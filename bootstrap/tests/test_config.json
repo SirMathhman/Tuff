@@ -20,13 +20,10 @@
     "feature8_expect_actual/test_missing_actual": "not declared",
     "feature8_expect_actual/test_signature_mismatch": "return type mismatch"
   },
-  "skip_tests": [
-    "feature4_structs/test_struct_scoped",
-    "feature8_expect_actual/test_qualified"
-  ],
+  "skip_tests": ["feature4_structs/test_struct_scoped"],
   "notes": {
     "expected_exit_codes": "Maps test paths to their expected exit codes. Tests not listed here will only verify consistency between JS and C++ targets.",
     "negative_tests": "Tests that should fail compilation. Maps test path to expected error message substring.",
-    "skip_tests": "Tests with known bugs or unimplemented features: block-scoped structs, FQN in expect/actual"
+    "skip_tests": "Tests with known bugs or unimplemented features: block-scoped structs"
   }
 }

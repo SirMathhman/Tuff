@@ -211,6 +211,25 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 	}
 	case ASTNodeType::MODULE_DECL:
 	{
+		// Check if module has any content that needs code generation
+		bool hasContent = false;
+		for (auto child : node->children)
+		{
+			if (child->type == ASTNodeType::FUNCTION_DECL ||
+					child->type == ASTNodeType::ACTUAL_DECL ||
+					child->type == ASTNodeType::ENUM_DECL)
+			{
+				hasContent = true;
+				break;
+			}
+		}
+
+		// Skip empty modules (e.g., modules with only expect declarations)
+		if (!hasContent)
+		{
+			return "";
+		}
+
 		// Generate module as a nested object namespace
 		std::stringstream ss;
 		std::string moduleName = node->value;
@@ -241,6 +260,53 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 				if (!first)
 					ss << ", ";
 				ss << child->value << ": " << generateNode(child);
+				first = false;
+			}
+			else if (child->type == ASTNodeType::ACTUAL_DECL)
+			{
+				if (!first)
+					ss << ", ";
+				// Generate actual as a function property
+				ss << child->value << ": ";
+				// Generate function body (same as ACTUAL_DECL case)
+				ss << "function(";
+				bool firstParam = true;
+				for (auto param : child->children)
+				{
+					if (param->type == ASTNodeType::IDENTIFIER)
+					{
+						if (!firstParam)
+							ss << ", ";
+						ss << param->value;
+						firstParam = false;
+					}
+				}
+				ss << ") ";
+				// Find and generate body
+				for (auto bodyChild : child->children)
+				{
+					if (bodyChild->type != ASTNodeType::IDENTIFIER)
+					{
+						if (bodyChild->type == ASTNodeType::BLOCK)
+						{
+							ss << generateFunctionBlock(bodyChild, child->inferredType);
+						}
+						else if (bodyChild->type == ASTNodeType::RETURN_STMT)
+						{
+							// Body is already a return statement
+							ss << "{ " << generateNode(bodyChild) << "; }";
+						}
+						else if (child->inferredType != "Void")
+						{
+							ss << "{ return " << generateNode(bodyChild) << "; }";
+						}
+						else
+						{
+							ss << "{ " << generateNode(bodyChild) << "; }";
+						}
+						break;
+					}
+				}
 				first = false;
 			}
 			else if (child->type == ASTNodeType::ENUM_DECL)

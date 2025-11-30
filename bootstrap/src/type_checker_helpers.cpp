@@ -364,6 +364,66 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 					}
 					structTable[structName] = info;
 				}
+				else if (moduleChild->type == ASTNodeType::EXPECT_DECL)
+				{
+					std::string expectName = currentModule + "::" + moduleChild->value;
+					if (expectTable.find(expectName) != expectTable.end())
+					{
+						std::cerr << "Error: Expect '" << expectName << "' already declared." << std::endl;
+						exit(1);
+					}
+
+					ExpectInfo info;
+					info.returnType = moduleChild->inferredType;
+					for (size_t i = 0; i < moduleChild->children.size(); i++)
+					{
+						auto paramNode = moduleChild->children[i];
+						info.params.push_back({paramNode->value, paramNode->inferredType});
+					}
+					expectTable[expectName] = info;
+				}
+				else if (moduleChild->type == ASTNodeType::ACTUAL_DECL)
+				{
+					std::string actualName = currentModule + "::" + moduleChild->value;
+
+					if (expectTable.find(actualName) == expectTable.end())
+					{
+						std::cerr << "Error: Actual '" << actualName << "' has no matching expect declaration." << std::endl;
+						exit(1);
+					}
+
+					const ExpectInfo &expectedSig = expectTable[actualName];
+
+					if (moduleChild->inferredType != expectedSig.returnType)
+					{
+						std::cerr << "Error: Actual '" << actualName << "' return type mismatch. Expected "
+											<< expectedSig.returnType << ", got " << moduleChild->inferredType << std::endl;
+						exit(1);
+					}
+
+					size_t paramCount = 0;
+					for (auto param : moduleChild->children)
+					{
+						if (param->type == ASTNodeType::IDENTIFIER)
+							paramCount++;
+					}
+
+					if (paramCount != expectedSig.params.size())
+					{
+						std::cerr << "Error: Actual '" << actualName << "' parameter count mismatch. Expected "
+											<< expectedSig.params.size() << ", got " << paramCount << std::endl;
+						exit(1);
+					}
+
+					FunctionInfo info;
+					info.returnType = moduleChild->inferredType;
+					for (size_t i = 0; i < paramCount; i++)
+					{
+						auto paramNode = moduleChild->children[i];
+						info.params.push_back({paramNode->value, paramNode->inferredType});
+					}
+					functionTable[actualName] = info;
+				}
 			}
 
 			// Restore previous module context

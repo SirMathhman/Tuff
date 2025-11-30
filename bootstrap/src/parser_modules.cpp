@@ -38,6 +38,14 @@ std::shared_ptr<ASTNode> Parser::parseModuleDecl()
 		{
 			moduleNode->addChild(parseEnumDecl());
 		}
+		else if (peek().type == TokenType::EXPECT)
+		{
+			moduleNode->addChild(parseExpectDecl());
+		}
+		else if (peek().type == TokenType::ACTUAL)
+		{
+			moduleNode->addChild(parseActualDecl());
+		}
 		else if (peek().type == TokenType::LET)
 		{
 			moduleNode->addChild(parseLetStatement());
