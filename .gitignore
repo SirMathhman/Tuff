@@ -1,0 +1,43 @@
+# Build directories
+bootstrap/build/
+**/build/
+**/out/
+
+# Compiled binaries
+*.exe
+*.obj
+*.o
+*.so
+*.dylib
+*.dll
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+*.vcxproj*
+*.sln
+*.tlog
+*.stamp*
+*.log
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test output files
+test_output.js
+test_output.cpp
+*.out
+
+# Node modules (if any)
+node_modules/
+package-lock.json
+
+# Compiled JavaScript/C++ from Tuff
+*.tuff.js
+*.tuff.cpp

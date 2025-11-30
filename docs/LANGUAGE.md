@@ -2,15 +2,15 @@
 
 ## Implementation Progress
 
-| Feature                          | Status         | Tests                                                           |
-| -------------------------------- | -------------- | --------------------------------------------------------------- |
-| 1. Variables & Let Bindings      | ✅ Complete    | `let`, mutable bindings, type inference, no-shadowing           |
-| 2. Primitive Operations          | ✅ Complete    | All arithmetic, comparison, logical operators; boolean literals |
-| 3. Control Flow (if/else, while) | ✅ Complete    | if/else statements & expressions, while, loop, break, continue  |
-| 4. Structs                       | ⏹️ Planned     | -                                                               |
-| 5. Generics & Collections        | ⏹️ Planned     | -                                                               |
-| 6. expect/actual Multi-platform  | ⏹️ Planned     | -                                                               |
-| 7-11. Advanced Features          | ⏹️ Deferred    | -                                                               |
+| Feature                          | Status      | Tests                                                           |
+| -------------------------------- | ----------- | --------------------------------------------------------------- |
+| 1. Variables & Let Bindings      | ✅ Complete | `let`, mutable bindings, type inference, no-shadowing           |
+| 2. Primitive Operations          | ✅ Complete | All arithmetic, comparison, logical operators; boolean literals |
+| 3. Control Flow (if/else, while) | ✅ Complete | if/else statements & expressions, while, loop, break, continue  |
+| 4. Structs                       | ⏹️ Planned  | -                                                               |
+| 5. Generics & Collections        | ⏹️ Planned  | -                                                               |
+| 6. expect/actual Multi-platform  | ⏹️ Planned  | -                                                               |
+| 7-11. Advanced Features          | ⏹️ Deferred | -                                                               |
 
 ## Overview
 
