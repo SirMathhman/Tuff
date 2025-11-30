@@ -1,0 +1,13 @@
+// Test: Module with enum and utility function
+module colors {
+    enum Color {
+        Red,
+        Green,
+        Blue
+    }
+    
+    fn isRed(c: Color): Bool => c == Color.Red;
+}
+
+let c = colors::Color.Red;
+colors::isRed(c)

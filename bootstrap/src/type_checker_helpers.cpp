@@ -149,7 +149,118 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 {
 	for (auto child : node->children)
 	{
-		if (child->type == ASTNodeType::FUNCTION_DECL)
+		if (child->type == ASTNodeType::MODULE_DECL)
+		{
+			// Save current module and switch context
+			std::string savedModule = currentModule;
+			currentModule = child->value;
+
+			// First pass: collect local type names (enums, structs) defined in this module
+			std::vector<std::string> localTypeNames;
+			for (auto moduleChild : child->children)
+			{
+				if (moduleChild->type == ASTNodeType::ENUM_DECL)
+				{
+					localTypeNames.push_back(moduleChild->value);
+				}
+				else if (moduleChild->type == ASTNodeType::STRUCT_DECL)
+				{
+					localTypeNames.push_back(moduleChild->value);
+				}
+			}
+
+			// Second pass: register declarations with proper type prefixing
+			for (auto moduleChild : child->children)
+			{
+				if (moduleChild->type == ASTNodeType::FUNCTION_DECL)
+				{
+					std::string funcName = currentModule + "::" + moduleChild->value;
+					if (functionTable.find(funcName) != functionTable.end())
+					{
+						std::cerr << "Error: Function '" << funcName << "' already declared." << std::endl;
+						exit(1);
+					}
+
+					FunctionInfo info;
+					info.returnType = moduleChild->inferredType;
+					for (size_t i = 0; i < moduleChild->children.size() - 1; i++)
+					{
+						auto paramNode = moduleChild->children[i];
+						std::string paramType = paramNode->inferredType;
+						
+						// If param type is a local type, prefix it with module name
+						bool isLocalType = false;
+						for (const auto &localType : localTypeNames)
+						{
+							if (paramType == localType)
+							{
+								paramType = currentModule + "::" + paramType;
+								isLocalType = true;
+								break;
+							}
+						}
+						
+						info.params.push_back({paramNode->value, paramType});
+					}
+					
+					// Normalize return type too
+					std::string returnType = moduleChild->inferredType;
+					for (const auto &localType : localTypeNames)
+					{
+						if (returnType == localType)
+						{
+							returnType = currentModule + "::" + returnType;
+							break;
+						}
+					}
+					info.returnType = returnType;
+					
+					functionTable[funcName] = info;
+					// Also register without prefix for local access within module
+					functionTable[moduleChild->value] = info;
+				}
+				else if (moduleChild->type == ASTNodeType::ENUM_DECL)
+				{
+					std::string enumName = currentModule + "::" + moduleChild->value;
+					if (enumTable.find(enumName) != enumTable.end())
+					{
+						std::cerr << "Error: Enum '" << enumName << "' already declared." << std::endl;
+						exit(1);
+					}
+
+					EnumInfo info;
+					for (auto variantNode : moduleChild->children)
+					{
+						info.variants.push_back(variantNode->value);
+					}
+					enumTable[enumName] = info;
+					// Also register without prefix for local access within module
+					enumTable[moduleChild->value] = info;
+				}
+				else if (moduleChild->type == ASTNodeType::STRUCT_DECL)
+				{
+					std::string structName = currentModule + "::" + moduleChild->value;
+					if (structTable.find(structName) != structTable.end())
+					{
+						std::cerr << "Error: Struct '" << structName << "' already declared." << std::endl;
+						exit(1);
+					}
+
+					StructInfo info;
+					for (auto fieldNode : moduleChild->children)
+					{
+						info.fields.push_back({fieldNode->value, fieldNode->inferredType});
+					}
+					structTable[structName] = info;
+					// Also register without prefix for local access within module
+					structTable[moduleChild->value] = info;
+				}
+			}
+
+			// Restore previous module context
+			currentModule = savedModule;
+		}
+		else if (child->type == ASTNodeType::FUNCTION_DECL)
 		{
 			std::string funcName = child->value;
 			if (functionTable.find(funcName) != functionTable.end())

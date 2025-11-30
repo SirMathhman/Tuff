@@ -24,6 +24,8 @@ enum class ASTNodeType
 	ENUM_VALUE,			// EnumName.Variant
 	EXPECT_DECL,		// expect fn name(...): Type;
 	ACTUAL_DECL,		// actual fn name(...): Type => {...}
+	MODULE_DECL,		// module name { statements }
+	USE_DECL,				// use module::path;
 	FIELD_ACCESS,		// obj.field
 	CALL_EXPR,
 	BINARY_OP,

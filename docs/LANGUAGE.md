@@ -202,6 +202,115 @@ Single-line and multi-line comments are supported.
    comment */
 ```
 
+## Module System
+
+Tuff's module system organizes code into hierarchical namespaces, similar to Java packages. Each Tuff source file implicitly defines a module based on its file path.
+
+### File-to-Module Mapping
+
+Given a root directory (e.g., `./src/tuff`), a file at `./src/tuff/com/example.tuff` defines the module `com::example`.
+
+**Example:**
+
+- File: `./src/tuff/io.tuff` → Module: `io`
+- File: `./src/tuff/com/example.tuff` → Module: `com::example`
+- File: `./src/tuff/org/util/math.tuff` → Module: `org::util::math`
+
+### Module Declarations (Block Form)
+
+You can explicitly wrap code in a module block:
+
+```tuff
+module math {
+    fn add(x: I32, y: I32): I32 => x + y;
+    fn multiply(x: I32, y: I32): I32 => x * y;
+}
+```
+
+This declares the functions within the `math` namespace, making them accessible as `math::add` and `math::multiply`.
+
+### Use Declarations
+
+Import a module with the `use` keyword:
+
+```tuff
+use com::example;  // Import module com::example
+```
+
+After a `use` declaration, you can reference members of that module directly or via FQN.
+
+### Fully Qualified Names (FQN)
+
+All identifiers (functions, types, struct fields, etc.) can be referenced using FQN:
+
+```tuff
+expect fn print(message: String): Void;
+
+fn main(): Void => {
+    io::println("Hello");           // Call io::println (FQN)
+    let c: Color::Red = Color::Red; // Access enum variant via FQN
+}
+```
+
+### Scope Resolution
+
+1. **Current module members** are always visible without qualification.
+2. **Imported modules** (via `use`) can be accessed with or without the full path, depending on what was imported.
+3. **Unqualified names** are resolved in this order:
+   - Local scope (variables, function parameters)
+   - Current module (functions, types, constants)
+   - Imported modules (if unambiguous)
+4. **Ambiguous references** (name exists in multiple imported modules) must use FQN.
+
+### Cross-File Modules
+
+Modules can span multiple files. If two files in the same directory declare the same module:
+
+```tuff
+// src/tuff/com/base.tuff
+module com::base {
+    struct Point { x: I32, y: I32 }
+}
+
+// src/tuff/com/util.tuff
+module com::util {
+    fn distance(a: Point, b: Point): F32 => {
+        // Use Point from com::base
+    }
+}
+```
+
+To use `Point` in `util.tuff`, add `use com::base;` at the top.
+
+### Integration with expect/actual
+
+Module names in expect/actual declarations are fully qualified:
+
+```tuff
+// core/main.tuff
+expect fn io::println(message: String): Void;
+
+fn main(): Void => {
+    io::println("Hello, Tuff!");
+}
+
+// js/io.tuff (compiled for JavaScript)
+actual fn io::println(message: String): Void => {
+    // JS implementation
+}
+
+// cpp/io.tuff (compiled for C++)
+actual fn io::println(message: String): Void => {
+    // C++ implementation
+}
+```
+
+### Module Visibility
+
+All modules are globally visible within a single compilation. There is no public/private distinction at the module level. All functions, types, and constants in a module are accessible from any other module if referenced by FQN or after a `use` declaration.
+
+**Note:** Access control (public/private/protected) is deferred to future versions.
+
 ## Multi-Platform Support: expect/actual
 
 Tuff uses the `expect`/`actual` pattern (similar to Kotlin Multiplatform) to support platform-specific implementations.

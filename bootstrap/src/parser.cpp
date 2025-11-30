@@ -46,6 +46,14 @@ std::shared_ptr<ASTNode> Parser::parse()
 		{
 			program->addChild(parseFunctionDecl());
 		}
+		else if (peek().type == TokenType::MODULE)
+		{
+			program->addChild(parseModuleDecl());
+		}
+		else if (peek().type == TokenType::USE)
+		{
+			program->addChild(parseUseDecl());
+		}
 		else if (peek().type == TokenType::EXPECT)
 		{
 			program->addChild(parseExpectDecl());
@@ -354,6 +362,15 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 	{
 		std::string name = tokens[pos - 1].value;
 
+		// Check for FQN: name::name::...
+		while (peek().type == TokenType::COLON && peek(1).type == TokenType::COLON)
+		{
+			advance(); // consume first :
+			advance(); // consume second :
+			name += "::";
+			name += consume(TokenType::IDENTIFIER, "Expected identifier after '::'").value;
+		}
+
 		// Check for struct literal: TypeName { expr, expr, ... }
 		if (peek().type == TokenType::LBRACE)
 		{
@@ -379,7 +396,7 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 		}
 		else
 		{
-			// Just an identifier
+			// Just an identifier (possibly with FQN)
 			auto node = std::make_shared<ASTNode>();
 			node->type = ASTNodeType::IDENTIFIER;
 			node->value = name;

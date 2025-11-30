@@ -1,0 +1,8 @@
+// Test: Basic module block with function definition
+module math {
+    fn add(x: I32, y: I32): I32 => x + y;
+    fn multiply(x: I32, y: I32): I32 => x * y;
+}
+
+let result = add(5, 3);
+result

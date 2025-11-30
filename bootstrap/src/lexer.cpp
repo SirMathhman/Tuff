@@ -85,6 +85,8 @@ Token Lexer::identifierOrKeyword()
 	static const std::unordered_map<std::string, TokenType> keywords = {
 			{"expect", TokenType::EXPECT},
 			{"actual", TokenType::ACTUAL},
+			{"module", TokenType::MODULE},
+			{"use", TokenType::USE},
 			{"fn", TokenType::FN},
 			{"let", TokenType::LET},
 			{"mut", TokenType::MUT},

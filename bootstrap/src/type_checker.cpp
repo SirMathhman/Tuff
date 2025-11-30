@@ -85,22 +85,36 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 	{
 		std::string name = node->value;
 
-		// Check if it's an enum type name (for EnumName.Variant access)
-		// Don't error here, let FIELD_ACCESS handle it
+		// First check if it's an FQN reference
 		if (enumTable.find(name) != enumTable.end())
 		{
-			node->inferredType = name; // Type is the enum name itself
+			node->inferredType = name; // Type is the enum name itself (possibly with FQN)
 			break;
 		}
 
+		// Check if it's a local variable/parameter in symbol table
 		auto it = symbolTable.find(name);
-		if (it == symbolTable.end())
+		if (it != symbolTable.end())
 		{
-			std::cerr << "Error: Variable '" << name << "' not declared." << std::endl;
-			exit(1);
+			node->inferredType = it->second.type;
+			break;
 		}
-		node->inferredType = it->second.type;
-		break;
+
+		// If not found and we're in a module context, try prefixing with module name
+		if (!currentModule.empty())
+		{
+			std::string fqn = currentModule + "::" + name;
+			if (enumTable.find(fqn) != enumTable.end())
+			{
+				node->value = fqn; // Update to FQN
+				node->inferredType = fqn;
+				break;
+			}
+		}
+
+		// If still not found, error
+		std::cerr << "Error: Variable '" << name << "' not declared." << std::endl;
+		exit(1);
 	}
 
 	case ASTNodeType::LITERAL:
@@ -238,6 +252,30 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::ENUM_DECL:
 	{
 		// Already registered in first pass, just skip
+		break;
+	}
+
+	case ASTNodeType::MODULE_DECL:
+	{
+		// Save current module and switch context
+		std::string savedModule = currentModule;
+		currentModule = node->value;
+
+		// Type check all statements inside the module
+		for (auto child : node->children)
+		{
+			check(child);
+		}
+
+		// Restore previous module context
+		currentModule = savedModule;
+		break;
+	}
+
+	case ASTNodeType::USE_DECL:
+	{
+		// Record the imported module
+		importedModules.push_back(node->value);
 		break;
 	}
 

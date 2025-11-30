@@ -41,7 +41,9 @@ private:
 	std::map<std::string, FunctionInfo> functionTable;
 	std::map<std::string, EnumInfo> enumTable;
 	std::map<std::string, ExpectInfo> expectTable;
-	std::string currentFunctionReturnType; // Track return type for validation
+	std::string currentFunctionReturnType;		// Track return type for validation
+	std::string currentModule;								// Track current module context
+	std::vector<std::string> importedModules; // Track use declarations
 
 	bool isNumericType(const std::string &type)
 	{

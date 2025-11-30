@@ -1,0 +1,10 @@
+// Test: Module with utility functions
+module geo {
+    fn distance(x1: I32, y1: I32, x2: I32, y2: I32): I32 => {
+        let dx = x2 - x1;
+        let dy = y2 - y1;
+        dx + dy
+    }
+}
+
+distance(0, 0, 3, 4)

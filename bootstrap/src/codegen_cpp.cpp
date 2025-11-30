@@ -9,10 +9,19 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 
 	auto isStatement = [](ASTNodeType type)
 	{
-		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL || type == ASTNodeType::EXPECT_DECL || type == ASTNodeType::ACTUAL_DECL;
+		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL || type == ASTNodeType::EXPECT_DECL || type == ASTNodeType::ACTUAL_DECL || type == ASTNodeType::MODULE_DECL;
 	};
 
-	// Generate enum declarations first
+	// Generate module declarations first (at top level, not inside main)
+	for (auto child : ast->children)
+	{
+		if (child->type == ASTNodeType::MODULE_DECL)
+		{
+			ss << generateNode(child) << "\n";
+		}
+	}
+
+	// Generate enum declarations
 	for (auto child : ast->children)
 	{
 		if (child->type == ASTNodeType::ENUM_DECL)
@@ -93,8 +102,8 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	{
 		auto child = ast->children[i];
 
-		// Skip struct, enum, function, expect, and actual declarations (already generated)
-		if (child->type == ASTNodeType::STRUCT_DECL || child->type == ASTNodeType::ENUM_DECL || child->type == ASTNodeType::FUNCTION_DECL || child->type == ASTNodeType::EXPECT_DECL || child->type == ASTNodeType::ACTUAL_DECL)
+		// Skip struct, enum, function, expect, actual, and module declarations (already generated)
+		if (child->type == ASTNodeType::STRUCT_DECL || child->type == ASTNodeType::ENUM_DECL || child->type == ASTNodeType::FUNCTION_DECL || child->type == ASTNodeType::EXPECT_DECL || child->type == ASTNodeType::ACTUAL_DECL || child->type == ASTNodeType::MODULE_DECL)
 			continue;
 
 		if (i == ast->children.size() - 1 && !isStatement(child->type))
@@ -280,6 +289,52 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		}
 		ss << "\n};";
 		return ss.str();
+	}
+	case ASTNodeType::MODULE_DECL:
+	{
+		// Generate module as C++ namespace
+		// e.g., module math { fn add(...) } becomes:
+		// namespace math { type add(...) { ... } }
+		std::stringstream ss;
+		std::string moduleName = node->value;
+
+		// Split by :: for nested namespaces
+		size_t pos = 0;
+		std::vector<std::string> parts;
+		while ((pos = moduleName.find("::")) != std::string::npos)
+		{
+			parts.push_back(moduleName.substr(0, pos));
+			moduleName = moduleName.substr(pos + 2);
+		}
+		parts.push_back(moduleName);
+
+		// Generate opening namespaces
+		for (const auto &part : parts)
+		{
+			ss << "namespace " << part << " {\n";
+		}
+
+		// Generate module body
+		for (auto child : node->children)
+		{
+			ss << generateNode(child) << "\n";
+		}
+
+		// Generate closing braces for namespaces
+		for (size_t i = 0; i < parts.size(); i++)
+		{
+			ss << "}";
+			if (i < parts.size() - 1)
+				ss << " ";
+		}
+
+		return ss.str();
+	}
+	case ASTNodeType::USE_DECL:
+	{
+		// Use declarations are handled at compile time for scope resolution
+		// No code generation needed
+		return "";
 	}
 	case ASTNodeType::EXPECT_DECL:
 	{
