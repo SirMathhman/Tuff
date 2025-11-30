@@ -46,9 +46,41 @@ std::shared_ptr<ASTNode> Parser::parse()
 		{
 			program->addChild(parseLetStatement());
 		}
+		else if (peek().type == TokenType::IF)
+		{
+			program->addChild(parseIfStatement());
+		}
+		else if (peek().type == TokenType::WHILE)
+		{
+			program->addChild(parseWhileStatement());
+		}
+		else if (peek().type == TokenType::LOOP)
+		{
+			program->addChild(parseLoopStatement());
+		}
+		else if (peek().type == TokenType::BREAK)
+		{
+			advance();
+			auto node = std::make_shared<ASTNode>();
+			node->type = ASTNodeType::BREAK_STMT;
+			program->addChild(node);
+			match(TokenType::SEMICOLON);
+		}
+		else if (peek().type == TokenType::CONTINUE)
+		{
+			advance();
+			auto node = std::make_shared<ASTNode>();
+			node->type = ASTNodeType::CONTINUE_STMT;
+			program->addChild(node);
+			match(TokenType::SEMICOLON);
+		}
 		else if (peek().type == TokenType::IDENTIFIER && peek(1).type == TokenType::EQUALS)
 		{
 			program->addChild(parseAssignmentStatement());
+		}
+		else if (peek().type == TokenType::LBRACE)
+		{
+			program->addChild(parseBlock());
 		}
 		else
 		{
@@ -265,6 +297,23 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 		node->inferredType = "Bool";
 		return node;
 	}
+	else if (match(TokenType::IF))
+	{
+		// If expression: if (cond) expr else expr
+		consume(TokenType::LPAREN, "Expected '(' after 'if'");
+		auto condition = parseExpression();
+		consume(TokenType::RPAREN, "Expected ')' after condition");
+		auto thenBranch = parseExpression();
+		consume(TokenType::ELSE, "If expressions must have 'else' clause");
+		auto elseBranch = parseExpression();
+
+		auto node = std::make_shared<ASTNode>();
+		node->type = ASTNodeType::IF_EXPR;
+		node->addChild(condition);
+		node->addChild(thenBranch);
+		node->addChild(elseBranch);
+		return node;
+	}
 	else if (match(TokenType::IDENTIFIER))
 	{
 		auto node = std::make_shared<ASTNode>();
@@ -280,4 +329,163 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 	}
 	std::cerr << "Unexpected token in expression: " << peek().value << std::endl;
 	exit(1);
+}
+
+std::shared_ptr<ASTNode> Parser::parseIfStatement()
+{
+	consume(TokenType::IF, "Expected 'if'");
+	consume(TokenType::LPAREN, "Expected '(' after 'if'");
+	auto condition = parseExpression();
+	consume(TokenType::RPAREN, "Expected ')' after condition");
+
+	auto thenBranch = parseStatementOrBlock();
+
+	auto node = std::make_shared<ASTNode>();
+	node->type = ASTNodeType::IF_STMT;
+	node->addChild(condition);
+	node->addChild(thenBranch);
+
+	if (match(TokenType::ELSE))
+	{
+		auto elseBranch = parseStatementOrBlock();
+		node->addChild(elseBranch);
+	}
+
+	return node;
+}
+
+std::shared_ptr<ASTNode> Parser::parseWhileStatement()
+{
+	consume(TokenType::WHILE, "Expected 'while'");
+	consume(TokenType::LPAREN, "Expected '(' after 'while'");
+	auto condition = parseExpression();
+	consume(TokenType::RPAREN, "Expected ')' after condition");
+
+	auto body = parseStatementOrBlock();
+
+	auto node = std::make_shared<ASTNode>();
+	node->type = ASTNodeType::WHILE_STMT;
+	node->addChild(condition);
+	node->addChild(body);
+	return node;
+}
+
+std::shared_ptr<ASTNode> Parser::parseLoopStatement()
+{
+	consume(TokenType::LOOP, "Expected 'loop'");
+	auto body = parseStatementOrBlock();
+
+	auto node = std::make_shared<ASTNode>();
+	node->type = ASTNodeType::LOOP_STMT;
+	node->addChild(body);
+	return node;
+}
+
+std::shared_ptr<ASTNode> Parser::parseBlock()
+{
+	consume(TokenType::LBRACE, "Expected '{'");
+	auto block = std::make_shared<ASTNode>();
+	block->type = ASTNodeType::BLOCK;
+
+	while (!match(TokenType::RBRACE) && peek().type != TokenType::END_OF_FILE)
+	{
+		if (peek().type == TokenType::LET)
+		{
+			block->addChild(parseLetStatement());
+		}
+		else if (peek().type == TokenType::IF)
+		{
+			block->addChild(parseIfStatement());
+		}
+		else if (peek().type == TokenType::WHILE)
+		{
+			block->addChild(parseWhileStatement());
+		}
+		else if (peek().type == TokenType::LOOP)
+		{
+			block->addChild(parseLoopStatement());
+		}
+		else if (peek().type == TokenType::BREAK)
+		{
+			advance();
+			auto node = std::make_shared<ASTNode>();
+			node->type = ASTNodeType::BREAK_STMT;
+			block->addChild(node);
+			match(TokenType::SEMICOLON);
+		}
+		else if (peek().type == TokenType::CONTINUE)
+		{
+			advance();
+			auto node = std::make_shared<ASTNode>();
+			node->type = ASTNodeType::CONTINUE_STMT;
+			block->addChild(node);
+			match(TokenType::SEMICOLON);
+		}
+		else if (peek().type == TokenType::IDENTIFIER && peek(1).type == TokenType::EQUALS)
+		{
+			block->addChild(parseAssignmentStatement());
+		}
+		else if (peek().type == TokenType::LBRACE)
+		{
+			block->addChild(parseBlock());
+		}
+		else
+		{
+			auto expr = parseExpression();
+			match(TokenType::SEMICOLON);
+			block->addChild(expr);
+		}
+	}
+
+	return block;
+}
+
+std::shared_ptr<ASTNode> Parser::parseStatementOrBlock()
+{
+	if (peek().type == TokenType::LBRACE)
+	{
+		return parseBlock();
+	}
+	else if (peek().type == TokenType::IF)
+	{
+		return parseIfStatement();
+	}
+	else if (peek().type == TokenType::WHILE)
+	{
+		return parseWhileStatement();
+	}
+	else if (peek().type == TokenType::LOOP)
+	{
+		return parseLoopStatement();
+	}
+	else if (peek().type == TokenType::BREAK)
+	{
+		advance();
+		auto node = std::make_shared<ASTNode>();
+		node->type = ASTNodeType::BREAK_STMT;
+		match(TokenType::SEMICOLON);
+		return node;
+	}
+	else if (peek().type == TokenType::CONTINUE)
+	{
+		advance();
+		auto node = std::make_shared<ASTNode>();
+		node->type = ASTNodeType::CONTINUE_STMT;
+		match(TokenType::SEMICOLON);
+		return node;
+	}
+	else if (peek().type == TokenType::LET)
+	{
+		return parseLetStatement();
+	}
+	else if (peek().type == TokenType::IDENTIFIER && peek(1).type == TokenType::EQUALS)
+	{
+		return parseAssignmentStatement();
+	}
+	else
+	{
+		auto expr = parseExpression();
+		match(TokenType::SEMICOLON);
+		return expr;
+	}
 }

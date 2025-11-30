@@ -10,10 +10,14 @@ enum class ASTNodeType
 	FUNCTION_DECL,
 	LET_STMT,
 	ASSIGNMENT_STMT, // For x = 10;
-	IF_EXPR,
+	IF_STMT,				 // Statement form: if (cond) stmt else stmt
+	IF_EXPR,				 // Expression form: if (cond) expr else expr
 	WHILE_STMT,
+	LOOP_STMT, // Infinite loop: loop { ... }
+	BREAK_STMT,
+	CONTINUE_STMT,
 	RETURN_STMT,
-	BLOCK,
+	BLOCK, // { stmt; stmt; }
 	CALL_EXPR,
 	BINARY_OP,
 	UNARY_OP,

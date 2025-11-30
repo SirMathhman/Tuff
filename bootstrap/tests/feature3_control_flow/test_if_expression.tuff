@@ -1,0 +1,5 @@
+// Test: If expression returning a value
+let x: I32 = 10;
+let result: I32 = if (x > 5) 100 else 200;
+
+// Expected: result = 100

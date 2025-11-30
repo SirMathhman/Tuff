@@ -1,0 +1,10 @@
+// Test: While loop with counter
+let mut counter: I32 = 0;
+let mut sum: I32 = 0;
+
+while (counter < 5) {
+    sum = sum + counter;
+    counter = counter + 1;
+}
+
+// Expected: sum = 10 (0+1+2+3+4)

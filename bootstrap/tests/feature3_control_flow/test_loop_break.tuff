@@ -1,0 +1,11 @@
+// Test: Infinite loop with break
+let mut i: I32 = 0;
+
+loop {
+    i = i + 1;
+    if (i > 3) {
+        break;
+    }
+}
+
+// Expected: i = 4

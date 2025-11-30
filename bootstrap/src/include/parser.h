@@ -18,6 +18,11 @@ private:
 	std::shared_ptr<ASTNode> parseStatement();
 	std::shared_ptr<ASTNode> parseLetStatement();
 	std::shared_ptr<ASTNode> parseAssignmentStatement();
+	std::shared_ptr<ASTNode> parseIfStatement();
+	std::shared_ptr<ASTNode> parseWhileStatement();
+	std::shared_ptr<ASTNode> parseLoopStatement();
+	std::shared_ptr<ASTNode> parseBlock();
+	std::shared_ptr<ASTNode> parseStatementOrBlock();
 	std::shared_ptr<ASTNode> parseExpression();
 	std::shared_ptr<ASTNode> parseLogicalOr();
 	std::shared_ptr<ASTNode> parseLogicalAnd();

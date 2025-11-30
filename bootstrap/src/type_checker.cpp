@@ -175,6 +175,97 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		break;
 	}
 
+	case ASTNodeType::IF_STMT:
+	{
+		auto condition = node->children[0];
+		check(condition);
+		if (condition->inferredType != "Bool")
+		{
+			std::cerr << "Error: If condition must be Bool, got " << condition->inferredType << std::endl;
+			exit(1);
+		}
+
+		auto thenBranch = node->children[1];
+		check(thenBranch);
+
+		if (node->children.size() > 2)
+		{
+			auto elseBranch = node->children[2];
+			check(elseBranch);
+		}
+		break;
+	}
+
+	case ASTNodeType::IF_EXPR:
+	{
+		auto condition = node->children[0];
+		check(condition);
+		if (condition->inferredType != "Bool")
+		{
+			std::cerr << "Error: If condition must be Bool, got " << condition->inferredType << std::endl;
+			exit(1);
+		}
+
+		auto thenBranch = node->children[1];
+		auto elseBranch = node->children[2];
+		check(thenBranch);
+		check(elseBranch);
+
+		// For now, just use the then branch type (union types deferred)
+		// TODO: Implement proper union type merging (e.g., 100I32 | 200I32)
+		if (thenBranch->inferredType == elseBranch->inferredType)
+		{
+			node->inferredType = thenBranch->inferredType;
+		}
+		else
+		{
+			// Simplified: use the then branch type for now
+			// In full implementation, this would be a union type
+			node->inferredType = thenBranch->inferredType;
+		}
+		break;
+	}
+
+	case ASTNodeType::WHILE_STMT:
+	{
+		auto condition = node->children[0];
+		check(condition);
+		if (condition->inferredType != "Bool")
+		{
+			std::cerr << "Error: While condition must be Bool, got " << condition->inferredType << std::endl;
+			exit(1);
+		}
+
+		auto body = node->children[1];
+		check(body);
+		break;
+	}
+
+	case ASTNodeType::LOOP_STMT:
+	{
+		auto body = node->children[0];
+		check(body);
+		break;
+	}
+
+	case ASTNodeType::BREAK_STMT:
+	case ASTNodeType::CONTINUE_STMT:
+		// No type checking needed
+		break;
+
+	case ASTNodeType::BLOCK:
+	{
+		// Create new scope for block
+		auto savedSymbols = symbolTable;
+		for (auto child : node->children)
+		{
+			check(child);
+		}
+		// Restore scope after block
+		symbolTable = savedSymbols;
+		break;
+	}
+
 	default:
 		break;
 	}
