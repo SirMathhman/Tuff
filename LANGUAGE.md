@@ -1,5 +1,17 @@
 # Tuff Language Specification
 
+## Implementation Progress
+
+| Feature | Status | Tests |
+|---------|--------|-------|
+| 1. Variables & Let Bindings | ✅ Complete | `let`, mutable bindings, type inference, no-shadowing |
+| 2. Primitive Operations | ✅ Complete | All arithmetic, comparison, logical operators; boolean literals |
+| 3. Control Flow (if/else, while) | ⏳ In Progress | - |
+| 4. Structs | ⏹️ Planned | - |
+| 5. Generics & Collections | ⏹️ Planned | - |
+| 6. expect/actual Multi-platform | ⏹️ Planned | - |
+| 7-11. Advanced Features | ⏹️ Deferred | - |
+
 ## Overview
 
 Tuff is a statically-typed, self-hosting programming language that compiles to JavaScript and C++. It features:
