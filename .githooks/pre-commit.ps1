@@ -3,8 +3,10 @@ Write-Host "Running pre-commit checks..." -ForegroundColor Cyan
 $maxLines = 500
 $violations = @()
 
-# Get all staged files
-$stagedFiles = git diff --cached --name-only --diff-filter=ACM
+# Get all staged files (excluding build artifacts)
+$stagedFiles = git diff --cached --name-only --diff-filter=ACM | Where-Object { 
+    -not ($_ -match '^bootstrap/build/' -or $_ -match '\.tlog$' -or $_ -match 'CMakeCCompilerId|CMakeCXXCompilerId')
+}
 
 foreach ($file in $stagedFiles) {
     if (Test-Path $file) {

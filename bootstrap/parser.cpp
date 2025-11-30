@@ -32,28 +32,15 @@ std::shared_ptr<ASTNode> Parser::parse() {
     program->type = ASTNodeType::PROGRAM;
 
     while (peek().type != TokenType::END_OF_FILE) {
-        // Check if it's a statement or a trailing expression
-        // Heuristic: LET is definitely a statement.
-        // IDENTIFIER could be assignment (stmt) or expression.
-        // For now, if it's LET, parse stmt.
-        // If it's IDENTIFIER followed by EQUALS, parse assignment stmt.
-        // Otherwise, try to parse expression and if it's the last thing, good.
-        
         if (peek().type == TokenType::LET) {
             program->addChild(parseLetStatement());
         } else if (peek().type == TokenType::IDENTIFIER && peek(1).type == TokenType::EQUALS) {
-             program->addChild(parseAssignmentStatement());
+            program->addChild(parseAssignmentStatement());
         } else {
-            // Assume expression
             auto expr = parseExpression();
-            // If followed by semicolon, it's an expression statement (which we might ignore or treat as void)
-            // But for "Program is expression", it should be the last thing.
             if (match(TokenType::SEMICOLON)) {
-                // Expression statement, maybe warn or allow?
-                // For now, let's just add it.
-                program->addChild(expr); 
+                program->addChild(expr);
             } else {
-                // Trailing expression
                 program->addChild(expr);
                 if (peek().type != TokenType::END_OF_FILE) {
                     std::cerr << "Error: Trailing expression must be the last element." << std::endl;
@@ -70,14 +57,12 @@ std::shared_ptr<ASTNode> Parser::parseLetStatement() {
     consume(TokenType::LET, "Expected 'let'");
     bool isMut = match(TokenType::MUT);
     Token name = consume(TokenType::IDENTIFIER, "Expected variable name");
-    
+
     std::string typeName = "Inferred";
     if (match(TokenType::COLON)) {
-        // Parse type
-        // For now, just simple types like I32
         if (match(TokenType::I32)) typeName = "I32";
         else if (match(TokenType::BOOL)) typeName = "Bool";
-        else consume(TokenType::IDENTIFIER, "Expected type"); // Placeholder
+        else consume(TokenType::IDENTIFIER, "Expected type");
     }
 
     consume(TokenType::EQUALS, "Expected '='");
@@ -107,6 +92,110 @@ std::shared_ptr<ASTNode> Parser::parseAssignmentStatement() {
 }
 
 std::shared_ptr<ASTNode> Parser::parseExpression() {
+    return parseLogicalOr();
+}
+
+std::shared_ptr<ASTNode> Parser::parseLogicalOr() {
+    auto left = parseLogicalAnd();
+    while (match(TokenType::OR_OR)) {
+        Token op = tokens[pos - 1];
+        auto right = parseLogicalAnd();
+        auto node = std::make_shared<ASTNode>();
+        node->type = ASTNodeType::BINARY_OP;
+        node->value = op.value;
+        node->addChild(left);
+        node->addChild(right);
+        left = node;
+    }
+    return left;
+}
+
+std::shared_ptr<ASTNode> Parser::parseLogicalAnd() {
+    auto left = parseEquality();
+    while (match(TokenType::AND_AND)) {
+        Token op = tokens[pos - 1];
+        auto right = parseEquality();
+        auto node = std::make_shared<ASTNode>();
+        node->type = ASTNodeType::BINARY_OP;
+        node->value = op.value;
+        node->addChild(left);
+        node->addChild(right);
+        left = node;
+    }
+    return left;
+}
+
+std::shared_ptr<ASTNode> Parser::parseEquality() {
+    auto left = parseComparison();
+    while (match(TokenType::EQUAL_EQUAL) || match(TokenType::NOT_EQUAL)) {
+        Token op = tokens[pos - 1];
+        auto right = parseComparison();
+        auto node = std::make_shared<ASTNode>();
+        node->type = ASTNodeType::BINARY_OP;
+        node->value = op.value;
+        node->addChild(left);
+        node->addChild(right);
+        left = node;
+    }
+    return left;
+}
+
+std::shared_ptr<ASTNode> Parser::parseComparison() {
+    auto left = parseAdditive();
+    while (match(TokenType::LESS) || match(TokenType::GREATER) || 
+           match(TokenType::LESS_EQUAL) || match(TokenType::GREATER_EQUAL)) {
+        Token op = tokens[pos - 1];
+        auto right = parseAdditive();
+        auto node = std::make_shared<ASTNode>();
+        node->type = ASTNodeType::BINARY_OP;
+        node->value = op.value;
+        node->addChild(left);
+        node->addChild(right);
+        left = node;
+    }
+    return left;
+}
+
+std::shared_ptr<ASTNode> Parser::parseAdditive() {
+    auto left = parseMultiplicative();
+    while (match(TokenType::PLUS) || match(TokenType::MINUS)) {
+        Token op = tokens[pos - 1];
+        auto right = parseMultiplicative();
+        auto node = std::make_shared<ASTNode>();
+        node->type = ASTNodeType::BINARY_OP;
+        node->value = op.value;
+        node->addChild(left);
+        node->addChild(right);
+        left = node;
+    }
+    return left;
+}
+
+std::shared_ptr<ASTNode> Parser::parseMultiplicative() {
+    auto left = parseUnary();
+    while (match(TokenType::STAR) || match(TokenType::SLASH) || match(TokenType::PERCENT)) {
+        Token op = tokens[pos - 1];
+        auto right = parseUnary();
+        auto node = std::make_shared<ASTNode>();
+        node->type = ASTNodeType::BINARY_OP;
+        node->value = op.value;
+        node->addChild(left);
+        node->addChild(right);
+        left = node;
+    }
+    return left;
+}
+
+std::shared_ptr<ASTNode> Parser::parseUnary() {
+    if (match(TokenType::NOT) || match(TokenType::MINUS)) {
+        Token op = tokens[pos - 1];
+        auto operand = parseUnary();
+        auto node = std::make_shared<ASTNode>();
+        node->type = ASTNodeType::UNARY_OP;
+        node->value = op.value;
+        node->addChild(operand);
+        return node;
+    }
     return parsePrimary();
 }
 
@@ -114,14 +203,18 @@ std::shared_ptr<ASTNode> Parser::parsePrimary() {
     if (match(TokenType::INT_LITERAL)) {
         auto node = std::make_shared<ASTNode>();
         node->type = ASTNodeType::LITERAL;
-        node->value = tokens[pos-1].value;
+        node->value = tokens[pos - 1].value;
         node->inferredType = "I32";
         return node;
     } else if (match(TokenType::IDENTIFIER)) {
         auto node = std::make_shared<ASTNode>();
         node->type = ASTNodeType::IDENTIFIER;
-        node->value = tokens[pos-1].value;
+        node->value = tokens[pos - 1].value;
         return node;
+    } else if (match(TokenType::LPAREN)) {
+        auto expr = parseExpression();
+        consume(TokenType::RPAREN, "Expected ')'");
+        return expr;
     }
     std::cerr << "Unexpected token in expression: " << peek().value << std::endl;
     exit(1);

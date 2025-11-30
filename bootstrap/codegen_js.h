@@ -3,9 +3,11 @@
 #include <memory>
 #include "ast.h"
 
-class CodeGeneratorJS {
+class CodeGeneratorJS
+{
 public:
-    std::string generate(std::shared_ptr<ASTNode> ast);
+	std::string generate(std::shared_ptr<ASTNode> ast);
+
 private:
-    std::string generateNode(std::shared_ptr<ASTNode> node);
+	std::string generateNode(std::shared_ptr<ASTNode> node);
 };

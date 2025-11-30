@@ -1,78 +1,164 @@
 #include "type_checker.h"
 #include <iostream>
 
-void TypeChecker::check(std::shared_ptr<ASTNode> node) {
-    switch (node->type) {
-        case ASTNodeType::PROGRAM:
-            for (auto child : node->children) {
-                check(child);
-            }
-            break;
+void TypeChecker::check(std::shared_ptr<ASTNode> node)
+{
+	switch (node->type)
+	{
+	case ASTNodeType::PROGRAM:
+		for (auto child : node->children)
+		{
+			check(child);
+		}
+		break;
 
-        case ASTNodeType::LET_STMT: {
-            std::string name = node->value;
-            if (symbolTable.find(name) != symbolTable.end()) {
-                std::cerr << "Error: Variable '" << name << "' already declared (no shadowing allowed)." << std::endl;
-                exit(1);
-            }
+	case ASTNodeType::LET_STMT:
+	{
+		std::string name = node->value;
+		if (symbolTable.find(name) != symbolTable.end())
+		{
+			std::cerr << "Error: Variable '" << name << "' already declared (no shadowing allowed)." << std::endl;
+			exit(1);
+		}
 
-            auto init = node->children[0];
-            check(init);
+		auto init = node->children[0];
+		check(init);
 
-            std::string type = node->inferredType;
-            if (type == "Inferred") {
-                type = init->inferredType;
-                node->inferredType = type; // Update AST with inferred type
-            } else {
-                if (type != init->inferredType) {
-                    std::cerr << "Error: Type mismatch for '" << name << "'. Expected " << type << ", got " << init->inferredType << std::endl;
-                    exit(1);
-                }
-            }
+		std::string type = node->inferredType;
+		if (type == "Inferred")
+		{
+			type = init->inferredType;
+			node->inferredType = type; // Update AST with inferred type
+		}
+		else
+		{
+			if (type != init->inferredType)
+			{
+				std::cerr << "Error: Type mismatch for '" << name << "'. Expected " << type << ", got " << init->inferredType << std::endl;
+				exit(1);
+			}
+		}
 
-            symbolTable[name] = {type, node->isMutable};
-            break;
-        }
+		symbolTable[name] = {type, node->isMutable};
+		break;
+	}
 
-        case ASTNodeType::ASSIGNMENT_STMT: {
-            std::string name = node->value;
-            auto it = symbolTable.find(name);
-            if (it == symbolTable.end()) {
-                std::cerr << "Error: Variable '" << name << "' not declared." << std::endl;
-                exit(1);
-            }
+	case ASTNodeType::ASSIGNMENT_STMT:
+	{
+		std::string name = node->value;
+		auto it = symbolTable.find(name);
+		if (it == symbolTable.end())
+		{
+			std::cerr << "Error: Variable '" << name << "' not declared." << std::endl;
+			exit(1);
+		}
 
-            if (!it->second.isMutable) {
-                std::cerr << "Error: Cannot assign to immutable variable '" << name << "'." << std::endl;
-                exit(1);
-            }
+		if (!it->second.isMutable)
+		{
+			std::cerr << "Error: Cannot assign to immutable variable '" << name << "'." << std::endl;
+			exit(1);
+		}
 
-            auto value = node->children[0];
-            check(value);
+		auto value = node->children[0];
+		check(value);
 
-            if (it->second.type != value->inferredType) {
-                std::cerr << "Error: Type mismatch in assignment to '" << name << "'. Expected " << it->second.type << ", got " << value->inferredType << std::endl;
-                exit(1);
-            }
-            break;
-        }
+		if (it->second.type != value->inferredType)
+		{
+			std::cerr << "Error: Type mismatch in assignment to '" << name << "'. Expected " << it->second.type << ", got " << value->inferredType << std::endl;
+			exit(1);
+		}
+		break;
+	}
 
-        case ASTNodeType::IDENTIFIER: {
-            std::string name = node->value;
-            auto it = symbolTable.find(name);
-            if (it == symbolTable.end()) {
-                std::cerr << "Error: Variable '" << name << "' not declared." << std::endl;
-                exit(1);
-            }
-            node->inferredType = it->second.type;
-            break;
-        }
+	case ASTNodeType::IDENTIFIER:
+	{
+		std::string name = node->value;
+		auto it = symbolTable.find(name);
+		if (it == symbolTable.end())
+		{
+			std::cerr << "Error: Variable '" << name << "' not declared." << std::endl;
+			exit(1);
+		}
+		node->inferredType = it->second.type;
+		break;
+	}
 
-        case ASTNodeType::LITERAL:
-            // Type already set by parser (e.g., I32)
-            break;
+	case ASTNodeType::LITERAL:
+		// Type already set by parser (e.g., I32)
+		break;
 
-        default:
-            break;
-    }
+	case ASTNodeType::BINARY_OP: {
+		auto left = node->children[0];
+		auto right = node->children[1];
+		check(left);
+		check(right);
+
+		std::string op = node->value;
+		// Arithmetic ops: both operands must be numeric, result is same type
+		if (op == "+" || op == "-" || op == "*" || op == "/" || op == "%") {
+			if (!isNumericType(left->inferredType)) {
+				std::cerr << "Error: Left operand of '" << op << "' must be numeric, got " << left->inferredType << std::endl;
+				exit(1);
+			}
+			if (!isNumericType(right->inferredType)) {
+				std::cerr << "Error: Right operand of '" << op << "' must be numeric, got " << right->inferredType << std::endl;
+				exit(1);
+			}
+			if (left->inferredType != right->inferredType) {
+				std::cerr << "Error: Type mismatch in '" << op << "': " << left->inferredType << " and " << right->inferredType << std::endl;
+				exit(1);
+			}
+			node->inferredType = left->inferredType;
+		}
+		// Comparison ops: both must be same numeric type, result is Bool
+		else if (op == "<" || op == ">" || op == "<=" || op == ">=" || op == "==" || op == "!=") {
+			if (left->inferredType != right->inferredType) {
+				std::cerr << "Error: Type mismatch in '" << op << "': " << left->inferredType << " and " << right->inferredType << std::endl;
+				exit(1);
+			}
+			if (!isNumericType(left->inferredType)) {
+				std::cerr << "Error: Cannot compare non-numeric types with '" << op << "'" << std::endl;
+				exit(1);
+			}
+			node->inferredType = "Bool";
+		}
+		// Logical ops: both must be Bool, result is Bool
+		else if (op == "&&" || op == "||") {
+			if (left->inferredType != "Bool") {
+				std::cerr << "Error: Left operand of '" << op << "' must be Bool, got " << left->inferredType << std::endl;
+				exit(1);
+			}
+			if (right->inferredType != "Bool") {
+				std::cerr << "Error: Right operand of '" << op << "' must be Bool, got " << right->inferredType << std::endl;
+				exit(1);
+			}
+			node->inferredType = "Bool";
+		}
+		break;
+	}
+
+	case ASTNodeType::UNARY_OP: {
+		auto operand = node->children[0];
+		check(operand);
+
+		std::string op = node->value;
+		if (op == "!") {
+			if (operand->inferredType != "Bool") {
+				std::cerr << "Error: Operand of '!' must be Bool, got " << operand->inferredType << std::endl;
+				exit(1);
+			}
+			node->inferredType = "Bool";
+		} else if (op == "-") {
+			if (!isNumericType(operand->inferredType)) {
+				std::cerr << "Error: Operand of '-' must be numeric, got " << operand->inferredType << std::endl;
+				exit(1);
+			}
+			node->inferredType = operand->inferredType;
+		}
+		break;
+	}
+
+	default:
+		break;
+	}
 }

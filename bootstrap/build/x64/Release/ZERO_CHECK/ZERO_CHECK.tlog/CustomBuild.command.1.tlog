@@ -1,0 +1,10 @@
+^C:\USERS\MATHM\IDEAPROJECTS\TUFF\BOOTSTRAP\BUILD\CMAKEFILES\4F6EF2A8E59C5D403521E5432BDBBE49\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/mathm/IdeaProjects/Tuff/bootstrap -BC:/Users/mathm/IdeaProjects/Tuff/bootstrap/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/mathm/IdeaProjects/Tuff/bootstrap/build/TuffBootstrap.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

@@ -261,10 +261,34 @@ Compiles to standard C++ (C++17), linkable with system C libraries via `expect`/
 - **Generics**: Monomorphization (each generic specialization becomes a separate function)
 - **Lifetimes**: Required annotations for pointer parameters (Rust-style)
 
+## Type System: Literal Types (Planned)
+
+Tuff will eventually support **literal types** for compile-time value tracking and overflow detection:
+
+```tuff
+let x = 5;           // x: 5I32 (literal type)
+let y: I32 = 5;      // y: I32 (widened to base type)
+let z: U8 = 5;       // z: U8 (auto-widened from 5I32)
+
+let a: 100U8 = 100U8;    // a: 100U8 (explicit literal type)
+let b = a + a;           // Error: 200U8 overflows (max 255U8)
+```
+
+**Design:**
+- Literals have both value and type: `5` → `5I32`
+- Operations preserve literal precision: `(5U8) + (10U8)` → `15U8`
+- Compile-time overflow detection for all arithmetic
+- Assignability: `LiteralType ≤ BaseType` but not vice versa
+- Propagation: `let y = x` where `x: 5U8` → `y: 5U8`
+- Base types track ranges: `U8` = `[0, 255]U8`, `I32` = `[-2^31, 2^31-1]I32`
+
+This is deferred until after the compiler can self-host.
+
 ## Future Extensions
 
 Features not yet implemented but planned:
 
+- Literal types with compile-time range tracking and overflow detection
 - Pattern matching on enums with associated data
 - Trait/interface system
 - Module system beyond expect/actual
