@@ -1,5 +1,6 @@
 #include "codegen_cpp.h"
 #include <sstream>
+#include <vector>
 
 std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 {
@@ -44,6 +45,17 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	{
 		if (child->type == ASTNodeType::FUNCTION_DECL)
 		{
+			if (!child->genericParams.empty())
+			{
+				ss << "template<";
+				for (size_t i = 0; i < child->genericParams.size(); i++)
+				{
+					if (i > 0)
+						ss << ", ";
+					ss << "typename " << child->genericParams[i]->value;
+				}
+				ss << ">\n";
+			}
 			ss << mapType(child->inferredType) << " " << child->value << "(";
 			for (size_t i = 0; i < child->children.size() - 1; i++)
 			{
@@ -227,6 +239,17 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::FUNCTION_DECL:
 	{
 		std::stringstream ss;
+		if (!node->genericParams.empty())
+		{
+			ss << "template<";
+			for (size_t i = 0; i < node->genericParams.size(); i++)
+			{
+				if (i > 0)
+					ss << ", ";
+				ss << "typename " << node->genericParams[i]->value;
+			}
+			ss << ">\n";
+		}
 		ss << mapType(node->inferredType) << " " << node->value << "(";
 
 		// Generate parameters (all children except last are params)
@@ -246,7 +269,22 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	{
 		std::stringstream ss;
 		// First child is callee (IDENTIFIER)
-		ss << generateNode(node->children[0]) << "(";
+		ss << generateNode(node->children[0]);
+
+		// Emit generic args <I32>
+		if (!node->children[0]->genericArgs.empty())
+		{
+			ss << "<";
+			for (size_t i = 0; i < node->children[0]->genericArgs.size(); i++)
+			{
+				if (i > 0)
+					ss << ", ";
+				ss << mapType(node->children[0]->genericArgs[i]);
+			}
+			ss << ">";
+		}
+
+		ss << "(";
 
 		// Remaining children are arguments
 		for (size_t i = 1; i < node->children.size(); i++)
@@ -269,6 +307,17 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::STRUCT_DECL:
 	{
 		std::stringstream ss;
+		if (!node->genericParams.empty())
+		{
+			ss << "template<";
+			for (size_t i = 0; i < node->genericParams.size(); i++)
+			{
+				if (i > 0)
+					ss << ", ";
+				ss << "typename " << node->genericParams[i]->value;
+			}
+			ss << ">\n";
+		}
 		ss << "struct " << node->value << " {\n";
 		for (auto field : node->children)
 		{
@@ -390,7 +439,21 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::STRUCT_LITERAL:
 	{
 		std::stringstream ss;
-		ss << node->value << "{ ";
+		ss << node->value;
+
+		if (!node->genericArgs.empty())
+		{
+			ss << "<";
+			for (size_t i = 0; i < node->genericArgs.size(); i++)
+			{
+				if (i > 0)
+					ss << ", ";
+				ss << mapType(node->genericArgs[i]);
+			}
+			ss << ">";
+		}
+
+		ss << "{ ";
 		for (size_t i = 0; i < node->children.size(); i++)
 		{
 			if (i > 0)
@@ -416,6 +479,52 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 		return "int32_t";
 	if (tuffType == "Bool")
 		return "bool";
+	if (tuffType == "Void")
+		return "void";
+
+	// Check for generics
+	size_t openBracket = tuffType.find('<');
+	if (openBracket != std::string::npos && tuffType.back() == '>')
+	{
+		std::string baseType = tuffType.substr(0, openBracket);
+		std::string argsStr = tuffType.substr(openBracket + 1, tuffType.length() - openBracket - 2);
+
+		std::vector<std::string> args;
+		int depth = 0;
+		std::string currentArg;
+		for (char c : argsStr)
+		{
+			if (c == '<')
+				depth++;
+			else if (c == '>')
+				depth--;
+
+			if (c == ',' && depth == 0)
+			{
+				args.push_back(currentArg);
+				currentArg = "";
+			}
+			else
+			{
+				if (c == ' ' && depth == 0 && currentArg.empty())
+					continue; // Skip leading spaces
+				currentArg += c;
+			}
+		}
+		if (!currentArg.empty())
+			args.push_back(currentArg);
+
+		std::string result = baseType + "<";
+		for (size_t i = 0; i < args.size(); i++)
+		{
+			if (i > 0)
+				result += ", ";
+			result += mapType(args[i]);
+		}
+		result += ">";
+		return result;
+	}
+
 	// Struct types pass through as-is
 	return tuffType;
 }

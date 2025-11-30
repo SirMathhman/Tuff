@@ -331,6 +331,14 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		std::map<std::string, SymbolInfo> savedSymbolTable = symbolTable;
 		symbolTable.clear();
 
+		// Save generic params scope
+		std::vector<std::string> savedGenericParams = genericParamsInScope;
+		// Add generic params to scope
+		for (auto genParam : node->genericParams)
+		{
+			genericParamsInScope.push_back(genParam->value);
+		}
+
 		// Add parameters to symbol table (immutable)
 		for (size_t i = 0; i < node->children.size() - 1; i++)
 		{
@@ -346,6 +354,9 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 
 		// Restore symbol table
 		symbolTable = savedSymbolTable;
+		// Restore generic params
+		genericParamsInScope = savedGenericParams;
+
 		currentFunctionReturnType = ""; // Clear for safety
 		break;
 	}
@@ -401,6 +412,21 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 
 		const StructInfo &info = it->second;
 
+		// Check generic args
+		if (node->genericArgs.size() != info.genericParams.size())
+		{
+			std::cerr << "Error: Struct '" << structName << "' expects " << info.genericParams.size()
+								<< " generic arguments, got " << node->genericArgs.size() << std::endl;
+			exit(1);
+		}
+
+		// Create substitution map
+		std::map<std::string, std::string> typeSubstitutions;
+		for (size_t i = 0; i < info.genericParams.size(); i++)
+		{
+			typeSubstitutions[info.genericParams[i]] = node->genericArgs[i];
+		}
+
 		// Check field count
 		if (node->children.size() != info.fields.size())
 		{
@@ -415,16 +441,36 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 			auto fieldExpr = node->children[i];
 			check(fieldExpr);
 
-			const std::string &expectedType = info.fields[i].second;
+			std::string expectedType = info.fields[i].second;
+			// Substitute generic types
+			if (typeSubstitutions.count(expectedType))
+			{
+				expectedType = typeSubstitutions[expectedType];
+			}
+
 			if (fieldExpr->inferredType != expectedType)
 			{
 				std::cerr << "Error: Field " << (i + 1) << " of struct '" << structName
 									<< "' expects type " << expectedType << ", got " << fieldExpr->inferredType << std::endl;
 				exit(1);
 			}
+			node->fieldNames.push_back(info.fields[i].first);
 		}
 
-		node->inferredType = structName;
+		// Construct full type name with generics
+		std::string fullType = structName;
+		if (!node->genericArgs.empty())
+		{
+			fullType += "<";
+			for (size_t i = 0; i < node->genericArgs.size(); i++)
+			{
+				fullType += node->genericArgs[i];
+				if (i < node->genericArgs.size() - 1)
+					fullType += ",";
+			}
+			fullType += ">";
+		}
+		node->inferredType = fullType;
 		break;
 	}
 

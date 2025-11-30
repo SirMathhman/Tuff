@@ -1,0 +1,16 @@
+struct Box<T> {
+    value: T
+}
+
+fn test_main(): I32 => {
+    let b1: Box<I32> = Box<I32> { 10 };
+    let b2: Box<Bool> = Box<Bool> { true };
+    
+    if (b2.value) {
+        return b1.value;
+    } else {
+        return 0;
+    }
+}
+
+test_main();

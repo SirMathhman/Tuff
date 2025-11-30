@@ -371,6 +371,13 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 			name += consume(TokenType::IDENTIFIER, "Expected identifier after '::'").value;
 		}
 
+		// Check for generic args
+		std::vector<std::string> genArgs;
+		if (isGenericInstantiation())
+		{
+			genArgs = parseGenericArgs();
+		}
+
 		// Check for struct literal: TypeName { expr, expr, ... }
 		if (peek().type == TokenType::LBRACE)
 		{
@@ -378,6 +385,7 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 			auto node = std::make_shared<ASTNode>();
 			node->type = ASTNodeType::STRUCT_LITERAL;
 			node->value = name; // struct type name
+			node->genericArgs = genArgs;
 
 			// Parse field initializers
 			while (peek().type != TokenType::RBRACE && peek().type != TokenType::END_OF_FILE)
@@ -400,6 +408,7 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 			auto node = std::make_shared<ASTNode>();
 			node->type = ASTNodeType::IDENTIFIER;
 			node->value = name;
+			node->genericArgs = genArgs;
 			return node;
 		}
 	}

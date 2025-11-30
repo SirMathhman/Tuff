@@ -14,12 +14,14 @@ struct SymbolInfo
 struct StructInfo
 {
 	std::vector<std::pair<std::string, std::string>> fields; // (name, type) pairs
+	std::vector<std::string> genericParams;									 // <T>
 };
 
 struct FunctionInfo
 {
 	std::string returnType;
 	std::vector<std::pair<std::string, std::string>> params; // (name, type) pairs
+	std::vector<std::string> genericParams;									 // <T, U>
 };
 
 struct EnumInfo
@@ -44,6 +46,7 @@ private:
 	std::string currentFunctionReturnType;		// Track return type for validation
 	std::string currentModule;								// Track current module context
 	std::vector<std::string> importedModules; // Track use declarations
+	std::vector<std::string> genericParamsInScope; // Track generic params in current scope
 
 	bool isNumericType(const std::string &type)
 	{

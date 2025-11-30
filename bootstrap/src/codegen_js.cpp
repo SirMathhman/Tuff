@@ -299,13 +299,17 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 	}
 	case ASTNodeType::STRUCT_LITERAL:
 	{
-		// Generate: { field1, field2, field3 }
+		// Generate: { field1: val1, field2: val2 }
 		std::stringstream ss;
 		ss << "{ ";
 		for (size_t i = 0; i < node->children.size(); i++)
 		{
 			if (i > 0)
 				ss << ", ";
+			if (i < node->fieldNames.size())
+			{
+				ss << node->fieldNames[i] << ": ";
+			}
 			ss << generateNode(node->children[i]);
 		}
 		ss << " }";

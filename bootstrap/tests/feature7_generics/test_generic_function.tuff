@@ -1,0 +1,13 @@
+fn identity<T>(x: T): T => x;
+
+fn test_main(): I32 => {
+    let a: I32 = identity<I32>(10);
+    let b: Bool = identity<Bool>(true);
+    if (b) {
+        return a;
+    } else {
+        return 0;
+    }
+}
+
+test_main();

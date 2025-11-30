@@ -42,6 +42,9 @@ std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 	node->type = ASTNodeType::FUNCTION_DECL;
 	node->value = funcName.value;
 
+	// Parse generic params <T, U>
+	node->genericParams = parseGenericParams();
+
 	consume(TokenType::LPAREN, "Expected '(' after function name");
 
 	// Parse parameters: name: Type, name: Type, ...
@@ -50,25 +53,14 @@ std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 		auto paramName = consume(TokenType::IDENTIFIER, "Expected parameter name");
 		consume(TokenType::COLON, "Expected ':' after parameter name");
 
-		// Parse parameter type (could be identifier or type keyword)
-		Token paramType = advance();
-		if (paramType.type != TokenType::IDENTIFIER &&
-				paramType.type != TokenType::I32 && paramType.type != TokenType::BOOL &&
-				paramType.type != TokenType::I8 && paramType.type != TokenType::I16 &&
-				paramType.type != TokenType::I64 && paramType.type != TokenType::U8 &&
-				paramType.type != TokenType::U16 && paramType.type != TokenType::U32 &&
-				paramType.type != TokenType::U64 && paramType.type != TokenType::F32 &&
-				paramType.type != TokenType::F64 && paramType.type != TokenType::VOID)
-		{
-			std::cerr << "Error: Expected parameter type at line " << paramType.line << std::endl;
-			exit(1);
-		}
+		// Parse parameter type
+		std::string paramType = parseType();
 
 		// Create parameter node (name in value, type in inferredType)
 		auto paramNode = std::make_shared<ASTNode>();
 		paramNode->type = ASTNodeType::IDENTIFIER;
 		paramNode->value = paramName.value;
-		paramNode->inferredType = paramType.value;
+		paramNode->inferredType = paramType;
 		node->addChild(paramNode);
 
 		if (!match(TokenType::COMMA))
@@ -83,19 +75,7 @@ std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 	std::string returnType = "Void";
 	if (match(TokenType::COLON))
 	{
-		Token retType = advance();
-		if (retType.type != TokenType::IDENTIFIER &&
-				retType.type != TokenType::I32 && retType.type != TokenType::BOOL &&
-				retType.type != TokenType::I8 && retType.type != TokenType::I16 &&
-				retType.type != TokenType::I64 && retType.type != TokenType::U8 &&
-				retType.type != TokenType::U16 && retType.type != TokenType::U32 &&
-				retType.type != TokenType::U64 && retType.type != TokenType::F32 &&
-				retType.type != TokenType::F64 && retType.type != TokenType::VOID)
-		{
-			std::cerr << "Error: Expected return type at line " << retType.line << std::endl;
-			exit(1);
-		}
-		returnType = retType.value;
+		returnType = parseType();
 	}
 	node->inferredType = returnType; // Store return type
 
@@ -136,6 +116,9 @@ std::shared_ptr<ASTNode> Parser::parseStructDecl()
 	node->type = ASTNodeType::STRUCT_DECL;
 	node->value = structName.value;
 
+	// Parse generic params <T>
+	node->genericParams = parseGenericParams();
+
 	consume(TokenType::LBRACE, "Expected '{' after struct name");
 
 	// Parse fields: field_name: Type, ...
@@ -144,25 +127,14 @@ std::shared_ptr<ASTNode> Parser::parseStructDecl()
 		auto fieldName = consume(TokenType::IDENTIFIER, "Expected field name");
 		consume(TokenType::COLON, "Expected ':' after field name");
 
-		// Field type can be an identifier (user-defined type) or type keyword (I32, Bool, etc.)
-		Token fieldType = advance();
-		if (fieldType.type != TokenType::IDENTIFIER &&
-				fieldType.type != TokenType::I32 && fieldType.type != TokenType::BOOL &&
-				fieldType.type != TokenType::I8 && fieldType.type != TokenType::I16 &&
-				fieldType.type != TokenType::I64 && fieldType.type != TokenType::U8 &&
-				fieldType.type != TokenType::U16 && fieldType.type != TokenType::U32 &&
-				fieldType.type != TokenType::U64 && fieldType.type != TokenType::F32 &&
-				fieldType.type != TokenType::F64 && fieldType.type != TokenType::VOID)
-		{
-			std::cerr << "Error: Expected field type at line " << fieldType.line << std::endl;
-			exit(1);
-		}
+		// Field type
+		std::string fieldType = parseType();
 
 		// Create a field node (name in value, type in inferredType)
 		auto fieldNode = std::make_shared<ASTNode>();
 		fieldNode->type = ASTNodeType::IDENTIFIER;
 		fieldNode->value = fieldName.value;
-		fieldNode->inferredType = fieldType.value;
+		fieldNode->inferredType = fieldType;
 		node->addChild(fieldNode);
 
 		if (!match(TokenType::COMMA))
@@ -184,12 +156,7 @@ std::shared_ptr<ASTNode> Parser::parseLetStatement()
 	std::string typeName = "Inferred";
 	if (match(TokenType::COLON))
 	{
-		if (match(TokenType::I32))
-			typeName = "I32";
-		else if (match(TokenType::BOOL))
-			typeName = "Bool";
-		else
-			consume(TokenType::IDENTIFIER, "Expected type");
+		typeName = parseType();
 	}
 
 	consume(TokenType::EQUALS, "Expected '='");

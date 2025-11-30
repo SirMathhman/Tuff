@@ -41,6 +41,11 @@ private:
 	std::shared_ptr<ASTNode> parsePostfix();
 	std::shared_ptr<ASTNode> parsePrimary();
 
+	std::vector<std::shared_ptr<ASTNode>> parseGenericParams();
+	std::string parseType();
+	std::vector<std::string> parseGenericArgs();
+	bool isGenericInstantiation();
+
 public:
 	Parser(const std::vector<Token> &toks);
 	std::shared_ptr<ASTNode> parse();

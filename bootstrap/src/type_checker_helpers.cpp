@@ -1,6 +1,39 @@
 #include "type_checker.h"
 #include <iostream>
 
+// Helper to parse generic type string
+static void parseGenericType(const std::string &fullType, std::string &baseName, std::vector<std::string> &args)
+{
+	size_t start = fullType.find('<');
+	if (start == std::string::npos)
+	{
+		baseName = fullType;
+		return;
+	}
+	baseName = fullType.substr(0, start);
+
+	std::string argsStr = fullType.substr(start + 1, fullType.length() - start - 2); // remove < and >
+
+	int depth = 0;
+	std::string current;
+	for (char c : argsStr)
+	{
+		if (c == '<')
+			depth++;
+		else if (c == '>')
+			depth--;
+		else if (c == ',' && depth == 0)
+		{
+			args.push_back(current);
+			current = "";
+			continue;
+		}
+		current += c;
+	}
+	if (!current.empty())
+		args.push_back(current);
+}
+
 void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 {
 	auto left = node->children[0];
@@ -82,24 +115,45 @@ void TypeChecker::checkFieldOrEnumAccess(std::shared_ptr<ASTNode> node)
 		}
 	}
 
-	auto it = structTable.find(object->inferredType);
+	std::string typeName = object->inferredType;
+	std::string baseName;
+	std::vector<std::string> genericArgs;
+	parseGenericType(typeName, baseName, genericArgs);
+
+	auto it = structTable.find(baseName);
 	if (it == structTable.end())
 	{
-		std::cerr << "Error: Cannot access field '" << fieldName << "' on non-struct type '" << object->inferredType << "'." << std::endl;
+		std::cerr << "Error: Cannot access field '" << fieldName << "' on non-struct type '" << typeName << "'." << std::endl;
 		exit(1);
 	}
 
 	const StructInfo &info = it->second;
+
+	// Create substitution map
+	std::map<std::string, std::string> typeSubstitutions;
+	if (genericArgs.size() == info.genericParams.size())
+	{
+		for (size_t i = 0; i < info.genericParams.size(); i++)
+		{
+			typeSubstitutions[info.genericParams[i]] = genericArgs[i];
+		}
+	}
+
 	for (const auto &field : info.fields)
 	{
 		if (field.first == fieldName)
 		{
-			node->inferredType = field.second;
+			std::string fieldType = field.second;
+			if (typeSubstitutions.count(fieldType))
+			{
+				fieldType = typeSubstitutions[fieldType];
+			}
+			node->inferredType = fieldType;
 			return;
 		}
 	}
 
-	std::cerr << "Error: Struct '" << object->inferredType << "' has no field named '" << fieldName << "'." << std::endl;
+	std::cerr << "Error: Struct '" << typeName << "' has no field named '" << fieldName << "'." << std::endl;
 	exit(1);
 }
 
@@ -116,11 +170,36 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 	auto it = functionTable.find(funcName);
 	if (it == functionTable.end())
 	{
-		std::cerr << "Error: Function '" << funcName << "' not declared." << std::endl;
-		exit(1);
+		// Try FQN resolution if in module
+		if (!currentModule.empty())
+		{
+			std::string fqn = currentModule + "::" + funcName;
+			it = functionTable.find(fqn);
+		}
+
+		if (it == functionTable.end())
+		{
+			std::cerr << "Error: Function '" << funcName << "' not declared." << std::endl;
+			exit(1);
+		}
 	}
 
 	const FunctionInfo &info = it->second;
+
+	// Check generic args
+	if (callee->genericArgs.size() != info.genericParams.size())
+	{
+		std::cerr << "Error: Function '" << funcName << "' expects " << info.genericParams.size()
+							<< " generic arguments, got " << callee->genericArgs.size() << std::endl;
+		exit(1);
+	}
+
+	// Create substitution map
+	std::map<std::string, std::string> typeSubstitutions;
+	for (size_t i = 0; i < info.genericParams.size(); i++)
+	{
+		typeSubstitutions[info.genericParams[i]] = callee->genericArgs[i];
+	}
 
 	size_t argCount = node->children.size() - 1;
 	if (argCount != info.params.size())
@@ -134,15 +213,28 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 	{
 		auto arg = node->children[i + 1];
 		check(arg);
-		if (arg->inferredType != info.params[i].second)
+
+		std::string expectedType = info.params[i].second;
+		// Substitute generic types
+		if (typeSubstitutions.count(expectedType))
+		{
+			expectedType = typeSubstitutions[expectedType];
+		}
+
+		if (arg->inferredType != expectedType)
 		{
 			std::cerr << "Error: Argument " << (i + 1) << " to function '" << funcName
-								<< "' has type " << arg->inferredType << ", expected " << info.params[i].second << std::endl;
+								<< "' has type " << arg->inferredType << ", expected " << expectedType << std::endl;
 			exit(1);
 		}
 	}
 
-	node->inferredType = info.returnType;
+	std::string returnType = info.returnType;
+	if (typeSubstitutions.count(returnType))
+	{
+		returnType = typeSubstitutions[returnType];
+	}
+	node->inferredType = returnType;
 }
 
 void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
@@ -182,6 +274,10 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 					}
 
 					FunctionInfo info;
+					for (auto genParam : moduleChild->genericParams)
+					{
+						info.genericParams.push_back(genParam->value);
+					}
 					info.returnType = moduleChild->inferredType;
 					for (size_t i = 0; i < moduleChild->children.size() - 1; i++)
 					{
@@ -247,6 +343,10 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 					}
 
 					StructInfo info;
+					for (auto genParam : moduleChild->genericParams)
+					{
+						info.genericParams.push_back(genParam->value);
+					}
 					for (auto fieldNode : moduleChild->children)
 					{
 						info.fields.push_back({fieldNode->value, fieldNode->inferredType});
@@ -270,6 +370,10 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 			}
 
 			FunctionInfo info;
+			for (auto genParam : child->genericParams)
+			{
+				info.genericParams.push_back(genParam->value);
+			}
 			info.returnType = child->inferredType;
 			for (size_t i = 0; i < child->children.size() - 1; i++)
 			{
@@ -348,6 +452,10 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 			}
 
 			StructInfo info;
+			for (auto genParam : child->genericParams)
+			{
+				info.genericParams.push_back(genParam->value);
+			}
 			for (auto fieldNode : child->children)
 			{
 				info.fields.push_back({fieldNode->value, fieldNode->inferredType});

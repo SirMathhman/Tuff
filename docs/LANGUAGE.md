@@ -10,7 +10,7 @@
 | 4. Structs                       | ✅ Complete | Definition, instantiation, field access, mutation, nesting      |
 | 5. Functions                     | ✅ Complete | Declaration, calls, return statements, recursion, forward refs  |
 | 6. Enums                         | ✅ Complete | Simple unit enums, variant access, equality comparison          |
-| 7. Generics & Collections        | ⏹️ Planned  | -                                                               |
+| 7. Generics & Collections        | ✅ Complete | Generic functions & structs, type inference, C++ templates & JS dynamic |
 | 8. expect/actual Multi-platform  | ✅ Complete | Fully qualified names, signature validation, JS & C++ codegen   |
 | 9. Modules & Namespaces          | ✅ Complete | Module blocks, FQN support, nested modules, JS & C++ codegen    |
 | 9-13. Advanced Features          | ⏹️ Deferred | -                                                               |
@@ -20,7 +20,7 @@
 Tuff is a statically-typed, self-hosting programming language that compiles to JavaScript and C++. It features:
 
 - Static typing with type inference
-- Generics with monomorphization (C++ template-style)
+- Generics (C++ templates for native, dynamic typing for JS)
 - Multi-platform support via `expect`/`actual` pattern
 - Pointers with lifetimes (Rust-style borrow checking)
 - Arrays with explicit initialization tracking to prevent use-before-init bugs
@@ -402,7 +402,7 @@ Cross-DLL support is deferred. Currently, all `expect`/`actual` matching occurs 
 
 - **Static typing**: All types are checked at compile time
 - **Type inference**: Limited inference for literals and generic type parameters
-- **Generics**: Monomorphization (each generic specialization becomes a separate function)
+- **Generics**: C++ templates (native) / Dynamic typing (JS)
 - **Lifetimes**: Required annotations for pointer parameters (Rust-style)
 
 ## Type System: Literal Types (Planned)

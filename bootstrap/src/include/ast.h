@@ -32,7 +32,8 @@ enum class ASTNodeType
 	UNARY_OP,
 	LITERAL,
 	IDENTIFIER,
-	TYPE
+	TYPE,
+	TYPE_PARAM_DECL // <T>
 };
 
 struct ASTNode
@@ -40,6 +41,9 @@ struct ASTNode
 	ASTNodeType type;
 	std::string value; // For identifiers, literals, operators
 	std::vector<std::shared_ptr<ASTNode>> children;
+	std::vector<std::shared_ptr<ASTNode>> genericParams; // For generic functions/structs declarations <T>
+	std::vector<std::string> genericArgs; // For generic calls/instantiations <I32>
+	std::vector<std::string> fieldNames;	// For struct literals (filled by TypeChecker)
 
 	// Type information (filled by TypeChecker)
 	std::string inferredType;
