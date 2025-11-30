@@ -112,6 +112,22 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 			}
 		}
 
+		// Try imported modules
+		bool foundImported = false;
+		for (const auto &imported : importedModules)
+		{
+			std::string fqn = imported + "::" + name;
+			if (enumTable.find(fqn) != enumTable.end())
+			{
+				node->value = fqn; // Update to FQN
+				node->inferredType = fqn;
+				foundImported = true;
+				break;
+			}
+		}
+		if (foundImported)
+			break;
+
 		// If still not found, error
 		std::cerr << "Error: Variable '" << name << "' not declared." << std::endl;
 		exit(1);
@@ -404,6 +420,37 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 
 		// Check if struct type exists
 		auto it = structTable.find(structName);
+		if (it == structTable.end())
+		{
+			// Try FQN resolution if in module
+			if (!currentModule.empty())
+			{
+				std::string fqn = currentModule + "::" + structName;
+				it = structTable.find(fqn);
+				if (it != structTable.end())
+				{
+					structName = fqn; // Update to FQN
+					node->value = fqn;
+				}
+			}
+
+			// Try imported modules
+			if (it == structTable.end())
+			{
+				for (const auto &imported : importedModules)
+				{
+					std::string fqn = imported + "::" + structName;
+					it = structTable.find(fqn);
+					if (it != structTable.end())
+					{
+						structName = fqn; // Update to FQN
+						node->value = fqn;
+						break;
+					}
+				}
+			}
+		}
+
 		if (it == structTable.end())
 		{
 			std::cerr << "Error: Unknown struct type '" << structName << "'." << std::endl;

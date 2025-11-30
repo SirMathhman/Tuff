@@ -7,14 +7,13 @@ std::shared_ptr<ASTNode> Parser::parseModuleDecl()
 
 	// Parse module name (with :: separators, e.g., com::example)
 	std::string moduleName;
-	moduleName += consume(TokenType::IDENTIFIER, "Expected module name").value;
+	moduleName += consume(TokenType::IDENTIFIER, "Expected module name after 'module' keyword").value;
 
-	while (peek().type == TokenType::COLON && peek(1).type == TokenType::COLON)
+	while (peek().type == TokenType::DOUBLE_COLON)
 	{
-		advance(); // consume first :
-		advance(); // consume second :
+		advance(); // consume ::
 		moduleName += "::";
-		moduleName += consume(TokenType::IDENTIFIER, "Expected identifier after '::'").value;
+		moduleName += consume(TokenType::IDENTIFIER, "Expected identifier after '::' in module path").value;
 	}
 
 	auto moduleNode = std::make_shared<ASTNode>();
@@ -102,14 +101,13 @@ std::shared_ptr<ASTNode> Parser::parseUseDecl()
 
 	// Parse module path (with :: separators, e.g., com::example)
 	std::string modulePath;
-	modulePath += consume(TokenType::IDENTIFIER, "Expected module path").value;
+	modulePath += consume(TokenType::IDENTIFIER, "Expected module path after 'use' keyword").value;
 
-	while (peek().type == TokenType::COLON && peek(1).type == TokenType::COLON)
+	while (peek().type == TokenType::DOUBLE_COLON)
 	{
-		advance(); // consume first :
-		advance(); // consume second :
+		advance(); // consume ::
 		modulePath += "::";
-		modulePath += consume(TokenType::IDENTIFIER, "Expected identifier after '::'").value;
+		modulePath += consume(TokenType::IDENTIFIER, "Expected identifier after '::' in use path").value;
 	}
 
 	consume(TokenType::SEMICOLON, "Expected ';' after use declaration");

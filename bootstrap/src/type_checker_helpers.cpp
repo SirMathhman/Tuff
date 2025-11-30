@@ -44,7 +44,7 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 	std::string leftType = left->inferredType;
 	std::string rightType = right->inferredType;
 
-	if (node->value == "+" || node->value == "-" || node->value == "*" || node->value == "/")
+	if (node->value == "+" || node->value == "-" || node->value == "*" || node->value == "/" || node->value == "%")
 	{
 		if (!isNumericType(leftType) || !isNumericType(rightType))
 		{
@@ -175,6 +175,21 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 		{
 			std::string fqn = currentModule + "::" + funcName;
 			it = functionTable.find(fqn);
+		}
+
+		// Try imported modules
+		if (it == functionTable.end())
+		{
+			for (const auto &imported : importedModules)
+			{
+				std::string fqn = imported + "::" + funcName;
+				it = functionTable.find(fqn);
+				if (it != functionTable.end())
+				{
+					callee->value = fqn; // Update to FQN for codegen
+					break;
+				}
+			}
 		}
 
 		if (it == functionTable.end())
@@ -312,8 +327,6 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 					info.returnType = returnType;
 
 					functionTable[funcName] = info;
-					// Also register without prefix for local access within module
-					functionTable[moduleChild->value] = info;
 				}
 				else if (moduleChild->type == ASTNodeType::ENUM_DECL)
 				{
@@ -330,8 +343,6 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 						info.variants.push_back(variantNode->value);
 					}
 					enumTable[enumName] = info;
-					// Also register without prefix for local access within module
-					enumTable[moduleChild->value] = info;
 				}
 				else if (moduleChild->type == ASTNodeType::STRUCT_DECL)
 				{
@@ -352,8 +363,6 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 						info.fields.push_back({fieldNode->value, fieldNode->inferredType});
 					}
 					structTable[structName] = info;
-					// Also register without prefix for local access within module
-					structTable[moduleChild->value] = info;
 				}
 			}
 

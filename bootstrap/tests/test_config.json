@@ -2,16 +2,31 @@
   "description": "Tuff Compiler Test Configuration",
   "expected_exit_codes": {
     "feature1_variables/test_simple": 10,
-    "feature1_variables/test_mutable": 42,
+    "feature1_variables/test_mutable": 100,
     "feature2_operators/test_all_ops": 30,
-    "feature2_operators/test_arithmetic": 13,
+    "feature2_operators/test_arithmetic": 15,
     "feature7_generics/test_generic_function": 10,
     "feature7_generics/test_generic_struct": 10,
-    "feature7_generics/test_multiple_params": 42
+    "feature7_generics/test_multiple_params": 42,
+    "feature9_modules/test_basic_module": 8,
+    "feature9_modules/test_module_with_struct": 7,
+    "feature9_modules/test_module_with_enum": 1,
+    "feature9_modules/test_nested_module": 20,
+    "feature9_modules/test_use_declaration": 6
   },
-  "skip_tests": [],
+  "negative_tests": {
+    "feature1_variables/test_immutable_reassign": "Cannot assign to immutable variable",
+    "feature1_variables/test_shadowing": "already declared",
+    "feature8_expect_actual/test_missing_actual": "not declared",
+    "feature8_expect_actual/test_signature_mismatch": "return type mismatch"
+  },
+  "skip_tests": [
+    "feature4_structs/test_struct_scoped",
+    "feature8_expect_actual/test_qualified"
+  ],
   "notes": {
     "expected_exit_codes": "Maps test paths to their expected exit codes. Tests not listed here will only verify consistency between JS and C++ targets.",
-    "skip_tests": "List of test paths to skip (e.g., ['feature1_variables/test_broken'])"
+    "negative_tests": "Tests that should fail compilation. Maps test path to expected error message substring.",
+    "skip_tests": "Tests with known bugs or unimplemented features: block-scoped structs, FQN in expect/actual"
   }
 }

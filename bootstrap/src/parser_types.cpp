@@ -41,6 +41,16 @@ std::string Parser::parseType()
 
 	std::string typeName = typeToken.value;
 
+	// Handle FQN: name::name
+	if (typeToken.type == TokenType::IDENTIFIER)
+	{
+		while (match(TokenType::DOUBLE_COLON))
+		{
+			typeName += "::";
+			typeName += consume(TokenType::IDENTIFIER, "Expected identifier after '::'").value;
+		}
+	}
+
 	// Handle generics: Type<T, U>
 	if (typeToken.type == TokenType::IDENTIFIER && match(TokenType::LESS))
 	{

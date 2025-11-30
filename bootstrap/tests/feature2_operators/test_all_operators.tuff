@@ -18,9 +18,9 @@ let gte = a >= b;
 // Logical operators (use immutable booleans for operands)
 let t = true;
 let f = false;
-let and = t && f;
-let or = t || f;
-let not = !t;
+let andResult = t && f;
+let orResult = t || f;
+let notResult = !t;
 
 // Final value (testing arithmetic since it's most versatile)
 mul

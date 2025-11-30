@@ -363,10 +363,9 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 		std::string name = tokens[pos - 1].value;
 
 		// Check for FQN: name::name::...
-		while (peek().type == TokenType::COLON && peek(1).type == TokenType::COLON)
+		while (peek().type == TokenType::DOUBLE_COLON)
 		{
-			advance(); // consume first :
-			advance(); // consume second :
+			advance(); // consume ::
 			name += "::";
 			name += consume(TokenType::IDENTIFIER, "Expected identifier after '::'").value;
 		}

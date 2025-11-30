@@ -164,7 +164,10 @@ std::vector<Token> Lexer::tokenize()
 				tokens.push_back({TokenType::RBRACE, "}", startLine, startCol});
 				break;
 			case ':':
-				tokens.push_back({TokenType::COLON, ":", startLine, startCol});
+				if (match(':'))
+					tokens.push_back({TokenType::DOUBLE_COLON, "::", startLine, startCol});
+				else
+					tokens.push_back({TokenType::COLON, ":", startLine, startCol});
 				break;
 			case ';':
 				tokens.push_back({TokenType::SEMICOLON, ";", startLine, startCol});

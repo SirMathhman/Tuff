@@ -18,4 +18,5 @@ add_executable(tuffc
     src/type_checker_helpers.cpp
     src/codegen_js.cpp
     src/codegen_cpp.cpp
+    src/codegen_cpp_helpers.cpp
 )

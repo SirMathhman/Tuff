@@ -4,5 +4,5 @@ module math {
     fn multiply(x: I32, y: I32): I32 => x * y;
 }
 
-let result = add(5, 3);
+let result = math::add(5, 3);
 result

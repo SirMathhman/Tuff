@@ -84,7 +84,7 @@ function Write-ColorOutput {
 function Initialize-TestEnvironment {
     # Check if compiler exists
     if (-not (Test-Path $CompilerPath)) {
-        Write-ColorOutput "??? Compiler not found at: $CompilerPath" $ColorRed
+        Write-ColorOutput "[ERROR] Compiler not found at: $CompilerPath" $ColorRed
         Write-ColorOutput "Run: cd bootstrap\build; cmake --build . --config Release" $ColorYellow
         exit 1
     }
@@ -94,7 +94,7 @@ function Initialize-TestEnvironment {
         try {
             $null = Get-Command node -ErrorAction Stop
         } catch {
-            Write-ColorOutput "??????  Node.js not found. JavaScript tests will be skipped." $ColorYellow
+            Write-ColorOutput "[WARN] Node.js not found. JavaScript tests will be skipped." $ColorYellow
             if ($Target -eq "js") {
                 exit 1
             }
@@ -106,13 +106,43 @@ function Initialize-TestEnvironment {
         try {
             $null = Get-Command clang -ErrorAction Stop
         } catch {
-            Write-ColorOutput "??????  clang not found. C++ tests will be skipped." $ColorYellow
+            Write-ColorOutput "[WARN] clang not found. C++ tests will be skipped." $ColorYellow
             if ($Target -eq "cpp") {
                 exit 1
             }
         }
     }
 
+    # Load config
+    $configFile = Join-Path $TestDir "test_config.json"
+    if (Test-Path $configFile) {
+        $json = Get-Content $configFile -Raw | ConvertFrom-Json
+        
+        # Load expected exit codes
+        if ($json.expected_exit_codes) {
+            $json.expected_exit_codes.PSObject.Properties | ForEach-Object {
+                $Script:ExpectedExitCodes[$_.Name] = $_.Value
+            }
+        }
+        
+        # Load skipped tests
+        if ($json.skip_tests) {
+            $Script:SkippedTestsList = $json.skip_tests
+        } else {
+            $Script:SkippedTestsList = @()
+        }
+        
+        # Load negative tests (expected to fail compilation)
+        $Script:NegativeTests = @{}
+        if ($json.negative_tests) {
+            $json.negative_tests.PSObject.Properties | ForEach-Object {
+                $Script:NegativeTests[$_.Name] = $_.Value
+            }
+        }
+    } else {
+        $Script:SkippedTestsList = @()
+        $Script:NegativeTests = @{}
+    }
     # Create temp directory
     if (Test-Path $TempDir) {
         Remove-Item $TempDir -Recurse -Force
@@ -263,6 +293,42 @@ function Test-TuffFile {
         ExpectedExitCode = Get-ExpectedExitCode $Test.RelativePath
     }
     
+    if ($Test.RelativePath -in $Script:SkippedTestsList) {
+        $result.Status = "SKIPPED"
+        $result.Message = "Skipped via config"
+        if ($Verbose) { Write-ColorOutput " - SKIPPED" $ColorYellow }
+        return $result
+    }
+    
+    # Check if this is a negative test (expected to fail compilation)
+    if ($Script:NegativeTests.ContainsKey($Test.RelativePath)) {
+        $expectedError = $Script:NegativeTests[$Test.RelativePath]
+        if ($Verbose) {
+            Write-Host "  Testing $($Test.RelativePath) (negative)..." -NoNewline
+        }
+        
+        # Try to compile - should fail
+        $compileResult = Invoke-TuffCompiler -SourcePath $Test.Path -TargetType "js"
+        
+        if ($compileResult.Success) {
+            # Compilation succeeded but should have failed
+            $result.Status = "FAILED"
+            $result.Message = "Expected compilation to fail with '$expectedError' but it succeeded"
+            if ($Verbose) { Write-ColorOutput " x FAILED" $ColorRed }
+        } elseif ($compileResult.Output -match [regex]::Escape($expectedError)) {
+            # Compilation failed with expected error
+            $result.Status = "PASSED"
+            $result.Message = "Correctly rejected: $expectedError"
+            if ($Verbose) { Write-ColorOutput " + PASSED" $ColorGreen }
+        } else {
+            # Compilation failed but with wrong error
+            $result.Status = "FAILED"
+            $result.Message = "Expected error '$expectedError' but got: $($compileResult.Output)"
+            if ($Verbose) { Write-ColorOutput " x FAILED" $ColorRed }
+        }
+        return $result
+    }
+
     if ($Verbose) {
         Write-Host "  Testing $($Test.RelativePath)..." -NoNewline
     }
@@ -274,7 +340,7 @@ function Test-TuffFile {
         if (-not $jsCompile.Success) {
             $result.Status = "ERROR"
             $result.Message = "JS compilation failed"
-            if ($Verbose) { Write-ColorOutput " ??? ERROR" $ColorRed }
+            if ($Verbose) { Write-ColorOutput " ! ERROR" $ColorRed }
             return $result
         }
         
@@ -282,7 +348,7 @@ function Test-TuffFile {
         if (-not $jsRun.Success) {
             $result.Status = "ERROR"
             $result.Message = "JS execution failed"
-            if ($Verbose) { Write-ColorOutput " ??? ERROR" $ColorRed }
+            if ($Verbose) { Write-ColorOutput " ! ERROR" $ColorRed }
             return $result
         }
         
@@ -297,7 +363,7 @@ function Test-TuffFile {
         if (-not $cppCompile.Success) {
             $result.Status = "ERROR"
             $result.Message = "C++ compilation failed"
-            if ($Verbose) { Write-ColorOutput " ??? ERROR" $ColorRed }
+            if ($Verbose) { Write-ColorOutput " ! ERROR" $ColorRed }
             return $result
         }
         
@@ -305,7 +371,7 @@ function Test-TuffFile {
         if (-not $cppRun.Success) {
             $result.Status = "ERROR"
             $result.Message = "C++ execution failed: $($cppRun.Output)"
-            if ($Verbose) { Write-ColorOutput " ??? ERROR" $ColorRed }
+            if ($Verbose) { Write-ColorOutput " ! ERROR" $ColorRed }
             return $result
         }
         
@@ -327,11 +393,11 @@ function Test-TuffFile {
         if ($allMatch) {
             $result.Status = "PASSED"
             $result.Message = "Exit code: $($result.ExpectedExitCode)"
-            if ($Verbose) { Write-ColorOutput " ??? PASSED" $ColorGreen }
+            if ($Verbose) { Write-ColorOutput " + PASSED" $ColorGreen }
         } else {
             $result.Status = "FAILED"
             $result.Message = "Expected: $($result.ExpectedExitCode), JS: $jsExitCode, C++: $cppExitCode"
-            if ($Verbose) { Write-ColorOutput " ??? FAILED" $ColorRed }
+            if ($Verbose) { Write-ColorOutput " x FAILED" $ColorRed }
         }
     } else {
         # Check consistency between targets
@@ -339,18 +405,18 @@ function Test-TuffFile {
             if ($jsExitCode -eq $cppExitCode) {
                 $result.Status = "PASSED"
                 $result.Message = "Both targets agree (exit: $jsExitCode)"
-                if ($Verbose) { Write-ColorOutput " ??? PASSED" $ColorGreen }
+                if ($Verbose) { Write-ColorOutput " + PASSED" $ColorGreen }
             } else {
                 $result.Status = "FAILED"
                 $result.Message = "Exit code mismatch: JS=$jsExitCode, C++=$cppExitCode"
-                if ($Verbose) { Write-ColorOutput " ??? FAILED" $ColorRed }
+                if ($Verbose) { Write-ColorOutput " x FAILED" $ColorRed }
             }
         } else {
             # Single target - just verify it runs
             $result.Status = "PASSED"
             $exitCode = if ($jsExitCode -ne $null) { $jsExitCode } else { $cppExitCode }
             $result.Message = "Exit code: $exitCode"
-            if ($Verbose) { Write-ColorOutput " ??? PASSED" $ColorGreen }
+            if ($Verbose) { Write-ColorOutput " + PASSED" $ColorGreen }
         }
     }
     
@@ -359,9 +425,9 @@ function Test-TuffFile {
 
 function Show-TestSummary {
     Write-Host ""
-    Write-ColorOutput "?????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????" $ColorCyan
-    Write-ColorOutput "TEST SUMMARY" $ColorCyan
-    Write-ColorOutput "?????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????" $ColorCyan
+    Write-ColorOutput "============================================================" $ColorCyan
+    Write-ColorOutput "                       TEST SUMMARY" $ColorCyan
+    Write-ColorOutput "============================================================" $ColorCyan
     
     $allPassed = $true
     
@@ -372,7 +438,7 @@ function Show-TestSummary {
         $errors = ($featureResults | Where-Object { $_.Status -eq "ERROR" }).Count
         $total = $featureResults.Count
         
-        $icon = if ($failed -eq 0 -and $errors -eq 0) { "???" } else { "???"; $allPassed = $false }
+        $icon = if ($failed -eq 0 -and $errors -eq 0) { "[OK]" } else { "[X]"; $allPassed = $false }
         $color = if ($failed -eq 0 -and $errors -eq 0) { $ColorGreen } else { $ColorRed }
         
         Write-Host ""
@@ -382,16 +448,16 @@ function Show-TestSummary {
         foreach ($result in $featureResults) {
             if ($result.Status -in @("FAILED", "ERROR")) {
                 $statusColor = if ($result.Status -eq "FAILED") { $ColorRed } else { $ColorYellow }
-                Write-ColorOutput "  ??? $($result.Test.Name): $($result.Message)" $statusColor
+                Write-ColorOutput "  -> $($result.Test.Name): $($result.Message)" $statusColor
             }
         }
     }
     
     Write-Host ""
-    Write-ColorOutput "?????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????" $ColorCyan
+    Write-ColorOutput "============================================================" $ColorCyan
     $total = $Script:PassedTests + $Script:FailedTests + $Script:ErrorTests
     Write-ColorOutput "TOTAL: $($Script:PassedTests)/${total} passed, $($Script:FailedTests) failed, $($Script:ErrorTests) errors" $ColorCyan
-    Write-ColorOutput "?????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????" $ColorCyan
+    Write-ColorOutput "============================================================" $ColorCyan
     
     return $allPassed
 }
@@ -404,7 +470,7 @@ function Cleanup-TestEnvironment {
 
 # Main execution
 try {
-    Write-ColorOutput "???? Tuff Compiler Test Runner" $ColorCyan
+    Write-ColorOutput "=== Tuff Compiler Test Runner ===" $ColorCyan
     Write-Host ""
     
     Initialize-TestEnvironment

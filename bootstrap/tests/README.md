@@ -98,7 +98,7 @@ The test runner validates:
 
 1. **Compilation**: Both JS and C++ targets must compile successfully
 2. **Execution**: Both targets must execute without crashing
-3. **Exit Codes**: 
+3. **Exit Codes**:
    - If an expected exit code is configured, both targets must match it
    - If no expected exit code is configured, both targets must produce the same exit code
 

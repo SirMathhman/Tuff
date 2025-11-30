@@ -51,6 +51,7 @@ enum class TokenType
 	LANGLE,
 	RANGLE,
 	COLON,
+	DOUBLE_COLON,
 	SEMICOLON,
 	COMMA,
 	DOT,
