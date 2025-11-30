@@ -156,21 +156,7 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		{
 			if (i > 0)
 				ss << ", ";
-
-			// Handle C++ array parameters: int32_t arr[10] instead of int32_t[10] arr
-			std::string paramType = mapType(node->children[i]->inferredType);
-			std::string paramName = node->children[i]->value;
-			size_t bracketPos = paramType.find('[');
-			if (bracketPos != std::string::npos)
-			{
-				std::string baseType = paramType.substr(0, bracketPos);
-				std::string arraySuffix = paramType.substr(bracketPos);
-				ss << baseType << " " << paramName << arraySuffix;
-			}
-			else
-			{
-				ss << paramType << " " << paramName;
-			}
+			ss << mapType(node->children[i]->inferredType) << " " << node->children[i]->value;
 		}
 
 		ss << ") ";
@@ -335,20 +321,7 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 			{
 				if (paramIdx > 0)
 					ss << ", ";
-				// Handle array parameters: int32_t arr[10] instead of int32_t[10] arr
-				std::string paramType = mapType(param->inferredType);
-				std::string paramName = param->value;
-				size_t bracketPos = paramType.find('[');
-				if (bracketPos != std::string::npos)
-				{
-					std::string baseType = paramType.substr(0, bracketPos);
-					std::string arraySuffix = paramType.substr(bracketPos);
-					ss << baseType << " " << paramName << arraySuffix;
-				}
-				else
-				{
-					ss << paramType << " " << paramName;
-				}
+				ss << mapType(param->inferredType) << " " << param->value;
 				paramIdx++;
 			}
 		}
