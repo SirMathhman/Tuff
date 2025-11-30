@@ -25,7 +25,11 @@
     "feature11_ownership/test_lifetime_basic": 10,
     "feature11_ownership/test_lifetime_elision": 42,
     "feature11_ownership/test_lifetime_multiple": 30,
-    "feature11_ownership/test_borrow_scope": 100
+    "feature11_ownership/test_borrow_scope": 100,
+    "feature12_strings/test_string_basic": 104,
+    "feature12_strings/test_string_escapes": 10,
+    "feature12_strings/test_string_indexing": 448,
+    "feature12_strings/test_string_single": 120
   },
   "negative_tests": {
     "feature1_variables/test_immutable_reassign": "Cannot assign to immutable variable",

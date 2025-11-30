@@ -1,0 +1,5 @@
+// Test: Basic string literal
+let s = "hello";
+let first: U8 = s[0];
+let second: U8 = s[1];
+first

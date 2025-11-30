@@ -17,7 +17,7 @@ private:
 	void skipWhitespace();
 	Token identifierOrKeyword();
 	Token number();
-	Token stringLiteral(); // Keeping for future use, though not in current scope
+	Token stringLiteral();
 
 public:
 	Lexer(const std::string &src);

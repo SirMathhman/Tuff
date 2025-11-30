@@ -5,6 +5,24 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 {
 	if (tuffType == "I32")
 		return "int32_t";
+	if (tuffType == "I64")
+		return "int64_t";
+	if (tuffType == "I16")
+		return "int16_t";
+	if (tuffType == "I8")
+		return "int8_t";
+	if (tuffType == "U32")
+		return "uint32_t";
+	if (tuffType == "U64")
+		return "uint64_t";
+	if (tuffType == "U16")
+		return "uint16_t";
+	if (tuffType == "U8")
+		return "uint8_t";
+	if (tuffType == "F32")
+		return "float";
+	if (tuffType == "F64")
+		return "double";
 	if (tuffType == "Bool")
 		return "bool";
 	if (tuffType == "Void")

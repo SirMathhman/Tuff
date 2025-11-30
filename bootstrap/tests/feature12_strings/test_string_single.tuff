@@ -1,0 +1,4 @@
+// Test: Single character string
+let s = "x";
+let c: U8 = s[0];
+c

@@ -1,0 +1,8 @@
+// Test: String escape sequences
+let newline = "\n";
+let tab = "\t";
+let backslash = "\\";
+let quote = "\"";
+let s = "hello\nworld";
+let len_newline: U8 = newline[0];
+len_newline

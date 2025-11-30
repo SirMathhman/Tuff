@@ -1,0 +1,7 @@
+// Test: String indexing
+let s = "test";
+let c0: U8 = s[0];
+let c1: U8 = s[1];
+let c2: U8 = s[2];
+let c3: U8 = s[3];
+c0 + c1 + c2 + c3

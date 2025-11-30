@@ -1,6 +1,7 @@
 #include "lexer.h"
 #include <cctype>
 #include <unordered_map>
+#include <iostream>
 
 Lexer::Lexer(const std::string &src) : source(src) {}
 
@@ -113,6 +114,58 @@ Token Lexer::identifierOrKeyword()
 	return {type, text, line, startCol};
 }
 
+Token Lexer::stringLiteral()
+{
+	int startLine = line;
+	int startCol = column;
+	advance(); // consume opening "
+
+	std::string text;
+	while (peek() != '"' && peek() != '\0')
+	{
+		if (peek() == '\\')
+		{
+			advance(); // consume backslash
+			char escaped = advance();
+			switch (escaped)
+			{
+			case 'n':
+				text += '\n';
+				break;
+			case 't':
+				text += '\t';
+				break;
+			case 'r':
+				text += '\r';
+				break;
+			case '\\':
+				text += '\\';
+				break;
+			case '"':
+				text += '"';
+				break;
+			default:
+				// Unknown escape - just include the character
+				text += escaped;
+				break;
+			}
+		}
+		else
+		{
+			text += advance();
+		}
+	}
+
+	if (peek() != '"')
+	{
+		std::cerr << "Lexer Error: Unterminated string at line " << startLine << std::endl;
+		exit(1);
+	}
+
+	advance(); // consume closing "
+	return {TokenType::STRING_LITERAL, text, startLine, startCol};
+}
+
 Token Lexer::number()
 {
 	int startCol = column;
@@ -145,6 +198,10 @@ std::vector<Token> Lexer::tokenize()
 		else if (isdigit(c))
 		{
 			tokens.push_back(number());
+		}
+		else if (c == '"')
+		{
+			tokens.push_back(stringLiteral());
 		}
 		else
 		{

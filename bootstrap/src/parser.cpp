@@ -366,6 +366,24 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 		node->inferredType = "I32";
 		return node;
 	}
+	else if (match(TokenType::STRING_LITERAL))
+	{
+		// String literal: "hello" → [U8; n; n]
+		auto node = std::make_shared<ASTNode>();
+		node->type = ASTNodeType::ARRAY_LITERAL;
+		
+		std::string str = tokens[pos - 1].value;
+		for (unsigned char c : str)
+		{
+			auto byteNode = std::make_shared<ASTNode>();
+			byteNode->type = ASTNodeType::LITERAL;
+			byteNode->value = std::to_string((int)c);
+			byteNode->inferredType = "U8";
+			node->addChild(byteNode);
+		}
+		
+		return node;
+	}
 	else if (match(TokenType::LBRACKET))
 	{
 		// Array literal: [1, 2, 3]

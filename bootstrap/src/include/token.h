@@ -88,6 +88,7 @@ enum class TokenType
 	// Literals
 	INT_LITERAL,
 	FLOAT_LITERAL,
+	STRING_LITERAL,
 	IDENTIFIER,
 
 	END_OF_FILE
