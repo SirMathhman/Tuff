@@ -8,9 +8,10 @@
 | 2. Primitive Operations          | ✅ Complete | All arithmetic, comparison, logical operators; boolean literals |
 | 3. Control Flow (if/else, while) | ✅ Complete | if/else statements & expressions, while, loop, break, continue  |
 | 4. Structs                       | ✅ Complete | Definition, instantiation, field access, mutation, nesting      |
-| 5. Generics & Collections        | ⏹️ Planned  | -                                                               |
-| 6. expect/actual Multi-platform  | ⏹️ Planned  | -                                                               |
-| 7-11. Advanced Features          | ⏹️ Deferred | -                                                               |
+| 5. Functions                     | ✅ Complete | Declaration, calls, return statements, recursion, forward refs  |
+| 6. Generics & Collections        | ⏹️ Planned  | -                                                               |
+| 7. expect/actual Multi-platform  | ⏹️ Planned  | -                                                               |
+| 8-12. Advanced Features          | ⏹️ Deferred | -                                                               |
 
 ## Overview
 

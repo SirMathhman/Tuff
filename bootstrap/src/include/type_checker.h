@@ -16,11 +16,19 @@ struct StructInfo
 	std::vector<std::pair<std::string, std::string>> fields; // (name, type) pairs
 };
 
+struct FunctionInfo
+{
+	std::string returnType;
+	std::vector<std::pair<std::string, std::string>> params; // (name, type) pairs
+};
+
 class TypeChecker
 {
 private:
 	std::map<std::string, SymbolInfo> symbolTable;
 	std::map<std::string, StructInfo> structTable;
+	std::map<std::string, FunctionInfo> functionTable;
+	std::string currentFunctionReturnType; // Track return type for validation
 
 	bool isNumericType(const std::string &type)
 	{

@@ -1,6 +1,100 @@
 #include "parser.h"
 #include <iostream>
 
+std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
+{
+	consume(TokenType::FN, "Expected 'fn'");
+	auto funcName = consume(TokenType::IDENTIFIER, "Expected function name");
+	
+	auto node = std::make_shared<ASTNode>();
+	node->type = ASTNodeType::FUNCTION_DECL;
+	node->value = funcName.value;
+	
+	consume(TokenType::LPAREN, "Expected '(' after function name");
+	
+	// Parse parameters: name: Type, name: Type, ...
+	while (peek().type != TokenType::RPAREN && peek().type != TokenType::END_OF_FILE)
+	{
+		auto paramName = consume(TokenType::IDENTIFIER, "Expected parameter name");
+		consume(TokenType::COLON, "Expected ':' after parameter name");
+		
+		// Parse parameter type (could be identifier or type keyword)
+		Token paramType = advance();
+		if (paramType.type != TokenType::IDENTIFIER && 
+		    paramType.type != TokenType::I32 && paramType.type != TokenType::BOOL &&
+		    paramType.type != TokenType::I8 && paramType.type != TokenType::I16 &&
+		    paramType.type != TokenType::I64 && paramType.type != TokenType::U8 &&
+		    paramType.type != TokenType::U16 && paramType.type != TokenType::U32 &&
+		    paramType.type != TokenType::U64 && paramType.type != TokenType::F32 &&
+		    paramType.type != TokenType::F64 && paramType.type != TokenType::VOID)
+		{
+			std::cerr << "Error: Expected parameter type at line " << paramType.line << std::endl;
+			exit(1);
+		}
+		
+		// Create parameter node (name in value, type in inferredType)
+		auto paramNode = std::make_shared<ASTNode>();
+		paramNode->type = ASTNodeType::IDENTIFIER;
+		paramNode->value = paramName.value;
+		paramNode->inferredType = paramType.value;
+		node->addChild(paramNode);
+		
+		if (!match(TokenType::COMMA))
+		{
+			break;
+		}
+	}
+	
+	consume(TokenType::RPAREN, "Expected ')' after parameters");
+	
+	// Parse optional return type: `: Type` or default to Void
+	std::string returnType = "Void";
+	if (match(TokenType::COLON))
+	{
+		Token retType = advance();
+		if (retType.type != TokenType::IDENTIFIER && 
+		    retType.type != TokenType::I32 && retType.type != TokenType::BOOL &&
+		    retType.type != TokenType::I8 && retType.type != TokenType::I16 &&
+		    retType.type != TokenType::I64 && retType.type != TokenType::U8 &&
+		    retType.type != TokenType::U16 && retType.type != TokenType::U32 &&
+		    retType.type != TokenType::U64 && retType.type != TokenType::F32 &&
+		    retType.type != TokenType::F64 && retType.type != TokenType::VOID)
+		{
+			std::cerr << "Error: Expected return type at line " << retType.line << std::endl;
+			exit(1);
+		}
+		returnType = retType.value;
+	}
+	node->inferredType = returnType; // Store return type
+	
+	consume(TokenType::FAT_ARROW, "Expected '=>' after function signature");
+	
+	// Parse body: either { block } or single expression
+	if (peek().type == TokenType::LBRACE)
+	{
+		node->addChild(parseBlock());
+	}
+	else
+	{
+		// Expression body: fn add(x: I32, y: I32): I32 => x + y;
+		auto expr = parseExpression();
+		consume(TokenType::SEMICOLON, "Expected ';' after expression body");
+		
+		// Wrap expression in implicit return
+		auto returnNode = std::make_shared<ASTNode>();
+		returnNode->type = ASTNodeType::RETURN_STMT;
+		returnNode->addChild(expr);
+		
+		// Wrap in block
+		auto blockNode = std::make_shared<ASTNode>();
+		blockNode->type = ASTNodeType::BLOCK;
+		blockNode->addChild(returnNode);
+		node->addChild(blockNode);
+	}
+	
+	return node;
+}
+
 std::shared_ptr<ASTNode> Parser::parseStructDecl()
 {
 	consume(TokenType::STRUCT, "Expected 'struct'");
@@ -215,6 +309,18 @@ std::shared_ptr<ASTNode> Parser::parseBlock()
 			node->type = ASTNodeType::CONTINUE_STMT;
 			block->addChild(node);
 			match(TokenType::SEMICOLON);
+		}
+		else if (peek().type == TokenType::RETURN)
+		{
+			advance();
+			auto node = std::make_shared<ASTNode>();
+			node->type = ASTNodeType::RETURN_STMT;
+			if (peek().type != TokenType::SEMICOLON && peek().type != TokenType::RBRACE)
+			{
+				node->addChild(parseExpression());
+			}
+			match(TokenType::SEMICOLON);
+			block->addChild(node);
 		}
 		else if (peek().type == TokenType::IDENTIFIER && (peek(1).type == TokenType::EQUALS || peek(1).type == TokenType::DOT))
 		{

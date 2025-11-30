@@ -10,7 +10,7 @@ std::string CodeGeneratorJS::generate(std::shared_ptr<ASTNode> ast)
 
 	auto isStatement = [](ASTNodeType type)
 	{
-		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL;
+		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::FUNCTION_DECL;
 	};
 
 	for (size_t i = 0; i < ast->children.size(); ++i)
@@ -112,6 +112,48 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::LITERAL:
 	case ASTNodeType::IDENTIFIER:
 		return node->value;
+	case ASTNodeType::FUNCTION_DECL:
+	{
+		std::stringstream ss;
+		ss << "function " << node->value << "(";
+		
+		// Generate parameters (all children except last are params)
+		for (size_t i = 0; i < node->children.size() - 1; i++)
+		{
+			if (i > 0)
+				ss << ", ";
+			ss << node->children[i]->value;
+		}
+		
+		ss << ") ";
+		// Last child is the body
+		ss << generateNode(node->children.back());
+		return ss.str();
+	}
+	case ASTNodeType::CALL_EXPR:
+	{
+		std::stringstream ss;
+		// First child is callee (IDENTIFIER)
+		ss << generateNode(node->children[0]) << "(";
+		
+		// Remaining children are arguments
+		for (size_t i = 1; i < node->children.size(); i++)
+		{
+			if (i > 1)
+				ss << ", ";
+			ss << generateNode(node->children[i]);
+		}
+		
+		ss << ")";
+		return ss.str();
+	}
+	case ASTNodeType::RETURN_STMT:
+	{
+		if (node->children.empty())
+			return "return";
+		else
+			return "return " + generateNode(node->children[0]);
+	}
 	case ASTNodeType::STRUCT_DECL:
 		// Structs don't need runtime declaration in JS
 		return "";

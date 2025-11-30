@@ -16,6 +16,7 @@ private:
 	Token consume(TokenType type, const std::string &errorMsg);
 
 	std::shared_ptr<ASTNode> parseStatement();
+	std::shared_ptr<ASTNode> parseFunctionDecl();
 	std::shared_ptr<ASTNode> parseStructDecl();
 	std::shared_ptr<ASTNode> parseLetStatement();
 	std::shared_ptr<ASTNode> parseAssignmentStatement();

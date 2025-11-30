@@ -1,0 +1,9 @@
+// Test: Recursive factorial function
+fn factorial(n: I32): I32 => {
+    if (n == 0) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+factorial(5)  // Expected: 120

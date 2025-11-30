@@ -6,6 +6,53 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 	switch (node->type)
 	{
 	case ASTNodeType::PROGRAM:
+		// First pass: register all functions and structs
+		for (auto child : node->children)
+		{
+			if (child->type == ASTNodeType::FUNCTION_DECL)
+			{
+				std::string funcName = child->value;
+				if (functionTable.find(funcName) != functionTable.end())
+				{
+					std::cerr << "Error: Function '" << funcName << "' already declared." << std::endl;
+					exit(1);
+				}
+
+				FunctionInfo info;
+				info.returnType = child->inferredType; // Return type stored in inferredType
+
+				// Parameters are the first N children, body is the last child
+				for (size_t i = 0; i < child->children.size() - 1; i++)
+				{
+					auto paramNode = child->children[i];
+					std::string paramName = paramNode->value;
+					std::string paramType = paramNode->inferredType;
+					info.params.push_back({paramName, paramType});
+				}
+
+				functionTable[funcName] = info;
+			}
+			else if (child->type == ASTNodeType::STRUCT_DECL)
+			{
+				std::string structName = child->value;
+				if (structTable.find(structName) != structTable.end())
+				{
+					std::cerr << "Error: Struct '" << structName << "' already declared." << std::endl;
+					exit(1);
+				}
+
+				StructInfo info;
+				for (auto fieldNode : child->children)
+				{
+					std::string fieldName = fieldNode->value;
+					std::string fieldType = fieldNode->inferredType;
+					info.fields.push_back({fieldName, fieldType});
+				}
+				structTable[structName] = info;
+			}
+		}
+
+		// Second pass: type check all nodes
 		for (auto child : node->children)
 		{
 			check(child);
@@ -277,24 +324,114 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 
 	case ASTNodeType::STRUCT_DECL:
 	{
-		std::string structName = node->value;
+		// Already registered in first pass, just skip
+		break;
+	}
 
-		// Check if struct already declared
-		if (structTable.find(structName) != structTable.end())
+	case ASTNodeType::FUNCTION_DECL:
+	{
+		std::string funcName = node->value;
+		currentFunctionReturnType = node->inferredType; // Set for return statement validation
+
+		// Create new scope for function parameters
+		std::map<std::string, SymbolInfo> savedSymbolTable = symbolTable;
+		symbolTable.clear();
+
+		// Add parameters to symbol table (immutable)
+		for (size_t i = 0; i < node->children.size() - 1; i++)
 		{
-			std::cerr << "Error: Struct '" << structName << "' already declared." << std::endl;
+			auto paramNode = node->children[i];
+			std::string paramName = paramNode->value;
+			std::string paramType = paramNode->inferredType;
+			symbolTable[paramName] = {paramType, false}; // parameters are immutable
+		}
+
+		// Type check function body (last child)
+		auto body = node->children.back();
+		check(body);
+
+		// Restore symbol table
+		symbolTable = savedSymbolTable;
+		currentFunctionReturnType = ""; // Clear for safety
+		break;
+	}
+
+	case ASTNodeType::CALL_EXPR:
+	{
+		// First child is the callee (should be IDENTIFIER)
+		auto callee = node->children[0];
+		if (callee->type != ASTNodeType::IDENTIFIER)
+		{
+			std::cerr << "Error: Expected function name in call expression." << std::endl;
 			exit(1);
 		}
 
-		// Register struct with its fields
-		StructInfo info;
-		for (auto fieldNode : node->children)
+		std::string funcName = callee->value;
+		auto it = functionTable.find(funcName);
+		if (it == functionTable.end())
 		{
-			std::string fieldName = fieldNode->value;
-			std::string fieldType = fieldNode->inferredType;
-			info.fields.push_back({fieldName, fieldType});
+			std::cerr << "Error: Function '" << funcName << "' not declared." << std::endl;
+			exit(1);
 		}
-		structTable[structName] = info;
+
+		const FunctionInfo &info = it->second;
+
+		// Check argument count (children[0] is callee, rest are args)
+		size_t argCount = node->children.size() - 1;
+		if (argCount != info.params.size())
+		{
+			std::cerr << "Error: Function '" << funcName << "' expects " << info.params.size()
+								<< " arguments, got " << argCount << std::endl;
+			exit(1);
+		}
+
+		// Check argument types
+		for (size_t i = 0; i < argCount; i++)
+		{
+			auto arg = node->children[i + 1];
+			check(arg);
+			if (arg->inferredType != info.params[i].second)
+			{
+				std::cerr << "Error: Argument " << (i + 1) << " to function '" << funcName
+									<< "' has type " << arg->inferredType << ", expected " << info.params[i].second << std::endl;
+				exit(1);
+			}
+		}
+
+		node->inferredType = info.returnType;
+		break;
+	}
+
+	case ASTNodeType::RETURN_STMT:
+	{
+		if (currentFunctionReturnType.empty())
+		{
+			std::cerr << "Error: Return statement outside of function." << std::endl;
+			exit(1);
+		}
+
+		if (node->children.empty())
+		{
+			// return; with no value
+			if (currentFunctionReturnType != "Void")
+			{
+				std::cerr << "Error: Function expects return type " << currentFunctionReturnType
+									<< ", but got void return." << std::endl;
+				exit(1);
+			}
+		}
+		else
+		{
+			// return expr;
+			auto expr = node->children[0];
+			check(expr);
+			if (expr->inferredType != currentFunctionReturnType)
+			{
+				std::cerr << "Error: Function expects return type " << currentFunctionReturnType
+									<< ", but got " << expr->inferredType << std::endl;
+				exit(1);
+			}
+		}
 		break;
 	}
 

@@ -42,7 +42,11 @@ std::shared_ptr<ASTNode> Parser::parse()
 
 	while (peek().type != TokenType::END_OF_FILE)
 	{
-		if (peek().type == TokenType::STRUCT)
+		if (peek().type == TokenType::FN)
+		{
+			program->addChild(parseFunctionDecl());
+		}
+		else if (peek().type == TokenType::STRUCT)
 		{
 			program->addChild(parseStructDecl());
 		}
@@ -77,6 +81,18 @@ std::shared_ptr<ASTNode> Parser::parse()
 			node->type = ASTNodeType::CONTINUE_STMT;
 			program->addChild(node);
 			match(TokenType::SEMICOLON);
+		}
+		else if (peek().type == TokenType::RETURN)
+		{
+			advance();
+			auto node = std::make_shared<ASTNode>();
+			node->type = ASTNodeType::RETURN_STMT;
+			if (peek().type != TokenType::SEMICOLON && peek().type != TokenType::RBRACE)
+			{
+				node->addChild(parseExpression());
+			}
+			match(TokenType::SEMICOLON);
+			program->addChild(node);
 		}
 		else if (peek().type == TokenType::IDENTIFIER && (peek(1).type == TokenType::EQUALS || peek(1).type == TokenType::DOT))
 		{
@@ -235,15 +251,44 @@ std::shared_ptr<ASTNode> Parser::parsePostfix()
 {
 	auto expr = parsePrimary();
 
-	// Handle field access: expr.field
-	while (match(TokenType::DOT))
+	// Handle postfix operations
+	while (true)
 	{
-		auto fieldName = consume(TokenType::IDENTIFIER, "Expected field name after '.'");
-		auto node = std::make_shared<ASTNode>();
-		node->type = ASTNodeType::FIELD_ACCESS;
-		node->value = fieldName.value;
-		node->addChild(expr);
-		expr = node;
+		if (match(TokenType::DOT))
+		{
+			// Field access: expr.field
+			auto fieldName = consume(TokenType::IDENTIFIER, "Expected field name after '.'");
+			auto node = std::make_shared<ASTNode>();
+			node->type = ASTNodeType::FIELD_ACCESS;
+			node->value = fieldName.value;
+			node->addChild(expr);
+			expr = node;
+		}
+		else if (peek().type == TokenType::LPAREN)
+		{
+			// Function call: expr(args)
+			advance(); // consume '('
+			auto node = std::make_shared<ASTNode>();
+			node->type = ASTNodeType::CALL_EXPR;
+			node->addChild(expr); // callee
+
+			// Parse arguments
+			while (peek().type != TokenType::RPAREN && peek().type != TokenType::END_OF_FILE)
+			{
+				node->addChild(parseExpression());
+				if (!match(TokenType::COMMA))
+				{
+					break;
+				}
+			}
+
+			consume(TokenType::RPAREN, "Expected ')' after function arguments");
+			expr = node;
+		}
+		else
+		{
+			break;
+		}
 	}
 
 	return expr;

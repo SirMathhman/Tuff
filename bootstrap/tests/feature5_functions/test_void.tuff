@@ -1,0 +1,10 @@
+// Test: Void function with no return value
+fn doSomething(): Void => {
+    let x = 10;
+    let y = 20;
+}
+
+fn getValue(): I32 => 99;
+
+doSomething();
+getValue()  // Expected: 99
