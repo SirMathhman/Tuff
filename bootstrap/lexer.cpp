@@ -83,7 +83,23 @@ Token Lexer::identifierOrKeyword()
 	}
 
 	static const std::unordered_map<std::string, TokenType> keywords = {
-			{"expect", TokenType::EXPECT}, {"actual", TokenType::ACTUAL}, {"fn", TokenType::FN}, {"let", TokenType::LET}, {"mut", TokenType::MUT}, {"struct", TokenType::STRUCT}, {"enum", TokenType::ENUM}, {"if", TokenType::IF}, {"else", TokenType::ELSE}, {"while", TokenType::WHILE}, {"return", TokenType::RETURN}, {"type", TokenType::TYPE}, {"I32", TokenType::I32}, {"Bool", TokenType::BOOL}, {"Void", TokenType::VOID}
+			{"expect", TokenType::EXPECT},
+			{"actual", TokenType::ACTUAL},
+			{"fn", TokenType::FN},
+			{"let", TokenType::LET},
+			{"mut", TokenType::MUT},
+			{"struct", TokenType::STRUCT},
+			{"enum", TokenType::ENUM},
+			{"if", TokenType::IF},
+			{"else", TokenType::ELSE},
+			{"while", TokenType::WHILE},
+			{"return", TokenType::RETURN},
+			{"type", TokenType::TYPE},
+			{"true", TokenType::TRUE},
+			{"false", TokenType::FALSE},
+			{"I32", TokenType::I32},
+			{"Bool", TokenType::BOOL},
+			{"Void", TokenType::VOID}
 			// Add other types as needed
 	};
 

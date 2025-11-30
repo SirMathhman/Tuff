@@ -6,17 +6,28 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	std::stringstream ss;
 	ss << "#include <iostream>\n";
 	ss << "#include <cstdint>\n\n";
-	ss << "int main() {\n";
+	
+	// Determine return type from last expression
+	std::string returnType = "int"; // default
+	if (ast->children.size() > 0)
+	{
+		auto lastNode = ast->children.back();
+		returnType = mapType(lastNode->inferredType);
+	}
+	
+	ss << returnType << " main() {\n";
 
 	for (size_t i = 0; i < ast->children.size(); ++i)
 	{
 		auto child = ast->children[i];
-		if (i == ast->children.size() - 1 && (child->type == ASTNodeType::LITERAL || child->type == ASTNodeType::IDENTIFIER))
+		if (i == ast->children.size() - 1)
 		{
+			// Last node: return its value
 			ss << "    return " << generateNode(child) << ";\n";
 		}
 		else
 		{
+			// Earlier nodes: execute for side effects (variable declarations)
 			ss << "    " << generateNode(child) << ";\n";
 		}
 	}

@@ -206,6 +206,18 @@ std::shared_ptr<ASTNode> Parser::parsePrimary() {
         node->value = tokens[pos - 1].value;
         node->inferredType = "I32";
         return node;
+    } else if (match(TokenType::TRUE)) {
+        auto node = std::make_shared<ASTNode>();
+        node->type = ASTNodeType::LITERAL;
+        node->value = "true";
+        node->inferredType = "Bool";
+        return node;
+    } else if (match(TokenType::FALSE)) {
+        auto node = std::make_shared<ASTNode>();
+        node->type = ASTNodeType::LITERAL;
+        node->value = "false";
+        node->inferredType = "Bool";
+        return node;
     } else if (match(TokenType::IDENTIFIER)) {
         auto node = std::make_shared<ASTNode>();
         node->type = ASTNodeType::IDENTIFIER;

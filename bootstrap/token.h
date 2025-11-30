@@ -17,6 +17,8 @@ enum class TokenType
 	WHILE,
 	RETURN,
 	TYPE,
+	TRUE,
+	FALSE,
 
 	// Integer Types
 	U8,

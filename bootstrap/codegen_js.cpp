@@ -6,13 +6,20 @@ std::string CodeGeneratorJS::generate(std::shared_ptr<ASTNode> ast)
 	std::stringstream ss;
 	// For Node.js, we can just emit statements.
 	// If the last node is an expression, we wrap it in process.exit()
+	// Convert booleans to numbers (true=1, false=0) for exit code compatibility
 
 	for (size_t i = 0; i < ast->children.size(); ++i)
 	{
 		auto child = ast->children[i];
-		if (i == ast->children.size() - 1 && (child->type == ASTNodeType::LITERAL || child->type == ASTNodeType::IDENTIFIER))
+		if (i == ast->children.size() - 1)
 		{
-			ss << "process.exit(" << generateNode(child) << ");\n";
+			// Last node: return its value (converted to number if bool)
+			std::string exitCode = generateNode(child);
+			if (child->inferredType == "Bool")
+			{
+				exitCode = "(" + exitCode + " ? 1 : 0)";
+			}
+			ss << "process.exit(" << exitCode << ");\n";
 		}
 		else
 		{

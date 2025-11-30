@@ -1,0 +1,5 @@
+// Test logical operators with boolean literals
+let t = true;
+let f = false;
+let result = t || f;
+result
