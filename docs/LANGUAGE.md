@@ -297,11 +297,47 @@ let b = a + a;           // Error: 200U8 overflows (max 255U8)
 
 This is deferred until after the compiler can self-host.
 
+## Advanced Array Safety (Deferred)
+
+Tuff will support **compile-time initialization tracking** for arrays to prevent use-before-init bugs:
+
+```tuff
+// Array pointer with type-level initialization tracking
+let mut array : *[I32, 0, 100] = malloc(SizeOf<I32> * 100);
+// Type: pointer to I32 array, 0 initialized, capacity 100
+
+array[0] = 10;   // OK: initializes index 0 → type becomes *[I32, 1, 100]
+array[1] = 20;   // OK: initializes index 1 → type becomes *[I32, 2, 100]
+array[2] = 30;   // OK: initializes index 2 → type becomes *[I32, 3, 100]
+
+array[5] = 50;   // ERROR: cannot skip indices (only 3 initialized)
+let x = array[4]; // ERROR: reading uninitialized memory (only 3 initialized)
+```
+
+**Destructor Pattern:**
+```tuff
+type Allocated<T, L : USize> = *[T; 0; L] & ~free;
+extern fn malloc<T, L : USize>(count : SizeOf<T> * L) : Allocated<T, L>;
+extern fn free(this : Allocated<T, L : USize>) : Void;
+
+// ~free is a destructor: any function matching fn ?(this : T) => Void
+// Automatically called when value goes out of scope
+```
+
+**Features:**
+- Sequential initialization enforced at compile-time
+- Array literals: `*[I32, 3, 100] = [10, 20, 30]`
+- Loop analysis: `for i in 0..n { array[i] = i }` tracks initialization count
+- Safe slicing: `array[0..n]` only exposes initialized portion
+
+This requires advanced flow-sensitive type checking and is **extremely complex** - deferred until post-self-hosting.
+
 ## Future Extensions
 
 Features not yet implemented but planned:
 
 - Literal types with compile-time range tracking and overflow detection
+- Advanced array initialization tracking (see above)
 - Pattern matching on enums with associated data
 - Trait/interface system
 - Module system beyond expect/actual
