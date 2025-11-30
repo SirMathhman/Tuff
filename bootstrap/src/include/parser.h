@@ -14,6 +14,7 @@ private:
 	Token advance();
 	bool match(TokenType type);
 	Token consume(TokenType type, const std::string &errorMsg);
+	void error(const std::string &errorMsg, const std::string &syntaxHint = "");
 
 	std::shared_ptr<ASTNode> parseStatement();
 	std::shared_ptr<ASTNode> parseFunctionDecl();

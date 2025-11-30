@@ -35,6 +35,16 @@ Token Parser::consume(TokenType type, const std::string &errorMsg)
 	exit(1);
 }
 
+void Parser::error(const std::string &errorMsg, const std::string &syntaxHint)
+{
+	std::cerr << "Parse Error: " << errorMsg << " at line " << peek().line << std::endl;
+	if (!syntaxHint.empty())
+	{
+		std::cerr << "Syntax: " << syntaxHint << std::endl;
+	}
+	exit(1);
+}
+
 std::shared_ptr<ASTNode> Parser::parse()
 {
 	auto program = std::make_shared<ASTNode>();
@@ -447,7 +457,12 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 				}
 			}
 
-			consume(TokenType::RBRACE, "Expected '}' after struct literal");
+			if (peek().type != TokenType::RBRACE)
+			{
+				error("Expected '}' after struct literal",
+					  "Struct literals use positional fields: Point { x, y } not Point { x: x, y: y }");
+			}
+			advance(); // consume }
 			return node;
 		}
 		else

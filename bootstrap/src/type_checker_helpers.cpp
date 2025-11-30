@@ -206,6 +206,14 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 	{
 		std::cerr << "Error: Function '" << funcName << "' expects " << info.genericParams.size()
 							<< " generic arguments, got " << callee->genericArgs.size() << std::endl;
+		std::cerr << "Syntax: " << funcName << "<";
+		for (size_t i = 0; i < info.genericParams.size(); i++)
+		{
+			if (i > 0)
+				std::cerr << ", ";
+			std::cerr << "Type";
+		}
+		std::cerr << ">(...)" << std::endl;
 		exit(1);
 	}
 

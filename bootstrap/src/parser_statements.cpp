@@ -101,7 +101,12 @@ std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 	{
 		// Expression body: fn add(x: I32, y: I32): I32 => x + y;
 		auto expr = parseExpression();
-		consume(TokenType::SEMICOLON, "Expected ';' after expression body");
+		if (peek().type != TokenType::SEMICOLON)
+		{
+			error("Expected ';' after expression body",
+				  "Expression-body functions need semicolons: fn f() => expr; Block-body functions don't: fn f() => { ... }");
+		}
+		advance(); // consume ;
 
 		// Wrap expression in implicit return
 		auto returnNode = std::make_shared<ASTNode>();
@@ -305,7 +310,12 @@ std::shared_ptr<ASTNode> Parser::parseAssignmentStatement()
 std::shared_ptr<ASTNode> Parser::parseIfStatement()
 {
 	consume(TokenType::IF, "Expected 'if'");
-	consume(TokenType::LPAREN, "Expected '(' after 'if'");
+	if (peek().type != TokenType::LPAREN)
+	{
+		error("Expected '(' after 'if'",
+			  "If conditions require parentheses: if (condition) { ... }");
+	}
+	advance(); // consume (
 	auto condition = parseExpression();
 	consume(TokenType::RPAREN, "Expected ')' after condition");
 
@@ -328,7 +338,12 @@ std::shared_ptr<ASTNode> Parser::parseIfStatement()
 std::shared_ptr<ASTNode> Parser::parseWhileStatement()
 {
 	consume(TokenType::WHILE, "Expected 'while'");
-	consume(TokenType::LPAREN, "Expected '(' after 'while'");
+	if (peek().type != TokenType::LPAREN)
+	{
+		error("Expected '(' after 'while'",
+			  "While conditions require parentheses: while (condition) { ... }");
+	}
+	advance(); // consume (
 	auto condition = parseExpression();
 	consume(TokenType::RPAREN, "Expected ')' after condition");
 
