@@ -31,14 +31,15 @@ foreach ($file in $stagedFiles) {
     }
 }
 
-# Check .md file placement (must be in docs/ or named README.md)
+# Check .md file placement (must be in docs/, named README.md, or in .github/)
 foreach ($file in $stagedFiles) {
     if ($file -match '\.md$') {
         $fileName = Split-Path -Leaf $file
         $isInDocs = $file -match '(/|\\)docs(/|\\)' -or $file -match '^docs(/|\\)'
         $isReadme = $fileName -eq 'README.md'
+        $isInGithub = $file -match '^\.github(/|\\)'
         
-        if (-not ($isInDocs -or $isReadme)) {
+        if (-not ($isInDocs -or $isReadme -or $isInGithub)) {
             $mdViolations += "  - $file"
         }
     }
@@ -106,11 +107,12 @@ if ($dirViolations.Count -gt 0) {
 if ($mdViolations.Count -gt 0) {
     $hasViolations = $true
     Write-Host "`n❌ Documentation organization check FAILED!" -ForegroundColor Red
-    Write-Host "`nThe following .md files are not in the docs/ folder:" -ForegroundColor Yellow
+    Write-Host "`nThe following .md files are not properly organized:" -ForegroundColor Yellow
     $mdViolations | ForEach-Object { Write-Host $_ -ForegroundColor Yellow }
     Write-Host "`nMarkdown files must either:" -ForegroundColor Yellow
     Write-Host "  - Be placed in the docs/ directory, OR" -ForegroundColor Yellow
-    Write-Host "  - Be named README.md`n" -ForegroundColor Yellow
+    Write-Host "  - Be named README.md, OR" -ForegroundColor Yellow
+    Write-Host "  - Be in the .github/ directory`n" -ForegroundColor Yellow
 }
 
 if ($hasViolations) {
