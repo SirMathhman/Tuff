@@ -116,7 +116,7 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 	{
 		std::stringstream ss;
 		ss << "function " << node->value << "(";
-		
+
 		// Generate parameters (all children except last are params)
 		for (size_t i = 0; i < node->children.size() - 1; i++)
 		{
@@ -124,7 +124,7 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 				ss << ", ";
 			ss << node->children[i]->value;
 		}
-		
+
 		ss << ") ";
 		// Last child is the body
 		ss << generateNode(node->children.back());
@@ -135,7 +135,7 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 		std::stringstream ss;
 		// First child is callee (IDENTIFIER)
 		ss << generateNode(node->children[0]) << "(";
-		
+
 		// Remaining children are arguments
 		for (size_t i = 1; i < node->children.size(); i++)
 		{
@@ -143,7 +143,7 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 				ss << ", ";
 			ss << generateNode(node->children[i]);
 		}
-		
+
 		ss << ")";
 		return ss.str();
 	}
