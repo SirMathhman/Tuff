@@ -22,6 +22,8 @@ enum class ASTNodeType
 	STRUCT_LITERAL, // TypeName { expr, expr, ... }
 	ENUM_DECL,			// enum Name { Variant1, Variant2 }
 	ENUM_VALUE,			// EnumName.Variant
+	EXPECT_DECL,		// expect fn name(...): Type;
+	ACTUAL_DECL,		// actual fn name(...): Type => {...}
 	FIELD_ACCESS,		// obj.field
 	CALL_EXPR,
 	BINARY_OP,

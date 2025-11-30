@@ -11,7 +11,7 @@
 | 5. Functions                     | ✅ Complete | Declaration, calls, return statements, recursion, forward refs  |
 | 6. Enums                         | ✅ Complete | Simple unit enums, variant access, equality comparison          |
 | 7. Generics & Collections        | ⏹️ Planned  | -                                                               |
-| 8. expect/actual Multi-platform  | ⏹️ Planned  | -                                                               |
+| 8. expect/actual Multi-platform  | ✅ Complete | Fully qualified names, signature validation, JS & C++ codegen   |
 | 9-13. Advanced Features          | ⏹️ Deferred | -                                                               |
 
 ## Overview
@@ -206,34 +206,55 @@ Single-line and multi-line comments are supported.
 
 Tuff uses the `expect`/`actual` pattern (similar to Kotlin Multiplatform) to support platform-specific implementations.
 
-**Declaring an interface** (core module):
+**Declaring an interface** (expect):
 
 ```tuff
 expect fn print(message: String): Void;
 ```
 
-**Implementing for JavaScript** (js module):
+**Implementing the interface** (actual):
 
 ```tuff
 actual fn print(message: String): Void => {
-    // console.log implementation
+    // Implementation for specific target
 }
 ```
 
-**Implementing for C++** (cpp module):
+**Fully Qualified Names:**
+
+For namespace organization, expect/actual declarations can use fully qualified names with `::` separators:
 
 ```tuff
-actual fn print(message: String): Void => {
-    // std::cout implementation
+expect fn math::add(x: I32, y: I32): I32;
+actual fn math::add(x: I32, y: I32): I32 => x + y;
+
+expect fn io::print(msg: String): Void;
+actual fn io::print(msg: String): Void => {
+    // IO implementation
 }
 ```
 
-When compiling for a target, all `expect` declarations must have corresponding `actual` implementations in that target's module.
+**Signature Validation:**
 
-## Example: Hello World
+Each `actual` must match its corresponding `expect` exactly:
+- Return type must be identical
+- Parameter count must match
+- Parameter types must match in order
+- Parameter names are not significant
 
-**core/main.tuff**:
+**Compilation Model:**
 
+When compiling for a target:
+1. All source files are parsed
+2. All `expect` declarations are registered with their fully qualified names
+3. All `actual` declarations are validated against their corresponding `expect`
+4. An error is raised if an `expect` has no matching `actual` or signatures don't match
+5. `expect` declarations are skipped in code generation
+6. `actual` declarations are emitted as function implementations
+
+**Example: Cross-Platform Hello World**
+
+core/main.tuff:
 ```tuff
 expect fn print(message: String): Void;
 
@@ -242,31 +263,26 @@ fn main(): Void => {
 }
 ```
 
-**js/io.tuff**:
-
+js/io.tuff:
 ```tuff
 actual fn print(message: String): Void => {
-    // JS runtime will implement this
+    // JS console.log
 }
 ```
 
-**cpp/io.tuff**:
-
+cpp/io.tuff:
 ```tuff
 actual fn print(message: String): Void => {
-    // C++ runtime will implement this
+    // C++ std::cout
 }
 ```
 
-## Compilation Targets
+When compiling for JavaScript, `actual fn print` from `js/io.tuff` is used. When compiling for C++, `actual fn print` from `cpp/io.tuff` is used.
 
-### JavaScript (Node.js)
+**Future Enhancement:**
 
-Compiles to modern JavaScript, suitable for Node.js runtime.
+Cross-DLL support is deferred. Currently, all `expect`/`actual` matching occurs within a single compilation unit. Future versions will support linking separate compiled modules.
 
-### C++
-
-Compiles to standard C++ (C++17), linkable with system C libraries via `expect`/`actual` pattern.
 
 ## Type System
 

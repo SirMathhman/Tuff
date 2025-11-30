@@ -1,0 +1,8 @@
+// Test: Basic expect/actual matching
+// Shows platform-specific implementations
+
+expect fn getPlatform(): I32;
+
+actual fn getPlatform(): I32 => 42;
+
+getPlatform()

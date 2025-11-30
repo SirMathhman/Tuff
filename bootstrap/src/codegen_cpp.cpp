@@ -9,7 +9,7 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 
 	auto isStatement = [](ASTNodeType type)
 	{
-		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL;
+		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL || type == ASTNodeType::EXPECT_DECL || type == ASTNodeType::ACTUAL_DECL;
 	};
 
 	// Generate enum declarations first
@@ -41,6 +41,22 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 				if (i > 0)
 					ss << ", ";
 				ss << mapType(child->children[i]->inferredType) << " " << child->children[i]->value;
+			}
+			ss << ");\n";
+		}
+		else if (child->type == ASTNodeType::ACTUAL_DECL)
+		{
+			ss << mapType(child->inferredType) << " " << child->value << "(";
+			size_t paramCount = 0;
+			for (auto param : child->children)
+			{
+				if (param->type == ASTNodeType::IDENTIFIER)
+				{
+					if (paramCount > 0)
+						ss << ", ";
+					ss << mapType(param->inferredType) << " " << param->value;
+					paramCount++;
+				}
 			}
 			ss << ");\n";
 		}
@@ -77,8 +93,8 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	{
 		auto child = ast->children[i];
 
-		// Skip struct, enum, and function declarations (already generated)
-		if (child->type == ASTNodeType::STRUCT_DECL || child->type == ASTNodeType::ENUM_DECL || child->type == ASTNodeType::FUNCTION_DECL)
+		// Skip struct, enum, function, expect, and actual declarations (already generated)
+		if (child->type == ASTNodeType::STRUCT_DECL || child->type == ASTNodeType::ENUM_DECL || child->type == ASTNodeType::FUNCTION_DECL || child->type == ASTNodeType::EXPECT_DECL || child->type == ASTNodeType::ACTUAL_DECL)
 			continue;
 
 		if (i == ast->children.size() - 1 && !isStatement(child->type))
@@ -106,6 +122,11 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	for (auto child : ast->children)
 	{
 		if (child->type == ASTNodeType::FUNCTION_DECL)
+		{
+			ss << "\n"
+				 << generateNode(child) << "\n";
+		}
+		else if (child->type == ASTNodeType::ACTUAL_DECL)
 		{
 			ss << "\n"
 				 << generateNode(child) << "\n";
@@ -258,6 +279,51 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 			ss << "    " << node->children[i]->value;
 		}
 		ss << "\n};";
+		return ss.str();
+	}
+	case ASTNodeType::EXPECT_DECL:
+	{
+		// Skip expect declarations - they have no codegen
+		return "";
+	}
+	case ASTNodeType::ACTUAL_DECL:
+	{
+		// Generate actual as a normal function
+		std::stringstream ss;
+		ss << mapType(node->inferredType) << " " << node->value << "(";
+
+		// Parameters
+		size_t paramIdx = 0;
+		for (auto param : node->children)
+		{
+			if (param->type == ASTNodeType::IDENTIFIER)
+			{
+				if (paramIdx > 0)
+					ss << ", ";
+				ss << mapType(param->inferredType) << " " << param->value;
+				paramIdx++;
+			}
+		}
+		ss << ") ";
+
+		// Find body
+		for (auto child : node->children)
+		{
+			if (child->type != ASTNodeType::IDENTIFIER)
+			{
+				if (child->type == ASTNodeType::BLOCK)
+				{
+					ss << generateNode(child);
+				}
+				else if (child->type == ASTNodeType::RETURN_STMT)
+				{
+					// RETURN_STMT already includes "return " so wrap it directly
+					ss << "{ " << generateNode(child) << "; }";
+				}
+				break;
+			}
+		}
+
 		return ss.str();
 	}
 	case ASTNodeType::ENUM_VALUE:

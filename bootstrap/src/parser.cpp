@@ -46,6 +46,14 @@ std::shared_ptr<ASTNode> Parser::parse()
 		{
 			program->addChild(parseFunctionDecl());
 		}
+		else if (peek().type == TokenType::EXPECT)
+		{
+			program->addChild(parseExpectDecl());
+		}
+		else if (peek().type == TokenType::ACTUAL)
+		{
+			program->addChild(parseActualDecl());
+		}
 		else if (peek().type == TokenType::STRUCT)
 		{
 			program->addChild(parseStructDecl());

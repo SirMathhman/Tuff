@@ -241,6 +241,49 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		break;
 	}
 
+	case ASTNodeType::EXPECT_DECL:
+	{
+		// Already registered in first pass, no body to check
+		break;
+	}
+
+	case ASTNodeType::ACTUAL_DECL:
+	{
+		std::string funcName = node->value;
+		currentFunctionReturnType = node->inferredType;
+
+		// Create new scope for function parameters
+		std::map<std::string, SymbolInfo> savedSymbolTable = symbolTable;
+		symbolTable.clear();
+
+		// Add parameters to symbol table
+		for (size_t i = 0; i < node->children.size(); i++)
+		{
+			auto paramNode = node->children[i];
+			if (paramNode->type == ASTNodeType::IDENTIFIER)
+			{
+				std::string paramName = paramNode->value;
+				std::string paramType = paramNode->inferredType;
+				symbolTable[paramName] = {paramType, false};
+			}
+		}
+
+		// Check function body (last child is the body/return statement)
+		if (!node->children.empty())
+		{
+			auto lastChild = node->children.back();
+			if (lastChild->type == ASTNodeType::RETURN_STMT || lastChild->type == ASTNodeType::BLOCK)
+			{
+				check(lastChild);
+			}
+		}
+
+		// Restore symbol table
+		symbolTable = savedSymbolTable;
+		currentFunctionReturnType = "";
+		break;
+	}
+
 	case ASTNodeType::FUNCTION_DECL:
 	{
 		std::string funcName = node->value;
@@ -356,208 +399,6 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 	}
 }
 
-void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
-{
-	auto left = node->children[0];
-	auto right = node->children[1];
-	check(left);
-	check(right);
 
-	std::string leftType = left->inferredType;
-	std::string rightType = right->inferredType;
 
-	if (node->value == "+" || node->value == "-" || node->value == "*" || node->value == "/")
-	{
-		if ((leftType != "int" && leftType != "float") || (rightType != "int" && rightType != "float"))
-		{
-			std::cerr << "Error: Operands of '" << node->value << "' must be int or float." << std::endl;
-			exit(1);
-		}
-		node->inferredType = (leftType == "float" || rightType == "float") ? "float" : "int";
-	}
-	else if (node->value == "==" || node->value == "!=")
-	{
-		node->inferredType = "Bool";
-	}
-	else if (node->value == "<" || node->value == ">" || node->value == "<=" || node->value == ">=")
-	{
-		if ((leftType != "int" && leftType != "float") || (rightType != "int" && rightType != "float"))
-		{
-			std::cerr << "Error: Operands of '" << node->value << "' must be int or float." << std::endl;
-			exit(1);
-		}
-		node->inferredType = "Bool";
-	}
-	else if (node->value == "&&" || node->value == "||")
-	{
-		if (leftType != "Bool" || rightType != "Bool")
-		{
-			std::cerr << "Error: Operands of '" << node->value << "' must be Bool." << std::endl;
-			exit(1);
-		}
-		node->inferredType = "Bool";
-	}
-	else
-	{
-		std::cerr << "Error: Unknown binary operator '" << node->value << "'." << std::endl;
-		exit(1);
-	}
-}
 
-void TypeChecker::checkFieldOrEnumAccess(std::shared_ptr<ASTNode> node)
-{
-	auto object = node->children[0];
-	check(object);
-
-	std::string fieldName = node->value;
-
-	// Check if it's an enum value access (EnumName.Variant)
-	if (object->type == ASTNodeType::IDENTIFIER)
-	{
-		auto enumIt = enumTable.find(object->value);
-		if (enumIt != enumTable.end())
-		{
-			const EnumInfo &enumInfo = enumIt->second;
-			bool found = false;
-			for (const auto &variant : enumInfo.variants)
-			{
-				if (variant == fieldName)
-				{
-					found = true;
-					break;
-				}
-			}
-			if (!found)
-			{
-				std::cerr << "Error: Enum '" << object->value << "' has no variant named '" << fieldName << "'." << std::endl;
-				exit(1);
-			}
-			node->type = ASTNodeType::ENUM_VALUE;
-			node->inferredType = object->value;
-			return;
-		}
-	}
-
-	// Otherwise, it's a struct field access
-	auto it = structTable.find(object->inferredType);
-	if (it == structTable.end())
-	{
-		std::cerr << "Error: Cannot access field '" << fieldName << "' on non-struct type '" << object->inferredType << "'." << std::endl;
-		exit(1);
-	}
-
-	const StructInfo &info = it->second;
-	for (const auto &field : info.fields)
-	{
-		if (field.first == fieldName)
-		{
-			node->inferredType = field.second;
-			return;
-		}
-	}
-
-	std::cerr << "Error: Struct '" << object->inferredType << "' has no field named '" << fieldName << "'." << std::endl;
-	exit(1);
-}
-
-void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
-{
-	for (auto child : node->children)
-	{
-		if (child->type == ASTNodeType::FUNCTION_DECL)
-		{
-			std::string funcName = child->value;
-			if (functionTable.find(funcName) != functionTable.end())
-			{
-				std::cerr << "Error: Function '" << funcName << "' already declared." << std::endl;
-				exit(1);
-			}
-
-			FunctionInfo info;
-			info.returnType = child->inferredType;
-			for (size_t i = 0; i < child->children.size() - 1; i++)
-			{
-				auto paramNode = child->children[i];
-				info.params.push_back({paramNode->value, paramNode->inferredType});
-			}
-			functionTable[funcName] = info;
-		}
-		else if (child->type == ASTNodeType::STRUCT_DECL)
-		{
-			std::string structName = child->value;
-			if (structTable.find(structName) != structTable.end())
-			{
-				std::cerr << "Error: Struct '" << structName << "' already declared." << std::endl;
-				exit(1);
-			}
-
-			StructInfo info;
-			for (auto fieldNode : child->children)
-			{
-				info.fields.push_back({fieldNode->value, fieldNode->inferredType});
-			}
-			structTable[structName] = info;
-		}
-		else if (child->type == ASTNodeType::ENUM_DECL)
-		{
-			std::string enumName = child->value;
-			if (enumTable.find(enumName) != enumTable.end())
-			{
-				std::cerr << "Error: Enum '" << enumName << "' already declared." << std::endl;
-				exit(1);
-			}
-
-			EnumInfo info;
-			for (auto variantNode : child->children)
-			{
-				info.variants.push_back(variantNode->value);
-			}
-			enumTable[enumName] = info;
-		}
-	}
-}
-
-void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
-{
-	// First child is the callee (should be IDENTIFIER)
-	auto callee = node->children[0];
-	if (callee->type != ASTNodeType::IDENTIFIER)
-	{
-		std::cerr << "Error: Expected function name in call expression." << std::endl;
-		exit(1);
-	}
-
-	std::string funcName = callee->value;
-	auto it = functionTable.find(funcName);
-	if (it == functionTable.end())
-	{
-		std::cerr << "Error: Function '" << funcName << "' not declared." << std::endl;
-		exit(1);
-	}
-
-	const FunctionInfo &info = it->second;
-
-	// Check argument count (children[0] is callee, rest are args)
-	size_t argCount = node->children.size() - 1;
-	if (argCount != info.params.size())
-	{
-		std::cerr << "Error: Function '" << funcName << "' expects " << info.params.size()
-							<< " arguments, got " << argCount << std::endl;
-		exit(1);
-	}
-
-	// Check argument types
-	for (size_t i = 0; i < argCount; i++)
-	{
-		auto arg = node->children[i + 1];
-		check(arg);
-		if (arg->inferredType != info.params[i].second)
-		{
-			std::cerr << "Error: Argument " << (i + 1) << " to function '" << funcName
-								<< "' has type " << arg->inferredType << ", expected " << info.params[i].second << std::endl;
-			exit(1);
-		}
-	}
-
-	node->inferredType = info.returnType;
-}

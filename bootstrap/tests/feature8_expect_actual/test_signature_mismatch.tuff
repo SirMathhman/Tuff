@@ -1,0 +1,8 @@
+// Test: Signature mismatch
+// Expect and actual have different signatures
+
+expect fn calculate(x: I32, y: I32): I32;
+
+actual fn calculate(x: I32, y: I32): Bool => true;
+
+calculate(5, 10)

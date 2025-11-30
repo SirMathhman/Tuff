@@ -10,12 +10,22 @@ std::string CodeGeneratorJS::generate(std::shared_ptr<ASTNode> ast)
 
 	auto isStatement = [](ASTNodeType type)
 	{
-		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL;
+		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL || type == ASTNodeType::EXPECT_DECL || type == ASTNodeType::ACTUAL_DECL;
 	};
 
 	for (size_t i = 0; i < ast->children.size(); ++i)
 	{
 		auto child = ast->children[i];
+		
+		// Skip expect and actual declarations
+		if (child->type == ASTNodeType::EXPECT_DECL)
+			continue;
+		if (child->type == ASTNodeType::ACTUAL_DECL)
+		{
+			ss << generateNode(child) << "\n";
+			continue;
+		}
+		
 		if (i == ast->children.size() - 1 && !isStatement(child->type))
 		{
 			// Last node is an expression: return its value (converted to number if bool)
@@ -169,6 +179,51 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 			ss << node->children[i]->value << ": " << i;
 		}
 		ss << " }";
+		return ss.str();
+	}
+	case ASTNodeType::EXPECT_DECL:
+	{
+		// Skip expect declarations - they have no codegen
+		return "";
+	}
+	case ASTNodeType::ACTUAL_DECL:
+	{
+		// Generate actual as a normal function declaration
+		std::stringstream ss;
+		ss << "function " << node->value << "(";
+
+		// Parameters
+		size_t paramIdx = 0;
+		for (auto param : node->children)
+		{
+			if (param->type == ASTNodeType::IDENTIFIER)
+			{
+				if (paramIdx > 0)
+					ss << ", ";
+				ss << param->value;
+				paramIdx++;
+			}
+		}
+		ss << ") ";
+
+		// Find body (last child that's not an IDENTIFIER)
+		for (auto child : node->children)
+		{
+			if (child->type != ASTNodeType::IDENTIFIER)
+			{
+				if (child->type == ASTNodeType::BLOCK)
+				{
+					ss << generateNode(child);
+				}
+				else if (child->type == ASTNodeType::RETURN_STMT)
+				{
+					// RETURN_STMT already includes "return " so wrap it directly
+					ss << "{ " << generateNode(child) << "; }";
+				}
+				break;
+			}
+		}
+
 		return ss.str();
 	}
 	case ASTNodeType::ENUM_VALUE:

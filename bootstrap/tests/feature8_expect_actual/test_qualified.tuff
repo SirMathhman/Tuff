@@ -1,0 +1,13 @@
+// Test: Fully qualified names (FQN) in expect/actual declarations
+// Function names can use module::path::name syntax
+// But we can only call them by their unqualified name (limitation for now)
+
+expect fn math::double(x: I32): I32;
+
+actual fn math::double(x: I32): I32 => x * 2;
+
+// Note: Can't call math::double() yet due to parser limitations
+// This test just validates that FQN names in declarations parse and match correctly
+
+
+

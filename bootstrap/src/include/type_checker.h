@@ -27,6 +27,12 @@ struct EnumInfo
 	std::vector<std::string> variants; // List of variant names
 };
 
+struct ExpectInfo
+{
+	std::string returnType;
+	std::vector<std::pair<std::string, std::string>> params; // (name, type) pairs
+};
+
 class TypeChecker
 {
 private:
@@ -34,6 +40,7 @@ private:
 	std::map<std::string, StructInfo> structTable;
 	std::map<std::string, FunctionInfo> functionTable;
 	std::map<std::string, EnumInfo> enumTable;
+	std::map<std::string, ExpectInfo> expectTable;
 	std::string currentFunctionReturnType; // Track return type for validation
 
 	bool isNumericType(const std::string &type)

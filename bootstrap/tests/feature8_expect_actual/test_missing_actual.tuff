@@ -1,0 +1,6 @@
+// Test: Missing actual implementation
+// Should error because getPlatform expect has no actual
+
+expect fn getPlatform(): I32;
+
+getPlatform()
