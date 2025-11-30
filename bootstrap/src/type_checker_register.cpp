@@ -42,6 +42,10 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 					{
 						info.genericParams.push_back(genParam->value);
 					}
+					for (const auto &lifetime : moduleChild->lifetimeParams)
+					{
+						info.lifetimeParams.push_back(lifetime);
+					}
 					info.returnType = moduleChild->inferredType;
 					for (size_t i = 0; i < moduleChild->children.size() - 1; i++)
 					{
@@ -191,6 +195,10 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 			for (auto genParam : child->genericParams)
 			{
 				info.genericParams.push_back(genParam->value);
+			}
+			for (const auto &lifetime : child->lifetimeParams)
+			{
+				info.lifetimeParams.push_back(lifetime);
 			}
 			info.returnType = child->inferredType;
 			for (size_t i = 0; i < child->children.size() - 1; i++)

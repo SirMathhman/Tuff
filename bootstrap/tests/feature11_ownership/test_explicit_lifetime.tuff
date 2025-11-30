@@ -1,0 +1,8 @@
+// Test: Explicit lifetime annotation on function
+// Expected: exit 42
+
+fn identity<a>(p: *a I32): *a I32 => p;
+
+let x: I32 = 42;
+let p: *I32 = identity(&x);
+*p

@@ -47,10 +47,10 @@ enum class ASTNodeType
 // Ownership state for borrow checking
 enum class OwnershipState
 {
-	Owned,			 // Variable owns its value
-	Moved,			 // Value has been moved out
-	Borrowed,		 // Immutably borrowed (shared)
-	BorrowedMut	 // Mutably borrowed (exclusive)
+	Owned,			// Variable owns its value
+	Moved,			// Value has been moved out
+	Borrowed,		// Immutably borrowed (shared)
+	BorrowedMut // Mutably borrowed (exclusive)
 };
 
 struct ASTNode

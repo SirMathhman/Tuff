@@ -1,6 +1,23 @@
 #include "codegen_js.h"
 #include <sstream>
 
+// Helper to check if a pointer type is mutable (*mut T or *a mut T)
+static bool isMutablePtr(const std::string &type)
+{
+	if (type.empty() || type[0] != '*')
+		return false;
+	// Check for *mut T
+	if (type.substr(0, 5) == "*mut ")
+		return true;
+	// Check for *a mut T (lifetime followed by mut)
+	if (type.length() > 2 && type[1] >= 'a' && type[1] <= 'z' && type[2] == ' ')
+	{
+		std::string rest = type.substr(3);
+		return rest.substr(0, 4) == "mut ";
+	}
+	return false;
+}
+
 std::string CodeGeneratorJS::generate(std::shared_ptr<ASTNode> ast)
 {
 	std::stringstream ss;
@@ -62,7 +79,7 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 		{
 			auto ptrExpr = lhs->children[0];
 			std::string ptrType = ptrExpr->inferredType;
-			if (ptrType.substr(0, 5) == "*mut ")
+			if (isMutablePtr(ptrType))
 			{
 				return generateNode(ptrExpr) + ".set(" + generateNode(rhs) + ")";
 			}
@@ -172,7 +189,7 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 		auto operand = node->children[0];
 		// Check if this is a mutable pointer by looking at the operand's type
 		std::string ptrType = operand->inferredType;
-		if (ptrType.substr(0, 5) == "*mut ")
+		if (isMutablePtr(ptrType))
 		{
 			// For mutable references, use .ptr() to read the value
 			return generateNode(operand) + ".ptr()";

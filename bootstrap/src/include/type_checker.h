@@ -15,9 +15,9 @@ struct SymbolInfo
 
 struct BorrowInfo
 {
-	std::string borrower;		// Name of variable holding the borrow
-	bool isMutable;					// true for &mut, false for &
-	int scopeDepth;					// Scope level where borrow was created
+	std::string borrower; // Name of variable holding the borrow
+	bool isMutable;				// true for &mut, false for &
+	int scopeDepth;				// Scope level where borrow was created
 };
 
 struct StructInfo
@@ -55,10 +55,10 @@ private:
 	std::map<std::string, ExpectInfo> expectTable;
 	std::map<std::string, std::vector<BorrowInfo>> activeBorrows; // variable -> active borrows
 	int currentScopeDepth = 0;
-	std::string currentFunctionReturnType;				 // Track return type for validation
-	std::string currentModule;										 // Track current module context
-	std::vector<std::string> importedModules;			 // Track use declarations
-	std::vector<std::string> genericParamsInScope; // Track generic params in current scope
+	std::string currentFunctionReturnType;					// Track return type for validation
+	std::string currentModule;											// Track current module context
+	std::vector<std::string> importedModules;				// Track use declarations
+	std::vector<std::string> genericParamsInScope;	// Track generic params in current scope
 	std::vector<std::string> lifetimeParamsInScope; // Track lifetime params in current scope
 
 	bool isNumericType(const std::string &type)
@@ -90,6 +90,11 @@ private:
 	void checkNotMoved(const std::string &variable);
 	void moveVariable(const std::string &variable);
 	std::string applyLifetimeElision(std::shared_ptr<ASTNode> funcNode);
+
+	// Type comparison with lifetime substitution
+	std::string stripLifetime(const std::string &type);
+	bool typesMatch(const std::string &actual, const std::string &expected,
+									const std::vector<std::string> &lifetimeParams);
 
 public:
 	void check(std::shared_ptr<ASTNode> node);

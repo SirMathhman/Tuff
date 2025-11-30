@@ -236,7 +236,8 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 			expectedType = typeSubstitutions[expectedType];
 		}
 
-		if (arg->inferredType != expectedType)
+		// Use typesMatch for lifetime-aware comparison
+		if (!typesMatch(arg->inferredType, expectedType, info.lifetimeParams))
 		{
 			std::cerr << "Error: Argument " << (i + 1) << " to function '" << funcName
 								<< "' has type " << arg->inferredType << ", expected " << expectedType << std::endl;
@@ -249,7 +250,8 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 	{
 		returnType = typeSubstitutions[returnType];
 	}
-	node->inferredType = returnType;
+	// Strip lifetime from return type for the inferred type at call site
+	node->inferredType = stripLifetime(returnType);
 }
 
 void TypeChecker::checkStructLiteral(std::shared_ptr<ASTNode> node)
@@ -515,10 +517,13 @@ void TypeChecker::checkDerefExpr(std::shared_ptr<ASTNode> node)
 
 	if (ptrType.length() > 0 && ptrType[0] == '*')
 	{
-		if (ptrType.substr(0, 5) == "*mut ")
-			node->inferredType = ptrType.substr(5);
+		// Strip the pointer prefix, handling lifetimes
+		// Formats: *T, *mut T, *a T, *a mut T
+		std::string stripped = stripLifetime(ptrType); // Remove lifetime if present
+		if (stripped.substr(0, 5) == "*mut ")
+			node->inferredType = stripped.substr(5);
 		else
-			node->inferredType = ptrType.substr(1);
+			node->inferredType = stripped.substr(1);
 	}
 	else
 	{

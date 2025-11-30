@@ -174,3 +174,60 @@ std::string TypeChecker::applyLifetimeElision(std::shared_ptr<ASTNode> funcNode)
 
 	return returnType;
 }
+std::string TypeChecker::stripLifetime(const std::string &type)
+{
+	// Convert "*a I32" or "*a mut I32" to "*I32" or "*mut I32"
+	if (type.empty() || type[0] != '*')
+	{
+		return type;
+	}
+
+	// Check for lifetime annotation (single lowercase letter after *)
+	// Must be a single letter followed by a space, not "mut" or other keywords
+	if (type.length() > 2 && type[1] >= 'a' && type[1] <= 'z' && type[2] == ' ')
+	{
+		// This is a lifetime: *a I32 or *a mut I32
+		std::string rest = type.substr(3); // Skip "*a "
+		if (rest.substr(0, 4) == "mut ")
+		{
+			return "*mut " + rest.substr(4);
+		}
+		else
+		{
+			return "*" + rest;
+		}
+	}
+
+	return type;
+}
+
+bool TypeChecker::typesMatch(const std::string &actual, const std::string &expected,
+														 const std::vector<std::string> &lifetimeParams)
+{
+	// Fast path: exact match
+	if (actual == expected)
+	{
+		return true;
+	}
+
+	// Check if expected type has a lifetime parameter that needs substitution
+	// Lifetime format: *a T or *a mut T (single letter followed by space)
+	if (expected.length() > 2 && expected[0] == '*' &&
+			expected[1] >= 'a' && expected[1] <= 'z' && expected[2] == ' ')
+	{
+		// Extract the single-letter lifetime name
+		std::string lifetimeName(1, expected[1]);
+		// Check if this is a declared lifetime parameter
+		for (const auto &param : lifetimeParams)
+		{
+			if (lifetimeName == param)
+			{
+				// Compare stripped versions
+				return stripLifetime(actual) == stripLifetime(expected);
+			}
+		}
+	}
+
+	// Strip lifetimes and compare base types
+	return stripLifetime(actual) == stripLifetime(expected);
+}
