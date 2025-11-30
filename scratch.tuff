@@ -3,3 +3,6 @@ import extern stdlib;
 type Allocated<T, L : USize> = *[T; 0; L] & ~free;
 extern fn malloc<T, L : USize>(count : SizeOf<T> * L) : Allocated<T, L>;
 extern fn free(this : Allocated<T, L : USize>) : Void;
+
+let mut array : *[I32, 0, 100] = malloc(SizeOf<I32> * 100);
+array[1] = 200;

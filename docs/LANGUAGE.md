@@ -315,6 +315,7 @@ let x = array[4]; // ERROR: reading uninitialized memory (only 3 initialized)
 ```
 
 **Destructor Pattern:**
+
 ```tuff
 type Allocated<T, L : USize> = *[T; 0; L] & ~free;
 extern fn malloc<T, L : USize>(count : SizeOf<T> * L) : Allocated<T, L>;
@@ -325,6 +326,7 @@ extern fn free(this : Allocated<T, L : USize>) : Void;
 ```
 
 **Features:**
+
 - Sequential initialization enforced at compile-time
 - Array literals: `*[I32, 3, 100] = [10, 20, 30]`
 - Loop analysis: `for i in 0..n { array[i] = i }` tracks initialization count
