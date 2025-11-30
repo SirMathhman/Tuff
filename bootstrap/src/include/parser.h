@@ -25,7 +25,7 @@ private:
 	std::shared_ptr<ASTNode> parseEnumDecl();
 	std::shared_ptr<ASTNode> parseLetStatement();
 	std::shared_ptr<ASTNode> parseAssignmentStatement();
-	bool isAssignmentStatement();  // Lookahead to check for assignment
+	bool isAssignmentStatement(); // Lookahead to check for assignment
 	std::shared_ptr<ASTNode> parseIfStatement();
 	std::shared_ptr<ASTNode> parseWhileStatement();
 	std::shared_ptr<ASTNode> parseLoopStatement();

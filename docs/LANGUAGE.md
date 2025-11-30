@@ -14,7 +14,8 @@
 | 8. expect/actual Multi-platform  | ✅ Complete | Fully qualified names, signature validation, JS & C++ codegen           |
 | 9. Modules & Namespaces          | ✅ Complete | Module blocks, FQN support, nested modules, JS & C++ codegen            |
 | 10. Pointers & Arrays            | ✅ Complete | Pointer refs/deref, mutable/immutable, array literals, indexing         |
-| 11-13. Advanced Features         | ⏹️ Deferred | Type aliases, destructors, type inference improvements                  |
+| 11. Ownership & Borrow Checking  | ✅ Complete | Move semantics, borrow tracking, lifetime elision                       |
+| 12-14. Advanced Features         | ⏹️ Deferred | Type aliases, destructors, type inference improvements                  |
 
 ## Overview
 
@@ -236,6 +237,116 @@ let p: *mut I32 = &mut x;
 
 - Immutable refs: pass by value
 - Mutable refs: wrapper object `{ptr: () => x, set: (v) => x = v}`
+
+## Ownership & Borrow Checking
+
+Tuff enforces memory safety at compile-time through ownership and borrow checking, similar to Rust but with raw pointer representation for C/C++ interop.
+
+### Move Semantics
+
+Non-Copy types (structs, arrays) are **moved** on assignment. After a move, the source variable is invalidated:
+
+```tuff
+struct Data { value: I32 }
+
+let d = Data { 42 };
+let e = d;           // d is moved to e
+// d.value;          // ERROR: use of moved value 'd'
+e.value              // OK: 42
+```
+
+### Copy Types
+
+Primitive types (`I32`, `F64`, `Bool`, etc.) are **copied** instead of moved:
+
+```tuff
+let x: I32 = 42;
+let y = x;           // x is copied to y
+x + y                // OK: both valid, returns 84
+```
+
+### Borrow Rules
+
+Borrows are tracked at compile-time to prevent data races:
+
+1. **Multiple shared borrows** (`&x`) are allowed simultaneously
+2. **Exclusive mutable borrow** (`&mut x`) requires no other borrows
+3. **Cannot use variable directly** while it is mutably borrowed
+4. **Borrows end at scope exit**
+
+```tuff
+// Multiple shared borrows - OK
+let x: I32 = 10;
+let p: *I32 = &x;
+let q: *I32 = &x;    // OK: multiple shared borrows
+*p + *q              // 20
+
+// Exclusive mutable borrow
+let mut x: I32 = 42;
+let p: *mut I32 = &mut x;
+*p = 100;
+// let q: *I32 = &x; // ERROR: x is mutably borrowed
+*p                   // 100
+```
+
+### Scope-Based Borrow Release
+
+Borrows are released when their scope ends:
+
+```tuff
+let mut x: I32 = 42;
+{
+    let p: *mut I32 = &mut x;
+    *p = 100;
+}  // borrow of x ends here
+x  // OK: x is no longer borrowed, returns 100
+```
+
+### Whole-Struct Borrowing
+
+Borrowing any field of a struct borrows the entire struct:
+
+```tuff
+struct Point { x: I32, y: I32 }
+
+let mut p = Point { 1, 2 };
+let px: *mut I32 = &mut p.x;
+// let py: *mut I32 = &mut p.y;  // ERROR: p is already borrowed
+```
+
+### Lifetime Elision
+
+For functions with a single pointer parameter returning a pointer, the lifetime is automatically inferred:
+
+```tuff
+// Written (elided):
+fn identity(p: *I32): *I32 => p;
+
+// Compiler infers the output shares input's lifetime
+```
+
+For multiple pointer parameters returning a pointer, explicit lifetime annotation is required:
+
+```tuff
+fn first<a, b>(x: *a I32, y: *b I32): *a I32 => x;
+```
+
+### Lifetime Syntax
+
+Lifetimes are declared as lowercase identifiers in generic parameter lists:
+
+```tuff
+fn get_ref<a>(p: *a I32): *a I32 => p;
+```
+
+- Lifetime params: lowercase (`a`, `b`, `x`)
+- Type params: uppercase (`T`, `U`, `Item`)
+
+Pointer types with lifetimes: `*a I32`, `*a mut I32`
+
+### Raw Pointer Representation
+
+Unlike Rust, Tuff pointers are raw pointers with no runtime overhead. The borrow checker operates entirely at compile-time. This enables seamless C/C++ interop while maintaining safety guarantees.
 
 ## Comments
 

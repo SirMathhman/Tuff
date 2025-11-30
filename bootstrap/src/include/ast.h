@@ -35,12 +35,22 @@ enum class ASTNodeType
 	TYPE,
 	TYPE_PARAM_DECL, // <T>
 	// Pointer and array types
-	POINTER_TYPE,		 // *T or *mut T
-	ARRAY_TYPE,			 // [T; init; capacity]
-	REFERENCE_EXPR,	 // &x or &mut x
-	DEREF_EXPR,			 // *p
-	ARRAY_LITERAL,	 // [1, 2, 3]
-	INDEX_EXPR			 // arr[i]
+	POINTER_TYPE,		// *T or *mut T
+	ARRAY_TYPE,			// [T; init; capacity]
+	REFERENCE_EXPR, // &x or &mut x
+	DEREF_EXPR,			// *p
+	ARRAY_LITERAL,	// [1, 2, 3]
+	INDEX_EXPR,			// arr[i]
+	LIFETIME_PARAM	// lifetime parameter declaration
+};
+
+// Ownership state for borrow checking
+enum class OwnershipState
+{
+	Owned,			 // Variable owns its value
+	Moved,			 // Value has been moved out
+	Borrowed,		 // Immutably borrowed (shared)
+	BorrowedMut	 // Mutably borrowed (exclusive)
 };
 
 struct ASTNode
@@ -50,6 +60,8 @@ struct ASTNode
 	std::vector<std::shared_ptr<ASTNode>> children;
 	std::vector<std::shared_ptr<ASTNode>> genericParams; // For generic functions/structs declarations <T>
 	std::vector<std::string> genericArgs;								 // For generic calls/instantiations <I32>
+	std::vector<std::string> lifetimeParams;						 // For lifetime declarations <a, b>
+	std::string lifetime;																 // For pointer types: *a I32
 	std::vector<std::string> fieldNames;								 // For struct literals (filled by TypeChecker)
 
 	// Type information (filled by TypeChecker)

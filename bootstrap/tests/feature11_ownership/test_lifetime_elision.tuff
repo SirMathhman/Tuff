@@ -1,0 +1,10 @@
+// Test: Lifetime elision - single input pointer
+// Expected: exit 42
+
+fn deref(p: *I32): I32 => *p;
+
+fn pass_through(p: *I32): *I32 => p;  // elided: <a>(p: *a I32): *a I32
+
+let x: I32 = 42;
+let p: *I32 = pass_through(&x);
+deref(p)

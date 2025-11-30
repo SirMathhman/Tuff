@@ -42,8 +42,19 @@ std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 	node->type = ASTNodeType::FUNCTION_DECL;
 	node->value = funcName.value;
 
-	// Parse generic params <T, U>
-	node->genericParams = parseGenericParams();
+	// Parse generic params <a, b, T, U> - separates lifetimes from type params
+	auto allParams = parseGenericParams();
+	for (auto &param : allParams)
+	{
+		if (param->type == ASTNodeType::LIFETIME_PARAM)
+		{
+			node->lifetimeParams.push_back(param->value);
+		}
+		else
+		{
+			node->genericParams.push_back(param);
+		}
+	}
 
 	consume(TokenType::LPAREN, "Expected '(' after function name");
 

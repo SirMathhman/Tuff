@@ -1,0 +1,7 @@
+// Test: Mutable borrow is exclusive
+// Expected: exit 100
+
+let mut x: I32 = 42;
+let p: *mut I32 = &mut x;  // exclusive mutable borrow
+*p = 100;
+*p

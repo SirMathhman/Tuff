@@ -41,7 +41,23 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 			}
 		}
 
-		symbolTable[name] = {type, node->isMutable};
+		// Handle move semantics: if init is an identifier of non-Copy type, move it
+		if (init->type == ASTNodeType::IDENTIFIER && !isCopyType(type))
+		{
+			std::string srcName = init->value;
+			auto srcIt = symbolTable.find(srcName);
+			if (srcIt != symbolTable.end())
+			{
+				checkNotMoved(srcName);
+				moveVariable(srcName);
+			}
+		}
+
+		SymbolInfo info;
+		info.type = type;
+		info.isMutable = node->isMutable;
+		info.ownership = OwnershipState::Owned;
+		symbolTable[name] = info;
 		break;
 	}
 
@@ -96,6 +112,8 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		auto it = symbolTable.find(name);
 		if (it != symbolTable.end())
 		{
+			// Check if variable has been moved
+			checkNotMoved(name);
 			node->inferredType = it->second.type;
 			break;
 		}
@@ -250,12 +268,21 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 	{
 		// Create new scope for block
 		auto savedSymbols = symbolTable;
+		auto savedBorrows = activeBorrows;
+		currentScopeDepth++;
+
 		for (auto child : node->children)
 		{
 			check(child);
 		}
+
+		// Release borrows created in this scope
+		releaseBorrowsAtScope(currentScopeDepth);
+		currentScopeDepth--;
+
 		// Restore scope after block
 		symbolTable = savedSymbols;
+		activeBorrows = savedBorrows;
 		break;
 	}
 
@@ -345,15 +372,28 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 
 		// Create new scope for function parameters
 		std::map<std::string, SymbolInfo> savedSymbolTable = symbolTable;
+		auto savedBorrows = activeBorrows;
 		symbolTable.clear();
+		activeBorrows.clear();
+		currentScopeDepth++;
 
 		// Save generic params scope
 		std::vector<std::string> savedGenericParams = genericParamsInScope;
+		std::vector<std::string> savedLifetimeParams = lifetimeParamsInScope;
+
 		// Add generic params to scope
 		for (auto genParam : node->genericParams)
 		{
 			genericParamsInScope.push_back(genParam->value);
 		}
+		// Add lifetime params to scope
+		for (const auto &lifetime : node->lifetimeParams)
+		{
+			lifetimeParamsInScope.push_back(lifetime);
+		}
+
+		// Apply lifetime elision if needed
+		applyLifetimeElision(node);
 
 		// Add parameters to symbol table (immutable)
 		for (size_t i = 0; i < node->children.size() - 1; i++)
@@ -361,17 +401,23 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 			auto paramNode = node->children[i];
 			std::string paramName = paramNode->value;
 			std::string paramType = paramNode->inferredType;
-			symbolTable[paramName] = {paramType, false}; // parameters are immutable
+			SymbolInfo info;
+			info.type = paramType;
+			info.isMutable = false;
+			info.ownership = OwnershipState::Owned;
+			symbolTable[paramName] = info;
 		}
 
 		// Type check function body (last child)
 		auto body = node->children.back();
 		check(body);
 
-		// Restore symbol table
+		// Restore state
+		currentScopeDepth--;
 		symbolTable = savedSymbolTable;
-		// Restore generic params
+		activeBorrows = savedBorrows;
 		genericParamsInScope = savedGenericParams;
+		lifetimeParamsInScope = savedLifetimeParams;
 
 		currentFunctionReturnType = ""; // Clear for safety
 		break;

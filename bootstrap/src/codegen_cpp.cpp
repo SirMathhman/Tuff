@@ -45,6 +45,9 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	{
 		if (child->type == ASTNodeType::FUNCTION_DECL)
 		{
+			// Skip main - it's generated as the entry point wrapper
+			if (child->value == "main")
+				continue;
 			if (!child->genericParams.empty())
 			{
 				ss << "template<";
@@ -164,6 +167,9 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	{
 		if (child->type == ASTNodeType::FUNCTION_DECL)
 		{
+			// Skip main - it's already generated as the entry point wrapper
+			if (child->value == "main")
+				continue;
 			ss << "\n"
 				 << generateNode(child) << "\n";
 		}

@@ -434,18 +434,70 @@ void TypeChecker::checkReferenceExpr(std::shared_ptr<ASTNode> node)
 	auto operand = node->children[0];
 	check(operand);
 
-	if (node->isMutable)
+	// Track borrows for identifiers
+	if (operand->type == ASTNodeType::IDENTIFIER)
 	{
-		if (operand->type == ASTNodeType::IDENTIFIER)
+		std::string name = operand->value;
+		auto it = symbolTable.find(name);
+		if (it != symbolTable.end())
 		{
-			std::string name = operand->value;
-			auto it = symbolTable.find(name);
-			if (it != symbolTable.end() && !it->second.isMutable)
+			// Check if variable has been moved
+			checkNotMoved(name);
+
+			if (node->isMutable)
 			{
-				std::cerr << "Error: Cannot take mutable reference of immutable variable '" << name << "'." << std::endl;
-				exit(1);
+				// Check mutability
+				if (!it->second.isMutable)
+				{
+					std::cerr << "Error: Cannot take mutable reference of immutable variable '" << name << "'." << std::endl;
+					exit(1);
+				}
+				// Check for borrow conflicts (need exclusive access)
+				checkBorrowConflicts(name, true);
+				// Record the borrow
+				addBorrow(name, "_temp", true);
+			}
+			else
+			{
+				// Check for borrow conflicts (can coexist with other shared borrows)
+				checkBorrowConflicts(name, false);
+				// Record the borrow
+				addBorrow(name, "_temp", false);
 			}
 		}
+	}
+	else if (operand->type == ASTNodeType::FIELD_ACCESS)
+	{
+		// Borrowing a field borrows the whole struct
+		auto base = operand->children[0];
+		if (base->type == ASTNodeType::IDENTIFIER)
+		{
+			std::string name = base->value;
+			auto it = symbolTable.find(name);
+			if (it != symbolTable.end())
+			{
+				checkNotMoved(name);
+				if (node->isMutable)
+				{
+					if (!it->second.isMutable)
+					{
+						std::cerr << "Error: Cannot take mutable reference of field from immutable variable '" << name << "'." << std::endl;
+						exit(1);
+					}
+					checkBorrowConflicts(name, true);
+					addBorrow(name, "_temp", true);
+				}
+				else
+				{
+					checkBorrowConflicts(name, false);
+					addBorrow(name, "_temp", false);
+				}
+			}
+		}
+	}
+
+	if (node->isMutable)
+	{
 		node->inferredType = "*mut " + operand->inferredType;
 	}
 	else

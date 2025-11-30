@@ -9,7 +9,7 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::LET_STMT:
 	{
 		std::string cppType = mapType(node->inferredType);
-		
+
 		// Handle C++ array declaration: int32_t arr[3] instead of int32_t[3] arr
 		size_t bracketPos = cppType.find('[');
 		if (bracketPos != std::string::npos)
@@ -19,7 +19,7 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 			std::string prefix = node->isMutable ? "" : "const ";
 			return prefix + baseType + " " + node->value + arraySuffix + " = " + generateNode(node->children[0]);
 		}
-		
+
 		// For pointer types, const goes after * (e.g., int32_t* const p)
 		if (!cppType.empty() && cppType.back() == '*')
 		{
@@ -32,7 +32,7 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 				return cppType + " const " + node->value + " = " + generateNode(node->children[0]);
 			}
 		}
-		
+
 		std::string prefix = node->isMutable ? "" : "const ";
 		return prefix + cppType + " " + node->value + " = " + generateNode(node->children[0]);
 	}

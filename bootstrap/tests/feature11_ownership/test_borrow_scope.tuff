@@ -1,0 +1,9 @@
+// Test: Borrow ends at scope exit, variable usable again
+// Expected: exit 100
+
+let mut x: I32 = 42;
+{
+    let p: *mut I32 = &mut x;
+    *p = 100;
+}
+x  // OK: x no longer borrowed

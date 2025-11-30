@@ -17,7 +17,15 @@
     "feature10_pointers_arrays/test_pointer_mutable": 50,
     "feature10_pointers_arrays/test_array_basic": 30,
     "feature10_pointers_arrays/test_array_mutable": 100,
-    "feature10_pointers_arrays/test_array_inferred": 15
+    "feature10_pointers_arrays/test_array_inferred": 15,
+    "feature11_ownership/test_move_basic": 42,
+    "feature11_ownership/test_copy_types": 84,
+    "feature11_ownership/test_borrow_shared": 20,
+    "feature11_ownership/test_borrow_exclusive": 100,
+    "feature11_ownership/test_lifetime_basic": 10,
+    "feature11_ownership/test_lifetime_elision": 42,
+    "feature11_ownership/test_lifetime_multiple": 30,
+    "feature11_ownership/test_borrow_scope": 100
   },
   "negative_tests": {
     "feature1_variables/test_immutable_reassign": "Cannot assign to immutable variable",

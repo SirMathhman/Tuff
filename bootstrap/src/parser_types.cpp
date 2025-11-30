@@ -1,6 +1,12 @@
 #include "parser.h"
 #include <iostream>
 
+// Helper to check if identifier is a lifetime (lowercase first char)
+static bool isLifetimeParam(const std::string &name)
+{
+	return !name.empty() && name[0] >= 'a' && name[0] <= 'z';
+}
+
 std::vector<std::shared_ptr<ASTNode>> Parser::parseGenericParams()
 {
 	std::vector<std::shared_ptr<ASTNode>> params;
@@ -10,7 +16,15 @@ std::vector<std::shared_ptr<ASTNode>> Parser::parseGenericParams()
 		{
 			auto paramName = consume(TokenType::IDENTIFIER, "Expected type parameter name");
 			auto paramNode = std::make_shared<ASTNode>();
-			paramNode->type = ASTNodeType::TYPE_PARAM_DECL;
+			// Lowercase = lifetime param, Uppercase = type param
+			if (isLifetimeParam(paramName.value))
+			{
+				paramNode->type = ASTNodeType::LIFETIME_PARAM;
+			}
+			else
+			{
+				paramNode->type = ASTNodeType::TYPE_PARAM_DECL;
+			}
 			paramNode->value = paramName.value;
 			params.push_back(paramNode);
 
@@ -26,16 +40,27 @@ std::vector<std::shared_ptr<ASTNode>> Parser::parseGenericParams()
 
 std::string Parser::parseType()
 {
-	// Handle pointer types: *T, *mut T, **T
+	// Handle pointer types: *T, *mut T, *a T, *a mut T
 	if (match(TokenType::STAR))
 	{
+		std::string lifetime = "";
+		// Check for lifetime: *a (where 'a' is lowercase identifier)
+		if (peek().type == TokenType::IDENTIFIER && isLifetimeParam(peek().value))
+		{
+			lifetime = advance().value;
+		}
 		bool isMutable = match(TokenType::MUT);
 		std::string innerType = parseType();
+		std::string result = "*";
+		if (!lifetime.empty())
+		{
+			result += lifetime + " ";
+		}
 		if (isMutable)
 		{
-			return "*mut " + innerType;
+			result += "mut ";
 		}
-		return "*" + innerType;
+		return result + innerType;
 	}
 
 	// Handle array types: [T; init; capacity]
