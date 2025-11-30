@@ -1,0 +1,3 @@
+#!/bin/sh
+
+pwsh -NoProfile -ExecutionPolicy Bypass -File "$(git rev-parse --show-toplevel)/.githooks/pre-commit.ps1"
