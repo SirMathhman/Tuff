@@ -18,6 +18,9 @@ enum class ASTNodeType
 	CONTINUE_STMT,
 	RETURN_STMT,
 	BLOCK, // { stmt; stmt; }
+	STRUCT_DECL, // struct Name { field: Type, ... }
+	STRUCT_LITERAL, // TypeName { expr, expr, ... }
+	FIELD_ACCESS, // obj.field
 	CALL_EXPR,
 	BINARY_OP,
 	UNARY_OP,

@@ -170,6 +170,9 @@ std::vector<Token> Lexer::tokenize()
 			case ',':
 				tokens.push_back({TokenType::COMMA, ",", startLine, startCol});
 				break;
+			case '.':
+				tokens.push_back({TokenType::DOT, ".", startLine, startCol});
+				break;
 			case '=':
 				if (match('='))
 					tokens.push_back({TokenType::EQUAL_EQUAL, "==", startLine, startCol});

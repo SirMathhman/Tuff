@@ -16,6 +16,7 @@ private:
 	Token consume(TokenType type, const std::string &errorMsg);
 
 	std::shared_ptr<ASTNode> parseStatement();
+	std::shared_ptr<ASTNode> parseStructDecl();
 	std::shared_ptr<ASTNode> parseLetStatement();
 	std::shared_ptr<ASTNode> parseAssignmentStatement();
 	std::shared_ptr<ASTNode> parseIfStatement();
@@ -31,6 +32,7 @@ private:
 	std::shared_ptr<ASTNode> parseAdditive();
 	std::shared_ptr<ASTNode> parseMultiplicative();
 	std::shared_ptr<ASTNode> parseUnary();
+	std::shared_ptr<ASTNode> parsePostfix();
 	std::shared_ptr<ASTNode> parsePrimary();
 
 public:

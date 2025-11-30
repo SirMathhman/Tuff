@@ -45,26 +45,35 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 
 	case ASTNodeType::ASSIGNMENT_STMT:
 	{
-		std::string name = node->value;
-		auto it = symbolTable.find(name);
-		if (it == symbolTable.end())
-		{
-			std::cerr << "Error: Variable '" << name << "' not declared." << std::endl;
-			exit(1);
-		}
-
-		if (!it->second.isMutable)
-		{
-			std::cerr << "Error: Cannot assign to immutable variable '" << name << "'." << std::endl;
-			exit(1);
-		}
-
-		auto value = node->children[0];
+		// Check if it's a field assignment or simple variable assignment
+		auto lhs = node->children[0];
+		auto value = node->children[1];
+		
+		check(lhs); // This will set the inferred type of lhs
 		check(value);
-
-		if (it->second.type != value->inferredType)
+		
+		// For field access, lhs already has its type checked
+		// For simple identifier, check mutability
+		if (lhs->type == ASTNodeType::IDENTIFIER)
 		{
-			std::cerr << "Error: Type mismatch in assignment to '" << name << "'. Expected " << it->second.type << ", got " << value->inferredType << std::endl;
+			std::string name = lhs->value;
+			auto it = symbolTable.find(name);
+			if (it == symbolTable.end())
+			{
+				std::cerr << "Error: Variable '" << name << "' not declared." << std::endl;
+				exit(1);
+			}
+
+			if (!it->second.isMutable)
+			{
+				std::cerr << "Error: Cannot assign to immutable variable '" << name << "'." << std::endl;
+				exit(1);
+			}
+		}
+		
+		if (lhs->inferredType != value->inferredType)
+		{
+			std::cerr << "Error: Type mismatch in assignment. Expected " << lhs->inferredType << ", got " << value->inferredType << std::endl;
 			exit(1);
 		}
 		break;
@@ -263,6 +272,108 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		}
 		// Restore scope after block
 		symbolTable = savedSymbols;
+		break;
+	}
+
+	case ASTNodeType::STRUCT_DECL:
+	{
+		std::string structName = node->value;
+		
+		// Check if struct already declared
+		if (structTable.find(structName) != structTable.end())
+		{
+			std::cerr << "Error: Struct '" << structName << "' already declared." << std::endl;
+			exit(1);
+		}
+		
+		// Register struct with its fields
+		StructInfo info;
+		for (auto fieldNode : node->children)
+		{
+			std::string fieldName = fieldNode->value;
+			std::string fieldType = fieldNode->inferredType;
+			info.fields.push_back({fieldName, fieldType});
+		}
+		structTable[structName] = info;
+		break;
+	}
+
+	case ASTNodeType::STRUCT_LITERAL:
+	{
+		std::string structName = node->value;
+		
+		// Check if struct type exists
+		auto it = structTable.find(structName);
+		if (it == structTable.end())
+		{
+			std::cerr << "Error: Unknown struct type '" << structName << "'." << std::endl;
+			exit(1);
+		}
+		
+		const StructInfo &info = it->second;
+		
+		// Check field count
+		if (node->children.size() != info.fields.size())
+		{
+			std::cerr << "Error: Struct '" << structName << "' expects " << info.fields.size() 
+					  << " fields, got " << node->children.size() << std::endl;
+			exit(1);
+		}
+		
+		// Check field types in order
+		for (size_t i = 0; i < node->children.size(); i++)
+		{
+			auto fieldExpr = node->children[i];
+			check(fieldExpr);
+			
+			const std::string &expectedType = info.fields[i].second;
+			if (fieldExpr->inferredType != expectedType)
+			{
+				std::cerr << "Error: Field " << (i + 1) << " of struct '" << structName 
+						  << "' expects type " << expectedType << ", got " << fieldExpr->inferredType << std::endl;
+				exit(1);
+			}
+		}
+		
+		node->inferredType = structName;
+		break;
+	}
+
+	case ASTNodeType::FIELD_ACCESS:
+	{
+		auto object = node->children[0];
+		check(object);
+		
+		std::string objType = object->inferredType;
+		std::string fieldName = node->value;
+		
+		// Check if object type is a struct
+		auto it = structTable.find(objType);
+		if (it == structTable.end())
+		{
+			std::cerr << "Error: Cannot access field '" << fieldName << "' on non-struct type '" << objType << "'." << std::endl;
+			exit(1);
+		}
+		
+		const StructInfo &info = it->second;
+		
+		// Find field
+		bool found = false;
+		for (const auto &field : info.fields)
+		{
+			if (field.first == fieldName)
+			{
+				node->inferredType = field.second;
+				found = true;
+				break;
+			}
+		}
+		
+		if (!found)
+		{
+			std::cerr << "Error: Struct '" << objType << "' has no field named '" << fieldName << "'." << std::endl;
+			exit(1);
+		}
 		break;
 	}
 

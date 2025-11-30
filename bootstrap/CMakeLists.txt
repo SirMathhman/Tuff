@@ -10,6 +10,7 @@ add_executable(tuffc
     src/main.cpp
     src/lexer.cpp
     src/parser.cpp
+    src/parser_statements.cpp
     src/type_checker.cpp
     src/codegen_js.cpp
     src/codegen_cpp.cpp

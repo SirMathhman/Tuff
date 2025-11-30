@@ -10,7 +10,7 @@ std::string CodeGeneratorJS::generate(std::shared_ptr<ASTNode> ast)
 
 	auto isStatement = [](ASTNodeType type)
 	{
-		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT;
+		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL;
 	};
 
 	for (size_t i = 0; i < ast->children.size(); ++i)
@@ -44,7 +44,11 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 		return keyword + " " + node->value + " = " + generateNode(node->children[0]);
 	}
 	case ASTNodeType::ASSIGNMENT_STMT:
-		return node->value + " = " + generateNode(node->children[0]);
+	{
+		auto lhs = node->children[0];
+		auto rhs = node->children[1];
+		return generateNode(lhs) + " = " + generateNode(rhs);
+	}
 	case ASTNodeType::IF_STMT:
 	{
 		std::stringstream ss;
@@ -108,6 +112,28 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::LITERAL:
 	case ASTNodeType::IDENTIFIER:
 		return node->value;
+	case ASTNodeType::STRUCT_DECL:
+		// Structs don't need runtime declaration in JS
+		return "";
+	case ASTNodeType::STRUCT_LITERAL:
+	{
+		// Generate: { field1, field2, field3 }
+		std::stringstream ss;
+		ss << "{ ";
+		for (size_t i = 0; i < node->children.size(); i++)
+		{
+			if (i > 0)
+				ss << ", ";
+			ss << generateNode(node->children[i]);
+		}
+		ss << " }";
+		return ss.str();
+	}
+	case ASTNodeType::FIELD_ACCESS:
+	{
+		auto object = generateNode(node->children[0]);
+		return object + "." + node->value;
+	}
 	default:
 		return "";
 	}
