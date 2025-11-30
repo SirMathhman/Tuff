@@ -20,44 +20,73 @@ enum class TokenType
 	EXPECT,
 	ACTUAL,
 	FN,
+	LET,
 	STRUCT,
 	ENUM,
 	IF,
 	ELSE,
 	WHILE,
 	RETURN,
-	// Types
+	TYPE,
+	// Integer Types
+	U8,
+	U16,
+	U32,
+	U64,
+	I8,
+	I16,
 	I32,
 	I64,
+	// Float Types
 	F32,
 	F64,
+	// Other Types
 	BOOL,
-	STRING,
 	VOID,
 	// Symbols
 	LPAREN,
 	RPAREN,
 	LBRACE,
 	RBRACE,
+	LBRACKET,
+	RBRACKET,
 	LANGLE,
 	RANGLE,
 	COLON,
 	SEMICOLON,
 	COMMA,
+	DOT,
 	ARROW,
 	FAT_ARROW,
-	// Operators
+	// Comparison Operators
+	LESS,
+	GREATER,
+	LESS_EQUAL,
+	GREATER_EQUAL,
+	EQUAL_EQUAL,
+	NOT_EQUAL,
+	// Logical Operators
+	AND_AND,
+	OR_OR,
+	NOT,
+	// Bitwise Operators
+	AMPERSAND,
+	PIPE,
+	CARET,
+	TILDE,
+	LEFT_SHIFT,
+	RIGHT_SHIFT,
+	// Arithmetic Operators
 	PLUS,
 	MINUS,
 	STAR,
 	SLASH,
+	PERCENT,
+	// Assignment
 	EQUALS,
-	DOUBLE_EQUALS,
 	// Literals
 	INT_LITERAL,
 	FLOAT_LITERAL,
-	STRING_LITERAL,
-	BOOL_LITERAL,
 	IDENTIFIER,
 	END_OF_FILE
 };
@@ -77,11 +106,21 @@ enum class ASTNodeType
 	FUNCTION_DECL,
 	EXPECT_DECL,
 	ACTUAL_DECL,
-	PARAM,
-	TYPE,
-	BLOCK,
+	STRUCT_DECL,
+	ENUM_DECL,
+	LET_STMT,
+	IF_EXPR,
+	WHILE_STMT,
 	RETURN_STMT,
-	CALL_EXPR
+	BLOCK,
+	CALL_EXPR,
+	BINARY_OP,
+	UNARY_OP,
+	ARRAY_ACCESS,
+	FIELD_ACCESS,
+	LITERAL,
+	IDENTIFIER_NODE,
+	TYPE_NODE
 };
 
 struct ASTNode
