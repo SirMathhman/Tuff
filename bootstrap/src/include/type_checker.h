@@ -43,9 +43,9 @@ private:
 	std::map<std::string, FunctionInfo> functionTable;
 	std::map<std::string, EnumInfo> enumTable;
 	std::map<std::string, ExpectInfo> expectTable;
-	std::string currentFunctionReturnType;		// Track return type for validation
-	std::string currentModule;								// Track current module context
-	std::vector<std::string> importedModules; // Track use declarations
+	std::string currentFunctionReturnType;				 // Track return type for validation
+	std::string currentModule;										 // Track current module context
+	std::vector<std::string> importedModules;			 // Track use declarations
 	std::vector<std::string> genericParamsInScope; // Track generic params in current scope
 
 	bool isNumericType(const std::string &type)

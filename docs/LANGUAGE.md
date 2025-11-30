@@ -2,18 +2,18 @@
 
 ## Implementation Progress
 
-| Feature                          | Status      | Tests                                                           |
-| -------------------------------- | ----------- | --------------------------------------------------------------- |
-| 1. Variables & Let Bindings      | ✅ Complete | `let`, mutable bindings, type inference, no-shadowing           |
-| 2. Primitive Operations          | ✅ Complete | All arithmetic, comparison, logical operators; boolean literals |
-| 3. Control Flow (if/else, while) | ✅ Complete | if/else statements & expressions, while, loop, break, continue  |
-| 4. Structs                       | ✅ Complete | Definition, instantiation, field access, mutation, nesting      |
-| 5. Functions                     | ✅ Complete | Declaration, calls, return statements, recursion, forward refs  |
-| 6. Enums                         | ✅ Complete | Simple unit enums, variant access, equality comparison          |
+| Feature                          | Status      | Tests                                                                   |
+| -------------------------------- | ----------- | ----------------------------------------------------------------------- |
+| 1. Variables & Let Bindings      | ✅ Complete | `let`, mutable bindings, type inference, no-shadowing                   |
+| 2. Primitive Operations          | ✅ Complete | All arithmetic, comparison, logical operators; boolean literals         |
+| 3. Control Flow (if/else, while) | ✅ Complete | if/else statements & expressions, while, loop, break, continue          |
+| 4. Structs                       | ✅ Complete | Definition, instantiation, field access, mutation, nesting              |
+| 5. Functions                     | ✅ Complete | Declaration, calls, return statements, recursion, forward refs          |
+| 6. Enums                         | ✅ Complete | Simple unit enums, variant access, equality comparison                  |
 | 7. Generics & Collections        | ✅ Complete | Generic functions & structs, type inference, C++ templates & JS dynamic |
-| 8. expect/actual Multi-platform  | ✅ Complete | Fully qualified names, signature validation, JS & C++ codegen   |
-| 9. Modules & Namespaces          | ✅ Complete | Module blocks, FQN support, nested modules, JS & C++ codegen    |
-| 9-13. Advanced Features          | ⏹️ Deferred | -                                                               |
+| 8. expect/actual Multi-platform  | ✅ Complete | Fully qualified names, signature validation, JS & C++ codegen           |
+| 9. Modules & Namespaces          | ✅ Complete | Module blocks, FQN support, nested modules, JS & C++ codegen            |
+| 9-13. Advanced Features          | ⏹️ Deferred | -                                                                       |
 
 ## Overview
 

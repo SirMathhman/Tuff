@@ -1,0 +1,17 @@
+{
+  "description": "Tuff Compiler Test Configuration",
+  "expected_exit_codes": {
+    "feature1_variables/test_simple": 10,
+    "feature1_variables/test_mutable": 42,
+    "feature2_operators/test_all_ops": 30,
+    "feature2_operators/test_arithmetic": 13,
+    "feature7_generics/test_generic_function": 10,
+    "feature7_generics/test_generic_struct": 10,
+    "feature7_generics/test_multiple_params": 42
+  },
+  "skip_tests": [],
+  "notes": {
+    "expected_exit_codes": "Maps test paths to their expected exit codes. Tests not listed here will only verify consistency between JS and C++ targets.",
+    "skip_tests": "List of test paths to skip (e.g., ['feature1_variables/test_broken'])"
+  }
+}
