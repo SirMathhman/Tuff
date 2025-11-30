@@ -1,0 +1,4 @@
+actual fn print(message: String): Void => {
+    // JS implementation stub
+    // console.log(message);
+}

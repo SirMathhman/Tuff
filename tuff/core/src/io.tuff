@@ -1,0 +1,1 @@
+expect fn print(message: String): Void;

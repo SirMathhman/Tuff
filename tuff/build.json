@@ -1,0 +1,24 @@
+{
+  "projects": [
+    {
+      "name": "core",
+      "path": "./core",
+      "type": "common"
+    },
+    {
+      "name": "js",
+      "path": "./js",
+      "type": "target",
+      "target": "js",
+      "dependencies": ["core"]
+    },
+    {
+      "name": "cpp",
+      "path": "./cpp",
+      "type": "target",
+      "target": "cpp",
+      "dependencies": ["core"]
+    }
+  ],
+  "defaultTarget": "js"
+}
