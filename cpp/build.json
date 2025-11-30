@@ -1,10 +1,8 @@
 {
-  "name": "js",
+  "name": "cpp",
   "type": "target",
-  "target": "js",
+  "target": "cpp",
   "sourceRoot": "./src",
   "dependencies": ["core"],
-  "actuals": [
-    "io.tuff"
-  ]
+  "actuals": ["io.tuff"]
 }
