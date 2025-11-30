@@ -371,7 +371,7 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 		// String literal: "hello" → [U8; n; n]
 		auto node = std::make_shared<ASTNode>();
 		node->type = ASTNodeType::ARRAY_LITERAL;
-		
+
 		std::string str = tokens[pos - 1].value;
 		for (unsigned char c : str)
 		{
@@ -381,7 +381,7 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 			byteNode->inferredType = "U8";
 			node->addChild(byteNode);
 		}
-		
+
 		return node;
 	}
 	else if (match(TokenType::LBRACKET))
