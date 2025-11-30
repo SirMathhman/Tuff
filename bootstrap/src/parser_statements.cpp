@@ -104,7 +104,7 @@ std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 		if (peek().type != TokenType::SEMICOLON)
 		{
 			error("Expected ';' after expression body",
-				  "Expression-body functions need semicolons: fn f() => expr; Block-body functions don't: fn f() => { ... }");
+						"Expression-body functions need semicolons: fn f() => expr; Block-body functions don't: fn f() => { ... }");
 		}
 		advance(); // consume ;
 
@@ -313,7 +313,7 @@ std::shared_ptr<ASTNode> Parser::parseIfStatement()
 	if (peek().type != TokenType::LPAREN)
 	{
 		error("Expected '(' after 'if'",
-			  "If conditions require parentheses: if (condition) { ... }");
+					"If conditions require parentheses: if (condition) { ... }");
 	}
 	advance(); // consume (
 	auto condition = parseExpression();
@@ -341,7 +341,7 @@ std::shared_ptr<ASTNode> Parser::parseWhileStatement()
 	if (peek().type != TokenType::LPAREN)
 	{
 		error("Expected '(' after 'while'",
-			  "While conditions require parentheses: while (condition) { ... }");
+					"While conditions require parentheses: while (condition) { ... }");
 	}
 	advance(); // consume (
 	auto condition = parseExpression();

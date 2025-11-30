@@ -460,7 +460,7 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 			if (peek().type != TokenType::RBRACE)
 			{
 				error("Expected '}' after struct literal",
-					  "Struct literals use positional fields: Point { x, y } not Point { x: x, y: y }");
+							"Struct literals use positional fields: Point { x, y } not Point { x: x, y: y }");
 			}
 			advance(); // consume }
 			return node;
