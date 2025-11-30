@@ -37,11 +37,11 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	for (size_t i = 0; i < ast->children.size(); ++i)
 	{
 		auto child = ast->children[i];
-		
+
 		// Skip struct declarations (already generated)
 		if (child->type == ASTNodeType::STRUCT_DECL)
 			continue;
-		
+
 		if (i == ast->children.size() - 1 && !isStatement(child->type))
 		{
 			// Last node is an expression: return its value

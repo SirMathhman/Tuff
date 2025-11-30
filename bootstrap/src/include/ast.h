@@ -17,10 +17,10 @@ enum class ASTNodeType
 	BREAK_STMT,
 	CONTINUE_STMT,
 	RETURN_STMT,
-	BLOCK, // { stmt; stmt; }
-	STRUCT_DECL, // struct Name { field: Type, ... }
+	BLOCK,					// { stmt; stmt; }
+	STRUCT_DECL,		// struct Name { field: Type, ... }
 	STRUCT_LITERAL, // TypeName { expr, expr, ... }
-	FIELD_ACCESS, // obj.field
+	FIELD_ACCESS,		// obj.field
 	CALL_EXPR,
 	BINARY_OP,
 	UNARY_OP,

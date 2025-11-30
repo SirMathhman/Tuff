@@ -234,18 +234,18 @@ std::shared_ptr<ASTNode> Parser::parseUnary()
 std::shared_ptr<ASTNode> Parser::parsePostfix()
 {
 	auto expr = parsePrimary();
-	
+
 	// Handle field access: expr.field
 	while (match(TokenType::DOT))
 	{
-		auto fieldName = consume(TokenType::IDENTIFIER, "Expected field name after '.'" );
+		auto fieldName = consume(TokenType::IDENTIFIER, "Expected field name after '.'");
 		auto node = std::make_shared<ASTNode>();
 		node->type = ASTNodeType::FIELD_ACCESS;
 		node->value = fieldName.value;
 		node->addChild(expr);
 		expr = node;
 	}
-	
+
 	return expr;
 }
 
@@ -295,7 +295,7 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 	else if (match(TokenType::IDENTIFIER))
 	{
 		std::string name = tokens[pos - 1].value;
-		
+
 		// Check for struct literal: TypeName { expr, expr, ... }
 		if (peek().type == TokenType::LBRACE)
 		{
@@ -303,19 +303,19 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 			auto node = std::make_shared<ASTNode>();
 			node->type = ASTNodeType::STRUCT_LITERAL;
 			node->value = name; // struct type name
-			
+
 			// Parse field initializers
 			while (peek().type != TokenType::RBRACE && peek().type != TokenType::END_OF_FILE)
 			{
 				auto expr = parseExpression();
 				node->addChild(expr);
-				
+
 				if (!match(TokenType::COMMA))
 				{
 					break;
 				}
 			}
-			
+
 			consume(TokenType::RBRACE, "Expected '}' after struct literal");
 			return node;
 		}

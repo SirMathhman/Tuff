@@ -5,46 +5,46 @@ std::shared_ptr<ASTNode> Parser::parseStructDecl()
 {
 	consume(TokenType::STRUCT, "Expected 'struct'");
 	auto structName = consume(TokenType::IDENTIFIER, "Expected struct name");
-	
+
 	auto node = std::make_shared<ASTNode>();
 	node->type = ASTNodeType::STRUCT_DECL;
 	node->value = structName.value;
-	
+
 	consume(TokenType::LBRACE, "Expected '{' after struct name");
-	
+
 	// Parse fields: field_name: Type, ...
 	while (peek().type != TokenType::RBRACE && peek().type != TokenType::END_OF_FILE)
 	{
 		auto fieldName = consume(TokenType::IDENTIFIER, "Expected field name");
 		consume(TokenType::COLON, "Expected ':' after field name");
-		
+
 		// Field type can be an identifier (user-defined type) or type keyword (I32, Bool, etc.)
 		Token fieldType = advance();
-		if (fieldType.type != TokenType::IDENTIFIER && 
-		    fieldType.type != TokenType::I32 && fieldType.type != TokenType::BOOL &&
-		    fieldType.type != TokenType::I8 && fieldType.type != TokenType::I16 &&
-		    fieldType.type != TokenType::I64 && fieldType.type != TokenType::U8 &&
-		    fieldType.type != TokenType::U16 && fieldType.type != TokenType::U32 &&
-		    fieldType.type != TokenType::U64 && fieldType.type != TokenType::F32 &&
-		    fieldType.type != TokenType::F64 && fieldType.type != TokenType::VOID)
+		if (fieldType.type != TokenType::IDENTIFIER &&
+				fieldType.type != TokenType::I32 && fieldType.type != TokenType::BOOL &&
+				fieldType.type != TokenType::I8 && fieldType.type != TokenType::I16 &&
+				fieldType.type != TokenType::I64 && fieldType.type != TokenType::U8 &&
+				fieldType.type != TokenType::U16 && fieldType.type != TokenType::U32 &&
+				fieldType.type != TokenType::U64 && fieldType.type != TokenType::F32 &&
+				fieldType.type != TokenType::F64 && fieldType.type != TokenType::VOID)
 		{
 			std::cerr << "Error: Expected field type at line " << fieldType.line << std::endl;
 			exit(1);
 		}
-		
+
 		// Create a field node (name in value, type in inferredType)
 		auto fieldNode = std::make_shared<ASTNode>();
 		fieldNode->type = ASTNodeType::IDENTIFIER;
 		fieldNode->value = fieldName.value;
 		fieldNode->inferredType = fieldType.value;
 		node->addChild(fieldNode);
-		
+
 		if (!match(TokenType::COMMA))
 		{
 			break;
 		}
 	}
-	
+
 	consume(TokenType::RBRACE, "Expected '}' after struct fields");
 	return node;
 }
@@ -83,16 +83,16 @@ std::shared_ptr<ASTNode> Parser::parseAssignmentStatement()
 {
 	// Parse left-hand side (could be identifier or field access)
 	Token name = consume(TokenType::IDENTIFIER, "Expected variable name");
-	
+
 	std::shared_ptr<ASTNode> lhs;
-	
+
 	// Check if it's a field access: x.field = value
 	if (peek().type == TokenType::DOT)
 	{
 		lhs = std::make_shared<ASTNode>();
 		lhs->type = ASTNodeType::IDENTIFIER;
 		lhs->value = name.value;
-		
+
 		while (match(TokenType::DOT))
 		{
 			auto fieldName = consume(TokenType::IDENTIFIER, "Expected field name after '.'");
@@ -110,7 +110,7 @@ std::shared_ptr<ASTNode> Parser::parseAssignmentStatement()
 		lhs->type = ASTNodeType::IDENTIFIER;
 		lhs->value = name.value;
 	}
-	
+
 	consume(TokenType::EQUALS, "Expected '='");
 	auto value = parseExpression();
 	consume(TokenType::SEMICOLON, "Expected ';'");

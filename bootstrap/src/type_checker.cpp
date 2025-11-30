@@ -48,10 +48,10 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		// Check if it's a field assignment or simple variable assignment
 		auto lhs = node->children[0];
 		auto value = node->children[1];
-		
+
 		check(lhs); // This will set the inferred type of lhs
 		check(value);
-		
+
 		// For field access, lhs already has its type checked
 		// For simple identifier, check mutability
 		if (lhs->type == ASTNodeType::IDENTIFIER)
@@ -70,7 +70,7 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 				exit(1);
 			}
 		}
-		
+
 		if (lhs->inferredType != value->inferredType)
 		{
 			std::cerr << "Error: Type mismatch in assignment. Expected " << lhs->inferredType << ", got " << value->inferredType << std::endl;
@@ -278,14 +278,14 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::STRUCT_DECL:
 	{
 		std::string structName = node->value;
-		
+
 		// Check if struct already declared
 		if (structTable.find(structName) != structTable.end())
 		{
 			std::cerr << "Error: Struct '" << structName << "' already declared." << std::endl;
 			exit(1);
 		}
-		
+
 		// Register struct with its fields
 		StructInfo info;
 		for (auto fieldNode : node->children)
@@ -301,7 +301,7 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::STRUCT_LITERAL:
 	{
 		std::string structName = node->value;
-		
+
 		// Check if struct type exists
 		auto it = structTable.find(structName);
 		if (it == structTable.end())
@@ -309,32 +309,32 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 			std::cerr << "Error: Unknown struct type '" << structName << "'." << std::endl;
 			exit(1);
 		}
-		
+
 		const StructInfo &info = it->second;
-		
+
 		// Check field count
 		if (node->children.size() != info.fields.size())
 		{
-			std::cerr << "Error: Struct '" << structName << "' expects " << info.fields.size() 
-					  << " fields, got " << node->children.size() << std::endl;
+			std::cerr << "Error: Struct '" << structName << "' expects " << info.fields.size()
+								<< " fields, got " << node->children.size() << std::endl;
 			exit(1);
 		}
-		
+
 		// Check field types in order
 		for (size_t i = 0; i < node->children.size(); i++)
 		{
 			auto fieldExpr = node->children[i];
 			check(fieldExpr);
-			
+
 			const std::string &expectedType = info.fields[i].second;
 			if (fieldExpr->inferredType != expectedType)
 			{
-				std::cerr << "Error: Field " << (i + 1) << " of struct '" << structName 
-						  << "' expects type " << expectedType << ", got " << fieldExpr->inferredType << std::endl;
+				std::cerr << "Error: Field " << (i + 1) << " of struct '" << structName
+									<< "' expects type " << expectedType << ", got " << fieldExpr->inferredType << std::endl;
 				exit(1);
 			}
 		}
-		
+
 		node->inferredType = structName;
 		break;
 	}
@@ -343,10 +343,10 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 	{
 		auto object = node->children[0];
 		check(object);
-		
+
 		std::string objType = object->inferredType;
 		std::string fieldName = node->value;
-		
+
 		// Check if object type is a struct
 		auto it = structTable.find(objType);
 		if (it == structTable.end())
@@ -354,9 +354,9 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 			std::cerr << "Error: Cannot access field '" << fieldName << "' on non-struct type '" << objType << "'." << std::endl;
 			exit(1);
 		}
-		
+
 		const StructInfo &info = it->second;
-		
+
 		// Find field
 		bool found = false;
 		for (const auto &field : info.fields)
@@ -368,7 +368,7 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 				break;
 			}
 		}
-		
+
 		if (!found)
 		{
 			std::cerr << "Error: Struct '" << objType << "' has no field named '" << fieldName << "'." << std::endl;
