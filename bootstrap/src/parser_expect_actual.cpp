@@ -33,7 +33,7 @@ std::shared_ptr<ASTNode> Parser::parseExpectDecl()
 			consume(TokenType::IDENTIFIER, "Expected parameter name");
 			paramNode->value = tokens[pos - 1].value;
 			consume(TokenType::COLON, "Expected ':' after parameter name");
-			
+
 			Token paramType = advance();
 			if (paramType.type != TokenType::IDENTIFIER &&
 					paramType.type != TokenType::I32 && paramType.type != TokenType::BOOL &&
@@ -53,7 +53,7 @@ std::shared_ptr<ASTNode> Parser::parseExpectDecl()
 
 	consume(TokenType::RPAREN, "Expected ')' after parameters");
 	consume(TokenType::COLON, "Expected ':' after ')'");
-	
+
 	Token retType = advance();
 	if (retType.type != TokenType::IDENTIFIER &&
 			retType.type != TokenType::I32 && retType.type != TokenType::BOOL &&
@@ -105,7 +105,7 @@ std::shared_ptr<ASTNode> Parser::parseActualDecl()
 			consume(TokenType::IDENTIFIER, "Expected parameter name");
 			paramNode->value = tokens[pos - 1].value;
 			consume(TokenType::COLON, "Expected ':' after parameter name");
-			
+
 			Token paramType = advance();
 			if (paramType.type != TokenType::IDENTIFIER &&
 					paramType.type != TokenType::I32 && paramType.type != TokenType::BOOL &&
@@ -125,7 +125,7 @@ std::shared_ptr<ASTNode> Parser::parseActualDecl()
 
 	consume(TokenType::RPAREN, "Expected ')' after parameters");
 	consume(TokenType::COLON, "Expected ':' after ')'");
-	
+
 	Token actualRetType = advance();
 	if (actualRetType.type != TokenType::IDENTIFIER &&
 			actualRetType.type != TokenType::I32 && actualRetType.type != TokenType::BOOL &&

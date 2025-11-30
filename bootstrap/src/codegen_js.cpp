@@ -16,7 +16,7 @@ std::string CodeGeneratorJS::generate(std::shared_ptr<ASTNode> ast)
 	for (size_t i = 0; i < ast->children.size(); ++i)
 	{
 		auto child = ast->children[i];
-		
+
 		// Skip expect and actual declarations
 		if (child->type == ASTNodeType::EXPECT_DECL)
 			continue;
@@ -25,7 +25,7 @@ std::string CodeGeneratorJS::generate(std::shared_ptr<ASTNode> ast)
 			ss << generateNode(child) << "\n";
 			continue;
 		}
-		
+
 		if (i == ast->children.size() - 1 && !isStatement(child->type))
 		{
 			// Last node is an expression: return its value (converted to number if bool)

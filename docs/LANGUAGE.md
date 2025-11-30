@@ -237,6 +237,7 @@ actual fn io::print(msg: String): Void => {
 **Signature Validation:**
 
 Each `actual` must match its corresponding `expect` exactly:
+
 - Return type must be identical
 - Parameter count must match
 - Parameter types must match in order
@@ -245,6 +246,7 @@ Each `actual` must match its corresponding `expect` exactly:
 **Compilation Model:**
 
 When compiling for a target:
+
 1. All source files are parsed
 2. All `expect` declarations are registered with their fully qualified names
 3. All `actual` declarations are validated against their corresponding `expect`
@@ -255,6 +257,7 @@ When compiling for a target:
 **Example: Cross-Platform Hello World**
 
 core/main.tuff:
+
 ```tuff
 expect fn print(message: String): Void;
 
@@ -264,6 +267,7 @@ fn main(): Void => {
 ```
 
 js/io.tuff:
+
 ```tuff
 actual fn print(message: String): Void => {
     // JS console.log
@@ -271,6 +275,7 @@ actual fn print(message: String): Void => {
 ```
 
 cpp/io.tuff:
+
 ```tuff
 actual fn print(message: String): Void => {
     // C++ std::cout
@@ -282,7 +287,6 @@ When compiling for JavaScript, `actual fn print` from `js/io.tuff` is used. When
 **Future Enhancement:**
 
 Cross-DLL support is deferred. Currently, all `expect`/`actual` matching occurs within a single compilation unit. Future versions will support linking separate compiled modules.
-
 
 ## Type System
 

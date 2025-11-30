@@ -398,7 +398,3 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		break;
 	}
 }
-
-
-
-

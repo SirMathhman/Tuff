@@ -188,7 +188,7 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 		else if (child->type == ASTNodeType::ACTUAL_DECL)
 		{
 			std::string actualName = child->value;
-			
+
 			if (expectTable.find(actualName) == expectTable.end())
 			{
 				std::cerr << "Error: Actual '" << actualName << "' has no matching expect declaration." << std::endl;
@@ -196,11 +196,11 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 			}
 
 			const ExpectInfo &expectedSig = expectTable[actualName];
-			
+
 			if (child->inferredType != expectedSig.returnType)
 			{
-				std::cerr << "Error: Actual '" << actualName << "' return type mismatch. Expected " 
-					<< expectedSig.returnType << ", got " << child->inferredType << std::endl;
+				std::cerr << "Error: Actual '" << actualName << "' return type mismatch. Expected "
+									<< expectedSig.returnType << ", got " << child->inferredType << std::endl;
 				exit(1);
 			}
 
@@ -214,7 +214,7 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 			if (paramCount != expectedSig.params.size())
 			{
 				std::cerr << "Error: Actual '" << actualName << "' parameter count mismatch. Expected "
-					<< expectedSig.params.size() << ", got " << paramCount << std::endl;
+									<< expectedSig.params.size() << ", got " << paramCount << std::endl;
 				exit(1);
 			}
 

@@ -426,6 +426,3 @@ std::shared_ptr<ASTNode> Parser::parseStatementOrBlock()
 		return expr;
 	}
 }
-
-
-
