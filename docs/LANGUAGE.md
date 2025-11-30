@@ -12,6 +12,7 @@
 | 6. Enums                         | ✅ Complete | Simple unit enums, variant access, equality comparison          |
 | 7. Generics & Collections        | ⏹️ Planned  | -                                                               |
 | 8. expect/actual Multi-platform  | ✅ Complete | Fully qualified names, signature validation, JS & C++ codegen   |
+| 9. Modules & Namespaces          | ✅ Complete | Module blocks, FQN support, nested modules, JS & C++ codegen    |
 | 9-13. Advanced Features          | ⏹️ Deferred | -                                                               |
 
 ## Overview

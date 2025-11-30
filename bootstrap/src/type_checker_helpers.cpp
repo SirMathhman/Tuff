@@ -187,7 +187,7 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 					{
 						auto paramNode = moduleChild->children[i];
 						std::string paramType = paramNode->inferredType;
-						
+
 						// If param type is a local type, prefix it with module name
 						bool isLocalType = false;
 						for (const auto &localType : localTypeNames)
@@ -199,10 +199,10 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 								break;
 							}
 						}
-						
+
 						info.params.push_back({paramNode->value, paramType});
 					}
-					
+
 					// Normalize return type too
 					std::string returnType = moduleChild->inferredType;
 					for (const auto &localType : localTypeNames)
@@ -214,7 +214,7 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 						}
 					}
 					info.returnType = returnType;
-					
+
 					functionTable[funcName] = info;
 					// Also register without prefix for local access within module
 					functionTable[moduleChild->value] = info;
