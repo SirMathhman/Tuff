@@ -252,300 +252,225 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 	node->inferredType = returnType;
 }
 
-void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
+void TypeChecker::checkStructLiteral(std::shared_ptr<ASTNode> node)
 {
-	for (auto child : node->children)
+	std::string structName = node->value;
+
+	// Check if struct type exists
+	auto it = structTable.find(structName);
+	if (it == structTable.end())
 	{
-		if (child->type == ASTNodeType::MODULE_DECL)
+		// Try FQN resolution if in module
+		if (!currentModule.empty())
 		{
-			// Save current module and switch context
-			std::string savedModule = currentModule;
-			currentModule = child->value;
-
-			// First pass: collect local type names (enums, structs) defined in this module
-			std::vector<std::string> localTypeNames;
-			for (auto moduleChild : child->children)
+			std::string fqn = currentModule + "::" + structName;
+			it = structTable.find(fqn);
+			if (it != structTable.end())
 			{
-				if (moduleChild->type == ASTNodeType::ENUM_DECL)
-				{
-					localTypeNames.push_back(moduleChild->value);
-				}
-				else if (moduleChild->type == ASTNodeType::STRUCT_DECL)
-				{
-					localTypeNames.push_back(moduleChild->value);
-				}
+				structName = fqn;
+				node->value = fqn;
 			}
-
-			// Second pass: register declarations with proper type prefixing
-			for (auto moduleChild : child->children)
-			{
-				if (moduleChild->type == ASTNodeType::FUNCTION_DECL)
-				{
-					std::string funcName = currentModule + "::" + moduleChild->value;
-					if (functionTable.find(funcName) != functionTable.end())
-					{
-						std::cerr << "Error: Function '" << funcName << "' already declared." << std::endl;
-						exit(1);
-					}
-
-					FunctionInfo info;
-					for (auto genParam : moduleChild->genericParams)
-					{
-						info.genericParams.push_back(genParam->value);
-					}
-					info.returnType = moduleChild->inferredType;
-					for (size_t i = 0; i < moduleChild->children.size() - 1; i++)
-					{
-						auto paramNode = moduleChild->children[i];
-						std::string paramType = paramNode->inferredType;
-
-						// If param type is a local type, prefix it with module name
-						bool isLocalType = false;
-						for (const auto &localType : localTypeNames)
-						{
-							if (paramType == localType)
-							{
-								paramType = currentModule + "::" + paramType;
-								isLocalType = true;
-								break;
-							}
-						}
-
-						info.params.push_back({paramNode->value, paramType});
-					}
-
-					// Normalize return type too
-					std::string returnType = moduleChild->inferredType;
-					for (const auto &localType : localTypeNames)
-					{
-						if (returnType == localType)
-						{
-							returnType = currentModule + "::" + returnType;
-							break;
-						}
-					}
-					info.returnType = returnType;
-
-					functionTable[funcName] = info;
-				}
-				else if (moduleChild->type == ASTNodeType::ENUM_DECL)
-				{
-					std::string enumName = currentModule + "::" + moduleChild->value;
-					if (enumTable.find(enumName) != enumTable.end())
-					{
-						std::cerr << "Error: Enum '" << enumName << "' already declared." << std::endl;
-						exit(1);
-					}
-
-					EnumInfo info;
-					for (auto variantNode : moduleChild->children)
-					{
-						info.variants.push_back(variantNode->value);
-					}
-					enumTable[enumName] = info;
-				}
-				else if (moduleChild->type == ASTNodeType::STRUCT_DECL)
-				{
-					std::string structName = currentModule + "::" + moduleChild->value;
-					if (structTable.find(structName) != structTable.end())
-					{
-						std::cerr << "Error: Struct '" << structName << "' already declared." << std::endl;
-						exit(1);
-					}
-
-					StructInfo info;
-					for (auto genParam : moduleChild->genericParams)
-					{
-						info.genericParams.push_back(genParam->value);
-					}
-					for (auto fieldNode : moduleChild->children)
-					{
-						info.fields.push_back({fieldNode->value, fieldNode->inferredType});
-					}
-					structTable[structName] = info;
-				}
-				else if (moduleChild->type == ASTNodeType::EXPECT_DECL)
-				{
-					std::string expectName = currentModule + "::" + moduleChild->value;
-					if (expectTable.find(expectName) != expectTable.end())
-					{
-						std::cerr << "Error: Expect '" << expectName << "' already declared." << std::endl;
-						exit(1);
-					}
-
-					ExpectInfo info;
-					info.returnType = moduleChild->inferredType;
-					for (size_t i = 0; i < moduleChild->children.size(); i++)
-					{
-						auto paramNode = moduleChild->children[i];
-						info.params.push_back({paramNode->value, paramNode->inferredType});
-					}
-					expectTable[expectName] = info;
-				}
-				else if (moduleChild->type == ASTNodeType::ACTUAL_DECL)
-				{
-					std::string actualName = currentModule + "::" + moduleChild->value;
-
-					if (expectTable.find(actualName) == expectTable.end())
-					{
-						std::cerr << "Error: Actual '" << actualName << "' has no matching expect declaration." << std::endl;
-						exit(1);
-					}
-
-					const ExpectInfo &expectedSig = expectTable[actualName];
-
-					if (moduleChild->inferredType != expectedSig.returnType)
-					{
-						std::cerr << "Error: Actual '" << actualName << "' return type mismatch. Expected "
-											<< expectedSig.returnType << ", got " << moduleChild->inferredType << std::endl;
-						exit(1);
-					}
-
-					size_t paramCount = 0;
-					for (auto param : moduleChild->children)
-					{
-						if (param->type == ASTNodeType::IDENTIFIER)
-							paramCount++;
-					}
-
-					if (paramCount != expectedSig.params.size())
-					{
-						std::cerr << "Error: Actual '" << actualName << "' parameter count mismatch. Expected "
-											<< expectedSig.params.size() << ", got " << paramCount << std::endl;
-						exit(1);
-					}
-
-					FunctionInfo info;
-					info.returnType = moduleChild->inferredType;
-					for (size_t i = 0; i < paramCount; i++)
-					{
-						auto paramNode = moduleChild->children[i];
-						info.params.push_back({paramNode->value, paramNode->inferredType});
-					}
-					functionTable[actualName] = info;
-				}
-			}
-
-			// Restore previous module context
-			currentModule = savedModule;
 		}
-		else if (child->type == ASTNodeType::FUNCTION_DECL)
+
+		// Try imported modules
+		if (it == structTable.end())
 		{
-			std::string funcName = child->value;
-			if (functionTable.find(funcName) != functionTable.end())
+			for (const auto &imported : importedModules)
 			{
-				std::cerr << "Error: Function '" << funcName << "' already declared." << std::endl;
-				exit(1);
+				std::string fqn = imported + "::" + structName;
+				it = structTable.find(fqn);
+				if (it != structTable.end())
+				{
+					structName = fqn;
+					node->value = fqn;
+					break;
+				}
 			}
-
-			FunctionInfo info;
-			for (auto genParam : child->genericParams)
-			{
-				info.genericParams.push_back(genParam->value);
-			}
-			info.returnType = child->inferredType;
-			for (size_t i = 0; i < child->children.size() - 1; i++)
-			{
-				auto paramNode = child->children[i];
-				info.params.push_back({paramNode->value, paramNode->inferredType});
-			}
-			functionTable[funcName] = info;
 		}
-		else if (child->type == ASTNodeType::EXPECT_DECL)
+	}
+
+	if (it == structTable.end())
+	{
+		std::cerr << "Error: Unknown struct type '" << structName << "'." << std::endl;
+		exit(1);
+	}
+
+	const StructInfo &info = it->second;
+
+	// Check generic args
+	if (node->genericArgs.size() != info.genericParams.size())
+	{
+		std::cerr << "Error: Struct '" << structName << "' expects " << info.genericParams.size()
+							<< " generic arguments, got " << node->genericArgs.size() << std::endl;
+		exit(1);
+	}
+
+	// Create substitution map
+	std::map<std::string, std::string> typeSubstitutions;
+	for (size_t i = 0; i < info.genericParams.size(); i++)
+	{
+		typeSubstitutions[info.genericParams[i]] = node->genericArgs[i];
+	}
+
+	// Check field count
+	if (node->children.size() != info.fields.size())
+	{
+		std::cerr << "Error: Struct '" << structName << "' expects " << info.fields.size()
+							<< " fields, got " << node->children.size() << std::endl;
+		exit(1);
+	}
+
+	// Check field types in order
+	for (size_t i = 0; i < node->children.size(); i++)
+	{
+		auto fieldExpr = node->children[i];
+		check(fieldExpr);
+
+		std::string expectedType = info.fields[i].second;
+		if (typeSubstitutions.count(expectedType))
 		{
-			std::string expectName = child->value;
-			if (expectTable.find(expectName) != expectTable.end())
-			{
-				std::cerr << "Error: Expect '" << expectName << "' already declared." << std::endl;
-				exit(1);
-			}
-
-			ExpectInfo info;
-			info.returnType = child->inferredType;
-			for (size_t i = 0; i < child->children.size(); i++)
-			{
-				auto paramNode = child->children[i];
-				info.params.push_back({paramNode->value, paramNode->inferredType});
-			}
-			expectTable[expectName] = info;
+			expectedType = typeSubstitutions[expectedType];
 		}
-		else if (child->type == ASTNodeType::ACTUAL_DECL)
+
+		if (fieldExpr->inferredType != expectedType)
 		{
-			std::string actualName = child->value;
-
-			if (expectTable.find(actualName) == expectTable.end())
-			{
-				std::cerr << "Error: Actual '" << actualName << "' has no matching expect declaration." << std::endl;
-				exit(1);
-			}
-
-			const ExpectInfo &expectedSig = expectTable[actualName];
-
-			if (child->inferredType != expectedSig.returnType)
-			{
-				std::cerr << "Error: Actual '" << actualName << "' return type mismatch. Expected "
-									<< expectedSig.returnType << ", got " << child->inferredType << std::endl;
-				exit(1);
-			}
-
-			size_t paramCount = 0;
-			for (auto param : child->children)
-			{
-				if (param->type == ASTNodeType::IDENTIFIER)
-					paramCount++;
-			}
-
-			if (paramCount != expectedSig.params.size())
-			{
-				std::cerr << "Error: Actual '" << actualName << "' parameter count mismatch. Expected "
-									<< expectedSig.params.size() << ", got " << paramCount << std::endl;
-				exit(1);
-			}
-
-			FunctionInfo info;
-			info.returnType = child->inferredType;
-			for (size_t i = 0; i < paramCount; i++)
-			{
-				auto paramNode = child->children[i];
-				info.params.push_back({paramNode->value, paramNode->inferredType});
-			}
-			functionTable[actualName] = info;
+			std::cerr << "Error: Field " << (i + 1) << " of struct '" << structName
+								<< "' expects type " << expectedType << ", got " << fieldExpr->inferredType << std::endl;
+			exit(1);
 		}
-		else if (child->type == ASTNodeType::STRUCT_DECL)
+		node->fieldNames.push_back(info.fields[i].first);
+	}
+
+	// Construct full type name with generics
+	std::string fullType = structName;
+	if (!node->genericArgs.empty())
+	{
+		fullType += "<";
+		for (size_t i = 0; i < node->genericArgs.size(); i++)
 		{
-			std::string structName = child->value;
-			if (structTable.find(structName) != structTable.end())
-			{
-				std::cerr << "Error: Struct '" << structName << "' already declared." << std::endl;
-				exit(1);
-			}
-
-			StructInfo info;
-			for (auto genParam : child->genericParams)
-			{
-				info.genericParams.push_back(genParam->value);
-			}
-			for (auto fieldNode : child->children)
-			{
-				info.fields.push_back({fieldNode->value, fieldNode->inferredType});
-			}
-			structTable[structName] = info;
+			fullType += node->genericArgs[i];
+			if (i < node->genericArgs.size() - 1)
+				fullType += ",";
 		}
-		else if (child->type == ASTNodeType::ENUM_DECL)
+		fullType += ">";
+	}
+	node->inferredType = fullType;
+}
+
+void TypeChecker::checkArrayLiteral(std::shared_ptr<ASTNode> node)
+{
+	if (node->children.empty())
+	{
+		std::cerr << "Error: Empty array literal requires explicit type annotation." << std::endl;
+		exit(1);
+	}
+
+	check(node->children[0]);
+	std::string elementType = node->children[0]->inferredType;
+
+	for (size_t i = 1; i < node->children.size(); i++)
+	{
+		check(node->children[i]);
+		if (node->children[i]->inferredType != elementType)
 		{
-			std::string enumName = child->value;
-			if (enumTable.find(enumName) != enumTable.end())
+			std::cerr << "Error: Array element " << (i + 1) << " has type "
+								<< node->children[i]->inferredType << ", expected " << elementType << std::endl;
+			exit(1);
+		}
+	}
+
+	size_t count = node->children.size();
+	node->inferredType = "[" + elementType + "; " + std::to_string(count) + "; " + std::to_string(count) + "]";
+}
+
+void TypeChecker::checkIndexExpr(std::shared_ptr<ASTNode> node)
+{
+	auto array = node->children[0];
+	auto index = node->children[1];
+	check(array);
+	check(index);
+
+	if (!isNumericType(index->inferredType))
+	{
+		std::cerr << "Error: Array index must be numeric, got " << index->inferredType << std::endl;
+		exit(1);
+	}
+
+	std::string arrayType = array->inferredType;
+
+	if (arrayType.length() > 0 && arrayType[0] == '*')
+	{
+		if (arrayType.substr(0, 5) == "*mut ")
+			arrayType = arrayType.substr(5);
+		else
+			arrayType = arrayType.substr(1);
+	}
+
+	if (arrayType.length() > 0 && arrayType[0] == '[')
+	{
+		size_t semiPos = arrayType.find(';');
+		if (semiPos != std::string::npos)
+		{
+			std::string elementType = arrayType.substr(1, semiPos - 1);
+			while (!elementType.empty() && elementType.back() == ' ')
+				elementType.pop_back();
+			node->inferredType = elementType;
+		}
+		else
+		{
+			std::cerr << "Error: Invalid array type '" << arrayType << "'." << std::endl;
+			exit(1);
+		}
+	}
+	else
+	{
+		std::cerr << "Error: Cannot index non-array type '" << array->inferredType << "'." << std::endl;
+		exit(1);
+	}
+}
+
+void TypeChecker::checkReferenceExpr(std::shared_ptr<ASTNode> node)
+{
+	auto operand = node->children[0];
+	check(operand);
+
+	if (node->isMutable)
+	{
+		if (operand->type == ASTNodeType::IDENTIFIER)
+		{
+			std::string name = operand->value;
+			auto it = symbolTable.find(name);
+			if (it != symbolTable.end() && !it->second.isMutable)
 			{
-				std::cerr << "Error: Enum '" << enumName << "' already declared." << std::endl;
+				std::cerr << "Error: Cannot take mutable reference of immutable variable '" << name << "'." << std::endl;
 				exit(1);
 			}
-
-			EnumInfo info;
-			for (auto variantNode : child->children)
-			{
-				info.variants.push_back(variantNode->value);
-			}
-			enumTable[enumName] = info;
 		}
+		node->inferredType = "*mut " + operand->inferredType;
+	}
+	else
+	{
+		node->inferredType = "*" + operand->inferredType;
+	}
+}
+
+void TypeChecker::checkDerefExpr(std::shared_ptr<ASTNode> node)
+{
+	auto operand = node->children[0];
+	check(operand);
+
+	std::string ptrType = operand->inferredType;
+
+	if (ptrType.length() > 0 && ptrType[0] == '*')
+	{
+		if (ptrType.substr(0, 5) == "*mut ")
+			node->inferredType = ptrType.substr(5);
+		else
+			node->inferredType = ptrType.substr(1);
+	}
+	else
+	{
+		std::cerr << "Error: Cannot dereference non-pointer type '" << ptrType << "'." << std::endl;
+		exit(1);
 	}
 }

@@ -26,6 +26,37 @@ std::vector<std::shared_ptr<ASTNode>> Parser::parseGenericParams()
 
 std::string Parser::parseType()
 {
+	// Handle pointer types: *T, *mut T, **T
+	if (match(TokenType::STAR))
+	{
+		bool isMutable = match(TokenType::MUT);
+		std::string innerType = parseType();
+		if (isMutable)
+		{
+			return "*mut " + innerType;
+		}
+		return "*" + innerType;
+	}
+
+	// Handle array types: [T; init; capacity]
+	if (match(TokenType::LBRACKET))
+	{
+		std::string elementType = parseType();
+		consume(TokenType::SEMICOLON, "Expected ';' after array element type");
+
+		Token initToken = consume(TokenType::INT_LITERAL, "Expected init count in array type");
+		std::string init = initToken.value;
+
+		consume(TokenType::SEMICOLON, "Expected ';' after init count");
+
+		Token capacityToken = consume(TokenType::INT_LITERAL, "Expected capacity in array type");
+		std::string capacity = capacityToken.value;
+
+		consume(TokenType::RBRACKET, "Expected ']' after array type");
+
+		return "[" + elementType + "; " + init + "; " + capacity + "]";
+	}
+
 	Token typeToken = advance();
 	if (typeToken.type != TokenType::IDENTIFIER &&
 			typeToken.type != TokenType::I32 && typeToken.type != TokenType::BOOL &&

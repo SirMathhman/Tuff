@@ -33,7 +33,14 @@ enum class ASTNodeType
 	LITERAL,
 	IDENTIFIER,
 	TYPE,
-	TYPE_PARAM_DECL // <T>
+	TYPE_PARAM_DECL, // <T>
+	// Pointer and array types
+	POINTER_TYPE,		 // *T or *mut T
+	ARRAY_TYPE,			 // [T; init; capacity]
+	REFERENCE_EXPR,	 // &x or &mut x
+	DEREF_EXPR,			 // *p
+	ARRAY_LITERAL,	 // [1, 2, 3]
+	INDEX_EXPR			 // arr[i]
 };
 
 struct ASTNode

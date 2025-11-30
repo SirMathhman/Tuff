@@ -114,7 +114,7 @@ std::shared_ptr<ASTNode> Parser::parse()
 			match(TokenType::SEMICOLON);
 			program->addChild(node);
 		}
-		else if (peek().type == TokenType::IDENTIFIER && (peek(1).type == TokenType::EQUALS || peek(1).type == TokenType::DOT))
+		else if (isAssignmentStatement())
 		{
 			program->addChild(parseAssignmentStatement());
 		}
@@ -264,6 +264,26 @@ std::shared_ptr<ASTNode> Parser::parseUnary()
 		node->addChild(operand);
 		return node;
 	}
+	// Handle reference: &x or &mut x
+	if (match(TokenType::AMPERSAND))
+	{
+		bool isMutable = match(TokenType::MUT);
+		auto operand = parseUnary();
+		auto node = std::make_shared<ASTNode>();
+		node->type = ASTNodeType::REFERENCE_EXPR;
+		node->isMutable = isMutable;
+		node->addChild(operand);
+		return node;
+	}
+	// Handle dereference: *p
+	if (match(TokenType::STAR))
+	{
+		auto operand = parseUnary();
+		auto node = std::make_shared<ASTNode>();
+		node->type = ASTNodeType::DEREF_EXPR;
+		node->addChild(operand);
+		return node;
+	}
 	return parsePostfix();
 }
 
@@ -283,6 +303,17 @@ std::shared_ptr<ASTNode> Parser::parsePostfix()
 			node->type = ASTNodeType::FIELD_ACCESS;
 			node->value = fieldName.value;
 			node->addChild(expr);
+			expr = node;
+		}
+		else if (match(TokenType::LBRACKET))
+		{
+			// Array/pointer indexing: arr[i]
+			auto index = parseExpression();
+			consume(TokenType::RBRACKET, "Expected ']' after index");
+			auto node = std::make_shared<ASTNode>();
+			node->type = ASTNodeType::INDEX_EXPR;
+			node->addChild(expr);
+			node->addChild(index);
 			expr = node;
 		}
 		else if (peek().type == TokenType::LPAREN)
@@ -323,6 +354,24 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 		node->type = ASTNodeType::LITERAL;
 		node->value = tokens[pos - 1].value;
 		node->inferredType = "I32";
+		return node;
+	}
+	else if (match(TokenType::LBRACKET))
+	{
+		// Array literal: [1, 2, 3]
+		auto node = std::make_shared<ASTNode>();
+		node->type = ASTNodeType::ARRAY_LITERAL;
+
+		while (peek().type != TokenType::RBRACKET && peek().type != TokenType::END_OF_FILE)
+		{
+			node->addChild(parseExpression());
+			if (!match(TokenType::COMMA))
+			{
+				break;
+			}
+		}
+
+		consume(TokenType::RBRACKET, "Expected ']' after array elements");
 		return node;
 	}
 	else if (match(TokenType::TRUE))

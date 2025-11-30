@@ -163,6 +163,12 @@ std::vector<Token> Lexer::tokenize()
 			case '}':
 				tokens.push_back({TokenType::RBRACE, "}", startLine, startCol});
 				break;
+			case '[':
+				tokens.push_back({TokenType::LBRACKET, "[", startLine, startCol});
+				break;
+			case ']':
+				tokens.push_back({TokenType::RBRACKET, "]", startLine, startCol});
+				break;
 			case ':':
 				if (match(':'))
 					tokens.push_back({TokenType::DOUBLE_COLON, "::", startLine, startCol});

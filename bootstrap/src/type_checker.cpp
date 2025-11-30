@@ -415,114 +415,27 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 	}
 
 	case ASTNodeType::STRUCT_LITERAL:
-	{
-		std::string structName = node->value;
-
-		// Check if struct type exists
-		auto it = structTable.find(structName);
-		if (it == structTable.end())
-		{
-			// Try FQN resolution if in module
-			if (!currentModule.empty())
-			{
-				std::string fqn = currentModule + "::" + structName;
-				it = structTable.find(fqn);
-				if (it != structTable.end())
-				{
-					structName = fqn; // Update to FQN
-					node->value = fqn;
-				}
-			}
-
-			// Try imported modules
-			if (it == structTable.end())
-			{
-				for (const auto &imported : importedModules)
-				{
-					std::string fqn = imported + "::" + structName;
-					it = structTable.find(fqn);
-					if (it != structTable.end())
-					{
-						structName = fqn; // Update to FQN
-						node->value = fqn;
-						break;
-					}
-				}
-			}
-		}
-
-		if (it == structTable.end())
-		{
-			std::cerr << "Error: Unknown struct type '" << structName << "'." << std::endl;
-			exit(1);
-		}
-
-		const StructInfo &info = it->second;
-
-		// Check generic args
-		if (node->genericArgs.size() != info.genericParams.size())
-		{
-			std::cerr << "Error: Struct '" << structName << "' expects " << info.genericParams.size()
-								<< " generic arguments, got " << node->genericArgs.size() << std::endl;
-			exit(1);
-		}
-
-		// Create substitution map
-		std::map<std::string, std::string> typeSubstitutions;
-		for (size_t i = 0; i < info.genericParams.size(); i++)
-		{
-			typeSubstitutions[info.genericParams[i]] = node->genericArgs[i];
-		}
-
-		// Check field count
-		if (node->children.size() != info.fields.size())
-		{
-			std::cerr << "Error: Struct '" << structName << "' expects " << info.fields.size()
-								<< " fields, got " << node->children.size() << std::endl;
-			exit(1);
-		}
-
-		// Check field types in order
-		for (size_t i = 0; i < node->children.size(); i++)
-		{
-			auto fieldExpr = node->children[i];
-			check(fieldExpr);
-
-			std::string expectedType = info.fields[i].second;
-			// Substitute generic types
-			if (typeSubstitutions.count(expectedType))
-			{
-				expectedType = typeSubstitutions[expectedType];
-			}
-
-			if (fieldExpr->inferredType != expectedType)
-			{
-				std::cerr << "Error: Field " << (i + 1) << " of struct '" << structName
-									<< "' expects type " << expectedType << ", got " << fieldExpr->inferredType << std::endl;
-				exit(1);
-			}
-			node->fieldNames.push_back(info.fields[i].first);
-		}
-
-		// Construct full type name with generics
-		std::string fullType = structName;
-		if (!node->genericArgs.empty())
-		{
-			fullType += "<";
-			for (size_t i = 0; i < node->genericArgs.size(); i++)
-			{
-				fullType += node->genericArgs[i];
-				if (i < node->genericArgs.size() - 1)
-					fullType += ",";
-			}
-			fullType += ">";
-		}
-		node->inferredType = fullType;
+		checkStructLiteral(node);
 		break;
-	}
 
 	case ASTNodeType::FIELD_ACCESS:
 		checkFieldOrEnumAccess(node);
+		break;
+
+	case ASTNodeType::ARRAY_LITERAL:
+		checkArrayLiteral(node);
+		break;
+
+	case ASTNodeType::INDEX_EXPR:
+		checkIndexExpr(node);
+		break;
+
+	case ASTNodeType::REFERENCE_EXPR:
+		checkReferenceExpr(node);
+		break;
+
+	case ASTNodeType::DEREF_EXPR:
+		checkDerefExpr(node);
 		break;
 
 	default:

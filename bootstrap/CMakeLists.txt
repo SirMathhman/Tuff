@@ -16,7 +16,9 @@ add_executable(tuffc
     src/parser_types.cpp
     src/type_checker.cpp
     src/type_checker_helpers.cpp
+    src/type_checker_register.cpp
     src/codegen_js.cpp
+    src/codegen_js_helpers.cpp
     src/codegen_cpp.cpp
     src/codegen_cpp_helpers.cpp
 )

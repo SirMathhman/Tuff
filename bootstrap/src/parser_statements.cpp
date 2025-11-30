@@ -172,21 +172,81 @@ std::shared_ptr<ASTNode> Parser::parseLetStatement()
 	return node;
 }
 
+bool Parser::isAssignmentStatement()
+{
+	// Lookahead to detect: *+ identifier (.field | [index])* =
+	// or: identifier (.field | [index])* =
+	int offset = 0;
+
+	// Handle leading dereference(s): * or multiple *
+	while (peek(offset).type == TokenType::STAR)
+	{
+		offset++;
+	}
+
+	// Must have an identifier
+	if (peek(offset).type != TokenType::IDENTIFIER)
+		return false;
+
+	offset++;
+	while (true)
+	{
+		TokenType t = peek(offset).type;
+		if (t == TokenType::DOT)
+		{
+			// Skip .field
+			offset++;
+			if (peek(offset).type != TokenType::IDENTIFIER)
+				return false;
+			offset++;
+		}
+		else if (t == TokenType::LBRACKET)
+		{
+			// Skip [index] - need to find matching ]
+			offset++;
+			int depth = 1;
+			while (depth > 0 && peek(offset).type != TokenType::END_OF_FILE)
+			{
+				if (peek(offset).type == TokenType::LBRACKET)
+					depth++;
+				else if (peek(offset).type == TokenType::RBRACKET)
+					depth--;
+				offset++;
+			}
+		}
+		else if (t == TokenType::EQUALS)
+		{
+			return true;
+		}
+		else
+		{
+			return false;
+		}
+	}
+}
+
 std::shared_ptr<ASTNode> Parser::parseAssignmentStatement()
 {
-	// Parse left-hand side (could be identifier or field access)
-	Token name = consume(TokenType::IDENTIFIER, "Expected variable name");
-
+	// Parse left-hand side (could be *p, identifier, field access, or index)
 	std::shared_ptr<ASTNode> lhs;
 
-	// Check if it's a field access: x.field = value
-	if (peek().type == TokenType::DOT)
+	// Handle leading dereferences: *p, **p, etc.
+	int derefCount = 0;
+	while (match(TokenType::STAR))
 	{
-		lhs = std::make_shared<ASTNode>();
-		lhs->type = ASTNodeType::IDENTIFIER;
-		lhs->value = name.value;
+		derefCount++;
+	}
 
-		while (match(TokenType::DOT))
+	Token name = consume(TokenType::IDENTIFIER, "Expected variable name");
+
+	lhs = std::make_shared<ASTNode>();
+	lhs->type = ASTNodeType::IDENTIFIER;
+	lhs->value = name.value;
+
+	// Handle postfix operations: field access and indexing
+	while (true)
+	{
+		if (match(TokenType::DOT))
 		{
 			auto fieldName = consume(TokenType::IDENTIFIER, "Expected field name after '.'");
 			auto fieldAccess = std::make_shared<ASTNode>();
@@ -195,13 +255,29 @@ std::shared_ptr<ASTNode> Parser::parseAssignmentStatement()
 			fieldAccess->addChild(lhs);
 			lhs = fieldAccess;
 		}
+		else if (match(TokenType::LBRACKET))
+		{
+			auto index = parseExpression();
+			consume(TokenType::RBRACKET, "Expected ']' after index");
+			auto indexExpr = std::make_shared<ASTNode>();
+			indexExpr->type = ASTNodeType::INDEX_EXPR;
+			indexExpr->addChild(lhs);
+			indexExpr->addChild(index);
+			lhs = indexExpr;
+		}
+		else
+		{
+			break;
+		}
 	}
-	else
+
+	// Wrap in dereference nodes
+	for (int i = 0; i < derefCount; i++)
 	{
-		// Simple identifier
-		lhs = std::make_shared<ASTNode>();
-		lhs->type = ASTNodeType::IDENTIFIER;
-		lhs->value = name.value;
+		auto deref = std::make_shared<ASTNode>();
+		deref->type = ASTNodeType::DEREF_EXPR;
+		deref->addChild(lhs);
+		lhs = deref;
 	}
 
 	consume(TokenType::EQUALS, "Expected '='");
@@ -325,7 +401,7 @@ std::shared_ptr<ASTNode> Parser::parseBlock()
 			match(TokenType::SEMICOLON);
 			block->addChild(node);
 		}
-		else if (peek().type == TokenType::IDENTIFIER && (peek(1).type == TokenType::EQUALS || peek(1).type == TokenType::DOT))
+		else if (isAssignmentStatement())
 		{
 			block->addChild(parseAssignmentStatement());
 		}
@@ -382,7 +458,7 @@ std::shared_ptr<ASTNode> Parser::parseStatementOrBlock()
 	{
 		return parseLetStatement();
 	}
-	else if (peek().type == TokenType::IDENTIFIER && (peek(1).type == TokenType::EQUALS || peek(1).type == TokenType::DOT))
+	else if (isAssignmentStatement())
 	{
 		return parseAssignmentStatement();
 	}

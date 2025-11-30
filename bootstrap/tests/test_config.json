@@ -12,7 +12,12 @@
     "feature9_modules/test_module_with_struct": 7,
     "feature9_modules/test_module_with_enum": 1,
     "feature9_modules/test_nested_module": 20,
-    "feature9_modules/test_use_declaration": 6
+    "feature9_modules/test_use_declaration": 6,
+    "feature10_pointers_arrays/test_pointer_basic": 42,
+    "feature10_pointers_arrays/test_pointer_mutable": 50,
+    "feature10_pointers_arrays/test_array_basic": 30,
+    "feature10_pointers_arrays/test_array_mutable": 100,
+    "feature10_pointers_arrays/test_array_inferred": 15
   },
   "negative_tests": {
     "feature1_variables/test_immutable_reassign": "Cannot assign to immutable variable",

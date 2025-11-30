@@ -13,7 +13,8 @@
 | 7. Generics & Collections        | ✅ Complete | Generic functions & structs, type inference, C++ templates & JS dynamic |
 | 8. expect/actual Multi-platform  | ✅ Complete | Fully qualified names, signature validation, JS & C++ codegen           |
 | 9. Modules & Namespaces          | ✅ Complete | Module blocks, FQN support, nested modules, JS & C++ codegen            |
-| 9-13. Advanced Features          | ⏹️ Deferred | -                                                                       |
+| 10. Pointers & Arrays            | ✅ Complete | Pointer refs/deref, mutable/immutable, array literals, indexing         |
+| 11-13. Advanced Features         | ⏹️ Deferred | Type aliases, destructors, type inference improvements                  |
 
 ## Overview
 
@@ -163,34 +164,78 @@ enum Color {
 
 Arrays have explicit initialization tracking to prevent use-before-init bugs.
 
-**Type syntax**: `[Type; Initialized; Total]`
+**Type syntax**: `[Type; Initialized; Capacity]`
 
 - `Type`: The element type
 - `Initialized`: Number of elements that have been initialized
-- `Total`: Total capacity of the array
+- `Capacity`: Total capacity of the array
+
+**Array literals** (inferred type):
 
 ```tuff
-let arr: [I32; 3; 5] = [1, 2, 3];
-let first = arr[0];
+let arr = [1, 2, 3];        // Type: [I32; 3; 3]
+let first = arr[0];          // 1
+let second = arr[1];         // 2
 ```
 
-The type ensures you cannot access `arr[4]` when only 3 elements are initialized.
+**Mutable arrays**:
+
+```tuff
+let mut arr = [1, 2, 3];
+arr[0] = 100;                // Modify element
+```
+
+**Explicit type annotation**:
+
+```tuff
+let arr: [I32; 3; 5] = [1, 2, 3];  // 3 initialized, capacity 5
+```
+
+The type ensures you cannot access `arr[4]` when only 3 elements are initialized (enforced at compile-time in future versions).
 
 ## Pointers
 
-Pointers are non-nullable and use Rust-style lifetimes for borrow checking.
+Pointers provide low-level memory access with mutability control.
 
-**Syntax**:
+**Pointer types**:
 
-- `*T` - Pointer to type T
-- `&value` - Create a reference to value
-- `*ptr` - Dereference a pointer
+- `*T` - Immutable pointer (cannot modify pointee)
+- `*mut T` - Mutable pointer (can modify pointee)
+
+**Reference operators**:
+
+- `&x` - Create immutable reference to `x`
+- `&mut x` - Create mutable reference to `x` (requires `let mut x`)
+
+**Dereference operator**:
+
+- `*p` - Read value through pointer
+
+**Examples**:
 
 ```tuff
+// Immutable pointer
 let x: I32 = 42;
-let ptr: *I32 = &x;
-let deref: I32 = *ptr;
+let p: *I32 = &x;
+let y: I32 = *p;              // y = 42
+
+// Mutable pointer
+let mut x: I32 = 10;
+let p: *mut I32 = &mut x;
+*p = 50;                       // x is now 50
 ```
+
+**C++ codegen**:
+
+- `*I32` → `const int32_t*` (pointer to const)
+- `*mut I32` → `int32_t*` (pointer to mutable)
+- `let p: *T` → `T* const p` (const pointer)
+- `let mut p: *T` → `T* p` (mutable pointer)
+
+**JS codegen**:
+
+- Immutable refs: pass by value
+- Mutable refs: wrapper object `{ptr: () => x, set: (v) => x = v}`
 
 ## Comments
 

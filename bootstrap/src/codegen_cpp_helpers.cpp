@@ -9,6 +9,30 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::LET_STMT:
 	{
 		std::string cppType = mapType(node->inferredType);
+		
+		// Handle C++ array declaration: int32_t arr[3] instead of int32_t[3] arr
+		size_t bracketPos = cppType.find('[');
+		if (bracketPos != std::string::npos)
+		{
+			std::string baseType = cppType.substr(0, bracketPos);
+			std::string arraySuffix = cppType.substr(bracketPos);
+			std::string prefix = node->isMutable ? "" : "const ";
+			return prefix + baseType + " " + node->value + arraySuffix + " = " + generateNode(node->children[0]);
+		}
+		
+		// For pointer types, const goes after * (e.g., int32_t* const p)
+		if (!cppType.empty() && cppType.back() == '*')
+		{
+			if (node->isMutable)
+			{
+				return cppType + " " + node->value + " = " + generateNode(node->children[0]);
+			}
+			else
+			{
+				return cppType + " const " + node->value + " = " + generateNode(node->children[0]);
+			}
+		}
+		
 		std::string prefix = node->isMutable ? "" : "const ";
 		return prefix + cppType + " " + node->value + " = " + generateNode(node->children[0]);
 	}
@@ -77,6 +101,36 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	{
 		auto operand = generateNode(node->children[0]);
 		return "(" + node->value + operand + ")";
+	}
+	case ASTNodeType::ARRAY_LITERAL:
+	{
+		// Generate C++ initializer list
+		std::stringstream ss;
+		ss << "{";
+		for (size_t i = 0; i < node->children.size(); i++)
+		{
+			if (i > 0)
+				ss << ", ";
+			ss << generateNode(node->children[i]);
+		}
+		ss << "}";
+		return ss.str();
+	}
+	case ASTNodeType::INDEX_EXPR:
+	{
+		auto array = generateNode(node->children[0]);
+		auto index = generateNode(node->children[1]);
+		return array + "[" + index + "]";
+	}
+	case ASTNodeType::REFERENCE_EXPR:
+	{
+		// In C++, use the address-of operator
+		return "&" + generateNode(node->children[0]);
+	}
+	case ASTNodeType::DEREF_EXPR:
+	{
+		// In C++, use the dereference operator
+		return "*" + generateNode(node->children[0]);
 	}
 	case ASTNodeType::LITERAL:
 	case ASTNodeType::IDENTIFIER:
@@ -344,6 +398,49 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 		return "bool";
 	if (tuffType == "Void")
 		return "void";
+
+	// Handle pointer types: *T or *mut T
+	if (!tuffType.empty() && tuffType[0] == '*')
+	{
+		if (tuffType.substr(0, 5) == "*mut ")
+		{
+			// *mut T -> pointer to mutable T
+			return mapType(tuffType.substr(5)) + "*";
+		}
+		// *T -> pointer to const T
+		return "const " + mapType(tuffType.substr(1)) + "*";
+	}
+
+	// Handle array types: [T; init; capacity]
+	if (!tuffType.empty() && tuffType[0] == '[')
+	{
+		// Parse: [T; init; capacity]
+		size_t firstSemi = tuffType.find(';');
+		if (firstSemi != std::string::npos)
+		{
+			std::string elementType = tuffType.substr(1, firstSemi - 1);
+			// Trim trailing whitespace
+			while (!elementType.empty() && elementType.back() == ' ')
+				elementType.pop_back();
+
+			// Find capacity (after second semicolon)
+			size_t secondSemi = tuffType.find(';', firstSemi + 1);
+			if (secondSemi != std::string::npos)
+			{
+				std::string capacityStr = tuffType.substr(secondSemi + 1);
+				// Remove trailing ]
+				if (!capacityStr.empty() && capacityStr.back() == ']')
+					capacityStr.pop_back();
+				// Trim whitespace
+				while (!capacityStr.empty() && capacityStr.front() == ' ')
+					capacityStr = capacityStr.substr(1);
+				while (!capacityStr.empty() && capacityStr.back() == ' ')
+					capacityStr.pop_back();
+
+				return mapType(elementType) + "[" + capacityStr + "]";
+			}
+		}
+	}
 
 	// Check for generics
 	size_t openBracket = tuffType.find('<');

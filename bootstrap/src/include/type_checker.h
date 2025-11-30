@@ -59,6 +59,11 @@ private:
 	void checkFieldOrEnumAccess(std::shared_ptr<ASTNode> node);
 	void registerDeclarations(std::shared_ptr<ASTNode> node);
 	void checkCallExpr(std::shared_ptr<ASTNode> node);
+	void checkStructLiteral(std::shared_ptr<ASTNode> node);
+	void checkArrayLiteral(std::shared_ptr<ASTNode> node);
+	void checkIndexExpr(std::shared_ptr<ASTNode> node);
+	void checkReferenceExpr(std::shared_ptr<ASTNode> node);
+	void checkDerefExpr(std::shared_ptr<ASTNode> node);
 
 public:
 	void check(std::shared_ptr<ASTNode> node);

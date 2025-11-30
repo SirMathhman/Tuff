@@ -1,0 +1,5 @@
+// Test: Mutable pointer operations
+let mut x: I32 = 10;
+let p: *mut I32 = &mut x;
+*p = 50;
+x
