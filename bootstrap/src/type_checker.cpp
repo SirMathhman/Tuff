@@ -87,7 +87,8 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		// Type already set by parser (e.g., I32)
 		break;
 
-	case ASTNodeType::BINARY_OP: {
+	case ASTNodeType::BINARY_OP:
+	{
 		auto left = node->children[0];
 		auto right = node->children[1];
 		check(left);
@@ -95,40 +96,50 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 
 		std::string op = node->value;
 		// Arithmetic ops: both operands must be numeric, result is same type
-		if (op == "+" || op == "-" || op == "*" || op == "/" || op == "%") {
-			if (!isNumericType(left->inferredType)) {
+		if (op == "+" || op == "-" || op == "*" || op == "/" || op == "%")
+		{
+			if (!isNumericType(left->inferredType))
+			{
 				std::cerr << "Error: Left operand of '" << op << "' must be numeric, got " << left->inferredType << std::endl;
 				exit(1);
 			}
-			if (!isNumericType(right->inferredType)) {
+			if (!isNumericType(right->inferredType))
+			{
 				std::cerr << "Error: Right operand of '" << op << "' must be numeric, got " << right->inferredType << std::endl;
 				exit(1);
 			}
-			if (left->inferredType != right->inferredType) {
+			if (left->inferredType != right->inferredType)
+			{
 				std::cerr << "Error: Type mismatch in '" << op << "': " << left->inferredType << " and " << right->inferredType << std::endl;
 				exit(1);
 			}
 			node->inferredType = left->inferredType;
 		}
 		// Comparison ops: both must be same numeric type, result is Bool
-		else if (op == "<" || op == ">" || op == "<=" || op == ">=" || op == "==" || op == "!=") {
-			if (left->inferredType != right->inferredType) {
+		else if (op == "<" || op == ">" || op == "<=" || op == ">=" || op == "==" || op == "!=")
+		{
+			if (left->inferredType != right->inferredType)
+			{
 				std::cerr << "Error: Type mismatch in '" << op << "': " << left->inferredType << " and " << right->inferredType << std::endl;
 				exit(1);
 			}
-			if (!isNumericType(left->inferredType)) {
+			if (!isNumericType(left->inferredType))
+			{
 				std::cerr << "Error: Cannot compare non-numeric types with '" << op << "'" << std::endl;
 				exit(1);
 			}
 			node->inferredType = "Bool";
 		}
 		// Logical ops: both must be Bool, result is Bool
-		else if (op == "&&" || op == "||") {
-			if (left->inferredType != "Bool") {
+		else if (op == "&&" || op == "||")
+		{
+			if (left->inferredType != "Bool")
+			{
 				std::cerr << "Error: Left operand of '" << op << "' must be Bool, got " << left->inferredType << std::endl;
 				exit(1);
 			}
-			if (right->inferredType != "Bool") {
+			if (right->inferredType != "Bool")
+			{
 				std::cerr << "Error: Right operand of '" << op << "' must be Bool, got " << right->inferredType << std::endl;
 				exit(1);
 			}
@@ -137,19 +148,25 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		break;
 	}
 
-	case ASTNodeType::UNARY_OP: {
+	case ASTNodeType::UNARY_OP:
+	{
 		auto operand = node->children[0];
 		check(operand);
 
 		std::string op = node->value;
-		if (op == "!") {
-			if (operand->inferredType != "Bool") {
+		if (op == "!")
+		{
+			if (operand->inferredType != "Bool")
+			{
 				std::cerr << "Error: Operand of '!' must be Bool, got " << operand->inferredType << std::endl;
 				exit(1);
 			}
 			node->inferredType = "Bool";
-		} else if (op == "-") {
-			if (!isNumericType(operand->inferredType)) {
+		}
+		else if (op == "-")
+		{
+			if (!isNumericType(operand->inferredType))
+			{
 				std::cerr << "Error: Operand of '-' must be numeric, got " << operand->inferredType << std::endl;
 				exit(1);
 			}

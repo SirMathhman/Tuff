@@ -4,11 +4,13 @@ project(TuffBootstrap)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+include_directories(src/include)
+
 add_executable(tuffc 
-    main.cpp
-    lexer.cpp
-    parser.cpp
-    type_checker.cpp
-    codegen_js.cpp
-    codegen_cpp.cpp
+    src/main.cpp
+    src/lexer.cpp
+    src/parser.cpp
+    src/type_checker.cpp
+    src/codegen_js.cpp
+    src/codegen_cpp.cpp
 )

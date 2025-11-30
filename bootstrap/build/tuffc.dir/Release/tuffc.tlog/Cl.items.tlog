@@ -1,6 +1,6 @@
-C:\Users\mathm\IdeaProjects\Tuff\bootstrap\main.cpp;C:\Users\mathm\IdeaProjects\Tuff\bootstrap\build\tuffc.dir\Release\main.obj
-C:\Users\mathm\IdeaProjects\Tuff\bootstrap\lexer.cpp;C:\Users\mathm\IdeaProjects\Tuff\bootstrap\build\tuffc.dir\Release\lexer.obj
-C:\Users\mathm\IdeaProjects\Tuff\bootstrap\parser.cpp;C:\Users\mathm\IdeaProjects\Tuff\bootstrap\build\tuffc.dir\Release\parser.obj
-C:\Users\mathm\IdeaProjects\Tuff\bootstrap\type_checker.cpp;C:\Users\mathm\IdeaProjects\Tuff\bootstrap\build\tuffc.dir\Release\type_checker.obj
-C:\Users\mathm\IdeaProjects\Tuff\bootstrap\codegen_js.cpp;C:\Users\mathm\IdeaProjects\Tuff\bootstrap\build\tuffc.dir\Release\codegen_js.obj
-C:\Users\mathm\IdeaProjects\Tuff\bootstrap\codegen_cpp.cpp;C:\Users\mathm\IdeaProjects\Tuff\bootstrap\build\tuffc.dir\Release\codegen_cpp.obj
+C:\Users\mathm\IdeaProjects\Tuff\bootstrap\src\main.cpp;C:\Users\mathm\IdeaProjects\Tuff\bootstrap\build\tuffc.dir\Release\main.obj
+C:\Users\mathm\IdeaProjects\Tuff\bootstrap\src\lexer.cpp;C:\Users\mathm\IdeaProjects\Tuff\bootstrap\build\tuffc.dir\Release\lexer.obj
+C:\Users\mathm\IdeaProjects\Tuff\bootstrap\src\parser.cpp;C:\Users\mathm\IdeaProjects\Tuff\bootstrap\build\tuffc.dir\Release\parser.obj
+C:\Users\mathm\IdeaProjects\Tuff\bootstrap\src\type_checker.cpp;C:\Users\mathm\IdeaProjects\Tuff\bootstrap\build\tuffc.dir\Release\type_checker.obj
+C:\Users\mathm\IdeaProjects\Tuff\bootstrap\src\codegen_js.cpp;C:\Users\mathm\IdeaProjects\Tuff\bootstrap\build\tuffc.dir\Release\codegen_js.obj
+C:\Users\mathm\IdeaProjects\Tuff\bootstrap\src\codegen_cpp.cpp;C:\Users\mathm\IdeaProjects\Tuff\bootstrap\build\tuffc.dir\Release\codegen_cpp.obj

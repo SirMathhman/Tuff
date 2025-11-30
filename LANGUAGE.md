@@ -2,15 +2,15 @@
 
 ## Implementation Progress
 
-| Feature | Status | Tests |
-|---------|--------|-------|
-| 1. Variables & Let Bindings | ✅ Complete | `let`, mutable bindings, type inference, no-shadowing |
-| 2. Primitive Operations | ✅ Complete | All arithmetic, comparison, logical operators; boolean literals |
-| 3. Control Flow (if/else, while) | ⏳ In Progress | - |
-| 4. Structs | ⏹️ Planned | - |
-| 5. Generics & Collections | ⏹️ Planned | - |
-| 6. expect/actual Multi-platform | ⏹️ Planned | - |
-| 7-11. Advanced Features | ⏹️ Deferred | - |
+| Feature                          | Status         | Tests                                                           |
+| -------------------------------- | -------------- | --------------------------------------------------------------- |
+| 1. Variables & Let Bindings      | ✅ Complete    | `let`, mutable bindings, type inference, no-shadowing           |
+| 2. Primitive Operations          | ✅ Complete    | All arithmetic, comparison, logical operators; boolean literals |
+| 3. Control Flow (if/else, while) | ⏳ In Progress | -                                                               |
+| 4. Structs                       | ⏹️ Planned     | -                                                               |
+| 5. Generics & Collections        | ⏹️ Planned     | -                                                               |
+| 6. expect/actual Multi-platform  | ⏹️ Planned     | -                                                               |
+| 7-11. Advanced Features          | ⏹️ Deferred    | -                                                               |
 
 ## Overview
 
@@ -287,6 +287,7 @@ let b = a + a;           // Error: 200U8 overflows (max 255U8)
 ```
 
 **Design:**
+
 - Literals have both value and type: `5` → `5I32`
 - Operations preserve literal precision: `(5U8) + (10U8)` → `15U8`
 - Compile-time overflow detection for all arithmetic

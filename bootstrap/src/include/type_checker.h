@@ -15,10 +15,11 @@ class TypeChecker
 private:
 	std::map<std::string, SymbolInfo> symbolTable;
 
-	bool isNumericType(const std::string& type) {
+	bool isNumericType(const std::string &type)
+	{
 		return (type == "I32" || type == "I64" || type == "I8" || type == "I16" ||
-				type == "U8" || type == "U16" || type == "U32" || type == "U64" ||
-				type == "F32" || type == "F64");
+						type == "U8" || type == "U16" || type == "U32" || type == "U64" ||
+						type == "F32" || type == "F64");
 	}
 
 public:

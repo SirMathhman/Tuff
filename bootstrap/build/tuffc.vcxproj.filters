@@ -1,22 +1,22 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <ClCompile Include="C:\Users\mathm\IdeaProjects\Tuff\bootstrap\main.cpp">
+    <ClCompile Include="C:\Users\mathm\IdeaProjects\Tuff\bootstrap\src\main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="C:\Users\mathm\IdeaProjects\Tuff\bootstrap\lexer.cpp">
+    <ClCompile Include="C:\Users\mathm\IdeaProjects\Tuff\bootstrap\src\lexer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="C:\Users\mathm\IdeaProjects\Tuff\bootstrap\parser.cpp">
+    <ClCompile Include="C:\Users\mathm\IdeaProjects\Tuff\bootstrap\src\parser.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="C:\Users\mathm\IdeaProjects\Tuff\bootstrap\type_checker.cpp">
+    <ClCompile Include="C:\Users\mathm\IdeaProjects\Tuff\bootstrap\src\type_checker.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="C:\Users\mathm\IdeaProjects\Tuff\bootstrap\codegen_js.cpp">
+    <ClCompile Include="C:\Users\mathm\IdeaProjects\Tuff\bootstrap\src\codegen_js.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="C:\Users\mathm\IdeaProjects\Tuff\bootstrap\codegen_cpp.cpp">
+    <ClCompile Include="C:\Users\mathm\IdeaProjects\Tuff\bootstrap\src\codegen_cpp.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

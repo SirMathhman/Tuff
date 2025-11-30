@@ -6,7 +6,7 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	std::stringstream ss;
 	ss << "#include <iostream>\n";
 	ss << "#include <cstdint>\n\n";
-	
+
 	// Determine return type from last expression
 	std::string returnType = "int"; // default
 	if (ast->children.size() > 0)
@@ -14,7 +14,7 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 		auto lastNode = ast->children.back();
 		returnType = mapType(lastNode->inferredType);
 	}
-	
+
 	ss << returnType << " main() {\n";
 
 	for (size_t i = 0; i < ast->children.size(); ++i)
