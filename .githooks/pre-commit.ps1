@@ -4,6 +4,7 @@ $maxLines = 500
 $maxFilesPerDir = 15
 $violations = @()
 $dirViolations = @()
+$mdViolations = @()
 
 # Directories to ignore (build artifacts, hidden dirs, etc.)
 $ignoreDirs = @(
@@ -26,6 +27,19 @@ foreach ($file in $stagedFiles) {
         
         if ($lineCount -gt $maxLines) {
             $violations += "  - $file ($lineCount lines)"
+        }
+    }
+}
+
+# Check .md file placement (must be in docs/ or named README.md)
+foreach ($file in $stagedFiles) {
+    if ($file -match '\.md$') {
+        $fileName = Split-Path -Leaf $file
+        $isInDocs = $file -match '(/|\\)docs(/|\\)' -or $file -match '^docs(/|\\)'
+        $isReadme = $fileName -eq 'README.md'
+        
+        if (-not ($isInDocs -or $isReadme)) {
+            $mdViolations += "  - $file"
         }
     }
 }
@@ -89,10 +103,21 @@ if ($dirViolations.Count -gt 0) {
     Write-Host "Each directory should contain at most $maxFilesPerDir direct files.`n" -ForegroundColor Yellow
 }
 
+if ($mdViolations.Count -gt 0) {
+    $hasViolations = $true
+    Write-Host "`n❌ Documentation organization check FAILED!" -ForegroundColor Red
+    Write-Host "`nThe following .md files are not in the docs/ folder:" -ForegroundColor Yellow
+    $mdViolations | ForEach-Object { Write-Host $_ -ForegroundColor Yellow }
+    Write-Host "`nMarkdown files must either:" -ForegroundColor Yellow
+    Write-Host "  - Be placed in the docs/ directory, OR" -ForegroundColor Yellow
+    Write-Host "  - Be named README.md`n" -ForegroundColor Yellow
+}
+
 if ($hasViolations) {
     exit 1
 }
 
 Write-Host "✓ All files are within the $maxLines line limit." -ForegroundColor Green
-Write-Host "✓ All directories have $maxFilesPerDir or fewer direct files.`n" -ForegroundColor Green
+Write-Host "✓ All directories have $maxFilesPerDir or fewer direct files." -ForegroundColor Green
+Write-Host "✓ All .md files are properly organized.`n" -ForegroundColor Green
 exit 0
