@@ -50,6 +50,10 @@ std::shared_ptr<ASTNode> Parser::parse()
 		{
 			program->addChild(parseStructDecl());
 		}
+		else if (peek().type == TokenType::ENUM)
+		{
+			program->addChild(parseEnumDecl());
+		}
 		else if (peek().type == TokenType::LET)
 		{
 			program->addChild(parseLetStatement());
@@ -256,7 +260,8 @@ std::shared_ptr<ASTNode> Parser::parsePostfix()
 	{
 		if (match(TokenType::DOT))
 		{
-			// Field access: expr.field
+			// Field access (obj.field) or enum value (EnumName.Variant)
+			// Type checker will determine which based on left side type
 			auto fieldName = consume(TokenType::IDENTIFIER, "Expected field name after '.'");
 			auto node = std::make_shared<ASTNode>();
 			node->type = ASTNodeType::FIELD_ACCESS;

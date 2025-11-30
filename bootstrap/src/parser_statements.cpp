@@ -1,6 +1,38 @@
 #include "parser.h"
 #include <iostream>
 
+std::shared_ptr<ASTNode> Parser::parseEnumDecl()
+{
+	consume(TokenType::ENUM, "Expected 'enum'");
+	auto enumName = consume(TokenType::IDENTIFIER, "Expected enum name");
+
+	auto node = std::make_shared<ASTNode>();
+	node->type = ASTNodeType::ENUM_DECL;
+	node->value = enumName.value;
+
+	consume(TokenType::LBRACE, "Expected '{' after enum name");
+
+	// Parse variants: Variant1, Variant2, ...
+	while (peek().type != TokenType::RBRACE && peek().type != TokenType::END_OF_FILE)
+	{
+		auto variantName = consume(TokenType::IDENTIFIER, "Expected variant name");
+
+		// Create variant node
+		auto variantNode = std::make_shared<ASTNode>();
+		variantNode->type = ASTNodeType::IDENTIFIER;
+		variantNode->value = variantName.value;
+		node->addChild(variantNode);
+
+		if (!match(TokenType::COMMA))
+		{
+			break;
+		}
+	}
+
+	consume(TokenType::RBRACE, "Expected '}' after enum variants");
+	return node;
+}
+
 std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 {
 	consume(TokenType::FN, "Expected 'fn'");
@@ -277,6 +309,10 @@ std::shared_ptr<ASTNode> Parser::parseBlock()
 		if (peek().type == TokenType::STRUCT)
 		{
 			block->addChild(parseStructDecl());
+		}
+		else if (peek().type == TokenType::ENUM)
+		{
+			block->addChild(parseEnumDecl());
 		}
 		else if (peek().type == TokenType::LET)
 		{

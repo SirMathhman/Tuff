@@ -1,0 +1,18 @@
+// Test: Multiple enums
+enum Color {
+    Red,
+    Green,
+    Blue
+}
+
+enum Status {
+    Success,
+    Failure
+}
+
+let c = Color.Red;
+let s = Status.Success;
+c
+
+
+

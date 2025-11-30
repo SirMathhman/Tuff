@@ -1,0 +1,11 @@
+// Test: Enum comparison
+enum Status {
+    Success,
+    Failure
+}
+
+let s = Status.Success;
+let result = if (s == Status.Success) 100 else 200;
+
+// Expected: 100
+result

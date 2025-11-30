@@ -10,7 +10,7 @@ std::string CodeGeneratorJS::generate(std::shared_ptr<ASTNode> ast)
 
 	auto isStatement = [](ASTNodeType type)
 	{
-		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::FUNCTION_DECL;
+		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL;
 	};
 
 	for (size_t i = 0; i < ast->children.size(); ++i)
@@ -157,6 +157,27 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::STRUCT_DECL:
 		// Structs don't need runtime declaration in JS
 		return "";
+	case ASTNodeType::ENUM_DECL:
+	{
+		// Generate: const EnumName = { Variant1: 0, Variant2: 1, ... }
+		std::stringstream ss;
+		ss << "const " << node->value << " = { ";
+		for (size_t i = 0; i < node->children.size(); i++)
+		{
+			if (i > 0)
+				ss << ", ";
+			ss << node->children[i]->value << ": " << i;
+		}
+		ss << " }";
+		return ss.str();
+	}
+	case ASTNodeType::ENUM_VALUE:
+	{
+		// Generate: EnumName.Variant
+		// The enum name is stored in inferredType, variant name in value
+		auto enumName = node->children[0]; // The IDENTIFIER node for enum
+		return enumName->value + "." + node->value;
+	}
 	case ASTNodeType::STRUCT_LITERAL:
 	{
 		// Generate: { field1, field2, field3 }

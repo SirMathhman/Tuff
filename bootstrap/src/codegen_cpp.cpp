@@ -9,10 +9,19 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 
 	auto isStatement = [](ASTNodeType type)
 	{
-		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::FUNCTION_DECL;
+		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL;
 	};
 
-	// Generate struct declarations first
+	// Generate enum declarations first
+	for (auto child : ast->children)
+	{
+		if (child->type == ASTNodeType::ENUM_DECL)
+		{
+			ss << generateNode(child) << "\n";
+		}
+	}
+
+	// Generate struct declarations
 	for (auto child : ast->children)
 	{
 		if (child->type == ASTNodeType::STRUCT_DECL)
@@ -39,12 +48,26 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 
 	// Determine return type from last expression (if last node is an expression)
 	std::string returnType = "int"; // default
+	bool needsEnumCast = false;
 	if (ast->children.size() > 0)
 	{
 		auto lastNode = ast->children.back();
 		if (!isStatement(lastNode->type))
 		{
-			returnType = mapType(lastNode->inferredType);
+			std::string inferredType = lastNode->inferredType;
+			// Check if it's an enum type (not a primitive type)
+			if (inferredType != "I32" && inferredType != "Bool" && inferredType != "I8" &&
+					inferredType != "I16" && inferredType != "I64" && inferredType != "U8" &&
+					inferredType != "U16" && inferredType != "U32" && inferredType != "U64" &&
+					inferredType != "F32" && inferredType != "F64" && inferredType != "Void")
+			{
+				// Assume it's an enum, keep return type as int and cast
+				needsEnumCast = true;
+			}
+			else
+			{
+				returnType = mapType(inferredType);
+			}
 		}
 	}
 
@@ -54,14 +77,21 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	{
 		auto child = ast->children[i];
 
-		// Skip struct and function declarations (already generated)
-		if (child->type == ASTNodeType::STRUCT_DECL || child->type == ASTNodeType::FUNCTION_DECL)
+		// Skip struct, enum, and function declarations (already generated)
+		if (child->type == ASTNodeType::STRUCT_DECL || child->type == ASTNodeType::ENUM_DECL || child->type == ASTNodeType::FUNCTION_DECL)
 			continue;
 
 		if (i == ast->children.size() - 1 && !isStatement(child->type))
 		{
 			// Last node is an expression: return its value
-			ss << "    return " << generateNode(child) << ";\n";
+			if (needsEnumCast)
+			{
+				ss << "    return static_cast<int>(" << generateNode(child) << ");\n";
+			}
+			else
+			{
+				ss << "    return " << generateNode(child) << ";\n";
+			}
 		}
 		else
 		{
@@ -216,6 +246,25 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		}
 		ss << "};";
 		return ss.str();
+	}
+	case ASTNodeType::ENUM_DECL:
+	{
+		std::stringstream ss;
+		ss << "enum class " << node->value << " {\n";
+		for (size_t i = 0; i < node->children.size(); i++)
+		{
+			if (i > 0)
+				ss << ",\n";
+			ss << "    " << node->children[i]->value;
+		}
+		ss << "\n};";
+		return ss.str();
+	}
+	case ASTNodeType::ENUM_VALUE:
+	{
+		// Generate: EnumName::Variant
+		auto enumName = node->children[0]; // The IDENTIFIER node for enum
+		return enumName->value + "::" + node->value;
 	}
 	case ASTNodeType::STRUCT_LITERAL:
 	{

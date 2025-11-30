@@ -1,0 +1,13 @@
+// Test: Basic enum declaration and usage
+enum Color {
+    Red,
+    Green,
+    Blue
+}
+
+let c = Color.Red;
+let g = Color.Green;
+
+// Red = 0, Green = 1
+// Expected: 1 (Green)
+g

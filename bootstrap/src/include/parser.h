@@ -18,6 +18,7 @@ private:
 	std::shared_ptr<ASTNode> parseStatement();
 	std::shared_ptr<ASTNode> parseFunctionDecl();
 	std::shared_ptr<ASTNode> parseStructDecl();
+	std::shared_ptr<ASTNode> parseEnumDecl();
 	std::shared_ptr<ASTNode> parseLetStatement();
 	std::shared_ptr<ASTNode> parseAssignmentStatement();
 	std::shared_ptr<ASTNode> parseIfStatement();

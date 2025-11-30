@@ -9,9 +9,10 @@
 | 3. Control Flow (if/else, while) | ✅ Complete | if/else statements & expressions, while, loop, break, continue  |
 | 4. Structs                       | ✅ Complete | Definition, instantiation, field access, mutation, nesting      |
 | 5. Functions                     | ✅ Complete | Declaration, calls, return statements, recursion, forward refs  |
-| 6. Generics & Collections        | ⏹️ Planned  | -                                                               |
-| 7. expect/actual Multi-platform  | ⏹️ Planned  | -                                                               |
-| 8-12. Advanced Features          | ⏹️ Deferred | -                                                               |
+| 6. Enums                         | ✅ Complete | Simple unit enums, variant access, equality comparison          |
+| 7. Generics & Collections        | ⏹️ Planned  | -                                                               |
+| 8. expect/actual Multi-platform  | ⏹️ Planned  | -                                                               |
+| 9-13. Advanced Features          | ⏹️ Deferred | -                                                               |
 
 ## Overview
 

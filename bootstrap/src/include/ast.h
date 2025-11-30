@@ -20,6 +20,8 @@ enum class ASTNodeType
 	BLOCK,					// { stmt; stmt; }
 	STRUCT_DECL,		// struct Name { field: Type, ... }
 	STRUCT_LITERAL, // TypeName { expr, expr, ... }
+	ENUM_DECL,			// enum Name { Variant1, Variant2 }
+	ENUM_VALUE,			// EnumName.Variant
 	FIELD_ACCESS,		// obj.field
 	CALL_EXPR,
 	BINARY_OP,

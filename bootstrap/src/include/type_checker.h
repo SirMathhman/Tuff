@@ -22,12 +22,18 @@ struct FunctionInfo
 	std::vector<std::pair<std::string, std::string>> params; // (name, type) pairs
 };
 
+struct EnumInfo
+{
+	std::vector<std::string> variants; // List of variant names
+};
+
 class TypeChecker
 {
 private:
 	std::map<std::string, SymbolInfo> symbolTable;
 	std::map<std::string, StructInfo> structTable;
 	std::map<std::string, FunctionInfo> functionTable;
+	std::map<std::string, EnumInfo> enumTable;
 	std::string currentFunctionReturnType; // Track return type for validation
 
 	bool isNumericType(const std::string &type)
@@ -36,6 +42,11 @@ private:
 						type == "U8" || type == "U16" || type == "U32" || type == "U64" ||
 						type == "F32" || type == "F64");
 	}
+
+	void checkBinaryOp(std::shared_ptr<ASTNode> node);
+	void checkFieldOrEnumAccess(std::shared_ptr<ASTNode> node);
+	void registerDeclarations(std::shared_ptr<ASTNode> node);
+	void checkCallExpr(std::shared_ptr<ASTNode> node);
 
 public:
 	void check(std::shared_ptr<ASTNode> node);
