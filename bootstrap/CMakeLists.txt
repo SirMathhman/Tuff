@@ -22,12 +22,9 @@ set(COMPILER_SOURCES
     src/type_checker/type_checker_call.cpp
     src/type_checker/type_checker_struct.cpp
     src/type_checker/type_checker_union.cpp
-    src/type_checker/type_checker_intersection.cpp
     src/type_checker/type_checker_register.cpp
-    src/type_checker/type_checker_ownership.cpp
     src/type_checker/type_checker_alias.cpp
     src/type_checker/type_checker_expr.cpp
-    src/type_checker/type_checker_multiple_of.cpp
     src/codegen/codegen_js.cpp
     src/codegen/codegen_js_helpers.cpp
     src/codegen/codegen_cpp.cpp
@@ -40,7 +37,6 @@ set(COMPILER_SOURCES
     src/codegen/codegen_cpp_decl.cpp
     src/codegen/codegen_cpp_types.cpp
     src/codegen/codegen_cpp_union.cpp
-    src/codegen/codegen_cpp_intersection.cpp
 )
 
 # Main compiler executable

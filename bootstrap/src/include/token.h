@@ -24,6 +24,7 @@ enum class TokenType
 	RETURN,
 	TYPE,
 	IS,
+	MATCH,
 	SIZEOF,
 	TRUE,
 	FALSE,

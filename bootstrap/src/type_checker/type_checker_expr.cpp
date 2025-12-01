@@ -1,6 +1,15 @@
 #include "type_checker.h"
 #include <iostream>
 
+// Implementation of isNumericType
+bool TypeChecker::isNumericType(const std::string &type)
+{
+	return (type == "I32" || type == "I64" || type == "I8" || type == "I16" ||
+					type == "U8" || type == "U16" || type == "U32" || type == "U64" ||
+					type == "F32" || type == "F64" || type == "USize" ||
+					type.rfind("SizeOf<", 0) == 0);
+}
+
 void TypeChecker::checkIdentifier(std::shared_ptr<ASTNode> node)
 {
 	std::string name = node->value;
@@ -25,8 +34,6 @@ void TypeChecker::checkIdentifier(std::shared_ptr<ASTNode> node)
 	auto it = symbolTable.find(name);
 	if (it != symbolTable.end())
 	{
-		// Check if variable has been moved
-		checkNotMoved(name);
 		node->inferredType = it->second.type;
 		return;
 	}
@@ -102,45 +109,125 @@ void TypeChecker::checkIsExpr(std::shared_ptr<ASTNode> node)
 	node->inferredType = "Bool";
 }
 
-void TypeChecker::checkIntersectionExpr(std::shared_ptr<ASTNode> node)
+void TypeChecker::checkMatchExpr(std::shared_ptr<ASTNode> node)
 {
-	// Intersection expression: expr & expr (struct merging)
-	auto left = node->children[0];
-	auto right = node->children[1];
-	check(left);
-	check(right);
+	// Match expression: match scrutinee { Type => expr, ... }
+	// children[0] is the scrutinee
+	// children[1..n] are the arms, each arm has:
+	//   - value: the pattern type (or "_" for wildcard)
+	//   - children[0]: the body expression
 
-	std::string leftType = left->inferredType;
-	std::string rightType = right->inferredType;
+	auto scrutinee = node->children[0];
+	check(scrutinee);
 
-	// Both types must be structs (or intersections of structs)
-	// Validate left type
-	if (!isIntersectionType(leftType))
+	std::string scrutineeType = scrutinee->inferredType;
+
+	// Determine if scrutinee is a union type or enum type
+	bool isUnion = isUnionType(scrutineeType);
+	bool isEnum = enumTable.find(scrutineeType) != enumTable.end();
+
+	if (!isUnion && !isEnum)
 	{
-		auto it = structTable.find(leftType);
-		if (it == structTable.end())
+		std::cerr << "Error: match expression requires union or enum type, got '" << scrutineeType << "'" << std::endl;
+		exit(1);
+	}
+
+	// Collect all possible variants
+	std::vector<std::string> variants;
+	if (isUnion)
+	{
+		variants = splitUnionType(scrutineeType);
+	}
+	else
+	{
+		variants = enumTable[scrutineeType].variants;
+	}
+
+	// Track which variants have been covered
+	std::set<std::string> coveredVariants;
+	bool hasWildcard = false;
+	std::string resultType;
+
+	// Check each arm (children[1..n])
+	for (size_t i = 1; i < node->children.size(); i++)
+	{
+		auto arm = node->children[i];
+		std::string pattern = arm->value;
+
+		if (pattern == "_")
 		{
-			std::cerr << "Error: Left operand of '&' must be a struct type, got '" << leftType << "'" << std::endl;
-			exit(1);
+			hasWildcard = true;
+		}
+		else
+		{
+			// Validate pattern is a valid variant
+			bool found = false;
+			for (const auto &variant : variants)
+			{
+				if (variant == pattern || (isEnum && variant == pattern))
+				{
+					found = true;
+					break;
+				}
+			}
+
+			if (!found)
+			{
+				std::cerr << "Error: Pattern '" << pattern << "' is not a variant of type '" << scrutineeType << "'" << std::endl;
+				exit(1);
+			}
+
+			if (coveredVariants.count(pattern))
+			{
+				std::cerr << "Error: Duplicate pattern '" << pattern << "' in match expression" << std::endl;
+				exit(1);
+			}
+			coveredVariants.insert(pattern);
+
+			// For union types, narrow the scrutinee type in the arm body
+			if (isUnion && scrutinee->type == ASTNodeType::IDENTIFIER)
+			{
+				narrowedTypes[scrutinee->value] = pattern;
+			}
+		}
+
+		// Check the arm body
+		auto armBody = arm->children[0];
+		check(armBody);
+
+		// Clear narrowing after checking arm
+		if (isUnion && scrutinee->type == ASTNodeType::IDENTIFIER && pattern != "_")
+		{
+			narrowedTypes.erase(scrutinee->value);
+		}
+
+		// Track result type (all arms must have compatible types)
+		if (resultType.empty())
+		{
+			resultType = armBody->inferredType;
+		}
+		else if (resultType != armBody->inferredType)
+		{
+			if (!isTypeCompatible(armBody->inferredType, resultType))
+			{
+				std::cerr << "Error: Match arms have incompatible types: '" << resultType << "' and '" << armBody->inferredType << "'" << std::endl;
+				exit(1);
+			}
 		}
 	}
 
-	// Validate right type
-	if (!isIntersectionType(rightType))
+	// Check exhaustiveness
+	if (!hasWildcard)
 	{
-		auto it = structTable.find(rightType);
-		if (it == structTable.end())
+		for (const auto &variant : variants)
 		{
-			std::cerr << "Error: Right operand of '&' must be a struct type, got '" << rightType << "'" << std::endl;
-			exit(1);
+			if (coveredVariants.find(variant) == coveredVariants.end())
+			{
+				std::cerr << "Error: Non-exhaustive match expression. Missing pattern for '" << variant << "'" << std::endl;
+				exit(1);
+			}
 		}
 	}
-
-	// Result type is intersection of both types
-	std::string resultType = leftType + "&" + rightType;
-
-	// Validate that the intersection doesn't have conflicting fields
-	validateIntersectionType(resultType);
 
 	node->inferredType = resultType;
 }

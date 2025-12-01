@@ -114,35 +114,8 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 
 		return "(" + expr + ".__tag == " + structName + "::Tag::" + baseName + ")";
 	}
-	case ASTNodeType::INTERSECTION_EXPR:
-	{
-		// Intersection operator: merge two struct values into one
-		// Generate: merge_TYPE1_AND_TYPE2(left, right) which will be defined as a template
-		auto left = node->children[0];
-		auto right = node->children[1];
-		std::string leftExpr = generateNode(left);
-		std::string rightExpr = generateNode(right);
-
-		// The result type name uses & replaced with _AND_
-		std::string resultTypeName;
-		for (char c : node->inferredType)
-		{
-			if (c == '&')
-			{
-				resultTypeName += "_AND_";
-			}
-			else
-			{
-				resultTypeName += c;
-			}
-		}
-
-		// Use a lambda that creates the merged struct with designated initializers
-		// We copy all fields from both operands
-		std::stringstream ss;
-		ss << resultTypeName << "::merge(" << leftExpr << ", " << rightExpr << ")";
-		return ss.str();
-	}
+	case ASTNodeType::MATCH_EXPR:
+		return generateMatchExpr(node);
 	case ASTNodeType::UNARY_OP:
 		return generateUnaryOp(node);
 	case ASTNodeType::ARRAY_LITERAL:

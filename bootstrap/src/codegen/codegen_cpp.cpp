@@ -97,64 +97,6 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 			}
 		}
 
-		// Collect all intersection types used in the program
-		std::set<std::string> intersectionTypes;
-		std::function<void(std::shared_ptr<ASTNode>)> collectIntersectionTypes = [&](std::shared_ptr<ASTNode> node)
-		{
-			if (!node)
-				return;
-			if (!node->inferredType.empty() && isIntersectionType(node->inferredType))
-			{
-				intersectionTypes.insert(node->inferredType);
-			}
-			for (auto child : node->children)
-			{
-				collectIntersectionTypes(child);
-			}
-		};
-		collectIntersectionTypes(ast);
-
-		// Filter out intersection types that are just a type with a destructor
-		// e.g., NativeString&#string_destroy or *mut [T; 0; L]&#free
-		// These should not generate wrapper structs; the destructor is metadata
-		std::set<std::string> filteredIntersectionTypes;
-
-		for (const auto &intersectionType : intersectionTypes)
-		{
-			auto components = splitIntersectionType(intersectionType);
-			bool isTypeWithDestructor = false;
-
-			// Check if this is just Type & #destructor (2 components, one is destructor)
-			if (components.size() == 2)
-			{
-				int destructorCount = 0;
-				int dataTypeCount = 0;
-
-				for (const auto &comp : components)
-				{
-					if (!comp.empty() && comp[0] == '#')
-					{
-						destructorCount++;
-					}
-					else
-					{
-						dataTypeCount++;
-					}
-				}
-
-				// If we have exactly 1 data type and 1 destructor, skip struct generation
-				if (dataTypeCount == 1 && destructorCount == 1)
-				{
-					isTypeWithDestructor = true;
-				}
-			}
-
-			if (!isTypeWithDestructor)
-			{
-				filteredIntersectionTypes.insert(intersectionType);
-			}
-		}
-
 		auto isStatement = [](ASTNodeType type)
 		{
 			return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL || type == ASTNodeType::EXPECT_DECL || type == ASTNodeType::ACTUAL_DECL || type == ASTNodeType::MODULE_DECL;
@@ -180,7 +122,22 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 		// Note: extern function declarations are not emitted - they are provided by external libraries
 		// The extern keyword in Tuff is like TypeScript declarations or C headers
 
-		// Generate type aliases
+		// Generate struct declarations
+		for (auto child : ast->children)
+		{
+			if (child->type == ASTNodeType::STRUCT_DECL)
+			{
+				ss << generateNode(child) << "\n";
+			}
+		}
+
+		// Generate union struct definitions AFTER struct declarations (to avoid forward reference errors)
+		for (const auto &pair : unionStructToGeneric)
+		{
+			ss << generateUnionStruct(pair.second) << "\n";
+		}
+
+		// Generate type aliases AFTER union struct definitions
 		for (auto child : ast->children)
 		{
 			if (child->type == ASTNodeType::TYPE_ALIAS)
@@ -201,22 +158,7 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 			}
 		}
 
-		// Generate struct declarations
-		for (auto child : ast->children)
-		{
-			if (child->type == ASTNodeType::STRUCT_DECL)
-			{
-				ss << generateNode(child) << "\n";
-			}
-		}
-
-		// Generate union struct definitions AFTER struct declarations (to avoid forward reference errors)
-		for (const auto &pair : unionStructToGeneric)
-		{
-			ss << generateUnionStruct(pair.second) << "\n";
-		}
-
-		// Generate function forward declarations (before intersection structs so destructors can reference them)
+		// Generate function forward declarations
 		for (auto child : ast->children)
 		{
 			if (child->type == ASTNodeType::FUNCTION_DECL)
@@ -288,12 +230,6 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 				}
 				ss << ");\n";
 			}
-		}
-
-		// Generate intersection struct definitions (after regular structs and function forward declarations)
-		for (const auto &intersectionType : filteredIntersectionTypes)
-		{
-			ss << generateIntersectionStruct(intersectionType, structFields) << "\n";
 		}
 
 	} // End of !useSharedHeader block

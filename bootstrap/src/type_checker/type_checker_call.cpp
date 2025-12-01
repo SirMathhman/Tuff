@@ -104,8 +104,8 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 			expectedType = typeSubstitutions[expectedType];
 		}
 
-		// Use typesMatch for lifetime-aware comparison
-		if (!typesMatch(arg->inferredType, expectedType, info.lifetimeParams))
+		// Use isTypeCompatible for type comparison
+		if (!isTypeCompatible(arg->inferredType, expectedType))
 		{
 			std::cerr << "Error: Argument " << (i + 1) << " to function '" << funcName
 								<< "' has type " << arg->inferredType << ", expected " << expectedType << std::endl;
@@ -118,6 +118,5 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 	{
 		returnType = typeSubstitutions[returnType];
 	}
-	// Strip lifetime from return type for the inferred type at call site
-	node->inferredType = stripLifetime(returnType);
+	node->inferredType = returnType;
 }

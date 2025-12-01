@@ -1,5 +1,24 @@
 #include "type_checker.h"
 
+// Helper: Strip lifetime annotations from pointer types
+// e.g., "*a I32" -> "*I32", "*a mut I32" -> "*mut I32"
+static std::string stripLifetime(const std::string &type)
+{
+	if (type.empty() || type[0] != '*')
+		return type;
+
+	std::string rest = type.substr(1);
+
+	// Check if there's a lifetime annotation (lowercase letter followed by space)
+	if (rest.length() >= 2 && rest[0] >= 'a' && rest[0] <= 'z' && rest[1] == ' ')
+	{
+		// Skip the lifetime and space
+		return "*" + rest.substr(2);
+	}
+
+	return type;
+}
+
 // Helper: Check if a type is a union type (contains '|')
 bool TypeChecker::isUnionType(const std::string &type)
 {
@@ -41,6 +60,12 @@ bool TypeChecker::isTypeCompatible(const std::string &valueType, const std::stri
 	if (expandedValue == expandedTarget)
 		return true;
 
+	// Strip lifetimes and compare again
+	std::string strippedValue = stripLifetime(expandedValue);
+	std::string strippedTarget = stripLifetime(expandedTarget);
+	if (strippedValue == strippedTarget)
+		return true;
+
 	// Integer literal widening: I32 literals can be assigned to any integer type
 	// This allows `let x: USize = 0;` to work
 	if (expandedValue == "I32" &&
@@ -57,21 +82,6 @@ bool TypeChecker::isTypeCompatible(const std::string &valueType, const std::stri
 		return true;
 	}
 
-	// Multiple-of compatibility: I32*10I32 can be assigned to I32*5I32
-	if (isMultipleOfType(expandedValue) && isMultipleOfType(expandedTarget))
-	{
-		if (isMultipleOfCompatible(expandedValue, expandedTarget))
-			return true;
-	}
-
-	// Multiple-of to base type: I32*5I32 can be assigned to I32
-	if (isMultipleOfType(expandedValue))
-	{
-		std::string baseType = getMultipleOfBaseType(expandedValue);
-		if (baseType == expandedTarget)
-			return true;
-	}
-
 	// If target is a union type, check if value is one of the variants
 	if (isUnionType(expandedTarget))
 	{
@@ -81,48 +91,6 @@ bool TypeChecker::isTypeCompatible(const std::string &valueType, const std::stri
 			if (expandedValue == variant)
 				return true;
 		}
-	}
-
-	// If target is an intersection type with a destructor, check if value matches the data type
-	// e.g., I32 is compatible with I32&~myDestructor
-	if (isIntersectionType(expandedTarget))
-	{
-		auto components = splitIntersectionType(expandedTarget);
-		// Build the data type (exclude destructor components)
-		std::string dataType;
-		for (const auto &comp : components)
-		{
-			if (!comp.empty() && comp[0] == '#')
-				continue;
-			if (!dataType.empty())
-				dataType += "&";
-			dataType += comp;
-		}
-		if (expandedValue == dataType)
-			return true;
-	}
-
-	// If value is an intersection type with a destructor, check if target matches the data type
-	// e.g., I32&#myDestructor is compatible with I32 (can extract the underlying value)
-	if (isIntersectionType(expandedValue))
-	{
-		auto components = splitIntersectionType(expandedValue);
-		// Build the data type (exclude destructor components)
-		std::string dataType;
-		for (const auto &comp : components)
-		{
-			if (!comp.empty() && comp[0] == '#')
-				continue;
-			if (!dataType.empty())
-				dataType += "&";
-			dataType += comp;
-		}
-		if (expandedTarget == dataType)
-			return true;
-
-		// Also check if target is compatible with the data type (e.g. *mut [T] vs *[T])
-		if (isTypeCompatible(dataType, expandedTarget))
-			return true;
 	}
 
 	// Handle pointer mutability compatibility: *mut T is compatible with *T (immutable)

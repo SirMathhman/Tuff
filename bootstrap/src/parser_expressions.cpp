@@ -93,11 +93,11 @@ std::shared_ptr<ASTNode> Parser::parseComparison()
 
 std::shared_ptr<ASTNode> Parser::parseAdditive()
 {
-	auto left = parseIntersection();
+	auto left = parseBitwiseAnd();
 	while (match(TokenType::PLUS) || match(TokenType::MINUS))
 	{
 		Token op = tokens[pos - 1];
-		auto right = parseIntersection();
+		auto right = parseBitwiseAnd();
 		auto node = std::make_shared<ASTNode>();
 		node->type = ASTNodeType::BINARY_OP;
 		node->value = op.value;
@@ -108,14 +108,15 @@ std::shared_ptr<ASTNode> Parser::parseAdditive()
 	return left;
 }
 
-std::shared_ptr<ASTNode> Parser::parseIntersection()
+std::shared_ptr<ASTNode> Parser::parseBitwiseAnd()
 {
 	auto left = parseMultiplicative();
 	while (match(TokenType::AMPERSAND))
 	{
 		auto right = parseMultiplicative();
 		auto node = std::make_shared<ASTNode>();
-		node->type = ASTNodeType::INTERSECTION_EXPR;
+		node->type = ASTNodeType::BINARY_OP;
+		node->value = "&";
 		node->addChild(left);
 		node->addChild(right);
 		left = node;
@@ -336,6 +337,10 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 		node->inferredType = "USize"; // sizeOf always returns USize
 		return node;
 	}
+	else if (match(TokenType::MATCH))
+	{
+		return parseMatchExpr();
+	}
 	else if (match(TokenType::IF))
 	{
 		// If expression: if (cond) expr else expr
@@ -448,4 +453,84 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 	}
 	std::cerr << "Unexpected token in expression: " << peek().value << std::endl;
 	exit(1);
+}
+
+std::shared_ptr<ASTNode> Parser::parseMatchExpr()
+{
+	// match expr { Pattern => expr, Pattern => expr, ... }
+	auto node = std::make_shared<ASTNode>();
+	node->type = ASTNodeType::MATCH_EXPR;
+
+	// Parse the scrutinee expression
+	auto scrutinee = parseExpression();
+	node->addChild(scrutinee);
+
+	consume(TokenType::LBRACE, "Expected '{' after match expression");
+
+	// Parse arms
+	while (peek().type != TokenType::RBRACE && peek().type != TokenType::END_OF_FILE)
+	{
+		auto arm = std::make_shared<ASTNode>();
+
+		// Parse pattern: Type, EnumName.Variant, or _
+		if (peek().type == TokenType::IDENTIFIER)
+		{
+			std::string pattern = advance().value;
+
+			// Check for FQN or enum variant: Type::Variant or EnumName.Variant
+			while (peek().type == TokenType::DOUBLE_COLON)
+			{
+				advance();
+				pattern += "::";
+				pattern += consume(TokenType::IDENTIFIER, "Expected identifier after '::'").value;
+			}
+
+			// Check for enum dot notation: EnumName.Variant
+			if (peek().type == TokenType::DOT)
+			{
+				advance();
+				pattern += ".";
+				pattern += consume(TokenType::IDENTIFIER, "Expected variant name after '.'").value;
+			}
+
+			arm->value = pattern;
+		}
+		else
+		{
+			// Expecting a type keyword or wildcard
+			Token patternToken = advance();
+			if (patternToken.value == "_")
+			{
+				arm->value = "_";
+			}
+			else
+			{
+				// Could be a primitive type like I32, Bool, etc.
+				arm->value = patternToken.value;
+			}
+		}
+
+		consume(TokenType::FAT_ARROW, "Expected '=>' after match pattern");
+
+		// Parse arm body - can be expression or block
+		std::shared_ptr<ASTNode> body;
+		if (peek().type == TokenType::LBRACE)
+		{
+			body = parseBlock();
+		}
+		else
+		{
+			body = parseExpression();
+		}
+		arm->addChild(body);
+
+		node->addChild(arm);
+
+		// Optional comma between arms
+		match(TokenType::COMMA);
+	}
+
+	consume(TokenType::RBRACE, "Expected '}' after match arms");
+
+	return node;
 }

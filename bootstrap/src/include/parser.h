@@ -42,25 +42,18 @@ private:
 	std::shared_ptr<ASTNode> parseIsCheck();
 	std::shared_ptr<ASTNode> parseComparison();
 	std::shared_ptr<ASTNode> parseAdditive();
-	std::shared_ptr<ASTNode> parseIntersection();
+	std::shared_ptr<ASTNode> parseBitwiseAnd();
 	std::shared_ptr<ASTNode> parseMultiplicative();
 	std::shared_ptr<ASTNode> parseUnary();
 	std::shared_ptr<ASTNode> parsePostfix();
 	std::shared_ptr<ASTNode> parsePrimary();
+	std::shared_ptr<ASTNode> parseMatchExpr();
 
 	std::vector<std::shared_ptr<ASTNode>> parseGenericParams();
 	std::string parseType();
-	std::string parseIntersectionType();
 	std::string parseSingleType();
 	std::vector<std::string> parseGenericArgs();
 	bool isGenericInstantiation();
-
-	// New expression-based type parsing (gradual migration)
-	ExprPtr parseTypeExpr();
-	ExprPtr parseIntersectionTypeExpr();
-	ExprPtr parseSingleTypeExpr();
-
-	// Helper to check if identifier is a lifetime parameter (lowercase single char)
 	bool isLifetimeParam(const std::string &name) const;
 
 public:

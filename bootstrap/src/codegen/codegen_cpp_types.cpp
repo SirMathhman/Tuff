@@ -3,17 +3,6 @@
 
 std::string CodeGeneratorCPP::mapType(std::string tuffType)
 {
-	// Strip multiple-of constraints: I32*5I32 -> I32
-	size_t starPos = tuffType.find('*');
-	if (starPos != std::string::npos && starPos > 0)
-	{
-		// Check if it's a multiple-of type (not a pointer)
-		if (starPos + 1 < tuffType.length() && tuffType[starPos + 1] >= '0' && tuffType[starPos + 1] <= '9')
-		{
-			tuffType = tuffType.substr(0, starPos);
-		}
-	}
-
 	// Handle union types: Some<I32>|None<I32> -> Union_Some_None<int32_t>
 	if (tuffType.find('|') != std::string::npos)
 	{
@@ -36,33 +25,6 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 		}
 
 		return structName;
-	}
-
-	// Handle intersection types: Point&Color -> Point_AND_Color
-	// But NOT reference types like &I32
-	if (!tuffType.empty() && tuffType[0] != '&' && tuffType.find('&') != std::string::npos)
-	{
-		// Check if this is an intersection type with destructor
-		// If so, extract the data type (exclude #destructor components)
-		auto components = splitIntersectionType(tuffType);
-		std::string dataType;
-		for (const auto &comp : components)
-		{
-			if (!comp.empty() && comp[0] == '#')
-				continue; // Skip destructor
-			if (!dataType.empty())
-				dataType += "&";
-			dataType += comp;
-		}
-
-		// If the data type is just a single type (no more &), map it directly
-		if (dataType.find('&') == std::string::npos && !dataType.empty())
-		{
-			return mapType(dataType);
-		}
-
-		// Otherwise, generate struct name for multi-component intersection
-		return getIntersectionStructName(tuffType);
 	}
 
 	if (tuffType == "I32")

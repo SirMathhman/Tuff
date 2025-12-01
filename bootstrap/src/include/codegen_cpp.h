@@ -63,19 +63,14 @@ private:
 	std::string wrapInUnion(const std::string &value, const std::string &valueType, const std::string &targetType);
 	bool isGenericParam(const std::string &type);
 
+	// Match expression codegen
+	std::string generateMatchExpr(std::shared_ptr<ASTNode> node);
+
 	// Name mangling for generic types
 	std::string mangleName(const std::string &name);
 
 	// C++ keyword escaping
 	std::string escapeCppKeyword(const std::string &name);
-
-	// Intersection type helpers
-	bool isIntersectionType(const std::string &type);
-	std::vector<std::string> splitIntersectionType(const std::string &intersectionType);
-	std::string getIntersectionStructName(const std::string &intersectionType);
-	std::string generateIntersectionStruct(
-			const std::string &intersectionType,
-			const std::map<std::string, std::vector<std::pair<std::string, std::string>>> &structFields);
 
 	// Destructor tracking
 	std::vector<ScopeCPP> scopes;

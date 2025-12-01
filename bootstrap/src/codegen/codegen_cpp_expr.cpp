@@ -50,6 +50,20 @@ std::string CodeGeneratorCPP::generateCallExpr(std::shared_ptr<ASTNode> node)
 
 std::string CodeGeneratorCPP::generateIfExpr(std::shared_ptr<ASTNode> node)
 {
+	// If this is a Void expression, generate as if statement
+	if (node->inferredType == "Void" || node->inferredType.empty())
+	{
+		std::stringstream ss;
+		ss << "if (" << generateNode(node->children[0]) << ") ";
+		ss << generateNode(node->children[1]);
+		if (node->children.size() > 2)
+		{
+			ss << " else ";
+			ss << generateNode(node->children[2]);
+		}
+		return ss.str();
+	}
+
 	std::stringstream ss;
 	ss << "(" << generateNode(node->children[0]) << " ? ";
 
@@ -69,5 +83,165 @@ std::string CodeGeneratorCPP::generateIfExpr(std::shared_ptr<ASTNode> node)
 		ss << generateNode(elseBranch);
 
 	ss << ")";
+	return ss.str();
+}
+
+std::string CodeGeneratorCPP::generateMatchExpr(std::shared_ptr<ASTNode> node)
+{
+	// Match expression compiles to nested ternary operators or switch
+	// For union types, we use tag-based dispatch
+	// For enum types, we use enum value comparison
+
+	auto scrutinee = node->children[0];
+	std::string scrutineeExpr = generateNode(scrutinee);
+	std::string scrutineeType = scrutinee->inferredType;
+
+	// Check if it's a union type (contains |)
+	bool isUnion = isUnionType(scrutineeType);
+
+	std::stringstream ss;
+
+	if (isUnion)
+	{
+		// Generate nested ternary: (x.__tag == Tag::A ? bodyA : (x.__tag == Tag::B ? bodyB : ...))
+		std::string structName = getUnionStructName(scrutineeType);
+
+		// Add template argument if needed
+		auto variants = splitUnionType(scrutineeType);
+		if (!variants.empty())
+		{
+			size_t start = variants[0].find('<');
+			if (start != std::string::npos)
+			{
+				size_t end = variants[0].find('>');
+				if (end != std::string::npos)
+				{
+					std::string param = variants[0].substr(start + 1, end - start - 1);
+					structName += "<" + mapType(param) + ">";
+				}
+			}
+		}
+
+		// Process arms (children[1..n])
+		std::string defaultBody;
+		std::vector<std::pair<std::string, std::string>> patternBodies; // pattern -> body
+
+		for (size_t i = 1; i < node->children.size(); i++)
+		{
+			auto arm = node->children[i];
+			std::string pattern = arm->value;
+
+			std::string body;
+			if (arm->children[0]->type == ASTNodeType::BLOCK)
+			{
+				body = generateFunctionBlock(arm->children[0], node->inferredType, true);
+			}
+			else
+			{
+				body = generateNode(arm->children[0]);
+			}
+
+			if (pattern == "_")
+			{
+				defaultBody = body;
+			}
+			else
+			{
+				// Extract base name from pattern (e.g., "Some" from "Some<I32>")
+				std::string baseName = pattern;
+				size_t pos = baseName.find('<');
+				if (pos != std::string::npos)
+				{
+					baseName = baseName.substr(0, pos);
+				}
+				patternBodies.push_back({baseName, body});
+			}
+		}
+
+		// Build nested ternary
+		ss << "(";
+		for (size_t i = 0; i < patternBodies.size(); i++)
+		{
+			if (i > 0)
+				ss << " : ";
+			ss << "(" << scrutineeExpr << ".__tag == " << structName << "::Tag::" << patternBodies[i].first << ") ? " << patternBodies[i].second;
+		}
+
+		if (!defaultBody.empty())
+		{
+			ss << " : " << defaultBody;
+		}
+		else if (!patternBodies.empty())
+		{
+			// Should not happen if exhaustive, but add fallback
+			ss << " : " << patternBodies.back().second;
+		}
+
+		ss << ")";
+	}
+	else
+	{
+		// Enum type - generate nested ternary with enum comparison
+		std::string defaultBody;
+		std::vector<std::pair<std::string, std::string>> patternBodies;
+
+		for (size_t i = 1; i < node->children.size(); i++)
+		{
+			auto arm = node->children[i];
+			std::string pattern = arm->value;
+
+			std::string body;
+			if (arm->children[0]->type == ASTNodeType::BLOCK)
+			{
+				body = generateFunctionBlock(arm->children[0], node->inferredType, true);
+			}
+			else
+			{
+				body = generateNode(arm->children[0]);
+			}
+
+			if (pattern == "_")
+			{
+				defaultBody = body;
+			}
+			else
+			{
+				// Handle enum patterns: Color.Red -> Color::Red
+				std::string enumPattern = pattern;
+				size_t dotPos = enumPattern.find('.');
+				if (dotPos != std::string::npos)
+				{
+					enumPattern = enumPattern.substr(0, dotPos) + "::" + enumPattern.substr(dotPos + 1);
+				}
+				else
+				{
+					// Pattern is just variant name, prefix with scrutinee type
+					enumPattern = scrutineeType + "::" + pattern;
+				}
+				patternBodies.push_back({enumPattern, body});
+			}
+		}
+
+		// Build nested ternary
+		ss << "(";
+		for (size_t i = 0; i < patternBodies.size(); i++)
+		{
+			if (i > 0)
+				ss << " : ";
+			ss << "(" << scrutineeExpr << " == " << patternBodies[i].first << ") ? " << patternBodies[i].second;
+		}
+
+		if (!defaultBody.empty())
+		{
+			ss << " : " << defaultBody;
+		}
+		else if (!patternBodies.empty())
+		{
+			ss << " : " << patternBodies.back().second;
+		}
+
+		ss << ")";
+	}
+
 	return ss.str();
 }

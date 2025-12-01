@@ -103,6 +103,7 @@ Token Lexer::identifierOrKeyword()
 			{"return", TokenType::RETURN},
 			{"type", TokenType::TYPE},
 			{"is", TokenType::IS},
+			{"match", TokenType::MATCH},
 			{"sizeOf", TokenType::SIZEOF},
 			{"true", TokenType::TRUE},
 			{"false", TokenType::FALSE},

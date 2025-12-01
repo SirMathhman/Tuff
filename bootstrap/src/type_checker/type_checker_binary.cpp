@@ -44,56 +44,10 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 			return;
 		}
 
-		// Also handle intersection types with pointers (e.g. *mut [T] & #free)
-		if (isIntersectionType(leftType))
-		{
-			auto parts = splitIntersectionType(leftType);
-			for (const auto &part : parts)
-			{
-				if (part.length() > 0 && part[0] == '*' && isNumericType(rightType))
-				{
-					// Found a pointer part, use logic above
-					std::string ptrType = part;
-					size_t bracketPos = ptrType.find('[');
-					if (bracketPos != std::string::npos)
-					{
-						bool isMutable = (ptrType.substr(1, 4) == "mut ");
-						size_t startPos = isMutable ? 6 : 2;
-						size_t semiPos = ptrType.find(';');
-						std::string elementType;
-						if (semiPos == std::string::npos)
-							elementType = ptrType.substr(startPos, ptrType.length() - startPos - 1);
-						else
-							elementType = ptrType.substr(startPos, semiPos - startPos);
-
-						if (isMutable)
-							node->inferredType = "*mut " + elementType;
-						else
-							node->inferredType = "*" + elementType;
-					}
-					else
-					{
-						node->inferredType = ptrType;
-					}
-					return;
-				}
-			}
-		}
-
 		if (!isNumericType(leftType) || !isNumericType(rightType))
 		{
 			std::cerr << "Error: Operands of '" << node->value << "' must be numeric." << std::endl;
 			exit(1);
-		}
-
-		// Handle multiple-of type arithmetic (only for addition)
-		if (node->value == "+")
-		{
-			if (isMultipleOfType(leftType) || isMultipleOfType(rightType))
-			{
-				node->inferredType = computeMultipleOfAddition(leftType, rightType);
-				return;
-			}
 		}
 
 		// If either operand is USize or SizeOf<T>, result is USize (for sizeOf arithmetic)
@@ -106,6 +60,16 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 		{
 			node->inferredType = "I32";
 		}
+	}
+	else if (node->value == "&")
+	{
+		// Bitwise AND - both operands must be numeric
+		if (!isNumericType(leftType) || !isNumericType(rightType))
+		{
+			std::cerr << "Error: Operands of '&' must be numeric." << std::endl;
+			exit(1);
+		}
+		node->inferredType = leftType;
 	}
 	else if (node->value == "==" || node->value == "!=")
 	{

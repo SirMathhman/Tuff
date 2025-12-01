@@ -47,7 +47,7 @@ std::vector<std::shared_ptr<ASTNode>> Parser::parseGenericParams()
 
 std::string Parser::parseType()
 {
-	std::string leftType = parseIntersectionType();
+	std::string leftType = parseSingleType();
 
 	// Handle union types: Type0 | Type1 | Type2 (lowest precedence)
 	if (match(TokenType::PIPE))
@@ -56,36 +56,13 @@ std::string Parser::parseType()
 		while (true)
 		{
 			unionType += "|";
-			unionType += parseIntersectionType();
+			unionType += parseSingleType();
 			if (!match(TokenType::PIPE))
 			{
 				break;
 			}
 		}
 		return unionType;
-	}
-
-	return leftType;
-}
-
-std::string Parser::parseIntersectionType()
-{
-	std::string leftType = parseSingleType();
-
-	// Handle intersection types: Type0 & Type1 & Type2
-	if (match(TokenType::AMPERSAND))
-	{
-		std::string intersectionType = leftType;
-		while (true)
-		{
-			intersectionType += "&";
-			intersectionType += parseSingleType();
-			if (!match(TokenType::AMPERSAND))
-			{
-				break;
-			}
-		}
-		return intersectionType;
 	}
 
 	return leftType;
@@ -102,33 +79,25 @@ std::string Parser::parseSingleType()
 		return "SizeOf<" + innerType + ">";
 	}
 
-	// Handle destructor types: #DestructorName
-	if (match(TokenType::HASH))
-	{
-		Token destructorName = consume(TokenType::IDENTIFIER, "Expected destructor name after '#'");
-		return "#" + destructorName.value;
-	}
-
-	// Handle pointer types: *T, *mut T, *a T, *a mut T
+	// Handle pointer types: *T, *mut T, *a T (with lifetime), *a mut T
 	if (match(TokenType::STAR))
 	{
-		std::string lifetime = "";
-		// Check for lifetime: *a (where 'a' is lowercase identifier)
+		std::string result = "*";
+
+		// Check for lifetime annotation (lowercase identifier followed by space)
 		if (peek().type == TokenType::IDENTIFIER && isLifetimeParam(peek().value))
 		{
-			lifetime = advance().value;
+			Token lifetimeToken = advance();
+			result += lifetimeToken.value + " ";
 		}
+
 		bool isMutable = match(TokenType::MUT);
-		std::string innerType = parseSingleType();
-		std::string result = "*";
-		if (!lifetime.empty())
-		{
-			result += lifetime + " ";
-		}
 		if (isMutable)
 		{
 			result += "mut ";
 		}
+
+		std::string innerType = parseSingleType();
 		return result + innerType;
 	}
 
@@ -233,18 +202,6 @@ std::string Parser::parseSingleType()
 		}
 		consume(TokenType::GREATER, "Expected '>' after generic type arguments");
 		typeName += ">";
-	}
-
-	// Handle multiple-of types: Type * Literal or Type * TypeParam
-	if (match(TokenType::STAR))
-	{
-		Token multipleLiteral = advance();
-		if (multipleLiteral.type != TokenType::INT_LITERAL && multipleLiteral.type != TokenType::IDENTIFIER)
-		{
-			std::cerr << "Error: Expected integer literal or type parameter after '*' in multiple-of type at line " << multipleLiteral.line << std::endl;
-			exit(1);
-		}
-		typeName += "*" + multipleLiteral.value;
 	}
 
 	return typeName;

@@ -38,36 +38,16 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 			type = expandTypeAlias(type);
 			node->inferredType = type;
 
-			// Validate multiple-of constraints (before general type compatibility)
-			if (isMultipleOfType(type))
-			{
-				validateMultipleOfAssignment(type, init);
-				// For multiple-of types, we allow assigning if the literal is valid
-				// The validation above will error if not, so if we get here, it's OK
-			}
-			else if (!isTypeCompatible(init->inferredType, type))
+			if (!isTypeCompatible(init->inferredType, type))
 			{
 				std::cerr << "Error: Type mismatch for '" << name << "'. Expected " << type << ", got " << init->inferredType << std::endl;
 				exit(1);
 			}
 		}
 
-		// Handle move semantics: if init is an identifier of non-Copy type, move it
-		if (init->type == ASTNodeType::IDENTIFIER && !isCopyType(type))
-		{
-			std::string srcName = init->value;
-			auto srcIt = symbolTable.find(srcName);
-			if (srcIt != symbolTable.end())
-			{
-				checkNotMoved(srcName);
-				moveVariable(srcName);
-			}
-		}
-
 		SymbolInfo info;
 		info.type = type;
 		info.isMutable = node->isMutable;
-		info.ownership = OwnershipState::Owned;
 		symbolTable[name] = info;
 		break;
 	}
@@ -100,13 +80,8 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 			}
 		}
 
-		// Validate multiple-of constraints for assignments (before general type compatibility)
-		if (isMultipleOfType(lhs->inferredType))
-		{
-			validateMultipleOfAssignment(lhs->inferredType, value);
-			// If we get here, the literal is valid
-		}
-		else if (!isTypeCompatible(value->inferredType, lhs->inferredType))
+		// Validate type compatibility
+		if (!isTypeCompatible(value->inferredType, lhs->inferredType))
 		{
 			std::cerr << "Error: Type mismatch in assignment. Expected " << lhs->inferredType << ", got " << value->inferredType << std::endl;
 			exit(1);
@@ -130,8 +105,8 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		checkIsExpr(node);
 		break;
 
-	case ASTNodeType::INTERSECTION_EXPR:
-		checkIntersectionExpr(node);
+	case ASTNodeType::MATCH_EXPR:
+		checkMatchExpr(node);
 		break;
 
 	case ASTNodeType::UNARY_OP:
@@ -210,7 +185,6 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 	{
 		// Create new scope for block
 		auto savedSymbols = symbolTable;
-		auto savedBorrows = activeBorrows;
 		currentScopeDepth++;
 
 		for (auto child : node->children)
@@ -219,14 +193,9 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		}
 
 		// If block is used as expression, its type is the type of the last statement
-		// But only if it's an expression statement (not let, etc.)
-		// Actually, Tuff blocks return the value of the last expression if it's not terminated by semicolon?
-		// The parser handles this by making the last statement an expression if no semicolon.
-		// But here we just iterate children.
 		if (!node->children.empty())
 		{
 			auto lastChild = node->children.back();
-			// If last child has a type, propagate it
 			if (!lastChild->inferredType.empty() && lastChild->inferredType != "Void")
 			{
 				node->inferredType = lastChild->inferredType;
@@ -241,13 +210,10 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 			node->inferredType = "Void";
 		}
 
-		// Release borrows created in this scope
-		releaseBorrowsAtScope(currentScopeDepth);
 		currentScopeDepth--;
 
 		// Restore scope after block
 		symbolTable = savedSymbols;
-		activeBorrows = savedBorrows;
 		break;
 	}
 
@@ -363,28 +329,17 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 
 		// Create new scope for function parameters
 		std::map<std::string, SymbolInfo> savedSymbolTable = symbolTable;
-		auto savedBorrows = activeBorrows;
 		symbolTable.clear();
-		activeBorrows.clear();
 		currentScopeDepth++;
 
 		// Save generic params scope
 		std::vector<std::string> savedGenericParams = genericParamsInScope;
-		std::vector<std::string> savedLifetimeParams = lifetimeParamsInScope;
 
 		// Add generic params to scope
 		for (auto genParam : node->genericParams)
 		{
 			genericParamsInScope.push_back(genParam->value);
 		}
-		// Add lifetime params to scope
-		for (const auto &lifetime : node->lifetimeParams)
-		{
-			lifetimeParamsInScope.push_back(lifetime);
-		}
-
-		// Apply lifetime elision if needed
-		applyLifetimeElision(node);
 
 		// Add parameters to symbol table (immutable)
 		for (size_t i = 0; i < node->children.size() - 1; i++)
@@ -395,7 +350,6 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 			SymbolInfo info;
 			info.type = paramType;
 			info.isMutable = false;
-			info.ownership = OwnershipState::Owned;
 			symbolTable[paramName] = info;
 		}
 
@@ -406,9 +360,7 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		// Restore state
 		currentScopeDepth--;
 		symbolTable = savedSymbolTable;
-		activeBorrows = savedBorrows;
 		genericParamsInScope = savedGenericParams;
-		lifetimeParamsInScope = savedLifetimeParams;
 
 		currentFunctionReturnType = ""; // Clear for safety
 		break;

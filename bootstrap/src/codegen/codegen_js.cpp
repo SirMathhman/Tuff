@@ -26,8 +26,12 @@ std::string CodeGeneratorJS::generate(std::shared_ptr<ASTNode> ast)
 	// If the last node is an expression, we wrap it in process.exit()
 	// Convert booleans to numbers (true=1, false=0) for exit code compatibility
 
-	auto isStatement = [](ASTNodeType type)
+	auto isStatement = [](std::shared_ptr<ASTNode> node)
 	{
+		ASTNodeType type = node->type;
+		// IF_STMT with non-void type is an expression, not a statement
+		if (type == ASTNodeType::IF_STMT && !node->inferredType.empty() && node->inferredType != "Void")
+			return false;
 		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL || type == ASTNodeType::EXPECT_DECL || type == ASTNodeType::ACTUAL_DECL || type == ASTNodeType::MODULE_DECL;
 	};
 
@@ -71,7 +75,7 @@ std::string CodeGeneratorJS::generate(std::shared_ptr<ASTNode> ast)
 			continue;
 		}
 
-		if (i == ast->children.size() - 1 && !isStatement(child->type))
+		if (i == ast->children.size() - 1 && !isStatement(child))
 		{
 			// Last node is an expression: return its value (converted to number if bool)
 			std::string exitCode = generateNode(child);
@@ -139,6 +143,33 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 	}
 	case ASTNodeType::IF_STMT:
 	{
+		// Check if this is used as an expression (has non-Void type)
+		if (!node->inferredType.empty() && node->inferredType != "Void" && node->children.size() > 2)
+		{
+			// Generate as ternary expression
+			std::stringstream ss;
+			ss << "((" << generateNode(node->children[0]) << ") ? ";
+
+			auto thenBranch = node->children[1];
+			auto elseBranch = node->children[2];
+
+			if (thenBranch->type == ASTNodeType::BLOCK)
+				ss << "(() => " << generateFunctionBlock(thenBranch, node->inferredType) << ")()";
+			else
+				ss << generateNode(thenBranch);
+
+			ss << " : ";
+
+			if (elseBranch->type == ASTNodeType::BLOCK)
+				ss << "(() => " << generateFunctionBlock(elseBranch, node->inferredType) << ")()";
+			else
+				ss << generateNode(elseBranch);
+
+			ss << ")";
+			return ss.str();
+		}
+
+		// Generate as statement
 		std::stringstream ss;
 		ss << "if (" << generateNode(node->children[0]) << ") ";
 		ss << generateNode(node->children[1]);
@@ -260,13 +291,92 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 		std::string targetType = node->value;
 		return "(" + expr + ".__tag === \"" + targetType + "\")";
 	}
-	case ASTNodeType::INTERSECTION_EXPR:
+	case ASTNodeType::MATCH_EXPR:
 	{
-		// Intersection operator: merge two struct values into one
-		// In JS, we use object spread: {...left, ...right}
-		auto left = generateNode(node->children[0]);
-		auto right = generateNode(node->children[1]);
-		return "({..." + left + ", ..." + right + "})";
+		// Match expression compiles to nested ternary operators
+		auto scrutinee = node->children[0];
+		std::string scrutineeExpr = generateNode(scrutinee);
+		std::string scrutineeType = scrutinee->inferredType;
+
+		bool isUnion = isUnionType(scrutineeType);
+
+		std::stringstream ss;
+		ss << "(";
+
+		std::string defaultBody;
+		std::vector<std::pair<std::string, std::string>> patternBodies;
+
+		for (size_t i = 1; i < node->children.size(); i++)
+		{
+			auto arm = node->children[i];
+			std::string pattern = arm->value;
+
+			std::string body;
+			if (arm->children[0]->type == ASTNodeType::BLOCK)
+			{
+				body = "(() => " + generateFunctionBlock(arm->children[0], node->inferredType) + ")()";
+			}
+			else
+			{
+				body = generateNode(arm->children[0]);
+			}
+
+			if (pattern == "_")
+			{
+				defaultBody = body;
+			}
+			else
+			{
+				patternBodies.push_back({pattern, body});
+			}
+		}
+
+		if (isUnion)
+		{
+			// Union type: compare __tag
+			for (size_t i = 0; i < patternBodies.size(); i++)
+			{
+				if (i > 0)
+					ss << " : ";
+				ss << "(" << scrutineeExpr << ".__tag === \"" << patternBodies[i].first << "\") ? " << patternBodies[i].second;
+			}
+		}
+		else
+		{
+			// Enum type: compare values
+			for (size_t i = 0; i < patternBodies.size(); i++)
+			{
+				if (i > 0)
+					ss << " : ";
+				// Handle enum patterns: Color.Red -> Color.Red
+				std::string enumPattern = patternBodies[i].first;
+				size_t dotPos = enumPattern.find('.');
+				if (dotPos == std::string::npos)
+				{
+					// Pattern is just variant name, prefix with scrutinee type
+					enumPattern = scrutineeType + "." + enumPattern;
+				}
+				// Convert :: to . for JS
+				size_t pos;
+				while ((pos = enumPattern.find("::")) != std::string::npos)
+				{
+					enumPattern.replace(pos, 2, ".");
+				}
+				ss << "(" << scrutineeExpr << " === " << enumPattern << ") ? " << patternBodies[i].second;
+			}
+		}
+
+		if (!defaultBody.empty())
+		{
+			ss << " : " << defaultBody;
+		}
+		else if (!patternBodies.empty())
+		{
+			ss << " : " << patternBodies.back().second;
+		}
+
+		ss << ")";
+		return ss.str();
 	}
 	case ASTNodeType::UNARY_OP:
 	{
