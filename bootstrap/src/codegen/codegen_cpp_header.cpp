@@ -176,6 +176,27 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 	}
 	ss << "\n";
 
+	// Generate type aliases
+	for (auto child : ast->children)
+	{
+		if (child->type == ASTNodeType::TYPE_ALIAS)
+		{
+			// Generic type alias: template<typename T, typename L> using Name = Type;
+			if (!child->genericParams.empty())
+			{
+				ss << "template<";
+				for (size_t i = 0; i < child->genericParams.size(); i++)
+				{
+					if (i > 0)
+						ss << ", ";
+					ss << "typename " << child->genericParams[i]->value;
+				}
+				ss << ">\n";
+			}
+			ss << "using " << child->value << " = " << mapType(child->inferredType) << ";\n";
+		}
+	}
+
 	// Generate function forward declarations
 	for (auto child : ast->children)
 	{
