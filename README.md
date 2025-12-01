@@ -133,12 +133,19 @@ Compile all source files from `src/` to both JavaScript and C++ targets with pac
 
 # Clean and rebuild
 .\build.ps1 -Clean
+
+# Build with build system generation (package.json for JS, CMakeLists.txt for C++)
+.\build.ps1 -Bundle
 ```
+
+When using `-Bundle`, the script will:
+- **JavaScript**: Generate `package.json` in `dist/js/` and test with `npm start`
+- **C++**: Generate `CMakeLists.txt` in `dist/native/`, configure and build with CMake
 
 Output will be in:
 
-- **JavaScript**: `dist/js/tuff/`
-- **C++**: `dist/native/tuff/`
+- **JavaScript**: `dist/js/tuff/` (run with `npm start` in `dist/js/`)
+- **C++**: `dist/native/tuff/` (executable at `dist/native/build/Release/program.exe`)
 
 The build system:
 

@@ -177,14 +177,14 @@ std::shared_ptr<ASTNode> Parser::parseExternTypeDecl()
 {
 	consume(TokenType::TYPE, "Expected 'type'");
 	consume(TokenType::EXTERN, "Expected 'extern' after 'type'");
-	
+
 	Token typeName = consume(TokenType::IDENTIFIER, "Expected type name after 'type extern'");
-	
+
 	auto node = std::make_shared<ASTNode>();
 	node->type = ASTNodeType::EXTERN_TYPE_DECL;
 	node->value = typeName.value;
-	
+
 	consume(TokenType::SEMICOLON, "Expected ';' after extern type declaration");
-	
+
 	return node;
 }
