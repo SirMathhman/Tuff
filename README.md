@@ -4,12 +4,39 @@ A self-hosting compiler for the **Tuff** programming language, targeting JavaScr
 
 ## Project Structure
 
-This is a monorepo containing the core language definitions and platform-specific implementations.
+This project follows a **Kotlin Multiplatform-inspired** structure with common code and platform-specific implementations:
 
-- **core/**: Common language definitions, standard library interfaces (`expect` declarations), and shared logic.
-- **js/**: JavaScript target implementation (`actual` definitions).
-- **cpp/**: C++ target implementation (`actual` definitions).
-- **bootstrap/**: Stage 0 compiler written in Node.js (JavaScript) to bootstrap the language.
+```
+tuff/
+├── src/
+│   ├── commonMain/tuff/      # Common code (expect declarations)
+│   │   ├── io.tuff           # I/O interface
+│   │   ├── main.tuff         # Entry point
+│   │   └── string.tuff       # String operations
+│   ├── jsMain/tuff/          # JavaScript implementations (actual)
+│   │   ├── io.tuff
+│   │   └── string.tuff
+│   ├── cppMain/tuff/         # C++ implementations (actual)
+│   │   ├── io.tuff
+│   │   └── string.tuff
+│   └── commonTest/tuff/      # Shared tests
+│       ├── feature1_variables/
+│       ├── feature2_operators/
+│       └── ...
+├── bootstrap/                # Stage 0 compiler (C++17)
+│   ├── src/                  # Compiler source code
+│   └── build/                # Build output
+├── examples/                 # Example programs
+├── docs/                     # Documentation
+└── build/                    # Build artifacts (gitignored)
+```
+
+### Source Sets
+
+- **commonMain**: Platform-independent code with `expect` declarations
+- **jsMain**: JavaScript target with `actual` implementations
+- **cppMain**: C++ target with `actual` implementations  
+- **commonTest**: Cross-platform tests
 
 ## Language Features
 
@@ -22,4 +49,44 @@ This is a monorepo containing the core language definitions and platform-specifi
 
 ## Building
 
-(TODO: Add build instructions)
+### Prerequisites
+- CMake 3.15+
+- C++17 compiler (MSVC, GCC, or Clang)
+- Node.js (for running JS target)
+
+### Build the Bootstrap Compiler
+
+```powershell
+cd bootstrap/build
+cmake --build . --config Release
+```
+
+### Run Tests
+
+```powershell
+# Run all tests
+.\run_tests.ps1
+
+# Run specific feature tests
+.\run_tests.ps1 -Feature feature7_generics
+
+# Run with verbose output
+.\run_tests.ps1 -Verbose
+
+# Run only JS or C++ target
+.\run_tests.ps1 -Target js
+.\run_tests.ps1 -Target cpp
+```
+
+### Compile Tuff Programs
+
+```powershell
+# Compile to JavaScript
+.\bootstrap\build\Release\tuffc.exe yourprogram.tuff js > output.js
+node output.js
+
+# Compile to C++
+.\bootstrap\build\Release\tuffc.exe yourprogram.tuff cpp > output.cpp
+clang output.cpp -o program
+.\program.exe
+```

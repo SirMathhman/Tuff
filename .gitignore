@@ -2,6 +2,7 @@
 bootstrap/build/
 **/build/
 **/out/
+build/
 
 # Compiled binaries
 *.exe

@@ -4,7 +4,7 @@
     Tuff Compiler Automated Test Runner
 
 .DESCRIPTION
-    Discovers and runs all Tuff compiler tests in bootstrap/tests/.
+    Discovers and runs all Tuff compiler tests in src/commonTest/tuff/.
     Compiles each .tuff file to both JavaScript and C++ targets,
     executes them, and reports results.
 
@@ -42,7 +42,7 @@ $ErrorActionPreference = "Stop"
 # Configuration
 $RootDir = $PSScriptRoot
 $CompilerPath = Join-Path $RootDir "bootstrap\build\Release\tuffc.exe"
-$TestDir = Join-Path $RootDir "bootstrap\tests"
+$TestDir = Join-Path $RootDir "src\commonTest\tuff"
 $TempDir = Join-Path $TestDir "_temp"
 
 # ANSI color codes

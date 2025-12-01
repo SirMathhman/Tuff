@@ -1,8 +1,0 @@
-{
-  "name": "cpp",
-  "type": "target",
-  "target": "cpp",
-  "sourceRoot": "./src",
-  "dependencies": ["core"],
-  "actuals": ["io.tuff"]
-}

@@ -1,8 +1,0 @@
-{
-  "name": "js",
-  "type": "target",
-  "target": "js",
-  "sourceRoot": "./src",
-  "dependencies": ["core"],
-  "actuals": ["io.tuff"]
-}

@@ -1,6 +1,0 @@
-{
-  "name": "core",
-  "type": "common",
-  "sourceRoot": "./src",
-  "expects": ["io.tuff"]
-}
