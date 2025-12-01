@@ -87,12 +87,34 @@ std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 
 		// Parse parameter type
 		std::string paramType = parseType();
+		
+		// Check for type bound: Type < expr
+		std::string typeBound;
+		if (peek().type == TokenType::LESS || peek().type == TokenType::LANGLE)
+		{
+			advance(); // consume <
+			// For now, just consume tokens until we hit , or )
+			// Full expression parsing would go here
+			int depth = 1;
+			while (depth > 0 && peek().type != TokenType::END_OF_FILE)
+			{
+				if (peek().type == TokenType::LESS || peek().type == TokenType::LANGLE)
+					depth++;
+				else if (peek().type == TokenType::GREATER || peek().type == TokenType::RANGLE)
+					depth--;
+				else if (depth == 1 && (peek().type == TokenType::COMMA || peek().type == TokenType::RPAREN))
+					break;
+				
+				typeBound += advance().value + " ";
+			}
+		}
 
 		// Create parameter node (name in value, type in inferredType)
 		auto paramNode = std::make_shared<ASTNode>();
 		paramNode->type = ASTNodeType::IDENTIFIER;
 		paramNode->value = paramName.value;
 		paramNode->inferredType = paramType;
+		paramNode->typeBound = typeBound;  // Store the bound expression
 		node->addChild(paramNode);
 
 		if (!match(TokenType::COMMA))

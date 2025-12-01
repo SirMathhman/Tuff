@@ -1,8 +1,8 @@
 #include "parser.h"
 #include <iostream>
 
-// Helper to check if identifier is a lifetime (lowercase first char)
-static bool isLifetimeParam(const std::string &name)
+// Member function to check if identifier is a lifetime (lowercase first char)
+bool Parser::isLifetimeParam(const std::string &name) const
 {
 	return !name.empty() && name[0] >= 'a' && name[0] <= 'z';
 }
