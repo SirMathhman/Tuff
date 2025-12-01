@@ -4,16 +4,17 @@
 #include <iostream>
 #include <cstdint>
 
-extern "C" {
-
-void print(const char *message)
+extern "C"
 {
-	std::cout << message << std::flush;
-}
 
-void println(const char *message)
-{
-	std::cout << message << std::endl;
-}
+	void print(const char *message)
+	{
+		std::cout << message << std::flush;
+	}
 
-}  // extern "C"
+	void println(const char *message)
+	{
+		std::cout << message << std::endl;
+	}
+
+} // extern "C"
