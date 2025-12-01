@@ -1,6 +1,5 @@
 #include "codegen_js.h"
 #include <sstream>
-#include <iostream>
 
 // Helper to check if a pointer type is mutable (*mut T or *a mut T)
 static bool isMutablePtr(const std::string &type)
@@ -28,29 +27,23 @@ std::string CodeGeneratorJS::generate(std::shared_ptr<ASTNode> ast)
 
 	auto isStatement = [](ASTNodeType type)
 	{
-		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL || type == ASTNodeType::EXPECT_DECL || type == ASTNodeType::ACTUAL_DECL || type == ASTNodeType::MODULE_DECL;
+		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL || type == ASTNodeType::EXPECT_DECL || type == ASTNodeType::ACTUAL_DECL || type == ASTNodeType::EXTERN_FN_DECL || type == ASTNodeType::USE_EXTERN_DECL || type == ASTNodeType::MODULE_DECL;
 	};
-
-	// Check if there's a main function
-	bool hasUserMain = false;
-	for (auto child : ast->children)
-	{
-		if (child->type == ASTNodeType::FUNCTION_DECL && child->value == "main")
-		{
-			hasUserMain = true;
-			break;
-		}
-	}
 
 	for (size_t i = 0; i < ast->children.size(); ++i)
 	{
 		auto child = ast->children[i];
 
-		// Check extern function declarations for unsupported types
+		// Skip expect, extern fn, and use extern declarations
+		if (child->type == ASTNodeType::EXPECT_DECL)
+			continue;
 		if (child->type == ASTNodeType::EXTERN_FN_DECL)
 		{
+			// Check for unsupported types in JS (like SizeOf)
+			std::cerr << "DEBUG: Checking extern fn '" << child->value << "' with " << child->children.size() << " params" << std::endl;
 			for (const auto &param : child->children)
 			{
+				std::cerr << "DEBUG: Param type = '" << param->inferredType << "'" << std::endl;
 				if (param->inferredType.find("SizeOf<") != std::string::npos)
 				{
 					std::cerr << "Error: Cannot compile function '" << child->value
@@ -60,10 +53,9 @@ std::string CodeGeneratorJS::generate(std::shared_ptr<ASTNode> ast)
 					exit(1);
 				}
 			}
+			continue;
 		}
-
-		// Skip expect and actual declarations
-		if (child->type == ASTNodeType::EXPECT_DECL)
+		if (child->type == ASTNodeType::USE_EXTERN_DECL)
 			continue;
 		if (child->type == ASTNodeType::ACTUAL_DECL)
 		{
@@ -83,21 +75,9 @@ std::string CodeGeneratorJS::generate(std::shared_ptr<ASTNode> ast)
 		}
 		else
 		{
-			std::string code = generateNode(child);
-			// Only emit code if non-empty (skip extern declarations, use declarations, etc.)
-			if (!code.empty())
-			{
-				ss << code << ";\n";
-			}
+			ss << generateNode(child) << ";\n";
 		}
 	}
-
-	// If there's a user-defined main function, call it
-	if (hasUserMain)
-	{
-		ss << "process.exit(main());\n";
-	}
-
 	return ss.str();
 }
 
@@ -108,17 +88,7 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::LET_STMT:
 	{
 		std::string keyword = node->isMutable ? "let" : "const";
-		std::string value = generateNode(node->children[0]);
-		std::string wrapped = wrapInUnion(value, node->children[0]->inferredType, node->inferredType);
-
-		// Track variable with destructor if applicable
-		std::string dtor = getDestructor(node->inferredType);
-		if (!dtor.empty() && !scopes.empty())
-		{
-			scopes.back().vars.push_back({node->value, dtor});
-		}
-
-		return keyword + " " + node->value + " = " + wrapped;
+		return keyword + " " + node->value + " = " + generateNode(node->children[0]);
 	}
 	case ASTNodeType::ASSIGNMENT_STMT:
 	{
@@ -161,7 +131,6 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 	{
 		std::stringstream ss;
 		ss << "while (" << generateNode(node->children[0]) << ") ";
-		nextBlockIsLoop = true;
 		ss << generateNode(node->children[1]);
 		return ss.str();
 	}
@@ -169,66 +138,21 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 	{
 		std::stringstream ss;
 		ss << "while (true) ";
-		nextBlockIsLoop = true;
 		ss << generateNode(node->children[0]);
 		return ss.str();
 	}
 	case ASTNodeType::BREAK_STMT:
-	{
-		// Inject destructor calls for all scopes up to nearest loop
-		std::stringstream ss;
-		for (auto it = scopes.rbegin(); it != scopes.rend(); ++it)
-		{
-			for (auto vit = it->vars.rbegin(); vit != it->vars.rend(); ++vit)
-			{
-				ss << vit->destructor << "(" << vit->name << "); ";
-			}
-			if (it->isLoop)
-				break;
-		}
-		ss << "break";
-		return ss.str();
-	}
+		return "break";
 	case ASTNodeType::CONTINUE_STMT:
-	{
-		// Inject destructor calls for current loop scope only
-		std::stringstream ss;
-		for (auto it = scopes.rbegin(); it != scopes.rend(); ++it)
-		{
-			for (auto vit = it->vars.rbegin(); vit != it->vars.rend(); ++vit)
-			{
-				ss << vit->destructor << "(" << vit->name << "); ";
-			}
-			if (it->isLoop)
-				break;
-		}
-		ss << "continue";
-		return ss.str();
-	}
+		return "continue";
 	case ASTNodeType::BLOCK:
 	{
 		std::stringstream ss;
 		ss << "{\n";
-
-		// Push new scope
-		Scope newScope;
-		newScope.isLoop = nextBlockIsLoop;
-		nextBlockIsLoop = false;
-		scopes.push_back(newScope);
-
 		for (auto child : node->children)
 		{
 			ss << "  " << generateNode(child) << ";\n";
 		}
-
-		// Pop scope and inject destructor calls (in reverse order)
-		Scope &currentScope = scopes.back();
-		for (auto it = currentScope.vars.rbegin(); it != currentScope.vars.rend(); ++it)
-		{
-			ss << "  " << it->destructor << "(" << it->name << ");\n";
-		}
-		scopes.pop_back();
-
 		ss << "}";
 		return ss.str();
 	}
@@ -237,21 +161,6 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 		auto left = generateNode(node->children[0]);
 		auto right = generateNode(node->children[1]);
 		return "(" + left + " " + node->value + " " + right + ")";
-	}
-	case ASTNodeType::IS_EXPR:
-	{
-		// is operator: expr is Type → expr.__tag === "Type"
-		auto expr = generateNode(node->children[0]);
-		std::string targetType = node->value;
-		return "(" + expr + ".__tag === \"" + targetType + "\")";
-	}
-	case ASTNodeType::INTERSECTION_EXPR:
-	{
-		// Intersection operator: merge two struct values into one
-		// In JS, we use object spread: {...left, ...right}
-		auto left = generateNode(node->children[0]);
-		auto right = generateNode(node->children[1]);
-		return "({..." + left + ", ..." + right + "})";
 	}
 	case ASTNodeType::UNARY_OP:
 	{
@@ -308,29 +217,8 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 		// For immutable references, just return the value
 		return generateNode(operand);
 	}
-	case ASTNodeType::SIZEOF_EXPR:
-	{
-		// sizeOf is not supported in JS output; emit runtime error placeholder
-		return "(() => { throw new Error(\"sizeOf operator is not supported in JavaScript target\"); })()";
-	}
 	case ASTNodeType::LITERAL:
-	{
-		// Strip type suffix from literals (e.g., "10I32" -> "10")
-		std::string literal = node->value;
-		std::string result;
-		for (char c : literal)
-		{
-			if ((c >= '0' && c <= '9') || c == '.' || c == '-')
-			{
-				result += c;
-			}
-			else
-			{
-				break; // Stop at type suffix
-			}
-		}
-		return result.empty() ? literal : result;
-	}
+		return node->value;
 	case ASTNodeType::IDENTIFIER:
 	{
 		// Convert FQN separator :: to . for JavaScript
@@ -397,20 +285,10 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 	}
 	case ASTNodeType::RETURN_STMT:
 	{
-		std::stringstream ss;
-		// Inject destructor calls for all scopes before return
-		for (auto it = scopes.rbegin(); it != scopes.rend(); ++it)
-		{
-			for (auto vit = it->vars.rbegin(); vit != it->vars.rend(); ++vit)
-			{
-				ss << vit->destructor << "(" << vit->name << "); ";
-			}
-		}
 		if (node->children.empty())
-			ss << "return";
+			return "return";
 		else
-			ss << "return " << generateNode(node->children[0]);
-		return ss.str();
+			return "return " + generateNode(node->children[0]);
 	}
 	case ASTNodeType::STRUCT_DECL:
 		// Structs don't need runtime declaration in JS
@@ -440,6 +318,16 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::EXPECT_DECL:
 	{
 		// Skip expect declarations - they have no codegen
+		return "";
+	}
+	case ASTNodeType::EXTERN_FN_DECL:
+	{
+		// Skip extern fn declarations - not available in JS
+		return "";
+	}
+	case ASTNodeType::USE_EXTERN_DECL:
+	{
+		// Skip use extern declarations - not available in JS
 		return "";
 	}
 	case ASTNodeType::ACTUAL_DECL:
@@ -479,14 +367,44 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::FIELD_ACCESS:
 	{
 		auto object = generateNode(node->children[0]);
-		// If accessing field on a narrowed union, unwrap it first
-		if (node->children[0]->isNarrowedUnion)
-		{
-			return object + ".__value." + node->value;
-		}
 		return object + "." + node->value;
 	}
 	default:
 		return "";
 	}
+}
+
+std::string CodeGeneratorJS::generateFunctionBlock(std::shared_ptr<ASTNode> block, const std::string &returnType)
+{
+	// Helper to check if a node is a statement (vs expression)
+	auto isStatement = [](ASTNodeType type)
+	{
+		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT ||
+					 type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT ||
+					 type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT ||
+					 type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK ||
+					 type == ASTNodeType::RETURN_STMT;
+	};
+
+	std::stringstream ss;
+	ss << "{\n";
+
+	for (size_t i = 0; i < block->children.size(); i++)
+	{
+		auto child = block->children[i];
+
+		// If this is the last child and it's an expression (not a statement),
+		// and the function has a non-void return type, add implicit return
+		if (i == block->children.size() - 1 && !isStatement(child->type) && returnType != "Void")
+		{
+			ss << "  return " << generateNode(child) << ";\n";
+		}
+		else
+		{
+			ss << "  " << generateNode(child) << ";\n";
+		}
+	}
+
+	ss << "}";
+	return ss.str();
 }

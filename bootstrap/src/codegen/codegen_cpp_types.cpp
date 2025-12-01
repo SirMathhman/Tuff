@@ -101,6 +101,34 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 	if (tuffType.rfind("SizeOf<", 0) == 0)
 		return "size_t";
 
+	// Handle slice pointer types: *[T] or *mut [T]
+	// These map to plain pointers in C++ (T* or const T*)
+	if (tuffType.length() > 2 && tuffType[0] == '*')
+	{
+		size_t bracketPos = tuffType.find('[');
+		if (bracketPos != std::string::npos && tuffType.back() == ']')
+		{
+			// Check if it's a sized array or slice
+			size_t semiPos = tuffType.find(';');
+			if (semiPos == std::string::npos)
+			{
+				// This is a slice: *[T] or *mut [T]
+				bool isMutable = (tuffType.substr(1, 4) == "mut ");
+				size_t startPos = isMutable ? 6 : 2; // Skip "*mut [" or "*["
+				std::string elementType = tuffType.substr(startPos, tuffType.length() - startPos - 1); // Remove trailing ]
+				
+				if (isMutable)
+				{
+					return mapType(elementType) + "*";
+				}
+				else
+				{
+					return "const " + mapType(elementType) + "*";
+				}
+			}
+		}
+	}
+
 	// Handle pointer types: *T, *mut T, *a T, *a mut T
 	if (!tuffType.empty() && tuffType[0] == '*')
 	{
