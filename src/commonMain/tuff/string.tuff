@@ -1,13 +1,16 @@
-// string is platform-specific (std::string in C++, string in JS)
-type extern string;
+// NativeString is platform-specific (char* in C++, string in JS)
+type extern NativeString;
+
+// string is NativeString with automatic cleanup via destructor
+type extern string = NativeString & ~string_destroy;
 
 // Core string operations (implemented in platform-specific .js/.cpp files)
-extern fn string_length(s: string): USize;
-extern fn string_charAt(s: string, index: USize): U8;
-extern fn string_substring(s: string, start: USize, end: USize): string;
-extern fn string_indexOf(s: string, needle: string): I32;
-extern fn string_equals(s1: string, s2: string): Bool;
-extern fn string_concat(s1: string, s2: string): string;
-extern fn string_fromI32(value: I32): string;
-extern fn string_toI32(s: string): I32;
-expect fn string_destroy(s: string): Void;
+extern fn string_length(s: NativeString): USize;
+extern fn string_charAt(s: NativeString, index: USize): U8;
+extern fn string_substring(s: NativeString, start: USize, end: USize): NativeString;
+extern fn string_indexOf(s: NativeString, needle: NativeString): I32;
+extern fn string_equals(s1: NativeString, s2: NativeString): Bool;
+extern fn string_concat(s1: NativeString, s2: NativeString): NativeString;
+extern fn string_fromI32(value: I32): NativeString;
+extern fn string_toI32(s: NativeString): I32;
+extern fn string_destroy(s: NativeString): Void;

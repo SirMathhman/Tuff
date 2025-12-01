@@ -362,5 +362,26 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 			}
 			typeAliasTable[aliasName] = info;
 		}
+		else if (child->type == ASTNodeType::EXTERN_TYPE_DECL)
+		{
+			// If extern type has an alias (type extern Name = Type), register it
+			if (!child->inferredType.empty())
+			{
+				std::string aliasName = child->value;
+				if (typeAliasTable.find(aliasName) != typeAliasTable.end())
+				{
+					std::cerr << "Error: Type alias '" << aliasName << "' already declared." << std::endl;
+					exit(1);
+				}
+
+				TypeAliasInfo info;
+				info.aliasedType = child->inferredType;
+				for (auto genParam : child->genericParams)
+				{
+					info.genericParams.push_back(genParam->value);
+				}
+				typeAliasTable[aliasName] = info;
+			}
+		}
 	}
 }

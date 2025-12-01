@@ -69,6 +69,46 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	};
 	collectIntersectionTypes(ast);
 
+	// Filter out intersection types that are just extern types with destructors
+	// e.g., NativeString&~string_destroy should not generate a wrapper struct
+	std::set<std::string> filteredIntersectionTypes;
+	std::set<std::string> externTypes = {"NativeString"}; // Known extern types
+	
+	for (const auto &intersectionType : intersectionTypes)
+	{
+		auto components = splitIntersectionType(intersectionType);
+		bool isExternWithDestructor = false;
+		
+		// Check if this is just ExternType & ~destructor
+		if (components.size() == 2)
+		{
+			bool hasExternType = false;
+			bool hasDestructor = false;
+			
+			for (const auto &comp : components)
+			{
+				if (!comp.empty() && comp[0] == '~')
+				{
+					hasDestructor = true;
+				}
+				else if (externTypes.count(comp) > 0)
+				{
+					hasExternType = true;
+				}
+			}
+			
+			if (hasExternType && hasDestructor)
+			{
+				isExternWithDestructor = true;
+			}
+		}
+		
+		if (!isExternWithDestructor)
+		{
+			filteredIntersectionTypes.insert(intersectionType);
+		}
+	}
+
 	auto isStatement = [](ASTNodeType type)
 	{
 		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL || type == ASTNodeType::EXPECT_DECL || type == ASTNodeType::ACTUAL_DECL || type == ASTNodeType::MODULE_DECL;
@@ -174,7 +214,7 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	}
 
 	// Generate intersection struct definitions (after regular structs and function forward declarations)
-	for (const auto &intersectionType : intersectionTypes)
+	for (const auto &intersectionType : filteredIntersectionTypes)
 	{
 		ss << generateIntersectionStruct(intersectionType, structFields) << "\n";
 	}

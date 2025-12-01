@@ -222,12 +222,13 @@ bool TypeChecker::typesMatch(const std::string &actual, const std::string &expec
 		{
 			if (lifetimeName == param)
 			{
-				// Compare stripped versions
-				return stripLifetime(actual) == stripLifetime(expected);
+				// Compare stripped versions using isTypeCompatible for full type system support
+				return isTypeCompatible(stripLifetime(actual), stripLifetime(expected));
 			}
 		}
 	}
 
-	// Strip lifetimes and compare base types
-	return stripLifetime(actual) == stripLifetime(expected);
+	// Strip lifetimes and use isTypeCompatible for full type checking
+	// This handles type aliases, intersection types with destructors, union types, etc.
+	return isTypeCompatible(stripLifetime(actual), stripLifetime(expected));
 }

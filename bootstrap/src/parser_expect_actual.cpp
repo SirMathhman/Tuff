@@ -184,6 +184,12 @@ std::shared_ptr<ASTNode> Parser::parseExternTypeDecl()
 	node->type = ASTNodeType::EXTERN_TYPE_DECL;
 	node->value = typeName.value;
 
+	// Check if this is a type alias: type extern Name = Type;
+	if (match(TokenType::EQUALS))
+	{
+		node->inferredType = parseType();
+	}
+
 	consume(TokenType::SEMICOLON, "Expected ';' after extern type declaration");
 
 	return node;
