@@ -35,15 +35,15 @@ enum class ASTNodeType
 	TYPE,
 	TYPE_PARAM_DECL, // <T>
 	// Pointer and array types
-	POINTER_TYPE,		// *T or *mut T
-	ARRAY_TYPE,			// [T; init; capacity]
-	REFERENCE_EXPR, // &x or &mut x
-	DEREF_EXPR,			// *p
-	ARRAY_LITERAL,	// [1, 2, 3]
-	INDEX_EXPR,			// arr[i]
-	IS_EXPR,				// expr is Type
-	INTERSECTION_EXPR,	// expr & expr (struct merging)
-	LIFETIME_PARAM	// lifetime parameter declaration
+	POINTER_TYPE,			 // *T or *mut T
+	ARRAY_TYPE,				 // [T; init; capacity]
+	REFERENCE_EXPR,		 // &x or &mut x
+	DEREF_EXPR,				 // *p
+	ARRAY_LITERAL,		 // [1, 2, 3]
+	INDEX_EXPR,				 // arr[i]
+	IS_EXPR,					 // expr is Type
+	INTERSECTION_EXPR, // expr & expr (struct merging)
+	LIFETIME_PARAM		 // lifetime parameter declaration
 };
 
 // Ownership state for borrow checking

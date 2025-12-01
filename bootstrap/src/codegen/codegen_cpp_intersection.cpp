@@ -56,8 +56,8 @@ std::string CodeGeneratorCPP::getIntersectionStructName(const std::string &inter
 
 // Helper: Generate a merged struct for an intersection type
 std::string CodeGeneratorCPP::generateIntersectionStruct(
-	const std::string &intersectionType,
-	const std::map<std::string, std::vector<std::pair<std::string, std::string>>> &structFields)
+		const std::string &intersectionType,
+		const std::map<std::string, std::vector<std::pair<std::string, std::string>>> &structFields)
 {
 	std::stringstream ss;
 	auto components = splitIntersectionType(intersectionType);

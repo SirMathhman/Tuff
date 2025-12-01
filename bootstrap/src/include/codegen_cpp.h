@@ -27,6 +27,6 @@ private:
 	std::vector<std::string> splitIntersectionType(const std::string &intersectionType);
 	std::string getIntersectionStructName(const std::string &intersectionType);
 	std::string generateIntersectionStruct(
-		const std::string &intersectionType,
-		const std::map<std::string, std::vector<std::pair<std::string, std::string>>> &structFields);
+			const std::string &intersectionType,
+			const std::map<std::string, std::vector<std::pair<std::string, std::string>>> &structFields);
 };

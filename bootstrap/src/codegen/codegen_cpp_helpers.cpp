@@ -119,10 +119,14 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 
 		// The result type name uses & replaced with _AND_
 		std::string resultTypeName;
-		for (char c : node->inferredType) {
-			if (c == '&') {
+		for (char c : node->inferredType)
+		{
+			if (c == '&')
+			{
 				resultTypeName += "_AND_";
-			} else {
+			}
+			else
+			{
 				resultTypeName += c;
 			}
 		}
