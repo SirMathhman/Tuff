@@ -1,15 +1,27 @@
 // Vector<T> - dynamic array with automatic memory management
 // Stub implementation until pointer casting is available
 
+use mem;
+
 struct Vector<T> {
-    capacity: USize
+	/*
+	[T] is should be a wrapped struct around *mut [T; 0; Length] with two other fields:
+
+	length : USize;
+	init   : USize;
+
+	So we track them at runtime, instead of compile time.
+	*/
+	data : *[T] & ~free;
 }
 
 // Create a new empty vector
 fn vectorNew<T>(): Vector<T> => Vector<T> { 0USize };
 
-// Get the length of a vector (stub: always 0)
-fn vectorLen<T>(vec: Vector<T>): USize => 0;
+// Get the length of a vector
+// Conceptually makes sense, in most vec implementations the "init" would be the size, and "length" would be the capacity,
+// It's just that we track this safely in the slice anyways.
+fn vectorLen<T>(vec: Vector<T>): USize => vec.data.init;
 
 // Get initialized count (stub: always 0)
 fn vectorInit<T>(vec: Vector<T>): USize => 0;
