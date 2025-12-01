@@ -41,6 +41,16 @@ bool TypeChecker::isTypeCompatible(const std::string &valueType, const std::stri
 	if (expandedValue == expandedTarget)
 		return true;
 
+	// Integer literal widening: I32 literals can be assigned to any integer type
+	// This allows `let x: USize = 0;` to work
+	if (expandedValue == "I32" &&
+			(expandedTarget == "I8" || expandedTarget == "I16" || expandedTarget == "I32" || expandedTarget == "I64" ||
+			 expandedTarget == "U8" || expandedTarget == "U16" || expandedTarget == "U32" || expandedTarget == "U64" ||
+			 expandedTarget == "USize"))
+	{
+		return true;
+	}
+
 	// SizeOf<T> extends USize
 	if (expandedTarget == "USize" && expandedValue.rfind("SizeOf<", 0) == 0)
 	{

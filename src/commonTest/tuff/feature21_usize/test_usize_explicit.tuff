@@ -1,0 +1,8 @@
+// Test explicit USize literals with suffix
+
+let x: USize = 10USize;
+let y: USize = 20USize;
+let z: USize = 15USize;
+
+// Return sum
+x + y + z

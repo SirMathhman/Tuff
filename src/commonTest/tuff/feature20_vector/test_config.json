@@ -1,8 +1,4 @@
 {
-  "skipped_tests": [
-    "test_vector_new",
-    "test_vector_push",
-    "test_vector_pop"
-  ],
+  "skipped_tests": ["test_vector_new", "test_vector_push", "test_vector_pop"],
   "reason": "Vector tests require multi-file compilation support (need vector.tuff, option.tuff)"
 }

@@ -240,8 +240,35 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 	{
 		auto node = std::make_shared<ASTNode>();
 		node->type = ASTNodeType::LITERAL;
-		node->value = tokens[pos - 1].value;
-		node->inferredType = "I32";
+		std::string literal = tokens[pos - 1].value;
+		node->value = literal;
+
+		// Check for type suffix (e.g., 42I64, 0USize)
+		std::string inferredType = "I32"; // Default
+		if (literal.find("I8") != std::string::npos)
+			inferredType = "I8";
+		else if (literal.find("I16") != std::string::npos)
+			inferredType = "I16";
+		else if (literal.find("I32") != std::string::npos)
+			inferredType = "I32";
+		else if (literal.find("I64") != std::string::npos)
+			inferredType = "I64";
+		else if (literal.find("U8") != std::string::npos)
+			inferredType = "U8";
+		else if (literal.find("U16") != std::string::npos)
+			inferredType = "U16";
+		else if (literal.find("U32") != std::string::npos)
+			inferredType = "U32";
+		else if (literal.find("U64") != std::string::npos)
+			inferredType = "U64";
+		else if (literal.find("USize") != std::string::npos)
+			inferredType = "USize";
+		else if (literal.find("F32") != std::string::npos)
+			inferredType = "F32";
+		else if (literal.find("F64") != std::string::npos)
+			inferredType = "F64";
+
+		node->inferredType = inferredType;
 		return node;
 	}
 	else if (match(TokenType::STRING_LITERAL))

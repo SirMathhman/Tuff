@@ -1,0 +1,7 @@
+{
+  "expected_exit_code": {
+    "test_usize_implicit": 142,
+    "test_usize_explicit": 45,
+    "test_usize_mixed": 45
+  }
+}
