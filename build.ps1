@@ -155,22 +155,20 @@ function Build-Target {
     $compiled = 0
     $errors = 0
     
-    # Compile each file
+    # Build complete source list for cross-file visibility
+    $allSources = @()
+    foreach ($cf in $commonFiles) {
+        $allSources += $cf.FullPath
+        $pf = $platformFiles | Where-Object { $_.RelativePath -eq $cf.RelativePath }
+        if ($pf) { $allSources += $pf.FullPath }
+    }
+    
+    # Compile each file with all sources for cross-file declarations
     foreach ($commonFile in $commonFiles) {
         $relPath = $commonFile.RelativePath
-        $platformFile = $platformFiles | Where-Object { $_.RelativePath -eq $relPath }
-        
-        # Determine output path
         $outputFile = Join-Path $outputBase ($relPath -replace '\.tuff$', $extension)
+        $sourcesList = $allSources -join ','
         
-        # Build source list
-        $sources = @($commonFile.FullPath)
-        if ($platformFile) {
-            $sources += $platformFile.FullPath
-        }
-        
-        # Compile
-        $sourcesList = $sources -join ','
         Write-Host "  Compiling: $relPath" -NoNewline
         
         try {
@@ -350,22 +348,20 @@ function Build-Target {
     $compiled = 0
     $errors = 0
     
-    # Compile each file
+    # Build complete source list for cross-file visibility
+    $allSources = @()
+    foreach ($cf in $commonFiles) {
+        $allSources += $cf.FullPath
+        $pf = $platformFiles | Where-Object { $_.RelativePath -eq $cf.RelativePath }
+        if ($pf) { $allSources += $pf.FullPath }
+    }
+    
+    # Compile each file with all sources for cross-file declarations
     foreach ($commonFile in $commonFiles) {
         $relPath = $commonFile.RelativePath
-        $platformFile = $platformFiles | Where-Object { $_.RelativePath -eq $relPath }
-        
-        # Determine output path
         $outputFile = Join-Path $outputBase ($relPath -replace '\.tuff$', $extension)
+        $sourcesList = $allSources -join ','
         
-        # Build source list
-        $sources = @($commonFile.FullPath)
-        if ($platformFile) {
-            $sources += $platformFile.FullPath
-        }
-        
-        # Compile
-        $sourcesList = $sources -join ','
         Write-Host "  Compiling: $relPath" -NoNewline
         
         try {
