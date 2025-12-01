@@ -72,7 +72,7 @@ private:
 	{
 		return (type == "I32" || type == "I64" || type == "I8" || type == "I16" ||
 						type == "U8" || type == "U16" || type == "U32" || type == "U64" ||
-						type == "F32" || type == "F64");
+						type == "F32" || type == "F64" || type == "USize");
 	}
 
 	bool isCopyType(const std::string &type)
@@ -96,6 +96,7 @@ private:
 	void checkIntersectionExpr(std::shared_ptr<ASTNode> node);
 	void checkUnaryOp(std::shared_ptr<ASTNode> node);
 	void checkIfExpr(std::shared_ptr<ASTNode> node);
+	void checkSizeOfExpr(std::shared_ptr<ASTNode> node);
 
 	// Ownership and borrow checking
 	void addBorrow(const std::string &variable, const std::string &borrower, bool isMutable);

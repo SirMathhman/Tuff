@@ -51,7 +51,15 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 			std::cerr << "Error: Operands of '" << node->value << "' must be numeric." << std::endl;
 			exit(1);
 		}
-		node->inferredType = "I32";
+		// If either operand is USize, result is USize (for sizeOf arithmetic)
+		if (leftType == "USize" || rightType == "USize")
+		{
+			node->inferredType = "USize";
+		}
+		else
+		{
+			node->inferredType = "I32";
+		}
 	}
 	else if (node->value == "==" || node->value == "!=")
 	{

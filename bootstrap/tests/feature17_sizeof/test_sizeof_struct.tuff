@@ -1,0 +1,12 @@
+// Test sizeOf with arithmetic
+struct Point {
+  x: I32,
+  y: I32
+}
+
+fn main() : I32 => {
+  let point_size: USize = sizeOf(Point);
+  let total_size: USize = sizeOf(Point) * 10;
+  let double_size: USize = sizeOf(F64) * 2;
+  0
+}

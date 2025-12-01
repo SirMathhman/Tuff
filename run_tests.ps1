@@ -64,14 +64,12 @@ $Script:SkippedTests = 0
 $Script:TestResults = @{}
 
 # Known expected exit codes (can be extended)
-$Script:ExpectedExitCodes = @{
-    "feature1_variables/test_simple" = 10
-    "feature1_variables/test_mutable" = 42
-    "feature2_operators/test_all_ops" = 30
-    "feature7_generics/test_generic_function" = 10
-    "feature7_generics/test_generic_struct" = 10
-    "feature7_generics/test_multiple_params" = 42
-}
+$Script:ExpectedExitCodes = @{}
+
+# Config-driven lists
+$Script:SkippedTestsList = @()
+$Script:NegativeTests = @{}
+$Script:NativeOnlyTests = @()
 
 function Write-ColorOutput {
     param(
@@ -124,24 +122,23 @@ function Initialize-TestEnvironment {
                 $Script:ExpectedExitCodes[$_.Name] = $_.Value
             }
         }
-        
+
         # Load skipped tests
         if ($json.skip_tests) {
             $Script:SkippedTestsList = $json.skip_tests
-        } else {
-            $Script:SkippedTestsList = @()
         }
-        
+
         # Load negative tests (expected to fail compilation)
-        $Script:NegativeTests = @{}
         if ($json.negative_tests) {
             $json.negative_tests.PSObject.Properties | ForEach-Object {
                 $Script:NegativeTests[$_.Name] = $_.Value
             }
         }
-    } else {
-        $Script:SkippedTestsList = @()
-        $Script:NegativeTests = @{}
+
+        # Load native-only (C++-only) tests
+        if ($json.native_only_tests) {
+            $Script:NativeOnlyTests = $json.native_only_tests
+        }
     }
     # Create temp directory
     if (Test-Path $TempDir) {
@@ -293,13 +290,14 @@ function Test-TuffFile {
         ExpectedExitCode = Get-ExpectedExitCode $Test.RelativePath
     }
     
+    # Globally skipped tests
     if ($Test.RelativePath -in $Script:SkippedTestsList) {
         $result.Status = "SKIPPED"
         $result.Message = "Skipped via config"
         if ($Verbose) { Write-ColorOutput " - SKIPPED" $ColorYellow }
         return $result
     }
-    
+
     # Check if this is a negative test (expected to fail compilation)
     if ($Script:NegativeTests.ContainsKey($Test.RelativePath)) {
         $expectedError = $Script:NegativeTests[$Test.RelativePath]
@@ -333,9 +331,9 @@ function Test-TuffFile {
         Write-Host "  Testing $($Test.RelativePath)..." -NoNewline
     }
     
-    # Compile to JavaScript
+    # Compile to JavaScript (skip for native-only tests)
     $jsExitCode = $null
-    if ($Target -in @("both", "js")) {
+    if ($Target -in @("both", "js") -and $Test.RelativePath -notin $Script:NativeOnlyTests) {
         $jsCompile = Invoke-TuffCompiler -SourcePath $Test.Path -TargetType "js"
         if (-not $jsCompile.Success) {
             $result.Status = "ERROR"
@@ -356,9 +354,9 @@ function Test-TuffFile {
         $jsExitCode = $jsRun.ExitCode
     }
     
-    # Compile to C++
+    # Compile to C++ (always for native-only tests; otherwise respect Target)
     $cppExitCode = $null
-    if ($Target -in @("both", "cpp")) {
+    if ($Target -in @("both", "cpp") -or $Test.RelativePath -in $Script:NativeOnlyTests) {
         $cppCompile = Invoke-TuffCompiler -SourcePath $Test.Path -TargetType "cpp"
         if (-not $cppCompile.Success) {
             $result.Status = "ERROR"
@@ -399,6 +397,11 @@ function Test-TuffFile {
             $result.Message = "Expected: $($result.ExpectedExitCode), JS: $jsExitCode, C++: $cppExitCode"
             if ($Verbose) { Write-ColorOutput " x FAILED" $ColorRed }
         }
+    } elseif ($Test.RelativePath -in $Script:NativeOnlyTests) {
+        # Native-only tests: only check C++ result, ignore JS
+        $result.Status = "PASSED"
+        $result.Message = "C++ exit code: $cppExitCode"
+        if ($Verbose) { Write-ColorOutput " + PASSED" $ColorGreen }
     } else {
         # Check consistency between targets
         if ($Target -eq "both") {

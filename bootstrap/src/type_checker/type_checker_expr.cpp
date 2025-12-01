@@ -181,3 +181,35 @@ void TypeChecker::checkIfExpr(std::shared_ptr<ASTNode> node)
 		node->inferredType = thenBranch->inferredType;
 	}
 }
+
+void TypeChecker::checkSizeOfExpr(std::shared_ptr<ASTNode> node)
+{
+	// sizeOf(Type) - the type is stored in node->value
+	std::string typeName = node->value;
+
+	// Expand type aliases if this is an alias
+	typeName = expandTypeAlias(typeName);
+	node->value = typeName;
+
+	// Validate that the type is valid
+	// Primitives are always valid
+	std::set<std::string> primitiveTypes = {
+			"I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F32", "F64", "Bool", "Void"};
+
+	if (primitiveTypes.count(typeName) == 0)
+	{
+		// Check if it's a struct type
+		if (structTable.find(typeName) == structTable.end())
+		{
+			// Check if it's an array type [T; init; capacity]
+			if (typeName[0] != '[')
+			{
+				std::cerr << "Error: sizeOf argument must be a valid type, got '" << typeName << "'" << std::endl;
+				exit(1);
+			}
+		}
+	}
+
+	// sizeOf always returns USize
+	node->inferredType = "USize";
+}

@@ -23,6 +23,7 @@ enum class TokenType
 	RETURN,
 	TYPE,
 	IS,
+	SIZEOF,
 	TRUE,
 	FALSE,
 
@@ -41,6 +42,7 @@ enum class TokenType
 	// Other Types
 	BOOL,
 	VOID,
+	USIZE,
 
 	// Symbols
 	LPAREN,

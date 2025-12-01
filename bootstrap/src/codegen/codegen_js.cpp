@@ -1,5 +1,6 @@
 #include "codegen_js.h"
 #include <sstream>
+#include <iostream>
 
 // Helper to check if a pointer type is mutable (*mut T or *a mut T)
 static bool isMutablePtr(const std::string &type)
@@ -267,6 +268,11 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 		}
 		// For immutable references, just return the value
 		return generateNode(operand);
+	}
+	case ASTNodeType::SIZEOF_EXPR:
+	{
+		// sizeOf is not supported in JS output; emit runtime error placeholder
+		return "(() => { throw new Error(\"sizeOf operator is not supported in JavaScript target\"); })()";
 	}
 	case ASTNodeType::LITERAL:
 		return node->value;

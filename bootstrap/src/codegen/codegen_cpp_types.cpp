@@ -40,6 +40,8 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 		return "bool";
 	if (tuffType == "Void")
 		return "void";
+	if (tuffType == "USize")
+		return "size_t";
 
 	// Handle pointer types: *T, *mut T, *a T, *a mut T
 	if (!tuffType.empty() && tuffType[0] == '*')

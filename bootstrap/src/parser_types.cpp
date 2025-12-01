@@ -142,7 +142,8 @@ std::string Parser::parseSingleType()
 			typeToken.type != TokenType::I64 && typeToken.type != TokenType::U8 &&
 			typeToken.type != TokenType::U16 && typeToken.type != TokenType::U32 &&
 			typeToken.type != TokenType::U64 && typeToken.type != TokenType::F32 &&
-			typeToken.type != TokenType::F64 && typeToken.type != TokenType::VOID)
+			typeToken.type != TokenType::F64 && typeToken.type != TokenType::VOID &&
+			typeToken.type != TokenType::USIZE)
 	{
 		std::cerr << "Error: Expected type at line " << typeToken.line << std::endl;
 		exit(1);

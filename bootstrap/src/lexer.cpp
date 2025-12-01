@@ -102,11 +102,13 @@ Token Lexer::identifierOrKeyword()
 			{"return", TokenType::RETURN},
 			{"type", TokenType::TYPE},
 			{"is", TokenType::IS},
+			{"sizeOf", TokenType::SIZEOF},
 			{"true", TokenType::TRUE},
 			{"false", TokenType::FALSE},
 			{"I32", TokenType::I32},
 			{"Bool", TokenType::BOOL},
-			{"Void", TokenType::VOID}
+			{"Void", TokenType::VOID},
+			{"USize", TokenType::USIZE},
 			// Add other types as needed
 	};
 

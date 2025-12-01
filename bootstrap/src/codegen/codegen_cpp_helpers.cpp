@@ -172,6 +172,12 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		// In C++, use the dereference operator
 		return "*" + generateNode(node->children[0]);
 	}
+	case ASTNodeType::SIZEOF_EXPR:
+	{
+		// sizeOf(Type) maps to C++ sizeof operator
+		std::string cppType = mapType(node->value);
+		return "sizeof(" + cppType + ")";
+	}
 	case ASTNodeType::LITERAL:
 	case ASTNodeType::IDENTIFIER:
 		return node->value;

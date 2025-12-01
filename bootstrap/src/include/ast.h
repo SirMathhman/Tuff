@@ -44,7 +44,8 @@ enum class ASTNodeType
 	INDEX_EXPR,				 // arr[i]
 	IS_EXPR,					 // expr is Type
 	INTERSECTION_EXPR, // expr & expr (struct merging)
-	LIFETIME_PARAM		 // lifetime parameter declaration
+	LIFETIME_PARAM,		 // lifetime parameter declaration
+	SIZEOF_EXPR				 // sizeOf(Type) operator
 };
 
 // Ownership state for borrow checking

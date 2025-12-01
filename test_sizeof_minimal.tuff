@@ -1,0 +1,4 @@
+fn main() : I32 => {
+  let size = sizeOf(I32);
+  0
+};

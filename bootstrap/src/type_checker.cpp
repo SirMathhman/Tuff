@@ -404,6 +404,10 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		checkDerefExpr(node);
 		break;
 
+	case ASTNodeType::SIZEOF_EXPR:
+		checkSizeOfExpr(node);
+		break;
+
 	default:
 		break;
 	}

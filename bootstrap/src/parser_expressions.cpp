@@ -296,6 +296,19 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 		node->inferredType = "Bool";
 		return node;
 	}
+	else if (match(TokenType::SIZEOF))
+	{
+		// sizeOf(Type) - parse the type parameter
+		consume(TokenType::LPAREN, "Expected '(' after 'sizeOf'");
+		std::string typeName = parseType();
+		consume(TokenType::RPAREN, "Expected ')' after sizeOf type parameter");
+
+		auto node = std::make_shared<ASTNode>();
+		node->type = ASTNodeType::SIZEOF_EXPR;
+		node->value = typeName;				// Store the type we're getting size of
+		node->inferredType = "USize"; // sizeOf always returns USize
+		return node;
+	}
 	else if (match(TokenType::IF))
 	{
 		// If expression: if (cond) expr else expr

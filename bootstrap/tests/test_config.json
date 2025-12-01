@@ -41,9 +41,15 @@
     "feature8_expect_actual/test_signature_mismatch": "return type mismatch"
   },
   "skip_tests": ["feature4_structs/test_struct_scoped"],
+  "native_only_tests": [
+    "feature17_sizeof/test_sizeof_array",
+    "feature17_sizeof/test_sizeof_basic",
+    "feature17_sizeof/test_sizeof_struct"
+  ],
   "notes": {
     "expected_exit_codes": "Maps test paths to their expected exit codes. Tests not listed here will only verify consistency between JS and C++ targets.",
     "negative_tests": "Tests that should fail compilation. Maps test path to expected error message substring.",
-    "skip_tests": "Tests with known bugs or unimplemented features: block-scoped structs"
+    "skip_tests": "Tests with known bugs or unimplemented features: block-scoped structs",
+    "native_only_tests": "Tests that should only be run on native (C++) targets. JS target will be skipped even when the runner target is 'both'."
   }
 }
