@@ -12,7 +12,8 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 
 	// Collect all union types used in the program
 	std::set<std::string> unionTypes;
-	std::function<void(std::shared_ptr<ASTNode>)> collectUnionTypes = [&](std::shared_ptr<ASTNode> node) {
+	std::function<void(std::shared_ptr<ASTNode>)> collectUnionTypes = [&](std::shared_ptr<ASTNode> node)
+	{
 		if (!node)
 			return;
 		if (!node->inferredType.empty() && isUnionType(node->inferredType))
