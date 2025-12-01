@@ -1,0 +1,11 @@
+// Test alias to struct type
+
+struct Point {
+    x: I32,
+    y: I32
+}
+
+type Coord = Point;
+
+let p: Coord = Point { 10, 20 };
+p.x + p.y

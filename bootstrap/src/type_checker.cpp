@@ -34,6 +34,10 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		}
 		else
 		{
+			// Expand type aliases in the declared type
+			type = expandTypeAlias(type);
+			node->inferredType = type;
+
 			// Use isTypeCompatible for union upcasting
 			if (!isTypeCompatible(init->inferredType, type))
 			{
@@ -99,58 +103,8 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 	}
 
 	case ASTNodeType::IDENTIFIER:
-	{
-		std::string name = node->value;
-
-		// First check if it's an FQN reference
-		if (enumTable.find(name) != enumTable.end())
-		{
-			node->inferredType = name; // Type is the enum name itself (possibly with FQN)
-			break;
-		}
-
-		// Check if it's a local variable/parameter in symbol table
-		auto it = symbolTable.find(name);
-		if (it != symbolTable.end())
-		{
-			// Check if variable has been moved
-			checkNotMoved(name);
-			node->inferredType = it->second.type;
-			break;
-		}
-
-		// If not found and we're in a module context, try prefixing with module name
-		if (!currentModule.empty())
-		{
-			std::string fqn = currentModule + "::" + name;
-			if (enumTable.find(fqn) != enumTable.end())
-			{
-				node->value = fqn; // Update to FQN
-				node->inferredType = fqn;
-				break;
-			}
-		}
-
-		// Try imported modules
-		bool foundImported = false;
-		for (const auto &imported : importedModules)
-		{
-			std::string fqn = imported + "::" + name;
-			if (enumTable.find(fqn) != enumTable.end())
-			{
-				node->value = fqn; // Update to FQN
-				node->inferredType = fqn;
-				foundImported = true;
-				break;
-			}
-		}
-		if (foundImported)
-			break;
-
-		// If still not found, error
-		std::cerr << "Error: Variable '" << name << "' not declared." << std::endl;
-		exit(1);
-	}
+		checkIdentifier(node);
+		break;
 
 	case ASTNodeType::LITERAL:
 		// Type already set by parser (e.g., I32)
@@ -161,111 +115,16 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		break;
 
 	case ASTNodeType::IS_EXPR:
-	{
-		// is operator: expr is Type
-		auto expr = node->children[0];
-		check(expr);
-
-		std::string targetType = node->value; // The type we're checking against
-
-		// Validate that the expression type is a union type
-		if (!isUnionType(expr->inferredType))
-		{
-			std::cerr << "Error: 'is' operator can only be used on union types, got " << expr->inferredType << std::endl;
-			exit(1);
-		}
-
-		// Validate that target type is one of the union variants
-		auto variants = splitUnionType(expr->inferredType);
-		bool found = false;
-		for (const auto &variant : variants)
-		{
-			if (variant == targetType)
-			{
-				found = true;
-				break;
-			}
-		}
-		if (!found)
-		{
-			std::cerr << "Error: Type '" << targetType << "' is not a variant of union type '" << expr->inferredType << "'" << std::endl;
-			exit(1);
-		}
-
-		node->inferredType = "Bool";
+		checkIsExpr(node);
 		break;
-	}
 
 	case ASTNodeType::INTERSECTION_EXPR:
-	{
-		// Intersection expression: expr & expr (struct merging)
-		auto left = node->children[0];
-		auto right = node->children[1];
-		check(left);
-		check(right);
-
-		std::string leftType = left->inferredType;
-		std::string rightType = right->inferredType;
-
-		// Both types must be structs (or intersections of structs)
-		// Validate left type
-		if (!isIntersectionType(leftType))
-		{
-			auto it = structTable.find(leftType);
-			if (it == structTable.end())
-			{
-				std::cerr << "Error: Left operand of '&' must be a struct type, got '" << leftType << "'" << std::endl;
-				exit(1);
-			}
-		}
-
-		// Validate right type
-		if (!isIntersectionType(rightType))
-		{
-			auto it = structTable.find(rightType);
-			if (it == structTable.end())
-			{
-				std::cerr << "Error: Right operand of '&' must be a struct type, got '" << rightType << "'" << std::endl;
-				exit(1);
-			}
-		}
-
-		// Result type is intersection of both types
-		std::string resultType = leftType + "&" + rightType;
-
-		// Validate that the intersection doesn't have conflicting fields
-		validateIntersectionType(resultType);
-
-		node->inferredType = resultType;
+		checkIntersectionExpr(node);
 		break;
-	}
 
 	case ASTNodeType::UNARY_OP:
-	{
-		auto operand = node->children[0];
-		check(operand);
-
-		std::string op = node->value;
-		if (op == "!")
-		{
-			if (operand->inferredType != "Bool")
-			{
-				std::cerr << "Error: Operand of '!' must be Bool, got " << operand->inferredType << std::endl;
-				exit(1);
-			}
-			node->inferredType = "Bool";
-		}
-		else if (op == "-")
-		{
-			if (!isNumericType(operand->inferredType))
-			{
-				std::cerr << "Error: Operand of '-' must be numeric, got " << operand->inferredType << std::endl;
-				exit(1);
-			}
-			node->inferredType = operand->inferredType;
-		}
+		checkUnaryOp(node);
 		break;
-	}
 
 	case ASTNodeType::IF_STMT:
 	{
@@ -289,34 +148,8 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 	}
 
 	case ASTNodeType::IF_EXPR:
-	{
-		auto condition = node->children[0];
-		check(condition);
-		if (condition->inferredType != "Bool")
-		{
-			std::cerr << "Error: If condition must be Bool, got " << condition->inferredType << std::endl;
-			exit(1);
-		}
-
-		auto thenBranch = node->children[1];
-		auto elseBranch = node->children[2];
-		check(thenBranch);
-		check(elseBranch);
-
-		// For now, just use the then branch type (union types deferred)
-		// TODO: Implement proper union type merging (e.g., 100I32 | 200I32)
-		if (thenBranch->inferredType == elseBranch->inferredType)
-		{
-			node->inferredType = thenBranch->inferredType;
-		}
-		else
-		{
-			// Simplified: use the then branch type for now
-			// In full implementation, this would be a union type
-			node->inferredType = thenBranch->inferredType;
-		}
+		checkIfExpr(node);
 		break;
-	}
 
 	case ASTNodeType::WHILE_STMT:
 	{
@@ -374,6 +207,12 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 	}
 
 	case ASTNodeType::ENUM_DECL:
+	{
+		// Already registered in first pass, just skip
+		break;
+	}
+
+	case ASTNodeType::TYPE_ALIAS:
 	{
 		// Already registered in first pass, just skip
 		break;

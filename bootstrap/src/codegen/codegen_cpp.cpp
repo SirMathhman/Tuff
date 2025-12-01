@@ -99,13 +99,7 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 		}
 	}
 
-	// Generate intersection struct definitions (after regular structs so we can reference them)
-	for (const auto &intersectionType : intersectionTypes)
-	{
-		ss << generateIntersectionStruct(intersectionType, structFields) << "\n";
-	}
-
-	// Generate function forward declarations
+	// Generate function forward declarations (before intersection structs so destructors can reference them)
 	for (auto child : ast->children)
 	{
 		if (child->type == ASTNodeType::FUNCTION_DECL)
@@ -175,6 +169,12 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 			}
 			ss << ");\n";
 		}
+	}
+
+	// Generate intersection struct definitions (after regular structs and function forward declarations)
+	for (const auto &intersectionType : intersectionTypes)
+	{
+		ss << generateIntersectionStruct(intersectionType, structFields) << "\n";
 	}
 
 	// Determine return type from last expression (if last node is an expression)

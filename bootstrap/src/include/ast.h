@@ -26,6 +26,7 @@ enum class ASTNodeType
 	ACTUAL_DECL,		// actual fn name(...): Type => {...}
 	MODULE_DECL,		// module name { statements }
 	USE_DECL,				// use module::path;
+	TYPE_ALIAS,			// type Name = Type; or type Name<T> = Type;
 	FIELD_ACCESS,		// obj.field
 	CALL_EXPR,
 	BINARY_OP,

@@ -117,6 +117,23 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 					}
 					structTable[structName] = info;
 				}
+				else if (moduleChild->type == ASTNodeType::TYPE_ALIAS)
+				{
+					std::string aliasName = currentModule + "::" + moduleChild->value;
+					if (typeAliasTable.find(aliasName) != typeAliasTable.end())
+					{
+						std::cerr << "Error: Type alias '" << aliasName << "' already declared." << std::endl;
+						exit(1);
+					}
+
+					TypeAliasInfo info;
+					info.aliasedType = moduleChild->inferredType;
+					for (auto genParam : moduleChild->genericParams)
+					{
+						info.genericParams.push_back(genParam->value);
+					}
+					typeAliasTable[aliasName] = info;
+				}
 				else if (moduleChild->type == ASTNodeType::EXPECT_DECL)
 				{
 					std::string expectName = currentModule + "::" + moduleChild->value;
@@ -303,6 +320,23 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 				info.variants.push_back(variantNode->value);
 			}
 			enumTable[enumName] = info;
+		}
+		else if (child->type == ASTNodeType::TYPE_ALIAS)
+		{
+			std::string aliasName = child->value;
+			if (typeAliasTable.find(aliasName) != typeAliasTable.end())
+			{
+				std::cerr << "Error: Type alias '" << aliasName << "' already declared." << std::endl;
+				exit(1);
+			}
+
+			TypeAliasInfo info;
+			info.aliasedType = child->inferredType;
+			for (auto genParam : child->genericParams)
+			{
+				info.genericParams.push_back(genParam->value);
+			}
+			typeAliasTable[aliasName] = info;
 		}
 	}
 }

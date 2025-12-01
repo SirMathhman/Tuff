@@ -38,6 +38,10 @@ std::shared_ptr<ASTNode> Parser::parseModuleDecl()
 		{
 			moduleNode->addChild(parseEnumDecl());
 		}
+		else if (peek().type == TokenType::TYPE)
+		{
+			moduleNode->addChild(parseTypeAlias());
+		}
 		else if (peek().type == TokenType::EXPECT)
 		{
 			moduleNode->addChild(parseExpectDecl());

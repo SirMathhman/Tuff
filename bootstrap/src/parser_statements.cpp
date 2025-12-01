@@ -33,6 +33,27 @@ std::shared_ptr<ASTNode> Parser::parseEnumDecl()
 	return node;
 }
 
+std::shared_ptr<ASTNode> Parser::parseTypeAlias()
+{
+	consume(TokenType::TYPE, "Expected 'type'");
+	auto aliasName = consume(TokenType::IDENTIFIER, "Expected type alias name");
+
+	auto node = std::make_shared<ASTNode>();
+	node->type = ASTNodeType::TYPE_ALIAS;
+	node->value = aliasName.value;
+
+	// Parse optional generic params <T, U>
+	node->genericParams = parseGenericParams();
+
+	consume(TokenType::EQUALS, "Expected '=' after type alias name");
+
+	// Parse the aliased type
+	node->inferredType = parseType();
+
+	match(TokenType::SEMICOLON);
+	return node;
+}
+
 std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 {
 	consume(TokenType::FN, "Expected 'fn'");

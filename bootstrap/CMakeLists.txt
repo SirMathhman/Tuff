@@ -10,16 +10,19 @@ add_executable(tuffc
     src/main.cpp
     src/lexer.cpp
     src/parser.cpp
+    src/parser_expressions.cpp
     src/parser_statements.cpp
     src/parser_modules.cpp
     src/parser_expect_actual.cpp
     src/parser_types.cpp
     src/type_checker.cpp
     src/type_checker_helpers.cpp
-    src/type_checker_union.cpp
-    src/type_checker_intersection.cpp
-    src/type_checker_register.cpp
-    src/type_checker_ownership.cpp
+    src/type_checker/type_checker_union.cpp
+    src/type_checker/type_checker_intersection.cpp
+    src/type_checker/type_checker_register.cpp
+    src/type_checker/type_checker_ownership.cpp
+    src/type_checker/type_checker_alias.cpp
+    src/type_checker/type_checker_expr.cpp
     src/codegen/codegen_js.cpp
     src/codegen/codegen_js_helpers.cpp
     src/codegen/codegen_cpp.cpp

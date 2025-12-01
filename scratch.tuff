@@ -1,4 +1,4 @@
-import extern stdlib;
+use extern stdlib;
 
 type Allocated<T, L : USize> = *[T; 0; L] & ~free;
 extern fn malloc<T, L : USize>(count : SizeOf<T> * L) : Allocated<T, L>;

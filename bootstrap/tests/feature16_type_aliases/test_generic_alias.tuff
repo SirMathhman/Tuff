@@ -1,0 +1,6 @@
+// Test generic type alias
+
+type Wrapper<T> = T;
+
+let x: Wrapper<I32> = 100;
+x

@@ -45,6 +45,12 @@ struct ExpectInfo
 	std::vector<std::pair<std::string, std::string>> params; // (name, type) pairs
 };
 
+struct TypeAliasInfo
+{
+	std::string aliasedType;
+	std::vector<std::string> genericParams; // <T, U>
+};
+
 class TypeChecker
 {
 private:
@@ -53,6 +59,7 @@ private:
 	std::map<std::string, FunctionInfo> functionTable;
 	std::map<std::string, EnumInfo> enumTable;
 	std::map<std::string, ExpectInfo> expectTable;
+	std::map<std::string, TypeAliasInfo> typeAliasTable;
 	std::map<std::string, std::vector<BorrowInfo>> activeBorrows; // variable -> active borrows
 	int currentScopeDepth = 0;
 	std::string currentFunctionReturnType;					// Track return type for validation
@@ -83,6 +90,13 @@ private:
 	void checkReferenceExpr(std::shared_ptr<ASTNode> node);
 	void checkDerefExpr(std::shared_ptr<ASTNode> node);
 
+	// Expression checking helpers (in type_checker_expr.cpp)
+	void checkIdentifier(std::shared_ptr<ASTNode> node);
+	void checkIsExpr(std::shared_ptr<ASTNode> node);
+	void checkIntersectionExpr(std::shared_ptr<ASTNode> node);
+	void checkUnaryOp(std::shared_ptr<ASTNode> node);
+	void checkIfExpr(std::shared_ptr<ASTNode> node);
+
 	// Ownership and borrow checking
 	void addBorrow(const std::string &variable, const std::string &borrower, bool isMutable);
 	void releaseBorrowsAtScope(int depth);
@@ -106,6 +120,9 @@ private:
 	std::vector<std::string> splitIntersectionType(const std::string &intersectionType);
 	std::vector<std::pair<std::string, std::string>> validateIntersectionType(const std::string &intersectionType);
 	std::string getIntersectionStructName(const std::string &intersectionType);
+
+	// Type alias helpers
+	std::string expandTypeAlias(const std::string &type);
 
 public:
 	void check(std::shared_ptr<ASTNode> node);
