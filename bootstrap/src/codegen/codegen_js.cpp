@@ -46,6 +46,22 @@ std::string CodeGeneratorJS::generate(std::shared_ptr<ASTNode> ast)
 	{
 		auto child = ast->children[i];
 
+		// Check extern function declarations for unsupported types
+		if (child->type == ASTNodeType::EXTERN_FN_DECL)
+		{
+			for (const auto &param : child->children)
+			{
+				if (param->inferredType.find("SizeOf<") != std::string::npos)
+				{
+					std::cerr << "Error: Cannot compile function '" << child->value
+										<< "' to JavaScript: parameter of type '" << param->inferredType 
+										<< "' is not supported." << std::endl;
+					std::cerr << "SizeOf<T> is a compile-time concept for native code generation only." << std::endl;
+					exit(1);
+				}
+			}
+		}
+
 		// Skip expect and actual declarations
 		if (child->type == ASTNodeType::EXPECT_DECL)
 			continue;

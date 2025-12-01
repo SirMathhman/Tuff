@@ -139,7 +139,7 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 			{
 				continue;
 			}
-			
+
 			ss << "    " << mapType(child->inferredType) << " " << child->value << "(";
 			for (size_t i = 0; i < child->children.size(); i++)
 			{
