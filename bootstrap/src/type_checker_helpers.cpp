@@ -116,6 +116,30 @@ void TypeChecker::checkFieldOrEnumAccess(std::shared_ptr<ASTNode> node)
 	}
 
 	std::string typeName = object->inferredType;
+
+	// Handle intersection types - look up field in all component structs
+	if (isIntersectionType(typeName))
+	{
+		auto components = splitIntersectionType(typeName);
+		for (const auto &component : components)
+		{
+			auto it = structTable.find(component);
+			if (it != structTable.end())
+			{
+				for (const auto &field : it->second.fields)
+				{
+					if (field.first == fieldName)
+					{
+						node->inferredType = field.second;
+						return;
+					}
+				}
+			}
+		}
+		std::cerr << "Error: Intersection type '" << typeName << "' has no field named '" << fieldName << "'." << std::endl;
+		exit(1);
+	}
+
 	std::string baseName;
 	std::vector<std::string> genericArgs;
 	parseGenericType(typeName, baseName, genericArgs);

@@ -40,22 +40,45 @@ std::vector<std::shared_ptr<ASTNode>> Parser::parseGenericParams()
 
 std::string Parser::parseType()
 {
-	std::string leftType = parseSingleType();
+	std::string leftType = parseIntersectionType();
 
-	// Handle union types: Type0 | Type1 | Type2
+	// Handle union types: Type0 | Type1 | Type2 (lowest precedence)
 	if (match(TokenType::PIPE))
 	{
 		std::string unionType = leftType;
 		while (true)
 		{
 			unionType += "|";
-			unionType += parseSingleType();
+			unionType += parseIntersectionType();
 			if (!match(TokenType::PIPE))
 			{
 				break;
 			}
 		}
 		return unionType;
+	}
+
+	return leftType;
+}
+
+std::string Parser::parseIntersectionType()
+{
+	std::string leftType = parseSingleType();
+
+	// Handle intersection types: Type0 & Type1 & Type2
+	if (match(TokenType::AMPERSAND))
+	{
+		std::string intersectionType = leftType;
+		while (true)
+		{
+			intersectionType += "&";
+			intersectionType += parseSingleType();
+			if (!match(TokenType::AMPERSAND))
+			{
+				break;
+			}
+		}
+		return intersectionType;
 	}
 
 	return leftType;

@@ -1,0 +1,22 @@
+// Test basic intersection type merging
+
+struct Point {
+    x: I32,
+    y: I32
+}
+
+struct Color {
+    r: I32,
+    g: I32,
+    b: I32
+}
+
+let pt = Point { 10, 20 };
+let col = Color { 255, 128, 0 };
+
+// Merge the two structs using intersection operator
+let merged = pt & col;
+
+// Access fields from both component types
+// Sum: 10 + 20 + 255 + 128 + 0 = 413
+merged.x + merged.y + merged.r + merged.g + merged.b

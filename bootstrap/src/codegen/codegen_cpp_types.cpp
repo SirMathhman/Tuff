@@ -9,6 +9,13 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 		return getUnionStructName(tuffType);
 	}
 
+	// Handle intersection types: Point&Color -> Point_AND_Color
+	// But NOT reference types like &I32
+	if (!tuffType.empty() && tuffType[0] != '&' && tuffType.find('&') != std::string::npos)
+	{
+		return getIntersectionStructName(tuffType);
+	}
+
 	if (tuffType == "I32")
 		return "int32_t";
 	if (tuffType == "I64")

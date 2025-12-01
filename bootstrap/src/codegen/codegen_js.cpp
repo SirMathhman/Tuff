@@ -151,6 +151,14 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 		std::string targetType = node->value;
 		return "(" + expr + ".__tag === \"" + targetType + "\")";
 	}
+	case ASTNodeType::INTERSECTION_EXPR:
+	{
+		// Intersection operator: merge two struct values into one
+		// In JS, we use object spread: {...left, ...right}
+		auto left = generateNode(node->children[0]);
+		auto right = generateNode(node->children[1]);
+		return "({..." + left + ", ..." + right + "})";
+	}
 	case ASTNodeType::UNARY_OP:
 	{
 		auto operand = generateNode(node->children[0]);

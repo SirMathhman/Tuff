@@ -2,6 +2,7 @@
 #include <sstream>
 #include <vector>
 #include <set>
+#include <map>
 #include <functional>
 
 std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
@@ -33,6 +34,39 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 		ss << generateUnionStruct(unionType) << "\n";
 	}
 
+	// Collect struct field information for intersection types
+	std::map<std::string, std::vector<std::pair<std::string, std::string>>> structFields;
+	for (auto child : ast->children)
+	{
+		if (child->type == ASTNodeType::STRUCT_DECL)
+		{
+			std::string structName = child->value;
+			std::vector<std::pair<std::string, std::string>> fields;
+			for (auto field : child->children)
+			{
+				fields.push_back({field->value, field->inferredType});
+			}
+			structFields[structName] = fields;
+		}
+	}
+
+	// Collect all intersection types used in the program
+	std::set<std::string> intersectionTypes;
+	std::function<void(std::shared_ptr<ASTNode>)> collectIntersectionTypes = [&](std::shared_ptr<ASTNode> node)
+	{
+		if (!node)
+			return;
+		if (!node->inferredType.empty() && isIntersectionType(node->inferredType))
+		{
+			intersectionTypes.insert(node->inferredType);
+		}
+		for (auto child : node->children)
+		{
+			collectIntersectionTypes(child);
+		}
+	};
+	collectIntersectionTypes(ast);
+
 	auto isStatement = [](ASTNodeType type)
 	{
 		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL || type == ASTNodeType::EXPECT_DECL || type == ASTNodeType::ACTUAL_DECL || type == ASTNodeType::MODULE_DECL;
@@ -63,6 +97,12 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 		{
 			ss << generateNode(child) << "\n";
 		}
+	}
+
+	// Generate intersection struct definitions (after regular structs so we can reference them)
+	for (const auto &intersectionType : intersectionTypes)
+	{
+		ss << generateIntersectionStruct(intersectionType, structFields) << "\n";
 	}
 
 	// Generate function forward declarations

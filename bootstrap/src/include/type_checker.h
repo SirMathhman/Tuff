@@ -101,6 +101,12 @@ private:
 	std::vector<std::string> splitUnionType(const std::string &unionType);
 	bool isTypeCompatible(const std::string &valueType, const std::string &targetType);
 
+	// Intersection type helpers
+	bool isIntersectionType(const std::string &type);
+	std::vector<std::string> splitIntersectionType(const std::string &intersectionType);
+	std::vector<std::pair<std::string, std::string>> validateIntersectionType(const std::string &intersectionType);
+	std::string getIntersectionStructName(const std::string &intersectionType);
+
 public:
 	void check(std::shared_ptr<ASTNode> node);
 };

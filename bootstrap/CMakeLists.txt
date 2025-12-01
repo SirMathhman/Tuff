@@ -17,6 +17,7 @@ add_executable(tuffc
     src/type_checker.cpp
     src/type_checker_helpers.cpp
     src/type_checker_union.cpp
+    src/type_checker_intersection.cpp
     src/type_checker_register.cpp
     src/type_checker_ownership.cpp
     src/codegen/codegen_js.cpp
@@ -25,4 +26,5 @@ add_executable(tuffc
     src/codegen/codegen_cpp_helpers.cpp
     src/codegen/codegen_cpp_types.cpp
     src/codegen/codegen_cpp_union.cpp
+    src/codegen/codegen_cpp_intersection.cpp
 )

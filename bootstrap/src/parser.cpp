@@ -246,14 +246,29 @@ std::shared_ptr<ASTNode> Parser::parseComparison()
 
 std::shared_ptr<ASTNode> Parser::parseAdditive()
 {
-	auto left = parseMultiplicative();
+	auto left = parseIntersection();
 	while (match(TokenType::PLUS) || match(TokenType::MINUS))
 	{
 		Token op = tokens[pos - 1];
-		auto right = parseMultiplicative();
+		auto right = parseIntersection();
 		auto node = std::make_shared<ASTNode>();
 		node->type = ASTNodeType::BINARY_OP;
 		node->value = op.value;
+		node->addChild(left);
+		node->addChild(right);
+		left = node;
+	}
+	return left;
+}
+
+std::shared_ptr<ASTNode> Parser::parseIntersection()
+{
+	auto left = parseMultiplicative();
+	while (match(TokenType::AMPERSAND))
+	{
+		auto right = parseMultiplicative();
+		auto node = std::make_shared<ASTNode>();
+		node->type = ASTNodeType::INTERSECTION_EXPR;
 		node->addChild(left);
 		node->addChild(right);
 		left = node;

@@ -196,6 +196,50 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		break;
 	}
 
+	case ASTNodeType::INTERSECTION_EXPR:
+	{
+		// Intersection expression: expr & expr (struct merging)
+		auto left = node->children[0];
+		auto right = node->children[1];
+		check(left);
+		check(right);
+
+		std::string leftType = left->inferredType;
+		std::string rightType = right->inferredType;
+
+		// Both types must be structs (or intersections of structs)
+		// Validate left type
+		if (!isIntersectionType(leftType))
+		{
+			auto it = structTable.find(leftType);
+			if (it == structTable.end())
+			{
+				std::cerr << "Error: Left operand of '&' must be a struct type, got '" << leftType << "'" << std::endl;
+				exit(1);
+			}
+		}
+
+		// Validate right type
+		if (!isIntersectionType(rightType))
+		{
+			auto it = structTable.find(rightType);
+			if (it == structTable.end())
+			{
+				std::cerr << "Error: Right operand of '&' must be a struct type, got '" << rightType << "'" << std::endl;
+				exit(1);
+			}
+		}
+
+		// Result type is intersection of both types
+		std::string resultType = leftType + "&" + rightType;
+
+		// Validate that the intersection doesn't have conflicting fields
+		validateIntersectionType(resultType);
+
+		node->inferredType = resultType;
+		break;
+	}
+
 	case ASTNodeType::UNARY_OP:
 	{
 		auto operand = node->children[0];
