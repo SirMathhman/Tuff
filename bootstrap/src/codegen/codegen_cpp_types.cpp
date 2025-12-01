@@ -18,8 +18,8 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 	if (tuffType.find('|') != std::string::npos)
 	{
 		std::string structName = getUnionStructName(tuffType);
-		
-		// Extract generic parameters from the first variant
+
+		// Extract generic parameter from first variant and add as template argument
 		auto variants = splitUnionType(tuffType);
 		if (!variants.empty())
 		{
@@ -30,15 +30,11 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 				if (end != std::string::npos)
 				{
 					std::string param = variants[0].substr(start + 1, end - start - 1);
-					// If it's a concrete type (not a single-letter generic), add template args
-					if (param.length() > 1 || param[0] < 'A' || param[0] > 'Z')
-					{
-						return structName + "<" + mapType(param) + ">";
-					}
+					return structName + "<" + mapType(param) + ">";
 				}
 			}
 		}
-		
+
 		return structName;
 	}
 

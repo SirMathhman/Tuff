@@ -44,6 +44,9 @@ private:
 	// Name mangling for generic types
 	std::string mangleName(const std::string &name);
 
+	// C++ keyword escaping
+	std::string escapeCppKeyword(const std::string &name);
+
 	// Intersection type helpers
 	bool isIntersectionType(const std::string &type);
 	std::vector<std::string> splitIntersectionType(const std::string &intersectionType);

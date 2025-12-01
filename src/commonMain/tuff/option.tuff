@@ -1,0 +1,35 @@
+// Option<T> - A type that represents an optional value
+// Either Some<T> (contains a value) or None (empty)
+
+struct Some<T> {
+    value: T
+}
+
+struct None<T> {
+}
+
+// Helper functions for Option<T>
+
+// Check if option has a value
+fn isSome<T>(opt: Some<T> | None<T>): Bool => opt is Some<T>;
+
+fn isNone<T>(opt: Some<T> | None<T>): Bool => opt is None<T>;
+
+// Unwrap value or panic (unsafe - use only when certain)
+fn unwrap<T>(opt: Some<T> | None<T>): T => {
+    if (opt is Some<T>) {
+        return opt.value;
+    } else {
+        // TODO: panic with message when we have error handling
+        return opt.value; // Will cause error - intentional
+    }
+};
+
+// Unwrap value or return default
+fn unwrapOr<T>(opt: Some<T> | None<T>, default: T): T => {
+    if (opt is Some<T>) {
+        return opt.value;
+    } else {
+        return default;
+    }
+};

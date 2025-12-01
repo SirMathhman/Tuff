@@ -50,7 +50,7 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 		for (const auto &unionType : unionTypes)
 		{
 			std::string structName = getUnionStructName(unionType);
-			
+
 			// Check if this union uses generic params (single letters T, U, etc.)
 			bool isGeneric = false;
 			auto variants = splitUnionType(unionType);
@@ -71,7 +71,7 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 					}
 				}
 			}
-			
+
 			// Prefer generic versions
 			if (unionStructToGeneric.find(structName) == unionStructToGeneric.end() || isGeneric)
 			{

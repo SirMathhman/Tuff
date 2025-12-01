@@ -1,0 +1,24 @@
+// Test Option<T> with type narrowing
+
+struct Some<T> {
+    value: T
+}
+
+struct None<T> {
+}
+
+fn main(): I32 => {
+    let option: Some<I32> | None<I32> = Some<I32> { 100 };
+    
+    // Type narrowing with is operator
+    if (option is Some<I32>) {
+        // After narrowing, can access .value directly
+        let val = option.value;
+        if (val != 100) {
+            return 1;
+        }
+        return 0;
+    } else {
+        return 2;
+    }
+}
