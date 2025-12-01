@@ -75,7 +75,10 @@ function Get-BuildConfig {
 }
 
 function Get-SourceFiles {
-    param([string]$Path)
+    param(
+        [string]$Path,
+        [string]$Extension = "*.tuff"
+    )
     
     if (-not (Test-Path $Path)) {
         return @()
@@ -83,7 +86,7 @@ function Get-SourceFiles {
     
     $fullPath = (Resolve-Path $Path).Path
     
-    return Get-ChildItem -Path $fullPath -Filter "*.tuff" -Recurse | ForEach-Object {
+    return Get-ChildItem -Path $fullPath -Filter $Extension -Recurse | ForEach-Object {
         $relativePath = $_.FullName.Substring($fullPath.Length + 1)
         @{
             FullPath = $_.FullName
@@ -91,6 +94,35 @@ function Get-SourceFiles {
             Name = $_.Name
         }
     }
+}
+
+function Copy-PlatformFiles {
+    param(
+        [string]$SourcePath,
+        [string]$DestinationBase,
+        [string]$Extension
+    )
+    
+    if (-not (Test-Path $SourcePath)) {
+        return 0
+    }
+    
+    $files = Get-SourceFiles -Path $SourcePath -Extension $Extension
+    $copied = 0
+    
+    foreach ($file in $files) {
+        $destPath = Join-Path $DestinationBase $file.RelativePath
+        $destDir = Split-Path $destPath -Parent
+        
+        if (-not (Test-Path $destDir)) {
+            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+        }
+        
+        Copy-Item -Path $file.FullPath -Destination $destPath -Force
+        $copied++
+    }
+    
+    return $copied
 }
 
 function Build-Target {
@@ -173,14 +205,12 @@ function Bundle-JavaScript {
     
     Write-ColorOutput "`nGenerating JavaScript build system..." $ColorCyan
     
-    # Find all .js files
     $jsFiles = Get-ChildItem -Path $OutputBase -Filter "*.js" -Recurse
     if ($jsFiles.Count -eq 0) {
         Write-ColorOutput "  No JavaScript files found" $ColorYellow
         return
     }
     
-    # Find main.js
     $mainFile = $jsFiles | Where-Object { $_.Name -eq "main.js" } | Select-Object -First 1
     if (-not $mainFile) {
         Write-ColorOutput "  No main.js found, skipping" $ColorYellow
@@ -189,44 +219,31 @@ function Bundle-JavaScript {
     
     $distRoot = (Resolve-Path (Split-Path $OutputBase -Parent)).Path
     $packageJsonPath = Join-Path $distRoot "package.json"
-    
-    # Generate package.json
     $relativePath = $mainFile.FullName.Substring($distRoot.Length + 1)
-    # Normalize to forward slashes for Node.js
     $relativeMain = "./" + $relativePath.Replace('\', '/')
     
-    $packageJson = @{
+    @{
         name = "tuff-project"
         version = "0.1.0"
         description = "Tuff compiled JavaScript project"
         type = "module"
         main = $relativeMain
-        scripts = @{
-            start = "node $relativeMain"
-        }
-    } | ConvertTo-Json -Depth 10
+        scripts = @{ start = "node $relativeMain" }
+    } | ConvertTo-Json -Depth 10 | Out-File -FilePath $packageJsonPath -Encoding UTF8
     
-    $packageJson | Out-File -FilePath $packageJsonPath -Encoding UTF8
     Write-ColorOutput "  Created: $packageJsonPath" $ColorGreen
     
-    # Test if Node.js is available
     $nodeAvailable = $null -ne (Get-Command node -ErrorAction SilentlyContinue)
     if ($nodeAvailable) {
         Write-Host "  Testing with Node.js..." -NoNewline
-        try {
-            Push-Location $distRoot
-            $testResult = npm start 2>&1
-            Pop-Location
-            $exitCode = $LASTEXITCODE
-            if ($exitCode -eq 0 -or $exitCode -eq 42) {
-                Write-ColorOutput " ✓ (exit code: $exitCode)" $ColorGreen
-            } else {
-                Write-ColorOutput " ✗ (exit code: $exitCode)" $ColorRed
-            }
-        }
-        catch {
-            Pop-Location
-            Write-ColorOutput " ✗ Error: $_" $ColorRed
+        Push-Location $distRoot
+        npm start 2>&1 | Out-Null
+        Pop-Location
+        $exitCode = $LASTEXITCODE
+        if ($exitCode -eq 0 -or $exitCode -eq 42) {
+            Write-ColorOutput " ✓ (exit code: $exitCode)" $ColorGreen
+        } else {
+            Write-ColorOutput " ✗ (exit code: $exitCode)" $ColorRed
         }
     } else {
         Write-ColorOutput "  Node.js not found - run 'npm start' in dist/js to execute" $ColorYellow
@@ -237,123 +254,66 @@ function Bundle-Native {
     param([string]$OutputBase)
     
     Write-ColorOutput "`nGenerating native build system..." $ColorCyan
-    
-    # Find all .cpp files
     $cppFiles = Get-ChildItem -Path $OutputBase -Filter "*.cpp" -Recurse
-    if ($cppFiles.Count -eq 0) {
-        Write-ColorOutput "  No C++ files found" $ColorYellow
-        return
-    }
+    if ($cppFiles.Count -eq 0) { Write-ColorOutput "  No C++ files found" $ColorYellow; return }
     
     $distRoot = (Resolve-Path (Split-Path $OutputBase -Parent)).Path
     $cmakeListsPath = Join-Path $distRoot "CMakeLists.txt"
     $buildDir = Join-Path $distRoot "build"
     
-    # Generate CMakeLists.txt
-    $relativeFiles = $cppFiles | ForEach-Object {
-        $_.FullName.Substring($distRoot.Length + 1).Replace('\', '/')
-    }
-    
-    # Find main.cpp - it should be the entry point
+    $relativeFiles = $cppFiles | ForEach-Object { $_.FullName.Substring($distRoot.Length + 1).Replace('\', '/') }
     $mainCpp = $relativeFiles | Where-Object { $_ -match 'main\.cpp$' } | Select-Object -First 1
+    
     if (-not $mainCpp) {
-        Write-ColorOutput "  No main.cpp found, using all files" $ColorYellow
         $sourcesList = $relativeFiles
     } else {
-        # Only compile main.cpp since Tuff merges all code at compile-time
-        Write-ColorOutput "  Using entry point: $mainCpp" $ColorGreen
-        $sourcesList = @($mainCpp)
+        $tuffDir = Split-Path $mainCpp -Parent
+        $allCppInDir = $relativeFiles | Where-Object { (Split-Path $_ -Parent) -eq $tuffDir }
+        $implementationFiles = $allCppInDir | Where-Object { (Split-Path $_ -Leaf) -notin @('io.cpp', 'main.cpp') }
+        $sourcesList = @($mainCpp) + $implementationFiles
+        if ($implementationFiles.Count -gt 0) {
+            Write-ColorOutput "  Including $($implementationFiles.Count) implementation file(s)" $ColorGreen
+        }
     }
     
-    $cmakeContent = @"
+    @"
 cmake_minimum_required(VERSION 3.15)
 project(TuffProject)
-
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-# Source files
 set(SOURCES
 $(($sourcesList | ForEach-Object { "    $_" }) -join "`n")
 )
-
-# Executable
 add_executable(program `${SOURCES})
-
-# Platform-specific settings
-if(WIN32)
-    # Windows-specific settings
-elseif(UNIX)
-    # Unix-specific settings
-endif()
-"@
+"@ | Out-File -FilePath $cmakeListsPath -Encoding UTF8
     
-    $cmakeContent | Out-File -FilePath $cmakeListsPath -Encoding UTF8
     Write-ColorOutput "  Created: $cmakeListsPath" $ColorGreen
     
-    # Check if CMake is available
-    $cmakeAvailable = $null -ne (Get-Command cmake -ErrorAction SilentlyContinue)
-    if ($cmakeAvailable) {
-        Write-ColorOutput "  Configuring with CMake..." $ColorCyan
+    if (Get-Command cmake -ErrorAction SilentlyContinue) {
+        if (Test-Path $buildDir) { Remove-Item $buildDir -Recurse -Force }
+        New-Item -ItemType Directory -Path $buildDir -Force | Out-Null
         
-        try {
-            # Create build directory
-            if (Test-Path $buildDir) {
-                Remove-Item $buildDir -Recurse -Force
-            }
-            New-Item -ItemType Directory -Path $buildDir -Force | Out-Null
-            
-            # Configure
-            Push-Location $buildDir
-            $configResult = cmake .. 2>&1
+        Push-Location $buildDir
+        cmake .. 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  Building with CMake..." -NoNewline
+            cmake --build . --config Release 2>&1 | Out-Null
             if ($LASTEXITCODE -eq 0) {
-                Write-ColorOutput "  CMake configuration successful" $ColorGreen
-                
-                # Build
-                Write-Host "  Building with CMake..." -NoNewline
-                $buildResult = cmake --build . --config Release 2>&1
-                if ($LASTEXITCODE -eq 0) {
-                    Write-ColorOutput " ✓" $ColorGreen
-                    
-                    # Find the executable
-                    $exePath = Get-ChildItem -Path $buildDir -Filter "program.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-                    if (-not $exePath) {
-                        $exePath = Get-ChildItem -Path $buildDir -Filter "program" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+                Write-ColorOutput " ✓" $ColorGreen
+                $exePath = Get-ChildItem -Path $buildDir -Filter "program*" -Recurse | Where-Object { $_.Extension -in @('.exe', '') } | Select-Object -First 1
+                if ($exePath) {
+                    Write-Host "  Testing executable..." -NoNewline
+                    & $exePath.FullName 2>&1 | Out-Null
+                    $exitCode = $LASTEXITCODE
+                    if ($exitCode -eq 0 -or $exitCode -eq 42) {
+                        Write-ColorOutput " ✓ (exit code: $exitCode)" $ColorGreen
+                    } else {
+                        Write-ColorOutput " ✗ (exit code: $exitCode)" $ColorRed
                     }
-                    
-                    if ($exePath) {
-                        Write-ColorOutput "  Created executable: $($exePath.FullName)" $ColorGreen
-                        
-                        # Test the executable
-                        Write-Host "  Testing executable..." -NoNewline
-                        try {
-                            $testResult = & $exePath.FullName 2>&1
-                            $exitCode = $LASTEXITCODE
-                            if ($exitCode -eq 0 -or $exitCode -eq 42) {
-                                Write-ColorOutput " ✓ (exit code: $exitCode)" $ColorGreen
-                            } else {
-                                Write-ColorOutput " ✗ (exit code: $exitCode)" $ColorRed
-                            }
-                        }
-                        catch {
-                            Write-ColorOutput " ✗ Error: $_" $ColorRed
-                        }
-                    }
-                } else {
-                    Write-ColorOutput " ✗" $ColorRed
-                    Write-ColorOutput "  Build failed" $ColorYellow
                 }
-            } else {
-                Write-ColorOutput "  CMake configuration failed" $ColorRed
-            }
-            Pop-Location
+            } else { Write-ColorOutput " ✗" $ColorRed }
         }
-        catch {
-            if ((Get-Location).Path -ne $PWD.Path) {
-                Pop-Location
-            }
-            Write-ColorOutput "  Error: $_" $ColorRed
-        }
+        Pop-Location
     } else {
         Write-ColorOutput "  CMake not found - run 'cmake -B build && cmake --build build' in dist/native" $ColorYellow
     }
@@ -430,6 +390,20 @@ function Build-Target {
     if ($errors -gt 0) {
         Write-ColorOutput "  $errors errors" $ColorRed
         return
+    }
+    
+    # Copy platform-specific .js or .cpp files to dist
+    if ($TargetName -eq "js") {
+        $copiedJs = Copy-PlatformFiles -SourcePath $platformPath -DestinationBase $outputBase -Extension "*.js"
+        if ($copiedJs -gt 0) {
+            Write-ColorOutput "  Copied $copiedJs JavaScript implementation file(s)" $ColorGreen
+        }
+    }
+    elseif ($TargetName -eq "cpp") {
+        $copiedCpp = Copy-PlatformFiles -SourcePath $platformPath -DestinationBase $outputBase -Extension "*.cpp"
+        if ($copiedCpp -gt 0) {
+            Write-ColorOutput "  Copied $copiedCpp C++ implementation file(s)" $ColorGreen
+        }
     }
     
     # Bundle if requested and compilation succeeded

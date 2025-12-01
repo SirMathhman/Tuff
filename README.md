@@ -139,6 +139,7 @@ Compile all source files from `src/` to both JavaScript and C++ targets with pac
 ```
 
 When using `-Bundle`, the script will:
+
 - **JavaScript**: Generate `package.json` in `dist/js/` and test with `npm start`
 - **C++**: Generate `CMakeLists.txt` in `dist/native/`, configure and build with CMake
 
