@@ -1,3 +1,3 @@
-fn main(): Void => {
-    print("Hello, Tuff!");
+fn main(): I32 => {
+    42
 }

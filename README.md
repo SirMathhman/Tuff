@@ -26,6 +26,9 @@ tuff/
 ├── bootstrap/                # Stage 0 compiler (C++17)
 │   ├── src/                  # Compiler source code
 │   └── build/                # Build output
+├── dist/                     # Compiled output (gitignored)
+│   ├── js/tuff/              # JavaScript compiled files
+│   └── native/tuff/          # C++ compiled files
 ├── examples/                 # Example programs
 ├── docs/                     # Documentation
 └── build/                    # Build artifacts (gitignored)
@@ -35,7 +38,7 @@ tuff/
 
 - **commonMain**: Platform-independent code with `expect` declarations
 - **jsMain**: JavaScript target with `actual` implementations
-- **cppMain**: C++ target with `actual` implementations  
+- **cppMain**: C++ target with `actual` implementations
 - **commonTest**: Cross-platform tests
 
 ## Language Features
@@ -50,6 +53,7 @@ tuff/
 ## Building
 
 ### Prerequisites
+
 - CMake 3.15+
 - C++17 compiler (MSVC, GCC, or Clang)
 - Node.js (for running JS target)
@@ -60,6 +64,34 @@ tuff/
 cd bootstrap/build
 cmake --build . --config Release
 ```
+
+### Build the Project
+
+Compile all source files from `src/` to both JavaScript and C++ targets with package structure preserved:
+
+```powershell
+# Build all targets (JS + C++)
+.\build.ps1
+
+# Build specific target
+.\build.ps1 -Target js
+.\build.ps1 -Target cpp
+
+# Clean and rebuild
+.\build.ps1 -Clean
+```
+
+Output will be in:
+
+- **JavaScript**: `dist/js/tuff/`
+- **C++**: `dist/native/tuff/`
+
+The build system:
+
+- Discovers all `.tuff` files in `src/commonMain/tuff/`
+- Merges with platform-specific files from `src/jsMain/tuff/` or `src/cppMain/tuff/`
+- Combines `expect` (interface) and `actual` (implementation) declarations
+- Preserves package structure in output
 
 ### Run Tests
 

@@ -4,6 +4,9 @@ bootstrap/build/
 **/out/
 build/
 
+# Distribution directory
+dist/
+
 # Compiled binaries
 *.exe
 *.obj

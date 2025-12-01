@@ -1,24 +1,35 @@
 {
-  "projects": [
-    {
-      "name": "core",
-      "path": "./core",
+  "sourceRoot": "src",
+  "outputRoot": "dist",
+  "sourceSets": {
+    "commonMain": {
+      "path": "src/commonMain/tuff",
       "type": "common"
     },
-    {
-      "name": "js",
-      "path": "./js",
-      "type": "target",
+    "jsMain": {
+      "path": "src/jsMain/tuff",
+      "type": "platform",
       "target": "js",
-      "dependencies": ["core"]
+      "output": "dist/js/tuff",
+      "extension": ".js"
     },
-    {
-      "name": "cpp",
-      "path": "./cpp",
-      "type": "target",
+    "cppMain": {
+      "path": "src/cppMain/tuff",
+      "type": "platform",
       "target": "cpp",
-      "dependencies": ["core"]
+      "output": "dist/native/tuff",
+      "extension": ".cpp"
     }
-  ],
+  },
+  "targets": {
+    "js": {
+      "sourceSets": ["commonMain", "jsMain"],
+      "output": "dist/js/tuff"
+    },
+    "cpp": {
+      "sourceSets": ["commonMain", "cppMain"],
+      "output": "dist/native/tuff"
+    }
+  },
   "defaultTarget": "js"
 }
