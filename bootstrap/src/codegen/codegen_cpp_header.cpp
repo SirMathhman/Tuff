@@ -81,33 +81,36 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 	};
 	collectIntersectionTypes(ast);
 
-	// Filter intersection types
+	// Filter intersection types - skip Type & ~destructor patterns
+	// e.g., NativeString&~string_destroy or *mut [T; 0; L]&~free
+	// These should not generate wrapper structs; the destructor is metadata
 	std::set<std::string> filteredIntersectionTypes;
-	std::set<std::string> externTypes = {"NativeString"};
 
 	for (const auto &intersectionType : intersectionTypes)
 	{
 		auto components = splitIntersectionType(intersectionType);
-		bool isExternWithDestructor = false;
+		bool isTypeWithDestructor = false;
 
+		// Check if this is just Type & ~destructor (2 components, one is destructor)
 		if (components.size() == 2)
 		{
-			bool hasExternType = false;
-			bool hasDestructor = false;
+			int destructorCount = 0;
+			int dataTypeCount = 0;
 
 			for (const auto &comp : components)
 			{
 				if (!comp.empty() && comp[0] == '~')
-					hasDestructor = true;
-				else if (externTypes.count(comp) > 0)
-					hasExternType = true;
+					destructorCount++;
+				else
+					dataTypeCount++;
 			}
 
-			if (hasExternType && hasDestructor)
-				isExternWithDestructor = true;
+			// If we have exactly 1 data type and 1 destructor, skip struct generation
+			if (dataTypeCount == 1 && destructorCount == 1)
+				isTypeWithDestructor = true;
 		}
 
-		if (!isExternWithDestructor)
+		if (!isTypeWithDestructor)
 			filteredIntersectionTypes.insert(intersectionType);
 	}
 

@@ -114,41 +114,42 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 		};
 		collectIntersectionTypes(ast);
 
-		// Filter out intersection types that are just extern types with destructors
-		// e.g., NativeString&~string_destroy should not generate a wrapper struct
+		// Filter out intersection types that are just a type with a destructor
+		// e.g., NativeString&~string_destroy or *mut [T; 0; L]&~free
+		// These should not generate wrapper structs; the destructor is metadata
 		std::set<std::string> filteredIntersectionTypes;
-		std::set<std::string> externTypes = {"NativeString"}; // Known extern types
 
 		for (const auto &intersectionType : intersectionTypes)
 		{
 			auto components = splitIntersectionType(intersectionType);
-			bool isExternWithDestructor = false;
+			bool isTypeWithDestructor = false;
 
-			// Check if this is just ExternType & ~destructor
+			// Check if this is just Type & ~destructor (2 components, one is destructor)
 			if (components.size() == 2)
 			{
-				bool hasExternType = false;
-				bool hasDestructor = false;
+				int destructorCount = 0;
+				int dataTypeCount = 0;
 
 				for (const auto &comp : components)
 				{
 					if (!comp.empty() && comp[0] == '~')
 					{
-						hasDestructor = true;
+						destructorCount++;
 					}
-					else if (externTypes.count(comp) > 0)
+					else
 					{
-						hasExternType = true;
+						dataTypeCount++;
 					}
 				}
 
-				if (hasExternType && hasDestructor)
+				// If we have exactly 1 data type and 1 destructor, skip struct generation
+				if (dataTypeCount == 1 && destructorCount == 1)
 				{
-					isExternWithDestructor = true;
+					isTypeWithDestructor = true;
 				}
 			}
 
-			if (!isExternWithDestructor)
+			if (!isTypeWithDestructor)
 			{
 				filteredIntersectionTypes.insert(intersectionType);
 			}
