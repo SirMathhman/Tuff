@@ -2,8 +2,11 @@
 
 use extern stdlib;
 
-`extern fn malloc<T, L : USize>(size: SizeOf<T> * L): *mut [T; 0; L];`
-extern fn free(ptr: *mut U8): Void;
+type Allocated<T, L : USize> = *mut [T; 0; L] & ~free;
+
+extern fn malloc<T, L : USize>(size: SizeOf<T> * L): *mut [T; 0; L];
+extern fn free<T, L : USize>(ptr: Allocated<T, L>): Void;
+
 extern fn exit(code: I32): Void;
 
 // Allocate array of T with given count
