@@ -101,10 +101,7 @@ Token Lexer::identifierOrKeyword()
 			{"continue", TokenType::CONTINUE},
 			{"return", TokenType::RETURN},
 			{"type", TokenType::TYPE},
-			{"true", TokenType::TRUE},
-			{"false", TokenType::FALSE},
-			{"I32", TokenType::I32},
-			{"Bool", TokenType::BOOL},
+		{"is", TokenType::IS},
 			{"Void", TokenType::VOID}
 			// Add other types as needed
 	};

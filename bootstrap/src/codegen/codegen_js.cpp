@@ -68,7 +68,9 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::LET_STMT:
 	{
 		std::string keyword = node->isMutable ? "let" : "const";
-		return keyword + " " + node->value + " = " + generateNode(node->children[0]);
+		std::string value = generateNode(node->children[0]);
+		std::string wrapped = wrapInUnion(value, node->children[0]->inferredType, node->inferredType);
+		return keyword + " " + node->value + " = " + wrapped;
 	}
 	case ASTNodeType::ASSIGNMENT_STMT:
 	{
@@ -141,6 +143,13 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 		auto left = generateNode(node->children[0]);
 		auto right = generateNode(node->children[1]);
 		return "(" + left + " " + node->value + " " + right + ")";
+	}
+	case ASTNodeType::IS_EXPR:
+	{
+		// is operator: expr is Type → expr.__tag === "Type"
+		auto expr = generateNode(node->children[0]);
+		std::string targetType = node->value;
+		return "(" + expr + ".__tag === \"" + targetType + "\")";
 	}
 	case ASTNodeType::UNARY_OP:
 	{
@@ -377,4 +386,22 @@ std::string CodeGeneratorJS::generateFunctionBlock(std::shared_ptr<ASTNode> bloc
 
 	ss << "}";
 	return ss.str();
+}
+bool CodeGeneratorJS::isUnionType(const std::string &type)
+{
+	return type.find('|') != std::string::npos;
+}
+
+std::string CodeGeneratorJS::wrapInUnion(const std::string &value, const std::string &valueType, const std::string &targetType)
+{
+	// If target is not a union, no wrapping needed
+	if (!isUnionType(targetType))
+		return value;
+
+	// If value type matches target exactly, no wrapping needed
+	if (valueType == targetType)
+		return value;
+
+	// Wrap the value: {__tag: "ValueType", __value: value}
+	return "{__tag: \"" + valueType + "\", __value: " + value + "}";
 }

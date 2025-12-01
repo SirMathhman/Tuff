@@ -36,6 +36,7 @@ private:
 	std::shared_ptr<ASTNode> parseLogicalOr();
 	std::shared_ptr<ASTNode> parseLogicalAnd();
 	std::shared_ptr<ASTNode> parseEquality();
+	std::shared_ptr<ASTNode> parseIsCheck();
 	std::shared_ptr<ASTNode> parseComparison();
 	std::shared_ptr<ASTNode> parseAdditive();
 	std::shared_ptr<ASTNode> parseMultiplicative();
@@ -45,6 +46,7 @@ private:
 
 	std::vector<std::shared_ptr<ASTNode>> parseGenericParams();
 	std::string parseType();
+	std::string parseSingleType();
 	std::vector<std::string> parseGenericArgs();
 	bool isGenericInstantiation();
 

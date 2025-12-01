@@ -195,16 +195,32 @@ std::shared_ptr<ASTNode> Parser::parseLogicalAnd()
 
 std::shared_ptr<ASTNode> Parser::parseEquality()
 {
-	auto left = parseComparison();
+	auto left = parseIsCheck();
 	while (match(TokenType::EQUAL_EQUAL) || match(TokenType::NOT_EQUAL))
 	{
 		Token op = tokens[pos - 1];
-		auto right = parseComparison();
+		auto right = parseIsCheck();
 		auto node = std::make_shared<ASTNode>();
 		node->type = ASTNodeType::BINARY_OP;
 		node->value = op.value;
 		node->addChild(left);
 		node->addChild(right);
+		left = node;
+	}
+	return left;
+}
+
+std::shared_ptr<ASTNode> Parser::parseIsCheck()
+{
+	auto left = parseComparison();
+	while (match(TokenType::IS))
+	{
+		// is operator: expr is Type
+		std::string targetType = parseType();
+		auto node = std::make_shared<ASTNode>();
+		node->type = ASTNodeType::IS_EXPR;
+		node->value = targetType; // Store the type we're checking against
+		node->addChild(left);
 		left = node;
 	}
 	return left;

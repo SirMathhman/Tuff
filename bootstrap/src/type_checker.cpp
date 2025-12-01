@@ -34,7 +34,8 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		}
 		else
 		{
-			if (type != init->inferredType)
+			// Use isTypeCompatible for union upcasting
+			if (!isTypeCompatible(init->inferredType, type))
 			{
 				std::cerr << "Error: Type mismatch for '" << name << "'. Expected " << type << ", got " << init->inferredType << std::endl;
 				exit(1);
@@ -158,6 +159,42 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::BINARY_OP:
 		checkBinaryOp(node);
 		break;
+
+	case ASTNodeType::IS_EXPR:
+	{
+		// is operator: expr is Type
+		auto expr = node->children[0];
+		check(expr);
+
+		std::string targetType = node->value; // The type we're checking against
+
+		// Validate that the expression type is a union type
+		if (!isUnionType(expr->inferredType))
+		{
+			std::cerr << "Error: 'is' operator can only be used on union types, got " << expr->inferredType << std::endl;
+			exit(1);
+		}
+
+		// Validate that target type is one of the union variants
+		auto variants = splitUnionType(expr->inferredType);
+		bool found = false;
+		for (const auto &variant : variants)
+		{
+			if (variant == targetType)
+			{
+				found = true;
+				break;
+			}
+		}
+		if (!found)
+		{
+			std::cerr << "Error: Type '" << targetType << "' is not a variant of union type '" << expr->inferredType << "'" << std::endl;
+			exit(1);
+		}
+
+		node->inferredType = "Bool";
+		break;
+	}
 
 	case ASTNodeType::UNARY_OP:
 	{

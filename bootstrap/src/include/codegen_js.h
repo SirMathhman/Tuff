@@ -13,4 +13,8 @@ private:
 	std::string generateFunctionBlock(std::shared_ptr<ASTNode> block, const std::string &returnType);
 	std::string generateModuleDecl(std::shared_ptr<ASTNode> node);
 	std::string generateActualDecl(std::shared_ptr<ASTNode> node);
+
+	// Union type helpers
+	bool isUnionType(const std::string &type);
+	std::string wrapInUnion(const std::string &value, const std::string &valueType, const std::string &targetType);
 };

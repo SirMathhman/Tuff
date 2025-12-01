@@ -41,6 +41,7 @@ enum class ASTNodeType
 	DEREF_EXPR,			// *p
 	ARRAY_LITERAL,	// [1, 2, 3]
 	INDEX_EXPR,			// arr[i]
+	IS_EXPR,				// expr is Type
 	LIFETIME_PARAM	// lifetime parameter declaration
 };
 

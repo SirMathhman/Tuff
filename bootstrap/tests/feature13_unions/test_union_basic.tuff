@@ -1,0 +1,2 @@
+let x: I32 | Bool = 42;
+(if (x is Bool) 1 else 2)

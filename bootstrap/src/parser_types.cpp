@@ -40,6 +40,29 @@ std::vector<std::shared_ptr<ASTNode>> Parser::parseGenericParams()
 
 std::string Parser::parseType()
 {
+	std::string leftType = parseSingleType();
+
+	// Handle union types: Type0 | Type1 | Type2
+	if (match(TokenType::PIPE))
+	{
+		std::string unionType = leftType;
+		while (true)
+		{
+			unionType += "|";
+			unionType += parseSingleType();
+			if (!match(TokenType::PIPE))
+			{
+				break;
+			}
+		}
+		return unionType;
+	}
+
+	return leftType;
+}
+
+std::string Parser::parseSingleType()
+{
 	// Handle pointer types: *T, *mut T, *a T, *a mut T
 	if (match(TokenType::STAR))
 	{
@@ -50,7 +73,7 @@ std::string Parser::parseType()
 			lifetime = advance().value;
 		}
 		bool isMutable = match(TokenType::MUT);
-		std::string innerType = parseType();
+		std::string innerType = parseSingleType();
 		std::string result = "*";
 		if (!lifetime.empty())
 		{
@@ -66,7 +89,7 @@ std::string Parser::parseType()
 	// Handle array types: [T; init; capacity]
 	if (match(TokenType::LBRACKET))
 	{
-		std::string elementType = parseType();
+		std::string elementType = parseSingleType();
 		consume(TokenType::SEMICOLON, "Expected ';' after array element type");
 
 		Token initToken = consume(TokenType::INT_LITERAL, "Expected init count in array type");

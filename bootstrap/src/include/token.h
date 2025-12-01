@@ -22,6 +22,7 @@ enum class TokenType
 	CONTINUE,
 	RETURN,
 	TYPE,
+	IS,
 	TRUE,
 	FALSE,
 

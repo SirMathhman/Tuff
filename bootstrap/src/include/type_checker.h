@@ -96,6 +96,11 @@ private:
 	bool typesMatch(const std::string &actual, const std::string &expected,
 									const std::vector<std::string> &lifetimeParams);
 
+	// Union type helpers
+	bool isUnionType(const std::string &type);
+	std::vector<std::string> splitUnionType(const std::string &unionType);
+	bool isTypeCompatible(const std::string &valueType, const std::string &targetType);
+
 public:
 	void check(std::shared_ptr<ASTNode> node);
 };
