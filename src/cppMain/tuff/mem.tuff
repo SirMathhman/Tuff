@@ -4,7 +4,7 @@ use extern stdlib;
 
 type Allocated<T, L : USize> = *mut [T; 0; L] & ~free;
 
-extern fn malloc<T, L : USize>(size: SizeOf<T> * L): *mut [T; 0; L];
+extern fn malloc<T, L : USize>(size: SizeOf<T> * L): Allocated<T, L>;
 extern fn free<T, L : USize>(ptr: Allocated<T, L>): Void;
 
 extern fn exit(code: I32): Void;
