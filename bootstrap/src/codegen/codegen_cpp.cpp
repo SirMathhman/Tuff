@@ -1,12 +1,36 @@
 #include "codegen_cpp.h"
 #include <sstream>
 #include <vector>
+#include <set>
+#include <functional>
 
 std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 {
 	std::stringstream ss;
 	ss << "#include <iostream>\n";
 	ss << "#include <cstdint>\n\n";
+
+	// Collect all union types used in the program
+	std::set<std::string> unionTypes;
+	std::function<void(std::shared_ptr<ASTNode>)> collectUnionTypes = [&](std::shared_ptr<ASTNode> node) {
+		if (!node)
+			return;
+		if (!node->inferredType.empty() && isUnionType(node->inferredType))
+		{
+			unionTypes.insert(node->inferredType);
+		}
+		for (auto child : node->children)
+		{
+			collectUnionTypes(child);
+		}
+	};
+	collectUnionTypes(ast);
+
+	// Generate union struct definitions
+	for (const auto &unionType : unionTypes)
+	{
+		ss << generateUnionStruct(unionType) << "\n";
+	}
 
 	auto isStatement = [](ASTNodeType type)
 	{

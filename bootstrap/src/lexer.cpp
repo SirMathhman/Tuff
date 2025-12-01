@@ -101,7 +101,7 @@ Token Lexer::identifierOrKeyword()
 			{"continue", TokenType::CONTINUE},
 			{"return", TokenType::RETURN},
 			{"type", TokenType::TYPE},
-		{"is", TokenType::IS},
+			{"is", TokenType::IS},
 			{"Void", TokenType::VOID}
 			// Add other types as needed
 	};

@@ -10,6 +10,10 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	{
 		std::string cppType = mapType(node->inferredType);
 
+		// Generate value with potential union wrapping
+		std::string value = generateNode(node->children[0]);
+		std::string wrappedValue = wrapInUnion(value, node->children[0]->inferredType, node->inferredType);
+
 		// Handle C++ array declaration: int32_t arr[3] instead of int32_t[3] arr
 		size_t bracketPos = cppType.find('[');
 		if (bracketPos != std::string::npos)
@@ -17,7 +21,7 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 			std::string baseType = cppType.substr(0, bracketPos);
 			std::string arraySuffix = cppType.substr(bracketPos);
 			std::string prefix = node->isMutable ? "" : "const ";
-			return prefix + baseType + " " + node->value + arraySuffix + " = " + generateNode(node->children[0]);
+			return prefix + baseType + " " + node->value + arraySuffix + " = " + wrappedValue;
 		}
 
 		// For pointer types, const goes after * (e.g., int32_t* const p)
@@ -25,16 +29,16 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		{
 			if (node->isMutable)
 			{
-				return cppType + " " + node->value + " = " + generateNode(node->children[0]);
+				return cppType + " " + node->value + " = " + wrappedValue;
 			}
 			else
 			{
-				return cppType + " const " + node->value + " = " + generateNode(node->children[0]);
+				return cppType + " const " + node->value + " = " + wrappedValue;
 			}
 		}
 
 		std::string prefix = node->isMutable ? "" : "const ";
-		return prefix + cppType + " " + node->value + " = " + generateNode(node->children[0]);
+		return prefix + cppType + " " + node->value + " = " + wrappedValue;
 	}
 	case ASTNodeType::ASSIGNMENT_STMT:
 	{
@@ -96,6 +100,13 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		auto left = generateNode(node->children[0]);
 		auto right = generateNode(node->children[1]);
 		return left + " " + node->value + " " + right;
+	}
+	case ASTNodeType::IS_EXPR:
+	{
+		// is operator: expr is Type → expr.__is_Type()
+		auto expr = generateNode(node->children[0]);
+		std::string targetType = node->value;
+		return "(" + expr + ".__is_" + targetType + "())";
 	}
 	case ASTNodeType::UNARY_OP:
 	{

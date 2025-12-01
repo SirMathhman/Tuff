@@ -3,6 +3,12 @@
 
 std::string CodeGeneratorCPP::mapType(std::string tuffType)
 {
+	// Handle union types: I32|Bool -> Union_I32_Bool
+	if (tuffType.find('|') != std::string::npos)
+	{
+		return getUnionStructName(tuffType);
+	}
+
 	if (tuffType == "I32")
 		return "int32_t";
 	if (tuffType == "I64")

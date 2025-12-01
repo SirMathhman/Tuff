@@ -24,4 +24,5 @@ add_executable(tuffc
     src/codegen/codegen_cpp.cpp
     src/codegen/codegen_cpp_helpers.cpp
     src/codegen/codegen_cpp_types.cpp
+    src/codegen/codegen_cpp_union.cpp
 )

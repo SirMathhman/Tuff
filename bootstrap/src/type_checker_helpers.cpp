@@ -538,5 +538,4 @@ void TypeChecker::checkDerefExpr(std::shared_ptr<ASTNode> node)
 		std::cerr << "Error: Cannot dereference non-pointer type '" << ptrType << "'." << std::endl;
 		exit(1);
 	}
-
 }
