@@ -210,6 +210,6 @@ void TypeChecker::checkSizeOfExpr(std::shared_ptr<ASTNode> node)
 		}
 	}
 
-	// sizeOf always returns USize
-	node->inferredType = "USize";
+	// sizeOf returns SizeOf<T> which extends USize
+	node->inferredType = "SizeOf<" + typeName + ">";
 }

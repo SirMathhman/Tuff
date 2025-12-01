@@ -43,6 +43,9 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 	if (tuffType == "USize")
 		return "size_t";
 
+	if (tuffType.rfind("SizeOf<", 0) == 0)
+		return "size_t";
+
 	// Handle pointer types: *T, *mut T, *a T, *a mut T
 	if (!tuffType.empty() && tuffType[0] == '*')
 	{

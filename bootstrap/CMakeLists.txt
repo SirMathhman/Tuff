@@ -16,7 +16,10 @@ add_executable(tuffc
     src/parser_expect_actual.cpp
     src/parser_types.cpp
     src/type_checker.cpp
-    src/type_checker_helpers.cpp
+    src/type_checker/type_checker_binary.cpp
+    src/type_checker/type_checker_access.cpp
+    src/type_checker/type_checker_call.cpp
+    src/type_checker/type_checker_struct.cpp
     src/type_checker/type_checker_union.cpp
     src/type_checker/type_checker_intersection.cpp
     src/type_checker/type_checker_register.cpp

@@ -37,6 +37,12 @@ bool TypeChecker::isTypeCompatible(const std::string &valueType, const std::stri
 	if (valueType == targetType)
 		return true;
 
+	// SizeOf<T> extends USize
+	if (targetType == "USize" && valueType.rfind("SizeOf<", 0) == 0)
+	{
+		return true;
+	}
+
 	// If target is a union type, check if value is one of the variants
 	if (isUnionType(targetType))
 	{
