@@ -392,6 +392,11 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 			for (auto genParam : child->genericParams)
 			{
 				info.genericParams.push_back(genParam->value);
+				// Store type bounds if present
+				if (!genParam->typeBound.empty())
+				{
+					info.genericBounds[genParam->value] = genParam->typeBound;
+				}
 			}
 			typeAliasTable[aliasName] = info;
 		}

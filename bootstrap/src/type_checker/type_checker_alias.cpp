@@ -64,6 +64,27 @@ std::string TypeChecker::expandTypeAlias(const std::string &type)
 			exit(1);
 		}
 
+		// Validate type bounds
+		for (size_t i = 0; i < alias.genericParams.size(); ++i)
+		{
+			const std::string &param = alias.genericParams[i];
+			const std::string &arg = typeArgs[i];
+
+			// Check if this parameter has a bound
+			auto boundIt = alias.genericBounds.find(param);
+			if (boundIt != alias.genericBounds.end())
+			{
+				const std::string &boundType = boundIt->second;
+				// Check if arg matches the bound
+				if (arg != boundType)
+				{
+					std::cerr << "Error: Type parameter '" << param << "' in type alias '" << baseName
+										<< "' requires type '" << boundType << "', but got '" << arg << "'" << std::endl;
+					exit(1);
+				}
+			}
+		}
+
 		// Substitute each generic parameter with the provided type argument
 		for (size_t i = 0; i < alias.genericParams.size(); ++i)
 		{
