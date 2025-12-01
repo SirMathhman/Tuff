@@ -65,7 +65,23 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 	std::map<std::string, std::string> typeSubstitutions;
 	for (size_t i = 0; i < info.genericParams.size(); i++)
 	{
-		typeSubstitutions[info.genericParams[i]] = callee->genericArgs[i];
+		std::string paramName = info.genericParams[i];
+		std::string argType = callee->genericArgs[i];
+		typeSubstitutions[paramName] = argType;
+		
+		// Check type bounds if present
+		auto boundIt = info.genericBounds.find(paramName);
+		if (boundIt != info.genericBounds.end())
+		{
+			std::string boundType = boundIt->second;
+			// Check if argType matches the bound
+			if (argType != boundType)
+			{
+				std::cerr << "Error: Type parameter '" << paramName << "' requires type '" << boundType
+									<< "', but got '" << argType << "'" << std::endl;
+				exit(1);
+			}
+		}
 	}
 
 	size_t argCount = node->children.size() - 1;

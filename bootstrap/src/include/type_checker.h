@@ -31,6 +31,7 @@ struct FunctionInfo
 	std::string returnType;
 	std::vector<std::pair<std::string, std::string>> params; // (name, type) pairs
 	std::vector<std::string> genericParams;									 // <T, U>
+	std::map<std::string, std::string> genericBounds;					 // T -> I32 (type bounds)
 	std::vector<std::string> lifetimeParams;								 // <a, b>
 };
 

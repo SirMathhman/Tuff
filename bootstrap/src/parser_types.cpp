@@ -26,6 +26,13 @@ std::vector<std::shared_ptr<ASTNode>> Parser::parseGenericParams()
 				paramNode->type = ASTNodeType::TYPE_PARAM_DECL;
 			}
 			paramNode->value = paramName.value;
+			
+			// Check for type bound: T : SomeType
+			if (match(TokenType::COLON))
+			{
+				paramNode->typeBound = parseType();
+			}
+			
 			params.push_back(paramNode);
 
 			if (!match(TokenType::COMMA))
