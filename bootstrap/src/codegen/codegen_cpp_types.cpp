@@ -149,13 +149,55 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 			}
 		}
 
+		std::string pointeeType;
+		bool isMutable = false;
+
 		if (stripped.substr(0, 5) == "*mut ")
 		{
 			// *mut T -> pointer to mutable T
-			return mapType(stripped.substr(5)) + "*";
+			pointeeType = stripped.substr(5);
+			isMutable = true;
 		}
-		// *T -> pointer to const T
-		return "const " + mapType(stripped.substr(1)) + "*";
+		else
+		{
+			// *T -> pointer to const T
+			pointeeType = stripped.substr(1);
+			isMutable = false;
+		}
+
+		// Special case: if pointee is an array type [T; init; cap], extract element type
+		// *mut [T; 0; L] -> T* (mutable pointer to T)
+		// *[T; 0; L] -> const T* (immutable pointer to T)
+		if (!pointeeType.empty() && pointeeType[0] == '[')
+		{
+			size_t firstSemi = pointeeType.find(';');
+			if (firstSemi != std::string::npos)
+			{
+				std::string elementType = pointeeType.substr(1, firstSemi - 1);
+				// Trim trailing whitespace
+				while (!elementType.empty() && elementType.back() == ' ')
+					elementType.pop_back();
+
+				if (isMutable)
+				{
+					return mapType(elementType) + "*";
+				}
+				else
+				{
+					return "const " + mapType(elementType) + "*";
+				}
+			}
+		}
+
+		// Regular pointer to non-array type
+		if (isMutable)
+		{
+			return mapType(pointeeType) + "*";
+		}
+		else
+		{
+			return "const " + mapType(pointeeType) + "*";
+		}
 	}
 
 	// Handle array types: [T; init; capacity]
