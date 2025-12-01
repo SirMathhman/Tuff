@@ -12,13 +12,11 @@ struct Vector<T> {
 
 	So we track them at runtime, instead of compile time.
 	*/
-	data : *[T] & ~free
+	data : *mut [T] & ~free
 }
 
-let INITIAL_SIZE = 10USize;
-
 // Create a new empty vector
-fn vectorNew<T>(): Vector<T> => Vector<T> { malloc(sizeOf(T) * INITIAL_SIZE) };
+fn vectorNew<T>(): Vector<T> => Vector<T> { malloc<T>(sizeOf(T) * 10USize) };
 
 // Get the length of a vector
 // Conceptually makes sense, in most vec implementations the "init" would be the size, and "length" would be the capacity,

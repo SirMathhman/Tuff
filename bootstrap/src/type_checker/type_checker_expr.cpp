@@ -203,18 +203,32 @@ void TypeChecker::checkSizeOfExpr(std::shared_ptr<ASTNode> node)
 	// Validate that the type is valid
 	// Primitives are always valid
 	std::set<std::string> primitiveTypes = {
-			"I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F32", "F64", "Bool", "Void"};
+			"I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F32", "F64", "Bool", "Void", "USize"};
 
 	if (primitiveTypes.count(typeName) == 0)
 	{
-		// Check if it's a struct type
-		if (structTable.find(typeName) == structTable.end())
+		// Check if it's a generic parameter
+		bool isGenericParam = false;
+		for (const auto &param : genericParamsInScope)
 		{
-			// Check if it's an array type [T; init; capacity]
-			if (typeName[0] != '[')
+			if (param == typeName)
 			{
-				std::cerr << "Error: sizeOf argument must be a valid type, got '" << typeName << "'" << std::endl;
-				exit(1);
+				isGenericParam = true;
+				break;
+			}
+		}
+
+		if (!isGenericParam)
+		{
+			// Check if it's a struct type
+			if (structTable.find(typeName) == structTable.end())
+			{
+				// Check if it's an array type [T; init; capacity]
+				if (typeName[0] != '[')
+				{
+					std::cerr << "Error: sizeOf argument must be a valid type, got '" << typeName << "'" << std::endl;
+					exit(1);
+				}
 			}
 		}
 	}

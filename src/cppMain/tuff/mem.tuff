@@ -2,10 +2,10 @@
 
 use extern stdlib;
 
-type Allocated<Type, Length : USize> = *mut [Type; 0; Length] & ~free;
+type Allocated<Type> = *mut [Type] & ~free;
 
-extern fn malloc<Type, Length : USize>(size: SizeOf<Type> * Length): Allocated<Type, Length>;
-extern fn free<Type, Length : USize>(ptr: Allocated<Type, Length>): Void;
+extern fn malloc<Type>(size: USize): Allocated<Type>;
+extern fn free<Type>(ptr: Allocated<Type>): Void;
 
 extern fn exit(code: I32): Void;
 
