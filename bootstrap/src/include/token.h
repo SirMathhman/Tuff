@@ -27,6 +27,7 @@ enum class TokenType
 	SIZEOF,
 	TRUE,
 	FALSE,
+	THIS,
 
 	// Integer Types
 	U8,
