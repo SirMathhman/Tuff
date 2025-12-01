@@ -7,15 +7,15 @@
 std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 {
 	std::stringstream ss;
-	
+
 	// Header guard
 	ss << "#pragma once\n\n";
-	
+
 	// Standard includes
 	ss << "#include <cstdint>\n";
 	ss << "#include <cstddef>\n";
 	ss << "#include <string>\n\n";
-	
+
 	// Collect all union types
 	std::set<std::string> unionTypes;
 	std::function<void(std::shared_ptr<ASTNode>)> collectUnionTypes = [&](std::shared_ptr<ASTNode> node)
@@ -38,7 +38,7 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 	{
 		ss << generateUnionStruct(unionType) << "\n";
 	}
-	
+
 	// Generate enum declarations
 	for (auto child : ast->children)
 	{
@@ -47,7 +47,7 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 			ss << generateNode(child) << "\n";
 		}
 	}
-	
+
 	// Collect struct field information
 	std::map<std::string, std::vector<std::pair<std::string, std::string>>> structFields;
 	for (auto child : ast->children)
@@ -63,7 +63,7 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 			structFields[structName] = fields;
 		}
 	}
-	
+
 	// Collect intersection types
 	std::set<std::string> intersectionTypes;
 	std::function<void(std::shared_ptr<ASTNode>)> collectIntersectionTypes = [&](std::shared_ptr<ASTNode> node)
@@ -80,21 +80,21 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 		}
 	};
 	collectIntersectionTypes(ast);
-	
+
 	// Filter intersection types
 	std::set<std::string> filteredIntersectionTypes;
 	std::set<std::string> externTypes = {"NativeString"};
-	
+
 	for (const auto &intersectionType : intersectionTypes)
 	{
 		auto components = splitIntersectionType(intersectionType);
 		bool isExternWithDestructor = false;
-		
+
 		if (components.size() == 2)
 		{
 			bool hasExternType = false;
 			bool hasDestructor = false;
-			
+
 			for (const auto &comp : components)
 			{
 				if (!comp.empty() && comp[0] == '~')
@@ -102,21 +102,21 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 				else if (externTypes.count(comp) > 0)
 					hasExternType = true;
 			}
-			
+
 			if (hasExternType && hasDestructor)
 				isExternWithDestructor = true;
 		}
-		
+
 		if (!isExternWithDestructor)
 			filteredIntersectionTypes.insert(intersectionType);
 	}
-	
+
 	// Generate intersection struct definitions
 	for (const auto &intersectionType : filteredIntersectionTypes)
 	{
 		ss << generateIntersectionStruct(intersectionType, structFields) << "\n";
 	}
-	
+
 	// Generate struct declarations
 	for (auto child : ast->children)
 	{
@@ -125,7 +125,7 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 			ss << generateNode(child) << "\n";
 		}
 	}
-	
+
 	// Generate extern function declarations
 	ss << "// Extern function declarations\n";
 	ss << "extern \"C\" {\n";
@@ -144,7 +144,7 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 		}
 	}
 	ss << "}\n\n";
-	
+
 	// Generate function forward declarations
 	for (auto child : ast->children)
 	{
@@ -154,7 +154,7 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 			std::string funcName = child->value;
 			if (funcName == "main")
 				funcName = "tuff_main";
-			
+
 			if (!child->genericParams.empty())
 			{
 				ss << "template<";
@@ -188,6 +188,6 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 			ss << ");\n";
 		}
 	}
-	
+
 	return ss.str();
 }

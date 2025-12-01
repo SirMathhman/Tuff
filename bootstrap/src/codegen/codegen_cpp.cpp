@@ -8,7 +8,7 @@
 std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 {
 	std::stringstream ss;
-	
+
 	// If using shared header, just include it
 	if (useSharedHeader)
 	{
@@ -27,206 +27,179 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	if (!useSharedHeader)
 	{
 
-	// Collect all union types used in the program
-	std::set<std::string> unionTypes;
-	std::function<void(std::shared_ptr<ASTNode>)> collectUnionTypes = [&](std::shared_ptr<ASTNode> node)
-	{
-		if (!node)
-			return;
-		if (!node->inferredType.empty() && isUnionType(node->inferredType))
+		// Collect all union types used in the program
+		std::set<std::string> unionTypes;
+		std::function<void(std::shared_ptr<ASTNode>)> collectUnionTypes = [&](std::shared_ptr<ASTNode> node)
 		{
-			unionTypes.insert(node->inferredType);
-		}
-		for (auto child : node->children)
-		{
-			collectUnionTypes(child);
-		}
-	};
-	collectUnionTypes(ast);
-
-	// Generate union struct definitions
-	for (const auto &unionType : unionTypes)
-	{
-		ss << generateUnionStruct(unionType) << "\n";
-	}
-
-	// Collect struct field information for intersection types
-	std::map<std::string, std::vector<std::pair<std::string, std::string>>> structFields;
-	for (auto child : ast->children)
-	{
-		if (child->type == ASTNodeType::STRUCT_DECL)
-		{
-			std::string structName = child->value;
-			std::vector<std::pair<std::string, std::string>> fields;
-			for (auto field : child->children)
+			if (!node)
+				return;
+			if (!node->inferredType.empty() && isUnionType(node->inferredType))
 			{
-				fields.push_back({field->value, field->inferredType});
+				unionTypes.insert(node->inferredType);
 			}
-			structFields[structName] = fields;
-		}
-	}
-
-	// Collect all intersection types used in the program
-	std::set<std::string> intersectionTypes;
-	std::function<void(std::shared_ptr<ASTNode>)> collectIntersectionTypes = [&](std::shared_ptr<ASTNode> node)
-	{
-		if (!node)
-			return;
-		if (!node->inferredType.empty() && isIntersectionType(node->inferredType))
-		{
-			intersectionTypes.insert(node->inferredType);
-		}
-		for (auto child : node->children)
-		{
-			collectIntersectionTypes(child);
-		}
-	};
-	collectIntersectionTypes(ast);
-
-	// Filter out intersection types that are just extern types with destructors
-	// e.g., NativeString&~string_destroy should not generate a wrapper struct
-	std::set<std::string> filteredIntersectionTypes;
-	std::set<std::string> externTypes = {"NativeString"}; // Known extern types
-
-	for (const auto &intersectionType : intersectionTypes)
-	{
-		auto components = splitIntersectionType(intersectionType);
-		bool isExternWithDestructor = false;
-
-		// Check if this is just ExternType & ~destructor
-		if (components.size() == 2)
-		{
-			bool hasExternType = false;
-			bool hasDestructor = false;
-
-			for (const auto &comp : components)
+			for (auto child : node->children)
 			{
-				if (!comp.empty() && comp[0] == '~')
+				collectUnionTypes(child);
+			}
+		};
+		collectUnionTypes(ast);
+
+		// Generate union struct definitions
+		for (const auto &unionType : unionTypes)
+		{
+			ss << generateUnionStruct(unionType) << "\n";
+		}
+
+		// Collect struct field information for intersection types
+		std::map<std::string, std::vector<std::pair<std::string, std::string>>> structFields;
+		for (auto child : ast->children)
+		{
+			if (child->type == ASTNodeType::STRUCT_DECL)
+			{
+				std::string structName = child->value;
+				std::vector<std::pair<std::string, std::string>> fields;
+				for (auto field : child->children)
 				{
-					hasDestructor = true;
+					fields.push_back({field->value, field->inferredType});
 				}
-				else if (externTypes.count(comp) > 0)
+				structFields[structName] = fields;
+			}
+		}
+
+		// Collect all intersection types used in the program
+		std::set<std::string> intersectionTypes;
+		std::function<void(std::shared_ptr<ASTNode>)> collectIntersectionTypes = [&](std::shared_ptr<ASTNode> node)
+		{
+			if (!node)
+				return;
+			if (!node->inferredType.empty() && isIntersectionType(node->inferredType))
+			{
+				intersectionTypes.insert(node->inferredType);
+			}
+			for (auto child : node->children)
+			{
+				collectIntersectionTypes(child);
+			}
+		};
+		collectIntersectionTypes(ast);
+
+		// Filter out intersection types that are just extern types with destructors
+		// e.g., NativeString&~string_destroy should not generate a wrapper struct
+		std::set<std::string> filteredIntersectionTypes;
+		std::set<std::string> externTypes = {"NativeString"}; // Known extern types
+
+		for (const auto &intersectionType : intersectionTypes)
+		{
+			auto components = splitIntersectionType(intersectionType);
+			bool isExternWithDestructor = false;
+
+			// Check if this is just ExternType & ~destructor
+			if (components.size() == 2)
+			{
+				bool hasExternType = false;
+				bool hasDestructor = false;
+
+				for (const auto &comp : components)
 				{
-					hasExternType = true;
+					if (!comp.empty() && comp[0] == '~')
+					{
+						hasDestructor = true;
+					}
+					else if (externTypes.count(comp) > 0)
+					{
+						hasExternType = true;
+					}
+				}
+
+				if (hasExternType && hasDestructor)
+				{
+					isExternWithDestructor = true;
 				}
 			}
 
-			if (hasExternType && hasDestructor)
+			if (!isExternWithDestructor)
 			{
-				isExternWithDestructor = true;
+				filteredIntersectionTypes.insert(intersectionType);
 			}
 		}
 
-		if (!isExternWithDestructor)
+		auto isStatement = [](ASTNodeType type)
 		{
-			filteredIntersectionTypes.insert(intersectionType);
-		}
-	}
+			return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL || type == ASTNodeType::EXPECT_DECL || type == ASTNodeType::ACTUAL_DECL || type == ASTNodeType::MODULE_DECL;
+		};
 
-	auto isStatement = [](ASTNodeType type)
-	{
-		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL || type == ASTNodeType::EXPECT_DECL || type == ASTNodeType::ACTUAL_DECL || type == ASTNodeType::MODULE_DECL;
-	};
-
-	// Generate module declarations first (at top level, not inside main)
-	for (auto child : ast->children)
-	{
-		if (child->type == ASTNodeType::MODULE_DECL)
+		// Generate module declarations first (at top level, not inside main)
+		for (auto child : ast->children)
 		{
-			ss << generateNode(child) << "\n";
-		}
-	}
-
-	// Generate enum declarations
-	for (auto child : ast->children)
-	{
-		if (child->type == ASTNodeType::ENUM_DECL)
-		{
-			ss << generateNode(child) << "\n";
-		}
-	}
-
-	// Generate extern function forward declarations
-	for (auto child : ast->children)
-	{
-		if (child->type == ASTNodeType::EXTERN_FN_DECL)
-		{
-			ss << "extern \"C\" " << mapType(child->inferredType) << " " << child->value << "(";
-			for (size_t i = 0; i < child->children.size(); i++)
+			if (child->type == ASTNodeType::MODULE_DECL)
 			{
-				if (i > 0)
-					ss << ", ";
-				ss << mapType(child->children[i]->inferredType);
+				ss << generateNode(child) << "\n";
 			}
-			ss << ");\n";
 		}
-	}
 
-	// Generate struct declarations
-	for (auto child : ast->children)
-	{
-		if (child->type == ASTNodeType::STRUCT_DECL)
+		// Generate enum declarations
+		for (auto child : ast->children)
 		{
-			ss << generateNode(child) << "\n";
-		}
-	}
-
-	// Generate function forward declarations (before intersection structs so destructors can reference them)
-	for (auto child : ast->children)
-	{
-		if (child->type == ASTNodeType::FUNCTION_DECL)
-		{
-			// Rename main to tuff_main for forward declaration
-			std::string funcName = child->value;
-			if (funcName == "main")
-				funcName = "tuff_main";
-
-			if (!child->genericParams.empty())
+			if (child->type == ASTNodeType::ENUM_DECL)
 			{
-				ss << "template<";
-				for (size_t i = 0; i < child->genericParams.size(); i++)
+				ss << generateNode(child) << "\n";
+			}
+		}
+
+		// Generate extern function forward declarations
+		for (auto child : ast->children)
+		{
+			if (child->type == ASTNodeType::EXTERN_FN_DECL)
+			{
+				ss << "extern \"C\" " << mapType(child->inferredType) << " " << child->value << "(";
+				for (size_t i = 0; i < child->children.size(); i++)
 				{
 					if (i > 0)
 						ss << ", ";
-					ss << "typename " << child->genericParams[i]->value;
+					ss << mapType(child->children[i]->inferredType);
 				}
-				ss << ">\n";
+				ss << ");\n";
 			}
-			ss << mapType(child->inferredType) << " " << funcName << "(";
-			for (size_t i = 0; i < child->children.size() - 1; i++)
-			{
-				if (i > 0)
-					ss << ", ";
-				// Handle array parameters: int32_t arr[10] instead of int32_t[10] arr
-				std::string paramType = mapType(child->children[i]->inferredType);
-				std::string paramName = child->children[i]->value;
-				size_t bracketPos = paramType.find('[');
-				if (bracketPos != std::string::npos)
-				{
-					std::string baseType = paramType.substr(0, bracketPos);
-					std::string arraySuffix = paramType.substr(bracketPos);
-					ss << baseType << " " << paramName << arraySuffix;
-				}
-				else
-				{
-					ss << paramType << " " << paramName;
-				}
-			}
-			ss << ");\n";
 		}
-		else if (child->type == ASTNodeType::ACTUAL_DECL)
+
+		// Generate struct declarations
+		for (auto child : ast->children)
 		{
-			ss << mapType(child->inferredType) << " " << child->value << "(";
-			size_t paramCount = 0;
-			for (auto param : child->children)
+			if (child->type == ASTNodeType::STRUCT_DECL)
 			{
-				if (param->type == ASTNodeType::IDENTIFIER)
+				ss << generateNode(child) << "\n";
+			}
+		}
+
+		// Generate function forward declarations (before intersection structs so destructors can reference them)
+		for (auto child : ast->children)
+		{
+			if (child->type == ASTNodeType::FUNCTION_DECL)
+			{
+				// Rename main to tuff_main for forward declaration
+				std::string funcName = child->value;
+				if (funcName == "main")
+					funcName = "tuff_main";
+
+				if (!child->genericParams.empty())
 				{
-					if (paramCount > 0)
+					ss << "template<";
+					for (size_t i = 0; i < child->genericParams.size(); i++)
+					{
+						if (i > 0)
+							ss << ", ";
+						ss << "typename " << child->genericParams[i]->value;
+					}
+					ss << ">\n";
+				}
+				ss << mapType(child->inferredType) << " " << funcName << "(";
+				for (size_t i = 0; i < child->children.size() - 1; i++)
+				{
+					if (i > 0)
 						ss << ", ";
 					// Handle array parameters: int32_t arr[10] instead of int32_t[10] arr
-					std::string paramType = mapType(param->inferredType);
-					std::string paramName = param->value;
+					std::string paramType = mapType(child->children[i]->inferredType);
+					std::string paramName = child->children[i]->value;
 					size_t bracketPos = paramType.find('[');
 					if (bracketPos != std::string::npos)
 					{
@@ -238,19 +211,46 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 					{
 						ss << paramType << " " << paramName;
 					}
-					paramCount++;
 				}
+				ss << ");\n";
 			}
-			ss << ");\n";
+			else if (child->type == ASTNodeType::ACTUAL_DECL)
+			{
+				ss << mapType(child->inferredType) << " " << child->value << "(";
+				size_t paramCount = 0;
+				for (auto param : child->children)
+				{
+					if (param->type == ASTNodeType::IDENTIFIER)
+					{
+						if (paramCount > 0)
+							ss << ", ";
+						// Handle array parameters: int32_t arr[10] instead of int32_t[10] arr
+						std::string paramType = mapType(param->inferredType);
+						std::string paramName = param->value;
+						size_t bracketPos = paramType.find('[');
+						if (bracketPos != std::string::npos)
+						{
+							std::string baseType = paramType.substr(0, bracketPos);
+							std::string arraySuffix = paramType.substr(bracketPos);
+							ss << baseType << " " << paramName << arraySuffix;
+						}
+						else
+						{
+							ss << paramType << " " << paramName;
+						}
+						paramCount++;
+					}
+				}
+				ss << ");\n";
+			}
 		}
-	}
 
-	// Generate intersection struct definitions (after regular structs and function forward declarations)
-	for (const auto &intersectionType : filteredIntersectionTypes)
-	{
-		ss << generateIntersectionStruct(intersectionType, structFields) << "\n";
-	}
-	
+		// Generate intersection struct definitions (after regular structs and function forward declarations)
+		for (const auto &intersectionType : filteredIntersectionTypes)
+		{
+			ss << generateIntersectionStruct(intersectionType, structFields) << "\n";
+		}
+
 	} // End of !useSharedHeader block
 
 	auto isStatement = [](ASTNodeType type)
