@@ -30,6 +30,7 @@ add_executable(tuffc
     src/codegen/codegen_js.cpp
     src/codegen/codegen_js_helpers.cpp
     src/codegen/codegen_cpp.cpp
+    src/codegen/codegen_cpp_header.cpp
     src/codegen/codegen_cpp_helpers.cpp
     src/codegen/codegen_cpp_types.cpp
     src/codegen/codegen_cpp_union.cpp

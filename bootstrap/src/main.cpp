@@ -132,6 +132,19 @@ int main(int argc, char *argv[])
 	else if (target == "cpp")
 	{
 		CodeGeneratorCPP codegen;
+		
+		// Use shared header when outputPath is specified
+		if (!outputPath.empty())
+		{
+			codegen.setUseSharedHeader(true);
+			
+			// Generate shared header
+			std::filesystem::path outPath(outputPath);
+			std::filesystem::path headerPath = outPath.parent_path() / "tuff_decls.h";
+			std::string headerContent = codegen.generateSharedHeader(mergedAst);
+			writeToFile(headerPath.string(), headerContent);
+		}
+		
 		output = codegen.generate(mergedAst);
 	}
 	else

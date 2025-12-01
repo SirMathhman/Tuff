@@ -8,10 +8,24 @@
 std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 {
 	std::stringstream ss;
-	ss << "#include <iostream>\n";
-	ss << "#include <cstdint>\n";
-	ss << "#include <cstddef>\n";	 // Include cstddef for size_t definition
-	ss << "#include <string>\n\n"; // Include string for std::string
+	
+	// If using shared header, just include it
+	if (useSharedHeader)
+	{
+		ss << "#include \"tuff_decls.h\"\n\n";
+	}
+	else
+	{
+		// Generate everything inline for backward compatibility
+		ss << "#include <iostream>\n";
+		ss << "#include <cstdint>\n";
+		ss << "#include <cstddef>\n";
+		ss << "#include <string>\n\n";
+	}
+
+	// Only generate type definitions and forward declarations if not using shared header
+	if (!useSharedHeader)
+	{
 
 	// Collect all union types used in the program
 	std::set<std::string> unionTypes;
@@ -236,6 +250,13 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	{
 		ss << generateIntersectionStruct(intersectionType, structFields) << "\n";
 	}
+	
+	} // End of !useSharedHeader block
+
+	auto isStatement = [](ASTNodeType type)
+	{
+		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL || type == ASTNodeType::EXPECT_DECL || type == ASTNodeType::ACTUAL_DECL || type == ASTNodeType::MODULE_DECL;
+	};
 
 	// Determine return type from last expression (if last node is an expression)
 	std::string returnType = "int"; // default

@@ -9,8 +9,13 @@ class CodeGeneratorCPP
 {
 public:
 	std::string generate(std::shared_ptr<ASTNode> ast);
+	std::string generateSharedHeader(std::shared_ptr<ASTNode> ast);
+	
+	// Set whether to use shared header (default: false for backward compat)
+	void setUseSharedHeader(bool use) { useSharedHeader = use; }
 
 private:
+	bool useSharedHeader = false;
 	std::string generateNode(std::shared_ptr<ASTNode> node);
 	std::string generateFunctionBlock(std::shared_ptr<ASTNode> block, const std::string &returnType);
 	std::string mapType(std::string tuffType);
