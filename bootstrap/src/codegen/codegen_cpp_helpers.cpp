@@ -156,10 +156,13 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	}
 	case ASTNodeType::IS_EXPR:
 	{
-		// is operator: expr is Type → expr.__is_Type()
+		// is operator: expr is Type → expr.__tag == Tag::Type
 		auto expr = generateNode(node->children[0]);
 		std::string targetType = node->value;
-		return "(" + expr + ".__is_" + targetType + "())";
+		// Get the union struct name from the expression's inferred type
+		std::string unionType = node->children[0]->inferredType;
+		std::string structName = getUnionStructName(unionType);
+		return "(" + expr + ".__tag == " + structName + "::Tag::" + targetType + ")";
 	}
 	case ASTNodeType::INTERSECTION_EXPR:
 	{
@@ -453,12 +456,12 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::FIELD_ACCESS:
 	{
 		auto object = generateNode(node->children[0]);
-		// If accessing field on a narrowed union, unwrap it using getter
+		// If accessing field on a narrowed union, unwrap it directly
 		if (node->children[0]->isNarrowedUnion)
 		{
 			// Get the narrowed type (e.g., Some<I32>)
 			std::string narrowedType = node->children[0]->inferredType;
-			return object + ".__get_" + narrowedType + "()." + node->value;
+			return object + ".__val_" + narrowedType + "." + node->value;
 		}
 		return object + "." + node->value;
 	}

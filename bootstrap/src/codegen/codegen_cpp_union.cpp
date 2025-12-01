@@ -76,20 +76,6 @@ std::string CodeGeneratorCPP::generateUnionStruct(const std::string &unionType)
 	{
 		ss << "    " << structName << "(" << mapType(variant) << " val) : __tag(Tag::" << variant << "), __val_" << variant << "(val) {}\n";
 	}
-	ss << "\n";
-
-	// Type checking methods
-	for (const auto &variant : variants)
-	{
-		ss << "    bool __is_" << variant << "() const { return __tag == Tag::" << variant << "; }\n";
-	}
-	ss << "\n";
-
-	// Value extraction methods
-	for (const auto &variant : variants)
-	{
-		ss << "    " << mapType(variant) << " __get_" << variant << "() const { return __val_" << variant << "; }\n";
-	}
 
 	ss << "};\n";
 	return ss.str();
