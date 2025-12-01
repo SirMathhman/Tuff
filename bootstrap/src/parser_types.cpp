@@ -93,6 +93,15 @@ std::string Parser::parseIntersectionType()
 
 std::string Parser::parseSingleType()
 {
+	// Handle SizeOf<Type> type expressions
+	if (match(TokenType::SIZEOF))
+	{
+		consume(TokenType::LESS, "Expected '<' after 'SizeOf'");
+		std::string innerType = parseType();
+		consume(TokenType::GREATER, "Expected '>' after SizeOf type parameter");
+		return "SizeOf<" + innerType + ">";
+	}
+
 	// Handle destructor types: ~DestructorName
 	if (match(TokenType::TILDE))
 	{
