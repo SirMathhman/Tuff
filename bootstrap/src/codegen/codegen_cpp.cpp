@@ -360,47 +360,47 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 			ss << "    return tuff_main();\n";
 		}
 		else
-	{
-		// Execute top-level statements
-		for (size_t i = 0; i < ast->children.size(); ++i)
 		{
-			auto child = ast->children[i];
-
-			// Skip struct, enum, function, expect, actual, extern, and module declarations (already generated)
-			if (child->type == ASTNodeType::STRUCT_DECL || child->type == ASTNodeType::ENUM_DECL || child->type == ASTNodeType::FUNCTION_DECL || child->type == ASTNodeType::EXPECT_DECL || child->type == ASTNodeType::ACTUAL_DECL || child->type == ASTNodeType::EXTERN_FN_DECL || child->type == ASTNodeType::EXTERN_TYPE_DECL || child->type == ASTNodeType::MODULE_DECL)
-				continue;
-
-			if (i == ast->children.size() - 1 && !isStatement(child->type))
+			// Execute top-level statements
+			for (size_t i = 0; i < ast->children.size(); ++i)
 			{
-				// Last node is an expression: return its value
-				if (needsEnumCast)
+				auto child = ast->children[i];
+
+				// Skip struct, enum, function, expect, actual, extern, and module declarations (already generated)
+				if (child->type == ASTNodeType::STRUCT_DECL || child->type == ASTNodeType::ENUM_DECL || child->type == ASTNodeType::FUNCTION_DECL || child->type == ASTNodeType::EXPECT_DECL || child->type == ASTNodeType::ACTUAL_DECL || child->type == ASTNodeType::EXTERN_FN_DECL || child->type == ASTNodeType::EXTERN_TYPE_DECL || child->type == ASTNodeType::MODULE_DECL)
+					continue;
+
+				if (i == ast->children.size() - 1 && !isStatement(child->type))
 				{
-					ss << "    return static_cast<int>(" << generateNode(child) << ");\n";
-				}
-				else if (hasReturnValue)
-				{
-					ss << "    return " << generateNode(child) << ";\n";
+					// Last node is an expression: return its value
+					if (needsEnumCast)
+					{
+						ss << "    return static_cast<int>(" << generateNode(child) << ");\n";
+					}
+					else if (hasReturnValue)
+					{
+						ss << "    return " << generateNode(child) << ";\n";
+					}
+					else
+					{
+						ss << "    " << generateNode(child) << ";\n";
+						ss << "    return 0;\n";
+					}
 				}
 				else
 				{
+					// Earlier nodes or statements: execute for side effects
 					ss << "    " << generateNode(child) << ";\n";
-					ss << "    return 0;\n";
 				}
 			}
-			else
+
+			if (ast->children.empty() || isStatement(ast->children.back()->type))
 			{
-				// Earlier nodes or statements: execute for side effects
-				ss << "    " << generateNode(child) << ";\n";
+				ss << "    return 0;\n";
 			}
 		}
 
-		if (ast->children.empty() || isStatement(ast->children.back()->type))
-		{
-			ss << "    return 0;\n";
-		}
-	}
-
-	ss << "}\n";
+		ss << "}\n";
 	} // end if (!isLibrary)
 
 	// Generate function definitions

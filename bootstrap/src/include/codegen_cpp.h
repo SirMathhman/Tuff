@@ -25,7 +25,7 @@ public:
 
 	// Set whether to use shared header (default: false for backward compat)
 	void setUseSharedHeader(bool use) { useSharedHeader = use; }
-	
+
 	// Set whether this is a library (no main generation)
 	void setIsLibrary(bool lib) { isLibrary = lib; }
 
