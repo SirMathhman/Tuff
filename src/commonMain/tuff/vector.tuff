@@ -1,21 +1,18 @@
 // Vector<T> - dynamic array with automatic memory management
-// Uses slice pointer (*[T]) which has .init and .length fields
+// Stub implementation until pointer casting is available
 
 struct Vector<T> {
-    elements: *mut [T]
+    capacity: USize
 }
 
 // Create a new empty vector
-fn vectorNew<T>(): Vector<T> => {
-    let dummy: *mut U8 = malloc(0);
-    Vector<T> { dummy }
-}
+fn vectorNew<T>(): Vector<T> => Vector<T> { 0USize };
 
-// Get the length of a vector
-fn vectorLen<T>(vec: Vector<T>): USize => vec.elements.length;
+// Get the length of a vector (stub: always 0)
+fn vectorLen<T>(vec: Vector<T>): USize => 0;
 
-// Get initialized count
-fn vectorInit<T>(vec: Vector<T>): USize => vec.elements.init;
+// Get initialized count (stub: always 0)
+fn vectorInit<T>(vec: Vector<T>): USize => 0;
 
-// Check if vector is empty
-fn vectorIsEmpty<T>(vec: Vector<T>): Bool => vec.elements.length == 0;
+// Check if vector is empty (stub: always true)
+fn vectorIsEmpty<T>(vec: Vector<T>): Bool => true;

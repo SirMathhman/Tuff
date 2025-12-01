@@ -1,7 +1,6 @@
-fn main(): I32 => {
-    let num: I32 = 42;
-    let numStr = string_fromI32(num);
-    println(numStr);
-    
-    0
-}
+// Main entry point - uses top-level statements
+let num: I32 = 42;
+let numStr = string_fromI32(num);
+println(numStr);
+
+0

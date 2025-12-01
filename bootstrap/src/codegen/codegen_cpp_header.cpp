@@ -133,6 +133,13 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 	{
 		if (child->type == ASTNodeType::EXTERN_FN_DECL)
 		{
+			// Skip standard C library functions to avoid conflicts
+			std::string funcName = child->value;
+			if (funcName == "malloc" || funcName == "free" || funcName == "exit")
+			{
+				continue;
+			}
+			
 			ss << "    " << mapType(child->inferredType) << " " << child->value << "(";
 			for (size_t i = 0; i < child->children.size(); i++)
 			{

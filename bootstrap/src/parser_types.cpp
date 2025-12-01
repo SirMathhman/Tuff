@@ -120,14 +120,14 @@ std::string Parser::parseSingleType()
 	if (match(TokenType::LBRACKET))
 	{
 		std::string elementType = parseSingleType();
-		
+
 		// Check if this is a slice [T] or sized array [T; init; capacity]
 		if (match(TokenType::RBRACKET))
 		{
 			// Slice type: [T]
 			return "[" + elementType + "]";
 		}
-		
+
 		// Sized array: [T; init; capacity]
 		consume(TokenType::SEMICOLON, "Expected ';' after array element type");
 

@@ -1,37 +1,48 @@
 // JavaScript implementation of Tuff string operations
 
-function string_length(s) {
+export function string_length(s) {
   return s.length;
 }
 
-function string_charAt(s, index) {
+export function string_charAt(s, index) {
   return s.charCodeAt(index);
 }
 
-function string_substring(s, start, end) {
+export function string_substring(s, start, end) {
   return s.substring(start, end);
 }
 
-function string_indexOf(s, needle) {
+export function string_indexOf(s, needle) {
   return s.indexOf(needle);
 }
 
-function string_equals(s1, s2) {
+export function string_equals(s1, s2) {
   return s1 === s2;
 }
 
-function string_concat(s1, s2) {
+export function string_concat(s1, s2) {
   return s1 + s2;
 }
 
-function string_fromI32(value) {
+export function string_fromI32(value) {
   return String(value);
 }
 
-function string_toI32(s) {
+export function string_toI32(s) {
   return parseInt(s, 10);
 }
 
-function string_destroy(s) {
+export function string_destroy(s) {
   // JavaScript has garbage collection, no explicit cleanup needed
 }
+
+// Make functions globally available for compiled Tuff code
+globalThis.string_length = string_length;
+globalThis.string_charAt = string_charAt;
+globalThis.string_substring = string_substring;
+globalThis.string_indexOf = string_indexOf;
+globalThis.string_equals = string_equals;
+globalThis.string_concat = string_concat;
+globalThis.string_fromI32 = string_fromI32;
+globalThis.string_toI32 = string_toI32;
+globalThis.string_destroy = string_destroy;
