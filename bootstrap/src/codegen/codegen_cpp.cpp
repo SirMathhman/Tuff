@@ -182,14 +182,39 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 		{
 			if (child->type == ASTNodeType::EXTERN_FN_DECL)
 			{
-				ss << "extern \"C\" " << mapType(child->inferredType) << " " << child->value << "(";
-				for (size_t i = 0; i < child->children.size(); i++)
+				// Check if this is a generic extern function
+				if (!child->genericParams.empty())
 				{
-					if (i > 0)
-						ss << ", ";
-					ss << mapType(child->children[i]->inferredType);
+					// Generic extern functions need template wrappers
+					ss << "template<";
+					for (size_t i = 0; i < child->genericParams.size(); i++)
+					{
+						if (i > 0)
+							ss << ", ";
+						ss << "typename " << child->genericParams[i]->value;
+					}
+					ss << ">\n";
+					ss << "extern " << mapType(child->inferredType) << " " << child->value << "(";
+					for (size_t i = 0; i < child->children.size(); i++)
+					{
+						if (i > 0)
+							ss << ", ";
+						ss << mapType(child->children[i]->inferredType);
+					}
+					ss << ");\n";
 				}
-				ss << ");\n";
+				else
+				{
+					// Non-generic extern functions use extern "C"
+					ss << "extern \"C\" " << mapType(child->inferredType) << " " << child->value << "(";
+					for (size_t i = 0; i < child->children.size(); i++)
+					{
+						if (i > 0)
+							ss << ", ";
+						ss << mapType(child->children[i]->inferredType);
+					}
+					ss << ");\n";
+				}
 			}
 		}
 

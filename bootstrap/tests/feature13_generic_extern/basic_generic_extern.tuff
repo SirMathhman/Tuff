@@ -1,0 +1,6 @@
+// Test generic extern function declaration
+
+extern fn test_generic<T>(value: T): T;
+
+let x: I32 = test_generic<I32>(42);
+x
