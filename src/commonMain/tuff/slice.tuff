@@ -2,18 +2,17 @@ use math;
 
 // So, technically all instances of *[T] should just become Slice<T>.
 // This is the ACTUAL impl of it.
-
 struct Slice<T> {
-	 pointer : *mut [T, this.init, this.length] & ~free,
+	 pointer : *mut [T; this.init; this.length] & ~free,
 	 init : USize,
 	 length : USize
 }
 
-fn get(slice: Slice<T>, index: USize < slice.init): T => {
+fn get<T>(slice: *Slice<T>, index: USize < slice.init): T => {
 	return slice.pointer[index];
 }
 
-fn set(slice: Slice<T>, index: USize < slice.init + 1, value: T): Void => {
+fn set<T>(slice: *mut Slice<T>, index: USize < slice.init + 1, value: T): Void => {
 	slice.pointer[index] = value;
 	slice.init = if (index + 1 > slice.init) {
 		index + 1USize
