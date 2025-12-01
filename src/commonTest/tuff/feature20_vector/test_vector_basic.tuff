@@ -1,0 +1,126 @@
+// Test basic Vector operations
+
+// For now, inline the necessary Option types
+struct Some<T> {
+    value: T
+}
+
+struct None<T> {
+}
+
+// Import extern functions we need
+extern fn malloc<T>(size: USize): *mut [T];
+extern fn realloc<T>(ptr: *mut [T], newSize: USize): *mut [T];
+extern fn free<T>(ptr: *mut [T]): Void;
+extern fn exit(code: I32): Void;
+
+// Inline Vector struct
+struct Vector<T> {
+    data : *mut [T],
+    length : USize,
+    capacity : USize
+}
+
+// Vector functions
+fn vectorNew<T>(): Vector<T> => Vector<T> { malloc<T>(sizeOf(T) * 10USize), 0USize, 10USize };
+
+fn vectorLen<T>(vec: *Vector<T>): USize => vec.length;
+
+fn vectorCapacity<T>(vec: *Vector<T>): USize => vec.capacity;
+
+fn vectorIsEmpty<T>(vec: *Vector<T>): Bool => vec.length == 0USize;
+
+fn vectorPush<T>(vec: *mut Vector<T>, value: T): Void => {
+    // Check if we need to grow
+    if (vec.length >= vec.capacity) {
+        let newCapacity: USize = vec.capacity * 2USize;
+        vec.data = realloc<T>(vec.data, sizeOf(T) * newCapacity);
+        vec.capacity = newCapacity;
+    }
+    
+    // Assign value at the end using array index syntax (workaround for parser bug)
+    vec.data[vec.length] = value;
+    
+    // Increment length
+    vec.length = vec.length + 1USize;
+};
+
+fn vectorGet<T>(vec: *Vector<T>, index: USize): Some<T> | None<T> => {
+    if (index >= vec.length) {
+        return None<T> { };
+    }
+    
+    let ptr: *T = vec.data + index;
+    return Some<T> { *ptr };
+};
+
+fn vectorFree<T>(vec: *mut Vector<T>): Void => {
+    free<T>(vec.data);
+};
+
+// Main test logic
+let mut vec = vectorNew<I32>();
+
+// Check initial state
+if (vectorLen(&vec) != 0USize) {
+    exit(1);
+}
+
+if (!vectorIsEmpty(&vec)) {
+    exit(2);
+}
+
+if (vectorCapacity(&vec) != 10USize) {
+    exit(3);
+}
+
+// Push some elements
+vectorPush(&mut vec, 42);
+vectorPush(&mut vec, 100);
+vectorPush(&mut vec, 200);
+
+// Check length
+if (vectorLen(&vec) != 3USize) {
+    exit(4);
+}
+
+if (vectorIsEmpty(&vec)) {
+    exit(5);
+}
+
+// Get elements
+let first = vectorGet(&vec, 0USize);
+if (first is None<I32>) {
+    exit(6);
+}
+if (first.value != 42) {
+    exit(7);
+}
+
+let second = vectorGet(&vec, 1USize);
+if (second is None<I32>) {
+    exit(8);
+}
+if (second.value != 100) {
+    exit(9);
+}
+
+let third = vectorGet(&vec, 2USize);
+if (third is None<I32>) {
+    exit(10);
+}
+if (third.value != 200) {
+    exit(11);
+}
+
+// Test out of bounds
+let invalid = vectorGet(&vec, 3USize);
+if (invalid is Some<I32>) {
+    exit(12);
+}
+
+// Clean up
+vectorFree(&mut vec);
+
+// Success!
+0

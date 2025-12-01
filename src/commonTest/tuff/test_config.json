@@ -38,7 +38,8 @@
     "feature19_multiple_of/test_basic": 19,
     "feature19_multiple_of/test_arithmetic": 25,
     "feature19_multiple_of/test_subtyping": 20,
-    "feature19_multiple_of/test_to_base": 10
+    "feature19_multiple_of/test_to_base": 10,
+    "feature20_vector/test_vector_basic": 0
   },
   "negative_tests": {
     "feature1_variables/test_immutable_reassign": "Cannot assign to immutable variable",
@@ -55,7 +56,8 @@
     "feature17_sizeof/test_sizeof_basic",
     "feature17_sizeof/test_sizeof_struct",
     "feature18_extern/test_use_extern_stdlib",
-    "feature18_extern/test_extern_abs"
+    "feature18_extern/test_extern_abs",
+    "feature20_vector/test_vector_basic"
   ],
   "notes": {
     "expected_exit_codes": "Maps test paths to their expected exit codes. Tests not listed here will only verify consistency between JS and C++ targets.",

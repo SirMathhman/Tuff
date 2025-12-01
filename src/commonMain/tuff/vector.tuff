@@ -1,30 +1,56 @@
 // Vector<T> - dynamic array with automatic memory management
-// Stub implementation until pointer casting is available
+// Tracks length and capacity separately since slice properties are read-only
 
 use mem;
+use option;
 
 struct Vector<T> {
-	/*
-	[T] is should be a wrapped struct around *mut [T; 0; Length] with two other fields:
-
+	data : *mut [T] & #free,
 	length : USize,
-	init   : USize,
-
-	So we track them at runtime, instead of compile time.
-	*/
-	data : *mut [T] & #free
+	capacity : USize
 }
 
-// Create a new empty vector
-fn vectorNew<T>(): Vector<T> => Vector<T> { malloc<T>(sizeOf(T) * 10USize) };
+// Create a new empty vector with initial capacity of 10
+fn vectorNew<T>(): Vector<T> => Vector<T> { malloc<T>(sizeOf(T) * 10USize), 0USize, 10USize };
 
-// Get the length of a vector
-// Conceptually makes sense, in most vec implementations the "init" would be the size, and "length" would be the capacity,
-// It's just that we track this safely in the slice anyways.
-fn vectorLen<T>(vec: Vector<T>): USize => vec.data.init;
+// Get the number of initialized elements
+fn vectorLen<T>(vec: *Vector<T>): USize => vec.length;
 
-// Get initialized count (stub: always 0)
-fn vectorInit<T>(vec: Vector<T>): USize => 0;
+// Get the total capacity
+fn vectorCapacity<T>(vec: *Vector<T>): USize => vec.capacity;
 
-// Check if vector is empty (stub: always true)
-fn vectorIsEmpty<T>(vec: Vector<T>): Bool => true;
+// Check if vector is empty
+fn vectorIsEmpty<T>(vec: *Vector<T>): Bool => vec.length == 0USize;
+
+// Push an element to the end of the vector
+// Grows capacity by 2x when full
+fn vectorPush<T>(vec: *mut Vector<T>, value: T): Void => {
+	// Check if we need to grow
+	if (vec.length >= vec.capacity) {
+		let newCapacity: USize = vec.capacity * 2USize;
+		vec.data = realloc<T>(vec.data, sizeOf(T) * newCapacity);
+		vec.capacity = newCapacity;
+	}
+	
+	// Assign value at the end using array index syntax (workaround for parser bug)
+	vec.data[vec.length] = value;
+	
+	// Increment length
+	vec.length = vec.length + 1USize;
+};
+
+// Get an element at the given index
+// Returns Some<T> if index is valid, None<T> otherwise
+fn vectorGet<T>(vec: *Vector<T>, index: USize): Some<T> | None<T> => {
+	if (index >= vec.length) {
+		return None<T> { };
+	}
+	
+	let ptr: *T = vec.data + index;
+	return Some<T> { *ptr };
+};
+
+// Free the vector's memory
+fn vectorFree<T>(vec: *mut Vector<T>): Void => {
+	free<T>(vec.data);
+};

@@ -5,6 +5,7 @@ use extern stdlib;
 type Allocated<Type> = *mut [Type] & #free;
 
 extern fn malloc<Type>(size: USize): Allocated<Type>;
+extern fn realloc<Type>(ptr: Allocated<Type>, newSize: USize): Allocated<Type>;
 extern fn free<Type>(ptr: Allocated<Type>): Void;
 
 extern fn exit(code: I32): Void;

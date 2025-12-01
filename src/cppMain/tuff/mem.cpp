@@ -11,6 +11,11 @@ extern "C"
 		return static_cast<uint8_t *>(std::malloc(size));
 	}
 
+	uint8_t *realloc(uint8_t *ptr, size_t newSize)
+	{
+		return static_cast<uint8_t *>(std::realloc(ptr, newSize));
+	}
+
 	void free(uint8_t *ptr)
 	{
 		std::free(ptr);
