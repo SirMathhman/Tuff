@@ -32,6 +32,8 @@ add_executable(tuffc
     src/codegen/codegen_cpp.cpp
     src/codegen/codegen_cpp_header.cpp
     src/codegen/codegen_cpp_helpers.cpp
+    src/codegen/codegen_cpp_decl.cpp
+    src/codegen/codegen_cpp_scope.cpp
     src/codegen/codegen_cpp_types.cpp
     src/codegen/codegen_cpp_union.cpp
     src/codegen/codegen_cpp_intersection.cpp

@@ -5,6 +5,18 @@
 #include <vector>
 #include "ast.h"
 
+struct VarInfoCPP
+{
+	std::string name;
+	std::string destructor;
+};
+
+struct ScopeCPP
+{
+	std::vector<VarInfoCPP> vars;
+	bool isLoop = false;
+};
+
 class CodeGeneratorCPP
 {
 public:
@@ -18,6 +30,8 @@ private:
 	bool useSharedHeader = false;
 	std::string generateNode(std::shared_ptr<ASTNode> node);
 	std::string generateFunctionBlock(std::shared_ptr<ASTNode> block, const std::string &returnType);
+	std::string generateModuleDecl(std::shared_ptr<ASTNode> node);
+	std::string generateActualDecl(std::shared_ptr<ASTNode> node);
 	std::string mapType(std::string tuffType);
 
 	// Union type helpers
@@ -34,4 +48,9 @@ private:
 	std::string generateIntersectionStruct(
 			const std::string &intersectionType,
 			const std::map<std::string, std::vector<std::pair<std::string, std::string>>> &structFields);
+
+	// Destructor tracking
+	std::vector<ScopeCPP> scopes;
+	std::string getDestructor(const std::string &type);
+	bool nextBlockIsLoop = false;
 };

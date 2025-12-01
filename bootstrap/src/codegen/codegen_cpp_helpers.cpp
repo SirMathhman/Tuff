@@ -14,6 +14,13 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		std::string value = generateNode(node->children[0]);
 		std::string wrappedValue = wrapInUnion(value, node->children[0]->inferredType, node->inferredType);
 
+		// Track variable with destructor if applicable
+		std::string dtor = getDestructor(node->inferredType);
+		if (!dtor.empty() && !scopes.empty())
+		{
+			scopes.back().vars.push_back({node->value, dtor});
+		}
+
 		// Handle C++ array declaration: int32_t arr[3] instead of int32_t[3] arr
 		size_t bracketPos = cppType.find('[');
 		if (bracketPos != std::string::npos)
@@ -70,6 +77,7 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	{
 		std::stringstream ss;
 		ss << "while (" << generateNode(node->children[0]) << ") ";
+		nextBlockIsLoop = true;
 		ss << generateNode(node->children[1]);
 		return ss.str();
 	}
@@ -77,21 +85,66 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	{
 		std::stringstream ss;
 		ss << "while (true) ";
+		nextBlockIsLoop = true;
 		ss << generateNode(node->children[0]);
 		return ss.str();
 	}
 	case ASTNodeType::BREAK_STMT:
-		return "break";
+	{
+		// Inject destructor calls for all scopes up to nearest loop
+		std::stringstream ss;
+		for (auto it = scopes.rbegin(); it != scopes.rend(); ++it)
+		{
+			for (auto vit = it->vars.rbegin(); vit != it->vars.rend(); ++vit)
+			{
+				ss << vit->destructor << "(" << vit->name << "); ";
+			}
+			if (it->isLoop)
+				break;
+		}
+		ss << "break";
+		return ss.str();
+	}
 	case ASTNodeType::CONTINUE_STMT:
-		return "continue";
+	{
+		// Inject destructor calls for current loop scope only
+		std::stringstream ss;
+		for (auto it = scopes.rbegin(); it != scopes.rend(); ++it)
+		{
+			for (auto vit = it->vars.rbegin(); vit != it->vars.rend(); ++vit)
+			{
+				ss << vit->destructor << "(" << vit->name << "); ";
+			}
+			if (it->isLoop)
+				break;
+		}
+		ss << "continue";
+		return ss.str();
+	}
 	case ASTNodeType::BLOCK:
 	{
 		std::stringstream ss;
 		ss << "{\n";
+
+		// Push new scope
+		ScopeCPP newScope;
+		newScope.isLoop = nextBlockIsLoop;
+		nextBlockIsLoop = false;
+		scopes.push_back(newScope);
+
 		for (auto child : node->children)
 		{
 			ss << "  " << generateNode(child) << ";\n";
 		}
+
+		// Pop scope and inject destructor calls (in reverse order)
+		ScopeCPP &currentScope = scopes.back();
+		for (auto it = currentScope.vars.rbegin(); it != currentScope.vars.rend(); ++it)
+		{
+			ss << "  " << it->destructor << "(" << it->name << ");\n";
+		}
+		scopes.pop_back();
+
 		ss << "}";
 		return ss.str();
 	}
@@ -299,10 +352,20 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	}
 	case ASTNodeType::RETURN_STMT:
 	{
+		std::stringstream ss;
+		// Inject destructor calls for all scopes before return
+		for (auto it = scopes.rbegin(); it != scopes.rend(); ++it)
+		{
+			for (auto vit = it->vars.rbegin(); vit != it->vars.rend(); ++vit)
+			{
+				ss << vit->destructor << "(" << vit->name << "); ";
+			}
+		}
 		if (node->children.empty())
-			return "return";
+			ss << "return";
 		else
-			return "return " + generateNode(node->children[0]);
+			ss << "return " << generateNode(node->children[0]);
+		return ss.str();
 	}
 	case ASTNodeType::STRUCT_DECL:
 	{
@@ -340,45 +403,7 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		return ss.str();
 	}
 	case ASTNodeType::MODULE_DECL:
-	{
-		// Generate module as C++ namespace
-		// e.g., module math { fn add(...) } becomes:
-		// namespace math { type add(...) { ... } }
-		std::stringstream ss;
-		std::string moduleName = node->value;
-
-		// Split by :: for nested namespaces
-		size_t pos = 0;
-		std::vector<std::string> parts;
-		while ((pos = moduleName.find("::")) != std::string::npos)
-		{
-			parts.push_back(moduleName.substr(0, pos));
-			moduleName = moduleName.substr(pos + 2);
-		}
-		parts.push_back(moduleName);
-
-		// Generate opening namespaces
-		for (const auto &part : parts)
-		{
-			ss << "namespace " << part << " {\n";
-		}
-
-		// Generate module body
-		for (auto child : node->children)
-		{
-			ss << generateNode(child) << "\n";
-		}
-
-		// Generate closing braces for namespaces
-		for (size_t i = 0; i < parts.size(); i++)
-		{
-			ss << "}";
-			if (i < parts.size() - 1)
-				ss << " ";
-		}
-
-		return ss.str();
-	}
+		return generateModuleDecl(node);
 	case ASTNodeType::USE_DECL:
 	{
 		// Use declarations are handled at compile time for scope resolution
@@ -391,58 +416,7 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		return "";
 	}
 	case ASTNodeType::ACTUAL_DECL:
-	{
-		// Generate actual as a normal function
-		std::stringstream ss;
-		ss << mapType(node->inferredType) << " " << node->value << "(";
-
-		// Parameters
-		size_t paramIdx = 0;
-		for (auto param : node->children)
-		{
-			if (param->type == ASTNodeType::IDENTIFIER)
-			{
-				if (paramIdx > 0)
-					ss << ", ";
-				// Handle array parameters: int32_t arr[10] instead of int32_t[10] arr
-				std::string paramType = mapType(param->inferredType);
-				std::string paramName = param->value;
-				size_t bracketPos = paramType.find('[');
-				if (bracketPos != std::string::npos)
-				{
-					std::string baseType = paramType.substr(0, bracketPos);
-					std::string arraySuffix = paramType.substr(bracketPos);
-					ss << baseType << " " << paramName << arraySuffix;
-				}
-				else
-				{
-					ss << paramType << " " << paramName;
-				}
-				paramIdx++;
-			}
-		}
-		ss << ") ";
-
-		// Find body
-		for (auto child : node->children)
-		{
-			if (child->type != ASTNodeType::IDENTIFIER)
-			{
-				if (child->type == ASTNodeType::BLOCK)
-				{
-					ss << generateNode(child);
-				}
-				else if (child->type == ASTNodeType::RETURN_STMT)
-				{
-					// RETURN_STMT already includes "return " so wrap it directly
-					ss << "{ " << generateNode(child) << "; }";
-				}
-				break;
-			}
-		}
-
-		return ss.str();
-	}
+		return generateActualDecl(node);
 	case ASTNodeType::ENUM_VALUE:
 	{
 		// Generate: EnumName::Variant
@@ -484,39 +458,4 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	default:
 		return "";
 	}
-}
-
-std::string CodeGeneratorCPP::generateFunctionBlock(std::shared_ptr<ASTNode> block, const std::string &returnType)
-{
-	// Helper to check if a node is a statement (vs expression)
-	auto isStatement = [](ASTNodeType type)
-	{
-		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT ||
-					 type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT ||
-					 type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT ||
-					 type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK ||
-					 type == ASTNodeType::RETURN_STMT;
-	};
-
-	std::stringstream ss;
-	ss << "{\n";
-
-	for (size_t i = 0; i < block->children.size(); i++)
-	{
-		auto child = block->children[i];
-
-		// If this is the last child and it's an expression (not a statement),
-		// and the function has a non-void return type, add implicit return
-		if (i == block->children.size() - 1 && !isStatement(child->type) && returnType != "Void")
-		{
-			ss << "  return " << generateNode(child) << ";\n";
-		}
-		else
-		{
-			ss << "  " << generateNode(child) << ";\n";
-		}
-	}
-
-	ss << "}";
-	return ss.str();
 }
