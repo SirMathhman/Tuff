@@ -25,6 +25,7 @@ enum class ASTNodeType
 	EXPECT_DECL,		 // expect fn name(...): Type;
 	ACTUAL_DECL,		 // actual fn name(...): Type => {...}
 	EXTERN_FN_DECL,	 // extern fn name(...): Type;
+	EXTERN_TYPE_DECL, // type extern TypeName;
 	MODULE_DECL,		 // module name { statements }
 	USE_DECL,				 // use module::path;
 	USE_EXTERN_DECL, // use extern stdlib;

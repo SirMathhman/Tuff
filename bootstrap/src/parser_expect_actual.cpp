@@ -34,19 +34,8 @@ std::shared_ptr<ASTNode> Parser::parseExpectDecl()
 			paramNode->value = tokens[pos - 1].value;
 			consume(TokenType::COLON, "Expected ':' after parameter name");
 
-			Token paramType = advance();
-			if (paramType.type != TokenType::IDENTIFIER &&
-					paramType.type != TokenType::I32 && paramType.type != TokenType::BOOL &&
-					paramType.type != TokenType::I8 && paramType.type != TokenType::I16 &&
-					paramType.type != TokenType::I64 && paramType.type != TokenType::U8 &&
-					paramType.type != TokenType::U16 && paramType.type != TokenType::U32 &&
-					paramType.type != TokenType::U64 && paramType.type != TokenType::F32 &&
-					paramType.type != TokenType::F64 && paramType.type != TokenType::VOID)
-			{
-				std::cerr << "Error: Expected parameter type at line " << paramType.line << std::endl;
-				exit(1);
-			}
-			paramNode->inferredType = paramType.value;
+			// Use parseType to support complex types and lowercase identifiers
+			paramNode->inferredType = parseType();
 			node->addChild(paramNode);
 		} while (match(TokenType::COMMA));
 	}
@@ -54,19 +43,8 @@ std::shared_ptr<ASTNode> Parser::parseExpectDecl()
 	consume(TokenType::RPAREN, "Expected ')' after parameters");
 	consume(TokenType::COLON, "Expected ':' after ')'");
 
-	Token retType = advance();
-	if (retType.type != TokenType::IDENTIFIER &&
-			retType.type != TokenType::I32 && retType.type != TokenType::BOOL &&
-			retType.type != TokenType::I8 && retType.type != TokenType::I16 &&
-			retType.type != TokenType::I64 && retType.type != TokenType::U8 &&
-			retType.type != TokenType::U16 && retType.type != TokenType::U32 &&
-			retType.type != TokenType::U64 && retType.type != TokenType::F32 &&
-			retType.type != TokenType::F64 && retType.type != TokenType::VOID)
-	{
-		std::cerr << "Error: Expected return type at line " << retType.line << std::endl;
-		exit(1);
-	}
-	node->inferredType = retType.value;
+	// Use parseType to support complex types and lowercase identifiers
+	node->inferredType = parseType();
 
 	consume(TokenType::SEMICOLON, "Expected ';' after expect declaration");
 
@@ -106,19 +84,8 @@ std::shared_ptr<ASTNode> Parser::parseActualDecl()
 			paramNode->value = tokens[pos - 1].value;
 			consume(TokenType::COLON, "Expected ':' after parameter name");
 
-			Token paramType = advance();
-			if (paramType.type != TokenType::IDENTIFIER &&
-					paramType.type != TokenType::I32 && paramType.type != TokenType::BOOL &&
-					paramType.type != TokenType::I8 && paramType.type != TokenType::I16 &&
-					paramType.type != TokenType::I64 && paramType.type != TokenType::U8 &&
-					paramType.type != TokenType::U16 && paramType.type != TokenType::U32 &&
-					paramType.type != TokenType::U64 && paramType.type != TokenType::F32 &&
-					paramType.type != TokenType::F64 && paramType.type != TokenType::VOID)
-			{
-				std::cerr << "Error: Expected parameter type at line " << paramType.line << std::endl;
-				exit(1);
-			}
-			paramNode->inferredType = paramType.value;
+			// Use parseType to support complex types and lowercase identifiers
+			paramNode->inferredType = parseType();
 			node->addChild(paramNode);
 		} while (match(TokenType::COMMA));
 	}
@@ -126,19 +93,8 @@ std::shared_ptr<ASTNode> Parser::parseActualDecl()
 	consume(TokenType::RPAREN, "Expected ')' after parameters");
 	consume(TokenType::COLON, "Expected ':' after ')'");
 
-	Token actualRetType = advance();
-	if (actualRetType.type != TokenType::IDENTIFIER &&
-			actualRetType.type != TokenType::I32 && actualRetType.type != TokenType::BOOL &&
-			actualRetType.type != TokenType::I8 && actualRetType.type != TokenType::I16 &&
-			actualRetType.type != TokenType::I64 && actualRetType.type != TokenType::U8 &&
-			actualRetType.type != TokenType::U16 && actualRetType.type != TokenType::U32 &&
-			actualRetType.type != TokenType::U64 && actualRetType.type != TokenType::F32 &&
-			actualRetType.type != TokenType::F64 && actualRetType.type != TokenType::VOID)
-	{
-		std::cerr << "Error: Expected return type at line " << actualRetType.line << std::endl;
-		exit(1);
-	}
-	node->inferredType = actualRetType.value;
+	// Use parseType to support complex types and lowercase identifiers
+	node->inferredType = parseType();
 
 	consume(TokenType::FAT_ARROW, "Expected '=>' after return type");
 
@@ -214,5 +170,21 @@ std::shared_ptr<ASTNode> Parser::parseExternFnDecl()
 
 	consume(TokenType::SEMICOLON, "Expected ';' after extern function declaration");
 
+	return node;
+}
+
+std::shared_ptr<ASTNode> Parser::parseExternTypeDecl()
+{
+	consume(TokenType::TYPE, "Expected 'type'");
+	consume(TokenType::EXTERN, "Expected 'extern' after 'type'");
+	
+	Token typeName = consume(TokenType::IDENTIFIER, "Expected type name after 'type extern'");
+	
+	auto node = std::make_shared<ASTNode>();
+	node->type = ASTNodeType::EXTERN_TYPE_DECL;
+	node->value = typeName.value;
+	
+	consume(TokenType::SEMICOLON, "Expected ';' after extern type declaration");
+	
 	return node;
 }

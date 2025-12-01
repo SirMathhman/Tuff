@@ -261,6 +261,13 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		break;
 	}
 
+	case ASTNodeType::EXTERN_TYPE_DECL:
+	{
+		// External type declaration - register as an opaque type
+		// No type checking needed, just record that it exists
+		break;
+	}
+
 	case ASTNodeType::EXPECT_DECL:
 	{
 		// Already registered in first pass, no body to check

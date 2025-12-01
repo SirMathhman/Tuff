@@ -86,7 +86,15 @@ std::shared_ptr<ASTNode> Parser::parse()
 		}
 		else if (peek().type == TokenType::TYPE)
 		{
-			program->addChild(parseTypeAlias());
+			// Check if this is 'type extern'
+			if (peek(1).type == TokenType::EXTERN)
+			{
+				program->addChild(parseExternTypeDecl());
+			}
+			else
+			{
+				program->addChild(parseTypeAlias());
+			}
 		}
 		else if (peek().type == TokenType::LET)
 		{
