@@ -1,3 +1,6 @@
+// This depends if void* is stack or heap allocated.
+void dropPointer(void*);
+
 template <typename T>
 struct Slice
 {
@@ -9,7 +12,7 @@ struct Slice
 template <typename T>
 T *get(Slice<T> *slice, size_t index)
 {
-	return slice->pointer[index];
+	return slice->pointer + index;
 }
 
 template <typename T>
@@ -40,5 +43,5 @@ void dropPointer(Slice<T> *slice)
 template <typename T>
 void drop(Slice<T> *slice)
 {
-	free(slice->pointer);
+	dropPointer(slice->pointer);
 }

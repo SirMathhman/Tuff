@@ -1,4 +1,5 @@
 use math;
+use mem;
 
 // So, technically all instances of *[T] should just become Slice<T>.
 // This is the ACTUAL impl of it.
