@@ -1,0 +1,15 @@
+// Vector<T> - dynamic array with automatic memory management
+// Simplified stub implementation
+
+struct Vector<T> {
+    capacity: I32
+}
+
+// Create a new empty vector  
+fn vectorNew<T>(): Vector<T> => Vector<T> { 0 };
+
+// Get the length of a vector (always 0 for now)
+fn vectorLen<T>(vec: Vector<T>): I32 => 0;
+
+// Check if vector is empty
+fn vectorIsEmpty<T>(vec: Vector<T>): Bool => true;
