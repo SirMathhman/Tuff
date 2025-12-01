@@ -53,6 +53,8 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 		return "void";
 	if (tuffType == "USize")
 		return "size_t";
+	if (tuffType == "String")
+		return "std::string";
 
 	if (tuffType.rfind("SizeOf<", 0) == 0)
 		return "size_t";

@@ -1,0 +1,36 @@
+actual fn string_length(s: String): USize => {
+    // JS: s.length is a number, cast to USize
+    return s.length;
+}
+
+actual fn string_charAt(s: String, index: USize): U8 => {
+    return s.charCodeAt(index);
+}
+
+actual fn string_substring(s: String, start: USize, end: USize): String => {
+    return s.substring(start, end);
+}
+
+actual fn string_indexOf(s: String, needle: String): I32 => {
+    return s.indexOf(needle);
+}
+
+actual fn string_equals(s1: String, s2: String): Bool => {
+    return s1 === s2;
+}
+
+actual fn string_concat(s1: String, s2: String): String => {
+    return s1 + s2;
+}
+
+actual fn string_fromI32(value: I32): String => {
+    return String(value);
+}
+
+actual fn string_toI32(s: String): I32 => {
+    return parseInt(s, 10);
+}
+
+actual fn string_destroy(s: String): Void => {
+    // JavaScript has garbage collection, no explicit cleanup needed
+}

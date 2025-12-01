@@ -9,8 +9,9 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 {
 	std::stringstream ss;
 	ss << "#include <iostream>\n";
-	ss << "#include <cstdint>\n\n";
-	ss << "#include <cstddef>\n\n"; // Include cstddef for size_t definition
+	ss << "#include <cstdint>\n";
+	ss << "#include <cstddef>\n";	 // Include cstddef for size_t definition
+	ss << "#include <string>\n\n"; // Include string for std::string
 
 	// Collect all union types used in the program
 	std::set<std::string> unionTypes;

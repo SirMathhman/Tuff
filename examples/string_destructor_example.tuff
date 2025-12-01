@@ -1,0 +1,18 @@
+// Example: String destructor demonstration
+// This example shows how String variables will have destructors called automatically
+
+// Hypothetical example (when String literals become String types):
+// fn example_string_lifecycle(): I32 => {
+//     let s1: String = "hello";
+//     let s2: String = string_concat(s1, " world");
+//     
+//     // At end of scope:
+//     // - string_destroy(s2) is called
+//     // - string_destroy(s1) is called
+//     42
+// }
+
+// Current implementation: string literals are byte arrays
+let s = "hello";
+let first: U8 = s[0];
+first // Returns 104 ('h')

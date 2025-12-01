@@ -1,0 +1,13 @@
+// String is platform-specific (std::string in C++, string in JS)
+extern type String;
+
+// Core string operations
+expect fn string_length(s: String): USize;
+expect fn string_charAt(s: String, index: USize): U8;
+expect fn string_substring(s: String, start: USize, end: USize): String;
+expect fn string_indexOf(s: String, needle: String): I32;
+expect fn string_equals(s1: String, s2: String): Bool;
+expect fn string_concat(s1: String, s2: String): String;
+expect fn string_fromI32(value: I32): String;
+expect fn string_toI32(s: String): I32;
+expect fn string_destroy(s: String): Void;

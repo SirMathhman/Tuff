@@ -2,12 +2,27 @@
 
 You are assisting with the development of the **Tuff** programming language compiler. Tuff is a statically-typed, self-hosting language targeting JavaScript and C++.
 
+## Required Reading
+
+**MANDATORY**: Before assisting with any Tuff language work, you MUST read `docs/TUTORIAL.md`. This tutorial provides a comprehensive overview of all implemented Tuff language features including:
+
+- Variables, types, and operators
+- Functions and control flow
+- Data structures (structs, enums, arrays)
+- Pointers, ownership, and borrow checking
+- Union and intersection types
+- Modules and the expect/actual pattern
+- Advanced features (sizeOf, extern, etc.)
+
+Refer to `docs/LANGUAGE.md` for the complete language specification.
+
 ## Project Overview
 
 - **bootstrap/**: The Stage 0 compiler (C++17).
 - **core/**: Standard library interfaces (`expect` declarations).
 - **js/**: JavaScript target implementation (`actual` definitions).
 - **cpp/**: C++ target implementation (`actual` definitions).
+- **docs/**: Language documentation (TUTORIAL.md, LANGUAGE.md).
 
 ## Architecture
 
@@ -76,13 +91,22 @@ _Note: Tests compile `.tuff` files to JS/C++ and execute them, comparing exit co
 
 ### Tuff (Language)
 
-- **Types**: `I32`, `F64`, `Bool`, `String`, `Void`.
+**Read [docs/TUTORIAL.md](../docs/TUTORIAL.md) for comprehensive language syntax and examples.**
+
+- **Types**: `I32`, `I64`, `U32`, `U64`, `F32`, `F64`, `Bool`, `String`, `Void`, `USize`.
 - **Variables**: `let x: I32 = 10;` (immutable). `let mut x = 10;` (mutable).
 - **Functions**: `fn name(arg: Type): RetType => body;`
 - **Structs**: `struct Point { x: I32, y: I32 }`
+- **Pointers**: `*T` (immutable), `*mut T` (mutable), `&x` (reference), `*p` (dereference).
+- **Arrays**: `[Type; Initialized; Capacity]`
+- **Unions**: `I32 | Bool` with `is` operator
+- **Intersections**: `struct1 & struct2` to merge values
+- **Modules**: `module name { ... }` and `use path::to::module`
 
 ## Key Files
 
+- [docs/TUTORIAL.md](../docs/TUTORIAL.md): **MANDATORY reading** - comprehensive language tutorial.
+- [docs/LANGUAGE.md](../docs/LANGUAGE.md): Complete language specification.
 - `bootstrap/src/include/ast.h`: AST node definitions.
 - `bootstrap/src/include/parser.h`: Parser class definition.
 - `bootstrap/src/include/type_checker.h`: TypeChecker class definition.
