@@ -147,47 +147,47 @@ std::string Parser::parseSingleType()
 		// Sized array: [T; init; capacity]
 		consume(TokenType::SEMICOLON, "Expected ';' after array element type");
 
-	// Parse init: can be literal, identifier, or this.field
-	std::string init;
-	if (peek().type == TokenType::THIS)
-	{
-		advance(); // consume 'this'
-		consume(TokenType::DOT, "Expected '.' after 'this'");
-		Token fieldToken = consume(TokenType::IDENTIFIER, "Expected field name after 'this.'");
-		init = "this." + fieldToken.value;
-	}
-	else
-	{
-		Token initToken = advance();
-		if (initToken.type != TokenType::INT_LITERAL && initToken.type != TokenType::IDENTIFIER)
+		// Parse init: can be literal, identifier, or this.field
+		std::string init;
+		if (peek().type == TokenType::THIS)
 		{
-			std::cerr << "Error: Expected init count (literal, type parameter, or this.field) in array type at line " << initToken.line << std::endl;
-			exit(1);
+			advance(); // consume 'this'
+			consume(TokenType::DOT, "Expected '.' after 'this'");
+			Token fieldToken = consume(TokenType::IDENTIFIER, "Expected field name after 'this.'");
+			init = "this." + fieldToken.value;
 		}
-		init = initToken.value;
-	}
-
-	consume(TokenType::SEMICOLON, "Expected ';' after init count");
-
-	// Parse capacity: can be literal, identifier, or this.field
-	std::string capacity;
-	if (peek().type == TokenType::THIS)
-	{
-		advance(); // consume 'this'
-		consume(TokenType::DOT, "Expected '.' after 'this'");
-		Token fieldToken = consume(TokenType::IDENTIFIER, "Expected field name after 'this.'");
-		capacity = "this." + fieldToken.value;
-	}
-	else
-	{
-		Token capacityToken = advance();
-		if (capacityToken.type != TokenType::INT_LITERAL && capacityToken.type != TokenType::IDENTIFIER)
+		else
 		{
-			std::cerr << "Error: Expected capacity (literal, type parameter, or this.field) in array type at line " << capacityToken.line << std::endl;
-			exit(1);
+			Token initToken = advance();
+			if (initToken.type != TokenType::INT_LITERAL && initToken.type != TokenType::IDENTIFIER)
+			{
+				std::cerr << "Error: Expected init count (literal, type parameter, or this.field) in array type at line " << initToken.line << std::endl;
+				exit(1);
+			}
+			init = initToken.value;
 		}
-		capacity = capacityToken.value;
-	}
+
+		consume(TokenType::SEMICOLON, "Expected ';' after init count");
+
+		// Parse capacity: can be literal, identifier, or this.field
+		std::string capacity;
+		if (peek().type == TokenType::THIS)
+		{
+			advance(); // consume 'this'
+			consume(TokenType::DOT, "Expected '.' after 'this'");
+			Token fieldToken = consume(TokenType::IDENTIFIER, "Expected field name after 'this.'");
+			capacity = "this." + fieldToken.value;
+		}
+		else
+		{
+			Token capacityToken = advance();
+			if (capacityToken.type != TokenType::INT_LITERAL && capacityToken.type != TokenType::IDENTIFIER)
+			{
+				std::cerr << "Error: Expected capacity (literal, type parameter, or this.field) in array type at line " << capacityToken.line << std::endl;
+				exit(1);
+			}
+			capacity = capacityToken.value;
+		}
 		return "[" + elementType + "; " + init + "; " + capacity + "]";
 	}
 

@@ -21,23 +21,4 @@ fn set<T>(slice: *mut Slice<T>, index: USize < slice.init + 1, value: T): Void =
 	};
 }
 
-// Expected cpp
-/*
-template <typename T>
-struct Slice {
-	T* pointer;
-	size_t init;
-	size_t length;
-}
-
-T* get(Slice<T>* slice, size_t index) {
-	return pointer[index];
-}
-
-void set(Slice<T>* slice, size_t index, T value) {
-	slice->pointer[index] = value;
-	if (index + 1 > slice->init) {
-		slice->init = index + 1;
-	}
-}
-*/
+// Expected cpp is at expected-slice.cpp for now.
