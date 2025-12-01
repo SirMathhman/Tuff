@@ -59,11 +59,12 @@ int main(int argc, char *argv[])
 {
 	if (argc < 3)
 	{
-		std::cerr << "Usage: tuffc <source.tuff> <target> [-o <output>] [--sources <file1,file2,...>]" << std::endl;
+		std::cerr << "Usage: tuffc <source.tuff> <target> [-o <output>] [--sources <file1,file2,...>] [--lib]" << std::endl;
 		std::cerr << "Targets: js, cpp" << std::endl;
 		std::cerr << "Options:" << std::endl;
 		std::cerr << "  -o <output>           Write output to file instead of stdout" << std::endl;
 		std::cerr << "  --sources <files>     Comma-separated list of source files to compile together" << std::endl;
+		std::cerr << "  --lib                 Compile as library (don't generate main function)" << std::endl;
 		return 1;
 	}
 
@@ -72,6 +73,7 @@ int main(int argc, char *argv[])
 	std::string outputPath = "";
 	std::vector<std::string> sourcePaths;
 	sourcePaths.push_back(sourcePath);
+	bool isLibrary = false;
 
 	// Parse additional arguments
 	for (int i = 3; i < argc; i++)
@@ -85,6 +87,10 @@ int main(int argc, char *argv[])
 		{
 			std::string sourcesList = argv[++i];
 			sourcePaths = split(sourcesList, ',');
+		}
+		else if (arg == "--lib")
+		{
+			isLibrary = true;
 		}
 	}
 
@@ -132,6 +138,7 @@ int main(int argc, char *argv[])
 	else if (target == "cpp")
 	{
 		CodeGeneratorCPP codegen;
+		codegen.setIsLibrary(isLibrary);
 
 		// Use shared header when outputPath is specified
 		if (!outputPath.empty())

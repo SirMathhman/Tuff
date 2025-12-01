@@ -338,25 +338,28 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 		}
 	}
 
-	ss << "int main() {\n";
-
-	// Check if there's a user-defined main function
-	bool hasUserMain = false;
-	for (auto child : ast->children)
+	// Generate main function (unless compiling as library)
+	if (!isLibrary)
 	{
-		if (child->type == ASTNodeType::FUNCTION_DECL && child->value == "main")
+		ss << "int main() {\n";
+
+		// Check if there's a user-defined main function
+		bool hasUserMain = false;
+		for (auto child : ast->children)
 		{
-			hasUserMain = true;
-			break;
+			if (child->type == ASTNodeType::FUNCTION_DECL && child->value == "main")
+			{
+				hasUserMain = true;
+				break;
+			}
 		}
-	}
 
-	if (hasUserMain)
-	{
-		// Call the user's main function
-		ss << "    return tuff_main();\n";
-	}
-	else
+		if (hasUserMain)
+		{
+			// Call the user's main function
+			ss << "    return tuff_main();\n";
+		}
+		else
 	{
 		// Execute top-level statements
 		for (size_t i = 0; i < ast->children.size(); ++i)
@@ -398,6 +401,7 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	}
 
 	ss << "}\n";
+	} // end if (!isLibrary)
 
 	// Generate function definitions
 	bool hasMainFunction = false;
