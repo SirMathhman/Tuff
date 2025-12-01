@@ -43,6 +43,21 @@ bool TypeChecker::isTypeCompatible(const std::string &valueType, const std::stri
 		return true;
 	}
 
+	// Multiple-of compatibility: I32*10I32 can be assigned to I32*5I32
+	if (isMultipleOfType(valueType) && isMultipleOfType(targetType))
+	{
+		if (isMultipleOfCompatible(valueType, targetType))
+			return true;
+	}
+
+	// Multiple-of to base type: I32*5I32 can be assigned to I32
+	if (isMultipleOfType(valueType))
+	{
+		std::string baseType = getMultipleOfBaseType(valueType);
+		if (baseType == targetType)
+			return true;
+	}
+
 	// If target is a union type, check if value is one of the variants
 	if (isUnionType(targetType))
 	{

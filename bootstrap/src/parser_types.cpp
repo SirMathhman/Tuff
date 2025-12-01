@@ -177,6 +177,18 @@ std::string Parser::parseSingleType()
 		typeName += ">";
 	}
 
+	// Handle multiple-of types: Type * Literal
+	if (match(TokenType::STAR))
+	{
+		Token multipleLiteral = advance();
+		if (multipleLiteral.type != TokenType::INT_LITERAL)
+		{
+			std::cerr << "Error: Expected integer literal after '*' in multiple-of type at line " << multipleLiteral.line << std::endl;
+			exit(1);
+		}
+		typeName += "*" + multipleLiteral.value;
+	}
+
 	return typeName;
 }
 

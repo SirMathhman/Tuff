@@ -68,13 +68,7 @@ private:
 	std::vector<std::string> genericParamsInScope;	// Track generic params in current scope
 	std::vector<std::string> lifetimeParamsInScope; // Track lifetime params in current scope
 
-	bool isNumericType(const std::string &type)
-	{
-		return (type == "I32" || type == "I64" || type == "I8" || type == "I16" ||
-						type == "U8" || type == "U16" || type == "U32" || type == "U64" ||
-						type == "F32" || type == "F64" || type == "USize" ||
-						type.rfind("SizeOf<", 0) == 0);
-	}
+	bool isNumericType(const std::string &type);
 
 	bool isCopyType(const std::string &type)
 	{
@@ -125,6 +119,16 @@ private:
 
 	// Type alias helpers
 	std::string expandTypeAlias(const std::string &type);
+
+	// Multiple-of type helpers
+	bool isMultipleOfType(const std::string &type);
+	void parseMultipleOfType(const std::string &type, std::string &baseType, std::vector<std::string> &constraints);
+	long long extractLiteralValue(const std::string &literal);
+	bool isMultiple(long long value, const std::string &constraintLiteral);
+	bool isMultipleOfCompatible(const std::string &valueType, const std::string &targetType);
+	std::string getMultipleOfBaseType(const std::string &type);
+	void validateMultipleOfAssignment(const std::string &targetType, std::shared_ptr<ASTNode> valueNode);
+	std::string computeMultipleOfAddition(const std::string &leftType, const std::string &rightType);
 
 public:
 	void check(std::shared_ptr<ASTNode> node);

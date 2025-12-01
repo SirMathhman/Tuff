@@ -26,6 +26,7 @@ add_executable(tuffc
     src/type_checker/type_checker_ownership.cpp
     src/type_checker/type_checker_alias.cpp
     src/type_checker/type_checker_expr.cpp
+    src/type_checker/type_checker_multiple_of.cpp
     src/codegen/codegen_js.cpp
     src/codegen/codegen_js_helpers.cpp
     src/codegen/codegen_cpp.cpp

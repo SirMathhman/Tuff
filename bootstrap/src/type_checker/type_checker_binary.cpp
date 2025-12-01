@@ -18,6 +18,17 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 			std::cerr << "Error: Operands of '" << node->value << "' must be numeric." << std::endl;
 			exit(1);
 		}
+
+		// Handle multiple-of type arithmetic (only for addition)
+		if (node->value == "+")
+		{
+			if (isMultipleOfType(leftType) || isMultipleOfType(rightType))
+			{
+				node->inferredType = computeMultipleOfAddition(leftType, rightType);
+				return;
+			}
+		}
+
 		// If either operand is USize or SizeOf<T>, result is USize (for sizeOf arithmetic)
 		if (leftType == "USize" || rightType == "USize" ||
 				leftType.rfind("SizeOf<", 0) == 0 || rightType.rfind("SizeOf<", 0) == 0)

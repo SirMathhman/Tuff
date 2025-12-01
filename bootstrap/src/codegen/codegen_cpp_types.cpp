@@ -3,6 +3,17 @@
 
 std::string CodeGeneratorCPP::mapType(std::string tuffType)
 {
+	// Strip multiple-of constraints: I32*5I32 -> I32
+	size_t starPos = tuffType.find('*');
+	if (starPos != std::string::npos && starPos > 0)
+	{
+		// Check if it's a multiple-of type (not a pointer)
+		if (starPos + 1 < tuffType.length() && tuffType[starPos + 1] >= '0' && tuffType[starPos + 1] <= '9')
+		{
+			tuffType = tuffType.substr(0, starPos);
+		}
+	}
+
 	// Handle union types: I32|Bool -> Union_I32_Bool
 	if (tuffType.find('|') != std::string::npos)
 	{

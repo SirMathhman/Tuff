@@ -38,8 +38,14 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 			type = expandTypeAlias(type);
 			node->inferredType = type;
 
-			// Use isTypeCompatible for union upcasting
-			if (!isTypeCompatible(init->inferredType, type))
+			// Validate multiple-of constraints (before general type compatibility)
+			if (isMultipleOfType(type))
+			{
+				validateMultipleOfAssignment(type, init);
+				// For multiple-of types, we allow assigning if the literal is valid
+				// The validation above will error if not, so if we get here, it's OK
+			}
+			else if (!isTypeCompatible(init->inferredType, type))
 			{
 				std::cerr << "Error: Type mismatch for '" << name << "'. Expected " << type << ", got " << init->inferredType << std::endl;
 				exit(1);
@@ -94,7 +100,13 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 			}
 		}
 
-		if (!isTypeCompatible(value->inferredType, lhs->inferredType))
+		// Validate multiple-of constraints for assignments (before general type compatibility)
+		if (isMultipleOfType(lhs->inferredType))
+		{
+			validateMultipleOfAssignment(lhs->inferredType, value);
+			// If we get here, the literal is valid
+		}
+		else if (!isTypeCompatible(value->inferredType, lhs->inferredType))
 		{
 			std::cerr << "Error: Type mismatch in assignment. Expected " << lhs->inferredType << ", got " << value->inferredType << std::endl;
 			exit(1);
@@ -383,7 +395,7 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 			// return expr;
 			auto expr = node->children[0];
 			check(expr);
-			if (expr->inferredType != currentFunctionReturnType)
+			if (!isTypeCompatible(expr->inferredType, currentFunctionReturnType))
 			{
 				std::cerr << "Error: Function expects return type " << currentFunctionReturnType
 									<< ", but got " << expr->inferredType << std::endl;

@@ -1,0 +1,4 @@
+let a: I32 * 5I32 = 10I32;
+let b: I32 * 5I32 = 15I32;
+let c: I32 * 5I32 = a + b;
+c

@@ -179,6 +179,23 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		return "sizeof(" + cppType + ")";
 	}
 	case ASTNodeType::LITERAL:
+	{
+		// Strip type suffix from literals (e.g., "10I32" -> "10")
+		std::string literal = node->value;
+		std::string result;
+		for (char c : literal)
+		{
+			if ((c >= '0' && c <= '9') || c == '.' || c == '-')
+			{
+				result += c;
+			}
+			else
+			{
+				break; // Stop at type suffix
+			}
+		}
+		return result.empty() ? literal : result;
+	}
 	case ASTNodeType::IDENTIFIER:
 		return node->value;
 	case ASTNodeType::FUNCTION_DECL:

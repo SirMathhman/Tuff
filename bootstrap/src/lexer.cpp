@@ -178,7 +178,31 @@ Token Lexer::number()
 	{
 		text += advance();
 	}
-	// TODO: Handle floats
+
+	// Handle type suffixes: I8, I16, I32, I64, U8, U16, U32, U64, F32, F64, USize
+	if (peek() == 'I' || peek() == 'U' || peek() == 'F')
+	{
+		std::string suffix;
+		suffix += advance(); // I, U, or F
+		while (isdigit(peek()) || (peek() == 'S' || peek() == 'i' || peek() == 'z' || peek() == 'e'))
+		{
+			suffix += advance();
+		}
+		// Validate suffix is a known type
+		if (suffix == "I8" || suffix == "I16" || suffix == "I32" || suffix == "I64" ||
+				suffix == "U8" || suffix == "U16" || suffix == "U32" || suffix == "U64" ||
+				suffix == "F32" || suffix == "F64" || suffix == "USize")
+		{
+			text += suffix;
+		}
+		else
+		{
+			std::cerr << "Lexer Error: Invalid numeric type suffix '" << suffix << "' at line " << line << std::endl;
+			exit(1);
+		}
+	}
+
+	// TODO: Handle floats without suffix
 	return {TokenType::INT_LITERAL, text, line, startCol};
 }
 

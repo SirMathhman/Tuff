@@ -1,0 +1,4 @@
+fn getValue(): I32 * 5I32 => 20I32;
+
+let x: I32 * 5I32 = getValue();
+x
