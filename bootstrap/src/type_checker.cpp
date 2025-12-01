@@ -242,7 +242,20 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		break;
 	}
 
+	case ASTNodeType::USE_EXTERN_DECL:
+	{
+		// External include - no type checking needed, just record
+		// The code generator will emit #include <name.h>
+		break;
+	}
+
 	case ASTNodeType::EXPECT_DECL:
+	{
+		// Already registered in first pass, no body to check
+		break;
+	}
+
+	case ASTNodeType::EXTERN_FN_DECL:
 	{
 		// Already registered in first pass, no body to check
 		break;

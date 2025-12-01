@@ -307,6 +307,16 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		// Skip expect declarations - they have no codegen
 		return "";
 	}
+	case ASTNodeType::EXTERN_FN_DECL:
+	{
+		// Skip extern fn declarations - they are resolved by the linker
+		return "";
+	}
+	case ASTNodeType::USE_EXTERN_DECL:
+	{
+		// use extern is handled at top-level for #include generation
+		return "";
+	}
 	case ASTNodeType::ACTUAL_DECL:
 	{
 		// Generate actual as a normal function

@@ -243,6 +243,30 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 			}
 			expectTable[expectName] = info;
 		}
+		else if (child->type == ASTNodeType::EXTERN_FN_DECL)
+		{
+			// extern fn declares an external function (e.g., from C library)
+			// Register directly in functionTable, no expect/actual matching
+			std::string funcName = child->value;
+			if (functionTable.find(funcName) != functionTable.end())
+			{
+				std::cerr << "Error: Function '" << funcName << "' already declared." << std::endl;
+				exit(1);
+			}
+
+			FunctionInfo info;
+			for (auto genParam : child->genericParams)
+			{
+				info.genericParams.push_back(genParam->value);
+			}
+			info.returnType = child->inferredType;
+			for (size_t i = 0; i < child->children.size(); i++)
+			{
+				auto paramNode = child->children[i];
+				info.params.push_back({paramNode->value, paramNode->inferredType});
+			}
+			functionTable[funcName] = info;
+		}
 		else if (child->type == ASTNodeType::ACTUAL_DECL)
 		{
 			std::string actualName = child->value;

@@ -27,15 +27,19 @@ std::string CodeGeneratorJS::generate(std::shared_ptr<ASTNode> ast)
 
 	auto isStatement = [](ASTNodeType type)
 	{
-		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL || type == ASTNodeType::EXPECT_DECL || type == ASTNodeType::ACTUAL_DECL || type == ASTNodeType::MODULE_DECL;
+		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL || type == ASTNodeType::EXPECT_DECL || type == ASTNodeType::ACTUAL_DECL || type == ASTNodeType::EXTERN_FN_DECL || type == ASTNodeType::USE_EXTERN_DECL || type == ASTNodeType::MODULE_DECL;
 	};
 
 	for (size_t i = 0; i < ast->children.size(); ++i)
 	{
 		auto child = ast->children[i];
 
-		// Skip expect and actual declarations
+		// Skip expect, extern fn, and use extern declarations
 		if (child->type == ASTNodeType::EXPECT_DECL)
+			continue;
+		if (child->type == ASTNodeType::EXTERN_FN_DECL)
+			continue;
+		if (child->type == ASTNodeType::USE_EXTERN_DECL)
 			continue;
 		if (child->type == ASTNodeType::ACTUAL_DECL)
 		{
@@ -298,6 +302,16 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::EXPECT_DECL:
 	{
 		// Skip expect declarations - they have no codegen
+		return "";
+	}
+	case ASTNodeType::EXTERN_FN_DECL:
+	{
+		// Skip extern fn declarations - not available in JS
+		return "";
+	}
+	case ASTNodeType::USE_EXTERN_DECL:
+	{
+		// Skip use extern declarations - not available in JS
 		return "";
 	}
 	case ASTNodeType::ACTUAL_DECL:

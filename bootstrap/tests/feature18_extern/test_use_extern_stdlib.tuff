@@ -1,0 +1,9 @@
+// Test use extern for stdlib header
+// Expected exit code: 0
+
+use extern stdlib;
+
+extern fn exit(code: I32): Void;
+
+exit(0);
+42  // Should never reach here

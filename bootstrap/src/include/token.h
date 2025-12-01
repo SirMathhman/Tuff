@@ -7,6 +7,7 @@ enum class TokenType
 	// Keywords
 	EXPECT,
 	ACTUAL,
+	EXTERN,
 	MODULE,
 	USE,
 	FN,

@@ -22,6 +22,7 @@ private:
 	std::shared_ptr<ASTNode> parseUseDecl();
 	std::shared_ptr<ASTNode> parseExpectDecl();
 	std::shared_ptr<ASTNode> parseActualDecl();
+	std::shared_ptr<ASTNode> parseExternFnDecl();
 	std::shared_ptr<ASTNode> parseStructDecl();
 	std::shared_ptr<ASTNode> parseEnumDecl();
 	std::shared_ptr<ASTNode> parseTypeAlias();

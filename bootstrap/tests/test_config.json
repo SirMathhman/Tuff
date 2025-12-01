@@ -32,7 +32,9 @@
     "feature12_strings/test_string_single": 120,
     "feature13_unions/test_union_basic": 2,
     "feature13_unions/test_is_returns_bool": 1,
-    "feature14_intersections/test_intersection_basic": 413
+    "feature14_intersections/test_intersection_basic": 413,
+    "feature18_extern/test_use_extern_stdlib": 0,
+    "feature18_extern/test_extern_abs": 5
   },
   "negative_tests": {
     "feature1_variables/test_immutable_reassign": "Cannot assign to immutable variable",
@@ -44,7 +46,9 @@
   "native_only_tests": [
     "feature17_sizeof/test_sizeof_array",
     "feature17_sizeof/test_sizeof_basic",
-    "feature17_sizeof/test_sizeof_struct"
+    "feature17_sizeof/test_sizeof_struct",
+    "feature18_extern/test_use_extern_stdlib",
+    "feature18_extern/test_extern_abs"
   ],
   "notes": {
     "expected_exit_codes": "Maps test paths to their expected exit codes. Tests not listed here will only verify consistency between JS and C++ targets.",

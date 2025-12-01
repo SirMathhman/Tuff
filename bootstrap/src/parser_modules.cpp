@@ -111,6 +111,22 @@ std::shared_ptr<ASTNode> Parser::parseUseDecl()
 {
 	consume(TokenType::USE, "Expected 'use'");
 
+	// Check if this is a "use extern" declaration
+	if (peek().type == TokenType::EXTERN)
+	{
+		advance(); // consume 'extern'
+
+		std::string headerName = consume(TokenType::IDENTIFIER, "Expected header name after 'use extern'").value;
+
+		consume(TokenType::SEMICOLON, "Expected ';' after use extern declaration");
+
+		auto useExternNode = std::make_shared<ASTNode>();
+		useExternNode->type = ASTNodeType::USE_EXTERN_DECL;
+		useExternNode->value = headerName;
+
+		return useExternNode;
+	}
+
 	// Parse module path (with :: separators, e.g., com::example)
 	std::string modulePath;
 	modulePath += consume(TokenType::IDENTIFIER, "Expected module path after 'use' keyword").value;
