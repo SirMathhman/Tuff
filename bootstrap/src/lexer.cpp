@@ -336,6 +336,9 @@ std::vector<Token> Lexer::tokenize()
 			case '~':
 				tokens.push_back({TokenType::TILDE, "~", startLine, startCol});
 				break;
+			case '#':
+				tokens.push_back({TokenType::HASH, "#", startLine, startCol});
+				break;
 			// Add other operators
 			default:
 				// Unknown char, skip for now or error

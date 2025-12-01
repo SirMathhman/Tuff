@@ -102,11 +102,11 @@ std::string Parser::parseSingleType()
 		return "SizeOf<" + innerType + ">";
 	}
 
-	// Handle destructor types: ~DestructorName
-	if (match(TokenType::TILDE))
+	// Handle destructor types: #DestructorName
+	if (match(TokenType::HASH))
 	{
-		Token destructorName = consume(TokenType::IDENTIFIER, "Expected destructor name after '~'");
-		return "~" + destructorName.value;
+		Token destructorName = consume(TokenType::IDENTIFIER, "Expected destructor name after '#'");
+		return "#" + destructorName.value;
 	}
 
 	// Handle pointer types: *T, *mut T, *a T, *a mut T

@@ -2,7 +2,7 @@
 
 use extern stdlib;
 
-type Allocated<Type> = *mut [Type] & ~free;
+type Allocated<Type> = *mut [Type] & #free;
 
 extern fn malloc<Type>(size: USize): Allocated<Type>;
 extern fn free<Type>(ptr: Allocated<Type>): Void;

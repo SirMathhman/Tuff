@@ -79,6 +79,7 @@ enum class TokenType
 	PIPE,
 	CARET,
 	TILDE,
+	HASH,
 	LEFT_SHIFT,
 	RIGHT_SHIFT,
 	// Arithmetic Operators

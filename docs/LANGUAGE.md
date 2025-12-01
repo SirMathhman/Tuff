@@ -605,11 +605,11 @@ let x = array[4]; // ERROR: reading uninitialized memory (only 3 initialized)
 **Destructor Pattern:**
 
 ```tuff
-type Allocated<T, L : USize> = *[T; 0; L] & ~free;
+type Allocated<T, L : USize> = *[T; 0; L] & #free;
 extern fn malloc<T, L : USize>(count : SizeOf<T> * L) : Allocated<T, L>;
 extern fn free(this : Allocated<T, L : USize>) : Void;
 
-// ~free is a destructor: any function matching fn ?(this : T) => Void
+// #free is a destructor: any function matching fn ?(this : T) => Void
 // Automatically called when value goes out of scope
 ```
 

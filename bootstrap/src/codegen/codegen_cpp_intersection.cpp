@@ -82,7 +82,7 @@ std::string CodeGeneratorCPP::generateIntersectionStruct(
 	// Collect all fields from all component structs
 	for (const auto &component : components)
 	{
-		if (component.length() > 0 && component[0] == '~')
+		if (component.length() > 0 && component[0] == '#')
 		{
 			destructorName = component.substr(1);
 			continue;
@@ -186,7 +186,7 @@ std::string CodeGeneratorCPP::generateIntersectionStruct(
 	std::set<std::string> usedFields;
 	for (size_t i = 0; i < components.size(); i++)
 	{
-		if (components[i].length() > 0 && components[i][0] == '~')
+		if (components[i].length() > 0 && components[i][0] == '#')
 			continue;
 
 		auto it = structFields.find(components[i]);

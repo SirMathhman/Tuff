@@ -92,7 +92,7 @@ bool TypeChecker::isTypeCompatible(const std::string &valueType, const std::stri
 		std::string dataType;
 		for (const auto &comp : components)
 		{
-			if (!comp.empty() && comp[0] == '~')
+			if (!comp.empty() && comp[0] == '#')
 				continue;
 			if (!dataType.empty())
 				dataType += "&";
@@ -103,7 +103,7 @@ bool TypeChecker::isTypeCompatible(const std::string &valueType, const std::stri
 	}
 
 	// If value is an intersection type with a destructor, check if target matches the data type
-	// e.g., I32&~myDestructor is compatible with I32 (can extract the underlying value)
+	// e.g., I32&#myDestructor is compatible with I32 (can extract the underlying value)
 	if (isIntersectionType(expandedValue))
 	{
 		auto components = splitIntersectionType(expandedValue);
@@ -111,7 +111,7 @@ bool TypeChecker::isTypeCompatible(const std::string &valueType, const std::stri
 		std::string dataType;
 		for (const auto &comp : components)
 		{
-			if (!comp.empty() && comp[0] == '~')
+			if (!comp.empty() && comp[0] == '#')
 				continue;
 			if (!dataType.empty())
 				dataType += "&";

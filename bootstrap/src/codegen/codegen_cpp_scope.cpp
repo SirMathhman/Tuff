@@ -65,12 +65,12 @@ std::string CodeGeneratorCPP::generateFunctionBlock(std::shared_ptr<ASTNode> blo
 
 std::string CodeGeneratorCPP::getDestructor(const std::string &type)
 {
-	// Check if the type contains a destructor component (~Destructor)
-	// Type format: "DataType&~Destructor" or "A&B&~Destructor"
-	size_t pos = type.find("~");
+	// Check if the type contains a destructor component (#Destructor)
+	// Type format: "DataType&#Destructor" or "A&B&#Destructor"
+	size_t pos = type.find("#");
 	if (pos != std::string::npos)
 	{
-		// Extract destructor name (everything after ~ until next & or end)
+		// Extract destructor name (everything after # until next & or end)
 		std::string rest = type.substr(pos + 1);
 		size_t ampPos = rest.find('&');
 		if (ampPos != std::string::npos)

@@ -12,7 +12,7 @@ struct Vector<T> {
 
 	So we track them at runtime, instead of compile time.
 	*/
-	data : *mut [T] & ~free
+	data : *mut [T] & #free
 }
 
 // Create a new empty vector

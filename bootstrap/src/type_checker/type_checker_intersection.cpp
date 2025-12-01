@@ -50,8 +50,8 @@ std::vector<std::pair<std::string, std::string>> TypeChecker::validateIntersecti
 
 	for (const auto &component : components)
 	{
-		// Check for destructor component (~DestructorName)
-		if (!component.empty() && component[0] == '~')
+		// Check for destructor component (#DestructorName)
+		if (!component.empty() && component[0] == '#')
 		{
 			destructorCount++;
 			if (destructorCount > 1)
@@ -115,7 +115,7 @@ std::vector<std::pair<std::string, std::string>> TypeChecker::validateIntersecti
 	{
 		for (const auto &component : components)
 		{
-			if (!component.empty() && component[0] == '~')
+			if (!component.empty() && component[0] == '#')
 			{
 				std::string destructorName = component.substr(1);
 				const FunctionInfo &funcInfo = functionTable[destructorName];

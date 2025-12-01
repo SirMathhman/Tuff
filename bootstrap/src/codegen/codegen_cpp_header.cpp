@@ -81,8 +81,8 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 	};
 	collectIntersectionTypes(ast);
 
-	// Filter intersection types - skip Type & ~destructor patterns
-	// e.g., NativeString&~string_destroy or *mut [T; 0; L]&~free
+	// Filter intersection types - skip Type & #destructor patterns
+	// e.g., NativeString&#string_destroy or *mut [T; 0; L]&#free
 	// These should not generate wrapper structs; the destructor is metadata
 	std::set<std::string> filteredIntersectionTypes;
 
@@ -91,7 +91,7 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 		auto components = splitIntersectionType(intersectionType);
 		bool isTypeWithDestructor = false;
 
-		// Check if this is just Type & ~destructor (2 components, one is destructor)
+		// Check if this is just Type & #destructor (2 components, one is destructor)
 		if (components.size() == 2)
 		{
 			int destructorCount = 0;
@@ -99,7 +99,7 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 
 			for (const auto &comp : components)
 			{
-				if (!comp.empty() && comp[0] == '~')
+				if (!comp.empty() && comp[0] == '#')
 					destructorCount++;
 				else
 					dataTypeCount++;

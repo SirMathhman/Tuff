@@ -4,7 +4,7 @@ use mem;
 // So, technically all instances of *[T] should just become Slice<T>.
 // This is the ACTUAL impl of it.
 struct Slice<T> {
-	 pointer : *mut [T; this.init; this.length] & ~free,
+	 pointer : *mut [T; this.init; this.length] & #free,
 	 init : USize,
 	 length : USize
 }

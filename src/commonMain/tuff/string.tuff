@@ -2,7 +2,7 @@
 type extern NativeString;
 
 // string is NativeString with automatic cleanup via destructor
-type extern string = NativeString & ~string_destroy;
+type extern string = NativeString & #string_destroy;
 
 // Core string operations (implemented in platform-specific .js/.cpp files)
 extern fn string_length(s: string): USize;

@@ -43,12 +43,12 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 	if (!tuffType.empty() && tuffType[0] != '&' && tuffType.find('&') != std::string::npos)
 	{
 		// Check if this is an intersection type with destructor
-		// If so, extract the data type (exclude ~destructor components)
+		// If so, extract the data type (exclude #destructor components)
 		auto components = splitIntersectionType(tuffType);
 		std::string dataType;
 		for (const auto &comp : components)
 		{
-			if (!comp.empty() && comp[0] == '~')
+			if (!comp.empty() && comp[0] == '#')
 				continue; // Skip destructor
 			if (!dataType.empty())
 				dataType += "&";
@@ -96,7 +96,7 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 	if (tuffType == "NativeString")
 		return "char*";
 	if (tuffType == "string")
-		return "char*"; // Type alias for NativeString&~string_destroy
+		return "char*"; // Type alias for NativeString&#string_destroy
 
 	if (tuffType.rfind("SizeOf<", 0) == 0)
 		return "size_t";
