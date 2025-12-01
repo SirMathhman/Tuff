@@ -31,6 +31,17 @@ std::string CodeGeneratorJS::generate(std::shared_ptr<ASTNode> ast)
 		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL || type == ASTNodeType::EXPECT_DECL || type == ASTNodeType::ACTUAL_DECL || type == ASTNodeType::MODULE_DECL;
 	};
 
+	// Check if there's a main function
+	bool hasUserMain = false;
+	for (auto child : ast->children)
+	{
+		if (child->type == ASTNodeType::FUNCTION_DECL && child->value == "main")
+		{
+			hasUserMain = true;
+			break;
+		}
+	}
+
 	for (size_t i = 0; i < ast->children.size(); ++i)
 	{
 		auto child = ast->children[i];
@@ -64,6 +75,13 @@ std::string CodeGeneratorJS::generate(std::shared_ptr<ASTNode> ast)
 			}
 		}
 	}
+
+	// If there's a user-defined main function, call it
+	if (hasUserMain)
+	{
+		ss << "process.exit(main());\n";
+	}
+
 	return ss.str();
 }
 
