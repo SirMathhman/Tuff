@@ -1,0 +1,16 @@
+// This maps cleanly from *mut [Type] & ~free
+
+//
+struct Slice<T> {
+	 pointer : *mut [T, this.init, this.length] & ~free,
+	 init : USize,
+	 length : USize
+}
+
+fn get(slice: Slice<T>, index: USize < slice.init): T => {
+	return slice.pointer[index];
+}
+
+fn set(slice: Slice<T>, index: USize < slice.init + 1, value: T): Void => {
+	slice.pointer[index] = value;
+}
