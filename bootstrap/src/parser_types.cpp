@@ -86,6 +86,13 @@ std::string Parser::parseIntersectionType()
 
 std::string Parser::parseSingleType()
 {
+	// Handle destructor types: ~DestructorName
+	if (match(TokenType::TILDE))
+	{
+		Token destructorName = consume(TokenType::IDENTIFIER, "Expected destructor name after '~'");
+		return "~" + destructorName.value;
+	}
+
 	// Handle pointer types: *T, *mut T, *a T, *a mut T
 	if (match(TokenType::STAR))
 	{

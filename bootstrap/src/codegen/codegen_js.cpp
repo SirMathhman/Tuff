@@ -70,6 +70,14 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 		std::string keyword = node->isMutable ? "let" : "const";
 		std::string value = generateNode(node->children[0]);
 		std::string wrapped = wrapInUnion(value, node->children[0]->inferredType, node->inferredType);
+
+		// Track variable with destructor if applicable
+		std::string dtor = getDestructor(node->inferredType);
+		if (!dtor.empty() && !scopes.empty())
+		{
+			scopes.back().vars.push_back({node->value, dtor});
+		}
+
 		return keyword + " " + node->value + " = " + wrapped;
 	}
 	case ASTNodeType::ASSIGNMENT_STMT:
@@ -113,6 +121,7 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 	{
 		std::stringstream ss;
 		ss << "while (" << generateNode(node->children[0]) << ") ";
+		nextBlockIsLoop = true;
 		ss << generateNode(node->children[1]);
 		return ss.str();
 	}
@@ -120,21 +129,66 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 	{
 		std::stringstream ss;
 		ss << "while (true) ";
+		nextBlockIsLoop = true;
 		ss << generateNode(node->children[0]);
 		return ss.str();
 	}
 	case ASTNodeType::BREAK_STMT:
-		return "break";
+	{
+		// Inject destructor calls for all scopes up to nearest loop
+		std::stringstream ss;
+		for (auto it = scopes.rbegin(); it != scopes.rend(); ++it)
+		{
+			for (auto vit = it->vars.rbegin(); vit != it->vars.rend(); ++vit)
+			{
+				ss << vit->destructor << "(" << vit->name << "); ";
+			}
+			if (it->isLoop)
+				break;
+		}
+		ss << "break";
+		return ss.str();
+	}
 	case ASTNodeType::CONTINUE_STMT:
-		return "continue";
+	{
+		// Inject destructor calls for current loop scope only
+		std::stringstream ss;
+		for (auto it = scopes.rbegin(); it != scopes.rend(); ++it)
+		{
+			for (auto vit = it->vars.rbegin(); vit != it->vars.rend(); ++vit)
+			{
+				ss << vit->destructor << "(" << vit->name << "); ";
+			}
+			if (it->isLoop)
+				break;
+		}
+		ss << "continue";
+		return ss.str();
+	}
 	case ASTNodeType::BLOCK:
 	{
 		std::stringstream ss;
 		ss << "{\n";
+
+		// Push new scope
+		Scope newScope;
+		newScope.isLoop = nextBlockIsLoop;
+		nextBlockIsLoop = false;
+		scopes.push_back(newScope);
+
 		for (auto child : node->children)
 		{
 			ss << "  " << generateNode(child) << ";\n";
 		}
+
+		// Pop scope and inject destructor calls (in reverse order)
+		Scope &currentScope = scopes.back();
+		for (auto it = currentScope.vars.rbegin(); it != currentScope.vars.rend(); ++it)
+		{
+			ss << "  " << it->destructor << "(" << it->name << ");\n";
+		}
+		scopes.pop_back();
+
 		ss << "}";
 		return ss.str();
 	}
@@ -282,10 +336,20 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 	}
 	case ASTNodeType::RETURN_STMT:
 	{
+		std::stringstream ss;
+		// Inject destructor calls for all scopes before return
+		for (auto it = scopes.rbegin(); it != scopes.rend(); ++it)
+		{
+			for (auto vit = it->vars.rbegin(); vit != it->vars.rend(); ++vit)
+			{
+				ss << vit->destructor << "(" << vit->name << "); ";
+			}
+		}
 		if (node->children.empty())
-			return "return";
+			ss << "return";
 		else
-			return "return " + generateNode(node->children[0]);
+			ss << "return " << generateNode(node->children[0]);
+		return ss.str();
 	}
 	case ASTNodeType::STRUCT_DECL:
 		// Structs don't need runtime declaration in JS
@@ -376,6 +440,10 @@ std::string CodeGeneratorJS::generateFunctionBlock(std::shared_ptr<ASTNode> bloc
 	std::stringstream ss;
 	ss << "{\n";
 
+	// Push new scope for function body
+	Scope funcScope;
+	scopes.push_back(funcScope);
+
 	for (size_t i = 0; i < block->children.size(); i++)
 	{
 		auto child = block->children[i];
@@ -384,6 +452,12 @@ std::string CodeGeneratorJS::generateFunctionBlock(std::shared_ptr<ASTNode> bloc
 		// and the function has a non-void return type, add implicit return
 		if (i == block->children.size() - 1 && !isStatement(child->type) && returnType != "Void")
 		{
+			// Inject destructor calls before implicit return
+			Scope &currentScope = scopes.back();
+			for (auto it = currentScope.vars.rbegin(); it != currentScope.vars.rend(); ++it)
+			{
+				ss << "  " << it->destructor << "(" << it->name << ");\n";
+			}
 			ss << "  return " << generateNode(child) << ";\n";
 		}
 		else
@@ -391,6 +465,23 @@ std::string CodeGeneratorJS::generateFunctionBlock(std::shared_ptr<ASTNode> bloc
 			ss << "  " << generateNode(child) << ";\n";
 		}
 	}
+
+	// Pop scope (destructor calls already injected for implicit return)
+	// For explicit returns, the destructor calls are injected by RETURN_STMT case
+	Scope &currentScope = scopes.back();
+	// If last statement was not a return/expression, inject destructor calls
+	if (!block->children.empty())
+	{
+		auto lastChild = block->children.back();
+		if (isStatement(lastChild->type) && lastChild->type != ASTNodeType::RETURN_STMT)
+		{
+			for (auto it = currentScope.vars.rbegin(); it != currentScope.vars.rend(); ++it)
+			{
+				ss << "  " << it->destructor << "(" << it->name << ");\n";
+			}
+		}
+	}
+	scopes.pop_back();
 
 	ss << "}";
 	return ss.str();
@@ -412,4 +503,20 @@ std::string CodeGeneratorJS::wrapInUnion(const std::string &value, const std::st
 
 	// Wrap the value: {__tag: "ValueType", __value: value}
 	return "{__tag: \"" + valueType + "\", __value: " + value + "}";
+}
+
+std::string CodeGeneratorJS::getDestructor(const std::string &type)
+{
+	// Check if the type contains a destructor component (~Destructor)
+	// Type format: "DataType&~Destructor" or "A&B&~Destructor"
+	size_t pos = type.find("~");
+	if (pos == std::string::npos)
+		return "";
+
+	// Extract destructor name (everything after ~ until next & or end)
+	std::string rest = type.substr(pos + 1);
+	size_t ampPos = rest.find('&');
+	if (ampPos != std::string::npos)
+		return rest.substr(0, ampPos);
+	return rest;
 }

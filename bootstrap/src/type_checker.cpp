@@ -90,7 +90,7 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 			}
 		}
 
-		if (lhs->inferredType != value->inferredType)
+		if (!isTypeCompatible(value->inferredType, lhs->inferredType))
 		{
 			std::cerr << "Error: Type mismatch in assignment. Expected " << lhs->inferredType << ", got " << value->inferredType << std::endl;
 			exit(1);

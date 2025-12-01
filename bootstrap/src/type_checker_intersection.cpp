@@ -42,17 +42,53 @@ std::vector<std::pair<std::string, std::string>> TypeChecker::validateIntersecti
 	std::map<std::string, std::string> fieldTypeMap; // field name -> type
 
 	auto components = splitIntersectionType(intersectionType);
+	int destructorCount = 0;
+	std::vector<std::string> dataComponents;
+
+	// Primitive types that can be used with destructors
+	std::set<std::string> primitiveTypes = {"I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F32", "F64", "Bool"};
 
 	for (const auto &component : components)
 	{
-		// Each component must be a struct type
+		// Check for destructor component (~DestructorName)
+		if (!component.empty() && component[0] == '~')
+		{
+			destructorCount++;
+			if (destructorCount > 1)
+			{
+				std::cerr << "Error: Intersection type can only have one destructor, found multiple." << std::endl;
+				exit(1);
+			}
+
+			std::string destructorName = component.substr(1);
+			auto it = functionTable.find(destructorName);
+			if (it == functionTable.end())
+			{
+				std::cerr << "Error: Destructor function '" << destructorName << "' not found." << std::endl;
+				exit(1);
+			}
+
+			// We'll validate the signature after we find the data components
+			continue;
+		}
+
+		// Check if it's a primitive type
+		if (primitiveTypes.count(component))
+		{
+			dataComponents.push_back(component);
+			continue;
+		}
+
+		// Each non-destructor non-primitive component must be a struct type
 		auto it = structTable.find(component);
 		if (it == structTable.end())
 		{
 			std::cerr << "Error: Intersection type component '" << component
-								<< "' is not a struct type" << std::endl;
+								<< "' is not a struct type or primitive type" << std::endl;
 			exit(1);
 		}
+
+		dataComponents.push_back(component);
 
 		const StructInfo &structInfo = it->second;
 		for (const auto &field : structInfo.fields)
@@ -74,19 +110,68 @@ std::vector<std::pair<std::string, std::string>> TypeChecker::validateIntersecti
 		}
 	}
 
+	// Validate destructor signature if present
+	if (destructorCount > 0)
+	{
+		for (const auto &component : components)
+		{
+			if (!component.empty() && component[0] == '~')
+			{
+				std::string destructorName = component.substr(1);
+				const FunctionInfo &funcInfo = functionTable[destructorName];
+
+				if (funcInfo.params.size() != 1)
+				{
+					std::cerr << "Error: Destructor '" << destructorName << "' must take exactly one argument." << std::endl;
+					exit(1);
+				}
+
+				// The argument type must match the data type being destructed
+				std::string paramType = funcInfo.params[0].second;
+
+				bool matchFound = false;
+				for (const auto &comp : dataComponents)
+				{
+					if (comp == paramType)
+					{
+						matchFound = true;
+						break;
+					}
+				}
+
+				if (!matchFound)
+				{
+					std::cerr << "Error: Destructor '" << destructorName << "' expects '" << paramType
+										<< "' but is not attached to that type in the intersection." << std::endl;
+					exit(1);
+				}
+
+				if (funcInfo.returnType != "Void")
+				{
+					std::cerr << "Error: Destructor '" << destructorName << "' must return Void." << std::endl;
+					exit(1);
+				}
+			}
+		}
+	}
+
 	return mergedFields;
 }
 
 // Helper: Get the canonical name for an intersection type (used for struct generation)
 std::string TypeChecker::getIntersectionStructName(const std::string &intersectionType)
 {
-	// Replace & with _AND_ for a valid identifier
+	// Replace & with _AND_ and ~ with _DTOR_ for a valid identifier
 	std::string result;
 	for (char c : intersectionType)
 	{
 		if (c == '&')
 		{
 			result += "_AND_";
+		}
+		else if (c == '~')
+		{
+			result += "_DTOR_";
 		}
 		else
 		{
