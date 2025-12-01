@@ -6,8 +6,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include_directories(src/include)
 
-add_executable(tuffc 
-    src/main.cpp
+# Compiler library sources (shared between tuffc and tests)
+set(COMPILER_SOURCES
+    src/compiler.cpp
     src/lexer.cpp
     src/parser.cpp
     src/parser_expressions.cpp
@@ -41,3 +42,17 @@ add_executable(tuffc
     src/codegen/codegen_cpp_union.cpp
     src/codegen/codegen_cpp_intersection.cpp
 )
+
+# Main compiler executable
+add_executable(tuffc 
+    src/main.cpp
+    ${COMPILER_SOURCES}
+)
+
+# Unit test executable
+add_executable(tuffc_test
+    tests/unit/test_compiler.cpp
+    ${COMPILER_SOURCES}
+)
+
+target_include_directories(tuffc_test PRIVATE tests/unit)
