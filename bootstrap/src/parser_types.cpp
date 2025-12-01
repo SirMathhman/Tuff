@@ -26,13 +26,13 @@ std::vector<std::shared_ptr<ASTNode>> Parser::parseGenericParams()
 				paramNode->type = ASTNodeType::TYPE_PARAM_DECL;
 			}
 			paramNode->value = paramName.value;
-			
+
 			// Check for type bound: T : SomeType
 			if (match(TokenType::COLON))
 			{
 				paramNode->typeBound = parseType();
 			}
-			
+
 			params.push_back(paramNode);
 
 			if (!match(TokenType::COMMA))
@@ -138,12 +138,22 @@ std::string Parser::parseSingleType()
 		// Sized array: [T; init; capacity]
 		consume(TokenType::SEMICOLON, "Expected ';' after array element type");
 
-		Token initToken = consume(TokenType::INT_LITERAL, "Expected init count in array type");
+		Token initToken = advance();
+		if (initToken.type != TokenType::INT_LITERAL && initToken.type != TokenType::IDENTIFIER)
+		{
+			std::cerr << "Error: Expected init count (literal or type parameter) in array type at line " << initToken.line << std::endl;
+			exit(1);
+		}
 		std::string init = initToken.value;
 
 		consume(TokenType::SEMICOLON, "Expected ';' after init count");
 
-		Token capacityToken = consume(TokenType::INT_LITERAL, "Expected capacity in array type");
+		Token capacityToken = advance();
+		if (capacityToken.type != TokenType::INT_LITERAL && capacityToken.type != TokenType::IDENTIFIER)
+		{
+			std::cerr << "Error: Expected capacity (literal or type parameter) in array type at line " << capacityToken.line << std::endl;
+			exit(1);
+		}
 		std::string capacity = capacityToken.value;
 
 		consume(TokenType::RBRACKET, "Expected ']' after array type");
@@ -193,13 +203,13 @@ std::string Parser::parseSingleType()
 		typeName += ">";
 	}
 
-	// Handle multiple-of types: Type * Literal
+	// Handle multiple-of types: Type * Literal or Type * TypeParam
 	if (match(TokenType::STAR))
 	{
 		Token multipleLiteral = advance();
-		if (multipleLiteral.type != TokenType::INT_LITERAL)
+		if (multipleLiteral.type != TokenType::INT_LITERAL && multipleLiteral.type != TokenType::IDENTIFIER)
 		{
-			std::cerr << "Error: Expected integer literal after '*' in multiple-of type at line " << multipleLiteral.line << std::endl;
+			std::cerr << "Error: Expected integer literal or type parameter after '*' in multiple-of type at line " << multipleLiteral.line << std::endl;
 			exit(1);
 		}
 		typeName += "*" + multipleLiteral.value;

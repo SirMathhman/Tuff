@@ -68,7 +68,7 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 		std::string paramName = info.genericParams[i];
 		std::string argType = callee->genericArgs[i];
 		typeSubstitutions[paramName] = argType;
-		
+
 		// Check type bounds if present
 		auto boundIt = info.genericBounds.find(paramName);
 		if (boundIt != info.genericBounds.end())

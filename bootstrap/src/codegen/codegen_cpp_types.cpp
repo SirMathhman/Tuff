@@ -114,9 +114,9 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 			{
 				// This is a slice: *[T] or *mut [T]
 				bool isMutable = (tuffType.substr(1, 4) == "mut ");
-				size_t startPos = isMutable ? 6 : 2; // Skip "*mut [" or "*["
+				size_t startPos = isMutable ? 6 : 2;																									 // Skip "*mut [" or "*["
 				std::string elementType = tuffType.substr(startPos, tuffType.length() - startPos - 1); // Remove trailing ]
-				
+
 				if (isMutable)
 				{
 					return mapType(elementType) + "*";

@@ -2,7 +2,7 @@
 
 use extern stdlib;
 
-extern fn malloc(size: USize): *mut U8;
+`extern fn malloc<T, L : USize>(size: SizeOf<T> * L): *mut [T; 0; L];`
 extern fn free(ptr: *mut U8): Void;
 extern fn exit(code: I32): Void;
 
