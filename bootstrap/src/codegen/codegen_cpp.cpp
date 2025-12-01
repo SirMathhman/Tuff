@@ -177,47 +177,8 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 				ss << generateNode(child) << "\n";
 			}
 		}
-
-		// Generate extern function forward declarations
-		for (auto child : ast->children)
-		{
-			if (child->type == ASTNodeType::EXTERN_FN_DECL)
-			{
-				// Check if this is a generic extern function
-				if (!child->genericParams.empty())
-				{
-					// Generic extern functions need template wrappers
-					ss << "template<";
-					for (size_t i = 0; i < child->genericParams.size(); i++)
-					{
-						if (i > 0)
-							ss << ", ";
-						ss << "typename " << child->genericParams[i]->value;
-					}
-					ss << ">\n";
-					ss << "extern " << mapType(child->inferredType) << " " << child->value << "(";
-					for (size_t i = 0; i < child->children.size(); i++)
-					{
-						if (i > 0)
-							ss << ", ";
-						ss << mapType(child->children[i]->inferredType);
-					}
-					ss << ");\n";
-				}
-				else
-				{
-					// Non-generic extern functions use extern "C"
-					ss << "extern \"C\" " << mapType(child->inferredType) << " " << child->value << "(";
-					for (size_t i = 0; i < child->children.size(); i++)
-					{
-						if (i > 0)
-							ss << ", ";
-						ss << mapType(child->children[i]->inferredType);
-					}
-					ss << ");\n";
-				}
-			}
-		}
+		// Note: extern function declarations are not emitted - they are provided by external libraries
+		// The extern keyword in Tuff is like TypeScript declarations or C headers
 
 		// Generate type aliases
 		for (auto child : ast->children)
