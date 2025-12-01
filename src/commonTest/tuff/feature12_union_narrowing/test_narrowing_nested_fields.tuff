@@ -1,0 +1,27 @@
+// Test type narrowing with nested field access
+
+struct Point {
+    x: I32,
+    y: I32
+}
+
+struct Some<T> {
+    value: T
+}
+
+struct None<T> {
+}
+
+type Option<T> = Some<T> | None<T>;
+
+fn main(): I32 => {
+    let pt: Option<Point> = Some<Point> { Point { 10, 20 } };
+    
+    if (pt is Some<Point>) {
+        // Narrowed to Some<Point>, can access pt.value to get Point
+        // Then access Point fields
+        return pt.value.x + pt.value.y;  // Returns 30
+    } else {
+        return 0;
+    }
+}

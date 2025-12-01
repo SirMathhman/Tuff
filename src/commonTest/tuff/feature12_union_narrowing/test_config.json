@@ -1,0 +1,7 @@
+{
+  "expected_exit_code": {
+    "test_narrowing_basic": 42,
+    "test_narrowing_none": 0,
+    "test_narrowing_nested_fields": 30
+  }
+}

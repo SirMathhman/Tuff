@@ -1,0 +1,22 @@
+// Test basic type narrowing with union types
+
+struct Some<T> {
+    value: T
+}
+
+struct None<T> {
+}
+
+type Option<T> = Some<T> | None<T>;
+
+fn main(): I32 => {
+    let opt: Option<I32> = Some<I32> { 42 };
+    
+    if (opt is Some<I32>) {
+        // After 'is' check, opt is narrowed to Some<I32>
+        // Can directly access opt.value without unwrapping
+        return opt.value;  // Returns 42
+    } else {
+        return 0;
+    }
+}
