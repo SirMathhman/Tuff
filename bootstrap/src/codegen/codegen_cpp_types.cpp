@@ -24,6 +24,26 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 	// But NOT reference types like &I32
 	if (!tuffType.empty() && tuffType[0] != '&' && tuffType.find('&') != std::string::npos)
 	{
+		// Check if this is an intersection type with destructor
+		// If so, extract the data type (exclude ~destructor components)
+		auto components = splitIntersectionType(tuffType);
+		std::string dataType;
+		for (const auto &comp : components)
+		{
+			if (!comp.empty() && comp[0] == '~')
+				continue; // Skip destructor
+			if (!dataType.empty())
+				dataType += "&";
+			dataType += comp;
+		}
+
+		// If the data type is just a single type (no more &), map it directly
+		if (dataType.find('&') == std::string::npos && !dataType.empty())
+		{
+			return mapType(dataType);
+		}
+
+		// Otherwise, generate struct name for multi-component intersection
 		return getIntersectionStructName(tuffType);
 	}
 
@@ -57,6 +77,8 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 		return "std::string";
 	if (tuffType == "NativeString")
 		return "char*";
+	if (tuffType == "string")
+		return "char*"; // Type alias for NativeString&~string_destroy
 
 	if (tuffType.rfind("SizeOf<", 0) == 0)
 		return "size_t";

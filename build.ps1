@@ -267,7 +267,7 @@ function Bundle-Native {
     } else {
         $tuffDir = Split-Path $mainCpp -Parent
         $allCppInDir = $relativeFiles | Where-Object { (Split-Path $_ -Parent) -eq $tuffDir }
-        $implementationFiles = $allCppInDir | Where-Object { (Split-Path $_ -Leaf) -notin @('io.cpp', 'main.cpp') }
+        $implementationFiles = $allCppInDir | Where-Object { (Split-Path $_ -Leaf) -notin @('main.cpp') }
         $sourcesList = @($mainCpp) + $implementationFiles
         if ($implementationFiles.Count -gt 0) {
             Write-ColorOutput "  Including $($implementationFiles.Count) implementation file(s)" $ColorGreen

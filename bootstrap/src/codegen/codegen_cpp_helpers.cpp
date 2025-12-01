@@ -212,7 +212,13 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 			}
 			ss << ">\n";
 		}
-		ss << mapType(node->inferredType) << " " << node->value << "(";
+
+		// For user-defined main function, rename to tuff_main to avoid clash with C++ main
+		std::string funcName = node->value;
+		if (funcName == "main")
+			funcName = "tuff_main";
+
+		ss << mapType(node->inferredType) << " " << funcName << "(";
 
 		// Generate parameters (all children except last are params)
 		for (size_t i = 0; i < node->children.size() - 1; i++)

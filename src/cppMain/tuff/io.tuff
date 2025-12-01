@@ -1,4 +1,0 @@
-actual fn print(message: String): Void => {
-    // C++ implementation stub
-    // std::cout << message << std::endl;
-}

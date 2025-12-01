@@ -33,47 +33,51 @@ std::vector<std::string> TypeChecker::splitUnionType(const std::string &unionTyp
 // Helper: Check if valueType is compatible with targetType (including union upcasting)
 bool TypeChecker::isTypeCompatible(const std::string &valueType, const std::string &targetType)
 {
+	// Expand type aliases first
+	std::string expandedValue = expandTypeAlias(valueType);
+	std::string expandedTarget = expandTypeAlias(targetType);
+
 	// Direct match
-	if (valueType == targetType)
+	if (expandedValue == expandedTarget)
 		return true;
 
 	// SizeOf<T> extends USize
-	if (targetType == "USize" && valueType.rfind("SizeOf<", 0) == 0)
+	if (expandedTarget == "USize" && expandedValue.rfind("SizeOf<", 0) == 0)
 	{
 		return true;
 	}
 
 	// Multiple-of compatibility: I32*10I32 can be assigned to I32*5I32
-	if (isMultipleOfType(valueType) && isMultipleOfType(targetType))
+	if (isMultipleOfType(expandedValue) && isMultipleOfType(expandedTarget))
 	{
-		if (isMultipleOfCompatible(valueType, targetType))
+		if (isMultipleOfCompatible(expandedValue, expandedTarget))
 			return true;
 	}
 
 	// Multiple-of to base type: I32*5I32 can be assigned to I32
-	if (isMultipleOfType(valueType))
+	if (isMultipleOfType(expandedValue))
 	{
-		std::string baseType = getMultipleOfBaseType(valueType);
-		if (baseType == targetType)
+		std::string baseType = getMultipleOfBaseType(expandedValue);
+		if (baseType == expandedTarget)
 			return true;
 	}
 
 	// If target is a union type, check if value is one of the variants
-	if (isUnionType(targetType))
+	if (isUnionType(expandedTarget))
 	{
-		auto variants = splitUnionType(targetType);
+		auto variants = splitUnionType(expandedTarget);
 		for (const auto &variant : variants)
 		{
-			if (valueType == variant)
+			if (expandedValue == variant)
 				return true;
 		}
 	}
 
 	// If target is an intersection type with a destructor, check if value matches the data type
 	// e.g., I32 is compatible with I32&~myDestructor
-	if (isIntersectionType(targetType))
+	if (isIntersectionType(expandedTarget))
 	{
-		auto components = splitIntersectionType(targetType);
+		auto components = splitIntersectionType(expandedTarget);
 		// Build the data type (exclude destructor components)
 		std::string dataType;
 		for (const auto &comp : components)
@@ -84,15 +88,15 @@ bool TypeChecker::isTypeCompatible(const std::string &valueType, const std::stri
 				dataType += "&";
 			dataType += comp;
 		}
-		if (valueType == dataType)
+		if (expandedValue == dataType)
 			return true;
 	}
 
 	// If value is an intersection type with a destructor, check if target matches the data type
 	// e.g., I32&~myDestructor is compatible with I32 (can extract the underlying value)
-	if (isIntersectionType(valueType))
+	if (isIntersectionType(expandedValue))
 	{
-		auto components = splitIntersectionType(valueType);
+		auto components = splitIntersectionType(expandedValue);
 		// Build the data type (exclude destructor components)
 		std::string dataType;
 		for (const auto &comp : components)
@@ -103,7 +107,7 @@ bool TypeChecker::isTypeCompatible(const std::string &valueType, const std::stri
 				dataType += "&";
 			dataType += comp;
 		}
-		if (targetType == dataType)
+		if (expandedTarget == dataType)
 			return true;
 	}
 

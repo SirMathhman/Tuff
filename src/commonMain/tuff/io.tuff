@@ -1,1 +1,4 @@
-expect fn print(message: String): Void;
+// io.tuff - I/O functions
+
+extern fn print(message: string): Void;
+extern fn println(message: string): Void;

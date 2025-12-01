@@ -73,18 +73,18 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	// e.g., NativeString&~string_destroy should not generate a wrapper struct
 	std::set<std::string> filteredIntersectionTypes;
 	std::set<std::string> externTypes = {"NativeString"}; // Known extern types
-	
+
 	for (const auto &intersectionType : intersectionTypes)
 	{
 		auto components = splitIntersectionType(intersectionType);
 		bool isExternWithDestructor = false;
-		
+
 		// Check if this is just ExternType & ~destructor
 		if (components.size() == 2)
 		{
 			bool hasExternType = false;
 			bool hasDestructor = false;
-			
+
 			for (const auto &comp : components)
 			{
 				if (!comp.empty() && comp[0] == '~')
@@ -96,13 +96,13 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 					hasExternType = true;
 				}
 			}
-			
+
 			if (hasExternType && hasDestructor)
 			{
 				isExternWithDestructor = true;
 			}
 		}
-		
+
 		if (!isExternWithDestructor)
 		{
 			filteredIntersectionTypes.insert(intersectionType);
@@ -132,6 +132,22 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 		}
 	}
 
+	// Generate extern function forward declarations
+	for (auto child : ast->children)
+	{
+		if (child->type == ASTNodeType::EXTERN_FN_DECL)
+		{
+			ss << "extern \"C\" " << mapType(child->inferredType) << " " << child->value << "(";
+			for (size_t i = 0; i < child->children.size(); i++)
+			{
+				if (i > 0)
+					ss << ", ";
+				ss << mapType(child->children[i]->inferredType);
+			}
+			ss << ");\n";
+		}
+	}
+
 	// Generate struct declarations
 	for (auto child : ast->children)
 	{
@@ -146,9 +162,11 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	{
 		if (child->type == ASTNodeType::FUNCTION_DECL)
 		{
-			// Skip main - it's generated as the entry point wrapper
-			if (child->value == "main")
-				continue;
+			// Rename main to tuff_main for forward declaration
+			std::string funcName = child->value;
+			if (funcName == "main")
+				funcName = "tuff_main";
+
 			if (!child->genericParams.empty())
 			{
 				ss << "template<";
@@ -160,7 +178,7 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 				}
 				ss << ">\n";
 			}
-			ss << mapType(child->inferredType) << " " << child->value << "(";
+			ss << mapType(child->inferredType) << " " << funcName << "(";
 			for (size_t i = 0; i < child->children.size() - 1; i++)
 			{
 				if (i > 0)
@@ -256,53 +274,75 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 
 	ss << "int main() {\n";
 
-	for (size_t i = 0; i < ast->children.size(); ++i)
+	// Check if there's a user-defined main function
+	bool hasUserMain = false;
+	for (auto child : ast->children)
 	{
-		auto child = ast->children[i];
-
-		// Skip struct, enum, function, expect, actual, and module declarations (already generated)
-		if (child->type == ASTNodeType::STRUCT_DECL || child->type == ASTNodeType::ENUM_DECL || child->type == ASTNodeType::FUNCTION_DECL || child->type == ASTNodeType::EXPECT_DECL || child->type == ASTNodeType::ACTUAL_DECL || child->type == ASTNodeType::MODULE_DECL)
-			continue;
-
-		if (i == ast->children.size() - 1 && !isStatement(child->type))
+		if (child->type == ASTNodeType::FUNCTION_DECL && child->value == "main")
 		{
-			// Last node is an expression: return its value
-			if (needsEnumCast)
-			{
-				ss << "    return static_cast<int>(" << generateNode(child) << ");\n";
-			}
-			else if (hasReturnValue)
-			{
-				ss << "    return " << generateNode(child) << ";\n";
-			}
-			else
-			{
-				ss << "    " << generateNode(child) << ";\n";
-				ss << "    return 0;\n";
-			}
-		}
-		else
-		{
-			// Earlier nodes or statements: execute for side effects
-			ss << "    " << generateNode(child) << ";\n";
+			hasUserMain = true;
+			break;
 		}
 	}
 
-	if (ast->children.empty() || isStatement(ast->children.back()->type))
+	if (hasUserMain)
 	{
-		ss << "    return 0;\n";
+		// Call the user's main function
+		ss << "    return tuff_main();\n";
+	}
+	else
+	{
+		// Execute top-level statements
+		for (size_t i = 0; i < ast->children.size(); ++i)
+		{
+			auto child = ast->children[i];
+
+			// Skip struct, enum, function, expect, actual, extern, and module declarations (already generated)
+			if (child->type == ASTNodeType::STRUCT_DECL || child->type == ASTNodeType::ENUM_DECL || child->type == ASTNodeType::FUNCTION_DECL || child->type == ASTNodeType::EXPECT_DECL || child->type == ASTNodeType::ACTUAL_DECL || child->type == ASTNodeType::EXTERN_FN_DECL || child->type == ASTNodeType::EXTERN_TYPE_DECL || child->type == ASTNodeType::MODULE_DECL)
+				continue;
+
+			if (i == ast->children.size() - 1 && !isStatement(child->type))
+			{
+				// Last node is an expression: return its value
+				if (needsEnumCast)
+				{
+					ss << "    return static_cast<int>(" << generateNode(child) << ");\n";
+				}
+				else if (hasReturnValue)
+				{
+					ss << "    return " << generateNode(child) << ";\n";
+				}
+				else
+				{
+					ss << "    " << generateNode(child) << ";\n";
+					ss << "    return 0;\n";
+				}
+			}
+			else
+			{
+				// Earlier nodes or statements: execute for side effects
+				ss << "    " << generateNode(child) << ";\n";
+			}
+		}
+
+		if (ast->children.empty() || isStatement(ast->children.back()->type))
+		{
+			ss << "    return 0;\n";
+		}
 	}
 
 	ss << "}\n";
 
 	// Generate function definitions
+	bool hasMainFunction = false;
 	for (auto child : ast->children)
 	{
 		if (child->type == ASTNodeType::FUNCTION_DECL)
 		{
-			// Skip main - it's already generated as the entry point wrapper
 			if (child->value == "main")
-				continue;
+			{
+				hasMainFunction = true;
+			}
 			ss << "\n"
 				 << generateNode(child) << "\n";
 		}

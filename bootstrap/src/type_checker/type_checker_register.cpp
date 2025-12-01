@@ -259,11 +259,14 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 			{
 				info.genericParams.push_back(genParam->value);
 			}
-			info.returnType = child->inferredType;
+			// Expand type aliases in return type
+			info.returnType = expandTypeAlias(child->inferredType);
 			for (size_t i = 0; i < child->children.size(); i++)
 			{
 				auto paramNode = child->children[i];
-				info.params.push_back({paramNode->value, paramNode->inferredType});
+				// Expand type aliases in parameter types
+				std::string paramType = expandTypeAlias(paramNode->inferredType);
+				info.params.push_back({paramNode->value, paramType});
 			}
 			functionTable[funcName] = info;
 		}

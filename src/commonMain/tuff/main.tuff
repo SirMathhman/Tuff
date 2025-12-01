@@ -1,4 +1,7 @@
 fn main(): I32 => {
-    let s: string = string_fromI32(42);
-    string_toI32(s)
+    let num: I32 = 42;
+    let numStr = string_fromI32(num);
+    println(numStr);
+    
+    0
 }
