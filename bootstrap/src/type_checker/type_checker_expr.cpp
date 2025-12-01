@@ -12,6 +12,15 @@ void TypeChecker::checkIdentifier(std::shared_ptr<ASTNode> node)
 		return;
 	}
 
+	// Check narrowed types first (for union type narrowing after 'is' checks)
+	auto narrowedIt = narrowedTypes.find(name);
+	if (narrowedIt != narrowedTypes.end())
+	{
+		node->inferredType = narrowedIt->second;
+		node->isNarrowedUnion = true; // Mark that this is a narrowed union (value is still wrapped)
+		return;
+	}
+
 	// Check if it's a local variable/parameter in symbol table
 	auto it = symbolTable.find(name);
 	if (it != symbolTable.end())

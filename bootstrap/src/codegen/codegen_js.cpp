@@ -445,6 +445,11 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::FIELD_ACCESS:
 	{
 		auto object = generateNode(node->children[0]);
+		// If accessing field on a narrowed union, unwrap it first
+		if (node->children[0]->isNarrowedUnion)
+		{
+			return object + ".__value." + node->value;
+		}
 		return object + "." + node->value;
 	}
 	default:

@@ -148,8 +148,24 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 			exit(1);
 		}
 
+		// Type narrowing: if condition is `x is SomeType`, narrow x's type in then-branch
+		std::string narrowedVar;
+		std::string narrowedToType;
+		if (condition->type == ASTNodeType::IS_EXPR && condition->children[0]->type == ASTNodeType::IDENTIFIER)
+		{
+			narrowedVar = condition->children[0]->value;
+			narrowedToType = condition->value; // The type we're checking against
+			narrowedTypes[narrowedVar] = narrowedToType;
+		}
+
 		auto thenBranch = node->children[1];
 		check(thenBranch);
+
+		// Clear type narrowing after then-branch
+		if (!narrowedVar.empty())
+		{
+			narrowedTypes.erase(narrowedVar);
+		}
 
 		if (node->children.size() > 2)
 		{

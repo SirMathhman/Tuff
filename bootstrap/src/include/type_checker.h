@@ -61,6 +61,7 @@ private:
 	std::map<std::string, ExpectInfo> expectTable;
 	std::map<std::string, TypeAliasInfo> typeAliasTable;
 	std::map<std::string, std::vector<BorrowInfo>> activeBorrows; // variable -> active borrows
+	std::map<std::string, std::string> narrowedTypes; // variable -> narrowed type (for union type narrowing)
 	int currentScopeDepth = 0;
 	std::string currentFunctionReturnType;					// Track return type for validation
 	std::string currentModule;											// Track current module context

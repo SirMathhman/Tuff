@@ -453,6 +453,13 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::FIELD_ACCESS:
 	{
 		auto object = generateNode(node->children[0]);
+		// If accessing field on a narrowed union, unwrap it using getter
+		if (node->children[0]->isNarrowedUnion)
+		{
+			// Get the narrowed type (e.g., Some<I32>)
+			std::string narrowedType = node->children[0]->inferredType;
+			return object + ".__get_" + narrowedType + "()." + node->value;
+		}
 		return object + "." + node->value;
 	}
 	default:

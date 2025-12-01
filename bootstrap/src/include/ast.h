@@ -74,6 +74,7 @@ struct ASTNode
 	// Type information (filled by TypeChecker)
 	std::string inferredType;
 	bool isMutable = false; // For LET_STMT
+	bool isNarrowedUnion = false; // For union type narrowing - indicates value is wrapped
 
 	// Helper to add a child
 	void addChild(std::shared_ptr<ASTNode> child)
