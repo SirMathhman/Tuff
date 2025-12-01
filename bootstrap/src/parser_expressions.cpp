@@ -342,9 +342,22 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 		consume(TokenType::LPAREN, "Expected '(' after 'if'");
 		auto condition = parseExpression();
 		consume(TokenType::RPAREN, "Expected ')' after condition");
-		auto thenBranch = parseExpression();
+
+		// Parse then branch - could be a block or expression
+		std::shared_ptr<ASTNode> thenBranch;
+		if (peek().type == TokenType::LBRACE)
+			thenBranch = parseBlock();
+		else
+			thenBranch = parseExpression();
+
 		consume(TokenType::ELSE, "If expressions must have 'else' clause");
-		auto elseBranch = parseExpression();
+
+		// Parse else branch - could be a block or expression
+		std::shared_ptr<ASTNode> elseBranch;
+		if (peek().type == TokenType::LBRACE)
+			elseBranch = parseBlock();
+		else
+			elseBranch = parseExpression();
 
 		auto node = std::make_shared<ASTNode>();
 		node->type = ASTNodeType::IF_EXPR;
@@ -373,8 +386,24 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 		}
 
 		// Check for struct literal: TypeName { expr, expr, ... }
+		// BUT be careful not to consume the start of a block if this identifier is just a variable
+		// e.g. "return x;" inside a block shouldn't parse "x {" as a struct literal if { starts a new block
+		// Actually, struct literals are expressions, so if we are parsing an expression and see { it must be a struct literal
+		// UNLESS we are in a statement context where { starts a block.
+		// But parseExpression() is called for expressions.
+		// The ambiguity is:
+		// if (cond) Ident { ... }  -> Struct literal
+		// fn f() => Ident { ... }  -> Struct literal
+		// Ident { ... }            -> Statement starting with struct literal? Or block?
+
 		if (peek().type == TokenType::LBRACE)
 		{
+			// Lookahead to see if it looks like a struct literal (fields) or a block (statements)
+			// Struct literal: { expr, expr }
+			// Block: { stmt; stmt; }
+			// This is hard to distinguish without backtracking or more context.
+			// For now, assume if we are parsing an expression, Ident { is a struct literal.
+
 			advance(); // consume '{'
 			auto node = std::make_shared<ASTNode>();
 			node->type = ASTNodeType::STRUCT_LITERAL;

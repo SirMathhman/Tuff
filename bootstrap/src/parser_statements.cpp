@@ -87,7 +87,7 @@ std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 
 		// Parse parameter type
 		std::string paramType = parseType();
-		
+
 		// Check for type bound: Type < expr
 		std::string typeBound;
 		if (peek().type == TokenType::LESS || peek().type == TokenType::LANGLE)
@@ -95,16 +95,23 @@ std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 			advance(); // consume <
 			// For now, just consume tokens until we hit , or )
 			// Full expression parsing would go here
-			int depth = 1;
-			while (depth > 0 && peek().type != TokenType::END_OF_FILE)
+			int depth = 0; // Start at 0 since we already consumed the first <
+			while (peek().type != TokenType::END_OF_FILE)
 			{
 				if (peek().type == TokenType::LESS || peek().type == TokenType::LANGLE)
 					depth++;
 				else if (peek().type == TokenType::GREATER || peek().type == TokenType::RANGLE)
-					depth--;
-				else if (depth == 1 && (peek().type == TokenType::COMMA || peek().type == TokenType::RPAREN))
+				{
+					if (depth > 0)
+						depth--;
+				}
+				else if (depth == 0 && (peek().type == TokenType::COMMA || peek().type == TokenType::RPAREN))
 					break;
-				
+
+				// Stop if we hit the start of the function body
+				if (peek().type == TokenType::FAT_ARROW || peek().type == TokenType::LBRACE)
+					break;
+
 				typeBound += advance().value + " ";
 			}
 		}
@@ -114,7 +121,7 @@ std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 		paramNode->type = ASTNodeType::IDENTIFIER;
 		paramNode->value = paramName.value;
 		paramNode->inferredType = paramType;
-		paramNode->typeBound = typeBound;  // Store the bound expression
+		paramNode->typeBound = typeBound; // Store the bound expression
 		node->addChild(paramNode);
 
 		if (!match(TokenType::COMMA))
@@ -144,12 +151,16 @@ std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 	{
 		// Expression body: fn add(x: I32, y: I32): I32 => x + y;
 		auto expr = parseExpression();
-		if (peek().type != TokenType::SEMICOLON)
+		if (peek().type == TokenType::SEMICOLON)
 		{
+			advance(); // consume ;
+		}
+		else if (peek().type != TokenType::RBRACE && peek().type != TokenType::END_OF_FILE)
+		{
+			// Only error if we're not at the end of a block or file
 			error("Expected ';' after expression body",
 						"Expression-body functions need semicolons: fn f() => expr; Block-body functions don't: fn f() => { ... }");
 		}
-		advance(); // consume ;
 
 		// Wrap expression in implicit return
 		auto returnNode = std::make_shared<ASTNode>();
@@ -520,6 +531,18 @@ std::shared_ptr<ASTNode> Parser::parseStatementOrBlock()
 		advance();
 		auto node = std::make_shared<ASTNode>();
 		node->type = ASTNodeType::CONTINUE_STMT;
+		match(TokenType::SEMICOLON);
+		return node;
+	}
+	else if (peek().type == TokenType::RETURN)
+	{
+		advance();
+		auto node = std::make_shared<ASTNode>();
+		node->type = ASTNodeType::RETURN_STMT;
+		if (peek().type != TokenType::SEMICOLON && peek().type != TokenType::RBRACE)
+		{
+			node->addChild(parseExpression());
+		}
 		match(TokenType::SEMICOLON);
 		return node;
 	}

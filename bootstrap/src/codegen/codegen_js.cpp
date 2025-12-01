@@ -153,8 +153,23 @@ std::string CodeGeneratorJS::generateNode(std::shared_ptr<ASTNode> node)
 	{
 		std::stringstream ss;
 		ss << "(" << generateNode(node->children[0]) << " ? ";
-		ss << generateNode(node->children[1]) << " : ";
-		ss << generateNode(node->children[2]) << ")";
+		
+		auto thenBranch = node->children[1];
+		auto elseBranch = node->children[2];
+		
+		if (thenBranch->type == ASTNodeType::BLOCK)
+			ss << "(() => " << generateFunctionBlock(thenBranch, node->inferredType) << ")()";
+		else
+			ss << generateNode(thenBranch);
+			
+		ss << " : ";
+		
+		if (elseBranch->type == ASTNodeType::BLOCK)
+			ss << "(() => " << generateFunctionBlock(elseBranch, node->inferredType) << ")()";
+		else
+			ss << generateNode(elseBranch);
+			
+		ss << ")";
 		return ss.str();
 	}
 	case ASTNodeType::WHILE_STMT:

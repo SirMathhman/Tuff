@@ -13,6 +13,73 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 
 	if (node->value == "+" || node->value == "-" || node->value == "*" || node->value == "/" || node->value == "%")
 	{
+		// Allow pointer arithmetic: ptr + int
+		// If ptr is *[T] or *mut [T], result is *T or *mut T (decay to element pointer)
+		if (leftType.length() > 0 && leftType[0] == '*' && isNumericType(rightType))
+		{
+			// Check if it's an array pointer
+			size_t bracketPos = leftType.find('[');
+			if (bracketPos != std::string::npos)
+			{
+				// It's *[T] or *mut [T] or *mut [T; ...]
+				// Decay to element pointer
+				bool isMutable = (leftType.substr(1, 4) == "mut ");
+				size_t startPos = isMutable ? 6 : 2;
+				size_t semiPos = leftType.find(';');
+				std::string elementType;
+				if (semiPos == std::string::npos)
+					elementType = leftType.substr(startPos, leftType.length() - startPos - 1);
+				else
+					elementType = leftType.substr(startPos, semiPos - startPos);
+					
+				if (isMutable)
+					node->inferredType = "*mut " + elementType;
+				else
+					node->inferredType = "*" + elementType;
+			}
+			else
+			{
+				node->inferredType = leftType;
+			}
+			return;
+		}
+		
+		// Also handle intersection types with pointers (e.g. *mut [T] & #free)
+		if (isIntersectionType(leftType))
+		{
+			auto parts = splitIntersectionType(leftType);
+			for (const auto& part : parts)
+			{
+				if (part.length() > 0 && part[0] == '*' && isNumericType(rightType))
+				{
+					// Found a pointer part, use logic above
+					std::string ptrType = part;
+					size_t bracketPos = ptrType.find('[');
+					if (bracketPos != std::string::npos)
+					{
+						bool isMutable = (ptrType.substr(1, 4) == "mut ");
+						size_t startPos = isMutable ? 6 : 2;
+						size_t semiPos = ptrType.find(';');
+						std::string elementType;
+						if (semiPos == std::string::npos)
+							elementType = ptrType.substr(startPos, ptrType.length() - startPos - 1);
+						else
+							elementType = ptrType.substr(startPos, semiPos - startPos);
+							
+						if (isMutable)
+							node->inferredType = "*mut " + elementType;
+						else
+							node->inferredType = "*" + elementType;
+					}
+					else
+					{
+						node->inferredType = ptrType;
+					}
+					return;
+				}
+			}
+		}
+		
 		if (!isNumericType(leftType) || !isNumericType(rightType))
 		{
 			std::cerr << "Error: Operands of '" << node->value << "' must be numeric." << std::endl;

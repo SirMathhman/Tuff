@@ -73,8 +73,8 @@ struct ASTNode
 	std::vector<std::string> fieldNames;								 // For struct literals (filled by TypeChecker)
 
 	// Type information (filled by TypeChecker)
-	std::string inferredType;        // DEPRECATED: Use exprType instead
-	ExprPtr exprType;                // New unified expression/type system
+	std::string inferredType;			// DEPRECATED: Use exprType instead
+	ExprPtr exprType;							// New unified expression/type system
 	std::string typeBound;				// For type parameters with bounds: T : SomeType
 	bool isMutable = false;				// For LET_STMT
 	bool isNarrowedUnion = false; // For union type narrowing - indicates value is wrapped

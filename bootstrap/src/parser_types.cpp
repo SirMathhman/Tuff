@@ -188,6 +188,8 @@ std::string Parser::parseSingleType()
 			}
 			capacity = capacityToken.value;
 		}
+
+		consume(TokenType::RBRACKET, "Expected ']' after array capacity");
 		return "[" + elementType + "; " + init + "; " + capacity + "]";
 	}
 

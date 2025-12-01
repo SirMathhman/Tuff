@@ -230,5 +230,9 @@ bool TypeChecker::typesMatch(const std::string &actual, const std::string &expec
 
 	// Strip lifetimes and use isTypeCompatible for full type checking
 	// This handles type aliases, intersection types with destructors, union types, etc.
+	// Also handle pointer to slice vs slice pointer
+	// *[T] vs *Slice<T>
+	// If one is a slice pointer and the other is a struct pointer, they might be compatible
+	// But for now, just use isTypeCompatible
 	return isTypeCompatible(stripLifetime(actual), stripLifetime(expected));
 }

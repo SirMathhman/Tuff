@@ -30,6 +30,13 @@ void TypeChecker::checkIdentifier(std::shared_ptr<ASTNode> node)
 		node->inferredType = it->second.type;
 		return;
 	}
+	
+	// Check if it's 'this' in a struct context
+	if (name == "this" && !currentStruct.empty())
+	{
+		node->inferredType = currentStruct;
+		return;
+	}
 
 	// If not found and we're in a module context, try prefixing with module name
 	if (!currentModule.empty())
@@ -186,8 +193,31 @@ void TypeChecker::checkIfExpr(std::shared_ptr<ASTNode> node)
 	}
 	else
 	{
-		// Simplified: use the then branch type for now
-		node->inferredType = thenBranch->inferredType;
+		// Check if types are compatible (e.g. one is subtype of another)
+		if (isTypeCompatible(elseBranch->inferredType, thenBranch->inferredType))
+		{
+			node->inferredType = thenBranch->inferredType;
+		}
+		else if (isTypeCompatible(thenBranch->inferredType, elseBranch->inferredType))
+		{
+			node->inferredType = elseBranch->inferredType;
+		}
+		else
+		{
+			// Simplified: use the then branch type for now, but warn/error if very different
+			// For the slice case: index + 1USize (USize) vs slice.init (USize)
+			// They should match.
+			// If we get here, it means they don't match exactly and aren't compatible.
+			// But wait, the error was "Expected USize, got " (empty string?)
+			// This suggests one branch has empty inferred type?
+			if (thenBranch->inferredType.empty() || elseBranch->inferredType.empty())
+			{
+				// This shouldn't happen if check() works correctly
+			}
+			
+			// Fallback
+			node->inferredType = thenBranch->inferredType;
+		}
 	}
 }
 

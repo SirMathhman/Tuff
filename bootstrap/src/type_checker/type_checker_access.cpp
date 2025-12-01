@@ -42,27 +42,128 @@ void TypeChecker::checkFieldOrEnumAccess(std::shared_ptr<ASTNode> node)
 	std::string fieldName = node->value;
 	std::string typeName = object->inferredType;
 
-	// Handle pointer to slice: *[T] or *mut [T]
+	// Handle pointer to slice: *[T] or *mut [T] or *mut [T; init; cap]
 	// These have virtual fields: .init and .length (both USize)
 	if ((typeName.rfind("*[", 0) == 0 || typeName.rfind("*mut [", 0) == 0))
 	{
 		// Extract to check if it's a slice (no semicolons)
 		size_t bracketStart = typeName.find('[');
 		size_t bracketEnd = typeName.find(']');
-		if (bracketStart != std::string::npos && bracketEnd != std::string::npos)
+		
+		// Check if it's a sized array or slice
+		// Sized arrays also have .init and .length if they are pointers
+		// Actually, sized arrays [T; N; C] have fixed size, but we might want to access it
+		// But the error message "Cannot access field 'pointer' on non-struct type '*Slice<T>'"
+		// suggests that *Slice<T> is NOT being recognized as a struct pointer.
+		// Wait, *Slice<T> IS a pointer to a struct.
+		// The issue is likely that typeName is "*Slice<T>" and we need to dereference it to get "Slice<T>"
+		// But field access on pointer (*p).x is usually handled by auto-deref or explicit deref.
+		// In Tuff, p.x works on pointers.
+	}
+	
+	// Handle pointer dereference for field access (auto-deref)
+	if (typeName.length() > 0 && typeName[0] == '*')
+	{
+		// Strip pointer
+		if (typeName.substr(0, 5) == "*mut ")
+			typeName = typeName.substr(5);
+		else
+			typeName = typeName.substr(1);
+			
+		// Strip lifetime if present: *a T -> T
+		// Simple heuristic: if starts with lowercase letter and space
+		if (typeName.length() > 2 && typeName[1] == ' ' && typeName[0] >= 'a' && typeName[0] <= 'z')
 		{
-			std::string arrayPart = typeName.substr(bracketStart, bracketEnd - bracketStart + 1);
-			// Check if it's a slice [T] (no semicolons)
-			if (arrayPart.find(';') == std::string::npos)
+			typeName = typeName.substr(2);
+		}
+	}
+
+	// Handle intersection types (struct merging)
+	if (isIntersectionType(typeName))
+	{
+		auto parts = splitIntersectionType(typeName);
+		bool found = false;
+		std::string fieldType;
+
+		for (const auto &part : parts)
+		{
+			// Check if this part is a struct with the field
+			auto it = structTable.find(part);
+			if (it != structTable.end())
 			{
-				if (fieldName == "init" || fieldName == "length")
+				for (const auto &field : it->second.fields)
 				{
-					node->inferredType = "USize";
-					return;
+					if (field.first == fieldName)
+					{
+						fieldType = field.second;
+						found = true;
+						break;
+					}
 				}
-				std::cerr << "Error: Slice pointer type '" << typeName << "' only has fields 'init' and 'length', not '" << fieldName << "'." << std::endl;
-				exit(1);
 			}
+			if (found) break;
+		}
+		
+		if (found)
+		{
+			node->inferredType = fieldType;
+			return;
+		}
+	}
+
+	// Handle generic types: Struct<T>
+	// This part was duplicated above but with incomplete logic.
+	// The logic above handles finding the struct and substituting generics.
+	// If we reached here, it means we didn't return early, so we should fall through to the error.
+	// BUT, the code above (lines 140-170) was trying to do exactly what this code does.
+	// I should remove the duplicate logic I added above and let this handle it.
+	// The issue was that I added logic to handle Struct<T> inside the pointer deref block? No.
+	
+	// Let's clean up. The code I added above (lines 140-170) was:
+	/*
+	// Handle generic types: Struct<T>
+	std::string baseName;
+	std::vector<std::string> typeArgs;
+	parseGenericType(typeName, baseName, typeArgs);
+
+	auto it = structTable.find(baseName);
+	if (it != structTable.end())
+	{
+		...
+	}
+	*/
+	
+	// This logic is redundant with the logic at the end of the function.
+	// I should remove the block I added and let the logic at the end handle it.
+	// The logic at the end handles Struct<T> correctly.
+	
+	// So, I will remove the block I added in the previous step.
+	
+	// Wait, the previous step added logic to handle Struct<T> BEFORE checking for slice pointer.
+	// This is because *Slice<T> becomes Slice<T> after pointer stripping.
+	// And Slice<T> is a struct.
+	// So we want to check if it's a struct first.
+	
+	// The problem is that I duplicated the logic.
+	// I should just let the control flow fall through to the end where Struct<T> is handled.
+	
+	// So I will remove the block I added.
+
+	
+	// Handle pointer to slice: *[T] or *mut [T]
+	// These have virtual fields: .init and .length (both USize)
+	// We check this AFTER struct check because *Slice<T> is a struct pointer
+	// But if it's a raw slice pointer, we handle it here.
+	// Note: typeName was stripped of pointer above, so we check if it starts with [
+	if (typeName.length() > 0 && typeName[0] == '[')
+	{
+		// Check if it's a slice [T] (no semicolons) or sized array [T; N; C]
+		// Both have init/length if accessed via pointer (which we stripped)
+		// Actually, sized arrays have fixed length, but we can still access it
+		if (fieldName == "init" || fieldName == "length")
+		{
+			node->inferredType = "USize";
+			return;
 		}
 	}
 
@@ -91,6 +192,7 @@ void TypeChecker::checkFieldOrEnumAccess(std::shared_ptr<ASTNode> node)
 			return;
 		}
 	}
+
 
 	// typeName already declared at top of function
 

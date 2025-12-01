@@ -119,6 +119,23 @@ bool TypeChecker::isTypeCompatible(const std::string &valueType, const std::stri
 		}
 		if (expandedTarget == dataType)
 			return true;
+			
+		// Also check if target is compatible with the data type (e.g. *mut [T] vs *[T])
+		if (isTypeCompatible(dataType, expandedTarget))
+			return true;
+	}
+	
+	// Handle pointer mutability compatibility: *mut T is compatible with *T (immutable)
+	if (expandedValue.length() > 5 && expandedValue.substr(0, 5) == "*mut " &&
+	    expandedTarget.length() > 1 && expandedTarget[0] == '*' && expandedTarget.substr(0, 5) != "*mut ")
+	{
+		// Value is *mut T, Target is *T
+		std::string valueInner = expandedValue.substr(5);
+		std::string targetInner = expandedTarget.substr(1);
+		
+		// Check if inner types are compatible
+		if (isTypeCompatible(valueInner, targetInner))
+			return true;
 	}
 
 	return false;

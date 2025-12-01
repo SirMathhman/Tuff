@@ -67,6 +67,7 @@ private:
 	int currentScopeDepth = 0;
 	std::string currentFunctionReturnType;					// Track return type for validation
 	std::string currentModule;											// Track current module context
+	std::string currentStruct;                      // Track current struct context (for this.field)
 	std::vector<std::string> importedModules;				// Track use declarations
 	std::vector<std::string> genericParamsInScope;	// Track generic params in current scope
 	std::vector<std::string> lifetimeParamsInScope; // Track lifetime params in current scope

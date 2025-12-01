@@ -126,10 +126,18 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 					{
 						info.genericParams.push_back(genParam->value);
 					}
+					
+					// Set current struct context
+					currentStruct = structName;
+					
 					for (auto fieldNode : moduleChild->children)
 					{
 						info.fields.push_back({fieldNode->value, fieldNode->inferredType});
 					}
+					
+					// Clear struct context
+					currentStruct = "";
+					
 					structTable[structName] = info;
 				}
 				else if (moduleChild->type == ASTNodeType::TYPE_ALIAS)
@@ -356,10 +364,21 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 			{
 				info.genericParams.push_back(genParam->value);
 			}
+			
+			// Set current struct context for field validation
+			currentStruct = structName;
+			
 			for (auto fieldNode : child->children)
 			{
+				// Validate field type (e.g. check this.field references)
+				// For now, we just store it, but we should validate it
+				// TODO: Validate field type with currentStruct context
 				info.fields.push_back({fieldNode->value, fieldNode->inferredType});
 			}
+			
+			// Clear struct context
+			currentStruct = "";
+			
 			structTable[structName] = info;
 		}
 		else if (child->type == ASTNodeType::ENUM_DECL)

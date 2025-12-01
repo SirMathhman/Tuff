@@ -54,14 +54,14 @@ private:
 	std::string parseSingleType();
 	std::vector<std::string> parseGenericArgs();
 	bool isGenericInstantiation();
-	
+
 	// New expression-based type parsing (gradual migration)
 	ExprPtr parseTypeExpr();
 	ExprPtr parseIntersectionTypeExpr();
 	ExprPtr parseSingleTypeExpr();
 
 	// Helper to check if identifier is a lifetime parameter (lowercase single char)
-	bool isLifetimeParam(const std::string& name) const;
+	bool isLifetimeParam(const std::string &name) const;
 
 public:
 	Parser(const std::vector<Token> &toks);

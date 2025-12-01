@@ -7,125 +7,44 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	switch (node->type)
 	{
 	case ASTNodeType::LET_STMT:
-	{
-		std::string cppType = mapType(node->inferredType);
-
-		// Generate value with potential union wrapping
-		std::string value = generateNode(node->children[0]);
-		std::string wrappedValue = wrapInUnion(value, node->children[0]->inferredType, node->inferredType);
-
-		// Track variable with destructor if applicable
-		std::string dtor = getDestructor(node->inferredType);
-		if (!dtor.empty() && !scopes.empty())
-		{
-			scopes.back().vars.push_back({node->value, dtor});
-		}
-
-		std::string safeName = escapeCppKeyword(node->value);
-
-		// Handle C++ array declaration: int32_t arr[3] instead of int32_t[3] arr
-		size_t bracketPos = cppType.find('[');
-		if (bracketPos != std::string::npos)
-		{
-			std::string baseType = cppType.substr(0, bracketPos);
-			std::string arraySuffix = cppType.substr(bracketPos);
-			std::string prefix = node->isMutable ? "" : "const ";
-			return prefix + baseType + " " + safeName + arraySuffix + " = " + wrappedValue;
-		}
-
-		// For pointer types, const goes after * (e.g., int32_t* const p)
-		if (!cppType.empty() && cppType.back() == '*')
-		{
-			if (node->isMutable)
-			{
-				return cppType + " " + safeName + " = " + wrappedValue;
-			}
-			else
-			{
-				return cppType + " const " + safeName + " = " + wrappedValue;
-			}
-		}
-
-		std::string prefix = node->isMutable ? "" : "const ";
-		return prefix + cppType + " " + safeName + " = " + wrappedValue;
-	}
+		return generateLetStmt(node);
 	case ASTNodeType::ASSIGNMENT_STMT:
-	{
-		auto lhs = node->children[0];
-		auto rhs = node->children[1];
-		return generateNode(lhs) + " = " + generateNode(rhs);
-	}
+		return generateAssignmentStmt(node);
 	case ASTNodeType::IF_STMT:
-	{
-		std::stringstream ss;
-		ss << "if (" << generateNode(node->children[0]) << ") ";
-		ss << generateNode(node->children[1]);
-		if (node->children.size() > 2)
-		{
-			ss << " else ";
-			ss << generateNode(node->children[2]);
-		}
-		return ss.str();
-	}
+		return generateIfStmt(node);
 	case ASTNodeType::IF_EXPR:
-	{
-		std::stringstream ss;
-		ss << "(" << generateNode(node->children[0]) << " ? ";
-		ss << generateNode(node->children[1]) << " : ";
-		ss << generateNode(node->children[2]) << ")";
-		return ss.str();
-	}
+		return generateIfExpr(node);
 	case ASTNodeType::WHILE_STMT:
-	{
-		std::stringstream ss;
-		ss << "while (" << generateNode(node->children[0]) << ") ";
-		nextBlockIsLoop = true;
-		ss << generateNode(node->children[1]);
-		return ss.str();
-	}
+		return generateWhileStmt(node);
 	case ASTNodeType::LOOP_STMT:
-	{
-		std::stringstream ss;
-		ss << "while (true) ";
-		nextBlockIsLoop = true;
-		ss << generateNode(node->children[0]);
-		return ss.str();
-	}
+		return generateLoopStmt(node);
 	case ASTNodeType::BREAK_STMT:
-	{
-		// Inject destructor calls for all scopes up to nearest loop
-		std::stringstream ss;
-		for (auto it = scopes.rbegin(); it != scopes.rend(); ++it)
-		{
-			for (auto vit = it->vars.rbegin(); vit != it->vars.rend(); ++vit)
-			{
-				ss << vit->destructor << "(" << vit->name << "); ";
-			}
-			if (it->isLoop)
-				break;
-		}
-		ss << "break";
-		return ss.str();
-	}
+		return generateBreakStmt(node);
 	case ASTNodeType::CONTINUE_STMT:
-	{
-		// Inject destructor calls for current loop scope only
-		std::stringstream ss;
-		for (auto it = scopes.rbegin(); it != scopes.rend(); ++it)
-		{
-			for (auto vit = it->vars.rbegin(); vit != it->vars.rend(); ++vit)
-			{
-				ss << vit->destructor << "(" << vit->name << "); ";
-			}
-			if (it->isLoop)
-				break;
-		}
-		ss << "continue";
-		return ss.str();
-	}
+		return generateContinueStmt(node);
 	case ASTNodeType::BLOCK:
 	{
 		std::stringstream ss;
+		
+		// If block is used as expression (has a type), we need to use statement expression or lambda
+		// C++ statement expressions are a GCC extension ({ ...; val; })
+		// Standard C++ requires lambda: [&](){ ...; return val; }()
+		bool isExpression = !node->inferredType.empty() && node->inferredType != "Void";
+		
+		if (isExpression)
+		{
+			// Use ternary operator if it's a simple if-else expression
+			// But this is a block.
+			// If it's a block inside an if-expression, we might need to wrap it.
+			// But wait, if-expressions are handled in IF_STMT case.
+			// If this block is just a standalone block expression, we use lambda.
+			// However, IF_STMT generates `if (...) { ... } else { ... }` which is a statement.
+			// If IF_STMT is used as expression, it should generate `(...) ? (...) : (...)`.
+			// But IF_STMT case handles both.
+			
+			// Let's check IF_STMT handling first.
+		}
+
 		ss << "{\n";
 
 		// Push new scope
@@ -134,9 +53,17 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		nextBlockIsLoop = false;
 		scopes.push_back(newScope);
 
-		for (auto child : node->children)
+		for (size_t i = 0; i < node->children.size(); i++)
 		{
-			ss << "  " << generateNode(child) << ";\n";
+			auto child = node->children[i];
+			std::string childCode = generateNode(child);
+			
+			// If this is the last statement and block is an expression, don't add semicolon if it's an expression
+			// But in C++, blocks don't return values unless it's a function body or statement expr.
+			// We rely on the parent node to handle expression-ness (e.g. function body or if-expr).
+			// If this block is part of an if-expression, the parent IF_STMT should handle it.
+			
+			ss << "  " << childCode << ";\n";
 		}
 
 		// Pop scope and inject destructor calls (in reverse order)
@@ -151,11 +78,7 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		return ss.str();
 	}
 	case ASTNodeType::BINARY_OP:
-	{
-		auto left = generateNode(node->children[0]);
-		auto right = generateNode(node->children[1]);
-		return left + " " + node->value + " " + right;
-	}
+		return generateBinaryOp(node);
 	case ASTNodeType::IS_EXPR:
 	{
 		// is operator: expr is Type → expr.__tag == Tag::Type
@@ -221,10 +144,7 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		return ss.str();
 	}
 	case ASTNodeType::UNARY_OP:
-	{
-		auto operand = generateNode(node->children[0]);
-		return "(" + node->value + operand + ")";
-	}
+		return generateUnaryOp(node);
 	case ASTNodeType::ARRAY_LITERAL:
 	{
 		// Generate C++ initializer list
@@ -349,54 +269,9 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		return ss.str();
 	}
 	case ASTNodeType::CALL_EXPR:
-	{
-		std::stringstream ss;
-		// First child is callee (IDENTIFIER)
-		ss << generateNode(node->children[0]);
-
-		// Emit generic args <I32>
-		if (!node->children[0]->genericArgs.empty())
-		{
-			ss << "<";
-			for (size_t i = 0; i < node->children[0]->genericArgs.size(); i++)
-			{
-				if (i > 0)
-					ss << ", ";
-				ss << mapType(node->children[0]->genericArgs[i]);
-			}
-			ss << ">";
-		}
-
-		ss << "(";
-
-		// Remaining children are arguments
-		for (size_t i = 1; i < node->children.size(); i++)
-		{
-			if (i > 1)
-				ss << ", ";
-			ss << generateNode(node->children[i]);
-		}
-
-		ss << ")";
-		return ss.str();
-	}
+		return generateCallExpr(node);
 	case ASTNodeType::RETURN_STMT:
-	{
-		std::stringstream ss;
-		// Inject destructor calls for all scopes before return
-		for (auto it = scopes.rbegin(); it != scopes.rend(); ++it)
-		{
-			for (auto vit = it->vars.rbegin(); vit != it->vars.rend(); ++vit)
-			{
-				ss << vit->destructor << "(" << vit->name << "); ";
-			}
-		}
-		if (node->children.empty())
-			ss << "return";
-		else
-			ss << "return " << generateNode(node->children[0]);
-		return ss.str();
-	}
+		return generateReturnStmt(node);
 	case ASTNodeType::STRUCT_DECL:
 	{
 		std::stringstream ss;
@@ -498,6 +373,11 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 			}
 
 			return object + ".__val_" + baseName + "." + node->value;
+		}
+		// Handle pointer access ->
+		if (node->children[0]->inferredType.length() > 0 && node->children[0]->inferredType[0] == '*')
+		{
+			return object + "->" + node->value;
 		}
 		return object + "." + node->value;
 	}

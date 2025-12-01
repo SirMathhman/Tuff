@@ -217,6 +217,29 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		{
 			check(child);
 		}
+		
+		// If block is used as expression, its type is the type of the last statement
+		// But only if it's an expression statement (not let, etc.)
+		// Actually, Tuff blocks return the value of the last expression if it's not terminated by semicolon?
+		// The parser handles this by making the last statement an expression if no semicolon.
+		// But here we just iterate children.
+		if (!node->children.empty())
+		{
+			auto lastChild = node->children.back();
+			// If last child has a type, propagate it
+			if (!lastChild->inferredType.empty() && lastChild->inferredType != "Void")
+			{
+				node->inferredType = lastChild->inferredType;
+			}
+			else
+			{
+				node->inferredType = "Void";
+			}
+		}
+		else
+		{
+			node->inferredType = "Void";
+		}
 
 		// Release borrows created in this scope
 		releaseBorrowsAtScope(currentScopeDepth);

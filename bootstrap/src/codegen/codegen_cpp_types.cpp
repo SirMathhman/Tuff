@@ -101,7 +101,7 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 	if (tuffType.rfind("SizeOf<", 0) == 0)
 		return "size_t";
 
-	// Handle slice pointer types: *[T] or *mut [T]
+	// Handle slice pointer types: *[T] or *mut [T] or *mut [T; init; cap]
 	// These map to plain pointers in C++ (T* or const T*)
 	if (tuffType.length() > 2 && tuffType[0] == '*')
 	{
@@ -110,21 +110,32 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 		{
 			// Check if it's a sized array or slice
 			size_t semiPos = tuffType.find(';');
+			
+			// It's an array pointer (slice or sized array)
+			// Extract element type
+			bool isMutable = (tuffType.substr(1, 4) == "mut ");
+			size_t startPos = isMutable ? 6 : 2; // Skip "*mut [" or "*["
+			
+			std::string elementType;
 			if (semiPos == std::string::npos)
 			{
-				// This is a slice: *[T] or *mut [T]
-				bool isMutable = (tuffType.substr(1, 4) == "mut ");
-				size_t startPos = isMutable ? 6 : 2;																									 // Skip "*mut [" or "*["
-				std::string elementType = tuffType.substr(startPos, tuffType.length() - startPos - 1); // Remove trailing ]
+				// Slice: *[T]
+				elementType = tuffType.substr(startPos, tuffType.length() - startPos - 1);
+			}
+			else
+			{
+				// Sized array: *[T; init; cap]
+				// We just want T, so take substring up to semicolon
+				elementType = tuffType.substr(startPos, semiPos - startPos);
+			}
 
-				if (isMutable)
-				{
-					return mapType(elementType) + "*";
-				}
-				else
-				{
-					return "const " + mapType(elementType) + "*";
-				}
+			if (isMutable)
+			{
+				return mapType(elementType) + "*";
+			}
+			else
+			{
+				return "const " + mapType(elementType) + "*";
 			}
 		}
 	}
