@@ -1,7 +1,9 @@
 // Test sizeOf operator for basic types
-fn main() : I32 => {
+fn run() : I32 => {
   let i32_size: USize = sizeOf(I32);
   let u64_size: USize = sizeOf(U64);
   let bool_size: USize = sizeOf(Bool);
   0
 }
+
+run()

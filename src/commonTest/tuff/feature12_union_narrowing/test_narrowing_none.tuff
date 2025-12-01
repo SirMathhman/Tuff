@@ -9,7 +9,7 @@ struct None<T> {
 
 type Option<T> = Some<T> | None<T>;
 
-fn main(): I32 => {
+fn run(): I32 => {
     let opt: Option<I32> = None<I32> { };
     
     if (opt is Some<I32>) {
@@ -19,3 +19,5 @@ fn main(): I32 => {
         return 0;
     }
 }
+
+run()

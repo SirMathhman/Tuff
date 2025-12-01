@@ -31,6 +31,16 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 				if (moduleChild->type == ASTNodeType::FUNCTION_DECL)
 				{
 					std::string funcName = currentModule + "::" + moduleChild->value;
+					
+					// Error: 'main' is reserved even in modules
+					if (moduleChild->value == "main")
+					{
+						std::cerr << "Error: Function name 'main' is reserved. "
+											<< "Top-level statements are automatically wrapped in a main() function. "
+											<< "Please use a different function name." << std::endl;
+						exit(1);
+					}
+					
 					if (functionTable.find(funcName) != functionTable.end())
 					{
 						std::cerr << "Error: Function '" << funcName << "' already declared." << std::endl;
@@ -202,6 +212,16 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 		else if (child->type == ASTNodeType::FUNCTION_DECL)
 		{
 			std::string funcName = child->value;
+			
+			// Error: 'main' is reserved for the generated entry point
+			if (funcName == "main")
+			{
+				std::cerr << "Error: Function name 'main' is reserved. " 
+									<< "Top-level statements are automatically wrapped in a main() function. "
+									<< "Please use a different function name." << std::endl;
+				exit(1);
+			}
+			
 			if (functionTable.find(funcName) != functionTable.end())
 			{
 				std::cerr << "Error: Function '" << funcName << "' already declared." << std::endl;

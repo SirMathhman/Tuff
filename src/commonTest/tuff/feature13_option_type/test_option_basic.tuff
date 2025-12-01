@@ -7,7 +7,7 @@ struct Some<T> {
 struct None<T> {
 }
 
-fn main(): I32 => {
+fn run(): I32 => {
     // Test Some
     let opt1: Some<I32> | None<I32> = Some<I32> { 42 };
     if (!(opt1 is Some<I32>)) {
@@ -47,3 +47,5 @@ fn main(): I32 => {
     
     return 0;
 }
+
+run()

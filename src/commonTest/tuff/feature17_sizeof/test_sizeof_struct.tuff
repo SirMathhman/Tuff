@@ -4,9 +4,11 @@ struct Point {
   y: I32
 }
 
-fn main() : I32 => {
+fn run() : I32 => {
   let point_size: USize = sizeOf(Point);
   let total_size: USize = sizeOf(Point) * 10;
   let double_size: USize = sizeOf(F64) * 2;
   0
 }
+
+run()

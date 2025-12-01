@@ -14,7 +14,7 @@ struct None<T> {
 
 type Option<T> = Some<T> | None<T>;
 
-fn main(): I32 => {
+fn run(): I32 => {
     let pt: Option<Point> = Some<Point> { Point { 10, 20 } };
     
     if (pt is Some<Point>) {
@@ -25,3 +25,5 @@ fn main(): I32 => {
         return 0;
     }
 }
+
+run()
