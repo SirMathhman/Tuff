@@ -162,7 +162,37 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		// Get the union struct name from the expression's inferred type
 		std::string unionType = node->children[0]->inferredType;
 		std::string structName = getUnionStructName(unionType);
-		return "(" + expr + ".__tag == " + structName + "::Tag::" + targetType + ")";
+		
+		// Add template arguments if this is a concrete instantiation
+		std::string fullStructName = structName;
+		auto variants = splitUnionType(unionType);
+		if (!variants.empty())
+		{
+			size_t start = variants[0].find('<');
+			if (start != std::string::npos)
+			{
+				size_t end = variants[0].find('>');
+				if (end != std::string::npos)
+				{
+					std::string param = variants[0].substr(start + 1, end - start - 1);
+					// If it's a concrete type (not a single-letter generic), add template args
+					if (param.length() > 1 || param[0] < 'A' || param[0] > 'Z')
+					{
+						fullStructName += "<" + mapType(param) + ">";
+					}
+				}
+			}
+		}
+		
+		// Extract base name from target type (e.g., "Some" from "Some<I32>")
+		std::string baseName = targetType;
+		size_t pos = baseName.find('<');
+		if (pos != std::string::npos)
+		{
+			baseName = baseName.substr(0, pos);
+		}
+		
+		return "(" + expr + ".__tag == " + fullStructName + "::Tag::" + baseName + ")";
 	}
 	case ASTNodeType::INTERSECTION_EXPR:
 	{
@@ -461,7 +491,16 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		{
 			// Get the narrowed type (e.g., Some<I32>)
 			std::string narrowedType = node->children[0]->inferredType;
-			return object + ".__val_" + narrowedType + "." + node->value;
+			
+			// Extract base name (e.g., "Some" from "Some<I32>")
+			std::string baseName = narrowedType;
+			size_t pos = baseName.find('<');
+			if (pos != std::string::npos)
+			{
+				baseName = baseName.substr(0, pos);
+			}
+			
+			return object + ".__val_" + baseName + "." + node->value;
 		}
 		return object + "." + node->value;
 	}

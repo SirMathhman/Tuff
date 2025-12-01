@@ -41,6 +41,9 @@ private:
 	std::string getUnionStructName(const std::string &unionType);
 	std::string wrapInUnion(const std::string &value, const std::string &valueType, const std::string &targetType);
 
+	// Name mangling for generic types
+	std::string mangleName(const std::string &name);
+
 	// Intersection type helpers
 	bool isIntersectionType(const std::string &type);
 	std::vector<std::string> splitIntersectionType(const std::string &intersectionType);

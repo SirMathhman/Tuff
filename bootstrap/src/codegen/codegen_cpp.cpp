@@ -44,11 +44,42 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 		};
 		collectUnionTypes(ast);
 
-		// Generate union struct definitions
+		// Deduplicate union types: prefer generic versions over concrete ones
+		// Group by base structure (e.g., Some<T>|None<T> and Some<I32>|None<I32> both map to Union_Some_None)
+		std::map<std::string, std::string> unionStructToGeneric;
 		for (const auto &unionType : unionTypes)
 		{
-			ss << generateUnionStruct(unionType) << "\n";
+			std::string structName = getUnionStructName(unionType);
+			
+			// Check if this union uses generic params (single letters T, U, etc.)
+			bool isGeneric = false;
+			auto variants = splitUnionType(unionType);
+			for (const auto &variant : variants)
+			{
+				size_t start = variant.find('<');
+				if (start != std::string::npos)
+				{
+					size_t end = variant.find('>');
+					if (end != std::string::npos)
+					{
+						std::string param = variant.substr(start + 1, end - start - 1);
+						if (param.length() == 1 && param[0] >= 'A' && param[0] <= 'Z')
+						{
+							isGeneric = true;
+							break;
+						}
+					}
+				}
+			}
+			
+			// Prefer generic versions
+			if (unionStructToGeneric.find(structName) == unionStructToGeneric.end() || isGeneric)
+			{
+				unionStructToGeneric[structName] = unionType;
+			}
 		}
+
+		// Note: union struct generation moved after struct declarations to avoid forward reference errors
 
 		// Collect struct field information for intersection types
 		std::map<std::string, std::vector<std::pair<std::string, std::string>>> structFields;
@@ -169,6 +200,12 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 			{
 				ss << generateNode(child) << "\n";
 			}
+		}
+
+		// Generate union struct definitions AFTER struct declarations (to avoid forward reference errors)
+		for (const auto &pair : unionStructToGeneric)
+		{
+			ss << generateUnionStruct(pair.second) << "\n";
 		}
 
 		// Generate function forward declarations (before intersection structs so destructors can reference them)

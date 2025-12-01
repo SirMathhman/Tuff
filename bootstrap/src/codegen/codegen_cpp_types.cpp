@@ -14,10 +14,32 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 		}
 	}
 
-	// Handle union types: I32|Bool -> Union_I32_Bool
+	// Handle union types: Some<I32>|None<I32> -> Union_Some_None<int32_t>
 	if (tuffType.find('|') != std::string::npos)
 	{
-		return getUnionStructName(tuffType);
+		std::string structName = getUnionStructName(tuffType);
+		
+		// Extract generic parameters from the first variant
+		auto variants = splitUnionType(tuffType);
+		if (!variants.empty())
+		{
+			size_t start = variants[0].find('<');
+			if (start != std::string::npos)
+			{
+				size_t end = variants[0].find('>');
+				if (end != std::string::npos)
+				{
+					std::string param = variants[0].substr(start + 1, end - start - 1);
+					// If it's a concrete type (not a single-letter generic), add template args
+					if (param.length() > 1 || param[0] < 'A' || param[0] > 'Z')
+					{
+						return structName + "<" + mapType(param) + ">";
+					}
+				}
+			}
+		}
+		
+		return structName;
 	}
 
 	// Handle intersection types: Point&Color -> Point_AND_Color
