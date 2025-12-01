@@ -40,6 +40,7 @@ private:
 	std::string generateUnionStruct(const std::string &unionType);
 	std::string getUnionStructName(const std::string &unionType);
 	std::string wrapInUnion(const std::string &value, const std::string &valueType, const std::string &targetType);
+	bool isGenericParam(const std::string &type);
 
 	// Name mangling for generic types
 	std::string mangleName(const std::string &name);
