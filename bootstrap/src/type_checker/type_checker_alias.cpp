@@ -75,8 +75,19 @@ std::string TypeChecker::expandTypeAlias(const std::string &type)
 			if (boundIt != alias.genericBounds.end())
 			{
 				const std::string &boundType = boundIt->second;
-				// Check if arg matches the bound
-				if (arg != boundType)
+
+				// Skip validation if arg looks like a type parameter (single uppercase identifier)
+				// or if it's in the current generic scope
+				// (bounds will be validated when the outer generic is instantiated)
+				bool looksLikeTypeParam = !arg.empty() && std::isupper(arg[0]) &&
+																	arg.find('<') == std::string::npos &&
+																	arg.find('[') == std::string::npos &&
+																	arg.find('*') == std::string::npos;
+				bool isInScope = std::find(genericParamsInScope.begin(),
+																	 genericParamsInScope.end(),
+																	 arg) != genericParamsInScope.end();
+
+				if (!looksLikeTypeParam && !isInScope && arg != boundType)
 				{
 					std::cerr << "Error: Type parameter '" << param << "' in type alias '" << baseName
 										<< "' requires type '" << boundType << "', but got '" << arg << "'" << std::endl;

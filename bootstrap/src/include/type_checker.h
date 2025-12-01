@@ -49,7 +49,7 @@ struct ExpectInfo
 struct TypeAliasInfo
 {
 	std::string aliasedType;
-	std::vector<std::string> genericParams;				// <T, U>
+	std::vector<std::string> genericParams;						// <T, U>
 	std::map<std::string, std::string> genericBounds; // T -> USize (type bounds)
 };
 
