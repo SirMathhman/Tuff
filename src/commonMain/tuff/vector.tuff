@@ -7,16 +7,18 @@ struct Vector<T> {
 	/*
 	[T] is should be a wrapped struct around *mut [T; 0; Length] with two other fields:
 
-	length : USize;
-	init   : USize;
+	length : USize,
+	init   : USize,
 
 	So we track them at runtime, instead of compile time.
 	*/
-	data : *[T] & ~free;
+	data : *[T] & ~free
 }
 
+let INITIAL_SIZE = 10USize;
+
 // Create a new empty vector
-fn vectorNew<T>(): Vector<T> => Vector<T> { 0USize };
+fn vectorNew<T>(): Vector<T> => Vector<T> { malloc(sizeOf(T) * INITIAL_SIZE) };
 
 // Get the length of a vector
 // Conceptually makes sense, in most vec implementations the "init" would be the size, and "length" would be the capacity,
