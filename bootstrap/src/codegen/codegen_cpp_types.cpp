@@ -110,12 +110,12 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 		{
 			// Check if it's a sized array or slice
 			size_t semiPos = tuffType.find(';');
-			
+
 			// It's an array pointer (slice or sized array)
 			// Extract element type
 			bool isMutable = (tuffType.substr(1, 4) == "mut ");
 			size_t startPos = isMutable ? 6 : 2; // Skip "*mut [" or "*["
-			
+
 			std::string elementType;
 			if (semiPos == std::string::npos)
 			{

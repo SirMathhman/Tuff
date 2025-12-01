@@ -49,7 +49,7 @@ void TypeChecker::checkFieldOrEnumAccess(std::shared_ptr<ASTNode> node)
 		// Extract to check if it's a slice (no semicolons)
 		size_t bracketStart = typeName.find('[');
 		size_t bracketEnd = typeName.find(']');
-		
+
 		// Check if it's a sized array or slice
 		// Sized arrays also have .init and .length if they are pointers
 		// Actually, sized arrays [T; N; C] have fixed size, but we might want to access it
@@ -60,7 +60,7 @@ void TypeChecker::checkFieldOrEnumAccess(std::shared_ptr<ASTNode> node)
 		// But field access on pointer (*p).x is usually handled by auto-deref or explicit deref.
 		// In Tuff, p.x works on pointers.
 	}
-	
+
 	// Handle pointer dereference for field access (auto-deref)
 	if (typeName.length() > 0 && typeName[0] == '*')
 	{
@@ -69,7 +69,7 @@ void TypeChecker::checkFieldOrEnumAccess(std::shared_ptr<ASTNode> node)
 			typeName = typeName.substr(5);
 		else
 			typeName = typeName.substr(1);
-			
+
 		// Strip lifetime if present: *a T -> T
 		// Simple heuristic: if starts with lowercase letter and space
 		if (typeName.length() > 2 && typeName[1] == ' ' && typeName[0] >= 'a' && typeName[0] <= 'z')
@@ -101,9 +101,10 @@ void TypeChecker::checkFieldOrEnumAccess(std::shared_ptr<ASTNode> node)
 					}
 				}
 			}
-			if (found) break;
+			if (found)
+				break;
 		}
-		
+
 		if (found)
 		{
 			node->inferredType = fieldType;
@@ -118,7 +119,7 @@ void TypeChecker::checkFieldOrEnumAccess(std::shared_ptr<ASTNode> node)
 	// BUT, the code above (lines 140-170) was trying to do exactly what this code does.
 	// I should remove the duplicate logic I added above and let this handle it.
 	// The issue was that I added logic to handle Struct<T> inside the pointer deref block? No.
-	
+
 	// Let's clean up. The code I added above (lines 140-170) was:
 	/*
 	// Handle generic types: Struct<T>
@@ -132,24 +133,23 @@ void TypeChecker::checkFieldOrEnumAccess(std::shared_ptr<ASTNode> node)
 		...
 	}
 	*/
-	
+
 	// This logic is redundant with the logic at the end of the function.
 	// I should remove the block I added and let the logic at the end handle it.
 	// The logic at the end handles Struct<T> correctly.
-	
+
 	// So, I will remove the block I added in the previous step.
-	
+
 	// Wait, the previous step added logic to handle Struct<T> BEFORE checking for slice pointer.
 	// This is because *Slice<T> becomes Slice<T> after pointer stripping.
 	// And Slice<T> is a struct.
 	// So we want to check if it's a struct first.
-	
+
 	// The problem is that I duplicated the logic.
 	// I should just let the control flow fall through to the end where Struct<T> is handled.
-	
+
 	// So I will remove the block I added.
 
-	
 	// Handle pointer to slice: *[T] or *mut [T]
 	// These have virtual fields: .init and .length (both USize)
 	// We check this AFTER struct check because *Slice<T> is a struct pointer
@@ -192,7 +192,6 @@ void TypeChecker::checkFieldOrEnumAccess(std::shared_ptr<ASTNode> node)
 			return;
 		}
 	}
-
 
 	// typeName already declared at top of function
 

@@ -30,7 +30,7 @@ void TypeChecker::checkIdentifier(std::shared_ptr<ASTNode> node)
 		node->inferredType = it->second.type;
 		return;
 	}
-	
+
 	// Check if it's 'this' in a struct context
 	if (name == "this" && !currentStruct.empty())
 	{
@@ -214,7 +214,7 @@ void TypeChecker::checkIfExpr(std::shared_ptr<ASTNode> node)
 			{
 				// This shouldn't happen if check() works correctly
 			}
-			
+
 			// Fallback
 			node->inferredType = thenBranch->inferredType;
 		}

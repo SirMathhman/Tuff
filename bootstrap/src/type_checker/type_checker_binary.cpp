@@ -31,7 +31,7 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 					elementType = leftType.substr(startPos, leftType.length() - startPos - 1);
 				else
 					elementType = leftType.substr(startPos, semiPos - startPos);
-					
+
 				if (isMutable)
 					node->inferredType = "*mut " + elementType;
 				else
@@ -43,12 +43,12 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 			}
 			return;
 		}
-		
+
 		// Also handle intersection types with pointers (e.g. *mut [T] & #free)
 		if (isIntersectionType(leftType))
 		{
 			auto parts = splitIntersectionType(leftType);
-			for (const auto& part : parts)
+			for (const auto &part : parts)
 			{
 				if (part.length() > 0 && part[0] == '*' && isNumericType(rightType))
 				{
@@ -65,7 +65,7 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 							elementType = ptrType.substr(startPos, ptrType.length() - startPos - 1);
 						else
 							elementType = ptrType.substr(startPos, semiPos - startPos);
-							
+
 						if (isMutable)
 							node->inferredType = "*mut " + elementType;
 						else
@@ -79,7 +79,7 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 				}
 			}
 		}
-		
+
 		if (!isNumericType(leftType) || !isNumericType(rightType))
 		{
 			std::cerr << "Error: Operands of '" << node->value << "' must be numeric." << std::endl;

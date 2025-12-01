@@ -217,7 +217,7 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		{
 			check(child);
 		}
-		
+
 		// If block is used as expression, its type is the type of the last statement
 		// But only if it's an expression statement (not let, etc.)
 		// Actually, Tuff blocks return the value of the last expression if it's not terminated by semicolon?

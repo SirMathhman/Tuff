@@ -33,7 +33,7 @@ private:
 	bool useSharedHeader = false;
 	bool isLibrary = false;
 	std::string generateNode(std::shared_ptr<ASTNode> node);
-	
+
 	// Statement generation
 	std::string generateIfStmt(std::shared_ptr<ASTNode> node);
 	std::string generateWhileStmt(std::shared_ptr<ASTNode> node);
@@ -43,13 +43,13 @@ private:
 	std::string generateLetStmt(std::shared_ptr<ASTNode> node);
 	std::string generateAssignmentStmt(std::shared_ptr<ASTNode> node);
 	std::string generateReturnStmt(std::shared_ptr<ASTNode> node);
-	
+
 	// Expression generation
 	std::string generateBinaryOp(std::shared_ptr<ASTNode> node);
 	std::string generateUnaryOp(std::shared_ptr<ASTNode> node);
 	std::string generateCallExpr(std::shared_ptr<ASTNode> node);
 	std::string generateIfExpr(std::shared_ptr<ASTNode> node);
-	
+
 	std::string generateFunctionBlock(std::shared_ptr<ASTNode> block, const std::string &returnType, bool isExpression = false);
 	std::string generateModuleDecl(std::shared_ptr<ASTNode> node);
 	std::string generateActualDecl(std::shared_ptr<ASTNode> node);

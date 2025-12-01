@@ -61,35 +61,35 @@ std::string CodeGeneratorCPP::generateIfStmt(std::shared_ptr<ASTNode> node)
 		// It's an expression, generate ternary
 		std::stringstream ss;
 		ss << "(" << generateNode(node->children[0]) << " ? ";
-		
+
 		auto thenBranch = node->children[1];
 		auto elseBranch = node->children[2];
-		
+
 		if (thenBranch->type == ASTNodeType::BLOCK)
 			ss << generateFunctionBlock(thenBranch, node->inferredType, true); // true for lambda-like body
 		else
 			ss << generateNode(thenBranch);
-			
+
 		ss << " : ";
-		
+
 		if (elseBranch->type == ASTNodeType::BLOCK)
 			ss << generateFunctionBlock(elseBranch, node->inferredType, true);
 		else
 			ss << generateNode(elseBranch);
-			
+
 		ss << ")";
 		return ss.str();
 	}
-	
+
 	std::stringstream ss;
 	ss << "if (" << generateNode(node->children[0]) << ") ";
-	
+
 	// If branches are not blocks, wrap them in blocks for safety
 	if (node->children[1]->type != ASTNodeType::BLOCK)
 		ss << "{\n  " << generateNode(node->children[1]) << ";\n}";
 	else
 		ss << generateNode(node->children[1]);
-		
+
 	if (node->children.size() > 2)
 	{
 		ss << " else ";

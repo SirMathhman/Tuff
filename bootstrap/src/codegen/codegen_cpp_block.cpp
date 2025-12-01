@@ -5,7 +5,7 @@
 std::string CodeGeneratorCPP::generateFunctionBlock(std::shared_ptr<ASTNode> block, const std::string &returnType, bool isExpression)
 {
 	std::stringstream ss;
-	
+
 	if (isExpression)
 	{
 		// Generate lambda for block expression
@@ -26,7 +26,7 @@ std::string CodeGeneratorCPP::generateFunctionBlock(std::shared_ptr<ASTNode> blo
 	for (size_t i = 0; i < block->children.size(); i++)
 	{
 		auto child = block->children[i];
-		
+
 		// If this is the last statement and block is an expression
 		if (isExpression && i == block->children.size() - 1)
 		{
@@ -44,7 +44,7 @@ std::string CodeGeneratorCPP::generateFunctionBlock(std::shared_ptr<ASTNode> blo
 				{
 					ss << "  " << it->destructor << "(" << it->name << ");\n";
 				}
-				
+
 				ss << "  return " << generateNode(child) << ";\n";
 			}
 		}
@@ -53,7 +53,7 @@ std::string CodeGeneratorCPP::generateFunctionBlock(std::shared_ptr<ASTNode> blo
 			ss << "  " << generateNode(child) << ";\n";
 		}
 	}
-	
+
 	// If not expression, or if expression but empty block (shouldn't happen for valid expr)
 	if (!isExpression)
 	{
@@ -64,7 +64,7 @@ std::string CodeGeneratorCPP::generateFunctionBlock(std::shared_ptr<ASTNode> blo
 			ss << "  " << it->destructor << "(" << it->name << ");\n";
 		}
 	}
-	
+
 	scopes.pop_back();
 
 	if (isExpression)
@@ -75,7 +75,7 @@ std::string CodeGeneratorCPP::generateFunctionBlock(std::shared_ptr<ASTNode> blo
 	{
 		ss << "}";
 	}
-	
+
 	return ss.str();
 }
 

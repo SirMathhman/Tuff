@@ -25,12 +25,12 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::BLOCK:
 	{
 		std::stringstream ss;
-		
+
 		// If block is used as expression (has a type), we need to use statement expression or lambda
 		// C++ statement expressions are a GCC extension ({ ...; val; })
 		// Standard C++ requires lambda: [&](){ ...; return val; }()
 		bool isExpression = !node->inferredType.empty() && node->inferredType != "Void";
-		
+
 		if (isExpression)
 		{
 			// Use ternary operator if it's a simple if-else expression
@@ -41,7 +41,7 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 			// However, IF_STMT generates `if (...) { ... } else { ... }` which is a statement.
 			// If IF_STMT is used as expression, it should generate `(...) ? (...) : (...)`.
 			// But IF_STMT case handles both.
-			
+
 			// Let's check IF_STMT handling first.
 		}
 
@@ -57,12 +57,12 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		{
 			auto child = node->children[i];
 			std::string childCode = generateNode(child);
-			
+
 			// If this is the last statement and block is an expression, don't add semicolon if it's an expression
 			// But in C++, blocks don't return values unless it's a function body or statement expr.
 			// We rely on the parent node to handle expression-ness (e.g. function body or if-expr).
 			// If this block is part of an if-expression, the parent IF_STMT should handle it.
-			
+
 			ss << "  " << childCode << ";\n";
 		}
 

@@ -52,22 +52,22 @@ std::string CodeGeneratorCPP::generateIfExpr(std::shared_ptr<ASTNode> node)
 {
 	std::stringstream ss;
 	ss << "(" << generateNode(node->children[0]) << " ? ";
-	
+
 	auto thenBranch = node->children[1];
 	auto elseBranch = node->children[2];
-	
+
 	if (thenBranch->type == ASTNodeType::BLOCK)
 		ss << generateFunctionBlock(thenBranch, node->inferredType, true);
 	else
 		ss << generateNode(thenBranch);
-		
+
 	ss << " : ";
-	
+
 	if (elseBranch->type == ASTNodeType::BLOCK)
 		ss << generateFunctionBlock(elseBranch, node->inferredType, true);
 	else
 		ss << generateNode(elseBranch);
-		
+
 	ss << ")";
 	return ss.str();
 }

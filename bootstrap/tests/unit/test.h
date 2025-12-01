@@ -93,17 +93,6 @@ inline void assertEquals(const std::string& expected, const std::string& actual)
     }
 }
 
-// assertContains - check if actual contains expected substring
-inline void assertContains(const std::string& expected, const std::string& actual) {
-    if (actual.find(expected) == std::string::npos) {
-        std::ostringstream oss;
-        oss << "Assertion failed:\n";
-        oss << "  Expected to contain: \"" << expected << "\"\n";
-        oss << "  Actual: \"" << actual << "\"";
-        throw AssertionError(oss.str());
-    }
-}
-
 // assertTrue
 inline void assertTrue(bool condition, const std::string& message = "Expected true") {
     if (!condition) {
@@ -158,8 +147,8 @@ inline std::pair<int, std::string> runCompilerProcess(const std::string& source,
         out << source;
     }
     
-    // Run compiler and capture stderr
-    std::string cmd = "tuffc.exe " + tempFile + " " + target + " 2>&1";
+    // Run compiler and capture stderr - use relative path since test runs from Release dir
+    std::string cmd = ".\\tuffc.exe " + tempFile + " " + target + " 2>&1";
     std::array<char, 4096> buffer;
     std::string output;
     
