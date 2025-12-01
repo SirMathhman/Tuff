@@ -40,6 +40,31 @@ void TypeChecker::checkFieldOrEnumAccess(std::shared_ptr<ASTNode> node)
 	check(object);
 
 	std::string fieldName = node->value;
+	std::string typeName = object->inferredType;
+
+	// Handle pointer to slice: *[T] or *mut [T]
+	// These have virtual fields: .init and .length (both USize)
+	if ((typeName.rfind("*[", 0) == 0 || typeName.rfind("*mut [", 0) == 0))
+	{
+		// Extract to check if it's a slice (no semicolons)
+		size_t bracketStart = typeName.find('[');
+		size_t bracketEnd = typeName.find(']');
+		if (bracketStart != std::string::npos && bracketEnd != std::string::npos)
+		{
+			std::string arrayPart = typeName.substr(bracketStart, bracketEnd - bracketStart + 1);
+			// Check if it's a slice [T] (no semicolons)
+			if (arrayPart.find(';') == std::string::npos)
+			{
+				if (fieldName == "init" || fieldName == "length")
+				{
+					node->inferredType = "USize";
+					return;
+				}
+				std::cerr << "Error: Slice pointer type '" << typeName << "' only has fields 'init' and 'length', not '" << fieldName << "'." << std::endl;
+				exit(1);
+			}
+		}
+	}
 
 	if (object->type == ASTNodeType::IDENTIFIER)
 	{
@@ -67,7 +92,7 @@ void TypeChecker::checkFieldOrEnumAccess(std::shared_ptr<ASTNode> node)
 		}
 	}
 
-	std::string typeName = object->inferredType;
+	// typeName already declared at top of function
 
 	// Handle intersection types - look up field in all component structs
 	if (isIntersectionType(typeName))

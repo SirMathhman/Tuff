@@ -116,10 +116,19 @@ std::string Parser::parseSingleType()
 		return result + innerType;
 	}
 
-	// Handle array types: [T; init; capacity]
+	// Handle array types: [T; init; capacity] or [T] (slice)
 	if (match(TokenType::LBRACKET))
 	{
 		std::string elementType = parseSingleType();
+		
+		// Check if this is a slice [T] or sized array [T; init; capacity]
+		if (match(TokenType::RBRACKET))
+		{
+			// Slice type: [T]
+			return "[" + elementType + "]";
+		}
+		
+		// Sized array: [T; init; capacity]
 		consume(TokenType::SEMICOLON, "Expected ';' after array element type");
 
 		Token initToken = consume(TokenType::INT_LITERAL, "Expected init count in array type");
