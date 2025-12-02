@@ -35,7 +35,22 @@ std::string CodeGeneratorCPP::genExpr(ast::ExprPtr expr)
 																	[this](const ast::Identifier &e) -> std::string
 																	{
 																		// Note: generic args are NOT emitted here - they're handled at CALL_EXPR level
-																		return escapeCppKeyword(e.name);
+																		std::string name = escapeCppKeyword(e.name);
+
+																		// Replace :: with _ for impl method calls (Counter::new -> Counter_new)
+																		// Only do this if the prefix is a struct name (starts with uppercase)
+																		size_t colonPos = name.find("::");
+																		if (colonPos != std::string::npos && colonPos > 0)
+																		{
+																			char firstChar = name[0];
+																			if (firstChar >= 'A' && firstChar <= 'Z')
+																			{
+																				// This looks like an impl method (StructName::method)
+																				name.replace(colonPos, 2, "_");
+																			}
+																		}
+
+																		return name;
 																	},
 
 																	[this](const ast::BinaryOp &e) -> std::string

@@ -8,11 +8,11 @@ impl Counter {
 		return Counter { 0 };
 	}
 
-	fn increment(self: *mut Counter): Void => {
-		self.value = self.value + 1;
+	fn increment(this: *mut Counter): Void => {
+		this.value = this.value + 1;
 	}
 
-	fn get(self: *Counter): I32 => self.value;
+	fn get(this: *Counter): I32 => this.value;
 }
 
 let mut c = Counter::new();

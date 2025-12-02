@@ -9,9 +9,9 @@ impl<T> Pair<T> {
 		return Pair<T> { a, b };
 	}
 
-	fn getFirst(self: *Pair<T>): T => self.first;
+	fn getFirst(this: *Pair<T>): T => this.first;
 
-	fn getSecond(self: *Pair<T>): T => self.second;
+	fn getSecond(this: *Pair<T>): T => this.second;
 }
 
 let p = Pair<I32> { 10, 20 };

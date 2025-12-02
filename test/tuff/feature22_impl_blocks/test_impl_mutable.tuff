@@ -8,11 +8,11 @@ impl Box {
 		return Box { val };
 	}
 
-	fn peek(self: *Box): I32 => self.contents;
+	fn peek(this: *Box): I32 => this.contents;
 
-	fn replace(self: *mut Box, val: I32): I32 => {
-		let old = self.contents;
-		self.contents = val;
+	fn replace(this: *mut Box, val: I32): I32 => {
+		let old = this.contents;
+		this.contents = val;
 		return old;
 	}
 }
@@ -22,4 +22,5 @@ let v1 = Box::peek(&b);
 let old = Box::replace(&mut b, 99);
 let v2 = Box::peek(&b);
 
-// Expected: v1 = 42, old = 42, v2 = 99v2;
+// Expected: v1 = 42, old = 42, v2 = 99
+v2;

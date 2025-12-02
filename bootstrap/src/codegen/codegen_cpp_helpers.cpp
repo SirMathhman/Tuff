@@ -128,6 +128,13 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 			// Handle C++ array parameters: int32_t arr[10] instead of int32_t[10] arr
 			std::string paramType = mapType(node->children[i]->inferredType);
 			std::string paramName = node->children[i]->value;
+
+			// Rename 'this' to 'this_' for C++ (since 'this' is a C++ keyword)
+			if (paramName == "this")
+			{
+				paramName = "this_";
+			}
+
 			size_t bracketPos = paramType.find('[');
 			if (bracketPos != std::string::npos)
 			{
@@ -181,13 +188,74 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		return generateModuleDecl(node);
 	case ASTNodeType::IMPL_DECL:
 	{
-		// Generate methods as separate functions with FQN names
-		// Names are already converted to FQN by type checker
+		// Generate impl block methods as free functions with mangled names
+		// Since C++ doesn't allow namespace and struct with same name,
+		// we generate free functions with underscore separator: Counter_new, Counter_increment
 		std::stringstream ss;
+
+		// Extract struct name from impl node
+		std::string structName;
+		if (node->typeNode && !node->typeNode->value.empty())
+		{
+			structName = node->typeNode->value;
+		}
+		else if (!node->value.empty())
+		{
+			structName = node->value;
+		}
+
+		if (structName.empty())
+		{
+			// Fallback: generate without modification (shouldn't happen)
+			for (auto method : node->children)
+			{
+				ss << generateNode(method) << "\n\n";
+			}
+			return ss.str();
+		}
+
+		// Generate methods with mangled names (StructName_methodName)
 		for (auto method : node->children)
 		{
-			ss << generateNode(method) << "\n\n";
+			if (method->type == ASTNodeType::FUNCTION_DECL)
+			{
+				// Method name is already FQN'd like "Counter::new"
+				// Replace "::" with "_" for C++ compatibility
+				std::string methodName = method->value;
+				std::string prefix = structName + "::";
+
+				// Replace :: with _
+				if (methodName.find(prefix) == 0)
+				{
+					methodName = structName + "_" + methodName.substr(prefix.length());
+				}
+
+				// Temporarily change method name and add impl generic params for generation
+				std::string savedName = method->value;
+				auto savedGenericParams = method->genericParams;
+
+				method->value = methodName;
+
+				// Prepend impl block generic params to method generic params
+				std::vector<std::shared_ptr<ASTNode>> combinedParams = node->genericParams;
+				for (auto param : savedGenericParams)
+				{
+					combinedParams.push_back(param);
+				}
+				method->genericParams = combinedParams;
+
+				ss << generateNode(method) << "\n";
+
+				// Restore original name and generic params
+				method->value = savedName;
+				method->genericParams = savedGenericParams;
+			}
+			else
+			{
+				ss << generateNode(method) << "\n";
+			}
 		}
+
 		return ss.str();
 	}
 	case ASTNodeType::ACTUAL_DECL:

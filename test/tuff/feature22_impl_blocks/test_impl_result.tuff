@@ -9,9 +9,9 @@ impl<T> Result<T> {
 		return Result<T> { val, true };
 	}
 
-	fn get(self: *Result<T>): T => self.value;
+	fn get(this: *Result<T>): T => this.value;
 
-	fn is_ok(self: *Result<T>): Bool => self.ok;
+	fn is_ok(this: *Result<T>): Bool => this.ok;
 }
 
 let r = Result::ok<I32>(42);

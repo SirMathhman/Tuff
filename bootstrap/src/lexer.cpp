@@ -107,7 +107,6 @@ Token Lexer::identifierOrKeyword()
 			{"sizeOf", TokenType::SIZEOF},
 			{"true", TokenType::TRUE},
 			{"false", TokenType::FALSE},
-			{"this", TokenType::THIS},
 			{"impl", TokenType::IMPL},
 			{"I32", TokenType::I32},
 			{"Bool", TokenType::BOOL},

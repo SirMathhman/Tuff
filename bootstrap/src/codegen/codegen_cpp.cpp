@@ -230,6 +230,74 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 				}
 				ss << ");\n";
 			}
+			else if (child->type == ASTNodeType::IMPL_DECL)
+			{
+				// Get generic params from impl block (e.g., impl<T> Vector<T> { ... })
+				std::vector<std::shared_ptr<ASTNode>> implGenericParams = child->genericParams;
+
+				// Generate forward declarations for impl block methods
+				for (auto method : child->children)
+				{
+					if (method->type == ASTNodeType::FUNCTION_DECL)
+					{
+						// Method name is already FQN'd like "Counter::new"
+						// Replace :: with _ for C++ compatibility
+						std::string methodName = method->value;
+						size_t colonPos = methodName.find("::");
+						if (colonPos != std::string::npos)
+						{
+							methodName.replace(colonPos, 2, "_");
+						}
+
+						// Combine impl generic params with method generic params
+						std::vector<std::shared_ptr<ASTNode>> allGenericParams = implGenericParams;
+						for (auto param : method->genericParams)
+						{
+							allGenericParams.push_back(param);
+						}
+
+						if (!allGenericParams.empty())
+						{
+							ss << "template<";
+							for (size_t i = 0; i < allGenericParams.size(); i++)
+							{
+								if (i > 0)
+									ss << ", ";
+								ss << "typename " << allGenericParams[i]->value;
+							}
+							ss << ">\n";
+						}
+
+						ss << mapType(method->inferredType) << " " << methodName << "(";
+						for (size_t i = 0; i < method->children.size() - 1; i++)
+						{
+							if (i > 0)
+								ss << ", ";
+							std::string paramType = mapType(method->children[i]->inferredType);
+							std::string paramName = method->children[i]->value;
+
+							// Rename 'this' to 'this_' for C++
+							if (paramName == "this")
+							{
+								paramName = "this_";
+							}
+
+							size_t bracketPos = paramType.find('[');
+							if (bracketPos != std::string::npos)
+							{
+								std::string baseType = paramType.substr(0, bracketPos);
+								std::string arraySuffix = paramType.substr(bracketPos);
+								ss << baseType << " " << paramName << arraySuffix;
+							}
+							else
+							{
+								ss << paramType << " " << paramName;
+							}
+						}
+						ss << ");\n";
+					}
+				}
+			}
 		}
 
 	} // End of !useSharedHeader block

@@ -41,6 +41,7 @@ set(COMPILER_SOURCES
     src/parser/parser_primary.cpp
     src/parser/parser_match.cpp
     src/parser/parser_statements.cpp
+    src/parser/parser_functions.cpp
     src/parser/parser_modules.cpp
     src/parser/parser_expect_actual.cpp
     src/parser/parser_types.cpp
