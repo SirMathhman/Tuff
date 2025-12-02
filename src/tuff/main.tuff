@@ -1,0 +1,6 @@
+// Main entry point - uses top-level statements
+let num: I32 = 42;
+let numStr = string_fromI32(num);
+println(numStr);
+
+0

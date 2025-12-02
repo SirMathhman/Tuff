@@ -1,0 +1,14 @@
+// Memory allocation primitives
+
+use extern stdlib;
+
+type Allocated<Type> = *mut [Type] & #free;
+
+extern fn malloc<Type>(size: USize): Allocated<Type>;
+extern fn realloc<Type>(ptr: Allocated<Type>, newSize: USize): Allocated<Type>;
+extern fn free<Type>(ptr: Allocated<Type>): Void;
+
+// Allocate array of T with given count
+// TODO: Once we support nullable pointers, return *[T] | Null
+// extern fn mallocSlice<T>(count: USize): *mut [T];
+ 

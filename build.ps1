@@ -7,9 +7,6 @@
     Builds Tuff projects for C++ target.
     Reads configuration from build.config.json (or custom file via -Config).
 
-.PARAMETER Target
-    Build target: "cpp" or "all" (default: cpp)
-
 .PARAMETER Config
     Path to build config file (default: build.config.json in current directory)
 
@@ -21,7 +18,7 @@
 
 .EXAMPLE
     .\build.ps1
-    Build cpp target
+    Build project
 
 .EXAMPLE
     .\build.ps1 -Clean -Bundle
@@ -33,9 +30,7 @@
 #>
 
 param(
-    [ValidateSet("all", "cpp")]
-    [string]$Target = "cpp",
-    [string]$Config = "",
+    [string]$ConfigPath = "",
     [switch]$Clean,
     [switch]$Bundle
 )
@@ -45,10 +40,10 @@ $ErrorActionPreference = "Stop"
 # Configuration
 $RootDir = $PSScriptRoot
 $CompilerPath = Join-Path $RootDir "bootstrap\build\Release\tuffc.exe"
-if ([string]::IsNullOrEmpty($Config)) {
+if ([string]::IsNullOrEmpty($ConfigPath)) {
     $BuildConfigPath = Join-Path $RootDir "build.config.json"
 } else {
-    $BuildConfigPath = $Config
+    $BuildConfigPath = $ConfigPath
 }
 $DistDir = Join-Path $RootDir "dist"
 
@@ -83,7 +78,10 @@ function Initialize-BuildEnvironment {
 }
 
 function Get-BuildConfig {
-    return Get-Content $BuildConfigPath -Raw | ConvertFrom-Json
+    param(
+        [string]$Path
+    )
+    return Get-Content $Path -Raw | ConvertFrom-Json
 }
 
 function Get-SourceFiles {
@@ -108,33 +106,70 @@ function Get-SourceFiles {
     }
 }
 
-function Copy-PlatformFiles {
+function Build {
     param(
-        [string]$SourcePath,
-        [string]$DestinationBase,
-        [string]$Extension
+        [object]$Config,
+        [bool]$ShouldBundle
     )
     
-    if (-not (Test-Path $SourcePath)) {
-        return 0
+    Write-ColorOutput "`nBuilding..." $ColorCyan
+    
+    $sourcePath = $Config.sourcePath
+    $outputPath = $Config.outputPath
+    $target = $Config.target
+    
+
+    # Get all source files
+    $sourceFiles = Get-SourceFiles -Path $sourcePath
+    
+    if ($sourceFiles.Count -eq 0) {
+        Write-ColorOutput "  No source files found in $sourcePath" $ColorYellow
+        return
     }
     
-    $files = Get-SourceFiles -Path $SourcePath -Extension $Extension
-    $copied = 0
+    Write-ColorOutput "  Found $($sourceFiles.Count) source file(s)" $ColorGreen
     
-    foreach ($file in $files) {
-        $destPath = Join-Path $DestinationBase $file.RelativePath
-        $destDir = Split-Path $destPath -Parent
+    $compiled = 0
+    $errors = 0
+    
+    # Build source list for cross-file visibility
+    $allSourcesList = ($sourceFiles | ForEach-Object { $_.FullPath }) -join ','
+    
+    # Compile each file with all sources
+    foreach ($sourceFile in $sourceFiles) {
+        $relPath = $sourceFile.RelativePath
+        $outputFile = Join-Path $outputPath ($relPath -replace '\.tuff$', '.cpp')
         
-        if (-not (Test-Path $destDir)) {
-            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+        Write-Host "  Compiling: $relPath" -NoNewline
+        
+        try {
+            $result = & $CompilerPath --sources $allSourcesList --target $target -o $outputFile 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-ColorOutput " ✓" $ColorGreen
+                $compiled++
+            } else {
+                Write-ColorOutput " ✗" $ColorRed
+                Write-ColorOutput "    Error: $result" $ColorYellow
+                $errors++
+            }
         }
-        
-        Copy-Item -Path $file.FullPath -Destination $destPath -Force
-        $copied++
+        catch {
+            Write-ColorOutput " ✗" $ColorRed
+            Write-ColorOutput "    Error: $_" $ColorYellow
+            $errors++
+        }
     }
     
-    return $copied
+    Write-ColorOutput "  Compiled $compiled/$($sourceFiles.Count) files" $(if ($errors -eq 0) { $ColorGreen } else { $ColorYellow })
+    if ($errors -gt 0) {
+        Write-ColorOutput "  $errors errors" $ColorRed
+        return
+    }
+    
+    # Bundle if requested
+    if ($ShouldBundle) {
+        Bundle-Native -OutputBase $outputPath
+    }
 }
 
 function Bundle-Native {
@@ -142,7 +177,10 @@ function Bundle-Native {
     
     Write-ColorOutput "`nGenerating native build system..." $ColorCyan
     $cppFiles = Get-ChildItem -Path $OutputBase -Filter "*.cpp" -Recurse
-    if ($cppFiles.Count -eq 0) { Write-ColorOutput "  No C++ files found" $ColorYellow; return }
+    if ($cppFiles.Count -eq 0) { 
+        Write-ColorOutput "  No C++ files found" $ColorYellow
+        return 
+    }
     
     $distRoot = (Resolve-Path (Split-Path $OutputBase -Parent)).Path
     $cmakeListsPath = Join-Path $distRoot "CMakeLists.txt"
@@ -198,107 +236,13 @@ add_executable(program `${SOURCES})
                         Write-ColorOutput " ✗ (exit code: $exitCode)" $ColorRed
                     }
                 }
-            } else { Write-ColorOutput " ✗" $ColorRed }
+            } else { 
+                Write-ColorOutput " ✗" $ColorRed 
+            }
         }
         Pop-Location
     } else {
-        Write-ColorOutput "  CMake not found - run 'cmake -B build && cmake --build build' in dist/native" $ColorYellow
-    }
-}
-
-function Build-Target {
-    param(
-        [string]$TargetName,
-        [object]$TargetConfig,
-        [object]$BuildConfig,
-        [bool]$ShouldBundle
-    )
-    
-    Write-ColorOutput "`nBuilding target: $TargetName" $ColorCyan
-    
-    $sourceSets = $TargetConfig.sourceSets
-    $outputBase = $TargetConfig.output
-    
-    # Get common files
-    $commonPath = $BuildConfig.sourceSets.commonMain.path
-    $commonFiles = Get-SourceFiles -Path $commonPath
-    
-    # Get platform-specific files
-    $platformSourceSet = $sourceSets | Where-Object { $_ -ne "commonMain" } | Select-Object -First 1
-    $platformPath = $BuildConfig.sourceSets.$platformSourceSet.path
-    $platformFiles = Get-SourceFiles -Path $platformPath
-    
-    # Get extension
-    $extension = $BuildConfig.sourceSets.$platformSourceSet.extension
-    
-    Write-ColorOutput "  Found $($commonFiles.Count) common files" $ColorGreen
-    Write-ColorOutput "  Found $($platformFiles.Count) platform files" $ColorGreen
-    
-    $compiled = 0
-    $errors = 0
-    
-    # Build complete source list for cross-file visibility
-    $allSources = @()
-    foreach ($cf in $commonFiles) {
-        $allSources += $cf.FullPath
-        $pf = $platformFiles | Where-Object { $_.RelativePath -eq $cf.RelativePath }
-        if ($pf) { $allSources += $pf.FullPath }
-    }
-    
-    # Compile each file with all sources for cross-file declarations
-    foreach ($commonFile in $commonFiles) {
-        $relPath = $commonFile.RelativePath
-        $outputFile = Join-Path $outputBase ($relPath -replace '\.tuff$', $extension)
-        $sourcesList = $allSources -join ','
-        
-        Write-Host "  Compiling: $relPath" -NoNewline
-        
-        try {
-            $result = & $CompilerPath --sources $sourcesList --target $TargetName -o $outputFile 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                Write-ColorOutput " ✓" $ColorGreen
-                $compiled++
-            } else {
-                Write-ColorOutput " ✗" $ColorRed
-                Write-ColorOutput "    Error: $result" $ColorYellow
-                $errors++
-            }
-        }
-        catch {
-            Write-ColorOutput " ✗" $ColorRed
-            Write-ColorOutput "    Error: $_" $ColorYellow
-            $errors++
-        }
-    }
-    
-    Write-ColorOutput "  Compiled $compiled/$($commonFiles.Count) files" $(if ($errors -eq 0) { $ColorGreen } else { $ColorYellow })
-    if ($errors -gt 0) {
-        Write-ColorOutput "  $errors errors" $ColorRed
-        return
-    }
-    
-    # Copy platform-specific .js or .cpp files to dist
-    if ($TargetName -eq "js") {
-        $copiedJs = Copy-PlatformFiles -SourcePath $platformPath -DestinationBase $outputBase -Extension "*.js"
-        if ($copiedJs -gt 0) {
-            Write-ColorOutput "  Copied $copiedJs JavaScript implementation file(s)" $ColorGreen
-        }
-    }
-    elseif ($TargetName -eq "cpp") {
-        $copiedCpp = Copy-PlatformFiles -SourcePath $platformPath -DestinationBase $outputBase -Extension "*.cpp"
-        if ($copiedCpp -gt 0) {
-            Write-ColorOutput "  Copied $copiedCpp C++ implementation file(s)" $ColorGreen
-        }
-    }
-    
-    # Bundle if requested and compilation succeeded
-    if ($ShouldBundle) {
-        if ($TargetName -eq "js") {
-            Bundle-JavaScript -OutputBase $outputBase
-        }
-        elseif ($TargetName -eq "cpp") {
-            Bundle-Native -OutputBase $outputBase
-        }
+        Write-ColorOutput "  CMake not found - run 'cmake -B build && cmake --build build' in dist" $ColorYellow
     }
 }
 
@@ -307,20 +251,9 @@ try {
     Write-ColorOutput "=== Tuff Build System ===" $ColorCyan
     
     Initialize-BuildEnvironment
-    $config = Get-BuildConfig
+    $config = Get-BuildConfig -Path $BuildConfigPath
     
-    $targetsToBuild = @()
-    if ($Target -eq "all") {
-        $targetsToBuild = $config.targets.PSObject.Properties.Name
-    }
-    else {
-        $targetsToBuild = @($Target)
-    }
-    
-    foreach ($targetName in $targetsToBuild) {
-        $targetConfig = $config.targets.$targetName
-        Build-Target -TargetName $targetName -TargetConfig $targetConfig -BuildConfig $config -ShouldBundle $Bundle
-    }
+    Build -Config $config -ShouldBundle $Bundle
     
     Write-Host ""
     Write-ColorOutput "Build complete! Output in: $DistDir" $ColorCyan

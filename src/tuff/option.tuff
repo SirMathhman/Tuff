@@ -1,0 +1,9 @@
+// Option<T> - represents an optional value
+// Either Some<T> (contains a value) or None<T> (empty)
+
+struct Some<T> {
+    value: T
+}
+
+struct None<T> {
+}

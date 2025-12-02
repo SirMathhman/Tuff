@@ -1,24 +1,7 @@
 {
   "sourceRoot": "src",
   "outputRoot": "dist",
-  "sourceSets": {
-    "commonMain": {
-      "path": "src/commonMain/tuff",
-      "type": "common"
-    },
-    "cppMain": {
-      "path": "src/cppMain/tuff",
-      "type": "platform",
-      "target": "cpp",
-      "output": "dist/tuff",
-      "extension": ".cpp"
-    }
-  },
-  "targets": {
-    "cpp": {
-      "sourceSets": ["commonMain", "cppMain"],
-      "output": "dist/tuff"
-    }
-  },
-  "defaultTarget": "cpp"
+  "sourcePath": "src/tuff",
+  "outputPath": "dist/tuff",
+  "target": "cpp"
 }
