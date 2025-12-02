@@ -76,6 +76,33 @@ public:
 		if (typeStr.empty())
 			return nullptr;
 
+		// Check for union type (contains |)
+		size_t pipePos = typeStr.find('|');
+		if (pipePos != std::string::npos)
+		{
+			ast::UnionType t;
+			size_t pos = 0;
+			while (pos < typeStr.length())
+			{
+				size_t nextPipe = typeStr.find('|', pos);
+				if (nextPipe == std::string::npos)
+					nextPipe = typeStr.length();
+				
+				std::string memberStr = typeStr.substr(pos, nextPipe - pos);
+				// Trim whitespace
+				while (!memberStr.empty() && memberStr[0] == ' ')
+					memberStr = memberStr.substr(1);
+				while (!memberStr.empty() && memberStr.back() == ' ')
+					memberStr.pop_back();
+				
+				if (!memberStr.empty())
+					t.members.push_back(typeFromString(memberStr));
+				
+				pos = nextPipe + 1;
+			}
+			return std::make_shared<ast::Type>(t);
+		}
+
 		// Check for primitive
 		if (typeStr == "I8" || typeStr == "I16" || typeStr == "I32" || typeStr == "I64" ||
 				typeStr == "U8" || typeStr == "U16" || typeStr == "U32" || typeStr == "U64" ||

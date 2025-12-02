@@ -85,4 +85,6 @@ private:
 	std::string genStmt(ast::StmtPtr stmt);
 	std::string genDecl(ast::DeclPtr decl);
 	std::string genType(ast::TypePtr type);
+	std::string genParamDecl(const ast::Parameter &param);
+	std::string genFunctionBody(ast::ExprPtr body, ast::TypePtr returnType);
 };

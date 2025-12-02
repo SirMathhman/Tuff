@@ -229,10 +229,14 @@ public:
 			ast::Let stmt;
 			stmt.name = node->value;
 			stmt.isMutable = node->isMutable;
+			// Type annotation
+			if (node->typeNode)
+				stmt.typeAnnotation = toType(node->typeNode);
+			else if (!node->inferredType.empty())
+				stmt.typeAnnotation = typeFromString(node->inferredType);
+			// Initializer
 			if (node->children.size() > 0)
-			{
 				stmt.initializer = toExpr(node->children[0]);
-			}
 			return std::make_shared<ast::Stmt>(stmt);
 		}
 

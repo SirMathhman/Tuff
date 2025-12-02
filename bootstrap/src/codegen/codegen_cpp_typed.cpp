@@ -343,10 +343,14 @@ std::string CodeGeneratorCPP::genStmt(ast::StmtPtr stmt)
 	return std::visit(ast::Overload{[this](const ast::Let &s) -> std::string
 																	{
 																		std::stringstream ss;
-																		ss << "auto ";
+																		// Use type annotation if present, otherwise auto
+																		if (s.typeAnnotation)
+																			ss << genType(s.typeAnnotation);
+																		else
+																			ss << "auto";
 																		if (!s.isMutable)
-																			ss << "const ";
-																		ss << s.name;
+																			ss << " const";
+																		ss << " " << s.name;
 																		if (s.initializer)
 																		{
 																			ss << " = " << genExpr(s.initializer);
@@ -406,4 +410,81 @@ std::string CodeGeneratorCPP::genStmt(ast::StmtPtr stmt)
 																		return genExpr(s.expr) + ";";
 																	}},
 										*stmt);
+}
+
+std::string CodeGeneratorCPP::genParamDecl(const ast::Parameter &param)
+{
+	std::string typeStr = genType(param.type);
+
+	// Handle C++ array parameter syntax: int32_t arr[10] instead of int32_t[10] arr
+	size_t bracketPos = typeStr.find('[');
+	if (bracketPos != std::string::npos)
+	{
+		std::string baseType = typeStr.substr(0, bracketPos);
+		std::string arraySuffix = typeStr.substr(bracketPos);
+		return baseType + " " + param.name + arraySuffix;
+	}
+
+	return typeStr + " " + param.name;
+}
+
+std::string CodeGeneratorCPP::genFunctionBody(ast::ExprPtr body, ast::TypePtr returnType)
+{
+	if (!body)
+		return "{}";
+
+	// Check if body is a Block
+	if (auto *block = std::get_if<ast::Block>(&*body))
+	{
+		std::stringstream ss;
+		ss << "{\n";
+
+		// Push new scope
+		ScopeCPP newScope;
+		newScope.isLoop = nextBlockIsLoop;
+		nextBlockIsLoop = false;
+		scopes.push_back(newScope);
+
+		// Determine if we need implicit return
+		std::string retType = genType(returnType);
+		bool needsImplicitReturn = !retType.empty() && retType != "void";
+
+		for (size_t i = 0; i < block->statements.size(); i++)
+		{
+			ss << "  " << genStmt(block->statements[i]) << "\n";
+		}
+
+		// Handle result expression (implicit return)
+		if (block->resultExpr)
+		{
+			// Inject destructor calls before return
+			ScopeCPP &currentScope = scopes.back();
+			for (auto it = currentScope.vars.rbegin(); it != currentScope.vars.rend(); ++it)
+			{
+				ss << "  " << it->destructor << "(" << it->name << ");\n";
+			}
+			ss << "  return " << genExpr(block->resultExpr) << ";\n";
+		}
+		else
+		{
+			// No result expr - inject destructors at end
+			ScopeCPP &currentScope = scopes.back();
+			for (auto it = currentScope.vars.rbegin(); it != currentScope.vars.rend(); ++it)
+			{
+				ss << "  " << it->destructor << "(" << it->name << ");\n";
+			}
+		}
+
+		scopes.pop_back();
+		ss << "}";
+		return ss.str();
+	}
+
+	// Single expression body - wrap in braces with return
+	std::string retType = genType(returnType);
+	if (retType != "void")
+	{
+		return "{ return " + genExpr(body) + "; }";
+	}
+	return "{ " + genExpr(body) + "; }";
 }
