@@ -31,14 +31,18 @@ std::string CodeGeneratorJS::generateStmt(std::shared_ptr<ASTNode> node)
 			std::string ptrType = ptrExpr->inferredType;
 			// Helper to check if a pointer type is mutable (*mut T or *a mut T)
 			bool isMutable = false;
-			if (!ptrType.empty() && ptrType[0] == '*') {
-				if (ptrType.substr(0, 5) == "*mut ") isMutable = true;
-				else if (ptrType.length() > 2 && ptrType[1] >= 'a' && ptrType[1] <= 'z' && ptrType[2] == ' ') {
+			if (!ptrType.empty() && ptrType[0] == '*')
+			{
+				if (ptrType.substr(0, 5) == "*mut ")
+					isMutable = true;
+				else if (ptrType.length() > 2 && ptrType[1] >= 'a' && ptrType[1] <= 'z' && ptrType[2] == ' ')
+				{
 					std::string rest = ptrType.substr(3);
-					if (rest.substr(0, 4) == "mut ") isMutable = true;
+					if (rest.substr(0, 4) == "mut ")
+						isMutable = true;
 				}
 			}
-			
+
 			if (isMutable)
 			{
 				return generateNode(ptrExpr) + ".set(" + generateNode(rhs) + ")";
