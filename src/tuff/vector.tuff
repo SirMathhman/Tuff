@@ -1,8 +1,9 @@
 // Vector<T> - dynamic array with automatic memory management
-// Tracks length and capacity separately since slice properties are read-only
+// Tracks length and capacity separately for resizable arrays
 
 use mem;
 use option;
+use array;
 
 struct Vector<T> {
 	data : Allocated<T>,
@@ -10,8 +11,11 @@ struct Vector<T> {
 	capacity : USize
 }
 
-// Create a new empty vector with initial capacity of 10
-fn vectorNew<T>(): Vector<T> => Vector<T> { malloc<T>(sizeOf(T) * 10USize), 0USize, 10USize };
+// Create a new empty vector with initial capacity
+fn vectorNew<T>(initialCapacity: USize): Vector<T> => {
+	let ptr = malloc<T>(sizeOf(T) * initialCapacity);
+	return Vector<T> { ptr, 0USize, initialCapacity };
+}
 
 // Get the number of initialized elements
 fn vectorLen<T>(vec: *Vector<T>): USize => vec.length;
@@ -27,13 +31,14 @@ fn vectorIsEmpty<T>(vec: *Vector<T>): Bool => vec.length == 0USize;
 fn vectorPush<T>(vec: *mut Vector<T>, value: T): Void => {
 	// Check if we need to grow
 	if (vec.length >= vec.capacity) {
-		let newCapacity: USize = vec.capacity * 2USize;
+		let newCapacity: USize = if (vec.capacity == 0USize) 10USize else vec.capacity * 2USize;
 		vec.data = realloc<T>(vec.data, sizeOf(T) * newCapacity);
 		vec.capacity = newCapacity;
 	}
 	
-	// Assign value at the end
-	vec.data[vec.length] = value;
+	// Assign value at the end using pointer arithmetic
+	let ptr: *mut T = vec.data + vec.length;
+	*ptr = value;
 	
 	// Increment length
 	vec.length = vec.length + 1USize;
@@ -41,13 +46,36 @@ fn vectorPush<T>(vec: *mut Vector<T>, value: T): Void => {
 
 // Get an element at the given index
 // Returns Some<T> if index is valid, None<T> otherwise
-fn vectorGet<T>(vec: *Vector<T>, index: USize): Some<T> | None<T> => {
+fn vectorGet<T>(vec: *Vector<T>, index: USize): Option<T> => {
 	if (index >= vec.length) {
 		return None<T> { };
 	}
 	
 	let ptr: *T = vec.data + index;
 	return Some<T> { *ptr };
+}
+
+// Get mutable reference to element at the given index
+// Returns Some<*mut T> if index is valid, None<*mut T> otherwise
+fn vectorGetMut<T>(vec: *mut Vector<T>, index: USize): Option<*mut T> => {
+	if (index >= vec.length) {
+		return None<*mut T> { };
+	}
+	
+	let ptr: *mut T = vec.data + index;
+	return Some<*mut T> { ptr };
+}
+
+// Set element at the given index
+// Returns true if successful, false if index out of bounds
+fn vectorSet<T>(vec: *mut Vector<T>, index: USize, value: T): Bool => {
+	if (index >= vec.length) {
+		return false;
+	}
+	
+	let ptr: *mut T = vec.data + index;
+	*ptr = value;
+	return true;
 }
 
 // Free the vector's memory
