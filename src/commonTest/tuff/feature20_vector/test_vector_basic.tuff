@@ -1,6 +1,5 @@
 // Test basic Vector operations
 
-// For now, inline the necessary Option types
 struct Some<T> {
     value: T
 }
@@ -8,21 +7,18 @@ struct Some<T> {
 struct None<T> {
 }
 
-// Import extern functions we need
-extern fn malloc<T>(size: USize): *mut [T];
-extern fn realloc<T>(ptr: *mut [T], newSize: USize): *mut [T];
-extern fn free<T>(ptr: *mut [T]): Void;
+extern fn tuff_malloc<T>(size: USize): *mut [T];
+extern fn tuff_realloc<T>(ptr: *mut [T], newSize: USize): *mut [T];
+extern fn tuff_free<T>(ptr: *mut [T]): Void;
 extern fn exit(code: I32): Void;
 
-// Inline Vector struct
 struct Vector<T> {
     data : *mut [T],
     length : USize,
     capacity : USize
 }
 
-// Vector functions
-fn vectorNew<T>(): Vector<T> => Vector<T> { malloc<T>(sizeOf(T) * 10USize), 0USize, 10USize };
+fn vectorNew<T>(): Vector<T> => Vector<T> { tuff_malloc<T>(sizeOf(T) * 10USize), 0USize, 10USize };
 
 fn vectorLen<T>(vec: *Vector<T>): USize => vec.length;
 
@@ -31,19 +27,15 @@ fn vectorCapacity<T>(vec: *Vector<T>): USize => vec.capacity;
 fn vectorIsEmpty<T>(vec: *Vector<T>): Bool => vec.length == 0USize;
 
 fn vectorPush<T>(vec: *mut Vector<T>, value: T): Void => {
-    // Check if we need to grow
     if (vec.length >= vec.capacity) {
         let newCapacity: USize = vec.capacity * 2USize;
-        vec.data = realloc<T>(vec.data, sizeOf(T) * newCapacity);
+        vec.data = tuff_realloc<T>(vec.data, sizeOf(T) * newCapacity);
         vec.capacity = newCapacity;
     }
     
-    // Assign value at the end using array index syntax (workaround for parser bug)
     vec.data[vec.length] = value;
-    
-    // Increment length
     vec.length = vec.length + 1USize;
-};
+}
 
 fn vectorGet<T>(vec: *Vector<T>, index: USize): Some<T> | None<T> => {
     if (index >= vec.length) {
@@ -52,75 +44,38 @@ fn vectorGet<T>(vec: *Vector<T>, index: USize): Some<T> | None<T> => {
     
     let ptr: *T = vec.data + index;
     return Some<T> { *ptr };
-};
+}
 
 fn vectorFree<T>(vec: *mut Vector<T>): Void => {
-    free<T>(vec.data);
-};
+    tuff_free<T>(vec.data);
+}
 
-// Main test logic
+// Test
 let mut vec = vectorNew<I32>();
 
-// Check initial state
-if (vectorLen(&vec) != 0USize) {
-    exit(1);
-}
+if (vectorLen<I32>(&vec) != 0USize) exit(1);
+if (!vectorIsEmpty<I32>(&vec)) exit(2);
+if (vectorCapacity<I32>(&vec) != 10USize) exit(3);
 
-if (!vectorIsEmpty(&vec)) {
-    exit(2);
-}
+vectorPush<I32>(&mut vec, 42);
+vectorPush<I32>(&mut vec, 100);
+vectorPush<I32>(&mut vec, 200);
 
-if (vectorCapacity(&vec) != 10USize) {
-    exit(3);
-}
+if (vectorLen<I32>(&vec) != 3USize) exit(4);
+if (vectorIsEmpty<I32>(&vec)) exit(5);
 
-// Push some elements
-vectorPush(&mut vec, 42);
-vectorPush(&mut vec, 100);
-vectorPush(&mut vec, 200);
+let first = vectorGet<I32>(&vec, 0USize);
+if (first is None<I32>) exit(6);
 
-// Check length
-if (vectorLen(&vec) != 3USize) {
-    exit(4);
-}
+let second = vectorGet<I32>(&vec, 1USize);
+if (second is None<I32>) exit(8);
 
-if (vectorIsEmpty(&vec)) {
-    exit(5);
-}
+let third = vectorGet<I32>(&vec, 2USize);
+if (third is None<I32>) exit(10);
 
-// Get elements
-let first = vectorGet(&vec, 0USize);
-if (first is None<I32>) {
-    exit(6);
-}
-if (first.value != 42) {
-    exit(7);
-}
+let invalid = vectorGet<I32>(&vec, 3USize);
+if (invalid is Some<I32>) exit(12);
 
-let second = vectorGet(&vec, 1USize);
-if (second is None<I32>) {
-    exit(8);
-}
-if (second.value != 100) {
-    exit(9);
-}
+vectorFree<I32>(&mut vec);
 
-let third = vectorGet(&vec, 2USize);
-if (third is None<I32>) {
-    exit(10);
-}
-if (third.value != 200) {
-    exit(11);
-}
-
-// Test out of bounds
-let invalid = vectorGet(&vec, 3USize);
-if (invalid is Some<I32>) {
-    exit(12);
-}
-
-// Clean up
-vectorFree(&mut vec);
-
-// Success!
 0

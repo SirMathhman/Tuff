@@ -32,12 +32,12 @@ fn vectorPush<T>(vec: *mut Vector<T>, value: T): Void => {
 		vec.capacity = newCapacity;
 	}
 	
-	// Assign value at the end using array index syntax (workaround for parser bug)
+	// Assign value at the end
 	vec.data[vec.length] = value;
 	
 	// Increment length
 	vec.length = vec.length + 1USize;
-};
+}
 
 // Get an element at the given index
 // Returns Some<T> if index is valid, None<T> otherwise
@@ -48,9 +48,9 @@ fn vectorGet<T>(vec: *Vector<T>, index: USize): Some<T> | None<T> => {
 	
 	let ptr: *T = vec.data + index;
 	return Some<T> { *ptr };
-};
+}
 
 // Free the vector's memory
 fn vectorFree<T>(vec: *mut Vector<T>): Void => {
 	free<T>(vec.data);
-};
+}
