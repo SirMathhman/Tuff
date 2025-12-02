@@ -191,31 +191,15 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		return ss.str();
 	}
 	case ASTNodeType::ENUM_DECL:
+	case ASTNodeType::USE_DECL:
+	case ASTNodeType::EXPECT_DECL:
 	{
-		std::stringstream ss;
-		ss << "enum class " << node->value << " {\n";
-		for (size_t i = 0; i < node->children.size(); i++)
-		{
-			if (i > 0)
-				ss << ",\n";
-			ss << "    " << node->children[i]->value;
-		}
-		ss << "\n};";
-		return ss.str();
+		// Use typed AST path
+		auto typed = ASTConverter::toDecl(node);
+		return genDecl(typed);
 	}
 	case ASTNodeType::MODULE_DECL:
 		return generateModuleDecl(node);
-	case ASTNodeType::USE_DECL:
-	{
-		// Use declarations are handled at compile time for scope resolution
-		// No code generation needed
-		return "";
-	}
-	case ASTNodeType::EXPECT_DECL:
-	{
-		// Skip expect declarations - they have no codegen
-		return "";
-	}
 	case ASTNodeType::ACTUAL_DECL:
 		return generateActualDecl(node);
 	default:
