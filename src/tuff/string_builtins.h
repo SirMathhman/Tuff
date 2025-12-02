@@ -296,4 +296,88 @@ inline bool __builtin_string_isEmpty(string s)
 	return s[0] == '\0';
 }
 
+// Split string by delimiter (returns opaque void pointer to array)
+inline void *__builtin_string_split(const char *s, const char *delimiter, size_t *outCount)
+{
+	if (delimiter[0] == '\0')
+	{
+		// Empty delimiter - return copy of original string as single element
+		char **result = static_cast<char **>(std::malloc(2 * sizeof(char *)));
+		if (result != nullptr)
+		{
+			size_t len = std::strlen(s);
+			result[0] = static_cast<char *>(std::malloc(len + 1));
+			if (result[0] != nullptr)
+			{
+				std::strcpy(result[0], s);
+			}
+			result[1] = nullptr;
+			*outCount = 1;
+		}
+		return result;
+	}
+
+	size_t delim_len = std::strlen(delimiter);
+	
+	// Count occurrences to determine array size
+	size_t count = 1; // At least one part
+	const char *p = s;
+	while ((p = std::strstr(p, delimiter)) != nullptr)
+	{
+		count++;
+		p += delim_len;
+	}
+	
+	// Allocate array (count + 1 for null terminator)
+	char **result = static_cast<char **>(std::malloc((count + 1) * sizeof(char *)));
+	if (result == nullptr)
+	{
+		*outCount = 0;
+		return nullptr;
+	}
+	
+	// Split the string
+	size_t idx = 0;
+	const char *start = s;
+	p = s;
+	
+	while ((p = std::strstr(p, delimiter)) != nullptr)
+	{
+		// Copy substring before delimiter
+		size_t len = p - start;
+		result[idx] = static_cast<char *>(std::malloc(len + 1));
+		if (result[idx] != nullptr)
+		{
+			std::memcpy(result[idx], start, len);
+			result[idx][len] = '\0';
+		}
+		idx++;
+		
+		// Move past delimiter
+		p += delim_len;
+		start = p;
+	}
+	
+	// Copy remaining part
+	size_t len = std::strlen(start);
+	result[idx] = static_cast<char *>(std::malloc(len + 1));
+	if (result[idx] != nullptr)
+	{
+		std::strcpy(result[idx], start);
+	}
+	idx++;
+	
+	result[idx] = nullptr; // Null terminator
+	*outCount = count;
+	
+	return result;
+}
+
+// Helper to get string from split result
+inline const char *__builtin_split_get(void *parts, size_t index)
+{
+	char **arr = static_cast<char **>(parts);
+	return arr[index];
+}
+
 #endif // TUFF_STRING_BUILTINS_H

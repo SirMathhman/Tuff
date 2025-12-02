@@ -3,6 +3,12 @@
 
 std::string CodeGeneratorCPP::escapeCppKeyword(const std::string &name)
 {
+	// Special builtin mappings
+	if (name == "__c_free")
+	{
+		return "free";
+	}
+	
 	// C++ keywords that conflict with Tuff variable names
 	static const std::set<std::string> cppKeywords = {
 			"alignas", "alignof", "and", "and_eq", "asm", "auto",

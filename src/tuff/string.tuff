@@ -5,6 +5,8 @@
 
 extern use string_builtins;
 use option;
+use vector;
+use mem;
 
 // string is an opaque type - just use it as an identifier, codegen will handle the mapping
 extern type string;
@@ -60,6 +62,13 @@ extern fn __builtin_string_toLowerCase(s: string): string;
 // Check if string is empty
 extern fn __builtin_string_isEmpty(s: string): Bool;
 
+// Split returns an opaque pointer that must be used with helper functions
+extern fn __builtin_string_split(s: string, delimiter: string, outCount: *mut USize): *mut Void;
+extern fn __builtin_split_get(parts: *mut Void, index: USize): string;
+
+// C stdlib free for raw pointer cleanup (generic to accept any pointer type)
+extern fn __c_free<T>(ptr: *mut T): Void;
+
 impl string {
 	fn length(this: string): USize => __builtin_string_length(this);
 	fn charAt(this: string, index: USize): U8 => __builtin_string_charAt(this, index);
@@ -90,4 +99,24 @@ impl string {
 	fn toUpperCase(this: string): string => __builtin_string_toUpperCase(this);
 	fn toLowerCase(this: string): string => __builtin_string_toLowerCase(this);
 	fn isEmpty(this: string): Bool => __builtin_string_isEmpty(this);
+	
+	// Split string by delimiter, returns Vector<string>
+	fn split(this: string, delimiter: string): Vector<string> => {
+		let mut count: USize = 0USize;
+		let parts = __builtin_string_split(this, delimiter, &mut count);
+		
+		// Create vector and populate it
+		let mut vec = Vector::new<string>(count);
+		let mut i: USize = 0USize;
+		while (i < count) {
+			let part: string = __builtin_split_get(parts, i);
+			vec.push(part);
+			i = i + 1USize;
+		}
+		
+		// Free the array (but not the strings - they're now owned by the vector)
+		__c_free<Void>(parts);
+		
+		return vec;
+	}
 }
