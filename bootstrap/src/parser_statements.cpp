@@ -48,7 +48,8 @@ std::shared_ptr<ASTNode> Parser::parseTypeAlias()
 	consume(TokenType::EQUALS, "Expected '=' after type alias name");
 
 	// Parse the aliased type
-	node->inferredType = parseType();
+	node->typeNode = parseType();
+	node->inferredType = typeToString(node->typeNode);
 
 	match(TokenType::SEMICOLON);
 	return node;
@@ -86,7 +87,8 @@ std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 		consume(TokenType::COLON, "Expected ':' after parameter name");
 
 		// Parse parameter type
-		std::string paramType = parseType();
+		auto paramTypeNode = parseType();
+		std::string paramType = typeToString(paramTypeNode);
 
 		// Check for type bound: Type < expr
 		std::string typeBound;
@@ -121,7 +123,8 @@ std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 		paramNode->type = ASTNodeType::IDENTIFIER;
 		paramNode->value = paramName.value;
 		paramNode->inferredType = paramType;
-		paramNode->typeBound = typeBound; // Store the bound expression
+		paramNode->typeNode = paramTypeNode; // Store AST node
+		paramNode->typeBound = typeBound;		 // Store the bound expression
 		node->addChild(paramNode);
 
 		if (!match(TokenType::COMMA))
@@ -136,7 +139,8 @@ std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 	std::string returnType = "Void";
 	if (match(TokenType::COLON))
 	{
-		returnType = parseType();
+		node->returnTypeNode = parseType();
+		returnType = typeToString(node->returnTypeNode);
 	}
 	node->inferredType = returnType; // Store return type
 
@@ -198,13 +202,15 @@ std::shared_ptr<ASTNode> Parser::parseStructDecl()
 		consume(TokenType::COLON, "Expected ':' after field name");
 
 		// Field type
-		std::string fieldType = parseType();
+		auto fieldTypeNode = parseType();
+		std::string fieldType = typeToString(fieldTypeNode);
 
 		// Create a field node (name in value, type in inferredType)
 		auto fieldNode = std::make_shared<ASTNode>();
 		fieldNode->type = ASTNodeType::IDENTIFIER;
 		fieldNode->value = fieldName.value;
 		fieldNode->inferredType = fieldType;
+		fieldNode->typeNode = fieldTypeNode; // Store AST node
 		node->addChild(fieldNode);
 
 		if (!match(TokenType::COMMA))
@@ -224,9 +230,11 @@ std::shared_ptr<ASTNode> Parser::parseLetStatement()
 	Token name = consume(TokenType::IDENTIFIER, "Expected variable name");
 
 	std::string typeName = "Inferred";
+	std::shared_ptr<ASTNode> typeNode = nullptr;
 	if (match(TokenType::COLON))
 	{
-		typeName = parseType();
+		typeNode = parseType();
+		typeName = typeToString(typeNode);
 	}
 
 	consume(TokenType::EQUALS, "Expected '='");
@@ -238,6 +246,7 @@ std::shared_ptr<ASTNode> Parser::parseLetStatement()
 	node->value = name.value;
 	node->isMutable = isMut;
 	node->inferredType = typeName;
+	node->typeNode = typeNode; // Store AST node
 	node->addChild(init);
 	return node;
 }

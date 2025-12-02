@@ -337,7 +337,7 @@ function Test-TuffFile {
         $jsCompile = Invoke-TuffCompiler -SourcePath $Test.Path -TargetType "js"
         if (-not $jsCompile.Success) {
             $result.Status = "ERROR"
-            $result.Message = "JS compilation failed"
+            $result.Message = "JS compilation failed: $($jsCompile.Output)"
             if ($Verbose) { Write-ColorOutput " ! ERROR" $ColorRed }
             return $result
         }
@@ -345,7 +345,7 @@ function Test-TuffFile {
         $jsRun = Invoke-JavaScriptCode -Code $jsCompile.Output -TestName $Test.Name
         if (-not $jsRun.Success) {
             $result.Status = "ERROR"
-            $result.Message = "JS execution failed"
+            $result.Message = "JS execution failed: $($jsRun.Output)"
             if ($Verbose) { Write-ColorOutput " ! ERROR" $ColorRed }
             return $result
         }
@@ -504,8 +504,20 @@ try {
             
             switch ($result.Status) {
                 "PASSED" { $Script:PassedTests++ }
-                "FAILED" { $Script:FailedTests++ }
-                "ERROR" { $Script:ErrorTests++ }
+                "FAILED" { 
+                    $Script:FailedTests++ 
+                    Write-Host ""
+                    Write-ColorOutput ">>> FAILURE: $($test.Name) <<<" $ColorRed
+                    Write-ColorOutput $result.Message $ColorRed
+                    exit 1
+                }
+                "ERROR" { 
+                    $Script:ErrorTests++ 
+                    Write-Host ""
+                    Write-ColorOutput ">>> ERROR: $($test.Name) <<<" $ColorRed
+                    Write-ColorOutput $result.Message $ColorRed
+                    exit 1
+                }
                 "SKIPPED" { $Script:SkippedTests++ }
             }
         }

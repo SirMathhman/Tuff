@@ -9,23 +9,28 @@
 struct SymbolInfo
 {
 	std::string type;
+	ExprPtr exprType; // New: ExprPtr based type
 	bool isMutable;
 };
 
 struct StructInfo
 {
-	std::vector<std::pair<std::string, std::string>> fields; // (name, type) pairs
-	std::vector<std::string> genericParams;									 // <T>
+	std::vector<std::pair<std::string, std::string>> fields;		 // (name, type) pairs
+	std::vector<std::pair<std::string, ExprPtr>> fieldTypesExpr; // New
+	std::vector<std::string> genericParams;											 // <T>
 };
 
 struct FunctionInfo
 {
 	std::string returnType;
-	std::vector<std::pair<std::string, std::string>> params; // (name, type) pairs
-	std::vector<std::string> genericParams;									 // <T, U>
-	std::map<std::string, std::string> genericBounds;				 // T -> I32 (type bounds)
-	std::vector<std::string> lifetimeParams;								 // <a, b>
-	bool isExtern = false;														 // true for extern fn declarations
+	ExprPtr returnTypeExpr;																			 // New
+	std::vector<std::pair<std::string, std::string>> params;		 // (name, type) pairs
+	std::vector<std::pair<std::string, ExprPtr>> paramTypesExpr; // New
+	std::vector<std::string> genericParams;											 // <T, U>
+	std::map<std::string, std::string> genericBounds;						 // T -> I32 (type bounds)
+	std::map<std::string, ExprPtr> genericBoundsExpr;						 // New
+	std::vector<std::string> lifetimeParams;										 // <a, b>
+	bool isExtern = false;																			 // true for extern fn declarations
 };
 
 struct EnumInfo
@@ -36,12 +41,15 @@ struct EnumInfo
 struct ExpectInfo
 {
 	std::string returnType;
-	std::vector<std::pair<std::string, std::string>> params; // (name, type) pairs
+	ExprPtr returnTypeExpr;																			 // New
+	std::vector<std::pair<std::string, std::string>> params;		 // (name, type) pairs
+	std::vector<std::pair<std::string, ExprPtr>> paramTypesExpr; // New
 };
 
 struct TypeAliasInfo
 {
 	std::string aliasedType;
+	ExprPtr aliasedTypeExpr;													// New
 	std::vector<std::string> genericParams;						// <T, U>
 	std::map<std::string, std::string> genericBounds; // T -> USize (type bounds)
 };
@@ -55,15 +63,20 @@ private:
 	std::map<std::string, EnumInfo> enumTable;
 	std::map<std::string, ExpectInfo> expectTable;
 	std::map<std::string, TypeAliasInfo> typeAliasTable;
-	std::map<std::string, std::string> narrowedTypes; // variable -> narrowed type (for union type narrowing)
+	std::map<std::string, ExprPtr> narrowedTypes; // variable -> narrowed type (for union type narrowing)
 	int currentScopeDepth = 0;
 	std::string currentFunctionReturnType;				 // Track return type for validation
+	ExprPtr currentFunctionReturnTypeExpr;				 // New
 	std::string currentModule;										 // Track current module context
 	std::string currentStruct;										 // Track current struct context (for this.field)
 	std::vector<std::string> importedModules;			 // Track use declarations
 	std::vector<std::string> genericParamsInScope; // Track generic params in current scope
 
 	bool isNumericType(const std::string &type);
+	bool isNumericType(ExprPtr type); // New
+	bool isIntegerType(ExprPtr type); // New
+	bool isFloatType(ExprPtr type);		// New
+	bool isBoolType(ExprPtr type);		// New
 
 	void checkBinaryOp(std::shared_ptr<ASTNode> node);
 	void checkFieldOrEnumAccess(std::shared_ptr<ASTNode> node);
@@ -90,6 +103,16 @@ private:
 
 	// Type alias helpers
 	std::string expandTypeAlias(const std::string &type);
+	ExprPtr expandTypeAlias(ExprPtr type); // New
+
+	// Helper to convert AST type node to ExprPtr
+	ExprPtr resolveType(std::shared_ptr<ASTNode> node);
+
+	// New type compatibility check using ExprPtr
+	bool isTypeCompatible(ExprPtr valueType, ExprPtr targetType);
+	bool areTypesEqual(ExprPtr t1, ExprPtr t2);
+	std::string exprTypeToString(ExprPtr type);																								 // Helper for error messages
+	ExprPtr substituteType(ExprPtr type, const std::map<std::string, ExprPtr> &substitutions); // New
 
 public:
 	void check(std::shared_ptr<ASTNode> node);

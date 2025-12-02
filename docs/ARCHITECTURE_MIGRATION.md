@@ -7,26 +7,30 @@ The Tuff compiler currently has a **hybrid type system** that makes it difficult
 ### What's Wrong
 
 1. **Dual type representations** - Types exist as both:
+
    - `std::string inferredType` (deprecated, but still used everywhere)
    - `ExprPtr exprType` (the "new unified system", but barely used)
 
 2. **String-based type handling throughout**:
+
    ```cpp
    // Type checking does string replacement
    if (typeSubstitutions.count(returnType)) {
        returnType = typeSubstitutions[returnType];  // "T" -> "I32"
    }
-   
+
    // Codegen re-parses strings
    std::string cppType = mapType(node->inferredType);  // "*mut [T]" -> ???
    ```
 
 3. **Loss of semantic information**:
+
    - Can't distinguish `T` (unbound type var) from `I32` (concrete) in a string
    - Can't track whether a function is `extern` without context
    - Can't represent complex types like `(*a I32, *b I32) -> *a I32` properly
 
 4. **Generic instantiation is fragile**:
+
    - String replacement of `T` with `I32` in `*mut [T]` works by accident
    - No validation that substitutions are legal
    - No way to track which types are instantiated
@@ -44,16 +48,19 @@ let data = malloc<I32>(100USize);
 ```
 
 **Current (wrong) codegen:**
+
 ```cpp
 T* const data = malloc<int32_t>(100);  // T is unbound! malloc isn't a template!
 ```
 
 **Desired codegen:**
+
 ```cpp
 int32_t* const data = malloc(100);  // No template args, proper type substitution
 ```
 
 **Why it fails:**
+
 1. Type checker substitutes return type: `*mut [T]` -> `*mut [I32]`
 2. But it stores this as string `"*mut [I32]"`
 3. Codegen reads the string and tries to parse it
@@ -66,7 +73,7 @@ int32_t* const data = malloc(100);  // No template args, proper type substitutio
 
 **Goal**: Have `ExprPtr` as the single source of truth for all types.
 
-#### 1.1 Complete `expr.h` 
+#### 1.1 Complete `expr.h`
 
 Ensure `ExprPtr` can represent **all** Tuff types:
 
@@ -91,14 +98,14 @@ class TypeEnvironment {
   private:
     std::map<std::string, ExprPtr> typeVariables;  // T -> I32, U -> String
     std::map<std::string, ExprPtr> substitutions;  // T -> ExprPtr
-    
+
   public:
     // Substitute all type vars in an expression
     ExprPtr substitute(ExprPtr type);
-    
+
     // Unify two types (check if they match)
     bool unify(ExprPtr expected, ExprPtr actual);
-    
+
     // Apply substitution map
     void applySubstitutions(const std::map<std::string, ExprPtr>& subs);
 };
@@ -110,11 +117,11 @@ class TypeEnvironment {
 class TypeChecker {
   private:
     std::map<std::string, FunctionInfo> functionTable;
-    
+
   public:
     // Check expressions and return ExprPtr types
     ExprPtr check(ASTNode* node);
-    
+
     // Instantiate generic function
     ExprPtr instantiateGeneric(
         const FunctionInfo& func,
@@ -141,19 +148,19 @@ struct FunctionInfo {
 void TypeChecker::checkCallExpr(ASTNode* node) {
     // Get callee info
     const FunctionInfo& funcInfo = functionTable[calleeName];
-    
+
     // Create type environment for this call
     TypeEnvironment env;
-    
+
     // Get concrete type arguments
     std::vector<ExprPtr> typeArgs = parseTypeArgs(node);  // ExprPtr, not string!
-    
+
     // Instantiate function signature
     ExprPtr instantiatedSig = instantiateGeneric(funcInfo, typeArgs, env);
-    
+
     // Instantiated sig is now something like:
     // (USize) -> int32_t*  (fully concrete, no type vars)
-    
+
     // Validate arguments and set return type
     node->exprType = getReturnType(instantiatedSig);  // Use ExprPtr!
     node->calleeIsExtern = funcInfo.isExtern;
@@ -170,20 +177,20 @@ void TypeChecker::checkFunctionDecl(ASTNode* node) {
     for (auto param : node->params) {
         paramTypes.push_back(parseType(param));
     }
-    
+
     // Build function signature
     ExprPtr signature = std::make_shared<FunctionExpr>(
         paramTypes,
         returnType,
         node->genericParams  // Track generics properly
     );
-    
+
     FunctionInfo info{
         signature,
         node->genericParams,
         node->type == ASTNodeType::EXTERN_FN_DECL
     };
-    
+
     functionTable[node->value] = info;
 }
 ```
@@ -199,13 +206,13 @@ class TypeCodegen {
   public:
     // Convert ExprPtr type to C++ code
     std::string toCPP(ExprPtr type);
-    
+
     // Convert ExprPtr type to JavaScript
     std::string toJS(ExprPtr type);
-    
+
     // Helper: is this type a generic parameter?
     bool isGenericParam(ExprPtr type);
-    
+
     // Helper: extract base type from pointer
     ExprPtr getPointedType(ExprPtr pointerType);
 };
@@ -232,7 +239,7 @@ case ASTNodeType::LET_STMT: {
 ```cpp
 case ASTNodeType::CALL_EXPR: {
     std::string callee = generateNode(node->children[0]);
-    
+
     // For extern functions, don't emit template args
     if (!node->calleeIsExtern && !node->children[0]->genericArgs.empty()) {
         callee += "<";
@@ -242,7 +249,7 @@ case ASTNodeType::CALL_EXPR: {
         }
         callee += ">";
     }
-    
+
     // ... rest of call generation
 }
 ```
@@ -259,11 +266,13 @@ case ASTNodeType::CALL_EXPR: {
 ## Migration Path (Safest Approach)
 
 ### Step 1: Parallel Implementation
+
 - Keep old string-based system working
 - Build new `ExprPtr`-based system alongside it
 - No breaking changes to existing tests
 
 ### Step 2: Gradual Migration
+
 - Migrate one component at a time:
   1. Type parsing: string -> ExprPtr
   2. Type checking: validate with ExprPtr
@@ -271,6 +280,7 @@ case ASTNodeType::CALL_EXPR: {
   4. Remove string types
 
 ### Step 3: Testing at Each Step
+
 - Run full test suite after each component
 - Keep git history clean with small, logical commits
 - Easy to revert if issues found
@@ -278,11 +288,13 @@ case ASTNodeType::CALL_EXPR: {
 ## Deliverables
 
 ### Phase 1 (Foundation)
+
 - [ ] Complete `expr.h` with all type representations
 - [ ] Implement `TypeEnvironment` class
 - [ ] Create `ExprPtr` versions of all type structures
 
 ### Phase 2 (Type Checking)
+
 - [ ] Rewrite `checkCallExpr` for ExprPtr
 - [ ] Rewrite `checkFunctionDecl` for ExprPtr
 - [ ] Update all `check*` methods to return ExprPtr
@@ -290,6 +302,7 @@ case ASTNodeType::CALL_EXPR: {
 - [ ] All tests still pass
 
 ### Phase 3 (Codegen)
+
 - [ ] Create `TypeCodegen` class
 - [ ] Update CALL_EXPR generation
 - [ ] Update LET_STMT generation
@@ -298,6 +311,7 @@ case ASTNodeType::CALL_EXPR: {
 - [ ] All tests still pass
 
 ### Phase 4 (Cleanup)
+
 - [ ] Remove all `inferredType` string references
 - [ ] Clean up `mapType()` function (or remove if unused)
 - [ ] Remove old string-based substitution code
@@ -317,7 +331,7 @@ After migration:
 ## Estimated Timeline
 
 - **Phase 1**: 2-3 days (foundation)
-- **Phase 2**: 2-3 days (type checking) 
+- **Phase 2**: 2-3 days (type checking)
 - **Phase 3**: 2-3 days (codegen)
 - **Phase 4**: 1-2 days (cleanup)
 
@@ -334,9 +348,9 @@ After migration:
 ## Dependencies
 
 This migration enables:
+
 - Literal types (`5I32` vs `I32`)
 - Type bounds on generics (`fn<T: USize>`)
 - Function types as first-class values
 - Proper type inference
 - Better error messages
-

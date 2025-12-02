@@ -30,7 +30,9 @@ std::vector<std::shared_ptr<ASTNode>> Parser::parseGenericParams()
 			// Check for type bound: T : SomeType
 			if (match(TokenType::COLON))
 			{
-				paramNode->typeBound = parseType();
+				paramNode->typeBoundNode = parseType();
+				// Keep string version for compatibility if needed, or remove
+				// paramNode->typeBound = ...; // We don't have a string converter yet
 			}
 
 			params.push_back(paramNode);
@@ -45,121 +47,111 @@ std::vector<std::shared_ptr<ASTNode>> Parser::parseGenericParams()
 	return params;
 }
 
-std::string Parser::parseType()
+std::shared_ptr<ASTNode> Parser::parseType()
 {
-	std::string leftType = parseSingleType();
+	auto leftType = parseSingleType();
 
 	// Handle union types: Type0 | Type1 | Type2 (lowest precedence)
 	if (match(TokenType::PIPE))
 	{
-		std::string unionType = leftType;
-		while (true)
+		auto unionNode = std::make_shared<ASTNode>();
+		unionNode->type = ASTNodeType::BINARY_OP;
+		unionNode->value = "|";
+		unionNode->addChild(leftType);
+
+		// First iteration
+		auto rightType = parseSingleType();
+		unionNode->addChild(rightType);
+
+		// Subsequent iterations
+		while (match(TokenType::PIPE))
 		{
-			unionType += "|";
-			unionType += parseSingleType();
-			if (!match(TokenType::PIPE))
-			{
-				break;
-			}
+			auto nextType = parseSingleType();
+			auto newUnion = std::make_shared<ASTNode>();
+			newUnion->type = ASTNodeType::BINARY_OP;
+			newUnion->value = "|";
+			newUnion->addChild(unionNode);
+			newUnion->addChild(nextType);
+			unionNode = newUnion;
 		}
-		return unionType;
+		return unionNode;
 	}
 
 	return leftType;
 }
 
-std::string Parser::parseSingleType()
+std::shared_ptr<ASTNode> Parser::parseSingleType()
 {
 	// Handle SizeOf<Type> type expressions
 	if (match(TokenType::SIZEOF))
 	{
 		consume(TokenType::LESS, "Expected '<' after 'SizeOf'");
-		std::string innerType = parseType();
+		auto innerType = parseType();
 		consume(TokenType::GREATER, "Expected '>' after SizeOf type parameter");
-		return "SizeOf<" + innerType + ">";
+
+		auto node = std::make_shared<ASTNode>();
+		node->type = ASTNodeType::SIZEOF_EXPR;
+		node->addChild(innerType);
+		return node;
 	}
 
 	// Handle pointer types: *T, *mut T, *a T (with lifetime), *a mut T
 	if (match(TokenType::STAR))
 	{
-		std::string result = "*";
+		auto node = std::make_shared<ASTNode>();
+		node->type = ASTNodeType::POINTER_TYPE;
+		node->value = "*";
 
 		// Check for lifetime annotation (lowercase identifier followed by space)
 		if (peek().type == TokenType::IDENTIFIER && isLifetimeParam(peek().value))
 		{
 			Token lifetimeToken = advance();
-			result += lifetimeToken.value + " ";
+			node->lifetime = lifetimeToken.value;
 		}
 
 		bool isMutable = match(TokenType::MUT);
-		if (isMutable)
-		{
-			result += "mut ";
-		}
+		node->isMutable = isMutable;
 
-		std::string innerType = parseSingleType();
-		return result + innerType;
+		auto innerType = parseSingleType();
+		node->addChild(innerType);
+		return node;
 	}
 
 	// Handle array types: [T; init; capacity] or [T] (slice)
 	if (match(TokenType::LBRACKET))
 	{
-		std::string elementType = parseSingleType();
+		auto elementType = parseSingleType();
+		auto node = std::make_shared<ASTNode>();
+		node->type = ASTNodeType::ARRAY_TYPE;
+		node->addChild(elementType);
 
 		// Check if this is a slice [T] or sized array [T; init; capacity]
 		if (match(TokenType::RBRACKET))
 		{
 			// Slice type: [T]
-			return "[" + elementType + "]";
+			return node;
 		}
 
 		// Sized array: [T; init; capacity]
 		consume(TokenType::SEMICOLON, "Expected ';' after array element type");
 
 		// Parse init: can be literal, identifier, or this.field
-		std::string init;
-		if (peek().type == TokenType::THIS)
-		{
-			advance(); // consume 'this'
-			consume(TokenType::DOT, "Expected '.' after 'this'");
-			Token fieldToken = consume(TokenType::IDENTIFIER, "Expected field name after 'this.'");
-			init = "this." + fieldToken.value;
-		}
-		else
-		{
-			Token initToken = advance();
-			if (initToken.type != TokenType::INT_LITERAL && initToken.type != TokenType::IDENTIFIER)
-			{
-				std::cerr << "Error: Expected init count (literal, type parameter, or this.field) in array type at line " << initToken.line << std::endl;
-				exit(1);
-			}
-			init = initToken.value;
-		}
+		// We need to parse these as expressions
+		// But parseExpression returns ASTNode, which is what we want!
+		// However, the original code parsed them as strings.
+		// We should use parseExpression() here if possible, but we need to be careful about precedence/terminators.
+		// Since it's delimited by semicolon, parseExpression should work.
+
+		auto initExpr = parseExpression();
+		node->addChild(initExpr);
 
 		consume(TokenType::SEMICOLON, "Expected ';' after init count");
 
-		// Parse capacity: can be literal, identifier, or this.field
-		std::string capacity;
-		if (peek().type == TokenType::THIS)
-		{
-			advance(); // consume 'this'
-			consume(TokenType::DOT, "Expected '.' after 'this'");
-			Token fieldToken = consume(TokenType::IDENTIFIER, "Expected field name after 'this.'");
-			capacity = "this." + fieldToken.value;
-		}
-		else
-		{
-			Token capacityToken = advance();
-			if (capacityToken.type != TokenType::INT_LITERAL && capacityToken.type != TokenType::IDENTIFIER)
-			{
-				std::cerr << "Error: Expected capacity (literal, type parameter, or this.field) in array type at line " << capacityToken.line << std::endl;
-				exit(1);
-			}
-			capacity = capacityToken.value;
-		}
+		auto capExpr = parseExpression();
+		node->addChild(capExpr);
 
 		consume(TokenType::RBRACKET, "Expected ']' after array capacity");
-		return "[" + elementType + "; " + init + "; " + capacity + "]";
+		return node;
 	}
 
 	Token typeToken = advance();
@@ -176,35 +168,36 @@ std::string Parser::parseSingleType()
 		exit(1);
 	}
 
-	std::string typeName = typeToken.value;
+	auto node = std::make_shared<ASTNode>();
+	node->type = ASTNodeType::TYPE;
+	node->value = typeToken.value;
 
 	// Handle FQN: name::name
 	if (typeToken.type == TokenType::IDENTIFIER)
 	{
 		while (match(TokenType::DOUBLE_COLON))
 		{
-			typeName += "::";
-			typeName += consume(TokenType::IDENTIFIER, "Expected identifier after '::'").value;
+			node->value += "::";
+			node->value += consume(TokenType::IDENTIFIER, "Expected identifier after '::'").value;
 		}
 	}
 
 	// Handle generics: Type<T, U>
 	if (typeToken.type == TokenType::IDENTIFIER && match(TokenType::LESS))
 	{
-		typeName += "<";
+		// We need to parse generic args as AST nodes
 		while (peek().type != TokenType::GREATER && peek().type != TokenType::END_OF_FILE)
 		{
-			typeName += parseType();
+			node->genericArgsNodes.push_back(parseType());
 			if (match(TokenType::COMMA))
 			{
-				typeName += ",";
+				continue;
 			}
 		}
 		consume(TokenType::GREATER, "Expected '>' after generic type arguments");
-		typeName += ">";
 	}
 
-	return typeName;
+	return node;
 }
 
 bool Parser::isGenericInstantiation()
@@ -249,9 +242,9 @@ bool Parser::isGenericInstantiation()
 	return false;
 }
 
-std::vector<std::string> Parser::parseGenericArgs()
+std::vector<std::shared_ptr<ASTNode>> Parser::parseGenericArgs()
 {
-	std::vector<std::string> args;
+	std::vector<std::shared_ptr<ASTNode>> args;
 	if (match(TokenType::LESS))
 	{
 		while (peek().type != TokenType::GREATER && peek().type != TokenType::END_OF_FILE)
@@ -265,4 +258,95 @@ std::vector<std::string> Parser::parseGenericArgs()
 		consume(TokenType::GREATER, "Expected '>' after generic arguments");
 	}
 	return args;
+}
+
+static std::string expressionToString(std::shared_ptr<ASTNode> node)
+{
+	if (!node)
+		return "";
+	switch (node->type)
+	{
+	case ASTNodeType::LITERAL:
+		return node->value;
+	case ASTNodeType::IDENTIFIER:
+		return node->value;
+	case ASTNodeType::FIELD_ACCESS:
+		return expressionToString(node->children[0]) + "." + node->value;
+	case ASTNodeType::BINARY_OP:
+		return expressionToString(node->children[0]) + " " + node->value + " " + expressionToString(node->children[1]);
+	case ASTNodeType::UNARY_OP:
+		return node->value + expressionToString(node->children[0]);
+	case ASTNodeType::SIZEOF_EXPR:
+		return "sizeOf(" + node->value + ")";
+	default:
+		return "...";
+	}
+}
+
+std::string Parser::typeToString(std::shared_ptr<ASTNode> node)
+{
+	if (!node)
+		return "Void";
+
+	switch (node->type)
+	{
+	case ASTNodeType::TYPE:
+	{
+		std::string res = node->value;
+		if (!node->genericArgsNodes.empty())
+		{
+			res += "<";
+			for (size_t i = 0; i < node->genericArgsNodes.size(); i++)
+			{
+				if (i > 0)
+					res += ", ";
+				res += typeToString(node->genericArgsNodes[i]);
+			}
+			res += ">";
+		}
+		return res;
+	}
+	case ASTNodeType::POINTER_TYPE:
+	{
+		std::string res = "*";
+		if (!node->lifetime.empty())
+			res += node->lifetime + " ";
+		if (node->isMutable)
+			res += "mut ";
+		if (!node->children.empty())
+			res += typeToString(node->children[0]);
+		return res;
+	}
+	case ASTNodeType::ARRAY_TYPE:
+	{
+		if (node->children.empty())
+			return "[Unknown]";
+		std::string res = "[" + typeToString(node->children[0]);
+		if (node->children.size() > 1)
+		{
+			// Init and capacity are expressions
+			res += "; " + expressionToString(node->children[1]);
+			if (node->children.size() > 2)
+			{
+				res += "; " + expressionToString(node->children[2]);
+			}
+		}
+		res += "]";
+		return res;
+	}
+	case ASTNodeType::BINARY_OP:
+	{
+		if (node->value == "|")
+		{
+			return typeToString(node->children[0]) + "|" + typeToString(node->children[1]);
+		}
+		return "UnknownBinaryOp";
+	}
+	case ASTNodeType::SIZEOF_EXPR:
+	{
+		return "SizeOf<" + typeToString(node->children[0]) + ">";
+	}
+	default:
+		return "UnknownType";
+	}
 }

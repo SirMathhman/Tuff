@@ -63,10 +63,12 @@ std::shared_ptr<ASTNode> Parser::parseIsCheck()
 	while (match(TokenType::IS))
 	{
 		// is operator: expr is Type
-		std::string targetType = parseType();
+		auto targetTypeNode = parseType();
+		std::string targetType = typeToString(targetTypeNode);
 		auto node = std::make_shared<ASTNode>();
 		node->type = ASTNodeType::IS_EXPR;
-		node->value = targetType; // Store the type we're checking against
+		node->value = targetType;				 // Store the type we're checking against
+		node->typeNode = targetTypeNode; // Store AST node
 		node->addChild(left);
 		left = node;
 	}
@@ -270,6 +272,31 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 			inferredType = "F64";
 
 		node->inferredType = inferredType;
+
+		// Set exprType
+		if (inferredType == "I8")
+			node->exprType = makePrimitive(PrimitiveKind::I8);
+		else if (inferredType == "I16")
+			node->exprType = makePrimitive(PrimitiveKind::I16);
+		else if (inferredType == "I32")
+			node->exprType = makePrimitive(PrimitiveKind::I32);
+		else if (inferredType == "I64")
+			node->exprType = makePrimitive(PrimitiveKind::I64);
+		else if (inferredType == "U8")
+			node->exprType = makePrimitive(PrimitiveKind::U8);
+		else if (inferredType == "U16")
+			node->exprType = makePrimitive(PrimitiveKind::U16);
+		else if (inferredType == "U32")
+			node->exprType = makePrimitive(PrimitiveKind::U32);
+		else if (inferredType == "U64")
+			node->exprType = makePrimitive(PrimitiveKind::U64);
+		else if (inferredType == "USize")
+			node->exprType = makePrimitive(PrimitiveKind::USize);
+		else if (inferredType == "F32")
+			node->exprType = makePrimitive(PrimitiveKind::F32);
+		else if (inferredType == "F64")
+			node->exprType = makePrimitive(PrimitiveKind::F64);
+
 		return node;
 	}
 	else if (match(TokenType::STRING_LITERAL))
@@ -285,8 +312,17 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 			byteNode->type = ASTNodeType::LITERAL;
 			byteNode->value = std::to_string((int)c);
 			byteNode->inferredType = "U8";
+			byteNode->exprType = makePrimitive(PrimitiveKind::U8);
 			node->addChild(byteNode);
 		}
+
+		// Set exprType for the array literal
+		// It's [U8; len; len]
+		// We need to construct ArrayExpr
+		// But ArrayExpr expects ExprPtr for init and capacity
+		// We can use IntLiteralExpr
+		auto len = makeInt(str.length(), "USize");
+		node->exprType = makeArray(makePrimitive(PrimitiveKind::U8), len, len);
 
 		return node;
 	}
@@ -306,6 +342,8 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 		}
 
 		consume(TokenType::RBRACKET, "Expected ']' after array elements");
+		// We can't determine type here easily without checking children types
+		// TypeChecker will handle it
 		return node;
 	}
 	else if (match(TokenType::TRUE))
@@ -314,6 +352,7 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 		node->type = ASTNodeType::LITERAL;
 		node->value = "true";
 		node->inferredType = "Bool";
+		node->exprType = makePrimitive(PrimitiveKind::Bool);
 		return node;
 	}
 	else if (match(TokenType::FALSE))
@@ -322,19 +361,23 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 		node->type = ASTNodeType::LITERAL;
 		node->value = "false";
 		node->inferredType = "Bool";
+		node->exprType = makePrimitive(PrimitiveKind::Bool);
 		return node;
 	}
 	else if (match(TokenType::SIZEOF))
 	{
 		// sizeOf(Type) - parse the type parameter
 		consume(TokenType::LPAREN, "Expected '(' after 'sizeOf'");
-		std::string typeName = parseType();
+		auto typeNode = parseType();
+		std::string typeName = typeToString(typeNode);
 		consume(TokenType::RPAREN, "Expected ')' after sizeOf type parameter");
 
 		auto node = std::make_shared<ASTNode>();
 		node->type = ASTNodeType::SIZEOF_EXPR;
 		node->value = typeName;				// Store the type we're getting size of
+		node->typeNode = typeNode;		// Store AST node
 		node->inferredType = "USize"; // sizeOf always returns USize
+		node->exprType = makePrimitive(PrimitiveKind::USize);
 		return node;
 	}
 	else if (match(TokenType::MATCH))
@@ -385,9 +428,14 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 
 		// Check for generic args
 		std::vector<std::string> genArgs;
+		std::vector<std::shared_ptr<ASTNode>> genArgsNodes;
 		if (isGenericInstantiation())
 		{
-			genArgs = parseGenericArgs();
+			genArgsNodes = parseGenericArgs();
+			for (auto &arg : genArgsNodes)
+			{
+				genArgs.push_back(typeToString(arg));
+			}
 		}
 
 		// Check for struct literal: TypeName { expr, expr, ... }
@@ -414,6 +462,7 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 			node->type = ASTNodeType::STRUCT_LITERAL;
 			node->value = name; // struct type name
 			node->genericArgs = genArgs;
+			node->genericArgsNodes = genArgsNodes;
 
 			// Parse field initializers
 			while (peek().type != TokenType::RBRACE && peek().type != TokenType::END_OF_FILE)
@@ -442,6 +491,7 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 			node->type = ASTNodeType::IDENTIFIER;
 			node->value = name;
 			node->genericArgs = genArgs;
+			node->genericArgsNodes = genArgsNodes;
 			return node;
 		}
 	}

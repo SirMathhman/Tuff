@@ -57,19 +57,23 @@ struct ASTNode
 	ASTNodeType type;
 	std::string value; // For identifiers, literals, operators
 	std::vector<std::shared_ptr<ASTNode>> children;
-	std::vector<std::shared_ptr<ASTNode>> genericParams; // For generic functions/structs declarations <T>
-	std::vector<std::string> genericArgs;								 // For generic calls/instantiations <I32>
-	std::vector<std::string> lifetimeParams;						 // For lifetime declarations <a, b>
-	std::string lifetime;																 // For pointer types: *a I32
-	std::vector<std::string> fieldNames;								 // For struct literals (filled by TypeChecker)
+	std::vector<std::shared_ptr<ASTNode>> genericParams;		// For generic functions/structs declarations <T>
+	std::vector<std::string> genericArgs;										// For generic calls/instantiations <I32>
+	std::vector<std::shared_ptr<ASTNode>> genericArgsNodes; // New: AST nodes for generic args
+	std::vector<std::string> lifetimeParams;								// For lifetime declarations <a, b>
+	std::string lifetime;																		// For pointer types: *a I32
+	std::vector<std::string> fieldNames;										// For struct literals (filled by TypeChecker)
 
 	// Type information (filled by TypeChecker)
-	std::string inferredType;			// DEPRECATED: Use exprType instead
-	ExprPtr exprType;							// New unified expression/type system
-	std::string typeBound;				// For type parameters with bounds: T : SomeType
-	bool isMutable = false;				// For LET_STMT
-	bool isNarrowedUnion = false; // For union type narrowing - indicates value is wrapped
-	bool calleeIsExtern = false;		// For CALL_EXPR - true if callee is an extern function
+	std::string inferredType;								 // DEPRECATED: Use exprType instead
+	std::shared_ptr<ASTNode> typeNode;			 // New: AST node for explicit type annotation
+	std::shared_ptr<ASTNode> returnTypeNode; // New: AST node for function return type
+	ExprPtr exprType;												 // New unified expression/type system
+	std::string typeBound;									 // For type parameters with bounds: T : SomeType
+	std::shared_ptr<ASTNode> typeBoundNode;	 // New: AST node for type bound
+	bool isMutable = false;									 // For LET_STMT
+	bool isNarrowedUnion = false;						 // For union type narrowing - indicates value is wrapped
+	bool calleeIsExtern = false;						 // For CALL_EXPR - true if callee is an extern function
 
 	// Helper to add a child
 	void addChild(std::shared_ptr<ASTNode> child)

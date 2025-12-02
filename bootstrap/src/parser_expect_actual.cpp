@@ -35,7 +35,9 @@ std::shared_ptr<ASTNode> Parser::parseExpectDecl()
 			consume(TokenType::COLON, "Expected ':' after parameter name");
 
 			// Use parseType to support complex types and lowercase identifiers
-			paramNode->inferredType = parseType();
+			auto paramTypeNode = parseType();
+			paramNode->inferredType = typeToString(paramTypeNode);
+			paramNode->typeNode = paramTypeNode;
 			node->addChild(paramNode);
 		} while (match(TokenType::COMMA));
 	}
@@ -44,7 +46,8 @@ std::shared_ptr<ASTNode> Parser::parseExpectDecl()
 	consume(TokenType::COLON, "Expected ':' after ')'");
 
 	// Use parseType to support complex types and lowercase identifiers
-	node->inferredType = parseType();
+	node->returnTypeNode = parseType();
+	node->inferredType = typeToString(node->returnTypeNode);
 
 	consume(TokenType::SEMICOLON, "Expected ';' after expect declaration");
 
@@ -85,7 +88,9 @@ std::shared_ptr<ASTNode> Parser::parseActualDecl()
 			consume(TokenType::COLON, "Expected ':' after parameter name");
 
 			// Use parseType to support complex types and lowercase identifiers
-			paramNode->inferredType = parseType();
+			auto paramTypeNode = parseType();
+			paramNode->inferredType = typeToString(paramTypeNode);
+			paramNode->typeNode = paramTypeNode;
 			node->addChild(paramNode);
 		} while (match(TokenType::COMMA));
 	}
@@ -94,7 +99,8 @@ std::shared_ptr<ASTNode> Parser::parseActualDecl()
 	consume(TokenType::COLON, "Expected ':' after ')'");
 
 	// Use parseType to support complex types and lowercase identifiers
-	node->inferredType = parseType();
+	node->returnTypeNode = parseType();
+	node->inferredType = typeToString(node->returnTypeNode);
 
 	consume(TokenType::FAT_ARROW, "Expected '=>' after return type");
 
@@ -157,7 +163,9 @@ std::shared_ptr<ASTNode> Parser::parseExternFnDecl()
 			consume(TokenType::COLON, "Expected ':' after parameter name");
 
 			// Use parseType to support complex types (pointers, etc.)
-			paramNode->inferredType = parseType();
+			auto paramTypeNode = parseType();
+			paramNode->inferredType = typeToString(paramTypeNode);
+			paramNode->typeNode = paramTypeNode;
 			node->addChild(paramNode);
 		} while (match(TokenType::COMMA));
 	}
@@ -166,7 +174,8 @@ std::shared_ptr<ASTNode> Parser::parseExternFnDecl()
 	consume(TokenType::COLON, "Expected ':' after ')'");
 
 	// Use parseType to support complex return types
-	node->inferredType = parseType();
+	node->returnTypeNode = parseType();
+	node->inferredType = typeToString(node->returnTypeNode);
 
 	consume(TokenType::SEMICOLON, "Expected ';' after extern function declaration");
 
@@ -187,7 +196,8 @@ std::shared_ptr<ASTNode> Parser::parseExternTypeDecl()
 	// Check if this is a type alias: type extern Name = Type;
 	if (match(TokenType::EQUALS))
 	{
-		node->inferredType = parseType();
+		node->typeNode = parseType();
+		node->inferredType = typeToString(node->typeNode);
 	}
 
 	consume(TokenType::SEMICOLON, "Expected ';' after extern type declaration");

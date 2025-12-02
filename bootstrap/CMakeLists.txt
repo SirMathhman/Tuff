@@ -25,8 +25,11 @@ set(COMPILER_SOURCES
     src/type_checker/type_checker_register.cpp
     src/type_checker/type_checker_alias.cpp
     src/type_checker/type_checker_expr.cpp
+    src/type_checker/type_checker_types.cpp
     src/codegen/codegen_js.cpp
     src/codegen/codegen_js_helpers.cpp
+    src/codegen/codegen_js_stmt.cpp
+    src/codegen/codegen_js_expr.cpp
     src/codegen/codegen_cpp.cpp
     src/codegen/codegen_cpp_header.cpp
     src/codegen/codegen_cpp_helpers.cpp

@@ -102,24 +102,7 @@ std::shared_ptr<ASTNode> Parser::parse()
 		}
 		else if (peek().type == TokenType::IF)
 		{
-			// Parse as expression first (which handles if-else as expression)
-			auto expr = parseExpression();
-			if (match(TokenType::SEMICOLON))
-			{
-				// Statement usage - but expression form is fine
-				program->addChild(expr);
-			}
-			else
-			{
-				// No semicolon - must be trailing expression
-				program->addChild(expr);
-				if (peek().type != TokenType::END_OF_FILE)
-				{
-					std::cerr << "Error: Trailing expression must be the last element." << std::endl;
-					exit(1);
-				}
-				break;
-			}
+			program->addChild(parseIfStatement());
 		}
 		else if (peek().type == TokenType::WHILE)
 		{

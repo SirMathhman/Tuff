@@ -127,3 +127,100 @@ std::string TypeChecker::expandTypeAlias(const std::string &type)
 	// Recursively expand in case the aliased type also contains aliases
 	return expandTypeAlias(expandedType);
 }
+
+ExprPtr TypeChecker::expandTypeAlias(ExprPtr type)
+{
+	if (!type)
+		return nullptr;
+
+	if (type->kind == ExprKind::IDENTIFIER)
+	{
+		auto id = type->as<IdentifierExpr>();
+		auto it = typeAliasTable.find(id->name);
+		if (it != typeAliasTable.end())
+		{
+			// Found alias
+			// If it has generic params, it should be a CallExpr.
+			// If it is IdentifierExpr, it means no args provided.
+			if (!it->second.genericParams.empty())
+			{
+				// Error: missing generic args
+				// But maybe we are just resolving the name?
+				// For now, assume if it's IdentifierExpr, it has no args.
+			}
+
+			return expandTypeAlias(it->second.aliasedTypeExpr);
+		}
+		return type;
+	}
+
+	if (type->kind == ExprKind::CALL)
+	{
+		auto c = type->as<CallExpr>();
+		// Check if callee is an alias
+		if (c->callee->kind == ExprKind::IDENTIFIER)
+		{
+			auto id = c->callee->as<IdentifierExpr>();
+			auto it = typeAliasTable.find(id->name);
+			if (it != typeAliasTable.end())
+			{
+				// Found generic alias
+				// Substitute args
+				std::map<std::string, ExprPtr> substitutions;
+				if (c->args.size() != it->second.genericParams.size())
+				{
+					std::cerr << "Error: Type alias '" << id->name << "' expects "
+										<< it->second.genericParams.size() << " type arguments, got "
+										<< c->args.size() << std::endl;
+					exit(1);
+				}
+
+				for (size_t i = 0; i < it->second.genericParams.size(); i++)
+				{
+					// Expand args first
+					substitutions[it->second.genericParams[i]] = expandTypeAlias(c->args[i]);
+				}
+
+				ExprPtr expanded = substituteType(it->second.aliasedTypeExpr, substitutions);
+				return expandTypeAlias(expanded);
+			}
+		}
+
+		// Also expand args recursively
+		std::vector<ExprPtr> newArgs;
+		bool changed = false;
+		for (auto arg : c->args)
+		{
+			auto newArg = expandTypeAlias(arg);
+			if (newArg != arg)
+				changed = true;
+			newArgs.push_back(newArg);
+		}
+		if (changed)
+		{
+			return std::make_shared<CallExpr>(c->callee, newArgs, c->isGenericInstantiation);
+		}
+		return type;
+	}
+
+	// Handle other types recursively (pointers, arrays)
+	if (type->kind == ExprKind::UNARY)
+	{
+		auto u = type->as<UnaryExpr>();
+		auto newOp = expandTypeAlias(u->operand);
+		if (newOp != u->operand)
+			return std::make_shared<UnaryExpr>(u->op, newOp);
+		return type;
+	}
+
+	if (type->kind == ExprKind::ARRAY)
+	{
+		auto a = type->as<ArrayExpr>();
+		auto newElem = expandTypeAlias(a->elementType);
+		if (newElem != a->elementType)
+			return std::make_shared<ArrayExpr>(newElem, a->init, a->capacity);
+		return type;
+	}
+
+	return type;
+}

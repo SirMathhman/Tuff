@@ -50,11 +50,12 @@ private:
 	std::shared_ptr<ASTNode> parseMatchExpr();
 
 	std::vector<std::shared_ptr<ASTNode>> parseGenericParams();
-	std::string parseType();
-	std::string parseSingleType();
-	std::vector<std::string> parseGenericArgs();
+	std::shared_ptr<ASTNode> parseType();
+	std::shared_ptr<ASTNode> parseSingleType();
+	std::vector<std::shared_ptr<ASTNode>> parseGenericArgs();
 	bool isGenericInstantiation();
 	bool isLifetimeParam(const std::string &name) const;
+	std::string typeToString(std::shared_ptr<ASTNode> node); // Helper to convert type AST back to string
 
 public:
 	Parser(const std::vector<Token> &toks);

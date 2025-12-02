@@ -11,6 +11,109 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 	std::string leftType = left->inferredType;
 	std::string rightType = right->inferredType;
 
+	// Use exprType if available
+	if (left->exprType && right->exprType)
+	{
+		if (node->value == "+" || node->value == "-" || node->value == "*" || node->value == "/" || node->value == "%")
+		{
+			// Pointer arithmetic: ptr + int
+			if (left->exprType->kind == ExprKind::UNARY && left->exprType->as<UnaryExpr>()->op == UnaryOp::STAR && isNumericType(right->exprType))
+			{
+				auto ptr = left->exprType->as<UnaryExpr>();
+				// Check for *mut [T] -> Unary(STAR, Unary(MUT, Array(T)))
+				if (ptr->operand->kind == ExprKind::UNARY && ptr->operand->as<UnaryExpr>()->op == UnaryOp::MUT)
+				{
+					auto mut = ptr->operand->as<UnaryExpr>();
+					if (mut->operand->kind == ExprKind::ARRAY)
+					{
+						auto arr = mut->operand->as<ArrayExpr>();
+						node->exprType = makePtrMut(arr->elementType);
+						node->inferredType = exprTypeToString(node->exprType);
+						return;
+					}
+				}
+				// Check for *[T] -> Unary(STAR, Array(T))
+				else if (ptr->operand->kind == ExprKind::ARRAY)
+				{
+					auto arr = ptr->operand->as<ArrayExpr>();
+					node->exprType = makePtr(arr->elementType);
+					node->inferredType = exprTypeToString(node->exprType);
+					return;
+				}
+
+				node->exprType = left->exprType;
+				node->inferredType = exprTypeToString(node->exprType);
+				return;
+			}
+
+			if (!isNumericType(left->exprType) || !isNumericType(right->exprType))
+			{
+				std::cerr << "Error: Operands of '" << node->value << "' must be numeric." << std::endl;
+				exit(1);
+			}
+
+			if (areTypesEqual(left->exprType, makePrimitive(PrimitiveKind::USize)) ||
+					areTypesEqual(right->exprType, makePrimitive(PrimitiveKind::USize)) ||
+					left->exprType->kind == ExprKind::SIZEOF || right->exprType->kind == ExprKind::SIZEOF)
+			{
+				node->exprType = makePrimitive(PrimitiveKind::USize);
+			}
+			else
+			{
+				// Preserve type if both are same float/int
+				if (areTypesEqual(left->exprType, right->exprType))
+				{
+					node->exprType = left->exprType;
+				}
+				else
+				{
+					node->exprType = makePrimitive(PrimitiveKind::I32);
+				}
+			}
+			node->inferredType = exprTypeToString(node->exprType);
+			return;
+		}
+		else if (node->value == "&")
+		{
+			if (!isNumericType(left->exprType) || !isNumericType(right->exprType))
+			{
+				std::cerr << "Error: Operands of '&' must be numeric." << std::endl;
+				exit(1);
+			}
+			node->exprType = left->exprType;
+			node->inferredType = exprTypeToString(node->exprType);
+			return;
+		}
+		else if (node->value == "==" || node->value == "!=")
+		{
+			node->exprType = makePrimitive(PrimitiveKind::Bool);
+			node->inferredType = "Bool";
+			return;
+		}
+		else if (node->value == "<" || node->value == ">" || node->value == "<=" || node->value == ">=")
+		{
+			if (!isNumericType(left->exprType) || !isNumericType(right->exprType))
+			{
+				std::cerr << "Error: Operands of '" << node->value << "' must be numeric." << std::endl;
+				exit(1);
+			}
+			node->exprType = makePrimitive(PrimitiveKind::Bool);
+			node->inferredType = "Bool";
+			return;
+		}
+		else if (node->value == "&&" || node->value == "||")
+		{
+			if (!isBoolType(left->exprType) || !isBoolType(right->exprType))
+			{
+				std::cerr << "Error: Operands of '" << node->value << "' must be Bool." << std::endl;
+				exit(1);
+			}
+			node->exprType = makePrimitive(PrimitiveKind::Bool);
+			node->inferredType = "Bool";
+			return;
+		}
+	}
+
 	if (node->value == "+" || node->value == "-" || node->value == "*" || node->value == "/" || node->value == "%")
 	{
 		// Allow pointer arithmetic: ptr + int

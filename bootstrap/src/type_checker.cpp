@@ -26,10 +26,29 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		auto init = node->children[0];
 		check(init);
 
-		std::string type = node->inferredType;
-		if (type == "Inferred")
+		// Resolve explicit type if present
+		if (node->typeNode)
 		{
-			type = init->inferredType;
+			node->exprType = resolveType(node->typeNode);
+			node->exprType = expandTypeAlias(node->exprType);
+		}
+
+		std::string type = node->inferredType;
+		if (type == "Inferred" || type.empty())
+		{
+			if (node->exprType)
+			{
+				// Explicit type was resolved
+				type = exprTypeToString(node->exprType);
+			}
+			else
+			{
+				// Infer from init
+				node->exprType = init->exprType;
+				if (node->exprType)
+					node->exprType = expandTypeAlias(node->exprType);
+				type = init->inferredType;
+			}
 			node->inferredType = type; // Update AST with inferred type
 		}
 		else
@@ -38,15 +57,30 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 			type = expandTypeAlias(type);
 			node->inferredType = type;
 
-			if (!isTypeCompatible(init->inferredType, type))
+			if (node->exprType && init->exprType)
 			{
-				std::cerr << "Error: Type mismatch for '" << name << "'. Expected " << type << ", got " << init->inferredType << std::endl;
-				exit(1);
+				// Expand aliases in init type too
+				init->exprType = expandTypeAlias(init->exprType);
+
+				if (!isTypeCompatible(init->exprType, node->exprType))
+				{
+					std::cerr << "Error: Type mismatch for '" << name << "'. Expected " << exprTypeToString(node->exprType) << ", got " << exprTypeToString(init->exprType) << std::endl;
+					exit(1);
+				}
+			}
+			else
+			{
+				if (!isTypeCompatible(init->inferredType, type))
+				{
+					std::cerr << "Error: Type mismatch for '" << name << "'. Expected " << type << ", got " << init->inferredType << std::endl;
+					exit(1);
+				}
 			}
 		}
 
 		SymbolInfo info;
-		info.type = type;
+		info.type = node->inferredType;
+		info.exprType = node->exprType;
 		info.isMutable = node->isMutable;
 		symbolTable[name] = info;
 		break;
@@ -81,10 +115,24 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		}
 
 		// Validate type compatibility
-		if (!isTypeCompatible(value->inferredType, lhs->inferredType))
+		if (lhs->exprType && value->exprType)
 		{
-			std::cerr << "Error: Type mismatch in assignment. Expected " << lhs->inferredType << ", got " << value->inferredType << std::endl;
-			exit(1);
+			lhs->exprType = expandTypeAlias(lhs->exprType);
+			value->exprType = expandTypeAlias(value->exprType);
+
+			if (!isTypeCompatible(value->exprType, lhs->exprType))
+			{
+				std::cerr << "Error: Type mismatch in assignment. Expected " << exprTypeToString(lhs->exprType) << ", got " << exprTypeToString(value->exprType) << std::endl;
+				exit(1);
+			}
+		}
+		else
+		{
+			if (!isTypeCompatible(value->inferredType, lhs->inferredType))
+			{
+				std::cerr << "Error: Type mismatch in assignment. Expected " << lhs->inferredType << ", got " << value->inferredType << std::endl;
+				exit(1);
+			}
 		}
 		break;
 	}
@@ -125,11 +173,22 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 
 		// Type narrowing: if condition is `x is SomeType`, narrow x's type in then-branch
 		std::string narrowedVar;
-		std::string narrowedToType;
+		ExprPtr narrowedToType;
 		if (condition->type == ASTNodeType::IS_EXPR && condition->children[0]->type == ASTNodeType::IDENTIFIER)
 		{
 			narrowedVar = condition->children[0]->value;
-			narrowedToType = condition->value; // The type we're checking against
+			// Use typeNode if available, otherwise fallback to resolving string (deprecated)
+			if (condition->typeNode)
+			{
+				narrowedToType = resolveType(condition->typeNode);
+			}
+			else
+			{
+				// Fallback for migration
+				// We can't easily resolve string to ExprPtr without parser
+				// But we can create an IdentifierExpr
+				narrowedToType = std::make_shared<IdentifierExpr>(condition->value);
+			}
 			narrowedTypes[narrowedVar] = narrowedToType;
 		}
 
@@ -146,6 +205,26 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		{
 			auto elseBranch = node->children[2];
 			check(elseBranch);
+
+			// Infer type from branches
+			if (thenBranch->inferredType == elseBranch->inferredType)
+			{
+				node->inferredType = thenBranch->inferredType;
+				node->exprType = thenBranch->exprType;
+			}
+			else
+			{
+				// If one is Void, result is Void
+				// Or if types mismatch (should be error if used as expression, but here we just mark as Void/Incompatible)
+				// For now, just set to Void if mismatch
+				node->inferredType = "Void";
+				node->exprType = makePrimitive(PrimitiveKind::Void);
+			}
+		}
+		else
+		{
+			node->inferredType = "Void";
+			node->exprType = makePrimitive(PrimitiveKind::Void);
 		}
 		break;
 	}

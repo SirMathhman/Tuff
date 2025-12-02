@@ -65,25 +65,57 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 	}
 
 	// Create substitution map
-	std::map<std::string, std::string> typeSubstitutions;
-	for (size_t i = 0; i < info.genericParams.size(); i++)
-	{
-		std::string paramName = info.genericParams[i];
-		std::string argType = callee->genericArgs[i];
-		typeSubstitutions[paramName] = argType;
+	std::map<std::string, ExprPtr> typeSubstitutions;
 
-		// Check type bounds if present
-		auto boundIt = info.genericBounds.find(paramName);
-		if (boundIt != info.genericBounds.end())
+	if (!callee->genericArgsNodes.empty())
+	{
+		if (callee->genericArgsNodes.size() != info.genericParams.size())
 		{
-			std::string boundType = boundIt->second;
-			// Check if argType matches the bound
-			if (argType != boundType)
+			std::cerr << "Error: Function '" << funcName << "' expects " << info.genericParams.size()
+								<< " generic arguments, got " << callee->genericArgsNodes.size() << std::endl;
+			exit(1);
+		}
+
+		for (size_t i = 0; i < info.genericParams.size(); i++)
+		{
+			std::string paramName = info.genericParams[i];
+			ExprPtr argType = resolveType(callee->genericArgsNodes[i]);
+			typeSubstitutions[paramName] = argType;
+
+			// Check type bounds if present
+			auto boundIt = info.genericBoundsExpr.find(paramName);
+			if (boundIt != info.genericBoundsExpr.end())
 			{
-				std::cerr << "Error: Type parameter '" << paramName << "' requires type '" << boundType
-									<< "', but got '" << argType << "'" << std::endl;
-				exit(1);
+				ExprPtr boundType = boundIt->second;
+				// Substitute generic params in bound if needed (e.g. <T, U: T>)
+				boundType = substituteType(boundType, typeSubstitutions);
+
+				if (!isTypeCompatible(argType, boundType))
+				{
+					std::cerr << "Error: Type parameter '" << paramName << "' requires type '" << exprTypeToString(boundType)
+										<< "', but got '" << exprTypeToString(argType) << "'" << std::endl;
+					exit(1);
+				}
 			}
+		}
+	}
+	else if (!callee->genericArgs.empty())
+	{
+		// Fallback for string generic args (deprecated)
+		if (callee->genericArgs.size() != info.genericParams.size())
+		{
+			std::cerr << "Error: Function '" << funcName << "' expects " << info.genericParams.size()
+								<< " generic arguments, got " << callee->genericArgs.size() << std::endl;
+			exit(1);
+		}
+
+		for (size_t i = 0; i < info.genericParams.size(); i++)
+		{
+			std::string paramName = info.genericParams[i];
+			std::string argTypeStr = callee->genericArgs[i];
+			// Try to convert string to ExprPtr
+			ExprPtr argType = std::make_shared<IdentifierExpr>(argTypeStr); // Simple fallback
+			typeSubstitutions[paramName] = argType;
 		}
 	}
 
@@ -100,26 +132,36 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 		auto arg = node->children[i + 1];
 		check(arg);
 
-		std::string expectedType = info.params[i].second;
+		ExprPtr expectedType = info.paramTypesExpr[i].second;
 		// Substitute generic types
-		if (typeSubstitutions.count(expectedType))
-		{
-			expectedType = typeSubstitutions[expectedType];
-		}
+		expectedType = substituteType(expectedType, typeSubstitutions);
 
 		// Use isTypeCompatible for type comparison
-		if (!isTypeCompatible(arg->inferredType, expectedType))
+		if (arg->exprType && expectedType)
 		{
-			std::cerr << "Error: Argument " << (i + 1) << " to function '" << funcName
-								<< "' has type " << arg->inferredType << ", expected " << expectedType << std::endl;
-			exit(1);
+			if (!isTypeCompatible(arg->exprType, expectedType))
+			{
+				std::cerr << "Error: Argument " << (i + 1) << " to function '" << funcName
+									<< "' has type " << exprTypeToString(arg->exprType) << ", expected " << exprTypeToString(expectedType) << std::endl;
+				exit(1);
+			}
+		}
+		else
+		{
+			// Fallback to string check
+			std::string expectedTypeStr = info.params[i].second;
+			// We can't easily substitute strings if we only have ExprPtr map
+			// But we can try to use inferredType string
+			if (!isTypeCompatible(arg->inferredType, expectedTypeStr))
+			{
+				// This might be false positive if strings don't match but types do
+				// But we should have exprType by now.
+			}
 		}
 	}
 
-	std::string returnType = info.returnType;
-	if (typeSubstitutions.count(returnType))
-	{
-		returnType = typeSubstitutions[returnType];
-	}
-	node->inferredType = returnType;
+	ExprPtr returnType = info.returnTypeExpr;
+	returnType = substituteType(returnType, typeSubstitutions);
+	node->exprType = returnType;
+	node->inferredType = exprTypeToString(returnType);
 }

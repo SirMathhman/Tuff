@@ -18,6 +18,7 @@ void TypeChecker::checkIdentifier(std::shared_ptr<ASTNode> node)
 	if (enumTable.find(name) != enumTable.end())
 	{
 		node->inferredType = name; // Type is the enum name itself (possibly with FQN)
+		node->exprType = std::make_shared<IdentifierExpr>(name);
 		return;
 	}
 
@@ -25,7 +26,8 @@ void TypeChecker::checkIdentifier(std::shared_ptr<ASTNode> node)
 	auto narrowedIt = narrowedTypes.find(name);
 	if (narrowedIt != narrowedTypes.end())
 	{
-		node->inferredType = narrowedIt->second;
+		node->inferredType = exprTypeToString(narrowedIt->second);
+		node->exprType = narrowedIt->second;
 		node->isNarrowedUnion = true; // Mark that this is a narrowed union (value is still wrapped)
 		return;
 	}
@@ -35,6 +37,7 @@ void TypeChecker::checkIdentifier(std::shared_ptr<ASTNode> node)
 	if (it != symbolTable.end())
 	{
 		node->inferredType = it->second.type;
+		node->exprType = it->second.exprType;
 		return;
 	}
 
@@ -42,6 +45,7 @@ void TypeChecker::checkIdentifier(std::shared_ptr<ASTNode> node)
 	if (name == "this" && !currentStruct.empty())
 	{
 		node->inferredType = currentStruct;
+		node->exprType = std::make_shared<IdentifierExpr>(currentStruct);
 		return;
 	}
 
@@ -53,6 +57,7 @@ void TypeChecker::checkIdentifier(std::shared_ptr<ASTNode> node)
 		{
 			node->value = fqn; // Update to FQN
 			node->inferredType = fqn;
+			node->exprType = std::make_shared<IdentifierExpr>(fqn);
 			return;
 		}
 	}
@@ -65,6 +70,7 @@ void TypeChecker::checkIdentifier(std::shared_ptr<ASTNode> node)
 		{
 			node->value = fqn; // Update to FQN
 			node->inferredType = fqn;
+			node->exprType = std::make_shared<IdentifierExpr>(fqn);
 			return;
 		}
 	}
@@ -187,7 +193,7 @@ void TypeChecker::checkMatchExpr(std::shared_ptr<ASTNode> node)
 			// For union types, narrow the scrutinee type in the arm body
 			if (isUnion && scrutinee->type == ASTNodeType::IDENTIFIER)
 			{
-				narrowedTypes[scrutinee->value] = pattern;
+				narrowedTypes[scrutinee->value] = std::make_shared<IdentifierExpr>(pattern);
 			}
 		}
 

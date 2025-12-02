@@ -62,6 +62,7 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 						info.lifetimeParams.push_back(lifetime);
 					}
 					info.returnType = moduleChild->inferredType;
+					info.returnTypeExpr = resolveType(moduleChild->returnTypeNode); // New
 					for (size_t i = 0; i < moduleChild->children.size() - 1; i++)
 					{
 						auto paramNode = moduleChild->children[i];
@@ -80,6 +81,11 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 						}
 
 						info.params.push_back({paramNode->value, paramType});
+
+						// Populate ExprPtr param type
+						auto paramTypeExpr = resolveType(paramNode->typeNode);
+						// TODO: Handle qualification for ExprPtr
+						info.paramTypesExpr.push_back({paramNode->value, paramTypeExpr});
 					}
 
 					// Normalize return type too
@@ -133,6 +139,7 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 					for (auto fieldNode : moduleChild->children)
 					{
 						info.fields.push_back({fieldNode->value, fieldNode->inferredType});
+						info.fieldTypesExpr.push_back({fieldNode->value, resolveType(fieldNode->typeNode)}); // New
 					}
 
 					// Clear struct context
@@ -151,6 +158,7 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 
 					TypeAliasInfo info;
 					info.aliasedType = moduleChild->inferredType;
+					info.aliasedTypeExpr = resolveType(moduleChild->typeNode); // New
 					for (auto genParam : moduleChild->genericParams)
 					{
 						info.genericParams.push_back(genParam->value);
@@ -168,10 +176,12 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 
 					ExpectInfo info;
 					info.returnType = moduleChild->inferredType;
+					info.returnTypeExpr = resolveType(moduleChild->returnTypeNode); // New
 					for (size_t i = 0; i < moduleChild->children.size(); i++)
 					{
 						auto paramNode = moduleChild->children[i];
 						info.params.push_back({paramNode->value, paramNode->inferredType});
+						info.paramTypesExpr.push_back({paramNode->value, resolveType(paramNode->typeNode)}); // New
 					}
 					expectTable[expectName] = info;
 				}
@@ -210,10 +220,12 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 
 					FunctionInfo info;
 					info.returnType = moduleChild->inferredType;
+					info.returnTypeExpr = resolveType(moduleChild->returnTypeNode); // New
 					for (size_t i = 0; i < paramCount; i++)
 					{
 						auto paramNode = moduleChild->children[i];
 						info.params.push_back({paramNode->value, paramNode->inferredType});
+						info.paramTypesExpr.push_back({paramNode->value, resolveType(paramNode->typeNode)}); // New
 					}
 					functionTable[actualName] = info;
 				}
@@ -256,10 +268,12 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 				info.lifetimeParams.push_back(lifetime);
 			}
 			info.returnType = child->inferredType;
+			info.returnTypeExpr = resolveType(child->returnTypeNode); // New
 			for (size_t i = 0; i < child->children.size() - 1; i++)
 			{
 				auto paramNode = child->children[i];
 				info.params.push_back({paramNode->value, paramNode->inferredType});
+				info.paramTypesExpr.push_back({paramNode->value, resolveType(paramNode->typeNode)}); // New
 			}
 			functionTable[funcName] = info;
 		}
@@ -274,10 +288,12 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 
 			ExpectInfo info;
 			info.returnType = child->inferredType;
+			info.returnTypeExpr = resolveType(child->returnTypeNode); // New
 			for (size_t i = 0; i < child->children.size(); i++)
 			{
 				auto paramNode = child->children[i];
 				info.params.push_back({paramNode->value, paramNode->inferredType});
+				info.paramTypesExpr.push_back({paramNode->value, resolveType(paramNode->typeNode)}); // New
 			}
 			expectTable[expectName] = info;
 		}
@@ -300,12 +316,14 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 			}
 			// Expand type aliases in return type
 			info.returnType = expandTypeAlias(child->inferredType);
+			info.returnTypeExpr = resolveType(child->returnTypeNode); // New
 			for (size_t i = 0; i < child->children.size(); i++)
 			{
 				auto paramNode = child->children[i];
 				// Expand type aliases in parameter types
 				std::string paramType = expandTypeAlias(paramNode->inferredType);
 				info.params.push_back({paramNode->value, paramType});
+				info.paramTypesExpr.push_back({paramNode->value, resolveType(paramNode->typeNode)}); // New
 			}
 			functionTable[funcName] = info;
 		}
@@ -344,10 +362,12 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 
 			FunctionInfo info;
 			info.returnType = child->inferredType;
+			info.returnTypeExpr = resolveType(child->returnTypeNode); // New
 			for (size_t i = 0; i < paramCount; i++)
 			{
 				auto paramNode = child->children[i];
 				info.params.push_back({paramNode->value, paramNode->inferredType});
+				info.paramTypesExpr.push_back({paramNode->value, resolveType(paramNode->typeNode)}); // New
 			}
 			functionTable[actualName] = info;
 		}
@@ -375,6 +395,7 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 				// For now, we just store it, but we should validate it
 				// TODO: Validate field type with currentStruct context
 				info.fields.push_back({fieldNode->value, fieldNode->inferredType});
+				info.fieldTypesExpr.push_back({fieldNode->value, resolveType(fieldNode->typeNode)}); // New
 			}
 
 			// Clear struct context
@@ -409,6 +430,7 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 
 			TypeAliasInfo info;
 			info.aliasedType = child->inferredType;
+			info.aliasedTypeExpr = resolveType(child->typeNode); // New
 			for (auto genParam : child->genericParams)
 			{
 				info.genericParams.push_back(genParam->value);
@@ -434,6 +456,7 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 
 				TypeAliasInfo info;
 				info.aliasedType = child->inferredType;
+				info.aliasedTypeExpr = resolveType(child->typeNode); // New
 				for (auto genParam : child->genericParams)
 				{
 					info.genericParams.push_back(genParam->value);

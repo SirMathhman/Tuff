@@ -97,7 +97,8 @@ enum class ExprKind
 	BLOCK,	 // { stmts; expr }
 
 	// Type-specific
-	SIZEOF // sizeOf(T)
+	SIZEOF,	 // sizeOf(T)
+	FUNCTION // (Args) -> Ret
 };
 
 // Base expression class
@@ -500,6 +501,44 @@ public:
 	std::string toString() const override
 	{
 		return "sizeOf(" + typeArg->toString() + ")";
+	}
+};
+
+// Function type expression: (A, B) -> C
+class FunctionExpr : public Expr
+{
+public:
+	std::vector<ExprPtr> paramTypes;
+	ExprPtr returnType;
+	std::vector<std::string> genericParams; // <T, U>
+
+	FunctionExpr(std::vector<ExprPtr> params, ExprPtr ret, std::vector<std::string> generics = {})
+			: Expr(ExprKind::FUNCTION), paramTypes(std::move(params)),
+				returnType(std::move(ret)), genericParams(std::move(generics)) {}
+
+	std::string toString() const override
+	{
+		std::string result;
+		if (!genericParams.empty())
+		{
+			result += "<";
+			for (size_t i = 0; i < genericParams.size(); i++)
+			{
+				if (i > 0)
+					result += ", ";
+				result += genericParams[i];
+			}
+			result += ">";
+		}
+		result += "(";
+		for (size_t i = 0; i < paramTypes.size(); i++)
+		{
+			if (i > 0)
+				result += ", ";
+			result += paramTypes[i]->toString();
+		}
+		result += ") -> " + returnType->toString();
+		return result;
 	}
 };
 

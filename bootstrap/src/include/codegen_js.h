@@ -23,6 +23,8 @@ public:
 
 private:
 	std::string generateNode(std::shared_ptr<ASTNode> node);
+	std::string generateStmt(std::shared_ptr<ASTNode> node);
+	std::string generateExpr(std::shared_ptr<ASTNode> node);
 	std::string generateFunctionBlock(std::shared_ptr<ASTNode> block, const std::string &returnType);
 	std::string generateModuleDecl(std::shared_ptr<ASTNode> node);
 	std::string generateActualDecl(std::shared_ptr<ASTNode> node);
