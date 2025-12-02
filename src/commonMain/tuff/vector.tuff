@@ -5,7 +5,7 @@ use mem;
 use option;
 
 struct Vector<T> {
-	data : *mut [T] & #free,
+	data : Allocated<T>,
 	length : USize,
 	capacity : USize
 }
