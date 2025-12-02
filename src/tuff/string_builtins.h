@@ -140,12 +140,12 @@ inline bool __builtin_string_endsWith(string s, string suffix)
 {
 	size_t slen = std::strlen(s);
 	size_t suffixlen = std::strlen(suffix);
-	
+
 	if (suffixlen > slen)
 	{
 		return false;
 	}
-	
+
 	return std::strcmp(s + slen - suffixlen, suffix) == 0;
 }
 
@@ -158,14 +158,14 @@ inline char *__builtin_string_trim(string s)
 	{
 		start++;
 	}
-	
+
 	// Find end (skip trailing whitespace)
 	const char *end = s + std::strlen(s);
 	while (end > start && (*(end - 1) == ' ' || *(end - 1) == '\t' || *(end - 1) == '\n' || *(end - 1) == '\r'))
 	{
 		end--;
 	}
-	
+
 	size_t len = end - start;
 	char *result = static_cast<char *>(std::malloc(len + 1));
 	if (result != nullptr)
@@ -196,11 +196,11 @@ inline char *__builtin_string_replace(string s, string from, string to)
 		}
 		return result;
 	}
-	
+
 	size_t from_len = std::strlen(from);
 	size_t to_len = std::strlen(to);
 	size_t s_len = std::strlen(s);
-	
+
 	// Count occurrences
 	size_t count = 0;
 	const char *p = s;
@@ -209,7 +209,7 @@ inline char *__builtin_string_replace(string s, string from, string to)
 		count++;
 		p += from_len;
 	}
-	
+
 	// Allocate result buffer
 	size_t result_len = s_len + count * (to_len - from_len);
 	char *result = static_cast<char *>(std::malloc(result_len + 1));
@@ -217,7 +217,7 @@ inline char *__builtin_string_replace(string s, string from, string to)
 	{
 		return nullptr;
 	}
-	
+
 	// Build result string
 	char *dst = result;
 	const char *src = s;
@@ -227,18 +227,18 @@ inline char *__builtin_string_replace(string s, string from, string to)
 		size_t prefix_len = p - src;
 		std::memcpy(dst, src, prefix_len);
 		dst += prefix_len;
-		
+
 		// Copy replacement
 		std::memcpy(dst, to, to_len);
 		dst += to_len;
-		
+
 		// Move past match
 		src = p + from_len;
 	}
-	
+
 	// Copy remaining
 	std::strcpy(dst, src);
-	
+
 	return result;
 }
 

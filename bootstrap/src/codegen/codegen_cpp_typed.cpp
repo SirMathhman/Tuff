@@ -23,17 +23,23 @@ std::string CodeGeneratorCPP::genExpr(ast::ExprPtr expr)
 																			ss << "\"";
 																			for (char c : e.value)
 																			{
-																				if (c == '\n') ss << "\\n";
-																				else if (c == '\r') ss << "\\r";
-																				else if (c == '\t') ss << "\\t";
-																				else if (c == '\\') ss << "\\\\";
-																				else if (c == '"') ss << "\\\"";
-																				else ss << c;
+																				if (c == '\n')
+																					ss << "\\n";
+																				else if (c == '\r')
+																					ss << "\\r";
+																				else if (c == '\t')
+																					ss << "\\t";
+																				else if (c == '\\')
+																					ss << "\\\\";
+																				else if (c == '"')
+																					ss << "\\\"";
+																				else
+																					ss << c;
 																			}
 																			ss << "\"";
 																			return ss.str();
 																		}
-																		
+
 																		// Strip type suffix from numeric literals (e.g., "10I32" -> "10")
 																		std::string literal = e.value;
 																		std::string result;
@@ -82,15 +88,9 @@ std::string CodeGeneratorCPP::genExpr(ast::ExprPtr expr)
 
 																	[this](const ast::Reference &e) -> std::string
 																	{
-																		// Check if this is a function reference (type starts with |)
-																		if (!e.inferredType.empty() && e.inferredType[0] == '|')
-																		{
-																			// Function pointer - just output the function name
-																			// (C++ automatically converts function to pointer)
-																			return genExpr(e.operand);
-																		}
-																		return "&" + genExpr(e.operand);
-																	},
+						// Function pointer - just output the function name (C++ automatically converts function to pointer)
+						if (!e.inferredType.empty() && e.inferredType[0] == '|')
+							return genExpr(e.operand);
 
 																	[this](const ast::Deref &e) -> std::string
 																	{
