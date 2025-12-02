@@ -44,7 +44,10 @@
     "feature22_impl_blocks/test_impl_mutable": 99,
     "feature22_impl_blocks/test_impl_multiple_methods": 1,
     "feature22_impl_blocks/test_impl_generic": 30,
-    "feature22_impl_blocks/test_impl_result": 1
+    "feature22_impl_blocks/test_impl_result": 1,
+    "feature22_impl_blocks/test_method_call": 2,
+    "feature22_impl_blocks/test_method_immutable": 42,
+    "feature22_impl_blocks/test_method_chain": 5
   },
   "negative_tests": {
     "feature1_variables/test_immutable_reassign": "Cannot assign to immutable variable",

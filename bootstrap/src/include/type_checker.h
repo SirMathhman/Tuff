@@ -83,6 +83,7 @@ private:
 	void registerDeclarations(std::shared_ptr<ASTNode> node);
 	void checkImplBlock(std::shared_ptr<ASTNode> node);
 	void checkCallExpr(std::shared_ptr<ASTNode> node);
+	void handleMethodCall(std::shared_ptr<ASTNode> node);
 	void checkStructLiteral(std::shared_ptr<ASTNode> node);
 	void checkArrayLiteral(std::shared_ptr<ASTNode> node);
 	void checkIndexExpr(std::shared_ptr<ASTNode> node);

@@ -1,0 +1,25 @@
+// Test: Method chaining
+struct Builder {
+	value: I32
+}
+
+impl Builder {
+	fn new(): Builder => {
+		return Builder { 0 };
+	}
+
+	fn add(this: *mut Builder, n: I32): *mut Builder => {
+		this.value = this.value + n;
+		return this;
+	}
+
+	fn get(this: *Builder): I32 => this.value;
+}
+
+let mut b = Builder::new();
+
+// Chain method calls
+b.add(2).add(3);
+
+// Expected: 2 + 3 = 5
+b.get();

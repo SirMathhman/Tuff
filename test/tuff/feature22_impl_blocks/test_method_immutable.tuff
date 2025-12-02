@@ -1,0 +1,18 @@
+// Test: Method call on immutable object (read-only method)
+struct Box {
+	value: I32
+}
+
+impl Box {
+	fn new(v: I32): Box => {
+		return Box { v };
+	}
+
+	fn get(this: *Box): I32 => this.value;
+}
+
+// Immutable variable - can only call immutable methods
+let b = Box::new(42);
+
+// This should work - get() only needs *Box (immutable reference)
+b.get();
