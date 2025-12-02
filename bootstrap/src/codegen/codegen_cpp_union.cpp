@@ -21,9 +21,13 @@ std::string CodeGeneratorCPP::mangleName(const std::string &name)
 	return result;
 }
 
-// Helper: Check if a type is a union type (contains '|')
+// Helper: Check if a type is a union type (contains '|' but not a function pointer)
+// Function pointer types start with '|' like: |I32, I32| => Bool
 bool CodeGeneratorCPP::isUnionType(const std::string &type)
 {
+	// Function pointer types start with '|'
+	if (!type.empty() && type[0] == '|')
+		return false;
 	return type.find('|') != std::string::npos;
 }
 

@@ -99,6 +99,21 @@ ExprPtr TypeChecker::resolveType(std::shared_ptr<ASTNode> node)
 		}
 	}
 
+	case ASTNodeType::FUNCTION_PTR_TYPE:
+	{
+		// Function pointer type: |T1, T2| => RetType
+		// node->value is the param count as string
+		// children[0..n-1] are param types, children[n] is return type
+		size_t paramCount = std::stoul(node->value);
+		std::vector<ExprPtr> paramTypes;
+		for (size_t i = 0; i < paramCount; i++)
+		{
+			paramTypes.push_back(resolveType(node->children[i]));
+		}
+		auto returnType = resolveType(node->children[paramCount]);
+		return std::make_shared<FunctionExpr>(paramTypes, returnType);
+	}
+
 	case ASTNodeType::BINARY_OP:
 	{
 		// Union or Intersection types

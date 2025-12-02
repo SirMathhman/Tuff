@@ -19,6 +19,99 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 	}
 
 	std::string funcName = callee->value;
+
+	// Check if callee is a variable with function pointer type
+	auto symIt = symbolTable.find(funcName);
+	if (symIt != symbolTable.end())
+	{
+		std::string varType = symIt->second.type;
+		// Check if it's a function pointer type: |T1, T2| => Ret
+		if (!varType.empty() && varType[0] == '|')
+		{
+			// Parse the function pointer type to validate call
+			check(callee);
+
+			// Parse param types and return type from the function pointer type
+			size_t closePos = 1;
+			int depth = 0;
+			while (closePos < varType.length())
+			{
+				if (varType[closePos] == '<')
+					depth++;
+				else if (varType[closePos] == '>')
+					depth--;
+				else if (varType[closePos] == '|' && depth == 0)
+					break;
+				closePos++;
+			}
+			std::string paramsStr = varType.substr(1, closePos - 1);
+			size_t arrowPos = varType.find("=>", closePos);
+			std::string retType = varType.substr(arrowPos + 2);
+			while (!retType.empty() && retType[0] == ' ')
+				retType = retType.substr(1);
+
+			// Parse param types
+			std::vector<std::string> paramTypes;
+			if (!paramsStr.empty())
+			{
+				depth = 0;
+				std::string current;
+				for (char c : paramsStr)
+				{
+					if (c == '<')
+						depth++;
+					else if (c == '>')
+						depth--;
+					else if (c == ',' && depth == 0)
+					{
+						while (!current.empty() && current[0] == ' ')
+							current = current.substr(1);
+						while (!current.empty() && current.back() == ' ')
+							current.pop_back();
+						if (!current.empty())
+							paramTypes.push_back(current);
+						current.clear();
+						continue;
+					}
+					current += c;
+				}
+				while (!current.empty() && current[0] == ' ')
+					current = current.substr(1);
+				while (!current.empty() && current.back() == ' ')
+					current.pop_back();
+				if (!current.empty())
+					paramTypes.push_back(current);
+			}
+
+			// Check argument count
+			size_t argCount = node->children.size() - 1;
+			if (argCount != paramTypes.size())
+			{
+				std::cerr << "Error: Function pointer call expects " << paramTypes.size()
+									<< " arguments, got " << argCount << std::endl;
+				exit(1);
+			}
+
+			// Check each argument type
+			for (size_t i = 0; i < argCount; i++)
+			{
+				auto arg = node->children[i + 1];
+				check(arg);
+				std::string expectedType = expandTypeAlias(paramTypes[i]);
+				std::string actualType = expandTypeAlias(arg->inferredType);
+				if (expectedType != actualType)
+				{
+					std::cerr << "Error: Argument " << (i + 1) << " to function pointer has type "
+										<< actualType << ", expected " << expectedType << std::endl;
+					exit(1);
+				}
+			}
+
+			node->inferredType = retType;
+			return;
+		}
+	}
+
 	auto it = functionTable.find(funcName);
 	if (it == functionTable.end())
 	{

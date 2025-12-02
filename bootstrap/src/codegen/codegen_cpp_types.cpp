@@ -3,6 +3,86 @@
 
 std::string CodeGeneratorCPP::mapType(std::string tuffType)
 {
+	// Handle function pointer types: |T1, T2| => Ret -> Ret (*)(T1, T2)
+	if (!tuffType.empty() && tuffType[0] == '|')
+	{
+		// Find the closing | and =>
+		size_t closePos = 1;
+		int depth = 0;
+		while (closePos < tuffType.length())
+		{
+			if (tuffType[closePos] == '<')
+				depth++;
+			else if (tuffType[closePos] == '>')
+				depth--;
+			else if (tuffType[closePos] == '|' && depth == 0)
+				break;
+			closePos++;
+		}
+
+		// Extract param types string (between the two |)
+		std::string paramsStr = tuffType.substr(1, closePos - 1);
+
+		// Find => after the second |
+		size_t arrowPos = tuffType.find("=>", closePos);
+		if (arrowPos == std::string::npos)
+		{
+			return "/* invalid function pointer type */";
+		}
+
+		// Extract return type (after "=> ")
+		std::string retType = tuffType.substr(arrowPos + 2);
+		// Trim leading space
+		while (!retType.empty() && retType[0] == ' ')
+			retType = retType.substr(1);
+
+		// Parse parameter types (comma-separated, respecting <> depth)
+		std::vector<std::string> paramTypes;
+		if (!paramsStr.empty())
+		{
+			depth = 0;
+			std::string current;
+			for (char c : paramsStr)
+			{
+				if (c == '<')
+					depth++;
+				else if (c == '>')
+					depth--;
+				else if (c == ',' && depth == 0)
+				{
+					// Trim whitespace
+					while (!current.empty() && current[0] == ' ')
+						current = current.substr(1);
+					while (!current.empty() && current.back() == ' ')
+						current.pop_back();
+					if (!current.empty())
+						paramTypes.push_back(current);
+					current.clear();
+					continue;
+				}
+				current += c;
+			}
+			// Last param
+			while (!current.empty() && current[0] == ' ')
+				current = current.substr(1);
+			while (!current.empty() && current.back() == ' ')
+				current.pop_back();
+			if (!current.empty())
+				paramTypes.push_back(current);
+		}
+
+		// Generate C++ function pointer: RetType (*)(Param1, Param2)
+		std::string result = mapType(retType) + " (*)(";
+		for (size_t i = 0; i < paramTypes.size(); i++)
+		{
+			if (i > 0)
+				result += ", ";
+			result += mapType(paramTypes[i]);
+		}
+		result += ")";
+		return result;
+	}
+
 	// Handle intersection types: A & B -> mapType(A)
 	// We assume the first component is the data type and subsequent components are markers (like #free)
 	size_t ampPos = tuffType.find('&');

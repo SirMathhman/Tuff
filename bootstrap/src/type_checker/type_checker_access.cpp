@@ -270,6 +270,35 @@ void TypeChecker::checkIndexExpr(std::shared_ptr<ASTNode> node)
 void TypeChecker::checkReferenceExpr(std::shared_ptr<ASTNode> node)
 {
 	auto operand = node->children[0];
+
+	// Check if this is a function reference: &funcName
+	if (operand->type == ASTNodeType::IDENTIFIER)
+	{
+		std::string name = operand->value;
+
+		// Check if it's a function name
+		auto funcIt = functionTable.find(name);
+		if (funcIt != functionTable.end())
+		{
+			// It's a function reference - create function pointer type
+			const FunctionInfo &funcInfo = funcIt->second;
+
+			// Build function pointer type string: |T1, T2| => Ret
+			std::string fnPtrType = "|";
+			for (size_t i = 0; i < funcInfo.params.size(); i++)
+			{
+				if (i > 0)
+					fnPtrType += ", ";
+				fnPtrType += funcInfo.params[i].second; // .second is the type
+			}
+			fnPtrType += "| => " + funcInfo.returnType;
+
+			node->inferredType = fnPtrType;
+			operand->inferredType = fnPtrType;
+			return;
+		}
+	}
+
 	check(operand);
 
 	// Track borrows for identifiers

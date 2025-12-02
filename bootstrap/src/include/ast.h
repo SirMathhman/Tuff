@@ -42,17 +42,19 @@ enum class ASTNodeType
 	TYPE,
 	TYPE_PARAM_DECL, // <T>
 	// Pointer and array types
-	POINTER_TYPE,		// *T or *mut T
-	ARRAY_TYPE,			// [T; init; capacity]
-	REFERENCE_EXPR, // &x or &mut x
-	DEREF_EXPR,			// *p
-	ARRAY_LITERAL,	// [1, 2, 3]
-	STRING_LITERAL, // "hello"
-	INDEX_EXPR,			// arr[i]
-	IS_EXPR,				// expr is Type
-	MATCH_EXPR,			// match expr { Type => expr, ... }
-	LIFETIME_PARAM, // lifetime parameter declaration
-	SIZEOF_EXPR			// sizeOf(Type) operator
+	POINTER_TYPE,			 // *T or *mut T
+	ARRAY_TYPE,				 // [T; init; capacity]
+	REFERENCE_EXPR,		 // &x or &mut x
+	DEREF_EXPR,				 // *p
+	ARRAY_LITERAL,		 // [1, 2, 3]
+	STRING_LITERAL,		 // "hello"
+	INDEX_EXPR,				 // arr[i]
+	IS_EXPR,					 // expr is Type
+	MATCH_EXPR,				 // match expr { Type => expr, ... }
+	LIFETIME_PARAM,		 // lifetime parameter declaration
+	SIZEOF_EXPR,			 // sizeOf(Type) operator
+	FUNCTION_PTR_TYPE, // |T1, T2| => RetType
+	FUNCTION_REF_EXPR	 // &funcName - reference to a function
 };
 
 struct ASTNode

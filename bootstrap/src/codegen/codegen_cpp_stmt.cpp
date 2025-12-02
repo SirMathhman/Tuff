@@ -19,6 +19,18 @@ std::string CodeGeneratorCPP::generateLetStmt(std::shared_ptr<ASTNode> node)
 
 	std::string safeName = escapeCppKeyword(node->value);
 
+	// Handle function pointer types: RetType (*)(Params) -> RetType (*name)(Params)
+	size_t funcPtrPos = cppType.find("(*)");
+	if (funcPtrPos != std::string::npos)
+	{
+		std::string retType = cppType.substr(0, funcPtrPos);
+		std::string params = cppType.substr(funcPtrPos + 3); // "(Params)"
+		// Trim leading space from retType
+		while (!retType.empty() && retType.back() == ' ')
+			retType.pop_back();
+		return retType + " (*" + safeName + ")" + params + " = " + wrappedValue;
+	}
+
 	// Handle C++ array declaration: int32_t arr[3] instead of int32_t[3] arr
 	size_t bracketPos = cppType.find('[');
 	if (bracketPos != std::string::npos)

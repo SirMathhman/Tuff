@@ -65,6 +65,13 @@ std::string CodeGeneratorCPP::genExpr(ast::ExprPtr expr)
 
 																	[this](const ast::Reference &e) -> std::string
 																	{
+																		// Check if this is a function reference (type starts with |)
+																		if (!e.inferredType.empty() && e.inferredType[0] == '|')
+																		{
+																			// Function pointer - just output the function name
+																			// (C++ automatically converts function to pointer)
+																			return genExpr(e.operand);
+																		}
 																		return "&" + genExpr(e.operand);
 																	},
 

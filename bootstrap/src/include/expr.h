@@ -530,14 +530,14 @@ public:
 			}
 			result += ">";
 		}
-		result += "(";
+		result += "|";
 		for (size_t i = 0; i < paramTypes.size(); i++)
 		{
 			if (i > 0)
 				result += ", ";
 			result += paramTypes[i]->toString();
 		}
-		result += ") -> " + returnType->toString();
+		result += "| => " + returnType->toString();
 		return result;
 	}
 };

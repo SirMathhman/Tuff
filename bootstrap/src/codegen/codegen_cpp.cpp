@@ -235,6 +235,16 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 				std::string arraySuffix = paramType.substr(bracketPos);
 				ss << baseType << " " << paramName << arraySuffix;
 			}
+			// Handle function pointer parameters: RetType (*)(Params) -> RetType (*name)(Params)
+			else if (paramType.find("(*)") != std::string::npos)
+			{
+				size_t funcPtrPos = paramType.find("(*)");
+				std::string retType = paramType.substr(0, funcPtrPos);
+				std::string params = paramType.substr(funcPtrPos + 3);
+				while (!retType.empty() && retType.back() == ' ')
+					retType.pop_back();
+				ss << retType << " (*" << paramName << ")" << params;
+			}
 			else
 			{
 				ss << paramType << " " << paramName;

@@ -112,6 +112,63 @@ std::shared_ptr<ASTNode> Parser::parseIntersectionType()
 
 std::shared_ptr<ASTNode> Parser::parseSingleType()
 {
+	// Handle function pointer types: |T1, T2| => RetType
+	// Also handle empty params: || => RetType (lexed as OR_OR)
+	if (match(TokenType::PIPE) || peek().type == TokenType::OR_OR)
+	{
+		auto node = std::make_shared<ASTNode>();
+		node->type = ASTNodeType::FUNCTION_PTR_TYPE;
+
+		// Check if it's || (empty params case)
+		bool emptyParams = false;
+		if (tokens[pos - 1].type == TokenType::OR_OR || peek().type == TokenType::OR_OR)
+		{
+			// If we matched PIPE, check if next is PIPE or we're looking at OR_OR
+			if (tokens[pos - 1].type != TokenType::OR_OR)
+			{
+				// We matched a single PIPE, check for second PIPE
+				if (match(TokenType::PIPE))
+				{
+					emptyParams = true;
+				}
+			}
+			else
+			{
+				// We're looking at OR_OR, consume it
+				advance();
+				emptyParams = true;
+			}
+		}
+
+		// Parse parameter types (may be empty)
+		std::vector<std::shared_ptr<ASTNode>> paramTypes;
+		if (!emptyParams && peek().type != TokenType::PIPE)
+		{
+			// Use parseSingleType for params to avoid | being treated as union
+			paramTypes.push_back(parseSingleType());
+			while (match(TokenType::COMMA))
+			{
+				paramTypes.push_back(parseSingleType());
+			}
+			consume(TokenType::PIPE, "Expected '|' after function pointer parameters");
+		}
+
+		consume(TokenType::FAT_ARROW, "Expected '=>' in function pointer type");
+
+		auto returnType = parseType();
+
+		// Store param types as children, return type as last child
+		for (auto &param : paramTypes)
+		{
+			node->addChild(param);
+		}
+		node->addChild(returnType);
+		// Store param count in value for easy access
+		node->value = std::to_string(paramTypes.size());
+
+		return node;
+	}
+
 	// Handle destructor type: #name
 	if (match(TokenType::HASH))
 	{
@@ -389,6 +446,20 @@ std::string Parser::typeToString(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::SIZEOF_EXPR:
 	{
 		return "SizeOf<" + typeToString(node->children[0]) + ">";
+	}
+	case ASTNodeType::FUNCTION_PTR_TYPE:
+	{
+		// node->value is param count, children[0..n-1] are params, children[n] is return type
+		size_t paramCount = std::stoul(node->value);
+		std::string res = "|";
+		for (size_t i = 0; i < paramCount; i++)
+		{
+			if (i > 0)
+				res += ", ";
+			res += typeToString(node->children[i]);
+		}
+		res += "| => " + typeToString(node->children[paramCount]);
+		return res;
 	}
 	default:
 		return "UnknownType";
