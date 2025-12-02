@@ -55,7 +55,68 @@ int32_t* const data = malloc(100);  // Correct - T→int32_t substituted
 - Parse tree (syntax: "*I32", "Vec<T>")
 - Type representation (semantics: PointerType{I32}, GenericType{Vec, [I32]})
 
-## Solution: Progressive Type System Migration
+## Implementation Progress
+
+### ✅ Phase 1: TypeEnvironment Implementation (COMPLETED)
+
+- ✅ Created TypeEnvironment class (200 lines)
+- ✅ Supports type variable binding and substitution
+- ✅ Handles generics, pointers, arrays, union types
+- ✅ Added to ASTNode for use by type checker
+- ✅ Tests: All 82 tests passing
+
+**Key Implementation Details**:
+- Handles nested generic types: `Vec<T>` → `Vec<I32>`
+- Recursively substitutes in pointers: `*mut T` → `*mut I32`
+- Handles union types properly: `Some<T>|None<T>` → `Some<I32>|None<I32>`
+- Whitespace-tolerant parsing
+
+### ✅ Phase 2: TypeChecker Integration (COMPLETED)
+
+- ✅ Modified `checkCallExpr()` to populate `node->typeEnv`
+- ✅ Binds generic parameters during call processing
+- ✅ Stores both ExprPtr and string substitutions
+- ✅ Tests: All 82 tests passing
+
+**Key Changes**:
+```cpp
+// During generic function call
+node->typeEnv.bind("T", "I32");
+node->typeEnv.bind("U", "F64");
+
+// Return type resolution
+std::string returnTypeStr = node->typeEnv.substitute(originalReturnType);
+```
+
+**What This Fixes**:
+- Generic function calls now properly track type substitutions
+- Return types are correctly substituted before reaching codegen
+- String-based and ExprPtr-based type systems work together
+
+### Phase 3: Update Codegen (NEXT)
+
+**Goal**: Use substituted types from TypeEnvironment
+
+**What to do**:
+1. In `genExpr()` for CALL_EXPR: Use return type from node->inferredType (already substituted by TypeChecker)
+2. In `mapType()`: Trust types are already substituted, simplify logic
+3. In `generateFunctionBlock()`: Pass TypeEnvironment to child nodes
+
+**No changes needed**: Most codegen already uses `node->inferredType` which TypeChecker now populates with substituted types!
+
+### Phase 4: Testing (IN PROGRESS)
+
+Need to test generic functions:
+- [ ] Create test: `extern fn malloc<T>(...): *mut [T]`
+- [ ] Verify generated code: `int32_t* data = malloc(...);` (no template)
+- [ ] Test with complex types: `Vec<Vec<I32>>`
+- [ ] Test nested generics in union types
+
+### Phase 5: Cleanup (TODO)
+
+- [ ] Remove old type parsing code
+- [ ] Update documentation
+- [ ] Performance profiling
 
 ### Phase 1: Create TypeEnvironment (2-3 hours)
 
