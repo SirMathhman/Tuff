@@ -19,20 +19,26 @@ std::shared_ptr<ASTNode> Parser::parseUnary()
 	// Handle reference: &x or &mut x
 	if (match(TokenType::AMPERSAND))
 	{
+		Token op = tokens[pos - 1];
 		bool isMutable = match(TokenType::MUT);
 		auto operand = parseUnary();
 		auto node = std::make_shared<ASTNode>();
 		node->type = ASTNodeType::REFERENCE_EXPR;
 		node->isMutable = isMutable;
+		node->line = op.line;
+		node->column = op.column;
 		node->addChild(operand);
 		return node;
 	}
 	// Handle dereference: *p
 	if (match(TokenType::STAR))
 	{
+		Token op = tokens[pos - 1];
 		auto operand = parseUnary();
 		auto node = std::make_shared<ASTNode>();
 		node->type = ASTNodeType::DEREF_EXPR;
+		node->line = op.line;
+		node->column = op.column;
 		node->addChild(operand);
 		return node;
 	}
@@ -50,20 +56,26 @@ std::shared_ptr<ASTNode> Parser::parsePostfix()
 		{
 			// Field access (obj.field) or enum value (EnumName.Variant)
 			// Type checker will determine which based on left side type
+			Token dot = tokens[pos - 1];
 			auto fieldName = consume(TokenType::IDENTIFIER, "Expected field name after '.'");
 			auto node = std::make_shared<ASTNode>();
 			node->type = ASTNodeType::FIELD_ACCESS;
 			node->value = fieldName.value;
+			node->line = dot.line;
+			node->column = dot.column;
 			node->addChild(expr);
 			expr = node;
 		}
 		else if (match(TokenType::LBRACKET))
 		{
 			// Array/pointer indexing: arr[i]
+			Token bracket = tokens[pos - 1];
 			auto index = parseExpression();
 			consume(TokenType::RBRACKET, "Expected ']' after index");
 			auto node = std::make_shared<ASTNode>();
 			node->type = ASTNodeType::INDEX_EXPR;
+			node->line = bracket.line;
+			node->column = bracket.column;
 			node->addChild(expr);
 			node->addChild(index);
 			expr = node;
@@ -71,9 +83,11 @@ std::shared_ptr<ASTNode> Parser::parsePostfix()
 		else if (peek().type == TokenType::LPAREN)
 		{
 			// Function call: expr(args)
-			advance(); // consume '('
+			Token paren = advance(); // consume '('
 			auto node = std::make_shared<ASTNode>();
 			node->type = ASTNodeType::CALL_EXPR;
+			node->line = paren.line;
+			node->column = paren.column;
 			node->addChild(expr); // callee
 
 			// Parse arguments

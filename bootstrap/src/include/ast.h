@@ -61,6 +61,8 @@ struct ASTNode
 {
 	ASTNodeType type;
 	std::string value; // For identifiers, literals, operators
+	int line = 0;			 // Source line number
+	int column = 0;		 // Source column number
 	std::vector<std::shared_ptr<ASTNode>> children;
 	std::vector<std::shared_ptr<ASTNode>> genericParams;		// For generic functions/structs declarations <T>
 	std::vector<std::string> genericArgs;										// For generic calls/instantiations <I32>

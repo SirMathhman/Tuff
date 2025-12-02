@@ -368,17 +368,17 @@ std::vector<std::shared_ptr<ASTNode>> Parser::parseGenericArgs()
 		while (!pendingGreater && peek().type != TokenType::GREATER && peek().type != TokenType::RIGHT_SHIFT && peek().type != TokenType::END_OF_FILE)
 		{
 			args.push_back(parseType());
-			
+
 			// Check if inner parsing left us a pending >
 			if (pendingGreater)
 				break;
-				
+
 			if (!match(TokenType::COMMA))
 			{
 				break;
 			}
 		}
-		
+
 		// Handle closing > or >>
 		if (pendingGreater)
 		{

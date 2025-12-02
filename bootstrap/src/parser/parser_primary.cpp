@@ -9,8 +9,11 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 	{
 		auto node = std::make_shared<ASTNode>();
 		node->type = ASTNodeType::LITERAL;
-		std::string literal = tokens[pos - 1].value;
+		Token token = tokens[pos - 1];
+		std::string literal = token.value;
 		node->value = literal;
+		node->line = token.line;
+		node->column = token.column;
 
 		// Check for type suffix (e.g., 42I64, 0USize)
 		std::string inferredType = "I32"; // Default
@@ -70,7 +73,10 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 		// String literal: "hello" → string type (maps to const char* in C++)
 		auto node = std::make_shared<ASTNode>();
 		node->type = ASTNodeType::STRING_LITERAL;
-		node->value = tokens[pos - 1].value;
+		Token token = tokens[pos - 1];
+		node->value = token.value;
+		node->line = token.line;
+		node->column = token.column;
 		node->inferredType = "string";
 		// exprType will be set by type checker if needed
 		return node;
@@ -165,7 +171,8 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 	}
 	else if (match(TokenType::IDENTIFIER))
 	{
-		std::string name = tokens[pos - 1].value;
+		Token token = tokens[pos - 1];
+		std::string name = token.value;
 
 		// Check for FQN: name::name::...
 		while (peek().type == TokenType::DOUBLE_COLON)
@@ -239,6 +246,8 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 			auto node = std::make_shared<ASTNode>();
 			node->type = ASTNodeType::IDENTIFIER;
 			node->value = name;
+			node->line = token.line;
+			node->column = token.column;
 			node->genericArgs = genArgs;
 			node->genericArgsNodes = genArgsNodes;
 			return node;

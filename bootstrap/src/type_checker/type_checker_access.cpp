@@ -323,7 +323,7 @@ void TypeChecker::checkReferenceExpr(std::shared_ptr<ASTNode> node)
 				// Check mutability
 				if (!it->second.isMutable)
 				{
-					std::cerr << "Error: Cannot take mutable reference of immutable variable '" << name << "'." << std::endl;
+					std::cerr << "Error: Cannot take mutable reference of immutable variable '" << name << "' at line " << operand->line << "." << std::endl;
 					exit(1);
 				}
 			}
@@ -333,7 +333,30 @@ void TypeChecker::checkReferenceExpr(std::shared_ptr<ASTNode> node)
 	{
 		// Borrowing a field borrows the whole struct
 		auto base = operand->children[0];
-		if (base->type == ASTNodeType::IDENTIFIER)
+
+		// Check if base is a pointer (implicit dereference)
+		bool isPointer = false;
+		bool isMutablePointer = false;
+		if (base->inferredType.length() > 0 && base->inferredType[0] == '*')
+		{
+			isPointer = true;
+			if (base->inferredType.substr(0, 5) == "*mut ")
+			{
+				isMutablePointer = true;
+			}
+		}
+
+		if (isPointer)
+		{
+			if (node->isMutable && !isMutablePointer)
+			{
+				std::cerr << "Error: Cannot take mutable reference of field through immutable pointer." << std::endl;
+				exit(1);
+			}
+			// If it is a pointer, we don't care if the variable holding the pointer is mutable or not
+			// We only care if the pointer itself allows mutation (*mut)
+		}
+		else if (base->type == ASTNodeType::IDENTIFIER)
 		{
 			std::string name = base->value;
 			auto it = symbolTable.find(name);
@@ -343,7 +366,7 @@ void TypeChecker::checkReferenceExpr(std::shared_ptr<ASTNode> node)
 				{
 					if (!it->second.isMutable)
 					{
-						std::cerr << "Error: Cannot take mutable reference of field from immutable variable '" << name << "'." << std::endl;
+						std::cerr << "Error: Cannot take mutable reference of field from immutable variable '" << name << "' at line " << operand->line << "." << std::endl;
 						exit(1);
 					}
 				}

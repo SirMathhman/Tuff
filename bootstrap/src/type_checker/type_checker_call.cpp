@@ -139,7 +139,7 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 
 		if (it == functionTable.end())
 		{
-			std::cerr << "Error: Function '" << funcName << "' not declared." << std::endl;
+			std::cerr << "Error: Function '" << funcName << "' not declared at line " << callee->line << "." << std::endl;
 			exit(1);
 		}
 	}
@@ -153,7 +153,7 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 	if (callee->genericArgs.size() != info.genericParams.size())
 	{
 		std::cerr << "Error: Function '" << funcName << "' expects " << info.genericParams.size()
-							<< " generic arguments, got " << callee->genericArgs.size() << std::endl;
+							<< " generic arguments, got " << callee->genericArgs.size() << " at line " << callee->line << "." << std::endl;
 		std::cerr << "Syntax: " << funcName << "<";
 		for (size_t i = 0; i < info.genericParams.size(); i++)
 		{
@@ -231,7 +231,7 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 	if (argCount != info.params.size())
 	{
 		std::cerr << "Error: Function '" << funcName << "' expects " << info.params.size()
-							<< " arguments, got " << argCount << std::endl;
+							<< " arguments, got " << argCount << " at line " << callee->line << "." << std::endl;
 		exit(1);
 	}
 
@@ -250,7 +250,8 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 			if (!isTypeCompatible(arg->exprType, expectedType))
 			{
 				std::cerr << "Error: Argument " << (i + 1) << " to function '" << funcName
-									<< "' has type " << exprTypeToString(arg->exprType) << ", expected " << exprTypeToString(expectedType) << std::endl;
+									<< "' has type " << exprTypeToString(arg->exprType) << ", expected " << exprTypeToString(expectedType)
+									<< " at line " << arg->line << "." << std::endl;
 				exit(1);
 			}
 		}

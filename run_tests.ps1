@@ -74,7 +74,7 @@ function Initialize-TestEnvironment {
     New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
     
     # Copy builtin headers to temp directory for test compilation
-    $builtinHeaders = @("string_builtins.h", "file_builtins.h")
+    $builtinHeaders = @("string_builtins.h", "file_builtins.h", "io_builtins.h")
     foreach ($header in $builtinHeaders) {
         $headerPath = Join-Path $RootDir "src\tuff\$header"
         if (Test-Path $headerPath) {

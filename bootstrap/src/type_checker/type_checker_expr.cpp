@@ -76,7 +76,7 @@ void TypeChecker::checkIdentifier(std::shared_ptr<ASTNode> node)
 	}
 
 	// If still not found, error
-	std::cerr << "Error: Variable '" << name << "' not declared." << std::endl;
+	std::cerr << "Error: Variable '" << name << "' not declared at line " << node->line << "." << std::endl;
 	exit(1);
 }
 
@@ -368,7 +368,7 @@ void TypeChecker::checkSizeOfExpr(std::shared_ptr<ASTNode> node)
 			{
 				baseTypeName = typeName.substr(0, ltPos);
 			}
-			
+
 			if (structTable.find(baseTypeName) == structTable.end())
 			{
 				// Check if it's an array type [T; init; capacity]

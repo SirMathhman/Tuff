@@ -22,19 +22,19 @@
 
 The standard library is currently in early development (`src/tuff/`).
 
-| Module | Status | Description |
-| :--- | :--- | :--- |
-| `array` | ✅ Basic | Array utilities |
-| `file` | ⚠️ Minimal | File I/O (relies on externs) |
-| `io` | ⚠️ Minimal | Console I/O (relies on externs) |
-| `map` | ✅ Usable | Hash map implementation |
-| `math` | ✅ Basic | Basic math functions |
-| `mem` | ✅ Basic | Memory management (malloc/free) |
-| `option` | ✅ Usable | Option type |
-| `result` | ✅ Usable | Result type |
-| `slice` | ✅ Basic | Slice utilities |
+| Module   | Status     | Description                           |
+| :------- | :--------- | :------------------------------------ |
+| `array`  | ✅ Basic   | Array utilities                       |
+| `file`   | ⚠️ Minimal | File I/O (relies on externs)          |
+| `io`     | ⚠️ Minimal | Console I/O (relies on externs)       |
+| `map`    | ✅ Usable  | Hash map implementation               |
+| `math`   | ✅ Basic   | Basic math functions                  |
+| `mem`    | ✅ Basic   | Memory management (malloc/free)       |
+| `option` | ✅ Usable  | Option type                           |
+| `result` | ✅ Usable  | Result type                           |
+| `slice`  | ✅ Basic   | Slice utilities                       |
 | `string` | ⚠️ Minimal | String operations (relies on externs) |
-| `vector` | ✅ Usable | Dynamic array implementation |
+| `vector` | ✅ Usable  | Dynamic array implementation          |
 
 ## Bootstrapping Requirements
 

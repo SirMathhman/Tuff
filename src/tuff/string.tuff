@@ -31,3 +31,6 @@ extern fn string_fromI32(value: I32): string;
 
 // Parse string to integer (returns None if parsing fails)
 extern fn string_toI32(s: string): Option<I32>;
+
+// Create a string from a byte buffer (copies the data)
+extern fn string_fromBytes(buffer: *U8, length: USize): string;

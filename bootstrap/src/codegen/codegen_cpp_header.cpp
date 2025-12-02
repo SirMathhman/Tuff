@@ -221,7 +221,7 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 				ss << ", ";
 			std::string paramType = mapType(node->children[i]->inferredType);
 			std::string paramName = node->children[i]->value;
-			
+
 			// Check if this is a function pointer type
 			if (isFunctionPointerType(node->children[i]->inferredType))
 			{

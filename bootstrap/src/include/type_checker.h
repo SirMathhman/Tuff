@@ -98,6 +98,20 @@ private:
 	void checkIfExpr(std::shared_ptr<ASTNode> node);
 	void checkSizeOfExpr(std::shared_ptr<ASTNode> node);
 
+	// Statement checking helpers (in type_checker_stmt.cpp)
+	void checkLetStmt(std::shared_ptr<ASTNode> node);
+	void checkAssignmentStmt(std::shared_ptr<ASTNode> node);
+	void checkIfStmt(std::shared_ptr<ASTNode> node);
+	void checkWhileStmt(std::shared_ptr<ASTNode> node);
+	void checkLoopStmt(std::shared_ptr<ASTNode> node);
+	void checkBlock(std::shared_ptr<ASTNode> node);
+	void checkReturnStmt(std::shared_ptr<ASTNode> node);
+
+	// Declaration checking helpers (in type_checker_decl.cpp)
+	void checkFunctionDecl(std::shared_ptr<ASTNode> node);
+	void checkModuleDecl(std::shared_ptr<ASTNode> node);
+	void checkActualDecl(std::shared_ptr<ASTNode> node);
+
 	// Union type helpers
 	bool isUnionType(const std::string &type);
 	std::vector<std::string> splitUnionType(const std::string &unionType);

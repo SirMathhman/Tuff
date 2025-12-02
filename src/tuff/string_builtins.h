@@ -122,4 +122,16 @@ inline OptionI32 string_toI32(const char *s)
 	return OptionI32{1, static_cast<int32_t>(val)}; // Some(value)
 }
 
+// Create a string from a byte buffer (copies the data)
+inline char *string_fromBytes(const uint8_t *buffer, size_t length)
+{
+	char *result = static_cast<char *>(std::malloc(length + 1));
+	if (result != nullptr)
+	{
+		std::memcpy(result, buffer, length);
+		result[length] = '\0';
+	}
+	return result;
+}
+
 #endif // TUFF_STRING_BUILTINS_H

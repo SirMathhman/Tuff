@@ -1,0 +1,36 @@
+// StringBuilder - Efficient string construction
+
+use mem;
+use vector;
+use string;
+
+struct StringBuilder {
+	buffer: Vector<U8>
+}
+
+impl StringBuilder {
+	// Create a new empty StringBuilder
+	fn new(): StringBuilder => {
+		return StringBuilder { Vector::new<U8>(16USize) };
+	}
+
+	// Append a string to the builder
+	fn append(this: *mut StringBuilder, s: string): Void => {
+		let len = string_length(s);
+		let mut i: USize = 0USize;
+		while (i < len) {
+			Vector::push<U8>(&mut this.buffer, string_charAt(s, i));
+			i = i + 1USize;
+		}
+	}
+
+	// Convert to string
+	fn toString(this: *StringBuilder): string => {
+		return string_fromBytes(this.buffer.data, this.buffer.length);
+	}
+	
+	// Free the builder's memory
+	fn free(this: *mut StringBuilder): Void => {
+		Vector::free<U8>(&mut this.buffer);
+	}
+}

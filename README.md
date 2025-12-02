@@ -59,19 +59,21 @@ The compiler uses monomorphization for generics (C++ templates for native, speci
 The project structure is organized as follows:
 
 ```
+
 tuff/
 ├── src/
-│   └── tuff/            # Standard library source code
-│       ├── io.tuff      # I/O interface
-│       ├── map.tuff     # Map implementation
-│       ├── vector.tuff  # Vector implementation
-│       └── ...
-├── bootstrap/           # Stage 0 compiler (C++17)
-│   ├── src/             # Compiler source code
-│   └── build/           # Build output
-├── docs/                # Documentation
-└── build/               # Build artifacts (gitignored)
-```
+│ └── tuff/ # Standard library source code
+│ ├── io.tuff # I/O interface
+│ ├── map.tuff # Map implementation
+│ ├── vector.tuff # Vector implementation
+│ └── ...
+├── bootstrap/ # Stage 0 compiler (C++17)
+│ ├── src/ # Compiler source code
+│ └── build/ # Build output
+├── docs/ # Documentation
+└── build/ # Build artifacts (gitignored)
+
+````
 
 ### Source Code
 

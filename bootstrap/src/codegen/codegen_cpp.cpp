@@ -289,7 +289,7 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 					ss << ", ";
 				std::string paramType = mapType(param->inferredType);
 				std::string paramName = param->value;
-				
+
 				// Check if this is a function pointer type
 				if (isFunctionPointerType(param->inferredType))
 				{

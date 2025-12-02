@@ -1,4 +1,6 @@
 // io.tuff - I/O functions
 
+extern use io_builtins;
+
 extern fn print(message: string): Void;
 extern fn println(message: string): Void;

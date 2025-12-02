@@ -77,7 +77,7 @@ std::string CodeGeneratorCPP::genExpr(ast::ExprPtr expr)
 
 																	[this](const ast::Deref &e) -> std::string
 																	{
-																		return "*" + genExpr(e.operand);
+																		return "(*" + genExpr(e.operand) + ")";
 																	},
 
 																	[this](const ast::FieldAccess &e) -> std::string
@@ -113,7 +113,25 @@ std::string CodeGeneratorCPP::genExpr(ast::ExprPtr expr)
 																	[this](const ast::Call &e) -> std::string
 																	{
 																		std::stringstream ss;
-																		ss << genExpr(e.callee) << "(";
+																		ss << genExpr(e.callee);
+
+																		// Emit generic args if callee is an identifier and not extern
+																		if (auto *id = std::get_if<ast::Identifier>(&*e.callee))
+																		{
+																			if (!e.calleeIsExtern && !id->genericArgs.empty())
+																			{
+																				ss << "<";
+																				for (size_t i = 0; i < id->genericArgs.size(); i++)
+																				{
+																					if (i > 0)
+																						ss << ", ";
+																					ss << mapType(id->genericArgs[i]);
+																				}
+																				ss << ">";
+																			}
+																		}
+
+																		ss << "(";
 																		for (size_t i = 0; i < e.args.size(); i++)
 																		{
 																			if (i > 0)

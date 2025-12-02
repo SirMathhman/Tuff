@@ -1,8 +1,0 @@
-// Main entry point - uses top-level statements
-// Temporarily disabled pending string implementation
-
-// let num: I32 = 42;
-// let numStr = string_fromI32(num);
-// println(numStr);
-
-0
