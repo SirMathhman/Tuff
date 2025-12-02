@@ -111,10 +111,27 @@ impl MapI32ToI32 {
 		return None<I32> { };
 	}
 
-	// Check if key exists
+	// Check if key exists (inlined to avoid Union_Option codegen bug)
 	fn contains(this: *MapI32ToI32, key: I32): Bool => {
-		let result = this.get(key);
-		return result is Some<I32>;
+		let start: USize = hashI32(key, this.capacity);
+		let mut i: USize = 0USize;
+		
+		while (i < this.capacity) {
+			let idx: USize = (start + i) % this.capacity;
+			let entry: *MapEntryI32ToI32 = this.data + idx;
+			
+			if (entry.state == EntryState.Empty) {
+				return false;
+			}
+			
+			if (entry.state == EntryState.Occupied && entry.key == key) {
+				return true;
+			}
+			
+			i = i + 1USize;
+		}
+		
+		return false;
 	}
 
 	// Remove a key-value pair

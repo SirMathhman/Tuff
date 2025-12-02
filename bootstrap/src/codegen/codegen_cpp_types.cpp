@@ -282,3 +282,48 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 	// Struct types pass through as-is
 	return tuffType;
 }
+
+// Expand a type alias to its underlying type
+// e.g., "Option<I32>" -> "Some<I32>|None<I32>"
+std::string CodeGeneratorCPP::expandTypeAlias(const std::string &type)
+{
+	// Check if this is a generic type instantiation like Option<I32>
+	size_t openBracket = type.find('<');
+	std::string baseName = type;
+	std::string typeArgs;
+
+	if (openBracket != std::string::npos && type.back() == '>')
+	{
+		baseName = type.substr(0, openBracket);
+		typeArgs = type.substr(openBracket); // includes "<...>"
+	}
+
+	// Look up the base name in our type alias map
+	auto it = typeAliasExpansions.find(baseName);
+	if (it == typeAliasExpansions.end())
+	{
+		// Not a type alias, return as-is
+		return type;
+	}
+
+	std::string expandedType = it->second;
+
+	// If we have type arguments, substitute them in the expanded type
+	// e.g., "Some<T>|None<T>" with <I32> -> "Some<I32>|None<I32>"
+	if (!typeArgs.empty())
+	{
+		// Extract the type argument (assuming single arg for now)
+		std::string argType = typeArgs.substr(1, typeArgs.length() - 2); // strip < and >
+
+		// Replace T with the actual type in the expanded union
+		// Simple substitution: replace "<T>" with "<argType>"
+		size_t pos = 0;
+		while ((pos = expandedType.find("<T>", pos)) != std::string::npos)
+		{
+			expandedType.replace(pos, 3, "<" + argType + ">");
+			pos += argType.length() + 2;
+		}
+	}
+
+	return expandedType;
+}

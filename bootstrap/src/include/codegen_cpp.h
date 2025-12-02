@@ -74,6 +74,10 @@ private:
 	std::string getDestructor(const std::string &type);
 	bool nextBlockIsLoop = false;
 
+	// Type alias expansion (e.g., "Option" -> "Some<T>|None<T>")
+	std::map<std::string, std::string> typeAliasExpansions;
+	std::string expandTypeAlias(const std::string &type);
+
 	// ===== DEPENDENCY TRACKING FOR TOPOLOGICAL SORT =====
 	// Extract type names that a given type depends on
 	std::set<std::string> extractTypeDependencies(const std::string &typeStr);

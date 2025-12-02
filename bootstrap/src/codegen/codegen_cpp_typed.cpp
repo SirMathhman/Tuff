@@ -115,9 +115,9 @@ std::string CodeGeneratorCPP::genExpr(ast::ExprPtr expr)
 																			// If so, use compound literal so it can be passed to functions
 																			if (std::holds_alternative<ast::ArrayLiteral>(*e.args[i]))
 																			{
-																				const auto& arrLit = std::get<ast::ArrayLiteral>(*e.args[i]);
-																				bool isString = arrLit.inferredType == "string" || 
-																							   arrLit.inferredType.find("[U8;") == 0;
+																				const auto &arrLit = std::get<ast::ArrayLiteral>(*e.args[i]);
+																				bool isString = arrLit.inferredType == "string" ||
+																												arrLit.inferredType.find("[U8;") == 0;
 																				if (isString)
 																				{
 																					ss << "(const uint8_t[]){";
@@ -205,7 +205,8 @@ std::string CodeGeneratorCPP::genExpr(ast::ExprPtr expr)
 																	{
 																		// is operator: expr is Type → (expr.__tag == UnionStruct::Tag::Type)
 																		auto exprCode = genExpr(e.value);
-																		std::string unionType = e.valueInferredType;
+																		// Expand type aliases: Option<I32> -> Some<I32>|None<I32>
+																		std::string unionType = expandTypeAlias(e.valueInferredType);
 																		std::string structName = getUnionStructName(unionType);
 
 																		// Add template argument from union variants

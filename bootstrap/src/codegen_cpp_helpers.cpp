@@ -106,20 +106,23 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	{
 		// Generate C++ initializer list or compound literal for strings
 		std::stringstream ss;
-		
+
 		// Check if this is a string type (array of U8) - if so, use compound literal
 		// so it can be passed directly to functions expecting const uint8_t*
-		bool isString = node->inferredType == "string" || 
-						node->inferredType.find("[U8;") == 0 ||
-						(!node->children.empty() && node->children[0]->inferredType == "U8");
-		
-		if (isString) {
+		bool isString = node->inferredType == "string" ||
+										node->inferredType.find("[U8;") == 0 ||
+										(!node->children.empty() && node->children[0]->inferredType == "U8");
+
+		if (isString)
+		{
 			// Use compound literal: (const uint8_t[]){...}
 			ss << "(const uint8_t[]){";
-		} else {
+		}
+		else
+		{
 			ss << "{";
 		}
-		
+
 		for (size_t i = 0; i < node->children.size(); i++)
 		{
 			if (i > 0)

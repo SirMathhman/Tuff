@@ -40,7 +40,14 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 		else if (child->type == ASTNodeType::STRUCT_DECL)
 			allTypes.push_back(child);
 		else if (child->type == ASTNodeType::TYPE_ALIAS)
+		{
 			allTypes.push_back(child);
+			// Store type alias expansion for later use (e.g., Option -> Some<T>|None<T>)
+			// child->value is the alias name, child->inferredType is the expanded type
+			std::string baseName = child->value;
+			// For generic aliases like Option<T>, we store just "Option" -> expanded type
+			typeAliasExpansions[baseName] = child->inferredType;
+		}
 		else if (child->type == ASTNodeType::FUNCTION_DECL)
 			functions.push_back(child);
 		else if (child->type == ASTNodeType::ACTUAL_DECL)

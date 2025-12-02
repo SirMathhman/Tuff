@@ -82,14 +82,28 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		// String literal: generate as C string with proper escaping
 		std::stringstream ss;
 		ss << "\"";
-		for (char c : node->value) {
-			switch (c) {
-				case '\n': ss << "\\n"; break;
-				case '\r': ss << "\\r"; break;
-				case '\t': ss << "\\t"; break;
-				case '\\': ss << "\\\\"; break;
-				case '"': ss << "\\\""; break;
-				default: ss << c; break;
+		for (char c : node->value)
+		{
+			switch (c)
+			{
+			case '\n':
+				ss << "\\n";
+				break;
+			case '\r':
+				ss << "\\r";
+				break;
+			case '\t':
+				ss << "\\t";
+				break;
+			case '\\':
+				ss << "\\\\";
+				break;
+			case '"':
+				ss << "\\\"";
+				break;
+			default:
+				ss << c;
+				break;
 			}
 		}
 		ss << "\"";
