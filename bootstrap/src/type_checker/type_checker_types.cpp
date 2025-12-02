@@ -214,6 +214,29 @@ bool TypeChecker::isTypeCompatible(ExprPtr valueType, ExprPtr targetType)
 	if (areTypesEqual(valueType, targetType))
 		return true;
 
+	// Array-to-string decay: [U8; N; N] -> string
+	// string is an extern type that represents a pointer to byte array
+	if (targetType->kind == ExprKind::IDENTIFIER)
+	{
+		auto targetId = targetType->as<IdentifierExpr>();
+		if (targetId->name == "string")
+		{
+			// Check if value is [U8; N; N]
+			if (valueType->kind == ExprKind::ARRAY)
+			{
+				auto arrType = valueType->as<ArrayExpr>();
+				if (arrType->elementType->kind == ExprKind::PRIMITIVE)
+				{
+					auto elemPrim = arrType->elementType->as<PrimitiveExpr>();
+					if (elemPrim->primitiveKind == PrimitiveKind::U8)
+					{
+						return true; // [U8; N; N] can decay to string
+					}
+				}
+			}
+		}
+	}
+
 	// Integer literal widening (I32 -> any int)
 	// TODO: This is unsafe for variables, should be restricted to literals or use bidirectional checking
 	if (valueType->kind == ExprKind::PRIMITIVE && targetType->kind == ExprKind::PRIMITIVE)
@@ -263,6 +286,94 @@ bool TypeChecker::isTypeCompatible(ExprPtr valueType, ExprPtr targetType)
 				return true;
 			if (isTypeCompatible(valueType, bin->right))
 				return true;
+		}
+	}
+
+	return false;
+}
+
+// Strip intersection types: T & #free -> T, *mut [T] & #free -> *mut [T]
+ExprPtr TypeChecker::stripIntersection(ExprPtr type)
+{
+	if (!type)
+		return nullptr;
+
+	if (type->kind == ExprKind::BINARY)
+	{
+		auto bin = type->as<BinaryExpr>();
+		if (bin->op == BinaryOp::INTERSECTION)
+		{
+			// For T & #free, we want the left side (the actual type)
+			// Recursively strip in case of nested intersections
+			return stripIntersection(bin->left);
+		}
+	}
+
+	return type;
+}
+
+// Comprehensive assignability check: can we assign sourceType to a variable of targetType?
+// Handles:
+// - Exact type matches
+// - Intersection type stripping (T & #free assignable to T)
+// - Pointer mutability coercion (*mut T assignable to *T)
+// - Union type compatibility (T assignable to T | U)
+// - Integer literal widening
+bool TypeChecker::isAssignableTo(ExprPtr sourceType, ExprPtr targetType)
+{
+	if (!sourceType || !targetType)
+		return false;
+
+	// First, strip intersection types from source
+	// e.g., *mut [T] & #free should be assignable to *mut [T]
+	ExprPtr strippedSource = stripIntersection(sourceType);
+
+	// Also strip from target (for bidirectional compatibility)
+	ExprPtr strippedTarget = stripIntersection(targetType);
+
+	// Exact match after stripping
+	if (areTypesEqual(strippedSource, strippedTarget))
+		return true;
+
+	// Try the basic compatibility check
+	if (isTypeCompatible(strippedSource, strippedTarget))
+		return true;
+
+	// Special case: *mut T to *T coercion with intersection
+	// *mut [T] & #free should be assignable to *mut [T]
+	if (strippedSource->kind == ExprKind::UNARY && strippedTarget->kind == ExprKind::UNARY)
+	{
+		auto src = strippedSource->as<UnaryExpr>();
+		auto tgt = strippedTarget->as<UnaryExpr>();
+
+		if (src->op == UnaryOp::STAR && tgt->op == UnaryOp::STAR)
+		{
+			// Both are pointers. Check if inner types are compatible after stripping
+			ExprPtr srcInner = stripIntersection(src->operand);
+			ExprPtr tgtInner = stripIntersection(tgt->operand);
+
+			// *mut T -> *mut T (exact)
+			if (areTypesEqual(srcInner, tgtInner))
+				return true;
+
+			// *mut T -> *T (mut to immut coercion)
+			if (srcInner->kind == ExprKind::UNARY)
+			{
+				auto srcMut = srcInner->as<UnaryExpr>();
+				if (srcMut->op == UnaryOp::MUT)
+				{
+					// Source is *mut T, target is *U
+					// Check if T == U
+					if (areTypesEqual(srcMut->operand, tgtInner))
+						return true;
+
+					// Also check if inner types are compatible after stripping
+					ExprPtr srcBase = stripIntersection(srcMut->operand);
+					ExprPtr tgtBase = stripIntersection(tgtInner);
+					if (areTypesEqual(srcBase, tgtBase))
+						return true;
+				}
+			}
 		}
 	}
 

@@ -1,0 +1,188 @@
+// Map<K, V> - hash map / dictionary implementation
+// Uses open addressing with linear probing for collision resolution
+// Note: Since Tuff doesn't have traits yet, we provide specialized maps for common key types
+
+use mem;
+use option;
+
+// Entry states for open addressing
+enum EntryState {
+	Empty,
+	Deleted,
+	Occupied
+}
+
+// MapI32ToI32 - Map with I32 keys and I32 values (fully concrete)
+struct MapEntryI32ToI32 {
+	key: I32,
+	value: I32,
+	state: EntryState
+}
+
+struct MapI32ToI32 {
+	data: Allocated<MapEntryI32ToI32>,
+	length: USize,
+	capacity: USize,
+	tombstones: USize
+}
+
+// Simple hash function for I32 keys
+fn hashI32(key: I32, capacity: USize): USize => {
+	let k: USize = if (key < 0) (0 - key) else key;
+	return k % capacity;
+}
+
+impl MapI32ToI32 {
+	// Create a new empty map with initial capacity
+	fn new(initialCapacity: USize): MapI32ToI32 => {
+		let cap: USize = if (initialCapacity < 8USize) 8USize else initialCapacity;
+		let ptr = malloc<MapEntryI32ToI32>(sizeOf(MapEntryI32ToI32) * cap);
+		
+		// Initialize all entries to Empty state
+		let mut i: USize = 0USize;
+		while (i < cap) {
+			let entry: *mut MapEntryI32ToI32 = ptr + i;
+			entry.state = EntryState.Empty;
+			i = i + 1USize;
+		}
+		
+		return MapI32ToI32 { ptr, 0USize, cap, 0USize };
+	}
+
+	// Insert or update a key-value pair
+	fn put(this: *mut MapI32ToI32, key: I32, value: I32): Void => {
+		// Grow if load factor > 0.7
+		let load: USize = this.length + this.tombstones;
+		if (load * 10USize > this.capacity * 7USize) {
+			this.grow();
+		}
+		
+		let start: USize = hashI32(key, this.capacity);
+		let mut i: USize = 0USize;
+		
+		while (i < this.capacity) {
+			let idx: USize = (start + i) % this.capacity;
+			let entry: *mut MapEntryI32ToI32 = this.data + idx;
+			
+			// Found empty or deleted slot - insert here
+			if (entry.state == EntryState.Empty || entry.state == EntryState.Deleted) {
+				if (entry.state == EntryState.Deleted) {
+					this.tombstones = this.tombstones - 1USize;
+				}
+				entry.key = key;
+				entry.value = value;
+				entry.state = EntryState.Occupied;
+				this.length = this.length + 1USize;
+				return;
+			}
+			
+			// Found existing key - update value
+			if (entry.key == key) {
+				entry.value = value;
+				return;
+			}
+			
+			i = i + 1USize;
+		}
+	}
+
+	// Get value by key
+	fn get(this: *MapI32ToI32, key: I32): Option<I32> => {
+		let start: USize = hashI32(key, this.capacity);
+		let mut i: USize = 0USize;
+		
+		while (i < this.capacity) {
+			let idx: USize = (start + i) % this.capacity;
+			let entry: *MapEntryI32ToI32 = this.data + idx;
+			
+			// Empty slot - key not found
+			if (entry.state == EntryState.Empty) {
+				return None<I32> { };
+			}
+			
+			// Found the key
+			if (entry.state == EntryState.Occupied && entry.key == key) {
+				return Some<I32> { entry.value };
+			}
+			
+			i = i + 1USize;
+		}
+		
+		return None<I32> { };
+	}
+
+	// Check if key exists
+	fn contains(this: *MapI32ToI32, key: I32): Bool => {
+		let result = this.get(key);
+		return result is Some<I32>;
+	}
+
+	// Remove a key-value pair
+	fn remove(this: *mut MapI32ToI32, key: I32): Bool => {
+		let start: USize = hashI32(key, this.capacity);
+		let mut i: USize = 0USize;
+		
+		while (i < this.capacity) {
+			let idx: USize = (start + i) % this.capacity;
+			let entry: *mut MapEntryI32ToI32 = this.data + idx;
+			
+			if (entry.state == EntryState.Empty) {
+				return false;
+			}
+			
+			if (entry.state == EntryState.Occupied && entry.key == key) {
+				entry.state = EntryState.Deleted;
+				this.length = this.length - 1USize;
+				this.tombstones = this.tombstones + 1USize;
+				return true;
+			}
+			
+			i = i + 1USize;
+		}
+		
+		return false;
+	}
+
+	// Grow the map when load factor exceeds threshold
+	fn grow(this: *mut MapI32ToI32): Void => {
+		let oldData = this.data;
+		let oldCapacity = this.capacity;
+		
+		let newCapacity: USize = this.capacity * 2USize;
+		this.data = malloc<MapEntryI32ToI32>(sizeOf(MapEntryI32ToI32) * newCapacity);
+		this.capacity = newCapacity;
+		this.length = 0USize;
+		this.tombstones = 0USize;
+		
+		// Initialize new entries
+		let mut i: USize = 0USize;
+		while (i < newCapacity) {
+			let entry: *mut MapEntryI32ToI32 = this.data + i;
+			entry.state = EntryState.Empty;
+			i = i + 1USize;
+		}
+		
+		// Rehash all occupied entries
+		i = 0USize;
+		while (i < oldCapacity) {
+			let entry: *MapEntryI32ToI32 = oldData + i;
+			if (entry.state == EntryState.Occupied) {
+				this.put(entry.key, entry.value);
+			}
+			i = i + 1USize;
+		}
+		
+		free<MapEntryI32ToI32>(oldData);
+	}
+
+	// Get number of entries
+	fn len(this: *MapI32ToI32): USize => this.length;
+
+	// Check if empty
+	fn isEmpty(this: *MapI32ToI32): Bool => this.length == 0USize;
+
+	// Free the map's memory
+	fn free(this: *mut MapI32ToI32): Void => {
+		free<MapEntryI32ToI32>(this.data);
+	}
+}

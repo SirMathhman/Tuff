@@ -67,7 +67,7 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 	}
 	else if (match(TokenType::STRING_LITERAL))
 	{
-		// String literal: "hello" → [U8; n; n]
+		// String literal: "hello" → [U8; n+1; n+1] (with null terminator)
 		auto node = std::make_shared<ASTNode>();
 		node->type = ASTNodeType::ARRAY_LITERAL;
 
@@ -82,12 +82,17 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 			node->addChild(byteNode);
 		}
 
+		// Add null terminator for C compatibility
+		auto nullNode = std::make_shared<ASTNode>();
+		nullNode->type = ASTNodeType::LITERAL;
+		nullNode->value = "0";
+		nullNode->inferredType = "U8";
+		nullNode->exprType = makePrimitive(PrimitiveKind::U8);
+		node->addChild(nullNode);
+
 		// Set exprType for the array literal
-		// It's [U8; len; len]
-		// We need to construct ArrayExpr
-		// But ArrayExpr expects ExprPtr for init and capacity
-		// We can use IntLiteralExpr
-		auto len = makeInt(str.length(), "USize");
+		// It's [U8; len+1; len+1] (including null terminator)
+		auto len = makeInt(str.length() + 1, "USize");
 		node->exprType = makeArray(makePrimitive(PrimitiveKind::U8), len, len);
 
 		return node;

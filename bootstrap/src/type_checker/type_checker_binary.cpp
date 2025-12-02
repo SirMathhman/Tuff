@@ -43,12 +43,24 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 	// Use exprType if available
 	if (left->exprType && right->exprType)
 	{
+		// Handle intersection types - extract the left component
+		// e.g., *mut [T] & #free -> use *mut [T] for type checking
+		auto leftExpr = left->exprType;
+		if (leftExpr->kind == ExprKind::BINARY)
+		{
+			auto bin = leftExpr->as<BinaryExpr>();
+			if (bin->op == BinaryOp::INTERSECTION)
+			{
+				leftExpr = bin->left;
+			}
+		}
+
 		if (node->value == "+" || node->value == "-" || node->value == "*" || node->value == "/" || node->value == "%")
 		{
 			// Pointer arithmetic: ptr + int
-			if (left->exprType->kind == ExprKind::UNARY && left->exprType->as<UnaryExpr>()->op == UnaryOp::STAR && isNumericType(right->exprType))
+			if (leftExpr->kind == ExprKind::UNARY && leftExpr->as<UnaryExpr>()->op == UnaryOp::STAR && isNumericType(right->exprType))
 			{
-				auto ptr = left->exprType->as<UnaryExpr>();
+				auto ptr = leftExpr->as<UnaryExpr>();
 				// Check for *mut [T] -> Unary(STAR, Unary(MUT, Array(T)))
 				if (ptr->operand->kind == ExprKind::UNARY && ptr->operand->as<UnaryExpr>()->op == UnaryOp::MUT)
 				{
@@ -70,29 +82,31 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 					return;
 				}
 
-				node->exprType = left->exprType;
+				node->exprType = leftExpr;
 				node->inferredType = exprTypeToString(node->exprType);
 				return;
 			}
 
-			if (!isNumericType(left->exprType) || !isNumericType(right->exprType))
+			if (!isNumericType(leftExpr) || !isNumericType(right->exprType))
 			{
 				std::cerr << "Error: Operands of '" << node->value << "' must be numeric." << std::endl;
+				std::cerr << "  Left operand: " << exprTypeToString(left->exprType) << std::endl;
+				std::cerr << "  Right operand: " << exprTypeToString(right->exprType) << std::endl;
 				exit(1);
 			}
 
-			if (areTypesEqual(left->exprType, makePrimitive(PrimitiveKind::USize)) ||
+			if (areTypesEqual(leftExpr, makePrimitive(PrimitiveKind::USize)) ||
 					areTypesEqual(right->exprType, makePrimitive(PrimitiveKind::USize)) ||
-					left->exprType->kind == ExprKind::SIZEOF || right->exprType->kind == ExprKind::SIZEOF)
+					leftExpr->kind == ExprKind::SIZEOF || right->exprType->kind == ExprKind::SIZEOF)
 			{
 				node->exprType = makePrimitive(PrimitiveKind::USize);
 			}
 			else
 			{
 				// Preserve type if both are same float/int
-				if (areTypesEqual(left->exprType, right->exprType))
+				if (areTypesEqual(leftExpr, right->exprType))
 				{
-					node->exprType = left->exprType;
+					node->exprType = leftExpr;
 				}
 				else
 				{
@@ -104,12 +118,14 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 		}
 		else if (node->value == "&")
 		{
-			if (!isNumericType(left->exprType) || !isNumericType(right->exprType))
+			if (!isNumericType(leftExpr) || !isNumericType(right->exprType))
 			{
 				std::cerr << "Error: Operands of '&' must be numeric." << std::endl;
+				std::cerr << "  Left operand: " << exprTypeToString(left->exprType) << std::endl;
+				std::cerr << "  Right operand: " << exprTypeToString(right->exprType) << std::endl;
 				exit(1);
 			}
-			node->exprType = left->exprType;
+			node->exprType = leftExpr;
 			node->inferredType = exprTypeToString(node->exprType);
 			return;
 		}
@@ -121,9 +137,11 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 		}
 		else if (node->value == "<" || node->value == ">" || node->value == "<=" || node->value == ">=")
 		{
-			if (!isNumericType(left->exprType) || !isNumericType(right->exprType))
+			if (!isNumericType(leftExpr) || !isNumericType(right->exprType))
 			{
 				std::cerr << "Error: Operands of '" << node->value << "' must be numeric." << std::endl;
+				std::cerr << "  Left operand: " << exprTypeToString(left->exprType) << std::endl;
+				std::cerr << "  Right operand: " << exprTypeToString(right->exprType) << std::endl;
 				exit(1);
 			}
 			node->exprType = makePrimitive(PrimitiveKind::Bool);
@@ -132,7 +150,7 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 		}
 		else if (node->value == "&&" || node->value == "||")
 		{
-			if (!isBoolType(left->exprType) || !isBoolType(right->exprType))
+			if (!isBoolType(leftExpr) || !isBoolType(right->exprType))
 			{
 				std::cerr << "Error: Operands of '" << node->value << "' must be Bool." << std::endl;
 				exit(1);
@@ -179,6 +197,8 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 		if (!isNumericType(leftType) || !isNumericType(rightType))
 		{
 			std::cerr << "Error: Operands of '" << node->value << "' must be numeric." << std::endl;
+			std::cerr << "  Left operand: " << leftType << std::endl;
+			std::cerr << "  Right operand: " << rightType << std::endl;
 			exit(1);
 		}
 
@@ -199,6 +219,8 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 		if (!isNumericType(leftType) || !isNumericType(rightType))
 		{
 			std::cerr << "Error: Operands of '&' must be numeric." << std::endl;
+			std::cerr << "  Left operand: " << leftType << std::endl;
+			std::cerr << "  Right operand: " << rightType << std::endl;
 			exit(1);
 		}
 		node->inferredType = leftType;
@@ -212,6 +234,8 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 		if (!isNumericType(leftType) || !isNumericType(rightType))
 		{
 			std::cerr << "Error: Operands of '" << node->value << "' must be numeric." << std::endl;
+			std::cerr << "  Left operand: " << leftType << std::endl;
+			std::cerr << "  Right operand: " << rightType << std::endl;
 			exit(1);
 		}
 		node->inferredType = "Bool";

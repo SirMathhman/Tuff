@@ -1,48 +1,32 @@
-// TODO: Actual implementations need to support raw platform code
-// These implementations use platform-specific syntax (static_cast, etc)
-// that cannot be parsed as Tuff code yet.
-//
-// Temporarily disabled until we add support for:
-// 1. Raw code blocks in actual declarations, OR
-// 2. Extern implementations with separate .cpp files
+// String operations using extern C functions
+// string is an opaque type that maps to *[U8] (pointer to byte array) for C compatibility
+// Functions that allocate memory (concat, substring, fromI32) return malloc'd memory
+// Caller is responsible for freeing allocated strings
 
-/*
-actual fn string_length(s: string): USize => {
-    // C++: s.length() returns size_t
-    return s.length();
-}
+use option;
 
-actual fn string_charAt(s: string, index: USize): U8 => {
-    return static_cast<uint8_t>(s[index]);
-}
+// string is an opaque type - just use it as an identifier, codegen will handle the mapping
 
-actual fn string_substring(s: string, start: USize, end: USize): string => {
-    return s.substr(start, end - start);
-}
+// Get the length of a string (number of bytes, excluding null terminator)
+extern fn string_length(s: string): USize;
 
-actual fn string_indexOf(s: string, needle: string): I32 => {
-    size_t pos = s.find(needle);
-    return pos == std::string::npos ? -1 : static_cast<int32_t>(pos);
-}
+// Get character at index (bounds checking is caller's responsibility)
+extern fn string_charAt(s: string, index: USize): U8;
 
-actual fn string_equals(s1: string, s2: string): Bool => {
-    return s1 == s2;
-}
+// Concatenate two strings (returns newly allocated string, caller must free)
+extern fn string_concat(s1: string, s2: string): string;
 
-actual fn string_concat(s1: string, s2: string): string => {
-    return s1 + s2;
-}
+// Compare two strings for equality
+extern fn string_equals(s1: string, s2: string): Bool;
 
-actual fn string_fromI32(value: I32): string => {
-    return std::to_string(value);
-}
+// Extract substring from start to end (exclusive, returns newly allocated string, caller must free)
+extern fn string_substring(s: string, start: USize, end: USize): string;
 
-actual fn string_toI32(s: string): I32 => {
-    return std::stoi(s);
-}
+// Find first occurrence of needle in haystack (returns -1 if not found)
+extern fn string_indexOf(s: string, needle: string): I32;
 
-actual fn string_destroy(s: string): Void => {
-    // std::string has RAII, destructor is called automatically
-    // This function exists for consistency with the Tuff ownership model
-}
-*/
+// Convert integer to string (returns newly allocated string, caller must free)
+extern fn string_fromI32(value: I32): string;
+
+// Parse string to integer (returns None if parsing fails)
+extern fn string_toI32(s: string): Option<I32>;

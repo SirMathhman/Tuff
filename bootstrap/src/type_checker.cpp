@@ -128,9 +128,39 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		}
 		else
 		{
-			if (!isTypeCompatible(value->inferredType, lhs->inferredType))
+			// Use string-based type compatibility with alias expansion and intersection stripping
+			std::string expectedType = expandTypeAlias(lhs->inferredType);
+			std::string actualType = expandTypeAlias(value->inferredType);
+
+			// Strip intersection from both types (e.g., *mut [T] & #free -> *mut [T])
+			auto stripIntersection = [](std::string &type)
+			{
+				size_t ampPos = type.find(" & ");
+				if (ampPos == std::string::npos)
+				{
+					ampPos = type.find("&");
+					if (ampPos != std::string::npos && ampPos + 1 < type.length())
+					{
+						char nextChar = type[ampPos + 1];
+						if (nextChar != '#' && !std::isupper(nextChar))
+						{
+							return;
+						}
+					}
+				}
+				if (ampPos != std::string::npos)
+				{
+					type = type.substr(0, ampPos);
+				}
+			};
+
+			stripIntersection(expectedType);
+			stripIntersection(actualType);
+
+			if (!isTypeCompatible(actualType, expectedType))
 			{
 				std::cerr << "Error: Type mismatch in assignment. Expected " << lhs->inferredType << ", got " << value->inferredType << std::endl;
+				std::cerr << "  (expanded: expected '" << expectedType << "', got '" << actualType << "')" << std::endl;
 				exit(1);
 			}
 		}

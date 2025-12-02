@@ -81,10 +81,49 @@ void TypeChecker::checkStructLiteral(std::shared_ptr<ASTNode> node)
 			expectedType = typeSubstitutions[expectedType];
 		}
 
-		if (fieldExpr->inferredType != expectedType)
+		// Expand type aliases for both expected and actual types
+		std::string expandedExpected = expandTypeAlias(expectedType);
+		std::string expandedActual = expandTypeAlias(fieldExpr->inferredType);
+
+		// Strip intersection from both types for comparison
+		// e.g., "*mut [T] & #free" or "*mut [T]&#free" should match "*mut [T]"
+		auto stripIntersection = [](std::string &type)
+		{
+			size_t ampPos = type.find(" & ");
+			if (ampPos == std::string::npos)
+			{
+				ampPos = type.find("&");
+				// Only strip if it looks like intersection (& followed by # or uppercase)
+				if (ampPos != std::string::npos && ampPos + 1 < type.length())
+				{
+					char nextChar = type[ampPos + 1];
+					if (nextChar != '#' && !std::isupper(nextChar))
+					{
+						return; // Not an intersection, don't strip
+					}
+				}
+			}
+			if (ampPos != std::string::npos)
+			{
+				type = type.substr(0, ampPos);
+			}
+		};
+
+		stripIntersection(expandedExpected);
+		stripIntersection(expandedActual);
+
+		bool typesMatch = (expandedActual == expandedExpected);
+
+		if (!typesMatch)
+		{
+			typesMatch = isTypeCompatible(expandedActual, expandedExpected);
+		}
+
+		if (!typesMatch)
 		{
 			std::cerr << "Error: Field " << (i + 1) << " of struct '" << structName
 								<< "' expects type " << expectedType << ", got " << fieldExpr->inferredType << std::endl;
+			std::cerr << "  (expanded: expected '" << expandedExpected << "', got '" << expandedActual << "')" << std::endl;
 			exit(1);
 		}
 		node->fieldNames.push_back(info.fields[i].first);

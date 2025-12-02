@@ -88,15 +88,22 @@ void TypeChecker::checkIsExpr(std::shared_ptr<ASTNode> node)
 
 	std::string targetType = node->value; // The type we're checking against
 
+	// Expand type alias to get the actual union type
+	std::string expandedExprType = expandTypeAlias(expr->inferredType);
+
 	// Validate that the expression type is a union type
-	if (!isUnionType(expr->inferredType))
+	if (!isUnionType(expandedExprType))
 	{
 		std::cerr << "Error: 'is' operator can only be used on union types, got " << expr->inferredType << std::endl;
+		if (expandedExprType != expr->inferredType)
+		{
+			std::cerr << "  (expanded to: " << expandedExprType << ")" << std::endl;
+		}
 		exit(1);
 	}
 
 	// Validate that target type is one of the union variants
-	auto variants = splitUnionType(expr->inferredType);
+	auto variants = splitUnionType(expandedExprType);
 	bool found = false;
 	for (const auto &variant : variants)
 	{
@@ -109,6 +116,17 @@ void TypeChecker::checkIsExpr(std::shared_ptr<ASTNode> node)
 	if (!found)
 	{
 		std::cerr << "Error: Type '" << targetType << "' is not a variant of union type '" << expr->inferredType << "'" << std::endl;
+		if (expandedExprType != expr->inferredType)
+		{
+			std::cerr << "  (expanded to: " << expandedExprType << ", variants: ";
+			for (size_t i = 0; i < variants.size(); i++)
+			{
+				if (i > 0)
+					std::cerr << ", ";
+				std::cerr << variants[i];
+			}
+			std::cerr << ")" << std::endl;
+		}
 		exit(1);
 	}
 

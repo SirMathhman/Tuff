@@ -47,8 +47,8 @@ function Initialize-TestEnvironment {
         Write-ColorOutput "[ERROR] Compiler not found at: $CompilerPath" $ColorRed
         exit 1
     }
-    try { $null = Get-Command clang -ErrorAction Stop } catch {
-        Write-ColorOutput "[WARN] clang not found." $ColorYellow
+    try { $null = Get-Command clang++ -ErrorAction Stop } catch {
+        Write-ColorOutput "[WARN] clang++ not found." $ColorYellow
         exit 1
     }
 
@@ -131,9 +131,11 @@ function Test-TuffFile([hashtable]$Test) {
     
     try {
         Set-Content -Path $cppFile -Value ($cppCode -join "`n") -Encoding UTF8
-        $compileOutput = clang $cppFile -o $exeFile 2>&1
+        $includeDir = Join-Path $RootDir "bootstrap\src\include"
+        $compileOutput = clang++ -std=c++17 -I $includeDir $cppFile -o $exeFile 2>&1
         if ($LASTEXITCODE -ne 0) {
-            $result.Status = "ERROR"; $result.Message = "clang failed"
+            $errorLines = ($compileOutput | Select-String "error:" | Select-Object -First 3) -join "; "
+            $result.Status = "ERROR"; $result.Message = "C++ compilation failed: $errorLines"
             return $result
         }
         $null = & $exeFile 2>&1
@@ -215,6 +217,7 @@ try {
             $Test = $_
             $CompilerPath = $using:CompilerPath
             $TempDir = $using:TempDir
+            $RootDir = $using:RootDir
             $SkippedTestsList = $using:Script:SkippedTestsList
             $NegativeTests = $using:Script:NegativeTests
             $ExpectedExitCodes = $using:Script:ExpectedExitCodes
@@ -255,9 +258,11 @@ try {
             
             try {
                 Set-Content -Path $cppFile -Value ($cppCode -join "`n") -Encoding UTF8
-                $null = clang $cppFile -o $exeFile 2>&1
+                $includeDir = Join-Path $RootDir "bootstrap\src\include"
+                $compileOutput = clang++ -std=c++17 -I $includeDir $cppFile -o $exeFile 2>&1
                 if ($LASTEXITCODE -ne 0) {
-                    $result.Status = "ERROR"; $result.Message = "clang failed"
+                    $errorLines = ($compileOutput | Select-String "error:" | Select-Object -First 3) -join "; "
+                    $result.Status = "ERROR"; $result.Message = "C++ compilation failed: $errorLines"
                     return $result
                 }
                 $null = & $exeFile 2>&1

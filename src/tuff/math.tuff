@@ -1,7 +1,10 @@
-fn max<Type : Number>(a: Type, b: Type): Type {
-	if a > b {
-			return a;
-	} else {
-			return b;
-	}
-}
+// Math utilities
+// Temporarily disabled - generic constraints not yet supported
+
+// fn max<Type>(a: Type, b: Type): Type => {
+// 	if (a > b) {
+// 		return a;
+// 	} else {
+// 		return b;
+// 	}
+// }

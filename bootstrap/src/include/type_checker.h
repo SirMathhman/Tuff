@@ -113,6 +113,8 @@ private:
 	// New type compatibility check using ExprPtr
 	bool isTypeCompatible(ExprPtr valueType, ExprPtr targetType);
 	bool areTypesEqual(ExprPtr t1, ExprPtr t2);
+	bool isAssignableTo(ExprPtr sourceType, ExprPtr targetType);															 // Comprehensive assignability check
+	ExprPtr stripIntersection(ExprPtr type);																									 // Strip intersection (T & #free -> T)
 	std::string exprTypeToString(ExprPtr type);																								 // Helper for error messages
 	ExprPtr substituteType(ExprPtr type, const std::map<std::string, ExprPtr> &substitutions); // New
 

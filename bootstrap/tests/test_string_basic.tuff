@@ -1,0 +1,44 @@
+// Test basic string operations
+
+use string;
+use io;
+
+// Test string_length
+let hello = "Hello";
+let len: USize = string_length(hello);
+
+if (len != 5USize) {
+	1
+} else {
+	// Test string_charAt
+	let firstChar: U8 = string_charAt(hello, 0USize);
+	if (firstChar != 72U8) {  // 'H' = 72
+		2
+	} else {
+		// Test string_equals
+		let world = "World";
+		let hello2 = "Hello";
+		
+		if (!string_equals(hello, hello2)) {
+			3
+		} else if (string_equals(hello, world)) {
+			4
+		} else {
+			// Test string_indexOf
+			let greeting = "Hello World";
+			let pos: I32 = string_indexOf(greeting, world);
+			
+			if (pos != 6) {
+				5
+			} else {
+				let tuff = "Tuff";
+				let notFound: I32 = string_indexOf(greeting, tuff);
+				if (notFound != -1) {
+					6
+				} else {
+					0
+				}
+			}
+		}
+	}
+}

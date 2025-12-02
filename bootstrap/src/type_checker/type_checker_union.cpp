@@ -22,7 +22,9 @@ static std::string stripLifetime(const std::string &type)
 // Helper: Check if a type is a union type (contains '|')
 bool TypeChecker::isUnionType(const std::string &type)
 {
-	return type.find('|') != std::string::npos;
+	// First expand type aliases - Option<T> expands to Some<T>|None<T>
+	std::string expanded = expandTypeAlias(type);
+	return expanded.find('|') != std::string::npos;
 }
 
 // Helper: Split union type into its variants

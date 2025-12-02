@@ -20,7 +20,8 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 		ss << "#include <iostream>\n";
 		ss << "#include <cstdint>\n";
 		ss << "#include <cstddef>\n";
-		ss << "#include <string>\n\n";
+		ss << "#include <string>\n";
+		ss << "#include \"string_builtins.h\"\n\n";
 	}
 
 	// Only generate type definitions and forward declarations if not using shared header
