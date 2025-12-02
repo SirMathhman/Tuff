@@ -1,33 +1,41 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Tuff Multi-Platform Build Script
+    Tuff Build Script
 
 .DESCRIPTION
-    Builds Tuff projects for JavaScript and/or C++ targets.
-    Preserves package structure in output directory.
+    Builds Tuff projects for C++ target.
+    Reads configuration from build.config.json (or custom file via -Config).
 
 .PARAMETER Target
-    Build target: "js", "cpp", or "all" (default: all)
+    Build target: "cpp" or "all" (default: cpp)
+
+.PARAMETER Config
+    Path to build config file (default: build.config.json in current directory)
 
 .PARAMETER Clean
     Clean dist/ directory before building
 
 .PARAMETER Bundle
-    Bundle/compile the generated files (JS bundle or native executable)
+    Bundle/compile the generated files (native executable)
 
 .EXAMPLE
     .\build.ps1
-    Build all targets
+    Build cpp target
 
 .EXAMPLE
-    .\build.ps1 -Target js -Clean -Bundle
-    Clean, build, and bundle JS target
+    .\build.ps1 -Clean -Bundle
+    Clean, build, and bundle
+
+.EXAMPLE
+    .\build.ps1 -Config custom.json
+    Build using custom configuration file
 #>
 
 param(
-    [ValidateSet("all", "js", "cpp")]
-    [string]$Target = "all",
+    [ValidateSet("all", "cpp")]
+    [string]$Target = "cpp",
+    [string]$Config = "",
     [switch]$Clean,
     [switch]$Bundle
 )
@@ -37,7 +45,11 @@ $ErrorActionPreference = "Stop"
 # Configuration
 $RootDir = $PSScriptRoot
 $CompilerPath = Join-Path $RootDir "bootstrap\build\Release\tuffc.exe"
-$BuildConfigPath = Join-Path $RootDir "build.json"
+if ([string]::IsNullOrEmpty($Config)) {
+    $BuildConfigPath = Join-Path $RootDir "build.config.json"
+} else {
+    $BuildConfigPath = $Config
+}
 $DistDir = Join-Path $RootDir "dist"
 
 # ANSI colors
@@ -60,7 +72,7 @@ function Initialize-BuildEnvironment {
     }
 
     if (-not (Test-Path $BuildConfigPath)) {
-        Write-ColorOutput "[ERROR] build.json not found" $ColorRed
+        Write-ColorOutput "[ERROR] Config file not found: $BuildConfigPath" $ColorRed
         exit 1
     }
 
@@ -123,129 +135,6 @@ function Copy-PlatformFiles {
     }
     
     return $copied
-}
-
-function Build-Target {
-    param(
-        [string]$TargetName,
-        [object]$TargetConfig,
-        [object]$BuildConfig
-    )
-    
-    Write-ColorOutput "`nBuilding target: $TargetName" $ColorCyan
-    
-    $sourceSets = $TargetConfig.sourceSets
-    $outputBase = $TargetConfig.output
-    
-    # Get common files
-    $commonPath = $BuildConfig.sourceSets.commonMain.path
-    $commonFiles = Get-SourceFiles -Path $commonPath
-    
-    # Get platform-specific files
-    $platformSourceSet = $sourceSets | Where-Object { $_ -ne "commonMain" } | Select-Object -First 1
-    $platformPath = $BuildConfig.sourceSets.$platformSourceSet.path
-    $platformFiles = Get-SourceFiles -Path $platformPath
-    
-    # Get extension
-    $extension = $BuildConfig.sourceSets.$platformSourceSet.extension
-    
-    Write-ColorOutput "  Found $($commonFiles.Count) common files" $ColorGreen
-    Write-ColorOutput "  Found $($platformFiles.Count) platform files" $ColorGreen
-    
-    $compiled = 0
-    $errors = 0
-    
-    # Build complete source list for cross-file visibility
-    $allSources = @()
-    foreach ($cf in $commonFiles) {
-        $allSources += $cf.FullPath
-        $pf = $platformFiles | Where-Object { $_.RelativePath -eq $cf.RelativePath }
-        if ($pf) { $allSources += $pf.FullPath }
-    }
-    
-    # Compile each file with all sources for cross-file declarations
-    foreach ($commonFile in $commonFiles) {
-        $relPath = $commonFile.RelativePath
-        $outputFile = Join-Path $outputBase ($relPath -replace '\.tuff$', $extension)
-        $sourcesList = $allSources -join ','
-        
-        Write-Host "  Compiling: $relPath" -NoNewline
-        
-        try {
-            $result = & $CompilerPath --sources $sourcesList --target $TargetName -o $outputFile 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                Write-ColorOutput " ✓" $ColorGreen
-                $compiled++
-            } else {
-                Write-ColorOutput " ✗" $ColorRed
-                Write-ColorOutput "    Error: $result" $ColorYellow
-                $errors++
-            }
-        }
-        catch {
-            Write-ColorOutput " ✗" $ColorRed
-            Write-ColorOutput "    Error: $_" $ColorYellow
-            $errors++
-        }
-    }
-    
-    Write-ColorOutput "  Compiled $compiled/$($commonFiles.Count) files" $(if ($errors -eq 0) { $ColorGreen } else { $ColorYellow })
-    if ($errors -gt 0) {
-        Write-ColorOutput "  $errors errors" $ColorRed
-        return $false
-    }
-    
-    return $true
-}
-
-function Bundle-JavaScript {
-    param([string]$OutputBase)
-    
-    Write-ColorOutput "`nGenerating JavaScript build system..." $ColorCyan
-    
-    $jsFiles = Get-ChildItem -Path $OutputBase -Filter "*.js" -Recurse
-    if ($jsFiles.Count -eq 0) {
-        Write-ColorOutput "  No JavaScript files found" $ColorYellow
-        return
-    }
-    
-    $mainFile = $jsFiles | Where-Object { $_.Name -eq "main.js" } | Select-Object -First 1
-    if (-not $mainFile) {
-        Write-ColorOutput "  No main.js found, skipping" $ColorYellow
-        return
-    }
-    
-    $distRoot = (Resolve-Path (Split-Path $OutputBase -Parent)).Path
-    $packageJsonPath = Join-Path $distRoot "package.json"
-    $relativePath = $mainFile.FullName.Substring($distRoot.Length + 1)
-    $relativeMain = "./" + $relativePath.Replace('\', '/')
-    
-    @{
-        name = "tuff-project"
-        version = "0.1.0"
-        description = "Tuff compiled JavaScript project"
-        type = "module"
-        main = $relativeMain
-        scripts = @{ start = "node $relativeMain" }
-    } | ConvertTo-Json -Depth 10 | Out-File -FilePath $packageJsonPath -Encoding UTF8
-    
-    Write-ColorOutput "  Created: $packageJsonPath" $ColorGreen
-    
-    $nodeAvailable = $null -ne (Get-Command node -ErrorAction SilentlyContinue)
-    if ($nodeAvailable) {
-        Write-Host "  Testing with Node.js..." -NoNewline
-        Push-Location $distRoot
-        npm start 2>&1 | Out-Null
-        Pop-Location
-        $exitCode = $LASTEXITCODE
-        if ($exitCode -eq 0 -or $exitCode -eq 42) {
-            Write-ColorOutput " ✓ (exit code: $exitCode)" $ColorGreen
-        } else {
-            Write-ColorOutput " ✗ (exit code: $exitCode)" $ColorRed
-        }
-    } else {
-        Write-ColorOutput "  Node.js not found - run 'npm start' in dist/js to execute" $ColorYellow
-    }
 }
 
 function Bundle-Native {
