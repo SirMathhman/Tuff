@@ -5,6 +5,7 @@ extern use file_builtins;
 use result;
 use vector;
 use string;
+use path;
 
 // Opaque file handle type (maps to FILE*)
 extern type FileHandle;
@@ -46,11 +47,20 @@ extern fn __builtin_file_getSize(path: string, outSize: *mut I64): Bool;
 extern fn __builtin_file_createDirectory(path: string): Bool;
 extern fn __builtin_file_listDirectory(path: string, outCount: *mut USize): *mut Void;
 
-// Helper function from string module for accessing split results
-extern fn __builtin_split_get(parts: *mut Void, index: USize): string;
-extern fn __c_free<T>(ptr: *mut T): Void;
+impl FileHandle {
+	fn open(path: string, mode: string): FileHandle => __builtin_file_open(path, mode);
+	
+	fn isValid(this: FileHandle): Bool => __builtin_file_isValid(this);
+	
+	fn close(this: FileHandle): I32 => __builtin_file_close(this);
+	
+	fn read(this: FileHandle, buffer: *mut U8, count: USize): I64 => __builtin_file_read(this, buffer, count);
+	
+	fn write(this: FileHandle, buffer: *U8, count: USize): I64 => __builtin_file_write(this, buffer, count);
+	
+	fn eof(this: FileHandle): Bool => __builtin_file_eof(this);
+}
 
-i
 // High-level file operations using Result for error handling
 fn fileReadAll(path: string): Result<string, string> => {
 	let content = __builtin_file_readAll(path);
@@ -172,20 +182,4 @@ fn walkDirectory(root: string): Result<Vector<string>, string> => {
 	
 	return Ok<Vector<string>, string> { results };
 }
-
-// Helper to join paths (simple version - just concatenate with separator)
-fn pathJoin(a: string, b: string): string => {
-	// Check if a ends with separator
-	let aLen = a.length();
-	if (aLen == 0USize) {
-		return b;
-	}
-	
-	let lastChar = a.charAt(aLen - 1USize);
-	let needsSep = lastChar != 47U8 && lastChar != 92U8;  // '/' = 47, '\\' = 92
-	
-	if (needsSep) {
-		return a.concat("/").concat(b);
-	}
-	return a.concat(b);
 
