@@ -1,0 +1,32 @@
+// Test: Multiple impl blocks for same struct (not allowed in Tuff, but methods within one block)
+struct Stack {
+	top: I32,
+	size: I32
+}
+
+impl Stack {
+	fn new(): Stack => {
+		return Stack { 0, 0 };
+	}
+
+	fn size(self: *Stack): I32 => self.size;
+
+	fn push(self: *mut Stack): Void => {
+		self.size = self.size + 1;
+	}
+
+	fn pop(self: *mut Stack): Void => {
+		if (self.size > 0) {
+			self.size = self.size - 1;
+		}
+	}
+}
+
+let mut s = Stack::new();
+Stack::push(&mut s);
+Stack::push(&mut s);
+let sz = Stack::size(&s);
+Stack::pop(&mut s);
+let sz2 = Stack::size(&s);
+
+// Expected: sz = 2, sz2 = 1sz2;

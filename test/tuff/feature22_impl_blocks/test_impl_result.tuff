@@ -1,0 +1,22 @@
+// Test: Impl block with nested generic types
+struct Result<T> {
+	value: T,
+	ok: Bool
+}
+
+impl<T> Result<T> {
+	fn ok(val: T): Result<T> => {
+		return Result<T> { val, true };
+	}
+
+	fn get(self: *Result<T>): T => self.value;
+
+	fn is_ok(self: *Result<T>): Bool => self.ok;
+}
+
+let r = Result::ok<I32>(42);
+let v = Result::get<I32>(&r);
+let is_ok = Result::is_ok<I32>(&r);
+
+// Expected: v = 42, is_ok = true
+is_ok;

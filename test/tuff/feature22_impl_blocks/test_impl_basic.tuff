@@ -1,0 +1,22 @@
+// Test: Basic impl block with associated function and methods
+struct Counter {
+	value: I32
+}
+
+impl Counter {
+	fn new(): Counter => {
+		return Counter { 0 };
+	}
+
+	fn increment(self: *mut Counter): Void => {
+		self.value = self.value + 1;
+	}
+
+	fn get(self: *Counter): I32 => self.value;
+}
+
+let mut c = Counter::new();
+Counter::increment(&mut c);
+
+// Expected: Returns 1 (incremented counter value)
+Counter::get(&c);
