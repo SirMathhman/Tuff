@@ -4,6 +4,29 @@
 #include <map>
 #include <functional>
 
+// Helper: check if a type is a function pointer type (starts with |)
+static bool isFunctionPointerType(const std::string &type)
+{
+	return !type.empty() && type[0] == '|';
+}
+
+// Helper: format a C++ function pointer parameter declaration
+// Input: paramType = "int32_t (*)(int32_t, int32_t)", paramName = "f"
+// Output: "int32_t (*f)(int32_t, int32_t)"
+static std::string formatFunctionPointerParam(const std::string &paramType, const std::string &paramName)
+{
+	size_t funcPtrPos = paramType.find("(*)");
+	if (funcPtrPos != std::string::npos)
+	{
+		std::string retType = paramType.substr(0, funcPtrPos);
+		std::string params = paramType.substr(funcPtrPos + 3);
+		while (!retType.empty() && retType.back() == ' ')
+			retType.pop_back();
+		return retType + " (*" + paramName + ")" + params;
+	}
+	return paramType + " " + paramName;
+}
+
 std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 {
 	std::stringstream ss;
@@ -198,16 +221,25 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 				ss << ", ";
 			std::string paramType = mapType(node->children[i]->inferredType);
 			std::string paramName = node->children[i]->value;
-			size_t bracketPos = paramType.find('[');
-			if (bracketPos != std::string::npos)
+			
+			// Check if this is a function pointer type
+			if (isFunctionPointerType(node->children[i]->inferredType))
 			{
-				std::string baseType = paramType.substr(0, bracketPos);
-				std::string arraySuffix = paramType.substr(bracketPos);
-				ss << baseType << " " << paramName << arraySuffix;
+				ss << formatFunctionPointerParam(paramType, paramName);
 			}
 			else
 			{
-				ss << paramType << " " << paramName;
+				size_t bracketPos = paramType.find('[');
+				if (bracketPos != std::string::npos)
+				{
+					std::string baseType = paramType.substr(0, bracketPos);
+					std::string arraySuffix = paramType.substr(bracketPos);
+					ss << baseType << " " << paramName << arraySuffix;
+				}
+				else
+				{
+					ss << paramType << " " << paramName;
+				}
 			}
 		}
 		ss << ");\n";

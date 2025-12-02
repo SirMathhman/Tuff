@@ -138,7 +138,7 @@ void TypeChecker::checkStructLiteral(std::shared_ptr<ASTNode> node)
 		{
 			fullType += node->genericArgs[i];
 			if (i < node->genericArgs.size() - 1)
-				fullType += ",";
+				fullType += ", ";
 		}
 		fullType += ">";
 	}

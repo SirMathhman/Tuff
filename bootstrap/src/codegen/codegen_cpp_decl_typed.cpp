@@ -60,7 +60,23 @@ std::string CodeGeneratorCPP::genDecl(ast::DeclPtr decl)
 
 																		ss << "struct " << d.name << " {\n";
 																		for (const auto &field : d.fields)
-																			ss << "    " << genType(field.type) << " " << field.name << ";\n";
+																		{
+																			std::string typeStr = genType(field.type);
+																			// Handle function pointer types specially
+																			size_t funcPtrPos = typeStr.find("(*)");
+																			if (funcPtrPos != std::string::npos)
+																			{
+																				std::string retType = typeStr.substr(0, funcPtrPos);
+																				std::string params = typeStr.substr(funcPtrPos + 3);
+																				while (!retType.empty() && retType.back() == ' ')
+																					retType.pop_back();
+																				ss << "    " << retType << " (*" << field.name << ")" << params << ";\n";
+																			}
+																			else
+																			{
+																				ss << "    " << typeStr << " " << field.name << ";\n";
+																			}
+																		}
 																		ss << "};";
 																		return ss.str();
 																	},

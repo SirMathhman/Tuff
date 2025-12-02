@@ -361,8 +361,15 @@ void TypeChecker::checkSizeOfExpr(std::shared_ptr<ASTNode> node)
 
 		if (!isGenericParam)
 		{
-			// Check if it's a struct type
-			if (structTable.find(typeName) == structTable.end())
+			// Check if it's a struct type (strip generic args if present)
+			std::string baseTypeName = typeName;
+			size_t ltPos = typeName.find('<');
+			if (ltPos != std::string::npos)
+			{
+				baseTypeName = typeName.substr(0, ltPos);
+			}
+			
+			if (structTable.find(baseTypeName) == structTable.end())
 			{
 				// Check if it's an array type [T; init; capacity]
 				if (typeName[0] != '[')

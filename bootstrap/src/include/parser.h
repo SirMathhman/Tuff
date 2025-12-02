@@ -9,6 +9,7 @@ class Parser
 private:
 	std::vector<Token> tokens;
 	size_t pos = 0;
+	bool pendingGreater = false; // For handling >> in nested generics
 
 	Token peek(int offset = 0) const;
 	Token advance();

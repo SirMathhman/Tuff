@@ -60,6 +60,19 @@ public:
 			return std::make_shared<ast::Type>(t);
 		}
 
+		case ASTNodeType::FUNCTION_PTR_TYPE:
+		{
+			// node->value is param count, children[0..n-1] are params, children[n] is return type
+			ast::FunctionType t;
+			size_t paramCount = std::stoul(node->value);
+			for (size_t i = 0; i < paramCount; i++)
+			{
+				t.paramTypes.push_back(toType(node->children[i]));
+			}
+			t.returnType = toType(node->children[paramCount]);
+			return std::make_shared<ast::Type>(t);
+		}
+
 		default:
 			// Fallback: try to use inferredType string as primitive
 			if (!node->inferredType.empty())
@@ -76,9 +89,73 @@ public:
 		if (typeStr.empty())
 			return nullptr;
 
-		// Check for union type (contains |)
+		// Check for function pointer type: |T1, T2| => Ret
+		if (!typeStr.empty() && typeStr[0] == '|')
+		{
+			// Find closing |
+			size_t closePos = 1;
+			int depth = 0;
+			while (closePos < typeStr.length())
+			{
+				if (typeStr[closePos] == '<')
+					depth++;
+				else if (typeStr[closePos] == '>')
+					depth--;
+				else if (typeStr[closePos] == '|' && depth == 0)
+					break;
+				closePos++;
+			}
+
+			std::string paramsStr = typeStr.substr(1, closePos - 1);
+			size_t arrowPos = typeStr.find("=>", closePos);
+			if (arrowPos != std::string::npos)
+			{
+				std::string retStr = typeStr.substr(arrowPos + 2);
+				while (!retStr.empty() && retStr[0] == ' ')
+					retStr = retStr.substr(1);
+
+				ast::FunctionType t;
+				t.returnType = typeFromString(retStr);
+
+				// Parse param types
+				if (!paramsStr.empty())
+				{
+					depth = 0;
+					std::string current;
+					for (char c : paramsStr)
+					{
+						if (c == '<')
+							depth++;
+						else if (c == '>')
+							depth--;
+						else if (c == ',' && depth == 0)
+						{
+							while (!current.empty() && current[0] == ' ')
+								current = current.substr(1);
+							while (!current.empty() && current.back() == ' ')
+								current.pop_back();
+							if (!current.empty())
+								t.paramTypes.push_back(typeFromString(current));
+							current.clear();
+							continue;
+						}
+						current += c;
+					}
+					while (!current.empty() && current[0] == ' ')
+						current = current.substr(1);
+					while (!current.empty() && current.back() == ' ')
+						current.pop_back();
+					if (!current.empty())
+						t.paramTypes.push_back(typeFromString(current));
+				}
+
+				return std::make_shared<ast::Type>(t);
+			}
+		}
+
+		// Check for union type (contains | but not at start - function pointers start with |)
 		size_t pipePos = typeStr.find('|');
-		if (pipePos != std::string::npos)
+		if (pipePos != std::string::npos && pipePos > 0)
 		{
 			ast::UnionType t;
 			size_t pos = 0;

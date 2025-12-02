@@ -1,6 +1,16 @@
 #include "type_checker.h"
 #include <iostream>
 
+// Helper to trim whitespace from string
+static std::string trim(const std::string &str)
+{
+	size_t start = str.find_first_not_of(" \t\n\r");
+	if (start == std::string::npos)
+		return "";
+	size_t end = str.find_last_not_of(" \t\n\r");
+	return str.substr(start, end - start + 1);
+}
+
 // Helper to parse generic type string
 static void parseGenericType(const std::string &fullType, std::string &baseName, std::vector<std::string> &args)
 {
@@ -24,14 +34,14 @@ static void parseGenericType(const std::string &fullType, std::string &baseName,
 			depth--;
 		else if (c == ',' && depth == 0)
 		{
-			args.push_back(current);
+			args.push_back(trim(current));
 			current = "";
 			continue;
 		}
 		current += c;
 	}
 	if (!current.empty())
-		args.push_back(current);
+		args.push_back(trim(current));
 }
 
 void TypeChecker::checkFieldOrEnumAccess(std::shared_ptr<ASTNode> node)

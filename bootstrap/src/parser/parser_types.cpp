@@ -283,15 +283,35 @@ std::shared_ptr<ASTNode> Parser::parseSingleType()
 	if (typeToken.type == TokenType::IDENTIFIER && match(TokenType::LESS))
 	{
 		// We need to parse generic args as AST nodes
-		while (peek().type != TokenType::GREATER && peek().type != TokenType::END_OF_FILE)
+		// After parsing each arg, check if we got a pendingGreater from nested generics
+		do
 		{
 			node->genericArgsNodes.push_back(parseType());
-			if (match(TokenType::COMMA))
+
+			// If inner type parsing consumed >> and left us a >, we're done
+			// Don't clear pendingGreater here - let the code below handle it
+			if (pendingGreater)
 			{
-				continue;
+				break;
 			}
+		} while (match(TokenType::COMMA));
+
+		// After the loop, we need to consume our closing >
+		if (pendingGreater)
+		{
+			// A previous nested generic consumed >> and left us a >
+			// We don't need to consume anything, just clear the flag
+			pendingGreater = false;
 		}
-		consume(TokenType::GREATER, "Expected '>' after generic type arguments");
+		else if (match(TokenType::RIGHT_SHIFT))
+		{
+			// We consumed >>. The outer parser also needs a >, so mark that one is pending
+			pendingGreater = true;
+		}
+		else
+		{
+			consume(TokenType::GREATER, "Expected '>' after generic arguments");
+		}
 	}
 
 	return node;
@@ -344,15 +364,36 @@ std::vector<std::shared_ptr<ASTNode>> Parser::parseGenericArgs()
 	std::vector<std::shared_ptr<ASTNode>> args;
 	if (match(TokenType::LESS))
 	{
-		while (peek().type != TokenType::GREATER && peek().type != TokenType::END_OF_FILE)
+		// Loop until we see >, >>, or a pendingGreater from nested parsing
+		while (!pendingGreater && peek().type != TokenType::GREATER && peek().type != TokenType::RIGHT_SHIFT && peek().type != TokenType::END_OF_FILE)
 		{
 			args.push_back(parseType());
+			
+			// Check if inner parsing left us a pending >
+			if (pendingGreater)
+				break;
+				
 			if (!match(TokenType::COMMA))
 			{
 				break;
 			}
 		}
-		consume(TokenType::GREATER, "Expected '>' after generic arguments");
+		
+		// Handle closing > or >>
+		if (pendingGreater)
+		{
+			// Inner parsing consumed >> and left us a >
+			pendingGreater = false;
+		}
+		else if (match(TokenType::RIGHT_SHIFT))
+		{
+			// We consumed >>, leave a pending > for outer parser
+			pendingGreater = true;
+		}
+		else
+		{
+			consume(TokenType::GREATER, "Expected '>' after generic arguments");
+		}
 	}
 	return args;
 }
