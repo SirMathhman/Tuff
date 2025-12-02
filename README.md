@@ -56,44 +56,26 @@ Documentation
 The compiler uses monomorphization for generics (C++ templates for native, specialized JS functions) and enforces memory safety through compile-time ownership analysis
 ## Project Structure
 
-This project follows a **Kotlin Multiplatform-inspired** structure with common code and platform-specific implementations:
+The project structure is organized as follows:
 
 ```
-
 tuff/
 ├── src/
-│ ├── commonMain/tuff/ # Common code (expect declarations)
-│ │ ├── io.tuff # I/O interface
-│ │ ├── main.tuff # Entry point
-│ │ └── string.tuff # String operations
-│ ├── jsMain/tuff/ # JavaScript implementations (actual)
-│ │ ├── io.tuff
-│ │ └── string.tuff
-│ ├── cppMain/tuff/ # C++ implementations (actual)
-│ │ ├── io.tuff
-│ │ └── string.tuff
-│ └── commonTest/tuff/ # Shared tests
-│ ├── feature1_variables/
-│ ├── feature2_operators/
-│ └── ...
-├── bootstrap/ # Stage 0 compiler (C++17)
-│ ├── src/ # Compiler source code
-│ └── build/ # Build output
-├── dist/ # Compiled output (gitignored)
-│ ├── js/tuff/ # JavaScript compiled files
-│ └── native/tuff/ # C++ compiled files
-├── examples/ # Example programs
-├── docs/ # Documentation
-└── build/ # Build artifacts (gitignored)
+│   └── tuff/            # Standard library source code
+│       ├── io.tuff      # I/O interface
+│       ├── map.tuff     # Map implementation
+│       ├── vector.tuff  # Vector implementation
+│       └── ...
+├── bootstrap/           # Stage 0 compiler (C++17)
+│   ├── src/             # Compiler source code
+│   └── build/           # Build output
+├── docs/                # Documentation
+└── build/               # Build artifacts (gitignored)
+```
 
-````
+### Source Code
 
-### Source Sets
-
-- **commonMain**: Platform-independent code with `expect` declarations
-- **jsMain**: JavaScript target with `actual` implementations
-- **cppMain**: C++ target with `actual` implementations
-- **commonTest**: Cross-platform tests
+The standard library is located in `src/tuff/`. It contains the core modules required for Tuff programs.
 
 ## Language Features
 

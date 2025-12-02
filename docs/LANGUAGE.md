@@ -18,6 +18,36 @@
 | 12. Function Pointers            | ✅ Complete | Function pointer types, references, nested generics                     |
 | 13-15. Advanced Features         | ⏹️ Deferred | Type aliases, destructors, type inference improvements                  |
 
+## Standard Library Status
+
+The standard library is currently in early development (`src/tuff/`).
+
+| Module | Status | Description |
+| :--- | :--- | :--- |
+| `array` | ✅ Basic | Array utilities |
+| `file` | ⚠️ Minimal | File I/O (relies on externs) |
+| `io` | ⚠️ Minimal | Console I/O (relies on externs) |
+| `map` | ✅ Usable | Hash map implementation |
+| `math` | ✅ Basic | Basic math functions |
+| `mem` | ✅ Basic | Memory management (malloc/free) |
+| `option` | ✅ Usable | Option type |
+| `result` | ✅ Usable | Result type |
+| `slice` | ✅ Basic | Slice utilities |
+| `string` | ⚠️ Minimal | String operations (relies on externs) |
+| `vector` | ✅ Usable | Dynamic array implementation |
+
+## Bootstrapping Requirements
+
+To achieve self-hosting (compiling the Tuff compiler with Tuff), the following standard library features must be implemented:
+
+1.  **StringBuilder**: Efficient string construction for code generation.
+2.  **Advanced String Manipulation**: `split`, `trim`, `startsWith`, `endsWith`, `substring` (native implementation) for the Lexer/Parser.
+3.  **File System API**: Robust file reading/writing, directory traversal, existence checks.
+4.  **Command Line Arguments**: Access to `argv`/`argc` to read input file paths and flags.
+5.  **Process Control**: Exit codes, environment variables.
+6.  **Testing Framework**: A simple way to write and run unit tests within Tuff.
+7.  **Char/String Iterators**: For efficient lexing.
+
 ## Overview
 
 Tuff is a statically-typed, self-hosting programming language that compiles to JavaScript and C++. It features:
@@ -246,6 +276,7 @@ Function pointers allow passing functions as values.
 **Type syntax**: `|ParamType1, ParamType2| => ReturnType`
 
 **Creating function pointers**:
+
 - `&functionName` - Create a pointer to a function
 
 **Examples**:
