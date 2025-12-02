@@ -15,7 +15,8 @@
 | 9. Modules & Namespaces          | ✅ Complete | Module blocks, FQN support, nested modules, JS & C++ codegen            |
 | 10. Pointers & Arrays            | ✅ Complete | Pointer refs/deref, mutable/immutable, array literals, indexing         |
 | 11. Ownership & Borrow Checking  | ✅ Complete | Move semantics, borrow tracking, lifetime elision                       |
-| 12-14. Advanced Features         | ⏹️ Deferred | Type aliases, destructors, type inference improvements                  |
+| 12. Function Pointers            | ✅ Complete | Function pointer types, references, nested generics                     |
+| 13-15. Advanced Features         | ⏹️ Deferred | Type aliases, destructors, type inference improvements                  |
 
 ## Overview
 
@@ -237,6 +238,49 @@ let p: *mut I32 = &mut x;
 
 - Immutable refs: pass by value
 - Mutable refs: wrapper object `{ptr: () => x, set: (v) => x = v}`
+
+## Function Pointers
+
+Function pointers allow passing functions as values.
+
+**Type syntax**: `|ParamType1, ParamType2| => ReturnType`
+
+**Creating function pointers**:
+- `&functionName` - Create a pointer to a function
+
+**Examples**:
+
+```tuff
+fn add(a: I32, b: I32): I32 => a + b;
+
+// Function pointer variable
+let f: |I32, I32| => I32 = &add;
+
+// Call through function pointer
+let result: I32 = f(10, 20);  // 30
+
+// Function taking a function pointer
+fn apply(op: |I32, I32| => I32, x: I32, y: I32): I32 => op(x, y);
+
+let sum: I32 = apply(&add, 5, 3);  // 8
+```
+
+**No-parameter function pointers**:
+
+```tuff
+fn getZero(): I32 => 0;
+let f: || => I32 = &getZero;
+```
+
+**C++ codegen**:
+
+- `|I32, I32| => I32` → `int32_t (*)(int32_t, int32_t)`
+- Parameter: `f: |I32| => Void` → `void (*f)(int32_t)`
+
+**JS codegen**:
+
+- Function pointers are regular JavaScript function values
+- `&funcName` → `funcName` (functions are first-class values)
 
 ## Ownership & Borrow Checking
 

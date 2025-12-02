@@ -434,6 +434,25 @@ fn main(): Void => {
 
 ## 13. Advanced Features
 
+### Function Pointers
+
+Function pointers allow passing functions as values:
+
+```tuff
+// Function pointer type syntax: |ParamTypes| => ReturnType
+let add: |I32, I32| => I32 = &myAdd;
+
+fn myAdd(a: I32, b: I32): I32 => a + b;
+
+// Function that takes a function pointer
+fn apply(f: |I32, I32| => I32, x: I32, y: I32): I32 => f(x, y);
+
+fn main(): I32 => {
+    let result = apply(&myAdd, 10, 20);
+    return result;  // 30
+}
+```
+
 ### SizeOf Operator
 
 Get the size of a type at compile-time:
