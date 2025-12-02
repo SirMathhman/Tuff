@@ -1,6 +1,6 @@
 // Test: Basic string literal
 use string;
 let s = "hello";
-let first: U8 = string_charAt(s, 0);
-let second: U8 = string_charAt(s, 1);
+let first: U8 = s.charAt(0);
+let second: U8 = s.charAt(1);
 first

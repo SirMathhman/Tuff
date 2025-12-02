@@ -9,21 +9,22 @@
 #include <limits>
 
 // String type in Tuff: string = const char*
+typedef const char *string;
 
 // Get string length (excluding null terminator)
-inline size_t string_length(const char *s)
+inline size_t __builtin_string_length(string s)
 {
 	return std::strlen(s);
 }
 
 // Get character at index (no bounds checking)
-inline uint8_t string_charAt(const char *s, size_t index)
+inline uint8_t __builtin_string_charAt(string s, size_t index)
 {
 	return static_cast<uint8_t>(s[index]);
 }
 
 // Concatenate two strings (returns newly allocated string)
-inline char *string_concat(const char *s1, const char *s2)
+inline char *__builtin_string_concat(string s1, string s2)
 {
 	size_t len1 = std::strlen(s1);
 	size_t len2 = std::strlen(s2);
@@ -40,13 +41,13 @@ inline char *string_concat(const char *s1, const char *s2)
 }
 
 // Compare two strings for equality
-inline bool string_equals(const char *s1, const char *s2)
+inline bool __builtin_string_equals(string s1, string s2)
 {
 	return std::strcmp(s1, s2) == 0;
 }
 
 // Extract substring [start, end) (returns newly allocated string)
-inline char *string_substring(const char *s, size_t start, size_t end)
+inline char *__builtin_string_substring(string s, size_t start, size_t end)
 {
 	if (end <= start)
 	{
@@ -71,7 +72,7 @@ inline char *string_substring(const char *s, size_t start, size_t end)
 }
 
 // Find first occurrence of needle in haystack (returns -1 if not found)
-inline int32_t string_indexOf(const char *haystack, const char *needle)
+inline int32_t __builtin_string_indexOf(string haystack, string needle)
 {
 	const char *result = std::strstr(haystack, needle);
 
@@ -84,7 +85,7 @@ inline int32_t string_indexOf(const char *haystack, const char *needle)
 }
 
 // Convert integer to string (returns newly allocated string)
-inline char *string_fromI32(int32_t value)
+inline char *__builtin_string_fromI32(int32_t value)
 {
 	// Max length for int32_t: "-2147483648" = 11 chars + null terminator
 	char *result = static_cast<char *>(std::malloc(12));
@@ -97,16 +98,8 @@ inline char *string_fromI32(int32_t value)
 	return result;
 }
 
-// Parse string to integer (returns Option<I32>)
-// Option<I32> in Tuff is: Some<I32> { value: I32 } | None<I32> { }
-// We use a struct with tag field (0 = None, 1 = Some) and value field
-struct OptionI32
-{
-	uint8_t tag; // 0 = None, 1 = Some
-	int32_t value;
-};
-
-inline OptionI32 string_toI32(const char *s)
+// Parse string to integer (returns true on success, false on failure)
+inline bool __builtin_string_toI32(string s, int32_t *outValue)
 {
 	char *endptr;
 	errno = 0;
@@ -116,14 +109,15 @@ inline OptionI32 string_toI32(const char *s)
 	if (endptr == s || *endptr != '\0' ||
 			errno == ERANGE || val < INT32_MIN || val > INT32_MAX)
 	{
-		return OptionI32{0, 0}; // None
+		return false;
 	}
 
-	return OptionI32{1, static_cast<int32_t>(val)}; // Some(value)
+	*outValue = static_cast<int32_t>(val);
+	return true;
 }
 
 // Create a string from a byte buffer (copies the data)
-inline char *string_fromBytes(const uint8_t *buffer, size_t length)
+inline char *__builtin_string_fromBytes(const uint8_t *buffer, size_t length)
 {
 	char *result = static_cast<char *>(std::malloc(length + 1));
 	if (result != nullptr)

@@ -7,30 +7,53 @@ extern use string_builtins;
 use option;
 
 // string is an opaque type - just use it as an identifier, codegen will handle the mapping
+extern type string;
 
 // Get the length of a string (number of bytes, excluding null terminator)
-extern fn string_length(s: string): USize;
+extern fn __builtin_string_length(s: string): USize;
 
 // Get character at index (bounds checking is caller's responsibility)
-extern fn string_charAt(s: string, index: USize): U8;
+extern fn __builtin_string_charAt(s: string, index: USize): U8;
 
 // Concatenate two strings (returns newly allocated string, caller must free)
-extern fn string_concat(s1: string, s2: string): string;
+extern fn __builtin_string_concat(s1: string, s2: string): string;
 
 // Compare two strings for equality
-extern fn string_equals(s1: string, s2: string): Bool;
+extern fn __builtin_string_equals(s1: string, s2: string): Bool;
 
 // Extract substring from start to end (exclusive, returns newly allocated string, caller must free)
-extern fn string_substring(s: string, start: USize, end: USize): string;
+extern fn __builtin_string_substring(s: string, start: USize, end: USize): string;
 
 // Find first occurrence of needle in haystack (returns -1 if not found)
-extern fn string_indexOf(s: string, needle: string): I32;
+extern fn __builtin_string_indexOf(s: string, needle: string): I32;
 
 // Convert integer to string (returns newly allocated string, caller must free)
-extern fn string_fromI32(value: I32): string;
+extern fn __builtin_string_fromI32(value: I32): string;
 
-// Parse string to integer (returns None if parsing fails)
-extern fn string_toI32(s: string): Option<I32>;
+// Parse string to integer (returns true on success, false on failure)
+extern fn __builtin_string_toI32(s: string, outValue: *mut I32): Bool;
 
 // Create a string from a byte buffer (copies the data)
-extern fn string_fromBytes(buffer: *U8, length: USize): string;
+extern fn __builtin_string_fromBytes(buffer: *U8, length: USize): string;
+
+impl string {
+	fn length(this: string): USize => __builtin_string_length(this);
+	fn charAt(this: string, index: USize): U8 => __builtin_string_charAt(this, index);
+	fn concat(this: string, other: string): string => __builtin_string_concat(this, other);
+	fn equals(this: string, other: string): Bool => __builtin_string_equals(this, other);
+	fn substring(this: string, start: USize, end: USize): string => __builtin_string_substring(this, start, end);
+	fn indexOf(this: string, needle: string): I32 => __builtin_string_indexOf(this, needle);
+	
+	fn toI32(this: string): Option<I32> => {
+		let mut val: I32 = 0;
+		if (__builtin_string_toI32(this, &mut val)) {
+			return Some<I32> { val };
+		} else {
+			return None<I32> { };
+		}
+	}
+	
+	// Static methods
+	fn fromI32(value: I32): string => __builtin_string_fromI32(value);
+	fn fromBytes(buffer: *U8, length: USize): string => __builtin_string_fromBytes(buffer, length);
+}

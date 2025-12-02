@@ -222,7 +222,12 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 			node->typeEnv.bind(paramName, argTypeStr);
 
 			// Try to convert string to ExprPtr
-			ExprPtr argType = std::make_shared<IdentifierExpr>(argTypeStr); // Simple fallback
+			// Create a dummy node to resolve the type string (handles primitives correctly)
+			auto dummyNode = std::make_shared<ASTNode>();
+			dummyNode->type = ASTNodeType::TYPE;
+			dummyNode->value = argTypeStr;
+			ExprPtr argType = resolveType(dummyNode);
+			
 			typeSubstitutions[paramName] = argType;
 		}
 	}
@@ -308,6 +313,12 @@ void TypeChecker::handleMethodCall(std::shared_ptr<ASTNode> node)
 	else if (baseType.substr(0, 1) == "*")
 	{
 		baseType = baseType.substr(1);
+		isPointer = true;
+	}
+	else if (baseType == "string")
+	{
+		// Special case: string is treated as a pointer type (const char*)
+		// So we pass it by value, not by reference
 		isPointer = true;
 	}
 

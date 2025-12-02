@@ -164,9 +164,30 @@ void TypeChecker::checkImplBlock(std::shared_ptr<ASTNode> node)
 
 	// Verify struct exists
 	auto structIt = structTable.find(structName);
-	if (structIt == structTable.end())
+	bool found = (structIt != structTable.end());
+
+	if (!found)
 	{
-		std::cerr << "Error: Struct '" << structName << "' not found when checking impl block." << std::endl;
+		auto aliasIt = typeAliasTable.find(structName);
+		if (aliasIt != typeAliasTable.end())
+		{
+			found = true;
+		}
+	}
+
+	if (!found)
+	{
+		std::cerr << "Error: Struct or Type Alias '" << structName << "' not found when checking impl block." << std::endl;
+		std::cerr << "Available structs:" << std::endl;
+		for (const auto &pair : structTable)
+		{
+			std::cerr << "  - " << pair.first << std::endl;
+		}
+		std::cerr << "Available aliases:" << std::endl;
+		for (const auto &pair : typeAliasTable)
+		{
+			std::cerr << "  - " << pair.first << std::endl;
+		}
 		exit(1);
 	}
 

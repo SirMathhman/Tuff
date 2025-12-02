@@ -1,30 +1,30 @@
-// Test Vector with static call syntax
+// Test Vector with method call syntax
 // Uses stdlib Vector
 use vector;
 use option;
 
 extern fn exit(code: I32): Void;
 
-// Test using static call syntax
+// Test using method call syntax
 let mut vec = Vector::new<I32>(10);
 
 // Test initial state
-if (Vector::len<I32>(&vec) != 0USize) exit(1);
-if (!Vector::isEmpty<I32>(&vec)) exit(2);
-if (Vector::capacity<I32>(&vec) != 10USize) exit(3);
+if (vec.len() != 0USize) exit(1);
+if (!vec.isEmpty()) exit(2);
+if (vec.capacity() != 10USize) exit(3);
 
 // Test push
-Vector::push<I32>(&mut vec, 10);
-Vector::push<I32>(&mut vec, 20);
-Vector::push<I32>(&mut vec, 30);
+vec.push(10);
+vec.push(20);
+vec.push(30);
 
-if (Vector::len<I32>(&vec) != 3USize) exit(4);
-if (Vector::isEmpty<I32>(&vec)) exit(5);
+if (vec.len() != 3USize) exit(4);
+if (vec.isEmpty()) exit(5);
 
 // Test set and verify with get
-Vector::set<I32>(&mut vec, 1, 100);
+vec.set(1, 100);
 
-Vector::free<I32>(&mut vec);
+vec.free();
 
 // Success!
 0

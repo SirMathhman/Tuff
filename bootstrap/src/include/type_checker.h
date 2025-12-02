@@ -18,6 +18,7 @@ struct StructInfo
 	std::vector<std::pair<std::string, std::string>> fields;		 // (name, type) pairs
 	std::vector<std::pair<std::string, ExprPtr>> fieldTypesExpr; // New
 	std::vector<std::string> genericParams;											 // <T>
+	bool isOpaque = false;																			 // true for extern type (no fields, cannot be instantiated)
 };
 
 struct FunctionInfo

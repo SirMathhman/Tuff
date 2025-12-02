@@ -12,25 +12,25 @@
 typedef FILE *FileHandle;
 
 // Open a file - returns nullptr on failure
-inline FileHandle file_open(const char *path, const char *mode)
+inline FileHandle __builtin_file_open(const char *path, const char *mode)
 {
 	return fopen(path, mode);
 }
 
 // Check if file handle is valid
-inline bool file_isValid(FileHandle handle)
+inline bool __builtin_file_isValid(FileHandle handle)
 {
 	return handle != nullptr;
 }
 
 // Close a file - returns 0 on success, -1 on error
-inline int32_t file_close(FileHandle handle)
+inline int32_t __builtin_file_close(FileHandle handle)
 {
 	return fclose(handle) == 0 ? 0 : -1;
 }
 
 // Read from file - returns bytes read, or -1 on error
-inline int64_t file_read(FileHandle handle, char *buffer, size_t count)
+inline int64_t __builtin_file_read(FileHandle handle, uint8_t *buffer, size_t count)
 {
 	size_t bytesRead = fread(buffer, 1, count, handle);
 	if (bytesRead < count && ferror(handle))
@@ -41,7 +41,7 @@ inline int64_t file_read(FileHandle handle, char *buffer, size_t count)
 }
 
 // Write to file - returns bytes written, or -1 on error
-inline int64_t file_write(FileHandle handle, const char *buffer, size_t count)
+inline int64_t __builtin_file_write(FileHandle handle, const uint8_t *buffer, size_t count)
 {
 	size_t written = fwrite(buffer, 1, count, handle);
 	if (written < count)
@@ -52,13 +52,13 @@ inline int64_t file_write(FileHandle handle, const char *buffer, size_t count)
 }
 
 // Check end of file
-inline bool file_eof(FileHandle handle)
+inline bool __builtin_file_eof(FileHandle handle)
 {
 	return feof(handle) != 0;
 }
 
 // Read entire file as string - returns nullptr on failure
-inline char *file_readAll(const char *path)
+inline char *__builtin_file_readAll(const char *path)
 {
 	FILE *f = fopen(path, "rb");
 	if (f == nullptr)
@@ -100,7 +100,7 @@ inline char *file_readAll(const char *path)
 }
 
 // Write string to file - returns 0 on success, -1 on error
-inline int32_t file_writeAll(const char *path, const char *content)
+inline int32_t __builtin_file_writeAll(const char *path, const char *content)
 {
 	FILE *f = fopen(path, "wb");
 	if (f == nullptr)

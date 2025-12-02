@@ -133,8 +133,8 @@ function Test-TuffFile([hashtable]$Test) {
     $sources = "$stdlibDir,$($Test.Path)"
     $cppCode = & $CompilerPath --sources $sources --target "cpp" 2>&1
     if ($LASTEXITCODE -ne 0) {
-        $errorMsg = ($cppCode | Select-Object -First 1) -join " "
-        $result.Status = "ERROR"; $result.Message = "Tuff compilation failed: $errorMsg"
+        $errorMsg = ($cppCode | Select-Object -First 20) -join "`n"
+        $result.Status = "ERROR"; $result.Message = "Tuff compilation failed:`n$errorMsg"
         return $result
     }
 
@@ -263,8 +263,8 @@ try {
             $sources = "$stdlibDir,$($Test.Path)"
             $cppCode = & $CompilerPath --sources $sources --target "cpp" 2>&1
             if ($LASTEXITCODE -ne 0) {
-                $errorMsg = ($cppCode | Select-Object -First 1) -join " "
-                $result.Status = "ERROR"; $result.Message = "Tuff compile failed: $errorMsg"
+                $errorMsg = ($cppCode | Select-Object -First 20) -join "`n"
+                $result.Status = "ERROR"; $result.Message = "Tuff compile failed:`n$errorMsg"
                 return $result
             }
             

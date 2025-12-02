@@ -5,5 +5,5 @@ use string;
 
 // Test that string literals work as expected
 let s = "hello";
-let first: U8 = string_charAt(s, 0);
+let first: U8 = s.charAt(0);
 first

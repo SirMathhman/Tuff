@@ -232,10 +232,10 @@ bool TypeChecker::isTypeCompatible(ExprPtr valueType, ExprPtr targetType)
 	// Debugging: Print types if they look the same but are not equal
 	if (exprTypeToString(valueType) == exprTypeToString(targetType))
 	{
-		// std::cerr << "DEBUG: Types look same but areTypesEqual returned false: " << exprTypeToString(valueType) << std::endl;
+		std::cerr << "DEBUG: Types look same but areTypesEqual returned false: " << exprTypeToString(valueType) << std::endl;
 		// Check why they are not equal
 		if (valueType->kind != targetType->kind) {
-			// std::cerr << "DEBUG: Kinds differ: " << (int)valueType->kind << " vs " << (int)targetType->kind << std::endl;
+			std::cerr << "DEBUG: Kinds differ: " << (int)valueType->kind << " vs " << (int)targetType->kind << std::endl;
 		}
 	}
 

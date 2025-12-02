@@ -39,11 +39,13 @@ std::string CodeGeneratorCPP::genExpr(ast::ExprPtr expr)
 
 																		// Replace :: with _ for impl method calls (Counter::new -> Counter_new)
 																		// Only do this if the prefix is a struct name (starts with uppercase)
+																		// OR if it is the special 'string' type
 																		size_t colonPos = name.find("::");
 																		if (colonPos != std::string::npos && colonPos > 0)
 																		{
 																			char firstChar = name[0];
-																			if (firstChar >= 'A' && firstChar <= 'Z')
+																			std::string prefix = name.substr(0, colonPos);
+																			if ((firstChar >= 'A' && firstChar <= 'Z') || prefix == "string")
 																			{
 																				// This looks like an impl method (StructName::method)
 																				name.replace(colonPos, 2, "_");

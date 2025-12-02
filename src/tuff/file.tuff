@@ -9,29 +9,43 @@ extern type FileHandle;
 
 // Open a file with the given mode ("r", "w", "a", "rb", "wb", etc.)
 // Returns null-equivalent handle on failure (check with file_isValid)
-extern fn file_open(path: string, mode: string): FileHandle;
+extern fn __builtin_file_open(path: string, mode: string): FileHandle;
 
 // Check if file handle is valid (not null)
-extern fn file_isValid(handle: FileHandle): Bool;
+extern fn __builtin_file_isValid(handle: FileHandle): Bool;
 
 // Close a file handle. Returns 0 on success, -1 on error
-extern fn file_close(handle: FileHandle): I32;
+extern fn __builtin_file_close(handle: FileHandle): I32;
 
 // Read up to `count` bytes from file into buffer
 // Returns number of bytes actually read, or -1 on error
-extern fn file_read(handle: FileHandle, buffer: *mut U8, count: USize): I64;
+extern fn __builtin_file_read(handle: FileHandle, buffer: *mut U8, count: USize): I64;
 
 // Write `count` bytes from buffer to file
 // Returns number of bytes actually written, or -1 on error
-extern fn file_write(handle: FileHandle, buffer: *U8, count: USize): I64;
+extern fn __builtin_file_write(handle: FileHandle, buffer: *U8, count: USize): I64;
 
 // Check if end of file has been reached
-extern fn file_eof(handle: FileHandle): Bool;
+extern fn __builtin_file_eof(handle: FileHandle): Bool;
 
 // Read entire file contents as a string (caller must free)
 // Returns empty string on failure
-extern fn file_readAll(path: string): string;
+extern fn __builtin_file_readAll(path: string): string;
 
 // Write string to file (creates/overwrites)
 // Returns 0 on success, -1 on error
-extern fn file_writeAll(path: string, content: string): I32;
+extern fn __builtin_file_writeAll(path: string, content: string): I32;
+
+impl FileHandle {
+	fn open(path: string, mode: string): FileHandle => __builtin_file_open(path, mode);
+	
+	fn isValid(this: FileHandle): Bool => __builtin_file_isValid(this);
+	
+	fn close(this: FileHandle): I32 => __builtin_file_close(this);
+	
+	fn read(this: FileHandle, buffer: *mut U8, count: USize): I64 => __builtin_file_read(this, buffer, count);
+	
+	fn write(this: FileHandle, buffer: *U8, count: USize): I64 => __builtin_file_write(this, buffer, count);
+	
+	fn eof(this: FileHandle): Bool => __builtin_file_eof(this);
+}

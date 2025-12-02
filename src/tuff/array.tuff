@@ -10,53 +10,55 @@ struct Array<T> {
 	len : USize
 }
 
-// Create an array from raw allocated memory with known length
-// UNSAFE: caller must ensure ptr is validly allocated for len elements
-fn arrayFromRaw<T>(ptr: *mut T, len: USize): Array<T> => Array<T> { ptr, len };
+impl<T> Array<T> {
+	// Create an array from raw allocated memory with known length
+	// UNSAFE: caller must ensure ptr is validly allocated for len elements
+	fn fromRaw(ptr: *mut T, len: USize): Array<T> => Array<T> { ptr, len };
 
-// Get the number of initialized elements
-fn arrayLen<T>(arr: *Array<T>): USize => arr.len;
+	// Get the number of initialized elements
+	fn len(this: *Array<T>): USize => this.len;
 
-// Check if array is empty
-fn arrayIsEmpty<T>(arr: *Array<T>): Bool => arr.len == 0USize;
+	// Check if array is empty
+	fn isEmpty(this: *Array<T>): Bool => this.len == 0USize;
 
-// Get element at index with bounds checking
-// Returns Some<T> if index is valid, None<T> otherwise
-fn arrayGet<T>(arr: *Array<T>, index: USize): Option<T> => {
-	if (index >= arr.len) {
-		return None<T> { };
+	// Get element at index with bounds checking
+	// Returns Some<T> if index is valid, None<T> otherwise
+	fn get(this: *Array<T>, index: USize): Option<T> => {
+		if (index >= this.len) {
+			return None<T> { };
+		}
+		
+		let ptr: *T = this.data + index;
+		return Some<T> { *ptr };
 	}
-	
-	let ptr: *T = arr.data + index;
-	return Some<T> { *ptr };
-}
 
-// Get mutable reference to element at index with bounds checking
-// Returns Some<*mut T> if index is valid, None<*mut T> otherwise
-fn arrayGetMut<T>(arr: *mut Array<T>, index: USize): Option<*mut T> => {
-	if (index >= arr.len) {
-		return None<*mut T> { };
+	// Get mutable reference to element at index with bounds checking
+	// Returns Some<*mut T> if index is valid, None<*mut T> otherwise
+	fn getMut(this: *mut Array<T>, index: USize): Option<*mut T> => {
+		if (index >= this.len) {
+			return None<*mut T> { };
+		}
+		
+		let ptr: *mut T = this.data + index;
+		return Some<*mut T> { ptr };
 	}
-	
-	let ptr: *mut T = arr.data + index;
-	return Some<*mut T> { ptr };
-}
 
-// Set element at index with bounds checking
-// Returns true if successful, false if index out of bounds
-fn arraySet<T>(arr: *mut Array<T>, index: USize, value: T): Bool => {
-	if (index >= arr.len) {
-		return false;
+	// Set element at index with bounds checking
+	// Returns true if successful, false if index out of bounds
+	fn set(this: *mut Array<T>, index: USize, value: T): Bool => {
+		if (index >= this.len) {
+			return false;
+		}
+		
+		let ptr: *mut T = this.data + index;
+		*ptr = value;
+		return true;
 	}
-	
-	let ptr: *mut T = arr.data + index;
-	*ptr = value;
-	return true;
-}
 
-// Initialize array length
-// Assumes array was created with arrayFromRaw() and data pointer is valid
-fn arrayInit<T>(arr: *mut Array<T>, length: USize): Void => {
-	arr.len = length;
+	// Initialize array length
+	// Assumes array was created with fromRaw() and data pointer is valid
+	fn init(this: *mut Array<T>, length: USize): Void => {
+		this.len = length;
+	}
 }
 

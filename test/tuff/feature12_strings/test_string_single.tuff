@@ -1,5 +1,5 @@
 // Test: Single character string
 use string;
 let s = "x";
-let c: U8 = string_charAt(s, 0);
+let c = s.charAt(0);
 c

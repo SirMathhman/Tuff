@@ -19,28 +19,27 @@ Refer to `docs/LANGUAGE.md` for the complete language specification.
 ## Project Overview
 
 - **bootstrap/**: The Stage 0 compiler (C++17).
-- **core/**: Standard library interfaces (`expect` declarations).
-- **js/**: JavaScript target implementation (`actual` definitions).
-- **cpp/**: C++ target implementation (`actual` definitions).
-- **docs/**: Language documentation (TUTORIAL.md, LANGUAGE.md).
+- **src/tuff/**: Standard library implementation (`.tuff` files and C++ headers).
+- **test/tuff/**: Integration tests (`.tuff` files).
+- **docs/**: Language documentation.
 
 ## Architecture
 
 The compiler follows a strict pipeline:
 
-1.  **Lexer** (`Lexer`): Tokenizes source code.
-2.  **Parser** (`Parser`): Produces an AST (`ASTNode`). Implementation is split across multiple `parser_*.cpp` files.
-3.  **Type Checker** (`TypeChecker`):
-    - **Pass 1**: Registers declarations (structs, functions, enums) to handle forward references.
+1.  **Lexer** (`src/lexer.cpp`): Tokenizes source code.
+2.  **Parser** (`src/parser.cpp` + `src/parser/*.cpp`): Produces an AST (`ASTNode`).
+    - **Split Implementation**: The `Parser` class is large, so methods are distributed across `parser_statements.cpp`, `parser_expressions.cpp`, etc.
+3.  **Type Checker** (`src/type_checker.cpp` + `src/type_checker/*.cpp`):
+    - **Pass 1**: Registers declarations (structs, functions, enums).
     - **Pass 2**: Validates types, resolves symbols, and enforces mutability.
     - **Symbol Table**: Maps names to `{type, isMutable}`.
-    - Implementation is split across `type_checker.cpp` and `type_checker/` directory.
-4.  **Code Generator** (`CodeGeneratorJS` / `CodeGeneratorCPP`): Emits target code to `stdout`. Implementation split across `codegen_*.cpp` and `codegen/` directory.
+4.  **Code Generator** (`src/codegen/codegen_cpp.cpp` + `src/codegen/*.cpp`): Emits target code to `stdout` or file.
 
 ### Key Concepts
 
 - **AST**: Nodes use `std::shared_ptr<ASTNode>`. See `bootstrap/src/include/ast.h`.
-- **Class Implementation Split**: Large classes (`Parser`, `TypeChecker`) have their implementation distributed across multiple `.cpp` files (e.g., `parser_statements.cpp`, `parser_expressions.cpp`).
+- **Split Implementation**: Large classes (`Parser`, `TypeChecker`, `CodeGeneratorCPP`) have their implementation distributed across multiple `.cpp` files. Always check the specific subdirectory (e.g., `src/parser/`) for the relevant implementation file.
 - **Error Handling**: Fail-fast using `std::cerr` and `exit(1)`.
 - **Multi-Platform**: `expect` (interface) and `actual` (implementation) keywords.
 - **Monomorphization**: Generics are specialized at compile time.
@@ -58,25 +57,29 @@ cmake --build . --config Release
 
 ### 2. Test
 
-Use the PowerShell test runner. **Always run tests after changes.**
+Use the PowerShell test runner `run_tests.ps1`. **Always run tests after changes.**
 
 ```powershell
-# Run all tests
+# Run all tests (auto-parallel)
 .\run_tests.ps1
 
-# Run specific feature
+# Run specific feature (filters by directory name in test/tuff/)
 .\run_tests.ps1 -Feature feature1_variables
 
-# Run specific target
-.\run_tests.ps1 -Target js
+# Run sequentially (for debugging)
+.\run_tests.ps1 -Parallel 1
 ```
 
-_Note: Tests compile `.tuff` files to JS/C++ and execute them, comparing exit codes._
+_Note: Tests compile `.tuff` files to C++, compile the C++ to an executable using `clang++`, and execute them._
 
 ### 3. Run Manually
 
 ```powershell
-.\bootstrap\build\Release\tuffc.exe path/to/source.tuff js > output.js
+# Compile Tuff to C++
+.\bootstrap\build\Release\tuffc.exe --sources path/to/source.tuff --target cpp > output.cpp
+
+# Compile Tuff to JavaScript
+.\bootstrap\build\Release\tuffc.exe --sources path/to/source.tuff --target js > output.js
 ```
 
 ## Coding Conventions
@@ -88,6 +91,7 @@ _Note: Tests compile `.tuff` files to JS/C++ and execute them, comparing exit co
 - **Strings**: `std::string` for identifiers and values.
 - **Formatting**: 2-space indentation.
 - **Headers**: `bootstrap/src/include/*.h` are the source of truth for class interfaces.
+- **Implementation**: When adding a new feature, likely need to touch `ast.h`, `parser_*.cpp`, `type_checker_*.cpp`, and `codegen_*.cpp`.
 
 ### Tuff (Language)
 
@@ -110,6 +114,7 @@ _Note: Tests compile `.tuff` files to JS/C++ and execute them, comparing exit co
 - `bootstrap/src/include/ast.h`: AST node definitions.
 - `bootstrap/src/include/parser.h`: Parser class definition.
 - `bootstrap/src/include/type_checker.h`: TypeChecker class definition.
-- `bootstrap/src/parser*.cpp`: Parser implementation files.
-- `bootstrap/src/type_checker.cpp` & `bootstrap/src/type_checker/*.cpp`: Type checker logic.
+- `bootstrap/src/parser/*.cpp`: Parser implementation files.
+- `bootstrap/src/type_checker/*.cpp`: Type checker logic.
+- `bootstrap/src/codegen/*.cpp`: Code generation logic.
 - `run_tests.ps1`: Test runner script.

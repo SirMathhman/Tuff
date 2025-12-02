@@ -7,48 +7,48 @@ extern fn exit(code: I32): Void;
 let mut m = MapI32ToI32::new(16);
 
 // Initially empty
-if (MapI32ToI32::len(&m) != 0USize) exit(1);
-if (!MapI32ToI32::isEmpty(&m)) exit(2);
+if (m.len() != 0USize) exit(1);
+if (!m.isEmpty()) exit(2);
 
 // Put some values
-MapI32ToI32::put(&mut m, 10, 100);
-MapI32ToI32::put(&mut m, 20, 200);
-MapI32ToI32::put(&mut m, 30, 300);
+m.put(10, 100);
+m.put(20, 200);
+m.put(30, 300);
 
 // Check length
-if (MapI32ToI32::len(&m) != 3USize) exit(3);
-if (MapI32ToI32::isEmpty(&m)) exit(4);
+if (m.len() != 3USize) exit(3);
+if (m.isEmpty()) exit(4);
 
 // Check contains
-if (!MapI32ToI32::contains(&m, 10)) exit(5);
-if (!MapI32ToI32::contains(&m, 20)) exit(6);
-if (!MapI32ToI32::contains(&m, 30)) exit(7);
-if (MapI32ToI32::contains(&m, 40)) exit(8);
+if (!m.contains(10)) exit(5);
+if (!m.contains(20)) exit(6);
+if (!m.contains(30)) exit(7);
+if (m.contains(40)) exit(8);
 
 // Check get (avoid Option type alias bug by using is on concrete types)
-let result1 = MapI32ToI32::get(&m, 10);
+let result1 = m.get(10);
 if (result1 is None<I32>) exit(9);
 if (result1 is Some<I32>) {
     if (result1.value != 100) exit(10);
 }
 
-let result2 = MapI32ToI32::get(&m, 40);
+let result2 = m.get(40);
 if (result2 is Some<I32>) exit(11);
 
 // Update existing key
-MapI32ToI32::put(&mut m, 10, 999);
-let result3 = MapI32ToI32::get(&m, 10);
+m.put(10, 999);
+let result3 = m.get(10);
 if (result3 is Some<I32>) {
     if (result3.value != 999) exit(12);
 }
 
 // Remove
-if (!MapI32ToI32::remove(&mut m, 20)) exit(13);
-if (MapI32ToI32::len(&m) != 2USize) exit(14);
-if (MapI32ToI32::contains(&m, 20)) exit(15);
+if (!m.remove(20)) exit(13);
+if (m.len() != 2USize) exit(14);
+if (m.contains(20)) exit(15);
 
 // Free
-MapI32ToI32::free(&mut m);
+m.free();
 
 // Success!
 0

@@ -525,6 +525,25 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 				}
 				typeAliasTable[aliasName] = info;
 			}
+			else
+			{
+				// Opaque extern type (extern type Name;)
+				// Register as an opaque struct so we can have impl blocks for it
+				std::string typeName = child->value;
+				if (structTable.find(typeName) != structTable.end())
+				{
+					std::cerr << "Error: Type '" << typeName << "' already declared." << std::endl;
+					exit(1);
+				}
+
+				StructInfo info;
+				info.isOpaque = true;
+				for (auto genParam : child->genericParams)
+				{
+					info.genericParams.push_back(genParam->value);
+				}
+				structTable[typeName] = info;
+			}
 		}
 	}
 }

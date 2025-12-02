@@ -10,7 +10,7 @@ sb.append("World!");
 let s = sb.toString();
 println(s);
 
-if (string_equals(s, "Hello, World!")) {
+if (s.equals("Hello, World!")) {
 	println("Test Passed");
 } else {
 	println("Test Failed");
