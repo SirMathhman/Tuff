@@ -41,7 +41,7 @@ The standard library is currently in early development (`src/tuff/`).
 To achieve self-hosting (compiling the Tuff compiler with Tuff), the following standard library features must be implemented:
 
 1.  **✅ StringBuilder**: Efficient string construction for code generation (DONE).
-2.  **✅ Advanced String Manipulation**: `split`, `trim`, `startsWith`, `endsWith`, `replace`, `toUpperCase`, `toLowerCase` (DONE - split needs implementation).
+2.  **✅ Advanced String Manipulation**: All methods complete including `split`, `trim`, `startsWith`, `endsWith`, `replace`, `toUpperCase`, `toLowerCase` (DONE).
 3.  **❌ File System API**: Robust file reading/writing, directory traversal, existence checks.
 4.  **❌ Command Line Arguments**: Access to `argv`/`argc` to read input file paths and flags.
 5.  **❌ Process Control**: Exit codes, environment variables.
@@ -56,11 +56,7 @@ To achieve self-hosting (compiling the Tuff compiler with Tuff), the following s
 - ✅ `substring`, `indexOf`
 - ✅ `startsWith`, `endsWith`, `trim`, `contains`
 - ✅ `replace`, `toUpperCase`, `toLowerCase`, `isEmpty`
-- ❌ `split` (delimiter-based string tokenization)
-- ❌ Character iteration/streaming API
-
-### File I/O (Critical for Reading Source Files)
-
+- ✅ `split` (delimiter-based string tokenization)
 ## Future Extensions
 
 Features not yet implemented but planned:
