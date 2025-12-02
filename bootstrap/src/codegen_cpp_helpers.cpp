@@ -309,7 +309,11 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	}
 	case ASTNodeType::EXTERN_FN_DECL:
 	{
-		// Skip extern fn declarations - they are resolved by the linker
+		// Do NOT generate forward declarations for extern functions.
+		// Extern functions are provided by the linker/platform layer.
+		// We must emit nothing here to avoid generating invalid C++ template declarations
+		// (e.g., template<typename T> T* tuff_malloc(size_t);) without definitions,
+		// which would cause linker errors.
 		return "";
 	}
 	case ASTNodeType::USE_EXTERN_DECL:
