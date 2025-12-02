@@ -65,6 +65,7 @@
     "feature17_sizeof/test_sizeof_array",
     "feature17_sizeof/test_sizeof_basic",
     "feature17_sizeof/test_sizeof_struct",
+    "feature17_sizeof/test_sizeof_generic",
     "feature18_extern/test_use_extern_stdlib",
     "feature18_extern/test_extern_abs",
     "feature20_vector/test_vector_basic"

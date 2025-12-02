@@ -541,6 +541,14 @@ void TypeChecker::checkImplBlock(std::shared_ptr<ASTNode> node)
 		exit(1);
 	}
 
+	// Save and add impl block's generic params to scope
+	// e.g., impl<T> Vector<T> { ... } - T should be in scope for all methods
+	std::vector<std::string> savedGenericParams = genericParamsInScope;
+	for (auto genParam : node->genericParams)
+	{
+		genericParamsInScope.push_back(genParam->value);
+	}
+
 	// For each method in the impl block
 	for (auto method : node->children)
 	{
@@ -554,4 +562,7 @@ void TypeChecker::checkImplBlock(std::shared_ptr<ASTNode> node)
 		// Just check them as normal functions
 		check(method);
 	}
+
+	// Restore generic params scope
+	genericParamsInScope = savedGenericParams;
 }

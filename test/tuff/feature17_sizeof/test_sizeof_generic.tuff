@@ -1,0 +1,21 @@
+// Test: sizeOf(T) where T is a generic type parameter
+extern fn exit(code: I32): Void;
+
+fn getSize<T>(): USize => sizeOf(T);
+
+// Test sizes of different types
+let i32Size = getSize<I32>();
+let i64Size = getSize<I64>();
+let boolSize = getSize<Bool>();
+
+// I32 should be 4 bytes
+if (i32Size != 4USize) exit(1);
+
+// I64 should be 8 bytes
+if (i64Size != 8USize) exit(2);
+
+// Bool should be 1 byte
+if (boolSize != 1USize) exit(3);
+
+// Success
+0

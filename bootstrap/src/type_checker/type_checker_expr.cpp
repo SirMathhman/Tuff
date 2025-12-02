@@ -350,6 +350,22 @@ void TypeChecker::checkSizeOfExpr(std::shared_ptr<ASTNode> node)
 				if (typeName[0] != '[')
 				{
 					std::cerr << "Error: sizeOf argument must be a valid type, got '" << typeName << "'" << std::endl;
+					std::cerr << "  Valid types: primitives (I32, U64, Bool, etc.), structs, or generic parameters in scope" << std::endl;
+					if (!genericParamsInScope.empty())
+					{
+						std::cerr << "  Generic parameters in scope: ";
+						for (size_t i = 0; i < genericParamsInScope.size(); i++)
+						{
+							if (i > 0)
+								std::cerr << ", ";
+							std::cerr << genericParamsInScope[i];
+						}
+						std::cerr << std::endl;
+					}
+					else
+					{
+						std::cerr << "  No generic parameters in scope." << std::endl;
+					}
 					exit(1);
 				}
 			}
