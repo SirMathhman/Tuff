@@ -242,6 +242,7 @@ namespace ast
 		ExprPtr value;
 		TypePtr targetType;
 		std::string targetTypeStr;
+		std::string valueInferredType; // The union type of the value being checked
 		std::string inferredType;
 		::ExprPtr exprType;
 		int line = 0;

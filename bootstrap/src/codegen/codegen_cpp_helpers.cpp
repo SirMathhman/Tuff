@@ -78,98 +78,25 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		return ss.str();
 	}
 	case ASTNodeType::BINARY_OP:
+	case ASTNodeType::IS_EXPR:
+	case ASTNodeType::UNARY_OP:
+	case ASTNodeType::ARRAY_LITERAL:
+	case ASTNodeType::INDEX_EXPR:
+	case ASTNodeType::REFERENCE_EXPR:
+	case ASTNodeType::DEREF_EXPR:
+	case ASTNodeType::SIZEOF_EXPR:
+	case ASTNodeType::LITERAL:
+	case ASTNodeType::IDENTIFIER:
+	case ASTNodeType::ENUM_VALUE:
+	case ASTNodeType::STRUCT_LITERAL:
+	case ASTNodeType::FIELD_ACCESS:
 	{
 		// Use typed AST path
 		auto typed = ASTConverter::toExpr(node);
 		return genExpr(typed);
-	}
-	case ASTNodeType::IS_EXPR:
-	{
-		// is operator: expr is Type → expr.__tag == Tag::Type
-		auto expr = generateNode(node->children[0]);
-		std::string targetType = node->value;
-		// Get the union struct name from the expression's inferred type
-		std::string unionType = node->children[0]->inferredType;
-		std::string structName = getUnionStructName(unionType);
-
-		// Add template argument
-		auto variants = splitUnionType(unionType);
-		if (!variants.empty())
-		{
-			size_t start = variants[0].find('<');
-			if (start != std::string::npos)
-			{
-				size_t end = variants[0].find('>');
-				if (end != std::string::npos)
-				{
-					std::string param = variants[0].substr(start + 1, end - start - 1);
-					structName += "<" + mapType(param) + ">";
-				}
-			}
-		}
-
-		// Extract base name from target type (e.g., "Some" from "Some<I32>")
-		std::string baseName = targetType;
-		size_t pos = baseName.find('<');
-		if (pos != std::string::npos)
-		{
-			baseName = baseName.substr(0, pos);
-		}
-
-		return "(" + expr + ".__tag == " + structName + "::Tag::" + baseName + ")";
 	}
 	case ASTNodeType::MATCH_EXPR:
 		return generateMatchExpr(node);
-	case ASTNodeType::UNARY_OP:
-		return generateUnaryOp(node);
-	case ASTNodeType::ARRAY_LITERAL:
-	{
-		// Generate C++ initializer list
-		std::stringstream ss;
-		ss << "{";
-		for (size_t i = 0; i < node->children.size(); i++)
-		{
-			if (i > 0)
-				ss << ", ";
-			ss << generateNode(node->children[i]);
-		}
-		ss << "}";
-		return ss.str();
-	}
-	case ASTNodeType::INDEX_EXPR:
-	{
-		auto array = generateNode(node->children[0]);
-		auto index = generateNode(node->children[1]);
-		return array + "[" + index + "]";
-	}
-	case ASTNodeType::REFERENCE_EXPR:
-	{
-		// In C++, use the address-of operator
-		return "&" + generateNode(node->children[0]);
-	}
-	case ASTNodeType::DEREF_EXPR:
-	{
-		// In C++, use the dereference operator
-		return "*" + generateNode(node->children[0]);
-	}
-	case ASTNodeType::SIZEOF_EXPR:
-	{
-		// sizeOf(Type) maps to C++ sizeof operator
-		std::string cppType = mapType(node->value);
-		return "sizeof(" + cppType + ")";
-	}
-	case ASTNodeType::LITERAL:
-	{
-		// Use typed AST path
-		auto typed = ASTConverter::toExpr(node);
-		return genExpr(typed);
-	}
-	case ASTNodeType::IDENTIFIER:
-	{
-		// Use typed AST path
-		auto typed = ASTConverter::toExpr(node);
-		return genExpr(typed);
-	}
 	case ASTNodeType::FUNCTION_DECL:
 	{
 		std::stringstream ss;
@@ -291,65 +218,6 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	}
 	case ASTNodeType::ACTUAL_DECL:
 		return generateActualDecl(node);
-	case ASTNodeType::ENUM_VALUE:
-	{
-		// Generate: EnumName::Variant
-		auto enumName = node->children[0]; // The IDENTIFIER node for enum
-		return enumName->value + "::" + node->value;
-	}
-	case ASTNodeType::STRUCT_LITERAL:
-	{
-		std::stringstream ss;
-		ss << node->value;
-
-		if (!node->genericArgs.empty())
-		{
-			ss << "<";
-			for (size_t i = 0; i < node->genericArgs.size(); i++)
-			{
-				if (i > 0)
-					ss << ", ";
-				ss << mapType(node->genericArgs[i]);
-			}
-			ss << ">";
-		}
-
-		ss << "{ ";
-		for (size_t i = 0; i < node->children.size(); i++)
-		{
-			if (i > 0)
-				ss << ", ";
-			ss << generateNode(node->children[i]);
-		}
-		ss << " }";
-		return ss.str();
-	}
-	case ASTNodeType::FIELD_ACCESS:
-	{
-		auto object = generateNode(node->children[0]);
-		// If accessing field on a narrowed union, unwrap it directly
-		if (node->children[0]->isNarrowedUnion)
-		{
-			// Get the narrowed type (e.g., Some<I32>)
-			std::string narrowedType = node->children[0]->inferredType;
-
-			// Extract base name (e.g., "Some" from "Some<I32>")
-			std::string baseName = narrowedType;
-			size_t pos = baseName.find('<');
-			if (pos != std::string::npos)
-			{
-				baseName = baseName.substr(0, pos);
-			}
-
-			return object + ".__val_" + baseName + "." + node->value;
-		}
-		// Handle pointer access ->
-		if (node->children[0]->inferredType.length() > 0 && node->children[0]->inferredType[0] == '*')
-		{
-			return object + "->" + node->value;
-		}
-		return object + "." + node->value;
-	}
 	default:
 		return "";
 	}

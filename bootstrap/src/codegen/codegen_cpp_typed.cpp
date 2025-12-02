@@ -168,7 +168,36 @@ std::string CodeGeneratorCPP::genExpr(ast::ExprPtr expr)
 
 																	[this](const ast::Is &e) -> std::string
 																	{
-																		return genExpr(e.value) + ".__tag == /* " + e.targetTypeStr + " */";
+																		// is operator: expr is Type → (expr.__tag == UnionStruct::Tag::Type)
+																		auto exprCode = genExpr(e.value);
+																		std::string unionType = e.valueInferredType;
+																		std::string structName = getUnionStructName(unionType);
+
+																		// Add template argument from union variants
+																		auto variants = splitUnionType(unionType);
+																		if (!variants.empty())
+																		{
+																			size_t start = variants[0].find('<');
+																			if (start != std::string::npos)
+																			{
+																				size_t end = variants[0].find('>');
+																				if (end != std::string::npos)
+																				{
+																					std::string param = variants[0].substr(start + 1, end - start - 1);
+																					structName += "<" + mapType(param) + ">";
+																				}
+																			}
+																		}
+
+																		// Extract base name from target type (e.g., "Some" from "Some<I32>")
+																		std::string baseName = e.targetTypeStr;
+																		size_t pos = baseName.find('<');
+																		if (pos != std::string::npos)
+																		{
+																			baseName = baseName.substr(0, pos);
+																		}
+
+																		return "(" + exprCode + ".__tag == " + structName + "::Tag::" + baseName + ")";
 																	},
 
 																	[this](const ast::SizeOf &e) -> std::string

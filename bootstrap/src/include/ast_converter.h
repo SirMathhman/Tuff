@@ -166,6 +166,7 @@ public:
 			ast::Is expr;
 			expr.value = toExpr(node->children[0]);
 			expr.targetTypeStr = node->value;
+			expr.valueInferredType = node->children[0]->inferredType;
 			expr.exprType = node->exprType;
 			return std::make_shared<ast::Expr>(expr);
 		}
