@@ -1,9 +1,9 @@
 // Test: String destructor infrastructure
 // This test verifies that the String type can be used with destructor support
-// Currently, string literals are [U8; n; n] arrays, not String types
-// This test documents the expected behavior once String is used as a proper type
+// string is now an opaque type mapped to char* in C++
+use string;
 
-// For now, just test that string literals work as expected
+// Test that string literals work as expected
 let s = "hello";
-let first: U8 = s[0];
+let first: U8 = string_charAt(s, 0);
 first

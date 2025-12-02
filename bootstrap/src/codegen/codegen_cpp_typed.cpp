@@ -111,6 +111,26 @@ std::string CodeGeneratorCPP::genExpr(ast::ExprPtr expr)
 																		{
 																			if (i > 0)
 																				ss << ", ";
+																			// Check if argument is an array literal with string type
+																			// If so, use compound literal so it can be passed to functions
+																			if (std::holds_alternative<ast::ArrayLiteral>(*e.args[i]))
+																			{
+																				const auto& arrLit = std::get<ast::ArrayLiteral>(*e.args[i]);
+																				bool isString = arrLit.inferredType == "string" || 
+																							   arrLit.inferredType.find("[U8;") == 0;
+																				if (isString)
+																				{
+																					ss << "(const uint8_t[]){";
+																					for (size_t j = 0; j < arrLit.elements.size(); j++)
+																					{
+																						if (j > 0)
+																							ss << ", ";
+																						ss << genExpr(arrLit.elements[j]);
+																					}
+																					ss << "}";
+																					continue;
+																				}
+																			}
 																			ss << genExpr(e.args[i]);
 																		}
 																		ss << ")";

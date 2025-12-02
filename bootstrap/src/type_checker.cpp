@@ -528,6 +528,11 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		checkArrayLiteral(node);
 		break;
 
+	case ASTNodeType::STRING_LITERAL:
+		// String literals have type 'string'
+		node->inferredType = "string";
+		break;
+
 	case ASTNodeType::INDEX_EXPR:
 		checkIndexExpr(node);
 		break;

@@ -14,7 +14,7 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	ss << "#include <cstdint>\n";
 	ss << "#include <cstddef>\n";
 	ss << "#include <string>\n";
-	
+
 	// Collect extern use declarations and emit corresponding includes
 	for (auto child : ast->children)
 	{

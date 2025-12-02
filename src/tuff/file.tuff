@@ -1,45 +1,37 @@
 // File IO operations using extern C functions
 // FileHandle is an opaque type wrapping FILE*
-// Error returns include strerror message for the errno
+// Functions return 0 on success, -1 on error (simple for now)
 
 extern use file_builtins;
-use result;
 
-// Opaque file handle type
+// Opaque file handle type (maps to FILE*)
 extern type FileHandle;
 
 // Open a file with the given mode ("r", "w", "a", "rb", "wb", etc.)
-// Returns Err with error message on failure
-extern fn file_open(path: string, mode: string): Result<FileHandle, string>;
+// Returns null-equivalent handle on failure (check with file_isValid)
+extern fn file_open(path: string, mode: string): FileHandle;
 
-// Close a file handle
-// Returns Err with error message on failure
-extern fn file_close(handle: FileHandle): Result<Void, string>;
+// Check if file handle is valid (not null)
+extern fn file_isValid(handle: FileHandle): Bool;
+
+// Close a file handle. Returns 0 on success, -1 on error
+extern fn file_close(handle: FileHandle): I32;
 
 // Read up to `count` bytes from file into buffer
-// Returns number of bytes actually read, or Err on failure
-extern fn file_read(handle: FileHandle, buffer: *mut U8, count: USize): Result<USize, string>;
+// Returns number of bytes actually read, or -1 on error
+extern fn file_read(handle: FileHandle, buffer: *mut U8, count: USize): I64;
 
 // Write `count` bytes from buffer to file
-// Returns number of bytes actually written, or Err on failure
-extern fn file_write(handle: FileHandle, buffer: *U8, count: USize): Result<USize, string>;
+// Returns number of bytes actually written, or -1 on error
+extern fn file_write(handle: FileHandle, buffer: *U8, count: USize): I64;
 
 // Check if end of file has been reached
 extern fn file_eof(handle: FileHandle): Bool;
 
 // Read entire file contents as a string (caller must free)
-// Returns Err with error message on failure
-extern fn file_readAll(path: string): Result<string, string>;
+// Returns empty string on failure
+extern fn file_readAll(path: string): string;
 
 // Write string to file (creates/overwrites)
-// Returns Err with error message on failure
-extern fn file_writeAll(path: string, content: string): Result<Void, string>;
-
-// Flush file buffer to disk
-extern fn file_flush(handle: FileHandle): Result<Void, string>;
-
-// Get current file position
-extern fn file_tell(handle: FileHandle): Result<USize, string>;
-
-// Seek to position in file (0 = start, 1 = current, 2 = end)
-extern fn file_seek(handle: FileHandle, offset: I64, whence: I32): Result<Void, string>;
+// Returns 0 on success, -1 on error
+extern fn file_writeAll(path: string, content: string): I32;

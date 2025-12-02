@@ -74,9 +74,12 @@ function Initialize-TestEnvironment {
     New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
     
     # Copy builtin headers to temp directory for test compilation
-    $builtinHeader = Join-Path $RootDir "src\tuff\string_builtins.h"
-    if (Test-Path $builtinHeader) {
-        Copy-Item $builtinHeader -Destination $TempDir -Force
+    $builtinHeaders = @("string_builtins.h", "file_builtins.h")
+    foreach ($header in $builtinHeaders) {
+        $headerPath = Join-Path $RootDir "src\tuff\$header"
+        if (Test-Path $headerPath) {
+            Copy-Item $headerPath -Destination $TempDir -Force
+        }
     }
 }
 
@@ -125,8 +128,10 @@ function Test-TuffFile([hashtable]$Test) {
         return $result
     }
 
-    # Compile to C++
-    $cppCode = & $CompilerPath --sources $Test.Path --target "cpp" 2>&1
+    # Compile to C++ - include stdlib for tests that use it
+    $stdlibDir = Join-Path $RootDir "src\tuff"
+    $sources = "$stdlibDir,$($Test.Path)"
+    $cppCode = & $CompilerPath --sources $sources --target "cpp" 2>&1
     if ($LASTEXITCODE -ne 0) {
         $result.Status = "ERROR"; $result.Message = "Tuff compilation failed"
         return $result
@@ -252,7 +257,10 @@ try {
                 return $result
             }
             
-            $cppCode = & $CompilerPath --sources $Test.Path --target "cpp" 2>&1
+            # Include stdlib directory for tests that use it
+            $stdlibDir = Join-Path $RootDir "src\tuff"
+            $sources = "$stdlibDir,$($Test.Path)"
+            $cppCode = & $CompilerPath --sources $sources --target "cpp" 2>&1
             if ($LASTEXITCODE -ne 0) {
                 $result.Status = "ERROR"; $result.Message = "Tuff compile failed"
                 return $result

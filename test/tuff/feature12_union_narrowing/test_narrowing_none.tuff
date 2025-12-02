@@ -1,14 +1,5 @@
 // Test type narrowing with None variant
-
-struct Some<T> {
-    value: T
-}
-
-struct None<T> {
-}
-
-type Option<T> = Some<T> | None<T>;
-
+use option;
 fn run(): I32 => {
     let opt: Option<I32> = None<I32> { };
     

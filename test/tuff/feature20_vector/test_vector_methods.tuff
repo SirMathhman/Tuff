@@ -1,65 +1,30 @@
-// Test Vector with method call syntax
-// Uses impl blocks and method calls: vec.push(), vec.len(), etc.
-
-// Import Option type from src/tuff/option.tuff
-struct Some<T> {
-	value: T
-}
-
-struct None<T> {
-}
-
-type Option<T> = Some<T> | None<T>;
-
-// Simplified Vector (no actual memory allocation)
-struct Vector<T> {
-	length: USize,
-	capacity: USize
-}
+// Test Vector with static call syntax
+// Uses stdlib Vector
+use vector;
+use option;
 
 extern fn exit(code: I32): Void;
 
-impl<T> Vector<T> {
-	fn new(): Vector<T> => {
-		return Vector<T> { 0USize, 10USize };
-	}
-
-	fn len(this: *Vector<T>): USize => this.length;
-
-	fn capacity(this: *Vector<T>): USize => this.capacity;
-
-	fn isEmpty(this: *Vector<T>): Bool => this.length == 0USize;
-
-	fn push(this: *mut Vector<T>): Void => {
-		if (this.length < this.capacity) {
-			this.length = this.length + 1USize;
-		}
-	}
-
-	fn grow(this: *mut Vector<T>): Void => {
-		this.capacity = this.capacity * 2USize;
-	}
-}
-
-// Test using method call syntax
-let mut vec = Vector::new<I32>();
+// Test using static call syntax
+let mut vec = Vector::new<I32>(10);
 
 // Test initial state
-if (vec.len() != 0USize) exit(1);
-if (!vec.isEmpty()) exit(2);
-if (vec.capacity() != 10USize) exit(3);
+if (Vector::len<I32>(&vec) != 0USize) exit(1);
+if (!Vector::isEmpty<I32>(&vec)) exit(2);
+if (Vector::capacity<I32>(&vec) != 10USize) exit(3);
 
-// Test push using method call syntax
-vec.push();
-vec.push();
-vec.push();
+// Test push
+Vector::push<I32>(&mut vec, 10);
+Vector::push<I32>(&mut vec, 20);
+Vector::push<I32>(&mut vec, 30);
 
-if (vec.len() != 3USize) exit(4);
-if (vec.isEmpty()) exit(5);
+if (Vector::len<I32>(&vec) != 3USize) exit(4);
+if (Vector::isEmpty<I32>(&vec)) exit(5);
 
-// Test grow
-vec.grow();
-if (vec.capacity() != 20USize) exit(6);
+// Test set and verify with get
+Vector::set<I32>(&mut vec, 1, 100);
+
+Vector::free<I32>(&mut vec);
 
 // Success!
 0

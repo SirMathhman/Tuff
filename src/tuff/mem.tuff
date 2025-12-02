@@ -1,6 +1,6 @@
 // Memory allocation primitives
 
-use extern stdlib;
+extern use stdlib;
 
 type Allocated<Type> = *mut [Type] & #free;
 

@@ -88,9 +88,9 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 	if (tuffType == "String")
 		return "std::string";
 	if (tuffType == "NativeString")
-		return "char*";
+		return "const char*";
 	if (tuffType == "string")
-		return "char*"; // Type alias for NativeString&#string_destroy
+		return "const char*"; // Native C string, compatible with string_builtins.h
 
 	if (tuffType.rfind("SizeOf<", 0) == 0)
 		return "size_t";

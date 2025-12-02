@@ -1,15 +1,9 @@
 // Test Option<T> with different types
-
-struct Some<T> {
-    value: T
-}
-
-struct None<T> {
-}
+use option;
 
 fn run(): I32 => {
     // Option<I32>
-    let result1: Some<I32> | None<I32> = Some<I32> { 42 };
+    let result1: Option<I32> = Some<I32> { 42 };
     if (result1 is Some<I32>) {
         let val1 = result1.value;
         if (val1 != 42) {
@@ -20,7 +14,7 @@ fn run(): I32 => {
     }
     
     // Option<Bool>
-    let result2: Some<Bool> | None<Bool> = Some<Bool> { true };
+    let result2: Option<Bool> = Some<Bool> { true };
     if (result2 is Some<Bool>) {
         let val2 = result2.value;
         if (!val2) {
@@ -31,7 +25,7 @@ fn run(): I32 => {
     }
     
     // Option<Bool> with None
-    let result3: Some<Bool> | None<Bool> = None<Bool> { };
+    let result3: Option<Bool> = None<Bool> { };
     let mut val3 = true;
     if (result3 is Some<Bool>) {
         val3 = result3.value;

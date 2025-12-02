@@ -67,34 +67,12 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 	}
 	else if (match(TokenType::STRING_LITERAL))
 	{
-		// String literal: "hello" → [U8; n+1; n+1] (with null terminator)
+		// String literal: "hello" → string type (maps to const char* in C++)
 		auto node = std::make_shared<ASTNode>();
-		node->type = ASTNodeType::ARRAY_LITERAL;
-
-		std::string str = tokens[pos - 1].value;
-		for (unsigned char c : str)
-		{
-			auto byteNode = std::make_shared<ASTNode>();
-			byteNode->type = ASTNodeType::LITERAL;
-			byteNode->value = std::to_string((int)c);
-			byteNode->inferredType = "U8";
-			byteNode->exprType = makePrimitive(PrimitiveKind::U8);
-			node->addChild(byteNode);
-		}
-
-		// Add null terminator for C compatibility
-		auto nullNode = std::make_shared<ASTNode>();
-		nullNode->type = ASTNodeType::LITERAL;
-		nullNode->value = "0";
-		nullNode->inferredType = "U8";
-		nullNode->exprType = makePrimitive(PrimitiveKind::U8);
-		node->addChild(nullNode);
-
-		// Set exprType for the array literal
-		// It's [U8; len+1; len+1] (including null terminator)
-		auto len = makeInt(str.length() + 1, "USize");
-		node->exprType = makeArray(makePrimitive(PrimitiveKind::U8), len, len);
-
+		node->type = ASTNodeType::STRING_LITERAL;
+		node->value = tokens[pos - 1].value;
+		node->inferredType = "string";
+		// exprType will be set by type checker if needed
 		return node;
 	}
 	else if (match(TokenType::LBRACKET))

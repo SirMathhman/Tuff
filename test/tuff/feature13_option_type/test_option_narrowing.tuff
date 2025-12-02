@@ -1,14 +1,8 @@
 // Test Option<T> with type narrowing
-
-struct Some<T> {
-    value: T
-}
-
-struct None<T> {
-}
+use option;
 
 fn run(): I32 => {
-    let option: Some<I32> | None<I32> = Some<I32> { 100 };
+    let option: Option<I32> = Some<I32> { 100 };
     
     // Type narrowing with is operator
     if (option is Some<I32>) {

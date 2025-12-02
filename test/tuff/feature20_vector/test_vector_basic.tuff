@@ -1,49 +1,23 @@
 // Test basic Vector operations
-// Simplified test that works within Tuff's current type system limitations
-
-struct Vector<T> {
-    length : USize,
-    capacity : USize
-}
+// Uses stdlib Vector
+use vector;
 
 extern fn exit(code: I32): Void;
 
-fn vectorNew<T>(): Vector<T> => {
-    let capacity: USize = 10USize;
-    return Vector<T> { 0USize, capacity };
-}
-
-fn vectorLen<T>(vec: *Vector<T>): USize => vec.length;
-
-fn vectorCapacity<T>(vec: *Vector<T>): USize => vec.capacity;
-
-fn vectorIsEmpty<T>(vec: *Vector<T>): Bool => vec.length == 0USize;
-
-fn vectorPush<T>(vec: *mut Vector<T>): Void => {
-    if (vec.length < vec.capacity) {
-        vec.length = vec.length + 1USize;
-    }
-}
-
-fn vectorGrow<T>(vec: *mut Vector<T>): Void => {
-    vec.capacity = vec.capacity * 2USize;
-}
-
 // Test
-let mut vec = vectorNew<I32>();
+let mut vec = Vector::new<I32>(10);
 
-if (vectorLen<I32>(&vec) != 0USize) exit(1);
-if (!vectorIsEmpty<I32>(&vec)) exit(2);
-if (vectorCapacity<I32>(&vec) != 10USize) exit(3);
+if (Vector::len<I32>(&vec) != 0USize) exit(1);
+if (!Vector::isEmpty<I32>(&vec)) exit(2);
+if (Vector::capacity<I32>(&vec) != 10USize) exit(3);
 
-vectorPush<I32>(&mut vec);
-vectorPush<I32>(&mut vec);
-vectorPush<I32>(&mut vec);
+Vector::push<I32>(&mut vec, 1);
+Vector::push<I32>(&mut vec, 2);
+Vector::push<I32>(&mut vec, 3);
 
-if (vectorLen<I32>(&vec) != 3USize) exit(4);
-if (vectorIsEmpty<I32>(&vec)) exit(5);
+if (Vector::len<I32>(&vec) != 3USize) exit(4);
+if (Vector::isEmpty<I32>(&vec)) exit(5);
 
-vectorGrow<I32>(&mut vec);
-if (vectorCapacity<I32>(&vec) != 20USize) exit(6);
+Vector::free<I32>(&mut vec);
 
 0

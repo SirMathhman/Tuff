@@ -1,30 +1,26 @@
 // Test basic file IO operations
+// Expected exit code: 0
 use file;
-use result;
+use string;
 
-fn main(): I32 => {
-    // Test file_writeAll and file_readAll
-    let writeResult = file_writeAll("test_output.txt", "Hello, Tuff!");
-    
-    // Check write succeeded
-    if (writeResult is Err) {
-        return 1;
-    }
-    
+// Test file_writeAll and file_readAll
+let writeResult = file_writeAll("test_output.txt", "Hello, Tuff!");
+
+// Check write succeeded (0 = success)
+if (writeResult != 0) {
+    1
+} else {
     // Read it back
-    let readResult = file_readAll("test_output.txt");
+    let content = file_readAll("test_output.txt");
     
-    if (readResult is Err) {
-        return 2;
-    }
-    
-    // Verify content matches
-    if (readResult is Ok) {
-        let content = readResult.value;
+    // Verify content matches (empty string means failure)
+    if (string_length(content) == 0) {
+        2
+    } else {
         if (string_equals(content, "Hello, Tuff!")) {
-            return 0;  // Success
+            0  // Success
+        } else {
+            3  // Content mismatch
         }
     }
-    
-    return 3;
 }

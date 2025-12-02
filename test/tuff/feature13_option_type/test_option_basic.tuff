@@ -1,15 +1,9 @@
 // Test basic Option<T> functionality
-
-struct Some<T> {
-    value: T
-}
-
-struct None<T> {
-}
+use option;
 
 fn run(): I32 => {
     // Test Some
-    let opt1: Some<I32> | None<I32> = Some<I32> { 42 };
+    let opt1: Option<I32> = Some<I32> { 42 };
     if (!(opt1 is Some<I32>)) {
         return 1;
     }
@@ -28,7 +22,7 @@ fn run(): I32 => {
     }
     
     // Test None
-    let opt2: Some<I32> | None<I32> = None<I32> { };
+    let opt2: Option<I32> = None<I32> { };
     if (opt2 is Some<I32>) {
         return 4;
     }

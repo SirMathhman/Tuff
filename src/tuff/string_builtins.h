@@ -8,27 +8,26 @@
 #include <cerrno>
 #include <limits>
 
-// String type in Tuff: *[U8] = const uint8_t*
-// Mutable string: *mut [U8] = uint8_t*
+// String type in Tuff: string = const char*
 
 // Get string length (excluding null terminator)
-inline size_t string_length(const uint8_t *s)
+inline size_t string_length(const char *s)
 {
-	return std::strlen(reinterpret_cast<const char *>(s));
+	return std::strlen(s);
 }
 
 // Get character at index (no bounds checking)
-inline uint8_t string_charAt(const uint8_t *s, size_t index)
+inline uint8_t string_charAt(const char *s, size_t index)
 {
-	return s[index];
+	return static_cast<uint8_t>(s[index]);
 }
 
 // Concatenate two strings (returns newly allocated string)
-inline uint8_t *string_concat(const uint8_t *s1, const uint8_t *s2)
+inline char *string_concat(const char *s1, const char *s2)
 {
-	size_t len1 = string_length(s1);
-	size_t len2 = string_length(s2);
-	uint8_t *result = static_cast<uint8_t *>(std::malloc(len1 + len2 + 1));
+	size_t len1 = std::strlen(s1);
+	size_t len2 = std::strlen(s2);
+	char *result = static_cast<char *>(std::malloc(len1 + len2 + 1));
 
 	if (result != nullptr)
 	{
@@ -41,18 +40,17 @@ inline uint8_t *string_concat(const uint8_t *s1, const uint8_t *s2)
 }
 
 // Compare two strings for equality
-inline bool string_equals(const uint8_t *s1, const uint8_t *s2)
+inline bool string_equals(const char *s1, const char *s2)
 {
-	return std::strcmp(reinterpret_cast<const char *>(s1),
-										 reinterpret_cast<const char *>(s2)) == 0;
+	return std::strcmp(s1, s2) == 0;
 }
 
 // Extract substring [start, end) (returns newly allocated string)
-inline uint8_t *string_substring(const uint8_t *s, size_t start, size_t end)
+inline char *string_substring(const char *s, size_t start, size_t end)
 {
 	if (end <= start)
 	{
-		uint8_t *empty = static_cast<uint8_t *>(std::malloc(1));
+		char *empty = static_cast<char *>(std::malloc(1));
 		if (empty != nullptr)
 		{
 			empty[0] = '\0';
@@ -61,7 +59,7 @@ inline uint8_t *string_substring(const uint8_t *s, size_t start, size_t end)
 	}
 
 	size_t len = end - start;
-	uint8_t *result = static_cast<uint8_t *>(std::malloc(len + 1));
+	char *result = static_cast<char *>(std::malloc(len + 1));
 
 	if (result != nullptr)
 	{
@@ -73,29 +71,27 @@ inline uint8_t *string_substring(const uint8_t *s, size_t start, size_t end)
 }
 
 // Find first occurrence of needle in haystack (returns -1 if not found)
-inline int32_t string_indexOf(const uint8_t *haystack, const uint8_t *needle)
+inline int32_t string_indexOf(const char *haystack, const char *needle)
 {
-	const char *result = std::strstr(
-			reinterpret_cast<const char *>(haystack),
-			reinterpret_cast<const char *>(needle));
+	const char *result = std::strstr(haystack, needle);
 
 	if (result == nullptr)
 	{
 		return -1;
 	}
 
-	return static_cast<int32_t>(result - reinterpret_cast<const char *>(haystack));
+	return static_cast<int32_t>(result - haystack);
 }
 
 // Convert integer to string (returns newly allocated string)
-inline uint8_t *string_fromI32(int32_t value)
+inline char *string_fromI32(int32_t value)
 {
 	// Max length for int32_t: "-2147483648" = 11 chars + null terminator
-	uint8_t *result = static_cast<uint8_t *>(std::malloc(12));
+	char *result = static_cast<char *>(std::malloc(12));
 
 	if (result != nullptr)
 	{
-		std::snprintf(reinterpret_cast<char *>(result), 12, "%d", value);
+		std::snprintf(result, 12, "%d", value);
 	}
 
 	return result;
@@ -110,14 +106,14 @@ struct OptionI32
 	int32_t value;
 };
 
-inline OptionI32 string_toI32(const uint8_t *s)
+inline OptionI32 string_toI32(const char *s)
 {
 	char *endptr;
 	errno = 0;
-	long val = std::strtol(reinterpret_cast<const char *>(s), &endptr, 10);
+	long val = std::strtol(s, &endptr, 10);
 
 	// Check for errors: no conversion, trailing characters, or out of range
-	if (endptr == reinterpret_cast<const char *>(s) || *endptr != '\0' ||
+	if (endptr == s || *endptr != '\0' ||
 			errno == ERANGE || val < INT32_MIN || val > INT32_MAX)
 	{
 		return OptionI32{0, 0}; // None

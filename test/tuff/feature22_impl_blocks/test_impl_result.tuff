@@ -1,22 +1,22 @@
 // Test: Impl block with nested generic types
-struct Result<T> {
-	value: T,
-	ok: Bool
+// Using a custom ValueResult to avoid conflict with stdlib Result
+struct ValueResult<T> {
+        value: T,
+        ok: Bool
 }
 
-impl<T> Result<T> {
-	fn ok(val: T): Result<T> => {
-		return Result<T> { val, true };
-	}
+impl<T> ValueResult<T> {
+        fn ok(val: T): ValueResult<T> => {
+                return ValueResult<T> { val, true };
+        }
 
-	fn get(this: *Result<T>): T => this.value;
+        fn get(this: *ValueResult<T>): T => this.value;
 
-	fn is_ok(this: *Result<T>): Bool => this.ok;
+        fn is_ok(this: *ValueResult<T>): Bool => this.ok;
 }
 
-let r = Result::ok<I32>(42);
-let v = Result::get<I32>(&r);
-let is_ok = Result::is_ok<I32>(&r);
-
+let r = ValueResult::ok<I32>(42);
+let v = ValueResult::get<I32>(&r);
+let is_ok = ValueResult::is_ok<I32>(&r);
 // Expected: v = 42, is_ok = true
 is_ok;
