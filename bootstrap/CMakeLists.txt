@@ -44,6 +44,7 @@ set(COMPILER_SOURCES
     src/parser/parser_modules.cpp
     src/parser/parser_expect_actual.cpp
     src/parser/parser_types.cpp
+    src/type_env.cpp
     src/type_checker.cpp
     src/type_checker/type_checker_binary.cpp
     src/type_checker/type_checker_access.cpp
