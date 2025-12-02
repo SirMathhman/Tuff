@@ -4,8 +4,8 @@
     Tuff Compiler Automated Test Runner
 
 .DESCRIPTION
-    Discovers and runs all Tuff compiler tests in src/commonTest/tuff/.
-    Compiles each .tuff file to both JavaScript and C++ targets,
+    Discovers and runs all Tuff compiler tests in test/tuff/.
+    Compiles each .tuff file to C++ target,
     executes them, and reports results.
 
 .PARAMETER Verbose
@@ -15,7 +15,7 @@
     Run only tests from a specific feature (e.g., "feature1_variables")
 
 .PARAMETER Target
-    Run only specific target: "js", "cpp", or "both" (default)
+    Run only specific target: "cpp" (default)
 
 .EXAMPLE
     .\run_tests.ps1
@@ -42,7 +42,7 @@ $ErrorActionPreference = "Stop"
 # Configuration
 $RootDir = $PSScriptRoot
 $CompilerPath = Join-Path $RootDir "bootstrap\build\Release\tuffc.exe"
-$TestDir = Join-Path $RootDir "src\commonTest\tuff"
+$TestDir = Join-Path $RootDir "test\tuff"
 $TempDir = Join-Path $TestDir "_temp"
 
 # ANSI color codes
