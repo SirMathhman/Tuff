@@ -22,7 +22,7 @@ fn arrayIsEmpty<T>(arr: *Array<T>): Bool => arr.len == 0USize;
 
 // Get element at index with bounds checking
 // Returns Some<T> if index is valid, None<T> otherwise
-fn arrayGet<T>(arr: *Array<T>, index: USize): Some<T> | None<T> => {
+fn arrayGet<T>(arr: *Array<T>, index: USize): Option<T> => {
 	if (index >= arr.len) {
 		return None<T> { };
 	}
@@ -33,7 +33,7 @@ fn arrayGet<T>(arr: *Array<T>, index: USize): Some<T> | None<T> => {
 
 // Get mutable reference to element at index with bounds checking
 // Returns Some<*mut T> if index is valid, None<*mut T> otherwise
-fn arrayGetMut<T>(arr: *mut Array<T>, index: USize): Some<*mut T> | None<*mut T> => {
+fn arrayGetMut<T>(arr: *mut Array<T>, index: USize): Option<*mut T> => {
 	if (index >= arr.len) {
 		return None<*mut T> { };
 	}

@@ -7,3 +7,5 @@ struct Some<T> {
 
 struct None<T> {
 }
+// Type alias for the union of Some<T> and None<T>
+type Option<T> = Some<T> | None<T>;
