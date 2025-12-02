@@ -1,0 +1,62 @@
+// Array<T> - safe wrapper around allocated memory with bounds checking
+// Provides safe, bounds-checked access to dynamically allocated memory
+// Note: This is a simplified array type. For automatic memory management,
+// use Vector<T> or wrap with Allocated<T> type alias from mem.tuff
+
+use option;
+
+struct Array<T> {
+	data : *mut T,
+	len : USize
+}
+
+// Create an array from raw allocated memory with known length
+// UNSAFE: caller must ensure ptr is validly allocated for len elements
+fn arrayFromRaw<T>(ptr: *mut T, len: USize): Array<T> => Array<T> { ptr, len };
+
+// Get the number of initialized elements
+fn arrayLen<T>(arr: *Array<T>): USize => arr.len;
+
+// Check if array is empty
+fn arrayIsEmpty<T>(arr: *Array<T>): Bool => arr.len == 0USize;
+
+// Get element at index with bounds checking
+// Returns Some<T> if index is valid, None<T> otherwise
+fn arrayGet<T>(arr: *Array<T>, index: USize): Some<T> | None<T> => {
+	if (index >= arr.len) {
+		return None<T> { };
+	}
+	
+	let ptr: *T = arr.data + index;
+	return Some<T> { *ptr };
+}
+
+// Get mutable reference to element at index with bounds checking
+// Returns Some<*mut T> if index is valid, None<*mut T> otherwise
+fn arrayGetMut<T>(arr: *mut Array<T>, index: USize): Some<*mut T> | None<*mut T> => {
+	if (index >= arr.len) {
+		return None<*mut T> { };
+	}
+	
+	let ptr: *mut T = arr.data + index;
+	return Some<*mut T> { ptr };
+}
+
+// Set element at index with bounds checking
+// Returns true if successful, false if index out of bounds
+fn arraySet<T>(arr: *mut Array<T>, index: USize, value: T): Bool => {
+	if (index >= arr.len) {
+		return false;
+	}
+	
+	let ptr: *mut T = arr.data + index;
+	*ptr = value;
+	return true;
+}
+
+// Initialize array length
+// Assumes array was created with arrayFromRaw() and data pointer is valid
+fn arrayInit<T>(arr: *mut Array<T>, length: USize): Void => {
+	arr.len = length;
+}
+
