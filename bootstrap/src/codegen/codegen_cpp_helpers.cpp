@@ -169,27 +169,6 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::RETURN_STMT:
 		return generateReturnStmt(node);
 	case ASTNodeType::STRUCT_DECL:
-	{
-		std::stringstream ss;
-		if (!node->genericParams.empty())
-		{
-			ss << "template<";
-			for (size_t i = 0; i < node->genericParams.size(); i++)
-			{
-				if (i > 0)
-					ss << ", ";
-				ss << "typename " << node->genericParams[i]->value;
-			}
-			ss << ">\n";
-		}
-		ss << "struct " << node->value << " {\n";
-		for (auto field : node->children)
-		{
-			ss << "    " << mapType(field->inferredType) << " " << field->value << ";\n";
-		}
-		ss << "};";
-		return ss.str();
-	}
 	case ASTNodeType::ENUM_DECL:
 	case ASTNodeType::USE_DECL:
 	case ASTNodeType::EXPECT_DECL:

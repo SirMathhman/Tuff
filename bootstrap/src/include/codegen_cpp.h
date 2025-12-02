@@ -84,4 +84,5 @@ private:
 	std::string genExpr(ast::ExprPtr expr);
 	std::string genStmt(ast::StmtPtr stmt);
 	std::string genDecl(ast::DeclPtr decl);
+	std::string genType(ast::TypePtr type);
 };

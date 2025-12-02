@@ -1,0 +1,152 @@
+#pragma once
+
+#include "ast.h"
+#include "ast_typed.h"
+
+// ============================================================================
+// AST TYPE CONVERTER - Converts type nodes to ast::TypePtr
+// ============================================================================
+
+class ASTTypeConverter
+{
+public:
+	// Convert ASTNode type nodes to ast::TypePtr
+	static ast::TypePtr toType(std::shared_ptr<ASTNode> node)
+	{
+		if (!node)
+			return nullptr;
+
+		switch (node->type)
+		{
+		case ASTNodeType::TYPE:
+		case ASTNodeType::IDENTIFIER:
+		{
+			// Check for primitive types
+			const std::string &name = node->value;
+			if (name == "I8" || name == "I16" || name == "I32" || name == "I64" ||
+					name == "U8" || name == "U16" || name == "U32" || name == "U64" ||
+					name == "F32" || name == "F64" || name == "Bool" || name == "Void" ||
+					name == "USize" || name == "Char")
+			{
+				ast::PrimitiveType t;
+				t.name = name;
+				return std::make_shared<ast::Type>(t);
+			}
+
+			// Named type (struct, enum, type alias, or generic)
+			ast::NamedType t;
+			t.name = name;
+			for (auto &arg : node->genericArgsNodes)
+				t.genericArgs.push_back(toType(arg));
+			return std::make_shared<ast::Type>(t);
+		}
+
+		case ASTNodeType::POINTER_TYPE:
+		{
+			ast::PointerType t;
+			t.isMutable = node->isMutable;
+			t.lifetime = node->lifetime;
+			if (!node->children.empty())
+				t.pointee = toType(node->children[0]);
+			return std::make_shared<ast::Type>(t);
+		}
+
+		case ASTNodeType::ARRAY_TYPE:
+		{
+			ast::ArrayType t;
+			if (node->children.size() > 0)
+				t.elementType = toType(node->children[0]);
+			// initCount and capacity would need toExpr - skip for now
+			return std::make_shared<ast::Type>(t);
+		}
+
+		default:
+			// Fallback: try to use inferredType string as primitive
+			if (!node->inferredType.empty())
+			{
+				return typeFromString(node->inferredType);
+			}
+			return nullptr;
+		}
+	}
+
+	// Create TypePtr from inferredType string (fallback)
+	static ast::TypePtr typeFromString(const std::string &typeStr)
+	{
+		if (typeStr.empty())
+			return nullptr;
+
+		// Check for primitive
+		if (typeStr == "I8" || typeStr == "I16" || typeStr == "I32" || typeStr == "I64" ||
+				typeStr == "U8" || typeStr == "U16" || typeStr == "U32" || typeStr == "U64" ||
+				typeStr == "F32" || typeStr == "F64" || typeStr == "Bool" || typeStr == "Void" ||
+				typeStr == "USize" || typeStr == "Char")
+		{
+			ast::PrimitiveType t;
+			t.name = typeStr;
+			return std::make_shared<ast::Type>(t);
+		}
+
+		// Check for pointer type
+		if (typeStr.length() > 0 && typeStr[0] == '*')
+		{
+			ast::PointerType t;
+			size_t start = 1;
+			if (typeStr.substr(1, 4) == "mut ")
+			{
+				t.isMutable = true;
+				start = 5;
+			}
+			t.pointee = typeFromString(typeStr.substr(start));
+			return std::make_shared<ast::Type>(t);
+		}
+
+		// Check for array type [T; init; cap]
+		if (typeStr.length() > 0 && typeStr[0] == '[')
+		{
+			ast::ArrayType t;
+			size_t semi = typeStr.find(';');
+			if (semi != std::string::npos)
+			{
+				std::string elemType = typeStr.substr(1, semi - 1);
+				t.elementType = typeFromString(elemType);
+			}
+			return std::make_shared<ast::Type>(t);
+		}
+
+		// Otherwise treat as named type
+		ast::NamedType t;
+		// Handle generic args like "Vec<I32>"
+		size_t lt = typeStr.find('<');
+		if (lt != std::string::npos)
+		{
+			t.name = typeStr.substr(0, lt);
+			size_t gt = typeStr.rfind('>');
+			if (gt != std::string::npos && gt > lt)
+			{
+				std::string args = typeStr.substr(lt + 1, gt - lt - 1);
+				size_t pos = 0;
+				while (pos < args.length())
+				{
+					size_t comma = args.find(',', pos);
+					if (comma == std::string::npos)
+						comma = args.length();
+					std::string arg = args.substr(pos, comma - pos);
+					// Trim whitespace
+					while (!arg.empty() && arg[0] == ' ')
+						arg = arg.substr(1);
+					while (!arg.empty() && arg.back() == ' ')
+						arg.pop_back();
+					if (!arg.empty())
+						t.genericArgs.push_back(typeFromString(arg));
+					pos = comma + 1;
+				}
+			}
+		}
+		else
+		{
+			t.name = typeStr;
+		}
+		return std::make_shared<ast::Type>(t);
+	}
+};

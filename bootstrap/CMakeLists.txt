@@ -65,6 +65,7 @@ set(COMPILER_SOURCES
     src/codegen/codegen_cpp_types.cpp
     src/codegen/codegen_cpp_union.cpp
     src/codegen/codegen_cpp_typed.cpp
+    src/codegen/codegen_cpp_decl_typed.cpp
 )
 
 # Main compiler executable

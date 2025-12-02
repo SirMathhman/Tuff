@@ -2,6 +2,7 @@
 
 #include "ast.h"
 #include "ast_typed.h"
+#include "ast_type_converter.h"
 #include <iostream>
 
 // ============================================================================
@@ -11,6 +12,17 @@
 class ASTConverter
 {
 public:
+	// Delegate type conversion to ASTTypeConverter
+	static ast::TypePtr toType(std::shared_ptr<ASTNode> node)
+	{
+		return ASTTypeConverter::toType(node);
+	}
+
+	static ast::TypePtr typeFromString(const std::string &typeStr)
+	{
+		return ASTTypeConverter::typeFromString(typeStr);
+	}
+
 	static ast::ExprPtr toExpr(std::shared_ptr<ASTNode> node)
 	{
 		if (!node)
@@ -304,11 +316,22 @@ public:
 			for (auto &gp : node->genericParams)
 				decl.genericParams.push_back(gp->value);
 
+			// Return type from returnTypeNode or inferredType
+			if (node->returnTypeNode)
+				decl.returnType = toType(node->returnTypeNode);
+			else
+				decl.returnType = typeFromString(node->inferredType);
+
 			for (size_t i = 0; i + 1 < node->children.size(); i++)
 			{
 				ast::Parameter param;
 				param.name = node->children[i]->value;
 				param.isMutable = node->children[i]->isMutable;
+				// Type from typeNode or inferredType
+				if (node->children[i]->typeNode)
+					param.type = toType(node->children[i]->typeNode);
+				else
+					param.type = typeFromString(node->children[i]->inferredType);
 				decl.params.push_back(param);
 			}
 
@@ -330,6 +353,11 @@ public:
 			{
 				ast::StructField field;
 				field.name = child->value;
+				// Type from typeNode or inferredType
+				if (child->typeNode)
+					field.type = toType(child->typeNode);
+				else
+					field.type = typeFromString(child->inferredType);
 				decl.fields.push_back(field);
 			}
 
@@ -355,11 +383,21 @@ public:
 			for (auto &gp : node->genericParams)
 				decl.genericParams.push_back(gp->value);
 
+			// Return type
+			if (node->returnTypeNode)
+				decl.returnType = toType(node->returnTypeNode);
+			else
+				decl.returnType = typeFromString(node->inferredType);
+
 			for (auto &child : node->children)
 			{
 				ast::Parameter param;
 				param.name = child->value;
 				param.isMutable = child->isMutable;
+				if (child->typeNode)
+					param.type = toType(child->typeNode);
+				else
+					param.type = typeFromString(child->inferredType);
 				decl.params.push_back(param);
 			}
 
@@ -374,11 +412,21 @@ public:
 			for (auto &gp : node->genericParams)
 				decl.genericParams.push_back(gp->value);
 
+			// Return type
+			if (node->returnTypeNode)
+				decl.returnType = toType(node->returnTypeNode);
+			else
+				decl.returnType = typeFromString(node->inferredType);
+
 			for (size_t i = 0; i + 1 < node->children.size(); i++)
 			{
 				ast::Parameter param;
 				param.name = node->children[i]->value;
 				param.isMutable = node->children[i]->isMutable;
+				if (node->children[i]->typeNode)
+					param.type = toType(node->children[i]->typeNode);
+				else
+					param.type = typeFromString(node->children[i]->inferredType);
 				decl.params.push_back(param);
 			}
 
