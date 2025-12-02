@@ -47,6 +47,38 @@ void writeToFile(const std::string &path, const std::string &content)
 	file.close();
 }
 
+void copyBuiltinHeaders(const std::string &outputDir, const std::vector<std::string> &sourcePaths)
+{
+	// Find the Tuff source root by looking for src/tuff in source paths
+	std::string tuffRoot;
+	for (const auto &srcPath : sourcePaths)
+	{
+		fs::path p(srcPath);
+		// Look for src/tuff in the path
+		auto pathStr = p.string();
+		size_t pos = pathStr.find("src");
+		if (pos != std::string::npos)
+		{
+			tuffRoot = pathStr.substr(0, pos);
+			break;
+		}
+	}
+
+	if (tuffRoot.empty())
+	{
+		// Fallback: assume src/tuff is relative to current directory
+		tuffRoot = ".";
+	}
+
+	// Copy string_builtins.h if it exists
+	fs::path builtinHeader = fs::path(tuffRoot) / "src" / "tuff" / "string_builtins.h";
+	if (fs::exists(builtinHeader))
+	{
+		fs::path destPath = fs::path(outputDir) / "string_builtins.h";
+		fs::copy_file(builtinHeader, destPath, fs::copy_options::overwrite_existing);
+	}
+}
+
 std::vector<std::string> split(const std::string &str, char delimiter)
 {
 	std::vector<std::string> tokens;
@@ -208,6 +240,9 @@ int main(int argc, char *argv[])
 			fs::path headerPath = outPath.parent_path() / "tuff_decls.h";
 			std::string headerContent = codegen.generateSharedHeader(mergedAst);
 			writeToFile(headerPath.string(), headerContent);
+			
+			// Copy builtin headers
+			copyBuiltinHeaders(outPath.parent_path().string(), sourcePaths);
 		}
 		else if (!outRootDir.empty())
 		{
@@ -217,6 +252,9 @@ int main(int argc, char *argv[])
 			fs::path headerPath = fs::path(outRootDir) / "tuff_decls.h";
 			std::string headerContent = codegen.generateSharedHeader(mergedAst);
 			writeToFile(headerPath.string(), headerContent);
+			
+			// Copy builtin headers
+			copyBuiltinHeaders(outRootDir, sourcePaths);
 		}
 
 		output = codegen.generate(mergedAst);

@@ -72,6 +72,12 @@ function Initialize-TestEnvironment {
     
     if (Test-Path $TempDir) { Remove-Item $TempDir -Recurse -Force }
     New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
+    
+    # Copy builtin headers to temp directory for test compilation
+    $builtinHeader = Join-Path $RootDir "src\tuff\string_builtins.h"
+    if (Test-Path $builtinHeader) {
+        Copy-Item $builtinHeader -Destination $TempDir -Force
+    }
 }
 
 function Get-TuffTests([string]$FeatureFilter = "") {
@@ -132,7 +138,7 @@ function Test-TuffFile([hashtable]$Test) {
     try {
         Set-Content -Path $cppFile -Value ($cppCode -join "`n") -Encoding UTF8
         $includeDir = Join-Path $RootDir "bootstrap\src\include"
-        $compileOutput = clang++ -std=c++17 -I $includeDir $cppFile -o $exeFile 2>&1
+        $compileOutput = clang++ -std=c++17 -I $includeDir -I $TempDir $cppFile -o $exeFile 2>&1
         if ($LASTEXITCODE -ne 0) {
             $errorLines = ($compileOutput | Select-String "error:" | Select-Object -First 3) -join "; "
             $result.Status = "ERROR"; $result.Message = "C++ compilation failed: $errorLines"
@@ -259,7 +265,7 @@ try {
             try {
                 Set-Content -Path $cppFile -Value ($cppCode -join "`n") -Encoding UTF8
                 $includeDir = Join-Path $RootDir "bootstrap\src\include"
-                $compileOutput = clang++ -std=c++17 -I $includeDir $cppFile -o $exeFile 2>&1
+                $compileOutput = clang++ -std=c++17 -I $includeDir -I $TempDir $cppFile -o $exeFile 2>&1
                 if ($LASTEXITCODE -ne 0) {
                     $errorLines = ($compileOutput | Select-String "error:" | Select-Object -First 3) -join "; "
                     $result.Status = "ERROR"; $result.Message = "C++ compilation failed: $errorLines"
