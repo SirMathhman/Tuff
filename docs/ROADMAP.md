@@ -22,19 +22,19 @@
 
 The standard library is currently in early development (`src/tuff/`).
 
-| Module   | Status     | Description                                     |
-| :------- | :--------- | :---------------------------------------------- |
-| `array`  | ✅ Basic   | Array utilities                                 |
-| `file`   | ⚠️ Minimal | File I/O (relies on externs)                    |
-| `io`     | ⚠️ Minimal | Console I/O (relies on externs)                 |
-| `map`    | ✅ Usable  | Hash map implementation                         |
-| `math`   | ✅ Basic   | Basic math functions                            |
-| `mem`    | ✅ Basic   | Memory management (malloc/free)                 |
-| `option` | ✅ Usable  | Option type                                     |
-| `result` | ✅ Usable  | Result type                                     |
-| `slice`  | ✅ Basic   | Slice utilities                                 |
-| `string` | ✅ Usable  | String operations (includes advanced methods)   |
-| `vector` | ✅ Usable  | Dynamic array implementation                    |
+| Module   | Status     | Description                                   |
+| :------- | :--------- | :-------------------------------------------- |
+| `array`  | ✅ Basic   | Array utilities                               |
+| `file`   | ⚠️ Minimal | File I/O (relies on externs)                  |
+| `io`     | ⚠️ Minimal | Console I/O (relies on externs)               |
+| `map`    | ✅ Usable  | Hash map implementation                       |
+| `math`   | ✅ Basic   | Basic math functions                          |
+| `mem`    | ✅ Basic   | Memory management (malloc/free)               |
+| `option` | ✅ Usable  | Option type                                   |
+| `result` | ✅ Usable  | Result type                                   |
+| `slice`  | ✅ Basic   | Slice utilities                               |
+| `string` | ✅ Usable  | String operations (includes advanced methods) |
+| `vector` | ✅ Usable  | Dynamic array implementation                  |
 
 ## Bootstrapping Requirements
 
@@ -51,7 +51,8 @@ To achieve self-hosting (compiling the Tuff compiler with Tuff), the following s
 ## Bootstrap Progress Checklist
 
 ### String Operations (Critical for Lexer/Parser)
-- ✅ `length`, `charAt`, `concat`, `equals` 
+
+- ✅ `length`, `charAt`, `concat`, `equals`
 - ✅ `substring`, `indexOf`
 - ✅ `startsWith`, `endsWith`, `trim`, `contains`
 - ✅ `replace`, `toUpperCase`, `toLowerCase`, `isEmpty`
