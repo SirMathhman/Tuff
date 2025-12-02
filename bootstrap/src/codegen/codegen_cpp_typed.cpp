@@ -300,3 +300,175 @@ std::string CodeGeneratorCPP::genStmt(ast::StmtPtr stmt)
 																	}},
 										*stmt);
 }
+
+std::string CodeGeneratorCPP::genDecl(ast::DeclPtr decl)
+{
+	if (!decl)
+		return "";
+
+	return std::visit(ast::Overload{
+			[this](const ast::Function &d) -> std::string
+			{
+				std::stringstream ss;
+
+				// Template params
+				if (!d.genericParams.empty())
+				{
+					ss << "template<";
+					for (size_t i = 0; i < d.genericParams.size(); i++)
+					{
+						if (i > 0) ss << ", ";
+						ss << "typename " << d.genericParams[i];
+					}
+					ss << ">\n";
+				}
+
+				// Return type and name (rename main to tuff_main)
+				std::string funcName = (d.name == "main") ? "tuff_main" : d.name;
+				// Note: returnType would need proper handling - for now use inferredType
+				ss << "/* return */ " << funcName << "(";
+
+				// Parameters
+				for (size_t i = 0; i < d.params.size(); i++)
+				{
+					if (i > 0) ss << ", ";
+					ss << "/* type */ " << d.params[i].name;
+				}
+
+				ss << ") ";
+
+				// Body
+				if (d.body)
+				{
+					ss << genExpr(d.body);
+				}
+
+				return ss.str();
+			},
+
+			[this](const ast::Struct &d) -> std::string
+			{
+				std::stringstream ss;
+
+				if (!d.genericParams.empty())
+				{
+					ss << "template<";
+					for (size_t i = 0; i < d.genericParams.size(); i++)
+					{
+						if (i > 0) ss << ", ";
+						ss << "typename " << d.genericParams[i];
+					}
+					ss << ">\n";
+				}
+
+				ss << "struct " << d.name << " {\n";
+				for (const auto &field : d.fields)
+				{
+					ss << "    /* type */ " << field.name << ";\n";
+				}
+				ss << "};";
+				return ss.str();
+			},
+
+			[this](const ast::Enum &d) -> std::string
+			{
+				std::stringstream ss;
+				ss << "enum class " << d.name << " {\n";
+				for (size_t i = 0; i < d.variants.size(); i++)
+				{
+					if (i > 0) ss << ",\n";
+					ss << "    " << d.variants[i];
+				}
+				ss << "\n};";
+				return ss.str();
+			},
+
+			[this](const ast::Expect &) -> std::string
+			{
+				// Expect declarations have no codegen
+				return "";
+			},
+
+			[this](const ast::Actual &d) -> std::string
+			{
+				std::stringstream ss;
+
+				if (!d.genericParams.empty())
+				{
+					ss << "template<";
+					for (size_t i = 0; i < d.genericParams.size(); i++)
+					{
+						if (i > 0) ss << ", ";
+						ss << "typename " << d.genericParams[i];
+					}
+					ss << ">\n";
+				}
+
+				ss << "/* return */ " << d.name << "(";
+				for (size_t i = 0; i < d.params.size(); i++)
+				{
+					if (i > 0) ss << ", ";
+					ss << "/* type */ " << d.params[i].name;
+				}
+				ss << ") ";
+
+				if (d.body)
+				{
+					ss << genExpr(d.body);
+				}
+
+				return ss.str();
+			},
+
+			[this](const ast::ExternFn &d) -> std::string
+			{
+				std::stringstream ss;
+				ss << "extern ";
+
+				if (!d.genericParams.empty())
+				{
+					ss << "template<";
+					for (size_t i = 0; i < d.genericParams.size(); i++)
+					{
+						if (i > 0) ss << ", ";
+						ss << "typename " << d.genericParams[i];
+					}
+					ss << "> ";
+				}
+
+				ss << "/* return */ " << d.name << "(";
+				for (size_t i = 0; i < d.params.size(); i++)
+				{
+					if (i > 0) ss << ", ";
+					ss << "/* type */ " << d.params[i].name;
+				}
+				ss << ");";
+				return ss.str();
+			},
+
+			[this](const ast::TypeAlias &d) -> std::string
+			{
+				std::stringstream ss;
+				ss << "using " << d.name << " = /* aliased type */;";
+				return ss.str();
+			},
+
+			[this](const ast::Module &d) -> std::string
+			{
+				std::stringstream ss;
+				ss << "namespace " << d.name << " {\n";
+				for (const auto &child : d.declarations)
+				{
+					ss << genDecl(child) << "\n";
+				}
+				ss << "}";
+				return ss.str();
+			},
+
+			[this](const ast::Use &) -> std::string
+			{
+				// Use declarations have no codegen
+				return "";
+			}
+		}, *decl);
+}

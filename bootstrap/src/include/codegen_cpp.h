@@ -80,7 +80,8 @@ private:
 	bool nextBlockIsLoop = false;
 
 	// ===== TYPED AST METHODS (using std::visit) =====
-	// These use the new ast::Expr and ast::Stmt types
+	// These use the new ast::Expr, ast::Stmt, and ast::Decl types
 	std::string genExpr(ast::ExprPtr expr);
 	std::string genStmt(ast::StmtPtr stmt);
+	std::string genDecl(ast::DeclPtr decl);
 };

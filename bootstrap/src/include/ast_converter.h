@@ -287,4 +287,138 @@ public:
 		}
 		}
 	}
+
+	// Convert declaration nodes
+	static ast::DeclPtr toDecl(std::shared_ptr<ASTNode> node)
+	{
+		if (!node)
+			return nullptr;
+
+		switch (node->type)
+		{
+		case ASTNodeType::FUNCTION_DECL:
+		{
+			ast::Function decl;
+			decl.name = node->value;
+
+			for (auto &gp : node->genericParams)
+				decl.genericParams.push_back(gp->value);
+
+			for (size_t i = 0; i + 1 < node->children.size(); i++)
+			{
+				ast::Parameter param;
+				param.name = node->children[i]->value;
+				param.isMutable = node->children[i]->isMutable;
+				decl.params.push_back(param);
+			}
+
+			if (!node->children.empty())
+				decl.body = toExpr(node->children.back());
+
+			return std::make_shared<ast::Decl>(decl);
+		}
+
+		case ASTNodeType::STRUCT_DECL:
+		{
+			ast::Struct decl;
+			decl.name = node->value;
+
+			for (auto &gp : node->genericParams)
+				decl.genericParams.push_back(gp->value);
+
+			for (auto &child : node->children)
+			{
+				ast::StructField field;
+				field.name = child->value;
+				decl.fields.push_back(field);
+			}
+
+			return std::make_shared<ast::Decl>(decl);
+		}
+
+		case ASTNodeType::ENUM_DECL:
+		{
+			ast::Enum decl;
+			decl.name = node->value;
+
+			for (auto &child : node->children)
+				decl.variants.push_back(child->value);
+
+			return std::make_shared<ast::Decl>(decl);
+		}
+
+		case ASTNodeType::EXPECT_DECL:
+		{
+			ast::Expect decl;
+			decl.name = node->value;
+
+			for (auto &gp : node->genericParams)
+				decl.genericParams.push_back(gp->value);
+
+			for (auto &child : node->children)
+			{
+				ast::Parameter param;
+				param.name = child->value;
+				param.isMutable = child->isMutable;
+				decl.params.push_back(param);
+			}
+
+			return std::make_shared<ast::Decl>(decl);
+		}
+
+		case ASTNodeType::ACTUAL_DECL:
+		{
+			ast::Actual decl;
+			decl.name = node->value;
+
+			for (auto &gp : node->genericParams)
+				decl.genericParams.push_back(gp->value);
+
+			for (size_t i = 0; i + 1 < node->children.size(); i++)
+			{
+				ast::Parameter param;
+				param.name = node->children[i]->value;
+				param.isMutable = node->children[i]->isMutable;
+				decl.params.push_back(param);
+			}
+
+			if (!node->children.empty())
+				decl.body = toExpr(node->children.back());
+
+			return std::make_shared<ast::Decl>(decl);
+		}
+
+		case ASTNodeType::USE_DECL:
+		{
+			ast::Use decl;
+			decl.path = node->value;
+			return std::make_shared<ast::Decl>(decl);
+		}
+
+		case ASTNodeType::MODULE_DECL:
+		{
+			ast::Module decl;
+			decl.name = node->value;
+
+			for (auto &child : node->children)
+				decl.declarations.push_back(toDecl(child));
+
+			return std::make_shared<ast::Decl>(decl);
+		}
+
+		case ASTNodeType::TYPE_ALIAS:
+		{
+			ast::TypeAlias decl;
+			decl.name = node->value;
+
+			for (auto &gp : node->genericParams)
+				decl.genericParams.push_back(gp->value);
+
+			return std::make_shared<ast::Decl>(decl);
+		}
+
+		default:
+			return nullptr;
+		}
+	}
 };
