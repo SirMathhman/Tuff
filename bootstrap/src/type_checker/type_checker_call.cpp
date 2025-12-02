@@ -275,11 +275,11 @@ void TypeChecker::handleMethodCall(std::shared_ptr<ASTNode> node)
 	auto fqnCallee = std::make_shared<ASTNode>();
 	fqnCallee->type = ASTNodeType::IDENTIFIER;
 	fqnCallee->value = fqn;
-	
+
 	// Copy generic args from field access (if explicitly provided)
 	fqnCallee->genericArgs = fieldAccess->genericArgs;
 	fqnCallee->genericArgsNodes = fieldAccess->genericArgsNodes;
-	
+
 	// If no explicit generic args but the object type has them, inherit from object type
 	// e.g., vec.len() where vec: Vector<I32> should call Vector::len<I32>
 	if (fqnCallee->genericArgs.empty() && !genericArgs.empty())
@@ -291,8 +291,10 @@ void TypeChecker::handleMethodCall(std::shared_ptr<ASTNode> node)
 		std::string current;
 		for (char c : args)
 		{
-			if (c == '<') depth++;
-			else if (c == '>') depth--;
+			if (c == '<')
+				depth++;
+			else if (c == '>')
+				depth--;
 			else if (c == ',' && depth == 0)
 			{
 				if (!current.empty())

@@ -1,0 +1,60 @@
+// Test impl blocks with Option-like return types
+// Tests method calls returning union types
+
+struct Some<T> {
+	value: T
+}
+
+struct None<T> {
+}
+
+// Box with Option-returning methods (concrete type for simplicity)
+struct IntBox {
+	hasValue: Bool,
+	value: I32
+}
+
+extern fn exit(code: I32): Void;
+
+impl IntBox {
+	fn empty(): IntBox => {
+		return IntBox { false, 0 };
+	}
+
+	fn with(val: I32): IntBox => {
+		return IntBox { true, val };
+	}
+
+	// Return union type directly instead of type alias
+	fn get(this: *IntBox): Some<I32> | None<I32> => {
+		if (this.hasValue) {
+			return Some<I32> { this.value };
+		}
+		return None<I32> { };
+	}
+
+	fn set(this: *mut IntBox, val: I32): Void => {
+		this.value = val;
+		this.hasValue = true;
+	}
+}
+
+// Test
+let mut box = IntBox::with(42);
+
+// Get should return Some
+let result = box.get();
+if (result is None<I32>) exit(1);
+
+// Set new value
+box.set(99);
+let result2 = box.get();
+if (result2 is None<I32>) exit(2);
+
+// Empty box should return None
+let empty = IntBox::empty();
+let result3 = empty.get();
+if (result3 is Some<I32>) exit(3);
+
+// Success!
+0
