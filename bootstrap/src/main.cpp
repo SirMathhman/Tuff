@@ -70,12 +70,22 @@ void copyBuiltinHeaders(const std::string &outputDir, const std::vector<std::str
 		tuffRoot = ".";
 	}
 
-	// Copy string_builtins.h if it exists
-	fs::path builtinHeader = fs::path(tuffRoot) / "src" / "tuff" / "string_builtins.h";
-	if (fs::exists(builtinHeader))
+	// Copy all .h and .cpp files from src/tuff to output directory
+	fs::path sourceDir = fs::path(tuffRoot) / "src" / "tuff";
+	if (fs::exists(sourceDir) && fs::is_directory(sourceDir))
 	{
-		fs::path destPath = fs::path(outputDir) / "string_builtins.h";
-		fs::copy_file(builtinHeader, destPath, fs::copy_options::overwrite_existing);
+		for (const auto &entry : fs::directory_iterator(sourceDir))
+		{
+			if (fs::is_regular_file(entry))
+			{
+				auto ext = entry.path().extension().string();
+				if (ext == ".h" || ext == ".cpp" || ext == ".hpp")
+				{
+					fs::path destPath = fs::path(outputDir) / entry.path().filename();
+					fs::copy_file(entry.path(), destPath, fs::copy_options::overwrite_existing);
+				}
+			}
+		}
 	}
 }
 
@@ -240,7 +250,7 @@ int main(int argc, char *argv[])
 			fs::path headerPath = outPath.parent_path() / "tuff_decls.h";
 			std::string headerContent = codegen.generateSharedHeader(mergedAst);
 			writeToFile(headerPath.string(), headerContent);
-			
+
 			// Copy builtin headers
 			copyBuiltinHeaders(outPath.parent_path().string(), sourcePaths);
 		}
@@ -252,7 +262,7 @@ int main(int argc, char *argv[])
 			fs::path headerPath = fs::path(outRootDir) / "tuff_decls.h";
 			std::string headerContent = codegen.generateSharedHeader(mergedAst);
 			writeToFile(headerPath.string(), headerContent);
-			
+
 			// Copy builtin headers
 			copyBuiltinHeaders(outRootDir, sourcePaths);
 		}
