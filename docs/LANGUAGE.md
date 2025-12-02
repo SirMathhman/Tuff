@@ -1,53 +1,5 @@
 # Tuff Language Specification
 
-## Implementation Progress
-
-| Feature                          | Status      | Tests                                                                   |
-| -------------------------------- | ----------- | ----------------------------------------------------------------------- |
-| 1. Variables & Let Bindings      | ✅ Complete | `let`, mutable bindings, type inference, no-shadowing                   |
-| 2. Primitive Operations          | ✅ Complete | All arithmetic, comparison, logical operators; boolean literals         |
-| 3. Control Flow (if/else, while) | ✅ Complete | if/else statements & expressions, while, loop, break, continue          |
-| 4. Structs                       | ✅ Complete | Definition, instantiation, field access, mutation, nesting              |
-| 5. Functions                     | ✅ Complete | Declaration, calls, return statements, recursion, forward refs          |
-| 6. Enums                         | ✅ Complete | Simple unit enums, variant access, equality comparison                  |
-| 7. Generics & Collections        | ✅ Complete | Generic functions & structs, type inference, C++ templates & JS dynamic |
-| 8. expect/actual Multi-platform  | ✅ Complete | Fully qualified names, signature validation, JS & C++ codegen           |
-| 9. Modules & Namespaces          | ✅ Complete | Module blocks, FQN support, nested modules, JS & C++ codegen            |
-| 10. Pointers & Arrays            | ✅ Complete | Pointer refs/deref, mutable/immutable, array literals, indexing         |
-| 11. Ownership & Borrow Checking  | ✅ Complete | Move semantics, borrow tracking, lifetime elision                       |
-| 12. Function Pointers            | ✅ Complete | Function pointer types, references, nested generics                     |
-| 13-15. Advanced Features         | ⏹️ Deferred | Type aliases, destructors, type inference improvements                  |
-
-## Standard Library Status
-
-The standard library is currently in early development (`src/tuff/`).
-
-| Module   | Status     | Description                           |
-| :------- | :--------- | :------------------------------------ |
-| `array`  | ✅ Basic   | Array utilities                       |
-| `file`   | ⚠️ Minimal | File I/O (relies on externs)          |
-| `io`     | ⚠️ Minimal | Console I/O (relies on externs)       |
-| `map`    | ✅ Usable  | Hash map implementation               |
-| `math`   | ✅ Basic   | Basic math functions                  |
-| `mem`    | ✅ Basic   | Memory management (malloc/free)       |
-| `option` | ✅ Usable  | Option type                           |
-| `result` | ✅ Usable  | Result type                           |
-| `slice`  | ✅ Basic   | Slice utilities                       |
-| `string` | ⚠️ Minimal | String operations (relies on externs) |
-| `vector` | ✅ Usable  | Dynamic array implementation          |
-
-## Bootstrapping Requirements
-
-To achieve self-hosting (compiling the Tuff compiler with Tuff), the following standard library features must be implemented:
-
-1.  **StringBuilder**: Efficient string construction for code generation.
-2.  **Advanced String Manipulation**: `split`, `trim`, `startsWith`, `endsWith`, `substring` (native implementation) for the Lexer/Parser.
-3.  **File System API**: Robust file reading/writing, directory traversal, existence checks.
-4.  **Command Line Arguments**: Access to `argv`/`argc` to read input file paths and flags.
-5.  **Process Control**: Exit codes, environment variables.
-6.  **Testing Framework**: A simple way to write and run unit tests within Tuff.
-7.  **Char/String Iterators**: For efficient lexing.
-
 ## Overview
 
 Tuff is a statically-typed, self-hosting programming language that compiles to JavaScript and C++. It features:
@@ -178,6 +130,52 @@ let p = Point { 10, 20 };
 
 ```tuff
 let x_coord = p.x;
+```
+
+## Methods and Impl Blocks
+
+Methods are functions associated with a struct, defined within an `impl` block.
+
+### Defining Methods
+
+```tuff
+struct Counter {
+    value: I32
+}
+
+impl Counter {
+    // Static method (constructor pattern)
+    fn new(): Counter => Counter { 0 };
+
+    // Instance method (takes 'this' parameter)
+    fn increment(this: *mut Counter): Void => {
+        this.value = this.value + 1;
+    }
+
+    fn getValue(this: *Counter): I32 => this.value;
+}
+```
+
+### Method Call Syntax
+
+Methods can be called using dot notation. The compiler automatically handles referencing (`&` or `&mut`) based on the `this` parameter type.
+
+```tuff
+let mut c = Counter::new();
+
+// Equivalent to Counter::increment(&mut c)
+c.increment();
+
+// Equivalent to Counter::getValue(&c)
+let val = c.getValue();
+```
+
+### Static Methods
+
+Static methods (functions without a `this` parameter) are called using the namespace syntax:
+
+```tuff
+let c = Counter::new();
 ```
 
 ## Enums
@@ -636,75 +634,4 @@ Cross-DLL support is deferred. Currently, all `expect`/`actual` matching occurs 
 - **Generics**: C++ templates (native) / Dynamic typing (JS)
 - **Lifetimes**: Required annotations for pointer parameters (Rust-style)
 
-## Type System: Literal Types (Planned)
-
-Tuff will eventually support **literal types** for compile-time value tracking and overflow detection:
-
-```tuff
-let x = 5;           // x: 5I32 (literal type)
-let y: I32 = 5;      // y: I32 (widened to base type)
-let z: U8 = 5;       // z: U8 (auto-widened from 5I32)
-
-let a: 100U8 = 100U8;    // a: 100U8 (explicit literal type)
-let b = a + a;           // Error: 200U8 overflows (max 255U8)
-```
-
-**Design:**
-
-- Literals have both value and type: `5` → `5I32`
-- Operations preserve literal precision: `(5U8) + (10U8)` → `15U8`
-- Compile-time overflow detection for all arithmetic
-- Assignability: `LiteralType ≤ BaseType` but not vice versa
-- Propagation: `let y = x` where `x: 5U8` → `y: 5U8`
-- Base types track ranges: `U8` = `[0, 255]U8`, `I32` = `[-2^31, 2^31-1]I32`
-
-This is deferred until after the compiler can self-host.
-
-## Advanced Array Safety (Deferred)
-
-Tuff will support **compile-time initialization tracking** for arrays to prevent use-before-init bugs:
-
-```tuff
-// Array pointer with type-level initialization tracking
-let mut array : *[I32, 0, 100] = malloc(SizeOf<I32> * 100);
-// Type: pointer to I32 array, 0 initialized, capacity 100
-
-array[0] = 10;   // OK: initializes index 0 → type becomes *[I32, 1, 100]
-array[1] = 20;   // OK: initializes index 1 → type becomes *[I32, 2, 100]
-array[2] = 30;   // OK: initializes index 2 → type becomes *[I32, 3, 100]
-
-array[5] = 50;   // ERROR: cannot skip indices (only 3 initialized)
-let x = array[4]; // ERROR: reading uninitialized memory (only 3 initialized)
-```
-
-**Destructor Pattern:**
-
-```tuff
-type Allocated<T, L : USize> = *[T; 0; L] & #free;
-extern fn malloc<T, L : USize>(count : SizeOf<T> * L) : Allocated<T, L>;
-extern fn free(this : Allocated<T, L : USize>) : Void;
-
-// #free is a destructor: any function matching fn ?(this : T) => Void
-// Automatically called when value goes out of scope
-```
-
-**Features:**
-
-- Sequential initialization enforced at compile-time
-- Array literals: `*[I32, 3, 100] = [10, 20, 30]`
-- Loop analysis: `for i in 0..n { array[i] = i }` tracks initialization count
-- Safe slicing: `array[0..n]` only exposes initialized portion
-
-This requires advanced flow-sensitive type checking and is **extremely complex** - deferred until post-self-hosting.
-
-## Future Extensions
-
-Features not yet implemented but planned:
-
-- Literal types with compile-time range tracking and overflow detection
-- Advanced array initialization tracking (see above)
-- Pattern matching on enums with associated data
-- Trait/interface system
-- Module system beyond expect/actual
-- Compile-time metaprogramming
-- Error handling (Result types)
+See [ROADMAP.md](ROADMAP.md) for planned features and implementation status.
