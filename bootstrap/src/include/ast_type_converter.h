@@ -87,17 +87,17 @@ public:
 				size_t nextPipe = typeStr.find('|', pos);
 				if (nextPipe == std::string::npos)
 					nextPipe = typeStr.length();
-				
+
 				std::string memberStr = typeStr.substr(pos, nextPipe - pos);
 				// Trim whitespace
 				while (!memberStr.empty() && memberStr[0] == ' ')
 					memberStr = memberStr.substr(1);
 				while (!memberStr.empty() && memberStr.back() == ' ')
 					memberStr.pop_back();
-				
+
 				if (!memberStr.empty())
 					t.members.push_back(typeFromString(memberStr));
-				
+
 				pos = nextPipe + 1;
 			}
 			return std::make_shared<ast::Type>(t);
