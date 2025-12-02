@@ -179,6 +179,17 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	}
 	case ASTNodeType::MODULE_DECL:
 		return generateModuleDecl(node);
+	case ASTNodeType::IMPL_DECL:
+	{
+		// Generate methods as separate functions with FQN names
+		// Names are already converted to FQN by type checker
+		std::stringstream ss;
+		for (auto method : node->children)
+		{
+			ss << generateNode(method) << "\n\n";
+		}
+		return ss.str();
+	}
 	case ASTNodeType::ACTUAL_DECL:
 		return generateActualDecl(node);
 	default:

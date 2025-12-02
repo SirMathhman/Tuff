@@ -96,6 +96,10 @@ std::shared_ptr<ASTNode> Parser::parse()
 				program->addChild(parseTypeAlias());
 			}
 		}
+		else if (peek().type == TokenType::IMPL)
+		{
+			program->addChild(parseImplBlock());
+		}
 		else if (peek().type == TokenType::LET)
 		{
 			program->addChild(parseLetStatement());

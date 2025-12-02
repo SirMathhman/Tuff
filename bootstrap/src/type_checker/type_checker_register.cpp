@@ -277,6 +277,68 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 			}
 			functionTable[funcName] = info;
 		}
+		else if (child->type == ASTNodeType::IMPL_DECL)
+		{
+			// Extract struct name from impl block
+			std::string structName = child->value;
+			if (structName.empty() && child->typeNode)
+			{
+				structName = child->typeNode->value;
+			}
+
+			// Register all methods as functions with FQN: StructName::methodName
+			for (auto method : child->children)
+			{
+				if (method->type != ASTNodeType::FUNCTION_DECL)
+					continue;
+
+				std::string methodName = method->value;
+				std::string fqnMethodName = structName + "::" + methodName;
+
+				if (functionTable.find(fqnMethodName) != functionTable.end())
+				{
+					std::cerr << "Error: Method '" << fqnMethodName << "' already declared." << std::endl;
+					exit(1);
+				}
+
+				FunctionInfo info;
+				// Copy generic params from method
+				for (auto genParam : method->genericParams)
+				{
+					info.genericParams.push_back(genParam->value);
+					if (!genParam->typeBound.empty())
+					{
+						info.genericBounds[genParam->value] = genParam->typeBound;
+					}
+				}
+				// Also add generic params from impl block
+				for (auto genParam : child->genericParams)
+				{
+					info.genericParams.push_back(genParam->value);
+					if (!genParam->typeBound.empty())
+					{
+						info.genericBounds[genParam->value] = genParam->typeBound;
+					}
+				}
+				for (const auto &lifetime : method->lifetimeParams)
+				{
+					info.lifetimeParams.push_back(lifetime);
+				}
+				info.returnType = method->inferredType;
+				info.returnTypeExpr = resolveType(method->returnTypeNode);
+				for (size_t i = 0; i < method->children.size() - 1; i++)
+				{
+					auto paramNode = method->children[i];
+					info.params.push_back({paramNode->value, paramNode->inferredType});
+					info.paramTypesExpr.push_back({paramNode->value, resolveType(paramNode->typeNode)});
+				}
+
+				// Update method node with FQN name for later code generation
+				method->value = fqnMethodName;
+
+				functionTable[fqnMethodName] = info;
+			}
+		}
 		else if (child->type == ASTNodeType::EXPECT_DECL)
 		{
 			std::string expectName = child->value;

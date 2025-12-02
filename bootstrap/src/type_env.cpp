@@ -176,4 +176,3 @@ void TypeEnvironment::print() const
 		std::cout << "  " << pair.first << " -> " << pair.second << "\n";
 	}
 }
-

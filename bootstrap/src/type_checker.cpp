@@ -445,6 +445,10 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		break;
 	}
 
+	case ASTNodeType::IMPL_DECL:
+		checkImplBlock(node);
+		break;
+
 	case ASTNodeType::CALL_EXPR:
 		checkCallExpr(node);
 		break;
@@ -512,5 +516,42 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 
 	default:
 		break;
+	}
+}
+
+void TypeChecker::checkImplBlock(std::shared_ptr<ASTNode> node)
+{
+	// Extract struct name from impl typeNode
+	// For Vector<T>, typeNode->value is "Vector"
+	std::string structName;
+	if (node->typeNode && !node->typeNode->value.empty())
+	{
+		structName = node->typeNode->value;
+	}
+	else if (!node->value.empty())
+	{
+		structName = node->value;
+	}
+
+	// Verify struct exists
+	auto structIt = structTable.find(structName);
+	if (structIt == structTable.end())
+	{
+		std::cerr << "Error: Struct '" << structName << "' not found when checking impl block." << std::endl;
+		exit(1);
+	}
+
+	// For each method in the impl block
+	for (auto method : node->children)
+	{
+		if (method->type != ASTNodeType::FUNCTION_DECL)
+		{
+			std::cerr << "Error: Expected function declaration in impl block." << std::endl;
+			exit(1);
+		}
+
+		// Methods are already registered with FQN names by registerDeclarations
+		// Just check them as normal functions
+		check(method);
 	}
 }

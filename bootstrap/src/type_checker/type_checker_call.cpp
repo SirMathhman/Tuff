@@ -116,10 +116,10 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 		{
 			std::string paramName = info.genericParams[i];
 			std::string argTypeStr = callee->genericArgs[i];
-			
+
 			// Store in string-based TypeEnvironment for codegen
 			node->typeEnv.bind(paramName, argTypeStr);
-			
+
 			// Try to convert string to ExprPtr
 			ExprPtr argType = std::make_shared<IdentifierExpr>(argTypeStr); // Simple fallback
 			typeSubstitutions[paramName] = argType;
@@ -169,11 +169,11 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 
 	ExprPtr returnType = info.returnTypeExpr;
 	returnType = substituteType(returnType, typeSubstitutions);
-	
+
 	// Also apply string substitution for codegen
 	std::string returnTypeStr = exprTypeToString(returnType);
 	returnTypeStr = node->typeEnv.substitute(returnTypeStr);
-	
+
 	node->exprType = returnType;
 	node->inferredType = returnTypeStr;
 }

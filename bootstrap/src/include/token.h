@@ -29,6 +29,7 @@ enum class TokenType
 	TRUE,
 	FALSE,
 	THIS,
+	IMPL,
 
 	// Integer Types
 	U8,
