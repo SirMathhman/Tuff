@@ -157,14 +157,14 @@ void TypeChecker::checkIndexExpr(std::shared_ptr<ASTNode> node)
 		std::string baseName;
 		std::vector<std::string> args;
 		parseGenericType(arrayType, baseName, args);
-		
+
 		auto genericAliasIt = typeAliasTable.find(baseName);
 		if (genericAliasIt != typeAliasTable.end())
 		{
 			// Substitute generic args into target type
 			std::string target = genericAliasIt->second.aliasedType;
-			const auto& params = genericAliasIt->second.genericParams;
-			
+			const auto &params = genericAliasIt->second.genericParams;
+
 			if (args.size() == params.size())
 			{
 				// Simple string substitution for now (fragile but works for simple cases)
@@ -172,15 +172,15 @@ void TypeChecker::checkIndexExpr(std::shared_ptr<ASTNode> node)
 				{
 					std::string param = params[i];
 					std::string arg = args[i];
-					
+
 					// Replace all occurrences of param with arg
 					size_t pos = 0;
 					while ((pos = target.find(param, pos)) != std::string::npos)
 					{
 						// Ensure we match whole word
-						bool startOk = (pos == 0 || !isalnum(target[pos-1]));
-						bool endOk = (pos + param.length() == target.length() || !isalnum(target[pos+param.length()]));
-						
+						bool startOk = (pos == 0 || !isalnum(target[pos - 1]));
+						bool endOk = (pos + param.length() == target.length() || !isalnum(target[pos + param.length()]));
+
 						if (startOk && endOk)
 						{
 							target.replace(pos, param.length(), arg);
@@ -207,8 +207,10 @@ void TypeChecker::checkIndexExpr(std::shared_ptr<ASTNode> node)
 		size_t splitPos = std::string::npos;
 		for (size_t i = 0; i < arrayType.length(); i++)
 		{
-			if (arrayType[i] == '<') depth++;
-			else if (arrayType[i] == '>') depth--;
+			if (arrayType[i] == '<')
+				depth++;
+			else if (arrayType[i] == '>')
+				depth--;
 			else if (arrayType[i] == '&' && depth == 0)
 			{
 				splitPos = i;

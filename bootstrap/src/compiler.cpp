@@ -2,7 +2,6 @@
 #include "lexer.h"
 #include "parser.h"
 #include "type_checker.h"
-#include "codegen_js.h"
 #include "codegen_cpp.h"
 
 #include <sstream>
@@ -38,12 +37,7 @@ std::string compile(const std::string &source, const std::string &target)
 
 		// 4. Code Generation
 		std::string output;
-		if (target == "js")
-		{
-			CodeGeneratorJS codegen;
-			output = codegen.generate(ast);
-		}
-		else if (target == "cpp")
+		if (target == "cpp")
 		{
 			CodeGeneratorCPP codegen;
 			output = codegen.generate(ast);

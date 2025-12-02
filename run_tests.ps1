@@ -33,8 +33,8 @@
 param(
     [switch]$Verbose,
     [string]$Feature = "",
-    [ValidateSet("both", "js", "cpp")]
-    [string]$Target = "both"
+    [ValidateSet("cpp")]
+    [string]$Target = "cpp"
 )
 
 $ErrorActionPreference = "Stop"
@@ -87,27 +87,13 @@ function Initialize-TestEnvironment {
         exit 1
     }
 
-    # Check for Node.js
-    if ($Target -in @("both", "js")) {
-        try {
-            $null = Get-Command node -ErrorAction Stop
-        } catch {
-            Write-ColorOutput "[WARN] Node.js not found. JavaScript tests will be skipped." $ColorYellow
-            if ($Target -eq "js") {
-                exit 1
-            }
-        }
-    }
-
     # Check for clang
-    if ($Target -in @("both", "cpp")) {
+    if ($Target -eq "cpp") {
         try {
             $null = Get-Command clang -ErrorAction Stop
         } catch {
             Write-ColorOutput "[WARN] clang not found. C++ tests will be skipped." $ColorYellow
-            if ($Target -eq "cpp") {
-                exit 1
-            }
+            exit 1
         }
     }
 

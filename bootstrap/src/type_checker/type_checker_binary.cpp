@@ -21,8 +21,10 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 		size_t splitPos = std::string::npos;
 		for (size_t i = 0; i < leftType.length(); i++)
 		{
-			if (leftType[i] == '<') depth++;
-			else if (leftType[i] == '>') depth--;
+			if (leftType[i] == '<')
+				depth++;
+			else if (leftType[i] == '>')
+				depth--;
 			else if (leftType[i] == '&' && depth == 0)
 			{
 				splitPos = i;

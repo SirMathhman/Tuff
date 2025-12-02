@@ -8,7 +8,6 @@
 #include "lexer.h"
 #include "parser.h"
 #include "type_checker.h"
-#include "codegen_js.h"
 #include "codegen_cpp.h"
 
 std::string readFile(const std::string &path)
@@ -60,7 +59,7 @@ int main(int argc, char *argv[])
 	if (argc < 3)
 	{
 		std::cerr << "Usage: tuffc <source.tuff> <target> [-o <output>] [--sources <file1,file2,...>] [--lib]" << std::endl;
-		std::cerr << "Targets: js, cpp" << std::endl;
+		std::cerr << "Targets: cpp" << std::endl;
 		std::cerr << "Options:" << std::endl;
 		std::cerr << "  -o <output>           Write output to file instead of stdout" << std::endl;
 		std::cerr << "  --sources <files>     Comma-separated list of source files to compile together" << std::endl;
@@ -130,12 +129,7 @@ int main(int argc, char *argv[])
 
 	// 4. Code Generation
 	std::string output;
-	if (target == "js")
-	{
-		CodeGeneratorJS codegen;
-		output = codegen.generate(mergedAst);
-	}
-	else if (target == "cpp")
+	if (target == "cpp")
 	{
 		CodeGeneratorCPP codegen;
 		codegen.setIsLibrary(isLibrary);

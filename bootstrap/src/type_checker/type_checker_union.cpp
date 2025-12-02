@@ -35,9 +35,11 @@ std::vector<std::string> TypeChecker::splitUnionType(const std::string &unionTyp
 		if (c == '|')
 		{
 			// Trim whitespace
-			while (!current.empty() && current.front() == ' ') current.erase(0, 1);
-			while (!current.empty() && current.back() == ' ') current.pop_back();
-			
+			while (!current.empty() && current.front() == ' ')
+				current.erase(0, 1);
+			while (!current.empty() && current.back() == ' ')
+				current.pop_back();
+
 			variants.push_back(current);
 			current = "";
 		}
@@ -49,9 +51,11 @@ std::vector<std::string> TypeChecker::splitUnionType(const std::string &unionTyp
 	if (!current.empty())
 	{
 		// Trim whitespace
-		while (!current.empty() && current.front() == ' ') current.erase(0, 1);
-		while (!current.empty() && current.back() == ' ') current.pop_back();
-		
+		while (!current.empty() && current.front() == ' ')
+			current.erase(0, 1);
+		while (!current.empty() && current.back() == ' ')
+			current.pop_back();
+
 		variants.push_back(current);
 	}
 	return variants;
