@@ -4,6 +4,8 @@
 #include <map>
 #include <vector>
 #include "ast.h"
+#include "ast_typed.h"
+#include "ast_converter.h"
 
 struct VarInfoCPP
 {
@@ -76,4 +78,9 @@ private:
 	std::vector<ScopeCPP> scopes;
 	std::string getDestructor(const std::string &type);
 	bool nextBlockIsLoop = false;
+
+	// ===== TYPED AST METHODS (using std::visit) =====
+	// These use the new ast::Expr and ast::Stmt types
+	std::string genExpr(ast::ExprPtr expr);
+	std::string genStmt(ast::StmtPtr stmt);
 };
