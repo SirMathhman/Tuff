@@ -1,0 +1,26 @@
+// Test: isEmpty method
+use string;
+use io;
+
+extern fn exit(code: I32): Void;
+
+let s1 = "";
+if (!s1.isEmpty()) {
+	println("FAIL: empty string should be empty");
+	exit(1);
+}
+
+let s2 = "hello";
+if (s2.isEmpty()) {
+	println("FAIL: non-empty string should not be empty");
+	exit(2);
+}
+
+let s3 = " ";
+if (s3.isEmpty()) {
+	println("FAIL: string with space should not be empty");
+	exit(3);
+}
+
+println("PASS");
+0

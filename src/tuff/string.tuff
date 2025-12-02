@@ -36,6 +36,30 @@ extern fn __builtin_string_toI32(s: string, outValue: *mut I32): Bool;
 // Create a string from a byte buffer (copies the data)
 extern fn __builtin_string_fromBytes(buffer: *U8, length: USize): string;
 
+// Check if string starts with prefix
+extern fn __builtin_string_startsWith(s: string, prefix: string): Bool;
+
+// Check if string ends with suffix
+extern fn __builtin_string_endsWith(s: string, suffix: string): Bool;
+
+// Trim whitespace from both ends (returns newly allocated string)
+extern fn __builtin_string_trim(s: string): string;
+
+// Check if string contains substring
+extern fn __builtin_string_contains(s: string, needle: string): Bool;
+
+// Replace all occurrences of 'from' with 'to' (returns newly allocated string)
+extern fn __builtin_string_replace(s: string, from: string, to: string): string;
+
+// Convert string to uppercase (returns newly allocated string)
+extern fn __builtin_string_toUpperCase(s: string): string;
+
+// Convert string to lowercase (returns newly allocated string)
+extern fn __builtin_string_toLowerCase(s: string): string;
+
+// Check if string is empty
+extern fn __builtin_string_isEmpty(s: string): Bool;
+
 impl string {
 	fn length(this: string): USize => __builtin_string_length(this);
 	fn charAt(this: string, index: USize): U8 => __builtin_string_charAt(this, index);
@@ -56,4 +80,14 @@ impl string {
 	// Static methods
 	fn fromI32(value: I32): string => __builtin_string_fromI32(value);
 	fn fromBytes(buffer: *U8, length: USize): string => __builtin_string_fromBytes(buffer, length);
+	
+	// Advanced string operations
+	fn startsWith(this: string, prefix: string): Bool => __builtin_string_startsWith(this, prefix);
+	fn endsWith(this: string, suffix: string): Bool => __builtin_string_endsWith(this, suffix);
+	fn trim(this: string): string => __builtin_string_trim(this);
+	fn contains(this: string, needle: string): Bool => __builtin_string_contains(this, needle);
+	fn replace(this: string, from: string, to: string): string => __builtin_string_replace(this, from, to);
+	fn toUpperCase(this: string): string => __builtin_string_toUpperCase(this);
+	fn toLowerCase(this: string): string => __builtin_string_toLowerCase(this);
+	fn isEmpty(this: string): Bool => __builtin_string_isEmpty(this);
 }

@@ -1,0 +1,40 @@
+// Test: trim method
+use string;
+use io;
+
+extern fn exit(code: I32): Void;
+
+// Test basic trim
+let s1 = "  hello  ";
+let trimmed1 = s1.trim();
+if (!trimmed1.equals("hello")) {
+	println("FAIL: basic trim");
+	exit(1);
+}
+
+// Test trim with tabs and newlines
+let s2 = "\t\nhello\r\n";
+let trimmed2 = s2.trim();
+if (!trimmed2.equals("hello")) {
+	println("FAIL: trim tabs/newlines");
+	exit(2);
+}
+
+// Test trim with no whitespace
+let s3 = "hello";
+let trimmed3 = s3.trim();
+if (!trimmed3.equals("hello")) {
+	println("FAIL: trim no whitespace");
+	exit(3);
+}
+
+// Test trim all whitespace
+let s4 = "   \t\n  ";
+let trimmed4 = s4.trim();
+if (!trimmed4.equals("")) {
+	println("FAIL: trim all whitespace");
+	exit(4);
+}
+
+println("PASS");
+0

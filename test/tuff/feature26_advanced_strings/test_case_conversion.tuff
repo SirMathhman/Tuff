@@ -1,0 +1,46 @@
+// Test: toUpperCase and toLowerCase methods
+use string;
+use io;
+
+extern fn exit(code: I32): Void;
+
+// Test toUpperCase
+let s1 = "hello world";
+let upper = s1.toUpperCase();
+if (!upper.equals("HELLO WORLD")) {
+	println("FAIL: toUpperCase");
+	exit(1);
+}
+
+// Test toLowerCase
+let s2 = "HELLO WORLD";
+let lower = s2.toLowerCase();
+if (!lower.equals("hello world")) {
+	println("FAIL: toLowerCase");
+	exit(2);
+}
+
+// Test mixed case
+let s3 = "HeLLo WoRLd";
+let upper3 = s3.toUpperCase();
+if (!upper3.equals("HELLO WORLD")) {
+	println("FAIL: mixed toUpperCase");
+	exit(3);
+}
+
+let lower3 = s3.toLowerCase();
+if (!lower3.equals("hello world")) {
+	println("FAIL: mixed toLowerCase");
+	exit(4);
+}
+
+// Test with numbers and symbols
+let s4 = "Hello123!@#";
+let upper4 = s4.toUpperCase();
+if (!upper4.equals("HELLO123!@#")) {
+	println("FAIL: toUpperCase with symbols");
+	exit(5);
+}
+
+println("PASS");
+0

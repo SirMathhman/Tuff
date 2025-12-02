@@ -227,7 +227,7 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 			dummyNode->type = ASTNodeType::TYPE;
 			dummyNode->value = argTypeStr;
 			ExprPtr argType = resolveType(dummyNode);
-			
+
 			typeSubstitutions[paramName] = argType;
 		}
 	}

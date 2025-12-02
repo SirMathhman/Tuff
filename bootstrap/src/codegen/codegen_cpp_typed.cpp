@@ -15,19 +15,34 @@ std::string CodeGeneratorCPP::genExpr(ast::ExprPtr expr)
 
 	return std::visit(ast::Overload{[this](const ast::Literal &e) -> std::string
 																	{
-																		// Strip type suffix from literals (e.g., "10I32" -> "10")
+																		// Check if this is a string literal
+																		if (e.inferredType == "string")
+																		{
+																			// String literal: generate as C string with proper escaping
+																			std::stringstream ss;
+																			ss << "\"";
+																			for (char c : e.value)
+																			{
+																				if (c == '\n') ss << "\\n";
+																				else if (c == '\r') ss << "\\r";
+																				else if (c == '\t') ss << "\\t";
+																				else if (c == '\\') ss << "\\\\";
+																				else if (c == '"') ss << "\\\"";
+																				else ss << c;
+																			}
+																			ss << "\"";
+																			return ss.str();
+																		}
+																		
+																		// Strip type suffix from numeric literals (e.g., "10I32" -> "10")
 																		std::string literal = e.value;
 																		std::string result;
 																		for (char c : literal)
 																		{
 																			if ((c >= '0' && c <= '9') || c == '.' || c == '-')
-																			{
 																				result += c;
-																			}
 																			else
-																			{
 																				break;
-																			}
 																		}
 																		return result.empty() ? literal : result;
 																	},
@@ -440,38 +455,22 @@ std::string CodeGeneratorCPP::genStmt(ast::StmtPtr stmt)
 																	},
 
 																	[this](const ast::While &s) -> std::string
-																	{
-																		return "while (" + genExpr(s.condition) + ") " + genExpr(s.body);
-																	},
+																	{ return "while (" + genExpr(s.condition) + ") " + genExpr(s.body); },
 
 																	[this](const ast::Loop &s) -> std::string
-																	{
-																		return "while (true) " + genExpr(s.body);
-																	},
+																	{ return "while (true) " + genExpr(s.body); },
 
 																	[this](const ast::Break &) -> std::string
-																	{
-																		return "break;";
-																	},
+																	{ return "break;"; },
 
 																	[this](const ast::Continue &) -> std::string
-																	{
-																		return "continue;";
-																	},
+																	{ return "continue;"; },
 
 																	[this](const ast::Return &s) -> std::string
-																	{
-																		if (s.value)
-																		{
-																			return "return " + genExpr(s.value) + ";";
-																		}
-																		return "return;";
-																	},
+																	{ return s.value ? "return " + genExpr(s.value) + ";" : "return;"; },
 
 																	[this](const ast::ExprStmt &s) -> std::string
-																	{
-																		return genExpr(s.expr) + ";";
-																	}},
+																	{ return genExpr(s.expr) + ";"; }},
 										*stmt);
 }
 

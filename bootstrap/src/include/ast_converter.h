@@ -145,6 +145,17 @@ public:
 				expr.elements.push_back(toExpr(child));
 			}
 			expr.exprType = node->exprType;
+			expr.inferredType = node->inferredType;
+			return std::make_shared<ast::Expr>(expr);
+		}
+
+		case ASTNodeType::STRING_LITERAL:
+		{
+			// String literals are treated as literals
+			ast::Literal expr;
+			expr.value = node->value;
+			expr.inferredType = node->inferredType;
+			expr.exprType = node->exprType;
 			return std::make_shared<ast::Expr>(expr);
 		}
 
