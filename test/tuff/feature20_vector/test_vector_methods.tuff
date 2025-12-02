@@ -1,0 +1,54 @@
+// Test Vector with method call syntax
+// Uses impl blocks and method calls: vec.push(), vec.len(), etc.
+
+struct Vector<T> {
+	length: USize,
+	capacity: USize
+}
+
+extern fn exit(code: I32): Void;
+
+impl<T> Vector<T> {
+	fn new(): Vector<T> => {
+		return Vector<T> { 0USize, 10USize };
+	}
+
+	fn len(this: *Vector<T>): USize => this.length;
+
+	fn capacity(this: *Vector<T>): USize => this.capacity;
+
+	fn isEmpty(this: *Vector<T>): Bool => this.length == 0USize;
+
+	fn push(this: *mut Vector<T>): Void => {
+		if (this.length < this.capacity) {
+			this.length = this.length + 1USize;
+		}
+	}
+
+	fn grow(this: *mut Vector<T>): Void => {
+		this.capacity = this.capacity * 2USize;
+	}
+}
+
+// Test using method call syntax
+let mut vec = Vector::new<I32>();
+
+// Test initial state
+if (vec.len() != 0USize) exit(1);
+if (!vec.isEmpty()) exit(2);
+if (vec.capacity() != 10USize) exit(3);
+
+// Test push using method call syntax
+vec.push();
+vec.push();
+vec.push();
+
+if (vec.len() != 3USize) exit(4);
+if (vec.isEmpty()) exit(5);
+
+// Test grow
+vec.grow();
+if (vec.capacity() != 20USize) exit(6);
+
+// Success!
+0

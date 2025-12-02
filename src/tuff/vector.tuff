@@ -19,68 +19,68 @@ impl<T> Vector<T> {
 	}
 
 	// Get the number of initialized elements
-	fn len(self: *Vector<T>): USize => self.length;
+	fn len(this: *Vector<T>): USize => this.length;
 
 	// Get the total capacity
-	fn capacity(self: *Vector<T>): USize => self.capacity;
+	fn capacity(this: *Vector<T>): USize => this.capacity;
 
 	// Check if vector is empty
-	fn isEmpty(self: *Vector<T>): Bool => self.length == 0USize;
+	fn isEmpty(this: *Vector<T>): Bool => this.length == 0USize;
 
 	// Push an element to the end of the vector
 	// Grows capacity by 2x when full
-	fn push(self: *mut Vector<T>, value: T): Void => {
+	fn push(this: *mut Vector<T>, value: T): Void => {
 		// Check if we need to grow
-		if (self.length >= self.capacity) {
-			let newCapacity: USize = if (self.capacity == 0USize) 10USize else self.capacity * 2USize;
-			self.data = realloc<T>(self.data, sizeOf(T) * newCapacity);
-			self.capacity = newCapacity;
+		if (this.length >= this.capacity) {
+			let newCapacity: USize = if (this.capacity == 0USize) 10USize else this.capacity * 2USize;
+			this.data = realloc<T>(this.data, sizeOf(T) * newCapacity);
+			this.capacity = newCapacity;
 		}
 		
 		// Assign value at the end using pointer arithmetic
-		let ptr: *mut T = self.data + self.length;
+		let ptr: *mut T = this.data + this.length;
 		*ptr = value;
 		
 		// Increment length
-		self.length = self.length + 1USize;
+		this.length = this.length + 1USize;
 	}
 
 	// Get an element at the given index
 	// Returns Some<T> if index is valid, None<T> otherwise
-	fn get(self: *Vector<T>, index: USize): Option<T> => {
-		if (index >= self.length) {
+	fn get(this: *Vector<T>, index: USize): Option<T> => {
+		if (index >= this.length) {
 			return None<T> { };
 		}
 		
-		let ptr: *T = self.data + index;
+		let ptr: *T = this.data + index;
 		return Some<T> { *ptr };
 	}
 
 	// Get mutable reference to element at the given index
 	// Returns Some<*mut T> if index is valid, None<*mut T> otherwise
-	fn getMut(self: *mut Vector<T>, index: USize): Option<*mut T> => {
-		if (index >= self.length) {
+	fn getMut(this: *mut Vector<T>, index: USize): Option<*mut T> => {
+		if (index >= this.length) {
 			return None<*mut T> { };
 		}
 		
-		let ptr: *mut T = self.data + index;
+		let ptr: *mut T = this.data + index;
 		return Some<*mut T> { ptr };
 	}
 
 	// Set element at the given index
 	// Returns true if successful, false if index out of bounds
-	fn set(self: *mut Vector<T>, index: USize, value: T): Bool => {
-		if (index >= self.length) {
+	fn set(this: *mut Vector<T>, index: USize, value: T): Bool => {
+		if (index >= this.length) {
 			return false;
 		}
 		
-		let ptr: *mut T = self.data + index;
+		let ptr: *mut T = this.data + index;
 		*ptr = value;
 		return true;
 	}
 
 	// Free the vector's memory
-	fn free(self: *mut Vector<T>): Void => {
-		free<T>(self.data);
+	fn free(this: *mut Vector<T>): Void => {
+		free<T>(this.data);
 	}
 }

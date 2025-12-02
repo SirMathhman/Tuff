@@ -40,6 +40,7 @@
     "feature19_multiple_of/test_subtyping": 20,
     "feature19_multiple_of/test_to_base": 10,
     "feature20_vector/test_vector_basic": 0,
+    "feature20_vector/test_vector_methods": 0,
     "feature22_impl_blocks/test_impl_basic": 1,
     "feature22_impl_blocks/test_impl_mutable": 99,
     "feature22_impl_blocks/test_impl_multiple_methods": 1,

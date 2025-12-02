@@ -217,8 +217,18 @@ void TypeChecker::handleMethodCall(std::shared_ptr<ASTNode> node)
 		isPointer = true;
 	}
 
-	// Construct the FQN for the method: StructName::methodName
-	std::string fqn = baseType + "::" + methodName;
+	// Extract generic args from the type (e.g., "Vector<I32>" -> "Vector", "<I32>")
+	std::string structName = baseType;
+	std::string genericArgs;
+	size_t anglePos = baseType.find('<');
+	if (anglePos != std::string::npos)
+	{
+		structName = baseType.substr(0, anglePos);
+		genericArgs = baseType.substr(anglePos);
+	}
+
+	// Construct the FQN for the method: StructName::methodName (without generic args)
+	std::string fqn = structName + "::" + methodName;
 
 	// Look up the method in function table
 	auto it = functionTable.find(fqn);
@@ -265,8 +275,40 @@ void TypeChecker::handleMethodCall(std::shared_ptr<ASTNode> node)
 	auto fqnCallee = std::make_shared<ASTNode>();
 	fqnCallee->type = ASTNodeType::IDENTIFIER;
 	fqnCallee->value = fqn;
+	
+	// Copy generic args from field access (if explicitly provided)
 	fqnCallee->genericArgs = fieldAccess->genericArgs;
 	fqnCallee->genericArgsNodes = fieldAccess->genericArgsNodes;
+	
+	// If no explicit generic args but the object type has them, inherit from object type
+	// e.g., vec.len() where vec: Vector<I32> should call Vector::len<I32>
+	if (fqnCallee->genericArgs.empty() && !genericArgs.empty())
+	{
+		// Parse generic args from the type string "<I32>" -> ["I32"]
+		std::string args = genericArgs.substr(1, genericArgs.length() - 2); // Strip < >
+		size_t pos = 0;
+		int depth = 0;
+		std::string current;
+		for (char c : args)
+		{
+			if (c == '<') depth++;
+			else if (c == '>') depth--;
+			else if (c == ',' && depth == 0)
+			{
+				if (!current.empty())
+				{
+					fqnCallee->genericArgs.push_back(current);
+					current.clear();
+				}
+				continue;
+			}
+			current += c;
+		}
+		if (!current.empty())
+		{
+			fqnCallee->genericArgs.push_back(current);
+		}
+	}
 
 	// 2. Determine the first argument (reference to object or object itself if already pointer)
 	std::shared_ptr<ASTNode> firstArg;
