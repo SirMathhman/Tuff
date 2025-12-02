@@ -25,6 +25,7 @@ struct FunctionInfo
 	std::vector<std::string> genericParams;									 // <T, U>
 	std::map<std::string, std::string> genericBounds;				 // T -> I32 (type bounds)
 	std::vector<std::string> lifetimeParams;								 // <a, b>
+	bool isExtern = false;														 // true for extern fn declarations
 };
 
 struct EnumInfo

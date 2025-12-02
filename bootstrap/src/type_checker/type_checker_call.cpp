@@ -45,6 +45,9 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 
 	const FunctionInfo &info = it->second;
 
+	// Mark if callee is extern (for codegen to skip template args)
+	node->calleeIsExtern = info.isExtern;
+
 	// Check generic args
 	if (callee->genericArgs.size() != info.genericParams.size())
 	{

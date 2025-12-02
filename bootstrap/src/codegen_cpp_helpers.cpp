@@ -188,8 +188,10 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		// First child is callee (IDENTIFIER)
 		ss << generateNode(node->children[0]);
 
-		// Emit generic args <I32>
-		if (!node->children[0]->genericArgs.empty())
+		// Emit generic args <I32>, but NOT for extern functions
+		// Extern functions come from C/C++ and aren't templates, so we instantiate them
+		// at compile-time in type checking but don't emit template syntax
+		if (!node->children[0]->genericArgs.empty() && !node->calleeIsExtern)
 		{
 			ss << "<";
 			for (size_t i = 0; i < node->children[0]->genericArgs.size(); i++)

@@ -293,6 +293,7 @@ void TypeChecker::registerDeclarations(std::shared_ptr<ASTNode> node)
 			}
 
 			FunctionInfo info;
+			info.isExtern = true; // Mark as extern
 			for (auto genParam : child->genericParams)
 			{
 				info.genericParams.push_back(genParam->value);

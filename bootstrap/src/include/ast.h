@@ -69,6 +69,7 @@ struct ASTNode
 	std::string typeBound;				// For type parameters with bounds: T : SomeType
 	bool isMutable = false;				// For LET_STMT
 	bool isNarrowedUnion = false; // For union type narrowing - indicates value is wrapped
+	bool calleeIsExtern = false;		// For CALL_EXPR - true if callee is an extern function
 
 	// Helper to add a child
 	void addChild(std::shared_ptr<ASTNode> child)
