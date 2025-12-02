@@ -122,26 +122,46 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 		// Note: extern function declarations are not emitted - they are provided by external libraries
 		// The extern keyword in Tuff is like TypeScript declarations or C headers
 
-		// Generate struct declarations
-		for (auto child : ast->children)
+		// Helper to check if a type alias only uses primitive types (no struct references)
+		auto isPrimitiveAlias = [](const std::string &mappedType)
 		{
-			if (child->type == ASTNodeType::STRUCT_DECL)
+			// Primitive types in C++
+			std::set<std::string> primitives = {
+					"int8_t", "int16_t", "int32_t", "int64_t",
+					"uint8_t", "uint16_t", "uint32_t", "uint64_t",
+					"float", "double", "bool", "void", "size_t"};
+
+			// Strip pointer/const qualifiers and check base type
+			std::string base = mappedType;
+			while (base.back() == '*' || base.back() == ' ')
+				base.pop_back();
+			if (base.find("const ") == 0)
+				base = base.substr(6);
+
+			// Check if it's a primitive or pointer to primitive
+			for (const auto &p : primitives)
 			{
-				ss << generateNode(child) << "\n";
+				if (base == p || base.find(p) == 0)
+					return true;
 			}
-		}
+			return false;
+		};
 
-		// Generate union struct definitions AFTER struct declarations (to avoid forward reference errors)
-		for (const auto &pair : unionStructToGeneric)
-		{
-			ss << generateUnionStruct(pair.second) << "\n";
-		}
-
-		// Generate type aliases AFTER union struct definitions
+		// Generate primitive type aliases BEFORE struct declarations
+		// (e.g., Allocated<T> = T* which is just a pointer)
 		for (auto child : ast->children)
 		{
 			if (child->type == ASTNodeType::TYPE_ALIAS)
 			{
+				std::string mappedType = mapType(child->inferredType);
+				// Only emit primitive aliases (pointers to type params are primitive)
+				// Type param aliases like T* should be emitted early
+				bool isPrimitive = isPrimitiveAlias(mappedType) || mappedType.back() == '*';
+				if (!isPrimitive)
+				{
+					continue;
+				}
+
 				// Generic type alias: template<typename T, typename L> using Name = Type;
 				if (!child->genericParams.empty())
 				{
@@ -154,7 +174,53 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 					}
 					ss << ">\n";
 				}
-				ss << "using " << child->value << " = " << mapType(child->inferredType) << ";\n";
+				ss << "using " << child->value << " = " << mappedType << ";\n";
+			}
+		}
+
+		// Generate struct declarations
+		for (auto child : ast->children)
+		{
+			if (child->type == ASTNodeType::STRUCT_DECL)
+			{
+				ss << generateNode(child) << "\n";
+			}
+		}
+
+		// Generate union struct definitions AFTER regular struct declarations
+		// (union structs use Some<T>, None<T>, etc.)
+		for (const auto &pair : unionStructToGeneric)
+		{
+			ss << generateUnionStruct(pair.second) << "\n";
+		}
+
+		// Generate remaining type aliases AFTER struct and union definitions
+		// (type aliases like Option<T> = Union_Some_None<T> or Coord = Point)
+		for (auto child : ast->children)
+		{
+			if (child->type == ASTNodeType::TYPE_ALIAS)
+			{
+				std::string mappedType = mapType(child->inferredType);
+				// Skip primitive aliases (already emitted)
+				bool isPrimitive = isPrimitiveAlias(mappedType) || mappedType.back() == '*';
+				if (isPrimitive)
+				{
+					continue;
+				}
+
+				// Generic type alias: template<typename T, typename L> using Name = Type;
+				if (!child->genericParams.empty())
+				{
+					ss << "template<";
+					for (size_t i = 0; i < child->genericParams.size(); i++)
+					{
+						if (i > 0)
+							ss << ", ";
+						ss << "typename " << child->genericParams[i]->value;
+					}
+					ss << ">\n";
+				}
+				ss << "using " << child->value << " = " << mappedType << ";\n";
 			}
 		}
 
