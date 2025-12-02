@@ -23,16 +23,11 @@ class CodeGeneratorCPP
 {
 public:
 	std::string generate(std::shared_ptr<ASTNode> ast);
-	std::string generateSharedHeader(std::shared_ptr<ASTNode> ast);
-
-	// Set whether to use shared header (default: false for backward compat)
-	void setUseSharedHeader(bool use) { useSharedHeader = use; }
 
 	// Set whether this is a library (no main generation)
 	void setIsLibrary(bool lib) { isLibrary = lib; }
 
 private:
-	bool useSharedHeader = false;
 	bool isLibrary = false;
 	std::string generateNode(std::shared_ptr<ASTNode> node);
 

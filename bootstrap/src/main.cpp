@@ -240,30 +240,14 @@ int main(int argc, char *argv[])
 		CodeGeneratorCPP codegen;
 		codegen.setIsLibrary(isLibrary);
 
-		// Use shared header when outputPath is specified
+		// Copy builtin headers to output directory
 		if (!outputPath.empty())
 		{
-			codegen.setUseSharedHeader(true);
-
-			// Generate shared header
 			fs::path outPath(outputPath);
-			fs::path headerPath = outPath.parent_path() / "tuff_decls.h";
-			std::string headerContent = codegen.generateSharedHeader(mergedAst);
-			writeToFile(headerPath.string(), headerContent);
-
-			// Copy builtin headers
 			copyBuiltinHeaders(outPath.parent_path().string(), sourcePaths);
 		}
 		else if (!outRootDir.empty())
 		{
-			codegen.setUseSharedHeader(true);
-
-			// Generate shared header in output root
-			fs::path headerPath = fs::path(outRootDir) / "tuff_decls.h";
-			std::string headerContent = codegen.generateSharedHeader(mergedAst);
-			writeToFile(headerPath.string(), headerContent);
-
-			// Copy builtin headers
 			copyBuiltinHeaders(outRootDir, sourcePaths);
 		}
 

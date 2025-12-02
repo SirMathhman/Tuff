@@ -9,251 +9,296 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 {
 	std::stringstream ss;
 
-	// If using shared header, just include it
-	if (useSharedHeader)
+	// Standard includes
+	ss << "#include <iostream>\n";
+	ss << "#include <cstdint>\n";
+	ss << "#include <cstddef>\n";
+	ss << "#include <string>\n";
+	ss << "#include \"string_builtins.h\"\n\n";
+
+	// Collect all types that need to be declared
+	std::vector<std::shared_ptr<ASTNode>> enums;
+	std::vector<std::shared_ptr<ASTNode>> allTypes; // structs + type aliases
+	std::vector<std::shared_ptr<ASTNode>> functions;
+	std::vector<std::shared_ptr<ASTNode>> actualDecls;
+	std::vector<std::shared_ptr<ASTNode>> implDecls;
+	std::vector<std::shared_ptr<ASTNode>> moduleDecls;
+
+	for (auto child : ast->children)
 	{
-		ss << "#include \"tuff_decls.h\"\n\n";
+		if (child->type == ASTNodeType::ENUM_DECL)
+			enums.push_back(child);
+		else if (child->type == ASTNodeType::STRUCT_DECL)
+			allTypes.push_back(child);
+		else if (child->type == ASTNodeType::TYPE_ALIAS)
+			allTypes.push_back(child);
+		else if (child->type == ASTNodeType::FUNCTION_DECL)
+			functions.push_back(child);
+		else if (child->type == ASTNodeType::ACTUAL_DECL)
+			actualDecls.push_back(child);
+		else if (child->type == ASTNodeType::IMPL_DECL)
+			implDecls.push_back(child);
+		else if (child->type == ASTNodeType::MODULE_DECL)
+			moduleDecls.push_back(child);
 	}
-	else
+
+	// Collect all union types used in the program
+	std::set<std::string> unionTypes;
+	std::function<void(std::shared_ptr<ASTNode>)> collectUnionTypes = [&](std::shared_ptr<ASTNode> node)
 	{
-		// Generate everything inline for backward compatibility
-		ss << "#include <iostream>\n";
-		ss << "#include <cstdint>\n";
-		ss << "#include <cstddef>\n";
-		ss << "#include <string>\n";
-		ss << "#include \"string_builtins.h\"\n\n";
+		if (!node)
+			return;
+		if (!node->inferredType.empty() && isUnionType(node->inferredType))
+		{
+			unionTypes.insert(node->inferredType);
+		}
+		for (auto child : node->children)
+		{
+			collectUnionTypes(child);
+		}
+	};
+	collectUnionTypes(ast);
+
+	// Deduplicate union types: prefer generic versions over concrete ones
+	std::map<std::string, std::string> unionStructToGeneric;
+	for (const auto &unionType : unionTypes)
+	{
+		std::string structName = getUnionStructName(unionType);
+		bool isGeneric = false;
+		auto variants = splitUnionType(unionType);
+		for (const auto &variant : variants)
+		{
+			size_t start = variant.find('<');
+			if (start != std::string::npos)
+			{
+				size_t end = variant.find('>');
+				if (end != std::string::npos)
+				{
+					std::string param = variant.substr(start + 1, end - start - 1);
+					if (param.length() == 1 && param[0] >= 'A' && param[0] <= 'Z')
+					{
+						isGeneric = true;
+						break;
+					}
+				}
+			}
+		}
+		if (unionStructToGeneric.find(structName) == unionStructToGeneric.end() || isGeneric)
+		{
+			unionStructToGeneric[structName] = unionType;
+		}
 	}
 
-	// Only generate type definitions and forward declarations if not using shared header
-	if (!useSharedHeader)
+	// ========== Generate module declarations ==========
+	for (auto node : moduleDecls)
 	{
+		ss << generateNode(node) << "\n";
+	}
 
-		// Collect all union types used in the program
-		std::set<std::string> unionTypes;
-		std::function<void(std::shared_ptr<ASTNode>)> collectUnionTypes = [&](std::shared_ptr<ASTNode> node)
+	// ========== Generate enum declarations ==========
+	for (auto node : enums)
+	{
+		ss << generateNode(node) << "\n";
+	}
+
+	// ========== Topologically sort all types (structs + type aliases) ==========
+	auto sortedTypes = topologicalSortTypes(allTypes);
+	
+	// Separate type aliases that reference union types
+	std::vector<std::shared_ptr<ASTNode>> regularTypes;
+	std::vector<std::shared_ptr<ASTNode>> unionAliases;
+	
+	for (auto node : sortedTypes)
+	{
+		if (node->type == ASTNodeType::TYPE_ALIAS && isUnionType(node->inferredType))
 		{
-			if (!node)
-				return;
-			if (!node->inferredType.empty() && isUnionType(node->inferredType))
-			{
-				unionTypes.insert(node->inferredType);
-			}
-			for (auto child : node->children)
-			{
-				collectUnionTypes(child);
-			}
-		};
-		collectUnionTypes(ast);
-
-		// Deduplicate union types: prefer generic versions over concrete ones
-		// Group by base structure (e.g., Some<T>|None<T> and Some<I32>|None<I32> both map to Union_Some_None)
-		std::map<std::string, std::string> unionStructToGeneric;
-		for (const auto &unionType : unionTypes)
-		{
-			std::string structName = getUnionStructName(unionType);
-
-			// Check if this union uses generic params (single letters T, U, etc.)
-			bool isGeneric = false;
-			auto variants = splitUnionType(unionType);
-			for (const auto &variant : variants)
-			{
-				size_t start = variant.find('<');
-				if (start != std::string::npos)
-				{
-					size_t end = variant.find('>');
-					if (end != std::string::npos)
-					{
-						std::string param = variant.substr(start + 1, end - start - 1);
-						if (param.length() == 1 && param[0] >= 'A' && param[0] <= 'Z')
-						{
-							isGeneric = true;
-							break;
-						}
-					}
-				}
-			}
-
-			// Prefer generic versions
-			if (unionStructToGeneric.find(structName) == unionStructToGeneric.end() || isGeneric)
-			{
-				unionStructToGeneric[structName] = unionType;
-			}
+			unionAliases.push_back(node);
 		}
-
-		// Note: union struct generation moved after struct declarations to avoid forward reference errors
-
-		// Collect struct field information for intersection types
-		std::map<std::string, std::vector<std::pair<std::string, std::string>>> structFields;
-		for (auto child : ast->children)
+		else
 		{
-			if (child->type == ASTNodeType::STRUCT_DECL)
-			{
-				std::string structName = child->value;
-				std::vector<std::pair<std::string, std::string>> fields;
-				for (auto field : child->children)
-				{
-					fields.push_back({field->value, field->inferredType});
-				}
-				structFields[structName] = fields;
-			}
+			regularTypes.push_back(node);
 		}
+	}
 
-		auto isStatement = [](ASTNodeType type)
+	// Generate struct forward declarations
+	for (auto node : regularTypes)
+	{
+		if (node->type != ASTNodeType::STRUCT_DECL)
+			continue;
+		if (!node->genericParams.empty())
 		{
-			return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL || type == ASTNodeType::EXPECT_DECL || type == ASTNodeType::ACTUAL_DECL || type == ASTNodeType::MODULE_DECL;
-		};
-
-		// Generate module declarations first (at top level, not inside main)
-		for (auto child : ast->children)
-		{
-			if (child->type == ASTNodeType::MODULE_DECL)
+			ss << "template<";
+			for (size_t i = 0; i < node->genericParams.size(); i++)
 			{
-				ss << generateNode(child) << "\n";
+				if (i > 0) ss << ", ";
+				ss << "typename " << node->genericParams[i]->value;
 			}
+			ss << "> ";
 		}
+		ss << "struct " << node->value << ";\n";
+	}
+	ss << "\n";
 
-		// Generate enum declarations
-		for (auto child : ast->children)
+	// Generate types in sorted order (structs + non-union type aliases interleaved)
+	for (auto node : regularTypes)
+	{
+		if (node->type == ASTNodeType::STRUCT_DECL)
 		{
-			if (child->type == ASTNodeType::ENUM_DECL)
-			{
-				ss << generateNode(child) << "\n";
-			}
+			ss << generateNode(node) << "\n";
 		}
-		// Note: extern function declarations are not emitted - they are provided by external libraries
-		// The extern keyword in Tuff is like TypeScript declarations or C headers
-
-		// Helper to check if a type alias only uses primitive types (no struct references)
-		auto isPrimitiveAlias = [](const std::string &mappedType)
+		else if (node->type == ASTNodeType::TYPE_ALIAS)
 		{
-			// Primitive types in C++
-			std::set<std::string> primitives = {
-					"int8_t", "int16_t", "int32_t", "int64_t",
-					"uint8_t", "uint16_t", "uint32_t", "uint64_t",
-					"float", "double", "bool", "void", "size_t"};
-
-			// Strip pointer/const qualifiers and check base type
-			std::string base = mappedType;
-			while (base.back() == '*' || base.back() == ' ')
-				base.pop_back();
-			if (base.find("const ") == 0)
-				base = base.substr(6);
-
-			// Check if it's a primitive or pointer to primitive
-			for (const auto &p : primitives)
+			if (!node->genericParams.empty())
 			{
-				if (base == p || base.find(p) == 0)
-					return true;
-			}
-			return false;
-		};
-
-		// Generate primitive type aliases BEFORE struct declarations
-		// (e.g., Allocated<T> = T* which is just a pointer)
-		for (auto child : ast->children)
-		{
-			if (child->type == ASTNodeType::TYPE_ALIAS)
-			{
-				std::string mappedType = mapType(child->inferredType);
-				// Only emit primitive aliases (pointers to type params are primitive)
-				// Type param aliases like T* should be emitted early
-				bool isPrimitive = isPrimitiveAlias(mappedType) || mappedType.back() == '*';
-				if (!isPrimitive)
-				{
-					continue;
-				}
-
-				// Generic type alias: template<typename T, typename L> using Name = Type;
-				if (!child->genericParams.empty())
-				{
-					ss << "template<";
-					for (size_t i = 0; i < child->genericParams.size(); i++)
-					{
-						if (i > 0)
-							ss << ", ";
-						ss << "typename " << child->genericParams[i]->value;
-					}
-					ss << ">\n";
-				}
-				ss << "using " << child->value << " = " << mappedType << ";\n";
-			}
-		}
-
-		// Generate struct declarations
-		for (auto child : ast->children)
-		{
-			if (child->type == ASTNodeType::STRUCT_DECL)
-			{
-				ss << generateNode(child) << "\n";
-			}
-		}
-
-		// Generate union struct definitions AFTER regular struct declarations
-		// (union structs use Some<T>, None<T>, etc.)
-		for (const auto &pair : unionStructToGeneric)
-		{
-			ss << generateUnionStruct(pair.second) << "\n";
-		}
-
-		// Generate remaining type aliases AFTER struct and union definitions
-		// (type aliases like Option<T> = Union_Some_None<T> or Coord = Point)
-		for (auto child : ast->children)
-		{
-			if (child->type == ASTNodeType::TYPE_ALIAS)
-			{
-				std::string mappedType = mapType(child->inferredType);
-				// Skip primitive aliases (already emitted)
-				bool isPrimitive = isPrimitiveAlias(mappedType) || mappedType.back() == '*';
-				if (isPrimitive)
-				{
-					continue;
-				}
-
-				// Generic type alias: template<typename T, typename L> using Name = Type;
-				if (!child->genericParams.empty())
-				{
-					ss << "template<";
-					for (size_t i = 0; i < child->genericParams.size(); i++)
-					{
-						if (i > 0)
-							ss << ", ";
-						ss << "typename " << child->genericParams[i]->value;
-					}
-					ss << ">\n";
-				}
-				ss << "using " << child->value << " = " << mappedType << ";\n";
-			}
-		}
-
-		// Generate function forward declarations
-		for (auto child : ast->children)
-		{
-			if (child->type == ASTNodeType::FUNCTION_DECL)
-			{
-				// Rename main to tuff_main for forward declaration
-				std::string funcName = child->value;
-				if (funcName == "main")
-					funcName = "tuff_main";
-
-				if (!child->genericParams.empty())
-				{
-					ss << "template<";
-					for (size_t i = 0; i < child->genericParams.size(); i++)
-					{
-						if (i > 0)
-							ss << ", ";
-						ss << "typename " << child->genericParams[i]->value;
-					}
-					ss << ">\n";
-				}
-				ss << mapType(child->inferredType) << " " << funcName << "(";
-				for (size_t i = 0; i < child->children.size() - 1; i++)
+				ss << "template<";
+				for (size_t i = 0; i < node->genericParams.size(); i++)
 				{
 					if (i > 0)
 						ss << ", ";
-					// Handle array parameters: int32_t arr[10] instead of int32_t[10] arr
-					std::string paramType = mapType(child->children[i]->inferredType);
-					std::string paramName = child->children[i]->value;
+					ss << "typename " << node->genericParams[i]->value;
+				}
+				ss << ">\n";
+			}
+			ss << "using " << node->value << " = " << mapType(node->inferredType) << ";\n";
+		}
+	}
+
+	// ========== Generate union struct definitions ==========
+	for (const auto &pair : unionStructToGeneric)
+	{
+		ss << generateUnionStruct(pair.second) << "\n";
+	}
+
+	// ========== Generate type aliases that reference union types ==========
+	for (auto node : unionAliases)
+	{
+		if (!node->genericParams.empty())
+		{
+			ss << "template<";
+			for (size_t i = 0; i < node->genericParams.size(); i++)
+			{
+				if (i > 0)
+					ss << ", ";
+				ss << "typename " << node->genericParams[i]->value;
+			}
+			ss << ">\n";
+		}
+		ss << "using " << node->value << " = " << mapType(node->inferredType) << ";\n";
+	}
+
+	// ========== Generate function forward declarations ==========
+	for (auto child : functions)
+	{
+		std::string funcName = child->value;
+		if (funcName == "main")
+			funcName = "tuff_main";
+
+		if (!child->genericParams.empty())
+		{
+			ss << "template<";
+			for (size_t i = 0; i < child->genericParams.size(); i++)
+			{
+				if (i > 0)
+					ss << ", ";
+				ss << "typename " << child->genericParams[i]->value;
+			}
+			ss << ">\n";
+		}
+		ss << mapType(child->inferredType) << " " << funcName << "(";
+		for (size_t i = 0; i < child->children.size() - 1; i++)
+		{
+			if (i > 0)
+				ss << ", ";
+			std::string paramType = mapType(child->children[i]->inferredType);
+			std::string paramName = child->children[i]->value;
+			size_t bracketPos = paramType.find('[');
+			if (bracketPos != std::string::npos)
+			{
+				std::string baseType = paramType.substr(0, bracketPos);
+				std::string arraySuffix = paramType.substr(bracketPos);
+				ss << baseType << " " << paramName << arraySuffix;
+			}
+			else
+			{
+				ss << paramType << " " << paramName;
+			}
+		}
+		ss << ");\n";
+	}
+
+	// ========== Generate actual function forward declarations ==========
+	for (auto child : actualDecls)
+	{
+		ss << mapType(child->inferredType) << " " << child->value << "(";
+		size_t paramCount = 0;
+		for (auto param : child->children)
+		{
+			if (param->type == ASTNodeType::IDENTIFIER)
+			{
+				if (paramCount > 0)
+					ss << ", ";
+				std::string paramType = mapType(param->inferredType);
+				std::string paramName = param->value;
+				size_t bracketPos = paramType.find('[');
+				if (bracketPos != std::string::npos)
+				{
+					std::string baseType = paramType.substr(0, bracketPos);
+					std::string arraySuffix = paramType.substr(bracketPos);
+					ss << baseType << " " << paramName << arraySuffix;
+				}
+				else
+				{
+					ss << paramType << " " << paramName;
+				}
+				paramCount++;
+			}
+		}
+		ss << ");\n";
+	}
+
+	// ========== Generate impl method forward declarations ==========
+	for (auto child : implDecls)
+	{
+		std::vector<std::shared_ptr<ASTNode>> implGenericParams = child->genericParams;
+		for (auto method : child->children)
+		{
+			if (method->type == ASTNodeType::FUNCTION_DECL)
+			{
+				std::string methodName = method->value;
+				size_t colonPos = methodName.find("::");
+				if (colonPos != std::string::npos)
+				{
+					methodName.replace(colonPos, 2, "_");
+				}
+
+				std::vector<std::shared_ptr<ASTNode>> allGenericParams = implGenericParams;
+				for (auto param : method->genericParams)
+				{
+					allGenericParams.push_back(param);
+				}
+
+				if (!allGenericParams.empty())
+				{
+					ss << "template<";
+					for (size_t i = 0; i < allGenericParams.size(); i++)
+					{
+						if (i > 0)
+							ss << ", ";
+						ss << "typename " << allGenericParams[i]->value;
+					}
+					ss << ">\n";
+				}
+
+				ss << mapType(method->inferredType) << " " << methodName << "(";
+				for (size_t i = 0; i < method->children.size() - 1; i++)
+				{
+					if (i > 0)
+						ss << ", ";
+					std::string paramType = mapType(method->children[i]->inferredType);
+					std::string paramName = method->children[i]->value;
+					if (paramName == "this")
+						paramName = "this_";
+
 					size_t bracketPos = paramType.find('[');
 					if (bracketPos != std::string::npos)
 					{
@@ -268,106 +313,8 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 				}
 				ss << ");\n";
 			}
-			else if (child->type == ASTNodeType::ACTUAL_DECL)
-			{
-				ss << mapType(child->inferredType) << " " << child->value << "(";
-				size_t paramCount = 0;
-				for (auto param : child->children)
-				{
-					if (param->type == ASTNodeType::IDENTIFIER)
-					{
-						if (paramCount > 0)
-							ss << ", ";
-						// Handle array parameters: int32_t arr[10] instead of int32_t[10] arr
-						std::string paramType = mapType(param->inferredType);
-						std::string paramName = param->value;
-						size_t bracketPos = paramType.find('[');
-						if (bracketPos != std::string::npos)
-						{
-							std::string baseType = paramType.substr(0, bracketPos);
-							std::string arraySuffix = paramType.substr(bracketPos);
-							ss << baseType << " " << paramName << arraySuffix;
-						}
-						else
-						{
-							ss << paramType << " " << paramName;
-						}
-						paramCount++;
-					}
-				}
-				ss << ");\n";
-			}
-			else if (child->type == ASTNodeType::IMPL_DECL)
-			{
-				// Get generic params from impl block (e.g., impl<T> Vector<T> { ... })
-				std::vector<std::shared_ptr<ASTNode>> implGenericParams = child->genericParams;
-
-				// Generate forward declarations for impl block methods
-				for (auto method : child->children)
-				{
-					if (method->type == ASTNodeType::FUNCTION_DECL)
-					{
-						// Method name is already FQN'd like "Counter::new"
-						// Replace :: with _ for C++ compatibility
-						std::string methodName = method->value;
-						size_t colonPos = methodName.find("::");
-						if (colonPos != std::string::npos)
-						{
-							methodName.replace(colonPos, 2, "_");
-						}
-
-						// Combine impl generic params with method generic params
-						std::vector<std::shared_ptr<ASTNode>> allGenericParams = implGenericParams;
-						for (auto param : method->genericParams)
-						{
-							allGenericParams.push_back(param);
-						}
-
-						if (!allGenericParams.empty())
-						{
-							ss << "template<";
-							for (size_t i = 0; i < allGenericParams.size(); i++)
-							{
-								if (i > 0)
-									ss << ", ";
-								ss << "typename " << allGenericParams[i]->value;
-							}
-							ss << ">\n";
-						}
-
-						ss << mapType(method->inferredType) << " " << methodName << "(";
-						for (size_t i = 0; i < method->children.size() - 1; i++)
-						{
-							if (i > 0)
-								ss << ", ";
-							std::string paramType = mapType(method->children[i]->inferredType);
-							std::string paramName = method->children[i]->value;
-
-							// Rename 'this' to 'this_' for C++
-							if (paramName == "this")
-							{
-								paramName = "this_";
-							}
-
-							size_t bracketPos = paramType.find('[');
-							if (bracketPos != std::string::npos)
-							{
-								std::string baseType = paramType.substr(0, bracketPos);
-								std::string arraySuffix = paramType.substr(bracketPos);
-								ss << baseType << " " << paramName << arraySuffix;
-							}
-							else
-							{
-								ss << paramType << " " << paramName;
-							}
-						}
-						ss << ");\n";
-					}
-				}
-			}
 		}
-
-	} // End of !useSharedHeader block
+	}
 
 	auto isStatement = [](ASTNodeType type)
 	{
