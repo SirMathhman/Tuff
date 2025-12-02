@@ -1,4 +1,0 @@
-// io.tuff - I/O functions
-
-extern fn print(message: string): Void;
-extern fn println(message: string): Void;

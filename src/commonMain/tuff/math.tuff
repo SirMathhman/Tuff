@@ -1,7 +1,0 @@
-fn max<Type : Number>(a: Type, b: Type): Type {
-	if a > b {
-			return a;
-	} else {
-			return b;
-	}
-}
