@@ -1,8 +1,33 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.16)
 project(TuffBootstrap)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# ============================================================================
+# Build Speed Optimizations
+# ============================================================================
+
+# Enable parallel compilation within each target (MSVC)
+if(MSVC)
+    add_compile_options(/MP)
+endif()
+
+# Unity builds disabled - causes issues with std::variant forward declarations
+# set(CMAKE_UNITY_BUILD ON)
+# set(CMAKE_UNITY_BUILD_BATCH_SIZE 8)
+
+# Precompiled header support (CMake 3.16+)
+set(PCH_HEADERS
+    <string>
+    <vector>
+    <memory>
+    <variant>
+    <sstream>
+    <map>
+    <set>
+    <iostream>
+)
 
 include_directories(src/include)
 
@@ -48,10 +73,16 @@ add_executable(tuffc
     ${COMPILER_SOURCES}
 )
 
+# Enable precompiled headers for faster builds
+target_precompile_headers(tuffc PRIVATE ${PCH_HEADERS})
+
 # Unit test executable
 add_executable(tuffc_test
     tests/unit/test_compiler.cpp
     ${COMPILER_SOURCES}
 )
+
+# Reuse PCH from tuffc to avoid rebuilding
+target_precompile_headers(tuffc_test REUSE_FROM tuffc)
 
 target_include_directories(tuffc_test PRIVATE tests/unit)

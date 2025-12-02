@@ -34,7 +34,8 @@ param(
     [switch]$Verbose,
     [string]$Feature = "",
     [ValidateSet("cpp")]
-    [string]$Target = "cpp"
+    [string]$Target = "cpp",
+    [int]$Parallel = 0  # 0 = auto-detect, 1 = sequential
 )
 
 $ErrorActionPreference = "Stop"
@@ -474,6 +475,12 @@ try {
     
     Write-ColorOutput "Found $($tests.Count) test(s)" $ColorGray
     Write-ColorOutput "Target: $Target" $ColorGray
+    
+    # Determine parallelism
+    $maxParallel = if ($Parallel -eq 0) { [Environment]::ProcessorCount } else { $Parallel }
+    if ($maxParallel -gt 1) {
+        Write-ColorOutput "Parallelism: $maxParallel" $ColorGray
+    }
     Write-Host ""
     
     # Group tests by feature

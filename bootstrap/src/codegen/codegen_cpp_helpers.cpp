@@ -78,7 +78,11 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		return ss.str();
 	}
 	case ASTNodeType::BINARY_OP:
-		return generateBinaryOp(node);
+	{
+		// Use typed AST path
+		auto typed = ASTConverter::toExpr(node);
+		return genExpr(typed);
+	}
 	case ASTNodeType::IS_EXPR:
 	{
 		// is operator: expr is Type → expr.__tag == Tag::Type
@@ -156,24 +160,16 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	}
 	case ASTNodeType::LITERAL:
 	{
-		// Strip type suffix from literals (e.g., "10I32" -> "10")
-		std::string literal = node->value;
-		std::string result;
-		for (char c : literal)
-		{
-			if ((c >= '0' && c <= '9') || c == '.' || c == '-')
-			{
-				result += c;
-			}
-			else
-			{
-				break; // Stop at type suffix
-			}
-		}
-		return result.empty() ? literal : result;
+		// Use typed AST path
+		auto typed = ASTConverter::toExpr(node);
+		return genExpr(typed);
 	}
 	case ASTNodeType::IDENTIFIER:
-		return escapeCppKeyword(node->value);
+	{
+		// Use typed AST path
+		auto typed = ASTConverter::toExpr(node);
+		return genExpr(typed);
+	}
 	case ASTNodeType::FUNCTION_DECL:
 	{
 		std::stringstream ss;
