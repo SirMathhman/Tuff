@@ -168,7 +168,9 @@ std::shared_ptr<ASTNode> Parser::parse()
 				program->addChild(expr);
 				if (peek().type != TokenType::END_OF_FILE)
 				{
-					std::cerr << "Error: Trailing expression must be the last element." << std::endl;
+					std::cerr << "Error: Trailing expression must be the last element at line " << peek().line << "." << std::endl;
+					std::cerr << "       Found unexpected token: " << peek().value << std::endl;
+					std::cerr << "       Hint: Did you forget a semicolon, or have statements after a return/expression?" << std::endl;
 					exit(1);
 				}
 				break;

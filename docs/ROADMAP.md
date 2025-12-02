@@ -57,6 +57,7 @@ To achieve self-hosting (compiling the Tuff compiler with Tuff), the following s
 - ✅ `startsWith`, `endsWith`, `trim`, `contains`
 - ✅ `replace`, `toUpperCase`, `toLowerCase`, `isEmpty`
 - ✅ `split` (delimiter-based string tokenization)
+
 ## Future Extensions
 
 Features not yet implemented but planned:

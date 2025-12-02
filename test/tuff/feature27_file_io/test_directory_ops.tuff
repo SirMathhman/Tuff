@@ -1,0 +1,29 @@
+// Test: Directory operations
+use io;
+use file;
+use result;
+
+extern fn exit(code: I32): Void;
+
+// Test createDirectory
+let testDir = "test_temp_dir";
+let createResult = createDirectory(testDir);
+if (createResult is Err<Void, string>) {
+	println("FAIL: create directory");
+	exit(1);
+}
+
+// Test directory exists
+if (!fileExists(testDir)) {
+	println("FAIL: directory should exist");
+	exit(2);
+}
+
+// Test isDirectory
+if (!isDirectory(testDir)) {
+	println("FAIL: should be directory");
+	exit(3);
+}
+
+println("PASS");
+0

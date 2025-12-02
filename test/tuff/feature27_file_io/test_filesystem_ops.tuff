@@ -1,0 +1,27 @@
+// Test: Filesystem query operations
+use io;
+use file;
+
+extern fn exit(code: I32): Void;
+
+// Test file exists
+let testPath = "test_temp_file.txt";
+if (!fileExists(testPath)) {
+	println("FAIL: file should exist");
+	exit(1);
+}
+
+// Test isFile
+if (!isFile(testPath)) {
+	println("FAIL: should be a file");
+	exit(2);
+}
+
+// Test isDirectory (should be false for file)
+if (isDirectory(testPath)) {
+	println("FAIL: file should not be directory");
+	exit(3);
+}
+
+println("PASS");
+0

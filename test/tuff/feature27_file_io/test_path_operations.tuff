@@ -1,0 +1,43 @@
+// Test: Path manipulation
+use io;
+use path;
+
+extern fn exit(code: I32): Void;
+
+// Test pathJoin
+let joined = pathJoin("src", "main.tuff");
+if (!joined.equals("src/main.tuff")) {
+	println("FAIL: pathJoin");
+	exit(1);
+}
+
+// Test getExtension
+let ext = getExtension("file.tuff");
+if (!ext.equals(".tuff")) {
+	println("FAIL: getExtension");
+	exit(2);
+}
+
+// Test getFileName
+let fname = getFileName("src/main.tuff");
+if (!fname.equals("main.tuff")) {
+	println("FAIL: getFileName");
+	exit(3);
+}
+
+// Test getDirectory
+let dir = getDirectory("src/main.tuff");
+if (!dir.equals("src")) {
+	println("FAIL: getDirectory");
+	exit(4);
+}
+
+// Test normalize
+let normalized = normalize("src\\file.tuff");
+if (!normalized.equals("src/file.tuff")) {
+	println("FAIL: normalize");
+	exit(5);
+}
+
+println("PASS");
+0

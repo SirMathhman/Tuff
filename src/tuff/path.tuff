@@ -1,0 +1,104 @@
+// Path manipulation utilities
+
+use string;
+
+// Join path components with platform separator
+fn pathJoin(a: string, b: string): string => {
+	let aLen = a.length();
+	if (aLen == 0USize) {
+		return b;
+	}
+	
+	let lastChar = a.charAt(aLen - 1USize);
+	let needsSep = lastChar != 47U8 && lastChar != 92U8;  // '/' = 47, '\\' = 92
+	
+	if (needsSep) {
+		return a.concat("/").concat(b);
+	}
+	return a.concat(b);
+}
+
+// Get file extension (including the dot)
+fn getExtension(path: string): string => {
+	let len = path.length();
+	let mut i: USize = len;
+	
+	// Search backwards for dot
+	while (i > 0USize) {
+		i = i - 1USize;
+		let c = path.charAt(i);
+		if (c == 46U8) {  // '.' = 46
+			return path.substring(i, len);
+		}
+		// Stop at path separator
+		if (c == 47U8 || c == 92U8) {  // '/' = 47, '\\' = 92
+			return "";
+		}
+	}
+	
+	return "";
+}
+
+// Get filename without directory
+fn getFileName(path: string): string => {
+	let len = path.length();
+	let mut i: USize = len;
+	
+	// Search backwards for separator
+	while (i > 0USize) {
+		i = i - 1USize;
+		let c = path.charAt(i);
+		if (c == 47U8 || c == 92U8) {  // '/' = 47, '\\' = 92
+			return path.substring(i + 1USize, len);
+		}
+	}
+	
+	return path;
+}
+
+// Get parent directory path
+fn getDirectory(path: string): string => {
+	let len = path.length();
+	let mut i: USize = len;
+	
+	// Search backwards for separator
+	while (i > 0USize) {
+		i = i - 1USize;
+		let c = path.charAt(i);
+		if (c == 47U8 || c == 92U8) {  // '/' = 47, '\\' = 92
+			return path.substring(0USize, i);
+		}
+	}
+	
+	return "";
+}
+
+// Check if path is absolute
+fn isAbsolute(path: string): Bool => {
+	let len = path.length();
+	if (len == 0USize) {
+		return false;
+	}
+	
+	// Unix absolute path starts with /
+	let first = path.charAt(0USize);
+	if (first == 47U8) {  // '/' = 47
+		return true;
+	}
+	
+	// Windows absolute path: C:\ or C:/
+	if (len >= 3USize) {
+		let second = path.charAt(1USize);
+		let third = path.charAt(2USize);
+		if (second == 58U8 && (third == 92U8 || third == 47U8)) {  // ':' = 58, '\\' = 92, '/' = 47
+			return true;
+		}
+	}
+	
+	return false;
+}
+
+// Normalize path separators to forward slash
+fn normalize(path: string): string => {
+	return path.replace("\\", "/");
+}

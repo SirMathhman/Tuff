@@ -318,7 +318,7 @@ inline void *__builtin_string_split(const char *s, const char *delimiter, size_t
 	}
 
 	size_t delim_len = std::strlen(delimiter);
-	
+
 	// Count occurrences to determine array size
 	size_t count = 1; // At least one part
 	const char *p = s;
@@ -327,7 +327,7 @@ inline void *__builtin_string_split(const char *s, const char *delimiter, size_t
 		count++;
 		p += delim_len;
 	}
-	
+
 	// Allocate array (count + 1 for null terminator)
 	char **result = static_cast<char **>(std::malloc((count + 1) * sizeof(char *)));
 	if (result == nullptr)
@@ -335,12 +335,12 @@ inline void *__builtin_string_split(const char *s, const char *delimiter, size_t
 		*outCount = 0;
 		return nullptr;
 	}
-	
+
 	// Split the string
 	size_t idx = 0;
 	const char *start = s;
 	p = s;
-	
+
 	while ((p = std::strstr(p, delimiter)) != nullptr)
 	{
 		// Copy substring before delimiter
@@ -352,12 +352,12 @@ inline void *__builtin_string_split(const char *s, const char *delimiter, size_t
 			result[idx][len] = '\0';
 		}
 		idx++;
-		
+
 		// Move past delimiter
 		p += delim_len;
 		start = p;
 	}
-	
+
 	// Copy remaining part
 	size_t len = std::strlen(start);
 	result[idx] = static_cast<char *>(std::malloc(len + 1));
@@ -366,10 +366,10 @@ inline void *__builtin_string_split(const char *s, const char *delimiter, size_t
 		std::strcpy(result[idx], start);
 	}
 	idx++;
-	
+
 	result[idx] = nullptr; // Null terminator
 	*outCount = count;
-	
+
 	return result;
 }
 
