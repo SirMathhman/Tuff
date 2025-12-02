@@ -4,6 +4,7 @@
 #include <memory>
 #include "token.h"
 #include "expr.h"
+#include "type_env.h"
 
 enum class ASTNodeType
 {
@@ -74,6 +75,7 @@ struct ASTNode
 	bool isMutable = false;									 // For LET_STMT
 	bool isNarrowedUnion = false;						 // For union type narrowing - indicates value is wrapped
 	bool calleeIsExtern = false;						 // For CALL_EXPR - true if callee is an extern function
+	TypeEnvironment typeEnv;								 // Type variable substitutions for generics
 
 	// Helper to add a child
 	void addChild(std::shared_ptr<ASTNode> child)

@@ -1,32 +1,46 @@
 #pragma once
 #include <map>
 #include <string>
-#include <memory>
-#include "expr.h"
+
+// TypeEnvironment tracks type variable substitutions for generics
+// Works with string-based types in the current system
+// Example: When calling malloc<I32>, bind T -> I32
+// Then substitute "T" in return type "*mut [T]" to get "*mut [I32]"
 
 class TypeEnvironment
 {
-private:
-	std::map<std::string, ExprPtr> typeVariables; // T -> I32, U -> String
-	std::map<std::string, ExprPtr> substitutions; // T -> ExprPtr
-
 public:
-	// Substitute all type vars in an expression
-	ExprPtr substitute(ExprPtr type);
+	TypeEnvironment() = default;
 
-	// Unify two types (check if they match)
-	// Returns true if unification succeeded
-	bool unify(ExprPtr expected, ExprPtr actual);
+	// Bind a type variable to a concrete type
+	// Example: bind("T", "I32")
+	void bind(const std::string &typeVar, const std::string &concreteType);
 
-	// Add a substitution
-	void addSubstitution(const std::string &name, ExprPtr type);
+	// Apply substitutions to a type string
+	// Example: substitute("*mut [T]") with T->I32 returns "*mut [I32]"
+	std::string substitute(const std::string &type) const;
 
-	// Apply a map of substitutions
-	void applySubstitutions(const std::map<std::string, ExprPtr> &subs);
+	// Create a child environment that inherits this environment's bindings
+	TypeEnvironment createChild() const;
 
-	// Get current substitutions
-	const std::map<std::string, ExprPtr> &getSubstitutions() const { return substitutions; }
+	// Check if a type variable is bound
+	bool isBound(const std::string &typeVar) const;
 
-	// Clear substitutions
+	// Get the binding for a type variable (empty string if not bound)
+	std::string getBinding(const std::string &typeVar) const;
+
+	// Clear all bindings
 	void clear() { substitutions.clear(); }
+
+	// Debug: print all bindings
+	void print() const;
+
+private:
+	std::map<std::string, std::string> substitutions;
+
+	// Helper: substitute a comma-separated list of types
+	std::string substituteCsv(const std::string &types) const;
+
+	// Helper: trim whitespace from both ends
+	static std::string trim(const std::string &str);
 };
