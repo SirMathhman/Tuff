@@ -11,11 +11,14 @@ set(COMPILER_SOURCES
     src/compiler.cpp
     src/lexer.cpp
     src/parser.cpp
-    src/parser_expressions.cpp
-    src/parser_statements.cpp
-    src/parser_modules.cpp
-    src/parser_expect_actual.cpp
-    src/parser_types.cpp
+    src/parser/parser_binary_ops.cpp
+    src/parser/parser_unary_postfix.cpp
+    src/parser/parser_primary.cpp
+    src/parser/parser_match.cpp
+    src/parser/parser_statements.cpp
+    src/parser/parser_modules.cpp
+    src/parser/parser_expect_actual.cpp
+    src/parser/parser_types.cpp
     src/type_checker.cpp
     src/type_checker/type_checker_binary.cpp
     src/type_checker/type_checker_access.cpp
