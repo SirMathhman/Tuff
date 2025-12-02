@@ -145,6 +145,85 @@ void TypeChecker::checkIndexExpr(std::shared_ptr<ASTNode> node)
 
 	std::string arrayType = array->inferredType;
 
+	// Resolve type aliases
+	auto aliasIt = typeAliasTable.find(arrayType);
+	if (aliasIt != typeAliasTable.end())
+	{
+		arrayType = aliasIt->second.aliasedType;
+	}
+	// Handle generic aliases (e.g. Allocated<T>)
+	else if (arrayType.find('<') != std::string::npos)
+	{
+		std::string baseName;
+		std::vector<std::string> args;
+		parseGenericType(arrayType, baseName, args);
+		
+		auto genericAliasIt = typeAliasTable.find(baseName);
+		if (genericAliasIt != typeAliasTable.end())
+		{
+			// Substitute generic args into target type
+			std::string target = genericAliasIt->second.aliasedType;
+			const auto& params = genericAliasIt->second.genericParams;
+			
+			if (args.size() == params.size())
+			{
+				// Simple string substitution for now (fragile but works for simple cases)
+				for (size_t i = 0; i < params.size(); i++)
+				{
+					std::string param = params[i];
+					std::string arg = args[i];
+					
+					// Replace all occurrences of param with arg
+					size_t pos = 0;
+					while ((pos = target.find(param, pos)) != std::string::npos)
+					{
+						// Ensure we match whole word
+						bool startOk = (pos == 0 || !isalnum(target[pos-1]));
+						bool endOk = (pos + param.length() == target.length() || !isalnum(target[pos+param.length()]));
+						
+						if (startOk && endOk)
+						{
+							target.replace(pos, param.length(), arg);
+							pos += arg.length();
+						}
+						else
+						{
+							pos += param.length();
+						}
+					}
+				}
+				arrayType = target;
+			}
+		}
+	}
+
+	// Handle intersection types (take first component)
+	// e.g. *mut [T] & #free -> *mut [T]
+	size_t ampPos = arrayType.find('&');
+	if (ampPos != std::string::npos)
+	{
+		// Be careful not to split inside generic args <...>
+		int depth = 0;
+		size_t splitPos = std::string::npos;
+		for (size_t i = 0; i < arrayType.length(); i++)
+		{
+			if (arrayType[i] == '<') depth++;
+			else if (arrayType[i] == '>') depth--;
+			else if (arrayType[i] == '&' && depth == 0)
+			{
+				splitPos = i;
+				break;
+			}
+		}
+
+		if (splitPos != std::string::npos)
+		{
+			arrayType = arrayType.substr(0, splitPos);
+			while (!arrayType.empty() && arrayType.back() == ' ')
+				arrayType.pop_back();
+		}
+	}
+
 	if (arrayType.length() > 0 && arrayType[0] == '*')
 	{
 		if (arrayType.substr(0, 5) == "*mut ")
@@ -165,8 +244,18 @@ void TypeChecker::checkIndexExpr(std::shared_ptr<ASTNode> node)
 		}
 		else
 		{
-			std::cerr << "Error: Invalid array type '" << arrayType << "'." << std::endl;
-			exit(1);
+			// Slice type [T]
+			size_t endBracket = arrayType.find(']');
+			if (endBracket != std::string::npos)
+			{
+				std::string elementType = arrayType.substr(1, endBracket - 1);
+				node->inferredType = elementType;
+			}
+			else
+			{
+				std::cerr << "Error: Invalid array type '" << arrayType << "'." << std::endl;
+				exit(1);
+			}
 		}
 	}
 	else

@@ -322,6 +322,15 @@ ExprPtr TypeChecker::substituteType(ExprPtr type, const std::map<std::string, Ex
 			return type;
 		return std::make_shared<ArrayExpr>(newElem, a->init, a->capacity);
 	}
+	case ExprKind::BINARY:
+	{
+		auto b = type->as<BinaryExpr>();
+		auto newLeft = substituteType(b->left, substitutions);
+		auto newRight = substituteType(b->right, substitutions);
+		if (newLeft == b->left && newRight == b->right)
+			return type;
+		return std::make_shared<BinaryExpr>(b->op, newLeft, newRight);
+	}
 	default:
 		return type;
 	}

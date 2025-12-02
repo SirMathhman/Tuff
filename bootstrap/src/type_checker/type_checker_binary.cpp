@@ -8,8 +8,35 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 	check(left);
 	check(right);
 
-	std::string leftType = left->inferredType;
-	std::string rightType = right->inferredType;
+	std::string leftType = expandTypeAlias(left->inferredType);
+	std::string rightType = expandTypeAlias(right->inferredType);
+
+	// Handle intersection types (take first component)
+	// e.g. *mut [T] & #free -> *mut [T]
+	size_t ampPos = leftType.find('&');
+	if (ampPos != std::string::npos)
+	{
+		// Be careful not to split inside generic args <...>
+		int depth = 0;
+		size_t splitPos = std::string::npos;
+		for (size_t i = 0; i < leftType.length(); i++)
+		{
+			if (leftType[i] == '<') depth++;
+			else if (leftType[i] == '>') depth--;
+			else if (leftType[i] == '&' && depth == 0)
+			{
+				splitPos = i;
+				break;
+			}
+		}
+
+		if (splitPos != std::string::npos)
+		{
+			leftType = leftType.substr(0, splitPos);
+			while (!leftType.empty() && leftType.back() == ' ')
+				leftType.pop_back();
+		}
+	}
 
 	// Use exprType if available
 	if (left->exprType && right->exprType)
