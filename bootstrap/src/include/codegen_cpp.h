@@ -79,6 +79,15 @@ private:
 	std::string getDestructor(const std::string &type);
 	bool nextBlockIsLoop = false;
 
+	// ===== DEPENDENCY TRACKING FOR TOPOLOGICAL SORT =====
+	// Extract type names that a given type depends on
+	std::set<std::string> extractTypeDependencies(const std::string &typeStr);
+	std::set<std::string> extractNodeDependencies(std::shared_ptr<ASTNode> node);
+	
+	// Topological sort of type declarations
+	std::vector<std::shared_ptr<ASTNode>> topologicalSortTypes(
+		const std::vector<std::shared_ptr<ASTNode>> &nodes);
+
 	// ===== TYPED AST METHODS (using std::visit) =====
 	// These use the new ast::Expr, ast::Stmt, and ast::Decl types
 	std::string genExpr(ast::ExprPtr expr);
