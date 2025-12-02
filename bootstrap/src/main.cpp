@@ -9,6 +9,9 @@
 #include "parser.h"
 #include "type_checker.h"
 #include "codegen_cpp.h"
+#include "ast_typed.h"
+#include "ast_converter.h"
+#include "codegen_typed.h"
 
 namespace fs = std::filesystem;
 
