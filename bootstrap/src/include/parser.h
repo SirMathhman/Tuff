@@ -51,6 +51,7 @@ private:
 
 	std::vector<std::shared_ptr<ASTNode>> parseGenericParams();
 	std::shared_ptr<ASTNode> parseType();
+	std::shared_ptr<ASTNode> parseIntersectionType();
 	std::shared_ptr<ASTNode> parseSingleType();
 	std::vector<std::shared_ptr<ASTNode>> parseGenericArgs();
 	bool isGenericInstantiation();

@@ -18,11 +18,15 @@ std::string CodeGeneratorCPP::generateUnaryOp(std::shared_ptr<ASTNode> node)
 std::string CodeGeneratorCPP::generateCallExpr(std::shared_ptr<ASTNode> node)
 {
 	std::stringstream ss;
+
+	// Check if extern
+	bool isExtern = node->calleeIsExtern;
+
 	// First child is callee (IDENTIFIER)
 	ss << generateNode(node->children[0]);
 
 	// Emit generic args <I32>
-	if (!node->children[0]->genericArgs.empty())
+	if (!isExtern && !node->children[0]->genericArgs.empty())
 	{
 		ss << "<";
 		for (size_t i = 0; i < node->children[0]->genericArgs.size(); i++)
@@ -45,6 +49,16 @@ std::string CodeGeneratorCPP::generateCallExpr(std::shared_ptr<ASTNode> node)
 	}
 
 	ss << ")";
+
+	// If extern and generic, we might need a cast because C++ extern functions don't have templates
+	// and return types might be void* (like malloc) while Tuff expects concrete types.
+	if (isExtern && !node->children[0]->genericArgs.empty())
+	{
+		std::string call = ss.str();
+		std::string targetType = mapType(node->inferredType);
+		return "((" + targetType + ")" + call + ")";
+	}
+
 	return ss.str();
 }
 

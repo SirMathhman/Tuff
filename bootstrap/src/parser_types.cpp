@@ -49,7 +49,7 @@ std::vector<std::shared_ptr<ASTNode>> Parser::parseGenericParams()
 
 std::shared_ptr<ASTNode> Parser::parseType()
 {
-	auto leftType = parseSingleType();
+	auto leftType = parseIntersectionType();
 
 	// Handle union types: Type0 | Type1 | Type2 (lowest precedence)
 	if (match(TokenType::PIPE))
@@ -60,13 +60,13 @@ std::shared_ptr<ASTNode> Parser::parseType()
 		unionNode->addChild(leftType);
 
 		// First iteration
-		auto rightType = parseSingleType();
+		auto rightType = parseIntersectionType();
 		unionNode->addChild(rightType);
 
 		// Subsequent iterations
 		while (match(TokenType::PIPE))
 		{
-			auto nextType = parseSingleType();
+			auto nextType = parseIntersectionType();
 			auto newUnion = std::make_shared<ASTNode>();
 			newUnion->type = ASTNodeType::BINARY_OP;
 			newUnion->value = "|";
@@ -80,8 +80,48 @@ std::shared_ptr<ASTNode> Parser::parseType()
 	return leftType;
 }
 
+std::shared_ptr<ASTNode> Parser::parseIntersectionType()
+{
+	auto leftType = parseSingleType();
+
+	// Handle intersection types: Type0 & Type1
+	if (match(TokenType::AMPERSAND))
+	{
+		auto intersectionNode = std::make_shared<ASTNode>();
+		intersectionNode->type = ASTNodeType::BINARY_OP;
+		intersectionNode->value = "&";
+		intersectionNode->addChild(leftType);
+
+		auto rightType = parseSingleType();
+		intersectionNode->addChild(rightType);
+
+		while (match(TokenType::AMPERSAND))
+		{
+			auto nextType = parseSingleType();
+			auto newIntersection = std::make_shared<ASTNode>();
+			newIntersection->type = ASTNodeType::BINARY_OP;
+			newIntersection->value = "&";
+			newIntersection->addChild(intersectionNode);
+			newIntersection->addChild(nextType);
+			intersectionNode = newIntersection;
+		}
+		return intersectionNode;
+	}
+	return leftType;
+}
+
 std::shared_ptr<ASTNode> Parser::parseSingleType()
 {
+	// Handle destructor type: #name
+	if (match(TokenType::HASH))
+	{
+		auto name = consume(TokenType::IDENTIFIER, "Expected identifier after '#'");
+		auto node = std::make_shared<ASTNode>();
+		node->type = ASTNodeType::TYPE;
+		node->value = "#" + name.value;
+		return node;
+	}
+
 	// Handle SizeOf<Type> type expressions
 	if (match(TokenType::SIZEOF))
 	{
@@ -339,6 +379,10 @@ std::string Parser::typeToString(std::shared_ptr<ASTNode> node)
 		if (node->value == "|")
 		{
 			return typeToString(node->children[0]) + "|" + typeToString(node->children[1]);
+		}
+		if (node->value == "&")
+		{
+			return typeToString(node->children[0]) + "&" + typeToString(node->children[1]);
 		}
 		return "UnknownBinaryOp";
 	}

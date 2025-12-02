@@ -3,6 +3,38 @@
 
 std::string CodeGeneratorCPP::mapType(std::string tuffType)
 {
+	// Handle intersection types: A & B -> mapType(A)
+	// We assume the first component is the data type and subsequent components are markers (like #free)
+	size_t ampPos = tuffType.find('&');
+	if (ampPos != std::string::npos)
+	{
+		// Be careful not to split inside generic args <...>
+		// Scan for & at top level
+		int depth = 0;
+		size_t splitPos = std::string::npos;
+		for (size_t i = 0; i < tuffType.length(); i++)
+		{
+			if (tuffType[i] == '<')
+				depth++;
+			else if (tuffType[i] == '>')
+				depth--;
+			else if (tuffType[i] == '&' && depth == 0)
+			{
+				splitPos = i;
+				break;
+			}
+		}
+
+		if (splitPos != std::string::npos)
+		{
+			std::string left = tuffType.substr(0, splitPos);
+			// Trim trailing whitespace
+			while (!left.empty() && left.back() == ' ')
+				left.pop_back();
+			return mapType(left);
+		}
+	}
+
 	// Handle union types: Some<I32>|None<I32> -> Union_Some_None<int32_t>
 	if (tuffType.find('|') != std::string::npos)
 	{
