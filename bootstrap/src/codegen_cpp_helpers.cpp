@@ -318,7 +318,7 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		// which would cause linker errors.
 		return "";
 	}
-	case ASTNodeType::USE_EXTERN_DECL:
+	case ASTNodeType::EXTERN_USE_DECL:
 	{
 		// use extern is handled at top-level for #include generation
 		return "";

@@ -27,10 +27,10 @@ enum class ASTNodeType
 	EXPECT_DECL,			// expect fn name(...): Type;
 	ACTUAL_DECL,			// actual fn name(...): Type => {...}
 	EXTERN_FN_DECL,		// extern fn name(...): Type;
-	EXTERN_TYPE_DECL, // type extern TypeName;
+	EXTERN_TYPE_DECL, // extern type TypeName;
+	EXTERN_USE_DECL,	// extern use stdlib;
 	MODULE_DECL,			// module name { statements }
 	USE_DECL,					// use module::path;
-	USE_EXTERN_DECL,	// use extern stdlib;
 	TYPE_ALIAS,				// type Name = Type; or type Name<T> = Type;
 	IMPL_DECL,				// impl<T> Struct<T> { fn method(...) => ... }
 	FIELD_ACCESS,			// obj.field

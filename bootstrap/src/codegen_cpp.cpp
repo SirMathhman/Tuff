@@ -12,7 +12,7 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	// Generate external includes from "use extern" declarations
 	for (auto child : ast->children)
 	{
-		if (child->type == ASTNodeType::USE_EXTERN_DECL)
+		if (child->type == ASTNodeType::EXTERN_USE_DECL)
 		{
 			ss << "#include <" << child->value << ".h>\n";
 		}
@@ -21,7 +21,7 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 
 	auto isStatement = [](ASTNodeType type)
 	{
-		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL || type == ASTNodeType::EXPECT_DECL || type == ASTNodeType::ACTUAL_DECL || type == ASTNodeType::EXTERN_FN_DECL || type == ASTNodeType::USE_EXTERN_DECL || type == ASTNodeType::MODULE_DECL;
+		return type == ASTNodeType::LET_STMT || type == ASTNodeType::ASSIGNMENT_STMT || type == ASTNodeType::IF_STMT || type == ASTNodeType::WHILE_STMT || type == ASTNodeType::LOOP_STMT || type == ASTNodeType::BREAK_STMT || type == ASTNodeType::CONTINUE_STMT || type == ASTNodeType::BLOCK || type == ASTNodeType::RETURN_STMT || type == ASTNodeType::STRUCT_DECL || type == ASTNodeType::ENUM_DECL || type == ASTNodeType::FUNCTION_DECL || type == ASTNodeType::EXPECT_DECL || type == ASTNodeType::ACTUAL_DECL || type == ASTNodeType::EXTERN_FN_DECL || type == ASTNodeType::EXTERN_USE_DECL || type == ASTNodeType::MODULE_DECL;
 	};
 
 	// Generate module declarations first (at top level, not inside main)
@@ -139,7 +139,7 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 		auto child = ast->children[i];
 
 		// Skip struct, enum, function, expect, actual, extern, use extern, and module declarations (already generated or no codegen needed)
-		if (child->type == ASTNodeType::STRUCT_DECL || child->type == ASTNodeType::ENUM_DECL || child->type == ASTNodeType::FUNCTION_DECL || child->type == ASTNodeType::EXPECT_DECL || child->type == ASTNodeType::ACTUAL_DECL || child->type == ASTNodeType::EXTERN_FN_DECL || child->type == ASTNodeType::USE_EXTERN_DECL || child->type == ASTNodeType::MODULE_DECL)
+		if (child->type == ASTNodeType::STRUCT_DECL || child->type == ASTNodeType::ENUM_DECL || child->type == ASTNodeType::FUNCTION_DECL || child->type == ASTNodeType::EXPECT_DECL || child->type == ASTNodeType::ACTUAL_DECL || child->type == ASTNodeType::EXTERN_FN_DECL || child->type == ASTNodeType::EXTERN_USE_DECL || child->type == ASTNodeType::MODULE_DECL)
 			continue;
 
 		if (i == ast->children.size() - 1 && !isStatement(child->type))

@@ -368,7 +368,7 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		break;
 	}
 
-	case ASTNodeType::USE_EXTERN_DECL:
+	case ASTNodeType::EXTERN_USE_DECL:
 	{
 		// External include - no type checking needed, just record
 		// The code generator will emit #include <name.h>

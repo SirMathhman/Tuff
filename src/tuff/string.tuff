@@ -3,6 +3,7 @@
 // Functions that allocate memory (concat, substring, fromI32) return malloc'd memory
 // Caller is responsible for freeing allocated strings
 
+extern use string_builtins;
 use option;
 
 // string is an opaque type - just use it as an identifier, codegen will handle the mapping

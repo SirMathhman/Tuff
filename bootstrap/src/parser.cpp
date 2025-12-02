@@ -74,7 +74,19 @@ std::shared_ptr<ASTNode> Parser::parse()
 		}
 		else if (peek().type == TokenType::EXTERN)
 		{
-			program->addChild(parseExternFnDecl());
+			// extern use, extern fn, or extern type
+			if (peek(1).type == TokenType::USE)
+			{
+				program->addChild(parseExternUseDecl());
+			}
+			else if (peek(1).type == TokenType::TYPE)
+			{
+				program->addChild(parseExternTypeDecl());
+			}
+			else
+			{
+				program->addChild(parseExternFnDecl());
+			}
 		}
 		else if (peek().type == TokenType::STRUCT)
 		{
@@ -86,15 +98,7 @@ std::shared_ptr<ASTNode> Parser::parse()
 		}
 		else if (peek().type == TokenType::TYPE)
 		{
-			// Check if this is 'type extern'
-			if (peek(1).type == TokenType::EXTERN)
-			{
-				program->addChild(parseExternTypeDecl());
-			}
-			else
-			{
-				program->addChild(parseTypeAlias());
-			}
+			program->addChild(parseTypeAlias());
 		}
 		else if (peek().type == TokenType::IMPL)
 		{

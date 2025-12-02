@@ -14,7 +14,16 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	ss << "#include <cstdint>\n";
 	ss << "#include <cstddef>\n";
 	ss << "#include <string>\n";
-	ss << "#include \"string_builtins.h\"\n\n";
+	
+	// Collect extern use declarations and emit corresponding includes
+	for (auto child : ast->children)
+	{
+		if (child->type == ASTNodeType::EXTERN_USE_DECL)
+		{
+			ss << "#include \"" << child->value << ".h\"\n";
+		}
+	}
+	ss << "\n";
 
 	// Collect all types that need to be declared
 	std::vector<std::shared_ptr<ASTNode>> enums;
@@ -103,11 +112,11 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 
 	// ========== Topologically sort all types (structs + type aliases) ==========
 	auto sortedTypes = topologicalSortTypes(allTypes);
-	
+
 	// Separate type aliases that reference union types
 	std::vector<std::shared_ptr<ASTNode>> regularTypes;
 	std::vector<std::shared_ptr<ASTNode>> unionAliases;
-	
+
 	for (auto node : sortedTypes)
 	{
 		if (node->type == ASTNodeType::TYPE_ALIAS && isUnionType(node->inferredType))
@@ -130,7 +139,8 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 			ss << "template<";
 			for (size_t i = 0; i < node->genericParams.size(); i++)
 			{
-				if (i > 0) ss << ", ";
+				if (i > 0)
+					ss << ", ";
 				ss << "typename " << node->genericParams[i]->value;
 			}
 			ss << "> ";

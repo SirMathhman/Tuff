@@ -17,13 +17,13 @@ std::set<std::string> CodeGeneratorCPP::extractTypeDependencies(const std::strin
 
 	// Skip primitives - they have no dependencies
 	static const std::set<std::string> primitives = {
-		"I8", "I16", "I32", "I64",
-		"U8", "U16", "U32", "U64",
-		"F32", "F64", "Bool", "Void", "USize",
-		"int8_t", "int16_t", "int32_t", "int64_t",
-		"uint8_t", "uint16_t", "uint32_t", "uint64_t",
-		"float", "double", "bool", "void", "size_t",
-		"string" // opaque type, handled externally
+			"I8", "I16", "I32", "I64",
+			"U8", "U16", "U32", "U64",
+			"F32", "F64", "Bool", "Void", "USize",
+			"int8_t", "int16_t", "int32_t", "int64_t",
+			"uint8_t", "uint16_t", "uint32_t", "uint64_t",
+			"float", "double", "bool", "void", "size_t",
+			"string" // opaque type, handled externally
 	};
 
 	std::string type = typeStr;
@@ -215,7 +215,7 @@ std::set<std::string> CodeGeneratorCPP::extractNodeDependencies(std::shared_ptr<
 
 // Topological sort using Kahn's algorithm
 std::vector<std::shared_ptr<ASTNode>> CodeGeneratorCPP::topologicalSortTypes(
-	const std::vector<std::shared_ptr<ASTNode>> &nodes)
+		const std::vector<std::shared_ptr<ASTNode>> &nodes)
 {
 	// Build name -> node mapping
 	std::map<std::string, std::shared_ptr<ASTNode>> nodeByName;
@@ -225,7 +225,7 @@ std::vector<std::shared_ptr<ASTNode>> CodeGeneratorCPP::topologicalSortTypes(
 	}
 
 	// Build dependency graph and in-degree count
-	std::map<std::string, std::set<std::string>> graph;	   // node -> dependencies
+	std::map<std::string, std::set<std::string>> graph;			 // node -> dependencies
 	std::map<std::string, std::set<std::string>> dependents; // node -> nodes that depend on it
 	std::map<std::string, int> inDegree;
 

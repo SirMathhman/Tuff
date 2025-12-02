@@ -1,0 +1,11 @@
+// Result type for operations that can fail with an error message
+
+struct Ok<T> {
+    value: T
+}
+
+struct Err<E> {
+    error: E
+}
+
+type Result<T, E> = Ok<T> | Err<E>;

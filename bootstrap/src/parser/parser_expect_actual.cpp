@@ -184,10 +184,10 @@ std::shared_ptr<ASTNode> Parser::parseExternFnDecl()
 
 std::shared_ptr<ASTNode> Parser::parseExternTypeDecl()
 {
-	consume(TokenType::TYPE, "Expected 'type'");
-	consume(TokenType::EXTERN, "Expected 'extern' after 'type'");
+	consume(TokenType::EXTERN, "Expected 'extern'");
+	consume(TokenType::TYPE, "Expected 'type' after 'extern'");
 
-	Token typeName = consume(TokenType::IDENTIFIER, "Expected type name after 'type extern'");
+	Token typeName = consume(TokenType::IDENTIFIER, "Expected type name after 'extern type'");
 
 	auto node = std::make_shared<ASTNode>();
 	node->type = ASTNodeType::EXTERN_TYPE_DECL;
