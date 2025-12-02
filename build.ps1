@@ -172,7 +172,7 @@ function Build-Target {
         Write-Host "  Compiling: $relPath" -NoNewline
         
         try {
-            $result = & $CompilerPath $commonFile.FullPath $TargetName -o $outputFile --sources $sourcesList 2>&1
+            $result = & $CompilerPath --sources $sourcesList --target $TargetName -o $outputFile 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-ColorOutput " ✓" $ColorGreen
                 $compiled++
@@ -365,7 +365,7 @@ function Build-Target {
         Write-Host "  Compiling: $relPath" -NoNewline
         
         try {
-            $result = & $CompilerPath $commonFile.FullPath $TargetName -o $outputFile --sources $sourcesList 2>&1
+            $result = & $CompilerPath --sources $sourcesList --target $TargetName -o $outputFile 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-ColorOutput " ✓" $ColorGreen
                 $compiled++

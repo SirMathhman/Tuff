@@ -10,6 +10,8 @@
 #include "type_checker.h"
 #include "codegen_cpp.h"
 
+namespace fs = std::filesystem;
+
 std::string readFile(const std::string &path)
 {
 	std::ifstream file(path);
@@ -26,10 +28,10 @@ std::string readFile(const std::string &path)
 void writeToFile(const std::string &path, const std::string &content)
 {
 	// Create parent directories
-	std::filesystem::path filePath(path);
+	fs::path filePath(path);
 	if (filePath.has_parent_path())
 	{
-		std::filesystem::create_directories(filePath.parent_path());
+		fs::create_directories(filePath.parent_path());
 	}
 
 	std::ofstream file(path);
@@ -54,43 +56,102 @@ std::vector<std::string> split(const std::string &str, char delimiter)
 	return tokens;
 }
 
+// Recursively find all .tuff files in a directory or return the file if it's a file
+std::vector<std::string> expandSourcePath(const std::string &path)
+{
+	std::vector<std::string> result;
+	fs::path p(path);
+
+	if (!fs::exists(p))
+	{
+		std::cerr << "Source path does not exist: " << path << std::endl;
+		exit(1);
+	}
+
+	if (fs::is_regular_file(p))
+	{
+		// Single file
+		result.push_back(p.string());
+	}
+	else if (fs::is_directory(p))
+	{
+		// Recursively find all .tuff files
+		for (const auto &entry : fs::recursive_directory_iterator(p))
+		{
+			if (fs::is_regular_file(entry) && entry.path().extension() == ".tuff")
+			{
+				result.push_back(entry.path().string());
+			}
+		}
+	}
+
+	return result;
+}
+
 int main(int argc, char *argv[])
 {
-	if (argc < 3)
+	if (argc < 2)
 	{
-		std::cerr << "Usage: tuffc <source.tuff> <target> [-o <output>] [--sources <file1,file2,...>] [--lib]" << std::endl;
-		std::cerr << "Targets: cpp" << std::endl;
+		std::cerr << "Usage: tuffc [options]" << std::endl;
+		std::cerr << "" << std::endl;
 		std::cerr << "Options:" << std::endl;
-		std::cerr << "  -o <output>           Write output to file instead of stdout" << std::endl;
-		std::cerr << "  --sources <files>     Comma-separated list of source files to compile together" << std::endl;
-		std::cerr << "  --lib                 Compile as library (don't generate main function)" << std::endl;
+		std::cerr << "  --sources <paths>        Files, directories, or root directories to compile (comma-separated)" << std::endl;
+		std::cerr << "  --target <target>        Compilation target (default: cpp)" << std::endl;
+		std::cerr << "  -o <output>              Write single output to file (conflicts with --out-root-dir)" << std::endl;
+		std::cerr << "  --out-root-dir <dir>     Write outputs to directory, preserving structure (conflicts with -o)" << std::endl;
+		std::cerr << "  --lib                    Compile as library (don't generate main function)" << std::endl;
 		return 1;
 	}
 
-	std::string sourcePath = argv[1];
-	std::string target = argv[2];
+	std::string target = "cpp";
 	std::string outputPath = "";
+	std::string outRootDir = "";
 	std::vector<std::string> sourcePaths;
-	sourcePaths.push_back(sourcePath);
 	bool isLibrary = false;
 
-	// Parse additional arguments
-	for (int i = 3; i < argc; i++)
+	// Parse arguments
+	for (int i = 1; i < argc; i++)
 	{
 		std::string arg = argv[i];
-		if (arg == "-o" && i + 1 < argc)
+		if (arg == "--sources" && i + 1 < argc)
+		{
+			std::string sourcesList = argv[++i];
+			auto paths = split(sourcesList, ',');
+			for (const auto &p : paths)
+			{
+				auto expanded = expandSourcePath(p);
+				sourcePaths.insert(sourcePaths.end(), expanded.begin(), expanded.end());
+			}
+		}
+		else if (arg == "--target" && i + 1 < argc)
+		{
+			target = argv[++i];
+		}
+		else if (arg == "-o" && i + 1 < argc)
 		{
 			outputPath = argv[++i];
 		}
-		else if (arg == "--sources" && i + 1 < argc)
+		else if (arg == "--out-root-dir" && i + 1 < argc)
 		{
-			std::string sourcesList = argv[++i];
-			sourcePaths = split(sourcesList, ',');
+			outRootDir = argv[++i];
 		}
 		else if (arg == "--lib")
 		{
 			isLibrary = true;
 		}
+	}
+
+	// Validation
+	if (sourcePaths.empty())
+	{
+		std::cerr << "Error: no source files specified (use --sources)" << std::endl;
+		return 1;
+	}
+
+	if (!outputPath.empty() && !outRootDir.empty())
+	{
+		std::cerr << "Error: cannot use both -o and --out-root-dir" << std::endl;
+		return 1;
 	}
 
 	// Read and parse all source files
@@ -140,8 +201,17 @@ int main(int argc, char *argv[])
 			codegen.setUseSharedHeader(true);
 
 			// Generate shared header
-			std::filesystem::path outPath(outputPath);
-			std::filesystem::path headerPath = outPath.parent_path() / "tuff_decls.h";
+			fs::path outPath(outputPath);
+			fs::path headerPath = outPath.parent_path() / "tuff_decls.h";
+			std::string headerContent = codegen.generateSharedHeader(mergedAst);
+			writeToFile(headerPath.string(), headerContent);
+		}
+		else if (!outRootDir.empty())
+		{
+			codegen.setUseSharedHeader(true);
+
+			// Generate shared header in output root
+			fs::path headerPath = fs::path(outRootDir) / "tuff_decls.h";
 			std::string headerContent = codegen.generateSharedHeader(mergedAst);
 			writeToFile(headerPath.string(), headerContent);
 		}
@@ -155,14 +225,31 @@ int main(int argc, char *argv[])
 	}
 
 	// Write output
-	if (outputPath.empty())
-	{
-		std::cout << output;
-	}
-	else
+	if (!outputPath.empty())
 	{
 		writeToFile(outputPath, output);
 		std::cerr << "Compiled to: " << outputPath << std::endl;
+	}
+	else if (!outRootDir.empty())
+	{
+		// For single file, write to outRootDir/filename
+		if (sourcePaths.size() == 1)
+		{
+			fs::path srcPath(sourcePaths[0]);
+			std::string outExtension = (target == "cpp") ? ".cpp" : ".js";
+			fs::path outPath = fs::path(outRootDir) / srcPath.stem().string() += outExtension;
+			writeToFile(outPath.string(), output);
+			std::cerr << "Compiled to: " << outPath.string() << std::endl;
+		}
+		else
+		{
+			std::cerr << "Warning: --out-root-dir with multiple sources not yet fully supported" << std::endl;
+		}
+	}
+	else
+	{
+		// Write to stdout
+		std::cout << output;
 	}
 
 	return 0;

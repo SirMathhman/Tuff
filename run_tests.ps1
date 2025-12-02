@@ -176,7 +176,7 @@ function Invoke-TuffCompiler {
     )
     
     try {
-        $output = & $CompilerPath $SourcePath $TargetType 2>&1
+        $output = & $CompilerPath --sources $SourcePath --target $TargetType 2>&1
         $success = $LASTEXITCODE -eq 0
         return @{
             Success = $success
