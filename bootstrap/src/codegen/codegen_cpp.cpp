@@ -302,8 +302,8 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 			{
 				auto child = ast->children[i];
 
-// Skip struct, enum, function, expect, actual, extern, module, and impl declarations (already generated)
-			if (child->type == ASTNodeType::STRUCT_DECL || child->type == ASTNodeType::ENUM_DECL || child->type == ASTNodeType::FUNCTION_DECL || child->type == ASTNodeType::EXPECT_DECL || child->type == ASTNodeType::ACTUAL_DECL || child->type == ASTNodeType::EXTERN_FN_DECL || child->type == ASTNodeType::EXTERN_TYPE_DECL || child->type == ASTNodeType::MODULE_DECL || child->type == ASTNodeType::IMPL_DECL)
+				// Skip struct, enum, function, expect, actual, extern, module, and impl declarations (already generated)
+				if (child->type == ASTNodeType::STRUCT_DECL || child->type == ASTNodeType::ENUM_DECL || child->type == ASTNodeType::FUNCTION_DECL || child->type == ASTNodeType::EXPECT_DECL || child->type == ASTNodeType::ACTUAL_DECL || child->type == ASTNodeType::EXTERN_FN_DECL || child->type == ASTNodeType::EXTERN_TYPE_DECL || child->type == ASTNodeType::MODULE_DECL || child->type == ASTNodeType::IMPL_DECL)
 					continue;
 
 				if (i == ast->children.size() - 1 && !isStatement(child->type))

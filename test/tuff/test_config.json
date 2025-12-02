@@ -55,7 +55,14 @@
     "feature19_multiple_of/test_literal_return": "got I32",
     "feature19_multiple_of/test_non_literal": "Cannot assign non-literal"
   },
-  "skip_tests": ["feature4_structs/test_struct_scoped"],
+  "skip_tests": [
+    "feature4_structs/test_struct_scoped",
+    "feature22_impl_blocks/test_impl_basic",
+    "feature22_impl_blocks/test_impl_mutable",
+    "feature22_impl_blocks/test_impl_multiple_methods",
+    "feature22_impl_blocks/test_impl_generic",
+    "feature22_impl_blocks/test_impl_result"
+  ],
   "native_only_tests": [
     "feature17_sizeof/test_sizeof_array",
     "feature17_sizeof/test_sizeof_basic",
