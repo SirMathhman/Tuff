@@ -27,25 +27,16 @@ std::string CodeGeneratorCPP::genDecl(ast::DeclPtr decl)
 																		}
 
 																		std::string funcName = (d.name == "main") ? "tuff_main" : d.name;
-					
-					// Replace :: with _ for method names
-					size_t pos = 0;
-					while ((pos = funcName.find("::", pos)) != std::string::npos)
-					{
-						funcName.replace(pos, 2, "_");
-						pos += 1;
-					}
-					
 
-																		for (size_t i = 0; i < d.params.size(); i++)
+																		// Replace :: with _ for method names
+																		size_t pos = 0;
+																		while ((pos = funcName.find("::", pos)) != std::string::npos)
 																		{
-																			if (i > 0)
-																				ss << ", ";
-																			ss << genParamDecl(d.params[i]);
+																			funcName.replace(pos, 2, "_");
+																			pos += 1;
 																		}
 
-																		ss << ") ";
-																		ss << genFunctionBody(d.body, d.returnType);
+				ss << genType(d.returnType) << " " << funcName << "(";
 
 																		return ss.str();
 																	},
@@ -268,7 +259,7 @@ std::string CodeGeneratorCPP::genFunctionForwardDecl(ast::DeclPtr decl)
 																		}
 
 																		std::string funcName = (d.name == "main") ? "tuff_main" : d.name;
-																		
+
 																		// Replace :: with _ for method names
 																		size_t pos = 0;
 																		while ((pos = funcName.find("::", pos)) != std::string::npos)
@@ -276,7 +267,7 @@ std::string CodeGeneratorCPP::genFunctionForwardDecl(ast::DeclPtr decl)
 																			funcName.replace(pos, 2, "_");
 																			pos += 1;
 																		}
-																		
+
 																		ss << genType(d.returnType) << " " << funcName << "(";
 
 																		for (size_t i = 0; i < d.params.size(); i++)
