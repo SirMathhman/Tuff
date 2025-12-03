@@ -6,7 +6,7 @@
 #include <functional>
 
 // Helper: check if a type is a function pointer type (starts with |)
-static bool isFunctionPointerType(const std::string &type)
+bool CodeGeneratorCPP::isFunctionPointerType(const std::string &type)
 {
 	return !type.empty() && type[0] == '|';
 }
@@ -14,7 +14,7 @@ static bool isFunctionPointerType(const std::string &type)
 // Helper: format a C++ function pointer parameter declaration
 // Input: paramType = "int32_t (*)(int32_t, int32_t)", paramName = "f"
 // Output: "int32_t (*f)(int32_t, int32_t)"
-static std::string formatFunctionPointerParam(const std::string &paramType, const std::string &paramName)
+std::string CodeGeneratorCPP::formatFunctionPointerParam(const std::string &paramType, const std::string &paramName)
 {
 	size_t funcPtrPos = paramType.find("(*)");
 	if (funcPtrPos != std::string::npos)
@@ -37,6 +37,7 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	ss << "#include <cstdint>\n";
 	ss << "#include <cstddef>\n";
 	ss << "#include <string>\n";
+	ss << "#include \"argv_builtins.h\"\n";
 
 	// Collect extern use declarations and emit corresponding includes
 	for (auto child : ast->children)
@@ -105,7 +106,7 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 		std::string structName = getUnionStructName(unionType);
 		bool isGeneric = false;
 		std::vector<std::string> typeParams;
-		
+
 		auto variants = splitUnionType(unionType);
 		for (const auto &variant : variants)
 		{
@@ -118,8 +119,10 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 					std::string paramsStr = variant.substr(start + 1, end - start - 1);
 					// Parse comma-separated parameters
 					std::string currentParam;
-					for (char c : paramsStr) {
-						if (c == ',') {
+					for (char c : paramsStr)
+					{
+						if (c == ',')
+						{
 							// Trim whitespace
 							while (!currentParam.empty() && currentParam.front() == ' ')
 								currentParam.erase(0, 1);
@@ -131,18 +134,23 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 								isGeneric = true;
 								// Add to type params if not already present
 								bool found = false;
-								for (const auto &p : typeParams) {
-									if (p == currentParam) {
+								for (const auto &p : typeParams)
+								{
+									if (p == currentParam)
+									{
 										found = true;
 										break;
 									}
 								}
-								if (!found) {
+								if (!found)
+								{
 									typeParams.push_back(currentParam);
 								}
 							}
 							currentParam.clear();
-						} else {
+						}
+						else
+						{
 							currentParam += c;
 						}
 					}
@@ -155,20 +163,23 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 					{
 						isGeneric = true;
 						bool found = false;
-						for (const auto &p : typeParams) {
-							if (p == currentParam) {
+						for (const auto &p : typeParams)
+						{
+							if (p == currentParam)
+							{
 								found = true;
 								break;
 							}
 						}
-						if (!found) {
+						if (!found)
+						{
 							typeParams.push_back(currentParam);
 						}
 					}
 				}
 			}
 		}
-		
+
 		if (unionStructToGeneric.find(structName) == unionStructToGeneric.end() || isGeneric)
 		{
 			unionStructToGeneric[structName] = {unionType, typeParams};
@@ -274,161 +285,20 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	}
 
 	// ========== Generate function forward declarations ==========
-	for (auto child : functions)
+	std::vector<std::shared_ptr<ASTNode>> allFunctions = functions;
+	for (auto impl : implDecls)
 	{
-		std::string funcName = child->value;
-		if (funcName == "main")
-			funcName = "tuff_main";
-
-		if (!child->genericParams.empty())
+		for (auto child : impl->children)
 		{
-			ss << "template<";
-			for (size_t i = 0; i < child->genericParams.size(); i++)
+			if (child->type == ASTNodeType::FUNCTION_DECL)
 			{
-				if (i > 0)
-					ss << ", ";
-				ss << "typename " << child->genericParams[i]->value;
-			}
-			ss << ">\n";
-		}
-		ss << mapType(child->inferredType) << " " << funcName << "(";
-		for (size_t i = 0; i < child->children.size() - 1; i++)
-		{
-			if (i > 0)
-				ss << ", ";
-			std::string paramType = mapType(child->children[i]->inferredType);
-			std::string paramName = child->children[i]->value;
-			size_t bracketPos = paramType.find('[');
-			if (bracketPos != std::string::npos)
-			{
-				std::string baseType = paramType.substr(0, bracketPos);
-				std::string arraySuffix = paramType.substr(bracketPos);
-				ss << baseType << " " << paramName << arraySuffix;
-			}
-			// Handle function pointer parameters: RetType (*)(Params) -> RetType (*name)(Params)
-			else if (paramType.find("(*)") != std::string::npos)
-			{
-				size_t funcPtrPos = paramType.find("(*)");
-				std::string retType = paramType.substr(0, funcPtrPos);
-				std::string params = paramType.substr(funcPtrPos + 3);
-				while (!retType.empty() && retType.back() == ' ')
-					retType.pop_back();
-				ss << retType << " (*" << paramName << ")" << params;
-			}
-			else
-			{
-				ss << paramType << " " << paramName;
-			}
-		}
-		ss << ");\n";
-	}
-
-	// ========== Generate actual function forward declarations ==========
-	for (auto child : actualDecls)
-	{
-		ss << mapType(child->inferredType) << " " << child->value << "(";
-		size_t paramCount = 0;
-		for (auto param : child->children)
-		{
-			if (param->type == ASTNodeType::IDENTIFIER)
-			{
-				if (paramCount > 0)
-					ss << ", ";
-				std::string paramType = mapType(param->inferredType);
-				std::string paramName = param->value;
-
-				// Check if this is a function pointer type
-				if (isFunctionPointerType(param->inferredType))
-				{
-					ss << formatFunctionPointerParam(paramType, paramName);
-				}
-				else
-				{
-					size_t bracketPos = paramType.find('[');
-					if (bracketPos != std::string::npos)
-					{
-						std::string baseType = paramType.substr(0, bracketPos);
-						std::string arraySuffix = paramType.substr(bracketPos);
-						ss << baseType << " " << paramName << arraySuffix;
-					}
-					else
-					{
-						ss << paramType << " " << paramName;
-					}
-				}
-				paramCount++;
-			}
-		}
-		ss << ");\n";
-	}
-
-	// ========== Generate impl method forward declarations ==========
-	for (auto child : implDecls)
-	{
-		std::vector<std::shared_ptr<ASTNode>> implGenericParams = child->genericParams;
-		for (auto method : child->children)
-		{
-			if (method->type == ASTNodeType::FUNCTION_DECL)
-			{
-				std::string methodName = method->value;
-				size_t colonPos = methodName.find("::");
-				if (colonPos != std::string::npos)
-				{
-					methodName.replace(colonPos, 2, "_");
-				}
-
-				std::vector<std::shared_ptr<ASTNode>> allGenericParams = implGenericParams;
-				for (auto param : method->genericParams)
-				{
-					allGenericParams.push_back(param);
-				}
-
-				if (!allGenericParams.empty())
-				{
-					ss << "template<";
-					for (size_t i = 0; i < allGenericParams.size(); i++)
-					{
-						if (i > 0)
-							ss << ", ";
-						ss << "typename " << allGenericParams[i]->value;
-					}
-					ss << ">\n";
-				}
-
-				ss << mapType(method->inferredType) << " " << methodName << "(";
-				for (size_t i = 0; i < method->children.size() - 1; i++)
-				{
-					if (i > 0)
-						ss << ", ";
-					std::string paramType = mapType(method->children[i]->inferredType);
-					std::string paramName = method->children[i]->value;
-					if (paramName == "this")
-						paramName = "this_";
-
-					// Check if this is a function pointer type
-					if (isFunctionPointerType(method->children[i]->inferredType))
-					{
-						ss << formatFunctionPointerParam(paramType, paramName);
-					}
-					else
-					{
-						size_t bracketPos = paramType.find('[');
-						if (bracketPos != std::string::npos)
-						{
-							std::string baseType = paramType.substr(0, bracketPos);
-							std::string arraySuffix = paramType.substr(bracketPos);
-							ss << baseType << " " << paramName << arraySuffix;
-						}
-						else
-						{
-							ss << paramType << " " << paramName;
-						}
-					}
-				}
-				ss << ");\n";
+				allFunctions.push_back(child);
 			}
 		}
 	}
+
+	// ========== Generate function forward declarations ==========
+	ss << generateForwardDeclarations(functions, implDecls, actualDecls);
 
 	auto isStatement = [](ASTNodeType type)
 	{
@@ -470,10 +340,42 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 		}
 	}
 
+	// ========== Generate global variables for 'in let' ==========
+	for (auto child : ast->children)
+	{
+		if (child->type == ASTNodeType::IN_LET_STMT)
+		{
+			std::string type = mapType(child->inferredType);
+			std::string name = child->value;
+			ss << type << " " << name << ";\n";
+		}
+	}
+
 	// Generate main function (unless compiling as library)
 	if (!isLibrary)
 	{
-		ss << "int main() {\n";
+		// Check for 'in let' declaration to determine main signature
+		std::string argvName;
+		for (auto child : ast->children)
+		{
+			if (child->type == ASTNodeType::IN_LET_STMT)
+			{
+				argvName = child->value;
+				break;
+			}
+		}
+
+		if (!argvName.empty())
+		{
+			ss << "int main(int argc, char* argv[]) {\n";
+			ss << "    // Convert argv to Tuff slice\n";
+			ss << "    ArgvArray raw_" << argvName << " = __builtin_argv_convert(argc, argv);\n";
+			ss << "    " << argvName << " = { raw_" << argvName << ".data, raw_" << argvName << ".len };\n";
+		}
+		else
+		{
+			ss << "int main() {\n";
+		}
 
 		// Check if there's a user-defined main function
 		bool hasUserMain = false;
@@ -500,6 +402,10 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 
 				// Skip struct, enum, function, expect, actual, extern, module, and impl declarations (already generated)
 				if (child->type == ASTNodeType::STRUCT_DECL || child->type == ASTNodeType::ENUM_DECL || child->type == ASTNodeType::FUNCTION_DECL || child->type == ASTNodeType::EXPECT_DECL || child->type == ASTNodeType::ACTUAL_DECL || child->type == ASTNodeType::EXTERN_FN_DECL || child->type == ASTNodeType::EXTERN_TYPE_DECL || child->type == ASTNodeType::MODULE_DECL || child->type == ASTNodeType::IMPL_DECL)
+					continue;
+
+				// Skip 'in let' declarations (handled at start of main)
+				if (child->type == ASTNodeType::IN_LET_STMT)
 					continue;
 
 				if (i == ast->children.size() - 1 && !isStatement(child->type))

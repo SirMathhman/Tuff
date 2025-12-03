@@ -357,6 +357,7 @@ void TypeChecker::handleMethodCall(std::shared_ptr<ASTNode> node)
 	// Check if method requires mutable reference
 	std::string thisParamType = info.params[0].second;
 	bool methodNeedsMutable = thisParamType.find("*mut ") != std::string::npos;
+	bool methodNeedsPointer = thisParamType.find("*") != std::string::npos;
 
 	// Check mutability
 	if (methodNeedsMutable && !isPointer)
@@ -420,36 +421,65 @@ void TypeChecker::handleMethodCall(std::shared_ptr<ASTNode> node)
 	// 2. Determine the first argument (reference to object or object itself if already pointer)
 	std::shared_ptr<ASTNode> firstArg;
 
-	if (isPointer)
+	if (methodNeedsPointer)
 	{
-		// Object is already a pointer, pass it directly (no need for &)
-		// But check mutability: can't pass *T where *mut T is expected
-		if (methodNeedsMutable && !isMutablePointer)
+		if (isPointer)
 		{
-			std::cerr << "Error: Cannot call mutable method '" << methodName
-								<< "' through immutable pointer." << std::endl;
-			exit(1);
-		}
-		firstArg = objectNode;
-	}
-	else
-	{
-		// Object is not a pointer, create reference expression (&obj or &mut obj)
-		auto refExpr = std::make_shared<ASTNode>();
-		refExpr->type = ASTNodeType::REFERENCE_EXPR;
-		refExpr->isMutable = methodNeedsMutable;
-		refExpr->addChild(objectNode);
-
-		// Set the inferred type for the reference
-		if (methodNeedsMutable)
-		{
-			refExpr->inferredType = "*mut " + objectType;
+			// Object is already a pointer, pass it directly (no need for &)
+			// But check mutability: can't pass *T where *mut T is expected
+			if (methodNeedsMutable && !isMutablePointer)
+			{
+				std::cerr << "Error: Cannot call mutable method '" << methodName
+									<< "' through immutable pointer." << std::endl;
+				exit(1);
+			}
+			firstArg = objectNode;
 		}
 		else
 		{
-			refExpr->inferredType = "*" + objectType;
+			// Object is not a pointer, create reference expression (&obj or &mut obj)
+			auto refExpr = std::make_shared<ASTNode>();
+			refExpr->type = ASTNodeType::REFERENCE_EXPR;
+			refExpr->isMutable = methodNeedsMutable;
+			refExpr->addChild(objectNode);
+
+			// Set the inferred type for the reference
+			if (methodNeedsMutable)
+			{
+				refExpr->inferredType = "*mut " + objectType;
+			}
+			else
+			{
+				refExpr->inferredType = "*" + objectType;
+			}
+			firstArg = refExpr;
 		}
-		firstArg = refExpr;
+	}
+	else
+	{
+		// Method expects value
+		if (isPointer)
+		{
+			// Special case for string: it's treated as pointer but passed as value
+			if (objectType == "string")
+			{
+				firstArg = objectNode;
+			}
+			else
+			{
+				// Object is a pointer, dereference it
+				auto derefExpr = std::make_shared<ASTNode>();
+				derefExpr->type = ASTNodeType::DEREF_EXPR;
+				derefExpr->addChild(objectNode);
+				derefExpr->inferredType = baseType; // The type pointed to
+				firstArg = derefExpr;
+			}
+		}
+		else
+		{
+			// Object is value, pass directly
+			firstArg = objectNode;
+		}
 	}
 
 	// 3. Rebuild the children: [fqnCallee, firstArg, ...originalArgs]

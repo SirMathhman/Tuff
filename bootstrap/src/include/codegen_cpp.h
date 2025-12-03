@@ -29,6 +29,10 @@ public:
 
 private:
 	bool isLibrary = false;
+	// Helpers
+	static bool isFunctionPointerType(const std::string &type);
+	static std::string formatFunctionPointerParam(const std::string &paramType, const std::string &paramName);
+
 	std::string generateNode(std::shared_ptr<ASTNode> node);
 
 	// Statement generation
@@ -87,6 +91,12 @@ private:
 	// Topological sort of type declarations
 	std::vector<std::shared_ptr<ASTNode>> topologicalSortTypes(
 			const std::vector<std::shared_ptr<ASTNode>> &nodes);
+
+	// Forward declarations generation
+	std::string generateForwardDeclarations(
+			const std::vector<std::shared_ptr<ASTNode>> &functions,
+			const std::vector<std::shared_ptr<ASTNode>> &implDecls,
+			const std::vector<std::shared_ptr<ASTNode>> &actualDecls);
 
 	// ===== TYPED AST METHODS (using std::visit) =====
 	// These use the new ast::Expr, ast::Stmt, and ast::Decl types

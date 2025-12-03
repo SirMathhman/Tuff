@@ -117,6 +117,7 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 	case ASTNodeType::REFERENCE_EXPR:
 	case ASTNodeType::DEREF_EXPR:
 	case ASTNodeType::SIZEOF_EXPR:
+	case ASTNodeType::CAST_EXPR:
 	case ASTNodeType::LITERAL:
 	case ASTNodeType::IDENTIFIER:
 	case ASTNodeType::ENUM_VALUE:
@@ -148,6 +149,14 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		std::string funcName = node->value;
 		if (funcName == "main")
 			funcName = "tuff_main";
+
+		// Replace :: with _ for methods (e.g. Struct::method -> Struct_method)
+		size_t pos = 0;
+		while ((pos = funcName.find("::", pos)) != std::string::npos)
+		{
+			funcName.replace(pos, 2, "_");
+			pos += 1;
+		}
 
 		ss << mapType(node->inferredType) << " " << funcName << "(";
 
@@ -272,25 +281,14 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 					methodName = structName + "_" + methodName.substr(prefix.length());
 				}
 
-				// Temporarily change method name and add impl generic params for generation
+				// Temporarily change method name for generation
 				std::string savedName = method->value;
-				auto savedGenericParams = method->genericParams;
-
 				method->value = methodName;
-
-				// Prepend impl block generic params to method generic params
-				std::vector<std::shared_ptr<ASTNode>> combinedParams = node->genericParams;
-				for (auto param : savedGenericParams)
-				{
-					combinedParams.push_back(param);
-				}
-				method->genericParams = combinedParams;
 
 				ss << generateNode(method) << "\n";
 
-				// Restore original name and generic params
+				// Restore original name
 				method->value = savedName;
-				method->genericParams = savedGenericParams;
 			}
 			else
 			{

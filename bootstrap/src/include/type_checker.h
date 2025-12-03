@@ -11,6 +11,7 @@ struct SymbolInfo
 	std::string type;
 	ExprPtr exprType; // New: ExprPtr based type
 	bool isMutable;
+	int scopeDepth = 0; // 0 = global, 1+ = local
 };
 
 struct StructInfo
@@ -82,6 +83,7 @@ private:
 	void checkBinaryOp(std::shared_ptr<ASTNode> node);
 	void checkFieldOrEnumAccess(std::shared_ptr<ASTNode> node);
 	void registerDeclarations(std::shared_ptr<ASTNode> node);
+	void registerImplDecl(std::shared_ptr<ASTNode> node);
 	void checkImplBlock(std::shared_ptr<ASTNode> node);
 	void checkCallExpr(std::shared_ptr<ASTNode> node);
 	void handleMethodCall(std::shared_ptr<ASTNode> node);
@@ -98,9 +100,11 @@ private:
 	void checkUnaryOp(std::shared_ptr<ASTNode> node);
 	void checkIfExpr(std::shared_ptr<ASTNode> node);
 	void checkSizeOfExpr(std::shared_ptr<ASTNode> node);
+	void checkCastExpr(std::shared_ptr<ASTNode> node);
 
 	// Statement checking helpers (in type_checker_stmt.cpp)
 	void checkLetStmt(std::shared_ptr<ASTNode> node);
+	void checkInLetStmt(std::shared_ptr<ASTNode> node);
 	void checkAssignmentStmt(std::shared_ptr<ASTNode> node);
 	void checkIfStmt(std::shared_ptr<ASTNode> node);
 	void checkWhileStmt(std::shared_ptr<ASTNode> node);
