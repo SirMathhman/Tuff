@@ -53,8 +53,10 @@ enum class ASTNodeType
 	MATCH_EXPR,				 // match expr { Type => expr, ... }
 	LIFETIME_PARAM,		 // lifetime parameter declaration
 	SIZEOF_EXPR,			 // sizeOf(Type) operator
+	CAST_EXPR,				 // cast(expr, Type)
 	FUNCTION_PTR_TYPE, // |T1, T2| => RetType
-	FUNCTION_REF_EXPR	 // &funcName - reference to a function
+	FUNCTION_REF_EXPR, // &funcName - reference to a function
+	IN_LET_STMT				 // in let args: *[string];
 };
 
 struct ASTNode

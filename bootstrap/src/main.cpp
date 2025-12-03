@@ -229,6 +229,22 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	// Debug: check for duplicates
+	std::map<std::string, int> nodeCounts;
+	for (auto child : mergedAst->children)
+	{
+		if (child->type == ASTNodeType::IMPL_DECL)
+		{
+			std::string key = "IMPL " + child->value;
+			nodeCounts[key]++;
+		}
+	}
+	for (auto const &[key, val] : nodeCounts)
+	{
+		if (val > 1)
+			std::cerr << "Duplicate node: " << key << " count=" << val << std::endl;
+	}
+
 	// 3. Type Checking
 	TypeChecker checker;
 	checker.check(mergedAst);

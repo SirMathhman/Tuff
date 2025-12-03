@@ -123,7 +123,7 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 		// Extract generic parameters from all variants and add as template arguments
 		auto variants = splitUnionType(tuffType);
 		std::vector<std::string> templateArgs;
-		
+
 		for (const auto &variant : variants)
 		{
 			size_t start = variant.find('<');
@@ -135,13 +135,16 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 					std::string param = variant.substr(start + 1, end - start - 1);
 					// Add to template args if not already present
 					bool found = false;
-					for (const auto &arg : templateArgs) {
-						if (arg == param) {
+					for (const auto &arg : templateArgs)
+					{
+						if (arg == param)
+						{
 							found = true;
 							break;
 						}
 					}
-					if (!found) {
+					if (!found)
+					{
 						templateArgs.push_back(param);
 					}
 				}

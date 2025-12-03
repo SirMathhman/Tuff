@@ -51,6 +51,8 @@ namespace codegen
 																			{ return genIs(e); },
 																			[this](const ast::SizeOf &e)
 																			{ return genSizeOf(e); },
+																			[this](const ast::Cast &e)
+																			{ return genCast(e); },
 																			[this](const ast::Block &e)
 																			{ return genBlock(e); },
 																			[this](const ast::EnumValue &e) -> std::string
@@ -229,6 +231,11 @@ namespace codegen
 		std::string genSizeOf(const ast::SizeOf &e)
 		{
 			return "sizeof(" + mapType(e.typeStr) + ")";
+		}
+
+		std::string genCast(const ast::Cast &e)
+		{
+			return "((" + mapType(e.targetTypeStr) + ")" + generate(e.operand) + ")";
 		}
 
 		std::string genBlock(const ast::Block &e)

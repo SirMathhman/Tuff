@@ -38,7 +38,8 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 	ss << "#include <cstdint>\n";
 	ss << "#include <cstddef>\n";
 	ss << "#include <string>\n";
-	ss << "#include \"string_builtins.h\"\n\n";
+	ss << "#include \"string_builtins.h\"\n";
+	ss << "#include \"argv_builtins.h\"\n\n";
 
 	// Collect all types that need to be declared
 	std::vector<std::shared_ptr<ASTNode>> enums;
@@ -157,7 +158,7 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 		std::string structName = getUnionStructName(unionType);
 		bool isGeneric = false;
 		std::vector<std::string> typeParams;
-		
+
 		auto variants = splitUnionType(unionType);
 		for (const auto &variant : variants)
 		{
@@ -170,8 +171,10 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 					std::string paramsStr = variant.substr(start + 1, end - start - 1);
 					// Parse comma-separated parameters
 					std::string currentParam;
-					for (char c : paramsStr) {
-						if (c == ',') {
+					for (char c : paramsStr)
+					{
+						if (c == ',')
+						{
 							// Trim whitespace
 							while (!currentParam.empty() && currentParam.front() == ' ')
 								currentParam.erase(0, 1);
@@ -183,18 +186,23 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 								isGeneric = true;
 								// Add to type params if not already present
 								bool found = false;
-								for (const auto &p : typeParams) {
-									if (p == currentParam) {
+								for (const auto &p : typeParams)
+								{
+									if (p == currentParam)
+									{
 										found = true;
 										break;
 									}
 								}
-								if (!found) {
+								if (!found)
+								{
 									typeParams.push_back(currentParam);
 								}
 							}
 							currentParam.clear();
-						} else {
+						}
+						else
+						{
 							currentParam += c;
 						}
 					}
@@ -207,20 +215,23 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 					{
 						isGeneric = true;
 						bool found = false;
-						for (const auto &p : typeParams) {
-							if (p == currentParam) {
+						for (const auto &p : typeParams)
+						{
+							if (p == currentParam)
+							{
 								found = true;
 								break;
 							}
 						}
-						if (!found) {
+						if (!found)
+						{
 							typeParams.push_back(currentParam);
 						}
 					}
 				}
 			}
 		}
-		
+
 		if (unionStructToGeneric.find(structName) == unionStructToGeneric.end() || isGeneric)
 		{
 			unionStructToGeneric[structName] = {unionType, typeParams};

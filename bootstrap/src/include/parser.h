@@ -31,6 +31,7 @@ private:
 	std::shared_ptr<ASTNode> parseTypeAlias();
 	std::shared_ptr<ASTNode> parseImplBlock();
 	std::shared_ptr<ASTNode> parseLetStatement();
+	std::shared_ptr<ASTNode> parseInLetStatement();
 	std::shared_ptr<ASTNode> parseAssignmentStatement();
 	bool isAssignmentStatement(); // Lookahead to check for assignment
 	std::shared_ptr<ASTNode> parseIfStatement();

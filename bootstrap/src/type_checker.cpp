@@ -18,6 +18,10 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		checkLetStmt(node);
 		break;
 
+	case ASTNodeType::IN_LET_STMT:
+		// Already checked during registration phase
+		break;
+
 	case ASTNodeType::ASSIGNMENT_STMT:
 		checkAssignmentStmt(node);
 		break;
@@ -143,6 +147,10 @@ void TypeChecker::check(std::shared_ptr<ASTNode> node)
 		checkSizeOfExpr(node);
 		break;
 
+	case ASTNodeType::CAST_EXPR:
+		checkCastExpr(node);
+		break;
+
 	default:
 		break;
 	}
@@ -173,6 +181,12 @@ void TypeChecker::checkImplBlock(std::shared_ptr<ASTNode> node)
 		{
 			found = true;
 		}
+	}
+
+	// Allow primitive types
+	if (!found && (structName == "I32" || structName == "USize" || structName == "Bool" || structName == "string"))
+	{
+		found = true;
 	}
 
 	if (!found)

@@ -400,3 +400,16 @@ void TypeChecker::checkSizeOfExpr(std::shared_ptr<ASTNode> node)
 	// sizeOf returns SizeOf<T> which extends USize
 	node->inferredType = "SizeOf<" + typeName + ">";
 }
+
+void TypeChecker::checkCastExpr(std::shared_ptr<ASTNode> node)
+{
+	auto expr = node->children[0];
+	check(expr);
+
+	// Resolve target type
+	node->exprType = resolveType(node->typeNode);
+	node->exprType = expandTypeAlias(node->exprType);
+	node->inferredType = exprTypeToString(node->exprType);
+
+	// TODO: Add validation logic (e.g. can only cast numeric to numeric, or ptr to ptr)
+}

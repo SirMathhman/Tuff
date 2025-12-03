@@ -60,6 +60,7 @@ set(COMPILER_SOURCES
     src/type_checker/type_checker_stmt.cpp
     src/type_checker/type_checker_decl.cpp
     src/type_checker/type_checker_types.cpp
+    src/type_checker/type_checker_subst.cpp
     src/codegen/codegen_cpp.cpp
     src/codegen/codegen_cpp_helpers.cpp
     src/codegen/codegen_cpp_stmt.cpp
@@ -72,6 +73,7 @@ set(COMPILER_SOURCES
     src/codegen/codegen_cpp_union.cpp
     src/codegen/codegen_cpp_typed.cpp
     src/codegen/codegen_cpp_decl_typed.cpp
+    src/codegen/codegen_cpp_stmt_typed.cpp
     src/codegen/codegen_cpp_deps.cpp
 )
 

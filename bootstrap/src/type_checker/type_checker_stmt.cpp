@@ -1,6 +1,43 @@
 #include "type_checker.h"
 #include <iostream>
 
+void TypeChecker::checkInLetStmt(std::shared_ptr<ASTNode> node)
+{
+	std::string name = node->value;
+	if (symbolTable.find(name) != symbolTable.end())
+	{
+		std::cerr << "Error: Variable '" << name << "' already declared at line " << node->line << "." << std::endl;
+		exit(1);
+	}
+
+	// Resolve explicit type
+	if (node->typeNode)
+	{
+		node->exprType = resolveType(node->typeNode);
+		node->exprType = expandTypeAlias(node->exprType);
+		node->inferredType = exprTypeToString(node->exprType);
+	}
+	else
+	{
+		std::cerr << "Error: 'in let' declaration requires explicit type annotation." << std::endl;
+		exit(1);
+	}
+
+	// Validate type: must be Array<string>
+	// We check string representation for now, but ideally should check structure
+	if (node->inferredType != "Array<string>")
+	{
+		std::cerr << "Error: 'in let' declaration must have type 'Array<string>', got '" << node->inferredType << "'." << std::endl;
+		exit(1);
+	}
+
+	SymbolInfo info;
+	info.type = node->inferredType;
+	info.exprType = node->exprType;
+	info.isMutable = false;
+	symbolTable[name] = info;
+}
+
 void TypeChecker::checkLetStmt(std::shared_ptr<ASTNode> node)
 {
 	std::string name = node->value;

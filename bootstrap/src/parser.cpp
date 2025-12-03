@@ -108,6 +108,10 @@ std::shared_ptr<ASTNode> Parser::parse()
 		{
 			program->addChild(parseLetStatement());
 		}
+		else if (peek().type == TokenType::IN)
+		{
+			program->addChild(parseInLetStatement());
+		}
 		else if (peek().type == TokenType::IF)
 		{
 			program->addChild(parseIfStatement());

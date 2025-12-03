@@ -108,10 +108,12 @@ Token Lexer::identifierOrKeyword()
 			{"true", TokenType::TRUE},
 			{"false", TokenType::FALSE},
 			{"impl", TokenType::IMPL},
+			{"in", TokenType::IN},
 			{"I32", TokenType::I32},
 			{"Bool", TokenType::BOOL},
 			{"Void", TokenType::VOID},
 			{"USize", TokenType::USIZE},
+			{"cast", TokenType::CAST},
 			// Add other types as needed
 	};
 

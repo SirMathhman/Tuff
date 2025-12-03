@@ -32,6 +32,7 @@ namespace ast
 	struct MatchArm;
 	struct Is;
 	struct SizeOf;
+	struct Cast;
 	struct Block;
 	struct EnumValue;
 
@@ -67,7 +68,7 @@ namespace ast
 	using Expr = std::variant<
 			Literal, Identifier, BinaryOp, UnaryOp, Reference, Deref,
 			FieldAccess, Index, Call, StructLiteral, ArrayLiteral,
-			If, Match, Is, SizeOf, Block, EnumValue>;
+			If, Match, Is, SizeOf, Cast, Block, EnumValue>;
 	using ExprPtr = std::shared_ptr<Expr>;
 
 	// Statement Variant
@@ -251,6 +252,15 @@ namespace ast
 	{
 		TypePtr typeNode;
 		std::string typeStr;
+		std::string inferredType;
+		::ExprPtr exprType;
+		int line = 0;
+	};
+	struct Cast
+	{
+		ExprPtr operand;
+		TypePtr targetType;
+		std::string targetTypeStr;
 		std::string inferredType;
 		::ExprPtr exprType;
 		int line = 0;

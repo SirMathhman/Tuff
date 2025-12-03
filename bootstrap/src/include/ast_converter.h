@@ -202,6 +202,17 @@ public:
 			return std::make_shared<ast::Expr>(expr);
 		}
 
+		case ASTNodeType::CAST_EXPR:
+		{
+			ast::Cast expr;
+			expr.operand = toExpr(node->children[0]);
+			expr.targetType = toType(node->typeNode);
+			expr.targetTypeStr = node->inferredType;
+			expr.inferredType = node->inferredType;
+			expr.exprType = node->exprType;
+			return std::make_shared<ast::Expr>(expr);
+		}
+
 		case ASTNodeType::BLOCK:
 		{
 			ast::Block expr;

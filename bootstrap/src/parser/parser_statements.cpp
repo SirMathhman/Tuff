@@ -125,6 +125,27 @@ std::shared_ptr<ASTNode> Parser::parseLetStatement()
 	return node;
 }
 
+std::shared_ptr<ASTNode> Parser::parseInLetStatement()
+{
+	consume(TokenType::IN, "Expected 'in'");
+	consume(TokenType::LET, "Expected 'let'");
+	Token name = consume(TokenType::IDENTIFIER, "Expected variable name");
+
+	consume(TokenType::COLON, "Expected ':'");
+	auto typeNode = parseType();
+	std::string typeName = typeToString(typeNode);
+
+	consume(TokenType::SEMICOLON, "Expected ';'");
+
+	auto node = std::make_shared<ASTNode>();
+	node->type = ASTNodeType::IN_LET_STMT;
+	node->value = name.value;
+	node->isMutable = false; // 'in let' is always immutable
+	node->inferredType = typeName;
+	node->typeNode = typeNode;
+	return node;
+}
+
 bool Parser::isAssignmentStatement()
 {
 	// Lookahead to detect: *+ identifier (.field | [index])* =

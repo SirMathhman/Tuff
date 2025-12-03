@@ -128,7 +128,8 @@ std::string CodeGeneratorCPP::generateUnionStruct(const std::string &unionType, 
 	// Check if any variant has generic syntax (contains '<' and '>')
 	// If so, we need to generate a template
 	bool hasGenerics = !typeParams.empty();
-	if (!hasGenerics) {
+	if (!hasGenerics)
+	{
 		for (const auto &variant : variants)
 		{
 			if (variant.find('<') != std::string::npos)
@@ -183,14 +184,19 @@ std::string CodeGeneratorCPP::generateUnionStruct(const std::string &unionType, 
 	// Only generate template if union has generic parameters
 	if (hasGenerics)
 	{
-		if (!typeParams.empty()) {
+		if (!typeParams.empty())
+		{
 			ss << "template<";
-			for (size_t i = 0; i < typeParams.size(); i++) {
-				if (i > 0) ss << ", ";
+			for (size_t i = 0; i < typeParams.size(); i++)
+			{
+				if (i > 0)
+					ss << ", ";
 				ss << "typename " << typeParams[i];
 			}
 			ss << ">\n";
-		} else {
+		}
+		else
+		{
 			// Fallback for legacy behavior (should be avoided)
 			ss << "template<typename T>\n";
 		}
@@ -258,7 +264,7 @@ std::string CodeGeneratorCPP::wrapInUnion(const std::string &value, const std::s
 	// Extract generic parameters and add as template arguments
 	auto variants = splitUnionType(targetType);
 	std::vector<std::string> templateArgs;
-	
+
 	for (const auto &variant : variants)
 	{
 		size_t start = variant.find('<');
@@ -270,13 +276,16 @@ std::string CodeGeneratorCPP::wrapInUnion(const std::string &value, const std::s
 				std::string param = variant.substr(start + 1, end - start - 1);
 				// Add to template args if not already present
 				bool found = false;
-				for (const auto &arg : templateArgs) {
-					if (arg == param) {
+				for (const auto &arg : templateArgs)
+				{
+					if (arg == param)
+					{
 						found = true;
 						break;
 					}
 				}
-				if (!found) {
+				if (!found)
+				{
 					templateArgs.push_back(param);
 				}
 			}

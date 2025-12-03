@@ -259,6 +259,22 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 		consume(TokenType::RPAREN, "Expected ')'");
 		return expr;
 	}
+	else if (match(TokenType::CAST))
+	{
+		// cast(expr, Type)
+		consume(TokenType::LPAREN, "Expected '(' after 'cast'");
+		auto expr = parseExpression();
+		consume(TokenType::COMMA, "Expected ',' after expression in cast");
+		auto typeNode = parseType();
+		consume(TokenType::RPAREN, "Expected ')' after type in cast");
+
+		auto node = std::make_shared<ASTNode>();
+		node->type = ASTNodeType::CAST_EXPR;
+		node->addChild(expr);
+		node->typeNode = typeNode;
+		node->inferredType = typeToString(typeNode);
+		return node;
+	}
 	std::cerr << "Parse Error: Unexpected token '" << peek().value << "' at line " << peek().line
 						<< " (expected a literal, identifier, or expression)" << std::endl;
 	exit(1);

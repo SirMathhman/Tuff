@@ -8,7 +8,31 @@ void TypeChecker::checkFunctionDecl(std::shared_ptr<ASTNode> node)
 
 	// Create new scope for function parameters
 	std::map<std::string, SymbolInfo> savedSymbolTable = symbolTable;
-	symbolTable.clear();
+	// Don't clear symbol table completely - we need to keep global symbols (like 'in let' vars)
+	// But we do need to handle shadowing correctly.
+	// For now, Tuff doesn't have true globals except 'in let', so we can just copy them over
+	// or rely on a scope stack. The current implementation clears the table which wipes globals.
+
+	// Filter out non-global symbols if we had any, but currently symbolTable only has locals
+	// However, 'in let' variables are added to the global scope (depth 0)
+	// So we should preserve them.
+
+	// Better approach: Use a scope stack or just increment scope depth and remove locals on exit
+	// But since we're using a single map, we need to be careful.
+	// The current implementation assumes top-level is empty or we don't care about it inside functions.
+	// But 'in let' changes that.
+
+	// Let's preserve symbols with scopeDepth == 0
+	std::map<std::string, SymbolInfo> globalSymbols;
+	for (const auto &pair : symbolTable)
+	{
+		if (pair.second.scopeDepth == 0)
+		{
+			globalSymbols[pair.first] = pair.second;
+		}
+	}
+	symbolTable = globalSymbols;
+
 	currentScopeDepth++;
 
 	// Save generic params scope

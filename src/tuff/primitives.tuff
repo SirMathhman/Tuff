@@ -1,0 +1,14 @@
+// Primitive type extensions
+// Adds methods to primitive types like I32, USize, etc.
+
+use string;
+
+impl I32 {
+	fn toString(this: I32): string => string::fromI32(this);
+}
+
+impl USize {
+	// Convert USize to I32 then to string (safe for small values)
+	// TODO: Add native USize to string conversion
+	fn toString(this: USize): string => string::fromI32(cast(this, I32));
+}

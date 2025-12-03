@@ -26,10 +26,12 @@ enum class TokenType
 	IS,
 	MATCH,
 	SIZEOF,
+	CAST,
 	TRUE,
 	FALSE,
 	THIS,
 	IMPL,
+	IN,
 
 	// Integer Types
 	U8,
