@@ -1,4 +1,5 @@
 #include "codegen_cpp.h"
+#include "ast_converter.h"
 #include <sstream>
 #include <vector>
 #include <set>
@@ -467,60 +468,4 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	}
 
 	return ss.str();
-}
-
-// ============================================================================
-// PER-FILE CODE GENERATION
-// ============================================================================
-
-FileOutput CodeGeneratorCPP::generateFile(std::shared_ptr<ASTNode> ast, const std::string &moduleName)
-{
-	FileOutput output;
-	output.header = generateFileHeader(ast, moduleName);
-	output.implementation = generateFileImplementation(ast, moduleName);
-	output.dependencies = extractDependencies(ast);
-	return output;
-}
-
-bool CodeGeneratorCPP::shouldExport(std::shared_ptr<ASTNode> node)
-{
-	if (node->type == ASTNodeType::EXPECT_DECL)
-		return true;
-	if (node->type == ASTNodeType::FUNCTION_DECL && node->value == "main")
-		return true;
-	return node->isExported;
-}
-
-std::set<std::string> CodeGeneratorCPP::extractDependencies(std::shared_ptr<ASTNode> ast)
-{
-	std::set<std::string> deps;
-	for (const auto &child : ast->children)
-	{
-		if (child->type == ASTNodeType::USE_DECL)
-		{
-			deps.insert(child->value);
-		}
-	}
-	return deps;
-}
-
-std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, const std::string &moduleName)
-{
-	std::stringstream header;
-	header << "#pragma once\n\n";
-	header << "#include <cstdint>\n";
-	header << "#include <string>\n";
-	header << "#include <memory>\n\n";
-	header << "// TODO: Implement full header generation\n";
-	header << "// Module: " << moduleName << "\n";
-	return header.str();
-}
-
-std::string CodeGeneratorCPP::generateFileImplementation(std::shared_ptr<ASTNode> ast, const std::string &moduleName)
-{
-	std::stringstream impl;
-	impl << "#include \"" << moduleName << ".h\"\n\n";
-	impl << "// TODO: Implement full implementation generation\n";
-	impl << "// Module: " << moduleName << "\n";
-	return impl.str();
 }

@@ -219,6 +219,7 @@ int main(int argc, char *argv[])
 		std::cerr << "  --target <target>        Compilation target (overrides build.json)" << std::endl;
 		std::cerr << "  -o <output>              Write single output to file" << std::endl;
 		std::cerr << "  --lib                    Compile as library (don't generate main function)" << std::endl;
+		std::cerr << "  --per-file               Generate separate .h and .cpp files (experimental)" << std::endl;
 		return 1;
 	}
 
@@ -228,6 +229,7 @@ int main(int argc, char *argv[])
 	std::string outputPath = "";
 	std::vector<std::string> additionalSources;
 	bool isLibrary = false;
+	bool perFileMode = false;
 
 	// Parse arguments
 	for (int i = 1; i < argc; i++)
@@ -263,6 +265,10 @@ int main(int argc, char *argv[])
 		{
 			isLibrary = true;
 		}
+		else if (arg == "--per-file")
+		{
+			perFileMode = true;
+		}
 	}
 
 	// Load build configuration
@@ -275,11 +281,15 @@ int main(int argc, char *argv[])
 		config.target = target;
 	}
 
-	// Collect all source sets
-	std::vector<std::string> allSourceSets = config.mainSourceSets;
-	if (includeTests)
+	// Collect all source sets - but only if no explicit sources were provided
+	std::vector<std::string> allSourceSets;
+	if (additionalSources.empty())
 	{
-		allSourceSets.insert(allSourceSets.end(), config.testSourceSets.begin(), config.testSourceSets.end());
+		allSourceSets = config.mainSourceSets;
+		if (includeTests)
+		{
+			allSourceSets.insert(allSourceSets.end(), config.testSourceSets.begin(), config.testSourceSets.end());
+		}
 	}
 
 	// Collect all source files from source sets
@@ -312,6 +322,7 @@ int main(int argc, char *argv[])
 
 	// Read and parse all source files
 	std::vector<std::shared_ptr<ASTNode>> asts;
+	std::vector<std::string> sourceFilePaths = sourcePaths; // Keep for per-file mode
 
 	for (const auto &path : sourcePaths)
 	{
@@ -328,6 +339,62 @@ int main(int argc, char *argv[])
 		asts.push_back(ast);
 	}
 
+	// ===== PER-FILE MODE (EXPERIMENTAL) =====
+	if (perFileMode && config.target == "cpp")
+	{
+		// Generate separate .h and .cpp files for each source file
+		CodeGeneratorCPP codegen;
+		codegen.setIsLibrary(isLibrary);
+
+		// Type check each AST individually
+		TypeChecker checker;
+		for (auto ast : asts)
+		{
+			checker.check(ast);
+		}
+
+		// Generate files
+		for (size_t i = 0; i < asts.size(); i++)
+		{
+			fs::path srcPath(sourceFilePaths[i]);
+			std::string moduleName = srcPath.stem().string();
+
+			// Generate header and implementation
+			FileOutput fileOutput = codegen.generateFile(asts[i], moduleName);
+
+			// Write to console or file
+			if (!outputPath.empty())
+			{
+				// Single file mode - write first file only
+				std::cerr << "// ========== " << moduleName << ".h ==========\n";
+				std::cout << fileOutput.header << "\n";
+				std::cerr << "\n// ========== " << moduleName << ".cpp ==========\n";
+				std::cout << fileOutput.implementation << "\n";
+				break;
+			}
+			else
+			{
+				// Multiple files mode - write to dist/
+				fs::path headerPath = fs::path(config.outputDir) / (moduleName + ".h");
+				fs::path implPath = fs::path(config.outputDir) / (moduleName + ".cpp");
+
+				if (!fs::exists(config.outputDir))
+				{
+					fs::create_directories(config.outputDir);
+				}
+
+				writeToFile(headerPath.string(), fileOutput.header);
+				writeToFile(implPath.string(), fileOutput.implementation);
+
+				std::cerr << "Generated: " << headerPath.string() << std::endl;
+				std::cerr << "Generated: " << implPath.string() << std::endl;
+			}
+		}
+
+		return 0; // Exit after per-file generation
+	}
+
+	// ===== LEGACY MERGED MODE =====
 	// Merge ASTs (combine children from all source files)
 	auto mergedAst = std::make_shared<ASTNode>();
 	mergedAst->type = ASTNodeType::PROGRAM;
