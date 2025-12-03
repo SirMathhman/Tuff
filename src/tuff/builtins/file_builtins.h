@@ -19,6 +19,16 @@
 #endif
 #include <errno.h>
 
+// Windows compatibility for stat macros
+#ifdef _WIN32
+	#ifndef S_ISREG
+		#define S_ISREG(m) (((m) & S_IFMT) == S_IFREG)
+	#endif
+	#ifndef S_ISDIR
+		#define S_ISDIR(m) (((m) & S_IFMT) == S_IFDIR)
+	#endif
+#endif
+
 // FileHandle is just FILE*
 typedef FILE *FileHandle;
 
@@ -113,7 +123,23 @@ inline char *__builtin_file_readAll(const char *path)
 // Write string to file - returns 0 on success, -1 on error
 inline int32_t __builtin_file_writeAll(const char *path, const char *content)
 {
+	FILE *f = fopen(path, "w");
+	if (f == nullptr)
+	{
+		return -1;
+	}
 	
+	size_t len = strlen(content);
+	size_t written = fwrite(content, 1, len, f);
+	fclose(f);
+	
+	if (written != len)
+	{
+		return -1;
+	}
+	return 0;
+}
+
 // Check if file/directory exists
 inline bool __builtin_file_exists(const char *path)
 {
@@ -289,14 +315,25 @@ inline void *__builtin_file_listDirectory(const char *path, size_t *outCount)
 		*outCount = count;
 		return result;
 	#endif
-}	if (f == nullptr)
-	{
-		return -1;
-	}
+}
 
-	size_t len = strlen(content);
-	size_t written = fwrite(content, 1, len, f);
-	fclose(f);
+// Delete a file - returns 0 on success, -1 on error
+inline int32_t __builtin_file_delete(const char *path)
+{
+	#ifdef _WIN32
+		return _unlink(path) == 0 ? 0 : -1;
+	#else
+		return unlink(path) == 0 ? 0 : -1;
+	#endif
+}
 
-	return (written == len) ? 0 : -1;
+// Delete an empty directory - returns 0 on success, -1 on error
+// Does not support recursive deletion; directory must be empty
+inline int32_t __builtin_file_deleteDirectory(const char *path)
+{
+	#ifdef _WIN32
+		return _rmdir(path) == 0 ? 0 : -1;
+	#else
+		return rmdir(path) == 0 ? 0 : -1;
+	#endif
 }

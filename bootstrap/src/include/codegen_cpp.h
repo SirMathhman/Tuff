@@ -55,8 +55,9 @@ private:
 	// Union type helpers
 	bool isUnionType(const std::string &type);
 	std::vector<std::string> splitUnionType(const std::string &unionType);
-	std::string generateUnionStruct(const std::string &unionType);
+	std::string generateUnionStruct(const std::string &unionType, const std::vector<std::string> &typeParams = {});
 	std::string getUnionStructName(const std::string &unionType);
+	std::string getUnionTagName(const std::string &unionType);
 	std::string wrapInUnion(const std::string &value, const std::string &valueType, const std::string &targetType);
 	bool isGenericParam(const std::string &type);
 

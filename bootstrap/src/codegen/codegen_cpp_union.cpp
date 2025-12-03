@@ -89,6 +89,27 @@ std::string CodeGeneratorCPP::getUnionStructName(const std::string &unionType)
 	return name;
 }
 
+// Helper: Get the C++ tag enum name for a union type
+std::string CodeGeneratorCPP::getUnionTagName(const std::string &unionType)
+{
+	// Convert "Some<I32>|None<I32>" or "Some<T>|None<T>" to "Tag_Some_None"
+	std::string name = "Tag";
+	auto variants = splitUnionType(unionType);
+	for (const auto &variant : variants)
+	{
+		size_t pos = variant.find('<');
+		if (pos != std::string::npos)
+		{
+			name += "_" + variant.substr(0, pos);
+		}
+		else
+		{
+			name += "_" + variant;
+		}
+	}
+	return name;
+}
+
 // Helper: Check if a type is a generic type parameter (e.g., "T" or "U")
 // Generic params are single uppercase letters
 bool CodeGeneratorCPP::isGenericParam(const std::string &type)
@@ -99,20 +120,22 @@ bool CodeGeneratorCPP::isGenericParam(const std::string &type)
 }
 
 // Helper: Generate a tagged union struct for a union type
-std::string CodeGeneratorCPP::generateUnionStruct(const std::string &unionType)
+std::string CodeGeneratorCPP::generateUnionStruct(const std::string &unionType, const std::vector<std::string> &typeParams)
 {
 	std::stringstream ss;
 	auto variants = splitUnionType(unionType);
 
 	// Check if any variant has generic syntax (contains '<' and '>')
 	// If so, we need to generate a template
-	bool hasGenerics = false;
-	for (const auto &variant : variants)
-	{
-		if (variant.find('<') != std::string::npos)
+	bool hasGenerics = !typeParams.empty();
+	if (!hasGenerics) {
+		for (const auto &variant : variants)
 		{
-			hasGenerics = true;
-			break;
+			if (variant.find('<') != std::string::npos)
+			{
+				hasGenerics = true;
+				break;
+			}
 		}
 	}
 
@@ -134,17 +157,12 @@ std::string CodeGeneratorCPP::generateUnionStruct(const std::string &unionType)
 	baseName.pop_back(); // Remove trailing _
 
 	std::string structName = "Union_" + baseName;
+	std::string tagName = "Tag_" + baseName;
 
 	ss << "// Union type: " << unionType << "\n";
 
-	// Only generate template if union has generic parameters
-	if (hasGenerics)
-	{
-		ss << "template<typename T>\n";
-	}
-
-	ss << "struct " << structName << " {\n";
-	ss << "    enum class Tag { ";
+	// Generate standalone enum (no template needed)
+	ss << "enum class " << tagName << " { ";
 	for (size_t i = 0; i < variants.size(); i++)
 	{
 		if (i > 0)
@@ -160,9 +178,26 @@ std::string CodeGeneratorCPP::generateUnionStruct(const std::string &unionType)
 			ss << variants[i];
 		}
 	}
-	ss << " };\n\n";
+	ss << " };\n";
 
-	ss << "    Tag __tag;\n";
+	// Only generate template if union has generic parameters
+	if (hasGenerics)
+	{
+		if (!typeParams.empty()) {
+			ss << "template<";
+			for (size_t i = 0; i < typeParams.size(); i++) {
+				if (i > 0) ss << ", ";
+				ss << "typename " << typeParams[i];
+			}
+			ss << ">\n";
+		} else {
+			// Fallback for legacy behavior (should be avoided)
+			ss << "template<typename T>\n";
+		}
+	}
+
+	ss << "struct " << structName << " {\n";
+	ss << "    " << tagName << " __tag;\n";
 	ss << "    union {\n";
 	for (const auto &variant : variants)
 	{
@@ -174,10 +209,12 @@ std::string CodeGeneratorCPP::generateUnionStruct(const std::string &unionType)
 			baseName = baseName.substr(0, pos);
 		}
 
-		// For generics: use T. For concrete types: use mapped type
+		// For generics: use mapped type which handles parameter substitution
 		if (hasGenerics)
 		{
-			ss << "        " << baseName << "<T> __val_" << baseName << ";\n";
+			// If we have explicit type params, we need to reconstruct the type with them
+			// But mapType handles this if the variant string already contains the params (e.g. "Ok<T>")
+			ss << "        " << mapType(fullType) << " __val_" << baseName << ";\n";
 		}
 		else
 		{
@@ -197,14 +234,7 @@ std::string CodeGeneratorCPP::generateUnionStruct(const std::string &unionType)
 			baseName = baseName.substr(0, pos);
 		}
 
-		if (hasGenerics)
-		{
-			ss << "    " << structName << "(" << baseName << "<T> val) : __tag(Tag::" << baseName << "), __val_" << baseName << "(val) {}\n";
-		}
-		else
-		{
-			ss << "    " << structName << "(" << mapType(fullType) << " val) : __tag(Tag::" << baseName << "), __val_" << baseName << "(val) {}\n";
-		}
+		ss << "    " << structName << "(" << mapType(fullType) << " val) : __tag(" << tagName << "::" << baseName << "), __val_" << baseName << "(val) {}\n";
 	}
 
 	ss << "};\n";
@@ -225,20 +255,45 @@ std::string CodeGeneratorCPP::wrapInUnion(const std::string &value, const std::s
 	// Wrap the value using union constructor with template argument
 	std::string structName = getUnionStructName(targetType);
 
-	// Extract generic parameter and add as template argument
+	// Extract generic parameters and add as template arguments
 	auto variants = splitUnionType(targetType);
-	if (!variants.empty())
+	std::vector<std::string> templateArgs;
+	
+	for (const auto &variant : variants)
 	{
-		size_t start = variants[0].find('<');
+		size_t start = variant.find('<');
 		if (start != std::string::npos)
 		{
-			size_t end = variants[0].find('>');
+			size_t end = variant.find('>');
 			if (end != std::string::npos)
 			{
-				std::string param = variants[0].substr(start + 1, end - start - 1);
-				return structName + "<" + mapType(param) + ">(" + value + ")";
+				std::string param = variant.substr(start + 1, end - start - 1);
+				// Add to template args if not already present
+				bool found = false;
+				for (const auto &arg : templateArgs) {
+					if (arg == param) {
+						found = true;
+						break;
+					}
+				}
+				if (!found) {
+					templateArgs.push_back(param);
+				}
 			}
 		}
+	}
+
+	if (!templateArgs.empty())
+	{
+		std::string result = structName + "<";
+		for (size_t i = 0; i < templateArgs.size(); i++)
+		{
+			if (i > 0)
+				result += ", ";
+			result += mapType(templateArgs[i]);
+		}
+		result += ">(" + value + ")";
+		return result;
 	}
 
 	return structName + "(" + value + ")";

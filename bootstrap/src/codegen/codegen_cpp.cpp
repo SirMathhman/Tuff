@@ -99,11 +99,13 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	collectUnionTypes(ast);
 
 	// Deduplicate union types: prefer generic versions over concrete ones
-	std::map<std::string, std::string> unionStructToGeneric;
+	std::map<std::string, std::pair<std::string, std::vector<std::string>>> unionStructToGeneric;
 	for (const auto &unionType : unionTypes)
 	{
 		std::string structName = getUnionStructName(unionType);
 		bool isGeneric = false;
+		std::vector<std::string> typeParams;
+		
 		auto variants = splitUnionType(unionType);
 		for (const auto &variant : variants)
 		{
@@ -113,18 +115,63 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 				size_t end = variant.find('>');
 				if (end != std::string::npos)
 				{
-					std::string param = variant.substr(start + 1, end - start - 1);
-					if (param.length() == 1 && param[0] >= 'A' && param[0] <= 'Z')
+					std::string paramsStr = variant.substr(start + 1, end - start - 1);
+					// Parse comma-separated parameters
+					std::string currentParam;
+					for (char c : paramsStr) {
+						if (c == ',') {
+							// Trim whitespace
+							while (!currentParam.empty() && currentParam.front() == ' ')
+								currentParam.erase(0, 1);
+							while (!currentParam.empty() && currentParam.back() == ' ')
+								currentParam.pop_back();
+							// Check if it's a generic param (single uppercase letter)
+							if (currentParam.length() == 1 && currentParam[0] >= 'A' && currentParam[0] <= 'Z')
+							{
+								isGeneric = true;
+								// Add to type params if not already present
+								bool found = false;
+								for (const auto &p : typeParams) {
+									if (p == currentParam) {
+										found = true;
+										break;
+									}
+								}
+								if (!found) {
+									typeParams.push_back(currentParam);
+								}
+							}
+							currentParam.clear();
+						} else {
+							currentParam += c;
+						}
+					}
+					// Handle last parameter
+					while (!currentParam.empty() && currentParam.front() == ' ')
+						currentParam.erase(0, 1);
+					while (!currentParam.empty() && currentParam.back() == ' ')
+						currentParam.pop_back();
+					if (currentParam.length() == 1 && currentParam[0] >= 'A' && currentParam[0] <= 'Z')
 					{
 						isGeneric = true;
-						break;
+						bool found = false;
+						for (const auto &p : typeParams) {
+							if (p == currentParam) {
+								found = true;
+								break;
+							}
+						}
+						if (!found) {
+							typeParams.push_back(currentParam);
+						}
 					}
 				}
 			}
 		}
+		
 		if (unionStructToGeneric.find(structName) == unionStructToGeneric.end() || isGeneric)
 		{
-			unionStructToGeneric[structName] = unionType;
+			unionStructToGeneric[structName] = {unionType, typeParams};
 		}
 	}
 
@@ -206,7 +253,7 @@ std::string CodeGeneratorCPP::generate(std::shared_ptr<ASTNode> ast)
 	// ========== Generate union struct definitions ==========
 	for (const auto &pair : unionStructToGeneric)
 	{
-		ss << generateUnionStruct(pair.second) << "\n";
+		ss << generateUnionStruct(pair.second.first, pair.second.second) << "\n";
 	}
 
 	// ========== Generate type aliases that reference union types ==========

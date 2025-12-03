@@ -117,24 +117,8 @@ std::string CodeGeneratorCPP::generateMatchExpr(std::shared_ptr<ASTNode> node)
 
 	if (isUnion)
 	{
-		// Generate nested ternary: (x.__tag == Tag::A ? bodyA : (x.__tag == Tag::B ? bodyB : ...))
-		std::string structName = getUnionStructName(scrutineeType);
-
-		// Add template argument if needed
-		auto variants = splitUnionType(scrutineeType);
-		if (!variants.empty())
-		{
-			size_t start = variants[0].find('<');
-			if (start != std::string::npos)
-			{
-				size_t end = variants[0].find('>');
-				if (end != std::string::npos)
-				{
-					std::string param = variants[0].substr(start + 1, end - start - 1);
-					structName += "<" + mapType(param) + ">";
-				}
-			}
-		}
+		// Generate nested ternary: (x.__tag == Tag_*::A ? bodyA : (x.__tag == Tag_*::B ? bodyB : ...))
+		std::string tagName = getUnionTagName(scrutineeType);
 
 		// Process arms (children[1..n])
 		std::string defaultBody;
@@ -178,7 +162,7 @@ std::string CodeGeneratorCPP::generateMatchExpr(std::shared_ptr<ASTNode> node)
 		{
 			if (i > 0)
 				ss << " : ";
-			ss << "(" << scrutineeExpr << ".__tag == " << structName << "::Tag::" << patternBodies[i].first << ") ? " << patternBodies[i].second;
+			ss << "(" << scrutineeExpr << ".__tag == " << tagName << "::" << patternBodies[i].first << ") ? " << patternBodies[i].second;
 		}
 
 		if (!defaultBody.empty())

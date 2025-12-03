@@ -8,7 +8,7 @@ extern fn exit(code: I32): Void;
 // Test createDirectory
 let testDir = "test_temp_dir";
 let createResult = createDirectory(testDir);
-if (createResult is Err<Void, string>) {
+if (createResult is Err<Unit, string>) {
 	println("FAIL: create directory");
 	exit(1);
 }

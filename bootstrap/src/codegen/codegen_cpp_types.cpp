@@ -120,20 +120,45 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 	{
 		std::string structName = getUnionStructName(tuffType);
 
-		// Extract generic parameter from first variant and add as template argument
+		// Extract generic parameters from all variants and add as template arguments
 		auto variants = splitUnionType(tuffType);
-		if (!variants.empty())
+		std::vector<std::string> templateArgs;
+		
+		for (const auto &variant : variants)
 		{
-			size_t start = variants[0].find('<');
+			size_t start = variant.find('<');
 			if (start != std::string::npos)
 			{
-				size_t end = variants[0].find('>');
+				size_t end = variant.find('>');
 				if (end != std::string::npos)
 				{
-					std::string param = variants[0].substr(start + 1, end - start - 1);
-					return structName + "<" + mapType(param) + ">";
+					std::string param = variant.substr(start + 1, end - start - 1);
+					// Add to template args if not already present
+					bool found = false;
+					for (const auto &arg : templateArgs) {
+						if (arg == param) {
+							found = true;
+							break;
+						}
+					}
+					if (!found) {
+						templateArgs.push_back(param);
+					}
 				}
 			}
+		}
+
+		if (!templateArgs.empty())
+		{
+			std::string result = structName + "<";
+			for (size_t i = 0; i < templateArgs.size(); i++)
+			{
+				if (i > 0)
+					result += ", ";
+				result += mapType(templateArgs[i]);
+			}
+			result += ">";
+			return result;
 		}
 
 		return structName;
