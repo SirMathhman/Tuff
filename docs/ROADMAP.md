@@ -22,23 +22,23 @@
 
 The standard library is currently in early development (`src/tuff/`).
 
-| Module       | Status      | Description                                   |
-| :----------- | :---------- | :-------------------------------------------- |
-| `array`      | ✅ Basic    | Array utilities                               |
-| `argv`       | ✅ Complete | Command line arguments                        |
-| `char_stream`| ✅ Complete | Sequential character processing for lexing    |
-| `file`       | ✅ Complete | File I/O (read/write, directory ops, delete)  |
-| `io`      | ✅ Minimal  | Console I/O (relies on externs)               |
-| `map`     | ✅ Usable   | Hash map implementation                       |
-| `math`    | ✅ Basic    | Basic math functions                          |
-| `mem`     | ✅ Basic    | Memory management (malloc/free)               |
-| `option`  | ✅ Usable   | Option type                                   |
-| `process` | ✅ Basic    | Process execution (run external programs)     |
-| `result`  | ✅ Usable   | Result type                                   |
-| `slice`   | ✅ Basic    | Slice utilities                               |
-| `string`  | ✅ Usable   | String operations (includes advanced methods) |
-| `testing` | ✅ Basic    | Simple testing framework with assertions      |
-| `vector`  | ✅ Usable   | Dynamic array implementation                  |
+| Module        | Status      | Description                                   |
+| :------------ | :---------- | :-------------------------------------------- |
+| `array`       | ✅ Basic    | Array utilities                               |
+| `argv`        | ✅ Complete | Command line arguments                        |
+| `char_stream` | ✅ Complete | Sequential character processing for lexing    |
+| `file`        | ✅ Complete | File I/O (read/write, directory ops, delete)  |
+| `io`          | ✅ Minimal  | Console I/O (relies on externs)               |
+| `map`         | ✅ Usable   | Hash map implementation                       |
+| `math`        | ✅ Basic    | Basic math functions                          |
+| `mem`         | ✅ Basic    | Memory management (malloc/free)               |
+| `option`      | ✅ Usable   | Option type                                   |
+| `process`     | ✅ Basic    | Process execution (run external programs)     |
+| `result`      | ✅ Usable   | Result type                                   |
+| `slice`       | ✅ Basic    | Slice utilities                               |
+| `string`      | ✅ Usable   | String operations (includes advanced methods) |
+| `testing`     | ✅ Basic    | Simple testing framework with assertions      |
+| `vector`      | ✅ Usable   | Dynamic array implementation                  |
 
 ## Bootstrapping Requirements
 

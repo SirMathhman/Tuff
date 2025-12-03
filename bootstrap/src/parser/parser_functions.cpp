@@ -3,7 +3,7 @@
 std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 {
 	consume(TokenType::FN, "Expected 'fn'");
-	
+
 	// Check for function name - give helpful error if keyword is used
 	Token funcName;
 	if (peek().type == TokenType::IDENTIFIER)
@@ -15,21 +15,21 @@ std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 		Token badToken = peek();
 		// Check common keywords that might be mistakenly used as function names
 		if (badToken.type == TokenType::MATCH || badToken.type == TokenType::TYPE ||
-		    badToken.type == TokenType::IF || badToken.type == TokenType::ELSE ||
-		    badToken.type == TokenType::WHILE || badToken.type == TokenType::LOOP ||
-		    badToken.type == TokenType::RETURN || badToken.type == TokenType::LET ||
-		    badToken.type == TokenType::MUT || badToken.type == TokenType::STRUCT ||
-		    badToken.type == TokenType::ENUM || badToken.type == TokenType::IMPL ||
-		    badToken.type == TokenType::USE || badToken.type == TokenType::MODULE ||
-		    badToken.type == TokenType::ACTUAL || badToken.type == TokenType::EXPECT)
+				badToken.type == TokenType::IF || badToken.type == TokenType::ELSE ||
+				badToken.type == TokenType::WHILE || badToken.type == TokenType::LOOP ||
+				badToken.type == TokenType::RETURN || badToken.type == TokenType::LET ||
+				badToken.type == TokenType::MUT || badToken.type == TokenType::STRUCT ||
+				badToken.type == TokenType::ENUM || badToken.type == TokenType::IMPL ||
+				badToken.type == TokenType::USE || badToken.type == TokenType::MODULE ||
+				badToken.type == TokenType::ACTUAL || badToken.type == TokenType::EXPECT)
 		{
 			error("'" + badToken.value + "' is a reserved keyword and cannot be used as a function name",
-			      "fn myFunction(param: Type): ReturnType => ...");
+						"fn myFunction(param: Type): ReturnType => ...");
 		}
 		else
 		{
 			error("Expected function name after 'fn', got '" + badToken.value + "'",
-			      "fn myFunction(param: Type): ReturnType => ...");
+						"fn myFunction(param: Type): ReturnType => ...");
 		}
 	}
 
