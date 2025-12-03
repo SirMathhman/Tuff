@@ -12,199 +12,10 @@
 #include "ast_typed.h"
 #include "ast_converter.h"
 #include "codegen_typed.h"
-#include "json_parser.h"
+#include "utils/build_config.h"
+#include "utils/file_utils.h"
 
 namespace fs = std::filesystem;
-
-std::string readFile(const std::string &path)
-{
-	std::ifstream file(path);
-	if (!file.is_open())
-	{
-		std::cerr << "Could not open file: " << path << std::endl;
-		exit(1);
-	}
-	std::stringstream buffer;
-	buffer << file.rdbuf();
-	return buffer.str();
-}
-
-void writeToFile(const std::string &path, const std::string &content)
-{
-	// Create parent directories
-	fs::path filePath(path);
-	if (filePath.has_parent_path())
-	{
-		fs::create_directories(filePath.parent_path());
-	}
-
-	std::ofstream file(path);
-	if (!file.is_open())
-	{
-		std::cerr << "Could not write to file: " << path << std::endl;
-		exit(1);
-	}
-	file << content;
-	file.close();
-}
-
-struct BuildConfig
-{
-	std::vector<std::string> mainSourceSets;
-	std::vector<std::string> testSourceSets;
-	std::string target;
-	std::string outputDir;
-	bool includeTests = false;
-};
-
-BuildConfig loadBuildConfig(const std::string &buildFilePath, bool includeTests)
-{
-	BuildConfig config;
-	config.target = "cpp";
-	config.outputDir = "dist";
-	config.includeTests = includeTests;
-
-	if (!fs::exists(buildFilePath))
-	{
-		return config; // Return defaults if no build file
-	}
-
-	std::string jsonContent = readFile(buildFilePath);
-	auto root = json::parse(jsonContent);
-
-	if (root->type == json::Value::Type::Object)
-	{
-		// Parse main sourceSets
-		if (root->objectValue.count("main"))
-		{
-			auto mainObj = root->objectValue["main"];
-			if (mainObj->type == json::Value::Type::Object && mainObj->objectValue.count("sourceSets"))
-			{
-				auto sourceSets = mainObj->objectValue["sourceSets"];
-				if (sourceSets->type == json::Value::Type::Array)
-				{
-					for (const auto &item : sourceSets->arrayValue)
-					{
-						if (item->type == json::Value::Type::String)
-						{
-							config.mainSourceSets.push_back(item->stringValue);
-						}
-					}
-				}
-			}
-		}
-
-		// Parse test sourceSets if requested
-		if (includeTests && root->objectValue.count("test"))
-		{
-			auto testObj = root->objectValue["test"];
-			if (testObj->type == json::Value::Type::Object && testObj->objectValue.count("sourceSets"))
-			{
-				auto sourceSets = testObj->objectValue["sourceSets"];
-				if (sourceSets->type == json::Value::Type::Array)
-				{
-					for (const auto &item : sourceSets->arrayValue)
-					{
-						if (item->type == json::Value::Type::String)
-						{
-							config.testSourceSets.push_back(item->stringValue);
-						}
-					}
-				}
-			}
-		}
-
-		// Parse target
-		if (root->objectValue.count("target"))
-		{
-			auto targetVal = root->objectValue["target"];
-			if (targetVal->type == json::Value::Type::String)
-			{
-				config.target = targetVal->stringValue;
-			}
-		}
-
-		// Parse outputDir
-		if (root->objectValue.count("outputDir"))
-		{
-			auto outputDirVal = root->objectValue["outputDir"];
-			if (outputDirVal->type == json::Value::Type::String)
-			{
-				config.outputDir = outputDirVal->stringValue;
-			}
-		}
-	}
-
-	return config;
-}
-
-void copyBuiltinHeaders(const std::string &outputDir, const std::vector<std::string> &sourceSetDirs)
-{
-	// Copy all .h and .cpp files from each source set directory
-	for (const auto &sourceSetDir : sourceSetDirs)
-	{
-		fs::path sourceDir(sourceSetDir);
-		if (fs::exists(sourceDir) && fs::is_directory(sourceDir))
-		{
-			for (const auto &entry : fs::recursive_directory_iterator(sourceDir))
-			{
-				if (fs::is_regular_file(entry))
-				{
-					auto ext = entry.path().extension().string();
-					if (ext == ".h" || ext == ".cpp" || ext == ".hpp")
-					{
-						fs::path destPath = fs::path(outputDir) / entry.path().filename();
-						fs::copy_file(entry.path(), destPath, fs::copy_options::overwrite_existing);
-					}
-				}
-			}
-		}
-	}
-}
-
-std::vector<std::string> split(const std::string &str, char delimiter)
-{
-	std::vector<std::string> tokens;
-	std::stringstream ss(str);
-	std::string token;
-	while (std::getline(ss, token, delimiter))
-	{
-		tokens.push_back(token);
-	}
-	return tokens;
-}
-
-// Recursively find all .tuff files in a directory or return the file if it's a file
-std::vector<std::string> expandSourcePath(const std::string &path)
-{
-	std::vector<std::string> result;
-	fs::path p(path);
-
-	if (!fs::exists(p))
-	{
-		std::cerr << "Source path does not exist: " << path << std::endl;
-		exit(1);
-	}
-
-	if (fs::is_regular_file(p))
-	{
-		// Single file
-		result.push_back(p.string());
-	}
-	else if (fs::is_directory(p))
-	{
-		// Recursively find all .tuff files
-		for (const auto &entry : fs::recursive_directory_iterator(p))
-		{
-			if (fs::is_regular_file(entry) && entry.path().extension() == ".tuff")
-			{
-				result.push_back(entry.path().string());
-			}
-		}
-	}
-
-	return result;
-}
 
 int main(int argc, char *argv[])
 {
@@ -215,6 +26,7 @@ int main(int argc, char *argv[])
 		std::cerr << "Options:" << std::endl;
 		std::cerr << "  --build <file>           Build configuration file (default: build.json)" << std::endl;
 		std::cerr << "  --profile <name>         Build profile: main (default) or test" << std::endl;
+		std::cerr << "  --source-sets <paths>    Source directories to include (comma-separated)" << std::endl;
 		std::cerr << "  --sources <paths>        Additional files to compile (comma-separated)" << std::endl;
 		std::cerr << "  --target <target>        Compilation target (overrides build.json)" << std::endl;
 		std::cerr << "  -o <output>              Write single output to file" << std::endl;
@@ -228,6 +40,7 @@ int main(int argc, char *argv[])
 	std::string target = "";
 	std::string outputPath = "";
 	std::vector<std::string> additionalSources;
+	std::vector<std::string> explicitSourceSets;
 	bool isLibrary = false;
 	bool perFileMode = false;
 
@@ -242,6 +55,12 @@ int main(int argc, char *argv[])
 		else if (arg == "--profile" && i + 1 < argc)
 		{
 			profile = argv[++i];
+		}
+		else if (arg == "--source-sets" && i + 1 < argc)
+		{
+			std::string sourceSetsList = argv[++i];
+			auto paths = split(sourceSetsList, ',');
+			explicitSourceSets.insert(explicitSourceSets.end(), paths.begin(), paths.end());
 		}
 		else if (arg == "--sources" && i + 1 < argc)
 		{
@@ -281,15 +100,24 @@ int main(int argc, char *argv[])
 		config.target = target;
 	}
 
-	// Collect all source sets - but only if no explicit sources were provided
+	// Collect all source sets - but only if no explicit source sets were provided
 	std::vector<std::string> allSourceSets;
-	if (additionalSources.empty())
+	if (explicitSourceSets.empty())
 	{
-		allSourceSets = config.mainSourceSets;
-		if (includeTests)
+		// Use source sets from build.json
+		if (additionalSources.empty())
 		{
-			allSourceSets.insert(allSourceSets.end(), config.testSourceSets.begin(), config.testSourceSets.end());
+			allSourceSets = config.mainSourceSets;
+			if (includeTests)
+			{
+				allSourceSets.insert(allSourceSets.end(), config.testSourceSets.begin(), config.testSourceSets.end());
+			}
 		}
+	}
+	else
+	{
+		// Use explicit source sets from command line
+		allSourceSets = explicitSourceSets;
 	}
 
 	// Collect all source files from source sets
@@ -322,7 +150,7 @@ int main(int argc, char *argv[])
 
 	// Read and parse all source files
 	std::vector<std::shared_ptr<ASTNode>> asts;
-	std::vector<std::string> sourceFilePaths = sourcePaths; // Keep for per-file mode
+	std::vector<std::string> sourceFilePaths = sourcePaths;
 
 	for (const auto &path : sourcePaths)
 	{
@@ -339,19 +167,32 @@ int main(int argc, char *argv[])
 		asts.push_back(ast);
 	}
 
-	// ===== PER-FILE MODE (EXPERIMENTAL) =====
-	if (perFileMode && config.target == "cpp")
+	// ===== PER-FILE MODE (DEFAULT FOR BUILD.JSON) =====
+	// Use per-file generation when:
+	// 1. Explicitly requested via --per-file flag
+	// 2. Building from build.json without explicit --sources (normal build workflow)
+	bool usePerFileMode = perFileMode || (config.target == "cpp" && outputPath.empty() && additionalSources.empty() && explicitSourceSets.empty());
+
+	if (usePerFileMode && config.target == "cpp")
 	{
 		// Generate separate .h and .cpp files for each source file
 		CodeGeneratorCPP codegen;
 		codegen.setIsLibrary(isLibrary);
 
-		// Type check each AST individually
-		TypeChecker checker;
-		for (auto ast : asts)
+		// Merge ASTs for type checking (all files need to see each other's types)
+		auto mergedAst = std::make_shared<ASTNode>();
+		mergedAst->type = ASTNodeType::PROGRAM;
+		for (const auto &ast : asts)
 		{
-			checker.check(ast);
+			for (auto child : ast->children)
+			{
+				mergedAst->children.push_back(child);
+			}
 		}
+
+		// Type check all files together
+		TypeChecker checker;
+		checker.check(mergedAst);
 
 		// Generate files
 		for (size_t i = 0; i < asts.size(); i++)
@@ -374,13 +215,36 @@ int main(int argc, char *argv[])
 			}
 			else
 			{
-				// Multiple files mode - write to dist/
-				fs::path headerPath = fs::path(config.outputDir) / (moduleName + ".h");
-				fs::path implPath = fs::path(config.outputDir) / (moduleName + ".cpp");
+				// Multiple files mode - write to dist/ preserving directory structure
+				fs::path srcPath(sourceFilePaths[i]);
 
-				if (!fs::exists(config.outputDir))
+				// Get relative path from source root to preserve directory structure
+				std::string relPath = srcPath.filename().string();
+				for (const auto &sourceSet : allSourceSets)
 				{
-					fs::create_directories(config.outputDir);
+					if (sourceFilePaths[i].find(sourceSet) != std::string::npos)
+					{
+						size_t pos = sourceFilePaths[i].find(sourceSet);
+						if (pos != std::string::npos)
+						{
+							relPath = sourceFilePaths[i].substr(pos + sourceSet.length());
+							if (relPath.front() == '/' || relPath.front() == '\\')
+								relPath = relPath.substr(1);
+							break;
+						}
+					}
+				}
+
+				// Replace .tuff extension with .h/.cpp
+				std::string relPathNoExt = relPath.substr(0, relPath.find_last_of('.'));
+
+				fs::path headerPath = fs::path(config.outputDir) / (relPathNoExt + ".h");
+				fs::path implPath = fs::path(config.outputDir) / (relPathNoExt + ".cpp");
+
+				// Create parent directories if needed
+				if (!fs::exists(headerPath.parent_path()))
+				{
+					fs::create_directories(headerPath.parent_path());
 				}
 
 				writeToFile(headerPath.string(), fileOutput.header);
@@ -390,6 +254,56 @@ int main(int argc, char *argv[])
 				std::cerr << "Generated: " << implPath.string() << std::endl;
 			}
 		}
+
+		// Generate CMakeLists.txt
+		std::stringstream cmake;
+		cmake << "cmake_minimum_required(VERSION 3.16)\n";
+		cmake << "project(TuffGenerated)\n\n";
+		cmake << "set(CMAKE_CXX_STANDARD 17)\n";
+		cmake << "set(CMAKE_CXX_STANDARD_REQUIRED ON)\n\n";
+		cmake << "# Source files\n";
+		cmake << "set(SOURCES\n";
+
+		for (size_t i = 0; i < asts.size(); i++)
+		{
+			fs::path srcPath(sourceFilePaths[i]);
+			std::string relPath = srcPath.filename().string();
+			for (const auto &sourceSet : allSourceSets)
+			{
+				if (sourceFilePaths[i].find(sourceSet) != std::string::npos)
+				{
+					size_t pos = sourceFilePaths[i].find(sourceSet);
+					if (pos != std::string::npos)
+					{
+						relPath = sourceFilePaths[i].substr(pos + sourceSet.length());
+						if (relPath.front() == '/' || relPath.front() == '\\')
+							relPath = relPath.substr(1);
+						break;
+					}
+				}
+			}
+			std::string relPathNoExt = relPath.substr(0, relPath.find_last_of('.'));
+			cmake << "    " << relPathNoExt << ".cpp\n";
+		}
+
+		cmake << ")\n\n";
+
+		if (!isLibrary)
+		{
+			cmake << "# Main wrapper to call tuff_main\n";
+			cmake << "file(WRITE \"${CMAKE_CURRENT_BINARY_DIR}/main_wrapper.cpp\"\n";
+			cmake << "\"int32_t tuff_main();\\n";
+			cmake << "int main() { return tuff_main(); }\\n\")\n\n";
+			cmake << "add_executable(tuff_program ${SOURCES} \"${CMAKE_CURRENT_BINARY_DIR}/main_wrapper.cpp\")\n";
+		}
+		else
+		{
+			cmake << "add_library(tuff_lib STATIC ${SOURCES})\n";
+		}
+
+		fs::path cmakePath = fs::path(config.outputDir) / "CMakeLists.txt";
+		writeToFile(cmakePath.string(), cmake.str());
+		std::cerr << "Generated: " << cmakePath.string() << std::endl;
 
 		return 0; // Exit after per-file generation
 	}

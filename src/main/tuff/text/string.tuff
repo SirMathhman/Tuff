@@ -14,6 +14,9 @@ extern type string;
 // Get the length of a string (number of bytes, excluding null terminator)
 extern fn __builtin_string_length(s: string): USize;
 
+// Convert single byte to string
+extern fn __builtin_string_fromU8(value: U8): string;
+
 // Get character at index (bounds checking is caller's responsibility)
 extern fn __builtin_string_charAt(s: string, index: USize): U8;
 
@@ -88,6 +91,7 @@ impl string {
 	
 	// Static methods
 	fn fromI32(value: I32): string => __builtin_string_fromI32(value);
+	fn fromU8(value: U8): string => __builtin_string_fromU8(value);
 	fn fromBytes(buffer: *U8, length: USize): string => __builtin_string_fromBytes(buffer, length);
 	
 	// Advanced string operations

@@ -6,9 +6,8 @@ use result;
 use vector;
 use string;
 
-// Extern declaration for the C++ builtin
-// args is a pointer to an array of strings (char**)
-extern fn __builtin_process_execute(program: string, args: *mut Void, argCount: USize, cwd: string): I32;
+// Extern declaration for the C++ builtin - takes vector as void pointer
+extern fn __builtin_process_execute(program: string, argsVector: *mut Void, argCount: USize, cwd: string): I32;
 
 // Execute a program with arguments in a specified working directory
 // Returns Ok(exitCode) on success, Err(message) on failure
@@ -19,12 +18,13 @@ fn execute(program: string, args: *Vector<string>, cwd: string): Result<I32, str
 	// Convert Vector<string> to raw pointer array for C builtin
 	let argCount = args.len();
 	
-	// Get pointer to internal data of vector
-	// The vector data is already a pointer to strings
-	let exitCode = __builtin_process_execute(program, args.data, argCount, cwd);
+	// Pass the vector's data field directly - it's already the right type
+	// But the type system won't let us, so we have to work around it
+	// For now, this won't work - need to fix the type system or add unsafe cast
+	let exitCode = -1;
 	
 	if (exitCode < 0) {
-		return Err<I32, string> { "Failed to execute process" };
+		return Err<I32, string> { "Process execution not yet fully implemented" };
 	}
 	
 	return Ok<I32, string> { exitCode };

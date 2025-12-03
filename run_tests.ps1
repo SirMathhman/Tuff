@@ -74,12 +74,11 @@ function Initialize-TestEnvironment {
     if (Test-Path $TempDir) { Remove-Item $TempDir -Recurse -Force }
     New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
     
-    # Copy builtin headers to temp directory for test compilation
-    $builtinHeaders = @("string_builtins.h", "file_builtins.h", "io_builtins.h")
-    foreach ($header in $builtinHeaders) {
-        $headerPath = Join-Path $RootDir "src\main\cpp\$header"
-        if (Test-Path $headerPath) {
-            Copy-Item $headerPath -Destination $TempDir -Force
+    # Copy all builtin headers to temp directory for test compilation
+    $builtinHeadersDir = Join-Path $RootDir "src\main\cpp"
+    if (Test-Path $builtinHeadersDir) {
+        Get-ChildItem -Path $builtinHeadersDir -Filter "*.h" | ForEach-Object {
+            Copy-Item $_.FullName -Destination $TempDir -Force
         }
     }
 }
@@ -294,7 +293,7 @@ try {
             }
             
             # Include stdlib directory for tests that use it
-            $stdlibDir = Join-Path $RootDir "src\tuff"
+            $stdlibDir = Join-Path $RootDir "src\main\tuff"
             $sources = "$stdlibDir,$($Test.Path)"
             $cppCode = & $CompilerPath --sources $sources --target "cpp" 2>&1
             if ($LASTEXITCODE -ne 0) {
@@ -310,7 +309,7 @@ try {
             try {
                 Set-Content -Path $cppFile -Value ($cppCode -join "`n") -Encoding UTF8
                 $includeDir = Join-Path $RootDir "bootstrap\src\include"
-                $builtinsDir = Join-Path $RootDir "src\tuff\builtins"
+                $builtinsDir = Join-Path $RootDir "src\main\tuff\builtins"
                 $compileOutput = clang++ -std=c++17 -I $includeDir -I $builtinsDir -I $TempDir $cppFile -o $exeFile 2>&1
                 if ($LASTEXITCODE -ne 0) {
                     $errorLines = ($compileOutput | Select-String "error:" | Select-Object -First 3) -join "; "

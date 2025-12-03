@@ -33,7 +33,9 @@ include_directories(src/include)
 
 # Compiler library sources (shared between tuffc and tests)
 set(COMPILER_SOURCES
+    src/build_config.cpp
     src/compiler.cpp
+    src/file_utils.cpp
     src/json_parser.cpp
     src/lexer.cpp
     src/parser.cpp
