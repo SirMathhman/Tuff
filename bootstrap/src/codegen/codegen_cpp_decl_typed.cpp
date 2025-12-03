@@ -158,33 +158,33 @@ std::string CodeGeneratorCPP::genDecl(ast::DeclPtr decl)
 																	},
 
 																	[this](const ast::TypeAlias &d) -> std::string
-				{
-					// Check if this is a union type alias
-					if (d.aliasedType && std::holds_alternative<ast::UnionType>(*d.aliasedType))
-					{
-						// Union types need a tagged union struct, not a simple alias
-						return generateUnionStructFromType(d.name, d.aliasedType, d.genericParams);
-					}
-					
-					std::stringstream ss;
-					
-					if (!d.genericParams.empty())
-					{
-						ss << "template<";
-						for (size_t i = 0; i < d.genericParams.size(); i++)
-						{
-							if (i > 0)
-								ss << ", ";
-							ss << "typename " << d.genericParams[i];
-						}
-						ss << ">\n";
-					}
-					
-					ss << "using " << d.name << " = " << genType(d.aliasedType) << ";";
-					return ss.str();
-				},
+																	{
+																		// Check if this is a union type alias
+																		if (d.aliasedType && std::holds_alternative<ast::UnionType>(*d.aliasedType))
+																		{
+																			// Union types need a tagged union struct, not a simple alias
+																			return generateUnionStructFromType(d.name, d.aliasedType, d.genericParams);
+																		}
 
-				[this](const ast::Module &d) -> std::string
+																		std::stringstream ss;
+
+																		if (!d.genericParams.empty())
+																		{
+																			ss << "template<";
+																			for (size_t i = 0; i < d.genericParams.size(); i++)
+																			{
+																				if (i > 0)
+																					ss << ", ";
+																				ss << "typename " << d.genericParams[i];
+																			}
+																			ss << ">\n";
+																		}
+
+																		ss << "using " << d.name << " = " << genType(d.aliasedType) << ";";
+																		return ss.str();
+																	},
+
+																	[this](const ast::Module &d) -> std::string
 																	{
 																		std::stringstream ss;
 																		ss << "namespace " << d.name << " {\n";

@@ -313,10 +313,10 @@ std::string CodeGeneratorCPP::generateUnionStructFromType(const std::string &ali
 {
 	if (!unionType || !std::holds_alternative<ast::UnionType>(*unionType))
 		return "";
-	
+
 	const auto &ut = std::get<ast::UnionType>(*unionType);
 	std::stringstream ss;
-	
+
 	// Generate tag enum (NOT templated - it's the same for all instantiations)
 	std::string tagName = "Tag_" + aliasName;
 	ss << "enum class " << tagName << " {\n";
@@ -332,7 +332,7 @@ std::string CodeGeneratorCPP::generateUnionStructFromType(const std::string &ali
 		ss << "    " << memberName;
 	}
 	ss << "\n};\n\n";
-	
+
 	// Generate template header for the struct if needed
 	if (!genericParams.empty())
 	{
@@ -345,12 +345,12 @@ std::string CodeGeneratorCPP::generateUnionStructFromType(const std::string &ali
 		}
 		ss << ">\n";
 	}
-	
+
 	// Generate the union struct
 	ss << "struct " << aliasName << " {\n";
 	ss << "    " << tagName << " __tag;\n";
 	ss << "    union {\n";
-	
+
 	// Add a member for each variant
 	for (size_t i = 0; i < ut.members.size(); i++)
 	{
@@ -361,9 +361,9 @@ std::string CodeGeneratorCPP::generateUnionStructFromType(const std::string &ali
 			memberName = memberName.substr(0, pos);
 		ss << "        " << memberType << " __" << memberName << ";\n";
 	}
-	
+
 	ss << "    } __data;\n";
 	ss << "};";
-	
+
 	return ss.str();
 }

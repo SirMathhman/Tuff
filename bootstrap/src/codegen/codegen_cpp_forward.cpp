@@ -148,64 +148,79 @@ bool CodeGeneratorCPP::shouldExport(std::shared_ptr<ASTNode> node)
 std::set<std::string> CodeGeneratorCPP::extractDependencies(std::shared_ptr<ASTNode> ast)
 {
 	std::set<std::string> deps;
-	
+
 	// Traverse AST to find all type references
 	std::function<void(std::shared_ptr<ASTNode>)> traverse;
-	traverse = [&](std::shared_ptr<ASTNode> node) {
-		if (!node) return;
-		
+	traverse = [&](std::shared_ptr<ASTNode> node)
+	{
+		if (!node)
+			return;
+
 		// Extract from use declarations
-		if (node->type == ASTNodeType::USE_DECL) {
+		if (node->type == ASTNodeType::USE_DECL)
+		{
 			deps.insert(node->value);
 		}
-		
+
 		// Extract from type strings (inferredType, value for TYPE nodes)
 		std::string typeStr = node->inferredType;
-		if (node->type == ASTNodeType::TYPE && !node->value.empty()) {
+		if (node->type == ASTNodeType::TYPE && !node->value.empty())
+		{
 			typeStr = node->value;
 		}
-		
+
 		// Look for stdlib types in type strings
-		if (!typeStr.empty()) {
-			if (typeStr.find("Option") != std::string::npos || 
-			    typeStr.find("Some") != std::string::npos || 
-			    typeStr.find("None") != std::string::npos) {
+		if (!typeStr.empty())
+		{
+			if (typeStr.find("Option") != std::string::npos ||
+					typeStr.find("Some") != std::string::npos ||
+					typeStr.find("None") != std::string::npos)
+			{
 				deps.insert("option");
 			}
-			if (typeStr.find("Result") != std::string::npos || 
-			    typeStr.find("Ok") != std::string::npos || 
-			    typeStr.find("Err") != std::string::npos) {
+			if (typeStr.find("Result") != std::string::npos ||
+					typeStr.find("Ok") != std::string::npos ||
+					typeStr.find("Err") != std::string::npos)
+			{
 				deps.insert("result");
 			}
-			if (typeStr.find("Array") != std::string::npos) {
+			if (typeStr.find("Array") != std::string::npos)
+			{
 				deps.insert("array");
 			}
-			if (typeStr.find("Vector") != std::string::npos) {
+			if (typeStr.find("Vector") != std::string::npos)
+			{
 				deps.insert("vector");
 			}
-			if (typeStr.find("Map") != std::string::npos) {
+			if (typeStr.find("Map") != std::string::npos)
+			{
 				deps.insert("map");
 			}
-			if (typeStr.find("string") != std::string::npos) {
+			if (typeStr.find("string") != std::string::npos)
+			{
 				deps.insert("string");
 			}
-			if (typeStr.find("StringBuilder") != std::string::npos) {
+			if (typeStr.find("StringBuilder") != std::string::npos)
+			{
 				deps.insert("string_builder");
 			}
-			if (typeStr.find("CharStream") != std::string::npos) {
+			if (typeStr.find("CharStream") != std::string::npos)
+			{
 				deps.insert("char_stream");
 			}
-			if (typeStr.find("Allocated") != std::string::npos) {
+			if (typeStr.find("Allocated") != std::string::npos)
+			{
 				deps.insert("mem");
 			}
 		}
-		
+
 		// Recursively traverse children
-		for (const auto &child : node->children) {
+		for (const auto &child : node->children)
+		{
 			traverse(child);
 		}
 	};
-	
+
 	traverse(ast);
 	return deps;
 }
@@ -307,7 +322,7 @@ std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, c
 		else if (c->type == ASTNodeType::MODULE_DECL)
 			h << generateModuleDecl(c) << "\n\n";
 	}
-	
+
 	return h.str();
 }
 
@@ -315,10 +330,10 @@ std::string CodeGeneratorCPP::generateFileImplementation(std::shared_ptr<ASTNode
 {
 	std::stringstream impl;
 	impl << "#include \"tuff_" << moduleName << ".h\"\n\n";
-	
+
 	// Note: For now, implementation is minimal since most code is in header
 	// This is because C++ templates need full definitions in headers
 	// TODO: Move non-template implementations here
-	
+
 	return impl.str();
 }
