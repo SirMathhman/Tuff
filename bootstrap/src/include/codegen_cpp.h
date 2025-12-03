@@ -125,4 +125,7 @@ private:
 	std::string genType(ast::TypePtr type);
 	std::string genParamDecl(const ast::Parameter &param);
 	std::string genFunctionBody(ast::ExprPtr body, ast::TypePtr returnType);
+	
+	// Generate tagged union struct from TypePtr
+	std::string generateUnionStructFromType(const std::string &aliasName, ast::TypePtr unionType, const std::vector<std::string> &genericParams);
 };

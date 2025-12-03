@@ -498,6 +498,12 @@ public:
 			for (auto &gp : node->genericParams)
 				decl.genericParams.push_back(gp->value);
 
+			// Convert the aliased type from typeNode or inferredType
+			if (node->typeNode)
+				decl.aliasedType = toType(node->typeNode);
+			else if (!node->inferredType.empty())
+				decl.aliasedType = typeFromString(node->inferredType);
+
 			return std::make_shared<ast::Decl>(decl);
 		}
 

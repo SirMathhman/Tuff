@@ -10,6 +10,44 @@
 class ASTTypeConverter
 {
 public:
+	// Helper: Collect all union members from nested BINARY_OP nodes
+	static void collectUnionMembers(std::shared_ptr<ASTNode> node, std::vector<ast::TypePtr> &members)
+	{
+		if (!node)
+			return;
+		
+		if (node->type == ASTNodeType::BINARY_OP && node->value == "|")
+		{
+			// Recursively collect from left and right
+			collectUnionMembers(node->children[0], members);
+			collectUnionMembers(node->children[1], members);
+		}
+		else
+		{
+			// Base case: convert this node to a type
+			members.push_back(toType(node));
+		}
+	}
+	
+	// Helper: Collect all intersection members from nested BINARY_OP nodes
+	static void collectIntersectionMembers(std::shared_ptr<ASTNode> node, std::vector<ast::TypePtr> &members)
+	{
+		if (!node)
+			return;
+		
+		if (node->type == ASTNodeType::BINARY_OP && node->value == "&")
+		{
+			// Recursively collect from left and right
+			collectIntersectionMembers(node->children[0], members);
+			collectIntersectionMembers(node->children[1], members);
+		}
+		else
+		{
+			// Base case: convert this node to a type
+			members.push_back(toType(node));
+		}
+	}
+	
 	// Convert ASTNode type nodes to ast::TypePtr
 	static ast::TypePtr toType(std::shared_ptr<ASTNode> node)
 	{
@@ -71,6 +109,26 @@ public:
 			}
 			t.returnType = toType(node->children[paramCount]);
 			return std::make_shared<ast::Type>(t);
+		}
+		
+		case ASTNodeType::BINARY_OP:
+		{
+			// Handle union (|) and intersection (&) types
+			if (node->value == "|")
+			{
+				ast::UnionType t;
+				// Flatten nested union types
+				collectUnionMembers(node, t.members);
+				return std::make_shared<ast::Type>(t);
+			}
+			else if (node->value == "&")
+			{
+				ast::IntersectionType t;
+				// Flatten nested intersection types  
+				collectIntersectionMembers(node, t.members);
+				return std::make_shared<ast::Type>(t);
+			}
+			return nullptr;
 		}
 
 		default:

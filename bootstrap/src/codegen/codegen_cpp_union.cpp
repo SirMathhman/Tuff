@@ -307,3 +307,63 @@ std::string CodeGeneratorCPP::wrapInUnion(const std::string &value, const std::s
 
 	return structName + "(" + value + ")";
 }
+
+// Generate a tagged union struct from a TypePtr (for type aliases)
+std::string CodeGeneratorCPP::generateUnionStructFromType(const std::string &aliasName, ast::TypePtr unionType, const std::vector<std::string> &genericParams)
+{
+	if (!unionType || !std::holds_alternative<ast::UnionType>(*unionType))
+		return "";
+	
+	const auto &ut = std::get<ast::UnionType>(*unionType);
+	std::stringstream ss;
+	
+	// Generate tag enum (NOT templated - it's the same for all instantiations)
+	std::string tagName = "Tag_" + aliasName;
+	ss << "enum class " << tagName << " {\n";
+	for (size_t i = 0; i < ut.members.size(); i++)
+	{
+		if (i > 0)
+			ss << ",\n";
+		// Extract base name from type (e.g., "Some" from "Some<T>")
+		std::string memberName = genType(ut.members[i]);
+		size_t pos = memberName.find('<');
+		if (pos != std::string::npos)
+			memberName = memberName.substr(0, pos);
+		ss << "    " << memberName;
+	}
+	ss << "\n};\n\n";
+	
+	// Generate template header for the struct if needed
+	if (!genericParams.empty())
+	{
+		ss << "template<";
+		for (size_t i = 0; i < genericParams.size(); i++)
+		{
+			if (i > 0)
+				ss << ", ";
+			ss << "typename " << genericParams[i];
+		}
+		ss << ">\n";
+	}
+	
+	// Generate the union struct
+	ss << "struct " << aliasName << " {\n";
+	ss << "    " << tagName << " __tag;\n";
+	ss << "    union {\n";
+	
+	// Add a member for each variant
+	for (size_t i = 0; i < ut.members.size(); i++)
+	{
+		std::string memberType = genType(ut.members[i]);
+		std::string memberName = memberType;
+		size_t pos = memberName.find('<');
+		if (pos != std::string::npos)
+			memberName = memberName.substr(0, pos);
+		ss << "        " << memberType << " __" << memberName << ";\n";
+	}
+	
+	ss << "    } __data;\n";
+	ss << "};";
+	
+	return ss.str();
+}

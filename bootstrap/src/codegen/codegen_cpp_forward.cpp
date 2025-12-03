@@ -224,6 +224,8 @@ std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, c
 	h << "#include <vector>\n\n";
 
 	auto deps = extractDependencies(ast);
+	// Remove self-reference (don't include own header)
+	deps.erase(moduleName);
 	if (!deps.empty())
 	{
 		h << "// Dependencies\n";
@@ -251,19 +253,17 @@ std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, c
 	std::vector<std::shared_ptr<ASTNode>> structs, enums, funcs, aliases, expects;
 	for (const auto &c : ast->children)
 	{
-		if (shouldExport(c))
-		{
-			if (c->type == ASTNodeType::STRUCT_DECL)
-				structs.push_back(c);
-			else if (c->type == ASTNodeType::ENUM_DECL)
-				enums.push_back(c);
-			else if (c->type == ASTNodeType::FUNCTION_DECL)
-				funcs.push_back(c);
-			else if (c->type == ASTNodeType::TYPE_ALIAS)
-				aliases.push_back(c);
-			else if (c->type == ASTNodeType::EXPECT_DECL)
-				expects.push_back(c);
-		}
+		// For per-file headers, export ALL top-level declarations
+		if (c->type == ASTNodeType::STRUCT_DECL)
+			structs.push_back(c);
+		else if (c->type == ASTNodeType::ENUM_DECL)
+			enums.push_back(c);
+		else if (c->type == ASTNodeType::FUNCTION_DECL)
+			funcs.push_back(c);
+		else if (c->type == ASTNodeType::TYPE_ALIAS)
+			aliases.push_back(c);
+		else if (c->type == ASTNodeType::EXPECT_DECL)
+			expects.push_back(c);
 	}
 
 	if (!structs.empty())
@@ -296,15 +296,6 @@ std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, c
 
 	// Generate inline implementations in header (needed for templates)
 	h << "// Implementations\n";
-	for (const auto &c : ast->children)
-	{
-		if (!shouldExport(c))
-		{
-			if (c->type == ASTNodeType::STRUCT_DECL || c->type == ASTNodeType::ENUM_DECL)
-				h << genDecl(ASTConverter::toDecl(c)) << "\n\n";
-		}
-	}
-
 	for (const auto &c : ast->children)
 	{
 		if (c->type == ASTNodeType::FUNCTION_DECL)
