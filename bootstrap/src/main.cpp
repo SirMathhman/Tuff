@@ -30,6 +30,7 @@ int main(int argc, char *argv[])
 		std::cerr << "  --sources <paths>        Additional files to compile (comma-separated)" << std::endl;
 		std::cerr << "  --target <target>        Compilation target (overrides build.json)" << std::endl;
 		std::cerr << "  -o <output>              Write single output to file" << std::endl;
+		std::cerr << "  --output-dir <dir>       Output directory for per-file generation" << std::endl;
 		std::cerr << "  --lib                    Compile as library (don't generate main function)" << std::endl;
 		std::cerr << "  --per-file               Generate separate .h and .cpp files (experimental)" << std::endl;
 		return 1;
@@ -39,6 +40,7 @@ int main(int argc, char *argv[])
 	std::string profile = "main";
 	std::string target = "";
 	std::string outputPath = "";
+	std::string outputDir = "";
 	std::vector<std::string> additionalSources;
 	std::vector<std::string> explicitSourceSets;
 	bool isLibrary = false;
@@ -80,6 +82,10 @@ int main(int argc, char *argv[])
 		{
 			outputPath = argv[++i];
 		}
+		else if (arg == "--output-dir" && i + 1 < argc)
+		{
+			outputDir = argv[++i];
+		}
 		else if (arg == "--lib")
 		{
 			isLibrary = true;
@@ -98,6 +104,12 @@ int main(int argc, char *argv[])
 	if (!target.empty())
 	{
 		config.target = target;
+	}
+
+	// Override output directory if specified
+	if (!outputDir.empty())
+	{
+		config.outputDir = outputDir;
 	}
 
 	// Collect all source sets - but only if no explicit source sets were provided
@@ -167,13 +179,12 @@ int main(int argc, char *argv[])
 		asts.push_back(ast);
 	}
 
-	// ===== PER-FILE MODE (DEFAULT FOR BUILD.JSON) =====
-	// Use per-file generation when:
-	// 1. Explicitly requested via --per-file flag
-	// 2. Building from build.json without explicit --sources (normal build workflow)
-	bool usePerFileMode = perFileMode || (config.target == "cpp" && outputPath.empty() && additionalSources.empty() && explicitSourceSets.empty());
+	// ===== PER-FILE MODE (C++ WITHOUT -o FLAG) =====
+	// Use per-file generation for C++ when not writing to stdout
+	// This avoids duplicate declarations and enables parallel compilation
+	bool usePerFileMode = (config.target == "cpp" && outputPath.empty());
 
-	if (usePerFileMode && config.target == "cpp")
+	if (usePerFileMode)
 	{
 		// Generate separate .h and .cpp files for each source file
 		CodeGeneratorCPP codegen;
@@ -235,11 +246,18 @@ int main(int argc, char *argv[])
 					}
 				}
 
-				// Replace .tuff extension with .h/.cpp
+				// Replace .tuff extension with .h/.cpp and add tuff_ prefix to avoid conflicts with system headers
 				std::string relPathNoExt = relPath.substr(0, relPath.find_last_of('.'));
+				std::string baseName = fs::path(relPathNoExt).filename().string();
+				std::string parentPath = fs::path(relPathNoExt).parent_path().string();
+				std::string prefixedName = "tuff_" + baseName;
+				if (!parentPath.empty())
+				{
+					prefixedName = parentPath + "/" + prefixedName;
+				}
 
-				fs::path headerPath = fs::path(config.outputDir) / (relPathNoExt + ".h");
-				fs::path implPath = fs::path(config.outputDir) / (relPathNoExt + ".cpp");
+				fs::path headerPath = fs::path(config.outputDir) / (prefixedName + ".h");
+				fs::path implPath = fs::path(config.outputDir) / (prefixedName + ".cpp");
 
 				// Create parent directories if needed
 				if (!fs::exists(headerPath.parent_path()))

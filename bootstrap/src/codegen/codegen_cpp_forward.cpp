@@ -2,6 +2,7 @@
 #include "ast_converter.h"
 #include <sstream>
 #include <iostream>
+#include <functional>
 
 std::string CodeGeneratorCPP::generateForwardDeclarations(
 		const std::vector<std::shared_ptr<ASTNode>> &functions,
@@ -147,16 +148,80 @@ bool CodeGeneratorCPP::shouldExport(std::shared_ptr<ASTNode> node)
 std::set<std::string> CodeGeneratorCPP::extractDependencies(std::shared_ptr<ASTNode> ast)
 {
 	std::set<std::string> deps;
-	for (const auto &child : ast->children)
-		if (child->type == ASTNodeType::USE_DECL)
-			deps.insert(child->value);
+	
+	// Traverse AST to find all type references
+	std::function<void(std::shared_ptr<ASTNode>)> traverse;
+	traverse = [&](std::shared_ptr<ASTNode> node) {
+		if (!node) return;
+		
+		// Extract from use declarations
+		if (node->type == ASTNodeType::USE_DECL) {
+			deps.insert(node->value);
+		}
+		
+		// Extract from type strings (inferredType, value for TYPE nodes)
+		std::string typeStr = node->inferredType;
+		if (node->type == ASTNodeType::TYPE && !node->value.empty()) {
+			typeStr = node->value;
+		}
+		
+		// Look for stdlib types in type strings
+		if (!typeStr.empty()) {
+			if (typeStr.find("Option") != std::string::npos || 
+			    typeStr.find("Some") != std::string::npos || 
+			    typeStr.find("None") != std::string::npos) {
+				deps.insert("option");
+			}
+			if (typeStr.find("Result") != std::string::npos || 
+			    typeStr.find("Ok") != std::string::npos || 
+			    typeStr.find("Err") != std::string::npos) {
+				deps.insert("result");
+			}
+			if (typeStr.find("Array") != std::string::npos) {
+				deps.insert("array");
+			}
+			if (typeStr.find("Vector") != std::string::npos) {
+				deps.insert("vector");
+			}
+			if (typeStr.find("Map") != std::string::npos) {
+				deps.insert("map");
+			}
+			if (typeStr.find("string") != std::string::npos) {
+				deps.insert("string");
+			}
+			if (typeStr.find("StringBuilder") != std::string::npos) {
+				deps.insert("string_builder");
+			}
+			if (typeStr.find("CharStream") != std::string::npos) {
+				deps.insert("char_stream");
+			}
+			if (typeStr.find("Allocated") != std::string::npos) {
+				deps.insert("mem");
+			}
+		}
+		
+		// Recursively traverse children
+		for (const auto &child : node->children) {
+			traverse(child);
+		}
+	};
+	
+	traverse(ast);
 	return deps;
 }
 
 std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, const std::string &moduleName)
 {
 	std::stringstream h;
-	h << "#pragma once\n\n#include <cstdint>\n#include <string>\n#include <memory>\n#include <cstddef>\n\n";
+	h << "#pragma once\n\n";
+	h << "#include <iostream>\n";
+	h << "#include <cstdint>\n";
+	h << "#include <cstddef>\n";
+	h << "#include <cmath>\n";
+	h << "#include <cstdlib>\n";
+	h << "#include <string>\n";
+	h << "#include <memory>\n";
+	h << "#include <vector>\n\n";
 
 	auto deps = extractDependencies(ast);
 	if (!deps.empty())
@@ -168,6 +233,16 @@ std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, c
 			size_t pos = 0;
 			while ((pos = hpath.find("::")) != std::string::npos)
 				hpath.replace(pos, 2, "/");
+			// Add tuff_ prefix for last component only
+			size_t lastSlash = hpath.find_last_of('/');
+			if (lastSlash != std::string::npos)
+			{
+				hpath = hpath.substr(0, lastSlash + 1) + "tuff_" + hpath.substr(lastSlash + 1);
+			}
+			else
+			{
+				hpath = "tuff_" + hpath;
+			}
 			h << "#include \"" << hpath << ".h\"\n";
 		}
 		h << "\n";
@@ -219,67 +294,40 @@ std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, c
 	for (const auto &s : structs)
 		h << genDecl(ASTConverter::toDecl(s)) << "\n\n";
 
-	if (!funcs.empty() || !expects.empty())
-	{
-		h << "// Function declarations\n";
-		for (const auto &f : funcs)
-		{
-			auto typed = ASTConverter::toDecl(f);
-			if (auto fp = std::get_if<ast::Function>(&(*typed)))
-			{
-				if (!fp->genericParams.empty())
-				{
-					h << "template<";
-					for (size_t i = 0; i < fp->genericParams.size(); i++)
-						h << (i ? ", " : "") << "typename " << fp->genericParams[i];
-					h << ">\n";
-				}
-				h << genType(fp->returnType) << " " << (fp->name == "main" ? "tuff_main" : fp->name) << "(";
-				for (size_t i = 0; i < fp->params.size(); i++)
-					h << (i ? ", " : "") << genParamDecl(fp->params[i]);
-				h << ");\n";
-			}
-		}
-		for (const auto &e : expects)
-		{
-			auto typed = ASTConverter::toDecl(e);
-			if (auto ep = std::get_if<ast::Expect>(&(*typed)))
-			{
-				h << genType(ep->returnType) << " " << ep->name << "(";
-				for (size_t i = 0; i < ep->params.size(); i++)
-					h << (i ? ", " : "") << genParamDecl(ep->params[i]);
-				h << ");\n";
-			}
-		}
-		h << "\n";
-	}
-	return h.str();
-}
-
-std::string CodeGeneratorCPP::generateFileImplementation(std::shared_ptr<ASTNode> ast, const std::string &moduleName)
-{
-	std::stringstream impl;
-	impl << "#include \"" << moduleName << ".h\"\n\n";
-
+	// Generate inline implementations in header (needed for templates)
+	h << "// Implementations\n";
 	for (const auto &c : ast->children)
 	{
 		if (!shouldExport(c))
 		{
 			if (c->type == ASTNodeType::STRUCT_DECL || c->type == ASTNodeType::ENUM_DECL)
-				impl << genDecl(ASTConverter::toDecl(c)) << "\n\n";
+				h << genDecl(ASTConverter::toDecl(c)) << "\n\n";
 		}
 	}
 
 	for (const auto &c : ast->children)
 	{
 		if (c->type == ASTNodeType::FUNCTION_DECL)
-			impl << genDecl(ASTConverter::toDecl(c)) << "\n\n";
+			h << genDecl(ASTConverter::toDecl(c)) << "\n\n";
 		else if (c->type == ASTNodeType::ACTUAL_DECL)
-			impl << generateActualDecl(c) << "\n\n";
+			h << generateActualDecl(c) << "\n\n";
 		else if (c->type == ASTNodeType::IMPL_DECL)
-			impl << generateNode(c) << "\n\n";
+			h << generateNode(c) << "\n\n";
 		else if (c->type == ASTNodeType::MODULE_DECL)
-			impl << generateModuleDecl(c) << "\n\n";
+			h << generateModuleDecl(c) << "\n\n";
 	}
+	
+	return h.str();
+}
+
+std::string CodeGeneratorCPP::generateFileImplementation(std::shared_ptr<ASTNode> ast, const std::string &moduleName)
+{
+	std::stringstream impl;
+	impl << "#include \"tuff_" << moduleName << ".h\"\n\n";
+	
+	// Note: For now, implementation is minimal since most code is in header
+	// This is because C++ templates need full definitions in headers
+	// TODO: Move non-template implementations here
+	
 	return impl.str();
 }

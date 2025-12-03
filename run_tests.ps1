@@ -165,22 +165,33 @@ function Test-TuffFile([hashtable]$Test) {
     $cppSourceSet = Join-Path $RootDir "src\main\cpp"
     $sources = "$($Test.Path)"
     $sourceSets = "$tuffSourceSet,$cppSourceSet"
-    $cppCode = & $CompilerPath --source-sets $sourceSets --sources $sources --target "cpp" 2>&1
+    
+    # Use test-specific output directory to avoid parallel test collisions
+    $testOutputDir = Join-Path $TempDir "dist_$($Test.Name)"
+    if (Test-Path $testOutputDir) {
+        Remove-Item "$testOutputDir\*" -Recurse -Force -ErrorAction SilentlyContinue
+    } else {
+        New-Item -Path $testOutputDir -ItemType Directory -Force | Out-Null
+    }
+    
+    # Tuff compiler generates per-file output
+    $compileOutput = & $CompilerPath --source-sets $sourceSets --sources $sources --target "cpp" --output-dir $testOutputDir 2>&1
+    $env:TUFF_OUTPUT_DIR = $null
     if ($LASTEXITCODE -ne 0) {
-        $errorMsg = ($cppCode | Select-Object -First 20) -join "`n"
+        $errorMsg = ($compileOutput | Select-Object -First 20) -join "`n"
         $result.Status = "ERROR"; $result.Message = "Tuff compilation failed:`n$errorMsg"
         return $result
     }
 
-    $cppFile = Join-Path $TempDir "$($Test.Name).cpp"
+    # Find all generated .cpp files
+    $generatedCppFiles = Get-ChildItem -Path $testOutputDir -Filter "*.cpp" -File | Select-Object -ExpandProperty FullName
     $exeFile = Join-Path $TempDir "$($Test.Name).exe"
     
     try {
-        Set-Content -Path $cppFile -Value ($cppCode -join "`n") -Encoding UTF8
         $includeDir = Join-Path $RootDir "bootstrap\src\include"
-        $compileOutput = clang++ -std=c++17 -I $includeDir -I $TempDir $cppFile -o $exeFile 2>&1
+        $cppCompileOutput = clang++ -std=c++17 -I $includeDir -I $testOutputDir $generatedCppFiles -o $exeFile 2>&1
         if ($LASTEXITCODE -ne 0) {
-            $errorLines = ($compileOutput | Select-String "error:" | Select-Object -First 3) -join "; "
+            $errorLines = ($cppCompileOutput | Select-String "error:" | Select-Object -First 3) -join "; "
             $result.Status = "ERROR"; $result.Message = "C++ compilation failed: $errorLines"
             return $result
         }
@@ -198,8 +209,8 @@ function Test-TuffFile([hashtable]$Test) {
             $result.Status = "PASSED"; $result.Message = "Exit: $($result.CppExitCode)"
         }
     } finally {
-        Remove-Item $cppFile -Force -ErrorAction SilentlyContinue
         Remove-Item $exeFile -Force -ErrorAction SilentlyContinue
+        Remove-Item $testOutputDir -Recurse -Force -ErrorAction SilentlyContinue
     }
     return $result
 }
@@ -292,27 +303,37 @@ try {
                 return $result
             }
             
-            # Include stdlib directory for tests that use it
-            $stdlibDir = Join-Path $RootDir "src\main\tuff"
-            $sources = "$stdlibDir,$($Test.Path)"
-            $cppCode = & $CompilerPath --sources $sources --target "cpp" 2>&1
+            # Compile to C++ with per-file generation
+            $tuffSourceSet = Join-Path $RootDir "src\main\tuff"
+            $cppSourceSet = Join-Path $RootDir "src\main\cpp"
+            $sources = "$($Test.Path)"
+            $sourceSets = "$tuffSourceSet,$cppSourceSet"
+            
+            # Use test-specific output directory
+            $testOutputDir = Join-Path $TempDir "dist_$($Test.Name)"
+            if (Test-Path $testOutputDir) {
+                Remove-Item "$testOutputDir\*" -Recurse -Force -ErrorAction SilentlyContinue
+            } else {
+                New-Item -Path $testOutputDir -ItemType Directory -Force | Out-Null
+            }
+            
+            $compileOutput = & $CompilerPath --source-sets $sourceSets --sources $sources --target "cpp" --output-dir $testOutputDir 2>&1
             if ($LASTEXITCODE -ne 0) {
-                $errorMsg = ($cppCode | Select-Object -First 20) -join "`n"
+                $errorMsg = ($compileOutput | Select-Object -First 20) -join "`n"
                 $result.Status = "ERROR"; $result.Message = "Tuff compile failed:`n$errorMsg"
                 return $result
             }
             
+            # Find all generated .cpp files
+            $generatedCppFiles = Get-ChildItem -Path $testOutputDir -Filter "*.cpp" -File | Select-Object -ExpandProperty FullName
             $uniqueId = [System.Guid]::NewGuid().ToString("N").Substring(0, 8)
-            $cppFile = Join-Path $TempDir "${uniqueId}_$($Test.Name).cpp"
             $exeFile = Join-Path $TempDir "${uniqueId}_$($Test.Name).exe"
             
             try {
-                Set-Content -Path $cppFile -Value ($cppCode -join "`n") -Encoding UTF8
                 $includeDir = Join-Path $RootDir "bootstrap\src\include"
-                $builtinsDir = Join-Path $RootDir "src\main\tuff\builtins"
-                $compileOutput = clang++ -std=c++17 -I $includeDir -I $builtinsDir -I $TempDir $cppFile -o $exeFile 2>&1
+                $cppCompileOutput = clang++ -std=c++17 -I $includeDir -I $testOutputDir $generatedCppFiles -o $exeFile 2>&1
                 if ($LASTEXITCODE -ne 0) {
-                    $errorLines = ($compileOutput | Select-String "error:" | Select-Object -First 3) -join "; "
+                    $errorLines = ($cppCompileOutput | Select-String "error:" | Select-Object -First 3) -join "; "
                     $result.Status = "ERROR"; $result.Message = "C++ compilation failed: $errorLines"
                     return $result
                 }
@@ -331,8 +352,8 @@ try {
                 }
                 $result.Message = "Exit: $($result.CppExitCode)"
             } finally {
-                Remove-Item $cppFile -Force -ErrorAction SilentlyContinue
                 Remove-Item $exeFile -Force -ErrorAction SilentlyContinue
+                Remove-Item $testOutputDir -Recurse -Force -ErrorAction SilentlyContinue
             }
             return $result
         }
