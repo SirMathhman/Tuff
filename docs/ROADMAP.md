@@ -25,6 +25,7 @@ The standard library is currently in early development (`src/tuff/`).
 | Module   | Status      | Description                                   |
 | :------- | :---------- | :-------------------------------------------- |
 | `array`  | ✅ Basic    | Array utilities                               |
+| `argv`   | ✅ Complete | Command line arguments                        |
 | `file`   | ✅ Complete | File I/O (read/write, directory ops, delete)  |
 | `io`     | ✅ Minimal  | Console I/O (relies on externs)               |
 | `map`    | ✅ Usable   | Hash map implementation                       |
@@ -43,7 +44,7 @@ To achieve self-hosting (compiling the Tuff compiler with Tuff), the following s
 1.  **✅ StringBuilder**: Efficient string construction for code generation (DONE).
 2.  **✅ Advanced String Manipulation**: All methods complete including `split`, `trim`, `startsWith`, `endsWith`, `replace`, `toUpperCase`, `toLowerCase` (DONE).
 3.  **✅ File System API**: Robust file reading/writing, directory traversal, existence checks, and deletion (DONE).
-4.  **❌ Command Line Arguments**: Access to `argv`/`argc` to read input file paths and flags.
+4.  **✅ Command Line Arguments**: Access to `argv`/`argc` to read input file paths and flags (DONE).
 5.  **❌ Process Control**: Exit codes, environment variables.
 6.  **❌ Testing Framework**: A simple way to write and run unit tests within Tuff.
 7.  **❌ Char/String Iterators**: For efficient lexing.
