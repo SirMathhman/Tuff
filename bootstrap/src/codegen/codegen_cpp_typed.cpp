@@ -341,14 +341,24 @@ std::string CodeGeneratorCPP::genType(ast::TypePtr type)
 																	},
 
 																	[this](const ast::PointerType &t) -> std::string
-																	{
-																		std::string pointee = genType(t.pointee);
-																		if (t.isMutable)
-																			return pointee + "*";
-																		return "const " + pointee + "*";
-																	},
+				{
+					// Special case: pointer to array should just be element type pointer
+					if (t.pointee && std::holds_alternative<ast::ArrayType>(*t.pointee))
+					{
+						const auto &arr = std::get<ast::ArrayType>(*t.pointee);
+						std::string elem = genType(arr.elementType);
+						if (t.isMutable)
+							return elem + "*";
+						return "const " + elem + "*";
+					}
+					
+					std::string pointee = genType(t.pointee);
+					if (t.isMutable)
+						return pointee + "*";
+					return "const " + pointee + "*";
+				},
 
-																	[this](const ast::ArrayType &t) -> std::string
+				[this](const ast::ArrayType &t) -> std::string
 																	{
 																		std::string elem = genType(t.elementType);
 																		// For now, just return element type with array suffix
