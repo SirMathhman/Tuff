@@ -236,7 +236,17 @@ std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, c
 	h << "#include <cstdlib>\n";
 	h << "#include <string>\n";
 	h << "#include <memory>\n";
-	h << "#include <vector>\n\n";
+	h << "#include <vector>\n";
+
+	// Handle extern use declarations (e.g., extern use string_builtins;)
+	for (const auto &c : ast->children)
+	{
+		if (c->type == ASTNodeType::EXTERN_USE_DECL)
+		{
+			h << "#include \"" << c->value << ".h\"\n";
+		}
+	}
+	h << "\n";
 
 	auto deps = extractDependencies(ast);
 	// Remove self-reference (don't include own header)

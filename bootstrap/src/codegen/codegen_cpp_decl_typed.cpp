@@ -158,71 +158,71 @@ std::string CodeGeneratorCPP::genDecl(ast::DeclPtr decl)
 																	},
 
 																	[this](const ast::TypeAlias &d) -> std::string
-				{
-					// Check if this is a union type alias
-					if (d.aliasedType && std::holds_alternative<ast::UnionType>(*d.aliasedType))
-					{
-						// Union types need a tagged union struct, not a simple alias
-						return generateUnionStructFromType(d.name, d.aliasedType, d.genericParams);
-					}
-					
-					// Check if this is an intersection type alias
-					if (d.aliasedType && std::holds_alternative<ast::IntersectionType>(*d.aliasedType))
-					{
-						// Intersection types: extract the first non-destructor member as the actual type
-						const auto &it = std::get<ast::IntersectionType>(*d.aliasedType);
-						ast::TypePtr actualType = nullptr;
-						for (const auto &member : it.members)
-						{
-							// Skip destructor markers (NamedType starting with #)
-							if (member && std::holds_alternative<ast::NamedType>(*member))
-							{
-								const auto &nt = std::get<ast::NamedType>(*member);
-								if (!nt.name.empty() && nt.name[0] == '#')
-									continue;
-							}
-							actualType = member;
-							break;
-						}
-						
-						if (actualType)
-						{
-							std::stringstream ss;
-							if (!d.genericParams.empty())
-							{
-								ss << "template<";
-								for (size_t i = 0; i < d.genericParams.size(); i++)
-								{
-									if (i > 0)
-										ss << ", ";
-									ss << "typename " << d.genericParams[i];
-								}
-								ss << ">\n";
-							}
-							ss << "using " << d.name << " = " << genType(actualType) << ";";
-							return ss.str();
-						}
-					}
+																	{
+																		// Check if this is a union type alias
+																		if (d.aliasedType && std::holds_alternative<ast::UnionType>(*d.aliasedType))
+																		{
+																			// Union types need a tagged union struct, not a simple alias
+																			return generateUnionStructFromType(d.name, d.aliasedType, d.genericParams);
+																		}
 
-					std::stringstream ss;
+																		// Check if this is an intersection type alias
+																		if (d.aliasedType && std::holds_alternative<ast::IntersectionType>(*d.aliasedType))
+																		{
+																			// Intersection types: extract the first non-destructor member as the actual type
+																			const auto &it = std::get<ast::IntersectionType>(*d.aliasedType);
+																			ast::TypePtr actualType = nullptr;
+																			for (const auto &member : it.members)
+																			{
+																				// Skip destructor markers (NamedType starting with #)
+																				if (member && std::holds_alternative<ast::NamedType>(*member))
+																				{
+																					const auto &nt = std::get<ast::NamedType>(*member);
+																					if (!nt.name.empty() && nt.name[0] == '#')
+																						continue;
+																				}
+																				actualType = member;
+																				break;
+																			}
 
-					if (!d.genericParams.empty())
-					{
-						ss << "template<";
-						for (size_t i = 0; i < d.genericParams.size(); i++)
-						{
-							if (i > 0)
-								ss << ", ";
-							ss << "typename " << d.genericParams[i];
-						}
-						ss << ">\n";
-					}
+																			if (actualType)
+																			{
+																				std::stringstream ss;
+																				if (!d.genericParams.empty())
+																				{
+																					ss << "template<";
+																					for (size_t i = 0; i < d.genericParams.size(); i++)
+																					{
+																						if (i > 0)
+																							ss << ", ";
+																						ss << "typename " << d.genericParams[i];
+																					}
+																					ss << ">\n";
+																				}
+																				ss << "using " << d.name << " = " << genType(actualType) << ";";
+																				return ss.str();
+																			}
+																		}
 
-					ss << "using " << d.name << " = " << genType(d.aliasedType) << ";";
-					return ss.str();
-				},
+																		std::stringstream ss;
 
-				[this](const ast::Module &d) -> std::string
+																		if (!d.genericParams.empty())
+																		{
+																			ss << "template<";
+																			for (size_t i = 0; i < d.genericParams.size(); i++)
+																			{
+																				if (i > 0)
+																					ss << ", ";
+																				ss << "typename " << d.genericParams[i];
+																			}
+																			ss << ">\n";
+																		}
+
+																		ss << "using " << d.name << " = " << genType(d.aliasedType) << ";";
+																		return ss.str();
+																	},
+
+																	[this](const ast::Module &d) -> std::string
 																	{
 																		std::stringstream ss;
 																		ss << "namespace " << d.name << " {\n";

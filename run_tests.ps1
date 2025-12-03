@@ -189,7 +189,8 @@ function Test-TuffFile([hashtable]$Test) {
     
     try {
         $includeDir = Join-Path $RootDir "bootstrap\src\include"
-        $cppCompileOutput = clang++ -std=c++17 -I $includeDir -I $testOutputDir $generatedCppFiles -o $exeFile 2>&1
+        $builtinsDir = Join-Path $RootDir "src\main\cpp"
+        $cppCompileOutput = clang++ -std=c++17 -I $includeDir -I $builtinsDir -I $testOutputDir $generatedCppFiles -o $exeFile 2>&1
         if ($LASTEXITCODE -ne 0) {
             $errorLines = ($cppCompileOutput | Select-String "error:" | Select-Object -First 3) -join "; "
             $result.Status = "ERROR"; $result.Message = "C++ compilation failed: $errorLines"
@@ -331,7 +332,8 @@ try {
             
             try {
                 $includeDir = Join-Path $RootDir "bootstrap\src\include"
-                $cppCompileOutput = clang++ -std=c++17 -I $includeDir -I $testOutputDir $generatedCppFiles -o $exeFile 2>&1
+                $builtinsDir = Join-Path $RootDir "src\main\cpp"
+                $cppCompileOutput = clang++ -std=c++17 -I $includeDir -I $builtinsDir -I $testOutputDir $generatedCppFiles -o $exeFile 2>&1
                 if ($LASTEXITCODE -ne 0) {
                     $errorLines = ($cppCompileOutput | Select-String "error:" | Select-Object -First 3) -join "; "
                     $result.Status = "ERROR"; $result.Message = "C++ compilation failed: $errorLines"

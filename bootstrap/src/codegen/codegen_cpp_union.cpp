@@ -359,10 +359,22 @@ std::string CodeGeneratorCPP::generateUnionStructFromType(const std::string &ali
 		size_t pos = memberName.find('<');
 		if (pos != std::string::npos)
 			memberName = memberName.substr(0, pos);
-		ss << "        " << memberType << " __" << memberName << ";\n";
+		ss << "        " << memberType << " __val_" << memberName << ";\n";
 	}
 
-	ss << "    } __data;\n";
+	ss << "    };\n\n";
+
+	// Add constructors for each variant type
+	for (size_t i = 0; i < ut.members.size(); i++)
+	{
+		std::string memberType = genType(ut.members[i]);
+		std::string memberName = memberType;
+		size_t pos = memberName.find('<');
+		if (pos != std::string::npos)
+			memberName = memberName.substr(0, pos);
+		ss << "    " << aliasName << "(" << memberType << " val) : __tag(" << tagName << "::" << memberName << "), __val_" << memberName << "(val) {}\n";
+	}
+
 	ss << "};";
 
 	return ss.str();

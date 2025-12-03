@@ -16,7 +16,7 @@ std::string CodeGeneratorCPP::genStmt(ast::StmtPtr stmt)
 																			ss << "auto";
 																		if (!s.isMutable)
 																			ss << " const";
-																		ss << " " << s.name;
+																		ss << " " << escapeCppKeyword(s.name);
 																		if (s.initializer)
 																		{
 																			ss << " = " << genExpr(s.initializer);
@@ -65,6 +65,7 @@ std::string CodeGeneratorCPP::genStmt(ast::StmtPtr stmt)
 std::string CodeGeneratorCPP::genParamDecl(const ast::Parameter &param)
 {
 	std::string typeStr = genType(param.type);
+	std::string paramName = escapeCppKeyword(param.name);
 
 	// Handle C++ array parameter syntax: int32_t arr[10] instead of int32_t[10] arr
 	size_t bracketPos = typeStr.find('[');
@@ -72,10 +73,10 @@ std::string CodeGeneratorCPP::genParamDecl(const ast::Parameter &param)
 	{
 		std::string baseType = typeStr.substr(0, bracketPos);
 		std::string arraySuffix = typeStr.substr(bracketPos);
-		return baseType + " " + param.name + arraySuffix;
+		return baseType + " " + paramName + arraySuffix;
 	}
 
-	return typeStr + " " + param.name;
+	return typeStr + " " + paramName;
 }
 
 std::string CodeGeneratorCPP::genFunctionBody(ast::ExprPtr body, ast::TypePtr returnType)
