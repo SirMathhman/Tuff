@@ -2,6 +2,7 @@
 #include "ast_converter.h"
 #include <sstream>
 #include <iostream>
+#include <fstream>
 #include <functional>
 
 std::string CodeGeneratorCPP::generateForwardDeclarations(
@@ -358,16 +359,66 @@ std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, c
 	bool wasInline = generateInline;
 	generateInline = true;
 
+	// Collect top-level statements that aren't declarations
+	std::vector<std::shared_ptr<ASTNode>> topLevelStmts;
+	bool hasMainFunction = false;
+
 	for (const auto &c : ast->children)
 	{
 		if (c->type == ASTNodeType::FUNCTION_DECL)
+		{
+			if (c->value == "main")
+				hasMainFunction = true;
 			h << genDecl(ASTConverter::toDecl(c)) << "\n\n";
+		}
 		else if (c->type == ASTNodeType::ACTUAL_DECL)
 			h << generateActualDecl(c) << "\n\n";
 		else if (c->type == ASTNodeType::IMPL_DECL)
 			h << generateNode(c) << "\n\n";
 		else if (c->type == ASTNodeType::MODULE_DECL)
 			h << generateModuleDecl(c) << "\n\n";
+		else if (c->type == ASTNodeType::LET_STMT || c->type == ASTNodeType::ASSIGNMENT_STMT ||
+				 c->type == ASTNodeType::IF_STMT || c->type == ASTNodeType::WHILE_STMT ||
+				 c->type == ASTNodeType::LOOP_STMT || c->type == ASTNodeType::RETURN_STMT ||
+				 c->type == ASTNodeType::BREAK_STMT || c->type == ASTNodeType::CONTINUE_STMT ||
+				 c->type == ASTNodeType::CALL_EXPR || c->type == ASTNodeType::BINARY_OP ||
+				 c->type == ASTNodeType::UNARY_OP || c->type == ASTNodeType::LITERAL ||
+				 c->type == ASTNodeType::IDENTIFIER || c->type == ASTNodeType::IF_EXPR ||
+				 c->type == ASTNodeType::BLOCK)
+		{
+			topLevelStmts.push_back(c);
+		}
+	}
+
+	// If there are top-level statements but no main function, wrap them in main
+	if (!topLevelStmts.empty() && !hasMainFunction)
+	{
+		h << "// Generated main from top-level statements\n";
+		h << "inline int tuff_main() {\n";
+
+		// Generate all statements
+		for (size_t i = 0; i < topLevelStmts.size(); i++)
+		{
+			auto stmt = topLevelStmts[i];
+
+			// If this is the last statement and it's an expression, return it
+			if (i == topLevelStmts.size() - 1 &&
+				(stmt->type == ASTNodeType::CALL_EXPR || stmt->type == ASTNodeType::BINARY_OP ||
+				 stmt->type == ASTNodeType::UNARY_OP || stmt->type == ASTNodeType::LITERAL ||
+				 stmt->type == ASTNodeType::IDENTIFIER || stmt->type == ASTNodeType::IF_EXPR))
+			{
+				h << "  return " << generateNode(stmt) << ";\n";
+			}
+			else
+			{
+				h << "  " << generateNode(stmt) << ";\n";
+			}
+		}
+
+		h << "}\n\n";
+
+		// Generate C++ main wrapper
+		h << "int main() { return tuff_main(); }\n";
 	}
 
 	generateInline = wasInline;
