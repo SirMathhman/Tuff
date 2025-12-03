@@ -406,8 +406,6 @@ bool TypeChecker::isAssignableTo(ExprPtr sourceType, ExprPtr targetType)
 	return false;
 }
 
-
-
 bool TypeChecker::isNumericType(ExprPtr type)
 {
 	if (!type)

@@ -407,5 +407,3 @@ std::string CodeGeneratorCPP::genType(ast::TypePtr type)
 																	}},
 										*type);
 }
-
-
