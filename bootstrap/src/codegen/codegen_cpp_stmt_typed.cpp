@@ -72,8 +72,8 @@ std::string CodeGeneratorCPP::genParamDecl(const ast::Parameter &param)
 	if (funcPtrPos != std::string::npos)
 	{
 		// Insert parameter name after the *: "RetType (*name)(Params)"
-		std::string before = typeStr.substr(0, funcPtrPos + 4); // Include " (**"
-		std::string after = typeStr.substr(funcPtrPos + 4);     // Everything after "(*" (includes ")(..."
+		std::string before = typeStr.substr(0, funcPtrPos + 3); // Include " (*"
+		std::string after = typeStr.substr(funcPtrPos + 3);     // Everything after "(*" (includes ")(..."
 		return before + paramName + after;
 	}
 
