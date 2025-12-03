@@ -1,0 +1,17 @@
+// Test: Character literal basic functionality
+// Expected output: Exit code 0
+
+fn main(): I32 => {
+	let a: U8 = 'a';
+	let z: U8 = 'Z';
+	let zero: U8 = '0';
+	let nine: U8 = '9';
+	
+	// Test character values
+	if (a != 97U8) return 1;
+	if (z != 90U8) return 2;
+	if (zero != 48U8) return 3;
+	if (nine != 57U8) return 4;
+	
+	return 0;
+}

@@ -109,6 +109,11 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 		ss << "\"";
 		return ss.str();
 	}
+	case ASTNodeType::CHAR_LITERAL:
+	{
+		// Character literal: emit as U8 cast of numeric value
+		return "static_cast<uint8_t>(" + node->value + ")";
+	}
 	case ASTNodeType::BINARY_OP:
 	case ASTNodeType::IS_EXPR:
 	case ASTNodeType::UNARY_OP:

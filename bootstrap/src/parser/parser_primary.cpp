@@ -81,6 +81,19 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 		// exprType will be set by type checker if needed
 		return node;
 	}
+	else if (match(TokenType::CHAR_LITERAL))
+	{
+		// Character literal: 'a' → U8 type
+		auto node = std::make_shared<ASTNode>();
+		node->type = ASTNodeType::CHAR_LITERAL;
+		Token token = tokens[pos - 1];
+		node->value = token.value; // Numeric value as string
+		node->line = token.line;
+		node->column = token.column;
+		node->inferredType = "U8";
+		node->exprType = makePrimitive(PrimitiveKind::U8);
+		return node;
+	}
 	else if (match(TokenType::LBRACKET))
 	{
 		// Array literal: [1, 2, 3]

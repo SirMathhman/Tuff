@@ -48,6 +48,7 @@ enum class ASTNodeType
 	DEREF_EXPR,				 // *p
 	ARRAY_LITERAL,		 // [1, 2, 3]
 	STRING_LITERAL,		 // "hello"
+	CHAR_LITERAL,			 // 'a'
 	INDEX_EXPR,				 // arr[i]
 	IS_EXPR,					 // expr is Type
 	MATCH_EXPR,				 // match expr { Type => expr, ... }

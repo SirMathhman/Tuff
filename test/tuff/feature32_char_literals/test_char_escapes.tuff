@@ -1,0 +1,21 @@
+// Test: Character literal escape sequences
+// Expected output: Exit code 0
+
+fn main(): I32 => {
+	let newline: U8 = '\n';
+	let tab: U8 = '\t';
+	let cr: U8 = '\r';
+	let backslash: U8 = '\\';
+	let quote: U8 = '\'';
+	let nullchar: U8 = '\0';
+	
+	// Test escape sequence values
+	if (newline != 10U8) return 1;
+	if (tab != 9U8) return 2;
+	if (cr != 13U8) return 3;
+	if (backslash != 92U8) return 4;
+	if (quote != 39U8) return 5;
+	if (nullchar != 0U8) return 6;
+	
+	return 0;
+}

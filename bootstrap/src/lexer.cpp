@@ -174,6 +174,66 @@ Token Lexer::stringLiteral()
 	return {TokenType::STRING_LITERAL, text, startLine, startCol};
 }
 
+Token Lexer::charLiteral()
+{
+	int startLine = line;
+	int startCol = column;
+	advance(); // consume opening '
+
+	if (peek() == '\'')
+	{
+		std::cerr << "Lexer Error: Empty character literal at line " << startLine << std::endl;
+		exit(1);
+	}
+
+	uint8_t value = 0;
+	if (peek() == '\\')
+	{
+		advance(); // consume backslash
+		char escaped = advance();
+		switch (escaped)
+		{
+		case 'n':
+			value = '\n';
+			break;
+		case 't':
+			value = '\t';
+			break;
+		case 'r':
+			value = '\r';
+			break;
+		case '\\':
+			value = '\\';
+			break;
+		case '\'':
+			value = '\'';
+			break;
+		case '"':
+			value = '"';
+			break;
+		case '0':
+			value = '\0';
+			break;
+		default:
+			std::cerr << "Lexer Error: Unknown escape sequence '\\" << escaped << "' at line " << startLine << std::endl;
+			exit(1);
+		}
+	}
+	else
+	{
+		value = static_cast<uint8_t>(advance());
+	}
+
+	if (peek() != '\'')
+	{
+		std::cerr << "Lexer Error: Unterminated character literal at line " << startLine << std::endl;
+		exit(1);
+	}
+
+	advance(); // consume closing '
+	return {TokenType::CHAR_LITERAL, std::to_string(value), startLine, startCol};
+}
+
 Token Lexer::number()
 {
 	int startCol = column;
@@ -234,6 +294,10 @@ std::vector<Token> Lexer::tokenize()
 		else if (c == '"')
 		{
 			tokens.push_back(stringLiteral());
+		}
+		else if (c == '\'')
+		{
+			tokens.push_back(charLiteral());
 		}
 		else
 		{

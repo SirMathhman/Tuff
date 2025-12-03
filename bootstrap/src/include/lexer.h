@@ -18,6 +18,7 @@ private:
 	Token identifierOrKeyword();
 	Token number();
 	Token stringLiteral();
+	Token charLiteral();
 
 public:
 	Lexer(const std::string &src);

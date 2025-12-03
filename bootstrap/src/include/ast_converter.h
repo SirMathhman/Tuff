@@ -39,6 +39,16 @@ public:
 			return std::make_shared<ast::Expr>(expr);
 		}
 
+		case ASTNodeType::CHAR_LITERAL:
+		{
+			// Character literals are treated as U8 literals
+			ast::Literal expr;
+			expr.value = node->value; // Numeric value as string
+			expr.inferredType = "U8";
+			expr.exprType = node->exprType;
+			return std::make_shared<ast::Expr>(expr);
+		}
+
 		case ASTNodeType::IDENTIFIER:
 		{
 			ast::Identifier expr;
