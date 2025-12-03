@@ -3,7 +3,35 @@
 std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 {
 	consume(TokenType::FN, "Expected 'fn'");
-	auto funcName = consume(TokenType::IDENTIFIER, "Expected function name");
+	
+	// Check for function name - give helpful error if keyword is used
+	Token funcName;
+	if (peek().type == TokenType::IDENTIFIER)
+	{
+		funcName = advance();
+	}
+	else
+	{
+		Token badToken = peek();
+		// Check common keywords that might be mistakenly used as function names
+		if (badToken.type == TokenType::MATCH || badToken.type == TokenType::TYPE ||
+		    badToken.type == TokenType::IF || badToken.type == TokenType::ELSE ||
+		    badToken.type == TokenType::WHILE || badToken.type == TokenType::LOOP ||
+		    badToken.type == TokenType::RETURN || badToken.type == TokenType::LET ||
+		    badToken.type == TokenType::MUT || badToken.type == TokenType::STRUCT ||
+		    badToken.type == TokenType::ENUM || badToken.type == TokenType::IMPL ||
+		    badToken.type == TokenType::USE || badToken.type == TokenType::MODULE ||
+		    badToken.type == TokenType::ACTUAL || badToken.type == TokenType::EXPECT)
+		{
+			error("'" + badToken.value + "' is a reserved keyword and cannot be used as a function name",
+			      "fn myFunction(param: Type): ReturnType => ...");
+		}
+		else
+		{
+			error("Expected function name after 'fn', got '" + badToken.value + "'",
+			      "fn myFunction(param: Type): ReturnType => ...");
+		}
+	}
 
 	auto node = std::make_shared<ASTNode>();
 	node->type = ASTNodeType::FUNCTION_DECL;

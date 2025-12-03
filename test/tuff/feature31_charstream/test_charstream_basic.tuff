@@ -1,0 +1,136 @@
+// Test: CharStream basic functionality
+// Expected output: All assertions pass, exit code 0
+
+use char_stream;
+use testing;
+use io;
+use string;
+
+fn testNew(): Bool => {
+	let stream = CharStream::new("hello");
+	return assertTrue(!stream.isAtEnd()) &&
+	       assertEqualUSize(stream.getPos(), 0USize) &&
+	       assertEqualUSize(stream.getLine(), 1USize) &&
+	       assertEqualUSize(stream.getColumn(), 1USize);
+}
+
+fn testPeek(): Bool => {
+	let stream = CharStream::new("abc");
+	return assertTrue(stream.peek() == 97U8);  // 'a' = 97
+}
+
+fn testAdvance(): Bool => {
+	let mut stream = CharStream::new("abc");
+	let c1 = stream.advance();
+	let c2 = stream.advance();
+	let c3 = stream.advance();
+	return assertTrue(c1 == 97U8) &&  // 'a'
+	       assertTrue(c2 == 98U8) &&  // 'b'
+	       assertTrue(c3 == 99U8) &&  // 'c'
+	       assertTrue(stream.isAtEnd());
+}
+
+fn testPeekNext(): Bool => {
+	let stream = CharStream::new("ab");
+	return assertTrue(stream.peek() == 97U8) &&      // 'a'
+	       assertTrue(stream.peekNext() == 98U8);    // 'b'
+}
+
+fn testLineTracking(): Bool => {
+	let mut stream = CharStream::new("a\nb\nc");
+	stream.advance();  // 'a'
+	stream.advance();  // '\n'
+	let line2 = stream.getLine();
+	stream.advance();  // 'b'
+	stream.advance();  // '\n'
+	let line3 = stream.getLine();
+	return assertEqualUSize(line2, 2USize) &&
+	       assertEqualUSize(line3, 3USize);
+}
+
+fn testMatch(): Bool => {
+	let mut stream = CharStream::new("abc");
+	let matched = stream.matchChar(97U8);   // 'a'
+	let notMatched = stream.matchChar(99U8); // 'c' - should not match 'b'
+	return assertTrue(matched) && assertFalse(notMatched);
+}
+
+fn testSkipWhitespace(): Bool => {
+	let mut stream = CharStream::new("   abc");
+	stream.skipWhitespace();
+	return assertTrue(stream.peek() == 97U8);  // 'a'
+}
+
+fn testSubstringFrom(): Bool => {
+	let mut stream = CharStream::new("hello world");
+	stream.advance();  // h
+	stream.advance();  // e
+	stream.advance();  // l
+	stream.advance();  // l
+	stream.advance();  // o
+	let word = stream.substringFrom(0USize);
+	return assertEqualString(word, "hello");
+}
+
+fn testIsDigit(): Bool => {
+	return assertTrue(isDigit(48U8)) &&   // '0'
+	       assertTrue(isDigit(57U8)) &&   // '9'
+	       assertFalse(isDigit(97U8));    // 'a'
+}
+
+fn testIsAlpha(): Bool => {
+	return assertTrue(isAlpha(65U8)) &&   // 'A'
+	       assertTrue(isAlpha(122U8)) &&  // 'z'
+	       assertFalse(isAlpha(48U8));    // '0'
+}
+
+fn testIsIdentifierStart(): Bool => {
+	return assertTrue(isIdentifierStart(97U8)) &&   // 'a'
+	       assertTrue(isIdentifierStart(95U8)) &&   // '_'
+	       assertFalse(isIdentifierStart(48U8));    // '0'
+}
+
+fn main(): I32 => {
+	let mut passed: I32 = 0;
+	let mut failed: I32 = 0;
+	
+	println("=== CharStream Tests ===");
+	
+	if (testNew()) { println("  [PASS] new"); passed = passed + 1; }
+	else { println("  [FAIL] new"); failed = failed + 1; }
+	
+	if (testPeek()) { println("  [PASS] peek"); passed = passed + 1; }
+	else { println("  [FAIL] peek"); failed = failed + 1; }
+	
+	if (testAdvance()) { println("  [PASS] advance"); passed = passed + 1; }
+	else { println("  [FAIL] advance"); failed = failed + 1; }
+	
+	if (testPeekNext()) { println("  [PASS] peekNext"); passed = passed + 1; }
+	else { println("  [FAIL] peekNext"); failed = failed + 1; }
+	
+	if (testLineTracking()) { println("  [PASS] lineTracking"); passed = passed + 1; }
+	else { println("  [FAIL] lineTracking"); failed = failed + 1; }
+	
+	if (testMatch()) { println("  [PASS] match"); passed = passed + 1; }
+	else { println("  [FAIL] match"); failed = failed + 1; }
+	
+	if (testSkipWhitespace()) { println("  [PASS] skipWhitespace"); passed = passed + 1; }
+	else { println("  [FAIL] skipWhitespace"); failed = failed + 1; }
+	
+	if (testSubstringFrom()) { println("  [PASS] substringFrom"); passed = passed + 1; }
+	else { println("  [FAIL] substringFrom"); failed = failed + 1; }
+	
+	if (testIsDigit()) { println("  [PASS] isDigit"); passed = passed + 1; }
+	else { println("  [FAIL] isDigit"); failed = failed + 1; }
+	
+	if (testIsAlpha()) { println("  [PASS] isAlpha"); passed = passed + 1; }
+	else { println("  [FAIL] isAlpha"); failed = failed + 1; }
+	
+	if (testIsIdentifierStart()) { println("  [PASS] isIdentifierStart"); passed = passed + 1; }
+	else { println("  [FAIL] isIdentifierStart"); failed = failed + 1; }
+	
+	println("");
+	println("Results: ".concat(string::fromI32(passed)).concat("/").concat(string::fromI32(passed + failed)).concat(" passed"));
+	
+	return if (failed == 0) 0 else 1;
+}

@@ -22,11 +22,12 @@
 
 The standard library is currently in early development (`src/tuff/`).
 
-| Module    | Status      | Description                                   |
-| :-------- | :---------- | :-------------------------------------------- |
-| `array`   | ✅ Basic    | Array utilities                               |
-| `argv`    | ✅ Complete | Command line arguments                        |
-| `file`    | ✅ Complete | File I/O (read/write, directory ops, delete)  |
+| Module       | Status      | Description                                   |
+| :----------- | :---------- | :-------------------------------------------- |
+| `array`      | ✅ Basic    | Array utilities                               |
+| `argv`       | ✅ Complete | Command line arguments                        |
+| `char_stream`| ✅ Complete | Sequential character processing for lexing    |
+| `file`       | ✅ Complete | File I/O (read/write, directory ops, delete)  |
 | `io`      | ✅ Minimal  | Console I/O (relies on externs)               |
 | `map`     | ✅ Usable   | Hash map implementation                       |
 | `math`    | ✅ Basic    | Basic math functions                          |
@@ -49,7 +50,7 @@ To achieve self-hosting (compiling the Tuff compiler with Tuff), the following s
 4.  **✅ Command Line Arguments**: Access to `argv`/`argc` to read input file paths and flags (DONE).
 5.  **✅ Process Execution**: Execute external programs with arguments and working directory (DONE).
 6.  **✅ Testing Framework**: Simple assertion-based testing with `assertTrue`, `assertEqualI32`, etc. (DONE).
-7.  **❌ Char/String Iterators**: For efficient lexing.
+7.  **✅ CharStream**: Sequential character processing for efficient lexing (DONE).
 
 ## Bootstrap Progress Checklist
 

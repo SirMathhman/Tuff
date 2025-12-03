@@ -1,0 +1,144 @@
+// CharStream - Sequential character processing for lexing
+// Provides efficient character-by-character access with position tracking
+
+use string;
+
+// A stream for reading characters from a string sequentially
+struct CharStream {
+	source: string,
+	len: USize,
+	pos: USize,
+	line: USize,
+	column: USize
+}
+
+impl CharStream {
+	// Create a new CharStream from a source string
+	fn new(source: string): CharStream => {
+		return CharStream {
+			source,
+			source.length(),
+			0USize,
+			1USize,
+			1USize
+		};
+	}
+	
+	// Check if we've reached the end of the stream
+	fn isAtEnd(this: *CharStream): Bool => {
+		return this.pos >= this.len;
+	}
+	
+	// Peek at the current character without consuming it
+	// Returns 0 if at end of stream
+	fn peek(this: *CharStream): U8 => {
+		if (this.pos >= this.len) {
+			return 0U8;
+		}
+		return this.source.charAt(this.pos);
+	}
+	
+	// Peek at the next character (one ahead) without consuming
+	// Returns 0 if at end of stream
+	fn peekNext(this: *CharStream): U8 => {
+		if (this.pos + 1USize >= this.len) {
+			return 0U8;
+		}
+		return this.source.charAt(this.pos + 1USize);
+	}
+	
+	// Peek at character n positions ahead without consuming
+	// Returns 0 if at end of stream
+	fn peekAhead(this: *CharStream, n: USize): U8 => {
+		if (this.pos + n >= this.len) {
+			return 0U8;
+		}
+		return this.source.charAt(this.pos + n);
+	}
+	
+	// Advance to the next character and return the current one
+	// Returns 0 if at end of stream
+	fn advance(this: *mut CharStream): U8 => {
+		if (this.pos >= this.len) {
+			return 0U8;
+		}
+		let c = this.source.charAt(this.pos);
+		this.pos = this.pos + 1USize;
+		
+		// Track line and column
+		if (c == 10U8) {
+			// newline
+			this.line = this.line + 1USize;
+			this.column = 1USize;
+		} else {
+			this.column = this.column + 1USize;
+		}
+		
+		return c;
+	}
+	
+	// Check if current character matches expected, and advance if so
+	fn matchChar(this: *mut CharStream, c: U8): Bool => {
+		if (this.isAtEnd()) {
+			return false;
+		}
+		if (this.peek() != c) {
+			return false;
+		}
+		this.advance();
+		return true;
+	}
+	
+	// Skip whitespace characters (space, tab, newline, carriage return)
+	fn skipWhitespace(this: *mut CharStream): Void => {
+		while (!this.isAtEnd()) {
+			let c = this.peek();
+			if (c == 32U8 || c == 9U8 || c == 10U8 || c == 13U8) {
+				this.advance();
+			} else {
+				return;
+			}
+		}
+	}
+	
+	// Get current position in source
+	fn getPos(this: *CharStream): USize => this.pos;
+	
+	// Get current line number (1-based)
+	fn getLine(this: *CharStream): USize => this.line;
+	
+	// Get current column number (1-based)
+	fn getColumn(this: *CharStream): USize => this.column;
+	
+	// Extract substring from start position to current position
+	fn substringFrom(this: *CharStream, start: USize): string => {
+		return this.source.substring(start, this.pos);
+	}
+}
+
+// Helper functions for character classification
+
+fn isDigit(c: U8): Bool => {
+	return c >= 48U8 && c <= 57U8;  // '0' to '9'
+}
+
+fn isAlpha(c: U8): Bool => {
+	return (c >= 65U8 && c <= 90U8) ||   // 'A' to 'Z'
+	       (c >= 97U8 && c <= 122U8);    // 'a' to 'z'
+}
+
+fn isAlphaNumeric(c: U8): Bool => {
+	return isAlpha(c) || isDigit(c);
+}
+
+fn isIdentifierStart(c: U8): Bool => {
+	return isAlpha(c) || c == 95U8;  // alpha or '_'
+}
+
+fn isIdentifierChar(c: U8): Bool => {
+	return isAlphaNumeric(c) || c == 95U8;  // alphanumeric or '_'
+}
+
+fn isWhitespace(c: U8): Bool => {
+	return c == 32U8 || c == 9U8 || c == 10U8 || c == 13U8;  // space, tab, newline, carriage return
+}
