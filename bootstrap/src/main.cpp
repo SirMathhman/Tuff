@@ -275,12 +275,11 @@ int main(int argc, char *argv[])
 
 		// Copy builtin header files to output directory
 		std::vector<std::string> builtinHeaders = {
-			"argv_builtins.h",
-			"file_builtins.h",
-			"io_builtins.h",
-			"process_builtins.h",
-			"string_builtins.h"
-		};
+				"argv_builtins.h",
+				"file_builtins.h",
+				"io_builtins.h",
+				"process_builtins.h",
+				"string_builtins.h"};
 
 		for (const auto &builtinHeader : builtinHeaders)
 		{

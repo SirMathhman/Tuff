@@ -36,6 +36,10 @@ std::string CodeGeneratorCPP::genDecl(ast::DeclPtr decl)
 																			pos += 1;
 																		}
 
+																		// Add inline keyword if generating for header
+																		if (generateInline)
+																			ss << "inline ";
+
 																		ss << genType(d.returnType) << " " << funcName << "(";
 
 																		for (size_t i = 0; i < d.params.size(); i++)
