@@ -1,14 +1,9 @@
 {
   "main": {
-    "sourceSets": [
-      "src/main/tuff",
-      "src/main/cpp"
-    ]
+    "sourceSets": ["src/main/tuff", "src/main/cpp"]
   },
   "test": {
-    "sourceSets": [
-      "src/test/tuff"
-    ]
+    "sourceSets": ["src/test/tuff"]
   },
   "target": "cpp",
   "outputDir": "dist"

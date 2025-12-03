@@ -32,6 +32,7 @@ enum class TokenType
 	THIS,
 	IMPL,
 	IN,
+	OUT,
 
 	// Integer Types
 	U8,

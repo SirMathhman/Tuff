@@ -84,6 +84,7 @@ struct ASTNode
 	bool isMutable = false;									 // For LET_STMT
 	bool isNarrowedUnion = false;						 // For union type narrowing - indicates value is wrapped
 	bool calleeIsExtern = false;						 // For CALL_EXPR - true if callee is an extern function
+	bool isExported = false;								 // For declarations - true if marked with 'out' keyword
 	TypeEnvironment typeEnv;								 // Type variable substitutions for generics
 
 	// Helper to add a child

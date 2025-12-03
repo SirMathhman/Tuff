@@ -52,9 +52,19 @@ std::shared_ptr<ASTNode> Parser::parse()
 
 	while (peek().type != TokenType::END_OF_FILE)
 	{
+		// Check for 'out' keyword prefix for exported declarations
+		bool isExported = false;
+		if (peek().type == TokenType::OUT)
+		{
+			advance(); // consume 'out'
+			isExported = true;
+		}
+
 		if (peek().type == TokenType::FN)
 		{
-			program->addChild(parseFunctionDecl());
+			auto funcDecl = parseFunctionDecl();
+			funcDecl->isExported = isExported;
+			program->addChild(funcDecl);
 		}
 		else if (peek().type == TokenType::MODULE)
 		{
@@ -90,26 +100,44 @@ std::shared_ptr<ASTNode> Parser::parse()
 		}
 		else if (peek().type == TokenType::STRUCT)
 		{
-			program->addChild(parseStructDecl());
+			auto structDecl = parseStructDecl();
+			structDecl->isExported = isExported;
+			program->addChild(structDecl);
 		}
 		else if (peek().type == TokenType::ENUM)
 		{
-			program->addChild(parseEnumDecl());
+			auto enumDecl = parseEnumDecl();
+			enumDecl->isExported = isExported;
+			program->addChild(enumDecl);
 		}
 		else if (peek().type == TokenType::TYPE)
 		{
-			program->addChild(parseTypeAlias());
+			auto typeAlias = parseTypeAlias();
+			typeAlias->isExported = isExported;
+			program->addChild(typeAlias);
 		}
 		else if (peek().type == TokenType::IMPL)
 		{
+			if (isExported)
+			{
+				error("'out' keyword cannot be used with 'impl' blocks", "impl MyStruct { ... }");
+			}
 			program->addChild(parseImplBlock());
 		}
 		else if (peek().type == TokenType::LET)
 		{
+			if (isExported)
+			{
+				error("'out' keyword cannot be used with let statements", "out fn myFunction() => ...");
+			}
 			program->addChild(parseLetStatement());
 		}
 		else if (peek().type == TokenType::IN)
 		{
+			if (isExported)
+			{
+				error("'out' keyword cannot be used with in statements", "out fn myFunction() => ...");
+			}
 			program->addChild(parseInLetStatement());
 		}
 		else if (peek().type == TokenType::IF)
@@ -154,14 +182,27 @@ std::shared_ptr<ASTNode> Parser::parse()
 		}
 		else if (isAssignmentStatement())
 		{
+			if (isExported)
+			{
+				error("'out' keyword cannot be used with statements", "out fn myFunction() => ...");
+			}
 			program->addChild(parseAssignmentStatement());
 		}
 		else if (peek().type == TokenType::LBRACE)
 		{
+			if (isExported)
+			{
+				error("'out' keyword cannot be used with blocks", "out fn myFunction() => ...");
+			}
 			program->addChild(parseBlock());
 		}
 		else
 		{
+			if (isExported)
+			{
+				error("'out' keyword must be followed by fn, struct, enum, or type declaration", 
+							"out fn myFunction() => ...");
+			}
 			auto expr = parseExpression();
 			if (match(TokenType::SEMICOLON))
 			{
