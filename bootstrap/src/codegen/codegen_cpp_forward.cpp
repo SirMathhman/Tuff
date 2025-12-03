@@ -319,6 +319,38 @@ std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, c
 	for (const auto &s : structs)
 		h << genDecl(ASTConverter::toDecl(s)) << "\n\n";
 
+	// Generate function forward declarations
+	if (!funcs.empty())
+	{
+		std::vector<std::shared_ptr<ASTNode>> implFuncs;
+		for (const auto &c : ast->children)
+		{
+			if (c->type == ASTNodeType::IMPL_DECL)
+			{
+				for (const auto &child : c->children)
+				{
+					if (child->type == ASTNodeType::FUNCTION_DECL)
+					{
+						implFuncs.push_back(child);
+					}
+				}
+			}
+		}
+
+		std::vector<std::shared_ptr<ASTNode>> allFuncs = funcs;
+		allFuncs.insert(allFuncs.end(), implFuncs.begin(), implFuncs.end());
+
+		if (!allFuncs.empty())
+		{
+			h << "// Function forward declarations\n";
+			for (const auto &f : allFuncs)
+			{
+				h << genFunctionForwardDecl(ASTConverter::toDecl(f)) << "\n";
+			}
+			h << "\n";
+		}
+	}
+
 	// Generate inline implementations in header (needed for templates)
 	h << "// Implementations\n";
 	for (const auto &c : ast->children)

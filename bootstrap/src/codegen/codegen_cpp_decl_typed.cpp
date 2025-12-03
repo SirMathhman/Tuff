@@ -27,7 +27,15 @@ std::string CodeGeneratorCPP::genDecl(ast::DeclPtr decl)
 																		}
 
 																		std::string funcName = (d.name == "main") ? "tuff_main" : d.name;
-																		ss << genType(d.returnType) << " " << funcName << "(";
+					
+					// Replace :: with _ for method names
+					size_t pos = 0;
+					while ((pos = funcName.find("::", pos)) != std::string::npos)
+					{
+						funcName.replace(pos, 2, "_");
+						pos += 1;
+					}
+					
 
 																		for (size_t i = 0; i < d.params.size(); i++)
 																		{
@@ -234,6 +242,57 @@ std::string CodeGeneratorCPP::genDecl(ast::DeclPtr decl)
 
 																	[this](const ast::Use &) -> std::string
 																	{
+																		return "";
+																	}},
+										*decl);
+}
+std::string CodeGeneratorCPP::genFunctionForwardDecl(ast::DeclPtr decl)
+{
+	if (!decl)
+		return "";
+
+	return std::visit(ast::Overload{[this](const ast::Function &d) -> std::string
+																	{
+																		std::stringstream ss;
+
+																		if (!d.genericParams.empty())
+																		{
+																			ss << "template<";
+																			for (size_t i = 0; i < d.genericParams.size(); i++)
+																			{
+																				if (i > 0)
+																					ss << ", ";
+																				ss << "typename " << d.genericParams[i];
+																			}
+																			ss << ">\n";
+																		}
+
+																		std::string funcName = (d.name == "main") ? "tuff_main" : d.name;
+																		
+																		// Replace :: with _ for method names
+																		size_t pos = 0;
+																		while ((pos = funcName.find("::", pos)) != std::string::npos)
+																		{
+																			funcName.replace(pos, 2, "_");
+																			pos += 1;
+																		}
+																		
+																		ss << genType(d.returnType) << " " << funcName << "(";
+
+																		for (size_t i = 0; i < d.params.size(); i++)
+																		{
+																			if (i > 0)
+																				ss << ", ";
+																			ss << genParamDecl(d.params[i]);
+																		}
+
+																		ss << ");";
+																		return ss.str();
+																	},
+
+																	[](const auto &) -> std::string
+																	{
+																		// Other declarations don't need forward declarations
 																		return "";
 																	}},
 										*decl);
