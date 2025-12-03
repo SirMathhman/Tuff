@@ -15,7 +15,7 @@ $ErrorActionPreference = "Stop"
 # Configuration
 $RootDir = $PSScriptRoot
 $CompilerPath = Join-Path $RootDir "bootstrap\build\Release\tuffc.exe"
-$TestDir = Join-Path $RootDir "test\tuff"
+$TestDir = Join-Path $RootDir "src\test\tuff"
 $TempDir = Join-Path $TestDir "_temp"
 
 # ANSI color codes
@@ -77,7 +77,7 @@ function Initialize-TestEnvironment {
     # Copy builtin headers to temp directory for test compilation
     $builtinHeaders = @("string_builtins.h", "file_builtins.h", "io_builtins.h")
     foreach ($header in $builtinHeaders) {
-        $headerPath = Join-Path $RootDir "src\tuff\$header"
+        $headerPath = Join-Path $RootDir "src\main\cpp\$header"
         if (Test-Path $headerPath) {
             Copy-Item $headerPath -Destination $TempDir -Force
         }
@@ -113,16 +113,20 @@ function Get-TuffTests([string]$InputPath = "", [string]$FeatureFilter = "") {
             }
         }
     } else {
-        $featureDirs = Get-ChildItem -Path $TestDir -Directory -Filter "feature*" | Sort-Object Name
-        foreach ($featureDir in $featureDirs) {
-            if ($FeatureFilter -and $featureDir.Name -ne $FeatureFilter) { continue }
-            $testFiles = Get-ChildItem -Path $featureDir.FullName -Filter "test_*.tuff" | Sort-Object Name
+        # Get all test directories (feature* and compiler)
+        $testDirs = Get-ChildItem -Path $TestDir -Directory | Where-Object {
+            $_.Name -like "feature*" -or $_.Name -eq "compiler"
+        } | Sort-Object Name
+        
+        foreach ($testDir in $testDirs) {
+            if ($FeatureFilter -and $testDir.Name -ne $FeatureFilter) { continue }
+            $testFiles = Get-ChildItem -Path $testDir.FullName -Filter "test_*.tuff" | Sort-Object Name
             foreach ($testFile in $testFiles) {
                 $tests += @{
                     Path = $testFile.FullName
-                    Feature = $featureDir.Name
+                    Feature = $testDir.Name
                     Name = $testFile.BaseName
-                    RelativePath = "$($featureDir.Name)/$($testFile.BaseName)"
+                    RelativePath = "$($testDir.Name)/$($testFile.BaseName)"
                 }
             }
         }
@@ -158,9 +162,11 @@ function Test-TuffFile([hashtable]$Test) {
     }
 
     # Compile to C++ - include stdlib for tests that use it
-    $stdlibDir = Join-Path $RootDir "src\tuff"
-    $sources = "$stdlibDir,$($Test.Path)"
-    $cppCode = & $CompilerPath --sources $sources --target "cpp" 2>&1
+    $tuffSourceSet = Join-Path $RootDir "src\main\tuff"
+    $cppSourceSet = Join-Path $RootDir "src\main\cpp"
+    $sources = "$($Test.Path)"
+    $sourceSets = "$tuffSourceSet,$cppSourceSet"
+    $cppCode = & $CompilerPath --source-sets $sourceSets --sources $sources --target "cpp" 2>&1
     if ($LASTEXITCODE -ne 0) {
         $errorMsg = ($cppCode | Select-Object -First 20) -join "`n"
         $result.Status = "ERROR"; $result.Message = "Tuff compilation failed:`n$errorMsg"

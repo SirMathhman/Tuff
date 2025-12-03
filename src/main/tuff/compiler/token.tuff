@@ -1,0 +1,208 @@
+// Token types and Token struct for Tuff lexer
+
+use string;
+
+// All token types in the Tuff language
+enum TokenType {
+	// Keywords
+	Expect,
+	Actual,
+	Extern,
+	Module,
+	Use,
+	Fn,
+	Let,
+	Mut,
+	Struct,
+	Enum,
+	If,
+	Else,
+	While,
+	Loop,
+	Break,
+	Continue,
+	Return,
+	Type,
+	Is,
+	Match,
+	SizeOf,
+	Cast,
+	True,
+	False,
+	This,
+	Impl,
+	In,
+	
+	// Integer types
+	U8Type,
+	U16Type,
+	U32Type,
+	U64Type,
+	I8Type,
+	I16Type,
+	I32Type,
+	I64Type,
+	
+	// Float types
+	F32Type,
+	F64Type,
+	
+	// Other types
+	BoolType,
+	VoidType,
+	USizeType,
+	
+	// Symbols
+	LParen,
+	RParen,
+	LBrace,
+	RBrace,
+	LBracket,
+	RBracket,
+	LAngle,
+	RAngle,
+	Colon,
+	DoubleColon,
+	Semicolon,
+	Comma,
+	Dot,
+	Arrow,
+	FatArrow,
+	
+	// Comparison operators
+	Less,
+	Greater,
+	LessEqual,
+	GreaterEqual,
+	EqualEqual,
+	NotEqual,
+	
+	// Logical operators
+	AndAnd,
+	OrOr,
+	Not,
+	
+	// Bitwise operators
+	Ampersand,
+	Pipe,
+	Caret,
+	Tilde,
+	Hash,
+	LeftShift,
+	RightShift,
+	
+	// Arithmetic operators
+	Plus,
+	Minus,
+	Star,
+	Slash,
+	Percent,
+	
+	// Assignment
+	Equals,
+	
+	// Literals
+	IntLiteral,
+	FloatLiteral,
+	StringLiteral,
+	CharLiteral,
+	Identifier,
+	
+	EndOfFile
+}
+
+// A token with type, value, and source location
+struct Token {
+	tokenType: TokenType,
+	value: string,
+	line: USize,
+	column: USize
+}
+
+// Convert token type to string for debugging/error messages
+fn tokenTypeToString(tokenType: TokenType): string => {
+	if (tokenType == TokenType.Expect) return "Expect";
+	if (tokenType == TokenType.Actual) return "Actual";
+	if (tokenType == TokenType.Extern) return "Extern";
+	if (tokenType == TokenType.Module) return "Module";
+	if (tokenType == TokenType.Use) return "Use";
+	if (tokenType == TokenType.Fn) return "Fn";
+	if (tokenType == TokenType.Let) return "Let";
+	if (tokenType == TokenType.Mut) return "Mut";
+	if (tokenType == TokenType.Struct) return "Struct";
+	if (tokenType == TokenType.Enum) return "Enum";
+	if (tokenType == TokenType.If) return "If";
+	if (tokenType == TokenType.Else) return "Else";
+	if (tokenType == TokenType.While) return "While";
+	if (tokenType == TokenType.Loop) return "Loop";
+	if (tokenType == TokenType.Break) return "Break";
+	if (tokenType == TokenType.Continue) return "Continue";
+	if (tokenType == TokenType.Return) return "Return";
+	if (tokenType == TokenType.Type) return "Type";
+	if (tokenType == TokenType.Is) return "Is";
+	if (tokenType == TokenType.Match) return "Match";
+	if (tokenType == TokenType.SizeOf) return "SizeOf";
+	if (tokenType == TokenType.Cast) return "Cast";
+	if (tokenType == TokenType.True) return "True";
+	if (tokenType == TokenType.False) return "False";
+	if (tokenType == TokenType.This) return "This";
+	if (tokenType == TokenType.Impl) return "Impl";
+	if (tokenType == TokenType.In) return "In";
+	if (tokenType == TokenType.U8Type) return "U8";
+	if (tokenType == TokenType.U16Type) return "U16";
+	if (tokenType == TokenType.U32Type) return "U32";
+	if (tokenType == TokenType.U64Type) return "U64";
+	if (tokenType == TokenType.I8Type) return "I8";
+	if (tokenType == TokenType.I16Type) return "I16";
+	if (tokenType == TokenType.I32Type) return "I32";
+	if (tokenType == TokenType.I64Type) return "I64";
+	if (tokenType == TokenType.F32Type) return "F32";
+	if (tokenType == TokenType.F64Type) return "F64";
+	if (tokenType == TokenType.BoolType) return "Bool";
+	if (tokenType == TokenType.VoidType) return "Void";
+	if (tokenType == TokenType.USizeType) return "USize";
+	if (tokenType == TokenType.LParen) return "(";
+	if (tokenType == TokenType.RParen) return ")";
+	if (tokenType == TokenType.LBrace) return "{";
+	if (tokenType == TokenType.RBrace) return "}";
+	if (tokenType == TokenType.LBracket) return "[";
+	if (tokenType == TokenType.RBracket) return "]";
+	if (tokenType == TokenType.LAngle) return "<";
+	if (tokenType == TokenType.RAngle) return ">";
+	if (tokenType == TokenType.Colon) return ":";
+	if (tokenType == TokenType.DoubleColon) return "::";
+	if (tokenType == TokenType.Semicolon) return ";";
+	if (tokenType == TokenType.Comma) return ",";
+	if (tokenType == TokenType.Dot) return ".";
+	if (tokenType == TokenType.Arrow) return "->";
+	if (tokenType == TokenType.FatArrow) return "=>";
+	if (tokenType == TokenType.Less) return "<";
+	if (tokenType == TokenType.Greater) return ">";
+	if (tokenType == TokenType.LessEqual) return "<=";
+	if (tokenType == TokenType.GreaterEqual) return ">=";
+	if (tokenType == TokenType.EqualEqual) return "==";
+	if (tokenType == TokenType.NotEqual) return "!=";
+	if (tokenType == TokenType.AndAnd) return "&&";
+	if (tokenType == TokenType.OrOr) return "||";
+	if (tokenType == TokenType.Not) return "!";
+	if (tokenType == TokenType.Ampersand) return "&";
+	if (tokenType == TokenType.Pipe) return "|";
+	if (tokenType == TokenType.Caret) return "^";
+	if (tokenType == TokenType.Tilde) return "~";
+	if (tokenType == TokenType.Hash) return "#";
+	if (tokenType == TokenType.LeftShift) return "<<";
+	if (tokenType == TokenType.RightShift) return ">>";
+	if (tokenType == TokenType.Plus) return "+";
+	if (tokenType == TokenType.Minus) return "-";
+	if (tokenType == TokenType.Star) return "*";
+	if (tokenType == TokenType.Slash) return "/";
+	if (tokenType == TokenType.Percent) return "%";
+	if (tokenType == TokenType.Equals) return "=";
+	if (tokenType == TokenType.IntLiteral) return "IntLiteral";
+	if (tokenType == TokenType.FloatLiteral) return "FloatLiteral";
+	if (tokenType == TokenType.StringLiteral) return "StringLiteral";
+	if (tokenType == TokenType.CharLiteral) return "CharLiteral";
+	if (tokenType == TokenType.Identifier) return "Identifier";
+	if (tokenType == TokenType.EndOfFile) return "EOF";
+	return "Unknown";
+}

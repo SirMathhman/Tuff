@@ -12,6 +12,7 @@
 #include "ast_typed.h"
 #include "ast_converter.h"
 #include "codegen_typed.h"
+#include "json_parser.h"
 
 namespace fs = std::filesystem;
 
@@ -47,42 +48,114 @@ void writeToFile(const std::string &path, const std::string &content)
 	file.close();
 }
 
-void copyBuiltinHeaders(const std::string &outputDir, const std::vector<std::string> &sourcePaths)
+struct BuildConfig
 {
-	// Find the Tuff source root by looking for src/tuff in source paths
-	std::string tuffRoot;
-	for (const auto &srcPath : sourcePaths)
+	std::vector<std::string> mainSourceSets;
+	std::vector<std::string> testSourceSets;
+	std::string target;
+	std::string outputDir;
+	bool includeTests = false;
+};
+
+BuildConfig loadBuildConfig(const std::string &buildFilePath, bool includeTests)
+{
+	BuildConfig config;
+	config.target = "cpp";
+	config.outputDir = "dist";
+	config.includeTests = includeTests;
+
+	if (!fs::exists(buildFilePath))
 	{
-		fs::path p(srcPath);
-		// Look for src/tuff in the path
-		auto pathStr = p.string();
-		size_t pos = pathStr.find("src");
-		if (pos != std::string::npos)
+		return config; // Return defaults if no build file
+	}
+
+	std::string jsonContent = readFile(buildFilePath);
+	auto root = json::parse(jsonContent);
+
+	if (root->type == json::Value::Type::Object)
+	{
+		// Parse main sourceSets
+		if (root->objectValue.count("main"))
 		{
-			tuffRoot = pathStr.substr(0, pos);
-			break;
+			auto mainObj = root->objectValue["main"];
+			if (mainObj->type == json::Value::Type::Object && mainObj->objectValue.count("sourceSets"))
+			{
+				auto sourceSets = mainObj->objectValue["sourceSets"];
+				if (sourceSets->type == json::Value::Type::Array)
+				{
+					for (const auto &item : sourceSets->arrayValue)
+					{
+						if (item->type == json::Value::Type::String)
+						{
+							config.mainSourceSets.push_back(item->stringValue);
+						}
+					}
+				}
+			}
+		}
+
+		// Parse test sourceSets if requested
+		if (includeTests && root->objectValue.count("test"))
+		{
+			auto testObj = root->objectValue["test"];
+			if (testObj->type == json::Value::Type::Object && testObj->objectValue.count("sourceSets"))
+			{
+				auto sourceSets = testObj->objectValue["sourceSets"];
+				if (sourceSets->type == json::Value::Type::Array)
+				{
+					for (const auto &item : sourceSets->arrayValue)
+					{
+						if (item->type == json::Value::Type::String)
+						{
+							config.testSourceSets.push_back(item->stringValue);
+						}
+					}
+				}
+			}
+		}
+
+		// Parse target
+		if (root->objectValue.count("target"))
+		{
+			auto targetVal = root->objectValue["target"];
+			if (targetVal->type == json::Value::Type::String)
+			{
+				config.target = targetVal->stringValue;
+			}
+		}
+
+		// Parse outputDir
+		if (root->objectValue.count("outputDir"))
+		{
+			auto outputDirVal = root->objectValue["outputDir"];
+			if (outputDirVal->type == json::Value::Type::String)
+			{
+				config.outputDir = outputDirVal->stringValue;
+			}
 		}
 	}
 
-	if (tuffRoot.empty())
-	{
-		// Fallback: assume src/tuff is relative to current directory
-		tuffRoot = ".";
-	}
+	return config;
+}
 
-	// Copy all .h and .cpp files from src/tuff to output directory
-	fs::path sourceDir = fs::path(tuffRoot) / "src" / "tuff";
-	if (fs::exists(sourceDir) && fs::is_directory(sourceDir))
+void copyBuiltinHeaders(const std::string &outputDir, const std::vector<std::string> &sourceSetDirs)
+{
+	// Copy all .h and .cpp files from each source set directory
+	for (const auto &sourceSetDir : sourceSetDirs)
 	{
-		for (const auto &entry : fs::directory_iterator(sourceDir))
+		fs::path sourceDir(sourceSetDir);
+		if (fs::exists(sourceDir) && fs::is_directory(sourceDir))
 		{
-			if (fs::is_regular_file(entry))
+			for (const auto &entry : fs::recursive_directory_iterator(sourceDir))
 			{
-				auto ext = entry.path().extension().string();
-				if (ext == ".h" || ext == ".cpp" || ext == ".hpp")
+				if (fs::is_regular_file(entry))
 				{
-					fs::path destPath = fs::path(outputDir) / entry.path().filename();
-					fs::copy_file(entry.path(), destPath, fs::copy_options::overwrite_existing);
+					auto ext = entry.path().extension().string();
+					if (ext == ".h" || ext == ".cpp" || ext == ".hpp")
+					{
+						fs::path destPath = fs::path(outputDir) / entry.path().filename();
+						fs::copy_file(entry.path(), destPath, fs::copy_options::overwrite_existing);
+					}
 				}
 			}
 		}
@@ -140,32 +213,42 @@ int main(int argc, char *argv[])
 		std::cerr << "Usage: tuffc [options]" << std::endl;
 		std::cerr << "" << std::endl;
 		std::cerr << "Options:" << std::endl;
-		std::cerr << "  --sources <paths>        Files, directories, or root directories to compile (comma-separated)" << std::endl;
-		std::cerr << "  --target <target>        Compilation target (default: cpp)" << std::endl;
-		std::cerr << "  -o <output>              Write single output to file (conflicts with --out-root-dir)" << std::endl;
-		std::cerr << "  --out-root-dir <dir>     Write outputs to directory, preserving structure (conflicts with -o)" << std::endl;
+		std::cerr << "  --build <file>           Build configuration file (default: build.json)" << std::endl;
+		std::cerr << "  --profile <name>         Build profile: main (default) or test" << std::endl;
+		std::cerr << "  --sources <paths>        Additional files to compile (comma-separated)" << std::endl;
+		std::cerr << "  --target <target>        Compilation target (overrides build.json)" << std::endl;
+		std::cerr << "  -o <output>              Write single output to file" << std::endl;
 		std::cerr << "  --lib                    Compile as library (don't generate main function)" << std::endl;
 		return 1;
 	}
 
-	std::string target = "cpp";
+	std::string buildFile = "build.json";
+	std::string profile = "main";
+	std::string target = "";
 	std::string outputPath = "";
-	std::string outRootDir = "";
-	std::vector<std::string> sourcePaths;
+	std::vector<std::string> additionalSources;
 	bool isLibrary = false;
 
 	// Parse arguments
 	for (int i = 1; i < argc; i++)
 	{
 		std::string arg = argv[i];
-		if (arg == "--sources" && i + 1 < argc)
+		if (arg == "--build" && i + 1 < argc)
+		{
+			buildFile = argv[++i];
+		}
+		else if (arg == "--profile" && i + 1 < argc)
+		{
+			profile = argv[++i];
+		}
+		else if (arg == "--sources" && i + 1 < argc)
 		{
 			std::string sourcesList = argv[++i];
 			auto paths = split(sourcesList, ',');
 			for (const auto &p : paths)
 			{
 				auto expanded = expandSourcePath(p);
-				sourcePaths.insert(sourcePaths.end(), expanded.begin(), expanded.end());
+				additionalSources.insert(additionalSources.end(), expanded.begin(), expanded.end());
 			}
 		}
 		else if (arg == "--target" && i + 1 < argc)
@@ -176,26 +259,54 @@ int main(int argc, char *argv[])
 		{
 			outputPath = argv[++i];
 		}
-		else if (arg == "--out-root-dir" && i + 1 < argc)
-		{
-			outRootDir = argv[++i];
-		}
 		else if (arg == "--lib")
 		{
 			isLibrary = true;
 		}
 	}
 
+	// Load build configuration
+	bool includeTests = (profile == "test");
+	BuildConfig config = loadBuildConfig(buildFile, includeTests);
+
+	// Override target if specified on command line
+	if (!target.empty())
+	{
+		config.target = target;
+	}
+
+	// Collect all source sets
+	std::vector<std::string> allSourceSets = config.mainSourceSets;
+	if (includeTests)
+	{
+		allSourceSets.insert(allSourceSets.end(), config.testSourceSets.begin(), config.testSourceSets.end());
+	}
+
+	// Collect all source files from source sets
+	std::vector<std::string> sourcePaths;
+	for (const auto &sourceSet : allSourceSets)
+	{
+		if (fs::exists(sourceSet) && fs::is_directory(sourceSet))
+		{
+			auto expanded = expandSourcePath(sourceSet);
+			// Only add .tuff files
+			for (const auto &path : expanded)
+			{
+				if (path.size() >= 5 && path.substr(path.size() - 5) == ".tuff")
+				{
+					sourcePaths.push_back(path);
+				}
+			}
+		}
+	}
+
+	// Add additional sources
+	sourcePaths.insert(sourcePaths.end(), additionalSources.begin(), additionalSources.end());
+
 	// Validation
 	if (sourcePaths.empty())
 	{
-		std::cerr << "Error: no source files specified (use --sources)" << std::endl;
-		return 1;
-	}
-
-	if (!outputPath.empty() && !outRootDir.empty())
-	{
-		std::cerr << "Error: cannot use both -o and --out-root-dir" << std::endl;
+		std::cerr << "Error: no source files found. Check build.json configuration." << std::endl;
 		return 1;
 	}
 
@@ -251,7 +362,7 @@ int main(int argc, char *argv[])
 
 	// 4. Code Generation
 	std::string output;
-	if (target == "cpp")
+	if (config.target == "cpp")
 	{
 		CodeGeneratorCPP codegen;
 		codegen.setIsLibrary(isLibrary);
@@ -260,18 +371,23 @@ int main(int argc, char *argv[])
 		if (!outputPath.empty())
 		{
 			fs::path outPath(outputPath);
-			copyBuiltinHeaders(outPath.parent_path().string(), sourcePaths);
+			copyBuiltinHeaders(outPath.parent_path().string(), allSourceSets);
 		}
-		else if (!outRootDir.empty())
+		else
 		{
-			copyBuiltinHeaders(outRootDir, sourcePaths);
+			// Create output directory if it doesn't exist
+			if (!fs::exists(config.outputDir))
+			{
+				fs::create_directories(config.outputDir);
+			}
+			copyBuiltinHeaders(config.outputDir, allSourceSets);
 		}
 
 		output = codegen.generate(mergedAst);
 	}
 	else
 	{
-		std::cerr << "Unknown target: " << target << std::endl;
+		std::cerr << "Unknown target: " << config.target << std::endl;
 		return 1;
 	}
 
@@ -281,26 +397,22 @@ int main(int argc, char *argv[])
 		writeToFile(outputPath, output);
 		std::cerr << "Compiled to: " << outputPath << std::endl;
 	}
-	else if (!outRootDir.empty())
+	else
 	{
-		// For single file, write to outRootDir/filename
+		// Write to configured output directory
 		if (sourcePaths.size() == 1)
 		{
 			fs::path srcPath(sourcePaths[0]);
-			std::string outExtension = (target == "cpp") ? ".cpp" : ".js";
-			fs::path outPath = fs::path(outRootDir) / srcPath.stem().string() += outExtension;
+			std::string outExtension = (config.target == "cpp") ? ".cpp" : ".js";
+			fs::path outPath = fs::path(config.outputDir) / (srcPath.stem().string() + outExtension);
 			writeToFile(outPath.string(), output);
 			std::cerr << "Compiled to: " << outPath.string() << std::endl;
 		}
 		else
 		{
-			std::cerr << "Warning: --out-root-dir with multiple sources not yet fully supported" << std::endl;
+			// Write to stdout for multiple files
+			std::cout << output;
 		}
-	}
-	else
-	{
-		// Write to stdout
-		std::cout << output;
 	}
 
 	return 0;

@@ -1,0 +1,82 @@
+// Test: Lexer operators
+// Expected output: Exit code 0
+
+use lexer;
+use token;
+use testing;
+use io;
+use string;
+
+fn main(): I32 => {
+	let mut lexer = Lexer::new("+ - * / == != <= >= && || => ::");
+	let tokens = lexer.tokenize();
+	
+	// Should have 13 tokens (12 operators + EOF)
+	if (tokens.len() != 13USize) {
+		println("Expected 13 tokens, got ".concat(tokens.len().toString()));
+		return 1;
+	}
+	
+	let t0 = tokens.get(0USize);
+	let t1 = tokens.get(1USize);
+	let t2 = tokens.get(2USize);
+	let t3 = tokens.get(3USize);
+	let t4 = tokens.get(4USize);
+	let t5 = tokens.get(5USize);
+	let t6 = tokens.get(6USize);
+	let t7 = tokens.get(7USize);
+	let t8 = tokens.get(8USize);
+	let t9 = tokens.get(9USize);
+	let t10 = tokens.get(10USize);
+	let t11 = tokens.get(11USize);
+	
+	if (t0 is Some<Token>) {
+		if (t0.value.tokenType != TokenType.Plus) return 2;
+	} else return 2;
+	
+	if (t1 is Some<Token>) {
+		if (t1.value.tokenType != TokenType.Minus) return 3;
+	} else return 3;
+	
+	if (t2 is Some<Token>) {
+		if (t2.value.tokenType != TokenType.Star) return 4;
+	} else return 4;
+	
+	if (t3 is Some<Token>) {
+		if (t3.value.tokenType != TokenType.Slash) return 5;
+	} else return 5;
+	
+	if (t4 is Some<Token>) {
+		if (t4.value.tokenType != TokenType.EqualEqual) return 6;
+	} else return 6;
+	
+	if (t5 is Some<Token>) {
+		if (t5.value.tokenType != TokenType.NotEqual) return 7;
+	} else return 7;
+	
+	if (t6 is Some<Token>) {
+		if (t6.value.tokenType != TokenType.LessEqual) return 8;
+	} else return 8;
+	
+	if (t7 is Some<Token>) {
+		if (t7.value.tokenType != TokenType.GreaterEqual) return 9;
+	} else return 9;
+	
+	if (t8 is Some<Token>) {
+		if (t8.value.tokenType != TokenType.AndAnd) return 10;
+	} else return 10;
+	
+	if (t9 is Some<Token>) {
+		if (t9.value.tokenType != TokenType.OrOr) return 11;
+	} else return 11;
+	
+	if (t10 is Some<Token>) {
+		if (t10.value.tokenType != TokenType.FatArrow) return 12;
+	} else return 12;
+	
+	if (t11 is Some<Token>) {
+		if (t11.value.tokenType != TokenType.DoubleColon) return 13;
+	} else return 13;
+	
+	return 0;
+}
