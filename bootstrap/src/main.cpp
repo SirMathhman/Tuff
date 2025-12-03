@@ -273,6 +273,30 @@ int main(int argc, char *argv[])
 			}
 		}
 
+		// Copy builtin header files to output directory
+		std::vector<std::string> builtinHeaders = {
+			"argv_builtins.h",
+			"file_builtins.h",
+			"io_builtins.h",
+			"process_builtins.h",
+			"string_builtins.h"
+		};
+
+		for (const auto &builtinHeader : builtinHeaders)
+		{
+			// Find the header in source sets
+			for (const auto &sourceSet : allSourceSets)
+			{
+				fs::path builtinPath = fs::path(sourceSet) / builtinHeader;
+				if (fs::exists(builtinPath))
+				{
+					fs::path destPath = fs::path(config.outputDir) / builtinHeader;
+					fs::copy_file(builtinPath, destPath, fs::copy_options::overwrite_existing);
+					break;
+				}
+			}
+		}
+
 		// Generate CMakeLists.txt
 		std::stringstream cmake;
 		cmake << "cmake_minimum_required(VERSION 3.16)\n";
