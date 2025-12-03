@@ -36,38 +36,38 @@ std::string CodeGeneratorCPP::genDecl(ast::DeclPtr decl)
 																			pos += 1;
 																		}
 
-				ss << genType(d.returnType) << " " << funcName << "(";
+																		ss << genType(d.returnType) << " " << funcName << "(";
 
-				for (size_t i = 0; i < d.params.size(); i++)
-				{
-					if (i > 0)
-						ss << ", ";
-					ss << genParamDecl(d.params[i]);
-				}
+																		for (size_t i = 0; i < d.params.size(); i++)
+																		{
+																			if (i > 0)
+																				ss << ", ";
+																			ss << genParamDecl(d.params[i]);
+																		}
 
-				ss << ") ";
-				ss << genFunctionBody(d.body, d.returnType);
+																		ss << ") ";
+																		ss << genFunctionBody(d.body, d.returnType);
 
-			return ss.str();
-		},
+																		return ss.str();
+																	},
 
-		[this](const ast::Struct &d) -> std::string
-		{
-			std::stringstream ss;
+																	[this](const ast::Struct &d) -> std::string
+																	{
+																		std::stringstream ss;
 
-			if (!d.genericParams.empty())
-			{
-				ss << "template<";
-				for (size_t i = 0; i < d.genericParams.size(); i++)
-				{
-					if (i > 0)
-						ss << ", ";
-					ss << "typename " << d.genericParams[i];
-				}
-				ss << ">\n";
-			}
+																		if (!d.genericParams.empty())
+																		{
+																			ss << "template<";
+																			for (size_t i = 0; i < d.genericParams.size(); i++)
+																			{
+																				if (i > 0)
+																					ss << ", ";
+																				ss << "typename " << d.genericParams[i];
+																			}
+																			ss << ">\n";
+																		}
 
-			ss << "struct " << d.name << " {\n";
+																		ss << "struct " << d.name << " {\n";
 																		for (const auto &field : d.fields)
 																		{
 																			std::string typeStr = genType(field.type);

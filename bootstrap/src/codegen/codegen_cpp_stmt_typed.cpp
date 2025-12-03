@@ -67,6 +67,16 @@ std::string CodeGeneratorCPP::genParamDecl(const ast::Parameter &param)
 	std::string typeStr = genType(param.type);
 	std::string paramName = escapeCppKeyword(param.name);
 
+	// Handle function pointer types: need to inject name after (*): RetType (*name)(Params)
+	size_t funcPtrPos = typeStr.find(" (*)(");
+	if (funcPtrPos != std::string::npos)
+	{
+		// Insert parameter name after the *: "RetType (*name)(Params)"
+		std::string before = typeStr.substr(0, funcPtrPos + 4); // Include " (**"
+		std::string after = typeStr.substr(funcPtrPos + 4);     // Everything after "(*" (includes ")(..."
+		return before + paramName + after;
+	}
+
 	// Handle C++ array parameter syntax: int32_t arr[10] instead of int32_t[10] arr
 	size_t bracketPos = typeStr.find('[');
 	if (bracketPos != std::string::npos)

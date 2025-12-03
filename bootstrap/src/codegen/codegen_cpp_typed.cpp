@@ -405,7 +405,7 @@ std::string CodeGeneratorCPP::genType(ast::TypePtr type)
 																	[this](const ast::FunctionType &t) -> std::string
 																	{
 																		std::stringstream ss;
-																		ss << genType(t.returnType) << "(*)( ";
+																		ss << genType(t.returnType) << " (*)(";
 																		for (size_t i = 0; i < t.paramTypes.size(); i++)
 																		{
 																			if (i > 0)
