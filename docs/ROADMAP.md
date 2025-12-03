@@ -32,6 +32,7 @@ The standard library is currently in early development (`src/tuff/`).
 | `math`   | ✅ Basic    | Basic math functions                          |
 | `mem`    | ✅ Basic    | Memory management (malloc/free)               |
 | `option` | ✅ Usable   | Option type                                   |
+| `process`| ✅ Basic    | Process execution (run external programs)     |
 | `result` | ✅ Usable   | Result type                                   |
 | `slice`  | ✅ Basic    | Slice utilities                               |
 | `string` | ✅ Usable   | String operations (includes advanced methods) |
@@ -45,7 +46,7 @@ To achieve self-hosting (compiling the Tuff compiler with Tuff), the following s
 2.  **✅ Advanced String Manipulation**: All methods complete including `split`, `trim`, `startsWith`, `endsWith`, `replace`, `toUpperCase`, `toLowerCase` (DONE).
 3.  **✅ File System API**: Robust file reading/writing, directory traversal, existence checks, and deletion (DONE).
 4.  **✅ Command Line Arguments**: Access to `argv`/`argc` to read input file paths and flags (DONE).
-5.  **❌ Process Control**: Exit codes, environment variables.
+5.  **✅ Process Execution**: Execute external programs with arguments and working directory (DONE).
 6.  **❌ Testing Framework**: A simple way to write and run unit tests within Tuff.
 7.  **❌ Char/String Iterators**: For efficient lexing.
 
