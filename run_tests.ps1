@@ -4,6 +4,7 @@
 # Compiles each .tuff file to C++ target, executes, and reports results.
 
 param(
+    [string]$Path = "",
     [switch]$Verbose,
     [string]$Feature = "",
     [int]$Parallel = 0  # 0 = auto-detect, 1 = sequential
@@ -83,18 +84,46 @@ function Initialize-TestEnvironment {
     }
 }
 
-function Get-TuffTests([string]$FeatureFilter = "") {
+function Get-TuffTests([string]$InputPath = "", [string]$FeatureFilter = "") {
     $tests = @()
-    $featureDirs = Get-ChildItem -Path $TestDir -Directory -Filter "feature*" | Sort-Object Name
-    foreach ($featureDir in $featureDirs) {
-        if ($FeatureFilter -and $featureDir.Name -ne $FeatureFilter) { continue }
-        $testFiles = Get-ChildItem -Path $featureDir.FullName -Filter "test_*.tuff" | Sort-Object Name
-        foreach ($testFile in $testFiles) {
+    
+    if ($InputPath) {
+        $resolvedPath = Resolve-Path $InputPath
+        if (Test-Path $resolvedPath -PathType Leaf) {
+            # Single file
+            $item = Get-Item $resolvedPath
+            $feature = $item.Directory.Name
             $tests += @{
-                Path = $testFile.FullName
-                Feature = $featureDir.Name
-                Name = $testFile.BaseName
-                RelativePath = "$($featureDir.Name)/$($testFile.BaseName)"
+                Path = $item.FullName
+                Feature = $feature
+                Name = $item.BaseName
+                RelativePath = "$feature/$($item.BaseName)"
+            }
+        } elseif (Test-Path $resolvedPath -PathType Container) {
+            # Directory - recursive search
+            $files = Get-ChildItem -Path $resolvedPath -Recurse -Filter "test_*.tuff"
+            foreach ($file in $files) {
+                $feature = $file.Directory.Name
+                $tests += @{
+                    Path = $file.FullName
+                    Feature = $feature
+                    Name = $file.BaseName
+                    RelativePath = "$feature/$($file.BaseName)"
+                }
+            }
+        }
+    } else {
+        $featureDirs = Get-ChildItem -Path $TestDir -Directory -Filter "feature*" | Sort-Object Name
+        foreach ($featureDir in $featureDirs) {
+            if ($FeatureFilter -and $featureDir.Name -ne $FeatureFilter) { continue }
+            $testFiles = Get-ChildItem -Path $featureDir.FullName -Filter "test_*.tuff" | Sort-Object Name
+            foreach ($testFile in $testFiles) {
+                $tests += @{
+                    Path = $testFile.FullName
+                    Feature = $featureDir.Name
+                    Name = $testFile.BaseName
+                    RelativePath = "$($featureDir.Name)/$($testFile.BaseName)"
+                }
             }
         }
     }
@@ -211,7 +240,7 @@ try {
     Write-Host ""
     Initialize-TestEnvironment
     
-    $tests = Get-TuffTests -FeatureFilter $Feature
+    $tests = Get-TuffTests -InputPath $Path -FeatureFilter $Feature
     if ($tests.Count -eq 0) {
         Write-ColorOutput "No tests found!" $ColorYellow
         exit 0
