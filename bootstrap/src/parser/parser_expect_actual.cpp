@@ -30,8 +30,24 @@ std::shared_ptr<ASTNode> Parser::parseExpectDecl()
 		{
 			auto paramNode = std::make_shared<ASTNode>();
 			paramNode->type = ASTNodeType::IDENTIFIER;
-			consume(TokenType::IDENTIFIER, "Expected parameter name");
-			paramNode->value = tokens[pos - 1].value;
+			if (peek().type == TokenType::IDENTIFIER)
+			{
+				paramNode->value = advance().value;
+			}
+			else
+			{
+				Token badToken = peek();
+				if (badToken.type == TokenType::ACTUAL || badToken.type == TokenType::EXPECT)
+				{
+					error("'" + badToken.value + "' is a reserved keyword and cannot be used as a parameter name. Try 'got', 'want', 'val', or another name.",
+								"expect fn example(got: I32, want: I32): Bool;");
+				}
+				else
+				{
+					error("Expected parameter name, got '" + badToken.value + "'",
+								"expect fn example(name: Type): ReturnType;");
+				}
+			}
 			consume(TokenType::COLON, "Expected ':' after parameter name");
 
 			// Use parseType to support complex types and lowercase identifiers
@@ -83,8 +99,24 @@ std::shared_ptr<ASTNode> Parser::parseActualDecl()
 		{
 			auto paramNode = std::make_shared<ASTNode>();
 			paramNode->type = ASTNodeType::IDENTIFIER;
-			consume(TokenType::IDENTIFIER, "Expected parameter name");
-			paramNode->value = tokens[pos - 1].value;
+			if (peek().type == TokenType::IDENTIFIER)
+			{
+				paramNode->value = advance().value;
+			}
+			else
+			{
+				Token badToken = peek();
+				if (badToken.type == TokenType::ACTUAL || badToken.type == TokenType::EXPECT)
+				{
+					error("'" + badToken.value + "' is a reserved keyword and cannot be used as a parameter name. Try 'got', 'want', 'val', or another name.",
+								"actual fn example(got: I32, want: I32): Bool => got == want;");
+				}
+				else
+				{
+					error("Expected parameter name, got '" + badToken.value + "'",
+								"actual fn example(name: Type): ReturnType => ...;");
+				}
+			}
 			consume(TokenType::COLON, "Expected ':' after parameter name");
 
 			// Use parseType to support complex types and lowercase identifiers
@@ -158,8 +190,24 @@ std::shared_ptr<ASTNode> Parser::parseExternFnDecl()
 		{
 			auto paramNode = std::make_shared<ASTNode>();
 			paramNode->type = ASTNodeType::IDENTIFIER;
-			consume(TokenType::IDENTIFIER, "Expected parameter name");
-			paramNode->value = tokens[pos - 1].value;
+			if (peek().type == TokenType::IDENTIFIER)
+			{
+				paramNode->value = advance().value;
+			}
+			else
+			{
+				Token badToken = peek();
+				if (badToken.type == TokenType::ACTUAL || badToken.type == TokenType::EXPECT)
+				{
+					error("'" + badToken.value + "' is a reserved keyword and cannot be used as a parameter name. Try 'got', 'want', 'val', or another name.",
+								"extern fn example(size: USize): *mut Void;");
+				}
+				else
+				{
+					error("Expected parameter name, got '" + badToken.value + "'",
+								"extern fn example(name: Type): ReturnType;");
+				}
+			}
 			consume(TokenType::COLON, "Expected ':' after parameter name");
 
 			// Use parseType to support complex types (pointers, etc.)

@@ -35,9 +35,24 @@ std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 			paramName = advance();
 			paramName.value = "this"; // Ensure value is "this"
 		}
+		else if (peek().type == TokenType::IDENTIFIER)
+		{
+			paramName = advance();
+		}
 		else
 		{
-			paramName = consume(TokenType::IDENTIFIER, "Expected parameter name");
+			// Check if it's a keyword being used as parameter name
+			Token badToken = peek();
+			if (badToken.type == TokenType::ACTUAL || badToken.type == TokenType::EXPECT)
+			{
+				error("'" + badToken.value + "' is a reserved keyword and cannot be used as a parameter name. Try 'got', 'want', 'val', or another name.",
+							"fn example(got: I32, want: I32): Bool => ...");
+			}
+			else
+			{
+				error("Expected parameter name, got '" + badToken.value + "'",
+							"fn example(name: Type, name2: Type): ReturnType => ...");
+			}
 		}
 		consume(TokenType::COLON, "Expected ':' after parameter name");
 
