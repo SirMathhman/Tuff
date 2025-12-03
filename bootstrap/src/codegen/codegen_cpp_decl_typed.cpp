@@ -38,26 +38,36 @@ std::string CodeGeneratorCPP::genDecl(ast::DeclPtr decl)
 
 				ss << genType(d.returnType) << " " << funcName << "(";
 
-																		return ss.str();
-																	},
+				for (size_t i = 0; i < d.params.size(); i++)
+				{
+					if (i > 0)
+						ss << ", ";
+					ss << genParamDecl(d.params[i]);
+				}
 
-																	[this](const ast::Struct &d) -> std::string
-																	{
-																		std::stringstream ss;
+				ss << ") ";
+				ss << genFunctionBody(d.body, d.returnType);
 
-																		if (!d.genericParams.empty())
-																		{
-																			ss << "template<";
-																			for (size_t i = 0; i < d.genericParams.size(); i++)
-																			{
-																				if (i > 0)
-																					ss << ", ";
-																				ss << "typename " << d.genericParams[i];
-																			}
-																			ss << ">\n";
-																		}
+			return ss.str();
+		},
 
-																		ss << "struct " << d.name << " {\n";
+		[this](const ast::Struct &d) -> std::string
+		{
+			std::stringstream ss;
+
+			if (!d.genericParams.empty())
+			{
+				ss << "template<";
+				for (size_t i = 0; i < d.genericParams.size(); i++)
+				{
+					if (i > 0)
+						ss << ", ";
+					ss << "typename " << d.genericParams[i];
+				}
+				ss << ">\n";
+			}
+
+			ss << "struct " << d.name << " {\n";
 																		for (const auto &field : d.fields)
 																		{
 																			std::string typeStr = genType(field.type);
