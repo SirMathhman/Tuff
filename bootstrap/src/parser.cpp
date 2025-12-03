@@ -200,7 +200,7 @@ std::shared_ptr<ASTNode> Parser::parse()
 		{
 			if (isExported)
 			{
-				error("'out' keyword must be followed by fn, struct, enum, or type declaration", 
+				error("'out' keyword must be followed by fn, struct, enum, or type declaration",
 							"out fn myFunction() => ...");
 			}
 			auto expr = parseExpression();

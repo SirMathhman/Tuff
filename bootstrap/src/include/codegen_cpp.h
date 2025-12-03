@@ -3,9 +3,17 @@
 #include <memory>
 #include <map>
 #include <vector>
+#include <set>
 #include "ast.h"
 #include "ast_typed.h"
 #include "ast_converter.h"
+
+struct FileOutput
+{
+	std::string header;									// .h file content
+	std::string implementation;					// .cpp file content
+	std::set<std::string> dependencies; // Module names this file depends on (from 'use' statements)
+};
 
 struct VarInfoCPP
 {
@@ -22,13 +30,24 @@ struct ScopeCPP
 class CodeGeneratorCPP
 {
 public:
+	// Legacy method: generate single merged output
 	std::string generate(std::shared_ptr<ASTNode> ast);
+
+	// New per-file generation methods
+	FileOutput generateFile(std::shared_ptr<ASTNode> ast, const std::string &moduleName);
 
 	// Set whether this is a library (no main generation)
 	void setIsLibrary(bool lib) { isLibrary = lib; }
 
 private:
 	bool isLibrary = false;
+
+	// Per-file generation helpers
+	std::string generateFileHeader(std::shared_ptr<ASTNode> ast, const std::string &moduleName);
+	std::string generateFileImplementation(std::shared_ptr<ASTNode> ast, const std::string &moduleName);
+	std::set<std::string> extractDependencies(std::shared_ptr<ASTNode> ast);
+	bool shouldExport(std::shared_ptr<ASTNode> node);
+
 	// Helpers
 	static bool isFunctionPointerType(const std::string &type);
 	static std::string formatFunctionPointerParam(const std::string &paramType, const std::string &paramName);
