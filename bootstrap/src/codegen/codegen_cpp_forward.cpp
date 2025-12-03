@@ -353,6 +353,11 @@ std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, c
 
 	// Generate inline implementations in header (needed for templates)
 	h << "// Implementations\n";
+	
+	// Enable inline generation for functions in header
+	bool wasInline = generateInline;
+	generateInline = true;
+	
 	for (const auto &c : ast->children)
 	{
 		if (c->type == ASTNodeType::FUNCTION_DECL)
@@ -364,6 +369,8 @@ std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, c
 		else if (c->type == ASTNodeType::MODULE_DECL)
 			h << generateModuleDecl(c) << "\n\n";
 	}
+	
+	generateInline = wasInline;
 
 	return h.str();
 }

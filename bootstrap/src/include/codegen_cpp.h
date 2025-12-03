@@ -39,8 +39,12 @@ public:
 	// Set whether this is a library (no main generation)
 	void setIsLibrary(bool lib) { isLibrary = lib; }
 
+	// Set whether to generate inline functions (for headers)
+	void setGenerateInline(bool inline_) { generateInline = inline_; }
+
 private:
 	bool isLibrary = false;
+	bool generateInline = false;
 
 	// Per-file generation helpers
 	std::string generateFileHeader(std::shared_ptr<ASTNode> ast, const std::string &moduleName);
