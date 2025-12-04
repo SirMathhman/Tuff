@@ -1,0 +1,119 @@
+// Tuff Parser Bootstrap - Phase 3 foundation
+// Demonstrates using stdlib (Vec, HashMap, Option, Result)
+// Stub implementation to validate stdlib integration
+
+// Import from stdlib
+fn vec_new() -> i32 { return 0; }
+fn vec_push(v: i32, val: i32) -> void { return; }
+fn option_some(val: i32) -> i32 { return val; }
+fn option_none() -> i32 { return 0; }
+
+// AST node types (simplified for Tuff)
+type ASTNode = i32;
+type Token = i32;
+
+// Token types (matching lexer)
+fn token_type_fn() -> i32 { return 1; }
+fn token_type_let() -> i32 { return 2; }
+fn token_type_ident() -> i32 { return 101; }
+fn token_type_eof() -> i32 { return 99; }
+
+// Parser state
+fn parser_new() -> i32 {
+    // Initialize parser: allocate token buffer, position, etc.
+    return 0;
+}
+
+fn parser_has_tokens(parser: i32) -> bool {
+    // Check if parser has more tokens to process
+    return false;
+}
+
+fn parser_current_token(parser: i32) -> Token {
+    // Get current token without advancing
+    return 0;
+}
+
+fn parser_advance(parser: i32) -> void {
+    // Move to next token
+    return;
+}
+
+fn parser_peek_token(parser: i32, offset: i32) -> Token {
+    // Look ahead N tokens
+    return 0;
+}
+
+// Core parsing functions - stubs
+fn parse_program(parser: i32) -> i32 {
+    // Parse entire program (list of items)
+    // TODO: Actual implementation
+    return 0;
+}
+
+fn parse_function_def(parser: i32) -> i32 {
+    // Parse function definition (fn name(params) -> type { body })
+    // TODO: Actual implementation
+    return 0;
+}
+
+fn parse_statement(parser: i32) -> i32 {
+    // Parse single statement
+    // TODO: Actual implementation
+    return 0;
+}
+
+fn parse_expression(parser: i32) -> i32 {
+    // Parse expression with precedence climbing
+    // TODO: Actual implementation
+    return 0;
+}
+
+fn parse_binary_expr(parser: i32, min_precedence: i32) -> i32 {
+    // Parse binary expression with minimum precedence
+    // Uses precedence climbing algorithm
+    // TODO: Actual implementation
+    return 0;
+}
+
+fn parse_unary_expr(parser: i32) -> i32 {
+    // Parse unary expression (!, -, &, etc.)
+    // TODO: Actual implementation
+    return 0;
+}
+
+fn parse_primary_expr(parser: i32) -> i32 {
+    // Parse primary expression (literals, identifiers, parenthesized exprs)
+    // TODO: Actual implementation
+    return 0;
+}
+
+fn parse_type(parser: i32) -> i32 {
+    // Parse type annotation (i32, &mut String, etc.)
+    // TODO: Actual implementation
+    return 0;
+}
+
+fn parse_pattern(parser: i32) -> i32 {
+    // Parse pattern (for match arms, let bindings)
+    // TODO: Actual implementation
+    return 0;
+}
+
+// Error recovery
+fn parser_error(parser: i32, message: i32) -> void {
+    // Record parse error and attempt recovery
+    // TODO: Actual implementation
+    return;
+}
+
+fn parser_synchronize(parser: i32) -> void {
+    // Skip to next statement boundary for error recovery
+    // TODO: Actual implementation
+    return;
+}
+
+// Main entry point
+fn main() -> void {
+    return;
+}

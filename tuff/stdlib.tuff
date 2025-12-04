@@ -1,0 +1,220 @@
+// Tuff Standard Library - Core data structures for self-hosting compiler
+// Provides Vec, HashMap, String, Option, Result types needed by compiler phases
+
+// ============================================================================
+// VECTOR / DYNAMIC ARRAY
+// ============================================================================
+
+// Simple Vec<i32> implementation for phase 1
+// TODO: Generic Vec<T> when Tuff supports proper generics
+type Vec = i32;
+
+fn vec_new() -> Vec {
+    // Allocate empty vector with capacity 10
+    return 0;
+}
+
+fn vec_push(vec: Vec, value: i32) -> void {
+    // Add item to vector, growing as needed
+    return;
+}
+
+fn vec_pop(vec: Vec) -> i32 {
+    // Remove and return last item
+    return 0;
+}
+
+fn vec_get(vec: Vec, index: i32) -> i32 {
+    // Get item at index, panic if out of bounds
+    return 0;
+}
+
+fn vec_len(vec: Vec) -> i32 {
+    // Return number of items in vector
+    return 0;
+}
+
+// ============================================================================
+// HASHMAP / DICTIONARY
+// ============================================================================
+
+// Simple HashMap<String, i32> for symbol tables
+type HashMap = i32;
+
+fn hashmap_new() -> HashMap {
+    // Create empty hash map with initial capacity
+    return 0;
+}
+
+fn hashmap_insert(map: HashMap, key: i32, value: i32) -> void {
+    // Insert or update key-value pair
+    return;
+}
+
+fn hashmap_get(map: HashMap, key: i32) -> i32 {
+    // Get value for key, return 0 if not found (TODO: Option<T>)
+    return 0;
+}
+
+fn hashmap_contains(map: HashMap, key: i32) -> bool {
+    // Check if key exists
+    return false;
+}
+
+fn hashmap_remove(map: HashMap, key: i32) -> void {
+    // Remove key-value pair
+    return;
+}
+
+// ============================================================================
+// STRING
+// ============================================================================
+
+// String type (pointer to character array with length)
+type String = i32;
+
+fn string_new() -> String {
+    // Create empty string
+    return 0;
+}
+
+fn string_from_literal(literal: i32) -> String {
+    // Create string from string literal
+    return 0;
+}
+
+fn string_len(s: String) -> i32 {
+    // Return length in characters
+    return 0;
+}
+
+fn string_concat(s1: String, s2: String) -> String {
+    // Concatenate two strings, return new string
+    return 0;
+}
+
+fn string_substring(s: String, start: i32, end: i32) -> String {
+    // Extract substring from start to end
+    return 0;
+}
+
+fn string_char_at(s: String, index: i32) -> i32 {
+    // Get character code at index
+    return 0;
+}
+
+fn string_equals(s1: String, s2: String) -> bool {
+    // Compare two strings for equality
+    return false;
+}
+
+// ============================================================================
+// OPTION<T>
+// ============================================================================
+
+// Option type: Some(value) or None
+// Represented as: positive number = Some(n), 0 = None
+type Option = i32;
+
+fn option_some(value: i32) -> Option {
+    // Wrap value in Some
+    return value;
+}
+
+fn option_none() -> Option {
+    // Return None
+    return 0;
+}
+
+fn option_is_some(opt: Option) -> bool {
+    // Check if Some
+    return opt != 0;
+}
+
+fn option_is_none(opt: Option) -> bool {
+    // Check if None
+    return opt == 0;
+}
+
+fn option_unwrap(opt: Option) -> i32 {
+    // Extract value from Some, panic if None
+    return opt;
+}
+
+fn option_unwrap_or(opt: Option, default: i32) -> i32 {
+    // Extract value or return default
+    if option_is_some(opt) {
+        return option_unwrap(opt);
+    }
+    return default;
+}
+
+// ============================================================================
+// RESULT<T, E>
+// ============================================================================
+
+// Result type: Ok(value) or Err(error)
+// Represented as: positive = Ok(n), negative = Err(-abs(n))
+type Result = i32;
+
+fn result_ok(value: i32) -> Result {
+    // Wrap value in Ok
+    return value;
+}
+
+fn result_err(error: i32) -> Result {
+    // Wrap error in Err (negate to distinguish from Ok)
+    return 0 - error;
+}
+
+fn result_is_ok(res: Result) -> bool {
+    // Check if Ok
+    return res >= 0;
+}
+
+fn result_is_err(res: Result) -> bool {
+    // Check if Err
+    return res < 0;
+}
+
+fn result_unwrap(res: Result) -> i32 {
+    // Extract value from Ok, panic if Err
+    return res;
+}
+
+fn result_unwrap_err(res: Result) -> i32 {
+    // Extract error from Err, panic if Ok
+    return 0 - res;
+}
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+// Convert boolean to integer (true = 1, false = 0)
+fn bool_to_i32(b: bool) -> i32 {
+    if b {
+        return 1;
+    }
+    return 0;
+}
+
+// Convert integer to boolean (0 = false, non-zero = true)
+fn i32_to_bool(n: i32) -> bool {
+    return n != 0;
+}
+
+// Print integer for debugging
+fn print_i32(n: i32) -> void {
+    return;
+}
+
+// Print string for debugging
+fn print_string(s: String) -> void {
+    return;
+}
+
+// Main entry point
+fn main() -> void {
+    return;
+}
