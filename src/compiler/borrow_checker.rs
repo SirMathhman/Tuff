@@ -209,6 +209,17 @@ impl BorrowChecker {
         }
     }
 
+    /// Check if a type is Copy (can be used multiple times without moving)
+    fn is_copy_type(ty: &Option<Type>) -> bool {
+        match ty {
+            Some(Type::Primitive(name)) => {
+                matches!(name.as_str(), "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "bool")
+            }
+            Some(Type::Reference(_, _)) => true, // References are Copy
+            _ => false,
+        }
+    }
+
     /// Check a program for borrow violations
     pub fn check_program(&mut self, program: &Program) -> Result<(), Vec<CompileError>> {
         for item in &program.items {
@@ -303,10 +314,15 @@ impl BorrowChecker {
     fn check_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Variable(var) => {
-                if let Err(e) = self.move_var(&var.name, &var.span) {
-                    self.errors.push(e);
+                if let Some(info) = self.lookup(&var.name) {
+                    // Only move non-Copy types
+                    if !Self::is_copy_type(&info.ty) {
+                        if let Err(e) = self.move_var(&var.name, &var.span) {
+                            self.errors.push(e);
+                        }
+                    }
+                    self.unborrow(&var.name);
                 }
-                self.unborrow(&var.name);
             }
             Expr::UnaryOp(unop) => {
                 if unop.op == "&" {

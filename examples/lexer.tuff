@@ -1,0 +1,33 @@
+// Self-hosting bootstrap test
+// Demonstrates the compiler can compile its own helper functions
+
+fn is_whitespace(code: i32) -> bool {
+    return code == 32 || code == 9 || code == 10;
+}
+
+fn is_digit(code: i32) -> bool {
+    return code >= 48 && code <= 57;
+}
+
+fn is_alpha(code: i32) -> bool {
+    return (code >= 97 && code <= 122) || (code >= 65 && code <= 90);
+}
+
+fn is_lower(code: i32) -> bool {
+    return code >= 97 && code <= 122;
+}
+
+fn is_upper(code: i32) -> bool {
+    return code >= 65 && code <= 90;
+}
+
+fn is_alphanumeric(c: i32) -> bool {
+    return is_alpha(c) || is_digit(c);
+}
+
+fn main() -> void {
+    return;
+}
+
+
+
