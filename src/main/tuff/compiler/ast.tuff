@@ -1,211 +1,289 @@
-// AST node types and structures for Tuff parser
-// This defines a proper AST with type expressions as nodes, not strings
+// Union-based AST for Tuff Parser
+// Each AST node is a distinct struct type, combined via type alias unions
 
 use vector;
 use string;
 use option;
 
-// All possible AST node types
-enum ASTNodeType {
-	// Program and declarations
-	Program,
-	
-	// Declarations
-	FunctionDecl,
-	StructDecl,
-	EnumDecl,
-	TypeAlias,
-	ImplBlock,
-	ModuleDecl,
-	UseDecl,
-	ExpectDecl,
-	ActualDecl,
-	ExternDecl,
-	
-	// Function parts
-	GenericParams,
-	ParamList,
-	Field,
-	
-	// Statements
-	LetStatement,
-	AssignmentStatement,
-	IfStatement,
-	WhileStatement,
-	LoopStatement,
-	BlockStatement,
-	ReturnStatement,
-	BreakStatement,
-	ContinueStatement,
-	ExpressionStatement,
-	
-	// Expressions
-	BinaryOp,
-	UnaryOp,
-	CallExpr,
-	FieldAccess,
-	IndexExpr,
-	ArrayLiteral,
-	StructLiteral,
-	EnumValue,
-	IfExpr,
-	MatchExpr,
-	MatchArm,
-	Identifier,
-	IntLiteral,
-	FloatLiteral,
-	StringLiteral,
-	CharLiteral,
-	BoolLiteral,
-	ArrayExpr,
-	BlockExpr,
-	ReferenceExpr,
-	DereferenceExpr,
-	CastExpr,
-	SizeOfExpr,
-	IsExpr,
-	MemberAccess,
-	Index,
-	FunctionCall,
-	TypeNarrow,
-	If,
-	Cast,
-	SizeOf,
-	This,
-	
-	// Types (when used as expressions in generic args, etc)
-	TypeExpr,
-	PointerType,
-	ArrayType,
-	FunctionType,
-	GenericType,
-	UnionType,
-	IntersectionType,
-	
-	// Other
-	GenericParam,
-	Parameter,
-	StructField,
-	EnumVariant
+// ============ Type Expressions ============
+struct PrimitiveType {
+	name: string
 }
 
-// Type expression kinds - for representing types as AST nodes
-enum TypeExprKind {
-	Primitive,
-	Identifier,
-	Pointer,
-	Array,
-	Function,
-	Generic,
-	Union,
-	Intersection
-}
-
-// Type expressions - proper representation of types as AST nodes
-struct TypeExpr {
-	kind: TypeExprKind,
-	name: string,                              // For Primitive, Identifier, Generic
-	mutable: Bool,                             // For Pointer
-	lifetime: Option<string>,                  // For Pointer
-	inner: Option<*TypeExpr>,                  // For Pointer, Array
-	element: Option<*TypeExpr>,                // For Array
-	initialized: Option<*ASTNode>,             // For Array
-	capacity: Option<*ASTNode>,                // For Array
-	params: Vector<*TypeExpr>,                 // For Function
-	returnType: Option<*TypeExpr>,             // For Function
-	args: Vector<*TypeExpr>,                   // For Generic
-	left: Option<*TypeExpr>,                   // For Union, Intersection
-	right: Option<*TypeExpr>                   // For Union, Intersection
-}
-
-// Generic parameter with optional bounds
-struct GenericParam {
+struct NamedType {
 	name: string,
-	lifetime: Bool  // true if it's a lifetime param like 'a
+	args: *Vector<*Type>
 }
 
-// Function parameter
-struct Parameter {
+struct PointerType {
+	inner: *Type,
+	mutable: Bool
+}
+
+struct ArrayType {
+	element: *Type,
+	initialized: *Option<I32>,
+	capacity: *Option<I32>
+}
+
+struct FunctionType {
+	params: *Vector<*Type>,
+	returnType: *Type
+}
+
+struct UnionType {
+	left: *Type,
+	right: *Type
+}
+
+struct IntersectionType {
+	left: *Type,
+	right: *Type
+}
+
+type Type = PrimitiveType | NamedType | PointerType | ArrayType | FunctionType | UnionType | IntersectionType;
+
+// ============ Literals ============
+struct IntegerLiteral {
+	value: I64
+}
+
+struct FloatLiteral {
+	value: F64
+}
+
+struct StringLiteral {
+	value: string
+}
+
+struct CharLiteral {
+	value: U8
+}
+
+struct BoolLiteral {
+	value: Bool
+}
+
+type Literal = IntegerLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral;
+
+// ============ Operators ============
+enum BinaryOp {
+	Add, Sub, Mul, Div, Mod,
+	Eq, Ne, Lt, Le, Gt, Ge,
+	And, Or,
+	BitwiseAnd, BitwiseOr, BitwiseXor,
+	LeftShift, RightShift
+}
+
+enum UnaryOp {
+	Neg, Not, BitwiseNot, Deref, Ref, RefMut
+}
+
+// ============ Expressions ============
+struct LiteralExpr {
+	lit: *Literal
+}
+
+struct IdentifierExpr {
+	name: string
+}
+
+struct BinaryExpr {
+	op: BinaryOp,
+	left: *Expr,
+	right: *Expr
+}
+
+struct UnaryExpr {
+	op: UnaryOp,
+	expr: *Expr
+}
+
+struct IfExpr {
+	cond: *Expr,
+	thenBranch: *Expr,
+	elseBranch: *Option<*Expr>
+}
+
+struct ArrayExpr {
+	elements: *Vector<*Expr>
+}
+
+struct StructExpr {
 	name: string,
-	paramType: *TypeExpr,
-	line: I32,
-	column: I32
+	fields: *Vector<*Expr>
 }
 
-// Struct field
+struct FieldExpr {
+	expr: *Expr,
+	field: string
+}
+
+struct IndexExpr {
+	expr: *Expr,
+	index: *Expr
+}
+
+struct CallExpr {
+	func: *Expr,
+	args: *Vector<*Expr>
+}
+
+struct CastExpr {
+	expr: *Expr,
+	targetType: *Type
+}
+
+struct SizeOfExpr {
+	targetType: *Type
+}
+
+struct IsExpr {
+	expr: *Expr,
+	targetType: *Type
+}
+
+struct BlockExpr {
+	statements: *Vector<*Stmt>,
+	expr: *Option<*Expr>
+}
+
+type Expr = LiteralExpr | IdentifierExpr | BinaryExpr | UnaryExpr | IfExpr | ArrayExpr | StructExpr | FieldExpr | IndexExpr | CallExpr | CastExpr | SizeOfExpr | IsExpr | BlockExpr;
+
+// ============ Statements ============
+struct LetStmt {
+	name: string,
+	mutable: Bool,
+	typeAnnotation: *Option<*Type>,
+	init: *Expr
+}
+
+struct AssignStmt {
+	target: *Expr,
+	value: *Expr
+}
+
+struct IfStmt {
+	cond: *Expr,
+	thenBranch: *Stmt,
+	elseBranch: *Option<*Stmt>
+}
+
+struct WhileStmt {
+	cond: *Expr,
+	body: *Stmt
+}
+
+struct LoopStmt {
+	body: *Stmt
+}
+
+struct BreakStmt {
+}
+
+struct ContinueStmt {
+}
+
+struct ReturnStmt {
+	value: *Option<*Expr>
+}
+
+struct BlockStmt {
+	statements: *Vector<*Stmt>
+}
+
+struct ExprStmt {
+	expr: *Expr
+}
+
+type Stmt = LetStmt | AssignStmt | IfStmt | WhileStmt | LoopStmt | BreakStmt | ContinueStmt | ReturnStmt | BlockStmt | ExprStmt;
+
+// ============ Supporting Types for Declarations ============
+struct FunctionParam {
+	name: string,
+	paramType: *Type,
+	mutable: Bool
+}
+
 struct StructField {
 	name: string,
-	fieldType: *TypeExpr,
-	line: I32,
-	column: I32
+	fieldType: *Type
 }
 
-// Main AST node structure
-struct ASTNode {
-	nodeType: ASTNodeType,
-	value: string,                           // For identifiers, literals, etc.
-	children: Vector<*ASTNode>,              // For nested nodes
-	line: I32,
-	column: I32,
-	
-	// For declarations with types
-	typeExpr: Option<*TypeExpr>,             // The type when available
-	genericParams: Vector<GenericParam>,     // Generic parameters
-	
-	// For structured declarations
-	parameters: Vector<Parameter>,           // Function parameters
-	fields: Vector<StructField>,             // Struct fields
-	variants: Vector<string>,                // Enum variants
-	
-	// For tracking mutable vs immutable
-	isMutable: Bool,
-	
-	// For tracking if exported
-	isExported: Bool
+struct EnumVariant {
+	name: string
 }
 
-impl ASTNode {
-	// Create a new AST node
-	fn new(nodeType: ASTNodeType): *mut ASTNode => {
-		let mut node: *mut ASTNode = &mut ASTNode {
-			nodeType,
-			"",
-			Vector::new<*ASTNode>(10USize),
-			0,
-			0,
-			None<*TypeExpr> { },
-			Vector::new<GenericParam>(5USize),
-			Vector::new<Parameter>(5USize),
-			Vector::new<StructField>(5USize),
-			Vector::new<string>(5USize),
-			false,
-			false
-		};
-		return node;
-	}
-	
-	// Add a child node
-	fn addChild(this: *mut ASTNode, child: *ASTNode): Void => {
-		this.children.push(child);
-	}
-	
-	// Add a parameter
-	fn addParameter(this: *mut ASTNode, param: Parameter): Void => {
-		this.parameters.push(param);
-	}
-	
-	// Add a struct field
-	fn addField(this: *mut ASTNode, field: StructField): Void => {
-		this.fields.push(field);
-	}
-	
-	// Add an enum variant
-	fn addVariant(this: *mut ASTNode, variant: string): Void => {
-		this.variants.push(variant);
-	}
-	
-	// Add a generic parameter
-	fn addGenericParam(this: *mut ASTNode, param: GenericParam): Void => {
-		this.genericParams.push(param);
-	}
+struct GenericParam {
+	name: string,
+	lifetime: Bool
+}
+
+// ============ Declarations ============
+struct FunctionDecl {
+	name: string,
+	generics: *Vector<GenericParam>,
+	params: *Vector<FunctionParam>,
+	returnType: *Option<*Type>,
+	body: *Expr
+}
+
+struct StructDecl {
+	name: string,
+	generics: *Vector<GenericParam>,
+	fields: *Vector<StructField>
+}
+
+struct EnumDecl {
+	name: string,
+	variants: *Vector<EnumVariant>
+}
+
+struct ImplDecl {
+	targetType: *Type,
+	methods: *Vector<*Decl>
+}
+
+struct TypeAliasDecl {
+	name: string,
+	generics: *Vector<GenericParam>,
+	aliasedType: *Type
+}
+
+struct ModuleDecl {
+	name: string,
+	declarations: *Vector<*Decl>
+}
+
+struct UseDecl {
+	path: string
+}
+
+struct ExpectDecl {
+	name: string,
+	generics: *Vector<GenericParam>,
+	params: *Vector<FunctionParam>,
+	returnType: *Option<*Type>
+}
+
+struct ActualDecl {
+	name: string,
+	generics: *Vector<GenericParam>,
+	params: *Vector<FunctionParam>,
+	returnType: *Option<*Type>,
+	body: *Expr
+}
+
+struct ExternDecl {
+	name: string,
+	generics: *Vector<GenericParam>,
+	params: *Vector<FunctionParam>,
+	returnType: *Option<*Type>
+}
+
+type Decl = FunctionDecl | StructDecl | EnumDecl | ImplDecl | TypeAliasDecl | ModuleDecl | UseDecl | ExpectDecl | ActualDecl | ExternDecl;
+
+// ============ Program ============
+struct Program {
+	declarations: *Vector<*Decl>
 }

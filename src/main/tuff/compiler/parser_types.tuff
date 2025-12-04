@@ -10,19 +10,19 @@ use option;
 
 impl Parser {
 	// Parse a type expression - the main entry point
-	fn parseTypeExpression(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseTypeExpression(this: *mut Parser): Option<*Type> => {
 		return this.parseUnionType();
 	}
 	
 	// Parse union type: Type1 | Type2
-	fn parseUnionType(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseUnionType(this: *mut Parser): Option<*Type> => {
 		let left = this.parseIntersectionType();
-		if (!(left is Some<*mut ASTNode>)) {
-			return None<*mut ASTNode> { };
+		if (!(left is Some<*Type>)) {
+			return None<*Type> { };
 		}
 		
-		if (left is Some<*mut ASTNode>) {
-			let mut leftNode = left.value;
+		if (left is Some<*Type>) {
+			let mut leftType = left.value;
 			
 			loop {
 				if (!(this.check(TokenType.Pipe))) {
@@ -31,32 +31,30 @@ impl Parser {
 				this.advance();
 				
 				let right = this.parseIntersectionType();
-				if (right is Some<*mut ASTNode>) {
-					let node = ASTNode::new(ASTNodeType.UnionType);
-					node.addChild(leftNode);
-					node.addChild(right.value);
-					leftNode = node;
+				if (right is Some<*Type>) {
+					let unionType: *Type = &mut UnionType { leftType, right.value };
+					leftType = unionType;
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected type after '|'");
-					return None<*mut ASTNode> { };
+					return None<*Type> { };
 				}
 			}
 			
-			return Some<*mut ASTNode> { leftNode };
+			return Some<*Type> { leftType };
 		}
 		
-		return None<*mut ASTNode> { };
+		return None<*Type> { };
 	}
 	
 	// Parse intersection type: Type1 & Type2
-	fn parseIntersectionType(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseIntersectionType(this: *mut Parser): Option<*Type> => {
 		let left = this.parsePrimaryType();
-		if (!(left is Some<*mut ASTNode>)) {
-			return None<*mut ASTNode> { };
+		if (!(left is Some<*Type>)) {
+			return None<*Type> { };
 		}
 		
-		if (left is Some<*mut ASTNode>) {
-			let mut leftNode = left.value;
+		if (left is Some<*Type>) {
+			let mut leftType = left.value;
 			
 			loop {
 				// Only parse as intersection if followed by a type, not an expression
@@ -74,25 +72,23 @@ impl Parser {
 				
 				this.advance();
 				let right = this.parsePrimaryType();
-				if (right is Some<*mut ASTNode>) {
-					let node = ASTNode::new(ASTNodeType.IntersectionType);
-					node.addChild(leftNode);
-					node.addChild(right.value);
-					leftNode = node;
+				if (right is Some<*Type>) {
+					let intersectType: *Type = &mut IntersectionType { leftType, right.value };
+					leftType = intersectType;
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected type after '&'");
-					return None<*mut ASTNode> { };
+					return None<*Type> { };
 				}
 			}
 			
-			return Some<*mut ASTNode> { leftNode };
+			return Some<*Type> { leftType };
 		}
 		
-		return None<*mut ASTNode> { };
+		return None<*Type> { };
 	}
 	
 	// Parse primary type: primitive, pointer, array, function, generic, or identifier
-	fn parsePrimaryType(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parsePrimaryType(this: *mut Parser): Option<*Type> => {
 		let token = this.current();
 		
 		// Pointer type: *T or *mut T
@@ -128,7 +124,7 @@ impl Parser {
 			return inner;
 		}
 		
-		return None<*mut ASTNode> { };
+		return None<*Type> { };
 	}
 	
 	// Check if token is a primitive type
@@ -150,87 +146,82 @@ impl Parser {
 	}
 	
 	// Parse primitive type
-	fn parsePrimitiveType(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parsePrimitiveType(this: *mut Parser): Option<*Type> => {
 		let token = this.current();
 		this.advance();
 		
-		let node = ASTNode::new(ASTNodeType.TypeExpr);
-		node.value = tokenTypeToString(token.tokenType);
-		return Some<*mut ASTNode> { node };
+		let primType: *Type = &mut PrimitiveType { tokenTypeToString(token.tokenType) };
+		return Some<*Type> { primType };
 	}
 	
 	// Parse pointer type: *T or *mut T
-	fn parsePointerType(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parsePointerType(this: *mut Parser): Option<*Type> => {
 		if (!(this.matchToken(TokenType.Star))) {
-			return None<*mut ASTNode> { };
+			return None<*Type> { };
 		}
 		
-		let node = ASTNode::new(ASTNodeType.PointerType);
-		node.isMutable = this.matchToken(TokenType.Mut);
+		let mutable = this.matchToken(TokenType.Mut);
 		
 		let inner = this.parsePrimaryType();
-		if (inner is Some<*mut ASTNode>) {
-			node.addChild(inner.value);
+		if (inner is Some<*Type>) {
+			// Create PointerType struct instance
+			let ptrType: *Type = &mut PointerType { inner.value, mutable };
+			return Some<*Type> { ptrType };
 		} else {
 			this.addError(this.current().line, this.current().column, "Expected type after '*'");
-			return None<*mut ASTNode> { };
+			return None<*Type> { };
 		}
-		
-		return Some<*mut ASTNode> { node };
 	}
 	
 	// Parse array type: [T; N; Cap] or [T]
-	fn parseArrayType(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseArrayType(this: *mut Parser): Option<*Type> => {
 		if (!(this.matchToken(TokenType.LBracket))) {
-			return None<*mut ASTNode> { };
+			return None<*Type> { };
 		}
-		
-		let node = ASTNode::new(ASTNodeType.ArrayType);
 		
 		// Parse element type
 		let elemType = this.parseTypeExpression();
-		if (elemType is Some<*mut ASTNode>) {
-			node.addChild(elemType.value);
-		} else {
+		if (!(elemType is Some<*Type>)) {
 			this.addError(this.current().line, this.current().column, "Expected element type in array");
-			return None<*mut ASTNode> { };
+			return None<*Type> { };
 		}
+		
+		let mut initialized: Option<I32> = None<I32> { };
+		let mut capacity: Option<I32> = None<I32> { };
 		
 		// Parse optional size and capacity: [T; initialized; capacity]
 		if (this.matchToken(TokenType.Semicolon)) {
-			// Parse initialized count
+			// Parse initialized count - for now, just skip the expression
 			let initExpr = this.parseExpression();
-			if (initExpr is Some<*mut ASTNode>) {
-				node.addChild(initExpr.value);
-			}
+			// TODO: extract constant value from expression
 			
 			// Parse optional capacity
 			if (this.matchToken(TokenType.Semicolon)) {
 				let capExpr = this.parseExpression();
-				if (capExpr is Some<*mut ASTNode>) {
-					node.addChild(capExpr.value);
-				}
+				// TODO: extract constant value from expression
 			}
 		}
 		
 		this.expectToken(TokenType.RBracket, "Expected ']' in array type");
-		return Some<*mut ASTNode> { node };
+		// Create ArrayType struct instance
+		let arrayType: *Type = &mut ArrayType { elemType.value, initialized, capacity };
+		return Some<*Type> { arrayType };
 	}
 	
 	// Parse function pointer type: |ParamType1, ParamType2| => ReturnType
-	fn parseFunctionPointerType(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseFunctionPointerType(this: *mut Parser): Option<*Type> => {
 		if (!(this.matchToken(TokenType.Pipe))) {
-			return None<*mut ASTNode> { };
+			return None<*Type> { };
 		}
 		
-		let node = ASTNode::new(ASTNodeType.FunctionType);
+		let mut params: Vector<*Type> = Vector::new<*Type>(5USize);
 		
 		// Parse parameter types
 		if (!(this.check(TokenType.Pipe))) {
 			loop {
 				let paramType = this.parseTypeExpression();
-				if (paramType is Some<*mut ASTNode>) {
-					node.addChild(paramType.value);
+				if (paramType is Some<*Type>) {
+					params.push(paramType.value);
 				}
 				
 				if (!(this.matchToken(TokenType.Comma))) {
@@ -244,21 +235,20 @@ impl Parser {
 		
 		// Parse return type
 		let retType = this.parseTypeExpression();
-		if (retType is Some<*mut ASTNode>) {
-			node.addChild(retType.value);
-		} else {
+		if (!(retType is Some<*Type>)) {
 			this.addError(this.current().line, this.current().column, "Expected return type after '=>'");
-			return None<*mut ASTNode> { };
+			return None<*Type> { };
 		}
 		
-		return Some<*mut ASTNode> { node };
+		let fnType: *Type = &mut FunctionType { params, retType.value };
+		return Some<*Type> { fnType };
 	}
 	
 	// Parse named type (identifier, possibly with generics): Option<T>, Map<K, V>
-	fn parseNamedType(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseNamedType(this: *mut Parser): Option<*Type> => {
 		let token = this.current();
 		if (!(this.matchToken(TokenType.Identifier))) {
-			return None<*mut ASTNode> { };
+			return None<*Type> { };
 		}
 		
 		// Check for :: qualifier
@@ -277,15 +267,14 @@ impl Parser {
 		
 		// Check for generic arguments: <T, U>
 		if (this.check(TokenType.LAngle)) {
-			let node = ASTNode::new(ASTNodeType.GenericType);
-			node.value = fullName;
+			let mut args: Vector<*Type> = Vector::new<*Type>(5USize);
 			
 			this.advance();  // consume <
 			
 			loop {
 				let typeArg = this.parseTypeExpression();
-				if (typeArg is Some<*mut ASTNode>) {
-					node.addChild(typeArg.value);
+				if (typeArg is Some<*Type>) {
+					args.push(typeArg.value);
 				}
 				
 				if (!(this.matchToken(TokenType.Comma))) {
@@ -294,12 +283,14 @@ impl Parser {
 			}
 			
 			this.expectToken(TokenType.RAngle, "Expected '>' after generic arguments");
-			return Some<*mut ASTNode> { node };
+		// Create NamedType struct instance
+		let namedType: *Type = &mut NamedType { fullName, args };
+			return Some<*Type> { namedType };
 		}
 		
-		// Simple identifier type
-		let node = ASTNode::new(ASTNodeType.TypeExpr);
-		node.value = fullName;
-		return Some<*mut ASTNode> { node };
+		// Simple identifier type (no generics)
+		// Create PrimitiveType struct instance
+		let simpleType: *Type = &mut PrimitiveType { fullName };
+		return Some<*Type> { simpleType };
 	}
 }
