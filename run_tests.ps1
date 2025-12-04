@@ -89,7 +89,24 @@ function Initialize-TestEnvironment {
         Write-ColorOutput "[ERROR] Failed to compile stdlib: $stdlibOutput" $ColorRed
         exit 1
     }
-    Write-ColorOutput "Stdlib compiled to $($Script:StdlibDir)" $ColorGray
+    
+    # Pre-compile stdlib cpp files to object files for faster linking
+    $includeDir = Join-Path $RootDir "bootstrap\src\include"
+    $builtinsDir = Join-Path $RootDir "src\main\cpp"
+    $stdlibCppFiles = @(Get-ChildItem -Path $Script:StdlibDir -Filter "*.cpp" -File -Recurse | Select-Object -ExpandProperty FullName)
+    
+    $Script:StdlibObjDir = Join-Path $TempDir "stdlib_obj"
+    New-Item -ItemType Directory -Path $Script:StdlibObjDir -Force | Out-Null
+    
+    # Compile each cpp to .o in parallel
+    $stdlibCppFiles | ForEach-Object -ThrottleLimit ([Environment]::ProcessorCount) -Parallel {
+        $cppFile = $_
+        $objFile = Join-Path $using:Script:StdlibObjDir ([IO.Path]::GetFileNameWithoutExtension($cppFile) + ".o")
+        $null = & clang++ -std=c++17 -c -I $using:includeDir -I $using:builtinsDir -I $using:Script:StdlibDir $cppFile -o $objFile 2>&1
+    }
+    
+    $Script:StdlibObjFiles = @(Get-ChildItem -Path $Script:StdlibObjDir -Filter "*.o" -File | Select-Object -ExpandProperty FullName)
+    Write-ColorOutput "Stdlib compiled to $($Script:StdlibDir) ($($Script:StdlibObjFiles.Count) object files)" $ColorGray
 }
 
 function Get-TuffTests([string]$InputPath = "", [string]$FeatureFilter = "") {
@@ -191,16 +208,14 @@ function Test-TuffFile([hashtable]$Test) {
     # Find generated .cpp files for this test only (not stdlib)
     $testCppFiles = @(Get-ChildItem -Path $testOutputDir -Filter "tuff_test_*.cpp" -File | Select-Object -ExpandProperty FullName)
     
-    # Get all stdlib .cpp files
-    $stdlibCppFiles = @(Get-ChildItem -Path $Script:StdlibDir -Filter "*.cpp" -File -Recurse | Select-Object -ExpandProperty FullName)
-    
-    $allCppFiles = @($testCppFiles) + @($stdlibCppFiles)
+    # Use pre-compiled stdlib object files
+    $allFiles = @($testCppFiles) + @($Script:StdlibObjFiles)
     $exeFile = Join-Path $TempDir "$($Test.Name).exe"
     
     try {
         $includeDir = Join-Path $RootDir "bootstrap\src\include"
         $builtinsDir = Join-Path $RootDir "src\main\cpp"
-        $clangArgs = @("-std=c++17", "-I", $includeDir, "-I", $builtinsDir, "-I", $testOutputDir, "-I", $Script:StdlibDir) + $allCppFiles + @("-o", $exeFile)
+        $clangArgs = @("-std=c++17", "-I", $includeDir, "-I", $builtinsDir, "-I", $testOutputDir, "-I", $Script:StdlibDir) + $allFiles + @("-o", $exeFile)
         $cppCompileOutput = & clang++ @clangArgs 2>&1
         if ($LASTEXITCODE -ne 0) {
             $errorLines = ($cppCompileOutput | Select-String "error:" | Select-Object -First 3) -join "; "
@@ -258,6 +273,9 @@ function Show-TestSummary {
     Write-ColorOutput "============================================================" $ColorCyan
     $total = $Script:PassedTests + $Script:FailedTests + $Script:ErrorTests
     Write-ColorOutput "TOTAL: $($Script:PassedTests)/${total} passed, $($Script:FailedTests) failed, $($Script:ErrorTests) errors" $ColorCyan
+    if ($Script:ElapsedTime) {
+        Write-ColorOutput "Time: $($Script:ElapsedTime.TotalSeconds.ToString('F2'))s" $ColorGray
+    }
     Write-ColorOutput "============================================================" $ColorCyan
     return $allPassed
 }
@@ -279,6 +297,8 @@ try {
     if ($maxParallel -gt 1) { Write-ColorOutput "Parallelism: $maxParallel" $ColorGray }
     Write-Host ""
     
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    
     if ($maxParallel -gt 1 -and $tests.Count -gt 1) {
         Write-Host "Running $($tests.Count) tests in parallel..." -ForegroundColor Cyan
         
@@ -288,6 +308,7 @@ try {
             $TempDir = $using:TempDir
             $RootDir = $using:RootDir
             $StdlibDir = $using:Script:StdlibDir
+            $StdlibObjFiles = $using:Script:StdlibObjFiles
             $SkippedTestsList = $using:Script:SkippedTestsList
             $NegativeTests = $using:Script:NegativeTests
             $ExpectedExitCodes = $using:Script:ExpectedExitCodes
@@ -336,17 +357,15 @@ try {
             # Find generated .cpp files for this test only
             $testCppFiles = @(Get-ChildItem -Path $testOutputDir -Filter "tuff_test_*.cpp" -File | Select-Object -ExpandProperty FullName)
             
-            # Get all stdlib .cpp files  
-            $stdlibCppFiles = @(Get-ChildItem -Path $StdlibDir -Filter "*.cpp" -File -Recurse | Select-Object -ExpandProperty FullName)
-            
-            $allCppFiles = @($testCppFiles) + @($stdlibCppFiles)
+            # Use pre-compiled stdlib object files
+            $allFiles = @($testCppFiles) + @($StdlibObjFiles)
             $uniqueId = [System.Guid]::NewGuid().ToString("N").Substring(0, 8)
             $exeFile = Join-Path $TempDir "${uniqueId}_$($Test.Name).exe"
             
             try {
                 $includeDir = Join-Path $RootDir "bootstrap\src\include"
                 $builtinsDir = Join-Path $RootDir "src\main\cpp"
-                $clangArgs = @("-std=c++17", "-I", $includeDir, "-I", $builtinsDir, "-I", $testOutputDir, "-I", $StdlibDir) + $allCppFiles + @("-o", $exeFile)
+                $clangArgs = @("-std=c++17", "-I", $includeDir, "-I", $builtinsDir, "-I", $testOutputDir, "-I", $StdlibDir) + $allFiles + @("-o", $exeFile)
                 $cppCompileOutput = & clang++ @clangArgs 2>&1
                 if ($LASTEXITCODE -ne 0) {
                     $errorLines = ($cppCompileOutput | Select-String "error:" | Select-Object -First 3) -join "; "
@@ -413,6 +432,9 @@ try {
             }
         }
     }
+    
+    $stopwatch.Stop()
+    $Script:ElapsedTime = $stopwatch.Elapsed
     
     $allPassed = Show-TestSummary
     exit $(if ($allPassed) { 0 } else { 1 })
