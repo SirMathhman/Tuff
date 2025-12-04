@@ -9,8 +9,25 @@ use parser_binary_ops;
 use vector;
 use string;
 use option;
+use mem;
 
 impl Parser {
+	// Helper to allocate expression on heap
+	fn allocExpr(this: *mut Parser, expr: Expr): *Expr => {
+		let raw = malloc<Expr>(sizeOf(Expr));
+		let ptr: *mut Expr = raw + 0;
+		*ptr = expr;
+		return ptr;
+	}
+
+	// Helper to allocate literal on heap
+	fn allocLiteral(this: *mut Parser, lit: Literal): *Literal => {
+		let raw = malloc<Literal>(sizeOf(Literal));
+		let ptr: *mut Literal = raw + 0;
+		*ptr = lit;
+		return ptr;
+	}
+
 // Entry point for expression parsing
 fn parseExpression(this: *mut Parser): Option<*Expr> => {
 	return this.parseLogicalOr();
@@ -37,8 +54,8 @@ loop {
 	let right = this.parseLogicalAnd();
 	if (right is Some<*Expr>) {
 		let rightNode = right.value;
-		let node: *Expr = &mut BinaryExpr { BinaryOp.Or, leftNode, rightNode };
-		leftNode = node;
+		let node = BinaryExpr { BinaryOp.Or, leftNode, rightNode };
+		leftNode = this.allocExpr(node);
 	} else {
 		this.addError(this.current().line, this.current().column, "Expected expression after operator");
 		return None<*Expr> { };
@@ -57,8 +74,8 @@ fn parseUnary(this: *mut Parser): Option<*Expr> => {
 		this.advance();
 		let operand = this.parseUnary();
 		if (operand is Some<*Expr>) {
-			let node: *Expr = &mut UnaryExpr { UnaryOp.Not, operand.value };
-			return Some<*Expr> { node };
+			let node = UnaryExpr { UnaryOp.Not, operand.value };
+			return Some<*Expr> { this.allocExpr(node) };
 		}
 	}
 	
@@ -66,8 +83,8 @@ fn parseUnary(this: *mut Parser): Option<*Expr> => {
 		this.advance();
 		let operand = this.parseUnary();
 		if (operand is Some<*Expr>) {
-			let node: *Expr = &mut UnaryExpr { UnaryOp.Neg, operand.value };
-			return Some<*Expr> { node };
+			let node = UnaryExpr { UnaryOp.Neg, operand.value };
+			return Some<*Expr> { this.allocExpr(node) };
 		}
 	}
 	
@@ -75,8 +92,8 @@ fn parseUnary(this: *mut Parser): Option<*Expr> => {
 		this.advance();
 		let operand = this.parseUnary();
 		if (operand is Some<*Expr>) {
-			let node: *Expr = &mut UnaryExpr { UnaryOp.BitwiseNot, operand.value };
-			return Some<*Expr> { node };
+			let node = UnaryExpr { UnaryOp.BitwiseNot, operand.value };
+			return Some<*Expr> { this.allocExpr(node) };
 		}
 	}
 	
@@ -84,8 +101,8 @@ fn parseUnary(this: *mut Parser): Option<*Expr> => {
 		this.advance();
 		let operand = this.parseUnary();
 		if (operand is Some<*Expr>) {
-			let node: *Expr = &mut UnaryExpr { UnaryOp.Deref, operand.value };
-			return Some<*Expr> { node };
+			let node = UnaryExpr { UnaryOp.Deref, operand.value };
+			return Some<*Expr> { this.allocExpr(node) };
 		}
 	}
 	
@@ -95,8 +112,8 @@ fn parseUnary(this: *mut Parser): Option<*Expr> => {
 		let operand = this.parseUnary();
 		if (operand is Some<*Expr>) {
 			let op = if (isMut) { UnaryOp.RefMut } else { UnaryOp.Ref };
-			let node: *Expr = &mut UnaryExpr { op, operand.value };
-			return Some<*Expr> { node };
+			let node = UnaryExpr { op, operand.value };
+			return Some<*Expr> { this.allocExpr(node) };
 		}
 	}
 	
@@ -106,8 +123,10 @@ fn parseUnary(this: *mut Parser): Option<*Expr> => {
 			let operand = this.parseUnary();
 			if (operand is Some<*Expr>) {
 				if (this.matchToken(TokenType.RParen)) {
-					let node: *Expr = &mut SizeOfExpr { /* need type here */ };
-					return Some<*Expr> { node };
+					// TODO: Fix SizeOfExpr to take type, or parse type here
+					// let node = SizeOfExpr { ... };
+					// return Some<*Expr> { this.allocExpr(node) };
+					return None<*Expr> { };
 				}
 			}
 		}
@@ -131,8 +150,8 @@ fn parsePostfix(this: *mut Parser): Option<*Expr> => {
 				this.advance();
 				let token = this.current();
 				if (this.matchToken(TokenType.Identifier)) {
-					let node: *Expr = &mut FieldExpr { exprNode, token.value };
-					exprNode = node;
+					let node = FieldExpr { exprNode, token.value };
+					exprNode = this.allocExpr(node);
 					continue;
 				}
 			}
@@ -142,8 +161,8 @@ fn parsePostfix(this: *mut Parser): Option<*Expr> => {
 				let index = this.parseExpression();
 				if (index is Some<*Expr>) {
 					if (this.matchToken(TokenType.RBracket)) {
-						let node: *Expr = &mut IndexExpr { exprNode, index.value };
-						exprNode = node;
+						let node = IndexExpr { exprNode, index.value };
+						exprNode = this.allocExpr(node);
 						continue;
 					}
 				}
@@ -153,8 +172,8 @@ fn parsePostfix(this: *mut Parser): Option<*Expr> => {
 				this.advance();
 				let args = this.parseArguments();
 				if (this.matchToken(TokenType.RParen)) {
-					let node: *Expr = &mut CallExpr { exprNode, args };
-					exprNode = node;
+					let node = CallExpr { exprNode, args };
+					exprNode = this.allocExpr(node);
 					continue;
 				}
 			}
@@ -186,9 +205,10 @@ fn parsePrimary(this: *mut Parser): Option<*Expr> => {
 		this.advance();
 		let intVal = string::toI64(token.value);
 		if (intVal is Some<I64>) {
-			let lit: *Literal = &mut IntegerLiteral { intVal.value };
-			let node: *Expr = &mut LiteralExpr { lit };
-			return Some<*Expr> { node };
+			let lit = IntegerLiteral { intVal.value };
+			let litPtr = this.allocLiteral(lit);
+			let node = LiteralExpr { litPtr };
+			return Some<*Expr> { this.allocExpr(node) };
 		}
 	}
 	
@@ -196,37 +216,41 @@ fn parsePrimary(this: *mut Parser): Option<*Expr> => {
 		this.advance();
 		let floatVal = string::toF64(token.value);
 		if (floatVal is Some<F64>) {
-			let lit: *Literal = &mut FloatLiteral { floatVal.value };
-			let node: *Expr = &mut LiteralExpr { lit };
-			return Some<*Expr> { node };
+			let lit = FloatLiteral { floatVal.value };
+			let litPtr = this.allocLiteral(lit);
+			let node = LiteralExpr { litPtr };
+			return Some<*Expr> { this.allocExpr(node) };
 		}
 	}
 	
 	if (token.tokenType == TokenType.StringLiteral) {
 		this.advance();
-		let lit: *Literal = &mut StringLiteral { token.value };
-		let node: *Expr = &mut LiteralExpr { lit };
-		return Some<*Expr> { node };
+		let lit = StringLiteral { token.value };
+		let litPtr = this.allocLiteral(lit);
+		let node = LiteralExpr { litPtr };
+		return Some<*Expr> { this.allocExpr(node) };
 	}
 	
 	if (token.tokenType == TokenType.True) {
 		this.advance();
-		let lit: *Literal = &mut BoolLiteral { true };
-		let node: *Expr = &mut LiteralExpr { lit };
-		return Some<*Expr> { node };
+		let lit = BoolLiteral { true };
+		let litPtr = this.allocLiteral(lit);
+		let node = LiteralExpr { litPtr };
+		return Some<*Expr> { this.allocExpr(node) };
 	}
 	
 	if (token.tokenType == TokenType.False) {
 		this.advance();
-		let lit: *Literal = &mut BoolLiteral { false };
-		let node: *Expr = &mut LiteralExpr { lit };
-		return Some<*Expr> { node };
+		let lit = BoolLiteral { false };
+		let litPtr = this.allocLiteral(lit);
+		let node = LiteralExpr { litPtr };
+		return Some<*Expr> { this.allocExpr(node) };
 	}
 	
 	if (token.tokenType == TokenType.Identifier) {
 		this.advance();
-		let node: *Expr = &mut IdentifierExpr { token.value };
-		return Some<*Expr> { node };
+		let node = IdentifierExpr { token.value };
+		return Some<*Expr> { this.allocExpr(node) };
 	}
 	
 	if (token.tokenType == TokenType.LParen) {
@@ -239,8 +263,8 @@ fn parsePrimary(this: *mut Parser): Option<*Expr> => {
 	
 	if (token.tokenType == TokenType.This) {
 		this.advance();
-		let node: *Expr = &mut IdentifierExpr { "this" };
-		return Some<*Expr> { node };
+		let node = IdentifierExpr { "this" };
+		return Some<*Expr> { this.allocExpr(node) };
 	}
 	
 	return None<*Expr> { };

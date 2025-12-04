@@ -9,8 +9,17 @@ use parser_types;
 use vector;
 use string;
 use option;
+use mem;
 
 impl Parser {
+	// Helper to allocate statement on heap
+	fn allocStmt(this: *mut Parser, stmt: Stmt): *Stmt => {
+		let raw = malloc<Stmt>(sizeOf(Stmt));
+		let ptr: *mut Stmt = raw + 0;
+		*ptr = stmt;
+		return ptr;
+	}
+
 	// Parse a statement - the main dispatcher for all statement types
 	fn parseStatement(this: *mut Parser): Option<*Stmt> => {
 		let token = this.current();
@@ -86,8 +95,8 @@ impl Parser {
 		}
 		
 		this.expectToken(TokenType.RBrace, "Expected '}' to close block");
-		let blockStmt: *Stmt = &mut BlockStmt { statements };
-		return Some<*Stmt> { blockStmt };
+		let blockStmt = BlockStmt { statements };
+		return Some<*Stmt> { this.allocStmt(blockStmt) };
 	}
 	
 	// Parse if statement: if (condition) statement [else statement]
@@ -120,8 +129,8 @@ impl Parser {
 			elseBranch = this.parseStatement();
 		}
 		
-		let ifStmt: *Stmt = &mut IfStmt { condition.value, thenBranch.value, elseBranch };
-		return Some<*Stmt> { ifStmt };
+		let ifStmt = IfStmt { condition.value, thenBranch.value, elseBranch };
+		return Some<*Stmt> { this.allocStmt(ifStmt) };
 	}
 	
 	// Parse while statement: while (condition) statement
@@ -148,8 +157,8 @@ impl Parser {
 			return None<*Stmt> { };
 		}
 		
-		let whileStmt: *Stmt = &mut WhileStmt { condition.value, body.value };
-		return Some<*Stmt> { whileStmt };
+		let whileStmt = WhileStmt { condition.value, body.value };
+		return Some<*Stmt> { this.allocStmt(whileStmt) };
 	}
 	
 	// Parse loop statement: loop { statements }
@@ -165,8 +174,8 @@ impl Parser {
 			return None<*Stmt> { };
 		}
 		
-		let loopStmt: *Stmt = &mut LoopStmt { body.value };
-		return Some<*Stmt> { loopStmt };
+		let loopStmt = LoopStmt { body.value };
+		return Some<*Stmt> { this.allocStmt(loopStmt) };
 	}
 	
 	// Parse break statement: break;
@@ -176,8 +185,8 @@ impl Parser {
 		}
 		
 		this.expectToken(TokenType.Semicolon, "Expected ';' after 'break'");
-		let breakStmt: *Stmt = &mut BreakStmt { };
-		return Some<*Stmt> { breakStmt };
+		let breakStmt = BreakStmt { };
+		return Some<*Stmt> { this.allocStmt(breakStmt) };
 	}
 	
 	// Parse continue statement: continue;
@@ -187,8 +196,8 @@ impl Parser {
 		}
 		
 		this.expectToken(TokenType.Semicolon, "Expected ';' after 'continue'");
-		let continueStmt: *Stmt = &mut ContinueStmt { };
-		return Some<*Stmt> { continueStmt };
+		let continueStmt = ContinueStmt { };
+		return Some<*Stmt> { this.allocStmt(continueStmt) };
 	}
 	
 	// Parse return statement: return [expression];
@@ -208,8 +217,8 @@ impl Parser {
 		}
 		
 		this.expectToken(TokenType.Semicolon, "Expected ';' after return");
-		let returnStmt: *Stmt = &mut ReturnStmt { value };
-		return Some<*Stmt> { returnStmt };
+		let returnStmt = ReturnStmt { value };
+		return Some<*Stmt> { this.allocStmt(returnStmt) };
 	}
 	
 	// Parse let statement: let [mut] name [: type] = expression;
@@ -244,8 +253,8 @@ impl Parser {
 		}
 		
 		this.expectToken(TokenType.Semicolon, "Expected ';' after let statement");
-		let letStmt: *Stmt = &mut LetStmt { name, mutable, typeAnnotation, init.value };
-		return Some<*Stmt> { letStmt };
+		let letStmt = LetStmt { name, mutable, typeAnnotation, init.value };
+		return Some<*Stmt> { this.allocStmt(letStmt) };
 	}
 	
 	// Parse expression statement or assignment: expr; or lvalue = expr;
@@ -264,13 +273,13 @@ impl Parser {
 			}
 			
 			this.expectToken(TokenType.Semicolon, "Expected ';' after assignment");
-			let assignStmt: *Stmt = &mut AssignStmt { expr.value, rhs.value };
-			return Some<*Stmt> { assignStmt };
+			let assignStmt = AssignStmt { expr.value, rhs.value };
+			return Some<*Stmt> { this.allocStmt(assignStmt) };
 		}
 		
 		// Regular expression statement
 		this.expectToken(TokenType.Semicolon, "Expected ';' after expression");
-		let exprStmt: *Stmt = &mut ExprStmt { expr.value };
-		return Some<*Stmt> { exprStmt };
+		let exprStmt = ExprStmt { expr.value };
+		return Some<*Stmt> { this.allocStmt(exprStmt) };
 	}
 }

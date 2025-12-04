@@ -7,8 +7,17 @@ use parser;
 use vector;
 use string;
 use option;
+use mem;
 
 impl Parser {
+	// Helper to allocate type on heap
+	fn allocType(this: *mut Parser, typeNode: Type): *Type => {
+		let raw = malloc<Type>(sizeOf(Type));
+		let ptr: *mut Type = raw + 0;
+		*ptr = typeNode;
+		return ptr;
+	}
+
 	// Parse a type expression - the main entry point
 	fn parseTypeExpression(this: *mut Parser): Option<*Type> => {
 		return this.parseUnionType();
@@ -32,8 +41,8 @@ impl Parser {
 				
 				let right = this.parseIntersectionType();
 				if (right is Some<*Type>) {
-					let unionType: *Type = &mut UnionType { leftType, right.value };
-					leftType = unionType;
+					let unionType = UnionType { leftType, right.value };
+					leftType = this.allocType(unionType);
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected type after '|'");
 					return None<*Type> { };
@@ -73,8 +82,8 @@ impl Parser {
 				this.advance();
 				let right = this.parsePrimaryType();
 				if (right is Some<*Type>) {
-					let intersectType: *Type = &mut IntersectionType { leftType, right.value };
-					leftType = intersectType;
+					let intersectType = IntersectionType { leftType, right.value };
+					leftType = this.allocType(intersectType);
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected type after '&'");
 					return None<*Type> { };
@@ -150,8 +159,8 @@ impl Parser {
 		let token = this.current();
 		this.advance();
 		
-		let primType: *Type = &mut PrimitiveType { tokenTypeToString(token.tokenType) };
-		return Some<*Type> { primType };
+		let primType = PrimitiveType { tokenTypeToString(token.tokenType) };
+		return Some<*Type> { this.allocType(primType) };
 	}
 	
 	// Parse pointer type: *T or *mut T
@@ -165,8 +174,8 @@ impl Parser {
 		let inner = this.parsePrimaryType();
 		if (inner is Some<*Type>) {
 			// Create PointerType struct instance
-			let ptrType: *Type = &mut PointerType { inner.value, mutable };
-			return Some<*Type> { ptrType };
+			let ptrType = PointerType { inner.value, mutable };
+			return Some<*Type> { this.allocType(ptrType) };
 		} else {
 			this.addError(this.current().line, this.current().column, "Expected type after '*'");
 			return None<*Type> { };
@@ -204,8 +213,8 @@ impl Parser {
 		
 		this.expectToken(TokenType.RBracket, "Expected ']' in array type");
 		// Create ArrayType struct instance
-		let arrayType: *Type = &mut ArrayType { elemType.value, initialized, capacity };
-		return Some<*Type> { arrayType };
+		let arrayType = ArrayType { elemType.value, initialized, capacity };
+		return Some<*Type> { this.allocType(arrayType) };
 	}
 	
 	// Parse function pointer type: |ParamType1, ParamType2| => ReturnType
@@ -240,8 +249,8 @@ impl Parser {
 			return None<*Type> { };
 		}
 		
-		let fnType: *Type = &mut FunctionType { params, retType.value };
-		return Some<*Type> { fnType };
+		let fnType = FunctionType { params, retType.value };
+		return Some<*Type> { this.allocType(fnType) };
 	}
 	
 	// Parse named type (identifier, possibly with generics): Option<T>, Map<K, V>
@@ -284,13 +293,13 @@ impl Parser {
 			
 			this.expectToken(TokenType.RAngle, "Expected '>' after generic arguments");
 		// Create NamedType struct instance
-		let namedType: *Type = &mut NamedType { fullName, args };
-			return Some<*Type> { namedType };
+		let namedType = NamedType { fullName, args };
+			return Some<*Type> { this.allocType(namedType) };
 		}
 		
 		// Simple identifier type (no generics)
 		// Create PrimitiveType struct instance
-		let simpleType: *Type = &mut PrimitiveType { fullName };
-		return Some<*Type> { simpleType };
+		let simpleType = PrimitiveType { fullName };
+		return Some<*Type> { this.allocType(simpleType) };
 	}
 }

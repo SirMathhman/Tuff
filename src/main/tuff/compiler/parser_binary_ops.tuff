@@ -29,8 +29,8 @@ impl Parser {
 				let right = this.parseEquality();
 				if (right is Some<*Expr>) {
 					let rightNode = right.value;
-					let node: *Expr = &mut BinaryExpr { BinaryOp.And, leftNode, rightNode };
-					leftNode = node;
+					let node = BinaryExpr { BinaryOp.And, leftNode, rightNode };
+					leftNode = this.allocExpr(node);
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected expression after &&");
 					return None<*Expr> { };
@@ -70,8 +70,8 @@ impl Parser {
 				let right = this.parseComparison();
 				if (right is Some<*Expr>) {
 					let rightNode = right.value;
-					let node: *Expr = &mut BinaryExpr { op, leftNode, rightNode };
-					leftNode = node;
+					let node = BinaryExpr { op, leftNode, rightNode };
+					leftNode = this.allocExpr(node);
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected expression after operator");
 					return None<*Expr> { };
@@ -115,8 +115,8 @@ impl Parser {
 				let right = this.parseBitwiseOr();
 				if (right is Some<*Expr>) {
 					let rightNode = right.value;
-					let node: *Expr = &mut BinaryExpr { op, leftNode, rightNode };
-					leftNode = node;
+					let node = BinaryExpr { op, leftNode, rightNode };
+					leftNode = this.allocExpr(node);
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected expression after operator");
 					return None<*Expr> { };
@@ -148,8 +148,8 @@ impl Parser {
 				let right = this.parseBitwiseXor();
 				if (right is Some<*Expr>) {
 					let rightNode = right.value;
-					let node: *Expr = &mut BinaryExpr { BinaryOp.BitwiseOr, leftNode, rightNode };
-					leftNode = node;
+					let node = BinaryExpr { BinaryOp.BitwiseOr, leftNode, rightNode };
+					leftNode = this.allocExpr(node);
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected expression after |");
 					return None<*Expr> { };
@@ -181,8 +181,8 @@ impl Parser {
 				let right = this.parseBitwiseAnd();
 				if (right is Some<*Expr>) {
 					let rightNode = right.value;
-					let node: *Expr = &mut BinaryExpr { BinaryOp.BitwiseXor, leftNode, rightNode };
-					leftNode = node;
+					let node = BinaryExpr { BinaryOp.BitwiseXor, leftNode, rightNode };
+					leftNode = this.allocExpr(node);
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected expression after ^");
 					return None<*Expr> { };
@@ -214,8 +214,8 @@ impl Parser {
 				let right = this.parseShift();
 				if (right is Some<*Expr>) {
 					let rightNode = right.value;
-					let node: *Expr = &mut BinaryExpr { BinaryOp.BitwiseAnd, leftNode, rightNode };
-					leftNode = node;
+					let node = BinaryExpr { BinaryOp.BitwiseAnd, leftNode, rightNode };
+					leftNode = this.allocExpr(node);
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected expression after &");
 					return None<*Expr> { };
@@ -255,8 +255,8 @@ impl Parser {
 				let right = this.parseAdditive();
 				if (right is Some<*Expr>) {
 					let rightNode = right.value;
-					let node: *Expr = &mut BinaryExpr { op, leftNode, rightNode };
-					leftNode = node;
+					let node = BinaryExpr { op, leftNode, rightNode };
+					leftNode = this.allocExpr(node);
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected expression after operator");
 					return None<*Expr> { };
@@ -296,8 +296,8 @@ impl Parser {
 				let right = this.parseMultiplicative();
 				if (right is Some<*Expr>) {
 					let rightNode = right.value;
-					let node: *Expr = &mut BinaryExpr { op, leftNode, rightNode };
-					leftNode = node;
+					let node = BinaryExpr { op, leftNode, rightNode };
+					leftNode = this.allocExpr(node);
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected expression after operator");
 					return None<*Expr> { };
@@ -339,8 +339,8 @@ impl Parser {
 				let right = this.parseUnary();
 				if (right is Some<*Expr>) {
 					let rightNode = right.value;
-					let node: *Expr = &mut BinaryExpr { op, leftNode, rightNode };
-					leftNode = node;
+					let node = BinaryExpr { op, leftNode, rightNode };
+					leftNode = this.allocExpr(node);
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected expression after operator");
 					return None<*Expr> { };
