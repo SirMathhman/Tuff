@@ -1,5 +1,6 @@
 // Ownership and lifetime checking for pointers
 #include "type_checker.h"
+#include <algorithm>
 #include <iostream>
 
 bool TypeChecker::isPointerType(const std::string &type)
@@ -106,5 +107,103 @@ void TypeChecker::checkReturnLifetime(std::shared_ptr<ASTNode> node, std::shared
 		std::cerr << "Error: Cannot return pointer to local variable - it would create a dangling pointer at line "
 							<< line << "." << std::endl;
 		exit(1);
+	}
+}
+
+// Get the base variable name from a reference expression (handles field access)
+std::string TypeChecker::getBaseVariable(std::shared_ptr<ASTNode> node)
+{
+	if (!node)
+		return "";
+
+	if (node->type == ASTNodeType::IDENTIFIER)
+	{
+		return node->value;
+	}
+	else if (node->type == ASTNodeType::FIELD_ACCESS)
+	{
+		// For struct.field, get the base struct variable
+		return getBaseVariable(node->children[0]);
+	}
+	else if (node->type == ASTNodeType::DEREF_EXPR)
+	{
+		// For *ptr, get the pointer variable
+		return getBaseVariable(node->children[0]);
+	}
+	return "";
+}
+
+// Record a new borrow of a variable
+void TypeChecker::recordBorrow(const std::string &variable, BorrowKind kind, int line, const std::string &borrower)
+{
+	if (variable.empty())
+		return;
+
+	BorrowInfo info;
+	info.kind = kind;
+	info.scopeDepth = currentScopeDepth;
+	info.line = line;
+	info.borrower = borrower;
+
+	activeBorrows[variable].push_back(info);
+}
+
+// Check for borrow conflicts before creating a new borrow
+void TypeChecker::checkBorrowConflicts(const std::string &variable, BorrowKind requestedKind, int line)
+{
+	if (variable.empty())
+		return;
+
+	auto it = activeBorrows.find(variable);
+	if (it == activeBorrows.end() || it->second.empty())
+		return; // No existing borrows
+
+	const std::vector<BorrowInfo> &borrows = it->second;
+
+	if (requestedKind == BorrowKind::MUTABLE)
+	{
+		// Mutable borrow requires no existing borrows of any kind
+		for (const auto &borrow : borrows)
+		{
+			if (borrow.kind == BorrowKind::MUTABLE)
+			{
+				std::cerr << "Error: Cannot borrow '" << variable << "' as mutable because it is already mutably borrowed by '"
+									<< borrow.borrower << "' (line " << borrow.line << ") at line " << line << "." << std::endl;
+				exit(1);
+			}
+			else
+			{
+				std::cerr << "Error: Cannot borrow '" << variable << "' as mutable because it is already borrowed by '"
+									<< borrow.borrower << "' (line " << borrow.line << ") at line " << line << "." << std::endl;
+				exit(1);
+			}
+		}
+	}
+	else
+	{
+		// Shared borrow is only blocked by existing mutable borrows
+		for (const auto &borrow : borrows)
+		{
+			if (borrow.kind == BorrowKind::MUTABLE)
+			{
+				std::cerr << "Error: Cannot borrow '" << variable << "' because it is mutably borrowed by '"
+									<< borrow.borrower << "' (line " << borrow.line << ") at line " << line << "." << std::endl;
+				exit(1);
+			}
+		}
+	}
+}
+
+// Release all borrows created at or after the given scope depth
+void TypeChecker::releaseBorrowsAtScope(int scopeDepth)
+{
+	for (auto &pair : activeBorrows)
+	{
+		auto &borrows = pair.second;
+		borrows.erase(
+				std::remove_if(borrows.begin(), borrows.end(),
+											 [scopeDepth](const BorrowInfo &b)
+											 { return b.scopeDepth >= scopeDepth; }),
+				borrows.end());
 	}
 }

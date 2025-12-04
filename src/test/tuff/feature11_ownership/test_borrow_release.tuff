@@ -1,0 +1,11 @@
+// Test: Borrow is released after scope ends, allowing new borrow
+// Expected: exit 200
+
+let mut x: I32 = 42;
+{
+    let p: *mut I32 = &mut x;  // mutable borrow in inner scope
+    *p = 100;
+}  // borrow ends here
+let q: *mut I32 = &mut x;  // OK: x is no longer borrowed
+*q = 200;
+*q

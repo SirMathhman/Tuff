@@ -118,6 +118,18 @@ void TypeChecker::checkLetStmt(std::shared_ptr<ASTNode> node)
 		{
 			pointerOrigins[name] = origin;
 		}
+
+		// Record borrow for the referenced variable
+		if (init->type == ASTNodeType::REFERENCE_EXPR)
+		{
+			std::string baseVar = getBaseVariable(init->children[0]);
+			if (!baseVar.empty())
+			{
+				BorrowKind kind = init->isMutable ? BorrowKind::MUTABLE : BorrowKind::SHARED;
+				int borrowLine = init->line > 0 ? init->line : node->line;
+				recordBorrow(baseVar, kind, borrowLine, name);
+			}
+		}
 	}
 }
 
@@ -336,6 +348,9 @@ void TypeChecker::checkBlock(std::shared_ptr<ASTNode> node)
 	{
 		node->inferredType = "Void";
 	}
+
+	// Release borrows created in this scope before exiting
+	releaseBorrowsAtScope(currentScopeDepth);
 
 	currentScopeDepth--;
 

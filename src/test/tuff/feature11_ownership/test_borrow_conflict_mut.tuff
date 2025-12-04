@@ -1,0 +1,8 @@
+// Test: Cannot take mutable borrow while shared borrow exists
+// This should fail compilation
+// Expected error: already borrowed
+
+let mut x: I32 = 42;
+let p: *I32 = &x;         // shared borrow
+let q: *mut I32 = &mut x; // ERROR: x is already borrowed
+*q

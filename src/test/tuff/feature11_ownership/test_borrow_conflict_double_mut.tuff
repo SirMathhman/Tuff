@@ -1,0 +1,8 @@
+// Test: Cannot take second mutable borrow
+// This should fail compilation
+// Expected error: already mutably borrowed
+
+let mut x: I32 = 42;
+let p: *mut I32 = &mut x; // first mutable borrow
+let q: *mut I32 = &mut x; // ERROR: x is already mutably borrowed
+*q

@@ -11,8 +11,8 @@ struct SymbolInfo
 	std::string type;
 	ExprPtr exprType; // New: ExprPtr based type
 	bool isMutable;
-	int scopeDepth = 0; // 0 = global, 1+ = local
-	int originScopeDepth = -1; // For pointers: scope depth of the variable they reference (-1 = unknown/safe)
+	int scopeDepth = 0;					// 0 = global, 1+ = local
+	int originScopeDepth = -1;	// For pointers: scope depth of the variable they reference (-1 = unknown/safe)
 	std::string originVariable; // For pointers: name of the variable they reference (empty = unknown/safe)
 };
 
@@ -58,6 +58,21 @@ struct TypeAliasInfo
 	std::map<std::string, std::string> genericBounds; // T -> USize (type bounds)
 };
 
+// Borrow tracking for ownership safety
+enum class BorrowKind
+{
+	SHARED,	 // &x - immutable borrow
+	MUTABLE, // &mut x - mutable borrow
+};
+
+struct BorrowInfo
+{
+	BorrowKind kind;
+	int scopeDepth;				 // Scope where the borrow was created
+	int line;							 // Line number where borrow was created (for error messages)
+	std::string borrower; // Name of variable holding the borrow (for error messages)
+};
+
 class TypeChecker
 {
 private:
@@ -68,9 +83,10 @@ private:
 	std::map<std::string, ExpectInfo> expectTable;
 	std::map<std::string, TypeAliasInfo> typeAliasTable;
 	std::map<std::string, ExprPtr> narrowedTypes; // variable -> narrowed type (for union type narrowing)
-	std::map<std::string, int> pointerOrigins; // variable -> origin scope depth (for dangling pointer detection)
+	std::map<std::string, int> pointerOrigins;		// variable -> origin scope depth (for dangling pointer detection)
+	std::map<std::string, std::vector<BorrowInfo>> activeBorrows; // variable -> list of active borrows
 	int currentScopeDepth = 0;
-	int functionScopeDepth = 0; // Track the scope depth where function body starts
+	int functionScopeDepth = 0;										 // Track the scope depth where function body starts
 	std::string currentFunctionReturnType;				 // Track return type for validation
 	ExprPtr currentFunctionReturnTypeExpr;				 // New
 	std::string currentModule;										 // Track current module context
@@ -125,6 +141,10 @@ private:
 	bool isPointerType(const std::string &type);
 	int getExprOriginScope(std::shared_ptr<ASTNode> node);
 	void checkReturnLifetime(std::shared_ptr<ASTNode> node, std::shared_ptr<ASTNode> expr);
+	void recordBorrow(const std::string &variable, BorrowKind kind, int line, const std::string &borrower);
+	void checkBorrowConflicts(const std::string &variable, BorrowKind requestedKind, int line);
+	void releaseBorrowsAtScope(int scopeDepth);
+	std::string getBaseVariable(std::shared_ptr<ASTNode> node);
 
 	// Union type helpers
 	bool isUnionType(const std::string &type);

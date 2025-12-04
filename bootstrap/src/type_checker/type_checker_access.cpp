@@ -311,6 +311,16 @@ void TypeChecker::checkReferenceExpr(std::shared_ptr<ASTNode> node)
 
 	check(operand);
 
+	// Get the base variable being borrowed
+	std::string baseVar = getBaseVariable(operand);
+	BorrowKind borrowKind = node->isMutable ? BorrowKind::MUTABLE : BorrowKind::SHARED;
+
+	// Check for borrow conflicts
+	if (!baseVar.empty())
+	{
+		checkBorrowConflicts(baseVar, borrowKind, node->line);
+	}
+
 	// Track borrows for identifiers
 	if (operand->type == ASTNodeType::IDENTIFIER)
 	{
