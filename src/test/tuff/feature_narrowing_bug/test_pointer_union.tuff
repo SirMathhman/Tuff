@@ -1,0 +1,8 @@
+// Test parser generation with pointer types in unions
+
+fn testPointerUnion(): I32 => {
+    let x: *I32 | *Bool = 0;
+    return 0;
+}
+
+testPointerUnion();
