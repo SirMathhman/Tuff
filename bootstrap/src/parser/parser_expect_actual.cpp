@@ -28,11 +28,12 @@ std::shared_ptr<ASTNode> Parser::parseExpectDecl()
 	{
 		do
 		{
-			auto paramNode = std::make_shared<ASTNode>();
-			paramNode->type = ASTNodeType::IDENTIFIER;
+			std::string paramName;
+			int paramLine = peek().line;
+			int paramCol = peek().column;
 			if (peek().type == TokenType::IDENTIFIER)
 			{
-				paramNode->value = advance().value;
+				paramName = advance().value;
 			}
 			else
 			{
@@ -52,6 +53,7 @@ std::shared_ptr<ASTNode> Parser::parseExpectDecl()
 
 			// Use parseType to support complex types and lowercase identifiers
 			auto paramTypeNode = parseType();
+			auto paramNode = makeIdentifierNode(paramName, paramLine, paramCol);
 			paramNode->inferredType = typeToString(paramTypeNode);
 			paramNode->typeNode = paramTypeNode;
 			node->addChild(paramNode);
@@ -97,11 +99,12 @@ std::shared_ptr<ASTNode> Parser::parseActualDecl()
 	{
 		do
 		{
-			auto paramNode = std::make_shared<ASTNode>();
-			paramNode->type = ASTNodeType::IDENTIFIER;
+			std::string paramName;
+			int paramLine = peek().line;
+			int paramCol = peek().column;
 			if (peek().type == TokenType::IDENTIFIER)
 			{
-				paramNode->value = advance().value;
+				paramName = advance().value;
 			}
 			else
 			{
@@ -121,6 +124,7 @@ std::shared_ptr<ASTNode> Parser::parseActualDecl()
 
 			// Use parseType to support complex types and lowercase identifiers
 			auto paramTypeNode = parseType();
+			auto paramNode = makeIdentifierNode(paramName, paramLine, paramCol);
 			paramNode->inferredType = typeToString(paramTypeNode);
 			paramNode->typeNode = paramTypeNode;
 			node->addChild(paramNode);
@@ -143,10 +147,7 @@ std::shared_ptr<ASTNode> Parser::parseActualDecl()
 	else
 	{
 		auto expr = parseExpression();
-		auto returnNode = std::make_shared<ASTNode>();
-		returnNode->type = ASTNodeType::RETURN_STMT;
-		returnNode->addChild(expr);
-		node->addChild(returnNode);
+		node->addChild(makeReturnNode(expr));
 	}
 
 	match(TokenType::SEMICOLON);
@@ -188,11 +189,12 @@ std::shared_ptr<ASTNode> Parser::parseExternFnDecl()
 	{
 		do
 		{
-			auto paramNode = std::make_shared<ASTNode>();
-			paramNode->type = ASTNodeType::IDENTIFIER;
+			std::string paramName;
+			int paramLine = peek().line;
+			int paramCol = peek().column;
 			if (peek().type == TokenType::IDENTIFIER)
 			{
-				paramNode->value = advance().value;
+				paramName = advance().value;
 			}
 			else
 			{
@@ -212,6 +214,7 @@ std::shared_ptr<ASTNode> Parser::parseExternFnDecl()
 
 			// Use parseType to support complex types (pointers, etc.)
 			auto paramTypeNode = parseType();
+			auto paramNode = makeIdentifierNode(paramName, paramLine, paramCol);
 			paramNode->inferredType = typeToString(paramTypeNode);
 			paramNode->typeNode = paramTypeNode;
 			node->addChild(paramNode);

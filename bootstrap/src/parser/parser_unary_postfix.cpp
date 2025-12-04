@@ -10,11 +10,7 @@ std::shared_ptr<ASTNode> Parser::parseUnary()
 	{
 		Token op = tokens[pos - 1];
 		auto operand = parseUnary();
-		auto node = std::make_shared<ASTNode>();
-		node->type = ASTNodeType::UNARY_OP;
-		node->value = op.value;
-		node->addChild(operand);
-		return node;
+		return makeUnaryOpNode(op.value, operand, op.line, op.column);
 	}
 	// Handle reference: &x or &mut x
 	if (match(TokenType::AMPERSAND))
@@ -22,25 +18,14 @@ std::shared_ptr<ASTNode> Parser::parseUnary()
 		Token op = tokens[pos - 1];
 		bool isMutable = match(TokenType::MUT);
 		auto operand = parseUnary();
-		auto node = std::make_shared<ASTNode>();
-		node->type = ASTNodeType::REFERENCE_EXPR;
-		node->isMutable = isMutable;
-		node->line = op.line;
-		node->column = op.column;
-		node->addChild(operand);
-		return node;
+		return makeReferenceExprNode(operand, isMutable, op.line, op.column);
 	}
 	// Handle dereference: *p
 	if (match(TokenType::STAR))
 	{
 		Token op = tokens[pos - 1];
 		auto operand = parseUnary();
-		auto node = std::make_shared<ASTNode>();
-		node->type = ASTNodeType::DEREF_EXPR;
-		node->line = op.line;
-		node->column = op.column;
-		node->addChild(operand);
-		return node;
+		return makeDerefExprNode(operand, op.line, op.column);
 	}
 	return parsePostfix();
 }
@@ -58,13 +43,7 @@ std::shared_ptr<ASTNode> Parser::parsePostfix()
 			// Type checker will determine which based on left side type
 			Token dot = tokens[pos - 1];
 			auto fieldName = consume(TokenType::IDENTIFIER, "Expected field name after '.'");
-			auto node = std::make_shared<ASTNode>();
-			node->type = ASTNodeType::FIELD_ACCESS;
-			node->value = fieldName.value;
-			node->line = dot.line;
-			node->column = dot.column;
-			node->addChild(expr);
-			expr = node;
+			expr = makeFieldAccessNode(expr, fieldName.value, dot.line, dot.column);
 		}
 		else if (match(TokenType::LBRACKET))
 		{
@@ -72,28 +51,18 @@ std::shared_ptr<ASTNode> Parser::parsePostfix()
 			Token bracket = tokens[pos - 1];
 			auto index = parseExpression();
 			consume(TokenType::RBRACKET, "Expected ']' after index");
-			auto node = std::make_shared<ASTNode>();
-			node->type = ASTNodeType::INDEX_EXPR;
-			node->line = bracket.line;
-			node->column = bracket.column;
-			node->addChild(expr);
-			node->addChild(index);
-			expr = node;
+			expr = makeIndexExprNode(expr, index, bracket.line, bracket.column);
 		}
 		else if (peek().type == TokenType::LPAREN)
 		{
 			// Function call: expr(args)
 			Token paren = advance(); // consume '('
-			auto node = std::make_shared<ASTNode>();
-			node->type = ASTNodeType::CALL_EXPR;
-			node->line = paren.line;
-			node->column = paren.column;
-			node->addChild(expr); // callee
+			std::vector<std::shared_ptr<ASTNode>> args;
 
 			// Parse arguments
 			while (peek().type != TokenType::RPAREN && peek().type != TokenType::END_OF_FILE)
 			{
-				node->addChild(parseExpression());
+				args.push_back(parseExpression());
 				if (!match(TokenType::COMMA))
 				{
 					break;
@@ -101,7 +70,7 @@ std::shared_ptr<ASTNode> Parser::parsePostfix()
 			}
 
 			consume(TokenType::RPAREN, "Expected ')' after function arguments");
-			expr = node;
+			expr = makeCallExprNode(expr, args, paren.line, paren.column);
 		}
 		else
 		{

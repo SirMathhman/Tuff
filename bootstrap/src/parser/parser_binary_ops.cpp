@@ -16,12 +16,7 @@ std::shared_ptr<ASTNode> Parser::parseLogicalOr()
 	{
 		Token op = tokens[pos - 1];
 		auto right = parseLogicalAnd();
-		auto node = std::make_shared<ASTNode>();
-		node->type = ASTNodeType::BINARY_OP;
-		node->value = op.value;
-		node->addChild(left);
-		node->addChild(right);
-		left = node;
+		left = makeBinaryOpNode(op.value, left, right, op.line, op.column);
 	}
 	return left;
 }
@@ -33,12 +28,7 @@ std::shared_ptr<ASTNode> Parser::parseLogicalAnd()
 	{
 		Token op = tokens[pos - 1];
 		auto right = parseEquality();
-		auto node = std::make_shared<ASTNode>();
-		node->type = ASTNodeType::BINARY_OP;
-		node->value = op.value;
-		node->addChild(left);
-		node->addChild(right);
-		left = node;
+		left = makeBinaryOpNode(op.value, left, right, op.line, op.column);
 	}
 	return left;
 }
@@ -50,12 +40,7 @@ std::shared_ptr<ASTNode> Parser::parseEquality()
 	{
 		Token op = tokens[pos - 1];
 		auto right = parseIsCheck();
-		auto node = std::make_shared<ASTNode>();
-		node->type = ASTNodeType::BINARY_OP;
-		node->value = op.value;
-		node->addChild(left);
-		node->addChild(right);
-		left = node;
+		left = makeBinaryOpNode(op.value, left, right, op.line, op.column);
 	}
 	return left;
 }
@@ -73,6 +58,7 @@ std::shared_ptr<ASTNode> Parser::parseIsCheck()
 		node->value = targetType;				 // Store the type we're checking against
 		node->typeNode = targetTypeNode; // Store AST node
 		node->addChild(left);
+		node->data = IsExprNode{left, targetTypeNode};
 		left = node;
 	}
 	return left;
@@ -86,12 +72,7 @@ std::shared_ptr<ASTNode> Parser::parseComparison()
 	{
 		Token op = tokens[pos - 1];
 		auto right = parseAdditive();
-		auto node = std::make_shared<ASTNode>();
-		node->type = ASTNodeType::BINARY_OP;
-		node->value = op.value;
-		node->addChild(left);
-		node->addChild(right);
-		left = node;
+		left = makeBinaryOpNode(op.value, left, right, op.line, op.column);
 	}
 	return left;
 }
@@ -103,12 +84,7 @@ std::shared_ptr<ASTNode> Parser::parseAdditive()
 	{
 		Token op = tokens[pos - 1];
 		auto right = parseBitwiseAnd();
-		auto node = std::make_shared<ASTNode>();
-		node->type = ASTNodeType::BINARY_OP;
-		node->value = op.value;
-		node->addChild(left);
-		node->addChild(right);
-		left = node;
+		left = makeBinaryOpNode(op.value, left, right, op.line, op.column);
 	}
 	return left;
 }
@@ -118,13 +94,9 @@ std::shared_ptr<ASTNode> Parser::parseBitwiseAnd()
 	auto left = parseMultiplicative();
 	while (match(TokenType::AMPERSAND))
 	{
+		Token op = tokens[pos - 1];
 		auto right = parseMultiplicative();
-		auto node = std::make_shared<ASTNode>();
-		node->type = ASTNodeType::BINARY_OP;
-		node->value = "&";
-		node->addChild(left);
-		node->addChild(right);
-		left = node;
+		left = makeBinaryOpNode("&", left, right, op.line, op.column);
 	}
 	return left;
 }
@@ -136,12 +108,7 @@ std::shared_ptr<ASTNode> Parser::parseMultiplicative()
 	{
 		Token op = tokens[pos - 1];
 		auto right = parseUnary();
-		auto node = std::make_shared<ASTNode>();
-		node->type = ASTNodeType::BINARY_OP;
-		node->value = op.value;
-		node->addChild(left);
-		node->addChild(right);
-		left = node;
+		left = makeBinaryOpNode(op.value, left, right, op.line, op.column);
 	}
 	return left;
 }

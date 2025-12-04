@@ -1,7 +1,7 @@
 #pragma once
 
-#include "ast_typed.h"
-#include "ast_converter.h"
+#include "ast/ast_typed.h"
+#include "ast/ast_converter.h"
 #include <sstream>
 
 // ============================================================================

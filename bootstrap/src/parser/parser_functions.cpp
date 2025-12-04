@@ -117,9 +117,7 @@ std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 		}
 
 		// Create parameter node (name in value, type in inferredType)
-		auto paramNode = std::make_shared<ASTNode>();
-		paramNode->type = ASTNodeType::IDENTIFIER;
-		paramNode->value = paramName.value;
+		auto paramNode = makeIdentifierNode(paramName.value, paramName.line, paramName.column);
 		paramNode->inferredType = paramType;
 		paramNode->typeNode = paramTypeNode; // Store AST node
 		paramNode->typeBound = typeBound;		 // Store the bound expression
@@ -165,14 +163,10 @@ std::shared_ptr<ASTNode> Parser::parseFunctionDecl()
 		}
 
 		// Wrap expression in implicit return
-		auto returnNode = std::make_shared<ASTNode>();
-		returnNode->type = ASTNodeType::RETURN_STMT;
-		returnNode->addChild(expr);
+		auto returnNode = makeReturnNode(expr);
 
 		// Wrap in block
-		auto blockNode = std::make_shared<ASTNode>();
-		blockNode->type = ASTNodeType::BLOCK;
-		blockNode->addChild(returnNode);
+		auto blockNode = makeBlockNode({returnNode});
 		node->addChild(blockNode);
 	}
 

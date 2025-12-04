@@ -7,10 +7,10 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 {
 	if (match(TokenType::INT_LITERAL))
 	{
-		auto node = std::make_shared<ASTNode>();
-		node->type = ASTNodeType::LITERAL;
 		Token token = tokens[pos - 1];
 		std::string literal = token.value;
+		auto node = std::make_shared<ASTNode>();
+		node->type = ASTNodeType::LITERAL;
 		node->value = literal;
 		node->line = token.line;
 		node->column = token.column;
@@ -71,26 +71,14 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 	else if (match(TokenType::STRING_LITERAL))
 	{
 		// String literal: "hello" → string type (maps to const char* in C++)
-		auto node = std::make_shared<ASTNode>();
-		node->type = ASTNodeType::STRING_LITERAL;
 		Token token = tokens[pos - 1];
-		node->value = token.value;
-		node->line = token.line;
-		node->column = token.column;
-		node->inferredType = "string";
-		// exprType will be set by type checker if needed
-		return node;
+		return makeStringLiteralNode(token.value, token.line, token.column);
 	}
 	else if (match(TokenType::CHAR_LITERAL))
 	{
 		// Character literal: 'a' → U8 type
-		auto node = std::make_shared<ASTNode>();
-		node->type = ASTNodeType::CHAR_LITERAL;
 		Token token = tokens[pos - 1];
-		node->value = token.value; // Numeric value as string
-		node->line = token.line;
-		node->column = token.column;
-		node->inferredType = "U8";
+		auto node = makeCharLiteralNode(static_cast<char>(std::stoi(token.value)), token.line, token.column);
 		node->exprType = makePrimitive(PrimitiveKind::U8);
 		return node;
 	}
@@ -116,19 +104,15 @@ std::shared_ptr<ASTNode> Parser::parsePrimary()
 	}
 	else if (match(TokenType::TRUE))
 	{
-		auto node = std::make_shared<ASTNode>();
-		node->type = ASTNodeType::LITERAL;
-		node->value = "true";
-		node->inferredType = "Bool";
+		Token token = tokens[pos - 1];
+		auto node = makeLiteralNode("true", "Bool", token.line, token.column);
 		node->exprType = makePrimitive(PrimitiveKind::Bool);
 		return node;
 	}
 	else if (match(TokenType::FALSE))
 	{
-		auto node = std::make_shared<ASTNode>();
-		node->type = ASTNodeType::LITERAL;
-		node->value = "false";
-		node->inferredType = "Bool";
+		Token token = tokens[pos - 1];
+		auto node = makeLiteralNode("false", "Bool", token.line, token.column);
 		node->exprType = makePrimitive(PrimitiveKind::Bool);
 		return node;
 	}

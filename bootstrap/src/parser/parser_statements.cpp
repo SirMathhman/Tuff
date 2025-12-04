@@ -80,9 +80,7 @@ std::shared_ptr<ASTNode> Parser::parseStructDecl()
 		std::string fieldType = typeToString(fieldTypeNode);
 
 		// Create a field node (name in value, type in inferredType)
-		auto fieldNode = std::make_shared<ASTNode>();
-		fieldNode->type = ASTNodeType::IDENTIFIER;
-		fieldNode->value = fieldName.value;
+		auto fieldNode = makeIdentifierNode(fieldName.value, fieldName.line, fieldName.column);
 		fieldNode->inferredType = fieldType;
 		fieldNode->typeNode = fieldTypeNode; // Store AST node
 		node->addChild(fieldNode);
@@ -212,10 +210,7 @@ std::shared_ptr<ASTNode> Parser::parseAssignmentStatement()
 	}
 
 	Token name = consume(TokenType::IDENTIFIER, "Expected variable name");
-
-	lhs = std::make_shared<ASTNode>();
-	lhs->type = ASTNodeType::IDENTIFIER;
-	lhs->value = name.value;
+	lhs = makeIdentifierNode(name.value, name.line, name.column);
 
 	// Handle postfix operations: field access and indexing
 	while (true)
@@ -223,21 +218,14 @@ std::shared_ptr<ASTNode> Parser::parseAssignmentStatement()
 		if (match(TokenType::DOT))
 		{
 			auto fieldName = consume(TokenType::IDENTIFIER, "Expected field name after '.'");
-			auto fieldAccess = std::make_shared<ASTNode>();
-			fieldAccess->type = ASTNodeType::FIELD_ACCESS;
-			fieldAccess->value = fieldName.value;
-			fieldAccess->addChild(lhs);
-			lhs = fieldAccess;
+			lhs = makeFieldAccessNode(lhs, fieldName.value, fieldName.line, fieldName.column);
 		}
 		else if (match(TokenType::LBRACKET))
 		{
+			Token bracket = tokens[pos - 1];
 			auto index = parseExpression();
 			consume(TokenType::RBRACKET, "Expected ']' after index");
-			auto indexExpr = std::make_shared<ASTNode>();
-			indexExpr->type = ASTNodeType::INDEX_EXPR;
-			indexExpr->addChild(lhs);
-			indexExpr->addChild(index);
-			lhs = indexExpr;
+			lhs = makeIndexExprNode(lhs, index, bracket.line, bracket.column);
 		}
 		else
 		{
@@ -248,10 +236,7 @@ std::shared_ptr<ASTNode> Parser::parseAssignmentStatement()
 	// Wrap in dereference nodes
 	for (int i = 0; i < derefCount; i++)
 	{
-		auto deref = std::make_shared<ASTNode>();
-		deref->type = ASTNodeType::DEREF_EXPR;
-		deref->addChild(lhs);
-		lhs = deref;
+		lhs = makeDerefExprNode(lhs);
 	}
 
 	consume(TokenType::EQUALS, "Expected '='");
@@ -359,31 +344,26 @@ std::shared_ptr<ASTNode> Parser::parseBlock()
 		}
 		else if (peek().type == TokenType::BREAK)
 		{
-			advance();
-			auto node = std::make_shared<ASTNode>();
-			node->type = ASTNodeType::BREAK_STMT;
-			block->addChild(node);
+			Token token = advance();
+			block->addChild(makeBreakNode(token.line, token.column));
 			match(TokenType::SEMICOLON);
 		}
 		else if (peek().type == TokenType::CONTINUE)
 		{
-			advance();
-			auto node = std::make_shared<ASTNode>();
-			node->type = ASTNodeType::CONTINUE_STMT;
-			block->addChild(node);
+			Token token = advance();
+			block->addChild(makeContinueNode(token.line, token.column));
 			match(TokenType::SEMICOLON);
 		}
 		else if (peek().type == TokenType::RETURN)
 		{
-			advance();
-			auto node = std::make_shared<ASTNode>();
-			node->type = ASTNodeType::RETURN_STMT;
+			Token token = advance();
+			std::shared_ptr<ASTNode> retValue = nullptr;
 			if (peek().type != TokenType::SEMICOLON && peek().type != TokenType::RBRACE)
 			{
-				node->addChild(parseExpression());
+				retValue = parseExpression();
 			}
 			match(TokenType::SEMICOLON);
-			block->addChild(node);
+			block->addChild(makeReturnNode(retValue, token.line, token.column));
 		}
 		else if (isAssignmentStatement())
 		{
@@ -424,31 +404,26 @@ std::shared_ptr<ASTNode> Parser::parseStatementOrBlock()
 	}
 	else if (peek().type == TokenType::BREAK)
 	{
-		advance();
-		auto node = std::make_shared<ASTNode>();
-		node->type = ASTNodeType::BREAK_STMT;
+		Token token = advance();
 		match(TokenType::SEMICOLON);
-		return node;
+		return makeBreakNode(token.line, token.column);
 	}
 	else if (peek().type == TokenType::CONTINUE)
 	{
-		advance();
-		auto node = std::make_shared<ASTNode>();
-		node->type = ASTNodeType::CONTINUE_STMT;
+		Token token = advance();
 		match(TokenType::SEMICOLON);
-		return node;
+		return makeContinueNode(token.line, token.column);
 	}
 	else if (peek().type == TokenType::RETURN)
 	{
-		advance();
-		auto node = std::make_shared<ASTNode>();
-		node->type = ASTNodeType::RETURN_STMT;
+		Token token = advance();
+		std::shared_ptr<ASTNode> retValue = nullptr;
 		if (peek().type != TokenType::SEMICOLON && peek().type != TokenType::RBRACE)
 		{
-			node->addChild(parseExpression());
+			retValue = parseExpression();
 		}
 		match(TokenType::SEMICOLON);
-		return node;
+		return makeReturnNode(retValue, token.line, token.column);
 	}
 	else if (peek().type == TokenType::LET)
 	{

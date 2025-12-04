@@ -2,7 +2,7 @@
 #include <vector>
 #include <memory>
 #include "token.h"
-#include "ast.h"
+#include "ast/ast.h"
 
 class Parser
 {

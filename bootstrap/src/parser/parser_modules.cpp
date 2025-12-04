@@ -68,30 +68,25 @@ std::shared_ptr<ASTNode> Parser::parseModuleDecl()
 		}
 		else if (peek().type == TokenType::BREAK)
 		{
-			advance();
-			auto node = std::make_shared<ASTNode>();
-			node->type = ASTNodeType::BREAK_STMT;
-			moduleNode->addChild(node);
+			Token token = advance();
+			moduleNode->addChild(makeBreakNode(token.line, token.column));
 			match(TokenType::SEMICOLON);
 		}
 		else if (peek().type == TokenType::CONTINUE)
 		{
-			advance();
-			auto node = std::make_shared<ASTNode>();
-			node->type = ASTNodeType::CONTINUE_STMT;
-			moduleNode->addChild(node);
+			Token token = advance();
+			moduleNode->addChild(makeContinueNode(token.line, token.column));
 			match(TokenType::SEMICOLON);
 		}
 		else if (peek().type == TokenType::RETURN)
 		{
-			advance();
-			auto node = std::make_shared<ASTNode>();
-			node->type = ASTNodeType::RETURN_STMT;
+			Token token = advance();
+			std::shared_ptr<ASTNode> retValue = nullptr;
 			if (peek().type != TokenType::SEMICOLON && peek().type != TokenType::RBRACE)
 			{
-				node->addChild(parseExpression());
+				retValue = parseExpression();
 			}
-			moduleNode->addChild(node);
+			moduleNode->addChild(makeReturnNode(retValue, token.line, token.column));
 			match(TokenType::SEMICOLON);
 		}
 		else

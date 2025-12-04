@@ -4,7 +4,7 @@
 #include <set>
 #include <string>
 #include <vector>
-#include "ast.h"
+#include "ast/ast.h"
 
 struct SymbolInfo
 {

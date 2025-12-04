@@ -54,25 +54,16 @@ std::shared_ptr<ASTNode> Parser::parseType()
 	// Handle union types: Type0 | Type1 | Type2 (lowest precedence)
 	if (match(TokenType::PIPE))
 	{
-		auto unionNode = std::make_shared<ASTNode>();
-		unionNode->type = ASTNodeType::BINARY_OP;
-		unionNode->value = "|";
-		unionNode->addChild(leftType);
-
-		// First iteration
+		Token op = tokens[pos - 1];
 		auto rightType = parseIntersectionType();
-		unionNode->addChild(rightType);
+		auto unionNode = makeBinaryOpNode("|", leftType, rightType, op.line, op.column);
 
 		// Subsequent iterations
 		while (match(TokenType::PIPE))
 		{
+			op = tokens[pos - 1];
 			auto nextType = parseIntersectionType();
-			auto newUnion = std::make_shared<ASTNode>();
-			newUnion->type = ASTNodeType::BINARY_OP;
-			newUnion->value = "|";
-			newUnion->addChild(unionNode);
-			newUnion->addChild(nextType);
-			unionNode = newUnion;
+			unionNode = makeBinaryOpNode("|", unionNode, nextType, op.line, op.column);
 		}
 		return unionNode;
 	}
@@ -87,23 +78,15 @@ std::shared_ptr<ASTNode> Parser::parseIntersectionType()
 	// Handle intersection types: Type0 & Type1
 	if (match(TokenType::AMPERSAND))
 	{
-		auto intersectionNode = std::make_shared<ASTNode>();
-		intersectionNode->type = ASTNodeType::BINARY_OP;
-		intersectionNode->value = "&";
-		intersectionNode->addChild(leftType);
-
+		Token op = tokens[pos - 1];
 		auto rightType = parseSingleType();
-		intersectionNode->addChild(rightType);
+		auto intersectionNode = makeBinaryOpNode("&", leftType, rightType, op.line, op.column);
 
 		while (match(TokenType::AMPERSAND))
 		{
+			op = tokens[pos - 1];
 			auto nextType = parseSingleType();
-			auto newIntersection = std::make_shared<ASTNode>();
-			newIntersection->type = ASTNodeType::BINARY_OP;
-			newIntersection->value = "&";
-			newIntersection->addChild(intersectionNode);
-			newIntersection->addChild(nextType);
-			intersectionNode = newIntersection;
+			intersectionNode = makeBinaryOpNode("&", intersectionNode, nextType, op.line, op.column);
 		}
 		return intersectionNode;
 	}
