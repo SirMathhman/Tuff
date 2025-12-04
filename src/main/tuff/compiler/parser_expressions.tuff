@@ -12,8 +12,8 @@ use option;
 
 impl Parser {
 // Entry point for expression parsing
-fn parseExpression(this: *mut Parser): Option<*mut ASTNode> => {
-return this.parseLogicalOr();
+fn parseExpression(this: *mut Parser): Option<*Expr> => {
+	return this.parseLogicalOr();
 }
 
 // Logical OR (||) - lowest precedence (defined in parser_binary_ops.tuff)
