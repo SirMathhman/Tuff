@@ -1,8 +1,8 @@
 // Parser Module - Recursive Descent Parser for Tuff
 
 use crate::compiler::ast::*;
-use crate::compiler::lexer::{Token, TokenKind};
 use crate::compiler::error::{CompileError, ErrorKind, Span};
+use crate::compiler::lexer::{Token, TokenKind};
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -770,6 +770,7 @@ impl Parser {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compiler::lexer::Lexer;
 
     fn parse_string(input: &str) -> Result<Program, Vec<CompileError>> {
         let mut lexer = Lexer::new(input, "test.tuff");

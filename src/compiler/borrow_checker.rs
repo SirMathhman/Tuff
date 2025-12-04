@@ -8,7 +8,6 @@
 ///    - Exactly one mutable reference (&mut T)
 /// 3. References cannot outlive their referent
 /// 4. Moving a borrowed value is not allowed
-
 use crate::compiler::ast::*;
 use crate::compiler::error::{CompileError, ErrorKind, Span};
 use std::collections::{HashMap, HashSet};
@@ -104,20 +103,19 @@ impl BorrowChecker {
                     info.state = BorrowState::ImmutablyBorrowed;
                     Ok(())
                 }
-                BorrowState::MutablyBorrowed => {
-                    Err(CompileError::new(
-                        ErrorKind::CannotBorrowWhileBorrowed(name.to_string()),
-                        span.clone(),
-                        format!("Cannot borrow {} immutably while it is mutably borrowed", name),
-                    ))
-                }
-                BorrowState::Moved => {
-                    Err(CompileError::new(
-                        ErrorKind::CannotMoveWhileBorrowed(name.to_string()),
-                        span.clone(),
-                        format!("Cannot use {} after it has been moved", name),
-                    ))
-                }
+                BorrowState::MutablyBorrowed => Err(CompileError::new(
+                    ErrorKind::CannotBorrowWhileBorrowed(name.to_string()),
+                    span.clone(),
+                    format!(
+                        "Cannot borrow {} immutably while it is mutably borrowed",
+                        name
+                    ),
+                )),
+                BorrowState::Moved => Err(CompileError::new(
+                    ErrorKind::CannotMoveWhileBorrowed(name.to_string()),
+                    span.clone(),
+                    format!("Cannot use {} after it has been moved", name),
+                )),
             },
             None => Err(CompileError::new(
                 ErrorKind::UndefinedVariable(name.to_string()),
@@ -143,30 +141,24 @@ impl BorrowChecker {
                         info.state = BorrowState::MutablyBorrowed;
                         Ok(())
                     }
-                    BorrowState::ImmutablyBorrowed => {
-                        Err(CompileError::new(
-                            ErrorKind::CannotBorrowMutableTwice(name.to_string()),
-                            span.clone(),
-                            format!(
-                                "Cannot mutably borrow {} while it is immutably borrowed",
-                                name
-                            ),
-                        ))
-                    }
-                    BorrowState::MutablyBorrowed => {
-                        Err(CompileError::new(
-                            ErrorKind::CannotBorrowMutableTwice(name.to_string()),
-                            span.clone(),
-                            format!("Cannot mutably borrow {} twice", name),
-                        ))
-                    }
-                    BorrowState::Moved => {
-                        Err(CompileError::new(
-                            ErrorKind::CannotMoveWhileBorrowed(name.to_string()),
-                            span.clone(),
-                            format!("Cannot use {} after it has been moved", name),
-                        ))
-                    }
+                    BorrowState::ImmutablyBorrowed => Err(CompileError::new(
+                        ErrorKind::CannotBorrowMutableTwice(name.to_string()),
+                        span.clone(),
+                        format!(
+                            "Cannot mutably borrow {} while it is immutably borrowed",
+                            name
+                        ),
+                    )),
+                    BorrowState::MutablyBorrowed => Err(CompileError::new(
+                        ErrorKind::CannotBorrowMutableTwice(name.to_string()),
+                        span.clone(),
+                        format!("Cannot mutably borrow {} twice", name),
+                    )),
+                    BorrowState::Moved => Err(CompileError::new(
+                        ErrorKind::CannotMoveWhileBorrowed(name.to_string()),
+                        span.clone(),
+                        format!("Cannot use {} after it has been moved", name),
+                    )),
                 }
             }
             None => Err(CompileError::new(
@@ -192,13 +184,11 @@ impl BorrowChecker {
                         format!("Cannot move {} while it is borrowed", name),
                     ))
                 }
-                BorrowState::Moved => {
-                    Err(CompileError::new(
-                        ErrorKind::CannotMoveWhileBorrowed(name.to_string()),
-                        span.clone(),
-                        format!("Cannot use {} after it has been moved", name),
-                    ))
-                }
+                BorrowState::Moved => Err(CompileError::new(
+                    ErrorKind::CannotMoveWhileBorrowed(name.to_string()),
+                    span.clone(),
+                    format!("Cannot use {} after it has been moved", name),
+                )),
             },
             None => Err(CompileError::new(
                 ErrorKind::UndefinedVariable(name.to_string()),
@@ -379,7 +369,11 @@ mod tests {
     #[test]
     fn test_declare_and_lookup() {
         let mut checker = BorrowChecker::new();
-        checker.declare("x".to_string(), false, Some(Type::Primitive("i32".to_string())));
+        checker.declare(
+            "x".to_string(),
+            false,
+            Some(Type::Primitive("i32".to_string())),
+        );
         let info = checker.lookup("x");
         assert!(info.is_some());
         assert_eq!(info.unwrap().state, BorrowState::Available);
@@ -388,7 +382,11 @@ mod tests {
     #[test]
     fn test_immutable_borrow() {
         let mut checker = BorrowChecker::new();
-        checker.declare("x".to_string(), false, Some(Type::Primitive("i32".to_string())));
+        checker.declare(
+            "x".to_string(),
+            false,
+            Some(Type::Primitive("i32".to_string())),
+        );
         let result = checker.borrow_immut("x", &make_span());
         assert!(result.is_ok());
         let info = checker.lookup("x").unwrap();
@@ -398,7 +396,11 @@ mod tests {
     #[test]
     fn test_mutable_borrow() {
         let mut checker = BorrowChecker::new();
-        checker.declare("x".to_string(), true, Some(Type::Primitive("i32".to_string())));
+        checker.declare(
+            "x".to_string(),
+            true,
+            Some(Type::Primitive("i32".to_string())),
+        );
         let result = checker.borrow_mut("x", &make_span());
         assert!(result.is_ok());
         let info = checker.lookup("x").unwrap();
@@ -408,7 +410,11 @@ mod tests {
     #[test]
     fn test_cannot_mutably_borrow_immutable() {
         let mut checker = BorrowChecker::new();
-        checker.declare("x".to_string(), false, Some(Type::Primitive("i32".to_string())));
+        checker.declare(
+            "x".to_string(),
+            false,
+            Some(Type::Primitive("i32".to_string())),
+        );
         let result = checker.borrow_mut("x", &make_span());
         assert!(result.is_err());
     }
@@ -416,7 +422,11 @@ mod tests {
     #[test]
     fn test_cannot_borrow_while_mutably_borrowed() {
         let mut checker = BorrowChecker::new();
-        checker.declare("x".to_string(), true, Some(Type::Primitive("i32".to_string())));
+        checker.declare(
+            "x".to_string(),
+            true,
+            Some(Type::Primitive("i32".to_string())),
+        );
         assert!(checker.borrow_mut("x", &make_span()).is_ok());
         let result = checker.borrow_immut("x", &make_span());
         assert!(result.is_err());
@@ -425,7 +435,11 @@ mod tests {
     #[test]
     fn test_cannot_mutably_borrow_twice() {
         let mut checker = BorrowChecker::new();
-        checker.declare("x".to_string(), true, Some(Type::Primitive("i32".to_string())));
+        checker.declare(
+            "x".to_string(),
+            true,
+            Some(Type::Primitive("i32".to_string())),
+        );
         assert!(checker.borrow_mut("x", &make_span()).is_ok());
         let result = checker.borrow_mut("x", &make_span());
         assert!(result.is_err());
@@ -434,7 +448,11 @@ mod tests {
     #[test]
     fn test_move_available_var() {
         let mut checker = BorrowChecker::new();
-        checker.declare("x".to_string(), false, Some(Type::Primitive("i32".to_string())));
+        checker.declare(
+            "x".to_string(),
+            false,
+            Some(Type::Primitive("i32".to_string())),
+        );
         let result = checker.move_var("x", &make_span());
         assert!(result.is_ok());
         let info = checker.lookup("x").unwrap();
@@ -444,7 +462,11 @@ mod tests {
     #[test]
     fn test_cannot_move_borrowed_var() {
         let mut checker = BorrowChecker::new();
-        checker.declare("x".to_string(), true, Some(Type::Primitive("i32".to_string())));
+        checker.declare(
+            "x".to_string(),
+            true,
+            Some(Type::Primitive("i32".to_string())),
+        );
         assert!(checker.borrow_mut("x", &make_span()).is_ok());
         let result = checker.move_var("x", &make_span());
         assert!(result.is_err());
@@ -453,12 +475,20 @@ mod tests {
     #[test]
     fn test_scopes() {
         let mut checker = BorrowChecker::new();
-        checker.declare("x".to_string(), false, Some(Type::Primitive("i32".to_string())));
+        checker.declare(
+            "x".to_string(),
+            false,
+            Some(Type::Primitive("i32".to_string())),
+        );
         assert!(checker.lookup("x").is_some());
 
         checker.push_scope();
         assert!(checker.lookup("x").is_some()); // Can see from outer scope
-        checker.declare("y".to_string(), false, Some(Type::Primitive("bool".to_string())));
+        checker.declare(
+            "y".to_string(),
+            false,
+            Some(Type::Primitive("bool".to_string())),
+        );
         assert!(checker.lookup("y").is_some());
 
         checker.pop_scope();
