@@ -44,22 +44,22 @@ impl Parser {
 	}
 	
 	// Equality (==, !=)
-	fn parseEquality(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseEquality(this: *mut Parser): Option<*Expr> => {
 		let left = this.parseComparison();
-		if (!(left is Some<*mut ASTNode>)) {
-			return None<*mut ASTNode> { };
+		if (!(left is Some<*Expr>)) {
+			return None<*Expr> { };
 		}
 		
-		if (left is Some<*mut ASTNode>) {
+		if (left is Some<*Expr>) {
 			let mut leftNode = left.value;
 			
 			loop {
 				// Check which operator we have
-				let mut op: string = "";
+				let mut op: BinaryOp = BinaryOp.Eq;
 				if (this.check(TokenType.EqualEqual)) {
-					op = "==";
+					op = BinaryOp.Eq;
 				} else if (this.check(TokenType.NotEqual)) {
-					op = "!=";
+					op = BinaryOp.Ne;
 				} else {
 					// No matching operator, exit loop
 					break;
@@ -68,46 +68,43 @@ impl Parser {
 				this.advance();
 				
 				let right = this.parseComparison();
-				if (right is Some<*mut ASTNode>) {
+				if (right is Some<*Expr>) {
 					let rightNode = right.value;
-					let node = ASTNode::new(ASTNodeType.BinaryOp);
-					node.value = op;
-					node.addChild(leftNode);
-					node.addChild(rightNode);
+					let node: *Expr = &mut BinaryExpr { op, leftNode, rightNode };
 					leftNode = node;
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected expression after operator");
-					return None<*mut ASTNode> { };
+					return None<*Expr> { };
 				}
 			}
 			
-			return Some<*mut ASTNode> { leftNode };
+			return Some<*Expr> { leftNode };
 		}
 		
-		return None<*mut ASTNode> { };
+		return None<*Expr> { };
 	}
 	
 	// Relational (<, >, <=, >=)
-	fn parseComparison(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseComparison(this: *mut Parser): Option<*Expr> => {
 		let left = this.parseBitwiseOr();
-		if (!(left is Some<*mut ASTNode>)) {
-			return None<*mut ASTNode> { };
+		if (!(left is Some<*Expr>)) {
+			return None<*Expr> { };
 		}
 		
-		if (left is Some<*mut ASTNode>) {
+		if (left is Some<*Expr>) {
 			let mut leftNode = left.value;
 			
 			loop {
 				// Check which operator we have
-				let mut op: string = "";
+				let mut op: BinaryOp = BinaryOp.Lt;
 				if (this.check(TokenType.Less)) {
-					op = "<";
+					op = BinaryOp.Lt;
 				} else if (this.check(TokenType.Greater)) {
-					op = ">";
+					op = BinaryOp.Gt;
 				} else if (this.check(TokenType.LessEqual)) {
-					op = "<=";
+					op = BinaryOp.Le;
 				} else if (this.check(TokenType.GreaterEqual)) {
-					op = ">=";
+					op = BinaryOp.Ge;
 				} else {
 					// No matching operator, exit loop
 					break;
@@ -116,33 +113,30 @@ impl Parser {
 				this.advance();
 				
 				let right = this.parseBitwiseOr();
-				if (right is Some<*mut ASTNode>) {
+				if (right is Some<*Expr>) {
 					let rightNode = right.value;
-					let node = ASTNode::new(ASTNodeType.BinaryOp);
-					node.value = op;
-					node.addChild(leftNode);
-					node.addChild(rightNode);
+					let node: *Expr = &mut BinaryExpr { op, leftNode, rightNode };
 					leftNode = node;
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected expression after operator");
-					return None<*mut ASTNode> { };
+					return None<*Expr> { };
 				}
 			}
 			
-			return Some<*mut ASTNode> { leftNode };
+			return Some<*Expr> { leftNode };
 		}
 		
-		return None<*mut ASTNode> { };
+		return None<*Expr> { };
 	}
 	
 	// Bitwise OR (|)
-	fn parseBitwiseOr(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseBitwiseOr(this: *mut Parser): Option<*Expr> => {
 		let left = this.parseBitwiseXor();
-		if (!(left is Some<*mut ASTNode>)) {
-			return None<*mut ASTNode> { };
+		if (!(left is Some<*Expr>)) {
+			return None<*Expr> { };
 		}
 		
-		if (left is Some<*mut ASTNode>) {
+		if (left is Some<*Expr>) {
 			let mut leftNode = left.value;
 			
 			loop {
@@ -152,33 +146,30 @@ impl Parser {
 				this.advance();
 				
 				let right = this.parseBitwiseXor();
-				if (right is Some<*mut ASTNode>) {
+				if (right is Some<*Expr>) {
 					let rightNode = right.value;
-					let node = ASTNode::new(ASTNodeType.BinaryOp);
-					node.value = "|";
-					node.addChild(leftNode);
-					node.addChild(rightNode);
+					let node: *Expr = &mut BinaryExpr { BinaryOp.BitwiseOr, leftNode, rightNode };
 					leftNode = node;
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected expression after |");
-					return None<*mut ASTNode> { };
+					return None<*Expr> { };
 				}
 			}
 			
-			return Some<*mut ASTNode> { leftNode };
+			return Some<*Expr> { leftNode };
 		}
 		
-		return None<*mut ASTNode> { };
+		return None<*Expr> { };
 	}
 	
 	// Bitwise XOR (^)
-	fn parseBitwiseXor(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseBitwiseXor(this: *mut Parser): Option<*Expr> => {
 		let left = this.parseBitwiseAnd();
-		if (!(left is Some<*mut ASTNode>)) {
-			return None<*mut ASTNode> { };
+		if (!(left is Some<*Expr>)) {
+			return None<*Expr> { };
 		}
 		
-		if (left is Some<*mut ASTNode>) {
+		if (left is Some<*Expr>) {
 			let mut leftNode = left.value;
 			
 			loop {
@@ -188,33 +179,30 @@ impl Parser {
 				this.advance();
 				
 				let right = this.parseBitwiseAnd();
-				if (right is Some<*mut ASTNode>) {
+				if (right is Some<*Expr>) {
 					let rightNode = right.value;
-					let node = ASTNode::new(ASTNodeType.BinaryOp);
-					node.value = "^";
-					node.addChild(leftNode);
-					node.addChild(rightNode);
+					let node: *Expr = &mut BinaryExpr { BinaryOp.BitwiseXor, leftNode, rightNode };
 					leftNode = node;
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected expression after ^");
-					return None<*mut ASTNode> { };
+					return None<*Expr> { };
 				}
 			}
 			
-			return Some<*mut ASTNode> { leftNode };
+			return Some<*Expr> { leftNode };
 		}
 		
-		return None<*mut ASTNode> { };
+		return None<*Expr> { };
 	}
 	
 	// Bitwise AND (&)
-	fn parseBitwiseAnd(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseBitwiseAnd(this: *mut Parser): Option<*Expr> => {
 		let left = this.parseShift();
-		if (!(left is Some<*mut ASTNode>)) {
-			return None<*mut ASTNode> { };
+		if (!(left is Some<*Expr>)) {
+			return None<*Expr> { };
 		}
 		
-		if (left is Some<*mut ASTNode>) {
+		if (left is Some<*Expr>) {
 			let mut leftNode = left.value;
 			
 			loop {
@@ -224,42 +212,39 @@ impl Parser {
 				this.advance();
 				
 				let right = this.parseShift();
-				if (right is Some<*mut ASTNode>) {
+				if (right is Some<*Expr>) {
 					let rightNode = right.value;
-					let node = ASTNode::new(ASTNodeType.BinaryOp);
-					node.value = "&";
-					node.addChild(leftNode);
-					node.addChild(rightNode);
+					let node: *Expr = &mut BinaryExpr { BinaryOp.BitwiseAnd, leftNode, rightNode };
 					leftNode = node;
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected expression after &");
-					return None<*mut ASTNode> { };
+					return None<*Expr> { };
 				}
 			}
 			
-			return Some<*mut ASTNode> { leftNode };
+			return Some<*Expr> { leftNode };
 		}
 		
-		return None<*mut ASTNode> { };
+		return None<*Expr> { };
 	}
 	
 	// Shift (<<, >>)
-	fn parseShift(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseShift(this: *mut Parser): Option<*Expr> => {
 		let left = this.parseAdditive();
-		if (!(left is Some<*mut ASTNode>)) {
-			return None<*mut ASTNode> { };
+		if (!(left is Some<*Expr>)) {
+			return None<*Expr> { };
 		}
 		
-		if (left is Some<*mut ASTNode>) {
+		if (left is Some<*Expr>) {
 			let mut leftNode = left.value;
 			
 			loop {
 				// Check which operator we have
-				let mut op: string = "";
+				let mut op: BinaryOp = BinaryOp.LeftShift;
 				if (this.check(TokenType.LeftShift)) {
-					op = "<<";
+					op = BinaryOp.LeftShift;
 				} else if (this.check(TokenType.RightShift)) {
-					op = ">>";
+					op = BinaryOp.RightShift;
 				} else {
 					// No matching operator, exit loop
 					break;
@@ -268,42 +253,39 @@ impl Parser {
 				this.advance();
 				
 				let right = this.parseAdditive();
-				if (right is Some<*mut ASTNode>) {
+				if (right is Some<*Expr>) {
 					let rightNode = right.value;
-					let node = ASTNode::new(ASTNodeType.BinaryOp);
-					node.value = op;
-					node.addChild(leftNode);
-					node.addChild(rightNode);
+					let node: *Expr = &mut BinaryExpr { op, leftNode, rightNode };
 					leftNode = node;
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected expression after operator");
-					return None<*mut ASTNode> { };
+					return None<*Expr> { };
 				}
 			}
 			
-			return Some<*mut ASTNode> { leftNode };
+			return Some<*Expr> { leftNode };
 		}
 		
-		return None<*mut ASTNode> { };
+		return None<*Expr> { };
 	}
 	
 	// Additive (+, -)
-	fn parseAdditive(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseAdditive(this: *mut Parser): Option<*Expr> => {
 		let left = this.parseMultiplicative();
-		if (!(left is Some<*mut ASTNode>)) {
-			return None<*mut ASTNode> { };
+		if (!(left is Some<*Expr>)) {
+			return None<*Expr> { };
 		}
 		
-		if (left is Some<*mut ASTNode>) {
+		if (left is Some<*Expr>) {
 			let mut leftNode = left.value;
 			
 			loop {
 				// Check which operator we have
-				let mut op: string = "";
+				let mut op: BinaryOp = BinaryOp.Add;
 				if (this.check(TokenType.Plus)) {
-					op = "+";
+					op = BinaryOp.Add;
 				} else if (this.check(TokenType.Minus)) {
-					op = "-";
+					op = BinaryOp.Sub;
 				} else {
 					// No matching operator, exit loop
 					break;
@@ -312,44 +294,41 @@ impl Parser {
 				this.advance();
 				
 				let right = this.parseMultiplicative();
-				if (right is Some<*mut ASTNode>) {
+				if (right is Some<*Expr>) {
 					let rightNode = right.value;
-					let node = ASTNode::new(ASTNodeType.BinaryOp);
-					node.value = op;
-					node.addChild(leftNode);
-					node.addChild(rightNode);
+					let node: *Expr = &mut BinaryExpr { op, leftNode, rightNode };
 					leftNode = node;
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected expression after operator");
-					return None<*mut ASTNode> { };
+					return None<*Expr> { };
 				}
 			}
 			
-			return Some<*mut ASTNode> { leftNode };
+			return Some<*Expr> { leftNode };
 		}
 		
-		return None<*mut ASTNode> { };
+		return None<*Expr> { };
 	}
 	
 	// Multiplicative (*, /, %)
-	fn parseMultiplicative(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseMultiplicative(this: *mut Parser): Option<*Expr> => {
 		let left = this.parseUnary();
-		if (!(left is Some<*mut ASTNode>)) {
-			return None<*mut ASTNode> { };
+		if (!(left is Some<*Expr>)) {
+			return None<*Expr> { };
 		}
 		
-		if (left is Some<*mut ASTNode>) {
+		if (left is Some<*Expr>) {
 			let mut leftNode = left.value;
 			
 			loop {
 				// Check which operator we have
-				let mut op: string = "";
+				let mut op: BinaryOp = BinaryOp.Mul;
 				if (this.check(TokenType.Star)) {
-					op = "*";
+					op = BinaryOp.Mul;
 				} else if (this.check(TokenType.Slash)) {
-					op = "/";
+					op = BinaryOp.Div;
 				} else if (this.check(TokenType.Percent)) {
-					op = "%";
+					op = BinaryOp.Mod;
 				} else {
 					// No matching operator, exit loop
 					break;
@@ -358,22 +337,19 @@ impl Parser {
 				this.advance();
 				
 				let right = this.parseUnary();
-				if (right is Some<*mut ASTNode>) {
+				if (right is Some<*Expr>) {
 					let rightNode = right.value;
-					let node = ASTNode::new(ASTNodeType.BinaryOp);
-					node.value = op;
-					node.addChild(leftNode);
-					node.addChild(rightNode);
+					let node: *Expr = &mut BinaryExpr { op, leftNode, rightNode };
 					leftNode = node;
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected expression after operator");
-					return None<*mut ASTNode> { };
+					return None<*Expr> { };
 				}
 			}
 			
-			return Some<*mut ASTNode> { leftNode };
+			return Some<*Expr> { leftNode };
 		}
 		
-		return None<*mut ASTNode> { };
+		return None<*Expr> { };
 	}
 }
