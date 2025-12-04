@@ -149,9 +149,13 @@ struct LoopStmtNode
 	ASTNodePtr body;
 };
 
-struct BreakStmtNode {};
+struct BreakStmtNode
+{
+};
 
-struct ContinueStmtNode {};
+struct ContinueStmtNode
+{
+};
 
 struct ReturnStmtNode
 {
