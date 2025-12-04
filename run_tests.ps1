@@ -144,6 +144,15 @@ function Initialize-TestEnvironment {
         Write-ColorOutput "Stdlib compiled ($($Script:StdlibObjFiles.Count) object files, cached for next run)" $ColorGray
     }
     
+    # Store stdlib hash for test cache invalidation
+    $Script:StdlibHash = $currentHashStr
+    
+    # Test cache directory (for compiled test .o files)
+    $Script:TestCacheDir = Join-Path $Script:StdlibCacheDir "tests"
+    if (-not (Test-Path $Script:TestCacheDir)) {
+        New-Item -ItemType Directory -Path $Script:TestCacheDir -Force | Out-Null
+    }
+    
     # Use temp directory only for test-specific outputs
     if (Test-Path $TempDir) { Remove-Item $TempDir -Recurse -Force }
     New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
@@ -197,90 +206,6 @@ function Get-TuffTests([string]$InputPath = "", [string]$FeatureFilter = "") {
         }
     }
     return $tests
-}
-
-function Test-TuffFile([hashtable]$Test) {
-    $result = @{
-        Test = $Test; Status = "UNKNOWN"; Message = ""; CppExitCode = $null
-        ExpectedExitCode = if ($Script:ExpectedExitCodes.ContainsKey($Test.RelativePath)) { 
-            $Script:ExpectedExitCodes[$Test.RelativePath] 
-        } else { $null }
-    }
-    
-    if ($Test.RelativePath -in $Script:SkippedTestsList) {
-        $result.Status = "SKIPPED"; $result.Message = "Skipped via config"
-        return $result
-    }
-
-    # Negative test check
-    if ($Script:NegativeTests.ContainsKey($Test.RelativePath)) {
-        $expectedError = $Script:NegativeTests[$Test.RelativePath]
-        $output = & $CompilerPath --sources $Test.Path --target "js" 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            $result.Status = "FAILED"; $result.Message = "Expected compilation to fail"
-        } elseif (($output -join "`n") -match [regex]::Escape($expectedError)) {
-            $result.Status = "PASSED"; $result.Message = "Correctly rejected"
-        } else {
-            $result.Status = "FAILED"; $result.Message = "Wrong error"
-        }
-        return $result
-    }
-
-    # Compile to C++ - only the test file, stdlib is pre-compiled
-    $tuffSourceSet = Join-Path $RootDir "src\main\tuff"
-    $cppSourceSet = Join-Path $RootDir "src\main\cpp"
-    $sources = "$($Test.Path)"
-    $sourceSets = "$tuffSourceSet,$cppSourceSet"
-    
-    # Use test-specific output directory (include feature to avoid collisions)
-    $testOutputDir = Join-Path $TempDir "dist_$($Test.Feature)_$($Test.Name)"
-    New-Item -Path $testOutputDir -ItemType Directory -Force | Out-Null
-    
-    # Compile only the test file (stdlib already compiled)
-    $compileOutput = & $CompilerPath --source-sets $sourceSets --sources $sources --target "cpp" --output-dir $testOutputDir 2>&1
-    $env:TUFF_OUTPUT_DIR = $null
-    if ($LASTEXITCODE -ne 0) {
-        $errorMsg = ($compileOutput | Select-Object -First 20) -join "`n"
-        $result.Status = "ERROR"; $result.Message = "Tuff compilation failed:`n$errorMsg"
-        return $result
-    }
-
-    # Find generated .cpp files for this test only (not stdlib)
-    $testCppFiles = @(Get-ChildItem -Path $testOutputDir -Filter "tuff_test_*.cpp" -File | Select-Object -ExpandProperty FullName)
-    
-    # Use pre-compiled stdlib object files
-    $allFiles = @($testCppFiles) + @($Script:StdlibObjFiles)
-    # Use unique exe name to avoid collision in parallel execution
-    $exeFile = Join-Path $TempDir "$($Test.Feature)_$($Test.Name).exe"
-    
-    try {
-        $includeDir = Join-Path $RootDir "bootstrap\src\include"
-        $builtinsDir = Join-Path $RootDir "src\main\cpp"
-        $clangArgs = @("-std=c++17", "-I", $includeDir, "-I", $builtinsDir, "-I", $testOutputDir, "-I", $Script:StdlibDir) + $allFiles + @("-o", $exeFile)
-        $cppCompileOutput = & clang++ @clangArgs 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            $errorLines = ($cppCompileOutput | Select-String "error:" | Select-Object -First 3) -join "; "
-            $result.Status = "ERROR"; $result.Message = "C++ compilation failed: $errorLines"
-            return $result
-        }
-        $null = & $exeFile 2>&1
-        $result.CppExitCode = $LASTEXITCODE
-        
-        if ($null -ne $result.ExpectedExitCode) {
-            if ($result.CppExitCode -eq $result.ExpectedExitCode) {
-                $result.Status = "PASSED"; $result.Message = "Exit: $($result.CppExitCode)"
-            } else {
-                $result.Status = "FAILED"
-                $result.Message = "Expected $($result.ExpectedExitCode), got $($result.CppExitCode)"
-            }
-        } else {
-            $result.Status = "PASSED"; $result.Message = "Exit: $($result.CppExitCode)"
-        }
-    } finally {
-        Remove-Item $exeFile -Force -ErrorAction SilentlyContinue
-        Remove-Item $testOutputDir -Recurse -Force -ErrorAction SilentlyContinue
-    }
-    return $result
 }
 
 function Show-TestSummary {
@@ -349,7 +274,10 @@ try {
             $TempDir = $using:TempDir
             $RootDir = $using:RootDir
             $StdlibDir = $using:Script:StdlibDir
+            $StdlibObjDir = $using:Script:StdlibObjDir
             $StdlibObjFiles = $using:Script:StdlibObjFiles
+            $StdlibHash = $using:Script:StdlibHash
+            $TestCacheDir = $using:Script:TestCacheDir
             $SkippedTestsList = $using:Script:SkippedTestsList
             $NegativeTests = $using:Script:NegativeTests
             $ExpectedExitCodes = $using:Script:ExpectedExitCodes
@@ -378,39 +306,71 @@ try {
                 return $result
             }
             
-            # Compile to C++ - only test file, stdlib is pre-compiled
-            $tuffSourceSet = Join-Path $RootDir "src\main\tuff"
-            $cppSourceSet = Join-Path $RootDir "src\main\cpp"
-            $sources = "$($Test.Path)"
-            $sourceSets = "$tuffSourceSet,$cppSourceSet"
+            # Check test cache - hash test file mtime + stdlib hash
+            $testMtime = (Get-Item $Test.Path).LastWriteTimeUtc.Ticks
+            $testCacheKey = "$($Test.Feature)_$($Test.Name)"
+            $testCacheManifest = Join-Path $TestCacheDir "$testCacheKey.json"
+            $testObjFile = Join-Path $TestCacheDir "$testCacheKey.o"
             
-            # Use test-specific output directory (include feature to avoid collisions)
-            $testOutputDir = Join-Path $TempDir "dist_$($Test.Feature)_$($Test.Name)"
-            New-Item -Path $testOutputDir -ItemType Directory -Force | Out-Null
-            
-            $compileOutput = & $CompilerPath --source-sets $sourceSets --sources $sources --target "cpp" --output-dir $testOutputDir 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                $errorMsg = ($compileOutput | Select-Object -First 20) -join "`n"
-                $result.Status = "ERROR"; $result.Message = "Tuff compile failed:`n$errorMsg"
-                return $result
+            $testCacheValid = $false
+            if ((Test-Path $testCacheManifest) -and (Test-Path $testObjFile)) {
+                try {
+                    $manifest = Get-Content $testCacheManifest -Raw | ConvertFrom-Json
+                    if ($manifest.testMtime -eq $testMtime -and $manifest.stdlibHash -eq $StdlibHash) {
+                        $testCacheValid = $true
+                    }
+                } catch { }
             }
             
-            # Find generated .cpp files for this test only
-            $testCppFiles = @(Get-ChildItem -Path $testOutputDir -Filter "tuff_test_*.cpp" -File | Select-Object -ExpandProperty FullName)
+            if (-not $testCacheValid) {
+                # Compile to C++ - only test file, stdlib is pre-compiled
+                $tuffSourceSet = Join-Path $RootDir "src\main\tuff"
+                $cppSourceSet = Join-Path $RootDir "src\main\cpp"
+                $sources = "$($Test.Path)"
+                $sourceSets = "$tuffSourceSet,$cppSourceSet"
+                
+                # Use test-specific output directory
+                $testOutputDir = Join-Path $TempDir "dist_$testCacheKey"
+                New-Item -Path $testOutputDir -ItemType Directory -Force | Out-Null
+                
+                $compileOutput = & $CompilerPath --source-sets $sourceSets --sources $sources --target "cpp" --output-dir $testOutputDir 2>&1
+                if ($LASTEXITCODE -ne 0) {
+                    $errorMsg = ($compileOutput | Select-Object -First 20) -join "`n"
+                    $result.Status = "ERROR"; $result.Message = "Tuff compile failed:`n$errorMsg"
+                    return $result
+                }
+                
+                # Compile test C++ to object file
+                $testCppFile = Get-ChildItem -Path $testOutputDir -Filter "tuff_test_*.cpp" -File | Select-Object -First 1 -ExpandProperty FullName
+                if (-not $testCppFile) {
+                    $result.Status = "ERROR"; $result.Message = "No test cpp file generated"
+                    return $result
+                }
+                
+                $includeDir = Join-Path $RootDir "bootstrap\src\include"
+                $builtinsDir = Join-Path $RootDir "src\main\cpp"
+                $compileResult = & clang++ -std=c++17 -c -I $includeDir -I $builtinsDir -I $testOutputDir -I $StdlibDir $testCppFile -o $testObjFile 2>&1
+                if ($LASTEXITCODE -ne 0) {
+                    $result.Status = "ERROR"; $result.Message = "C++ compile failed: $compileResult"
+                    Remove-Item $testOutputDir -Recurse -Force -ErrorAction SilentlyContinue
+                    return $result
+                }
+                
+                # Save cache manifest
+                @{ testMtime = $testMtime; stdlibHash = $StdlibHash } | ConvertTo-Json | Set-Content $testCacheManifest
+                
+                Remove-Item $testOutputDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
             
-            # Use pre-compiled stdlib object files
-            $allFiles = @($testCppFiles) + @($StdlibObjFiles)
+            # Link and run
+            $allFiles = @($testObjFile) + @($StdlibObjFiles)
             $uniqueId = [System.Guid]::NewGuid().ToString("N").Substring(0, 8)
             $exeFile = Join-Path $TempDir "${uniqueId}_$($Test.Name).exe"
             
             try {
-                $includeDir = Join-Path $RootDir "bootstrap\src\include"
-                $builtinsDir = Join-Path $RootDir "src\main\cpp"
-                $clangArgs = @("-std=c++17", "-I", $includeDir, "-I", $builtinsDir, "-I", $testOutputDir, "-I", $StdlibDir) + $allFiles + @("-o", $exeFile)
-                $cppCompileOutput = & clang++ @clangArgs 2>&1
+                $linkOutput = & clang++ -std=c++17 @allFiles -o $exeFile 2>&1
                 if ($LASTEXITCODE -ne 0) {
-                    $errorLines = ($cppCompileOutput | Select-String "error:" | Select-Object -First 3) -join "; "
-                    $result.Status = "ERROR"; $result.Message = "C++ compilation failed: $errorLines"
+                    $result.Status = "ERROR"; $result.Message = "Link failed: $linkOutput"
                     return $result
                 }
                 $null = & $exeFile 2>&1
@@ -429,7 +389,6 @@ try {
                 $result.Message = "Exit: $($result.CppExitCode)"
             } finally {
                 Remove-Item $exeFile -Force -ErrorAction SilentlyContinue
-                Remove-Item $testOutputDir -Recurse -Force -ErrorAction SilentlyContinue
             }
             return $result
         }
@@ -445,31 +404,6 @@ try {
                 "FAILED" { $Script:FailedTests++ }
                 "ERROR" { $Script:ErrorTests++ }
                 "SKIPPED" { $Script:SkippedTests++ }
-            }
-        }
-    } else {
-        # Sequential execution
-        $testsByFeature = $tests | Group-Object -Property Feature
-        foreach ($group in $testsByFeature) {
-            Write-Host "Running $($group.Name) [$($group.Count) files]..." -ForegroundColor Cyan
-            $Script:TestResults[$group.Name] = @()
-            foreach ($test in $group.Group) {
-                $result = Test-TuffFile -Test $test
-                $Script:TestResults[$group.Name] += $result
-                switch ($result.Status) {
-                    "PASSED" { $Script:PassedTests++ }
-                    "FAILED" { 
-                        $Script:FailedTests++
-                        Write-ColorOutput ">>> FAILURE: $($test.Name) - $($result.Message)" $ColorRed
-                        exit 1
-                    }
-                    "ERROR" { 
-                        $Script:ErrorTests++
-                        Write-ColorOutput ">>> ERROR: $($test.Name) - $($result.Message)" $ColorRed
-                        exit 1
-                    }
-                    "SKIPPED" { $Script:SkippedTests++ }
-                }
             }
         }
     }
