@@ -11,47 +11,22 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 	std::string leftType = expandTypeAlias(left->inferredType);
 	std::string rightType = expandTypeAlias(right->inferredType);
 
-	// Handle intersection types (take first component)
-	// e.g. *mut [T] & #free -> *mut [T]
-	size_t ampPos = leftType.find('&');
-	if (ampPos != std::string::npos)
-	{
-		// Be careful not to split inside generic args <...>
-		int depth = 0;
-		size_t splitPos = std::string::npos;
-		for (size_t i = 0; i < leftType.length(); i++)
-		{
-			if (leftType[i] == '<')
-				depth++;
-			else if (leftType[i] == '>')
-				depth--;
-			else if (leftType[i] == '&' && depth == 0)
-			{
-				splitPos = i;
-				break;
-			}
-		}
-
-		if (splitPos != std::string::npos)
-		{
-			leftType = leftType.substr(0, splitPos);
-			while (!leftType.empty() && leftType.back() == ' ')
-				leftType.pop_back();
-		}
-	}
-
 	// Use exprType if available
 	if (left->exprType && right->exprType)
 	{
-		// Handle intersection types - extract the left component
-		// e.g., *mut [T] & #free -> use *mut [T] for type checking
+		// Handle intersection types - extract the left component for type checking
+		// but preserve the full intersection for the result
+		// e.g., *mut [T] & #free -> use *mut [T] for checking, preserve & #free
 		auto leftExpr = left->exprType;
+		ExprPtr destructorExpr = nullptr;  // Will hold #free if present
+		
 		if (leftExpr->kind == ExprKind::BINARY)
 		{
 			auto bin = leftExpr->as<BinaryExpr>();
 			if (bin->op == BinaryOp::INTERSECTION)
 			{
-				leftExpr = bin->left;
+				destructorExpr = bin->right;  // Save the destructor part
+				leftExpr = bin->left;         // Use the pointer part for checking
 			}
 		}
 
@@ -61,6 +36,9 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 			if (leftExpr->kind == ExprKind::UNARY && leftExpr->as<UnaryExpr>()->op == UnaryOp::STAR && isNumericType(right->exprType))
 			{
 				auto ptr = leftExpr->as<UnaryExpr>();
+				ExprPtr resultType = nullptr;
+				bool isArrayDecay = false;
+				
 				// Check for *mut [T] -> Unary(STAR, Unary(MUT, Array(T)))
 				if (ptr->operand->kind == ExprKind::UNARY && ptr->operand->as<UnaryExpr>()->op == UnaryOp::MUT)
 				{
@@ -68,21 +46,34 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 					if (mut->operand->kind == ExprKind::ARRAY)
 					{
 						auto arr = mut->operand->as<ArrayExpr>();
-						node->exprType = makePtrMut(arr->elementType);
-						node->inferredType = exprTypeToString(node->exprType);
-						return;
+						resultType = makePtrMut(arr->elementType);
+						isArrayDecay = true;  // Array decayed to element pointer
 					}
 				}
 				// Check for *[T] -> Unary(STAR, Array(T))
 				else if (ptr->operand->kind == ExprKind::ARRAY)
 				{
 					auto arr = ptr->operand->as<ArrayExpr>();
-					node->exprType = makePtr(arr->elementType);
-					node->inferredType = exprTypeToString(node->exprType);
-					return;
+					resultType = makePtr(arr->elementType);
+					isArrayDecay = true;  // Array decayed to element pointer
 				}
-
-				node->exprType = leftExpr;
+				else
+				{
+					// Non-array pointer, keep the original type
+					resultType = leftExpr;
+				}
+				
+				// Preserve destructor annotation ONLY for non-array decay
+				// When array decays to element pointer, the destructor should NOT be preserved
+				// because the destructor is for the whole array, not individual elements
+				if (destructorExpr && resultType && !isArrayDecay)
+				{
+					node->exprType = makeBinary(BinaryOp::INTERSECTION, resultType, destructorExpr);
+				}
+				else
+				{
+					node->exprType = resultType;
+				}
 				node->inferredType = exprTypeToString(node->exprType);
 				return;
 			}
@@ -161,18 +152,45 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 		}
 	}
 
+	// Fallback: String-based type checking (legacy path)
+	// Handle intersection types (take first component for type checking)
+	std::string leftDestructor = "";
+	size_t ampPos = leftType.find('&');
+	if (ampPos != std::string::npos)
+	{
+		int depth = 0;
+		size_t splitPos = std::string::npos;
+		for (size_t i = 0; i < leftType.length(); i++)
+		{
+			if (leftType[i] == '<')
+				depth++;
+			else if (leftType[i] == '>')
+				depth--;
+			else if (leftType[i] == '&' && depth == 0)
+			{
+				splitPos = i;
+				break;
+			}
+		}
+		if (splitPos != std::string::npos)
+		{
+			leftDestructor = leftType.substr(splitPos);
+			leftType = leftType.substr(0, splitPos);
+			while (!leftType.empty() && leftType.back() == ' ')
+				leftType.pop_back();
+		}
+	}
+
 	if (node->value == "+" || node->value == "-" || node->value == "*" || node->value == "/" || node->value == "%")
 	{
 		// Allow pointer arithmetic: ptr + int
-		// If ptr is *[T] or *mut [T], result is *T or *mut T (decay to element pointer)
 		if (leftType.length() > 0 && leftType[0] == '*' && isNumericType(rightType))
 		{
-			// Check if it's an array pointer
 			size_t bracketPos = leftType.find('[');
 			if (bracketPos != std::string::npos)
 			{
-				// It's *[T] or *mut [T] or *mut [T; ...]
-				// Decay to element pointer
+				// Array decay: *[T] or *mut [T] -> *T or *mut T
+				// Do NOT preserve destructor - it applies to the array, not elements
 				bool isMutable = (leftType.substr(1, 4) == "mut ");
 				size_t startPos = isMutable ? 6 : 2;
 				size_t semiPos = leftType.find(';');
@@ -189,7 +207,8 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 			}
 			else
 			{
-				node->inferredType = leftType;
+				// Non-array pointer: preserve destructor
+				node->inferredType = leftType + leftDestructor;
 			}
 			return;
 		}
@@ -202,7 +221,6 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 			exit(1);
 		}
 
-		// If either operand is USize or SizeOf<T>, result is USize (for sizeOf arithmetic)
 		if (leftType == "USize" || rightType == "USize" ||
 				leftType.rfind("SizeOf<", 0) == 0 || rightType.rfind("SizeOf<", 0) == 0)
 		{
@@ -215,7 +233,6 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 	}
 	else if (node->value == "&")
 	{
-		// Bitwise AND - both operands must be numeric
 		if (!isNumericType(leftType) || !isNumericType(rightType))
 		{
 			std::cerr << "Error: Operands of '&' must be numeric." << std::endl;
