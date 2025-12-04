@@ -13,4 +13,32 @@ extern fn memcpy(dest: *mut Void, src: *Void, count: USize): Void;
 // Allocate array of T with given count
 // TODO: Once we support nullable pointers, return *[T] | Null
 // extern fn mallocSlice<T>(count: USize): *mut [T];
- 
+
+// Box<T> - An owned pointer to a heap-allocated value
+// Box has an implicit destructor because its field has a destructor (#free)
+struct Box<T> {
+	ptr: Alloc<T>
+}
+
+impl<T> Box<T> {
+	// Create a new boxed value
+	fn new(value: T): Box<T> => {
+		let ptr = malloc<T>(sizeOf(T));
+		ptr[0] = value;
+		return Box<T> { ptr };
+	}
+	
+	// Get a copy of the boxed value
+	fn get(this: *Box<T>): T => this.ptr[0];
+	
+	// Get mutable reference to the boxed value
+	fn getMut(this: *mut Box<T>): *mut T => this.ptr + 0;
+	
+	// Get immutable reference to the boxed value
+	fn getRef(this: *Box<T>): *T => this.ptr + 0;
+	
+	// Set the boxed value
+	fn set(this: *mut Box<T>, value: T): Void => {
+		this.ptr[0] = value;
+	}
+}

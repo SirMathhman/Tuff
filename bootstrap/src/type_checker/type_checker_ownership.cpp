@@ -208,10 +208,40 @@ void TypeChecker::releaseBorrowsAtScope(int scopeDepth)
 	}
 }
 
-// Check if a type has a destructor (contains #)
+// Check if a type has a destructor (contains # or is a struct with destructor fields)
 bool TypeChecker::hasDestructor(const std::string &type)
 {
-	return type.find('#') != std::string::npos;
+	// Direct destructor annotation (e.g., *mut [T] & #free)
+	if (type.find('#') != std::string::npos)
+		return true;
+
+	// Expand type alias first (e.g., Alloc<T> -> *mut [T] & #free)
+	std::string expanded = expandTypeAlias(type);
+	if (expanded != type && expanded.find('#') != std::string::npos)
+		return true;
+
+	// Extract base type name (strip generic args)
+	std::string baseName = type;
+	size_t anglePos = baseName.find('<');
+	if (anglePos != std::string::npos)
+	{
+		baseName = baseName.substr(0, anglePos);
+	}
+
+	// Check if it's a struct type with destructor fields
+	auto it = structTable.find(baseName);
+	if (it != structTable.end())
+	{
+		const StructInfo &info = it->second;
+		for (const auto &field : info.fields)
+		{
+			// Recursively check field types
+			if (hasDestructor(field.second))
+				return true;
+		}
+	}
+
+	return false;
 }
 
 // Check if a type is a copy type (primitives are copy, destructor types are not)

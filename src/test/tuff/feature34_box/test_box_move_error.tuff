@@ -1,0 +1,28 @@
+// Test that Box<T> is move-only - should fail compilation
+// This test expects a compiler error
+// Expected error: moved
+
+extern fn malloc(size: USize): *mut [I32] & #free;
+
+// A simple Box that contains a destructor field
+struct MyBox {
+	ptr: *mut [I32] & #free
+}
+
+fn newBox(val: I32): MyBox => {
+	let p = malloc(4);
+	p[0] = val;
+	return MyBox { p };
+}
+
+fn getVal(b: *MyBox): I32 => b.ptr[0];
+
+fn main(): I32 => {
+	let b = newBox(42);
+	let b2 = b;  // Move b to b2
+	
+	// This should cause a use-after-move error
+	let val = getVal(&b);
+	
+	return val;
+}

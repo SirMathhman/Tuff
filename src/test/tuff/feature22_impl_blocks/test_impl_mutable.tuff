@@ -1,26 +1,26 @@
 // Test: Impl block with mutable and immutable methods
-struct Box {
+struct Container {
 	contents: I32
 }
 
-impl Box {
-	fn new(val: I32): Box => {
-		return Box { val };
+impl Container {
+	fn new(val: I32): Container => {
+		return Container { val };
 	}
 
-	fn peek(this: *Box): I32 => this.contents;
+	fn peek(this: *Container): I32 => this.contents;
 
-	fn replace(this: *mut Box, val: I32): I32 => {
+	fn replace(this: *mut Container, val: I32): I32 => {
 		let old = this.contents;
 		this.contents = val;
 		return old;
 	}
 }
 
-let mut b = Box::new(42);
-let v1 = Box::peek(&b);
-let old = Box::replace(&mut b, 99);
-let v2 = Box::peek(&b);
+let mut b = Container::new(42);
+let v1 = Container::peek(&b);
+let old = Container::replace(&mut b, 99);
+let v2 = Container::peek(&b);
 
 // Expected: v1 = 42, old = 42, v2 = 99
 v2;

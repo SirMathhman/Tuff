@@ -66,7 +66,8 @@
     "feature11_ownership/move/test_double_free": "moved",
     "feature19_multiple_of/test_invalid_literal": "not a multiple of",
     "feature19_multiple_of/test_literal_return": "got I32",
-    "feature19_multiple_of/test_non_literal": "Cannot assign non-literal"
+    "feature19_multiple_of/test_non_literal": "Cannot assign non-literal",
+    "feature34_box/test_box_move_error": "Use of moved value"
   },
   "skip_tests": [
     "feature4_structs/test_struct_scoped",
