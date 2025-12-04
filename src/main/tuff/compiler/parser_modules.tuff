@@ -29,7 +29,7 @@ impl Parser {
 				}
 				let nextToken = this.current();
 				if (this.matchToken(TokenType.Identifier)) {
-					moduleName = moduleName + "::" + nextToken.value;
+					moduleName = moduleName.concat("::" ).concat(nextToken.value);
 				} else {
 					this.addError(nextToken.line, nextToken.column, "Expected identifier after '::'");
 					break;
@@ -78,7 +78,7 @@ impl Parser {
 				}
 				let nextToken = this.current();
 				if (this.matchToken(TokenType.Identifier)) {
-					path = path + "::" + nextToken.value;
+					path = path.concat("::").concat(nextToken.value);
 				} else {
 					this.addError(nextToken.line, nextToken.column, "Expected identifier after '::'");
 					break;
@@ -172,7 +172,7 @@ impl Parser {
 				}
 				let nextToken = this.current();
 				if (this.matchToken(TokenType.Identifier)) {
-					funcName = funcName + "::" + nextToken.value;
+					funcName = funcName.concat("::" ).concat(nextToken.value);
 				} else {
 					break;
 				}

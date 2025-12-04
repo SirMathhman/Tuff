@@ -272,7 +272,7 @@ impl Parser {
 				this.addError(nextToken.line, nextToken.column, "Expected identifier after '::'");
 				break;
 			}
-			fullName = fullName + "::" + nextToken.value;
+			fullName = fullName.concat("::" ).concat(nextToken.value);
 		}
 		
 		// Check for generic arguments: <T, U>
