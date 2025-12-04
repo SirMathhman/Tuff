@@ -75,7 +75,8 @@ std::set<std::string> CodeGeneratorCPP::extractDependencies(std::shared_ptr<ASTN
 			{
 				deps.insert("char_stream");
 			}
-			if (typeStr.find("Allocated") != std::string::npos)
+			if (typeStr.find("Allocated") != std::string::npos ||
+					typeStr.find("Alloc") != std::string::npos)
 			{
 				deps.insert("mem");
 			}

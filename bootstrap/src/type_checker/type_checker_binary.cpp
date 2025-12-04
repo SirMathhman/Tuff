@@ -70,20 +70,20 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 				{
 					isZeroOffset = true;
 				}
-				
+
 				// ERROR: Array decay with +0 explicitly loses the destructor annotation
 				// e.g., *mut [T] & #free + 0 -> *mut T loses #free
 				// Regular pointer arithmetic (+ index) is allowed as temporary access
 				if (destructorExpr && isArrayDecay && isZeroOffset)
 				{
-					std::cerr << "Error: Array decay loses destructor annotation '" 
-					          << exprTypeToString(destructorExpr) << "'." << std::endl;
-					std::cerr << "  Cannot convert '" << exprTypeToString(left->exprType) 
-					          << "' to '" << exprTypeToString(resultType) << "'." << std::endl;
+					std::cerr << "Error: Array decay loses destructor annotation '"
+										<< exprTypeToString(destructorExpr) << "'." << std::endl;
+					std::cerr << "  Cannot convert '" << exprTypeToString(left->exprType)
+										<< "' to '" << exprTypeToString(resultType) << "'." << std::endl;
 					std::cerr << "  The destructor would never be called, causing a resource leak." << std::endl;
 					exit(1);
 				}
-				
+
 				if (destructorExpr && resultType && !isArrayDecay)
 				{
 					node->exprType = makeBinary(BinaryOp::INTERSECTION, resultType, destructorExpr);

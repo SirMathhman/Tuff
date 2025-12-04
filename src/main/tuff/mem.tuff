@@ -2,11 +2,11 @@
 
 extern use stdlib;
 
-type Allocated<Type> = *mut [Type] & #free;
+type Alloc<Type> = *mut [Type] & #free;
 
-extern fn malloc<Type>(size: USize): Allocated<Type>;
-extern fn realloc<Type>(ptr: Allocated<Type>, newSize: USize): Allocated<Type>;
-extern fn free<Type>(ptr: Allocated<Type>): Void;
+extern fn malloc<Type>(size: USize): Alloc<Type>;
+extern fn realloc<Type>(ptr: Alloc<Type>, newSize: USize): Alloc<Type>;
+extern fn free<Type>(ptr: Alloc<Type>): Void;
 
 extern fn memcpy(dest: *mut Void, src: *Void, count: USize): Void;
 

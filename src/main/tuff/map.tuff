@@ -22,7 +22,7 @@ struct MapEntry<K, V> {
 }
 
 struct Map<K, V> {
-	data: Allocated<MapEntry<K, V>>,
+	data: Alloc<MapEntry<K, V>>,
 	length: USize,
 	capacity: USize,
 	tombstones: USize,
@@ -222,7 +222,7 @@ struct MapEntryI32ToI32 {
 }
 
 struct MapI32ToI32 {
-	data: Allocated<MapEntryI32ToI32>,
+	data: Alloc<MapEntryI32ToI32>,
 	length: USize,
 	capacity: USize,
 	tombstones: USize
