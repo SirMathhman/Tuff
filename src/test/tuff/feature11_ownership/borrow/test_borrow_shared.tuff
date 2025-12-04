@@ -1,7 +1,0 @@
-// Test: Multiple shared borrows allowed
-// Expected: exit 20
-
-let x: I32 = 10;
-let p: *I32 = &x;    // shared borrow
-let q: *I32 = &x;    // another shared borrow - OK
-*p + *q              // 20

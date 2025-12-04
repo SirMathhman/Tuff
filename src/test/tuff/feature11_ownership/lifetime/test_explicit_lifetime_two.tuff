@@ -1,9 +1,0 @@
-// Test: Two explicit lifetime parameters
-// Expected: exit 10
-
-fn first<a, b>(x: *a I32, y: *b I32): *a I32 => x;
-
-let a: I32 = 10;
-let b: I32 = 20;
-let p: *I32 = first(&a, &b);
-*p

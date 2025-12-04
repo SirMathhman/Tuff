@@ -1,8 +1,0 @@
-// Test: Expect with parameters
-// Platform-specific add function
-
-expect fn add(x: I32, y: I32): I32;
-
-actual fn add(x: I32, y: I32): I32 => x + y;
-
-add(10, 32)

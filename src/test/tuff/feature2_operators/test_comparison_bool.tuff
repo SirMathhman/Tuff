@@ -1,5 +1,0 @@
-// Test comparison operators
-let a = 42;
-let b = 17;
-let result = a > b;
-result

@@ -1,8 +1,0 @@
-// Test: Moving a struct invalidates the source
-// Expected: exit 42
-
-struct Data { value: I32 }
-
-let d = Data { 42 };
-let e = d;           // d moves to e
-e.value              // OK: e owns it now

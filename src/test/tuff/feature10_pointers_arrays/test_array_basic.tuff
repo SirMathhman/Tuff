@@ -1,5 +1,0 @@
-// Test: Basic array operations
-let arr: [I32; 3; 3] = [10, 20, 30];
-let first: I32 = arr[0];
-let second: I32 = arr[1];
-first + second

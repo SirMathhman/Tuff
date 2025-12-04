@@ -1,8 +1,0 @@
-// Test: Function with multiple pointer parameters (dereferences, no return ptr)
-// Expected: exit 30
-
-fn sum_ptrs(x: *I32, y: *I32): I32 => *x + *y;
-
-let a: I32 = 10;
-let b: I32 = 20;
-sum_ptrs(&a, &b)

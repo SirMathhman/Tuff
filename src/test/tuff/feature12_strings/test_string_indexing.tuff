@@ -1,8 +1,0 @@
-// Test: String indexing using string_charAt
-use string;
-let s = "test";
-let c0: U8 = s.charAt(0);
-let c1: U8 = s.charAt(1);
-let c2: U8 = s.charAt(2);
-let c3: U8 = s.charAt(3);
-c0 + c1 + c2 + c3

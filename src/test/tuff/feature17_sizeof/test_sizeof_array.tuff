@@ -1,8 +1,0 @@
-// Test sizeOf with array types
-fn run() : I32 => {
-  let arr_size: USize = sizeOf([I32; 0; 100]);
-  let bytes_size: USize = sizeOf([U8; 0; 256]);
-  0
-}
-
-run()

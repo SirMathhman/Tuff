@@ -1,5 +1,0 @@
-// Test: Basic pointer operations
-let x: I32 = 42;
-let p: *I32 = &x;
-let y: I32 = *p;
-y

@@ -1,7 +1,0 @@
-// Test: Basic function declaration and call
-fn add(x: I32, y: I32): I32 => {
-    return x + y;
-}
-
-let result = add(5, 10);
-result  // Expected: 15

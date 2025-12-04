@@ -1,8 +1,0 @@
-// Argv module for Tuff
-// Provides access to command line arguments via 'in let args' declaration
-
-extern use argv_builtins;
-use vector;
-
-// No explicit functions needed as 'in let args' provides direct access
-// to the arguments as a slice *[string]

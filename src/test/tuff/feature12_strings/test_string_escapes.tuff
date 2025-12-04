@@ -1,9 +1,0 @@
-// Test: String escape sequences
-use string;
-let newline = "\n";
-let tab = "\t";
-let backslash = "\\";
-let quote = "\"";
-let s = "hello\nworld";
-let len_newline: U8 = newline.charAt(0);
-len_newline

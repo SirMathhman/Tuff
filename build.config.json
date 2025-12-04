@@ -1,7 +1,0 @@
-{
-  "sourceRoot": "src/main",
-  "outputRoot": "dist",
-  "sourcePath": "src/main/tuff",
-  "outputPath": "dist/tuff",
-  "target": "cpp"
-}

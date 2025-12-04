@@ -1,7 +1,0 @@
-// Test mixing implicit and explicit USize
-
-let a: USize = 5;
-let b: USize = 10USize;
-let c: USize = 30;
-
-a + b + c

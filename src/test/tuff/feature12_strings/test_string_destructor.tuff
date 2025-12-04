@@ -1,9 +1,0 @@
-// Test: String destructor infrastructure
-// This test verifies that the String type can be used with destructor support
-// string is now an opaque type mapped to char* in C++
-use string;
-
-// Test that string literals work as expected
-let s = "hello";
-let first: U8 = s.charAt(0);
-first

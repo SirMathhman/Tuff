@@ -1,6 +1,0 @@
-// Test basic type alias
-
-type MyInt = I32;
-
-let x: MyInt = 42;
-x

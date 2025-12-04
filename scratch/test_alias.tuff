@@ -1,8 +1,0 @@
-// Simple type alias test
-struct A { x: I32 }
-struct B { y: I32 }
-
-type Simple = I32;
-type Union = A | B;
-
-fn main(): I32 => 0;

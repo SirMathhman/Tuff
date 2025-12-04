@@ -1,6 +1,0 @@
-// Test: Primitives (Copy types) don't move, they copy
-// Expected: exit 84
-
-let x: I32 = 42;
-let y = x;           // copy, not move
-x + y                // both valid: 84

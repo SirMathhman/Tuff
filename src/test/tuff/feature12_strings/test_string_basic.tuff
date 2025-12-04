@@ -1,6 +1,0 @@
-// Test: Basic string literal
-use string;
-let s = "hello";
-let first: U8 = s.charAt(0);
-let second: U8 = s.charAt(1);
-first

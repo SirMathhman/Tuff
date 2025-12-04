@@ -1,8 +1,0 @@
-// Test implicit integer literal to USize conversion
-
-let a: USize = 0;
-let b: USize = 42;
-let c: USize = 100;
-
-// Return sum (will be implicitly converted to I32 for exit code)
-a + b + c

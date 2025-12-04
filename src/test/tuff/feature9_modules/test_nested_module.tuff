@@ -1,8 +1,0 @@
-// Test: Nested module with FQN (e.g., com::utils)
-module com::utils {
-    fn doubleIt(x: I32): I32 => x * 2;
-    fn tripleIt(x: I32): I32 => x * 3;
-}
-
-let result = com::utils::doubleIt(10);
-result

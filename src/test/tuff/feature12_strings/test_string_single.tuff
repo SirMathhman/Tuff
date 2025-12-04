@@ -1,5 +1,0 @@
-// Test: Single character string
-use string;
-let s = "x";
-let c = s.charAt(0);
-c

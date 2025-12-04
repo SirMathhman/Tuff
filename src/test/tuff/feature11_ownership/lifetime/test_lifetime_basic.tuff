@@ -1,8 +1,0 @@
-// Test: Pointer function with elided lifetime
-// Expected: exit 10
-
-fn identity(p: *I32): *I32 => p;
-
-let x: I32 = 10;
-let p: *I32 = identity(&x);
-*p
