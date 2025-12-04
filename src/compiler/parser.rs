@@ -1,7 +1,7 @@
 // Parser Module - Recursive Descent Parser for Tuff
 
 use crate::compiler::ast::*;
-use crate::compiler::lexer::{Lexer, Token, TokenKind};
+use crate::compiler::lexer::{Token, TokenKind};
 use crate::compiler::error::{CompileError, ErrorKind, Span};
 
 pub struct Parser {
@@ -115,6 +115,11 @@ impl Parser {
             return Ok(Type::Reference(Box::new(inner), is_mutable));
         }
 
+        // Handle keyword types like "void"
+        if self.match_token(&TokenKind::Void) {
+            return Ok(Type::void());
+        }
+
         let base_name = self.parse_identifier()?;
 
         // Check for generic type parameters
@@ -132,7 +137,6 @@ impl Parser {
                 "f32" => Ok(Type::f32()),
                 "f64" => Ok(Type::f64()),
                 "bool" => Ok(Type::bool()),
-                "void" => Ok(Type::void()),
                 _ => Ok(Type::Named(base_name)),
             }
         }

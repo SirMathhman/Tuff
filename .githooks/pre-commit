@@ -33,7 +33,9 @@ def count_lines(file_path: str) -> int:
     """Count the number of lines in a file."""
     try:
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            return sum(1 for _ in f)
+            # Read file content and count only LF characters (normalize CRLF to LF first)
+            content = f.read().replace('\r\n', '\n')
+            return content.count('\n') + (1 if content and not content.endswith('\n') else 0)
     except (IOError, OSError):
         return 0
 
