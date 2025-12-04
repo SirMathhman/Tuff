@@ -110,6 +110,12 @@ void TypeChecker::checkLetStmt(std::shared_ptr<ASTNode> node)
 	info.scopeDepth = currentScopeDepth;
 	symbolTable[name] = info;
 
+	// Move semantics: if assigning from a non-copy type variable, mark it as moved
+	if (init->type == ASTNodeType::IDENTIFIER && !isCopyType(type))
+	{
+		markAsMoved(init->value, node->line);
+	}
+
 	// Track pointer origins for dangling pointer detection
 	if (isPointerType(node->inferredType))
 	{

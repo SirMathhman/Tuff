@@ -272,6 +272,12 @@ void TypeChecker::checkCallExpr(std::shared_ptr<ASTNode> node)
 				// But we should have exprType by now.
 			}
 		}
+
+		// Move semantics: if passing a non-copy type variable by value, mark it as moved
+		if (arg->type == ASTNodeType::IDENTIFIER && !isCopyType(arg->inferredType))
+		{
+			markAsMoved(arg->value, arg->line);
+		}
 	}
 
 	ExprPtr returnType = info.returnTypeExpr;

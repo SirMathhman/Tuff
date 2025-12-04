@@ -36,6 +36,9 @@ void TypeChecker::checkIdentifier(std::shared_ptr<ASTNode> node)
 	auto it = symbolTable.find(name);
 	if (it != symbolTable.end())
 	{
+		// Check for use-after-move on variables with destructors
+		checkUseAfterMove(name, node->line);
+		
 		node->inferredType = it->second.type;
 		node->exprType = it->second.exprType;
 		return;

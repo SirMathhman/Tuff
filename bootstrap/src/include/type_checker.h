@@ -68,8 +68,8 @@ enum class BorrowKind
 struct BorrowInfo
 {
 	BorrowKind kind;
-	int scopeDepth;				 // Scope where the borrow was created
-	int line;							 // Line number where borrow was created (for error messages)
+	int scopeDepth;				// Scope where the borrow was created
+	int line;							// Line number where borrow was created (for error messages)
 	std::string borrower; // Name of variable holding the borrow (for error messages)
 };
 
@@ -82,9 +82,10 @@ private:
 	std::map<std::string, EnumInfo> enumTable;
 	std::map<std::string, ExpectInfo> expectTable;
 	std::map<std::string, TypeAliasInfo> typeAliasTable;
-	std::map<std::string, ExprPtr> narrowedTypes; // variable -> narrowed type (for union type narrowing)
-	std::map<std::string, int> pointerOrigins;		// variable -> origin scope depth (for dangling pointer detection)
+	std::map<std::string, ExprPtr> narrowedTypes;									// variable -> narrowed type (for union type narrowing)
+	std::map<std::string, int> pointerOrigins;										// variable -> origin scope depth (for dangling pointer detection)
 	std::map<std::string, std::vector<BorrowInfo>> activeBorrows; // variable -> list of active borrows
+	std::set<std::string> movedVariables;													// variables that have been moved (use-after-move detection)
 	int currentScopeDepth = 0;
 	int functionScopeDepth = 0;										 // Track the scope depth where function body starts
 	std::string currentFunctionReturnType;				 // Track return type for validation
@@ -139,6 +140,10 @@ private:
 
 	// Ownership/lifetime helpers (in type_checker_ownership.cpp)
 	bool isPointerType(const std::string &type);
+	bool hasDestructor(const std::string &type);
+	bool isCopyType(const std::string &type);
+	void checkUseAfterMove(const std::string &variable, int line);
+	void markAsMoved(const std::string &variable, int line);
 	int getExprOriginScope(std::shared_ptr<ASTNode> node);
 	void checkReturnLifetime(std::shared_ptr<ASTNode> node, std::shared_ptr<ASTNode> expr);
 	void recordBorrow(const std::string &variable, BorrowKind kind, int line, const std::string &borrower);

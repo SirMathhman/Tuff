@@ -1,0 +1,14 @@
+// Test: Valid ownership transfer - move to new variable then use new variable
+// Expected: exit 42
+
+extern fn malloc(size: USize): *mut [I32] & #free;
+extern fn free(ptr: *mut [I32] & #free): Void;
+
+fn main(): I32 => {
+    let ptr: *mut [I32] & #free = malloc(4);
+    let ptr2 = ptr;   // ptr is moved to ptr2
+    ptr2[0] = 42;     // OK: ptr2 now owns the memory
+    let result = ptr2[0];
+    free(ptr2);       // OK: ptr2 is valid
+    return result;
+}

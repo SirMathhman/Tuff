@@ -207,3 +207,36 @@ void TypeChecker::releaseBorrowsAtScope(int scopeDepth)
 				borrows.end());
 	}
 }
+
+// Check if a type has a destructor (contains #)
+bool TypeChecker::hasDestructor(const std::string &type)
+{
+	return type.find('#') != std::string::npos;
+}
+
+// Check if a type is a copy type (primitives are copy, destructor types are not)
+bool TypeChecker::isCopyType(const std::string &type)
+{
+	// If it has a destructor, it's not copy (move-only)
+	if (hasDestructor(type))
+		return false;
+	
+	// Everything else is copy by default (structs, primitives, pointers without destructors)
+	return true;
+}
+
+// Check if a variable has been moved and error if so
+void TypeChecker::checkUseAfterMove(const std::string &variable, int line)
+{
+	if (movedVariables.count(variable))
+	{
+		std::cerr << "Error: Use of moved value '" << variable << "' at line " << line << "." << std::endl;
+		exit(1);
+	}
+}
+
+// Mark a variable as moved
+void TypeChecker::markAsMoved(const std::string &variable, int line)
+{
+	movedVariables.insert(variable);
+}

@@ -321,23 +321,25 @@ Tuff enforces memory safety through ownership and borrowing rules similar to Rus
 
 ### Move Semantics
 
-Non-Copy types (structs, arrays) are moved on assignment:
+Types with destructors (marked with `#`) are moved on assignment. After a move, the source variable cannot be used:
 
 ```tuff
-struct Data { value: I32 }
+// Allocated memory has a destructor (marked with #free)
+extern fn malloc(size: USize): *mut [I32] & #free;
 
-let d = Data { 42 };
-let e = d;           // d is moved to e
-// d.value;          // ERROR: use of moved value 'd'
+let ptr: *mut [I32] & #free = malloc(4);
+let ptr2 = ptr;      // ptr is moved to ptr2
+// ptr[0] = 42;      // ERROR: use of moved value 'ptr'
 ```
 
 ### Copy Types
 
-Primitive types are copied instead of moved:
+Most types (primitives, regular structs, pointers without destructors) are copied instead of moved:
 
 ```tuff
 let x: I32 = 42;
 let y = x;           // x is copied to y
+x + y                // OK: both valid
 ```
 
 ### Borrow Rules
