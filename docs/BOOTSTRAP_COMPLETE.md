@@ -6,25 +6,26 @@ The Tuff compiler has been successfully ported from Rust to Tuff across **8 phas
 
 ## 📊 Phase Breakdown
 
-| Phase | Module | Lines | Purpose | Status |
-|-------|--------|-------|---------|--------|
-| 1 | `lexer.tuff` | 159 | Tokenization engine | ✅ Complete |
-| 2a | FFI Bridge | 46 | Rust↔Tuff interface | ✅ Complete |
-| 2b | `stdlib.tuff` | 175 | Core data structures | ✅ Complete |
-| 3 | `parser.tuff` | 405 | Recursive descent parser with precedence climbing | ✅ Complete |
-| 4 | `type_checker.tuff` | 279 | Type inference & symbol tables | ✅ Complete |
-| 5 | `borrow_checker.tuff` | 254 | Ownership validation | ✅ Complete |
-| 6 | `codegen.tuff` | 268 | C code generation | ✅ Complete |
-| 7 | `main.tuff` | 152 | Pipeline orchestration | ✅ Complete |
-| 8 | `bootstrap.tuff` | 40 | Bootstrap validation | ✅ Complete |
+| Phase | Module                | Lines | Purpose                                           | Status      |
+| ----- | --------------------- | ----- | ------------------------------------------------- | ----------- |
+| 1     | `lexer.tuff`          | 159   | Tokenization engine                               | ✅ Complete |
+| 2a    | FFI Bridge            | 46    | Rust↔Tuff interface                               | ✅ Complete |
+| 2b    | `stdlib.tuff`         | 175   | Core data structures                              | ✅ Complete |
+| 3     | `parser.tuff`         | 405   | Recursive descent parser with precedence climbing | ✅ Complete |
+| 4     | `type_checker.tuff`   | 279   | Type inference & symbol tables                    | ✅ Complete |
+| 5     | `borrow_checker.tuff` | 254   | Ownership validation                              | ✅ Complete |
+| 6     | `codegen.tuff`        | 268   | C code generation                                 | ✅ Complete |
+| 7     | `main.tuff`           | 152   | Pipeline orchestration                            | ✅ Complete |
+| 8     | `bootstrap.tuff`      | 40    | Bootstrap validation                              | ✅ Complete |
 
 **Total: 1,732 lines of self-hosting Tuff code**
 
 ## 🧪 Test Results
 
 **61 tests passing (100%)**
+
 - ✅ 45 unit tests
-- ✅ 11 integration tests  
+- ✅ 11 integration tests
 - ✅ 5 bootstrap validation tests
 
 All tests pass after every phase implementation.
@@ -36,6 +37,7 @@ Read Source → Lexer → Parser → Type Checker → Borrow Checker → Code Ge
 ```
 
 Each stage is implemented in Tuff and compiles to standalone C:
+
 - `lexer.c` - Tokenization
 - `stdlib.c` - Data structures
 - `parser.c` - AST generation
@@ -48,6 +50,7 @@ Each stage is implemented in Tuff and compiles to standalone C:
 ## ✨ Key Features
 
 ### Tuff Compiler Now Supports
+
 - ✅ **Self-compilation**: Tuff→C code generation validated
 - ✅ **Type checking**: Full type inference and checking
 - ✅ **Memory safety**: Borrow checker validates ownership rules
@@ -55,15 +58,17 @@ Each stage is implemented in Tuff and compiles to standalone C:
 - ✅ **Production ready**: All phases compile without errors
 
 ### Data Structures Available in Tuff
+
 - `Vec<T>` - Dynamic arrays with push, pop, get, len
 - `HashMap<K,V>` - Symbol tables and tracking maps
 - `String` - Text manipulation
-- `Option<T>` - Some/None wrapping  
+- `Option<T>` - Some/None wrapping
 - `Result<T,E>` - Ok/Err error handling
 
 ## 🏗️ Implementation Notes
 
 All 8 modules currently contain **TODO placeholders** for actual implementation details:
+
 - **Lexer**: Token types and character classification complete, tokenization logic TODO
 - **Parser**: Function structure defined, actual parsing logic TODO
 - **Type Checker**: Environment and checking structure, actual type inference TODO
@@ -90,6 +95,7 @@ All 8 modules currently contain **TODO placeholders** for actual implementation 
 ## 🚀 Bootstrap Ready
 
 The Tuff compiler framework is now ready for:
+
 - Production-grade self-compilation
 - Verification of bootstrap loop closure
 - Binary reproducibility testing
