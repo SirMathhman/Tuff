@@ -1,10 +1,106 @@
-#!/bin/bash
-# Git pre-commit hook - Delegates to Python script for cross-platform support
+#!/usr/bin/env python3
+"""
+Pre-commit hook to enforce maximum file line count of 500 lines.
+Excludes: target/, .git/, .githooks/, node_modules/, .vscode/, .idea/, and hidden directories.
+"""
 
-# Get the directory where this script is located
-HOOKS_DIR="$(git rev-parse --git-dir)/../.githooks"
-HOOKS_DIR="$(cd "$HOOKS_DIR" && pwd)"
+import subprocess
+import sys
+import os
+from pathlib import Path
+from typing import List, Tuple
 
-# Execute the Python hook
-python3 "$HOOKS_DIR/pre-commit.py"
-exit $?
+MAX_LINES = 500
+EXCLUDED_DIRS = {"target", ".git", ".githooks", "node_modules", ".vscode", ".idea"}
+
+
+def is_excluded(file_path: str) -> bool:
+    """Check if a file path is in an excluded directory."""
+    path = Path(file_path)
+
+    # Check each part of the path
+    for part in path.parts:
+        if part in EXCLUDED_DIRS:
+            return True
+        # Exclude hidden files/directories except .gitignore
+        if part.startswith(".") and file_path != ".gitignore":
+            return True
+
+    return False
+
+
+def count_lines(file_path: str) -> int:
+    """Count the number of lines in a file."""
+    try:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            return sum(1 for _ in f)
+    except (IOError, OSError):
+        return 0
+
+
+def get_staged_files() -> List[str]:
+    """Get list of staged files from git."""
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            return [f.strip() for f in result.stdout.split("\n") if f.strip()]
+    except (FileNotFoundError, subprocess.SubprocessError):
+        pass
+    return []
+
+
+def check_file_sizes() -> Tuple[bool, List[str]]:
+    """
+    Check that all staged files are within the line limit.
+    Returns: (all_valid, violations_list)
+    """
+    files = get_staged_files()
+    violations = []
+
+    for file_path in files:
+        # Skip if file doesn't exist or is a directory
+        if not os.path.isfile(file_path):
+            continue
+
+        # Skip if in excluded directory
+        if is_excluded(file_path):
+            continue
+
+        # Count lines
+        line_count = count_lines(file_path)
+
+        # Check if exceeds limit
+        if line_count > MAX_LINES:
+            violations.append((file_path, line_count))
+
+    return len(violations) == 0, violations
+
+
+def format_violations(violations: List[Tuple[str, int]]) -> str:
+    """Format violations for display."""
+    lines = [f"Error: The following files exceed {MAX_LINES} lines:"]
+    for file_path, line_count in violations:
+        lines.append(f"  - {file_path} ({line_count} lines)")
+    lines.append("Please split large files into smaller modules.")
+    return "\n".join(lines)
+
+
+def main() -> int:
+    """Main hook logic."""
+    all_valid, violations = check_file_sizes()
+
+    if all_valid:
+        print(f"✓ All files are within the {MAX_LINES} line limit.")
+        return 0
+    else:
+        print(format_violations(violations), file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
