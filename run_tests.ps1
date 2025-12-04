@@ -265,8 +265,12 @@ try {
     
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     
-    if ($maxParallel -gt 1 -and $tests.Count -gt 1) {
-        Write-Host "Running $($tests.Count) tests in parallel..." -ForegroundColor Cyan
+    if ($tests.Count -gt 0) {
+        if ($maxParallel -eq 1) {
+            Write-Host "Running $($tests.Count) tests sequentially..." -ForegroundColor Cyan
+        } else {
+            Write-Host "Running $($tests.Count) tests in parallel..." -ForegroundColor Cyan
+        }
         
         $results = $tests | ForEach-Object -ThrottleLimit $maxParallel -Parallel {
             $Test = $_

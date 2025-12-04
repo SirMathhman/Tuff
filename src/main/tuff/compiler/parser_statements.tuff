@@ -1,0 +1,303 @@
+// Statement parsing for Tuff Parser
+// Handles block, if-else, while, loop, break, continue, return, let, and expression statements
+
+use token;
+use ast;
+use parser;
+use parser_expressions;
+use parser_types;
+use vector;
+use string;
+use option;
+
+impl Parser {
+	// Parse a statement - the main dispatcher for all statement types
+	fn parseStatement(this: *mut Parser): Option<*mut ASTNode> => {
+		let token = this.current();
+		
+		// Block statement
+		if (token.tokenType == TokenType.LBrace) {
+			return this.parseBlock();
+		}
+		
+		// If statement/expression
+		if (token.tokenType == TokenType.If) {
+			return this.parseIfStatement();
+		}
+		
+		// While loop
+		if (token.tokenType == TokenType.While) {
+			return this.parseWhileStatement();
+		}
+		
+		// Infinite loop
+		if (token.tokenType == TokenType.Loop) {
+			return this.parseLoopStatement();
+		}
+		
+		// Break statement
+		if (token.tokenType == TokenType.Break) {
+			return this.parseBreakStatement();
+		}
+		
+		// Continue statement
+		if (token.tokenType == TokenType.Continue) {
+			return this.parseContinueStatement();
+		}
+		
+		// Return statement
+		if (token.tokenType == TokenType.Return) {
+			return this.parseReturnStatement();
+		}
+		
+		// Let statement (variable declaration)
+		if (token.tokenType == TokenType.Let) {
+			return this.parseLetStatement();
+		}
+		
+		// Expression statement (including assignments)
+		return this.parseExpressionStatement();
+	}
+	
+	// Parse a block: { statements... }
+	fn parseBlock(this: *mut Parser): Option<*mut ASTNode> => {
+		if (!(this.matchToken(TokenType.LBrace))) {
+			return None<*mut ASTNode> { };
+		}
+		
+		let node = ASTNode::new(ASTNodeType.BlockStatement);
+		
+		loop {
+			if (this.check(TokenType.RBrace)) {
+				break;
+			}
+			if (this.isAtEnd()) {
+				this.addError(this.current().line, this.current().column, "Unexpected end of file in block");
+				break;
+			}
+			
+			let stmt = this.parseStatement();
+			if (stmt is Some<*mut ASTNode>) {
+				node.addChild(stmt.value);
+			} else {
+				// Skip invalid token to avoid infinite loop
+				this.advance();
+			}
+		}
+		
+		this.expectToken(TokenType.RBrace, "Expected '}' to close block");
+		return Some<*mut ASTNode> { node };
+	}
+	
+	// Parse if statement: if (condition) statement [else statement]
+	fn parseIfStatement(this: *mut Parser): Option<*mut ASTNode> => {
+		if (!(this.matchToken(TokenType.If))) {
+			return None<*mut ASTNode> { };
+		}
+		
+		let node = ASTNode::new(ASTNodeType.IfStatement);
+		
+		// Parse condition (with or without parentheses)
+		let hasParens = this.matchToken(TokenType.LParen);
+		let condition = this.parseExpression();
+		if (condition is Some<*mut ASTNode>) {
+			node.addChild(condition.value);
+		} else {
+			this.addError(this.current().line, this.current().column, "Expected condition after 'if'");
+			return None<*mut ASTNode> { };
+		}
+		if (hasParens) {
+			this.expectToken(TokenType.RParen, "Expected ')' after condition");
+		}
+		
+		// Parse then branch
+		let thenBranch = this.parseStatement();
+		if (thenBranch is Some<*mut ASTNode>) {
+			node.addChild(thenBranch.value);
+		} else {
+			this.addError(this.current().line, this.current().column, "Expected statement after if condition");
+			return None<*mut ASTNode> { };
+		}
+		
+		// Parse optional else branch
+		if (this.matchToken(TokenType.Else)) {
+			let elseBranch = this.parseStatement();
+			if (elseBranch is Some<*mut ASTNode>) {
+				node.addChild(elseBranch.value);
+			}
+		}
+		
+		return Some<*mut ASTNode> { node };
+	}
+	
+	// Parse while statement: while (condition) statement
+	fn parseWhileStatement(this: *mut Parser): Option<*mut ASTNode> => {
+		if (!(this.matchToken(TokenType.While))) {
+			return None<*mut ASTNode> { };
+		}
+		
+		let node = ASTNode::new(ASTNodeType.WhileStatement);
+		
+		// Parse condition
+		let hasParens = this.matchToken(TokenType.LParen);
+		let condition = this.parseExpression();
+		if (condition is Some<*mut ASTNode>) {
+			node.addChild(condition.value);
+		} else {
+			this.addError(this.current().line, this.current().column, "Expected condition after 'while'");
+			return None<*mut ASTNode> { };
+		}
+		if (hasParens) {
+			this.expectToken(TokenType.RParen, "Expected ')' after condition");
+		}
+		
+		// Parse body
+		let body = this.parseStatement();
+		if (body is Some<*mut ASTNode>) {
+			node.addChild(body.value);
+		} else {
+			this.addError(this.current().line, this.current().column, "Expected statement after while condition");
+			return None<*mut ASTNode> { };
+		}
+		
+		return Some<*mut ASTNode> { node };
+	}
+	
+	// Parse loop statement: loop { statements }
+	fn parseLoopStatement(this: *mut Parser): Option<*mut ASTNode> => {
+		if (!(this.matchToken(TokenType.Loop))) {
+			return None<*mut ASTNode> { };
+		}
+		
+		let node = ASTNode::new(ASTNodeType.LoopStatement);
+		
+		// Parse body (must be a block)
+		let body = this.parseBlock();
+		if (body is Some<*mut ASTNode>) {
+			node.addChild(body.value);
+		} else {
+			this.addError(this.current().line, this.current().column, "Expected block after 'loop'");
+			return None<*mut ASTNode> { };
+		}
+		
+		return Some<*mut ASTNode> { node };
+	}
+	
+	// Parse break statement: break;
+	fn parseBreakStatement(this: *mut Parser): Option<*mut ASTNode> => {
+		if (!(this.matchToken(TokenType.Break))) {
+			return None<*mut ASTNode> { };
+		}
+		
+		let node = ASTNode::new(ASTNodeType.BreakStatement);
+		this.expectToken(TokenType.Semicolon, "Expected ';' after 'break'");
+		return Some<*mut ASTNode> { node };
+	}
+	
+	// Parse continue statement: continue;
+	fn parseContinueStatement(this: *mut Parser): Option<*mut ASTNode> => {
+		if (!(this.matchToken(TokenType.Continue))) {
+			return None<*mut ASTNode> { };
+		}
+		
+		let node = ASTNode::new(ASTNodeType.ContinueStatement);
+		this.expectToken(TokenType.Semicolon, "Expected ';' after 'continue'");
+		return Some<*mut ASTNode> { node };
+	}
+	
+	// Parse return statement: return [expression];
+	fn parseReturnStatement(this: *mut Parser): Option<*mut ASTNode> => {
+		if (!(this.matchToken(TokenType.Return))) {
+			return None<*mut ASTNode> { };
+		}
+		
+		let node = ASTNode::new(ASTNodeType.ReturnStatement);
+		
+		// Check if there's a return value
+		if (!(this.check(TokenType.Semicolon))) {
+			let expr = this.parseExpression();
+			if (expr is Some<*mut ASTNode>) {
+				node.addChild(expr.value);
+			}
+		}
+		
+		this.expectToken(TokenType.Semicolon, "Expected ';' after return");
+		return Some<*mut ASTNode> { node };
+	}
+	
+	// Parse let statement: let [mut] name [: type] = expression;
+	fn parseLetStatement(this: *mut Parser): Option<*mut ASTNode> => {
+		if (!(this.matchToken(TokenType.Let))) {
+			return None<*mut ASTNode> { };
+		}
+		
+		let node = ASTNode::new(ASTNodeType.LetStatement);
+		
+		// Check for mut
+		node.isMutable = this.matchToken(TokenType.Mut);
+		
+		// Parse variable name
+		let nameToken = this.current();
+		if (!(this.matchToken(TokenType.Identifier))) {
+			this.addError(nameToken.line, nameToken.column, "Expected variable name after 'let'");
+			return None<*mut ASTNode> { };
+		}
+		node.value = nameToken.value;
+		
+		// Parse optional type annotation
+		if (this.matchToken(TokenType.Colon)) {
+			let typeExpr = this.parseTypeExpression();
+			if (typeExpr is Some<*mut ASTNode>) {
+				node.addChild(typeExpr.value);
+			}
+		}
+		
+		// Parse initializer
+		this.expectToken(TokenType.Equals, "Expected '=' in let statement");
+		let init = this.parseExpression();
+		if (init is Some<*mut ASTNode>) {
+			node.addChild(init.value);
+		} else {
+			this.addError(this.current().line, this.current().column, "Expected expression after '='");
+			return None<*mut ASTNode> { };
+		}
+		
+		this.expectToken(TokenType.Semicolon, "Expected ';' after let statement");
+		return Some<*mut ASTNode> { node };
+	}
+	
+	// Parse expression statement or assignment: expr; or lvalue = expr;
+	fn parseExpressionStatement(this: *mut Parser): Option<*mut ASTNode> => {
+		let expr = this.parseExpression();
+		if (!(expr is Some<*mut ASTNode>)) {
+			return None<*mut ASTNode> { };
+		}
+		
+		if (expr is Some<*mut ASTNode>) {
+			// Check for assignment
+			if (this.matchToken(TokenType.Equals)) {
+				let node = ASTNode::new(ASTNodeType.AssignmentStatement);
+				node.addChild(expr.value);  // LHS
+				
+				let rhs = this.parseExpression();
+				if (rhs is Some<*mut ASTNode>) {
+					node.addChild(rhs.value);
+				} else {
+					this.addError(this.current().line, this.current().column, "Expected expression after '='");
+					return None<*mut ASTNode> { };
+				}
+				
+				this.expectToken(TokenType.Semicolon, "Expected ';' after assignment");
+				return Some<*mut ASTNode> { node };
+			}
+			
+			// Regular expression statement
+			let node = ASTNode::new(ASTNodeType.ExpressionStatement);
+			node.addChild(expr.value);
+			this.expectToken(TokenType.Semicolon, "Expected ';' after expression");
+			return Some<*mut ASTNode> { node };
+		}
+		
+		return None<*mut ASTNode> { };
+	}
+}

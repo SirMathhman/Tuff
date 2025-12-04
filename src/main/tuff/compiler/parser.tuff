@@ -9,6 +9,14 @@ use string;
 use option;
 use io;
 
+// Include other parser modules
+use parser_expressions;
+use parser_binary_ops;
+use parser_statements;
+use parser_types;
+use parser_declarations;
+use parser_modules;
+
 struct Parser {
 	tokens: Vector<Token>,
 	pos: USize,
@@ -53,6 +61,22 @@ impl Parser {
 	// Peek at current token only
 	fn current(this: *Parser): Token => {
 		return this.peek(0USize);
+	}
+	
+	// Get the previous token
+	fn previous(this: *Parser): Token => {
+		if (this.pos > 0USize) {
+			let optToken = this.tokens.get(this.pos - 1USize);
+			if (optToken is Some<Token>) {
+				return optToken.value;
+			}
+		}
+		return Token {
+			TokenType.EndOfFile,
+			"",
+			0,
+			0
+		};
 	}
 	
 	// Consume and return current token
@@ -110,58 +134,9 @@ impl Parser {
 				break;
 			}
 			
-			// Try to parse a declaration
-			let token = this.current();
-			if (token.tokenType == TokenType.Fn) {
-				let decl = this.parseFunctionDecl();
-				if (decl is Some<*mut ASTNode>) {
-					programPtr.addChild(decl.value);
-				}
-			} else if (token.tokenType == TokenType.Struct) {
-				let decl = this.parseStructDecl();
-				if (decl is Some<*mut ASTNode>) {
-					programPtr.addChild(decl.value);
-				}
-			} else if (token.tokenType == TokenType.Enum) {
-				let decl = this.parseEnumDecl();
-				if (decl is Some<*mut ASTNode>) {
-					programPtr.addChild(decl.value);
-				}
-			} else if (token.tokenType == TokenType.Type) {
-				let decl = this.parseTypeAlias();
-				if (decl is Some<*mut ASTNode>) {
-					programPtr.addChild(decl.value);
-				}
-			} else if (token.tokenType == TokenType.Module) {
-				let decl = this.parseModuleDecl();
-				if (decl is Some<*mut ASTNode>) {
-					programPtr.addChild(decl.value);
-				}
-			} else if (token.tokenType == TokenType.Use) {
-				let decl = this.parseUseDecl();
-				if (decl is Some<*mut ASTNode>) {
-					programPtr.addChild(decl.value);
-				}
-			} else if (token.tokenType == TokenType.Expect) {
-				let decl = this.parseExpectDecl();
-				if (decl is Some<*mut ASTNode>) {
-					programPtr.addChild(decl.value);
-				}
-			} else if (token.tokenType == TokenType.Actual) {
-				let decl = this.parseActualDecl();
-				if (decl is Some<*mut ASTNode>) {
-					programPtr.addChild(decl.value);
-				}
-			} else if (token.tokenType == TokenType.Impl) {
-				let decl = this.parseImplBlock();
-				if (decl is Some<*mut ASTNode>) {
-					programPtr.addChild(decl.value);
-				}
-			} else if (token.tokenType == TokenType.Extern) {
-				let decl = this.parseExternDecl();
-				if (decl is Some<*mut ASTNode>) {
-					programPtr.addChild(decl.value);
-				}
+			let decl = this.parseDeclaration();
+			if (decl is Some<*mut ASTNode>) {
+				programPtr.addChild(decl.value);
 			} else {
 				// Skip unexpected token
 				this.advance();
@@ -169,51 +144,5 @@ impl Parser {
 		}
 		
 		return programPtr;
-	}
-	
-	// Stub methods to be implemented in subsequent phases
-	fn parseFunctionDecl(this: *mut Parser): Option<*mut ASTNode> => {
-		return None<*mut ASTNode> { };
-	}
-	
-	fn parseStructDecl(this: *mut Parser): Option<*mut ASTNode> => {
-		return None<*mut ASTNode> { };
-	}
-	
-	fn parseEnumDecl(this: *mut Parser): Option<*mut ASTNode> => {
-		return None<*mut ASTNode> { };
-	}
-	
-	fn parseTypeAlias(this: *mut Parser): Option<*mut ASTNode> => {
-		return None<*mut ASTNode> { };
-	}
-	
-	fn parseModuleDecl(this: *mut Parser): Option<*mut ASTNode> => {
-		return None<*mut ASTNode> { };
-	}
-	
-	fn parseUseDecl(this: *mut Parser): Option<*mut ASTNode> => {
-		return None<*mut ASTNode> { };
-	}
-	
-	fn parseExpectDecl(this: *mut Parser): Option<*mut ASTNode> => {
-		return None<*mut ASTNode> { };
-	}
-	
-	fn parseActualDecl(this: *mut Parser): Option<*mut ASTNode> => {
-		return None<*mut ASTNode> { };
-	}
-	
-	fn parseImplBlock(this: *mut Parser): Option<*mut ASTNode> => {
-		return None<*mut ASTNode> { };
-	}
-	
-	fn parseExternDecl(this: *mut Parser): Option<*mut ASTNode> => {
-		return None<*mut ASTNode> { };
-	}
-	
-	// Expression parsing stubs
-	fn parseType(this: *mut Parser): Option<*mut TypeExpr> => {
-		return None<*mut TypeExpr> { };
 	}
 }

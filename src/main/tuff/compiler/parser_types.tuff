@@ -1,0 +1,305 @@
+// Type expression parsing for Tuff Parser
+// Handles all type syntax: primitives, pointers, arrays, generics, function types, unions, intersections
+
+use token;
+use ast;
+use parser;
+use vector;
+use string;
+use option;
+
+impl Parser {
+	// Parse a type expression - the main entry point
+	fn parseTypeExpression(this: *mut Parser): Option<*mut ASTNode> => {
+		return this.parseUnionType();
+	}
+	
+	// Parse union type: Type1 | Type2
+	fn parseUnionType(this: *mut Parser): Option<*mut ASTNode> => {
+		let left = this.parseIntersectionType();
+		if (!(left is Some<*mut ASTNode>)) {
+			return None<*mut ASTNode> { };
+		}
+		
+		if (left is Some<*mut ASTNode>) {
+			let mut leftNode = left.value;
+			
+			loop {
+				if (!(this.check(TokenType.Pipe))) {
+					break;
+				}
+				this.advance();
+				
+				let right = this.parseIntersectionType();
+				if (right is Some<*mut ASTNode>) {
+					let node = ASTNode::new(ASTNodeType.UnionType);
+					node.addChild(leftNode);
+					node.addChild(right.value);
+					leftNode = node;
+				} else {
+					this.addError(this.current().line, this.current().column, "Expected type after '|'");
+					return None<*mut ASTNode> { };
+				}
+			}
+			
+			return Some<*mut ASTNode> { leftNode };
+		}
+		
+		return None<*mut ASTNode> { };
+	}
+	
+	// Parse intersection type: Type1 & Type2
+	fn parseIntersectionType(this: *mut Parser): Option<*mut ASTNode> => {
+		let left = this.parsePrimaryType();
+		if (!(left is Some<*mut ASTNode>)) {
+			return None<*mut ASTNode> { };
+		}
+		
+		if (left is Some<*mut ASTNode>) {
+			let mut leftNode = left.value;
+			
+			loop {
+				// Only parse as intersection if followed by a type, not an expression
+				// This is tricky because & is also used for references
+				// For now, only in type position do we parse intersections
+				if (!(this.check(TokenType.Ampersand))) {
+					break;
+				}
+				// Peek ahead to see if it looks like another type
+				let next = this.peek(1USize);
+				let isType = next.tokenType == TokenType.Identifier;
+				if (!(isType)) {
+					break;
+				}
+				
+				this.advance();
+				let right = this.parsePrimaryType();
+				if (right is Some<*mut ASTNode>) {
+					let node = ASTNode::new(ASTNodeType.IntersectionType);
+					node.addChild(leftNode);
+					node.addChild(right.value);
+					leftNode = node;
+				} else {
+					this.addError(this.current().line, this.current().column, "Expected type after '&'");
+					return None<*mut ASTNode> { };
+				}
+			}
+			
+			return Some<*mut ASTNode> { leftNode };
+		}
+		
+		return None<*mut ASTNode> { };
+	}
+	
+	// Parse primary type: primitive, pointer, array, function, generic, or identifier
+	fn parsePrimaryType(this: *mut Parser): Option<*mut ASTNode> => {
+		let token = this.current();
+		
+		// Pointer type: *T or *mut T
+		if (token.tokenType == TokenType.Star) {
+			return this.parsePointerType();
+		}
+		
+		// Array type: [T; N; Cap] or [T]
+		if (token.tokenType == TokenType.LBracket) {
+			return this.parseArrayType();
+		}
+		
+		// Function pointer type: |params| => ReturnType
+		if (token.tokenType == TokenType.Pipe) {
+			return this.parseFunctionPointerType();
+		}
+		
+		// Primitive types
+		if (this.isPrimitiveType(token.tokenType)) {
+			return this.parsePrimitiveType();
+		}
+		
+		// Identifier (could be generic like Option<T>)
+		if (token.tokenType == TokenType.Identifier) {
+			return this.parseNamedType();
+		}
+		
+		// Parenthesized type
+		if (token.tokenType == TokenType.LParen) {
+			this.advance();
+			let inner = this.parseTypeExpression();
+			this.expectToken(TokenType.RParen, "Expected ')' in type expression");
+			return inner;
+		}
+		
+		return None<*mut ASTNode> { };
+	}
+	
+	// Check if token is a primitive type
+	fn isPrimitiveType(this: *Parser, tokenType: TokenType): Bool => {
+		if (tokenType == TokenType.I8Type) return true;
+		if (tokenType == TokenType.I16Type) return true;
+		if (tokenType == TokenType.I32Type) return true;
+		if (tokenType == TokenType.I64Type) return true;
+		if (tokenType == TokenType.U8Type) return true;
+		if (tokenType == TokenType.U16Type) return true;
+		if (tokenType == TokenType.U32Type) return true;
+		if (tokenType == TokenType.U64Type) return true;
+		if (tokenType == TokenType.F32Type) return true;
+		if (tokenType == TokenType.F64Type) return true;
+		if (tokenType == TokenType.BoolType) return true;
+		if (tokenType == TokenType.VoidType) return true;
+		if (tokenType == TokenType.USizeType) return true;
+		return false;
+	}
+	
+	// Parse primitive type
+	fn parsePrimitiveType(this: *mut Parser): Option<*mut ASTNode> => {
+		let token = this.current();
+		this.advance();
+		
+		let node = ASTNode::new(ASTNodeType.TypeExpr);
+		node.value = tokenTypeToString(token.tokenType);
+		return Some<*mut ASTNode> { node };
+	}
+	
+	// Parse pointer type: *T or *mut T
+	fn parsePointerType(this: *mut Parser): Option<*mut ASTNode> => {
+		if (!(this.matchToken(TokenType.Star))) {
+			return None<*mut ASTNode> { };
+		}
+		
+		let node = ASTNode::new(ASTNodeType.PointerType);
+		node.isMutable = this.matchToken(TokenType.Mut);
+		
+		let inner = this.parsePrimaryType();
+		if (inner is Some<*mut ASTNode>) {
+			node.addChild(inner.value);
+		} else {
+			this.addError(this.current().line, this.current().column, "Expected type after '*'");
+			return None<*mut ASTNode> { };
+		}
+		
+		return Some<*mut ASTNode> { node };
+	}
+	
+	// Parse array type: [T; N; Cap] or [T]
+	fn parseArrayType(this: *mut Parser): Option<*mut ASTNode> => {
+		if (!(this.matchToken(TokenType.LBracket))) {
+			return None<*mut ASTNode> { };
+		}
+		
+		let node = ASTNode::new(ASTNodeType.ArrayType);
+		
+		// Parse element type
+		let elemType = this.parseTypeExpression();
+		if (elemType is Some<*mut ASTNode>) {
+			node.addChild(elemType.value);
+		} else {
+			this.addError(this.current().line, this.current().column, "Expected element type in array");
+			return None<*mut ASTNode> { };
+		}
+		
+		// Parse optional size and capacity: [T; initialized; capacity]
+		if (this.matchToken(TokenType.Semicolon)) {
+			// Parse initialized count
+			let initExpr = this.parseExpression();
+			if (initExpr is Some<*mut ASTNode>) {
+				node.addChild(initExpr.value);
+			}
+			
+			// Parse optional capacity
+			if (this.matchToken(TokenType.Semicolon)) {
+				let capExpr = this.parseExpression();
+				if (capExpr is Some<*mut ASTNode>) {
+					node.addChild(capExpr.value);
+				}
+			}
+		}
+		
+		this.expectToken(TokenType.RBracket, "Expected ']' in array type");
+		return Some<*mut ASTNode> { node };
+	}
+	
+	// Parse function pointer type: |ParamType1, ParamType2| => ReturnType
+	fn parseFunctionPointerType(this: *mut Parser): Option<*mut ASTNode> => {
+		if (!(this.matchToken(TokenType.Pipe))) {
+			return None<*mut ASTNode> { };
+		}
+		
+		let node = ASTNode::new(ASTNodeType.FunctionType);
+		
+		// Parse parameter types
+		if (!(this.check(TokenType.Pipe))) {
+			loop {
+				let paramType = this.parseTypeExpression();
+				if (paramType is Some<*mut ASTNode>) {
+					node.addChild(paramType.value);
+				}
+				
+				if (!(this.matchToken(TokenType.Comma))) {
+					break;
+				}
+			}
+		}
+		
+		this.expectToken(TokenType.Pipe, "Expected '|' after function pointer parameters");
+		this.expectToken(TokenType.FatArrow, "Expected '=>' in function pointer type");
+		
+		// Parse return type
+		let retType = this.parseTypeExpression();
+		if (retType is Some<*mut ASTNode>) {
+			node.addChild(retType.value);
+		} else {
+			this.addError(this.current().line, this.current().column, "Expected return type after '=>'");
+			return None<*mut ASTNode> { };
+		}
+		
+		return Some<*mut ASTNode> { node };
+	}
+	
+	// Parse named type (identifier, possibly with generics): Option<T>, Map<K, V>
+	fn parseNamedType(this: *mut Parser): Option<*mut ASTNode> => {
+		let token = this.current();
+		if (!(this.matchToken(TokenType.Identifier))) {
+			return None<*mut ASTNode> { };
+		}
+		
+		// Check for :: qualifier
+		let mut fullName = token.value;
+		loop {
+			if (!(this.matchToken(TokenType.DoubleColon))) {
+				break;
+			}
+			let nextToken = this.current();
+			if (!(this.matchToken(TokenType.Identifier))) {
+				this.addError(nextToken.line, nextToken.column, "Expected identifier after '::'");
+				break;
+			}
+			fullName = fullName + "::" + nextToken.value;
+		}
+		
+		// Check for generic arguments: <T, U>
+		if (this.check(TokenType.LAngle)) {
+			let node = ASTNode::new(ASTNodeType.GenericType);
+			node.value = fullName;
+			
+			this.advance();  // consume <
+			
+			loop {
+				let typeArg = this.parseTypeExpression();
+				if (typeArg is Some<*mut ASTNode>) {
+					node.addChild(typeArg.value);
+				}
+				
+				if (!(this.matchToken(TokenType.Comma))) {
+					break;
+				}
+			}
+			
+			this.expectToken(TokenType.RAngle, "Expected '>' after generic arguments");
+			return Some<*mut ASTNode> { node };
+		}
+		
+		// Simple identifier type
+		let node = ASTNode::new(ASTNodeType.TypeExpr);
+		node.value = fullName;
+		return Some<*mut ASTNode> { node };
+	}
+}

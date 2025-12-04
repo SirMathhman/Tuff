@@ -20,9 +20,12 @@ enum ASTNodeType {
 	UseDecl,
 	ExpectDecl,
 	ActualDecl,
-	ExternFnDecl,
-	ExternTypeDecl,
-	ExternUseDecl,
+	ExternDecl,
+	
+	// Function parts
+	GenericParams,
+	ParamList,
+	Field,
 	
 	// Statements
 	LetStatement,

@@ -1,0 +1,329 @@
+// Declaration parsing for Tuff Parser - Part 2
+// Handles: modules, use, expect/actual, extern, parameters, error recovery
+
+use token;
+use ast;
+use parser;
+use vector;
+use string;
+use option;
+
+impl Parser {
+	// Parse module declaration: module name { ... }
+	fn parseModuleDecl(this: *mut Parser): Option<*mut ASTNode> => {
+		if (!(this.matchToken(TokenType.Module))) {
+			return None<*mut ASTNode> { };
+		}
+		
+		let node = ASTNode::new(ASTNodeType.ModuleDecl);
+		
+		// Module name (may be qualified like com::example)
+		let mut moduleName = "";
+		let nameToken = this.current();
+		if (this.matchToken(TokenType.Identifier)) {
+			moduleName = nameToken.value;
+			
+			loop {
+				if (!(this.matchToken(TokenType.DoubleColon))) {
+					break;
+				}
+				let nextToken = this.current();
+				if (this.matchToken(TokenType.Identifier)) {
+					moduleName = moduleName + "::" + nextToken.value;
+				} else {
+					this.addError(nextToken.line, nextToken.column, "Expected identifier after '::'");
+					break;
+				}
+			}
+		}
+		node.value = moduleName;
+		
+		// Module body { declarations }
+		this.expectToken(TokenType.LBrace, "Expected '{' after module name");
+		
+		loop {
+			if (this.check(TokenType.RBrace) || this.isAtEnd()) {
+				break;
+			}
+			
+			let decl = this.parseDeclaration();
+			if (decl is Some<*mut ASTNode>) {
+				node.addChild(decl.value);
+			} else {
+				this.synchronize();
+			}
+		}
+		
+		this.expectToken(TokenType.RBrace, "Expected '}' after module declarations");
+		return Some<*mut ASTNode> { node };
+	}
+	
+	// Parse use declaration: use path::to::module;
+	fn parseUseDecl(this: *mut Parser): Option<*mut ASTNode> => {
+		if (!(this.matchToken(TokenType.Use))) {
+			return None<*mut ASTNode> { };
+		}
+		
+		let node = ASTNode::new(ASTNodeType.UseDecl);
+		
+		// Parse path
+		let mut path = "";
+		let firstToken = this.current();
+		if (this.matchToken(TokenType.Identifier)) {
+			path = firstToken.value;
+			
+			loop {
+				if (!(this.matchToken(TokenType.DoubleColon))) {
+					break;
+				}
+				let nextToken = this.current();
+				if (this.matchToken(TokenType.Identifier)) {
+					path = path + "::" + nextToken.value;
+				} else {
+					this.addError(nextToken.line, nextToken.column, "Expected identifier after '::'");
+					break;
+				}
+			}
+		}
+		node.value = path;
+		
+		this.expectToken(TokenType.Semicolon, "Expected ';' after use declaration");
+		return Some<*mut ASTNode> { node };
+	}
+	
+	// Parse expect declaration: expect fn name(params): Type;
+	fn parseExpectDecl(this: *mut Parser): Option<*mut ASTNode> => {
+		if (!(this.matchToken(TokenType.Expect))) {
+			return None<*mut ASTNode> { };
+		}
+		
+		let node = ASTNode::new(ASTNodeType.ExpectDecl);
+		
+		// Must be followed by fn
+		if (!(this.matchToken(TokenType.Fn))) {
+			this.addError(this.current().line, this.current().column, "Expected 'fn' after 'expect'");
+			return None<*mut ASTNode> { };
+		}
+		
+		// Function signature (name, params, return type)
+		let sig = this.parseFunctionSignature();
+		if (sig is Some<*mut ASTNode>) {
+			node.addChild(sig.value);
+		}
+		
+		this.expectToken(TokenType.Semicolon, "Expected ';' after expect declaration");
+		return Some<*mut ASTNode> { node };
+	}
+	
+	// Parse actual declaration: actual fn name(params): Type => body;
+	fn parseActualDecl(this: *mut Parser): Option<*mut ASTNode> => {
+		if (!(this.matchToken(TokenType.Actual))) {
+			return None<*mut ASTNode> { };
+		}
+		
+		let node = ASTNode::new(ASTNodeType.ActualDecl);
+		
+		// Parse the full function declaration
+		let fn_decl = this.parseFunctionDecl();
+		if (fn_decl is Some<*mut ASTNode>) {
+			node.addChild(fn_decl.value);
+		}
+		
+		return Some<*mut ASTNode> { node };
+	}
+	
+	// Parse extern declaration: extern fn name(params): Type;
+	fn parseExternDecl(this: *mut Parser): Option<*mut ASTNode> => {
+		if (!(this.matchToken(TokenType.Extern))) {
+			return None<*mut ASTNode> { };
+		}
+		
+		let node = ASTNode::new(ASTNodeType.ExternDecl);
+		
+		// Must be followed by fn
+		if (!(this.matchToken(TokenType.Fn))) {
+			this.addError(this.current().line, this.current().column, "Expected 'fn' after 'extern'");
+			return None<*mut ASTNode> { };
+		}
+		
+		// Function signature
+		let sig = this.parseFunctionSignature();
+		if (sig is Some<*mut ASTNode>) {
+			node.addChild(sig.value);
+		}
+		
+		this.expectToken(TokenType.Semicolon, "Expected ';' after extern declaration");
+		return Some<*mut ASTNode> { node };
+	}
+	
+	// Parse function signature (for expect/extern): name(params): Type
+	fn parseFunctionSignature(this: *mut Parser): Option<*mut ASTNode> => {
+		let node = ASTNode::new(ASTNodeType.FunctionDecl);
+		
+		// Function name (may be qualified)
+		let mut funcName = "";
+		let nameToken = this.current();
+		if (this.matchToken(TokenType.Identifier)) {
+			funcName = nameToken.value;
+			
+			loop {
+				if (!(this.matchToken(TokenType.DoubleColon))) {
+					break;
+				}
+				let nextToken = this.current();
+				if (this.matchToken(TokenType.Identifier)) {
+					funcName = funcName + "::" + nextToken.value;
+				} else {
+					break;
+				}
+			}
+		}
+		node.value = funcName;
+		
+		// Generic parameters
+		if (this.matchToken(TokenType.LAngle)) {
+			let generics = this.parseGenericParams();
+			if (generics is Some<*mut ASTNode>) {
+				node.addChild(generics.value);
+			}
+		}
+		
+		// Parameters
+		this.expectToken(TokenType.LParen, "Expected '('");
+		let params = this.parseParameters();
+		if (params is Some<*mut ASTNode>) {
+			node.addChild(params.value);
+		}
+		this.expectToken(TokenType.RParen, "Expected ')'");
+		
+		// Return type
+		if (this.matchToken(TokenType.Colon)) {
+			let retType = this.parseTypeExpression();
+			if (retType is Some<*mut ASTNode>) {
+				node.addChild(retType.value);
+			}
+		}
+		
+		return Some<*mut ASTNode> { node };
+	}
+	
+	// Parse generic parameters: T, U, 'a
+	fn parseGenericParams(this: *mut Parser): Option<*mut ASTNode> => {
+		let node = ASTNode::new(ASTNodeType.GenericParams);
+		
+		loop {
+			if (this.check(TokenType.RAngle) || this.isAtEnd()) {
+				break;
+			}
+			
+			let paramToken = this.current();
+			if (this.matchToken(TokenType.Identifier)) {
+				let param = ASTNode::new(ASTNodeType.GenericParam);
+				param.value = paramToken.value;
+				node.addChild(param);
+			}
+			
+			if (!(this.matchToken(TokenType.Comma))) {
+				break;
+			}
+		}
+		
+		this.expectToken(TokenType.RAngle, "Expected '>' after generic parameters");
+		return Some<*mut ASTNode> { node };
+	}
+	
+	// Parse function parameters: name: Type, name: Type
+	fn parseParameters(this: *mut Parser): Option<*mut ASTNode> => {
+		let node = ASTNode::new(ASTNodeType.ParamList);
+		
+		if (this.check(TokenType.RParen)) {
+			return Some<*mut ASTNode> { node };
+		}
+		
+		loop {
+			let param = this.parseParameter();
+			if (param is Some<*mut ASTNode>) {
+				node.addChild(param.value);
+			}
+			
+			if (!(this.matchToken(TokenType.Comma))) {
+				break;
+			}
+		}
+		
+		return Some<*mut ASTNode> { node };
+	}
+	
+	// Parse single parameter: name: Type or mut name: Type
+	fn parseParameter(this: *mut Parser): Option<*mut ASTNode> => {
+		let node = ASTNode::new(ASTNodeType.Parameter);
+		
+		// Optional mut
+		node.isMutable = this.matchToken(TokenType.Mut);
+		
+		// Parameter name
+		let nameToken = this.current();
+		if (!(this.matchToken(TokenType.Identifier))) {
+			return None<*mut ASTNode> { };
+		}
+		node.value = nameToken.value;
+		
+		// Type annotation
+		this.expectToken(TokenType.Colon, "Expected ':' after parameter name");
+		let paramType = this.parseTypeExpression();
+		if (paramType is Some<*mut ASTNode>) {
+			node.addChild(paramType.value);
+		}
+		
+		return Some<*mut ASTNode> { node };
+	}
+	
+	// Parse a top-level declaration
+	fn parseDeclaration(this: *mut Parser): Option<*mut ASTNode> => {
+		let token = this.current();
+		
+		if (token.tokenType == TokenType.Fn) return this.parseFunctionDecl();
+		if (token.tokenType == TokenType.Struct) return this.parseStructDecl();
+		if (token.tokenType == TokenType.Enum) return this.parseEnumDecl();
+		if (token.tokenType == TokenType.Impl) return this.parseImplBlock();
+		if (token.tokenType == TokenType.Type) return this.parseTypeAlias();
+		if (token.tokenType == TokenType.Module) return this.parseModuleDecl();
+		if (token.tokenType == TokenType.Use) return this.parseUseDecl();
+		if (token.tokenType == TokenType.Expect) return this.parseExpectDecl();
+		if (token.tokenType == TokenType.Actual) return this.parseActualDecl();
+		if (token.tokenType == TokenType.Extern) return this.parseExternDecl();
+		
+		return None<*mut ASTNode> { };
+	}
+	
+	// Error recovery - skip tokens until we find a sync point
+	fn synchronize(this: *mut Parser): Void => {
+		this.advance();
+		
+		loop {
+			if (this.isAtEnd()) {
+				break;
+			}
+			
+			// Statement terminators
+			let prev = this.previous().tokenType;
+			if (prev == TokenType.Semicolon) return;
+			if (prev == TokenType.RBrace) return;
+			
+			// Declaration starters
+			let current = this.current().tokenType;
+			if (current == TokenType.Fn) return;
+			if (current == TokenType.Struct) return;
+			if (current == TokenType.Enum) return;
+			if (current == TokenType.Impl) return;
+			if (current == TokenType.Type) return;
+			if (current == TokenType.Module) return;
+			if (current == TokenType.Use) return;
+			if (current == TokenType.Expect) return;
+			if (current == TokenType.Actual) return;
+			if (current == TokenType.Extern) return;
+			
+			this.advance();
+		}
+	}
+}
