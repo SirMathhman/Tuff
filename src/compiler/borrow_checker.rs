@@ -213,7 +213,10 @@ impl BorrowChecker {
     fn is_copy_type(ty: &Option<Type>) -> bool {
         match ty {
             Some(Type::Primitive(name)) => {
-                matches!(name.as_str(), "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "bool")
+                matches!(
+                    name.as_str(),
+                    "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "bool"
+                )
             }
             Some(Type::Reference(_, _)) => true, // References are Copy
             _ => false,

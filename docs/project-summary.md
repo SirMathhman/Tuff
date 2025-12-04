@@ -20,6 +20,7 @@
 ## Compiler Architecture
 
 ### Five Compiler Phases (All Complete)
+
 ```
 Tuff Source Code
     ↓
@@ -41,11 +42,13 @@ C Output (links against libc)
 ## Test Results
 
 ### All Tests Passing: 61/61 ✅
+
 - **Unit Tests:** 50 passing (10 per phase)
 - **Integration Tests:** 11 passing (full pipeline validation)
 - **Coverage:** All 5 compiler phases validated end-to-end
 
 ### Test Categories
+
 1. **Lexer Tests** - Tokenization correctness
 2. **Parser Tests** - AST generation correctness
 3. **Type Checker Tests** - Type inference and checking
@@ -61,22 +64,27 @@ C Output (links against libc)
 The compiler can now compile Tuff code that demonstrates its own functionality:
 
 #### Example 1: Lexer Helpers (`examples/lexer.tuff`)
+
 - 11 character classification functions
 - Demonstrates: copy type semantics, function composition
 - Successfully compiles to C
 
 #### Example 2: Parser State Machine (`examples/parser.tuff`)
+
 - State constants and transition logic
 - Demonstrates: complex control flow, state management
 - Successfully compiles to C
 
 #### Example 3: Type System (`examples/types.tuff`)
+
 - Type constants, unification, inference logic
 - Demonstrates: type operations, compatibility checking
 - Successfully compiles to C
 
 ### Key Milestone
+
 ✅ **Compiler can now compile code that would be used in its own implementation** - This validates:
+
 - Language completeness for self-hosting
 - Compiler robustness with non-trivial code
 - All five phases working correctly together
@@ -84,18 +92,21 @@ The compiler can now compile Tuff code that demonstrates its own functionality:
 ## Recent Enhancements
 
 ### Borrow Checker Fix
+
 - Added proper Copy type semantics
 - Primitive types (i32, bool, etc) now correctly handled as Copy
 - Enables multi-use of numeric parameters without artificial moves
 - Fixes bootstrap compilation errors
 
 ### Code Organization
+
 - Pre-commit hooks enforce:
   - 500 line limit per file (exceptions: parser, borrow_checker)
   - Markdown files in `/docs` folder (except README.md)
 - Git repository with clean commit history
 
 ### Documentation
+
 - Comprehensive bootstrap documentation (`docs/bootstrap.md`)
 - Language specification documentation
 - Error system documentation
@@ -104,6 +115,7 @@ The compiler can now compile Tuff code that demonstrates its own functionality:
 ## Language Features Implemented
 
 ### ✅ Supported Features
+
 - Function definitions with parameters and return types
 - Primitive types: i32, bool, str
 - Type inference (Hindley-Milner algorithm)
@@ -117,6 +129,7 @@ The compiler can now compile Tuff code that demonstrates its own functionality:
 - Copy type semantics for primitives
 
 ### ⏳ Not Yet Implemented
+
 - Struct/union types with multiple fields
 - Generic types and functions
 - Module system
@@ -130,6 +143,7 @@ The compiler can now compile Tuff code that demonstrates its own functionality:
 ## Project Statistics
 
 ### Code Metrics
+
 - **Total Rust Code:** 2,561 lines (compiler phases)
 - **Test Code:** 150+ lines (unit + integration tests)
 - **Bootstrap Examples:** 3 files, ~100 lines of Tuff code
@@ -137,6 +151,7 @@ The compiler can now compile Tuff code that demonstrates its own functionality:
 - **Pre-commit Hooks:** 168 lines (validation)
 
 ### Commits
+
 - Initial setup through Phase 8: 8 commits
 - Integration tests: 1 commit
 - Pre-commit enforcement: 1 commit
@@ -145,6 +160,7 @@ The compiler can now compile Tuff code that demonstrates its own functionality:
 - **Total: 14 commits**
 
 ### Build Time
+
 - Clean build: < 2 seconds
 - Test run: < 1 second
 - Example compilation: instantaneous
@@ -152,6 +168,7 @@ The compiler can now compile Tuff code that demonstrates its own functionality:
 ## Next Steps for Full Self-Hosting
 
 ### Phase 13: Complete Self-Hosting (Future)
+
 1. Rewrite lexer.rs → lexer.tuff
 2. Rewrite parser.rs → parser.tuff
 3. Rewrite type_checker.rs → type_checker.tuff
@@ -162,6 +179,7 @@ The compiler can now compile Tuff code that demonstrates its own functionality:
 8. Iterate: Ensure multiple generations produce identical output
 
 ### Preparatory Work
+
 - Enhance language to support more complex types
 - Implement standard library functions
 - Add better error handling
@@ -194,6 +212,7 @@ git hooks run pre-commit
 ## Conclusion
 
 The Tuff compiler project has successfully:
+
 - ✅ Implemented all 5 major compiler phases
 - ✅ Achieved 100% test pass rate (61/61 tests)
 - ✅ Initiated self-hosting with working bootstrap examples

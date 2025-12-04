@@ -3,11 +3,11 @@
 
 #[cfg(test)]
 mod integration_tests {
+    use tuff_compiler::compiler::borrow_checker::BorrowChecker;
+    use tuff_compiler::compiler::codegen::CodeGenerator;
     use tuff_compiler::compiler::lexer::Lexer;
     use tuff_compiler::compiler::parser::Parser;
     use tuff_compiler::compiler::type_checker::TypeChecker;
-    use tuff_compiler::compiler::borrow_checker::BorrowChecker;
-    use tuff_compiler::compiler::codegen::CodeGenerator;
 
     /// Helper function to compile Tuff source through full pipeline
     fn compile_tuff(source: &str) -> Result<String, String> {
@@ -17,17 +17,20 @@ mod integration_tests {
 
         // Parsing
         let mut parser = Parser::new(tokens, "test.tuff".to_string());
-        let program = parser.parse()
+        let program = parser
+            .parse()
             .map_err(|errs| format!("{} parse errors", errs.len()))?;
 
         // Type checking
         let mut type_checker = TypeChecker::new();
-        type_checker.check_program(&program)
+        type_checker
+            .check_program(&program)
             .map_err(|errs| format!("{} type errors", errs.len()))?;
 
         // Borrow checking
         let mut borrow_checker = BorrowChecker::new();
-        borrow_checker.check_program(&program)
+        borrow_checker
+            .check_program(&program)
             .map_err(|errs| format!("{} borrow errors", errs.len()))?;
 
         // Code generation
