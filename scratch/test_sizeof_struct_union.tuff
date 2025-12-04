@@ -1,0 +1,7 @@
+struct A { x: I32 }
+struct B { y: F64 }
+type U = A | B;
+struct Wrapper { u: U }
+fn main(): Void => {
+    let s = sizeOf(Wrapper);
+}

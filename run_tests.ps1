@@ -267,11 +267,12 @@ try {
     
     if ($tests.Count -gt 0) {
         if ($maxParallel -eq 1) {
-            Write-Host "Running $($tests.Count) tests sequentially..." -ForegroundColor Cyan
+            Write-Host "Running $($tests.Count) tests sequentially (ThrottleLimit 1)..." -ForegroundColor Cyan
         } else {
-            Write-Host "Running $($tests.Count) tests in parallel..." -ForegroundColor Cyan
+            Write-Host "Running $($tests.Count) tests in parallel (ThrottleLimit $maxParallel)..." -ForegroundColor Cyan
         }
         
+        # Always use parallel execution with adjustable throttle limit
         $results = $tests | ForEach-Object -ThrottleLimit $maxParallel -Parallel {
             $Test = $_
             $CompilerPath = $using:CompilerPath
