@@ -56,6 +56,7 @@
     "feature1_variables/test_shadowing": "already declared",
     "feature8_expect_actual/test_missing_actual": "not declared",
     "feature8_expect_actual/test_signature_mismatch": "return type mismatch",
+    "feature11_ownership/test_dangling_pointer": "dangling",
     "feature19_multiple_of/test_invalid_literal": "not a multiple of",
     "feature19_multiple_of/test_literal_return": "got I32",
     "feature19_multiple_of/test_non_literal": "Cannot assign non-literal"
