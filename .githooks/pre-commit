@@ -18,8 +18,8 @@ EXCLUDED_DIRS = {"target", ".git", ".githooks", "node_modules", ".vscode", ".ide
 
 def is_excluded(file_path: str) -> bool:
     """Check if a file path is in an excluded directory or is an excluded file type."""
-    # Exclude parser and borrow_checker - known large files, to be refactored
-    if "parser.rs" in file_path or "borrow_checker.rs" in file_path:
+    # Exclude parser - known large file (707 lines), to be refactored
+    if "parser.rs" in file_path:
         return True
 
     # Exclude markdown files from line count check (they're checked separately for location)
