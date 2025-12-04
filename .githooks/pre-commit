@@ -152,8 +152,8 @@ def main() -> int:
     all_valid = all_sizes_valid and all_markdown_valid
 
     if all_valid:
-        print(f"✓ All files are within the {MAX_LINES} line limit.")
-        print("✓ All markdown files are properly organized.")
+        print(f"[OK] All files are within the {MAX_LINES} line limit.")
+        print("[OK] All markdown files are properly organized.")
         return 0
     else:
         if not all_sizes_valid:
