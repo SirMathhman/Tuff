@@ -1,0 +1,15 @@
+#!/bin/bash
+# Git pre-commit hook wrapper - delegates to appropriate script based on shell
+
+# Try to run PowerShell version on Windows
+if command -v pwsh &> /dev/null; then
+    pwsh -NoProfile -ExecutionPolicy Bypass -File "$(git rev-parse --git-dir)/hooks/pre-commit.ps1"
+    exit $?
+elif command -v powershell &> /dev/null; then
+    powershell -NoProfile -ExecutionPolicy Bypass -File "$(git rev-parse --git-dir)/hooks/pre-commit.ps1"
+    exit $?
+else
+    # Fall back to bash version
+    bash "$(git rev-parse --git-dir)/hooks/pre-commit"
+    exit $?
+fi
