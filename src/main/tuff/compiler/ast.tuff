@@ -1,0 +1,200 @@
+// AST node types and structures for Tuff parser
+// This defines a proper AST with type expressions as nodes, not strings
+
+use vector;
+use string;
+use option;
+
+// All possible AST node types
+enum ASTNodeType {
+	// Program and declarations
+	Program,
+	
+	// Declarations
+	FunctionDecl,
+	StructDecl,
+	EnumDecl,
+	TypeAlias,
+	ImplBlock,
+	ModuleDecl,
+	UseDecl,
+	ExpectDecl,
+	ActualDecl,
+	ExternFnDecl,
+	ExternTypeDecl,
+	ExternUseDecl,
+	
+	// Statements
+	LetStatement,
+	AssignmentStatement,
+	IfStatement,
+	WhileStatement,
+	LoopStatement,
+	BlockStatement,
+	ReturnStatement,
+	BreakStatement,
+	ContinueStatement,
+	ExpressionStatement,
+	
+	// Expressions
+	BinaryOp,
+	UnaryOp,
+	CallExpr,
+	FieldAccess,
+	IndexExpr,
+	ArrayLiteral,
+	StructLiteral,
+	EnumValue,
+	IfExpr,
+	MatchExpr,
+	MatchArm,
+	Identifier,
+	IntLiteral,
+	FloatLiteral,
+	StringLiteral,
+	CharLiteral,
+	BoolLiteral,
+	ArrayExpr,
+	BlockExpr,
+	ReferenceExpr,
+	DereferenceExpr,
+	CastExpr,
+	SizeOfExpr,
+	IsExpr,
+	
+	// Types (when used as expressions in generic args, etc)
+	TypeExpr,
+	PointerType,
+	ArrayType,
+	FunctionType,
+	GenericType,
+	UnionType,
+	IntersectionType,
+	
+	// Other
+	GenericParam,
+	Parameter,
+	StructField,
+	EnumVariant
+}
+
+// Type expression kinds - for representing types as AST nodes
+enum TypeExprKind {
+	Primitive,
+	Identifier,
+	Pointer,
+	Array,
+	Function,
+	Generic,
+	Union,
+	Intersection
+}
+
+// Type expressions - proper representation of types as AST nodes
+struct TypeExpr {
+	kind: TypeExprKind,
+	name: string,                              // For Primitive, Identifier, Generic
+	mutable: Bool,                             // For Pointer
+	lifetime: Option<string>,                  // For Pointer
+	inner: Option<*TypeExpr>,                  // For Pointer, Array
+	element: Option<*TypeExpr>,                // For Array
+	initialized: Option<*ASTNode>,             // For Array
+	capacity: Option<*ASTNode>,                // For Array
+	params: Vector<*TypeExpr>,                 // For Function
+	returnType: Option<*TypeExpr>,             // For Function
+	args: Vector<*TypeExpr>,                   // For Generic
+	left: Option<*TypeExpr>,                   // For Union, Intersection
+	right: Option<*TypeExpr>                   // For Union, Intersection
+}
+
+// Generic parameter with optional bounds
+struct GenericParam {
+	name: string,
+	lifetime: Bool  // true if it's a lifetime param like 'a
+}
+
+// Function parameter
+struct Parameter {
+	name: string,
+	paramType: *TypeExpr,
+	line: I32,
+	column: I32
+}
+
+// Struct field
+struct StructField {
+	name: string,
+	fieldType: *TypeExpr,
+	line: I32,
+	column: I32
+}
+
+// Main AST node structure
+struct ASTNode {
+	nodeType: ASTNodeType,
+	value: string,                           // For identifiers, literals, etc.
+	children: Vector<*ASTNode>,              // For nested nodes
+	line: I32,
+	column: I32,
+	
+	// For declarations with types
+	typeExpr: Option<*TypeExpr>,             // The type when available
+	genericParams: Vector<GenericParam>,     // Generic parameters
+	
+	// For structured declarations
+	parameters: Vector<Parameter>,           // Function parameters
+	fields: Vector<StructField>,             // Struct fields
+	variants: Vector<string>,                // Enum variants
+	
+	// For tracking mutable vs immutable
+	isMutable: Bool,
+	
+	// For tracking if exported
+	isExported: Bool
+}
+
+impl ASTNode {
+	// Create a new AST node
+	fn new(nodeType: ASTNodeType): *mut ASTNode => {
+		let mut node: *mut ASTNode = &mut ASTNode {
+			nodeType,
+			"",
+			Vector::new<*ASTNode>(10USize),
+			0,
+			0,
+			None<*TypeExpr> { },
+			Vector::new<GenericParam>(5USize),
+			Vector::new<Parameter>(5USize),
+			Vector::new<StructField>(5USize),
+			Vector::new<string>(5USize),
+			false,
+			false
+		};
+		return node;
+	}
+	
+	// Add a child node
+	fn addChild(this: *mut ASTNode, child: *ASTNode): Void => {
+		this.children.push(child);
+	}
+	
+	// Add a parameter
+	fn addParameter(this: *mut ASTNode, param: Parameter): Void => {
+		this.parameters.push(param);
+	}
+	
+	// Add a struct field
+	fn addField(this: *mut ASTNode, field: StructField): Void => {
+		this.fields.push(field);
+	}
+	
+	// Add an enum variant
+	fn addVariant(this: *mut ASTNode, variant: string): Void => {
+		this.variants.push(variant);
+	}
+	
+	// Add a generic parameter
+	fn addGenericParam(this: *mut ASTNode, param: GenericParam): Void => {
+		this.genericParams.push(param);
+	}
+}

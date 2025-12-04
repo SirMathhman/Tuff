@@ -415,7 +415,10 @@ std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, c
 						 c->type == ASTNodeType::SIZEOF_EXPR || c->type == ASTNodeType::STRUCT_LITERAL ||
 						 c->type == ASTNodeType::ARRAY_LITERAL || c->type == ASTNodeType::STRING_LITERAL ||
 						 c->type == ASTNodeType::CHAR_LITERAL || c->type == ASTNodeType::IS_EXPR ||
-						 c->type == ASTNodeType::MATCH_EXPR) { topLevelStmts.push_back(c); }
+						 c->type == ASTNodeType::MATCH_EXPR)
+		{
+			topLevelStmts.push_back(c);
+		}
 	}
 
 	// If there are top-level statements but no main function, wrap them in main
@@ -427,17 +430,17 @@ std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, c
 		{
 			auto stmt = topLevelStmts[i];
 			bool isLastExpr = (i == topLevelStmts.size() - 1) &&
-					(stmt->type == ASTNodeType::CALL_EXPR || stmt->type == ASTNodeType::BINARY_OP ||
-					 stmt->type == ASTNodeType::UNARY_OP || stmt->type == ASTNodeType::LITERAL ||
-					 stmt->type == ASTNodeType::IDENTIFIER || stmt->type == ASTNodeType::IF_EXPR ||
-					 stmt->type == ASTNodeType::INDEX_EXPR || stmt->type == ASTNodeType::FIELD_ACCESS ||
-					 stmt->type == ASTNodeType::DEREF_EXPR || stmt->type == ASTNodeType::CAST_EXPR ||
-					 stmt->type == ASTNodeType::IS_EXPR);
+												(stmt->type == ASTNodeType::CALL_EXPR || stmt->type == ASTNodeType::BINARY_OP ||
+												 stmt->type == ASTNodeType::UNARY_OP || stmt->type == ASTNodeType::LITERAL ||
+												 stmt->type == ASTNodeType::IDENTIFIER || stmt->type == ASTNodeType::IF_EXPR ||
+												 stmt->type == ASTNodeType::INDEX_EXPR || stmt->type == ASTNodeType::FIELD_ACCESS ||
+												 stmt->type == ASTNodeType::DEREF_EXPR || stmt->type == ASTNodeType::CAST_EXPR ||
+												 stmt->type == ASTNodeType::IS_EXPR);
 			std::string type = stmt->inferredType;
 			bool isIntLike = (type == "I32" || type == "int32_t" || type == "U8" || type == "uint8_t" ||
-					type == "I8" || type == "int8_t" || type == "U16" || type == "uint16_t" ||
-					type == "I16" || type == "int16_t" || type == "Char" || type == "char" ||
-					type == "Bool" || type == "bool");
+												type == "I8" || type == "int8_t" || type == "U16" || type == "uint16_t" ||
+												type == "I16" || type == "int16_t" || type == "Char" || type == "char" ||
+												type == "Bool" || type == "bool");
 			if (isLastExpr && isIntLike)
 				h << "  return " << generateNode(stmt) << ";\n";
 			else if (isLastExpr)
@@ -446,7 +449,8 @@ std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, c
 				h << "  " << generateNode(stmt) << ";\n";
 		}
 		h << "}\n\n";
-		if (!isLibrary) h << "int main() { return tuff_main(); }\n";
+		if (!isLibrary)
+			h << "int main() { return tuff_main(); }\n";
 	}
 	else if (hasMainFunction && !isLibrary)
 	{

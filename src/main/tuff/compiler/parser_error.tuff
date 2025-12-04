@@ -1,0 +1,14 @@
+// Parser error handling
+
+// Parse error with location information
+struct ParseError {
+	line: I32,
+	column: I32,
+	message: string
+}
+
+impl ParseError {
+	fn new(line: I32, column: I32, message: string): ParseError => {
+		return ParseError { line, column, message };
+	}
+}

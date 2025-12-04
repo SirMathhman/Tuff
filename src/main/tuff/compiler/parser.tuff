@@ -1,0 +1,224 @@
+// Tuff Parser - Recursive descent parser with proper type system
+// Parses tokens from lexer into AST with type expressions as nodes
+
+use token;
+use ast;
+use parser_error;
+use vector;
+use string;
+use option;
+use io;
+
+struct Parser {
+	tokens: Vector<Token>,
+	pos: USize,
+	errors: Vector<ParseError>
+}
+
+impl Parser {
+	// Create a new parser from tokens
+	fn new(tokens: Vector<Token>): Parser => {
+		return Parser {
+			tokens,
+			0USize,
+			Vector::new<ParseError>(10USize)
+		};
+	}
+	
+	// Peek at current token (offset 0) or lookahead (offset > 0)
+	fn peek(this: *Parser, offset: USize): Token => {
+		let index = this.pos + offset;
+		if (index >= this.tokens.len()) {
+			// Return EOF token
+			return Token {
+				TokenType.EndOfFile,
+				"",
+				0,
+				0
+			};
+		}
+		let optToken = this.tokens.get(index);
+		if (optToken is Some<Token>) {
+			return optToken.value;
+		}
+		// Return EOF if None (shouldn't happen)
+		return Token {
+			TokenType.EndOfFile,
+			"",
+			0,
+			0
+		};
+	}
+	
+	// Peek at current token only
+	fn current(this: *Parser): Token => {
+		return this.peek(0USize);
+	}
+	
+	// Consume and return current token
+	fn advance(this: *mut Parser): Token => {
+		let token = this.current();
+		if (this.pos < this.tokens.len()) {
+			this.pos = this.pos + 1USize;
+		}
+		return token;
+	}
+	
+	// Check if current token matches type
+	fn check(this: *Parser, tokenType: TokenType): Bool => {
+		return this.current().tokenType == tokenType;
+	}
+	
+	// If current token matches, consume it and return true
+	fn matchToken(this: *mut Parser, tokenType: TokenType): Bool => {
+		if (this.check(tokenType)) {
+			this.advance();
+			return true;
+		}
+		return false;
+	}
+	
+	// Consume a token of expected type or record error
+	fn expectToken(this: *mut Parser, tokenType: TokenType, message: string): Token => {
+		let token = this.current();
+		if (token.tokenType == tokenType) {
+			this.advance();
+			return token;
+		}
+		this.addError(token.line, token.column, message);
+		return token;
+	}
+	
+	// Add an error to the error list
+	fn addError(this: *mut Parser, line: I32, column: I32, message: string): Void => {
+		let error = ParseError::new(line, column, message);
+		this.errors.push(error);
+	}
+	
+	// Check if we're at end of file
+	fn isAtEnd(this: *Parser): Bool => {
+		return this.current().tokenType == TokenType.EndOfFile;
+	}
+	
+	// Main parse entry point - parses a program (top-level declarations)
+	fn parse(this: *mut Parser): *mut ASTNode => {
+		let programPtr = ASTNode::new(ASTNodeType.Program);
+		
+		// Parse top-level declarations until EOF
+		loop {
+			if (this.isAtEnd()) {
+				break;
+			}
+			
+			// Try to parse a declaration
+			let token = this.current();
+			if (token.tokenType == TokenType.Fn) {
+				let decl = this.parseFunctionDecl();
+				if (decl is Some<*mut ASTNode>) {
+					programPtr.addChild(decl.value);
+				}
+			} else if (token.tokenType == TokenType.Struct) {
+				let decl = this.parseStructDecl();
+				if (decl is Some<*mut ASTNode>) {
+					programPtr.addChild(decl.value);
+				}
+			} else if (token.tokenType == TokenType.Enum) {
+				let decl = this.parseEnumDecl();
+				if (decl is Some<*mut ASTNode>) {
+					programPtr.addChild(decl.value);
+				}
+			} else if (token.tokenType == TokenType.Type) {
+				let decl = this.parseTypeAlias();
+				if (decl is Some<*mut ASTNode>) {
+					programPtr.addChild(decl.value);
+				}
+			} else if (token.tokenType == TokenType.Module) {
+				let decl = this.parseModuleDecl();
+				if (decl is Some<*mut ASTNode>) {
+					programPtr.addChild(decl.value);
+				}
+			} else if (token.tokenType == TokenType.Use) {
+				let decl = this.parseUseDecl();
+				if (decl is Some<*mut ASTNode>) {
+					programPtr.addChild(decl.value);
+				}
+			} else if (token.tokenType == TokenType.Expect) {
+				let decl = this.parseExpectDecl();
+				if (decl is Some<*mut ASTNode>) {
+					programPtr.addChild(decl.value);
+				}
+			} else if (token.tokenType == TokenType.Actual) {
+				let decl = this.parseActualDecl();
+				if (decl is Some<*mut ASTNode>) {
+					programPtr.addChild(decl.value);
+				}
+			} else if (token.tokenType == TokenType.Impl) {
+				let decl = this.parseImplBlock();
+				if (decl is Some<*mut ASTNode>) {
+					programPtr.addChild(decl.value);
+				}
+			} else if (token.tokenType == TokenType.Extern) {
+				let decl = this.parseExternDecl();
+				if (decl is Some<*mut ASTNode>) {
+					programPtr.addChild(decl.value);
+				}
+			} else {
+				// Skip unexpected token
+				this.advance();
+			}
+		}
+		
+		return programPtr;
+	}
+	
+	// Stub methods to be implemented in subsequent phases
+	fn parseFunctionDecl(this: *mut Parser): Option<*mut ASTNode> => {
+		return None<*mut ASTNode> { };
+	}
+	
+	fn parseStructDecl(this: *mut Parser): Option<*mut ASTNode> => {
+		return None<*mut ASTNode> { };
+	}
+	
+	fn parseEnumDecl(this: *mut Parser): Option<*mut ASTNode> => {
+		return None<*mut ASTNode> { };
+	}
+	
+	fn parseTypeAlias(this: *mut Parser): Option<*mut ASTNode> => {
+		return None<*mut ASTNode> { };
+	}
+	
+	fn parseModuleDecl(this: *mut Parser): Option<*mut ASTNode> => {
+		return None<*mut ASTNode> { };
+	}
+	
+	fn parseUseDecl(this: *mut Parser): Option<*mut ASTNode> => {
+		return None<*mut ASTNode> { };
+	}
+	
+	fn parseExpectDecl(this: *mut Parser): Option<*mut ASTNode> => {
+		return None<*mut ASTNode> { };
+	}
+	
+	fn parseActualDecl(this: *mut Parser): Option<*mut ASTNode> => {
+		return None<*mut ASTNode> { };
+	}
+	
+	fn parseImplBlock(this: *mut Parser): Option<*mut ASTNode> => {
+		return None<*mut ASTNode> { };
+	}
+	
+	fn parseExternDecl(this: *mut Parser): Option<*mut ASTNode> => {
+		return None<*mut ASTNode> { };
+	}
+	
+	// Expression parsing stubs
+	fn parseExpression(this: *mut Parser): Option<*mut ASTNode> => {
+		return None<*mut ASTNode> { };
+	}
+	
+	// Type parsing stubs
+	fn parseType(this: *mut Parser): Option<*mut TypeExpr> => {
+		return None<*mut TypeExpr> { };
+	}
+}
