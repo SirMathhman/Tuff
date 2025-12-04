@@ -1,6 +1,5 @@
 /// Type checker for Tuff compiler.
 /// Performs type inference and checking on AST nodes.
-
 use crate::compiler::ast::*;
 use crate::compiler::error::{CompileError, ErrorKind, Span};
 use std::collections::HashMap;
@@ -390,15 +389,27 @@ mod tests {
     fn test_scopes() {
         let mut checker = TypeChecker::new();
         checker.bind("x".to_string(), Type::Primitive("i32".to_string()));
-        assert_eq!(checker.lookup("x"), Some(Type::Primitive("i32".to_string())));
+        assert_eq!(
+            checker.lookup("x"),
+            Some(Type::Primitive("i32".to_string()))
+        );
 
         checker.push_scope();
         checker.bind("y".to_string(), Type::Primitive("bool".to_string()));
-        assert_eq!(checker.lookup("x"), Some(Type::Primitive("i32".to_string())));
-        assert_eq!(checker.lookup("y"), Some(Type::Primitive("bool".to_string())));
+        assert_eq!(
+            checker.lookup("x"),
+            Some(Type::Primitive("i32".to_string()))
+        );
+        assert_eq!(
+            checker.lookup("y"),
+            Some(Type::Primitive("bool".to_string()))
+        );
 
         checker.pop_scope();
-        assert_eq!(checker.lookup("x"), Some(Type::Primitive("i32".to_string())));
+        assert_eq!(
+            checker.lookup("x"),
+            Some(Type::Primitive("i32".to_string()))
+        );
         assert_eq!(checker.lookup("y"), None);
     }
 }
