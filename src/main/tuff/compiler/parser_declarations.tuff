@@ -4,149 +4,214 @@
 use token;
 use ast;
 use parser;
+use parser_types;
+use parser_expressions;
 use vector;
 use string;
 use option;
+use mem;
 
 impl Parser {
+	// Helper to allocate declaration on heap
+	fn allocDecl(this: *mut Parser, decl: Decl): *Decl => {
+		let raw = malloc<Decl>(sizeOf(DeclWrapper));
+		let ptr: *mut Decl = raw + 0;
+		*ptr = decl;
+		return ptr;
+	}
+
 	// Parse function declaration: fn name<T>(params): ReturnType => body;
-	fn parseFunctionDecl(this: *mut Parser): Option<*mut ASTNode> => {
-		let startToken = this.current();
+	fn parseFunctionDecl(this: *mut Parser): Option<*Decl> => {
 		if (!(this.matchToken(TokenType.Fn))) {
-			return None<*mut ASTNode> { };
+			return None<*Decl> { };
 		}
-		
-		let node = ASTNode::new(ASTNodeType.FunctionDecl);
 		
 		// Function name
 		let nameToken = this.current();
 		if (!(this.matchToken(TokenType.Identifier))) {
 			this.addError(nameToken.line, nameToken.column, "Expected function name after 'fn'");
-			return None<*mut ASTNode> { };
+			return None<*Decl> { };
 		}
-		node.value = nameToken.value;
+		let name = nameToken.value;
 		
 		// Generic parameters <T, U>
-		if (this.matchToken(TokenType.LAngle)) {
-			let generics = this.parseGenericParams();
-			if (generics is Some<*mut ASTNode>) {
-				node.addChild(generics.value);
-			}
+		let mut generics = Vector::new<GenericParam>(0USize);
+		if (this.check(TokenType.LAngle)) {
+			generics = this.parseGenericParams();
 		}
 		
 		// Parameters (param: Type, ...)
 		this.expectToken(TokenType.LParen, "Expected '(' after function name");
 		let params = this.parseParameters();
-		if (params is Some<*mut ASTNode>) {
-			node.addChild(params.value);
-		}
 		this.expectToken(TokenType.RParen, "Expected ')' after parameters");
 		
 		// Return type: ReturnType
-		if (this.matchToken(TokenType.Colon)) {
-			let retType = this.parseTypeExpression();
-			if (retType is Some<*mut ASTNode>) {
-				node.addChild(retType.value);
-			} else {
+		let returnType = if (this.matchToken(TokenType.Colon)) {
+			let res = this.parseTypeExpression();
+			if (!(res is Some<*Type>)) {
 				this.addError(this.current().line, this.current().column, "Expected return type after ':'");
 			}
-		}
+			res
+		} else {
+			None<*Type> { }
+		};
 		
 		// Function body => expr or => { ... }
 		this.expectToken(TokenType.FatArrow, "Expected '=>' before function body");
-		let body = this.parseStatementOrExpression();
-		if (body is Some<*mut ASTNode>) {
-			node.addChild(body.value);
+		let body = this.parseExpression();
+		if (!(body is Some<*Expr>)) {
+			this.addError(this.current().line, this.current().column, "Expected function body");
+			return None<*Decl> { };
 		}
 		
-		return Some<*mut ASTNode> { node };
+		// Allocate heap objects
+		let genericsPtr = malloc<Vector<GenericParam>>(sizeOf(Vector<GenericParam>));
+		let gp: *mut Vector<GenericParam> = genericsPtr + 0;
+		*gp = generics;
+		
+		let paramsPtr = malloc<Vector<FunctionParam>>(sizeOf(Vector<FunctionParam>));
+		let pp: *mut Vector<FunctionParam> = paramsPtr + 0;
+		*pp = params;
+		
+		let returnTypePtr = malloc<Option<*Type>>(sizeOf(Option<*Type>));
+		let rp: *mut Option<*Type> = returnTypePtr + 0;
+		*rp = returnType;
+		
+		let funcDecl = FunctionDecl { name, genericsPtr, paramsPtr, returnTypePtr, body.value };
+		return Some<*Decl> { this.allocDecl(funcDecl) };
+	}
+	
+	// Parse generic parameters: <T, U>
+	fn parseGenericParams(this: *mut Parser): Vector<GenericParam> => {
+		let mut params = Vector::new<GenericParam>(2USize);
+		if (!(this.matchToken(TokenType.LAngle))) {
+			return params;
+		}
+		
+		loop {
+			let token = this.current();
+			if (this.matchToken(TokenType.Identifier)) {
+				let lifetime = false; // TODO: detect lifetime syntax
+				params.push(GenericParam { token.value, lifetime });
+			}
+			
+			if (!(this.matchToken(TokenType.Comma))) {
+				break;
+			}
+		}
+		
+		this.expectToken(TokenType.RAngle, "Expected '>' after generic parameters");
+		return params;
+	}
+	
+	// Parse function parameters: (name: Type, ...)
+	fn parseParameters(this: *mut Parser): Vector<FunctionParam> => {
+		let mut params = Vector::new<FunctionParam>(4USize);
+		
+		if (this.check(TokenType.RParen)) {
+			return params;
+		}
+		
+		loop {
+			let mutable = this.matchToken(TokenType.Mut);
+			
+			let nameToken = this.current();
+			if (!(this.matchToken(TokenType.Identifier))) {
+				this.addError(nameToken.line, nameToken.column, "Expected parameter name");
+				break;
+			}
+			let name = nameToken.value;
+			
+			this.expectToken(TokenType.Colon, "Expected ':' after parameter name");
+			
+			let paramType = this.parseTypeExpression();
+			if (paramType is Some<*Type>) {
+				params.push(FunctionParam { name, paramType.value, mutable });
+			}
+			
+			if (!(this.matchToken(TokenType.Comma))) {
+				break;
+			}
+		}
+		
+		return params;
 	}
 	
 	// Parse struct declaration: struct Name<T> { fields }
-	fn parseStructDecl(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseStructDecl(this: *mut Parser): Option<*Decl> => {
 		if (!(this.matchToken(TokenType.Struct))) {
-			return None<*mut ASTNode> { };
+			return None<*Decl> { };
 		}
-		
-		let node = ASTNode::new(ASTNodeType.StructDecl);
 		
 		// Struct name
 		let nameToken = this.current();
 		if (!(this.matchToken(TokenType.Identifier))) {
 			this.addError(nameToken.line, nameToken.column, "Expected struct name");
-			return None<*mut ASTNode> { };
+			return None<*Decl> { };
 		}
-		node.value = nameToken.value;
+		let name = nameToken.value;
 		
 		// Generic parameters
-		if (this.matchToken(TokenType.LAngle)) {
-			let generics = this.parseGenericParams();
-			if (generics is Some<*mut ASTNode>) {
-				node.addChild(generics.value);
-			}
+		let mut generics = Vector::new<GenericParam>(0USize);
+		if (this.check(TokenType.LAngle)) {
+			generics = this.parseGenericParams();
 		}
 		
 		// Fields { name: Type, ... }
 		this.expectToken(TokenType.LBrace, "Expected '{' after struct name");
+		let mut fields = Vector::new<StructField>(4USize);
 		
 		loop {
 			if (this.check(TokenType.RBrace) || this.isAtEnd()) {
 				break;
 			}
 			
-			let field = this.parseStructField();
-			if (field is Some<*mut ASTNode>) {
-				node.addChild(field.value);
+			let nameToken = this.current();
+			if (this.matchToken(TokenType.Identifier)) {
+				this.expectToken(TokenType.Colon, "Expected ':' after field name");
+				let fieldType = this.parseTypeExpression();
+				if (fieldType is Some<*Type>) {
+					fields.push(StructField { nameToken.value, fieldType.value });
+				}
 			}
 			
-			// Comma between fields (optional before })
 			if (!(this.matchToken(TokenType.Comma))) {
 				break;
 			}
 		}
 		
 		this.expectToken(TokenType.RBrace, "Expected '}' after struct fields");
-		return Some<*mut ASTNode> { node };
-	}
-	
-	// Parse struct field: name: Type
-	fn parseStructField(this: *mut Parser): Option<*mut ASTNode> => {
-		let nameToken = this.current();
-		if (!(this.matchToken(TokenType.Identifier))) {
-			return None<*mut ASTNode> { };
-		}
 		
-		let field = ASTNode::new(ASTNodeType.Field);
-		field.value = nameToken.value;
+		// Allocate heap objects
+		let genericsPtr = malloc<Vector<GenericParam>>(sizeOf(Vector<GenericParam>));
+		let gp: *mut Vector<GenericParam> = genericsPtr + 0;
+		*gp = generics;
 		
-		this.expectToken(TokenType.Colon, "Expected ':' after field name");
+		let fieldsPtr = malloc<Vector<StructField>>(sizeOf(Vector<StructField>));
+		let fp: *mut Vector<StructField> = fieldsPtr + 0;
+		*fp = fields;
 		
-		let fieldType = this.parseTypeExpression();
-		if (fieldType is Some<*mut ASTNode>) {
-			field.addChild(fieldType.value);
-		}
-		
-		return Some<*mut ASTNode> { field };
+		let structDecl = StructDecl { name, genericsPtr, fieldsPtr };
+		return Some<*Decl> { this.allocDecl(structDecl) };
 	}
 	
 	// Parse enum declaration: enum Name { Variant1, Variant2 }
-	fn parseEnumDecl(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseEnumDecl(this: *mut Parser): Option<*Decl> => {
 		if (!(this.matchToken(TokenType.Enum))) {
-			return None<*mut ASTNode> { };
+			return None<*Decl> { };
 		}
-		
-		let node = ASTNode::new(ASTNodeType.EnumDecl);
 		
 		// Enum name
 		let nameToken = this.current();
 		if (!(this.matchToken(TokenType.Identifier))) {
 			this.addError(nameToken.line, nameToken.column, "Expected enum name");
-			return None<*mut ASTNode> { };
+			return None<*Decl> { };
 		}
-		node.value = nameToken.value;
+		let name = nameToken.value;
 		
 		// Variants { Variant1, Variant2 }
 		this.expectToken(TokenType.LBrace, "Expected '{' after enum name");
+		let mut variants = Vector::new<EnumVariant>(4USize);
 		
 		loop {
 			if (this.check(TokenType.RBrace) || this.isAtEnd()) {
@@ -155,9 +220,7 @@ impl Parser {
 			
 			let variantToken = this.current();
 			if (this.matchToken(TokenType.Identifier)) {
-				let variant = ASTNode::new(ASTNodeType.EnumVariant);
-				variant.value = variantToken.value;
-				node.addChild(variant);
+				variants.push(EnumVariant { variantToken.value });
 			}
 			
 			if (!(this.matchToken(TokenType.Comma))) {
@@ -166,28 +229,32 @@ impl Parser {
 		}
 		
 		this.expectToken(TokenType.RBrace, "Expected '}' after enum variants");
-		return Some<*mut ASTNode> { node };
+		
+		// Allocate heap objects
+		let variantsPtr = malloc<Vector<EnumVariant>>(sizeOf(Vector<EnumVariant>));
+		let vp: *mut Vector<EnumVariant> = variantsPtr + 0;
+		*vp = variants;
+		
+		let enumDecl = EnumDecl { name, variantsPtr };
+		return Some<*Decl> { this.allocDecl(enumDecl) };
 	}
 	
 	// Parse impl block: impl Type { methods }
-	fn parseImplBlock(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseImplBlock(this: *mut Parser): Option<*Decl> => {
 		if (!(this.matchToken(TokenType.Impl))) {
-			return None<*mut ASTNode> { };
+			return None<*Decl> { };
 		}
-		
-		let node = ASTNode::new(ASTNodeType.ImplBlock);
 		
 		// Type being implemented
 		let implType = this.parseTypeExpression();
-		if (implType is Some<*mut ASTNode>) {
-			node.addChild(implType.value);
-		} else {
+		if (!(implType is Some<*Type>)) {
 			this.addError(this.current().line, this.current().column, "Expected type after 'impl'");
-			return None<*mut ASTNode> { };
+			return None<*Decl> { };
 		}
 		
 		// Methods { fn ... }
 		this.expectToken(TokenType.LBrace, "Expected '{' after impl type");
+		let mut methods = Vector::new<*Decl>(4USize);
 		
 		loop {
 			if (this.check(TokenType.RBrace) || this.isAtEnd()) {
@@ -195,57 +262,61 @@ impl Parser {
 			}
 			
 			let method = this.parseFunctionDecl();
-			if (method is Some<*mut ASTNode>) {
-				node.addChild(method.value);
+			if (method is Some<*Decl>) {
+				methods.push(method.value);
 			} else {
-				this.synchronize();
+				// Skip invalid token
+				this.advance();
 			}
 		}
 		
 		this.expectToken(TokenType.RBrace, "Expected '}' after impl methods");
-		return Some<*mut ASTNode> { node };
+		
+		// Allocate heap objects
+		let methodsPtr = malloc<Vector<*Decl>>(sizeOf(Vector<*Decl>));
+		let mp: *mut Vector<*Decl> = methodsPtr + 0;
+		*mp = methods;
+		
+		let implDecl = ImplDecl { implType.value, methodsPtr };
+		return Some<*Decl> { this.allocDecl(implDecl) };
 	}
 	
 	// Parse type alias: type Name = Type;
-	fn parseTypeAlias(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseTypeAlias(this: *mut Parser): Option<*Decl> => {
 		if (!(this.matchToken(TokenType.Type))) {
-			return None<*mut ASTNode> { };
+			return None<*Decl> { };
 		}
-		
-		let node = ASTNode::new(ASTNodeType.TypeAlias);
 		
 		// Alias name
 		let nameToken = this.current();
 		if (!(this.matchToken(TokenType.Identifier))) {
 			this.addError(nameToken.line, nameToken.column, "Expected type alias name");
-			return None<*mut ASTNode> { };
+			return None<*Decl> { };
 		}
-		node.value = nameToken.value;
+		let name = nameToken.value;
 		
 		// Generic parameters
-		if (this.matchToken(TokenType.LAngle)) {
-			let generics = this.parseGenericParams();
-			if (generics is Some<*mut ASTNode>) {
-				node.addChild(generics.value);
-			}
+		let mut generics = Vector::new<GenericParam>(0USize);
+		if (this.check(TokenType.LAngle)) {
+			generics = this.parseGenericParams();
 		}
 		
 		this.expectToken(TokenType.Equals, "Expected '=' in type alias");
 		
 		let aliasedType = this.parseTypeExpression();
-		if (aliasedType is Some<*mut ASTNode>) {
-			node.addChild(aliasedType.value);
+		if (!(aliasedType is Some<*Type>)) {
+			this.addError(this.current().line, this.current().column, "Expected type expression");
+			return None<*Decl> { };
 		}
 		
 		this.expectToken(TokenType.Semicolon, "Expected ';' after type alias");
-		return Some<*mut ASTNode> { node };
-	}
-	
-	// Parse statement or expression (for function bodies)
-	fn parseStatementOrExpression(this: *mut Parser): Option<*mut ASTNode> => {
-		if (this.check(TokenType.LBrace)) {
-			return this.parseBlock();
-		}
-		return this.parseExpression();
+		
+		// Allocate heap objects
+		let genericsPtr = malloc<Vector<GenericParam>>(sizeOf(Vector<GenericParam>));
+		let gp: *mut Vector<GenericParam> = genericsPtr + 0;
+		*gp = generics;
+		
+		let typeAliasDecl = TypeAliasDecl { name, genericsPtr, aliasedType.value };
+		return Some<*Decl> { this.allocDecl(typeAliasDecl) };
 	}
 }

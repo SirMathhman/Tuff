@@ -30,6 +30,9 @@ bool CodeGeneratorCPP::isUnionType(const std::string &type)
 	// Function pointer types start with '|'
 	if (!type.empty() && type[0] == '|')
 		return false;
+	// SizeOf<T> is not a union type even if T contains '|'
+	if (type.rfind("SizeOf<", 0) == 0)
+		return false;
 	return type.find('|') != std::string::npos;
 }
 

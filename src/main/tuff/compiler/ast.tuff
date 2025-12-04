@@ -283,6 +283,13 @@ struct ExternDecl {
 
 type Decl = FunctionDecl | StructDecl | EnumDecl | ImplDecl | TypeAliasDecl | ModuleDecl | UseDecl | ExpectDecl | ActualDecl | ExternDecl;
 
+// Wrappers for sizeOf workaround
+struct DeclWrapper { inner: Decl }
+struct ExprWrapper { inner: Expr }
+struct StmtWrapper { inner: Stmt }
+struct TypeWrapper { inner: Type }
+struct LiteralWrapper { inner: Literal }
+
 // ============ Program ============
 struct Program {
 	declarations: *Vector<*Decl>

@@ -14,7 +14,7 @@ use mem;
 impl Parser {
 	// Helper to allocate expression on heap
 	fn allocExpr(this: *mut Parser, expr: Expr): *Expr => {
-		let raw = malloc<Expr>(sizeOf(Expr));
+		let raw = malloc<Expr>(sizeOf(ExprWrapper));
 		let ptr: *mut Expr = raw + 0;
 		*ptr = expr;
 		return ptr;
@@ -22,7 +22,7 @@ impl Parser {
 
 	// Helper to allocate literal on heap
 	fn allocLiteral(this: *mut Parser, lit: Literal): *Literal => {
-		let raw = malloc<Literal>(sizeOf(Literal));
+		let raw = malloc<Literal>(sizeOf(LiteralWrapper));
 		let ptr: *mut Literal = raw + 0;
 		*ptr = lit;
 		return ptr;
@@ -267,7 +267,72 @@ fn parsePrimary(this: *mut Parser): Option<*Expr> => {
 		return Some<*Expr> { this.allocExpr(node) };
 	}
 	
+	if (token.tokenType == TokenType.LBrace) {
+		return this.parseBlockExpression();
+	}
+	
 	return None<*Expr> { };
+}
+
+// Parse block expression: { stmt; stmt; expr }
+fn parseBlockExpression(this: *mut Parser): Option<*Expr> => {
+	if (!(this.matchToken(TokenType.LBrace))) {
+		return None<*Expr> { };
+	}
+	
+	let mut statements = Vector::new<*Stmt>(10USize);
+	let mut finalExpr: Option<*Expr> = None<*Expr> { };
+	
+	loop {
+		if (this.check(TokenType.RBrace)) {
+			break;
+		}
+		if (this.isAtEnd()) {
+			this.addError(this.current().line, this.current().column, "Unexpected end of file in block");
+			break;
+		}
+		
+		// Check if it's a statement keyword
+		let token = this.current();
+		let isStmt = token.tokenType == TokenType.Let || 
+					 token.tokenType == TokenType.If || 
+					 token.tokenType == TokenType.While || 
+					 token.tokenType == TokenType.Loop || 
+					 token.tokenType == TokenType.Break || 
+					 token.tokenType == TokenType.Continue || 
+					 token.tokenType == TokenType.Return;
+					 
+		if (isStmt) {
+			let stmt = this.parseStatement();
+			if (stmt is Some<*Stmt>) {
+				statements.push(stmt.value);
+			} else {
+				this.advance(); // Skip invalid
+			}
+		} else {
+			// Expression
+			let expr = this.parseExpression();
+			if (expr is Some<*Expr>) {
+				if (this.matchToken(TokenType.Semicolon)) {
+					// Expression statement
+					let stmt = ExprStmt { expr.value };
+					statements.push(this.allocStmt(stmt));
+				} else if (this.check(TokenType.RBrace)) {
+					// Final expression
+					finalExpr = expr;
+					break;
+				} else {
+					this.addError(this.current().line, this.current().column, "Expected ';' after expression");
+				}
+			} else {
+				this.advance(); // Skip invalid
+			}
+		}
+	}
+	
+	this.expectToken(TokenType.RBrace, "Expected '}' to close block");
+	let blockExpr = BlockExpr { statements, finalExpr };
+	return Some<*Expr> { this.allocExpr(blockExpr) };
 }
 
 // Parse function call arguments

@@ -335,8 +335,12 @@ void TypeChecker::checkIfExpr(std::shared_ptr<ASTNode> node)
 void TypeChecker::checkSizeOfExpr(std::shared_ptr<ASTNode> node)
 {
 	// sizeOf(Type) - the type is stored in node->value
-	std::string typeName = node->value;
+	std::string originalTypeName = node->value;
+	std::string typeName = originalTypeName;
 
+	// Check if it's a type alias first (before expansion)
+	bool isTypeAlias = typeAliasTable.find(typeName) != typeAliasTable.end();
+	
 	// Expand type aliases if this is an alias
 	typeName = expandTypeAlias(typeName);
 	node->value = typeName;
@@ -369,30 +373,64 @@ void TypeChecker::checkSizeOfExpr(std::shared_ptr<ASTNode> node)
 				baseTypeName = typeName.substr(0, ltPos);
 			}
 
-			if (structTable.find(baseTypeName) == structTable.end())
+			bool isValidType = false;
+			
+			// If it was a type alias, it's valid (even if expanded to union syntax)
+			if (isTypeAlias)
 			{
-				// Check if it's an array type [T; init; capacity]
-				if (typeName[0] != '[')
+				isValidType = true;
+			}
+			
+			// Check struct table
+			if (!isValidType && structTable.find(baseTypeName) != structTable.end())
+			{
+				isValidType = true;
+			}
+			
+			// Check type alias table (includes union types)
+			if (!isValidType && typeAliasTable.find(baseTypeName) != typeAliasTable.end())
+			{
+				isValidType = true;
+			}
+			
+			// Check if it's an array type [T; init; capacity]
+			if (!isValidType && typeName[0] == '[')
+			{
+				isValidType = true;
+			}
+			
+			// Check if it's a union type (contains |)
+			if (!isValidType && typeName.find('|') != std::string::npos)
+			{
+				isValidType = true;
+			}
+			
+			// Check if it's an intersection type (contains &)
+			if (!isValidType && typeName.find('&') != std::string::npos)
+			{
+				isValidType = true;
+			}
+
+			if (!isValidType)
+			{
+				std::cerr << "Error: sizeOf argument must be a valid type, got '" << typeName << "'" << std::endl;
+				std::cerr << "  Valid types: primitives (I32, U64, Bool, etc.), structs, type aliases, or generic parameters in scope" << std::endl;
+				if (!genericParamsInScope.empty())
 				{
-					std::cerr << "Error: sizeOf argument must be a valid type, got '" << typeName << "'" << std::endl;
-					std::cerr << "  Valid types: primitives (I32, U64, Bool, etc.), structs, or generic parameters in scope" << std::endl;
-					if (!genericParamsInScope.empty())
+					std::cerr << "  Generic parameters in scope: ";
+					for (size_t i = 0; i < genericParamsInScope.size(); i++)
 					{
-						std::cerr << "  Generic parameters in scope: ";
-						for (size_t i = 0; i < genericParamsInScope.size(); i++)
-						{
-							if (i > 0)
-								std::cerr << ", ";
-							std::cerr << genericParamsInScope[i];
-						}
-						std::cerr << std::endl;
+						if (i > 0)
+							std::cerr << ", ";
+						std::cerr << genericParamsInScope[i];
 					}
-					else
-					{
-						std::cerr << "  No generic parameters in scope." << std::endl;
-					}
-					exit(1);
+					std::cerr << std::endl;
 				}
+				else
+				{
+					std::cerr << "  No generic parameters in scope." << std::endl;
+				}
+				exit(1);
 			}
 		}
 	}

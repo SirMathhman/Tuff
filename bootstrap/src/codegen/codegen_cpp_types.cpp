@@ -115,6 +115,10 @@ std::string CodeGeneratorCPP::mapType(std::string tuffType)
 		}
 	}
 
+	// Handle SizeOf<T> early (before union check since T might be a union type)
+	if (tuffType.rfind("SizeOf<", 0) == 0)
+		return "size_t";
+
 	// Handle union types: Some<I32>|None<I32> -> Union_Some_None<int32_t>
 	if (tuffType.find('|') != std::string::npos)
 	{

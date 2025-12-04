@@ -12,7 +12,7 @@ use mem;
 impl Parser {
 	// Helper to allocate type on heap
 	fn allocType(this: *mut Parser, typeNode: Type): *Type => {
-		let raw = malloc<Type>(sizeOf(Type));
+		let raw = malloc<Type>(sizeOf(TypeWrapper));
 		let ptr: *mut Type = raw + 0;
 		*ptr = typeNode;
 		return ptr;

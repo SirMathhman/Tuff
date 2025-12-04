@@ -14,7 +14,7 @@ use mem;
 impl Parser {
 	// Helper to allocate statement on heap
 	fn allocStmt(this: *mut Parser, stmt: Stmt): *Stmt => {
-		let raw = malloc<Stmt>(sizeOf(Stmt));
+		let raw = malloc<Stmt>(sizeOf(StmtWrapper));
 		let ptr: *mut Stmt = raw + 0;
 		*ptr = stmt;
 		return ptr;

@@ -211,31 +211,55 @@ public:
 			}
 		}
 
+		// Check for SizeOf<T> type - maps to USize
+		if (typeStr.rfind("SizeOf<", 0) == 0)
+		{
+			ast::PrimitiveType t;
+			t.name = "USize";
+			return std::make_shared<ast::Type>(t);
+		}
+
 		// Check for union type (contains | but not at start - function pointers start with |)
+		// Must also check that | is not inside angle brackets (e.g., SizeOf<A|B> is not a union)
 		size_t pipePos = typeStr.find('|');
 		if (pipePos != std::string::npos && pipePos > 0)
 		{
-			ast::UnionType t;
-			size_t pos = 0;
-			while (pos < typeStr.length())
+			// Check if | is inside angle brackets
+			int depth = 0;
+			bool pipeInsideBrackets = false;
+			for (size_t i = 0; i < pipePos; i++)
 			{
-				size_t nextPipe = typeStr.find('|', pos);
-				if (nextPipe == std::string::npos)
-					nextPipe = typeStr.length();
-
-				std::string memberStr = typeStr.substr(pos, nextPipe - pos);
-				// Trim whitespace
-				while (!memberStr.empty() && memberStr[0] == ' ')
-					memberStr = memberStr.substr(1);
-				while (!memberStr.empty() && memberStr.back() == ' ')
-					memberStr.pop_back();
-
-				if (!memberStr.empty())
-					t.members.push_back(typeFromString(memberStr));
-
-				pos = nextPipe + 1;
+				if (typeStr[i] == '<')
+					depth++;
+				else if (typeStr[i] == '>')
+					depth--;
 			}
-			return std::make_shared<ast::Type>(t);
+			pipeInsideBrackets = (depth > 0);
+
+			if (!pipeInsideBrackets)
+			{
+				ast::UnionType t;
+				size_t pos = 0;
+				while (pos < typeStr.length())
+				{
+					size_t nextPipe = typeStr.find('|', pos);
+					if (nextPipe == std::string::npos)
+						nextPipe = typeStr.length();
+
+					std::string memberStr = typeStr.substr(pos, nextPipe - pos);
+					// Trim whitespace
+					while (!memberStr.empty() && memberStr[0] == ' ')
+						memberStr = memberStr.substr(1);
+					while (!memberStr.empty() && memberStr.back() == ' ')
+						memberStr.pop_back();
+
+					if (!memberStr.empty())
+						t.members.push_back(typeFromString(memberStr));
+
+					pos = nextPipe + 1;
+				}
+				return std::make_shared<ast::Type>(t);
+			}
 		}
 
 		// Check for primitive

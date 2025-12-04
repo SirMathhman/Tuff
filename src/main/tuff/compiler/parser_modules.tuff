@@ -4,18 +4,20 @@
 use token;
 use ast;
 use parser;
+use parser_declarations;
+use parser_types;
+use parser_expressions;
 use vector;
 use string;
 use option;
+use mem;
 
 impl Parser {
 	// Parse module declaration: module name { ... }
-	fn parseModuleDecl(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseModuleDecl(this: *mut Parser): Option<*Decl> => {
 		if (!(this.matchToken(TokenType.Module))) {
-			return None<*mut ASTNode> { };
+			return None<*Decl> { };
 		}
-		
-		let node = ASTNode::new(ASTNodeType.ModuleDecl);
 		
 		// Module name (may be qualified like com::example)
 		let mut moduleName = "";
@@ -36,10 +38,10 @@ impl Parser {
 				}
 			}
 		}
-		node.value = moduleName;
 		
 		// Module body { declarations }
 		this.expectToken(TokenType.LBrace, "Expected '{' after module name");
+		let mut declarations = Vector::new<*Decl>(4USize);
 		
 		loop {
 			if (this.check(TokenType.RBrace) || this.isAtEnd()) {
@@ -47,24 +49,29 @@ impl Parser {
 			}
 			
 			let decl = this.parseDeclaration();
-			if (decl is Some<*mut ASTNode>) {
-				node.addChild(decl.value);
+			if (decl is Some<*Decl>) {
+				declarations.push(decl.value);
 			} else {
 				this.synchronize();
 			}
 		}
 		
 		this.expectToken(TokenType.RBrace, "Expected '}' after module declarations");
-		return Some<*mut ASTNode> { node };
+		
+		// Allocate heap objects
+		let declsPtr = malloc<Vector<*Decl>>(sizeOf(Vector<*Decl>));
+		let dp: *mut Vector<*Decl> = declsPtr + 0;
+		*dp = declarations;
+		
+		let moduleDecl = ModuleDecl { moduleName, declsPtr };
+		return Some<*Decl> { this.allocDecl(moduleDecl) };
 	}
 	
 	// Parse use declaration: use path::to::module;
-	fn parseUseDecl(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseUseDecl(this: *mut Parser): Option<*Decl> => {
 		if (!(this.matchToken(TokenType.Use))) {
-			return None<*mut ASTNode> { };
+			return None<*Decl> { };
 		}
-		
-		let node = ASTNode::new(ASTNodeType.UseDecl);
 		
 		// Parse path
 		let mut path = "";
@@ -85,80 +92,23 @@ impl Parser {
 				}
 			}
 		}
-		node.value = path;
 		
 		this.expectToken(TokenType.Semicolon, "Expected ';' after use declaration");
-		return Some<*mut ASTNode> { node };
+		let useDecl = UseDecl { path };
+		return Some<*Decl> { this.allocDecl(useDecl) };
 	}
 	
 	// Parse expect declaration: expect fn name(params): Type;
-	fn parseExpectDecl(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseExpectDecl(this: *mut Parser): Option<*Decl> => {
 		if (!(this.matchToken(TokenType.Expect))) {
-			return None<*mut ASTNode> { };
+			return None<*Decl> { };
 		}
-		
-		let node = ASTNode::new(ASTNodeType.ExpectDecl);
 		
 		// Must be followed by fn
 		if (!(this.matchToken(TokenType.Fn))) {
 			this.addError(this.current().line, this.current().column, "Expected 'fn' after 'expect'");
-			return None<*mut ASTNode> { };
+			return None<*Decl> { };
 		}
-		
-		// Function signature (name, params, return type)
-		let sig = this.parseFunctionSignature();
-		if (sig is Some<*mut ASTNode>) {
-			node.addChild(sig.value);
-		}
-		
-		this.expectToken(TokenType.Semicolon, "Expected ';' after expect declaration");
-		return Some<*mut ASTNode> { node };
-	}
-	
-	// Parse actual declaration: actual fn name(params): Type => body;
-	fn parseActualDecl(this: *mut Parser): Option<*mut ASTNode> => {
-		if (!(this.matchToken(TokenType.Actual))) {
-			return None<*mut ASTNode> { };
-		}
-		
-		let node = ASTNode::new(ASTNodeType.ActualDecl);
-		
-		// Parse the full function declaration
-		let fn_decl = this.parseFunctionDecl();
-		if (fn_decl is Some<*mut ASTNode>) {
-			node.addChild(fn_decl.value);
-		}
-		
-		return Some<*mut ASTNode> { node };
-	}
-	
-	// Parse extern declaration: extern fn name(params): Type;
-	fn parseExternDecl(this: *mut Parser): Option<*mut ASTNode> => {
-		if (!(this.matchToken(TokenType.Extern))) {
-			return None<*mut ASTNode> { };
-		}
-		
-		let node = ASTNode::new(ASTNodeType.ExternDecl);
-		
-		// Must be followed by fn
-		if (!(this.matchToken(TokenType.Fn))) {
-			this.addError(this.current().line, this.current().column, "Expected 'fn' after 'extern'");
-			return None<*mut ASTNode> { };
-		}
-		
-		// Function signature
-		let sig = this.parseFunctionSignature();
-		if (sig is Some<*mut ASTNode>) {
-			node.addChild(sig.value);
-		}
-		
-		this.expectToken(TokenType.Semicolon, "Expected ';' after extern declaration");
-		return Some<*mut ASTNode> { node };
-	}
-	
-	// Parse function signature (for expect/extern): name(params): Type
-	fn parseFunctionSignature(this: *mut Parser): Option<*mut ASTNode> => {
-		let node = ASTNode::new(ASTNodeType.FunctionDecl);
 		
 		// Function name (may be qualified)
 		let mut funcName = "";
@@ -178,108 +128,164 @@ impl Parser {
 				}
 			}
 		}
-		node.value = funcName;
 		
 		// Generic parameters
-		if (this.matchToken(TokenType.LAngle)) {
-			let generics = this.parseGenericParams();
-			if (generics is Some<*mut ASTNode>) {
-				node.addChild(generics.value);
-			}
+		let mut generics = Vector::new<GenericParam>(0USize);
+		if (this.check(TokenType.LAngle)) {
+			generics = this.parseGenericParams();
 		}
 		
 		// Parameters
 		this.expectToken(TokenType.LParen, "Expected '('");
 		let params = this.parseParameters();
-		if (params is Some<*mut ASTNode>) {
-			node.addChild(params.value);
-		}
 		this.expectToken(TokenType.RParen, "Expected ')'");
 		
 		// Return type
-		if (this.matchToken(TokenType.Colon)) {
-			let retType = this.parseTypeExpression();
-			if (retType is Some<*mut ASTNode>) {
-				node.addChild(retType.value);
-			}
-		}
+		let returnType = if (this.matchToken(TokenType.Colon)) {
+			this.parseTypeExpression()
+		} else {
+			None<*Type> { }
+		};
 		
-		return Some<*mut ASTNode> { node };
+		this.expectToken(TokenType.Semicolon, "Expected ';' after expect declaration");
+		
+		// Allocate heap objects
+		let genericsPtr = malloc<Vector<GenericParam>>(sizeOf(Vector<GenericParam>));
+		let gp: *mut Vector<GenericParam> = genericsPtr + 0;
+		*gp = generics;
+		
+		let paramsPtr = malloc<Vector<FunctionParam>>(sizeOf(Vector<FunctionParam>));
+		let pp: *mut Vector<FunctionParam> = paramsPtr + 0;
+		*pp = params;
+		
+		let returnTypePtr = malloc<Option<*Type>>(sizeOf(Option<*Type>));
+		let rp: *mut Option<*Type> = returnTypePtr + 0;
+		*rp = returnType;
+		
+		let expectDecl = ExpectDecl { funcName, genericsPtr, paramsPtr, returnTypePtr };
+		return Some<*Decl> { this.allocDecl(expectDecl) };
 	}
 	
-	// Parse generic parameters: T, U, 'a
-	fn parseGenericParams(this: *mut Parser): Option<*mut ASTNode> => {
-		let node = ASTNode::new(ASTNodeType.GenericParams);
-		
-		loop {
-			if (this.check(TokenType.RAngle) || this.isAtEnd()) {
-				break;
-			}
-			
-			let paramToken = this.current();
-			if (this.matchToken(TokenType.Identifier)) {
-				let param = ASTNode::new(ASTNodeType.GenericParam);
-				param.value = paramToken.value;
-				node.addChild(param);
-			}
-			
-			if (!(this.matchToken(TokenType.Comma))) {
-				break;
-			}
+	// Parse actual declaration: actual fn name(params): Type => body;
+	fn parseActualDecl(this: *mut Parser): Option<*Decl> => {
+		if (!(this.matchToken(TokenType.Actual))) {
+			return None<*Decl> { };
 		}
 		
-		this.expectToken(TokenType.RAngle, "Expected '>' after generic parameters");
-		return Some<*mut ASTNode> { node };
-	}
-	
-	// Parse function parameters: name: Type, name: Type
-	fn parseParameters(this: *mut Parser): Option<*mut ASTNode> => {
-		let node = ASTNode::new(ASTNodeType.ParamList);
-		
-		if (this.check(TokenType.RParen)) {
-			return Some<*mut ASTNode> { node };
+		if (!(this.matchToken(TokenType.Fn))) {
+			this.addError(this.current().line, this.current().column, "Expected 'fn' after 'actual'");
+			return None<*Decl> { };
 		}
 		
-		loop {
-			let param = this.parseParameter();
-			if (param is Some<*mut ASTNode>) {
-				node.addChild(param.value);
-			}
-			
-			if (!(this.matchToken(TokenType.Comma))) {
-				break;
-			}
-		}
-		
-		return Some<*mut ASTNode> { node };
-	}
-	
-	// Parse single parameter: name: Type or mut name: Type
-	fn parseParameter(this: *mut Parser): Option<*mut ASTNode> => {
-		let node = ASTNode::new(ASTNodeType.Parameter);
-		
-		// Optional mut
-		node.isMutable = this.matchToken(TokenType.Mut);
-		
-		// Parameter name
+		let mut funcName = "";
 		let nameToken = this.current();
-		if (!(this.matchToken(TokenType.Identifier))) {
-			return None<*mut ASTNode> { };
+		if (this.matchToken(TokenType.Identifier)) {
+			funcName = nameToken.value;
+			loop {
+				if (!(this.matchToken(TokenType.DoubleColon))) {
+					break;
+				}
+				let nextToken = this.current();
+				if (this.matchToken(TokenType.Identifier)) {
+					funcName = funcName.concat("::" ).concat(nextToken.value);
+				} else {
+					break;
+				}
+			}
 		}
-		node.value = nameToken.value;
 		
-		// Type annotation
-		this.expectToken(TokenType.Colon, "Expected ':' after parameter name");
-		let paramType = this.parseTypeExpression();
-		if (paramType is Some<*mut ASTNode>) {
-			node.addChild(paramType.value);
+		let mut generics = Vector::new<GenericParam>(0USize);
+		if (this.check(TokenType.LAngle)) {
+			generics = this.parseGenericParams();
 		}
 		
-		return Some<*mut ASTNode> { node };
+		this.expectToken(TokenType.LParen, "Expected '('");
+		let params = this.parseParameters();
+		this.expectToken(TokenType.RParen, "Expected ')'");
+		
+		let returnType = if (this.matchToken(TokenType.Colon)) {
+			this.parseTypeExpression()
+		} else {
+			None<*Type> { }
+		};
+		
+		this.expectToken(TokenType.FatArrow, "Expected '=>'");
+		let body = this.parseExpression();
+		if (!(body is Some<*Expr>)) {
+			this.addError(this.current().line, this.current().column, "Expected function body");
+			return None<*Decl> { };
+		}
+		
+		// Allocate heap objects
+		let genericsPtr = malloc<Vector<GenericParam>>(sizeOf(Vector<GenericParam>));
+		let gp: *mut Vector<GenericParam> = genericsPtr + 0;
+		*gp = generics;
+		
+		let paramsPtr = malloc<Vector<FunctionParam>>(sizeOf(Vector<FunctionParam>));
+		let pp: *mut Vector<FunctionParam> = paramsPtr + 0;
+		*pp = params;
+		
+		let returnTypePtr = malloc<Option<*Type>>(sizeOf(Option<*Type>));
+		let rp: *mut Option<*Type> = returnTypePtr + 0;
+		*rp = returnType;
+		
+		let actualDecl = ActualDecl { funcName, genericsPtr, paramsPtr, returnTypePtr, body.value };
+		return Some<*Decl> { this.allocDecl(actualDecl) };
+	}
+	
+	// Parse extern declaration: extern fn name(params): Type;
+	fn parseExternDecl(this: *mut Parser): Option<*Decl> => {
+		if (!(this.matchToken(TokenType.Extern))) {
+			return None<*Decl> { };
+		}
+		
+		if (!(this.matchToken(TokenType.Fn))) {
+			this.addError(this.current().line, this.current().column, "Expected 'fn' after 'extern'");
+			return None<*Decl> { };
+		}
+		
+		let mut funcName = "";
+		let nameToken = this.current();
+		if (this.matchToken(TokenType.Identifier)) {
+			funcName = nameToken.value;
+		}
+		
+		let mut generics = Vector::new<GenericParam>(0USize);
+		if (this.check(TokenType.LAngle)) {
+			generics = this.parseGenericParams();
+		}
+		
+		this.expectToken(TokenType.LParen, "Expected '('");
+		let params = this.parseParameters();
+		this.expectToken(TokenType.RParen, "Expected ')'");
+		
+		let returnType = if (this.matchToken(TokenType.Colon)) {
+			this.parseTypeExpression()
+		} else {
+			None<*Type> { }
+		};
+		
+		this.expectToken(TokenType.Semicolon, "Expected ';' after extern declaration");
+		
+		// Allocate heap objects
+		let genericsPtr = malloc<Vector<GenericParam>>(sizeOf(Vector<GenericParam>));
+		let gp: *mut Vector<GenericParam> = genericsPtr + 0;
+		*gp = generics;
+		
+		let paramsPtr = malloc<Vector<FunctionParam>>(sizeOf(Vector<FunctionParam>));
+		let pp: *mut Vector<FunctionParam> = paramsPtr + 0;
+		*pp = params;
+		
+		let returnTypePtr = malloc<Option<*Type>>(sizeOf(Option<*Type>));
+		let rp: *mut Option<*Type> = returnTypePtr + 0;
+		*rp = returnType;
+		
+		let externDecl = ExternDecl { funcName, genericsPtr, paramsPtr, returnTypePtr };
+		return Some<*Decl> { this.allocDecl(externDecl) };
 	}
 	
 	// Parse a top-level declaration
-	fn parseDeclaration(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseDeclaration(this: *mut Parser): Option<*Decl> => {
 		let token = this.current();
 		
 		if (token.tokenType == TokenType.Fn) return this.parseFunctionDecl();
@@ -293,10 +299,10 @@ impl Parser {
 		if (token.tokenType == TokenType.Actual) return this.parseActualDecl();
 		if (token.tokenType == TokenType.Extern) return this.parseExternDecl();
 		
-		return None<*mut ASTNode> { };
+		return None<*Decl> { };
 	}
 	
-	// Error recovery - skip tokens until we find a sync point
+	// Error recovery
 	fn synchronize(this: *mut Parser): Void => {
 		this.advance();
 		
@@ -305,12 +311,10 @@ impl Parser {
 				break;
 			}
 			
-			// Statement terminators
 			let prev = this.previous().tokenType;
 			if (prev == TokenType.Semicolon) return;
 			if (prev == TokenType.RBrace) return;
 			
-			// Declaration starters
 			let current = this.current().tokenType;
 			if (current == TokenType.Fn) return;
 			if (current == TokenType.Struct) return;
