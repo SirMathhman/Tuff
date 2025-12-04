@@ -39,6 +39,7 @@ $Script:ExpectedExitCodes = @{}
 $Script:SkippedTestsList = @()
 $Script:NegativeTests = @{}
 $Script:NativeOnlyTests = @()
+$Script:IncludeCompilerTests = @()
 
 function Write-ColorOutput($Message, $Color = $ColorReset) {
     Write-Host "${Color}${Message}${ColorReset}"
@@ -70,6 +71,7 @@ function Initialize-TestEnvironment {
             }
         }
         if ($json.native_only_tests) { $Script:NativeOnlyTests = $json.native_only_tests }
+        if ($json.include_compiler_tests) { $Script:IncludeCompilerTests = $json.include_compiler_tests }
     }
     
     # Use persistent cache directory for stdlib (survives between runs)
@@ -286,6 +288,7 @@ try {
             $SkippedTestsList = $using:Script:SkippedTestsList
             $NegativeTests = $using:Script:NegativeTests
             $ExpectedExitCodes = $using:Script:ExpectedExitCodes
+            $IncludeCompilerTests = $using:Script:IncludeCompilerTests
             
             $result = @{
                 Test = $Test; Status = "UNKNOWN"; Message = ""; CppExitCode = $null
@@ -338,8 +341,15 @@ try {
                 $testOutputDir = Join-Path $TempDir "dist_$testCacheKey"
                 New-Item -Path $testOutputDir -ItemType Directory -Force | Out-Null
                 
-                # Exclude compiler subdirectory which has known issues
-                $compileOutput = & $CompilerPath --source-sets $sourceSets --exclude "compiler" --sources $sources --target "cpp" --output-dir $testOutputDir 2>&1
+                # Check if this test needs compiler sources included
+                $needsCompiler = $IncludeCompilerTests | Where-Object { $Test.RelativePath -like "$_*" }
+                if ($needsCompiler) {
+                    # Include compiler subdirectory for compiler tests
+                    $compileOutput = & $CompilerPath --source-sets $sourceSets --sources $sources --target "cpp" --output-dir $testOutputDir 2>&1
+                } else {
+                    # Exclude compiler subdirectory for regular tests
+                    $compileOutput = & $CompilerPath --source-sets $sourceSets --exclude "compiler" --sources $sources --target "cpp" --output-dir $testOutputDir 2>&1
+                }
                 if ($LASTEXITCODE -ne 0) {
                     $errorMsg = ($compileOutput | Select-Object -First 20) -join "`n"
                     $result.Status = "ERROR"; $result.Message = "Tuff compile failed:`n$errorMsg"
@@ -355,7 +365,26 @@ try {
                 
                 $includeDir = Join-Path $RootDir "bootstrap\src\include"
                 $builtinsDir = Join-Path $RootDir "src\main\cpp"
-                $compileResult = & clang++ -std=c++17 -c -I $includeDir -I $builtinsDir -I $testOutputDir -I $StdlibDir $testCppFile -o $testObjFile 2>&1
+                
+                # For compiler tests, also compile the compiler cpp files
+                if ($needsCompiler) {
+                    $compilerOutputDir = Join-Path $testOutputDir "compiler"
+                    if (Test-Path $compilerOutputDir) {
+                        $compilerCppFiles = @(Get-ChildItem -Path $compilerOutputDir -Filter "*.cpp" -File | Select-Object -ExpandProperty FullName)
+                        foreach ($cppFile in $compilerCppFiles) {
+                            $objFile = $cppFile -replace '\.cpp$', '.o'
+                            $compileResult = & clang++ -std=c++17 -c -I $includeDir -I $builtinsDir -I $testOutputDir -I $compilerOutputDir $cppFile -o $objFile 2>&1
+                            if ($LASTEXITCODE -ne 0) {
+                                $result.Status = "ERROR"; $result.Message = "C++ compile failed (compiler): $compileResult"
+                                Remove-Item $testOutputDir -Recurse -Force -ErrorAction SilentlyContinue
+                                return $result
+                            }
+                        }
+                    }
+                    $compileResult = & clang++ -std=c++17 -c -I $includeDir -I $builtinsDir -I $testOutputDir -I $compilerOutputDir $testCppFile -o $testObjFile 2>&1
+                } else {
+                    $compileResult = & clang++ -std=c++17 -c -I $includeDir -I $builtinsDir -I $testOutputDir -I $StdlibDir $testCppFile -o $testObjFile 2>&1
+                }
                 if ($LASTEXITCODE -ne 0) {
                     $result.Status = "ERROR"; $result.Message = "C++ compile failed: $compileResult"
                     Remove-Item $testOutputDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -365,11 +394,26 @@ try {
                 # Save cache manifest
                 @{ testMtime = $testMtime; stdlibHash = $StdlibHash } | ConvertTo-Json | Set-Content $testCacheManifest
                 
-                Remove-Item $testOutputDir -Recurse -Force -ErrorAction SilentlyContinue
+                # Don't remove output dir for compiler tests - we need the .o files
+                if (-not $needsCompiler) {
+                    Remove-Item $testOutputDir -Recurse -Force -ErrorAction SilentlyContinue
+                }
             }
             
             # Link and run
-            $allFiles = @($testObjFile) + @($StdlibObjFiles)
+            $needsCompiler = $IncludeCompilerTests | Where-Object { $Test.RelativePath -like "$_*" }
+            if ($needsCompiler) {
+                # For compiler tests, link with compiler object files
+                $testOutputDir = Join-Path $TempDir "dist_$testCacheKey"
+                $compilerOutputDir = Join-Path $testOutputDir "compiler"
+                $compilerObjFiles = @()
+                if (Test-Path $compilerOutputDir) {
+                    $compilerObjFiles = @(Get-ChildItem -Path $compilerOutputDir -Filter "*.o" -File | Select-Object -ExpandProperty FullName)
+                }
+                $allFiles = @($testObjFile) + @($StdlibObjFiles) + @($compilerObjFiles)
+            } else {
+                $allFiles = @($testObjFile) + @($StdlibObjFiles)
+            }
             $uniqueId = [System.Guid]::NewGuid().ToString("N").Substring(0, 8)
             $exeFile = Join-Path $TempDir "${uniqueId}_$($Test.Name).exe"
             
