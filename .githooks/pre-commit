@@ -18,6 +18,10 @@ EXCLUDED_DIRS = {"target", ".git", ".githooks", "node_modules", ".vscode", ".ide
 
 def is_excluded(file_path: str) -> bool:
     """Check if a file path is in an excluded directory or is an excluded file type."""
+    # Exclude generated C files from Tuff compilation
+    if file_path.endswith(".c") and file_path.startswith("tuff/"):
+        return True
+
     # Exclude parser.rs - complex module (572 lines), refactored but still needs splitting
     if "parser.rs" in file_path:
         return True

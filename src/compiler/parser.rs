@@ -404,22 +404,23 @@ impl Parser {
         let mut left = self.parse_unary_expression()?;
 
         loop {
-            let (op_name, precedence, _assoc) = match &self.tokens.get(self.position).map(|t| &t.kind) {
-                Some(TokenKind::Or) => ("||", 1, "left"),
-                Some(TokenKind::And) => ("&&", 2, "left"),
-                Some(TokenKind::EqualEqual) => ("==", 3, "left"),
-                Some(TokenKind::NotEqual) => ("!=", 3, "left"),
-                Some(TokenKind::Less) => ("<", 4, "left"),
-                Some(TokenKind::Greater) => (">", 4, "left"),
-                Some(TokenKind::LessEqual) => ("<=", 4, "left"),
-                Some(TokenKind::GreaterEqual) => (">=", 4, "left"),
-                Some(TokenKind::Plus) => ("+", 5, "left"),
-                Some(TokenKind::Minus) => ("-", 5, "left"),
-                Some(TokenKind::Star) => ("*", 6, "left"),
-                Some(TokenKind::Slash) => ("/", 6, "left"),
-                Some(TokenKind::Percent) => ("%", 6, "left"),
-                _ => break,
-            };
+            let (op_name, precedence, _assoc) =
+                match &self.tokens.get(self.position).map(|t| &t.kind) {
+                    Some(TokenKind::Or) => ("||", 1, "left"),
+                    Some(TokenKind::And) => ("&&", 2, "left"),
+                    Some(TokenKind::EqualEqual) => ("==", 3, "left"),
+                    Some(TokenKind::NotEqual) => ("!=", 3, "left"),
+                    Some(TokenKind::Less) => ("<", 4, "left"),
+                    Some(TokenKind::Greater) => (">", 4, "left"),
+                    Some(TokenKind::LessEqual) => ("<=", 4, "left"),
+                    Some(TokenKind::GreaterEqual) => (">=", 4, "left"),
+                    Some(TokenKind::Plus) => ("+", 5, "left"),
+                    Some(TokenKind::Minus) => ("-", 5, "left"),
+                    Some(TokenKind::Star) => ("*", 6, "left"),
+                    Some(TokenKind::Slash) => ("/", 6, "left"),
+                    Some(TokenKind::Percent) => ("%", 6, "left"),
+                    _ => break,
+                };
 
             if precedence < min_precedence {
                 break;
@@ -658,4 +659,3 @@ impl Parser {
         }
     }
 }
-
