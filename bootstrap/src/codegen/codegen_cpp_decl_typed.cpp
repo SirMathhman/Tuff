@@ -36,20 +36,32 @@ std::string CodeGeneratorCPP::genDecl(ast::DeclPtr decl)
 																			pos += 1;
 																		}
 
-																		// Add inline keyword if generating for header
-																		if (generateInline)
-																			ss << "inline ";
-
+																		// Generate return type
 																		ss << genType(d.returnType) << " " << funcName << "(";
 
+																		// Generate parameters
 																		for (size_t i = 0; i < d.params.size(); i++)
 																		{
 																			if (i > 0)
 																				ss << ", ";
-																			ss << genParamDecl(d.params[i]);
+																			std::string paramType = genType(d.params[i].type);
+																			// Handle function pointer parameter types
+																			size_t funcPtrPos = paramType.find("(*)");
+																			if (funcPtrPos != std::string::npos)
+																			{
+																				std::string retType = paramType.substr(0, funcPtrPos);
+																				std::string params = paramType.substr(funcPtrPos + 3);
+																				while (!retType.empty() && retType.back() == ' ')
+																					retType.pop_back();
+																				ss << retType << " (*" << d.params[i].name << ")" << params;
+																			}
+																			else
+																			{
+																				ss << paramType << " " << d.params[i].name;
+																			}
 																		}
-
 																		ss << ") ";
+
 																		ss << genFunctionBody(d.body, d.returnType);
 
 																		return ss.str();

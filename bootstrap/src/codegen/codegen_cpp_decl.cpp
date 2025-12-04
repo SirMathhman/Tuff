@@ -96,3 +96,39 @@ std::string CodeGeneratorCPP::generateActualDecl(std::shared_ptr<ASTNode> node)
 
 	return ss.str();
 }
+
+std::string CodeGeneratorCPP::genActualForwardDecl(std::shared_ptr<ASTNode> node)
+{
+	// Generate just the forward declaration for an actual function
+	std::stringstream ss;
+	ss << mapType(node->inferredType) << " " << node->value << "(";
+
+	// Parameters
+	size_t paramIdx = 0;
+	for (auto param : node->children)
+	{
+		if (param->type == ASTNodeType::IDENTIFIER)
+		{
+			if (paramIdx > 0)
+				ss << ", ";
+			// Handle array parameters: int32_t arr[10] instead of int32_t[10] arr
+			std::string paramType = mapType(param->inferredType);
+			std::string paramName = param->value;
+			size_t bracketPos = paramType.find('[');
+			if (bracketPos != std::string::npos)
+			{
+				std::string baseType = paramType.substr(0, bracketPos);
+				std::string arraySuffix = paramType.substr(bracketPos);
+				ss << baseType << " " << paramName << arraySuffix;
+			}
+			else
+			{
+				ss << paramType << " " << paramName;
+			}
+			paramIdx++;
+		}
+	}
+	ss << ");";
+
+	return ss.str();
+}

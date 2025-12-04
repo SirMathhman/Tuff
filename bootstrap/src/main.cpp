@@ -259,14 +259,15 @@ int main(int argc, char *argv[])
 				// We already have relPathNoExt from module name computation
 				std::string baseName = fs::path(relPathNoExt).filename().string();
 				std::string parentPath = fs::path(relPathNoExt).parent_path().string();
-				std::string prefixedName = "tuff_" + baseName;
+				// Prefix with "tuff_" to avoid conflicts with system headers (e.g., math.h, string.h)
+				std::string outputName = "tuff_" + baseName;
 				if (!parentPath.empty())
 				{
-					prefixedName = parentPath + "/" + prefixedName;
+					outputName = parentPath + "/tuff_" + baseName;
 				}
 
-				fs::path headerPath = fs::path(config.outputDir) / (prefixedName + ".h");
-				fs::path implPath = fs::path(config.outputDir) / (prefixedName + ".cpp");
+				fs::path headerPath = fs::path(config.outputDir) / (outputName + ".h");
+				fs::path implPath = fs::path(config.outputDir) / (outputName + ".cpp");
 
 				// Create parent directories if needed
 				if (!fs::exists(headerPath.parent_path()))
@@ -333,7 +334,15 @@ int main(int argc, char *argv[])
 				}
 			}
 			std::string relPathNoExt = relPath.substr(0, relPath.find_last_of('.'));
-			cmake << "    " << relPathNoExt << ".cpp\n";
+			std::string baseName = fs::path(relPathNoExt).filename().string();
+			std::string parentPath = fs::path(relPathNoExt).parent_path().string();
+			// Use tuff_ prefix to match the generated file names
+			std::string outputName = "tuff_" + baseName;
+			if (!parentPath.empty())
+			{
+				outputName = parentPath + "/tuff_" + baseName;
+			}
+			cmake << "    " << outputName << ".cpp\n";
 		}
 
 		cmake << ")\n\n";

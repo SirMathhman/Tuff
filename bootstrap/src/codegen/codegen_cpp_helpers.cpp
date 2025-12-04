@@ -163,10 +163,6 @@ std::string CodeGeneratorCPP::generateNode(std::shared_ptr<ASTNode> node)
 			pos += 1;
 		}
 
-		// Add inline keyword if generating for header
-		if (generateInline)
-			ss << "inline ";
-
 		ss << mapType(node->inferredType) << " " << funcName << "(";
 
 		// Generate parameters (all children except last are params)

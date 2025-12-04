@@ -210,7 +210,8 @@ function Test-TuffFile([hashtable]$Test) {
     
     # Use pre-compiled stdlib object files
     $allFiles = @($testCppFiles) + @($Script:StdlibObjFiles)
-    $exeFile = Join-Path $TempDir "$($Test.Name).exe"
+    # Use unique exe name to avoid collision in parallel execution
+    $exeFile = Join-Path $TempDir "$($Test.Feature)_$($Test.Name).exe"
     
     try {
         $includeDir = Join-Path $RootDir "bootstrap\src\include"

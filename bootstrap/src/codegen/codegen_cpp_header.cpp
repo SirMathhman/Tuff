@@ -160,15 +160,16 @@ std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, c
 		for (const auto &dep : deps)
 		{
 			// Build the include path - always from output root
+			// Convert :: to / for path, then add tuff_ prefix to final component
 			std::string hpath = dep;
 			size_t pos = 0;
 			while ((pos = hpath.find("::")) != std::string::npos)
 				hpath.replace(pos, 2, "/");
-			// Add tuff_ prefix for last component only
-			size_t lastSlash = hpath.find_last_of('/');
+			// Add tuff_ prefix to the final component only
+			size_t lastSlash = hpath.rfind('/');
 			if (lastSlash != std::string::npos)
 			{
-				hpath = hpath.substr(0, lastSlash + 1) + "tuff_" + hpath.substr(lastSlash + 1);
+				hpath.insert(lastSlash + 1, "tuff_");
 			}
 			else
 			{
@@ -179,7 +180,7 @@ std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, c
 		h << "\n";
 	}
 
-	std::vector<std::shared_ptr<ASTNode>> structs, enums, funcs, aliases, expects;
+	std::vector<std::shared_ptr<ASTNode>> structs, enums, funcs, aliases, expects, actuals;
 	for (const auto &c : ast->children)
 	{
 		// For per-file headers, export ALL top-level declarations
@@ -193,6 +194,8 @@ std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, c
 			aliases.push_back(c);
 		else if (c->type == ASTNodeType::EXPECT_DECL)
 			expects.push_back(c);
+		else if (c->type == ASTNodeType::ACTUAL_DECL)
+			actuals.push_back(c);
 	}
 
 	// Collect all union types used in this file
@@ -341,22 +344,24 @@ std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, c
 	std::vector<std::shared_ptr<ASTNode>> allFuncs = funcs;
 	allFuncs.insert(allFuncs.end(), implFuncs.begin(), implFuncs.end());
 
-	if (!allFuncs.empty())
+	if (!allFuncs.empty() || !actuals.empty())
 	{
 		h << "// Function forward declarations\n";
 		for (const auto &f : allFuncs)
 		{
 			h << genFunctionForwardDecl(ASTConverter::toDecl(f)) << "\n";
 		}
+		// Add forward declarations for actual functions (body is in .cpp)
+		for (const auto &a : actuals)
+		{
+			h << genActualForwardDecl(a) << "\n";
+		}
 		h << "\n";
 	}
 
-	// Generate inline implementations in header (needed for templates)
+	// Generate template implementations in header (required by C++)
+	// Non-template functions only get forward declarations here; bodies go in .cpp
 	h << "// Implementations\n";
-
-	// Enable inline generation for functions in header
-	bool wasInline = generateInline;
-	generateInline = true;
 
 	// Collect top-level statements that aren't declarations
 	std::vector<std::shared_ptr<ASTNode>> topLevelStmts;
@@ -372,12 +377,29 @@ std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, c
 				hasMainFunction = true;
 				mainFuncNode = c;
 			}
-			h << genDecl(ASTConverter::toDecl(c)) << "\n\n";
+			// Only generate full body for template functions in header
+			// Non-template functions are forward-declared above, body goes in .cpp
+			if (!c->genericParams.empty())
+			{
+				h << genDecl(ASTConverter::toDecl(c)) << "\n\n";
+			}
 		}
 		else if (c->type == ASTNodeType::ACTUAL_DECL)
-			h << generateActualDecl(c) << "\n\n";
+		{
+			// actual functions: check if they have generic params
+			// For now, treat as non-template (body in .cpp)
+			// Forward declaration already generated above via expects
+		}
 		else if (c->type == ASTNodeType::IMPL_DECL)
-			h << generateNode(c) << "\n\n";
+		{
+			// impl blocks: check if the parent struct is generic
+			// For now, generate template impl methods in header
+			bool isGenericImpl = !c->genericParams.empty();
+			if (isGenericImpl)
+			{
+				h << generateNode(c) << "\n\n";
+			}
+		}
 		else if (c->type == ASTNodeType::MODULE_DECL)
 			h << generateModuleDecl(c) << "\n\n";
 		else if (c->type == ASTNodeType::LET_STMT || c->type == ASTNodeType::ASSIGNMENT_STMT ||
@@ -393,60 +415,38 @@ std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, c
 						 c->type == ASTNodeType::SIZEOF_EXPR || c->type == ASTNodeType::STRUCT_LITERAL ||
 						 c->type == ASTNodeType::ARRAY_LITERAL || c->type == ASTNodeType::STRING_LITERAL ||
 						 c->type == ASTNodeType::CHAR_LITERAL || c->type == ASTNodeType::IS_EXPR ||
-						 c->type == ASTNodeType::MATCH_EXPR)
-		{
-			topLevelStmts.push_back(c);
-		}
+						 c->type == ASTNodeType::MATCH_EXPR) { topLevelStmts.push_back(c); }
 	}
 
 	// If there are top-level statements but no main function, wrap them in main
 	if (!topLevelStmts.empty() && !hasMainFunction)
 	{
 		h << "// Generated main from top-level statements\n";
-		h << "inline int tuff_main() {\n";
-
-		// Generate all statements
+		h << "int tuff_main() {\n";
 		for (size_t i = 0; i < topLevelStmts.size(); i++)
 		{
 			auto stmt = topLevelStmts[i];
-
-			// If this is the last statement and it's an expression, return it if it's an integer
-			if (i == topLevelStmts.size() - 1 &&
+			bool isLastExpr = (i == topLevelStmts.size() - 1) &&
 					(stmt->type == ASTNodeType::CALL_EXPR || stmt->type == ASTNodeType::BINARY_OP ||
 					 stmt->type == ASTNodeType::UNARY_OP || stmt->type == ASTNodeType::LITERAL ||
 					 stmt->type == ASTNodeType::IDENTIFIER || stmt->type == ASTNodeType::IF_EXPR ||
 					 stmt->type == ASTNodeType::INDEX_EXPR || stmt->type == ASTNodeType::FIELD_ACCESS ||
 					 stmt->type == ASTNodeType::DEREF_EXPR || stmt->type == ASTNodeType::CAST_EXPR ||
-					 stmt->type == ASTNodeType::IS_EXPR))
-			{
-				std::string type = stmt->inferredType;
-				if (type == "I32" || type == "int32_t" ||
-						type == "U8" || type == "uint8_t" ||
-						type == "I8" || type == "int8_t" ||
-						type == "U16" || type == "uint16_t" ||
-						type == "I16" || type == "int16_t" ||
-						type == "Char" || type == "char" ||
-						type == "Bool" || type == "bool")
-				{
-					h << "  return " << generateNode(stmt) << ";\n";
-				}
-				else
-				{
-					h << "  " << generateNode(stmt) << ";\n";
-					h << "  return 0;\n";
-				}
-			}
+					 stmt->type == ASTNodeType::IS_EXPR);
+			std::string type = stmt->inferredType;
+			bool isIntLike = (type == "I32" || type == "int32_t" || type == "U8" || type == "uint8_t" ||
+					type == "I8" || type == "int8_t" || type == "U16" || type == "uint16_t" ||
+					type == "I16" || type == "int16_t" || type == "Char" || type == "char" ||
+					type == "Bool" || type == "bool");
+			if (isLastExpr && isIntLike)
+				h << "  return " << generateNode(stmt) << ";\n";
+			else if (isLastExpr)
+				h << "  " << generateNode(stmt) << ";\n  return 0;\n";
 			else
-			{
 				h << "  " << generateNode(stmt) << ";\n";
-			}
 		}
-
 		h << "}\n\n";
-
-		// Generate C++ main wrapper
-		if (!isLibrary)
-			h << "int main() { return tuff_main(); }\n";
+		if (!isLibrary) h << "int main() { return tuff_main(); }\n";
 	}
 	else if (hasMainFunction && !isLibrary)
 	{
@@ -467,8 +467,6 @@ std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, c
 		h << "}\n";
 	}
 
-	generateInline = wasInline;
-
 	return h.str();
 }
 
@@ -477,28 +475,52 @@ std::string CodeGeneratorCPP::generateFileImplementation(std::shared_ptr<ASTNode
 	std::stringstream impl;
 
 	// Convert module name to header path (e.g., "compiler::lexer" -> "compiler/tuff_lexer.h")
+	// We need to add tuff_ prefix only to the final component to avoid system header conflicts
 	std::string hpath = moduleName;
 	std::string::size_type pos = 0;
 	while ((pos = hpath.find("::", pos)) != std::string::npos)
 	{
 		hpath.replace(pos, 2, "/");
 	}
-	// Add tuff_ prefix to the last component
-	auto lastSlash = hpath.rfind('/');
+	// Find the last path separator and insert tuff_ after it
+	size_t lastSlash = hpath.rfind('/');
 	if (lastSlash != std::string::npos)
 	{
-		hpath = hpath.substr(0, lastSlash + 1) + "tuff_" + hpath.substr(lastSlash + 1);
+		hpath.insert(lastSlash + 1, "tuff_");
 	}
 	else
 	{
 		hpath = "tuff_" + hpath;
 	}
-
 	impl << "#include \"" << hpath << ".h\"\n\n";
 
-	// Note: For now, implementation is minimal since most code is in header
-	// This is because C++ templates need full definitions in headers
-	// TODO: Move non-template implementations here
+	// Generate non-template function implementations
+	for (const auto &c : ast->children)
+	{
+		if (c->type == ASTNodeType::FUNCTION_DECL)
+		{
+			// Only generate body for non-template functions
+			// Template functions have their body in the header
+			if (c->genericParams.empty())
+			{
+				impl << genDecl(ASTConverter::toDecl(c)) << "\n\n";
+			}
+		}
+		else if (c->type == ASTNodeType::ACTUAL_DECL)
+		{
+			// actual functions go in .cpp (they're typically non-template platform implementations)
+			impl << generateActualDecl(c) << "\n\n";
+		}
+		else if (c->type == ASTNodeType::IMPL_DECL)
+		{
+			// impl blocks: non-generic impl methods go in .cpp
+			bool isGenericImpl = !c->genericParams.empty();
+			if (!isGenericImpl)
+			{
+				impl << generateNode(c) << "\n\n";
+			}
+		}
+	}
 
 	return impl.str();
 }

@@ -77,6 +77,7 @@ private:
 	std::string generateFunctionBlock(std::shared_ptr<ASTNode> block, const std::string &returnType, bool isExpression = false);
 	std::string generateModuleDecl(std::shared_ptr<ASTNode> node);
 	std::string generateActualDecl(std::shared_ptr<ASTNode> node);
+	std::string genActualForwardDecl(std::shared_ptr<ASTNode> node);
 	std::string mapType(std::string tuffType);
 
 	// Union type helpers

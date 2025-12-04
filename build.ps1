@@ -106,6 +106,42 @@ function Get-SourceFiles {
     }
 }
 
+function Copy-Headers {
+    param(
+        [string]$SourceRoot,
+        [string]$OutputPath,
+        [string]$Target
+    )
+    
+    $headerDir = Join-Path $RootDir (Join-Path $SourceRoot $Target)
+    if (-not (Test-Path $headerDir)) {
+        return 0
+    }
+    
+    $headers = Get-ChildItem -Path $headerDir -Filter "*.h" -Recurse -ErrorAction SilentlyContinue
+    if ($headers.Count -eq 0) {
+        return 0
+    }
+    
+    $destDir = Join-Path $RootDir $OutputPath
+    if (-not (Test-Path $destDir)) {
+        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+    }
+    
+    $headerDirResolved = (Resolve-Path $headerDir).Path
+    foreach ($header in $headers) {
+        $relativePath = $header.FullName.Substring($headerDirResolved.Length + 1)
+        $destPath = Join-Path $destDir $relativePath
+        $destFolder = Split-Path $destPath -Parent
+        if (-not (Test-Path $destFolder)) {
+            New-Item -ItemType Directory -Path $destFolder -Force | Out-Null
+        }
+        Copy-Item $header.FullName -Destination $destPath -Force
+    }
+    
+    return $headers.Count
+}
+
 function Build {
     param(
         [object]$Config,
@@ -118,6 +154,18 @@ function Build {
     $outputPath = $Config.outputPath
     $target = $Config.target
     
+    # Ensure output directory exists
+    if (-not (Test-Path $outputPath)) {
+        New-Item -ItemType Directory -Path $outputPath -Force | Out-Null
+    }
+    
+    # Copy C++ headers if targeting cpp
+    if ($target -eq "cpp") {
+        $headerCount = Copy-Headers -SourceRoot $Config.sourceRoot -OutputPath $outputPath -Target "cpp"
+        if ($headerCount -gt 0) {
+            Write-ColorOutput "  Copied $headerCount header file(s)" $ColorGreen
+        }
+    }
 
     # Get all source files
     $sourceFiles = Get-SourceFiles -Path $sourcePath
@@ -129,41 +177,25 @@ function Build {
     
     Write-ColorOutput "  Found $($sourceFiles.Count) source file(s)" $ColorGreen
     
-    $compiled = 0
-    $errors = 0
-    
     # Build source list for cross-file visibility
     $allSourcesList = ($sourceFiles | ForEach-Object { $_.FullPath }) -join ','
     
-    # Compile each file with all sources
-    foreach ($sourceFile in $sourceFiles) {
-        $relPath = $sourceFile.RelativePath
-        $outputFile = Join-Path $outputPath ($relPath -replace '\.tuff$', '.cpp')
-        
-        Write-Host "  Compiling: $relPath" -NoNewline
-        
-        try {
-            $result = & $CompilerPath --sources $allSourcesList --target $target -o $outputFile 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                Write-ColorOutput " ✓" $ColorGreen
-                $compiled++
-            } else {
-                Write-ColorOutput " ✗" $ColorRed
-                Write-ColorOutput "    Error: $result" $ColorYellow
-                $errors++
-            }
-        }
-        catch {
+    Write-Host "  Compiling (per-file mode)..." -NoNewline
+    
+    try {
+        # Use --per-file and --output-dir for separate .h/.cpp files
+        $result = & $CompilerPath --sources $allSourcesList --target $target --per-file --output-dir $outputPath 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-ColorOutput " ✓" $ColorGreen
+            Write-ColorOutput "  Output directory: $outputPath" $ColorGreen
+        } else {
             Write-ColorOutput " ✗" $ColorRed
-            Write-ColorOutput "    Error: $_" $ColorYellow
-            $errors++
+            Write-ColorOutput "    Error: $result" $ColorYellow
         }
     }
-    
-    Write-ColorOutput "  Compiled $compiled/$($sourceFiles.Count) files" $(if ($errors -eq 0) { $ColorGreen } else { $ColorYellow })
-    if ($errors -gt 0) {
-        Write-ColorOutput "  $errors errors" $ColorRed
-        return
+    catch {
+        Write-ColorOutput " ✗" $ColorRed
+        Write-ColorOutput "    Error: $_" $ColorYellow
     }
     
     # Bundle if requested
