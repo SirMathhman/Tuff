@@ -128,6 +128,46 @@ inline bool __builtin_string_toI32(string s, int32_t *outValue)
 	return true;
 }
 
+// Parse string to 64-bit integer (returns true on success, false on failure)
+inline bool __builtin_string_toI64(string s, int64_t *outValue)
+{
+	char *endptr;
+	errno = 0;
+	long long val = std::strtoll(s, &endptr, 10);
+
+	// Check for errors: no conversion, trailing characters, or out of range
+	if (endptr == s || *endptr != '\0' || errno == ERANGE)
+	{
+		return false;
+	}
+
+	*outValue = static_cast<int64_t>(val);
+	return true;
+}
+
+// Get a zero F64 value
+inline double __builtin_f64_zero()
+{
+	return 0.0;
+}
+
+// Parse string to 64-bit float (returns true on success, false on failure)
+inline bool __builtin_string_toF64(string s, double *outValue)
+{
+	char *endptr;
+	errno = 0;
+	double val = std::strtod(s, &endptr);
+
+	// Check for errors: no conversion, trailing characters, or out of range
+	if (endptr == s || *endptr != '\0' || errno == ERANGE)
+	{
+		return false;
+	}
+
+	*outValue = val;
+	return true;
+}
+
 // Create a string from a byte buffer (copies the data)
 inline char *__builtin_string_fromBytes(const uint8_t *buffer, size_t length)
 {

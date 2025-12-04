@@ -30,29 +30,25 @@ impl Parser {
 			return None<*Type> { };
 		}
 		
-		if (left is Some<*Type>) {
-			let mut leftType = left.value;
-			
-			loop {
-				if (!(this.check(TokenType.Pipe))) {
-					break;
-				}
-				this.advance();
-				
-				let right = this.parseIntersectionType();
-				if (right is Some<*Type>) {
-					let unionType = UnionType { leftType, right.value };
-					leftType = this.allocType(unionType);
-				} else {
-					this.addError(this.current().line, this.current().column, "Expected type after '|'");
-					return None<*Type> { };
-				}
+		let mut leftType = left.value;
+		
+		loop {
+			if (!(this.check(TokenType.Pipe))) {
+				break;
 			}
+			this.advance();
 			
-			return Some<*Type> { leftType };
+			let right = this.parseIntersectionType();
+			if (right is Some<*Type>) {
+				let unionType = UnionType { leftType, right.value };
+				leftType = this.allocType(unionType);
+			} else {
+				this.addError(this.current().line, this.current().column, "Expected type after '|'");
+				return None<*Type> { };
+			}
 		}
 		
-		return None<*Type> { };
+		return Some<*Type> { leftType };
 	}
 	
 	// Parse intersection type: Type1 & Type2
@@ -62,38 +58,34 @@ impl Parser {
 			return None<*Type> { };
 		}
 		
-		if (left is Some<*Type>) {
-			let mut leftType = left.value;
-			
-			loop {
-				// Only parse as intersection if followed by a type, not an expression
-				// This is tricky because & is also used for references
-				// For now, only in type position do we parse intersections
-				if (!(this.check(TokenType.Ampersand))) {
-					break;
-				}
-				// Peek ahead to see if it looks like another type
-				let next = this.peek(1USize);
-				let isType = next.tokenType == TokenType.Identifier;
-				if (!(isType)) {
-					break;
-				}
-				
-				this.advance();
-				let right = this.parsePrimaryType();
-				if (right is Some<*Type>) {
-					let intersectType = IntersectionType { leftType, right.value };
-					leftType = this.allocType(intersectType);
-				} else {
-					this.addError(this.current().line, this.current().column, "Expected type after '&'");
-					return None<*Type> { };
-				}
+		let mut leftType = left.value;
+		
+		loop {
+			// Only parse as intersection if followed by a type, not an expression
+			// This is tricky because & is also used for references
+			// For now, only in type position do we parse intersections
+			if (!(this.check(TokenType.Ampersand))) {
+				break;
+			}
+			// Peek ahead to see if it looks like another type
+			let next = this.peek(1USize);
+			let isType = next.tokenType == TokenType.Identifier;
+			if (!(isType)) {
+				break;
 			}
 			
-			return Some<*Type> { leftType };
+			this.advance();
+			let right = this.parsePrimaryType();
+			if (right is Some<*Type>) {
+				let intersectType = IntersectionType { leftType, right.value };
+				leftType = this.allocType(intersectType);
+			} else {
+				this.addError(this.current().line, this.current().column, "Expected type after '&'");
+				return None<*Type> { };
+			}
 		}
 		
-		return None<*Type> { };
+		return Some<*Type> { leftType };
 	}
 	
 	// Parse primary type: primitive, pointer, array, function, generic, or identifier
@@ -212,8 +204,18 @@ impl Parser {
 		}
 		
 		this.expectToken(TokenType.RBracket, "Expected ']' in array type");
+		
+		// Allocate on heap
+		let initializedPtr = malloc<Option<I32>>(sizeOf(Option<I32>));
+		let ip: *mut Option<I32> = initializedPtr + 0;
+		*ip = initialized;
+		
+		let capacityPtr = malloc<Option<I32>>(sizeOf(Option<I32>));
+		let cp: *mut Option<I32> = capacityPtr + 0;
+		*cp = capacity;
+		
 		// Create ArrayType struct instance
-		let arrayType = ArrayType { elemType.value, initialized, capacity };
+		let arrayType = ArrayType { elemType.value, ip, cp };
 		return Some<*Type> { this.allocType(arrayType) };
 	}
 	
@@ -249,7 +251,12 @@ impl Parser {
 			return None<*Type> { };
 		}
 		
-		let fnType = FunctionType { params, retType.value };
+		// Allocate params on heap
+		let paramsPtr = malloc<Vector<*Type>>(sizeOf(Vector<*Type>));
+		let pp: *mut Vector<*Type> = paramsPtr + 0;
+		*pp = params;
+		
+		let fnType = FunctionType { pp, retType.value };
 		return Some<*Type> { this.allocType(fnType) };
 	}
 	
@@ -292,8 +299,14 @@ impl Parser {
 			}
 			
 			this.expectToken(TokenType.RAngle, "Expected '>' after generic arguments");
-		// Create NamedType struct instance
-		let namedType = NamedType { fullName, args };
+			
+			// Allocate args on heap
+			let argsPtr = malloc<Vector<*Type>>(sizeOf(Vector<*Type>));
+			let ap: *mut Vector<*Type> = argsPtr + 0;
+			*ap = args;
+			
+			// Create NamedType struct instance
+			let namedType = NamedType { fullName, ap };
 			return Some<*Type> { this.allocType(namedType) };
 		}
 		

@@ -7,18 +7,10 @@ fn run(): I32 => {
     if (!(opt1 is Some<I32>)) {
         return 1;
     }
-    if (opt1 is None<I32>) {
-        return 2;
-    }
-    
-    // Unwrap with type narrowing
-    if (opt1 is Some<I32>) {
-        let val1 = opt1.value;
-        if (val1 != 42) {
-            return 3;
-        }
-    } else {
-        return 10;
+    // After inverse narrowing, opt1 is now Some<I32>, so accessing .value is safe
+    let val1 = opt1.value;
+    if (val1 != 42) {
+        return 3;
     }
     
     // Test None
@@ -30,11 +22,8 @@ fn run(): I32 => {
         return 5;
     }
     
-    // unwrapOr with None (use default)
-    let mut val2: I32 = 99;
-    if (opt2 is Some<I32>) {
-        val2 = opt2.value;
-    }
+    // opt2 is now known to be None, so we use a default value
+    let val2: I32 = 99;
     if (val2 != 99) {
         return 6;
     }

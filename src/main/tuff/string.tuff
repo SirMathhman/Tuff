@@ -38,6 +38,15 @@ extern fn __builtin_string_fromI32(value: I32): string;
 // Parse string to integer (returns true on success, false on failure)
 extern fn __builtin_string_toI32(s: string, outValue: *mut I32): Bool;
 
+// Parse string to 64-bit integer (returns true on success, false on failure)
+extern fn __builtin_string_toI64(s: string, outValue: *mut I64): Bool;
+
+// Parse string to 64-bit float (returns true on success, false on failure)
+extern fn __builtin_string_toF64(s: string, outValue: *mut F64): Bool;
+
+// Get a zero F64 value
+extern fn __builtin_f64_zero(): F64;
+
 // Create a string from a byte buffer (copies the data)
 extern fn __builtin_string_fromBytes(buffer: *U8, length: USize): string;
 
@@ -86,6 +95,24 @@ impl string {
 			return Some<I32> { val };
 		} else {
 			return None<I32> { };
+		}
+	}
+	
+	fn toI64(this: string): Option<I64> => {
+		let mut val: I64 = 0;
+		if (__builtin_string_toI64(this, &mut val)) {
+			return Some<I64> { val };
+		} else {
+			return None<I64> { };
+		}
+	}
+	
+	fn toF64(this: string): Option<F64> => {
+		let mut val: F64 = __builtin_f64_zero();
+		if (__builtin_string_toF64(this, &mut val)) {
+			return Some<F64> { val };
+		} else {
+			return None<F64> { };
 		}
 	}
 	

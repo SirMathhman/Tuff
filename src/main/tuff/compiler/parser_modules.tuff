@@ -63,7 +63,7 @@ impl Parser {
 		let dp: *mut Vector<*Decl> = declsPtr + 0;
 		*dp = declarations;
 		
-		let moduleDecl = ModuleDecl { moduleName, declsPtr };
+		let moduleDecl = ModuleDecl { moduleName, dp };
 		return Some<*Decl> { this.allocDecl(moduleDecl) };
 	}
 	
@@ -162,7 +162,7 @@ impl Parser {
 		let rp: *mut Option<*Type> = returnTypePtr + 0;
 		*rp = returnType;
 		
-		let expectDecl = ExpectDecl { funcName, genericsPtr, paramsPtr, returnTypePtr };
+		let expectDecl = ExpectDecl { funcName, gp, pp, rp };
 		return Some<*Decl> { this.allocDecl(expectDecl) };
 	}
 	
@@ -229,7 +229,7 @@ impl Parser {
 		let rp: *mut Option<*Type> = returnTypePtr + 0;
 		*rp = returnType;
 		
-		let actualDecl = ActualDecl { funcName, genericsPtr, paramsPtr, returnTypePtr, body.value };
+		let actualDecl = ActualDecl { funcName, gp, pp, rp, body.value };
 		return Some<*Decl> { this.allocDecl(actualDecl) };
 	}
 	
@@ -280,7 +280,7 @@ impl Parser {
 		let rp: *mut Option<*Type> = returnTypePtr + 0;
 		*rp = returnType;
 		
-		let externDecl = ExternDecl { funcName, genericsPtr, paramsPtr, returnTypePtr };
+		let externDecl = ExternDecl { funcName, gp, pp, rp };
 		return Some<*Decl> { this.allocDecl(externDecl) };
 	}
 	

@@ -9,6 +9,7 @@ void TypeChecker::checkFunctionDecl(std::shared_ptr<ASTNode> node)
 	// Create new scope for function parameters
 	std::map<std::string, SymbolInfo> savedSymbolTable = symbolTable;
 	std::map<std::string, int> savedPointerOrigins = pointerOrigins;
+	std::map<std::string, ExprPtr> savedNarrowedTypes = narrowedTypes;
 	int savedFunctionScopeDepth = functionScopeDepth;
 	// Don't clear symbol table completely - we need to keep global symbols (like 'in let' vars)
 	// But we do need to handle shadowing correctly.
@@ -35,6 +36,7 @@ void TypeChecker::checkFunctionDecl(std::shared_ptr<ASTNode> node)
 	}
 	symbolTable = globalSymbols;
 	pointerOrigins.clear();
+	narrowedTypes.clear(); // Clear narrowings for new function
 
 	currentScopeDepth++;
 	functionScopeDepth = currentScopeDepth; // Parameters are at function scope depth
@@ -69,6 +71,7 @@ void TypeChecker::checkFunctionDecl(std::shared_ptr<ASTNode> node)
 	currentScopeDepth--;
 	symbolTable = savedSymbolTable;
 	pointerOrigins = savedPointerOrigins;
+	narrowedTypes = savedNarrowedTypes;
 	functionScopeDepth = savedFunctionScopeDepth;
 	genericParamsInScope = savedGenericParams;
 

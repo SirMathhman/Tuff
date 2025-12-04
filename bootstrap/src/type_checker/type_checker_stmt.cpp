@@ -44,7 +44,9 @@ void TypeChecker::checkLetStmt(std::shared_ptr<ASTNode> node)
 	std::string name = node->value;
 	if (symbolTable.find(name) != symbolTable.end())
 	{
-		std::cerr << "Error: Variable '" << name << "' already declared (no shadowing allowed) at line " << node->line << "." << std::endl;
+		auto existing = symbolTable[name];
+		std::cerr << "Error: Variable '" << name << "' already declared (no shadowing allowed) at line " << node->line << " in module " << currentModule << "." << std::endl;
+		std::cerr << "  Existing variable has type: " << existing.type << ", scopeDepth: " << existing.scopeDepth << ", currentScopeDepth: " << currentScopeDepth << std::endl;
 		exit(1);
 	}
 
@@ -232,9 +234,12 @@ void TypeChecker::checkIfStmt(std::shared_ptr<ASTNode> node)
 	// Type narrowing: collect all `x is SomeType` from compound conditions
 	// For `(a is T1) && (b is T2)`, narrow both a and b in the then-branch
 	std::vector<std::pair<std::string, ExprPtr>> narrowings;
+	
+	// For inverse narrowing: !(x is T) followed by early return
+	std::vector<std::pair<std::string, ExprPtr>> inverseNarrowings;
 
 	// Helper to extract is-expressions from condition
-	std::function<void(std::shared_ptr<ASTNode>)> collectNarrowings = [&](std::shared_ptr<ASTNode> cond)
+	std::function<void(std::shared_ptr<ASTNode>, bool)> collectNarrowings = [&](std::shared_ptr<ASTNode> cond, bool negated)
 	{
 		if (!cond)
 			return;
@@ -252,19 +257,33 @@ void TypeChecker::checkIfStmt(std::shared_ptr<ASTNode> node)
 			{
 				narrowedType = std::make_shared<IdentifierExpr>(cond->value);
 			}
-			narrowings.push_back({varName, narrowedType});
+			
+			if (negated)
+			{
+				// !(x is T) - we'll apply this narrowing after the if block if it always returns
+				inverseNarrowings.push_back({varName, narrowedType});
+			}
+			else
+			{
+				narrowings.push_back({varName, narrowedType});
+			}
 		}
 		// Compound && condition: recurse into both sides
 		else if (cond->type == ASTNodeType::BINARY_OP && cond->value == "&&")
 		{
-			collectNarrowings(cond->children[0]);
-			collectNarrowings(cond->children[1]);
+			collectNarrowings(cond->children[0], negated);
+			collectNarrowings(cond->children[1], negated);
+		}
+		// Negation: !(expr)
+		else if (cond->type == ASTNodeType::UNARY_OP && cond->value == "!")
+		{
+			collectNarrowings(cond->children[0], !negated);
 		}
 	};
 
-	collectNarrowings(condition);
+	collectNarrowings(condition, false);
 
-	// Apply all narrowings
+	// Apply all narrowings for the then-branch
 	for (const auto &n : narrowings)
 	{
 		narrowedTypes[n.first] = n.second;
@@ -278,6 +297,10 @@ void TypeChecker::checkIfStmt(std::shared_ptr<ASTNode> node)
 	{
 		narrowedTypes.erase(n.first);
 	}
+	
+	// If then-branch always returns and we have inverse narrowings,
+	// apply them for the code after the if statement
+	bool thenAlwaysReturns = blockAlwaysReturns(thenBranch);
 
 	if (node->children.size() > 2)
 	{
@@ -303,6 +326,16 @@ void TypeChecker::checkIfStmt(std::shared_ptr<ASTNode> node)
 	{
 		node->inferredType = "Void";
 		node->exprType = makePrimitive(PrimitiveKind::Void);
+		
+		// No else branch: if then always returns, apply inverse narrowings
+		// This handles: if (!(x is T)) { return; } followed by x.value
+		if (thenAlwaysReturns)
+		{
+			for (const auto &n : inverseNarrowings)
+			{
+				narrowedTypes[n.first] = n.second;
+			}
+		}
 	}
 }
 
@@ -396,5 +429,42 @@ void TypeChecker::checkReturnStmt(std::shared_ptr<ASTNode> node)
 
 		// Check for dangling pointers
 		checkReturnLifetime(node, expr);
+	}
+}
+
+// Check if a statement/block always returns (never falls through)
+bool TypeChecker::blockAlwaysReturns(std::shared_ptr<ASTNode> node)
+{
+	if (!node)
+		return false;
+
+	switch (node->type)
+	{
+	case ASTNodeType::RETURN_STMT:
+		return true;
+
+	case ASTNodeType::BREAK_STMT:
+	case ASTNodeType::CONTINUE_STMT:
+		return true;
+
+	case ASTNodeType::BLOCK:
+		// A block always returns if any statement in it always returns
+		for (auto child : node->children)
+		{
+			if (blockAlwaysReturns(child))
+				return true;
+		}
+		return false;
+
+	case ASTNodeType::IF_STMT:
+		// If statement always returns only if both branches exist and both return
+		if (node->children.size() >= 3)
+		{
+			return blockAlwaysReturns(node->children[1]) && blockAlwaysReturns(node->children[2]);
+		}
+		return false;
+
+	default:
+		return false;
 	}
 }

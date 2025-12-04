@@ -1,7 +1,6 @@
 // Vector<T> - dynamic array with automatic memory management
 // Tracks length and capacity separately for resizable arrays
 
-use mem;
 use option;
 use array;
 
@@ -14,7 +13,7 @@ struct Vector<T> {
 impl<T> Vector<T> {
 	// Create a new empty vector with initial capacity
 	fn new(initialCapacity: USize): Vector<T> => {
-		let ptr = mem::malloc<T>(sizeOf(T) * initialCapacity);
+		let ptr = malloc<T>(sizeOf(T) * initialCapacity);
 		return Vector<T> { ptr, 0USize, initialCapacity };
 	}
 
@@ -33,7 +32,7 @@ impl<T> Vector<T> {
 		// Check if we need to grow
 		if (this.length >= this.capacity) {
 			let newCapacity: USize = if (this.capacity == 0USize) 10USize else this.capacity * 2USize;
-			this.data = mem::realloc<T>(this.data, sizeOf(T) * newCapacity);
+			this.data = realloc<T>(this.data, sizeOf(T) * newCapacity);
 			this.capacity = newCapacity;
 		}
 		
@@ -81,6 +80,6 @@ impl<T> Vector<T> {
 
 	// Free the vector's memory
 	fn free(this: *mut Vector<T>): Void => {
-		mem::free<T>(this.data);
+		free<T>(this.data);
 	}
 }

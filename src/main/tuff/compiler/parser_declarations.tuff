@@ -58,11 +58,12 @@ impl Parser {
 		
 		// Function body => expr or => { ... }
 		this.expectToken(TokenType.FatArrow, "Expected '=>' before function body");
-		let body = this.parseExpression();
-		if (!(body is Some<*Expr>)) {
+		let bodyOpt = this.parseExpression();
+		if (!(bodyOpt is Some<*Expr>)) {
 			this.addError(this.current().line, this.current().column, "Expected function body");
 			return None<*Decl> { };
 		}
+		let body: *Expr = bodyOpt.value;
 		
 		// Allocate heap objects
 		let genericsPtr = malloc<Vector<GenericParam>>(sizeOf(Vector<GenericParam>));
@@ -77,7 +78,7 @@ impl Parser {
 		let rp: *mut Option<*Type> = returnTypePtr + 0;
 		*rp = returnType;
 		
-		let funcDecl = FunctionDecl { name, genericsPtr, paramsPtr, returnTypePtr, body.value };
+		let funcDecl = FunctionDecl { name, gp, pp, rp, body };
 		return Some<*Decl> { this.allocDecl(funcDecl) };
 	}
 	
@@ -166,12 +167,12 @@ impl Parser {
 				break;
 			}
 			
-			let nameToken = this.current();
+			let fieldNameToken = this.current();
 			if (this.matchToken(TokenType.Identifier)) {
 				this.expectToken(TokenType.Colon, "Expected ':' after field name");
 				let fieldType = this.parseTypeExpression();
 				if (fieldType is Some<*Type>) {
-					fields.push(StructField { nameToken.value, fieldType.value });
+					fields.push(StructField { fieldNameToken.value, fieldType.value });
 				}
 			}
 			
@@ -191,7 +192,7 @@ impl Parser {
 		let fp: *mut Vector<StructField> = fieldsPtr + 0;
 		*fp = fields;
 		
-		let structDecl = StructDecl { name, genericsPtr, fieldsPtr };
+		let structDecl = StructDecl { name, gp, fp };
 		return Some<*Decl> { this.allocDecl(structDecl) };
 	}
 	
@@ -235,7 +236,7 @@ impl Parser {
 		let vp: *mut Vector<EnumVariant> = variantsPtr + 0;
 		*vp = variants;
 		
-		let enumDecl = EnumDecl { name, variantsPtr };
+		let enumDecl = EnumDecl { name, vp };
 		return Some<*Decl> { this.allocDecl(enumDecl) };
 	}
 	
@@ -277,7 +278,7 @@ impl Parser {
 		let mp: *mut Vector<*Decl> = methodsPtr + 0;
 		*mp = methods;
 		
-		let implDecl = ImplDecl { implType.value, methodsPtr };
+		let implDecl = ImplDecl { implType.value, mp };
 		return Some<*Decl> { this.allocDecl(implDecl) };
 	}
 	
@@ -316,7 +317,7 @@ impl Parser {
 		let gp: *mut Vector<GenericParam> = genericsPtr + 0;
 		*gp = generics;
 		
-		let typeAliasDecl = TypeAliasDecl { name, genericsPtr, aliasedType.value };
+		let typeAliasDecl = TypeAliasDecl { name, gp, aliasedType.value };
 		return Some<*Decl> { this.allocDecl(typeAliasDecl) };
 	}
 }

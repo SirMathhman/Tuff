@@ -95,7 +95,13 @@ impl Parser {
 		}
 		
 		this.expectToken(TokenType.RBrace, "Expected '}' to close block");
-		let blockStmt = BlockStmt { statements };
+		
+		// Allocate statements on heap
+		let statementsPtr = malloc<Vector<*Stmt>>(sizeOf(Vector<*Stmt>));
+		let sp: *mut Vector<*Stmt> = statementsPtr + 0;
+		*sp = statements;
+		
+		let blockStmt = BlockStmt { sp };
 		return Some<*Stmt> { this.allocStmt(blockStmt) };
 	}
 	
@@ -129,7 +135,12 @@ impl Parser {
 			elseBranch = this.parseStatement();
 		}
 		
-		let ifStmt = IfStmt { condition.value, thenBranch.value, elseBranch };
+		// Allocate elseBranch on heap
+		let elseBranchPtr = malloc<Option<*Stmt>>(sizeOf(Option<*Stmt>));
+		let ep: *mut Option<*Stmt> = elseBranchPtr + 0;
+		*ep = elseBranch;
+		
+		let ifStmt = IfStmt { condition.value, thenBranch.value, ep };
 		return Some<*Stmt> { this.allocStmt(ifStmt) };
 	}
 	
@@ -217,7 +228,13 @@ impl Parser {
 		}
 		
 		this.expectToken(TokenType.Semicolon, "Expected ';' after return");
-		let returnStmt = ReturnStmt { value };
+		
+		// Allocate value on heap
+		let valuePtr = malloc<Option<*Expr>>(sizeOf(Option<*Expr>));
+		let vp: *mut Option<*Expr> = valuePtr + 0;
+		*vp = value;
+		
+		let returnStmt = ReturnStmt { vp };
 		return Some<*Stmt> { this.allocStmt(returnStmt) };
 	}
 	
@@ -253,7 +270,13 @@ impl Parser {
 		}
 		
 		this.expectToken(TokenType.Semicolon, "Expected ';' after let statement");
-		let letStmt = LetStmt { name, mutable, typeAnnotation, init.value };
+		
+		// Allocate typeAnnotation on heap
+		let typeAnnotationPtr = malloc<Option<*Type>>(sizeOf(Option<*Type>));
+		let tp: *mut Option<*Type> = typeAnnotationPtr + 0;
+		*tp = typeAnnotation;
+		
+		let letStmt = LetStmt { name, mutable, tp, init.value };
 		return Some<*Stmt> { this.allocStmt(letStmt) };
 	}
 	

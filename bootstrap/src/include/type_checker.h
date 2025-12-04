@@ -132,6 +132,7 @@ private:
 	void checkLoopStmt(std::shared_ptr<ASTNode> node);
 	void checkBlock(std::shared_ptr<ASTNode> node);
 	void checkReturnStmt(std::shared_ptr<ASTNode> node);
+	bool blockAlwaysReturns(std::shared_ptr<ASTNode> node);
 
 	// Declaration checking helpers (in type_checker_decl.cpp)
 	void checkFunctionDecl(std::shared_ptr<ASTNode> node);

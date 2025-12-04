@@ -38,7 +38,7 @@ void TypeChecker::checkIdentifier(std::shared_ptr<ASTNode> node)
 	{
 		// Check for use-after-move on variables with destructors
 		checkUseAfterMove(name, node->line);
-		
+
 		node->inferredType = it->second.type;
 		node->exprType = it->second.exprType;
 		return;
@@ -97,7 +97,8 @@ void TypeChecker::checkIsExpr(std::shared_ptr<ASTNode> node)
 	// Validate that the expression type is a union type
 	if (!isUnionType(expandedExprType))
 	{
-		std::cerr << "Error: 'is' operator can only be used on union types, got " << expr->inferredType << std::endl;
+		std::string varName = expr->type == ASTNodeType::IDENTIFIER ? expr->value : "(expression)";
+		std::cerr << "Error: 'is' operator can only be used on union types, got " << expr->inferredType << " for '" << varName << "' at line " << node->line << std::endl;
 		if (expandedExprType != expr->inferredType)
 		{
 			std::cerr << "  (expanded to: " << expandedExprType << ")" << std::endl;

@@ -17,30 +17,26 @@ impl Parser {
 			return None<*Expr> { };
 		}
 		
-		if (left is Some<*Expr>) {
-			let mut leftNode = left.value;
-			
-			loop {
-				if (!(this.check(TokenType.AndAnd))) {
-					break;
-				}
-				this.advance();
-				
-				let right = this.parseEquality();
-				if (right is Some<*Expr>) {
-					let rightNode = right.value;
-					let node = BinaryExpr { BinaryOp.And, leftNode, rightNode };
-					leftNode = this.allocExpr(node);
-				} else {
-					this.addError(this.current().line, this.current().column, "Expected expression after &&");
-					return None<*Expr> { };
-				}
+		let mut leftNode = left.value;
+		
+		loop {
+			if (!(this.check(TokenType.AndAnd))) {
+				break;
 			}
+			this.advance();
 			
-			return Some<*Expr> { leftNode };
+			let right = this.parseEquality();
+			if (right is Some<*Expr>) {
+				let rightNode = right.value;
+				let node = BinaryExpr { BinaryOp.And, leftNode, rightNode };
+				leftNode = this.allocExpr(node);
+			} else {
+				this.addError(this.current().line, this.current().column, "Expected expression after &&");
+				return None<*Expr> { };
+			}
 		}
 		
-		return None<*Expr> { };
+		return Some<*Expr> { leftNode };
 	}
 	
 	// Equality (==, !=)
@@ -50,38 +46,34 @@ impl Parser {
 			return None<*Expr> { };
 		}
 		
-		if (left is Some<*Expr>) {
-			let mut leftNode = left.value;
-			
-			loop {
-				// Check which operator we have
-				let mut op: BinaryOp = BinaryOp.Eq;
-				if (this.check(TokenType.EqualEqual)) {
-					op = BinaryOp.Eq;
-				} else if (this.check(TokenType.NotEqual)) {
-					op = BinaryOp.Ne;
-				} else {
-					// No matching operator, exit loop
-					break;
-				}
-				
-				this.advance();
-				
-				let right = this.parseComparison();
-				if (right is Some<*Expr>) {
-					let rightNode = right.value;
-					let node = BinaryExpr { op, leftNode, rightNode };
-					leftNode = this.allocExpr(node);
-				} else {
-					this.addError(this.current().line, this.current().column, "Expected expression after operator");
-					return None<*Expr> { };
-				}
+		let mut leftNode = left.value;
+		
+		loop {
+			// Check which operator we have
+			let mut op: BinaryOp = BinaryOp.Eq;
+			if (this.check(TokenType.EqualEqual)) {
+				op = BinaryOp.Eq;
+			} else if (this.check(TokenType.NotEqual)) {
+				op = BinaryOp.Ne;
+			} else {
+				// No matching operator, exit loop
+				break;
 			}
 			
-			return Some<*Expr> { leftNode };
+			this.advance();
+			
+			let right = this.parseComparison();
+			if (right is Some<*Expr>) {
+				let rightNode = right.value;
+				let node = BinaryExpr { op, leftNode, rightNode };
+				leftNode = this.allocExpr(node);
+			} else {
+				this.addError(this.current().line, this.current().column, "Expected expression after operator");
+				return None<*Expr> { };
+			}
 		}
 		
-		return None<*Expr> { };
+		return Some<*Expr> { leftNode };
 	}
 	
 	// Relational (<, >, <=, >=)
@@ -91,42 +83,38 @@ impl Parser {
 			return None<*Expr> { };
 		}
 		
-		if (left is Some<*Expr>) {
-			let mut leftNode = left.value;
-			
-			loop {
-				// Check which operator we have
-				let mut op: BinaryOp = BinaryOp.Lt;
-				if (this.check(TokenType.Less)) {
-					op = BinaryOp.Lt;
-				} else if (this.check(TokenType.Greater)) {
-					op = BinaryOp.Gt;
-				} else if (this.check(TokenType.LessEqual)) {
-					op = BinaryOp.Le;
-				} else if (this.check(TokenType.GreaterEqual)) {
-					op = BinaryOp.Ge;
-				} else {
-					// No matching operator, exit loop
-					break;
-				}
-				
-				this.advance();
-				
-				let right = this.parseBitwiseOr();
-				if (right is Some<*Expr>) {
-					let rightNode = right.value;
-					let node = BinaryExpr { op, leftNode, rightNode };
-					leftNode = this.allocExpr(node);
-				} else {
-					this.addError(this.current().line, this.current().column, "Expected expression after operator");
-					return None<*Expr> { };
-				}
+		let mut leftNode = left.value;
+		
+		loop {
+			// Check which operator we have
+			let mut op: BinaryOp = BinaryOp.Lt;
+			if (this.check(TokenType.Less)) {
+				op = BinaryOp.Lt;
+			} else if (this.check(TokenType.Greater)) {
+				op = BinaryOp.Gt;
+			} else if (this.check(TokenType.LessEqual)) {
+				op = BinaryOp.Le;
+			} else if (this.check(TokenType.GreaterEqual)) {
+				op = BinaryOp.Ge;
+			} else {
+				// No matching operator, exit loop
+				break;
 			}
 			
-			return Some<*Expr> { leftNode };
+			this.advance();
+			
+			let right = this.parseBitwiseOr();
+			if (right is Some<*Expr>) {
+				let rightNode = right.value;
+				let node = BinaryExpr { op, leftNode, rightNode };
+				leftNode = this.allocExpr(node);
+			} else {
+				this.addError(this.current().line, this.current().column, "Expected expression after operator");
+				return None<*Expr> { };
+			}
 		}
 		
-		return None<*Expr> { };
+		return Some<*Expr> { leftNode };
 	}
 	
 	// Bitwise OR (|)
@@ -136,30 +124,26 @@ impl Parser {
 			return None<*Expr> { };
 		}
 		
-		if (left is Some<*Expr>) {
-			let mut leftNode = left.value;
-			
-			loop {
-				if (!(this.check(TokenType.Pipe))) {
-					break;
-				}
-				this.advance();
-				
-				let right = this.parseBitwiseXor();
-				if (right is Some<*Expr>) {
-					let rightNode = right.value;
-					let node = BinaryExpr { BinaryOp.BitwiseOr, leftNode, rightNode };
-					leftNode = this.allocExpr(node);
-				} else {
-					this.addError(this.current().line, this.current().column, "Expected expression after |");
-					return None<*Expr> { };
-				}
+		let mut leftNode = left.value;
+		
+		loop {
+			if (!(this.check(TokenType.Pipe))) {
+				break;
 			}
+			this.advance();
 			
-			return Some<*Expr> { leftNode };
+			let right = this.parseBitwiseXor();
+			if (right is Some<*Expr>) {
+				let rightNode = right.value;
+				let node = BinaryExpr { BinaryOp.BitwiseOr, leftNode, rightNode };
+				leftNode = this.allocExpr(node);
+			} else {
+				this.addError(this.current().line, this.current().column, "Expected expression after |");
+				return None<*Expr> { };
+			}
 		}
 		
-		return None<*Expr> { };
+		return Some<*Expr> { leftNode };
 	}
 	
 	// Bitwise XOR (^)
@@ -169,30 +153,26 @@ impl Parser {
 			return None<*Expr> { };
 		}
 		
-		if (left is Some<*Expr>) {
-			let mut leftNode = left.value;
-			
-			loop {
-				if (!(this.check(TokenType.Caret))) {
-					break;
-				}
-				this.advance();
-				
-				let right = this.parseBitwiseAnd();
-				if (right is Some<*Expr>) {
-					let rightNode = right.value;
-					let node = BinaryExpr { BinaryOp.BitwiseXor, leftNode, rightNode };
-					leftNode = this.allocExpr(node);
-				} else {
-					this.addError(this.current().line, this.current().column, "Expected expression after ^");
-					return None<*Expr> { };
-				}
+		let mut leftNode = left.value;
+		
+		loop {
+			if (!(this.check(TokenType.Caret))) {
+				break;
 			}
+			this.advance();
 			
-			return Some<*Expr> { leftNode };
+			let right = this.parseBitwiseAnd();
+			if (right is Some<*Expr>) {
+				let rightNode = right.value;
+				let node = BinaryExpr { BinaryOp.BitwiseXor, leftNode, rightNode };
+				leftNode = this.allocExpr(node);
+			} else {
+				this.addError(this.current().line, this.current().column, "Expected expression after ^");
+				return None<*Expr> { };
+			}
 		}
 		
-		return None<*Expr> { };
+		return Some<*Expr> { leftNode };
 	}
 	
 	// Bitwise AND (&)
@@ -202,30 +182,26 @@ impl Parser {
 			return None<*Expr> { };
 		}
 		
-		if (left is Some<*Expr>) {
-			let mut leftNode = left.value;
-			
-			loop {
-				if (!(this.check(TokenType.Ampersand))) {
-					break;
-				}
-				this.advance();
-				
-				let right = this.parseShift();
-				if (right is Some<*Expr>) {
-					let rightNode = right.value;
-					let node = BinaryExpr { BinaryOp.BitwiseAnd, leftNode, rightNode };
-					leftNode = this.allocExpr(node);
-				} else {
-					this.addError(this.current().line, this.current().column, "Expected expression after &");
-					return None<*Expr> { };
-				}
+		let mut leftNode = left.value;
+		
+		loop {
+			if (!(this.check(TokenType.Ampersand))) {
+				break;
 			}
+			this.advance();
 			
-			return Some<*Expr> { leftNode };
+			let right = this.parseShift();
+			if (right is Some<*Expr>) {
+				let rightNode = right.value;
+				let node = BinaryExpr { BinaryOp.BitwiseAnd, leftNode, rightNode };
+				leftNode = this.allocExpr(node);
+			} else {
+				this.addError(this.current().line, this.current().column, "Expected expression after &");
+				return None<*Expr> { };
+			}
 		}
 		
-		return None<*Expr> { };
+		return Some<*Expr> { leftNode };
 	}
 	
 	// Shift (<<, >>)
@@ -235,38 +211,34 @@ impl Parser {
 			return None<*Expr> { };
 		}
 		
-		if (left is Some<*Expr>) {
-			let mut leftNode = left.value;
-			
-			loop {
-				// Check which operator we have
-				let mut op: BinaryOp = BinaryOp.LeftShift;
-				if (this.check(TokenType.LeftShift)) {
-					op = BinaryOp.LeftShift;
-				} else if (this.check(TokenType.RightShift)) {
-					op = BinaryOp.RightShift;
-				} else {
-					// No matching operator, exit loop
-					break;
-				}
-				
-				this.advance();
-				
-				let right = this.parseAdditive();
-				if (right is Some<*Expr>) {
-					let rightNode = right.value;
-					let node = BinaryExpr { op, leftNode, rightNode };
-					leftNode = this.allocExpr(node);
-				} else {
-					this.addError(this.current().line, this.current().column, "Expected expression after operator");
-					return None<*Expr> { };
-				}
+		let mut leftNode = left.value;
+		
+		loop {
+			// Check which operator we have
+			let mut op: BinaryOp = BinaryOp.LeftShift;
+			if (this.check(TokenType.LeftShift)) {
+				op = BinaryOp.LeftShift;
+			} else if (this.check(TokenType.RightShift)) {
+				op = BinaryOp.RightShift;
+			} else {
+				// No matching operator, exit loop
+				break;
 			}
 			
-			return Some<*Expr> { leftNode };
+			this.advance();
+			
+			let right = this.parseAdditive();
+			if (right is Some<*Expr>) {
+				let rightNode = right.value;
+				let node = BinaryExpr { op, leftNode, rightNode };
+				leftNode = this.allocExpr(node);
+			} else {
+				this.addError(this.current().line, this.current().column, "Expected expression after operator");
+				return None<*Expr> { };
+			}
 		}
 		
-		return None<*Expr> { };
+		return Some<*Expr> { leftNode };
 	}
 	
 	// Additive (+, -)
@@ -276,38 +248,34 @@ impl Parser {
 			return None<*Expr> { };
 		}
 		
-		if (left is Some<*Expr>) {
-			let mut leftNode = left.value;
-			
-			loop {
-				// Check which operator we have
-				let mut op: BinaryOp = BinaryOp.Add;
-				if (this.check(TokenType.Plus)) {
-					op = BinaryOp.Add;
-				} else if (this.check(TokenType.Minus)) {
-					op = BinaryOp.Sub;
-				} else {
-					// No matching operator, exit loop
-					break;
-				}
-				
-				this.advance();
-				
-				let right = this.parseMultiplicative();
-				if (right is Some<*Expr>) {
-					let rightNode = right.value;
-					let node = BinaryExpr { op, leftNode, rightNode };
-					leftNode = this.allocExpr(node);
-				} else {
-					this.addError(this.current().line, this.current().column, "Expected expression after operator");
-					return None<*Expr> { };
-				}
+		let mut leftNode = left.value;
+		
+		loop {
+			// Check which operator we have
+			let mut op: BinaryOp = BinaryOp.Add;
+			if (this.check(TokenType.Plus)) {
+				op = BinaryOp.Add;
+			} else if (this.check(TokenType.Minus)) {
+				op = BinaryOp.Sub;
+			} else {
+				// No matching operator, exit loop
+				break;
 			}
 			
-			return Some<*Expr> { leftNode };
+			this.advance();
+			
+			let right = this.parseMultiplicative();
+			if (right is Some<*Expr>) {
+				let rightNode = right.value;
+				let node = BinaryExpr { op, leftNode, rightNode };
+				leftNode = this.allocExpr(node);
+			} else {
+				this.addError(this.current().line, this.current().column, "Expected expression after operator");
+				return None<*Expr> { };
+			}
 		}
 		
-		return None<*Expr> { };
+		return Some<*Expr> { leftNode };
 	}
 	
 	// Multiplicative (*, /, %)
@@ -317,39 +285,35 @@ impl Parser {
 			return None<*Expr> { };
 		}
 		
-		if (left is Some<*Expr>) {
-			let mut leftNode = left.value;
-			
-			loop {
-				// Check which operator we have
-				let mut op: BinaryOp = BinaryOp.Mul;
-				if (this.check(TokenType.Star)) {
-					op = BinaryOp.Mul;
-				} else if (this.check(TokenType.Slash)) {
-					op = BinaryOp.Div;
-				} else if (this.check(TokenType.Percent)) {
-					op = BinaryOp.Mod;
-				} else {
-					// No matching operator, exit loop
-					break;
-				}
-				
-				this.advance();
-				
-				let right = this.parseUnary();
-				if (right is Some<*Expr>) {
-					let rightNode = right.value;
-					let node = BinaryExpr { op, leftNode, rightNode };
-					leftNode = this.allocExpr(node);
-				} else {
-					this.addError(this.current().line, this.current().column, "Expected expression after operator");
-					return None<*Expr> { };
-				}
+		let mut leftNode = left.value;
+		
+		loop {
+			// Check which operator we have
+			let mut op: BinaryOp = BinaryOp.Mul;
+			if (this.check(TokenType.Star)) {
+				op = BinaryOp.Mul;
+			} else if (this.check(TokenType.Slash)) {
+				op = BinaryOp.Div;
+			} else if (this.check(TokenType.Percent)) {
+				op = BinaryOp.Mod;
+			} else {
+				// No matching operator, exit loop
+				break;
 			}
 			
-			return Some<*Expr> { leftNode };
+			this.advance();
+			
+			let right = this.parseUnary();
+			if (right is Some<*Expr>) {
+				let rightNode = right.value;
+				let node = BinaryExpr { op, leftNode, rightNode };
+				leftNode = this.allocExpr(node);
+			} else {
+				this.addError(this.current().line, this.current().column, "Expected expression after operator");
+				return None<*Expr> { };
+			}
 		}
 		
-		return None<*Expr> { };
+		return Some<*Expr> { leftNode };
 	}
 }

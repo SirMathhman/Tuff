@@ -40,9 +40,7 @@ if (!(left is Some<*Expr>)) {
 	return None<*Expr> { };
 }
 
-// Nested if to properly narrow the type
-if (left is Some<*Expr>) {
-	let mut leftNode = left.value;
+let mut leftNode = left.value;
 
 // Loop for left-associativity: a || b || c = (a || b) || c
 loop {
@@ -63,9 +61,6 @@ loop {
 }
 
 return Some<*Expr> { leftNode };
-}
-
-return None<*Expr> { };
 }
 
 // Unary (!, -, ~, *, &, &mut, sizeOf)
@@ -142,59 +137,55 @@ fn parsePostfix(this: *mut Parser): Option<*Expr> => {
 		return None<*Expr> { };
 	}
 	
-	if (expr is Some<*Expr>) {
-		let mut exprNode = expr.value;
-		
-		loop {
-			if (this.check(TokenType.Dot)) {
-				this.advance();
-				let token = this.current();
-				if (this.matchToken(TokenType.Identifier)) {
-					let node = FieldExpr { exprNode, token.value };
-					exprNode = this.allocExpr(node);
-					continue;
-				}
+	let mut exprNode = expr.value;
+	
+	loop {
+		if (this.check(TokenType.Dot)) {
+			this.advance();
+			let token = this.current();
+			if (this.matchToken(TokenType.Identifier)) {
+				let node = FieldExpr { exprNode, token.value };
+				exprNode = this.allocExpr(node);
+				continue;
 			}
-			
-			if (this.check(TokenType.LBracket)) {
-				this.advance();
-				let index = this.parseExpression();
-				if (index is Some<*Expr>) {
-					if (this.matchToken(TokenType.RBracket)) {
-						let node = IndexExpr { exprNode, index.value };
-						exprNode = this.allocExpr(node);
-						continue;
-					}
-				}
-			}
-			
-			if (this.check(TokenType.LParen)) {
-				this.advance();
-				let args = this.parseArguments();
-				if (this.matchToken(TokenType.RParen)) {
-					let node = CallExpr { exprNode, args };
-					exprNode = this.allocExpr(node);
-					continue;
-				}
-			}
-			
-			if (this.check(TokenType.Is)) {
-				this.advance();
-				let token = this.current();
-				if (this.matchToken(TokenType.Identifier)) {
-					// TODO: need to parse type expression for the Is operator
-					// For now, skip this
-					continue;
-				}
-			}
-			
-			break;
 		}
 		
-		return Some<*Expr> { exprNode };
+		if (this.check(TokenType.LBracket)) {
+			this.advance();
+			let index = this.parseExpression();
+			if (index is Some<*Expr>) {
+				if (this.matchToken(TokenType.RBracket)) {
+					let node = IndexExpr { exprNode, index.value };
+					exprNode = this.allocExpr(node);
+					continue;
+				}
+			}
+		}
+		
+		if (this.check(TokenType.LParen)) {
+			this.advance();
+			let args = this.parseArguments();
+			if (this.matchToken(TokenType.RParen)) {
+				let node = CallExpr { exprNode, args };
+				exprNode = this.allocExpr(node);
+				continue;
+			}
+		}
+		
+		if (this.check(TokenType.Is)) {
+			this.advance();
+			let token = this.current();
+			if (this.matchToken(TokenType.Identifier)) {
+				// TODO: need to parse type expression for the Is operator
+				// For now, skip this
+				continue;
+			}
+		}
+		
+		break;
 	}
 	
-	return None<*Expr> { };
+	return Some<*Expr> { exprNode };
 }
 
 // Primary expressions (literals, identifiers, parenthesized, etc.)
@@ -203,7 +194,7 @@ fn parsePrimary(this: *mut Parser): Option<*Expr> => {
 	
 	if (token.tokenType == TokenType.IntLiteral) {
 		this.advance();
-		let intVal = string::toI64(token.value);
+		let intVal = token.value.toI64();
 		if (intVal is Some<I64>) {
 			let lit = IntegerLiteral { intVal.value };
 			let litPtr = this.allocLiteral(lit);
@@ -214,7 +205,7 @@ fn parsePrimary(this: *mut Parser): Option<*Expr> => {
 	
 	if (token.tokenType == TokenType.FloatLiteral) {
 		this.advance();
-		let floatVal = string::toF64(token.value);
+		let floatVal = token.value.toF64();
 		if (floatVal is Some<F64>) {
 			let lit = FloatLiteral { floatVal.value };
 			let litPtr = this.allocLiteral(lit);
@@ -331,7 +322,18 @@ fn parseBlockExpression(this: *mut Parser): Option<*Expr> => {
 	}
 	
 	this.expectToken(TokenType.RBrace, "Expected '}' to close block");
-	let blockExpr = BlockExpr { statements, finalExpr };
+	
+	// Allocate statement vector on heap
+	let statementsPtr = malloc<Vector<*Stmt>>(sizeOf(Vector<*Stmt>));
+	let sp: *mut Vector<*Stmt> = statementsPtr + 0;
+	*sp = statements;
+	
+	// Allocate final expr option on heap
+	let finalExprPtr = malloc<Option<*Expr>>(sizeOf(Option<*Expr>));
+	let fep: *mut Option<*Expr> = finalExprPtr + 0;
+	*fep = finalExpr;
+	
+	let blockExpr = BlockExpr { sp, fep };
 	return Some<*Expr> { this.allocExpr(blockExpr) };
 }
 
@@ -339,23 +341,25 @@ fn parseBlockExpression(this: *mut Parser): Option<*Expr> => {
 fn parseArguments(this: *mut Parser): *Vector<*Expr> => {
 	let mut args = Vector::new<*Expr>(10USize);
 	
-	if (this.check(TokenType.RParen)) {
-		return args;
+	if (!(this.check(TokenType.RParen))) {
+		loop {
+			let arg = this.parseExpression();
+			if (arg is Some<*Expr>) {
+				args.push(arg.value);
+			}
+			
+			if (!(this.check(TokenType.Comma))) {
+				break;
+			}
+			
+			this.advance();
+		}
 	}
 	
-	loop {
-		let arg = this.parseExpression();
-		if (arg is Some<*Expr>) {
-			args.push(arg.value);
-		}
-		
-		if (!(this.check(TokenType.Comma))) {
-			break;
-		}
-		
-		this.advance();
-	}
-	
-	return args;
+	// Allocate on heap and return pointer
+	let argsPtr = malloc<Vector<*Expr>>(sizeOf(Vector<*Expr>));
+	let ap: *mut Vector<*Expr> = argsPtr + 0;
+	*ap = args;
+	return ap;
 }
 }
