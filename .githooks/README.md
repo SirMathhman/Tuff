@@ -103,3 +103,11 @@ Enforcing a maximum file size encourages:
 3. **Testability**: Focused modules are easier to test
 4. **Reusability**: Well-scoped modules can be reused more easily
 5. **Code Review**: Smaller files make pull request reviews more manageable
+
+## Existing Large Files
+
+Some files in the repository may exceed the 500-line limit from before this hook was added:
+
+- `src/compiler/parser.rs` (703 lines) - Should be split into separate modules for parser phases
+
+As the codebase evolves, these files should be refactored into smaller, focused modules to comply with this standard.
