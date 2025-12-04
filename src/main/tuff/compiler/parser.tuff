@@ -90,7 +90,7 @@ impl Parser {
 	}
 	
 	// Add an error to the error list
-	fn addError(this: *mut Parser, line: I32, column: I32, message: string): Void => {
+	fn addError(this: *mut Parser, line: USize, column: USize, message: string): Void => {
 		let error = ParseError::new(line, column, message);
 		this.errors.push(error);
 	}
@@ -213,11 +213,6 @@ impl Parser {
 	}
 	
 	// Expression parsing stubs
-	fn parseExpression(this: *mut Parser): Option<*mut ASTNode> => {
-		return None<*mut ASTNode> { };
-	}
-	
-	// Type parsing stubs
 	fn parseType(this: *mut Parser): Option<*mut TypeExpr> => {
 		return None<*mut TypeExpr> { };
 	}

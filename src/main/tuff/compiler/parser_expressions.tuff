@@ -1,0 +1,191 @@
+// Expression parsing for Tuff Parser - STUB FOR PHASE 2
+// Framework and documentation for precedence climbing
+// Will be implemented with proper type narrowing fixes
+
+use token;
+use ast;
+use parser_error;
+use vector;
+use string;
+use option;
+
+impl Parser {
+	// Entry point for expression parsing
+	fn parseExpression(this: *mut Parser): Option<*mut ASTNode> => {
+		// TODO: Implement parseLogicalOr() and chain through operator precedence
+		return None<*mut ASTNode> { };
+	}
+	
+	// Logical OR (||) - lowest precedence
+	fn parseLogicalOr(this: *mut Parser): Option<*mut ASTNode> => {
+		// TODO: Implement with parseLogicalAnd() recursion
+		return None<*mut ASTNode> { };
+	}
+	
+	// Logical AND (&&)
+	fn parseLogicalAnd(this: *mut Parser): Option<*mut ASTNode> => {
+		// TODO: Implement with parseEquality() recursion
+		return None<*mut ASTNode> { };
+	}
+	
+	// Equality (==, !=)
+	fn parseEquality(this: *mut Parser): Option<*mut ASTNode> => {
+		// TODO: Implement with parseComparison() recursion
+		return None<*mut ASTNode> { };
+	}
+	
+	// Relational (<, >, <=, >=)
+	fn parseComparison(this: *mut Parser): Option<*mut ASTNode> => {
+		// TODO: Implement with parseBitwiseOr() recursion
+		return None<*mut ASTNode> { };
+	}
+	
+	// Bitwise OR (|)
+	fn parseBitwiseOr(this: *mut Parser): Option<*mut ASTNode> => {
+		// TODO: Implement with parseBitwiseXor() recursion
+		return None<*mut ASTNode> { };
+	}
+	
+	// Bitwise XOR (^)
+	fn parseBitwiseXor(this: *mut Parser): Option<*mut ASTNode> => {
+		// TODO: Implement with parseBitwiseAnd() recursion
+		return None<*mut ASTNode> { };
+	}
+	
+	// Bitwise AND (&)
+	fn parseBitwiseAnd(this: *mut Parser): Option<*mut ASTNode> => {
+		// TODO: Implement with parseShift() recursion
+		return None<*mut ASTNode> { };
+	}
+	
+	// Shift (<<, >>)
+	fn parseShift(this: *mut Parser): Option<*mut ASTNode> => {
+		// TODO: Implement with parseAdditive() recursion
+		return None<*mut ASTNode> { };
+	}
+	
+	// Additive (+, -)
+	fn parseAdditive(this: *mut Parser): Option<*mut ASTNode> => {
+		// TODO: Implement with parseMultiplicative() recursion
+		return None<*mut ASTNode> { };
+	}
+	
+	// Multiplicative (*, /, %)
+	fn parseMultiplicative(this: *mut Parser): Option<*mut ASTNode> => {
+		// TODO: Implement with parseUnary() recursion
+		return None<*mut ASTNode> { };
+	}
+	
+	// Unary (!, -, ~, *, &, &mut, sizeOf, cast)
+	fn parseUnary(this: *mut Parser): Option<*mut ASTNode> => {
+		// TODO: Implement unary operators and parsePostfix() recursion
+		return None<*mut ASTNode> { };
+	}
+	
+	// Postfix (., [], function call, 'is' for type narrowing)
+	fn parsePostfix(this: *mut Parser): Option<*mut ASTNode> => {
+		// TODO: Implement postfix operations and parsePrimary() recursion
+		return None<*mut ASTNode> { };
+	}
+	
+	// Primary expressions (literals, identifiers, parenthesized, etc.)
+	fn parsePrimary(this: *mut Parser): Option<*mut ASTNode> => {
+		let token = this.current();
+		
+		// Integer literal
+		if (token.tokenType == TokenType.IntLiteral) {
+			this.advance();
+			let node = ASTNode::new(ASTNodeType.IntLiteral);
+			node.value = token.value;
+			return Some<*mut ASTNode> { node };
+		}
+		
+		// Float literal
+		if (token.tokenType == TokenType.FloatLiteral) {
+			this.advance();
+			let node = ASTNode::new(ASTNodeType.FloatLiteral);
+			node.value = token.value;
+			return Some<*mut ASTNode> { node };
+		}
+		
+		// String literal
+		if (token.tokenType == TokenType.StringLiteral) {
+			this.advance();
+			let node = ASTNode::new(ASTNodeType.StringLiteral);
+			node.value = token.value;
+			return Some<*mut ASTNode> { node };
+		}
+		
+		// Boolean true
+		if (token.tokenType == TokenType.True) {
+			this.advance();
+			let node = ASTNode::new(ASTNodeType.BoolLiteral);
+			node.value = "true";
+			return Some<*mut ASTNode> { node };
+		}
+		
+		// Boolean false
+		if (token.tokenType == TokenType.False) {
+			this.advance();
+			let node = ASTNode::new(ASTNodeType.BoolLiteral);
+			node.value = "false";
+			return Some<*mut ASTNode> { node };
+		}
+		
+		// Identifier
+		if (token.tokenType == TokenType.Identifier) {
+			this.advance();
+			let node = ASTNode::new(ASTNodeType.Identifier);
+			node.value = token.value;
+			return Some<*mut ASTNode> { node };
+		}
+		
+		// Parenthesized expression
+		if (token.tokenType == TokenType.LParen) {
+			this.advance();
+			let expr = this.parseExpression();
+			if (!(this.matchToken(TokenType.RParen))) {
+				this.addError(this.current().line, this.current().column, "Expected ) after expression");
+				return None<*mut ASTNode> { };
+			}
+			return expr;
+		}
+		
+		// 'this' keyword
+		if (token.tokenType == TokenType.This) {
+			this.advance();
+			let node = ASTNode::new(ASTNodeType.This);
+			return Some<*mut ASTNode> { node };
+		}
+		
+		// Error - unexpected token
+		this.addError(token.line, token.column, "Unexpected token in expression");
+		return None<*mut ASTNode> { };
+	}
+	
+	// Parse function call arguments
+	fn parseArguments(this: *mut Parser): Vector<*mut ASTNode> => {
+		let mut args = Vector::new<*mut ASTNode>(10USize);
+		
+		// Check for empty argument list
+		if (this.check(TokenType.RParen)) {
+			return args;
+		}
+		
+		// Parse comma-separated arguments
+		loop {
+			let arg = this.parseExpression();
+			if (arg is Some<*mut ASTNode>) {
+				args.push(arg.value);
+			}
+			
+			if (!(this.check(TokenType.Comma))) {
+				break;
+			}
+			
+			this.advance();
+		}
+		
+		return args;
+	}
+}

@@ -61,6 +61,14 @@ enum ASTNodeType {
 	CastExpr,
 	SizeOfExpr,
 	IsExpr,
+	MemberAccess,
+	Index,
+	FunctionCall,
+	TypeNarrow,
+	If,
+	Cast,
+	SizeOf,
+	This,
 	
 	// Types (when used as expressions in generic args, etc)
 	TypeExpr,
