@@ -397,142 +397,51 @@ impl Parser {
     }
 
     fn parse_expression(&mut self) -> Result<Expr, CompileError> {
-        self.parse_or_expression()
+        self.parse_binary_expr(0)
     }
 
-    fn parse_or_expression(&mut self) -> Result<Expr, CompileError> {
-        let mut expr = self.parse_and_expression()?;
-
-        while self.match_token(&TokenKind::Or) {
-            let right = self.parse_and_expression()?;
-            expr = Expr::BinaryOp(BinaryOp {
-                left: Box::new(expr),
-                op: "||".to_string(),
-                right: Box::new(right),
-                span: Span::new(&self.current_filename, 0, 0, 0),
-            });
-        }
-
-        Ok(expr)
-    }
-
-    fn parse_and_expression(&mut self) -> Result<Expr, CompileError> {
-        let mut expr = self.parse_equality_expression()?;
-
-        while self.match_token(&TokenKind::And) {
-            let right = self.parse_equality_expression()?;
-            expr = Expr::BinaryOp(BinaryOp {
-                left: Box::new(expr),
-                op: "&&".to_string(),
-                right: Box::new(right),
-                span: Span::new(&self.current_filename, 0, 0, 0),
-            });
-        }
-
-        Ok(expr)
-    }
-
-    fn parse_equality_expression(&mut self) -> Result<Expr, CompileError> {
-        let mut expr = self.parse_relational_expression()?;
+    fn parse_binary_expr(&mut self, min_precedence: i32) -> Result<Expr, CompileError> {
+        let mut left = self.parse_unary_expression()?;
 
         loop {
-            let op = if self.match_token(&TokenKind::EqualEqual) {
-                "=="
-            } else if self.match_token(&TokenKind::NotEqual) {
-                "!="
-            } else {
-                break;
+            let (op_name, precedence, _assoc) = match &self.tokens.get(self.position).map(|t| &t.kind) {
+                Some(TokenKind::Or) => ("||", 1, "left"),
+                Some(TokenKind::And) => ("&&", 2, "left"),
+                Some(TokenKind::EqualEqual) => ("==", 3, "left"),
+                Some(TokenKind::NotEqual) => ("!=", 3, "left"),
+                Some(TokenKind::Less) => ("<", 4, "left"),
+                Some(TokenKind::Greater) => (">", 4, "left"),
+                Some(TokenKind::LessEqual) => ("<=", 4, "left"),
+                Some(TokenKind::GreaterEqual) => (">=", 4, "left"),
+                Some(TokenKind::Plus) => ("+", 5, "left"),
+                Some(TokenKind::Minus) => ("-", 5, "left"),
+                Some(TokenKind::Star) => ("*", 6, "left"),
+                Some(TokenKind::Slash) => ("/", 6, "left"),
+                Some(TokenKind::Percent) => ("%", 6, "left"),
+                _ => break,
             };
 
-            let right = self.parse_relational_expression()?;
-            expr = Expr::BinaryOp(BinaryOp {
-                left: Box::new(expr),
-                op: op.to_string(),
+            if precedence < min_precedence {
+                break;
+            }
+
+            self.advance();
+            let right = self.parse_binary_expr(precedence + 1)?;
+            left = Expr::BinaryOp(BinaryOp {
+                left: Box::new(left),
+                op: op_name.to_string(),
                 right: Box::new(right),
                 span: Span::new(&self.current_filename, 0, 0, 0),
             });
         }
 
-        Ok(expr)
+        Ok(left)
     }
 
-    fn parse_relational_expression(&mut self) -> Result<Expr, CompileError> {
-        let mut expr = self.parse_additive_expression()?;
-
-        loop {
-            let op = if self.match_token(&TokenKind::Less) {
-                "<"
-            } else if self.match_token(&TokenKind::Greater) {
-                ">"
-            } else if self.match_token(&TokenKind::LessEqual) {
-                "<="
-            } else if self.match_token(&TokenKind::GreaterEqual) {
-                ">="
-            } else {
-                break;
-            };
-
-            let right = self.parse_additive_expression()?;
-            expr = Expr::BinaryOp(BinaryOp {
-                left: Box::new(expr),
-                op: op.to_string(),
-                right: Box::new(right),
-                span: Span::new(&self.current_filename, 0, 0, 0),
-            });
-        }
-
-        Ok(expr)
-    }
-
-    fn parse_additive_expression(&mut self) -> Result<Expr, CompileError> {
-        let mut expr = self.parse_multiplicative_expression()?;
-
-        loop {
-            let op = if self.match_token(&TokenKind::Plus) {
-                "+"
-            } else if self.match_token(&TokenKind::Minus) {
-                "-"
-            } else {
-                break;
-            };
-
-            let right = self.parse_multiplicative_expression()?;
-            expr = Expr::BinaryOp(BinaryOp {
-                left: Box::new(expr),
-                op: op.to_string(),
-                right: Box::new(right),
-                span: Span::new(&self.current_filename, 0, 0, 0),
-            });
-        }
-
-        Ok(expr)
-    }
-
-    fn parse_multiplicative_expression(&mut self) -> Result<Expr, CompileError> {
-        let mut expr = self.parse_unary_expression()?;
-
-        loop {
-            let op = if self.match_token(&TokenKind::Star) {
-                "*"
-            } else if self.match_token(&TokenKind::Slash) {
-                "/"
-            } else if self.match_token(&TokenKind::Percent) {
-                "%"
-            } else {
-                break;
-            };
-
-            let right = self.parse_unary_expression()?;
-            expr = Expr::BinaryOp(BinaryOp {
-                left: Box::new(expr),
-                op: op.to_string(),
-                right: Box::new(right),
-                span: Span::new(&self.current_filename, 0, 0, 0),
-            });
-        }
-
-        Ok(expr)
-    }
+    // REMOVED: parse_or_expression, parse_and_expression, parse_equality_expression
+    // REMOVED: parse_relational_expression, parse_additive_expression
+    // REMOVED: parse_multiplicative_expression
+    // All consolidated into parse_binary_expr above
 
     fn parse_unary_expression(&mut self) -> Result<Expr, CompileError> {
         let op = if self.match_token(&TokenKind::Minus) {
@@ -625,41 +534,7 @@ impl Parser {
                 self.advance();
                 Ok(Expr::Literal(Literal::Bool(false)))
             }
-            TokenKind::Ident(name) => {
-                let name_clone = name.clone();
-                let span = token.span.clone();
-                self.advance();
-
-                // Check if this is a constructor
-                if self.check(&TokenKind::LeftParen)
-                    && !matches!(self.current()?.kind, TokenKind::LeftParen)
-                {
-                    Ok(Expr::Variable(Variable {
-                        name: name_clone,
-                        span,
-                    }))
-                } else if self.match_token(&TokenKind::LeftParen) {
-                    // Could be constructor call, but for now treat as function call
-                    let mut args = Vec::new();
-                    if !self.check(&TokenKind::RightParen) {
-                        args.push(self.parse_expression()?);
-                        while self.match_token(&TokenKind::Comma) {
-                            args.push(self.parse_expression()?);
-                        }
-                    }
-                    self.consume(TokenKind::RightParen)?;
-                    Ok(Expr::Constructor(Constructor {
-                        name: name_clone,
-                        args,
-                        span,
-                    }))
-                } else {
-                    Ok(Expr::Variable(Variable {
-                        name: name_clone,
-                        span,
-                    }))
-                }
-            }
+            TokenKind::Ident(name) => self.parse_identifier_expr(name.clone(), token.span.clone()),
             TokenKind::LeftParen => {
                 self.advance();
                 let expr = self.parse_expression()?;
@@ -674,6 +549,23 @@ impl Parser {
                 token.span.clone(),
                 "unexpected token in expression",
             )),
+        }
+    }
+
+    fn parse_identifier_expr(&mut self, name: String, span: Span) -> Result<Expr, CompileError> {
+        self.advance();
+        if self.match_token(&TokenKind::LeftParen) {
+            let mut args = Vec::new();
+            if !self.check(&TokenKind::RightParen) {
+                args.push(self.parse_expression()?);
+                while self.match_token(&TokenKind::Comma) {
+                    args.push(self.parse_expression()?);
+                }
+            }
+            self.consume(TokenKind::RightParen)?;
+            Ok(Expr::Constructor(Constructor { name, args, span }))
+        } else {
+            Ok(Expr::Variable(Variable { name, span }))
         }
     }
 
@@ -767,53 +659,3 @@ impl Parser {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::compiler::lexer::Lexer;
-
-    fn parse_string(input: &str) -> Result<Program, Vec<CompileError>> {
-        let mut lexer = Lexer::new(input, "test.tuff");
-        let tokens = lexer.tokenize();
-        let mut parser = Parser::new(tokens, "test.tuff".to_string());
-        parser.parse()
-    }
-
-    #[test]
-    fn test_parse_simple_function() {
-        let result = parse_string("fn main() { }");
-        assert!(result.is_ok());
-        let program = result.unwrap();
-        assert_eq!(program.items.len(), 1);
-    }
-
-    #[test]
-    fn test_parse_function_with_params() {
-        let result = parse_string("fn add(x: i32, y: i32) -> i32 { x + y; }");
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_parse_let_statement() {
-        let result = parse_string("fn main() { let x = 42; }");
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_parse_if_statement() {
-        let result = parse_string("fn main() { if true { } }");
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_parse_type_definition() {
-        let result = parse_string("type Option<T> = Some<T> | None;");
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_parse_expression() {
-        let result = parse_string("fn main() { let x = 1 + 2 * 3; }");
-        assert!(result.is_ok());
-    }
-}

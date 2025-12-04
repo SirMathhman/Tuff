@@ -18,7 +18,7 @@ EXCLUDED_DIRS = {"target", ".git", ".githooks", "node_modules", ".vscode", ".ide
 
 def is_excluded(file_path: str) -> bool:
     """Check if a file path is in an excluded directory or is an excluded file type."""
-    # Exclude parser - known large file (707 lines), to be refactored
+    # Exclude parser.rs - complex module (572 lines), refactored but still needs splitting
     if "parser.rs" in file_path:
         return True
 
