@@ -24,16 +24,28 @@ impl Span {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ErrorKind {
     // Syntax errors
-    UnexpectedToken { expected: String, found: String },
+    UnexpectedToken {
+        expected: String,
+        found: String,
+    },
     UnexpectedEndOfInput,
     InvalidLiteral(String),
     MalformedExpression(String),
 
     // Type errors
-    TypeMismatch { expected: String, found: String },
+    TypeMismatch {
+        expected: String,
+        found: String,
+    },
     UndefinedType(String),
-    GenericMismatch { expected: usize, found: usize },
-    TraitNotImplemented { trait_name: String, type_name: String },
+    GenericMismatch {
+        expected: usize,
+        found: usize,
+    },
+    TraitNotImplemented {
+        trait_name: String,
+        type_name: String,
+    },
 
     // Borrow errors
     CannotBorrowMutableTwice(String),
@@ -125,9 +137,7 @@ pub struct ErrorCollector {
 
 impl ErrorCollector {
     pub fn new() -> Self {
-        ErrorCollector {
-            errors: Vec::new(),
-        }
+        ErrorCollector { errors: Vec::new() }
     }
 
     pub fn add_error(&mut self, error: CompileError) {
@@ -193,7 +203,7 @@ mod tests {
             "type mismatch",
         )
         .with_fix("Try converting to i32");
-        
+
         assert!(error.fix.is_some());
         assert_eq!(error.fix.unwrap(), "Try converting to i32");
     }
