@@ -1,5 +1,6 @@
 #include "codegen_cpp.h"
 #include <sstream>
+#include <iostream>
 
 // ============================================================================
 // TYPED CODE GENERATION - Uses std::visit for pattern matching
@@ -78,6 +79,23 @@ std::string CodeGeneratorCPP::genExpr(ast::ExprPtr expr)
 
 																	[this](const ast::BinaryOp &e) -> std::string
 																	{
+																		// Warn if adding 0
+																		if (e.op == "+")
+																		{
+																			// Check if left operand is literal 0
+																			if (auto lit = std::get_if<ast::Literal>(e.left.get()))
+																			{
+																				if (lit->value == "0")
+																					std::cerr << "Warning: Adding 0 on the left side" << std::endl;
+																			}
+																			// Check if right operand is literal 0
+																			if (auto lit = std::get_if<ast::Literal>(e.right.get()))
+																			{
+																				if (lit->value == "0")
+																					std::cerr << "Warning: Adding 0 on the right side" << std::endl;
+																			}
+																		}
+
 																		return genExpr(e.left) + " " + e.op + " " + genExpr(e.right);
 																	},
 

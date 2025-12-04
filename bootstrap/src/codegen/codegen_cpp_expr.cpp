@@ -1,11 +1,27 @@
 #include "codegen_cpp.h"
 #include <sstream>
 #include <vector>
+#include <iostream>
 
 std::string CodeGeneratorCPP::generateBinaryOp(std::shared_ptr<ASTNode> node)
 {
 	auto left = generateNode(node->children[0]);
 	auto right = generateNode(node->children[1]);
+
+	// Warn if adding 0
+	if (node->value == "+")
+	{
+		// Check if either operand is the literal 0
+		if (node->children[0]->type == ASTNodeType::LITERAL && node->children[0]->value == "0")
+		{
+			std::cerr << "Warning: Adding 0 on the left side" << std::endl;
+		}
+		else if (node->children[1]->type == ASTNodeType::LITERAL && node->children[1]->value == "0")
+		{
+			std::cerr << "Warning: Adding 0 on the right side" << std::endl;
+		}
+	}
+
 	return left + " " + node->value + " " + right;
 }
 

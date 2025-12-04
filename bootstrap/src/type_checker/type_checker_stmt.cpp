@@ -234,7 +234,7 @@ void TypeChecker::checkIfStmt(std::shared_ptr<ASTNode> node)
 	// Type narrowing: collect all `x is SomeType` from compound conditions
 	// For `(a is T1) && (b is T2)`, narrow both a and b in the then-branch
 	std::vector<std::pair<std::string, ExprPtr>> narrowings;
-	
+
 	// For inverse narrowing: !(x is T) followed by early return
 	std::vector<std::pair<std::string, ExprPtr>> inverseNarrowings;
 
@@ -257,7 +257,7 @@ void TypeChecker::checkIfStmt(std::shared_ptr<ASTNode> node)
 			{
 				narrowedType = std::make_shared<IdentifierExpr>(cond->value);
 			}
-			
+
 			if (negated)
 			{
 				// !(x is T) - we'll apply this narrowing after the if block if it always returns
@@ -297,7 +297,7 @@ void TypeChecker::checkIfStmt(std::shared_ptr<ASTNode> node)
 	{
 		narrowedTypes.erase(n.first);
 	}
-	
+
 	// If then-branch always returns and we have inverse narrowings,
 	// apply them for the code after the if statement
 	bool thenAlwaysReturns = blockAlwaysReturns(thenBranch);
@@ -326,7 +326,7 @@ void TypeChecker::checkIfStmt(std::shared_ptr<ASTNode> node)
 	{
 		node->inferredType = "Void";
 		node->exprType = makePrimitive(PrimitiveKind::Void);
-		
+
 		// No else branch: if then always returns, apply inverse narrowings
 		// This handles: if (!(x is T)) { return; } followed by x.value
 		if (thenAlwaysReturns)
