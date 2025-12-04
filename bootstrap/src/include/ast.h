@@ -2,66 +2,34 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <optional>
 #include "token.h"
 #include "expr.h"
 #include "type_env.h"
+#include "ast_nodes.h"
 
-enum class ASTNodeType
-{
-	PROGRAM,
-	FUNCTION_DECL,
-	LET_STMT,
-	ASSIGNMENT_STMT, // For x = 10;
-	IF_STMT,				 // Statement form: if (cond) stmt else stmt
-	IF_EXPR,				 // Expression form: if (cond) expr else expr
-	WHILE_STMT,
-	LOOP_STMT, // Infinite loop: loop { ... }
-	BREAK_STMT,
-	CONTINUE_STMT,
-	RETURN_STMT,
-	BLOCK,						// { stmt; stmt; }
-	STRUCT_DECL,			// struct Name { field: Type, ... }
-	STRUCT_LITERAL,		// TypeName { expr, expr, ... }
-	ENUM_DECL,				// enum Name { Variant1, Variant2 }
-	ENUM_VALUE,				// EnumName.Variant
-	EXPECT_DECL,			// expect fn name(...): Type;
-	ACTUAL_DECL,			// actual fn name(...): Type => {...}
-	EXTERN_FN_DECL,		// extern fn name(...): Type;
-	EXTERN_TYPE_DECL, // extern type TypeName;
-	EXTERN_USE_DECL,	// extern use stdlib;
-	MODULE_DECL,			// module name { statements }
-	USE_DECL,					// use module::path;
-	TYPE_ALIAS,				// type Name = Type; or type Name<T> = Type;
-	IMPL_DECL,				// impl<T> Struct<T> { fn method(...) => ... }
-	FIELD_ACCESS,			// obj.field
-	CALL_EXPR,
-	BINARY_OP,
-	UNARY_OP,
-	LITERAL,
-	IDENTIFIER,
-	TYPE,
-	TYPE_PARAM_DECL, // <T>
-	// Pointer and array types
-	POINTER_TYPE,			 // *T or *mut T
-	ARRAY_TYPE,				 // [T; init; capacity]
-	REFERENCE_EXPR,		 // &x or &mut x
-	DEREF_EXPR,				 // *p
-	ARRAY_LITERAL,		 // [1, 2, 3]
-	STRING_LITERAL,		 // "hello"
-	CHAR_LITERAL,			 // 'a'
-	INDEX_EXPR,				 // arr[i]
-	IS_EXPR,					 // expr is Type
-	MATCH_EXPR,				 // match expr { Type => expr, ... }
-	LIFETIME_PARAM,		 // lifetime parameter declaration
-	SIZEOF_EXPR,			 // sizeOf(Type) operator
-	CAST_EXPR,				 // cast(expr, Type)
-	FUNCTION_PTR_TYPE, // |T1, T2| => RetType
-	FUNCTION_REF_EXPR, // &funcName - reference to a function
-	IN_LET_STMT				 // in let args: *[string];
-};
+// ASTNode is the main AST type used throughout the compiler.
+// It wraps ASTNodeVariant (typed node) with common metadata.
+// 
+// MIGRATION STRATEGY:
+// - The 'data' field holds the typed variant (when set)
+// - Legacy fields (type, value, children, etc.) are preserved for backward compatibility
+// - New code should use the typed variant via as<T>() and is<T>()
+// - Old code continues to work with legacy fields
+// 
+// Eventually, all code will migrate to using typed variants, and legacy fields
+// will be removed.
 
 struct ASTNode
 {
+	// =========================================================================
+	// NEW: Typed variant data (preferred)
+	// =========================================================================
+	std::optional<ASTNodeVariant> data;
+	
+	// =========================================================================
+	// LEGACY: Old untyped fields (deprecated, for backward compatibility)
+	// =========================================================================
 	ASTNodeType type;
 	std::string value; // For identifiers, literals, operators
 	int line = 0;			 // Source line number
@@ -87,6 +55,57 @@ struct ASTNode
 	bool isExported = false;								 // For declarations - true if marked with 'out' keyword
 	TypeEnvironment typeEnv;								 // Type variable substitutions for generics
 
+	// =========================================================================
+	// NEW: Typed access methods
+	// =========================================================================
+	
+	// Check if this node holds a specific typed variant
+	template<typename T>
+	bool is() const {
+		return data.has_value() && std::holds_alternative<T>(*data);
+	}
+	
+	// Get typed variant (throws if wrong type)
+	template<typename T>
+	T& as() {
+		return std::get<T>(*data);
+	}
+	
+	template<typename T>
+	const T& as() const {
+		return std::get<T>(*data);
+	}
+	
+	// Get typed variant pointer (returns nullptr if wrong type)
+	template<typename T>
+	T* asPtr() {
+		if (!data.has_value()) return nullptr;
+		return std::get_if<T>(&*data);
+	}
+	
+	template<typename T>
+	const T* asPtr() const {
+		if (!data.has_value()) return nullptr;
+		return std::get_if<T>(&*data);
+	}
+	
+	// Check if typed data is set
+	bool hasTypedData() const {
+		return data.has_value();
+	}
+	
+	// Get ASTNodeType from variant (or legacy type field)
+	ASTNodeType getType() const {
+		if (data.has_value()) {
+			return getNodeType(*data);
+		}
+		return type;
+	}
+
+	// =========================================================================
+	// LEGACY: Helper methods
+	// =========================================================================
+	
 	// Helper to add a child
 	void addChild(std::shared_ptr<ASTNode> child)
 	{
