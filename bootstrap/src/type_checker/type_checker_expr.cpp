@@ -340,7 +340,7 @@ void TypeChecker::checkSizeOfExpr(std::shared_ptr<ASTNode> node)
 
 	// Check if it's a type alias first (before expansion)
 	bool isTypeAlias = typeAliasTable.find(typeName) != typeAliasTable.end();
-	
+
 	// Expand type aliases if this is an alias
 	typeName = expandTypeAlias(typeName);
 	node->value = typeName;
@@ -374,37 +374,37 @@ void TypeChecker::checkSizeOfExpr(std::shared_ptr<ASTNode> node)
 			}
 
 			bool isValidType = false;
-			
+
 			// If it was a type alias, it's valid (even if expanded to union syntax)
 			if (isTypeAlias)
 			{
 				isValidType = true;
 			}
-			
+
 			// Check struct table
 			if (!isValidType && structTable.find(baseTypeName) != structTable.end())
 			{
 				isValidType = true;
 			}
-			
+
 			// Check type alias table (includes union types)
 			if (!isValidType && typeAliasTable.find(baseTypeName) != typeAliasTable.end())
 			{
 				isValidType = true;
 			}
-			
+
 			// Check if it's an array type [T; init; capacity]
 			if (!isValidType && typeName[0] == '[')
 			{
 				isValidType = true;
 			}
-			
+
 			// Check if it's a union type (contains |)
 			if (!isValidType && typeName.find('|') != std::string::npos)
 			{
 				isValidType = true;
 			}
-			
+
 			// Check if it's an intersection type (contains &)
 			if (!isValidType && typeName.find('&') != std::string::npos)
 			{

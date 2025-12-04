@@ -387,6 +387,20 @@ let px: *mut I32 = &mut p.x;
 // let py: *mut I32 = &mut p.y;  // ERROR: p is already borrowed
 ```
 
+### Dangling Pointer Prevention
+
+The compiler prevents returning pointers to local variables, which would create dangling pointers:
+
+```tuff
+fn getDanglingPointer(): *I32 => {
+    let x: I32 = 42;
+    let p: *I32 = &x;
+    return p;  // ERROR: Cannot return pointer to local variable
+}
+```
+
+The compiler tracks the origin of pointers and ensures that returned pointers don't reference variables that will go out of scope when the function returns. This check is performed at compile-time with no runtime overhead.
+
 ### Lifetime Elision
 
 For functions with a single pointer parameter returning a pointer, the lifetime is automatically inferred:

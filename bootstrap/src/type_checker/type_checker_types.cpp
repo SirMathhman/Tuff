@@ -215,6 +215,15 @@ bool TypeChecker::areTypesEqual(ExprPtr t1, ExprPtr t2)
 		// TODO: Implement expression equality
 		return true;
 	}
+	case ExprKind::BINARY:
+	{
+		// Union types: A | B
+		auto b1 = t1->as<BinaryExpr>();
+		auto b2 = t2->as<BinaryExpr>();
+		if (b1->op != b2->op)
+			return false;
+		return areTypesEqual(b1->left, b2->left) && areTypesEqual(b1->right, b2->right);
+	}
 	default:
 		return false;
 	}

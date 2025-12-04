@@ -107,7 +107,18 @@ void TypeChecker::checkLetStmt(std::shared_ptr<ASTNode> node)
 	info.type = node->inferredType;
 	info.exprType = node->exprType;
 	info.isMutable = node->isMutable;
+	info.scopeDepth = currentScopeDepth;
 	symbolTable[name] = info;
+
+	// Track pointer origins for dangling pointer detection
+	if (isPointerType(node->inferredType))
+	{
+		int origin = getExprOriginScope(init);
+		if (origin >= 0)
+		{
+			pointerOrigins[name] = origin;
+		}
+	}
 }
 
 void TypeChecker::checkAssignmentStmt(std::shared_ptr<ASTNode> node)
@@ -361,5 +372,8 @@ void TypeChecker::checkReturnStmt(std::shared_ptr<ASTNode> node)
 								<< ", but got " << expr->inferredType << std::endl;
 			exit(1);
 		}
+
+		// Check for dangling pointers
+		checkReturnLifetime(node, expr);
 	}
 }

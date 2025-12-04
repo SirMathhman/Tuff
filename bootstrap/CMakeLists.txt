@@ -64,6 +64,7 @@ set(COMPILER_SOURCES
     src/type_checker/type_checker_decl.cpp
     src/type_checker/type_checker_types.cpp
     src/type_checker/type_checker_subst.cpp
+    src/type_checker/type_checker_ownership.cpp
     src/codegen/codegen_cpp.cpp
     src/codegen/codegen_cpp_helpers.cpp
     src/codegen/codegen_cpp_stmt.cpp

@@ -358,6 +358,18 @@ let p: *mut I32 = &mut x;
 // let q: *I32 = &x; // ERROR: x is mutably borrowed
 ```
 
+### Dangling Pointer Prevention
+
+The compiler prevents returning pointers to local variables:
+
+```tuff
+fn getDanglingPointer(): *I32 => {
+    let x: I32 = 42;
+    let p: *I32 = &x;
+    return p;  // ERROR: x goes out of scope, p would dangle
+}
+```
+
 ## 11. Modules and Namespaces
 
 Tuff organizes code into hierarchical modules using the `::` separator.

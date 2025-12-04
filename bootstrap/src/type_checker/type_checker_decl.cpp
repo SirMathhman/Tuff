@@ -8,6 +8,8 @@ void TypeChecker::checkFunctionDecl(std::shared_ptr<ASTNode> node)
 
 	// Create new scope for function parameters
 	std::map<std::string, SymbolInfo> savedSymbolTable = symbolTable;
+	std::map<std::string, int> savedPointerOrigins = pointerOrigins;
+	int savedFunctionScopeDepth = functionScopeDepth;
 	// Don't clear symbol table completely - we need to keep global symbols (like 'in let' vars)
 	// But we do need to handle shadowing correctly.
 	// For now, Tuff doesn't have true globals except 'in let', so we can just copy them over
@@ -32,8 +34,10 @@ void TypeChecker::checkFunctionDecl(std::shared_ptr<ASTNode> node)
 		}
 	}
 	symbolTable = globalSymbols;
+	pointerOrigins.clear();
 
 	currentScopeDepth++;
+	functionScopeDepth = currentScopeDepth; // Parameters are at function scope depth
 
 	// Save generic params scope
 	std::vector<std::string> savedGenericParams = genericParamsInScope;
@@ -53,6 +57,7 @@ void TypeChecker::checkFunctionDecl(std::shared_ptr<ASTNode> node)
 		SymbolInfo info;
 		info.type = paramType;
 		info.isMutable = false;
+		info.scopeDepth = currentScopeDepth;
 		symbolTable[paramName] = info;
 	}
 
@@ -63,6 +68,8 @@ void TypeChecker::checkFunctionDecl(std::shared_ptr<ASTNode> node)
 	// Restore state
 	currentScopeDepth--;
 	symbolTable = savedSymbolTable;
+	pointerOrigins = savedPointerOrigins;
+	functionScopeDepth = savedFunctionScopeDepth;
 	genericParamsInScope = savedGenericParams;
 
 	currentFunctionReturnType = ""; // Clear for safety

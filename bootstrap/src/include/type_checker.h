@@ -12,6 +12,8 @@ struct SymbolInfo
 	ExprPtr exprType; // New: ExprPtr based type
 	bool isMutable;
 	int scopeDepth = 0; // 0 = global, 1+ = local
+	int originScopeDepth = -1; // For pointers: scope depth of the variable they reference (-1 = unknown/safe)
+	std::string originVariable; // For pointers: name of the variable they reference (empty = unknown/safe)
 };
 
 struct StructInfo
@@ -66,7 +68,9 @@ private:
 	std::map<std::string, ExpectInfo> expectTable;
 	std::map<std::string, TypeAliasInfo> typeAliasTable;
 	std::map<std::string, ExprPtr> narrowedTypes; // variable -> narrowed type (for union type narrowing)
+	std::map<std::string, int> pointerOrigins; // variable -> origin scope depth (for dangling pointer detection)
 	int currentScopeDepth = 0;
+	int functionScopeDepth = 0; // Track the scope depth where function body starts
 	std::string currentFunctionReturnType;				 // Track return type for validation
 	ExprPtr currentFunctionReturnTypeExpr;				 // New
 	std::string currentModule;										 // Track current module context
@@ -116,6 +120,11 @@ private:
 	void checkFunctionDecl(std::shared_ptr<ASTNode> node);
 	void checkModuleDecl(std::shared_ptr<ASTNode> node);
 	void checkActualDecl(std::shared_ptr<ASTNode> node);
+
+	// Ownership/lifetime helpers (in type_checker_ownership.cpp)
+	bool isPointerType(const std::string &type);
+	int getExprOriginScope(std::shared_ptr<ASTNode> node);
+	void checkReturnLifetime(std::shared_ptr<ASTNode> node, std::shared_ptr<ASTNode> expr);
 
 	// Union type helpers
 	bool isUnionType(const std::string &type);
