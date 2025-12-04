@@ -1,68 +1,201 @@
 #include "codegen_cpp.h"
+#include "ast_converter.h"
 #include <sstream>
 #include <set>
 #include <map>
 #include <functional>
+#include <iostream>
+#include <vector>
+#include <memory>
 
-// Helper: check if a type is a function pointer type (starts with |)
-static bool isFunctionPointerType(const std::string &type)
+// ============================================================================
+// PER-FILE CODE GENERATION
+// ============================================================================
+
+std::set<std::string> CodeGeneratorCPP::extractDependencies(std::shared_ptr<ASTNode> ast)
 {
-	return !type.empty() && type[0] == '|';
+	std::set<std::string> deps;
+
+	// Traverse AST to find all type references
+	std::function<void(std::shared_ptr<ASTNode>)> traverse;
+	traverse = [&](std::shared_ptr<ASTNode> node)
+	{
+		if (!node)
+			return;
+
+		// Extract from use declarations
+		if (node->type == ASTNodeType::USE_DECL)
+		{
+			deps.insert(node->value);
+		}
+
+		// Extract from type strings (inferredType, value for TYPE nodes)
+		std::string typeStr = node->inferredType;
+		if (node->type == ASTNodeType::TYPE && !node->value.empty())
+		{
+			typeStr = node->value;
+		}
+
+		// Look for stdlib types in type strings
+		if (!typeStr.empty())
+		{
+			if (typeStr.find("Option") != std::string::npos ||
+					typeStr.find("Some") != std::string::npos ||
+					typeStr.find("None") != std::string::npos)
+			{
+				deps.insert("option");
+			}
+			if (typeStr.find("Result") != std::string::npos ||
+					typeStr.find("Ok") != std::string::npos ||
+					typeStr.find("Err") != std::string::npos)
+			{
+				deps.insert("result");
+			}
+			if (typeStr.find("Array") != std::string::npos)
+			{
+				deps.insert("array");
+			}
+			if (typeStr.find("Vector") != std::string::npos)
+			{
+				deps.insert("vector");
+			}
+			if (typeStr.find("Map") != std::string::npos)
+			{
+				deps.insert("map");
+			}
+			if (typeStr.find("string") != std::string::npos)
+			{
+				deps.insert("string");
+			}
+			if (typeStr.find("StringBuilder") != std::string::npos)
+			{
+				deps.insert("string_builder");
+			}
+			if (typeStr.find("CharStream") != std::string::npos)
+			{
+				deps.insert("char_stream");
+			}
+			if (typeStr.find("Allocated") != std::string::npos)
+			{
+				deps.insert("mem");
+			}
+		}
+
+		// Detect calls to primitive type methods (e.g., line.toString() where line is USize)
+		// These are transformed to StructName::methodName format
+		if (node->type == ASTNodeType::CALL_EXPR && node->children.size() > 0)
+		{
+			auto calleeNode = node->children[0];
+			if (calleeNode && calleeNode->type == ASTNodeType::IDENTIFIER)
+			{
+				std::string callee = calleeNode->value;
+				// Check if it's a primitive type method call (format: TypeName::methodName)
+				if (callee.find("I32::") == 0 || callee.find("I64::") == 0 ||
+						callee.find("U32::") == 0 || callee.find("U64::") == 0 ||
+						callee.find("USize::") == 0 || callee.find("F32::") == 0 ||
+						callee.find("F64::") == 0 || callee.find("Bool::") == 0 ||
+						callee.find("I8::") == 0 || callee.find("U8::") == 0 ||
+						callee.find("I16::") == 0 || callee.find("U16::") == 0)
+				{
+					deps.insert("primitives");
+				}
+			}
+		}
+
+		// Recursively traverse children
+		for (const auto &child : node->children)
+		{
+			traverse(child);
+		}
+	};
+
+	traverse(ast);
+	return deps;
 }
 
-// Helper: format a C++ function pointer parameter declaration
-// Input: paramType = "int32_t (*)(int32_t, int32_t)", paramName = "f"
-// Output: "int32_t (*f)(int32_t, int32_t)"
-static std::string formatFunctionPointerParam(const std::string &paramType, const std::string &paramName)
+std::string CodeGeneratorCPP::generateFileHeader(std::shared_ptr<ASTNode> ast, const std::string &moduleName)
 {
-	size_t funcPtrPos = paramType.find("(*)");
-	if (funcPtrPos != std::string::npos)
+	std::stringstream h;
+	h << "#pragma once\n\n";
+	h << "#include <iostream>\n";
+	h << "#include <cstdint>\n";
+	h << "#include <cstddef>\n";
+	h << "#include <cmath>\n";
+	h << "#include <cstdlib>\n";
+	h << "#include <string>\n";
+	h << "#include <memory>\n";
+	h << "#include <vector>\n";
+
+	// Calculate how many levels deep this module is for relative includes
+	int moduleDepth = 0;
+	for (char c : moduleName)
 	{
-		std::string retType = paramType.substr(0, funcPtrPos);
-		std::string params = paramType.substr(funcPtrPos + 3);
-		while (!retType.empty() && retType.back() == ' ')
-			retType.pop_back();
-		return retType + " (*" + paramName + ")" + params;
+		if (c == ':')
+			moduleDepth++;
 	}
-	return paramType + " " + paramName;
-}
-
-std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
-{
-	std::stringstream ss;
-
-	// Header guard
-	ss << "#pragma once\n\n";
-
-	// Standard includes
-	ss << "#include <cstdint>\n";
-	ss << "#include <cstddef>\n";
-	ss << "#include <string>\n";
-	ss << "#include \"string_builtins.h\"\n";
-	ss << "#include \"argv_builtins.h\"\n\n";
-
-	// Collect all types that need to be declared
-	std::vector<std::shared_ptr<ASTNode>> enums;
-	std::vector<std::shared_ptr<ASTNode>> allTypes; // structs + type aliases together
-	std::vector<std::shared_ptr<ASTNode>> functions;
-	std::vector<std::shared_ptr<ASTNode>> externFns;
-
-	for (auto child : ast->children)
+	moduleDepth = moduleDepth / 2; // "::" counts as 2 chars each
+	std::string relativePrefix = "";
+	for (int i = 0; i < moduleDepth; i++)
 	{
-		if (child->type == ASTNodeType::ENUM_DECL)
-			enums.push_back(child);
-		else if (child->type == ASTNodeType::STRUCT_DECL)
-			allTypes.push_back(child);
-		else if (child->type == ASTNodeType::TYPE_ALIAS)
-			allTypes.push_back(child);
-		else if (child->type == ASTNodeType::FUNCTION_DECL ||
-						 child->type == ASTNodeType::ACTUAL_DECL)
-			functions.push_back(child);
-		else if (child->type == ASTNodeType::EXTERN_FN_DECL)
-			externFns.push_back(child);
+		relativePrefix += "../";
 	}
 
-	// Collect all union types used in the AST
+	// Handle extern use declarations (e.g., extern use string_builtins;)
+	for (const auto &c : ast->children)
+	{
+		if (c->type == ASTNodeType::EXTERN_USE_DECL)
+		{
+			h << "#include \"" << relativePrefix << c->value << ".h\"\n";
+		}
+	}
+	h << "\n";
+
+	auto deps = extractDependencies(ast);
+	// Remove self-reference (don't include own header)
+	deps.erase(moduleName);
+
+	if (!deps.empty())
+	{
+		h << "// Dependencies\n";
+		for (const auto &dep : deps)
+		{
+			// Build the include path - always from output root
+			std::string hpath = dep;
+			size_t pos = 0;
+			while ((pos = hpath.find("::")) != std::string::npos)
+				hpath.replace(pos, 2, "/");
+			// Add tuff_ prefix for last component only
+			size_t lastSlash = hpath.find_last_of('/');
+			if (lastSlash != std::string::npos)
+			{
+				hpath = hpath.substr(0, lastSlash + 1) + "tuff_" + hpath.substr(lastSlash + 1);
+			}
+			else
+			{
+				hpath = "tuff_" + hpath;
+			}
+			h << "#include \"" << hpath << ".h\"\n";
+		}
+		h << "\n";
+	}
+
+	std::vector<std::shared_ptr<ASTNode>> structs, enums, funcs, aliases, expects;
+	for (const auto &c : ast->children)
+	{
+		// For per-file headers, export ALL top-level declarations
+		if (c->type == ASTNodeType::STRUCT_DECL)
+			structs.push_back(c);
+		else if (c->type == ASTNodeType::ENUM_DECL)
+			enums.push_back(c);
+		else if (c->type == ASTNodeType::FUNCTION_DECL)
+			funcs.push_back(c);
+		else if (c->type == ASTNodeType::TYPE_ALIAS)
+			aliases.push_back(c);
+		else if (c->type == ASTNodeType::EXPECT_DECL)
+			expects.push_back(c);
+	}
+
+	// Collect all union types used in this file
 	std::set<std::string> unionTypes;
 	std::function<void(std::shared_ptr<ASTNode>)> collectUnionTypes = [&](std::shared_ptr<ASTNode> node)
 	{
@@ -79,259 +212,293 @@ std::string CodeGeneratorCPP::generateSharedHeader(std::shared_ptr<ASTNode> ast)
 	};
 	collectUnionTypes(ast);
 
-	// ========== PHASE 1: Enums (no dependencies) ==========
-	for (auto node : enums)
+	// Collect local struct names for dependency checking
+	std::set<std::string> localStructNames;
+	for (const auto &s : structs)
 	{
-		ss << generateNode(node) << "\n";
+		localStructNames.insert(s->value);
 	}
 
-	// ========== PHASE 2: Sort all types (structs + aliases) together ==========
-	auto sortedTypes = topologicalSortTypes(allTypes);
-
-	// Separate type aliases that reference union types - they must come after unions
-	std::vector<std::shared_ptr<ASTNode>> regularTypes;
-	std::vector<std::shared_ptr<ASTNode>> unionAliases;
-
-	for (auto node : sortedTypes)
+	// Helper to check if a type string depends on any of the local struct names
+	auto dependsOn = [&](const std::string &typeStr, const std::set<std::string> &names) -> bool
 	{
-		if (node->type == ASTNodeType::TYPE_ALIAS && isUnionType(node->inferredType))
+		for (const auto &name : names)
 		{
-			unionAliases.push_back(node);
+			// Check for whole word match
+			size_t pos = 0;
+			while ((pos = typeStr.find(name, pos)) != std::string::npos)
+			{
+				bool startOk = (pos == 0) || (!isalnum(typeStr[pos - 1]) && typeStr[pos - 1] != '_');
+				bool endOk = (pos + name.length() == typeStr.length()) || (!isalnum(typeStr[pos + name.length()]) && typeStr[pos + name.length()] != '_');
+				if (startOk && endOk)
+					return true;
+				pos += name.length();
+			}
+		}
+		return false;
+	};
+
+	// Split unions into early (no local deps) and late (local deps)
+	std::vector<std::string> earlyUnions, lateUnions;
+	for (const auto &unionType : unionTypes)
+	{
+		if (dependsOn(unionType, localStructNames))
+			lateUnions.push_back(unionType);
+		else
+			earlyUnions.push_back(unionType);
+	}
+
+	// Split aliases into early and late
+	std::vector<std::shared_ptr<ASTNode>> earlyAliases, lateAliases;
+	for (const auto &a : aliases)
+	{
+		// If it's a union alias AND depends on local structs -> Late
+		// Note: We check inferredType (the aliased type)
+		bool isUnion = isUnionType(a->inferredType);
+		if (isUnion && dependsOn(a->inferredType, localStructNames))
+		{
+			lateAliases.push_back(a);
 		}
 		else
 		{
-			regularTypes.push_back(node);
+			earlyAliases.push_back(a);
 		}
 	}
 
-	// Generate forward declarations for all structs first
-	for (auto node : regularTypes)
+	if (!structs.empty())
 	{
-		if (node->type != ASTNodeType::STRUCT_DECL)
-			continue;
-
-		if (!node->genericParams.empty())
+		h << "// Forward declarations\n";
+		for (const auto &s : structs)
 		{
-			ss << "template<";
-			for (size_t i = 0; i < node->genericParams.size(); i++)
+			if (!s->genericParams.empty())
 			{
-				if (i > 0)
-					ss << ", ";
-				ss << "typename " << node->genericParams[i]->value;
+				h << "template<";
+				for (size_t i = 0; i < s->genericParams.size(); i++)
+					h << (i ? ", " : "") << "typename " << s->genericParams[i]->value;
+				h << ">\n";
 			}
-			ss << "> ";
+			h << "struct " << s->value << ";\n";
 		}
-		ss << "struct " << node->value << ";\n";
-	}
-	ss << "\n";
-
-	// Generate definitions in sorted order (both structs and non-union type aliases)
-	for (auto node : regularTypes)
-	{
-		if (node->type == ASTNodeType::STRUCT_DECL)
-		{
-			ss << generateNode(node) << "\n";
-		}
-		else if (node->type == ASTNodeType::TYPE_ALIAS)
-		{
-			if (!node->genericParams.empty())
-			{
-				ss << "template<";
-				for (size_t i = 0; i < node->genericParams.size(); i++)
-				{
-					if (i > 0)
-						ss << ", ";
-					ss << "typename " << node->genericParams[i]->value;
-				}
-				ss << ">\n";
-			}
-			ss << "using " << node->value << " = " << mapType(node->inferredType) << ";\n";
-		}
+		h << "\n";
 	}
 
-	// ========== PHASE 3: Union types ==========
-	// Union types depend on their variant structs, which should now be defined
-	// Deduplicate union types: prefer generic versions over concrete ones
-	std::map<std::string, std::pair<std::string, std::vector<std::string>>> unionStructToGeneric;
-	for (const auto &unionType : unionTypes)
+	// Generate early union struct definitions
+	if (!earlyUnions.empty())
 	{
-		std::string structName = getUnionStructName(unionType);
-		bool isGeneric = false;
-		std::vector<std::string> typeParams;
-
-		auto variants = splitUnionType(unionType);
-		for (const auto &variant : variants)
+		h << "// Early Union type definitions\n";
+		for (const auto &unionType : earlyUnions)
 		{
-			size_t start = variant.find('<');
-			if (start != std::string::npos)
+			h << generateUnionStruct(unionType, {}) << "\n";
+		}
+		h << "\n";
+	}
+
+	// Generate early aliases
+	for (const auto &a : earlyAliases)
+		h << genDecl(ASTConverter::toDecl(a)) << "\n";
+	if (!earlyAliases.empty())
+		h << "\n";
+
+	for (const auto &e : enums)
+		h << genDecl(ASTConverter::toDecl(e)) << "\n\n";
+
+	for (const auto &s : structs)
+		h << genDecl(ASTConverter::toDecl(s)) << "\n\n";
+
+	// Generate late union struct definitions
+	if (!lateUnions.empty())
+	{
+		h << "// Late Union type definitions\n";
+		for (const auto &unionType : lateUnions)
+		{
+			h << generateUnionStruct(unionType, {}) << "\n";
+		}
+		h << "\n";
+	}
+
+	// Generate late aliases
+	for (const auto &a : lateAliases)
+		h << genDecl(ASTConverter::toDecl(a)) << "\n";
+	if (!lateAliases.empty())
+		h << "\n";
+
+	// Generate function forward declarations
+	std::vector<std::shared_ptr<ASTNode>> implFuncs;
+	for (const auto &c : ast->children)
+	{
+		if (c->type == ASTNodeType::IMPL_DECL)
+		{
+			for (const auto &child : c->children)
 			{
-				size_t end = variant.find('>');
-				if (end != std::string::npos)
+				if (child->type == ASTNodeType::FUNCTION_DECL)
 				{
-					std::string paramsStr = variant.substr(start + 1, end - start - 1);
-					// Parse comma-separated parameters
-					std::string currentParam;
-					for (char c : paramsStr)
-					{
-						if (c == ',')
-						{
-							// Trim whitespace
-							while (!currentParam.empty() && currentParam.front() == ' ')
-								currentParam.erase(0, 1);
-							while (!currentParam.empty() && currentParam.back() == ' ')
-								currentParam.pop_back();
-							// Check if it's a generic param (single uppercase letter)
-							if (currentParam.length() == 1 && currentParam[0] >= 'A' && currentParam[0] <= 'Z')
-							{
-								isGeneric = true;
-								// Add to type params if not already present
-								bool found = false;
-								for (const auto &p : typeParams)
-								{
-									if (p == currentParam)
-									{
-										found = true;
-										break;
-									}
-								}
-								if (!found)
-								{
-									typeParams.push_back(currentParam);
-								}
-							}
-							currentParam.clear();
-						}
-						else
-						{
-							currentParam += c;
-						}
-					}
-					// Handle last parameter
-					while (!currentParam.empty() && currentParam.front() == ' ')
-						currentParam.erase(0, 1);
-					while (!currentParam.empty() && currentParam.back() == ' ')
-						currentParam.pop_back();
-					if (currentParam.length() == 1 && currentParam[0] >= 'A' && currentParam[0] <= 'Z')
-					{
-						isGeneric = true;
-						bool found = false;
-						for (const auto &p : typeParams)
-						{
-							if (p == currentParam)
-							{
-								found = true;
-								break;
-							}
-						}
-						if (!found)
-						{
-							typeParams.push_back(currentParam);
-						}
-					}
+					implFuncs.push_back(child);
 				}
 			}
 		}
+	}
 
-		if (unionStructToGeneric.find(structName) == unionStructToGeneric.end() || isGeneric)
+	std::vector<std::shared_ptr<ASTNode>> allFuncs = funcs;
+	allFuncs.insert(allFuncs.end(), implFuncs.begin(), implFuncs.end());
+
+	if (!allFuncs.empty())
+	{
+		h << "// Function forward declarations\n";
+		for (const auto &f : allFuncs)
 		{
-			unionStructToGeneric[structName] = {unionType, typeParams};
+			h << genFunctionForwardDecl(ASTConverter::toDecl(f)) << "\n";
 		}
+		h << "\n";
 	}
 
-	for (const auto &pair : unionStructToGeneric)
-	{
-		ss << generateUnionStruct(pair.second.first, pair.second.second) << "\n";
-	}
+	// Generate inline implementations in header (needed for templates)
+	h << "// Implementations\n";
 
-	// ========== PHASE 4: Type aliases that reference union types ==========
-	for (auto node : unionAliases)
+	// Enable inline generation for functions in header
+	bool wasInline = generateInline;
+	generateInline = true;
+
+	// Collect top-level statements that aren't declarations
+	std::vector<std::shared_ptr<ASTNode>> topLevelStmts;
+	bool hasMainFunction = false;
+	std::shared_ptr<ASTNode> mainFuncNode = nullptr;
+
+	for (const auto &c : ast->children)
 	{
-		if (!node->genericParams.empty())
+		if (c->type == ASTNodeType::FUNCTION_DECL)
 		{
-			ss << "template<";
-			for (size_t i = 0; i < node->genericParams.size(); i++)
+			if (c->value == "main")
 			{
-				if (i > 0)
-					ss << ", ";
-				ss << "typename " << node->genericParams[i]->value;
+				hasMainFunction = true;
+				mainFuncNode = c;
 			}
-			ss << ">\n";
+			h << genDecl(ASTConverter::toDecl(c)) << "\n\n";
 		}
-		ss << "using " << node->value << " = " << mapType(node->inferredType) << ";\n";
+		else if (c->type == ASTNodeType::ACTUAL_DECL)
+			h << generateActualDecl(c) << "\n\n";
+		else if (c->type == ASTNodeType::IMPL_DECL)
+			h << generateNode(c) << "\n\n";
+		else if (c->type == ASTNodeType::MODULE_DECL)
+			h << generateModuleDecl(c) << "\n\n";
+		else if (c->type == ASTNodeType::LET_STMT || c->type == ASTNodeType::ASSIGNMENT_STMT ||
+						 c->type == ASTNodeType::IF_STMT || c->type == ASTNodeType::WHILE_STMT ||
+						 c->type == ASTNodeType::LOOP_STMT || c->type == ASTNodeType::RETURN_STMT ||
+						 c->type == ASTNodeType::BREAK_STMT || c->type == ASTNodeType::CONTINUE_STMT ||
+						 c->type == ASTNodeType::CALL_EXPR || c->type == ASTNodeType::BINARY_OP ||
+						 c->type == ASTNodeType::UNARY_OP || c->type == ASTNodeType::LITERAL ||
+						 c->type == ASTNodeType::IDENTIFIER || c->type == ASTNodeType::IF_EXPR ||
+						 c->type == ASTNodeType::BLOCK || c->type == ASTNodeType::INDEX_EXPR ||
+						 c->type == ASTNodeType::FIELD_ACCESS || c->type == ASTNodeType::DEREF_EXPR ||
+						 c->type == ASTNodeType::REFERENCE_EXPR || c->type == ASTNodeType::CAST_EXPR ||
+						 c->type == ASTNodeType::SIZEOF_EXPR || c->type == ASTNodeType::STRUCT_LITERAL ||
+						 c->type == ASTNodeType::ARRAY_LITERAL || c->type == ASTNodeType::STRING_LITERAL ||
+						 c->type == ASTNodeType::CHAR_LITERAL || c->type == ASTNodeType::IS_EXPR ||
+						 c->type == ASTNodeType::MATCH_EXPR)
+		{
+			topLevelStmts.push_back(c);
+		}
 	}
-	ss << "\n";
 
-	// ========== PHASE 4: Extern function declarations ==========
-	for (auto node : externFns)
+	// If there are top-level statements but no main function, wrap them in main
+	if (!topLevelStmts.empty() && !hasMainFunction)
 	{
-		// Skip extern functions that are provided by string_builtins.h
-		std::string funcName = node->value;
-		if (funcName.find("string_") == 0)
-			continue;
+		h << "// Generated main from top-level statements\n";
+		h << "inline int tuff_main() {\n";
 
-		ss << "extern ";
-		ss << mapType(node->inferredType) << " " << funcName << "(";
-		for (size_t i = 0; i < node->children.size() - 1; i++)
+		// Generate all statements
+		for (size_t i = 0; i < topLevelStmts.size(); i++)
 		{
-			if (i > 0)
-				ss << ", ";
-			std::string paramType = mapType(node->children[i]->inferredType);
-			std::string paramName = node->children[i]->value;
-			ss << paramType << " " << paramName;
-		}
-		ss << ");\n";
-	}
-	if (!externFns.empty())
-		ss << "\n";
+			auto stmt = topLevelStmts[i];
 
-	// ========== PHASE 5: Function forward declarations ==========
-	for (auto node : functions)
-	{
-		std::string funcName = node->value;
-		if (funcName == "main")
-			funcName = "tuff_main";
-
-		if (!node->genericParams.empty())
-		{
-			ss << "template<";
-			for (size_t i = 0; i < node->genericParams.size(); i++)
+			// If this is the last statement and it's an expression, return it if it's an integer
+			if (i == topLevelStmts.size() - 1 &&
+					(stmt->type == ASTNodeType::CALL_EXPR || stmt->type == ASTNodeType::BINARY_OP ||
+					 stmt->type == ASTNodeType::UNARY_OP || stmt->type == ASTNodeType::LITERAL ||
+					 stmt->type == ASTNodeType::IDENTIFIER || stmt->type == ASTNodeType::IF_EXPR ||
+					 stmt->type == ASTNodeType::INDEX_EXPR || stmt->type == ASTNodeType::FIELD_ACCESS ||
+					 stmt->type == ASTNodeType::DEREF_EXPR || stmt->type == ASTNodeType::CAST_EXPR ||
+					 stmt->type == ASTNodeType::IS_EXPR))
 			{
-				if (i > 0)
-					ss << ", ";
-				ss << "typename " << node->genericParams[i]->value;
-			}
-			ss << ">\n";
-		}
-		ss << mapType(node->inferredType) << " " << funcName << "(";
-		for (size_t i = 0; i < node->children.size() - 1; i++)
-		{
-			if (i > 0)
-				ss << ", ";
-			std::string paramType = mapType(node->children[i]->inferredType);
-			std::string paramName = node->children[i]->value;
-
-			// Check if this is a function pointer type
-			if (isFunctionPointerType(node->children[i]->inferredType))
-			{
-				ss << formatFunctionPointerParam(paramType, paramName);
-			}
-			else
-			{
-				size_t bracketPos = paramType.find('[');
-				if (bracketPos != std::string::npos)
+				std::string type = stmt->inferredType;
+				if (type == "I32" || type == "int32_t" ||
+						type == "U8" || type == "uint8_t" ||
+						type == "I8" || type == "int8_t" ||
+						type == "U16" || type == "uint16_t" ||
+						type == "I16" || type == "int16_t" ||
+						type == "Char" || type == "char" ||
+						type == "Bool" || type == "bool")
 				{
-					std::string baseType = paramType.substr(0, bracketPos);
-					std::string arraySuffix = paramType.substr(bracketPos);
-					ss << baseType << " " << paramName << arraySuffix;
+					h << "  return " << generateNode(stmt) << ";\n";
 				}
 				else
 				{
-					ss << paramType << " " << paramName;
+					h << "  " << generateNode(stmt) << ";\n";
+					h << "  return 0;\n";
 				}
 			}
+			else
+			{
+				h << "  " << generateNode(stmt) << ";\n";
+			}
 		}
-		ss << ");\n";
+
+		h << "}\n\n";
+
+		// Generate C++ main wrapper
+		if (!isLibrary)
+			h << "int main() { return tuff_main(); }\n";
+	}
+	else if (hasMainFunction && !isLibrary)
+	{
+		// Generate wrapper for user-defined main
+		h << "// Generated entry point for user main\n";
+		h << "int main() {\n";
+		// Check return type of main
+		// Note: inferredType might be "Void" or "I32"
+		if (mainFuncNode && (mainFuncNode->inferredType == "Void" || mainFuncNode->inferredType == "void"))
+		{
+			h << "  tuff_main();\n";
+			h << "  return 0;\n";
+		}
+		else
+		{
+			h << "  return tuff_main();\n";
+		}
+		h << "}\n";
 	}
 
-	return ss.str();
+	generateInline = wasInline;
+
+	return h.str();
+}
+
+std::string CodeGeneratorCPP::generateFileImplementation(std::shared_ptr<ASTNode> ast, const std::string &moduleName)
+{
+	std::stringstream impl;
+
+	// Convert module name to header path (e.g., "compiler::lexer" -> "compiler/tuff_lexer.h")
+	std::string hpath = moduleName;
+	std::string::size_type pos = 0;
+	while ((pos = hpath.find("::", pos)) != std::string::npos)
+	{
+		hpath.replace(pos, 2, "/");
+	}
+	// Add tuff_ prefix to the last component
+	auto lastSlash = hpath.rfind('/');
+	if (lastSlash != std::string::npos)
+	{
+		hpath = hpath.substr(0, lastSlash + 1) + "tuff_" + hpath.substr(lastSlash + 1);
+	}
+	else
+	{
+		hpath = "tuff_" + hpath;
+	}
+
+	impl << "#include \"" << hpath << ".h\"\n\n";
+
+	// Note: For now, implementation is minimal since most code is in header
+	// This is because C++ templates need full definitions in headers
+	// TODO: Move non-template implementations here
+
+	return impl.str();
 }

@@ -37,6 +37,9 @@ cmake_install.cmake
 test_output.js
 test_output.cpp
 *.out
+test_gen*/
+test_repro.tuff
+src/test/tuff/_temp/
 
 # Node modules (if any)
 node_modules/

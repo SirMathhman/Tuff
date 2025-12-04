@@ -209,7 +209,36 @@ int main(int argc, char *argv[])
 		for (size_t i = 0; i < asts.size(); i++)
 		{
 			fs::path srcPath(sourceFilePaths[i]);
-			std::string moduleName = srcPath.stem().string();
+
+			// Compute the module name including namespace from directory structure
+			std::string relPath = srcPath.filename().string();
+			for (const auto &sourceSet : allSourceSets)
+			{
+				if (sourceFilePaths[i].find(sourceSet) != std::string::npos)
+				{
+					size_t pos = sourceFilePaths[i].find(sourceSet);
+					if (pos != std::string::npos)
+					{
+						relPath = sourceFilePaths[i].substr(pos + sourceSet.length());
+						if (relPath.front() == '/' || relPath.front() == '\\')
+							relPath = relPath.substr(1);
+						break;
+					}
+				}
+			}
+
+			// Convert path to module name (e.g., "compiler/lexer.tuff" -> "compiler::lexer")
+			std::string relPathNoExt = relPath.substr(0, relPath.find_last_of('.'));
+			std::string moduleName = relPathNoExt;
+			// Replace path separators with ::
+			for (size_t j = 0; j < moduleName.length(); j++)
+			{
+				if (moduleName[j] == '/' || moduleName[j] == '\\')
+				{
+					moduleName.replace(j, 1, "::");
+					j++; // Skip the extra character we added
+				}
+			}
 
 			// Generate header and implementation
 			FileOutput fileOutput = codegen.generateFile(asts[i], moduleName);
@@ -227,27 +256,7 @@ int main(int argc, char *argv[])
 			else
 			{
 				// Multiple files mode - write to dist/ preserving directory structure
-				fs::path srcPath(sourceFilePaths[i]);
-
-				// Get relative path from source root to preserve directory structure
-				std::string relPath = srcPath.filename().string();
-				for (const auto &sourceSet : allSourceSets)
-				{
-					if (sourceFilePaths[i].find(sourceSet) != std::string::npos)
-					{
-						size_t pos = sourceFilePaths[i].find(sourceSet);
-						if (pos != std::string::npos)
-						{
-							relPath = sourceFilePaths[i].substr(pos + sourceSet.length());
-							if (relPath.front() == '/' || relPath.front() == '\\')
-								relPath = relPath.substr(1);
-							break;
-						}
-					}
-				}
-
-				// Replace .tuff extension with .h/.cpp and add tuff_ prefix to avoid conflicts with system headers
-				std::string relPathNoExt = relPath.substr(0, relPath.find_last_of('.'));
+				// We already have relPathNoExt from module name computation
 				std::string baseName = fs::path(relPathNoExt).filename().string();
 				std::string parentPath = fs::path(relPathNoExt).parent_path().string();
 				std::string prefixedName = "tuff_" + baseName;

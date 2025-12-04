@@ -1,6 +1,8 @@
 #include "codegen_cpp.h"
 #include <sstream>
 #include <set>
+#include <functional>
+#include <cctype>
 
 // Helper: Mangle a type name to be a valid C++ identifier
 // Replaces <, >, |, &, *, and spaces with underscores
@@ -159,8 +161,11 @@ std::string CodeGeneratorCPP::generateUnionStruct(const std::string &unionType, 
 
 	std::string structName = "Union_" + baseName;
 	std::string tagName = "Tag_" + baseName;
+	std::string guardName = "GUARD_" + structName;
 
 	ss << "// Union type: " << unionType << "\n";
+	ss << "#ifndef " << guardName << "\n";
+	ss << "#define " << guardName << "\n";
 
 	// Generate standalone enum (no template needed)
 	ss << "enum class " << tagName << " { ";
@@ -197,8 +202,49 @@ std::string CodeGeneratorCPP::generateUnionStruct(const std::string &unionType, 
 		}
 		else
 		{
-			// Fallback for legacy behavior (should be avoided)
-			ss << "template<typename T>\n";
+			// Extract generic params from variants
+			std::vector<std::string> extractedParams;
+			std::set<std::string> seenParams;
+
+			for (const auto &variant : variants)
+			{
+				for (size_t i = 0; i < variant.length(); i++)
+				{
+					if (isupper(variant[i]))
+					{
+						// Check if it's a standalone identifier (single uppercase letter)
+						bool startOk = (i == 0) || (!isalnum(variant[i - 1]) && variant[i - 1] != '_');
+						bool endOk = (i + 1 == variant.length()) || (!isalnum(variant[i + 1]) && variant[i + 1] != '_');
+
+						if (startOk && endOk)
+						{
+							std::string param(1, variant[i]);
+							if (seenParams.find(param) == seenParams.end())
+							{
+								seenParams.insert(param);
+								extractedParams.push_back(param);
+							}
+						}
+					}
+				}
+			}
+
+			if (!extractedParams.empty())
+			{
+				ss << "template<";
+				for (size_t i = 0; i < extractedParams.size(); i++)
+				{
+					if (i > 0)
+						ss << ", ";
+					ss << "typename " << extractedParams[i];
+				}
+				ss << ">\n";
+			}
+			else
+			{
+				// Fallback if no params found but hasGenerics is true (unlikely but safe default)
+				ss << "template<typename T>\n";
+			}
 		}
 	}
 
@@ -244,6 +290,7 @@ std::string CodeGeneratorCPP::generateUnionStruct(const std::string &unionType, 
 	}
 
 	ss << "};\n";
+	ss << "#endif // " << guardName << "\n";
 	return ss.str();
 }
 
@@ -317,21 +364,50 @@ std::string CodeGeneratorCPP::generateUnionStructFromType(const std::string &ali
 	const auto &ut = std::get<ast::UnionType>(*unionType);
 	std::stringstream ss;
 
-	// Generate tag enum (NOT templated - it's the same for all instantiations)
-	std::string tagName = "Tag_" + aliasName;
-	ss << "enum class " << tagName << " {\n";
+	// Get the underlying union type string to find its tag name
+	// We need to generate the type string for the union (e.g. "Some<T>|None<T>")
+	// Note: genType returns C++ types (Union_...), so we must reconstruct Tuff types
+	std::stringstream unionStrSS;
+
+	std::function<std::string(ast::TypePtr)> toTuffType;
+	toTuffType = [&](ast::TypePtr t) -> std::string
+	{
+		if (!t)
+			return "Void";
+		if (auto p = std::get_if<ast::PrimitiveType>(&*t))
+			return p->name;
+		if (auto n = std::get_if<ast::NamedType>(&*t))
+		{
+			std::string s = n->name;
+			if (!n->genericArgs.empty())
+			{
+				s += "<";
+				for (size_t k = 0; k < n->genericArgs.size(); ++k)
+				{
+					if (k > 0)
+						s += ", ";
+					s += toTuffType(n->genericArgs[k]);
+				}
+				s += ">";
+			}
+			return s;
+		}
+		// Fallback for other types
+		return genType(t);
+	};
+
 	for (size_t i = 0; i < ut.members.size(); i++)
 	{
 		if (i > 0)
-			ss << ",\n";
-		// Extract base name from type (e.g., "Some" from "Some<T>")
-		std::string memberName = genType(ut.members[i]);
-		size_t pos = memberName.find('<');
-		if (pos != std::string::npos)
-			memberName = memberName.substr(0, pos);
-		ss << "    " << memberName;
+			unionStrSS << "|";
+		unionStrSS << toTuffType(ut.members[i]);
 	}
-	ss << "\n};\n\n";
+	std::string unionTypeStr = unionStrSS.str();
+	std::string underlyingTagName = getUnionTagName(unionTypeStr);
+
+	// Generate tag alias instead of new enum
+	std::string tagName = "Tag_" + aliasName;
+	ss << "using " << tagName << " = " << underlyingTagName << ";\n\n";
 
 	// Generate template header for the struct if needed
 	if (!genericParams.empty())

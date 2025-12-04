@@ -70,6 +70,7 @@ set(COMPILER_SOURCES
     src/codegen/codegen_cpp_expr.cpp
     src/codegen/codegen_cpp_block.cpp
     src/codegen/codegen_cpp_forward.cpp
+    src/codegen/codegen_cpp_header.cpp
     src/codegen/codegen_cpp_keywords.cpp
     src/codegen/codegen_cpp_decl.cpp
     src/codegen/codegen_cpp_types.cpp

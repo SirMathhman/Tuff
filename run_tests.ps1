@@ -7,16 +7,17 @@ param(
     [string]$Path = "",
     [switch]$Verbose,
     [string]$Feature = "",
-    [int]$Parallel = 0  # 0 = auto-detect, 1 = sequential
+    [int]$Parallel = 0  # 0 = auto-detect parallelism, 1 = sequential
 )
 
 $ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
 
 # Configuration
 $RootDir = $PSScriptRoot
 $CompilerPath = Join-Path $RootDir "bootstrap\build\Release\tuffc.exe"
 $TestDir = Join-Path $RootDir "src\test\tuff"
-$TempDir = Join-Path $TestDir "_temp"
+$TempDir = Join-Path $env:TEMP "tuff_tests"
 
 # ANSI color codes
 $ColorReset = "`e[0m"
@@ -74,13 +75,21 @@ function Initialize-TestEnvironment {
     if (Test-Path $TempDir) { Remove-Item $TempDir -Recurse -Force }
     New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
     
-    # Copy all builtin headers to temp directory for test compilation
-    $builtinHeadersDir = Join-Path $RootDir "src\main\cpp"
-    if (Test-Path $builtinHeadersDir) {
-        Get-ChildItem -Path $builtinHeadersDir -Filter "*.h" | ForEach-Object {
-            Copy-Item $_.FullName -Destination $TempDir -Force
-        }
+    # Pre-compile stdlib once to shared directory
+    $Script:StdlibDir = Join-Path $TempDir "stdlib"
+    New-Item -ItemType Directory -Path $Script:StdlibDir -Force | Out-Null
+    
+    Write-ColorOutput "Pre-compiling stdlib..." $ColorGray
+    $tuffSourceSet = Join-Path $RootDir "src\main\tuff"
+    $cppSourceSet = Join-Path $RootDir "src\main\cpp"
+    
+    # Compile stdlib (all .tuff files in source set, no specific sources)
+    $stdlibOutput = & $CompilerPath --source-sets "$tuffSourceSet,$cppSourceSet" --target "cpp" --output-dir $Script:StdlibDir 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-ColorOutput "[ERROR] Failed to compile stdlib: $stdlibOutput" $ColorRed
+        exit 1
     }
+    Write-ColorOutput "Stdlib compiled to $($Script:StdlibDir)" $ColorGray
 }
 
 function Get-TuffTests([string]$InputPath = "", [string]$FeatureFilter = "") {
@@ -160,21 +169,17 @@ function Test-TuffFile([hashtable]$Test) {
         return $result
     }
 
-    # Compile to C++ - include stdlib for tests that use it
+    # Compile to C++ - only the test file, stdlib is pre-compiled
     $tuffSourceSet = Join-Path $RootDir "src\main\tuff"
     $cppSourceSet = Join-Path $RootDir "src\main\cpp"
     $sources = "$($Test.Path)"
     $sourceSets = "$tuffSourceSet,$cppSourceSet"
     
-    # Use test-specific output directory to avoid parallel test collisions
-    $testOutputDir = Join-Path $TempDir "dist_$($Test.Name)"
-    if (Test-Path $testOutputDir) {
-        Remove-Item "$testOutputDir\*" -Recurse -Force -ErrorAction SilentlyContinue
-    } else {
-        New-Item -Path $testOutputDir -ItemType Directory -Force | Out-Null
-    }
+    # Use test-specific output directory (include feature to avoid collisions)
+    $testOutputDir = Join-Path $TempDir "dist_$($Test.Feature)_$($Test.Name)"
+    New-Item -Path $testOutputDir -ItemType Directory -Force | Out-Null
     
-    # Tuff compiler generates per-file output
+    # Compile only the test file (stdlib already compiled)
     $compileOutput = & $CompilerPath --source-sets $sourceSets --sources $sources --target "cpp" --output-dir $testOutputDir 2>&1
     $env:TUFF_OUTPUT_DIR = $null
     if ($LASTEXITCODE -ne 0) {
@@ -183,14 +188,20 @@ function Test-TuffFile([hashtable]$Test) {
         return $result
     }
 
-    # Find all generated .cpp files
-    $generatedCppFiles = Get-ChildItem -Path $testOutputDir -Filter "*.cpp" -File | Select-Object -ExpandProperty FullName
+    # Find generated .cpp files for this test only (not stdlib)
+    $testCppFiles = @(Get-ChildItem -Path $testOutputDir -Filter "tuff_test_*.cpp" -File | Select-Object -ExpandProperty FullName)
+    
+    # Get all stdlib .cpp files
+    $stdlibCppFiles = @(Get-ChildItem -Path $Script:StdlibDir -Filter "*.cpp" -File -Recurse | Select-Object -ExpandProperty FullName)
+    
+    $allCppFiles = @($testCppFiles) + @($stdlibCppFiles)
     $exeFile = Join-Path $TempDir "$($Test.Name).exe"
     
     try {
         $includeDir = Join-Path $RootDir "bootstrap\src\include"
         $builtinsDir = Join-Path $RootDir "src\main\cpp"
-        $cppCompileOutput = clang++ -std=c++17 -I $includeDir -I $builtinsDir -I $testOutputDir $generatedCppFiles -o $exeFile 2>&1
+        $clangArgs = @("-std=c++17", "-I", $includeDir, "-I", $builtinsDir, "-I", $testOutputDir, "-I", $Script:StdlibDir) + $allCppFiles + @("-o", $exeFile)
+        $cppCompileOutput = & clang++ @clangArgs 2>&1
         if ($LASTEXITCODE -ne 0) {
             $errorLines = ($cppCompileOutput | Select-String "error:" | Select-Object -First 3) -join "; "
             $result.Status = "ERROR"; $result.Message = "C++ compilation failed: $errorLines"
@@ -276,6 +287,7 @@ try {
             $CompilerPath = $using:CompilerPath
             $TempDir = $using:TempDir
             $RootDir = $using:RootDir
+            $StdlibDir = $using:Script:StdlibDir
             $SkippedTestsList = $using:Script:SkippedTestsList
             $NegativeTests = $using:Script:NegativeTests
             $ExpectedExitCodes = $using:Script:ExpectedExitCodes
@@ -304,19 +316,15 @@ try {
                 return $result
             }
             
-            # Compile to C++ with per-file generation
+            # Compile to C++ - only test file, stdlib is pre-compiled
             $tuffSourceSet = Join-Path $RootDir "src\main\tuff"
             $cppSourceSet = Join-Path $RootDir "src\main\cpp"
             $sources = "$($Test.Path)"
             $sourceSets = "$tuffSourceSet,$cppSourceSet"
             
-            # Use test-specific output directory
-            $testOutputDir = Join-Path $TempDir "dist_$($Test.Name)"
-            if (Test-Path $testOutputDir) {
-                Remove-Item "$testOutputDir\*" -Recurse -Force -ErrorAction SilentlyContinue
-            } else {
-                New-Item -Path $testOutputDir -ItemType Directory -Force | Out-Null
-            }
+            # Use test-specific output directory (include feature to avoid collisions)
+            $testOutputDir = Join-Path $TempDir "dist_$($Test.Feature)_$($Test.Name)"
+            New-Item -Path $testOutputDir -ItemType Directory -Force | Out-Null
             
             $compileOutput = & $CompilerPath --source-sets $sourceSets --sources $sources --target "cpp" --output-dir $testOutputDir 2>&1
             if ($LASTEXITCODE -ne 0) {
@@ -325,15 +333,21 @@ try {
                 return $result
             }
             
-            # Find all generated .cpp files
-            $generatedCppFiles = Get-ChildItem -Path $testOutputDir -Filter "*.cpp" -File | Select-Object -ExpandProperty FullName
+            # Find generated .cpp files for this test only
+            $testCppFiles = @(Get-ChildItem -Path $testOutputDir -Filter "tuff_test_*.cpp" -File | Select-Object -ExpandProperty FullName)
+            
+            # Get all stdlib .cpp files  
+            $stdlibCppFiles = @(Get-ChildItem -Path $StdlibDir -Filter "*.cpp" -File -Recurse | Select-Object -ExpandProperty FullName)
+            
+            $allCppFiles = @($testCppFiles) + @($stdlibCppFiles)
             $uniqueId = [System.Guid]::NewGuid().ToString("N").Substring(0, 8)
             $exeFile = Join-Path $TempDir "${uniqueId}_$($Test.Name).exe"
             
             try {
                 $includeDir = Join-Path $RootDir "bootstrap\src\include"
                 $builtinsDir = Join-Path $RootDir "src\main\cpp"
-                $cppCompileOutput = clang++ -std=c++17 -I $includeDir -I $builtinsDir -I $testOutputDir $generatedCppFiles -o $exeFile 2>&1
+                $clangArgs = @("-std=c++17", "-I", $includeDir, "-I", $builtinsDir, "-I", $testOutputDir, "-I", $StdlibDir) + $allCppFiles + @("-o", $exeFile)
+                $cppCompileOutput = & clang++ @clangArgs 2>&1
                 if ($LASTEXITCODE -ne 0) {
                     $errorLines = ($cppCompileOutput | Select-String "error:" | Select-Object -First 3) -join "; "
                     $result.Status = "ERROR"; $result.Message = "C++ compilation failed: $errorLines"

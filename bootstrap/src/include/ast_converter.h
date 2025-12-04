@@ -244,6 +244,18 @@ public:
 		}
 
 		default:
+			// Don't print error for statement types, just return nullptr
+			if (node->type == ASTNodeType::RETURN_STMT ||
+					node->type == ASTNodeType::LET_STMT ||
+					node->type == ASTNodeType::ASSIGNMENT_STMT ||
+					node->type == ASTNodeType::WHILE_STMT ||
+					node->type == ASTNodeType::LOOP_STMT ||
+					node->type == ASTNodeType::BREAK_STMT ||
+					node->type == ASTNodeType::CONTINUE_STMT ||
+					node->type == ASTNodeType::IF_STMT)
+			{
+				return nullptr;
+			}
 			std::cerr << "ASTConverter: Unknown expr type " << (int)node->type << std::endl;
 			return nullptr;
 		}
@@ -284,10 +296,26 @@ public:
 		{
 			ast::IfStmt stmt;
 			stmt.condition = toExpr(node->children[0]);
-			stmt.thenBranch = toExpr(node->children[1]);
+
+			auto toBranch = [](std::shared_ptr<ASTNode> n) -> ast::ExprPtr
+			{
+				auto expr = toExpr(n);
+				if (expr)
+					return expr;
+				auto s = toStmt(n);
+				if (s)
+				{
+					ast::Block b;
+					b.statements.push_back(s);
+					return std::make_shared<ast::Expr>(b);
+				}
+				return nullptr;
+			};
+
+			stmt.thenBranch = toBranch(node->children[1]);
 			if (node->children.size() > 2)
 			{
-				stmt.elseBranch = toExpr(node->children[2]);
+				stmt.elseBranch = toBranch(node->children[2]);
 			}
 			return std::make_shared<ast::Stmt>(stmt);
 		}
