@@ -197,4 +197,44 @@ fn get_five() -> i32 {
             Err(e) => panic!("Should handle return statements: {}", e),
         }
     }
+
+    #[test]
+    fn test_bootstrap_lexer_helpers() {
+        // Test self-hosting: compiler can compile Tuff code that would be used in its own implementation
+        let source = r#"
+fn is_whitespace(code: i32) -> bool {
+    return code == 32 || code == 9 || code == 10;
+}
+
+fn is_digit(code: i32) -> bool {
+    return code >= 48 && code <= 57;
+}
+
+fn is_alpha(code: i32) -> bool {
+    return (code >= 97 && code <= 122) || (code >= 65 && code <= 90);
+}
+
+fn is_lower(code: i32) -> bool {
+    return code >= 97 && code <= 122;
+}
+
+fn is_upper(code: i32) -> bool {
+    return code >= 65 && code <= 90;
+}
+"#;
+        match compile_tuff(source) {
+            Ok(c_code) => {
+                // Verify all functions were compiled
+                assert!(c_code.contains("is_whitespace"));
+                assert!(c_code.contains("is_digit"));
+                assert!(c_code.contains("is_alpha"));
+                assert!(c_code.contains("is_lower"));
+                assert!(c_code.contains("is_upper"));
+                // Verify they're C functions
+                assert!(c_code.contains("bool"));
+                assert!(c_code.contains("int32_t"));
+            }
+            Err(e) => panic!("Should compile bootstrap code: {}", e),
+        }
+    }
 }
