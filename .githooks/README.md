@@ -4,6 +4,15 @@
 
 This pre-commit hook enforces a maximum line count of **500 lines** for any non-excluded file in the repository. This encourages modular code design and prevents files from becoming too large to maintain.
 
+## Implementation
+
+The hook is implemented in **Python 3** for maximum portability and maintainability across all platforms (Windows, macOS, Linux).
+
+### Files
+
+- `pre-commit.py` — Main Python implementation (cross-platform)
+- `pre-commit` — Bash wrapper that delegates to `pre-commit.py`
+
 ## Excluded Directories
 
 The following directories are automatically excluded from the check:
@@ -18,32 +27,30 @@ The following directories are automatically excluded from the check:
 
 ## Installation
 
-The hook is already configured in `.git/config` to use `.githooks` as the hooks directory:
+```bash
+# All platforms (Windows, macOS, Linux)
+git config core.hooksPath .githooks
+```
+
+The hook will run automatically on every `git commit`.
+
+**Requirements:**
+- Python 3.6+ (automatically available on all platforms)
+- Git 2.9+ (required for `core.hooksPath` support)
+
+## Manual Testing
 
 ```bash
-git config --get core.hooksPath
-# Output: .githooks
+# All platforms
+python3 .githooks/pre-commit.py
 ```
 
 ## Supported Platforms
 
-### Windows
-
-The hook runs automatically on commit using PowerShell:
-
-```powershell
-# Manual testing:
-powershell -NoProfile -ExecutionPolicy Bypass -File ".githooks/pre-commit.ps1"
-```
-
-### Linux/macOS
-
-The hook runs using bash:
-
-```bash
-# Manual testing:
-bash .githooks/pre-commit
-```
+The Python implementation runs identically on:
+- **Windows** (PowerShell, Command Prompt, Git Bash)
+- **macOS** (Terminal, iTerm2, etc.)
+- **Linux** (bash, zsh, fish, etc.)
 
 ## Behavior
 
@@ -75,24 +82,21 @@ To bypass the hook temporarily (not recommended):
 git commit --no-verify
 ```
 
-## Modifying the Limit
+## Modifying Configuration
 
-To change the 500-line limit, edit `.githooks/pre-commit.ps1` and `.githooks/pre-commit`:
+To change settings, edit `.githooks/pre-commit.py`:
 
-Search for `MAX_LINES = 500` or `MAX_LINES=500` and update the value.
-
-## Excluded Directories Configuration
-
-To add or remove excluded directories, edit the `$EXCLUDED_DIRS` array in:
-
-- `.githooks/pre-commit.ps1` (PowerShell version)
-- `.githooks/pre-commit` (Bash version)
-
-Example:
-
-```powershell
-$EXCLUDED_DIRS = @('target', '.git', '.githooks', 'node_modules', '.vscode', '.idea', 'dist', 'build')
+**Line Limit:**
+```python
+MAX_LINES = 500  # Change this value
 ```
+
+**Excluded Directories:**
+```python
+EXCLUDED_DIRS = ['target', '.git', '.githooks', 'node_modules', '.vscode', '.idea']
+```
+
+Add or remove directories as needed.
 
 ## Rationale
 

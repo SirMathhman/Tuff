@@ -1,67 +1,10 @@
 #!/bin/bash
-# Pre-commit hook to enforce maximum file line count of 500 lines
-# Excludes: target/, .git/, .githooks/, and hidden directories
+# Git pre-commit hook - Delegates to Python script for cross-platform support
 
-set -e
+# Get the directory where this script is located
+HOOKS_DIR="$(git rev-parse --git-dir)/../.githooks"
+HOOKS_DIR="$(cd "$HOOKS_DIR" && pwd)"
 
-# Color codes
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-GREEN='\033[0;32m'
-NC='\033[0m' # No Color
-
-MAX_LINES=500
-EXCLUDED_DIRS=('target' '.git' '.githooks' 'node_modules' '.vscode' '.idea')
-VIOLATIONS=()
-
-# Function to check if a path is in excluded directories
-is_excluded() {
-    local file="$1"
-    for excluded in "${EXCLUDED_DIRS[@]}"; do
-        if [[ "$file" == "$excluded"/* ]] || [[ "$file" == "."* && "$file" != ".gitignore" && "$file" != ".git"* ]]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
-# Get all staged files
-FILES=$(git diff --cached --name-only --diff-filter=ACM)
-
-if [ -z "$FILES" ]; then
-    exit 0
-fi
-
-# Check each file
-for file in $FILES; do
-    # Skip if it's a directory or doesn't exist
-    if [ ! -f "$file" ]; then
-        continue
-    fi
-
-    # Skip if it's in an excluded directory
-    if is_excluded "$file"; then
-        continue
-    fi
-
-    # Count lines in the file
-    line_count=$(wc -l < "$file" 2>/dev/null || echo 0)
-
-    # Check if it exceeds the limit
-    if [ "$line_count" -gt "$MAX_LINES" ]; then
-        VIOLATIONS+=("$file (${line_count} lines)")
-    fi
-done
-
-# Report violations
-if [ ${#VIOLATIONS[@]} -gt 0 ]; then
-    echo -e "${RED}Error: The following files exceed $MAX_LINES lines:${NC}"
-    for violation in "${VIOLATIONS[@]}"; do
-        echo -e "${YELLOW}  - $violation${NC}"
-    done
-    echo -e "${RED}Please split large files into smaller modules.${NC}"
-    exit 1
-fi
-
-echo -e "${GREEN}✓ All files are within the $MAX_LINES line limit.${NC}"
-exit 0
+# Execute the Python hook
+python3 "$HOOKS_DIR/pre-commit.py"
+exit $?
