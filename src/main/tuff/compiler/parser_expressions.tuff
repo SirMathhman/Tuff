@@ -17,281 +17,256 @@ fn parseExpression(this: *mut Parser): Option<*Expr> => {
 }
 
 // Logical OR (||) - lowest precedence (defined in parser_binary_ops.tuff)
-fn parseLogicalOr(this: *mut Parser): Option<*mut ASTNode> => {
+fn parseLogicalOr(this: *mut Parser): Option<*Expr> => {
 let left = this.parseLogicalAnd();
-if (!(left is Some<*mut ASTNode>)) {
-return None<*mut ASTNode> { };
+if (!(left is Some<*Expr>)) {
+	return None<*Expr> { };
 }
 
 // Nested if to properly narrow the type
-if (left is Some<*mut ASTNode>) {
-let mut leftNode = left.value;
+if (left is Some<*Expr>) {
+	let mut leftNode = left.value;
 
 // Loop for left-associativity: a || b || c = (a || b) || c
 loop {
-if (!(this.check(TokenType.OrOr))) {
-break;
-}
-this.advance();
-
-let right = this.parseLogicalAnd();
-if (right is Some<*mut ASTNode>) {
-let rightNode = right.value;
-let node = ASTNode::new(ASTNodeType.BinaryOp);
-node.value = "||";
-node.addChild(leftNode);
-node.addChild(rightNode);
-leftNode = node;
-} else {
-this.addError(this.current().line, this.current().column, "Expected expression after operator");
-return None<*mut ASTNode> { };
-}
+	if (!(this.check(TokenType.OrOr))) {
+		break;
+	}
+	this.advance();
+	
+	let right = this.parseLogicalAnd();
+	if (right is Some<*Expr>) {
+		let rightNode = right.value;
+		let node: *Expr = &mut BinaryExpr { BinaryOp.Or, leftNode, rightNode };
+		leftNode = node;
+	} else {
+		this.addError(this.current().line, this.current().column, "Expected expression after operator");
+		return None<*Expr> { };
+	}
 }
 
-return Some<*mut ASTNode> { leftNode };
+return Some<*Expr> { leftNode };
 }
 
-return None<*mut ASTNode> { };
+return None<*Expr> { };
 }
 
 // Unary (!, -, ~, *, &, &mut, sizeOf)
-fn parseUnary(this: *mut Parser): Option<*mut ASTNode> => {
-if (this.check(TokenType.Not)) {
-this.advance();
-let operand = this.parseUnary();
-if (operand is Some<*mut ASTNode>) {
-let node = ASTNode::new(ASTNodeType.UnaryOp);
-node.value = "!";
-node.addChild(operand.value);
-return Some<*mut ASTNode> { node };
-}
-}
-
-if (this.check(TokenType.Minus)) {
-this.advance();
-let operand = this.parseUnary();
-if (operand is Some<*mut ASTNode>) {
-let node = ASTNode::new(ASTNodeType.UnaryOp);
-node.value = "- ";
-node.addChild(operand.value);
-return Some<*mut ASTNode> { node };
-}
-}
-
-if (this.check(TokenType.Tilde)) {
-this.advance();
-let operand = this.parseUnary();
-if (operand is Some<*mut ASTNode>) {
-let node = ASTNode::new(ASTNodeType.UnaryOp);
-node.value = "~";
-node.addChild(operand.value);
-return Some<*mut ASTNode> { node };
-}
-}
-
-if (this.check(TokenType.Star)) {
-this.advance();
-let operand = this.parseUnary();
-if (operand is Some<*mut ASTNode>) {
-let node = ASTNode::new(ASTNodeType.UnaryOp);
-node.value = "*";
-node.addChild(operand.value);
-return Some<*mut ASTNode> { node };
-}
-}
-
-if (this.check(TokenType.Ampersand)) {
-this.advance();
-let isMut = this.matchToken(TokenType.Mut);
-let operand = this.parseUnary();
-if (operand is Some<*mut ASTNode>) {
-let node = ASTNode::new(ASTNodeType.UnaryOp);
-node.value = if (isMut) { "&mut" } else { "&" };
-node.addChild(operand.value);
-return Some<*mut ASTNode> { node };
-}
-}
-
-if (this.check(TokenType.SizeOf)) {
-this.advance();
-if (this.matchToken(TokenType.LParen)) {
-let operand = this.parseUnary();
-if (operand is Some<*mut ASTNode>) {
-if (this.matchToken(TokenType.RParen)) {
-let node = ASTNode::new(ASTNodeType.SizeOfExpr);
-node.addChild(operand.value);
-return Some<*mut ASTNode> { node };
-}
-}
-}
-}
-
-return this.parsePostfix();
+fn parseUnary(this: *mut Parser): Option<*Expr> => {
+	if (this.check(TokenType.Not)) {
+		this.advance();
+		let operand = this.parseUnary();
+		if (operand is Some<*Expr>) {
+			let node: *Expr = &mut UnaryExpr { UnaryOp.Not, operand.value };
+			return Some<*Expr> { node };
+		}
+	}
+	
+	if (this.check(TokenType.Minus)) {
+		this.advance();
+		let operand = this.parseUnary();
+		if (operand is Some<*Expr>) {
+			let node: *Expr = &mut UnaryExpr { UnaryOp.Neg, operand.value };
+			return Some<*Expr> { node };
+		}
+	}
+	
+	if (this.check(TokenType.Tilde)) {
+		this.advance();
+		let operand = this.parseUnary();
+		if (operand is Some<*Expr>) {
+			let node: *Expr = &mut UnaryExpr { UnaryOp.BitwiseNot, operand.value };
+			return Some<*Expr> { node };
+		}
+	}
+	
+	if (this.check(TokenType.Star)) {
+		this.advance();
+		let operand = this.parseUnary();
+		if (operand is Some<*Expr>) {
+			let node: *Expr = &mut UnaryExpr { UnaryOp.Deref, operand.value };
+			return Some<*Expr> { node };
+		}
+	}
+	
+	if (this.check(TokenType.Ampersand)) {
+		this.advance();
+		let isMut = this.matchToken(TokenType.Mut);
+		let operand = this.parseUnary();
+		if (operand is Some<*Expr>) {
+			let op = if (isMut) { UnaryOp.RefMut } else { UnaryOp.Ref };
+			let node: *Expr = &mut UnaryExpr { op, operand.value };
+			return Some<*Expr> { node };
+		}
+	}
+	
+	if (this.check(TokenType.SizeOf)) {
+		this.advance();
+		if (this.matchToken(TokenType.LParen)) {
+			let operand = this.parseUnary();
+			if (operand is Some<*Expr>) {
+				if (this.matchToken(TokenType.RParen)) {
+					let node: *Expr = &mut SizeOfExpr { /* need type here */ };
+					return Some<*Expr> { node };
+				}
+			}
+		}
+	}
+	
+	return this.parsePostfix();
 }
 
 // Postfix (., [], function call, 'is' for type narrowing)
-fn parsePostfix(this: *mut Parser): Option<*mut ASTNode> => {
-let expr = this.parsePrimary();
-if (!(expr is Some<*mut ASTNode>)) {
-return None<*mut ASTNode> { };
-}
-
-if (expr is Some<*mut ASTNode>) {
-let mut exprNode = expr.value;
-
-loop {
-if (this.check(TokenType.Dot)) {
-this.advance();
-let token = this.current();
-if (this.matchToken(TokenType.Identifier)) {
-let node = ASTNode::new(ASTNodeType.FieldAccess);
-node.value = token.value;
-node.addChild(exprNode);
-exprNode = node;
-continue;
-}
-}
-
-if (this.check(TokenType.LBracket)) {
-this.advance();
-let index = this.parseExpression();
-if (index is Some<*mut ASTNode>) {
-if (this.matchToken(TokenType.RBracket)) {
-let node = ASTNode::new(ASTNodeType.IndexExpr);
-node.addChild(exprNode);
-node.addChild(index.value);
-exprNode = node;
-continue;
-}
-}
-}
-
-if (this.check(TokenType.LParen)) {
-this.advance();
-let args = this.parseArguments();
-if (this.matchToken(TokenType.RParen)) {
-let node = ASTNode::new(ASTNodeType.CallExpr);
-node.addChild(exprNode);
-let mut i = 0USize;
-while (i < args.len()) {
-let arg = args.get(i);
-if (arg is Some<*mut ASTNode>) {
-node.addChild(arg.value);
-}
-i = i + 1USize;
-}
-exprNode = node;
-continue;
-}
-}
-
-if (this.check(TokenType.Is)) {
-this.advance();
-let token = this.current();
-if (this.matchToken(TokenType.Identifier)) {
-let typeNode = ASTNode::new(ASTNodeType.Identifier);
-typeNode.value = token.value;
-let node = ASTNode::new(ASTNodeType.IsExpr);
-node.addChild(exprNode);
-node.addChild(typeNode);
-exprNode = node;
-continue;
-}
-}
-
-break;
-}
-
-return Some<*mut ASTNode> { exprNode };
-}
-
-return None<*mut ASTNode> { };
+fn parsePostfix(this: *mut Parser): Option<*Expr> => {
+	let expr = this.parsePrimary();
+	if (!(expr is Some<*Expr>)) {
+		return None<*Expr> { };
+	}
+	
+	if (expr is Some<*Expr>) {
+		let mut exprNode = expr.value;
+		
+		loop {
+			if (this.check(TokenType.Dot)) {
+				this.advance();
+				let token = this.current();
+				if (this.matchToken(TokenType.Identifier)) {
+					let node: *Expr = &mut FieldExpr { exprNode, token.value };
+					exprNode = node;
+					continue;
+				}
+			}
+			
+			if (this.check(TokenType.LBracket)) {
+				this.advance();
+				let index = this.parseExpression();
+				if (index is Some<*Expr>) {
+					if (this.matchToken(TokenType.RBracket)) {
+						let node: *Expr = &mut IndexExpr { exprNode, index.value };
+						exprNode = node;
+						continue;
+					}
+				}
+			}
+			
+			if (this.check(TokenType.LParen)) {
+				this.advance();
+				let args = this.parseArguments();
+				if (this.matchToken(TokenType.RParen)) {
+					let node: *Expr = &mut CallExpr { exprNode, args };
+					exprNode = node;
+					continue;
+				}
+			}
+			
+			if (this.check(TokenType.Is)) {
+				this.advance();
+				let token = this.current();
+				if (this.matchToken(TokenType.Identifier)) {
+					// TODO: need to parse type expression for the Is operator
+					// For now, skip this
+					continue;
+				}
+			}
+			
+			break;
+		}
+		
+		return Some<*Expr> { exprNode };
+	}
+	
+	return None<*Expr> { };
 }
 
 // Primary expressions (literals, identifiers, parenthesized, etc.)
-fn parsePrimary(this: *mut Parser): Option<*mut ASTNode> => {
-let token = this.current();
-
-if (token.tokenType == TokenType.IntLiteral) {
-this.advance();
-let node = ASTNode::new(ASTNodeType.IntLiteral);
-node.value = token.value;
-return Some<*mut ASTNode> { node };
-}
-
-if (token.tokenType == TokenType.FloatLiteral) {
-this.advance();
-let node = ASTNode::new(ASTNodeType.FloatLiteral);
-node.value = token.value;
-return Some<*mut ASTNode> { node };
-}
-
-if (token.tokenType == TokenType.StringLiteral) {
-this.advance();
-let node = ASTNode::new(ASTNodeType.StringLiteral);
-node.value = token.value;
-return Some<*mut ASTNode> { node };
-}
-
-if (token.tokenType == TokenType.True) {
-this.advance();
-let node = ASTNode::new(ASTNodeType.BoolLiteral);
-node.value = "true";
-return Some<*mut ASTNode> { node };
-}
-
-if (token.tokenType == TokenType.False) {
-this.advance();
-let node = ASTNode::new(ASTNodeType.BoolLiteral);
-node.value = "false";
-return Some<*mut ASTNode> { node };
-}
-
-if (token.tokenType == TokenType.Identifier) {
-this.advance();
-let node = ASTNode::new(ASTNodeType.Identifier);
-node.value = token.value;
-return Some<*mut ASTNode> { node };
-}
-
-if (token.tokenType == TokenType.LParen) {
-this.advance();
-let expr = this.parseExpression();
-if (this.matchToken(TokenType.RParen)) {
-return expr;
-}
-}
-
-if (token.tokenType == TokenType.This) {
-this.advance();
-let node = ASTNode::new(ASTNodeType.This);
-return Some<*mut ASTNode> { node };
-}
-
-return None<*mut ASTNode> { };
+fn parsePrimary(this: *mut Parser): Option<*Expr> => {
+	let token = this.current();
+	
+	if (token.tokenType == TokenType.IntLiteral) {
+		this.advance();
+		let intVal = string::toI64(token.value);
+		if (intVal is Some<I64>) {
+			let lit: *Literal = &mut IntegerLiteral { intVal.value };
+			let node: *Expr = &mut LiteralExpr { lit };
+			return Some<*Expr> { node };
+		}
+	}
+	
+	if (token.tokenType == TokenType.FloatLiteral) {
+		this.advance();
+		let floatVal = string::toF64(token.value);
+		if (floatVal is Some<F64>) {
+			let lit: *Literal = &mut FloatLiteral { floatVal.value };
+			let node: *Expr = &mut LiteralExpr { lit };
+			return Some<*Expr> { node };
+		}
+	}
+	
+	if (token.tokenType == TokenType.StringLiteral) {
+		this.advance();
+		let lit: *Literal = &mut StringLiteral { token.value };
+		let node: *Expr = &mut LiteralExpr { lit };
+		return Some<*Expr> { node };
+	}
+	
+	if (token.tokenType == TokenType.True) {
+		this.advance();
+		let lit: *Literal = &mut BoolLiteral { true };
+		let node: *Expr = &mut LiteralExpr { lit };
+		return Some<*Expr> { node };
+	}
+	
+	if (token.tokenType == TokenType.False) {
+		this.advance();
+		let lit: *Literal = &mut BoolLiteral { false };
+		let node: *Expr = &mut LiteralExpr { lit };
+		return Some<*Expr> { node };
+	}
+	
+	if (token.tokenType == TokenType.Identifier) {
+		this.advance();
+		let node: *Expr = &mut IdentifierExpr { token.value };
+		return Some<*Expr> { node };
+	}
+	
+	if (token.tokenType == TokenType.LParen) {
+		this.advance();
+		let expr = this.parseExpression();
+		if (this.matchToken(TokenType.RParen)) {
+			return expr;
+		}
+	}
+	
+	if (token.tokenType == TokenType.This) {
+		this.advance();
+		let node: *Expr = &mut IdentifierExpr { "this" };
+		return Some<*Expr> { node };
+	}
+	
+	return None<*Expr> { };
 }
 
 // Parse function call arguments
-fn parseArguments(this: *mut Parser): Vector<*mut ASTNode> => {
-let mut args = Vector::new<*mut ASTNode>(10USize);
-
-if (this.check(TokenType.RParen)) {
-return args;
-}
-
-loop {
-let arg = this.parseExpression();
-if (arg is Some<*mut ASTNode>) {
-args.push(arg.value);
-}
-
-if (!(this.check(TokenType.Comma))) {
-break;
-}
-
-this.advance();
-}
-
-return args;
+fn parseArguments(this: *mut Parser): *Vector<*Expr> => {
+	let mut args = Vector::new<*Expr>(10USize);
+	
+	if (this.check(TokenType.RParen)) {
+		return args;
+	}
+	
+	loop {
+		let arg = this.parseExpression();
+		if (arg is Some<*Expr>) {
+			args.push(arg.value);
+		}
+		
+		if (!(this.check(TokenType.Comma))) {
+			break;
+		}
+		
+		this.advance();
+	}
+	
+	return args;
 }
 }

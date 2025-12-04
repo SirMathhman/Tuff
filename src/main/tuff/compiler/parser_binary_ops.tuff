@@ -11,13 +11,13 @@ use parser_expressions;
 
 impl Parser {
 	// Logical AND (&&)
-	fn parseLogicalAnd(this: *mut Parser): Option<*mut ASTNode> => {
+	fn parseLogicalAnd(this: *mut Parser): Option<*Expr> => {
 		let left = this.parseEquality();
-		if (!(left is Some<*mut ASTNode>)) {
-			return None<*mut ASTNode> { };
+		if (!(left is Some<*Expr>)) {
+			return None<*Expr> { };
 		}
 		
-		if (left is Some<*mut ASTNode>) {
+		if (left is Some<*Expr>) {
 			let mut leftNode = left.value;
 			
 			loop {
@@ -27,23 +27,20 @@ impl Parser {
 				this.advance();
 				
 				let right = this.parseEquality();
-				if (right is Some<*mut ASTNode>) {
+				if (right is Some<*Expr>) {
 					let rightNode = right.value;
-					let node = ASTNode::new(ASTNodeType.BinaryOp);
-					node.value = "&&";
-					node.addChild(leftNode);
-					node.addChild(rightNode);
+					let node: *Expr = &mut BinaryExpr { BinaryOp.And, leftNode, rightNode };
 					leftNode = node;
 				} else {
 					this.addError(this.current().line, this.current().column, "Expected expression after &&");
-					return None<*mut ASTNode> { };
+					return None<*Expr> { };
 				}
 			}
 			
-			return Some<*mut ASTNode> { leftNode };
+			return Some<*Expr> { leftNode };
 		}
 		
-		return None<*mut ASTNode> { };
+		return None<*Expr> { };
 	}
 	
 	// Equality (==, !=)
