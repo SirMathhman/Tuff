@@ -33,6 +33,7 @@ int main(int argc, char *argv[])
 		std::cerr << "  --output-dir <dir>       Output directory for per-file generation" << std::endl;
 		std::cerr << "  --lib                    Compile as library (don't generate main function)" << std::endl;
 		std::cerr << "  --per-file               Generate separate .h and .cpp files (experimental)" << std::endl;
+		std::cerr << "  --exclude <patterns>     Exclude paths matching patterns (comma-separated)" << std::endl;
 		return 1;
 	}
 
@@ -43,6 +44,7 @@ int main(int argc, char *argv[])
 	std::string outputDir = "";
 	std::vector<std::string> additionalSources;
 	std::vector<std::string> explicitSourceSets;
+	std::vector<std::string> excludePatterns;
 	bool isLibrary = false;
 	bool perFileMode = false;
 
@@ -93,6 +95,12 @@ int main(int argc, char *argv[])
 		else if (arg == "--per-file")
 		{
 			perFileMode = true;
+		}
+		else if (arg == "--exclude" && i + 1 < argc)
+		{
+			std::string excludeList = argv[++i];
+			auto patterns = split(excludeList, ',');
+			excludePatterns.insert(excludePatterns.end(), patterns.begin(), patterns.end());
 		}
 	}
 
@@ -152,6 +160,30 @@ int main(int argc, char *argv[])
 
 	// Add additional sources
 	sourcePaths.insert(sourcePaths.end(), additionalSources.begin(), additionalSources.end());
+
+	// Filter out excluded paths
+	if (!excludePatterns.empty())
+	{
+		std::vector<std::string> filteredPaths;
+		for (const auto &path : sourcePaths)
+		{
+			bool excluded = false;
+			for (const auto &pattern : excludePatterns)
+			{
+				// Simple substring match - if path contains the pattern, exclude it
+				if (path.find(pattern) != std::string::npos)
+				{
+					excluded = true;
+					break;
+				}
+			}
+			if (!excluded)
+			{
+				filteredPaths.push_back(path);
+			}
+		}
+		sourcePaths = filteredPaths;
+	}
 
 	// Validation
 	if (sourcePaths.empty())

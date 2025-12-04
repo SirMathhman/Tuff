@@ -18,15 +18,15 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 		// but preserve the full intersection for the result
 		// e.g., *mut [T] & #free -> use *mut [T] for checking, preserve & #free
 		auto leftExpr = left->exprType;
-		ExprPtr destructorExpr = nullptr;  // Will hold #free if present
-		
+		ExprPtr destructorExpr = nullptr; // Will hold #free if present
+
 		if (leftExpr->kind == ExprKind::BINARY)
 		{
 			auto bin = leftExpr->as<BinaryExpr>();
 			if (bin->op == BinaryOp::INTERSECTION)
 			{
-				destructorExpr = bin->right;  // Save the destructor part
-				leftExpr = bin->left;         // Use the pointer part for checking
+				destructorExpr = bin->right; // Save the destructor part
+				leftExpr = bin->left;				 // Use the pointer part for checking
 			}
 		}
 
@@ -38,7 +38,7 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 				auto ptr = leftExpr->as<UnaryExpr>();
 				ExprPtr resultType = nullptr;
 				bool isArrayDecay = false;
-				
+
 				// Check for *mut [T] -> Unary(STAR, Unary(MUT, Array(T)))
 				if (ptr->operand->kind == ExprKind::UNARY && ptr->operand->as<UnaryExpr>()->op == UnaryOp::MUT)
 				{
@@ -47,7 +47,7 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 					{
 						auto arr = mut->operand->as<ArrayExpr>();
 						resultType = makePtrMut(arr->elementType);
-						isArrayDecay = true;  // Array decayed to element pointer
+						isArrayDecay = true; // Array decayed to element pointer
 					}
 				}
 				// Check for *[T] -> Unary(STAR, Array(T))
@@ -55,17 +55,35 @@ void TypeChecker::checkBinaryOp(std::shared_ptr<ASTNode> node)
 				{
 					auto arr = ptr->operand->as<ArrayExpr>();
 					resultType = makePtr(arr->elementType);
-					isArrayDecay = true;  // Array decayed to element pointer
+					isArrayDecay = true; // Array decayed to element pointer
 				}
 				else
 				{
 					// Non-array pointer, keep the original type
 					resultType = leftExpr;
 				}
+
+				// Check for `+ 0` idiom which explicitly strips destructor
+				// This is only an error when used with destructored pointers
+				bool isZeroOffset = false;
+				if (right->type == ASTNodeType::LITERAL && right->value == "0")
+				{
+					isZeroOffset = true;
+				}
 				
-				// Preserve destructor annotation ONLY for non-array decay
-				// When array decays to element pointer, the destructor should NOT be preserved
-				// because the destructor is for the whole array, not individual elements
+				// ERROR: Array decay with +0 explicitly loses the destructor annotation
+				// e.g., *mut [T] & #free + 0 -> *mut T loses #free
+				// Regular pointer arithmetic (+ index) is allowed as temporary access
+				if (destructorExpr && isArrayDecay && isZeroOffset)
+				{
+					std::cerr << "Error: Array decay loses destructor annotation '" 
+					          << exprTypeToString(destructorExpr) << "'." << std::endl;
+					std::cerr << "  Cannot convert '" << exprTypeToString(left->exprType) 
+					          << "' to '" << exprTypeToString(resultType) << "'." << std::endl;
+					std::cerr << "  The destructor would never be called, causing a resource leak." << std::endl;
+					exit(1);
+				}
+				
 				if (destructorExpr && resultType && !isArrayDecay)
 				{
 					node->exprType = makeBinary(BinaryOp::INTERSECTION, resultType, destructorExpr);

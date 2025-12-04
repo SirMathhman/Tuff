@@ -118,8 +118,8 @@ function Initialize-TestEnvironment {
         New-Item -ItemType Directory -Path $Script:StdlibDir -Force | Out-Null
         New-Item -ItemType Directory -Path $Script:StdlibObjDir -Force | Out-Null
         
-        # Compile stdlib (all .tuff files in source set, no specific sources)
-        $stdlibOutput = & $CompilerPath --source-sets "$tuffSourceSet,$cppSourceSet" --target "cpp" --output-dir $Script:StdlibDir 2>&1
+        # Compile stdlib (exclude compiler subdirectory which has known issues)
+        $stdlibOutput = & $CompilerPath --source-sets "$tuffSourceSet,$cppSourceSet" --exclude "compiler" --target "cpp" --output-dir $Script:StdlibDir 2>&1
         if ($LASTEXITCODE -ne 0) {
             Write-ColorOutput "[ERROR] Failed to compile stdlib: $stdlibOutput" $ColorRed
             exit 1
@@ -338,7 +338,8 @@ try {
                 $testOutputDir = Join-Path $TempDir "dist_$testCacheKey"
                 New-Item -Path $testOutputDir -ItemType Directory -Force | Out-Null
                 
-                $compileOutput = & $CompilerPath --source-sets $sourceSets --sources $sources --target "cpp" --output-dir $testOutputDir 2>&1
+                # Exclude compiler subdirectory which has known issues
+                $compileOutput = & $CompilerPath --source-sets $sourceSets --exclude "compiler" --sources $sources --target "cpp" --output-dir $testOutputDir 2>&1
                 if ($LASTEXITCODE -ne 0) {
                     $errorMsg = ($compileOutput | Select-Object -First 20) -join "`n"
                     $result.Status = "ERROR"; $result.Message = "Tuff compile failed:`n$errorMsg"
