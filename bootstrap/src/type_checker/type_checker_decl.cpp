@@ -37,7 +37,7 @@ void TypeChecker::checkFunctionDecl(std::shared_ptr<ASTNode> node)
 	}
 	symbolTable = globalSymbols;
 	pointerOrigins.clear();
-	narrowedTypes.clear(); // Clear narrowings for new function
+	narrowedTypes.clear();	// Clear narrowings for new function
 	movedVariables.clear(); // Clear moved variables for new function
 
 	currentScopeDepth++;

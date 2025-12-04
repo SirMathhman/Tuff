@@ -250,7 +250,7 @@ bool TypeChecker::isCopyType(const std::string &type)
 	// If it has a destructor, it's not copy (move-only)
 	if (hasDestructor(type))
 		return false;
-	
+
 	// Everything else is copy by default (structs, primitives, pointers without destructors)
 	return true;
 }
