@@ -91,9 +91,10 @@ function Initialize-TestEnvironment {
     }
     
     # Pre-compile stdlib cpp files to object files for faster linking
+    # Exclude 'compiler' subdirectory as it has compilation issues and tests don't need it
     $includeDir = Join-Path $RootDir "bootstrap\src\include"
     $builtinsDir = Join-Path $RootDir "src\main\cpp"
-    $stdlibCppFiles = @(Get-ChildItem -Path $Script:StdlibDir -Filter "*.cpp" -File -Recurse | Select-Object -ExpandProperty FullName)
+    $stdlibCppFiles = @(Get-ChildItem -Path $Script:StdlibDir -Filter "*.cpp" -File | Select-Object -ExpandProperty FullName)
     
     $Script:StdlibObjDir = Join-Path $TempDir "stdlib_obj"
     New-Item -ItemType Directory -Path $Script:StdlibObjDir -Force | Out-Null

@@ -1,5 +1,6 @@
 #include "type_checker.h"
 #include <iostream>
+#include <functional>
 
 void TypeChecker::checkInLetStmt(std::shared_ptr<ASTNode> node)
 {
@@ -199,34 +200,54 @@ void TypeChecker::checkIfStmt(std::shared_ptr<ASTNode> node)
 		exit(1);
 	}
 
-	// Type narrowing: if condition is `x is SomeType`, narrow x's type in then-branch
-	std::string narrowedVar;
-	ExprPtr narrowedToType;
-	if (condition->type == ASTNodeType::IS_EXPR && condition->children[0]->type == ASTNodeType::IDENTIFIER)
+	// Type narrowing: collect all `x is SomeType` from compound conditions
+	// For `(a is T1) && (b is T2)`, narrow both a and b in the then-branch
+	std::vector<std::pair<std::string, ExprPtr>> narrowings;
+
+	// Helper to extract is-expressions from condition
+	std::function<void(std::shared_ptr<ASTNode>)> collectNarrowings = [&](std::shared_ptr<ASTNode> cond)
 	{
-		narrowedVar = condition->children[0]->value;
-		// Use typeNode if available, otherwise fallback to resolving string (deprecated)
-		if (condition->typeNode)
+		if (!cond)
+			return;
+
+		// Simple is-expression: x is Type
+		if (cond->type == ASTNodeType::IS_EXPR && cond->children[0]->type == ASTNodeType::IDENTIFIER)
 		{
-			narrowedToType = resolveType(condition->typeNode);
+			std::string varName = cond->children[0]->value;
+			ExprPtr narrowedType;
+			if (cond->typeNode)
+			{
+				narrowedType = resolveType(cond->typeNode);
+			}
+			else
+			{
+				narrowedType = std::make_shared<IdentifierExpr>(cond->value);
+			}
+			narrowings.push_back({varName, narrowedType});
 		}
-		else
+		// Compound && condition: recurse into both sides
+		else if (cond->type == ASTNodeType::BINARY_OP && cond->value == "&&")
 		{
-			// Fallback for migration
-			// We can't easily resolve string to ExprPtr without parser
-			// But we can create an IdentifierExpr
-			narrowedToType = std::make_shared<IdentifierExpr>(condition->value);
+			collectNarrowings(cond->children[0]);
+			collectNarrowings(cond->children[1]);
 		}
-		narrowedTypes[narrowedVar] = narrowedToType;
+	};
+
+	collectNarrowings(condition);
+
+	// Apply all narrowings
+	for (const auto &n : narrowings)
+	{
+		narrowedTypes[n.first] = n.second;
 	}
 
 	auto thenBranch = node->children[1];
 	check(thenBranch);
 
-	// Clear type narrowing after then-branch
-	if (!narrowedVar.empty())
+	// Clear type narrowings after then-branch
+	for (const auto &n : narrowings)
 	{
-		narrowedTypes.erase(narrowedVar);
+		narrowedTypes.erase(n.first);
 	}
 
 	if (node->children.size() > 2)

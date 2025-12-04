@@ -65,7 +65,10 @@
     "feature28_argv/test_argv_basic",
     "feature33_compiler/test_lexer_keywords",
     "feature33_compiler/test_lexer_strings",
-    "feature33_compiler/test_lexer_numbers"
+    "feature33_compiler/test_lexer_numbers",
+    "feature33_compiler/test_lexer_literals",
+    "feature33_compiler/test_lexer_operators",
+    "compiler/test_lexer_basic"
   ],
   "native_only_tests": [
     "feature17_sizeof/test_sizeof_array",

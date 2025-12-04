@@ -3,7 +3,9 @@
 
 use token;
 use ast;
+use parser;
 use parser_error;
+use parser_binary_ops;
 use vector;
 use string;
 use option;
@@ -27,7 +29,7 @@ let mut leftNode = left.value;
 
 // Loop for left-associativity: a || b || c = (a || b) || c
 loop {
-if (!(this.check(TokenType.LogicalOr))) {
+if (!(this.check(TokenType.OrOr))) {
 break;
 }
 this.advance();
@@ -36,7 +38,7 @@ let right = this.parseLogicalAnd();
 if (right is Some<*mut ASTNode>) {
 let rightNode = right.value;
 let node = ASTNode::new(ASTNodeType.BinaryOp);
-node.value = ""||"";
+node.value = "||";
 node.addChild(leftNode);
 node.addChild(rightNode);
 leftNode = node;
@@ -54,12 +56,12 @@ return None<*mut ASTNode> { };
 
 // Unary (!, -, ~, *, &, &mut, sizeOf)
 fn parseUnary(this: *mut Parser): Option<*mut ASTNode> => {
-if (this.check(TokenType.Bang)) {
+if (this.check(TokenType.Not)) {
 this.advance();
 let operand = this.parseUnary();
 if (operand is Some<*mut ASTNode>) {
 let node = ASTNode::new(ASTNodeType.UnaryOp);
-node.value = ""!"";
+node.value = "!";
 node.addChild(operand.value);
 return Some<*mut ASTNode> { node };
 }
@@ -70,7 +72,7 @@ this.advance();
 let operand = this.parseUnary();
 if (operand is Some<*mut ASTNode>) {
 let node = ASTNode::new(ASTNodeType.UnaryOp);
-node.value = ""- "";
+node.value = "- ";
 node.addChild(operand.value);
 return Some<*mut ASTNode> { node };
 }
@@ -81,7 +83,7 @@ this.advance();
 let operand = this.parseUnary();
 if (operand is Some<*mut ASTNode>) {
 let node = ASTNode::new(ASTNodeType.UnaryOp);
-node.value = ""~"";
+node.value = "~";
 node.addChild(operand.value);
 return Some<*mut ASTNode> { node };
 }
@@ -92,7 +94,7 @@ this.advance();
 let operand = this.parseUnary();
 if (operand is Some<*mut ASTNode>) {
 let node = ASTNode::new(ASTNodeType.UnaryOp);
-node.value = ""*"";
+node.value = "*";
 node.addChild(operand.value);
 return Some<*mut ASTNode> { node };
 }
@@ -104,7 +106,7 @@ let isMut = this.matchToken(TokenType.Mut);
 let operand = this.parseUnary();
 if (operand is Some<*mut ASTNode>) {
 let node = ASTNode::new(ASTNodeType.UnaryOp);
-node.value = if (isMut) { ""&mut"" } else { ""&"" };
+node.value = if (isMut) { "&mut" } else { "&" };
 node.addChild(operand.value);
 return Some<*mut ASTNode> { node };
 }
@@ -171,7 +173,7 @@ if (this.matchToken(TokenType.RParen)) {
 let node = ASTNode::new(ASTNodeType.CallExpr);
 node.addChild(exprNode);
 let mut i = 0USize;
-while (i < args.size()) {
+while (i < args.len()) {
 let arg = args.get(i);
 if (arg is Some<*mut ASTNode>) {
 node.addChild(arg.value);
@@ -234,14 +236,14 @@ return Some<*mut ASTNode> { node };
 if (token.tokenType == TokenType.True) {
 this.advance();
 let node = ASTNode::new(ASTNodeType.BoolLiteral);
-node.value = ""true"";
+node.value = "true";
 return Some<*mut ASTNode> { node };
 }
 
 if (token.tokenType == TokenType.False) {
 this.advance();
 let node = ASTNode::new(ASTNodeType.BoolLiteral);
-node.value = ""false"";
+node.value = "false";
 return Some<*mut ASTNode> { node };
 }
 

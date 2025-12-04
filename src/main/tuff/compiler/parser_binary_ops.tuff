@@ -3,7 +3,9 @@
 
 use token;
 use ast;
+use parser;
 use parser_error;
+use parser_expressions;
 
 // Extension methods for Parser impl block for binary operators
 
@@ -15,13 +17,11 @@ impl Parser {
 			return None<*mut ASTNode> { };
 		}
 		
-		// Nested if to properly narrow the type
 		if (left is Some<*mut ASTNode>) {
 			let mut leftNode = left.value;
 			
-			// Loop for left-associativity
 			loop {
-				if (!(this.check(TokenType.LogicalAnd))) {
+				if (!(this.check(TokenType.AndAnd))) {
 					break;
 				}
 				this.advance();
@@ -53,19 +53,20 @@ impl Parser {
 			return None<*mut ASTNode> { };
 		}
 		
-		// Nested if to properly narrow the type
 		if (left is Some<*mut ASTNode>) {
 			let mut leftNode = left.value;
 			
-			// Loop for left-associativity
 			loop {
-				let op = if (this.check(TokenType.Equal)) {
-					"=="
+				// Check which operator we have
+				let mut op: string = "";
+				if (this.check(TokenType.EqualEqual)) {
+					op = "==";
 				} else if (this.check(TokenType.NotEqual)) {
-					"!="
+					op = "!=";
 				} else {
-					return Some<*mut ASTNode> { leftNode };
-				};
+					// No matching operator, exit loop
+					break;
+				}
 				
 				this.advance();
 				
@@ -96,23 +97,24 @@ impl Parser {
 			return None<*mut ASTNode> { };
 		}
 		
-		// Nested if to properly narrow the type
 		if (left is Some<*mut ASTNode>) {
 			let mut leftNode = left.value;
 			
-			// Loop for left-associativity
 			loop {
-				let op = if (this.check(TokenType.LessThan)) {
-					"<"
-				} else if (this.check(TokenType.GreaterThan)) {
-					">"
-				} else if (this.check(TokenType.LessThanOrEqual)) {
-					"<="
-				} else if (this.check(TokenType.GreaterThanOrEqual)) {
-					">="
+				// Check which operator we have
+				let mut op: string = "";
+				if (this.check(TokenType.Less)) {
+					op = "<";
+				} else if (this.check(TokenType.Greater)) {
+					op = ">";
+				} else if (this.check(TokenType.LessEqual)) {
+					op = "<=";
+				} else if (this.check(TokenType.GreaterEqual)) {
+					op = ">=";
 				} else {
-					return Some<*mut ASTNode> { leftNode };
-				};
+					// No matching operator, exit loop
+					break;
+				}
 				
 				this.advance();
 				
@@ -143,11 +145,9 @@ impl Parser {
 			return None<*mut ASTNode> { };
 		}
 		
-		// Nested if to properly narrow the type
 		if (left is Some<*mut ASTNode>) {
 			let mut leftNode = left.value;
 			
-			// Loop for left-associativity
 			loop {
 				if (!(this.check(TokenType.Pipe))) {
 					break;
@@ -181,11 +181,9 @@ impl Parser {
 			return None<*mut ASTNode> { };
 		}
 		
-		// Nested if to properly narrow the type
 		if (left is Some<*mut ASTNode>) {
 			let mut leftNode = left.value;
 			
-			// Loop for left-associativity
 			loop {
 				if (!(this.check(TokenType.Caret))) {
 					break;
@@ -219,11 +217,9 @@ impl Parser {
 			return None<*mut ASTNode> { };
 		}
 		
-		// Nested if to properly narrow the type
 		if (left is Some<*mut ASTNode>) {
 			let mut leftNode = left.value;
 			
-			// Loop for left-associativity
 			loop {
 				if (!(this.check(TokenType.Ampersand))) {
 					break;
@@ -257,19 +253,20 @@ impl Parser {
 			return None<*mut ASTNode> { };
 		}
 		
-		// Nested if to properly narrow the type
 		if (left is Some<*mut ASTNode>) {
 			let mut leftNode = left.value;
 			
-			// Loop for left-associativity
 			loop {
-				let op = if (this.check(TokenType.LeftShift)) {
-					"<<"
+				// Check which operator we have
+				let mut op: string = "";
+				if (this.check(TokenType.LeftShift)) {
+					op = "<<";
 				} else if (this.check(TokenType.RightShift)) {
-					">>"
+					op = ">>";
 				} else {
-					return Some<*mut ASTNode> { leftNode };
-				};
+					// No matching operator, exit loop
+					break;
+				}
 				
 				this.advance();
 				
@@ -300,19 +297,20 @@ impl Parser {
 			return None<*mut ASTNode> { };
 		}
 		
-		// Nested if to properly narrow the type
 		if (left is Some<*mut ASTNode>) {
 			let mut leftNode = left.value;
 			
-			// Loop for left-associativity
 			loop {
-				let op = if (this.check(TokenType.Plus)) {
-					"+"
+				// Check which operator we have
+				let mut op: string = "";
+				if (this.check(TokenType.Plus)) {
+					op = "+";
 				} else if (this.check(TokenType.Minus)) {
-					"-"
+					op = "-";
 				} else {
-					return Some<*mut ASTNode> { leftNode };
-				};
+					// No matching operator, exit loop
+					break;
+				}
 				
 				this.advance();
 				
@@ -343,21 +341,22 @@ impl Parser {
 			return None<*mut ASTNode> { };
 		}
 		
-		// Nested if to properly narrow the type
 		if (left is Some<*mut ASTNode>) {
 			let mut leftNode = left.value;
 			
-			// Loop for left-associativity
 			loop {
-				let op = if (this.check(TokenType.Star)) {
-					"*"
+				// Check which operator we have
+				let mut op: string = "";
+				if (this.check(TokenType.Star)) {
+					op = "*";
 				} else if (this.check(TokenType.Slash)) {
-					"/"
+					op = "/";
 				} else if (this.check(TokenType.Percent)) {
-					"%"
+					op = "%";
 				} else {
-					return Some<*mut ASTNode> { leftNode };
-				};
+					// No matching operator, exit loop
+					break;
+				}
 				
 				this.advance();
 				
