@@ -15,7 +15,7 @@ impl Parser {
 	// Helper to allocate statement on heap
 	fn allocStmt(this: *mut Parser, stmt: Stmt): *Stmt => {
 		let raw = malloc<Stmt>(sizeOf(StmtWrapper));
-		let ptr: *mut Stmt = raw + 0;
+		let ptr: *mut Stmt = raw + 0USize;
 		*ptr = stmt;
 		return ptr;
 	}
@@ -98,7 +98,7 @@ impl Parser {
 		
 		// Allocate statements on heap
 		let statementsPtr = malloc<Vector<*Stmt>>(sizeOf(Vector<*Stmt>));
-		let sp: *mut Vector<*Stmt> = statementsPtr + 0;
+		let sp: *mut Vector<*Stmt> = statementsPtr + 0USize;
 		*sp = statements;
 		
 		let blockStmt = BlockStmt { sp };
@@ -137,7 +137,7 @@ impl Parser {
 		
 		// Allocate elseBranch on heap
 		let elseBranchPtr = malloc<Option<*Stmt>>(sizeOf(Option<*Stmt>));
-		let ep: *mut Option<*Stmt> = elseBranchPtr + 0;
+		let ep: *mut Option<*Stmt> = elseBranchPtr + 0USize;
 		*ep = elseBranch;
 		
 		let ifStmt = IfStmt { condition.value, thenBranch.value, ep };
@@ -231,7 +231,7 @@ impl Parser {
 		
 		// Allocate value on heap
 		let valuePtr = malloc<Option<*Expr>>(sizeOf(Option<*Expr>));
-		let vp: *mut Option<*Expr> = valuePtr + 0;
+		let vp: *mut Option<*Expr> = valuePtr + 0USize;
 		*vp = value;
 		
 		let returnStmt = ReturnStmt { vp };
@@ -273,7 +273,7 @@ impl Parser {
 		
 		// Allocate typeAnnotation on heap
 		let typeAnnotationPtr = malloc<Option<*Type>>(sizeOf(Option<*Type>));
-		let tp: *mut Option<*Type> = typeAnnotationPtr + 0;
+		let tp: *mut Option<*Type> = typeAnnotationPtr + 0USize;
 		*tp = typeAnnotation;
 		
 		let letStmt = LetStmt { name, mutable, tp, init.value };

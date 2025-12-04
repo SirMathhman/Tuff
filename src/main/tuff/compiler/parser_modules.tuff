@@ -60,10 +60,9 @@ impl Parser {
 		
 		// Allocate heap objects
 		let declsPtr = malloc<Vector<*Decl>>(sizeOf(Vector<*Decl>));
-		let dp: *mut Vector<*Decl> = declsPtr + 0;
-		*dp = declarations;
+		declsPtr[0] = declarations;
 		
-		let moduleDecl = ModuleDecl { moduleName, dp };
+		let moduleDecl = ModuleDecl { moduleName, declsPtr + 0USize };
 		return Some<*Decl> { this.allocDecl(moduleDecl) };
 	}
 	
@@ -151,15 +150,15 @@ impl Parser {
 		
 		// Allocate heap objects
 		let genericsPtr = malloc<Vector<GenericParam>>(sizeOf(Vector<GenericParam>));
-		let gp: *mut Vector<GenericParam> = genericsPtr + 0;
+		let gp: *mut Vector<GenericParam> = genericsPtr + 0USize;
 		*gp = generics;
 		
 		let paramsPtr = malloc<Vector<FunctionParam>>(sizeOf(Vector<FunctionParam>));
-		let pp: *mut Vector<FunctionParam> = paramsPtr + 0;
+		let pp: *mut Vector<FunctionParam> = paramsPtr + 0USize;
 		*pp = params;
 		
 		let returnTypePtr = malloc<Option<*Type>>(sizeOf(Option<*Type>));
-		let rp: *mut Option<*Type> = returnTypePtr + 0;
+		let rp: *mut Option<*Type> = returnTypePtr + 0USize;
 		*rp = returnType;
 		
 		let expectDecl = ExpectDecl { funcName, gp, pp, rp };
@@ -218,15 +217,15 @@ impl Parser {
 		
 		// Allocate heap objects
 		let genericsPtr = malloc<Vector<GenericParam>>(sizeOf(Vector<GenericParam>));
-		let gp: *mut Vector<GenericParam> = genericsPtr + 0;
+		let gp: *mut Vector<GenericParam> = genericsPtr + 0USize;
 		*gp = generics;
 		
 		let paramsPtr = malloc<Vector<FunctionParam>>(sizeOf(Vector<FunctionParam>));
-		let pp: *mut Vector<FunctionParam> = paramsPtr + 0;
+		let pp: *mut Vector<FunctionParam> = paramsPtr + 0USize;
 		*pp = params;
 		
 		let returnTypePtr = malloc<Option<*Type>>(sizeOf(Option<*Type>));
-		let rp: *mut Option<*Type> = returnTypePtr + 0;
+		let rp: *mut Option<*Type> = returnTypePtr + 0USize;
 		*rp = returnType;
 		
 		let actualDecl = ActualDecl { funcName, gp, pp, rp, body.value };
@@ -269,15 +268,15 @@ impl Parser {
 		
 		// Allocate heap objects
 		let genericsPtr = malloc<Vector<GenericParam>>(sizeOf(Vector<GenericParam>));
-		let gp: *mut Vector<GenericParam> = genericsPtr + 0;
+		let gp: *mut Vector<GenericParam> = genericsPtr + 0USize;
 		*gp = generics;
 		
 		let paramsPtr = malloc<Vector<FunctionParam>>(sizeOf(Vector<FunctionParam>));
-		let pp: *mut Vector<FunctionParam> = paramsPtr + 0;
+		let pp: *mut Vector<FunctionParam> = paramsPtr + 0USize;
 		*pp = params;
 		
 		let returnTypePtr = malloc<Option<*Type>>(sizeOf(Option<*Type>));
-		let rp: *mut Option<*Type> = returnTypePtr + 0;
+		let rp: *mut Option<*Type> = returnTypePtr + 0USize;
 		*rp = returnType;
 		
 		let externDecl = ExternDecl { funcName, gp, pp, rp };

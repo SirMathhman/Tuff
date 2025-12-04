@@ -15,7 +15,7 @@ impl Parser {
 	// Helper to allocate expression on heap
 	fn allocExpr(this: *mut Parser, expr: Expr): *Expr => {
 		let raw = malloc<Expr>(sizeOf(ExprWrapper));
-		let ptr: *mut Expr = raw + 0;
+		let ptr: *mut Expr = raw + 0USize;
 		*ptr = expr;
 		return ptr;
 	}
@@ -23,7 +23,7 @@ impl Parser {
 	// Helper to allocate literal on heap
 	fn allocLiteral(this: *mut Parser, lit: Literal): *Literal => {
 		let raw = malloc<Literal>(sizeOf(LiteralWrapper));
-		let ptr: *mut Literal = raw + 0;
+		let ptr: *mut Literal = raw + 0USize;
 		*ptr = lit;
 		return ptr;
 	}
@@ -325,12 +325,12 @@ fn parseBlockExpression(this: *mut Parser): Option<*Expr> => {
 	
 	// Allocate statement vector on heap
 	let statementsPtr = malloc<Vector<*Stmt>>(sizeOf(Vector<*Stmt>));
-	let sp: *mut Vector<*Stmt> = statementsPtr + 0;
+	let sp: *mut Vector<*Stmt> = statementsPtr + 0USize;
 	*sp = statements;
 	
 	// Allocate final expr option on heap
 	let finalExprPtr = malloc<Option<*Expr>>(sizeOf(Option<*Expr>));
-	let fep: *mut Option<*Expr> = finalExprPtr + 0;
+	let fep: *mut Option<*Expr> = finalExprPtr + 0USize;
 	*fep = finalExpr;
 	
 	let blockExpr = BlockExpr { sp, fep };
@@ -358,7 +358,7 @@ fn parseArguments(this: *mut Parser): *Vector<*Expr> => {
 	
 	// Allocate on heap and return pointer
 	let argsPtr = malloc<Vector<*Expr>>(sizeOf(Vector<*Expr>));
-	let ap: *mut Vector<*Expr> = argsPtr + 0;
+	let ap: *mut Vector<*Expr> = argsPtr + 0USize;
 	*ap = args;
 	return ap;
 }

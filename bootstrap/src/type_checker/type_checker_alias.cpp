@@ -6,6 +6,75 @@
 // For generics: if Pair<T> = { first: T, second: T }, then Pair<I32> -> { first: I32, second: I32 }
 std::string TypeChecker::expandTypeAlias(const std::string &type)
 {
+	// Handle union types: A|B|C - expand each part
+	// But only if there's a | at depth 0 (not inside angle brackets)
+	{
+		int depth = 0;
+		bool hasUnion = false;
+		for (char c : type)
+		{
+			if (c == '<')
+				depth++;
+			else if (c == '>')
+				depth--;
+			else if (c == '|' && depth == 0)
+			{
+				hasUnion = true;
+				break;
+			}
+		}
+		if (hasUnion)
+		{
+			// Split and expand each part
+			std::string result;
+			std::string current;
+			depth = 0;
+			for (char c : type)
+			{
+				if (c == '<')
+					depth++;
+				else if (c == '>')
+					depth--;
+
+				if (c == '|' && depth == 0)
+				{
+					if (!result.empty())
+						result += "|";
+					result += expandTypeAlias(current);
+					current.clear();
+				}
+				else
+				{
+					current += c;
+				}
+			}
+			if (!current.empty())
+			{
+				if (!result.empty())
+					result += "|";
+				result += expandTypeAlias(current);
+			}
+			return result;
+		}
+	}
+
+	// Handle pointer prefixes: *Type or *mut Type
+	if (!type.empty() && type[0] == '*')
+	{
+		if (type.length() > 5 && type.substr(0, 5) == "*mut ")
+		{
+			std::string inner = type.substr(5);
+			std::string expandedInner = expandTypeAlias(inner);
+			return "*mut " + expandedInner;
+		}
+		else if (type.length() > 1)
+		{
+			std::string inner = type.substr(1);
+			std::string expandedInner = expandTypeAlias(inner);
+			return "*" + expandedInner;
+		}
+	}
+
 	// Check if this is a generic type instantiation like MyType<I32>
 	size_t openBracket = type.find('<');
 	std::string baseName = type;
@@ -46,7 +115,20 @@ std::string TypeChecker::expandTypeAlias(const std::string &type)
 	auto it = typeAliasTable.find(baseName);
 	if (it == typeAliasTable.end())
 	{
-		// Not a type alias, return as-is
+		// Not a type alias, but still expand type arguments recursively
+		// e.g., Vector<*Decl> should become Vector<*FunctionDecl | StructDecl | ...>
+		if (!typeArgs.empty())
+		{
+			std::string result = baseName + "<";
+			for (size_t i = 0; i < typeArgs.size(); i++)
+			{
+				if (i > 0)
+					result += ", ";
+				result += expandTypeAlias(typeArgs[i]);
+			}
+			result += ">";
+			return result;
+		}
 		return type;
 	}
 

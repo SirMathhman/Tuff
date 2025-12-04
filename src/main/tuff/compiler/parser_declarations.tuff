@@ -15,7 +15,7 @@ impl Parser {
 	// Helper to allocate declaration on heap
 	fn allocDecl(this: *mut Parser, decl: Decl): *Decl => {
 		let raw = malloc<Decl>(sizeOf(DeclWrapper));
-		let ptr: *mut Decl = raw + 0;
+		let ptr: *mut Decl = raw + 0USize;
 		*ptr = decl;
 		return ptr;
 	}
@@ -67,15 +67,15 @@ impl Parser {
 		
 		// Allocate heap objects
 		let genericsPtr = malloc<Vector<GenericParam>>(sizeOf(Vector<GenericParam>));
-		let gp: *mut Vector<GenericParam> = genericsPtr + 0;
+		let gp: *mut Vector<GenericParam> = genericsPtr + 0USize;
 		*gp = generics;
 		
 		let paramsPtr = malloc<Vector<FunctionParam>>(sizeOf(Vector<FunctionParam>));
-		let pp: *mut Vector<FunctionParam> = paramsPtr + 0;
+		let pp: *mut Vector<FunctionParam> = paramsPtr + 0USize;
 		*pp = params;
 		
 		let returnTypePtr = malloc<Option<*Type>>(sizeOf(Option<*Type>));
-		let rp: *mut Option<*Type> = returnTypePtr + 0;
+		let rp: *mut Option<*Type> = returnTypePtr + 0USize;
 		*rp = returnType;
 		
 		let funcDecl = FunctionDecl { name, gp, pp, rp, body };
@@ -185,11 +185,11 @@ impl Parser {
 		
 		// Allocate heap objects
 		let genericsPtr = malloc<Vector<GenericParam>>(sizeOf(Vector<GenericParam>));
-		let gp: *mut Vector<GenericParam> = genericsPtr + 0;
+		let gp: *mut Vector<GenericParam> = genericsPtr + 0USize;
 		*gp = generics;
 		
 		let fieldsPtr = malloc<Vector<StructField>>(sizeOf(Vector<StructField>));
-		let fp: *mut Vector<StructField> = fieldsPtr + 0;
+		let fp: *mut Vector<StructField> = fieldsPtr + 0USize;
 		*fp = fields;
 		
 		let structDecl = StructDecl { name, gp, fp };
@@ -233,7 +233,7 @@ impl Parser {
 		
 		// Allocate heap objects
 		let variantsPtr = malloc<Vector<EnumVariant>>(sizeOf(Vector<EnumVariant>));
-		let vp: *mut Vector<EnumVariant> = variantsPtr + 0;
+		let vp: *mut Vector<EnumVariant> = variantsPtr + 0USize;
 		*vp = variants;
 		
 		let enumDecl = EnumDecl { name, vp };
@@ -275,7 +275,7 @@ impl Parser {
 		
 		// Allocate heap objects
 		let methodsPtr = malloc<Vector<*Decl>>(sizeOf(Vector<*Decl>));
-		let mp: *mut Vector<*Decl> = methodsPtr + 0;
+		let mp: *mut Vector<*Decl> = methodsPtr + 0USize;
 		*mp = methods;
 		
 		let implDecl = ImplDecl { implType.value, mp };
@@ -314,7 +314,7 @@ impl Parser {
 		
 		// Allocate heap objects
 		let genericsPtr = malloc<Vector<GenericParam>>(sizeOf(Vector<GenericParam>));
-		let gp: *mut Vector<GenericParam> = genericsPtr + 0;
+		let gp: *mut Vector<GenericParam> = genericsPtr + 0USize;
 		*gp = generics;
 		
 		let typeAliasDecl = TypeAliasDecl { name, gp, aliasedType.value };

@@ -1,8 +1,9 @@
 // Test: Lexer numbers and strings
 // Expected output: Exit code 0
 
-use compiler::lexer;
-use compiler::token;
+use lexer;
+use token;
+use char_stream;
 use testing;
 use io;
 use string;

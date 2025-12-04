@@ -13,7 +13,7 @@ impl Parser {
 	// Helper to allocate type on heap
 	fn allocType(this: *mut Parser, typeNode: Type): *Type => {
 		let raw = malloc<Type>(sizeOf(TypeWrapper));
-		let ptr: *mut Type = raw + 0;
+		let ptr: *mut Type = raw + 0USize;
 		*ptr = typeNode;
 		return ptr;
 	}
@@ -207,11 +207,11 @@ impl Parser {
 		
 		// Allocate on heap
 		let initializedPtr = malloc<Option<I32>>(sizeOf(Option<I32>));
-		let ip: *mut Option<I32> = initializedPtr + 0;
+		let ip: *mut Option<I32> = initializedPtr + 0USize;
 		*ip = initialized;
 		
 		let capacityPtr = malloc<Option<I32>>(sizeOf(Option<I32>));
-		let cp: *mut Option<I32> = capacityPtr + 0;
+		let cp: *mut Option<I32> = capacityPtr + 0USize;
 		*cp = capacity;
 		
 		// Create ArrayType struct instance
@@ -253,7 +253,7 @@ impl Parser {
 		
 		// Allocate params on heap
 		let paramsPtr = malloc<Vector<*Type>>(sizeOf(Vector<*Type>));
-		let pp: *mut Vector<*Type> = paramsPtr + 0;
+		let pp: *mut Vector<*Type> = paramsPtr + 0USize;
 		*pp = params;
 		
 		let fnType = FunctionType { pp, retType.value };
@@ -302,7 +302,7 @@ impl Parser {
 			
 			// Allocate args on heap
 			let argsPtr = malloc<Vector<*Type>>(sizeOf(Vector<*Type>));
-			let ap: *mut Vector<*Type> = argsPtr + 0;
+			let ap: *mut Vector<*Type> = argsPtr + 0USize;
 			*ap = args;
 			
 			// Create NamedType struct instance

@@ -146,9 +146,8 @@ impl Parser {
 		
 		// Allocate vector on heap for AST
 		let declsPtr = malloc<Vector<*Decl>>(sizeOf(Vector<*Decl>));
-		let ptr: *mut Vector<*Decl> = declsPtr + 0;
-		*ptr = declarations;
+		declsPtr[0] = declarations;
 		
-		return Program { ptr };
+		return Program { declsPtr + 0USize };
 	}
 }

@@ -112,6 +112,37 @@ void TypeChecker::checkStructLiteral(std::shared_ptr<ASTNode> node)
 		stripIntersection(expandedExpected);
 		stripIntersection(expandedActual);
 
+		// Normalize spacing around | in union types for comparison
+		auto normalizeUnion = [](std::string &type)
+		{
+			std::string result;
+			bool prevWasSpace = false;
+			for (size_t i = 0; i < type.length(); i++)
+			{
+				char c = type[i];
+				if (c == ' ')
+				{
+					// Skip spaces around |
+					if (i > 0 && type[i - 1] == '|')
+						continue;
+					if (i + 1 < type.length() && type[i + 1] == '|')
+						continue;
+					if (prevWasSpace)
+						continue;
+					prevWasSpace = true;
+				}
+				else
+				{
+					prevWasSpace = false;
+				}
+				result += c;
+			}
+			type = result;
+		};
+
+		normalizeUnion(expandedExpected);
+		normalizeUnion(expandedActual);
+
 		bool typesMatch = (expandedActual == expandedExpected);
 
 		if (!typesMatch)

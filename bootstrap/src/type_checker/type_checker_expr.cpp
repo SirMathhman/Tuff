@@ -108,10 +108,11 @@ void TypeChecker::checkIsExpr(std::shared_ptr<ASTNode> node)
 
 	// Validate that target type is one of the union variants
 	auto variants = splitUnionType(expandedExprType);
+	std::string expandedTargetType = expandTypeAlias(targetType);
 	bool found = false;
 	for (const auto &variant : variants)
 	{
-		if (variant == targetType)
+		if (variant == expandedTargetType)
 		{
 			found = true;
 			break;

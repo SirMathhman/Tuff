@@ -292,5 +292,5 @@ struct LiteralWrapper { inner: Literal }
 
 // ============ Program ============
 struct Program {
-	declarations: *Vector<*Decl>
+	declarations: *mut Vector<*Decl>
 }

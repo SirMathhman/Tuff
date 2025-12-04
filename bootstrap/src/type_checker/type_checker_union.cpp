@@ -32,10 +32,22 @@ std::vector<std::string> TypeChecker::splitUnionType(const std::string &unionTyp
 {
 	std::vector<std::string> variants;
 	std::string current;
+	int depth = 0; // Track angle bracket depth
 	for (char c : unionType)
 	{
-		if (c == '|')
+		if (c == '<')
 		{
+			depth++;
+			current += c;
+		}
+		else if (c == '>')
+		{
+			depth--;
+			current += c;
+		}
+		else if (c == '|' && depth == 0)
+		{
+			// Only split on | when not inside angle brackets
 			// Trim whitespace
 			while (!current.empty() && current.front() == ' ')
 				current.erase(0, 1);
@@ -102,7 +114,20 @@ bool TypeChecker::isTypeCompatible(const std::string &valueType, const std::stri
 		auto variants = splitUnionType(expandedTarget);
 		for (const auto &variant : variants)
 		{
-			if (expandedValue == variant)
+			// Normalize spaces for comparison
+			std::string normalizedVariant = variant;
+			std::string normalizedValue = expandedValue;
+			// Remove leading/trailing spaces
+			while (!normalizedVariant.empty() && normalizedVariant.front() == ' ')
+				normalizedVariant.erase(0, 1);
+			while (!normalizedVariant.empty() && normalizedVariant.back() == ' ')
+				normalizedVariant.pop_back();
+			while (!normalizedValue.empty() && normalizedValue.front() == ' ')
+				normalizedValue.erase(0, 1);
+			while (!normalizedValue.empty() && normalizedValue.back() == ' ')
+				normalizedValue.pop_back();
+
+			if (normalizedValue == normalizedVariant)
 				return true;
 		}
 	}
