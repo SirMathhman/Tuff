@@ -10,24 +10,6 @@ struct ASTNode;
 using ASTNodePtr = std::shared_ptr<ASTNode>;
 
 // =============================================================================
-// Base info shared by all AST nodes
-// =============================================================================
-
-struct SourceLocation
-{
-	int line = 0;
-	int column = 0;
-};
-
-struct TypeInfo
-{
-	std::string inferredType;			// DEPRECATED: Use exprType instead
-	ExprPtr exprType;							// New unified expression/type system
-	bool isNarrowedUnion = false; // For union type narrowing
-	TypeEnvironment typeEnv;			// Type variable substitutions for generics
-};
-
-// =============================================================================
 // DECLARATIONS
 // =============================================================================
 
