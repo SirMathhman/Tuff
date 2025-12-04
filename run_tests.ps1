@@ -72,42 +72,81 @@ function Initialize-TestEnvironment {
         if ($json.native_only_tests) { $Script:NativeOnlyTests = $json.native_only_tests }
     }
     
-    if (Test-Path $TempDir) { Remove-Item $TempDir -Recurse -Force }
-    New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
+    # Use persistent cache directory for stdlib (survives between runs)
+    $Script:StdlibCacheDir = Join-Path $RootDir ".tuff_cache"
+    $Script:StdlibDir = Join-Path $Script:StdlibCacheDir "stdlib_cpp"
+    $Script:StdlibObjDir = Join-Path $Script:StdlibCacheDir "stdlib_obj"
+    $cacheManifest = Join-Path $Script:StdlibCacheDir "manifest.json"
     
-    # Pre-compile stdlib once to shared directory
-    $Script:StdlibDir = Join-Path $TempDir "stdlib"
-    New-Item -ItemType Directory -Path $Script:StdlibDir -Force | Out-Null
-    
-    Write-ColorOutput "Pre-compiling stdlib..." $ColorGray
+    # Compute hash of all stdlib source files
     $tuffSourceSet = Join-Path $RootDir "src\main\tuff"
     $cppSourceSet = Join-Path $RootDir "src\main\cpp"
     
-    # Compile stdlib (all .tuff files in source set, no specific sources)
-    $stdlibOutput = & $CompilerPath --source-sets "$tuffSourceSet,$cppSourceSet" --target "cpp" --output-dir $Script:StdlibDir 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Write-ColorOutput "[ERROR] Failed to compile stdlib: $stdlibOutput" $ColorRed
-        exit 1
+    # Get all source files and their timestamps (excluding compiler subdirectory)
+    $sourceFiles = @()
+    $sourceFiles += Get-ChildItem -Path $tuffSourceSet -Filter "*.tuff" -File -Recurse | Where-Object { $_.DirectoryName -notlike "*\compiler" }
+    $sourceFiles += Get-ChildItem -Path $cppSourceSet -Filter "*.cpp" -File -Recurse
+    $sourceFiles += Get-ChildItem -Path $cppSourceSet -Filter "*.h" -File -Recurse
+    $compilerMtime = (Get-Item $CompilerPath).LastWriteTimeUtc.Ticks
+    $sourceHash = ($sourceFiles | ForEach-Object { "$($_.FullName):$($_.LastWriteTimeUtc.Ticks)" }) -join "|"
+    $sourceHash = "$compilerMtime|$sourceHash"
+    $currentHash = [System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($sourceHash))
+    $currentHashStr = [BitConverter]::ToString($currentHash) -replace '-', ''
+    
+    # Check if cache is valid
+    $cacheValid = $false
+    if (Test-Path $cacheManifest) {
+        try {
+            $manifest = Get-Content $cacheManifest -Raw | ConvertFrom-Json
+            if ($manifest.hash -eq $currentHashStr -and (Test-Path $Script:StdlibObjDir)) {
+                $objFiles = @(Get-ChildItem -Path $Script:StdlibObjDir -Filter "*.o" -File -ErrorAction SilentlyContinue)
+                if ($objFiles.Count -gt 0) {
+                    $cacheValid = $true
+                }
+            }
+        } catch { }
     }
     
-    # Pre-compile stdlib cpp files to object files for faster linking
-    # Exclude 'compiler' subdirectory as it has compilation issues and tests don't need it
-    $includeDir = Join-Path $RootDir "bootstrap\src\include"
-    $builtinsDir = Join-Path $RootDir "src\main\cpp"
-    $stdlibCppFiles = @(Get-ChildItem -Path $Script:StdlibDir -Filter "*.cpp" -File | Select-Object -ExpandProperty FullName)
-    
-    $Script:StdlibObjDir = Join-Path $TempDir "stdlib_obj"
-    New-Item -ItemType Directory -Path $Script:StdlibObjDir -Force | Out-Null
-    
-    # Compile each cpp to .o in parallel
-    $stdlibCppFiles | ForEach-Object -ThrottleLimit ([Environment]::ProcessorCount) -Parallel {
-        $cppFile = $_
-        $objFile = Join-Path $using:Script:StdlibObjDir ([IO.Path]::GetFileNameWithoutExtension($cppFile) + ".o")
-        $null = & clang++ -std=c++17 -c -I $using:includeDir -I $using:builtinsDir -I $using:Script:StdlibDir $cppFile -o $objFile 2>&1
+    if ($cacheValid) {
+        $Script:StdlibObjFiles = @(Get-ChildItem -Path $Script:StdlibObjDir -Filter "*.o" -File | Select-Object -ExpandProperty FullName)
+        Write-ColorOutput "Using cached stdlib ($($Script:StdlibObjFiles.Count) object files)" $ColorGray
+    } else {
+        Write-ColorOutput "Compiling stdlib (cache miss)..." $ColorGray
+        
+        # Clean and recreate cache directories
+        if (Test-Path $Script:StdlibCacheDir) { Remove-Item $Script:StdlibCacheDir -Recurse -Force }
+        New-Item -ItemType Directory -Path $Script:StdlibDir -Force | Out-Null
+        New-Item -ItemType Directory -Path $Script:StdlibObjDir -Force | Out-Null
+        
+        # Compile stdlib (all .tuff files in source set, no specific sources)
+        $stdlibOutput = & $CompilerPath --source-sets "$tuffSourceSet,$cppSourceSet" --target "cpp" --output-dir $Script:StdlibDir 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-ColorOutput "[ERROR] Failed to compile stdlib: $stdlibOutput" $ColorRed
+            exit 1
+        }
+        
+        # Pre-compile stdlib cpp files to object files for faster linking
+        $includeDir = Join-Path $RootDir "bootstrap\src\include"
+        $builtinsDir = Join-Path $RootDir "src\main\cpp"
+        $stdlibCppFiles = @(Get-ChildItem -Path $Script:StdlibDir -Filter "*.cpp" -File | Select-Object -ExpandProperty FullName)
+        
+        # Compile each cpp to .o in parallel
+        $stdlibCppFiles | ForEach-Object -ThrottleLimit ([Environment]::ProcessorCount) -Parallel {
+            $cppFile = $_
+            $objFile = Join-Path $using:Script:StdlibObjDir ([IO.Path]::GetFileNameWithoutExtension($cppFile) + ".o")
+            $null = & clang++ -std=c++17 -c -I $using:includeDir -I $using:builtinsDir -I $using:Script:StdlibDir $cppFile -o $objFile 2>&1
+        }
+        
+        # Save cache manifest
+        @{ hash = $currentHashStr; timestamp = (Get-Date).ToString("o") } | ConvertTo-Json | Set-Content $cacheManifest
+        
+        $Script:StdlibObjFiles = @(Get-ChildItem -Path $Script:StdlibObjDir -Filter "*.o" -File | Select-Object -ExpandProperty FullName)
+        Write-ColorOutput "Stdlib compiled ($($Script:StdlibObjFiles.Count) object files, cached for next run)" $ColorGray
     }
     
-    $Script:StdlibObjFiles = @(Get-ChildItem -Path $Script:StdlibObjDir -Filter "*.o" -File | Select-Object -ExpandProperty FullName)
-    Write-ColorOutput "Stdlib compiled to $($Script:StdlibDir) ($($Script:StdlibObjFiles.Count) object files)" $ColorGray
+    # Use temp directory only for test-specific outputs
+    if (Test-Path $TempDir) { Remove-Item $TempDir -Recurse -Force }
+    New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
 }
 
 function Get-TuffTests([string]$InputPath = "", [string]$FeatureFilter = "") {

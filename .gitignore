@@ -41,6 +41,9 @@ test_gen*/
 test_repro.tuff
 src/test/tuff/_temp/
 
+# Stdlib cache
+.tuff_cache/
+
 # Node modules (if any)
 node_modules/
 package-lock.json
