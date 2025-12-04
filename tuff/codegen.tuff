@@ -1,0 +1,303 @@
+// Tuff Code Generator - Phase 6 of self-hosting compiler port
+// Generates C code from typed and borrowed-checked AST
+
+// Import stdlib
+fn vec_new() -> i32 { return 0; }
+fn vec_push(v: i32, val: i32) -> void { return; }
+fn vec_len(v: i32) -> i32 { return 0; }
+
+// String building utilities
+fn string_new() -> i32 { return 0; }
+fn string_concat(s1: i32, s2: i32) -> i32 { return 0; }
+fn string_from_literal(lit: i32) -> i32 { return 0; }
+
+// ============================================================================
+// CODE GENERATOR STATE
+// ============================================================================
+
+type CodeGen = i32;
+type CCodeBuffer = i32;
+
+fn codegen_new() -> CodeGen {
+    // Create new code generator
+    // Initialize output buffer
+    return 0;
+}
+
+fn codegen_get_output(gen: CodeGen) -> CCodeBuffer {
+    // Get generated C code as string
+    return 0;
+}
+
+// ============================================================================
+// OUTPUT GENERATION
+// ============================================================================
+
+fn emit(gen: CodeGen, code: i32) -> void {
+    // Append code to output buffer
+    return;
+}
+
+fn emit_line(gen: CodeGen, code: i32) -> void {
+    // Emit code line with newline
+    return;
+}
+
+fn emit_indent(gen: CodeGen, depth: i32) -> void {
+    // Emit indentation (spaces)
+    let i = 0;
+    while i < depth {
+        // TODO: emit "  " (2 spaces)
+        i = i + 1;
+    }
+    return;
+}
+
+// ============================================================================
+// TYPE TO C MAPPING
+// ============================================================================
+
+fn type_to_c_name(ty: i32) -> i32 {
+    // Convert Tuff type to C type name
+    // 1 (i32) -> "int"
+    // 2 (bool) -> "int"  
+    // 3 (void) -> "void"
+    // 4 (string) -> "char*"
+    // TODO: references, generics, custom types
+    
+    if ty == 1 { return 0; }  // TODO: return "int"
+    if ty == 2 { return 0; }  // TODO: return "int"
+    if ty == 3 { return 0; }  // TODO: return "void"
+    if ty == 4 { return 0; }  // TODO: return "char*"
+    
+    return 0;  // TODO: "void" for unknown
+}
+
+// ============================================================================
+// EXPRESSION CODE GENERATION
+// ============================================================================
+
+fn generate_expr(gen: CodeGen, expr: i32, indent: i32) -> void {
+    // Generate C code for expression
+    // Match on expression kind and recursively generate subexpressions
+    
+    // TODO: Match on expr kind
+    // - Literal: emit literal value
+    // - Variable: emit variable name
+    // - BinaryOp: emit left op right
+    // - UnaryOp: emit op operand
+    // - FunctionCall: emit function(args)
+    // - FieldAccess: emit obj.field
+    // - Index: emit arr[idx]
+    // - Reference: emit &expr
+    // - Dereference: emit *expr
+    
+    return;
+}
+
+fn generate_binary_op(gen: CodeGen, op: i32, left: i32, right: i32) -> void {
+    // Generate C code for binary operation
+    // emit(gen, "(")
+    // generate_expr(gen, left, indent)
+    // emit(gen, " OP ")  where OP is C operator name
+    // generate_expr(gen, right, indent)
+    // emit(gen, ")")
+    
+    return;
+}
+
+fn generate_function_call(gen: CodeGen, func_name: i32, args: i32) -> void {
+    // Generate function call
+    // emit(gen, func_name)
+    // emit(gen, "(")
+    // For each arg: generate_expr(gen, arg, indent), emit(gen, ", ")
+    // emit(gen, ")")
+    
+    return;
+}
+
+// ============================================================================
+// STATEMENT CODE GENERATION
+// ============================================================================
+
+fn generate_stmt(gen: CodeGen, stmt: i32, indent: i32) -> void {
+    // Generate C code for statement
+    // Match on statement kind
+    
+    // TODO: Match on stmt kind
+    // - Let: emit C variable declaration
+    // - Assign: emit assignment
+    // - Expression: emit expression;
+    // - If: emit if (cond) { ... } else { ... }
+    // - Match: emit switch or if-else chain
+    // - Loop: emit while(true) { ... }
+    // - Return: emit return value;
+    
+    return;
+}
+
+fn generate_let_stmt(gen: CodeGen, var_name: i32, var_type: i32, init_expr: i32, indent: i32) -> void {
+    // Generate let binding as C variable declaration
+    // emit_indent(gen, indent)
+    // emit(gen, type_to_c_name(var_type))
+    // emit(gen, " ")
+    // emit(gen, var_name)
+    // if init_expr:
+    //   emit(gen, " = ")
+    //   generate_expr(gen, init_expr, indent)
+    // emit(gen, ";")
+    // emit_line(gen, "")
+    
+    return;
+}
+
+fn generate_if_stmt(gen: CodeGen, cond: i32, then_block: i32, else_block: i32, indent: i32) -> void {
+    // Generate if statement
+    // emit_indent(gen, indent)
+    // emit(gen, "if (")
+    // generate_expr(gen, cond, indent)
+    // emit_line(gen, ") {")
+    // generate_block(gen, then_block, indent + 1)
+    // if else_block:
+    //   emit_indent(gen, indent)
+    //   emit_line(gen, "} else {")
+    //   generate_block(gen, else_block, indent + 1)
+    // emit_indent(gen, indent)
+    // emit_line(gen, "}")
+    
+    return;
+}
+
+fn generate_return_stmt(gen: CodeGen, expr: i32, indent: i32) -> void {
+    // Generate return statement
+    // emit_indent(gen, indent)
+    // emit(gen, "return")
+    // if expr:
+    //   emit(gen, " ")
+    //   generate_expr(gen, expr, indent)
+    // emit_line(gen, ";")
+    
+    return;
+}
+
+// ============================================================================
+// BLOCK AND FUNCTION CODE GENERATION
+// ============================================================================
+
+fn generate_block(gen: CodeGen, block: i32, indent: i32) -> void {
+    // Generate block of statements
+    // For each statement in block:
+    //   generate_stmt(gen, stmt, indent)
+    
+    return;
+}
+
+fn generate_function(gen: CodeGen, func: i32, indent: i32) -> void {
+    // Generate function definition
+    // emit_indent(gen, indent)
+    // emit(gen, return_type_to_c(func))
+    // emit(gen, " ")
+    // emit(gen, func_name(func))
+    // emit(gen, "(")
+    // For each param: emit param_type, emit " ", emit param_name, emit ", "
+    // emit_line(gen, ") {")
+    // generate_block(gen, func_body(func), indent + 1)
+    // emit_indent(gen, indent)
+    // emit_line(gen, "}")
+    // emit_line(gen, "")
+    
+    return;
+}
+
+fn generate_type_def(gen: CodeGen, typedef: i32) -> void {
+    // Generate type definition (struct or union)
+    // For discriminated unions: emit struct { int tag; union { ... } data; }
+    // For regular structs: emit struct { fields... }
+    
+    return;
+}
+
+fn generate_extern_decl(gen: CodeGen, extern_decl: i32) -> void {
+    // Generate extern C declaration
+    // emit(gen, "extern ")
+    // emit(gen, c_signature(extern_decl))
+    // emit_line(gen, ";")
+    
+    return;
+}
+
+// ============================================================================
+// PROGRAM GENERATION
+// ============================================================================
+
+fn generate_program(gen: CodeGen, program: i32) -> void {
+    // Generate complete C program
+    
+    // Emit C includes
+    emit_line(gen, 0);  // TODO: "#include <stdio.h>"
+    emit_line(gen, 0);  // TODO: "#include <stdlib.h>"
+    emit_line(gen, 0);  // TODO: "#include <string.h>"
+    emit_line(gen, 0);
+    
+    // Emit forward declarations for types
+    // TODO: iterate through type definitions
+    
+    // Emit extern declarations
+    // TODO: iterate through extern blocks
+    
+    // Emit type definitions
+    // TODO: iterate through type definitions
+    
+    // Emit function definitions
+    // TODO: iterate through function definitions
+    // For each function: generate_function(gen, func, 0)
+    
+    return;
+}
+
+// ============================================================================
+// SPECIAL HANDLING
+// ============================================================================
+
+fn generate_discriminated_union(gen: CodeGen, typedef: i32) -> void {
+    // Generate C struct for discriminated union (tagged union)
+    // Tuff type definitions become C structs like:
+    // struct TypeName {
+    //   int tag;
+    //   union {
+    //     VariantType1 variant1;
+    //     VariantType2 variant2;
+    //   } data;
+    // }
+    
+    return;
+}
+
+fn generate_constructor_call(gen: CodeGen, type_name: i32, variant: i32, args: i32) -> void {
+    // Generate constructor instantiation
+    // Becomes: { .tag = VARIANT_ID, .data = { .variant_name = { args } } }
+    
+    return;
+}
+
+fn generate_match_stmt(gen: CodeGen, expr: i32, arms: i32, indent: i32) -> void {
+    // Generate match statement
+    // For discriminated unions: emit switch(expr.tag) { case VARIANT: ... }
+    // For simple values: emit if-else chain
+    
+    return;
+}
+
+// ============================================================================
+// ERROR HANDLING IN CODEGEN
+// ============================================================================
+
+fn codegen_error(location: i32, message: i32) -> void {
+    // Report code generation error
+    return;
+}
+
+// Main entry point
+fn main() -> void {
+    return;
+}

@@ -1,0 +1,290 @@
+// Tuff Borrow Checker - Phase 5 of self-hosting compiler port
+// Validates ownership rules, move semantics, borrow validity
+
+// Import stdlib
+fn vec_new() -> i32 { return 0; }
+fn vec_push(v: i32, val: i32) -> void { return; }
+
+fn hashmap_new() -> i32 { return 0; }
+fn hashmap_insert(m: i32, k: i32, v: i32) -> void { return; }
+fn hashmap_get(m: i32, k: i32) -> i32 { return 0; }
+
+// Ownership state constants
+fn state_available() -> i32 { return 1; }
+fn state_immutably_borrowed() -> i32 { return 2; }
+fn state_mutably_borrowed() -> i32 { return 3; }
+fn state_moved() -> i32 { return 4; }
+
+// Borrow type constants
+fn borrow_immutable() -> i32 { return 1; }
+fn borrow_mutable() -> i32 { return 2; }
+fn borrow_none() -> i32 { return 0; }
+
+// ============================================================================
+// OWNERSHIP TRACKING
+// ============================================================================
+
+type OwnershipMap = i32;
+type BorrowState = i32;
+
+fn ownership_map_new() -> OwnershipMap {
+    // Create map tracking ownership state of each variable
+    return hashmap_new();
+}
+
+fn ownership_map_add(map: OwnershipMap, var_name: i32, initial_state: i32) -> void {
+    // Add variable with initial state (Available)
+    hashmap_insert(map, var_name, initial_state);
+    return;
+}
+
+fn ownership_map_get_state(map: OwnershipMap, var_name: i32) -> i32 {
+    // Get current ownership state of variable
+    let state = hashmap_get(map, var_name);
+    return state;
+}
+
+fn ownership_map_set_state(map: OwnershipMap, var_name: i32, new_state: i32) -> void {
+    // Update ownership state
+    hashmap_insert(map, var_name, new_state);
+    return;
+}
+
+// ============================================================================
+// BORROW TRACKING
+// ============================================================================
+
+type BorrowTracker = i32;
+
+fn borrow_tracker_new() -> BorrowTracker {
+    // Create tracker for active borrows
+    return hashmap_new();
+}
+
+fn borrow_tracker_add_borrow(tracker: BorrowTracker, var_name: i32, borrow_type: i32, scope_depth: i32) -> void {
+    // Record borrow: variable, borrow type (immutable/mutable), scope depth
+    // Multiple immutable borrows allowed, but not with mutable borrows
+    return;
+}
+
+fn borrow_tracker_remove_borrow(tracker: BorrowTracker, var_name: i32) -> void {
+    // Remove borrow when going out of scope
+    return;
+}
+
+fn borrow_tracker_can_borrow(tracker: BorrowTracker, var_name: i32, borrow_type: i32) -> bool {
+    // Check if variable can be borrowed with given type
+    // - Can create new immutable borrow if no mutable borrows exist
+    // - Can create mutable borrow only if no other borrows exist
+    let current_borrows = borrow_tracker_get_borrows(tracker, var_name);
+    
+    // TODO: implement borrow compatibility logic
+    return true;
+}
+
+fn borrow_tracker_get_borrows(tracker: BorrowTracker, var_name: i32) -> i32 {
+    // Get list of active borrows for variable
+    let borrows = hashmap_get(tracker, var_name);
+    return borrows;
+}
+
+// ============================================================================
+// MOVE SEMANTICS
+// ============================================================================
+
+fn check_move(ownership: OwnershipMap, var_name: i32) -> bool {
+    // Check if variable can be moved
+    // Only Available variables can be moved
+    let state = ownership_map_get_state(ownership, var_name);
+    
+    if state == state_available() {
+        ownership_map_set_state(ownership, var_name, state_moved());
+        return true;
+    }
+    
+    // Can't move borrowed or already moved variable
+    return false;
+}
+
+fn check_use_after_move(ownership: OwnershipMap, var_name: i32) -> bool {
+    // Check if variable is being used after move
+    let state = ownership_map_get_state(ownership, var_name);
+    
+    if state == state_moved() {
+        // ERROR: use after move
+        return false;
+    }
+    
+    return true;
+}
+
+// ============================================================================
+// REFERENCE VALIDATION
+// ============================================================================
+
+fn check_immutable_borrow(ownership: OwnershipMap, borrows: BorrowTracker, var_name: i32) -> bool {
+    // Check if immutable borrow is allowed
+    let state = ownership_map_get_state(ownership, var_name);
+    
+    // Variable must be Available or already immutably borrowed
+    if state != state_available() && state != state_immutably_borrowed() {
+        return false;
+    }
+    
+    // Can create immutable borrow if no mutable borrows
+    if !borrow_tracker_can_borrow(borrows, var_name, borrow_immutable()) {
+        return false;
+    }
+    
+    // Record borrow and update state
+    borrow_tracker_add_borrow(borrows, var_name, borrow_immutable(), 0);  // TODO: pass scope depth
+    ownership_map_set_state(ownership, var_name, state_immutably_borrowed());
+    
+    return true;
+}
+
+fn check_mutable_borrow(ownership: OwnershipMap, borrows: BorrowTracker, var_name: i32) -> bool {
+    // Check if mutable borrow is allowed
+    let state = ownership_map_get_state(ownership, var_name);
+    
+    // Variable must be Available (no existing borrows)
+    if state != state_available() {
+        return false;
+    }
+    
+    // Can create mutable borrow only if no other borrows exist
+    if !borrow_tracker_can_borrow(borrows, var_name, borrow_mutable()) {
+        return false;
+    }
+    
+    // Record borrow and update state
+    borrow_tracker_add_borrow(borrows, var_name, borrow_mutable(), 0);  // TODO: pass scope depth
+    ownership_map_set_state(ownership, var_name, state_mutably_borrowed());
+    
+    return true;
+}
+
+fn check_reference_lifetime(var_name: i32, ref_scope: i32, var_scope: i32) -> bool {
+    // Check if reference outlives referenced value
+    // Reference must not outlive the variable
+    if ref_scope > var_scope {
+        // ERROR: reference outlives value
+        return false;
+    }
+    
+    return true;
+}
+
+// ============================================================================
+// BORROW CHECKER MAIN
+// ============================================================================
+
+fn check_program_borrows(program: i32) -> bool {
+    // Check entire program for borrow violations
+    let ownership = ownership_map_new();
+    let borrows = borrow_tracker_new();
+    
+    // Iterate through program items
+    let i = 0;
+    while i < 10 {  // TODO: iterate over program items
+        // Get item
+        let item = 0;  // TODO: get item from program
+        
+        // Check function definitions
+        // check_function_body(item, ownership, borrows)
+        
+        i = i + 1;
+    }
+    
+    return true;  // TODO: return false if violations found
+}
+
+fn check_function_body(func: i32, ownership: OwnershipMap, borrows: BorrowTracker) -> void {
+    // Check function body for borrow violations
+    // 1. Add parameters to ownership map (Available state)
+    // 2. Check each statement
+    // 3. Remove borrows going out of scope
+    
+    // Enter function scope
+    // TODO: enter_scope()
+    
+    // TODO: Add parameters
+    
+    // TODO: Check statements recursively
+    
+    // Exit function scope
+    // TODO: exit_scope()
+    
+    return;
+}
+
+fn check_let_statement(ownership: OwnershipMap, var_name: i32, init_expr: i32) -> void {
+    // Check let binding
+    // 1. Check init_expr for borrow violations
+    // 2. Add variable to ownership map
+    
+    // Check initialization expression
+    // TODO: check_expression(init_expr, ownership, borrows)
+    
+    // Add variable as Available
+    ownership_map_add(ownership, var_name, state_available());
+    
+    return;
+}
+
+fn check_assignment(ownership: OwnershipMap, target: i32, value_expr: i32) -> void {
+    // Check assignment for borrow violations
+    // 1. Check value expression
+    // 2. If target is moved, check it's Available
+    // 3. Update ownership state
+    
+    // TODO: check_expression(value_expr, ownership, borrows)
+    
+    // If assigning to variable, it moves (or rebinds)
+    // TODO: update target variable state
+    
+    return;
+}
+
+fn check_expression(expr: i32, ownership: OwnershipMap, borrows: BorrowTracker) -> bool {
+    // Check expression for borrow violations
+    // Recursively check subexpressions
+    
+    // TODO: Match on expression kind
+    // - Variable access: check not moved
+    // - Function call: check arguments
+    // - Field access: check base expression
+    // - Reference creation: check can borrow
+    // - Dereference: check not null
+    
+    return true;
+}
+
+// ============================================================================
+// ERROR REPORTING
+// ============================================================================
+
+fn borrow_error_use_after_move(location: i32, var_name: i32) -> void {
+    // Report use-after-move error
+    return;
+}
+
+fn borrow_error_multiple_mutable_borrows(location: i32, var_name: i32) -> void {
+    // Report multiple mutable borrows error
+    return;
+}
+
+fn borrow_error_mutable_and_immutable_borrows(location: i32, var_name: i32) -> void {
+    // Report mutable + immutable borrow conflict
+    return;
+}
+
+fn borrow_error_reference_outlives_value(location: i32, var_name: i32) -> void {
+    // Report reference lifetime error
+    return;
+}
+
+// Main entry point
+fn main() -> void {
+    return;
+}
