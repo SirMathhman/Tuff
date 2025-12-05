@@ -215,4 +215,10 @@ fn interpret_strips_type_like_suffix() {
         interpret("let mut x = 100; let y : *mut I32 = &x; *y"),
         Ok("100".to_string())
     );
+
+    // Write through a mutable pointer
+    assert_eq!(
+        interpret("let mut x = 0; let y : *mut I32 = &x; *y = 100; x"),
+        Ok("100".to_string())
+    );
 }

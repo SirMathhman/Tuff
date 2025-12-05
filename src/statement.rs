@@ -1,4 +1,3 @@
-use crate::brace_utils;
 use crate::control::{process_if_statement, process_while_statement, ControlContext};
 use crate::range_check::{check_signed_range, check_unsigned_range, SUFFIXES};
 use std::collections::HashMap;
@@ -19,70 +18,8 @@ pub struct StatementContext<'a> {
     pub eval_expr: ExprEvaluator<'a>,
     pub last_value: &'a mut Option<(String, Option<String>)>,
 }
-pub fn split_statements(seq: &str) -> Vec<&str> {
-    let mut stmts: Vec<&str> = Vec::new();
-    let mut start = 0usize;
-    let mut depth: i32 = 0;
-    for (i, ch) in seq.char_indices() {
-        match ch {
-            '{' => depth += 1,
-            '}' => depth = depth.saturating_sub(1),
-            ';' if depth == 0 => {
-                let stmt = seq[start..i].trim();
-                if !stmt.is_empty() {
-                    stmts.push(stmt);
-                }
-                start = i + 1;
-            }
-            _ => {}
-        }
-    }
-    let stmt = seq[start..].trim();
-    if !stmt.is_empty() {
-        stmts.push(stmt);
-    }
-    stmts
-}
-
-pub fn eval_block_expr(
-    block_text: &str,
-    env: &HashMap<String, Var>,
-    eval_expr_with_env: ExprEvaluator,
-) -> Result<(String, Option<String>), String> {
-    let mut local_env = env.clone();
-    let stmts = split_statements(block_text.trim());
-    let mut last_value: Option<(String, Option<String>)> = None;
-
-    for st in stmts {
-        let mut ctx = StatementContext {
-            env: &mut local_env,
-            eval_expr: eval_expr_with_env,
-            last_value: &mut last_value,
-        };
-        match run_block_stmt(st, &mut ctx) {
-            Ok(()) => {}
-            Err(e) if e.starts_with("__RETURN__:") => {
-                // Early return from function: extract the return value
-                let return_val = e.strip_prefix("__RETURN__:").unwrap_or("");
-                // Parse: "__RETURN__:value|suffix" or "__RETURN__:value"
-                if let Some(pipe_idx) = return_val.find('|') {
-                    let val = return_val[..pipe_idx].to_string();
-                    let suf = Some(return_val[pipe_idx + 1..].to_string());
-                    return Ok((val, suf));
-                } else {
-                    return Ok((return_val.to_string(), None));
-                }
-            }
-            Err(e) => return Err(e),
-        }
-    }
-
-    if let Some((v, suf)) = last_value {
-        Ok((v, suf))
-    } else {
-        Ok(("".to_string(), None))
-    }
-}
+mod block;
+pub use block::{eval_block_expr, split_statements};
 
 fn run_block_stmt(s: &str, ctx: &mut StatementContext) -> Result<(), String> {
     let s = s.trim();
@@ -307,6 +244,70 @@ fn process_assignment(s: &str, ctx: &mut StatementContext) -> Result<(), String>
         .ok_or_else(|| "invalid assignment".to_string())?
         .trim();
 
+    // Handle dereference assignment: "*ptr = rhs"
+    if let Some(stripped) = name.strip_prefix('*') {
+        let inner = stripped.trim();
+
+        if !ctx.env.contains_key(inner) {
+            return Err(format!("assignment-to-undeclared-variable: {}", inner));
+        }
+
+        // Evaluate the pointer expression to get the encoded pointer value
+        let (ptr_val, _ptr_suffix) = eval_rhs(inner, ctx.env, ctx.eval_expr)?;
+        if !ptr_val.starts_with("__PTR__:") {
+            return Err("assignment to non-pointer target".to_string());
+        }
+
+        // Ensure the pointer variable is declared as a mutable pointer (*mut)
+        if let Some(ptr_var) = ctx.env.get(inner) {
+            if let Some(ps) = &ptr_var.suffix {
+                if !ps.starts_with("*mut") {
+                    return Err("assignment through immutable pointer".to_string());
+                }
+            } else {
+                return Err("assignment through immutable pointer".to_string());
+            }
+        }
+
+        // ptr_val format: "__PTR__:<pointee_suffix>|<target_name>"
+        let rest = ptr_val
+            .strip_prefix("__PTR__:")
+            .ok_or_else(|| "invalid pointer encoding".to_string())?;
+        let pipe_idx = rest
+            .find('|')
+            .ok_or_else(|| "invalid pointer encoding".to_string())?;
+        let target = &rest[pipe_idx + 1..];
+
+        if !ctx.env.contains_key(target) {
+            return Err("dereference to invalid pointer".to_string());
+        }
+
+        // Evaluate RHS before taking mutable borrow on the target
+        let (value, expr_suffix) = eval_rhs(rhs, ctx.env, ctx.eval_expr)?;
+
+        // Now update the pointed-to variable (must be mutable)
+        let target_var = ctx
+            .env
+            .get_mut(target)
+            .ok_or_else(|| "dereference to invalid pointer".to_string())?;
+        if !target_var.mutable {
+            return Err("assignment to immutable variable".to_string());
+        }
+
+        if let Some(declared) = &target_var.suffix {
+            if let Some(sfx) = &expr_suffix {
+                if sfx != declared {
+                    return Err("type suffix mismatch on assignment".to_string());
+                }
+            }
+            validate_type(&value, declared)?;
+        }
+
+        target_var.value = value;
+        *ctx.last_value = None;
+        return Ok(());
+    }
+
     if !ctx.env.contains_key(name) {
         return Err(format!("assignment-to-undeclared-variable: {}", name));
     }
@@ -363,130 +364,6 @@ pub struct TopStmtContext<'a> {
     pub eval_expr: ExprEvaluator<'a>,
     pub last_value: &'a mut Option<String>,
 }
+pub use top::process_single_stmt;
 
-#[allow(clippy::too_many_arguments)]
-pub fn process_single_stmt(
-    stmt_text: &str,
-    env: &mut HashMap<String, Var>,
-    last_value: &mut Option<String>,
-    eval_expr_with_env: ExprEvaluator,
-) -> Result<(), String> {
-    let mut ctx = TopStmtContext {
-        env,
-        eval_expr: eval_expr_with_env,
-        last_value,
-    };
-    process_single_stmt_internal(stmt_text, &mut ctx)
-}
-
-fn process_single_stmt_internal(stmt_text: &str, ctx: &mut TopStmtContext) -> Result<(), String> {
-    let s = stmt_text.trim();
-
-    if s.starts_with('{') && s.ends_with('}') {
-        let inner = s[1..s.len() - 1].trim();
-        if inner.contains(';') {
-            for inner_stmt in split_statements(inner) {
-                process_single_stmt_internal(inner_stmt, ctx)?;
-            }
-            return Ok(());
-        } else {
-            let (value, _suffix) = (ctx.eval_expr)(inner, ctx.env)?;
-            *ctx.last_value = Some(value);
-            return Ok(());
-        }
-    }
-
-    if s.starts_with("if") {
-        let mut ctrl_ctx = ControlContext {
-            env: ctx.env,
-            eval_expr: ctx.eval_expr,
-            last_value: ctx.last_value,
-        };
-        process_if_statement(s, &mut ctrl_ctx)?;
-        return Ok(());
-    }
-
-    if s.starts_with("while") {
-        let mut ctrl_ctx = ControlContext {
-            env: ctx.env,
-            eval_expr: ctx.eval_expr,
-            last_value: ctx.last_value,
-        };
-        process_while_statement(s, &mut ctrl_ctx)?;
-        return Ok(());
-    }
-
-    if s.starts_with("fn ") {
-        // Parse and store function definition
-        // Format: fn name(param1: Type1, param2: Type2) : ReturnType => { body }
-        if let Some((arrow_pos, _open_brace, end_idx)) = brace_utils::find_fn_arrow_and_braces(s) {
-            // extract function name from "fn name(...)"
-            let sig_str = &s[3..arrow_pos].trim();
-            if let Some(paren_idx) = sig_str.find('(') {
-                let name = sig_str[..paren_idx].trim().to_string();
-
-                // extract params and return type
-                if let Some(close_paren_idx) = sig_str.find(')') {
-                    let params_str = sig_str[paren_idx + 1..close_paren_idx].to_string();
-                    let return_type = sig_str[close_paren_idx + 1..].trim();
-                    let return_type = return_type
-                        .strip_prefix(':')
-                        .unwrap_or(return_type)
-                        .trim()
-                        .to_string();
-
-                    // extract body
-                    let body = s[_open_brace + 1..end_idx].to_string();
-
-                    // store as __fn__<name> with format: "params|return_type|body"
-                    let fn_key = format!("__fn__{}", name);
-                    let fn_value = format!("{}|{}|{}", params_str, return_type, body);
-                    ctx.env.insert(
-                        fn_key,
-                        Var {
-                            mutable: false,
-                            value: fn_value,
-                            suffix: Some("FN".to_string()),
-                        },
-                    );
-                }
-            }
-        }
-        *ctx.last_value = None;
-        return Ok(());
-    }
-
-    // No special handling for `struct` inside blocks; top-level handler in lib.rs
-
-    if s.starts_with("let ") {
-        let mut block_last: Option<(String, Option<String>)> = None;
-        let is_decl = true; // marker
-        let mut stmt_ctx = StatementContext {
-            env: ctx.env,
-            eval_expr: ctx.eval_expr,
-            last_value: &mut block_last,
-        };
-        let _ = is_decl;
-        process_declaration(s, &mut stmt_ctx)?;
-        *ctx.last_value = None;
-        return Ok(());
-    }
-
-    if s.contains('=') && !s.starts_with("let ") {
-        let mut block_last: Option<(String, Option<String>)> = None;
-        let is_assign = true; // marker
-        let mut stmt_ctx = StatementContext {
-            env: ctx.env,
-            eval_expr: ctx.eval_expr,
-            last_value: &mut block_last,
-        };
-        let _ = is_assign;
-        process_assignment(s, &mut stmt_ctx)?;
-        *ctx.last_value = None;
-        return Ok(());
-    }
-
-    let (value, _suffix) = (ctx.eval_expr)(s, ctx.env)?;
-    *ctx.last_value = Some(value);
-    Ok(())
-}
+mod top;
