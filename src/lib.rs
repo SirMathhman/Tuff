@@ -194,7 +194,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
 
                     // RHS may itself be a block expression
                     let (value, expr_suffix) = if rhs.starts_with('{') && rhs.ends_with('}') {
-                        eval_block_expr(&rhs[1..rhs.len() - 1].trim(), local_env, eval_expr_with_env)?
+                        eval_block_expr(rhs[1..rhs.len() - 1].trim(), local_env, eval_expr_with_env)?
                     } else {
                         eval_expr_with_env(rhs, local_env)?
                     };
@@ -243,7 +243,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
                     }
 
                     let (value, expr_suffix) = if rhs.starts_with('{') && rhs.ends_with('}') {
-                        eval_block_expr(&rhs[1..rhs.len() - 1].trim(), local_env, eval_expr_with_env)?
+                        eval_block_expr(rhs[1..rhs.len() - 1].trim(), local_env, eval_expr_with_env)?
                     } else {
                         eval_expr_with_env(rhs, local_env)?
                     };
@@ -367,7 +367,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
                 // Evaluate RHS using current env. If RHS is a braced block, evaluate it
                 // in a local cloned environment and take its result as the RHS value.
                 let (value, expr_suffix) = if rhs.starts_with('{') && rhs.ends_with('}') {
-                    eval_block_expr(&rhs[1..rhs.len() - 1].trim(), env, eval_expr_with_env)?
+                    eval_block_expr(rhs[1..rhs.len() - 1].trim(), env, eval_expr_with_env)?
                 } else {
                     eval_expr_with_env(rhs, env)?
                 };
@@ -419,7 +419,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
                 }
 
                 let (value, expr_suffix) = if rhs.starts_with('{') && rhs.ends_with('}') {
-                    eval_block_expr(&rhs[1..rhs.len() - 1].trim(), env, eval_expr_with_env)?
+                    eval_block_expr(rhs[1..rhs.len() - 1].trim(), env, eval_expr_with_env)?
                 } else {
                     eval_expr_with_env(rhs, env)?
                 };
