@@ -180,6 +180,19 @@ fn test_option_string_type_parsing() {
     assert!(result.is_ok());
 }
 
+#[test]
+fn test_function_type_assignment() {
+    // Test that functions can be assigned to variables (typed function assignments prepared)
+    let mut evaluator = Evaluator::new();
+    let mut parser = Parser::new("fn add(a : i32, b : i32) : i32 { a + b; } let f = add; f(5, 3);");
+    let program = parser.parse().unwrap();
+    let result = evaluator.eval_program(&program).unwrap();
+    // Functions can now be assigned and called (function pointer foundation)
+    assert_eq!(result.to_string(), "8");
+}
+
+
+
 
 
 

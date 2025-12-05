@@ -154,6 +154,24 @@ fn type_compatibility(actual: &Type, expected: &Type) -> bool {
 
     // Reference/Pointer types: check inner type compatibility
     match (actual, expected) {
+        // Function pointer types: check parameter and return type compatibility
+        (
+            Type::FunctionPointer(actual_params, actual_return),
+            Type::FunctionPointer(expected_params, expected_return),
+        ) => {
+            // Function signatures must match: same arity and compatible types
+            if actual_params.len() != expected_params.len() {
+                return false;
+            }
+            // Parameters must be compatible (contravariant: expected params can be less specific)
+            for (actual_p, expected_p) in actual_params.iter().zip(expected_params.iter()) {
+                if !type_compatibility(actual_p, expected_p) {
+                    return false;
+                }
+            }
+            // Return types must be compatible (covariant: actual can be more specific)
+            return type_compatibility(actual_return, expected_return);
+        }
         // Reference type: &T
         (Type::Reference(actual_inner), Type::Reference(expected_inner)) => {
             return type_compatibility(actual_inner, expected_inner);
