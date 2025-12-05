@@ -318,6 +318,10 @@ mod tests {
             interpret("let x : I32 = 300; if (true) x = 200; x"),
             Ok("200".to_string())
         );
+
+        // Compound assignment should work for mutable variables
+        assert_eq!(interpret("let mut x = 0; x += 1; x"), Ok("1".to_string()));
+        assert_eq!(interpret("let mut y = 10; y += 5; y"), Ok("15".to_string()));
         // Assignment to immutable variable should error with a clear message
         assert_eq!(
             interpret("let x = 100; x = 200; x"),

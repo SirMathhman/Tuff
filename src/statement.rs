@@ -331,6 +331,60 @@ fn process_assignment(
     last_value: &mut Option<(String, Option<String>)>,
     eval_expr_with_env: ExprEvaluator,
 ) -> Result<(), String> {
+    // Support compound assignment operators like +=, -=, *=, /=
+    let mut handled = false;
+    for &(op, sym) in [("+=", "+"), ("-=", "-"), ("*=", "*"), ("/=", "/")].iter() {
+        if let Some(pos) = s.find(op) {
+            let name = s[..pos].trim();
+            let rhs = s[pos + op.len()..].trim();
+
+            if !env.contains_key(name) {
+                return Err("assignment to undeclared variable".to_string());
+            }
+
+            // Use an immutable borrow first to capture current value and suffix,
+            // then evaluate the expression using those literals so we don't keep
+            // the mutable borrow across evaluation.
+            let current = env
+                .get(name)
+                .ok_or_else(|| "assignment to undeclared variable".to_string())?;
+            if !current.mutable {
+                return Err("assignment to immutable variable".to_string());
+            }
+
+            let left_literal = if let Some(sfx) = &current.suffix {
+                format!("{}{}", current.value, sfx)
+            } else {
+                current.value.clone()
+            };
+
+            let expr = format!("{} {} {}", left_literal, sym, rhs);
+            let (value, expr_suffix) = eval_expr_with_env(expr.as_str(), env)?;
+
+            // Validate against declared suffix if present, then store the result
+            if let Some(declared) = &current.suffix {
+                if let Some(sfx) = &expr_suffix {
+                    if sfx != declared {
+                        return Err("type suffix mismatch on assignment".to_string());
+                    }
+                }
+                validate_type(&value, declared)?;
+            }
+
+            let var = env
+                .get_mut(name)
+                .ok_or_else(|| "assignment to undeclared variable".to_string())?;
+            var.value = value;
+            *last_value = None;
+            handled = true;
+            break;
+        }
+    }
+
+    if handled {
+        return Ok(());
+    }
+
     let mut parts = s.splitn(2, '=');
     let name = parts
         .next()
