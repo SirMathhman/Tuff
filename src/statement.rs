@@ -77,6 +77,19 @@ fn run_block_stmt(
         return Ok(());
     }
 
+    // If statement
+    if s.starts_with("if") {
+        // For block-local execution, run chosen branch against local_env which should modify outer env only when intended
+        // but here block expressions inside run_block_stmt use local_env, so we evaluate branches into local_env.
+        // Convert local_env into a temporary env and execute
+        // We can reuse process_if_statement by cloning env into a temp and mapping results back, but for simplicity
+        // evaluate chosen branch using local_env so changes remain local to the block expression evaluation.
+        // Implement a wrapper that runs process_if_statement on local_env
+        let mut tmp_last: Option<String> = None;
+        process_if_statement(s, local_env, &mut tmp_last, eval_expr_with_env)?;
+        return Ok(());
+    }
+
     // Declaration
     if s.starts_with("let ") {
         process_declaration(s, local_env, last_value, eval_expr_with_env)?;
@@ -92,6 +105,163 @@ fn run_block_stmt(
     // Expression
     let (value, suf) = eval_expr_with_env(s, local_env)?;
     *last_value = Some((value, suf));
+    Ok(())
+}
+
+/// Process an if/else statement that appears at block or top-level.
+fn process_if_statement(
+    s: &str,
+    env: &mut HashMap<String, Var>,
+    last_value: &mut Option<String>,
+    eval_expr_with_env: ExprEvaluator,
+) -> Result<(), String> {
+    // Expect syntax: if (<cond>) <then_block> [else <else_block>]
+    let s = s.trim();
+    if !s.starts_with("if") {
+        return Err("invalid if statement".to_string());
+    }
+
+    // Find '(' and matching ')'
+    let open_paren = s.find('(').ok_or_else(|| "invalid if syntax".to_string())?;
+    let mut depth = 0i32;
+    let mut close_paren = None;
+    for (i, ch) in s[open_paren..].char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    close_paren = Some(open_paren + i);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let close_paren = close_paren.ok_or_else(|| "invalid if syntax".to_string())?;
+    let cond = s[open_paren + 1..close_paren].trim();
+
+    // Evaluate condition (we accept boolean literals or boolean-returning expressions)
+    let (cond_val, _cond_suf) = eval_expr_with_env(cond, env)?;
+    let cond_true = cond_val.trim() == "true";
+
+    // After the condition, find the then-block (must be a braced block)
+    let mut idx = close_paren + 1;
+    fn skip_ws(s: &str, mut i: usize) -> usize {
+        while i < s.len()
+            && s.as_bytes()
+                .get(i)
+                .map(|b| b.is_ascii_whitespace())
+                .unwrap_or(false)
+        {
+            i += 1;
+        }
+        i
+    }
+    idx = skip_ws(s, idx);
+    if idx >= s.len() || &s[idx..idx + 1] != "{" {
+        return Err("if statement must have a braced then-block".to_string());
+    }
+
+    // Find matching brace for then-block
+    depth = 0;
+    let mut then_end = None;
+    for (off, ch) in s[idx..].char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    then_end = Some(idx + off);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let then_end = then_end.ok_or_else(|| "invalid then block".to_string())?;
+    let then_block = &s[idx + 1..then_end].trim();
+
+    // Check for optional else
+    let mut else_block: Option<&str> = None;
+    let mut else_end_idx: Option<usize> = None;
+    let mut rest_idx = skip_ws(s, then_end + 1);
+    if rest_idx < s.len() && s[rest_idx..].starts_with("else") {
+        rest_idx += 4;
+        rest_idx = skip_ws(s, rest_idx);
+        if rest_idx >= s.len() || &s[rest_idx..rest_idx + 1] != "{" {
+            return Err("else must have a braced block".to_string());
+        }
+        // find matching brace
+        depth = 0;
+        let mut else_end = None;
+        for (off, ch) in s[rest_idx..].char_indices() {
+            match ch {
+                '{' => depth += 1,
+                '}' => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        else_end = Some(rest_idx + off);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let else_end = else_end.ok_or_else(|| "invalid else block".to_string())?;
+        else_end_idx = Some(else_end);
+        else_block = Some(s[rest_idx + 1..else_end].trim());
+    }
+
+    // Execute appropriate branch in the provided env
+    let chosen = if cond_true {
+        then_block
+    } else {
+        else_block.unwrap_or("")
+    };
+    if !chosen.is_empty() {
+        for st in split_statements(chosen) {
+            process_single_stmt(st, env, last_value, eval_expr_with_env)?;
+        }
+    }
+
+    // If there is remaining text after the if/else, treat it as subsequent statements
+    // (e.g. "if (...) { ... } else { ... } x")
+    let mut tail_idx = then_end + 1;
+    tail_idx = skip_ws(s, tail_idx);
+    // If an else block was present, move the tail index past it
+    if let Some(eidx) = else_end_idx {
+        // find start of else block
+        let mut rest_idx = then_end + 1;
+        while rest_idx < s.len()
+            && s.as_bytes()
+                .get(rest_idx)
+                .map(|b| b.is_ascii_whitespace())
+                .unwrap_or(false)
+        {
+            rest_idx += 1;
+        }
+        if rest_idx < s.len() && s[rest_idx..].starts_with("else") {
+            tail_idx = eidx + 1;
+        }
+    }
+
+    while tail_idx < s.len()
+        && s.as_bytes()
+            .get(tail_idx)
+            .map(|b| b.is_ascii_whitespace())
+            .unwrap_or(false)
+    {
+        tail_idx += 1;
+    }
+    if tail_idx < s.len() {
+        let tail = s[tail_idx..].trim();
+        if !tail.is_empty() {
+            for st in split_statements(tail) {
+                process_single_stmt(st, env, last_value, eval_expr_with_env)?;
+            }
+        }
+    }
     Ok(())
 }
 
@@ -264,6 +434,12 @@ pub fn process_single_stmt(
             *last_value = Some(value);
             return Ok(());
         }
+    }
+
+    // If statement
+    if s.starts_with("if") {
+        process_if_statement(s, env, last_value, eval_expr_with_env)?;
+        return Ok(());
     }
 
     // Declaration

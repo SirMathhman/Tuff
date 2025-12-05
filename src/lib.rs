@@ -15,6 +15,13 @@ pub fn interpret(input: &str) -> Result<String, String> {
         expr: &str,
         env: &HashMap<String, Var>,
     ) -> Result<(String, Option<String>), String> {
+        let trimmed = expr.trim();
+
+        // Fast-path: boolean literals allowed inside expressions for control flow
+        if trimmed == "true" || trimmed == "false" {
+            return Ok((trimmed.to_string(), None));
+        }
+
         let tokens = tokenize_expr(expr)?;
 
         // Prepare tokens for suffix detection by substituting variable values.
@@ -272,6 +279,16 @@ mod tests {
         assert_eq!(
             interpret("{let x : I32; x = 200; x}"),
             Ok("200".to_string())
+        );
+
+        // Conditional execution should choose the correct branch and allow assignment
+        assert_eq!(
+            interpret("let x : I32; if (true) { x = 200; } else { x = 300; } x"),
+            Ok("200".to_string())
+        );
+        assert_eq!(
+            interpret("let x : I32; if (false) { x = 200; } else { x = 300; } x"),
+            Ok("300".to_string())
         );
         // Assignment to immutable variable should error with a clear message
         assert_eq!(
