@@ -54,3 +54,12 @@ fn test_arrays() {
     let result = evaluator.eval_program(&program).unwrap();
     assert_eq!(result.to_string(), "2");
 }
+
+#[test]
+fn test_typed_let_statement() {
+    let mut evaluator = Evaluator::new();
+    let mut parser = Parser::new("let x : i32 = 42; x;");
+    let program = parser.parse().unwrap();
+    let result = evaluator.eval_program(&program).unwrap();
+    assert_eq!(result.to_string(), "42");
+}

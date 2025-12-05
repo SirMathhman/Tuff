@@ -1,5 +1,12 @@
 use std::collections::HashMap;
 use std::fmt;
+use crate::ast::Type;
+
+#[derive(Debug, Clone)]
+pub struct FunctionSignature {
+    pub params: Vec<Type>,
+    pub return_type: Type,
+}
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -66,27 +73,83 @@ impl Value {
             _ => self.to_string(),
         }
     }
+
+    /// Infer the Type of a Value
+    pub fn infer_type(&self) -> Type {
+        match self {
+            Value::Number(n) => {
+                // If it's a whole number, infer I32; otherwise F64
+                if n.fract() == 0.0 && *n >= i32::MIN as f64 && *n <= i32::MAX as f64 {
+                    Type::I32
+                } else {
+                    Type::F64
+                }
+            }
+            Value::String(_) => Type::String,
+            Value::Boolean(_) => Type::Bool,
+            Value::Null => Type::Void,
+            Value::Array(_) => Type::Generic("Array".to_string(), vec![Type::Void]),
+            Value::Function { .. } => Type::Void, // Functions have explicit types
+        }
+    }
+
+    /// Check if this value's type is compatible with the expected type
+    pub fn is_compatible_with(&self, expected: &Type) -> bool {
+        let actual = self.infer_type();
+        type_compatibility(&actual, expected)
+    }
+}
+
+/// Check if an actual type is compatible with (can be used as) an expected type
+fn type_compatibility(actual: &Type, expected: &Type) -> bool {
+    // Same types are compatible
+    if actual == expected {
+        return true;
+    }
+
+    // Allow numeric coercion: smaller ints can be used as larger ints, etc.
+    match (actual, expected) {
+        // Int to Int coercion (allow "promotion" to larger types)
+        (Type::I8, Type::I16 | Type::I32 | Type::I64) => true,
+        (Type::I16, Type::I32 | Type::I64) => true,
+        (Type::I32, Type::I64) => true,
+        (Type::U8, Type::U16 | Type::U32 | Type::U64) => true,
+        (Type::U16, Type::U32 | Type::U64) => true,
+        (Type::U32, Type::U64) => true,
+        // Float compatibility
+        (Type::F32, Type::F64) => true,
+        // Int to Float
+        (Type::I32 | Type::I64 | Type::F32, Type::F64) => true,
+        // All else is incompatible
+        _ => false,
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Environment {
     scopes: Vec<HashMap<String, Value>>,
+    type_scopes: Vec<HashMap<String, Type>>, // Track declared types
+    function_sigs: HashMap<String, FunctionSignature>, // Track function signatures
 }
 
 impl Environment {
     pub fn new() -> Self {
         Environment {
             scopes: vec![HashMap::new()],
+            type_scopes: vec![HashMap::new()],
+            function_sigs: HashMap::new(),
         }
     }
 
     pub fn push_scope(&mut self) {
         self.scopes.push(HashMap::new());
+        self.type_scopes.push(HashMap::new());
     }
 
     pub fn pop_scope(&mut self) {
         if self.scopes.len() > 1 {
             self.scopes.pop();
+            self.type_scopes.pop();
         }
     }
 
@@ -96,10 +159,56 @@ impl Environment {
         }
     }
 
+    /// Define a function with its signature
+    pub fn define_function(
+        &mut self,
+        name: String,
+        value: Value,
+        sig: FunctionSignature,
+    ) {
+        self.define(name.clone(), value);
+        self.function_sigs.insert(name, sig);
+    }
+
+    /// Get function signature if it exists
+    pub fn get_function_sig(&self, name: &str) -> Option<FunctionSignature> {
+        self.function_sigs.get(name).cloned()
+    }
+
+    /// Define a variable with an explicit type
+    pub fn define_typed(&mut self, name: String, value: Value, ty: Type) -> Result<(), String> {
+        // Check type compatibility
+        if !value.is_compatible_with(&ty) {
+            return Err(format!(
+                "Type mismatch: expected {:?}, got {:?}",
+                ty,
+                value.infer_type()
+            ));
+        }
+
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.insert(name.clone(), value);
+        }
+        if let Some(type_scope) = self.type_scopes.last_mut() {
+            type_scope.insert(name, ty);
+        }
+        Ok(())
+    }
+
     pub fn get(&self, name: &str) -> Option<Value> {
         for scope in self.scopes.iter().rev() {
             if let Some(value) = scope.get(name) {
                 return Some(value.clone());
+            }
+        }
+        None
+    }
+
+    /// Get the declared type of a variable (if explicitly typed)
+    pub fn get_type(&self, name: &str) -> Option<Type> {
+        for type_scope in self.type_scopes.iter().rev() {
+            if let Some(ty) = type_scope.get(name) {
+                return Some(ty.clone());
             }
         }
         None
@@ -115,6 +224,22 @@ impl Environment {
         // If not found, define in current scope
         self.define(name.to_string(), value);
         Ok(())
+    }
+
+    /// Set with type checking against declared type
+    pub fn set_typed(&mut self, name: &str, value: Value) -> Result<(), String> {
+        // Check if variable has a declared type
+        if let Some(expected_type) = self.get_type(name) {
+            if !value.is_compatible_with(&expected_type) {
+                return Err(format!(
+                    "Type mismatch for variable '{}': expected {:?}, got {:?}",
+                    name,
+                    expected_type,
+                    value.infer_type()
+                ));
+            }
+        }
+        self.set(name, value)
     }
 }
 
@@ -162,28 +287,43 @@ impl Evaluator {
                 self.env.set(name, val.clone())?;
                 Ok(EvalResult::Value(val))
             }
-            Stmt::Let { name, ty: _, value } => {
+            Stmt::Let { name, ty, value } => {
                 let val = match value {
                     Some(expr) => self.eval_expression(expr)?,
                     None => Value::Null,
                 };
-                self.env.define(name.clone(), val);
+
+                // If type is explicitly declared, check compatibility
+                if let Some(declared_type) = ty {
+                    self.env.define_typed(name.clone(), val, declared_type.clone())?;
+                } else {
+                    // No explicit type - just define the value
+                    self.env.define(name.clone(), val);
+                }
                 Ok(EvalResult::Value(Value::Null))
             }
             Stmt::Function {
                 name,
                 type_params: _,
                 params,
-                return_type: _,
+                return_type,
                 body,
             } => {
                 let param_names: Vec<String> = params.iter().map(|(n, _)| n.clone()).collect();
+                let param_types: Vec<Type> = params.iter().map(|(_, t)| t.clone()).collect();
+                
                 let func = Value::Function {
                     params: param_names,
                     body: body.clone(),
                     closure: self.env.clone(),
                 };
-                self.env.define(name.clone(), func);
+
+                let sig = FunctionSignature {
+                    params: param_types,
+                    return_type: return_type.clone(),
+                };
+
+                self.env.define_function(name.clone(), func, sig);
                 Ok(EvalResult::Value(Value::Null))
             }
             Stmt::If {
@@ -349,6 +489,28 @@ impl Evaluator {
         right: &Value,
     ) -> Result<Value, String> {
         use crate::ast::BinOp;
+
+        // Type check for comparison and logical operations
+        match op {
+            BinOp::Equal | BinOp::NotEqual | BinOp::Less | BinOp::LessEqual
+            | BinOp::Greater | BinOp::GreaterEqual => {
+                // These operations are valid between compatible numeric types
+                match (left, right) {
+                    (Value::Number(_), Value::Number(_)) => {},
+                    (Value::String(_), Value::String(_)) => {},
+                    (Value::Boolean(_), Value::Boolean(_)) => {},
+                    _ => return Err(format!(
+                        "Cannot compare {:?} and {:?}",
+                        left.infer_type(), right.infer_type()
+                    )),
+                }
+            }
+            BinOp::And | BinOp::Or => {
+                // Logical operations work on any truthy values (no strict type check needed)
+            }
+            _ => {},
+        }
+
         match op {
             BinOp::Add => match (left, right) {
                 (Value::Number(l), Value::Number(r)) => Ok(Value::Number(l + r)),
@@ -453,6 +615,7 @@ impl Evaluator {
                 self.env.push_scope();
 
                 // Bind arguments to parameters
+                // Type checking is optional - function doesn't store type info in Value
                 for (param, arg) in params.iter().zip(args.iter()) {
                     self.env.define(param.clone(), arg.clone());
                 }
