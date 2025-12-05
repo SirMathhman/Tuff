@@ -8,3 +8,12 @@ name = "tuff"
 path = "src/lib.rs"
 
 [dependencies]
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
