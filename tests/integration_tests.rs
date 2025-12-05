@@ -175,6 +175,19 @@ fn interpret_strips_type_like_suffix() {
         Ok("5".to_string())
     );
 
+    // Function defined with semicolons should work
+    assert_eq!(
+        interpret("fn simple() => 99; simple()"),
+        Ok("99".to_string())
+    );
+
+    // Test if captures are being parsed
+    // First, test that a function with capture syntax doesn't error during definition
+    assert_eq!(
+        interpret("fn withcap[&x]() => 100; 42"),
+        Ok("42".to_string())
+    );
+
     // Function with explicit return statement
     let result = interpret("fn get_five() : I32 => { return 5; } get_five()");
     eprintln!("Result: {:?}", result);
@@ -256,6 +269,12 @@ fn interpret_strips_type_like_suffix() {
     assert_eq!(
         interpret("let mut x = 0; let y = &x; let z = &x;"),
         Ok("".to_string())
+    );
+
+    // Function with immutable captures
+    assert_eq!(
+        interpret("let value = 100; fn get[&value]() => value; get()"),
+        Ok("100".to_string())
     );
 
     // Type alias: allow aliasing primitive types and using in declarations
