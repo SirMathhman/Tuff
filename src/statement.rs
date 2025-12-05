@@ -116,7 +116,7 @@ fn process_declaration(
     eval_expr_with_env: ExprEvaluator,
 ) -> Result<(), String> {
     let rest = s.trim_start_matches("let").trim();
-    let (mutable, rest) = if rest.starts_with("mut ") {
+    let (mut mutable, rest) = if rest.starts_with("mut ") {
         (true, rest.trim_start_matches("mut").trim())
     } else {
         (false, rest)
@@ -127,10 +127,7 @@ fn process_declaration(
         .next()
         .ok_or_else(|| "invalid declaration".to_string())?
         .trim();
-    let rhs = parts
-        .next()
-        .ok_or_else(|| "invalid declaration".to_string())?
-        .trim();
+    let rhs_opt = parts.next().map(|s| s.trim()).filter(|s| !s.is_empty());
 
     let mut left_parts = left.splitn(2, ':');
     let name = left_parts
@@ -150,10 +147,26 @@ fn process_declaration(
         return Err("duplicate declaration".to_string());
     }
 
-    let (value, expr_suffix) = eval_rhs(rhs, env, eval_expr_with_env)?;
+    // If there's an RHS, evaluate it; if not, allow declaration-only only when a type is provided
+    let (value, expr_suffix) = if let Some(rhs) = rhs_opt {
+        eval_rhs(rhs, env, eval_expr_with_env)?
+    } else {
+        if ty_opt.is_none() {
+            return Err("invalid declaration".to_string());
+        }
+        // If there's no initializer but an explicit type was provided, make
+        // the variable mutable by default to allow later assignment.
+        if !mutable {
+            mutable = true;
+        }
+        ("".to_string(), None)
+    };
 
+    // Validate only when there is an initial RHS value
     if let Some(ty) = &ty_opt {
-        validate_type(&value, ty)?;
+        if !value.is_empty() {
+            validate_type(&value, ty)?;
+        }
     }
 
     let stored_suffix = ty_opt.or(expr_suffix);

@@ -260,6 +260,19 @@ mod tests {
             Ok("200".to_string())
         );
 
+        // Top-level braced block with nested block RHS should evaluate correctly
+        assert_eq!(
+            interpret("{let x = {let y = 200; y}; x}"),
+            Ok("200".to_string())
+        );
+
+        // Declaration with explicit type but no initializer should be allowed,
+        // then assignment and usage later should work.
+        assert_eq!(interpret("let x : I32; x = 200; x"), Ok("200".to_string()));
+        assert_eq!(
+            interpret("{let x : I32; x = 200; x}"),
+            Ok("200".to_string())
+        );
         // Assignment to immutable variable should error with a clear message
         assert_eq!(
             interpret("let x = 100; x = 200; x"),
