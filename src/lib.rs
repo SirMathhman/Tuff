@@ -29,25 +29,24 @@ pub fn interpret(input: &str) -> Result<String, String> {
             .next()
             .ok_or_else(|| "invalid declaration".to_string())?
             .trim();
-        let ty = name_and_ty
-            .next()
-            .ok_or_else(|| "invalid declaration".to_string())?
-            .trim();
+        let ty_opt = name_and_ty.next().map(|s| s.trim());
 
         // evaluate RHS expression
         let value = interpret(rhs_expr)?;
 
-        // ensure the value fits the declared type
-        if ty.starts_with('U') {
-            let v = value
-                .parse::<u128>()
-                .map_err(|_| "invalid numeric value".to_string())?;
-            check_unsigned_range(v, ty)?;
-        } else {
-            let v = value
-                .parse::<i128>()
-                .map_err(|_| "invalid numeric value".to_string())?;
-            check_signed_range(v, ty)?;
+        // ensure the value fits the declared type (if provided)
+        if let Some(ty) = ty_opt {
+            if ty.starts_with('U') {
+                let v = value
+                    .parse::<u128>()
+                    .map_err(|_| "invalid numeric value".to_string())?;
+                check_unsigned_range(v, ty)?;
+            } else {
+                let v = value
+                    .parse::<i128>()
+                    .map_err(|_| "invalid numeric value".to_string())?;
+                check_signed_range(v, ty)?;
+            }
         }
 
         if lookup.is_empty() {
@@ -447,7 +446,7 @@ mod tests {
         // Parentheses + precedence: multiplication outside parentheses.
         assert_eq!(interpret("10I8 * (3 - 5I8)"), Ok("-20".to_string()));
 
-        // Simple declaration and usage
+        // Simple declaration and usage (no-type declaration supported)
         assert_eq!(
             interpret("let x : I8 = 10I8 * (3 - 5I8); x"),
             Ok("-20".to_string())
@@ -458,6 +457,9 @@ mod tests {
 
         // Declaration-only returns empty string
         assert_eq!(interpret("let x : I32 = 100;"), Ok("".to_string()));
+
+        // Declaration without type should work: let x = 100; x => "100"
+        assert_eq!(interpret("let x = 100; x"), Ok("100".to_string()));
 
         // Declaration with unsigned overflow should error
         assert!(interpret("let x : U8 = 1000;").is_err());
