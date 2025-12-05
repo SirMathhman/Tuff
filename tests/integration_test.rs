@@ -162,6 +162,25 @@ fn test_pointer_type_parsing() {
     assert!(result.is_ok());
 }
 
+#[test]
+fn test_option_type_parsing() {
+    // Test that Option<T> types parse correctly
+    let mut parser = Parser::new("let opt : Option<i32> = 42;");
+    let result = parser.parse();
+    // Should parse successfully (Option type support)
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_option_string_type_parsing() {
+    // Test that Option<String> types parse correctly
+    let mut parser = Parser::new("let opt : Option<String> = \"hello\";");
+    let result = parser.parse();
+    // Should parse successfully
+    assert!(result.is_ok());
+}
+
+
 
 
 

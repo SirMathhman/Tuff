@@ -185,6 +185,11 @@ fn type_compatibility(actual: &Type, expected: &Type) -> bool {
             if actual_name != expected_name {
                 return false;
             }
+            // Special case: Option<T> can accept a value of type T (Some-like behavior)
+            if expected_name == "Option" && expected_args.len() == 1 {
+                // Allow T to be compatible with Option<T> (implicit Some wrapping for MVP)
+                return type_compatibility(actual, &expected_args[0]);
+            }
             return generic_type_compatible(actual_name, actual_args, expected_args);
         }
         // Generic type as type parameter (e.g., Vec<T> where T is TypeParameter)
