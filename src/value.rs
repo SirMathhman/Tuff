@@ -152,8 +152,28 @@ fn type_compatibility(actual: &Type, expected: &Type) -> bool {
         _ => {}
     }
 
-    // Array types: check element type compatibility
+    // Reference/Pointer types: check inner type compatibility
     match (actual, expected) {
+        // Reference type: &T
+        (Type::Reference(actual_inner), Type::Reference(expected_inner)) => {
+            return type_compatibility(actual_inner, expected_inner);
+        }
+        // Mutable reference type: &mut T
+        (
+            Type::MutableReference(actual_inner),
+            Type::MutableReference(expected_inner),
+        ) => {
+            return type_compatibility(actual_inner, expected_inner);
+        }
+        // Immutable reference from mutable (losing mutability is OK)
+        (Type::MutableReference(actual_inner), Type::Reference(expected_inner)) => {
+            return type_compatibility(actual_inner, expected_inner);
+        }
+        // Pointer type: *T
+        (Type::Pointer(actual_inner), Type::Pointer(expected_inner)) => {
+            return type_compatibility(actual_inner, expected_inner);
+        }
+        // Array types: check element type compatibility
         (Type::Array(actual_elem, _, _), Type::Array(expected_elem, _, _)) => {
             return type_compatibility(actual_elem, expected_elem);
         }

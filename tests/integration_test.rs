@@ -135,5 +135,33 @@ fn test_union_type_parsing() {
     assert!(result.is_ok());
 }
 
+#[test]
+fn test_reference_type_parsing() {
+    // Test that reference types parse correctly
+    let mut parser = Parser::new("let ptr : &i32 = 42;");
+    let result = parser.parse();
+    // Should parse successfully
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_mutable_reference_type_parsing() {
+    // Test that mutable reference types parse correctly
+    let mut parser = Parser::new("let ptr : &mut i32 = 42;");
+    let result = parser.parse();
+    // Should parse successfully
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_pointer_type_parsing() {
+    // Test that pointer types parse correctly
+    let mut parser = Parser::new("let ptr : *i32 = 42;");
+    let result = parser.parse();
+    // Should parse successfully
+    assert!(result.is_ok());
+}
+
+
 
 
