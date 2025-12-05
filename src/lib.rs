@@ -2,6 +2,7 @@ mod brace_utils;
 mod control;
 mod eval_expr;
 mod evaluator;
+mod fn_utils;
 mod parser;
 mod pointer_utils;
 mod range_check;

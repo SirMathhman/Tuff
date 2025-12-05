@@ -277,6 +277,12 @@ fn interpret_strips_type_like_suffix() {
         Ok("100".to_string())
     );
 
+    // Function with mutable captures
+    assert_eq!(
+        interpret("let mut value = 100; fn addOnce[&mut value]() => value += 1; addOnce(); value"),
+        Ok("101".to_string())
+    );
+
     // Type alias: allow aliasing primitive types and using in declarations
     assert_eq!(
         interpret("type MyAlias = I32; let value : MyAlias = 100; value"),

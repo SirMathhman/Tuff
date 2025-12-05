@@ -20,7 +20,9 @@ pub struct StatementContext<'a> {
     pub last_value: &'a mut Option<(String, Option<String>)>,
 }
 mod block;
-pub use block::{eval_block_expr, split_statements};
+mod mut_capture;
+pub use block::{eval_block_expr, eval_block_expr_mut, split_statements};
+use mut_capture::try_call_with_mut_captures;
 
 fn run_block_stmt(s: &str, ctx: &mut StatementContext) -> Result<(), String> {
     let s = s.trim();
@@ -84,6 +86,12 @@ fn run_block_stmt(s: &str, ctx: &mut StatementContext) -> Result<(), String> {
 
     if s.contains('=') && !s.starts_with("let ") {
         process_assignment(s, ctx)?;
+        return Ok(());
+    }
+
+    // Check for function calls with mutable captures - handle specially since we have &mut env
+    if let Some((value, suf)) = try_call_with_mut_captures(s, ctx)? {
+        *ctx.last_value = Some((value, suf));
         return Ok(());
     }
 

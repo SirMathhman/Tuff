@@ -32,12 +32,22 @@ pub fn eval_block_expr(
     eval_expr_with_env: ExprEvaluator,
 ) -> Result<(String, Option<String>), String> {
     let mut local_env = env.clone();
+    eval_block_expr_mut(block_text, &mut local_env, eval_expr_with_env)
+}
+
+/// Version of eval_block_expr that takes a mutable environment reference.
+/// This allows mutations within the block to persist.
+pub fn eval_block_expr_mut(
+    block_text: &str,
+    local_env: &mut HashMap<String, Var>,
+    eval_expr_with_env: ExprEvaluator,
+) -> Result<(String, Option<String>), String> {
     let stmts = split_statements(block_text.trim());
     let mut last_value: Option<(String, Option<String>)> = None;
 
     for st in stmts {
         let mut ctx = StatementContext {
-            env: &mut local_env,
+            env: local_env,
             eval_expr: eval_expr_with_env,
             last_value: &mut last_value,
         };

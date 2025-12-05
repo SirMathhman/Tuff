@@ -280,19 +280,9 @@ pub fn eval_expr_with_env(
 
                 let key = format!("__fn__{}", name);
                 if let Some(func_var) = env.get(&key) {
-                    let parts: Vec<&str> = func_var.value.splitn(3, '|').collect();
-                    let params_part = parts.first().copied().unwrap_or("");
-                    let body_part = parts.get(2).copied().unwrap_or("");
-
-                    let mut param_names: Vec<String> = Vec::new();
-                    if !params_part.is_empty() {
-                        for p in params_part.split(',') {
-                            let n = p.split(':').next().unwrap_or("").trim();
-                            if !n.is_empty() {
-                                param_names.push(n.to_string());
-                            }
-                        }
-                    }
+                    let (params_part, _, body_part) =
+                        crate::fn_utils::parse_fn_value(&func_var.value);
+                    let param_names = crate::fn_utils::extract_param_names(params_part);
 
                     let mut local_env = env.clone();
 

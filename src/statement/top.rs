@@ -1,11 +1,11 @@
 use crate::control::{process_if_statement, process_while_statement, ControlContext};
 
+use super::mut_capture::try_call_with_mut_captures_top;
 use super::{
     process_assignment, process_declaration, split_statements, ExprEvaluator, StatementContext, Var,
 };
 use std::collections::HashMap;
 
-#[allow(clippy::too_many_arguments)]
 #[allow(clippy::too_many_arguments)]
 pub fn process_single_stmt(
     stmt_text: &str,
@@ -220,6 +220,12 @@ fn process_single_stmt_internal(
         let _ = is_assign;
         process_assignment(s, &mut stmt_ctx)?;
         *ctx.last_value = None;
+        return Ok(());
+    }
+
+    // Check for function calls with mutable captures - handle specially since we have &mut env
+    if let Some((value, _suf)) = try_call_with_mut_captures_top(s, ctx)? {
+        *ctx.last_value = Some(value);
         return Ok(());
     }
 
