@@ -94,6 +94,7 @@ fn process_single_stmt_internal(
                             mutable: false,
                             value: fn_value,
                             suffix: Some("FN".to_string()),
+                            borrowed_mut: false,
                         },
                     );
                 }

@@ -1,5 +1,4 @@
 use crate::control::{process_if_statement, process_while_statement, ControlContext};
-use crate::range_check::{check_signed_range, check_unsigned_range, SUFFIXES};
 use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
@@ -7,6 +6,8 @@ pub struct Var {
     pub mutable: bool,
     pub suffix: Option<String>,
     pub value: String,
+    // if this variable is currently mutably borrowed via &mut
+    pub borrowed_mut: bool,
 }
 
 pub type ExprEvaluator<'a> =
@@ -107,6 +108,68 @@ fn eval_rhs(
     }
 }
 
+fn parse_address_of(rhs: &str, env: &HashMap<String, Var>) -> Result<(String, bool, Var), String> {
+    if !(rhs.starts_with("&mut ") || (rhs.starts_with('&') && !rhs.starts_with("&&"))) {
+        return Err("not an address-of expression".to_string());
+    }
+    let is_mutref = rhs.starts_with("&mut ");
+    let inner = if is_mutref {
+        rhs[5..].trim()
+    } else {
+        rhs[1..].trim()
+    };
+
+    if inner.is_empty() || !inner.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        return Err("invalid address-of expression".to_string());
+    }
+
+    let target = env
+        .get(inner)
+        .ok_or_else(|| format!("address-of to undeclared variable: {}", inner))?
+        .clone();
+
+    Ok((inner.to_string(), is_mutref, target))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn assign_ptr_to_existing_var(
+    ctx: &mut StatementContext,
+    name: &str,
+    ptr_val: String,
+    ptr_suffix: Option<String>,
+) -> Result<(), String> {
+    let var = ctx
+        .env
+        .get_mut(name)
+        .ok_or_else(|| format!("assignment-to-undeclared-variable: {}", name))?;
+    if !var.mutable {
+        return Err("assignment to immutable variable".to_string());
+    }
+
+    apply_assignment_to_var(var, ptr_val, ptr_suffix)?;
+    *ctx.last_value = None;
+    Ok(())
+}
+
+fn apply_assignment_to_var(
+    var: &mut Var,
+    value: String,
+    expr_suffix: Option<String>,
+) -> Result<(), String> {
+    if let Some(declared) = &var.suffix {
+        if let Some(sfx) = &expr_suffix {
+            if sfx != declared {
+                return Err("type suffix mismatch on assignment".to_string());
+            }
+        }
+        validate_type(&value, declared)?;
+    }
+
+    var.value = value;
+    var.suffix = expr_suffix;
+    Ok(())
+}
+
 fn process_declaration(s: &str, ctx: &mut StatementContext) -> Result<(), String> {
     let rest = s.trim_start_matches("let").trim();
     let (mut mutable, rest) = if rest.starts_with("mut ") {
@@ -147,7 +210,35 @@ fn process_declaration(s: &str, ctx: &mut StatementContext) -> Result<(), String
     }
 
     let (value, expr_suffix) = if let Some(rhs) = rhs_opt {
-        eval_rhs(rhs, ctx.env, ctx.eval_expr)?
+        // Handle address-of in declarations so we can mark mutable borrows
+        if rhs.starts_with("&mut ") || (rhs.starts_with('&') && !rhs.starts_with("&&")) {
+            let (inner, is_mutref, target_clone) = parse_address_of(rhs, ctx.env)?;
+
+            if is_mutref {
+                // set borrowed_mut on the real variable (mutable borrow)
+                let target = ctx
+                    .env
+                    .get_mut(&inner)
+                    .ok_or_else(|| format!("address-of to undeclared variable: {}", inner))?;
+                if !target.mutable {
+                    return Err("cannot take mutable reference of immutable variable".to_string());
+                }
+                if target.borrowed_mut {
+                    return Err("variable already mutably borrowed".to_string());
+                }
+                target.borrowed_mut = true;
+            }
+
+            let (ptr_val, ptr_suffix) = crate::pointer_utils::build_ptr_components(
+                target_clone.suffix.as_ref(),
+                &inner,
+                is_mutref,
+            );
+
+            (ptr_val, ptr_suffix)
+        } else {
+            eval_rhs(rhs, ctx.env, ctx.eval_expr)?
+        }
     } else {
         if ty_opt.is_none() {
             return Err("invalid declaration".to_string());
@@ -171,6 +262,7 @@ fn process_declaration(s: &str, ctx: &mut StatementContext) -> Result<(), String
             mutable,
             suffix: stored_suffix,
             value,
+            borrowed_mut: false,
         },
     );
     *ctx.last_value = None;
@@ -223,7 +315,7 @@ fn process_assignment(s: &str, ctx: &mut StatementContext) -> Result<(), String>
                 .env
                 .get_mut(name)
                 .ok_or_else(|| format!("assignment-to-undeclared-variable: {}", name))?;
-            var.value = value;
+            apply_assignment_to_var(var, value, expr_suffix)?;
             *ctx.last_value = None;
             handled = true;
             break;
@@ -294,22 +386,62 @@ fn process_assignment(s: &str, ctx: &mut StatementContext) -> Result<(), String>
             return Err("assignment to immutable variable".to_string());
         }
 
-        if let Some(declared) = &target_var.suffix {
-            if let Some(sfx) = &expr_suffix {
-                if sfx != declared {
-                    return Err("type suffix mismatch on assignment".to_string());
-                }
-            }
-            validate_type(&value, declared)?;
-        }
-
-        target_var.value = value;
+        apply_assignment_to_var(target_var, value, expr_suffix)?;
         *ctx.last_value = None;
         return Ok(());
     }
 
     if !ctx.env.contains_key(name) {
         return Err(format!("assignment-to-undeclared-variable: {}", name));
+    }
+
+    // Special handling when RHS is an address-of operator so we can manage
+    // mutable-borrow state (e.g. &mut x) in the environment.
+    if rhs.starts_with("&mut ") || (rhs.starts_with('&') && !rhs.starts_with("&&")) {
+        // Ensure we can assign to the left-hand variable (it's already checked below),
+        // but we need to handle releasing any previous pointer target this variable
+        // was referencing.
+        let mut prev_target: Option<String> = None;
+        if let Some(existing) = ctx.env.get(name) {
+            if existing.value.starts_with("__PTR__:") {
+                if let Some(rest) = existing.value.strip_prefix("__PTR__:") {
+                    if let Some(pipe_idx) = rest.find('|') {
+                        prev_target = Some(rest[pipe_idx + 1..].to_string());
+                    }
+                }
+            }
+        }
+
+        // Inspect target non-mutably first to make borrow checks without
+        // holding multiple mutable borrows at once.
+        let (inner0, is_mutref0, target_clone) = parse_address_of(rhs, ctx.env)?;
+        let inner = inner0.as_str();
+        let is_mutref = is_mutref0;
+
+        // If the LHS previously pointed to someone, release its borrow
+        if let Some(prev) = prev_target.clone() {
+            if let Some(prev_v) = ctx.env.get_mut(&prev) {
+                prev_v.borrowed_mut = false;
+            }
+        }
+
+        // Now obtain a mutable borrow for the target to mark it borrowed
+        if is_mutref {
+            let target = ctx
+                .env
+                .get_mut(inner)
+                .ok_or_else(|| format!("address-of to undeclared variable: {}", inner))?;
+            target.borrowed_mut = true;
+        }
+
+        let (ptr_val, ptr_suffix) = crate::pointer_utils::build_ptr_components(
+            target_clone.suffix.as_ref(),
+            inner,
+            is_mutref,
+        );
+        // assign pointer value into existing variable (with validation)
+        assign_ptr_to_existing_var(ctx, name, ptr_val, ptr_suffix)?;
+        return Ok(());
     }
 
     let (value, expr_suffix) = eval_rhs(rhs, ctx.env, ctx.eval_expr)?;
@@ -322,41 +454,14 @@ fn process_assignment(s: &str, ctx: &mut StatementContext) -> Result<(), String>
         return Err("assignment to immutable variable".to_string());
     }
 
-    if let Some(declared) = &var.suffix {
-        if let Some(sfx) = &expr_suffix {
-            if sfx != declared {
-                return Err("type suffix mismatch on assignment".to_string());
-            }
-        }
-        validate_type(&value, declared)?;
-    }
-
-    var.value = value;
+    apply_assignment_to_var(var, value, expr_suffix)?;
     *ctx.last_value = None;
     Ok(())
 }
 
-fn validate_type(value: &str, ty: &str) -> Result<(), String> {
-    // Only validate numeric primitive suffix types (e.g. "U8", "I32")
-    // If the type is not a known numeric suffix, treat it as a user-defined
-    // type (e.g. struct) and skip numeric validation.
-    if !SUFFIXES.contains(&ty) {
-        return Ok(());
-    }
+pub use validate::validate_type;
 
-    if ty.starts_with('U') {
-        let v = value
-            .parse::<u128>()
-            .map_err(|_| "invalid numeric value".to_string())?;
-        check_unsigned_range(v, ty)?;
-    } else {
-        let v = value
-            .parse::<i128>()
-            .map_err(|_| "invalid numeric value".to_string())?;
-        check_signed_range(v, ty)?;
-    }
-    Ok(())
-}
+mod validate;
 
 /// Context for top-level statement processing
 pub struct TopStmtContext<'a> {

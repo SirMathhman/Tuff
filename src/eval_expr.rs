@@ -87,20 +87,8 @@ pub fn eval_expr_with_env(
                     return Err("cannot take mutable reference of immutable variable".to_string());
                 }
                 // pointer encoded as: __PTR__:<pointee_suffix>|<target_name>
-                let pointee = v.suffix.clone().unwrap_or_else(|| "".to_string());
-                let ptr_val = format!("__PTR__:{}|{}", pointee, inner);
-                // expose pointer suffix: mute variant becomes "*mut <Type>", non-mutable becomes "*<Type>"
-                let ptr_suffix = if pointee.is_empty() {
-                    if is_mutref {
-                        Some("*mut".to_string())
-                    } else {
-                        Some("*".to_string())
-                    }
-                } else if is_mutref {
-                    Some(format!("*mut {}", pointee))
-                } else {
-                    Some(format!("*{}", pointee))
-                };
+                let (ptr_val, ptr_suffix) =
+                    crate::pointer_utils::build_ptr_components(v.suffix.as_ref(), inner, is_mutref);
                 return Ok((ptr_val, ptr_suffix));
             } else {
                 return Err("address-of to unknown identifier".to_string());
@@ -311,6 +299,7 @@ pub fn eval_expr_with_env(
                                     mutable: false,
                                     suffix: suf.clone(),
                                     value: val.clone(),
+                                    borrowed_mut: false,
                                 },
                             );
                         }

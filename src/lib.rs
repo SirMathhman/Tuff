@@ -3,6 +3,7 @@ mod control;
 mod eval_expr;
 mod evaluator;
 mod parser;
+mod pointer_utils;
 mod range_check;
 mod statement;
 
@@ -63,6 +64,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
                             mutable: false,
                             value: s[open_idx + 1..close_idx].to_string(),
                             suffix: Some("STRUCT".to_string()),
+                            borrowed_mut: false,
                         },
                     );
                     if tail.is_empty() {

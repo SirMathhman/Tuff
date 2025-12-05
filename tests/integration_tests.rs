@@ -227,4 +227,7 @@ fn interpret_strips_type_like_suffix() {
         interpret("let mut x = 0; let y : *mut I32 = &mut x; *y = 100; x"),
         Ok("100".to_string())
     );
+
+    // Cannot take two simultaneous mutable references
+    assert!(interpret("let mut x = 0; let y = &mut x; let z = &mut x;").is_err());
 }
