@@ -28,33 +28,19 @@ pub fn interpret(input: &str) -> Result<String, String> {
                             return Err("negative value for unsigned suffix".to_string());
                         }
                         let num_str = numeric.strip_prefix('+').unwrap_or(numeric);
-                        let parsed = num_str.parse::<u128>().map_err(|_| "invalid numeric value".to_string())?;
+                        let parsed = num_str
+                            .parse::<u128>()
+                            .map_err(|_| "invalid numeric value".to_string())?;
 
-                        let max = match sfx {
-                            "U8" => u8::MAX as u128,
-                            "U16" => u16::MAX as u128,
-                            "U32" => u32::MAX as u128,
-                            "U64" => u64::MAX as u128,
-                            _ => u128::MAX,
-                        };
-                        if parsed > max {
-                            return Err(format!("value out of range for {}", sfx));
-                        }
+                        check_unsigned_range(parsed, sfx)?;
                         return Ok((true, sfx, parsed, parsed as i128));
                     } else {
                         // signed
                         let num_str = numeric.strip_prefix('+').unwrap_or(numeric);
-                        let parsed = num_str.parse::<i128>().map_err(|_| "invalid numeric value".to_string())?;
-                        let (min, max) = match sfx {
-                            "I8" => (i8::MIN as i128, i8::MAX as i128),
-                            "I16" => (i16::MIN as i128, i16::MAX as i128),
-                            "I32" => (i32::MIN as i128, i32::MAX as i128),
-                            "I64" => (i64::MIN as i128, i64::MAX as i128),
-                            _ => (i128::MIN, i128::MAX),
-                        };
-                        if parsed < min || parsed > max {
-                            return Err(format!("value out of range for {}", sfx));
-                        }
+                        let parsed = num_str
+                            .parse::<i128>()
+                            .map_err(|_| "invalid numeric value".to_string())?;
+                        check_signed_range(parsed, sfx)?;
                         return Ok((false, sfx, parsed as u128, parsed));
                     }
                 }
@@ -73,30 +59,12 @@ pub fn interpret(input: &str) -> Result<String, String> {
         if l.0 && r.0 {
             // unsigned addition using u128
             let sum = l.2.checked_add(r.2).ok_or_else(|| "overflow".to_string())?;
-            let max = match l.1 {
-                "U8" => u8::MAX as u128,
-                "U16" => u16::MAX as u128,
-                "U32" => u32::MAX as u128,
-                "U64" => u64::MAX as u128,
-                _ => u128::MAX,
-            };
-            if sum > max {
-                return Err(format!("value out of range for {}", l.1));
-            }
+            check_unsigned_range(sum, l.1)?;
             return Ok(sum.to_string());
         } else if !l.0 && !r.0 {
             // signed addition using i128
             let sum = l.3.checked_add(r.3).ok_or_else(|| "overflow".to_string())?;
-            let (min, max) = match l.1 {
-                "I8" => (i8::MIN as i128, i8::MAX as i128),
-                "I16" => (i16::MIN as i128, i16::MAX as i128),
-                "I32" => (i32::MIN as i128, i32::MAX as i128),
-                "I64" => (i64::MIN as i128, i64::MAX as i128),
-                _ => (i128::MIN, i128::MAX),
-            };
-            if sum < min || sum > max {
-                return Err(format!("value out of range for {}", l.1));
-            }
+            check_signed_range(sum, l.1)?;
             return Ok(sum.to_string());
         } else {
             return Err("cannot mix signed and unsigned in addition".to_string());
@@ -129,17 +97,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
                         .parse::<u128>()
                         .map_err(|_| "invalid numeric value for unsigned suffix".to_string())?;
 
-                    let max = match sfx {
-                        "U8" => u8::MAX as u128,
-                        "U16" => u16::MAX as u128,
-                        "U32" => u32::MAX as u128,
-                        "U64" => u64::MAX as u128,
-                        _ => u128::MAX,
-                    };
-
-                    if parsed > max {
-                        return Err(format!("value out of range for {}", sfx));
-                    }
+                    check_unsigned_range(parsed, sfx)?;
                 }
 
                 return Ok(numeric_part.to_string());
@@ -148,6 +106,34 @@ pub fn interpret(input: &str) -> Result<String, String> {
     }
 
     Ok(input.to_string())
+}
+
+fn check_unsigned_range(value: u128, suffix: &str) -> Result<(), String> {
+    let max = match suffix {
+        "U8" => u8::MAX as u128,
+        "U16" => u16::MAX as u128,
+        "U32" => u32::MAX as u128,
+        "U64" => u64::MAX as u128,
+        _ => u128::MAX,
+    };
+    if value > max {
+        return Err(format!("value out of range for {}", suffix));
+    }
+    Ok(())
+}
+
+fn check_signed_range(value: i128, suffix: &str) -> Result<(), String> {
+    let (min, max) = match suffix {
+        "I8" => (i8::MIN as i128, i8::MAX as i128),
+        "I16" => (i16::MIN as i128, i16::MAX as i128),
+        "I32" => (i32::MIN as i128, i32::MAX as i128),
+        "I64" => (i64::MIN as i128, i64::MAX as i128),
+        _ => (i128::MIN, i128::MAX),
+    };
+    if value < min || value > max {
+        return Err(format!("value out of range for {}", suffix));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
