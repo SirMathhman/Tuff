@@ -10,7 +10,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
 
         for ch in input.chars() {
             match ch {
-                '+' | '-' => {
+                '+' | '-' | '*' => {
                     if last_was_op {
                         // unary sign
                         cur.push(ch);
@@ -231,6 +231,9 @@ fn apply_unsigned_op(total: u128, rhs: u128, op: &char, suffix: &str) -> Result<
                 .checked_sub(rhs)
                 .ok_or_else(|| "overflow".to_string())?
         }
+        '*' => total
+            .checked_mul(rhs)
+            .ok_or_else(|| "overflow".to_string())?,
         _ => return Err("invalid operator".to_string()),
     };
     check_unsigned_range(result, suffix)?;
@@ -329,6 +332,9 @@ mod tests {
 
         // Chained expression with subtraction
         assert_eq!(interpret("10U8 + 3 - 5U8"), Ok("8".to_string()));
+
+        // Multiplication then subtraction, left-to-right evaluation
+        assert_eq!(interpret("10U8 * 3 - 5U8"), Ok("25".to_string()));
 
         // Unsigned underflow should produce an error
         assert!(interpret("0U8 - 5U8").is_err());
