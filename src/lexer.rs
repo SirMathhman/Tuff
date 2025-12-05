@@ -18,6 +18,32 @@ pub enum Token {
     False,
     Null,
 
+    // Type keywords
+    U8,
+    U16,
+    U32,
+    U64,
+    I8,
+    I16,
+    I32,
+    I64,
+    F32,
+    F64,
+    Bool,
+    Char,
+    StringType,  // Type keyword for string (renamed to avoid conflict with String(String) variant)
+    Void,
+    Mut,
+    Struct,
+    Trait,
+    Impl,
+    Match,
+    Module,
+    Use,
+    From,
+    Out,
+    Is,
+
     // Operators
     Plus,
     Minus,
@@ -32,7 +58,9 @@ pub enum Token {
     LessEqual,
     Greater,
     GreaterEqual,
+    Ampersand,         // Single &
     AmpersandAmpersand,
+    Pipe,              // Single |
     PipePipe,
     Question,
     Colon,
@@ -162,6 +190,31 @@ impl Lexer {
             "true" => Token::True,
             "false" => Token::False,
             "null" => Token::Null,
+            // Type keywords
+            "u8" => Token::U8,
+            "u16" => Token::U16,
+            "u32" => Token::U32,
+            "u64" => Token::U64,
+            "i8" => Token::I8,
+            "i16" => Token::I16,
+            "i32" => Token::I32,
+            "i64" => Token::I64,
+            "f32" => Token::F32,
+            "f64" => Token::F64,
+            "bool" => Token::Bool,
+            "char" => Token::Char,
+            "string" => Token::StringType,
+            "void" => Token::Void,
+            "mut" => Token::Mut,
+            "struct" => Token::Struct,
+            "trait" => Token::Trait,
+            "impl" => Token::Impl,
+            "match" => Token::Match,
+            "module" => Token::Module,
+            "use" => Token::Use,
+            "from" => Token::From,
+            "out" => Token::Out,
+            "is" => Token::Is,
             _ => Token::Identifier(ident),
         }
     }
@@ -245,7 +298,7 @@ impl Lexer {
                     self.advance();
                     Token::AmpersandAmpersand
                 } else {
-                    Token::Identifier("&".to_string()) // Error: single & not supported
+                    Token::Ampersand
                 }
             }
             Some('|') => {
@@ -254,7 +307,7 @@ impl Lexer {
                     self.advance();
                     Token::PipePipe
                 } else {
-                    Token::Identifier("|".to_string()) // Error: single | not supported
+                    Token::Pipe
                 }
             }
             Some('?') => {

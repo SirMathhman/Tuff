@@ -47,6 +47,179 @@ impl Parser {
         Ok(Program { statements })
     }
 
+    // ==================== Type Parsing ====================
+    /// Parse a complete type: base type followed by postfix operators (*, &, etc.)
+    fn parse_type(&mut self) -> Result<Type, String> {
+        let base = self.parse_base_type()?;
+        self.parse_type_with_postfix(base)
+    }
+
+    /// Parse base type (primitives, generics, identifiers, tuples)
+    fn parse_base_type(&mut self) -> Result<Type, String> {
+        match self.current() {
+            Token::U8 => {
+                self.advance();
+                Ok(Type::U8)
+            }
+            Token::U16 => {
+                self.advance();
+                Ok(Type::U16)
+            }
+            Token::U32 => {
+                self.advance();
+                Ok(Type::U32)
+            }
+            Token::U64 => {
+                self.advance();
+                Ok(Type::U64)
+            }
+            Token::I8 => {
+                self.advance();
+                Ok(Type::I8)
+            }
+            Token::I16 => {
+                self.advance();
+                Ok(Type::I16)
+            }
+            Token::I32 => {
+                self.advance();
+                Ok(Type::I32)
+            }
+            Token::I64 => {
+                self.advance();
+                Ok(Type::I64)
+            }
+            Token::F32 => {
+                self.advance();
+                Ok(Type::F32)
+            }
+            Token::F64 => {
+                self.advance();
+                Ok(Type::F64)
+            }
+            Token::Bool => {
+                self.advance();
+                Ok(Type::Bool)
+            }
+            Token::Char => {
+                self.advance();
+                Ok(Type::Char)
+            }
+            Token::StringType => {
+                self.advance();
+                Ok(Type::String)
+            }
+            Token::Void => {
+                self.advance();
+                Ok(Type::Void)
+            }
+            Token::Identifier(name) => {
+                let name = name.clone();
+                self.advance();
+                // Check for generic parameters: Vec<I32>
+                if matches!(self.current(), Token::Less) {
+                    self.advance();
+                    let mut type_args = Vec::new();
+                    while !matches!(self.current(), Token::Greater) {
+                        type_args.push(self.parse_type()?);
+                        if matches!(self.current(), Token::Comma) {
+                            self.advance();
+                        }
+                    }
+                    self.expect(Token::Greater)?;
+                    Ok(Type::Generic(name, type_args))
+                } else {
+                    // Simple identifier - treat as type parameter (e.g., T, U)
+                    Ok(Type::TypeParameter(name))
+                }
+            }
+            Token::LeftBracket => {
+                // Tuple: [T1, T2, T3] or Array: [T; init; length]
+                self.advance();
+                let first_type = self.parse_type()?;
+
+                if matches!(self.current(), Token::Comma) {
+                    // Tuple
+                    self.advance();
+                    let mut types = vec![first_type];
+                    while !matches!(self.current(), Token::RightBracket) {
+                        types.push(self.parse_type()?);
+                        if matches!(self.current(), Token::Comma) {
+                            self.advance();
+                        }
+                    }
+                    self.expect(Token::RightBracket)?;
+                    Ok(Type::Tuple(types))
+                } else if matches!(self.current(), Token::Semicolon) {
+                    // Array: [T; init; length]
+                    self.advance();
+                    // Parse init value (as number for now)
+                    let init = match self.current() {
+                        Token::Number(n) => {
+                            let n = *n as usize;
+                            self.advance();
+                            n
+                        }
+                        _ => return Err("Expected number for array init in type".to_string()),
+                    };
+                    self.expect(Token::Semicolon)?;
+                    let length = match self.current() {
+                        Token::Number(n) => {
+                            let n = *n as usize;
+                            self.advance();
+                            n
+                        }
+                        _ => return Err("Expected number for array length in type".to_string()),
+                    };
+                    self.expect(Token::RightBracket)?;
+                    Ok(Type::Array(Box::new(first_type), init, length))
+                } else {
+                    // Single-element "tuple" or just [T]
+                    self.expect(Token::RightBracket)?;
+                    Ok(Type::Tuple(vec![first_type]))
+                }
+            }
+            Token::Pipe => {
+                // Union type: T | E | U (function pointer prefix)
+                // Actually, pipe usually means function pointer, but for now parse as union
+                self.advance();
+                let mut union_types = vec![self.parse_base_type()?];
+                while matches!(self.current(), Token::Pipe) {
+                    self.advance();
+                    union_types.push(self.parse_base_type()?);
+                }
+                self.expect(Token::Pipe)?;
+                Ok(Type::Union(union_types))
+            }
+            _ => Err(format!("Unexpected token in type: {:?}", self.current())),
+        }
+    }
+
+    /// Apply postfix operators to a base type: &T, &mut T, *T
+    fn parse_type_with_postfix(&mut self, mut base: Type) -> Result<Type, String> {
+        loop {
+            match self.current() {
+                Token::Ampersand => {
+                    self.advance();
+                    if matches!(self.current(), Token::Mut) {
+                        self.advance();
+                        base = Type::MutableReference(Box::new(base));
+                    } else {
+                        base = Type::Reference(Box::new(base));
+                    }
+                }
+                Token::Star => {
+                    self.advance();
+                    base = Type::Pointer(Box::new(base));
+                }
+                _ => break,
+            }
+        }
+        Ok(base)
+    }
+
+    // ==================== Statement Parsing ====================
+
     fn parse_statement(&mut self) -> Result<Stmt, String> {
         match self.current() {
             Token::Let => self.parse_let(),
@@ -88,6 +261,14 @@ impl Parser {
             _ => return Err("Expected identifier after 'let'".to_string()),
         };
 
+        // Parse optional type annotation: : Type
+        let ty = if matches!(self.current(), Token::Colon) {
+            self.advance();
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+
         let value = if matches!(self.current(), Token::Equal) {
             self.advance();
             Some(self.parse_expression()?)
@@ -99,7 +280,7 @@ impl Parser {
             self.advance();
         }
 
-        Ok(Stmt::Let { name, value })
+        Ok(Stmt::Let { name, ty, value })
     }
 
     fn parse_function(&mut self) -> Result<Stmt, String> {
@@ -112,21 +293,57 @@ impl Parser {
             _ => return Err("Expected function name".to_string()),
         };
 
+        // Parse optional generic parameters: fn<T, U>
+        let type_params = if matches!(self.current(), Token::Less) {
+            self.advance();
+            let mut params = Vec::new();
+            while !matches!(self.current(), Token::Greater) {
+                match self.current().clone() {
+                    Token::Identifier(p) => {
+                        params.push(p);
+                        self.advance();
+                    }
+                    _ => return Err("Expected type parameter name".to_string()),
+                }
+                if matches!(self.current(), Token::Comma) {
+                    self.advance();
+                }
+            }
+            self.expect(Token::Greater)?;
+            params
+        } else {
+            Vec::new()
+        };
+
         self.expect(Token::LeftParen)?;
         let mut params = Vec::new();
         while !matches!(self.current(), Token::RightParen) {
-            match self.current().clone() {
+            let param_name = match self.current().clone() {
                 Token::Identifier(p) => {
-                    params.push(p);
                     self.advance();
+                    p
                 }
                 _ => return Err("Expected parameter name".to_string()),
-            }
+            };
+
+            // Parse parameter type: name : Type
+            self.expect(Token::Colon)?;
+            let param_type = self.parse_type()?;
+            params.push((param_name, param_type));
+
             if matches!(self.current(), Token::Comma) {
                 self.advance();
             }
         }
         self.expect(Token::RightParen)?;
+
+        // Parse optional return type: : Type
+        let return_type = if matches!(self.current(), Token::Colon) {
+            self.advance();
+            self.parse_type()?
+        } else {
+            Type::Void  // Default return type
+        };
 
         self.expect(Token::LeftBrace)?;
         let mut body = Vec::new();
@@ -135,7 +352,13 @@ impl Parser {
         }
         self.expect(Token::RightBrace)?;
 
-        Ok(Stmt::Function { name, params, body })
+        Ok(Stmt::Function {
+            name,
+            type_params,
+            params,
+            return_type,
+            body,
+        })
     }
 
     fn parse_if(&mut self) -> Result<Stmt, String> {
@@ -491,7 +714,7 @@ mod tests {
 
     #[test]
     fn test_parse_function_def() {
-        let mut parser = Parser::new("fn add(a, b) { return a + b; }");
+        let mut parser = Parser::new("fn add(a : I32, b : I32) : I32 { return a + b; }");
         let program = parser.parse().unwrap();
         assert_eq!(program.statements.len(), 1);
     }

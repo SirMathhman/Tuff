@@ -162,7 +162,7 @@ impl Evaluator {
                 self.env.set(name, val.clone())?;
                 Ok(EvalResult::Value(val))
             }
-            Stmt::Let { name, value } => {
+            Stmt::Let { name, ty: _, value } => {
                 let val = match value {
                     Some(expr) => self.eval_expression(expr)?,
                     None => Value::Null,
@@ -170,9 +170,16 @@ impl Evaluator {
                 self.env.define(name.clone(), val);
                 Ok(EvalResult::Value(Value::Null))
             }
-            Stmt::Function { name, params, body } => {
+            Stmt::Function {
+                name,
+                type_params: _,
+                params,
+                return_type: _,
+                body,
+            } => {
+                let param_names: Vec<String> = params.iter().map(|(n, _)| n.clone()).collect();
                 let func = Value::Function {
-                    params: params.clone(),
+                    params: param_names,
                     body: body.clone(),
                     closure: self.env.clone(),
                 };

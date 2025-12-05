@@ -214,7 +214,7 @@ fn test_type_preserved_in_ast() {
 
     // Access the statement and verify type info is stored
     match &program.statements[0] {
-        tuff::ast::Stmt::Let { name, value: _ } => {
+        tuff::ast::Stmt::Let { name, ty: _, value: _ } => {
             assert_eq!(name, "x");
             // TODO: Add assertion for type when AST stores it
         }
@@ -230,7 +230,9 @@ fn test_function_types_preserved_in_ast() {
     match &program.statements[0] {
         tuff::ast::Stmt::Function {
             name,
+            type_params: _,
             params,
+            return_type: _,
             body: _,
         } => {
             assert_eq!(name, "add");

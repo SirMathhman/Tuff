@@ -1,4 +1,42 @@
 #[derive(Debug, Clone, PartialEq)]
+pub enum Type {
+    // Primitives
+    U8,
+    U16,
+    U32,
+    U64,
+    I8,
+    I16,
+    I32,
+    I64,
+    F32,
+    F64,
+    Bool,
+    Char,
+    String,
+    Void,
+
+    // Pointers and references
+    Reference(Box<Type>),           // &T
+    MutableReference(Box<Type>),    // &mut T
+    Pointer(Box<Type>),             // *T
+
+    // Collections
+    Array(Box<Type>, usize, usize), // [T; Init; Length]
+    Tuple(Vec<Type>),               // [T1, T2, T3]
+
+    // Generics
+    Generic(String, Vec<Type>), // Vec<I32>, Option<T>, etc.
+    TypeParameter(String),      // T, U, etc. (for fn<T>)
+
+    // Unions (for Result, Option)
+    Union(Vec<Type>), // T | E | U
+
+    // Function pointers
+    FunctionPointer(Vec<Type>, Box<Type>), // |Args...| => ReturnType
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     // Literals
     Number(f64),
@@ -79,16 +117,19 @@ pub enum Stmt {
         value: Expr,
     },
 
-    // Variable declaration: let x = 5;
+    // Variable declaration: let x = 5; or let x : I32 = 5;
     Let {
         name: String,
+        ty: Option<Type>,
         value: Option<Expr>,
     },
 
-    // Function declaration
+    // Function declaration: fn add(a : I32, b : I32) : I32 => a + b;
     Function {
         name: String,
-        params: Vec<String>,
+        type_params: Vec<String>,           // Generic parameters: fn<T, U>
+        params: Vec<(String, Type)>,        // Parameter names with their types
+        return_type: Type,                  // Return type (default Void if not specified)
         body: Vec<Stmt>,
     },
 

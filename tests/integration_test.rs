@@ -22,7 +22,7 @@ fn test_variables() {
 #[test]
 fn test_functions() {
     let mut evaluator = Evaluator::new();
-    let mut parser = Parser::new("fn add(a, b) { a + b; } add(3, 4);");
+    let mut parser = Parser::new("fn add(a : I32, b : I32) : I32 { a + b; } add(3, 4);");
     let program = parser.parse().unwrap();
     let result = evaluator.eval_program(&program).unwrap();
     assert_eq!(result.to_string(), "7");
