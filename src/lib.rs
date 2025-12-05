@@ -1,3 +1,82 @@
+const SUFFIXES: [&str; 8] = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
+
+fn tokenize_expr(expr: &str) -> Result<Vec<String>, String> {
+    let mut tokens: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let mut last_was_op = true;
+
+    fn push_op_local(tokens: &mut Vec<String>, cur: &mut String, ch: char, last_was_op: &mut bool) {
+        if !cur.trim().is_empty() {
+            tokens.push(cur.trim().to_string());
+            cur.clear();
+        }
+        tokens.push(ch.to_string());
+        *last_was_op = true;
+    }
+
+    for ch in expr.chars() {
+        match ch {
+            '+' | '-' => {
+                if last_was_op {
+                    cur.push(ch);
+                } else {
+                    push_op_local(&mut tokens, &mut cur, ch, &mut last_was_op);
+                    continue;
+                }
+                last_was_op = true;
+            }
+            '*' => {
+                if last_was_op {
+                    return Err("invalid expression".to_string());
+                }
+                push_op_local(&mut tokens, &mut cur, ch, &mut last_was_op);
+            }
+            '(' => {
+                push_op_local(&mut tokens, &mut cur, ch, &mut last_was_op);
+            }
+            ')' => {
+                push_op_local(&mut tokens, &mut cur, ch, &mut last_was_op);
+                last_was_op = false;
+            }
+            c if c.is_whitespace() => {
+                if !cur.is_empty() {
+                    cur.push(c);
+                }
+            }
+            other => {
+                cur.push(other);
+                last_was_op = false;
+            }
+        }
+    }
+
+    if !cur.trim().is_empty() {
+        tokens.push(cur.trim().to_string());
+    }
+    if tokens.is_empty() {
+        return Err("invalid expression".to_string());
+    }
+    Ok(tokens)
+}
+
+fn detect_suffix_from_tokens(tokens: &[String]) -> Result<Option<&'static str>, String> {
+    let mut seen_suffix: Option<&str> = None;
+    for p in tokens {
+        for sfx in SUFFIXES {
+            if p.ends_with(sfx) {
+                if let Some(existing) = seen_suffix {
+                    if existing != sfx {
+                        return Err("type suffix mismatch".to_string());
+                    }
+                } else {
+                    seen_suffix = Some(sfx);
+                }
+            }
+        }
+    }
+    Ok(seen_suffix)
+}
+
 pub fn interpret(input: &str) -> Result<String, String> {
     // Handle simple variable declaration syntax: `let <name> : <Type> = <expr>; <name>`
     // This supports a single declaration followed by a variable reference.
@@ -61,20 +140,23 @@ pub fn interpret(input: &str) -> Result<String, String> {
         return Err("unsupported declaration usage".to_string());
     }
 
-    // `typeOf(<literal>)` helper: return the suffix portion if present, e.g. typeOf(100U8) -> "U8"
+    // `typeOf(<literal or expr>)` helper: return the suffix portion if present, e.g. typeOf(100U8) -> "U8"
     if input.trim_start().starts_with("typeOf(") && input.trim_end().ends_with(')') {
         let inner = input.trim();
         let inner = &inner[7..inner.len() - 1]; // between parentheses
         let inner = inner.trim();
-        const SUFFIXES: [&str; 8] = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
+
+        // fast-path: a single literal token
         for sfx in SUFFIXES {
             if inner.ends_with(sfx) {
                 return Ok(sfx.to_string());
             }
         }
 
-        // no recognized suffix found -> empty string
-        return Ok(String::new());
+        // interpret as expression: tokenize, detect suffix
+        let tokens = tokenize_expr(inner)?;
+        let seen_suffix = detect_suffix_from_tokens(&tokens)?;
+        return Ok(seen_suffix.unwrap_or("").to_string());
     }
 
     // Handle a simple binary addition: "<lhs> + <rhs>" where both operands
@@ -85,79 +167,9 @@ pub fn interpret(input: &str) -> Result<String, String> {
         || input.contains('(')
         || input.contains(')')
     {
-        // Tokenize into numbers, operators and parentheses; treat leading +/- as unary signs attached to numbers.
-        let mut tokens: Vec<String> = Vec::new();
-        let mut cur = String::new();
-        let mut last_was_op = true;
-
-        fn push_op(tokens: &mut Vec<String>, cur: &mut String, ch: char, last_was_op: &mut bool) {
-            if !cur.trim().is_empty() {
-                tokens.push(cur.trim().to_string());
-                cur.clear();
-            }
-            tokens.push(ch.to_string());
-            *last_was_op = true;
-        }
-
-        for ch in input.chars() {
-            match ch {
-                '+' | '-' => {
-                    if last_was_op {
-                        cur.push(ch); // unary sign
-                    } else {
-                        push_op(&mut tokens, &mut cur, ch, &mut last_was_op);
-                        continue;
-                    }
-                    last_was_op = true;
-                }
-                '*' => {
-                    if last_was_op {
-                        return Err("invalid expression".to_string());
-                    }
-                    push_op(&mut tokens, &mut cur, ch, &mut last_was_op);
-                }
-                '(' => {
-                    push_op(&mut tokens, &mut cur, ch, &mut last_was_op);
-                }
-                ')' => {
-                    push_op(&mut tokens, &mut cur, ch, &mut last_was_op);
-                    last_was_op = false;
-                }
-                c if c.is_whitespace() => {
-                    if !cur.is_empty() {
-                        cur.push(c);
-                    }
-                }
-                other => {
-                    cur.push(other);
-                    last_was_op = false;
-                }
-            }
-        }
-
-        if !cur.trim().is_empty() {
-            tokens.push(cur.trim().to_string());
-        }
-        if tokens.is_empty() {
-            return Err("invalid expression".to_string());
-        }
-
-        const SUFFIXES: [&str; 8] = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
-
-        let mut seen_suffix: Option<&str> = None;
-        for p in &tokens {
-            for sfx in SUFFIXES {
-                if p.ends_with(sfx) {
-                    if let Some(existing) = seen_suffix {
-                        if existing != sfx {
-                            return Err("type suffix mismatch".to_string());
-                        }
-                    } else {
-                        seen_suffix = Some(sfx);
-                    }
-                }
-            }
-        }
+        // Tokenize and detect suffix across tokens
+        let tokens = tokenize_expr(input)?;
+        let seen_suffix = detect_suffix_from_tokens(&tokens)?;
 
         // Convert tokens to RPN using shunting-yard (supports +, -, *, parentheses)
         fn precedence(op: &str) -> i32 {
@@ -213,9 +225,6 @@ pub fn interpret(input: &str) -> Result<String, String> {
             output.push(op);
         }
 
-        let suffix = seen_suffix.ok_or_else(|| "internal error determining suffix".to_string())?;
-        let unsigned = suffix.starts_with('U');
-
         // Evaluate RPN output using a tiny generic evaluator to avoid duplicate code
         fn eval_rpn_generic<T, P, A>(
             output: &[String],
@@ -254,26 +263,41 @@ pub fn interpret(input: &str) -> Result<String, String> {
             stack.pop().ok_or_else(|| "invalid expression".to_string())
         }
 
-        if unsigned {
-            let res = eval_rpn_generic::<u128, _, _>(
-                &output,
-                suffix,
-                parse_unsigned_token,
-                apply_unsigned_op,
-            )?;
-            return Ok(res.to_string());
+        if let Some(suffix) = seen_suffix {
+            let unsigned = suffix.starts_with('U');
+            if unsigned {
+                let res = eval_rpn_generic::<u128, _, _>(
+                    &output,
+                    suffix,
+                    parse_unsigned_token,
+                    apply_unsigned_op,
+                )?;
+                return Ok(res.to_string());
+            } else {
+                let res = eval_rpn_generic::<i128, _, _>(
+                    &output,
+                    suffix,
+                    parse_signed_token,
+                    apply_signed_op,
+                )?;
+                return Ok(res.to_string());
+            }
         } else {
+            // no suffix: evaluate as plain signed i128 with empty suffix
             let res = eval_rpn_generic::<i128, _, _>(
                 &output,
-                suffix,
-                parse_signed_token,
+                "",
+                |tok, _sfx| {
+                    // parse plain signed i128 literal
+                    let num = tok.strip_prefix('+').unwrap_or(tok);
+                    num.parse::<i128>()
+                        .map_err(|_| "invalid numeric value".to_string())
+                },
                 apply_signed_op,
             )?;
             return Ok(res.to_string());
         }
     }
-    const SUFFIXES: [&str; 8] = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
-
     for sfx in SUFFIXES {
         if input.ends_with(sfx) {
             let pos = input.len() - sfx.len();
@@ -479,6 +503,9 @@ mod tests {
 
         // typeOf helper should return type suffix for literal
         assert_eq!(interpret("typeOf(100U8)"), Ok("U8".to_string()));
+
+        // typeOf should examine expressions and report the seen suffix
+        assert_eq!(interpret("typeOf(10I8 * (3 - 5I8))"), Ok("I8".to_string()));
 
         // Declaration with unsigned overflow should error
         assert!(interpret("let x : U8 = 1000;").is_err());
