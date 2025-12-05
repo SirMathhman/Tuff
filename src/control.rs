@@ -5,6 +5,13 @@ use std::collections::HashMap;
 pub type ExprEvaluator<'a> =
     &'a dyn Fn(&str, &HashMap<String, Var>) -> Result<(String, Option<String>), String>;
 
+/// Context for control flow statement processing
+pub struct ControlContext<'a> {
+    pub env: &'a mut HashMap<String, Var>,
+    pub eval_expr: ExprEvaluator<'a>,
+    pub last_value: &'a mut Option<String>,
+}
+
 fn skip_ws(s: &str, mut i: usize) -> usize {
     while i < s.len()
         && s.as_bytes()
@@ -17,7 +24,8 @@ fn skip_ws(s: &str, mut i: usize) -> usize {
     i
 }
 
-fn find_matching(s: &str, start: usize, open_ch: char, close_ch: char) -> Result<usize, String> {
+fn find_matching(s: &str, idx: (usize, char, char)) -> Result<usize, String> {
+    let (start, open_ch, close_ch) = idx;
     let mut depth: i32 = 0;
     for (i, ch) in s[start..].char_indices() {
         if ch == open_ch {
@@ -34,29 +42,24 @@ fn find_matching(s: &str, start: usize, open_ch: char, close_ch: char) -> Result
 
 fn extract_body(s: &str, idx: usize) -> Result<(usize, &str), String> {
     if idx < s.len() && &s[idx..idx + 1] == "{" {
-        let end = find_matching(s, idx, '{', '}')?;
+        let end = find_matching(s, (idx, '{', '}'))?;
         Ok((end, s[idx + 1..end].trim()))
     } else {
         Ok((s.len(), s[idx..].trim()))
     }
 }
 
-pub fn process_if_statement(
-    s: &str,
-    env: &mut HashMap<String, Var>,
-    eval_expr_with_env: ExprEvaluator,
-    last_value: &mut Option<String>,
-) -> Result<(), String> {
+pub fn process_if_statement(s: &str, ctx: &mut ControlContext) -> Result<(), String> {
     let s = s.trim();
     if !s.starts_with("if") {
         return Err("invalid if statement".to_string());
     }
 
     let open_paren = s.find('(').ok_or_else(|| "invalid if syntax".to_string())?;
-    let close_paren = find_matching(s, open_paren, '(', ')')?;
+    let close_paren = find_matching(s, (open_paren, '(', ')'))?;
     let cond = s[open_paren + 1..close_paren].trim();
 
-    let (cond_val, _cond_suf) = eval_expr_with_env(cond, env)?;
+    let (cond_val, _cond_suf) = (ctx.eval_expr)(cond, ctx.env)?;
     let cond_true = cond_val.trim() == "true";
 
     let idx = skip_ws(s, close_paren + 1);
@@ -66,10 +69,14 @@ pub fn process_if_statement(
     } else {
         let mut depth = 0i32;
         let mut found_else: Option<usize> = None;
+        let mut found_semicolon: Option<usize> = None;
         for (off, ch) in s[idx..].char_indices() {
             match ch {
                 '(' | '{' => depth += 1,
                 ')' | '}' => depth = depth.saturating_sub(1),
+                ';' if depth == 0 && found_semicolon.is_none() => {
+                    found_semicolon = Some(idx + off);
+                }
                 'e' if depth == 0 && s[idx + off..].starts_with("else") => {
                     found_else = Some(idx + off);
                     break;
@@ -77,7 +84,7 @@ pub fn process_if_statement(
                 _ => {}
             }
         }
-        let then_end = found_else.unwrap_or(s.len());
+        let then_end = found_else.or(found_semicolon).unwrap_or(s.len());
         (then_end, s[idx..then_end].trim())
     };
 
@@ -105,7 +112,7 @@ pub fn process_if_statement(
     };
     if !chosen.is_empty() {
         for st in split_statements(chosen) {
-            process_single_stmt(st, env, last_value, eval_expr_with_env)?;
+            process_single_stmt(st, ctx.env, ctx.last_value, ctx.eval_expr)?;
         }
     }
 
@@ -116,20 +123,13 @@ pub fn process_if_statement(
         } else {
             then_end
         },
-        env,
-        last_value,
-        eval_expr_with_env,
+        ctx,
     )?;
 
     Ok(())
 }
 
-pub fn process_while_statement(
-    s: &str,
-    env: &mut HashMap<String, Var>,
-    last_value: &mut Option<String>,
-    eval_expr_with_env: ExprEvaluator,
-) -> Result<(), String> {
+pub fn process_while_statement(s: &str, ctx: &mut ControlContext) -> Result<(), String> {
     let s = s.trim();
     if !s.starts_with("while") {
         return Err("invalid while statement".to_string());
@@ -138,7 +138,7 @@ pub fn process_while_statement(
     let open_paren = s
         .find('(')
         .ok_or_else(|| "invalid while syntax".to_string())?;
-    let close_paren = find_matching(s, open_paren, '(', ')')?;
+    let close_paren = find_matching(s, (open_paren, '(', ')'))?;
     let cond = s[open_paren + 1..close_paren].trim();
 
     let idx = skip_ws(s, close_paren + 1);
@@ -146,36 +146,30 @@ pub fn process_while_statement(
     let (body_end, body_text) = extract_body(s, idx)?;
 
     loop {
-        let (cond_val, _sfx) = eval_expr_with_env(cond, env)?;
+        let (cond_val, _sfx) = (ctx.eval_expr)(cond, ctx.env)?;
         if cond_val.trim() != "true" {
             break;
         }
 
         if !body_text.is_empty() {
             for st in split_statements(body_text) {
-                process_single_stmt(st, env, last_value, eval_expr_with_env)?;
+                process_single_stmt(st, ctx.env, ctx.last_value, ctx.eval_expr)?;
             }
         }
     }
 
-    process_tail(s, body_end + 1, env, last_value, eval_expr_with_env)?;
+    process_tail(s, body_end + 1, ctx)?;
 
     Ok(())
 }
 
-fn process_tail(
-    s: &str,
-    start_idx: usize,
-    env: &mut HashMap<String, Var>,
-    last_value: &mut Option<String>,
-    eval_expr_with_env: ExprEvaluator,
-) -> Result<(), String> {
+fn process_tail(s: &str, start_idx: usize, ctx: &mut ControlContext) -> Result<(), String> {
     let tail_idx = skip_ws(s, start_idx);
     if tail_idx < s.len() {
         let tail = s[tail_idx..].trim();
         if !tail.is_empty() {
             for st in split_statements(tail) {
-                process_single_stmt(st, env, last_value, eval_expr_with_env)?;
+                process_single_stmt(st, ctx.env, ctx.last_value, ctx.eval_expr)?;
             }
         }
     }

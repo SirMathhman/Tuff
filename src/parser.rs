@@ -1,54 +1,63 @@
 use crate::range_check::SUFFIXES;
 
-pub fn tokenize_expr(expr: &str) -> Result<Vec<String>, String> {
-    let mut tokens: Vec<String> = Vec::new();
-    let mut cur = String::new();
-    let mut last_was_op = true;
+/// Context for tokenization state
+pub struct TokenizerState {
+    pub tokens: Vec<String>,
+    pub cur: String,
+    pub last_was_op: bool,
+}
 
-    fn push_op_local(tokens: &mut Vec<String>, cur: &mut String, ch: char, last_was_op: &mut bool) {
-        if !cur.trim().is_empty() {
-            tokens.push(cur.trim().to_string());
-            cur.clear();
+pub fn tokenize_expr(expr: &str) -> Result<Vec<String>, String> {
+    let mut state = TokenizerState {
+        tokens: Vec::new(),
+        cur: String::new(),
+        last_was_op: true,
+    };
+
+    fn push_op_local(state: &mut TokenizerState, ch: char) {
+        if !state.cur.trim().is_empty() {
+            state.tokens.push(state.cur.trim().to_string());
+            state.cur.clear();
         }
-        tokens.push(ch.to_string());
-        *last_was_op = true;
+        state.tokens.push(ch.to_string());
+        state.last_was_op = true;
     }
 
     let mut chars = expr.chars().peekable();
     while let Some(ch) = chars.next() {
         match ch {
             '+' | '-' => {
-                if last_was_op {
-                    cur.push(ch);
+                if state.last_was_op {
+                    state.cur.push(ch);
                 } else {
-                    push_op_local(&mut tokens, &mut cur, ch, &mut last_was_op);
+                    push_op_local(&mut state, ch);
                     continue;
                 }
-                last_was_op = true;
+                state.last_was_op = true;
             }
             '*' => {
-                if last_was_op {
+                if state.last_was_op {
                     return Err("invalid expression".to_string());
                 }
-                push_op_local(&mut tokens, &mut cur, ch, &mut last_was_op);
+                push_op_local(&mut state, ch);
             }
             '(' => {
-                push_op_local(&mut tokens, &mut cur, ch, &mut last_was_op);
+                push_op_local(&mut state, ch);
             }
             ')' => {
-                push_op_local(&mut tokens, &mut cur, ch, &mut last_was_op);
-                last_was_op = false;
+                push_op_local(&mut state, ch);
+                state.last_was_op = false;
             }
             c if c.is_whitespace() => {
-                if !cur.is_empty() {
-                    cur.push(c);
+                if !state.cur.is_empty() {
+                    state.cur.push(c);
                 }
             }
             '<' | '>' | '=' | '!' => {
                 // handle multi-character comparison operators
-                if !cur.trim().is_empty() {
-                    tokens.push(cur.trim().to_string());
-                    cur.clear();
+                if !state.cur.trim().is_empty() {
+                    state.tokens.push(state.cur.trim().to_string());
+                    state.cur.clear();
                 }
                 let mut op = ch.to_string();
                 if let Some(&next_ch) = chars.peek() {
@@ -64,24 +73,24 @@ pub fn tokenize_expr(expr: &str) -> Result<Vec<String>, String> {
                 } else if ch == '=' || ch == '!' {
                     return Err("invalid expression".to_string());
                 }
-                tokens.push(op);
-                last_was_op = true;
+                state.tokens.push(op);
+                state.last_was_op = true;
                 continue;
             }
             other => {
-                cur.push(other);
-                last_was_op = false;
+                state.cur.push(other);
+                state.last_was_op = false;
             }
         }
     }
 
-    if !cur.trim().is_empty() {
-        tokens.push(cur.trim().to_string());
+    if !state.cur.trim().is_empty() {
+        state.tokens.push(state.cur.trim().to_string());
     }
-    if tokens.is_empty() {
+    if state.tokens.is_empty() {
         return Err("invalid expression".to_string());
     }
-    Ok(tokens)
+    Ok(state.tokens)
 }
 
 pub fn detect_suffix_from_tokens(tokens: &[String]) -> Result<Option<&'static str>, String> {

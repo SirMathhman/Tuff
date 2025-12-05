@@ -1,5 +1,25 @@
 use crate::range_check::{check_signed_range, check_unsigned_range};
 
+/// Context for arithmetic/comparison operations
+#[derive(Clone)]
+pub struct OpContext {
+    pub suffix: String,
+}
+
+/// Unsigned operation parameters
+pub struct UnsignedOp {
+    pub ctx: OpContext,
+    pub lhs: u128,
+    pub rhs: u128,
+}
+
+/// Signed operation parameters  
+pub struct SignedOp {
+    pub ctx: OpContext,
+    pub lhs: i128,
+    pub rhs: i128,
+}
+
 pub fn parse_unsigned_token(token: &str, suffix: &str) -> Result<u128, String> {
     let numeric = if let Some(stripped) = token.strip_suffix(suffix) {
         stripped
@@ -33,49 +53,54 @@ pub fn parse_signed_token(token: &str, suffix: &str) -> Result<i128, String> {
     Ok(v)
 }
 
-pub fn apply_unsigned_op(total: u128, rhs: u128, op: &char, suffix: &str) -> Result<u128, String> {
-    let result = match op {
-        '+' => total
-            .checked_add(rhs)
+pub fn apply_unsigned_op(op: UnsignedOp, op_char: &char) -> Result<u128, String> {
+    let result = match op_char {
+        '+' => op
+            .lhs
+            .checked_add(op.rhs)
             .ok_or_else(|| "overflow".to_string())?,
         '-' => {
-            if total < rhs {
+            if op.lhs < op.rhs {
                 return Err("value out of range for unsigned after subtraction".to_string());
             }
-            total
-                .checked_sub(rhs)
+            op.lhs
+                .checked_sub(op.rhs)
                 .ok_or_else(|| "overflow".to_string())?
         }
-        '*' => total
-            .checked_mul(rhs)
+        '*' => op
+            .lhs
+            .checked_mul(op.rhs)
             .ok_or_else(|| "overflow".to_string())?,
         _ => return Err("invalid operator".to_string()),
     };
-    check_unsigned_range(result, suffix)?;
+    check_unsigned_range(result, &op.ctx.suffix)?;
     Ok(result)
 }
 
-pub fn apply_signed_op(total: i128, rhs: i128, op: &char, suffix: &str) -> Result<i128, String> {
-    let result = match op {
-        '+' => total
-            .checked_add(rhs)
+pub fn apply_signed_op(op: SignedOp, op_char: &char) -> Result<i128, String> {
+    let result = match op_char {
+        '+' => op
+            .lhs
+            .checked_add(op.rhs)
             .ok_or_else(|| "overflow".to_string())?,
-        '-' => total
-            .checked_sub(rhs)
+        '-' => op
+            .lhs
+            .checked_sub(op.rhs)
             .ok_or_else(|| "overflow".to_string())?,
-        '*' => total
-            .checked_mul(rhs)
+        '*' => op
+            .lhs
+            .checked_mul(op.rhs)
             .ok_or_else(|| "overflow".to_string())?,
         '>' => {
-            if total > rhs {
-                total
+            if op.lhs > op.rhs {
+                op.lhs
             } else {
                 return Err("condition false".to_string());
             }
         }
         '<' => {
-            if total < rhs {
-                total
+            if op.lhs < op.rhs {
+                op.lhs
             } else {
                 return Err("condition false".to_string());
             }
@@ -84,19 +109,25 @@ pub fn apply_signed_op(total: i128, rhs: i128, op: &char, suffix: &str) -> Resul
         '=' => return Err("invalid operator".to_string()),
         _ => return Err("invalid operator".to_string()),
     };
-    check_signed_range(result, suffix)?;
+    check_signed_range(result, &op.ctx.suffix)?;
     Ok(result)
 }
 
-pub fn eval_rpn_generic<T, P, A>(
-    output: &[String],
-    suffix: &str,
-    parse: P,
-    apply: A,
-) -> Result<T, String>
+/// Context for RPN evaluation with callbacks
+pub struct RpnContext<T, P, A>
 where
-    P: Fn(&str, &str) -> Result<T, String>,
-    A: Fn(T, T, &char, &str) -> Result<T, String>,
+    P: Fn(&str) -> Result<T, String>,
+    A: Fn(T, T, &char) -> Result<T, String>,
+    T: Copy,
+{
+    pub parse: P,
+    pub apply: A,
+}
+
+pub fn eval_rpn_generic<T, P, A>(output: &[String], ctx: RpnContext<T, P, A>) -> Result<T, String>
+where
+    P: Fn(&str) -> Result<T, String>,
+    A: Fn(T, T, &char) -> Result<T, String>,
     T: Copy,
 {
     let mut stack: Vec<T> = Vec::new();
@@ -112,10 +143,10 @@ where
                 .chars()
                 .next()
                 .ok_or_else(|| "invalid operator token".to_string())?;
-            let res = apply(lhs, rhs, &op_char, suffix)?;
+            let res = (ctx.apply)(lhs, rhs, &op_char)?;
             stack.push(res);
         } else {
-            let v = parse(tok, suffix)?;
+            let v = (ctx.parse)(tok)?;
             stack.push(v);
         }
     }
@@ -194,24 +225,70 @@ pub fn eval_output_with_suffix(
     if let Some(suffix) = seen_suffix {
         let unsigned = suffix.starts_with('U');
         if unsigned {
-            let res = eval_rpn_generic::<u128, _, _>(
-                output,
-                suffix,
-                parse_unsigned_token,
-                apply_unsigned_op,
-            )?;
+            let res = eval_rpn_unsigned(output, suffix)?;
             Ok((res.to_string(), Some(suffix.to_string())))
         } else {
-            let res = eval_rpn_generic::<i128, _, _>(
-                output,
-                suffix,
-                parse_signed_token,
-                apply_signed_op,
-            )?;
+            let res = eval_rpn_signed(output, suffix)?;
             Ok((res.to_string(), Some(suffix.to_string())))
         }
     } else {
-        let res = eval_rpn_generic::<i128, _, _>(output, "", parse_plain_i128, apply_signed_op)?;
+        let res = eval_rpn_plain(output)?;
         Ok((res.to_string(), None))
     }
+}
+
+fn eval_rpn_unsigned(output: &[String], suffix: &str) -> Result<u128, String> {
+    let ctx = OpContext {
+        suffix: suffix.to_string(),
+    };
+    let rpn_ctx = RpnContext {
+        parse: |t| parse_unsigned_token(t, suffix),
+        apply: |lhs, rhs, op| {
+            let unsigned_op = UnsignedOp {
+                ctx: ctx.clone(),
+                lhs,
+                rhs,
+            };
+            apply_unsigned_op(unsigned_op, op)
+        },
+    };
+    eval_rpn_generic::<u128, _, _>(output, rpn_ctx)
+}
+
+fn eval_rpn_signed(output: &[String], suffix: &str) -> Result<i128, String> {
+    let ctx = OpContext {
+        suffix: suffix.to_string(),
+    };
+    let is_signed = true; // marker for signed operation
+    let rpn_ctx = RpnContext {
+        parse: |t| parse_signed_token(t, suffix),
+        apply: |lhs, rhs, op| {
+            let signed_op = SignedOp {
+                ctx: ctx.clone(),
+                lhs,
+                rhs,
+            };
+            apply_signed_op(signed_op, op)
+        },
+    };
+    let _ = is_signed; // use marker
+    eval_rpn_generic::<i128, _, _>(output, rpn_ctx)
+}
+
+fn eval_rpn_plain(output: &[String]) -> Result<i128, String> {
+    let ctx = OpContext {
+        suffix: "".to_string(),
+    };
+    let rpn_ctx = RpnContext {
+        parse: |t| parse_plain_i128(t, ""),
+        apply: |lhs, rhs, op| {
+            let signed_op = SignedOp {
+                ctx: ctx.clone(),
+                lhs,
+                rhs,
+            };
+            apply_signed_op(signed_op, op)
+        },
+    };
+    eval_rpn_generic::<i128, _, _>(output, rpn_ctx)
 }
