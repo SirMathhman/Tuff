@@ -311,6 +311,18 @@ impl Evaluator {
             }
             Stmt::Assign { name, value } => {
                 let val = self.eval_expression(value)?;
+                
+                // If variable has a declared type, validate assignment
+                if let Some(declared_type) = self.env.get_type(name) {
+                    let val_type = val.infer_type();
+                    if !type_compatibility(&val_type, &declared_type) {
+                        return Err(format!(
+                            "Cannot assign type {:?} to variable of type {:?}: {}",
+                            val_type, declared_type, name
+                        ));
+                    }
+                }
+                
                 self.env.set(name, val.clone())?;
                 Ok(EvalResult::Value(val))
             }

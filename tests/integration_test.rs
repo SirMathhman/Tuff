@@ -90,3 +90,13 @@ fn test_array_index_type_validation() {
     assert_eq!(result.to_string(), "20");
 }
 
+#[test]
+fn test_assignment_type_validation() {
+    let mut evaluator = Evaluator::new();
+    let mut parser = Parser::new("let x : i32 = 42; x = 100; x;");
+    let program = parser.parse().unwrap();
+    let result = evaluator.eval_program(&program).unwrap();
+    assert_eq!(result.to_string(), "100");
+}
+
+
