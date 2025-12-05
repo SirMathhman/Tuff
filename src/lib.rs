@@ -72,8 +72,31 @@ pub fn interpret(input: &str) -> Result<String, String> {
         let mut env: HashMap<String, Var> = HashMap::new();
         let mut last_value: Option<String> = None;
 
-        for stmt in stmts_raw {
-            process_single_stmt(stmt, &mut env, &mut last_value, &eval_expr_with_env)?;
+        let mut i = 0usize;
+        while i < stmts_raw.len() {
+            if let Some(s) = stmts_raw.get(i) {
+                // If this is an 'if' without an 'else' included, and the next statement
+                // starts with 'else', merge them into a single handler string so
+                // process_single_stmt/process_if_statement can parse them together.
+                if s.trim_start().starts_with("if") && !s.contains("else") {
+                    if let Some(next) = stmts_raw.get(i + 1) {
+                        if next.trim_start().starts_with("else") {
+                            let merged = format!("{} {}", s, next);
+                            process_single_stmt(
+                                merged.as_str(),
+                                &mut env,
+                                &mut last_value,
+                                &eval_expr_with_env,
+                            )?;
+                            i += 2;
+                            continue;
+                        }
+                    }
+                }
+                // Process normal statement
+                process_single_stmt(s, &mut env, &mut last_value, &eval_expr_with_env)?;
+            }
+            i += 1;
         }
 
         return if let Some(value) = last_value {
