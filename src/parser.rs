@@ -14,7 +14,8 @@ pub fn tokenize_expr(expr: &str) -> Result<Vec<String>, String> {
         *last_was_op = true;
     }
 
-    for ch in expr.chars() {
+    let mut chars = expr.chars().peekable();
+    while let Some(ch) = chars.next() {
         match ch {
             '+' | '-' => {
                 if last_was_op {
@@ -42,6 +43,30 @@ pub fn tokenize_expr(expr: &str) -> Result<Vec<String>, String> {
                 if !cur.is_empty() {
                     cur.push(c);
                 }
+            }
+            '<' | '>' | '=' | '!' => {
+                // handle multi-character comparison operators
+                if !cur.trim().is_empty() {
+                    tokens.push(cur.trim().to_string());
+                    cur.clear();
+                }
+                let mut op = ch.to_string();
+                if let Some(&next_ch) = chars.peek() {
+                    if next_ch == '=' {
+                        op.push('=');
+                        chars.next();
+                    } else if ch == '=' {
+                        // single '=' is invalid in expressions
+                        return Err("invalid expression".to_string());
+                    } else if ch == '!' && next_ch != '=' {
+                        return Err("invalid expression".to_string());
+                    }
+                } else if ch == '=' || ch == '!' {
+                    return Err("invalid expression".to_string());
+                }
+                tokens.push(op);
+                last_was_op = true;
+                continue;
             }
             other => {
                 cur.push(other);
@@ -80,8 +105,9 @@ pub fn detect_suffix_from_tokens(tokens: &[String]) -> Result<Option<&'static st
 pub fn tokens_to_rpn(tokens: &[String]) -> Result<Vec<String>, String> {
     fn precedence(op: &str) -> i32 {
         match op {
-            "*" => 2,
-            "+" | "-" => 1,
+            "*" => 3,
+            "+" | "-" => 2,
+            "<" | ">" | "<=" | ">=" | "==" | "!=" => 1,
             _ => 0,
         }
     }
@@ -90,7 +116,16 @@ pub fn tokens_to_rpn(tokens: &[String]) -> Result<Vec<String>, String> {
     let mut output: Vec<String> = Vec::new();
 
     for t in tokens {
-        if t == "+" || t == "-" || t == "*" {
+        if t == "+"
+            || t == "-"
+            || t == "*"
+            || t == "<"
+            || t == ">"
+            || t == "<="
+            || t == ">="
+            || t == "=="
+            || t == "!="
+        {
             while let Some(top) = op_stack.last() {
                 if (top == "+" || top == "-" || top == "*") && precedence(top) >= precedence(t) {
                     output.push(

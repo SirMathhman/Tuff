@@ -1,3 +1,4 @@
+use crate::control::{process_if_statement, process_while_statement};
 use crate::range_check::{check_signed_range, check_unsigned_range};
 use std::collections::HashMap;
 
@@ -10,18 +11,6 @@ pub struct Var {
 
 pub type ExprEvaluator<'a> =
     &'a dyn Fn(&str, &HashMap<String, Var>) -> Result<(String, Option<String>), String>;
-
-fn skip_ws(s: &str, mut i: usize) -> usize {
-    while i < s.len()
-        && s.as_bytes()
-            .get(i)
-            .map(|b| b.is_ascii_whitespace())
-            .unwrap_or(false)
-    {
-        i += 1;
-    }
-    i
-}
 
 pub fn split_statements(seq: &str) -> Vec<&str> {
     let mut stmts: Vec<&str> = Vec::new();
@@ -85,7 +74,13 @@ fn run_block_stmt(
 
     if s.starts_with("if") {
         let mut tmp_last: Option<String> = None;
-        process_if_statement(s, local_env, &mut tmp_last, eval_expr_with_env)?;
+        process_if_statement(s, local_env, eval_expr_with_env, &mut tmp_last)?;
+        return Ok(());
+    }
+
+    if s.starts_with("while") {
+        let mut tmp_last: Option<String> = None;
+        process_while_statement(s, local_env, &mut tmp_last, eval_expr_with_env)?;
         return Ok(());
     }
 
@@ -104,139 +99,9 @@ fn run_block_stmt(
     Ok(())
 }
 
-fn process_if_statement(
-    s: &str,
-    env: &mut HashMap<String, Var>,
-    last_value: &mut Option<String>,
-    eval_expr_with_env: ExprEvaluator,
-) -> Result<(), String> {
-    let s = s.trim();
-    if !s.starts_with("if") {
-        return Err("invalid if statement".to_string());
-    }
+// process_if_statement moved to control.rs
 
-    let open_paren = s.find('(').ok_or_else(|| "invalid if syntax".to_string())?;
-    let mut depth = 0i32;
-    let mut close_paren = None;
-    for (i, ch) in s[open_paren..].char_indices() {
-        match ch {
-            '(' => depth += 1,
-            ')' => {
-                depth = depth.saturating_sub(1);
-                if depth == 0 {
-                    close_paren = Some(open_paren + i);
-                    break;
-                }
-            }
-            _ => {}
-        }
-    }
-    let close_paren = close_paren.ok_or_else(|| "invalid if syntax".to_string())?;
-    let cond = s[open_paren + 1..close_paren].trim();
-
-    let (cond_val, _cond_suf) = eval_expr_with_env(cond, env)?;
-    let cond_true = cond_val.trim() == "true";
-
-    let idx = skip_ws(s, close_paren + 1);
-
-    let then_end: usize;
-    let then_block: &str;
-    if idx < s.len() && &s[idx..idx + 1] == "{" {
-        depth = 0;
-        let mut found = None;
-        for (off, ch) in s[idx..].char_indices() {
-            match ch {
-                '{' => depth += 1,
-                '}' => {
-                    depth = depth.saturating_sub(1);
-                    if depth == 0 {
-                        found = Some(idx + off);
-                        break;
-                    }
-                }
-                _ => {}
-            }
-        }
-        then_end = found.ok_or_else(|| "invalid then block".to_string())?;
-        then_block = s[idx + 1..then_end].trim();
-    } else {
-        let mut found_else: Option<usize> = None;
-        depth = 0;
-        for (off, ch) in s[idx..].char_indices() {
-            match ch {
-                '(' | '{' => depth += 1,
-                ')' | '}' => depth = depth.saturating_sub(1),
-                'e' if depth == 0 && s[idx + off..].starts_with("else") => {
-                    found_else = Some(idx + off);
-                    break;
-                }
-                _ => {}
-            }
-        }
-        then_end = found_else.unwrap_or(s.len());
-        then_block = s[idx..then_end].trim();
-    }
-
-    let mut else_block: Option<&str> = None;
-    let mut else_end_idx: Option<usize> = None;
-    let mut rest_idx = skip_ws(s, then_end + 1);
-    if rest_idx < s.len() && s[rest_idx..].starts_with("else") {
-        rest_idx += 4;
-        rest_idx = skip_ws(s, rest_idx);
-        if rest_idx < s.len() && &s[rest_idx..rest_idx + 1] == "{" {
-            depth = 0;
-            let mut else_end = None;
-            for (off, ch) in s[rest_idx..].char_indices() {
-                match ch {
-                    '{' => depth += 1,
-                    '}' => {
-                        depth = depth.saturating_sub(1);
-                        if depth == 0 {
-                            else_end = Some(rest_idx + off);
-                            break;
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            let else_end = else_end.ok_or_else(|| "invalid else block".to_string())?;
-            else_end_idx = Some(else_end);
-            else_block = Some(s[rest_idx + 1..else_end].trim());
-        } else {
-            let end_pos = s.len();
-            else_end_idx = Some(end_pos);
-            else_block = Some(s[rest_idx..end_pos].trim());
-        }
-    }
-
-    let chosen = if cond_true {
-        then_block
-    } else {
-        else_block.unwrap_or("")
-    };
-    if !chosen.is_empty() {
-        for st in split_statements(chosen) {
-            process_single_stmt(st, env, last_value, eval_expr_with_env)?;
-        }
-    }
-
-    let mut tail_idx = if let Some(eidx) = else_end_idx {
-        eidx + 1
-    } else {
-        then_end
-    };
-    tail_idx = skip_ws(s, tail_idx);
-    if tail_idx < s.len() {
-        let tail = s[tail_idx..].trim();
-        if !tail.is_empty() {
-            for st in split_statements(tail) {
-                process_single_stmt(st, env, last_value, eval_expr_with_env)?;
-            }
-        }
-    }
-
-    Ok(())
-}
+// process_while_statement moved to control.rs
 
 fn eval_rhs(
     rhs: &str,
@@ -460,7 +325,12 @@ pub fn process_single_stmt(
     }
 
     if s.starts_with("if") {
-        process_if_statement(s, env, last_value, eval_expr_with_env)?;
+        process_if_statement(s, env, eval_expr_with_env, last_value)?;
+        return Ok(());
+    }
+
+    if s.starts_with("while") {
+        process_while_statement(s, env, last_value, eval_expr_with_env)?;
         return Ok(());
     }
 

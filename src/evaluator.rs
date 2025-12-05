@@ -66,6 +66,22 @@ pub fn apply_signed_op(total: i128, rhs: i128, op: &char, suffix: &str) -> Resul
         '*' => total
             .checked_mul(rhs)
             .ok_or_else(|| "overflow".to_string())?,
+        '>' => {
+            if total > rhs {
+                total
+            } else {
+                return Err("condition false".to_string());
+            }
+        }
+        '<' => {
+            if total < rhs {
+                total
+            } else {
+                return Err("condition false".to_string());
+            }
+        }
+        '!' => return Err("invalid operator".to_string()),
+        '=' => return Err("invalid operator".to_string()),
         _ => return Err("invalid operator".to_string()),
     };
     check_signed_range(result, suffix)?;
@@ -119,6 +135,62 @@ pub fn eval_output_with_suffix(
     output: &[String],
     seen_suffix: Option<&str>,
 ) -> Result<(String, Option<String>), String> {
+    // If there are comparison operators in the RPN, evaluate to boolean.
+    let has_cmp = output
+        .iter()
+        .any(|t| matches!(t.as_str(), "<" | ">" | "<=" | ">=" | "==" | "!="));
+    if has_cmp {
+        // Generic helper to evaluate comparison expressions with a parse function
+        fn eval_cmp_generic<T, F>(output: &[String], mut parse: F) -> Result<String, String>
+        where
+            F: FnMut(&str) -> Result<T, String>,
+            T: Copy + PartialOrd + Eq,
+        {
+            let mut stack: Vec<T> = Vec::new();
+            for tok in output {
+                match tok.as_str() {
+                    "<" | ">" | "<=" | ">=" | "==" | "!=" => {
+                        let rhs = stack
+                            .pop()
+                            .ok_or_else(|| "invalid expression".to_string())?;
+                        let lhs = stack
+                            .pop()
+                            .ok_or_else(|| "invalid expression".to_string())?;
+                        let res = match tok.as_str() {
+                            "<" => lhs < rhs,
+                            ">" => lhs > rhs,
+                            "<=" => lhs <= rhs,
+                            ">=" => lhs >= rhs,
+                            "==" => lhs == rhs,
+                            "!=" => lhs != rhs,
+                            _ => return Err("invalid operator".to_string()),
+                        };
+                        return Ok(if res { "true" } else { "false" }.to_string());
+                    }
+                    other => {
+                        let v = parse(other)?;
+                        stack.push(v);
+                    }
+                }
+            }
+            Err("invalid comparison expression".to_string())
+        }
+
+        if let Some(suffix) = seen_suffix {
+            if suffix.starts_with('U') {
+                let res = eval_cmp_generic(output, |t| parse_unsigned_token(t, suffix))?;
+                return Ok((res, None));
+            } else {
+                let res = eval_cmp_generic(output, |t| parse_signed_token(t, suffix))?;
+                return Ok((res, None));
+            }
+        } else {
+            let res = eval_cmp_generic(output, |t| parse_plain_i128(t, ""))?;
+            return Ok((res, None));
+        }
+    }
+
+    // Fallback: arithmetic evaluation
     if let Some(suffix) = seen_suffix {
         let unsigned = suffix.starts_with('U');
         if unsigned {

@@ -1,3 +1,4 @@
+mod control;
 mod evaluator;
 mod parser;
 mod range_check;
@@ -322,6 +323,17 @@ mod tests {
         // Compound assignment should work for mutable variables
         assert_eq!(interpret("let mut x = 0; x += 1; x"), Ok("1".to_string()));
         assert_eq!(interpret("let mut y = 10; y += 5; y"), Ok("15".to_string()));
+
+        // While loop should iterate until condition false
+        assert_eq!(
+            interpret("let mut x = 0; while (x < 4) x += 1; x"),
+            Ok("4".to_string())
+        );
+        // Braced while body
+        assert_eq!(
+            interpret("let mut z = 0; while (z < 3) { z += 1; } z"),
+            Ok("3".to_string())
+        );
         // Assignment to immutable variable should error with a clear message
         assert_eq!(
             interpret("let x = 100; x = 200; x"),
