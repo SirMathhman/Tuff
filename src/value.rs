@@ -252,12 +252,14 @@ pub enum EvalResult {
 
 pub struct Evaluator {
     env: Environment,
+    expected_return_type: Option<Type>, // Track expected return type in functions
 }
 
 impl Evaluator {
     pub fn new() -> Self {
         Evaluator {
             env: Environment::new(),
+            expected_return_type: None,
         }
     }
 
@@ -436,6 +438,18 @@ impl Evaluator {
                     Some(e) => self.eval_expression(e)?,
                     None => Value::Null,
                 };
+
+                // Type check: validate return value against expected return type
+                if let Some(expected_type) = &self.expected_return_type {
+                    if !val.is_compatible_with(expected_type) {
+                        return Err(format!(
+                            "Return type mismatch: expected {:?}, got {:?}",
+                            expected_type,
+                            val.infer_type()
+                        ));
+                    }
+                }
+
                 Ok(EvalResult::Return(val))
             }
             Stmt::Block(stmts) => self.eval_block(stmts),
@@ -484,7 +498,13 @@ impl Evaluator {
                 for arg in args {
                     arg_vals.push(self.eval_expression(arg)?);
                 }
-                self.call_function(&func_val, arg_vals)
+                // Extract function name if it's an identifier for signature lookup
+                let func_name = if let Expr::Identifier(name) = &**func {
+                    Some(name.as_str())
+                } else {
+                    None
+                };
+                self.call_function(&func_val, arg_vals, func_name)
             }
             Expr::Array(elements) => {
                 let mut arr = Vec::new();
@@ -672,7 +692,7 @@ impl Evaluator {
         }
     }
 
-    fn call_function(&mut self, func: &Value, args: Vec<Value>) -> Result<Value, String> {
+    fn call_function(&mut self, func: &Value, args: Vec<Value>, func_name: Option<&str>) -> Result<Value, String> {
         match func {
             Value::Function {
                 params,
@@ -687,12 +707,20 @@ impl Evaluator {
                     ));
                 }
 
-                // Save current environment and use function's closure
+                // Save current environment, return type, and use function's closure
                 let saved_env = std::mem::replace(&mut self.env, closure.clone());
+                let saved_return_type = self.expected_return_type.clone();
+
+                // Look up function signature if available
+                if let Some(name) = func_name {
+                    if let Some(sig) = saved_env.get_function_sig(name) {
+                        self.expected_return_type = Some(sig.return_type);
+                    }
+                }
+
                 self.env.push_scope();
 
                 // Bind arguments to parameters
-                // Type checking is optional - function doesn't store type info in Value
                 for (param, arg) in params.iter().zip(args.iter()) {
                     self.env.define(param.clone(), arg.clone());
                 }
@@ -710,8 +738,9 @@ impl Evaluator {
                     }
                 }
 
-                // Restore environment
+                // Restore environment and return type
                 self.env = saved_env;
+                self.expected_return_type = saved_return_type;
                 Ok(result)
             }
             _ => Err("Attempting to call non-function".to_string()),

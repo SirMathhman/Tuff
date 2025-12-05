@@ -63,3 +63,11 @@ fn test_typed_let_statement() {
     let result = evaluator.eval_program(&program).unwrap();
     assert_eq!(result.to_string(), "42");
 }
+#[test]
+fn test_function_return_type_validation() {
+    let mut evaluator = Evaluator::new();
+    let mut parser = Parser::new("fn get_number() : i32 { 42; } get_number();");
+    let program = parser.parse().unwrap();
+    let result = evaluator.eval_program(&program).unwrap();
+    assert_eq!(result.to_string(), "42");
+}
