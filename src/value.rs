@@ -132,6 +132,58 @@ fn generic_type_compatible(
         .all(|(a, e)| type_compatibility(a, e))
 }
 
+fn format_type_name(ty: &Type) -> String {
+    match ty {
+        Type::I32 => "i32".to_string(),
+        Type::I64 => "i64".to_string(),
+        Type::I16 => "i16".to_string(),
+        Type::I8 => "i8".to_string(),
+        Type::U8 => "u8".to_string(),
+        Type::U16 => "u16".to_string(),
+        Type::U32 => "u32".to_string(),
+        Type::U64 => "u64".to_string(),
+        Type::F32 => "f32".to_string(),
+        Type::F64 => "f64".to_string(),
+        Type::Bool => "bool".to_string(),
+        Type::Char => "char".to_string(),
+        Type::String => "String".to_string(),
+        Type::Void => "void".to_string(),
+        Type::Array(inner, init_size, len) => {
+            format!("[{}; {}; {}]", format_type_name(inner), init_size, len)
+        }
+        Type::Tuple(members) => {
+            let member_strs: Vec<String> = members.iter().map(format_type_name).collect();
+            format!("({})", member_strs.join(", "))
+        }
+        Type::Generic(name, args) => {
+            if args.is_empty() {
+                name.clone()
+            } else {
+                let arg_strs: Vec<String> = args.iter().map(format_type_name).collect();
+                format!("{}<{}>", name, arg_strs.join(", "))
+            }
+        }
+        Type::Union(members) => {
+            let member_strs: Vec<String> = members.iter().map(format_type_name).collect();
+            member_strs.join(" | ")
+        }
+        Type::Reference(inner) => {
+            format!("&{}", format_type_name(inner))
+        }
+        Type::MutableReference(inner) => {
+            format!("&mut {}", format_type_name(inner))
+        }
+        Type::Pointer(inner) => {
+            format!("*{}", format_type_name(inner))
+        }
+        Type::TypeParameter(name) => name.clone(),
+        Type::FunctionPointer(params, return_ty) => {
+            let param_strs: Vec<String> = params.iter().map(format_type_name).collect();
+            format!("({}]) => {}", param_strs.join(", "), format_type_name(return_ty))
+        }
+    }
+}
+
 fn type_compatibility(actual: &Type, expected: &Type) -> bool {
     // Same types are compatible
     if actual == expected {

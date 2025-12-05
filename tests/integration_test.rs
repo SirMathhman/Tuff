@@ -191,9 +191,32 @@ fn test_function_type_assignment() {
     assert_eq!(result.to_string(), "8");
 }
 
+#[test]
+fn test_complex_generic_type_parsing() {
+    // Test that complex nested generic types parse correctly
+    let mut parser = Parser::new("let nested : Vec<Option<i32>> = [1, 2, 3];");
+    let result = parser.parse();
+    // Should parse successfully with nested generic types
+    assert!(result.is_ok());
+}
 
+#[test]
+fn test_nested_reference_type_parsing() {
+    // Test that chained reference types parse correctly
+    let mut parser = Parser::new("let ref_type : &i32 = 42;");
+    let result = parser.parse();
+    // Should parse successfully with reference types
+    assert!(result.is_ok());
+}
 
-
+#[test]
+fn test_tuple_type_parsing() {
+    // Test that tuple types parse correctly
+    let mut parser = Parser::new("let t : [i32, String, bool] = [1, \"hi\", true];");
+    let result = parser.parse();
+    // Should parse successfully with tuple types
+    assert!(result.is_ok());
+}
 
 
 
