@@ -233,4 +233,10 @@ fn interpret_strips_type_like_suffix() {
 
     // Cannot take immutable reference when a mutable borrow is active
     assert!(interpret("let mut x = 0; let y = &mut x; let z = &x;").is_err());
+
+    // Multiple immutable references are allowed
+    assert_eq!(
+        interpret("let mut x = 0; let y = &x; let z = &x;"),
+        Ok("".to_string())
+    );
 }
