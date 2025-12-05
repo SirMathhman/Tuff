@@ -330,6 +330,9 @@ mod tests {
         // Chained expression with subtraction
         assert_eq!(interpret("10U8 + 3 - 5U8"), Ok("8".to_string()));
 
+        // Unsigned underflow should produce an error
+        assert!(interpret("0U8 - 5U8").is_err());
+
         // Overflow when result exceeds the type max should be an error
         assert!(interpret("1U8 + 255U8").is_err());
     }
