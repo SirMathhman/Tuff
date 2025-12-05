@@ -277,6 +277,12 @@ fn interpret_strips_type_like_suffix() {
         Ok("100".to_string())
     );
 
+    // Function with immutable captures (bare syntax without &)
+    assert_eq!(
+        interpret("let value = 100; fn get[value]() => value; get()"),
+        Ok("100".to_string())
+    );
+
     // Function with mutable captures
     assert_eq!(
         interpret("let mut value = 100; fn addOnce[&mut value]() => value += 1; addOnce(); value"),
