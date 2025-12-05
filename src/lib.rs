@@ -2,72 +2,81 @@ pub fn interpret(input: &str) -> Result<String, String> {
     // Handle a simple binary addition: "<lhs> + <rhs>" where both operands
     // are integers with the same type suffix (e.g. "1U8 + 2U8").
     if input.contains('+') {
-        let mut parts = input.splitn(2, '+');
-        let lhs = parts
-            .next()
-            .ok_or_else(|| "invalid addition expression".to_string())?
-            .trim();
-        let rhs = parts
-            .next()
-            .ok_or_else(|| "invalid addition expression".to_string())?
-            .trim();
+        // Support chained additions like "1U8 + 3 + 2U8"
+        let parts: Vec<&str> = input.split('+').map(str::trim).filter(|s| !s.is_empty()).collect();
+        if parts.is_empty() {
+            return Err("invalid addition expression".to_string());
+        }
 
-        // helper to parse an operand into (is_unsigned, suffix, numeric_value)
-        fn parse_operand(op: &str) -> Result<(bool, &str, u128, i128), String> {
-            const SUFFIXES: [&str; 8] = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
+        // (parsing of suffixed operands is handled below per-part)
+
+        // Determine if any parts contain a known suffix. If so, all suffixed parts
+        // must have the same suffix; plain numbers will adopt that suffix's type.
+        const SUFFIXES: [&str; 8] = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
+
+        // collect suffixes seen
+        let mut seen_suffix: Option<&str> = None;
+        for p in &parts {
             for sfx in SUFFIXES {
-                if op.ends_with(sfx) {
-                    let pos = op.len() - sfx.len();
-                    if pos == 0 {
-                        return Err("missing numeric part".to_string());
-                    }
-                    let numeric = &op[..pos];
-
-                    if sfx.starts_with('U') {
-                        if numeric.starts_with('-') {
-                            return Err("negative value for unsigned suffix".to_string());
+                if p.ends_with(sfx) {
+                    if let Some(existing) = seen_suffix {
+                        if existing != sfx {
+                            return Err("type suffix mismatch".to_string());
                         }
-                        let num_str = numeric.strip_prefix('+').unwrap_or(numeric);
-                        let parsed = num_str
-                            .parse::<u128>()
-                            .map_err(|_| "invalid numeric value".to_string())?;
-
-                        check_unsigned_range(parsed, sfx)?;
-                        return Ok((true, sfx, parsed, parsed as i128));
                     } else {
-                        // signed
-                        let num_str = numeric.strip_prefix('+').unwrap_or(numeric);
-                        let parsed = num_str
-                            .parse::<i128>()
-                            .map_err(|_| "invalid numeric value".to_string())?;
-                        check_signed_range(parsed, sfx)?;
-                        return Ok((false, sfx, parsed as u128, parsed));
+                        seen_suffix = Some(sfx);
                     }
                 }
             }
-            Err("operand missing known suffix".to_string())
         }
 
-        let l = parse_operand(lhs)?;
-        let r = parse_operand(rhs)?;
-
-        // Require same suffix
-        if l.1 != r.1 {
-            return Err("type suffix mismatch".to_string());
+        // If we have no suffix in any operand, sum as signed i128
+        if seen_suffix.is_none() {
+            let mut total: i128 = 0;
+            for p in &parts {
+                let v = p.strip_prefix('+').unwrap_or(p).parse::<i128>().map_err(|_| "invalid numeric value".to_string())?;
+                total = total.checked_add(v).ok_or_else(|| "overflow".to_string())?;
+            }
+            return Ok(total.to_string());
         }
 
-        if l.0 && r.0 {
-            // unsigned addition using u128
-            let sum = l.2.checked_add(r.2).ok_or_else(|| "overflow".to_string())?;
-            check_unsigned_range(sum, l.1)?;
-            return Ok(sum.to_string());
-        } else if !l.0 && !r.0 {
-            // signed addition using i128
-            let sum = l.3.checked_add(r.3).ok_or_else(|| "overflow".to_string())?;
-            check_signed_range(sum, l.1)?;
-            return Ok(sum.to_string());
+        let suffix = seen_suffix.ok_or_else(|| "internal error determining suffix".to_string())?;
+        let unsigned = suffix.starts_with('U');
+
+        if unsigned {
+            let mut total: u128 = 0;
+            for p in &parts {
+                let numeric = if let Some(stripped) = p.strip_suffix(suffix) {
+                    stripped
+                } else {
+                    p
+                };
+                if numeric.starts_with('-') {
+                    return Err("negative value for unsigned suffix".to_string());
+                }
+                let num_str = numeric.strip_prefix('+').unwrap_or(numeric);
+                let v = num_str.parse::<u128>().map_err(|_| "invalid numeric value".to_string())?;
+                check_unsigned_range(v, suffix)?;
+                total = total.checked_add(v).ok_or_else(|| "overflow".to_string())?;
+            }
+            check_unsigned_range(total, suffix)?;
+            return Ok(total.to_string());
         } else {
-            return Err("cannot mix signed and unsigned in addition".to_string());
+            // signed
+            let mut total: i128 = 0;
+            for p in &parts {
+                let numeric = if let Some(stripped) = p.strip_suffix(suffix) {
+                    stripped
+                } else {
+                    p
+                };
+                let num_str = numeric.strip_prefix('+').unwrap_or(numeric);
+                let v = num_str.parse::<i128>().map_err(|_| "invalid numeric value".to_string())?;
+                check_signed_range(v, suffix)?;
+                total = total.checked_add(v).ok_or_else(|| "overflow".to_string())?;
+            }
+            check_signed_range(total, suffix)?;
+            return Ok(total.to_string());
         }
     }
     const SUFFIXES: [&str; 8] = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
@@ -172,5 +181,8 @@ mod tests {
 
         // Simple addition of same-suffix operands
         assert_eq!(interpret("1U8 + 2U8"), Ok("3".to_string()));
+
+        // Chained addition where plain numbers adopt the suffixed type
+        assert_eq!(interpret("1U8 + 3 + 2U8"), Ok("6".to_string()));
     }
 }
