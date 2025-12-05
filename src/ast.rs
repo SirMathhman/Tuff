@@ -98,6 +98,7 @@ pub enum BinOp {
     GreaterEqual,
     And,
     Or,
+    Is,  // Type checking operator: value is Type
 }
 
 #[derive(Debug, Clone, PartialEq)]

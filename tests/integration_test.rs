@@ -126,3 +126,14 @@ fn test_generic_vector_type_parsing() {
     assert!(result.is_ok());
 }
 
+#[test]
+fn test_union_type_parsing() {
+    // Test that union types parse correctly
+    let mut parser = Parser::new("let result : Result<i32, String> = 42;");
+    let result = parser.parse();
+    // Should parse successfully (union type support)
+    assert!(result.is_ok());
+}
+
+
+

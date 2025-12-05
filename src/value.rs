@@ -138,6 +138,20 @@ fn type_compatibility(actual: &Type, expected: &Type) -> bool {
         return true;
     }
 
+    // Union types: check if actual type is one of the union members
+    match expected {
+        Type::Union(members) => {
+            // Type is compatible if it matches any member of the union
+            for member in members {
+                if type_compatibility(actual, member) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        _ => {}
+    }
+
     // Array types: check element type compatibility
     match (actual, expected) {
         (Type::Array(actual_elem, _, _), Type::Array(expected_elem, _, _)) => {
@@ -705,6 +719,10 @@ impl Evaluator {
             BinOp::And | BinOp::Or => {
                 // Logical operations work on truthy values (no strict type check)
             }
+            BinOp::Is => {
+                // Type narrowing operator - checks if left value matches right type
+                // No strict type checking needed at MVP stage
+            }
         }
 
         match op {
@@ -767,6 +785,13 @@ impl Evaluator {
             }
             BinOp::And => Ok(Value::Boolean(left.is_truthy() && right.is_truthy())),
             BinOp::Or => Ok(Value::Boolean(left.is_truthy() || right.is_truthy())),
+            BinOp::Is => {
+                // Type checking operator: left is right
+                // For now, this is a placeholder for future type narrowing
+                // When union types are fully implemented, this will check if left's type matches right
+                // Always returns false for MVP (no runtime type tags on union values)
+                Ok(Value::Boolean(false))
+            }
         }
     }
 
