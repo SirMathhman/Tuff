@@ -288,6 +288,12 @@ fn process_declaration(
         return Err("duplicate declaration".to_string());
     }
 
+    // If an explicit type was provided, treat the declaration as mutable by
+    // default to allow later assignments at top-level and in blocks.
+    if ty_opt.is_some() && !mutable {
+        mutable = true;
+    }
+
     let (value, expr_suffix) = if let Some(rhs) = rhs_opt {
         eval_rhs(rhs, env, eval_expr_with_env)?
     } else {

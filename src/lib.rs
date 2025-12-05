@@ -313,6 +313,11 @@ mod tests {
             interpret("let x : I32; if (false) { x = 200; } else { x = 300; } x"),
             Ok("300".to_string())
         );
+        // Single-statement then and top-level continuation should work
+        assert_eq!(
+            interpret("let x : I32 = 300; if (true) x = 200; x"),
+            Ok("200".to_string())
+        );
         // Assignment to immutable variable should error with a clear message
         assert_eq!(
             interpret("let x = 100; x = 200; x"),
