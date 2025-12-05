@@ -99,4 +99,30 @@ fn test_assignment_type_validation() {
     assert_eq!(result.to_string(), "100");
 }
 
+#[test]
+fn test_array_type_inference() {
+    let mut evaluator = Evaluator::new();
+    let mut parser = Parser::new("let arr : [i32; 3; 3] = [1, 2, 3]; arr[0];");
+    let program = parser.parse().unwrap();
+    let result = evaluator.eval_program(&program).unwrap();
+    assert_eq!(result.to_string(), "1");
+}
+
+#[test]
+fn test_generic_type_parsing() {
+    // For now, test that generic types parse correctly without runtime enforcement
+    let mut parser = Parser::new("let opt : Option<i32> = 42;");
+    let result = parser.parse();
+    // Should parse successfully even if not fully enforced at runtime yet
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_generic_vector_type_parsing() {
+    // For now, test that generic vector types parse correctly
+    let mut parser = Parser::new("let vec : Vec<i32> = [1, 2, 3];");
+    let result = parser.parse();
+    // Should parse successfully
+    assert!(result.is_ok());
+}
 

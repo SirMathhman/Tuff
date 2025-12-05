@@ -74,6 +74,11 @@ impl Value {
         }
     }
 
+    /// Infer the Type of a Value with optional element type for arrays
+    pub fn infer_type_with_context(&self, _context: Option<&Type>) -> Type {
+        self.infer_type()
+    }
+
     /// Infer the Type of a Value
     pub fn infer_type(&self) -> Type {
         match self {
@@ -88,7 +93,15 @@ impl Value {
             Value::String(_) => Type::String,
             Value::Boolean(_) => Type::Bool,
             Value::Null => Type::Void,
-            Value::Array(_) => Type::Generic("Array".to_string(), vec![Type::Void]),
+            Value::Array(elements) => {
+                // Infer element type from first non-null element, or Void if empty
+                if let Some(first_elem) = elements.first() {
+                    let elem_type = first_elem.infer_type();
+                    Type::Array(Box::new(elem_type), elements.len(), elements.len())
+                } else {
+                    Type::Array(Box::new(Type::Void), 0, 0)
+                }
+            }
             Value::Function { .. } => Type::Void, // Functions have explicit types
         }
     }
@@ -101,10 +114,52 @@ impl Value {
 }
 
 /// Check if an actual type is compatible with (can be used as) an expected type
+/// Check if generic type instance (e.g., Vec<I32>) is compatible with expected type (e.g., Vec<I32>)
+fn generic_type_compatible(
+    actual_name: &str,
+    actual_args: &[Type],
+    expected_args: &[Type],
+) -> bool {
+    // For now, generic type names must match exactly (no variance/contravariance)
+    // Arguments must be compatible recursively
+    if actual_args.len() != expected_args.len() {
+        return false;
+    }
+
+    actual_args
+        .iter()
+        .zip(expected_args.iter())
+        .all(|(a, e)| type_compatibility(a, e))
+}
+
 fn type_compatibility(actual: &Type, expected: &Type) -> bool {
     // Same types are compatible
     if actual == expected {
         return true;
+    }
+
+    // Array types: check element type compatibility
+    match (actual, expected) {
+        (Type::Array(actual_elem, _, _), Type::Array(expected_elem, _, _)) => {
+            return type_compatibility(actual_elem, expected_elem);
+        }
+        // Generic types need recursive checking
+        (
+            Type::Generic(actual_name, actual_args),
+            Type::Generic(expected_name, expected_args),
+        ) => {
+            if actual_name != expected_name {
+                return false;
+            }
+            return generic_type_compatible(actual_name, actual_args, expected_args);
+        }
+        // Generic type as type parameter (e.g., Vec<T> where T is TypeParameter)
+        (Type::Generic(name, args), Type::TypeParameter(param_name)) => {
+            // A concrete generic type can match a type parameter if the parameter is bound
+            // For now, disallow (requires type binding context)
+            return false;
+        }
+        _ => {}
     }
 
     // TypeParameter("I32") should match Type::I32 (and others by name)

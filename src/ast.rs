@@ -17,9 +17,9 @@ pub enum Type {
     Void,
 
     // Pointers and references
-    Reference(Box<Type>),           // &T
-    MutableReference(Box<Type>),    // &mut T
-    Pointer(Box<Type>),             // *T
+    Reference(Box<Type>),        // &T
+    MutableReference(Box<Type>), // &mut T
+    Pointer(Box<Type>),          // *T
 
     // Collections
     Array(Box<Type>, usize, usize), // [T; Init; Length]
@@ -127,9 +127,9 @@ pub enum Stmt {
     // Function declaration: fn add(a : I32, b : I32) : I32 => a + b;
     Function {
         name: String,
-        type_params: Vec<String>,           // Generic parameters: fn<T, U>
-        params: Vec<(String, Type)>,        // Parameter names with their types
-        return_type: Type,                  // Return type (default Void if not specified)
+        type_params: Vec<String>,    // Generic parameters: fn<T, U>
+        params: Vec<(String, Type)>, // Parameter names with their types
+        return_type: Type,           // Return type (default Void if not specified)
         body: Vec<Stmt>,
     },
 

@@ -31,7 +31,7 @@ pub enum Token {
     F64,
     Bool,
     Char,
-    StringType,  // Type keyword for string (renamed to avoid conflict with String(String) variant)
+    StringType, // Type keyword for string (renamed to avoid conflict with String(String) variant)
     Void,
     Mut,
     Struct,
@@ -58,9 +58,9 @@ pub enum Token {
     LessEqual,
     Greater,
     GreaterEqual,
-    Ampersand,         // Single &
+    Ampersand, // Single &
     AmpersandAmpersand,
-    Pipe,              // Single |
+    Pipe, // Single |
     PipePipe,
     Question,
     Colon,
