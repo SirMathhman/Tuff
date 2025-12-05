@@ -1,0 +1,13 @@
+#!/bin/sh
+
+# Run Clippy and fail on any warnings
+echo "Running cargo clippy..."
+cargo clippy --all-targets --all-features -- -D warnings
+CLIPPY_EXIT=$?
+if [ "$CLIPPY_EXIT" -ne 0 ]; then
+  echo "cargo clippy failed (exit code $CLIPPY_EXIT). Commit aborted."
+  exit $CLIPPY_EXIT
+fi
+
+echo "cargo clippy passed."
+exit 0
