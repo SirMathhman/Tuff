@@ -3,7 +3,11 @@ pub fn interpret(input: &str) -> Result<String, String> {
     // are integers with the same type suffix (e.g. "1U8 + 2U8").
     if input.contains('+') {
         // Support chained additions like "1U8 + 3 + 2U8"
-        let parts: Vec<&str> = input.split('+').map(str::trim).filter(|s| !s.is_empty()).collect();
+        let parts: Vec<&str> = input
+            .split('+')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect();
         if parts.is_empty() {
             return Err("invalid addition expression".to_string());
         }
@@ -34,7 +38,11 @@ pub fn interpret(input: &str) -> Result<String, String> {
         if seen_suffix.is_none() {
             let mut total: i128 = 0;
             for p in &parts {
-                let v = p.strip_prefix('+').unwrap_or(p).parse::<i128>().map_err(|_| "invalid numeric value".to_string())?;
+                let v = p
+                    .strip_prefix('+')
+                    .unwrap_or(p)
+                    .parse::<i128>()
+                    .map_err(|_| "invalid numeric value".to_string())?;
                 total = total.checked_add(v).ok_or_else(|| "overflow".to_string())?;
             }
             return Ok(total.to_string());
@@ -55,7 +63,9 @@ pub fn interpret(input: &str) -> Result<String, String> {
                     return Err("negative value for unsigned suffix".to_string());
                 }
                 let num_str = numeric.strip_prefix('+').unwrap_or(numeric);
-                let v = num_str.parse::<u128>().map_err(|_| "invalid numeric value".to_string())?;
+                let v = num_str
+                    .parse::<u128>()
+                    .map_err(|_| "invalid numeric value".to_string())?;
                 check_unsigned_range(v, suffix)?;
                 total = total.checked_add(v).ok_or_else(|| "overflow".to_string())?;
             }
@@ -71,7 +81,9 @@ pub fn interpret(input: &str) -> Result<String, String> {
                     p
                 };
                 let num_str = numeric.strip_prefix('+').unwrap_or(numeric);
-                let v = num_str.parse::<i128>().map_err(|_| "invalid numeric value".to_string())?;
+                let v = num_str
+                    .parse::<i128>()
+                    .map_err(|_| "invalid numeric value".to_string())?;
                 check_signed_range(v, suffix)?;
                 total = total.checked_add(v).ok_or_else(|| "overflow".to_string())?;
             }
@@ -184,5 +196,8 @@ mod tests {
 
         // Chained addition where plain numbers adopt the suffixed type
         assert_eq!(interpret("1U8 + 3 + 2U8"), Ok("6".to_string()));
+
+        // Overflow when result exceeds the type max should be an error
+        assert!(interpret("1U8 + 255U8").is_err());
     }
 }
