@@ -248,6 +248,9 @@ fn apply_signed_op(total: i128, rhs: i128, op: &char, suffix: &str) -> Result<i1
         '-' => total
             .checked_sub(rhs)
             .ok_or_else(|| "overflow".to_string())?,
+        '*' => total
+            .checked_mul(rhs)
+            .ok_or_else(|| "overflow".to_string())?,
         _ => return Err("invalid operator".to_string()),
     };
     check_signed_range(result, suffix)?;
@@ -335,6 +338,9 @@ mod tests {
 
         // Multiplication then subtraction, left-to-right evaluation
         assert_eq!(interpret("10U8 * 3 - 5U8"), Ok("25".to_string()));
+
+        // Signed multiplication then subtraction
+        assert_eq!(interpret("10I8 * 3 - 5I8"), Ok("25".to_string()));
 
         // Unsigned underflow should produce an error
         assert!(interpret("0U8 - 5U8").is_err());
