@@ -1,35 +1,12 @@
 pub fn interpret(input: &str) -> String {
-    let bytes = input.as_bytes();
-    if bytes.is_empty() {
-        return input.to_string();
-    }
+    const SUFFIXES: [&str; 8] = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
 
-    // Find the start of the trailing digit run (if any)
-    let mut j = bytes.len();
-    while j > 0 {
-        match bytes.get(j - 1) {
-            Some(b) if b.is_ascii_digit() => j -= 1,
-            _ => break,
-        }
-    }
-
-    // If there is a trailing digit run, check for a preceding alphabetic run
-    if j < bytes.len() {
-        let mut k = j;
-        while k > 0 {
-            match bytes.get(k - 1) {
-                Some(b) if b.is_ascii_alphabetic() => k -= 1,
-                _ => break,
+    for sfx in SUFFIXES {
+        if input.ends_with(sfx) {
+            let pos = input.len() - sfx.len();
+            if pos > 0 && input.as_bytes().get(pos - 1).map(|b| b.is_ascii_digit()).unwrap_or(false) {
+                return input[..pos].to_string();
             }
-        }
-
-        // Only strip when there is at least one letter directly before the
-        // trailing digits and those letters themselves follow a digit
-        // (e.g. `100U8`, `42u32`). This avoids removing letters that are
-        // part of a word (e.g. `valueU16` remains unchanged).
-        if k < j && k > 0 && bytes.get(k - 1).map(|b| b.is_ascii_digit()).unwrap_or(false)
-        {
-            return input[..k].to_string();
         }
     }
 
@@ -50,9 +27,17 @@ mod tests {
     #[test]
     fn interpret_strips_type_like_suffix() {
         assert_eq!(interpret("100U8"), "100");
-        assert_eq!(interpret("42u32"), "42");
+        assert_eq!(interpret("123U16"), "123");
+        assert_eq!(interpret("7I32"), "7");
+        assert_eq!(interpret("900U64"), "900");
+
+        // Case-sensitive: lowercase should not match
+        assert_eq!(interpret("42u32"), "42u32");
+
+        // Don't strip when letters are part of a word
         assert_eq!(interpret("valueU16"), "valueU16");
-        // non-suffix digits-only should be unchanged
+
+        // digits-only should be unchanged
         assert_eq!(interpret("12345"), "12345");
     }
 }
