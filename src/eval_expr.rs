@@ -313,6 +313,7 @@ pub fn eval_expr_with_env(
                                     suffix: suf.clone(),
                                     value: val.clone(),
                                     borrowed_mut: false,
+                                    declared_type: None,
                                 },
                             );
                         }

@@ -8,6 +8,8 @@ pub struct Var {
     pub value: String,
     // if this variable is currently mutably borrowed via &mut
     pub borrowed_mut: bool,
+    // declared type (e.g., "DroppableI32") for drop handler tracking
+    pub declared_type: Option<String>,
 }
 
 pub type ExprEvaluator<'a> =
@@ -231,7 +233,7 @@ fn process_declaration(s: &str, ctx: &mut StatementContext) -> Result<(), String
         }
     }
 
-    let stored_suffix = ty_opt.or(expr_suffix);
+    let stored_suffix = ty_opt.clone().or(expr_suffix);
     ctx.env.insert(
         name.to_string(),
         Var {
@@ -239,6 +241,7 @@ fn process_declaration(s: &str, ctx: &mut StatementContext) -> Result<(), String
             suffix: stored_suffix,
             value,
             borrowed_mut: false,
+            declared_type: ty_opt,
         },
     );
     *ctx.last_value = None;

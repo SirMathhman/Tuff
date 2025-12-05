@@ -66,6 +66,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
                             value: s[open_idx + 1..close_idx].to_string(),
                             suffix: Some("STRUCT".to_string()),
                             borrowed_mut: false,
+                            declared_type: None,
                         },
                     );
                     if tail.is_empty() {
@@ -122,6 +123,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
         let stmts_raw = split_statements(seq);
         let mut env: HashMap<String, Var> = HashMap::new();
         let mut last_value: Option<String> = None;
+        let mut last_stmt: Option<String> = None;
 
         let mut i = 0usize;
         while i < stmts_raw.len() {
@@ -133,6 +135,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
                     if let Some(next) = stmts_raw.get(i + 1) {
                         if next.trim_start().starts_with("else") {
                             let merged = format!("{} {}", s, next);
+                            last_stmt = Some(merged.clone());
                             process_single_stmt(
                                 merged.as_str(),
                                 &mut env,
@@ -145,9 +148,53 @@ pub fn interpret(input: &str) -> Result<String, String> {
                     }
                 }
                 // Process normal statement
+                last_stmt = Some(s.trim().to_string());
                 process_single_stmt(s, &mut env, &mut last_value, &eval_expr_with_env)?;
             }
             i += 1;
+        }
+
+        // Call drop handlers for variables with declared types at scope exit
+        let vars_to_drop: Vec<(String, String)> = env
+            .iter()
+            .filter_map(|(name, var)| {
+                var.declared_type
+                    .as_ref()
+                    .map(|dtype| (name.clone(), dtype.clone()))
+            })
+            .collect();
+
+        for (var_name, var_type) in vars_to_drop {
+            let drop_handler_key = format!("__drop__{}", var_type);
+            if let Some(handler_var) = env.get(&drop_handler_key) {
+                // Get the variable value to pass to drop handler
+                if let Some(var_to_drop) = env.get(&var_name) {
+                    let var_value = var_to_drop.value.clone();
+                    // Don't pass suffix - just pass the value itself
+                    let call_text = format!("{}({})", handler_var.value, var_value,);
+
+                    // Call the drop handler as a statement so environment updates propagate
+                    let mut dummy_last_value: Option<String> = None;
+                    let _ = process_single_stmt(
+                        &call_text,
+                        &mut env,
+                        &mut dummy_last_value,
+                        &eval_expr_with_env,
+                    );
+                }
+            }
+        }
+
+        // After all drop handlers have been called, re-evaluate the last statement
+        // in case it was a variable reference that was modified by a drop handler
+        if let Some(stmt) = last_stmt {
+            let stmt_trimmed = stmt.trim();
+            // If the statement is a simple identifier, re-evaluate it to pick up updates from drop handlers
+            if !stmt_trimmed.contains(' ') && !stmt_trimmed.contains('(') && !stmt_trimmed.contains('[') {
+                if let Ok((new_val, _)) = eval_expr_with_env(stmt_trimmed, &env) {
+                    last_value = Some(new_val);
+                }
+            }
         }
 
         return if let Some(value) = last_value {

@@ -137,6 +137,7 @@ fn process_single_stmt_internal(
                         value: fn_value,
                         suffix: Some("FN".to_string()),
                         borrowed_mut: false,
+                        declared_type: None,
                     },
                 );
 
@@ -150,6 +151,7 @@ fn process_single_stmt_internal(
                             value: captures_str,
                             suffix: Some("CAPTURES".to_string()),
                             borrowed_mut: false,
+                            declared_type: None,
                         },
                     );
                 }
@@ -160,7 +162,7 @@ fn process_single_stmt_internal(
     }
 
     if s.starts_with("type ") {
-        // top-level type alias declarations: `type Name = BaseType`
+        // top-level type alias declarations: `type Name = BaseType` or `type Name = BaseType!drop`
         let rest = s[4..].trim();
         let mut parts = rest.splitn(2, '=');
         let name = parts
@@ -175,6 +177,15 @@ fn process_single_stmt_internal(
             return Err("invalid type declaration".to_string());
         }
 
+        // Check for drop handler marker: BaseType!drop
+        let (base_type, drop_fn) = if let Some(exclaim_pos) = base.find('!') {
+            let typ = base[..exclaim_pos].trim();
+            let handler = base[exclaim_pos + 1..].trim();
+            (typ.to_string(), Some(handler.to_string()))
+        } else {
+            (base.to_string(), None)
+        };
+
         let key = format!("__alias__{}", name);
         if ctx.env.contains_key(name) || ctx.env.contains_key(&key) {
             return Err("duplicate declaration".to_string());
@@ -185,10 +196,27 @@ fn process_single_stmt_internal(
             super::Var {
                 mutable: false,
                 suffix: Some("ALIAS".to_string()),
-                value: base.to_string(),
+                value: base_type,
                 borrowed_mut: false,
+                declared_type: None,
             },
         );
+
+        // Store drop handler if present
+        if let Some(handler) = drop_fn {
+            let drop_key = format!("__drop__{}", name);
+            ctx.env.insert(
+                drop_key,
+                super::Var {
+                    mutable: false,
+                    suffix: Some("DROP".to_string()),
+                    value: handler,
+                    borrowed_mut: false,
+                    declared_type: None,
+                },
+            );
+        }
+
         *ctx.last_value = None;
         return Ok(());
     }

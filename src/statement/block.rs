@@ -69,6 +69,44 @@ pub fn eval_block_expr_mut(
         }
     }
 
+    // Call drop handlers for variables with declared types at scope exit
+    let vars_to_drop: Vec<(String, String)> = local_env
+        .iter()
+        .filter_map(|(name, var)| {
+            var.declared_type
+                .as_ref()
+                .map(|dtype| (name.clone(), dtype.clone()))
+        })
+        .collect();
+
+    for (var_name, var_type) in vars_to_drop {
+        let drop_handler_key = format!("__drop__{}", var_type);
+        if let Some(handler_var) = local_env.get(&drop_handler_key) {
+            // Get the variable value to pass to drop handler
+            if let Some(var_to_drop) = local_env.get(&var_name) {
+                let var_value = var_to_drop.value.clone();
+                let var_suffix = var_to_drop.suffix.clone();
+
+                // Call the drop handler with the variable value
+                let call_text = format!(
+                    "{}({}{})",
+                    handler_var.value,
+                    var_value,
+                    var_suffix.map(|s| format!("|{}", s)).unwrap_or_default()
+                );
+
+                // Evaluate the drop handler call
+                if let Ok(result) = eval_expr_with_env(&call_text, local_env) {
+                    // Update the variable in env with the result (for captured mutable references)
+                    if let Some(var_ref) = local_env.get_mut(&var_name) {
+                        var_ref.value = result.0;
+                        var_ref.suffix = result.1;
+                    }
+                }
+            }
+        }
+    }
+
     if let Some((v, suf)) = last_value {
         Ok((v, suf))
     } else {

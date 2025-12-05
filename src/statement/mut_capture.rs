@@ -87,6 +87,7 @@ fn execute_fn_with_mut_captures(
                     suffix: suf,
                     value: val,
                     borrowed_mut: false,
+                    declared_type: None,
                 },
             );
         }
