@@ -171,6 +171,12 @@ fn interpret_strips_type_like_suffix() {
         Ok("100".to_string())
     );
 
+    // Struct declaration then variable assignment and field access
+    assert_eq!(
+        interpret("struct Wrapper { value : I32} let obj : Wrapper = Wrapper { 100 }; obj.value"),
+        Ok("100".to_string())
+    );
+
     // Assignment to declared I8 that overflows should error
     assert_eq!(
         interpret("let mut x : I8 = 100; x = 1000; x"),

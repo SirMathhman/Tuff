@@ -68,6 +68,20 @@ pub fn interpret(input: &str) -> Result<String, String> {
                     if tail.is_empty() {
                         return Ok("".to_string());
                     }
+                    // If the tail has semicolon-separated statements, execute them
+                    // with the struct registered in the environment.
+                    if tail.contains(';') {
+                        let mut seq = tail;
+                        if seq.starts_with('{') && seq.ends_with('}') {
+                            seq = seq[1..seq.len() - 1].trim();
+                        }
+                        let stmts_raw = split_statements(seq);
+                        let mut last_value: Option<String> = None;
+                        for s in stmts_raw {
+                            process_single_stmt(s, &mut env, &mut last_value, &eval_expr_with_env)?;
+                        }
+                        return Ok(last_value.unwrap_or_default());
+                    }
                     let (val, _suf) = eval_expr_with_env(tail, &env)?;
                     return Ok(val);
                 }

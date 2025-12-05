@@ -1,6 +1,6 @@
 use crate::brace_utils;
 use crate::control::{process_if_statement, process_while_statement, ControlContext};
-use crate::range_check::{check_signed_range, check_unsigned_range};
+use crate::range_check::{check_signed_range, check_unsigned_range, SUFFIXES};
 use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
@@ -336,6 +336,13 @@ fn process_assignment(s: &str, ctx: &mut StatementContext) -> Result<(), String>
 }
 
 fn validate_type(value: &str, ty: &str) -> Result<(), String> {
+    // Only validate numeric primitive suffix types (e.g. "U8", "I32")
+    // If the type is not a known numeric suffix, treat it as a user-defined
+    // type (e.g. struct) and skip numeric validation.
+    if !SUFFIXES.contains(&ty) {
+        return Ok(());
+    }
+
     if ty.starts_with('U') {
         let v = value
             .parse::<u128>()
