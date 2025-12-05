@@ -108,67 +108,30 @@ fn eval_rhs(
     }
 }
 
-fn parse_address_of(rhs: &str, env: &HashMap<String, Var>) -> Result<(String, bool, Var), String> {
-    if !(rhs.starts_with("&mut ") || (rhs.starts_with('&') && !rhs.starts_with("&&"))) {
-        return Err("not an address-of expression".to_string());
-    }
-    let is_mutref = rhs.starts_with("&mut ");
-    let inner = if is_mutref {
-        rhs[5..].trim()
-    } else {
-        rhs[1..].trim()
-    };
-
-    if inner.is_empty() || !inner.chars().all(|c| c.is_alphanumeric() || c == '_') {
-        return Err("invalid address-of expression".to_string());
-    }
-
-    let target = env
-        .get(inner)
-        .ok_or_else(|| format!("address-of to undeclared variable: {}", inner))?
-        .clone();
-
-    Ok((inner.to_string(), is_mutref, target))
-}
-
 #[allow(clippy::too_many_arguments)]
-fn assign_ptr_to_existing_var(
-    ctx: &mut StatementContext,
-    name: &str,
-    ptr_val: String,
-    ptr_suffix: Option<String>,
+fn check_declared_compat(
+    env: &HashMap<String, Var>,
+    declared: &str,
+    expr_suffix: Option<&String>,
+    value: &str,
 ) -> Result<(), String> {
-    let var = ctx
-        .env
-        .get_mut(name)
-        .ok_or_else(|| format!("assignment-to-undeclared-variable: {}", name))?;
-    if !var.mutable {
-        return Err("assignment to immutable variable".to_string());
-    }
-
-    apply_assignment_to_var(var, ptr_val, ptr_suffix)?;
-    *ctx.last_value = None;
-    Ok(())
-}
-
-fn apply_assignment_to_var(
-    var: &mut Var,
-    value: String,
-    expr_suffix: Option<String>,
-) -> Result<(), String> {
-    if let Some(declared) = &var.suffix {
-        if let Some(sfx) = &expr_suffix {
-            if sfx != declared {
+    if let Some(sfx) = expr_suffix {
+        if sfx != declared {
+            if let Some(resolved) = crate::statement::validate::resolve_alias(env, declared) {
+                if sfx != resolved {
+                    return Err("type suffix mismatch on assignment".to_string());
+                }
+            } else {
                 return Err("type suffix mismatch on assignment".to_string());
             }
         }
-        validate_type(&value, declared)?;
     }
-
-    var.value = value;
-    var.suffix = expr_suffix;
+    crate::statement::validate::validate_type(env, value, declared)?;
     Ok(())
 }
+
+mod ptr;
+pub use ptr::{apply_assignment_to_var, assign_ptr_to_existing_var, parse_address_of};
 
 fn process_declaration(s: &str, ctx: &mut StatementContext) -> Result<(), String> {
     let rest = s.trim_start_matches("let").trim();
@@ -256,7 +219,7 @@ fn process_declaration(s: &str, ctx: &mut StatementContext) -> Result<(), String
 
     if let Some(ty) = &ty_opt {
         if !value.is_empty() {
-            validate_type(&value, ty)?;
+            crate::statement::validate::validate_type(ctx.env, &value, ty)?;
         }
     }
 
@@ -308,12 +271,7 @@ fn process_assignment(s: &str, ctx: &mut StatementContext) -> Result<(), String>
 
             // Validate against declared suffix if present, then store the result
             if let Some(declared) = &current.suffix {
-                if let Some(sfx) = &expr_suffix {
-                    if sfx != declared {
-                        return Err("type suffix mismatch on assignment".to_string());
-                    }
-                }
-                validate_type(&value, declared)?;
+                check_declared_compat(ctx.env, declared, expr_suffix.as_ref(), &value)?;
             }
 
             let var = ctx
@@ -382,14 +340,21 @@ fn process_assignment(s: &str, ctx: &mut StatementContext) -> Result<(), String>
         // Evaluate RHS before taking mutable borrow on the target
         let (value, expr_suffix) = eval_rhs(rhs, ctx.env, ctx.eval_expr)?;
 
+        // Validate against declared suffix if present, before mutable borrow
+        if let Some(target_info) = ctx.env.get(target) {
+            if !target_info.mutable {
+                return Err("assignment to immutable variable".to_string());
+            }
+            if let Some(declared) = &target_info.suffix {
+                check_declared_compat(ctx.env, declared, expr_suffix.as_ref(), &value)?;
+            }
+        }
+
         // Now update the pointed-to variable (must be mutable)
         let target_var = ctx
             .env
             .get_mut(target)
             .ok_or_else(|| "dereference to invalid pointer".to_string())?;
-        if !target_var.mutable {
-            return Err("assignment to immutable variable".to_string());
-        }
 
         apply_assignment_to_var(target_var, value, expr_suffix)?;
         *ctx.last_value = None;
@@ -456,20 +421,25 @@ fn process_assignment(s: &str, ctx: &mut StatementContext) -> Result<(), String>
 
     let (value, expr_suffix) = eval_rhs(rhs, ctx.env, ctx.eval_expr)?;
 
+    // Validate against declared suffix if present before taking mutable borrow
+    if let Some(var_info) = ctx.env.get(name) {
+        if !var_info.mutable {
+            return Err("assignment to immutable variable".to_string());
+        }
+        if let Some(declared) = &var_info.suffix {
+            check_declared_compat(ctx.env, declared, expr_suffix.as_ref(), &value)?;
+        }
+    }
+
     let var = ctx
         .env
         .get_mut(name)
         .ok_or_else(|| format!("assignment-to-undeclared-variable: {}", name))?;
-    if !var.mutable {
-        return Err("assignment to immutable variable".to_string());
-    }
 
     apply_assignment_to_var(var, value, expr_suffix)?;
     *ctx.last_value = None;
     Ok(())
 }
-
-pub use validate::validate_type;
 
 mod validate;
 

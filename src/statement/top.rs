@@ -104,6 +104,40 @@ fn process_single_stmt_internal(
         return Ok(());
     }
 
+    if s.starts_with("type ") {
+        // top-level type alias declarations: `type Name = BaseType`
+        let rest = s[4..].trim();
+        let mut parts = rest.splitn(2, '=');
+        let name = parts
+            .next()
+            .ok_or_else(|| "invalid type declaration".to_string())?
+            .trim();
+        let base = parts
+            .next()
+            .ok_or_else(|| "invalid type declaration".to_string())?
+            .trim();
+        if name.is_empty() || base.is_empty() {
+            return Err("invalid type declaration".to_string());
+        }
+
+        let key = format!("__alias__{}", name);
+        if ctx.env.contains_key(name) || ctx.env.contains_key(&key) {
+            return Err("duplicate declaration".to_string());
+        }
+
+        ctx.env.insert(
+            key,
+            super::Var {
+                mutable: false,
+                suffix: Some("ALIAS".to_string()),
+                value: base.to_string(),
+                borrowed_mut: false,
+            },
+        );
+        *ctx.last_value = None;
+        return Ok(());
+    }
+
     // No special handling for `struct` inside blocks; top-level handler in lib.rs
 
     if s.starts_with("let ") {

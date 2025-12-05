@@ -239,4 +239,10 @@ fn interpret_strips_type_like_suffix() {
         interpret("let mut x = 0; let y = &x; let z = &x;"),
         Ok("".to_string())
     );
+
+    // Type alias: allow aliasing primitive types and using in declarations
+    assert_eq!(
+        interpret("type MyAlias = I32; let value : MyAlias = 100; value"),
+        Ok("100".to_string())
+    );
 }
