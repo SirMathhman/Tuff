@@ -19,7 +19,6 @@ pub struct StatementContext<'a> {
     pub eval_expr: ExprEvaluator<'a>,
     pub last_value: &'a mut Option<(String, Option<String>)>,
 }
-
 pub fn split_statements(seq: &str) -> Vec<&str> {
     let mut stmts: Vec<&str> = Vec::new();
     let mut start = 0usize;
@@ -449,6 +448,8 @@ fn process_single_stmt_internal(stmt_text: &str, ctx: &mut TopStmtContext) -> Re
         *ctx.last_value = None;
         return Ok(());
     }
+
+    // No special handling for `struct` inside blocks; top-level handler in lib.rs
 
     if s.starts_with("let ") {
         let mut block_last: Option<(String, Option<String>)> = None;

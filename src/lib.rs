@@ -223,6 +223,33 @@ pub fn interpret(input: &str) -> Result<String, String> {
         }
     }
 
+    // Handle a single top-level struct declaration without semicolons
+    if input.trim_start().starts_with("struct ") {
+        let s = input.trim();
+        if let Some(open_idx) = s.find('{') {
+            if let Some(close_idx) = brace_utils::find_matching_brace(s, open_idx) {
+                let name = s[6..open_idx]
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("")
+                    .trim();
+                if !name.is_empty() {
+                    let mut env: HashMap<String, Var> = HashMap::new();
+                    env.insert(
+                        format!("__struct__{}", name),
+                        Var {
+                            mutable: false,
+                            value: s[open_idx + 1..close_idx].to_string(),
+                            suffix: Some("STRUCT".to_string()),
+                        },
+                    );
+                    return Ok("".to_string());
+                }
+            }
+        }
+        return Err("invalid struct declaration".to_string());
+    }
+
     // Check if input is an expression with braced blocks that should be evaluated
     // before treating it as statements (e.g., "{let x = 3; x} + {let x = 4; x}")
     // This must happen before the semicolon check, since blocks contain semicolons.
