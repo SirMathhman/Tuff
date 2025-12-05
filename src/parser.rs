@@ -48,9 +48,42 @@ impl Parser {
     }
 
     // ==================== Type Parsing ====================
-    /// Parse a complete type: base type followed by postfix operators (*, &, etc.)
+    /// Parse a complete type: prefix operators (*, &) followed by base type, then postfix operators
     fn parse_type(&mut self) -> Result<Type, String> {
-        let base = self.parse_base_type()?;
+        // Handle prefix operators: &T, &mut T, *T
+        let mut is_mutable_ref = false;
+        let mut is_pointer = false;
+
+        loop {
+            match self.current() {
+                Token::Ampersand => {
+                    self.advance();
+                    if matches!(self.current(), Token::Mut) {
+                        is_mutable_ref = true;
+                        self.advance();
+                    }
+                    // We'll apply this after parsing the base type
+                    break;
+                }
+                Token::Star => {
+                    is_pointer = true;
+                    self.advance();
+                    break;
+                }
+                _ => break,
+            }
+        }
+
+        let mut base = self.parse_base_type()?;
+
+        // Apply prefix modifiers
+        if is_mutable_ref {
+            base = Type::MutableReference(Box::new(base));
+        } else if is_pointer {
+            base = Type::Pointer(Box::new(base));
+        }
+
+        // Handle postfix operators: &T, &mut T, *T (after base type)
         self.parse_type_with_postfix(base)
     }
 
