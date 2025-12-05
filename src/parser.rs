@@ -76,3 +76,59 @@ pub fn detect_suffix_from_tokens(tokens: &[String]) -> Result<Option<&'static st
     }
     Ok(seen_suffix)
 }
+
+pub fn tokens_to_rpn(tokens: &[String]) -> Result<Vec<String>, String> {
+    fn precedence(op: &str) -> i32 {
+        match op {
+            "*" => 2,
+            "+" | "-" => 1,
+            _ => 0,
+        }
+    }
+
+    let mut op_stack: Vec<String> = Vec::new();
+    let mut output: Vec<String> = Vec::new();
+
+    for t in tokens {
+        if t == "+" || t == "-" || t == "*" {
+            while let Some(top) = op_stack.last() {
+                if (top == "+" || top == "-" || top == "*") && precedence(top) >= precedence(t) {
+                    output.push(
+                        op_stack
+                            .pop()
+                            .ok_or_else(|| "invalid expression".to_string())?,
+                    );
+                } else {
+                    break;
+                }
+            }
+            op_stack.push(t.clone());
+        } else if t == "(" {
+            op_stack.push(t.clone());
+        } else if t == ")" {
+            while let Some(top) = op_stack.last() {
+                if top == "(" {
+                    op_stack.pop();
+                    break;
+                } else {
+                    output.push(
+                        op_stack
+                            .pop()
+                            .ok_or_else(|| "invalid expression".to_string())?,
+                    );
+                }
+            }
+        } else {
+            output.push(t.clone());
+        }
+    }
+
+    while let Some(op) = op_stack.pop() {
+        if op == "(" || op == ")" {
+            return Err("mismatched parentheses".to_string());
+        }
+        output.push(op);
+    }
+
+    Ok(output)
+}

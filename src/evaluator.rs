@@ -108,3 +108,9 @@ where
     }
     stack.pop().ok_or_else(|| "invalid expression".to_string())
 }
+
+pub fn parse_plain_i128(token: &str, _suffix: &str) -> Result<i128, String> {
+    let num = token.strip_prefix('+').unwrap_or(token);
+    num.parse::<i128>()
+        .map_err(|_| "invalid numeric value".to_string())
+}

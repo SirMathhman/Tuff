@@ -3,72 +3,240 @@ mod parser;
 mod range_check;
 
 use evaluator::{
-    apply_signed_op, apply_unsigned_op, eval_rpn_generic, parse_signed_token, parse_unsigned_token,
+    apply_signed_op, apply_unsigned_op, eval_rpn_generic, parse_plain_i128 as parse_plain,
+    parse_signed_token, parse_unsigned_token,
 };
-use parser::{detect_suffix_from_tokens, tokenize_expr};
+use parser::{detect_suffix_from_tokens, tokenize_expr, tokens_to_rpn};
 use range_check::{check_signed_range, check_unsigned_range, SUFFIXES};
 
 pub fn interpret(input: &str) -> Result<String, String> {
-    // Handle simple variable declaration syntax: `let <name> : <Type> = <expr>; <name>`
-    // This supports a single declaration followed by a variable reference.
-    if input.trim_start().starts_with("let ") && input.contains(';') {
-        let mut parts = input.splitn(2, ';');
-        let decl = parts
-            .next()
-            .ok_or_else(|| "invalid declaration".to_string())?
-            .trim();
-        let lookup = parts.next().map(|s| s.trim()).unwrap_or("");
+    // Support multiple semicolon-separated statements and a simple variable environment.
+    // Examples supported:
+    //  - let mut x = 100; x = 200; x  => "200"
+    //  - let x : I8 = 10I8 * (3 - 5I8); x => "-20"
+    use std::collections::HashMap;
 
-        // decl = "let <name> : <Type> = <rhs>"
-        let decl = decl
-            .strip_prefix("let")
-            .ok_or_else(|| "invalid declaration".to_string())?
-            .trim();
-        let mut left_and_rhs = decl.splitn(2, '=');
-        let left = left_and_rhs
-            .next()
-            .ok_or_else(|| "invalid declaration".to_string())?
-            .trim();
-        let rhs_expr = left_and_rhs
-            .next()
-            .ok_or_else(|| "invalid declaration".to_string())?
-            .trim();
+    #[derive(Clone, Debug)]
+    struct Var {
+        mutable: bool,
+        suffix: Option<String>, // e.g. Some("U8") or None
+        value: String,          // numeric string without suffix
+    }
 
-        let mut name_and_ty = left.splitn(2, ':');
-        let name = name_and_ty
-            .next()
-            .ok_or_else(|| "invalid declaration".to_string())?
-            .trim();
-        let ty_opt = name_and_ty.next().map(|s| s.trim());
+    // Helper to evaluate an expression with access to the current environment.
+    fn eval_expr_with_env(
+        expr: &str,
+        env: &HashMap<String, Var>,
+    ) -> Result<(String, Option<String>), String> {
+        // Tokenize and allow variable tokens
+        let tokens = tokenize_expr(expr)?;
 
-        // evaluate RHS expression
-        let value = interpret(rhs_expr)?;
-
-        // ensure the value fits the declared type (if provided)
-        if let Some(ty) = ty_opt {
-            if ty.starts_with('U') {
-                let v = value
-                    .parse::<u128>()
-                    .map_err(|_| "invalid numeric value".to_string())?;
-                check_unsigned_range(v, ty)?;
-            } else {
-                let v = value
-                    .parse::<i128>()
-                    .map_err(|_| "invalid numeric value".to_string())?;
-                check_signed_range(v, ty)?;
+        // Prepare a view for suffix detection. Replace var tokens that have suffixes
+        // with value+suffix so detect_suffix_from_tokens sees them.
+        let mut detection_tokens = tokens.clone();
+        for t in detection_tokens.iter_mut() {
+            if let Some(var) = env.get(t.as_str()) {
+                if let Some(s) = &var.suffix {
+                    *t = format!("{}{}", var.value, s);
+                } else {
+                    *t = var.value.clone();
+                }
             }
         }
 
-        if lookup.is_empty() {
-            // Declaration only — return empty string
-            return Ok(String::new());
+        let seen_suffix = detect_suffix_from_tokens(&detection_tokens)?;
+
+        // Replace tokens with their resolved literal equivalents (numbers) for evaluation.
+        let mut resolved_tokens: Vec<String> = Vec::new();
+        for t in tokens {
+            if t == "+" || t == "-" || t == "*" || t == "(" || t == ")" {
+                resolved_tokens.push(t.clone());
+                continue;
+            }
+
+            if let Some(var) = env.get(t.as_str()) {
+                // If variable has a suffix, append it so parser funcs validate correctly.
+                if let Some(s) = &var.suffix {
+                    resolved_tokens.push(format!("{}{}", var.value, s));
+                } else {
+                    resolved_tokens.push(var.value.clone());
+                }
+            } else {
+                resolved_tokens.push(t.clone());
+            }
         }
 
-        if lookup == name {
-            return Ok(value);
+        let output = tokens_to_rpn(&resolved_tokens)?;
+
+        // Evaluate
+        if let Some(suffix) = seen_suffix {
+            let unsigned = suffix.starts_with('U');
+            if unsigned {
+                let res = eval_rpn_generic::<u128, _, _>(
+                    &output,
+                    suffix,
+                    parse_unsigned_token,
+                    apply_unsigned_op,
+                )?;
+                Ok((res.to_string(), Some(suffix.to_string())))
+            } else {
+                let res = eval_rpn_generic::<i128, _, _>(
+                    &output,
+                    suffix,
+                    parse_signed_token,
+                    apply_signed_op,
+                )?;
+                Ok((res.to_string(), Some(suffix.to_string())))
+            }
+        } else {
+            let res = eval_rpn_generic::<i128, _, _>(&output, "", parse_plain, apply_signed_op)?;
+            Ok((res.to_string(), None))
+        }
+    }
+
+    // If there are semicolon-separated statements, process them sequentially
+    if input.contains(';') {
+        let stmts_raw: Vec<&str> = input
+            .split(';')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let mut env: HashMap<String, Var> = HashMap::new();
+        let mut last_value: Option<String> = None;
+
+        for stmt in stmts_raw {
+            // Declaration: let [mut] name [: Type]? = expr
+            if stmt.starts_with("let ") {
+                let rest = stmt.trim_start_matches("let").trim();
+                // check for 'mut'
+                let (mutable, rest) = if rest.starts_with("mut ") {
+                    (true, rest.trim_start_matches("mut").trim())
+                } else {
+                    (false, rest)
+                };
+
+                // split left (name [:type]) and rhs
+                let mut parts = rest.splitn(2, '=');
+                let left = parts
+                    .next()
+                    .ok_or_else(|| "invalid declaration".to_string())?
+                    .trim();
+                let rhs = parts
+                    .next()
+                    .ok_or_else(|| "invalid declaration".to_string())?
+                    .trim();
+
+                let mut left_parts = left.splitn(2, ':');
+                let name = left_parts
+                    .next()
+                    .ok_or_else(|| "invalid declaration".to_string())?
+                    .trim();
+                if name.is_empty() {
+                    return Err("invalid declaration".to_string());
+                }
+                let ty_opt = left_parts
+                    .next()
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string());
+
+                // Ensure name isn't already declared
+                if env.contains_key(name) {
+                    return Err("duplicate declaration".to_string());
+                }
+
+                // Evaluate RHS using current env
+                let (value, expr_suffix) = eval_expr_with_env(rhs, &env)?;
+
+                // If explicit type provided, validate
+                if let Some(ty) = &ty_opt {
+                    if ty.starts_with('U') {
+                        let v = value
+                            .parse::<u128>()
+                            .map_err(|_| "invalid numeric value".to_string())?;
+                        check_unsigned_range(v, ty)?;
+                    } else {
+                        let v = value
+                            .parse::<i128>()
+                            .map_err(|_| "invalid numeric value".to_string())?;
+                        check_signed_range(v, ty)?;
+                    }
+                }
+
+                // Determine final stored suffix
+                let stored_suffix = ty_opt.or(expr_suffix);
+
+                env.insert(
+                    name.to_string(),
+                    Var {
+                        mutable,
+                        suffix: stored_suffix,
+                        value,
+                    },
+                );
+                last_value = None;
+                continue;
+            }
+
+            // Assignment: <name> = <expr>
+            if stmt.contains('=') && !stmt.starts_with("let ") {
+                let mut parts = stmt.splitn(2, '=');
+                let name = parts
+                    .next()
+                    .ok_or_else(|| "invalid assignment".to_string())?
+                    .trim();
+                let rhs = parts
+                    .next()
+                    .ok_or_else(|| "invalid assignment".to_string())?
+                    .trim();
+
+                if !env.contains_key(name) {
+                    return Err("assignment to undeclared variable".to_string());
+                }
+
+                let (value, expr_suffix) = eval_expr_with_env(rhs, &env)?;
+                let var = env
+                    .get_mut(name)
+                    .ok_or_else(|| "assignment to undeclared variable".to_string())?;
+                if !var.mutable {
+                    return Err("assignment to immutable variable".to_string());
+                }
+
+                // If variable had a declared suffix, ensure new value fits and suffix (if present) matches
+                if let Some(declared) = &var.suffix {
+                    // If expression produced a suffix, ensure it matches declared
+                    if let Some(s) = &expr_suffix {
+                        if s != declared {
+                            return Err("type suffix mismatch on assignment".to_string());
+                        }
+                    }
+
+                    if declared.starts_with('U') {
+                        let v = value
+                            .parse::<u128>()
+                            .map_err(|_| "invalid numeric value".to_string())?;
+                        check_unsigned_range(v, declared)?;
+                    } else {
+                        let v = value
+                            .parse::<i128>()
+                            .map_err(|_| "invalid numeric value".to_string())?;
+                        check_signed_range(v, declared)?;
+                    }
+                }
+
+                // Update var value; keep suffix as-is (may remain None)
+                var.value = value;
+                last_value = None;
+                continue;
+            }
+
+            // Expression or variable reference — evaluate and keep as last_value
+            let (value, _suffix) = eval_expr_with_env(stmt, &env)?;
+            last_value = Some(value);
         }
 
-        return Err("unsupported declaration usage".to_string());
+        // Return the result of the last statement; if there is none then return empty
+        return Ok(last_value.unwrap_or_default());
     }
 
     // `typeOf(<literal or expr>)` helper: return the suffix portion if present, e.g. typeOf(100U8) -> "U8"
@@ -102,59 +270,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
         let tokens = tokenize_expr(input)?;
         let seen_suffix = detect_suffix_from_tokens(&tokens)?;
 
-        // Convert tokens to RPN using shunting-yard (supports +, -, *, parentheses)
-        fn precedence(op: &str) -> i32 {
-            match op {
-                "*" => 2,
-                "+" | "-" => 1,
-                _ => 0,
-            }
-        }
-
-        let mut op_stack: Vec<String> = Vec::new();
-        let mut output: Vec<String> = Vec::new();
-
-        for t in &tokens {
-            if t == "+" || t == "-" || t == "*" {
-                while let Some(top) = op_stack.last() {
-                    if (top == "+" || top == "-" || top == "*") && precedence(top) >= precedence(t)
-                    {
-                        output.push(
-                            op_stack
-                                .pop()
-                                .ok_or_else(|| "invalid expression".to_string())?,
-                        );
-                    } else {
-                        break;
-                    }
-                }
-                op_stack.push(t.clone());
-            } else if t == "(" {
-                op_stack.push(t.clone());
-            } else if t == ")" {
-                while let Some(top) = op_stack.last() {
-                    if top == "(" {
-                        op_stack.pop();
-                        break;
-                    } else {
-                        output.push(
-                            op_stack
-                                .pop()
-                                .ok_or_else(|| "invalid expression".to_string())?,
-                        );
-                    }
-                }
-            } else {
-                // number token
-                output.push(t.clone());
-            }
-        }
-        while let Some(op) = op_stack.pop() {
-            if op == "(" || op == ")" {
-                return Err("mismatched parentheses".to_string());
-            }
-            output.push(op);
-        }
+        let output = tokens_to_rpn(&tokens)?;
 
         // Evaluate RPN output using a tiny generic evaluator to avoid duplicate code
         if let Some(suffix) = seen_suffix {
@@ -178,17 +294,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
             }
         } else {
             // no suffix: evaluate as plain signed i128 with empty suffix
-            let res = eval_rpn_generic::<i128, _, _>(
-                &output,
-                "",
-                |tok, _sfx| {
-                    // parse plain signed i128 literal
-                    let num = tok.strip_prefix('+').unwrap_or(tok);
-                    num.parse::<i128>()
-                        .map_err(|_| "invalid numeric value".to_string())
-                },
-                apply_signed_op,
-            )?;
+            let res = eval_rpn_generic::<i128, _, _>(&output, "", parse_plain, apply_signed_op)?;
             return Ok(res.to_string());
         }
     }
@@ -294,6 +400,15 @@ mod tests {
 
         // Declaration without type should work: let x = 100; x => "100"
         assert_eq!(interpret("let x = 100; x"), Ok("100".to_string()));
+
+        // Mutable variable and assignment
+        assert_eq!(
+            interpret("let mut x = 100; x = 200; x"),
+            Ok("200".to_string())
+        );
+
+        // Assignment to immutable variable should error
+        assert!(interpret("let x = 100; x = 200; x").is_err());
 
         // typeOf helper should return type suffix for literal
         assert_eq!(interpret("typeOf(100U8)"), Ok("U8".to_string()));
