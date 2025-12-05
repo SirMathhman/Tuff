@@ -71,7 +71,14 @@ pub fn interpret(input: &str) -> Result<String, String> {
 
     // If there are semicolon-separated statements, process them sequentially
     if input.contains(';') {
-        let stmts_raw: Vec<&str> = input
+        // Allow optional surrounding braces: { ... }
+        let mut seq = input.trim();
+        if seq.starts_with('{') && seq.ends_with('}') {
+            // remove outer braces and trim
+            seq = seq[1..seq.len() - 1].trim();
+        }
+
+        let stmts_raw: Vec<&str> = seq
             .split(';')
             .map(|s| s.trim())
             .filter(|s| !s.is_empty())
@@ -371,6 +378,12 @@ mod tests {
         // Mutable variable and assignment
         assert_eq!(
             interpret("let mut x = 100; x = 200; x"),
+            Ok("200".to_string())
+        );
+
+        // Braced statement block should work the same
+        assert_eq!(
+            interpret("{let mut x = 100; x = 200; x}"),
             Ok("200".to_string())
         );
 
