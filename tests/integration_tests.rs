@@ -164,6 +164,9 @@ fn interpret_strips_type_like_suffix() {
     );
     // Expression-bodied functions without an explicit return type should work
     assert_eq!(interpret("fn getA() => 100; getA()"), Ok("100".to_string()));
+
+    // Functions defined out-of-order should resolve at call time
+    assert_eq!(interpret("fn getA() => getB(); fn getB() => 100; getA()"), Ok("100".to_string()));
     assert_eq!(
         interpret("fn add2(first : I32, second : I32) : I32 => first + second; add2(2, 3)"),
         Ok("5".to_string())
