@@ -1,27 +1,49 @@
 pub fn interpret(input: &str) -> Result<String, String> {
     // Handle a simple binary addition: "<lhs> + <rhs>" where both operands
     // are integers with the same type suffix (e.g. "1U8 + 2U8").
-    if input.contains('+') || input.contains('-') {
-        // Tokenize into operands and binary ops, preserving unary leading signs.
-        let mut parts: Vec<String> = Vec::new();
-        let mut ops: Vec<char> = Vec::new();
+    if input.contains('+')
+        || input.contains('-')
+        || input.contains('*')
+        || input.contains('(')
+        || input.contains(')')
+    {
+        // Tokenize into numbers, operators and parentheses; treat leading +/- as unary signs attached to numbers.
+        let mut tokens: Vec<String> = Vec::new();
         let mut cur = String::new();
         let mut last_was_op = true;
 
+        fn push_op(tokens: &mut Vec<String>, cur: &mut String, ch: char, last_was_op: &mut bool) {
+            if !cur.trim().is_empty() {
+                tokens.push(cur.trim().to_string());
+                cur.clear();
+            }
+            tokens.push(ch.to_string());
+            *last_was_op = true;
+        }
+
         for ch in input.chars() {
             match ch {
-                '+' | '-' | '*' => {
+                '+' | '-' => {
                     if last_was_op {
-                        // unary sign
-                        cur.push(ch);
+                        cur.push(ch); // unary sign
                     } else {
-                        parts.push(cur.trim().to_string());
-                        cur.clear();
-                        ops.push(ch);
-                        last_was_op = true;
+                        push_op(&mut tokens, &mut cur, ch, &mut last_was_op);
                         continue;
                     }
                     last_was_op = true;
+                }
+                '*' => {
+                    if last_was_op {
+                        return Err("invalid expression".to_string());
+                    }
+                    push_op(&mut tokens, &mut cur, ch, &mut last_was_op);
+                }
+                '(' => {
+                    push_op(&mut tokens, &mut cur, ch, &mut last_was_op);
+                }
+                ')' => {
+                    push_op(&mut tokens, &mut cur, ch, &mut last_was_op);
+                    last_was_op = false;
                 }
                 c if c.is_whitespace() => {
                     if !cur.is_empty() {
@@ -36,17 +58,16 @@ pub fn interpret(input: &str) -> Result<String, String> {
         }
 
         if !cur.trim().is_empty() {
-            parts.push(cur.trim().to_string());
+            tokens.push(cur.trim().to_string());
         }
-
-        if parts.is_empty() {
+        if tokens.is_empty() {
             return Err("invalid expression".to_string());
         }
 
         const SUFFIXES: [&str; 8] = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
 
         let mut seen_suffix: Option<&str> = None;
-        for p in &parts {
+        for p in &tokens {
             for sfx in SUFFIXES {
                 if p.ends_with(sfx) {
                     if let Some(existing) = seen_suffix {
@@ -60,63 +81,117 @@ pub fn interpret(input: &str) -> Result<String, String> {
             }
         }
 
-        // No suffix found: evaluate signed
-        if seen_suffix.is_none() {
-            let first_tok = parts
-                .first()
-                .map(|s| s.as_str())
-                .ok_or_else(|| "invalid expression".to_string())?;
-            let mut total: i128 = first_tok
-                .strip_prefix('+')
-                .unwrap_or(first_tok)
-                .parse::<i128>()
-                .map_err(|_| "invalid numeric value".to_string())?;
-            for (i, op) in ops.iter().enumerate() {
-                let rhs_tok = parts
-                    .get(i + 1)
-                    .map(|s| s.as_str())
-                    .ok_or_else(|| "invalid expression".to_string())?;
-                let rhs = rhs_tok
-                    .strip_prefix('+')
-                    .unwrap_or(rhs_tok)
-                    .parse::<i128>()
-                    .map_err(|_| "invalid numeric value".to_string())?;
-                match op {
-                    '+' => {
-                        total = total
-                            .checked_add(rhs)
-                            .ok_or_else(|| "overflow".to_string())?
-                    }
-                    '-' => {
-                        total = total
-                            .checked_sub(rhs)
-                            .ok_or_else(|| "overflow".to_string())?
-                    }
-                    _ => return Err("invalid operator".to_string()),
-                }
+        // Convert tokens to RPN using shunting-yard (supports +, -, *, parentheses)
+        fn precedence(op: &str) -> i32 {
+            match op {
+                "*" => 2,
+                "+" | "-" => 1,
+                _ => 0,
             }
-            return Ok(total.to_string());
+        }
+
+        let mut op_stack: Vec<String> = Vec::new();
+        let mut output: Vec<String> = Vec::new();
+
+        for t in &tokens {
+            if t == "+" || t == "-" || t == "*" {
+                while let Some(top) = op_stack.last() {
+                    if (top == "+" || top == "-" || top == "*") && precedence(top) >= precedence(t)
+                    {
+                        output.push(
+                            op_stack
+                                .pop()
+                                .ok_or_else(|| "invalid expression".to_string())?,
+                        );
+                    } else {
+                        break;
+                    }
+                }
+                op_stack.push(t.clone());
+            } else if t == "(" {
+                op_stack.push(t.clone());
+            } else if t == ")" {
+                while let Some(top) = op_stack.last() {
+                    if top == "(" {
+                        op_stack.pop();
+                        break;
+                    } else {
+                        output.push(
+                            op_stack
+                                .pop()
+                                .ok_or_else(|| "invalid expression".to_string())?,
+                        );
+                    }
+                }
+            } else {
+                // number token
+                output.push(t.clone());
+            }
+        }
+        while let Some(op) = op_stack.pop() {
+            if op == "(" || op == ")" {
+                return Err("mismatched parentheses".to_string());
+            }
+            output.push(op);
         }
 
         let suffix = seen_suffix.ok_or_else(|| "internal error determining suffix".to_string())?;
         let unsigned = suffix.starts_with('U');
 
+        // Evaluate RPN output using a tiny generic evaluator to avoid duplicate code
+        fn eval_rpn_generic<T, P, A>(
+            output: &[String],
+            suffix: &str,
+            parse: P,
+            apply: A,
+        ) -> Result<T, String>
+        where
+            P: Fn(&str, &str) -> Result<T, String>,
+            A: Fn(T, T, &char, &str) -> Result<T, String>,
+            T: Copy,
+        {
+            let mut stack: Vec<T> = Vec::new();
+            for tok in output {
+                if tok == "+" || tok == "-" || tok == "*" {
+                    let rhs = stack
+                        .pop()
+                        .ok_or_else(|| "invalid expression".to_string())?;
+                    let lhs = stack
+                        .pop()
+                        .ok_or_else(|| "invalid expression".to_string())?;
+                    let op_char = tok
+                        .chars()
+                        .next()
+                        .ok_or_else(|| "invalid operator token".to_string())?;
+                    let res = apply(lhs, rhs, &op_char, suffix)?;
+                    stack.push(res);
+                } else {
+                    let v = parse(tok, suffix)?;
+                    stack.push(v);
+                }
+            }
+            if stack.len() != 1 {
+                return Err("invalid expression".to_string());
+            }
+            stack.pop().ok_or_else(|| "invalid expression".to_string())
+        }
+
         if unsigned {
-            let first_tok = parts
-                .first()
-                .map(|s| s.as_str())
-                .ok_or_else(|| "invalid expression".to_string())?;
-            let first = parse_unsigned_token(first_tok, suffix)?;
-            let total = evaluate_unsigned_chain(first, &parts, &ops, suffix)?;
-            return Ok(total.to_string());
+            let res = eval_rpn_generic::<u128, _, _>(
+                &output,
+                suffix,
+                parse_unsigned_token,
+                apply_unsigned_op,
+            )?;
+            return Ok(res.to_string());
         } else {
-            let first_tok = parts
-                .first()
-                .map(|s| s.as_str())
-                .ok_or_else(|| "invalid expression".to_string())?;
-            let first = parse_signed_token(first_tok, suffix)?;
-            let total = evaluate_signed_chain(first, &parts, &ops, suffix)?;
-            return Ok(total.to_string());
+            let res = eval_rpn_generic::<i128, _, _>(
+                &output,
+                suffix,
+                parse_signed_token,
+                apply_signed_op,
+            )?;
+            return Ok(res.to_string());
         }
     }
     const SUFFIXES: [&str; 8] = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
@@ -257,42 +332,6 @@ fn apply_signed_op(total: i128, rhs: i128, op: &char, suffix: &str) -> Result<i1
     Ok(result)
 }
 
-fn evaluate_unsigned_chain(
-    first: u128,
-    parts: &[String],
-    ops: &[char],
-    suffix: &str,
-) -> Result<u128, String> {
-    let mut total = first;
-    for (i, op) in ops.iter().enumerate() {
-        let token = parts
-            .get(i + 1)
-            .map(|s| s.as_str())
-            .ok_or_else(|| "invalid expression".to_string())?;
-        let v = parse_unsigned_token(token, suffix)?;
-        total = apply_unsigned_op(total, v, op, suffix)?;
-    }
-    Ok(total)
-}
-
-fn evaluate_signed_chain(
-    first: i128,
-    parts: &[String],
-    ops: &[char],
-    suffix: &str,
-) -> Result<i128, String> {
-    let mut t = first;
-    for (i, op) in ops.iter().enumerate() {
-        let tok = parts
-            .get(i + 1)
-            .map(|s| s.as_str())
-            .ok_or_else(|| "invalid expression".to_string())?;
-        let v = parse_signed_token(tok, suffix)?;
-        t = apply_signed_op(t, v, op, suffix)?;
-    }
-    Ok(t)
-}
-
 #[cfg(test)]
 mod tests {
     use crate::interpret;
@@ -341,6 +380,9 @@ mod tests {
 
         // Signed multiplication then subtraction
         assert_eq!(interpret("10I8 * 3 - 5I8"), Ok("25".to_string()));
+
+        // Parentheses + precedence: multiplication outside parentheses.
+        assert_eq!(interpret("10I8 * (3 - 5I8)"), Ok("-20".to_string()));
 
         // Unsigned underflow should produce an error
         assert!(interpret("0U8 - 5U8").is_err());
