@@ -182,4 +182,10 @@ fn interpret_strips_type_like_suffix() {
 
     // Overflow when result exceeds the type max should be an error
     assert!(interpret("1U8 + 255U8").is_err());
+
+    // Block expressions with local scoping: {let x = 3; x} + {let x = 4; x} => "7"
+    assert_eq!(
+        interpret("{let x = 3; x} + {let x = 4; x}"),
+        Ok("7".to_string())
+    );
 }

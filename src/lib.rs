@@ -17,11 +17,67 @@ pub fn interpret(input: &str) -> Result<String, String> {
         expr: &str,
         env: &HashMap<String, Var>,
     ) -> Result<(String, Option<String>), String> {
-        let trimmed = expr.trim();
+        let mut trimmed = expr.trim().to_string();
 
         // Fast-path: boolean literals allowed inside expressions for control flow
         if trimmed == "true" || trimmed == "false" {
             return Ok((trimmed.to_string(), None));
+        }
+
+        // Preprocess braced blocks in the expression. E.g., "{let x = 3; x} + {let y = 4; y}"
+        // becomes "3 + 4" after evaluating each block in its own local scope.
+        loop {
+            // Find the first braced block at the top level (outside parens)
+            let mut brace_start = None;
+            let mut depth: i32 = 0;
+            let mut paren_depth: i32 = 0;
+            let mut found_block = false;
+
+            for (i, ch) in trimmed.char_indices() {
+                match ch {
+                    '{' if paren_depth == 0 => {
+                        if brace_start.is_none() {
+                            brace_start = Some(i);
+                        }
+                        depth += 1;
+                    }
+                    '}' if paren_depth == 0 => {
+                        depth = depth.saturating_sub(1);
+                        if let Some(block_start) = brace_start {
+                            if depth == 0 {
+                                // Found a complete block, evaluate it
+                                let block_content = &trimmed[block_start + 1..i];
+                                let (block_value, block_suffix) =
+                                    crate::statement::eval_block_expr(
+                                        block_content,
+                                        env,
+                                        &eval_expr_with_env,
+                                    )?;
+                                let block_result = if let Some(suffix) = block_suffix {
+                                    format!("{}{}", block_value, suffix)
+                                } else {
+                                    block_value
+                                };
+                                trimmed = format!(
+                                    "{}{}{}",
+                                    &trimmed[..block_start],
+                                    block_result,
+                                    &trimmed[i + 1..]
+                                );
+                                found_block = true;
+                                break;
+                            }
+                        }
+                    }
+                    '(' => paren_depth += 1,
+                    ')' => paren_depth = paren_depth.saturating_sub(1),
+                    _ => {}
+                }
+            }
+
+            if !found_block {
+                break;
+            }
         }
 
         // Fast-path: function call syntax like `name(arg1, arg2)` where the
@@ -57,13 +113,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
 
                     // lookup function by special key
                     let key = format!("__fn__{}", name);
-                    eprintln!(
-                        "DEBUG: looking up function key={:?}, env keys={:?}",
-                        key,
-                        env.keys().collect::<Vec<_>>()
-                    );
                     if let Some(func_var) = env.get(&key) {
-                        eprintln!("DEBUG: found function");
                         // function stored as expected
                         // stored format: params_list|return_type|body
                         let parts: Vec<&str> = func_var.value.splitn(3, '|').collect();
@@ -101,23 +151,18 @@ pub fn interpret(input: &str) -> Result<String, String> {
                         // execute function body
                         // evaluate function body in the local environment
                         // Body is stored without outer braces, so wrap it for eval_block_expr
-                        eprintln!(
-                            "DEBUG: calling eval_block_expr with body_part={:?}",
-                            body_part
-                        );
                         let (v, sfx) = crate::statement::eval_block_expr(
                             body_part,
                             &local_env,
                             &eval_expr_with_env,
                         )?;
-                        eprintln!("DEBUG: eval_block_expr returned v={:?}, sfx={:?}", v, sfx);
                         return Ok((v, sfx));
                     }
                 }
             }
         }
 
-        let tokens = tokenize_expr(expr)?;
+        let tokens = tokenize_expr(&trimmed)?;
 
         // Prepare tokens for suffix detection by substituting variable values.
         let mut detection_tokens = tokens.clone();
@@ -176,6 +221,25 @@ pub fn interpret(input: &str) -> Result<String, String> {
             let (val, _suf) = eval_expr_with_env(tail, &env)?;
             return Ok(val);
         }
+    }
+
+    // Check if input is an expression with braced blocks that should be evaluated
+    // before treating it as statements (e.g., "{let x = 3; x} + {let x = 4; x}")
+    // This must happen before the semicolon check, since blocks contain semicolons.
+    if input.contains('{')
+        && input.contains('}')
+        && (input.contains('+') || input.contains('-') || input.contains('*'))
+    {
+        let env: HashMap<String, Var> = HashMap::new();
+        if let Ok((val, suf)) = eval_expr_with_env(input, &env) {
+            let result = if let Some(suffix) = suf {
+                format!("{}{}", val, suffix)
+            } else {
+                val
+            };
+            return Ok(result);
+        }
+        // If it fails, fall through to other handlers
     }
 
     // Handle semicolon-separated statements
