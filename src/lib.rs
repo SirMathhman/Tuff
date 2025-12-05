@@ -50,6 +50,11 @@ pub fn interpret(input: &str) -> Result<String, String> {
             check_signed_range(v, ty)?;
         }
 
+        if lookup.is_empty() {
+            // Declaration only — return empty string
+            return Ok(String::new());
+        }
+
         if lookup == name {
             return Ok(value);
         }
@@ -447,6 +452,9 @@ mod tests {
             interpret("let x : I8 = 10I8 * (3 - 5I8); x"),
             Ok("-20".to_string())
         );
+
+        // Declaration-only returns empty string
+        assert_eq!(interpret("let x : I32 = 100;"), Ok("".to_string()));
 
         // Unsigned underflow should produce an error
         assert!(interpret("0U8 - 5U8").is_err());
