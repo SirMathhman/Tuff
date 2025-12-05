@@ -1,4 +1,62 @@
 pub fn interpret(input: &str) -> Result<String, String> {
+    // Handle simple variable declaration syntax: `let <name> : <Type> = <expr>; <name>`
+    // This supports a single declaration followed by a variable reference.
+    if input.trim_start().starts_with("let ") && input.contains(';') {
+        let mut parts = input.splitn(2, ';');
+        let decl = parts
+            .next()
+            .ok_or_else(|| "invalid declaration".to_string())?
+            .trim();
+        let lookup = parts.next().map(|s| s.trim()).unwrap_or("");
+
+        // decl = "let <name> : <Type> = <rhs>"
+        let decl = decl
+            .strip_prefix("let")
+            .ok_or_else(|| "invalid declaration".to_string())?
+            .trim();
+        let mut left_and_rhs = decl.splitn(2, '=');
+        let left = left_and_rhs
+            .next()
+            .ok_or_else(|| "invalid declaration".to_string())?
+            .trim();
+        let rhs_expr = left_and_rhs
+            .next()
+            .ok_or_else(|| "invalid declaration".to_string())?
+            .trim();
+
+        let mut name_and_ty = left.splitn(2, ':');
+        let name = name_and_ty
+            .next()
+            .ok_or_else(|| "invalid declaration".to_string())?
+            .trim();
+        let ty = name_and_ty
+            .next()
+            .ok_or_else(|| "invalid declaration".to_string())?
+            .trim();
+
+        // evaluate RHS expression
+        let value = interpret(rhs_expr)?;
+
+        // ensure the value fits the declared type
+        if ty.starts_with('U') {
+            let v = value
+                .parse::<u128>()
+                .map_err(|_| "invalid numeric value".to_string())?;
+            check_unsigned_range(v, ty)?;
+        } else {
+            let v = value
+                .parse::<i128>()
+                .map_err(|_| "invalid numeric value".to_string())?;
+            check_signed_range(v, ty)?;
+        }
+
+        if lookup == name {
+            return Ok(value);
+        }
+
+        return Err("unsupported declaration usage".to_string());
+    }
+
     // Handle a simple binary addition: "<lhs> + <rhs>" where both operands
     // are integers with the same type suffix (e.g. "1U8 + 2U8").
     if input.contains('+')
@@ -383,6 +441,12 @@ mod tests {
 
         // Parentheses + precedence: multiplication outside parentheses.
         assert_eq!(interpret("10I8 * (3 - 5I8)"), Ok("-20".to_string()));
+
+        // Simple declaration and usage
+        assert_eq!(
+            interpret("let x : I8 = 10I8 * (3 - 5I8); x"),
+            Ok("-20".to_string())
+        );
 
         // Unsigned underflow should produce an error
         assert!(interpret("0U8 - 5U8").is_err());
