@@ -289,6 +289,12 @@ fn interpret_strips_type_like_suffix() {
         Ok("101".to_string())
     );
 
+    // Explicit drop handler function with mutable captures
+    assert_eq!(
+        interpret("let mut sum = 0; fn drop[&mut sum](this : I32) => sum += 1; drop(100); sum"),
+        Ok("1".to_string())
+    );
+
     // Type alias: allow aliasing primitive types and using in declarations
     assert_eq!(
         interpret("type MyAlias = I32; let value : MyAlias = 100; value"),
