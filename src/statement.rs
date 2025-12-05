@@ -60,7 +60,22 @@ pub fn eval_block_expr(
             eval_expr: eval_expr_with_env,
             last_value: &mut last_value,
         };
-        run_block_stmt(st, &mut ctx)?;
+        match run_block_stmt(st, &mut ctx) {
+            Ok(()) => {}
+            Err(e) if e.starts_with("__RETURN__:") => {
+                // Early return from function: extract the return value
+                let return_val = e.strip_prefix("__RETURN__:").unwrap_or("");
+                // Parse: "__RETURN__:value|suffix" or "__RETURN__:value"
+                if let Some(pipe_idx) = return_val.find('|') {
+                    let val = return_val[..pipe_idx].to_string();
+                    let suf = Some(return_val[pipe_idx + 1..].to_string());
+                    return Ok((val, suf));
+                } else {
+                    return Ok((return_val.to_string(), None));
+                }
+            }
+            Err(e) => return Err(e),
+        }
     }
 
     if let Some((v, suf)) = last_value {
@@ -105,6 +120,24 @@ fn run_block_stmt(s: &str, ctx: &mut StatementContext) -> Result<(), String> {
     if s.starts_with("fn ") {
         // For now, functions are only top-level; not allowed inside blocks
         return Err("functions cannot be defined inside blocks".to_string());
+    }
+
+    if let Some(stripped) = s.strip_prefix("return ") {
+        // Handle return statement: evaluate the expression and signal early exit
+        let expr = stripped.trim();
+        // Remove trailing semicolon if present
+        let expr = if let Some(stripped) = expr.strip_suffix(';') {
+            stripped.trim()
+        } else {
+            expr
+        };
+        let (value, suf) = (ctx.eval_expr)(expr, ctx.env)?;
+        let return_signal = if let Some(suffix) = suf {
+            format!("__RETURN__:{}|{}", value, suffix)
+        } else {
+            format!("__RETURN__:{}", value)
+        };
+        return Err(return_signal);
     }
 
     if s.starts_with("let ") {

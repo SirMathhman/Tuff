@@ -57,7 +57,13 @@ pub fn interpret(input: &str) -> Result<String, String> {
 
                     // lookup function by special key
                     let key = format!("__fn__{}", name);
+                    eprintln!(
+                        "DEBUG: looking up function key={:?}, env keys={:?}",
+                        key,
+                        env.keys().collect::<Vec<_>>()
+                    );
                     if let Some(func_var) = env.get(&key) {
+                        eprintln!("DEBUG: found function");
                         // function stored as expected
                         // stored format: params_list|return_type|body
                         let parts: Vec<&str> = func_var.value.splitn(3, '|').collect();
@@ -94,18 +100,18 @@ pub fn interpret(input: &str) -> Result<String, String> {
 
                         // execute function body
                         // evaluate function body in the local environment
-                        if body_part.starts_with('{') && body_part.ends_with('}') {
-                            let inner = body_part[1..body_part.len() - 1].trim();
-                            let (v, sfx) = crate::statement::eval_block_expr(
-                                inner,
-                                &local_env,
-                                &eval_expr_with_env,
-                            )?;
-                            return Ok((v, sfx));
-                        } else {
-                            let (v, sfx) = eval_expr_with_env(body_part, &local_env)?;
-                            return Ok((v, sfx));
-                        }
+                        // Body is stored without outer braces, so wrap it for eval_block_expr
+                        eprintln!(
+                            "DEBUG: calling eval_block_expr with body_part={:?}",
+                            body_part
+                        );
+                        let (v, sfx) = crate::statement::eval_block_expr(
+                            body_part,
+                            &local_env,
+                            &eval_expr_with_env,
+                        )?;
+                        eprintln!("DEBUG: eval_block_expr returned v={:?}, sfx={:?}", v, sfx);
+                        return Ok((v, sfx));
                     }
                 }
             }
@@ -148,6 +154,28 @@ pub fn interpret(input: &str) -> Result<String, String> {
         let output = tokens_to_rpn(&resolved_tokens)?;
         let (value_out, maybe_suffix) = evaluator::eval_output_with_suffix(&output, seen_suffix)?;
         Ok((value_out, maybe_suffix))
+    }
+
+    // If input starts with a function definition followed by a call without
+    // semicolons (e.g. "fn add(...) => { ... } add(3,4)") handle the definition
+    // first then evaluate the tail expression.
+    if input.trim_start().starts_with("fn ") {
+        let s = input.trim();
+        if let Some((_arrow_pos, _open_brace, end_idx)) = brace_utils::find_fn_arrow_and_braces(s) {
+            let def_str = &s[..=end_idx];
+            let tail = s[end_idx + 1..].trim();
+            let mut env: HashMap<String, Var> = HashMap::new();
+            let mut last_value: Option<String> = None;
+            // register the function
+            process_single_stmt(def_str, &mut env, &mut last_value, &eval_expr_with_env)?;
+
+            if tail.is_empty() {
+                return Ok("".to_string());
+            }
+            // evaluate the tail expression in the environment with the function registered
+            let (val, _suf) = eval_expr_with_env(tail, &env)?;
+            return Ok(val);
+        }
     }
 
     // Handle semicolon-separated statements
@@ -212,28 +240,6 @@ pub fn interpret(input: &str) -> Result<String, String> {
         let tokens = tokenize_expr(inner)?;
         let seen_suffix = detect_suffix_from_tokens(&tokens)?;
         return Ok(seen_suffix.unwrap_or("").to_string());
-    }
-
-    // If input starts with a function definition followed by a call without
-    // semicolons (e.g. "fn add(...) => { ... } add(3,4)") handle the definition
-    // first then evaluate the tail expression.
-    if input.trim_start().starts_with("fn ") {
-        let s = input.trim();
-        if let Some((_arrow_pos, _open_brace, end_idx)) = brace_utils::find_fn_arrow_and_braces(s) {
-            let def_str = &s[..=end_idx];
-            let tail = s[end_idx + 1..].trim();
-            let mut env: HashMap<String, Var> = HashMap::new();
-            let mut last_value: Option<String> = None;
-            // register the function
-            process_single_stmt(def_str, &mut env, &mut last_value, &eval_expr_with_env)?;
-
-            if tail.is_empty() {
-                return Ok("".to_string());
-            }
-            // evaluate the tail expression in the environment with the function registered
-            let (val, _suf) = eval_expr_with_env(tail, &env)?;
-            return Ok(val);
-        }
     }
 
     // Handle a simple binary addition: "<lhs> + <rhs>" where both operands

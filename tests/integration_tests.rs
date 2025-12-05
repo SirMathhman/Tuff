@@ -157,6 +157,11 @@ fn interpret_strips_type_like_suffix() {
         Ok("7".to_string())
     );
 
+    // Function with explicit return statement
+    let result = interpret("fn get_five() : I32 => { return 5; } get_five()");
+    eprintln!("Result: {:?}", result);
+    assert_eq!(result, Ok("5".to_string()));
+
     // Assignment to declared I8 that overflows should error
     assert_eq!(
         interpret("let mut x : I8 = 100; x = 1000; x"),
