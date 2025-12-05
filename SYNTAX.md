@@ -133,6 +133,7 @@ fn calculate(x : I32) : I32 => {
 ```
 
 **Key Points:**
+
 - Explicit return types required
 - Implicit return from last expression
 - No explicit `return` keyword needed (but allowed)
@@ -182,7 +183,7 @@ impl Point {
     fn distance(this) : I32 => {
         (this.x * this.x + this.y * this.y) as I32
     }
-    
+
     fn translate(mut this, dx : I32, dy : I32) : ThisType => {
         this.x = this.x + dx;
         this.y = this.y + dy;
@@ -352,14 +353,14 @@ impl Drawable for Point {
     fn draw(this) : String => {
         format!("Point({}, {})", this.x, this.y)
     }
-    
+
     fn get_size(this) : I32 => 1
 }
 
 // Implement for generic types
 impl<T : Display> Drawable for Container<T> {
     fn draw(this) : String => { /* ... */ }
-    
+
     fn get_size(this) : I32 => this.len()
 }
 ```
@@ -375,9 +376,9 @@ struct ColoredPoint {
 }
 
 // Reuse with explicit forwarding
-let cp = ColoredPoint { 
-    point: Point { x: 5, y: 10 }, 
-    color: "red" 
+let cp = ColoredPoint {
+    point: Point { x: 5, y: 10 },
+    color: "red"
 };
 ```
 
@@ -633,9 +634,9 @@ let x = 5;  // Inline comment
 ### Documentation Comments
 
 ```tuff
-/** 
+/**
  * Adds two numbers together.
- * 
+ *
  * This function takes two I32 values and returns their sum.
  */
 fn add(a : I32, b : I32) : I32 => a + b;
@@ -673,6 +674,7 @@ let s : String = b.to_string();  // "true"
 ```
 
 **Common Methods:**
+
 - `.to_i8()`, `.to_i16()`, `.to_i32()`, `.to_i64()`
 - `.to_u8()`, `.to_u16()`, `.to_u32()`, `.to_u64()`
 - `.to_f32()`, `.to_f64()`
@@ -771,7 +773,7 @@ declaration → module_decl | function_decl | struct_decl | trait_decl | impl_de
 
 ```
 function_decl → "fn" identifier "(" parameters ")" ":" type "=>" block ";"
-parameters   → (parameter ("," parameter)*)? 
+parameters   → (parameter ("," parameter)*)?
 parameter    → identifier ":" type
 ```
 
@@ -820,11 +822,11 @@ fn fibonacci(n : U32) : U32 => {
 /** Process a list of numbers */
 fn process_numbers(numbers : Vec<I32>) : I32 => {
     let mut sum : I32 = 0;
-    
+
     for num in numbers {
         sum = sum + num;
     }
-    
+
     sum
 };
 
@@ -837,21 +839,21 @@ impl Calculator {
         this.base = this.base + value;
         this
     }
-    
+
     fn multiply(mut this, value : I32) : ThisType => {
         this.base = this.base * value;
         this
     }
-    
+
     fn result(this) : I32 => this.base
 }
 
 fn main() : Void => {
     let fib_10 = fibonacci(10);
-    
+
     let numbers = [1, 2, 3, 4, 5];
     let sum = process_numbers(numbers);
-    
+
     let calc = Calculator { base: 10 }
         .add(5)
         .multiply(2)

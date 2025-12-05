@@ -5,6 +5,7 @@ A hybrid systems programming language combining the best features of Rust, TypeS
 ## Overview
 
 Tuff is designed to be:
+
 - **Safe by default**: Ownership-based memory management without garbage collection
 - **Expressive**: Powerful type system with union types and pattern matching
 - **Practical**: Multi-platform compilation targeting multiple backends
@@ -15,6 +16,7 @@ Tuff is designed to be:
 **Version 0.1.0 - MVP (Tree-Walking Interpreter)**
 
 The initial implementation provides a functional interpreter with:
+
 - Lexer with full token support (keywords, operators, literals, delimiters)
 - Recursive descent parser producing an Abstract Syntax Tree
 - Tree-walking evaluator with:
@@ -29,16 +31,19 @@ The initial implementation provides a functional interpreter with:
 ## Getting Started
 
 ### Build
+
 ```bash
 cargo build --release
 ```
 
 ### Run the REPL
+
 ```bash
 cargo run --release
 ```
 
 ### Run Tests
+
 ```bash
 cargo test
 ```
@@ -46,6 +51,7 @@ cargo test
 ## Language Features
 
 ### Variables and Functions
+
 ```tuff
 let x = 42;
 let msg = "Hello, Tuff!";
@@ -58,6 +64,7 @@ add(10, 20);  // Returns 30
 ```
 
 ### Control Flow
+
 ```tuff
 if (x > 10) {
     x = x * 2;
@@ -75,6 +82,7 @@ for i in [1, 2, 3] {
 ```
 
 ### Arrays
+
 ```tuff
 let arr = [1, 2, 3, 4, 5];
 arr[0];      // 1
@@ -82,6 +90,7 @@ arr[2];      // 3
 ```
 
 ### String Operations
+
 ```tuff
 let greeting = "Hello" + " " + "World";
 greeting[0];  // "H"
@@ -102,30 +111,35 @@ src/
 ## Roadmap
 
 ### Phase 1: Foundation (Current ✓)
+
 - [x] Lexer
 - [x] Parser
 - [x] Tree-walking interpreter
 - [x] REPL
 
 ### Phase 2: Type System & Semantics
+
 - [ ] Static type checking
 - [ ] Generics
 - [ ] Traits/interfaces
 - [ ] Pattern matching
 
 ### Phase 3: Standard Library
+
 - [ ] Collections (Vec, HashMap, etc.)
 - [ ] I/O operations
 - [ ] File system API
 - [ ] String utilities
 
 ### Phase 4: Optimization
+
 - [ ] Bytecode compiler
 - [ ] Bytecode VM
 - [ ] Optimization passes
 - [ ] Performance profiling
 
 ### Phase 5: Ecosystem
+
 - [ ] Package manager
 - [ ] Build system
 - [ ] IDE/Editor support

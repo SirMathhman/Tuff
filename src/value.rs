@@ -227,8 +227,7 @@ impl Evaluator {
                     }
                     Value::String(s) => {
                         for ch in s.chars() {
-                            self.env
-                                .define(var.clone(), Value::String(ch.to_string()));
+                            self.env.define(var.clone(), Value::String(ch.to_string()));
                             match self.eval_block(body)? {
                                 EvalResult::Return(val) => return Ok(EvalResult::Return(val)),
                                 EvalResult::Break => break,
@@ -275,9 +274,10 @@ impl Evaluator {
             Expr::String(s) => Ok(Value::String(s.clone())),
             Expr::Boolean(b) => Ok(Value::Boolean(*b)),
             Expr::Null => Ok(Value::Null),
-            Expr::Identifier(name) => {
-                self.env.get(name).ok_or_else(|| format!("Undefined variable: {}", name))
-            }
+            Expr::Identifier(name) => self
+                .env
+                .get(name)
+                .ok_or_else(|| format!("Undefined variable: {}", name)),
             Expr::Binary { left, op, right } => {
                 let left_val = self.eval_expression(left)?;
                 let right_val = self.eval_expression(right)?;
@@ -405,11 +405,7 @@ impl Evaluator {
         }
     }
 
-    fn eval_unary_op(
-        &self,
-        op: &crate::ast::UnaryOp,
-        operand: &Value,
-    ) -> Result<Value, String> {
+    fn eval_unary_op(&self, op: &crate::ast::UnaryOp, operand: &Value) -> Result<Value, String> {
         use crate::ast::UnaryOp;
         match op {
             UnaryOp::Negate => {
@@ -432,7 +428,11 @@ impl Evaluator {
 
     fn call_function(&mut self, func: &Value, args: Vec<Value>) -> Result<Value, String> {
         match func {
-            Value::Function { params, body, closure } => {
+            Value::Function {
+                params,
+                body,
+                closure,
+            } => {
                 if args.len() != params.len() {
                     return Err(format!(
                         "Function expects {} arguments, got {}",

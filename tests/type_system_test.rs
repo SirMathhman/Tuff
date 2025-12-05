@@ -129,17 +129,20 @@ fn test_parse_function_pointer_type() {
 #[test]
 fn test_parse_all_primitive_types() {
     let primitives = vec![
-        "U8", "U16", "U32", "U64",
-        "I8", "I16", "I32", "I64",
-        "F32", "F64",
-        "Bool", "Char", "String", "Void"
+        "U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64", "F32", "F64", "Bool", "Char",
+        "String", "Void",
     ];
-    
+
     for prim in primitives {
         let code = format!("let x : {} = 0;", prim);
         let mut parser = Parser::new(&code);
         let program = parser.parse().unwrap();
-        assert_eq!(program.statements.len(), 1, "Failed to parse type: {}", prim);
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "Failed to parse type: {}",
+            prim
+        );
     }
 }
 
@@ -149,7 +152,7 @@ fn test_parse_let_without_type_fails() {
     let result = parser.parse();
     // For MVP, we should require type annotations, so this might fail or be accepted gracefully
     // This test documents the expected behavior
-    assert!(result.is_ok());  // For now, we're lenient
+    assert!(result.is_ok()); // For now, we're lenient
 }
 
 #[test]
@@ -165,7 +168,10 @@ fn test_parse_function_without_return_type_fails() {
     let mut parser = Parser::new("fn add(a : I32, b : I32) => { a + b };");
     let result = parser.parse();
     // Should fail because functions require return types
-    assert!(result.is_err(), "Parser should require function return types");
+    assert!(
+        result.is_err(),
+        "Parser should require function return types"
+    );
 }
 
 #[test]
@@ -205,7 +211,7 @@ fn test_parse_multiple_type_params() {
 fn test_type_preserved_in_ast() {
     let mut parser = Parser::new("let x : I32 = 42;");
     let program = parser.parse().unwrap();
-    
+
     // Access the statement and verify type info is stored
     match &program.statements[0] {
         tuff::ast::Stmt::Let { name, value: _ } => {
@@ -220,9 +226,13 @@ fn test_type_preserved_in_ast() {
 fn test_function_types_preserved_in_ast() {
     let mut parser = Parser::new("fn add(a : I32, b : I32) : I32 => { a + b };");
     let program = parser.parse().unwrap();
-    
+
     match &program.statements[0] {
-        tuff::ast::Stmt::Function { name, params, body: _ } => {
+        tuff::ast::Stmt::Function {
+            name,
+            params,
+            body: _,
+        } => {
             assert_eq!(name, "add");
             assert_eq!(params.len(), 2);
             // TODO: Add assertions for parameter types and return type

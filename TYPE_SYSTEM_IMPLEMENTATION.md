@@ -45,6 +45,7 @@ pub enum Type {
 Modify in [src/ast.rs](src/ast.rs):
 
 **For `Let`:**
+
 ```rust
 pub enum Stmt {
     Expression(Expr),
@@ -62,6 +63,7 @@ pub enum Stmt {
 ```
 
 **For `Function`:**
+
 ```rust
 pub enum Stmt {
     // ...
@@ -119,6 +121,7 @@ pub enum Token {
 ```
 
 **In `read_identifier()` method, update keyword matching:**
+
 ```rust
 match ident.as_str() {
     "let" => Token::Let,
@@ -205,12 +208,12 @@ fn parse_base_type(&mut self) -> Result<Type, String> {
         Token::Char_Keyword => { self.advance(); Ok(Type::Char) }
         Token::String_Keyword => { self.advance(); Ok(Type::String) }
         Token::Void => { self.advance(); Ok(Type::Void) }
-        
+
         // Generic types: Vec<I32>, Option<String>
         Token::Identifier(name) => {
             let name = name.clone();
             self.advance();
-            
+
             if matches!(self.current(), Token::Less) {
                 self.advance();
                 let mut type_args = vec![self.parse_type()?];
@@ -230,7 +233,7 @@ fn parse_base_type(&mut self) -> Result<Type, String> {
         Token::LeftBracket => {
             self.advance();
             let first_type = self.parse_type()?;
-            
+
             if matches!(self.current(), Token::Semicolon) {
                 // Array type: [T; Init; Length]
                 self.advance();
@@ -268,7 +271,7 @@ fn parse_base_type(&mut self) -> Result<Type, String> {
 
         // Function pointer: |Args...| => ReturnType
         // (This is tricky - parse after primary type if | | =>)
-        
+
         _ => Err(format!("Unexpected token in type: {:?}", self.current())),
     }
 }
