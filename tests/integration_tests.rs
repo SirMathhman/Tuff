@@ -209,4 +209,10 @@ fn interpret_strips_type_like_suffix() {
         interpret("let x = 100; let y : *I32 = &x; *y"),
         Ok("100".to_string())
     );
+
+    // Mutable pointer type should also work with mutable target
+    assert_eq!(
+        interpret("let mut x = 100; let y : *mut I32 = &x; *y"),
+        Ok("100".to_string())
+    );
 }
