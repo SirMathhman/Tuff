@@ -72,6 +72,28 @@ pub fn eval_expr_with_env(
 ) -> Result<(String, Option<String>), String> {
     let mut trimmed = expr.trim().to_string();
 
+    // address-of operator: &var
+    if let Some(stripped) = trimmed.strip_prefix('&') {
+        let inner = stripped.trim();
+        // only support taking address of simple identifiers for now
+        if !inner.is_empty() && inner.chars().all(|c| c.is_alphanumeric() || c == '_') {
+            if let Some(v) = env.get(inner) {
+                // pointer encoded as: __PTR__:<pointee_suffix>|<target_name>
+                let pointee = v.suffix.clone().unwrap_or_else(|| "".to_string());
+                let ptr_val = format!("__PTR__:{}|{}", pointee, inner);
+                // expose pointer suffix like "*I32" when the pointee suffix exists
+                let ptr_suffix = if pointee.is_empty() {
+                    Some("*".to_string())
+                } else {
+                    Some(format!("*{}", pointee))
+                };
+                return Ok((ptr_val, ptr_suffix));
+            } else {
+                return Err("address-of to unknown identifier".to_string());
+            }
+        }
+    }
+
     if trimmed == "true" || trimmed == "false" {
         return Ok((trimmed.to_string(), None));
     }
@@ -139,6 +161,23 @@ pub fn eval_expr_with_env(
         if !found_block {
             break;
         }
+    }
+
+    // dereference operator: *ptr
+    if let Some(stripped) = trimmed.strip_prefix('*') {
+        let inner = stripped.trim();
+        let (val, _suf) = eval_expr_with_env(inner, env)?;
+        if let Some(rest) = val.strip_prefix("__PTR__:") {
+            if let Some(pipe) = rest.find('|') {
+                let _ptype = &rest[..pipe];
+                let target = &rest[pipe + 1..];
+                if let Some(tv) = env.get(target) {
+                    return Ok((tv.value.clone(), tv.suffix.clone()));
+                }
+                return Err("dereference to invalid pointer".to_string());
+            }
+        }
+        return Err("dereference of non-pointer value".to_string());
     }
 
     // property access handling

@@ -203,4 +203,10 @@ fn interpret_strips_type_like_suffix() {
         interpret("{let x = 3; x} + {let x = 4; x}"),
         Ok("7".to_string())
     );
+
+    // Basic pointer support: address-of + dereference
+    assert_eq!(
+        interpret("let x = 100; let y : *I32 = &x; *y"),
+        Ok("100".to_string())
+    );
 }
