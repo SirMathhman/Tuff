@@ -1,5 +1,16 @@
 # Pre-commit hook for Windows (PowerShell)
-# Runs clippy, CPD duplicate detection, and rustfmt
+# Runs line-count check, cargo clippy, CPD duplicate detection, and rustfmt
+
+# Get the directory of this script
+$scriptDir = Split-Path -Parent $PSCommandPath
+
+Write-Host "Checking file line counts..." -ForegroundColor Cyan
+pwsh -NoProfile -ExecutionPolicy Bypass -File "$scriptDir\check-line-count.ps1"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Line count check failed (exit code $LASTEXITCODE). Commit aborted." -ForegroundColor Red
+    exit $LASTEXITCODE
+}
+Write-Host "Line count check passed." -ForegroundColor Green
 
 Write-Host "Running cargo clippy..." -ForegroundColor Cyan
 cargo clippy --all-targets --all-features -- -D warnings

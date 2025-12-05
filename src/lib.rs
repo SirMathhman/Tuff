@@ -1,81 +1,12 @@
-const SUFFIXES: [&str; 8] = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
+mod evaluator;
+mod parser;
+mod range_check;
 
-fn tokenize_expr(expr: &str) -> Result<Vec<String>, String> {
-    let mut tokens: Vec<String> = Vec::new();
-    let mut cur = String::new();
-    let mut last_was_op = true;
-
-    fn push_op_local(tokens: &mut Vec<String>, cur: &mut String, ch: char, last_was_op: &mut bool) {
-        if !cur.trim().is_empty() {
-            tokens.push(cur.trim().to_string());
-            cur.clear();
-        }
-        tokens.push(ch.to_string());
-        *last_was_op = true;
-    }
-
-    for ch in expr.chars() {
-        match ch {
-            '+' | '-' => {
-                if last_was_op {
-                    cur.push(ch);
-                } else {
-                    push_op_local(&mut tokens, &mut cur, ch, &mut last_was_op);
-                    continue;
-                }
-                last_was_op = true;
-            }
-            '*' => {
-                if last_was_op {
-                    return Err("invalid expression".to_string());
-                }
-                push_op_local(&mut tokens, &mut cur, ch, &mut last_was_op);
-            }
-            '(' => {
-                push_op_local(&mut tokens, &mut cur, ch, &mut last_was_op);
-            }
-            ')' => {
-                push_op_local(&mut tokens, &mut cur, ch, &mut last_was_op);
-                last_was_op = false;
-            }
-            c if c.is_whitespace() => {
-                if !cur.is_empty() {
-                    cur.push(c);
-                }
-            }
-            other => {
-                cur.push(other);
-                last_was_op = false;
-            }
-        }
-    }
-
-    if !cur.trim().is_empty() {
-        tokens.push(cur.trim().to_string());
-    }
-    if tokens.is_empty() {
-        return Err("invalid expression".to_string());
-    }
-    Ok(tokens)
-}
-
-fn detect_suffix_from_tokens(tokens: &[String]) -> Result<Option<&'static str>, String> {
-    let mut seen_suffix: Option<&str> = None;
-    for p in tokens {
-        for sfx in SUFFIXES {
-            if p.ends_with(sfx) {
-                if let Some(existing) = seen_suffix {
-                    if existing != sfx {
-                        return Err("type suffix mismatch".to_string());
-                    }
-                } else {
-                    seen_suffix = Some(sfx);
-                }
-            }
-        }
-    }
-    Ok(seen_suffix)
-}
+use evaluator::{
+    apply_signed_op, apply_unsigned_op, eval_rpn_generic, parse_signed_token, parse_unsigned_token,
+};
+use parser::{detect_suffix_from_tokens, tokenize_expr};
+use range_check::{check_signed_range, check_unsigned_range, SUFFIXES};
 
 pub fn interpret(input: &str) -> Result<String, String> {
     // Handle simple variable declaration syntax: `let <name> : <Type> = <expr>; <name>`
@@ -226,43 +157,6 @@ pub fn interpret(input: &str) -> Result<String, String> {
         }
 
         // Evaluate RPN output using a tiny generic evaluator to avoid duplicate code
-        fn eval_rpn_generic<T, P, A>(
-            output: &[String],
-            suffix: &str,
-            parse: P,
-            apply: A,
-        ) -> Result<T, String>
-        where
-            P: Fn(&str, &str) -> Result<T, String>,
-            A: Fn(T, T, &char, &str) -> Result<T, String>,
-            T: Copy,
-        {
-            let mut stack: Vec<T> = Vec::new();
-            for tok in output {
-                if tok == "+" || tok == "-" || tok == "*" {
-                    let rhs = stack
-                        .pop()
-                        .ok_or_else(|| "invalid expression".to_string())?;
-                    let lhs = stack
-                        .pop()
-                        .ok_or_else(|| "invalid expression".to_string())?;
-                    let op_char = tok
-                        .chars()
-                        .next()
-                        .ok_or_else(|| "invalid operator token".to_string())?;
-                    let res = apply(lhs, rhs, &op_char, suffix)?;
-                    stack.push(res);
-                } else {
-                    let v = parse(tok, suffix)?;
-                    stack.push(v);
-                }
-            }
-            if stack.len() != 1 {
-                return Err("invalid expression".to_string());
-            }
-            stack.pop().ok_or_else(|| "invalid expression".to_string())
-        }
-
         if let Some(suffix) = seen_suffix {
             let unsigned = suffix.starts_with('U');
             if unsigned {
@@ -332,106 +226,6 @@ pub fn interpret(input: &str) -> Result<String, String> {
     }
 
     Ok(input.to_string())
-}
-
-fn check_unsigned_range(value: u128, suffix: &str) -> Result<(), String> {
-    let max = match suffix {
-        "U8" => u8::MAX as u128,
-        "U16" => u16::MAX as u128,
-        "U32" => u32::MAX as u128,
-        "U64" => u64::MAX as u128,
-        _ => u128::MAX,
-    };
-    if value > max {
-        return Err(format!("value out of range for {}", suffix));
-    }
-    Ok(())
-}
-
-fn check_signed_range(value: i128, suffix: &str) -> Result<(), String> {
-    let (min, max) = match suffix {
-        "I8" => (i8::MIN as i128, i8::MAX as i128),
-        "I16" => (i16::MIN as i128, i16::MAX as i128),
-        "I32" => (i32::MIN as i128, i32::MAX as i128),
-        "I64" => (i64::MIN as i128, i64::MAX as i128),
-        _ => (i128::MIN, i128::MAX),
-    };
-    if value < min || value > max {
-        return Err(format!("value out of range for {}", suffix));
-    }
-    Ok(())
-}
-
-fn parse_unsigned_token(token: &str, suffix: &str) -> Result<u128, String> {
-    let numeric = if let Some(stripped) = token.strip_suffix(suffix) {
-        stripped
-    } else {
-        token
-    };
-    if numeric.starts_with('-') {
-        return Err("negative value for unsigned suffix".to_string());
-    }
-    let v = numeric
-        .strip_prefix('+')
-        .unwrap_or(numeric)
-        .parse::<u128>()
-        .map_err(|_| "invalid numeric value".to_string())?;
-    check_unsigned_range(v, suffix)?;
-    Ok(v)
-}
-
-fn parse_signed_token(token: &str, suffix: &str) -> Result<i128, String> {
-    let numeric = if let Some(stripped) = token.strip_suffix(suffix) {
-        stripped
-    } else {
-        token
-    };
-    let v = numeric
-        .strip_prefix('+')
-        .unwrap_or(numeric)
-        .parse::<i128>()
-        .map_err(|_| "invalid numeric value".to_string())?;
-    check_signed_range(v, suffix)?;
-    Ok(v)
-}
-
-fn apply_unsigned_op(total: u128, rhs: u128, op: &char, suffix: &str) -> Result<u128, String> {
-    let result = match op {
-        '+' => total
-            .checked_add(rhs)
-            .ok_or_else(|| "overflow".to_string())?,
-        '-' => {
-            if total < rhs {
-                return Err("value out of range for unsigned after subtraction".to_string());
-            }
-            total
-                .checked_sub(rhs)
-                .ok_or_else(|| "overflow".to_string())?
-        }
-        '*' => total
-            .checked_mul(rhs)
-            .ok_or_else(|| "overflow".to_string())?,
-        _ => return Err("invalid operator".to_string()),
-    };
-    check_unsigned_range(result, suffix)?;
-    Ok(result)
-}
-
-fn apply_signed_op(total: i128, rhs: i128, op: &char, suffix: &str) -> Result<i128, String> {
-    let result = match op {
-        '+' => total
-            .checked_add(rhs)
-            .ok_or_else(|| "overflow".to_string())?,
-        '-' => total
-            .checked_sub(rhs)
-            .ok_or_else(|| "overflow".to_string())?,
-        '*' => total
-            .checked_mul(rhs)
-            .ok_or_else(|| "overflow".to_string())?,
-        _ => return Err("invalid operator".to_string()),
-    };
-    check_signed_range(result, suffix)?;
-    Ok(result)
 }
 
 #[cfg(test)]
