@@ -61,6 +61,22 @@ pub fn interpret(input: &str) -> Result<String, String> {
         return Err("unsupported declaration usage".to_string());
     }
 
+    // `typeOf(<literal>)` helper: return the suffix portion if present, e.g. typeOf(100U8) -> "U8"
+    if input.trim_start().starts_with("typeOf(") && input.trim_end().ends_with(')') {
+        let inner = input.trim();
+        let inner = &inner[7..inner.len() - 1]; // between parentheses
+        let inner = inner.trim();
+        const SUFFIXES: [&str; 8] = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
+        for sfx in SUFFIXES {
+            if inner.ends_with(sfx) {
+                return Ok(sfx.to_string());
+            }
+        }
+
+        // no recognized suffix found -> empty string
+        return Ok(String::new());
+    }
+
     // Handle a simple binary addition: "<lhs> + <rhs>" where both operands
     // are integers with the same type suffix (e.g. "1U8 + 2U8").
     if input.contains('+')
@@ -460,6 +476,9 @@ mod tests {
 
         // Declaration without type should work: let x = 100; x => "100"
         assert_eq!(interpret("let x = 100; x"), Ok("100".to_string()));
+
+        // typeOf helper should return type suffix for literal
+        assert_eq!(interpret("typeOf(100U8)"), Ok("U8".to_string()));
 
         // Declaration with unsigned overflow should error
         assert!(interpret("let x : U8 = 1000;").is_err());
