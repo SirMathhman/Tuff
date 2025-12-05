@@ -62,18 +62,24 @@ fn process_single_stmt_internal(
     }
 
     if s.starts_with("fn ") {
-        // Parse and store function definition
-        // Format: fn name(param1: Type1, param2: Type2) : ReturnType => { body }
-        if let Some((arrow_pos, _open_brace, end_idx)) =
-            crate::brace_utils::find_fn_arrow_and_braces(s)
-        {
-            // extract function name from "fn name(...)"
+        // Parse and store function definition. Support both braced and expression bodies.
+        let mut arrow_pos_opt: Option<usize> = None;
+        let mut open_brace: Option<usize> = None;
+        let mut close_brace: Option<usize> = None;
+
+        if let Some((arrow_pos, ob, cb)) = crate::brace_utils::find_fn_arrow_and_braces(s) {
+            arrow_pos_opt = Some(arrow_pos);
+            open_brace = Some(ob);
+            close_brace = Some(cb);
+        } else if let Some(a) = s.find("=>") {
+            arrow_pos_opt = Some(a);
+        }
+
+        if let Some(arrow_pos) = arrow_pos_opt {
             let sig_str = &s[3..arrow_pos].trim();
             if let Some(paren_idx) = sig_str.find('(') {
-                let name = sig_str[..paren_idx].trim().to_string();
-
-                // extract params and return type
                 if let Some(close_paren_idx) = sig_str.find(')') {
+                    let name = sig_str[..paren_idx].trim().to_string();
                     let params_str = sig_str[paren_idx + 1..close_paren_idx].to_string();
                     let return_type = sig_str[close_paren_idx + 1..].trim();
                     let return_type = return_type
@@ -82,10 +88,17 @@ fn process_single_stmt_internal(
                         .trim()
                         .to_string();
 
-                    // extract body
-                    let body = s[_open_brace + 1..end_idx].to_string();
+                    let body = if let (Some(ob), Some(cb)) = (open_brace, close_brace) {
+                        s[ob + 1..cb].to_string()
+                    } else {
+                        let mut b = s[arrow_pos + 2..].trim().to_string();
+                        if b.ends_with(';') {
+                            b.pop();
+                            b = b.trim().to_string();
+                        }
+                        b
+                    };
 
-                    // store as __fn__<name> with format: "params|return_type|body"
                     let fn_key = format!("__fn__{}", name);
                     let fn_value = format!("{}|{}|{}", params_str, return_type, body);
                     ctx.env.insert(
