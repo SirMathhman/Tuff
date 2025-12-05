@@ -227,6 +227,11 @@ fn process_declaration(s: &str, ctx: &mut StatementContext) -> Result<(), String
                     return Err("variable already mutably borrowed".to_string());
                 }
                 target.borrowed_mut = true;
+            } else if target_clone.borrowed_mut {
+                return Err(
+                    "cannot take immutable reference while variable already mutably borrowed"
+                        .to_string(),
+                );
             }
 
             let (ptr_val, ptr_suffix) = crate::pointer_utils::build_ptr_components(
@@ -432,6 +437,11 @@ fn process_assignment(s: &str, ctx: &mut StatementContext) -> Result<(), String>
                 .get_mut(inner)
                 .ok_or_else(|| format!("address-of to undeclared variable: {}", inner))?;
             target.borrowed_mut = true;
+        } else if target_clone.borrowed_mut {
+            return Err(
+                "cannot take immutable reference while variable already mutably borrowed"
+                    .to_string(),
+            );
         }
 
         let (ptr_val, ptr_suffix) = crate::pointer_utils::build_ptr_components(

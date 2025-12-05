@@ -86,6 +86,12 @@ pub fn eval_expr_with_env(
                 if is_mutref && !v.mutable {
                     return Err("cannot take mutable reference of immutable variable".to_string());
                 }
+                if !is_mutref && v.borrowed_mut {
+                    return Err(
+                        "cannot take immutable reference while variable already mutably borrowed"
+                            .to_string(),
+                    );
+                }
                 // pointer encoded as: __PTR__:<pointee_suffix>|<target_name>
                 let (ptr_val, ptr_suffix) =
                     crate::pointer_utils::build_ptr_components(v.suffix.as_ref(), inner, is_mutref);

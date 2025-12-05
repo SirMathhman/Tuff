@@ -230,4 +230,7 @@ fn interpret_strips_type_like_suffix() {
 
     // Cannot take two simultaneous mutable references
     assert!(interpret("let mut x = 0; let y = &mut x; let z = &mut x;").is_err());
+
+    // Cannot take immutable reference when a mutable borrow is active
+    assert!(interpret("let mut x = 0; let y = &mut x; let z = &x;").is_err());
 }
