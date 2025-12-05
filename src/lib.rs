@@ -295,6 +295,8 @@ mod tests {
         let input = "hello world";
         let out = interpret(input);
         assert_eq!(out, Ok(input.to_string()));
+        // boolean literal returns as-is
+        assert_eq!(interpret("true"), Ok("true".to_string()));
     }
 
     #[test]
@@ -359,8 +361,17 @@ mod tests {
             Ok("200".to_string())
         );
 
-        // Assignment to immutable variable should error
-        assert!(interpret("let x = 100; x = 200; x").is_err());
+        // Assignment to immutable variable should error with a clear message
+        assert_eq!(
+            interpret("let x = 100; x = 200; x"),
+            Err("assignment to immutable variable".to_string())
+        );
+
+        // Assignment to declared I8 that overflows should error
+        assert_eq!(
+            interpret("let mut x : I8 = 100; x = 1000; x"),
+            Err("value out of range for I8".to_string())
+        );
 
         // typeOf helper should return type suffix for literal
         assert_eq!(interpret("typeOf(100U8)"), Ok("U8".to_string()));
