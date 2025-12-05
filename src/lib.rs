@@ -1,24 +1,50 @@
 pub fn interpret(input: &str) -> Result<String, String> {
     // Handle a simple binary addition: "<lhs> + <rhs>" where both operands
     // are integers with the same type suffix (e.g. "1U8 + 2U8").
-    if input.contains('+') {
-        // Support chained additions like "1U8 + 3 + 2U8"
-        let parts: Vec<&str> = input
-            .split('+')
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .collect();
-        if parts.is_empty() {
-            return Err("invalid addition expression".to_string());
+    if input.contains('+') || input.contains('-') {
+        // Tokenize into operands and binary ops, preserving unary leading signs.
+        let mut parts: Vec<String> = Vec::new();
+        let mut ops: Vec<char> = Vec::new();
+        let mut cur = String::new();
+        let mut last_was_op = true;
+
+        for ch in input.chars() {
+            match ch {
+                '+' | '-' => {
+                    if last_was_op {
+                        // unary sign
+                        cur.push(ch);
+                    } else {
+                        parts.push(cur.trim().to_string());
+                        cur.clear();
+                        ops.push(ch);
+                        last_was_op = true;
+                        continue;
+                    }
+                    last_was_op = true;
+                }
+                c if c.is_whitespace() => {
+                    if !cur.is_empty() {
+                        cur.push(c);
+                    }
+                }
+                other => {
+                    cur.push(other);
+                    last_was_op = false;
+                }
+            }
         }
 
-        // (parsing of suffixed operands is handled below per-part)
+        if !cur.trim().is_empty() {
+            parts.push(cur.trim().to_string());
+        }
 
-        // Determine if any parts contain a known suffix. If so, all suffixed parts
-        // must have the same suffix; plain numbers will adopt that suffix's type.
+        if parts.is_empty() {
+            return Err("invalid expression".to_string());
+        }
+
         const SUFFIXES: [&str; 8] = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
 
-        // collect suffixes seen
         let mut seen_suffix: Option<&str> = None;
         for p in &parts {
             for sfx in SUFFIXES {
@@ -34,16 +60,40 @@ pub fn interpret(input: &str) -> Result<String, String> {
             }
         }
 
-        // If we have no suffix in any operand, sum as signed i128
+        // No suffix found: evaluate signed
         if seen_suffix.is_none() {
-            let mut total: i128 = 0;
-            for p in &parts {
-                let v = p
+            let first_tok = parts
+                .first()
+                .map(|s| s.as_str())
+                .ok_or_else(|| "invalid expression".to_string())?;
+            let mut total: i128 = first_tok
+                .strip_prefix('+')
+                .unwrap_or(first_tok)
+                .parse::<i128>()
+                .map_err(|_| "invalid numeric value".to_string())?;
+            for (i, op) in ops.iter().enumerate() {
+                let rhs_tok = parts
+                    .get(i + 1)
+                    .map(|s| s.as_str())
+                    .ok_or_else(|| "invalid expression".to_string())?;
+                let rhs = rhs_tok
                     .strip_prefix('+')
-                    .unwrap_or(p)
+                    .unwrap_or(rhs_tok)
                     .parse::<i128>()
                     .map_err(|_| "invalid numeric value".to_string())?;
-                total = total.checked_add(v).ok_or_else(|| "overflow".to_string())?;
+                match op {
+                    '+' => {
+                        total = total
+                            .checked_add(rhs)
+                            .ok_or_else(|| "overflow".to_string())?
+                    }
+                    '-' => {
+                        total = total
+                            .checked_sub(rhs)
+                            .ok_or_else(|| "overflow".to_string())?
+                    }
+                    _ => return Err("invalid operator".to_string()),
+                }
             }
             return Ok(total.to_string());
         }
@@ -52,42 +102,20 @@ pub fn interpret(input: &str) -> Result<String, String> {
         let unsigned = suffix.starts_with('U');
 
         if unsigned {
-            let mut total: u128 = 0;
-            for p in &parts {
-                let numeric = if let Some(stripped) = p.strip_suffix(suffix) {
-                    stripped
-                } else {
-                    p
-                };
-                if numeric.starts_with('-') {
-                    return Err("negative value for unsigned suffix".to_string());
-                }
-                let num_str = numeric.strip_prefix('+').unwrap_or(numeric);
-                let v = num_str
-                    .parse::<u128>()
-                    .map_err(|_| "invalid numeric value".to_string())?;
-                check_unsigned_range(v, suffix)?;
-                total = total.checked_add(v).ok_or_else(|| "overflow".to_string())?;
-            }
-            check_unsigned_range(total, suffix)?;
+            let first_tok = parts
+                .first()
+                .map(|s| s.as_str())
+                .ok_or_else(|| "invalid expression".to_string())?;
+            let first = parse_unsigned_token(first_tok, suffix)?;
+            let total = evaluate_unsigned_chain(first, &parts, &ops, suffix)?;
             return Ok(total.to_string());
         } else {
-            // signed
-            let mut total: i128 = 0;
-            for p in &parts {
-                let numeric = if let Some(stripped) = p.strip_suffix(suffix) {
-                    stripped
-                } else {
-                    p
-                };
-                let num_str = numeric.strip_prefix('+').unwrap_or(numeric);
-                let v = num_str
-                    .parse::<i128>()
-                    .map_err(|_| "invalid numeric value".to_string())?;
-                check_signed_range(v, suffix)?;
-                total = total.checked_add(v).ok_or_else(|| "overflow".to_string())?;
-            }
-            check_signed_range(total, suffix)?;
+            let first_tok = parts
+                .first()
+                .map(|s| s.as_str())
+                .ok_or_else(|| "invalid expression".to_string())?;
+            let first = parse_signed_token(first_tok, suffix)?;
+            let total = evaluate_signed_chain(first, &parts, &ops, suffix)?;
             return Ok(total.to_string());
         }
     }
@@ -157,6 +185,108 @@ fn check_signed_range(value: i128, suffix: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn parse_unsigned_token(token: &str, suffix: &str) -> Result<u128, String> {
+    let numeric = if let Some(stripped) = token.strip_suffix(suffix) {
+        stripped
+    } else {
+        token
+    };
+    if numeric.starts_with('-') {
+        return Err("negative value for unsigned suffix".to_string());
+    }
+    let v = numeric
+        .strip_prefix('+')
+        .unwrap_or(numeric)
+        .parse::<u128>()
+        .map_err(|_| "invalid numeric value".to_string())?;
+    check_unsigned_range(v, suffix)?;
+    Ok(v)
+}
+
+fn parse_signed_token(token: &str, suffix: &str) -> Result<i128, String> {
+    let numeric = if let Some(stripped) = token.strip_suffix(suffix) {
+        stripped
+    } else {
+        token
+    };
+    let v = numeric
+        .strip_prefix('+')
+        .unwrap_or(numeric)
+        .parse::<i128>()
+        .map_err(|_| "invalid numeric value".to_string())?;
+    check_signed_range(v, suffix)?;
+    Ok(v)
+}
+
+fn apply_unsigned_op(total: u128, rhs: u128, op: &char, suffix: &str) -> Result<u128, String> {
+    let result = match op {
+        '+' => total
+            .checked_add(rhs)
+            .ok_or_else(|| "overflow".to_string())?,
+        '-' => {
+            if total < rhs {
+                return Err("value out of range for unsigned after subtraction".to_string());
+            }
+            total
+                .checked_sub(rhs)
+                .ok_or_else(|| "overflow".to_string())?
+        }
+        _ => return Err("invalid operator".to_string()),
+    };
+    check_unsigned_range(result, suffix)?;
+    Ok(result)
+}
+
+fn apply_signed_op(total: i128, rhs: i128, op: &char, suffix: &str) -> Result<i128, String> {
+    let result = match op {
+        '+' => total
+            .checked_add(rhs)
+            .ok_or_else(|| "overflow".to_string())?,
+        '-' => total
+            .checked_sub(rhs)
+            .ok_or_else(|| "overflow".to_string())?,
+        _ => return Err("invalid operator".to_string()),
+    };
+    check_signed_range(result, suffix)?;
+    Ok(result)
+}
+
+fn evaluate_unsigned_chain(
+    first: u128,
+    parts: &[String],
+    ops: &[char],
+    suffix: &str,
+) -> Result<u128, String> {
+    let mut total = first;
+    for (i, op) in ops.iter().enumerate() {
+        let token = parts
+            .get(i + 1)
+            .map(|s| s.as_str())
+            .ok_or_else(|| "invalid expression".to_string())?;
+        let v = parse_unsigned_token(token, suffix)?;
+        total = apply_unsigned_op(total, v, op, suffix)?;
+    }
+    Ok(total)
+}
+
+fn evaluate_signed_chain(
+    first: i128,
+    parts: &[String],
+    ops: &[char],
+    suffix: &str,
+) -> Result<i128, String> {
+    let mut t = first;
+    for (i, op) in ops.iter().enumerate() {
+        let tok = parts
+            .get(i + 1)
+            .map(|s| s.as_str())
+            .ok_or_else(|| "invalid expression".to_string())?;
+        let v = parse_signed_token(tok, suffix)?;
+        t = apply_signed_op(t, v, op, suffix)?;
+    }
+    Ok(t)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::interpret;
@@ -196,6 +326,9 @@ mod tests {
 
         // Chained addition where plain numbers adopt the suffixed type
         assert_eq!(interpret("1U8 + 3 + 2U8"), Ok("6".to_string()));
+
+        // Chained expression with subtraction
+        assert_eq!(interpret("10U8 + 3 - 5U8"), Ok("8".to_string()));
 
         // Overflow when result exceeds the type max should be an error
         assert!(interpret("1U8 + 255U8").is_err());
