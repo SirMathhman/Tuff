@@ -104,6 +104,199 @@ pub fn interpret(input: &str) -> Result<String, String> {
         let mut env: HashMap<String, Var> = HashMap::new();
         let mut last_value: Option<String> = None;
 
+        // Evaluate a braced block as an expression using a cloned local environment.
+        fn eval_block_expr(
+            block_text: &str,
+            env: &HashMap<String, Var>,
+            eval_expr_with_env: &dyn Fn(&str, &HashMap<String, Var>) -> Result<(String, Option<String>), String>,
+        ) -> Result<(String, Option<String>), String> {
+            // Create a local cloned environment so inner declarations do not leak
+            let mut local_env = env.clone();
+
+            // Reuse the brace-aware splitter to get inner statements
+            let mut stmts: Vec<&str> = Vec::new();
+            let mut start = 0usize;
+            let mut depth: i32 = 0;
+            let seq = block_text.trim();
+            for (i, ch) in seq.char_indices() {
+                match ch {
+                    '{' => depth += 1,
+                    '}' => depth = depth.saturating_sub(1),
+                    ';' if depth == 0 => {
+                        let stmt = seq[start..i].trim();
+                        if !stmt.is_empty() {
+                            stmts.push(stmt);
+                        }
+                        start = i + 1;
+                    }
+                    _ => {}
+                }
+            }
+            let stmt = seq[start..].trim();
+            if !stmt.is_empty() {
+                stmts.push(stmt);
+            }
+
+            let mut last_value: Option<(String, Option<String>)> = None;
+
+            // Internal helper that mirrors the behavior of process_single_stmt but returns suffix for final expressions
+            fn run_stmt(
+                s: &str,
+                local_env: &mut HashMap<String, Var>,
+                last_value: &mut Option<(String, Option<String>)>,
+                eval_expr_with_env: &dyn Fn(&str, &HashMap<String, Var>) -> Result<(String, Option<String>), String>,
+            ) -> Result<(), String> {
+                let s = s.trim();
+                if s.starts_with('{') && s.ends_with('}') {
+                    // nested block expression: evaluate with a fresh clone so nested locals don't leak outward
+                    let inner = s[1..s.len() - 1].trim();
+                    let (val, suf) = eval_block_expr(inner, local_env, eval_expr_with_env)?;
+                    *last_value = Some((val, suf));
+                    return Ok(());
+                }
+
+                // Declaration inside block-local environment
+                if s.starts_with("let ") {
+                    let rest = s.trim_start_matches("let").trim();
+                    let (mutable, rest) = if rest.starts_with("mut ") {
+                        (true, rest.trim_start_matches("mut").trim())
+                    } else {
+                        (false, rest)
+                    };
+
+                    let mut parts = rest.splitn(2, '=');
+                    let left = parts
+                        .next()
+                        .ok_or_else(|| "invalid declaration".to_string())?
+                        .trim();
+                    let rhs = parts
+                        .next()
+                        .ok_or_else(|| "invalid declaration".to_string())?
+                        .trim();
+
+                    let mut left_parts = left.splitn(2, ':');
+                    let name = left_parts
+                        .next()
+                        .ok_or_else(|| "invalid declaration".to_string())?
+                        .trim();
+                    if name.is_empty() {
+                        return Err("invalid declaration".to_string());
+                    }
+                    let ty_opt = left_parts
+                        .next()
+                        .map(|s| s.trim())
+                        .filter(|s| !s.is_empty())
+                        .map(|s| s.to_string());
+
+                    if local_env.contains_key(name) {
+                        return Err("duplicate declaration".to_string());
+                    }
+
+                    // RHS may itself be a block expression
+                    let (value, expr_suffix) = if rhs.starts_with('{') && rhs.ends_with('}') {
+                        eval_block_expr(&rhs[1..rhs.len() - 1].trim(), local_env, eval_expr_with_env)?
+                    } else {
+                        eval_expr_with_env(rhs, local_env)?
+                    };
+
+                    if let Some(ty) = &ty_opt {
+                        if ty.starts_with('U') {
+                            let v = value
+                                .parse::<u128>()
+                                .map_err(|_| "invalid numeric value".to_string())?;
+                            check_unsigned_range(v, ty)?;
+                        } else {
+                            let v = value
+                                .parse::<i128>()
+                                .map_err(|_| "invalid numeric value".to_string())?;
+                            check_signed_range(v, ty)?;
+                        }
+                    }
+
+                    let stored_suffix = ty_opt.or(expr_suffix);
+                    local_env.insert(
+                        name.to_string(),
+                        Var {
+                            mutable,
+                            suffix: stored_suffix,
+                            value,
+                        },
+                    );
+                    *last_value = None;
+                    return Ok(());
+                }
+
+                // Assignment
+                if s.contains('=') && !s.starts_with("let ") {
+                    let mut parts = s.splitn(2, '=');
+                    let name = parts
+                        .next()
+                        .ok_or_else(|| "invalid assignment".to_string())?
+                        .trim();
+                    let rhs = parts
+                        .next()
+                        .ok_or_else(|| "invalid assignment".to_string())?
+                        .trim();
+
+                    if !local_env.contains_key(name) {
+                        return Err("assignment to undeclared variable".to_string());
+                    }
+
+                    let (value, expr_suffix) = if rhs.starts_with('{') && rhs.ends_with('}') {
+                        eval_block_expr(&rhs[1..rhs.len() - 1].trim(), local_env, eval_expr_with_env)?
+                    } else {
+                        eval_expr_with_env(rhs, local_env)?
+                    };
+
+                    let var = local_env
+                        .get_mut(name)
+                        .ok_or_else(|| "assignment to undeclared variable".to_string())?;
+                    if !var.mutable {
+                        return Err("assignment to immutable variable".to_string());
+                    }
+
+                    if let Some(declared) = &var.suffix {
+                        if let Some(sfx) = &expr_suffix {
+                            if sfx != declared {
+                                return Err("type suffix mismatch on assignment".to_string());
+                            }
+                        }
+                        if declared.starts_with('U') {
+                            let v = value
+                                .parse::<u128>()
+                                .map_err(|_| "invalid numeric value".to_string())?;
+                            check_unsigned_range(v, declared)?;
+                        } else {
+                            let v = value
+                                .parse::<i128>()
+                                .map_err(|_| "invalid numeric value".to_string())?;
+                            check_signed_range(v, declared)?;
+                        }
+                    }
+
+                    var.value = value;
+                    *last_value = None;
+                    return Ok(());
+                }
+
+                // Expression
+                let (value, suf) = eval_expr_with_env(s, local_env)?;
+                *last_value = Some((value, suf));
+                Ok(())
+            }
+
+            // Iterate through inner statements
+            for st in stmts {
+                run_stmt(st, &mut local_env, &mut last_value, eval_expr_with_env)?;
+            }
+
+            if let Some((v, suf)) = last_value {
+                Ok((v, suf))
+            } else {
+                Ok(("".to_string(), None))
+            }
+        }
+
         fn process_single_stmt(
             stmt_text: &str,
             env: &mut HashMap<String, Var>,
@@ -171,8 +364,13 @@ pub fn interpret(input: &str) -> Result<String, String> {
                     return Err("duplicate declaration".to_string());
                 }
 
-                // Evaluate RHS using current env
-                let (value, expr_suffix) = eval_expr_with_env(rhs, env)?;
+                // Evaluate RHS using current env. If RHS is a braced block, evaluate it
+                // in a local cloned environment and take its result as the RHS value.
+                let (value, expr_suffix) = if rhs.starts_with('{') && rhs.ends_with('}') {
+                    eval_block_expr(&rhs[1..rhs.len() - 1].trim(), env, eval_expr_with_env)?
+                } else {
+                    eval_expr_with_env(rhs, env)?
+                };
 
                 // If explicit type provided, validate
                 if let Some(ty) = &ty_opt {
@@ -220,7 +418,11 @@ pub fn interpret(input: &str) -> Result<String, String> {
                     return Err("assignment to undeclared variable".to_string());
                 }
 
-                let (value, expr_suffix) = eval_expr_with_env(rhs, env)?;
+                let (value, expr_suffix) = if rhs.starts_with('{') && rhs.ends_with('}') {
+                    eval_block_expr(&rhs[1..rhs.len() - 1].trim(), env, eval_expr_with_env)?
+                } else {
+                    eval_expr_with_env(rhs, env)?
+                };
                 let var = env
                     .get_mut(name)
                     .ok_or_else(|| "assignment to undeclared variable".to_string())?;
@@ -447,6 +649,9 @@ mod tests {
             interpret("let mut x = 100; {x = 200; x}"),
             Ok("200".to_string())
         );
+
+        // Block expressions used as RHS should evaluate in a local scope
+        assert_eq!(interpret("let x = {let y = 200; y}; x"), Ok("200".to_string()));
 
         // Assignment to immutable variable should error with a clear message
         assert_eq!(
