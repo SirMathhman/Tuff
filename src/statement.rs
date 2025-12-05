@@ -1,3 +1,4 @@
+use crate::brace_utils;
 use crate::control::{process_if_statement, process_while_statement, ControlContext};
 use crate::range_check::{check_signed_range, check_unsigned_range};
 use std::collections::HashMap;
@@ -99,6 +100,11 @@ fn run_block_stmt(s: &str, ctx: &mut StatementContext) -> Result<(), String> {
         };
         process_while_statement(s, &mut ctrl_ctx)?;
         return Ok(());
+    }
+
+    if s.starts_with("fn ") {
+        // For now, functions are only top-level; not allowed inside blocks
+        return Err("functions cannot be defined inside blocks".to_string());
     }
 
     if s.starts_with("let ") {
@@ -211,7 +217,7 @@ fn process_assignment(s: &str, ctx: &mut StatementContext) -> Result<(), String>
             let rhs = s[pos + op.len()..].trim();
 
             if !ctx.env.contains_key(name) {
-                return Err("assignment to undeclared variable".to_string());
+                return Err(format!("assignment-to-undeclared-variable: {}", name));
             }
 
             // Use an immutable borrow first to capture current value and suffix,
@@ -220,7 +226,7 @@ fn process_assignment(s: &str, ctx: &mut StatementContext) -> Result<(), String>
             let current = ctx
                 .env
                 .get(name)
-                .ok_or_else(|| "assignment to undeclared variable".to_string())?;
+                .ok_or_else(|| format!("assignment-to-undeclared-variable: {}", name))?;
             if !current.mutable {
                 return Err("assignment to immutable variable".to_string());
             }
@@ -247,7 +253,7 @@ fn process_assignment(s: &str, ctx: &mut StatementContext) -> Result<(), String>
             let var = ctx
                 .env
                 .get_mut(name)
-                .ok_or_else(|| "assignment to undeclared variable".to_string())?;
+                .ok_or_else(|| format!("assignment-to-undeclared-variable: {}", name))?;
             var.value = value;
             *ctx.last_value = None;
             handled = true;
@@ -270,7 +276,7 @@ fn process_assignment(s: &str, ctx: &mut StatementContext) -> Result<(), String>
         .trim();
 
     if !ctx.env.contains_key(name) {
-        return Err("assignment to undeclared variable".to_string());
+        return Err(format!("assignment-to-undeclared-variable: {}", name));
     }
 
     let (value, expr_suffix) = eval_rhs(rhs, ctx.env, ctx.eval_expr)?;
@@ -278,7 +284,7 @@ fn process_assignment(s: &str, ctx: &mut StatementContext) -> Result<(), String>
     let var = ctx
         .env
         .get_mut(name)
-        .ok_or_else(|| "assignment to undeclared variable".to_string())?;
+        .ok_or_else(|| format!("assignment-to-undeclared-variable: {}", name))?;
     if !var.mutable {
         return Err("assignment to immutable variable".to_string());
     }
@@ -368,6 +374,46 @@ fn process_single_stmt_internal(stmt_text: &str, ctx: &mut TopStmtContext) -> Re
             last_value: ctx.last_value,
         };
         process_while_statement(s, &mut ctrl_ctx)?;
+        return Ok(());
+    }
+
+    if s.starts_with("fn ") {
+        // Parse and store function definition
+        // Format: fn name(param1: Type1, param2: Type2) : ReturnType => { body }
+        if let Some((arrow_pos, _open_brace, end_idx)) = brace_utils::find_fn_arrow_and_braces(s) {
+            // extract function name from "fn name(...)"
+            let sig_str = &s[3..arrow_pos].trim();
+            if let Some(paren_idx) = sig_str.find('(') {
+                let name = sig_str[..paren_idx].trim().to_string();
+
+                // extract params and return type
+                if let Some(close_paren_idx) = sig_str.find(')') {
+                    let params_str = sig_str[paren_idx + 1..close_paren_idx].to_string();
+                    let return_type = sig_str[close_paren_idx + 1..].trim();
+                    let return_type = return_type
+                        .strip_prefix(':')
+                        .unwrap_or(return_type)
+                        .trim()
+                        .to_string();
+
+                    // extract body
+                    let body = s[_open_brace + 1..end_idx].to_string();
+
+                    // store as __fn__<name> with format: "params|return_type|body"
+                    let fn_key = format!("__fn__{}", name);
+                    let fn_value = format!("{}|{}|{}", params_str, return_type, body);
+                    ctx.env.insert(
+                        fn_key,
+                        Var {
+                            mutable: false,
+                            value: fn_value,
+                            suffix: Some("FN".to_string()),
+                        },
+                    );
+                }
+            }
+        }
+        *ctx.last_value = None;
         return Ok(());
     }
 
