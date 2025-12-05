@@ -71,3 +71,12 @@ fn test_function_return_type_validation() {
     let result = evaluator.eval_program(&program).unwrap();
     assert_eq!(result.to_string(), "42");
 }
+
+#[test]
+fn test_function_argument_type_validation() {
+    let mut evaluator = Evaluator::new();
+    let mut parser = Parser::new("fn add(a : i32, b : i32) : i32 { a + b; } add(5, 3);");
+    let program = parser.parse().unwrap();
+    let result = evaluator.eval_program(&program).unwrap();
+    assert_eq!(result.to_string(), "8");
+}

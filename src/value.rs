@@ -107,6 +107,31 @@ fn type_compatibility(actual: &Type, expected: &Type) -> bool {
         return true;
     }
 
+    // TypeParameter("I32") should match Type::I32 (and others by name)
+    match expected {
+        Type::TypeParameter(param_name) => {
+            // Compare by stringified actual type against the parameter name
+            match actual {
+                Type::I8 if param_name == "I8" => return true,
+                Type::I16 if param_name == "I16" => return true,
+                Type::I32 if param_name == "I32" => return true,
+                Type::I64 if param_name == "I64" => return true,
+                Type::U8 if param_name == "U8" => return true,
+                Type::U16 if param_name == "U16" => return true,
+                Type::U32 if param_name == "U32" => return true,
+                Type::U64 if param_name == "U64" => return true,
+                Type::F32 if param_name == "F32" => return true,
+                Type::F64 if param_name == "F64" => return true,
+                Type::Bool if param_name == "Bool" => return true,
+                Type::String if param_name == "String" => return true,
+                Type::Void if param_name == "Void" => return true,
+                _ => {}
+            }
+            return false;
+        }
+        _ => {}
+    }
+
     // Allow numeric coercion: smaller ints can be used as larger ints, etc.
     match (actual, expected) {
         // Int to Int coercion (allow "promotion" to larger types)
@@ -711,17 +736,32 @@ impl Evaluator {
                 let saved_env = std::mem::replace(&mut self.env, closure.clone());
                 let saved_return_type = self.expected_return_type.clone();
 
-                // Look up function signature if available
+                // Look up function signature if available for type validation
+                let mut sig_params = None;
                 if let Some(name) = func_name {
                     if let Some(sig) = saved_env.get_function_sig(name) {
                         self.expected_return_type = Some(sig.return_type);
+                        sig_params = Some(sig.params);
                     }
                 }
 
                 self.env.push_scope();
 
-                // Bind arguments to parameters
-                for (param, arg) in params.iter().zip(args.iter()) {
+                // Bind arguments to parameters with type validation
+                for (i, (param, arg)) in params.iter().zip(args.iter()).enumerate() {
+                    // Validate argument type if signature has type information
+                    if let Some(ref sig_params) = sig_params {
+                        if i < sig_params.len() {
+                            let arg_type = arg.infer_type();
+                            let expected_type = &sig_params[i];
+                            if !type_compatibility(&arg_type, expected_type) {
+                                return Err(format!(
+                                    "Argument {} has type {:?}, expected {:?}",
+                                    i, arg_type, expected_type
+                                ));
+                            }
+                        }
+                    }
                     self.env.define(param.clone(), arg.clone());
                 }
 
