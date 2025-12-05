@@ -453,6 +453,9 @@ mod tests {
             Ok("-20".to_string())
         );
 
+        // Duplicate declarations should be an error
+        assert!(interpret("let x : I32 = 100; let x : I32 = 200;").is_err());
+
         // Declaration-only returns empty string
         assert_eq!(interpret("let x : I32 = 100;"), Ok("".to_string()));
 
