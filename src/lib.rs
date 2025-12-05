@@ -1,5 +1,6 @@
 mod brace_utils;
 mod control;
+mod eval_expr;
 mod evaluator;
 mod parser;
 mod range_check;
@@ -17,188 +18,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
         expr: &str,
         env: &HashMap<String, Var>,
     ) -> Result<(String, Option<String>), String> {
-        let mut trimmed = expr.trim().to_string();
-
-        // Fast-path: boolean literals allowed inside expressions for control flow
-        if trimmed == "true" || trimmed == "false" {
-            return Ok((trimmed.to_string(), None));
-        }
-
-        // Preprocess braced blocks in the expression. E.g., "{let x = 3; x} + {let y = 4; y}"
-        // becomes "3 + 4" after evaluating each block in its own local scope.
-        loop {
-            // Find the first braced block at the top level (outside parens)
-            let mut brace_start = None;
-            let mut depth: i32 = 0;
-            let mut paren_depth: i32 = 0;
-            let mut found_block = false;
-
-            for (i, ch) in trimmed.char_indices() {
-                match ch {
-                    '{' if paren_depth == 0 => {
-                        if brace_start.is_none() {
-                            brace_start = Some(i);
-                        }
-                        depth += 1;
-                    }
-                    '}' if paren_depth == 0 => {
-                        depth = depth.saturating_sub(1);
-                        if let Some(block_start) = brace_start {
-                            if depth == 0 {
-                                // Found a complete block, evaluate it
-                                let block_content = &trimmed[block_start + 1..i];
-                                let (block_value, block_suffix) =
-                                    crate::statement::eval_block_expr(
-                                        block_content,
-                                        env,
-                                        &eval_expr_with_env,
-                                    )?;
-                                let block_result = if let Some(suffix) = block_suffix {
-                                    format!("{}{}", block_value, suffix)
-                                } else {
-                                    block_value
-                                };
-                                trimmed = format!(
-                                    "{}{}{}",
-                                    &trimmed[..block_start],
-                                    block_result,
-                                    &trimmed[i + 1..]
-                                );
-                                found_block = true;
-                                break;
-                            }
-                        }
-                    }
-                    '(' => paren_depth += 1,
-                    ')' => paren_depth = paren_depth.saturating_sub(1),
-                    _ => {}
-                }
-            }
-
-            if !found_block {
-                break;
-            }
-        }
-
-        // Fast-path: function call syntax like `name(arg1, arg2)` where the
-        // whole expression is the call. This allows calling functions defined
-        // in the environment (stored under the key __fn__<name>).
-        if let Some(open_idx) = trimmed.find('(') {
-            if trimmed.ends_with(')') {
-                let name = trimmed[..open_idx].trim();
-                if !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_') {
-                    // split arguments at top-level commas
-                    let args_text = &trimmed[open_idx + 1..trimmed.len() - 1];
-                    let mut args: Vec<&str> = Vec::new();
-                    let mut start = 0usize;
-                    let mut depth: i32 = 0;
-                    for (i, ch) in args_text.char_indices() {
-                        match ch {
-                            '(' => depth += 1,
-                            ')' => depth = depth.saturating_sub(1),
-                            ',' if depth == 0 => {
-                                let piece = args_text[start..i].trim();
-                                if !piece.is_empty() {
-                                    args.push(piece);
-                                }
-                                start = i + 1;
-                            }
-                            _ => {}
-                        }
-                    }
-                    let last_piece = args_text[start..].trim();
-                    if !last_piece.is_empty() {
-                        args.push(last_piece);
-                    }
-
-                    // lookup function by special key
-                    let key = format!("__fn__{}", name);
-                    if let Some(func_var) = env.get(&key) {
-                        // function stored as expected
-                        // stored format: params_list|return_type|body
-                        let parts: Vec<&str> = func_var.value.splitn(3, '|').collect();
-                        let params_part = parts.first().copied().unwrap_or("");
-                        let body_part = parts.get(2).copied().unwrap_or("");
-
-                        // parse param names e.g. "a:I32,b:I32" -> ["a","b"]
-                        let mut param_names: Vec<String> = Vec::new();
-                        if !params_part.is_empty() {
-                            for p in params_part.split(',') {
-                                let n = p.split(':').next().unwrap_or("").trim();
-                                if !n.is_empty() {
-                                    param_names.push(n.to_string());
-                                }
-                            }
-                        }
-
-                        // evaluate each arg and bind to local env
-                        let mut local_env = env.clone();
-                        for (i, arg_expr) in args.into_iter().enumerate() {
-                            let (val, suf) = eval_expr_with_env(arg_expr, env)?;
-                            let name = param_names.get(i).map(|s| s.as_str()).unwrap_or("");
-                            if !name.is_empty() {
-                                local_env.insert(
-                                    name.to_string(),
-                                    Var {
-                                        mutable: false,
-                                        suffix: suf.clone(),
-                                        value: val.clone(),
-                                    },
-                                );
-                            }
-                        }
-
-                        // execute function body
-                        // evaluate function body in the local environment
-                        // Body is stored without outer braces, so wrap it for eval_block_expr
-                        let (v, sfx) = crate::statement::eval_block_expr(
-                            body_part,
-                            &local_env,
-                            &eval_expr_with_env,
-                        )?;
-                        return Ok((v, sfx));
-                    }
-                }
-            }
-        }
-
-        let tokens = tokenize_expr(&trimmed)?;
-
-        // Prepare tokens for suffix detection by substituting variable values.
-        let mut detection_tokens = tokens.clone();
-        for t in detection_tokens.iter_mut() {
-            if let Some(var) = env.get(t.as_str()) {
-                if let Some(s) = &var.suffix {
-                    *t = format!("{}{}", var.value, s);
-                } else {
-                    *t = var.value.clone();
-                }
-            }
-        }
-
-        let seen_suffix = detect_suffix_from_tokens(&detection_tokens)?;
-
-        // Resolve variable tokens to their literal values.
-        let mut resolved_tokens: Vec<String> = Vec::new();
-        for t in tokens {
-            if t == "+" || t == "-" || t == "*" || t == "(" || t == ")" {
-                resolved_tokens.push(t.clone());
-                continue;
-            }
-            if let Some(var) = env.get(t.as_str()) {
-                if let Some(s) = &var.suffix {
-                    resolved_tokens.push(format!("{}{}", var.value, s));
-                } else {
-                    resolved_tokens.push(var.value.clone());
-                }
-            } else {
-                resolved_tokens.push(t.clone());
-            }
-        }
-
-        let output = tokens_to_rpn(&resolved_tokens)?;
-        let (value_out, maybe_suffix) = evaluator::eval_output_with_suffix(&output, seen_suffix)?;
-        Ok((value_out, maybe_suffix))
+        crate::eval_expr::eval_expr_with_env(expr, env)
     }
 
     // If input starts with a function definition followed by a call without
@@ -228,6 +48,8 @@ pub fn interpret(input: &str) -> Result<String, String> {
         let s = input.trim();
         if let Some(open_idx) = s.find('{') {
             if let Some(close_idx) = brace_utils::find_matching_brace(s, open_idx) {
+                let _def_str = &s[..=close_idx];
+                let tail = s[close_idx + 1..].trim();
                 let name = s[6..open_idx]
                     .split_whitespace()
                     .next()
@@ -243,7 +65,11 @@ pub fn interpret(input: &str) -> Result<String, String> {
                             suffix: Some("STRUCT".to_string()),
                         },
                     );
-                    return Ok("".to_string());
+                    if tail.is_empty() {
+                        return Ok("".to_string());
+                    }
+                    let (val, _suf) = eval_expr_with_env(tail, &env)?;
+                    return Ok(val);
                 }
             }
         }
