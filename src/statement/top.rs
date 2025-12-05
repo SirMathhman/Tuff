@@ -76,15 +76,31 @@ fn process_single_stmt_internal(
         }
 
         if let Some(arrow_pos) = arrow_pos_opt {
-            let sig_str = &s[3..arrow_pos].trim();
-            if let Some(paren_idx) = sig_str.find('(') {
-                if let Some(close_paren_idx) = sig_str.find(')') {
-                    let name = sig_str[..paren_idx].trim().to_string();
-                    let params_str = sig_str[paren_idx + 1..close_paren_idx].to_string();
-                    let return_type = sig_str[close_paren_idx + 1..].trim();
-                    let return_type = return_type
+            let sig_str = s[3..arrow_pos].trim();
+
+            // Extract captures: fn name[capture1, capture2](params)
+            let mut captures_str = String::new();
+            let mut name_and_params_str = sig_str;
+
+            if let Some(bracket_start) = sig_str.find('[') {
+                if let Some(bracket_end) = sig_str.rfind(']') {
+                    if bracket_start < bracket_end {
+                        // Captures exist
+                        captures_str = sig_str[bracket_start + 1..bracket_end].to_string();
+                        name_and_params_str = sig_str[..bracket_start].trim();
+                    }
+                }
+            }
+
+            if let Some(paren_idx) = name_and_params_str.find('(') {
+                if let Some(close_paren_idx) = name_and_params_str.find(')') {
+                    let name = name_and_params_str[..paren_idx].trim().to_string();
+                    let params_str =
+                        name_and_params_str[paren_idx + 1..close_paren_idx].to_string();
+                    let return_type_part = name_and_params_str[close_paren_idx + 1..].trim();
+                    let return_type = return_type_part
                         .strip_prefix(':')
-                        .unwrap_or(return_type)
+                        .unwrap_or(return_type_part)
                         .trim()
                         .to_string();
 
@@ -99,10 +115,11 @@ fn process_single_stmt_internal(
                         b
                     };
 
+                    // Store function with format: params|return_type|body
                     let fn_key = format!("__fn__{}", name);
                     let fn_value = format!("{}|{}|{}", params_str, return_type, body);
                     ctx.env.insert(
-                        fn_key,
+                        fn_key.clone(),
                         Var {
                             mutable: false,
                             value: fn_value,
@@ -110,6 +127,20 @@ fn process_single_stmt_internal(
                             borrowed_mut: false,
                         },
                     );
+
+                    // Store captures separately if present
+                    if !captures_str.is_empty() {
+                        let captures_key = format!("__captures__{}", name);
+                        ctx.env.insert(
+                            captures_key,
+                            Var {
+                                mutable: false,
+                                value: captures_str,
+                                suffix: Some("CAPTURES".to_string()),
+                                borrowed_mut: false,
+                            },
+                        );
+                    }
                 }
             }
         }

@@ -295,6 +295,23 @@ pub fn eval_expr_with_env(
                     }
 
                     let mut local_env = env.clone();
+
+                    // Handle captures: look for __captures__<name> in env
+                    let captures_key = format!("__captures__{}", name);
+                    if let Some(captures_var) = env.get(&captures_key) {
+                        for capture in captures_var.value.split(',') {
+                            let cap = capture.trim();
+                            let var_name = cap
+                                .strip_prefix("&mut ")
+                                .or_else(|| cap.strip_prefix('&'))
+                                .unwrap_or(cap)
+                                .trim();
+                            if let Some(captured_var) = env.get(var_name) {
+                                local_env.insert(var_name.to_string(), captured_var.clone());
+                            }
+                        }
+                    }
+
                     for (i, arg_expr) in args.into_iter().enumerate() {
                         let (val, suf) = eval_expr_with_env(arg_expr, env)?;
                         let name = param_names.get(i).map(|s| s.as_str()).unwrap_or("");
