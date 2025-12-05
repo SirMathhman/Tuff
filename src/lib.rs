@@ -78,18 +78,62 @@ pub fn interpret(input: &str) -> Result<String, String> {
             seq = seq[1..seq.len() - 1].trim();
         }
 
-        let stmts_raw: Vec<&str> = seq
-            .split(';')
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .collect();
+        // Split by semicolons, but respect braces: don't split inside { ... }
+        let mut stmts_raw: Vec<&str> = Vec::new();
+        let mut start = 0;
+        let mut depth: i32 = 0;
+        for (i, ch) in seq.char_indices() {
+            match ch {
+                '{' => depth += 1,
+                '}' => depth = depth.saturating_sub(1),
+                ';' if depth == 0 => {
+                    let stmt = seq[start..i].trim();
+                    if !stmt.is_empty() {
+                        stmts_raw.push(stmt);
+                    }
+                    start = i + 1;
+                }
+                _ => {}
+            }
+        }
+        let stmt = seq[start..].trim();
+        if !stmt.is_empty() {
+            stmts_raw.push(stmt);
+        }
+
         let mut env: HashMap<String, Var> = HashMap::new();
         let mut last_value: Option<String> = None;
 
-        for stmt in stmts_raw {
+        fn process_single_stmt(
+            stmt_text: &str,
+            env: &mut HashMap<String, Var>,
+            last_value: &mut Option<String>,
+            eval_expr_with_env: &dyn Fn(
+                &str,
+                &HashMap<String, Var>,
+            ) -> Result<(String, Option<String>), String>,
+        ) -> Result<(), String> {
+            let s = stmt_text.trim();
+
+            // If this statement is a braced block
+            if s.starts_with('{') && s.ends_with('}') {
+                let inner = s[1..s.len() - 1].trim();
+                if inner.contains(';') {
+                    for inner_stmt in inner.split(';').map(|s| s.trim()).filter(|s| !s.is_empty()) {
+                        process_single_stmt(inner_stmt, env, last_value, eval_expr_with_env)?;
+                    }
+                    return Ok(());
+                } else {
+                    // single-expression block
+                    let (value, _suffix) = eval_expr_with_env(inner, env)?;
+                    *last_value = Some(value);
+                    return Ok(());
+                }
+            }
+
             // Declaration: let [mut] name [: Type]? = expr
-            if stmt.starts_with("let ") {
-                let rest = stmt.trim_start_matches("let").trim();
+            if s.starts_with("let ") {
+                let rest = s.trim_start_matches("let").trim();
                 // check for 'mut'
                 let (mutable, rest) = if rest.starts_with("mut ") {
                     (true, rest.trim_start_matches("mut").trim())
@@ -128,7 +172,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
                 }
 
                 // Evaluate RHS using current env
-                let (value, expr_suffix) = eval_expr_with_env(rhs, &env)?;
+                let (value, expr_suffix) = eval_expr_with_env(rhs, env)?;
 
                 // If explicit type provided, validate
                 if let Some(ty) = &ty_opt {
@@ -156,13 +200,13 @@ pub fn interpret(input: &str) -> Result<String, String> {
                         value,
                     },
                 );
-                last_value = None;
-                continue;
+                *last_value = None;
+                return Ok(());
             }
 
             // Assignment: <name> = <expr>
-            if stmt.contains('=') && !stmt.starts_with("let ") {
-                let mut parts = stmt.splitn(2, '=');
+            if s.contains('=') && !s.starts_with("let ") {
+                let mut parts = s.splitn(2, '=');
                 let name = parts
                     .next()
                     .ok_or_else(|| "invalid assignment".to_string())?
@@ -176,7 +220,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
                     return Err("assignment to undeclared variable".to_string());
                 }
 
-                let (value, expr_suffix) = eval_expr_with_env(rhs, &env)?;
+                let (value, expr_suffix) = eval_expr_with_env(rhs, env)?;
                 let var = env
                     .get_mut(name)
                     .ok_or_else(|| "assignment to undeclared variable".to_string())?;
@@ -184,15 +228,12 @@ pub fn interpret(input: &str) -> Result<String, String> {
                     return Err("assignment to immutable variable".to_string());
                 }
 
-                // If variable had a declared suffix, ensure new value fits and suffix (if present) matches
                 if let Some(declared) = &var.suffix {
-                    // If expression produced a suffix, ensure it matches declared
-                    if let Some(s) = &expr_suffix {
-                        if s != declared {
+                    if let Some(sfx) = &expr_suffix {
+                        if sfx != declared {
                             return Err("type suffix mismatch on assignment".to_string());
                         }
                     }
-
                     if declared.starts_with('U') {
                         let v = value
                             .parse::<u128>()
@@ -206,19 +247,27 @@ pub fn interpret(input: &str) -> Result<String, String> {
                     }
                 }
 
-                // Update var value; keep suffix as-is (may remain None)
                 var.value = value;
-                last_value = None;
-                continue;
+                *last_value = None;
+                return Ok(());
             }
 
             // Expression or variable reference — evaluate and keep as last_value
-            let (value, _suffix) = eval_expr_with_env(stmt, &env)?;
-            last_value = Some(value);
+            let (value, _suffix) = eval_expr_with_env(s, env)?;
+            *last_value = Some(value);
+            Ok(())
         }
 
-        // Return the result of the last statement; if there is none then return empty
-        return Ok(last_value.unwrap_or_default());
+        for stmt in stmts_raw {
+            process_single_stmt(stmt, &mut env, &mut last_value, &eval_expr_with_env)?;
+        }
+
+        // Return the last evaluated value or empty string if only declarations
+        if let Some(value) = last_value {
+            return Ok(value);
+        } else {
+            return Ok("".to_string());
+        }
     }
 
     // `typeOf(<literal or expr>)` helper: return the suffix portion if present, e.g. typeOf(100U8) -> "U8"
@@ -384,6 +433,18 @@ mod tests {
         // Braced statement block should work the same
         assert_eq!(
             interpret("{let mut x = 100; x = 200; x}"),
+            Ok("200".to_string())
+        );
+
+        // Braced expression as a statement should also work
+        assert_eq!(
+            interpret("let mut x = 100; x = 200; {x}"),
+            Ok("200".to_string())
+        );
+
+        // Multi-statement braced block should also work and modify outer env
+        assert_eq!(
+            interpret("let mut x = 100; {x = 200; x}"),
             Ok("200".to_string())
         );
 
