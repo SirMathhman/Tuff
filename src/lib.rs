@@ -459,6 +459,9 @@ mod tests {
         // Declaration-only returns empty string
         assert_eq!(interpret("let x : I32 = 100;"), Ok("".to_string()));
 
+        // Declaration with unsigned overflow should error
+        assert!(interpret("let x : U8 = 1000;").is_err());
+
         // Unsigned underflow should produce an error
         assert!(interpret("0U8 - 5U8").is_err());
 
