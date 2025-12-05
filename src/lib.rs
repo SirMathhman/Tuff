@@ -307,8 +307,9 @@ mod tests {
         let input = "hello world";
         let out = interpret(input);
         assert_eq!(out, Err("invalid input".to_string()));
-        // boolean literal returns as-is
+        // boolean literals return as-is
         assert_eq!(interpret("true"), Ok("true".to_string()));
+        assert_eq!(interpret("false"), Ok("false".to_string()));
     }
 
     #[test]
