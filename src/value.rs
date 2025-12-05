@@ -541,6 +541,13 @@ impl Evaluator {
             Expr::Index { object, index } => {
                 let obj = self.eval_expression(object)?;
                 let idx = self.eval_expression(index)?;
+                
+                // Type check: index must be numeric
+                let idx_type = idx.infer_type();
+                if !matches!(idx_type, Type::I32 | Type::I64 | Type::I16 | Type::I8 | Type::U8 | Type::U16 | Type::U32 | Type::U64 | Type::F64 | Type::F32) {
+                    return Err(format!("Array index must be numeric, got {:?}", idx_type));
+                }
+                
                 match (&obj, &idx) {
                     (Value::Array(arr), Value::Number(n)) => {
                         let index = *n as usize;

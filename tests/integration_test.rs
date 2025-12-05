@@ -80,3 +80,13 @@ fn test_function_argument_type_validation() {
     let result = evaluator.eval_program(&program).unwrap();
     assert_eq!(result.to_string(), "8");
 }
+
+#[test]
+fn test_array_index_type_validation() {
+    let mut evaluator = Evaluator::new();
+    let mut parser = Parser::new("let arr = [10, 20, 30]; arr[1];");
+    let program = parser.parse().unwrap();
+    let result = evaluator.eval_program(&program).unwrap();
+    assert_eq!(result.to_string(), "20");
+}
+
