@@ -2,10 +2,6 @@ mod evaluator;
 mod parser;
 mod range_check;
 
-use evaluator::{
-    apply_signed_op, apply_unsigned_op, eval_rpn_generic, parse_plain_i128 as parse_plain,
-    parse_signed_token, parse_unsigned_token,
-};
 use parser::{detect_suffix_from_tokens, tokenize_expr, tokens_to_rpn};
 use range_check::{check_signed_range, check_unsigned_range, SUFFIXES};
 
@@ -68,30 +64,9 @@ pub fn interpret(input: &str) -> Result<String, String> {
 
         let output = tokens_to_rpn(&resolved_tokens)?;
 
-        // Evaluate
-        if let Some(suffix) = seen_suffix {
-            let unsigned = suffix.starts_with('U');
-            if unsigned {
-                let res = eval_rpn_generic::<u128, _, _>(
-                    &output,
-                    suffix,
-                    parse_unsigned_token,
-                    apply_unsigned_op,
-                )?;
-                Ok((res.to_string(), Some(suffix.to_string())))
-            } else {
-                let res = eval_rpn_generic::<i128, _, _>(
-                    &output,
-                    suffix,
-                    parse_signed_token,
-                    apply_signed_op,
-                )?;
-                Ok((res.to_string(), Some(suffix.to_string())))
-            }
-        } else {
-            let res = eval_rpn_generic::<i128, _, _>(&output, "", parse_plain, apply_signed_op)?;
-            Ok((res.to_string(), None))
-        }
+        // Evaluate RPN output using evaluator helper
+        let (value_out, maybe_suffix) = evaluator::eval_output_with_suffix(&output, seen_suffix)?;
+        Ok((value_out, maybe_suffix))
     }
 
     // If there are semicolon-separated statements, process them sequentially
@@ -272,31 +247,8 @@ pub fn interpret(input: &str) -> Result<String, String> {
 
         let output = tokens_to_rpn(&tokens)?;
 
-        // Evaluate RPN output using a tiny generic evaluator to avoid duplicate code
-        if let Some(suffix) = seen_suffix {
-            let unsigned = suffix.starts_with('U');
-            if unsigned {
-                let res = eval_rpn_generic::<u128, _, _>(
-                    &output,
-                    suffix,
-                    parse_unsigned_token,
-                    apply_unsigned_op,
-                )?;
-                return Ok(res.to_string());
-            } else {
-                let res = eval_rpn_generic::<i128, _, _>(
-                    &output,
-                    suffix,
-                    parse_signed_token,
-                    apply_signed_op,
-                )?;
-                return Ok(res.to_string());
-            }
-        } else {
-            // no suffix: evaluate as plain signed i128 with empty suffix
-            let res = eval_rpn_generic::<i128, _, _>(&output, "", parse_plain, apply_signed_op)?;
-            return Ok(res.to_string());
-        }
+        let (value_out, _maybe_suffix) = evaluator::eval_output_with_suffix(&output, seen_suffix)?;
+        return Ok(value_out);
     }
     for sfx in SUFFIXES {
         if input.ends_with(sfx) {

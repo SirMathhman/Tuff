@@ -114,3 +114,32 @@ pub fn parse_plain_i128(token: &str, _suffix: &str) -> Result<i128, String> {
     num.parse::<i128>()
         .map_err(|_| "invalid numeric value".to_string())
 }
+
+pub fn eval_output_with_suffix(
+    output: &[String],
+    seen_suffix: Option<&str>,
+) -> Result<(String, Option<String>), String> {
+    if let Some(suffix) = seen_suffix {
+        let unsigned = suffix.starts_with('U');
+        if unsigned {
+            let res = eval_rpn_generic::<u128, _, _>(
+                output,
+                suffix,
+                parse_unsigned_token,
+                apply_unsigned_op,
+            )?;
+            Ok((res.to_string(), Some(suffix.to_string())))
+        } else {
+            let res = eval_rpn_generic::<i128, _, _>(
+                output,
+                suffix,
+                parse_signed_token,
+                apply_signed_op,
+            )?;
+            Ok((res.to_string(), Some(suffix.to_string())))
+        }
+    } else {
+        let res = eval_rpn_generic::<i128, _, _>(output, "", parse_plain_i128, apply_signed_op)?;
+        Ok((res.to_string(), None))
+    }
+}
