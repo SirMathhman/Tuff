@@ -332,6 +332,28 @@ impl Evaluator {
                 else_body,
             } => {
                 let cond_val = self.eval_expression(condition)?;
+                // Type check: condition must be boolean or truthy
+                match &cond_val {
+                    Value::Boolean(_) => {
+                        // Ideal case - condition is explicitly boolean
+                    }
+                    Value::Number(n) if *n == 0.0 => {
+                        // Numeric 0 is falsy - allow but should be bool
+                    }
+                    Value::Number(n) if *n != 0.0 => {
+                        // Numeric non-zero is truthy - allow but should be bool
+                    }
+                    Value::String(_) | Value::Null => {
+                        // String/Null are truthy/falsy - allow but should be bool
+                    }
+                    _ => {
+                        return Err(format!(
+                            "If condition must be boolean, got {:?}",
+                            cond_val.infer_type()
+                        ))
+                    }
+                }
+
                 if cond_val.is_truthy() {
                     self.eval_block(then_body)
                 } else if let Some(else_stmts) = else_body {
@@ -344,6 +366,28 @@ impl Evaluator {
                 let mut last_val = Value::Null;
                 loop {
                     let cond_val = self.eval_expression(condition)?;
+                    // Type check: condition must be boolean or truthy
+                    match &cond_val {
+                        Value::Boolean(_) => {
+                            // Ideal case - condition is explicitly boolean
+                        }
+                        Value::Number(n) if *n == 0.0 => {
+                            // Numeric 0 is falsy - allow but should be bool
+                        }
+                        Value::Number(n) if *n != 0.0 => {
+                            // Numeric non-zero is truthy - allow but should be bool
+                        }
+                        Value::String(_) | Value::Null => {
+                            // String/Null are truthy/falsy - allow but should be bool
+                        }
+                        _ => {
+                            return Err(format!(
+                                "While condition must be boolean, got {:?}",
+                                cond_val.infer_type()
+                            ))
+                        }
+                    }
+
                     if !cond_val.is_truthy() {
                         break;
                     }
@@ -490,25 +534,58 @@ impl Evaluator {
     ) -> Result<Value, String> {
         use crate::ast::BinOp;
 
-        // Type check for comparison and logical operations
+        let left_type = left.infer_type();
+        let right_type = right.infer_type();
+
+        // Type check for different operation categories
         match op {
-            BinOp::Equal | BinOp::NotEqual | BinOp::Less | BinOp::LessEqual
-            | BinOp::Greater | BinOp::GreaterEqual => {
-                // These operations are valid between compatible numeric types
+            BinOp::Add | BinOp::Subtract | BinOp::Multiply | BinOp::Divide | BinOp::Modulo => {
+                // Arithmetic operations require numeric types or compatible types
+                match (left, right) {
+                    (Value::Number(_), Value::Number(_)) => {},
+                    (Value::String(_), Value::String(_)) if matches!(op, BinOp::Add) => {
+                        // String concatenation is allowed
+                    },
+                    _ => {
+                        return Err(format!(
+                            "Invalid operands for {:?}: {:?} and {:?}",
+                            op, left_type, right_type
+                        ))
+                    }
+                }
+            }
+            BinOp::Equal | BinOp::NotEqual => {
+                // These operations work on matching types
+                if left_type != right_type {
+                    // Allow comparison between compatible numeric types
+                    match (&left_type, &right_type) {
+                        (Type::I32 | Type::I64 | Type::F32 | Type::F64,
+                         Type::I32 | Type::I64 | Type::F32 | Type::F64) => {},
+                        _ => {
+                            return Err(format!(
+                                "Cannot compare {:?} and {:?}",
+                                left_type, right_type
+                            ))
+                        }
+                    }
+                }
+            }
+            BinOp::Less | BinOp::LessEqual | BinOp::Greater | BinOp::GreaterEqual => {
+                // Comparison operations require numeric types
                 match (left, right) {
                     (Value::Number(_), Value::Number(_)) => {},
                     (Value::String(_), Value::String(_)) => {},
-                    (Value::Boolean(_), Value::Boolean(_)) => {},
-                    _ => return Err(format!(
-                        "Cannot compare {:?} and {:?}",
-                        left.infer_type(), right.infer_type()
-                    )),
+                    _ => {
+                        return Err(format!(
+                            "Cannot compare {:?} and {:?} with {:?}",
+                            left_type, right_type, op
+                        ))
+                    }
                 }
             }
             BinOp::And | BinOp::Or => {
-                // Logical operations work on any truthy values (no strict type check needed)
+                // Logical operations work on truthy values (no strict type check)
             }
-            _ => {},
         }
 
         match op {
