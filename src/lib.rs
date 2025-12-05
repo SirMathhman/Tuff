@@ -283,7 +283,19 @@ pub fn interpret(input: &str) -> Result<String, String> {
         }
     }
 
-    Ok(input.to_string())
+    // Accept plain integer literals (signed) as valid input
+    let trimmed = input.trim();
+    let num_candidate = trimmed.strip_prefix('+').unwrap_or(trimmed);
+    if num_candidate.parse::<i128>().is_ok() {
+        return Ok(trimmed.to_string());
+    }
+
+    // Explicitly accept boolean literals; otherwise treat unexpected input as an error
+    if trimmed == "true" || trimmed == "false" {
+        return Ok(trimmed.to_string());
+    }
+
+    Err("invalid input".to_string())
 }
 
 #[cfg(test)]
@@ -294,7 +306,7 @@ mod tests {
     fn interpret_returns_same_string() {
         let input = "hello world";
         let out = interpret(input);
-        assert_eq!(out, Ok(input.to_string()));
+        assert_eq!(out, Err("invalid input".to_string()));
         // boolean literal returns as-is
         assert_eq!(interpret("true"), Ok("true".to_string()));
     }
@@ -306,11 +318,11 @@ mod tests {
         assert_eq!(interpret("7I32"), Ok("7".to_string()));
         assert_eq!(interpret("900U64"), Ok("900".to_string()));
 
-        // Case-sensitive: lowercase should not match
-        assert_eq!(interpret("42u32"), Ok("42u32".to_string()));
+        // Case-sensitive: lowercase should not match and is unexpected
+        assert!(interpret("42u32").is_err());
 
-        // Don't strip when letters are part of a word
-        assert_eq!(interpret("valueU16"), Ok("valueU16".to_string()));
+        // Don't strip when letters are part of a word -> unexpected
+        assert!(interpret("valueU16").is_err());
 
         // digits-only should be unchanged
         assert_eq!(interpret("12345"), Ok("12345".to_string()));
