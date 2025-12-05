@@ -74,16 +74,30 @@ pub fn eval_expr_with_env(
 
     // address-of operator: &var
     if let Some(stripped) = trimmed.strip_prefix('&') {
-        let inner = stripped.trim();
+        let mut inner = stripped.trim();
+        let mut is_mutref = false;
+        if let Some(rest) = inner.strip_prefix("mut ") {
+            is_mutref = true;
+            inner = rest.trim();
+        }
         // only support taking address of simple identifiers for now
         if !inner.is_empty() && inner.chars().all(|c| c.is_alphanumeric() || c == '_') {
             if let Some(v) = env.get(inner) {
+                if is_mutref && !v.mutable {
+                    return Err("cannot take mutable reference of immutable variable".to_string());
+                }
                 // pointer encoded as: __PTR__:<pointee_suffix>|<target_name>
                 let pointee = v.suffix.clone().unwrap_or_else(|| "".to_string());
                 let ptr_val = format!("__PTR__:{}|{}", pointee, inner);
-                // expose pointer suffix like "*I32" when the pointee suffix exists
+                // expose pointer suffix: mute variant becomes "*mut <Type>", non-mutable becomes "*<Type>"
                 let ptr_suffix = if pointee.is_empty() {
-                    Some("*".to_string())
+                    if is_mutref {
+                        Some("*mut".to_string())
+                    } else {
+                        Some("*".to_string())
+                    }
+                } else if is_mutref {
+                    Some(format!("*mut {}", pointee))
                 } else {
                     Some(format!("*{}", pointee))
                 };
