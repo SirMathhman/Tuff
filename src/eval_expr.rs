@@ -72,6 +72,13 @@ pub fn eval_expr_with_env(
 ) -> Result<(String, Option<String>), String> {
     let mut trimmed = expr.trim().to_string();
 
+    // Disallow standalone arrow-style function literals as top-level expressions.
+    // Arrow-style function literals are only allowed when used as RHS (e.g. `let a = () => ...`) or
+    // inside other expressions. Reject bare `(args) => {}` or `() => expr` at top level.
+    if crate::statement::parse_fn_literal(&trimmed).is_some() && !trimmed.starts_with("fn ") {
+        return Err("invalid input".to_string());
+    }
+
     // address-of operator: &var
     if let Some(stripped) = trimmed.strip_prefix('&') {
         let mut inner = stripped.trim();
