@@ -45,10 +45,7 @@ $trackedFiles | ForEach-Object {
         return
     }
     
-    $lineCount = @(Get-Content $file -ErrorAction SilentlyContinue).Count
-    if ($lineCount -eq 0) {
-        $lineCount = if ((Get-Content $file -ErrorAction SilentlyContinue) -ne $null) { 1 } else { 0 }
-    }
+    $lineCount = (Get-Content $file -ErrorAction SilentlyContinue | Measure-Object -Line).Lines
     
     if ($lineCount -gt 500) {
         $exceeded += @{ File = $file; Lines = $lineCount }
