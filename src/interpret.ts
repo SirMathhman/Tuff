@@ -1,4 +1,4 @@
-export function interpret(_input: string): string {
-  // stub implementation — returns empty string for now
-  return "";
+export function interpret(input: string): string {
+  // Basic interpreter behavior: return input unchanged for now
+  return input;
 }

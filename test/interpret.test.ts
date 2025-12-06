@@ -7,7 +7,7 @@ describe("interpret", () => {
     expect(typeof out).toBe("string");
   });
 
-  it("returns an empty string for now (stub)", () => {
-    expect(interpret("anything")).toBe("");
+  it("returns the same string for simple inputs (identity)", () => {
+    expect(interpret("100")).toBe("100");
   });
 });
