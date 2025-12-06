@@ -155,14 +155,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
         }
 
         // Call drop handlers for variables with declared types at scope exit
-        let vars_to_drop: Vec<(String, String)> = env
-            .iter()
-            .filter_map(|(name, var)| {
-                var.declared_type
-                    .as_ref()
-                    .map(|dtype| (name.clone(), dtype.clone()))
-            })
-            .collect();
+        let vars_to_drop: Vec<(String, String)> = crate::statement::collect_droppable_vars(&env);
 
         for (var_name, var_type) in vars_to_drop {
             let drop_handler_key = format!("__drop__{}", var_type);
@@ -190,7 +183,10 @@ pub fn interpret(input: &str) -> Result<String, String> {
         if let Some(stmt) = last_stmt {
             let stmt_trimmed = stmt.trim();
             // If the statement is a simple identifier, re-evaluate it to pick up updates from drop handlers
-            if !stmt_trimmed.contains(' ') && !stmt_trimmed.contains('(') && !stmt_trimmed.contains('[') {
+            if !stmt_trimmed.contains(' ')
+                && !stmt_trimmed.contains('(')
+                && !stmt_trimmed.contains('[')
+            {
                 if let Ok((new_val, _)) = eval_expr_with_env(stmt_trimmed, &env) {
                     last_value = Some(new_val);
                 }

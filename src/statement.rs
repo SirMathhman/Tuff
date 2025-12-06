@@ -6,25 +6,26 @@ pub struct Var {
     pub mutable: bool,
     pub suffix: Option<String>,
     pub value: String,
-    // if this variable is currently mutably borrowed via &mut
     pub borrowed_mut: bool,
-    // declared type (e.g., "DroppableI32") for drop handler tracking
     pub declared_type: Option<String>,
 }
 
 pub type ExprEvaluator<'a> =
     &'a dyn Fn(&str, &HashMap<String, Var>) -> Result<(String, Option<String>), String>;
-
-/// Context for statement processing within blocks
 pub struct StatementContext<'a> {
     pub env: &'a mut HashMap<String, Var>,
     pub eval_expr: ExprEvaluator<'a>,
     pub last_value: &'a mut Option<(String, Option<String>)>,
 }
 mod block;
+mod helpers;
 mod mut_capture;
 pub use block::{eval_block_expr, eval_block_expr_mut, split_statements};
+pub use helpers::{collect_droppable_vars, resolve_fn_or_eval_rhs};
 use mut_capture::try_call_with_mut_captures;
+// try_copy_fn_definition moved to helpers.rs
+
+// helpers moved to helpers.rs
 
 fn run_block_stmt(s: &str, ctx: &mut StatementContext) -> Result<(), String> {
     let s = s.trim();
@@ -59,14 +60,12 @@ fn run_block_stmt(s: &str, ctx: &mut StatementContext) -> Result<(), String> {
     }
 
     if s.starts_with("fn ") {
-        // For now, functions are only top-level; not allowed inside blocks
         return Err("functions cannot be defined inside blocks".to_string());
     }
 
     if let Some(stripped) = s.strip_prefix("return ") {
-        // Handle return statement: evaluate the expression and signal early exit
+        // Handle return statement: evaluate expression and signal early exit
         let expr = stripped.trim();
-        // Remove trailing semicolon if present
         let expr = if let Some(stripped) = expr.strip_suffix(';') {
             stripped.trim()
         } else {
@@ -91,7 +90,7 @@ fn run_block_stmt(s: &str, ctx: &mut StatementContext) -> Result<(), String> {
         return Ok(());
     }
 
-    // Check for function calls with mutable captures - handle specially since we have &mut env
+    // function calls with mutable captures handled specially below
     if let Some((value, suf)) = try_call_with_mut_captures(s, ctx)? {
         *ctx.last_value = Some((value, suf));
         return Ok(());
@@ -102,9 +101,7 @@ fn run_block_stmt(s: &str, ctx: &mut StatementContext) -> Result<(), String> {
     Ok(())
 }
 
-// process_if_statement moved to control.rs
-
-// process_while_statement moved to control.rs
+// helper control logic in control.rs
 
 fn eval_rhs(
     rhs: &str,
@@ -176,8 +173,7 @@ fn process_declaration(s: &str, ctx: &mut StatementContext) -> Result<(), String
         return Err("duplicate declaration".to_string());
     }
 
-    // If an explicit type was provided, treat the declaration as mutable by
-    // default to allow later assignments at top-level and in blocks.
+    // If an explicit type was provided, treat the declaration as mutable.
     if ty_opt.is_some() && !mutable {
         mutable = true;
     }
@@ -215,7 +211,8 @@ fn process_declaration(s: &str, ctx: &mut StatementContext) -> Result<(), String
 
             (ptr_val, ptr_suffix)
         } else {
-            eval_rhs(rhs, ctx.env, ctx.eval_expr)?
+            // assigning a function reference by name, e.g. `let f = get;`
+            resolve_fn_or_eval_rhs(ctx.env, rhs, name, ctx.eval_expr)?
         }
     } else {
         if ty_opt.is_none() {
@@ -261,8 +258,7 @@ fn process_assignment(s: &str, ctx: &mut StatementContext) -> Result<(), String>
             }
 
             // Use an immutable borrow first to capture current value and suffix,
-            // then evaluate the expression using those literals so we don't keep
-            // the mutable borrow across evaluation.
+            // then evaluate the expression using those literals so we don't keep the mutable borrow across evaluation.
             let current = ctx
                 .env
                 .get(name)
@@ -280,7 +276,7 @@ fn process_assignment(s: &str, ctx: &mut StatementContext) -> Result<(), String>
             let expr = format!("{} {} {}", left_literal, sym, rhs);
             let (value, expr_suffix) = (ctx.eval_expr)(expr.as_str(), ctx.env)?;
 
-            // Validate against declared suffix if present, then store the result
+            // Validate against declared suffix if present and store the result
             if let Some(declared) = &current.suffix {
                 check_declared_compat(ctx.env, declared, expr_suffix.as_ref(), &value)?;
             }
@@ -406,7 +402,7 @@ fn process_assignment(s: &str, ctx: &mut StatementContext) -> Result<(), String>
             }
         }
 
-        // Now obtain a mutable borrow for the target to mark it borrowed
+        // Obtain a mutable borrow for the target to mark it borrowed
         if is_mutref {
             let target = ctx
                 .env
@@ -425,12 +421,13 @@ fn process_assignment(s: &str, ctx: &mut StatementContext) -> Result<(), String>
             inner,
             is_mutref,
         );
-        // assign pointer value into existing variable (with validation)
+        // assign pointer value into existing variable
         assign_ptr_to_existing_var(ctx, name, ptr_val, ptr_suffix)?;
         return Ok(());
     }
 
-    let (value, expr_suffix) = eval_rhs(rhs, ctx.env, ctx.eval_expr)?;
+    // Special-case: assignment of a named function to an existing variable, e.g. `x = get;`
+    let (value, expr_suffix) = resolve_fn_or_eval_rhs(ctx.env, rhs, name, ctx.eval_expr)?;
 
     // Validate against declared suffix if present before taking mutable borrow
     if let Some(var_info) = ctx.env.get(name) {
@@ -452,8 +449,7 @@ fn process_assignment(s: &str, ctx: &mut StatementContext) -> Result<(), String>
     Ok(())
 }
 
-mod validate;
-
+mod validate; // validation helpers
 /// Context for top-level statement processing
 pub struct TopStmtContext<'a> {
     pub env: &'a mut HashMap<String, Var>,
@@ -463,3 +459,6 @@ pub struct TopStmtContext<'a> {
 pub use top::process_single_stmt;
 
 mod top;
+
+// Return a list of (variable_name, declared_type) for variables that have a declared type
+// collect_droppable_vars moved to helpers.rs and re-exported

@@ -4,6 +4,7 @@ fn main() {
     println!("Test 1 (auto drop): {:?}", tuff::interpret(input1));
 
     // Manual drop handler call
-    let input2 = "let mut sum = 0; fn drop[&mut sum](this : DroppableI32) => sum += 1; drop(100); sum";
+    let input2 =
+        "let mut sum = 0; fn drop[&mut sum](this : DroppableI32) => sum += 1; drop(100); sum";
     println!("Test 2 (manual drop): {:?}", tuff::interpret(input2));
 }

@@ -70,14 +70,7 @@ pub fn eval_block_expr_mut(
     }
 
     // Call drop handlers for variables with declared types at scope exit
-    let vars_to_drop: Vec<(String, String)> = local_env
-        .iter()
-        .filter_map(|(name, var)| {
-            var.declared_type
-                .as_ref()
-                .map(|dtype| (name.clone(), dtype.clone()))
-        })
-        .collect();
+    let vars_to_drop: Vec<(String, String)> = super::collect_droppable_vars(local_env);
 
     for (var_name, var_type) in vars_to_drop {
         let drop_handler_key = format!("__drop__{}", var_type);
