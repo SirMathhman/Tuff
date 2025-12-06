@@ -3,7 +3,7 @@ use tuff::interpret;
 
 fn main() {
     println!("Tuff REPL - v0.1.0");
-    println!("Type 'exit' or 'quit' to leave, 'help' for commands");
+    println!("Type '#exit', '#quit', or '#help' for commands");
     println!();
 
     let stdin = io::stdin();
@@ -24,11 +24,11 @@ fn main() {
                 let trimmed = input.trim();
 
                 match trimmed {
-                    "exit" | "quit" => {
+                    "#exit" | "#quit" => {
                         println!("Goodbye!");
                         break;
                     }
-                    "help" => {
+                    "#help" => {
                         print_help();
                         continue;
                     }
@@ -77,8 +77,8 @@ fn print_help() {
     println!("  if (x > 0) {{ x }} else {{ 0 }}");
     println!("  while (x < 10) {{ x += 1 }}");
     println!();
-    println!("REPL Commands:");
-    println!("  help                - Show this help");
-    println!("  exit, quit          - Exit the REPL");
+    println!("REPL Commands (prefix with #):");
+    println!("  #help               - Show this help");
+    println!("  #exit, #quit        - Exit the REPL");
     println!();
 }
