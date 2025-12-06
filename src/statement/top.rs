@@ -2,7 +2,8 @@ use crate::control::{process_if_statement, process_while_statement, ControlConte
 
 use super::mut_capture::try_call_with_mut_captures_top;
 use super::{
-    process_assignment, process_declaration, split_statements, ExprEvaluator, StatementContext, Var,
+    helpers, process_assignment, process_declaration, split_statements, ExprEvaluator,
+    StatementContext, Var,
 };
 use std::collections::HashMap;
 
@@ -144,6 +145,12 @@ fn process_single_stmt_internal(
         };
         process_while_statement(s, &mut ctrl_ctx)?;
         return Ok(());
+    }
+
+    if s.starts_with("class ") {
+        // Transform class definition into function that returns this
+        let transformed = helpers::transform_class_to_fn(s);
+        return process_single_stmt_internal(&transformed, ctx);
     }
 
     if s.starts_with("fn ") {

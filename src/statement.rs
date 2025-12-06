@@ -18,10 +18,13 @@ pub struct StatementContext<'a> {
     pub last_value: &'a mut Option<(String, Option<String>)>,
 }
 mod block;
-mod helpers;
+pub mod helpers;
 mod mut_capture;
+pub mod top;
 pub use block::{eval_block_expr, eval_block_expr_mut, split_statements};
-pub use helpers::{collect_droppable_vars, parse_fn_literal, resolve_fn_or_eval_rhs};
+pub use helpers::{
+    collect_droppable_vars, parse_fn_literal, resolve_fn_or_eval_rhs, transform_class_to_fn,
+};
 use mut_capture::try_call_with_mut_captures;
 // try_copy_fn_definition moved to helpers.rs
 
@@ -509,8 +512,6 @@ pub struct TopStmtContext<'a> {
     pub last_value: &'a mut Option<String>,
 }
 pub use top::process_single_stmt;
-
-mod top;
 
 // Return a list of (variable_name, declared_type) for variables that have a declared type
 // collect_droppable_vars moved to helpers.rs and re-exported

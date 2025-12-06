@@ -7,7 +7,7 @@ mod parser;
 mod pointer_utils;
 mod property_access;
 mod range_check;
-mod statement;
+pub mod statement;
 
 use parser::{detect_suffix_from_tokens, tokenize_expr, tokens_to_rpn};
 use range_check::{check_unsigned_range, SUFFIXES};
@@ -22,6 +22,13 @@ pub fn interpret(input: &str) -> Result<String, String> {
         env: &HashMap<String, Var>,
     ) -> Result<(String, Option<String>), String> {
         crate::eval_expr::eval_expr_with_env(expr, env)
+    }
+
+    // Handle class definitions (syntactic sugar for functions that return this)
+    if input.trim_start().starts_with("class ") {
+        let s = input.trim();
+        let transformed = statement::transform_class_to_fn(s);
+        return interpret(&transformed);
     }
 
     // If input starts with a function definition followed by a call without

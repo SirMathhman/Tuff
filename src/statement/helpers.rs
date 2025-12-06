@@ -160,3 +160,55 @@ pub fn parse_fn_literal(s: &str) -> Option<(String, String, String, String, Stri
 
     None
 }
+
+/// Transform a class definition into a function that returns this.
+/// Input: "class fn Point(x : I32, y : I32) => {fn manhattan() => x + y;}"
+/// Output: "fn Point(x : I32, y : I32) => {fn manhattan() => x + y; this}"
+/// Also preserves any tail after the closing brace.
+pub fn transform_class_to_fn(input: &str) -> String {
+    let s = input.trim();
+    if !s.starts_with("class ") {
+        return input.to_string();
+    }
+
+    // Strip "class " prefix
+    let without_class = &s[6..].trim_start();
+
+    // Check if it's a braced function body
+    if let Some((_arrow_pos, _ob, cb)) = crate::brace_utils::find_fn_arrow_and_braces(without_class)
+    {
+        // Find the => and opening {
+        if let Some(arrow_idx) = without_class.find("=>") {
+            let fn_sig = &without_class[..arrow_idx];
+            if let Some(open_brace_idx) = without_class[arrow_idx..].find('{') {
+                let abs_open_idx = arrow_idx + open_brace_idx;
+                let body_content = &without_class[abs_open_idx + 1..cb].trim();
+
+                // Add "; this" to the body if not already there
+                let new_body = if body_content.trim_end().ends_with('}') {
+                    // Body already has nested braces
+                    format!("{}; this", body_content)
+                } else if body_content.trim_end().ends_with(';') {
+                    format!("{} this", body_content)
+                } else {
+                    format!("{}; this", body_content)
+                };
+
+                // Preserve any tail after the closing brace
+                let tail = &without_class[cb + 1..];
+
+                // Keep the arrow in the output: fn_sig already contains "fn " and the signature
+                return format!("{} => {{ {} }}{}", fn_sig.trim(), new_body, tail);
+            }
+        }
+    }
+
+    // For arrow-style functions without braces
+    // Transform: class fn make() => fn inner() => 100
+    // To: fn make() => (fn inner() => 100, this)  -- but we need it to return this, not both
+    // Actually for non-braced: class fn make() => expression
+    // We need to change it so it still returns a single value that is this
+    // For now, skip non-braced classes
+
+    input.to_string()
+}
