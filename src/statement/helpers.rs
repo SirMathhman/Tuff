@@ -84,10 +84,6 @@ pub fn collect_droppable_vars(env: &HashMap<String, Var>) -> Vec<(String, String
 // Parse a function literal or definition string and extract (name, captures, params, return_type, body)
 // Returns None if parsing fails.
 pub fn parse_fn_literal(s: &str) -> Option<(String, String, String, String, String)> {
-    if !s.trim_start().starts_with("fn ") {
-        return None;
-    }
-
     let s = s.trim();
     let mut arrow_pos_opt: Option<usize> = None;
     let mut open_brace: Option<usize> = None;
@@ -102,31 +98,43 @@ pub fn parse_fn_literal(s: &str) -> Option<(String, String, String, String, Stri
     }
 
     if let Some(arrow_pos) = arrow_pos_opt {
-        let sig_str = s[3..arrow_pos].trim();
+        let sig_slice = if s.starts_with("fn ") {
+            &s[3..arrow_pos]
+        } else {
+            &s[..arrow_pos]
+        };
+        let sig_str = sig_slice.trim();
 
         let mut captures_str = String::new();
         let mut params_str = String::new();
         let mut return_type = String::new();
 
-        let name_end = sig_str
+        // Create owned signature string so we can inspect/manipulate it
+        let sig_owned = sig_str.to_string();
+
+        let name_end = sig_owned
             .find('[')
             .or_else(|| sig_str.find('('))
             .unwrap_or(sig_str.len());
-        let fn_name = sig_str[..name_end].trim().to_string();
+        let mut fn_name = sig_owned[..name_end].trim().to_string();
+        // Arrow-style literals like `() => ...` won't have a name; clear it if it's just parentheses
+        if fn_name.starts_with('(') || fn_name.is_empty() {
+            fn_name = String::new();
+        }
 
-        if let Some(bracket_start) = sig_str.find('[') {
+        if let Some(bracket_start) = sig_owned.find('[') {
             if let Some(bracket_end) = sig_str.find(']') {
                 if bracket_start < bracket_end {
-                    captures_str = sig_str[bracket_start + 1..bracket_end].to_string();
+                    captures_str = sig_owned[bracket_start + 1..bracket_end].to_string();
                 }
             }
         }
 
-        if let Some(paren_start) = sig_str.find('(') {
+        if let Some(paren_start) = sig_owned.find('(') {
             if let Some(paren_end) = sig_str.find(')') {
                 if paren_start < paren_end {
-                    params_str = sig_str[paren_start + 1..paren_end].to_string();
-                    let after_paren = sig_str[paren_end + 1..].trim();
+                    params_str = sig_owned[paren_start + 1..paren_end].to_string();
+                    let after_paren = sig_owned[paren_end + 1..].trim();
                     return_type = after_paren
                         .strip_prefix(':')
                         .unwrap_or(after_paren)

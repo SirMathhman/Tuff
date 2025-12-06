@@ -193,6 +193,12 @@ fn interpret_strips_type_like_suffix() {
         Ok("100".to_string())
     );
 
+    // Arrow-style function literal assignment should work
+    assert_eq!(
+        interpret("let myFunc = () => 100; myFunc()"),
+        Ok("100".to_string())
+    );
+
     // Test if captures are being parsed
     // First, test that a function with capture syntax doesn't error during definition
     assert_eq!(
