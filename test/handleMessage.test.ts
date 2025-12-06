@@ -10,7 +10,7 @@ describe("handleMessage", () => {
     expect(handleMessage("100")).toBe("100");
   });
 
-  it('returns leading digits when message contains extra chars', () => {
-    expect(handleMessage("100U8'")).toBe("100");
-  });
+  it('evaluates leading arithmetic expression and returns "3" for "1 + 2\'"', () => {
+    expect(handleMessage("1 + 2'")) .toBe("3")
+  })
 });
