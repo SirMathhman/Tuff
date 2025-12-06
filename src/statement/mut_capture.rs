@@ -45,7 +45,7 @@ fn execute_fn_with_mut_captures(
         None => return Err(format!("unknown function: {}", fn_name)),
     };
 
-    let (params_part, _, body_part) = crate::fn_utils::parse_fn_value(&func_var.value);
+    let (_maybe_caps, params_part, _, body_part) = crate::fn_utils::parse_fn_value(&func_var.value);
     let param_names = crate::fn_utils::extract_param_names(params_part);
 
     // Create local environment with captures

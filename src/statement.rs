@@ -59,7 +59,9 @@ fn run_block_stmt(s: &str, ctx: &mut StatementContext) -> Result<(), String> {
         return Ok(());
     }
 
-    if s.starts_with("fn ") {
+    if s.starts_with("fn ") && s.contains('{') && !s.contains("=>") {
+        // Only error if it's a full function definition with braces (not a function literal)
+        // Function literals like `fn () => 100` should be allowed as expressions
         return Err("functions cannot be defined inside blocks".to_string());
     }
 
@@ -85,7 +87,8 @@ fn run_block_stmt(s: &str, ctx: &mut StatementContext) -> Result<(), String> {
         return Ok(());
     }
 
-    if s.contains('=') && !s.starts_with("let ") {
+    // Don't treat arrow functions as assignments (=> is not an assignment operator)
+    if s.contains('=') && !s.contains("=>") && !s.starts_with("let ") {
         process_assignment(s, ctx)?;
         return Ok(());
     }

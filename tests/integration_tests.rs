@@ -205,6 +205,12 @@ fn interpret_strips_type_like_suffix() {
         Ok("100".to_string())
     );
 
+    // A function should be able to return another function (call chain)
+    assert_eq!(
+        interpret("fn make() => fn inner() => 100; make()()"),
+        Ok("100".to_string())
+    );
+
     // Standalone arrow-style function literal used as top-level should be rejected
     assert!(interpret("(first : I32, second : I32) => {}").is_err());
 

@@ -66,6 +66,78 @@ fn build_struct_instance(
     Ok(values_map)
 }
 
+/// Helper to invoke a function given its parsed value, args, and env.
+/// Returns the result of calling the function.
+#[allow(clippy::too_many_arguments)]
+fn invoke_fn_value(
+    fn_value: &str,
+    args_text: &str,
+    env: &HashMap<String, Var>,
+    maybe_captures_override: Option<&str>,
+) -> Result<(String, Option<String>), String> {
+    let (maybe_caps, params_part, _, body_part) = crate::fn_utils::parse_fn_value(fn_value);
+    let param_names = crate::fn_utils::extract_param_names(params_part);
+    let mut local_env = env.clone();
+
+    // Apply captures from either override or parsed value
+    let captures_to_use = maybe_captures_override.or(maybe_caps);
+    if let Some(captures_str) = captures_to_use {
+        for capture in captures_str.split(',') {
+            let cap = capture.trim();
+            let var_name = cap
+                .strip_prefix("&mut ")
+                .or_else(|| cap.strip_prefix('&'))
+                .unwrap_or(cap)
+                .trim();
+            if let Some(captured_var) = env.get(var_name) {
+                local_env.insert(var_name.to_string(), captured_var.clone());
+            }
+        }
+    }
+
+    // Collect args while respecting nested parentheses
+    let mut args: Vec<&str> = Vec::new();
+    let mut start = 0usize;
+    let mut depth: i32 = 0;
+    for (i, ch) in args_text.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                let piece = args_text[start..i].trim();
+                if !piece.is_empty() {
+                    args.push(piece);
+                }
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    let last_piece = args_text[start..].trim();
+    if !last_piece.is_empty() {
+        args.push(last_piece);
+    }
+
+    for (i, arg_expr) in args.into_iter().enumerate() {
+        let (val, suf) = eval_expr_with_env(arg_expr, env)?;
+        let name = param_names.get(i).map(|s| s.as_str()).unwrap_or("");
+        if !name.is_empty() {
+            local_env.insert(
+                name.to_string(),
+                Var {
+                    mutable: false,
+                    suffix: suf.clone(),
+                    value: val.clone(),
+                    borrowed_mut: false,
+                    declared_type: None,
+                },
+            );
+        }
+    }
+
+    statement::eval_block_expr(body_part, &local_env, &eval_expr_with_env)
+}
+
 pub fn eval_expr_with_env(
     expr: &str,
     env: &HashMap<String, Var>,
@@ -77,6 +149,20 @@ pub fn eval_expr_with_env(
     // inside other expressions. Reject bare `(args) => {}` or `() => expr` at top level.
     if crate::statement::parse_fn_literal(&trimmed).is_some() && !trimmed.starts_with("fn ") {
         return Err("invalid input".to_string());
+    }
+
+    // Support function literals as expressions (return as FN values)
+    if trimmed.starts_with("fn ") {
+        if let Some((_name, captures_str, params_str, return_type, body)) =
+            crate::statement::parse_fn_literal(&trimmed)
+        {
+            let fn_value = if captures_str.is_empty() {
+                format!("{}|{}|{}", params_str, return_type, body)
+            } else {
+                format!("{}|{}|{}|{}", captures_str, params_str, return_type, body)
+            };
+            return Ok((fn_value, Some("FN".to_string())));
+        }
     }
 
     // address-of operator: &var
@@ -258,77 +344,44 @@ pub fn eval_expr_with_env(
         }
     }
 
-    if let Some(open_idx) = trimmed.find('(') {
-        if trimmed.ends_with(')') {
-            let name = trimmed[..open_idx].trim();
-            if !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_') {
-                let args_text = &trimmed[open_idx + 1..trimmed.len() - 1];
-                let mut args: Vec<&str> = Vec::new();
-                let mut start = 0usize;
-                let mut depth: i32 = 0;
-                for (i, ch) in args_text.char_indices() {
-                    match ch {
-                        '(' => depth += 1,
-                        ')' => depth = depth.saturating_sub(1),
-                        ',' if depth == 0 => {
-                            let piece = args_text[start..i].trim();
-                            if !piece.is_empty() {
-                                args.push(piece);
-                            }
-                            start = i + 1;
-                        }
-                        _ => {}
+    if trimmed.ends_with(')') {
+        // Find the opening paren matching the final closing paren so calls like make()() work
+        let mut depth: i32 = 0;
+        let mut open_idx_opt: Option<usize> = None;
+        for (i, ch) in trimmed.char_indices().rev() {
+            match ch {
+                ')' => depth += 1,
+                '(' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        open_idx_opt = Some(i);
+                        break;
                     }
                 }
-                let last_piece = args_text[start..].trim();
-                if !last_piece.is_empty() {
-                    args.push(last_piece);
-                }
+                _ => {}
+            }
+        }
 
+        if let Some(open_idx) = open_idx_opt {
+            let left = trimmed[..open_idx].trim();
+            let args_text = &trimmed[open_idx + 1..trimmed.len() - 1];
+
+            // Check if left is a function identifier before attempting parsing
+            if !left.is_empty() && left.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                let name = left;
                 let key = format!("__fn__{}", name);
                 if let Some(func_var) = env.get(&key) {
-                    let (params_part, _, body_part) =
-                        crate::fn_utils::parse_fn_value(&func_var.value);
-                    let param_names = crate::fn_utils::extract_param_names(params_part);
-
-                    let mut local_env = env.clone();
-
-                    // Handle captures: look for __captures__<name> in env
+                    // Check for external captures in __captures__<name>
                     let captures_key = format!("__captures__{}", name);
-                    if let Some(captures_var) = env.get(&captures_key) {
-                        for capture in captures_var.value.split(',') {
-                            let cap = capture.trim();
-                            let var_name = cap
-                                .strip_prefix("&mut ")
-                                .or_else(|| cap.strip_prefix('&'))
-                                .unwrap_or(cap)
-                                .trim();
-                            if let Some(captured_var) = env.get(var_name) {
-                                local_env.insert(var_name.to_string(), captured_var.clone());
-                            }
-                        }
-                    }
-
-                    for (i, arg_expr) in args.into_iter().enumerate() {
-                        let (val, suf) = eval_expr_with_env(arg_expr, env)?;
-                        let name = param_names.get(i).map(|s| s.as_str()).unwrap_or("");
-                        if !name.is_empty() {
-                            local_env.insert(
-                                name.to_string(),
-                                Var {
-                                    mutable: false,
-                                    suffix: suf.clone(),
-                                    value: val.clone(),
-                                    borrowed_mut: false,
-                                    declared_type: None,
-                                },
-                            );
-                        }
-                    }
-
-                    let (v, sfx) =
-                        statement::eval_block_expr(body_part, &local_env, &eval_expr_with_env)?;
-                    return Ok((v, sfx));
+                    let captures_override = env.get(&captures_key).map(|v| v.value.as_str());
+                    return invoke_fn_value(&func_var.value, args_text, env, captures_override);
+                }
+            } else if !left.is_empty() && left.ends_with(')') {
+                // Left ends with ) which means it's a chained call like make()()
+                // Evaluate left and if it returns a function value, call that function
+                let (left_val, left_sfx) = eval_expr_with_env(left, env)?;
+                if left_sfx.as_deref() == Some("FN") {
+                    return invoke_fn_value(&left_val, args_text, env, None);
                 }
             }
         }
