@@ -5,8 +5,9 @@
   "type": "module",
   "main": "dist/src/interpret.js",
   "scripts": {
-    "test": "bun test",
+    "test": "bun test --coverage",
     "build": "tsc --project tsconfig.build.json",
+    "build:test": "tsc --project tsconfig.test.json",
     "dev": "bun run src/interpret.ts"
   },
   "devDependencies": {
