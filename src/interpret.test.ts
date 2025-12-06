@@ -31,9 +31,14 @@ describe("interpret", () => {
     const result = interpret("let x : I32 = {1 + 2 - 3}; x");
     expect(result).toBe("0");
   });
-  
-  it('should evaluate let bindings inside braces and return variable value', () => {
+
+  it("should evaluate let bindings inside braces and return variable value", () => {
     const result = interpret("{let x : I32 = 1 + 2 - 3; x}");
+    expect(result).toBe("0");
+  });
+
+  it('should evaluate nested braced block inside expression', () => {
+    const result = interpret("1 + {let x : I32 = 2; x} - 3");
     expect(result).toBe("0");
   });
 });
