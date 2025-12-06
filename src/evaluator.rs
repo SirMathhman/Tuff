@@ -1,4 +1,9 @@
 use crate::range_check::{check_signed_range, check_unsigned_range};
+use crate::statement::Var;
+use std::collections::HashMap;
+
+/// Type alias for the environment (variable store)
+pub type Environment = HashMap<String, Var>;
 
 /// Context for arithmetic/comparison operations
 #[derive(Clone)]
@@ -291,4 +296,66 @@ fn eval_rpn_plain(output: &[String]) -> Result<i128, String> {
         },
     };
     eval_rpn_generic::<i128, _, _>(output, rpn_ctx)
+}
+
+/// Build a struct instance from a type name, arguments text, and environment.
+/// Returns a HashMap mapping field names to their evaluated values.
+pub fn build_struct_instance(
+    type_name: &str,
+    args_text: &str,
+    env: &Environment,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    let key = format!("__struct__{}", type_name);
+    let templ = env
+        .get(&key)
+        .ok_or_else(|| "unknown struct type".to_string())?;
+    let fields_def = templ.value.trim();
+    let mut field_names: Vec<String> = Vec::new();
+    for part in fields_def.split(|c| [',', ';'].contains(&c)) {
+        let p = part.trim();
+        if p.is_empty() {
+            continue;
+        }
+        let fn_name = p.split(':').next().unwrap_or("").trim();
+        if !fn_name.is_empty() {
+            field_names.push(fn_name.to_string());
+        }
+    }
+
+    let mut args: Vec<&str> = Vec::new();
+    let mut start = 0usize;
+    let mut depth2: i32 = 0;
+    for (i, ch) in args_text.char_indices() {
+        match ch {
+            '{' => depth2 += 1,
+            '}' => depth2 = depth2.saturating_sub(1),
+            '(' => depth2 += 1,
+            ')' => depth2 = depth2.saturating_sub(1),
+            ',' if depth2 == 0 => {
+                let piece = args_text[start..i].trim();
+                if !piece.is_empty() {
+                    args.push(piece);
+                }
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    if start < args_text.len() {
+        let last = args_text[start..].trim();
+        if !last.is_empty() {
+            args.push(last);
+        }
+    }
+
+    let mut values_map: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+    for (i, a) in args.into_iter().enumerate() {
+        let (val, _suf) = crate::eval_expr::eval_expr_with_env(a, env)?;
+        if let Some(fname) = field_names.get(i) {
+            values_map.insert(fname.clone(), val);
+        }
+    }
+
+    Ok(values_map)
 }

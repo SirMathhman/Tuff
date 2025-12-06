@@ -5,6 +5,7 @@ mod evaluator;
 mod fn_utils;
 mod parser;
 mod pointer_utils;
+mod property_access;
 mod range_check;
 mod statement;
 

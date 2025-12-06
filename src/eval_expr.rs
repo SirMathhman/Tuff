@@ -1,70 +1,12 @@
 use crate::brace_utils;
 use crate::evaluator;
+use crate::evaluator::build_struct_instance;
 use crate::parser::{detect_suffix_from_tokens, tokenize_expr, tokens_to_rpn};
+use crate::property_access::{handle_complex_property_access, preprocess_property_access};
 use crate::statement;
 use crate::statement::Var;
 // SUFFIXES are not used directly in this module
 use std::collections::HashMap;
-
-fn build_struct_instance(
-    type_name: &str,
-    args_text: &str,
-    env: &HashMap<String, Var>,
-) -> Result<std::collections::HashMap<String, String>, String> {
-    let key = format!("__struct__{}", type_name);
-    let templ = env
-        .get(&key)
-        .ok_or_else(|| "unknown struct type".to_string())?;
-    let fields_def = templ.value.trim();
-    let mut field_names: Vec<String> = Vec::new();
-    for part in fields_def.split(|c| [',', ';'].contains(&c)) {
-        let p = part.trim();
-        if p.is_empty() {
-            continue;
-        }
-        let fn_name = p.split(':').next().unwrap_or("").trim();
-        if !fn_name.is_empty() {
-            field_names.push(fn_name.to_string());
-        }
-    }
-
-    let mut args: Vec<&str> = Vec::new();
-    let mut start = 0usize;
-    let mut depth2: i32 = 0;
-    for (i, ch) in args_text.char_indices() {
-        match ch {
-            '{' => depth2 += 1,
-            '}' => depth2 = depth2.saturating_sub(1),
-            '(' => depth2 += 1,
-            ')' => depth2 = depth2.saturating_sub(1),
-            ',' if depth2 == 0 => {
-                let piece = args_text[start..i].trim();
-                if !piece.is_empty() {
-                    args.push(piece);
-                }
-                start = i + 1;
-            }
-            _ => {}
-        }
-    }
-    if start < args_text.len() {
-        let last = args_text[start..].trim();
-        if !last.is_empty() {
-            args.push(last);
-        }
-    }
-
-    let mut values_map: std::collections::HashMap<String, String> =
-        std::collections::HashMap::new();
-    for (i, a) in args.into_iter().enumerate() {
-        let (val, _suf) = eval_expr_with_env(a, env)?;
-        if let Some(fname) = field_names.get(i) {
-            values_map.insert(fname.clone(), val);
-        }
-    }
-
-    Ok(values_map)
-}
 
 /// Helper to invoke a function given its parsed value, args, and env.
 /// Returns the result of calling the function.
@@ -301,72 +243,13 @@ pub fn eval_expr_with_env(
 
     // property access handling
     {
-        let mut depth = 0i32;
-        let mut paren_depth = 0i32;
-        let mut dot_idx: Option<usize> = None;
-        for (i, ch) in trimmed.char_indices() {
-            match ch {
-                '{' => depth += 1,
-                '}' => depth = depth.saturating_sub(1),
-                '(' => paren_depth += 1,
-                ')' => paren_depth = paren_depth.saturating_sub(1),
-                '.' if depth == 0 && paren_depth == 0 => {
-                    dot_idx = Some(i);
-                    break;
-                }
-                _ => {}
-            }
-        }
+        preprocess_property_access(&mut trimmed, env);
+    }
 
-        if let Some(dotpos) = dot_idx {
-            let left = trimmed[..dotpos].trim();
-            let right = trimmed[dotpos + 1..].trim();
-            if right.chars().all(|c| c.is_alphanumeric() || c == '_') && !right.is_empty() {
-                if let Some(open_br) = left.find('{') {
-                    if left.ends_with('}') {
-                        if let Some(close_br) = brace_utils::find_matching_brace(left, open_br) {
-                            let type_name = left[..open_br].trim();
-                            if !type_name.is_empty() {
-                                let key = format!("__struct__{}", type_name);
-                                if env.contains_key(&key) {
-                                    let args_text = &left[open_br + 1..close_br];
-                                    let values_map =
-                                        build_struct_instance(type_name, args_text, env)?;
-                                    if let Some(v) = values_map.get(right) {
-                                        return Ok((v.clone(), None));
-                                    }
-                                    return Err("field not found on struct instance".to_string());
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Special-case `this` to access the current environment's variables
-                if left == "this" {
-                    if let Some(v) = env.get(right) {
-                        return Ok((v.value.clone(), v.suffix.clone()));
-                    }
-                }
-
-                let (left_val, _left_suf) = eval_expr_with_env(left, env)?;
-                if left_val.starts_with("__STRUCT__:") {
-                    let rest = &left_val[10..];
-                    let mut parts = rest.split('|');
-                    let _typename = parts.next();
-                    for ent in parts {
-                        if let Some(eq) = ent.find('=') {
-                            let fname = &ent[..eq];
-                            let fval = &ent[eq + 1..];
-                            if fname == right {
-                                return Ok((fval.to_string(), None));
-                            }
-                        }
-                    }
-                    return Err("field not found on struct instance".to_string());
-                }
-            }
-        }
+    // Fallback: handle property access when left side is not a simple identifier
+    // (e.g., struct literals like "Wrapper { 100 }.value")
+    if let Some(result) = handle_complex_property_access(&trimmed, env)? {
+        return Ok(result);
     }
 
     if trimmed.ends_with(')') {

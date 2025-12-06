@@ -75,6 +75,12 @@ fn interpret_strips_type_like_suffix() {
         Ok("100".to_string())
     );
 
+    // Assigning snapshot `this` into an untyped variable and using fields in expressions
+    assert_eq!(
+        interpret("let x = 100; let y = 200; let temp = this; temp.x + temp.y"),
+        Ok("300".to_string())
+    );
+
     // Mutable variable and assignment
     assert_eq!(
         interpret("let mut x = 100; x = 200; x"),
