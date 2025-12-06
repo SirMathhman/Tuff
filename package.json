@@ -1,18 +1,20 @@
 {
   "name": "tuff",
-  "version": "0.0.0",
-  "private": true,
-  "type": "commonjs",
+  "version": "1.0.0",
+  "description": "Interpret function implementation",
+  "type": "module",
+  "main": "dist/src/interpret.js",
   "scripts": {
-    "test": "mocha -r ts-node/register 'tests/**/*.test.ts' --exit"
+    "test": "bun test",
+    "build": "tsc",
+    "dev": "bun run src/interpret.ts"
   },
   "devDependencies": {
-    "mocha": "^10.2.0",
-    "ts-node": "^10.9.1",
-    "typescript": "^5.4.0",
-    "@types/mocha": "^10.0.1",
-    "chai": "^4.3.7",
-    "@types/chai": "^4.3.0",
-    "@types/node": "^20.2.5"
+    "@types/bun": "latest",
+    "typescript": "^5.0.0",
+    "bun": "latest"
+  },
+  "dependencies": {
+    "chai": "^4.3.10"
   }
 }

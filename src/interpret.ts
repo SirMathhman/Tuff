@@ -1,5 +1,5 @@
-const interpret = (input: string): string => {
-  throw new Error("interpret: stub not implemented");
-};
+export function interpret(input: string): string {
+  return input;
+}
 
-module.exports = { interpret };
+export default interpret;
