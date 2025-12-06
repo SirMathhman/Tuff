@@ -199,6 +199,24 @@ pub fn eval_expr_with_env(
         return Ok((trimmed.to_string(), None));
     }
 
+    // `this` evaluates to a struct-like snapshot of the current environment's variables
+    if trimmed == "this" {
+        let mut parts: Vec<String> = Vec::new();
+        parts.push("This".to_string());
+        for (k, v) in env.iter() {
+            if k.starts_with("__") {
+                continue;
+            }
+            let mut val = v.value.clone();
+            if let Some(s) = &v.suffix {
+                val = format!("{}{}", val, s);
+            }
+            parts.push(format!("{}={}", k, val));
+        }
+        let encoded = format!("__STRUCT__:{}", parts.join("|"));
+        return Ok((encoded, None));
+    }
+
     if let Some(first) = trimmed.chars().next() {
         if (first.is_alphabetic() || first == '_')
             && trimmed.chars().all(|c| c.is_alphanumeric() || c == '_')

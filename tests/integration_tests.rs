@@ -69,6 +69,12 @@ fn interpret_strips_type_like_suffix() {
     // Accessing current environment via `this` should return variable values
     assert_eq!(interpret("let x = 100; this.x"), Ok("100".to_string()));
 
+    // Assigning snapshot `this` into a typed variable and accessing fields
+    assert_eq!(
+        interpret("let x = 100; let temp : This = this; temp.x"),
+        Ok("100".to_string())
+    );
+
     // Mutable variable and assignment
     assert_eq!(
         interpret("let mut x = 100; x = 200; x"),
