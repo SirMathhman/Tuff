@@ -97,3 +97,51 @@ fn test_extern_with_struct() {
     let result = interpret_all("main", sources);
     assert_eq!(result, Ok("10".to_string()));
 }
+
+#[test]
+fn test_extern_as_c_style_header() {
+    let mut sources = HashMap::new();
+
+    // Implementation file: actual function definitions (like a .c/.so file)
+    sources.insert(
+        "memory".to_string(),
+        "out let malloc = fn malloc(size : USize) : USize => size;
+        out let free = fn free(ptr : USize) : I32 => 0;"
+            .to_string(),
+    );
+
+    // Main program: uses header for declarations, imports implementation
+    sources.insert(
+        "main".to_string(),
+        "extern use memory;
+        extern fn malloc<T>(size : USize) : *mut T;
+        extern fn free<T>(ptr : *mut T) : I32;
+        
+        let size = malloc(1024USize);
+        free(size)"
+            .to_string(),
+    );
+
+    let result = interpret_all("main", sources);
+    assert_eq!(result, Ok("0".to_string()));
+}
+
+#[test]
+fn test_multiple_modules_with_headers() {
+    let mut sources = HashMap::new();
+
+    // Standard library implementation (like a compiled .so/.dll)
+    sources.insert(
+        "stdlib".to_string(),
+        "out let add = fn add(a : I32, b : I32) : I32 => a + b;".to_string(),
+    );
+
+    // Main program: uses extern declarations as forward declarations (like C headers)
+    sources.insert(
+        "main".to_string(),
+        "extern use stdlib; extern fn add(a : I32, b : I32) : I32; add(15, 5)".to_string(),
+    );
+
+    let result = interpret_all("main", sources);
+    assert_eq!(result, Ok("20".to_string()));
+}
