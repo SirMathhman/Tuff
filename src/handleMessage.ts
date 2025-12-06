@@ -1,6 +1,21 @@
 export function handleMessage(message: string): string {
   if (message === "boom") throw new Error(message);
 
+  // First check for a braced expression at the start like {1 + 2}
+  const braceMatch = message.match(/^\{\s*([0-9+\-*/().\s]+)\s*\}/);
+  if (braceMatch && braceMatch[1]) {
+    const expr = braceMatch[1].trim();
+    if (/[+\-*/()]/.test(expr) && /^[0-9+\-*/().\s]+$/.test(expr)) {
+      try {
+        // eslint-disable-next-line no-new-func
+        const result = new Function(`return (${expr})`)();
+        return String(result);
+      } catch {
+        return message;
+      }
+    }
+  }
+
   // Extract a leading arithmetic expression composed of digits, spaces,
   // decimal points and the basic operators + - * / and parentheses.
   const match = message.match(/^[0-9+\-*/().\s]+/);
