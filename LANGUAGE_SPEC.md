@@ -15,17 +15,18 @@ Tuff is a statically-typed, imperative programming language with support for clo
 9. [Operators](#operators)
 
 For examples, implementation notes, and the rest of the spec, see LANGUAGE_SPEC_EXAMPLES.md
-fn increment() => x = x + 1;  // automatically captures &mut x
+fn increment() => x = x + 1; // automatically captures &mut x
 increment();
-x  // returns 1
-```
+x // returns 1
+
+````
 
 #### Explicit Capture Syntax
 
 ```rust
 fn getter[&x]() => x;        // immutable capture
 fn setter[&mut x]() => x;    // mutable capture
-```
+````
 
 ### Arrow Functions
 

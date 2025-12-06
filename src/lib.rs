@@ -20,6 +20,69 @@ fn local_eval_expr_with_env(
     crate::eval_expr::eval_expr_with_env(expr, env)
 }
 
+/// Context for module import operations
+struct ModuleImportContext<'a> {
+    module_name: &'a str,
+    item_name: Option<&'a str>,
+    source_set: &'a std::collections::HashMap<String, String>,
+}
+
+/// Process module exports and optionally filter by item name.
+/// If item_name is None, imports all exports. If Some(name), imports only that item.
+fn process_module_imports(
+    ctx: ModuleImportContext,
+    target_env: &mut std::collections::HashMap<String, Var>,
+) -> Result<(), String> {
+    use std::collections::HashMap;
+
+    let module_source = ctx
+        .source_set
+        .get(ctx.module_name)
+        .ok_or_else(|| format!("module '{}' not found in source set", ctx.module_name))?;
+
+    let module_stmts = split_statements(module_source.trim());
+    for module_stmt in module_stmts {
+        let module_stmt_trimmed = module_stmt.trim();
+
+        if let Some(export_content) = module_stmt_trimmed.strip_prefix("out ") {
+            let export_content = export_content.trim();
+
+            let mut module_env: HashMap<String, Var> = HashMap::new();
+            let mut module_last: Option<String> = None;
+            process_single_stmt(
+                export_content,
+                &mut module_env,
+                &mut module_last,
+                &local_eval_expr_with_env,
+            )?;
+
+            if let Some(requested_item) = ctx.item_name {
+                // Selective import: only import the requested item
+                if let Some(var) = module_env.get(requested_item) {
+                    target_env.insert(requested_item.to_string(), var.clone());
+                }
+
+                let fn_key = format!("__fn__{}", requested_item);
+                if let Some(func) = module_env.get(&fn_key) {
+                    target_env.insert(fn_key.clone(), func.clone());
+
+                    let captures_key = format!("__captures__{}", requested_item);
+                    if let Some(captures) = module_env.get(&captures_key) {
+                        target_env.insert(captures_key.clone(), captures.clone());
+                    }
+                }
+            } else {
+                // Import all exports
+                for (key, var) in module_env {
+                    target_env.insert(key, var);
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 pub fn interpret_all(
     main_name: &str,
     source_set: std::collections::HashMap<String, String>,
@@ -37,8 +100,22 @@ pub fn interpret_all(
         for stmt in stmts {
             let stmt_trimmed = stmt.trim();
 
-            // Handle use statements: use module::item;
-            if let Some(use_content) = stmt_trimmed.strip_prefix("use ") {
+            // Handle extern use statements: extern use module;
+            if let Some(use_content) = stmt_trimmed.strip_prefix("extern use ") {
+                let use_content = if let Some(stripped) = use_content.trim().strip_suffix(';') {
+                    stripped
+                } else {
+                    use_content.trim()
+                };
+
+                let module_name = use_content.trim();
+                let ctx = ModuleImportContext {
+                    module_name,
+                    item_name: None,
+                    source_set: &source_set,
+                };
+                process_module_imports(ctx, &mut env)?;
+            } else if let Some(use_content) = stmt_trimmed.strip_prefix("use ") {
                 let use_content = if let Some(stripped) = use_content.trim().strip_suffix(';') {
                     stripped
                 } else {
@@ -49,53 +126,19 @@ pub fn interpret_all(
                 if let Some(double_colon) = use_content.find("::") {
                     let module_name = &use_content[..double_colon];
                     let item_name = &use_content[double_colon + 2..];
-
-                    // Load the module from source_set
-                    if let Some(module_source) = source_set.get(module_name) {
-                        // Process the module to extract exported items
-                        let module_stmts = split_statements(module_source.trim());
-                        for module_stmt in module_stmts {
-                            let module_stmt_trimmed = module_stmt.trim();
-
-                            // Handle "out let item = value;" exports
-                            if let Some(export_content) = module_stmt_trimmed.strip_prefix("out ") {
-                                let export_content = export_content.trim();
-
-                                // Process the export statement in a temporary environment
-                                let mut module_env: HashMap<String, Var> = HashMap::new();
-                                let mut module_last: Option<String> = None;
-                                process_single_stmt(
-                                    export_content,
-                                    &mut module_env,
-                                    &mut module_last,
-                                    &local_eval_expr_with_env,
-                                )?;
-
-                                // Import the requested item into main environment
-                                // For variables: look in module_env
-                                if let Some(var) = module_env.get(item_name) {
-                                    env.insert(item_name.to_string(), var.clone());
-                                }
-
-                                // For functions: look for __fn__<item_name>
-                                let fn_key = format!("__fn__{}", item_name);
-                                if let Some(func) = module_env.get(&fn_key) {
-                                    env.insert(fn_key.clone(), func.clone());
-
-                                    // Also import captures if present
-                                    let captures_key = format!("__captures__{}", item_name);
-                                    if let Some(captures) = module_env.get(&captures_key) {
-                                        env.insert(captures_key.clone(), captures.clone());
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        return Err(format!("module '{}' not found in source set", module_name));
-                    }
+                    let ctx = ModuleImportContext {
+                        module_name,
+                        item_name: Some(item_name),
+                        source_set: &source_set,
+                    };
+                    process_module_imports(ctx, &mut env)?
                 } else {
                     return Err(format!("invalid use statement: {}", stmt_trimmed));
                 }
+            } else if stmt_trimmed.starts_with("extern fn ") {
+                // extern fn declarations are no-ops (function signatures only)
+                // The actual function is imported via extern use
+                continue;
             } else {
                 // Process normal statement
                 process_single_stmt(
