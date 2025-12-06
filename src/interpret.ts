@@ -4,14 +4,37 @@ export function interpret(input: string): string {
   // quick number-only shortcut
   if (/^\d+$/.test(trimmed)) return trimmed;
 
-  // Statements are semicolon separated
-  const stmts = trimmed.split(";").map((s) => s.trim()).filter(Boolean);
+  // Statements are semicolon separated at top-level (respecting nested braces/parentheses)
+  function splitTopLevelStatements(s: string): string[] {
+    const res: string[] = [];
+    let buf = "";
+    let depth = 0;
+    for (let i = 0; i < s.length; i++) {
+      const ch = s[i];
+      if (ch === ";" && depth === 0) {
+        if (buf.trim()) res.push(buf.trim());
+        buf = "";
+        continue;
+      }
+      if (ch === "(" || ch === "{") depth++;
+      else if (ch === ")" || ch === "}") depth = Math.max(0, depth - 1);
+      buf += ch;
+    }
+    if (buf.trim()) res.push(buf.trim());
+    return res;
+  }
+
+  const isBlock = trimmed.startsWith("{") && trimmed.endsWith("}");
+  const stmtsSource = isBlock ? trimmed.slice(1, -1) : trimmed;
+  const stmts = splitTopLevelStatements(stmtsSource);
   const env = new Map<string, number>();
   let lastResult: number | undefined = undefined;
 
   for (const stmt of stmts) {
     // let statement: let x : I32 = <expr>
-    const letMatch = stmt.match(/^let\s+([A-Za-z_]\w*)\s*(?::\s*([A-Za-z0-9_]+))?\s*=\s*(.*)$/s);
+    const letMatch = stmt.match(
+      /^let\s+([A-Za-z_]\w*)\s*(?::\s*([A-Za-z0-9_]+))?\s*=\s*(.*)$/s
+    );
     if (letMatch) {
       const name = letMatch[1];
       const type = letMatch[2];
@@ -57,7 +80,10 @@ function tokenize(expr: string): string[] {
 
   let prev: string | undefined = undefined;
   for (const t of raw) {
-    if (t === "-" && (prev === undefined || prev === "(" || prev === "{" || isOperator(prev))) {
+    if (
+      t === "-" &&
+      (prev === undefined || prev === "(" || prev === "{" || isOperator(prev))
+    ) {
       // unary minus -> treat as 0 - <expr>
       tokens.push("0");
       tokens.push("-");

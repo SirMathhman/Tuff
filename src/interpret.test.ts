@@ -27,8 +27,13 @@ describe("interpret", () => {
     expect(result).toBe("0");
   });
 
-  it('should evaluate let bindings and return variable value', () => {
+  it("should evaluate let bindings and return variable value", () => {
     const result = interpret("let x : I32 = {1 + 2 - 3}; x");
+    expect(result).toBe("0");
+  });
+  
+  it('should evaluate let bindings inside braces and return variable value', () => {
+    const result = interpret("{let x : I32 = 1 + 2 - 3; x}");
     expect(result).toBe("0");
   });
 });
