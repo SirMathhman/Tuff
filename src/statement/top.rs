@@ -168,32 +168,8 @@ fn process_single_stmt_internal(
                 };
 
                 // Store function with format: params|return_type|body
-                let fn_key = format!("__fn__{}", fn_name);
                 let fn_value = format!("{}|{}|{}", params_str, return_type, body);
-                ctx.env.insert(
-                    fn_key.clone(),
-                    Var {
-                        mutable: false,
-                        value: fn_value,
-                        suffix: Some("FN".to_string()),
-                        borrowed_mut: false,
-                        declared_type: None,
-                    },
-                );
-
-                if !final_captures_str.is_empty() {
-                    let captures_key = format!("__captures__{}", fn_name);
-                    ctx.env.insert(
-                        captures_key,
-                        Var {
-                            mutable: false,
-                            value: final_captures_str,
-                            suffix: Some("CAPTURES".to_string()),
-                            borrowed_mut: false,
-                            declared_type: None,
-                        },
-                    );
-                }
+                helpers::insert_named_fn(ctx.env, &fn_name, &fn_value, Some(&final_captures_str));
             }
         }
         *ctx.last_value = None;

@@ -1,4 +1,6 @@
-pub const SUFFIXES: [&str; 8] = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
+pub const SUFFIXES: [&str; 9] = [
+    "U8", "U16", "U32", "U64", "USize", "I8", "I16", "I32", "I64",
+];
 
 pub fn check_unsigned_range(value: u128, suffix: &str) -> Result<(), String> {
     let max = match suffix {
@@ -6,6 +8,7 @@ pub fn check_unsigned_range(value: u128, suffix: &str) -> Result<(), String> {
         "U16" => u16::MAX as u128,
         "U32" => u32::MAX as u128,
         "U64" => u64::MAX as u128,
+        "USize" => usize::MAX as u128,
         _ => u128::MAX,
     };
     if value > max {

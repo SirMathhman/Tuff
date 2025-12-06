@@ -13,6 +13,13 @@ use parser::{detect_suffix_from_tokens, tokenize_expr, tokens_to_rpn};
 use range_check::{check_unsigned_range, SUFFIXES};
 use statement::{process_single_stmt, split_statements, Var};
 
+fn local_eval_expr_with_env(
+    expr: &str,
+    env: &std::collections::HashMap<String, Var>,
+) -> Result<(String, Option<String>), String> {
+    crate::eval_expr::eval_expr_with_env(expr, env)
+}
+
 pub fn interpret_all(
     main_name: &str,
     source_set: std::collections::HashMap<String, String>,
@@ -20,12 +27,6 @@ pub fn interpret_all(
     use std::collections::HashMap;
 
     // Helper to evaluate an expression with access to the current environment.
-    fn eval_expr_with_env(
-        expr: &str,
-        env: &HashMap<String, Var>,
-    ) -> Result<(String, Option<String>), String> {
-        crate::eval_expr::eval_expr_with_env(expr, env)
-    }
 
     if let Some(main_source) = source_set.get(main_name) {
         let mut env: HashMap<String, Var> = HashMap::new();
@@ -67,7 +68,7 @@ pub fn interpret_all(
                                     export_content,
                                     &mut module_env,
                                     &mut module_last,
-                                    &eval_expr_with_env,
+                                    &local_eval_expr_with_env,
                                 )?;
 
                                 // Import the requested item into main environment
@@ -97,7 +98,12 @@ pub fn interpret_all(
                 }
             } else {
                 // Process normal statement
-                process_single_stmt(stmt_trimmed, &mut env, &mut last_value, &eval_expr_with_env)?;
+                process_single_stmt(
+                    stmt_trimmed,
+                    &mut env,
+                    &mut last_value,
+                    &local_eval_expr_with_env,
+                )?;
             }
         }
 
@@ -111,12 +117,6 @@ pub fn interpret(input: &str) -> Result<String, String> {
     use std::collections::HashMap;
 
     // Helper to evaluate an expression with access to the current environment.
-    fn eval_expr_with_env(
-        expr: &str,
-        env: &HashMap<String, Var>,
-    ) -> Result<(String, Option<String>), String> {
-        crate::eval_expr::eval_expr_with_env(expr, env)
-    }
 
     // Handle class definitions (syntactic sugar for functions that return this)
     if input.trim_start().starts_with("class ") {
@@ -136,7 +136,12 @@ pub fn interpret(input: &str) -> Result<String, String> {
             let mut env: HashMap<String, Var> = HashMap::new();
             let mut last_value: Option<String> = None;
             // register the function
-            process_single_stmt(def_str, &mut env, &mut last_value, &eval_expr_with_env)?;
+            process_single_stmt(
+                def_str,
+                &mut env,
+                &mut last_value,
+                &local_eval_expr_with_env,
+            )?;
 
             if tail.is_empty() {
                 return Ok("".to_string());
@@ -149,7 +154,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
             // Process tail as statements
             let stmts = split_statements(tail_trimmed);
             for stmt in stmts {
-                process_single_stmt(stmt, &mut env, &mut last_value, &eval_expr_with_env)?;
+                process_single_stmt(stmt, &mut env, &mut last_value, &local_eval_expr_with_env)?;
             }
             return Ok(last_value.unwrap_or_default());
         }
@@ -192,11 +197,16 @@ pub fn interpret(input: &str) -> Result<String, String> {
                         let stmts_raw = split_statements(seq);
                         let mut last_value: Option<String> = None;
                         for s in stmts_raw {
-                            process_single_stmt(s, &mut env, &mut last_value, &eval_expr_with_env)?;
+                            process_single_stmt(
+                                s,
+                                &mut env,
+                                &mut last_value,
+                                &local_eval_expr_with_env,
+                            )?;
                         }
                         return Ok(last_value.unwrap_or_default());
                     }
-                    let (val, _suf) = eval_expr_with_env(tail, &env)?;
+                    let (val, _suf) = local_eval_expr_with_env(tail, &env)?;
                     return Ok(val);
                 }
             }
@@ -212,7 +222,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
         && (input.contains('+') || input.contains('-') || input.contains('*'))
     {
         let env: HashMap<String, Var> = HashMap::new();
-        if let Ok((val, suf)) = eval_expr_with_env(input, &env) {
+        if let Ok((val, suf)) = local_eval_expr_with_env(input, &env) {
             let result = if let Some(suffix) = suf {
                 format!("{}{}", val, suffix)
             } else {
@@ -250,7 +260,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
                                 merged.as_str(),
                                 &mut env,
                                 &mut last_value,
-                                &eval_expr_with_env,
+                                &local_eval_expr_with_env,
                             )?;
                             i += 2;
                             continue;
@@ -259,7 +269,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
                 }
                 // Process normal statement
                 last_stmt = Some(s.trim().to_string());
-                process_single_stmt(s, &mut env, &mut last_value, &eval_expr_with_env)?;
+                process_single_stmt(s, &mut env, &mut last_value, &local_eval_expr_with_env)?;
             }
             i += 1;
         }
@@ -282,7 +292,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
                         &call_text,
                         &mut env,
                         &mut dummy_last_value,
-                        &eval_expr_with_env,
+                        &local_eval_expr_with_env,
                     );
                 }
             }
@@ -297,7 +307,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
                 && !stmt_trimmed.contains('(')
                 && !stmt_trimmed.contains('[')
             {
-                if let Ok((new_val, _)) = eval_expr_with_env(stmt_trimmed, &env) {
+                if let Ok((new_val, _)) = local_eval_expr_with_env(stmt_trimmed, &env) {
                     last_value = Some(new_val);
                 }
             }

@@ -22,6 +22,43 @@ pub fn try_copy_fn_definition(
     None
 }
 
+/// Insert a named function definition and optional captures into the provided env.
+#[allow(clippy::too_many_arguments)]
+pub fn insert_named_fn(
+    env: &mut HashMap<String, Var>,
+    fn_name: &str,
+    fn_value: &str,
+    captures: Option<&str>,
+) {
+    let fn_key = format!("__fn__{}", fn_name);
+    env.insert(
+        fn_key.clone(),
+        Var {
+            mutable: false,
+            value: fn_value.to_string(),
+            suffix: Some("FN".to_string()),
+            borrowed_mut: false,
+            declared_type: None,
+        },
+    );
+
+    if let Some(caps) = captures {
+        if !caps.is_empty() {
+            let captures_key = format!("__captures__{}", fn_name);
+            env.insert(
+                captures_key,
+                Var {
+                    mutable: false,
+                    value: caps.to_string(),
+                    suffix: Some("CAPTURES".to_string()),
+                    borrowed_mut: false,
+                    declared_type: None,
+                },
+            );
+        }
+    }
+}
+
 // Resolve RHS when possibly assigning a named function to `target`.
 #[allow(clippy::too_many_arguments)]
 pub fn resolve_fn_or_eval_rhs(

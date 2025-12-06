@@ -386,4 +386,13 @@ fn interpret_strips_type_like_suffix() {
         interpret("let mut sum = 0; fn drop[&mut sum](this : DroppableI32) => sum += 1; type DroppableI32 = I32!drop; let value : DroppableI32 = 100; sum"),
         Ok("1".to_string())
     );
+
+    // USize type support
+    assert_eq!(interpret("0USize"), Ok("0".to_string()));
+    assert_eq!(interpret("100USize"), Ok("100".to_string()));
+    assert_eq!(
+        interpret("let type : USize = 0USize; type"),
+        Ok("0".to_string())
+    );
+    assert_eq!(interpret("1USize + 2USize"), Ok("3".to_string()));
 }

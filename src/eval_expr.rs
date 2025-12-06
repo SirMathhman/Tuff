@@ -8,176 +8,25 @@ use crate::statement::Var;
 // SUFFIXES are not used directly in this module
 use std::collections::HashMap;
 
-/// Helper to invoke a function given its parsed value, args, and env.
-/// Returns the result of calling the function.
-#[allow(clippy::too_many_arguments)]
-fn invoke_fn_value(
-    fn_value: &str,
-    args_text: &str,
-    env: &HashMap<String, Var>,
-    maybe_captures_override: Option<&str>,
-) -> Result<(String, Option<String>), String> {
-    let (maybe_caps, params_part, _, body_part) = crate::fn_utils::parse_fn_value(fn_value);
-    let param_names = crate::fn_utils::extract_param_names(params_part);
-    let mut local_env = env.clone();
+mod invoke;
+use invoke::invoke_fn_value;
+pub use invoke::invoke_fn_value_with_captures;
 
-    // Apply captures from either override or parsed value
-    let captures_to_use = maybe_captures_override.or(maybe_caps);
-    if let Some(captures_str) = captures_to_use {
-        for capture in captures_str.split(',') {
-            let cap = capture.trim();
-            let var_name = cap
-                .strip_prefix("&mut ")
-                .or_else(|| cap.strip_prefix('&'))
-                .unwrap_or(cap)
-                .trim();
-            if let Some(captured_var) = env.get(var_name) {
-                local_env.insert(var_name.to_string(), captured_var.clone());
-            }
-        }
-    }
-
-    // Collect args while respecting nested parentheses
-    let mut args: Vec<&str> = Vec::new();
-    let mut start = 0usize;
+fn find_matching_open_from_end(text: &str, closing: char, opening: char) -> Option<usize> {
     let mut depth: i32 = 0;
-    for (i, ch) in args_text.char_indices() {
+    for (i, ch) in text.char_indices().rev() {
         match ch {
-            '(' => depth += 1,
-            ')' => depth = depth.saturating_sub(1),
-            ',' if depth == 0 => {
-                let piece = args_text[start..i].trim();
-                if !piece.is_empty() {
-                    args.push(piece);
+            c if c == closing => depth += 1,
+            c if c == opening => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i);
                 }
-                start = i + 1;
             }
             _ => {}
         }
     }
-    let last_piece = args_text[start..].trim();
-    if !last_piece.is_empty() {
-        args.push(last_piece);
-    }
-
-    for (i, arg_expr) in args.into_iter().enumerate() {
-        let (val, suf) = eval_expr_with_env(arg_expr, env)?;
-        let name = param_names.get(i).map(|s| s.as_str()).unwrap_or("");
-        if !name.is_empty() {
-            local_env.insert(
-                name.to_string(),
-                Var {
-                    mutable: false,
-                    suffix: suf.clone(),
-                    value: val.clone(),
-                    borrowed_mut: false,
-                    declared_type: None,
-                },
-            );
-        }
-    }
-
-    statement::eval_block_expr(body_part, &local_env, &eval_expr_with_env)
-}
-
-/// Public version of invoke_fn_value for method calls.
-/// This version also takes the struct value to extract captured values from.
-#[allow(clippy::too_many_arguments)]
-pub fn invoke_fn_value_with_captures(
-    fn_value: &str,
-    args_text: &str,
-    env: &HashMap<String, Var>,
-    captures_str: Option<&str>,
-    struct_value: &str,
-) -> Result<Option<(String, Option<String>)>, String> {
-    let (_, params_part, _, body_part) = crate::fn_utils::parse_fn_value(fn_value);
-    let param_names = crate::fn_utils::extract_param_names(params_part);
-    let mut local_env = env.clone();
-
-    // Extract captured values from the struct
-    if let Some(captures) = captures_str {
-        if struct_value.starts_with("__STRUCT__:") {
-            let rest = &struct_value[10..];
-            for capture in captures.split(',') {
-                let cap = capture.trim();
-                let var_name = cap
-                    .strip_prefix("&mut ")
-                    .or_else(|| cap.strip_prefix('&'))
-                    .unwrap_or(cap)
-                    .trim();
-
-                // Look for this variable in the struct
-                for ent in rest.split('|').skip(1) {
-                    if let Some(eq) = ent.find('=') {
-                        let fname = &ent[..eq];
-                        let fval = &ent[eq + 1..];
-                        if fname == var_name {
-                            // Parse the value - might have a suffix like "3I32"
-                            let (val, suf) = if let Some(stripped) = fval.strip_suffix("I32") {
-                                (stripped.to_string(), Some("I32".to_string()))
-                            } else {
-                                (fval.to_string(), None)
-                            };
-                            local_env.insert(
-                                var_name.to_string(),
-                                Var {
-                                    mutable: false,
-                                    suffix: suf,
-                                    value: val,
-                                    borrowed_mut: false,
-                                    declared_type: None,
-                                },
-                            );
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Collect args while respecting nested parentheses
-    let mut args: Vec<&str> = Vec::new();
-    let mut start = 0usize;
-    let mut depth: i32 = 0;
-    for (i, ch) in args_text.char_indices() {
-        match ch {
-            '(' => depth += 1,
-            ')' => depth = depth.saturating_sub(1),
-            ',' if depth == 0 => {
-                let piece = args_text[start..i].trim();
-                if !piece.is_empty() {
-                    args.push(piece);
-                }
-                start = i + 1;
-            }
-            _ => {}
-        }
-    }
-    let last_piece = args_text[start..].trim();
-    if !last_piece.is_empty() {
-        args.push(last_piece);
-    }
-
-    for (i, arg_expr) in args.into_iter().enumerate() {
-        let (val, suf) = eval_expr_with_env(arg_expr, env)?;
-        let name = param_names.get(i).map(|s| s.as_str()).unwrap_or("");
-        if !name.is_empty() {
-            local_env.insert(
-                name.to_string(),
-                Var {
-                    mutable: false,
-                    suffix: suf.clone(),
-                    value: val.clone(),
-                    borrowed_mut: false,
-                    declared_type: None,
-                },
-            );
-        }
-    }
-
-    let result = statement::eval_block_expr(body_part, &local_env, &eval_expr_with_env)?;
-    Ok(Some(result))
+    None
 }
 
 pub fn eval_expr_with_env(
@@ -198,6 +47,8 @@ pub fn eval_expr_with_env(
         if let Some((_name, captures_str, params_str, return_type, body)) =
             crate::statement::parse_fn_literal(&trimmed)
         {
+            // Find the index of the matching opening bracket for a trailing closing bracket.
+            // Scans the string in reverse and handles nested pairs.
             let fn_value = if captures_str.is_empty() {
                 format!("{}|{}|{}", params_str, return_type, body)
             } else {
@@ -223,60 +74,60 @@ pub fn eval_expr_with_env(
                 }
             }
         }
-        if match_idx.is_none() || match_idx.unwrap() != trimmed.len() - 1 {
-            // Not a standalone array literal — fall through and let indexing logic handle it
-        } else {
-            // it's a top-level array literal
-        let inner = &trimmed[1..trimmed.len() - 1];
-        // split by commas while respecting nested braces/parentheses
-        let mut elems: Vec<&str> = Vec::new();
-        let mut start = 0usize;
-        let mut depth: i32 = 0;
-        for (i, ch) in inner.char_indices() {
-            match ch {
-                '{' | '(' | '[' => depth += 1,
-                '}' | ')' | ']' => depth = depth.saturating_sub(1),
-                ',' if depth == 0 => {
-                    let piece = inner[start..i].trim();
-                    if !piece.is_empty() {
-                        elems.push(piece);
+        if let Some(idx) = match_idx {
+            if idx == trimmed.len() - 1 {
+                // it's a top-level array literal
+                let inner = &trimmed[1..trimmed.len() - 1];
+                // split by commas while respecting nested braces/parentheses
+                let mut elems: Vec<&str> = Vec::new();
+                let mut start = 0usize;
+                let mut depth: i32 = 0;
+                for (i, ch) in inner.char_indices() {
+                    match ch {
+                        '{' | '(' | '[' => depth += 1,
+                        '}' | ')' | ']' => depth = depth.saturating_sub(1),
+                        ',' if depth == 0 => {
+                            let piece = inner[start..i].trim();
+                            if !piece.is_empty() {
+                                elems.push(piece);
+                            }
+                            start = i + 1;
+                        }
+                        _ => {}
                     }
-                    start = i + 1;
                 }
-                _ => {}
-            }
-        }
-        if start < inner.len() {
-            let last = inner[start..].trim();
-            if !last.is_empty() {
-                elems.push(last);
-            }
-        }
-
-        // Evaluate each element and collect their values and suffixes
-        let mut collected: Vec<String> = Vec::new();
-        let mut elem_suffix: Option<String> = None;
-        for e in elems.into_iter() {
-            let (val, suf) = eval_expr_with_env(e, env)?;
-            if let Some(s) = suf {
-                if elem_suffix.is_none() {
-                    elem_suffix = Some(s.clone());
-                } else if elem_suffix.as_ref() != Some(&s) {
-                    // mixed suffixes — represent elements individually but don't set a common suffix
-                    elem_suffix = None;
+                if start < inner.len() {
+                    let last = inner[start..].trim();
+                    if !last.is_empty() {
+                        elems.push(last);
+                    }
                 }
-                collected.push(format!("{}{}", val, s));
-            } else {
-                collected.push(val);
-            }
-        }
 
-            let encoded = if let Some(s) = elem_suffix.as_ref() {
-            format!("__ARRAY__:{}|{}", s, collected.join(","))
-        } else {
-            format!("__ARRAY__:|{}", collected.join(","))
-        };
-            return Ok((encoded, Some("ARRAY".to_string())));
+                // Evaluate each element and collect their values and suffixes
+                let mut collected: Vec<String> = Vec::new();
+                let mut elem_suffix: Option<String> = None;
+                for e in elems.into_iter() {
+                    let (val, suf) = eval_expr_with_env(e, env)?;
+                    if let Some(s) = suf {
+                        if elem_suffix.is_none() {
+                            elem_suffix = Some(s.clone());
+                        } else if elem_suffix.as_ref() != Some(&s) {
+                            // mixed suffixes — represent elements individually but don't set a common suffix
+                            elem_suffix = None;
+                        }
+                        collected.push(format!("{}{}", val, s));
+                    } else {
+                        collected.push(val);
+                    }
+                }
+
+                let encoded = if let Some(s) = elem_suffix.as_ref() {
+                    format!("__ARRAY__:{}|{}", s, collected.join(","))
+                } else {
+                    format!("__ARRAY__:|{}", collected.join(","))
+                };
+                return Ok((encoded, Some("ARRAY".to_string())));
+            }
         }
     }
 
@@ -439,20 +290,9 @@ pub fn eval_expr_with_env(
     // Indexing expressions: left[index]
     if trimmed.ends_with(']') {
         // Find matching '[' for the trailing ']'
-        let mut depth: i32 = 0;
         let mut open_idx_opt: Option<usize> = None;
-        for (i, ch) in trimmed.char_indices().rev() {
-            match ch {
-                ']' => depth += 1,
-                '[' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        open_idx_opt = Some(i);
-                        break;
-                    }
-                }
-                _ => {}
-            }
+        if let Some(idx) = find_matching_open_from_end(&trimmed, ']', '[') {
+            open_idx_opt = Some(idx);
         }
 
         if let Some(open_idx) = open_idx_opt {
@@ -491,7 +331,9 @@ pub fn eval_expr_with_env(
                     if idx_usize >= items.len() {
                         return Err("index out of range".to_string());
                     }
-                    let item = items[idx_usize];
+                    let item = *items
+                        .get(idx_usize)
+                        .ok_or_else(|| "index out of range".to_string())?;
                     // determine suffix if present (e.g., 3I32)
                     for sfx in crate::range_check::SUFFIXES.iter() {
                         if item.ends_with(sfx) {
@@ -509,20 +351,9 @@ pub fn eval_expr_with_env(
 
     if trimmed.ends_with(')') {
         // Find the opening paren matching the final closing paren so calls like make()() work
-        let mut depth: i32 = 0;
         let mut open_idx_opt: Option<usize> = None;
-        for (i, ch) in trimmed.char_indices().rev() {
-            match ch {
-                ')' => depth += 1,
-                '(' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        open_idx_opt = Some(i);
-                        break;
-                    }
-                }
-                _ => {}
-            }
+        if let Some(idx) = find_matching_open_from_end(&trimmed, ')', '(') {
+            open_idx_opt = Some(idx);
         }
 
         if let Some(open_idx) = open_idx_opt {
@@ -561,18 +392,13 @@ pub fn eval_expr_with_env(
                             let struct_left = &left[..left.rfind('.').unwrap_or(0)];
                             let mut captures_override = None;
                             if let Ok((struct_val, _)) = eval_expr_with_env(struct_left, env) {
-                                if struct_val.starts_with("__STRUCT__:") {
-                                    let rest = &struct_val[10..];
-                                    for ent in rest.split('|').skip(1) {
-                                        if let Some(eq) = ent.find('=') {
-                                            let fname = &ent[..eq];
-                                            let fval = &ent[eq + 1..];
-                                            if fname == captures_key {
-                                                captures_override = Some(fval.to_string());
-                                                break;
-                                            }
-                                        }
-                                    }
+                                if let Some(fval) =
+                                    crate::property_access::extract_field_from_struct_value(
+                                        &struct_val,
+                                        &captures_key,
+                                    )
+                                {
+                                    captures_override = Some(fval);
                                 }
                             }
 

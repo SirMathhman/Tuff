@@ -30,7 +30,10 @@ pub fn validate_type(env: &HashMap<String, Var>, value: &str, ty: &str) -> Resul
         if parts.is_empty() {
             return Ok(());
         }
-        let elem_ty = parts[0];
+        let elem_ty = match parts.first() {
+            Some(p) => *p,
+            None => return Ok(()),
+        };
 
         // If the value is encoded array from evaluator, parse element strings
         if let Some(arr_rest) = value.strip_prefix("__ARRAY__:") {

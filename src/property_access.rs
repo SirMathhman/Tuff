@@ -101,26 +101,8 @@ pub fn preprocess_property_access(trimmed: &mut String, env: &Environment) {
                 if let Some(var) = env.get(&left_slice) {
                     let left_val = &var.value;
                     if left_val.starts_with("__STRUCT__:") {
-                        let rest = &left_val[10..];
-                        let mut found = None;
-                        for ent in rest.split('|').skip(1) {
-                            if let Some(eq) = ent.find('=') {
-                                let fname = &ent[..eq];
-                                let fval = &ent[eq + 1..];
-                                if fname == right_ident {
-                                    found = Some(fval.to_string());
-                                    break;
-                                }
-                                // Also check for function fields: __fn__name=value
-                                if let Some(fn_name) = fname.strip_prefix("__fn__") {
-                                    if fn_name == right_ident {
-                                        found = Some(fval.to_string());
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        if let Some(fval) = found {
+                        if let Some(fval) = extract_field_from_struct_value(left_val, &right_ident)
+                        {
                             if let Some(new_dot) =
                                 replace_and_continue(trimmed, (left_start_idx, right_end_idx), fval)
                             {
@@ -162,30 +144,19 @@ pub fn handle_complex_property_access(
                     let (left_val, _left_suf) = eval_expr_with_env(left, env)?;
 
                     if left_val.starts_with("__STRUCT__:") {
-                        let rest = &left_val[10..];
                         let mut fn_value: Option<String> = None;
                         let mut captures_value: Option<String> = None;
-
-                        // Look for the function and its captures in the struct
-                        for ent in rest.split('|').skip(1) {
-                            if let Some(eq) = ent.find('=') {
-                                let fname = &ent[..eq];
-                                let fval = &ent[eq + 1..];
-
-                                // Check for __fn__methodname
-                                if let Some(fn_name) = fname.strip_prefix("__fn__") {
-                                    if fn_name == method_name {
-                                        // Decode the function value (~ back to |)
-                                        fn_value = Some(fval.replace('~', "|"));
-                                    }
-                                }
-                                // Check for __captures__methodname
-                                if let Some(cap_name) = fname.strip_prefix("__captures__") {
-                                    if cap_name == method_name {
-                                        captures_value = Some(fval.to_string());
-                                    }
-                                }
-                            }
+                        if let Some(fval) = extract_field_from_struct_value(
+                            &left_val,
+                            &format!("__fn__{}", method_name),
+                        ) {
+                            fn_value = Some(fval.replace('~', "|"));
+                        }
+                        if let Some(fval) = extract_field_from_struct_value(
+                            &left_val,
+                            &format!("__captures__{}", method_name),
+                        ) {
+                            captures_value = Some(fval);
                         }
 
                         if let Some(fn_val) = fn_value {
@@ -231,8 +202,7 @@ pub fn handle_complex_property_access(
             // Evaluate left as expression and check if it's a struct
             let (left_val, _left_suf) = eval_expr_with_env(left, env)?;
             if left_val.starts_with("__STRUCT__:") {
-                let rest = &left_val[10..];
-                let mut parts = rest.split('|');
+                let mut parts = left_val[10..].split('|');
                 let _typename = parts.next();
                 for ent in parts {
                     if let Some(eq) = ent.find('=') {
@@ -254,4 +224,28 @@ pub fn handle_complex_property_access(
         }
     }
     Ok(None)
+}
+
+/// Extract a named field from an encoded struct value string like "__STRUCT__:Type|field=val|...".
+/// Returns the raw field value string if found, otherwise None.
+pub fn extract_field_from_struct_value(struct_val: &str, field_key: &str) -> Option<String> {
+    if !struct_val.starts_with("__STRUCT__:") {
+        return None;
+    }
+    let rest = &struct_val[10..];
+    for ent in rest.split('|').skip(1) {
+        if let Some(eq) = ent.find('=') {
+            let fname = &ent[..eq];
+            let fval = &ent[eq + 1..];
+            if fname == field_key {
+                return Some(fval.to_string());
+            }
+            if let Some(fn_name) = fname.strip_prefix("__fn__") {
+                if fn_name == field_key {
+                    return Some(fval.to_string());
+                }
+            }
+        }
+    }
+    None
 }
