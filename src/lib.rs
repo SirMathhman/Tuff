@@ -13,6 +13,18 @@ use parser::{detect_suffix_from_tokens, tokenize_expr, tokens_to_rpn};
 use range_check::{check_unsigned_range, SUFFIXES};
 use statement::{process_single_stmt, split_statements, Var};
 
+pub fn interpret_all(
+    main_name: &str,
+    source_set: std::collections::HashMap<String, String>,
+) -> Result<String, String> {
+    // For now, just process the main file
+    if let Some(main_source) = source_set.get(main_name) {
+        interpret(main_source)
+    } else {
+        Err(format!("main file '{}' not found in source set", main_name))
+    }
+}
+
 pub fn interpret(input: &str) -> Result<String, String> {
     use std::collections::HashMap;
 
