@@ -145,3 +145,54 @@ fn test_multiple_modules_with_headers() {
     let result = interpret_all("main", sources);
     assert_eq!(result, Ok("20".to_string()));
 }
+
+#[test]
+fn test_extern_class_fn_declaration() {
+    let mut sources = HashMap::new();
+
+    // Implementation module with a class (StringBuilder-like pattern)
+    sources.insert(
+        "strings".to_string(),
+        "out let StringBuilder = class fn StringBuilder() => {
+            fn build() : I32 => 42;
+        };"
+        .to_string(),
+    );
+
+    // Main program: extern class fn declaration (no-op) + extern use for import
+    sources.insert(
+        "main".to_string(),
+        "extern use strings;
+        extern class fn StringBuilder() => {
+            extern fn build() : I32;
+        };
+        let sb = StringBuilder();
+        sb.build()"
+            .to_string(),
+    );
+
+    let result = interpret_all("main", sources);
+    assert_eq!(result, Ok("42".to_string()));
+}
+
+#[test]
+fn test_extern_class_fn_simple() {
+    let mut sources = HashMap::new();
+
+    sources.insert(
+        "mylib".to_string(),
+        "out let Foo = class fn Foo() => { fn get() : I32 => 99; };".to_string(),
+    );
+
+    sources.insert(
+        "main".to_string(),
+        "extern use mylib;
+        extern class fn Foo() => { extern fn get() : I32; };
+        let f = Foo();
+        f.get()"
+            .to_string(),
+    );
+
+    let result = interpret_all("main", sources);
+    assert_eq!(result, Ok("99".to_string()));
+}

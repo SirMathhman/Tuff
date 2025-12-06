@@ -234,6 +234,58 @@ Drop handlers are called automatically when variables go out of scope:
 
 ---
 
+## External Declarations
+
+Tuff supports external function declarations for interoperability with other modules and platforms.
+
+### Extern Functions
+
+Use `extern fn` to declare a function signature without implementation:
+
+```rust
+extern fn malloc(size : USize) : *mut I32;
+extern fn free(ptr : *mut I32) : I32;
+```
+
+### Extern Classes
+
+Use `extern class fn` to declare a class with method signatures:
+
+```rust
+extern class fn StringBuilder() => {
+    extern fn append(text : String) : StringBuilder;
+    extern fn build() : String;
+};
+```
+
+### Extern Use
+
+Import external modules with `extern use`:
+
+```rust
+extern use stdlib;
+extern use mylib;
+```
+
+### Complete Example
+
+```rust
+// Import the strings module
+extern use strings;
+
+// Declare the class and its methods (no-op, for type checking)
+extern class fn StringBuilder() => {
+    extern fn append(text : String) : StringBuilder;
+    extern fn build() : String;
+};
+
+// Use the imported class
+let sb = StringBuilder();
+sb.append("hello").build()
+```
+
+---
+
 ## Operators
 
 ### Arithmetic Operators

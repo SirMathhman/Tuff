@@ -68,8 +68,15 @@ pub fn resolve_fn_or_eval_rhs(
     eval_expr: super::ExprEvaluator,
 ) -> Result<(String, Option<String>), String> {
     let rhs_trim = rhs.trim();
+    // Transform class fn to fn before parsing
+    let rhs_transformed = if rhs_trim.starts_with("class fn ") {
+        transform_class_to_fn(rhs_trim)
+    } else {
+        rhs_trim.to_string()
+    };
+    let rhs_ref = rhs_transformed.as_str();
     // If RHS is a function literal, parse it and store as a function under the target name
-    if let Some((_, captures_str, params_str, return_type, body)) = parse_fn_literal(rhs_trim) {
+    if let Some((_, captures_str, params_str, return_type, body)) = parse_fn_literal(rhs_ref) {
         let fn_value = format!("{}|{}|{}", params_str, return_type, body);
         let fn_key = format!("__fn__{}", target);
         env.insert(
@@ -104,7 +111,7 @@ pub fn resolve_fn_or_eval_rhs(
             return Ok((val, suf));
         }
     }
-    super::eval_rhs(rhs, env, eval_expr)
+    super::eval_rhs(rhs_ref, env, eval_expr)
 }
 
 // Return a list of (variable_name, declared_type) for variables that have a declared type

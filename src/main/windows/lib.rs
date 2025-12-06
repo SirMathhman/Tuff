@@ -171,8 +171,10 @@ pub fn interpret_all(
                 } else {
                     return Err(format!("invalid use statement: {}", stmt_trimmed));
                 }
-            } else if stmt_trimmed.starts_with("extern fn ") {
-                // extern fn declarations are no-ops (function signatures only)
+            } else if stmt_trimmed.starts_with("extern fn ")
+                || stmt_trimmed.starts_with("extern class fn ")
+            {
+                // extern fn and extern class fn declarations are no-ops (signatures only)
                 // The actual function is imported via extern use
                 continue;
             } else {
