@@ -17,9 +17,91 @@ pub fn interpret_all(
     main_name: &str,
     source_set: std::collections::HashMap<String, String>,
 ) -> Result<String, String> {
-    // For now, just process the main file
+    use std::collections::HashMap;
+
+    // Helper to evaluate an expression with access to the current environment.
+    fn eval_expr_with_env(
+        expr: &str,
+        env: &HashMap<String, Var>,
+    ) -> Result<(String, Option<String>), String> {
+        crate::eval_expr::eval_expr_with_env(expr, env)
+    }
+
     if let Some(main_source) = source_set.get(main_name) {
-        interpret(main_source)
+        let mut env: HashMap<String, Var> = HashMap::new();
+        let mut last_value: Option<String> = None;
+
+        // Process the main file, handling use statements
+        let stmts = split_statements(main_source.trim());
+        for stmt in stmts {
+            let stmt_trimmed = stmt.trim();
+
+            // Handle use statements: use module::item;
+            if let Some(use_content) = stmt_trimmed.strip_prefix("use ") {
+                let use_content = if let Some(stripped) = use_content.trim().strip_suffix(';') {
+                    stripped
+                } else {
+                    use_content.trim()
+                };
+
+                // Parse: module::item
+                if let Some(double_colon) = use_content.find("::") {
+                    let module_name = &use_content[..double_colon];
+                    let item_name = &use_content[double_colon + 2..];
+
+                    // Load the module from source_set
+                    if let Some(module_source) = source_set.get(module_name) {
+                        // Process the module to extract exported items
+                        let module_stmts = split_statements(module_source.trim());
+                        for module_stmt in module_stmts {
+                            let module_stmt_trimmed = module_stmt.trim();
+
+                            // Handle "out let item = value;" exports
+                            if let Some(export_content) = module_stmt_trimmed.strip_prefix("out ") {
+                                let export_content = export_content.trim();
+
+                                // Process the export statement in a temporary environment
+                                let mut module_env: HashMap<String, Var> = HashMap::new();
+                                let mut module_last: Option<String> = None;
+                                process_single_stmt(
+                                    export_content,
+                                    &mut module_env,
+                                    &mut module_last,
+                                    &eval_expr_with_env,
+                                )?;
+
+                                // Import the requested item into main environment
+                                // For variables: look in module_env
+                                if let Some(var) = module_env.get(item_name) {
+                                    env.insert(item_name.to_string(), var.clone());
+                                }
+
+                                // For functions: look for __fn__<item_name>
+                                let fn_key = format!("__fn__{}", item_name);
+                                if let Some(func) = module_env.get(&fn_key) {
+                                    env.insert(fn_key.clone(), func.clone());
+
+                                    // Also import captures if present
+                                    let captures_key = format!("__captures__{}", item_name);
+                                    if let Some(captures) = module_env.get(&captures_key) {
+                                        env.insert(captures_key.clone(), captures.clone());
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        return Err(format!("module '{}' not found in source set", module_name));
+                    }
+                } else {
+                    return Err(format!("invalid use statement: {}", stmt_trimmed));
+                }
+            } else {
+                // Process normal statement
+                process_single_stmt(stmt_trimmed, &mut env, &mut last_value, &eval_expr_with_env)?;
+            }
+        }
+
+        Ok(last_value.unwrap_or_default())
     } else {
         Err(format!("main file '{}' not found in source set", main_name))
     }
