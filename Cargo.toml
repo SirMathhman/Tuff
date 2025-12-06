@@ -13,31 +13,31 @@ path = "src/main/windows/bin/repl.rs"
 
 [[test]]
 name = "integration_tests"
-path = "src/test/integration_tests.rs"
+path = "src/test/windows/integration_tests.rs"
 
 [[test]]
 name = "test_class"
-path = "src/test/test_class.rs"
+path = "src/test/windows/test_class.rs"
 
 [[test]]
 name = "test_extern"
-path = "src/test/test_extern.rs"
+path = "src/test/windows/test_extern.rs"
 
 [[test]]
 name = "test_interpret_all"
-path = "src/test/test_interpret_all.rs"
+path = "src/test/windows/test_interpret_all.rs"
 
 [[test]]
 name = "test_method"
-path = "src/test/test_method.rs"
+path = "src/test/windows/test_method.rs"
 
 [[test]]
 name = "test_struct_generics"
-path = "src/test/test_struct_generics.rs"
+path = "src/test/windows/test_struct_generics.rs"
 
 [[test]]
 name = "test_use_statement"
-path = "src/test/test_use_statement.rs"
+path = "src/test/windows/test_use_statement.rs"
 
 [dependencies]
 
