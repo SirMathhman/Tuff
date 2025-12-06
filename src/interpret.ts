@@ -30,9 +30,9 @@ function tokenize(expr: string): string[] {
   const raw = expr.match(re) || [];
   const tokens: string[] = [];
 
-  let prev: string | null = null;
+  let prev: string | undefined = undefined;
   for (const t of raw) {
-    if (t === "-" && (prev === null || prev === "(" || isOperator(prev))) {
+    if (t === "-" && (prev === undefined || prev === "(" || isOperator(prev))) {
       // unary minus -> treat as 0 - <expr>
       tokens.push("0");
       tokens.push("-");
@@ -61,7 +61,11 @@ function toRPN(tokens: string[]): string[] {
     }
 
     if (isOperator(t)) {
-      while (ops.length && isOperator(ops[ops.length - 1]) && prec[ops[ops.length - 1]] >= prec[t]) {
+      while (
+        ops.length &&
+        isOperator(ops[ops.length - 1]) &&
+        prec[ops[ops.length - 1]] >= prec[t]
+      ) {
         out.push(ops.pop()!);
       }
       ops.push(t);
@@ -93,7 +97,8 @@ function evalRPN(rpn: string[]): number {
     }
     const b = st.pop();
     const a = st.pop();
-    if (a === undefined || b === undefined) throw new Error("Invalid expression");
+    if (a === undefined || b === undefined)
+      throw new Error("Invalid expression");
     switch (t) {
       case "+":
         st.push(a + b);

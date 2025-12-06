@@ -18,6 +18,13 @@ export default [
     rules: {
       "no-new-func": "error",
       "no-eval": "error",
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "Literal[value=null]",
+          message: "Using null is banned — prefer undefined or explicit types."
+        }
+      ]
     },
   },
 ];
