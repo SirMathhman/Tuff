@@ -1,0 +1,16 @@
+{
+  "name": "tuff",
+  "version": "0.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "test": "mocha -r ts-node/register 'tests/**/*.test.ts' --exit"
+  },
+  "devDependencies": {
+    "mocha": "^10.2.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.4.0",
+    "@types/mocha": "^10.0.1",
+    "@types/node": "^20.2.5"
+  }
+}
