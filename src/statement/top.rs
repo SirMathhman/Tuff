@@ -6,6 +6,60 @@ use super::{
 };
 use std::collections::HashMap;
 
+/// Detect variables referenced in function body that should be captured.
+/// Returns a comma-separated list of captures like "&x, &y"
+fn detect_captures(body: &str, params_str: &str, env: &HashMap<String, Var>) -> String {
+    // Extract parameter names to exclude them from captures
+    let param_names: std::collections::HashSet<String> = params_str
+        .split(',')
+        .filter_map(|p| {
+            let name = p.split(':').next()?.trim();
+            if name.is_empty() {
+                None
+            } else {
+                Some(name.to_string())
+            }
+        })
+        .collect();
+
+    // Find all identifiers in the body (simple heuristic approach)
+    let mut captures = Vec::new();
+    let mut current_ident = String::new();
+
+    for ch in body.chars() {
+        if ch.is_alphanumeric() || ch == '_' {
+            current_ident.push(ch);
+        } else if !current_ident.is_empty() {
+            // Check if this identifier is a variable in env and not a parameter
+            if !param_names.contains(&current_ident)
+                && env.contains_key(&current_ident)
+                && !current_ident.starts_with("__")
+                && !captures.contains(&current_ident)
+            {
+                captures.push(current_ident.clone());
+            }
+            current_ident.clear();
+        }
+    }
+
+    // Check last identifier
+    if !current_ident.is_empty()
+        && !param_names.contains(&current_ident)
+        && env.contains_key(&current_ident)
+        && !current_ident.starts_with("__")
+        && !captures.contains(&current_ident)
+    {
+        captures.push(current_ident);
+    }
+
+    // Format as "&x, &y, &z"
+    captures
+        .iter()
+        .map(|v| format!("&{}", v))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn process_single_stmt(
     stmt_text: &str,
@@ -68,6 +122,13 @@ fn process_single_stmt_internal(
             crate::statement::parse_fn_literal(s)
         {
             if !fn_name.is_empty() {
+                // If no explicit captures provided, detect referenced variables automatically
+                let final_captures_str = if captures_str.is_empty() {
+                    detect_captures(&body, &params_str, ctx.env)
+                } else {
+                    captures_str
+                };
+
                 // Store function with format: params|return_type|body
                 let fn_key = format!("__fn__{}", fn_name);
                 let fn_value = format!("{}|{}|{}", params_str, return_type, body);
@@ -82,13 +143,13 @@ fn process_single_stmt_internal(
                     },
                 );
 
-                if !captures_str.is_empty() {
+                if !final_captures_str.is_empty() {
                     let captures_key = format!("__captures__{}", fn_name);
                     ctx.env.insert(
                         captures_key,
                         Var {
                             mutable: false,
-                            value: captures_str,
+                            value: final_captures_str,
                             suffix: Some("CAPTURES".to_string()),
                             borrowed_mut: false,
                             declared_type: None,

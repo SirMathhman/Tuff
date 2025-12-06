@@ -87,6 +87,18 @@ fn interpret_strips_type_like_suffix() {
         Ok("100".to_string())
     );
 
+    // Automatic capture: variables referenced in function body are implicitly captured
+    assert_eq!(
+        interpret("let x = 100; fn get() => x; get()"),
+        Ok("100".to_string())
+    );
+
+    // Multiple automatic captures
+    assert_eq!(
+        interpret("let x = 10; let y = 20; fn add() => x + y; add()"),
+        Ok("30".to_string())
+    );
+
     // Mutable variable and assignment
     assert_eq!(
         interpret("let mut x = 100; x = 200; x"),
