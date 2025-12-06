@@ -8,7 +8,7 @@ export function interpret(input: string): string {
 
   // Handle arithmetic expressions using eval with strict validation
   // Only allow numbers, operators, and spaces
-  if (!/^[\d\s+\-*/().]+$/.test(trimmed)) {
+  if (!/^[\d\s+\-*/().{}]+$/.test(trimmed)) {
     return input;
   }
 
@@ -26,13 +26,13 @@ export function interpret(input: string): string {
 export default interpret;
 
 function tokenize(expr: string): string[] {
-  const re = /(?:\d+(?:\.\d+)?)|[()+\-*/]/g;
+  const re = /(?:\d+(?:\.\d+)?)|[(){}+\-*/]/g;
   const raw = expr.match(re) || [];
   const tokens: string[] = [];
 
   let prev: string | undefined = undefined;
   for (const t of raw) {
-    if (t === "-" && (prev === undefined || prev === "(" || isOperator(prev))) {
+    if (t === "-" && (prev === undefined || prev === "(" || prev === "{" || isOperator(prev))) {
       // unary minus -> treat as 0 - <expr>
       tokens.push("0");
       tokens.push("-");
@@ -72,14 +72,15 @@ function toRPN(tokens: string[]): string[] {
       continue;
     }
 
-    if (t === "(") {
+    if (t === "(" || t === "{") {
       ops.push(t);
       continue;
     }
 
-    if (t === ")") {
-      while (ops.length && ops[ops.length - 1] !== "(") out.push(ops.pop()!);
-      if (ops.length && ops[ops.length - 1] === "(") ops.pop();
+    if (t === ")" || t === "}") {
+      const open = t === ")" ? "(" : "{";
+      while (ops.length && ops[ops.length - 1] !== open) out.push(ops.pop()!);
+      if (ops.length && ops[ops.length - 1] === open) ops.pop();
       continue;
     }
   }

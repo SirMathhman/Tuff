@@ -22,9 +22,9 @@ export default [
         "error",
         {
           selector: "Literal[value=null]",
-          message: "Using null is banned — prefer undefined or explicit types."
-        }
-      ]
+          message: "Using null is banned — prefer undefined or explicit types.",
+        },
+      ],
     },
   },
 ];
