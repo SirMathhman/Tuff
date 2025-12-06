@@ -81,6 +81,12 @@ fn interpret_strips_type_like_suffix() {
         Ok("300".to_string())
     );
 
+    // Function returning `this` allows property access on result
+    assert_eq!(
+        interpret("fn wrapper(value : I32) => this; wrapper(100).value"),
+        Ok("100".to_string())
+    );
+
     // Mutable variable and assignment
     assert_eq!(
         interpret("let mut x = 100; x = 200; x"),
