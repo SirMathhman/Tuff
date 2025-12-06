@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "bun test --all",
+    "test": "bun run tsc && bun test --all",
     "start": "bun run src/index.ts",
     "tsc": "tsc -p . --noEmit",
     "prepare": "husky install"
