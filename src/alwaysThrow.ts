@@ -1,3 +1,3 @@
-export function alwaysThrow(): never {
-  throw new Error("This function always throws");
+export function alwaysThrow(message: string): string {
+  throw new Error(message)
 }
