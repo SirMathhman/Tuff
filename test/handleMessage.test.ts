@@ -9,4 +9,8 @@ describe("handleMessage", () => {
   it('returns the provided string "100"', () => {
     expect(handleMessage("100")).toBe("100");
   });
+
+  it('returns leading digits when message contains extra chars', () => {
+    expect(handleMessage("100U8'")).toBe("100");
+  });
 });
