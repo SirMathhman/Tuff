@@ -17,6 +17,7 @@ export default [
     },
     rules: {
       "no-new-func": "error",
+      "no-eval": "error",
     },
   },
 ];

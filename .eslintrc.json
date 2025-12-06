@@ -9,6 +9,7 @@
     "sourceType": "module"
   },
   "rules": {
-    "no-new-func": "error"
+    "no-new-func": "error",
+    "no-eval": "error"
   }
 }
