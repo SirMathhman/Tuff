@@ -7,7 +7,7 @@ use super::{
 use std::collections::HashMap;
 
 /// Detect variables referenced in function body that should be captured.
-/// Returns a comma-separated list of captures like "&x, &y"
+/// Returns a comma-separated list of captures like "&x, &mut y"
 fn detect_captures(body: &str, params_str: &str, env: &HashMap<String, Var>) -> String {
     // Extract parameter names to exclude them from captures
     let param_names: std::collections::HashSet<String> = params_str
@@ -22,11 +22,14 @@ fn detect_captures(body: &str, params_str: &str, env: &HashMap<String, Var>) -> 
         })
         .collect();
 
-    // Find all identifiers in the body (simple heuristic approach)
-    let mut captures = Vec::new();
+    // Track which variables are captured and whether they're mutated
+    let mut captures: std::collections::HashMap<String, bool> = std::collections::HashMap::new();
     let mut current_ident = String::new();
+    let chars_vec: Vec<char> = body.chars().collect();
 
-    for ch in body.chars() {
+    for i in 0..chars_vec.len() {
+        let ch = *chars_vec.get(i).unwrap_or(&' ');
+
         if ch.is_alphanumeric() || ch == '_' {
             current_ident.push(ch);
         } else if !current_ident.is_empty() {
@@ -34,9 +37,30 @@ fn detect_captures(body: &str, params_str: &str, env: &HashMap<String, Var>) -> 
             if !param_names.contains(&current_ident)
                 && env.contains_key(&current_ident)
                 && !current_ident.starts_with("__")
-                && !captures.contains(&current_ident)
             {
-                captures.push(current_ident.clone());
+                // Check if this is an assignment (var = ...)
+                let is_mutation = {
+                    let mut j = i;
+                    // Skip whitespace
+                    while j < chars_vec.len() && chars_vec.get(j).is_some_and(|c| c.is_whitespace())
+                    {
+                        j += 1;
+                    }
+                    // Check if next char is '=' but not '==' or '=>'
+                    if chars_vec.get(j) == Some(&'=') {
+                        j += 1;
+                        // Not '==' and not '=>'
+                        chars_vec.get(j) != Some(&'=') && chars_vec.get(j) != Some(&'>')
+                    } else {
+                        false
+                    }
+                };
+
+                // Add or update the capture
+                captures
+                    .entry(current_ident.clone())
+                    .and_modify(|is_mut| *is_mut = *is_mut || is_mutation)
+                    .or_insert(is_mutation);
             }
             current_ident.clear();
         }
@@ -47,17 +71,24 @@ fn detect_captures(body: &str, params_str: &str, env: &HashMap<String, Var>) -> 
         && !param_names.contains(&current_ident)
         && env.contains_key(&current_ident)
         && !current_ident.starts_with("__")
-        && !captures.contains(&current_ident)
     {
-        captures.push(current_ident);
+        captures.entry(current_ident).or_insert(false);
     }
 
-    // Format as "&x, &y, &z"
-    captures
+    // Format as "&x, &mut y, &z"
+    let mut capture_list: Vec<String> = captures
         .iter()
-        .map(|v| format!("&{}", v))
-        .collect::<Vec<_>>()
-        .join(", ")
+        .map(|(var, is_mut)| {
+            if *is_mut {
+                format!("&mut {}", var)
+            } else {
+                format!("&{}", var)
+            }
+        })
+        .collect();
+
+    capture_list.sort();
+    capture_list.join(", ")
 }
 
 #[allow(clippy::too_many_arguments)]

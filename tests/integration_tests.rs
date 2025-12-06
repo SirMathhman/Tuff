@@ -99,6 +99,18 @@ fn interpret_strips_type_like_suffix() {
         Ok("30".to_string())
     );
 
+    // Automatic mutable capture: variable mutation is detected
+    assert_eq!(
+        interpret("let mut x = 0; fn set() => x = 100; set(); x"),
+        Ok("100".to_string())
+    );
+
+    // Mixed mutable and immutable captures
+    assert_eq!(
+        interpret("let mut x = 0; let y = 50; fn update() => x = y + 10; update(); x"),
+        Ok("60".to_string())
+    );
+
     // Mutable variable and assignment
     assert_eq!(
         interpret("let mut x = 100; x = 200; x"),
