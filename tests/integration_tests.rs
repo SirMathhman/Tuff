@@ -199,6 +199,12 @@ fn interpret_strips_type_like_suffix() {
         Ok("100".to_string())
     );
 
+    // Typed arrow-style function variable should work
+    assert_eq!(
+        interpret("let myFunc : () => I32 = () => 100; myFunc()"),
+        Ok("100".to_string())
+    );
+
     // Standalone arrow-style function literal used as top-level should be rejected
     assert!(interpret("(first : I32, second : I32) => {}").is_err());
 
