@@ -65,6 +65,55 @@ fn run_block_stmt(s: &str, ctx: &mut StatementContext) -> Result<(), String> {
         return Err("functions cannot be defined inside blocks".to_string());
     }
 
+    // Handle named function literals inside blocks: store them in the environment
+    // and return the function value so it can be used as an expression
+    if s.starts_with("fn ") && s.contains("=>") {
+        if let Some((fn_name, captures_str, params_str, return_type, body)) =
+            helpers::parse_fn_literal(s)
+        {
+            // Store function with format: params|return_type|body
+            let fn_value = format!("{}|{}|{}", params_str, return_type, body);
+
+            if !fn_name.is_empty() {
+                // If no explicit captures provided, detect referenced variables automatically
+                let final_captures_str = if captures_str.is_empty() {
+                    top::detect_captures(&body, &params_str, ctx.env)
+                } else {
+                    captures_str
+                };
+
+                let fn_key = format!("__fn__{}", fn_name);
+                ctx.env.insert(
+                    fn_key.clone(),
+                    Var {
+                        mutable: false,
+                        value: fn_value.clone(),
+                        suffix: Some("FN".to_string()),
+                        borrowed_mut: false,
+                        declared_type: None,
+                    },
+                );
+
+                if !final_captures_str.is_empty() {
+                    let captures_key = format!("__captures__{}", fn_name);
+                    ctx.env.insert(
+                        captures_key,
+                        Var {
+                            mutable: false,
+                            value: final_captures_str,
+                            suffix: Some("CAPTURES".to_string()),
+                            borrowed_mut: false,
+                            declared_type: None,
+                        },
+                    );
+                }
+            }
+            // Return the function value so it can be used as an expression result
+            *ctx.last_value = Some((fn_value, Some("FN".to_string())));
+            return Ok(());
+        }
+    }
+
     if let Some(stripped) = s.strip_prefix("return ") {
         // Handle return statement: evaluate expression and signal early exit
         let expr = stripped.trim();

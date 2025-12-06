@@ -40,9 +40,17 @@ pub fn interpret(input: &str) -> Result<String, String> {
             if tail.is_empty() {
                 return Ok("".to_string());
             }
-            // evaluate the tail expression in the environment with the function registered
-            let (val, _suf) = eval_expr_with_env(tail, &env)?;
-            return Ok(val);
+            // Handle tail that starts with semicolon (multiple statements)
+            let tail_trimmed = tail.trim_start_matches(';').trim();
+            if tail_trimmed.is_empty() {
+                return Ok("".to_string());
+            }
+            // Process tail as statements
+            let stmts = split_statements(tail_trimmed);
+            for stmt in stmts {
+                process_single_stmt(stmt, &mut env, &mut last_value, &eval_expr_with_env)?;
+            }
+            return Ok(last_value.unwrap_or_default());
         }
     }
 

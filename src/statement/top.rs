@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 /// Detect variables referenced in function body that should be captured.
 /// Returns a comma-separated list of captures like "&x, &mut y"
-fn detect_captures(body: &str, params_str: &str, env: &HashMap<String, Var>) -> String {
+pub fn detect_captures(body: &str, params_str: &str, env: &HashMap<String, Var>) -> String {
     // Extract parameter names to exclude them from captures
     let param_names: std::collections::HashSet<String> = params_str
         .split(',')

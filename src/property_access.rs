@@ -56,6 +56,14 @@ pub fn preprocess_property_access(trimmed: &mut String, env: &Environment) {
             if right_end_idx == start_idx {
                 break;
             }
+
+            // Check if this is a method call (followed by '(')
+            // If so, skip preprocessing and let the method call handling deal with it
+            let next_char = trimmed[right_end_idx..].chars().next();
+            if next_char == Some('(') {
+                break; // Don't preprocess method calls
+            }
+
             let right_ident = trimmed[start_idx..right_end_idx].trim().to_string();
 
             // Find the left identifier by scanning backwards from the dot
@@ -103,6 +111,13 @@ pub fn preprocess_property_access(trimmed: &mut String, env: &Environment) {
                                     found = Some(fval.to_string());
                                     break;
                                 }
+                                // Also check for function fields: __fn__name=value
+                                if let Some(fn_name) = fname.strip_prefix("__fn__") {
+                                    if fn_name == right_ident {
+                                        found = Some(fval.to_string());
+                                        break;
+                                    }
+                                }
                             }
                         }
                         if let Some(fval) = found {
@@ -132,6 +147,66 @@ pub fn handle_complex_property_access(
     if let Some(dot_pos) = rightmost_dot {
         let left = trimmed[..dot_pos].trim();
         let right = trimmed[dot_pos + 1..].trim();
+
+        // Check if this is a method call: obj.method()
+        if right.ends_with(')') {
+            if let Some(paren_pos) = right.find('(') {
+                let method_name = right[..paren_pos].trim();
+                let args_text = &right[paren_pos + 1..right.len() - 1];
+
+                // Check if method_name is a valid identifier
+                if !method_name.is_empty()
+                    && method_name.chars().all(|c| c.is_alphanumeric() || c == '_')
+                {
+                    // Evaluate left to get the struct
+                    let (left_val, _left_suf) = eval_expr_with_env(left, env)?;
+
+                    if left_val.starts_with("__STRUCT__:") {
+                        let rest = &left_val[10..];
+                        let mut fn_value: Option<String> = None;
+                        let mut captures_value: Option<String> = None;
+
+                        // Look for the function and its captures in the struct
+                        for ent in rest.split('|').skip(1) {
+                            if let Some(eq) = ent.find('=') {
+                                let fname = &ent[..eq];
+                                let fval = &ent[eq + 1..];
+
+                                // Check for __fn__methodname
+                                if let Some(fn_name) = fname.strip_prefix("__fn__") {
+                                    if fn_name == method_name {
+                                        // Decode the function value (~ back to |)
+                                        fn_value = Some(fval.replace('~', "|"));
+                                    }
+                                }
+                                // Check for __captures__methodname
+                                if let Some(cap_name) = fname.strip_prefix("__captures__") {
+                                    if cap_name == method_name {
+                                        captures_value = Some(fval.to_string());
+                                    }
+                                }
+                            }
+                        }
+
+                        if let Some(fn_val) = fn_value {
+                            // Call the method with captures
+                            return crate::eval_expr::invoke_fn_value_with_captures(
+                                &fn_val,
+                                args_text,
+                                env,
+                                captures_value.as_deref(),
+                                &left_val, // Pass struct value for field access
+                            );
+                        }
+
+                        return Err(format!(
+                            "method '{}' not found on struct instance",
+                            method_name
+                        ));
+                    }
+                }
+            }
+        }
 
         // Check if right is a valid identifier
         if !right.is_empty() && right.chars().all(|c| c.is_alphanumeric() || c == '_') {
@@ -165,6 +240,12 @@ pub fn handle_complex_property_access(
                         let fval = &ent[eq + 1..];
                         if fname == right {
                             return Ok(Some((fval.to_string(), None)));
+                        }
+                        // Also check for function fields: __fn__name=value
+                        if let Some(fn_name) = fname.strip_prefix("__fn__") {
+                            if fn_name == right {
+                                return Ok(Some((fval.to_string(), Some("FN".to_string()))));
+                            }
                         }
                     }
                 }

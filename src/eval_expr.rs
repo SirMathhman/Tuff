@@ -80,6 +80,106 @@ fn invoke_fn_value(
     statement::eval_block_expr(body_part, &local_env, &eval_expr_with_env)
 }
 
+/// Public version of invoke_fn_value for method calls.
+/// This version also takes the struct value to extract captured values from.
+#[allow(clippy::too_many_arguments)]
+pub fn invoke_fn_value_with_captures(
+    fn_value: &str,
+    args_text: &str,
+    env: &HashMap<String, Var>,
+    captures_str: Option<&str>,
+    struct_value: &str,
+) -> Result<Option<(String, Option<String>)>, String> {
+    let (_, params_part, _, body_part) = crate::fn_utils::parse_fn_value(fn_value);
+    let param_names = crate::fn_utils::extract_param_names(params_part);
+    let mut local_env = env.clone();
+
+    // Extract captured values from the struct
+    if let Some(captures) = captures_str {
+        if struct_value.starts_with("__STRUCT__:") {
+            let rest = &struct_value[10..];
+            for capture in captures.split(',') {
+                let cap = capture.trim();
+                let var_name = cap
+                    .strip_prefix("&mut ")
+                    .or_else(|| cap.strip_prefix('&'))
+                    .unwrap_or(cap)
+                    .trim();
+
+                // Look for this variable in the struct
+                for ent in rest.split('|').skip(1) {
+                    if let Some(eq) = ent.find('=') {
+                        let fname = &ent[..eq];
+                        let fval = &ent[eq + 1..];
+                        if fname == var_name {
+                            // Parse the value - might have a suffix like "3I32"
+                            let (val, suf) = if let Some(stripped) = fval.strip_suffix("I32") {
+                                (stripped.to_string(), Some("I32".to_string()))
+                            } else {
+                                (fval.to_string(), None)
+                            };
+                            local_env.insert(
+                                var_name.to_string(),
+                                Var {
+                                    mutable: false,
+                                    suffix: suf,
+                                    value: val,
+                                    borrowed_mut: false,
+                                    declared_type: None,
+                                },
+                            );
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Collect args while respecting nested parentheses
+    let mut args: Vec<&str> = Vec::new();
+    let mut start = 0usize;
+    let mut depth: i32 = 0;
+    for (i, ch) in args_text.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                let piece = args_text[start..i].trim();
+                if !piece.is_empty() {
+                    args.push(piece);
+                }
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    let last_piece = args_text[start..].trim();
+    if !last_piece.is_empty() {
+        args.push(last_piece);
+    }
+
+    for (i, arg_expr) in args.into_iter().enumerate() {
+        let (val, suf) = eval_expr_with_env(arg_expr, env)?;
+        let name = param_names.get(i).map(|s| s.as_str()).unwrap_or("");
+        if !name.is_empty() {
+            local_env.insert(
+                name.to_string(),
+                Var {
+                    mutable: false,
+                    suffix: suf.clone(),
+                    value: val.clone(),
+                    borrowed_mut: false,
+                    declared_type: None,
+                },
+            );
+        }
+    }
+
+    let result = statement::eval_block_expr(body_part, &local_env, &eval_expr_with_env)?;
+    Ok(Some(result))
+}
+
 pub fn eval_expr_with_env(
     expr: &str,
     env: &HashMap<String, Var>,
@@ -146,14 +246,25 @@ pub fn eval_expr_with_env(
         let mut parts: Vec<String> = Vec::new();
         parts.push("This".to_string());
         for (k, v) in env.iter() {
-            if k.starts_with("__") {
-                continue;
+            // Include regular variables
+            if !k.starts_with("__") {
+                let mut val = v.value.clone();
+                if let Some(s) = &v.suffix {
+                    val = format!("{}{}", val, s);
+                }
+                parts.push(format!("{}={}", k, val));
             }
-            let mut val = v.value.clone();
-            if let Some(s) = &v.suffix {
-                val = format!("{}{}", val, s);
+            // Also include functions (stored as __fn__name)
+            else if let Some(fn_name) = k.strip_prefix("__fn__") {
+                // Store function as __fn__name=value with | replaced by ~ to avoid conflicts
+                let encoded_fn_value = v.value.replace('|', "~");
+                parts.push(format!("__fn__{}={}", fn_name, encoded_fn_value));
+                // Also include captures if they exist
+                let captures_key = format!("__captures__{}", fn_name);
+                if let Some(captures_var) = env.get(&captures_key) {
+                    parts.push(format!("__captures__{}={}", fn_name, captures_var.value));
+                }
             }
-            parts.push(format!("{}={}", k, val));
         }
         let encoded = format!("__STRUCT__:{}", parts.join("|"));
         return Ok((encoded, None));
@@ -290,6 +401,48 @@ pub fn eval_expr_with_env(
                 let (left_val, left_sfx) = eval_expr_with_env(left, env)?;
                 if left_sfx.as_deref() == Some("FN") {
                     return invoke_fn_value(&left_val, args_text, env, None);
+                }
+            } else if !left.is_empty() && left.contains('.') {
+                // Left contains a dot, so it's a property access like obj.method()
+                // Try to evaluate it as a property access first
+                match eval_expr_with_env(left, env) {
+                    Ok((left_val, left_sfx)) => {
+                        if left_sfx.as_deref() == Some("FN") {
+                            // Need to also get captures from the struct
+                            // Look for __captures__<method_name> in the struct
+                            let method_name = left.rsplit('.').next().unwrap_or("");
+                            let captures_key = format!("__captures__{}", method_name);
+
+                            // Get the struct value to look for captures
+                            let struct_left = &left[..left.rfind('.').unwrap_or(0)];
+                            let mut captures_override = None;
+                            if let Ok((struct_val, _)) = eval_expr_with_env(struct_left, env) {
+                                if struct_val.starts_with("__STRUCT__:") {
+                                    let rest = &struct_val[10..];
+                                    for ent in rest.split('|').skip(1) {
+                                        if let Some(eq) = ent.find('=') {
+                                            let fname = &ent[..eq];
+                                            let fval = &ent[eq + 1..];
+                                            if fname == captures_key {
+                                                captures_override = Some(fval.to_string());
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            return invoke_fn_value(
+                                &left_val,
+                                args_text,
+                                env,
+                                captures_override.as_deref(),
+                            );
+                        }
+                    }
+                    Err(_e) => {
+                        // Property access failed, continue to next case
+                    }
                 }
             }
         }
