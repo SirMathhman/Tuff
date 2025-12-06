@@ -6,15 +6,15 @@ export function interpret(input: string): string {
     return trimmed;
   }
 
-  // Handle arithmetic expressions
-  try {
-    // Use Function constructor to safely evaluate (in a controlled context)
-    // Only allow numbers, operators, and spaces
-    if (!/^[\d\s+\-*/().]+$/.test(trimmed)) {
-      return input;
-    }
+  // Handle arithmetic expressions using eval with strict validation
+  // Only allow numbers, operators, and spaces
+  if (!/^[\d\s+\-*/().]+$/.test(trimmed)) {
+    return input;
+  }
 
-    const result = Function(`"use strict"; return (${trimmed})`)();
+  try {
+    // We use eval here for arithmetic evaluation after validating input pattern
+    const result = eval(trimmed);
     return String(result);
   } catch {
     return input;

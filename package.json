@@ -9,13 +9,17 @@
     "build": "tsc --project tsconfig.build.json",
     "build:test": "tsc --project tsconfig.test.json",
     "dev": "bun run src/interpret.ts",
+    "lint": "eslint src/",
     "prepare": "husky"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.1",
     "@types/bun": "latest",
     "bun": "latest",
+    "eslint": "^9.39.1",
     "husky": "^9.1.7",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "typescript-eslint": "^8.48.1"
   },
   "dependencies": {
     "chai": "^4.3.10"
