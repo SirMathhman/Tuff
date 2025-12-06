@@ -154,6 +154,16 @@ pub fn parse_fn_literal(s: &str) -> Option<(String, String, String, String, Stri
             .or_else(|| sig_str.find('('))
             .unwrap_or(sig_str.len());
         let mut fn_name = sig_owned[..name_end].trim().to_string();
+        // strip generic type parameters from the function name, e.g. `pass<T>` -> `pass`
+        if let Some(lt_idx) = fn_name.find('<') {
+            // remove everything from '<' to the matching '>' if present
+            if let Some(_gt_idx_rel) = fn_name[lt_idx..].find('>') {
+                fn_name = fn_name[..lt_idx].trim().to_string();
+            } else {
+                // malformed generics, just drop the '<' and keep the prefix
+                fn_name = fn_name[..lt_idx].trim().to_string();
+            }
+        }
         // Arrow-style literals like `() => ...` won't have a name; clear it if it's just parentheses
         if fn_name.starts_with('(') || fn_name.is_empty() {
             fn_name = String::new();

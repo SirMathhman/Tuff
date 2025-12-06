@@ -222,6 +222,12 @@ fn interpret_strips_type_like_suffix() {
         Ok("5".to_string())
     );
 
+    // Generic function support: simple param/return using a type parameter
+    assert_eq!(
+        interpret("fn pass<T>(value : T) : T => value; pass(100)"),
+        Ok("100".to_string())
+    );
+
     // Function defined with semicolons should work
     assert_eq!(
         interpret("fn simple() => 99; simple()"),
