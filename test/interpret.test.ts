@@ -10,4 +10,8 @@ describe("interpret", () => {
   it("returns the same string for simple inputs (identity)", () => {
     expect(interpret("100")).toBe("100");
   });
+
+  it("evaluates a basic addition expression", () => {
+    expect(interpret("100 + 200")).toBe("300");
+  });
 });
