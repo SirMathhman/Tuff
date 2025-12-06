@@ -324,6 +324,13 @@ pub fn eval_expr_with_env(
                     }
                 }
 
+                // Special-case `this` to access the current environment's variables
+                if left == "this" {
+                    if let Some(v) = env.get(right) {
+                        return Ok((v.value.clone(), v.suffix.clone()));
+                    }
+                }
+
                 let (left_val, _left_suf) = eval_expr_with_env(left, env)?;
                 if left_val.starts_with("__STRUCT__:") {
                     let rest = &left_val[10..];

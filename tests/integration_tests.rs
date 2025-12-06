@@ -66,6 +66,9 @@ fn interpret_strips_type_like_suffix() {
     // Declaration without type should work: let x = 100; x => "100"
     assert_eq!(interpret("let x = 100; x"), Ok("100".to_string()));
 
+    // Accessing current environment via `this` should return variable values
+    assert_eq!(interpret("let x = 100; this.x"), Ok("100".to_string()));
+
     // Mutable variable and assignment
     assert_eq!(
         interpret("let mut x = 100; x = 200; x"),
