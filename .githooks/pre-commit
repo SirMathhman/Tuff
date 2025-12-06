@@ -1,3 +1,0 @@
-#!/bin/sh
-# Pre-commit hook - runs PowerShell script
-exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(dirname "$0")/pre-commit.ps1"

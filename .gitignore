@@ -1,6 +1,0 @@
-target/
-.idea/
-.vscode/
-**/*.rs.bk
-/tar
-pmd-bin-*/
