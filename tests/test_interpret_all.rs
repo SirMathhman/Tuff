@@ -50,3 +50,13 @@ fn interpret_all_custom_main_name() {
     let result = interpret_all("program", sources);
     assert_eq!(result, Ok("42".to_string()));
 }
+#[test]
+fn interpret_all_array_indexing() {
+    let mut sources = std::collections::HashMap::new();
+    sources.insert(
+        "main".to_string(),
+        "let array : [I32; 3; 3] = [1, 2, 3]; array[0]".to_string(),
+    );
+    let result = interpret_all("main", sources);
+    assert_eq!(result, Ok("1".to_string()));
+}

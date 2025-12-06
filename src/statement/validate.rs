@@ -22,6 +22,68 @@ pub fn resolve_alias<'a>(env: &'a HashMap<String, Var>, mut ty: &'a str) -> Opti
 }
 
 pub fn validate_type(env: &HashMap<String, Var>, value: &str, ty: &str) -> Result<(), String> {
+    // Support array types like [I32; 3; 3]
+    if ty.starts_with('[') && ty.ends_with(']') {
+        // inner format: <elem_type; ...>
+        let inner = &ty[1..ty.len() - 1];
+        let parts: Vec<&str> = inner.split(';').map(|s| s.trim()).collect();
+        if parts.is_empty() {
+            return Ok(());
+        }
+        let elem_ty = parts[0];
+
+        // If the value is encoded array from evaluator, parse element strings
+        if let Some(arr_rest) = value.strip_prefix("__ARRAY__:") {
+            if let Some(bar_idx) = arr_rest.find('|') {
+                let elems_str = &arr_rest[bar_idx + 1..];
+                if elems_str.is_empty() {
+                    return Ok(());
+                }
+                for item in elems_str.split(',') {
+                    let item = item.trim();
+                    // strip any element suffix
+                    let mut stripped = item;
+                    for &suf in SUFFIXES.iter() {
+                        if item.ends_with(suf) {
+                            let pos = item.len() - suf.len();
+                            stripped = &item[..pos];
+                            break;
+                        }
+                    }
+                    // Validate the element against elem_ty (resolve aliases)
+                    if SUFFIXES.contains(&elem_ty) {
+                        if elem_ty.starts_with('U') {
+                            let v = stripped
+                                .parse::<u128>()
+                                .map_err(|_| "invalid numeric value".to_string())?;
+                            check_unsigned_range(v, elem_ty)?;
+                        } else {
+                            let v = stripped
+                                .parse::<i128>()
+                                .map_err(|_| "invalid numeric value".to_string())?;
+                            check_signed_range(v, elem_ty)?;
+                        }
+                    } else if let Some(resolved) = resolve_alias(env, elem_ty) {
+                        if resolved.starts_with('U') {
+                            let v = stripped
+                                .parse::<u128>()
+                                .map_err(|_| "invalid numeric value".to_string())?;
+                            check_unsigned_range(v, resolved)?;
+                        } else {
+                            let v = stripped
+                                .parse::<i128>()
+                                .map_err(|_| "invalid numeric value".to_string())?;
+                            check_signed_range(v, resolved)?;
+                        }
+                    } else {
+                        // non-numeric element type (e.g. struct) — skip validation
+                    }
+                }
+                return Ok(());
+            }
+        }
+        // If value wasn't encoded array, fall through to default handlers
+    }
     // Only validate numeric primitive suffix types (e.g. "U8", "I32")
     // If the type is not a known numeric suffix, treat it as a user-defined
     // type (e.g. struct) and skip numeric validation.

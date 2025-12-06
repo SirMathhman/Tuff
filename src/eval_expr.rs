@@ -207,6 +207,79 @@ pub fn eval_expr_with_env(
         }
     }
 
+    // Array literal support: [a, b, c]
+    if trimmed.starts_with('[') {
+        // Ensure the first matching ']' for the opening '[' is the final character
+        let mut d = 0i32;
+        let mut match_idx: Option<usize> = None;
+        for (i, ch) in trimmed.char_indices() {
+            if ch == '[' {
+                d += 1;
+            } else if ch == ']' {
+                d -= 1;
+                if d == 0 {
+                    match_idx = Some(i);
+                    break;
+                }
+            }
+        }
+        if match_idx.is_none() || match_idx.unwrap() != trimmed.len() - 1 {
+            // Not a standalone array literal — fall through and let indexing logic handle it
+        } else {
+            // it's a top-level array literal
+        let inner = &trimmed[1..trimmed.len() - 1];
+        // split by commas while respecting nested braces/parentheses
+        let mut elems: Vec<&str> = Vec::new();
+        let mut start = 0usize;
+        let mut depth: i32 = 0;
+        for (i, ch) in inner.char_indices() {
+            match ch {
+                '{' | '(' | '[' => depth += 1,
+                '}' | ')' | ']' => depth = depth.saturating_sub(1),
+                ',' if depth == 0 => {
+                    let piece = inner[start..i].trim();
+                    if !piece.is_empty() {
+                        elems.push(piece);
+                    }
+                    start = i + 1;
+                }
+                _ => {}
+            }
+        }
+        if start < inner.len() {
+            let last = inner[start..].trim();
+            if !last.is_empty() {
+                elems.push(last);
+            }
+        }
+
+        // Evaluate each element and collect their values and suffixes
+        let mut collected: Vec<String> = Vec::new();
+        let mut elem_suffix: Option<String> = None;
+        for e in elems.into_iter() {
+            let (val, suf) = eval_expr_with_env(e, env)?;
+            if let Some(s) = suf {
+                if elem_suffix.is_none() {
+                    elem_suffix = Some(s.clone());
+                } else if elem_suffix.as_ref() != Some(&s) {
+                    // mixed suffixes — represent elements individually but don't set a common suffix
+                    elem_suffix = None;
+                }
+                collected.push(format!("{}{}", val, s));
+            } else {
+                collected.push(val);
+            }
+        }
+
+            let encoded = if let Some(s) = elem_suffix.as_ref() {
+            format!("__ARRAY__:{}|{}", s, collected.join(","))
+        } else {
+            format!("__ARRAY__:|{}", collected.join(","))
+        };
+            return Ok((encoded, Some("ARRAY".to_string())));
+        }
+    }
+
     // address-of operator: &var
     if let Some(stripped) = trimmed.strip_prefix('&') {
         let mut inner = stripped.trim();
@@ -361,6 +434,77 @@ pub fn eval_expr_with_env(
     // (e.g., struct literals like "Wrapper { 100 }.value")
     if let Some(result) = handle_complex_property_access(&trimmed, env)? {
         return Ok(result);
+    }
+
+    // Indexing expressions: left[index]
+    if trimmed.ends_with(']') {
+        // Find matching '[' for the trailing ']'
+        let mut depth: i32 = 0;
+        let mut open_idx_opt: Option<usize> = None;
+        for (i, ch) in trimmed.char_indices().rev() {
+            match ch {
+                ']' => depth += 1,
+                '[' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        open_idx_opt = Some(i);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if let Some(open_idx) = open_idx_opt {
+            let left = trimmed[..open_idx].trim();
+            let idx_text = &trimmed[open_idx + 1..trimmed.len() - 1];
+
+            // Evaluate index expression
+            let (idx_val_str, _idx_suf) = eval_expr_with_env(idx_text, env)?;
+            let idx_val = idx_val_str
+                .parse::<i128>()
+                .map_err(|_| "invalid index".to_string())?;
+            if idx_val < 0 {
+                return Err("negative index".to_string());
+            }
+            let idx_usize = idx_val as usize;
+
+            // Evaluate left expression to get array value
+            let (left_val, _left_sfx) = if left.is_empty() {
+                // e.g. literal indexing like [1,2,3][0] - evaluate the literal
+                eval_expr_with_env(&format!("[{}]", idx_text), env)?
+            } else {
+                eval_expr_with_env(left, env)?
+            };
+
+            // Accept encoded array format: __ARRAY__:<elem_suffix>|e1,e2,e3
+            if left_val.starts_with("__ARRAY__:") {
+                let after = &left_val[9..];
+                if let Some(bar_idx) = after.find('|') {
+                    let _elem_sfx = &after[..bar_idx];
+                    let elems_str = &after[bar_idx + 1..];
+                    let mut items: Vec<&str> = Vec::new();
+                    // split on commas (simple split is OK because elements were encoded without nested commas)
+                    for part in elems_str.split(',') {
+                        items.push(part);
+                    }
+                    if idx_usize >= items.len() {
+                        return Err("index out of range".to_string());
+                    }
+                    let item = items[idx_usize];
+                    // determine suffix if present (e.g., 3I32)
+                    for sfx in crate::range_check::SUFFIXES.iter() {
+                        if item.ends_with(sfx) {
+                            let pos = item.len() - sfx.len();
+                            return Ok((item[..pos].to_string(), Some(sfx.to_string())));
+                        }
+                    }
+                    return Ok((item.to_string(), None));
+                }
+            }
+            // If left didn't evaluate to an array, error
+            return Err("indexing into non-array".to_string());
+        }
     }
 
     if trimmed.ends_with(')') {

@@ -21,12 +21,12 @@ mod block;
 pub mod helpers;
 mod mut_capture;
 pub mod top;
+use crate::range_check::SUFFIXES;
 pub use block::{eval_block_expr, eval_block_expr_mut, split_statements};
 pub use helpers::{
     collect_droppable_vars, parse_fn_literal, resolve_fn_or_eval_rhs, transform_class_to_fn,
 };
 use mut_capture::try_call_with_mut_captures;
-use crate::range_check::SUFFIXES;
 // try_copy_fn_definition moved to helpers.rs
 
 // helpers moved to helpers.rs
@@ -285,9 +285,9 @@ fn process_declaration(s: &str, ctx: &mut StatementContext) -> Result<(), String
                 return Err("duplicate declaration".to_string());
             }
 
-            let fval = fields_map.get(var_name).ok_or_else(|| {
-                format!("field '{}' not found on struct instance", var_name)
-            })?;
+            let fval = fields_map
+                .get(var_name)
+                .ok_or_else(|| format!("field '{}' not found on struct instance", var_name))?;
 
             // detect suffix from known SUFFIXES
             let mut found_suf: Option<String> = None;

@@ -7,8 +7,8 @@ pub fn split_statements(seq: &str) -> Vec<&str> {
     let mut depth: i32 = 0;
     for (i, ch) in seq.char_indices() {
         match ch {
-            '{' => depth += 1,
-            '}' => depth = depth.saturating_sub(1),
+            '{' | '(' | '[' => depth += 1,
+            '}' | ')' | ']' => depth = depth.saturating_sub(1),
             ';' if depth == 0 => {
                 let stmt = seq[start..i].trim();
                 if !stmt.is_empty() {
