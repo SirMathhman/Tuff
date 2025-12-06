@@ -43,6 +43,10 @@ path = "src/test/windows/test_use_statement.rs"
 name = "test_print"
 path = "src/test/windows/test_print.rs"
 
+[[test]]
+name = "test_char"
+path = "src/test/windows/test_char.rs"
+
 [dependencies]
 
 [lints.clippy]

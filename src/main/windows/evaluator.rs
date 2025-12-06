@@ -58,6 +58,14 @@ pub fn parse_signed_token(token: &str, suffix: &str) -> Result<i128, String> {
     Ok(v)
 }
 
+pub fn parse_char_token(token: &str) -> Result<char, String> {
+    if token.starts_with('\'') && token.ends_with('\'') && token.len() == 3 {
+        Ok(token.chars().nth(1).unwrap_or(' '))
+    } else {
+        Err("invalid character literal".to_string())
+    }
+}
+
 pub fn apply_unsigned_op(op: UnsignedOp, op_char: &char) -> Result<u128, String> {
     let result = match op_char {
         '+' => op
@@ -171,6 +179,17 @@ pub fn eval_output_with_suffix(
     output: &[String],
     seen_suffix: Option<&str>,
 ) -> Result<(String, Option<String>), String> {
+    // Handle single value with Char suffix specially
+    if output.len() == 1 && seen_suffix == Some("Char") {
+        let tok = output
+            .first()
+            .ok_or_else(|| "invalid character literal".to_string())?;
+        if tok.starts_with('\'') && tok.ends_with('\'') && tok.len() == 3 {
+            return Ok((tok.to_string(), Some("Char".to_string())));
+        }
+        return Err("invalid character literal".to_string());
+    }
+
     // If there are comparison operators in the RPN, evaluate to boolean.
     let has_cmp = output
         .iter()
@@ -215,6 +234,9 @@ pub fn eval_output_with_suffix(
         if let Some(suffix) = seen_suffix {
             if suffix.starts_with('U') {
                 let res = eval_cmp_generic(output, |t| parse_unsigned_token(t, suffix))?;
+                return Ok((res, None));
+            } else if suffix == "Char" {
+                let res = eval_cmp_generic(output, parse_char_token)?;
                 return Ok((res, None));
             } else {
                 let res = eval_cmp_generic(output, |t| parse_signed_token(t, suffix))?;

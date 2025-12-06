@@ -1,5 +1,5 @@
-pub const SUFFIXES: [&str; 9] = [
-    "U8", "U16", "U32", "U64", "USize", "I8", "I16", "I32", "I64",
+pub const SUFFIXES: [&str; 10] = [
+    "U8", "U16", "U32", "U64", "USize", "I8", "I16", "I32", "I64", "Char",
 ];
 
 pub fn check_unsigned_range(value: u128, suffix: &str) -> Result<(), String> {

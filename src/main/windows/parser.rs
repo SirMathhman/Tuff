@@ -26,6 +26,27 @@ pub fn tokenize_expr(expr: &str) -> Result<Vec<String>, String> {
     let mut chars = expr.chars().peekable();
     while let Some(ch) = chars.next() {
         match ch {
+            '\'' => {
+                if !state.cur.trim().is_empty() {
+                    state.tokens.push(state.cur.trim().to_string());
+                    state.cur.clear();
+                }
+                if let Some(char_val) = chars.next() {
+                    if let Some(&closing) = chars.peek() {
+                        if closing == '\'' {
+                            chars.next();
+                            state.tokens.push(format!("'{}'", char_val));
+                            state.last_was_op = false;
+                        } else {
+                            return Err("unterminated character literal".to_string());
+                        }
+                    } else {
+                        return Err("unterminated character literal".to_string());
+                    }
+                } else {
+                    return Err("empty character literal".to_string());
+                }
+            }
             '+' | '-' => {
                 if state.last_was_op {
                     state.cur.push(ch);
@@ -96,14 +117,25 @@ pub fn tokenize_expr(expr: &str) -> Result<Vec<String>, String> {
 pub fn detect_suffix_from_tokens(tokens: &[String]) -> Result<Option<&'static str>, String> {
     let mut seen_suffix: Option<&str> = None;
     for p in tokens {
-        for sfx in SUFFIXES {
-            if p.ends_with(sfx) {
-                if let Some(existing) = seen_suffix {
-                    if existing != sfx {
-                        return Err("type suffix mismatch".to_string());
+        // Check for char literals: 'x'
+        if p.starts_with('\'') && p.ends_with('\'') && p.len() == 3 {
+            if let Some(existing) = seen_suffix {
+                if existing != "Char" {
+                    return Err("type suffix mismatch".to_string());
+                }
+            } else {
+                seen_suffix = Some("Char");
+            }
+        } else {
+            for sfx in SUFFIXES {
+                if p.ends_with(sfx) {
+                    if let Some(existing) = seen_suffix {
+                        if existing != sfx {
+                            return Err("type suffix mismatch".to_string());
+                        }
+                    } else {
+                        seen_suffix = Some(sfx);
                     }
-                } else {
-                    seen_suffix = Some(sfx);
                 }
             }
         }

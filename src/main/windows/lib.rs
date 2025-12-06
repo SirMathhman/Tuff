@@ -411,13 +411,13 @@ pub fn interpret(input: &str) -> Result<String, String> {
         };
     }
 
-    // `typeOf(<literal or expr>)` helper: return the suffix portion if present, e.g. typeOf(100U8) -> "U8"
     if input.trim_start().starts_with("typeOf(") && input.trim_end().ends_with(')') {
         let inner = input.trim();
-        let inner = &inner[7..inner.len() - 1]; // between parentheses
+        let inner = &inner[7..inner.len() - 1];
         let inner = inner.trim();
-
-        // fast-path: a single literal token
+        if inner.starts_with('\'') && inner.ends_with('\'') && inner.len() == 3 {
+            return Ok("Char".to_string());
+        }
         for sfx in SUFFIXES {
             if inner.ends_with(sfx) {
                 return Ok(sfx.to_string());
@@ -437,6 +437,10 @@ pub fn interpret(input: &str) -> Result<String, String> {
         || input.contains('*')
         || input.contains('(')
         || input.contains(')')
+        || input.contains('<')
+        || input.contains('>')
+        || input.contains('=')
+        || input.contains('!')
     {
         // Tokenize and detect suffix across tokens
         let tokens = tokenize_expr(input)?;
@@ -447,8 +451,26 @@ pub fn interpret(input: &str) -> Result<String, String> {
         let (value_out, _maybe_suffix) = evaluator::eval_output_with_suffix(&output, seen_suffix)?;
         return Ok(value_out);
     }
+
+    // Handle char literals: 'a', 'Z', ' ', etc.
+    if input.starts_with('\'') && input.ends_with('\'') && input.len() == 3 {
+        return Ok(input.to_string());
+    }
+
+    // Handle Char suffix specially: aChar, ZChar, etc.
+    if input.ends_with("Char") && input.len() > 4 {
+        let char_part = &input[..input.len() - 4];
+        if char_part.len() == 1 {
+            if let Some(c) = char_part.chars().next() {
+                if c.is_ascii() {
+                    return Ok(input.to_string());
+                }
+            }
+        }
+    }
+
     for sfx in SUFFIXES {
-        if input.ends_with(sfx) {
+        if input.ends_with(sfx) && sfx != "Char" {
             let pos = input.len() - sfx.len();
             if pos > 0
                 && input
