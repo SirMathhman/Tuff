@@ -6,7 +6,7 @@
   "main": "dist/src/interpret.js",
   "scripts": {
     "test": "bun test",
-    "build": "tsc",
+    "build": "tsc --project tsconfig.build.json",
     "dev": "bun run src/interpret.ts"
   },
   "devDependencies": {
