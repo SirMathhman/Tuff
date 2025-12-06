@@ -13,8 +13,12 @@ describe("handleMessage", () => {
   it('evaluates leading arithmetic expression and returns "3" for "1 + 2\'"', () => {
     expect(handleMessage("1 + 2'")).toBe("3");
   });
-  
+
   it('evaluates multiple operators and returns "6" for "1 + 2 + 3"', () => {
     expect(handleMessage("1 + 2 + 3")).toBe("6");
+  });
+
+  it('evaluates subtraction and addition and returns "2" for "1 + 4 - 3"', () => {
+    expect(handleMessage("1 + 4 - 3")).toBe("2");
   });
 });
