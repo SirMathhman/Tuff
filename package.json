@@ -5,7 +5,12 @@
   "type": "module",
   "scripts": {
     "test": "bun test --all",
-    "start": "bun run src/index.ts"
+    "start": "bun run src/index.ts",
+    "tsc": "tsc -p . --noEmit",
+    "prepare": "husky install"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "husky": "^8.0.0",
+    "typescript": "^5.4.0"
+  }
 }
