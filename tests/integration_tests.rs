@@ -57,6 +57,8 @@ fn interpret_strips_type_like_suffix() {
         Ok("-20".to_string())
     );
 
+    // Destructuring assignment from a struct instance
+    assert_eq!(interpret("struct Point { x : I32, y : I32 } let myPoint = Point { 3, 4}; let { x, y } = myPoint; x + y"), Ok("7".to_string()));
     // Duplicate declarations should be an error
     assert!(interpret("let x : I32 = 100; let x : I32 = 200;").is_err());
 

@@ -26,6 +26,7 @@ pub use helpers::{
     collect_droppable_vars, parse_fn_literal, resolve_fn_or_eval_rhs, transform_class_to_fn,
 };
 use mut_capture::try_call_with_mut_captures;
+use crate::range_check::SUFFIXES;
 // try_copy_fn_definition moved to helpers.rs
 
 // helpers moved to helpers.rs
@@ -209,6 +210,112 @@ fn process_declaration(s: &str, ctx: &mut StatementContext) -> Result<(), String
         .ok_or_else(|| "invalid declaration".to_string())?
         .trim();
     let rhs_opt = parts.next().map(|s| s.trim()).filter(|s| !s.is_empty());
+
+    // Support destructuring assignment style: let { x, y } = expr
+    if left.trim_start().starts_with('{') {
+        // find the matching closing brace for the pattern
+        let mut depth: i32 = 0;
+        let mut close_idx: Option<usize> = None;
+        for (i, ch) in left.char_indices() {
+            match ch {
+                '{' => depth += 1,
+                '}' => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        close_idx = Some(i);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let close_idx = close_idx.ok_or_else(|| "invalid declaration".to_string())?;
+        let pattern = &left[1..close_idx].trim();
+
+        // optional declared type after the pattern (e.g. "{ x, y } : Point")
+        let after = left[close_idx + 1..].trim();
+        let ty_opt = if after.starts_with(':') {
+            let t = after[1..].trim();
+            if t.is_empty() {
+                None
+            } else {
+                Some(t.to_string())
+            }
+        } else {
+            None
+        };
+
+        // must have an initializer for pattern destructuring
+        let rhs = rhs_opt.ok_or_else(|| "invalid declaration".to_string())?;
+        let (value, _expr_suffix) = eval_rhs(rhs, ctx.env, ctx.eval_expr)?;
+
+        if !value.starts_with("__STRUCT__:") {
+            return Err("destructuring requires struct value".to_string());
+        }
+
+        let rest = &value[10..];
+        // parts: first is type name, following are key=value entries
+        let mut iter = rest.split('|');
+        let struct_type = iter.next().unwrap_or("");
+
+        if let Some(declared_type) = &ty_opt {
+            if declared_type != struct_type {
+                return Err("type suffix mismatch on assignment".to_string());
+            }
+        }
+
+        // build a map of fields
+        let mut fields_map = std::collections::HashMap::new();
+        for ent in iter {
+            if let Some(eq) = ent.find('=') {
+                let fname = &ent[..eq];
+                let fval = &ent[eq + 1..];
+                fields_map.insert(fname.to_string(), fval.to_string());
+            }
+        }
+
+        // parse pattern names and bind variables
+        for part in pattern.split(',') {
+            let var_name = part.trim();
+            if var_name.is_empty() {
+                continue;
+            }
+            if ctx.env.contains_key(var_name) {
+                return Err("duplicate declaration".to_string());
+            }
+
+            let fval = fields_map.get(var_name).ok_or_else(|| {
+                format!("field '{}' not found on struct instance", var_name)
+            })?;
+
+            // detect suffix from known SUFFIXES
+            let mut found_suf: Option<String> = None;
+            let mut val_str = fval.as_str();
+            for &suf in SUFFIXES.iter() {
+                if val_str.ends_with(suf) {
+                    let trimmed = &val_str[..val_str.len() - suf.len()];
+                    found_suf = Some(suf.to_string());
+                    val_str = trimmed;
+                    break;
+                }
+            }
+
+            ctx.env.insert(
+                var_name.to_string(),
+                Var {
+                    mutable,
+                    suffix: found_suf,
+                    value: val_str.to_string(),
+                    borrowed_mut: false,
+                    declared_type: None,
+                },
+            );
+        }
+
+        *ctx.last_value = None;
+        return Ok(());
+    }
 
     let mut left_parts = left.splitn(2, ':');
     let name = left_parts
