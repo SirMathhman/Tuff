@@ -5,7 +5,6 @@ use crate::parser::{detect_suffix_from_tokens, tokenize_expr, tokens_to_rpn};
 use crate::property_access::{handle_complex_property_access, preprocess_property_access};
 use crate::statement;
 use crate::statement::Var;
-// SUFFIXES are not used directly in this module
 use std::collections::HashMap;
 
 mod invoke;
@@ -365,6 +364,20 @@ pub fn eval_expr_with_env(
             // Check if left is a function identifier before attempting parsing
             if !left.is_empty() && left.chars().all(|c| c.is_alphanumeric() || c == '_') {
                 let name = left;
+                // Special case: handle print() function
+                if name == "print" && !args_text.is_empty() {
+                    if let Ok((val, _)) = eval_expr_with_env(args_text, env) {
+                        let num_str = val
+                            .split(|c: char| !c.is_ascii_digit() && c != '-')
+                            .next()
+                            .unwrap_or(&val);
+                        if let Ok(num) = num_str.parse::<i32>() {
+                            crate::append_to_output(num);
+                            return Ok((val, Some("I32".to_string())));
+                        }
+                    }
+                    return Err("print requires one I32 argument".to_string());
+                }
                 let key = format!("__fn__{}", name);
                 if let Some(func_var) = env.get(&key) {
                     // Check for external captures in __captures__<name>

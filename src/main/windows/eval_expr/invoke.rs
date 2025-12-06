@@ -36,7 +36,7 @@ pub(crate) fn invoke_fn_value(
     crate::statement::eval_block_expr(body_part, &local_env, &eval_expr_with_env)
 }
 
-fn collect_args(args_text: &str) -> Vec<&str> {
+pub fn collect_args(args_text: &str) -> Vec<&str> {
     let mut args: Vec<&str> = Vec::new();
     let mut start = 0usize;
     let mut depth: i32 = 0;

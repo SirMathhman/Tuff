@@ -9,9 +9,45 @@ mod property_access;
 mod range_check;
 pub mod statement;
 
+use std::cell::RefCell;
+
 use parser::{detect_suffix_from_tokens, tokenize_expr, tokens_to_rpn};
 use range_check::{check_unsigned_range, SUFFIXES};
 use statement::{process_single_stmt, split_statements, Var};
+
+// Output buffer for capturing print() function calls
+thread_local! {
+    static OUTPUT_BUFFER: RefCell<String> = const { RefCell::new(String::new()) };
+}
+
+/// Clear the output buffer
+fn clear_output_buffer() {
+    OUTPUT_BUFFER.with(|buf| buf.borrow_mut().clear());
+}
+
+/// Append to the output buffer (called by print() function)
+fn append_to_output(value: i32) {
+    OUTPUT_BUFFER.with(|buf| {
+        let mut output = buf.borrow_mut();
+        output.push_str(&value.to_string());
+        output.push('\n');
+    });
+}
+
+/// Get the captured output
+fn get_captured_output() -> String {
+    OUTPUT_BUFFER.with(|buf| buf.borrow().clone())
+}
+
+/// Wrap a result with captured output if any
+fn wrap_with_output(result: String) -> String {
+    let output = get_captured_output();
+    if output.is_empty() {
+        result
+    } else {
+        format!("{}|{}", result, output.trim())
+    }
+}
 
 fn local_eval_expr_with_env(
     expr: &str,
@@ -159,6 +195,9 @@ pub fn interpret_all(
 pub fn interpret(input: &str) -> Result<String, String> {
     use std::collections::HashMap;
 
+    // Clear output buffer at the start
+    clear_output_buffer();
+
     // Helper to evaluate an expression with access to the current environment.
 
     // Handle class definitions (syntactic sugar for functions that return this)
@@ -199,7 +238,7 @@ pub fn interpret(input: &str) -> Result<String, String> {
             for stmt in stmts {
                 process_single_stmt(stmt, &mut env, &mut last_value, &local_eval_expr_with_env)?;
             }
-            return Ok(last_value.unwrap_or_default());
+            return Ok(wrap_with_output(last_value.unwrap_or_default()));
         }
     }
 
@@ -364,9 +403,9 @@ pub fn interpret(input: &str) -> Result<String, String> {
         }
 
         return if let Some(value) = last_value {
-            Ok(value)
+            Ok(wrap_with_output(value))
         } else {
-            Ok("".to_string())
+            Ok(wrap_with_output("".to_string()))
         };
     }
 

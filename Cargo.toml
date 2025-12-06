@@ -39,6 +39,10 @@ path = "src/test/windows/test_struct_generics.rs"
 name = "test_use_statement"
 path = "src/test/windows/test_use_statement.rs"
 
+[[test]]
+name = "test_print"
+path = "src/test/windows/test_print.rs"
+
 [dependencies]
 
 [lints.clippy]
