@@ -187,6 +187,12 @@ fn interpret_strips_type_like_suffix() {
         Ok("100".to_string())
     );
 
+    // Assign a function literal to a variable and call it
+    assert_eq!(
+        interpret("let myFunc = fn get() => 100; myFunc()"),
+        Ok("100".to_string())
+    );
+
     // Test if captures are being parsed
     // First, test that a function with capture syntax doesn't error during definition
     assert_eq!(

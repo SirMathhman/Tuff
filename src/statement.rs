@@ -21,7 +21,7 @@ mod block;
 mod helpers;
 mod mut_capture;
 pub use block::{eval_block_expr, eval_block_expr_mut, split_statements};
-pub use helpers::{collect_droppable_vars, resolve_fn_or_eval_rhs};
+pub use helpers::{collect_droppable_vars, parse_fn_literal, resolve_fn_or_eval_rhs};
 use mut_capture::try_call_with_mut_captures;
 // try_copy_fn_definition moved to helpers.rs
 

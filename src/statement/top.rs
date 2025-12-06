@@ -63,70 +63,11 @@ fn process_single_stmt_internal(
 
     if s.starts_with("fn ") {
         // Parse and store function definition. Support both braced and expression bodies.
-        let mut arrow_pos_opt: Option<usize> = None;
-        let mut open_brace: Option<usize> = None;
-        let mut close_brace: Option<usize> = None;
 
-        if let Some((arrow_pos, ob, cb)) = crate::brace_utils::find_fn_arrow_and_braces(s) {
-            arrow_pos_opt = Some(arrow_pos);
-            open_brace = Some(ob);
-            close_brace = Some(cb);
-        } else if let Some(a) = s.find("=>") {
-            arrow_pos_opt = Some(a);
-        }
-
-        if let Some(arrow_pos) = arrow_pos_opt {
-            let sig_str = s[3..arrow_pos].trim();
-
-            // Extract captures: fn name[capture1, capture2](params) : RetType
-            let mut captures_str = String::new();
-            let mut params_str = String::new();
-            let mut return_type = String::new();
-
-            // Find the function name (before [ or ()
-            let name_end = sig_str
-                .find('[')
-                .or_else(|| sig_str.find('('))
-                .unwrap_or(sig_str.len());
-            let fn_name = sig_str[..name_end].trim().to_string();
-
-            // Extract captures if present
-            if let Some(bracket_start) = sig_str.find('[') {
-                if let Some(bracket_end) = sig_str.find(']') {
-                    if bracket_start < bracket_end {
-                        captures_str = sig_str[bracket_start + 1..bracket_end].to_string();
-                    }
-                }
-            }
-
-            // Extract params from ()
-            if let Some(paren_start) = sig_str.find('(') {
-                if let Some(paren_end) = sig_str.find(')') {
-                    if paren_start < paren_end {
-                        params_str = sig_str[paren_start + 1..paren_end].to_string();
-                        // Return type comes after )
-                        let after_paren = sig_str[paren_end + 1..].trim();
-                        return_type = after_paren
-                            .strip_prefix(':')
-                            .unwrap_or(after_paren)
-                            .trim()
-                            .to_string();
-                    }
-                }
-            }
-
+        if let Some((fn_name, captures_str, params_str, return_type, body)) =
+            crate::statement::parse_fn_literal(s)
+        {
             if !fn_name.is_empty() {
-                let body = if let (Some(ob), Some(cb)) = (open_brace, close_brace) {
-                    s[ob + 1..cb].to_string()
-                } else {
-                    let mut b = s[arrow_pos + 2..].trim().to_string();
-                    if b.ends_with(';') {
-                        b.pop();
-                        b = b.trim().to_string();
-                    }
-                    b
-                };
-
                 // Store function with format: params|return_type|body
                 let fn_key = format!("__fn__{}", fn_name);
                 let fn_value = format!("{}|{}|{}", params_str, return_type, body);
@@ -141,7 +82,6 @@ fn process_single_stmt_internal(
                     },
                 );
 
-                // Store captures separately if present
                 if !captures_str.is_empty() {
                     let captures_key = format!("__captures__{}", fn_name);
                     ctx.env.insert(
