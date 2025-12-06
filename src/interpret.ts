@@ -1,32 +1,57 @@
 export function interpret(input: string): string {
   const trimmed = input.trim();
 
-  // Check if it's a simple number
-  if (/^\d+$/.test(trimmed)) {
-    return trimmed;
+  // quick number-only shortcut
+  if (/^\d+$/.test(trimmed)) return trimmed;
+
+  // Statements are semicolon separated
+  const stmts = trimmed.split(";").map((s) => s.trim()).filter(Boolean);
+  const env = new Map<string, number>();
+  let lastResult: number | undefined = undefined;
+
+  for (const stmt of stmts) {
+    // let statement: let x : I32 = <expr>
+    const letMatch = stmt.match(/^let\s+([A-Za-z_]\w*)\s*(?::\s*([A-Za-z0-9_]+))?\s*=\s*(.*)$/s);
+    if (letMatch) {
+      const name = letMatch[1];
+      const type = letMatch[2];
+      const expr = letMatch[3].trim();
+      // validate characters (allow braces, digits, identifiers, operators)
+      if (!/^[\d\s+\-*/().{}A-Za-z_\w:]+$/.test(expr)) return input;
+      const value = evaluateExpression(expr, env);
+      let stored = value;
+      if (type && /^I\d+$/.test(type)) {
+        // simple integer cast
+        stored = Math.trunc(value);
+      }
+      env.set(name, stored);
+      lastResult = stored;
+      continue;
+    }
+
+    // Expression or variable reference
+    if (!/^[\d\s+\-*/().{}A-Za-z_\w]+$/.test(stmt)) return input;
+    lastResult = evaluateExpression(stmt, env);
   }
 
-  // Handle arithmetic expressions using eval with strict validation
-  // Only allow numbers, operators, and spaces
-  if (!/^[\d\s+\-*/().{}]+$/.test(trimmed)) {
-    return input;
-  }
-
-  try {
-    const tokens = tokenize(trimmed);
-    const rpn = toRPN(tokens);
-    const value = evalRPN(rpn);
-    if (Number.isFinite(value) && !Number.isNaN(value)) return String(value);
-    return input;
-  } catch {
-    return input;
-  }
+  if (lastResult === undefined) return input;
+  return String(lastResult);
 }
 
 export default interpret;
 
+function evaluateExpression(expr: string, env: Map<string, number>) {
+  let e = expr.trim();
+  if (e.startsWith("{") && e.endsWith("}")) {
+    e = e.slice(1, -1).trim();
+  }
+  const tokens = tokenize(e);
+  const rpn = toRPN(tokens);
+  return evalRPN(rpn, env);
+}
+
 function tokenize(expr: string): string[] {
-  const re = /(?:\d+(?:\.\d+)?)|[(){}+\-*/]/g;
+  const re = /(?:\d+(?:\.\d+)?)|[A-Za-z_]\w*|[(){}+\-*/]/g;
   const raw = expr.match(re) || [];
   const tokens: string[] = [];
 
@@ -55,7 +80,7 @@ function toRPN(tokens: string[]): string[] {
   const prec: Record<string, number> = { "+": 1, "-": 1, "*": 2, "/": 2 };
 
   for (const t of tokens) {
-    if (/^\d+(?:\.\d+)?$/.test(t)) {
+    if (/^\d+(?:\.\d+)?$/.test(t) || /^[A-Za-z_]\w*$/.test(t)) {
       out.push(t);
       continue;
     }
@@ -89,11 +114,17 @@ function toRPN(tokens: string[]): string[] {
   return out;
 }
 
-function evalRPN(rpn: string[]): number {
+function evalRPN(rpn: string[], env: Map<string, number> = new Map()): number {
   const st: number[] = [];
   for (const t of rpn) {
     if (/^\d+(?:\.\d+)?$/.test(t)) {
       st.push(parseFloat(t));
+      continue;
+    }
+
+    if (/^[A-Za-z_]\w*$/.test(t)) {
+      if (!env.has(t)) throw new Error(`Undefined variable: ${t}`);
+      st.push(env.get(t)!);
       continue;
     }
     const b = st.pop();

@@ -26,4 +26,9 @@ describe("interpret", () => {
     const result = interpret("{1 + 2 - 3}");
     expect(result).toBe("0");
   });
+
+  it('should evaluate let bindings and return variable value', () => {
+    const result = interpret("let x : I32 = {1 + 2 - 3}; x");
+    expect(result).toBe("0");
+  });
 });
