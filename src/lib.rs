@@ -167,18 +167,25 @@ pub fn interpret(input: &str) -> Result<String, String> {
             if let Some(close_idx) = brace_utils::find_matching_brace(s, open_idx) {
                 let _def_str = &s[..=close_idx];
                 let tail = s[close_idx + 1..].trim();
-                let name = s[6..open_idx]
+                let raw_name = s[6..open_idx]
                     .split_whitespace()
                     .next()
                     .unwrap_or("")
                     .trim();
+                // strip generic params from struct name, e.g. Wrapper<T> -> Wrapper
+                let name = if let Some(lt_pos) = raw_name.find('<') {
+                    raw_name[..lt_pos].trim()
+                } else {
+                    raw_name
+                };
                 if !name.is_empty() {
                     let mut env: HashMap<String, Var> = HashMap::new();
+                    let templ_val = s[open_idx + 1..close_idx].to_string();
                     env.insert(
                         format!("__struct__{}", name),
                         Var {
                             mutable: false,
-                            value: s[open_idx + 1..close_idx].to_string(),
+                            value: templ_val,
                             suffix: Some("STRUCT".to_string()),
                             borrowed_mut: false,
                             declared_type: None,

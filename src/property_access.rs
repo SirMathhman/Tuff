@@ -186,10 +186,15 @@ pub fn handle_complex_property_access(
                 if let Some(close_br) = left[open_br..].find('}').map(|i| i + open_br) {
                     let type_name = left[..open_br].trim();
                     if !type_name.is_empty() {
-                        let key = format!("__struct__{}", type_name);
-                        if env.contains_key(&key) {
+                        // handle generic type names by stripping any generic parameter list
+                        let base_type = if let Some(lt_pos) = type_name.find('<') {
+                            type_name[..lt_pos].trim()
+                        } else {
+                            type_name
+                        };
+                        if env.contains_key(&format!("__struct__{}", base_type)) {
                             let args_text = &left[open_br + 1..close_br];
-                            let values_map = build_struct_instance(type_name, args_text, env)?;
+                            let values_map = build_struct_instance(base_type, args_text, env)?;
                             if let Some(v) = values_map.get(right) {
                                 return Ok(Some((v.clone(), None)));
                             }

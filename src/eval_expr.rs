@@ -215,7 +215,9 @@ pub fn eval_expr_with_env(
                 '{' if paren_depth == 0 => {
                     let prev_char_opt = trimmed[..i].chars().rev().find(|c| !c.is_whitespace());
                     let seen_ident_before = prev_char_opt
-                        .map(|pc| pc.is_alphanumeric() || pc == '_')
+                        .map(|pc| {
+                            pc.is_alphanumeric() || pc == '_' || pc == '>' || pc == ')' || pc == ']'
+                        })
                         .unwrap_or(false);
                     if !seen_ident_before && brace_start.is_none() {
                         brace_start = Some(i);
@@ -423,11 +425,17 @@ pub fn eval_expr_with_env(
             if let Some(close_br) = brace_utils::find_matching_brace(&trimmed, open_br) {
                 if close_br + 1 == trimmed.len() {
                     let type_name = trimmed[..open_br].trim();
+                    // Allow generic type constructor calls like Name<T>{...}
+                    let base_type_name = if let Some(lt) = type_name.find('<') {
+                        type_name[..lt].trim()
+                    } else {
+                        type_name
+                    };
                     if !type_name.is_empty() {
-                        let key = format!("__struct__{}", type_name);
+                        let key = format!("__struct__{}", base_type_name);
                         if env.contains_key(&key) {
                             let args_text = &trimmed[open_br + 1..close_br];
-                            let values_map = build_struct_instance(type_name, args_text, env)?;
+                            let values_map = build_struct_instance(base_type_name, args_text, env)?;
                             let mut parts: Vec<String> = Vec::new();
                             parts.push(type_name.to_string());
                             for (name, value) in values_map.into_iter() {

@@ -288,6 +288,11 @@ fn interpret_strips_type_like_suffix() {
         Ok("100".to_string())
     );
 
+    // Generic struct constructor + property access
+    let res = interpret("struct Wrapper<T> { value : T } Wrapper<I32> { 100 }.value");
+    eprintln!("generic struct result: {:?}", res);
+    assert_eq!(res, Ok("100".to_string()));
+
     // Struct declaration then variable assignment and field access
     assert_eq!(
         interpret("struct Wrapper { value : I32} let obj : Wrapper = Wrapper { 100 }; obj.value"),
