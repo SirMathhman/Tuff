@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
 . "$(dirname "$0")/_/husky.sh"
 
-# Run TypeScript compiler (no emit) as a pre-commit check
-bun run tsc
+# Run lint then TypeScript compiler (no emit) as a pre-commit check
+bun run lint && bun run tsc
