@@ -8,12 +8,14 @@
     "test": "bun test --coverage",
     "build": "tsc --project tsconfig.build.json",
     "build:test": "tsc --project tsconfig.test.json",
-    "dev": "bun run src/interpret.ts"
+    "dev": "bun run src/interpret.ts",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "typescript": "^5.0.0",
-    "bun": "latest"
+    "bun": "latest",
+    "husky": "^9.1.7",
+    "typescript": "^5.0.0"
   },
   "dependencies": {
     "chai": "^4.3.10"
