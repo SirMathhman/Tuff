@@ -11,4 +11,9 @@ describe("interpret", () => {
     const result = interpret("1 + 2");
     expect(result).toBe("3");
   });
+
+  it('should return "6" when given "1 + 2 + 3"', () => {
+    const result = interpret("1 + 2 + 3");
+    expect(result).toBe("6");
+  });
 });
