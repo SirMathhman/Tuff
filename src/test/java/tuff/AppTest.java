@@ -87,6 +87,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretCurlyBraceGroupingEvaluatesCorrectly() {
+		assertEquals("3", App.interpret("9 / { 2 + 1 }"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}

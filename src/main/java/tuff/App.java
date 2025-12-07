@@ -141,8 +141,7 @@ public final class App {
 				if (c == '+' || c == '-') {
 					i++;
 					Operand right = parseTerm();
-					java.math.BigInteger value = 
-							(c == '+') ? left.value.add(right.value) : left.value.subtract(right.value);
+					java.math.BigInteger value = (c == '+') ? left.value.add(right.value) : left.value.subtract(right.value);
 					String[] kind = combineKinds(left, right);
 					left = new Operand(value, kind[0], kind[1]);
 				} else {
@@ -174,14 +173,16 @@ public final class App {
 
 		Operand parseFactor() {
 			skipWhitespace();
-			if (i < n && s.charAt(i) == '(') {
-				i++; // consume '('
-				Operand inner = parseExpression();
-				skipWhitespace();
-				if (i >= n || s.charAt(i) != ')')
-					throw new IllegalArgumentException("mismatched parentheses");
-				i++; // consume ')'
-				return inner;
+				if (i < n && (s.charAt(i) == '(' || s.charAt(i) == '{')) {
+					char open = s.charAt(i);
+					char close = (open == '(') ? ')' : '}';
+					i++; // consume open
+					Operand inner = parseExpression();
+					skipWhitespace();
+					if (i >= n || s.charAt(i) != close)
+						throw new IllegalArgumentException("mismatched parentheses");
+					i++; // consume close
+					return inner;
 			}
 
 			// parse number token (may include suffix)
