@@ -215,6 +215,16 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretIfExpressionTrueBranch() {
+		assertEquals("300", App.interpret("let x = if (true) 100 + 200 else -1; x"));
+	}
+
+	@Test
+	void interpretIfExpressionFalseBranch() {
+		assertEquals("-1", App.interpret("let x = if (false) 100 + 200 else -1; x"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}

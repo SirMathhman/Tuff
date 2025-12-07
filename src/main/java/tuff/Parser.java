@@ -69,6 +69,7 @@ public final class Parser {
 	}
 
 	private String readEqualityOperator() {
+		skipWhitespace();
 		if (i + 1 < n) {
 			String two = s.substring(i, i + 2);
 			if ("==".equals(two) || "!=".equals(two) || "<=".equals(two) || ">=".equals(two)) {
@@ -194,6 +195,81 @@ public final class Parser {
 
 	public Operand parseFactor() {
 		skipWhitespace();
+		// support if-expression: if (cond) expr else expr
+		if (i + 1 < n && s.startsWith("if", i) && (i + 2 == n || !Character.isJavaIdentifierPart(s.charAt(i + 2)))) {
+			return parseIfExpression();
+		}
+
+		Operand paren = parseParenthesized();
+		if (paren != null)
+			return paren;
+
+		Operand block = parseBlockStart();
+		if (block != null)
+			return block;
+
+		Operand boolLit = parseBooleanLiteral();
+		if (boolLit != null)
+			return boolLit;
+
+		Operand num = parseNumberToken();
+		if (num != null)
+			return num;
+
+		Operand id = parseIdentifierLookup();
+		if (id != null)
+			return id;
+
+		throw new IllegalArgumentException("invalid token at position " + i);
+	}
+
+	private Operand parseBooleanLiteral() {
+		skipWhitespace();
+		if (s.startsWith("true", i) && (i + 4 == n || !Character.isJavaIdentifierPart(s.charAt(i + 4)))) {
+			i += 4;
+			return new Operand(java.math.BigInteger.ONE, true);
+		}
+		if (s.startsWith("false", i) && (i + 5 == n || !Character.isJavaIdentifierPart(s.charAt(i + 5)))) {
+			i += 5;
+			return new Operand(java.math.BigInteger.ZERO, true);
+		}
+		return null;
+	}
+
+	private Operand parseNumberToken() {
+		skipWhitespace();
+		java.util.regex.Matcher m = java.util.regex.Pattern.compile("^([-+]?\\d+)(?:(U|I)(8|16|32|64))?")
+			.matcher(s.substring(i));
+		if (!m.find())
+			return null;
+		String number = m.group(1);
+		String unsignedOrSigned = m.group(2);
+		String width = m.group(3);
+		int len = m.group(0).length();
+		i += len;
+		if (unsignedOrSigned != null && "U".equals(unsignedOrSigned) && number.startsWith("-")) {
+			throw new IllegalArgumentException("unsigned type with negative value");
+		}
+		if (width != null) {
+			App.validateRange(number, unsignedOrSigned, width);
+			return new Operand(new java.math.BigInteger(number), unsignedOrSigned, width);
+		}
+		return new Operand(new java.math.BigInteger(number), null, null);
+	}
+
+	private Operand parseIdentifierLookup() {
+		skipWhitespace();
+		java.util.regex.Matcher idm = java.util.regex.Pattern.compile("^[A-Za-z_]\\w*").matcher(s.substring(i));
+		if (!idm.find())
+			return null;
+		String name = idm.group();
+		i += name.length();
+		if (!locals.containsKey(name))
+			throw new IllegalArgumentException("undefined variable: " + name);
+		return locals.get(name);
+	}
+
+	private Operand parseParenthesized() {
 		if (i < n && s.charAt(i) == '(') {
 			i++; // consume '('
 			Operand inner = parseExpression();
@@ -203,38 +279,70 @@ public final class Parser {
 			i++; // consume ')'
 			return inner;
 		}
+		return null;
+	}
 
+	private Operand parseBlockStart() {
 		if (i < n && s.charAt(i) == '{') {
 			return parseBlock();
 		}
+		return null;
+	}
 
-		java.util.regex.Matcher boolm = java.util.regex.Pattern.compile("^true|^false").matcher(s.substring(i));
-		if (boolm.find()) {
-			String b = boolm.group();
-			i += b.length();
-			return new Operand("true".equals(b) ? java.math.BigInteger.ONE : java.math.BigInteger.ZERO, true);
+	private Operand parseIfExpression() {
+		i += 2; // consume 'if'
+		Operand cond = parseIfCondition();
+		Operand thenOp = parseLogicalOr();
+		parseElseKeyword();
+		Operand elseOp = parseLogicalOr();
+		return computeIfResult(cond, thenOp, elseOp);
+	}
+
+	private Operand parseIfCondition() {
+		skipWhitespace();
+		if (i >= n || s.charAt(i) != '(')
+			throw new IllegalArgumentException("expected '(' after if");
+		i++; // consume '('
+		Operand cond = parseLogicalOr();
+		skipWhitespace();
+		if (i >= n || s.charAt(i) != ')')
+			throw new IllegalArgumentException("expected ')' after if condition");
+		i++; // consume ')'
+		skipWhitespace();
+		return cond;
+	}
+
+	private void parseElseKeyword() {
+		skipWhitespace();
+		if (!s.startsWith("else", i) || (i + 4 < n && Character.isJavaIdentifierPart(s.charAt(i + 4))))
+			throw new IllegalArgumentException("expected 'else' in if-expression");
+		i += 4; // consume 'else'
+		skipWhitespace();
+	}
+
+	private Operand computeIfResult(Operand cond, Operand thenOp, Operand elseOp) {
+		// condition must be boolean
+		if (cond.isBoolean == null)
+			throw new IllegalArgumentException("if condition must be boolean");
+
+		// branches must be same kind (both boolean or both numeric)
+		if ((thenOp.isBoolean != null && elseOp.isBoolean == null) || (thenOp.isBoolean == null && elseOp.isBoolean != null)) {
+			throw new IllegalArgumentException("if branches must be same kind");
 		}
 
-		java.util.regex.Matcher m = java.util.regex.Pattern
-				.compile("^[+-]?\\d+(?:(?:U|I)(?:8|16|32|64))?")
-				.matcher(s.substring(i));
-		if (m.find()) {
-			String tok = m.group();
-			i += tok.length();
-			return App.parseOperand(tok);
+		if (thenOp.isBoolean != null) {
+			// both boolean -> pick based on cond
+			boolean c = !java.math.BigInteger.ZERO.equals(cond.value);
+			return new Operand(c ? thenOp.value : elseOp.value, true);
 		}
 
-		java.util.regex.Matcher idm = java.util.regex.Pattern.compile("^[A-Za-z_]\\w*").matcher(s.substring(i));
-		if (idm.find()) {
-			String name = idm.group();
-			i += name.length();
-			Operand val = locals.get(name);
-			if (val == null)
-				throw new IllegalArgumentException("unknown identifier: " + name);
-			return val;
+		// numeric branches
+		String[] kind = App.combineKinds(thenOp, elseOp);
+		java.math.BigInteger chosen = !java.math.BigInteger.ZERO.equals(cond.value) ? thenOp.value : elseOp.value;
+		if (kind[0] != null && kind[1] != null) {
+			App.validateRange(chosen.toString(), kind[0], kind[1]);
 		}
-
-		throw new IllegalArgumentException("invalid token at position " + i);
+		return new Operand(chosen, kind[0], kind[1]);
 	}
 
 	// parse a block { ... } with local variable declarations (let) and expression
