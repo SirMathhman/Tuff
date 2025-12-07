@@ -251,6 +251,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretAssignmentToImmutableThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("let x = 100; x = 200; x"));
+	}
+
+	@Test
 	void interpretMatchNoDefaultThrows() {
 		assertThrows(IllegalArgumentException.class,
 				() -> App.interpret("let x = match 300 { case 100 => 5; case 200 => 2 }; x"));
