@@ -32,6 +32,16 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretArbitraryPositiveIntegerReturnsSame() {
+		assertEquals("42", App.interpret("42"));
+	}
+
+	@Test
+	void interpretNegativeIntegerReturnsSame() {
+		assertEquals("-7", App.interpret("-7"));
+	}
+
+	@Test
 	void interpretNonEmptyThrows() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("hello"));
 	}
