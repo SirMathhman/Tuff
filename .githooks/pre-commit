@@ -14,6 +14,15 @@ MAX_LINES=500
 # Iterate all tracked files (handle spaces/newlines safely with -z)
 tmpfile=$(mktemp) || tmpfile=".git/.precommit_filelist_$$"
 git ls-files -z > "$tmpfile"
+# On Windows environments try using PowerShell helper if available
+if [ -n "$(command -v pwsh 2>/dev/null)" ] || [ -n "$(command -v powershell.exe 2>/dev/null)" ]; then
+  # when called from a Windows env prefer PowerShell script for proper line counting
+  if [ "$OS" = "Windows_NT" ] || uname -s 2>/dev/null | grep -qiE "mingw|msys|cygwin|nt"; then
+    POWERSHELL=$(command -v pwsh 2>/dev/null || command -v powershell.exe 2>/dev/null)
+    "$POWERSHELL" -NoProfile -ExecutionPolicy Bypass -File ".githooks/pre-commit.ps1"
+    exit $?
+  fi
+fi
 while IFS= read -r -d '' file; do
   # Obtain the content that will be committed: prefer staged/index version when present
   if git show :"$file" >/dev/null 2>&1; then

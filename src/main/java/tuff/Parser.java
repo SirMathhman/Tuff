@@ -228,7 +228,7 @@ public final class Parser {
 		throw new IllegalArgumentException("invalid token at position " + i);
 	}
 
-	private Operand parseBooleanLiteral() {
+	Operand parseBooleanLiteral() {
 		skipWhitespace();
 		if (s.startsWith("true", i) && (i + 4 == n || !Character.isJavaIdentifierPart(s.charAt(i + 4)))) {
 			i += 4;
@@ -241,7 +241,7 @@ public final class Parser {
 		return null;
 	}
 
-	private Operand parseNumberToken() {
+	Operand parseNumberToken() {
 		skipWhitespace();
 		java.util.regex.Matcher m = java.util.regex.Pattern.compile("^([-+]?\\d+)(?:(U|I)(8|16|32|64))?")
 				.matcher(s.substring(i));
@@ -295,12 +295,8 @@ public final class Parser {
 	}
 
 	private Operand parseIfExpression() {
-		i += 2; // consume 'if'
-		Operand cond = parseIfCondition();
-		Operand thenOp = parseLogicalOr();
-		parseElseKeyword();
-		Operand elseOp = parseLogicalOr();
-		return computeIfResult(cond, thenOp, elseOp);
+		IfExpressionParser iep = new IfExpressionParser(this);
+		return iep.parseIfExpression();
 	}
 
 	private static final class MatchArm {
@@ -316,177 +312,11 @@ public final class Parser {
 	}
 
 	private Operand parseMatchExpression() {
-		i += 5; // consume 'match'
-		skipWhitespace();
-		Operand control = parseLogicalOr();
-		skipWhitespace();
-		if (i >= n || s.charAt(i) != '{')
-			throw new IllegalArgumentException("expected '{' after match expression");
-		i++; // consume '{'
-		java.util.List<MatchArm> arms = parseMatchArms();
-		Boolean armsAreBoolean = determineArmsAreBoolean(arms);
-		MatchArm chosen = findMatchArm(control, arms);
-		return computeMatchResult(chosen, arms, armsAreBoolean);
+		MatchExpressionParser mep = new MatchExpressionParser(this);
+		return mep.parseMatchExpression();
 	}
 
-	private java.util.List<MatchArm> parseMatchArms() {
-		java.util.List<MatchArm> arms = new java.util.ArrayList<>();
-		while (true) {
-			skipWhitespace();
-			if (i >= n)
-				throw new IllegalArgumentException("mismatched brace in match expression");
-			if (s.charAt(i) == '}') {
-				i++; // consume '}'
-				break;
-			}
-			arms.add(parseSingleMatchArm());
-		}
-		if (arms.isEmpty())
-			throw new IllegalArgumentException("match with no arms");
-		return arms;
-	}
 
-	private MatchArm parseSingleMatchArm() {
-		if (!s.startsWith("case", i) || (i + 4 < n && Character.isJavaIdentifierPart(s.charAt(i + 4))))
-			throw new IllegalArgumentException("expected 'case' in match expression");
-		i += 4; // consume 'case'
-		skipWhitespace();
-		boolean isWildcard = false;
-		Operand patt = null;
-		if (i < n && s.charAt(i) == '_') {
-			isWildcard = true;
-			i++; // consume '_'
-		} else {
-			patt = parseBooleanLiteral();
-			if (patt == null)
-				patt = parseNumberToken();
-			if (patt == null)
-				throw new IllegalArgumentException("invalid match pattern");
-		}
-		skipWhitespace();
-		if (!(i + 1 < n && s.charAt(i) == '=' && s.charAt(i + 1) == '>'))
-			throw new IllegalArgumentException("expected '=>' in match arm");
-		i += 2; // consume '=>'
-		Operand res = parseLogicalOr();
-		skipWhitespace();
-		if (i < n && s.charAt(i) == ';') {
-			i++; // consume ';'
-			return new MatchArm(isWildcard, patt, res);
-		}
-		// allow '}' next
-		skipWhitespace();
-		if (i < n && s.charAt(i) == '}') {
-			return new MatchArm(isWildcard, patt, res);
-		}
-		throw new IllegalArgumentException("expected ';' or '}' in match expression");
-	}
-
-	private Boolean determineArmsAreBoolean(java.util.List<MatchArm> arms) {
-		Boolean armsAreBoolean = null;
-		for (MatchArm a : arms) {
-			if (armsAreBoolean == null) {
-				armsAreBoolean = a.result.isBoolean != null;
-			} else {
-				if (armsAreBoolean != (a.result.isBoolean != null))
-					throw new IllegalArgumentException("match arms must be same kind");
-			}
-		}
-		return armsAreBoolean;
-	}
-
-	private MatchArm findMatchArm(Operand control, java.util.List<MatchArm> arms) {
-		for (MatchArm a : arms) {
-			if (a.isWildcard) {
-				return a;
-			}
-			if (a.pattern != null) {
-				if (a.pattern.isBoolean != null) {
-					if (control.isBoolean == null)
-						continue;
-					if (control.value.equals(a.pattern.value))
-						return a;
-				} else {
-					if (control.isBoolean != null)
-						continue;
-					if (control.value.equals(a.pattern.value))
-						return a;
-				}
-			}
-		}
-		return null;
-	}
-
-	private Operand computeMatchResult(MatchArm chosen, java.util.List<MatchArm> arms, Boolean armsAreBoolean) {
-		if (chosen == null)
-			throw new IllegalArgumentException("no match arm found and no wildcard present");
-		if (!armsAreBoolean) {
-			String[] kind = new String[] { null, null };
-			for (MatchArm a : arms) {
-				if (a.result.unsignedOrSigned != null && a.result.width != null) {
-					if (kind[0] == null && kind[1] == null) {
-						kind[0] = a.result.unsignedOrSigned;
-						kind[1] = a.result.width;
-					} else if (!kind[0].equals(a.result.unsignedOrSigned) || !kind[1].equals(a.result.width)) {
-						throw new IllegalArgumentException("mixed typed match arm results not supported");
-					}
-				}
-			}
-			if (kind[0] != null && kind[1] != null) {
-				App.validateRange(chosen.result.value.toString(), kind[0], kind[1]);
-				return new Operand(chosen.result.value, kind[0], kind[1]);
-			}
-			return new Operand(chosen.result.value, null, null);
-		}
-		return new Operand(chosen.result.value, true);
-	}
-
-	private Operand parseIfCondition() {
-		skipWhitespace();
-		if (i >= n || s.charAt(i) != '(')
-			throw new IllegalArgumentException("expected '(' after if");
-		i++; // consume '('
-		Operand cond = parseLogicalOr();
-		skipWhitespace();
-		if (i >= n || s.charAt(i) != ')')
-			throw new IllegalArgumentException("expected ')' after if condition");
-		i++; // consume ')'
-		skipWhitespace();
-		return cond;
-	}
-
-	private void parseElseKeyword() {
-		skipWhitespace();
-		if (!s.startsWith("else", i) || (i + 4 < n && Character.isJavaIdentifierPart(s.charAt(i + 4))))
-			throw new IllegalArgumentException("expected 'else' in if-expression");
-		i += 4; // consume 'else'
-		skipWhitespace();
-	}
-
-	private Operand computeIfResult(Operand cond, Operand thenOp, Operand elseOp) {
-		// condition must be boolean
-		if (cond.isBoolean == null)
-			throw new IllegalArgumentException("if condition must be boolean");
-
-		// branches must be same kind (both boolean or both numeric)
-		if ((thenOp.isBoolean != null && elseOp.isBoolean == null)
-				|| (thenOp.isBoolean == null && elseOp.isBoolean != null)) {
-			throw new IllegalArgumentException("if branches must be same kind");
-		}
-
-		if (thenOp.isBoolean != null) {
-			// both boolean -> pick based on cond
-			boolean c = !java.math.BigInteger.ZERO.equals(cond.value);
-			return new Operand(c ? thenOp.value : elseOp.value, true);
-		}
-
-		// numeric branches
-		String[] kind = App.combineKinds(thenOp, elseOp);
-		java.math.BigInteger chosen = !java.math.BigInteger.ZERO.equals(cond.value) ? thenOp.value : elseOp.value;
-		if (kind[0] != null && kind[1] != null) {
-			App.validateRange(chosen.toString(), kind[0], kind[1]);
-		}
-		return new Operand(chosen, kind[0], kind[1]);
-	}
 
 	// parse a block { ... } with local variable declarations (let) and expression
 	// statements
@@ -626,5 +456,40 @@ public final class Parser {
 		String w = dt != null ? dt.width : null;
 		locals.put(name, new Operand(exprVal.value, signed, w));
 		return new Operand(exprVal.value, signed, w);
+	}
+
+	// Helper methods for IfExpressionParser and MatchExpressionParser
+	void consumeIf() {
+		i += 2; // consume 'if'
+	}
+
+	void consumeMatch() {
+		i += 5; // consume 'match'
+	}
+
+	void consumeChar() {
+		i++;
+	}
+
+	void consumeKeyword(String keyword) {
+		i += keyword.length();
+	}
+
+	void consumeArrow() {
+		i += 2; // consume '=>'
+	}
+
+	char peekChar() {
+		if (i >= n)
+			return '\u0000'; // null character
+		return s.charAt(i);
+	}
+
+	boolean startsWithKeyword(String keyword) {
+		return s.startsWith(keyword, i) && (i + keyword.length() == n || !Character.isJavaIdentifierPart(s.charAt(i + keyword.length())));
+	}
+
+	boolean startsWithArrow() {
+		return i + 1 < n && s.charAt(i) == '=' && s.charAt(i + 1) == '>';
 	}
 }
