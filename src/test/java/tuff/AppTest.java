@@ -230,6 +230,12 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretTypedLetWithIfBranchesDifferentKindsThrows() {
+		assertThrows(IllegalArgumentException.class,
+				() -> App.interpret("let x : U8 = if (true) false else 500;"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}
