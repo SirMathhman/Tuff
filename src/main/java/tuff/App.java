@@ -9,4 +9,11 @@ public final class App {
 	public static String greet() {
 		return "Hello from Tuff App!";
 	}
+
+	public static String interpret(String input) {
+		if (input == null || input.isEmpty()) {
+			return "";
+		}
+		throw new IllegalArgumentException("interpret: non-empty input not supported");
+	}
 }
