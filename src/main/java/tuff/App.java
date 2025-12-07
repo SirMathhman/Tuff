@@ -25,10 +25,18 @@ public final class App {
 		// Supported suffixes: U8, U16, U32, U64, I8, I16, I32, I64.
 		// If present, return only the integer portion.
 		java.util.regex.Matcher m = java.util.regex.Pattern
-				.compile("^([-+]?\\d+)(?:(?:U|I)(?:8|16|32|64))?$")
+				.compile("^([-+]?\\d+)(?:(U|I)(8|16|32|64))?$")
 				.matcher(input);
 		if (m.matches()) {
-			return m.group(1);
+			String number = m.group(1);
+			String unsignedOrSigned = m.group(2); // either "U" or "I" when present
+
+			// Disallow negative numbers with unsigned suffixes (e.g. "-100U8")
+			if (unsignedOrSigned != null && "U".equals(unsignedOrSigned) && number.startsWith("-")) {
+				throw new IllegalArgumentException("unsigned type with negative value");
+			}
+
+			return number;
 		}
 		throw new IllegalArgumentException("interpret: non-empty non-integer input not supported");
 	}

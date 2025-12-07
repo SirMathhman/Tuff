@@ -72,6 +72,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretNegativeUnsignedThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("-100U8"));
+	}
+
+	@Test
 	void interpretArbitraryPositiveIntegerReturnsSame() {
 		assertEquals("42", App.interpret("42"));
 	}
