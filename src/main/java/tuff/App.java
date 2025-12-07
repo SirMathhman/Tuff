@@ -15,6 +15,14 @@ public final class App {
 			return "";
 		}
 
+		// Simple addition expressions, possibly chained, like "100U8 + 50U8" or "1U8 +
+		// 2U8 + 3U8"
+		if (input.contains("+")) {
+			String[] parts = input.split("\\s*\\+\\s*");
+			if (parts.length > 1) {
+				return evaluateAddition(parts);
+			}
+		}
 		// Simple addition expressions like "100U8 + 50U8"
 		java.util.regex.Matcher addMatcher = java.util.regex.Pattern.compile("^\\s*([-+]?\\S+)\\s*\\+\\s*([-+]?\\S+)\\s*$")
 				.matcher(input);
@@ -53,15 +61,46 @@ public final class App {
 	}
 
 	private static String evaluateAddition(String left, String right) {
-		Operand l = parseOperand(left);
-		Operand r = parseOperand(right);
+		return evaluateAddition(new String[] { left, right });
+	}
 
-		java.math.BigInteger sum = l.value.add(r.value);
+	private static String evaluateAddition(String[] parts) {
+		java.util.List<Operand> operands = new java.util.ArrayList<>();
+		for (String p : parts) {
+			operands.add(parseOperand(p));
+		}
 
-		if (l.unsignedOrSigned != null && r.unsignedOrSigned != null
-				&& l.unsignedOrSigned.equals(r.unsignedOrSigned)
-				&& l.width != null && l.width.equals(r.width)) {
-			validateRange(sum.toString(), l.unsignedOrSigned, l.width);
+		java.math.BigInteger sum = java.math.BigInteger.ZERO;
+		for (Operand op : operands) {
+			sum = sum.add(op.value);
+		}
+
+		// If all operands share exact signedness and width, validate sum fits that
+		// range
+		boolean allSameType = true;
+		String refSign = operands.get(0).unsignedOrSigned;
+		String refWidth = operands.get(0).width;
+		for (Operand op : operands) {
+			if ((refSign == null) ^ (op.unsignedOrSigned == null)) {
+				allSameType = false;
+				break;
+			}
+			if ((refWidth == null) ^ (op.width == null)) {
+				allSameType = false;
+				break;
+			}
+			if (refSign != null && !refSign.equals(op.unsignedOrSigned)) {
+				allSameType = false;
+				break;
+			}
+			if (refWidth != null && !refWidth.equals(op.width)) {
+				allSameType = false;
+				break;
+			}
+		}
+
+		if (allSameType && refWidth != null) {
+			validateRange(sum.toString(), refSign, refWidth);
 		}
 
 		return sum.toString();

@@ -42,6 +42,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretChainedU8AdditionReturnsSum() {
+		assertEquals("6", App.interpret("1U8 + 2U8 + 3U8"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}
