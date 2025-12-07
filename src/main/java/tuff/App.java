@@ -274,6 +274,11 @@ public final class App {
 				throw new IllegalArgumentException("invalid identifier in let");
 			String name = idm.group();
 			i += name.length();
+
+			// reject duplicate declarations in current visible scope
+			if (locals.containsKey(name)) {
+				throw new IllegalArgumentException("duplicate let declaration: " + name);
+			}
 			skipWhitespace();
 			String unsignedOrSigned = null;
 			String width = null;
