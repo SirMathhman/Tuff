@@ -84,17 +84,42 @@ public final class App {
 
 	private static String tryEvaluateExpression(String input) {
 		Expr expr = tokenizeExpression(input);
-		if (expr == null || expr.tokens.size() == 0 || expr.ops.size() != expr.tokens.size() - 1) return null;
+		if (expr == null || expr.tokens.size() == 0 || expr.ops.size() != expr.tokens.size() - 1)
+			return null;
 
 		java.util.List<Operand> operands = new java.util.ArrayList<>();
-		for (String t : expr.tokens) operands.add(parseOperand(t));
+		for (String t : expr.tokens)
+			operands.add(parseOperand(t));
+
+		// evaluate * and / first (left-to-right)
+		for (int idx = 0; idx < expr.ops.size();) {
+			String op = expr.ops.get(idx);
+			if ("*".equals(op) || "/".equals(op)) {
+				java.math.BigInteger a = operands.get(idx).value;
+				java.math.BigInteger b = operands.get(idx + 1).value;
+				java.math.BigInteger computed = "*".equals(op) ? a.multiply(b) : a.divide(b);
+
+				String resSign = operands.get(idx).unsignedOrSigned != null ? operands.get(idx).unsignedOrSigned
+						: operands.get(idx + 1).unsignedOrSigned;
+				String resWidth = operands.get(idx).width != null ? operands.get(idx).width
+						: operands.get(idx + 1).width;
+
+				operands.set(idx, new Operand(computed, resSign, resWidth));
+				operands.remove(idx + 1);
+				expr.ops.remove(idx);
+			} else {
+				idx++;
+			}
+		}
 
 		java.math.BigInteger result = operands.get(0).value;
 		for (int k = 0; k < expr.ops.size(); k++) {
-			String op = expr.ops.get(k);
+			String op2 = expr.ops.get(k);
 			java.math.BigInteger val = operands.get(k + 1).value;
-			if ("+".equals(op)) result = result.add(val);
-			else result = result.subtract(val);
+			if ("+".equals(op2))
+				result = result.add(val);
+			else
+				result = result.subtract(val);
 		}
 
 		String onlyType = singleTypedKind(operands);
@@ -107,30 +132,37 @@ public final class App {
 		return result.toString();
 	}
 
-	private static final class Expr {java.util.List<String> tokens = new java.util.ArrayList<>(); java.util.List<String> ops = new java.util.ArrayList<>();}
+	private static final class Expr {
+		java.util.List<String> tokens = new java.util.ArrayList<>();
+		java.util.List<String> ops = new java.util.ArrayList<>();
+	}
 
 	private static Expr tokenizeExpression(String s) {
 		s = s.trim();
-		if (s.isEmpty()) return null;
+		if (s.isEmpty())
+			return null;
 		int n = s.length();
 		int i = 0;
 		Expr expr = new Expr();
 
 		while (i < n) {
-			while (i < n && Character.isWhitespace(s.charAt(i))) i++;
-			if (i >= n) break;
+			while (i < n && Character.isWhitespace(s.charAt(i)))
+				i++;
+			if (i >= n)
+				break;
 
 			if (expr.tokens.isEmpty() || expr.tokens.size() == expr.ops.size()) {
 				java.util.regex.Matcher m = java.util.regex.Pattern
 						.compile("^[+-]?\\d+(?:(?:U|I)(?:8|16|32|64))?")
 						.matcher(s.substring(i));
-				if (!m.find()) return null;
+				if (!m.find())
+					return null;
 				String tok = m.group();
 				expr.tokens.add(tok);
 				i += tok.length();
 			} else {
 				char c = s.charAt(i);
-				if (c == '+' || c == '-') {
+				if (c == '+' || c == '-' || c == '*' || c == '/') {
 					expr.ops.add(String.valueOf(c));
 					i++;
 				} else {

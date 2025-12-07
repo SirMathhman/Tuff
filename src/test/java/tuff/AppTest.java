@@ -52,6 +52,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretMultiplyThenAddReturnsCorrect() {
+		assertEquals("53", App.interpret("10 * 5U8 + 3"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}
