@@ -422,6 +422,9 @@ public final class Parser {
 
 		try {
 			Operand res = p2.parseTopLevelBlock();
+			if (res == null) {
+				res = new Operand(java.math.BigInteger.ZERO, null, null);
+			}
 			// validate return type if present (no explicit 'return' used)
 			if (fd.returnType != null) {
 				if (fd.returnType.isBool) {
@@ -591,7 +594,7 @@ public final class Parser {
 		locals = prev;
 		mutables = prevMut;
 		functions = prevFuncs;
-		return last == null ? new Operand(java.math.BigInteger.ZERO, null, null) : last;
+		return last == null ? null : last;
 	}
 
 	// Helper methods for IfExpressionParser and MatchExpressionParser

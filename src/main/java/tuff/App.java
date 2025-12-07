@@ -93,7 +93,7 @@ public final class App {
 		try {
 			Operand result = parseExpressionToOperand(input);
 			if (result == null)
-				return null;
+				return "";
 			if (result.unsignedOrSigned != null && result.width != null) {
 				validateRange(result.value.toString(), result.unsignedOrSigned, result.width);
 			}
