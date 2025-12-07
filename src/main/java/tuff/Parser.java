@@ -53,14 +53,48 @@ public final class Parser {
 		return left;
 	}
 
-	// logical-and level (&&) - binds looser than arithmetic
-	public Operand parseLogicalAnd() {
+	// equality level (==, !=) - binds looser than additive but tighter than logical-and
+	Operand parseEquality() {
 		Operand left = parseExpression();
+		while (true) {
+			skipWhitespace();
+			String op = readEqualityOperator();
+			if (op == null) break;
+			Operand right = parseExpression();
+			left = computeEqualityOp(left, right, op);
+		}
+		return left;
+	}
+
+	private String readEqualityOperator() {
+		if (i + 1 < n && s.charAt(i) == '=' && s.charAt(i + 1) == '=') {
+			i += 2;
+			return "==";
+		}
+		if (i + 1 < n && s.charAt(i) == '!' && s.charAt(i + 1) == '=') {
+			i += 2;
+			return "!=";
+		}
+		return null;
+	}
+
+	private Operand computeEqualityOp(Operand left, Operand right, String op) {
+		if ((left.isBoolean != null && right.isBoolean == null) || (left.isBoolean == null && right.isBoolean != null)) {
+			throw new IllegalArgumentException("equality requires operands of same kind");
+		}
+		boolean eq = left.value.equals(right.value);
+		boolean result = "==".equals(op) ? eq : !eq;
+		return new Operand(result ? java.math.BigInteger.ONE : java.math.BigInteger.ZERO, true);
+	}
+
+	// logical-and level (&&) - binds looser than equality
+	public Operand parseLogicalAnd() {
+		Operand left = parseEquality();
 		while (true) {
 			skipWhitespace();
 			if (i + 1 < n && s.charAt(i) == '&' && s.charAt(i + 1) == '&') {
 				i += 2;
-				Operand right = parseExpression();
+				Operand right = parseEquality();
 				if (left.isBoolean == null || right.isBoolean == null)
 					throw new IllegalArgumentException("logical operators require boolean operands");
 				boolean lv = !java.math.BigInteger.ZERO.equals(left.value);
@@ -215,17 +249,11 @@ public final class Parser {
 			throw new IllegalArgumentException("duplicate let declaration: " + name);
 		}
 		skipWhitespace();
-		String unsignedOrSigned = null;
-		String width = null;
-		boolean declaredBool = false;
 		DeclaredType dt = null;
 		if (i < n && s.charAt(i) == ':') {
 			i++; // consume ':'
 			skipWhitespace();
 			dt = readDeclaredType();
-			declaredBool = dt.isBool;
-			unsignedOrSigned = dt.unsignedOrSigned;
-			width = dt.width;
 		}
 		skipWhitespace();
 		if (i >= n || s.charAt(i) != '=')

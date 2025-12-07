@@ -187,6 +187,16 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretNumericEqualityFalse() {
+		assertEquals("false", App.interpret("100 == 200"));
+	}
+
+	@Test
+	void interpretNumericEqualityTrue() {
+		assertEquals("true", App.interpret("100 == 100"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}
