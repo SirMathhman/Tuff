@@ -42,14 +42,29 @@ final class LetStatementParser {
 			dt = readDeclaredType();
 		}
 		parser.skipWhitespace();
-		if (parser.peekChar() != '=') {
-			throw new IllegalArgumentException("missing = in let");
+		// initializer is optional when a type is declared (allow declaration without initializer)
+		if (parser.peekChar() == '=') {
+			parser.consumeChar();
+			Operand exprVal = parser.parseLogicalOr();
+			Operand res = applyDeclaredType(name, dt, exprVal);
+			mutables.put(name, isMutable);
+			return res;
+		} else {
+			if (dt == null) {
+				throw new IllegalArgumentException("missing = in let");
+			}
+			// no initializer but typed declaration -> create default value and allow later assignment
+			Operand defaultVal;
+			if (dt.isBool) {
+				defaultVal = new Operand(java.math.BigInteger.ZERO, true);
+			} else {
+				defaultVal = new Operand(java.math.BigInteger.ZERO, dt.unsignedOrSigned, dt.width);
+			}
+			locals.put(name, defaultVal);
+			// mark as mutable so assignment later is allowed even without explicit `mut`
+			mutables.put(name, true);
+			return defaultVal;
 		}
-		parser.consumeChar();
-		Operand exprVal = parser.parseLogicalOr();
-		Operand res = applyDeclaredType(name, dt, exprVal);
-		mutables.put(name, isMutable);
-		return res;
 	}
 
 	private String readIdentifier() {
