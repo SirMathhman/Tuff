@@ -92,6 +92,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretBlockLetAndVarLookup() {
+		assertEquals("3", App.interpret("9 / { let x : I32 = 2 + 1; x }"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}
