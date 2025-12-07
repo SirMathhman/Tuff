@@ -9,6 +9,11 @@
 			<property name="max" value="15" />
 		</module>
 
+		<!-- Enforce a maximum number of parameters per method -->
+		<module name="ParameterNumber">
+			<property name="max" value="3" />
+		</module>
+
 		<!-- Keep default recommended checks minimal for now -->
 	</module>
 </module>

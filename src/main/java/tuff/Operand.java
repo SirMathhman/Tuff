@@ -7,17 +7,17 @@ public final class Operand {
 	public final Boolean isBoolean;
 
 	public Operand(java.math.BigInteger value, String unsignedOrSigned, String width) {
-		this(value, unsignedOrSigned, width, null);
-	}
-
-	public Operand(java.math.BigInteger value, Boolean isBoolean) {
-		this(value, null, null, isBoolean);
-	}
-
-	Operand(java.math.BigInteger value, String unsignedOrSigned, String width, Boolean isBoolean) {
 		this.value = value;
 		this.unsignedOrSigned = unsignedOrSigned;
 		this.width = width;
+		this.isBoolean = null;
+	}
+
+	public Operand(java.math.BigInteger value, Boolean isBoolean) {
+		this.value = value;
+		this.unsignedOrSigned = null;
+		this.width = null;
 		this.isBoolean = isBoolean;
 	}
+
 }

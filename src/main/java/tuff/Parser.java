@@ -218,10 +218,11 @@ public final class Parser {
 		String unsignedOrSigned = null;
 		String width = null;
 		boolean declaredBool = false;
+		DeclaredType dt = null;
 		if (i < n && s.charAt(i) == ':') {
 			i++; // consume ':'
 			skipWhitespace();
-			DeclaredType dt = readDeclaredType();
+			dt = readDeclaredType();
 			declaredBool = dt.isBool;
 			unsignedOrSigned = dt.unsignedOrSigned;
 			width = dt.width;
@@ -231,7 +232,7 @@ public final class Parser {
 			throw new IllegalArgumentException("missing = in let");
 		i++; // consume '='
 		Operand exprVal = parseLogicalOr();
-		return applyDeclaredType(name, declaredBool, unsignedOrSigned, width, exprVal);
+		return applyDeclaredType(name, dt, exprVal);
 	}
 
 	// parse a top-level sequence of statements (let and expressions) ending at EOF
@@ -283,26 +284,28 @@ public final class Parser {
 		return dt;
 	}
 
-	private Operand applyDeclaredType(String name, boolean declaredBool, String unsignedOrSigned, String width, Operand exprVal) {
-		if (declaredBool) {
+	private Operand applyDeclaredType(String name, DeclaredType dt, Operand exprVal) {
+		if (dt != null && dt.isBool) {
 			if (exprVal.isBoolean == null) {
 				throw new IllegalArgumentException("typed Bool assignment requires boolean operand");
 			}
-			locals.put(name, new Operand(exprVal.value, null, null, true));
-			return new Operand(exprVal.value, null, null, true);
+			locals.put(name, new Operand(exprVal.value, true));
+			return new Operand(exprVal.value, true);
 		}
-		if (unsignedOrSigned != null && width != null) {
+		if (dt != null && dt.unsignedOrSigned != null && dt.width != null) {
 			if (exprVal.isBoolean != null) {
 				throw new IllegalArgumentException("typed numeric assignment requires numeric operand");
 			}
 			if (exprVal.unsignedOrSigned != null && exprVal.width != null) {
-				if (!unsignedOrSigned.equals(exprVal.unsignedOrSigned) || !width.equals(exprVal.width)) {
+				if (!dt.unsignedOrSigned.equals(exprVal.unsignedOrSigned) || !dt.width.equals(exprVal.width)) {
 					throw new IllegalArgumentException("mismatched typed assignment");
 				}
 			}
-			App.validateRange(exprVal.value.toString(), unsignedOrSigned, width);
+			App.validateRange(exprVal.value.toString(), dt.unsignedOrSigned, dt.width);
 		}
-		locals.put(name, new Operand(exprVal.value, unsignedOrSigned, width));
-		return new Operand(exprVal.value, unsignedOrSigned, width);
+		String signed = dt != null ? dt.unsignedOrSigned : null;
+		String w = dt != null ? dt.width : null;
+		locals.put(name, new Operand(exprVal.value, signed, w));
+		return new Operand(exprVal.value, signed, w);
 	}
 }
