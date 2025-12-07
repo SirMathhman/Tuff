@@ -103,8 +103,6 @@ public final class App {
 			return new Operand(new java.math.BigInteger(token), null, null);
 		}
 
-        
-
 		java.util.regex.Matcher m = java.util.regex.Pattern.compile("^([-+]?\\d+)(?:(U|I)(8|16|32|64))?$").matcher(token);
 		if (!m.matches()) {
 			throw new IllegalArgumentException("invalid operand: " + token);

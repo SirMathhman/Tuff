@@ -39,7 +39,7 @@ public class AppTest {
 	@Test
 	void interpretAddU8ReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50U8"));
-	}
+	} 
 
 	@Test
 	void interpretChainedU8AdditionReturnsSum() {
@@ -69,6 +69,11 @@ public class AppTest {
 	@Test
 	void interpretMixedDifferentSuffixesThrows() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("100U8 + 200U16"));
+	}
+
+	@Test
+	void interpretMixedDifferentSuffixesInChainThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("100U8 + 3 + 200U16"));
 	}
 
 	@Test
