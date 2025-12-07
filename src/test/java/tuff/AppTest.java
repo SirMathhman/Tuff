@@ -102,6 +102,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretTwoTopLevelLetsAndExpression() {
+		assertEquals("300", App.interpret("let x : I32 = 100; let y : I32 = 200; x + y"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}
