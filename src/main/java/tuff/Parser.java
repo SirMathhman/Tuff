@@ -299,11 +299,25 @@ public final class Parser {
 		int start = i;
 		i += name.length();
 		skipWhitespace();
-		if (i < n && s.charAt(i) == '=') {
-			i++; // consume '='
-			Operand val = parseLogicalOr();
-			new AssignmentUtils(locals, mutables, declaredTypes).assign(name, val);
-			return locals.get(name);
+		if (i < n) {
+			// simple assignment '='
+			if (s.charAt(i) == '=') {
+				i++; // consume '='
+				Operand val = parseLogicalOr();
+				new AssignmentUtils(locals, mutables, declaredTypes).assign(name, val);
+				return locals.get(name);
+			}
+			// compound assignment like '+=', '-=', '*=', '/=', '%='
+			if (i + 1 < n) {
+				char op = s.charAt(i);
+				char next = s.charAt(i + 1);
+				if ((op == '+' || op == '-' || op == '*' || op == '/' || op == '%') && next == '=') {
+					i += 2; // consume operator and '='
+					Operand val = parseLogicalOr();
+					new AssignmentUtils(locals, mutables, declaredTypes).assignCompound(name, op, val);
+					return locals.get(name);
+				}
+			}
 		}
 		i = start;
 		return null;

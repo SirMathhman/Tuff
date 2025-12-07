@@ -228,13 +228,21 @@ public final class App {
 		if (("/".equals(op) || "%".equals(op)) && java.math.BigInteger.ZERO.equals(b)) {
 			throw new IllegalArgumentException("division by zero");
 		}
+		if ("+".equals(op)) {
+			return a.add(b);
+		}
+		if ("-".equals(op)) {
+			return a.subtract(b);
+		}
 		if ("*".equals(op)) {
 			return a.multiply(b);
 		}
 		if ("/".equals(op)) {
 			return a.divide(b);
 		}
-		// percent
-		return a.remainder(b);
+		if ("%".equals(op)) {
+			return a.remainder(b);
+		}
+		throw new IllegalArgumentException("unknown operator " + op);
 	}
 }
