@@ -32,6 +32,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretWithU8SuffixReturnsNumber() {
+		assertEquals("100", App.interpret("100U8"));
+	}
+
+	@Test
 	void interpretArbitraryPositiveIntegerReturnsSame() {
 		assertEquals("42", App.interpret("42"));
 	}

@@ -20,6 +20,13 @@ public final class App {
 		if (input.matches("[-+]?\\d+")) {
 			return input;
 		}
+
+		// Accept an integer followed by an optional U8 suffix (e.g. "100U8").
+		// Return only the integer portion when present.
+		java.util.regex.Matcher m = java.util.regex.Pattern.compile("^([-+]?\\d+)(?:U8)?$").matcher(input);
+		if (m.matches()) {
+			return m.group(1);
+		}
 		throw new IllegalArgumentException("interpret: non-empty non-integer input not supported");
 	}
 }
