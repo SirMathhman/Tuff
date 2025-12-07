@@ -37,6 +37,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretAddU8ReturnsSum() {
+		assertEquals("150", App.interpret("100U8 + 50U8"));
+	}
+
+	@Test
 	void interpretU16ReturnsNumber() {
 		assertEquals("456", App.interpret("456U16"));
 	}

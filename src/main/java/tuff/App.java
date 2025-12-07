@@ -15,6 +15,12 @@ public final class App {
 			return "";
 		}
 
+		// Simple addition expressions like "100U8 + 50U8"
+		java.util.regex.Matcher addMatcher = java.util.regex.Pattern.compile("^\\s*([-+]?\\S+)\\s*\\+\\s*([-+]?\\S+)\\s*$").matcher(input);
+		if (addMatcher.matches()) {
+			return evaluateAddition(addMatcher.group(1), addMatcher.group(2));
+		}
+
 		if (isSignedInteger(input)) {
 			return input;
 		}
@@ -45,6 +51,59 @@ public final class App {
 		return s != null && s.matches("[-+]?\\d+");
 	}
 
+	private static String evaluateAddition(String left, String right) {
+		Operand l = parseOperand(left);
+		Operand r = parseOperand(right);
+
+		java.math.BigInteger sum = l.value.add(r.value);
+
+		if (l.unsignedOrSigned != null && r.unsignedOrSigned != null
+				&& l.unsignedOrSigned.equals(r.unsignedOrSigned)
+				&& l.width != null && l.width.equals(r.width)) {
+			validateRange(sum.toString(), l.unsignedOrSigned, l.width);
+		}
+
+		return sum.toString();
+	}
+
+	private static final class Operand {
+		final java.math.BigInteger value;
+		final String unsignedOrSigned;
+		final String width;
+
+		Operand(java.math.BigInteger value, String unsignedOrSigned, String width) {
+			this.value = value;
+			this.unsignedOrSigned = unsignedOrSigned;
+			this.width = width;
+		}
+	}
+
+	private static Operand parseOperand(String token) {
+		token = token.trim();
+		if (isSignedInteger(token)) {
+			return new Operand(new java.math.BigInteger(token), null, null);
+		}
+
+		java.util.regex.Matcher m = java.util.regex.Pattern.compile("^([-+]?\\d+)(?:(U|I)(8|16|32|64))?$").matcher(token);
+		if (!m.matches()) {
+			throw new IllegalArgumentException("invalid operand: " + token);
+		}
+
+		String number = m.group(1);
+		String unsignedOrSigned = m.group(2);
+		String width = m.group(3);
+
+		if (unsignedOrSigned != null && "U".equals(unsignedOrSigned) && number.startsWith("-")) {
+			throw new IllegalArgumentException("unsigned type with negative value");
+		}
+
+		if (width != null) {
+			validateRange(number, unsignedOrSigned, width);
+		}
+
+		return new Operand(new java.math.BigInteger(number), unsignedOrSigned, width);
+	}
+
 	private static void validateRange(String number, String unsignedOrSigned, String width) {
 		java.math.BigInteger value = new java.math.BigInteger(number);
 		java.math.BigInteger[] range = rangeFor(unsignedOrSigned, width);
@@ -59,26 +118,29 @@ public final class App {
 		switch (width) {
 			case "8":
 				if (isUnsigned) {
-					return new java.math.BigInteger[]{java.math.BigInteger.ZERO, java.math.BigInteger.valueOf(255)};
+					return new java.math.BigInteger[] { java.math.BigInteger.ZERO, java.math.BigInteger.valueOf(255) };
 				}
-				return new java.math.BigInteger[]{java.math.BigInteger.valueOf(-128), java.math.BigInteger.valueOf(127)};
+				return new java.math.BigInteger[] { java.math.BigInteger.valueOf(-128), java.math.BigInteger.valueOf(127) };
 			case "16":
 				if (isUnsigned) {
-					return new java.math.BigInteger[]{java.math.BigInteger.ZERO, java.math.BigInteger.valueOf(65535)};
+					return new java.math.BigInteger[] { java.math.BigInteger.ZERO, java.math.BigInteger.valueOf(65535) };
 				}
-				return new java.math.BigInteger[]{java.math.BigInteger.valueOf(-32768), java.math.BigInteger.valueOf(32767)};
+				return new java.math.BigInteger[] { java.math.BigInteger.valueOf(-32768), java.math.BigInteger.valueOf(32767) };
 			case "32":
 				if (isUnsigned) {
-					return new java.math.BigInteger[]{java.math.BigInteger.ZERO, new java.math.BigInteger("4294967295")};
+					return new java.math.BigInteger[] { java.math.BigInteger.ZERO, new java.math.BigInteger("4294967295") };
 				}
-				return new java.math.BigInteger[]{java.math.BigInteger.valueOf(Integer.MIN_VALUE), java.math.BigInteger.valueOf(Integer.MAX_VALUE)};
+				return new java.math.BigInteger[] { java.math.BigInteger.valueOf(Integer.MIN_VALUE),
+						java.math.BigInteger.valueOf(Integer.MAX_VALUE) };
 			case "64":
 				if (isUnsigned) {
-					return new java.math.BigInteger[]{java.math.BigInteger.ZERO, new java.math.BigInteger("18446744073709551615")};
+					return new java.math.BigInteger[] { java.math.BigInteger.ZERO,
+							new java.math.BigInteger("18446744073709551615") };
 				}
-				return new java.math.BigInteger[]{java.math.BigInteger.valueOf(Long.MIN_VALUE), java.math.BigInteger.valueOf(Long.MAX_VALUE)};
+				return new java.math.BigInteger[] { java.math.BigInteger.valueOf(Long.MIN_VALUE),
+						java.math.BigInteger.valueOf(Long.MAX_VALUE) };
 			default:
-				return new java.math.BigInteger[]{java.math.BigInteger.ZERO.negate(), java.math.BigInteger.ZERO};
+				return new java.math.BigInteger[] { java.math.BigInteger.ZERO.negate(), java.math.BigInteger.ZERO };
 		}
 	}
 }
