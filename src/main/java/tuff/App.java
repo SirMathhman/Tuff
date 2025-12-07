@@ -15,11 +15,19 @@ public final class App {
 			return "";
 		}
 
+		// boolean literal
+		String t = input.trim();
+		if ("true".equals(t) || "false".equals(t)) {
+			return t;
+		}
+
 		// Try parsing simple expressions containing + and - (left-to-right evaluation).
 		String exprResult = tryEvaluateExpression(input);
 		if (exprResult != null) {
 			return exprResult;
 		}
+
+        
 		// Simple addition expressions like "100U8 + 50U8"
 		java.util.regex.Matcher addMatcher = java.util.regex.Pattern.compile("^\\s*([-+]?\\S+)\\s*\\+\\s*([-+]?\\S+)\\s*$")
 				.matcher(input);

@@ -142,6 +142,16 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretBooleanTrueReturnsTrue() {
+		assertEquals("true", App.interpret("true"));
+	}
+
+	@Test
+	void interpretBooleanFalseReturnsFalse() {
+		assertEquals("false", App.interpret("false"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}
