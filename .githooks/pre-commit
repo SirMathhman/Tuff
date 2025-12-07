@@ -1,0 +1,10 @@
+#!/bin/sh
+# Run tests before committing; abort commit on failure.
+echo "Running mvn -q test before commit..."
+if mvn -q test; then
+  echo "Tests passed — continuing commit."
+  exit 0
+else
+  echo "Tests failed — aborting commit." 1>&2
+  exit 1
+fi
