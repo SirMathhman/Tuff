@@ -53,13 +53,15 @@ public final class Parser {
 		return left;
 	}
 
-	// equality level (==, !=) - binds looser than additive but tighter than logical-and
+	// equality level (==, !=) - binds looser than additive but tighter than
+	// logical-and
 	Operand parseEquality() {
 		Operand left = parseExpression();
 		while (true) {
 			skipWhitespace();
 			String op = readEqualityOperator();
-			if (op == null) break;
+			if (op == null)
+				break;
 			Operand right = parseExpression();
 			left = computeEqualityOp(left, right, op);
 		}
@@ -67,24 +69,62 @@ public final class Parser {
 	}
 
 	private String readEqualityOperator() {
-		if (i + 1 < n && s.charAt(i) == '=' && s.charAt(i + 1) == '=') {
-			i += 2;
-			return "==";
+		if (i + 1 < n) {
+			String two = s.substring(i, i + 2);
+			if ("==".equals(two) || "!=".equals(two) || "<=".equals(two) || ">=".equals(two)) {
+				i += 2;
+				return two;
+			}
 		}
-		if (i + 1 < n && s.charAt(i) == '!' && s.charAt(i + 1) == '=') {
-			i += 2;
-			return "!=";
+		if (i < n) {
+			char c = s.charAt(i);
+			if (c == '<' || c == '>') {
+				i++;
+				return String.valueOf(c);
+			}
 		}
 		return null;
 	}
 
 	private Operand computeEqualityOp(Operand left, Operand right, String op) {
+		if ("==".equals(op) || "!=".equals(op)) {
+			return computeEqualityEqOp(left, right, op);
+		}
+		return computeRelationalOp(left, right, op);
+	}
+
+	private Operand computeEqualityEqOp(Operand left, Operand right, String op) {
 		if ((left.isBoolean != null && right.isBoolean == null) || (left.isBoolean == null && right.isBoolean != null)) {
 			throw new IllegalArgumentException("equality requires operands of same kind");
 		}
 		boolean eq = left.value.equals(right.value);
 		boolean result = "==".equals(op) ? eq : !eq;
 		return new Operand(result ? java.math.BigInteger.ONE : java.math.BigInteger.ZERO, true);
+	}
+
+	private Operand computeRelationalOp(Operand left, Operand right, String op) {
+		if (left.isBoolean != null || right.isBoolean != null) {
+			throw new IllegalArgumentException("relational operators require numeric operands");
+		}
+		int cmp = left.value.compareTo(right.value);
+		boolean res;
+		switch (op) {
+			case "<":
+				res = cmp < 0;
+				break;
+			case "<=":
+				res = cmp <= 0;
+				break;
+			case ">":
+				res = cmp > 0;
+				break;
+			case ">=":
+				res = cmp >= 0;
+				break;
+			default:
+				throw new IllegalArgumentException("unknown operator " + op);
+		}
+		return new Operand(res ? java.math.BigInteger.ONE : java.math.BigInteger.ZERO, true);
 	}
 
 	// logical-and level (&&) - binds looser than equality

@@ -197,6 +197,24 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretInequalityOperator() {
+		assertEquals("true", App.interpret("100 != 200"));
+		assertEquals("false", App.interpret("100 != 100"));
+	}
+
+	@Test
+	void interpretRelationalOperators() {
+		assertEquals("true", App.interpret("100 < 200"));
+		assertEquals("false", App.interpret("200 < 100"));
+		assertEquals("true", App.interpret("200 <= 200"));
+		assertEquals("false", App.interpret("201 <= 200"));
+		assertEquals("true", App.interpret("200 > 100"));
+		assertEquals("false", App.interpret("100 > 200"));
+		assertEquals("true", App.interpret("200 >= 200"));
+		assertEquals("false", App.interpret("199 >= 200"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}
