@@ -57,6 +57,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretAddU8OverflowThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("100U8 + 200U8"));
+	}
+
+	@Test
 	void interpretU16ReturnsNumber() {
 		assertEquals("456", App.interpret("456U16"));
 	}
