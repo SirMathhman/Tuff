@@ -37,6 +37,41 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretU16ReturnsNumber() {
+		assertEquals("456", App.interpret("456U16"));
+	}
+
+	@Test
+	void interpretU32ReturnsNumber() {
+		assertEquals("789", App.interpret("789U32"));
+	}
+
+	@Test
+	void interpretU64ReturnsNumber() {
+		assertEquals("1000", App.interpret("1000U64"));
+	}
+
+	@Test
+	void interpretI8ReturnsNumber() {
+		assertEquals("-1", App.interpret("-1I8"));
+	}
+
+	@Test
+	void interpretI16ReturnsNumber() {
+		assertEquals("-2", App.interpret("-2I16"));
+	}
+
+	@Test
+	void interpretI32ReturnsNumber() {
+		assertEquals("-3", App.interpret("-3I32"));
+	}
+
+	@Test
+	void interpretI64ReturnsNumber() {
+		assertEquals("-4", App.interpret("-4I64"));
+	}
+
+	@Test
 	void interpretArbitraryPositiveIntegerReturnsSame() {
 		assertEquals("42", App.interpret("42"));
 	}

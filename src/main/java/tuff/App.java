@@ -21,9 +21,12 @@ public final class App {
 			return input;
 		}
 
-		// Accept an integer followed by an optional U8 suffix (e.g. "100U8").
-		// Return only the integer portion when present.
-		java.util.regex.Matcher m = java.util.regex.Pattern.compile("^([-+]?\\d+)(?:U8)?$").matcher(input);
+		// Accept an integer followed by an optional integer width/type suffix.
+		// Supported suffixes: U8, U16, U32, U64, I8, I16, I32, I64.
+		// If present, return only the integer portion.
+		java.util.regex.Matcher m = java.util.regex.Pattern
+				.compile("^([-+]?\\d+)(?:(?:U|I)(?:8|16|32|64))?$")
+				.matcher(input);
 		if (m.matches()) {
 			return m.group(1);
 		}
