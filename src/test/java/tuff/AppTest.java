@@ -27,6 +27,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretLargeNumberReturnsSame() {
+		assertEquals("163638", App.interpret("163638"));
+	}
+
+	@Test
 	void interpretNonEmptyThrows() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("hello"));
 	}
