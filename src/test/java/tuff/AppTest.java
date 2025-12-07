@@ -52,6 +52,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretPlainIntegerAddPlainIntegerReturnsSum() {
+		assertEquals("150", App.interpret("100 + 50"));
+	}
+
+	@Test
 	void interpretU16ReturnsNumber() {
 		assertEquals("456", App.interpret("456U16"));
 	}
