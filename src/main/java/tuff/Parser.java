@@ -37,9 +37,12 @@ public final class Parser {
 			if (i >= n)
 				break;
 			char c = s.charAt(i);
-			if (c == '+' || c == '-') {
+				if (c == '+' || c == '-') {
 				i++;
 				Operand right = parseTerm();
+					if (left.isBoolean != null || right.isBoolean != null) {
+						throw new IllegalArgumentException("arithmetic operators require numeric operands");
+					}
 				java.math.BigInteger value = (c == '+') ? left.value.add(right.value) : left.value.subtract(right.value);
 				String[] kind = App.combineKinds(left, right);
 				left = new Operand(value, kind[0], kind[1]);
@@ -102,6 +105,9 @@ public final class Parser {
 			if (c == '*' || c == '/' || c == '%') {
 				i++;
 				Operand right = parseFactor();
+				if (left.isBoolean != null || right.isBoolean != null) {
+					throw new IllegalArgumentException("arithmetic operators require numeric operands");
+				}
 				java.math.BigInteger computed = App.computeBinaryOp(left.value, right.value, String.valueOf(c));
 				String[] kind = App.combineKinds(left, right);
 				left = new Operand(computed, kind[0], kind[1]);
