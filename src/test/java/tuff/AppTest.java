@@ -20,7 +20,12 @@ public class AppTest {
 	void interpretOneHundredReturnsSame() {
 		assertEquals("100", App.interpret("100"));
 	}
-  
+
+	@Test
+	void interpretTwoHundredReturnsSame() {
+		assertEquals("200", App.interpret("200"));
+	}
+
 	@Test
 	void interpretNonEmptyThrows() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("hello"));
