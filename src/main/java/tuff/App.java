@@ -119,7 +119,7 @@ public final class App {
 		// Allow parsing top-level blocks when we have statements: let, while, match,
 		// if, or a leading '{'
 		if (p.startsWithLet() || p.startsWithKeyword("while") || p.startsWithKeyword("match") || p.startsWithKeyword("if")
-				|| p.peekChar() == '{') {
+				|| p.startsWithKeyword("fn") || p.peekChar() == '{') {
 			result = p.parseTopLevelBlock();
 		} else {
 			result = p.parseLogicalOr();
@@ -146,32 +146,6 @@ public final class App {
 		if (bKind != null)
 			return new String[] { b.unsignedOrSigned, b.width };
 		return new String[] { null, null };
-	}
-
-	static Operand parseOperand(String token) {
-		token = token.trim();
-		if (isSignedInteger(token)) {
-			return new Operand(new java.math.BigInteger(token), null, null);
-		}
-
-		java.util.regex.Matcher m = java.util.regex.Pattern.compile("^([-+]?\\d+)(?:(U|I)(8|16|32|64))?$").matcher(token);
-		if (!m.matches()) {
-			throw new IllegalArgumentException("invalid operand: " + token);
-		}
-
-		String number = m.group(1);
-		String unsignedOrSigned = m.group(2);
-		String width = m.group(3);
-
-		if (unsignedOrSigned != null && "U".equals(unsignedOrSigned) && number.startsWith("-")) {
-			throw new IllegalArgumentException("unsigned type with negative value");
-		}
-
-		if (width != null) {
-			validateRange(number, unsignedOrSigned, width);
-		}
-
-		return new Operand(new java.math.BigInteger(number), unsignedOrSigned, width);
 	}
 
 	private static String singleTypedKind(java.util.List<Operand> operands) {

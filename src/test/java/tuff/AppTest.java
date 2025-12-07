@@ -296,6 +296,18 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretSimpleFunctionCall() {
+		assertEquals("300",
+				App.interpret("fn addTwo(first : I32, second : I32) : I32 => { return first + second; } addTwo(100, 200)"));
+	}
+
+	@Test
+	void interpretSimpleFunctionCallNoBraces() {
+		assertEquals("300",
+				App.interpret("fn addTwo(first : I32, second : I32) : I32 => return first + second; addTwo(100, 200)"));
+	}
+
+	@Test
 	void interpretMatchNoDefaultThrows() {
 		assertThrows(IllegalArgumentException.class,
 				() -> App.interpret("let x = match 300 { case 100 => 5; case 200 => 2 }; x"));

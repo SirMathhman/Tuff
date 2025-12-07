@@ -13,6 +13,7 @@ public final class Parser {
 	private Map<String, Boolean> mutables = new HashMap<>();
 	// track declared (typed but not-yet-initialized) variables
 	private Map<String, DeclaredType> declaredTypes = new HashMap<>();
+	private Map<String, FunctionDef> functions = new HashMap<>();
 
 	// tracks how many loops we're currently inside (supports nested loops)
 	private int loopDepth = 0;
@@ -27,6 +28,20 @@ public final class Parser {
 
 	Map<String, DeclaredType> getDeclaredTypes() {
 		return declaredTypes;
+	}
+
+	Map<String, FunctionDef> getFunctions() {
+		return functions;
+	}
+
+	void setFunctions(Map<String, FunctionDef> f) {
+		this.functions = f;
+	}
+
+	private boolean allowReturn = false;
+
+	void setAllowReturn(boolean allowReturn) {
+		this.allowReturn = allowReturn;
 	}
 
 	public Parser(String s) {
@@ -240,6 +255,9 @@ public final class Parser {
 		if (num != null)
 			return num;
 
+		Operand fncall = parseFunctionCallIfPresent();
+		if (fncall != null)
+			return fncall;
 		Operand id = parseIdentifierLookup();
 		if (id != null)
 			return id;
@@ -326,6 +344,103 @@ public final class Parser {
 		return null;
 	}
 
+	private Operand parseFunctionCallIfPresent() {
+		skipWhitespace();
+		java.util.regex.Matcher idm = java.util.regex.Pattern.compile("^[A-Za-z_]\\w*").matcher(s.substring(i));
+		if (!idm.find())
+			return null;
+		String name = idm.group();
+		int start = i;
+		i += name.length();
+		skipWhitespace();
+		if (i >= n || s.charAt(i) != '(') {
+			i = start;
+			return null;
+		}
+		i++; // consume '('
+		java.util.List<Operand> args = new java.util.ArrayList<>();
+		skipWhitespace();
+		if (i < n && s.charAt(i) != ')') {
+			while (true) {
+				Operand arg = parseLogicalOr();
+				args.add(arg);
+				skipWhitespace();
+				if (i < n && s.charAt(i) == ',') {
+					i++; // consume comma
+					skipWhitespace();
+					continue;
+				}
+				break;
+			}
+		}
+		skipWhitespace();
+		if (i >= n || s.charAt(i) != ')')
+			throw new IllegalArgumentException("missing ')' in function call");
+		i++; // consume ')'
+
+		// resolve function
+		FunctionDef fd = functions.get(name);
+		if (fd == null) {
+			// not a function, restore and treat as identifier
+			i = start;
+			return null;
+		}
+
+		return callFunction(fd, args);
+	}
+
+	private Operand callFunction(FunctionDef fd, java.util.List<Operand> args) {
+		if (args.size() != fd.paramNames.size())
+			throw new IllegalArgumentException("argument count mismatch in function call");
+
+		// prepare params locals
+		java.util.Map<String, Operand> fLocals = new java.util.HashMap<>();
+		for (int idx = 0; idx < args.size(); idx++) {
+			Operand a = args.get(idx);
+			DeclaredType pdt = fd.paramTypes.get(idx);
+			if (pdt != null && pdt.isBool) {
+				if (a.isBoolean == null)
+					throw new IllegalArgumentException("typed Bool assignment requires boolean operand");
+				fLocals.put(fd.paramNames.get(idx), new Operand(a.value, true));
+			} else if (pdt != null && pdt.unsignedOrSigned != null && pdt.width != null) {
+				if (a.isBoolean != null)
+					throw new IllegalArgumentException("typed numeric assignment requires numeric operand");
+				App.validateRange(a.value.toString(), pdt.unsignedOrSigned, pdt.width);
+				fLocals.put(fd.paramNames.get(idx), new Operand(a.value, pdt.unsignedOrSigned, pdt.width));
+			} else {
+				fLocals.put(fd.paramNames.get(idx), a);
+			}
+		}
+
+		Parser p2 = new Parser(fd.bodySource);
+		// provide access to functions for recursion
+		p2.setFunctions(new java.util.HashMap<>(this.functions));
+		p2.setLocals(new java.util.HashMap<>(fLocals));
+		p2.setMutables(new java.util.HashMap<>());
+		p2.setDeclaredTypes(new java.util.HashMap<>());
+		p2.setAllowReturn(true);
+
+		try {
+			Operand res = p2.parseTopLevelBlock();
+			return res;
+		} catch (ReturnException re) {
+			Operand r = re.value;
+			// validate return type if present
+			if (fd.returnType != null) {
+				if (fd.returnType.isBool) {
+					if (r.isBoolean == null)
+						throw new IllegalArgumentException("typed Bool return requires boolean operand");
+				} else if (fd.returnType.unsignedOrSigned != null && fd.returnType.width != null) {
+					if (r.isBoolean != null)
+						throw new IllegalArgumentException("typed numeric return requires numeric operand");
+					App.validateRange(r.value.toString(), fd.returnType.unsignedOrSigned, fd.returnType.width);
+					return new Operand(r.value, fd.returnType.unsignedOrSigned, fd.returnType.width);
+				}
+			}
+			return r;
+		}
+	}
+
 	private Operand parseParenthesized() {
 		if (i < n && s.charAt(i) == '(') {
 			i++; // consume '('
@@ -344,9 +459,21 @@ public final class Parser {
 		if (s.startsWith("let", i) && (i + 3 == n || !Character.isJavaIdentifierPart(s.charAt(i + 3)))) {
 			return parseLetStatement();
 		}
+		if (s.startsWith("fn", i) && (i + 2 == n || !Character.isJavaIdentifierPart(s.charAt(i + 2)))) {
+			new FunctionDefinitionParser(this).parseFunctionDefinition();
+			return null;
+		}
 		if (s.startsWith("while", i) && (i + 5 == n || !Character.isJavaIdentifierPart(s.charAt(i + 5)))) {
 			new WhileStatementParser(this).parseWhileStatement();
 			return null;
+		}
+		if (s.startsWith("return", i) && (i + 6 == n || !Character.isJavaIdentifierPart(s.charAt(i + 6)))) {
+			if (!allowReturn)
+				throw new IllegalArgumentException("return outside function");
+			consumeKeyword("return");
+			skipWhitespace();
+			Operand ret = parseLogicalOr();
+			throw new ReturnException(ret);
 		}
 		if (s.startsWith("break", i) && (i + 5 == n || !Character.isJavaIdentifierPart(s.charAt(i + 5)))) {
 			if (loopDepth == 0)
@@ -431,9 +558,11 @@ public final class Parser {
 		Map<String, Operand> prev = locals;
 		Map<String, Boolean> prevMut = mutables;
 		Map<String, DeclaredType> prevDeclared = declaredTypes;
+		Map<String, FunctionDef> prevFuncs = functions;
 		locals = new HashMap<>(prev);
 		mutables = new HashMap<>(prevMut);
 		declaredTypes = new HashMap<>(prevDeclared);
+		functions = new HashMap<>(prevFuncs);
 		Operand last = null;
 		while (true) {
 			skipWhitespace();
@@ -449,6 +578,7 @@ public final class Parser {
 		}
 		locals = prev;
 		mutables = prevMut;
+		functions = prevFuncs;
 		return last == null ? new Operand(java.math.BigInteger.ZERO, null, null) : last;
 	}
 
