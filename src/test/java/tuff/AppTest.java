@@ -162,6 +162,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretLogicalOrWithNumericAndBooleanThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("100U8 || false"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}
