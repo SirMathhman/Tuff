@@ -17,6 +17,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretOneHundredReturnsSame() {
+		assertEquals("100", App.interpret("100"));
+	}
+  
+	@Test
 	void interpretNonEmptyThrows() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("hello"));
 	}
