@@ -77,6 +77,16 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretUnsignedOverflowThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("256U8"));
+	}
+
+	@Test
+	void interpretUnsignedEdgeAccepts() {
+		assertEquals("255", App.interpret("255U8"));
+	}
+
+	@Test
 	void interpretArbitraryPositiveIntegerReturnsSame() {
 		assertEquals("42", App.interpret("42"));
 	}
