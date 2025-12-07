@@ -1,10 +1,56 @@
 #!/bin/sh
 # Run tests before committing; abort commit on failure.
 echo "Running mvn -q test before commit..."
-if mvn -q test; then
-  echo "Tests passed — continuing commit."
-  exit 0
-else
+if ! mvn -q test; then
   echo "Tests failed — aborting commit." 1>&2
   exit 1
 fi
+
+echo "Checking tracked files for maximum length (max ${MAX_LINES:-500} lines)..."
+
+# Maximum allowed lines per file
+MAX_LINES=500
+
+# Iterate all tracked files (handle spaces/newlines safely with -z)
+tmpfile=$(mktemp) || tmpfile=".git/.precommit_filelist_$$"
+git ls-files -z > "$tmpfile"
+while IFS= read -r -d '' file; do
+  # Obtain the content that will be committed: prefer staged/index version when present
+  if git show :"$file" >/dev/null 2>&1; then
+    # staged content
+    # skip binary files (contain NUL)
+    if git show :"$file" | grep -q $'\x00'; then
+      continue
+    fi
+    lines=$(git show :"$file" | wc -l)
+  else
+    # not staged — try HEAD content (when available)
+    if git rev-parse --verify --quiet HEAD >/dev/null 2>&1 && git show HEAD:"$file" >/dev/null 2>&1; then
+      if git show HEAD:"$file" | grep -q $'\x00'; then
+        continue
+      fi
+      lines=$(git show HEAD:"$file" | wc -l)
+    elif [ -f "$file" ]; then
+      if grep -q $'\x00' -- "$file" 2>/dev/null; then
+        continue
+      fi
+      lines=$(wc -l < "$file")
+    else
+      # file not present in index/HEAD/working tree — skip
+      continue
+    fi
+  fi
+
+  # trim whitespace from count
+  lines=$(echo "$lines" | tr -d '[:space:]')
+  if [ -n "$lines" ] && [ "$lines" -gt "$MAX_LINES" ]; then
+    echo "ERROR: $file has $lines lines — exceeds ${MAX_LINES} lines. Split the file into smaller files before committing." 1>&2
+    echo "Note: pre-commit will not attempt to auto-modify or trim files to pass this check." 1>&2
+    exit 1
+  fi
+done < "$tmpfile"
+rm -f "$tmpfile" >/dev/null 2>&1 || true
+
+echo "All tracked files are within ${MAX_LINES} lines."
+
+exit 0
