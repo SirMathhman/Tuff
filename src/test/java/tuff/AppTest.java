@@ -241,6 +241,12 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretMatchNoDefaultThrows() {
+		assertThrows(IllegalArgumentException.class,
+				() -> App.interpret("let x = match 300 { case 100 => 5; case 200 => 2 }; x"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}
