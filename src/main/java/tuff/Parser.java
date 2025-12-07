@@ -9,6 +9,8 @@ public final class Parser {
 	private int i = 0;
 
 	private Map<String, Operand> locals = new HashMap<>();
+	// track mutability for variables in scope
+	private Map<String, Boolean> mutables = new HashMap<>();
 
 	public Parser(String s) {
 		this.s = s;
@@ -274,6 +276,25 @@ public final class Parser {
 		return locals.get(name);
 	}
 
+	private Operand parseAssignmentIfPresent() {
+		skipWhitespace();
+		java.util.regex.Matcher idm = java.util.regex.Pattern.compile("^[A-Za-z_]\\w*").matcher(s.substring(i));
+		if (!idm.find())
+			return null;
+		String name = idm.group();
+		int start = i;
+		i += name.length();
+		skipWhitespace();
+		if (i < n && s.charAt(i) == '=') {
+			i++; // consume '='
+			Operand val = parseLogicalOr();
+			new AssignmentUtils(locals, mutables).assign(name, val);
+			return locals.get(name);
+		}
+		i = start;
+		return null;
+	}
+
 	private Operand parseParenthesized() {
 		if (i < n && s.charAt(i) == '(') {
 			i++; // consume '('
@@ -299,31 +320,19 @@ public final class Parser {
 		return iep.parseIfExpression();
 	}
 
-	private static final class MatchArm {
-		final boolean isWildcard;
-		final Operand pattern; // null when wildcard
-		final Operand result;
-
-		MatchArm(boolean isWildcard, Operand pattern, Operand result) {
-			this.isWildcard = isWildcard;
-			this.pattern = pattern;
-			this.result = result;
-		}
-	}
-
 	private Operand parseMatchExpression() {
 		MatchExpressionParser mep = new MatchExpressionParser(this);
 		return mep.parseMatchExpression();
 	}
-
-
 
 	// parse a block { ... } with local variable declarations (let) and expression
 	// statements
 	private Operand parseBlock() {
 		i++; // we assume caller found '{'
 		Map<String, Operand> prev = locals;
+		Map<String, Boolean> prevMut = mutables;
 		locals = new HashMap<>(prev);
+		mutables = new HashMap<>(prevMut);
 		Operand last = null;
 		while (true) {
 			skipWhitespace();
@@ -336,7 +345,14 @@ public final class Parser {
 			if (s.startsWith("let", i) && (i + 3 == n || !Character.isJavaIdentifierPart(s.charAt(i + 3)))) {
 				last = parseLetStatement();
 			} else {
-				last = parseLogicalOr();
+				int save = i;
+				Operand assign = parseAssignmentIfPresent();
+				if (assign != null) {
+					last = assign;
+				} else {
+					i = save;
+					last = parseLogicalOr();
+				}
 			}
 			skipWhitespace();
 			if (i < n && s.charAt(i) == ';') {
@@ -352,42 +368,21 @@ public final class Parser {
 				throw new IllegalArgumentException("expected ';' or '}' in block");
 		}
 		locals = prev;
+		mutables = prevMut;
 		return last == null ? new Operand(java.math.BigInteger.ZERO, null, null) : last;
 	}
 
 	private Operand parseLetStatement() {
-		// caller ensures 'let' is present
-		i += 3; // consume 'let'
-		skipWhitespace();
-		java.util.regex.Matcher idm = java.util.regex.Pattern.compile("^[A-Za-z_]\\w*").matcher(s.substring(i));
-		if (!idm.find())
-			throw new IllegalArgumentException("invalid identifier in let");
-		String name = idm.group();
-		i += name.length();
-
-		// reject duplicate declarations in current visible scope
-		if (locals.containsKey(name)) {
-			throw new IllegalArgumentException("duplicate let declaration: " + name);
-		}
-		skipWhitespace();
-		DeclaredType dt = null;
-		if (i < n && s.charAt(i) == ':') {
-			i++; // consume ':'
-			skipWhitespace();
-			dt = readDeclaredType();
-		}
-		skipWhitespace();
-		if (i >= n || s.charAt(i) != '=')
-			throw new IllegalArgumentException("missing = in let");
-		i++; // consume '='
-		Operand exprVal = parseLogicalOr();
-		return applyDeclaredType(name, dt, exprVal);
+		LetStatementParser lsp = new LetStatementParser(this, locals, mutables);
+		return lsp.parseLetStatement();
 	}
 
 	// parse a top-level sequence of statements (let and expressions) ending at EOF
 	public Operand parseTopLevelBlock() {
 		Map<String, Operand> prev = locals;
+		Map<String, Boolean> prevMut = mutables;
 		locals = new HashMap<>(prev);
+		mutables = new HashMap<>(prevMut);
 		Operand last = null;
 		while (true) {
 			skipWhitespace();
@@ -396,7 +391,14 @@ public final class Parser {
 			if (s.startsWith("let", i) && (i + 3 == n || !Character.isJavaIdentifierPart(s.charAt(i + 3)))) {
 				last = parseLetStatement();
 			} else {
-				last = parseLogicalOr();
+				int save = i;
+				Operand assign = parseAssignmentIfPresent();
+				if (assign != null) {
+					last = assign;
+				} else {
+					i = save;
+					last = parseLogicalOr();
+				}
 			}
 			skipWhitespace();
 			if (i < n && s.charAt(i) == ';') {
@@ -406,56 +408,8 @@ public final class Parser {
 			// if not semicolon, loop will either consume more or end
 		}
 		locals = prev;
+		mutables = prevMut;
 		return last == null ? new Operand(java.math.BigInteger.ZERO, null, null) : last;
-	}
-
-	private static final class DeclaredType {
-		boolean isBool;
-		String unsignedOrSigned;
-		String width;
-	}
-
-	private DeclaredType readDeclaredType() {
-		DeclaredType dt = new DeclaredType();
-		java.util.regex.Matcher tm = java.util.regex.Pattern.compile("^(?:U|I)(?:8|16|32|64)").matcher(s.substring(i));
-		java.util.regex.Matcher bm = java.util.regex.Pattern.compile("^Bool").matcher(s.substring(i));
-		if (tm.find()) {
-			String type = tm.group();
-			dt.unsignedOrSigned = type.substring(0, 1);
-			dt.width = type.substring(1);
-			i += type.length();
-		} else if (bm.find()) {
-			dt.isBool = true;
-			i += 4; // length of "Bool"
-		} else {
-			throw new IllegalArgumentException("invalid type in let");
-		}
-		return dt;
-	}
-
-	private Operand applyDeclaredType(String name, DeclaredType dt, Operand exprVal) {
-		if (dt != null && dt.isBool) {
-			if (exprVal.isBoolean == null) {
-				throw new IllegalArgumentException("typed Bool assignment requires boolean operand");
-			}
-			locals.put(name, new Operand(exprVal.value, true));
-			return new Operand(exprVal.value, true);
-		}
-		if (dt != null && dt.unsignedOrSigned != null && dt.width != null) {
-			if (exprVal.isBoolean != null) {
-				throw new IllegalArgumentException("typed numeric assignment requires numeric operand");
-			}
-			if (exprVal.unsignedOrSigned != null && exprVal.width != null) {
-				if (!dt.unsignedOrSigned.equals(exprVal.unsignedOrSigned) || !dt.width.equals(exprVal.width)) {
-					throw new IllegalArgumentException("mismatched typed assignment");
-				}
-			}
-			App.validateRange(exprVal.value.toString(), dt.unsignedOrSigned, dt.width);
-		}
-		String signed = dt != null ? dt.unsignedOrSigned : null;
-		String w = dt != null ? dt.width : null;
-		locals.put(name, new Operand(exprVal.value, signed, w));
-		return new Operand(exprVal.value, signed, w);
 	}
 
 	// Helper methods for IfExpressionParser and MatchExpressionParser
@@ -486,10 +440,15 @@ public final class Parser {
 	}
 
 	boolean startsWithKeyword(String keyword) {
-		return s.startsWith(keyword, i) && (i + keyword.length() == n || !Character.isJavaIdentifierPart(s.charAt(i + keyword.length())));
+		return s.startsWith(keyword, i)
+				&& (i + keyword.length() == n || !Character.isJavaIdentifierPart(s.charAt(i + keyword.length())));
 	}
 
 	boolean startsWithArrow() {
 		return i + 1 < n && s.charAt(i) == '=' && s.charAt(i + 1) == '>';
+	}
+
+	String remainingInput() {
+		return s.substring(i);
 	}
 }

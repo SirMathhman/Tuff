@@ -26,25 +26,39 @@ $files = $filesBytes -split "`0" | Where-Object { $_ -ne '' }
 foreach ($file in $files) {
     # prefer staged/index version when present
     $content = $null
-    $linesCount = $null
+    $linesCount = 0
 
     # try staged
     $staged = git show ":$file" 2>$null
-    if ($LASTEXITCODE -eq 0) {
+    if ($LASTEXITCODE -eq 0 -and $staged) {
         $content = $staged -join "`n"
+        # count lines from array length (each element is a line)
+        if ($staged -is [array]) {
+            $linesCount = $staged.Count
+        } else {
+            $linesCount = 1
+        }
     }
     else {
         # try HEAD
         git rev-parse --verify --quiet HEAD > $null 2>&1
         if ($LASTEXITCODE -eq 0) {
             $c = git show "HEAD:$file" 2>$null
-            if ($LASTEXITCODE -eq 0) {
+            if ($LASTEXITCODE -eq 0 -and $c) {
                 $content = $c -join "`n"
+                if ($c -is [array]) {
+                    $linesCount = $c.Count
+                } else {
+                    $linesCount = 1
+                }
             }
         }
 
         if (-not $content -and (Test-Path -Path $file -PathType Leaf)) {
             $content = Get-Content -Raw -LiteralPath $file -ErrorAction SilentlyContinue
+            if ($content) {
+                $linesCount = ($content -split '\r?\n').Count
+            }
         }
     }
 
@@ -56,10 +70,6 @@ foreach ($file in $files) {
     if ($content -match "`0") {
         continue
     }
-
-    # count lines: number of lines is number of newlines + 1 (unless empty)
-    $newlineCount = ($content | Select-String -Pattern "(`r`n|`n|`r)" -AllMatches).Matches.Count
-    $linesCount = if ($content -eq '') { 0 } else { $newlineCount + 1 }
 
     if ($linesCount -gt $MAX) {
          Write-Error ("ERROR: $file has $linesCount lines - exceeds $MAX lines. Split the file into smaller files before committing.")
