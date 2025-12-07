@@ -15,13 +15,10 @@ public final class App {
 			return "";
 		}
 
-		// Simple addition expressions, possibly chained, like "100U8 + 50U8" or "1U8 +
-		// 2U8 + 3U8"
-		if (input.contains("+")) {
-			String[] parts = input.split("\\s*\\+\\s*");
-			if (parts.length > 1) {
-				return evaluateAddition(parts);
-			}
+		// Try parsing simple expressions containing + and - (left-to-right evaluation).
+		String exprResult = tryEvaluateExpression(input);
+		if (exprResult != null) {
+			return exprResult;
 		}
 		// Simple addition expressions like "100U8 + 50U8"
 		java.util.regex.Matcher addMatcher = java.util.regex.Pattern.compile("^\\s*([-+]?\\S+)\\s*\\+\\s*([-+]?\\S+)\\s*$")
@@ -83,6 +80,66 @@ public final class App {
 		}
 
 		return sum.toString();
+	}
+
+	private static String tryEvaluateExpression(String input) {
+		Expr expr = tokenizeExpression(input);
+		if (expr == null || expr.tokens.size() == 0 || expr.ops.size() != expr.tokens.size() - 1) return null;
+
+		java.util.List<Operand> operands = new java.util.ArrayList<>();
+		for (String t : expr.tokens) operands.add(parseOperand(t));
+
+		java.math.BigInteger result = operands.get(0).value;
+		for (int k = 0; k < expr.ops.size(); k++) {
+			String op = expr.ops.get(k);
+			java.math.BigInteger val = operands.get(k + 1).value;
+			if ("+".equals(op)) result = result.add(val);
+			else result = result.subtract(val);
+		}
+
+		String onlyType = singleTypedKind(operands);
+		if (onlyType != null) {
+			String signed = onlyType.substring(0, 1);
+			String width = onlyType.substring(1);
+			validateRange(result.toString(), signed, width);
+		}
+
+		return result.toString();
+	}
+
+	private static final class Expr {java.util.List<String> tokens = new java.util.ArrayList<>(); java.util.List<String> ops = new java.util.ArrayList<>();}
+
+	private static Expr tokenizeExpression(String s) {
+		s = s.trim();
+		if (s.isEmpty()) return null;
+		int n = s.length();
+		int i = 0;
+		Expr expr = new Expr();
+
+		while (i < n) {
+			while (i < n && Character.isWhitespace(s.charAt(i))) i++;
+			if (i >= n) break;
+
+			if (expr.tokens.isEmpty() || expr.tokens.size() == expr.ops.size()) {
+				java.util.regex.Matcher m = java.util.regex.Pattern
+						.compile("^[+-]?\\d+(?:(?:U|I)(?:8|16|32|64))?")
+						.matcher(s.substring(i));
+				if (!m.find()) return null;
+				String tok = m.group();
+				expr.tokens.add(tok);
+				i += tok.length();
+			} else {
+				char c = s.charAt(i);
+				if (c == '+' || c == '-') {
+					expr.ops.add(String.valueOf(c));
+					i++;
+				} else {
+					return null;
+				}
+			}
+		}
+
+		return expr;
 	}
 
 	private static final class Operand {
