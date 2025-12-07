@@ -5,10 +5,10 @@ import java.util.Map;
 final class AssignmentUtils {
 	private final Map<String, Operand> locals;
 	private final Map<String, Boolean> mutables;
-	private final Map<String, Parser.DeclaredType> declaredTypes;
+	private final Map<String, DeclaredType> declaredTypes;
 
 	AssignmentUtils(Map<String, Operand> locals, Map<String, Boolean> mutables,
-			Map<String, Parser.DeclaredType> declaredTypes) {
+			Map<String, DeclaredType> declaredTypes) {
 		this.locals = locals;
 		this.mutables = mutables;
 		this.declaredTypes = declaredTypes;
@@ -46,7 +46,7 @@ final class AssignmentUtils {
 	}
 
 	private void assignDeclaredUninitialized(String name, Operand val) {
-		Parser.DeclaredType dt = declaredTypes.get(name);
+		DeclaredType dt = declaredTypes.get(name);
 		if (dt != null && dt.isBool) {
 			if (val.isBoolean == null)
 				throw new IllegalArgumentException("typed Bool assignment requires boolean operand");
@@ -78,7 +78,7 @@ final class AssignmentUtils {
 	private void assignCompoundUninitialized(String name, char op, Operand val) {
 		if (!declaredTypes.containsKey(name))
 			throw new IllegalArgumentException("undefined variable: " + name);
-		Parser.DeclaredType dt = declaredTypes.get(name);
+		DeclaredType dt = declaredTypes.get(name);
 		Operand old = dt != null && dt.isBool
 				? new Operand(java.math.BigInteger.ZERO, true)
 				: new Operand(java.math.BigInteger.ZERO, dt != null ? dt.unsignedOrSigned : null,

@@ -11,7 +11,7 @@ final class LetStatementParser {
 	private final Parser parser;
 	private final Map<String, Operand> locals;
 	private final Map<String, Boolean> mutables;
-	private final Map<String, Parser.DeclaredType> declaredTypes;
+	private final Map<String, DeclaredType> declaredTypes;
 
 	LetStatementParser(Parser parser) {
 		this.parser = parser;
@@ -37,7 +37,7 @@ final class LetStatementParser {
 			throw new IllegalArgumentException("duplicate let declaration: " + name);
 		}
 		parser.skipWhitespace();
-		Parser.DeclaredType dt = null;
+		DeclaredType dt = null;
 		if (parser.peekChar() == ':') {
 			parser.consumeChar();
 			parser.skipWhitespace();
@@ -73,8 +73,8 @@ final class LetStatementParser {
 		return name;
 	}
 
-	private Parser.DeclaredType readDeclaredType() {
-		Parser.DeclaredType dt = new Parser.DeclaredType();
+	private DeclaredType readDeclaredType() {
+		DeclaredType dt = new DeclaredType();
 		Matcher tm = Pattern.compile("^(?:U|I)(?:8|16|32|64)").matcher(parser.remainingInput());
 		Matcher bm = Pattern.compile("^Bool").matcher(parser.remainingInput());
 		if (tm.find()) {
@@ -91,7 +91,7 @@ final class LetStatementParser {
 		return dt;
 	}
 
-	private Operand applyDeclaredType(String name, Parser.DeclaredType dt, Operand exprVal) {
+	private Operand applyDeclaredType(String name, DeclaredType dt, Operand exprVal) {
 		if (dt != null && dt.isBool) {
 			if (exprVal.isBoolean == null) {
 				throw new IllegalArgumentException("typed Bool assignment requires boolean operand");

@@ -286,6 +286,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretWhileLoopBlockBody() {
+		assertEquals("4", App.interpret("let mut x = 0; while (x < 4) { x += 1; } x"));
+	}
+
+	@Test
 	void interpretMatchNoDefaultThrows() {
 		assertThrows(IllegalArgumentException.class,
 				() -> App.interpret("let x = match 300 { case 100 => 5; case 200 => 2 }; x"));
