@@ -94,7 +94,7 @@ final class FunctionDefinitionParser {
 			}
 		}
 
-		FunctionDef fd = new FunctionDef(paramNames, paramTypes, returnType, body);
+		FunctionDef fd = new FunctionDef(paramNames, paramTypes, new FunctionBody(returnType, body));
 		parser.getFunctions().put(name, fd);
 		// function stored; parser index already advanced past the body
 	}

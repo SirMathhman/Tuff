@@ -89,6 +89,41 @@ public final class App {
 		return sum.toString();
 	}
 
+	private static Operand parseOperand(String token) {
+		if (token == null)
+			throw new IllegalArgumentException("invalid operand: null");
+		token = token.trim();
+		if ("true".equals(token) || "false".equals(token)) {
+			boolean val = "true".equals(token);
+			return new Operand(val ? java.math.BigInteger.ONE : java.math.BigInteger.ZERO, true);
+		}
+
+		if (isSignedInteger(token)) {
+			return new Operand(new java.math.BigInteger(token), null, null);
+		}
+
+		java.util.regex.Matcher m = java.util.regex.Pattern.compile("^([-+]?\\d+)(?:(U|I)(8|16|32|64))?$")
+				.matcher(token);
+		if (!m.matches()) {
+			throw new IllegalArgumentException("invalid operand: " + token);
+		}
+
+		String number = m.group(1);
+		String unsignedOrSigned = m.group(2);
+		String width = m.group(3);
+
+		if (unsignedOrSigned != null && "U".equals(unsignedOrSigned) && number.startsWith("-")) {
+			throw new IllegalArgumentException("unsigned type with negative value");
+		}
+
+		if (width != null) {
+			validateRange(number, unsignedOrSigned, width);
+			return new Operand(new java.math.BigInteger(number), unsignedOrSigned, width);
+		}
+
+		return new Operand(new java.math.BigInteger(number), null, null);
+	}
+
 	private static String tryEvaluateExpression(String input) {
 		try {
 			Operand result = parseExpressionToOperand(input);

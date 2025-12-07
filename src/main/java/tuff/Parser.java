@@ -22,6 +22,77 @@ public final class Parser {
 		return locals;
 	}
 
+	private Operand parseLeadingKeywords() {
+		skipWhitespace();
+		if (s.startsWith("let", i) && (i + 3 == n || !Character.isJavaIdentifierPart(s.charAt(i + 3)))) {
+			return parseLetStatement();
+		}
+		if (s.startsWith("fn", i) && (i + 2 == n || !Character.isJavaIdentifierPart(s.charAt(i + 2)))) {
+			new FunctionDefinitionParser(this).parseFunctionDefinition();
+			return null;
+		}
+		if (s.startsWith("while", i) && (i + 5 == n || !Character.isJavaIdentifierPart(s.charAt(i + 5)))) {
+			new WhileStatementParser(this).parseWhileStatement();
+			return null;
+		}
+		return null;
+	}
+
+	private void parseReturnStatement() {
+		if (!allowReturn)
+			throw new IllegalArgumentException("return outside function");
+		consumeKeyword("return");
+		skipWhitespace();
+		Operand ret = parseLogicalOr();
+		throw new ReturnException(ret);
+	}
+
+	private void parseBreakStatement() {
+		if (loopDepth == 0)
+			throw new IllegalArgumentException("break outside of loop");
+		consumeKeyword("break");
+		throw new BreakException();
+	}
+
+	private java.util.Map<String, Operand> bindFunctionParameters(FunctionDef fd, java.util.List<Operand> args) {
+		java.util.Map<String, Operand> fLocals = new java.util.HashMap<>();
+		for (int idx = 0; idx < args.size(); idx++) {
+			Operand a = args.get(idx);
+			DeclaredType pdt = fd.paramTypes.get(idx);
+			if (pdt != null && pdt.isBool) {
+				if (a.isBoolean == null)
+					throw new IllegalArgumentException("typed Bool assignment requires boolean operand");
+				fLocals.put(fd.paramNames.get(idx), new Operand(a.value, true));
+			} else if (pdt != null && pdt.unsignedOrSigned != null && pdt.width != null) {
+				if (a.isBoolean != null)
+					throw new IllegalArgumentException("typed numeric assignment requires numeric operand");
+				App.validateRange(a.value.toString(), pdt.unsignedOrSigned, pdt.width);
+				fLocals.put(fd.paramNames.get(idx), new Operand(a.value, pdt.unsignedOrSigned, pdt.width));
+			} else {
+				fLocals.put(fd.paramNames.get(idx), a);
+			}
+		}
+		return fLocals;
+	}
+
+	private Operand enforceDeclaredReturn(FunctionDef fd, Operand op) {
+		DeclaredType declared = fd.body.returnType;
+		if (declared == null)
+			return op;
+		if (declared.isBool) {
+			if (op.isBoolean == null)
+				throw new IllegalArgumentException("typed Bool return requires boolean operand");
+			return op;
+		}
+		if (declared.unsignedOrSigned != null && declared.width != null) {
+			if (op.isBoolean != null)
+				throw new IllegalArgumentException("typed numeric return requires numeric operand");
+			App.validateRange(op.value.toString(), declared.unsignedOrSigned, declared.width);
+			return new Operand(op.value, declared.unsignedOrSigned, declared.width);
+		}
+		return op;
+	}
+
 	Map<String, Boolean> getMutables() {
 		return mutables;
 	}
@@ -393,26 +464,9 @@ public final class Parser {
 		if (args.size() != fd.paramNames.size())
 			throw new IllegalArgumentException("argument count mismatch in function call");
 
-		// prepare params locals
-		java.util.Map<String, Operand> fLocals = new java.util.HashMap<>();
-		for (int idx = 0; idx < args.size(); idx++) {
-			Operand a = args.get(idx);
-			DeclaredType pdt = fd.paramTypes.get(idx);
-			if (pdt != null && pdt.isBool) {
-				if (a.isBoolean == null)
-					throw new IllegalArgumentException("typed Bool assignment requires boolean operand");
-				fLocals.put(fd.paramNames.get(idx), new Operand(a.value, true));
-			} else if (pdt != null && pdt.unsignedOrSigned != null && pdt.width != null) {
-				if (a.isBoolean != null)
-					throw new IllegalArgumentException("typed numeric assignment requires numeric operand");
-				App.validateRange(a.value.toString(), pdt.unsignedOrSigned, pdt.width);
-				fLocals.put(fd.paramNames.get(idx), new Operand(a.value, pdt.unsignedOrSigned, pdt.width));
-			} else {
-				fLocals.put(fd.paramNames.get(idx), a);
-			}
-		}
+		java.util.Map<String, Operand> fLocals = bindFunctionParameters(fd, args);
 
-		Parser p2 = new Parser(fd.bodySource);
+		Parser p2 = new Parser(fd.body.bodySource);
 		// provide access to functions for recursion
 		p2.setFunctions(new java.util.HashMap<>(this.functions));
 		p2.setLocals(new java.util.HashMap<>(fLocals));
@@ -425,34 +479,10 @@ public final class Parser {
 			if (res == null) {
 				res = new Operand(java.math.BigInteger.ZERO, null, null);
 			}
-			// validate return type if present (no explicit 'return' used)
-			if (fd.returnType != null) {
-				if (fd.returnType.isBool) {
-					if (res.isBoolean == null)
-						throw new IllegalArgumentException("typed Bool return requires boolean operand");
-				} else if (fd.returnType.unsignedOrSigned != null && fd.returnType.width != null) {
-					if (res.isBoolean != null)
-						throw new IllegalArgumentException("typed numeric return requires numeric operand");
-					App.validateRange(res.value.toString(), fd.returnType.unsignedOrSigned, fd.returnType.width);
-					return new Operand(res.value, fd.returnType.unsignedOrSigned, fd.returnType.width);
-				}
-			}
-			return res;
+			return enforceDeclaredReturn(fd, res);
 		} catch (ReturnException re) {
 			Operand r = re.value;
-			// validate return type if present
-			if (fd.returnType != null) {
-				if (fd.returnType.isBool) {
-					if (r.isBoolean == null)
-						throw new IllegalArgumentException("typed Bool return requires boolean operand");
-				} else if (fd.returnType.unsignedOrSigned != null && fd.returnType.width != null) {
-					if (r.isBoolean != null)
-						throw new IllegalArgumentException("typed numeric return requires numeric operand");
-					App.validateRange(r.value.toString(), fd.returnType.unsignedOrSigned, fd.returnType.width);
-					return new Operand(r.value, fd.returnType.unsignedOrSigned, fd.returnType.width);
-				}
-			}
-			return r;
+			return enforceDeclaredReturn(fd, r);
 		}
 	}
 
@@ -471,31 +501,17 @@ public final class Parser {
 
 	Operand parseStatement() {
 		skipWhitespace();
-		if (s.startsWith("let", i) && (i + 3 == n || !Character.isJavaIdentifierPart(s.charAt(i + 3)))) {
-			return parseLetStatement();
-		}
-		if (s.startsWith("fn", i) && (i + 2 == n || !Character.isJavaIdentifierPart(s.charAt(i + 2)))) {
-			new FunctionDefinitionParser(this).parseFunctionDefinition();
-			return null;
-		}
-		if (s.startsWith("while", i) && (i + 5 == n || !Character.isJavaIdentifierPart(s.charAt(i + 5)))) {
-			new WhileStatementParser(this).parseWhileStatement();
-			return null;
-		}
+		int beforeKeyword = i;
+		Operand leading = parseLeadingKeywords();
+		if (i != beforeKeyword)
+			return leading;
 		if (s.startsWith("return", i) && (i + 6 == n || !Character.isJavaIdentifierPart(s.charAt(i + 6)))) {
-			if (!allowReturn)
-				throw new IllegalArgumentException("return outside function");
-			consumeKeyword("return");
-			skipWhitespace();
-			Operand ret = parseLogicalOr();
-			throw new ReturnException(ret);
+			parseReturnStatement();
 		}
+
+        
 		if (s.startsWith("break", i) && (i + 5 == n || !Character.isJavaIdentifierPart(s.charAt(i + 5)))) {
-			if (loopDepth == 0)
-				throw new IllegalArgumentException("break outside of loop");
-			consumeKeyword("break");
-			// signal a loop break to the loop executor
-			throw new BreakException();
+			parseBreakStatement();
 		}
 		int save = i;
 		Operand assign = parseAssignmentIfPresent();
