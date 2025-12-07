@@ -137,6 +137,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretLetInitializerSelfReferenceThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("let x = { x + 100 };"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}
