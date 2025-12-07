@@ -82,6 +82,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretParenthesesGroupingEvaluatesCorrectly() {
+		assertEquals("9", App.interpret("(1U8 + 2U8) * 3"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}

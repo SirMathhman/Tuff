@@ -83,53 +83,132 @@ public final class App {
 	}
 
 	private static String tryEvaluateExpression(String input) {
-		Expr expr = tokenizeExpression(input);
-		if (expr == null || expr.tokens.size() == 0 || expr.ops.size() != expr.tokens.size() - 1)
-			return null;
-
-		java.util.List<Operand> operands = new java.util.ArrayList<>();
-		for (String t : expr.tokens)
-			operands.add(parseOperand(t));
-
-		// evaluate * and / first (left-to-right)
-		for (int idx = 0; idx < expr.ops.size();) {
-			String op = expr.ops.get(idx);
-			if ("*".equals(op) || "/".equals(op) || "%".equals(op)) {
-				java.math.BigInteger a = operands.get(idx).value;
-				java.math.BigInteger b = operands.get(idx + 1).value;
-				java.math.BigInteger computed = computeBinaryOp(a, b, op);
-
-				String resSign = operands.get(idx).unsignedOrSigned != null ? operands.get(idx).unsignedOrSigned
-						: operands.get(idx + 1).unsignedOrSigned;
-				String resWidth = operands.get(idx).width != null ? operands.get(idx).width
-						: operands.get(idx + 1).width;
-
-				operands.set(idx, new Operand(computed, resSign, resWidth));
-				operands.remove(idx + 1);
-				expr.ops.remove(idx);
-			} else {
-				idx++;
+		try {
+			Operand result = parseExpressionToOperand(input);
+			if (result == null)
+				return null;
+			if (result.unsignedOrSigned != null && result.width != null) {
+				validateRange(result.value.toString(), result.unsignedOrSigned, result.width);
 			}
+			return result.value.toString();
+		} catch (IllegalArgumentException ex) {
+			// propagate known evaluation errors
+			throw ex;
+		} catch (Exception ex) {
+			// parsing failed; not an expression we support
+			return null;
+		}
+	}
+
+	private static Operand parseExpressionToOperand(String input) {
+		if (input == null)
+			return null;
+		Parser p = new Parser(input);
+		Operand result = p.parseExpression();
+		p.skipWhitespace();
+		if (p.hasNext()) // leftover tokens -> not a simple expression
+			throw new IllegalArgumentException("invalid expression");
+		return result;
+	}
+
+	private static final class Parser {
+		private final String s;
+		private final int n;
+		private int i = 0;
+
+		Parser(String s) {
+			this.s = s;
+			this.n = s.length();
 		}
 
-		java.math.BigInteger result = operands.get(0).value;
-		for (int k = 0; k < expr.ops.size(); k++) {
-			String op2 = expr.ops.get(k);
-			java.math.BigInteger val = operands.get(k + 1).value;
-			if ("+".equals(op2))
-				result = result.add(val);
-			else
-				result = result.subtract(val);
+		boolean hasNext() {
+			skipWhitespace();
+			return i < n;
 		}
 
-		String onlyType = singleTypedKind(operands);
-		if (onlyType != null) {
-			String signed = onlyType.substring(0, 1);
-			String width = onlyType.substring(1);
-			validateRange(result.toString(), signed, width);
+		void skipWhitespace() {
+			while (i < n && Character.isWhitespace(s.charAt(i)))
+				i++;
 		}
 
-		return result.toString();
+		Operand parseExpression() {
+			Operand left = parseTerm();
+			while (true) {
+				skipWhitespace();
+				if (i >= n)
+					break;
+				char c = s.charAt(i);
+				if (c == '+' || c == '-') {
+					i++;
+					Operand right = parseTerm();
+					java.math.BigInteger value = 
+							(c == '+') ? left.value.add(right.value) : left.value.subtract(right.value);
+					String[] kind = combineKinds(left, right);
+					left = new Operand(value, kind[0], kind[1]);
+				} else {
+					break;
+				}
+			}
+			return left;
+		}
+
+		Operand parseTerm() {
+			Operand left = parseFactor();
+			while (true) {
+				skipWhitespace();
+				if (i >= n)
+					break;
+				char c = s.charAt(i);
+				if (c == '*' || c == '/' || c == '%') {
+					i++;
+					Operand right = parseFactor();
+					java.math.BigInteger computed = computeBinaryOp(left.value, right.value, String.valueOf(c));
+					String[] kind = combineKinds(left, right);
+					left = new Operand(computed, kind[0], kind[1]);
+				} else {
+					break;
+				}
+			}
+			return left;
+		}
+
+		Operand parseFactor() {
+			skipWhitespace();
+			if (i < n && s.charAt(i) == '(') {
+				i++; // consume '('
+				Operand inner = parseExpression();
+				skipWhitespace();
+				if (i >= n || s.charAt(i) != ')')
+					throw new IllegalArgumentException("mismatched parentheses");
+				i++; // consume ')'
+				return inner;
+			}
+
+			// parse number token (may include suffix)
+			java.util.regex.Matcher m = java.util.regex.Pattern
+					.compile("^[+-]?\\d+(?:(?:U|I)(?:8|16|32|64))?")
+					.matcher(s.substring(i));
+			if (!m.find())
+				throw new IllegalArgumentException("invalid token at position " + i);
+			String tok = m.group();
+			i += tok.length();
+			return parseOperand(tok);
+		}
+	}
+
+	private static String[] combineKinds(Operand a, Operand b) {
+		String aKind = (a.unsignedOrSigned != null && a.width != null) ? a.unsignedOrSigned + a.width : null;
+		String bKind = (b.unsignedOrSigned != null && b.width != null) ? b.unsignedOrSigned + b.width : null;
+		if (aKind != null && bKind != null) {
+			if (!aKind.equals(bKind))
+				throw new IllegalArgumentException("mixed typed operands not supported");
+			return new String[] { a.unsignedOrSigned, a.width };
+		}
+		if (aKind != null)
+			return new String[] { a.unsignedOrSigned, a.width };
+		if (bKind != null)
+			return new String[] { b.unsignedOrSigned, b.width };
+		return new String[] { null, null };
 	}
 
 	private static final class Expr {
