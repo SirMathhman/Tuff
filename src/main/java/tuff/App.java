@@ -116,7 +116,9 @@ public final class App {
 		Parser p = new Parser(input);
 		p.skipWhitespace();
 		Operand result;
-		if (p.startsWithLet()) {
+		// Allow parsing top-level blocks when we have statements: let, while, match, if, or a leading '{'
+		if (p.startsWithLet() || p.startsWithKeyword("while") || p.startsWithKeyword("match") || p.startsWithKeyword("if")
+			|| p.peekChar() == '{') {
 			result = p.parseTopLevelBlock();
 		} else {
 			result = p.parseLogicalOr();

@@ -14,6 +14,9 @@ public final class Parser {
 	// track declared (typed but not-yet-initialized) variables
 	private Map<String, DeclaredType> declaredTypes = new HashMap<>();
 
+	// tracks how many loops we're currently inside (supports nested loops)
+	private int loopDepth = 0;
+
 	Map<String, Operand> getLocals() {
 		return locals;
 	}
@@ -336,6 +339,30 @@ public final class Parser {
 		return null;
 	}
 
+	private Operand parseStatement() {
+		skipWhitespace();
+		if (s.startsWith("let", i) && (i + 3 == n || !Character.isJavaIdentifierPart(s.charAt(i + 3)))) {
+			return parseLetStatement();
+		}
+		if (s.startsWith("while", i) && (i + 5 == n || !Character.isJavaIdentifierPart(s.charAt(i + 5)))) {
+			parseWhileStatement();
+			return null;
+		}
+		if (s.startsWith("break", i) && (i + 5 == n || !Character.isJavaIdentifierPart(s.charAt(i + 5)))) {
+			if (loopDepth == 0)
+				throw new IllegalArgumentException("break outside of loop");
+			consumeKeyword("break");
+			// signal a loop break to the loop executor
+			throw new BreakException();
+		}
+		int save = i;
+		Operand assign = parseAssignmentIfPresent();
+		if (assign != null)
+			return assign;
+		i = save;
+		return parseLogicalOr();
+	}
+
 	private Operand parseBlockStart() {
 		if (i < n && s.charAt(i) == '{') {
 			return parseBlock();
@@ -353,6 +380,125 @@ public final class Parser {
 		return mep.parseMatchExpression();
 	}
 
+	private int findMatchingBrace(int start) {
+		int depth = 0;
+		for (int j = start; j < n; j++) {
+			char c = s.charAt(j);
+			if (c == '{')
+				depth++;
+			else if (c == '}') {
+				depth--;
+				if (depth == 0)
+					return j;
+			}
+		}
+		return -1;
+	}
+
+	private int computeBodyEnd(int bodyStart, boolean isBlock) {
+		if (isBlock) {
+			int closing = findMatchingBrace(bodyStart);
+			if (closing < 0)
+				throw new IllegalArgumentException("mismatched brace in while body");
+			return closing + 1;
+		}
+		int j = bodyStart;
+		int parenDepth = 0;
+		for (; j < n; j++) {
+			char c = s.charAt(j);
+			if (c == '(')
+				parenDepth++;
+			else if (c == ')') {
+				if (parenDepth > 0)
+					parenDepth--;
+			} else if (parenDepth == 0 && (c == ';' || c == '}')) {
+				break;
+			}
+		}
+		return j;
+	}
+
+	private void executeBlockIteration(int bodyStart) {
+		int saved = i;
+		i = bodyStart;
+		try {
+			loopDepth++;
+			parseBlock();
+		} catch (BreakException b) {
+			i = saved;
+			throw b;
+		} finally {
+			loopDepth--;
+		}
+		i = saved;
+	}
+
+	private void executeSingleStatementIteration(int bodyStart, int postCond) {
+		int saved = i;
+		i = bodyStart;
+		try {
+			loopDepth++;
+			// allow any kind of statement here (assignment, let, nested while, break etc.)
+			Operand stmt = parseStatement();
+			if (stmt == null) {
+				// some statements (like a nested while) return null; do nothing
+			}
+		} catch (BreakException b) {
+			i = saved;
+			throw b;
+		} finally {
+			loopDepth--;
+		}
+		i = postCond;
+	}
+
+	private void parseWhileStatement() {
+		consumeKeyword("while");
+		skipWhitespace();
+		if (peekChar() != '(')
+			throw new IllegalArgumentException("missing '(' in while");
+		// record condition region
+		i++; // consume '('
+		int condStart = i;
+		parseLogicalOr();
+		skipWhitespace();
+		if (peekChar() != ')')
+			throw new IllegalArgumentException("missing ')' in while");
+		i++; // consume ')'
+		int postCond = i;
+		skipWhitespace();
+		int bodyStart = i;
+		boolean isBlock = bodyStart < n && s.charAt(bodyStart) == '{';
+		int bodyEnd = computeBodyEnd(bodyStart, isBlock);
+
+		while (true) {
+			int savedIndex = i;
+			i = condStart;
+			Operand cval = parseLogicalOr();
+			if (cval.isBoolean == null)
+				throw new IllegalArgumentException("while condition requires boolean expression");
+			boolean ok = !java.math.BigInteger.ZERO.equals(cval.value);
+			i = postCond;
+			if (!ok)
+				break;
+
+			try {
+				if (isBlock) {
+					executeBlockIteration(bodyStart);
+				} else {
+					executeSingleStatementIteration(bodyStart, postCond);
+				}
+			} catch (BreakException b) {
+				// break out of the loop - stop iterating
+				break;
+			}
+			// restore index after executing body so we evaluate condition again
+			i = postCond;
+		}
+		// advance parser index to after body
+		i = bodyEnd;
+	}
+
 	// parse a block { ... } with local variable declarations (let) and expression
 	// statements
 	private Operand parseBlock() {
@@ -364,42 +510,35 @@ public final class Parser {
 		mutables = new HashMap<>(prevMut);
 		declaredTypes = new HashMap<>(prevDeclared);
 		Operand last = null;
-		while (true) {
-			skipWhitespace();
-			if (i >= n)
-				throw new IllegalArgumentException("mismatched brace");
-			if (s.charAt(i) == '}') {
-				i++; // consume '}'
-				break;
-			}
-			if (s.startsWith("let", i) && (i + 3 == n || !Character.isJavaIdentifierPart(s.charAt(i + 3)))) {
-				last = parseLetStatement();
-			} else {
-				int save = i;
-				Operand assign = parseAssignmentIfPresent();
-				if (assign != null) {
-					last = assign;
-				} else {
-					i = save;
-					last = parseLogicalOr();
+		try {
+			while (true) {
+				skipWhitespace();
+				if (i >= n)
+					throw new IllegalArgumentException("mismatched brace");
+				if (s.charAt(i) == '}') {
+					i++; // consume '}'
+					break;
 				}
+				last = parseStatement();
+				skipWhitespace();
+				if (i < n && s.charAt(i) == ';') {
+					i++; // consume ';' and continue
+					continue;
+				}
+				// allow '}' next or an error
+				skipWhitespace();
+				if (i < n && s.charAt(i) == '}') {
+					continue;
+				}
+				if (i < n && s.charAt(i) != '}')
+					throw new IllegalArgumentException("expected ';' or '}' in block");
 			}
-			skipWhitespace();
-			if (i < n && s.charAt(i) == ';') {
-				i++; // consume ';' and continue
-				continue;
-			}
-			// allow '}' next or an error
-			skipWhitespace();
-			if (i < n && s.charAt(i) == '}') {
-				continue;
-			}
-			if (i < n && s.charAt(i) != '}')
-				throw new IllegalArgumentException("expected ';' or '}' in block");
+			return last == null ? new Operand(java.math.BigInteger.ZERO, null, null) : last;
+		} finally {
+			locals = prev;
+			mutables = prevMut;
+			declaredTypes = prevDeclared;
 		}
-		locals = prev;
-		mutables = prevMut;
-		return last == null ? new Operand(java.math.BigInteger.ZERO, null, null) : last;
 	}
 
 	private Operand parseLetStatement() {
@@ -420,18 +559,7 @@ public final class Parser {
 			skipWhitespace();
 			if (i >= n)
 				break;
-			if (s.startsWith("let", i) && (i + 3 == n || !Character.isJavaIdentifierPart(s.charAt(i + 3)))) {
-				last = parseLetStatement();
-			} else {
-				int save = i;
-				Operand assign = parseAssignmentIfPresent();
-				if (assign != null) {
-					last = assign;
-				} else {
-					i = save;
-					last = parseLogicalOr();
-				}
-			}
+			last = parseStatement();
 			skipWhitespace();
 			if (i < n && s.charAt(i) == ';') {
 				i++; // consume ';' and continue
@@ -488,5 +616,8 @@ public final class Parser {
 		boolean isBool;
 		String unsignedOrSigned;
 		String width;
+	}
+
+	static final class BreakException extends RuntimeException {
 	}
 }
