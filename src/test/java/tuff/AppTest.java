@@ -132,6 +132,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretBlockLocalNotVisibleOutside() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("{let x = 100;} x"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}
