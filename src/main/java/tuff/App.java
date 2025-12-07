@@ -16,7 +16,8 @@ public final class App {
 		}
 
 		// Simple addition expressions like "100U8 + 50U8"
-		java.util.regex.Matcher addMatcher = java.util.regex.Pattern.compile("^\\s*([-+]?\\S+)\\s*\\+\\s*([-+]?\\S+)\\s*$").matcher(input);
+		java.util.regex.Matcher addMatcher = java.util.regex.Pattern.compile("^\\s*([-+]?\\S+)\\s*\\+\\s*([-+]?\\S+)\\s*$")
+				.matcher(input);
 		if (addMatcher.matches()) {
 			return evaluateAddition(addMatcher.group(1), addMatcher.group(2));
 		}
