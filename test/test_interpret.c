@@ -3,9 +3,12 @@
 #include <string.h>
 #include <stdlib.h>
 #include "../include/interpret.h"
+#include "../include/arena.h"
 
 int main(void)
 {
+	arena_init(1024);
+
 	struct
 	{
 		const char *in;
@@ -22,10 +25,15 @@ int main(void)
 	{
 		char *out = interpret(cases[i].in);
 		if (!out)
+		{
+			arena_cleanup();
 			return 2;
+		}
 		assert(strcmp(out, cases[i].want) == 0);
 		puts(out);
-		free(out);
+		arena_free(out, strlen(out) + 1);
 	}
+
+	arena_cleanup();
 	return 0;
 }

@@ -4,8 +4,7 @@
 /*
  * interpret.h
  * Interpret a simple arithmetic expression and return the result as a
- * newly-allocated string. The caller is responsible for freeing the
- * returned string.
+ * string allocated from the global arena.
  */
 
 char *interpret(const char *s);

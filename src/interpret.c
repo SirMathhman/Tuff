@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "interpret.h"
+#include "arena.h"
 
 static void skipws(const char **p)
 {
@@ -113,7 +114,7 @@ char *interpret(const char *s)
 	int n = snprintf(buf, sizeof(buf), "%lld", val);
 	if (n < 0)
 		return NULL;
-	char *out = malloc((size_t)n + 1);
+	char *out = arena_alloc((size_t)n + 1);
 	if (!out)
 		return NULL;
 	memcpy(out, buf, (size_t)n + 1);
