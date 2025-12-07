@@ -104,7 +104,16 @@ public final class App {
 		if (input == null)
 			return null;
 		Parser p = new Parser(input);
-		Operand result = p.parseExpression();
+		p.skipWhitespace();
+		Operand result;
+		if (p.startsWithLet()) {
+			result = p.parseTopLevelBlock();
+		} else {
+			result = p.parseExpression();
+			p.skipWhitespace();
+			if (p.hasNext()) // leftover tokens -> not a simple expression
+				throw new IllegalArgumentException("invalid expression");
+		}
 		p.skipWhitespace();
 		if (p.hasNext()) // leftover tokens -> not a simple expression
 			throw new IllegalArgumentException("invalid expression");
@@ -121,6 +130,11 @@ public final class App {
 		Parser(String s) {
 			this.s = s;
 			this.n = s.length();
+		}
+
+		boolean startsWithLet() {
+			skipWhitespace();
+			return i < n && s.startsWith("let", i) && (i + 3 == n || !Character.isJavaIdentifierPart(s.charAt(i + 3)));
 		}
 
 		boolean hasNext() {
@@ -214,7 +228,8 @@ public final class App {
 			throw new IllegalArgumentException("invalid token at position " + i);
 		}
 
-		// parse a block { ... } with local variable declarations (let) and expression statements
+		// parse a block { ... } with local variable declarations (let) and expression
+		// statements
 		private Operand parseBlock() {
 			i++; // we assume caller found '{'
 			java.util.Map<String, Operand> prev = locals;
@@ -279,6 +294,31 @@ public final class App {
 			validateRange(exprVal.value.toString(), unsignedOrSigned, width);
 			locals.put(name, new Operand(exprVal.value, unsignedOrSigned, width));
 			return new Operand(exprVal.value, unsignedOrSigned, width);
+		}
+
+		// parse a top-level sequence of statements (let and expressions) ending at EOF
+		private Operand parseTopLevelBlock() {
+			java.util.Map<String, Operand> prev = locals;
+			locals = new java.util.HashMap<>(prev);
+			Operand last = null;
+			while (true) {
+				skipWhitespace();
+				if (i >= n)
+					break;
+				if (s.startsWith("let", i) && (i + 3 == n || !Character.isJavaIdentifierPart(s.charAt(i + 3)))) {
+					last = parseLetStatement();
+				} else {
+					last = parseExpression();
+				}
+				skipWhitespace();
+				if (i < n && s.charAt(i) == ';') {
+					i++; // consume ';' and continue
+					continue;
+				}
+				// if not semicolon, loop will either consume more or end
+			}
+			locals = prev;
+			return last == null ? new Operand(java.math.BigInteger.ZERO, null, null) : last;
 		}
 	}
 

@@ -97,6 +97,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretTopLevelLetAndLookup() {
+		assertEquals("100", App.interpret("let x : I32 = 100; x"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}
