@@ -1,4 +1,4 @@
-package com.example;
+package tuff;
 
 public final class App {
 	public static void main(String[] args) {

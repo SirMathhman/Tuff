@@ -1,4 +1,4 @@
-package com.example;
+package tuff;
 
 import org.junit.jupiter.api.Test;
 

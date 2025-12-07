@@ -52,7 +52,7 @@
 					<archive>
 						<manifest>
 							<addDefaultImplementationEntries>true</addDefaultImplementationEntries>
-							<mainClass>com.example.App</mainClass>
+							<mainClass>tuff.App</mainClass>
 						</manifest>
 					</archive>
 				</configuration>
