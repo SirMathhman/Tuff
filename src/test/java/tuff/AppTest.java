@@ -177,6 +177,16 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretBoolAssignedToNumericTypedThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("let x : Bool = false; let y : U8 = x;"));
+	}
+
+	@Test
+	void interpretBoolTypedCopyToBoolAccepts() {
+		assertEquals("false", App.interpret("let x : Bool = false; let y : Bool = x; y"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}

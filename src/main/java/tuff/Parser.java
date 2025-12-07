@@ -217,33 +217,21 @@ public final class Parser {
 		skipWhitespace();
 		String unsignedOrSigned = null;
 		String width = null;
+		boolean declaredBool = false;
 		if (i < n && s.charAt(i) == ':') {
 			i++; // consume ':'
 			skipWhitespace();
-			java.util.regex.Matcher tm = java.util.regex.Pattern.compile("^(?:U|I)(?:8|16|32|64)").matcher(s.substring(i));
-			if (!tm.find())
-				throw new IllegalArgumentException("invalid type in let");
-			String type = tm.group();
-			unsignedOrSigned = type.substring(0, 1);
-			width = type.substring(1);
-			i += type.length();
+			DeclaredType dt = readDeclaredType();
+			declaredBool = dt.isBool;
+			unsignedOrSigned = dt.unsignedOrSigned;
+			width = dt.width;
 		}
 		skipWhitespace();
 		if (i >= n || s.charAt(i) != '=')
 			throw new IllegalArgumentException("missing = in let");
 		i++; // consume '='
 		Operand exprVal = parseLogicalOr();
-		if (unsignedOrSigned != null && width != null) {
-			// If the RHS expression has its own typed kind, require exact match
-			if (exprVal.unsignedOrSigned != null && exprVal.width != null) {
-				if (!unsignedOrSigned.equals(exprVal.unsignedOrSigned) || !width.equals(exprVal.width)) {
-					throw new IllegalArgumentException("mismatched typed assignment");
-				}
-			}
-			App.validateRange(exprVal.value.toString(), unsignedOrSigned, width);
-		}
-		locals.put(name, new Operand(exprVal.value, unsignedOrSigned, width));
-		return new Operand(exprVal.value, unsignedOrSigned, width);
+		return applyDeclaredType(name, declaredBool, unsignedOrSigned, width, exprVal);
 	}
 
 	// parse a top-level sequence of statements (let and expressions) ending at EOF
@@ -269,5 +257,52 @@ public final class Parser {
 		}
 		locals = prev;
 		return last == null ? new Operand(java.math.BigInteger.ZERO, null, null) : last;
+	}
+
+	private static final class DeclaredType {
+		boolean isBool;
+		String unsignedOrSigned;
+		String width;
+	}
+
+	private DeclaredType readDeclaredType() {
+		DeclaredType dt = new DeclaredType();
+		java.util.regex.Matcher tm = java.util.regex.Pattern.compile("^(?:U|I)(?:8|16|32|64)").matcher(s.substring(i));
+		java.util.regex.Matcher bm = java.util.regex.Pattern.compile("^Bool").matcher(s.substring(i));
+		if (tm.find()) {
+			String type = tm.group();
+			dt.unsignedOrSigned = type.substring(0, 1);
+			dt.width = type.substring(1);
+			i += type.length();
+		} else if (bm.find()) {
+			dt.isBool = true;
+			i += 4; // length of "Bool"
+		} else {
+			throw new IllegalArgumentException("invalid type in let");
+		}
+		return dt;
+	}
+
+	private Operand applyDeclaredType(String name, boolean declaredBool, String unsignedOrSigned, String width, Operand exprVal) {
+		if (declaredBool) {
+			if (exprVal.isBoolean == null) {
+				throw new IllegalArgumentException("typed Bool assignment requires boolean operand");
+			}
+			locals.put(name, new Operand(exprVal.value, null, null, true));
+			return new Operand(exprVal.value, null, null, true);
+		}
+		if (unsignedOrSigned != null && width != null) {
+			if (exprVal.isBoolean != null) {
+				throw new IllegalArgumentException("typed numeric assignment requires numeric operand");
+			}
+			if (exprVal.unsignedOrSigned != null && exprVal.width != null) {
+				if (!unsignedOrSigned.equals(exprVal.unsignedOrSigned) || !width.equals(exprVal.width)) {
+					throw new IllegalArgumentException("mismatched typed assignment");
+				}
+			}
+			App.validateRange(exprVal.value.toString(), unsignedOrSigned, width);
+		}
+		locals.put(name, new Operand(exprVal.value, unsignedOrSigned, width));
+		return new Operand(exprVal.value, unsignedOrSigned, width);
 	}
 }
