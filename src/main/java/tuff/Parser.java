@@ -37,12 +37,12 @@ public final class Parser {
 			if (i >= n)
 				break;
 			char c = s.charAt(i);
-				if (c == '+' || c == '-') {
+			if (c == '+' || c == '-') {
 				i++;
 				Operand right = parseTerm();
-					if (left.isBoolean != null || right.isBoolean != null) {
-						throw new IllegalArgumentException("arithmetic operators require numeric operands");
-					}
+				if (left.isBoolean != null || right.isBoolean != null) {
+					throw new IllegalArgumentException("arithmetic operators require numeric operands");
+				}
 				java.math.BigInteger value = (c == '+') ? left.value.add(right.value) : left.value.subtract(right.value);
 				String[] kind = App.combineKinds(left, right);
 				left = new Operand(value, kind[0], kind[1]);
@@ -234,6 +234,12 @@ public final class Parser {
 		i++; // consume '='
 		Operand exprVal = parseLogicalOr();
 		if (unsignedOrSigned != null && width != null) {
+			// If the RHS expression has its own typed kind, require exact match
+			if (exprVal.unsignedOrSigned != null && exprVal.width != null) {
+				if (!unsignedOrSigned.equals(exprVal.unsignedOrSigned) || !width.equals(exprVal.width)) {
+					throw new IllegalArgumentException("mismatched typed assignment");
+				}
+			}
 			App.validateRange(exprVal.value.toString(), unsignedOrSigned, width);
 		}
 		locals.put(name, new Operand(exprVal.value, unsignedOrSigned, width));

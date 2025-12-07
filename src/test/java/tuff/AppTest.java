@@ -172,6 +172,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretTypedAssignmentBetweenDifferentWidthsThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("let x : U16 = 100; let y : U8 = x;"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}
