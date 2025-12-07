@@ -62,6 +62,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretDivideThenAddReturnsCorrect() {
+		assertEquals("6", App.interpret("10 / 2 + 1"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}
