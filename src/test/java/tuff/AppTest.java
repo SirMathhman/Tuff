@@ -107,6 +107,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretNestedBlockInitializer() {
+		assertEquals("200", App.interpret("let x : I32 = {let y : I32 = 200; y}; x"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}
