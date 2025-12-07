@@ -225,6 +225,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretIfConditionNonBooleanThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("if (100 + 200) 3 else 5"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}

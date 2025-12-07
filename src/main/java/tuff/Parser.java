@@ -239,7 +239,7 @@ public final class Parser {
 	private Operand parseNumberToken() {
 		skipWhitespace();
 		java.util.regex.Matcher m = java.util.regex.Pattern.compile("^([-+]?\\d+)(?:(U|I)(8|16|32|64))?")
-			.matcher(s.substring(i));
+				.matcher(s.substring(i));
 		if (!m.find())
 			return null;
 		String number = m.group(1);
@@ -326,7 +326,8 @@ public final class Parser {
 			throw new IllegalArgumentException("if condition must be boolean");
 
 		// branches must be same kind (both boolean or both numeric)
-		if ((thenOp.isBoolean != null && elseOp.isBoolean == null) || (thenOp.isBoolean == null && elseOp.isBoolean != null)) {
+		if ((thenOp.isBoolean != null && elseOp.isBoolean == null)
+				|| (thenOp.isBoolean == null && elseOp.isBoolean != null)) {
 			throw new IllegalArgumentException("if branches must be same kind");
 		}
 
