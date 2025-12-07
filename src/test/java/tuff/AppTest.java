@@ -291,6 +291,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretBreakFromWhileBlockBody() {
+		assertEquals("1", App.interpret("let mut x = 0; while (x < 4) { x += 1; break; } x"));
+	}
+
+	@Test
 	void interpretMatchNoDefaultThrows() {
 		assertThrows(IllegalArgumentException.class,
 				() -> App.interpret("let x = match 300 { case 100 => 5; case 200 => 2 }; x"));

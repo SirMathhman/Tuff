@@ -492,6 +492,4 @@ public final class Parser {
 		return s.substring(i);
 	}
 
-    
-
 }
