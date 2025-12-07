@@ -72,6 +72,16 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretModuloReturnsCorrect() {
+		assertEquals("2", App.interpret("10 % 8"));
+	}
+
+	@Test
+	void interpretModuloByZeroThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("10 % 0"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}

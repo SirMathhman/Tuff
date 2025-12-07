@@ -94,7 +94,7 @@ public final class App {
 		// evaluate * and / first (left-to-right)
 		for (int idx = 0; idx < expr.ops.size();) {
 			String op = expr.ops.get(idx);
-			if ("*".equals(op) || "/".equals(op)) {
+			if ("*".equals(op) || "/".equals(op) || "%".equals(op)) {
 				java.math.BigInteger a = operands.get(idx).value;
 				java.math.BigInteger b = operands.get(idx + 1).value;
 				java.math.BigInteger computed = computeBinaryOp(a, b, op);
@@ -162,7 +162,7 @@ public final class App {
 				i += tok.length();
 			} else {
 				char c = s.charAt(i);
-				if (c == '+' || c == '-' || c == '*' || c == '/') {
+				if (c == '+' || c == '-' || c == '*' || c == '/' || c == '%') {
 					expr.ops.add(String.valueOf(c));
 					i++;
 				} else {
@@ -266,9 +266,16 @@ public final class App {
 	}
 
 	private static java.math.BigInteger computeBinaryOp(java.math.BigInteger a, java.math.BigInteger b, String op) {
-		if ("/".equals(op) && java.math.BigInteger.ZERO.equals(b)) {
+		if (("/".equals(op) || "%".equals(op)) && java.math.BigInteger.ZERO.equals(b)) {
 			throw new IllegalArgumentException("division by zero");
 		}
-		return "*".equals(op) ? a.multiply(b) : a.divide(b);
+		if ("*".equals(op)) {
+			return a.multiply(b);
+		}
+		if ("/".equals(op)) {
+			return a.divide(b);
+		}
+		// percent
+		return a.remainder(b);
 	}
 }
