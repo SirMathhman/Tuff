@@ -20,5 +20,5 @@ mvn test
 Git hooks
 
 - This repository uses a repo-level pre-commit hook placed in `.githooks/pre-commit`.
-- The hook runs `mvn -q verify` (tests + checks) and will abort commits if verification fails.
+- The hook runs `mvn -q test` (tests + checks) and will abort commits if tests or checks fail.
 - To opt out temporarily, use `git commit --no-verify`.

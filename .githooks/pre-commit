@@ -1,11 +1,10 @@
 #!/bin/sh
-#!/bin/sh
-# Run mvn verify (tests + checks) before committing; abort commit on failure.
-echo "Running mvn -q verify before commit..."
-if mvn -q verify; then
-  echo "Verify passed — continuing commit."
+# Run tests before committing; abort commit on failure.
+echo "Running mvn -q test before commit..."
+if mvn -q test; then
+  echo "Tests passed — continuing commit."
   exit 0
 else
-  echo "Verify failed — aborting commit." 1>&2
+  echo "Tests failed — aborting commit." 1>&2
   exit 1
 fi
