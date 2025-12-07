@@ -422,6 +422,18 @@ public final class Parser {
 
 		try {
 			Operand res = p2.parseTopLevelBlock();
+			// validate return type if present (no explicit 'return' used)
+			if (fd.returnType != null) {
+				if (fd.returnType.isBool) {
+					if (res.isBoolean == null)
+						throw new IllegalArgumentException("typed Bool return requires boolean operand");
+				} else if (fd.returnType.unsignedOrSigned != null && fd.returnType.width != null) {
+					if (res.isBoolean != null)
+						throw new IllegalArgumentException("typed numeric return requires numeric operand");
+					App.validateRange(res.value.toString(), fd.returnType.unsignedOrSigned, fd.returnType.width);
+					return new Operand(res.value, fd.returnType.unsignedOrSigned, fd.returnType.width);
+				}
+			}
 			return res;
 		} catch (ReturnException re) {
 			Operand r = re.value;
