@@ -67,6 +67,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretDivisionByZeroThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("10 / 0"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}

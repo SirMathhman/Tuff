@@ -97,7 +97,7 @@ public final class App {
 			if ("*".equals(op) || "/".equals(op)) {
 				java.math.BigInteger a = operands.get(idx).value;
 				java.math.BigInteger b = operands.get(idx + 1).value;
-				java.math.BigInteger computed = "*".equals(op) ? a.multiply(b) : a.divide(b);
+				java.math.BigInteger computed = computeBinaryOp(a, b, op);
 
 				String resSign = operands.get(idx).unsignedOrSigned != null ? operands.get(idx).unsignedOrSigned
 						: operands.get(idx + 1).unsignedOrSigned;
@@ -263,5 +263,12 @@ public final class App {
 			default:
 				return new java.math.BigInteger[] { java.math.BigInteger.ZERO.negate(), java.math.BigInteger.ZERO };
 		}
+	}
+
+	private static java.math.BigInteger computeBinaryOp(java.math.BigInteger a, java.math.BigInteger b, String op) {
+		if ("/".equals(op) && java.math.BigInteger.ZERO.equals(b)) {
+			throw new IllegalArgumentException("division by zero");
+		}
+		return "*".equals(op) ? a.multiply(b) : a.divide(b);
 	}
 }
