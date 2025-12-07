@@ -19,6 +19,7 @@ int main(void)
 			{"1 + 2 - 3", "0"},
 			{"1 + {2} - 3", "0"},
 			{"1 + {let x = 2; x} - 3", "0"},
+			{"1 + {let mut x = 0; x = 2; x} - 3", "0"},
 			{" 10 + 20 * 3 ", "70"},
 			{"(2+3)*4", "20"},
 			{"7 - 5 / 2", "5"},
@@ -33,8 +34,13 @@ int main(void)
 			arena_cleanup();
 			return 2;
 		}
-		assert(strcmp(out, cases[i].want) == 0);
-		puts(out);
+		if (strcmp(out, cases[i].want) != 0) {
+			fprintf(stderr, "Test %zu failed: in='%s' out='%s' want='%s'\n", i, cases[i].in, out, cases[i].want);
+			arena_free(out, strlen(out) + 1);
+			arena_cleanup();
+			return 3;
+		}
+		printf("case %zu: '%s' => %s\n", i, cases[i].in, out);
 		arena_free(out, strlen(out) + 1);
 	}
 

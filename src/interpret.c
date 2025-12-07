@@ -24,6 +24,7 @@ struct Env
 	{
 		char name[32];
 		long long val;
+		int mut;
 	} entries[32];
 	size_t count;
 };
@@ -92,6 +93,12 @@ static long long parse_factor(const char **p, struct Env *env)
 				{
 					*p += 3;
 					skipws(p);
+					int is_mut = 0;
+					if (strncmp(*p, "mut", 3) == 0 && !isalnum((unsigned char)(*p)[3]) && (*p)[3] != '_') {
+						is_mut = 1;
+						*p += 3;
+						skipws(p);
+					}
 					/* parse identifier */
 					const char *start = *p;
 					if (!(isalpha((unsigned char)**p) || **p == '_'))
@@ -116,6 +123,7 @@ static long long parse_factor(const char **p, struct Env *env)
 					{
 						strcpy(frame.entries[frame.count].name, name);
 						frame.entries[frame.count].val = v;
+						frame.entries[frame.count].mut = is_mut;
 						frame.count++;
 					}
 					skipws(p);
@@ -125,6 +133,50 @@ static long long parse_factor(const char **p, struct Env *env)
 						continue;
 					}
 					continue;
+				}
+				/* assignment? detect identifier = ... */
+				if ((isalpha((unsigned char)**p) || **p == '_')) {
+					/* peek identifier */
+					const char *q = *p;
+					const char *start = q;
+					while (isalnum((unsigned char)*q) || *q == '_') q++;
+					/* capture identifier length before skipping whitespace */
+					size_t len = (size_t)(q - start);
+					const char *r = q;
+					skipws(&r);
+					if (*r == '=') {
+						/* do assignment */
+						char name[32]; if (len >= sizeof(name)) len = sizeof(name)-1;
+						memcpy(name, start, len); name[len] = '\0';
+						/* advance *p to after identifier and '=' */
+						*p = start + len;
+						skipws(p);
+						if (**p == '=') (*p)++;
+						long long v = parse_expr(p, &frame);
+						/* find in env chain and update */
+						int updated = 0;
+						for (struct Env *e = &frame; e; e = e->parent) {
+							for (size_t i = 0; i < e->count; ++i) {
+								if (strcmp(e->entries[i].name, name) == 0) {
+									e->entries[i].val = v;
+									updated = 1;
+									break;
+								}
+							}
+							if (updated) break;
+						}
+						/* if not found, create in current frame */
+						if (!updated && frame.count < 32) {
+							strcpy(frame.entries[frame.count].name, name);
+							frame.entries[frame.count].val = v;
+							frame.entries[frame.count].mut = 1;
+							frame.count++;
+						}
+						last = v;
+						skipws(p);
+						if (**p == ';') { (*p)++; continue; }
+						if (**p == '}') { (*p)++; break; }
+					}
 				}
 				/* otherwise evaluate expression in this frame */
 				last = parse_expr(p, &frame);
