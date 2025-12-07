@@ -102,6 +102,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretTopLevelLetWithoutType() {
+		assertEquals("100", App.interpret("let x = 100; x"));
+	}
+
+	@Test
 	void interpretTwoTopLevelLetsAndExpression() {
 		assertEquals("300", App.interpret("let x : I32 = 100; let y : I32 = 200; x + y"));
 	}

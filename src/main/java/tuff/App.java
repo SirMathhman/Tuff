@@ -275,23 +275,27 @@ public final class App {
 			String name = idm.group();
 			i += name.length();
 			skipWhitespace();
-			if (i >= n || s.charAt(i) != ':')
-				throw new IllegalArgumentException("missing type in let");
-			i++; // consume ':'
-			skipWhitespace();
-			java.util.regex.Matcher tm = java.util.regex.Pattern.compile("^(?:U|I)(?:8|16|32|64)").matcher(s.substring(i));
-			if (!tm.find())
-				throw new IllegalArgumentException("invalid type in let");
-			String type = tm.group();
-			String unsignedOrSigned = type.substring(0, 1);
-			String width = type.substring(1);
-			i += type.length();
+			String unsignedOrSigned = null;
+			String width = null;
+			if (i < n && s.charAt(i) == ':') {
+				i++; // consume ':'
+				skipWhitespace();
+				java.util.regex.Matcher tm = java.util.regex.Pattern.compile("^(?:U|I)(?:8|16|32|64)").matcher(s.substring(i));
+				if (!tm.find())
+					throw new IllegalArgumentException("invalid type in let");
+				String type = tm.group();
+				unsignedOrSigned = type.substring(0, 1);
+				width = type.substring(1);
+				i += type.length();
+			}
 			skipWhitespace();
 			if (i >= n || s.charAt(i) != '=')
 				throw new IllegalArgumentException("missing = in let");
 			i++; // consume '='
 			Operand exprVal = parseExpression();
-			validateRange(exprVal.value.toString(), unsignedOrSigned, width);
+			if (unsignedOrSigned != null && width != null) {
+				validateRange(exprVal.value.toString(), unsignedOrSigned, width);
+			}
 			locals.put(name, new Operand(exprVal.value, unsignedOrSigned, width));
 			return new Operand(exprVal.value, unsignedOrSigned, width);
 		}
