@@ -112,6 +112,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretTypedLetOverflowThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("let x : U8 = 100 + 200;"));
+	}
+
+	@Test
 	void interpretTwoTopLevelLetsAndExpression() {
 		assertEquals("300", App.interpret("let x : I32 = 100; let y : I32 = 200; x + y"));
 	}
