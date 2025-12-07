@@ -67,6 +67,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretMixedDifferentSuffixesThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("100U8 + 200U16"));
+	}
+
+	@Test
 	void interpretU16ReturnsNumber() {
 		assertEquals("456", App.interpret("456U16"));
 	}

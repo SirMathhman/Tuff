@@ -75,32 +75,11 @@ public final class App {
 			sum = sum.add(op.value);
 		}
 
-		// If all operands share exact signedness and width, validate sum fits that
-		// range
-		boolean allSameType = true;
-		String refSign = operands.get(0).unsignedOrSigned;
-		String refWidth = operands.get(0).width;
-		for (Operand op : operands) {
-			if ((refSign == null) ^ (op.unsignedOrSigned == null)) {
-				allSameType = false;
-				break;
-			}
-			if ((refWidth == null) ^ (op.width == null)) {
-				allSameType = false;
-				break;
-			}
-			if (refSign != null && !refSign.equals(op.unsignedOrSigned)) {
-				allSameType = false;
-				break;
-			}
-			if (refWidth != null && !refWidth.equals(op.width)) {
-				allSameType = false;
-				break;
-			}
-		}
-
-		if (allSameType && refWidth != null) {
-			validateRange(sum.toString(), refSign, refWidth);
+		String onlyType = singleTypedKind(operands);
+		if (onlyType != null) {
+			String signed = onlyType.substring(0, 1);
+			String width = onlyType.substring(1);
+			validateRange(sum.toString(), signed, width);
 		}
 
 		return sum.toString();
@@ -124,6 +103,8 @@ public final class App {
 			return new Operand(new java.math.BigInteger(token), null, null);
 		}
 
+        
+
 		java.util.regex.Matcher m = java.util.regex.Pattern.compile("^([-+]?\\d+)(?:(U|I)(8|16|32|64))?$").matcher(token);
 		if (!m.matches()) {
 			throw new IllegalArgumentException("invalid operand: " + token);
@@ -142,6 +123,19 @@ public final class App {
 		}
 
 		return new Operand(new java.math.BigInteger(number), unsignedOrSigned, width);
+	}
+
+	private static String singleTypedKind(java.util.List<Operand> operands) {
+		java.util.Set<String> typedSet = new java.util.HashSet<>();
+		for (Operand op : operands) {
+			if (op.unsignedOrSigned != null && op.width != null) {
+				typedSet.add(op.unsignedOrSigned + op.width);
+			}
+		}
+		if (typedSet.size() > 1) {
+			throw new IllegalArgumentException("mixed typed operands not supported");
+		}
+		return typedSet.isEmpty() ? null : typedSet.iterator().next();
 	}
 
 	private static void validateRange(String number, String unsignedOrSigned, String width) {
