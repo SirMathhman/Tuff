@@ -27,7 +27,6 @@ public final class App {
 			return exprResult;
 		}
 
-        
 		// Simple addition expressions like "100U8 + 50U8"
 		java.util.regex.Matcher addMatcher = java.util.regex.Pattern.compile("^\\s*([-+]?\\S+)\\s*\\+\\s*([-+]?\\S+)\\s*$")
 				.matcher(input);
@@ -98,6 +97,9 @@ public final class App {
 			if (result.unsignedOrSigned != null && result.width != null) {
 				validateRange(result.value.toString(), result.unsignedOrSigned, result.width);
 			}
+			if (result.isBoolean != null && result.isBoolean) {
+				return java.math.BigInteger.ONE.equals(result.value) ? "true" : "false";
+			}
 			return result.value.toString();
 		} catch (IllegalArgumentException ex) {
 			// propagate known evaluation errors
@@ -117,7 +119,7 @@ public final class App {
 		if (p.startsWithLet()) {
 			result = p.parseTopLevelBlock();
 		} else {
-			result = p.parseExpression();
+			result = p.parseLogicalOr();
 			p.skipWhitespace();
 			if (p.hasNext()) // leftover tokens -> not a simple expression
 				throw new IllegalArgumentException("invalid expression");
@@ -156,7 +158,7 @@ public final class App {
 		}
 
 		Operand parseExpression() {
-			Operand left = parseTerm();
+				Operand left = parseTerm();
 			while (true) {
 				skipWhitespace();
 				if (i >= n)
@@ -174,6 +176,48 @@ public final class App {
 			}
 			return left;
 		}
+
+			// logical-and level (&&) - binds looser than arithmetic
+			Operand parseLogicalAnd() {
+				Operand left = parseExpression();
+				while (true) {
+					skipWhitespace();
+					if (i + 1 < n && s.charAt(i) == '&' && s.charAt(i + 1) == '&') {
+						i += 2;
+						Operand right = parseExpression();
+						if (left.isBoolean == null || right.isBoolean == null)
+							throw new IllegalArgumentException("logical operators require boolean operands");
+						boolean lv = !java.math.BigInteger.ZERO.equals(left.value);
+						boolean rv = !java.math.BigInteger.ZERO.equals(right.value);
+						java.math.BigInteger val = (lv && rv) ? java.math.BigInteger.ONE : java.math.BigInteger.ZERO;
+						left = new Operand(val, true);
+					} else {
+						break;
+					}
+				}
+				return left;
+			}
+
+			// logical-or level (||)
+			Operand parseLogicalOr() {
+				Operand left = parseLogicalAnd();
+				while (true) {
+					skipWhitespace();
+					if (i + 1 < n && s.charAt(i) == '|' && s.charAt(i + 1) == '|') {
+						i += 2;
+						Operand right = parseLogicalAnd();
+						if (left.isBoolean == null || right.isBoolean == null)
+							throw new IllegalArgumentException("logical operators require boolean operands");
+						boolean lv = !java.math.BigInteger.ZERO.equals(left.value);
+						boolean rv = !java.math.BigInteger.ZERO.equals(right.value);
+						java.math.BigInteger val = (lv || rv) ? java.math.BigInteger.ONE : java.math.BigInteger.ZERO;
+						left = new Operand(val, true);
+					} else {
+						break;
+					}
+				}
+				return left;
+			}
 
 		Operand parseTerm() {
 			Operand left = parseFactor();
@@ -212,6 +256,14 @@ public final class App {
 			}
 
 			// parse number token (may include suffix)
+			// try boolean literal first
+			java.util.regex.Matcher boolm = java.util.regex.Pattern.compile("^true|^false").matcher(s.substring(i));
+			if (boolm.find()) {
+				String b = boolm.group();
+				i += b.length();
+				return new Operand("true".equals(b) ? java.math.BigInteger.ONE : java.math.BigInteger.ZERO, true);
+			}
+
 			// try number token
 			java.util.regex.Matcher m = java.util.regex.Pattern
 					.compile("^[+-]?\\d+(?:(?:U|I)(?:8|16|32|64))?")
@@ -254,7 +306,7 @@ public final class App {
 				if (s.startsWith("let", i) && (i + 3 == n || !Character.isJavaIdentifierPart(s.charAt(i + 3)))) {
 					last = parseLetStatement();
 				} else {
-					last = parseExpression();
+					last = parseLogicalOr();
 				}
 				skipWhitespace();
 				if (i < n && s.charAt(i) == ';') {
@@ -305,7 +357,7 @@ public final class App {
 			if (i >= n || s.charAt(i) != '=')
 				throw new IllegalArgumentException("missing = in let");
 			i++; // consume '='
-			Operand exprVal = parseExpression();
+						Operand exprVal = parseLogicalOr();
 			if (unsignedOrSigned != null && width != null) {
 				validateRange(exprVal.value.toString(), unsignedOrSigned, width);
 			}
@@ -325,7 +377,7 @@ public final class App {
 				if (s.startsWith("let", i) && (i + 3 == n || !Character.isJavaIdentifierPart(s.charAt(i + 3)))) {
 					last = parseLetStatement();
 				} else {
-					last = parseExpression();
+						last = parseLogicalOr();
 				}
 				skipWhitespace();
 				if (i < n && s.charAt(i) == ';') {
@@ -400,11 +452,21 @@ public final class App {
 		final java.math.BigInteger value;
 		final String unsignedOrSigned;
 		final String width;
+		final Boolean isBoolean;
 
 		Operand(java.math.BigInteger value, String unsignedOrSigned, String width) {
+			this(value, unsignedOrSigned, width, null);
+		}
+
+		Operand(java.math.BigInteger value, Boolean isBoolean) {
+			this(value, null, null, isBoolean);
+		}
+
+		private Operand(java.math.BigInteger value, String unsignedOrSigned, String width, Boolean isBoolean) {
 			this.value = value;
 			this.unsignedOrSigned = unsignedOrSigned;
 			this.width = width;
+			this.isBoolean = isBoolean;
 		}
 	}
 

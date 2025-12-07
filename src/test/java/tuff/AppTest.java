@@ -152,6 +152,16 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretLogicalOrReturnsTrue() {
+		assertEquals("true", App.interpret("true || false"));
+	}
+
+	@Test
+	void interpretLogicalAndReturnsFalse() {
+		assertEquals("false", App.interpret("true && false"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}
