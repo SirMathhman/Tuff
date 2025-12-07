@@ -236,6 +236,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretMatchExpressionSimple() {
+		assertEquals("5", App.interpret("let x = match 100 { case 100 => 5; case _ => 2 }; x"));
+	}
+
+	@Test
 	void interpretAddU8AndPlainIntegerReturnsSum() {
 		assertEquals("150", App.interpret("100U8 + 50"));
 	}

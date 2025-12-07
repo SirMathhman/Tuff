@@ -200,6 +200,11 @@ public final class Parser {
 			return parseIfExpression();
 		}
 
+		// support match-expression: match <expr> { case <pat> => <expr>; ... }
+		if (i + 4 < n && s.startsWith("match", i) && (i + 5 == n || !Character.isJavaIdentifierPart(s.charAt(i + 5)))) {
+			return parseMatchExpression();
+		}
+
 		Operand paren = parseParenthesized();
 		if (paren != null)
 			return paren;
@@ -296,6 +301,143 @@ public final class Parser {
 		parseElseKeyword();
 		Operand elseOp = parseLogicalOr();
 		return computeIfResult(cond, thenOp, elseOp);
+	}
+
+	private static final class MatchArm {
+		final boolean isWildcard;
+		final Operand pattern; // null when wildcard
+		final Operand result;
+
+		MatchArm(boolean isWildcard, Operand pattern, Operand result) {
+			this.isWildcard = isWildcard;
+			this.pattern = pattern;
+			this.result = result;
+		}
+	}
+
+	private Operand parseMatchExpression() {
+		i += 5; // consume 'match'
+		skipWhitespace();
+		Operand control = parseLogicalOr();
+		skipWhitespace();
+		if (i >= n || s.charAt(i) != '{')
+			throw new IllegalArgumentException("expected '{' after match expression");
+		i++; // consume '{'
+		java.util.List<MatchArm> arms = parseMatchArms();
+		Boolean armsAreBoolean = determineArmsAreBoolean(arms);
+		MatchArm chosen = findMatchArm(control, arms);
+		return computeMatchResult(chosen, arms, armsAreBoolean);
+	}
+
+	private java.util.List<MatchArm> parseMatchArms() {
+		java.util.List<MatchArm> arms = new java.util.ArrayList<>();
+		while (true) {
+			skipWhitespace();
+			if (i >= n)
+				throw new IllegalArgumentException("mismatched brace in match expression");
+			if (s.charAt(i) == '}') {
+				i++; // consume '}'
+				break;
+			}
+			arms.add(parseSingleMatchArm());
+		}
+		if (arms.isEmpty())
+			throw new IllegalArgumentException("match with no arms");
+		return arms;
+	}
+
+	private MatchArm parseSingleMatchArm() {
+		if (!s.startsWith("case", i) || (i + 4 < n && Character.isJavaIdentifierPart(s.charAt(i + 4))))
+			throw new IllegalArgumentException("expected 'case' in match expression");
+		i += 4; // consume 'case'
+		skipWhitespace();
+		boolean isWildcard = false;
+		Operand patt = null;
+		if (i < n && s.charAt(i) == '_') {
+			isWildcard = true;
+			i++; // consume '_'
+		} else {
+			patt = parseBooleanLiteral();
+			if (patt == null)
+				patt = parseNumberToken();
+			if (patt == null)
+				throw new IllegalArgumentException("invalid match pattern");
+		}
+		skipWhitespace();
+		if (!(i + 1 < n && s.charAt(i) == '=' && s.charAt(i + 1) == '>'))
+			throw new IllegalArgumentException("expected '=>' in match arm");
+		i += 2; // consume '=>'
+		Operand res = parseLogicalOr();
+		skipWhitespace();
+		if (i < n && s.charAt(i) == ';') {
+			i++; // consume ';'
+			return new MatchArm(isWildcard, patt, res);
+		}
+		// allow '}' next
+		skipWhitespace();
+		if (i < n && s.charAt(i) == '}') {
+			return new MatchArm(isWildcard, patt, res);
+		}
+		throw new IllegalArgumentException("expected ';' or '}' in match expression");
+	}
+
+	private Boolean determineArmsAreBoolean(java.util.List<MatchArm> arms) {
+		Boolean armsAreBoolean = null;
+		for (MatchArm a : arms) {
+			if (armsAreBoolean == null) {
+				armsAreBoolean = a.result.isBoolean != null;
+			} else {
+				if (armsAreBoolean != (a.result.isBoolean != null))
+					throw new IllegalArgumentException("match arms must be same kind");
+			}
+		}
+		return armsAreBoolean;
+	}
+
+	private MatchArm findMatchArm(Operand control, java.util.List<MatchArm> arms) {
+		for (MatchArm a : arms) {
+			if (a.isWildcard) {
+				return a;
+			}
+			if (a.pattern != null) {
+				if (a.pattern.isBoolean != null) {
+					if (control.isBoolean == null)
+						continue;
+					if (control.value.equals(a.pattern.value))
+						return a;
+				} else {
+					if (control.isBoolean != null)
+						continue;
+					if (control.value.equals(a.pattern.value))
+						return a;
+				}
+			}
+		}
+		return null;
+	}
+
+	private Operand computeMatchResult(MatchArm chosen, java.util.List<MatchArm> arms, Boolean armsAreBoolean) {
+		if (chosen == null)
+			throw new IllegalArgumentException("no match arm found and no wildcard present");
+		if (!armsAreBoolean) {
+			String[] kind = new String[] { null, null };
+			for (MatchArm a : arms) {
+				if (a.result.unsignedOrSigned != null && a.result.width != null) {
+					if (kind[0] == null && kind[1] == null) {
+						kind[0] = a.result.unsignedOrSigned;
+						kind[1] = a.result.width;
+					} else if (!kind[0].equals(a.result.unsignedOrSigned) || !kind[1].equals(a.result.width)) {
+						throw new IllegalArgumentException("mixed typed match arm results not supported");
+					}
+				}
+			}
+			if (kind[0] != null && kind[1] != null) {
+				App.validateRange(chosen.result.value.toString(), kind[0], kind[1]);
+				return new Operand(chosen.result.value, kind[0], kind[1]);
+			}
+			return new Operand(chosen.result.value, null, null);
+		}
+		return new Operand(chosen.result.value, true);
 	}
 
 	private Operand parseIfCondition() {
