@@ -266,6 +266,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretTypedDeclarationAssignThenReassignThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("let x : I32; x = 100; x = 200; x"));
+	}
+
+	@Test
 	void interpretMatchNoDefaultThrows() {
 		assertThrows(IllegalArgumentException.class,
 				() -> App.interpret("let x = match 300 { case 100 => 5; case 200 => 2 }; x"));

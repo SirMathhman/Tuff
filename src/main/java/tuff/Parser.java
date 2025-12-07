@@ -11,6 +11,20 @@ public final class Parser {
 	private Map<String, Operand> locals = new HashMap<>();
 	// track mutability for variables in scope
 	private Map<String, Boolean> mutables = new HashMap<>();
+	// track declared (typed but not-yet-initialized) variables
+	private Map<String, DeclaredType> declaredTypes = new HashMap<>();
+
+	Map<String, Operand> getLocals() {
+		return locals;
+	}
+
+	Map<String, Boolean> getMutables() {
+		return mutables;
+	}
+
+	Map<String, DeclaredType> getDeclaredTypes() {
+		return declaredTypes;
+	}
 
 	public Parser(String s) {
 		this.s = s;
@@ -288,7 +302,7 @@ public final class Parser {
 		if (i < n && s.charAt(i) == '=') {
 			i++; // consume '='
 			Operand val = parseLogicalOr();
-			new AssignmentUtils(locals, mutables).assign(name, val);
+			new AssignmentUtils(locals, mutables, declaredTypes).assign(name, val);
 			return locals.get(name);
 		}
 		i = start;
@@ -331,8 +345,10 @@ public final class Parser {
 		i++; // we assume caller found '{'
 		Map<String, Operand> prev = locals;
 		Map<String, Boolean> prevMut = mutables;
+		Map<String, DeclaredType> prevDeclared = declaredTypes;
 		locals = new HashMap<>(prev);
 		mutables = new HashMap<>(prevMut);
+		declaredTypes = new HashMap<>(prevDeclared);
 		Operand last = null;
 		while (true) {
 			skipWhitespace();
@@ -373,7 +389,7 @@ public final class Parser {
 	}
 
 	private Operand parseLetStatement() {
-		LetStatementParser lsp = new LetStatementParser(this, locals, mutables);
+		LetStatementParser lsp = new LetStatementParser(this);
 		return lsp.parseLetStatement();
 	}
 
@@ -381,8 +397,10 @@ public final class Parser {
 	public Operand parseTopLevelBlock() {
 		Map<String, Operand> prev = locals;
 		Map<String, Boolean> prevMut = mutables;
+		Map<String, DeclaredType> prevDeclared = declaredTypes;
 		locals = new HashMap<>(prev);
 		mutables = new HashMap<>(prevMut);
+		declaredTypes = new HashMap<>(prevDeclared);
 		Operand last = null;
 		while (true) {
 			skipWhitespace();
@@ -450,5 +468,11 @@ public final class Parser {
 
 	String remainingInput() {
 		return s.substring(i);
+	}
+
+	static final class DeclaredType {
+		boolean isBool;
+		String unsignedOrSigned;
+		String width;
 	}
 }

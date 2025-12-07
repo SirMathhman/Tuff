@@ -11,11 +11,13 @@ final class LetStatementParser {
 	private final Parser parser;
 	private final Map<String, Operand> locals;
 	private final Map<String, Boolean> mutables;
+	private final Map<String, Parser.DeclaredType> declaredTypes;
 
-	LetStatementParser(Parser parser, Map<String, Operand> locals, Map<String, Boolean> mutables) {
+	LetStatementParser(Parser parser) {
 		this.parser = parser;
-		this.locals = locals;
-		this.mutables = mutables;
+		this.locals = parser.getLocals();
+		this.mutables = parser.getMutables();
+		this.declaredTypes = parser.getDeclaredTypes();
 	}
 
 	Operand parseLetStatement() {
@@ -35,14 +37,15 @@ final class LetStatementParser {
 			throw new IllegalArgumentException("duplicate let declaration: " + name);
 		}
 		parser.skipWhitespace();
-		DeclaredType dt = null;
+		Parser.DeclaredType dt = null;
 		if (parser.peekChar() == ':') {
 			parser.consumeChar();
 			parser.skipWhitespace();
 			dt = readDeclaredType();
 		}
 		parser.skipWhitespace();
-		// initializer is optional when a type is declared (allow declaration without initializer)
+		// initializer is optional when a type is declared (allow declaration without
+		// initializer)
 		if (parser.peekChar() == '=') {
 			parser.consumeChar();
 			Operand exprVal = parser.parseLogicalOr();
@@ -53,17 +56,10 @@ final class LetStatementParser {
 			if (dt == null) {
 				throw new IllegalArgumentException("missing = in let");
 			}
-			// no initializer but typed declaration -> create default value and allow later assignment
-			Operand defaultVal;
-			if (dt.isBool) {
-				defaultVal = new Operand(java.math.BigInteger.ZERO, true);
-			} else {
-				defaultVal = new Operand(java.math.BigInteger.ZERO, dt.unsignedOrSigned, dt.width);
-			}
-			locals.put(name, defaultVal);
-			// mark as mutable so assignment later is allowed even without explicit `mut`
-			mutables.put(name, true);
-			return defaultVal;
+			// no initializer but typed declaration -> record declared type and mutability
+			declaredTypes.put(name, dt);
+			mutables.put(name, isMutable);
+			return new Operand(java.math.BigInteger.ZERO, dt.unsignedOrSigned, dt.width);
 		}
 	}
 
@@ -77,8 +73,8 @@ final class LetStatementParser {
 		return name;
 	}
 
-	private DeclaredType readDeclaredType() {
-		DeclaredType dt = new DeclaredType();
+	private Parser.DeclaredType readDeclaredType() {
+		Parser.DeclaredType dt = new Parser.DeclaredType();
 		Matcher tm = Pattern.compile("^(?:U|I)(?:8|16|32|64)").matcher(parser.remainingInput());
 		Matcher bm = Pattern.compile("^Bool").matcher(parser.remainingInput());
 		if (tm.find()) {
@@ -95,7 +91,7 @@ final class LetStatementParser {
 		return dt;
 	}
 
-	private Operand applyDeclaredType(String name, DeclaredType dt, Operand exprVal) {
+	private Operand applyDeclaredType(String name, Parser.DeclaredType dt, Operand exprVal) {
 		if (dt != null && dt.isBool) {
 			if (exprVal.isBoolean == null) {
 				throw new IllegalArgumentException("typed Bool assignment requires boolean operand");
@@ -120,9 +116,4 @@ final class LetStatementParser {
 		return new Operand(exprVal.value, signed, w);
 	}
 
-	static final class DeclaredType {
-		boolean isBool;
-		String unsignedOrSigned;
-		String width;
-	}
 }
