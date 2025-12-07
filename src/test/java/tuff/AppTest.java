@@ -241,6 +241,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretMatchBooleanControl() {
+		assertEquals("5", App.interpret("let x = match true { case true => 5; case false => 2 }; x"));
+	}
+
+	@Test
 	void interpretMatchNoDefaultThrows() {
 		assertThrows(IllegalArgumentException.class,
 				() -> App.interpret("let x = match 300 { case 100 => 5; case 200 => 2 }; x"));
