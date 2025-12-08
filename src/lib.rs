@@ -39,14 +39,24 @@ fn parse_operand(s: &str) -> Result<ParsedValue, &'static str> {
     // parse optional sign
     let mut idx = 0usize;
     let mut sign: Option<char> = None;
-    if bytes[0] == b'+' || bytes[0] == b'-' {
-        sign = Some(bytes[0] as char);
-        idx = 1;
+    if let Some(&first) = bytes.first() {
+        if first == b'+' || first == b'-' {
+            sign = Some(first as char);
+            idx = 1;
+        }
     }
 
     let start_digits = idx;
-    while idx < bytes.len() && (bytes[idx] >= b'0' && bytes[idx] <= b'9') {
-        idx += 1;
+    while idx < bytes.len() {
+        if let Some(&byte) = bytes.get(idx) {
+            if byte.is_ascii_digit() {
+                idx += 1;
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
     }
 
     if start_digits == idx {
@@ -103,7 +113,7 @@ fn parse_operand(s: &str) -> Result<ParsedValue, &'static str> {
                 kind,
                 width,
                 
-                value_u: (signed_val.abs()) as u128,
+                value_u: signed_val.unsigned_abs(),
                 value_i: signed_val,
                 repr: if signed_val < 0 { format!("-{}", digits) } else { digits.to_string() },
             })
@@ -125,7 +135,7 @@ pub fn interpret(s: &str) -> Result<String, &'static str> {
         let l = parse_operand(left)?;
         let r = parse_operand(right)?;
         // types must match (kind and width)
-        if l.kind.to_ascii_uppercase() != r.kind.to_ascii_uppercase() || l.width != r.width {
+        if !l.kind.eq_ignore_ascii_case(&r.kind) || l.width != r.width {
             return Err("mismatched operand types");
         }
 

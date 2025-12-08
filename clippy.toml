@@ -1,0 +1,9 @@
+# Clippy configuration for the project
+
+# Maximum lines allowed in a function
+too-many-lines-threshold = 500
+
+# Note: To enable restriction lints for panic-causing functions,
+# they must be set in the source code or via command-line flags.
+# See Cargo.toml [lints.clippy] section or use:
+# cargo clippy -- -W clippy::panic -W clippy::unwrap_used -W clippy::expect_used
