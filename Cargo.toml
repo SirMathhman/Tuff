@@ -7,10 +7,6 @@ edition = "2021"
 name = "tuff"
 path = "src/lib.rs"
 
-[[bin]]
-name = "tuff"
-path = "src/main.rs"
-
 [lints.clippy]
 # Restrict file length
 too_many_lines = "deny"
