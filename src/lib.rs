@@ -48,20 +48,56 @@ pub fn interpret(s: &str) -> Result<String, &'static str> {
     }
     out.push_str(digits);
 
-    // validate unsigned 8-bit range if suffix indicates U8
+    // validate based on suffix (support U/I with widths 8,16,32,64)
     let suffix = &s[idx..];
-    if suffix.len() >= 2 {
-        // simple check for U8 (case-insensitive)
-        if (suffix.as_bytes()[0] == b'U' || suffix.as_bytes()[0] == b'u') && suffix.contains('8') {
-            // parse digits as u128 and ensure it's <= 255
-            if let Ok(val) = digits.parse::<u128>() {
-                if val > 255 {
-                    return Err("value out of range for U8");
-                }
-            } else {
-                return Err("failed to parse numeric value");
+    let mut suffix_chars = suffix.chars();
+    let kind = suffix_chars.next().unwrap_or('\0');
+    let width_str: String = suffix_chars.take_while(|c| c.is_ascii_digit()).collect();
+    if width_str.is_empty() {
+        return Err("unsupported or missing width in suffix");
+    }
+
+    let width: u32 = width_str.parse().map_err(|_| "invalid width in suffix")?;
+
+    match kind {
+        'U' | 'u' => {
+            // unsigned: parse digits as u128 and compare to max
+            let val = digits.parse::<u128>().map_err(|_| "failed to parse numeric value")?;
+            let max = match width {
+                8 => u128::from(u8::MAX),
+                16 => u128::from(u16::MAX),
+                32 => u128::from(u32::MAX),
+                64 => u128::from(u64::MAX),
+                _ => return Err("unsupported unsigned width"),
+            };
+            if val > max {
+                return Err("value out of range for unsigned type");
             }
         }
+        'I' | 'i' => {
+            // signed: convert digits to i128 applying sign and ensure it's in range
+            let unsigned = digits.parse::<u128>().map_err(|_| "failed to parse numeric value")?;
+            // apply sign
+            let signed_val = if let Some('-') = sign {
+                let v = -(unsigned as i128);
+                v
+            } else {
+                unsigned as i128
+            };
+
+            let (min, max) = match width {
+                8 => (i128::from(i8::MIN), i128::from(i8::MAX)),
+                16 => (i128::from(i16::MIN), i128::from(i16::MAX)),
+                32 => (i128::from(i32::MIN), i128::from(i32::MAX)),
+                64 => (i128::from(i64::MIN), i128::from(i64::MAX)),
+                _ => return Err("unsupported signed width"),
+            };
+
+            if signed_val < min || signed_val > max {
+                return Err("value out of range for signed type");
+            }
+        }
+        _ => return Err("unsupported suffix kind"),
     }
 
     Ok(out)
@@ -115,5 +151,47 @@ mod tests {
     fn interpret_rejects_out_of_range_u8() {
         let input = "256U8";
         assert!(interpret(input).is_err());
+    }
+
+    #[test]
+    fn interpret_allows_u16_boundaries() {
+        assert_eq!(interpret("65535U16").unwrap(), "65535");
+        assert!(interpret("65536U16").is_err());
+    }
+
+    #[test]
+    fn interpret_allows_u32_boundaries() {
+        assert_eq!(interpret("4294967295U32").unwrap(), "4294967295");
+        assert!(interpret("4294967296U32").is_err());
+    }
+
+    #[test]
+    fn interpret_allows_u64_boundaries() {
+        assert_eq!(interpret("18446744073709551615U64").unwrap(), "18446744073709551615");
+        assert!(interpret("18446744073709551616U64").is_err());
+    }
+
+    #[test]
+    fn interpret_signed_i16_boundaries() {
+        assert_eq!(interpret("32767I16").unwrap(), "32767");
+        assert_eq!(interpret("-32768I16").unwrap(), "-32768");
+        assert!(interpret("32768I16").is_err());
+        assert!(interpret("-32769I16").is_err());
+    }
+
+    #[test]
+    fn interpret_signed_i32_boundaries() {
+        assert_eq!(interpret("2147483647I32").unwrap(), "2147483647");
+        assert_eq!(interpret("-2147483648I32").unwrap(), "-2147483648");
+        assert!(interpret("2147483648I32").is_err());
+        assert!(interpret("-2147483649I32").is_err());
+    }
+
+    #[test]
+    fn interpret_signed_i64_boundaries() {
+        assert_eq!(interpret("9223372036854775807I64").unwrap(), "9223372036854775807");
+        assert_eq!(interpret("-9223372036854775808I64").unwrap(), "-9223372036854775808");
+        assert!(interpret("9223372036854775808I64").is_err());
+        assert!(interpret("-9223372036854775809I64").is_err());
     }
 }
