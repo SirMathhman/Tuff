@@ -23,74 +23,23 @@ public final class Parser {
 	}
 
 	private Operand parseLeadingKeywords() {
-		skipWhitespace();
-		if (s.startsWith("let", i) && (i + 3 == n || !Character.isJavaIdentifierPart(s.charAt(i + 3)))) {
-			return parseLetStatement();
-		}
-		if (s.startsWith("fn", i) && (i + 2 == n || !Character.isJavaIdentifierPart(s.charAt(i + 2)))) {
-			new FunctionDefinitionParser(this).parseFunctionDefinition();
-			return null;
-		}
-		if (s.startsWith("while", i) && (i + 5 == n || !Character.isJavaIdentifierPart(s.charAt(i + 5)))) {
-			new WhileStatementParser(this).parseWhileStatement();
-			return null;
-		}
-		return null;
+		return ParsingHelpers.parseLeadingKeywords(this);
 	}
 
 	private void parseReturnStatement() {
-		if (!allowReturn)
-			throw new IllegalArgumentException("return outside function");
-		consumeKeyword("return");
-		skipWhitespace();
-		Operand ret = parseLogicalOr();
-		throw new ReturnException(ret);
+		ParsingHelpers.parseReturnStatement(this);
 	}
 
 	private void parseBreakStatement() {
-		if (loopDepth == 0)
-			throw new IllegalArgumentException("break outside of loop");
-		consumeKeyword("break");
-		throw new BreakException();
+		ParsingHelpers.parseBreakStatement(this);
 	}
 
 	private java.util.Map<String, Operand> bindFunctionParameters(FunctionDef fd, java.util.List<Operand> args) {
-		java.util.Map<String, Operand> fLocals = new java.util.HashMap<>();
-		for (int idx = 0; idx < args.size(); idx++) {
-			Operand a = args.get(idx);
-			DeclaredType pdt = fd.paramTypes.get(idx);
-			if (pdt != null && pdt.isBool) {
-				if (a.isBoolean == null)
-					throw new IllegalArgumentException("typed Bool assignment requires boolean operand");
-				fLocals.put(fd.paramNames.get(idx), new Operand(a.value, true));
-			} else if (pdt != null && pdt.unsignedOrSigned != null && pdt.width != null) {
-				if (a.isBoolean != null)
-					throw new IllegalArgumentException("typed numeric assignment requires numeric operand");
-				App.validateRange(a.value.toString(), pdt.unsignedOrSigned, pdt.width);
-				fLocals.put(fd.paramNames.get(idx), new Operand(a.value, pdt.unsignedOrSigned, pdt.width));
-			} else {
-				fLocals.put(fd.paramNames.get(idx), a);
-			}
-		}
-		return fLocals;
+		return ParsingHelpers.bindFunctionParameters(fd, args);
 	}
 
 	private Operand enforceDeclaredReturn(FunctionDef fd, Operand op) {
-		DeclaredType declared = fd.body.returnType;
-		if (declared == null)
-			return op;
-		if (declared.isBool) {
-			if (op.isBoolean == null)
-				throw new IllegalArgumentException("typed Bool return requires boolean operand");
-			return op;
-		}
-		if (declared.unsignedOrSigned != null && declared.width != null) {
-			if (op.isBoolean != null)
-				throw new IllegalArgumentException("typed numeric return requires numeric operand");
-			App.validateRange(op.value.toString(), declared.unsignedOrSigned, declared.width);
-			return new Operand(op.value, declared.unsignedOrSigned, declared.width);
-		}
-		return op;
+		return ParsingHelpers.enforceDeclaredReturn(fd, op);
 	}
 
 	Map<String, Boolean> getMutables() {
@@ -136,166 +85,27 @@ public final class Parser {
 	}
 
 	public Operand parseExpression() {
-		Operand left = parseTerm();
-		while (true) {
-			skipWhitespace();
-			if (i >= n)
-				break;
-			char c = s.charAt(i);
-			if (c == '+' || c == '-') {
-				i++;
-				Operand right = parseTerm();
-				if (left.isBoolean != null || right.isBoolean != null) {
-					throw new IllegalArgumentException("arithmetic operators require numeric operands");
-				}
-				java.math.BigInteger value = (c == '+') ? left.value.add(right.value) : left.value.subtract(right.value);
-				String[] kind = App.combineKinds(left, right);
-				left = new Operand(value, kind[0], kind[1]);
-			} else {
-				break;
-			}
-		}
-		return left;
+		return ExpressionParser.parseExpression(this);
 	}
 
 	// equality level (==, !=) - binds looser than additive but tighter than
 	// logical-and
 	Operand parseEquality() {
-		Operand left = parseExpression();
-		while (true) {
-			skipWhitespace();
-			String op = readEqualityOperator();
-			if (op == null)
-				break;
-			Operand right = parseExpression();
-			left = computeEqualityOp(left, right, op);
-		}
-		return left;
-	}
-
-	private String readEqualityOperator() {
-		skipWhitespace();
-		if (i + 1 < n) {
-			String two = s.substring(i, i + 2);
-			if ("==".equals(two) || "!=".equals(two) || "<=".equals(two) || ">=".equals(two)) {
-				i += 2;
-				return two;
-			}
-		}
-		if (i < n) {
-			char c = s.charAt(i);
-			if (c == '<' || c == '>') {
-				i++;
-				return String.valueOf(c);
-			}
-		}
-		return null;
-	}
-
-	private Operand computeEqualityOp(Operand left, Operand right, String op) {
-		if ("==".equals(op) || "!=".equals(op)) {
-			return computeEqualityEqOp(left, right, op);
-		}
-		return computeRelationalOp(left, right, op);
-	}
-
-	private Operand computeEqualityEqOp(Operand left, Operand right, String op) {
-		if ((left.isBoolean != null && right.isBoolean == null) || (left.isBoolean == null && right.isBoolean != null)) {
-			throw new IllegalArgumentException("equality requires operands of same kind");
-		}
-		boolean eq = left.value.equals(right.value);
-		boolean result = "==".equals(op) ? eq : !eq;
-		return new Operand(result ? java.math.BigInteger.ONE : java.math.BigInteger.ZERO, true);
-	}
-
-	private Operand computeRelationalOp(Operand left, Operand right, String op) {
-		if (left.isBoolean != null || right.isBoolean != null) {
-			throw new IllegalArgumentException("relational operators require numeric operands");
-		}
-		int cmp = left.value.compareTo(right.value);
-		boolean res;
-		switch (op) {
-			case "<":
-				res = cmp < 0;
-				break;
-			case "<=":
-				res = cmp <= 0;
-				break;
-			case ">":
-				res = cmp > 0;
-				break;
-			case ">=":
-				res = cmp >= 0;
-				break;
-			default:
-				throw new IllegalArgumentException("unknown operator " + op);
-		}
-		return new Operand(res ? java.math.BigInteger.ONE : java.math.BigInteger.ZERO, true);
+		return ExpressionParser.parseEquality(this);
 	}
 
 	// logical-and level (&&) - binds looser than equality
 	public Operand parseLogicalAnd() {
-		Operand left = parseEquality();
-		while (true) {
-			skipWhitespace();
-			if (i + 1 < n && s.charAt(i) == '&' && s.charAt(i + 1) == '&') {
-				i += 2;
-				Operand right = parseEquality();
-				if (left.isBoolean == null || right.isBoolean == null)
-					throw new IllegalArgumentException("logical operators require boolean operands");
-				boolean lv = !java.math.BigInteger.ZERO.equals(left.value);
-				boolean rv = !java.math.BigInteger.ZERO.equals(right.value);
-				java.math.BigInteger val = (lv && rv) ? java.math.BigInteger.ONE : java.math.BigInteger.ZERO;
-				left = new Operand(val, true);
-			} else {
-				break;
-			}
-		}
-		return left;
+		return ExpressionParser.parseLogicalAnd(this);
 	}
 
 	// logical-or level (||)
 	public Operand parseLogicalOr() {
-		Operand left = parseLogicalAnd();
-		while (true) {
-			skipWhitespace();
-			if (i + 1 < n && s.charAt(i) == '|' && s.charAt(i + 1) == '|') {
-				i += 2;
-				Operand right = parseLogicalAnd();
-				if (left.isBoolean == null || right.isBoolean == null)
-					throw new IllegalArgumentException("logical operators require boolean operands");
-				boolean lv = !java.math.BigInteger.ZERO.equals(left.value);
-				boolean rv = !java.math.BigInteger.ZERO.equals(right.value);
-				java.math.BigInteger val = (lv || rv) ? java.math.BigInteger.ONE : java.math.BigInteger.ZERO;
-				left = new Operand(val, true);
-			} else {
-				break;
-			}
-		}
-		return left;
+		return ExpressionParser.parseLogicalOr(this);
 	}
 
 	public Operand parseTerm() {
-		Operand left = parseFactor();
-		while (true) {
-			skipWhitespace();
-			if (i >= n)
-				break;
-			char c = s.charAt(i);
-			if (c == '*' || c == '/' || c == '%') {
-				i++;
-				Operand right = parseFactor();
-				if (left.isBoolean != null || right.isBoolean != null) {
-					throw new IllegalArgumentException("arithmetic operators require numeric operands");
-				}
-				java.math.BigInteger computed = App.computeBinaryOp(left.value, right.value, String.valueOf(c));
-				String[] kind = App.combineKinds(left, right);
-				left = new Operand(computed, kind[0], kind[1]);
-			} else {
-				break;
-			}
-		}
-		return left;
+		return ExpressionParser.parseTerm(this);
 	}
 
 	public Operand parseFactor() {
@@ -337,37 +147,11 @@ public final class Parser {
 	}
 
 	Operand parseBooleanLiteral() {
-		skipWhitespace();
-		if (s.startsWith("true", i) && (i + 4 == n || !Character.isJavaIdentifierPart(s.charAt(i + 4)))) {
-			i += 4;
-			return new Operand(java.math.BigInteger.ONE, true);
-		}
-		if (s.startsWith("false", i) && (i + 5 == n || !Character.isJavaIdentifierPart(s.charAt(i + 5)))) {
-			i += 5;
-			return new Operand(java.math.BigInteger.ZERO, true);
-		}
-		return null;
+		return LiteralParser.parseBooleanLiteral(this);
 	}
 
 	Operand parseNumberToken() {
-		skipWhitespace();
-		java.util.regex.Matcher m = java.util.regex.Pattern.compile("^([-+]?\\d+)(?:(U|I)(8|16|32|64))?")
-				.matcher(s.substring(i));
-		if (!m.find())
-			return null;
-		String number = m.group(1);
-		String unsignedOrSigned = m.group(2);
-		String width = m.group(3);
-		int len = m.group(0).length();
-		i += len;
-		if (unsignedOrSigned != null && "U".equals(unsignedOrSigned) && number.startsWith("-")) {
-			throw new IllegalArgumentException("unsigned type with negative value");
-		}
-		if (width != null) {
-			App.validateRange(number, unsignedOrSigned, width);
-			return new Operand(new java.math.BigInteger(number), unsignedOrSigned, width);
-		}
-		return new Operand(new java.math.BigInteger(number), null, null);
+		return LiteralParser.parseNumberToken(this);
 	}
 
 	private Operand parseIdentifierLookup() {
@@ -509,7 +293,6 @@ public final class Parser {
 			parseReturnStatement();
 		}
 
-        
 		if (s.startsWith("break", i) && (i + 5 == n || !Character.isJavaIdentifierPart(s.charAt(i + 5)))) {
 			parseBreakStatement();
 		}
@@ -651,6 +434,23 @@ public final class Parser {
 
 	String remainingInput() {
 		return s.substring(i);
+	}
+
+	int getLength() {
+		return n;
+	}
+
+	String getSubstring(int start, int end) {
+		return s.substring(start, end);
+	}
+
+	boolean isAllowReturn() {
+		return allowReturn;
+	}
+
+	Operand parseLetStatementDirect() {
+		LetStatementParser lsp = new LetStatementParser(this);
+		return lsp.parseLetStatement();
 	}
 
 }
