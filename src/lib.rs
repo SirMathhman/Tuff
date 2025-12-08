@@ -226,7 +226,7 @@ fn extract_token_info(
                 negs.push(neg);
             }
             Token::Op(_) => has_op = true,
-            Token::LParen | Token::RParen => has_paren = true,
+            Token::LParen | Token::RParen | Token::LBrace | Token::RBrace => has_paren = true,
         }
     }
 
@@ -261,12 +261,14 @@ enum Token {
     Op(char),
     LParen,
     RParen,
+    LBrace,
+    RBrace,
 }
 
 fn try_eval_addition(s: &str) -> Option<Result<String, String>> {
 
     fn is_delimiter(ch: char) -> bool {
-        ch.is_ascii_whitespace() || ch == '+' || ch == '-' || ch == '*' || ch == '(' || ch == ')'
+        ch.is_ascii_whitespace() || ch == '+' || ch == '-' || ch == '*' || ch == '(' || ch == ')' || ch == '{' || ch == '}'
     }
 
     fn parse_number(s: &str, start: &mut usize) {
@@ -302,6 +304,14 @@ fn try_eval_addition(s: &str) -> Option<Result<String, String>> {
                 }
                 ')' => {
                     tokens.push(Token::RParen);
+                    i += 1;
+                }
+                '{' => {
+                    tokens.push(Token::LBrace);
+                    i += 1;
+                }
+                '}' => {
+                    tokens.push(Token::RBrace);
                     i += 1;
                 }
                 '+' | '-' | '*' => {
@@ -443,6 +453,17 @@ fn try_eval_addition(s: &str) -> Option<Result<String, String>> {
                         Ok(v)
                     }
                     _ => Err("missing closing parenthesis".to_string()),
+                }
+            }
+            Some(Token::LBrace) => {
+                *pos += 1;
+                let v = parse_expr_rec(toks, pos, suf, parse_literal)?;
+                match toks.get(*pos) {
+                    Some(Token::RBrace) => {
+                        *pos += 1;
+                        Ok(v)
+                    }
+                    _ => Err("missing closing brace".to_string()),
                 }
             }
             _ => Err("invalid factor".to_string()),
@@ -673,5 +694,26 @@ mod tests {
     #[test]
     fn interpret_rejects_mismatched_suffixes_in_expression() {
         assert!(interpret("100U8 + 50U16").is_err());
+    }
+
+    #[test]
+    fn interpret_braces_grouping() {
+        let res = interpret("(1U8 + { 10U8 }) * 2U8");
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), "22");
+    }
+
+    #[test]
+    fn interpret_nested_braces() {
+        let res = interpret("{ { 5U8 } + 3U8 } * 2U8");
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), "16");
+    }
+
+    #[test]
+    fn interpret_braces_only() {
+        let res = interpret("{ 10U8 + 5U8 }");
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), "15");
     }
 }
