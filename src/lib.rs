@@ -48,6 +48,22 @@ pub fn interpret(s: &str) -> Result<String, &'static str> {
     }
     out.push_str(digits);
 
+    // validate unsigned 8-bit range if suffix indicates U8
+    let suffix = &s[idx..];
+    if suffix.len() >= 2 {
+        // simple check for U8 (case-insensitive)
+        if (suffix.as_bytes()[0] == b'U' || suffix.as_bytes()[0] == b'u') && suffix.contains('8') {
+            // parse digits as u128 and ensure it's <= 255
+            if let Ok(val) = digits.parse::<u128>() {
+                if val > 255 {
+                    return Err("value out of range for U8");
+                }
+            } else {
+                return Err("failed to parse numeric value");
+            }
+        }
+    }
+
     Ok(out)
 }
 
@@ -93,5 +109,11 @@ mod tests {
     fn interpret_allows_negative_with_signed_suffix() {
         let input = "-100I8";
         assert_eq!(interpret(input).unwrap(), "-100");
+    }
+
+    #[test]
+    fn interpret_rejects_out_of_range_u8() {
+        let input = "256U8";
+        assert!(interpret(input).is_err());
     }
 }
