@@ -27,6 +27,54 @@ public final class ParsingHelpers {
 			return null;
 		}
 
+		if (parser.startsWithKeyword("module")) {
+			parser.consumeKeyword("module");
+			parser.skipWhitespace();
+			java.util.regex.Matcher idm = java.util.regex.Pattern.compile("^[A-Za-z_]\\w*")
+					.matcher(parser.remainingInput());
+			if (!idm.find())
+				throw new IllegalArgumentException("invalid module name");
+			String name = idm.group();
+			parser.consumeKeyword(name);
+			parser.skipWhitespace();
+			if (parser.peekChar() != '{')
+				throw new IllegalArgumentException("missing '{' in module declaration");
+			int start = parser.getIndex();
+			int depth = 0;
+			int j = start;
+			for (;; j++) {
+				char c = parser.charAt(j);
+				if (c == '\u0000')
+					throw new IllegalArgumentException("mismatched brace in module body");
+				if (c == '{')
+					depth++;
+				else if (c == '}') {
+					depth--;
+					if (depth == 0)
+						break;
+				}
+			}
+			// inner body without outer braces
+			String inner = parser.getSubstring(start + 1, j);
+			Parser p2 = new Parser(inner);
+			// parse inner content as a top-level sequence so declared locals are retained
+			while (true) {
+				p2.skipWhitespace();
+				if (!p2.hasNext())
+					break;
+				p2.parseStatement();
+				p2.skipWhitespace();
+				if (p2.hasNext() && p2.peekChar() == ';') {
+					p2.consumeChar();
+					continue;
+				}
+			}
+			parser.getModules().put(name, new java.util.LinkedHashMap<>(p2.getLocals()));
+			// advance index past closing brace
+			parser.setIndex(j + 1);
+			return null;
+		}
+
 		if (parser.startsWithKeyword("extern")) {
 			parser.consumeKeyword("extern");
 			parser.skipWhitespace();

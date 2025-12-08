@@ -80,6 +80,10 @@ final class FunctionDefinitionParser {
 	}
 
 	void parseFunctionDefinition() {
+		parseFunctionDefinition(false);
+	}
+
+	void parseFunctionDefinition(boolean allowExtern) {
 		parser.consumeKeyword("fn");
 		parser.skipWhitespace();
 		java.util.regex.Matcher idm = java.util.regex.Pattern.compile("^[A-Za-z_]\\w*").matcher(parser.remainingInput());
@@ -104,6 +108,14 @@ final class FunctionDefinitionParser {
 		}
 
 		parser.skipWhitespace();
+		if (allowExtern && !parser.startsWithArrow()) {
+			FunctionDef.Signature sig = new FunctionDef.Signature(paramNames, paramTypes);
+			parser.getFunctions().put(name, new FunctionDef(typeParams, sig, null));
+			if (parser.peekChar() == ';') {
+				parser.consumeChar();
+			}
+			return;
+		}
 		if (!parser.startsWithArrow())
 			throw new IllegalArgumentException("expected => after fn signature");
 		parser.consumeArrow();
@@ -228,78 +240,4 @@ final class FunctionDefinitionParser {
 		return dt;
 	}
 
-	// overload to support optional extern marker
-	void parseFunctionDefinition() {
-		parseFunctionDefinition(false);
-	}
-
-	void parseFunctionDefinition(boolean isExtern) {
-		parser.consumeKeyword("fn");
-		parser.skipWhitespace();
-		java.util.regex.Matcher idm = java.util.regex.Pattern.compile("^[A-Za-z_]\\w*").matcher(parser.remainingInput());
-		if (!idm.find())
-			throw new IllegalArgumentException("invalid function name");
-		String name = idm.group();
-		parser.consumeKeyword(name);
-		parser.skipWhitespace();
-
-		java.util.List<String> typeParams = parseTypeParams();
-
-		FunctionDef.Signature parsedSig = parseSignatureParameters();
-		List<String> paramNames = parsedSig.paramNames;
-		List<DeclaredType> paramTypes = parsedSig.paramTypes;
-		parser.skipWhitespace();
-
-		DeclaredType returnType = null;
-		if (parser.peekChar() == ':') {
-			parser.consumeChar();
-			parser.skipWhitespace();
-			returnType = readDeclaredType();
-		}
-
-		parser.skipWhitespace();
-		if (isExtern) {
-			if (parser.peekChar() != ';')
-				throw new IllegalArgumentException("expected ';' after extern fn declaration");
-			parser.consumeChar();
-			FunctionDef.Signature sig = new FunctionDef.Signature(paramNames, paramTypes);
-			FunctionDef fd = new FunctionDef(typeParams, sig, new FunctionBody(returnType, ""));
-			parser.getFunctions().put(name, fd);
-			return;
-		}
-
-		if (!parser.startsWithArrow())
-			throw new IllegalArgumentException("expected => after fn signature");
-		parser.consumeArrow();
-		parser.skipWhitespace();
-
-		// allow either a block body or a single-statement/expression terminated by ';'
-		int start = parser.getIndex();
-		String body;
-		if (parser.peekChar() == '{') {
-			int closing = findMatchingBrace(start);
-			if (closing < 0)
-				throw new IllegalArgumentException("mismatched brace in fn body");
-			body = parser.remainingInput().substring(0, closing - start + 1);
-			// advance index past the body (closing is absolute index)
-			parser.setIndex(closing + 1);
-		} else {
-			// read until the next semicolon or EOF and use that as the function body
-			String rem = parser.remainingInput();
-			int relSemi = rem.indexOf(';');
-			if (relSemi < 0) {
-				// take rest of input as body
-				body = rem;
-				parser.setIndex(parser.getIndex() + rem.length());
-			} else {
-				body = rem.substring(0, relSemi + 1);
-				parser.setIndex(start + relSemi + 1);
-			}
-		}
-
-		FunctionDef.Signature sig = new FunctionDef.Signature(paramNames, paramTypes);
-		FunctionDef fd = new FunctionDef(typeParams, sig, new FunctionBody(returnType, body));
-		parser.getFunctions().put(name, fd);
-		// function stored; parser index already advanced past the body
-	}
 }

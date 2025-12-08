@@ -2,6 +2,8 @@ package tuff;
 
 public final class Operand {
 	public final java.math.BigInteger value;
+	public final String stringValue;
+	public final Boolean isChar;
 	public final String unsignedOrSigned;
 	public final String width;
 	public final Boolean isBoolean;
@@ -15,6 +17,8 @@ public final class Operand {
 	public final java.util.Map<String, Operand> structFields; // non-null for struct operands
 
 	public Operand(java.math.BigInteger value, String unsignedOrSigned, String width) {
+		this.stringValue = null;
+		this.isChar = null;
 		this.value = value;
 		this.unsignedOrSigned = unsignedOrSigned;
 		this.width = width;
@@ -28,6 +32,8 @@ public final class Operand {
 	}
 
 	public Operand(java.math.BigInteger value, Boolean isBoolean) {
+		this.stringValue = null;
+		this.isChar = null;
 		this.value = value;
 		this.unsignedOrSigned = null;
 		this.width = null;
@@ -63,6 +69,8 @@ public final class Operand {
 			this.elemWidth = null;
 			this.structFields = null;
 		}
+		this.stringValue = null;
+		this.isChar = null;
 	}
 
 	public Operand(java.util.Map<String, Operand> structFields) {
@@ -76,6 +84,38 @@ public final class Operand {
 		this.elemUnsignedOrSigned = null;
 		this.elemWidth = null;
 		this.structFields = structFields;
+		this.stringValue = null;
+		this.isChar = null;
+	}
+
+	public Operand(String stringValue) {
+		this.value = null;
+		this.unsignedOrSigned = null;
+		this.width = null;
+		this.isBoolean = null;
+		this.elements = null;
+		this.arrayCapacity = null;
+		this.elemIsBool = null;
+		this.elemUnsignedOrSigned = null;
+		this.elemWidth = null;
+		this.structFields = null;
+		this.stringValue = stringValue;
+		this.isChar = false;
+	}
+
+	public Operand(String stringValue, boolean isChar) {
+		this.value = null;
+		this.unsignedOrSigned = null;
+		this.width = null;
+		this.isBoolean = null;
+		this.elements = null;
+		this.arrayCapacity = null;
+		this.elemIsBool = null;
+		this.elemUnsignedOrSigned = null;
+		this.elemWidth = null;
+		this.structFields = null;
+		this.stringValue = stringValue;
+		this.isChar = isChar;
 	}
 
 }

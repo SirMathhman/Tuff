@@ -50,6 +50,43 @@ final class FactorParser {
 		if (num != null)
 			return num;
 
+		Operand str = LiteralParser.parseStringLiteral(parser);
+		if (str != null) {
+			// allow string indexing "foo"[0]
+			parser.skipWhitespace();
+			if (parser.peekChar() == '[') {
+				parser.consumeChar();
+				Operand idxOp = parser.parseLogicalOr();
+				parser.skipWhitespace();
+				if (parser.peekChar() != ']')
+					throw new IllegalArgumentException("missing ']' in index expression");
+				parser.consumeChar();
+				if (idxOp.isBoolean != null)
+					throw new IllegalArgumentException("index must be numeric");
+				int idx = idxOp.value.intValue();
+				if (idx < 0 || idx >= str.stringValue.length())
+					throw new IllegalArgumentException("index out of bounds");
+				char ch = str.stringValue.charAt(idx);
+				return new Operand(String.valueOf(ch), true);
+			}
+			// allow simple member access on literals (e.g., "foo".length)
+			while (parser.peekChar() == '.') {
+				parser.consumeChar();
+				parser.skipWhitespace();
+				java.util.regex.Matcher fm = java.util.regex.Pattern.compile("^[A-Za-z_]\\w*")
+						.matcher(parser.remainingInput());
+				if (!fm.find())
+					throw new IllegalArgumentException("invalid field name in member access");
+				String fname = fm.group();
+				parser.setIndex(parser.getIndex() + fname.length());
+				if ("length".equals(fname)) {
+					return new Operand(java.math.BigInteger.valueOf(str.stringValue.length()), null, null);
+				}
+				throw new IllegalArgumentException("unknown field: " + fname);
+			}
+			return str;
+		}
+
 		Operand fncall = parser.parseFunctionCallIfPresent();
 		if (fncall != null)
 			return fncall;

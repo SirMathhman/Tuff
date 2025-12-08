@@ -174,7 +174,7 @@ final class AssignmentUtils {
 			java.util.Map.Entry<Integer, Operand> assignment) {
 		int idx = assignment.getKey();
 		Operand val = assignment.getValue();
-		if (dt.elemIsBool != null && dt.elemIsBool) {
+		if (dt.elemIsBool) {
 			if (val.isBoolean == null)
 				throw new IllegalArgumentException("typed Bool array requires boolean elements");
 			elems.set(idx, new Operand(val.value, true));
@@ -217,7 +217,7 @@ final class AssignmentUtils {
 	private java.util.List<Operand> expandExistingArrayToIndex(Operand arr, int idx) {
 		java.util.List<Operand> elems = arr.elements;
 		while (elems.size() <= idx) {
-			if (arr.elemIsBool != null && arr.elemIsBool) {
+			if (arr.elemIsBool) {
 				elems.add(new Operand(java.math.BigInteger.ZERO, true));
 			} else if (arr.elemUnsignedOrSigned != null && arr.elemWidth != null) {
 				elems.add(new Operand(java.math.BigInteger.ZERO, arr.elemUnsignedOrSigned, arr.elemWidth));
@@ -232,7 +232,7 @@ final class AssignmentUtils {
 			java.util.Map.Entry<Integer, Operand> assignment) {
 		int idx = assignment.getKey();
 		Operand val = assignment.getValue();
-		if (arr.elemIsBool != null && arr.elemIsBool) {
+		if (arr.elemIsBool) {
 			if (val.isBoolean == null)
 				throw new IllegalArgumentException("typed Bool array requires boolean elements");
 			elems.set(idx, new Operand(val.value, true));

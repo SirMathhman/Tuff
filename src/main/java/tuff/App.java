@@ -21,6 +21,16 @@ public final class App {
 			return t;
 		}
 
+		// single-quoted character literal, e.g. 'a' or '\n'
+		if (t.matches("^'([^'\\\\]|\\\\.)'$")) {
+			return t;
+		}
+
+		// double-quoted string literal, e.g. "value" or "escaped \" quotes"
+		if (t.matches("^\"([^\"\\\\]|\\\\.)*\"$")) {
+			return t;
+		}
+
 		// Try parsing simple expressions containing + and - (left-to-right evaluation).
 		String exprResult = tryEvaluateExpression(input);
 		if (exprResult != null) {
@@ -58,6 +68,20 @@ public final class App {
 		}
 
 		return number;
+	}
+
+	/**
+	 * Interpret a set of source files where one file is the "main" entry point.
+	 */
+	public static String interpretAll(String mainScriptName, java.util.Map<String, String> sources) {
+		return interpret(SourceCombiner.combine(mainScriptName, sources));
+	}
+
+	/**
+	 * Convenience overload which assumes the main script key is "main".
+	 */
+	public static String interpretAll(java.util.Map<String, String> sources) {
+		return interpret(SourceCombiner.combine(sources));
 	}
 
 	private static boolean isSignedInteger(String s) {
@@ -126,11 +150,94 @@ public final class App {
 
 	private static String tryEvaluateExpression(String input) {
 		try {
+			// support simple string concatenation expressions made of only
+			// double-quoted literals separated by + (e.g. "a" + "b" + "c")
+			if (input != null) {
+				String s = input.trim();
+				if (!s.isEmpty()) {
+					java.util.List<String> parts = new java.util.ArrayList<>();
+					boolean inQuotes = false;
+					boolean escaping = false;
+					int partStart = 0;
+					for (int idx = 0; idx < s.length(); idx++) {
+						char ch = s.charAt(idx);
+						if (escaping) {
+							escaping = false;
+							continue;
+						}
+						if (ch == '\\') {
+							escaping = true;
+							continue;
+						}
+						if (ch == '"') {
+							inQuotes = !inQuotes;
+							continue;
+						}
+						if (ch == '+' && !inQuotes) {
+							parts.add(s.substring(partStart, idx));
+							partStart = idx + 1;
+						}
+					}
+					if (partStart > 0) {
+						parts.add(s.substring(partStart));
+					}
+
+					if (!parts.isEmpty()) {
+						// if we split by top-level '+' successfully and each part is a
+						// quoted string literal, concatenate their inner contents
+						java.lang.StringBuilder out = new java.lang.StringBuilder();
+						boolean allQuoted = true;
+						for (String p : parts) {
+							String t = p.trim();
+							if (t.length() >= 2 && t.charAt(0) == '"' && t.charAt(t.length() - 1) == '"') {
+								// validate internal quotes are escaped
+								boolean ok = true;
+								boolean esc = false;
+								for (int j = 1; j < t.length() - 1; j++) {
+									char c = t.charAt(j);
+									if (esc) {
+										esc = false;
+										continue;
+									}
+									if (c == '\\') {
+										esc = true;
+										continue;
+									}
+									if (c == '"') {
+										ok = false;
+										break;
+									}
+								}
+								if (!ok) {
+									allQuoted = false;
+									break;
+								}
+								out.append(t.substring(1, t.length() - 1));
+							} else {
+								allQuoted = false;
+								break;
+							}
+						}
+						if (allQuoted && out.length() > 0) {
+							return '"' + out.toString() + '"';
+						}
+						if (allQuoted && out.length() == 0 && parts.size() > 0) {
+							// handle case where parts are empty strings: "" + "" -> ""
+							return "\"\"";
+						}
+					}
+				}
+			}
 			Operand result = parseExpressionToOperand(input);
 			if (result == null)
 				return "";
 			if (result.elements != null) {
 				return "";
+			}
+			if (result.stringValue != null) {
+				if (result.isChar != null && result.isChar)
+					return "'" + result.stringValue + "'";
+				return '"' + result.stringValue + '"';
 			}
 			if (result.unsignedOrSigned != null && result.width != null) {
 				validateRange(result.value.toString(), result.unsignedOrSigned, result.width);
@@ -158,7 +265,7 @@ public final class App {
 		// if, or a leading '{'
 		if (p.startsWithLet() || p.startsWithKeyword("while") || p.startsWithKeyword("match") || p.startsWithKeyword("if")
 				|| p.startsWithKeyword("fn") || p.startsWithKeyword("extern") || p.startsWithKeyword("type")
-				|| p.startsWithKeyword("struct") || p.peekChar() == '{') {
+				|| p.startsWithKeyword("struct") || p.startsWithKeyword("module") || p.peekChar() == '{') {
 			result = p.parseTopLevelBlock();
 		} else {
 			result = p.parseLogicalOr();

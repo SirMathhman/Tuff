@@ -93,4 +93,49 @@ public final class LiteralParser {
 		}
 		return new Operand(new java.math.BigInteger(number), null, null);
 	}
+
+	/**
+	 * Parse a double-quoted string literal, handling escape sequences.
+	 */
+	static Operand parseStringLiteral(Parser parser) {
+		parser.skipWhitespace();
+		if (parser.peekChar() != '"') {
+			return null;
+		}
+		// consume '"'
+		parser.consumeChar();
+		StringBuilder sb = new StringBuilder();
+		boolean esc = false;
+		while (true) {
+			char c = parser.peekChar();
+			if (c == '\u0000')
+				throw new IllegalArgumentException("missing closing '\"' in string literal");
+			parser.consumeChar();
+			if (esc) {
+				esc = false;
+				if (c == 'n')
+					sb.append('\n');
+				else if (c == 't')
+					sb.append('\t');
+				else if (c == 'r')
+					sb.append('\r');
+				else if (c == '\\')
+					sb.append('\\');
+				else if (c == '"')
+					sb.append('"');
+				else
+					sb.append(c);
+				continue;
+			}
+			if (c == '\\') {
+				esc = true;
+				continue;
+			}
+			if (c == '"') {
+				break;
+			}
+			sb.append(c);
+		}
+		return new Operand(sb.toString());
+	}
 }
