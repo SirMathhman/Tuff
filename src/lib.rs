@@ -2,8 +2,9 @@ pub fn add(a: i32, b: i32) -> i32 {
     a + b
 }
 
-pub fn interpret(s: &str) -> String {
-    s.to_string()
+pub fn interpret(s: &str) -> Result<String, &'static str> {
+    let _ = s;
+    Err("interpret is stubbed to return an error")
 }
 
 #[cfg(test)]
@@ -21,14 +22,14 @@ mod tests {
     }
 
     #[test]
-    fn interpret_returns_same_string() {
+    fn interpret_returns_error() {
         let input = "hello world";
-        assert_eq!(interpret(input), input);
+        assert!(interpret(input).is_err());
     }
 
     #[test]
-    fn interpret_handles_unicode() {
+    fn interpret_handles_unicode_error() {
         let input = "こんにちは";
-        assert_eq!(interpret(input), input);
+        assert!(interpret(input).is_err());
     }
 }
