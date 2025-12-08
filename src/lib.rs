@@ -202,14 +202,20 @@ fn evaluate_add_sub_expression(s: &str) -> Result<String, &'static str> {
         let max = unsigned_max_for_width(first.width)?;
         let mut acc: u128 = first.value_u;
         for (op, next_pv) in pairs {
-            if !next_pv.kind.eq_ignore_ascii_case(&first.kind) || next_pv.width != first.width { return Err("mismatched operand types"); }
+            if !next_pv.kind.eq_ignore_ascii_case(&first.kind) || next_pv.width != first.width {
+                return Err("mismatched operand types");
+            }
             if op == '+' {
                 acc = acc.checked_add(next_pv.value_u).ok_or("overflow")?;
             } else {
-                if next_pv.value_u > acc { return Err("value out of range for unsigned type"); }
+                if next_pv.value_u > acc {
+                    return Err("value out of range for unsigned type");
+                }
                 acc = acc.checked_sub(next_pv.value_u).ok_or("overflow")?;
             }
-            if acc > max { return Err("value out of range for unsigned type"); }
+            if acc > max {
+                return Err("value out of range for unsigned type");
+            }
         }
         return Ok(acc.to_string());
     }
@@ -217,13 +223,21 @@ fn evaluate_add_sub_expression(s: &str) -> Result<String, &'static str> {
     let (min, max) = signed_range_for_width(first.width)?;
     let mut acc: i128 = first.value_i;
     for (op, next_pv) in pairs {
-        if !next_pv.kind.eq_ignore_ascii_case(&first.kind) || next_pv.width != first.width { return Err("mismatched operand types"); }
-        if op == '+' { acc = acc.checked_add(next_pv.value_i).ok_or("overflow")?; } else { acc = acc.checked_sub(next_pv.value_i).ok_or("overflow")?; }
-        if acc < min || acc > max { return Err("value out of range for signed type"); }
+        if !next_pv.kind.eq_ignore_ascii_case(&first.kind) || next_pv.width != first.width {
+            return Err("mismatched operand types");
+        }
+        if op == '+' {
+            acc = acc.checked_add(next_pv.value_i).ok_or("overflow")?;
+        } else {
+            acc = acc.checked_sub(next_pv.value_i).ok_or("overflow")?;
+        }
+        if acc < min || acc > max {
+            return Err("value out of range for signed type");
+        }
     }
 
     Ok(acc.to_string())
-            }
+}
 
 fn skip_whitespace_bytes(s: &str, mut idx: usize) -> usize {
     let bytes = s.as_bytes();
@@ -239,16 +253,23 @@ fn skip_whitespace_bytes(s: &str, mut idx: usize) -> usize {
 
 /* evaluate_unsigned_expr and evaluate_signed_expr removed; evaluate_add_sub_expression handles both */
 
-fn collect_ops_and_operands(s: &str, mut idx: usize) -> Result<Vec<(char, ParsedValue)>, &'static str> {
+fn collect_ops_and_operands(
+    s: &str,
+    mut idx: usize,
+) -> Result<Vec<(char, ParsedValue)>, &'static str> {
     let mut out: Vec<(char, ParsedValue)> = Vec::new();
     let len = s.len();
     let bytes = s.as_bytes();
 
     while idx < len {
         idx = skip_whitespace_bytes(s, idx);
-        if idx >= len { break; }
+        if idx >= len {
+            break;
+        }
         let op = *bytes.get(idx).ok_or("expected operator")? as char;
-        if op != '+' && op != '-' { return Err("expected operator"); }
+        if op != '+' && op != '-' {
+            return Err("expected operator");
+        }
         idx += 1;
 
         idx = skip_whitespace_bytes(s, idx);
@@ -344,6 +365,11 @@ mod tests {
     #[test]
     fn interpret_adds_subtracts_signed_i16() {
         assert_eq!(interpret("100I16 - 200I16 + 300I16").unwrap(), "200");
+    }
+
+    #[test]
+    fn interpret_rejects_invalid_suffix_and_tokens() {
+        assert!(interpret("100U8 - 200U8*)").is_err());
     }
 
     #[test]
