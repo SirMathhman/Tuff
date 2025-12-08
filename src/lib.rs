@@ -5,10 +5,29 @@ pub fn add(a: i32, b: i32) -> i32 {
 struct ParsedValue {
     kind: char,
     width: u32,
-    signed: bool,
     value_u: u128,
     value_i: i128,
     repr: String,
+}
+
+fn unsigned_max_for_width(width: u32) -> Result<u128, &'static str> {
+    match width {
+        8 => Ok(u128::from(u8::MAX)),
+        16 => Ok(u128::from(u16::MAX)),
+        32 => Ok(u128::from(u32::MAX)),
+        64 => Ok(u128::from(u64::MAX)),
+        _ => Err("unsupported unsigned width"),
+    }
+}
+
+fn signed_range_for_width(width: u32) -> Result<(i128, i128), &'static str> {
+    match width {
+        8 => Ok((i128::from(i8::MIN), i128::from(i8::MAX))),
+        16 => Ok((i128::from(i16::MIN), i128::from(i16::MAX))),
+        32 => Ok((i128::from(i32::MIN), i128::from(i32::MAX))),
+        64 => Ok((i128::from(i64::MIN), i128::from(i64::MAX))),
+        _ => Err("unsupported signed width"),
+    }
 }
 
 fn parse_operand(s: &str) -> Result<ParsedValue, &'static str> {
@@ -57,13 +76,7 @@ fn parse_operand(s: &str) -> Result<ParsedValue, &'static str> {
                 return Err("negative values not allowed for unsigned suffix");
             }
             let val = digits.parse::<u128>().map_err(|_| "failed to parse numeric value")?;
-            let max = match width {
-                8 => u128::from(u8::MAX),
-                16 => u128::from(u16::MAX),
-                32 => u128::from(u32::MAX),
-                64 => u128::from(u64::MAX),
-                _ => return Err("unsupported unsigned width"),
-            };
+            let max = unsigned_max_for_width(width)?;
             if val > max {
                 return Err("value out of range for unsigned type");
             }
@@ -71,7 +84,7 @@ fn parse_operand(s: &str) -> Result<ParsedValue, &'static str> {
             Ok(ParsedValue {
                 kind,
                 width,
-                signed: false,
+                
                 value_u: val,
                 value_i: val as i128,
                 repr: digits.to_string(),
@@ -80,13 +93,8 @@ fn parse_operand(s: &str) -> Result<ParsedValue, &'static str> {
         'I' | 'i' => {
             let unsigned = digits.parse::<u128>().map_err(|_| "failed to parse numeric value")?;
             let signed_val = if let Some('-') = sign { -(unsigned as i128) } else { unsigned as i128 };
-            let (min, max) = match width {
-                8 => (i128::from(i8::MIN), i128::from(i8::MAX)),
-                16 => (i128::from(i16::MIN), i128::from(i16::MAX)),
-                32 => (i128::from(i32::MIN), i128::from(i32::MAX)),
-                64 => (i128::from(i64::MIN), i128::from(i64::MAX)),
-                _ => return Err("unsupported signed width"),
-            };
+
+            let (min, max) = signed_range_for_width(width)?;
             if signed_val < min || signed_val > max {
                 return Err("value out of range for signed type");
             }
@@ -94,10 +102,10 @@ fn parse_operand(s: &str) -> Result<ParsedValue, &'static str> {
             Ok(ParsedValue {
                 kind,
                 width,
-                signed: true,
-                value_u: (signed_val as i128).abs() as u128,
+                
+                value_u: (signed_val.abs()) as u128,
                 value_i: signed_val,
-                repr: if signed_val < 0 { format!("{}{}", "-", digits) } else { digits.to_string() },
+                repr: if signed_val < 0 { format!("-{}", digits) } else { digits.to_string() },
             })
         }
         _ => Err("unsupported suffix kind"),
@@ -124,13 +132,7 @@ pub fn interpret(s: &str) -> Result<String, &'static str> {
         return match l.kind.to_ascii_uppercase() {
             'U' => {
                 // unsigned add
-                let max = match l.width {
-                    8 => u128::from(u8::MAX),
-                    16 => u128::from(u16::MAX),
-                    32 => u128::from(u32::MAX),
-                    64 => u128::from(u64::MAX),
-                    _ => return Err("unsupported unsigned width"),
-                };
+                    let max = unsigned_max_for_width(l.width)?;
                 let sum = l.value_u.checked_add(r.value_u).ok_or("overflow")?;
                 if sum > max {
                     return Err("value out of range for unsigned type");
@@ -138,13 +140,7 @@ pub fn interpret(s: &str) -> Result<String, &'static str> {
                 Ok(sum.to_string())
             }
             'I' => {
-                let (min, max) = match l.width {
-                    8 => (i128::from(i8::MIN), i128::from(i8::MAX)),
-                    16 => (i128::from(i16::MIN), i128::from(i16::MAX)),
-                    32 => (i128::from(i32::MIN), i128::from(i32::MAX)),
-                    64 => (i128::from(i64::MIN), i128::from(i64::MAX)),
-                    _ => return Err("unsupported signed width"),
-                };
+                let (min, max) = signed_range_for_width(l.width)?;
                 let sum = l.value_i.checked_add(r.value_i).ok_or("overflow")?;
                 if sum < min || sum > max {
                     return Err("value out of range for signed type");
