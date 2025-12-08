@@ -6,12 +6,12 @@
 	<module name="TreeWalker">
 		<!-- Enforce a maximum cyclomatic complexity of 15 per method -->
 		<module name="CyclomaticComplexity">
-			<property name="max" value="100" />
+			<property name="max" value="15" />
 		</module>
 
 		<!-- Enforce a maximum number of parameters per method -->
 		<module name="ParameterNumber">
-			<property name="max" value="10" />
+			<property name="max" value="3" />
 		</module>
 
 		<!-- Keep default recommended checks minimal for now -->
