@@ -24,6 +24,103 @@ final class AssignmentUtils {
 		}
 	}
 
+	void assignField(String name, String fieldName, Operand val) {
+		if (!locals.containsKey(name)) {
+			assignFieldDeclared(name, fieldName, val);
+		} else {
+			assignFieldExisting(name, fieldName, val);
+		}
+	}
+
+	private void assignFieldDeclared(String name, String fieldName, Operand val) {
+		if (!declaredTypes.containsKey(name))
+			throw new IllegalArgumentException("undefined variable: " + name);
+		DeclaredType dt = declaredTypes.get(name);
+		if (dt == null || !dt.isStruct)
+			throw new IllegalArgumentException("attempted field assignment on non-struct: " + name);
+		Boolean isMut = mutables.getOrDefault(name, false);
+		if (!isMut)
+			throw new IllegalArgumentException("assignment to immutable variable: " + name);
+
+		if (!dt.structFields.containsKey(fieldName))
+			throw new IllegalArgumentException("unknown field: " + fieldName);
+
+		// build initial struct with zero-initialized fields then assign
+		java.util.Map<String, Operand> fmap = new java.util.LinkedHashMap<>();
+		for (java.util.Map.Entry<String, DeclaredType> e : dt.structFields.entrySet()) {
+			String fn = e.getKey();
+			DeclaredType fdt = e.getValue();
+			if (fn.equals(fieldName)) {
+				// validate and place value
+				fmap.put(fn, coerceFieldValue(fdt, val));
+			} else {
+				// zero-init
+				if (fdt.isBool) {
+					fmap.put(fn, new Operand(java.math.BigInteger.ZERO, true));
+				} else if (fdt.unsignedOrSigned != null && fdt.width != null) {
+					fmap.put(fn, new Operand(java.math.BigInteger.ZERO, fdt.unsignedOrSigned, fdt.width));
+				} else if (fdt.isArray) {
+					fmap.put(fn, new Operand(new java.util.ArrayList<>()));
+				} else {
+					fmap.put(fn, new Operand(java.math.BigInteger.ZERO, null, null));
+				}
+			}
+		}
+
+		locals.put(name, new Operand(fmap));
+		declaredTypes.remove(name);
+	}
+
+	private void assignFieldExisting(String name, String fieldName, Operand val) {
+		if (!locals.containsKey(name))
+			throw new IllegalArgumentException("undefined variable: " + name);
+		Operand obj = locals.get(name);
+		if (obj.structFields == null)
+			throw new IllegalArgumentException("attempted field assignment on non-struct: " + name);
+		Boolean isMut = mutables.getOrDefault(name, false);
+		if (!isMut)
+			throw new IllegalArgumentException("assignment to immutable variable: " + name);
+		if (!obj.structFields.containsKey(fieldName))
+			throw new IllegalArgumentException("unknown field: " + fieldName);
+		// basic validation: if existing field has typed info, enforce
+		Operand oldField = obj.structFields.get(fieldName);
+		if (oldField.isBoolean != null && val.isBoolean == null)
+			throw new IllegalArgumentException("typed Bool assignment requires boolean operand");
+		if (oldField.isBoolean == null && val.isBoolean != null)
+			throw new IllegalArgumentException("typed numeric assignment requires numeric operand");
+
+		if (oldField.unsignedOrSigned != null && oldField.width != null) {
+			if (val.unsignedOrSigned != null && val.width != null) {
+				if (!oldField.unsignedOrSigned.equals(val.unsignedOrSigned) || !oldField.width.equals(val.width))
+					throw new IllegalArgumentException("mismatched typed assignment");
+			}
+			App.validateRange(val.value.toString(), oldField.unsignedOrSigned, oldField.width);
+			obj.structFields.put(fieldName, new Operand(val.value, oldField.unsignedOrSigned, oldField.width));
+		} else {
+			obj.structFields.put(fieldName, new Operand(val.value, val.unsignedOrSigned, val.width));
+		}
+		locals.put(name, obj);
+	}
+
+	private Operand coerceFieldValue(DeclaredType fdt, Operand val) {
+		if (fdt.isBool) {
+			if (val.isBoolean == null)
+				throw new IllegalArgumentException("typed Bool field assignment requires boolean operand");
+			return new Operand(val.value, true);
+		}
+		if (fdt.unsignedOrSigned != null && fdt.width != null) {
+			if (val.isBoolean != null)
+				throw new IllegalArgumentException("typed numeric field assignment requires numeric operand");
+			if (val.unsignedOrSigned != null && val.width != null) {
+				if (!fdt.unsignedOrSigned.equals(val.unsignedOrSigned) || !fdt.width.equals(val.width))
+					throw new IllegalArgumentException("mismatched typed assignment");
+			}
+			App.validateRange(val.value.toString(), fdt.unsignedOrSigned, fdt.width);
+			return new Operand(val.value, fdt.unsignedOrSigned, fdt.width);
+		}
+		return new Operand(val.value, val.unsignedOrSigned, val.width);
+	}
+
 	private void assignIndexedDeclared(String name, int idx, Operand val) {
 		if (!declaredTypes.containsKey(name))
 			throw new IllegalArgumentException("undefined variable: " + name);

@@ -25,9 +25,12 @@ final class LetStatementParser {
 		String elemType = parts[0];
 		if (elemType.startsWith("Bool")) {
 			dt.elemIsBool = true;
-		} else {
+		} else if (elemType.matches("^(?:U|I)(?:8|16|32|64|Size)$")) {
 			dt.elemUnsignedOrSigned = elemType.substring(0, 1);
 			dt.elemWidth = elemType.substring(1);
+		} else {
+			// treat as type variable like 'T'
+			dt.elemTypeVarName = elemType;
 		}
 		if (parts.length > 1) {
 			try {
@@ -136,7 +139,7 @@ final class LetStatementParser {
 	private DeclaredType readDeclaredType() {
 		DeclaredType dt = new DeclaredType();
 		String rem = parser.remainingInput();
-		Matcher tm = Pattern.compile("^(?:U|I)(?:8|16|32|64)").matcher(rem);
+		Matcher tm = Pattern.compile("^(?:U|I)(?:8|16|32|64|Size)").matcher(rem);
 		Matcher bm = Pattern.compile("^Bool").matcher(rem);
 		Matcher am = Pattern.compile("^\\[\\s*[^\\]]+\\]").matcher(rem);
 		if (tm.find()) {
@@ -154,7 +157,25 @@ final class LetStatementParser {
 			dt.isArray = true;
 			parser.setIndex(parser.getIndex() + found.length());
 		} else {
-			throw new IllegalArgumentException("invalid type in let");
+			// support alias like 'MyInt'
+			java.util.regex.Matcher idm = java.util.regex.Pattern.compile("^[A-Za-z_]\\w*").matcher(rem);
+			if (!idm.find())
+				throw new IllegalArgumentException("invalid type in let");
+			String alias = idm.group();
+			java.util.Map<String, DeclaredType> aliases = parser.getTypeAliases();
+			if (!aliases.containsKey(alias))
+				throw new IllegalArgumentException("invalid type in let");
+			DeclaredType found = aliases.get(alias);
+			dt.isBool = found.isBool;
+			dt.unsignedOrSigned = found.unsignedOrSigned;
+			dt.width = found.width;
+			dt.isArray = found.isArray;
+			dt.elemIsBool = found.elemIsBool;
+			dt.elemUnsignedOrSigned = found.elemUnsignedOrSigned;
+			dt.elemWidth = found.elemWidth;
+			dt.arrayLength = found.arrayLength;
+			dt.arrayCapacity = found.arrayCapacity;
+			parser.consumeKeyword(alias);
 		}
 		return dt;
 	}

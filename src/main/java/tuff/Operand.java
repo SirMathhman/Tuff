@@ -12,6 +12,8 @@ public final class Operand {
 	public final String elemUnsignedOrSigned;
 	public final String elemWidth;
 
+	public final java.util.Map<String, Operand> structFields; // non-null for struct operands
+
 	public Operand(java.math.BigInteger value, String unsignedOrSigned, String width) {
 		this.value = value;
 		this.unsignedOrSigned = unsignedOrSigned;
@@ -22,6 +24,7 @@ public final class Operand {
 		this.elemIsBool = null;
 		this.elemUnsignedOrSigned = null;
 		this.elemWidth = null;
+		this.structFields = null;
 	}
 
 	public Operand(java.math.BigInteger value, Boolean isBoolean) {
@@ -34,6 +37,7 @@ public final class Operand {
 		this.elemIsBool = null;
 		this.elemUnsignedOrSigned = null;
 		this.elemWidth = null;
+		this.structFields = null;
 	}
 
 	public Operand(java.util.List<Operand> elements) {
@@ -51,12 +55,27 @@ public final class Operand {
 			this.elemIsBool = dt.elemIsBool;
 			this.elemUnsignedOrSigned = dt.elemUnsignedOrSigned;
 			this.elemWidth = dt.elemWidth;
+			this.structFields = null;
 		} else {
 			this.arrayCapacity = null;
 			this.elemIsBool = null;
 			this.elemUnsignedOrSigned = null;
 			this.elemWidth = null;
+			this.structFields = null;
 		}
+	}
+
+	public Operand(java.util.Map<String, Operand> structFields) {
+		this.value = null;
+		this.unsignedOrSigned = null;
+		this.width = null;
+		this.isBoolean = null;
+		this.elements = null;
+		this.arrayCapacity = null;
+		this.elemIsBool = null;
+		this.elemUnsignedOrSigned = null;
+		this.elemWidth = null;
+		this.structFields = structFields;
 	}
 
 }

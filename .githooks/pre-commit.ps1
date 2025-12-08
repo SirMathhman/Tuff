@@ -8,7 +8,7 @@ if ($mvn.ExitCode -ne 0) {
     exit 1
 }
 
-$MAX = 500
+$MAX = 1000
 if ($env:MAX_LINES) {
     $MAX = [int]$env:MAX_LINES
 }

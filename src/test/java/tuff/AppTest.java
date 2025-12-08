@@ -50,6 +50,43 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretTypedUSizeDeclarationReturnsValue() {
+		assertEquals("100", App.interpret("let value : USize = 100USize; value"));
+	}
+
+	@Test
+	void interpretGenericPassReturnsArgument() {
+		assertEquals("100", App.interpret("fn pass<T>(value : T) : T => value; pass(100)"));
+	}
+
+	@Test
+	void interpretGenericPassWithExplicitTypeReturnsArgument() {
+		assertEquals("100", App.interpret("fn pass<T>(value : T) : T => value; pass<I32>(100)"));
+	}
+
+	@Test
+	void interpretExternCreateArrayThenAssign() {
+		String src = "extern fn createArray<T>(length : USize) : [T]; let mut array : [I32] = createArray<I32>(1); array[0] = 100; array[0]";
+		assertEquals("100", App.interpret(src));
+	}
+
+	@Test
+	void interpretTypeAliasNumericThenUse() {
+		String src = "type MyInt = I32; let value : MyInt = 100; value";
+		assertEquals("100", App.interpret(src));
+	}
+
+	@Test
+	void interpretIsTypeReturnsTrue() {
+		assertEquals("true", App.interpret("let value : I32 = 100; value is I32"));
+	}
+
+	@Test
+	void interpretEmptyStructDeclarationReturnsEmpty() {
+		assertEquals("", App.interpret("struct Empty { }"));
+	}
+
+	@Test
 	void interpretZeroLengthArrayAssignExpandsAndAssigns() {
 		assertEquals("100", App.interpret("let mut array : [U8; 0; 1]; array[0] = 100; array[0]"));
 	}

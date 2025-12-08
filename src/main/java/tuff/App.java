@@ -39,7 +39,7 @@ public final class App {
 		}
 
 		java.util.regex.Matcher m = java.util.regex.Pattern
-				.compile("^([-+]?\\d+)(?:(U|I)(8|16|32|64))?$")
+				.compile("^([-+]?\\d+)(?:(U|I)(8|16|32|64|Size))?$")
 				.matcher(input);
 		if (!m.matches()) {
 			throw new IllegalArgumentException("interpret: non-empty non-integer input not supported");
@@ -102,7 +102,7 @@ public final class App {
 			return new Operand(new java.math.BigInteger(token), null, null);
 		}
 
-		java.util.regex.Matcher m = java.util.regex.Pattern.compile("^([-+]?\\d+)(?:(U|I)(8|16|32|64))?$")
+		java.util.regex.Matcher m = java.util.regex.Pattern.compile("^([-+]?\\d+)(?:(U|I)(8|16|32|64|Size))?$")
 				.matcher(token);
 		if (!m.matches()) {
 			throw new IllegalArgumentException("invalid operand: " + token);
@@ -157,7 +157,8 @@ public final class App {
 		// Allow parsing top-level blocks when we have statements: let, while, match,
 		// if, or a leading '{'
 		if (p.startsWithLet() || p.startsWithKeyword("while") || p.startsWithKeyword("match") || p.startsWithKeyword("if")
-				|| p.startsWithKeyword("fn") || p.peekChar() == '{') {
+				|| p.startsWithKeyword("fn") || p.startsWithKeyword("extern") || p.startsWithKeyword("type")
+				|| p.startsWithKeyword("struct") || p.peekChar() == '{') {
 			result = p.parseTopLevelBlock();
 		} else {
 			result = p.parseLogicalOr();
@@ -228,6 +229,13 @@ public final class App {
 				return new java.math.BigInteger[] { java.math.BigInteger.valueOf(Integer.MIN_VALUE),
 						java.math.BigInteger.valueOf(Integer.MAX_VALUE) };
 			case "64":
+				if (isUnsigned) {
+					return new java.math.BigInteger[] { java.math.BigInteger.ZERO,
+							new java.math.BigInteger("18446744073709551615") };
+				}
+				return new java.math.BigInteger[] { java.math.BigInteger.valueOf(Long.MIN_VALUE),
+						java.math.BigInteger.valueOf(Long.MAX_VALUE) };
+			case "Size":
 				if (isUnsigned) {
 					return new java.math.BigInteger[] { java.math.BigInteger.ZERO,
 							new java.math.BigInteger("18446744073709551615") };

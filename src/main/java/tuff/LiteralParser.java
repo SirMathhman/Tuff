@@ -72,7 +72,7 @@ public final class LiteralParser {
 	static Operand parseNumberToken(Parser parser) {
 		parser.skipWhitespace();
 		String remaining = parser.remainingInput();
-		Pattern p = Pattern.compile("^([-+]?\\d+)(?:(U|I)(8|16|32|64))?");
+		Pattern p = Pattern.compile("^([-+]?\\d+)(?:(U|I)(8|16|32|64|Size))?");
 		Matcher m = p.matcher(remaining);
 		if (!m.find())
 			return null;
