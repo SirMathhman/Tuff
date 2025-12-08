@@ -52,9 +52,9 @@ public class AppTest {
 	}
 
 	@Test
-	void interpretCopyFromZeroLengthTypedArrayThrows() {
+	void interpretCopyZeroLengthTypedArrayToDifferentSizedTypedArrayThrows() {
 		assertThrows(IllegalArgumentException.class,
-				() -> App.interpret("let mut array : [U8; 0; 5]; let copy : [U8; 1; 1] = array;"));
+				() -> App.interpret("let mut array : [U8; 0; 5]; let copy : [U8; 3; 5] = array;"));
 	}
 
 	@Test
