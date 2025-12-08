@@ -13,6 +13,7 @@ final class AssignmentUtils {
 		this.mutables = mutables;
 		this.declaredTypes = declaredTypes;
 	}
+
 	void assignIndexed(String name, int idx, Operand val) {
 		if (idx < 0)
 			throw new IllegalArgumentException("index out of bounds");
@@ -97,7 +98,7 @@ final class AssignmentUtils {
 		validateFieldCompatibility(oldField, val);
 
 		if (oldField.unsignedOrSigned != null && oldField.width != null) {
-			assignTypedNumericField(obj, fieldName, oldField, val);
+			assignTypedNumericField(obj, fieldName, val);
 			return;
 		}
 		// preserve string fields
@@ -130,10 +131,6 @@ final class AssignmentUtils {
 		}
 		TypeUtils.validateRange(val.value.toString(), oldField.unsignedOrSigned, oldField.width);
 		obj.structFields.put(fieldName, new Operand(val.value, oldField.unsignedOrSigned, oldField.width));
-	}
-
-	private void ensureCompoundOperandsAreNumeric(Operand old, Operand val) {
-		ensureCompoundOperandsAreNumeric(old, val);
 	}
 
 	private Operand coerceFieldValue(DeclaredType fdt, Operand val) {
@@ -464,7 +461,10 @@ final class AssignmentUtils {
 				? new Operand(java.math.BigInteger.ZERO, true)
 				: new Operand(java.math.BigInteger.ZERO, dt != null ? dt.unsignedOrSigned : null,
 						dt != null ? dt.width : null);
-		ensureCompoundOperandsAreNumeric(old, val);
+		if (old.isBoolean != null || val.isBoolean != null)
+			throw new IllegalArgumentException("compound assignment requires numeric operands");
+		if (old.stringValue != null || val.stringValue != null)
+			throw new IllegalArgumentException("compound assignment requires numeric operands");
 		java.math.BigInteger newVal = TypeUtils.computeBinaryOp(old.value, val.value, String.valueOf(op));
 		if (dt != null && dt.unsignedOrSigned != null && dt.width != null) {
 			TypeUtils.validateRange(newVal.toString(), dt.unsignedOrSigned, dt.width);

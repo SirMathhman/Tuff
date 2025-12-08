@@ -51,10 +51,11 @@ final class BlockParser {
 			}
 			parser.skipWhitespace();
 			if (parser.peekChar() == '}') {
+				// Allow the last statement in a block to omit the trailing semicolon
 				continue;
 			}
-			if (parser.peekChar() != '}')
-				throw new IllegalArgumentException("expected ';' or '}' in block");
+			// If we're not at a semicolon or closing brace, this is an error
+			throw new IllegalArgumentException("expected ';' or '}' in block");
 		}
 		return last;
 	}

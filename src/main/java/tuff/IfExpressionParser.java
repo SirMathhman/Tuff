@@ -11,8 +11,8 @@ final class IfExpressionParser {
 		parser.consumeIf();
 		Operand cond = parseIfCondition();
 		Operand thenOp = parser.parseLogicalOr();
-		parseElseKeyword();
-		Operand elseOp = parser.parseLogicalOr();
+		boolean hasElse = parseElseKeywordIfPresent();
+		Operand elseOp = hasElse ? parser.parseLogicalOr() : defaultElseOperand();
 		return computeIfResult(cond, thenOp, elseOp);
 	}
 
@@ -30,12 +30,19 @@ final class IfExpressionParser {
 		return cond;
 	}
 
-	private void parseElseKeyword() {
+	private boolean parseElseKeywordIfPresent() {
 		parser.skipWhitespace();
-		if (!parser.startsWithKeyword("else"))
-			throw new IllegalArgumentException("expected 'else' in if-expression");
+		if (!parser.startsWithKeyword("else")) {
+			return false;
+		}
 		parser.consumeKeyword("else");
 		parser.skipWhitespace();
+		return true;
+	}
+
+	private Operand defaultElseOperand() {
+		// Use a zero numeric operand as a neutral placeholder when no else is provided.
+		return new Operand(java.math.BigInteger.ZERO, null, null);
 	}
 
 	private Operand computeIfResult(Operand cond, Operand thenOp, Operand elseOp) {

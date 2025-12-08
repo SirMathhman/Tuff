@@ -1,46 +1,35 @@
 extern fn print<T>(value : T) : Void;
 
-let mut currentContext : String = "";
-let mut currentTestName : String = "";
-
 let mut currentTestPasses = true;
-let mut currentTestFailureReason = "";
-
 let mut totalPassed = 0;
 let mut totalCount = 0;
 
-fn describe(context : String, action : () => {
+fn describe(action : () => Void) => {
 	totalPassed = 0;
 	totalCount = 0;
-
 	action();
-
-	print(currentContext + ": ");
 	print(totalPassed);
 	print(" / ");
 	print(totalCount);
-});
+};
 
-fn it(testName : String, perform : () => Void) => {
+fn it(perform : () => Void) => {
+	currentTestPasses = true;
 	perform();
-
 	if (currentTestPasses) {
 		totalPassed += 1;
-	} else {
-		print("Fail: " + testName + ", Reason: " + currentTestFailureReason + "\n");
-	}
-
+	};
 	totalCount += 1;
-}
+};
 
 fn assertTrue(value : Bool) => {
 	if (!value) {
 		currentTestPasses = false;
-	}
-}
+	};
+};
 
-describe("All tests", () => {
-	test("A sample test passes", () => {
+describe(() => {
+	it(() => {
 		assertTrue(true);
 	});
-})
+});

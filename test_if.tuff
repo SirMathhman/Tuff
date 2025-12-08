@@ -1,0 +1,6 @@
+let mut x = 0;
+let flag = true;
+if (flag) {
+    x += 1;
+};
+x

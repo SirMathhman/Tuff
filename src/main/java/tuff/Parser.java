@@ -147,7 +147,7 @@ public final class Parser {
 
 			// fallback: regular parenthesized expression
 			i++; // consume '('
-			Operand inner = parseExpression();
+			Operand inner = parseLogicalOr();
 			skipWhitespace();
 			if (i >= n || s.charAt(i) != ')')
 				throw new IllegalArgumentException("mismatched parentheses");

@@ -16,7 +16,48 @@ final class FactorParser {
 			return primary;
 		}
 
-		throw new IllegalArgumentException("invalid token at position " + parser.getIndex());
+		int pos = parser.getIndex();
+		String rem = parser.remainingInput();
+		String previewRaw = rem.length() > 40 ? rem.substring(0, 40) + "..." : rem;
+		String preview = previewRaw.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
+		String found = pos < parser.getLength() ? String.valueOf(parser.charAt(pos)) : "<EOF>";
+		// compute line/column and the full line contents for a caret pointer
+		int line = 1, col = 1;
+		for (int j = 0; j < pos; j++) {
+			char c = parser.charAt(j);
+			if (c == '\n') {
+				line++;
+				col = 1;
+			} else {
+				col++;
+			}
+		}
+
+		// find current line boundaries
+		int startIdx = pos;
+		while (startIdx > 0) {
+			char c = parser.charAt(startIdx - 1);
+			if (c == '\n' || c == '\u0000')
+				break;
+			startIdx--;
+		}
+		int endIdx = pos;
+		while (true) {
+			char c = parser.charAt(endIdx);
+			if (c == '\n' || c == '\u0000')
+				break;
+			endIdx++;
+		}
+		String lineContent = parser.getSubstring(startIdx, endIdx).replace("\t", "\\t");
+		int caretPos = col - 1; // zero-based in this line
+		StringBuilder caret = new StringBuilder();
+		for (int k = 0; k < caretPos; k++)
+			caret.append(' ');
+		caret.append('^');
+
+		String msg = String.format("invalid token at line %d, col %d: '%s'\n%s\n%s", line, col, found, lineContent,
+				caret.toString());
+		throw new IllegalArgumentException(msg);
 	}
 
 	private static Operand parseKeywordFactor(Parser parser) {
@@ -30,6 +71,18 @@ final class FactorParser {
 	}
 
 	private static Operand parsePrimary(Parser parser) {
+		// support unary logical not
+		if (parser.peekChar() == '!') {
+			parser.consumeChar();
+			parser.skipWhitespace();
+			Operand operand = parsePrimary(parser);
+			if (operand == null)
+				throw new IllegalArgumentException("missing operand after '!'");
+			if (operand.isBoolean == null)
+				throw new IllegalArgumentException("logical not requires boolean operand");
+			boolean val = java.math.BigInteger.ZERO.equals(operand.value);
+			return new Operand(val ? java.math.BigInteger.ONE : java.math.BigInteger.ZERO, true);
+		}
 		Operand paren = parser.parseParenthesized();
 		if (paren != null)
 			return paren;

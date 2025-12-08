@@ -230,4 +230,9 @@ public class AppExpressionsTest {
 		// regression / debug test for typed String declarations
 		assertEquals("\"\"", App.interpret("let mut currentContext : String = \"\"; currentContext"));
 	}
+
+	@Test
+	void interpretUnaryNotOnBooleanExpr() {
+		assertEquals("false", App.interpret("let value = !(true || false); value"));
+	}
 }

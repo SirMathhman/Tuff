@@ -324,10 +324,15 @@ final class LetStatementParser {
 			return exprVal;
 		}
 
-		// allow assigning string literals to untyped lets
+		// allow assigning string literals or booleans to untyped lets
 		if (exprVal.stringValue != null && dt == null) {
 			locals.put(name, exprVal);
 			return exprVal;
+		}
+
+		if (exprVal.isBoolean != null && dt == null) {
+			locals.put(name, new Operand(exprVal.value, true));
+			return new Operand(exprVal.value, true);
 		}
 
 		String signed = dt != null ? dt.unsignedOrSigned : null;

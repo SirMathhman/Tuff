@@ -20,6 +20,13 @@ public final class ExpressionParser {
 			if (c == '+' || c == '-') {
 				parser.setIndex(parser.getIndex() + 1);
 				Operand right = parseTerm(parser);
+				// support string concatenation with '+'
+				if (c == '+' && (left.stringValue != null || right.stringValue != null)) {
+					String l = toStringValue(left);
+					String r = toStringValue(right);
+					left = new Operand(l + r);
+					continue;
+				}
 				if (left.isBoolean != null || right.isBoolean != null) {
 					throw new IllegalArgumentException("arithmetic operators require numeric operands");
 				}
@@ -31,6 +38,19 @@ public final class ExpressionParser {
 			}
 		}
 		return left;
+	}
+
+	// Convert any operand to a string representation for concatenation.
+	private static String toStringValue(Operand op) {
+		if (op == null)
+			return "";
+		if (op.stringValue != null)
+			return op.stringValue;
+		if (op.isBoolean != null)
+			return java.math.BigInteger.ONE.equals(op.value) ? "true" : "false";
+		if (op.value != null)
+			return op.value.toString();
+		return "";
 	}
 
 	static Operand parseEquality(Parser parser) {
