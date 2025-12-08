@@ -2,7 +2,16 @@ pub fn add(a: i32, b: i32) -> i32 {
     a + b
 }
 
-pub fn interpret(s: &str) -> Result<String, &'static str> {
+struct ParsedValue {
+    kind: char,
+    width: u32,
+    signed: bool,
+    value_u: u128,
+    value_i: i128,
+    repr: String,
+}
+
+fn parse_operand(s: &str) -> Result<ParsedValue, &'static str> {
     let bytes = s.as_bytes();
     if bytes.is_empty() {
         return Err("empty input");
@@ -25,30 +34,12 @@ pub fn interpret(s: &str) -> Result<String, &'static str> {
         return Err("no leading digits to interpret");
     }
 
-    // require a non-empty suffix (we only interpret values like "100U8" or "-100I8")
     if idx == bytes.len() {
         return Err("no type suffix present");
     }
 
-    // decide whether negative values are allowed — only allow when suffix starts with 'I' (signed)
-    if let Some('-') = sign {
-        // suffix's first character
-        let suffix_first = bytes[idx] as char;
-        if !(suffix_first == 'I' || suffix_first == 'i') {
-            return Err("negative values not allowed for unsigned suffix");
-        }
-    }
-
     let digits = &s[start_digits..idx];
-    let mut out = String::new();
-    if let Some(sign_char) = sign {
-        if sign_char == '-' {
-            out.push('-');
-        }
-    }
-    out.push_str(digits);
 
-    // validate based on suffix (support U/I with widths 8,16,32,64)
     let suffix = &s[idx..];
     let mut suffix_chars = suffix.chars();
     let kind = suffix_chars.next().unwrap_or('\0');
@@ -61,7 +52,10 @@ pub fn interpret(s: &str) -> Result<String, &'static str> {
 
     match kind {
         'U' | 'u' => {
-            // unsigned: parse digits as u128 and compare to max
+            // unsigned; negative sign not allowed
+            if let Some('-') = sign {
+                return Err("negative values not allowed for unsigned suffix");
+            }
             let val = digits.parse::<u128>().map_err(|_| "failed to parse numeric value")?;
             let max = match width {
                 8 => u128::from(u8::MAX),
@@ -73,18 +67,19 @@ pub fn interpret(s: &str) -> Result<String, &'static str> {
             if val > max {
                 return Err("value out of range for unsigned type");
             }
+
+            Ok(ParsedValue {
+                kind,
+                width,
+                signed: false,
+                value_u: val,
+                value_i: val as i128,
+                repr: digits.to_string(),
+            })
         }
         'I' | 'i' => {
-            // signed: convert digits to i128 applying sign and ensure it's in range
             let unsigned = digits.parse::<u128>().map_err(|_| "failed to parse numeric value")?;
-            // apply sign
-            let signed_val = if let Some('-') = sign {
-                let v = -(unsigned as i128);
-                v
-            } else {
-                unsigned as i128
-            };
-
+            let signed_val = if let Some('-') = sign { -(unsigned as i128) } else { unsigned as i128 };
             let (min, max) = match width {
                 8 => (i128::from(i8::MIN), i128::from(i8::MAX)),
                 16 => (i128::from(i16::MIN), i128::from(i16::MAX)),
@@ -92,15 +87,77 @@ pub fn interpret(s: &str) -> Result<String, &'static str> {
                 64 => (i128::from(i64::MIN), i128::from(i64::MAX)),
                 _ => return Err("unsupported signed width"),
             };
-
             if signed_val < min || signed_val > max {
                 return Err("value out of range for signed type");
             }
+
+            Ok(ParsedValue {
+                kind,
+                width,
+                signed: true,
+                value_u: (signed_val as i128).abs() as u128,
+                value_i: signed_val,
+                repr: if signed_val < 0 { format!("{}{}", "-", digits) } else { digits.to_string() },
+            })
         }
-        _ => return Err("unsupported suffix kind"),
+        _ => Err("unsupported suffix kind"),
+    }
+}
+
+pub fn interpret(s: &str) -> Result<String, &'static str> {
+    let bytes = s.as_bytes();
+    if bytes.is_empty() {
+        return Err("empty input");
     }
 
-    Ok(out)
+    // if expression with '+' operator
+    if let Some(pos) = s.find('+') {
+        let left = s[..pos].trim();
+        let right = s[pos + 1..].trim();
+        let l = parse_operand(left)?;
+        let r = parse_operand(right)?;
+        // types must match (kind and width)
+        if l.kind.to_ascii_uppercase() != r.kind.to_ascii_uppercase() || l.width != r.width {
+            return Err("mismatched operand types");
+        }
+
+        return match l.kind.to_ascii_uppercase() {
+            'U' => {
+                // unsigned add
+                let max = match l.width {
+                    8 => u128::from(u8::MAX),
+                    16 => u128::from(u16::MAX),
+                    32 => u128::from(u32::MAX),
+                    64 => u128::from(u64::MAX),
+                    _ => return Err("unsupported unsigned width"),
+                };
+                let sum = l.value_u.checked_add(r.value_u).ok_or("overflow")?;
+                if sum > max {
+                    return Err("value out of range for unsigned type");
+                }
+                Ok(sum.to_string())
+            }
+            'I' => {
+                let (min, max) = match l.width {
+                    8 => (i128::from(i8::MIN), i128::from(i8::MAX)),
+                    16 => (i128::from(i16::MIN), i128::from(i16::MAX)),
+                    32 => (i128::from(i32::MIN), i128::from(i32::MAX)),
+                    64 => (i128::from(i64::MIN), i128::from(i64::MAX)),
+                    _ => return Err("unsupported signed width"),
+                };
+                let sum = l.value_i.checked_add(r.value_i).ok_or("overflow")?;
+                if sum < min || sum > max {
+                    return Err("value out of range for signed type");
+                }
+                Ok(sum.to_string())
+            }
+            _ => Err("unsupported operand kind"),
+        };
+    }
+
+    // otherwise single token — parse and return the original repr
+    let p = parse_operand(s)?;
+    Ok(p.repr)
 }
 
 #[cfg(test)]
@@ -154,6 +211,11 @@ mod tests {
     }
 
     #[test]
+    fn interpret_adds_two_unsigned_u8() {
+        assert_eq!(interpret("100U8 + 50U8").unwrap(), "150");
+    }
+
+    #[test]
     fn interpret_allows_u16_boundaries() {
         assert_eq!(interpret("65535U16").unwrap(), "65535");
         assert!(interpret("65536U16").is_err());
@@ -167,7 +229,10 @@ mod tests {
 
     #[test]
     fn interpret_allows_u64_boundaries() {
-        assert_eq!(interpret("18446744073709551615U64").unwrap(), "18446744073709551615");
+        assert_eq!(
+            interpret("18446744073709551615U64").unwrap(),
+            "18446744073709551615"
+        );
         assert!(interpret("18446744073709551616U64").is_err());
     }
 
@@ -189,8 +254,14 @@ mod tests {
 
     #[test]
     fn interpret_signed_i64_boundaries() {
-        assert_eq!(interpret("9223372036854775807I64").unwrap(), "9223372036854775807");
-        assert_eq!(interpret("-9223372036854775808I64").unwrap(), "-9223372036854775808");
+        assert_eq!(
+            interpret("9223372036854775807I64").unwrap(),
+            "9223372036854775807"
+        );
+        assert_eq!(
+            interpret("-9223372036854775808I64").unwrap(),
+            "-9223372036854775808"
+        );
         assert!(interpret("9223372036854775808I64").is_err());
         assert!(interpret("-9223372036854775809I64").is_err());
     }
