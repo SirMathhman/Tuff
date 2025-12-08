@@ -55,4 +55,10 @@ mod tests {
         let input = "100U8";
         assert_eq!(interpret(input).unwrap(), "100");
     }
+
+    #[test]
+    fn interpret_rejects_negative_numeric_prefix() {
+        let input = "-100U8";
+        assert!(interpret(input).is_err());
+    }
 }
