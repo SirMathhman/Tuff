@@ -30,13 +30,18 @@ fn signed_range_for_width(width: u32) -> Result<(i128, i128), &'static str> {
     }
 }
 
-fn parse_operand(s: &str) -> Result<ParsedValue, &'static str> {
+struct ParsedPrefix<'a> {
+    sign: Option<char>,
+    digits: &'a str,
+    suffix_start: usize,
+}
+
+fn parse_sign_and_digits(s: &str) -> Result<ParsedPrefix, &'static str> {
     let bytes = s.as_bytes();
     if bytes.is_empty() {
         return Err("empty input");
     }
 
-    // parse optional sign
     let mut idx = 0usize;
     let mut sign: Option<char> = None;
     if let Some(&first) = bytes.first() {
@@ -67,69 +72,84 @@ fn parse_operand(s: &str) -> Result<ParsedValue, &'static str> {
         return Err("no type suffix present");
     }
 
-    let digits = &s[start_digits..idx];
+    Ok(ParsedPrefix {
+        sign,
+        digits: &s[start_digits..idx],
+        suffix_start: idx,
+    })
+}
 
-    let suffix = &s[idx..];
+fn parse_suffix_and_width(s: &str, suffix_start: usize) -> Result<(char, u32), &'static str> {
+    let suffix = &s[suffix_start..];
     let mut suffix_chars = suffix.chars();
     let kind = suffix_chars.next().unwrap_or('\0');
     let width_str: String = suffix_chars.take_while(|c| c.is_ascii_digit()).collect();
     if width_str.is_empty() {
         return Err("unsupported or missing width in suffix");
     }
-
     let width: u32 = width_str.parse().map_err(|_| "invalid width in suffix")?;
+    Ok((kind, width))
+}
+
+fn build_unsigned_value(
+    kind: char,
+    width: u32,
+    digits: &str,
+    sign: Option<char>,
+) -> Result<ParsedValue, &'static str> {
+    if let Some('-') = sign {
+        return Err("negative values not allowed for unsigned suffix");
+    }
+    let val = digits.parse::<u128>().map_err(|_| "failed to parse numeric value")?;
+    let max = unsigned_max_for_width(width)?;
+    if val > max {
+        return Err("value out of range for unsigned type");
+    }
+    Ok(ParsedValue {
+        kind,
+        width,
+        value_u: val,
+        value_i: val as i128,
+        repr: digits.to_string(),
+    })
+}
+
+fn build_signed_value(
+    kind: char,
+    width: u32,
+    digits: &str,
+    sign: Option<char>,
+) -> Result<ParsedValue, &'static str> {
+    let unsigned = digits.parse::<u128>().map_err(|_| "failed to parse numeric value")?;
+    let signed_val = if let Some('-') = sign {
+        -(unsigned as i128)
+    } else {
+        unsigned as i128
+    };
+    let (min, max) = signed_range_for_width(width)?;
+    if signed_val < min || signed_val > max {
+        return Err("value out of range for signed type");
+    }
+    Ok(ParsedValue {
+        kind,
+        width,
+        value_u: signed_val.unsigned_abs(),
+        value_i: signed_val,
+        repr: if signed_val < 0 {
+            format!("-{}", digits)
+        } else {
+            digits.to_string()
+        },
+    })
+}
+
+fn parse_operand(s: &str) -> Result<ParsedValue, &'static str> {
+    let parsed = parse_sign_and_digits(s)?;
+    let (kind, width) = parse_suffix_and_width(s, parsed.suffix_start)?;
 
     match kind {
-        'U' | 'u' => {
-            // unsigned; negative sign not allowed
-            if let Some('-') = sign {
-                return Err("negative values not allowed for unsigned suffix");
-            }
-            let val = digits
-                .parse::<u128>()
-                .map_err(|_| "failed to parse numeric value")?;
-            let max = unsigned_max_for_width(width)?;
-            if val > max {
-                return Err("value out of range for unsigned type");
-            }
-
-            Ok(ParsedValue {
-                kind,
-                width,
-
-                value_u: val,
-                value_i: val as i128,
-                repr: digits.to_string(),
-            })
-        }
-        'I' | 'i' => {
-            let unsigned = digits
-                .parse::<u128>()
-                .map_err(|_| "failed to parse numeric value")?;
-            let signed_val = if let Some('-') = sign {
-                -(unsigned as i128)
-            } else {
-                unsigned as i128
-            };
-
-            let (min, max) = signed_range_for_width(width)?;
-            if signed_val < min || signed_val > max {
-                return Err("value out of range for signed type");
-            }
-
-            Ok(ParsedValue {
-                kind,
-                width,
-
-                value_u: signed_val.unsigned_abs(),
-                value_i: signed_val,
-                repr: if signed_val < 0 {
-                    format!("-{}", digits)
-                } else {
-                    digits.to_string()
-                },
-            })
-        }
+        'U' | 'u' => build_unsigned_value(kind, width, parsed.digits, parsed.sign),
+        'I' | 'i' => build_signed_value(kind, width, parsed.digits, parsed.sign),
         _ => Err("unsupported suffix kind"),
     }
 }
