@@ -28,6 +28,12 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretArrayInitializerLengthMismatchThrows() {
+		assertThrows(IllegalArgumentException.class,
+				() -> App.interpret("let array : [U8; 2; 3] = [1, 2, 3];"));
+	}
+
+	@Test
 	void interpretTwoHundredReturnsSame() {
 		assertEquals("200", App.interpret("200"));
 	}
