@@ -1,0 +1,9 @@
+extern fn print(value : String) : Void;
+
+let mut passes : Bool = true;
+
+fn assertStringsEqual(left : String, right : String) => {
+	if (left.equalsTo(right)) {
+		print()
+	}
+}

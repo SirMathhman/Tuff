@@ -159,9 +159,14 @@ final class FunctionCallParser {
 
 		Parser p2 = new Parser(fd.body.bodySource);
 		p2.setFunctions(new java.util.HashMap<>(parser.getFunctions()));
-		p2.setLocals(new java.util.HashMap<>(fLocals));
-		p2.setMutables(new java.util.HashMap<>());
-		p2.setDeclaredTypes(new java.util.HashMap<>());
+		// provide the function body with a view of the caller's environment so
+		// functions can access variables from the surrounding scope. Parameters
+		// override any captured names.
+		java.util.Map<String, Operand> captured = new java.util.HashMap<>(parser.getLocals());
+		captured.putAll(fLocals);
+		p2.setLocals(captured);
+		p2.setMutables(new java.util.HashMap<>(parser.getMutables()));
+		p2.setDeclaredTypes(new java.util.HashMap<>(parser.getDeclaredTypes()));
 		p2.setAllowReturn(true);
 
 		try {
