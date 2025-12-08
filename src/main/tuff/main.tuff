@@ -1,30 +1,36 @@
-extern fn print(value : String) : Void;
+extern fn print<T>(value : T) : Void;
 
+let mut currentContext : String = "";
 let mut currentTestName : String = "";
+
 let mut currentTestPasses = true;
+let mut currentTestFailureReason = "";
 
 let mut totalPassed = 0;
 let mut totalCount = 0;
 
-fn pass() => {
-
-}
-
-fn fail() => {
-	print("Fail: " + currentTestName + "\n");
-}
-
 fn describe(context : String, action : () => {
-	
+	totalPassed = 0;
+	totalCount = 0;
+
+	action();
+
+	print(currentContext + ": ");
+	print(totalPassed);
+	print(" / ");
+	print(totalCount);
 });
 
-fn it(message : String, perform : () => Void) => {
-	currentTestName = message;
+fn it(testName : String, perform : () => Void) => {
 	perform();
 
-	if (!currentTestPasses) {
-		fail();
+	if (currentTestPasses) {
+		totalPassed += 1;
+	} else {
+		print("Fail: " + testName + ", Reason: " + currentTestFailureReason + "\n");
 	}
+
+	totalCount += 1;
 }
 
 fn assertTrue(value : Bool) => {
@@ -33,15 +39,8 @@ fn assertTrue(value : Bool) => {
 	}
 }
 
-fn assertStringsEqual(left : String, right : String) => {
-	if (left.equalsTo(right)) {
-	} else {
-		currentTestPasses = false;
-	}
-}
-
 describe("All tests", () => {
 	test("A sample test passes", () => {
-
+		assertTrue(true);
 	});
 })
