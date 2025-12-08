@@ -45,6 +45,11 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretTypeOnlyArrayDeclarationReturnsEmpty() {
+		assertEquals("", App.interpret("let array : [U8];"));
+	}
+
+	@Test
 	void interpretZeroLengthArrayAssignExpandsAndAssigns() {
 		assertEquals("100", App.interpret("let mut array : [U8; 0; 1]; array[0] = 100; array[0]"));
 	}
@@ -64,7 +69,8 @@ public class AppTest {
 	@Test
 	void interpretAssignOutOfRangeToU8ArrayThrows() {
 		assertThrows(IllegalArgumentException.class,
-				() -> App.interpret("let mut array : [U8; 0; 5]; array[0] = 100; array[0] = 200; array[0] = 300; let copy : [U8; 3; 5] = array;"));
+				() -> App.interpret(
+						"let mut array : [U8; 0; 5]; array[0] = 100; array[0] = 200; array[0] = 300; let copy : [U8; 3; 5] = array;"));
 	}
 
 	@Test

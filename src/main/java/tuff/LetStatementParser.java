@@ -20,6 +20,40 @@ final class LetStatementParser {
 		this.declaredTypes = parser.getDeclaredTypes();
 	}
 
+	private void parseArrayInside(String inside, DeclaredType dt) {
+		String[] parts = inside.split("\\s*;\\s*");
+		String elemType = parts[0];
+		if (elemType.startsWith("Bool")) {
+			dt.elemIsBool = true;
+		} else {
+			dt.elemUnsignedOrSigned = elemType.substring(0, 1);
+			dt.elemWidth = elemType.substring(1);
+		}
+		if (parts.length > 1) {
+			try {
+				dt.arrayLength = Integer.parseInt(parts[1]);
+			} catch (Exception ex) {
+				throw new IllegalArgumentException("invalid array length in type");
+			}
+		}
+		if (parts.length > 2) {
+			try {
+				dt.arrayCapacity = Integer.parseInt(parts[2]);
+			} catch (Exception ex) {
+				throw new IllegalArgumentException("invalid array capacity in type");
+			}
+		}
+		if (dt.arrayCapacity == null && dt.arrayLength != null) {
+			dt.arrayCapacity = dt.arrayLength;
+		}
+		if (dt.arrayCapacity != null && dt.arrayCapacity.intValue() <= 0)
+			throw new IllegalArgumentException("invalid array length in type");
+		if (dt.arrayLength != null && dt.arrayLength.intValue() < 0)
+			throw new IllegalArgumentException("invalid array length in type");
+		if (dt.arrayLength != null && dt.arrayCapacity != null && dt.arrayLength.intValue() > dt.arrayCapacity.intValue())
+			throw new IllegalArgumentException("invalid array length in type");
+	}
+
 	Operand parseLetStatement() {
 		parser.consumeKeyword("let");
 		parser.skipWhitespace();
@@ -104,7 +138,7 @@ final class LetStatementParser {
 		String rem = parser.remainingInput();
 		Matcher tm = Pattern.compile("^(?:U|I)(?:8|16|32|64)").matcher(rem);
 		Matcher bm = Pattern.compile("^Bool").matcher(rem);
-		Matcher am = Pattern.compile("^\\[\\s*(?:U|I)(?:8|16|32|64)\\s*;\\s*\\d+(?:\\s*;\\s*\\d+)?\\s*\\]").matcher(rem);
+		Matcher am = Pattern.compile("^\\[\\s*[^\\]]+\\]").matcher(rem);
 		if (tm.find()) {
 			String type = tm.group();
 			dt.unsignedOrSigned = type.substring(0, 1);
@@ -115,41 +149,9 @@ final class LetStatementParser {
 			parser.consumeKeyword("Bool");
 		} else if (am.find()) {
 			String found = am.group();
-			// format: [U8; 3] or [U8; 3; 3]
 			String inside = found.substring(1, found.length() - 1).trim();
-			String[] parts = inside.split("\\s*;\\s*");
-			// first part is element type
-			String elemType = parts[0];
-			if (elemType.startsWith("Bool")) {
-				dt.elemIsBool = true;
-			} else {
-				dt.elemUnsignedOrSigned = elemType.substring(0, 1);
-				dt.elemWidth = elemType.substring(1);
-			}
-			// second part is current length; optional third part is capacity
-			try {
-				dt.arrayLength = Integer.parseInt(parts[1]);
-			} catch (Exception ex) {
-				throw new IllegalArgumentException("invalid array length in type");
-			}
-			if (parts.length > 2) {
-				try {
-					dt.arrayCapacity = Integer.parseInt(parts[2]);
-				} catch (Exception ex) {
-					throw new IllegalArgumentException("invalid array capacity in type");
-				}
-			} else {
-				dt.arrayCapacity = dt.arrayLength;
-			}
-			if (dt.arrayCapacity == null || dt.arrayCapacity.intValue() <= 0) {
-				throw new IllegalArgumentException("invalid array length in type");
-			}
-			if (dt.arrayLength == null || dt.arrayLength.intValue() < 0
-					|| dt.arrayLength.intValue() > dt.arrayCapacity.intValue()) {
-				throw new IllegalArgumentException("invalid array length in type");
-			}
+			parseArrayInside(inside, dt);
 			dt.isArray = true;
-			// advance parser index by the length of the matched type token
 			parser.setIndex(parser.getIndex() + found.length());
 		} else {
 			throw new IllegalArgumentException("invalid type in let");
