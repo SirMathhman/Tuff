@@ -140,14 +140,22 @@ fn apply_ops_with_precedence(
     // first pass: handle multiplication (higher precedence)
     let mut vals2: Vec<i128> = Vec::new();
     let mut ops2: Vec<char> = Vec::new();
-    vals2.push(*values.first().ok_or_else(|| "invalid operands".to_string())?);
+    vals2.push(
+        *values
+            .first()
+            .ok_or_else(|| "invalid operands".to_string())?,
+    );
     for (i, &op) in ops.iter().enumerate() {
         let rhs = values
             .get(i + 1)
             .ok_or_else(|| "invalid operands".to_string())?;
         if op == '*' {
-            let last = vals2.last_mut().ok_or_else(|| "invalid operands".to_string())?;
-            *last = last.checked_mul(*rhs).ok_or_else(|| "overflow".to_string())?;
+            let last = vals2
+                .last_mut()
+                .ok_or_else(|| "invalid operands".to_string())?;
+            *last = last
+                .checked_mul(*rhs)
+                .ok_or_else(|| "overflow".to_string())?;
         } else {
             ops2.push(op);
             vals2.push(*rhs);
@@ -155,14 +163,20 @@ fn apply_ops_with_precedence(
     }
 
     // second pass: handle + and - left-to-right
-    let mut acc = *vals2.first().ok_or_else(|| "invalid operands".to_string())?;
+    let mut acc = *vals2
+        .first()
+        .ok_or_else(|| "invalid operands".to_string())?;
     for (i, &op) in ops2.iter().enumerate() {
         let rhs = vals2
             .get(i + 1)
             .ok_or_else(|| "invalid operands".to_string())?;
         acc = match op {
-            '+' => acc.checked_add(*rhs).ok_or_else(|| "overflow".to_string())?,
-            '-' => acc.checked_sub(*rhs).ok_or_else(|| "overflow".to_string())?,
+            '+' => acc
+                .checked_add(*rhs)
+                .ok_or_else(|| "overflow".to_string())?,
+            '-' => acc
+                .checked_sub(*rhs)
+                .ok_or_else(|| "overflow".to_string())?,
             _ => return Err("unsupported operator".to_string()),
         };
     }
@@ -583,6 +597,13 @@ mod tests {
         let res = interpret("2 * 3 + 1");
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), "7");
+    }
+
+    #[test]
+    fn interpret_add_then_mul_typed_u8() {
+        let res = interpret("1U8 + 10U8 * 2U8");
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), "21");
     }
 
     #[test]
