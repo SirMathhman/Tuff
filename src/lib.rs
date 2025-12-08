@@ -245,10 +245,18 @@ fn try_eval_addition(s: &str) -> Option<Result<String, String>> {
         r_rem.to_ascii_lowercase()
     };
 
-    Some(eval_addition_with_suffix(&suf, &l_num, &r_num, l_neg, r_neg))
+    Some(eval_addition_with_suffix(
+        &suf, &l_num, &r_num, l_neg, r_neg,
+    ))
 }
 
-fn eval_addition_with_suffix(suf: &str, l_num: &str, r_num: &str, l_neg: bool, r_neg: bool) -> Result<String, String> {
+fn eval_addition_with_suffix(
+    suf: &str,
+    l_num: &str,
+    r_num: &str,
+    l_neg: bool,
+    r_neg: bool,
+) -> Result<String, String> {
     if suf.is_empty() {
         let (a, b) = parse_signed_pair(l_num, r_num)?;
         return Ok((a + b).to_string());
@@ -399,6 +407,13 @@ mod tests {
     #[test]
     fn interpret_add_typed_and_plain() {
         let res = interpret("100U8 + 50");
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), "150");
+    }
+
+    #[test]
+    fn interpret_add_plain_and_typed() {
+        let res = interpret("100 + 50U8");
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), "150");
     }
