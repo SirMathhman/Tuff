@@ -11,8 +11,10 @@ pub fn interpret(input: &str) -> Result<String, String> {
     let mut chars = s.chars().peekable();
     let mut out = String::new();
 
+    let mut negative = false;
     if let Some(&c) = chars.peek() {
         if c == '+' || c == '-' {
+            if c == '-' { negative = true; }
             out.push(c);
             chars.next();
         }
@@ -31,6 +33,13 @@ pub fn interpret(input: &str) -> Result<String, String> {
     }
 
     if found_digit {
+        // If there are any remaining chars after the leading digits, we
+        // consider them a suffix. Negative numbers with suffixes are not
+        // supported and should return an error — e.g. "-100U8" -> Err.
+        if chars.peek().is_some() && negative {
+            return Err("negative numeric literal with suffix not supported".to_string());
+        }
+
         return Ok(out);
     }
 
@@ -60,5 +69,11 @@ mod tests {
         let res = interpret("100U8");
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), "100");
+    }
+
+    #[test]
+    fn interpret_rejects_negative_with_suffix() {
+        let res = interpret("-100U8");
+        assert!(res.is_err());
     }
 }
