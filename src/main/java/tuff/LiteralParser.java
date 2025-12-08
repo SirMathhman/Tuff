@@ -30,6 +30,42 @@ public final class LiteralParser {
 	}
 
 	/**
+	 * Parse an array literal like [1, 2, 3]. Elements are parsed as full
+	 * expressions.
+	 */
+	static Operand parseArrayLiteral(Parser parser) {
+		parser.skipWhitespace();
+		if (parser.peekChar() != '[') {
+			return null;
+		}
+		// consume '['
+		parser.consumeChar();
+		java.util.List<Operand> elems = new java.util.ArrayList<>();
+		parser.skipWhitespace();
+		if (parser.peekChar() == ']') {
+			// empty array
+			parser.consumeChar();
+			return new Operand(elems);
+		}
+		while (true) {
+			Operand el = parser.parseLogicalOr();
+			elems.add(el);
+			parser.skipWhitespace();
+			if (parser.peekChar() == ',') {
+				parser.consumeChar();
+				parser.skipWhitespace();
+				continue;
+			}
+			if (parser.peekChar() == ']') {
+				parser.consumeChar();
+				break;
+			}
+			throw new IllegalArgumentException("missing ']' or ',' in array literal");
+		}
+		return new Operand(elems);
+	}
+
+	/**
 	 * Parse a number token with optional type annotation (e.g., 42, -100, 255U8,
 	 * -128I16).
 	 */

@@ -22,6 +22,12 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretArrayIndexSum() {
+		String src = "let array : [U8; 3; 3] = [1, 2, 3]; array[0] + array[1] + array[2]";
+		assertEquals("6", App.interpret(src));
+	}
+
+	@Test
 	void interpretTwoHundredReturnsSame() {
 		assertEquals("200", App.interpret("200"));
 	}

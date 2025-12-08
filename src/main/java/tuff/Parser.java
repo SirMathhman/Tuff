@@ -109,41 +109,7 @@ public final class Parser {
 	}
 
 	public Operand parseFactor() {
-		skipWhitespace();
-		// support if-expression: if (cond) expr else expr
-		if (i + 1 < n && s.startsWith("if", i) && (i + 2 == n || !Character.isJavaIdentifierPart(s.charAt(i + 2)))) {
-			return parseIfExpression();
-		}
-
-		// support match-expression: match <expr> { case <pat> => <expr>; ... }
-		if (i + 4 < n && s.startsWith("match", i) && (i + 5 == n || !Character.isJavaIdentifierPart(s.charAt(i + 5)))) {
-			return parseMatchExpression();
-		}
-
-		Operand paren = parseParenthesized();
-		if (paren != null)
-			return paren;
-
-		Operand block = parseBlockStart();
-		if (block != null)
-			return block;
-
-		Operand boolLit = parseBooleanLiteral();
-		if (boolLit != null)
-			return boolLit;
-
-		Operand num = parseNumberToken();
-		if (num != null)
-			return num;
-
-		Operand fncall = parseFunctionCallIfPresent();
-		if (fncall != null)
-			return fncall;
-		Operand id = parseIdentifierLookup();
-		if (id != null)
-			return id;
-
-		throw new IllegalArgumentException("invalid token at position " + i);
+		return FactorParser.parse(this);
 	}
 
 	Operand parseBooleanLiteral() {
@@ -154,13 +120,39 @@ public final class Parser {
 		return LiteralParser.parseNumberToken(this);
 	}
 
-	private Operand parseIdentifierLookup() {
+	Operand parseArrayLiteral() {
+		return LiteralParser.parseArrayLiteral(this);
+	}
+
+	Operand parseIdentifierLookup() {
 		skipWhitespace();
 		java.util.regex.Matcher idm = java.util.regex.Pattern.compile("^[A-Za-z_]\\w*").matcher(s.substring(i));
 		if (!idm.find())
 			return null;
 		String name = idm.group();
 		i += name.length();
+		// support indexing: name[index]
+		skipWhitespace();
+		if (i < n && s.charAt(i) == '[') {
+			// consume '['
+			i++;
+			Operand idxOp = parseLogicalOr();
+			skipWhitespace();
+			if (i >= n || s.charAt(i) != ']')
+				throw new IllegalArgumentException("missing ']' in index expression");
+			i++; // consume ']'
+			if (!locals.containsKey(name))
+				throw new IllegalArgumentException("undefined variable: " + name);
+			Operand arrOp = locals.get(name);
+			if (arrOp.elements == null)
+				throw new IllegalArgumentException("attempted indexing on non-array: " + name);
+			if (idxOp.isBoolean != null)
+				throw new IllegalArgumentException("index must be numeric");
+			int idx = idxOp.value.intValue();
+			if (idx < 0 || idx >= arrOp.elements.size())
+				throw new IllegalArgumentException("index out of bounds");
+			return arrOp.elements.get(idx);
+		}
 		if (!locals.containsKey(name))
 			throw new IllegalArgumentException("undefined variable: " + name);
 		return locals.get(name);
@@ -199,7 +191,7 @@ public final class Parser {
 		return null;
 	}
 
-	private Operand parseFunctionCallIfPresent() {
+	Operand parseFunctionCallIfPresent() {
 		skipWhitespace();
 		java.util.regex.Matcher idm = java.util.regex.Pattern.compile("^[A-Za-z_]\\w*").matcher(s.substring(i));
 		if (!idm.find())
@@ -270,7 +262,7 @@ public final class Parser {
 		}
 	}
 
-	private Operand parseParenthesized() {
+	Operand parseParenthesized() {
 		if (i < n && s.charAt(i) == '(') {
 			i++; // consume '('
 			Operand inner = parseExpression();
@@ -304,19 +296,19 @@ public final class Parser {
 		return parseLogicalOr();
 	}
 
-	private Operand parseBlockStart() {
+	Operand parseBlockStart() {
 		if (i < n && s.charAt(i) == '{') {
 			return new BlockParser(this).parseBlock();
 		}
 		return null;
 	}
 
-	private Operand parseIfExpression() {
+	Operand parseIfExpression() {
 		IfExpressionParser iep = new IfExpressionParser(this);
 		return iep.parseIfExpression();
 	}
 
-	private Operand parseMatchExpression() {
+	Operand parseMatchExpression() {
 		MatchExpressionParser mep = new MatchExpressionParser(this);
 		return mep.parseMatchExpression();
 	}
