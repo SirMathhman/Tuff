@@ -100,7 +100,9 @@ fn build_unsigned_value(
     if let Some('-') = sign {
         return Err("negative values not allowed for unsigned suffix");
     }
-    let val = digits.parse::<u128>().map_err(|_| "failed to parse numeric value")?;
+    let val = digits
+        .parse::<u128>()
+        .map_err(|_| "failed to parse numeric value")?;
     let max = unsigned_max_for_width(width)?;
     if val > max {
         return Err("value out of range for unsigned type");
@@ -120,7 +122,9 @@ fn build_signed_value(
     digits: &str,
     sign: Option<char>,
 ) -> Result<ParsedValue, &'static str> {
-    let unsigned = digits.parse::<u128>().map_err(|_| "failed to parse numeric value")?;
+    let unsigned = digits
+        .parse::<u128>()
+        .map_err(|_| "failed to parse numeric value")?;
     let signed_val = if let Some('-') = sign {
         -(unsigned as i128)
     } else {
@@ -251,6 +255,11 @@ mod tests {
     #[test]
     fn interpret_adds_two_unsigned_u8() {
         assert_eq!(interpret("100U8 + 50U8").unwrap(), "150");
+    }
+
+    #[test]
+    fn interpret_rejects_overflowing_addition_u8() {
+        assert!(interpret("100U8 + 200U8").is_err());
     }
 
     #[test]
