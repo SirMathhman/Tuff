@@ -91,7 +91,7 @@ final class FunctionCallParser {
 		return callFunction(parser, name, fd, args, typeArgs);
 	}
 
-	private static Operand callFunction(Parser parser, String fname, FunctionDef fd, java.util.List<Operand> args,
+	static Operand callFunction(Parser parser, String fname, FunctionDef fd, java.util.List<Operand> args,
 			java.util.List<DeclaredType> typeArgs) {
 		if (args.size() != fd.signature.paramNames.size())
 			throw new IllegalArgumentException("argument count mismatch in function call");

@@ -130,8 +130,14 @@ final class IdentifierResolver {
 				throw new IllegalArgumentException("index out of bounds");
 			return arrOp.elements.get(idx);
 		}
-		if (!parser.getLocals().containsKey(name))
+		if (!parser.getLocals().containsKey(name)) {
+			// allow referencing a top-level function as a first-class value
+			if (parser.getFunctions().containsKey(name)) {
+				FunctionDef fd = parser.getFunctions().get(name);
+				return new Operand(fd, name);
+			}
 			throw new IllegalArgumentException("undefined variable: " + name);
+		}
 		return parser.getLocals().get(name);
 	}
 

@@ -107,6 +107,12 @@ public class AppExpressionsTest {
 	}
 
 	@Test
+	void interpretAssignFunctionToVariableAndCall() {
+		assertEquals("100",
+				App.interpret("fn pass(value : I32) => value; let func : (I32) => I32 = pass; func(100)"));
+	}
+
+	@Test
 	void interpretMatchNoDefaultThrows() {
 		assertThrows(IllegalArgumentException.class,
 				() -> App.interpret("let x = match 300 { case 100 => 5; case 200 => 2 }; x"));

@@ -156,6 +156,37 @@ final class LetStatementParser {
 			parseArrayInside(inside, dt);
 			dt.isArray = true;
 			parser.setIndex(parser.getIndex() + found.length());
+		} else if (parser.peekChar() == '(') {
+			// function type like '(I32, Bool) => I32'
+			parser.consumeChar();
+			parser.skipWhitespace();
+			java.util.List<DeclaredType> params = new java.util.ArrayList<>();
+			if (parser.peekChar() != ')') {
+				while (true) {
+					DeclaredType p = readDeclaredType();
+					params.add(p);
+					parser.skipWhitespace();
+					if (parser.peekChar() == ',') {
+						parser.consumeChar();
+						parser.skipWhitespace();
+						continue;
+					}
+					break;
+				}
+			}
+			if (parser.peekChar() != ')')
+				throw new IllegalArgumentException("missing ')' in function type");
+			parser.consumeChar();
+			parser.skipWhitespace();
+			if (!(parser.peekChar() == '=' && parser.getIndex() + 1 < parser.getLength()
+					&& parser.charAt(parser.getIndex() + 1) == '>'))
+				throw new IllegalArgumentException("missing => in function type");
+			parser.consumeArrow();
+			parser.skipWhitespace();
+			DeclaredType ret = readDeclaredType();
+			dt.isFunction = true;
+			dt.functionParamTypes = params;
+			dt.functionReturnType = ret;
 		} else {
 			// support alias like 'MyInt'
 			java.util.regex.Matcher idm = java.util.regex.Pattern.compile("^[A-Za-z_]\\w*").matcher(rem);
@@ -181,6 +212,9 @@ final class LetStatementParser {
 	}
 
 	private Operand applyDeclaredType(String name, DeclaredType dt, Operand exprVal) {
+		if (isTypedFunction(dt)) {
+			return assignFunction(name, dt, exprVal);
+		}
 		if (isTypedBool(dt)) {
 			return assignBool(name, exprVal);
 		}
@@ -217,6 +251,48 @@ final class LetStatementParser {
 
 	private boolean isTypedNumber(DeclaredType dt) {
 		return dt != null && dt.unsignedOrSigned != null && dt.width != null;
+	}
+
+	private boolean isTypedFunction(DeclaredType dt) {
+		return dt != null && dt.isFunction;
+	}
+
+	private Operand assignFunction(String name, DeclaredType dt, Operand exprVal) {
+		if (exprVal.functionRef == null)
+			throw new IllegalArgumentException("typed function assignment requires function operand");
+		FunctionDef fd = exprVal.functionRef;
+		java.util.List<DeclaredType> expected = dt.functionParamTypes != null ? dt.functionParamTypes
+				: new java.util.ArrayList<>();
+		java.util.List<DeclaredType> actual = fd.signature.paramTypes != null ? fd.signature.paramTypes
+				: new java.util.ArrayList<>();
+		if (expected.size() != actual.size())
+			throw new IllegalArgumentException("mismatched function type in assignment");
+		// validate parameter types where both sides are specified
+		for (int i = 0; i < expected.size(); i++) {
+			DeclaredType exp = expected.get(i);
+			DeclaredType act = actual.get(i);
+			if (exp == null || act == null)
+				continue;
+			if (exp.isBool != act.isBool)
+				throw new IllegalArgumentException("mismatched function parameter types in assignment");
+			if (exp.unsignedOrSigned != null && exp.width != null && act.unsignedOrSigned != null && act.width != null) {
+				if (!exp.unsignedOrSigned.equals(act.unsignedOrSigned) || !exp.width.equals(act.width))
+					throw new IllegalArgumentException("mismatched function parameter types in assignment");
+			}
+		}
+		// return type: require match only if both sides declared
+		if (dt.functionReturnType != null && fd.body != null && fd.body.returnType != null) {
+			DeclaredType expR = dt.functionReturnType;
+			DeclaredType actR = fd.body.returnType;
+			if (expR.isBool != actR.isBool)
+				throw new IllegalArgumentException("mismatched function return type in assignment");
+			if (expR.unsignedOrSigned != null && expR.width != null && actR.unsignedOrSigned != null && actR.width != null) {
+				if (!expR.unsignedOrSigned.equals(actR.unsignedOrSigned) || !expR.width.equals(actR.width))
+					throw new IllegalArgumentException("mismatched function return type in assignment");
+			}
+		}
+		locals.put(name, new Operand(exprVal.functionRef, exprVal.functionName));
+		return new Operand(exprVal.functionRef, exprVal.functionName);
 	}
 
 	private Operand assignBool(String name, Operand exprVal) {

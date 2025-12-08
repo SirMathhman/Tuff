@@ -15,6 +15,9 @@ public final class Operand {
 	public final String elemWidth;
 
 	public final java.util.Map<String, Operand> structFields; // non-null for struct operands
+	// function-ref metadata (non-null for function-valued operands)
+	public final FunctionDef functionRef;
+	public final String functionName;
 
 	public Operand(java.math.BigInteger value, String unsignedOrSigned, String width) {
 		this.stringValue = null;
@@ -29,6 +32,8 @@ public final class Operand {
 		this.elemUnsignedOrSigned = null;
 		this.elemWidth = null;
 		this.structFields = null;
+		this.functionRef = null;
+		this.functionName = null;
 	}
 
 	public Operand(java.math.BigInteger value, Boolean isBoolean) {
@@ -44,6 +49,8 @@ public final class Operand {
 		this.elemUnsignedOrSigned = null;
 		this.elemWidth = null;
 		this.structFields = null;
+		this.functionRef = null;
+		this.functionName = null;
 	}
 
 	public Operand(java.util.List<Operand> elements) {
@@ -71,6 +78,8 @@ public final class Operand {
 		}
 		this.stringValue = null;
 		this.isChar = null;
+		this.functionRef = null;
+		this.functionName = null;
 	}
 
 	public Operand(java.util.Map<String, Operand> structFields) {
@@ -86,6 +95,8 @@ public final class Operand {
 		this.structFields = structFields;
 		this.stringValue = null;
 		this.isChar = null;
+		this.functionRef = null;
+		this.functionName = null;
 	}
 
 	public Operand(String stringValue) {
@@ -101,6 +112,8 @@ public final class Operand {
 		this.structFields = null;
 		this.stringValue = stringValue;
 		this.isChar = false;
+		this.functionRef = null;
+		this.functionName = null;
 	}
 
 	public Operand(String stringValue, boolean isChar) {
@@ -116,6 +129,25 @@ public final class Operand {
 		this.structFields = null;
 		this.stringValue = stringValue;
 		this.isChar = isChar;
+		this.functionRef = null;
+		this.functionName = null;
+	}
+
+	public Operand(FunctionDef fd, String name) {
+		this.value = null;
+		this.stringValue = null;
+		this.isChar = null;
+		this.unsignedOrSigned = null;
+		this.width = null;
+		this.isBoolean = null;
+		this.elements = null;
+		this.arrayCapacity = null;
+		this.elemIsBool = null;
+		this.elemUnsignedOrSigned = null;
+		this.elemWidth = null;
+		this.structFields = null;
+		this.functionRef = fd;
+		this.functionName = name;
 	}
 
 }

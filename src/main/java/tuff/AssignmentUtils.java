@@ -279,6 +279,10 @@ final class AssignmentUtils {
 			App.validateRange(val.value.toString(), old.unsignedOrSigned, old.width);
 			locals.put(name, new Operand(val.value, old.unsignedOrSigned, old.width));
 		} else {
+			// allow reassigning function values
+			if (old.functionRef != null && val.functionRef == null)
+				throw new IllegalArgumentException("typed function assignment requires function operand");
+
 			locals.put(name, new Operand(val.value, val.unsignedOrSigned, val.width));
 		}
 	}
@@ -298,6 +302,18 @@ final class AssignmentUtils {
 			}
 			App.validateRange(val.value.toString(), dt.unsignedOrSigned, dt.width);
 			locals.put(name, new Operand(val.value, dt.unsignedOrSigned, dt.width));
+		} else if (dt != null && dt.isFunction) {
+			if (val.functionRef == null)
+				throw new IllegalArgumentException("typed function assignment requires function operand");
+			// basic arity check
+			java.util.List<DeclaredType> expected = dt.functionParamTypes != null ? dt.functionParamTypes
+					: new java.util.ArrayList<>();
+			java.util.List<DeclaredType> actual = val.functionRef.signature.paramTypes != null
+					? val.functionRef.signature.paramTypes
+					: new java.util.ArrayList<>();
+			if (expected.size() != actual.size())
+				throw new IllegalArgumentException("mismatched function type in assignment");
+			locals.put(name, new Operand(val.functionRef, val.functionName));
 		} else {
 			locals.put(name, new Operand(val.value, val.unsignedOrSigned, val.width));
 		}

@@ -91,6 +91,48 @@ final class FactorParser {
 		if (fncall != null)
 			return fncall;
 
-		return parser.parseIdentifierLookup();
+		Operand idOp = parser.parseIdentifierLookup();
+		if (idOp != null) {
+			parser.skipWhitespace();
+			// support calling a function-valued operand: e.g., `func(1, 2)` where
+			// `func` is a variable that holds a function reference.
+			if (parser.peekChar() == '(') {
+				parser.consumeChar();
+				java.util.List<Operand> args = new java.util.ArrayList<>();
+				parser.skipWhitespace();
+				int n = parser.getLength();
+				if (parser.getIndex() < n && parser.charAt(parser.getIndex()) != ')') {
+					while (true) {
+						Operand arg = parser.parseLogicalOr();
+						args.add(arg);
+						parser.skipWhitespace();
+						if (parser.getIndex() < n && parser.charAt(parser.getIndex()) == ',') {
+							parser.consumeChar();
+							parser.skipWhitespace();
+							continue;
+						}
+						break;
+					}
+				}
+				parser.skipWhitespace();
+				if (parser.peekChar() != ')')
+					throw new IllegalArgumentException("missing ')' in function call");
+				parser.consumeChar();
+
+				// determine function definition to call
+				String fname = idOp.functionName;
+				FunctionDef fd = idOp.functionRef;
+				if (fd == null && fname != null) {
+					fd = parser.getFunctions().get(fname);
+				}
+				if (fd == null)
+					throw new IllegalArgumentException("attempted call on non-function");
+
+				return FunctionCallParser.callFunction(parser, fname, fd, args, null);
+			}
+			return idOp;
+		}
+
+		return null;
 	}
 }

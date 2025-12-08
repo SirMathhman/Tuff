@@ -21,4 +21,8 @@ final class DeclaredType {
 	String typeVarName;
 	// optional array capacity when using [T; current; capacity]
 	Integer arrayCapacity;
+	// function type metadata
+	boolean isFunction;
+	java.util.List<DeclaredType> functionParamTypes;
+	DeclaredType functionReturnType;
 }

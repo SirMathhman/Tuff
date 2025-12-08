@@ -1,9 +1,29 @@
 extern fn print(value : String) : Void;
 
-let mut passes : Bool = true;
+let mut currentTestName : String = "";
+
+fn fail() => {
+	print("Test Fail")
+}
+
+fn test(message : String, perform : () => Void) => {
+	currentTestName = message;
+	perform();
+}
+
+fn assertTrue(value : Bool) => {
+	if (!value) {
+		currentTestPasses = false;
+	}
+}
 
 fn assertStringsEqual(left : String, right : String) => {
 	if (left.equalsTo(right)) {
-		print()
+	} else {
+		currentTestPasses = false;
 	}
 }
+
+test("A sample test passes", () => {
+
+});
