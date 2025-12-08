@@ -79,16 +79,29 @@ fn parse_sign_and_digits(s: &str) -> Result<ParsedPrefix, &'static str> {
     })
 }
 
-fn parse_suffix_and_width(s: &str, suffix_start: usize) -> Result<(char, u32), &'static str> {
+fn parse_suffix_and_width(
+    s: &str,
+    suffix_start: usize,
+) -> Result<(char, u32, usize), &'static str> {
     let suffix = &s[suffix_start..];
-    let mut suffix_chars = suffix.chars();
-    let kind = suffix_chars.next().unwrap_or('\0');
-    let width_str: String = suffix_chars.take_while(|c| c.is_ascii_digit()).collect();
-    if width_str.is_empty() {
+    let mut chars = suffix.chars();
+    let kind = chars.next().unwrap_or('\0');
+    let mut width_len = 0usize;
+    for c in chars {
+        if c.is_ascii_digit() {
+            width_len += 1;
+        } else {
+            break;
+        }
+    }
+    if width_len == 0 {
         return Err("unsupported or missing width in suffix");
     }
+
+    let width_str = &suffix[1..(1 + width_len)];
     let width: u32 = width_str.parse().map_err(|_| "invalid width in suffix")?;
-    Ok((kind, width))
+    // consumed length = 1 (kind) + width_len
+    Ok((kind, width, 1 + width_len))
 }
 
 fn build_unsigned_value(
@@ -149,7 +162,7 @@ fn build_signed_value(
 
 fn parse_operand(s: &str) -> Result<ParsedValue, &'static str> {
     let parsed = parse_sign_and_digits(s)?;
-    let (kind, width) = parse_suffix_and_width(s, parsed.suffix_start)?;
+    let (kind, width, _consumed) = parse_suffix_and_width(s, parsed.suffix_start)?;
 
     match kind {
         'U' | 'u' => build_unsigned_value(kind, width, parsed.digits, parsed.sign),
@@ -158,47 +171,93 @@ fn parse_operand(s: &str) -> Result<ParsedValue, &'static str> {
     }
 }
 
-fn parse_all_operands(parts: &[&str]) -> Result<Vec<ParsedValue>, &'static str> {
-    let mut parsed: Vec<ParsedValue> = Vec::with_capacity(parts.len());
-    for part in parts {
-        let pv = parse_operand(part)?;
-        if let Some(first) = parsed.first() {
-            if !pv.kind.eq_ignore_ascii_case(&first.kind) || pv.width != first.width {
-                return Err("mismatched operand types");
-            }
-        }
-        parsed.push(pv);
-    }
-    Ok(parsed)
+fn parse_operand_at(s: &str, start: usize) -> Result<(ParsedValue, usize), &'static str> {
+    let sub = &s[start..];
+    let prefix = parse_sign_and_digits(sub)?;
+    let (kind, width, consumed) = parse_suffix_and_width(sub, prefix.suffix_start)?;
+
+    let pv = match kind {
+        'U' | 'u' => build_unsigned_value(kind, width, prefix.digits, prefix.sign)?,
+        'I' | 'i' => build_signed_value(kind, width, prefix.digits, prefix.sign)?,
+        _ => return Err("unsupported suffix kind"),
+    };
+
+    let next_index = start + prefix.suffix_start + consumed;
+    Ok((pv, next_index))
 }
 
-fn sum_operands(parsed: &[ParsedValue]) -> Result<String, &'static str> {
-    let first = parsed.first().ok_or("no operands")?;
-    match first.kind.to_ascii_uppercase() {
-        'U' => {
-            let max = unsigned_max_for_width(first.width)?;
-            let mut acc: u128 = first.value_u;
-            for next in parsed.iter().skip(1) {
-                acc = acc.checked_add(next.value_u).ok_or("overflow")?;
-                if acc > max {
-                    return Err("value out of range for unsigned type");
-                }
+// removed unused helpers; evaluation helpers below provide arithmetic
+
+fn evaluate_add_sub_expression(s: &str) -> Result<String, &'static str> {
+    let mut idx = 0usize;
+
+    // parse first operand (allow leading sign)
+    // parse first operand (allow leading sign)
+    let (first, next) = parse_operand_at(s, idx)?;
+    idx = next;
+
+    let pairs = collect_ops_and_operands(s, idx)?;
+
+    if first.kind.eq_ignore_ascii_case(&'U') {
+        let max = unsigned_max_for_width(first.width)?;
+        let mut acc: u128 = first.value_u;
+        for (op, next_pv) in pairs {
+            if !next_pv.kind.eq_ignore_ascii_case(&first.kind) || next_pv.width != first.width { return Err("mismatched operand types"); }
+            if op == '+' {
+                acc = acc.checked_add(next_pv.value_u).ok_or("overflow")?;
+            } else {
+                if next_pv.value_u > acc { return Err("value out of range for unsigned type"); }
+                acc = acc.checked_sub(next_pv.value_u).ok_or("overflow")?;
             }
-            Ok(acc.to_string())
+            if acc > max { return Err("value out of range for unsigned type"); }
         }
-        'I' => {
-            let (min, max) = signed_range_for_width(first.width)?;
-            let mut acc: i128 = first.value_i;
-            for next in parsed.iter().skip(1) {
-                acc = acc.checked_add(next.value_i).ok_or("overflow")?;
-                if acc < min || acc > max {
-                    return Err("value out of range for signed type");
-                }
-            }
-            Ok(acc.to_string())
-        }
-        _ => Err("unsupported operand kind"),
+        return Ok(acc.to_string());
     }
+
+    let (min, max) = signed_range_for_width(first.width)?;
+    let mut acc: i128 = first.value_i;
+    for (op, next_pv) in pairs {
+        if !next_pv.kind.eq_ignore_ascii_case(&first.kind) || next_pv.width != first.width { return Err("mismatched operand types"); }
+        if op == '+' { acc = acc.checked_add(next_pv.value_i).ok_or("overflow")?; } else { acc = acc.checked_sub(next_pv.value_i).ok_or("overflow")?; }
+        if acc < min || acc > max { return Err("value out of range for signed type"); }
+    }
+
+    Ok(acc.to_string())
+            }
+
+fn skip_whitespace_bytes(s: &str, mut idx: usize) -> usize {
+    let bytes = s.as_bytes();
+    while let Some(&b) = bytes.get(idx) {
+        if b.is_ascii_whitespace() {
+            idx += 1;
+        } else {
+            break;
+        }
+    }
+    idx
+}
+
+/* evaluate_unsigned_expr and evaluate_signed_expr removed; evaluate_add_sub_expression handles both */
+
+fn collect_ops_and_operands(s: &str, mut idx: usize) -> Result<Vec<(char, ParsedValue)>, &'static str> {
+    let mut out: Vec<(char, ParsedValue)> = Vec::new();
+    let len = s.len();
+    let bytes = s.as_bytes();
+
+    while idx < len {
+        idx = skip_whitespace_bytes(s, idx);
+        if idx >= len { break; }
+        let op = *bytes.get(idx).ok_or("expected operator")? as char;
+        if op != '+' && op != '-' { return Err("expected operator"); }
+        idx += 1;
+
+        idx = skip_whitespace_bytes(s, idx);
+        let (pv, consumed) = parse_operand_at(s, idx)?;
+        idx = consumed;
+        out.push((op, pv));
+    }
+
+    Ok(out)
 }
 
 pub fn interpret(s: &str) -> Result<String, &'static str> {
@@ -208,14 +267,8 @@ pub fn interpret(s: &str) -> Result<String, &'static str> {
     }
 
     // if expression with '+' operator (support n-ary addition)
-    if s.contains('+') {
-        let parts: Vec<&str> = s.split('+').map(|p| p.trim()).collect();
-        if parts.len() < 2 {
-            return Err("invalid expression");
-        }
-
-        let parsed = parse_all_operands(&parts)?;
-        return sum_operands(&parsed);
+    if s.contains('+') || s.contains('-') {
+        return evaluate_add_sub_expression(s);
     }
 
     // otherwise single token — parse and return the original repr
@@ -286,6 +339,11 @@ mod tests {
     #[test]
     fn interpret_adds_three_signed_i16() {
         assert_eq!(interpret("100I16 + 200I16 + 300I16").unwrap(), "600");
+    }
+
+    #[test]
+    fn interpret_adds_subtracts_signed_i16() {
+        assert_eq!(interpret("100I16 - 200I16 + 300I16").unwrap(), "200");
     }
 
     #[test]
