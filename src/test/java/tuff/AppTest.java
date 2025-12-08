@@ -52,6 +52,12 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretCopyFromZeroLengthTypedArrayThrows() {
+		assertThrows(IllegalArgumentException.class,
+				() -> App.interpret("let mut array : [U8; 0; 5]; let copy : [U8; 1; 1] = array;"));
+	}
+
+	@Test
 	void interpretTwoHundredReturnsSame() {
 		assertEquals("200", App.interpret("200"));
 	}
