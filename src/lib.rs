@@ -119,7 +119,7 @@ fn validate_signed(out: &str, suf: &str) -> Result<(), String> {
 
 // old summing helpers were removed (no longer used after n-ary ops extension)
 
-fn apply_ops_generic(
+fn apply_ops_with_precedence(
     nums: &[String],
     ops: &[char],
     parse_op: &dyn Fn(&str) -> Result<i128, String>,
@@ -127,19 +127,46 @@ fn apply_ops_generic(
     if nums.is_empty() {
         return Err("invalid operands".to_string());
     }
-    let first = nums.first().ok_or_else(|| "invalid operands".to_string())?;
-    let mut acc = parse_op(first)?;
-    for (i, op) in ops.iter().enumerate() {
-        let rhs_s = nums
+    if nums.is_empty() {
+        return Err("invalid operands".to_string());
+    }
+
+    // parse all operands first
+    let mut values: Vec<i128> = Vec::with_capacity(nums.len());
+    for n in nums {
+        values.push(parse_op(n)?);
+    }
+
+    // first pass: handle multiplication (higher precedence)
+    let mut vals2: Vec<i128> = Vec::new();
+    let mut ops2: Vec<char> = Vec::new();
+    vals2.push(*values.first().ok_or_else(|| "invalid operands".to_string())?);
+    for (i, &op) in ops.iter().enumerate() {
+        let rhs = values
             .get(i + 1)
             .ok_or_else(|| "invalid operands".to_string())?;
-        let rhs = parse_op(rhs_s)?;
+        if op == '*' {
+            let last = vals2.last_mut().ok_or_else(|| "invalid operands".to_string())?;
+            *last = last.checked_mul(*rhs).ok_or_else(|| "overflow".to_string())?;
+        } else {
+            ops2.push(op);
+            vals2.push(*rhs);
+        }
+    }
+
+    // second pass: handle + and - left-to-right
+    let mut acc = *vals2.first().ok_or_else(|| "invalid operands".to_string())?;
+    for (i, &op) in ops2.iter().enumerate() {
+        let rhs = vals2
+            .get(i + 1)
+            .ok_or_else(|| "invalid operands".to_string())?;
         acc = match op {
-            '+' => acc.checked_add(rhs).ok_or_else(|| "overflow".to_string())?,
-            '-' => acc.checked_sub(rhs).ok_or_else(|| "overflow".to_string())?,
+            '+' => acc.checked_add(*rhs).ok_or_else(|| "overflow".to_string())?,
+            '-' => acc.checked_sub(*rhs).ok_or_else(|| "overflow".to_string())?,
             _ => return Err("unsupported operator".to_string()),
         };
     }
+
     Ok(acc)
 }
 
@@ -239,7 +266,7 @@ fn eval_nary_with_ops(
 
     // helper: apply sequence of ops using provided operand parser
     let apply_ops = |parse_op: &dyn Fn(&str) -> Result<i128, String>| -> Result<i128, String> {
-        apply_ops_generic(nums, ops, parse_op)
+        apply_ops_with_precedence(nums, ops, parse_op)
     };
 
     // plain (no suffix) -> signed arithmetic
@@ -275,7 +302,7 @@ fn eval_nary_with_ops(
 }
 
 fn try_eval_addition(s: &str) -> Option<Result<String, String>> {
-    if !s.contains('+') && !s.contains('-') {
+    if !s.contains('+') && !s.contains('-') && !s.contains('*') {
         return None;
     }
 
@@ -312,7 +339,7 @@ fn try_eval_addition(s: &str) -> Option<Result<String, String>> {
             // suffix characters
             while start < len {
                 let ch = get_byte(start) as char;
-                if ch.is_ascii_whitespace() || ch == '+' || ch == '-' {
+                if ch.is_ascii_whitespace() || ch == '+' || ch == '-' || ch == '*' {
                     break;
                 }
                 start += 1;
@@ -349,7 +376,7 @@ fn try_eval_addition(s: &str) -> Option<Result<String, String>> {
             }
 
             let ch = get_byte(i) as char;
-            if ch != '+' && ch != '-' {
+            if ch != '+' && ch != '-' && ch != '*' {
                 return Err("invalid operator".to_string());
             }
             ops.push(ch);
@@ -542,6 +569,20 @@ mod tests {
     #[test]
     fn interpret_subtract_u8_underflow_small() {
         assert!(interpret("3U8 - 5U8").is_err());
+    }
+
+    #[test]
+    fn interpret_mul_then_add_typed_u8() {
+        let res = interpret("10U8 * 2U8 + 1U8");
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), "21");
+    }
+
+    #[test]
+    fn interpret_mul_then_add_plain() {
+        let res = interpret("2 * 3 + 1");
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), "7");
     }
 
     #[test]
