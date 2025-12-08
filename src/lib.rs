@@ -607,6 +607,11 @@ mod tests {
     }
 
     #[test]
+    fn interpret_mul_overflow_u8() {
+        assert!(interpret("20U8 * 100U8").is_err());
+    }
+
+    #[test]
     fn interpret_rejects_mismatched_suffixes_in_expression() {
         assert!(interpret("100U8 + 50U16").is_err());
     }
