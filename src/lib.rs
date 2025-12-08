@@ -85,7 +85,9 @@ fn parse_operand(s: &str) -> Result<ParsedValue, &'static str> {
             if let Some('-') = sign {
                 return Err("negative values not allowed for unsigned suffix");
             }
-            let val = digits.parse::<u128>().map_err(|_| "failed to parse numeric value")?;
+            let val = digits
+                .parse::<u128>()
+                .map_err(|_| "failed to parse numeric value")?;
             let max = unsigned_max_for_width(width)?;
             if val > max {
                 return Err("value out of range for unsigned type");
@@ -94,15 +96,21 @@ fn parse_operand(s: &str) -> Result<ParsedValue, &'static str> {
             Ok(ParsedValue {
                 kind,
                 width,
-                
+
                 value_u: val,
                 value_i: val as i128,
                 repr: digits.to_string(),
             })
         }
         'I' | 'i' => {
-            let unsigned = digits.parse::<u128>().map_err(|_| "failed to parse numeric value")?;
-            let signed_val = if let Some('-') = sign { -(unsigned as i128) } else { unsigned as i128 };
+            let unsigned = digits
+                .parse::<u128>()
+                .map_err(|_| "failed to parse numeric value")?;
+            let signed_val = if let Some('-') = sign {
+                -(unsigned as i128)
+            } else {
+                unsigned as i128
+            };
 
             let (min, max) = signed_range_for_width(width)?;
             if signed_val < min || signed_val > max {
@@ -112,10 +120,14 @@ fn parse_operand(s: &str) -> Result<ParsedValue, &'static str> {
             Ok(ParsedValue {
                 kind,
                 width,
-                
+
                 value_u: signed_val.unsigned_abs(),
                 value_i: signed_val,
-                repr: if signed_val < 0 { format!("-{}", digits) } else { digits.to_string() },
+                repr: if signed_val < 0 {
+                    format!("-{}", digits)
+                } else {
+                    digits.to_string()
+                },
             })
         }
         _ => Err("unsupported suffix kind"),
@@ -142,7 +154,7 @@ pub fn interpret(s: &str) -> Result<String, &'static str> {
         return match l.kind.to_ascii_uppercase() {
             'U' => {
                 // unsigned add
-                    let max = unsigned_max_for_width(l.width)?;
+                let max = unsigned_max_for_width(l.width)?;
                 let sum = l.value_u.checked_add(r.value_u).ok_or("overflow")?;
                 if sum > max {
                     return Err("value out of range for unsigned type");

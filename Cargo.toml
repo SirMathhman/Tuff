@@ -21,4 +21,7 @@ unwrap_used = "deny"
 expect_used = "deny"
 indexing_slicing = "warn"
 
+# Cognitive complexity limit
+cognitive_complexity = "deny"
+
 [dependencies]

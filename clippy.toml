@@ -3,6 +3,9 @@
 # Maximum lines allowed in a function
 too-many-lines-threshold = 500
 
+# Cognitive complexity threshold (max 15)
+cognitive-complexity-threshold = 15
+
 # Note: To enable restriction lints for panic-causing functions,
 # they must be set in the source code or via command-line flags.
 # See Cargo.toml [lints.clippy] section or use:
