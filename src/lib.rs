@@ -158,43 +158,64 @@ fn parse_operand(s: &str) -> Result<ParsedValue, &'static str> {
     }
 }
 
+fn parse_all_operands(parts: &[&str]) -> Result<Vec<ParsedValue>, &'static str> {
+    let mut parsed: Vec<ParsedValue> = Vec::with_capacity(parts.len());
+    for part in parts {
+        let pv = parse_operand(part)?;
+        if let Some(first) = parsed.first() {
+            if !pv.kind.eq_ignore_ascii_case(&first.kind) || pv.width != first.width {
+                return Err("mismatched operand types");
+            }
+        }
+        parsed.push(pv);
+    }
+    Ok(parsed)
+}
+
+fn sum_operands(parsed: &[ParsedValue]) -> Result<String, &'static str> {
+    let first = parsed.first().ok_or("no operands")?;
+    match first.kind.to_ascii_uppercase() {
+        'U' => {
+            let max = unsigned_max_for_width(first.width)?;
+            let mut acc: u128 = first.value_u;
+            for next in parsed.iter().skip(1) {
+                acc = acc.checked_add(next.value_u).ok_or("overflow")?;
+                if acc > max {
+                    return Err("value out of range for unsigned type");
+                }
+            }
+            Ok(acc.to_string())
+        }
+        'I' => {
+            let (min, max) = signed_range_for_width(first.width)?;
+            let mut acc: i128 = first.value_i;
+            for next in parsed.iter().skip(1) {
+                acc = acc.checked_add(next.value_i).ok_or("overflow")?;
+                if acc < min || acc > max {
+                    return Err("value out of range for signed type");
+                }
+            }
+            Ok(acc.to_string())
+        }
+        _ => Err("unsupported operand kind"),
+    }
+}
+
 pub fn interpret(s: &str) -> Result<String, &'static str> {
     let bytes = s.as_bytes();
     if bytes.is_empty() {
         return Err("empty input");
     }
 
-    // if expression with '+' operator
-    if let Some(pos) = s.find('+') {
-        let left = s[..pos].trim();
-        let right = s[pos + 1..].trim();
-        let l = parse_operand(left)?;
-        let r = parse_operand(right)?;
-        // types must match (kind and width)
-        if !l.kind.eq_ignore_ascii_case(&r.kind) || l.width != r.width {
-            return Err("mismatched operand types");
+    // if expression with '+' operator (support n-ary addition)
+    if s.contains('+') {
+        let parts: Vec<&str> = s.split('+').map(|p| p.trim()).collect();
+        if parts.len() < 2 {
+            return Err("invalid expression");
         }
 
-        return match l.kind.to_ascii_uppercase() {
-            'U' => {
-                // unsigned add
-                let max = unsigned_max_for_width(l.width)?;
-                let sum = l.value_u.checked_add(r.value_u).ok_or("overflow")?;
-                if sum > max {
-                    return Err("value out of range for unsigned type");
-                }
-                Ok(sum.to_string())
-            }
-            'I' => {
-                let (min, max) = signed_range_for_width(l.width)?;
-                let sum = l.value_i.checked_add(r.value_i).ok_or("overflow")?;
-                if sum < min || sum > max {
-                    return Err("value out of range for signed type");
-                }
-                Ok(sum.to_string())
-            }
-            _ => Err("unsupported operand kind"),
-        };
+        let parsed = parse_all_operands(&parts)?;
+        return sum_operands(&parsed);
     }
 
     // otherwise single token — parse and return the original repr
@@ -260,6 +281,11 @@ mod tests {
     #[test]
     fn interpret_rejects_overflowing_addition_u8() {
         assert!(interpret("100U8 + 200U8").is_err());
+    }
+
+    #[test]
+    fn interpret_adds_three_signed_i16() {
+        assert_eq!(interpret("100I16 + 200I16 + 300I16").unwrap(), "600");
     }
 
     #[test]
