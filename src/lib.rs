@@ -426,6 +426,11 @@ mod tests {
     }
 
     #[test]
+    fn interpret_rejects_typed_plus_large_plain() {
+        assert!(interpret("100U8 + 200").is_err());
+    }
+
+    #[test]
     fn interpret_rejects_mismatched_suffixes_in_expression() {
         assert!(interpret("100U8 + 50U16").is_err());
     }
