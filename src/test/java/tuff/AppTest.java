@@ -34,6 +34,12 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretMutableU16ArraySingleElementReturnsValue() {
+		String src = "let mut array : [U16; 1; 1] = [100U16]; array[0]";
+		assertEquals("100", App.interpret(src));
+	}
+
+	@Test
 	void interpretTwoHundredReturnsSame() {
 		assertEquals("200", App.interpret("200"));
 	}
