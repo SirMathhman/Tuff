@@ -88,7 +88,7 @@ public final class LiteralParser {
 		}
 
 		if (width != null) {
-			App.validateRange(number, unsignedOrSigned, width);
+			TypeUtils.validateRange(number, unsignedOrSigned, width);
 			return new Operand(new java.math.BigInteger(number), unsignedOrSigned, width);
 		}
 		return new Operand(new java.math.BigInteger(number), null, null);

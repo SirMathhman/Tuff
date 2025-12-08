@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class AppTest {
 	@Test
@@ -418,5 +419,13 @@ public class AppTest {
 	@Test
 	void interpretIfExpressionFalseBranch() {
 		assertEquals("-1", App.interpret("let x = if (false) 100 + 200 else -1; x"));
+	}
+
+	@Test
+	void interpretInvalidTypeInLetIncludesNameAndType() {
+		IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+				() -> App.interpret("let x : String = \"\";"));
+		assertTrue(ex.getMessage().contains("x"));
+		assertTrue(ex.getMessage().contains("String"));
 	}
 }

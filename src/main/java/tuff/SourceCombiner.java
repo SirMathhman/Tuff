@@ -10,18 +10,31 @@ final class SourceCombiner {
 		if (sources == null || !sources.containsKey(mainScriptName))
 			throw new IllegalArgumentException("missing main script in sources");
 
-		StringBuilder combined = new StringBuilder();
-
 		String mainCode = sources.get(mainScriptName);
 		if (mainCode == null)
 			throw new IllegalArgumentException("missing main script in sources");
 
+		String parameterized = tryCombineParameterized(mainCode, sources);
+		if (parameterized != null) {
+			return parameterized;
+		}
+
+		String namespaced = tryCombineNamespaced(mainCode, sources);
+		if (namespaced != null) {
+			return namespaced;
+		}
+
+		return combineSimple(mainScriptName, sources, mainCode);
+	}
+
+	private static String tryCombineParameterized(String mainCode, java.util.Map<String, String> sources) {
 		java.util.regex.Pattern useParameterizedPattern = java.util.regex.Pattern
 				.compile(
 						"(?s)use\\s+([A-Za-z_]\\w*)\\s*\\{([^}]*)\\}\\s*::\\s*\\{\\s*([A-Za-z_]\\w*(?:\\s*,\\s*[A-Za-z_]\\w*)*)\\s*\\}\\s*;");
 		java.util.regex.Matcher useParameterizedMatcher = useParameterizedPattern.matcher(mainCode);
 		if (useParameterizedMatcher.find()) {
 			useParameterizedMatcher.reset();
+			StringBuilder combined = new StringBuilder();
 			StringBuilder allInitializations = new StringBuilder();
 			java.util.Set<String> processedParams = new java.util.HashSet<>();
 
@@ -84,12 +97,16 @@ final class SourceCombiner {
 			combined.append(cleanedMain);
 			return combined.toString();
 		}
+		return null;
+	}
 
+	private static String tryCombineNamespaced(String mainCode, java.util.Map<String, String> sources) {
 		java.util.regex.Pattern useNamespacePattern = java.util.regex.Pattern
 				.compile("(?s)use\\s+([A-Za-z_]\\w*)\\s*::\\s*\\{\\s*([A-Za-z_]\\w*(?:\\s*,\\s*[A-Za-z_]\\w*)*)\\s*\\}\\s*;");
 		java.util.regex.Matcher useNamespaceMatcher = useNamespacePattern.matcher(mainCode);
 		if (useNamespaceMatcher.find()) {
 			useNamespaceMatcher.reset();
+			StringBuilder combined = new StringBuilder();
 			while (useNamespaceMatcher.find()) {
 				String sourceKey = useNamespaceMatcher.group(1);
 				String names = useNamespaceMatcher.group(2);
@@ -121,7 +138,11 @@ final class SourceCombiner {
 			combined.append(cleanedMain);
 			return combined.toString();
 		}
+		return null;
+	}
 
+	private static String combineSimple(String mainScriptName, java.util.Map<String, String> sources, String mainCode) {
+		StringBuilder combined = new StringBuilder();
 		for (java.util.Map.Entry<String, String> e : sources.entrySet()) {
 			String k = e.getKey();
 			if (k == null || k.equals(mainScriptName))

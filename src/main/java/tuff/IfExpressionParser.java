@@ -56,10 +56,10 @@ final class IfExpressionParser {
 		}
 
 		// numeric branches
-		String[] kind = App.combineKinds(thenOp, elseOp);
+		String[] kind = TypeUtils.combineKinds(thenOp, elseOp);
 		java.math.BigInteger chosen = !java.math.BigInteger.ZERO.equals(cond.value) ? thenOp.value : elseOp.value;
 		if (kind[0] != null && kind[1] != null) {
-			App.validateRange(chosen.toString(), kind[0], kind[1]);
+			TypeUtils.validateRange(chosen.toString(), kind[0], kind[1]);
 		}
 		return new Operand(chosen, kind[0], kind[1]);
 	}

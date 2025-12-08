@@ -324,7 +324,7 @@ public final class ParsingHelpers {
 			} else if (pdt != null && pdt.unsignedOrSigned != null && pdt.width != null) {
 				if (a.isBoolean != null)
 					throw new IllegalArgumentException("typed numeric assignment requires numeric operand");
-				App.validateRange(a.value.toString(), pdt.unsignedOrSigned, pdt.width);
+				TypeUtils.validateRange(a.value.toString(), pdt.unsignedOrSigned, pdt.width);
 				fLocals.put(fd.signature.paramNames.get(idx),
 						new Operand(a.value, pdt.unsignedOrSigned, pdt.width));
 			} else {
@@ -387,33 +387,46 @@ public final class ParsingHelpers {
 		}
 		if (declared.arrayLength != null && op.elements.size() != declared.arrayLength.intValue())
 			throw new IllegalArgumentException("array initializer length mismatch");
+		ArrayElementValidationContext ctx = new ArrayElementValidationContext(elemIsBool, elemUnsigned, elemWidth);
 		for (Operand el : op.elements) {
-			validateArrayElement(el, elemIsBool, elemUnsigned, elemWidth);
+			validateArrayElement(el, ctx);
 		}
 		return op;
 	}
 
-	private static void validateArrayElement(Operand el, boolean elemIsBool, String elemUnsigned, String elemWidth) {
-		if (elemIsBool) {
+	static class ArrayElementValidationContext {
+		boolean elemIsBool;
+		String elemUnsigned;
+		String elemWidth;
+
+		ArrayElementValidationContext(boolean elemIsBool, String elemUnsigned, String elemWidth) {
+			this.elemIsBool = elemIsBool;
+			this.elemUnsigned = elemUnsigned;
+			this.elemWidth = elemWidth;
+		}
+	}
+
+	private static void validateArrayElement(Operand el, ArrayElementValidationContext ctx) {
+		if (ctx.elemIsBool) {
 			if (el.isBoolean == null)
 				throw new IllegalArgumentException("typed Bool array requires boolean elements");
 			return;
 		}
 		if (el.isBoolean != null)
 			throw new IllegalArgumentException("typed numeric array requires numeric elements");
-		if (elemUnsigned != null && elemWidth != null) {
+		if (ctx.elemUnsigned != null && ctx.elemWidth != null) {
 			if (el.unsignedOrSigned != null && el.width != null) {
-				if (!elemUnsigned.equals(el.unsignedOrSigned) || !elemWidth.equals(el.width))
+				if (!ctx.elemUnsigned.equals(el.unsignedOrSigned) || !ctx.elemWidth.equals(el.width))
 					throw new IllegalArgumentException("mismatched typed array element assignment");
 			}
-			App.validateRange(el.value.toString(), elemUnsigned, elemWidth);
+			TypeUtils.validateRange(el.value.toString(), ctx.elemUnsigned, ctx.elemWidth);
 		}
 	}
 
 	private static Operand enforceNumericReturn(Operand op, DeclaredType declared) {
 		if (op.isBoolean != null)
 			throw new IllegalArgumentException("typed numeric return requires numeric operand");
-		App.validateRange(op.value.toString(), declared.unsignedOrSigned, declared.width);
+		TypeUtils.validateRange(op.value.toString(), declared.unsignedOrSigned, declared.width);
 		return new Operand(op.value, declared.unsignedOrSigned, declared.width);
 	}
 }

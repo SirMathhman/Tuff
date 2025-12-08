@@ -46,6 +46,13 @@ final class AssignmentUtils {
 			throw new IllegalArgumentException("unknown field: " + fieldName);
 
 		// build initial struct with zero-initialized fields then assign
+		java.util.Map<String, Operand> fmap = initializeStructFields(dt, fieldName, val);
+
+		locals.put(name, new Operand(fmap));
+		declaredTypes.remove(name);
+	}
+
+	private java.util.Map<String, Operand> initializeStructFields(DeclaredType dt, String fieldName, Operand val) {
 		java.util.Map<String, Operand> fmap = new java.util.LinkedHashMap<>();
 		for (java.util.Map.Entry<String, DeclaredType> e : dt.structFields.entrySet()) {
 			String fn = e.getKey();
@@ -66,9 +73,7 @@ final class AssignmentUtils {
 				}
 			}
 		}
-
-		locals.put(name, new Operand(fmap));
-		declaredTypes.remove(name);
+		return fmap;
 	}
 
 	private void assignFieldExisting(String name, String fieldName, Operand val) {
@@ -83,6 +88,11 @@ final class AssignmentUtils {
 		if (!obj.structFields.containsKey(fieldName))
 			throw new IllegalArgumentException("unknown field: " + fieldName);
 		// basic validation: if existing field has typed info, enforce
+		validateAndAssignField(obj, fieldName, val);
+		locals.put(name, obj);
+	}
+
+	private void validateAndAssignField(Operand obj, String fieldName, Operand val) {
 		Operand oldField = obj.structFields.get(fieldName);
 		if (oldField.isBoolean != null && val.isBoolean == null)
 			throw new IllegalArgumentException("typed Bool assignment requires boolean operand");
@@ -94,12 +104,11 @@ final class AssignmentUtils {
 				if (!oldField.unsignedOrSigned.equals(val.unsignedOrSigned) || !oldField.width.equals(val.width))
 					throw new IllegalArgumentException("mismatched typed assignment");
 			}
-			App.validateRange(val.value.toString(), oldField.unsignedOrSigned, oldField.width);
+			TypeUtils.validateRange(val.value.toString(), oldField.unsignedOrSigned, oldField.width);
 			obj.structFields.put(fieldName, new Operand(val.value, oldField.unsignedOrSigned, oldField.width));
 		} else {
 			obj.structFields.put(fieldName, new Operand(val.value, val.unsignedOrSigned, val.width));
 		}
-		locals.put(name, obj);
 	}
 
 	private Operand coerceFieldValue(DeclaredType fdt, Operand val) {
@@ -115,7 +124,7 @@ final class AssignmentUtils {
 				if (!fdt.unsignedOrSigned.equals(val.unsignedOrSigned) || !fdt.width.equals(val.width))
 					throw new IllegalArgumentException("mismatched typed assignment");
 			}
-			App.validateRange(val.value.toString(), fdt.unsignedOrSigned, fdt.width);
+			TypeUtils.validateRange(val.value.toString(), fdt.unsignedOrSigned, fdt.width);
 			return new Operand(val.value, fdt.unsignedOrSigned, fdt.width);
 		}
 		return new Operand(val.value, val.unsignedOrSigned, val.width);
@@ -137,61 +146,102 @@ final class AssignmentUtils {
 		java.util.List<Operand> elems = buildDeclaredArrayForIndex(dt, idx);
 		applyValueToArraySlotDeclared(dt, elems, new java.util.AbstractMap.SimpleEntry<>(idx, val));
 
+		DeclaredType runtimeDt = createRuntimeType(dt, capacity);
+		locals.put(name, new Operand(elems, runtimeDt));
+		declaredTypes.remove(name);
+	}
+
+	private DeclaredType createRuntimeType(DeclaredType dt, int capacity) {
 		DeclaredType runtimeDt = new DeclaredType();
 		runtimeDt.arrayCapacity = capacity;
 		runtimeDt.elemIsBool = dt.elemIsBool;
 		runtimeDt.elemUnsignedOrSigned = dt.elemUnsignedOrSigned;
 		runtimeDt.elemWidth = dt.elemWidth;
-		locals.put(name, new Operand(elems, runtimeDt));
-		declaredTypes.remove(name);
+		return runtimeDt;
 	}
 
 	private java.util.List<Operand> buildDeclaredArrayForIndex(DeclaredType dt, int idx) {
 		java.util.List<Operand> elems = new java.util.ArrayList<>();
 		int initial = dt.arrayLength != null ? dt.arrayLength : 0;
 		for (int k = 0; k < initial; k++) {
-			if (dt.elemIsBool) {
-				elems.add(new Operand(java.math.BigInteger.ZERO, true));
-			} else if (dt.elemUnsignedOrSigned != null && dt.elemWidth != null) {
-				elems.add(new Operand(java.math.BigInteger.ZERO, dt.elemUnsignedOrSigned, dt.elemWidth));
-			} else {
-				elems.add(new Operand(java.math.BigInteger.ZERO, null, null));
-			}
+			addZeroElement(elems, dt);
 		}
 		while (elems.size() <= idx) {
-			if (dt.elemIsBool) {
-				elems.add(new Operand(java.math.BigInteger.ZERO, true));
-			} else if (dt.elemUnsignedOrSigned != null && dt.elemWidth != null) {
-				elems.add(new Operand(java.math.BigInteger.ZERO, dt.elemUnsignedOrSigned, dt.elemWidth));
-			} else {
-				elems.add(new Operand(java.math.BigInteger.ZERO, null, null));
-			}
+			addZeroElement(elems, dt);
 		}
 		return elems;
+	}
+
+	private void addZeroElement(java.util.List<Operand> elems, DeclaredType dt) {
+		if (dt.elemIsBool) {
+			elems.add(new Operand(java.math.BigInteger.ZERO, true));
+		} else if (dt.elemUnsignedOrSigned != null && dt.elemWidth != null) {
+			elems.add(new Operand(java.math.BigInteger.ZERO, dt.elemUnsignedOrSigned, dt.elemWidth));
+		} else {
+			elems.add(new Operand(java.math.BigInteger.ZERO, null, null));
+		}
+	}
+
+	private void addZeroElement(java.util.List<Operand> elems, Operand arr) {
+		if (arr.elemIsBool) {
+			elems.add(new Operand(java.math.BigInteger.ZERO, true));
+		} else if (arr.elemUnsignedOrSigned != null && arr.elemWidth != null) {
+			elems.add(new Operand(java.math.BigInteger.ZERO, arr.elemUnsignedOrSigned, arr.elemWidth));
+		} else {
+			elems.add(new Operand(java.math.BigInteger.ZERO, null, null));
+		}
 	}
 
 	private void applyValueToArraySlotDeclared(DeclaredType dt, java.util.List<Operand> elems,
 			java.util.Map.Entry<Integer, Operand> assignment) {
 		int idx = assignment.getKey();
 		Operand val = assignment.getValue();
-		if (dt.elemIsBool) {
+		validateArrayElementAssignment(dt, val);
+		elems.set(idx, createArrayElement(dt, val));
+	}
+
+	private Operand createArrayElement(DeclaredType dt, Operand val) {
+		if (dt.elemUnsignedOrSigned != null && dt.elemWidth != null) {
+			return new Operand(val.value, dt.elemUnsignedOrSigned, dt.elemWidth);
+		} else if (dt.elemIsBool) {
+			return new Operand(val.value, true);
+		} else {
+			return new Operand(val.value, val.unsignedOrSigned, val.width);
+		}
+	}
+
+	private void validateArrayElementAssignment(DeclaredType dt, Operand val) {
+		validateArrayElementAssignment(new ArrayElementContext(dt.elemIsBool, dt.elemUnsignedOrSigned, dt.elemWidth),
+				val);
+	}
+
+	private static class ArrayElementContext {
+		boolean isBool;
+		String uOrS;
+		String width;
+
+		ArrayElementContext(boolean isBool, String uOrS, String width) {
+			this.isBool = isBool;
+			this.uOrS = uOrS;
+			this.width = width;
+		}
+	}
+
+	private void validateArrayElementAssignment(ArrayElementContext ctx, Operand val) {
+		if (ctx.isBool) {
 			if (val.isBoolean == null)
 				throw new IllegalArgumentException("typed Bool array requires boolean elements");
-			elems.set(idx, new Operand(val.value, true));
 			return;
 		}
 		if (val.isBoolean != null)
 			throw new IllegalArgumentException("typed numeric array requires numeric elements");
-		if (dt.elemUnsignedOrSigned != null && dt.elemWidth != null) {
+		if (ctx.uOrS != null && ctx.width != null) {
 			if (val.unsignedOrSigned != null && val.width != null) {
-				if (!dt.elemUnsignedOrSigned.equals(val.unsignedOrSigned) || !dt.elemWidth.equals(val.width))
+				if (!ctx.uOrS.equals(val.unsignedOrSigned) || !ctx.width.equals(val.width))
 					throw new IllegalArgumentException("mismatched typed array element assignment");
 			}
-			App.validateRange(val.value.toString(), dt.elemUnsignedOrSigned, dt.elemWidth);
-			elems.set(idx, new Operand(val.value, dt.elemUnsignedOrSigned, dt.elemWidth));
-			return;
+			TypeUtils.validateRange(val.value.toString(), ctx.uOrS, ctx.width);
 		}
-		elems.set(idx, new Operand(val.value, val.unsignedOrSigned, val.width));
 	}
 
 	private void assignIndexedExisting(String name, int idx, Operand val) {
@@ -206,24 +256,23 @@ final class AssignmentUtils {
 			throw new IllegalArgumentException("index out of bounds");
 		java.util.List<Operand> elems = expandExistingArrayToIndex(arr, idx);
 		applyValueToArraySlotExisting(arr, elems, new java.util.AbstractMap.SimpleEntry<>(idx, val));
+		DeclaredType runtimeDt = createRuntimeTypeFromOperand(arr, capacity);
+		locals.put(name, new Operand(elems, runtimeDt));
+	}
+
+	private DeclaredType createRuntimeTypeFromOperand(Operand arr, Integer capacity) {
 		DeclaredType runtimeDt = new DeclaredType();
 		runtimeDt.arrayCapacity = capacity;
 		runtimeDt.elemIsBool = arr.elemIsBool;
 		runtimeDt.elemUnsignedOrSigned = arr.elemUnsignedOrSigned;
 		runtimeDt.elemWidth = arr.elemWidth;
-		locals.put(name, new Operand(elems, runtimeDt));
+		return runtimeDt;
 	}
 
 	private java.util.List<Operand> expandExistingArrayToIndex(Operand arr, int idx) {
 		java.util.List<Operand> elems = arr.elements;
 		while (elems.size() <= idx) {
-			if (arr.elemIsBool) {
-				elems.add(new Operand(java.math.BigInteger.ZERO, true));
-			} else if (arr.elemUnsignedOrSigned != null && arr.elemWidth != null) {
-				elems.add(new Operand(java.math.BigInteger.ZERO, arr.elemUnsignedOrSigned, arr.elemWidth));
-			} else {
-				elems.add(new Operand(java.math.BigInteger.ZERO, null, null));
-			}
+			addZeroElement(elems, arr);
 		}
 		return elems;
 	}
@@ -232,24 +281,23 @@ final class AssignmentUtils {
 			java.util.Map.Entry<Integer, Operand> assignment) {
 		int idx = assignment.getKey();
 		Operand val = assignment.getValue();
-		if (arr.elemIsBool) {
-			if (val.isBoolean == null)
-				throw new IllegalArgumentException("typed Bool array requires boolean elements");
-			elems.set(idx, new Operand(val.value, true));
-			return;
-		}
-		if (val.isBoolean != null)
-			throw new IllegalArgumentException("typed numeric array requires numeric elements");
+		validateArrayElementAssignment(arr, val);
+		elems.set(idx, createArrayElement(arr, val));
+	}
+
+	private Operand createArrayElement(Operand arr, Operand val) {
 		if (arr.elemUnsignedOrSigned != null && arr.elemWidth != null) {
-			if (val.unsignedOrSigned != null && val.width != null) {
-				if (!arr.elemUnsignedOrSigned.equals(val.unsignedOrSigned) || !arr.elemWidth.equals(val.width))
-					throw new IllegalArgumentException("mismatched typed array element assignment");
-			}
-			App.validateRange(val.value.toString(), arr.elemUnsignedOrSigned, arr.elemWidth);
-			elems.set(idx, new Operand(val.value, arr.elemUnsignedOrSigned, arr.elemWidth));
-			return;
+			return new Operand(val.value, arr.elemUnsignedOrSigned, arr.elemWidth);
+		} else if (arr.elemIsBool) {
+			return new Operand(val.value, true);
+		} else {
+			return new Operand(val.value, val.unsignedOrSigned, val.width);
 		}
-		elems.set(idx, new Operand(val.value, val.unsignedOrSigned, val.width));
+	}
+
+	private void validateArrayElementAssignment(Operand arr, Operand val) {
+		validateArrayElementAssignment(new ArrayElementContext(arr.elemIsBool, arr.elemUnsignedOrSigned, arr.elemWidth),
+				val);
 	}
 
 	void assign(String name, Operand val) {
@@ -260,7 +308,10 @@ final class AssignmentUtils {
 			assignDeclaredUninitialized(name, val);
 			return;
 		}
+		assignExisting(name, val);
+	}
 
+	private void assignExisting(String name, Operand val) {
 		Boolean isMut = mutables.getOrDefault(name, false);
 		if (!isMut)
 			throw new IllegalArgumentException("assignment to immutable variable: " + name);
@@ -276,7 +327,7 @@ final class AssignmentUtils {
 				if (!old.unsignedOrSigned.equals(val.unsignedOrSigned) || !old.width.equals(val.width))
 					throw new IllegalArgumentException("mismatched typed assignment");
 			}
-			App.validateRange(val.value.toString(), old.unsignedOrSigned, old.width);
+			TypeUtils.validateRange(val.value.toString(), old.unsignedOrSigned, old.width);
 			locals.put(name, new Operand(val.value, old.unsignedOrSigned, old.width));
 		} else {
 			// allow reassigning function values
@@ -289,36 +340,54 @@ final class AssignmentUtils {
 
 	private void assignDeclaredUninitialized(String name, Operand val) {
 		DeclaredType dt = declaredTypes.get(name);
-		if (dt != null && dt.isBool) {
-			if (val.isBoolean == null)
-				throw new IllegalArgumentException("typed Bool assignment requires boolean operand");
-			locals.put(name, new Operand(val.value, true));
-		} else if (dt != null && dt.unsignedOrSigned != null && dt.width != null) {
-			if (val.isBoolean != null)
-				throw new IllegalArgumentException("typed numeric assignment requires numeric operand");
-			if (val.unsignedOrSigned != null && val.width != null) {
-				if (!dt.unsignedOrSigned.equals(val.unsignedOrSigned) || !dt.width.equals(val.width))
-					throw new IllegalArgumentException("mismatched typed assignment");
-			}
-			App.validateRange(val.value.toString(), dt.unsignedOrSigned, dt.width);
-			locals.put(name, new Operand(val.value, dt.unsignedOrSigned, dt.width));
-		} else if (dt != null && dt.isFunction) {
-			if (val.functionRef == null)
-				throw new IllegalArgumentException("typed function assignment requires function operand");
-			// basic arity check
-			java.util.List<DeclaredType> expected = dt.functionParamTypes != null ? dt.functionParamTypes
-					: new java.util.ArrayList<>();
-			java.util.List<DeclaredType> actual = val.functionRef.signature.paramTypes != null
-					? val.functionRef.signature.paramTypes
-					: new java.util.ArrayList<>();
-			if (expected.size() != actual.size())
-				throw new IllegalArgumentException("mismatched function type in assignment");
-			locals.put(name, new Operand(val.functionRef, val.functionName));
+		if (dt == null) {
+			locals.put(name, new Operand(val.value, val.unsignedOrSigned, val.width));
+			declaredTypes.remove(name);
+			return;
+		}
+
+		if (dt.isBool) {
+			assignDeclaredBool(name, val);
+		} else if (dt.unsignedOrSigned != null && dt.width != null) {
+			assignDeclaredNumeric(name, dt, val);
+		} else if (dt.isFunction) {
+			assignDeclaredFunction(name, dt, val);
 		} else {
 			locals.put(name, new Operand(val.value, val.unsignedOrSigned, val.width));
 		}
 		// remove declared type entry now that it's initialized
 		declaredTypes.remove(name);
+	}
+
+	private void assignDeclaredBool(String name, Operand val) {
+		if (val.isBoolean == null)
+			throw new IllegalArgumentException("typed Bool assignment requires boolean operand");
+		locals.put(name, new Operand(val.value, true));
+	}
+
+	private void assignDeclaredNumeric(String name, DeclaredType dt, Operand val) {
+		if (val.isBoolean != null)
+			throw new IllegalArgumentException("typed numeric assignment requires numeric operand");
+		if (val.unsignedOrSigned != null && val.width != null) {
+			if (!dt.unsignedOrSigned.equals(val.unsignedOrSigned) || !dt.width.equals(val.width))
+				throw new IllegalArgumentException("mismatched typed assignment");
+		}
+		TypeUtils.validateRange(val.value.toString(), dt.unsignedOrSigned, dt.width);
+		locals.put(name, new Operand(val.value, dt.unsignedOrSigned, dt.width));
+	}
+
+	private void assignDeclaredFunction(String name, DeclaredType dt, Operand val) {
+		if (val.functionRef == null)
+			throw new IllegalArgumentException("typed function assignment requires function operand");
+		// basic arity check
+		java.util.List<DeclaredType> expected = dt.functionParamTypes != null ? dt.functionParamTypes
+				: new java.util.ArrayList<>();
+		java.util.List<DeclaredType> actual = val.functionRef.signature.paramTypes != null
+				? val.functionRef.signature.paramTypes
+				: new java.util.ArrayList<>();
+		if (expected.size() != actual.size())
+			throw new IllegalArgumentException("mismatched function type in assignment");
+		locals.put(name, new Operand(val.functionRef, val.functionName));
 	}
 
 	void assignCompound(String name, char op, Operand val) {
@@ -339,9 +408,9 @@ final class AssignmentUtils {
 						dt != null ? dt.width : null);
 		if (old.isBoolean != null || val.isBoolean != null)
 			throw new IllegalArgumentException("compound assignment requires numeric operands");
-		java.math.BigInteger newVal = App.computeBinaryOp(old.value, val.value, String.valueOf(op));
+		java.math.BigInteger newVal = TypeUtils.computeBinaryOp(old.value, val.value, String.valueOf(op));
 		if (dt != null && dt.unsignedOrSigned != null && dt.width != null) {
-			App.validateRange(newVal.toString(), dt.unsignedOrSigned, dt.width);
+			TypeUtils.validateRange(newVal.toString(), dt.unsignedOrSigned, dt.width);
 			locals.put(name, new Operand(newVal, dt.unsignedOrSigned, dt.width));
 		} else {
 			locals.put(name, new Operand(newVal, val.unsignedOrSigned, val.width));
@@ -356,13 +425,13 @@ final class AssignmentUtils {
 		Operand old = locals.get(name);
 		if (old.isBoolean != null || val.isBoolean != null)
 			throw new IllegalArgumentException("compound assignment requires numeric operands");
-		java.math.BigInteger result = App.computeBinaryOp(old.value, val.value, String.valueOf(op));
+		java.math.BigInteger result = TypeUtils.computeBinaryOp(old.value, val.value, String.valueOf(op));
 		if (old.unsignedOrSigned != null && old.width != null) {
 			if (val.unsignedOrSigned != null && val.width != null) {
 				if (!old.unsignedOrSigned.equals(val.unsignedOrSigned) || !old.width.equals(val.width))
 					throw new IllegalArgumentException("mismatched typed assignment");
 			}
-			App.validateRange(result.toString(), old.unsignedOrSigned, old.width);
+			TypeUtils.validateRange(result.toString(), old.unsignedOrSigned, old.width);
 			locals.put(name, new Operand(result, old.unsignedOrSigned, old.width));
 		} else {
 			locals.put(name, new Operand(result, val.unsignedOrSigned, val.width));

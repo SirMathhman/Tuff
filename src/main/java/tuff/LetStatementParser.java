@@ -23,6 +23,18 @@ final class LetStatementParser {
 	private void parseArrayInside(String inside, DeclaredType dt) {
 		String[] parts = inside.split("\\s*;\\s*");
 		String elemType = parts[0];
+		parseArrayElementType(elemType, dt);
+
+		if (parts.length > 1) {
+			parseArrayLength(parts[1], dt);
+		}
+		if (parts.length > 2) {
+			parseArrayCapacity(parts[2], dt);
+		}
+		validateArrayDimensions(dt);
+	}
+
+	private void parseArrayElementType(String elemType, DeclaredType dt) {
 		if (elemType.startsWith("Bool")) {
 			dt.elemIsBool = true;
 		} else if (elemType.matches("^(?:U|I)(?:8|16|32|64|Size)$")) {
@@ -32,20 +44,25 @@ final class LetStatementParser {
 			// treat as type variable like 'T'
 			dt.elemTypeVarName = elemType;
 		}
-		if (parts.length > 1) {
-			try {
-				dt.arrayLength = Integer.parseInt(parts[1]);
-			} catch (Exception ex) {
-				throw new IllegalArgumentException("invalid array length in type");
-			}
+	}
+
+	private void parseArrayLength(String part, DeclaredType dt) {
+		try {
+			dt.arrayLength = Integer.parseInt(part);
+		} catch (Exception ex) {
+			throw new IllegalArgumentException("invalid array length in type");
 		}
-		if (parts.length > 2) {
-			try {
-				dt.arrayCapacity = Integer.parseInt(parts[2]);
-			} catch (Exception ex) {
-				throw new IllegalArgumentException("invalid array capacity in type");
-			}
+	}
+
+	private void parseArrayCapacity(String part, DeclaredType dt) {
+		try {
+			dt.arrayCapacity = Integer.parseInt(part);
+		} catch (Exception ex) {
+			throw new IllegalArgumentException("invalid array capacity in type");
 		}
+	}
+
+	private void validateArrayDimensions(DeclaredType dt) {
 		if (dt.arrayCapacity == null && dt.arrayLength != null) {
 			dt.arrayCapacity = dt.arrayLength;
 		}
@@ -53,7 +70,8 @@ final class LetStatementParser {
 			throw new IllegalArgumentException("invalid array length in type");
 		if (dt.arrayLength != null && dt.arrayLength.intValue() < 0)
 			throw new IllegalArgumentException("invalid array length in type");
-		if (dt.arrayLength != null && dt.arrayCapacity != null && dt.arrayLength.intValue() > dt.arrayCapacity.intValue())
+		if (dt.arrayLength != null && dt.arrayCapacity != null
+				&& dt.arrayLength.intValue() > dt.arrayCapacity.intValue())
 			throw new IllegalArgumentException("invalid array length in type");
 	}
 
@@ -61,39 +79,20 @@ final class LetStatementParser {
 		parser.consumeKeyword("let");
 		parser.skipWhitespace();
 
-		boolean isMutable = false;
-		if (parser.startsWithKeyword("mut")) {
-			isMutable = true;
-			parser.consumeKeyword("mut");
-			parser.skipWhitespace();
-		}
-
-		String name = readIdentifier();
-		if (name == null) {
-			throw new IllegalArgumentException("invalid identifier in let");
-		}
-		if (locals.containsKey(name)) {
-			throw new IllegalArgumentException("duplicate let declaration: " + name);
-		}
-
-		parser.skipWhitespace();
-		DeclaredType dt = null;
-		if (parser.peekChar() == ':') {
-			parser.consumeChar();
-			parser.skipWhitespace();
-			dt = readDeclaredType();
-		}
+		boolean isMutable = parseMutable();
+		String name = parseName();
+		DeclaredType dt = parseTypeDeclaration(name);
 
 		parser.skipWhitespace();
 		// initializer is optional when a type is declared
 		if (parser.peekChar() == '=') {
-			parser.consumeChar();
-			Operand exprVal = parser.parseLogicalOr();
-			Operand res = applyDeclaredType(name, dt, exprVal);
-			mutables.put(name, isMutable);
-			return res;
+			return handleLetAssignment(name, dt, isMutable);
 		}
 
+		return handleLetDeclaration(name, dt, isMutable);
+	}
+
+	private Operand handleLetDeclaration(String name, DeclaredType dt, boolean isMutable) {
 		// no initializer
 		if (dt == null) {
 			throw new IllegalArgumentException("missing = in let");
@@ -105,25 +104,67 @@ final class LetStatementParser {
 
 		// if it's an array type, create a zero-initialized runtime array
 		if (dt.isArray) {
-			java.util.List<Operand> elems = new java.util.ArrayList<>();
-			int len = dt.arrayLength != null ? dt.arrayLength : 0;
-			for (int k = 0; k < len; k++) {
-				if (dt.elemIsBool) {
-					elems.add(new Operand(java.math.BigInteger.ZERO, true));
-				} else if (dt.elemUnsignedOrSigned != null && dt.elemWidth != null) {
-					elems.add(new Operand(java.math.BigInteger.ZERO, dt.elemUnsignedOrSigned, dt.elemWidth));
-				} else {
-					elems.add(new Operand(java.math.BigInteger.ZERO, null, null));
-				}
-			}
-
-			// store fully-initialized array and return its runtime value
-			locals.put(name, new Operand(elems, dt));
-			return new Operand(elems, dt);
+			return initializeArray(name, dt);
 		}
 
 		// non-array typed declarations do not create a runtime value yet
 		return null;
+	}
+
+	private boolean parseMutable() {
+		if (parser.startsWithKeyword("mut")) {
+			parser.consumeKeyword("mut");
+			parser.skipWhitespace();
+			return true;
+		}
+		return false;
+	}
+
+	private String parseName() {
+		String name = readIdentifier();
+		if (name == null) {
+			throw new IllegalArgumentException("invalid identifier in let");
+		}
+		if (locals.containsKey(name)) {
+			throw new IllegalArgumentException("duplicate let declaration: " + name);
+		}
+		return name;
+	}
+
+	private DeclaredType parseTypeDeclaration(String name) {
+		parser.skipWhitespace();
+		if (parser.peekChar() == ':') {
+			parser.consumeChar();
+			parser.skipWhitespace();
+			return readDeclaredType(name);
+		}
+		return null;
+	}
+
+	private Operand handleLetAssignment(String name, DeclaredType dt, boolean isMutable) {
+		parser.consumeChar();
+		Operand exprVal = parser.parseLogicalOr();
+		Operand res = applyDeclaredType(name, dt, exprVal);
+		mutables.put(name, isMutable);
+		return res;
+	}
+
+	private Operand initializeArray(String name, DeclaredType dt) {
+		java.util.List<Operand> elems = new java.util.ArrayList<>();
+		int len = dt.arrayLength != null ? dt.arrayLength : 0;
+		for (int k = 0; k < len; k++) {
+			if (dt.elemIsBool) {
+				elems.add(new Operand(java.math.BigInteger.ZERO, true));
+			} else if (dt.elemUnsignedOrSigned != null && dt.elemWidth != null) {
+				elems.add(new Operand(java.math.BigInteger.ZERO, dt.elemUnsignedOrSigned, dt.elemWidth));
+			} else {
+				elems.add(new Operand(java.math.BigInteger.ZERO, null, null));
+			}
+		}
+
+		// store fully-initialized array and return its runtime value
+		locals.put(name, new Operand(elems, dt));
+		return new Operand(elems, dt);
 	}
 
 	private String readIdentifier() {
@@ -136,34 +177,70 @@ final class LetStatementParser {
 		return name;
 	}
 
-	private DeclaredType readDeclaredType() {
+	private DeclaredType readDeclaredType(String varName) {
 		DeclaredType dt = new DeclaredType();
 		String rem = parser.remainingInput();
+
+		if (tryReadNumericType(dt, rem)) {
+			return dt;
+		}
+		if (tryReadBoolType(dt, rem)) {
+			return dt;
+		}
+		if (tryReadArrayType(dt, rem)) {
+			return dt;
+		}
+		if (tryReadFunctionType(dt, varName)) {
+			return dt;
+		}
+
+		return readAliasType(dt, rem, varName);
+	}
+
+	private boolean tryReadNumericType(DeclaredType dt, String rem) {
 		Matcher tm = Pattern.compile("^(?:U|I)(?:8|16|32|64|Size)").matcher(rem);
-		Matcher bm = Pattern.compile("^Bool").matcher(rem);
-		Matcher am = Pattern.compile("^\\[\\s*[^\\]]+\\]").matcher(rem);
 		if (tm.find()) {
 			String type = tm.group();
 			dt.unsignedOrSigned = type.substring(0, 1);
 			dt.width = type.substring(1);
 			parser.consumeKeyword(type);
-		} else if (bm.find()) {
+			return true;
+		}
+		return false;
+	}
+
+	private boolean tryReadBoolType(DeclaredType dt, String rem) {
+		Matcher bm = Pattern.compile("^Bool").matcher(rem);
+		if (bm.find()) {
 			dt.isBool = true;
 			parser.consumeKeyword("Bool");
-		} else if (am.find()) {
+			return true;
+		}
+		return false;
+	}
+
+	private boolean tryReadArrayType(DeclaredType dt, String rem) {
+		Matcher am = Pattern.compile("^\\[\\s*[^\\]]+\\]").matcher(rem);
+		if (am.find()) {
 			String found = am.group();
 			String inside = found.substring(1, found.length() - 1).trim();
 			parseArrayInside(inside, dt);
 			dt.isArray = true;
 			parser.setIndex(parser.getIndex() + found.length());
-		} else if (parser.peekChar() == '(') {
+			return true;
+		}
+		return false;
+	}
+
+	private boolean tryReadFunctionType(DeclaredType dt, String varName) {
+		if (parser.peekChar() == '(') {
 			// function type like '(I32, Bool) => I32'
 			parser.consumeChar();
 			parser.skipWhitespace();
 			java.util.List<DeclaredType> params = new java.util.ArrayList<>();
 			if (parser.peekChar() != ')') {
 				while (true) {
-					DeclaredType p = readDeclaredType();
+					DeclaredType p = readDeclaredType(varName);
 					params.add(p);
 					parser.skipWhitespace();
 					if (parser.peekChar() == ',') {
@@ -183,31 +260,40 @@ final class LetStatementParser {
 				throw new IllegalArgumentException("missing => in function type");
 			parser.consumeArrow();
 			parser.skipWhitespace();
-			DeclaredType ret = readDeclaredType();
+			DeclaredType ret = readDeclaredType(varName);
 			dt.isFunction = true;
 			dt.functionParamTypes = params;
 			dt.functionReturnType = ret;
-		} else {
-			// support alias like 'MyInt'
-			java.util.regex.Matcher idm = java.util.regex.Pattern.compile("^[A-Za-z_]\\w*").matcher(rem);
-			if (!idm.find())
-				throw new IllegalArgumentException("invalid type in let");
-			String alias = idm.group();
-			java.util.Map<String, DeclaredType> aliases = parser.getTypeAliases();
-			if (!aliases.containsKey(alias))
-				throw new IllegalArgumentException("invalid type in let");
-			DeclaredType found = aliases.get(alias);
-			dt.isBool = found.isBool;
-			dt.unsignedOrSigned = found.unsignedOrSigned;
-			dt.width = found.width;
-			dt.isArray = found.isArray;
-			dt.elemIsBool = found.elemIsBool;
-			dt.elemUnsignedOrSigned = found.elemUnsignedOrSigned;
-			dt.elemWidth = found.elemWidth;
-			dt.arrayLength = found.arrayLength;
-			dt.arrayCapacity = found.arrayCapacity;
-			parser.consumeKeyword(alias);
+			return true;
 		}
+		return false;
+	}
+
+	private DeclaredType readAliasType(DeclaredType dt, String rem, String varName) {
+		// support alias like 'MyInt'
+		java.util.regex.Matcher idm = java.util.regex.Pattern.compile("^[A-Za-z_]\\w*").matcher(rem);
+		if (!idm.find()) {
+			String invalid = rem.trim().isEmpty() ? rem : rem.split("\\s+")[0];
+			throw new IllegalArgumentException("invalid type in let"
+					+ (varName != null ? (": name='" + varName + "', type='" + invalid + "'")
+							: (": type='" + invalid + "'")));
+		}
+		String alias = idm.group();
+		java.util.Map<String, DeclaredType> aliases = parser.getTypeAliases();
+		if (!aliases.containsKey(alias))
+			throw new IllegalArgumentException("invalid type in let"
+					+ (varName != null ? (": name='" + varName + "', type='" + alias + "'") : (": type='" + alias + "'")));
+		DeclaredType found = aliases.get(alias);
+		dt.isBool = found.isBool;
+		dt.unsignedOrSigned = found.unsignedOrSigned;
+		dt.width = found.width;
+		dt.isArray = found.isArray;
+		dt.elemIsBool = found.elemIsBool;
+		dt.elemUnsignedOrSigned = found.elemUnsignedOrSigned;
+		dt.elemWidth = found.elemWidth;
+		dt.arrayLength = found.arrayLength;
+		dt.arrayCapacity = found.arrayCapacity;
+		parser.consumeKeyword(alias);
 		return dt;
 	}
 
@@ -261,6 +347,13 @@ final class LetStatementParser {
 		if (exprVal.functionRef == null)
 			throw new IllegalArgumentException("typed function assignment requires function operand");
 		FunctionDef fd = exprVal.functionRef;
+		validateFunctionParameters(dt, fd);
+		validateFunctionReturn(dt, fd);
+		locals.put(name, new Operand(exprVal.functionRef, exprVal.functionName));
+		return new Operand(exprVal.functionRef, exprVal.functionName);
+	}
+
+	private void validateFunctionParameters(DeclaredType dt, FunctionDef fd) {
 		java.util.List<DeclaredType> expected = dt.functionParamTypes != null ? dt.functionParamTypes
 				: new java.util.ArrayList<>();
 		java.util.List<DeclaredType> actual = fd.signature.paramTypes != null ? fd.signature.paramTypes
@@ -275,24 +368,27 @@ final class LetStatementParser {
 				continue;
 			if (exp.isBool != act.isBool)
 				throw new IllegalArgumentException("mismatched function parameter types in assignment");
-			if (exp.unsignedOrSigned != null && exp.width != null && act.unsignedOrSigned != null && act.width != null) {
+			if (exp.unsignedOrSigned != null && exp.width != null && act.unsignedOrSigned != null
+					&& act.width != null) {
 				if (!exp.unsignedOrSigned.equals(act.unsignedOrSigned) || !exp.width.equals(act.width))
 					throw new IllegalArgumentException("mismatched function parameter types in assignment");
 			}
 		}
+	}
+
+	private void validateFunctionReturn(DeclaredType dt, FunctionDef fd) {
 		// return type: require match only if both sides declared
 		if (dt.functionReturnType != null && fd.body != null && fd.body.returnType != null) {
 			DeclaredType expR = dt.functionReturnType;
 			DeclaredType actR = fd.body.returnType;
 			if (expR.isBool != actR.isBool)
 				throw new IllegalArgumentException("mismatched function return type in assignment");
-			if (expR.unsignedOrSigned != null && expR.width != null && actR.unsignedOrSigned != null && actR.width != null) {
+			if (expR.unsignedOrSigned != null && expR.width != null && actR.unsignedOrSigned != null
+					&& actR.width != null) {
 				if (!expR.unsignedOrSigned.equals(actR.unsignedOrSigned) || !expR.width.equals(actR.width))
 					throw new IllegalArgumentException("mismatched function return type in assignment");
 			}
 		}
-		locals.put(name, new Operand(exprVal.functionRef, exprVal.functionName));
-		return new Operand(exprVal.functionRef, exprVal.functionName);
 	}
 
 	private Operand assignBool(String name, Operand exprVal) {
@@ -337,7 +433,7 @@ final class LetStatementParser {
 					throw new IllegalArgumentException("mismatched typed array element assignment");
 				}
 			}
-			App.validateRange(el.value.toString(), dt.elemUnsignedOrSigned, dt.elemWidth);
+			TypeUtils.validateRange(el.value.toString(), dt.elemUnsignedOrSigned, dt.elemWidth);
 		}
 	}
 
@@ -350,7 +446,7 @@ final class LetStatementParser {
 				throw new IllegalArgumentException("mismatched typed assignment");
 			}
 		}
-		App.validateRange(exprVal.value.toString(), dt.unsignedOrSigned, dt.width);
+		TypeUtils.validateRange(exprVal.value.toString(), dt.unsignedOrSigned, dt.width);
 	}
 
 }

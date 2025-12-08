@@ -139,7 +139,7 @@ final class MatchExpressionParser {
 				}
 			}
 			if (kind[0] != null && kind[1] != null) {
-				App.validateRange(chosen.result.value.toString(), kind[0], kind[1]);
+				TypeUtils.validateRange(chosen.result.value.toString(), kind[0], kind[1]);
 				return new Operand(chosen.result.value, kind[0], kind[1]);
 			}
 			return new Operand(chosen.result.value, null, null);

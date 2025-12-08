@@ -50,6 +50,29 @@ final class FactorParser {
 		if (num != null)
 			return num;
 
+		Operand str = parseStringLiteralWithAccess(parser);
+		if (str != null) {
+			return str;
+		}
+
+		// support inline function literals as expressions
+		if (parser.startsWithKeyword("fn")) {
+			return FunctionDefinitionParser.parseFunctionLiteral(parser);
+		}
+
+		Operand fncall = parser.parseFunctionCallIfPresent();
+		if (fncall != null)
+			return fncall;
+
+		Operand idOp = parseIdentifierWithCall(parser);
+		if (idOp != null) {
+			return idOp;
+		}
+
+		return null;
+	}
+
+	private static Operand parseStringLiteralWithAccess(Parser parser) {
 		Operand str = LiteralParser.parseStringLiteral(parser);
 		if (str != null) {
 			// allow string indexing "foo"[0]
@@ -86,16 +109,10 @@ final class FactorParser {
 			}
 			return str;
 		}
+		return null;
+	}
 
-		// support inline function literals as expressions
-		if (parser.startsWithKeyword("fn")) {
-			return FunctionDefinitionParser.parseFunctionLiteral(parser);
-		}
-
-		Operand fncall = parser.parseFunctionCallIfPresent();
-		if (fncall != null)
-			return fncall;
-
+	private static Operand parseIdentifierWithCall(Parser parser) {
 		Operand idOp = parser.parseIdentifierLookup();
 		if (idOp != null) {
 			parser.skipWhitespace();
@@ -133,11 +150,13 @@ final class FactorParser {
 				if (fd == null)
 					throw new IllegalArgumentException("attempted call on non-function");
 
-				return FunctionCallParser.callFunction(parser, fname, fd, args, null);
+				FunctionCallParser.FunctionCallContext ctx = new FunctionCallParser.FunctionCallContext(fname, fd);
+				ctx.args = args;
+				ctx.typeArgs = null;
+				return FunctionCallParser.callFunction(parser, ctx);
 			}
 			return idOp;
 		}
-
 		return null;
 	}
 }
