@@ -419,6 +419,13 @@ mod tests {
     }
 
     #[test]
+    fn interpret_add_plain_plain() {
+        let res = interpret("100 + 50");
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), "150");
+    }
+
+    #[test]
     fn interpret_rejects_mismatched_suffixes_in_expression() {
         assert!(interpret("100U8 + 50U16").is_err());
     }
