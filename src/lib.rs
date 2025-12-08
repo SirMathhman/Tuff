@@ -119,14 +119,20 @@ fn validate_signed(out: &str, suf: &str) -> Result<(), String> {
 
 // old summing helpers were removed (no longer used after n-ary ops extension)
 
-fn apply_ops_generic(nums: &[String], ops: &[char], parse_op: &dyn Fn(&str) -> Result<i128, String>) -> Result<i128, String> {
+fn apply_ops_generic(
+    nums: &[String],
+    ops: &[char],
+    parse_op: &dyn Fn(&str) -> Result<i128, String>,
+) -> Result<i128, String> {
     if nums.is_empty() {
         return Err("invalid operands".to_string());
     }
     let first = nums.first().ok_or_else(|| "invalid operands".to_string())?;
     let mut acc = parse_op(first)?;
     for (i, op) in ops.iter().enumerate() {
-        let rhs_s = nums.get(i + 1).ok_or_else(|| "invalid operands".to_string())?;
+        let rhs_s = nums
+            .get(i + 1)
+            .ok_or_else(|| "invalid operands".to_string())?;
         let rhs = parse_op(rhs_s)?;
         acc = match op {
             '+' => acc.checked_add(rhs).ok_or_else(|| "overflow".to_string())?,
@@ -139,20 +145,68 @@ fn apply_ops_generic(nums: &[String], ops: &[char], parse_op: &dyn Fn(&str) -> R
 
 fn check_unsigned_suffix_range(suf: &str, acc: i128) -> Result<String, String> {
     match suf {
-        "u8" => if (0..=255).contains(&acc) { Ok(acc.to_string()) } else { Err("numeric literal out of range for U8".to_string()) },
-        "u16" => if (0..=65535).contains(&acc) { Ok(acc.to_string()) } else { Err("numeric literal out of range for U16".to_string()) },
-        "u32" => if (0..=4294967295).contains(&acc) { Ok(acc.to_string()) } else { Err("numeric literal out of range for U32".to_string()) },
-        "u64" => if (0..=18446744073709551615i128).contains(&acc) { Ok(acc.to_string()) } else { Err("numeric literal out of range for U64".to_string()) },
+        "u8" => {
+            if (0..=255).contains(&acc) {
+                Ok(acc.to_string())
+            } else {
+                Err("numeric literal out of range for U8".to_string())
+            }
+        }
+        "u16" => {
+            if (0..=65535).contains(&acc) {
+                Ok(acc.to_string())
+            } else {
+                Err("numeric literal out of range for U16".to_string())
+            }
+        }
+        "u32" => {
+            if (0..=4294967295).contains(&acc) {
+                Ok(acc.to_string())
+            } else {
+                Err("numeric literal out of range for U32".to_string())
+            }
+        }
+        "u64" => {
+            if (0..=18446744073709551615i128).contains(&acc) {
+                Ok(acc.to_string())
+            } else {
+                Err("numeric literal out of range for U64".to_string())
+            }
+        }
         _ => Err("unsupported unsigned suffix".to_string()),
     }
 }
 
 fn check_signed_suffix_range(suf: &str, acc: i128) -> Result<String, String> {
     match suf {
-        "i8" => if (-128..=127).contains(&acc) { Ok(acc.to_string()) } else { Err("numeric literal out of range for I8".to_string()) },
-        "i16" => if (-32768..=32767).contains(&acc) { Ok(acc.to_string()) } else { Err("numeric literal out of range for I16".to_string()) },
-        "i32" => if (-2147483648..=2147483647).contains(&acc) { Ok(acc.to_string()) } else { Err("numeric literal out of range for I32".to_string()) },
-        "i64" => if (-9223372036854775808..=9223372036854775807).contains(&acc) { Ok(acc.to_string()) } else { Err("numeric literal out of range for I64".to_string()) },
+        "i8" => {
+            if (-128..=127).contains(&acc) {
+                Ok(acc.to_string())
+            } else {
+                Err("numeric literal out of range for I8".to_string())
+            }
+        }
+        "i16" => {
+            if (-32768..=32767).contains(&acc) {
+                Ok(acc.to_string())
+            } else {
+                Err("numeric literal out of range for I16".to_string())
+            }
+        }
+        "i32" => {
+            if (-2147483648..=2147483647).contains(&acc) {
+                Ok(acc.to_string())
+            } else {
+                Err("numeric literal out of range for I32".to_string())
+            }
+        }
+        "i64" => {
+            if (-9223372036854775808..=9223372036854775807).contains(&acc) {
+                Ok(acc.to_string())
+            } else {
+                Err("numeric literal out of range for I64".to_string())
+            }
+        }
         _ => Err("unsupported signed suffix".to_string()),
     }
 }
@@ -173,7 +227,12 @@ fn choose_suffix(rems: &[String]) -> Result<String, String> {
     Ok(chosen.unwrap_or_default())
 }
 
-fn eval_nary_with_ops(suf: &str, nums: &[String], negs: &[bool], ops: &[char]) -> Result<String, String> {
+fn eval_nary_with_ops(
+    suf: &str,
+    nums: &[String],
+    negs: &[bool],
+    ops: &[char],
+) -> Result<String, String> {
     if nums.is_empty() {
         return Err("invalid operands".to_string());
     }
@@ -195,15 +254,15 @@ fn eval_nary_with_ops(suf: &str, nums: &[String], negs: &[bool], ops: &[char]) -
             return Err("negative numeric literal with suffix not supported".to_string());
         }
 
-        let acc = apply_ops(&|s| s
-            .trim_start_matches('+')
-            .parse::<i128>()
-            .map_err(|_| "invalid integer".to_string()))?;
+        let acc = apply_ops(&|s| {
+            s.trim_start_matches('+')
+                .parse::<i128>()
+                .map_err(|_| "invalid integer".to_string())
+        })?;
 
         // final range validation for unsigned types
         return check_unsigned_suffix_range(suf, acc);
     }
-
 
     // signed arithmetic (i8/i16/i32/i64)
     if suf.starts_with('i') {
@@ -235,18 +294,27 @@ fn try_eval_addition(s: &str) -> Option<Result<String, String>> {
             // optional leading sign
             if start < len {
                 let c = get_byte(start) as char;
-                if c == '+' || c == '-' { start += 1; }
+                if c == '+' || c == '-' {
+                    start += 1;
+                }
             }
 
             // digits
             let mut seen_digit = false;
-            while start < len && get_byte(start).is_ascii_digit() { seen_digit = true; start += 1; }
-            if !seen_digit { return Err("invalid operands".to_string()); }
+            while start < len && get_byte(start).is_ascii_digit() {
+                seen_digit = true;
+                start += 1;
+            }
+            if !seen_digit {
+                return Err("invalid operands".to_string());
+            }
 
             // suffix characters
             while start < len {
                 let ch = get_byte(start) as char;
-                if ch.is_ascii_whitespace() || ch == '+' || ch == '-' { break; }
+                if ch.is_ascii_whitespace() || ch == '+' || ch == '-' {
+                    break;
+                }
                 start += 1;
             }
 
@@ -254,23 +322,38 @@ fn try_eval_addition(s: &str) -> Option<Result<String, String>> {
         };
 
         while i < len {
-            while i < len && get_byte(i).is_ascii_whitespace() { i += 1; }
-            if i >= len { break; }
+            while i < len && get_byte(i).is_ascii_whitespace() {
+                i += 1;
+            }
+            if i >= len {
+                break;
+            }
 
             let start = i;
             let (token, next_i) = parse_next_token(s, start)?;
             i = next_i;
 
             let (n, r, neg, found) = split_leading_number(&token);
-            if !found { return Err("invalid operands".to_string()); }
-            nums.push(n); rems.push(r); negs.push(neg);
+            if !found {
+                return Err("invalid operands".to_string());
+            }
+            nums.push(n);
+            rems.push(r);
+            negs.push(neg);
 
-            while i < len && get_byte(i).is_ascii_whitespace() { i += 1; }
-            if i >= len { break; }
+            while i < len && get_byte(i).is_ascii_whitespace() {
+                i += 1;
+            }
+            if i >= len {
+                break;
+            }
 
             let ch = get_byte(i) as char;
-            if ch != '+' && ch != '-' { return Err("invalid operator".to_string()); }
-            ops.push(ch); i += 1;
+            if ch != '+' && ch != '-' {
+                return Err("invalid operator".to_string());
+            }
+            ops.push(ch);
+            i += 1;
         }
 
         Ok((nums, rems, negs, ops))
@@ -281,8 +364,12 @@ fn try_eval_addition(s: &str) -> Option<Result<String, String>> {
         Ok(v) => v,
         Err(e) => return Some(Err(e)),
     };
-    if nums.len() < 2 || ops.len() != nums.len().saturating_sub(1) { return None; }
-    if !nums.iter().all(|p| p.chars().any(|c| c.is_ascii_digit())) { return None; }
+    if nums.len() < 2 || ops.len() != nums.len().saturating_sub(1) {
+        return None;
+    }
+    if !nums.iter().all(|p| p.chars().any(|c| c.is_ascii_digit())) {
+        return None;
+    }
 
     match choose_suffix(&rems) {
         Err(e) => Some(Err(e)),
@@ -310,7 +397,9 @@ pub fn interpret(input: &str) -> Result<String, String> {
             match suf.as_str() {
                 "u8" | "u16" | "u32" | "u64" => {
                     if negative {
-                        return Err("negative numeric literal with suffix not supported".to_string());
+                        return Err(
+                            "negative numeric literal with suffix not supported".to_string()
+                        );
                     }
                     validate_unsigned(&out, suf.as_str())?;
                 }
@@ -326,7 +415,6 @@ pub fn interpret(input: &str) -> Result<String, String> {
 
     Err("interpret not implemented yet".to_string())
 }
-    
 
 #[cfg(test)]
 mod tests {
@@ -449,6 +537,11 @@ mod tests {
     #[test]
     fn interpret_subtract_u8_underflow() {
         assert!(interpret("5U8 - 10U8").is_err());
+    }
+
+    #[test]
+    fn interpret_subtract_u8_underflow_small() {
+        assert!(interpret("3U8 - 5U8").is_err());
     }
 
     #[test]
