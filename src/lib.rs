@@ -113,158 +113,156 @@ fn validate_signed(out: &str, suf: &str) -> Result<(), String> {
     }
 }
 
-fn try_eval_addition(s: &str) -> Option<Result<String, String>> {
-    if let Some(pos) = s.find('+') {
-        if pos > 0
-            && s[..pos].chars().any(|c| c.is_ascii_digit())
-            && s[pos + 1..].chars().any(|c| c.is_ascii_digit())
-        {
-            let left = s[..pos].trim();
-            let right = s[pos + 1..].trim();
+fn parse_signed_pair(a: &str, b: &str) -> Result<(i128, i128), String> {
+    let a = a
+        .parse::<i128>()
+        .map_err(|_| "invalid integer".to_string())?;
+    let b = b
+        .parse::<i128>()
+        .map_err(|_| "invalid integer".to_string())?;
+    Ok((a, b))
+}
 
-            let (l_num, l_rem, l_neg, l_found) = split_leading_number(left);
-            let (r_num, r_rem, r_neg, r_found) = split_leading_number(right);
-            if !l_found || !r_found {
-                return Some(Err("invalid operands".to_string()));
-            }
-            if !(l_rem.eq_ignore_ascii_case(&r_rem) || (l_rem.is_empty() && r_rem.is_empty())) {
-                return Some(Err("mismatched operand types".to_string()));
-            }
+fn parse_unsigned_pair(a: &str, b: &str) -> Result<(u128, u128), String> {
+    let a = a
+        .trim_start_matches('+')
+        .parse::<u128>()
+        .map_err(|_| "invalid integer".to_string())?;
+    let b = b
+        .trim_start_matches('+')
+        .parse::<u128>()
+        .map_err(|_| "invalid integer".to_string())?;
+    Ok((a, b))
+}
 
-            let suf = l_rem.to_ascii_lowercase();
-
-            // Evaluate similar to the inline logic; return Some(result) if matched
-            // Parse and check ranges without using the `?` operator here so we can
-            // return Option<Result<..>> cleanly.
-            // helpers to parse pairs
-            fn parse_signed_pair(a: &str, b: &str) -> Result<(i128, i128), String> {
-                let a = a
-                    .parse::<i128>()
-                    .map_err(|_| "invalid integer".to_string())?;
-                let b = b
-                    .parse::<i128>()
-                    .map_err(|_| "invalid integer".to_string())?;
-                Ok((a, b))
-            }
-
-            fn parse_unsigned_pair(a: &str, b: &str) -> Result<(u128, u128), String> {
-                let a = a
-                    .trim_start_matches('+')
-                    .parse::<u128>()
-                    .map_err(|_| "invalid integer".to_string())?;
-                let b = b
-                    .trim_start_matches('+')
-                    .parse::<u128>()
-                    .map_err(|_| "invalid integer".to_string())?;
-                Ok((a, b))
-            }
-
-            if suf.is_empty() {
-                let (a, b) = match parse_signed_pair(&l_num, &r_num) {
-                    Ok(v) => v,
-                    Err(e) => return Some(Err(e)),
-                };
-                return Some(Ok((a + b).to_string()));
-            }
-
-            if suf.starts_with('u') {
-                fn add_and_check_unsigned(
-                    a_str: &str,
-                    b_str: &str,
-                    suf: &str,
-                    negative: bool,
-                ) -> Result<String, String> {
-                    if negative {
-                        return Err(
-                            "negative numeric literal with suffix not supported".to_string()
-                        );
-                    }
-                    let (a, b) = parse_unsigned_pair(a_str, b_str)?;
-                    let sum = a.checked_add(b).ok_or_else(|| "overflow".to_string())?;
-                    match suf {
-                        "u8" => {
-                            if sum <= 255 {
-                                Ok(sum.to_string())
-                            } else {
-                                Err("numeric literal out of range for U8".to_string())
-                            }
-                        }
-                        "u16" => {
-                            if sum <= 65535 {
-                                Ok(sum.to_string())
-                            } else {
-                                Err("numeric literal out of range for U16".to_string())
-                            }
-                        }
-                        "u32" => {
-                            if sum <= 4294967295 {
-                                Ok(sum.to_string())
-                            } else {
-                                Err("numeric literal out of range for U32".to_string())
-                            }
-                        }
-                        "u64" => {
-                            if sum <= 18446744073709551615u128 {
-                                Ok(sum.to_string())
-                            } else {
-                                Err("numeric literal out of range for U64".to_string())
-                            }
-                        }
-                        _ => Err("unsupported unsigned suffix".to_string()),
-                    }
-                }
-
-                return Some(add_and_check_unsigned(&l_num, &r_num, &suf, l_neg || r_neg));
-            }
-
-            if suf.starts_with('i') {
-                fn add_and_check_signed(
-                    a_str: &str,
-                    b_str: &str,
-                    suf: &str,
-                ) -> Result<String, String> {
-                    let (a, b) = parse_signed_pair(a_str, b_str)?;
-                    let sum = a.checked_add(b).ok_or_else(|| "overflow".to_string())?;
-                    match suf {
-                        "i8" => {
-                            if (-128..=127).contains(&sum) {
-                                Ok(sum.to_string())
-                            } else {
-                                Err("numeric literal out of range for I8".to_string())
-                            }
-                        }
-                        "i16" => {
-                            if (-32768..=32767).contains(&sum) {
-                                Ok(sum.to_string())
-                            } else {
-                                Err("numeric literal out of range for I16".to_string())
-                            }
-                        }
-                        "i32" => {
-                            if (-2147483648..=2147483647).contains(&sum) {
-                                Ok(sum.to_string())
-                            } else {
-                                Err("numeric literal out of range for I32".to_string())
-                            }
-                        }
-                        "i64" => {
-                            if (-9223372036854775808..=9223372036854775807).contains(&sum) {
-                                Ok(sum.to_string())
-                            } else {
-                                Err("numeric literal out of range for I64".to_string())
-                            }
-                        }
-                        _ => Err("unsupported signed suffix".to_string()),
-                    }
-                }
-
-                return Some(add_and_check_signed(&l_num, &r_num, &suf));
-            }
-
-            return Some(Err("unsupported suffix for expression".to_string()));
-        }
+fn add_and_check_unsigned(
+    a_str: &str,
+    b_str: &str,
+    suf: &str,
+    negative: bool,
+) -> Result<String, String> {
+    if negative {
+        return Err("negative numeric literal with suffix not supported".to_string());
     }
-    None
+    let (a, b) = parse_unsigned_pair(a_str, b_str)?;
+    let sum = a.checked_add(b).ok_or_else(|| "overflow".to_string())?;
+    match suf {
+        "u8" => {
+            if sum <= 255 {
+                Ok(sum.to_string())
+            } else {
+                Err("numeric literal out of range for U8".to_string())
+            }
+        }
+        "u16" => {
+            if sum <= 65535 {
+                Ok(sum.to_string())
+            } else {
+                Err("numeric literal out of range for U16".to_string())
+            }
+        }
+        "u32" => {
+            if sum <= 4294967295 {
+                Ok(sum.to_string())
+            } else {
+                Err("numeric literal out of range for U32".to_string())
+            }
+        }
+        "u64" => {
+            if sum <= 18446744073709551615u128 {
+                Ok(sum.to_string())
+            } else {
+                Err("numeric literal out of range for U64".to_string())
+            }
+        }
+        _ => Err("unsupported unsigned suffix".to_string()),
+    }
+}
+
+fn add_and_check_signed(a_str: &str, b_str: &str, suf: &str) -> Result<String, String> {
+    let (a, b) = parse_signed_pair(a_str, b_str)?;
+    let sum = a.checked_add(b).ok_or_else(|| "overflow".to_string())?;
+    match suf {
+        "i8" => {
+            if (-128..=127).contains(&sum) {
+                Ok(sum.to_string())
+            } else {
+                Err("numeric literal out of range for I8".to_string())
+            }
+        }
+        "i16" => {
+            if (-32768..=32767).contains(&sum) {
+                Ok(sum.to_string())
+            } else {
+                Err("numeric literal out of range for I16".to_string())
+            }
+        }
+        "i32" => {
+            if (-2147483648..=2147483647).contains(&sum) {
+                Ok(sum.to_string())
+            } else {
+                Err("numeric literal out of range for I32".to_string())
+            }
+        }
+        "i64" => {
+            if (-9223372036854775808..=9223372036854775807).contains(&sum) {
+                Ok(sum.to_string())
+            } else {
+                Err("numeric literal out of range for I64".to_string())
+            }
+        }
+        _ => Err("unsupported signed suffix".to_string()),
+    }
+}
+
+fn try_eval_addition(s: &str) -> Option<Result<String, String>> {
+    let pos = s.find('+')?;
+    if pos == 0 {
+        return None;
+    }
+    if !s[..pos].chars().any(|c| c.is_ascii_digit())
+        || !s[pos + 1..].chars().any(|c| c.is_ascii_digit())
+    {
+        return None;
+    }
+
+    let left = s[..pos].trim();
+    let right = s[pos + 1..].trim();
+
+    let (l_num, l_rem, l_neg, l_found) = split_leading_number(left);
+    let (r_num, r_rem, r_neg, r_found) = split_leading_number(right);
+    if !l_found || !r_found {
+        return Some(Err("invalid operands".to_string()));
+    }
+
+    if !l_rem.is_empty() && !r_rem.is_empty() && !l_rem.eq_ignore_ascii_case(&r_rem) {
+        return Some(Err("mismatched operand types".to_string()));
+    }
+
+    let suf = if !l_rem.is_empty() {
+        l_rem.to_ascii_lowercase()
+    } else {
+        r_rem.to_ascii_lowercase()
+    };
+
+    Some(eval_addition_with_suffix(&suf, &l_num, &r_num, l_neg, r_neg))
+}
+
+fn eval_addition_with_suffix(suf: &str, l_num: &str, r_num: &str, l_neg: bool, r_neg: bool) -> Result<String, String> {
+    if suf.is_empty() {
+        let (a, b) = parse_signed_pair(l_num, r_num)?;
+        return Ok((a + b).to_string());
+    }
+
+    if suf.starts_with('u') {
+        return add_and_check_unsigned(l_num, r_num, suf, l_neg || r_neg);
+    }
+
+    if suf.starts_with('i') {
+        return add_and_check_signed(l_num, r_num, suf);
+    }
+
+    Err("unsupported suffix for expression".to_string())
 }
 
 /// Interpret the given input string and return a resulting string.
@@ -396,6 +394,13 @@ mod tests {
     #[test]
     fn interpret_add_u8_overflow() {
         assert!(interpret("200U8 + 100U8").is_err());
+    }
+
+    #[test]
+    fn interpret_add_typed_and_plain() {
+        let res = interpret("100U8 + 50");
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), "150");
     }
 
     #[test]
