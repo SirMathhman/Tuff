@@ -40,6 +40,12 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretZeroLengthArrayTypeThrows() {
+		assertThrows(IllegalArgumentException.class,
+				() -> App.interpret("let array : [U8; 0; 1];"));
+	}
+
+	@Test
 	void interpretTwoHundredReturnsSame() {
 		assertEquals("200", App.interpret("200"));
 	}

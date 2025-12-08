@@ -132,6 +132,9 @@ final class LetStatementParser {
 			} catch (Exception ex) {
 				throw new IllegalArgumentException("invalid array length in type");
 			}
+			if (dt.arrayLength != null && dt.arrayLength.intValue() <= 0) {
+				throw new IllegalArgumentException("invalid array length in type");
+			}
 			dt.isArray = true;
 			// advance parser index by the length of the matched type token
 			parser.setIndex(parser.getIndex() + found.length());
