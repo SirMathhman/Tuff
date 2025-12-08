@@ -321,6 +321,19 @@ public class AppTest {
 	}
 
 	@Test
+	void loadSourceFileCreatesKeyFromRelativePath() throws Exception {
+		java.nio.file.Path base = java.nio.file.Files.createTempDirectory("tuff-src-base");
+		java.nio.file.Path sub = java.nio.file.Files.createDirectories(base.resolve("foo"));
+		java.nio.file.Path file = java.nio.file.Files.createFile(sub.resolve("bar.tuff"));
+		java.nio.file.Files.writeString(file, "content here", java.nio.charset.StandardCharsets.UTF_8);
+
+		java.util.Map<String, String> map = App.loadSourceFile(file.toString(), base.toString());
+		org.junit.jupiter.api.Assertions.assertEquals(1, map.size());
+		org.junit.jupiter.api.Assertions.assertTrue(map.containsKey("foo::bar"));
+		org.junit.jupiter.api.Assertions.assertEquals("content here", map.get("foo::bar"));
+	}
+
+	@Test
 	void interpretAllParameterizedModuleImport() {
 		java.util.Map<String, String> sources = new java.util.HashMap<>();
 		sources.put("lib", "in let value : I32; out let copy = value;");

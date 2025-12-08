@@ -4,8 +4,75 @@ public final class App {
 	private static final ThreadLocal<StringBuilder> CAPTURED_OUTPUT = ThreadLocal.withInitial(StringBuilder::new);
 
 	public static void main(String[] args) {
-		System.out.println("Hello from Tuff App!");
-		System.out.println("Java version: " + System.getProperty("java.version"));
+		if (args == null || args.length != 2) {
+			System.err.println("Usage: java -jar tuff.jar <file> <source-set-dir>");
+			System.exit(1);
+		}
+
+		String filePath = args[0];
+		String sourceSetDir = args[1];
+
+		try {
+			java.util.Map<String, String> sources = loadSourceFile(filePath, sourceSetDir);
+			// interpret the single file as the main script (the single key present)
+			if (sources.isEmpty()) {
+				System.err.println("No sources loaded");
+				System.exit(1);
+			}
+			String mainScriptName = sources.keySet().iterator().next();
+			String result = interpretAll(mainScriptName, sources);
+			if (result != null)
+				System.out.println(result);
+		} catch (Exception ex) {
+			ex.printStackTrace();
+			System.exit(1);
+		}
+	}
+
+	/**
+	 * Load a single source file as a module keyed by the module path derived from
+	 * the source set base dir. For example, baseDir=./src and
+	 * file=./src/foo/bar.tuff
+	 * will produce a map entry with key "foo::bar".
+	 */
+	public static java.util.Map<String, String> loadSourceFile(String filePath, String sourceSetDir)
+			throws java.io.IOException {
+		if (filePath == null || sourceSetDir == null)
+			throw new IllegalArgumentException("filePath and sourceSetDir must be non-null");
+
+		java.nio.file.Path file = java.nio.file.Paths.get(filePath).toAbsolutePath().normalize();
+		java.nio.file.Path base = java.nio.file.Paths.get(sourceSetDir).toAbsolutePath().normalize();
+
+		java.nio.file.Path rel;
+		try {
+			rel = base.relativize(file);
+		} catch (IllegalArgumentException ex) {
+			// not relative: if file contains base as substring, try manual
+			String baseStr = base.toString();
+			String fileStr = file.toString();
+			int idx = fileStr.indexOf(baseStr);
+			if (idx >= 0) {
+				String sub = fileStr.substring(idx + baseStr.length());
+				if (sub.startsWith(java.io.File.separator))
+					sub = sub.substring(1);
+				rel = java.nio.file.Paths.get(sub);
+			} else {
+				throw new IllegalArgumentException("file is not under the provided source set directory: " + filePath);
+			}
+		}
+
+		String relStr = rel.toString().replace(java.io.File.separatorChar, '/');
+		if (relStr.startsWith("./"))
+			relStr = relStr.substring(2);
+		if (relStr.endsWith(".tuff"))
+			relStr = relStr.substring(0, relStr.length() - ".tuff".length());
+
+		String key = String.join("::", relStr.split("/"));
+		String content = java.nio.file.Files.readString(file, java.nio.charset.StandardCharsets.UTF_8);
+
+		java.util.Map<String, String> map = new java.util.HashMap<>();
+		map.put(key, content);
+		return map;
 	}
 
 	public static String greet() {

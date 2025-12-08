@@ -22,15 +22,15 @@ public final class Parser {
 		return locals;
 	}
 
-	private Operand parseLeadingKeywords() {
+	Operand parseLeadingKeywords() {
 		return ParsingHelpers.parseLeadingKeywords(this);
 	}
 
-	private void parseReturnStatement() {
+	void parseReturnStatement() {
 		ParsingHelpers.parseReturnStatement(this);
 	}
 
-	private void parseBreakStatement() {
+	void parseBreakStatement() {
 		ParsingHelpers.parseBreakStatement(this);
 	}
 
@@ -131,7 +131,7 @@ public final class Parser {
 		return IdentifierResolver.parseIdentifierLookup(this);
 	}
 
-	private Operand parseAssignmentIfPresent() {
+	Operand parseAssignmentIfPresent() {
 		return IdentifierResolver.parseAssignmentIfPresent(this);
 	}
 
@@ -141,6 +141,11 @@ public final class Parser {
 
 	Operand parseParenthesized() {
 		if (i < n && s.charAt(i) == '(') {
+			Operand maybeFn = ParenthesizedFunctionParser.parse(this);
+			if (maybeFn != null)
+				return maybeFn;
+
+			// fallback: regular parenthesized expression
 			i++; // consume '('
 			Operand inner = parseExpression();
 			skipWhitespace();
@@ -153,24 +158,7 @@ public final class Parser {
 	}
 
 	Operand parseStatement() {
-		skipWhitespace();
-		int beforeKeyword = i;
-		Operand leading = parseLeadingKeywords();
-		if (i != beforeKeyword)
-			return leading;
-		if (s.startsWith("return", i) && (i + 6 == n || !Character.isJavaIdentifierPart(s.charAt(i + 6)))) {
-			parseReturnStatement();
-		}
-
-		if (s.startsWith("break", i) && (i + 5 == n || !Character.isJavaIdentifierPart(s.charAt(i + 5)))) {
-			parseBreakStatement();
-		}
-		int save = i;
-		Operand assign = parseAssignmentIfPresent();
-		if (assign != null)
-			return assign;
-		i = save;
-		return parseLogicalOr();
+		return ParserTopLevel.parseStatement(this);
 	}
 
 	Operand parseBlockStart() {
@@ -234,30 +222,7 @@ public final class Parser {
 	}
 
 	public Operand parseTopLevelBlock() {
-		Map<String, Operand> prev = locals;
-		Map<String, Boolean> prevMut = mutables;
-		Map<String, DeclaredType> prevDeclared = declaredTypes;
-		Map<String, FunctionDef> prevFuncs = functions;
-		locals = new HashMap<>(prev);
-		mutables = new HashMap<>(prevMut);
-		declaredTypes = new HashMap<>(prevDeclared);
-		functions = new HashMap<>(prevFuncs);
-		Operand last = null;
-		while (true) {
-			skipWhitespace();
-			if (i >= n)
-				break;
-			last = parseStatement();
-			skipWhitespace();
-			if (i < n && s.charAt(i) == ';') {
-				i++; // consume ';' and continue
-				continue;
-			}
-		}
-		locals = prev;
-		mutables = prevMut;
-		functions = prevFuncs;
-		return last == null ? null : last;
+		return ParserTopLevel.parseTopLevelBlock(this);
 	}
 
 	void consumeIf() {
