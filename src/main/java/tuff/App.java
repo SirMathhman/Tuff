@@ -1,6 +1,8 @@
 package tuff;
 
 public final class App {
+	private static final ThreadLocal<StringBuilder> CAPTURED_OUTPUT = ThreadLocal.withInitial(StringBuilder::new);
+
 	public static void main(String[] args) {
 		System.out.println("Hello from Tuff App!");
 		System.out.println("Java version: " + System.getProperty("java.version"));
@@ -11,6 +13,8 @@ public final class App {
 	}
 
 	public static String interpret(String input) {
+		// reset captured output for this interpretation run
+		CAPTURED_OUTPUT.set(new StringBuilder());
 		if (input == null || input.isEmpty()) {
 			return "";
 		}
@@ -68,6 +72,15 @@ public final class App {
 		}
 
 		return number;
+	}
+
+	// Helpers for capturing stdout-like output during interpretation
+	static void appendCapturedOutput(String s) {
+		CAPTURED_OUTPUT.get().append(s);
+	}
+
+	static String getCapturedOutput() {
+		return CAPTURED_OUTPUT.get().toString();
 	}
 
 	/**
@@ -229,23 +242,33 @@ public final class App {
 				}
 			}
 			Operand result = parseExpressionToOperand(input);
-			if (result == null)
-				return "";
-			if (result.elements != null) {
-				return "";
-			}
-			if (result.stringValue != null) {
+			String finalResult;
+			if (result == null) {
+				finalResult = "";
+			} else if (result.elements != null) {
+				finalResult = "";
+			} else if (result.stringValue != null) {
 				if (result.isChar != null && result.isChar)
-					return "'" + result.stringValue + "'";
-				return '"' + result.stringValue + '"';
+					finalResult = "'" + result.stringValue + "'";
+				else
+					finalResult = '"' + result.stringValue + '"';
+			} else {
+				if (result.unsignedOrSigned != null && result.width != null) {
+					validateRange(result.value.toString(), result.unsignedOrSigned, result.width);
+				}
+				if (result.isBoolean != null && result.isBoolean) {
+					finalResult = java.math.BigInteger.ONE.equals(result.value) ? "true" : "false";
+				} else {
+					finalResult = result.value == null ? "" : result.value.toString();
+				}
 			}
-			if (result.unsignedOrSigned != null && result.width != null) {
-				validateRange(result.value.toString(), result.unsignedOrSigned, result.width);
+
+			String captured = getCapturedOutput();
+			if (captured != null && !captured.isEmpty()) {
+				return captured;
 			}
-			if (result.isBoolean != null && result.isBoolean) {
-				return java.math.BigInteger.ONE.equals(result.value) ? "true" : "false";
-			}
-			return result.value.toString();
+
+			return finalResult;
 		} catch (IllegalArgumentException ex) {
 			// propagate known evaluation errors
 			throw ex;

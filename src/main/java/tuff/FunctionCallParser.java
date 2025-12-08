@@ -137,6 +137,23 @@ final class FunctionCallParser {
 				}
 				return new Operand(elems, runtimeDt);
 			}
+			if ("print".equals(fname)) {
+				if (args.size() != 1)
+					throw new IllegalArgumentException("argument count mismatch in extern call");
+				Operand a = args.get(0);
+				String out;
+				if (a.stringValue != null) {
+					out = a.stringValue;
+				} else if (a.isBoolean != null) {
+					out = a.isBoolean ? "true" : "false";
+				} else if (a.value != null) {
+					out = a.value.toString();
+				} else {
+					out = "";
+				}
+				App.appendCapturedOutput(out);
+				return new Operand(java.math.BigInteger.ZERO, null, null);
+			}
 			throw new IllegalArgumentException("unknown extern function: " + fname);
 		}
 

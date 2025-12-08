@@ -276,6 +276,12 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretExternPrintConcatenatesOutput() {
+		String src = "extern fn print(value : String) : Void; print(\"Hello \" ); print(\"World!\");";
+		assertEquals("Hello World!", App.interpret(src));
+	}
+
+	@Test
 	void interpretAllRunsMultipleSourcesWithMain() {
 		java.util.Map<String, String> sources = new java.util.HashMap<>();
 		sources.put("lib", "fn add(a : I32, b : I32) : I32 => a + b;");
