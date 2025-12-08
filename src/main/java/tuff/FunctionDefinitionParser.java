@@ -234,22 +234,90 @@ final class FunctionDefinitionParser {
 
 	private DeclaredType readDeclaredType() {
 		DeclaredType dt = new DeclaredType();
-		java.util.regex.Matcher tm = java.util.regex.Pattern.compile("^(?:U|I)(?:8|16|32|64|Size)")
-				.matcher(parser.remainingInput());
-		java.util.regex.Matcher bm = java.util.regex.Pattern.compile("^Bool").matcher(parser.remainingInput());
-		java.util.regex.Matcher am = java.util.regex.Pattern.compile("^\\[\\s*[^\\]]+\\]").matcher(parser.remainingInput());
+		String rem = parser.remainingInput();
+
+		if (tryReadNumericType(dt, rem))
+			return dt;
+		if (tryReadBoolType(dt, rem))
+			return dt;
+		if (tryReadStringType(dt, rem))
+			return dt;
+		if (tryReadArrayType(dt, rem))
+			return dt;
+		if (tryReadFunctionType(dt))
+			return dt;
+
+		// alias or generic type variable
+		java.util.regex.Matcher idm = java.util.regex.Pattern.compile("^[A-Za-z_]\\w*").matcher(rem);
+		if (!idm.find()) {
+			String invalid = rem.trim().isEmpty() ? rem : rem.split("\\s+")[0];
+			String guidance = "expected a type like U8/I32, Bool, String, array ([T]), function type (e.g. (I32)=>I32), or a type alias";
+			// common mistake: starting a function body here (e.g. 'action : () => {')
+			if (rem.trim().startsWith("{")) {
+				throw new IllegalArgumentException("invalid type in fn: '" + invalid
+						+ "' (looks like a function body started — did you mean a function type like '() => Void' or to move '{' after the outer =>?)");
+			}
+			throw new IllegalArgumentException("invalid type in fn: '" + invalid + "' (" + guidance + ")");
+		}
+		String ident = idm.group();
+		java.util.Map<String, DeclaredType> aliases = parser.getTypeAliases();
+		if (aliases.containsKey(ident)) {
+			DeclaredType found = aliases.get(ident);
+			dt.isBool = found.isBool;
+			dt.unsignedOrSigned = found.unsignedOrSigned;
+			dt.width = found.width;
+			dt.isArray = found.isArray;
+			dt.elemIsBool = found.elemIsBool;
+			dt.elemUnsignedOrSigned = found.elemUnsignedOrSigned;
+			dt.elemWidth = found.elemWidth;
+			dt.arrayLength = found.arrayLength;
+			dt.arrayCapacity = found.arrayCapacity;
+			parser.consumeKeyword(ident);
+		} else {
+			// treat as a generic type variable (e.g., T)
+			dt.typeVarName = ident;
+			parser.consumeKeyword(dt.typeVarName);
+		}
+		return dt;
+	}
+
+	private boolean tryReadNumericType(DeclaredType dt, String rem) {
+		java.util.regex.Matcher tm = java.util.regex.Pattern.compile("^(?:U|I)(?:8|16|32|64|Size)").matcher(rem);
 		if (tm.find()) {
 			String type = tm.group();
 			dt.unsignedOrSigned = type.substring(0, 1);
 			dt.width = type.substring(1);
 			parser.consumeKeyword(type);
-		} else if (bm.find()) {
+			return true;
+		}
+		return false;
+	}
+
+	private boolean tryReadBoolType(DeclaredType dt, String rem) {
+		java.util.regex.Matcher bm = java.util.regex.Pattern.compile("^Bool").matcher(rem);
+		if (bm.find()) {
 			dt.isBool = true;
 			parser.consumeKeyword("Bool");
-		} else if (am.find()) {
+			return true;
+		}
+		return false;
+	}
+
+	private boolean tryReadStringType(DeclaredType dt, String rem) {
+		java.util.regex.Matcher sm = java.util.regex.Pattern.compile("^String").matcher(rem);
+		if (sm.find()) {
+			dt.isString = true;
+			parser.consumeKeyword("String");
+			return true;
+		}
+		return false;
+	}
+
+	private boolean tryReadArrayType(DeclaredType dt, String rem) {
+		java.util.regex.Matcher am = java.util.regex.Pattern.compile("^\\[\\s*[^\\]]+\\]").matcher(rem);
+		if (am.find()) {
 			String found = am.group();
 			String inside = found.substring(1, found.length() - 1).trim();
-			// parse inside like 'T' or 'I32; len; cap'
 			String[] parts = inside.split("\\s*;\\s*");
 			String elemType = parts[0];
 			if (elemType.startsWith("Bool")) {
@@ -276,31 +344,45 @@ final class FunctionDefinitionParser {
 			}
 			dt.isArray = true;
 			parser.setIndex(parser.getIndex() + found.length());
-		} else {
-			// could be a type alias or a generic type variable like 'T'
-			java.util.regex.Matcher idm = java.util.regex.Pattern.compile("^[A-Za-z_]\\w*").matcher(parser.remainingInput());
-			if (!idm.find())
-				throw new IllegalArgumentException("invalid type in fn");
-			String ident = idm.group();
-			java.util.Map<String, DeclaredType> aliases = parser.getTypeAliases();
-			if (aliases.containsKey(ident)) {
-				DeclaredType found = aliases.get(ident);
-				dt.isBool = found.isBool;
-				dt.unsignedOrSigned = found.unsignedOrSigned;
-				dt.width = found.width;
-				dt.isArray = found.isArray;
-				dt.elemIsBool = found.elemIsBool;
-				dt.elemUnsignedOrSigned = found.elemUnsignedOrSigned;
-				dt.elemWidth = found.elemWidth;
-				dt.arrayLength = found.arrayLength;
-				dt.arrayCapacity = found.arrayCapacity;
-				parser.consumeKeyword(ident);
-			} else {
-				dt.typeVarName = ident;
-				parser.consumeKeyword(dt.typeVarName);
-			}
+			return true;
 		}
-		return dt;
+		return false;
+	}
+
+	private boolean tryReadFunctionType(DeclaredType dt) {
+		if (parser.peekChar() == '(') {
+			parser.consumeChar();
+			parser.skipWhitespace();
+			java.util.List<DeclaredType> params = new java.util.ArrayList<>();
+			if (parser.peekChar() != ')') {
+				while (true) {
+					DeclaredType p = readDeclaredType();
+					params.add(p);
+					parser.skipWhitespace();
+					if (parser.peekChar() == ',') {
+						parser.consumeChar();
+						parser.skipWhitespace();
+						continue;
+					}
+					break;
+				}
+			}
+			if (parser.peekChar() != ')')
+				throw new IllegalArgumentException("missing ')' in function type");
+			parser.consumeChar();
+			parser.skipWhitespace();
+			if (!(parser.peekChar() == '=' && parser.getIndex() + 1 < parser.getLength()
+					&& parser.charAt(parser.getIndex() + 1) == '>'))
+				throw new IllegalArgumentException("missing => in function type");
+			parser.consumeArrow();
+			parser.skipWhitespace();
+			DeclaredType ret = readDeclaredType();
+			dt.isFunction = true;
+			dt.functionParamTypes = params;
+			dt.functionReturnType = ret;
+			return true;
+		}
+		return false;
 	}
 
 }

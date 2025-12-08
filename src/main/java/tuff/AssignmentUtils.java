@@ -13,7 +13,6 @@ final class AssignmentUtils {
 		this.mutables = mutables;
 		this.declaredTypes = declaredTypes;
 	}
-
 	void assignIndexed(String name, int idx, Operand val) {
 		if (idx < 0)
 			throw new IllegalArgumentException("index out of bounds");
@@ -45,7 +44,6 @@ final class AssignmentUtils {
 		if (!dt.structFields.containsKey(fieldName))
 			throw new IllegalArgumentException("unknown field: " + fieldName);
 
-		// build initial struct with zero-initialized fields then assign
 		java.util.Map<String, Operand> fmap = initializeStructFields(dt, fieldName, val);
 
 		locals.put(name, new Operand(fmap));
@@ -68,6 +66,8 @@ final class AssignmentUtils {
 					fmap.put(fn, new Operand(java.math.BigInteger.ZERO, fdt.unsignedOrSigned, fdt.width));
 				} else if (fdt.isArray) {
 					fmap.put(fn, new Operand(new java.util.ArrayList<>()));
+				} else if (fdt.isString) {
+					fmap.put(fn, new Operand(""));
 				} else {
 					fmap.put(fn, new Operand(java.math.BigInteger.ZERO, null, null));
 				}
@@ -94,21 +94,46 @@ final class AssignmentUtils {
 
 	private void validateAndAssignField(Operand obj, String fieldName, Operand val) {
 		Operand oldField = obj.structFields.get(fieldName);
+		validateFieldCompatibility(oldField, val);
+
+		if (oldField.unsignedOrSigned != null && oldField.width != null) {
+			assignTypedNumericField(obj, fieldName, oldField, val);
+			return;
+		}
+		// preserve string fields
+		if (oldField.stringValue != null) {
+			obj.structFields.put(fieldName, new Operand(val.stringValue));
+			return;
+		} else {
+			obj.structFields.put(fieldName, new Operand(val.value, val.unsignedOrSigned, val.width));
+		}
+	}
+
+	private void validateFieldCompatibility(Operand oldField, Operand val) {
 		if (oldField.isBoolean != null && val.isBoolean == null)
 			throw new IllegalArgumentException("typed Bool assignment requires boolean operand");
 		if (oldField.isBoolean == null && val.isBoolean != null)
 			throw new IllegalArgumentException("typed numeric assignment requires numeric operand");
 
-		if (oldField.unsignedOrSigned != null && oldField.width != null) {
-			if (val.unsignedOrSigned != null && val.width != null) {
-				if (!oldField.unsignedOrSigned.equals(val.unsignedOrSigned) || !oldField.width.equals(val.width))
-					throw new IllegalArgumentException("mismatched typed assignment");
-			}
-			TypeUtils.validateRange(val.value.toString(), oldField.unsignedOrSigned, oldField.width);
-			obj.structFields.put(fieldName, new Operand(val.value, oldField.unsignedOrSigned, oldField.width));
-		} else {
-			obj.structFields.put(fieldName, new Operand(val.value, val.unsignedOrSigned, val.width));
+		// string typed fields
+		if (oldField.stringValue != null && val.stringValue == null)
+			throw new IllegalArgumentException("typed String assignment requires string operand");
+		if (oldField.stringValue == null && val.stringValue != null)
+			throw new IllegalArgumentException("typed non-string assignment requires numeric or boolean operand");
+	}
+
+	private void assignTypedNumericField(Operand obj, String fieldName, Operand val) {
+		Operand oldField = obj.structFields.get(fieldName);
+		if (val.unsignedOrSigned != null && val.width != null) {
+			if (!oldField.unsignedOrSigned.equals(val.unsignedOrSigned) || !oldField.width.equals(val.width))
+				throw new IllegalArgumentException("mismatched typed assignment");
 		}
+		TypeUtils.validateRange(val.value.toString(), oldField.unsignedOrSigned, oldField.width);
+		obj.structFields.put(fieldName, new Operand(val.value, oldField.unsignedOrSigned, oldField.width));
+	}
+
+	private void ensureCompoundOperandsAreNumeric(Operand old, Operand val) {
+		ensureCompoundOperandsAreNumeric(old, val);
 	}
 
 	private Operand coerceFieldValue(DeclaredType fdt, Operand val) {
@@ -126,6 +151,11 @@ final class AssignmentUtils {
 			}
 			TypeUtils.validateRange(val.value.toString(), fdt.unsignedOrSigned, fdt.width);
 			return new Operand(val.value, fdt.unsignedOrSigned, fdt.width);
+		}
+		if (fdt.isString) {
+			if (val.stringValue == null)
+				throw new IllegalArgumentException("typed String field assignment requires string operand");
+			return new Operand(val.stringValue);
 		}
 		return new Operand(val.value, val.unsignedOrSigned, val.width);
 	}
@@ -242,6 +272,8 @@ final class AssignmentUtils {
 			}
 			TypeUtils.validateRange(val.value.toString(), ctx.uOrS, ctx.width);
 		}
+		// string array elements are allowed but require a stringValue; handled by
+		// elemTypeVarName elsewhere
 	}
 
 	private void assignIndexedExisting(String name, int idx, Operand val) {
@@ -317,23 +349,41 @@ final class AssignmentUtils {
 			throw new IllegalArgumentException("assignment to immutable variable: " + name);
 
 		Operand old = locals.get(name);
+		validateExistingCompatibility(old, val);
+
+		if (old.unsignedOrSigned != null && old.width != null) {
+			applyTypedNumericReassign(name, old, val);
+		} else {
+			applyReassign(name, old, val);
+		}
+	}
+
+	private void validateExistingCompatibility(Operand old, Operand val) {
 		if (old.isBoolean != null && val.isBoolean == null)
 			throw new IllegalArgumentException("typed Bool assignment requires boolean operand");
 		if (old.isBoolean == null && val.isBoolean != null)
 			throw new IllegalArgumentException("typed numeric assignment requires numeric operand");
+		if (old.stringValue != null && val.stringValue == null)
+			throw new IllegalArgumentException("typed String assignment requires string operand");
+		if (old.stringValue == null && val.stringValue != null)
+			throw new IllegalArgumentException("typed non-string assignment requires non-string operand");
+	}
 
-		if (old.unsignedOrSigned != null && old.width != null) {
-			if (val.unsignedOrSigned != null && val.width != null) {
-				if (!old.unsignedOrSigned.equals(val.unsignedOrSigned) || !old.width.equals(val.width))
-					throw new IllegalArgumentException("mismatched typed assignment");
-			}
-			TypeUtils.validateRange(val.value.toString(), old.unsignedOrSigned, old.width);
-			locals.put(name, new Operand(val.value, old.unsignedOrSigned, old.width));
+	private void applyTypedNumericReassign(String name, Operand old, Operand val) {
+		if (val.unsignedOrSigned != null && val.width != null) {
+			if (!old.unsignedOrSigned.equals(val.unsignedOrSigned) || !old.width.equals(val.width))
+				throw new IllegalArgumentException("mismatched typed assignment");
+		}
+		TypeUtils.validateRange(val.value.toString(), old.unsignedOrSigned, old.width);
+		locals.put(name, new Operand(val.value, old.unsignedOrSigned, old.width));
+	}
+
+	private void applyReassign(String name, Operand old, Operand val) {
+		if (old.functionRef != null && val.functionRef == null)
+			throw new IllegalArgumentException("typed function assignment requires function operand");
+		if (old.stringValue != null) {
+			locals.put(name, new Operand(val.stringValue));
 		} else {
-			// allow reassigning function values
-			if (old.functionRef != null && val.functionRef == null)
-				throw new IllegalArgumentException("typed function assignment requires function operand");
-
 			locals.put(name, new Operand(val.value, val.unsignedOrSigned, val.width));
 		}
 	}
@@ -350,6 +400,8 @@ final class AssignmentUtils {
 			assignDeclaredBool(name, val);
 		} else if (dt.unsignedOrSigned != null && dt.width != null) {
 			assignDeclaredNumeric(name, dt, val);
+		} else if (dt.isString) {
+			assignDeclaredString(name, val);
 		} else if (dt.isFunction) {
 			assignDeclaredFunction(name, dt, val);
 		} else {
@@ -374,6 +426,12 @@ final class AssignmentUtils {
 		}
 		TypeUtils.validateRange(val.value.toString(), dt.unsignedOrSigned, dt.width);
 		locals.put(name, new Operand(val.value, dt.unsignedOrSigned, dt.width));
+	}
+
+	private void assignDeclaredString(String name, Operand val) {
+		if (val.stringValue == null)
+			throw new IllegalArgumentException("typed String assignment requires string operand");
+		locals.put(name, new Operand(val.stringValue));
 	}
 
 	private void assignDeclaredFunction(String name, DeclaredType dt, Operand val) {
@@ -406,8 +464,7 @@ final class AssignmentUtils {
 				? new Operand(java.math.BigInteger.ZERO, true)
 				: new Operand(java.math.BigInteger.ZERO, dt != null ? dt.unsignedOrSigned : null,
 						dt != null ? dt.width : null);
-		if (old.isBoolean != null || val.isBoolean != null)
-			throw new IllegalArgumentException("compound assignment requires numeric operands");
+		ensureCompoundOperandsAreNumeric(old, val);
 		java.math.BigInteger newVal = TypeUtils.computeBinaryOp(old.value, val.value, String.valueOf(op));
 		if (dt != null && dt.unsignedOrSigned != null && dt.width != null) {
 			TypeUtils.validateRange(newVal.toString(), dt.unsignedOrSigned, dt.width);
@@ -424,6 +481,8 @@ final class AssignmentUtils {
 			throw new IllegalArgumentException("assignment to immutable variable: " + name);
 		Operand old = locals.get(name);
 		if (old.isBoolean != null || val.isBoolean != null)
+			throw new IllegalArgumentException("compound assignment requires numeric operands");
+		if (old.stringValue != null || val.stringValue != null)
 			throw new IllegalArgumentException("compound assignment requires numeric operands");
 		java.math.BigInteger result = TypeUtils.computeBinaryOp(old.value, val.value, String.valueOf(op));
 		if (old.unsignedOrSigned != null && old.width != null) {

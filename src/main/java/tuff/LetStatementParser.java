@@ -187,6 +187,9 @@ final class LetStatementParser {
 		if (tryReadBoolType(dt, rem)) {
 			return dt;
 		}
+		if (tryReadStringType(dt, rem)) {
+			return dt;
+		}
 		if (tryReadArrayType(dt, rem)) {
 			return dt;
 		}
@@ -274,15 +277,18 @@ final class LetStatementParser {
 		java.util.regex.Matcher idm = java.util.regex.Pattern.compile("^[A-Za-z_]\\w*").matcher(rem);
 		if (!idm.find()) {
 			String invalid = rem.trim().isEmpty() ? rem : rem.split("\\s+")[0];
-			throw new IllegalArgumentException("invalid type in let"
-					+ (varName != null ? (": name='" + varName + "', type='" + invalid + "'")
-							: (": type='" + invalid + "'")));
+			String guidance = "expected a type like U8, I32, Bool, an array ([T]), a function type, or a defined type alias";
+			throw new IllegalArgumentException("invalid type in let: '" + invalid + "' (" + guidance + ")"
+					+ (varName != null ? (" for name='" + varName + "'") : ""));
 		}
 		String alias = idm.group();
 		java.util.Map<String, DeclaredType> aliases = parser.getTypeAliases();
-		if (!aliases.containsKey(alias))
-			throw new IllegalArgumentException("invalid type in let"
-					+ (varName != null ? (": name='" + varName + "', type='" + alias + "'") : (": type='" + alias + "'")));
+		if (!aliases.containsKey(alias)) {
+			java.util.Set<String> keys = aliases.keySet();
+			String suggestion = keys.isEmpty() ? "no type aliases are defined" : "known aliases: " + String.join(", ", keys);
+			throw new IllegalArgumentException("invalid type in let: unknown type alias '" + alias + "'"
+					+ (varName != null ? (" for name='" + varName + "'") : "") + ". " + suggestion);
+		}
 		DeclaredType found = aliases.get(alias);
 		dt.isBool = found.isBool;
 		dt.unsignedOrSigned = found.unsignedOrSigned;
@@ -306,6 +312,9 @@ final class LetStatementParser {
 		}
 		if (isTypedArray(dt)) {
 			return assignArray(name, dt, exprVal);
+		}
+		if (isTypedString(dt)) {
+			return assignString(name, exprVal);
 		}
 		if (isTypedNumber(dt)) {
 			validateNumericOperand(dt, exprVal);
@@ -337,6 +346,10 @@ final class LetStatementParser {
 
 	private boolean isTypedNumber(DeclaredType dt) {
 		return dt != null && dt.unsignedOrSigned != null && dt.width != null;
+	}
+
+	private boolean isTypedString(DeclaredType dt) {
+		return dt != null && dt.isString;
 	}
 
 	private boolean isTypedFunction(DeclaredType dt) {
@@ -397,6 +410,24 @@ final class LetStatementParser {
 		}
 		locals.put(name, new Operand(exprVal.value, true));
 		return new Operand(exprVal.value, true);
+	}
+
+	private Operand assignString(String name, Operand exprVal) {
+		if (exprVal.stringValue == null) {
+			throw new IllegalArgumentException("typed String assignment requires string literal");
+		}
+		locals.put(name, new Operand(exprVal.stringValue));
+		return new Operand(exprVal.stringValue);
+	}
+
+	private boolean tryReadStringType(DeclaredType dt, String rem) {
+		java.util.regex.Matcher sm = java.util.regex.Pattern.compile("^String").matcher(rem);
+		if (sm.find()) {
+			dt.isString = true;
+			parser.consumeKeyword("String");
+			return true;
+		}
+		return false;
 	}
 
 	private Operand assignArray(String name, DeclaredType dt, Operand exprVal) {

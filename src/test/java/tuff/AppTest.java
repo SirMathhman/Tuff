@@ -422,10 +422,7 @@ public class AppTest {
 	}
 
 	@Test
-	void interpretInvalidTypeInLetIncludesNameAndType() {
-		IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-				() -> App.interpret("let x : String = \"\";"));
-		assertTrue(ex.getMessage().contains("x"));
-		assertTrue(ex.getMessage().contains("String"));
+	void interpretTypedStringLetWorks() {
+		assertEquals("\"\"", App.interpret("let x : String = \"\"; x"));
 	}
 }

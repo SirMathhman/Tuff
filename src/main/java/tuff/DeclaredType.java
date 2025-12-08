@@ -6,6 +6,8 @@ final class DeclaredType {
 	String width;
 	// array metadata
 	boolean isArray;
+	// string type
+	boolean isString;
 	// element type for arrays
 	boolean elemIsBool;
 	String elemUnsignedOrSigned;

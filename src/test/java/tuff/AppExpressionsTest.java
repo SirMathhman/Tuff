@@ -224,4 +224,10 @@ public class AppExpressionsTest {
 	void interpretNonEmptyThrows() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("hello"));
 	}
+
+	@Test
+	void interpretTypedStringLet() {
+		// regression / debug test for typed String declarations
+		assertEquals("\"\"", App.interpret("let mut currentContext : String = \"\"; currentContext"));
+	}
 }
