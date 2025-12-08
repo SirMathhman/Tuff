@@ -40,21 +40,25 @@ public class AppTest {
 	}
 
 	@Test
-	void interpretZeroLengthArrayTypeThrows() {
-		assertThrows(IllegalArgumentException.class,
-				() -> App.interpret("let array : [U8; 0; 1];"));
+	void interpretZeroLengthArrayTypeAllowed() {
+		assertEquals("", App.interpret("let array : [U8; 0; 1];"));
 	}
 
 	@Test
-	void interpretZeroLengthArrayAssignThrows() {
-		assertThrows(IllegalArgumentException.class,
-				() -> App.interpret("let mut array : [U8; 0; 1]; array[0] = 100; array[0]"));
+	void interpretZeroLengthArrayAssignExpandsAndAssigns() {
+		assertEquals("100", App.interpret("let mut array : [U8; 0; 1]; array[0] = 100; array[0]"));
 	}
 
 	@Test
 	void interpretCopyZeroLengthTypedArrayToDifferentSizedTypedArrayThrows() {
 		assertThrows(IllegalArgumentException.class,
 				() -> App.interpret("let mut array : [U8; 0; 5]; let copy : [U8; 3; 5] = array;"));
+	}
+
+	@Test
+	void interpretBuildArrayByIndexThenCopyToTypedArrayWorks() {
+		String src = "let mut array : [U16; 0; 5]; array[0] = 100U16; array[1] = 200U16; array[2] = 300U16; let copy : [U16; 3; 5] = array; copy[0]";
+		assertEquals("100", App.interpret(src));
 	}
 
 	@Test

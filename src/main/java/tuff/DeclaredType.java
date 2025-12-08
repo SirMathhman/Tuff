@@ -12,4 +12,6 @@ final class DeclaredType {
 	String elemWidth;
 	// array length (only support single-dimension arrays for now)
 	Integer arrayLength;
+	// optional array capacity when using [T; current; capacity]
+	Integer arrayCapacity;
 }

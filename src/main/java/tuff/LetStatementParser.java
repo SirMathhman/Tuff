@@ -81,8 +81,8 @@ final class LetStatementParser {
 			}
 
 			// store fully-initialized array and return its runtime value
-			locals.put(name, new Operand(elems));
-			return new Operand(elems);
+			locals.put(name, new Operand(elems, dt));
+			return new Operand(elems, dt);
 		}
 
 		// non-array typed declarations do not create a runtime value yet
@@ -126,13 +126,26 @@ final class LetStatementParser {
 				dt.elemUnsignedOrSigned = elemType.substring(0, 1);
 				dt.elemWidth = elemType.substring(1);
 			}
-			// second part is length
+			// second part is current length; optional third part is capacity
 			try {
 				dt.arrayLength = Integer.parseInt(parts[1]);
 			} catch (Exception ex) {
 				throw new IllegalArgumentException("invalid array length in type");
 			}
-			if (dt.arrayLength != null && dt.arrayLength.intValue() <= 0) {
+			if (parts.length > 2) {
+				try {
+					dt.arrayCapacity = Integer.parseInt(parts[2]);
+				} catch (Exception ex) {
+					throw new IllegalArgumentException("invalid array capacity in type");
+				}
+			} else {
+				dt.arrayCapacity = dt.arrayLength;
+			}
+			if (dt.arrayCapacity == null || dt.arrayCapacity.intValue() <= 0) {
+				throw new IllegalArgumentException("invalid array length in type");
+			}
+			if (dt.arrayLength == null || dt.arrayLength.intValue() < 0
+					|| dt.arrayLength.intValue() > dt.arrayCapacity.intValue()) {
 				throw new IllegalArgumentException("invalid array length in type");
 			}
 			dt.isArray = true;
@@ -193,8 +206,14 @@ final class LetStatementParser {
 			throw new IllegalArgumentException("array initializer length mismatch");
 		}
 		exprVal.elements.forEach(el -> validateArrayElement(dt, el));
-		locals.put(name, new Operand(exprVal.elements));
-		return new Operand(exprVal.elements);
+		Integer cap = dt.arrayCapacity != null ? dt.arrayCapacity : dt.arrayLength;
+		DeclaredType runtimeDt = new DeclaredType();
+		runtimeDt.arrayCapacity = cap;
+		runtimeDt.elemIsBool = dt.elemIsBool;
+		runtimeDt.elemUnsignedOrSigned = dt.elemUnsignedOrSigned;
+		runtimeDt.elemWidth = dt.elemWidth;
+		locals.put(name, new Operand(exprVal.elements, runtimeDt));
+		return new Operand(exprVal.elements, runtimeDt);
 	}
 
 	private void validateArrayElement(DeclaredType dt, Operand el) {

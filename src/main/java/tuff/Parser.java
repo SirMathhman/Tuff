@@ -168,6 +168,11 @@ public final class Parser {
 		i += name.length();
 		skipWhitespace();
 		if (i < n) {
+			// support indexed assignment like name[index] = value
+			Operand indexed = parseIndexedAssignmentIfPresent(name, start);
+			if (indexed != null) {
+				return indexed;
+			}
 			// simple assignment '='
 			if (s.charAt(i) == '=') {
 				i++; // consume '='
@@ -188,6 +193,34 @@ public final class Parser {
 			}
 		}
 		i = start;
+		return null;
+	}
+
+	private Operand parseIndexedAssignmentIfPresent(String name, int start) {
+		skipWhitespace();
+		if (i < n && s.charAt(i) == '[') {
+			i++; // consume '['
+			Operand idxOp = parseLogicalOr();
+			skipWhitespace();
+			if (i >= n || s.charAt(i) != ']')
+				throw new IllegalArgumentException("missing ']' in index assignment");
+			i++; // consume ']'
+			skipWhitespace();
+			if (i < n && s.charAt(i) == '=') {
+				i++; // consume '='
+				Operand val = parseLogicalOr();
+				if (idxOp.isBoolean != null)
+					throw new IllegalArgumentException("index must be numeric");
+				int idx = idxOp.value.intValue();
+				new AssignmentUtils(locals, mutables, declaredTypes).assignIndexed(name, idx, val);
+				Operand arr = locals.get(name);
+				return arr.elements.get(idx);
+			}
+			// not an assignment
+			// reset parser position to start so outer caller can continue
+			i = start;
+			return null;
+		}
 		return null;
 	}
 

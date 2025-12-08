@@ -129,6 +129,9 @@ public final class App {
 			Operand result = parseExpressionToOperand(input);
 			if (result == null)
 				return "";
+			if (result.elements != null) {
+				return "";
+			}
 			if (result.unsignedOrSigned != null && result.width != null) {
 				validateRange(result.value.toString(), result.unsignedOrSigned, result.width);
 			}
