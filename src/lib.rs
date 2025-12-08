@@ -3,25 +3,52 @@ pub fn add(a: i32, b: i32) -> i32 {
 }
 
 pub fn interpret(s: &str) -> Result<String, &'static str> {
-    let mut digits = String::new();
-    for c in s.chars() {
-        if c.is_ascii_digit() {
-            digits.push(c);
-        } else {
-            break;
-        }
+    let bytes = s.as_bytes();
+    if bytes.is_empty() {
+        return Err("empty input");
     }
 
-    if digits.is_empty() {
+    // parse optional sign
+    let mut idx = 0usize;
+    let mut sign: Option<char> = None;
+    if bytes[0] == b'+' || bytes[0] == b'-' {
+        sign = Some(bytes[0] as char);
+        idx = 1;
+    }
+
+    let start_digits = idx;
+    while idx < bytes.len() && (bytes[idx] >= b'0' && bytes[idx] <= b'9') {
+        idx += 1;
+    }
+
+    if start_digits == idx {
         return Err("no leading digits to interpret");
     }
 
-    // require a non-empty suffix (we only interpret values like "100U8")
-    if digits.len() == s.len() {
+    // require a non-empty suffix (we only interpret values like "100U8" or "-100I8")
+    if idx == bytes.len() {
         return Err("no type suffix present");
     }
 
-    Ok(digits)
+    // decide whether negative values are allowed — only allow when suffix starts with 'I' (signed)
+    if let Some('-') = sign {
+        // suffix's first character
+        let suffix_first = bytes[idx] as char;
+        if !(suffix_first == 'I' || suffix_first == 'i') {
+            return Err("negative values not allowed for unsigned suffix");
+        }
+    }
+
+    let digits = &s[start_digits..idx];
+    let mut out = String::new();
+    if let Some(sign_char) = sign {
+        if sign_char == '-' {
+            out.push('-');
+        }
+    }
+    out.push_str(digits);
+
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -60,5 +87,11 @@ mod tests {
     fn interpret_rejects_negative_numeric_prefix() {
         let input = "-100U8";
         assert!(interpret(input).is_err());
+    }
+
+    #[test]
+    fn interpret_allows_negative_with_signed_suffix() {
+        let input = "-100I8";
+        assert_eq!(interpret(input).unwrap(), "-100");
     }
 }
