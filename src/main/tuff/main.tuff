@@ -1,14 +1,30 @@
 extern fn print(value : String) : Void;
 
 let mut currentTestName : String = "";
+let mut currentTestPasses = true;
 
-fn fail() => {
-	print("Test Fail")
+let mut totalPassed = 0;
+let mut totalCount = 0;
+
+fn pass() => {
+
 }
 
-fn test(message : String, perform : () => Void) => {
+fn fail() => {
+	print("Fail: " + currentTestName + "\n");
+}
+
+fn describe(context : String, action : () => {
+	
+});
+
+fn it(message : String, perform : () => Void) => {
 	currentTestName = message;
 	perform();
+
+	if (!currentTestPasses) {
+		fail();
+	}
 }
 
 fn assertTrue(value : Bool) => {
@@ -24,6 +40,8 @@ fn assertStringsEqual(left : String, right : String) => {
 	}
 }
 
-test("A sample test passes", () => {
+describe("All tests", () => {
+	test("A sample test passes", () => {
 
-});
+	});
+})

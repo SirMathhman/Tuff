@@ -151,6 +151,69 @@ final class FunctionDefinitionParser {
 		// function stored; parser index already advanced past the body
 	}
 
+	// parse a function literal (expression) and return a FunctionDef without
+	// registering it in the caller's function map. Accepts an optional name.
+	static Operand parseFunctionLiteral(Parser parser) {
+		parser.consumeKeyword("fn");
+		parser.skipWhitespace();
+		java.util.regex.Matcher idm = java.util.regex.Pattern.compile("^[A-Za-z_]\\w*")
+				.matcher(parser.remainingInput());
+		String name = null;
+		if (idm.find()) {
+			name = idm.group();
+			parser.consumeKeyword(name);
+			parser.skipWhitespace();
+		}
+
+		java.util.List<String> typeParams = new ArrayList<>();
+		if (parser.peekChar() == '<') {
+			// reuse instance parsing logic: temporarily create a helper
+			FunctionDefinitionParser helper = new FunctionDefinitionParser(parser);
+			typeParams = helper.parseTypeParams();
+		}
+
+		FunctionDef.Signature parsedSig = new FunctionDefinitionParser(parser).parseSignatureParameters();
+		java.util.List<String> paramNames = parsedSig.paramNames;
+		java.util.List<DeclaredType> paramTypes = parsedSig.paramTypes;
+		parser.skipWhitespace();
+
+		DeclaredType returnType = null;
+		if (parser.peekChar() == ':') {
+			parser.consumeChar();
+			parser.skipWhitespace();
+			returnType = new FunctionDefinitionParser(parser).readDeclaredType();
+		}
+
+		if (!parser.startsWithArrow())
+			throw new IllegalArgumentException("expected => after fn signature");
+		parser.consumeArrow();
+		parser.skipWhitespace();
+
+		int start = parser.getIndex();
+		String body;
+		if (parser.peekChar() == '{') {
+			int closing = new FunctionDefinitionParser(parser).findMatchingBrace(start);
+			if (closing < 0)
+				throw new IllegalArgumentException("mismatched brace in fn body");
+			body = parser.remainingInput().substring(0, closing - start + 1);
+			parser.setIndex(closing + 1);
+		} else {
+			String rem = parser.remainingInput();
+			int relSemi = rem.indexOf(';');
+			if (relSemi < 0) {
+				body = rem;
+				parser.setIndex(parser.getIndex() + rem.length());
+			} else {
+				body = rem.substring(0, relSemi + 1);
+				parser.setIndex(start + relSemi + 1);
+			}
+		}
+
+		FunctionDef.Signature sig = new FunctionDef.Signature(paramNames, paramTypes);
+		FunctionDef fd = new FunctionDef(typeParams, sig, new FunctionBody(returnType, body));
+		return new Operand(fd, name);
+	}
+
 	private int findMatchingBrace(int start) {
 		int depth = 0;
 		int j = start;

@@ -113,6 +113,12 @@ public class AppExpressionsTest {
 	}
 
 	@Test
+	void interpretAssignInlineFunctionLiteralAndCall() {
+		assertEquals("100",
+				App.interpret("let func : (I32) => I32 = fn pass(value : I32) => value; func(100)"));
+	}
+
+	@Test
 	void interpretMatchNoDefaultThrows() {
 		assertThrows(IllegalArgumentException.class,
 				() -> App.interpret("let x = match 300 { case 100 => 5; case 200 => 2 }; x"));

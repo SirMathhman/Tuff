@@ -87,6 +87,11 @@ final class FactorParser {
 			return str;
 		}
 
+		// support inline function literals as expressions
+		if (parser.startsWithKeyword("fn")) {
+			return FunctionDefinitionParser.parseFunctionLiteral(parser);
+		}
+
 		Operand fncall = parser.parseFunctionCallIfPresent();
 		if (fncall != null)
 			return fncall;
