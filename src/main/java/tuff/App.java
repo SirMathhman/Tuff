@@ -118,6 +118,10 @@ public final class App {
 				throw new IllegalArgumentException("unable to determine type of final expression: " + last);
 			}
 		}
+		if ("Bool".equals(v.token)) {
+			// Represent Bool values as textual true/false
+			return v.value.equals(java.math.BigInteger.ONE) ? "true" : "false";
+		}
 		return v.value.toString();
 	}
 
@@ -340,7 +344,8 @@ public final class App {
 			return null;
 
 		// Try explicit type with optional mut: let [mut] name : TYPE = expr
-		Pattern explicitType = Pattern.compile("let\\s+(mut\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*:\\s*([UI]\\d+)\\s*=\\s*(.+)");
+		// Accept integer tokens (U/I types) and Bool
+		Pattern explicitType = Pattern.compile("let\\s+(mut\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*:\\s*([UI]\\d+|Bool)\\s*=\\s*(.+)");
 		Matcher explicit = explicitType.matcher(stmt);
 		if (explicit.find()) {
 			boolean isMut = explicit.group(1) != null;

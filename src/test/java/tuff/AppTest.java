@@ -177,6 +177,11 @@ class AppTest {
 	}
 
 	@Test
+	void interpretMutableBoolAssignment() {
+		assertEquals("false", App.interpret("let mut x : Bool = true; x = false; x"));
+	}
+
+	@Test
 	void interpretThrowsForNegativeU8() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("-1U8 "));
 	}

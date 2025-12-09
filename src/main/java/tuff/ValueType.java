@@ -27,6 +27,11 @@ public final class ValueType {
 	 * Validates ranges and looks up variables in context.
 	 */
 	public static Value parseOperandAndValidate(String operand, Map<String, Value> ctx) {
+		// boolean literals
+		if (operand != null && (operand.equals("true") || operand.equals("false"))) {
+			java.math.BigInteger v = operand.equals("true") ? java.math.BigInteger.ONE : java.math.BigInteger.ZERO;
+			return new Value(v, "Bool");
+		}
 		// block operand - delegated to App
 		if (operand != null && operand.startsWith("{")) {
 			return App.evaluateBlock(operand, ctx);
