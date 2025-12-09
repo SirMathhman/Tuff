@@ -9,6 +9,15 @@ public final class App {
 		if (input == null || input.isEmpty())
 			return "";
 		input = input.trim();
+		// If expression contains operators or parentheses, try full expression
+		// evaluation first
+		if (input.indexOf('(') >= 0 || input.indexOf(')') >= 0 || input.indexOf('+') >= 0 || input.indexOf('*') >= 0
+				|| java.util.regex.Pattern.compile("\\d\\s*[-]\\s*\\d").matcher(input).find()) {
+			String full = evaluateBinaryExpression(input);
+			if (full != null)
+				return full;
+		}
+
 		java.util.regex.Pattern p = java.util.regex.Pattern.compile("^([+-]?\\d+)(.*)$");
 		java.util.regex.Matcher m = p.matcher(input);
 		if (!m.find())
@@ -99,11 +108,202 @@ public final class App {
 	 * binary expression we support.
 	 */
 	private static String evaluateBinaryExpression(String input) {
-		Expression expr = parseExpression(input);
-		if (expr == null)
+		try {
+			return evaluateWithParentheses(input);
+		} catch (IllegalArgumentException ex) {
+			throw ex;
+		} catch (Exception ex) {
+			return null;
+		}
+	}
+
+	private static java.util.List<String> tokenize(String input) {
+		java.util.List<String> tokens = new java.util.ArrayList<>();
+		int i = 0;
+		while (i < input.length()) {
+			char c = input.charAt(i);
+			if (Character.isWhitespace(c)) {
+				i++;
+				continue;
+			}
+			if (c == '(' || c == ')') {
+				tokens.add(String.valueOf(c));
+				i++;
+				continue;
+			}
+			if (isStandaloneOperator(input, i)) {
+				tokens.add(String.valueOf(c));
+				i++;
+				continue;
+			}
+			// operand: [+-]?\d+[A-Za-z0-9]*
+			java.util.regex.Matcher m = java.util.regex.Pattern.compile("[+-]?\\d+[A-Za-z0-9]*").matcher(input.substring(i));
+			if (!m.lookingAt())
+				return null;
+			String tok = m.group();
+			tokens.add(tok);
+			i += tok.length();
+		}
+		return tokens;
+	}
+
+	private static boolean isStandaloneOperator(String input, int i) {
+		char c = input.charAt(i);
+		if (c == '*')
+			return true;
+		if ((c == '+' || c == '-') && i + 1 < input.length() && Character.isDigit(input.charAt(i + 1))) {
+			return false; // Leading sign, not operator
+		}
+		return c == '+' || c == '-';
+	}
+
+	private static String evaluateWithParentheses(String input) {
+		// Tokenize
+		java.util.List<String> tokens = tokenize(input);
+		if (tokens == null)
 			return null;
 
-		return evaluateExpressionWithTokenValidation(expr);
+		// shunting-yard to RPN
+		java.util.List<String> output = shuntingYard(tokens);
+		if (output == null)
+			return null;
+
+		// evaluate RPN
+		return evaluateRPN(output);
+	}
+
+	private static java.util.List<String> shuntingYard(java.util.List<String> tokens) {
+		java.util.List<String> output = new java.util.ArrayList<>();
+		java.util.Deque<String> ops = new java.util.ArrayDeque<>();
+		java.util.Map<String, Integer> prec = new java.util.HashMap<>();
+		prec.put("+", 1);
+		prec.put("-", 1);
+		prec.put("*", 2);
+
+		for (String tk : tokens) {
+			if (tk.equals("(")) {
+				ops.push(tk);
+				continue;
+			}
+			if (tk.equals(")")) {
+				while (!ops.isEmpty() && !ops.peek().equals("("))
+					output.add(ops.pop());
+				if (ops.isEmpty() || !ops.peek().equals("("))
+					return null; // mismatched paren
+				ops.pop();
+				continue;
+			}
+			if (prec.containsKey(tk)) {
+				while (!ops.isEmpty() && prec.containsKey(ops.peek()) && prec.get(ops.peek()) >= prec.get(tk)) {
+					output.add(ops.pop());
+				}
+				ops.push(tk);
+				continue;
+			}
+			// operand
+			output.add(tk);
+		}
+		while (!ops.isEmpty()) {
+			String o = ops.pop();
+			if (o.equals("(") || o.equals(")"))
+				return null;
+			output.add(o);
+		}
+		return output;
+	}
+
+	private static String evaluateRPN(java.util.List<String> output) {
+		java.util.Map<String, Integer> prec = new java.util.HashMap<>();
+		prec.put("+", 1);
+		prec.put("-", 1);
+		prec.put("*", 2);
+		java.util.Deque<Value> stack = new java.util.ArrayDeque<>();
+		for (String tk : output) {
+			if (!prec.containsKey(tk)) { // operand
+				stack.push(parseOperandAndValidate(tk));
+				continue;
+			}
+			if (stack.size() < 2)
+				return null;
+			Value b = stack.pop();
+			Value a = stack.pop();
+			if (!a.token.equals(b.token))
+				throw new IllegalArgumentException("mismatched operand types: " + a.token + " vs " + b.token);
+			java.math.BigInteger res;
+			switch (tk) {
+				case "+":
+					res = a.value.add(b.value);
+					break;
+				case "-":
+					res = a.value.subtract(b.value);
+					break;
+				case "*":
+					res = a.value.multiply(b.value);
+					break;
+				default:
+					return null;
+			}
+
+			// check range for token
+			checkValueInRange(a.token, res);
+			stack.push(new Value(res, a.token));
+		}
+
+		if (stack.size() != 1)
+			return null;
+		Value result = stack.pop();
+		return result.value.toString();
+	}
+
+	private static final class Value {
+		final java.math.BigInteger value;
+		final String token;
+
+		Value(java.math.BigInteger value, String token) {
+			this.value = value;
+			this.token = token;
+		}
+	}
+
+	private static Value parseOperandAndValidate(String operand) {
+		java.util.regex.Pattern p = java.util.regex.Pattern.compile("^([+-]?\\d+)(.*)$");
+		java.util.regex.Matcher m = p.matcher(operand);
+		if (!m.find())
+			throw new IllegalArgumentException("invalid operand: " + operand);
+		String digits = m.group(1);
+		String rest = m.group(2).trim();
+		String token = extractToken(rest);
+		if (token.isEmpty())
+			throw new IllegalArgumentException("missing type for operand: " + operand);
+		validateTokenRange(token, digits);
+		java.math.BigInteger val = new java.math.BigInteger(normalizeDigits(digits));
+		return new Value(val, token);
+	}
+
+	private static void checkValueInRange(String token, java.math.BigInteger value) {
+		boolean isUnsigned = token.startsWith("U");
+		boolean isSigned = token.startsWith("I");
+		if (!isUnsigned && !isSigned)
+			return;
+		if (token.length() < 2)
+			return;
+		int bits;
+		try {
+			bits = Integer.parseInt(token.substring(1));
+		} catch (NumberFormatException ex) {
+			return;
+		}
+		java.math.BigInteger min, max;
+		if (isUnsigned) {
+			min = java.math.BigInteger.ZERO;
+			max = java.math.BigInteger.ONE.shiftLeft(bits).subtract(java.math.BigInteger.ONE);
+		} else {
+			min = java.math.BigInteger.ONE.shiftLeft(bits - 1).negate();
+			max = java.math.BigInteger.ONE.shiftLeft(bits - 1).subtract(java.math.BigInteger.ONE);
+		}
+		if (value.compareTo(min) < 0 || value.compareTo(max) > 0) {
+			throw new IllegalArgumentException("value out of range for " + token + ": " + value.toString());
+		}
 	}
 
 	private static class Expression {

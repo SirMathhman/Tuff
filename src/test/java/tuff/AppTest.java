@@ -116,6 +116,11 @@ class AppTest {
 	}
 
 	@Test
+	void interpretParenthesesAffectPrecedence() {
+		assertEquals("9", App.interpret("(1U8 + 2U8) * 3U8"));
+	}
+
+	@Test
 	void interpretThrowsForNegativeU8() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("-1U8 "));
 	}
