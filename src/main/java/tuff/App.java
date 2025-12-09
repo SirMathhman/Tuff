@@ -9,10 +9,9 @@ public final class App {
 		if (input == null || input.isEmpty())
 			return "";
 		input = input.trim();
-		// If expression contains operators or parentheses, try full expression
+		// If expression contains operators or parentheses/braces, try full expression
 		// evaluation first
-		if (input.indexOf('(') >= 0 || input.indexOf(')') >= 0 || input.indexOf('+') >= 0 || input.indexOf('*') >= 0
-				|| java.util.regex.Pattern.compile("\\d\\s*[-]\\s*\\d").matcher(input).find()) {
+		if (hasExpressionOperators(input)) {
 			String full = evaluateBinaryExpression(input);
 			if (full != null)
 				return full;
@@ -107,6 +106,13 @@ public final class App {
 	 * Returns the normalized numeric result as a string or null if input is not a
 	 * binary expression we support.
 	 */
+	private static boolean hasExpressionOperators(String input) {
+		if (input.indexOf('(') >= 0 || input.indexOf(')') >= 0 || input.indexOf('{') >= 0 || input.indexOf('}') >= 0
+				|| input.indexOf('+') >= 0 || input.indexOf('*') >= 0)
+			return true;
+		return java.util.regex.Pattern.compile("\\d\\s*[-]\\s*\\d").matcher(input).find();
+	}
+
 	private static String evaluateBinaryExpression(String input) {
 		try {
 			return evaluateWithParentheses(input);
@@ -126,7 +132,7 @@ public final class App {
 				i++;
 				continue;
 			}
-			if (c == '(' || c == ')') {
+			if (c == '(' || c == ')' || c == '{' || c == '}') {
 				tokens.add(String.valueOf(c));
 				i++;
 				continue;
@@ -181,16 +187,13 @@ public final class App {
 		prec.put("*", 2);
 
 		for (String tk : tokens) {
-			if (tk.equals("(")) {
+			if (isOpenParen(tk)) {
 				ops.push(tk);
 				continue;
 			}
-			if (tk.equals(")")) {
-				while (!ops.isEmpty() && !ops.peek().equals("("))
-					output.add(ops.pop());
-				if (ops.isEmpty() || !ops.peek().equals("("))
-					return null; // mismatched paren
-				ops.pop();
+			if (isCloseParen(tk)) {
+				if (!processCloseParen(tk, output, ops))
+					return null;
 				continue;
 			}
 			if (prec.containsKey(tk)) {
@@ -205,11 +208,29 @@ public final class App {
 		}
 		while (!ops.isEmpty()) {
 			String o = ops.pop();
-			if (o.equals("(") || o.equals(")"))
+			if (isOpenParen(o) || isCloseParen(o))
 				return null;
 			output.add(o);
 		}
 		return output;
+	}
+
+	private static boolean isOpenParen(String tk) {
+		return tk.equals("(") || tk.equals("{");
+	}
+
+	private static boolean isCloseParen(String tk) {
+		return tk.equals(")") || tk.equals("}");
+	}
+
+	private static boolean processCloseParen(String tk, java.util.List<String> output, java.util.Deque<String> ops) {
+		String openParen = tk.equals(")") ? "(" : "{";
+		while (!ops.isEmpty() && !ops.peek().equals(openParen))
+			output.add(ops.pop());
+		if (ops.isEmpty() || !ops.peek().equals(openParen))
+			return false; // mismatched paren/brace
+		ops.pop();
+		return true;
 	}
 
 	private static String evaluateRPN(java.util.List<String> output) {
