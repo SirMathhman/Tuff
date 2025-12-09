@@ -91,6 +91,11 @@ class AppTest {
 	}
 
 	@Test
+	void interpretUnsignedUnderflowThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("3U8 - 5U8"));
+	}
+
+	@Test
 	void interpretThrowsForNegativeU8() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("-1U8 "));
 	}
