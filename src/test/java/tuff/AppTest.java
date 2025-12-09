@@ -126,6 +126,11 @@ class AppTest {
 	}
 
 	@Test
+	void interpretLetInBracesAffectPrecedence() {
+		assertEquals("9", App.interpret("{ let x : U8 = 1U8 + 2U8; x } * 3U8"));
+	}
+
+	@Test
 	void interpretThrowsForNegativeU8() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("-1U8 "));
 	}

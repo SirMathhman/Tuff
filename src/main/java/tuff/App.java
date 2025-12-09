@@ -5,6 +5,66 @@ public final class App {
 		return "Hello, Tuff!";
 	}
 
+	private static java.util.List<String> splitTopLevelStatements(String inside) {
+		java.util.List<String> parts = new java.util.ArrayList<>();
+		int depth = 0;
+		StringBuilder cur = new StringBuilder();
+		for (int i = 0; i < inside.length(); i++) {
+			char c = inside.charAt(i);
+			if (c == '{' || c == '(') {
+				depth++;
+			} else if (c == '}' || c == ')') {
+				depth--;
+			}
+			if (c == ';' && depth == 0) {
+				parts.add(cur.toString().trim());
+				cur.setLength(0);
+			} else {
+				cur.append(c);
+			}
+		}
+		if (cur.length() > 0) {
+			parts.add(cur.toString().trim());
+		}
+		return parts;
+	}
+
+	private static String[] parseLetDeclaration(String stmt) {
+		if (!stmt.startsWith("let "))
+			return null;
+		java.util.regex.Pattern lp = java.util.regex.Pattern
+				.compile("let\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*:\\s*([UI]\\d+)\\s*=\\s*(.+)");
+		java.util.regex.Matcher lm = lp.matcher(stmt);
+		if (!lm.find())
+			return null;
+		return new String[] { lm.group(1), lm.group(2), lm.group(3).trim() };
+	}
+
+	private static Value evaluateFinalExpression(String last, java.util.Map<String, Value> ctx) {
+		if (last.matches("^[A-Za-z_][A-Za-z0-9_]*$")) {
+			if (!ctx.containsKey(last))
+				throw new IllegalArgumentException("unknown identifier: " + last);
+			return ctx.get(last);
+		}
+
+		String r = evaluateWithParentheses(last, ctx);
+		if (r == null)
+			throw new IllegalArgumentException("invalid expression in block: " + last);
+
+		java.util.regex.Pattern p = java.util.regex.Pattern.compile("^([+-]?\\d+)(.*)$");
+		java.util.regex.Matcher m = p.matcher(last.trim());
+		if (m.find()) {
+			String rest = m.group(2).trim();
+			String tk = extractToken(rest);
+			if (tk.isEmpty())
+				throw new IllegalArgumentException("final expression in block missing type: " + last);
+			checkValueInRange(tk, new java.math.BigInteger(r));
+			return new Value(new java.math.BigInteger(r), tk);
+		}
+
+		throw new IllegalArgumentException("unable to determine type of final expression in block: " + last);
+	}
+
 	public static String interpret(String input) {
 		if (input == null || input.isEmpty())
 			return "";
@@ -132,18 +192,43 @@ public final class App {
 				i++;
 				continue;
 			}
-			if (c == '(' || c == ')' || c == '{' || c == '}') {
+			if (c == '(' || c == ')') {
 				tokens.add(String.valueOf(c));
 				i++;
 				continue;
+			}
+			if (c == '{') {
+				// extract full block including nested braces as a single token
+				int depth = 1;
+				int j = i + 1;
+				for (; j < input.length(); j++) {
+					char cc = input.charAt(j);
+					if (cc == '{')
+						depth++;
+					else if (cc == '}') {
+						depth--;
+						if (depth == 0)
+							break;
+					}
+				}
+				if (j >= input.length())
+					return null; // mismatched brace
+				String block = input.substring(i, j + 1);
+				tokens.add(block);
+				i = j + 1;
+				continue;
+			}
+			if (c == '}') {
+				return null; // stray closing brace
 			}
 			if (isStandaloneOperator(input, i)) {
 				tokens.add(String.valueOf(c));
 				i++;
 				continue;
 			}
-			// operand: [+-]?\d+[A-Za-z0-9]*
-			java.util.regex.Matcher m = java.util.regex.Pattern.compile("[+-]?\\d+[A-Za-z0-9]*").matcher(input.substring(i));
+			// operand: either signed/unsigned digits with optional suffix, or an identifier
+			java.util.regex.Matcher m = java.util.regex.Pattern.compile("[+-]?\\d+[A-Za-z0-9]*|[A-Za-z_][A-Za-z0-9_]*")
+					.matcher(input.substring(i));
 			if (!m.lookingAt())
 				return null;
 			String tok = m.group();
@@ -175,7 +260,17 @@ public final class App {
 			return null;
 
 		// evaluate RPN
-		return evaluateRPN(output);
+		return evaluateRPN(output, java.util.Collections.emptyMap());
+	}
+
+	private static String evaluateWithParentheses(String input, java.util.Map<String, Value> ctx) {
+		java.util.List<String> tokens = tokenize(input);
+		if (tokens == null)
+			return null;
+		java.util.List<String> output = shuntingYard(tokens);
+		if (output == null)
+			return null;
+		return evaluateRPN(output, ctx == null ? java.util.Collections.emptyMap() : ctx);
 	}
 
 	private static java.util.List<String> shuntingYard(java.util.List<String> tokens) {
@@ -233,7 +328,7 @@ public final class App {
 		return true;
 	}
 
-	private static String evaluateRPN(java.util.List<String> output) {
+	private static String evaluateRPN(java.util.List<String> output, java.util.Map<String, Value> ctx) {
 		java.util.Map<String, Integer> prec = new java.util.HashMap<>();
 		prec.put("+", 1);
 		prec.put("-", 1);
@@ -241,7 +336,7 @@ public final class App {
 		java.util.Deque<Value> stack = new java.util.ArrayDeque<>();
 		for (String tk : output) {
 			if (!prec.containsKey(tk)) { // operand
-				stack.push(parseOperandAndValidate(tk));
+				stack.push(parseOperandAndValidate(tk, ctx));
 				continue;
 			}
 			if (stack.size() < 2)
@@ -286,7 +381,22 @@ public final class App {
 		}
 	}
 
-	private static Value parseOperandAndValidate(String operand) {
+	private static Value parseOperandAndValidate(String operand, java.util.Map<String, Value> ctx) {
+		// block operand
+		if (operand != null && operand.startsWith("{")) {
+			return evaluateBlock(operand, ctx);
+		}
+
+		// identifier (variable reference)
+		java.util.regex.Pattern ident = java.util.regex.Pattern.compile("^[A-Za-z_][A-Za-z0-9_]*$");
+		if (ident.matcher(operand).matches()) {
+			if (ctx != null && ctx.containsKey(operand)) {
+				return ctx.get(operand);
+			}
+			throw new IllegalArgumentException("unknown identifier: " + operand);
+		}
+
+		// numeric operand with token
 		java.util.regex.Pattern p = java.util.regex.Pattern.compile("^([+-]?\\d+)(.*)$");
 		java.util.regex.Matcher m = p.matcher(operand);
 		if (!m.find())
@@ -299,6 +409,45 @@ public final class App {
 		validateTokenRange(token, digits);
 		java.math.BigInteger val = new java.math.BigInteger(normalizeDigits(digits));
 		return new Value(val, token);
+	}
+
+	private static Value evaluateBlock(String block, java.util.Map<String, Value> outerCtx) {
+		// strip outer braces
+		String inside = block.substring(1, block.length() - 1).trim();
+		// split statements on top-level semicolons
+		java.util.List<String> parts = splitTopLevelStatements(inside);
+
+		java.util.Map<String, Value> ctx = new java.util.HashMap<>();
+		if (outerCtx != null)
+			ctx.putAll(outerCtx);
+
+		// declarations are all parts except last, last is final expression
+		if (parts.isEmpty())
+			throw new IllegalArgumentException("empty block");
+
+		for (int i = 0; i < parts.size() - 1; i++) {
+			String stmt = parts.get(i);
+			String[] decl = parseLetDeclaration(stmt);
+			if (decl == null)
+				throw new IllegalArgumentException("invalid let declaration: " + stmt);
+			String name = decl[0];
+			String token = decl[1];
+			String exprStr = decl[2];
+			// evaluate exprStr with current ctx
+			String res = evaluateWithParentheses(exprStr, ctx);
+			if (res == null)
+				throw new IllegalArgumentException("invalid expression in let: " + stmt);
+			// validate range for declared token
+			checkValueInRange(token, new java.math.BigInteger(res));
+			ctx.put(name, new Value(new java.math.BigInteger(res), token));
+		}
+
+		// final expression
+		String last = parts.get(parts.size() - 1);
+		if (last.isEmpty())
+			throw new IllegalArgumentException("missing final expression in block");
+
+		return evaluateFinalExpression(last, ctx);
 	}
 
 	private static void checkValueInRange(String token, java.math.BigInteger value) {
