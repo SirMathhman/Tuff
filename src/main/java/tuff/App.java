@@ -6,7 +6,8 @@ public final class App {
 	}
 
 	public static String interpret(String input) {
-		if (input == null || input.isEmpty()) return "";
+		if (input == null || input.isEmpty())
+			return "";
 		input = input.trim();
 		java.util.regex.Pattern p = java.util.regex.Pattern.compile("^([+-]?\\d+)(.*)$");
 		java.util.regex.Matcher m = p.matcher(input);
@@ -14,22 +15,60 @@ public final class App {
 			return "";
 		String digits = m.group(1);
 		String rest = m.group(2);
-		// If the token uses a U8 suffix, validate it's within 0..255 and not negative
-		if (rest.startsWith("U8")) {
-			if (digits.startsWith("+")) digits = digits.substring(1);
-			if (digits.startsWith("-")) {
-				throw new IllegalArgumentException("negative value not allowed for U8: " + digits);
-			}
-			try {
-				int val = Integer.parseInt(digits);
-				if (val < 0 || val > 255) {
-					throw new IllegalArgumentException("value out of range for U8: " + digits);
-				}
-			} catch (NumberFormatException ex) {
-				throw new IllegalArgumentException("invalid number for U8: " + digits, ex);
-			}
+		// support typed integer suffixes e.g. U8, I16, U32, I64. Validate ranges using
+		// BigInteger.
+		String suffix = rest.trim();
+		if (suffix.isEmpty() || suffix.length() < 2)
+			return digits.startsWith("+") ? digits.substring(1) : digits;
+
+		// take first token (letters+digits)
+		int tokenEnd = 0;
+		while (tokenEnd < suffix.length() && Character.isLetterOrDigit(suffix.charAt(tokenEnd)))
+			tokenEnd++;
+		String token = suffix.substring(0, tokenEnd);
+
+		boolean isUnsigned = token.startsWith("U");
+		boolean isSigned = token.startsWith("I");
+
+		String numberForParse = digits.startsWith("+") ? digits.substring(1) : digits;
+		if (isUnsigned && numberForParse.startsWith("-")) {
+			throw new IllegalArgumentException("negative value not allowed for " + token + ": " + digits);
 		}
-		return digits;
+
+		java.math.BigInteger value;
+		try {
+			value = new java.math.BigInteger(numberForParse);
+		} catch (NumberFormatException ex) {
+			throw new IllegalArgumentException("invalid number for " + token + ": " + digits, ex);
+		}
+
+		if ((isUnsigned || isSigned) && token.length() >= 2) {
+			String bitsStr = token.substring(1);
+			int bits;
+			try {
+				bits = Integer.parseInt(bitsStr);
+			} catch (NumberFormatException ex) {
+				// unknown token, return normalized digits
+				return digits.startsWith("+") ? digits.substring(1) : digits;
+			}
+
+			java.math.BigInteger min, max;
+			if (isUnsigned) {
+				min = java.math.BigInteger.ZERO;
+				max = java.math.BigInteger.ONE.shiftLeft(bits).subtract(java.math.BigInteger.ONE);
+			} else {
+				min = java.math.BigInteger.ONE.shiftLeft(bits - 1).negate();
+				max = java.math.BigInteger.ONE.shiftLeft(bits - 1).subtract(java.math.BigInteger.ONE);
+			}
+
+			if (value.compareTo(min) < 0 || value.compareTo(max) > 0) {
+				throw new IllegalArgumentException("value out of range for " + token + ": " + digits);
+			}
+
+			return digits.startsWith("+") ? digits.substring(1) : digits;
+		}
+
+		return digits.startsWith("+") ? digits.substring(1) : digits;
 	}
 
 	public static void main(String[] args) {
