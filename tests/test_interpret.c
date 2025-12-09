@@ -116,6 +116,17 @@ void test_interpret_i64_valid_and_invalid(void)
 	free(bad);
 }
 
+void test_interpret_addition_u8(void)
+{
+	char *sum = interpret("100U8 + 50U8");
+	TEST_ASSERT_EQUAL_STRING("150", sum);
+	free(sum);
+
+	char *overflow = interpret("200U8 + 100U8");
+	TEST_ASSERT_EQUAL_STRING("Error", overflow);
+	free(overflow);
+}
+
 int main(void)
 {
 	UNITY_BEGIN();
@@ -131,5 +142,6 @@ int main(void)
 	RUN_TEST(test_interpret_i16_valid_and_invalid);
 	RUN_TEST(test_interpret_i32_valid_and_invalid);
 	RUN_TEST(test_interpret_i64_valid_and_invalid);
+	RUN_TEST(test_interpret_addition_u8);
 	return UNITY_END();
 }
