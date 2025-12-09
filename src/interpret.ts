@@ -9,7 +9,9 @@ export function interpret(input: string): string {
     const [, num, suffix] = m;
     // If suffix indicates unsigned (starts with 'u' or 'U'), negative values are invalid.
     if (suffix && /^[uU]/.test(suffix) && /^-/.test(num)) {
-      throw new Error('interpret: negative value not allowed for unsigned type');
+      throw new Error(
+        "interpret: negative value not allowed for unsigned type"
+      );
     }
     return num;
   }
