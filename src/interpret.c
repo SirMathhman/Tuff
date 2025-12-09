@@ -202,11 +202,13 @@ static char *fmt_ll(long long v)
 	return alloc_string(buf);
 }
 
-static int contains_plus(const char *input, size_t len)
+static int contains_operator(const char *input, size_t len)
 {
-	for (size_t i = 0; i < len; ++i)
-		if (input[i] == '+')
-			return 1;
+	for (size_t i = 0; i < len; ++i) {
+		if (input[i] == '+') return 1;
+		// treat '-' as operator only if not the very first char (to allow leading negative values)
+		if (input[i] == '-' && i > 0) return 1;
+	}
 	return 0;
 }
 
@@ -221,24 +223,29 @@ static char *init_first_operand(int bits, int is_signed, int neg, unsigned long 
 	return NULL;
 }
 
-static char *add_next_operand(int bits, int is_signed, int neg, unsigned long long mag, int common_bits, int common_signed, unsigned long long *u_sum, long long *s_sum)
+static char *apply_operand_op(int bits, int is_signed, int neg, unsigned long long mag, int common_bits, int common_signed, unsigned long long *u_sum, long long *s_sum, char op)
 {
 	if (bits != common_bits || is_signed != common_signed)
 		return alloc_error();
 	if (!common_signed)
 	{
-		if (!accumulate_unsigned(u_sum, mag, common_bits))
-			return alloc_error();
+		if (op == '+') {
+			if (!accumulate_unsigned(u_sum, mag, common_bits)) return alloc_error();
+		} else if (op == '-') {
+			if (mag > *u_sum) return alloc_error();
+			*u_sum = *u_sum - mag;
+		} else return alloc_error();
 	}
 	else
 	{
-		if (!accumulate_signed(s_sum, neg, mag, common_bits))
-			return alloc_error();
+		// For signed types we can treat operator '-' as adding the negated operand
+		int effective_neg = (op == '-') ? !neg : neg;
+		if (!accumulate_signed(s_sum, effective_neg, mag, common_bits)) return alloc_error();
 	}
 	return NULL;
 }
 
-static char *process_one_operand(const char *input, size_t a, size_t b, int count, int *common_bits, int *common_signed, unsigned long long *u_sum, long long *s_sum)
+static char *process_one_operand(const char *input, size_t a, size_t b, int count, int *common_bits, int *common_signed, unsigned long long *u_sum, long long *s_sum, char op)
 {
 	int bits = 0, is_signed = 0, neg = 0;
 	unsigned long long mag = 0ULL;
@@ -247,13 +254,13 @@ static char *process_one_operand(const char *input, size_t a, size_t b, int coun
 
 	if (count == 0)
 		return init_first_operand(bits, is_signed, neg, mag, common_bits, common_signed, u_sum, s_sum);
-	return add_next_operand(bits, is_signed, neg, mag, *common_bits, *common_signed, u_sum, s_sum);
+	return apply_operand_op(bits, is_signed, neg, mag, *common_bits, *common_signed, u_sum, s_sum, op);
 }
 
 static char *try_handle_addition(const char *input)
 {
 	size_t len = strlen(input);
-	if (!contains_plus(input, len))
+	if (!contains_operator(input, len))
 		return NULL;
 
 	size_t pos = 0;
@@ -261,10 +268,11 @@ static char *try_handle_addition(const char *input)
 	int common_bits = 0, common_signed = 0;
 	unsigned long long u_sum = 0ULL;
 	long long s_sum = 0LL;
+	char prev_op = '+'; // first operand treated as if preceded by +
 	while (pos < len)
 	{
 		size_t next = pos;
-		while (next < len && input[next] != '+')
+		while (next < len && input[next] != '+' && input[next] != '-')
 			next++;
 		size_t a = pos, b = next;
 		while (a < b && input[a] == ' ')
@@ -274,12 +282,15 @@ static char *try_handle_addition(const char *input)
 		if (a >= b)
 			return alloc_error();
 
-		char *err = process_one_operand(input, a, b, count, &common_bits, &common_signed, &u_sum, &s_sum);
+		char *err = process_one_operand(input, a, b, count, &common_bits, &common_signed, &u_sum, &s_sum, prev_op);
 		if (err)
 			return err;
 
 		count++;
-		pos = (next < len) ? next + 1 : next;
+		if (next < len) {
+			prev_op = input[next];
+			pos = next + 1;
+		} else pos = next;
 	}
 	if (count < 2)
 		return NULL;

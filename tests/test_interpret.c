@@ -143,6 +143,21 @@ void test_interpret_addition_u8(void)
 	free(overflow3);
 }
 
+void test_interpret_addition_and_subtraction_u8(void)
+{
+	char *expr = interpret("10U8 - 2U8 + 3U8");
+	TEST_ASSERT_EQUAL_STRING("11", expr);
+	free(expr);
+
+	char *under = interpret("5U8 - 10U8");
+	TEST_ASSERT_EQUAL_STRING("Error", under);
+	free(under);
+
+	char *mixerr = interpret("10U8 - 2I8");
+	TEST_ASSERT_EQUAL_STRING("Error", mixerr);
+	free(mixerr);
+}
+
 int main(void)
 {
 	UNITY_BEGIN();
@@ -159,5 +174,6 @@ int main(void)
 	RUN_TEST(test_interpret_i32_valid_and_invalid);
 	RUN_TEST(test_interpret_i64_valid_and_invalid);
 	RUN_TEST(test_interpret_addition_u8);
+	RUN_TEST(test_interpret_addition_and_subtraction_u8);
 	return UNITY_END();
 }
