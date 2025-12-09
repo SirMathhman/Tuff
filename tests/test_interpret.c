@@ -32,6 +32,13 @@ void test_interpret_negative_u8_returns_error(void)
 	free(out);
 }
 
+void test_interpret_u8_out_of_range_returns_error(void)
+{
+	char *out = interpret("256U8");
+	TEST_ASSERT_EQUAL_STRING("Error", out);
+	free(out);
+}
+
 int main(void)
 {
 	UNITY_BEGIN();
@@ -39,5 +46,6 @@ int main(void)
 	RUN_TEST(test_interpret_null_returns_null);
 	RUN_TEST(test_interpret_strips_u8_suffix);
 	RUN_TEST(test_interpret_negative_u8_returns_error);
+	RUN_TEST(test_interpret_u8_out_of_range_returns_error);
 	return UNITY_END();
 }
