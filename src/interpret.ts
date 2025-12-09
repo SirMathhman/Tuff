@@ -1,5 +1,8 @@
 type Env = {
-  map: Map<string, { value: bigint | boolean; suffix: string; mutable?: boolean }>;
+  map: Map<
+    string,
+    { value: bigint | boolean; suffix: string; mutable?: boolean }
+  >;
   parent?: Env;
 };
 
@@ -16,7 +19,10 @@ function lookupEnv(env: Env | undefined, name: string) {
   return undefined;
 }
 
-function findEnvContaining(env: Env | undefined, name: string): Env | undefined {
+function findEnvContaining(
+  env: Env | undefined,
+  name: string
+): Env | undefined {
   let cur = env;
   while (cur) {
     if (cur.map.has(name)) return cur;
@@ -224,6 +230,19 @@ function evaluateValueAndSuffix(
   throw new Error("interpret: only integer strings are supported");
 }
 
+function validateSimpleNumber(
+  numStr: string,
+  suffixStr: string,
+  suffixRe: RegExp
+): void {
+  if (!suffixRe.test(suffixStr)) {
+    throw new Error("interpret: unsupported or invalid suffix");
+  }
+  const parsed = parseSuffix(suffixStr);
+  if (!parsed) throw new Error("interpret: unsupported or invalid suffix");
+  checkRange(parsed.kind, parsed.bits, BigInt(numStr), suffixStr);
+}
+
 function executeStatements(
   parts: string[],
   env: Env,
@@ -311,12 +330,7 @@ function executeStatements(
     if (simpleNum && parts.length === 1) {
       const num = simpleNum[1];
       const suffix = simpleNum[2];
-      if (!suffixRe.test(suffix)) {
-        throw new Error("interpret: unsupported or invalid suffix");
-      }
-      const parsed = parseSuffix(suffix);
-      if (!parsed) throw new Error("interpret: unsupported or invalid suffix");
-      checkRange(parsed.kind, parsed.bits, BigInt(num), suffix);
+      validateSimpleNumber(num, suffix, suffixRe);
       lastVal = num;
       continue;
     }
@@ -328,7 +342,8 @@ function executeStatements(
       const container = findEnvContaining(env, name);
       if (!container) throw new Error(`interpret: unknown identifier ${name}`);
       const entry = container.map.get(name)!;
-      if (!entry.mutable) throw new Error(`interpret: cannot assign to immutable ${name}`);
+      if (!entry.mutable)
+        throw new Error(`interpret: cannot assign to immutable ${name}`);
       // allow bare integer literal for assignment when variable is untyped/raw
       const bareAssign = rhs.trim().match(/^([+-]?\d+)$/);
       let rAssign;
@@ -352,7 +367,11 @@ function executeStatements(
         if (!pd) throw new Error("interpret: invalid variable suffix");
         checkRange(pd.kind, pd.bits, rAssign.value as bigint, entry.suffix);
       }
-      container.map.set(name, { value: rAssign.value, suffix: entry.suffix, mutable: entry.mutable });
+      container.map.set(name, {
+        value: rAssign.value,
+        suffix: entry.suffix,
+        mutable: entry.mutable,
+      });
       lastWasLet = true; // assignment behaves like a statement with no return
       lastVal = rAssign.value.toString();
       continue;
@@ -388,12 +407,7 @@ export function interpret(input: string, envIn?: Env): string {
     if (simpleNum) {
       const num = simpleNum[1];
       const suffix = simpleNum[2];
-      if (!suffixRe.test(suffix)) {
-        throw new Error("interpret: unsupported or invalid suffix");
-      }
-      const parsed = parseSuffix(suffix);
-      if (!parsed) throw new Error("interpret: unsupported or invalid suffix");
-      checkRange(parsed.kind, parsed.bits, BigInt(num), suffix);
+      validateSimpleNumber(num, suffix, suffixRe);
       return num;
     }
 
