@@ -172,6 +172,11 @@ class AppTest {
 	}
 
 	@Test
+	void interpretImmutableVariableAssignmentThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("let x = 100; x = 20; x"));
+	}
+
+	@Test
 	void interpretThrowsForNegativeU8() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("-1U8 "));
 	}
