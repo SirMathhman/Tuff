@@ -21,23 +21,23 @@ it("interpret adds two suffixed integers", () => {
 });
 
 it("interpret enforces signed I8 boundaries", () => {
-  expect(interpret("127I8")).toBe("127")
-  expect(interpret("-128I8")).toBe("-128")
-  expect(() => interpret("128I8")).toThrow()
-  expect(() => interpret("-129I8")).toThrow()
-})
+  expect(interpret("127I8")).toBe("127");
+  expect(interpret("-128I8")).toBe("-128");
+  expect(() => interpret("128I8")).toThrow();
+  expect(() => interpret("-129I8")).toThrow();
+});
 
 it("interpret enforces 32-bit boundaries", () => {
-  expect(interpret("2147483647I32")).toBe("2147483647")
-  expect(() => interpret("2147483648I32")).toThrow()
-  expect(interpret("4294967295U32")).toBe("4294967295")
-  expect(() => interpret("4294967296U32")).toThrow()
-})
+  expect(interpret("2147483647I32")).toBe("2147483647");
+  expect(() => interpret("2147483648I32")).toThrow();
+  expect(interpret("4294967295U32")).toBe("4294967295");
+  expect(() => interpret("4294967296U32")).toThrow();
+});
 
 it("interpret enforces addition overflow rules", () => {
-  expect(() => interpret("200U8 + 100U8")).toThrow()
-  expect(() => interpret("100I8 + 50I8")).toThrow()
-})
+  expect(() => interpret("200U8 + 100U8")).toThrow();
+  expect(() => interpret("100I8 + 50I8")).toThrow();
+});
 
 it("interpret throws for non-integer strings", () => {
   expect(() => interpret("hello")).toThrow();
