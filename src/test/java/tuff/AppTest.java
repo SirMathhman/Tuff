@@ -131,6 +131,11 @@ class AppTest {
 	}
 
 	@Test
+	void interpretTopLevelLetWithNestedBlock() {
+		assertEquals("9", App.interpret("let y : U8 = { let x : U8 = 1U8 + 2U8; x } * 3U8; y"));
+	}
+
+	@Test
 	void interpretThrowsForNegativeU8() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("-1U8 "));
 	}

@@ -71,6 +71,13 @@ public final class App {
 		input = input.trim();
 		// If expression contains operators or parentheses/braces, try full expression
 		// evaluation first
+		// If this looks like a top-level statement sequence (let ...; ...), evaluate
+		// statements first
+		if (input.startsWith("let ") || input.indexOf(';') >= 0) {
+			String stm = evaluateStatements(input);
+			if (stm != null)
+				return stm;
+		}
 		if (hasExpressionOperators(input)) {
 			String full = evaluateBinaryExpression(input);
 			if (full != null)
@@ -103,6 +110,56 @@ public final class App {
 		validateTokenRange(token, digits);
 
 		return normalizeDigits(digits);
+	}
+
+	private static String evaluateStatements(String input) {
+		java.util.List<String> parts = splitTopLevelStatements(input);
+		if (parts == null || parts.isEmpty())
+			return null;
+		if (parts.size() == 1) {
+			// single expression
+			return evaluateWithParentheses(parts.get(0));
+		}
+		java.util.Map<String, Value> ctx = new java.util.HashMap<>();
+		for (int i = 0; i < parts.size() - 1; i++) {
+			String stmt = parts.get(i);
+			String[] decl = parseLetDeclaration(stmt);
+			if (decl == null)
+				return null;
+			String name = decl[0];
+			String token = decl[1];
+			String expr = decl[2];
+			String res = evaluateWithParentheses(expr, ctx);
+			if (res == null)
+				return null;
+			checkValueInRange(token, new java.math.BigInteger(res));
+			ctx.put(name, new Value(new java.math.BigInteger(res), token));
+		}
+		// final expression
+		String last = parts.get(parts.size() - 1).trim();
+		Value v;
+		if (last.matches("^[A-Za-z_][A-Za-z0-9_]*$")) {
+			if (!ctx.containsKey(last))
+				throw new IllegalArgumentException("unknown identifier: " + last);
+			v = ctx.get(last);
+		} else {
+			String r = evaluateWithParentheses(last, ctx);
+			if (r == null)
+				return null;
+			java.util.regex.Pattern p = java.util.regex.Pattern.compile("^([+-]?\\d+)(.*)$");
+			java.util.regex.Matcher m = p.matcher(last.trim());
+			if (m.find()) {
+				String rest = m.group(2).trim();
+				String tk = extractToken(rest);
+				if (tk.isEmpty())
+					throw new IllegalArgumentException("final expression missing type: " + last);
+				checkValueInRange(tk, new java.math.BigInteger(r));
+				v = new Value(new java.math.BigInteger(r), tk);
+			} else {
+				throw new IllegalArgumentException("unable to determine type of final expression: " + last);
+			}
+		}
+		return v.value.toString();
 	}
 
 	private static String extractToken(String suffix) {
