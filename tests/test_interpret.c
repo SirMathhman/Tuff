@@ -173,23 +173,35 @@ TEST_ASSERT_EQUAL_STRING("Error", mix);
 free(mix);
 }
 
+void test_interpret_leading_minus_converts_to_signed(void)
+{
+	char *res = interpret("-3U8 + 10U8 * 2U8");
+	TEST_ASSERT_EQUAL_STRING("17", res);
+	free(res);
+
+	char *res2 = interpret("-3I8 + 10I8 * 2I8");
+	TEST_ASSERT_EQUAL_STRING("17", res2);
+	free(res2);
+}
+
 int main(void)
 {
-UNITY_BEGIN();
-RUN_TEST(test_interpret_returns_stub_for_input);
-RUN_TEST(test_interpret_null_returns_null);
-RUN_TEST(test_interpret_strips_u8_suffix);
-RUN_TEST(test_interpret_negative_u8_returns_error);
-RUN_TEST(test_interpret_u8_out_of_range_returns_error);
-RUN_TEST(test_interpret_u16_valid_and_invalid);
-RUN_TEST(test_interpret_u32_valid_and_invalid);
-RUN_TEST(test_interpret_u64_valid_and_invalid);
-RUN_TEST(test_interpret_i8_valid_and_invalid);
-RUN_TEST(test_interpret_i16_valid_and_invalid);
-RUN_TEST(test_interpret_i32_valid_and_invalid);
-RUN_TEST(test_interpret_i64_valid_and_invalid);
-RUN_TEST(test_interpret_addition_u8);
-RUN_TEST(test_interpret_addition_and_subtraction_u8);
-RUN_TEST(test_interpret_multiplication_and_precedence);
-return UNITY_END();
+	UNITY_BEGIN();
+	RUN_TEST(test_interpret_returns_stub_for_input);
+	RUN_TEST(test_interpret_null_returns_null);
+	RUN_TEST(test_interpret_strips_u8_suffix);
+	RUN_TEST(test_interpret_negative_u8_returns_error);
+	RUN_TEST(test_interpret_u8_out_of_range_returns_error);
+	RUN_TEST(test_interpret_u16_valid_and_invalid);
+	RUN_TEST(test_interpret_u32_valid_and_invalid);
+	RUN_TEST(test_interpret_u64_valid_and_invalid);
+	RUN_TEST(test_interpret_i8_valid_and_invalid);
+	RUN_TEST(test_interpret_i16_valid_and_invalid);
+	RUN_TEST(test_interpret_i32_valid_and_invalid);
+	RUN_TEST(test_interpret_i64_valid_and_invalid);
+	RUN_TEST(test_interpret_addition_u8);
+	RUN_TEST(test_interpret_addition_and_subtraction_u8);
+	RUN_TEST(test_interpret_multiplication_and_precedence);
+	RUN_TEST(test_interpret_leading_minus_converts_to_signed);
+	return UNITY_END();
 }

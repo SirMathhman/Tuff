@@ -444,6 +444,32 @@ static char *validate_homogeneous_types(int count, int *bits, int *signedness, i
 	return NULL;
 }
 
+static char *normalize_leading_minus(const char *input)
+{
+	// Convert expressions like "-3U8 + ..." to "-3I8 + ..." by replacing U with I
+	if (!input || input[0] != '-')
+		return NULL;
+
+	size_t len = strlen(input);
+	char *normalized = malloc(len + 1);
+	if (!normalized)
+		return NULL;
+
+	// Copy and replace all 'U' with 'I' and 'u' with 'i' 
+	for (size_t i = 0; i < len; ++i)
+	{
+		if (input[i] == 'U')
+			normalized[i] = 'I';
+		else if (input[i] == 'u')
+			normalized[i] = 'i';
+		else
+			normalized[i] = input[i];
+	}
+	normalized[len] = '\0';
+
+	return normalized;
+}
+
 static char *try_handle_addition(const char *input)
 {
 	size_t len = strlen(input);
@@ -531,6 +557,15 @@ char *interpret(const char *input)
 {
 	if (!input)
 		return NULL;
+
+	char *normalized = normalize_leading_minus(input);
+	if (normalized)
+	{
+		char *result = try_handle_addition(normalized);
+		free(normalized);
+		if (result)
+			return result;
+	}
 
 	char *r = try_handle_addition(input);
 	if (r)
