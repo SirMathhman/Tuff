@@ -13,6 +13,10 @@
 #include <ctype.h>
 #include <limits.h>
 
+// forward declarations needed by helper functions below
+static char *try_handle_addition(const char *input);
+static char *process_integer_input(const char *input);
+
 static char *alloc_string(const char *s)
 {
 	size_t n = strlen(s);
@@ -382,6 +386,107 @@ static size_t find_next_operator(const char *input, size_t len, size_t start)
 	return next;
 }
 
+static long find_matching_paren(const char *input, size_t len, size_t start)
+{
+	if (start >= len || input[start] != '(')
+		return -1;
+	size_t depth = 0;
+	for (size_t i = start; i < len; ++i)
+	{
+		if (input[i] == '(')
+			depth++;
+		else if (input[i] == ')')
+		{
+			depth--;
+			if (depth == 0)
+				return (long)i;
+		}
+	}
+	return -1;
+}
+
+// Evaluate an expression range inside parentheses (a..b exclusive of b)
+static char *evaluate_subexpr_range(const char *input, size_t a, size_t b, int *out_bits, int *out_signed, int *out_negative, unsigned long long *out_val)
+{
+	if (a >= b)
+		return alloc_error();
+
+	size_t sublen = b - a;
+	char *sub = malloc(sublen + 1);
+	if (!sub)
+		return alloc_error();
+	memcpy(sub, input + a, sublen);
+	sub[sublen] = '\0';
+
+	// First try parsing as a full expression
+	char *res = try_handle_addition(sub);
+	if (!res)
+	{
+		// maybe a single integer literal
+		res = process_integer_input(sub);
+	}
+	if (!res)
+	{
+		free(sub);
+		return alloc_error();
+	}
+	if (strcmp(res, "Error") == 0)
+	{
+		free(sub);
+		free(res);
+		return alloc_error();
+	}
+
+	// determine type from the inner substring (should end with suffix)
+	int is_signed = 0, bits = 0;
+	if (!detect_suffix(sub, sublen, &is_signed, &bits))
+	{
+		free(sub);
+		free(res);
+		return alloc_error();
+	}
+
+	// parse numeric result string (res) into magnitude and sign
+	int neg = 0;
+	const char *r = res;
+	if (is_signed && r[0] == '-')
+	{
+		neg = 1;
+		r++;
+	}
+	else if (!is_signed && r[0] == '-')
+	{
+		// unsigned cannot be negative
+		free(sub);
+		free(res);
+		return alloc_error();
+	}
+
+	unsigned long long mag = 0ULL;
+	if (!parse_unsigned_digits(r, strlen(r), &mag))
+	{
+		free(sub);
+		free(res);
+		return alloc_error();
+	}
+
+	if (!validate_parsed_value(mag, bits, is_signed, neg))
+	{
+		free(sub);
+		free(res);
+		return alloc_error();
+	}
+
+	*out_bits = bits;
+	*out_signed = is_signed;
+	*out_negative = neg;
+	*out_val = mag;
+
+	free(sub);
+	free(res);
+	return NULL;
+}
+
 static char *trim_and_parse_operand(const char *input, size_t pos, size_t next, int *obits, int *osig, int *oneg, unsigned long long *omag)
 {
 	size_t a = pos, b = next;
@@ -415,9 +520,27 @@ static char *parse_all_operands(const char *input, size_t len, int n, unsigned l
 		size_t next = find_next_operator(input, len, pos);
 		int obits = 0, osig = 0, oneg = 0;
 		unsigned long long omag = 0ULL;
-		char *err = trim_and_parse_operand(input, pos, next, &obits, &osig, &oneg, &omag);
-		if (err)
-			return err;
+
+		// support parenthesized operands
+		if (input[pos] == '(')
+		{
+			long close = find_matching_paren(input, len, pos);
+			if (close < 0)
+				return alloc_error();
+			// evaluate subexpression inside parentheses
+			char *err = evaluate_subexpr_range(input, pos + 1, (size_t)close, &obits, &osig, &oneg, &omag);
+			if (err)
+				return err;
+			/* locate the real next operator after the closing parenthesis */
+			next = (size_t)close + 1;
+			next = find_next_operator(input, len, next);
+		}
+		else
+		{
+			char *err = trim_and_parse_operand(input, pos, next, &obits, &osig, &oneg, &omag);
+			if (err)
+				return err;
+		}
 
 		store_operand(idx, obits, osig, oneg, omag, u_vals, s_vals, bits, signedness);
 
@@ -455,7 +578,7 @@ static char *normalize_leading_minus(const char *input)
 	if (!normalized)
 		return NULL;
 
-	// Copy and replace all 'U' with 'I' and 'u' with 'i' 
+	// Copy and replace all 'U' with 'I' and 'u' with 'i'
 	for (size_t i = 0; i < len; ++i)
 	{
 		if (input[i] == 'U')
