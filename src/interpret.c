@@ -2,12 +2,32 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Minimal stub implementation: if input is NULL return NULL, otherwise
-// return a newly allocated string containing the fixed text "stubbed".
+// If input is NULL return NULL.
+// If input ends with the suffix "U8" (case-insensitive) return a newly
+// allocated string with that suffix stripped. Otherwise return the
+// fixed text "stubbed".
 char *interpret(const char *input)
 {
 	if (!input)
 		return NULL;
+	size_t inlen = strlen(input);
+	if (inlen >= 2)
+	{
+		char last = input[inlen - 1];
+		char prev = input[inlen - 2];
+		if ((prev == 'U' || prev == 'u') && last == '8')
+		{
+			size_t outlen = inlen - 2;
+			char *res = (char *)malloc(outlen + 1);
+			if (!res)
+				return NULL;
+			if (outlen > 0)
+				memcpy(res, input, outlen);
+			res[outlen] = '\0';
+			return res;
+		}
+	}
+
 	const char *out = "stubbed";
 	char *res = (char *)malloc(strlen(out) + 1);
 	if (!res)

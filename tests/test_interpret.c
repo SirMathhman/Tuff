@@ -18,6 +18,13 @@ void test_interpret_null_returns_null(void)
 	TEST_ASSERT_EQUAL_STRING(NULL, out);
 }
 
+void test_interpret_strips_u8_suffix(void)
+{
+	char *out = interpret("100U8");
+	TEST_ASSERT_EQUAL_STRING("100", out);
+	free(out);
+}
+
 int main(void)
 {
 	UNITY_BEGIN();
