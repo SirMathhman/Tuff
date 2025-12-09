@@ -5,53 +5,61 @@ export function interpret(input: string): string {
   // Support numeric type suffixes like `100U8`, `-42u16`.
   // Capture the leading integer and ignore a trailing alphabetic/numeric suffix.
   // Require a suffix — bare integers (e.g. "100") are no longer supported.
+  // Supported suffixes: U8, U16, U32, U64, I8, I16, I32, I64 (case-insensitive)
+  const suffixRe = /^[uUiI](?:8|16|32|64)$/
+
   // Binary addition like: "100U8 + 50U8"
   const exprMatch = s.match(
-    /^([+-]?\d+)([a-zA-Z0-9]+)\s*\+\s*([+-]?\d+)([a-zA-Z0-9]+)$/
+    /^([+-]?\d+)\s*([a-zA-Z0-9]+)\s*\+\s*([+-]?\d+)\s*([a-zA-Z0-9]+)$/
   );
   if (exprMatch) {
     const [, n1, suf1, n2, suf2] = exprMatch;
-    // Require same suffix for simplicity
-    if (suf1.toLowerCase() !== suf2.toLowerCase()) {
-      throw new Error("interpret: mismatched suffixes in expression");
+    // Require same suffix for simplicity and ensure it's supported
+    if (suf1.toLowerCase() !== suf2.toLowerCase() || !suffixRe.test(suf1)) {
+      throw new Error("interpret: mismatched or unsupported suffixes in expression");
     }
 
     const sum = BigInt(n1) + BigInt(n2);
 
-    // If unsigned suffix, enforce overflow on positive values
-    if (/^[uU]/.test(suf1)) {
-      const unsignedMatch = suf1.match(/^[uU](\d+)$/);
-      if (unsignedMatch) {
-        const bits = Number(unsignedMatch[1]);
-        if (!Number.isNaN(bits) && bits > 0) {
-          const max = (1n << BigInt(bits)) - 1n;
-          if (sum > max)
-            throw new Error(`interpret: unsigned overflow for ${suf1}`);
-        }
+    // Validate range according to suffix type
+    const t = suf1.toLowerCase()
+    const kind = t[0] // 'u' or 'i'
+    const bits = Number(t.slice(1))
+    if (!Number.isNaN(bits) && bits > 0) {
+      if (kind === 'u') {
+        const max = (1n << BigInt(bits)) - 1n
+        if (sum > max) throw new Error(`interpret: unsigned overflow for ${suf1}`)
+      } else {
+        const max = (1n << BigInt(bits - 1)) - 1n
+        const min = -(1n << BigInt(bits - 1))
+        if (sum > max || sum < min) throw new Error(`interpret: signed overflow for ${suf1}`)
       }
     }
 
     return sum.toString();
   }
 
-  const m = s.match(/^([+-]?\d+)([a-zA-Z0-9]+)$/);
+  const m = s.match(/^([+-]?\d+)\s*([a-zA-Z0-9]+)$/);
   if (m) {
     const [, num, suffix] = m;
-    // If suffix indicates unsigned (starts with 'u' or 'U'), negative values are invalid
-    // and the numeric value must fit in the declared bit width (U8 -> 8 bits -> 0..255).
-    if (suffix && /^[uU]/.test(suffix)) {
-      // Negative values are allowed even with unsigned suffixes (e.g. -1U8)
+    // Ensure suffix is one of supported types
+    if (!suffixRe.test(suffix)) {
+      throw new Error('interpret: unsupported or invalid suffix')
+    }
 
-      const unsignedMatch = suffix.match(/^[uU](\d+)$/);
-      if (unsignedMatch) {
-        const bits = Number(unsignedMatch[1]);
-        if (!Number.isNaN(bits) && bits > 0) {
-          const value = BigInt(num);
-          const max = (1n << BigInt(bits)) - 1n;
-          if (value > max) {
-            throw new Error(`interpret: unsigned overflow for ${suffix}`);
-          }
-        }
+    const t = suffix.toLowerCase()
+    const kind = t[0]
+    const bits = Number(t.slice(1))
+    if (!Number.isNaN(bits) && bits > 0) {
+      const value = BigInt(num)
+      if (kind === 'u') {
+        const max = (1n << BigInt(bits)) - 1n
+        if (value > max) throw new Error(`interpret: unsigned overflow for ${suffix}`)
+        // negative values are allowed for unsigned types (preserve prior behaviour)
+      } else {
+        const max = (1n << BigInt(bits - 1)) - 1n
+        const min = -(1n << BigInt(bits - 1))
+        if (value > max || value < min) throw new Error(`interpret: signed overflow for ${suffix}`)
       }
     }
 
