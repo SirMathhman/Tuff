@@ -96,6 +96,11 @@ class AppTest {
 	}
 
 	@Test
+	void interpretMultiplyAndAddPrecedence() {
+		assertEquals("53", App.interpret("10U8 * 5U8 + 3U8"));
+	}
+
+	@Test
 	void interpretThrowsForNegativeU8() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("-1U8 "));
 	}

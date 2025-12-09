@@ -128,7 +128,7 @@ public final class App {
 			int end = om.end();
 			if (lastEnd != 0) {
 				String opText = input.substring(lastEnd, start).trim();
-				if (opText.isEmpty() || !(opText.equals("+") || opText.equals("-")))
+				if (opText.isEmpty() || !(opText.equals("+") || opText.equals("-") || opText.equals("*")))
 					return null;
 				ops.add(opText);
 			} else {
@@ -161,12 +161,13 @@ public final class App {
 			return null;
 
 		validateTokenRange(commonToken, od0);
-		java.math.BigInteger acc = new java.math.BigInteger(normalizeDigits(od0));
+		java.math.BigInteger firstValue = new java.math.BigInteger(normalizeDigits(od0));
 
+		// compute operand values and ensure tokens match
+		java.util.List<java.math.BigInteger> values = new java.util.ArrayList<>();
+		values.add(firstValue);
 		for (int i = 0; i < expr.ops.size(); i++) {
-			String op = expr.ops.get(i);
 			String operand = expr.operands.get(i + 1);
-
 			java.util.regex.Matcher mm = p.matcher(operand);
 			if (!mm.find())
 				return null;
@@ -182,11 +183,39 @@ public final class App {
 
 			validateTokenRange(ntoken, nd);
 			java.math.BigInteger nv = new java.math.BigInteger(normalizeDigits(nd));
-			if (op.equals("+"))
-				acc = acc.add(nv);
-			else
-				acc = acc.subtract(nv);
+			values.add(nv);
 		}
+
+		// first pass: handle '*' precedence by collapsing multiplications
+		java.util.List<java.math.BigInteger> stageValues = new java.util.ArrayList<>();
+		java.util.List<String> stageOps = new java.util.ArrayList<>();
+
+		java.math.BigInteger temp = values.get(0);
+		for (int i = 0; i < expr.ops.size(); i++) {
+			String op = expr.ops.get(i);
+			java.math.BigInteger nextVal = values.get(i + 1);
+			if (op.equals("*")) {
+				temp = temp.multiply(nextVal);
+			} else {
+				stageValues.add(temp);
+				stageOps.add(op);
+				temp = nextVal;
+			}
+		}
+		stageValues.add(temp);
+
+		// second pass: apply + and - left-to-right
+		java.math.BigInteger acc2 = stageValues.get(0);
+		for (int i = 0; i < stageOps.size(); i++) {
+			String op = stageOps.get(i);
+			java.math.BigInteger v = stageValues.get(i + 1);
+			if (op.equals("+"))
+				acc2 = acc2.add(v);
+			else
+				acc2 = acc2.subtract(v);
+		}
+
+		java.math.BigInteger acc = acc2;
 
 		// validate final result in range
 		boolean isUnsigned = commonToken.startsWith("U");
