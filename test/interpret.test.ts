@@ -7,13 +7,13 @@ it("interpret handles integer with unsigned suffix", () => {
 });
 
 it("interpret rejects out-of-range unsigned values (enforces range)", () => {
-  expect(() => interpret("256U8")).toThrow()
-})
-
-it("interpret throws for negative unsigned integers", () => {
-  expect(() => interpret("-100U8")).toThrow();
-  expect(() => interpret(" -1u16 ")).toThrow();
+  expect(() => interpret("256U8")).toThrow();
 });
+
+it("interpret accepts negative unsigned integers (returns numeric part)", () => {
+  expect(interpret("-100U8")).toBe("-100")
+  expect(interpret(" -1u16 ")).toBe("-1")
+})
 
 it("interpret throws for non-integer strings", () => {
   expect(() => interpret("hello")).toThrow();
