@@ -63,3 +63,9 @@ it("interpret enforces addition overflow rules", () => {
 it("interpret throws for non-integer strings", () => {
   expect(() => interpret("hello")).toThrow();
 });
+
+it("interpret supports let declarations and variables", () => {
+  expect(
+    interpret("let x : U8 = { 4U8 + 2U8 } * 3U8; x")
+  ).toBe("18");
+});

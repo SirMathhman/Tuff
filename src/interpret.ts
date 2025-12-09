@@ -28,11 +28,12 @@ function checkRange(
 // addSuffixed removed — multi-term addition handled inline
 
 function parseParenthesizedValue(
-  str: string
+  str: string,
+  env?: Map<string, { value: bigint; suffix: string }>
 ): { value: string; suffix: string; length: number } | null {
-  if (!(str.startsWith('(') || str.startsWith('{'))) return null;
+  if (!(str.startsWith("(") || str.startsWith("{"))) return null;
   const open = str[0];
-  const close = open === '{' ? '}' : ')';
+  const close = open === "{" ? "}" : ")";
   let depth = 0;
   let i = 0;
   for (; i < str.length; i++) {
@@ -46,27 +47,49 @@ function parseParenthesizedValue(
   const sufMatches = Array.from(inner.matchAll(/[uUiI](?:8|16|32|64)/g)).map(
     (m) => m[0]
   );
-  if (sufMatches.length === 0) return null;
-  const sfx = sufMatches[0];
-  if (!sufMatches.every((x) => x.toLowerCase() === sfx.toLowerCase()))
+  // Also consider suffixes from variables referenced inside the inner expression
+  const idMatches = Array.from(inner.matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\b/g)).map(
+    (m) => m[1]
+  );
+  const varSufMatches: string[] = [];
+  if (env) {
+    for (const id of idMatches) {
+      const v = env.get(id);
+      if (v) varSufMatches.push(v.suffix);
+    }
+  }
+  const allSufs = [...sufMatches, ...varSufMatches];
+  if (allSufs.length === 0) return null;
+  const sfx = allSufs[0];
+  if (!allSufs.every((x) => x.toLowerCase() === sfx.toLowerCase()))
     return null;
-  const val = interpret(inner);
+  const val = interpret(inner, env);
   return { value: val, suffix: sfx, length: i + 1 };
 }
 
 function parseOperandToken(
-  str: string
+  str: string,
+  env?: Map<string, { value: bigint; suffix: string }>
 ): { value: string; suffix: string; consumed: number } | null {
   // parenthesized value first
-  const p = parseParenthesizedValue(str);
+  const p = parseParenthesizedValue(str, env);
   if (p) return { value: p.value, suffix: p.suffix, consumed: p.length };
 
+  // identifier / variable lookup
+  const idm = str.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*/);
+  if (idm) {
+    const name = idm[1];
+    if (env && env.has(name)) {
+      const v = env.get(name)!;
+      return { value: v.value.toString(), suffix: v.suffix, consumed: idm[0].length };
+    }
+  }
   const mm = str.match(/^\s*([+-]?\d+)\s*([a-zA-Z0-9]+)\s*/);
   if (!mm) return null;
   return { value: mm[1], suffix: mm[2], consumed: mm[0].length };
 }
 
-export function interpret(input: string): string {
+export function interpret(input: string, envIn?: Map<string, { value: bigint; suffix: string }>): string {
   // Simple interpreter: accept integer strings and return them unchanged (trimmed).
   // Examples: "100" => "100"
   const s = input.trim();
@@ -77,6 +100,9 @@ export function interpret(input: string): string {
   const suffixRe = /^[uUiI](?:8|16|32|64)$/;
 
   // Try parse an n-ary expression of operands separated by + or -
+  // environment of variables for this interpret invocation (may be shared by callers)
+  const env = envIn ?? new Map<string, { value: bigint; suffix: string }>();
+
   const tryParseExpr = (inputStr: string) => {
     // We attempt to tokenise and parse expressions (operands can be numbers
     // with suffixes or parenthesized sub-expressions). If parsing fails,
@@ -86,7 +112,7 @@ export function interpret(input: string): string {
     const nums: string[] = [];
     const ops: string[] = [];
     let rest = inputStr;
-    const firstTok = parseOperandToken(rest);
+    const firstTok = parseOperandToken(rest, env);
     if (!firstTok) return null;
     nums.push(firstTok.value);
     const firstSuffix = firstTok.suffix;
@@ -97,7 +123,7 @@ export function interpret(input: string): string {
       if (!mo) return null;
       ops.push(mo[1]);
       rest = rest.slice(mo[0].length);
-      const tok = parseOperandToken(rest);
+      const tok = parseOperandToken(rest, env);
       if (!tok) return null;
       if (tok.suffix.toLowerCase() !== firstSuffix.toLowerCase()) return null;
       nums.push(tok.value);
@@ -109,6 +135,62 @@ export function interpret(input: string): string {
       ops: string[];
       suffix: string;
     };
+  };
+
+  const evaluateValueAndSuffix = (inputStr: string): { value: bigint; suffix: string } => {
+    const ep = tryParseExpr(inputStr);
+    if (ep) {
+      const { nums, ops, suffix } = ep;
+      const parsed = parseSuffix(suffix);
+      if (!parsed) throw new Error("interpret: mismatched or unsupported suffixes in expression");
+      const { kind, bits } = parsed;
+      let nnums: bigint[] = nums.map((x) => BigInt(x));
+      let nops: string[] = [...ops];
+      for (let i = 0; i < nops.length; ) {
+        if (nops[i] === "*") {
+          const prod = nnums[i] * nnums[i + 1];
+          nnums.splice(i, 2, prod);
+          nops.splice(i, 1);
+        } else {
+          i++;
+        }
+      }
+      let acc = nnums[0];
+      for (let i = 0; i < nops.length; i++) {
+        const op = nops[i];
+        const n = nnums[i + 1];
+        if (op === "+") acc = acc + n;
+        else if (op === "-") acc = acc - n;
+        else throw new Error("interpret: unsupported operator");
+      }
+      checkRange(kind, bits, acc, suffix);
+      return { value: acc, suffix };
+    }
+
+    // single number with suffix
+    const m2 = inputStr.trim().match(/^([+-]?\d+)\s*([a-zA-Z0-9]+)\s*$/);
+    if (m2) {
+      const [, num, suffix] = m2;
+      const suffixRe = /^[uUiI](?:8|16|32|64)$/;
+      if (!suffixRe.test(suffix)) throw new Error("interpret: unsupported or invalid suffix");
+      const parsed = parseSuffix(suffix);
+      if (!parsed) throw new Error("interpret: unsupported or invalid suffix");
+      const { kind, bits } = parsed;
+      const val = BigInt(num);
+      checkRange(kind, bits, val, suffix);
+      return { value: val, suffix };
+    }
+
+    // identifier lookup
+    const idOnly = inputStr.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)$/);
+    if (idOnly) {
+      const name = idOnly[1];
+      if (!env.has(name)) throw new Error(`interpret: unknown identifier ${name}`);
+      const v = env.get(name)!;
+      return { value: v.value, suffix: v.suffix };
+    }
+
+    throw new Error("interpret: only integer strings are supported");
   };
 
   const exprParsed = tryParseExpr(s);
@@ -146,6 +228,47 @@ export function interpret(input: string): string {
     checkRange(kind, bits, acc, suffix);
     return acc.toString();
   }
+
+  // Top-level statement handling: support semicolon-separated statements and let declarations
+  const parts = s.split(";").map((p) => p.trim()).filter(Boolean);
+  let lastVal: string | null = null;
+
+  for (const stmt of parts) {
+    // let <ident> : <Type> = <expr>
+    const letMatch = stmt.match(/^let\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([uUiI](?:8|16|32|64))\s*=\s*(.*)$/);
+    if (letMatch) {
+      const name = letMatch[1];
+      const declared = letMatch[2];
+      const rhs = letMatch[3];
+      const r = evaluateValueAndSuffix(rhs);
+      // ensure value fits declared type
+      const pd = parseSuffix(declared);
+      if (!pd) throw new Error("interpret: invalid declared suffix");
+      checkRange(pd.kind, pd.bits, r.value, declared);
+      env.set(name, { value: r.value, suffix: declared });
+      lastVal = r.value.toString();
+      continue;
+    }
+
+    // otherwise evaluate expression or identifier
+    const simpleNum = stmt.trim().match(/^([+-]?\d+)\s*([a-zA-Z0-9]+)\s*$/);
+    if (simpleNum && parts.length === 1) {
+      const num = simpleNum[1];
+      const suffix = simpleNum[2];
+      if (!suffixRe.test(suffix)) {
+        throw new Error("interpret: unsupported or invalid suffix");
+      }
+      const parsed = parseSuffix(suffix);
+      if (!parsed) throw new Error("interpret: unsupported or invalid suffix");
+      checkRange(parsed.kind, parsed.bits, BigInt(num), suffix);
+      lastVal = num;
+      continue;
+    }
+    const r2 = evaluateValueAndSuffix(stmt);
+    lastVal = r2.value.toString();
+  }
+
+  if (lastVal !== null) return lastVal;
 
   const m = s.match(/^([+-]?\d+)\s*([a-zA-Z0-9]+)$/);
   if (m) {
