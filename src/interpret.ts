@@ -188,45 +188,11 @@ function evaluateValueAndSuffix(
   throw new Error("interpret: only integer strings are supported");
 }
 
-export function interpret(
-  input: string,
-  envIn?: Map<string, { value: bigint; suffix: string }>
-): string {
-  // Simple interpreter: accept integer strings and return them unchanged (trimmed).
-  // Examples: "100" => "100"
-  const s = input.trim();
-  // Support numeric type suffixes like `100U8`, `-42u16`.
-  // Capture the leading integer and ignore a trailing alphabetic/numeric suffix.
-  // Require a suffix — bare integers (e.g. "100") are no longer supported.
-  // Supported suffixes: U8, U16, U32, U64, I8, I16, I32, I64 (case-insensitive)
-  const suffixRe = /^[uUiI](?:8|16|32|64)$/;
-
-  // Try parse an n-ary expression of operands separated by + or -
-  // environment of variables for this interpret invocation (may be shared by callers)
-  const env = envIn ?? new Map<string, { value: bigint; suffix: string }>();
-
-  // Top-level statement handling: support semicolon-separated statements and let declarations
-  const parts = s.split(";").map((p) => p.trim()).filter(Boolean);
-
-  // Special-case single-statement inputs that are not `let` declarations:
-  if (parts.length === 1 && !parts[0].trim().startsWith("let ")) {
-    const stmt = parts[0];
-    const simpleNum = stmt.trim().match(/^([+-]?\d+)\s*([a-zA-Z0-9]+)\s*$/);
-    if (simpleNum) {
-      const num = simpleNum[1];
-      const suffix = simpleNum[2];
-      if (!suffixRe.test(suffix)) {
-        throw new Error("interpret: unsupported or invalid suffix");
-      }
-      const parsed = parseSuffix(suffix);
-      if (!parsed) throw new Error("interpret: unsupported or invalid suffix");
-      checkRange(parsed.kind, parsed.bits, BigInt(num), suffix);
-      return num;
-    }
-
-    const r = evaluateValueAndSuffix(stmt, env);
-    return r.value.toString();
-  }
+function executeStatements(
+  parts: string[],
+  env: Map<string, { value: bigint; suffix: string }>,
+  suffixRe: RegExp
+): string | null {
   let lastVal: string | null = null;
 
   for (const stmt of parts) {
@@ -266,7 +232,53 @@ export function interpret(
     lastVal = r2.value.toString();
   }
 
-  if (lastVal !== null) return lastVal;
+  return lastVal;
+}
+
+export function interpret(
+  input: string,
+  envIn?: Map<string, { value: bigint; suffix: string }>
+): string {
+  // Simple interpreter: accept integer strings and return them unchanged (trimmed).
+  // Examples: "100" => "100"
+  const s = input.trim();
+  // Support numeric type suffixes like `100U8`, `-42u16`.
+  // Capture the leading integer and ignore a trailing alphabetic/numeric suffix.
+  // Require a suffix — bare integers (e.g. "100") are no longer supported.
+  // Supported suffixes: U8, U16, U32, U64, I8, I16, I32, I64 (case-insensitive)
+  const suffixRe = /^[uUiI](?:8|16|32|64)$/;
+
+  // Try parse an n-ary expression of operands separated by + or -
+  // environment of variables for this interpret invocation (may be shared by callers)
+  const env = envIn ?? new Map<string, { value: bigint; suffix: string }>();
+
+  // Top-level statement handling: support semicolon-separated statements and let declarations
+  const parts = s
+    .split(";")
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  // Special-case single-statement inputs that are not `let` declarations:
+  if (parts.length === 1 && !parts[0].trim().startsWith("let ")) {
+    const stmt = parts[0];
+    const simpleNum = stmt.trim().match(/^([+-]?\d+)\s*([a-zA-Z0-9]+)\s*$/);
+    if (simpleNum) {
+      const num = simpleNum[1];
+      const suffix = simpleNum[2];
+      if (!suffixRe.test(suffix)) {
+        throw new Error("interpret: unsupported or invalid suffix");
+      }
+      const parsed = parseSuffix(suffix);
+      if (!parsed) throw new Error("interpret: unsupported or invalid suffix");
+      checkRange(parsed.kind, parsed.bits, BigInt(num), suffix);
+      return num;
+    }
+
+    const r = evaluateValueAndSuffix(stmt, env);
+    return r.value.toString();
+  }
+  const maybe = executeStatements(parts, env, suffixRe);
+  if (maybe !== null) return maybe;
 
   const m = s.match(/^([+-]?\d+)\s*([a-zA-Z0-9]+)$/);
   if (m) {
