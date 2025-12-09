@@ -25,27 +25,7 @@ function checkRange(
   }
 }
 
-function addSuffixed(
-  n1: string,
-  suf1: string,
-  n2: string,
-  suf2: string
-): string {
-  if (suf1.toLowerCase() !== suf2.toLowerCase())
-    throw new Error(
-      "interpret: mismatched or unsupported suffixes in expression"
-    );
-  const suffix = suf1;
-  const parsed = parseSuffix(suffix);
-  if (!parsed)
-    throw new Error(
-      "interpret: mismatched or unsupported suffixes in expression"
-    );
-  const { kind, bits } = parsed;
-  const sum = BigInt(n1) + BigInt(n2);
-  checkRange(kind, bits, sum, suffix);
-  return sum.toString();
-}
+// addSuffixed removed — multi-term addition handled inline
 
 export function interpret(input: string): string {
   // Simple interpreter: accept integer strings and return them unchanged (trimmed).
