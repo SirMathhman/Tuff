@@ -133,6 +133,14 @@ void test_interpret_addition_u8(void)
 	char *mismatch = interpret("100U8 + 50I16");
 	TEST_ASSERT_EQUAL_STRING("Error", mismatch);
 	free(mismatch);
+
+	char *sum3 = interpret("1U8 + 2U8 + 3U8");
+	TEST_ASSERT_EQUAL_STRING("6", sum3);
+	free(sum3);
+
+	char *overflow3 = interpret("100U8 + 100U8 + 100U8");
+	TEST_ASSERT_EQUAL_STRING("Error", overflow3);
+	free(overflow3);
 }
 
 int main(void)
