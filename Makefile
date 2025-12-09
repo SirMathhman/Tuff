@@ -1,4 +1,4 @@
-CC=gcc
+CC=clang
 CFLAGS=-I./src -I./tests/vendor -Wall -Wextra -std=c99
 SRCS=src/interpret.c
 TEST_SRCS=tests/test_interpret.c tests/vendor/unity.c

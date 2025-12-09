@@ -30,5 +30,6 @@ int main(void)
 	UNITY_BEGIN();
 	RUN_TEST(test_interpret_returns_stub_for_input);
 	RUN_TEST(test_interpret_null_returns_null);
+	RUN_TEST(test_interpret_strips_u8_suffix);
 	return UNITY_END();
 }
