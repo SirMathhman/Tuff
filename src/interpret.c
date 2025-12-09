@@ -169,21 +169,6 @@ static int accumulate_unsigned(unsigned long long *sum, unsigned long long add, 
 	return 1;
 }
 
-static int accumulate_signed(long long *sum, int neg, unsigned long long add, int bits)
-{
-	unsigned long long umax, sm, sp;
-	if (!compute_limits(bits, &umax, &sm, &sp))
-		return 0;
-	long long addv = neg ? -((long long)add) : (long long)add;
-	long long min = -((long long)sm);
-	long long max = (long long)sp;
-	long long s = *sum + addv;
-	if (s < min || s > max)
-		return 0;
-	*sum = s;
-	return 1;
-}
-
 static char *fmt_ull(unsigned long long v)
 {
 	char buf[32];
@@ -204,57 +189,259 @@ static char *fmt_ll(long long v)
 
 static int contains_operator(const char *input, size_t len)
 {
-	for (size_t i = 0; i < len; ++i) {
-		if (input[i] == '+') return 1;
+	for (size_t i = 0; i < len; ++i)
+	{
+		if (input[i] == '+')
+			return 1;
+		if (input[i] == '*')
+			return 1;
 		// treat '-' as operator only if not the very first char (to allow leading negative values)
-		if (input[i] == '-' && i > 0) return 1;
+		if (input[i] == '-' && i > 0)
+			return 1;
 	}
 	return 0;
 }
 
-static char *init_first_operand(int bits, int is_signed, int neg, unsigned long long mag, int *common_bits, int *common_signed, unsigned long long *u_sum, long long *s_sum)
+// Helper: reduce multiplication segments (respect precedence)
+static char *reduce_multiplications(int n, unsigned long long *u_vals, long long *s_vals, char *ops, int common_bits, int common_signed, int *out_n, unsigned long long **out_u, long long **out_s, char **out_ops)
 {
-	*common_bits = bits;
-	*common_signed = is_signed;
-	if (!is_signed)
-		*u_sum = mag;
-	else
-		*s_sum = neg ? -((long long)mag) : (long long)mag;
-	return NULL;
-}
-
-static char *apply_operand_op(int bits, int is_signed, int neg, unsigned long long mag, int common_bits, int common_signed, unsigned long long *u_sum, long long *s_sum, char op)
-{
-	if (bits != common_bits || is_signed != common_signed)
+	unsigned long long umax = 0ULL, sm = 0ULL, sp = 0ULL;
+	if (!compute_limits(common_bits, &umax, &sm, &sp))
 		return alloc_error();
+
+	unsigned long long *u_new = malloc(sizeof(unsigned long long) * n);
+	long long *s_new = malloc(sizeof(long long) * n);
+	char *ops_new = malloc(sizeof(char) * (n > 0 ? n - 1 : 0));
+	if (!u_new || !s_new || (n > 0 && !ops_new))
+	{
+		free(u_new);
+		free(s_new);
+		free(ops_new);
+		return alloc_error();
+	}
+
+	int idx = 0;
 	if (!common_signed)
 	{
-		if (op == '+') {
-			if (!accumulate_unsigned(u_sum, mag, common_bits)) return alloc_error();
-		} else if (op == '-') {
-			if (mag > *u_sum) return alloc_error();
-			*u_sum = *u_sum - mag;
-		} else return alloc_error();
+		unsigned long long cur = u_vals[0];
+		for (int i = 0; i < n - 1; ++i)
+		{
+			char op = ops[i];
+			if (op == '*')
+			{
+				unsigned long long rhs = u_vals[i + 1];
+				unsigned __int128 prod = (unsigned __int128)cur * (unsigned __int128)rhs;
+				if (prod > umax)
+				{
+					free(u_new);
+					free(s_new);
+					free(ops_new);
+					return alloc_error();
+				}
+				cur = (unsigned long long)prod;
+			}
+			else
+			{
+				u_new[idx++] = cur;
+				ops_new[idx - 1] = op;
+				cur = u_vals[i + 1];
+			}
+		}
+		u_new[idx++] = cur;
+		*out_n = idx;
+		*out_u = u_new;
+		*out_s = NULL;
+		*out_ops = ops_new;
+		return NULL;
 	}
-	else
+
+	long long cur = s_vals[0];
+	long long min = -((long long)sm), max = (long long)sp;
+	for (int i = 0; i < n - 1; ++i)
 	{
-		// For signed types we can treat operator '-' as adding the negated operand
-		int effective_neg = (op == '-') ? !neg : neg;
-		if (!accumulate_signed(s_sum, effective_neg, mag, common_bits)) return alloc_error();
+		char op = ops[i];
+		if (op == '*')
+		{
+			long long rhs = s_vals[i + 1];
+			__int128 prod = (__int128)cur * (__int128)rhs;
+			if (prod < min || prod > max)
+			{
+				free(u_new);
+				free(s_new);
+				free(ops_new);
+				return alloc_error();
+			}
+			cur = (long long)prod;
+		}
+		else
+		{
+			s_new[idx++] = cur;
+			ops_new[idx - 1] = op;
+			cur = s_vals[i + 1];
+		}
+	}
+	s_new[idx++] = cur;
+	*out_n = idx;
+	*out_u = NULL;
+	*out_s = s_new;
+	*out_ops = ops_new;
+	return NULL;
+}
+
+static char *evaluate_add_sub_unsigned(int n, unsigned long long *vals, char *ops, int bits)
+{
+	unsigned long long umax = 0ULL, sm = 0ULL, sp = 0ULL;
+	if (!compute_limits(bits, &umax, &sm, &sp))
+		return alloc_error();
+	unsigned long long acc = vals[0];
+	for (int i = 0; i < n - 1; ++i)
+	{
+		char op = ops[i];
+		unsigned long long v = vals[i + 1];
+		if (op == '+')
+		{
+			if (!accumulate_unsigned(&acc, v, bits))
+				return alloc_error();
+		}
+		else if (op == '-')
+		{
+			if (v > acc)
+				return alloc_error();
+			acc = acc - v;
+		}
+		else
+			return alloc_error();
+	}
+	return fmt_ull(acc);
+}
+
+static char *evaluate_add_sub_signed(int n, long long *vals, char *ops, int bits)
+{
+	unsigned long long umax = 0ULL, sm = 0ULL, sp = 0ULL;
+	if (!compute_limits(bits, &umax, &sm, &sp))
+		return alloc_error();
+	long long min = -((long long)sm), max = (long long)sp;
+	long long acc = vals[0];
+	for (int i = 0; i < n - 1; ++i)
+	{
+		char op = ops[i];
+		long long v = vals[i + 1];
+		long long addv = (op == '+') ? v : -v;
+		__int128 s = (__int128)acc + (__int128)addv;
+		if (s < min || s > max)
+			return alloc_error();
+		acc = (long long)s;
+	}
+	return fmt_ll(acc);
+}
+
+static int count_operators(const char *input, size_t len)
+{
+	int op_count = 0;
+	for (size_t i = 0; i < len; ++i)
+	{
+		if (input[i] == '+')
+			op_count++;
+		else if (input[i] == '*')
+			op_count++;
+		else if (input[i] == '-' && i > 0)
+			op_count++;
+	}
+	return op_count;
+}
+
+static void free_parse_buffers(unsigned long long *u_vals, long long *s_vals, int *bits, int *signedness, char *ops)
+{
+	free(u_vals);
+	free(s_vals);
+	free(bits);
+	free(signedness);
+	free(ops);
+}
+
+static char *alloc_parse_buffers(int n, unsigned long long **u_vals, long long **s_vals, int **bits, int **signedness, char **ops)
+{
+	*u_vals = malloc(sizeof(unsigned long long) * n);
+	*s_vals = malloc(sizeof(long long) * n);
+	*bits = malloc(sizeof(int) * n);
+	*signedness = malloc(sizeof(int) * n);
+	*ops = malloc(sizeof(char) * (n - 1));
+	if (!*u_vals || !*s_vals || !*bits || !*signedness || (n > 1 && !*ops))
+	{
+		free_parse_buffers(*u_vals, *s_vals, *bits, *signedness, *ops);
+		return alloc_error();
 	}
 	return NULL;
 }
 
-static char *process_one_operand(const char *input, size_t a, size_t b, int count, int *common_bits, int *common_signed, unsigned long long *u_sum, long long *s_sum, char op)
+static size_t find_next_operator(const char *input, size_t len, size_t start)
 {
-	int bits = 0, is_signed = 0, neg = 0;
-	unsigned long long mag = 0ULL;
-	if (!parse_operand(input + a, b - a, &bits, &is_signed, &neg, &mag))
-		return alloc_error();
+	size_t next = start;
+	while (next < len && !(input[next] == '+' || input[next] == '*' || (input[next] == '-' && next > start)))
+		next++;
+	return next;
+}
 
-	if (count == 0)
-		return init_first_operand(bits, is_signed, neg, mag, common_bits, common_signed, u_sum, s_sum);
-	return apply_operand_op(bits, is_signed, neg, mag, *common_bits, *common_signed, u_sum, s_sum, op);
+static char *trim_and_parse_operand(const char *input, size_t pos, size_t next, int *obits, int *osig, int *oneg, unsigned long long *omag)
+{
+	size_t a = pos, b = next;
+	while (a < b && input[a] == ' ')
+		a++;
+	while (b > a && input[b - 1] == ' ')
+		b--;
+	if (a >= b)
+		return alloc_error();
+	if (!parse_operand(input + a, b - a, obits, osig, oneg, omag))
+		return alloc_error();
+	return NULL;
+}
+
+static void store_operand(int idx, int obits, int osig, int oneg, unsigned long long omag, unsigned long long *u_vals, long long *s_vals, int *bits, int *signedness)
+{
+	bits[idx] = obits;
+	signedness[idx] = osig;
+	if (!osig)
+		u_vals[idx] = omag;
+	else
+		s_vals[idx] = oneg ? -((long long)omag) : (long long)omag;
+}
+
+static char *parse_all_operands(const char *input, size_t len, int n, unsigned long long *u_vals, long long *s_vals, int *bits, int *signedness, char *ops, int *out_count)
+{
+	size_t pos = 0;
+	int idx = 0;
+	while (pos < len && idx < n)
+	{
+		size_t next = find_next_operator(input, len, pos);
+		int obits = 0, osig = 0, oneg = 0;
+		unsigned long long omag = 0ULL;
+		char *err = trim_and_parse_operand(input, pos, next, &obits, &osig, &oneg, &omag);
+		if (err)
+			return err;
+
+		store_operand(idx, obits, osig, oneg, omag, u_vals, s_vals, bits, signedness);
+
+		if (next < len)
+		{
+			ops[idx] = input[next];
+			pos = next + 1;
+		}
+		else
+			pos = next;
+		idx++;
+	}
+	*out_count = idx;
+	return NULL;
+}
+
+static char *validate_homogeneous_types(int count, int *bits, int *signedness, int *out_bits, int *out_signed)
+{
+	*out_bits = bits[0];
+	*out_signed = signedness[0];
+	for (int i = 1; i < count; ++i)
+		if (bits[i] != *out_bits || signedness[i] != *out_signed)
+			return alloc_error();
+	return NULL;
 }
 
 static char *try_handle_addition(const char *input)
@@ -263,40 +450,60 @@ static char *try_handle_addition(const char *input)
 	if (!contains_operator(input, len))
 		return NULL;
 
-	size_t pos = 0;
+	int op_count = count_operators(input, len);
+	int n = op_count + 1;
+	if (n < 2)
+		return NULL;
+
+	unsigned long long *u_vals = NULL;
+	long long *s_vals = NULL;
+	int *bits = NULL;
+	int *signedness = NULL;
+	char *ops = NULL;
+	char *err = alloc_parse_buffers(n, &u_vals, &s_vals, &bits, &signedness, &ops);
+	if (err)
+		return err;
+
 	int count = 0;
-	int common_bits = 0, common_signed = 0;
-	unsigned long long u_sum = 0ULL;
-	long long s_sum = 0LL;
-	char prev_op = '+'; // first operand treated as if preceded by +
-	while (pos < len)
+	err = parse_all_operands(input, len, n, u_vals, s_vals, bits, signedness, ops, &count);
+	if (err)
 	{
-		size_t next = pos;
-		while (next < len && input[next] != '+' && input[next] != '-')
-			next++;
-		size_t a = pos, b = next;
-		while (a < b && input[a] == ' ')
-			a++;
-		while (b > a && input[b - 1] == ' ')
-			b--;
-		if (a >= b)
-			return alloc_error();
-
-		char *err = process_one_operand(input, a, b, count, &common_bits, &common_signed, &u_sum, &s_sum, prev_op);
-		if (err)
-			return err;
-
-		count++;
-		if (next < len) {
-			prev_op = input[next];
-			pos = next + 1;
-		} else pos = next;
+		free_parse_buffers(u_vals, s_vals, bits, signedness, ops);
+		return err;
 	}
 	if (count < 2)
+	{
+		free_parse_buffers(u_vals, s_vals, bits, signedness, ops);
 		return NULL;
+	}
+
+	int common_bits = 0, common_signed = 0;
+	err = validate_homogeneous_types(count, bits, signedness, &common_bits, &common_signed);
+	if (err)
+	{
+		free_parse_buffers(u_vals, s_vals, bits, signedness, ops);
+		return err;
+	}
+
+	int reduced_n = 0;
+	unsigned long long *u_reduced = NULL;
+	long long *s_reduced = NULL;
+	char *ops_reduced = NULL;
+	err = reduce_multiplications(count, u_vals, s_vals, ops, common_bits, common_signed, &reduced_n, &u_reduced, &s_reduced, &ops_reduced);
+	free_parse_buffers(u_vals, s_vals, bits, signedness, ops);
+	if (err)
+		return err;
+
+	char *out = NULL;
 	if (!common_signed)
-		return fmt_ull(u_sum);
-	return fmt_ll(s_sum);
+		out = evaluate_add_sub_unsigned(reduced_n, u_reduced, ops_reduced, common_bits);
+	else
+		out = evaluate_add_sub_signed(reduced_n, s_reduced, ops_reduced, common_bits);
+
+	free(u_reduced);
+	free(s_reduced);
+	free(ops_reduced);
+	return out;
 }
 
 static char *process_integer_input(const char *input)
