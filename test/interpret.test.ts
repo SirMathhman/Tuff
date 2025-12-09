@@ -109,3 +109,7 @@ it("interpret throws when letting without type then assigning to different decla
 it("interpret throws when Bool variable passed to different numeric declared type", () => {
   expect(() => interpret("let x : Bool = true; let y : I8 = x;")).toThrow();
 });
+
+it("interpret throws when Bool=false variable passed to different numeric declared type", () => {
+  expect(() => interpret("let x : Bool = false; let y : I8 = x;")).toThrow();
+});
