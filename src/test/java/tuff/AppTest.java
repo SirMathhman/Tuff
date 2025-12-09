@@ -71,6 +71,11 @@ class AppTest {
 	}
 
 	@Test
+	void interpretU8AdditionOverflow() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("1U8 + 255U8"));
+	}
+
+	@Test
 	void interpretThrowsForNegativeU8() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("-1U8 "));
 	}

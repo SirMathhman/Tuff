@@ -93,13 +93,17 @@ public final class App {
 	}
 
 	/**
-	 * Evaluate simple binary expressions with + operator where both operands have the same type suffix (e.g. U8)
-	 * Returns the normalized numeric result as a string or null if input is not a binary expression we support.
+	 * Evaluate simple binary expressions with + operator where both operands have
+	 * the same type suffix (e.g. U8)
+	 * Returns the normalized numeric result as a string or null if input is not a
+	 * binary expression we support.
 	 */
 	private static String evaluateBinaryExpression(String input) {
-		java.util.regex.Pattern expr = java.util.regex.Pattern.compile("^\\s*([+-]?\\d+[A-Za-z0-9]*?)\\s*\\+\\s*([+-]?\\d+[A-Za-z0-9]*?)\\s*$");
+		java.util.regex.Pattern expr = java.util.regex.Pattern
+				.compile("^\\s*([+-]?\\d+[A-Za-z0-9]*?)\\s*\\+\\s*([+-]?\\d+[A-Za-z0-9]*?)\\s*$");
 		java.util.regex.Matcher mm = expr.matcher(input);
-		if (!mm.find()) return null;
+		if (!mm.find())
+			return null;
 
 		String left = mm.group(1);
 		String right = mm.group(2);
@@ -108,7 +112,8 @@ public final class App {
 		java.util.regex.Pattern p = java.util.regex.Pattern.compile("^([+-]?\\d+)(.*)$");
 		java.util.regex.Matcher lm = p.matcher(left);
 		java.util.regex.Matcher rm = p.matcher(right);
-		if (!lm.find() || !rm.find()) return null;
+		if (!lm.find() || !rm.find())
+			return null;
 
 		String ld = lm.group(1);
 		String lr = lm.group(2).trim();
@@ -118,7 +123,8 @@ public final class App {
 		String ltoken = extractToken(lr);
 		String rtoken = extractToken(rr);
 		// require tokens to match (same type) for now
-		if (ltoken.isEmpty() || !ltoken.equals(rtoken)) return null;
+		if (ltoken.isEmpty() || !ltoken.equals(rtoken))
+			return null;
 
 		// validate operands
 		validateTokenRange(ltoken, ld);
