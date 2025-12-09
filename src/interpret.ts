@@ -39,33 +39,48 @@ export function interpret(input: string): string {
 
   // Addition expression with one or more '+' tokens between operands,
   // e.g. "1U8 + 2U8 + 3U8". Avoid treating unary + as an expression.
-  const exprPattern = /^([+-]?\d+\s*[a-zA-Z0-9]+)(\s*\+\s*[+-]?\d+\s*[a-zA-Z0-9]+)+$/
+  const exprPattern =
+    /^([+-]?\d+\s*[a-zA-Z0-9]+)(\s*\+\s*[+-]?\d+\s*[a-zA-Z0-9]+)+$/;
   if (exprPattern.test(s)) {
-    const parts = s.split('+').map((p) => p.trim()).filter(Boolean)
-    if (parts.length < 2) throw new Error('interpret: invalid expression')
+    const parts = s
+      .split("+")
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (parts.length < 2) throw new Error("interpret: invalid expression");
 
-    const nums: string[] = []
-    const suffixes: string[] = []
+    const nums: string[] = [];
+    const suffixes: string[] = [];
     for (const part of parts) {
-      const mm = part.match(/^([+-]?\d+)\s*([a-zA-Z0-9]+)$/)
-      if (!mm) throw new Error('interpret: invalid operand in expression')
-      nums.push(mm[1])
-      suffixes.push(mm[2])
+      const mm = part.match(/^([+-]?\d+)\s*([a-zA-Z0-9]+)$/);
+      if (!mm) throw new Error("interpret: invalid operand in expression");
+      nums.push(mm[1]);
+      suffixes.push(mm[2]);
     }
 
     // All suffixes must match and be supported
-    const firstSuffix = suffixes[0]
-    if (!suffixRe.test(firstSuffix)) throw new Error('interpret: mismatched or unsupported suffixes in expression')
-    if (!suffixes.every((suf) => suf.toLowerCase() === firstSuffix.toLowerCase())) throw new Error('interpret: mismatched or unsupported suffixes in expression')
+    const firstSuffix = suffixes[0];
+    if (!suffixRe.test(firstSuffix))
+      throw new Error(
+        "interpret: mismatched or unsupported suffixes in expression"
+      );
+    if (
+      !suffixes.every((suf) => suf.toLowerCase() === firstSuffix.toLowerCase())
+    )
+      throw new Error(
+        "interpret: mismatched or unsupported suffixes in expression"
+      );
 
-    const parsed = parseSuffix(firstSuffix)
-    if (!parsed) throw new Error('interpret: mismatched or unsupported suffixes in expression')
-    const { kind, bits } = parsed
+    const parsed = parseSuffix(firstSuffix);
+    if (!parsed)
+      throw new Error(
+        "interpret: mismatched or unsupported suffixes in expression"
+      );
+    const { kind, bits } = parsed;
 
-    let sum = 0n
-    for (const n of nums) sum += BigInt(n)
-    checkRange(kind, bits, sum, firstSuffix)
-    return sum.toString()
+    let sum = 0n;
+    for (const n of nums) sum += BigInt(n);
+    checkRange(kind, bits, sum, firstSuffix);
+    return sum.toString();
   }
 
   const m = s.match(/^([+-]?\d+)\s*([a-zA-Z0-9]+)$/);
