@@ -125,6 +125,10 @@ void test_interpret_addition_u8(void)
 	char *overflow = interpret("200U8 + 100U8");
 	TEST_ASSERT_EQUAL_STRING("Error", overflow);
 	free(overflow);
+
+	char *overflow2 = interpret("100U8 + 200U8");
+	TEST_ASSERT_EQUAL_STRING("Error", overflow2);
+	free(overflow2);
 }
 
 int main(void)
