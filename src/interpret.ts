@@ -1,28 +1,46 @@
-function parseSuffix(suffix: string): { kind: 'u' | 'i'; bits: number } | null {
+function parseSuffix(suffix: string): { kind: "u" | "i"; bits: number } | null {
   const t = suffix.toLowerCase();
   if (!/^[ui](8|16|32|64)$/.test(t)) return null;
-  const kind = t[0] as 'u' | 'i';
+  const kind = t[0] as "u" | "i";
   const bits = Number(t.slice(1));
   return { kind, bits };
 }
 
-function checkRange(kind: 'u' | 'i', bits: number, value: bigint, suffix: string) {
+function checkRange(
+  kind: "u" | "i",
+  bits: number,
+  value: bigint,
+  suffix: string
+) {
   if (isNaN(bits) || bits <= 0) return;
-  if (kind === 'u') {
+  if (kind === "u") {
     const max = (1n << BigInt(bits)) - 1n;
-    if (value > max) throw new Error(`interpret: unsigned overflow for ${suffix}`);
+    if (value > max)
+      throw new Error(`interpret: unsigned overflow for ${suffix}`);
   } else {
     const max = (1n << BigInt(bits - 1)) - 1n;
     const min = -(1n << BigInt(bits - 1));
-    if (value > max || value < min) throw new Error(`interpret: signed overflow for ${suffix}`);
+    if (value > max || value < min)
+      throw new Error(`interpret: signed overflow for ${suffix}`);
   }
 }
 
-function addSuffixed(n1: string, suf1: string, n2: string, suf2: string): string {
-  if (suf1.toLowerCase() !== suf2.toLowerCase()) throw new Error('interpret: mismatched or unsupported suffixes in expression');
+function addSuffixed(
+  n1: string,
+  suf1: string,
+  n2: string,
+  suf2: string
+): string {
+  if (suf1.toLowerCase() !== suf2.toLowerCase())
+    throw new Error(
+      "interpret: mismatched or unsupported suffixes in expression"
+    );
   const suffix = suf1;
   const parsed = parseSuffix(suffix);
-  if (!parsed) throw new Error('interpret: mismatched or unsupported suffixes in expression');
+  if (!parsed)
+    throw new Error(
+      "interpret: mismatched or unsupported suffixes in expression"
+    );
   const { kind, bits } = parsed;
   const sum = BigInt(n1) + BigInt(n2);
   checkRange(kind, bits, sum, suffix);
@@ -57,7 +75,7 @@ export function interpret(input: string): string {
     }
 
     const parsed = parseSuffix(suffix);
-    if (!parsed) throw new Error('interpret: unsupported or invalid suffix');
+    if (!parsed) throw new Error("interpret: unsupported or invalid suffix");
     const { kind, bits } = parsed;
     checkRange(kind, bits, BigInt(num), suffix);
 
