@@ -97,3 +97,7 @@ it("interpret throws on redeclaration in same scope", () => {
 it("interpret throws when declared type doesn't match RHS suffix", () => {
   expect(() => interpret("let x : U8 = 60I8;")).toThrow();
 });
+
+it("interpret throws when assigning variable with mismatched suffix to different declared type", () => {
+  expect(() => interpret("let x : U8 = 60U8; let y : I8 = x;")).toThrow();
+});

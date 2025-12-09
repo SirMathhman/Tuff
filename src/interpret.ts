@@ -244,7 +244,9 @@ function executeStatements(
       }
       // ensure RHS suffix matches declared type exactly (case-insensitive)
       if (r.suffix.toLowerCase() !== declared.toLowerCase()) {
-        throw new Error(`interpret: declared type ${declared} does not match RHS type ${r.suffix}`);
+        throw new Error(
+          `interpret: declared type ${declared} does not match RHS type ${r.suffix}`
+        );
       }
       // ensure value fits declared type
       const pd = parseSuffix(declared);
