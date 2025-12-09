@@ -83,9 +83,9 @@ it("interpret supports nested let inside a block (scoped)", () => {
 });
 
 it("interpret returns empty string for standalone let statements", () => {
-  expect(interpret("let x : U8 = 100;")).toBe("");
+  expect(interpret("let x : U8 = 100U8;")).toBe("");
 });
 
 it("interpret throws on redeclaration in same scope", () => {
-  expect(() => interpret("let x : U8 = 100; let x : U8 = 200;")).toThrow();
+  expect(() => interpret("let x : U8 = 100U8; let x : U8 = 200U8;")).toThrow();
 });
