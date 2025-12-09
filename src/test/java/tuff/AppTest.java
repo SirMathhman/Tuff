@@ -161,6 +161,12 @@ class AppTest {
 	}
 
 	@Test
+	void interpretLetVariableTypeMismatchThrows() {
+		assertThrows(IllegalArgumentException.class,
+				() -> App.interpret("let x = 200U16; let y : U8 = x;"));
+	}
+
+	@Test
 	void interpretThrowsForNegativeU8() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("-1U8 "));
 	}
