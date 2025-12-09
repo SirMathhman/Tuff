@@ -8,7 +8,7 @@ Build and run tests (PowerShell):
 .\scripts\build_and_test.ps1    # uses clang or gcc if available
 ```
 
-Or on *nix / CI runners:
+Or on \*nix / CI runners:
 
 ```sh
 ./scripts/run_tests.sh          # uses $CC or clang/gcc
@@ -30,6 +30,7 @@ Check cyclomatic complexity (maximum 15 per function):
 
 This repository also includes a pre-commit hook that runs:
 
+- **Build & tests** to block commits if compilation or tests fail
 - PMD CPD to block commits if duplicated code (>=60 tokens) is found
 - Cyclomatic complexity checks to block commits if any function exceeds complexity 15
 
