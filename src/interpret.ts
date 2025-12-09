@@ -114,6 +114,16 @@ function parseOperandToken(
   const p = parseParenthesizedValue(str, env);
   if (p) return { value: p.value, suffix: p.suffix, consumed: p.length };
 
+  // boolean literals
+  const boolMatch = str.match(/^\s*(true|false)\s*/i);
+  if (boolMatch) {
+    return {
+      value: boolMatch[1].toLowerCase(),
+      suffix: "Bool",
+      consumed: boolMatch[0].length,
+    };
+  }
+
   // identifier / variable lookup
   const idm = str.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*/);
   if (idm) {
@@ -141,7 +151,7 @@ function tryParseExpr(inputStr: string, env?: Env) {
   nums.push(firstTok.value);
   const firstSuffix = firstTok.suffix;
   rest = rest.slice(firstTok.consumed).trimStart();
-  const opRe = /^([+\-*])\s*/;
+  const opRe = /^(==|[+\-*])\s*/;
   while (rest.length > 0) {
     const mo = rest.match(opRe);
     if (!mo) return null;
@@ -161,6 +171,64 @@ function tryParseExpr(inputStr: string, env?: Env) {
   };
 }
 
+function evaluateComparison(
+  nums: string[],
+  ops: string[],
+  suffix: string
+): { value: boolean; suffix: string } {
+  if (ops.length !== 1 || ops[0] !== "==") {
+    throw new Error("interpret: complex comparisons not yet supported");
+  }
+
+  if (suffix.toLowerCase() === "bool") {
+    const left = nums[0].toLowerCase() === "true";
+    const right = nums[1].toLowerCase() === "true";
+    return { value: left === right, suffix: "Bool" };
+  }
+
+  const parsed = parseSuffix(suffix);
+  if (!parsed) {
+    throw new Error("interpret: mismatched or unsupported suffixes in expression");
+  }
+  const left = BigInt(nums[0]);
+  const right = BigInt(nums[1]);
+  return { value: left === right, suffix: "Bool" };
+}
+
+function evaluateArithmetic(
+  nums: string[],
+  ops: string[],
+  suffix: string
+): { value: bigint; suffix: string } {
+  const parsed = parseSuffix(suffix);
+  if (!parsed)
+    throw new Error(
+      "interpret: mismatched or unsupported suffixes in expression"
+    );
+  const { kind, bits } = parsed;
+  let nnums: bigint[] = nums.map((x) => BigInt(x));
+  let nops: string[] = [...ops];
+  for (let i = 0; i < nops.length; ) {
+    if (nops[i] === "*") {
+      const prod = nnums[i] * nnums[i + 1];
+      nnums.splice(i, 2, prod);
+      nops.splice(i, 1);
+    } else {
+      i++;
+    }
+  }
+  let acc = nnums[0];
+  for (let i = 0; i < nops.length; i++) {
+    const op = nops[i];
+    const n = nnums[i + 1];
+    if (op === "+") acc = acc + n;
+    else if (op === "-") acc = acc - n;
+    else throw new Error("interpret: unsupported operator");
+  }
+  checkRange(kind, bits, acc, suffix);
+  return { value: acc, suffix };
+}
+
 function evaluateValueAndSuffix(
   inputStr: string,
   env?: Env
@@ -168,33 +236,10 @@ function evaluateValueAndSuffix(
   const ep = tryParseExpr(inputStr, env as Env);
   if (ep) {
     const { nums, ops, suffix } = ep;
-    const parsed = parseSuffix(suffix);
-    if (!parsed)
-      throw new Error(
-        "interpret: mismatched or unsupported suffixes in expression"
-      );
-    const { kind, bits } = parsed;
-    let nnums: bigint[] = nums.map((x) => BigInt(x));
-    let nops: string[] = [...ops];
-    for (let i = 0; i < nops.length; ) {
-      if (nops[i] === "*") {
-        const prod = nnums[i] * nnums[i + 1];
-        nnums.splice(i, 2, prod);
-        nops.splice(i, 1);
-      } else {
-        i++;
-      }
+    if (ops.includes("==")) {
+      return evaluateComparison(nums, ops, suffix);
     }
-    let acc = nnums[0];
-    for (let i = 0; i < nops.length; i++) {
-      const op = nops[i];
-      const n = nnums[i + 1];
-      if (op === "+") acc = acc + n;
-      else if (op === "-") acc = acc - n;
-      else throw new Error("interpret: unsupported operator");
-    }
-    checkRange(kind, bits, acc, suffix);
-    return { value: acc, suffix };
+    return evaluateArithmetic(nums, ops, suffix);
   }
 
   // single number with suffix

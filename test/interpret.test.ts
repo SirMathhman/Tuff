@@ -133,3 +133,12 @@ it("interpret throws when assigning mismatched suffix to mut variable", () => {
 it("interpret allows assigning I32 to untyped mut variable", () => {
   expect(interpret("let mut x = 100; x = 50I32;")).toBe("");
 });
+
+it("interpret handles equality comparisons returning Bool", () => {
+  expect(interpret("50U8 == 100U8")).toBe("false");
+  expect(interpret("100U8 == 100U8")).toBe("true");
+  expect(interpret("50I32 == 50I32")).toBe("true");
+  expect(interpret("true == true")).toBe("true");
+  expect(interpret("true == false")).toBe("false");
+  expect(interpret("false == false")).toBe("true");
+});
