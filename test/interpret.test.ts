@@ -121,3 +121,7 @@ it("interpret throws for plain assignment statements (reassignment not supported
 it("interpret allows assigning to mut variable and returns empty string for top-level mut assignment", () => {
   expect(interpret("let mut x = 100; x = 200;")).toBe("");
 });
+
+it("interpret returns updated value after mut assignment when referenced", () => {
+  expect(interpret("let mut x = 100; x = 200; x")).toBe("200");
+});
