@@ -64,6 +64,10 @@ it("interpret throws for non-integer strings", () => {
   expect(() => interpret("hello")).toThrow();
 });
 
+it("interpret throws when mixing suffix kinds in expression", () => {
+  expect(() => interpret("10U8 + 20I8")).toThrow();
+});
+
 it("interpret supports let declarations and variables", () => {
   expect(interpret("let x : U8 = { 4U8 + 2U8 } * 3U8; x")).toBe("18");
 });
