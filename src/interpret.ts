@@ -1,3 +1,25 @@
+type Env = {
+  map: Map<string, { value: bigint; suffix: string }>;
+  parent?: Env;
+};
+
+function makeEnv(parent?: Env): Env {
+  return { map: new Map<string, { value: bigint; suffix: string }>(), parent };
+}
+
+function lookupEnv(env: Env | undefined, name: string) {
+  let cur = env;
+  while (cur) {
+    if (cur.map.has(name)) return cur.map.get(name);
+    cur = cur.parent;
+  }
+  return undefined;
+}
+
+function isDeclaredInCurrentScope(env: Env | undefined, name: string) {
+  return !!env && env.map.has(name);
+}
+
 function parseSuffix(suffix: string): { kind: "u" | "i"; bits: number } | null {
   const t = suffix.toLowerCase();
   if (!/^[ui](8|16|32|64)$/.test(t)) return null;
@@ -29,7 +51,7 @@ function checkRange(
 
 function parseParenthesizedValue(
   str: string,
-  env?: Map<string, { value: bigint; suffix: string }>
+  env?: Env
 ): { value: string; suffix: string; length: number } | null {
   if (!(str.startsWith("(") || str.startsWith("{"))) return null;
   const open = str[0];
@@ -54,7 +76,7 @@ function parseParenthesizedValue(
   const varSufMatches: string[] = [];
   if (env) {
     for (const id of idMatches) {
-      const v = env.get(id);
+      const v = lookupEnv(env, id);
       if (v) varSufMatches.push(v.suffix);
     }
   }
@@ -64,16 +86,14 @@ function parseParenthesizedValue(
   if (!allSufs.every((x) => x.toLowerCase() === sfx.toLowerCase())) return null;
   // Evaluate the inner block in a child scope cloned from env so inner `let`
   // declarations don't leak into the outer environment.
-  const childEnv = env
-    ? new Map(env)
-    : new Map<string, { value: bigint; suffix: string }>();
+  const childEnv = makeEnv(env);
   const val = interpret(inner, childEnv);
   return { value: val, suffix: sfx, length: i + 1 };
 }
 
 function parseOperandToken(
   str: string,
-  env?: Map<string, { value: bigint; suffix: string }>
+  env?: Env
 ): { value: string; suffix: string; consumed: number } | null {
   // parenthesized value first
   const p = parseParenthesizedValue(str, env);
@@ -83,8 +103,8 @@ function parseOperandToken(
   const idm = str.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*/);
   if (idm) {
     const name = idm[1];
-    if (env && env.has(name)) {
-      const v = env.get(name)!;
+    const v = lookupEnv(env, name);
+    if (v) {
       return {
         value: v.value.toString(),
         suffix: v.suffix,
@@ -97,10 +117,7 @@ function parseOperandToken(
   return { value: mm[1], suffix: mm[2], consumed: mm[0].length };
 }
 
-function tryParseExpr(
-  inputStr: string,
-  env?: Map<string, { value: bigint; suffix: string }>
-) {
+function tryParseExpr(inputStr: string, env?: Env) {
   const nums: string[] = [];
   const ops: string[] = [];
   let rest = inputStr;
@@ -133,7 +150,7 @@ function evaluateValueAndSuffix(
   inputStr: string,
   env?: Map<string, { value: bigint; suffix: string }>
 ): { value: bigint; suffix: string } {
-  const ep = tryParseExpr(inputStr, env);
+  const ep = tryParseExpr(inputStr, env as Env);
   if (ep) {
     const { nums, ops, suffix } = ep;
     const parsed = parseSuffix(suffix);
@@ -184,9 +201,8 @@ function evaluateValueAndSuffix(
   const idOnly = inputStr.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)$/);
   if (idOnly) {
     const name = idOnly[1];
-    if (!env || !env.has(name))
-      throw new Error(`interpret: unknown identifier ${name}`);
-    const v = env.get(name)!;
+    const v = lookupEnv(env, name);
+    if (!v) throw new Error(`interpret: unknown identifier ${name}`);
     return { value: v.value, suffix: v.suffix };
   }
 
@@ -195,7 +211,7 @@ function evaluateValueAndSuffix(
 
 function executeStatements(
   parts: string[],
-  env: Map<string, { value: bigint; suffix: string }>,
+  env: Env,
   suffixRe: RegExp
 ): string | null {
   let lastVal: string | null = null;
@@ -208,6 +224,10 @@ function executeStatements(
     );
     if (letMatch) {
       const name = letMatch[1];
+      // redeclaration in the current scope is an error
+      if (isDeclaredInCurrentScope(env, name)) {
+        throw new Error(`interpret: redeclaration of ${name}`);
+      }
       const declared = letMatch[2];
       const rhs = letMatch[3];
       let r;
@@ -226,7 +246,7 @@ function executeStatements(
       const pd = parseSuffix(declared);
       if (!pd) throw new Error("interpret: invalid declared suffix");
       checkRange(pd.kind, pd.bits, r.value, declared);
-      env.set(name, { value: r.value, suffix: declared });
+      env.map.set(name, { value: r.value, suffix: declared });
       lastVal = r.value.toString();
       lastWasLet = true;
       continue;
@@ -255,10 +275,7 @@ function executeStatements(
   return lastVal;
 }
 
-export function interpret(
-  input: string,
-  envIn?: Map<string, { value: bigint; suffix: string }>
-): string {
+export function interpret(input: string, envIn?: Env): string {
   // Simple interpreter: accept integer strings and return them unchanged (trimmed).
   // Examples: "100" => "100"
   const s = input.trim();
@@ -270,7 +287,7 @@ export function interpret(
 
   // Try parse an n-ary expression of operands separated by + or -
   // environment of variables for this interpret invocation (may be shared by callers)
-  const env = envIn ?? new Map<string, { value: bigint; suffix: string }>();
+  const env = envIn ?? makeEnv();
 
   // Top-level statement handling: support semicolon-separated statements and let declarations
   const parts = splitTopLevelStatements(s);
