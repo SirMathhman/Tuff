@@ -64,7 +64,9 @@ function parseParenthesizedValue(
   if (!allSufs.every((x) => x.toLowerCase() === sfx.toLowerCase())) return null;
   // Evaluate the inner block in a child scope cloned from env so inner `let`
   // declarations don't leak into the outer environment.
-  const childEnv = env ? new Map(env) : new Map<string, { value: bigint; suffix: string }>();
+  const childEnv = env
+    ? new Map(env)
+    : new Map<string, { value: bigint; suffix: string }>();
   const val = interpret(inner, childEnv);
   return { value: val, suffix: sfx, length: i + 1 };
 }
@@ -198,6 +200,7 @@ function executeStatements(
 ): string | null {
   let lastVal: string | null = null;
 
+  let lastWasLet = false;
   for (const stmt of parts) {
     // let <ident> : <Type> = <expr>
     const letMatch = stmt.match(
@@ -207,13 +210,25 @@ function executeStatements(
       const name = letMatch[1];
       const declared = letMatch[2];
       const rhs = letMatch[3];
-      const r = evaluateValueAndSuffix(rhs, env);
+      let r;
+      // allow a bare integer literal on the RHS when assigning to a declared type
+      const bare = rhs.trim().match(/^([+-]?\d+)$/);
+      if (bare) {
+        const v = BigInt(bare[1]);
+        const pd = parseSuffix(declared);
+        if (!pd) throw new Error("interpret: invalid declared suffix");
+        checkRange(pd.kind, pd.bits, v, declared);
+        r = { value: v, suffix: declared };
+      } else {
+        r = evaluateValueAndSuffix(rhs, env);
+      }
       // ensure value fits declared type
       const pd = parseSuffix(declared);
       if (!pd) throw new Error("interpret: invalid declared suffix");
       checkRange(pd.kind, pd.bits, r.value, declared);
       env.set(name, { value: r.value, suffix: declared });
       lastVal = r.value.toString();
+      lastWasLet = true;
       continue;
     }
 
@@ -233,8 +248,10 @@ function executeStatements(
     }
     const r2 = evaluateValueAndSuffix(stmt, env);
     lastVal = r2.value.toString();
+    lastWasLet = false;
   }
 
+  if (lastWasLet) return "";
   return lastVal;
 }
 
@@ -305,7 +322,10 @@ export function interpret(
       const ch = src[i];
       if ((ch === "(" || ch === "{") && !(i > 0 && src[i - 1] === "\\")) {
         depth++;
-      } else if ((ch === ")" || ch === "}") && !(i > 0 && src[i - 1] === "\\")) {
+      } else if (
+        (ch === ")" || ch === "}") &&
+        !(i > 0 && src[i - 1] === "\\")
+      ) {
         if (depth > 0) depth--;
       }
       if (ch === ";" && depth === 0) {

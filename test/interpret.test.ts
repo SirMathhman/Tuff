@@ -81,3 +81,7 @@ it("interpret supports nested let inside a block (scoped)", () => {
     )
   ).toBe("18");
 });
+
+it("interpret returns empty string for standalone let statements", () => {
+  expect(interpret("let x : U8 = 100;")).toBe("");
+});
