@@ -16,6 +16,15 @@ PowerShell (preferred):
 .\scripts\check_duplicates.ps1 -MinTokens 60 -Dir src/
 ```
 
-This repository also includes a pre-commit hook that runs PMD CPD to block commits if duplicated code (>=60 tokens) is found.
+Check cyclomatic complexity (maximum 15 per function):
+
+```powershell
+.\scripts\check_complexity.ps1 -MaxComplexity 15 -Dir src/
+```
+
+This repository also includes a pre-commit hook that runs:
+
+- PMD CPD to block commits if duplicated code (>=60 tokens) is found
+- Cyclomatic complexity checks to block commits if any function exceeds complexity 15
 
 Preferred: PowerShell-only tooling where possible on this repo.
