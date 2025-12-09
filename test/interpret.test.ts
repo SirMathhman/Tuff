@@ -34,7 +34,9 @@ it("interpret handles multiplication with precedence", () => {
   expect(interpret("2U8 + 3U8 * 4U8")).toBe("14");
   expect(interpret("2U8 * 3U8 * 4U8")).toBe("24");
   expect(() => interpret("200U8 * 2U8")).toThrow();
-    expect(interpret("4U8 + 2U8 * 3U8")).toBe("10");
+  expect(interpret("4U8 + 2U8 * 3U8")).toBe("10");
+  // parentheses
+  expect(interpret("(4U8 + 2U8) * 3U8")).toBe("18");
 });
 
 it("interpret enforces signed I8 boundaries", () => {

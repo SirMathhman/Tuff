@@ -39,21 +39,48 @@ export function interpret(input: string): string {
 
   // Try parse an n-ary expression of operands separated by + or -
   const tryParseExpr = (inputStr: string) => {
-    const exprPattern =
-      /^([+-]?\d+\s*[a-zA-Z0-9]+)(?:\s*[-+*]\s*[+-]?\d+\s*[a-zA-Z0-9]+)+$/;
-    if (!exprPattern.test(inputStr))
-      return null as null | { nums: string[]; ops: string[]; suffix: string };
+    // We attempt to tokenise and parse expressions (operands can be numbers
+    // with suffixes or parenthesized sub-expressions). If parsing fails,
+    // return null so the caller can handle single-value cases.
 
     // Tokenize operands and operators sequentially
     const nums: string[] = [];
     const ops: string[] = [];
     let rest = inputStr;
     const firstRe = /^\s*([+-]?\d+)\s*([a-zA-Z0-9]+)\s*/;
+    let firstSuffix = "";
     const m0 = rest.match(firstRe);
-    if (!m0) return null;
-    nums.push(m0[1]);
-    const firstSuffix = m0[2];
-    rest = rest.slice(m0[0].length);
+    if (rest.startsWith("(")) {
+      // find matching closing parenthesis for first operand
+      let depth = 0;
+      let i = 0;
+      for (; i < rest.length; i++) {
+        const ch = rest[i];
+        if (ch === "(") depth++;
+        else if (ch === ")") {
+          depth--;
+          if (depth === 0) break;
+        }
+      }
+      if (i >= rest.length) return null;
+      const inner = rest.slice(1, i);
+      const sufMatches = Array.from(
+        inner.matchAll(/[uUiI](?:8|16|32|64)/g)
+      ).map((m) => m[0]);
+      if (sufMatches.length === 0) return null;
+      const sfx = sufMatches[0];
+      if (!sufMatches.every((x) => x.toLowerCase() === sfx.toLowerCase()))
+        return null;
+      const innerVal = interpret(inner);
+      nums.push(innerVal);
+      firstSuffix = sfx;
+      rest = rest.slice(i + 1).trimStart();
+    } else {
+      if (!m0) return null;
+      nums.push(m0[1]);
+      firstSuffix = m0[2];
+      rest = rest.slice(m0[0].length);
+    }
     const opRe = /^([+\-*])\s*/;
     const operandRe = /^([+-]?\d+)\s*([a-zA-Z0-9]+)\s*/;
     while (rest.length > 0) {
@@ -61,12 +88,43 @@ export function interpret(input: string): string {
       if (!mo) return null;
       ops.push(mo[1]);
       rest = rest.slice(mo[0].length);
-      const mm = rest.match(operandRe);
-      if (!mm) return null;
-      nums.push(mm[1]);
-      if (mm[2].toLowerCase() !== firstSuffix.toLowerCase()) return null;
-      rest = rest.slice(mm[0].length);
+      // operand can be a parenthesized sub-expression or a direct operand
+      if (rest.startsWith("(")) {
+        // find matching closing parenthesis
+        let depth = 0;
+        let i = 0;
+        for (; i < rest.length; i++) {
+          const ch = rest[i];
+          if (ch === "(") depth++;
+          else if (ch === ")") {
+            depth--;
+            if (depth === 0) break;
+          }
+        }
+        if (i >= rest.length) return null;
+        const inner = rest.slice(1, i);
+        // Derive suffix from inner expression (all suffixes must match)
+        const sufMatches = Array.from(
+          inner.matchAll(/[uUiI](?:8|16|32|64)/g)
+        ).map((m) => m[0]);
+        if (sufMatches.length === 0) return null;
+        const sfx = sufMatches[0];
+        if (!sufMatches.every((x) => x.toLowerCase() === sfx.toLowerCase()))
+          return null;
+        // evaluate inner expression recursively
+        const innerVal = interpret(inner);
+        nums.push(innerVal);
+        if (sfx.toLowerCase() !== firstSuffix.toLowerCase()) return null;
+        rest = rest.slice(i + 1).trimStart();
+      } else {
+        const mm = rest.match(operandRe);
+        if (!mm) return null;
+        nums.push(mm[1]);
+        if (mm[2].toLowerCase() !== firstSuffix.toLowerCase()) return null;
+        rest = rest.slice(mm[0].length);
+      }
     }
+    if (nums.length < 2) return null
     return { nums, ops, suffix: firstSuffix } as {
       nums: string[];
       ops: string[];
@@ -85,26 +143,26 @@ export function interpret(input: string): string {
     const { kind, bits } = parsed;
     // Evaluate * before + and - (left-associative)
     // First, apply all multiplications
-    let nnums: bigint[] = nums.map((x) => BigInt(x))
-    let nops: string[] = [...ops]
+    let nnums: bigint[] = nums.map((x) => BigInt(x));
+    let nops: string[] = [...ops];
     for (let i = 0; i < nops.length; ) {
-      if (nops[i] === '*') {
-        const prod = nnums[i] * nnums[i + 1]
-        nnums.splice(i, 2, prod)
-        nops.splice(i, 1)
+      if (nops[i] === "*") {
+        const prod = nnums[i] * nnums[i + 1];
+        nnums.splice(i, 2, prod);
+        nops.splice(i, 1);
       } else {
-        i++
+        i++;
       }
     }
 
     // Then evaluate + and - left-to-right
-    let acc = nnums[0]
+    let acc = nnums[0];
     for (let i = 0; i < nops.length; i++) {
-      const op = nops[i]
-      const n = nnums[i + 1]
-      if (op === '+') acc = acc + n
-      else if (op === '-') acc = acc - n
-      else throw new Error('interpret: unsupported operator')
+      const op = nops[i];
+      const n = nnums[i + 1];
+      if (op === "+") acc = acc + n;
+      else if (op === "-") acc = acc - n;
+      else throw new Error("interpret: unsupported operator");
     }
     checkRange(kind, bits, acc, suffix);
     return acc.toString();
