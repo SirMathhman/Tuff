@@ -129,6 +129,10 @@ void test_interpret_addition_u8(void)
 	char *overflow2 = interpret("100U8 + 200U8");
 	TEST_ASSERT_EQUAL_STRING("Error", overflow2);
 	free(overflow2);
+
+	char *mismatch = interpret("100U8 + 50I16");
+	TEST_ASSERT_EQUAL_STRING("Error", mismatch);
+	free(mismatch);
 }
 
 int main(void)

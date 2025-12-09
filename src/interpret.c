@@ -230,7 +230,7 @@ static int find_operands_around_plus(const char *input, size_t inlen, size_t *ls
 		re--;
 
 	if (ls >= le || rs >= re)
-		return 0;
+		return -1; // plus found but operands malformed
 	*lstart = ls;
 	*lend = le;
 	*rstart = rs;
@@ -368,8 +368,11 @@ static char *try_handle_addition(const char *input)
 {
 	size_t inlen = strlen(input);
 	size_t lstart, lend, rstart, rend;
-	if (!find_operands_around_plus(input, inlen, &lstart, &lend, &rstart, &rend))
+	int found = find_operands_around_plus(input, inlen, &lstart, &lend, &rstart, &rend);
+	if (found == 0)
 		return NULL;
+	if (found == -1)
+		return alloc_error();
 
 	int lb = 0, ls = 0, ln = 0;
 	unsigned long long lv = 0ULL;
@@ -378,11 +381,11 @@ static char *try_handle_addition(const char *input)
 	unsigned long long rv = 0ULL;
 	size_t rbase = 0;
 	if (!parse_operand(input + lstart, lend - lstart, &lb, &ls, &ln, &lv, &lbase))
-		return NULL;
+		return alloc_error();
 	if (!parse_operand(input + rstart, rend - rstart, &rb, &rs, &rn, &rv, &rbase))
-		return NULL;
+		return alloc_error();
 	if (lb != rb || ls != rs)
-		return NULL;
+		return alloc_error();
 
 	if (!ls)
 		return format_unsigned_sum(lv, rv, lb);
