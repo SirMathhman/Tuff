@@ -1,4 +1,4 @@
-package com.example.tuff;
+package tuff;
 
 public final class App {
 	public static String greet() {
