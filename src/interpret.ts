@@ -291,7 +291,9 @@ function executeStatements(
       const bareInit = rhs.trim().match(/^([+-]?\d+)$/);
       let r;
       if (bareInit) {
-        r = { value: BigInt(bareInit[1]), suffix: "" };
+        // default integer type for untyped mut variables is I32
+        if (isMut) r = { value: BigInt(bareInit[1]), suffix: "I32" };
+        else r = { value: BigInt(bareInit[1]), suffix: "" };
       } else {
         r = evaluateValueAndSuffix(rhs, env);
       }
@@ -334,6 +336,11 @@ function executeStatements(
         rAssign = { value: BigInt(bareAssign[1]), suffix: "" };
       } else {
         rAssign = evaluateValueAndSuffix(rhs, env);
+      }
+      // if assignment is a bare integer and variable already has a suffix,
+      // adopt variable's suffix for the assigned value
+      if (rAssign.suffix === "" && entry.suffix !== "") {
+        rAssign.suffix = entry.suffix;
       }
       // ensure types match exactly
       if (rAssign.suffix.toLowerCase() !== entry.suffix.toLowerCase()) {

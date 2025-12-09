@@ -129,3 +129,7 @@ it("interpret returns updated value after mut assignment when referenced", () =>
 it("interpret throws when assigning mismatched suffix to mut variable", () => {
   expect(() => interpret("let mut x = 100; x = 50I8;")).toThrow();
 });
+
+it("interpret allows assigning I32 to untyped mut variable", () => {
+  expect(interpret("let mut x = 100; x = 50I32;")).toBe("");
+});
