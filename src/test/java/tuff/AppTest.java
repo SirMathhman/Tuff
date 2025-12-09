@@ -136,6 +136,21 @@ class AppTest {
 	}
 
 	@Test
+	void interpretTopLevelLetReturnsEmptyString() {
+		assertEquals("", App.interpret("let x : U8 = 100U8;"));
+	}
+
+	@Test
+	void interpretTopLevelLetRedeclarationThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("let x : U8 = 100U8; let x : U8 = 200U8;"));
+	}
+
+	@Test
+	void interpretBlockRedeclarationThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("{ let x : U8 = 1U8; let x : U8 = 2U8; x }"));
+	}
+
+	@Test
 	void interpretThrowsForNegativeU8() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("-1U8 "));
 	}

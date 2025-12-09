@@ -116,10 +116,9 @@ public final class App {
 		java.util.List<String> parts = splitTopLevelStatements(input);
 		if (parts == null || parts.isEmpty())
 			return null;
-		if (parts.size() == 1) {
-			// single expression
-			return evaluateWithParentheses(parts.get(0));
-		}
+		boolean endsWithSemicolon = input.trim().endsWith(";");
+		if (parts.size() == 1)
+			return handleSingleStatement(parts.get(0), endsWithSemicolon);
 		java.util.Map<String, Value> ctx = new java.util.HashMap<>();
 		for (int i = 0; i < parts.size() - 1; i++) {
 			String stmt = parts.get(i);
@@ -133,8 +132,16 @@ public final class App {
 			if (res == null)
 				return null;
 			checkValueInRange(token, new java.math.BigInteger(res));
+			if (ctx.containsKey(name))
+				throw new IllegalArgumentException("duplicate declaration: " + name);
+			if (ctx.containsKey(name))
+				throw new IllegalArgumentException("duplicate declaration: " + name);
 			ctx.put(name, new Value(new java.math.BigInteger(res), token));
 		}
+		// when input ends with a semicolon, treat all parts as declarations
+		if (endsWithSemicolon)
+			return handleDeclarationsOnly(parts, ctx);
+
 		// final expression
 		String last = parts.get(parts.size() - 1).trim();
 		Value v;
@@ -160,6 +167,37 @@ public final class App {
 			}
 		}
 		return v.value.toString();
+	}
+
+	private static String handleSingleStatement(String stmt, boolean endsWithSemicolon) {
+		if (endsWithSemicolon) {
+			String[] decl = parseLetDeclaration(stmt);
+			if (decl == null)
+				return null;
+			String res = evaluateWithParentheses(decl[2], java.util.Collections.emptyMap());
+			if (res == null)
+				return null;
+			checkValueInRange(decl[1], new java.math.BigInteger(res));
+			return "";
+		}
+		return evaluateWithParentheses(stmt);
+	}
+
+	private static String handleDeclarationsOnly(java.util.List<String> parts, java.util.Map<String, Value> ctx) {
+		for (int i = 0; i < parts.size(); i++) {
+			String stmt = parts.get(i);
+			String[] decl = parseLetDeclaration(stmt);
+			if (decl == null)
+				return null;
+			String res = evaluateWithParentheses(decl[2], ctx);
+			if (res == null)
+				return null;
+			checkValueInRange(decl[1], new java.math.BigInteger(res));
+			if (ctx.containsKey(decl[0]))
+				throw new IllegalArgumentException("duplicate declaration: " + decl[0]);
+			ctx.put(decl[0], new Value(new java.math.BigInteger(res), decl[1]));
+		}
+		return "";
 	}
 
 	private static String extractToken(String suffix) {
@@ -496,6 +534,8 @@ public final class App {
 				throw new IllegalArgumentException("invalid expression in let: " + stmt);
 			// validate range for declared token
 			checkValueInRange(token, new java.math.BigInteger(res));
+			if (ctx.containsKey(name))
+				throw new IllegalArgumentException("duplicate declaration: " + name);
 			ctx.put(name, new Value(new java.math.BigInteger(res), token));
 		}
 
