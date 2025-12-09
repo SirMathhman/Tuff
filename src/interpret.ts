@@ -1,5 +1,5 @@
 type Env = {
-  map: Map<string, { value: bigint | boolean; suffix: string }>;
+  map: Map<string, { value: bigint | boolean; suffix: string; mutable?: boolean }>;
   parent?: Env;
 };
 
@@ -11,6 +11,15 @@ function lookupEnv(env: Env | undefined, name: string) {
   let cur = env;
   while (cur) {
     if (cur.map.has(name)) return cur.map.get(name);
+    cur = cur.parent;
+  }
+  return undefined;
+}
+
+function findEnvContaining(env: Env | undefined, name: string): Env | undefined {
+  let cur = env;
+  while (cur) {
+    if (cur.map.has(name)) return cur;
     cur = cur.parent;
   }
   return undefined;
@@ -226,16 +235,17 @@ function executeStatements(
   for (const stmt of parts) {
     // let <ident> : <Type> = <expr>
     const letMatch = stmt.match(
-      /^let\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(([uUiI](?:8|16|32|64))|([bB]ool))\s*=\s*(.*)$/
+      /^let\s+(mut\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(([uUiI](?:8|16|32|64))|([bB]ool))\s*=\s*(.*)$/
     );
     if (letMatch) {
-      const name = letMatch[1];
+      const name = letMatch[2];
       // redeclaration in the current scope is an error
       if (isDeclaredInCurrentScope(env, name)) {
         throw new Error(`interpret: redeclaration of ${name}`);
       }
-      const declared = letMatch[2];
-      const rhs = letMatch[5];
+      const declared = letMatch[3];
+      const rhs = letMatch[6];
+      const isMut = !!letMatch[1];
       let r;
       // allow a bare integer literal on the RHS when assigning to a declared type
       const bare = rhs.trim().match(/^([+-]?\d+)$/);
@@ -260,7 +270,7 @@ function executeStatements(
         if (!pd) throw new Error("interpret: invalid declared suffix");
         checkRange(pd.kind, pd.bits, r.value as bigint, declared);
       }
-      env.map.set(name, { value: r.value, suffix: declared });
+      env.map.set(name, { value: r.value, suffix: declared, mutable: isMut });
       lastVal = r.value.toString();
       lastWasLet = true;
       continue;
@@ -268,19 +278,27 @@ function executeStatements(
 
     // support `let <ident> = <expr>` where the variable's type is inferred
     const letNoTypeMatch = stmt.match(
-      /^let\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/
+      /^let\s+(mut\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/
     );
     if (letNoTypeMatch) {
-      const name = letNoTypeMatch[1];
+      const isMut = !!letNoTypeMatch[1];
+      const name = letNoTypeMatch[2];
       if (isDeclaredInCurrentScope(env, name)) {
         throw new Error(`interpret: redeclaration of ${name}`);
       }
-      const rhs = letNoTypeMatch[2];
-      const r = evaluateValueAndSuffix(rhs, env);
-      if (!r || !r.suffix)
+      const rhs = letNoTypeMatch[3];
+      // allow bare integer literal for untyped let
+      const bareInit = rhs.trim().match(/^([+-]?\d+)$/);
+      let r;
+      if (bareInit) {
+        r = { value: BigInt(bareInit[1]), suffix: "" };
+      } else {
+        r = evaluateValueAndSuffix(rhs, env);
+      }
+      if (!r || (r.suffix === "" && !isMut))
         throw new Error("interpret: invalid RHS for let without type");
       // store with inferred suffix
-      env.map.set(name, { value: r.value, suffix: r.suffix });
+      env.map.set(name, { value: r.value, suffix: r.suffix, mutable: isMut });
       lastVal = r.value.toString();
       lastWasLet = true;
       continue;
@@ -300,8 +318,38 @@ function executeStatements(
       lastVal = num;
       continue;
     }
-    const r2 = evaluateValueAndSuffix(stmt, env);
-    lastVal = r2.value.toString();
+    // assignment statement: <ident> = <expr>
+    const assignMatch = stmt.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (assignMatch) {
+      const name = assignMatch[1];
+      const rhs = assignMatch[2];
+      const container = findEnvContaining(env, name);
+      if (!container) throw new Error(`interpret: unknown identifier ${name}`);
+      const entry = container.map.get(name)!;
+      if (!entry.mutable) throw new Error(`interpret: cannot assign to immutable ${name}`);
+      // allow bare integer literal for assignment when variable is untyped/raw
+      const bareAssign = rhs.trim().match(/^([+-]?\d+)$/);
+      let rAssign;
+      if (bareAssign) {
+        rAssign = { value: BigInt(bareAssign[1]), suffix: "" };
+      } else {
+        rAssign = evaluateValueAndSuffix(rhs, env);
+      }
+      // ensure types match exactly
+      if (rAssign.suffix.toLowerCase() !== entry.suffix.toLowerCase()) {
+        throw new Error(`interpret: assignment type mismatch for ${name}`);
+      }
+      // range checks for numeric
+      if (entry.suffix !== "" && !/^bool$/i.test(entry.suffix)) {
+        const pd = parseSuffix(entry.suffix);
+        if (!pd) throw new Error("interpret: invalid variable suffix");
+        checkRange(pd.kind, pd.bits, rAssign.value as bigint, entry.suffix);
+      }
+      container.map.set(name, { value: rAssign.value, suffix: entry.suffix, mutable: entry.mutable });
+      lastWasLet = true; // assignment behaves like a statement with no return
+      lastVal = rAssign.value.toString();
+      continue;
+    }
     lastWasLet = false;
   }
 

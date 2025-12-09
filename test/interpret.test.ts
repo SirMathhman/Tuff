@@ -117,3 +117,7 @@ it("interpret throws when Bool=false variable passed to different numeric declar
 it("interpret throws for plain assignment statements (reassignment not supported)", () => {
   expect(() => interpret("let x = 100; x = 200;")).toThrow();
 });
+
+it("interpret allows assigning to mut variable and returns empty string for top-level mut assignment", () => {
+  expect(interpret("let mut x = 100; x = 200;")).toBe("");
+});
