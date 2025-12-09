@@ -31,7 +31,8 @@ char *interpret(const char *input)
 
 			size_t outlen = inlen - 2;
 
-			if (outlen == 0) {
+			if (outlen == 0)
+			{
 				const char *err = "Error";
 				size_t errlen = strlen(err);
 				char *res = (char *)malloc(errlen + 1);
@@ -45,7 +46,8 @@ char *interpret(const char *input)
 			for (size_t i = 0; i < outlen; ++i)
 			{
 				unsigned char c = (unsigned char)input[i];
-				if (!isdigit(c)) {
+				if (!isdigit(c))
+				{
 					const char *err = "Error";
 					size_t errlen = strlen(err);
 					char *res = (char *)malloc(errlen + 1);
@@ -55,7 +57,8 @@ char *interpret(const char *input)
 					return res;
 				}
 				val = val * 10 + (c - '0');
-				if (val > 255) {
+				if (val > 255)
+				{
 					const char *err = "Error";
 					size_t errlen = strlen(err);
 					char *res = (char *)malloc(errlen + 1);
