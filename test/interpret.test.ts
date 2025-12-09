@@ -101,3 +101,7 @@ it("interpret throws when declared type doesn't match RHS suffix", () => {
 it("interpret throws when assigning variable with mismatched suffix to different declared type", () => {
   expect(() => interpret("let x : U8 = 60U8; let y : I8 = x;")).toThrow();
 });
+
+it("interpret throws when letting without type then assigning to different declared type", () => {
+  expect(() => interpret("let x = 60U8; let y : I8 = x;")).toThrow();
+});

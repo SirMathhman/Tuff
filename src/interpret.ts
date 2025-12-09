@@ -258,6 +258,23 @@ function executeStatements(
       continue;
     }
 
+    // support `let <ident> = <expr>` where the variable's type is inferred
+    const letNoTypeMatch = stmt.match(/^let\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (letNoTypeMatch) {
+      const name = letNoTypeMatch[1];
+      if (isDeclaredInCurrentScope(env, name)) {
+        throw new Error(`interpret: redeclaration of ${name}`);
+      }
+      const rhs = letNoTypeMatch[2];
+      const r = evaluateValueAndSuffix(rhs, env);
+      if (!r || !r.suffix) throw new Error("interpret: invalid RHS for let without type");
+      // store with inferred suffix
+      env.map.set(name, { value: r.value, suffix: r.suffix });
+      lastVal = r.value.toString();
+      lastWasLet = true;
+      continue;
+    }
+
     // otherwise evaluate expression or identifier
     const simpleNum = stmt.trim().match(/^([+-]?\d+)\s*([a-zA-Z0-9]+)\s*$/);
     if (simpleNum && parts.length === 1) {
