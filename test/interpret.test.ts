@@ -93,3 +93,7 @@ it("interpret returns empty string for standalone let statements", () => {
 it("interpret throws on redeclaration in same scope", () => {
   expect(() => interpret("let x : U8 = 100U8; let x : U8 = 200U8;")).toThrow();
 });
+
+it("interpret throws when declared type doesn't match RHS suffix", () => {
+  expect(() => interpret("let x : U8 = 60I8;")).toThrow();
+});

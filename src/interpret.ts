@@ -242,6 +242,10 @@ function executeStatements(
       } else {
         r = evaluateValueAndSuffix(rhs, env);
       }
+      // ensure RHS suffix matches declared type exactly (case-insensitive)
+      if (r.suffix.toLowerCase() !== declared.toLowerCase()) {
+        throw new Error(`interpret: declared type ${declared} does not match RHS type ${r.suffix}`);
+      }
       // ensure value fits declared type
       const pd = parseSuffix(declared);
       if (!pd) throw new Error("interpret: invalid declared suffix");
