@@ -30,13 +30,15 @@ function checkRange(
 function parseParenthesizedValue(
   str: string
 ): { value: string; suffix: string; length: number } | null {
-  if (!str.startsWith("(")) return null;
+  if (!(str.startsWith('(') || str.startsWith('{'))) return null;
+  const open = str[0];
+  const close = open === '{' ? '}' : ')';
   let depth = 0;
   let i = 0;
   for (; i < str.length; i++) {
     const ch = str[i];
-    if (ch === "(") depth++;
-    else if (ch === ")") depth--;
+    if (ch === open) depth++;
+    else if (ch === close) depth--;
     if (depth === 0) break;
   }
   if (i >= str.length) return null;
