@@ -25,11 +25,19 @@ void test_interpret_strips_u8_suffix(void)
 	free(out);
 }
 
+void test_interpret_negative_u8_returns_error(void)
+{
+	char *out = interpret("-100U8");
+	TEST_ASSERT_EQUAL_STRING("Error", out);
+	free(out);
+}
+
 int main(void)
 {
 	UNITY_BEGIN();
 	RUN_TEST(test_interpret_returns_stub_for_input);
 	RUN_TEST(test_interpret_null_returns_null);
 	RUN_TEST(test_interpret_strips_u8_suffix);
+	RUN_TEST(test_interpret_negative_u8_returns_error);
 	return UNITY_END();
 }

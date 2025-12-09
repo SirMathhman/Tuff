@@ -17,6 +17,15 @@ char *interpret(const char *input)
 		char prev = input[inlen - 2];
 		if ((prev == 'U' || prev == 'u') && last == '8')
 		{
+			if (input[0] == '-')
+			{
+				const char *err = "Error";
+				char *res = (char *)malloc(strlen(err) + 1);
+				if (!res)
+					return NULL;
+				strcpy(res, err);
+				return res;
+			}
 			size_t outlen = inlen - 2;
 			char *res = (char *)malloc(outlen + 1);
 			if (!res)
