@@ -65,7 +65,5 @@ it("interpret throws for non-integer strings", () => {
 });
 
 it("interpret supports let declarations and variables", () => {
-  expect(
-    interpret("let x : U8 = { 4U8 + 2U8 } * 3U8; x")
-  ).toBe("18");
+  expect(interpret("let x : U8 = { 4U8 + 2U8 } * 3U8; x")).toBe("18");
 });
