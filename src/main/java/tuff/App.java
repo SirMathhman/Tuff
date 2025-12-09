@@ -62,6 +62,24 @@ public final class App {
 		return normalizeDigits(digits);
 	}
 
+	private static class MutableValue {
+		Value val;
+		boolean isMutable;
+
+		MutableValue(Value val, boolean isMutable) {
+			this.val = val;
+			this.isMutable = isMutable;
+		}
+	}
+
+	private static Map<String, Value> extractValueMap(Map<String, MutableValue> mutCtx) {
+		Map<String, Value> ctx = new HashMap<>();
+		for (String key : mutCtx.keySet()) {
+			ctx.put(key, mutCtx.get(key).val);
+		}
+		return ctx;
+	}
+
 	private static String evaluateStatements(String input) {
 		List<String> parts = splitTopLevelStatements(input);
 		if (parts == null || parts.isEmpty())
@@ -69,25 +87,10 @@ public final class App {
 		boolean endsWithSemicolon = input.trim().endsWith(";");
 		if (parts.size() == 1)
 			return handleSingleStatement(parts.get(0), endsWithSemicolon);
-		Map<String, Value> ctx = new HashMap<>();
+		Map<String, MutableValue> ctx = new HashMap<>();
 		for (int i = 0; i < parts.size() - 1; i++) {
 			String stmt = parts.get(i);
-			String[] decl = parseLetDeclaration(stmt);
-			if (decl == null)
-				return null;
-			String name = decl[0];
-			String token = decl[1];
-			String expr = decl[2];
-			Value resVal = evaluateExpressionValue(expr, ctx);
-			if (resVal == null)
-				return null;
-			if (token == null) {
-				token = resVal.token;
-			} else if (!resVal.token.equals(token)) {
-				throw new IllegalArgumentException("mismatched declaration type: " + token + " vs " + resVal.token);
-			}
-			TokenRange.checkValueInRange(token, resVal.value);
-			ctx.put(name, new Value(resVal.value, token));
+			processStatementOrAssignment(stmt, ctx);
 		}
 		if (endsWithSemicolon)
 			return handleDeclarationsOnly(parts, ctx);
@@ -97,9 +100,9 @@ public final class App {
 		if (last.matches("^[A-Za-z_][A-Za-z0-9_]*$")) {
 			if (!ctx.containsKey(last))
 				throw new IllegalArgumentException("unknown identifier: " + last);
-			v = ctx.get(last);
+			v = ctx.get(last).val;
 		} else {
-			String r = evaluateWithParentheses(last, ctx);
+			String r = evaluateWithParentheses(last, extractValueMap(ctx));
 			if (r == null)
 				return null;
 			Pattern p2 = Pattern.compile("^([+-]?\\d+)(.*)$");
@@ -116,6 +119,48 @@ public final class App {
 			}
 		}
 		return v.value.toString();
+	}
+
+	private static void processStatementOrAssignment(String stmt, Map<String, MutableValue> ctx) {
+		// Try let declaration first
+		String[] decl = parseLetDeclaration(stmt);
+		if (decl != null) {
+			String name = decl[0];
+			String token = decl[1];
+			String expr = decl[2];
+			boolean isMut = Boolean.parseBoolean(decl[3]);
+			Value resVal = evaluateExpressionValue(expr, extractValueMap(ctx));
+			if (resVal == null)
+				throw new IllegalArgumentException("invalid expression in declaration: " + expr);
+			if (token == null) {
+				token = resVal.token;
+			} else if (!resVal.token.equals(token)) {
+				throw new IllegalArgumentException("mismatched declaration type: " + token + " vs " + resVal.token);
+			}
+			TokenRange.checkValueInRange(token, resVal.value);
+			ctx.put(name, new MutableValue(new Value(resVal.value, token), isMut));
+			return;
+		}
+		// Try assignment
+		String[] assign = parseAssignment(stmt);
+		if (assign != null) {
+			String name = assign[0];
+			String expr = assign[1];
+			if (!ctx.containsKey(name))
+				throw new IllegalArgumentException("unknown identifier: " + name);
+			MutableValue mutVal = ctx.get(name);
+			if (!mutVal.isMutable)
+				throw new IllegalArgumentException("cannot assign to immutable variable: " + name);
+			Value resVal = evaluateExpressionValue(expr, extractValueMap(ctx));
+			if (resVal == null)
+				throw new IllegalArgumentException("invalid expression in assignment: " + expr);
+			if (!resVal.token.equals(mutVal.val.token))
+				throw new IllegalArgumentException("mismatched assignment type: " + mutVal.val.token + " vs " + resVal.token);
+			TokenRange.checkValueInRange(mutVal.val.token, resVal.value);
+			mutVal.val = new Value(resVal.value, mutVal.val.token);
+			return;
+		}
+		throw new IllegalArgumentException("invalid statement: " + stmt);
 	}
 
 	private static String handleSingleStatement(String stmt, boolean endsWithSemicolon) {
@@ -138,16 +183,17 @@ public final class App {
 		return evaluateWithParentheses(stmt);
 	}
 
-	private static String handleDeclarationsOnly(List<String> parts, Map<String, Value> ctx) {
+	private static String handleDeclarationsOnly(List<String> parts, Map<String, MutableValue> ctx) {
 		for (int i = 0; i < parts.size(); i++) {
 			String stmt = parts.get(i);
 			String[] decl = parseLetDeclaration(stmt);
 			if (decl == null)
 				return null;
-			Value resVal = evaluateExpressionValue(decl[2], ctx);
+			Value resVal = evaluateExpressionValue(decl[2], extractValueMap(ctx));
 			if (resVal == null)
 				return null;
 			String token = decl[1];
+			boolean isMut = Boolean.parseBoolean(decl[3]);
 			if (token == null) {
 				token = resVal.token;
 			} else if (!resVal.token.equals(token)) {
@@ -155,7 +201,7 @@ public final class App {
 			}
 			if (ctx.containsKey(decl[0]))
 				throw new IllegalArgumentException("duplicate declaration: " + decl[0]);
-			ctx.put(decl[0], new Value(resVal.value, token));
+			ctx.put(decl[0], new MutableValue(new Value(resVal.value, token), isMut));
 		}
 		return "";
 	}
@@ -292,18 +338,32 @@ public final class App {
 	private static String[] parseLetDeclaration(String stmt) {
 		if (!stmt.startsWith("let "))
 			return null;
-		// Try explicit type first: let name : TYPE = expr
-		Pattern explicitType = Pattern.compile("let\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*:\\s*([UI]\\d+)\\s*=\\s*(.+)");
+
+		// Try explicit type with optional mut: let [mut] name : TYPE = expr
+		Pattern explicitType = Pattern.compile("let\\s+(mut\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*:\\s*([UI]\\d+)\\s*=\\s*(.+)");
 		Matcher explicit = explicitType.matcher(stmt);
-		if (explicit.find())
-			return new String[] { explicit.group(1), explicit.group(2), explicit.group(3).trim() };
+		if (explicit.find()) {
+			boolean isMut = explicit.group(1) != null;
+			return new String[] { explicit.group(2), explicit.group(3), explicit.group(4).trim(), isMut ? "true" : "false" };
+		}
 
-		// Try inferred type: let name = expr
-		Pattern inferredType = Pattern.compile("let\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*(.+)");
+		// Try inferred type with optional mut: let [mut] name = expr
+		Pattern inferredType = Pattern.compile("let\\s+(mut\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*(.+)");
 		Matcher inferred = inferredType.matcher(stmt);
-		if (inferred.find())
-			return new String[] { inferred.group(1), null, inferred.group(2).trim() };
+		if (inferred.find()) {
+			boolean isMut = inferred.group(1) != null;
+			return new String[] { inferred.group(2), null, inferred.group(3).trim(), isMut ? "true" : "false" };
+		}
 
+		return null;
+	}
+
+	private static String[] parseAssignment(String stmt) {
+		// Parse: name = expr
+		Pattern assignPattern = Pattern.compile("^([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*(.+)$");
+		Matcher m = assignPattern.matcher(stmt);
+		if (m.find())
+			return new String[] { m.group(1), m.group(2).trim() };
 		return null;
 	}
 

@@ -167,6 +167,11 @@ class AppTest {
 	}
 
 	@Test
+	void interpretMutableVariableAssignment() {
+		assertEquals("20", App.interpret("let mut x = 100U8; x = 20U8; x"));
+	}
+
+	@Test
 	void interpretThrowsForNegativeU8() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("-1U8 "));
 	}
