@@ -27,6 +27,43 @@ function checkRange(
 
 // addSuffixed removed — multi-term addition handled inline
 
+function parseParenthesizedValue(
+  str: string
+): { value: string; suffix: string; length: number } | null {
+  if (!str.startsWith("(")) return null;
+  let depth = 0;
+  let i = 0;
+  for (; i < str.length; i++) {
+    const ch = str[i];
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    if (depth === 0) break;
+  }
+  if (i >= str.length) return null;
+  const inner = str.slice(1, i);
+  const sufMatches = Array.from(inner.matchAll(/[uUiI](?:8|16|32|64)/g)).map(
+    (m) => m[0]
+  );
+  if (sufMatches.length === 0) return null;
+  const sfx = sufMatches[0];
+  if (!sufMatches.every((x) => x.toLowerCase() === sfx.toLowerCase()))
+    return null;
+  const val = interpret(inner);
+  return { value: val, suffix: sfx, length: i + 1 };
+}
+
+function parseOperandToken(
+  str: string
+): { value: string; suffix: string; consumed: number } | null {
+  // parenthesized value first
+  const p = parseParenthesizedValue(str);
+  if (p) return { value: p.value, suffix: p.suffix, consumed: p.length };
+
+  const mm = str.match(/^\s*([+-]?\d+)\s*([a-zA-Z0-9]+)\s*/);
+  if (!mm) return null;
+  return { value: mm[1], suffix: mm[2], consumed: mm[0].length };
+}
+
 export function interpret(input: string): string {
   // Simple interpreter: accept integer strings and return them unchanged (trimmed).
   // Examples: "100" => "100"
@@ -43,88 +80,28 @@ export function interpret(input: string): string {
     // with suffixes or parenthesized sub-expressions). If parsing fails,
     // return null so the caller can handle single-value cases.
 
-    // Tokenize operands and operators sequentially
+    // Tokenize operands and operators sequentially using helper
     const nums: string[] = [];
     const ops: string[] = [];
     let rest = inputStr;
-    const firstRe = /^\s*([+-]?\d+)\s*([a-zA-Z0-9]+)\s*/;
-    let firstSuffix = "";
-    const m0 = rest.match(firstRe);
-    if (rest.startsWith("(")) {
-      // find matching closing parenthesis for first operand
-      let depth = 0;
-      let i = 0;
-      for (; i < rest.length; i++) {
-        const ch = rest[i];
-        if (ch === "(") depth++;
-        else if (ch === ")") {
-          depth--;
-          if (depth === 0) break;
-        }
-      }
-      if (i >= rest.length) return null;
-      const inner = rest.slice(1, i);
-      const sufMatches = Array.from(
-        inner.matchAll(/[uUiI](?:8|16|32|64)/g)
-      ).map((m) => m[0]);
-      if (sufMatches.length === 0) return null;
-      const sfx = sufMatches[0];
-      if (!sufMatches.every((x) => x.toLowerCase() === sfx.toLowerCase()))
-        return null;
-      const innerVal = interpret(inner);
-      nums.push(innerVal);
-      firstSuffix = sfx;
-      rest = rest.slice(i + 1).trimStart();
-    } else {
-      if (!m0) return null;
-      nums.push(m0[1]);
-      firstSuffix = m0[2];
-      rest = rest.slice(m0[0].length);
-    }
+    const firstTok = parseOperandToken(rest);
+    if (!firstTok) return null;
+    nums.push(firstTok.value);
+    const firstSuffix = firstTok.suffix;
+    rest = rest.slice(firstTok.consumed).trimStart();
     const opRe = /^([+\-*])\s*/;
-    const operandRe = /^([+-]?\d+)\s*([a-zA-Z0-9]+)\s*/;
     while (rest.length > 0) {
       const mo = rest.match(opRe);
       if (!mo) return null;
       ops.push(mo[1]);
       rest = rest.slice(mo[0].length);
-      // operand can be a parenthesized sub-expression or a direct operand
-      if (rest.startsWith("(")) {
-        // find matching closing parenthesis
-        let depth = 0;
-        let i = 0;
-        for (; i < rest.length; i++) {
-          const ch = rest[i];
-          if (ch === "(") depth++;
-          else if (ch === ")") {
-            depth--;
-            if (depth === 0) break;
-          }
-        }
-        if (i >= rest.length) return null;
-        const inner = rest.slice(1, i);
-        // Derive suffix from inner expression (all suffixes must match)
-        const sufMatches = Array.from(
-          inner.matchAll(/[uUiI](?:8|16|32|64)/g)
-        ).map((m) => m[0]);
-        if (sufMatches.length === 0) return null;
-        const sfx = sufMatches[0];
-        if (!sufMatches.every((x) => x.toLowerCase() === sfx.toLowerCase()))
-          return null;
-        // evaluate inner expression recursively
-        const innerVal = interpret(inner);
-        nums.push(innerVal);
-        if (sfx.toLowerCase() !== firstSuffix.toLowerCase()) return null;
-        rest = rest.slice(i + 1).trimStart();
-      } else {
-        const mm = rest.match(operandRe);
-        if (!mm) return null;
-        nums.push(mm[1]);
-        if (mm[2].toLowerCase() !== firstSuffix.toLowerCase()) return null;
-        rest = rest.slice(mm[0].length);
-      }
+      const tok = parseOperandToken(rest);
+      if (!tok) return null;
+      if (tok.suffix.toLowerCase() !== firstSuffix.toLowerCase()) return null;
+      nums.push(tok.value);
+      rest = rest.slice(tok.consumed).trimStart();
     }
-    if (nums.length < 2) return null
+    if (nums.length < 2) return null;
     return { nums, ops, suffix: firstSuffix } as {
       nums: string[];
       ops: string[];
