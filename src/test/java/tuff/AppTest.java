@@ -76,6 +76,11 @@ class AppTest {
 	}
 
 	@Test
+	void interpretMixedTypeAdditionThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("1U8 + 2U16"));
+	}
+
+	@Test
 	void interpretThrowsForNegativeU8() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("-1U8 "));
 	}

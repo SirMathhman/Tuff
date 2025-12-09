@@ -122,9 +122,11 @@ public final class App {
 
 		String ltoken = extractToken(lr);
 		String rtoken = extractToken(rr);
-		// require tokens to match (same type) for now
-		if (ltoken.isEmpty() || !ltoken.equals(rtoken))
-			return null;
+		// require tokens to match (same type)
+		if (ltoken.isEmpty()) return null;
+		if (!ltoken.equals(rtoken)) {
+			throw new IllegalArgumentException("mismatched operand types: " + ltoken + " vs " + rtoken);
+		}
 
 		// validate operands
 		validateTokenRange(ltoken, ld);
