@@ -1,9 +1,6 @@
-import { describe, expect, it } from 'bun:test';
-import { interpret } from '../src/interpret';
+import { it, expect } from 'bun:test'
+import { interpret } from '../src/interpret'
 
-describe('interpret', () => {
-  it('always returns an error string', () => {
-    const r = interpret('hello');
-    expect(r).toMatch(/^Error:/);
-  });
-});
+it('interpret throws not implemented error', () => {
+  expect(() => interpret('hello')).toThrow()
+})

@@ -1,6 +1,6 @@
 export function interpret(input: string): string {
-  // Stub implementation: always returns an error string for now
-  return `Error: interpret is not implemented — received input: ${input}`;
+  // Stubbed implementation: intentionally always throws an error for now.
+  throw new Error("interpret: not implemented");
 }
 
 export default interpret;
