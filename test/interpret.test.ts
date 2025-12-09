@@ -25,6 +25,10 @@ it("interpret sums multiple suffixed integers", () => {
   expect(interpret("10I8 + -3I8 + 2I8")).toBe("9");
 });
 
+it("interpret handles mixed + and - operators", () => {
+  expect(interpret("10U8 - 5U8 + 3U8")).toBe("8")
+})
+
 it("interpret enforces signed I8 boundaries", () => {
   expect(interpret("127I8")).toBe("127");
   expect(interpret("-128I8")).toBe("-128");
