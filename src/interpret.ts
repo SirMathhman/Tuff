@@ -62,7 +62,10 @@ function parseParenthesizedValue(
   if (allSufs.length === 0) return null;
   const sfx = allSufs[0];
   if (!allSufs.every((x) => x.toLowerCase() === sfx.toLowerCase())) return null;
-  const val = interpret(inner, env);
+  // Evaluate the inner block in a child scope cloned from env so inner `let`
+  // declarations don't leak into the outer environment.
+  const childEnv = env ? new Map(env) : new Map<string, { value: bigint; suffix: string }>();
+  const val = interpret(inner, childEnv);
   return { value: val, suffix: sfx, length: i + 1 };
 }
 
@@ -253,10 +256,7 @@ export function interpret(
   const env = envIn ?? new Map<string, { value: bigint; suffix: string }>();
 
   // Top-level statement handling: support semicolon-separated statements and let declarations
-  const parts = s
-    .split(";")
-    .map((p) => p.trim())
-    .filter(Boolean);
+  const parts = splitTopLevelStatements(s);
 
   // Special-case single-statement inputs that are not `let` declarations:
   if (parts.length === 1 && !parts[0].trim().startsWith("let ")) {
@@ -295,6 +295,30 @@ export function interpret(
 
     return num;
   }
+  // Split top-level statements by semicolons, but ignore semicolons inside
+  // parentheses or braces so nested blocks keep their internal statements.
+  function splitTopLevelStatements(src: string): string[] {
+    const out: string[] = [];
+    let depth = 0;
+    let buf = "";
+    for (let i = 0; i < src.length; i++) {
+      const ch = src[i];
+      if ((ch === "(" || ch === "{") && !(i > 0 && src[i - 1] === "\\")) {
+        depth++;
+      } else if ((ch === ")" || ch === "}") && !(i > 0 && src[i - 1] === "\\")) {
+        if (depth > 0) depth--;
+      }
+      if (ch === ";" && depth === 0) {
+        out.push(buf.trim());
+        buf = "";
+      } else {
+        buf += ch;
+      }
+    }
+    if (buf.trim().length > 0) out.push(buf.trim());
+    return out.filter(Boolean);
+  }
+
   throw new Error("interpret: only integer strings are supported");
 }
 

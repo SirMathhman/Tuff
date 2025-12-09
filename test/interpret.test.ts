@@ -73,3 +73,11 @@ it("interpret supports let-to-let assignment (copy variable)", () => {
     interpret("let x : U8 = {  4U8 + 2U8 } * 3U8; let y : U8 = x; y")
   ).toBe("18");
 });
+
+it("interpret supports nested let inside a block (scoped)", () => {
+  expect(
+    interpret(
+      "let x : U8 = {  let z : U8 = 4U8 + 2U8; z } * 3U8; let y : U8 = x; y"
+    )
+  ).toBe("18");
+});
