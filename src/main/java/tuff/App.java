@@ -128,15 +128,13 @@ public final class App {
 			String name = decl[0];
 			String token = decl[1];
 			String expr = decl[2];
-			String res = evaluateWithParentheses(expr, ctx);
-			if (res == null)
+			Value resVal = evaluateExpressionValue(expr, ctx);
+			if (resVal == null)
 				return null;
-			checkValueInRange(token, new java.math.BigInteger(res));
-			if (ctx.containsKey(name))
-				throw new IllegalArgumentException("duplicate declaration: " + name);
-			if (ctx.containsKey(name))
-				throw new IllegalArgumentException("duplicate declaration: " + name);
-			ctx.put(name, new Value(new java.math.BigInteger(res), token));
+			if (!resVal.token.equals(token))
+				throw new IllegalArgumentException("mismatched declaration type: " + token + " vs " + resVal.token);
+			checkValueInRange(token, resVal.value);
+			ctx.put(name, new Value(resVal.value, token));
 		}
 		// when input ends with a semicolon, treat all parts as declarations
 		if (endsWithSemicolon)
@@ -174,10 +172,12 @@ public final class App {
 			String[] decl = parseLetDeclaration(stmt);
 			if (decl == null)
 				return null;
-			String res = evaluateWithParentheses(decl[2], java.util.Collections.emptyMap());
-			if (res == null)
+			Value resVal = evaluateExpressionValue(decl[2], java.util.Collections.emptyMap());
+			if (resVal == null)
 				return null;
-			checkValueInRange(decl[1], new java.math.BigInteger(res));
+			if (!resVal.token.equals(decl[1]))
+				throw new IllegalArgumentException("mismatched declaration type: " + decl[1] + " vs " + resVal.token);
+			checkValueInRange(decl[1], resVal.value);
 			return "";
 		}
 		return evaluateWithParentheses(stmt);
@@ -189,13 +189,14 @@ public final class App {
 			String[] decl = parseLetDeclaration(stmt);
 			if (decl == null)
 				return null;
-			String res = evaluateWithParentheses(decl[2], ctx);
-			if (res == null)
+			Value resVal = evaluateExpressionValue(decl[2], ctx);
+			if (resVal == null)
 				return null;
-			checkValueInRange(decl[1], new java.math.BigInteger(res));
+			if (!resVal.token.equals(decl[1]))
+				throw new IllegalArgumentException("mismatched declaration type: " + decl[1] + " vs " + resVal.token);
 			if (ctx.containsKey(decl[0]))
 				throw new IllegalArgumentException("duplicate declaration: " + decl[0]);
-			ctx.put(decl[0], new Value(new java.math.BigInteger(res), decl[1]));
+			ctx.put(decl[0], new Value(resVal.value, decl[1]));
 		}
 		return "";
 	}
@@ -368,6 +369,58 @@ public final class App {
 		return evaluateRPN(output, ctx == null ? java.util.Collections.emptyMap() : ctx);
 	}
 
+	private static Value evaluateExpressionValue(String input, java.util.Map<String, Value> ctx) {
+		java.util.List<String> tokens = tokenize(input);
+		if (tokens == null)
+			return null;
+		java.util.List<String> output = shuntingYard(tokens);
+		if (output == null)
+			return null;
+		return evaluateRPNValue(output, ctx == null ? java.util.Collections.emptyMap() : ctx);
+	}
+
+	private static Value evaluateRPNValue(java.util.List<String> output, java.util.Map<String, Value> ctx) {
+		java.util.Map<String, Integer> prec = new java.util.HashMap<>();
+		prec.put("+", 1);
+		prec.put("-", 1);
+		prec.put("*", 2);
+		java.util.Deque<Value> stack = new java.util.ArrayDeque<>();
+		for (String tk : output) {
+			if (!prec.containsKey(tk)) { // operand
+				stack.push(parseOperandAndValidate(tk, ctx));
+				continue;
+			}
+			if (stack.size() < 2)
+				return null;
+			Value b = stack.pop();
+			Value a = stack.pop();
+			if (!a.token.equals(b.token))
+				throw new IllegalArgumentException("mismatched operand types: " + a.token + " vs " + b.token);
+			java.math.BigInteger res;
+			switch (tk) {
+				case "+":
+					res = a.value.add(b.value);
+					break;
+				case "-":
+					res = a.value.subtract(b.value);
+					break;
+				case "*":
+					res = a.value.multiply(b.value);
+					break;
+				default:
+					return null;
+			}
+
+			// check range for token
+			checkValueInRange(a.token, res);
+			stack.push(new Value(res, a.token));
+		}
+
+		if (stack.size() != 1)
+			return null;
+		return stack.pop();
+	}
+
 	private static java.util.List<String> shuntingYard(java.util.List<String> tokens) {
 		java.util.List<String> output = new java.util.ArrayList<>();
 		java.util.Deque<String> ops = new java.util.ArrayDeque<>();
@@ -529,14 +582,17 @@ public final class App {
 			String token = decl[1];
 			String exprStr = decl[2];
 			// evaluate exprStr with current ctx
-			String res = evaluateWithParentheses(exprStr, ctx);
-			if (res == null)
+			Value exprVal = evaluateExpressionValue(exprStr, ctx);
+			if (exprVal == null)
 				throw new IllegalArgumentException("invalid expression in let: " + stmt);
+			// ensure declared type matches expression token
+			if (!exprVal.token.equals(token))
+				throw new IllegalArgumentException("mismatched declaration type: " + token + " vs " + exprVal.token);
 			// validate range for declared token
-			checkValueInRange(token, new java.math.BigInteger(res));
+			checkValueInRange(token, exprVal.value);
 			if (ctx.containsKey(name))
 				throw new IllegalArgumentException("duplicate declaration: " + name);
-			ctx.put(name, new Value(new java.math.BigInteger(res), token));
+			ctx.put(name, new Value(exprVal.value, token));
 		}
 
 		// final expression

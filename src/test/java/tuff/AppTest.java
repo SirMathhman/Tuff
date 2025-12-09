@@ -151,6 +151,11 @@ class AppTest {
 	}
 
 	@Test
+	void interpretTopLevelLetTypeMismatchThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("let x : U8 = 200U16;"));
+	}
+
+	@Test
 	void interpretThrowsForNegativeU8() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("-1U8 "));
 	}
