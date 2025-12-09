@@ -99,44 +99,102 @@ public final class App {
 	 * binary expression we support.
 	 */
 	private static String evaluateBinaryExpression(String input) {
+		Expression expr = parseExpression(input);
+		if (expr == null)
+			return null;
 
-		// allow N-ary addition like "1U8 + 2U8 + 3U8"
-		String[] parts = input.split("\\+");
-		if (parts.length < 2) return null;
+		return evaluateExpressionWithTokenValidation(expr);
+	}
 
-		java.util.regex.Pattern p = java.util.regex.Pattern.compile("^([+-]?\\d+)(.*)$");
+	private static class Expression {
+		java.util.List<String> operands;
+		java.util.List<String> ops;
 
-		String commonToken = null;
-		java.math.BigInteger sum = java.math.BigInteger.ZERO;
-		for (String part : parts) {
-			String operand = part.trim();
-			java.util.regex.Matcher om = p.matcher(operand);
-			if (!om.find()) return null;
-			String od = om.group(1);
-			String or = om.group(2).trim();
-			String otoken = extractToken(or);
-			if (otoken.isEmpty()) return null;
-			if (commonToken == null) commonToken = otoken;
-			if (!commonToken.equals(otoken)) {
-				throw new IllegalArgumentException("mismatched operand types: " + commonToken + " vs " + otoken);
+		Expression(java.util.List<String> operands, java.util.List<String> ops) {
+			this.operands = operands;
+			this.ops = ops;
+		}
+	}
+
+	private static Expression parseExpression(String input) {
+		java.util.regex.Pattern operandPattern = java.util.regex.Pattern.compile("([+-]?\\d+[A-Za-z0-9]*)");
+		java.util.regex.Matcher om = operandPattern.matcher(input);
+		java.util.List<String> operands = new java.util.ArrayList<>();
+		java.util.List<String> ops = new java.util.ArrayList<>();
+
+		int lastEnd = 0;
+		while (om.find()) {
+			int start = om.start();
+			int end = om.end();
+			if (lastEnd != 0) {
+				String opText = input.substring(lastEnd, start).trim();
+				if (opText.isEmpty() || !(opText.equals("+") || opText.equals("-")))
+					return null;
+				ops.add(opText);
+			} else {
+				String leading = input.substring(0, start).trim();
+				if (!leading.isEmpty())
+					return null; // unexpected text before first operand
 			}
 
-			// validate operand
-			validateTokenRange(otoken, od);
-
-			java.math.BigInteger ov = new java.math.BigInteger(normalizeDigits(od));
-			sum = sum.add(ov);
+			operands.add(om.group(1));
+			lastEnd = end;
 		}
 
-		// validate sum within range for token
-		// reuse token range calculation
-		// compute min/max for token
+		if (operands.size() < 2)
+			return null;
+
+		return new Expression(operands, ops);
+	}
+
+	private static String evaluateExpressionWithTokenValidation(Expression expr) {
+		java.util.regex.Pattern p = java.util.regex.Pattern.compile("^([+-]?\\d+)(.*)$");
+
+		java.util.regex.Matcher m0 = p.matcher(expr.operands.get(0));
+		if (!m0.find())
+			return null;
+		String od0 = m0.group(1);
+		String or0 = m0.group(2).trim();
+
+		String commonToken = extractToken(or0);
+		if (commonToken.isEmpty())
+			return null;
+
+		validateTokenRange(commonToken, od0);
+		java.math.BigInteger acc = new java.math.BigInteger(normalizeDigits(od0));
+
+		for (int i = 0; i < expr.ops.size(); i++) {
+			String op = expr.ops.get(i);
+			String operand = expr.operands.get(i + 1);
+
+			java.util.regex.Matcher mm = p.matcher(operand);
+			if (!mm.find())
+				return null;
+			String nd = mm.group(1);
+			String nr = mm.group(2).trim();
+
+			String ntoken = extractToken(nr);
+			if (ntoken.isEmpty())
+				return null;
+			if (!commonToken.equals(ntoken)) {
+				throw new IllegalArgumentException("mismatched operand types: " + commonToken + " vs " + ntoken);
+			}
+
+			validateTokenRange(ntoken, nd);
+			java.math.BigInteger nv = new java.math.BigInteger(normalizeDigits(nd));
+			if (op.equals("+"))
+				acc = acc.add(nv);
+			else
+				acc = acc.subtract(nv);
+		}
+
+		// validate final result in range
 		boolean isUnsigned = commonToken.startsWith("U");
 		int bits;
 		try {
 			bits = Integer.parseInt(commonToken.substring(1));
 		} catch (NumberFormatException ex) {
-			return sum.toString();
+			return acc.toString();
 		}
 
 		java.math.BigInteger min, max;
@@ -148,11 +206,12 @@ public final class App {
 			max = java.math.BigInteger.ONE.shiftLeft(bits - 1).subtract(java.math.BigInteger.ONE);
 		}
 
-		if (sum.compareTo(min) < 0 || sum.compareTo(max) > 0) {
-			throw new IllegalArgumentException("value out of range for " + commonToken + ": " + sum.toString());
+		if (acc.compareTo(min) < 0 || acc.compareTo(max) > 0) {
+			throw new IllegalArgumentException("value out of range for " + commonToken + ": " + acc.toString());
 		}
 
-		return sum.toString();
+		return acc.toString();
+
 	}
 
 	public static void main(String[] args) {
