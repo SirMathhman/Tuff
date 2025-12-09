@@ -148,7 +148,7 @@ function tryParseExpr(inputStr: string, env?: Env) {
 
 function evaluateValueAndSuffix(
   inputStr: string,
-  env?: Map<string, { value: bigint; suffix: string }>
+  env?: Env
 ): { value: bigint; suffix: string } {
   const ep = tryParseExpr(inputStr, env as Env);
   if (ep) {
