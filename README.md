@@ -2,10 +2,16 @@
 
 This small project adds a stubbed C function `interpret(const char *input)` that returns a newly allocated string.
 
-Build and run tests (requires gcc/make):
+Build and run tests (PowerShell):
+
+```powershell
+.\scripts\build_and_test.ps1    # uses clang or gcc if available
+```
+
+Or on *nix / CI runners:
 
 ```sh
-make test
+./scripts/run_tests.sh          # uses $CC or clang/gcc
 ```
 
 Check for duplicated code using PMD CPD (minimum token count 60):
