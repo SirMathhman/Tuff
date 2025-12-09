@@ -53,6 +53,39 @@
 					<useModulePath>false</useModulePath>
 				</configuration>
 			</plugin>
+
+			<!-- Checkstyle plugin configured to use a modern Checkstyle runtime compatible with recent
+			JDKs.
+				 We ship an empty config so no default rules are applied. -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-checkstyle-plugin</artifactId>
+				<version>3.6.0</version>
+				<dependencies>
+					<!-- Use a recent Checkstyle build which supports newer Java language versions -->
+					<dependency>
+						<groupId>com.puppycrawl.tools</groupId>
+						<artifactId>checkstyle</artifactId>
+						<version>12.2.0</version>
+					</dependency>
+				</dependencies>
+				<configuration>
+					<!-- point to our empty ruleset so there are no default checks -->
+					<configLocation>config/checkstyle/checkstyle.xml</configLocation>
+					<failsOnError>false</failsOnError>
+					<failOnViolation>false</failOnViolation>
+					<consoleOutput>true</consoleOutput>
+				</configuration>
+				<executions>
+					<execution>
+						<id>checkstyle-verify</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>check</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
 		</plugins>
 	</build>
 
