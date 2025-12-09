@@ -99,50 +99,42 @@ public final class App {
 	 * binary expression we support.
 	 */
 	private static String evaluateBinaryExpression(String input) {
-		java.util.regex.Pattern expr = java.util.regex.Pattern
-				.compile("^\\s*([+-]?\\d+[A-Za-z0-9]*?)\\s*\\+\\s*([+-]?\\d+[A-Za-z0-9]*?)\\s*$");
-		java.util.regex.Matcher mm = expr.matcher(input);
-		if (!mm.find())
-			return null;
 
-		String left = mm.group(1);
-		String right = mm.group(2);
+		// allow N-ary addition like "1U8 + 2U8 + 3U8"
+		String[] parts = input.split("\\+");
+		if (parts.length < 2) return null;
 
-		// parse operands using the same parsing logic
 		java.util.regex.Pattern p = java.util.regex.Pattern.compile("^([+-]?\\d+)(.*)$");
-		java.util.regex.Matcher lm = p.matcher(left);
-		java.util.regex.Matcher rm = p.matcher(right);
-		if (!lm.find() || !rm.find())
-			return null;
 
-		String ld = lm.group(1);
-		String lr = lm.group(2).trim();
-		String rd = rm.group(1);
-		String rr = rm.group(2).trim();
+		String commonToken = null;
+		java.math.BigInteger sum = java.math.BigInteger.ZERO;
+		for (String part : parts) {
+			String operand = part.trim();
+			java.util.regex.Matcher om = p.matcher(operand);
+			if (!om.find()) return null;
+			String od = om.group(1);
+			String or = om.group(2).trim();
+			String otoken = extractToken(or);
+			if (otoken.isEmpty()) return null;
+			if (commonToken == null) commonToken = otoken;
+			if (!commonToken.equals(otoken)) {
+				throw new IllegalArgumentException("mismatched operand types: " + commonToken + " vs " + otoken);
+			}
 
-		String ltoken = extractToken(lr);
-		String rtoken = extractToken(rr);
-		// require tokens to match (same type)
-		if (ltoken.isEmpty()) return null;
-		if (!ltoken.equals(rtoken)) {
-			throw new IllegalArgumentException("mismatched operand types: " + ltoken + " vs " + rtoken);
+			// validate operand
+			validateTokenRange(otoken, od);
+
+			java.math.BigInteger ov = new java.math.BigInteger(normalizeDigits(od));
+			sum = sum.add(ov);
 		}
-
-		// validate operands
-		validateTokenRange(ltoken, ld);
-		validateTokenRange(rtoken, rd);
-
-		java.math.BigInteger lv = new java.math.BigInteger(normalizeDigits(ld));
-		java.math.BigInteger rv = new java.math.BigInteger(normalizeDigits(rd));
-		java.math.BigInteger sum = lv.add(rv);
 
 		// validate sum within range for token
 		// reuse token range calculation
 		// compute min/max for token
-		boolean isUnsigned = ltoken.startsWith("U");
+		boolean isUnsigned = commonToken.startsWith("U");
 		int bits;
 		try {
-			bits = Integer.parseInt(ltoken.substring(1));
+			bits = Integer.parseInt(commonToken.substring(1));
 		} catch (NumberFormatException ex) {
 			return sum.toString();
 		}
@@ -157,7 +149,7 @@ public final class App {
 		}
 
 		if (sum.compareTo(min) < 0 || sum.compareTo(max) > 0) {
-			throw new IllegalArgumentException("value out of range for " + ltoken + ": " + sum.toString());
+			throw new IllegalArgumentException("value out of range for " + commonToken + ": " + sum.toString());
 		}
 
 		return sum.toString();
