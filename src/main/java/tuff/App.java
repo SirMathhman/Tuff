@@ -81,8 +81,11 @@ public final class App {
 			Value resVal = evaluateExpressionValue(expr, ctx);
 			if (resVal == null)
 				return null;
-			if (!resVal.token.equals(token))
+			if (token == null) {
+				token = resVal.token;
+			} else if (!resVal.token.equals(token)) {
 				throw new IllegalArgumentException("mismatched declaration type: " + token + " vs " + resVal.token);
+			}
 			TokenRange.checkValueInRange(token, resVal.value);
 			ctx.put(name, new Value(resVal.value, token));
 		}
@@ -123,9 +126,13 @@ public final class App {
 			Value resVal = evaluateExpressionValue(decl[2], Collections.emptyMap());
 			if (resVal == null)
 				return null;
-			if (!resVal.token.equals(decl[1]))
-				throw new IllegalArgumentException("mismatched declaration type: " + decl[1] + " vs " + resVal.token);
-			TokenRange.checkValueInRange(decl[1], resVal.value);
+			String token = decl[1];
+			if (token == null) {
+				token = resVal.token;
+			} else if (!resVal.token.equals(token)) {
+				throw new IllegalArgumentException("mismatched declaration type: " + token + " vs " + resVal.token);
+			}
+			TokenRange.checkValueInRange(token, resVal.value);
 			return "";
 		}
 		return evaluateWithParentheses(stmt);
@@ -140,11 +147,15 @@ public final class App {
 			Value resVal = evaluateExpressionValue(decl[2], ctx);
 			if (resVal == null)
 				return null;
-			if (!resVal.token.equals(decl[1]))
-				throw new IllegalArgumentException("mismatched declaration type: " + decl[1] + " vs " + resVal.token);
+			String token = decl[1];
+			if (token == null) {
+				token = resVal.token;
+			} else if (!resVal.token.equals(token)) {
+				throw new IllegalArgumentException("mismatched declaration type: " + token + " vs " + resVal.token);
+			}
 			if (ctx.containsKey(decl[0]))
 				throw new IllegalArgumentException("duplicate declaration: " + decl[0]);
-			ctx.put(decl[0], new Value(resVal.value, decl[1]));
+			ctx.put(decl[0], new Value(resVal.value, token));
 		}
 		return "";
 	}
@@ -236,8 +247,11 @@ public final class App {
 			Value exprVal = evaluateExpressionValue(exprStr, ctx);
 			if (exprVal == null)
 				throw new IllegalArgumentException("invalid expression in let: " + stmt);
-			if (!exprVal.token.equals(token))
+			if (token == null) {
+				token = exprVal.token;
+			} else if (!exprVal.token.equals(token)) {
 				throw new IllegalArgumentException("mismatched declaration type: " + token + " vs " + exprVal.token);
+			}
 			TokenRange.checkValueInRange(token, exprVal.value);
 			if (ctx.containsKey(name))
 				throw new IllegalArgumentException("duplicate declaration: " + name);
@@ -278,11 +292,19 @@ public final class App {
 	private static String[] parseLetDeclaration(String stmt) {
 		if (!stmt.startsWith("let "))
 			return null;
-		Pattern lp = Pattern.compile("let\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*:\\s*([UI]\\d+)\\s*=\\s*(.+)");
-		Matcher lm = lp.matcher(stmt);
-		if (!lm.find())
-			return null;
-		return new String[] { lm.group(1), lm.group(2), lm.group(3).trim() };
+		// Try explicit type first: let name : TYPE = expr
+		Pattern explicitType = Pattern.compile("let\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*:\\s*([UI]\\d+)\\s*=\\s*(.+)");
+		Matcher explicit = explicitType.matcher(stmt);
+		if (explicit.find())
+			return new String[] { explicit.group(1), explicit.group(2), explicit.group(3).trim() };
+
+		// Try inferred type: let name = expr
+		Pattern inferredType = Pattern.compile("let\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*(.+)");
+		Matcher inferred = inferredType.matcher(stmt);
+		if (inferred.find())
+			return new String[] { inferred.group(1), null, inferred.group(2).trim() };
+
+		return null;
 	}
 
 	private static boolean hasExpressionOperators(String input) {

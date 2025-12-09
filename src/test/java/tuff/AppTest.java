@@ -156,6 +156,11 @@ class AppTest {
 	}
 
 	@Test
+	void interpretTopLevelLetTypeInferenceSimple() {
+		assertEquals("200", App.interpret("let x = 200U16; x"));
+	}
+
+	@Test
 	void interpretThrowsForNegativeU8() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("-1U8 "));
 	}
