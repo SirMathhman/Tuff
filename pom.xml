@@ -70,16 +70,16 @@
 					</dependency>
 				</dependencies>
 				<configuration>
-					<!-- point to our empty ruleset so there are no default checks -->
+					<!-- point to our ruleset. We'll enforce violations during the test phase -->
 					<configLocation>config/checkstyle/checkstyle.xml</configLocation>
 					<failsOnError>false</failsOnError>
-					<failOnViolation>false</failOnViolation>
+					<failOnViolation>true</failOnViolation>
 					<consoleOutput>true</consoleOutput>
 				</configuration>
 				<executions>
 					<execution>
 						<id>checkstyle-verify</id>
-						<phase>verify</phase>
+						<phase>test</phase>
 						<goals>
 							<goal>check</goal>
 						</goals>
