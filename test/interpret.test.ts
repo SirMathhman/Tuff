@@ -125,3 +125,7 @@ it("interpret allows assigning to mut variable and returns empty string for top-
 it("interpret returns updated value after mut assignment when referenced", () => {
   expect(interpret("let mut x = 100; x = 200; x")).toBe("200");
 });
+
+it("interpret throws when assigning mismatched suffix to mut variable", () => {
+  expect(() => interpret("let mut x = 100; x = 50I8;")).toThrow();
+});
