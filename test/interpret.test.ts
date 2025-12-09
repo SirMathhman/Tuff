@@ -26,7 +26,14 @@ it("interpret sums multiple suffixed integers", () => {
 });
 
 it("interpret handles mixed + and - operators", () => {
-  expect(interpret("10U8 - 5U8 + 3U8")).toBe("8")
+  expect(interpret("10U8 - 5U8 + 3U8")).toBe("8");
+});
+
+it("interpret handles multiplication with precedence", () => {
+  expect(interpret("2U8 * 3U8 + 4U8")).toBe("10")
+  expect(interpret("2U8 + 3U8 * 4U8")).toBe("14")
+  expect(interpret("2U8 * 3U8 * 4U8")).toBe("24")
+  expect(() => interpret("200U8 * 2U8")).toThrow()
 })
 
 it("interpret enforces signed I8 boundaries", () => {

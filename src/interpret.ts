@@ -40,8 +40,9 @@ export function interpret(input: string): string {
   // Try parse an n-ary expression of operands separated by + or -
   const tryParseExpr = (inputStr: string) => {
     const exprPattern =
-      /^([+-]?\d+\s*[a-zA-Z0-9]+)(?:\s*[-+]\s*[+-]?\d+\s*[a-zA-Z0-9]+)+$/;
-    if (!exprPattern.test(inputStr)) return null as null | { nums: string[]; ops: string[]; suffix: string };
+      /^([+-]?\d+\s*[a-zA-Z0-9]+)(?:\s*[-+*]\s*[+-]?\d+\s*[a-zA-Z0-9]+)+$/;
+    if (!exprPattern.test(inputStr))
+      return null as null | { nums: string[]; ops: string[]; suffix: string };
 
     // Tokenize operands and operators sequentially
     const nums: string[] = [];
@@ -53,7 +54,7 @@ export function interpret(input: string): string {
     nums.push(m0[1]);
     const firstSuffix = m0[2];
     rest = rest.slice(m0[0].length);
-    const opRe = /^([+-])\s*/;
+    const opRe = /^([+\-*])\s*/;
     const operandRe = /^([+-]?\d+)\s*([a-zA-Z0-9]+)\s*/;
     while (rest.length > 0) {
       const mo = rest.match(opRe);
@@ -66,20 +67,44 @@ export function interpret(input: string): string {
       if (mm[2].toLowerCase() !== firstSuffix.toLowerCase()) return null;
       rest = rest.slice(mm[0].length);
     }
-    return { nums, ops, suffix: firstSuffix } as { nums: string[]; ops: string[]; suffix: string };
+    return { nums, ops, suffix: firstSuffix } as {
+      nums: string[];
+      ops: string[];
+      suffix: string;
+    };
   };
 
   const exprParsed = tryParseExpr(s);
   if (exprParsed) {
     const { nums, ops, suffix } = exprParsed;
     const parsed = parseSuffix(suffix);
-    if (!parsed) throw new Error('interpret: mismatched or unsupported suffixes in expression');
+    if (!parsed)
+      throw new Error(
+        "interpret: mismatched or unsupported suffixes in expression"
+      );
     const { kind, bits } = parsed;
-    let acc = BigInt(nums[0]);
-    for (let i = 0; i < ops.length; i++) {
-      const op = ops[i];
-      const n = BigInt(nums[i + 1]);
-      acc = op === '+' ? acc + n : acc - n;
+    // Evaluate * before + and - (left-associative)
+    // First, apply all multiplications
+    let nnums: bigint[] = nums.map((x) => BigInt(x))
+    let nops: string[] = [...ops]
+    for (let i = 0; i < nops.length; ) {
+      if (nops[i] === '*') {
+        const prod = nnums[i] * nnums[i + 1]
+        nnums.splice(i, 2, prod)
+        nops.splice(i, 1)
+      } else {
+        i++
+      }
+    }
+
+    // Then evaluate + and - left-to-right
+    let acc = nnums[0]
+    for (let i = 0; i < nops.length; i++) {
+      const op = nops[i]
+      const n = nnums[i + 1]
+      if (op === '+') acc = acc + n
+      else if (op === '-') acc = acc - n
+      else throw new Error('interpret: unsupported operator')
     }
     checkRange(kind, bits, acc, suffix);
     return acc.toString();
