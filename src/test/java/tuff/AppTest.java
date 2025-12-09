@@ -101,6 +101,11 @@ class AppTest {
 	}
 
 	@Test
+	void interpretSignedMultiplicationOverflowThrows() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("-10I8 * 30I8"));
+	}
+
+	@Test
 	void interpretThrowsForNegativeU8() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("-1U8 "));
 	}
