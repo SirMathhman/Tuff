@@ -3,7 +3,7 @@ package tuff;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-    
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class AppTest {
 	@Test
@@ -16,5 +16,10 @@ class AppTest {
 	@Test
 	void interpretReturnsLeadingDigits() {
 		assertEquals("100", App.interpret("100U8"));
+	}
+
+	@Test
+	void interpretThrowsForU8Overflow() {
+		assertThrows(IllegalArgumentException.class, () -> App.interpret("256U8"));
 	}
 }
