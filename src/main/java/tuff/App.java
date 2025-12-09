@@ -6,7 +6,9 @@ public final class App {
 	}
 
 	public static String interpret(String input) {
-		throw new UnsupportedOperationException("interpret is not implemented");
+		if (input == null || input.isEmpty()) return "";
+		java.util.regex.Matcher m = java.util.regex.Pattern.compile("^\\d+").matcher(input);
+		return m.find() ? m.group(0) : "";
 	}
 
 	public static void main(String[] args) {
