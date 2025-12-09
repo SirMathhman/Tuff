@@ -66,6 +66,11 @@ class AppTest {
 	}
 
 	@Test
+	void interpretAddsU8Operands() {
+		assertEquals("3", App.interpret("1U8 + 2U8"));
+	}
+
+	@Test
 	void interpretThrowsForNegativeU8() {
 		assertThrows(IllegalArgumentException.class, () -> App.interpret("-1U8 "));
 	}

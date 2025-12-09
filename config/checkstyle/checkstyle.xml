@@ -4,7 +4,7 @@
 	<!-- Enforce cyclomatic complexity <= 15 for all methods and constructors -->
 	<module name="TreeWalker">
 		<module name="CyclomaticComplexity">
-			<property name="max" value="15"/>
+			<property name="max" value="15" />
 		</module>
 	</module>
 	<!-- Keep file-level checks empty otherwise; add additional checks as desired. -->
