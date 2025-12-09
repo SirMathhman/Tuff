@@ -14,6 +14,11 @@ it("interpret handles integer with unsigned suffix", () => {
   expect(interpret("  +255u16 ")).toBe("+255");
 });
 
+it("interpret throws for negative unsigned integers", () => {
+  expect(() => interpret("-100U8")).toThrow()
+  expect(() => interpret(" -1u16 ")).toThrow()
+})
+
 it("interpret throws for non-integer strings", () => {
   expect(() => interpret("hello")).toThrow();
 });
