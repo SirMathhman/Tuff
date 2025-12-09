@@ -1,5 +1,5 @@
 type Env = {
-  map: Map<string, { value: bigint; suffix: string }>;
+  map: Map<string, { value: bigint | boolean; suffix: string }>;
   parent?: Env;
 };
 
@@ -149,7 +149,7 @@ function tryParseExpr(inputStr: string, env?: Env) {
 function evaluateValueAndSuffix(
   inputStr: string,
   env?: Env
-): { value: bigint; suffix: string } {
+): { value: bigint | boolean; suffix: string } {
   const ep = tryParseExpr(inputStr, env as Env);
   if (ep) {
     const { nums, ops, suffix } = ep;
@@ -183,6 +183,12 @@ function evaluateValueAndSuffix(
   }
 
   // single number with suffix
+  // boolean literal
+  const b2 = inputStr.trim().match(/^(true|false)$/i);
+  if (b2) {
+    return { value: b2[1].toLowerCase() === "true", suffix: "Bool" };
+  }
+
   const m2 = inputStr.trim().match(/^([+-]?\d+)\s*([a-zA-Z0-9]+)\s*$/);
   if (m2) {
     const [, num, suffix] = m2;
@@ -220,7 +226,7 @@ function executeStatements(
   for (const stmt of parts) {
     // let <ident> : <Type> = <expr>
     const letMatch = stmt.match(
-      /^let\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([uUiI](?:8|16|32|64))\s*=\s*(.*)$/
+      /^let\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(([uUiI](?:8|16|32|64))|([bB]ool))\s*=\s*(.*)$/
     );
     if (letMatch) {
       const name = letMatch[1];
@@ -229,7 +235,7 @@ function executeStatements(
         throw new Error(`interpret: redeclaration of ${name}`);
       }
       const declared = letMatch[2];
-      const rhs = letMatch[3];
+      const rhs = letMatch[5];
       let r;
       // allow a bare integer literal on the RHS when assigning to a declared type
       const bare = rhs.trim().match(/^([+-]?\d+)$/);
@@ -248,10 +254,12 @@ function executeStatements(
           `interpret: declared type ${declared} does not match RHS type ${r.suffix}`
         );
       }
-      // ensure value fits declared type
-      const pd = parseSuffix(declared);
-      if (!pd) throw new Error("interpret: invalid declared suffix");
-      checkRange(pd.kind, pd.bits, r.value, declared);
+      // ensure value fits declared type when numeric
+      if (!/^bool$/i.test(declared)) {
+        const pd = parseSuffix(declared);
+        if (!pd) throw new Error("interpret: invalid declared suffix");
+        checkRange(pd.kind, pd.bits, r.value as bigint, declared);
+      }
       env.map.set(name, { value: r.value, suffix: declared });
       lastVal = r.value.toString();
       lastWasLet = true;
@@ -259,7 +267,9 @@ function executeStatements(
     }
 
     // support `let <ident> = <expr>` where the variable's type is inferred
-    const letNoTypeMatch = stmt.match(/^let\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    const letNoTypeMatch = stmt.match(
+      /^let\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/
+    );
     if (letNoTypeMatch) {
       const name = letNoTypeMatch[1];
       if (isDeclaredInCurrentScope(env, name)) {
@@ -267,7 +277,8 @@ function executeStatements(
       }
       const rhs = letNoTypeMatch[2];
       const r = evaluateValueAndSuffix(rhs, env);
-      if (!r || !r.suffix) throw new Error("interpret: invalid RHS for let without type");
+      if (!r || !r.suffix)
+        throw new Error("interpret: invalid RHS for let without type");
       // store with inferred suffix
       env.map.set(name, { value: r.value, suffix: r.suffix });
       lastVal = r.value.toString();

@@ -105,3 +105,7 @@ it("interpret throws when assigning variable with mismatched suffix to different
 it("interpret throws when letting without type then assigning to different declared type", () => {
   expect(() => interpret("let x = 60U8; let y : I8 = x;")).toThrow();
 });
+
+it("interpret throws when Bool variable passed to different numeric declared type", () => {
+  expect(() => interpret("let x : Bool = true; let y : I8 = x;")).toThrow();
+});
