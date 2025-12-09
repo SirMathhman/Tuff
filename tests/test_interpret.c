@@ -39,6 +39,83 @@ void test_interpret_u8_out_of_range_returns_error(void)
 	free(out);
 }
 
+void test_interpret_u16_valid_and_invalid(void)
+{
+	char *ok = interpret("65535U16");
+	TEST_ASSERT_EQUAL_STRING("65535", ok);
+	free(ok);
+
+	char *bad = interpret("65536U16");
+	TEST_ASSERT_EQUAL_STRING("Error", bad);
+	free(bad);
+}
+
+void test_interpret_u32_valid_and_invalid(void)
+{
+	char *ok = interpret("4294967295U32");
+	TEST_ASSERT_EQUAL_STRING("4294967295", ok);
+	free(ok);
+
+	char *bad = interpret("4294967296U32");
+	TEST_ASSERT_EQUAL_STRING("Error", bad);
+	free(bad);
+}
+
+void test_interpret_u64_valid_and_invalid(void)
+{
+	char *ok = interpret("18446744073709551615U64");
+	TEST_ASSERT_EQUAL_STRING("18446744073709551615", ok);
+	free(ok);
+
+	char *bad = interpret("18446744073709551616U64");
+	TEST_ASSERT_EQUAL_STRING("Error", bad);
+	free(bad);
+}
+
+void test_interpret_i8_valid_and_invalid(void)
+{
+	char *ok = interpret("-128I8");
+	TEST_ASSERT_EQUAL_STRING("-128", ok);
+	free(ok);
+
+	char *bad = interpret("-129I8");
+	TEST_ASSERT_EQUAL_STRING("Error", bad);
+	free(bad);
+}
+
+void test_interpret_i16_valid_and_invalid(void)
+{
+	char *ok = interpret("32767I16");
+	TEST_ASSERT_EQUAL_STRING("32767", ok);
+	free(ok);
+
+	char *bad = interpret("32768I16");
+	TEST_ASSERT_EQUAL_STRING("Error", bad);
+	free(bad);
+}
+
+void test_interpret_i32_valid_and_invalid(void)
+{
+	char *ok = interpret("2147483647I32");
+	TEST_ASSERT_EQUAL_STRING("2147483647", ok);
+	free(ok);
+
+	char *bad = interpret("2147483648I32");
+	TEST_ASSERT_EQUAL_STRING("Error", bad);
+	free(bad);
+}
+
+void test_interpret_i64_valid_and_invalid(void)
+{
+	char *ok = interpret("9223372036854775807I64");
+	TEST_ASSERT_EQUAL_STRING("9223372036854775807", ok);
+	free(ok);
+
+	char *bad = interpret("9223372036854775808I64");
+	TEST_ASSERT_EQUAL_STRING("Error", bad);
+	free(bad);
+}
+
 int main(void)
 {
 	UNITY_BEGIN();
@@ -47,5 +124,12 @@ int main(void)
 	RUN_TEST(test_interpret_strips_u8_suffix);
 	RUN_TEST(test_interpret_negative_u8_returns_error);
 	RUN_TEST(test_interpret_u8_out_of_range_returns_error);
+	RUN_TEST(test_interpret_u16_valid_and_invalid);
+	RUN_TEST(test_interpret_u32_valid_and_invalid);
+	RUN_TEST(test_interpret_u64_valid_and_invalid);
+	RUN_TEST(test_interpret_i8_valid_and_invalid);
+	RUN_TEST(test_interpret_i16_valid_and_invalid);
+	RUN_TEST(test_interpret_i32_valid_and_invalid);
+	RUN_TEST(test_interpret_i64_valid_and_invalid);
 	return UNITY_END();
 }
