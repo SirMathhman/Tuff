@@ -4,7 +4,8 @@ export function interpret(input: string): string {
   const s = input.trim();
   // Support numeric type suffixes like `100U8`, `-42u16`.
   // Capture the leading integer and ignore a trailing alphabetic/numeric suffix.
-  const m = s.match(/^([+-]?\d+)([a-zA-Z0-9]+)?$/);
+  // Require a suffix — bare integers (e.g. "100") are no longer supported.
+  const m = s.match(/^([+-]?\d+)([a-zA-Z0-9]+)$/);
   if (m) {
     const [, num, suffix] = m;
     // If suffix indicates unsigned (starts with 'u' or 'U'), negative values are invalid.
