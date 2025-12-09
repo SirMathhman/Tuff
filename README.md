@@ -10,16 +10,12 @@ make test
 
 Check for duplicated code using PMD CPD (minimum token count 60):
 
-Shell:
-
-```sh
-scripts/check_duplicates.sh [min_tokens] [directory]
-```
-
-PowerShell:
+PowerShell (preferred):
 
 ```powershell
 .\scripts\check_duplicates.ps1 -MinTokens 60 -Dir src/
 ```
 
 This repository also includes a pre-commit hook that runs PMD CPD to block commits if duplicated code (>=60 tokens) is found.
+
+Preferred: PowerShell-only tooling where possible on this repo.
