@@ -104,46 +104,76 @@ public class Parser {
 			throw new IllegalArgumentException("node cannot be null");
 		}
 		if (node instanceof BinaryOpNode) {
-			BinaryOpNode bin = (BinaryOpNode) node;
-			if ("+".equals(bin.getOp())) {
-				BigInteger left = numericValue(bin.getLeft());
-				BigInteger right = numericValue(bin.getRight());
-				BigInteger sum = left.add(right);
-				String leftSuffix = (bin.getLeft() instanceof LiteralNode) ? ((LiteralNode) bin.getLeft()).getSuffix() : null;
-				String rightSuffix = (bin.getRight() instanceof LiteralNode) ? ((LiteralNode) bin.getRight()).getSuffix()
-						: null;
-				if (leftSuffix != null && leftSuffix.equals(rightSuffix)) {
-					Range r = rangeForSuffix(leftSuffix);
-					if (r != null) {
-						if (sum.compareTo(r.min) < 0 || sum.compareTo(r.max) > 0) {
-							throw new ExecuteException(leftSuffix + " overflow: " + sum.toString());
-						}
-					}
-				}
-				return sum.toString();
-			}
+			return executeBinaryOp((BinaryOpNode) node);
 		}
 		if (node instanceof LiteralNode) {
-			LiteralNode ln = (LiteralNode) node;
-			String val = ln.getValue();
-			String suffix = ln.getSuffix();
-			if (suffix != null) {
-				// Check the numeric range for all supported types
-				BigInteger bigint = new BigInteger(val);
-				Range range = rangeForSuffix(suffix);
-				// Unsigned types should reject negative values
-				if (!range.signed && bigint.signum() < 0) {
-					throw new ExecuteException(suffix + " value cannot be negative: " + val + suffix);
-				}
-				if (bigint.compareTo(range.min) < 0 || bigint.compareTo(range.max) > 0) {
-					throw new ExecuteException(suffix + " value out of range: " + val + suffix);
-				}
-				return bigint.toString();
-			}
-			return val;
+			return executeLiteralNode((LiteralNode) node);
 		}
 		// Fallback: return toString() for unknown node types
 		return node.toString();
+	}
+
+	/**
+	 * Execute a binary operation node.
+	 *
+	 * @param bin the binary operation node
+	 * @return the result as a string
+	 */
+	private static String executeBinaryOp(BinaryOpNode bin) {
+		if ("+".equals(bin.getOp())) {
+			BigInteger left = numericValue(bin.getLeft());
+			BigInteger right = numericValue(bin.getRight());
+			BigInteger sum = left.add(right);
+			String leftSuffix = (bin.getLeft() instanceof LiteralNode) ? ((LiteralNode) bin.getLeft()).getSuffix() : null;
+			String rightSuffix = (bin.getRight() instanceof LiteralNode) ? ((LiteralNode) bin.getRight()).getSuffix()
+					: null;
+			if (leftSuffix != null && leftSuffix.equals(rightSuffix)) {
+				validateAdditionResult(sum, leftSuffix);
+			}
+			return sum.toString();
+		}
+		return "";
+	}
+
+	/**
+	 * Validate that an addition result is within the valid range for its type.
+	 *
+	 * @param sum the result of addition
+	 * @param suffix the type suffix
+	 * @throws ExecuteException if the sum is out of range
+	 */
+	private static void validateAdditionResult(BigInteger sum, String suffix) {
+		Range r = rangeForSuffix(suffix);
+		if (r != null) {
+			if (sum.compareTo(r.min) < 0 || sum.compareTo(r.max) > 0) {
+				throw new ExecuteException(suffix + " overflow: " + sum.toString());
+			}
+		}
+	}
+
+	/**
+	 * Execute a literal node.
+	 *
+	 * @param ln the literal node
+	 * @return the value as a string
+	 */
+	private static String executeLiteralNode(LiteralNode ln) {
+		String val = ln.getValue();
+		String suffix = ln.getSuffix();
+		if (suffix != null) {
+			// Check the numeric range for all supported types
+			BigInteger bigint = new BigInteger(val);
+			Range range = rangeForSuffix(suffix);
+			// Unsigned types should reject negative values
+			if (!range.signed && bigint.signum() < 0) {
+				throw new ExecuteException(suffix + " value cannot be negative: " + val + suffix);
+			}
+			if (bigint.compareTo(range.min) < 0 || bigint.compareTo(range.max) > 0) {
+				throw new ExecuteException(suffix + " value out of range: " + val + suffix);
+			}
+			return bigint.toString();
+		}
+		return val;
 	}
 
 	private static BigInteger numericValue(ASTNode node) {
