@@ -19,4 +19,23 @@ public class Parser {
 		}
 		return new LiteralNode(source);
 	}
+
+	/**
+	 * Execute the given ASTNode and return a string result.
+	 * Current implementation supports LiteralNode by returning its value.
+	 *
+	 * @param node the ASTNode to execute
+	 * @return a string result of executing the node
+	 */
+	public static String execute(ASTNode node) {
+		if (node == null) {
+			throw new IllegalArgumentException("node cannot be null");
+		}
+		if (node instanceof LiteralNode) {
+			LiteralNode ln = (LiteralNode) node;
+			return ln.getValue();
+		}
+		// Fallback: return toString() for unknown node types
+		return node.toString();
+	}
 }

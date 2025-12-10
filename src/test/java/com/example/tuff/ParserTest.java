@@ -18,4 +18,16 @@ public class ParserTest {
 	public void parseRejectsNull() {
 		assertThrows(IllegalArgumentException.class, () -> Parser.parse(null));
 	}
+
+	@Test
+	public void executeReturnsValue() {
+		ASTNode node = Parser.parse("hello");
+		String out = Parser.execute(node);
+		assertEquals("hello", out);
+	}
+
+	@Test
+	public void executeRejectsNull() {
+		assertThrows(IllegalArgumentException.class, () -> Parser.execute(null));
+	}
 }
