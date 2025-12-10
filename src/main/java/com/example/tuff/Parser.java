@@ -20,15 +20,57 @@ public class Parser {
 			throw new IllegalArgumentException("source cannot be null");
 		}
 
-		// Support simple binary addition by splitting on '+' (left-associative)
-		String[] parts = source.split("\\s*\\+\\s*");
-		if (parts.length > 1) {
-			ASTNode left = parse(parts[0]);
-			for (int i = 1; i < parts.length; i++) {
-				ASTNode right = parse(parts[i]);
-				left = new BinaryOpNode(left, "+", right);
+		// Support binary operations (+ and -) by finding first operator
+		// (left-associative)
+		// An operator must have a space before it to distinguish from type suffixes
+		// Process left-to-right for left-associativity: 10 - 5 + 3 = ((10 - 5) + 3) = 8
+		ASTNode result = null;
+		String remaining = source;
+		String currentOp = "+"; // default operator for the first operand
+
+		while (remaining.length() > 0) {
+			// Find the next operator
+			int operatorPos = -1;
+			for (int i = 1; i < remaining.length(); i++) {
+				char c = remaining.charAt(i);
+				if ((c == '+' || c == '-')) {
+					char prev = remaining.charAt(i - 1);
+					// It's an operator if previous char is a space
+					if (prev == ' ') {
+						operatorPos = i;
+						break;
+					}
+				}
 			}
-			return left;
+
+			String operand;
+			String nextOp = "+";
+			if (operatorPos == -1) {
+				// No more operators, this is the last operand
+				operand = remaining.trim();
+				remaining = "";
+			} else {
+				// Extract operand and next operator
+				operand = remaining.substring(0, operatorPos).trim();
+				nextOp = String.valueOf(remaining.charAt(operatorPos));
+				remaining = remaining.substring(operatorPos + 1).trim();
+			}
+
+			// Parse the operand
+			ASTNode operandNode = parseOperand(operand);
+
+			// Apply the previous operator to get the running result
+			if (result == null) {
+				result = operandNode;
+			} else {
+				result = new BinaryOpNode(result, currentOp, operandNode);
+			}
+
+			currentOp = nextOp;
+		}
+
+		if (result != null) {
+			return result;
 		}
 		// Support integer suffixes such as U8, U16, U32, U64 and I8, I16, I32, I64
 		String lower = source.toLowerCase();
@@ -43,6 +85,28 @@ public class Parser {
 			}
 		}
 		return new LiteralNode(source);
+	}
+
+	/**
+	 * Parse a single operand (no operators). Used internally by parse().
+	 *
+	 * @param operand the operand to parse
+	 * @return an ASTNode for the operand
+	 */
+	private static ASTNode parseOperand(String operand) {
+		// Support integer suffixes such as U8, U16, U32, U64 and I8, I16, I32, I64
+		String lower = operand.toLowerCase();
+		String[] supported = new String[] { "u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64" };
+		for (String s : supported) {
+			if (lower.endsWith(s)) {
+				String prefix = operand.substring(0, operand.length() - s.length());
+				if (prefix.matches("-?\\d+")) {
+					// Normalize suffix to upper-case (e.g., "U8")
+					return new LiteralNode(prefix, s.toUpperCase());
+				}
+			}
+		}
+		return new LiteralNode(operand);
 	}
 
 	/**
@@ -131,6 +195,17 @@ public class Parser {
 				validateAdditionResult(sum, leftSuffix);
 			}
 			return sum.toString();
+		} else if ("-".equals(bin.getOp())) {
+			BigInteger left = numericValue(bin.getLeft());
+			BigInteger right = numericValue(bin.getRight());
+			BigInteger diff = left.subtract(right);
+			String leftSuffix = (bin.getLeft() instanceof LiteralNode) ? ((LiteralNode) bin.getLeft()).getSuffix() : null;
+			String rightSuffix = (bin.getRight() instanceof LiteralNode) ? ((LiteralNode) bin.getRight()).getSuffix()
+					: null;
+			if (leftSuffix != null && leftSuffix.equals(rightSuffix)) {
+				validateAdditionResult(diff, leftSuffix);
+			}
+			return diff.toString();
 		}
 		return "";
 	}

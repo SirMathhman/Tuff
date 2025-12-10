@@ -61,6 +61,18 @@ public class ParserTest {
 	}
 
 	@Test
+	public void interpretSubtractionReturnsDifference() {
+		String out = Parser.interpret("10U8 - 5U8");
+		assertEquals("5", out);
+	}
+
+	@Test
+	public void interpretMixedAdditionAndSubtractionReturnsResult() {
+		String out = Parser.interpret("10U8 - 5U8 + 3U8");
+		assertEquals("8", out);
+	}
+
+	@Test
 	public void interpretNegativeU8ThrowsExecuteException() {
 		assertThrows(ExecuteException.class, () -> Parser.interpret("-1U8"));
 	}
