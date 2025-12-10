@@ -49,6 +49,12 @@ public class ParserTest {
 	}
 
 	@Test
+	public void interpretAdditionReturnsSum() {
+		String out = Parser.interpret("1U8 + 2U8");
+		assertEquals("3", out);
+	}
+
+	@Test
 	public void interpretNegativeU8ThrowsExecuteException() {
 		assertThrows(ExecuteException.class, () -> Parser.interpret("-1U8"));
 	}
@@ -56,5 +62,10 @@ public class ParserTest {
 	@Test
 	public void interpretOutOfRangeU8ThrowsExecuteException() {
 		assertThrows(ExecuteException.class, () -> Parser.interpret("256U8"));
+	}
+
+	@Test
+	public void interpretAdditionOutOfRangeThrowsExecuteException() {
+		assertThrows(ExecuteException.class, () -> Parser.interpret("100U8 + 300U8"));
 	}
 }
