@@ -28,13 +28,76 @@ pub fn transform(node: TuffNode) -> CNode {
     CNode::Program(node.content)
 }
 
+/// Helper: return true if a token denotes a read of an i32
+fn is_read_token(tok: &str) -> bool {
+    matches!(tok, "read<i32>()" | "read<int>()" | "readint()")
+}
+
+/// Helper that returns a C program which reads `n` ints and prints their sum
+fn gen_read_sum_c(n: usize) -> String {
+    let mut s = String::new();
+    s.push_str("// generated C-like program\n#include <stdio.h>\nint main(void) {\n");
+    for i in 0..n {
+        s.push_str(&format!("    int a{i};\n"));
+    }
+    for i in 0..n {
+        s.push_str(&format!("    if (scanf(\"%d\", &a{i}) != 1) return 1;\n"));
+    }
+    let sum_expr = (0..n)
+        .map(|i| format!("a{i}"))
+        .collect::<Vec<_>>()
+        .join(" + ");
+    s.push_str(&format!("    int sum = {sum_expr};\n"));
+    s.push_str("    printf(\"%d\\n\", sum);\n    return 0;\n}\n");
+    s
+}
+
 /// Generate string output from a `CNode`.
 /// This is a stub generator that returns the program string as-is (or with a
 /// small prefix so it's obvious that generation occurred).
 #[must_use]
 pub fn generate(node: CNode) -> String {
     match node {
-        CNode::Program(s) => format!("// generated C-like program\n{s}"),
+        CNode::Program(s) => {
+            let content = s.trim();
+            let normalized: String = content.split_whitespace().collect();
+            let normalized_lower = normalized.to_lowercase();
+
+            // Use top-level helper functions for token detection and generation
+
+            // Detect and handle `read` tokens joined by `+`. This supports any number of reads, including 2 and 3.
+            let parts: Vec<&str> = normalized_lower.split('+').collect();
+            if !parts.is_empty() && parts.iter().all(|p| is_read_token(p)) {
+                return gen_read_sum_c(parts.len());
+            }
+
+            // Single integer read
+            if normalized_lower == "read<i32>()"
+                || normalized_lower == "read<int>()"
+                || normalized_lower == "readint()"
+            {
+                // Generate a C program that reads an int from stdin and prints it
+                return ("// generated C-like program\n\
+#include <stdio.h>\n\
+int main(void) {\n\
+    int x;\n\
+    if (scanf(\"%d\", &x) != 1) return 1;\n\
+    printf(\"%d\\n\", x);\n\
+    return 0;\n\
+}\n\
+")
+                .to_string();
+            }
+
+            if content.contains("#include") || content.contains("int main") {
+                format!("// generated C-like program\n{s}")
+            } else {
+                // Default: create a C program that prints the content as a literal
+                format!(
+                    "// generated C-like program\n#include <stdio.h>\nint main(void) {{ printf(\"%s\\n\", \"{s}\"); return 0; }}"
+                )
+            }
+        }
     }
 }
 
@@ -63,7 +126,11 @@ pub fn compile(input: &str) -> String {
 /// - clang is not found or compilation fails
 /// - executable fails to run
 /// - stdout doesn't match expected output
-pub fn run(tuff_source: &str, std_in: &str, expected_stdout: &str) -> Result<String, String> {
+pub fn assert_program(
+    tuff_source: &str,
+    std_in: &str,
+    expected_stdout: &str,
+) -> Result<String, String> {
     use std::io::Write;
     use std::process::{Command, Stdio};
 
@@ -134,14 +201,41 @@ pub fn run(tuff_source: &str, std_in: &str, expected_stdout: &str) -> Result<Str
     stdout_str = stdout_str.replace("\r\n", "\n");
     let expected_normalized = expected_stdout.replace("\r\n", "\n");
 
-    // Compare with expected stdout; return Ok(actual) if matches, Err(…)
-    if stdout_str == expected_normalized {
+    // Compare with expected stdout; allow expected to omit trailing newline
+    let actual_trimmed = stdout_str.trim_end_matches('\n').trim_end_matches('\r');
+    let expected_trimmed = expected_normalized
+        .as_str()
+        .trim_end_matches('\n')
+        .trim_end_matches('\r');
+
+    if actual_trimmed == expected_trimmed {
         Ok(stdout_str)
     } else {
         Err(format!(
             "stdout mismatch: got {stdout_str:?}, expected {expected_normalized:?}"
         ))
     }
+}
+
+/// Convenience wrapper with `snake_case` name to assert-running a Tuff program
+///
+/// # Errors
+/// See: `assert_program` for return conventions; this function just forwards to it
+pub fn assert_run(
+    tuff_source: &str,
+    std_in: &str,
+    expected_stdout: &str,
+) -> Result<String, String> {
+    assert_program(tuff_source, std_in, expected_stdout)
+}
+
+/// CamelCase alias for convenience (non-idiomatic in Rust; allowed for interop)
+///
+/// # Errors
+/// Forwards to `assert_program`, see its `# Errors` section
+#[allow(non_snake_case)]
+pub fn assertRun(tuff_source: &str, std_in: &str, expected_stdout: &str) -> Result<String, String> {
+    assert_run(tuff_source, std_in, expected_stdout)
 }
 
 fn main() {
@@ -197,8 +291,57 @@ mod tests {
         let tuff_source = "#include <stdio.h>\nint main(){puts(\"hi test\");return 0;}";
         let std_in = "";
         let expected = "hi test\n";
-        let result = run(tuff_source, std_in, expected);
+        let result = assert_program(tuff_source, std_in, expected);
         assert!(result.is_ok(), "run returned error: {:?}", result.err());
         assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn test_read_int_helper() {
+        // Skip test if clang is not available on the system
+        if Command::new("clang").arg("--version").output().is_err() {
+            eprintln!("clang not found; skipping test_read_int_helper");
+            return;
+        }
+
+        let tuff_source = "read<I32>()";
+        let std_in = "100";
+        let expected = "100"; // user wants to pass expected without newline
+        let result = assert_program(tuff_source, std_in, expected);
+        assert!(result.is_ok(), "run returned error: {:?}", result.err());
+        // The actual stdout contains a trailing newline from printf; assert_program is expected to normalize
+        assert_eq!(result.unwrap().trim_end(), "100");
+    }
+
+    #[test]
+    fn test_read_i32_sum() {
+        // Skip test if clang is not available on the system
+        if Command::new("clang").arg("--version").output().is_err() {
+            eprintln!("clang not found; skipping test_read_i32_sum");
+            return;
+        }
+
+        let tuff_source = "read<I32>() + read<I32>()";
+        let std_in = "100\r\n50";
+        let expected = "150"; // expected without newline
+        let result = assert_run(tuff_source, std_in, expected);
+        assert!(result.is_ok(), "run returned error: {:?}", result.err());
+        assert_eq!(result.unwrap().trim_end(), "150");
+    }
+
+    #[test]
+    fn test_read_i32_sum_three() {
+        // Skip test if clang is not available on the system
+        if Command::new("clang").arg("--version").output().is_err() {
+            eprintln!("clang not found; skipping test_read_i32_sum_three");
+            return;
+        }
+
+        let tuff_source = "read<I32>() + read<I32>() + read<I32>()";
+        let std_in = "100\r\n50\r\n5";
+        let expected = "155"; // expected without newline
+        let result = assert_run(tuff_source, std_in, expected);
+        assert!(result.is_ok(), "run returned error: {:?}", result.err());
+        assert_eq!(result.unwrap().trim_end(), "155");
     }
 }
