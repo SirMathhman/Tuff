@@ -1,0 +1,19 @@
+[build]
+# Turn clippy lints into compile-time warnings (or errors if you prefer using -D)
+rustflags = [
+  "-W", "clippy::unwrap_used",
+  "-W", "clippy::expect_used",
+  "-W", "clippy::panic",
+  "-W", "clippy::indexing_slicing",
+  "-W", "clippy::unreachable",
+  "-W", "clippy::unimplemented",
+  "-W", "clippy::todo",
+  "-W", "clippy::exit",
+  "-W", "clippy::unwrap_in_result",
+  "-W", "clippy::panic_in_result_fn",
+  "-W", "clippy::arithmetic_side_effects",
+  "-W", "clippy::integer_division",
+  "-W", "clippy::cast_possible_truncation",
+  "-W", "clippy::cast_possible_wrap",
+  "-W", "clippy::cast_sign_loss",
+]
