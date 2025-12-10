@@ -52,6 +52,56 @@ fn gen_read_sum_c(n: usize) -> String {
     s
 }
 
+/// Parse a literal token like `1I32` or `1` and return it as decimal string
+fn parse_literal_token(tok: &str) -> Option<String> {
+    let t = tok.trim().to_lowercase();
+    if t.ends_with("i32") {
+        let digits = t.strip_suffix("i32")?.trim();
+        if digits.is_empty() {
+            return None;
+        }
+        if digits.chars().all(|c| c.is_ascii_digit() || c == '+' || c == '-') {
+            return Some(digits.to_string());
+        }
+        return None;
+    }
+    if t.chars().all(|c| c.is_ascii_digit() || c == '+' || c == '-') {
+        return Some(t);
+    }
+    None
+}
+
+/// Generate a C program that reads values where tokens may be reads or constants
+fn gen_sum_from_parts(parts: &[&str]) -> Option<String> {
+    // parts are expected to be already normalized/lowercased
+    let mut s = String::new();
+    let mut read_indices = 0usize;
+    let mut terms: Vec<String> = Vec::new();
+
+    for p in parts {
+        if is_read_token(p) {
+            terms.push(format!("a{read_indices}"));
+            read_indices += 1;
+        } else if let Some(lit) = parse_literal_token(p) {
+            terms.push(lit);
+        } else {
+            return None;
+        }
+    }
+
+    s.push_str("// generated C-like program\n#include <stdio.h>\nint main(void) {\n");
+    for i in 0..read_indices {
+        s.push_str(&format!("    int a{i};\n"));
+    }
+    for i in 0..read_indices {
+        s.push_str(&format!("    if (scanf(\"%d\", &a{i}) != 1) return 1;\n"));
+    }
+    let sum_expr = terms.join(" + ");
+    s.push_str(&format!("    int sum = {sum_expr};\n"));
+    s.push_str("    printf(\"%d\\n\", sum);\n    return 0;\n}\n");
+    Some(s)
+}
+
 /// Generate string output from a `CNode`.
 /// This is a stub generator that returns the program string as-is (or with a
 /// small prefix so it's obvious that generation occurred).
@@ -69,6 +119,11 @@ pub fn generate(node: CNode) -> String {
             let parts: Vec<&str> = normalized_lower.split('+').collect();
             if !parts.is_empty() && parts.iter().all(|p| is_read_token(p)) {
                 return gen_read_sum_c(parts.len());
+            }
+            if !parts.is_empty() && parts.iter().all(|p| is_read_token(p) || parse_literal_token(p).is_some()) {
+                if let Some(code) = gen_sum_from_parts(&parts) {
+                    return code;
+                }
             }
 
             // Single integer read
@@ -343,5 +398,19 @@ mod tests {
         let result = assert_run(tuff_source, std_in, expected);
         assert!(result.is_ok(), "run returned error: {:?}", result.err());
         assert_eq!(result.unwrap().trim_end(), "155");
+    }
+
+    #[test]
+    fn test_read_plus_literal() {
+        if Command::new("clang").arg("--version").output().is_err() {
+            eprintln!("clang not found; skipping test_read_plus_literal");
+            return;
+        }
+        let tuff_source = "read<I32>() + 1I32";
+        let std_in = "100";
+        let expected = "101";
+        let res = assert_run(tuff_source, std_in, expected);
+        assert!(res.is_ok(), "run returned error: {:?}", res.err());
+        assert_eq!(res.unwrap().trim_end(), "101");
     }
 }
