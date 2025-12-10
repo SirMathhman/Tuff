@@ -17,6 +17,13 @@ public class Parser {
 		if (source == null) {
 			throw new IllegalArgumentException("source cannot be null");
 		}
+		// Support unsigned 8-bit integer suffix format, e.g. "100U8" -> LiteralNode("100")
+		if (source.endsWith("U8")) {
+			String prefix = source.substring(0, source.length() - 2);
+			if (prefix.matches("\\d+")) {
+				return new LiteralNode(prefix);
+			}
+		}
 		return new LiteralNode(source);
 	}
 
@@ -46,6 +53,8 @@ public class Parser {
 	 * @return the result of executing the parsed ASTNode
 	 */
 	public static String interpret(String source) {
+		// YOU CANNOT MODIFY THIS
+
 		ASTNode node = parse(source);
 		return execute(node);
 	}

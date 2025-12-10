@@ -41,4 +41,10 @@ public class ParserTest {
 	public void interpretRejectsNull() {
 		assertThrows(IllegalArgumentException.class, () -> Parser.interpret(null));
 	}
+
+	@Test
+	public void interpretU8SuffixStripsSuffix() {
+		String out = Parser.interpret("100U8");
+		assertEquals("100", out);
+	}
 }
