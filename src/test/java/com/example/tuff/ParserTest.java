@@ -52,4 +52,9 @@ public class ParserTest {
 	public void interpretNegativeU8ThrowsExecuteException() {
 		assertThrows(ExecuteException.class, () -> Parser.interpret("-1U8"));
 	}
+
+	@Test
+	public void interpretOutOfRangeU8ThrowsExecuteException() {
+		assertThrows(ExecuteException.class, () -> Parser.interpret("256U8"));
+	}
 }

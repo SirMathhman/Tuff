@@ -21,9 +21,10 @@ public class Parser {
 		// LiteralNode("100")
 		if (source.endsWith("U8")) {
 			String prefix = source.substring(0, source.length() - 2);
-			if (prefix.matches("\\d+")) {
-				return new LiteralNode(prefix);
+			if (prefix.matches("-?\\d+")) {
+				return new LiteralNode(prefix, "U8");
 			}
+			// If it ends with U8 but prefix is non-numeric, keep original token
 		}
 		return new LiteralNode(source);
 	}
@@ -42,19 +43,17 @@ public class Parser {
 		if (node instanceof LiteralNode) {
 			LiteralNode ln = (LiteralNode) node;
 			String val = ln.getValue();
-			// If value uses U8 suffix (e.g., "-1U8"), reject negative values
-			if (val.endsWith("U8")) {
-				String prefix = val.substring(0, val.length() - 2);
-				// If prefix is an integer
-				if (prefix.matches("-?\\d+")) {
-					long num = Long.parseLong(prefix);
+			String suffix = ln.getSuffix();
+			if ("U8".equals(suffix)) {
+				if (val.matches("-?\\d+")) {
+					long num = Long.parseLong(val);
 					if (num < 0) {
-						throw new ExecuteException("Unsigned 8-bit integer cannot be negative: " + val);
+						throw new ExecuteException("Unsigned 8-bit integer cannot be negative: " + val + "U8");
 					}
-				}
-				// If stripping succeeds and positive, return the stripped number
-				if (prefix.matches("\\d+")) {
-					return prefix;
+					if (num > 255) {
+						throw new ExecuteException("Unsigned 8-bit integer out of range (0..255): " + val + "U8");
+					}
+					return String.valueOf(num);
 				}
 			}
 			return val;
