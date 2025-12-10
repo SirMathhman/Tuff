@@ -138,7 +138,7 @@ public class Parser {
 	/**
 	 * Validate that an addition result is within the valid range for its type.
 	 *
-	 * @param sum the result of addition
+	 * @param sum    the result of addition
 	 * @param suffix the type suffix
 	 * @throws ExecuteException if the sum is out of range
 	 */

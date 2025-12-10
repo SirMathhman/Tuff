@@ -55,6 +55,12 @@ public class ParserTest {
 	}
 
 	@Test
+	public void interpretMultipleAdditionsReturnsSum() {
+		String out = Parser.interpret("1U8 + 2U8 + 3U8");
+		assertEquals("6", out);
+	}
+
+	@Test
 	public void interpretNegativeU8ThrowsExecuteException() {
 		assertThrows(ExecuteException.class, () -> Parser.interpret("-1U8"));
 	}
