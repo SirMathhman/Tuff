@@ -3,4 +3,22 @@ name = "Tuff"
 version = "0.1.0"
 edition = "2021"
 
+[lints.clippy]
+# Clippy lints to help ensure no_panic compliance
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+indexing_slicing = "warn"
+unreachable = "warn"
+unimplemented = "warn"
+todo = "warn"
+exit = "warn"
+unwrap_in_result = "warn"
+panic_in_result_fn = "warn"
+arithmetic_side_effects = "warn"
+integer_division = "warn"
+cast_possible_truncation = "warn"
+cast_possible_wrap = "warn"
+cast_sign_loss = "warn"
+
 [dependencies]
