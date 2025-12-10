@@ -17,6 +17,11 @@ class AppTest {
 		Assertions.assertThrows(TransformException.class, () -> App.compile("-100U8"));
 	}
 
+	@Test
+	void overflowUnsignedShouldThrow() {
+		Assertions.assertThrows(TransformException.class, () -> App.compile("256U8"));
+	}
+
 	private void assertProgram(String tuffSource, String expectedStdOut) {
 		try {
 			final var cOutput = App.compile(tuffSource);

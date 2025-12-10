@@ -21,9 +21,11 @@ public class App {
 
 	private static CNode transform(TuffNode ast) throws TransformException {
 		if (ast instanceof TuffInteger i) {
-			// U8 is unsigned 8-bit, cannot represent negative values
-			if ("U8".equals(i.type()) && i.value() < 0) {
-				throw new TransformException("Cannot transform: negative value for unsigned type U8", ast);
+			// U8 is unsigned 8-bit, cannot represent negative values or values > 255
+			if ("U8".equals(i.type())) {
+				if (i.value() < 0 || i.value() > 255) {
+					throw new TransformException("Cannot transform: value out of range for unsigned type U8", ast);
+				}
 			}
 			return new CProgram(i.value());
 		}
