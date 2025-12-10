@@ -1,3 +1,20 @@
+// Clippy lints to help ensure no_panic compliance
+#![warn(clippy::unwrap_used)]
+#![warn(clippy::expect_used)]
+#![warn(clippy::panic)]
+#![warn(clippy::indexing_slicing)]
+#![warn(clippy::unreachable)]
+#![warn(clippy::unimplemented)]
+#![warn(clippy::todo)]
+#![warn(clippy::exit)]
+#![warn(clippy::unwrap_in_result)]
+#![warn(clippy::panic_in_result_fn)]
+#![warn(clippy::arithmetic_side_effects)]
+#![warn(clippy::integer_division)]
+#![warn(clippy::cast_possible_truncation)]
+#![warn(clippy::cast_possible_wrap)]
+#![warn(clippy::cast_sign_loss)]
+
 fn main() {
     use std::io::{self, Write};
 
