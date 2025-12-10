@@ -9,7 +9,7 @@ Detected Java Version: 24
 If you have Maven installed:
 
 ```powershell
-cd tuff-maven
+# From the project root (where pom.xml is):
 mvn -v
 mvn test
 mvn package
@@ -20,7 +20,7 @@ java -jar target/tuff-1.0-SNAPSHOT.jar
 If Maven is not installed, compile and run with javac/java directly:
 
 ```powershell
-cd tuff-maven
+# From the project root (where pom.xml is):
 javac -d out src/main/java/com/example/tuff/*.java
 java -cp out com.example.tuff.App
 ```
