@@ -1,4 +1,3 @@
 package tuff;
 
-public interface TuffNode {
-}
+public sealed interface TuffNode extends Display {}

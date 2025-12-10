@@ -1,4 +1,7 @@
 package tuff;
 
-public class ParseException {
+public class ParseException extends CompileException {
+	public ParseException(String message, String context) {
+		super(message, context);
+	}
 }

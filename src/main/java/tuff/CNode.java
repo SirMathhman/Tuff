@@ -1,4 +1,3 @@
 package tuff;
 
-public interface CNode {
-}
+public sealed interface CNode {}
