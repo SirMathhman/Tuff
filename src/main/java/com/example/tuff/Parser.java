@@ -1,5 +1,7 @@
 package com.example.tuff;
 
+import java.math.BigInteger;
+
 /**
  * Parser utilities that produce ASTNode objects.
  */
@@ -17,6 +19,7 @@ public class Parser {
 		if (source == null) {
 			throw new IllegalArgumentException("source cannot be null");
 		}
+
 		// Support simple binary addition by splitting on '+' (left-associative)
 		String[] parts = source.split("\\s*\\+\\s*");
 		if (parts.length > 1) {
@@ -27,16 +30,66 @@ public class Parser {
 			}
 			return left;
 		}
-		// Support unsigned 8-bit integer suffix format, e.g. "100U8" ->
-		// LiteralNode("100")
-		if (source.endsWith("U8")) {
-			String prefix = source.substring(0, source.length() - 2);
-			if (prefix.matches("-?\\d+")) {
-				return new LiteralNode(prefix, "U8");
+		// Support integer suffixes such as U8, U16, U32, U64 and I8, I16, I32, I64
+		String lower = source.toLowerCase();
+		String[] supported = new String[] { "u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64" };
+		for (String s : supported) {
+			if (lower.endsWith(s)) {
+				String prefix = source.substring(0, source.length() - s.length());
+				if (prefix.matches("-?\\d+")) {
+					// Normalize suffix to upper-case (e.g., "U8")
+					return new LiteralNode(prefix, s.toUpperCase());
+				}
 			}
-			// If it ends with U8 but prefix is non-numeric, keep original token
 		}
 		return new LiteralNode(source);
+	}
+
+	/**
+	 * Helper class for representing numeric ranges by suffix type.
+	 */
+	private static class Range {
+		final BigInteger min;
+		final BigInteger max;
+		final boolean signed;
+
+		Range(BigInteger min, BigInteger max, boolean signed) {
+			this.min = min;
+			this.max = max;
+			this.signed = signed;
+		}
+	}
+
+	/**
+	 * Returns the valid numeric range for a given integer type suffix.
+	 *
+	 * @param suffix the type suffix (e.g., "U8", "I32")
+	 * @return a Range object with min/max/signed info, or null if suffix is not
+	 *         recognized
+	 */
+	private static Range rangeForSuffix(String suffix) {
+		if (suffix == null)
+			return null;
+		switch (suffix.toUpperCase()) {
+			case "U8":
+				return new Range(BigInteger.ZERO, BigInteger.valueOf(255L), false);
+			case "U16":
+				return new Range(BigInteger.ZERO, BigInteger.valueOf(65535L), false);
+			case "U32":
+				return new Range(BigInteger.ZERO, new BigInteger("4294967295"), false);
+			case "U64":
+				return new Range(BigInteger.ZERO, new BigInteger("18446744073709551615"), false);
+			case "I8":
+				return new Range(BigInteger.valueOf(-128L), BigInteger.valueOf(127L), true);
+			case "I16":
+				return new Range(BigInteger.valueOf(-32768L), BigInteger.valueOf(32767L), true);
+			case "I32":
+				return new Range(BigInteger.valueOf(-2147483648L), BigInteger.valueOf(2147483647L), true);
+			case "I64":
+				return new Range(BigInteger.valueOf(Long.MIN_VALUE), BigInteger.valueOf(Long.MAX_VALUE), true);
+			default:
+				return null;
+		}
 	}
 
 	/**
@@ -53,36 +106,39 @@ public class Parser {
 		if (node instanceof BinaryOpNode) {
 			BinaryOpNode bin = (BinaryOpNode) node;
 			if ("+".equals(bin.getOp())) {
-				long left = numericValue(bin.getLeft());
-				long right = numericValue(bin.getRight());
-				long sum = left + right;
-				boolean leftU8 = (bin.getLeft() instanceof LiteralNode)
-						&& "U8".equals(((LiteralNode) bin.getLeft()).getSuffix());
-				boolean rightU8 = (bin.getRight() instanceof LiteralNode)
-						&& "U8".equals(((LiteralNode) bin.getRight()).getSuffix());
-				if (leftU8 && rightU8) {
-					if (sum < 0 || sum > 255) {
-						throw new ExecuteException("Unsigned 8-bit integer overflow: " + sum);
+				BigInteger left = numericValue(bin.getLeft());
+				BigInteger right = numericValue(bin.getRight());
+				BigInteger sum = left.add(right);
+				String leftSuffix = (bin.getLeft() instanceof LiteralNode) ? ((LiteralNode) bin.getLeft()).getSuffix() : null;
+				String rightSuffix = (bin.getRight() instanceof LiteralNode) ? ((LiteralNode) bin.getRight()).getSuffix()
+						: null;
+				if (leftSuffix != null && leftSuffix.equals(rightSuffix)) {
+					Range r = rangeForSuffix(leftSuffix);
+					if (r != null) {
+						if (sum.compareTo(r.min) < 0 || sum.compareTo(r.max) > 0) {
+							throw new ExecuteException(leftSuffix + " overflow: " + sum.toString());
+						}
 					}
 				}
-				return String.valueOf(sum);
+				return sum.toString();
 			}
 		}
 		if (node instanceof LiteralNode) {
 			LiteralNode ln = (LiteralNode) node;
 			String val = ln.getValue();
 			String suffix = ln.getSuffix();
-			if ("U8".equals(suffix)) {
-				if (val.matches("-?\\d+")) {
-					long num = Long.parseLong(val);
-					if (num < 0) {
-						throw new ExecuteException("Unsigned 8-bit integer cannot be negative: " + val + "U8");
-					}
-					if (num > 255) {
-						throw new ExecuteException("Unsigned 8-bit integer out of range (0..255): " + val + "U8");
-					}
-					return String.valueOf(num);
+			if (suffix != null) {
+				// Check the numeric range for all supported types
+				BigInteger bigint = new BigInteger(val);
+				Range range = rangeForSuffix(suffix);
+				// Unsigned types should reject negative values
+				if (!range.signed && bigint.signum() < 0) {
+					throw new ExecuteException(suffix + " value cannot be negative: " + val + suffix);
 				}
+				if (bigint.compareTo(range.min) < 0 || bigint.compareTo(range.max) > 0) {
+					throw new ExecuteException(suffix + " value out of range: " + val + suffix);
+				}
+				return bigint.toString();
 			}
 			return val;
 		}
@@ -90,25 +146,25 @@ public class Parser {
 		return node.toString();
 	}
 
-	private static long numericValue(ASTNode node) {
+	private static BigInteger numericValue(ASTNode node) {
 		if (node instanceof LiteralNode) {
 			LiteralNode ln = (LiteralNode) node;
 			String val = ln.getValue();
 			if (val.matches("-?\\d+")) {
-				return Long.parseLong(val);
+				return new BigInteger(val);
 			}
 			throw new ExecuteException("Not a numeric literal: " + val);
 		}
 		if (node instanceof BinaryOpNode) {
 			String out = execute(node);
 			if (out.matches("-?\\d+")) {
-				return Long.parseLong(out);
+				return new BigInteger(out);
 			}
 			throw new ExecuteException("Not a numeric expression: " + out);
 		}
 		String out = execute(node);
 		if (out.matches("-?\\d+")) {
-			return Long.parseLong(out);
+			return new BigInteger(out);
 		}
 		throw new ExecuteException("Not a numeric result: " + out);
 	}
