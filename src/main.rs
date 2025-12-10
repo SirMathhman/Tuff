@@ -429,5 +429,7 @@ mod tests {
         assert!(interpret("255U8+1U8").is_err());
         assert!(interpret("1U8 + 2U16").is_err());
         assert_eq!(interpret("-1I8 + 2I8").unwrap(), "1");
+        // Mixed/invalid operator/case
+        assert!(interpret("100U8 + 100U8*").is_err());
     }
 }
