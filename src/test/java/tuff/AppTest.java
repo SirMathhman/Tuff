@@ -9,6 +9,7 @@ class AppTest {
 	@Test
 	void test() {
 		this.assertProgram("100", "100");
+		this.assertProgram("100U8", "100");
 	}
 
 	private void assertProgram(String tuffSource, String expectedStdOut) {
