@@ -47,4 +47,9 @@ public class ParserTest {
 		String out = Parser.interpret("100U8");
 		assertEquals("100", out);
 	}
+
+	@Test
+	public void interpretNegativeU8ThrowsExecuteException() {
+		assertThrows(ExecuteException.class, () -> Parser.interpret("-1U8"));
+	}
 }

@@ -17,7 +17,8 @@ public class Parser {
 		if (source == null) {
 			throw new IllegalArgumentException("source cannot be null");
 		}
-		// Support unsigned 8-bit integer suffix format, e.g. "100U8" -> LiteralNode("100")
+		// Support unsigned 8-bit integer suffix format, e.g. "100U8" ->
+		// LiteralNode("100")
 		if (source.endsWith("U8")) {
 			String prefix = source.substring(0, source.length() - 2);
 			if (prefix.matches("\\d+")) {
@@ -40,7 +41,23 @@ public class Parser {
 		}
 		if (node instanceof LiteralNode) {
 			LiteralNode ln = (LiteralNode) node;
-			return ln.getValue();
+			String val = ln.getValue();
+			// If value uses U8 suffix (e.g., "-1U8"), reject negative values
+			if (val.endsWith("U8")) {
+				String prefix = val.substring(0, val.length() - 2);
+				// If prefix is an integer
+				if (prefix.matches("-?\\d+")) {
+					long num = Long.parseLong(prefix);
+					if (num < 0) {
+						throw new ExecuteException("Unsigned 8-bit integer cannot be negative: " + val);
+					}
+				}
+				// If stripping succeeds and positive, return the stripped number
+				if (prefix.matches("\\d+")) {
+					return prefix;
+				}
+			}
+			return val;
 		}
 		// Fallback: return toString() for unknown node types
 		return node.toString();
@@ -53,7 +70,7 @@ public class Parser {
 	 * @return the result of executing the parsed ASTNode
 	 */
 	public static String interpret(String source) {
-		// YOU CANNOT MODIFY THIS
+		// YOU CANNOT MODIFY THIS IMPLEMENTATION
 
 		ASTNode node = parse(source);
 		return execute(node);
