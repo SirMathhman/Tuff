@@ -1,0 +1,4 @@
+# Clippy configuration
+# Configure the cognitive complexity threshold (lower is stricter).
+# Lint 'cognitive_complexity' will warn when complexity exceeds this threshold.
+cognitive-complexity-threshold = 15
