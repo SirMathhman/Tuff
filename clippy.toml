@@ -2,3 +2,6 @@
 # Configure the cognitive complexity threshold (lower is stricter).
 # Lint 'cognitive_complexity' will warn when complexity exceeds this threshold.
 cognitive-complexity-threshold = 15
+
+# Lints to help ensure no_panic compliance by catching panic-causing patterns
+# These will be enabled via #![warn(...)] or #![deny(...)] in main.rs

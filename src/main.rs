@@ -1,3 +1,20 @@
+// Clippy lints to help ensure no_panic compliance
+#![warn(clippy::unwrap_used)]
+#![warn(clippy::expect_used)]
+#![warn(clippy::panic)]
+#![warn(clippy::indexing_slicing)]
+#![warn(clippy::unreachable)]
+#![warn(clippy::unimplemented)]
+#![warn(clippy::todo)]
+#![warn(clippy::exit)]
+#![warn(clippy::unwrap_in_result)]
+#![warn(clippy::panic_in_result_fn)]
+#![warn(clippy::arithmetic_side_effects)]
+#![warn(clippy::integer_division)]
+#![warn(clippy::cast_possible_truncation)]
+#![warn(clippy::cast_possible_wrap)]
+#![warn(clippy::cast_sign_loss)]
+
 fn main() {
     use std::io::{self, Write};
 
@@ -6,6 +23,7 @@ fn main() {
 
     loop {
         print!("interpret> ");
+        #[allow(clippy::expect_used)]
         stdout.flush().expect("flush failed");
 
         let mut input = String::new();
@@ -43,10 +61,14 @@ fn parse_numeric_prefix(s: &str) -> Result<usize, String> {
     let len = bytes.len();
 
     // optional leading sign
-    if i < len && (bytes[i] == b'+' || bytes[i] == b'-') {
-        i += 1;
-        if i == len {
-            return Err("invalid number".to_string());
+    if i < len {
+        if let Some(&byte) = bytes.get(i) {
+            if byte == b'+' || byte == b'-' {
+                i = i.saturating_add(1);
+                if i == len {
+                    return Err("invalid number".to_string());
+                }
+            }
         }
     }
 
@@ -55,10 +77,13 @@ fn parse_numeric_prefix(s: &str) -> Result<usize, String> {
     let mut seen_exp = false;
 
     while i < len {
-        let c = bytes[i] as char;
+        let c = match bytes.get(i) {
+            Some(&byte) => byte as char,
+            None => break,
+        };
         if c.is_ascii_digit() {
             seen_digit = true;
-            i += 1;
+            i = i.saturating_add(1);
             continue;
         }
         if c == '.' {
@@ -66,20 +91,32 @@ fn parse_numeric_prefix(s: &str) -> Result<usize, String> {
                 break;
             }
             seen_dot = true;
-            i += 1;
+            i = i.saturating_add(1);
             continue;
         }
         if (c == 'e' || c == 'E') && !seen_exp && seen_digit {
             // start exponent
             seen_exp = true;
-            i += 1;
-            if i < len && (bytes[i] == b'+' || bytes[i] == b'-') {
-                i += 1;
+            i = i.saturating_add(1);
+            if i < len {
+                if let Some(&byte) = bytes.get(i) {
+                    if byte == b'+' || byte == b'-' {
+                        i = i.saturating_add(1);
+                    }
+                }
             }
-            let mut exp_digits = 0;
-            while i < len && (bytes[i] as char).is_ascii_digit() {
-                exp_digits += 1;
-                i += 1;
+            let mut exp_digits: u32 = 0;
+            while i < len {
+                if let Some(&byte) = bytes.get(i) {
+                    if (byte as char).is_ascii_digit() {
+                        exp_digits = exp_digits.saturating_add(1);
+                        i = i.saturating_add(1);
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
             }
             if exp_digits == 0 {
                 return Err("invalid exponent".to_string());
@@ -107,7 +144,7 @@ fn interpret(input: &str) -> Result<String, String> {
     if let Some(op_pos) = find_top_level_plus(s) {
         let lhs = s.get(..op_pos).ok_or_else(|| "slice error".to_string())?;
         let rhs = s
-            .get(op_pos + 1..)
+            .get(op_pos.saturating_add(1)..)
             .ok_or_else(|| "slice error".to_string())?;
         return evaluate_add(lhs.trim(), rhs.trim());
     }
@@ -195,15 +232,35 @@ fn find_top_level_plus(s: &str) -> Option<usize> {
             let mut pos = i;
             let bytes = trimmed.as_bytes();
             // skip letters/digits for the suffix
-            while pos < bytes.len() && bytes[pos].is_ascii_alphanumeric() {
-                pos += 1;
+            while pos < bytes.len() {
+                if let Some(&byte) = bytes.get(pos) {
+                    if byte.is_ascii_alphanumeric() {
+                        pos = pos.saturating_add(1);
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
             }
             // skip whitespace
-            while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
-                pos += 1;
+            while pos < bytes.len() {
+                if let Some(&byte) = bytes.get(pos) {
+                    if byte.is_ascii_whitespace() {
+                        pos = pos.saturating_add(1);
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
             }
-            if pos < bytes.len() && bytes[pos] == b'+' {
-                return Some(pos);
+            if pos < bytes.len() {
+                if let Some(&byte) = bytes.get(pos) {
+                    if byte == b'+' {
+                        return Some(pos);
+                    }
+                }
             }
         }
         Err(_) => return None,
