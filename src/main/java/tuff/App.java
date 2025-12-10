@@ -31,12 +31,16 @@ public class App {
 			throw new ParseException("Cannot parse", "null");
 		}
 		final var s = tuffSource.strip();
-		if (!s.matches("\\d+")) {
+		// allow unsigned 8-bit suffix U8
+		if (!s.matches("(?i)\\d+(?:u8)?")) {
 			throw new ParseException("Cannot parse", tuffSource);
 		}
 		try {
-			final var value = Integer.parseInt(s);
-			return new TuffInteger(value);
+			final var hasU8 = s.toUpperCase().endsWith("U8");
+			final var digits = hasU8 ? s.substring(0, s.length() - 2) : s;
+			final var value = Integer.parseInt(digits);
+			final var type = hasU8 ? "U8" : "";
+			return new TuffInteger(value, type);
 		} catch (NumberFormatException e) {
 			throw new ParseException("Cannot parse", tuffSource);
 		}
