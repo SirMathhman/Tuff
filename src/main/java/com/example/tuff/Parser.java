@@ -38,4 +38,15 @@ public class Parser {
 		// Fallback: return toString() for unknown node types
 		return node.toString();
 	}
+
+	/**
+	 * Interpret the given source: parse it into an ASTNode and execute it.
+	 *
+	 * @param source source text to interpret
+	 * @return the result of executing the parsed ASTNode
+	 */
+	public static String interpret(String source) {
+		ASTNode node = parse(source);
+		return execute(node);
+	}
 }

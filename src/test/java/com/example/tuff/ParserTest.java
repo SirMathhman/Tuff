@@ -30,4 +30,15 @@ public class ParserTest {
 	public void executeRejectsNull() {
 		assertThrows(IllegalArgumentException.class, () -> Parser.execute(null));
 	}
+
+	@Test
+	public void interpretReturnsValue() {
+		String out = Parser.interpret("hello");
+		assertEquals("hello", out);
+	}
+
+	@Test
+	public void interpretRejectsNull() {
+		assertThrows(IllegalArgumentException.class, () -> Parser.interpret(null));
+	}
 }
