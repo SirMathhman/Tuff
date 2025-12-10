@@ -3,6 +3,8 @@ package tuff;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Files;
+
 class AppTest {
 	@Test
 	void test() {
@@ -14,11 +16,11 @@ class AppTest {
 			final var cOutput = App.compile(tuffSource);
 
 			// Write cOutput to a temporary file
-			final var tempCFile = java.nio.file.Files.createTempFile("tuff_test_", ".c");
-			java.nio.file.Files.writeString(tempCFile, cOutput);
+			final var tempCFile = Files.createTempFile("tuff_test_", ".c");
+			Files.writeString(tempCFile, cOutput);
 
 			// Compile the temporary file using clang
-			final var tempExeFile = java.nio.file.Files.createTempFile("tuff_test_", ".exe");
+			final var tempExeFile = Files.createTempFile("tuff_test_", ".exe");
 			final var compileProcess = new ProcessBuilder("clang", tempCFile.toString(), "-o", tempExeFile.toString())
 					.redirectErrorStream(true)
 					.start();
@@ -29,9 +31,7 @@ class AppTest {
 			}
 
 			// Execute the temporary .exe
-			final var runProcess = new ProcessBuilder(tempExeFile.toString())
-					.redirectErrorStream(true)
-					.start();
+			final var runProcess = new ProcessBuilder(tempExeFile.toString()).redirectErrorStream(true).start();
 			runProcess.waitFor();
 
 			// Collect the stdOut of the process
@@ -41,8 +41,8 @@ class AppTest {
 			Assertions.assertEquals(expectedStdOut, actualStdOut);
 
 			// Cleanup
-			java.nio.file.Files.deleteIfExists(tempCFile);
-			java.nio.file.Files.deleteIfExists(tempExeFile);
+			Files.deleteIfExists(tempCFile);
+			Files.deleteIfExists(tempExeFile);
 		} catch (CompileException e) {
 			Assertions.fail(e);
 		} catch (Exception e) {
