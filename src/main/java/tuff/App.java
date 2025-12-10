@@ -21,6 +21,10 @@ public class App {
 
 	private static CNode transform(TuffNode ast) throws TransformException {
 		if (ast instanceof TuffInteger i) {
+			// U8 is unsigned 8-bit, cannot represent negative values
+			if ("U8".equals(i.type()) && i.value() < 0) {
+				throw new TransformException("Cannot transform: negative value for unsigned type U8", ast);
+			}
 			return new CProgram(i.value());
 		}
 		throw new TransformException("Cannot transform", ast);
@@ -31,8 +35,8 @@ public class App {
 			throw new ParseException("Cannot parse", "null");
 		}
 		final var s = tuffSource.strip();
-		// allow unsigned 8-bit suffix U8
-		if (!s.matches("(?i)\\d+(?:u8)?")) {
+		// allow optional leading sign and unsigned 8-bit suffix U8
+		if (!s.matches("(?i)-?\\d+(?:u8)?")) {
 			throw new ParseException("Cannot parse", tuffSource);
 		}
 		try {

@@ -12,6 +12,11 @@ class AppTest {
 		this.assertProgram("100U8", "100");
 	}
 
+	@Test
+	void negativeUnsignedShouldThrow() {
+		Assertions.assertThrows(TransformException.class, () -> App.compile("-100U8"));
+	}
+
 	private void assertProgram(String tuffSource, String expectedStdOut) {
 		try {
 			final var cOutput = App.compile(tuffSource);
