@@ -420,8 +420,8 @@ public class Main {
 					final var condition = this.compileExpressionOrPlaceholder(substring2, indent);
 					if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
 						final var content = withBraces.substring(1, withBraces.length() - 1);
-						return "if (" + condition + ") {" + this.compileMethodStatements(content, indent) + this.createIndent(indent) +
-									 "}";
+						return "if (" + condition + ") {" + this.compileMethodStatements(content, indent) +
+									 this.createIndent(indent) + "}";
 					}
 				}
 			}
@@ -488,12 +488,47 @@ public class Main {
 				.compileInvokable(input, indent)
 				.or(() -> this
 						.compileString(input)
+						.or(() -> this.compileOperation(indent, input, "<"))
+						.or(() -> this.compileOperation(indent, input, "+"))
 						.or(() -> this.compileAccess(input,
 																				 ".",
 																				 (String input1) -> Main.this.compileExpressionOrPlaceholder(input1, indent)))
 						.or(() -> this.compileAccess(input, "::", Main.this::compileType))
 						.or(() -> this.compileIdentifier(input))
-						.or(() -> this.compileSwitch(input, indent)));
+						.or(() -> this.compileSwitch(input, indent)))
+				.or(() -> this.compileNumber(input));
+	}
+
+	private Optional<String> compileNumber(String input) {
+		final var stripped = input.strip();
+		if (this.isNumber(stripped)) {
+			return Optional.of(stripped);
+		}
+
+		return Optional.empty();
+	}
+
+	private boolean isNumber(String input) {
+		for (var i = 0; i < input.length(); i++) {
+			final var c = input.charAt(i);
+			if (Character.isDigit(c)) {
+				continue;
+			}
+			return false;
+		}
+		return true;
+	}
+
+	private Optional<String> compileOperation(int indent, String input, String operator) {
+		final var i1 = input.indexOf(operator);
+		if (i1 >= 0) {
+			final var substring = input.substring(0, i1);
+			final var substring1 = input.substring(i1 + 1);
+			return Optional.of(this.compileExpressionOrPlaceholder(substring, indent) + " < " +
+												 this.compileExpressionOrPlaceholder(substring1, indent));
+		} else {
+			return Optional.empty();
+		}
 	}
 
 	private Optional<String> compileSwitch(String input, int indent) {
