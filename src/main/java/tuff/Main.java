@@ -144,24 +144,31 @@ public class Main {
 		}
 
 		private State foldDoubleQuotes(State appended) {
-			while (true) {
-				final var maybeTuple = appended.popAndAppendToTuple();
-				if (maybeTuple.isEmpty()) {
-					break;
-				}
-
-				final var tuple = maybeTuple.get();
-				appended = tuple.left;
-
-				final var withinQuotes = tuple.right;
-				if (withinQuotes == '\\') {
-					appended = appended.popAndAppendToOption().orElse(appended);
-				}
-				if (withinQuotes == '\"') {
-					return appended;
-				}
+			var current = new Tuple<Boolean, State>(true, appended);
+			while (current.left) {
+				current = this.foldInDoubleQuote(current.right);
 			}
-			return appended;
+			return current.right;
+		}
+
+		private Tuple<Boolean, State> foldInDoubleQuote(State state) {
+			final var maybeTuple = state.popAndAppendToTuple();
+			if (maybeTuple.isEmpty()) {
+				return new Tuple<Boolean, State>(false, state);
+			}
+
+			final var tuple = maybeTuple.get();
+			var appended = tuple.left;
+
+			final var withinQuotes = tuple.right;
+			if (withinQuotes == '\\') {
+				appended = appended.popAndAppendToOption().orElse(appended);
+			}
+			if (withinQuotes == '\"') {
+				return new Tuple<Boolean, State>(false, appended);
+			}
+
+			return new Tuple<Boolean, State>(true, appended);
 		}
 	}
 
