@@ -2,9 +2,10 @@
   "name": "self-copy-sample",
   "version": "1.0.0",
   "description": "A small Node.js program that copies its own source to a new file",
-  "main": "self_copy.js",
+  "main": "self_copy.ts",
   "scripts": {
-    "test": "node test_self_copy.js"
+    "start": "bun ./self_copy.ts",
+    "test": "bun ./test_self_copy.ts"
   },
   "author": "",
   "license": "MIT"
