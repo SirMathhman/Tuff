@@ -9,12 +9,12 @@ async function main() {
     // Source file: the script itself
     const sourcePath = __filename;
 
-    // Allow user to provide target path, otherwise create a timestamped copy
-    const userProvided = process.argv[2];
+    // No command line arguments: always use a consistent copy name
     const baseName = path.basename(sourcePath);
     const dirName = process.cwd();
 
-    const targetName = userProvided || `copy_of_${baseName}_${Date.now()}.js`;
+    // Always write a consistently named copy `copy_of_<basename>`
+    const targetName = `copy_of_${baseName}`;
     const targetPath = path.isAbsolute(targetName)
       ? targetName
       : path.join(dirName, targetName);

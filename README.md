@@ -6,9 +6,9 @@ Usage:
 
 ```bash
 node self_copy.js
-# or provide a filename
-node self_copy.js mycopy.js
 ```
+
+By default, the script writes a consistently-named copy: `copy_of_self_copy.js`. The script does not accept command-line arguments.
 
 Run tests:
 
