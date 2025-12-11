@@ -741,6 +741,10 @@ public class Main {
 
 	private String compileType(String input) {
 		final var stripped = input.strip();
+		if (stripped.equals("int")) {
+			return "I32";
+		}
+
 		if (stripped.equals("void")) {
 			return "Void";
 		}

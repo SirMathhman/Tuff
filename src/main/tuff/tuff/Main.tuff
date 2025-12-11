@@ -20,10 +20,10 @@ class fn Main() => {
 	class fn State() => {
 		input : String;
 		segments : ArrayList<String>;
-		index : int;
+		index : I32;
 		buffer : StringBuilder;
-		depth : int;
-		fn State(input : String, index : int, buffer : StringBuilder, depth : int, segments : ArrayList<String>) : private => {
+		depth : I32;
+		fn State(input : String, index : I32, buffer : StringBuilder, depth : I32, segments : ArrayList<String>) : private => {
 			let /*<*/this.input/*>*/ = input;
 			let /*<*/this.index/*>*/ = index;
 			let /*<*/this.buffer/*>*/ = buffer;
@@ -652,6 +652,10 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 
 	private String compileType(String input) {
 		final var stripped = input.strip();
+		if (stripped.equals("int")) {
+			return "I32";
+		}
+
 		if (stripped.equals("void")) {
 			return "Void";
 		}
