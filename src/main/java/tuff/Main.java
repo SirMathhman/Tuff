@@ -263,7 +263,7 @@ public class Main {
 	}
 
 	private String wrap(String input) {
-		return "/*<*/" + input + "/*>*/";
+		return "/**/" + input + "/**/";
 	}
 
 	private String compileStructureSegment(String input, int indent) {
@@ -360,11 +360,8 @@ public class Main {
 						if (modifiers.contains("expect")) {
 							outputContent = ";";
 						} else {
-							outputContent = " => {" + this.compileStatements(content,
-																															 (String input1) -> this.compileMethodSegment(input1,
-																																																						indent +
-																																																						1)) +
-															this.createIndent(indent) + "}";
+							outputContent = " => {" + this.compileMethodStatements(content, indent) + this.createIndent(indent) +
+															"}";
 						}
 
 						return this.joinModifiers(modifiers) + "fn " + name + "(" + joinedParameters + ") : " + type +
@@ -395,6 +392,39 @@ public class Main {
 		if (stripped.startsWith("yield ") && stripped.endsWith(";")) {
 			final var substring = stripped.substring("yield ".length(), stripped.length() - 1);
 			return this.compileExpressionOrPlaceholder(substring, indent);
+		}
+
+		if (stripped.startsWith("if")) {
+			final var substring = stripped.substring(2).strip();
+			if (substring.startsWith("(")) {
+				final var substring1 = substring.substring(1);
+				int i = -1;
+				var depth = 0;
+				for (var i1 = 0; i1 < substring1.length(); i1++) {
+					final var c = substring1.charAt(i1);
+					if (c == '(') {
+						depth++;
+					}
+					if (c == ')') {
+						if (depth == 0) {
+							i = i1;
+							break;
+						}
+						depth--;
+					}
+				}
+
+				if (i >= 0) {
+					final var substring2 = substring1.substring(0, i);
+					final var withBraces = substring1.substring(i + 1).strip();
+					final var condition = this.compileExpressionOrPlaceholder(substring2, indent);
+					if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
+						final var content = withBraces.substring(1, withBraces.length() - 1);
+						return "if (" + condition + ") {" + this.compileMethodStatements(content, indent) + this.createIndent(indent) +
+									 "}";
+					}
+				}
+			}
 		}
 
 		if (stripped.endsWith(";")) {
@@ -540,12 +570,15 @@ public class Main {
 
 		if (stripped.startsWith("{") && stripped.endsWith("}")) {
 			final var substring = stripped.substring(1, stripped.length() - 1);
-			final var compiled =
-					this.compileStatements(substring, (String segment) -> this.compileMethodSegment(segment, indent + 1));
+			final var compiled = this.compileMethodStatements(substring, indent);
 			return "{" + compiled + this.createIndent(indent) + "}";
 		}
 
 		return this.wrap(stripped);
+	}
+
+	private String compileMethodStatements(String input, int indent) {
+		return this.compileStatements(input, (String segment) -> this.compileMethodSegment(segment, indent + 1));
 	}
 
 	private Optional<String> compileString(String input) {
@@ -724,16 +757,16 @@ public class Main {
 
 	private String compileType(String input) {
 		final var stripped = input.strip();
-		if (stripped.equals("Character")) {
-			return "U16";
-		}
-
-		if (stripped.equals("int")) {
-			return "I32";
-		}
-
-		if (stripped.equals("void")) {
-			return "Void";
+		switch (stripped) {
+			case "char", "Character" -> {
+				return "U16";
+			}
+			case "int" -> {
+				return "I32";
+			}
+			case "void" -> {
+				return "Void";
+			}
 		}
 
 		final var i = stripped.indexOf("<");
