@@ -6,7 +6,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,7 +36,7 @@ public class Main {
 
 	private record Ok<T, X>(T value) implements Result<T, X> {}
 
-	private record TuffDeclaration(List<String> modifiers, String name, String type)
+	private record TuffDeclaration(List<String> modifiers, String name, String type, boolean isMutable)
 			implements TuffDeclarationOrPlaceholder, TuffLValue {}
 
 	private record Placeholder(String input) implements TuffDeclarationOrPlaceholder, TuffLValue {}
@@ -585,7 +584,7 @@ public class Main {
 		final var declarationOrPlaceholder = this.parseDefinitionOrPlaceholderToTuff(substring);
 		final var parameters = this.compileParameters(parameterString);
 
-		if (!(declarationOrPlaceholder instanceof TuffDeclaration(var modifiers, var name, var type))) {
+		if (!(declarationOrPlaceholder instanceof TuffDeclaration(var modifiers, var name, var type, boolean isMutable))) {
 			return Optional.empty();
 		}
 
@@ -1117,18 +1116,27 @@ public class Main {
 
 	private String generateDefinitionOrPlaceholder(TuffDeclarationOrPlaceholder string) {
 		return switch (string) {
-			case TuffDeclaration(var modifiers, var name, var type) -> this.generateDefinition(modifiers, name, type);
+			case TuffDeclaration(var modifiers, var name, var type, var isMutable) ->
+					this.generateDefinition(modifiers, name, type, isMutable);
 			case Placeholder placeholder -> this.wrap(placeholder.input);
 		};
 	}
 
-	private String generateDefinition(List<String> modifiers, String name, String type) {
-		if (type.equals("var")) {
-			return name;
+	private String generateDefinition(List<String> modifiers, String name, String type, boolean isMutable) {
+
+		final String mutableString;
+		if (isMutable) {
+			mutableString = "mut ";
+		} else {
+			mutableString = "";
 		}
 
 		final var joinedModifiers = this.joinModifiers(modifiers);
-		return joinedModifiers + name + " : " + type;
+		if (type.equals("var")) {
+			return joinedModifiers + mutableString + name;
+		}
+
+		return joinedModifiers + mutableString + name + " : " + type;
 	}
 
 	private String joinModifiers(List<String> modifiers) {
@@ -1151,10 +1159,10 @@ public class Main {
 			final var i1 = this.findTypeSeparator(beforeName);
 			if (i1 < 0) {
 				final var compiled = this.compileTypeOrPlaceholder(beforeName);
-				return Optional.of(new TuffDeclaration(new ArrayList<String>(), name, compiled));
+				return Optional.of(new TuffDeclaration(new ArrayList<String>(), name, compiled, true));
 			}
 
-			final var beforeType = beforeName.substring(0, i1);
+			var beforeType = beforeName.substring(0, i1);
 			final var i2 = beforeType.lastIndexOf("\n");
 			List<String> annotations = new ArrayList<String>();
 			if (i2 >= 0) {
@@ -1165,19 +1173,22 @@ public class Main {
 						.filter((String slice) -> !slice.isEmpty())
 						.map((String slice) -> slice.substring(1))
 						.toList();
+				beforeType = beforeType.substring(i2 + 1).strip();
 			}
+
+			final var oldModifiers =
+					Arrays.stream(beforeType.split(" ")).map(String::strip).filter((String slice) -> !slice.isEmpty()).toList();
 
 			final var type = beforeName.substring(i1 + 1);
 			final var compiled = this.compileTypeOrPlaceholder(type);
-			final List<String> modifiers;
+
+			final List<String> newModifiers = new ArrayList<String>();
 			if (annotations.contains("Actual")) {
-				modifiers = List.of("expect");
-			} else {
-				modifiers = Collections.emptyList();
+				newModifiers.add("expect");
 			}
 
-			return Optional.of(new TuffDeclaration(modifiers, name, compiled));
-
+			final var isMutable = !oldModifiers.contains("final");
+			return Optional.of(new TuffDeclaration(newModifiers, name, compiled, isMutable));
 		}
 
 		return Optional.empty();
