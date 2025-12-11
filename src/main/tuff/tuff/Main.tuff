@@ -102,7 +102,7 @@ class fn Main() => {
 		while (true) {
 			let maybePopped = current.pop();
 			if (maybePopped.isEmpty()) {
-				/**/break;/**/
+				break;
 			}
 			let popped = maybePopped.get();
 			let /**/current/**/ = folder.apply(popped.left, popped.right);
@@ -366,6 +366,10 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 	}
 
 	private Optional<String> compileMethodStatementValue(String input, int indent) {
+		if (input.equals("break") || input.equals("continue")) {
+			return Optional.of(input);
+		}
+
 		if (input.startsWith("return ")) {
 			final var substring = input.substring("return ".length());
 			return Optional.of("return " + this.compileExpressionOrPlaceholder(substring, indent));

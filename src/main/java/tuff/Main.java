@@ -454,6 +454,10 @@ public class Main {
 	}
 
 	private Optional<String> compileMethodStatementValue(String input, int indent) {
+		if (input.equals("break") || input.equals("continue")) {
+			return Optional.of(input);
+		}
+
 		if (input.startsWith("return ")) {
 			final var substring = input.substring("return ".length());
 			return Optional.of("return " + this.compileExpressionOrPlaceholder(substring, indent));
