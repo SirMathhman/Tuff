@@ -251,8 +251,8 @@ public class Main {
 	}
 
 	private List<String> compileParameters(String input) {
-		return Arrays
-				.stream(input.split(Pattern.quote(",")))
+		return this
+				.divideValues(input)
 				.map(String::strip)
 				.filter((String slice) -> !slice.isEmpty())
 				.map(this::compileDefinitionOrPlaceholder)
@@ -498,16 +498,22 @@ public class Main {
 				.or(() -> this
 						.compileString(input)
 						.or(() -> this.compileSwitch(input, indent))
-						.or(() -> this.compileAccess(input,
-																				 ".",
-																				 (String input1) -> Main.this.compileExpressionOrPlaceholder(input1, indent)))
+						.or(() -> this.compileAccess(input, indent, "."))
 						.or(() -> this.compileOperation(indent, input, "<"))
 						.or(() -> this.compileOperation(indent, input, "+"))
 						.or(() -> this.compileOperation(indent, input, "-"))
 						.or(() -> this.compileOperation(indent, input, "=="))
-						.or(() -> this.compileAccess(input, "::", Main.this::compileTypeOrPlaceholder))
+						.or(() -> this.compileAccess(input, indent, "::"))
 						.or(() -> this.compileIdentifier(input)))
 				.or(() -> this.compileNumber(input));
+	}
+
+	private Optional<String> compileAccess(String input, int indent, String separator) {
+		return this.compileAccess(input, separator, (String input1) -> this.compileAccessInstance(indent, input1));
+	}
+
+	private String compileAccessInstance(int indent, String input) {
+		return Main.this.compileType(input).orElseGet(() -> this.compileExpressionOrPlaceholder(input, indent));
 	}
 
 	private Optional<String> compileNumber(String input) {

@@ -84,20 +84,20 @@ class fn Main() => {
 		}).collect(Collectors.joining());
 		return useStatements + compiled;
 	}
-	fn compileStatements(input : String, /**/Function<String/**/, mapper : /**/String>/**/) : String => {
+	fn compileStatements(input : String, mapper : Function<String, String>) : String => {
 		return this.divideStatements(input).map(mapper).collect(Collectors.joining());
 	}
 	fn divideStatements(input : String) : Stream<String> => {
-		return this.divide(input, /**/Main.this/**/::foldStatement);
+		return this.divide(input, Main.this::foldStatement);
 	}
-	fn divide(input : String, /**/BiFunction<State/**/, /**/Character/**/, folder : /**/State>/**/) : Stream<String> => {
+	fn divide(input : String, folder : BiFunction<State, U16, State>) : Stream<String> => {
 		let segments = ArrayList<String>();
 		let buffer = StringBuilder();
 		let depth = 0;
 		let i = 0;
 		return this.getStringStream(State(input, i, buffer, depth, segments), folder);
 	}
-	fn getStringStream(state : State, /**/BiFunction<State/**/, /**/Character/**/, folder : /**/State>/**/) : Stream<String> => {
+	fn getStringStream(state : State, folder : BiFunction<State, U16, State>) : Stream<String> => {
 		let current = state;
 		/**/while (true) {
 			final var maybePopped = current.pop();
@@ -167,8 +167,8 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 		return/**/;
 }
 /**/private List<String> compileParameters(String input) {
-		return Arrays
-				.stream(input.split(Pattern.quote(",")))
+		return this
+				.divideValues(input)
 				.map(String::strip)
 				.filter((String slice) -> !slice.isEmpty())
 				.map(this::compileDefinitionOrPlaceholder)
@@ -274,8 +274,7 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 							outputContent = ";";
 						} else {
 							final var compiledContent = this.compileMethodStatements(content, indent);
-							outputContent = " => {" + compiledContent + this.createIndent(indent) +
-															"}";
+							outputContent = " => {" + compiledContent + this.createIndent(indent) + "}";
 						}
 
 						return this.joinModifiers(modifiers) + "fn " + name + "(" + joinedParameters + ") : " + type +
@@ -397,8 +396,8 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 				final String compiled1;
 				if (maybeWithBraces.startsWith("{") && maybeWithBraces.endsWith("}")) {
 					final var body = maybeWithBraces.substring(1, maybeWithBraces.length() - 1);
-					compiled1 = "{" + this.compileMethodStatements(body, indent) + createIndent(indent) + "}";
-				}  else {
+					compiled1 = "{" + this.compileMethodStatements(body, indent) + this.createIndent(indent) + "}";
+				} else {
 					compiled1 = this.compileExpressionOrPlaceholder(maybeWithBraces, indent);
 				}
 
@@ -411,16 +410,22 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 				.or(() -> this
 						.compileString(input)
 						.or(() -> this.compileSwitch(input, indent))
-						.or(() -> this.compileAccess(input,
-																				 ".",
-																				 (String input1) -> Main.this.compileExpressionOrPlaceholder(input1, indent)))
+						.or(() -> this.compileAccess(input, indent, "."))
 						.or(() -> this.compileOperation(indent, input, "<"))
 						.or(() -> this.compileOperation(indent, input, "+"))
 						.or(() -> this.compileOperation(indent, input, "-"))
 						.or(() -> this.compileOperation(indent, input, "=="))
-						.or(() -> this.compileAccess(input, "::", Main.this::compileTypeOrPlaceholder))
+						.or(() -> this.compileAccess(input, indent, "::"))
 						.or(() -> this.compileIdentifier(input)))
 				.or(() -> this.compileNumber(input));
+	}
+
+	private Optional<String> compileAccess(String input, int indent, String separator) {
+		return this.compileAccess(input, separator, (String input1) -> this.compileAccessInstance(indent, input1));
+	}
+
+	private String compileAccessInstance(int indent, String input) {
+		return Main.this.compileType(input).orElseGet(() -> this.compileExpressionOrPlaceholder(input, indent));
 	}
 
 	private Optional<String> compileNumber(String input) {
