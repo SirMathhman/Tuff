@@ -1,68 +1,101 @@
+from java::util::function use { Function };
 from java::util::stream use { Collectors };
 from java::io use { IOException };
 from java::nio::file use { Files, Paths };
 from java::util use { ArrayList, Arrays, HashMap, List, Map };
 from java::util::regex use { Pattern };
-/*Raw*/public class Main {
-	private static final Map<List<String>, List<String>> imports = new HashMap<>();
-/*Raw*/public static void main(String[] args) {
-		try {
-			final var input = Files.readString(Paths.get(".", "src", "main", "java", "tuff", "Main.java"));
-/*Raw*/Files.writeString(Paths.get(".", "src", "main", "tuff", "tuff", "Main.tuff"), compile(input));
-/*Raw*/} catch (IOException e) {
-			throw new RuntimeException(e);
-/*Raw*/}
+class fn Main () => {
+	private final Map<List<String>, List<String>> imports = new HashMap<List<String>, List<String>>();
+	public static void main(String[] args) {
+		new Main().run();
 	}
 
-	private static String compile(String input) {
-		final var compiled = compileStatements(input);
-/*Raw*/final var useStatements = imports.entrySet().stream().map(entry -> {
-			final var usedNamespace = String.join("::", entry.getKey());
-/*Raw*/final var usedChildren = String.join(", ", entry.getValue());
-/*Raw*/return "from " + usedNamespace + " use { " + usedChildren + " };
-/*Raw*/" + System.lineSeparator();
-/*Raw*/}).collect(Collectors.joining());
-/*Raw*/return useStatements + compiled;
-/*Raw*/}
+	private void run() {
+		try {
+			final var input = Files.readString(Paths.get(".", "src", "main", "java", "tuff", "Main.java"));
+			Files.writeString(Paths.get(".", "src", "main", "tuff", "tuff", "Main.tuff"), this.compile(input));
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
+	}
 
-	private static String compileStatements(String input) {
+	private String compile(String input) {
+		final var compiled = this.compileStatements(input, this::compileRootSegment);
+		final var useStatements = this.imports.entrySet().stream().map(entry -> {
+			final var usedNamespace = String.join("::", entry.getKey());
+			final var usedChildren = String.join(", ", entry.getValue());
+			return "from " + usedNamespace + " use { " + usedChildren + " };" + System.lineSeparator();
+		}).collect(Collectors.joining());
+
+		return useStatements + compiled;
+	}
+
+	private String compileStatements(String input, Function<String, String> mapper) {
 		final var segments = new ArrayList<String>();
-/*Raw*/var buffer = new StringBuilder();
-/*Raw*/for (var i = 0;
-/*Raw*/i < input.length();
-/*Raw*/i++) {
+		var buffer = new StringBuilder();
+		var depth = 0;
+		for (var i = 0; i < input.length(); i++) {
 			final var c = input.charAt(i);
-/*Raw*/buffer.append(c);
-/*Raw*/if (c == ';
-/*Raw*/') {
+			buffer.append(c);
+			if (c == ';' && depth == 0) {
 				segments.add(buffer.toString());
-/*Raw*/buffer = new StringBuilder();
-/*Raw*/}
+				buffer = new StringBuilder();
+			} else {
+				if (c == '{') {
+					depth++;
+				}
+				if (c == '}') {
+					depth--;
+				}
+			}
 		}
 
 		segments.add(buffer.toString());
-/*Raw*/return segments.stream().map(Main::compileRootSegment).collect(Collectors.joining());
-/*Raw*/}
+		return segments.stream().map(mapper).collect(Collectors.joining());
+	}
 
-	private static String compileRootSegment(String input) {
+	private String compileRootSegment(String input) {
 		final var stripped = input.strip();
-/*Raw*/if (stripped.startsWith("package ")) {
+		if (stripped.startsWith("package ")) {
 			return "";
-/*Raw*/}
+		}
 
-		if (stripped.startsWith("import ") && stripped.endsWith(";
-/*Raw*/")) {
+		if (stripped.startsWith("import ") && stripped.endsWith(";")) {
 			final var slice = stripped.substring("import ".length(), stripped.length() - 1);
-/*Raw*/final var copy = Arrays.asList(slice.split(Pattern.quote(".")));
-/*Raw*/final var namespace = copy.subList(0, copy.size() - 1);
-/*Raw*/if (!imports.containsKey(namespace)) {
-				imports.put(namespace, new ArrayList<String>());
-/*Raw*/}
+			final var copy = Arrays.asList(slice.split(Pattern.quote(".")));
+			final var namespace = copy.subList(0, copy.size() - 1);
 
-			imports.get(namespace).add(copy.getLast());
-/*Raw*/return "";
-/*Raw*/}
+			if (!this.imports.containsKey(namespace)) {
+				this.imports.put(namespace, new ArrayList<String>());
+			}
 
-		return "/*Raw*/" + stripped + System.lineSeparator();
-/*Raw*/}
+			this.imports.get(namespace).add(copy.getLast());
+			return "";
+		}
+
+		return this.compileRootSegmentValue(stripped) + System.lineSeparator();
+	}
+
+	private String compileRootSegmentValue(String input) {
+		final var i = input.indexOf("class ");
+		if (i >= 0) {
+			final var afterKeyword = input.substring(i + "class ".length());
+			final var i1 = afterKeyword.indexOf("{");
+			if (i1 >= 0) {
+				final var name = afterKeyword.substring(0, i1);
+				final var substring1 = afterKeyword.substring(i1 + 1).strip();
+				if (substring1.endsWith("}")) {
+					final var body = substring1.substring(0, substring1.length() - 1);
+					return "class fn " + name + "() => {" + this.compileStatements(body, this::compileClassSegment) +
+								 System.lineSeparator() + "}";
+				}
+			}
+		}
+
+		return "/*Raw*/" + input;
+	}
+
+	private String compileClassSegment(String input) {
+		return System.lineSeparator() + "\t" + input.strip();
+	}
 }

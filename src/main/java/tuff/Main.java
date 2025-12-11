@@ -8,24 +8,29 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class Main {
-	private static final Map<List<String>, List<String>> imports = new HashMap<List<String>, List<String>>();
+	private final Map<List<String>, List<String>> imports = new HashMap<List<String>, List<String>>();
 
 	public static void main(String[] args) {
+		new Main().run();
+	}
+
+	private void run() {
 		try {
 			final var input = Files.readString(Paths.get(".", "src", "main", "java", "tuff", "Main.java"));
-			Files.writeString(Paths.get(".", "src", "main", "tuff", "tuff", "Main.tuff"), compile(input));
+			Files.writeString(Paths.get(".", "src", "main", "tuff", "tuff", "Main.tuff"), this.compile(input));
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
 	}
 
-	private static String compile(String input) {
-		final var compiled = compileStatements(input);
-		final var useStatements = imports.entrySet().stream().map(entry -> {
+	private String compile(String input) {
+		final var compiled = this.compileStatements(input, this::compileRootSegment);
+		final var useStatements = this.imports.entrySet().stream().map(entry -> {
 			final var usedNamespace = String.join("::", entry.getKey());
 			final var usedChildren = String.join(", ", entry.getValue());
 			return "from " + usedNamespace + " use { " + usedChildren + " };" + System.lineSeparator();
@@ -34,23 +39,31 @@ public class Main {
 		return useStatements + compiled;
 	}
 
-	private static String compileStatements(String input) {
+	private String compileStatements(String input, Function<String, String> mapper) {
 		final var segments = new ArrayList<String>();
 		var buffer = new StringBuilder();
+		var depth = 0;
 		for (var i = 0; i < input.length(); i++) {
 			final var c = input.charAt(i);
 			buffer.append(c);
-			if (c == ';') {
+			if (c == ';' && depth == 0) {
 				segments.add(buffer.toString());
 				buffer = new StringBuilder();
+			} else {
+				if (c == '{') {
+					depth++;
+				}
+				if (c == '}') {
+					depth--;
+				}
 			}
 		}
 
 		segments.add(buffer.toString());
-		return segments.stream().map(Main::compileRootSegment).collect(Collectors.joining());
+		return segments.stream().map(mapper).collect(Collectors.joining());
 	}
 
-	private static String compileRootSegment(String input) {
+	private String compileRootSegment(String input) {
 		final var stripped = input.strip();
 		if (stripped.startsWith("package ")) {
 			return "";
@@ -61,14 +74,37 @@ public class Main {
 			final var copy = Arrays.asList(slice.split(Pattern.quote(".")));
 			final var namespace = copy.subList(0, copy.size() - 1);
 
-			if (!imports.containsKey(namespace)) {
-				imports.put(namespace, new ArrayList<String>());
+			if (!this.imports.containsKey(namespace)) {
+				this.imports.put(namespace, new ArrayList<String>());
 			}
 
-			imports.get(namespace).add(copy.getLast());
+			this.imports.get(namespace).add(copy.getLast());
 			return "";
 		}
 
-		return "/*Raw*/" + stripped + System.lineSeparator();
+		return this.compileRootSegmentValue(stripped) + System.lineSeparator();
+	}
+
+	private String compileRootSegmentValue(String input) {
+		final var i = input.indexOf("class ");
+		if (i >= 0) {
+			final var afterKeyword = input.substring(i + "class ".length());
+			final var i1 = afterKeyword.indexOf("{");
+			if (i1 >= 0) {
+				final var name = afterKeyword.substring(0, i1);
+				final var substring1 = afterKeyword.substring(i1 + 1).strip();
+				if (substring1.endsWith("}")) {
+					final var body = substring1.substring(0, substring1.length() - 1);
+					return "class fn " + name + "() => {" + this.compileStatements(body, this::compileClassSegment) +
+								 System.lineSeparator() + "}";
+				}
+			}
+		}
+
+		return "/*Raw*/" + input;
+	}
+
+	private String compileClassSegment(String input) {
+		return System.lineSeparator() + "\t" + input.strip();
 	}
 }
