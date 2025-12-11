@@ -2,23 +2,73 @@ package tuff;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class Main {
+	private sealed interface Result<T, X> permits Err, Ok {}
+
+	private record Err<T, X>(X error) implements Result<T, X> {}
+
+	private record Ok<T, X>(T value) implements Result<T, X> {}
+
 	public static void main(String[] args) {
-		try {
-			final var input = Files.readString(Paths.get(".", "src", "main", "java", "tuff", "Main.java"));
-			final var target = Paths.get(".", "src", "main", "ts", "tuff", "Main.ts");
-			final var targetDirectory = target.getParent();
-			if (!Files.exists(targetDirectory)) {
-				Files.createDirectories(targetDirectory);
+		run().ifPresent(Throwable::printStackTrace);
+	}
+
+	private static Optional<IOException> run() {
+		final var source = Paths.get(".", "src", "main", "java", "tuff", "Main.java");
+		final var target = Paths.get(".", "src", "main", "ts", "tuff", "Main.ts");
+
+		final var input = readString(source);
+		return switch (input) {
+			case Err<String, IOException> v -> Optional.of(v.error);
+			case Ok<String, IOException> v -> {
+				final var output = compile(v.value);
+				yield writeTarget(target, output);
 			}
-			Files.writeString(target, compile(input));
+		};
+	}
+
+	private static Optional<IOException> writeTarget(Path target, String output) {
+		final var targetDirectory = target.getParent();
+		if (!Files.exists(targetDirectory)) {
+			final var maybeDirectoryCreationError = createDirectories(targetDirectory);
+			if (maybeDirectoryCreationError.isPresent()) {
+				return maybeDirectoryCreationError;
+			}
+		}
+
+		return writeString(target, output);
+	}
+
+	private static Optional<IOException> writeString(Path target, String output) {
+		try {
+			Files.writeString(target, output);
+			return Optional.empty();
 		} catch (IOException e) {
-			throw new RuntimeException(e);
+			return Optional.of(e);
+		}
+	}
+
+	private static Optional<IOException> createDirectories(Path targetDirectory) {
+		try {
+			Files.createDirectories(targetDirectory);
+			return Optional.empty();
+		} catch (IOException e) {
+			return Optional.of(e);
+		}
+	}
+
+	private static Result<String, IOException> readString(Path source) {
+		try {
+			return new Ok<String, IOException>(Files.readString(source));
+		} catch (IOException e) {
+			return new Err<String, IOException>(e);
 		}
 	}
 

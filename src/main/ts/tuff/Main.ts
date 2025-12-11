@@ -1,45 +1,89 @@
 class Main {
-	main(args : String[]) {
-		try {
-			final var input = Files.readString(Paths.get(".", "src", "main", "java", "tuff", "Main.java"));
-			final var target = Paths.get(".", "src", "main", "ts", "tuff", "Main.ts");
-			final var targetDirectory = target.getParent();
-			if (!Files.exists(targetDirectory)) {
-				Files.createDirectories(targetDirectory);
-			}
-			Files.writeString(target, compile(input));
-		}
-		catch (IOException e) {
-			throw new RuntimeException(e);
-		}}
-	/*private static String compile(String input) {
-		return compileStatements(input, Main::compileRootSegment);*/
+	/*private sealed interface Result<T, X> permits Err, Ok {}*/
+	/*private record Err<T, X>(X error) implements Result<T, X> {}
+
+	private record Ok<T, X>(T value) implements Result<T, X> {}
+
+	public static void main(String[] args) {
+		run().ifPresent(Throwable::printStackTrace);*/
 	/*}
 
+	private static Optional<IOException> run() {
+		final var source = Paths.get(".", "src", "main", "java", "tuff", "Main.java");*/
+	/*final var target = Paths.get(".", "src", "main", "ts", "tuff", "Main.ts");*/
+	/*final var input = readString(source);*/
+	switch() {
+		case Err<String, IOException> v -> Optional.of(v.error);
+		case Ok<String, IOException> v -> {
+				final var output = compile(v.value);
+				yield writeTarget(target, output);
+			}}
+	/*;
+	}
+
+	private static Optional<IOException> writeTarget(Path target, String output) {
+		final var targetDirectory = target.getParent();
+		if (!Files.exists(targetDirectory)) {
+			final var maybeDirectoryCreationError = createDirectories(targetDirectory);*/
+	/*if (maybeDirectoryCreationError.isPresent()) {
+				return maybeDirectoryCreationError;
+			}*/
+	/*}
+
+		return writeString(target, output);
+	}
+
+	private static Optional<IOException> writeString(Path target, String output) {
+		try {
+			Files.writeString(target, output);
+			return Optional.empty();
+		} catch (IOException e) {
+			return Optional.of(e);
+		}
+	}
+
+	private static Optional<IOException> createDirectories(Path targetDirectory) {
+		try {
+			Files.createDirectories(targetDirectory);
+			return Optional.empty();
+		} catch (IOException e) {
+			return Optional.of(e);
+		}
+	}
+
+	private static Result<String, IOException> readString(Path source) {
+		try {
+			return new Ok<String, IOException>(Files.readString(source));
+		} catch (IOException e) {
+			return new Err<String, IOException>(e);
+		}
+	}
+
+	private static String compile(String input) {
+		return compileStatements(input, Main::compileRootSegment);
+	}
+
 	private static String compileStatements(String input, Function<String, String> mapper) {
-		final var segments = new ArrayList<String>();*/
-	/*var buffer = new StringBuilder();*/
-	/*var depth = 0;*/
-	/*for (var i = 0;*/
-	/*i < input.length();*/
-	/*i++) {
+		final var segments = new ArrayList<String>();
+		var buffer = new StringBuilder();
+		var depth = 0;
+		for (var i = 0; i < input.length(); i++) {
 			final var c = input.charAt(i);
 			buffer.append(c);
 
 			if (c == ';' && depth == 0) {
-				segments.add(buffer.toString());
-				buffer = new StringBuilder();
-			}
-			if (c == '}*/
-	/*' && depth == 1) {
 				segments.add(buffer.toString());*/
 	/*buffer = new StringBuilder();*/
-	/*depth--;*/
 	/*}
+			if (c == '}' && depth == 1) {
+				segments.add(buffer.toString());
+				buffer = new StringBuilder();
+				depth--;
+			}
 			if (c == '{') {
-				depth++;
-			}*/
-	/*if (c == '}') {
+				depth++;*/
+	/*}
+			if (c == '}') {
 				depth--;
 			}
 		}
