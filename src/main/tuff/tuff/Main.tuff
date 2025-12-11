@@ -11,7 +11,7 @@ class fn Main() => {
 	
 	type TuffExpression extends TuffLValue = WrappedExpression;
 	type TuffLValue = Placeholder | TuffDeclaration | TuffExpression;
-	type Folder = EscapedFolder | ExprEndFolder | StatementFolder | ValueFolder;
+	type Folder = EscapedFolder | ExprEndFolder | OperationFolder | StatementFolder | ValueFolder;
 	class fn Err(error : X) => {
 	}
 	class fn Ok(value : T) => {
@@ -30,9 +30,6 @@ class fn Main() => {
 				return Optional.of(Tuple<State, U16>(state, c));
 			}
 			return Optional.empty();
-		}
-		fn peek() : U16 => {
-			return this.input.charAt(this.index);
 		}
 		fn append(c : U16) : State => {
 			this.buffer.append(c);
@@ -65,6 +62,14 @@ class fn Main() => {
 				let appended = tuple.left.append(tuple.right);
 				return Tuple<State, U16>(appended, tuple.right);
 			});
+		}
+		fn startsWith(slice : String) : boolean => {
+			if (slice.length() > this.input.length()) {
+				return false;
+			}
+			let min = Math.min(this.index + slice.length(), this.input.length());
+			let window = this.input.substring(this.index, min);
+			return window.equals(slice);
 		}
 	}
 	class fn WrappedExpression(value : String) => {
@@ -113,8 +118,7 @@ class fn Main() => {
 			}
 			if (character == '}' && appended.isShallow()) {
 				let appended1 = appended;
-				let peeked = appended.peek();
-				if (peeked == ';') {
+				if (appended.startsWith(";")) {
 					appended1 = appended.popAndAppendToOption().orElse(appended);
 				}
 				else {
@@ -137,15 +141,15 @@ class fn Main() => {
 				return state.advance();
 			}
 			let appended = state.append(character);
-			if (character == ' - ') {
-				if (appended.peek() == '>') {
+			if (character == '-') {
+				if (appended.startsWith(">")) {
 					let state1 = appended.popAndAppendToOption();
 					if (state1.isPresent()) {
 						return state1.get();
 					}
 				}
 			}
-			if (character == ' < ' || character == '(') {
+			if (character == '<' || character == '(') {
 				return appended.enter();
 			}
 			if (character == '>' || character == ')') {
@@ -164,6 +168,27 @@ class fn Main() => {
 				if (appended.isLevel()) {
 					return appended.advance().exit();
 				}
+				return appended.exit();
+			}
+			return appended;
+		}
+	}
+	class fn OperationFolder(operator : String) => {
+		fn apply(state : State, next : U16) : State => {
+			let appended = state.append(next);
+			if (appended.startsWith(this.operator) && state.isLevel()) {
+				let current = appended;
+				let i = 0;
+				while (i < this.operator.length()) {
+					current = current.popAndAppendToOption().orElse(current);
+					i++;
+				}
+				return current.advance();
+			}
+			if (next == '(') {
+				return appended.enter();
+			}
+			if (next == ')') {
 				return appended.exit();
 			}
 			return appended;
@@ -496,7 +521,7 @@ class fn Main() => {
 		if (i >= 0) {
 			let substring = input.substring(0, i);
 			let substring1 = input.substring(i + 1);
-			let string = this.parseDefinitionToTuff(substring).map((value : TuffDeclaration) => value).or(() => this.parseExpression(substring, 0).map((value : TuffExpression) => value)).orElseGet(() => Placeholder(substring));
+			let string = this.parseDefinitionToTuff(substring). < TuffLValue > map((value : TuffDeclaration) => value).or(() => this.parseExpression(substring, 0). < TuffLValue > map((value : TuffExpression) => value)).orElseGet(() => Placeholder(substring));
 			return Optional.of(this.generateAssignable(string) + " = " + this.compileExpressionOrPlaceholder(substring1, indent));
 		}
 		return Optional.empty();
@@ -546,10 +571,18 @@ class fn Main() => {
 			let substring = stripped.substring(1);
 			return Optional.of("!" + this.compileExpressionOrPlaceholder(substring, indent));
 		}
-		let i1 = input.indexOf("instanceof");
-		if (i1 >= 0) {
-			let substring = input.substring(0, i1);
-			let substring1 = /**/input.substring(i1/**/ + " is ".length {  };
+		let maybeInstanceOf = this.compileInstanceOf(input, indent);
+		if (maybeInstanceOf.isPresent()) {
+			return maybeInstanceOf;
+		}
+		return this.compileInvokable(input, indent).or(() => this.compileString(input)).or(() => this.compileSwitch(input, indent)).or(() => this.compileOperation(indent, input, "<")).or(() => this.compileOperation(indent, input, ">=")).or(() => this.compileOperation(indent, input, ">")).or(() => this.compileOperation(indent, input, "+")).or(() => this.compileOperation(indent, input, "-")).or(() => this.compileOperation(indent, input, "&&")).or(() => this.compileOperation(indent, input, "||")).or(() => this.compileOperation(indent, input, "==")).or(() => this.compileOperation(indent, input, "!=")).or(() => this.compileAccess(input, indent, ".")).or(() => this.compileAccess(input, indent, "::")).or(() => this.compileIdentifier(input)).or(() => this.compileNumber(input)).or(() => this.compileChar(input));
+	}
+	fn compileInstanceOf(input : String, indent : I32) : Optional<String> => {
+		let divisions = this.divide(input, EscapedFolder(OperationFolder("instanceof"))).toList();
+		if (divisions.size() >= 2) {
+			let first = divisions.getFirst();
+			let substring = first.substring(0, first.length() - "instanceof".length());
+			let substring1 = String.join("", divisions.subList(1, divisions.size()));
 			if (substring1.endsWith(")")) {
 				let substring2 = substring1.substring(0, substring1.length() - 1);
 				let i2 = substring2.indexOf("(");
@@ -563,7 +596,7 @@ class fn Main() => {
 				}
 			}
 		}
-		return this.compileInvokable(input, indent).or(() => this.compileString(input)).or(() => this.compileSwitch(input, indent)).or(() => this.compileAccess(input, indent, ".")).or(() => this.compileOperation(indent, input, "<")).or(() => this.compileOperation(indent, input, ">=")).or(() => this.compileOperation(indent, input, "+")).or(() => this.compileOperation(indent, input, "-")).or(() => this.compileOperation(indent, input, "==")).or(() => this.compileOperation(indent, input, "!=")).or(() => this.compileOperation(indent, input, "&&")).or(() => this.compileOperation(indent, input, "||")).or(() => this.compileAccess(input, indent, "::")).or(() => this.compileIdentifier(input)).or(() => this.compileNumber(input)).or(() => this.compileChar(input));
+		return Optional.empty();
 	}
 	fn retainDefinition(node : TuffDeclarationOrPlaceholder) : Optional<TuffDeclaration> => {
 		return match (node) {
@@ -607,11 +640,15 @@ class fn Main() => {
 		return IntStream.range(0, value.length()).mapToObj(value::charAt);
 	}
 	fn compileOperation(indent : I32, input : String, operator : String) : Optional<String> => {
-		let i1 = input.indexOf(operator);
-		if (i1 >= 0) {
-			let substring = input.substring(0, i1);
-			let substring1 = input.substring(i1 + operator.length());
-			return Optional.of(this.compileExpressionOrPlaceholder(substring, indent) + " " + operator + " " + this.compileExpressionOrPlaceholder(substring1, indent));
+		let divisions = this.divide(input, EscapedFolder(OperationFolder(operator))).toList();
+		if (divisions.size() >= 2) {
+			let first = divisions.getFirst();
+			let left = first.substring(0, first.length() - operator.length());
+			let elements = divisions.subList(1, divisions.size());
+			let right = String.join("", elements);
+			let leftResult = this.compileExpressionOrPlaceholder(left, indent);
+			let rightResult = this.compileExpressionOrPlaceholder(right, indent);
+			return Optional.of(leftResult + " " + operator + " " + rightResult);
 		}
 		else {
 			return Optional.empty();
@@ -642,7 +679,7 @@ class fn Main() => {
 		return Optional.empty();
 	}
 	fn compileCases(indent : I32, content : String) : String => {
-		return this.divideStatements(content).map(String::strip).filter((slice : String) => !slice.isEmpty()).map((input1 : String) => this.compileCase(input1, indent + 1)).map((slice : String) => /**/this.createIndent(indent/**/ + /**/1)/**/ + slice).collect(Collectors.joining());
+		return this.divideStatements(content).map(String::strip).filter((slice : String) => !slice.isEmpty()).map((input1 : String) => this.compileCase(input1, indent + 1)).map((slice : String) => this.createIndent(indent + 1) + slice).collect(Collectors.joining());
 	}
 	fn compileCase(input : String, indent : I32) : String => {
 		let stripped = input.strip();
@@ -793,7 +830,7 @@ class fn Main() => {
 		return modifiers.stream().map((modifier : String) => modifier + " ").collect(Collectors.joining());
 	}
 	fn parseDefinitionOrPlaceholderToTuff(input : String) : TuffDeclarationOrPlaceholder => {
-		return this.parseDefinitionToTuff(input).map((value : TuffDeclaration) => value).orElseGet(() => Placeholder(input));
+		return this.parseDefinitionToTuff(input). < TuffDeclarationOrPlaceholder > map((value : TuffDeclaration) => value).orElseGet(() => Placeholder(input));
 	}
 	fn parseDefinitionToTuff(input : String) : Optional<TuffDeclaration> => {
 		let stripped = input.strip();
@@ -842,7 +879,7 @@ class fn Main() => {
 			if (substring1.endsWith(">")) {
 				let args = substring1.substring(0, substring1.length() - 1);
 				let joinedTypeArguments = this.divideValues(args).map(this::compileTypeOrPlaceholder).collect(Collectors.joining(", "));
-				return Optional.of(base + " < " + joinedTypeArguments + ">");
+				return Optional.of(base + "<" + joinedTypeArguments + ">");
 			}
 		}
 		if (this.isIdentifier(stripped)) {
@@ -866,7 +903,7 @@ class fn Main() => {
 		let stripped = input.strip();
 		return IntStream.range(0, stripped.length()).allMatch((index : I32) => {
 			let c = stripped.charAt(index);
-			return U16.isLetter(c) || (index != 0 && Character.isDigit(c));
+			return U16.isLetter(c) || (index != 0 && U16.isDigit(c));
 		});
 	}
 	fn findTypeSeparator(beforeName : String) : I32 => {
@@ -878,7 +915,7 @@ class fn Main() => {
 			if (c == ' ' && depth == 0) {
 				i1 = i2;
 			}
-			if (c == ' < ') {
+			if (c == '<') {
 				depth++;
 			}
 			if (c == '>') {

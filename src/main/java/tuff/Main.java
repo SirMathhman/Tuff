@@ -29,7 +29,7 @@ public class Main {
 
 	private sealed interface TuffLValue permits Placeholder, TuffDeclaration, TuffExpression {}
 
-	private sealed interface Folder permits EscapedFolder, ExprEndFolder, StatementFolder, ValueFolder {
+	private sealed interface Folder permits EscapedFolder, ExprEndFolder, OperationFolder, StatementFolder, ValueFolder {
 		State apply(State state, Character character);
 	}
 
@@ -53,10 +53,6 @@ public class Main {
 			}
 
 			return Optional.empty();
-		}
-
-		private char peek() {
-			return this.input.charAt(this.index);
 		}
 
 		private State append(char c) {
@@ -98,6 +94,16 @@ public class Main {
 				final var appended = tuple.left.append(tuple.right);
 				return new Tuple<State, Character>(appended, tuple.right);
 			});
+		}
+
+		public boolean startsWith(String slice) {
+			if (slice.length() > this.input.length()) {
+				return false;
+			}
+
+			final var min = Math.min(this.index + slice.length(), this.input.length());
+			final var window = this.input.substring(this.index, min);
+			return window.equals(slice);
 		}
 	}
 
@@ -159,8 +165,7 @@ public class Main {
 			}
 			if (character == '}' && appended.isShallow()) {
 				var appended1 = appended;
-				final var peeked = appended.peek();
-				if (peeked == ';') {
+				if (appended.startsWith(";")) {
 					appended1 = appended.popAndAppendToOption().orElse(appended);
 				} else {
 					appended1 = appended1.advance();
@@ -186,7 +191,7 @@ public class Main {
 
 			final var appended = state.append(character);
 			if (character == '-') {
-				if (appended.peek() == '>') {
+				if (appended.startsWith(">")) {
 					final var state1 = appended.popAndAppendToOption();
 					if (state1.isPresent()) {
 						return state1.get();
@@ -217,6 +222,33 @@ public class Main {
 				}
 				return appended.exit();
 			}
+			return appended;
+		}
+	}
+
+	private record OperationFolder(String operator) implements Folder {
+		@Override
+		public State apply(State state, Character next) {
+			final var appended = state.append(next);
+			if (appended.startsWith(this.operator) && state.isLevel()) {
+				var current = appended;
+				var i = 0;
+				while (i < this.operator.length()) {
+					current = current.popAndAppendToOption().orElse(current);
+					i++;
+				}
+
+				return current.advance();
+			}
+
+			if (next == '(') {
+				return appended.enter();
+			}
+
+			if (next == ')') {
+				return appended.exit();
+			}
+
 			return appended;
 		}
 	}
@@ -711,10 +743,39 @@ public class Main {
 			return Optional.of("!" + this.compileExpressionOrPlaceholder(substring, indent));
 		}
 
-		final var i1 = input.indexOf("instanceof");
-		if (i1 >= 0) {
-			final var substring = input.substring(0, i1);
-			final var substring1 = input.substring(i1 + "instanceof".length()).strip();
+		final var maybeInstanceOf = this.compileInstanceOf(input, indent);
+		if (maybeInstanceOf.isPresent()) {
+			return maybeInstanceOf;
+		}
+
+		return this
+				.compileInvokable(input, indent)
+				.or(() -> this.compileString(input))
+				.or(() -> this.compileSwitch(input, indent))
+				.or(() -> this.compileOperation(indent, input, "<"))
+				.or(() -> this.compileOperation(indent, input, ">="))
+				.or(() -> this.compileOperation(indent, input, ">"))
+				.or(() -> this.compileOperation(indent, input, "+"))
+				.or(() -> this.compileOperation(indent, input, "-"))
+				.or(() -> this.compileOperation(indent, input, "&&"))
+				.or(() -> this.compileOperation(indent, input, "||"))
+				.or(() -> this.compileOperation(indent, input, "=="))
+				.or(() -> this.compileOperation(indent, input, "!="))
+				.or(() -> this.compileAccess(input, indent, "."))
+				.or(() -> this.compileAccess(input, indent, "::"))
+				.or(() -> this.compileIdentifier(input))
+				.or(() -> this.compileNumber(input))
+				.or(() -> this.compileChar(input));
+	}
+
+	private Optional<String> compileInstanceOf(String input, int indent) {
+		final var divisions = this.divide(input, new EscapedFolder(new OperationFolder("instanceof"))).toList();
+
+		if (divisions.size() >= 2) {
+			final var first = divisions.getFirst();
+			final var substring = first.substring(0, first.length() - "instanceof".length());
+			final var substring1 = String.join("", divisions.subList(1, divisions.size()));
+
 			if (substring1.endsWith(")")) {
 				final var substring2 = substring1.substring(0, substring1.length() - 1);
 				final var i2 = substring2.indexOf("(");
@@ -743,23 +804,7 @@ public class Main {
 			}
 		}
 
-		return this
-				.compileInvokable(input, indent)
-				.or(() -> this.compileString(input))
-				.or(() -> this.compileSwitch(input, indent))
-				.or(() -> this.compileAccess(input, indent, "."))
-				.or(() -> this.compileOperation(indent, input, "<"))
-				.or(() -> this.compileOperation(indent, input, ">="))
-				.or(() -> this.compileOperation(indent, input, "+"))
-				.or(() -> this.compileOperation(indent, input, "-"))
-				.or(() -> this.compileOperation(indent, input, "=="))
-				.or(() -> this.compileOperation(indent, input, "!="))
-				.or(() -> this.compileOperation(indent, input, "&&"))
-				.or(() -> this.compileOperation(indent, input, "||"))
-				.or(() -> this.compileAccess(input, indent, "::"))
-				.or(() -> this.compileIdentifier(input))
-				.or(() -> this.compileNumber(input))
-				.or(() -> this.compileChar(input));
+		return Optional.empty();
 	}
 
 	private Optional<TuffDeclaration> retainDefinition(TuffDeclarationOrPlaceholder node) {
@@ -811,12 +856,16 @@ public class Main {
 	}
 
 	private Optional<String> compileOperation(int indent, String input, String operator) {
-		final var i1 = input.indexOf(operator);
-		if (i1 >= 0) {
-			final var substring = input.substring(0, i1);
-			final var substring1 = input.substring(i1 + operator.length());
-			return Optional.of(this.compileExpressionOrPlaceholder(substring, indent) + " " + operator + " " +
-												 this.compileExpressionOrPlaceholder(substring1, indent));
+		final var divisions = this.divide(input, new EscapedFolder(new OperationFolder(operator))).toList();
+
+		if (divisions.size() >= 2) {
+			final var first = divisions.getFirst();
+			final var left = first.substring(0, first.length() - operator.length());
+			final var elements = divisions.subList(1, divisions.size());
+			final var right = String.join("", elements);
+			final var leftResult = this.compileExpressionOrPlaceholder(left, indent);
+			final var rightResult = this.compileExpressionOrPlaceholder(right, indent);
+			return Optional.of(leftResult + " " + operator + " " + rightResult);
 		} else {
 			return Optional.empty();
 		}
