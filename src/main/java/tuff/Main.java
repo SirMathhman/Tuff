@@ -37,9 +37,9 @@ public class Main {
 		final var source = Paths.get(".", "src", "main", "java", "tuff", "Main.java");
 		final var target = Paths.get(".", "src", "main", "tuff", "tuff", "Main.tuff");
 		return switch (this.readString(source)) {
-			case Err<String, IOException> v -> Optional.of(v.error);
-			case Ok<String, IOException> v -> {
-				final var output = this.compile(v.value);
+			case Err<String, IOException>(var error) -> Optional.of(error);
+			case Ok<String, IOException>(var value) -> {
+				final var output = this.compile(value);
 				yield this.writeString(target, output);
 			}
 		};
@@ -369,7 +369,7 @@ public class Main {
 		final var i = input.lastIndexOf(separator);
 		if (i >= 0) {
 			final var substring = input.substring(0, i);
-			final var memberName = input.substring(i + 1).strip();
+			final var memberName = input.substring(i + separator.length()).strip();
 			if (this.isIdentifier(memberName)) {
 				return Optional.of(mapper.apply(substring) + separator + memberName);
 			}
