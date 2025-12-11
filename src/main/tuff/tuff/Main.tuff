@@ -29,7 +29,7 @@ class fn Main() => {
 			return Optional.empty();
 		}
 		fn peek() : U16 => {
-			return this.input.charAt(this.index + 1);
+			return this.input.charAt(this.index);
 		}
 		fn append(c : U16) : State => {
 			this.buffer.append(c);
@@ -65,30 +65,29 @@ class fn Main() => {
 	fn run() : Optional<IOException> => {
 		let source = Paths.get(".", "src", "main", "java", "tuff", "Main.java");
 		let target = Paths.get(".", "src", "main", "tuff", "tuff", "Main.tuff");
-		/**/return switch (this.readString(source)) {
-			case Err<String, IOException>(var error) -> Optional.of(error);
-			case Ok<String, IOException>(var value) -> {
-				final var output = this.compile(value);
-				yield this.writeString(target, output);
+		return match (this.readString(source)) {
+			Err<String, IOException>(error) => Optional.of(error);
+			Ok<String, IOException>(value) => {
+				let output = this.compile(value);
+				this.writeString(target, output)
 			}
-		}/**/
-		/**/;/**/
+		};
 	}
 	expect fn writeString(target : Path, output : String) : Optional<IOException>;
 	expect fn readString(source : Path) : Result<String, IOException>;
 	fn compile(input : String) : String => {
 		let compiled = this.compileStatements(input, this::compileRootSegment);
-		let useStatements = /**/this.imports.entrySet().stream().map((Entry/**/ < List < /**/String>, List/**/ < /**/String>> entry)/**/ - /**/> {
-			final var usedNamespace = String.join("::", entry.getKey());
-			final var usedChildren = String.join(", ", entry.getValue());
-			return "from "/**/ + usedNamespace + " use { " + usedChildren + " };" + System.lineSeparator(/**/);
-		}/**/).collect(Collectors.joining());
+		let useStatements = this.imports.entrySet().stream().map((entry : Entry<List<String>, List<String>>) => {
+			let usedNamespace = String.join("::", entry.getKey());
+			let usedChildren = String.join(", ", entry.getValue());
+			return "from " + usedNamespace + " use { " + usedChildren + " };" + System.lineSeparator();
+		}).collect(Collectors.joining());
 		return useStatements + compiled;
 	}
 	fn compileStatements(input : String, /**/Function<String/**/, mapper : /**/String>/**/) : String => {
-		return this.divide(input).map(mapper).collect(Collectors.joining());
+		return this.divideStatements(input).map(mapper).collect(Collectors.joining());
 	}
-	fn divide(input : String) : Stream<String> => {
+	fn divideStatements(input : String) : Stream<String> => {
 		return this.divide(input, /**/Main.this/**/::foldStatement);
 	}
 	fn divide(input : String, /**/BiFunction<State/**/, /**/Character/**/, folder : /**/State>/**/) : Stream<String> => {
@@ -118,8 +117,9 @@ class fn Main() => {
 		/**/if (c == '}/**/
 		let appended1 : /**/{
 			var/**/ = appended;
-		if (appended.peek() == /**/';'/**/) {
-			let /**/appended1/**/ = appended;
+		let peeked = appended.peek();
+		if (peeked == /**/';'/**/) {
+			let /**/appended1/**/ = appended.popAndAppendToOption().orElse(appended);
 		}
 		/**/else {
 				appended1 = appended1.advance();
@@ -273,7 +273,8 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 						if (modifiers.contains("expect")) {
 							outputContent = ";";
 						} else {
-							outputContent = " => {" + this.compileMethodStatements(content, indent) + this.createIndent(indent) +
+							final var compiledContent = this.compileMethodStatements(content, indent);
+							outputContent = " => {" + compiledContent + this.createIndent(indent) +
 															"}";
 						}
 
@@ -389,11 +390,19 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 		final var i = input.indexOf("->");
 		if (i >= 0) {
 			final var beforeArrow = input.substring(0, i).strip();
-			final var body = input.substring(i + 2);
+			final var maybeWithBraces = input.substring(i + 2).strip();
 			if (beforeArrow.startsWith("(") && beforeArrow.endsWith(")")) {
 				final var substring = beforeArrow.substring(1, beforeArrow.length() - 1);
 				final var compiled = this.compileDefinitionOrPlaceholder(substring);
-				return Optional.of("(" + compiled + ")" + " => " + this.compileExpressionOrPlaceholder(body, indent));
+				final String compiled1;
+				if (maybeWithBraces.startsWith("{") && maybeWithBraces.endsWith("}")) {
+					final var body = maybeWithBraces.substring(1, maybeWithBraces.length() - 1);
+					compiled1 = "{" + this.compileMethodStatements(body, indent) + createIndent(indent) + "}";
+				}  else {
+					compiled1 = this.compileExpressionOrPlaceholder(maybeWithBraces, indent);
+				}
+
+				return Optional.of("(" + compiled + ")" + " => " + compiled1);
 			}
 		}
 
@@ -401,16 +410,16 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 				.compileInvokable(input, indent)
 				.or(() -> this
 						.compileString(input)
+						.or(() -> this.compileSwitch(input, indent))
+						.or(() -> this.compileAccess(input,
+																				 ".",
+																				 (String input1) -> Main.this.compileExpressionOrPlaceholder(input1, indent)))
 						.or(() -> this.compileOperation(indent, input, "<"))
 						.or(() -> this.compileOperation(indent, input, "+"))
 						.or(() -> this.compileOperation(indent, input, "-"))
 						.or(() -> this.compileOperation(indent, input, "=="))
-						.or(() -> this.compileAccess(input,
-																				 ".",
-																				 (String input1) -> Main.this.compileExpressionOrPlaceholder(input1, indent)))
 						.or(() -> this.compileAccess(input, "::", Main.this::compileTypeOrPlaceholder))
-						.or(() -> this.compileIdentifier(input))
-						.or(() -> this.compileSwitch(input, indent)))
+						.or(() -> this.compileIdentifier(input)))
 				.or(() -> this.compileNumber(input));
 	}
 
@@ -475,7 +484,7 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 					if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
 						final var content = withBraces.substring(1, withBraces.length() - 1);
 						final var collect = this
-								.divide(content)
+								.divideStatements(content)
 								.map(String::strip)
 								.filter((String slice) -> !slice.isEmpty())
 								.map((String input1) -> this.compileCase(input1, indent + 1))
