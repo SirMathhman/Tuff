@@ -20,8 +20,8 @@ class fn Main() => {
 		Main().run().ifPresent(Throwable:::printStackTrace)
 	}
 	fn run() : Optional<IOException> => {
-		/*<*/final var source = Paths/*>*/.get(/*<*/"/*>*/."/*<*/"src"/*>*//*<*/"main"/*>*//*<*/"java"/*>*//*<*/"tuff"/*>*//*<*/"Main/*>*/.java")
-		/*<*/final var target = Paths/*>*/.get(/*<*/"/*>*/."/*<*/"src"/*>*//*<*/"main"/*>*//*<*/"tuff"/*>*//*<*/"tuff"/*>*//*<*/"Main/*>*/.tuff")
+		let source = Paths.get(".""src""main""java""tuff"/*<*/"Main/*>*/.java")
+		let target = Paths.get(".""src""main""tuff""tuff"/*<*/"Main/*>*/.tuff")
 		/*<*/return switch (this.readString(source)) {
 			case Err<String, IOException> v -> Optional.of(v.error);
 			case Ok<String, IOException> v -> {
@@ -49,7 +49,7 @@ class fn Main() => {
 		}/*>*/
 	}
 	fn compile(input : String) : String => {
-		/*<*/final var compiled = this/*>*/.compileStatements(/*<*/input/*>*/this:::compileRootSegment)
+		let compiled = this.compileStatements(inputthis:::compileRootSegment)
 		/*<*/final var useStatements = this.imports.entrySet().stream().map(entry -> {
 			final var usedNamespace = String.join("::", entry.getKey());
 			final var usedChildren = String.join(", ", entry.getValue());
@@ -59,10 +59,10 @@ class fn Main() => {
 		/*<*/return useStatements + compiled;/*>*/
 	}
 	fn compileStatements(input : String, /*<*/Function<String/*>*/, mapper : /*<*/String>/*>*/) : String => {
-		/*<*/final var segments = new ArrayList<String>/*>*/()
-		/*<*/var buffer = new StringBuilder/*>*/()
-		/*<*/var depth = 0;/*>*/
-		/*<*/for (var i = 0;/*>*/
+		let segments = ArrayList<String>()
+		let buffer = StringBuilder()
+		let depth = /*<*/0/*>*/
+		let i : /*<*/(var/*>*/ = /*<*/0/*>*/
 		/*<*/i < input/*>*/.length()
 		/*<*/i++) {
 			final var c = input.charAt(i);
@@ -245,6 +245,11 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 		final var stripped = input.strip();
 		if (stripped.endsWith(";")) {
 			final var slice = stripped.substring(0, stripped.length() - 1);
+			final var maybeInitialization = this.compileInitialization(slice);
+			if (maybeInitialization.isPresent()) {
+				return maybeInitialization.get();
+			}
+
 			final var maybeInvokable = this.compileInvokable(slice);
 			if (maybeInvokable.isPresent()) {
 				return maybeInvokable.get();
@@ -255,14 +260,19 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 	}
 
 	private String compileClassStatement(String input) {
+		return this.compileInitialization(input).orElseGet(() -> this.wrap(input));
+	}
+
+	private Optional<String> compileInitialization(String input) {
 		final var i = input.indexOf("=");
 		if (i >= 0) {
 			final var substring = input.substring(0, i);
 			final var substring1 = input.substring(i + 1);
-			return "let " + this.compileDefinition(substring) + " = " + this.compileExpressionOrPlaceholder(substring1);
+			return Optional.of(
+					"let " + this.compileDefinition(substring) + " = " + this.compileExpressionOrPlaceholder(substring1));
 		}
 
-		return this.wrap(input);
+		return Optional.empty();
 	}
 
 	private String compileExpressionOrPlaceholder(String input) {
@@ -273,7 +283,27 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 		return this
 				.compileInvokable(input)
 				.or(() -> this.compileAccess(input, ".", Main.this::compileExpressionOrPlaceholder))
-				.or(() -> this.compileAccess(input, "::", Main.this::compileType));
+				.or(() -> this.compileAccess(input, "::", Main.this::compileType))
+				.or(() -> this.compileIdentifier(input))
+				.or(() -> compileString(input));
+	}
+
+	private Optional< String> compileString(String input) {
+		final var stripped = input.strip();
+		if(stripped.startsWith("\"") && stripped.endsWith("\"")) {
+			return Optional.of(stripped);
+		} else {
+			return Optional.empty();
+		}
+	}
+
+	private Optional<String> compileIdentifier(String input) {
+		final var stripped = input.strip();
+		if (this.isIdentifier(stripped)) {
+			return Optional.of(stripped);
+		} else {
+			return Optional.empty();
+		}
 	}
 
 	private Optional<String> compileAccess(String input, String separator, Function<String, String> mapper) {
@@ -330,7 +360,15 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 
 	private String generateDefinitionOrPlaceholder(TuffDeclarationOrPlaceholder string) {
 		return switch (string) {
-			case TuffDeclaration tuffDeclaration -> tuffDeclaration.name + " : " + tuffDeclaration.type;
+			case TuffDeclaration tuffDeclaration -> {
+				final var name = tuffDeclaration.name;
+				final var type = tuffDeclaration.type;
+				if (type.equals("var")) {
+					yield name;
+				}
+
+				yield name + " : " + type;
+			}
 			case Placeholder placeholder -> this.wrap(placeholder.input);
 		};
 	}

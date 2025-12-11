@@ -291,6 +291,11 @@ public class Main {
 		final var stripped = input.strip();
 		if (stripped.endsWith(";")) {
 			final var slice = stripped.substring(0, stripped.length() - 1);
+			final var maybeInitialization = this.compileInitialization(slice);
+			if (maybeInitialization.isPresent()) {
+				return maybeInitialization.get();
+			}
+
 			final var maybeInvokable = this.compileInvokable(slice);
 			if (maybeInvokable.isPresent()) {
 				return maybeInvokable.get();
@@ -301,14 +306,19 @@ public class Main {
 	}
 
 	private String compileClassStatement(String input) {
+		return this.compileInitialization(input).orElseGet(() -> this.wrap(input));
+	}
+
+	private Optional<String> compileInitialization(String input) {
 		final var i = input.indexOf("=");
 		if (i >= 0) {
 			final var substring = input.substring(0, i);
 			final var substring1 = input.substring(i + 1);
-			return "let " + this.compileDefinition(substring) + " = " + this.compileExpressionOrPlaceholder(substring1);
+			return Optional.of(
+					"let " + this.compileDefinition(substring) + " = " + this.compileExpressionOrPlaceholder(substring1));
 		}
 
-		return this.wrap(input);
+		return Optional.empty();
 	}
 
 	private String compileExpressionOrPlaceholder(String input) {
@@ -319,7 +329,27 @@ public class Main {
 		return this
 				.compileInvokable(input)
 				.or(() -> this.compileAccess(input, ".", Main.this::compileExpressionOrPlaceholder))
-				.or(() -> this.compileAccess(input, "::", Main.this::compileType));
+				.or(() -> this.compileAccess(input, "::", Main.this::compileType))
+				.or(() -> this.compileIdentifier(input))
+				.or(() -> this.compileString(input));
+	}
+
+	private Optional<String> compileString(String input) {
+		final var stripped = input.strip();
+		if (stripped.startsWith("\"") && stripped.endsWith("\"")) {
+			return Optional.of(stripped);
+		} else {
+			return Optional.empty();
+		}
+	}
+
+	private Optional<String> compileIdentifier(String input) {
+		final var stripped = input.strip();
+		if (this.isIdentifier(stripped)) {
+			return Optional.of(stripped);
+		} else {
+			return Optional.empty();
+		}
 	}
 
 	private Optional<String> compileAccess(String input, String separator, Function<String, String> mapper) {
@@ -376,7 +406,15 @@ public class Main {
 
 	private String generateDefinitionOrPlaceholder(TuffDeclarationOrPlaceholder string) {
 		return switch (string) {
-			case TuffDeclaration tuffDeclaration -> tuffDeclaration.name + " : " + tuffDeclaration.type;
+			case TuffDeclaration tuffDeclaration -> {
+				final var name = tuffDeclaration.name;
+				final var type = tuffDeclaration.type;
+				if (type.equals("var")) {
+					yield name;
+				}
+
+				yield name + " : " + type;
+			}
 			case Placeholder placeholder -> this.wrap(placeholder.input);
 		};
 	}
