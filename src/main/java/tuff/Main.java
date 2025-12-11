@@ -10,11 +10,23 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class Main {
-	private sealed interface Result<T, X> permits Err, Ok {}
+	private interface Result<T, X> {
+		<R> R match(Function<T, R> whenOk, Function<X, R> whenErr);
+	}
 
-	private record Err<T, X>(X error) implements Result<T, X> {}
+	private record Err<T, X>(X error) implements Result<T, X> {
+		@Override
+		public <R> R match(Function<T, R> whenOk, Function<X, R> whenErr) {
+			return whenErr.apply(this.error);
+		}
+	}
 
-	private record Ok<T, X>(T value) implements Result<T, X> {}
+	private record Ok<T, X>(T value) implements Result<T, X> {
+		@Override
+		public <R> R match(Function<T, R> whenOk, Function<X, R> whenErr) {
+			return whenOk.apply(this.value);
+		}
+	}
 
 	private static final ArrayList<String> structures = new ArrayList<String>();
 
@@ -26,14 +38,10 @@ public class Main {
 		final var source = Paths.get(".", "src", "main", "java", "tuff", "Main.java");
 		final var target = Paths.get(".", "src", "main", "ts", "tuff", "Main.ts");
 
-		final var input = readString(source);
-		return switch (input) {
-			case Err<String, IOException> v -> Optional.of(v.error);
-			case Ok<String, IOException> v -> {
-				final var output = compile(v.value);
-				yield writeTarget(target, output);
-			}
-		};
+		return readString(source).match(input -> {
+			final var output = compile(input);
+			return writeTarget(target, output);
+		}, Optional::of);
 	}
 
 	private static Optional<IOException> writeTarget(Path target, String output) {

@@ -1,28 +1,36 @@
-interface Result<T, X> permits Err, Ok {
+interface Result<T, X> {
+	/*<R> R match(Function<T, R> whenOk, Function<X, R> whenErr);*/
 }
 class Main {
 	
-	/*private record Err<T, X>(X error) implements Result<T, X> {}
+	/*private record Err<T, X>(X error) implements Result<T, X> {
+		@Override
+		public <R> R match(Function<T, R> whenOk, Function<X, R> whenErr) {
+			return whenErr.apply(this.error);
+		}*/
+	/*}
 
-	private record Ok<T, X>(T value) implements Result<T, X> {}
+	private record Ok<T, X>(T value) implements Result<T, X> {
+		@Override
+		public <R> R match(Function<T, R> whenOk, Function<X, R> whenErr) {
+			return whenOk.apply(this.value);*/
+	/*}
+	}
 
 	private static final ArrayList<String> structures = new ArrayList<String>();
 
 	public static void main(String[] args) {
-		run().ifPresent(Throwable::printStackTrace);*/
-	/*}
+		run().ifPresent(Throwable::printStackTrace);
+	}
 
 	private static Optional<IOException> run() {
-		final var source = Paths.get(".", "src", "main", "java", "tuff", "Main.java");*/
-	/*final var target = Paths.get(".", "src", "main", "ts", "tuff", "Main.ts");*/
-	/*final var input = readString(source);*/
-	switch() {
-		case Err<String, IOException> v -> Optional.of(v.error);
-		case Ok<String, IOException> v -> {
-				final var output = compile(v.value);
-				yield writeTarget(target, output);
-			}}
-	/*;
+		final var source = Paths.get(".", "src", "main", "java", "tuff", "Main.java");
+		final var target = Paths.get(".", "src", "main", "ts", "tuff", "Main.ts");
+
+		return readString(source).match(input -> {
+			final var output = compile(input);*/
+	/*return writeTarget(target, output);*/
+	/*}, Optional::of);
 	}
 
 	private static Optional<IOException> writeTarget(Path target, String output) {
