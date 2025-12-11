@@ -147,12 +147,8 @@ public class Main {
 					final var i3 = withParameters.indexOf("(");
 					if (i3 >= 0) {
 						name = withParameters.substring(0, i3).strip();
-						parameters = Arrays
-								.stream(withParameters.substring(i3 + 1).split(Pattern.quote(",")))
-								.map(String::strip)
-								.filter(slice -> !slice.isEmpty())
-								.map(this::compileDefinition)
-								.toList();
+						final var substring = withParameters.substring(i3 + 1);
+						parameters = this.compileParameters(substring);
 					}
 				}
 
@@ -168,6 +164,15 @@ public class Main {
 		}
 
 		return Optional.empty();
+	}
+
+	private List<String> compileParameters(String input) {
+		return Arrays
+				.stream(input.split(Pattern.quote(",")))
+				.map(String::strip)
+				.filter(slice -> !slice.isEmpty())
+				.map(this::compileDefinition)
+				.toList();
 	}
 
 	private String createIndent(int indent) {
@@ -253,15 +258,16 @@ public class Main {
 			final var withParameters = input.substring(i + 1);
 			final var i2 = withParameters.indexOf(")");
 			if (i2 >= 0) {
-				final var parameters = withParameters.substring(0, i2);
+				final var parameterString = withParameters.substring(0, i2);
 				final var withBraces = withParameters.substring(i2 + 1).strip();
 				final var declarationOrPlaceholder = this.parseDefinitionOrPlaceholderToTuff(substring);
-				final var compiledParameters = this.compileDefinition(parameters);
+				final var parameters = this.compileParameters(parameterString);
 
-				if (declarationOrPlaceholder instanceof TuffDeclaration(String name, String type)) {
+				if (declarationOrPlaceholder instanceof TuffDeclaration(var name, var type)) {
 					if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
 						final var content = withBraces.substring(1, withBraces.length() - 1);
-						return "fn " + name + "(" + compiledParameters + ") : " + type + " => {" + this.wrap(content) + "}";
+						final var joinedParameters = String.join(", ", parameters);
+						return "fn " + name + "(" + joinedParameters + ") : " + type + " => {" + this.wrap(content) + "}";
 					}
 				}
 			}
