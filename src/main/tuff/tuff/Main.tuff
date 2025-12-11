@@ -487,7 +487,7 @@ class fn Main() => {
 		if (i >= 0) {
 			let substring = input.substring(0, i);
 			let substring1 = input.substring(i + 1);
-			let string = this.parseDefinitionToTuff(substring). < /**/TuffLValue>map/**/((value : TuffDeclaration) => value).or(() => this.parseExpression(substring, 0). < /**/TuffLValue>map/**/((value : TuffExpression) => value)).orElseGet(() => Placeholder(substring));
+			let string = this.parseDefinitionToTuff(substring).map((value : TuffDeclaration) => value).or(() => this.parseExpression(substring, 0).map((value : TuffExpression) => value)).orElseGet(() => Placeholder(substring));
 			return Optional.of(this.generateAssignable(string) + " = " + this.compileExpressionOrPlaceholder(substring1, indent));
 		}
 		return Optional.empty();
@@ -674,6 +674,13 @@ class fn Main() => {
 		if (i >= 0) {
 			let substring = input.substring(0, i);
 			let memberName = input.substring(i + separator.length()).strip();
+			if (memberName.startsWith("<")) {
+				let substring1 = memberName.substring(1);
+				let i1 = substring1.indexOf(">");
+				if (i1 >= 0) {
+					memberName = substring1.substring(i1 + 1).strip();
+				}
+			}
 			if (this.isIdentifier(memberName)) {
 				return Optional.of(mapper.apply(substring) + separator + memberName);
 			}
@@ -754,7 +761,7 @@ class fn Main() => {
 		return modifiers.stream().map((modifier : String) => modifier + " ").collect(Collectors.joining());
 	}
 	fn parseDefinitionOrPlaceholderToTuff(input : String) : TuffDeclarationOrPlaceholder => {
-		return this.parseDefinitionToTuff(input). < /**/TuffDeclarationOrPlaceholder>map/**/((value : TuffDeclaration) => value).orElseGet(() => Placeholder(input));
+		return this.parseDefinitionToTuff(input).map((value : TuffDeclaration) => value).orElseGet(() => Placeholder(input));
 	}
 	fn parseDefinitionToTuff(input : String) : Optional<TuffDeclaration> => {
 		let stripped = input.strip();

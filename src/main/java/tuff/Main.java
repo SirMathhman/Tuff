@@ -881,7 +881,15 @@ public class Main {
 		final var i = input.lastIndexOf(separator);
 		if (i >= 0) {
 			final var substring = input.substring(0, i);
-			final var memberName = input.substring(i + separator.length()).strip();
+			var memberName = input.substring(i + separator.length()).strip();
+			if (memberName.startsWith("<")) {
+				final var substring1 = memberName.substring(1);
+				final var i1 = substring1.indexOf(">");
+				if (i1 >= 0) {
+					memberName = substring1.substring(i1 + 1).strip();
+				}
+			}
+
 			if (this.isIdentifier(memberName)) {
 				return Optional.of(mapper.apply(substring) + separator + memberName);
 			}
