@@ -2,29 +2,66 @@ package tuff;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class Main {
+	private interface Result<T, X> {
+		<R> R match(Function<T, R> whenOk, Function<X, R> whenErr);
+	}
+
+	private record Err<T, X>(X error) implements Result<T, X> {
+		@Override
+		public <R> R match(Function<T, R> whenOk, Function<X, R> whenErr) {
+			return whenErr.apply(this.error);
+		}
+	}
+
+	private record Ok<T, X>(T value) implements Result<T, X> {
+		@Override
+		public <R> R match(Function<T, R> whenOk, Function<X, R> whenErr) {
+			return whenOk.apply(this.value);
+		}
+	}
+
 	private final Map<List<String>, List<String>> imports = new HashMap<List<String>, List<String>>();
 
 	public static void main(String[] args) {
-		new Main().run();
+		new Main().run().ifPresent(Throwable::printStackTrace);
 	}
 
-	private void run() {
+	private Optional<IOException> run() {
+		final var source = Paths.get(".", "src", "main", "java", "tuff", "Main.java");
+		final var target = Paths.get(".", "src", "main", "tuff", "tuff", "Main.tuff");
+		return this.readString(source).match(input -> {
+			final var output = this.compile(input);
+			return this.writeString(target, output);
+		}, Optional::of);
+	}
+
+	private Optional<IOException> writeString(Path target, String output) {
 		try {
-			final var input = Files.readString(Paths.get(".", "src", "main", "java", "tuff", "Main.java"));
-			Files.writeString(Paths.get(".", "src", "main", "tuff", "tuff", "Main.tuff"), this.compile(input));
+			Files.writeString(target, output);
+			return Optional.empty();
 		} catch (IOException e) {
-			throw new RuntimeException(e);
+			return Optional.of(e);
+		}
+	}
+
+	private Result<String, IOException> readString(Path source) {
+		try {
+			return new Ok<String, IOException>(Files.readString(source));
+		} catch (IOException e) {
+			return new Err<String, IOException>(e);
 		}
 	}
 
@@ -220,7 +257,7 @@ public class Main {
 	}
 
 	private int findTypeSeparator(String beforeName) {
-		int i1 = -1;
+		var i1 = -1;
 		var depth = 0;
 		for (var i2 = 0; i2 < beforeName.length(); i2++) {
 			final var c = beforeName.charAt(i2);
