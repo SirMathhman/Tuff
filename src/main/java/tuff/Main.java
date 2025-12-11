@@ -86,8 +86,10 @@ public class Main {
 				continue;
 			}
 			if (c == '}' && depth == 1) {
-				segments.add(buffer.toString());
-				buffer = new StringBuilder();
+				if (input.charAt(i + 1) != ';') {
+					segments.add(buffer.toString());
+					buffer = new StringBuilder();
+				}
 				depth--;
 				continue;
 			}
@@ -291,7 +293,7 @@ public class Main {
 		final var stripped = input.strip();
 		if (stripped.endsWith(";")) {
 			final var slice = stripped.substring(0, stripped.length() - 1);
-			final var maybeInitialization = this.getString(slice);
+			final var maybeInitialization = this.compileMethodStatementValue(slice);
 			if (maybeInitialization.isPresent()) {
 				return maybeInitialization.get() + ";";
 			}
@@ -300,12 +302,19 @@ public class Main {
 		return this.wrap(stripped);
 	}
 
-	private Optional<String> getString(String slice) {
-		final var maybeInitialization = this.compileInitialization(slice);
+	private Optional<String> compileMethodStatementValue(String input) {
+		final var stripped = input;
+		if (stripped.startsWith("return ")) {
+			final var substring = stripped.substring("return ".length());
+			return Optional.of("return " + this.compileExpressionOrPlaceholder(substring));
+		}
+
+		final var maybeInitialization = this.compileInitialization(stripped);
 		if (maybeInitialization.isPresent()) {
 			return maybeInitialization;
 		}
-		return this.compileInvokable(slice);
+
+		return this.compileInvokable(stripped);
 	}
 
 	private String compileClassStatement(String input) {
@@ -360,8 +369,10 @@ public class Main {
 		final var i = input.lastIndexOf(separator);
 		if (i >= 0) {
 			final var substring = input.substring(0, i);
-			final var substring1 = input.substring(i + 1);
-			return Optional.of(mapper.apply(substring) + separator + substring1);
+			final var memberName = input.substring(i + 1).strip();
+			if (this.isIdentifier(memberName)) {
+				return Optional.of(mapper.apply(substring) + separator + memberName);
+			}
 		}
 
 		return Optional.empty();
