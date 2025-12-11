@@ -153,6 +153,56 @@ public class Main {
 			return this.compileClassStatement(slice) + ";";
 		}
 
+		final var i1 = input.indexOf("interface ");
+		if (i1 >= 0) {
+			final var modifiers = Arrays
+					.stream(input.substring(0, i1).split(Pattern.quote(" ")))
+					.map(String::strip)
+					.filter(slice -> !slice.isEmpty())
+					.toList();
+
+			final var afterKeyword = input.substring(i1 + "interface ".length());
+			if (modifiers.contains("sealed")) {
+				final var i = afterKeyword.indexOf("permits ");
+				if (i >= 0) {
+					var name = afterKeyword.substring(0, i).strip();
+					List<String> typeParameters = new ArrayList<String>();
+					if (name.endsWith(">")) {
+						final var slice = name.substring(0, name.length() - 1);
+						final var i2 = slice.indexOf("<");
+						if (i2 >= 0) {
+							name = slice.substring(0, i2);
+							typeParameters = Arrays
+									.stream(slice.substring(i2 + 1).split(Pattern.quote(",")))
+									.map(String::strip)
+									.filter(segment -> !segment.isEmpty())
+									.toList();
+						}
+					}
+
+					final var stripped = afterKeyword.substring(i + "permits ".length()).strip();
+					final String joinedTypeParameters;
+					if (typeParameters.isEmpty()) {
+						joinedTypeParameters = "";
+					} else {
+						joinedTypeParameters = "<" + String.join(", ", typeParameters) + ">";
+					}
+
+					final var i2 = stripped.indexOf("{");
+					if (i2 >= 0) {
+						final var variants = Arrays
+								.stream(stripped.substring(0, i2).split(Pattern.quote(",")))
+								.map(String::strip)
+								.filter(slice -> !slice.isEmpty())
+								.map(slice -> slice + joinedTypeParameters)
+								.collect(Collectors.joining(" | "));
+
+						return "type " + name + joinedTypeParameters + " = " + variants + ";";
+					}
+				}
+			}
+		}
+
 		return this.wrap(input);
 	}
 

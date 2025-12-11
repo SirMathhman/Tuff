@@ -5,7 +5,7 @@ from java::nio::file use { Files, Path, Paths };
 from java::util use { ArrayList, Arrays, HashMap, List, Map, Optional };
 from java::util::regex use { Pattern };
 class fn Main() => {
-	/*Raw*/private sealed interface Result<T, X> permits Err, Ok {}
+	type Result<T, X> = Err<T, X> | Ok<T, X>;
 	/*Raw*/private record Err<T, X>(X error) implements Result<T, X> {}
 	/*Raw*/private record Ok<T, X>(T value) implements Result<T, X> {}
 	let imports : Map<List<String>, List<String>> = HashMap<List<String>, List<String>>();
@@ -128,9 +128,60 @@ class fn ");
 			return this.compileClassStatement(slice) + ";";
 		}
 
+		final var i1 = input.indexOf("interface ");
+		if (i1 >= 0) {
+			final var modifiers = Arrays
+					.stream(input.substring(0, i1).split(Pattern.quote(" ")))
+					.map(String::strip)
+					.filter(slice -> !slice.isEmpty())
+					.toList();
+
+			final var afterKeyword = input.substring(i1 + "interface ".length());
+			if (modifiers.contains("sealed")) {
+				final var i = afterKeyword.indexOf("permits ");
+				if (i >= 0) {
+					var name = afterKeyword.substring(0, i).strip();
+					List<String> typeParameters = new ArrayList<String>();
+					if (name.endsWith(">")) {
+						final var slice = name.substring(0, name.length() - 1);
+						final var i2 = slice.indexOf("<");
+						if (i2 >= 0) {
+							name = slice.substring(0, i2);
+							typeParameters = Arrays
+									.stream(slice.substring(i2 + 1).split(Pattern.quote(",")))
+									.map(String::strip)
+									.filter(segment -> !segment.isEmpty())
+									.toList();
+						}
+					}
+
+					final var stripped = afterKeyword.substring(i + "permits ".length()).strip();
+					final String joinedTypeParameters;
+					if (typeParameters.isEmpty()) {
+						joinedTypeParameters = "";
+					} else {
+						joinedTypeParameters = "<" + String.join(", ", typeParameters) + ">";
+					}
+
+					final var i2 = stripped.indexOf("{");
+					if (i2 >= 0) {
+						final var variants = Arrays
+								.stream(stripped.substring(0, i2).split(Pattern.quote(",")))
+								.map(String::strip)
+								.filter(slice -> !slice.isEmpty())
+								.map(slice -> slice + joinedTypeParameters)
+								.collect(Collectors.joining(" | "));
+
+						return "type " + name + joinedTypeParameters + " = " + variants + ";";
+					}
+				}
+			}
+		}
+
 		return this.wrap(input);
 	}
-/*Raw*/private String compileClassStatement(String input) {
+
+	private String compileClassStatement(String input) {
 		final var i = input.indexOf("=");
 		if (i >= 0) {
 			final var substring = input.substring(0, i);
@@ -140,7 +191,8 @@ class fn ");
 
 		return this.wrap(input);
 	}
-/*Raw*/private String compileExpression(String input) {
+
+	private String compileExpression(String input) {
 		final var stripped = input.strip();
 		if (stripped.endsWith(")")) {
 			final var substring = stripped.substring(0, stripped.length() - 1);
@@ -161,7 +213,8 @@ class fn ");
 
 		return this.wrap(stripped);
 	}
-/*Raw*/private String compileCaller(String input) {
+
+	private String compileCaller(String input) {
 		final var stripped = input.strip();
 		if (stripped.startsWith("new ")) {
 			final var substring = stripped.substring("new ".length());
@@ -170,7 +223,8 @@ class fn ");
 
 		return this.wrap(stripped);
 	}
-/*Raw*/private String compileDefinition(String input) {
+
+	private String compileDefinition(String input) {
 		final var stripped = input.strip();
 		final var i = stripped.lastIndexOf(" ");
 		if (i >= 0) {
@@ -185,7 +239,8 @@ class fn ");
 
 		return this.wrap(stripped);
 	}
-/*Raw*/private String compileType(String input) {
+
+	private String compileType(String input) {
 		final var stripped = input.strip();
 		final var i = stripped.indexOf("<");
 		if (i >= 0) {
@@ -206,7 +261,8 @@ class fn ");
 
 		return this.wrap(stripped);
 	}
-/*Raw*/private boolean isIdentifier(String input) {
+
+	private boolean isIdentifier(String input) {
 		final var stripped = input.strip();
 		for (var i = 0; i < stripped.length(); i++) {
 			final var c = stripped.charAt(i);
@@ -215,7 +271,8 @@ class fn ");
 		}
 		return true;
 	}
-/*Raw*/private int findTypeSeparator(String beforeName) {
+
+	private int findTypeSeparator(String beforeName) {
 		var i1 = -1;
 		var depth = 0;
 		for (var i2 = 0; i2 < beforeName.length(); i2++) {
@@ -232,4 +289,5 @@ class fn ");
 		}
 		return i1;
 	}
-/*Raw*/}
+}
+/*Raw*/
