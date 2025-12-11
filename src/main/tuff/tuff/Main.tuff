@@ -5,8 +5,8 @@ from java::nio::file use { Files, Paths };
 from java::util use { ArrayList, Arrays, HashMap, List, Map };
 from java::util::regex use { Pattern };
 class fn Main() => {
-	private final Map<List<String>, List<String>> imports = new HashMap<List<String>, List<String>>();
-	public static void main(String[] args) {
+	let imports : Map<List<String>, List<String>> = HashMap<List<String>, List<String>>(/*Raw*/);
+	/*Raw*/public static void main(String[] args) {
 		new Main().run();
 	}
 
@@ -92,10 +92,126 @@ class fn Main() => {
 			}
 		}
 
+		return this.wrap(input);
+	}
+
+	private String wrap(String input) {
 		return "/*Raw*/" + input;
 	}
 
 	private String compileClassSegment(String input) {
-		return System.lineSeparator() + "\t" + input.strip();
+		final var stripped = input.strip();
+		return System.lineSeparator() + "\t" + this.compileClassSegmentValue(stripped);
+	}
+
+	private String compileClassSegmentValue(String input) {
+		if (input.endsWith(";")) {
+			final var slice = input.substring(0, input.length() - 1);
+			return this.compileClassStatement(slice) + ";";
+		}
+
+		return this.wrap(input);
+	}
+
+	private String compileClassStatement(String input) {
+		final var i = input.indexOf("=");
+		if (i >= 0) {
+			final var substring = input.substring(0, i);
+			final var substring1 = input.substring(i + 1);
+			return "let " + this.compileDefinition(substring) + " = " + this.compileExpression(substring1);
+		}
+
+		return this.wrap(input);
+	}
+
+	private String compileExpression(String input) {
+		final var stripped = input.strip();
+		if (stripped.endsWith(")")) {
+			final var substring = stripped.substring(0, stripped.length() - 1);
+			final var i = substring.indexOf("(");
+			if (i >= 0) {
+				final var caller = substring.substring(0, i);
+				final var arguments = substring.substring(i + 1);
+				return this.compileCaller(caller) + "(" + this.wrap(arguments) + ")";
+			}
+		}
+
+		return this.wrap(stripped);
+	}
+
+	private String compileCaller(String input) {
+		final var stripped = input.strip();
+		if (stripped.startsWith("new ")) {
+			final var substring = stripped.substring("new ".length());
+			return this.compileType(substring);
+		}
+
+		return this.wrap(stripped);
+	}
+
+	private String compileDefinition(String input) {
+		final var stripped = input.strip();
+		final var i = stripped.lastIndexOf(" ");
+		if (i >= 0) {
+			final var beforeName = stripped.substring(0, i);
+			final var name = stripped.substring(i + 1);
+			final var i1 = this.findTypeSeparator(beforeName);
+			if (i1 >= 0) {
+				final var type = beforeName.substring(i1 + 1);
+				return name + " : " + this.compileType(type);
+			}
+		}
+
+		return this.wrap(stripped);
+	}
+
+	private String compileType(String input) {
+		final var stripped = input.strip();
+		final var i = stripped.indexOf("<");
+		if (i >= 0) {
+			final var base = stripped.substring(0, i);
+			final var substring1 = stripped.substring(i + 1).strip();
+			if (substring1.endsWith(">")) {
+				final var args = substring1.substring(0, substring1.length() - 1);
+				final var joinedTypeArguments =
+						Arrays.stream(args.split(Pattern.quote(","))).map(this::compileType).collect(Collectors.joining(", "));
+
+				return base + "<" + joinedTypeArguments + ">";
+			}
+		}
+
+		if (this.isIdentifier(stripped)) {
+			return stripped;
+		}
+
+		return this.wrap(stripped);
+	}
+
+	private boolean isIdentifier(String input) {
+		final var stripped = input.strip();
+		for (var i = 0; i < stripped.length(); i++) {
+			final var c = stripped.charAt(i);
+			if (Character.isLetter(c)) {continue;}
+			return false;
+		}
+		return true;
+	}
+
+	private int findTypeSeparator(String beforeName) {
+		int i1 = -1;
+		var depth = 0;
+		for (var i2 = 0; i2 < beforeName.length(); i2++) {
+			final var c = beforeName.charAt(i2);
+			if (c == ' ' && depth == 0) {
+				i1 = i2;
+			}
+			if (c == '<') {
+				depth++;
+			}
+			if (c == '>') {
+				depth--;
+			}
+		}
+		return i1;
 	}
 }
