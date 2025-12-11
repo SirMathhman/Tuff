@@ -15,6 +15,7 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 public class Main {
@@ -600,12 +601,31 @@ public class Main {
 			return Optional.of("return " + this.compileExpressionOrPlaceholder(substring, indent));
 		}
 
+		final var maybePostIncrement = this.compilePost(input, indent, "++");
+		if (maybePostIncrement.isPresent()) {
+			return maybePostIncrement;
+		}
+
+		final var maybePostDecrement = this.compilePost(input, indent, "--");
+		if (maybePostDecrement.isPresent()) {
+			return maybePostDecrement;
+		}
+
 		final var maybeInitialization = this.compileInitialization(input, indent);
 		if (maybeInitialization.isPresent()) {
 			return maybeInitialization;
 		}
 
 		return this.compileInvokable(input, indent);
+	}
+
+	private Optional<String> compilePost(String input, int indent, String operator) {
+		if (input.endsWith(operator)) {
+			final var substring = input.substring(0, input.length() - 2);
+			return Optional.of(this.compileExpressionOrPlaceholder(substring, indent) + operator);
+		}
+
+		return Optional.empty();
 	}
 
 	private String compileClassStatement(String input, int indent) {
@@ -692,6 +712,7 @@ public class Main {
 				.or(() -> this.compileOperation(indent, input, "+"))
 				.or(() -> this.compileOperation(indent, input, "-"))
 				.or(() -> this.compileOperation(indent, input, "=="))
+				.or(() -> this.compileOperation(indent, input, "!="))
 				.or(() -> this.compileOperation(indent, input, "&&"))
 				.or(() -> this.compileOperation(indent, input, "||"))
 				.or(() -> this.compileAccess(input, indent, "::"))
@@ -734,14 +755,11 @@ public class Main {
 			stripped = input;
 		}
 
-		for (var i = 0; i < stripped.length(); i++) {
-			final var c = stripped.charAt(i);
-			if (Character.isDigit(c)) {
-				continue;
-			}
-			return false;
-		}
-		return true;
+		return this.streamString(stripped).allMatch(Character::isDigit);
+	}
+
+	private Stream<Character> streamString(String value) {
+		return IntStream.range(0, value.length()).mapToObj(value::charAt);
 	}
 
 	private Optional<String> compileOperation(int indent, String input, String operator) {
@@ -867,20 +885,7 @@ public class Main {
 		if (stripped.endsWith(")")) {
 			final var withoutEnd = stripped.substring(0, stripped.length() - 1);
 
-			var i = -1;
-			var depth = 0;
-			for (var i1 = 0; i1 < withoutEnd.length(); i1++) {
-				final var c = withoutEnd.charAt(i1);
-				if (c == '(') {
-					if (depth == 0) {
-						i = i1;
-					}
-					depth++;
-				}
-				if (c == ')') {
-					depth--;
-				}
-			}
+			final var i = this.findInvokableStart(withoutEnd);
 
 			if (i >= 0) {
 				final var caller = withoutEnd.substring(0, i);
@@ -897,6 +902,24 @@ public class Main {
 		}
 
 		return Optional.empty();
+	}
+
+	private int findInvokableStart(String withoutEnd) {
+		var i = -1;
+		var depth = 0;
+		for (var i1 = 0; i1 < withoutEnd.length(); i1++) {
+			final var c = withoutEnd.charAt(i1);
+			if (c == '(') {
+				if (depth == 0) {
+					i = i1;
+				}
+				depth++;
+			}
+			if (c == ')') {
+				depth--;
+			}
+		}
+		return i;
 	}
 
 	private Stream<String> divideValues(String input) {
@@ -1050,18 +1073,17 @@ public class Main {
 
 	private boolean isIdentifier(String input) {
 		final var stripped = input.strip();
-		for (var i = 0; i < stripped.length(); i++) {
-			final var c = stripped.charAt(i);
-			if (Character.isLetter(c) || (i != 0 && Character.isDigit(c))) {continue;}
-			return false;
-		}
-		return true;
+		return IntStream.range(0, stripped.length()).allMatch((int index) -> {
+			final var c = stripped.charAt(index);
+			return Character.isLetter(c) || (index != 0 && Character.isDigit(c));
+		});
 	}
 
 	private int findTypeSeparator(String beforeName) {
 		var i1 = -1;
 		var depth = 0;
-		for (var i2 = 0; i2 < beforeName.length(); i2++) {
+		var i2 = 0;
+		while (i2 < beforeName.length()) {
 			final var c = beforeName.charAt(i2);
 			if (c == ' ' && depth == 0) {
 				i1 = i2;
@@ -1072,6 +1094,7 @@ public class Main {
 			if (c == '>') {
 				depth--;
 			}
+			i2++;
 		}
 		return i1;
 	}

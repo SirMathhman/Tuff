@@ -1,6 +1,6 @@
 from java::util::function use { Function };
 from java::util::Map use { Entry };
-from java::util::stream use { Collectors, Stream };
+from java::util::stream use { Collectors, IntStream, Stream };
 from java::io use { IOException };
 from java::nio::file use { Files, Path, Paths };
 from java::util use { ArrayList, Arrays, Collections, HashMap, List, Map, Optional };
@@ -458,11 +458,26 @@ class fn Main() => {
 			let substring = input.substring("return ".length());
 			return Optional.of("return " + this.compileExpressionOrPlaceholder(substring, indent));
 		}
+		let maybePostIncrement = this.compilePost(input, indent, "++");
+		if (maybePostIncrement.isPresent()) {
+			return maybePostIncrement;
+		}
+		let maybePostDecrement = this.compilePost(input, indent, "--");
+		if (maybePostDecrement.isPresent()) {
+			return maybePostDecrement;
+		}
 		let maybeInitialization = this.compileInitialization(input, indent);
 		if (maybeInitialization.isPresent()) {
 			return maybeInitialization;
 		}
 		return this.compileInvokable(input, indent);
+	}
+	fn compilePost(input : String, indent : I32, operator : String) : Optional<String> => {
+		if (input.endsWith(operator)) {
+			let substring = input.substring(0, input.length() - 2);
+			return Optional.of(this.compileExpressionOrPlaceholder(substring, indent) + operator);
+		}
+		return Optional.empty();
 	}
 	fn compileClassStatement(input : String, indent : I32) : String => {
 		return this.compileInitialization(input, indent).orElseGet(() => this.compileDefinitionOrPlaceholder(input));
@@ -522,7 +537,7 @@ class fn Main() => {
 			let substring = stripped.substring(1);
 			return Optional.of("!" + this.compileExpressionOrPlaceholder(substring, indent));
 		}
-		return this.compileInvokable(input, indent).or(() => this.compileString(input)).or(() => this.compileSwitch(input, indent)).or(() => this.compileAccess(input, indent, ".")).or(() => this.compileOperation(indent, input, "<")).or(() => this.compileOperation(indent, input, ">=")).or(() => this.compileOperation(indent, input, "+")).or(() => this.compileOperation(indent, input, "-")).or(() => this.compileOperation(indent, input, "==")).or(() => this.compileOperation(indent, input, "&&")).or(() => this.compileOperation(indent, input, "||")).or(() => this.compileAccess(input, indent, "::")).or(() => this.compileIdentifier(input)).or(() => this.compileNumber(input)).or(() => this.compileChar(input));
+		return this.compileInvokable(input, indent).or(() => this.compileString(input)).or(() => this.compileSwitch(input, indent)).or(() => this.compileAccess(input, indent, ".")).or(() => this.compileOperation(indent, input, "<")).or(() => this.compileOperation(indent, input, ">=")).or(() => this.compileOperation(indent, input, "+")).or(() => this.compileOperation(indent, input, "-")).or(() => this.compileOperation(indent, input, "==")).or(() => this.compileOperation(indent, input, "!=")).or(() => this.compileOperation(indent, input, "&&")).or(() => this.compileOperation(indent, input, "||")).or(() => this.compileAccess(input, indent, "::")).or(() => this.compileIdentifier(input)).or(() => this.compileNumber(input)).or(() => this.compileChar(input));
 	}
 	fn compileChar(input : String) : Optional<String> => {
 		let stripped = input.strip();
@@ -554,14 +569,10 @@ class fn Main() => {
 		else {
 			stripped = input;
 		}
-		/**/for (var i = 0; i < stripped.length(); i++) {
-			final var c = stripped.charAt(i);
-			if (Character.isDigit(c)) {
-				continue;
-			}
-			return false;
-		}/**/
-		return true;
+		return this.streamString(stripped).allMatch(U16::isDigit);
+	}
+	fn streamString(value : String) : Stream<U16> => {
+		return IntStream.range(0, value.length()).mapToObj(value::charAt);
 	}
 	fn compileOperation(indent : I32, input : String, operator : String) : Optional<String> => {
 		let i1 = input.indexOf(operator);
@@ -664,20 +675,7 @@ class fn Main() => {
 		let stripped = input.strip();
 		if (stripped.endsWith(")")) {
 			let withoutEnd = stripped.substring(0, stripped.length() - 1);
-			let i =  - 1;
-			let depth = 0;
-			/**/for (var i1 = 0; i1 < withoutEnd.length(); i1++) {
-				final var c = withoutEnd.charAt(i1);
-				if (c == '(') {
-					if (depth == 0) {
-						i = i1;
-					}
-					depth++;
-				}
-				if (c == ')') {
-					depth--;
-				}
-			}/**/
+			let i = this.findInvokableStart(withoutEnd);
 			if (i >= 0) {
 				let caller = withoutEnd.substring(0, i);
 				let arguments = withoutEnd.substring(i + 1);
@@ -686,6 +684,23 @@ class fn Main() => {
 			}
 		}
 		return Optional.empty();
+	}
+	fn findInvokableStart(withoutEnd : String) : I32 => {
+		let i =  - 1;
+		let depth = 0;
+		/**/for (var i1 = 0; i1 < withoutEnd.length(); i1++) {
+			final var c = withoutEnd.charAt(i1);
+			if (c == '(') {
+				if (depth == 0) {
+					i = i1;
+				}
+				depth++;
+			}
+			if (c == ')') {
+				depth--;
+			}
+		}/**/
+		return i;
 	}
 	fn divideValues(input : String) : Stream<String> => {
 		return this.divide(input, EscapedFolder(ValueFolder()));
@@ -805,28 +820,28 @@ class fn Main() => {
 	}
 	fn isIdentifier(input : String) : boolean => {
 		let stripped = input.strip();
-		/**/for (var i = 0; i < stripped.length(); i++) {
-			final var c = stripped.charAt(i);
-			if (Character.isLetter(c) || (i != 0 && Character.isDigit(c))) {continue;}
-			return false;
-		}/**/
-		return true;
+		return IntStream.range(0, stripped.length()).allMatch((index : I32) => {
+			let c = stripped.charAt(index);
+			return U16.isLetter(c) || (index != 0 && Character.isDigit(c));
+		});
 	}
 	fn findTypeSeparator(beforeName : String) : I32 => {
 		let i1 =  - 1;
 		let depth = 0;
-		/**/for (var i2 = 0; i2 < beforeName.length(); i2++) {
-			final var c = beforeName.charAt(i2);
+		let i2 = 0;
+		while (i2 < beforeName.length()) {
+			let c = beforeName.charAt(i2);
 			if (c == ' ' && depth == 0) {
 				i1 = i2;
 			}
-			if (c == '<') {
+			if (c == ' < ') {
 				depth++;
 			}
 			if (c == '>') {
 				depth--;
 			}
-		}/**/
+			i2++;
+		}
 		return i1;
 	}
 }
