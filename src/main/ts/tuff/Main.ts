@@ -1,5 +1,5 @@
 class Main {
-	public static void main(String[] args) {
+	main(String[] args) {
 		try {
 			final var input = Files.readString(Paths.get(".", "src", "main", "java", "tuff", "Main.java"));
 			final var target = Paths.get(".", "src", "main", "ts", "tuff", "Main.ts");
@@ -69,7 +69,8 @@ class Main {
 				final var withEnd = afterKeyword.substring(i1 + 1).strip();
 				if (withEnd.endsWith("}")) {
 					final var content = withEnd.substring(0, withEnd.length() - 1);
-					return "class " + name + "{" + compileStatements(content, Main::compileMethodSegment) + System.lineSeparator() + "}";
+					return "class " + name + "{" + compileStatements(content, Main::compileMethodSegment) +
+								 System.lineSeparator() + "}";
 				}
 			}
 		}
@@ -78,6 +79,22 @@ class Main {
 	}
 
 	private static String compileMethodSegment(String input) {
-		return System.lineSeparator() + "\t" + input.strip();
+		final var stripped = input.strip();
+		return System.lineSeparator() + "\t" + compileMethodSegmentValue(stripped);
+	}
+
+	private static String compileMethodSegmentValue(String input) {
+		final var i = input.indexOf("(");
+		if (i >= 0) {
+			final var definition = input.substring(0, i).strip();
+			final var i1 = definition.lastIndexOf(" ");
+			if (i1 >= 0) {
+				final var name = definition.substring(i1 + 1);
+				final var substring = input.substring(i + 1);
+				return name + "(" + substring;
+			}
+		}
+
+		return input;
 	}
 }
