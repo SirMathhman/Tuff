@@ -37,7 +37,11 @@ public class Main {
 	private record Ok<T, X>(T value) implements Result<T, X> {}
 
 	private record TuffDeclaration(List<String> modifiers, String name, String type, boolean isMutable)
-			implements TuffDeclarationOrPlaceholder, TuffLValue {}
+			implements TuffDeclarationOrPlaceholder, TuffLValue {
+		public TuffDeclarationOrPlaceholder toggleMutable() {
+			return new TuffDeclaration(this.modifiers, this.name, this.type, !this.isMutable);
+		}
+	}
 
 	private record Placeholder(String input) implements TuffDeclarationOrPlaceholder, TuffLValue {}
 
@@ -462,8 +466,17 @@ public class Main {
 				.divideValues(input)
 				.map(String::strip)
 				.filter((String slice) -> !slice.isEmpty())
-				.map(this::compileDefinitionOrPlaceholder)
+				.map(this::parseDefinitionOrPlaceholderToTuff)
+				.map(this::transformParameter)
+				.map(this::generateDefinitionOrPlaceholder)
 				.toList();
+	}
+
+	private TuffDeclarationOrPlaceholder transformParameter(TuffDeclarationOrPlaceholder node) {
+		return switch (node) {
+			case Placeholder placeholder -> placeholder;
+			case TuffDeclaration tuffDeclaration -> tuffDeclaration.toggleMutable();
+		};
 	}
 
 	private String createIndent(int indent) {

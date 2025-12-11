@@ -12,19 +12,22 @@ class fn Main() => {
 	type TuffExpression extends TuffLValue = WrappedExpression;
 	type TuffLValue = Placeholder | TuffDeclaration | TuffExpression;
 	type Folder = EscapedFolder | ExprEndFolder | OperationFolder | StatementFolder | ValueFolder;
-	class fn Err<T, X>(mut error : X) => {
+	class fn Err<T, X>(error : X) => {
 	}
-	class fn Ok<T, X>(mut value : T) => {
+	class fn Ok<T, X>(value : T) => {
 	}
-	class fn TuffDeclaration(mut modifiers : List<String>, mut name : String, mut type : String, mut isMutable : boolean) => {
+	class fn TuffDeclaration(modifiers : List<String>, name : String, type : String, isMutable : boolean) => {
+		fn toggleMutable() : TuffDeclarationOrPlaceholder => {
+			return TuffDeclaration(this.modifiers, this.name, this.type, !this.isMutable);
+		}
 	}
-	class fn Placeholder(mut input : String) => {
+	class fn Placeholder(input : String) => {
 	}
-	class fn Tuple2<A, B>(mut a : A, mut b : B) => {
+	class fn Tuple2<A, B>(a : A, b : B) => {
 	}
-	class fn Tuple3<A, B, C>(mut a : A, mut b : B, mut c : C) => {
+	class fn Tuple3<A, B, C>(a : A, b : B, c : C) => {
 	}
-	class fn State(mut input : String, mut index : I32, mut buffer : StringBuilder, mut depth : I32, mut segments : ArrayList<String>) => {
+	class fn State(input : String, index : I32, buffer : StringBuilder, depth : I32, segments : ArrayList<String>) => {
 		fn pop() : Optional<Tuple2<State, U16>> => {
 			if (this.index < this.input.length()) {
 				let c = this.input.charAt(this.index);
@@ -33,7 +36,7 @@ class fn Main() => {
 			}
 			return Optional.empty();
 		}
-		fn append(mut c : U16) : State => {
+		fn append(c : U16) : State => {
 			return State(this.input, this.index, this.buffer.append(c), this.depth, this.segments);
 		}
 		fn advance() : State => {
@@ -56,15 +59,15 @@ class fn Main() => {
 			return this.segments.stream();
 		}
 		fn popAndAppendToOption() : Optional<State> => {
-			return this.pop().map((mut tuple : Tuple2<State, U16>) => tuple.a.append(tuple.b));
+			return this.pop().map((tuple : Tuple2<State, U16>) => tuple.a.append(tuple.b));
 		}
 		fn popAndAppendToTuple() : Optional<Tuple2<State, U16>> => {
-			return this.pop().map((mut tuple : Tuple2<State, U16>) => {
+			return this.pop().map((tuple : Tuple2<State, U16>) => {
 				let appended = tuple.a.append(tuple.b);
 				return Tuple2<State, U16>(appended, tuple.b);
 			});
 		}
-		fn startsWith(mut slice : String) : boolean => {
+		fn startsWith(slice : String) : boolean => {
 			if (slice.length() > this.input.length()) {
 				return false;
 			}
@@ -73,10 +76,10 @@ class fn Main() => {
 			return window.equals(slice);
 		}
 	}
-	class fn WrappedExpression(mut value : String) => {
+	class fn WrappedExpression(value : String) => {
 	}
-	class fn EscapedFolder(mut folder : Folder) => {
-		fn foldSingleEscapeChar(mut tuple : Tuple2<State, U16>) : State => {
+	class fn EscapedFolder(folder : Folder) => {
+		fn foldSingleEscapeChar(tuple : Tuple2<State, U16>) : State => {
 			if (tuple.b == '\\') {
 				return tuple.a.popAndAppendToOption().orElse(tuple.a);
 			}
@@ -84,10 +87,10 @@ class fn Main() => {
 				return tuple.a;
 			}
 		}
-		fn apply(mut state : State, mut next : U16) : State => {
+		fn apply(state : State, next : U16) : State => {
 			return this.foldQuotes(state, next).orElseGet(() => this.folder.apply(state, next));
 		}
-		fn foldQuotes(mut state : State, mut next : U16) : Optional<State> => {
+		fn foldQuotes(state : State, next : U16) : Optional<State> => {
 			if (next != '\'' && next != '\"') {
 				return Optional.empty();
 			}
@@ -98,17 +101,17 @@ class fn Main() => {
 			}
 			return Optional.of(this.foldSingleQuotes(appended));
 		}
-		fn foldSingleQuotes(mut appended : State) : State => {
+		fn foldSingleQuotes(appended : State) : State => {
 			return appended.popAndAppendToTuple().map(EscapedFolder::foldSingleEscapeChar).flatMap(State::popAndAppendToOption).orElse(appended);
 		}
-		fn foldDoubleQuotes(mut appended : State) : State => {
+		fn foldDoubleQuotes(appended : State) : State => {
 			let mut current = Tuple2<Boolean, State>(true, appended);
 			while (current.a) {
 				current = this.foldInDoubleQuote(current.b);
 			}
 			return current.b;
 		}
-		fn foldInDoubleQuote(mut state : State) : Tuple2<Boolean, State> => {
+		fn foldInDoubleQuote(state : State) : Tuple2<Boolean, State> => {
 			let maybeTuple = state.popAndAppendToTuple();
 			if (maybeTuple.isEmpty()) {
 				return Tuple2<Boolean, State>(false, state);
@@ -126,7 +129,7 @@ class fn Main() => {
 		}
 	}
 	class fn StatementFolder() => {
-		fn apply(mut state : State, mut character : U16) : State => {
+		fn apply(state : State, character : U16) : State => {
 			let appended = state.append(character);
 			if (character == ';' && appended.isLevel()) {
 				return appended.advance();
@@ -143,7 +146,7 @@ class fn Main() => {
 			}
 			return appended;
 		}
-		fn foldTrailingSemicolon(mut state : State) : State => {
+		fn foldTrailingSemicolon(state : State) : State => {
 			if (state.startsWith(";")) {
 				return state.popAndAppendToOption().orElse(state);
 			}
@@ -151,7 +154,7 @@ class fn Main() => {
 		}
 	}
 	class fn ValueFolder() => {
-		fn apply(mut state : State, mut character : U16) : State => {
+		fn apply(state : State, character : U16) : State => {
 			if (character == ',' && state.isLevel()) {
 				return state.advance();
 			}
@@ -168,7 +171,7 @@ class fn Main() => {
 			}
 			return appended;
 		}
-		fn foldArrow(mut state : State, mut character : U16) : Optional<State> => {
+		fn foldArrow(state : State, character : U16) : Optional<State> => {
 			if (character != '-') {
 				return Optional.empty();
 			}
@@ -179,7 +182,7 @@ class fn Main() => {
 		}
 	}
 	class fn ExprEndFolder() => {
-		fn apply(mut state : State, mut c : U16) : State => {
+		fn apply(state : State, c : U16) : State => {
 			let appended = state.append(c);
 			if (c == '(') {
 				return appended.enter();
@@ -190,8 +193,8 @@ class fn Main() => {
 			return appended;
 		}
 	}
-	class fn OperationFolder(mut operator : String) => {
-		fn apply(mut state : State, mut next : U16) : State => {
+	class fn OperationFolder(operator : String) => {
+		fn apply(state : State, next : U16) : State => {
 			let appended = state.append(next);
 			if (appended.startsWith(this.operator) && state.isLevel()) {
 				return this.foldOverOperator(appended);
@@ -204,7 +207,7 @@ class fn Main() => {
 			}
 			return appended;
 		}
-		fn foldOverOperator(mut appended : State) : State => {
+		fn foldOverOperator(appended : State) : State => {
 			let mut current = appended;
 			let mut i = 0;
 			while (i < this.operator.length()) {
@@ -215,13 +218,13 @@ class fn Main() => {
 		}
 	}
 	let imports : Map<List<String>, List<String>> = HashMap<List<String>, List<String>>();
-	fn foldClosingParentheses(mut appended : State) : State => {
+	fn foldClosingParentheses(appended : State) : State => {
 		if (appended.isLevel()) {
 			return appended.advance().exit();
 		}
 		return appended.exit();
 	}
-	fn main(mut args : *[String]) : Void => {
+	fn main(args : *[String]) : Void => {
 		Main().run().ifPresent(Throwable::printStackTrace);
 	}
 	fn run() : Optional<IOException> => {
@@ -235,31 +238,31 @@ class fn Main() => {
 			}
 		};
 	}
-	expect fn writeString(mut target : Path, mut output : String) : Optional<IOException>;
-	expect fn readString(mut source : Path) : Result<String, IOException>;
-	fn compile(mut input : String) : String => {
+	expect fn writeString(target : Path, output : String) : Optional<IOException>;
+	expect fn readString(source : Path) : Result<String, IOException>;
+	fn compile(input : String) : String => {
 		let compiled = this.compileStatements(input, this::compileRootSegment);
-		let useStatements = this.imports.entrySet().stream().map((mut entry : Entry<List<String>, List<String>>) => {
+		let useStatements = this.imports.entrySet().stream().map((entry : Entry<List<String>, List<String>>) => {
 			let usedNamespace = String.join("::", entry.getKey());
 			let usedChildren = String.join(", ", entry.getValue());
 			return "from " + usedNamespace + " use { " + usedChildren + " };" + System.lineSeparator();
 		}).collect(Collectors.joining());
 		return useStatements + compiled;
 	}
-	fn compileStatements(mut input : String, mut mapper : Function<String, String>) : String => {
+	fn compileStatements(input : String, mapper : Function<String, String>) : String => {
 		return this.divideStatements(input).map(mapper).collect(Collectors.joining());
 	}
-	fn divideStatements(mut input : String) : Stream<String> => {
+	fn divideStatements(input : String) : Stream<String> => {
 		return this.divide(input, EscapedFolder(StatementFolder()));
 	}
-	fn divide(mut input : String, mut folder : Folder) : Stream<String> => {
+	fn divide(input : String, folder : Folder) : Stream<String> => {
 		let segments = ArrayList<String>();
 		let mut buffer = StringBuilder();
 		let mut depth = 0;
 		let mut i = 0;
 		return this.getStringStream(State(input, i, buffer, depth, segments), folder);
 	}
-	fn getStringStream(mut state : State, mut folder : Folder) : Stream<String> => {
+	fn getStringStream(state : State, folder : Folder) : Stream<String> => {
 		let mut current = state;
 		while (true) {
 			let maybePopped = current.pop();
@@ -271,7 +274,7 @@ class fn Main() => {
 		}
 		return current.advance().stream();
 	}
-	fn compileRootSegment(mut input : String) : String => {
+	fn compileRootSegment(input : String) : String => {
 		let stripped = input.strip();
 		if (stripped.isEmpty()) {
 			return "";
@@ -291,10 +294,10 @@ class fn Main() => {
 		}
 		return this.compileRootSegmentValue(stripped) + System.lineSeparator();
 	}
-	fn compileRootSegmentValue(mut input : String) : String => {
+	fn compileRootSegmentValue(input : String) : String => {
 		return this.compileStructure("class", input, 0).orElseGet(() => this.wrap(input));
 	}
-	fn compileStructure(mut type : String, mut input : String, mut indent : I32) : Optional<String> => {
+	fn compileStructure(type : String, input : String, indent : I32) : Optional<String> => {
 		let i = input.indexOf(type + " ");
 		if (i < 0) {
 			return Optional.empty();
@@ -325,14 +328,14 @@ class fn Main() => {
 			let i3 = stripped.indexOf("<");
 			if (i3 >= 0) {
 				name = stripped.substring(0, i3).strip();
-				typeParameters = Arrays.stream(stripped.substring(i3 + 1).split(Pattern.quote(","))).map(String::strip).filter((mut slice : String) => !slice.isEmpty()).toList();
+				typeParameters = Arrays.stream(stripped.substring(i3 + 1).split(Pattern.quote(","))).map(String::strip).filter((slice : String) => !slice.isEmpty()).toList();
 			}
 		}
 		let substring1 = afterKeyword.substring(i1 + 1).strip();
 		if (substring1.endsWith("}")) {
 			let body = substring1.substring(0, substring1.length() - 1);
 			if (this.isIdentifier(name)) {
-				let compiled = this.compileStatements(body, (mut input1 : String) => this.compileStructureSegment(input1, indent + 1));
+				let compiled = this.compileStatements(body, (input1 : String) => this.compileStructureSegment(input1, indent + 1));
 				let joinedTypeParameters = this.joinTypeParameters(typeParameters);
 				let generated = "class fn " + name + joinedTypeParameters + "(" + String.join(", ", parameters) + ") => {" + compiled +
 						this.createIndent(indent) + "}";
@@ -341,7 +344,7 @@ class fn Main() => {
 		}
 		return Optional.empty();
 	}
-	fn joinTypeParameters(mut typeParameters : List<String>) : String => {
+	fn joinTypeParameters(typeParameters : List<String>) : String => {
 		joinedTypeParameters : String
 		if (typeParameters.isEmpty()) {
 			joinedTypeParameters = "";
@@ -351,23 +354,29 @@ class fn Main() => {
 		}
 		return joinedTypeParameters;
 	}
-	fn compileParameters(mut input : String) : List<String> => {
-		return this.divideValues(input).map(String::strip).filter((mut slice : String) => !slice.isEmpty()).map(this::compileDefinitionOrPlaceholder).toList();
+	fn compileParameters(input : String) : List<String> => {
+		return this.divideValues(input).map(String::strip).filter((slice : String) => !slice.isEmpty()).map(this::parseDefinitionOrPlaceholderToTuff).map(this::transformParameter).map(this::generateDefinitionOrPlaceholder).toList();
 	}
-	fn createIndent(mut indent : I32) : String => {
+	fn transformParameter(node : TuffDeclarationOrPlaceholder) : TuffDeclarationOrPlaceholder => {
+		return match (node) {
+			Placeholder placeholder => placeholder;
+			TuffDeclaration tuffDeclaration => tuffDeclaration.toggleMutable();
+		};
+	}
+	fn createIndent(indent : I32) : String => {
 		return System.lineSeparator() + "\t".repeat(indent);
 	}
-	fn wrap(mut input : String) : String => {
+	fn wrap(input : String) : String => {
 		return "/**/" + input + "/**/";
 	}
-	fn compileStructureSegment(mut input : String, mut indent : I32) : String => {
+	fn compileStructureSegment(input : String, indent : I32) : String => {
 		let stripped = input.strip();
 		if (stripped.isEmpty()) {
 			return "";
 		}
 		return this.createIndent(indent) + this.compileStructureSegmentValue(stripped, indent);
 	}
-	fn compileStructureSegmentValue(mut input : String, mut indent : I32) : String => {
+	fn compileStructureSegmentValue(input : String, indent : I32) : String => {
 		if (input.endsWith(";")) {
 			let slice = input.substring(0, input.length() - 1);
 			return this.compileClassStatement(slice, indent) + ";";
@@ -393,12 +402,12 @@ class fn Main() => {
 		}
 		return this.wrap(input);
 	}
-	fn compileSealedInterface(mut input : String) : Optional<String> => {
+	fn compileSealedInterface(input : String) : Optional<String> => {
 		let i1 = input.indexOf("interface ");
 		if (i1 < 0) {
 			return Optional.empty();
 		}
-		let modifiers = Arrays.stream(input.substring(0, i1).split(Pattern.quote(" "))).map(String::strip).filter((mut slice : String) => !slice.isEmpty()).toList();
+		let modifiers = Arrays.stream(input.substring(0, i1).split(Pattern.quote(" "))).map(String::strip).filter((slice : String) => !slice.isEmpty()).toList();
 		let afterKeyword = input.substring(i1 + "interface ".length());
 		if (!modifiers.contains("sealed")) {
 			return Optional.empty();
@@ -414,7 +423,7 @@ class fn Main() => {
 			let i2 = slice.indexOf("<");
 			if (i2 >= 0) {
 				name = slice.substring(0, i2);
-				typeParameters = Arrays.stream(slice.substring(i2 + 1).split(Pattern.quote(","))).map(String::strip).filter((mut segment : String) => !segment.isEmpty()).toList();
+				typeParameters = Arrays.stream(slice.substring(i2 + 1).split(Pattern.quote(","))).map(String::strip).filter((segment : String) => !segment.isEmpty()).toList();
 			}
 		}
 		let stripped = afterKeyword.substring(i + "permits ".length()).strip();
@@ -427,12 +436,12 @@ class fn Main() => {
 		}
 		let i2 = stripped.indexOf("{");
 		if (i2 >= 0) {
-			let variants = Arrays.stream(stripped.substring(0, i2).split(Pattern.quote(","))).map(String::strip).filter((mut slice : String) => !slice.isEmpty()).map((mut slice : String) => slice + joinedTypeParameters).collect(Collectors.joining(" | "));
+			let variants = Arrays.stream(stripped.substring(0, i2).split(Pattern.quote(","))).map(String::strip).filter((slice : String) => !slice.isEmpty()).map((slice : String) => slice + joinedTypeParameters).collect(Collectors.joining(" | "));
 			return Optional.of("type " + name + joinedTypeParameters + " = " + variants + ";");
 		}
 		return Optional.empty();
 	}
-	fn compileMethod(mut input : String, mut indent : I32) : Optional<String> => {
+	fn compileMethod(input : String, indent : I32) : Optional<String> => {
 		let i = input.indexOf("(");
 		if (i < 0) {
 			return Optional.empty();
@@ -465,14 +474,14 @@ class fn Main() => {
 		}
 		return Optional.of(this.joinModifiers(modifiers) + "fn " + name + "(" + joinedParameters + ") : " + type + outputContent);
 	}
-	fn compileMethodSegment(mut input : String, mut indent : I32) : String => {
+	fn compileMethodSegment(input : String, indent : I32) : String => {
 		let stripped = input.strip();
 		if (stripped.isEmpty()) {
 			return "";
 		}
 		return this.createIndent(indent) + this.compileMethodSegmentValue(stripped, indent);
 	}
-	fn compileMethodSegmentValue(mut input : String, mut indent : I32) : String => {
+	fn compileMethodSegmentValue(input : String, indent : I32) : String => {
 		let stripped = input.strip();
 		if (stripped.startsWith("yield ") && stripped.endsWith(";")) {
 			let substring = stripped.substring("yield ".length(), stripped.length() - 1);
@@ -506,7 +515,7 @@ class fn Main() => {
 		}
 		return this.wrap(stripped);
 	}
-	fn compileConditional(mut indent : I32, mut input : String, mut type : String) : Optional<String> => {
+	fn compileConditional(indent : I32, input : String, type : String) : Optional<String> => {
 		if (!input.startsWith(type)) {
 			return Optional.empty();
 		}
@@ -533,10 +542,10 @@ class fn Main() => {
 		return Optional.of(type + " (" + condition + ") {" + this.compileMethodStatements(content, indent) + this.createIndent(indent) +
 				"}");
 	}
-	fn findExprEnd(mut input : String) : List<String> => {
+	fn findExprEnd(input : String) : List<String> => {
 		return this.divide(input, EscapedFolder(ExprEndFolder())).toList();
 	}
-	fn compileMethodStatementValue(mut input : String, mut indent : I32) : Optional<String> => {
+	fn compileMethodStatementValue(input : String, indent : I32) : Optional<String> => {
 		if (input.equals("break") || input.equals("continue")) {
 			return Optional.of(input);
 		}
@@ -558,48 +567,48 @@ class fn Main() => {
 		}
 		return this.compileInvokable(input, indent);
 	}
-	fn compilePost(mut input : String, mut indent : I32, mut operator : String) : Optional<String> => {
+	fn compilePost(input : String, indent : I32, operator : String) : Optional<String> => {
 		if (input.endsWith(operator)) {
 			let substring = input.substring(0, input.length() - 2);
 			return Optional.of(this.compileExpressionOrPlaceholder(substring, indent) + operator);
 		}
 		return Optional.empty();
 	}
-	fn compileClassStatement(mut input : String, mut indent : I32) : String => {
+	fn compileClassStatement(input : String, indent : I32) : String => {
 		return this.compileInitialization(input, indent).orElseGet(() => this.compileDefinitionOrPlaceholder(input));
 	}
-	fn compileInitialization(mut input : String, mut indent : I32) : Optional<String> => {
+	fn compileInitialization(input : String, indent : I32) : Optional<String> => {
 		let i = input.indexOf("=");
 		if (i >= 0) {
 			let substring = input.substring(0, i);
 			let substring1 = input.substring(i + 1);
-			let string = this.parseDefinitionToTuff(substring). < TuffLValue > map((mut value : TuffDeclaration) => value).or(() => this.parseExpression(substring, 0). < TuffLValue > map((mut value : TuffExpression) => value)).orElseGet(() => Placeholder(substring));
+			let string = this.parseDefinitionToTuff(substring). < TuffLValue > map((value : TuffDeclaration) => value).or(() => this.parseExpression(substring, 0). < TuffLValue > map((value : TuffExpression) => value)).orElseGet(() => Placeholder(substring));
 			return Optional.of(this.generateAssignable(string) + " = " + this.compileExpressionOrPlaceholder(substring1, indent));
 		}
 		return Optional.empty();
 	}
-	fn generateAssignable(mut value : TuffLValue) : String => {
+	fn generateAssignable(value : TuffLValue) : String => {
 		return match (value) {
 			Placeholder placeholder => this.wrap(placeholder.input);
 			TuffDeclaration tuffDeclaration => "let " + this.generateDefinitionOrPlaceholder(tuffDeclaration);
 			TuffExpression tuffExpression => this.generateExpression(tuffExpression);
 		};
 	}
-	fn compileExpressionOrPlaceholder(mut input : String, mut indent : I32) : String => {
+	fn compileExpressionOrPlaceholder(input : String, indent : I32) : String => {
 		return this.compileExpression(input, indent).orElseGet(() => this.wrap(input.strip()));
 	}
-	fn compileExpression(mut input : String, mut indent : I32) : Optional<String> => {
+	fn compileExpression(input : String, indent : I32) : Optional<String> => {
 		return this.parseExpression(input, indent).map(this::generateExpression);
 	}
-	fn generateExpression(mut expr : TuffExpression) : String => {
+	fn generateExpression(expr : TuffExpression) : String => {
 		return match (expr) {
 			WrappedExpression(value) => value;
 		};
 	}
-	fn parseExpression(mut input : String, mut indent : I32) : Optional<TuffExpression> => {
+	fn parseExpression(input : String, indent : I32) : Optional<TuffExpression> => {
 		return this.compileExpression0(input, indent).map(WrappedExpression::new);
 	}
-	fn compileExpression0(mut input : String, mut indent : I32) : Optional<String> => {
+	fn compileExpression0(input : String, indent : I32) : Optional<String> => {
 		let maybeLambda = this.compileLambda(input, indent);
 		if (maybeLambda.isPresent()) {
 			return maybeLambda;
@@ -615,7 +624,7 @@ class fn Main() => {
 		}
 		return this.compileInvokable(input, indent).or(() => this.compileString(input)).or(() => this.compileSwitch(input, indent)).or(() => this.compileOperation(indent, input, "<")).or(() => this.compileOperation(indent, input, ">=")).or(() => this.compileOperation(indent, input, ">")).or(() => this.compileOperation(indent, input, "+")).or(() => this.compileOperation(indent, input, "-")).or(() => this.compileOperation(indent, input, "&&")).or(() => this.compileOperation(indent, input, "||")).or(() => this.compileOperation(indent, input, "==")).or(() => this.compileOperation(indent, input, "!=")).or(() => this.compileAccess(input, indent, ".")).or(() => this.compileAccess(input, indent, "::")).or(() => this.compileIdentifier(input)).or(() => this.compileNumber(input)).or(() => this.compileChar(input));
 	}
-	fn compileLambda(mut input : String, mut indent : I32) : Optional<String> => {
+	fn compileLambda(input : String, indent : I32) : Optional<String> => {
 		let i = input.indexOf("->");
 		if (i < 0) {
 			return Optional.empty();
@@ -637,7 +646,7 @@ class fn Main() => {
 		}
 		return Optional.of("(" + compiled + ")" + " => " + compiled1);
 	}
-	fn compileInstanceOf(mut input : String, mut indent : I32) : Optional<String> => {
+	fn compileInstanceOf(input : String, indent : I32) : Optional<String> => {
 		let divisions = this.divide(input, EscapedFolder(OperationFolder("instanceof"))).toList();
 		if (divisions.size() < 2) {
 			return Optional.empty();
@@ -655,17 +664,17 @@ class fn Main() => {
 		}
 		let substring3 = substring2.substring(0, i2).strip();
 		let substring4 = substring2.substring(i2 + 1);
-		let parameters = this.divideValues(substring4).map(String::strip).filter((mut slice : String) => !slice.isEmpty()).map(this::parseDefinitionOrPlaceholderToTuff).map(this::retainDefinition).flatMap(Optional::stream).toList();
-		let joinedNames = parameters.stream().map((mut declaration : TuffDeclaration) => declaration.name).collect(Collectors.joining(", "));
+		let parameters = this.divideValues(substring4).map(String::strip).filter((slice : String) => !slice.isEmpty()).map(this::parseDefinitionOrPlaceholderToTuff).map(this::retainDefinition).flatMap(Optional::stream).toList();
+		let joinedNames = parameters.stream().map((declaration : TuffDeclaration) => declaration.name).collect(Collectors.joining(", "));
 		return Optional.of(this.compileExpressionOrPlaceholder(substring, indent) + " is " + substring3 + " { " + joinedNames + " }");
 	}
-	fn retainDefinition(mut node : TuffDeclarationOrPlaceholder) : Optional<TuffDeclaration> => {
+	fn retainDefinition(node : TuffDeclarationOrPlaceholder) : Optional<TuffDeclaration> => {
 		return match (node) {
 			Placeholder _ => Optional.empty();
 			TuffDeclaration tuffDeclaration => Optional.of(tuffDeclaration);
 		};
 	}
-	fn compileChar(mut input : String) : Optional<String> => {
+	fn compileChar(input : String) : Optional<String> => {
 		let stripped = input.strip();
 		if (stripped.startsWith("'") && stripped.endsWith("'")) {
 			return Optional.of(stripped);
@@ -674,20 +683,20 @@ class fn Main() => {
 			return Optional.empty();
 		}
 	}
-	fn compileAccess(mut input : String, mut indent : I32, mut separator : String) : Optional<String> => {
-		return this.compileAccess(input, separator, (mut input1 : String) => this.compileAccessInstance(indent, input1));
+	fn compileAccess(input : String, indent : I32, separator : String) : Optional<String> => {
+		return this.compileAccess(input, separator, (input1 : String) => this.compileAccessInstance(indent, input1));
 	}
-	fn compileAccessInstance(mut indent : I32, mut input : String) : String => {
+	fn compileAccessInstance(indent : I32, input : String) : String => {
 		return Main.this.compileType(input).orElseGet(() => this.compileExpressionOrPlaceholder(input, indent));
 	}
-	fn compileNumber(mut input : String) : Optional<String> => {
+	fn compileNumber(input : String) : Optional<String> => {
 		let stripped = input.strip();
 		if (this.isNumber(stripped)) {
 			return Optional.of(stripped);
 		}
 		return Optional.empty();
 	}
-	fn isNumber(mut input : String) : boolean => {
+	fn isNumber(input : String) : boolean => {
 		stripped : String
 		if (input.startsWith("-")) {
 			stripped = input.substring(1);
@@ -697,10 +706,10 @@ class fn Main() => {
 		}
 		return this.streamString(stripped).allMatch(U16::isDigit);
 	}
-	fn streamString(mut value : String) : Stream<U16> => {
+	fn streamString(value : String) : Stream<U16> => {
 		return IntStream.range(0, value.length()).mapToObj(value::charAt);
 	}
-	fn compileOperation(mut indent : I32, mut input : String, mut operator : String) : Optional<String> => {
+	fn compileOperation(indent : I32, input : String, operator : String) : Optional<String> => {
 		let divisions = this.divide(input, EscapedFolder(OperationFolder(operator))).toList();
 		if (divisions.size() >= 2) {
 			let first = divisions.getFirst();
@@ -715,7 +724,7 @@ class fn Main() => {
 			return Optional.empty();
 		}
 	}
-	fn compileSwitch(mut input : String, mut indent : I32) : Optional<String> => {
+	fn compileSwitch(input : String, indent : I32) : Optional<String> => {
 		let stripped = input.strip();
 		if (!stripped.startsWith("switch")) {
 			return Optional.empty();
@@ -743,10 +752,10 @@ class fn Main() => {
 		let collect = this.compileCases(indent, content);
 		return Optional.of("match (" + compiledExpr + ") {" + collect + this.createIndent(indent) + "}");
 	}
-	fn compileCases(mut indent : I32, mut content : String) : String => {
-		return this.divideStatements(content).map(String::strip).filter((mut slice : String) => !slice.isEmpty()).map((mut input1 : String) => this.compileCase(input1, indent + 1)).map((mut slice : String) => this.createIndent(indent + 1) + slice).collect(Collectors.joining());
+	fn compileCases(indent : I32, content : String) : String => {
+		return this.divideStatements(content).map(String::strip).filter((slice : String) => !slice.isEmpty()).map((input1 : String) => this.compileCase(input1, indent + 1)).map((slice : String) => this.createIndent(indent + 1) + slice).collect(Collectors.joining());
 	}
-	fn compileCase(mut input : String, mut indent : I32) : String => {
+	fn compileCase(input : String, indent : I32) : String => {
 		let stripped = input.strip();
 		if (stripped.startsWith("case ")) {
 			let substring = stripped.substring("case ".length());
@@ -766,10 +775,10 @@ class fn Main() => {
 		}
 		return this.wrap(stripped);
 	}
-	fn compileDestructuring(mut input : String) : String => {
+	fn compileDestructuring(input : String) : String => {
 		return input.replace("var ", "").strip();
 	}
-	fn compileCaseValue(mut input : String, mut indent : I32) : String => {
+	fn compileCaseValue(input : String, indent : I32) : String => {
 		let stripped = input.strip();
 		if (stripped.endsWith(";")) {
 			let substring = stripped.substring(0, stripped.length() - 1);
@@ -782,10 +791,10 @@ class fn Main() => {
 		}
 		return this.wrap(stripped);
 	}
-	fn compileMethodStatements(mut input : String, mut indent : I32) : String => {
-		return this.compileStatements(input, (mut segment : String) => this.compileMethodSegment(segment, indent + 1));
+	fn compileMethodStatements(input : String, indent : I32) : String => {
+		return this.compileStatements(input, (segment : String) => this.compileMethodSegment(segment, indent + 1));
 	}
-	fn compileString(mut input : String) : Optional<String> => {
+	fn compileString(input : String) : Optional<String> => {
 		let stripped = input.strip();
 		if (stripped.startsWith("\"") && stripped.endsWith("\"")) {
 			return Optional.of(stripped);
@@ -794,7 +803,7 @@ class fn Main() => {
 			return Optional.empty();
 		}
 	}
-	fn compileIdentifier(mut input : String) : Optional<String> => {
+	fn compileIdentifier(input : String) : Optional<String> => {
 		let stripped = input.strip();
 		if (this.isIdentifier(stripped)) {
 			return Optional.of(stripped);
@@ -803,7 +812,7 @@ class fn Main() => {
 			return Optional.empty();
 		}
 	}
-	fn compileAccess(mut input : String, mut separator : String, mut mapper : Function<String, String>) : Optional<String> => {
+	fn compileAccess(input : String, separator : String, mapper : Function<String, String>) : Optional<String> => {
 		let i = input.lastIndexOf(separator);
 		if (i < 0) {
 			return Optional.empty();
@@ -822,7 +831,7 @@ class fn Main() => {
 		}
 		return Optional.empty();
 	}
-	fn compileInvokable(mut input : String, mut indent : I32) : Optional<String> => {
+	fn compileInvokable(input : String, indent : I32) : Optional<String> => {
 		let stripped = input.strip();
 		if (stripped.endsWith(")")) {
 			let withoutEnd = stripped.substring(0, stripped.length() - 1);
@@ -830,20 +839,20 @@ class fn Main() => {
 			if (i >= 0) {
 				let caller = withoutEnd.substring(0, i);
 				let arguments = withoutEnd.substring(i + 1);
-				let joinedArguments = this.divideValues(arguments).map(String::strip).filter((mut slice : String) => !slice.isEmpty()).map((mut input1 : String) => this.compileExpressionOrPlaceholder(input1, indent)).collect(Collectors.joining(", "));
+				let joinedArguments = this.divideValues(arguments).map(String::strip).filter((slice : String) => !slice.isEmpty()).map((input1 : String) => this.compileExpressionOrPlaceholder(input1, indent)).collect(Collectors.joining(", "));
 				return Optional.of(this.compileCaller(caller, indent) + "(" + joinedArguments + ")");
 			}
 		}
 		return Optional.empty();
 	}
-	fn findInvokableStart(mut withoutEnd : String) : I32 => {
+	fn findInvokableStart(withoutEnd : String) : I32 => {
 		let mut current = Tuple3<Integer, Integer, Integer>(-1, 0, 0);
 		while (current.b < withoutEnd.length()) {
 			current = this.fold(withoutEnd, current);
 		}
 		return current.a;
 	}
-	fn fold(mut withoutEnd : String, mut current : Tuple3<Integer, Integer, Integer>) : Tuple3<Integer, Integer, Integer> => {
+	fn fold(withoutEnd : String, current : Tuple3<Integer, Integer, Integer>) : Tuple3<Integer, Integer, Integer> => {
 		let mut indexToReturn = current.a;
 		let mut indexCurrent = current.b;
 		let mut depth = current.c;
@@ -860,10 +869,10 @@ class fn Main() => {
 		}
 		return Tuple3<Integer, Integer, Integer>(indexToReturn, next, depth);
 	}
-	fn divideValues(mut input : String) : Stream<String> => {
+	fn divideValues(input : String) : Stream<String> => {
 		return this.divide(input, EscapedFolder(ValueFolder()));
 	}
-	fn compileCaller(mut input : String, mut indent : I32) : String => {
+	fn compileCaller(input : String, indent : I32) : String => {
 		let stripped = input.strip();
 		if (stripped.startsWith("new ")) {
 			let substring = stripped.substring("new ".length());
@@ -882,16 +891,16 @@ class fn Main() => {
 		}
 		return this.wrap(stripped);
 	}
-	fn compileDefinitionOrPlaceholder(mut input : String) : String => {
+	fn compileDefinitionOrPlaceholder(input : String) : String => {
 		return this.generateDefinitionOrPlaceholder(this.parseDefinitionOrPlaceholderToTuff(input));
 	}
-	fn generateDefinitionOrPlaceholder(mut string : TuffDeclarationOrPlaceholder) : String => {
+	fn generateDefinitionOrPlaceholder(string : TuffDeclarationOrPlaceholder) : String => {
 		return match (string) {
 			TuffDeclaration(modifiers, name, type, isMutable) => this.generateDefinition(modifiers, name, type, isMutable);
 			Placeholder placeholder => this.wrap(placeholder.input);
 		};
 	}
-	fn generateDefinition(mut modifiers : List<String>, mut name : String, mut type : String, mut isMutable : boolean) : String => {
+	fn generateDefinition(modifiers : List<String>, name : String, type : String, isMutable : boolean) : String => {
 		mutableString : String
 		if (isMutable) {
 			mutableString = "mut ";
@@ -905,13 +914,13 @@ class fn Main() => {
 		}
 		return joinedModifiers + mutableString + name + " : " + type;
 	}
-	fn joinModifiers(mut modifiers : List<String>) : String => {
-		return modifiers.stream().map((mut modifier : String) => modifier + " ").collect(Collectors.joining());
+	fn joinModifiers(modifiers : List<String>) : String => {
+		return modifiers.stream().map((modifier : String) => modifier + " ").collect(Collectors.joining());
 	}
-	fn parseDefinitionOrPlaceholderToTuff(mut input : String) : TuffDeclarationOrPlaceholder => {
-		return this.parseDefinitionToTuff(input). < TuffDeclarationOrPlaceholder > map((mut value : TuffDeclaration) => value).orElseGet(() => Placeholder(input));
+	fn parseDefinitionOrPlaceholderToTuff(input : String) : TuffDeclarationOrPlaceholder => {
+		return this.parseDefinitionToTuff(input). < TuffDeclarationOrPlaceholder > map((value : TuffDeclaration) => value).orElseGet(() => Placeholder(input));
 	}
-	fn parseDefinitionToTuff(mut input : String) : Optional<TuffDeclaration> => {
+	fn parseDefinitionToTuff(input : String) : Optional<TuffDeclaration> => {
 		let stripped = input.strip();
 		let i = stripped.lastIndexOf(" ");
 		if (i >= 0) {
@@ -927,10 +936,10 @@ class fn Main() => {
 			let mut annotations : List<String> = ArrayList<String>();
 			if (i2 >= 0) {
 				let substring = beforeType.substring(0, i2);
-				annotations = Arrays.stream(substring.split(Pattern.quote(" "))).map(String::strip).filter((mut slice : String) => !slice.isEmpty()).map((mut slice : String) => slice.substring(1)).toList();
+				annotations = Arrays.stream(substring.split(Pattern.quote(" "))).map(String::strip).filter((slice : String) => !slice.isEmpty()).map((slice : String) => slice.substring(1)).toList();
 				beforeType = beforeType.substring(i2 + 1).strip();
 			}
-			let oldModifiers = Arrays.stream(beforeType.split(" ")).map(String::strip).filter((mut slice : String) => !slice.isEmpty()).toList();
+			let oldModifiers = Arrays.stream(beforeType.split(" ")).map(String::strip).filter((slice : String) => !slice.isEmpty()).toList();
 			let type = beforeName.substring(i1 + 1);
 			let compiled = this.compileTypeOrPlaceholder(type);
 			let newModifiers : List<String> = ArrayList<String>();
@@ -942,10 +951,10 @@ class fn Main() => {
 		}
 		return Optional.empty();
 	}
-	fn compileTypeOrPlaceholder(mut input : String) : String => {
+	fn compileTypeOrPlaceholder(input : String) : String => {
 		return this.compileType(input).orElseGet(() => this.wrap(input));
 	}
-	fn compileType(mut input : String) : Optional<String> => {
+	fn compileType(input : String) : Optional<String> => {
 		let stripped = input.strip();
 		let maybePrimitiveType = this.compilePrimitiveType(stripped);
 		if (maybePrimitiveType.isPresent()) {
@@ -970,7 +979,7 @@ class fn Main() => {
 		}
 		return Optional.empty();
 	}
-	fn compilePrimitiveType(mut stripped : String) : Optional<String> => {
+	fn compilePrimitiveType(stripped : String) : Optional<String> => {
 		return match (stripped) {
 			"char", "Character" => Optional.of("U16");
 			"int" => Optional.of("I32");
@@ -978,14 +987,14 @@ class fn Main() => {
 			default => Optional.empty();
 		};
 	}
-	fn isIdentifier(mut input : String) : boolean => {
+	fn isIdentifier(input : String) : boolean => {
 		let stripped = input.strip();
-		return IntStream.range(0, stripped.length()).allMatch((mut index : I32) => {
+		return IntStream.range(0, stripped.length()).allMatch((index : I32) => {
 			let c = stripped.charAt(index);
 			return U16.isLetter(c) || (index != 0 && U16.isDigit(c));
 		});
 	}
-	fn findTypeSeparator(mut beforeName : String) : I32 => {
+	fn findTypeSeparator(beforeName : String) : I32 => {
 		let mut i1 =  - 1;
 		let mut depth = 0;
 		let mut i2 = 0;
