@@ -490,6 +490,8 @@ public class Main {
 						.compileString(input)
 						.or(() -> this.compileOperation(indent, input, "<"))
 						.or(() -> this.compileOperation(indent, input, "+"))
+						.or(() -> this.compileOperation(indent, input, "-"))
+						.or(() -> this.compileOperation(indent, input, "=="))
 						.or(() -> this.compileAccess(input,
 																				 ".",
 																				 (String input1) -> Main.this.compileExpressionOrPlaceholder(input1, indent)))
@@ -523,8 +525,8 @@ public class Main {
 		final var i1 = input.indexOf(operator);
 		if (i1 >= 0) {
 			final var substring = input.substring(0, i1);
-			final var substring1 = input.substring(i1 + 1);
-			return Optional.of(this.compileExpressionOrPlaceholder(substring, indent) + " < " +
+			final var substring1 = input.substring(i1 + operator.length());
+			return Optional.of(this.compileExpressionOrPlaceholder(substring, indent) + " " + operator + " " +
 												 this.compileExpressionOrPlaceholder(substring1, indent));
 		} else {
 			return Optional.empty();
@@ -714,6 +716,11 @@ public class Main {
 
 	private String compileCaller(String input, int indent) {
 		final var stripped = input.strip();
+		if (stripped.startsWith("new ")) {
+			final var substring = stripped.substring("new ".length());
+			return this.compileType(substring);
+		}
+
 		final var maybeExpression = this.compileExpression(input, indent);
 		if (maybeExpression.isPresent()) {
 			return maybeExpression.get();
