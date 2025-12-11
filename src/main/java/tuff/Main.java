@@ -41,9 +41,9 @@ public class Main {
 		private StringBuilder buffer;
 		private int depth;
 
-		private State(String input, int i, StringBuilder buffer, int depth, ArrayList<String> segments) {
+		private State(String input, int index, StringBuilder buffer, int depth, ArrayList<String> segments) {
 			this.input = input;
-			this.index = i;
+			this.index = index;
 			this.buffer = buffer;
 			this.depth = depth;
 			this.segments = segments;
@@ -343,6 +343,11 @@ public class Main {
 					}
 				}
 			}
+		}
+
+		final var maybeClass = this.compileStructure("class", input, indent);
+		if (maybeClass.isPresent()) {
+			return maybeClass.get();
 		}
 
 		final var maybeRecord = this.compileStructure("record", input, indent);

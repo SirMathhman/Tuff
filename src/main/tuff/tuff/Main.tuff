@@ -17,57 +17,59 @@ class fn Main() => {
 	}
 	class fn Placeholder(input : String) => {
 	}
-	fn State(input : String, i : int, buffer : StringBuilder, depth : int, segments : ArrayList<String>) : /*<*/depth;
-
-		private/*>*/ => {
-		let /*<*/this.input/*>*/ = input;
-		let /*<*/this.index/*>*/ = i;
-		let /*<*/this.buffer/*>*/ = buffer;
-		let /*<*/this.depth/*>*/ = depth;
-		let /*<*/this.segments/*>*/ = segments;
-		/*<*/}
-
-		private Optional<Character> pop() {
-			if (this.index < this.input.length()) {
+	class fn State() => {
+	/*<*/private final String input/*>*/;
+	/*<*/private final ArrayList<String> segments/*>*/;
+	/*<*/private int index/*>*/;
+	/*<*/private StringBuilder buffer/*>*/;
+	/*<*/private int depth/*>*/;
+	fn State(input : String, i : int, buffer : StringBuilder, depth : int, segments : ArrayList<String>) : private => {
+			let /*<*/this.input/*>*/ = input;
+			let /*<*/this.index/*>*/ = i;
+			let /*<*/this.buffer/*>*/ = buffer;
+			let /*<*/this.depth/*>*/ = depth;
+			let /*<*/this.segments/*>*/ = segments;
+		}
+	fn pop() : Optional<Character> => {
+			/*<*/if (this.index < this.input.length()) {
 				final var c = this.input.charAt(this.index);
 				this.index = this.index + 1;
 				return Optional.of(c);
 			}/*>*/
-		return Optional.empty();
-		/*<*/}
-
-		private char peek() {
-			return this/*>*/.input.charAt(/*<*/this.index + 1/*>*/);
-		/*<*/}
-
-		private State append(char c) {
-			this/*>*/.buffer.append(c);
-		return this;
-		/*<*/}
-
-		private State advance() {
-			this/*>*/.segments.add(this.buffer.toString());
-		let /*<*/this.buffer/*>*/ = StringBuilder();
-		return this;
-		let {
-			this.depth : /*<*/exit()/*>*/ = /*<*/this.depth - 1/*>*/;
-		return this;
-		let {
-			this.depth : /*<*/enter()/*>*/ = /*<*/this.depth + 1/*>*/;
-		return this;
-		let this.depth : /*<*/{
-			return/*>*/ = /*<*/= 0/*>*/;
-		let this.depth : /*<*/{
-			return/*>*/ = /*<*/= 1/*>*/;
-		/*<*/}
-
-		public Stream<String> stream() {
-			return this/*>*/.segments.stream();
-		/*<*/}
-
-		public Optional<State> popAndAppendToOption() {
-			return this/*>*/.pop().map(this::append);
-		/*<*/}/*>*/
+			return Optional.empty();
+		}
+	fn peek() : char => {
+			return this.input.charAt(/*<*/this.index + 1/*>*/);
+		}
+	fn append(c : char) : State => {
+			this.buffer.append(c);
+			return this;
+		}
+	fn advance() : State => {
+			this.segments.add(this.buffer.toString());
+			let /*<*/this.buffer/*>*/ = StringBuilder();
+			return this;
+		}
+	fn exit() : State => {
+			let /*<*/this.depth/*>*/ = /*<*/this.depth - 1/*>*/;
+			return this;
+		}
+	fn enter() : State => {
+			let /*<*/this.depth/*>*/ = /*<*/this.depth + 1/*>*/;
+			return this;
+		}
+	fn isLevel() : boolean => {
+			return /*<*/this.depth == 0/*>*/;
+		}
+	fn isShallow() : boolean => {
+			return /*<*/this.depth == 1/*>*/;
+		}
+	fn stream() : Stream<String> => {
+			return this.segments.stream();
+		}
+	fn popAndAppendToOption() : Optional<State> => {
+			return this.pop().map(this::append);
+		}
 	}
 	let imports : Map<List<String>, List<String>> = HashMap<List<String>, List<String>>();
 	fn main(args : *[String]) : Void => {
@@ -254,6 +256,11 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 					}
 				}
 			}
+		}
+
+		final var maybeClass = this.compileStructure("class", input, indent);
+		if (maybeClass.isPresent()) {
+			return maybeClass.get();
 		}
 
 		final var maybeRecord = this.compileStructure("record", input, indent);
