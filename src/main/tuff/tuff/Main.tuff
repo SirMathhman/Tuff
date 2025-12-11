@@ -7,7 +7,7 @@ from java::util::regex use { Pattern };
 class fn Main() => {
 	type Result<T, X> = Err<T, X> | Ok<T, X>;
 	type TuffDeclarationOrPlaceholder = Placeholder | TuffDeclaration;
-	/*<*/private @interface Actual {}/*>*/
+	
 	class fn Err<T, X>(error : X) => {
 	}
 	class fn Ok<T, X>(value : T) => {
@@ -226,6 +226,10 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 					}
 				}
 			}
+		}
+
+		if (input.contains("@interface")) {
+			return "";
 		}
 
 		return this.wrap(input);

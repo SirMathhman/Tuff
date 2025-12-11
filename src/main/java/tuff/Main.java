@@ -297,8 +297,11 @@ public class Main {
 			}
 		}
 
-		return this.wrap(input);
+		if (input.contains("@interface")) {
+			return "";
+		}
 
+		return this.wrap(input);
 	}
 
 	private String compileMethodSegment(String input, int indent) {
