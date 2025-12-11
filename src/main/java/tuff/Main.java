@@ -141,7 +141,14 @@ public class Main {
 			if (i >= 0) {
 				final var caller = substring.substring(0, i);
 				final var arguments = substring.substring(i + 1);
-				return this.compileCaller(caller) + "(" + this.wrap(arguments) + ")";
+				final var joinedArguments = Arrays
+						.stream(arguments.split(Pattern.quote(",")))
+						.map(String::strip)
+						.filter(slice -> !slice.isEmpty())
+						.map(this::compileExpression)
+						.collect(Collectors.joining());
+
+				return this.compileCaller(caller) + "(" + joinedArguments + ")";
 			}
 		}
 

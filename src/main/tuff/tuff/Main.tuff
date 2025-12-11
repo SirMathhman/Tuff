@@ -5,7 +5,7 @@ from java::nio::file use { Files, Paths };
 from java::util use { ArrayList, Arrays, HashMap, List, Map };
 from java::util::regex use { Pattern };
 class fn Main() => {
-	let imports : Map<List<String>, List<String>> = HashMap<List<String>, List<String>>(/*Raw*/);
+	let imports : Map<List<String>, List<String>> = HashMap<List<String>, List<String>>();
 	/*Raw*/public static void main(String[] args) {
 		new Main().run();
 	}
@@ -132,7 +132,14 @@ class fn Main() => {
 			if (i >= 0) {
 				final var caller = substring.substring(0, i);
 				final var arguments = substring.substring(i + 1);
-				return this.compileCaller(caller) + "(" + this.wrap(arguments) + ")";
+				final var joinedArguments = Arrays
+						.stream(arguments.split(Pattern.quote(",")))
+						.map(String::strip)
+						.filter(slice -> !slice.isEmpty())
+						.map(this::compileExpression)
+						.collect(Collectors.joining());
+
+				return this.compileCaller(caller) + "(" + joinedArguments + ")";
 			}
 		}
 
