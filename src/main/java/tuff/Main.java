@@ -28,7 +28,7 @@ public class Main {
 
 	private sealed interface TuffLValue permits Placeholder, TuffDeclaration, TuffExpression {}
 
-	private sealed interface Folder permits EscapedFolder, StatementFolder, ValueFolder {
+	private sealed interface Folder permits EscapedFolder, ExprEndFolder, StatementFolder, ValueFolder {
 		State apply(State state, Character character);
 	}
 
@@ -174,6 +174,23 @@ public class Main {
 				return appended.enter();
 			}
 			if (character == '>' || character == ')') {
+				return appended.exit();
+			}
+			return appended;
+		}
+	}
+
+	private static final class ExprEndFolder implements Folder {
+		@Override
+		public State apply(State state, Character c) {
+			final var appended = state.append(c);
+			if (c == '(') {
+				return appended.enter();
+			}
+			if (c == ')') {
+				if (appended.isLevel()) {
+					return appended.advance().exit();
+				}
 				return appended.exit();
 			}
 			return appended;
@@ -501,16 +518,19 @@ public class Main {
 			final var substring = input.substring(type.length()).strip();
 			if (substring.startsWith("(")) {
 				final var substring1 = substring.substring(1);
-				final var i = this.findExprEnd(substring1);
+				final var divisions = this.findExprEnd(substring1);
 
-				if (i >= 0) {
-					final var substring2 = substring1.substring(0, i);
-					final var withBraces = substring1.substring(i + 1).strip();
-					final var condition = this.compileExpressionOrPlaceholder(substring2, indent);
-					if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
-						final var content = withBraces.substring(1, withBraces.length() - 1);
-						return Optional.of(type + " (" + condition + ") {" + this.compileMethodStatements(content, indent) +
-															 this.createIndent(indent) + "}");
+				if (divisions.size() >= 2) {
+					final var conditionStringWithSuffix = divisions.getFirst().strip();
+					final var withBraces = String.join("", divisions.subList(1, divisions.size())).strip();
+					if (conditionStringWithSuffix.endsWith(")")) {
+						final var conditionString = conditionStringWithSuffix.substring(0, conditionStringWithSuffix.length() - 1);
+						final var condition = this.compileExpressionOrPlaceholder(conditionString, indent);
+						if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
+							final var content = withBraces.substring(1, withBraces.length() - 1);
+							return Optional.of(type + " (" + condition + ") {" + this.compileMethodStatements(content, indent) +
+																 this.createIndent(indent) + "}");
+						}
 					}
 				}
 			}
@@ -519,23 +539,8 @@ public class Main {
 		return Optional.empty();
 	}
 
-	private int findExprEnd(String input) {
-		var i = -1;
-		var depth = 0;
-		for (var i1 = 0; i1 < input.length(); i1++) {
-			final var c = input.charAt(i1);
-			if (c == '(') {
-				depth++;
-			}
-			if (c == ')') {
-				if (depth == 0) {
-					i = i1;
-					break;
-				}
-				depth--;
-			}
-		}
-		return i;
+	private List<String> findExprEnd(String input) {
+		return this.divide(input, new EscapedFolder(new ExprEndFolder())).toList();
 	}
 
 	private Optional<String> compileMethodStatementValue(String input, int indent) {
@@ -634,6 +639,7 @@ public class Main {
 				.or(() -> this.compileOperation(indent, input, "-"))
 				.or(() -> this.compileOperation(indent, input, "=="))
 				.or(() -> this.compileOperation(indent, input, "&&"))
+				.or(() -> this.compileOperation(indent, input, "||"))
 				.or(() -> this.compileAccess(input, indent, "::"))
 				.or(() -> this.compileIdentifier(input))
 				.or(() -> this.compileNumber(input))
@@ -695,12 +701,13 @@ public class Main {
 			final var substring = stripped.substring("switch".length()).strip();
 			if (substring.startsWith("(")) {
 				final var withExpr = substring.substring(1);
-				final var i = this.findExprEnd(withExpr);
+				final var divisions = this.findExprEnd(withExpr);
 
-				if (i >= 0) {
-					final var substring1 = withExpr.substring(0, i);
-					final var withBraces = withExpr.substring(i + 1).strip();
-					final var expr = this.compileExpressionOrPlaceholder(substring1, indent);
+				if (divisions.size() >= 2) {
+					final var expr = divisions.getFirst();
+					final var withBraces = String.join("", divisions.subList(1, divisions.size())).strip();
+
+					final var compiledExpr = this.compileExpressionOrPlaceholder(expr, indent);
 					if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
 						final var content = withBraces.substring(1, withBraces.length() - 1);
 						final var collect = this
@@ -711,7 +718,7 @@ public class Main {
 								.map((String slice) -> this.createIndent(indent + 1) + slice)
 								.collect(Collectors.joining());
 
-						return Optional.of("match (" + expr + ") {" + collect + this.createIndent(indent) + "}");
+						return Optional.of("match (" + compiledExpr + ") {" + collect + this.createIndent(indent) + "}");
 					}
 				}
 			}
