@@ -24,13 +24,20 @@ public class Main {
 	private static String compile(String input) {
 		final var segments = new ArrayList<String>();
 		var buffer = new StringBuffer();
+		var depth = 0;
 		for (var i = 0; i < input.length(); i++) {
 			final var c = input.charAt(i);
 			buffer.append(c);
 
-			if (c == ';') {
+			if (c == ';' && depth == 0) {
 				segments.add(buffer.toString());
 				buffer = new StringBuffer();
+			}
+			if (c == '{') {
+				depth++;
+			}
+			if (c == '}') {
+				depth--;
 			}
 		}
 		segments.add(buffer.toString());
@@ -49,6 +56,10 @@ public class Main {
 			return "";
 		}
 
-		return stripped;
+		if (stripped.startsWith("import ")) {
+			return "";
+		}
+
+		return stripped + System.lineSeparator();
 	}
 }
