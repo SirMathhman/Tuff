@@ -25,14 +25,18 @@ public class Main {
 
 	private @interface Actual {}
 
+	private sealed interface TuffExpression extends TuffLValue permits WrappedExpression {}
+
+	private sealed interface TuffLValue permits Placeholder, TuffDeclaration, TuffExpression {}
+
 	private record Err<T, X>(X error) implements Result<T, X> {}
 
 	private record Ok<T, X>(T value) implements Result<T, X> {}
 
 	private record TuffDeclaration(List<String> modifiers, String name, String type)
-			implements TuffDeclarationOrPlaceholder {}
+			implements TuffDeclarationOrPlaceholder, TuffLValue {}
 
-	private record Placeholder(String input) implements TuffDeclarationOrPlaceholder {}
+	private record Placeholder(String input) implements TuffDeclarationOrPlaceholder, TuffLValue {}
 
 	private record Tuple<Left, Right>(Left left, Right right) {}
 
@@ -85,6 +89,8 @@ public class Main {
 			return this.pop().map((Tuple<State, Character> tuple) -> tuple.left.append(tuple.right));
 		}
 	}
+
+	private record WrappedExpression(String value) implements TuffExpression {}
 
 	private final Map<List<String>, List<String>> imports = new HashMap<List<String>, List<String>>();
 
@@ -480,11 +486,25 @@ public class Main {
 		if (i >= 0) {
 			final var substring = input.substring(0, i);
 			final var substring1 = input.substring(i + 1);
-			return Optional.of("let " + this.compileDefinitionOrPlaceholder(substring) + " = " +
-												 this.compileExpressionOrPlaceholder(substring1, indent));
+			final var string = this
+					.parseDefinitionToTuff(substring)
+					.<TuffLValue>map((TuffDeclaration value) -> value)
+					.or(() -> this.parseExpression(substring, 0).<TuffLValue>map((TuffExpression value) -> value))
+					.orElseGet(() -> new Placeholder(substring));
+
+			return Optional.of(
+					this.generateAssignable(string) + " = " + this.compileExpressionOrPlaceholder(substring1, indent));
 		}
 
 		return Optional.empty();
+	}
+
+	private String generateAssignable(TuffLValue value) {
+		return switch (value) {
+			case Placeholder placeholder -> this.wrap(placeholder.input);
+			case TuffDeclaration tuffDeclaration -> "let " + this.generateDefinitionOrPlaceholder(tuffDeclaration);
+			case TuffExpression tuffExpression -> this.generateExpression(tuffExpression);
+		};
 	}
 
 	private String compileExpressionOrPlaceholder(String input, int indent) {
@@ -492,6 +512,20 @@ public class Main {
 	}
 
 	private Optional<String> compileExpression(String input, int indent) {
+		return this.parseExpression(input, indent).map(this::generateExpression);
+	}
+
+	private String generateExpression(TuffExpression expr) {
+		return switch (expr) {
+			case WrappedExpression(var value) -> value;
+		};
+	}
+
+	private Optional<TuffExpression> parseExpression(String input, int indent) {
+		return this.compileExpression0(input, indent).map(WrappedExpression::new);
+	}
+
+	private Optional<String> compileExpression0(String input, int indent) {
 		final var i = input.indexOf("->");
 		if (i >= 0) {
 			final var beforeArrow = input.substring(0, i).strip();
@@ -793,6 +827,13 @@ public class Main {
 	}
 
 	private TuffDeclarationOrPlaceholder parseDefinitionOrPlaceholderToTuff(String input) {
+		return this
+				.parseDefinitionToTuff(input)
+				.<TuffDeclarationOrPlaceholder>map(value -> value)
+				.orElseGet(() -> new Placeholder(input));
+	}
+
+	private Optional<TuffDeclaration> parseDefinitionToTuff(String input) {
 		final var stripped = input.strip();
 		final var i = stripped.lastIndexOf(" ");
 		if (i >= 0) {
@@ -801,7 +842,7 @@ public class Main {
 			final var i1 = this.findTypeSeparator(beforeName);
 			if (i1 < 0) {
 				final var compiled = this.compileTypeOrPlaceholder(beforeName);
-				return new TuffDeclaration(new ArrayList<String>(), name, compiled);
+				return Optional.of(new TuffDeclaration(new ArrayList<String>(), name, compiled));
 			}
 
 			final var beforeType = beforeName.substring(0, i1);
@@ -826,11 +867,11 @@ public class Main {
 				modifiers = Collections.emptyList();
 			}
 
-			return new TuffDeclaration(modifiers, name, compiled);
+			return Optional.of(new TuffDeclaration(modifiers, name, compiled));
 
 		}
 
-		return new Placeholder(stripped);
+		return Optional.empty();
 	}
 
 	private String compileTypeOrPlaceholder(String input) {

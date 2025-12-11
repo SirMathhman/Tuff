@@ -9,6 +9,8 @@ class fn Main() => {
 	type Result<T, X> = Err<T, X> | Ok<T, X>;
 	type TuffDeclarationOrPlaceholder = Placeholder | TuffDeclaration;
 	
+	type TuffExpression extends TuffLValue = WrappedExpression;
+	type TuffLValue = Placeholder | TuffDeclaration | TuffExpression;
 	class fn Err<T, X>(error : X) => {
 	}
 	class fn Ok<T, X>(value : T) => {
@@ -58,6 +60,8 @@ class fn Main() => {
 			return this.pop().map((tuple : Tuple<State, U16>) => tuple.left.append(tuple.right));
 		}
 	}
+	class fn WrappedExpression(value : String) => {
+	}
 	let imports : Map<List<String>, List<String>> = HashMap<List<String>, List<String>>();
 	fn main(args : *[String]) : Void => {
 		Main().run().ifPresent(Throwable::printStackTrace);
@@ -105,7 +109,7 @@ class fn Main() => {
 				break;
 			}
 			let popped = maybePopped.get();
-			let /**/current/**/ = folder.apply(popped.left, popped.right);
+			current = folder.apply(popped.left, popped.right);
 		}
 		return current.advance().stream();
 	}
@@ -119,7 +123,7 @@ class fn Main() => {
 			var/**/ = appended;
 		let peeked = appended.peek();
 		if (peeked == /**/';'/**/) {
-			let /**/appended1/**/ = appended.popAndAppendToOption().orElse(appended);
+			/**/appended1 /**/ = appended.popAndAppendToOption().orElse(appended);
 		}
 		/**/else {
 				appended1 = appended1.advance();
@@ -392,11 +396,25 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 		if (i >= 0) {
 			final var substring = input.substring(0, i);
 			final var substring1 = input.substring(i + 1);
-			return Optional.of("let " + this.compileDefinitionOrPlaceholder(substring) + " = " +
-												 this.compileExpressionOrPlaceholder(substring1, indent));
+			final var string = this
+					.parseDefinitionToTuff(substring)
+					.<TuffLValue>map((TuffDeclaration value) -> value)
+					.or(() -> this.parseExpression(substring, 0).<TuffLValue>map((TuffExpression value) -> value))
+					.orElseGet(() -> new Placeholder(substring));
+
+			return Optional.of(
+					this.generateAssignable(string) + " = " + this.compileExpressionOrPlaceholder(substring1, indent));
 		}
 
 		return Optional.empty();
+	}
+
+	private String generateAssignable(TuffLValue value) {
+		return switch (value) {
+			case Placeholder placeholder -> this.wrap(placeholder.input);
+			case TuffDeclaration tuffDeclaration -> "let " + this.generateDefinitionOrPlaceholder(tuffDeclaration);
+			case TuffExpression tuffExpression -> this.generateExpression(tuffExpression);
+		};
 	}
 
 	private String compileExpressionOrPlaceholder(String input, int indent) {
@@ -404,6 +422,20 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 	}
 
 	private Optional<String> compileExpression(String input, int indent) {
+		return this.parseExpression(input, indent).map(this::generateExpression);
+	}
+
+	private String generateExpression(TuffExpression expr) {
+		return switch (expr) {
+			case WrappedExpression(var value) -> value;
+		};
+	}
+
+	private Optional<TuffExpression> parseExpression(String input, int indent) {
+		return this.compileExpression0(input, indent).map(WrappedExpression::new);
+	}
+
+	private Optional<String> compileExpression0(String input, int indent) {
 		final var i = input.indexOf("->");
 		if (i >= 0) {
 			final var beforeArrow = input.substring(0, i).strip();
@@ -705,6 +737,13 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 	}
 
 	private TuffDeclarationOrPlaceholder parseDefinitionOrPlaceholderToTuff(String input) {
+		return this
+				.parseDefinitionToTuff(input)
+				.<TuffDeclarationOrPlaceholder>map(value -> value)
+				.orElseGet(() -> new Placeholder(input));
+	}
+
+	private Optional<TuffDeclaration> parseDefinitionToTuff(String input) {
 		final var stripped = input.strip();
 		final var i = stripped.lastIndexOf(" ");
 		if (i >= 0) {
@@ -713,7 +752,7 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 			final var i1 = this.findTypeSeparator(beforeName);
 			if (i1 < 0) {
 				final var compiled = this.compileTypeOrPlaceholder(beforeName);
-				return new TuffDeclaration(new ArrayList<String>(), name, compiled);
+				return Optional.of(new TuffDeclaration(new ArrayList<String>(), name, compiled));
 			}
 
 			final var beforeType = beforeName.substring(0, i1);
@@ -738,11 +777,11 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 				modifiers = Collections.emptyList();
 			}
 
-			return new TuffDeclaration(modifiers, name, compiled);
+			return Optional.of(new TuffDeclaration(modifiers, name, compiled));
 
 		}
 
-		return new Placeholder(stripped);
+		return Optional.empty();
 	}
 
 	private String compileTypeOrPlaceholder(String input) {
