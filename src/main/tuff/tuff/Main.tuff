@@ -2,16 +2,17 @@ from java::util::function use { Function };
 from java::util::stream use { Collectors, Stream };
 from java::io use { IOException };
 from java::nio::file use { Files, Path, Paths };
-from java::util use { ArrayList, Arrays, HashMap, List, Map, Optional };
+from java::util use { ArrayList, Arrays, Collections, HashMap, List, Map, Optional };
 from java::util::regex use { Pattern };
 class fn Main() => {
 	type Result<T, X> = Err<T, X> | Ok<T, X>;
 	type TuffDeclarationOrPlaceholder = Placeholder | TuffDeclaration;
+	/*<*/private @interface Actual {}/*>*/
 	class fn Err<T, X>(error : X) => {
 	}
 	class fn Ok<T, X>(value : T) => {
 	}
-	class fn TuffDeclaration(name : String, type : String) => {
+	class fn TuffDeclaration(modifiers : List<String>, name : String, type : String) => {
 	}
 	class fn Placeholder(input : String) => {
 	}
@@ -30,23 +31,8 @@ class fn Main() => {
 			}
 		};
 	}
-	fn writeString(target : Path, output : String) : Optional<IOException> => {
-		/*<*/try {
-			Files.writeString(target, output);
-			return Optional.empty();
-		}/*>*/
-		/*<*/catch (IOException e) {
-			return Optional.of(e);
-		}/*>*/
-	}
-	fn readString(source : Path) : Result<String, IOException> => {
-		/*<*/try {
-			return new Ok<String, IOException>(Files.readString(source));
-		}/*>*/
-		/*<*/catch (IOException e) {
-			return new Err<String, IOException>(e);
-		}/*>*/
-	}
+	expect fn writeString(target : Path, output : String) : Optional<IOException>;
+	expect fn readString(source : Path) : Result<String, IOException>;
 	fn compile(input : String) : String => {
 		let compiled = this.compileStatements(input, this::compileRootSegment);
 		/*<*/final var useStatements = this.imports.entrySet().stream().map(entry -> {
@@ -92,8 +78,7 @@ class fn Main() => {
 			}/*>*/
 	}
 	/*<*/segments.add(buffer.toString())/*>*/;
-	let stream = segments.stream();
-	/*<*/return stream/*>*/;
+	/*<*/return segments.stream()/*>*/;
 }
 /*<*/private String compileRootSegment(String input) {
 		final var stripped = input.strip();
@@ -222,13 +207,22 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 				final var declarationOrPlaceholder = this.parseDefinitionOrPlaceholderToTuff(substring);
 				final var parameters = this.compileParameters(parameterString);
 
-				if (declarationOrPlaceholder instanceof TuffDeclaration(var name, var type)) {
+				if (declarationOrPlaceholder instanceof TuffDeclaration(List<String> modifiers, var name, var type)) {
 					if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
 						final var content = withBraces.substring(1, withBraces.length() - 1);
 						final var joinedParameters = String.join(", ", parameters);
-						return "fn " + name + "(" + joinedParameters + ") : " + type + " => {" +
-									 this.compileStatements(content, input1 -> this.compileMethodSegment(input1, indent + 1)) +
-									 this.createIndent(indent) + "}";
+
+						final String outputContent;
+						if (modifiers.contains("expect")) {
+							outputContent = ";";
+						} else {
+							outputContent =
+									" => {" + this.compileStatements(content, input1 -> this.compileMethodSegment(input1, indent + 1)) +
+									this.createIndent(indent) + "}";
+						}
+
+						return this.joinModifiers(modifiers) + "fn " + name + "(" + joinedParameters + ") : " + type +
+									 outputContent;
 					}
 				}
 			}
@@ -469,17 +463,20 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 
 	private String generateDefinitionOrPlaceholder(TuffDeclarationOrPlaceholder string) {
 		return switch (string) {
-			case TuffDeclaration tuffDeclaration -> {
-				final var name = tuffDeclaration.name;
-				final var type = tuffDeclaration.type;
+			case TuffDeclaration(var modifiers, var name, var type) -> {
 				if (type.equals("var")) {
 					yield name;
 				}
 
-				yield name + " : " + type;
+				final var joinedModifiers = this.joinModifiers(modifiers);
+				yield joinedModifiers + name + " : " + type;
 			}
 			case Placeholder placeholder -> this.wrap(placeholder.input);
 		};
+	}
+
+	private String joinModifiers(List<String> modifiers) {
+		return modifiers.stream().map(modifier -> modifier + " ").collect(Collectors.joining());
 	}
 
 	private TuffDeclarationOrPlaceholder parseDefinitionOrPlaceholderToTuff(String input) {
@@ -489,14 +486,35 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 			final var beforeName = stripped.substring(0, i);
 			final var name = stripped.substring(i + 1);
 			final var i1 = this.findTypeSeparator(beforeName);
-			if (i1 >= 0) {
-				final var type = beforeName.substring(i1 + 1);
-				final var compiled = this.compileType(type);
-				return new TuffDeclaration(name, compiled);
-			} else {
+			if (i1 < 0) {
 				final var compiled = this.compileType(beforeName);
-				return new TuffDeclaration(name, compiled);
+				return new TuffDeclaration(new ArrayList<String>(), name, compiled);
 			}
+
+			final var beforeType = beforeName.substring(0, i1);
+			final var i2 = beforeType.lastIndexOf("\n");
+			List<String> annotations = new ArrayList<String>();
+			if (i2 >= 0) {
+				final var substring = beforeType.substring(0, i2);
+				annotations = Arrays
+						.stream(substring.split(Pattern.quote(" ")))
+						.map(String::strip)
+						.filter(slice -> !slice.isEmpty())
+						.map(slice -> slice.substring(1))
+						.toList();
+			}
+
+			final var type = beforeName.substring(i1 + 1);
+			final var compiled = this.compileType(type);
+			final List<String> modifiers;
+			if (annotations.contains("Actual")) {
+				modifiers = List.of("expect");
+			} else {
+				modifiers = Collections.emptyList();
+			}
+
+			return new TuffDeclaration(modifiers, name, compiled);
+
 		}
 
 		return new Placeholder(stripped);

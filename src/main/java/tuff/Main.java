@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,11 +21,14 @@ public class Main {
 
 	private sealed interface TuffDeclarationOrPlaceholder permits Placeholder, TuffDeclaration {}
 
+	private @interface Actual {}
+
 	private record Err<T, X>(X error) implements Result<T, X> {}
 
 	private record Ok<T, X>(T value) implements Result<T, X> {}
 
-	private record TuffDeclaration(String name, String type) implements TuffDeclarationOrPlaceholder {}
+	private record TuffDeclaration(List<String> modifiers, String name, String type)
+			implements TuffDeclarationOrPlaceholder {}
 
 	private record Placeholder(String input) implements TuffDeclarationOrPlaceholder {}
 
@@ -46,6 +50,7 @@ public class Main {
 		};
 	}
 
+	@Actual
 	private Optional<IOException> writeString(Path target, String output) {
 		try {
 			Files.writeString(target, output);
@@ -55,6 +60,7 @@ public class Main {
 		}
 	}
 
+	@Actual
 	private Result<String, IOException> readString(Path source) {
 		try {
 			return new Ok<String, IOException>(Files.readString(source));
@@ -107,8 +113,7 @@ public class Main {
 		}
 
 		segments.add(buffer.toString());
-		final var stream = segments.stream();
-		return stream;
+		return segments.stream();
 	}
 
 	private String compileRootSegment(String input) {
@@ -271,13 +276,22 @@ public class Main {
 				final var declarationOrPlaceholder = this.parseDefinitionOrPlaceholderToTuff(substring);
 				final var parameters = this.compileParameters(parameterString);
 
-				if (declarationOrPlaceholder instanceof TuffDeclaration(var name, var type)) {
+				if (declarationOrPlaceholder instanceof TuffDeclaration(List<String> modifiers, var name, var type)) {
 					if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
 						final var content = withBraces.substring(1, withBraces.length() - 1);
 						final var joinedParameters = String.join(", ", parameters);
-						return "fn " + name + "(" + joinedParameters + ") : " + type + " => {" +
-									 this.compileStatements(content, input1 -> this.compileMethodSegment(input1, indent + 1)) +
-									 this.createIndent(indent) + "}";
+
+						final String outputContent;
+						if (modifiers.contains("expect")) {
+							outputContent = ";";
+						} else {
+							outputContent =
+									" => {" + this.compileStatements(content, input1 -> this.compileMethodSegment(input1, indent + 1)) +
+									this.createIndent(indent) + "}";
+						}
+
+						return this.joinModifiers(modifiers) + "fn " + name + "(" + joinedParameters + ") : " + type +
+									 outputContent;
 					}
 				}
 			}
@@ -518,17 +532,20 @@ public class Main {
 
 	private String generateDefinitionOrPlaceholder(TuffDeclarationOrPlaceholder string) {
 		return switch (string) {
-			case TuffDeclaration tuffDeclaration -> {
-				final var name = tuffDeclaration.name;
-				final var type = tuffDeclaration.type;
+			case TuffDeclaration(var modifiers, var name, var type) -> {
 				if (type.equals("var")) {
 					yield name;
 				}
 
-				yield name + " : " + type;
+				final var joinedModifiers = this.joinModifiers(modifiers);
+				yield joinedModifiers + name + " : " + type;
 			}
 			case Placeholder placeholder -> this.wrap(placeholder.input);
 		};
+	}
+
+	private String joinModifiers(List<String> modifiers) {
+		return modifiers.stream().map(modifier -> modifier + " ").collect(Collectors.joining());
 	}
 
 	private TuffDeclarationOrPlaceholder parseDefinitionOrPlaceholderToTuff(String input) {
@@ -538,14 +555,35 @@ public class Main {
 			final var beforeName = stripped.substring(0, i);
 			final var name = stripped.substring(i + 1);
 			final var i1 = this.findTypeSeparator(beforeName);
-			if (i1 >= 0) {
-				final var type = beforeName.substring(i1 + 1);
-				final var compiled = this.compileType(type);
-				return new TuffDeclaration(name, compiled);
-			} else {
+			if (i1 < 0) {
 				final var compiled = this.compileType(beforeName);
-				return new TuffDeclaration(name, compiled);
+				return new TuffDeclaration(new ArrayList<String>(), name, compiled);
 			}
+
+			final var beforeType = beforeName.substring(0, i1);
+			final var i2 = beforeType.lastIndexOf("\n");
+			List<String> annotations = new ArrayList<String>();
+			if (i2 >= 0) {
+				final var substring = beforeType.substring(0, i2);
+				annotations = Arrays
+						.stream(substring.split(Pattern.quote(" ")))
+						.map(String::strip)
+						.filter(slice -> !slice.isEmpty())
+						.map(slice -> slice.substring(1))
+						.toList();
+			}
+
+			final var type = beforeName.substring(i1 + 1);
+			final var compiled = this.compileType(type);
+			final List<String> modifiers;
+			if (annotations.contains("Actual")) {
+				modifiers = List.of("expect");
+			} else {
+				modifiers = Collections.emptyList();
+			}
+
+			return new TuffDeclaration(modifiers, name, compiled);
+
 		}
 
 		return new Placeholder(stripped);
