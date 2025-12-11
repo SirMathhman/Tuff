@@ -1,4 +1,5 @@
-class Main {public static void main(String[] args) {
+class Main {
+	public static void main(String[] args) {
 		try {
 			final var input = Files.readString(Paths.get(".", "src", "main", "java", "tuff", "Main.java"));
 			final var target = Paths.get(".", "src", "main", "ts", "tuff", "Main.ts");
@@ -13,6 +14,10 @@ class Main {public static void main(String[] args) {
 	}
 
 	private static String compile(String input) {
+		return compileStatements(input, Main::compileRootSegment);
+	}
+
+	private static String compileStatements(String input, Function<String, String> mapper) {
 		final var segments = new ArrayList<String>();
 		var buffer = new StringBuilder();
 		var depth = 0;
@@ -37,7 +42,7 @@ class Main {public static void main(String[] args) {
 				.stream()
 				.map(String::strip)
 				.filter(slice -> !slice.isEmpty())
-				.map(Main::compileRootSegment)
+				.map(mapper)
 				.collect(Collectors.joining());
 	}
 
@@ -61,13 +66,18 @@ class Main {public static void main(String[] args) {
 			final var i1 = afterKeyword.indexOf("{");
 			if (i1 >= 0) {
 				final var name = afterKeyword.substring(0, i1);
-				final var content = afterKeyword.substring(i1 + 1).strip();
-				if (content.endsWith("}")) {
-					return "class " + name + "{" + content + "}";
+				final var withEnd = afterKeyword.substring(i1 + 1).strip();
+				if (withEnd.endsWith("}")) {
+					final var content = withEnd.substring(0, withEnd.length() - 1);
+					return "class " + name + "{" + compileStatements(content, Main::compileMethodSegment) + System.lineSeparator() + "}";
 				}
 			}
 		}
 
 		return stripped;
 	}
-}}
+
+	private static String compileMethodSegment(String input) {
+		return System.lineSeparator() + "\t" + input.strip();
+	}
+}
