@@ -1,4 +1,5 @@
-from java::util::function use { Function };
+from java::util::function use { BiFunction, Function };
+from java::util::Map use { Entry };
 from java::util::stream use { Collectors, Stream };
 from java::io use { IOException };
 from java::nio::file use { Files, Path, Paths };
@@ -16,6 +17,58 @@ class fn Main() => {
 	}
 	class fn Placeholder(input : String) => {
 	}
+	fn State(input : String, i : int, buffer : StringBuilder, depth : int, segments : ArrayList<String>) : /*<*/depth;
+
+		private/*>*/ => {
+		let /*<*/this.input/*>*/ = input;
+		let /*<*/this.index/*>*/ = i;
+		let /*<*/this.buffer/*>*/ = buffer;
+		let /*<*/this.depth/*>*/ = depth;
+		let /*<*/this.segments/*>*/ = segments;
+		/*<*/}
+
+		private Optional<Character> pop() {
+			if (this.index < this.input.length()) {
+				final var c = this.input.charAt(this.index);
+				this.index = this.index + 1;
+				return Optional.of(c);
+			}/*>*/
+		return Optional.empty();
+		/*<*/}
+
+		private char peek() {
+			return this/*>*/.input.charAt(/*<*/this.index + 1/*>*/);
+		/*<*/}
+
+		private State append(char c) {
+			this/*>*/.buffer.append(c);
+		return this;
+		/*<*/}
+
+		private State advance() {
+			this/*>*/.segments.add(this.buffer.toString());
+		let /*<*/this.buffer/*>*/ = StringBuilder();
+		return this;
+		let {
+			this.depth : /*<*/exit()/*>*/ = /*<*/this.depth - 1/*>*/;
+		return this;
+		let {
+			this.depth : /*<*/enter()/*>*/ = /*<*/this.depth + 1/*>*/;
+		return this;
+		let this.depth : /*<*/{
+			return/*>*/ = /*<*/= 0/*>*/;
+		let this.depth : /*<*/{
+			return/*>*/ = /*<*/= 1/*>*/;
+		/*<*/}
+
+		public Stream<String> stream() {
+			return this/*>*/.segments.stream();
+		/*<*/}
+
+		public Optional<State> popAndAppendToOption() {
+			return this/*>*/.pop().map(this::append);
+		/*<*/}/*>*/
+	}
 	let imports : Map<List<String>, List<String>> = HashMap<List<String>, List<String>>();
 	fn main(args : *[String]) : Void => {
 		Main().run().ifPresent(Throwable::printStackTrace);
@@ -23,19 +76,20 @@ class fn Main() => {
 	fn run() : Optional<IOException> => {
 		let source = Paths.get(".", "src", "main", "java", "tuff", "Main.java");
 		let target = Paths.get(".", "src", "main", "tuff", "tuff", "Main.tuff");
-		return match (this.readString(source)) {
-			Err<String, IOException>(error) => Optional.of(error);
-			Ok<String, IOException>(value) => {
-				let output = this.compile(value);
-				this.writeString(target, output)
+		/*<*/return switch (this.readString(source)) {
+			case Err<String, IOException>(var error) -> Optional.of(error);
+			case Ok<String, IOException>(var value) -> {
+				final var output = this.compile(value);
+				yield this.writeString(target, output);
 			}
-		};
+		}/*>*/
+		/*<*/;/*>*/
 	}
 	expect fn writeString(target : Path, output : String) : Optional<IOException>;
 	expect fn readString(source : Path) : Result<String, IOException>;
 	fn compile(input : String) : String => {
 		let compiled = this.compileStatements(input, this::compileRootSegment);
-		let useStatements = this.imports.entrySet().stream().map(/*<*/entry -> {
+		let useStatements = this.imports.entrySet().stream().map(/*<*/(Entry<List<String>/*>*/, /*<*/List<String>> entry) -> {
 			final var usedNamespace = String.join("::"/*>*/, /*<*/entry.getKey());
 			final var usedChildren = String.join("/*>*/, ", /*<*/entry.getValue());
 			return "from " + usedNamespace + " use { " + usedChildren + " };" + System.lineSeparator();
@@ -46,34 +100,50 @@ class fn Main() => {
 		return this.divide(input).map(mapper).collect(Collectors.joining());
 	}
 	fn divide(input : String) : Stream<String> => {
+		return this.divide(input, /*<*/Main.this/*>*/::foldStatement);
+	}
+	fn divide(input : String, /*<*/BiFunction<State/*>*/, /*<*/Character/*>*/, folder : /*<*/State>/*>*/) : Stream<String> => {
 		let segments = ArrayList<String>();
 		let buffer = StringBuilder();
 		let depth = /*<*/0/*>*/;
-		/*<*/for (var i = 0; i < input.length(); i++) {
-			final var c = input.charAt(i);
-			buffer.append(c);
-			if (c == ';' && depth == 0) {
-				segments.add(buffer.toString());
-				buffer = new StringBuilder();
-				continue;
-			}
-			if (c == '}' && depth == 1) {
-				if (input.charAt(i + 1) != ';') {
-					segments.add(buffer.toString());
-					buffer = new StringBuilder();
-				}
-				depth--;
-				continue;
-			}/*>*/
-		/*<*/if (c == '{' || c == '(') {
-				depth++;
-			}
-			if (c == '}' || c == ')') {
-				depth--;
-			}/*>*/
+		let i = /*<*/0/*>*/;
+		return this.getStringStream(/*<*/new State(input/*>*/, i, buffer, depth, /*<*/segments)/*>*/, folder);
 	}
-	/*<*/segments.add(buffer.toString())/*>*/;
-	/*<*/return segments.stream()/*>*/;
+	fn getStringStream(state : State, /*<*/BiFunction<State/*>*/, /*<*/Character/*>*/, folder : /*<*/State>/*>*/) : Stream<String> => {
+		let current = state;
+		/*<*/while (true) {
+			final var maybePopped = current.pop();
+			if (maybePopped.isEmpty()) {
+				break;
+			}
+			final var popped = maybePopped.get();
+			current = folder.apply(current, popped);
+		}/*>*/
+		return current.advance().stream();
+	}
+	fn foldStatement(state : State, c : char) : State => {
+		let appended = state.append(c);
+		/*<*/if (c == ';' && appended.isLevel()) {
+			return appended.advance();
+		}/*>*/
+		/*<*/if (c == '}/*>*/
+		let appended1 : /*<*/{
+			var/*>*/ = appended;
+		/*<*/if (appended.peek() == ';') {
+				appended1 = appended;
+			}/*>*/
+		/*<*/else {
+				appended1 = appended1.advance();
+			}/*>*/
+		return /*<*/appended1/*>*/.exit();
+	}
+	/*<*/if (c == '{' || c == '(') {
+			return appended.enter();
+		}
+		if (c == '}' || c == ')') {
+			return appended.exit();
+		}/*>*/
+	/*<*/return appended/*>*/;
 }
 /*<*/private String compileRootSegment(String input) {
 		final var stripped = input.strip();
@@ -113,7 +183,7 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 		return Arrays
 				.stream(input.split(Pattern.quote(",")))
 				.map(String::strip)
-				.filter(slice -> !slice.isEmpty())
+				.filter((String slice) -> !slice.isEmpty())
 				.map(this::compileDefinition)
 				.toList();
 	}/*>*/
@@ -141,7 +211,7 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 			final var modifiers = Arrays
 					.stream(input.substring(0, i1).split(Pattern.quote(" ")))
 					.map(String::strip)
-					.filter(slice -> !slice.isEmpty())
+					.filter((String slice) -> !slice.isEmpty())
 					.toList();
 
 			final var afterKeyword = input.substring(i1 + "interface ".length());
@@ -158,7 +228,7 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 							typeParameters = Arrays
 									.stream(slice.substring(i2 + 1).split(Pattern.quote(",")))
 									.map(String::strip)
-									.filter(segment -> !segment.isEmpty())
+									.filter((String segment) -> !segment.isEmpty())
 									.toList();
 						}
 					}
@@ -176,8 +246,8 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 						final var variants = Arrays
 								.stream(stripped.substring(0, i2).split(Pattern.quote(",")))
 								.map(String::strip)
-								.filter(slice -> !slice.isEmpty())
-								.map(slice -> slice + joinedTypeParameters)
+								.filter((String slice) -> !slice.isEmpty())
+								.map((String slice) -> slice + joinedTypeParameters)
 								.collect(Collectors.joining(" | "));
 
 						return "type " + name + joinedTypeParameters + " = " + variants + ";";
@@ -211,9 +281,11 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 						if (modifiers.contains("expect")) {
 							outputContent = ";";
 						} else {
-							outputContent =
-									" => {" + this.compileStatements(content, input1 -> this.compileMethodSegment(input1, indent + 1)) +
-									this.createIndent(indent) + "}";
+							outputContent = " => {" + this.compileStatements(content,
+																															 (String input1) -> this.compileMethodSegment(input1,
+																																																						indent +
+																																																						1)) +
+															this.createIndent(indent) + "}";
 						}
 
 						return this.joinModifiers(modifiers) + "fn " + name + "(" + joinedParameters + ") : " + type +
@@ -293,13 +365,24 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 	}
 
 	private Optional<String> compileExpression(String input, int indent) {
+		final var i = input.indexOf("->");
+		if (i >= 0) {
+			final var beforeArrow = input.substring(0, i).strip();
+			final var substring1 = input.substring(i + 2);
+			if (beforeArrow.startsWith("(") && beforeArrow.endsWith(")")) {
+				final var substring = beforeArrow.substring(1, beforeArrow.length() - 1);
+				final var compiled = this.compileDefinition(substring);
+				return Optional.of("(" + compiled + ")" + " => " + this.wrap(substring1));
+			}
+		}
+
 		return this
 				.compileInvokable(input, indent)
 				.or(() -> this
 						.compileString(input)
 						.or(() -> this.compileAccess(input,
 																				 ".",
-																				 input1 -> Main.this.compileExpressionOrPlaceholder(input1, indent)))
+																				 (String input1) -> Main.this.compileExpressionOrPlaceholder(input1, indent)))
 						.or(() -> this.compileAccess(input, "::", Main.this::compileType))
 						.or(() -> this.compileIdentifier(input))
 						.or(() -> this.compileSwitch(input, indent)));
@@ -336,9 +419,9 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 						final var collect = this
 								.divide(content)
 								.map(String::strip)
-								.filter(slice -> !slice.isEmpty())
-								.map(input1 -> this.compileCase(input1, indent + 1))
-								.map(slice -> this.createIndent(indent + 1) + slice)
+								.filter((String slice) -> !slice.isEmpty())
+								.map((String input1) -> this.compileCase(input1, indent + 1))
+								.map((String slice) -> this.createIndent(indent + 1) + slice)
 								.collect(Collectors.joining());
 
 						return Optional.of("match (" + expr + ") {" + collect + this.createIndent(indent) + "}");
@@ -379,8 +462,8 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 
 		if (stripped.startsWith("{") && stripped.endsWith("}")) {
 			final var substring = stripped.substring(1, stripped.length() - 1);
-			final var compiled = this.compileStatements(substring, segment -> this.compileMethodSegment(segment,
-																																																	indent + 1));
+			final var compiled =
+					this.compileStatements(substring, (String segment) -> this.compileMethodSegment(segment, indent + 1));
 			return "{" + compiled + this.createIndent(indent) + "}";
 		}
 
@@ -441,11 +524,11 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 			if (i >= 0) {
 				final var caller = withoutEnd.substring(0, i);
 				final var arguments = withoutEnd.substring(i + 1);
-				final var joinedArguments = Arrays
-						.stream(arguments.split(Pattern.quote(",")))
+				final var joinedArguments = this
+						.divideValues(arguments)
 						.map(String::strip)
-						.filter(slice -> !slice.isEmpty())
-						.map(input1 -> this.compileExpressionOrPlaceholder(input1, indent))
+						.filter((String slice) -> !slice.isEmpty())
+						.map((String input1) -> this.compileExpressionOrPlaceholder(input1, indent))
 						.collect(Collectors.joining(", "));
 
 				return Optional.of(this.compileCaller(caller, indent) + "(" + joinedArguments + ")");
@@ -453,6 +536,36 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 		}
 
 		return Optional.empty();
+	}
+
+	private Stream<String> divideValues(String input) {
+		this.divide(input, this::foldValue);
+
+		return Arrays.stream(input.split(Pattern.quote(",")));
+	}
+
+	private State foldValue(State state, Character next) {
+		if (next == ',' && state.isLevel()) {
+			return state.advance();
+		}
+
+		final var appended = state.append(next);
+		if (next == '-') {
+			if (appended.peek() == '>') {
+				final var state1 = appended.popAndAppendToOption();
+				if (state1.isPresent()) {
+					return state1.get();
+				}
+			}
+		}
+
+		if (next == '<' || next == '(') {
+			return appended.enter();
+		}
+		if (next == '>' || next == ')') {
+			return appended.exit();
+		}
+		return appended;
 	}
 
 	private String compileCaller(String input, int indent) {
@@ -489,7 +602,7 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 	}
 
 	private String joinModifiers(List<String> modifiers) {
-		return modifiers.stream().map(modifier -> modifier + " ").collect(Collectors.joining());
+		return modifiers.stream().map((String modifier) -> modifier + " ").collect(Collectors.joining());
 	}
 
 	private TuffDeclarationOrPlaceholder parseDefinitionOrPlaceholderToTuff(String input) {
@@ -512,8 +625,8 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 				annotations = Arrays
 						.stream(substring.split(Pattern.quote(" ")))
 						.map(String::strip)
-						.filter(slice -> !slice.isEmpty())
-						.map(slice -> slice.substring(1))
+						.filter((String slice) -> !slice.isEmpty())
+						.map((String slice) -> slice.substring(1))
 						.toList();
 			}
 

@@ -10,7 +10,9 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Optional;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -31,6 +33,73 @@ public class Main {
 			implements TuffDeclarationOrPlaceholder {}
 
 	private record Placeholder(String input) implements TuffDeclarationOrPlaceholder {}
+
+	private static class State {
+		private final String input;
+		private final ArrayList<String> segments;
+		private int index;
+		private StringBuilder buffer;
+		private int depth;
+
+		private State(String input, int i, StringBuilder buffer, int depth, ArrayList<String> segments) {
+			this.input = input;
+			this.index = i;
+			this.buffer = buffer;
+			this.depth = depth;
+			this.segments = segments;
+		}
+
+		private Optional<Character> pop() {
+			if (this.index < this.input.length()) {
+				final var c = this.input.charAt(this.index);
+				this.index = this.index + 1;
+				return Optional.of(c);
+			}
+
+			return Optional.empty();
+		}
+
+		private char peek() {
+			return this.input.charAt(this.index + 1);
+		}
+
+		private State append(char c) {
+			this.buffer.append(c);
+			return this;
+		}
+
+		private State advance() {
+			this.segments.add(this.buffer.toString());
+			this.buffer = new StringBuilder();
+			return this;
+		}
+
+		private State exit() {
+			this.depth = this.depth - 1;
+			return this;
+		}
+
+		private State enter() {
+			this.depth = this.depth + 1;
+			return this;
+		}
+
+		private boolean isLevel() {
+			return this.depth == 0;
+		}
+
+		private boolean isShallow() {
+			return this.depth == 1;
+		}
+
+		public Stream<String> stream() {
+			return this.segments.stream();
+		}
+
+		public Optional<State> popAndAppendToOption() {
+			return this.pop().map(this::append);
+		}
+	}
 
 	private final Map<List<String>, List<String>> imports = new HashMap<List<String>, List<String>>();
 
@@ -71,7 +140,7 @@ public class Main {
 
 	private String compile(String input) {
 		final var compiled = this.compileStatements(input, this::compileRootSegment);
-		final var useStatements = this.imports.entrySet().stream().map(entry -> {
+		final var useStatements = this.imports.entrySet().stream().map((Entry<List<String>, List<String>> entry) -> {
 			final var usedNamespace = String.join("::", entry.getKey());
 			final var usedChildren = String.join(", ", entry.getValue());
 			return "from " + usedNamespace + " use { " + usedChildren + " };" + System.lineSeparator();
@@ -84,36 +153,51 @@ public class Main {
 		return this.divide(input).map(mapper).collect(Collectors.joining());
 	}
 
-	private Stream<String> divide(String input) {
+	private Stream<String> divide(String input) {return this.divide(input, Main.this::foldStatement);}
+
+	private Stream<String> divide(String input, BiFunction<State, Character, State> folder) {
 		final var segments = new ArrayList<String>();
 		var buffer = new StringBuilder();
 		var depth = 0;
-		for (var i = 0; i < input.length(); i++) {
-			final var c = input.charAt(i);
-			buffer.append(c);
-			if (c == ';' && depth == 0) {
-				segments.add(buffer.toString());
-				buffer = new StringBuilder();
-				continue;
+		var i = 0;
+		return this.getStringStream(new State(input, i, buffer, depth, segments), folder);
+	}
+
+	private Stream<String> getStringStream(State state, BiFunction<State, Character, State> folder) {
+		var current = state;
+		while (true) {
+			final var maybePopped = current.pop();
+			if (maybePopped.isEmpty()) {
+				break;
 			}
-			if (c == '}' && depth == 1) {
-				if (input.charAt(i + 1) != ';') {
-					segments.add(buffer.toString());
-					buffer = new StringBuilder();
-				}
-				depth--;
-				continue;
-			}
-			if (c == '{' || c == '(') {
-				depth++;
-			}
-			if (c == '}' || c == ')') {
-				depth--;
-			}
+			final var popped = maybePopped.get();
+			current = folder.apply(current, popped);
 		}
 
-		segments.add(buffer.toString());
-		return segments.stream();
+		return current.advance().stream();
+	}
+
+	private State foldStatement(State state, char c) {
+		final var appended = state.append(c);
+		if (c == ';' && appended.isLevel()) {
+			return appended.advance();
+		}
+		if (c == '}' && appended.isShallow()) {
+			var appended1 = appended;
+			if (appended.peek() == ';') {
+				appended1 = appended;
+			} else {
+				appended1 = appended1.advance();
+			}
+			return appended1.exit();
+		}
+		if (c == '{' || c == '(') {
+			return appended.enter();
+		}
+		if (c == '}' || c == ')') {
+			return appended.exit();
+		}
+		return appended;
 	}
 
 	private String compileRootSegment(String input) {
@@ -168,7 +252,8 @@ public class Main {
 				final var substring1 = afterKeyword.substring(i1 + 1).strip();
 				if (substring1.endsWith("}")) {
 					final var body = substring1.substring(0, substring1.length() - 1);
-					final var compiled = this.compileStatements(body, input1 -> this.compileClassSegment(input1, indent + 1));
+					final var compiled =
+							this.compileStatements(body, (String input1) -> this.compileClassSegment(input1, indent + 1));
 					final var generated = "class fn " + name + "(" + String.join(", ", parameters) + ") => {" + compiled +
 																this.createIndent(indent) + "}";
 					return Optional.of(generated);
@@ -183,7 +268,7 @@ public class Main {
 		return Arrays
 				.stream(input.split(Pattern.quote(",")))
 				.map(String::strip)
-				.filter(slice -> !slice.isEmpty())
+				.filter((String slice) -> !slice.isEmpty())
 				.map(this::compileDefinition)
 				.toList();
 	}
@@ -215,7 +300,7 @@ public class Main {
 			final var modifiers = Arrays
 					.stream(input.substring(0, i1).split(Pattern.quote(" ")))
 					.map(String::strip)
-					.filter(slice -> !slice.isEmpty())
+					.filter((String slice) -> !slice.isEmpty())
 					.toList();
 
 			final var afterKeyword = input.substring(i1 + "interface ".length());
@@ -232,7 +317,7 @@ public class Main {
 							typeParameters = Arrays
 									.stream(slice.substring(i2 + 1).split(Pattern.quote(",")))
 									.map(String::strip)
-									.filter(segment -> !segment.isEmpty())
+									.filter((String segment) -> !segment.isEmpty())
 									.toList();
 						}
 					}
@@ -250,8 +335,8 @@ public class Main {
 						final var variants = Arrays
 								.stream(stripped.substring(0, i2).split(Pattern.quote(",")))
 								.map(String::strip)
-								.filter(slice -> !slice.isEmpty())
-								.map(slice -> slice + joinedTypeParameters)
+								.filter((String slice) -> !slice.isEmpty())
+								.map((String slice) -> slice + joinedTypeParameters)
 								.collect(Collectors.joining(" | "));
 
 						return "type " + name + joinedTypeParameters + " = " + variants + ";";
@@ -285,9 +370,11 @@ public class Main {
 						if (modifiers.contains("expect")) {
 							outputContent = ";";
 						} else {
-							outputContent =
-									" => {" + this.compileStatements(content, input1 -> this.compileMethodSegment(input1, indent + 1)) +
-									this.createIndent(indent) + "}";
+							outputContent = " => {" + this.compileStatements(content,
+																															 (String input1) -> this.compileMethodSegment(input1,
+																																																						indent +
+																																																						1)) +
+															this.createIndent(indent) + "}";
 						}
 
 						return this.joinModifiers(modifiers) + "fn " + name + "(" + joinedParameters + ") : " + type +
@@ -367,13 +454,24 @@ public class Main {
 	}
 
 	private Optional<String> compileExpression(String input, int indent) {
+		final var i = input.indexOf("->");
+		if (i >= 0) {
+			final var beforeArrow = input.substring(0, i).strip();
+			final var substring1 = input.substring(i + 2);
+			if (beforeArrow.startsWith("(") && beforeArrow.endsWith(")")) {
+				final var substring = beforeArrow.substring(1, beforeArrow.length() - 1);
+				final var compiled = this.compileDefinition(substring);
+				return Optional.of("(" + compiled + ")" + " => " + this.wrap(substring1));
+			}
+		}
+
 		return this
 				.compileInvokable(input, indent)
 				.or(() -> this
 						.compileString(input)
 						.or(() -> this.compileAccess(input,
 																				 ".",
-																				 input1 -> Main.this.compileExpressionOrPlaceholder(input1, indent)))
+																				 (String input1) -> Main.this.compileExpressionOrPlaceholder(input1, indent)))
 						.or(() -> this.compileAccess(input, "::", Main.this::compileType))
 						.or(() -> this.compileIdentifier(input))
 						.or(() -> this.compileSwitch(input, indent)));
@@ -410,9 +508,9 @@ public class Main {
 						final var collect = this
 								.divide(content)
 								.map(String::strip)
-								.filter(slice -> !slice.isEmpty())
-								.map(input1 -> this.compileCase(input1, indent + 1))
-								.map(slice -> this.createIndent(indent + 1) + slice)
+								.filter((String slice) -> !slice.isEmpty())
+								.map((String input1) -> this.compileCase(input1, indent + 1))
+								.map((String slice) -> this.createIndent(indent + 1) + slice)
 								.collect(Collectors.joining());
 
 						return Optional.of("match (" + expr + ") {" + collect + this.createIndent(indent) + "}");
@@ -453,8 +551,8 @@ public class Main {
 
 		if (stripped.startsWith("{") && stripped.endsWith("}")) {
 			final var substring = stripped.substring(1, stripped.length() - 1);
-			final var compiled = this.compileStatements(substring, segment -> this.compileMethodSegment(segment,
-																																																	indent + 1));
+			final var compiled =
+					this.compileStatements(substring, (String segment) -> this.compileMethodSegment(segment, indent + 1));
 			return "{" + compiled + this.createIndent(indent) + "}";
 		}
 
@@ -515,11 +613,11 @@ public class Main {
 			if (i >= 0) {
 				final var caller = withoutEnd.substring(0, i);
 				final var arguments = withoutEnd.substring(i + 1);
-				final var joinedArguments = Arrays
-						.stream(arguments.split(Pattern.quote(",")))
+				final var joinedArguments = this
+						.divideValues(arguments)
 						.map(String::strip)
-						.filter(slice -> !slice.isEmpty())
-						.map(input1 -> this.compileExpressionOrPlaceholder(input1, indent))
+						.filter((String slice) -> !slice.isEmpty())
+						.map((String input1) -> this.compileExpressionOrPlaceholder(input1, indent))
 						.collect(Collectors.joining(", "));
 
 				return Optional.of(this.compileCaller(caller, indent) + "(" + joinedArguments + ")");
@@ -527,6 +625,36 @@ public class Main {
 		}
 
 		return Optional.empty();
+	}
+
+	private Stream<String> divideValues(String input) {
+		this.divide(input, this::foldValue);
+
+		return Arrays.stream(input.split(Pattern.quote(",")));
+	}
+
+	private State foldValue(State state, Character next) {
+		if (next == ',' && state.isLevel()) {
+			return state.advance();
+		}
+
+		final var appended = state.append(next);
+		if (next == '-') {
+			if (appended.peek() == '>') {
+				final var state1 = appended.popAndAppendToOption();
+				if (state1.isPresent()) {
+					return state1.get();
+				}
+			}
+		}
+
+		if (next == '<' || next == '(') {
+			return appended.enter();
+		}
+		if (next == '>' || next == ')') {
+			return appended.exit();
+		}
+		return appended;
 	}
 
 	private String compileCaller(String input, int indent) {
@@ -563,7 +691,7 @@ public class Main {
 	}
 
 	private String joinModifiers(List<String> modifiers) {
-		return modifiers.stream().map(modifier -> modifier + " ").collect(Collectors.joining());
+		return modifiers.stream().map((String modifier) -> modifier + " ").collect(Collectors.joining());
 	}
 
 	private TuffDeclarationOrPlaceholder parseDefinitionOrPlaceholderToTuff(String input) {
@@ -586,8 +714,8 @@ public class Main {
 				annotations = Arrays
 						.stream(substring.split(Pattern.quote(" ")))
 						.map(String::strip)
-						.filter(slice -> !slice.isEmpty())
-						.map(slice -> slice.substring(1))
+						.filter((String slice) -> !slice.isEmpty())
+						.map((String slice) -> slice.substring(1))
 						.toList();
 			}
 
