@@ -60,7 +60,7 @@ class fn Main() => {
 	}
 	let imports : Map<List<String>, List<String>> = HashMap<List<String>, List<String>>();
 	fn main(args : *[String]) : Void => {
-		/**/Main().run().ifPresent/**/(Throwable::printStackTrace);
+		Main().run().ifPresent(Throwable::printStackTrace);
 	}
 	fn run() : Optional<IOException> => {
 		let source = Paths.get(".", "src", "main", "java", "tuff", "Main.java");
@@ -631,7 +631,10 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 		final var stripped = input.strip();
 		if (stripped.startsWith("new ")) {
 			final var substring = stripped.substring("new ".length());
-			return this.compileTypeOrPlaceholder(substring);
+			final var maybeType = this.compileType(substring);
+			if (maybeType.isPresent()) {
+				return maybeType.get();
+			}
 		}
 
 		final var maybeExpression = this.compileExpression(input, indent);

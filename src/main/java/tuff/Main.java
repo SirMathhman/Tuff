@@ -718,7 +718,10 @@ public class Main {
 		final var stripped = input.strip();
 		if (stripped.startsWith("new ")) {
 			final var substring = stripped.substring("new ".length());
-			return this.compileTypeOrPlaceholder(substring);
+			final var maybeType = this.compileType(substring);
+			if (maybeType.isPresent()) {
+				return maybeType.get();
+			}
 		}
 
 		final var maybeExpression = this.compileExpression(input, indent);
