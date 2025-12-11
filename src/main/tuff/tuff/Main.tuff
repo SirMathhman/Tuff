@@ -9,8 +9,7 @@ class fn Main() => {
 	/*Raw*/public static void main(String[] args) {
 		new Main().run();
 	}
-
-	private void run() {
+	/*Raw*/private void run() {
 		try {
 			final var input = Files.readString(Paths.get(".", "src", "main", "java", "tuff", "Main.java"));
 			Files.writeString(Paths.get(".", "src", "main", "tuff", "tuff", "Main.tuff"), this.compile(input));
@@ -18,8 +17,7 @@ class fn Main() => {
 			throw new RuntimeException(e);
 		}
 	}
-
-	private String compile(String input) {
+	/*Raw*/private String compile(String input) {
 		final var compiled = this.compileStatements(input, this::compileRootSegment);
 		final var useStatements = this.imports.entrySet().stream().map(entry -> {
 			final var usedNamespace = String.join("::", entry.getKey());
@@ -29,8 +27,7 @@ class fn Main() => {
 
 		return useStatements + compiled;
 	}
-
-	private String compileStatements(String input, Function<String, String> mapper) {
+	/*Raw*/private String compileStatements(String input, Function<String, String> mapper) {
 		final var segments = new ArrayList<String>();
 		var buffer = new StringBuilder();
 		var depth = 0;
@@ -40,21 +37,26 @@ class fn Main() => {
 			if (c == ';' && depth == 0) {
 				segments.add(buffer.toString());
 				buffer = new StringBuilder();
-			} else {
-				if (c == '{') {
-					depth++;
-				}
-				if (c == '}') {
-					depth--;
-				}
+				continue;
+			}
+			if (c == '}' && depth == 1) {
+				segments.add(buffer.toString());
+				buffer = new StringBuilder();
+				depth--;
+				continue;
+			}
+			if (c == '{') {
+				depth++;
+			}
+			if (c == '}') {
+				depth--;
 			}
 		}
-
-		segments.add(buffer.toString());
-		return segments.stream().map(mapper).collect(Collectors.joining());
-	}
-
-	private String compileRootSegment(String input) {
+	/*Raw*/segments.add(buffer.toString());
+	/*Raw*/return segments.stream().map(mapper).collect(Collectors.joining());
+	/*Raw*/
+}
+/*Raw*/private String compileRootSegment(String input) {
 		final var stripped = input.strip();
 		if (stripped.startsWith("package ")) {
 			return "";
@@ -75,12 +77,10 @@ class fn Main() => {
 
 		return this.compileRootSegmentValue(stripped) + System.lineSeparator();
 	}
-
-	private String compileRootSegmentValue(String input) {
-		final var i = input.indexOf("class ");
-		if (i >= 0) {
-			final var afterKeyword = input.substring(i + "class ".length());
-			final var i1 = afterKeyword.indexOf("{");
+class fn ");
+		if (i >= 0)() => {
+	let afterKeyword : var = /*Raw*/input.substring(/*Raw*/i + "class ".length());
+	/*Raw*/final var i1 = afterKeyword.indexOf("{");
 			if (i1 >= 0) {
 				final var name = afterKeyword.substring(0, i1).strip();
 				final var substring1 = afterKeyword.substring(i1 + 1).strip();
@@ -90,21 +90,18 @@ class fn Main() => {
 								 System.lineSeparator() + "}";
 				}
 			}
-		}
+	/*Raw*/}
 
 		return this.wrap(input);
-	}
-
-	private String wrap(String input) {
+}
+/*Raw*/private String wrap(String input) {
 		return "/*Raw*/" + input;
 	}
-
-	private String compileClassSegment(String input) {
+/*Raw*/private String compileClassSegment(String input) {
 		final var stripped = input.strip();
 		return System.lineSeparator() + "\t" + this.compileClassSegmentValue(stripped);
 	}
-
-	private String compileClassSegmentValue(String input) {
+/*Raw*/private String compileClassSegmentValue(String input) {
 		if (input.endsWith(";")) {
 			final var slice = input.substring(0, input.length() - 1);
 			return this.compileClassStatement(slice) + ";";
@@ -112,8 +109,7 @@ class fn Main() => {
 
 		return this.wrap(input);
 	}
-
-	private String compileClassStatement(String input) {
+/*Raw*/private String compileClassStatement(String input) {
 		final var i = input.indexOf("=");
 		if (i >= 0) {
 			final var substring = input.substring(0, i);
@@ -123,8 +119,7 @@ class fn Main() => {
 
 		return this.wrap(input);
 	}
-
-	private String compileExpression(String input) {
+/*Raw*/private String compileExpression(String input) {
 		final var stripped = input.strip();
 		if (stripped.endsWith(")")) {
 			final var substring = stripped.substring(0, stripped.length() - 1);
@@ -145,8 +140,7 @@ class fn Main() => {
 
 		return this.wrap(stripped);
 	}
-
-	private String compileCaller(String input) {
+/*Raw*/private String compileCaller(String input) {
 		final var stripped = input.strip();
 		if (stripped.startsWith("new ")) {
 			final var substring = stripped.substring("new ".length());
@@ -155,8 +149,7 @@ class fn Main() => {
 
 		return this.wrap(stripped);
 	}
-
-	private String compileDefinition(String input) {
+/*Raw*/private String compileDefinition(String input) {
 		final var stripped = input.strip();
 		final var i = stripped.lastIndexOf(" ");
 		if (i >= 0) {
@@ -171,8 +164,7 @@ class fn Main() => {
 
 		return this.wrap(stripped);
 	}
-
-	private String compileType(String input) {
+/*Raw*/private String compileType(String input) {
 		final var stripped = input.strip();
 		final var i = stripped.indexOf("<");
 		if (i >= 0) {
@@ -193,8 +185,7 @@ class fn Main() => {
 
 		return this.wrap(stripped);
 	}
-
-	private boolean isIdentifier(String input) {
+/*Raw*/private boolean isIdentifier(String input) {
 		final var stripped = input.strip();
 		for (var i = 0; i < stripped.length(); i++) {
 			final var c = stripped.charAt(i);
@@ -203,8 +194,7 @@ class fn Main() => {
 		}
 		return true;
 	}
-
-	private int findTypeSeparator(String beforeName) {
+/*Raw*/private int findTypeSeparator(String beforeName) {
 		int i1 = -1;
 		var depth = 0;
 		for (var i2 = 0; i2 < beforeName.length(); i2++) {
@@ -221,4 +211,4 @@ class fn Main() => {
 		}
 		return i1;
 	}
-}
+/*Raw*/}
