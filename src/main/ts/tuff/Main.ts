@@ -1,5 +1,5 @@
 class Main {
-	main(args : String[])/* {
+	main(args : String[]) {
 		try {
 			final var input = Files.readString(Paths.get(".", "src", "main", "java", "tuff", "Main.java"));
 			final var target = Paths.get(".", "src", "main", "ts", "tuff", "Main.ts");
@@ -8,19 +8,22 @@ class Main {
 				Files.createDirectories(targetDirectory);
 			}
 			Files.writeString(target, compile(input));
-		} catch (IOException e) {
-			throw new RuntimeException(e);
 		}
-	}*/
-	compile(input : String)/* {
+		catch (IOException e) {
+			throw new RuntimeException(e);
+		}}
+	/*private static String compile(String input) {
 		return compileStatements(input, Main::compileRootSegment);*/
-	compileStatements(mapper : String input, Function<String, String>)/* {
+	/*}
+
+	private static String compileStatements(String input, Function<String, String> mapper) {
 		final var segments = new ArrayList<String>();*/
-	StringBuilder()/*;*/
+	/*var buffer = new StringBuilder();*/
 	/*var depth = 0;*/
 	/*for (var i = 0;*/
-	input.length()/*;*/
-	input.charAt()/*;
+	/*i < input.length();*/
+	/*i++) {
+			final var c = input.charAt(i);
 			buffer.append(c);
 
 			if (c == ';' && depth == 0) {
@@ -28,9 +31,9 @@ class Main {
 				buffer = new StringBuilder();
 			}
 			if (c == '}*/
-	{
-				segments.add()/*);*/
-	StringBuilder()/*;*/
+	/*' && depth == 1) {
+				segments.add(buffer.toString());*/
+	/*buffer = new StringBuilder();*/
 	/*depth--;*/
 	/*}
 			if (c == '{') {
@@ -66,7 +69,7 @@ if (stripped.startsWith("import ")) {
 		if (i >= 0) {
 			final var afterKeyword = stripped.substring(i + "class ".length());
 class " + name + "{
-	compileStatements(Main::compileMethodSegment : content,)/* +
+	/*" + compileStatements(content, Main::compileClassSegment) +
 								 System.lineSeparator() + "}";
 				}*/
 }
@@ -75,7 +78,7 @@ class " + name + "{
 		return stripped;
 	}
 
-	private static String compileMethodSegment(String input) {
+	private static String compileClassSegment(String input) {
 		final var stripped = input.strip();
 		return System.lineSeparator() + "\t" + compileMethodSegmentValue(stripped);
 	}
@@ -92,13 +95,24 @@ final var i2 = paramsAndBody.indexOf(")");
 if (i2 >= 0) {
 					final var params = paramsAndBody.substring(0, i2).strip();
 					final var outputParam = compileDefinition(params);
-					final var body = paramsAndBody.substring(i2 + 1);
-					return name + "(" + outputParam + ")" + wrap(body);
+					final var body = paramsAndBody.substring(i2 + 1).strip();
+					if (body.startsWith("{") && body.endsWith("}")) {
+						final var content = body.substring(1, body.length() - 1);
+						return name + "(" + outputParam + ") {" + compileStatements(content, Main::compileMethodSegment) + "}";
+					}
 				}
 }
 		}
 
 		return wrap(input);
+	}
+
+	private static String compileMethodSegment(String input) {
+		return generateIndent(2) + input.strip();
+	}
+
+	private static String generateIndent(int indent) {
+		return System.lineSeparator() + "\t".repeat(indent);
 	}
 
 	private static String compileDefinition(String params) {

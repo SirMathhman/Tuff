@@ -83,7 +83,7 @@ public class Main {
 				final var withEnd = afterKeyword.substring(i1 + 1).strip();
 				if (withEnd.endsWith("}")) {
 					final var content = withEnd.substring(0, withEnd.length() - 1);
-					return "class " + name + "{" + compileStatements(content, Main::compileMethodSegment) +
+					return "class " + name + "{" + compileStatements(content, Main::compileClassSegment) +
 								 System.lineSeparator() + "}";
 				}
 			}
@@ -92,7 +92,7 @@ public class Main {
 		return stripped;
 	}
 
-	private static String compileMethodSegment(String input) {
+	private static String compileClassSegment(String input) {
 		final var stripped = input.strip();
 		return System.lineSeparator() + "\t" + compileMethodSegmentValue(stripped);
 	}
@@ -109,13 +109,24 @@ public class Main {
 				if (i2 >= 0) {
 					final var params = paramsAndBody.substring(0, i2).strip();
 					final var outputParam = compileDefinition(params);
-					final var body = paramsAndBody.substring(i2 + 1);
-					return name + "(" + outputParam + ")" + wrap(body);
+					final var body = paramsAndBody.substring(i2 + 1).strip();
+					if (body.startsWith("{") && body.endsWith("}")) {
+						final var content = body.substring(1, body.length() - 1);
+						return name + "(" + outputParam + ") {" + compileStatements(content, Main::compileMethodSegment) + "}";
+					}
 				}
 			}
 		}
 
 		return wrap(input);
+	}
+
+	private static String compileMethodSegment(String input) {
+		return generateIndent(2) + input.strip();
+	}
+
+	private static String generateIndent(int indent) {
+		return System.lineSeparator() + "\t".repeat(indent);
 	}
 
 	private static String compileDefinition(String params) {
