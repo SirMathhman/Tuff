@@ -9,7 +9,7 @@ import java.util.function.Function;
 public class Main {
 	public static void main(String[] args) {
 		try {
-			final var target = Paths.get(".", "src", "main", "tuff", "tuff", "Main.tuff");
+			final var target = Paths.get(".", "src", "main", "tuff", "tuff", "Main0.tuff");
 			run(Paths.get(".", "src", "main", "java", "tuff", "Main.java"), target, Main::compile);
 			run(target, Paths.get(".", "src", "main", "java", "tuff", "Main0.java"), Main::getReplace);
 		} catch (IOException e) {

@@ -6,11 +6,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.function.Function;
 
-public class Main {
+public class Main0 {
 	public static void main(String[] args) {
 		try {
-			final var target = Paths.get(".", "src", "main", "tuff", "tuff", "Main.tuff");
-			run(Paths.get(".", "src", "main", "java", "tuff", "Main.java"), target, Main::compile);
+			final var target = Paths.get(".", "src", "main", "tuff", "tuff", "Main0.tuff");
+			run(Paths.get(".", "src", "main", "java", "tuff", "Main0.java"), target, Main0::compile);
 			run(target, Paths.get(".", "src", "main", "java", "tuff", "Main0.java"), input -> getReplace(input));
 		} catch (IOException e) {
 			throw new RuntimeException(e);
@@ -19,9 +19,9 @@ public class Main {
 
 	private static String getReplace(String input) {
 		return input
-				.replace("Main0", "Wah")
-				.replace("Main", "Main0")
-				.replace("Wah", "Main0");
+				.replace("Main0", "Main0")
+				.replace("Main0", "Main0")
+				.replace("Main0", "Main0");
 	}
 
 	private static void run(Path source, Path target, Function<String, String> compiler) throws IOException {

@@ -19,9 +19,9 @@ public class Main0 {
 
 	private static String getReplace(String input) {
 		return input
-				.replace("Main0", "Wah")
 				.replace("Main0", "Main0")
-				.replace("Wah", "Main0");
+				.replace("Main0", "Main0")
+				.replace("Main0", "Main0");
 	}
 
 	private static void run(Path source, Path target, Function<String, String> compiler) throws IOException {
