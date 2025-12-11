@@ -219,7 +219,7 @@ class fn Main() => {
 		return this.compileRootSegmentValue(stripped) + System.lineSeparator();
 	}
 	fn compileRootSegmentValue(input : String) : String => {
-		return this.compileStructure("class", input, 0).orElseGet((/**//**/) => this.wrap(input));
+		return this.compileStructure("class", input, 0).orElseGet(() => this.wrap(input));
 	}
 	class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 		Optional.empty() : /**/Optional.of(generated);
@@ -469,7 +469,7 @@ class fn Main() => {
 			final var maybeWithBraces = input.substring(i + 2).strip();
 			if (beforeArrow.startsWith("(") && beforeArrow.endsWith(")")) {
 				final var substring = beforeArrow.substring(1, beforeArrow.length() - 1);
-				final var compiled = this.compileDefinitionOrPlaceholder(substring);
+				final var compiled = String.join(", ", compileParameters(substring));
 				final String compiled1;
 				if (maybeWithBraces.startsWith("{") && maybeWithBraces.endsWith("}")) {
 					final var body = maybeWithBraces.substring(1, maybeWithBraces.length() - 1);

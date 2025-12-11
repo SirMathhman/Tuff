@@ -616,7 +616,7 @@ public class Main {
 			final var maybeWithBraces = input.substring(i + 2).strip();
 			if (beforeArrow.startsWith("(") && beforeArrow.endsWith(")")) {
 				final var substring = beforeArrow.substring(1, beforeArrow.length() - 1);
-				final var compiled = this.compileDefinitionOrPlaceholder(substring);
+				final var compiled = String.join(", ", compileParameters(substring));
 				final String compiled1;
 				if (maybeWithBraces.startsWith("{") && maybeWithBraces.endsWith("}")) {
 					final var body = maybeWithBraces.substring(1, maybeWithBraces.length() - 1);
