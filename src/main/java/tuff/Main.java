@@ -116,38 +116,71 @@ public class Main {
 			return "";
 		}
 
-		return this.compileRootSegmentValue(stripped) + System.lineSeparator();
+		return this.compileRootSegmentValue(stripped, 0) + System.lineSeparator();
 	}
 
-	private String compileRootSegmentValue(String input) {
-		final var i = input.indexOf("class ");
+	private String compileRootSegmentValue(String input, int indent) {
+		return this.compileStructure("class", input, indent).orElseGet(() -> this.wrap(input));
+	}
+
+	private Optional<String> compileStructure(String type, String input, int indent) {
+		final var i = input.indexOf(type + " ");
 		if (i >= 0) {
-			final var afterKeyword = input.substring(i + "class ".length());
+			final var afterKeyword = input.substring(i + (type + " ").length());
 			final var i1 = afterKeyword.indexOf("{");
 			if (i1 >= 0) {
-				final var name = afterKeyword.substring(0, i1).strip();
+				var name = afterKeyword.substring(0, i1).strip();
+				final var i2 = name.indexOf("implements ");
+				if (i2 >= 0) {
+					name = name.substring(0, i2).strip();
+				}
+
+				List<String> parameters = new ArrayList<String>();
+				if (name.endsWith(")")) {
+					final var withParameters = name.substring(0, name.length() - 1).strip();
+					final var i3 = withParameters.indexOf("(");
+					if (i3 >= 0) {
+						name = withParameters.substring(0, i3).strip();
+						parameters = Arrays
+								.stream(withParameters.substring(i3 + 1).split(Pattern.quote(",")))
+								.map(String::strip)
+								.filter(slice -> !slice.isEmpty())
+								.map(this::compileDefinition)
+								.toList();
+					}
+				}
+
 				final var substring1 = afterKeyword.substring(i1 + 1).strip();
 				if (substring1.endsWith("}")) {
 					final var body = substring1.substring(0, substring1.length() - 1);
-					return "class fn " + name + "() => {" + this.compileStatements(body, this::compileClassSegment) +
-								 System.lineSeparator() + "}";
+					final var compiled = this.compileStatements(body, input1 -> this.compileClassSegment(input1, indent + 1));
+					final var generated = "class fn " + name + "(" + String.join(", ", parameters) + ") => {" + compiled +
+																this.createIndent(indent) + "}";
+					return Optional.of(generated);
 				}
 			}
 		}
 
-		return this.wrap(input);
+		return Optional.empty();
+	}
+
+	private String createIndent(int indent) {
+		return System.lineSeparator() + "\t".repeat(indent);
 	}
 
 	private String wrap(String input) {
 		return "/*Raw*/" + input;
 	}
 
-	private String compileClassSegment(String input) {
+	private String compileClassSegment(String input, int indent) {
 		final var stripped = input.strip();
-		return System.lineSeparator() + "\t" + this.compileClassSegmentValue(stripped);
+		if (stripped.isEmpty()) {
+			return "";
+		}
+		return System.lineSeparator() + "\t" + this.compileClassSegmentValue(stripped, indent);
 	}
 
-	private String compileClassSegmentValue(String input) {
+	private String compileClassSegmentValue(String input, int indent) {
 		if (input.endsWith(";")) {
 			final var slice = input.substring(0, input.length() - 1);
 			return this.compileClassStatement(slice) + ";";
@@ -203,7 +236,8 @@ public class Main {
 			}
 		}
 
-		return this.wrap(input);
+		return this.compileStructure("record", input, indent).orElseGet(() -> this.wrap(input));
+
 	}
 
 	private String compileClassStatement(String input) {
@@ -259,6 +293,8 @@ public class Main {
 			if (i1 >= 0) {
 				final var type = beforeName.substring(i1 + 1);
 				return name + " : " + this.compileType(type);
+			} else {
+				return name + " : " + this.compileType(beforeName);
 			}
 		}
 

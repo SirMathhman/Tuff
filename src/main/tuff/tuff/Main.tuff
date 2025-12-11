@@ -6,8 +6,10 @@ from java::util use { ArrayList, Arrays, HashMap, List, Map, Optional };
 from java::util::regex use { Pattern };
 class fn Main() => {
 	type Result<T, X> = Err<T, X> | Ok<T, X>;
-	/*Raw*/private record Err<T, X>(X error) implements Result<T, X> {}
-	/*Raw*/private record Ok<T, X>(T value) implements Result<T, X> {}
+	class fn Err<T, X>(error : X) => {
+	}
+	class fn Ok<T, X>(value : T) => {
+	}
 	let imports : Map<List<String>, List<String>> = HashMap<List<String>, List<String>>();
 	/*Raw*/public static void main(String[] args) {
 		new Main().run().ifPresent(Throwable::printStackTrace);
@@ -75,7 +77,6 @@ class fn Main() => {
 		}
 	/*Raw*/segments.add(buffer.toString());
 	/*Raw*/return segments.stream().map(mapper).collect(Collectors.joining());
-	/*Raw*/
 }
 /*Raw*/private String compileRootSegment(String input) {
 		final var stripped = input.strip();
@@ -96,33 +97,35 @@ class fn Main() => {
 			return "";
 		}
 
-		return this.compileRootSegmentValue(stripped) + System.lineSeparator();
+		return this.compileRootSegmentValue(stripped, 0) + System.lineSeparator();
 	}
-class fn ");
-		if (i >= 0)() => {
-	let afterKeyword : var = /*Raw*/input.substring(/*Raw*/i + "class ".length());
-	/*Raw*/final var i1 = afterKeyword.indexOf("{");
-			if (i1 >= 0) {
-				final var name = afterKeyword.substring(0, i1).strip();
-				final var substring1 = afterKeyword.substring(i1 + 1).strip();
-				if (substring1.endsWith("}")) {
-					final var body = substring1.substring(0, substring1.length() - 1);
-					return "class fn " + name + "() => {" + this.compileStatements(body, this::compileClassSegment) +
-								 System.lineSeparator() + "}";
+/*Raw*/private String compileRootSegmentValue(String input, int indent) {
+		return this.compileStructure("class", input, indent).orElseGet(() -> this.wrap(input));
+	}
+class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
+	/*Raw*/" + compiled +
+																this.createIndent(indent) + "}";
+					return Optional.of(generated);
 				}
 			}
-	/*Raw*/}
+		}
 
-		return this.wrap(input);
+		return Optional.empty();
 }
+/*Raw*/private String createIndent(int indent) {
+		return System.lineSeparator() + "\t".repeat(indent);
+	}
 /*Raw*/private String wrap(String input) {
 		return "/*Raw*/" + input;
 	}
-/*Raw*/private String compileClassSegment(String input) {
+/*Raw*/private String compileClassSegment(String input, int indent) {
 		final var stripped = input.strip();
-		return System.lineSeparator() + "\t" + this.compileClassSegmentValue(stripped);
+		if (stripped.isEmpty()) {
+			return "";
+		}
+		return System.lineSeparator() + "\t" + this.compileClassSegmentValue(stripped, indent);
 	}
-/*Raw*/private String compileClassSegmentValue(String input) {
+/*Raw*/private String compileClassSegmentValue(String input, int indent) {
 		if (input.endsWith(";")) {
 			final var slice = input.substring(0, input.length() - 1);
 			return this.compileClassStatement(slice) + ";";
@@ -178,7 +181,8 @@ class fn ");
 			}
 		}
 
-		return this.wrap(input);
+		return this.compileStructure("record", input, indent).orElseGet(() -> this.wrap(input));
+
 	}
 
 	private String compileClassStatement(String input) {
@@ -234,6 +238,8 @@ class fn ");
 			if (i1 >= 0) {
 				final var type = beforeName.substring(i1 + 1);
 				return name + " : " + this.compileType(type);
+			} else {
+				return name + " : " + this.compileType(beforeName);
 			}
 		}
 
