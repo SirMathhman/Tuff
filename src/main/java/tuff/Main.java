@@ -405,11 +405,6 @@ public class Main {
 			name = name.substring(0, i2).strip();
 		}
 
-		final var i4 = name.indexOf(" implements ");
-		if (i4 >= 0) {
-			name = name.substring(0, i4).strip();
-		}
-
 		List<String> parameters = new ArrayList<String>();
 		if (name.endsWith(")")) {
 			final var withParameters = name.substring(0, name.length() - 1).strip();
@@ -421,11 +416,17 @@ public class Main {
 			}
 		}
 
+		List<String> typeParameters = new ArrayList<String>();
 		if (name.endsWith(">")) {
 			final var stripped = name.substring(0, name.length() - 1).strip();
 			final var i3 = stripped.indexOf("<");
 			if (i3 >= 0) {
 				name = stripped.substring(0, i3).strip();
+				typeParameters = Arrays
+						.stream(stripped.substring(i3 + 1).split(Pattern.quote(",")))
+						.map(String::strip)
+						.filter((String slice) -> !slice.isEmpty())
+						.toList();
 			}
 		}
 
@@ -435,14 +436,27 @@ public class Main {
 			if (this.isIdentifier(name)) {
 				final var compiled =
 						this.compileStatements(body, (String input1) -> this.compileStructureSegment(input1, indent + 1));
+
+				final var joinedTypeParameters = this.joinTypeParameters(typeParameters);
 				final var generated =
-						"class fn " + name + "(" + String.join(", ", parameters) + ") => {" + compiled + this.createIndent(indent) +
-						"}";
+						"class fn " + name + joinedTypeParameters + "(" + String.join(", ", parameters) + ") => {" + compiled +
+						this.createIndent(indent) + "}";
+
 				return Optional.of(generated);
 			}
 		}
 
 		return Optional.empty();
+	}
+
+	private String joinTypeParameters(List<String> typeParameters) {
+		final String joinedTypeParameters;
+		if (typeParameters.isEmpty()) {
+			joinedTypeParameters = "";
+		} else {
+			joinedTypeParameters = "<" + String.join(", ", typeParameters) + ">";
+		}
+		return joinedTypeParameters;
 	}
 
 	private List<String> compileParameters(String input) {

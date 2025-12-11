@@ -12,17 +12,17 @@ class fn Main() => {
 	type TuffExpression extends TuffLValue = WrappedExpression;
 	type TuffLValue = Placeholder | TuffDeclaration | TuffExpression;
 	type Folder = EscapedFolder | ExprEndFolder | OperationFolder | StatementFolder | ValueFolder;
-	class fn Err(error : X) => {
+	class fn Err<T, X>(error : X) => {
 	}
-	class fn Ok(value : T) => {
+	class fn Ok<T, X>(value : T) => {
 	}
 	class fn TuffDeclaration(modifiers : List<String>, name : String, type : String) => {
 	}
 	class fn Placeholder(input : String) => {
 	}
-	class fn Tuple2(a : A, b : B) => {
+	class fn Tuple2<A, B>(a : A, b : B) => {
 	}
-	class fn Tuple3(a : A, b : B, c : C) => {
+	class fn Tuple3<A, B, C>(a : A, b : B, c : C) => {
 	}
 	class fn State(input : String, index : I32, buffer : StringBuilder, depth : I32, segments : ArrayList<String>) => {
 		fn pop() : Optional<Tuple2<State, U16>> => {
@@ -310,10 +310,6 @@ class fn Main() => {
 		if (i2 >= 0) {
 			name = name.substring(0, i2).strip();
 		}
-		let i4 = name.indexOf(" implements ");
-		if (i4 >= 0) {
-			name = name.substring(0, i4).strip();
-		}
 		let parameters : List<String> = ArrayList<String>();
 		if (name.endsWith(")")) {
 			let withParameters = name.substring(0, name.length() - 1).strip();
@@ -324,11 +320,13 @@ class fn Main() => {
 				parameters = this.compileParameters(substring);
 			}
 		}
+		let typeParameters : List<String> = ArrayList<String>();
 		if (name.endsWith(">")) {
 			let stripped = name.substring(0, name.length() - 1).strip();
 			let i3 = stripped.indexOf("<");
 			if (i3 >= 0) {
 				name = stripped.substring(0, i3).strip();
+				typeParameters = Arrays.stream(stripped.substring(i3 + 1).split(Pattern.quote(","))).map(String::strip).filter((slice : String) => !slice.isEmpty()).toList();
 			}
 		}
 		let substring1 = afterKeyword.substring(i1 + 1).strip();
@@ -336,12 +334,23 @@ class fn Main() => {
 			let body = substring1.substring(0, substring1.length() - 1);
 			if (this.isIdentifier(name)) {
 				let compiled = this.compileStatements(body, (input1 : String) => this.compileStructureSegment(input1, indent + 1));
-				let generated = "class fn " + name + "(" + String.join(", ", parameters) + ") => {" + compiled + this.createIndent(indent) +
-						"}";
+				let joinedTypeParameters = this.joinTypeParameters(typeParameters);
+				let generated = "class fn " + name + joinedTypeParameters + "(" + String.join(", ", parameters) + ") => {" + compiled +
+						this.createIndent(indent) + "}";
 				return Optional.of(generated);
 			}
 		}
 		return Optional.empty();
+	}
+	fn joinTypeParameters(typeParameters : List<String>) : String => {
+		joinedTypeParameters : String
+		if (typeParameters.isEmpty()) {
+			joinedTypeParameters = "";
+		}
+		else {
+			joinedTypeParameters = "<" + String.join(", ", typeParameters) + ">";
+		}
+		return joinedTypeParameters;
 	}
 	fn compileParameters(input : String) : List<String> => {
 		return this.divideValues(input).map(String::strip).filter((slice : String) => !slice.isEmpty()).map(this::compileDefinitionOrPlaceholder).toList();
