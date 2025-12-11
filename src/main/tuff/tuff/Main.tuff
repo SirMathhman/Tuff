@@ -34,8 +34,7 @@ class fn Main() => {
 			return Optional.empty();
 		}
 		fn append(c : U16) : State => {
-			this.buffer.append(c);
-			return this;
+			return State(this.input, this.index, this.buffer.append(c), this.depth, this.segments);
 		}
 		fn advance() : State => {
 			this.segments.add(this.buffer.toString());

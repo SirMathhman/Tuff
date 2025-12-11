@@ -58,8 +58,7 @@ public class Main {
 		}
 
 		private State append(char c) {
-			this.buffer.append(c);
-			return this;
+			return new State(this.input, this.index, this.buffer.append(c), this.depth, this.segments);
 		}
 
 		private State advance() {
