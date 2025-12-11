@@ -15,23 +15,11 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class Main {
-	private interface Result<T, X> {
-		<R> R match(Function<T, R> whenOk, Function<X, R> whenErr);
-	}
+	private sealed interface Result<T, X> permits Err, Ok {}
 
-	private record Err<T, X>(X error) implements Result<T, X> {
-		@Override
-		public <R> R match(Function<T, R> whenOk, Function<X, R> whenErr) {
-			return whenErr.apply(this.error);
-		}
-	}
+	private record Err<T, X>(X error) implements Result<T, X> {}
 
-	private record Ok<T, X>(T value) implements Result<T, X> {
-		@Override
-		public <R> R match(Function<T, R> whenOk, Function<X, R> whenErr) {
-			return whenOk.apply(this.value);
-		}
-	}
+	private record Ok<T, X>(T value) implements Result<T, X> {}
 
 	private final Map<List<String>, List<String>> imports = new HashMap<List<String>, List<String>>();
 
@@ -42,10 +30,13 @@ public class Main {
 	private Optional<IOException> run() {
 		final var source = Paths.get(".", "src", "main", "java", "tuff", "Main.java");
 		final var target = Paths.get(".", "src", "main", "tuff", "tuff", "Main.tuff");
-		return this.readString(source).match(input -> {
-			final var output = this.compile(input);
-			return this.writeString(target, output);
-		}, Optional::of);
+		return switch (this.readString(source)) {
+			case Err<String, IOException> v -> Optional.of(v.error);
+			case Ok<String, IOException> v -> {
+				final var output = this.compile(v.value);
+				yield this.writeString(target, output);
+			}
+		};
 	}
 
 	private Optional<IOException> writeString(Path target, String output) {

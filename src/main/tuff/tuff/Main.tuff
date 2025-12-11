@@ -5,21 +5,9 @@ from java::nio::file use { Files, Path, Paths };
 from java::util use { ArrayList, Arrays, HashMap, List, Map, Optional };
 from java::util::regex use { Pattern };
 class fn Main() => {
-	/*Raw*/private interface Result<T, X> {
-		<R> R match(Function<T, R> whenOk, Function<X, R> whenErr);
-	}
-	/*Raw*/private record Err<T, X>(X error) implements Result<T, X> {
-		@Override
-		public <R> R match(Function<T, R> whenOk, Function<X, R> whenErr) {
-			return whenErr.apply(this.error);
-		}
-	}
-	/*Raw*/private record Ok<T, X>(T value) implements Result<T, X> {
-		@Override
-		public <R> R match(Function<T, R> whenOk, Function<X, R> whenErr) {
-			return whenOk.apply(this.value);
-		}
-	}
+	/*Raw*/private sealed interface Result<T, X> permits Err, Ok {}
+	/*Raw*/private record Err<T, X>(X error) implements Result<T, X> {}
+	/*Raw*/private record Ok<T, X>(T value) implements Result<T, X> {}
 	let imports : Map<List<String>, List<String>> = HashMap<List<String>, List<String>>();
 	/*Raw*/public static void main(String[] args) {
 		new Main().run().ifPresent(Throwable::printStackTrace);
@@ -27,10 +15,13 @@ class fn Main() => {
 	/*Raw*/private Optional<IOException> run() {
 		final var source = Paths.get(".", "src", "main", "java", "tuff", "Main.java");
 		final var target = Paths.get(".", "src", "main", "tuff", "tuff", "Main.tuff");
-		return this.readString(source).match(input -> {
-			final var output = this.compile(input);
-			return this.writeString(target, output);
-		}, Optional::of);
+		return switch (this.readString(source)) {
+			case Err<String, IOException> v -> Optional.of(v.error);
+			case Ok<String, IOException> v -> {
+				final var output = this.compile(v.value);
+				yield this.writeString(target, output);
+			}
+		};
 	}
 	/*Raw*/private Optional<IOException> writeString(Path target, String output) {
 		try {
