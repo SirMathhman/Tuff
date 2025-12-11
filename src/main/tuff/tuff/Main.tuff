@@ -4,7 +4,7 @@ from java::io use { IOException };
 from java::nio::file use { Files, Paths };
 from java::util use { ArrayList, Arrays, HashMap, List, Map };
 from java::util::regex use { Pattern };
-class fn Main () => {
+class fn Main() => {
 	private final Map<List<String>, List<String>> imports = new HashMap<List<String>, List<String>>();
 	public static void main(String[] args) {
 		new Main().run();
@@ -82,7 +82,7 @@ class fn Main () => {
 			final var afterKeyword = input.substring(i + "class ".length());
 			final var i1 = afterKeyword.indexOf("{");
 			if (i1 >= 0) {
-				final var name = afterKeyword.substring(0, i1);
+				final var name = afterKeyword.substring(0, i1).strip();
 				final var substring1 = afterKeyword.substring(i1 + 1).strip();
 				if (substring1.endsWith("}")) {
 					final var body = substring1.substring(0, substring1.length() - 1);

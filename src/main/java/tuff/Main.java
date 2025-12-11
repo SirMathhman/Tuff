@@ -91,7 +91,7 @@ public class Main {
 			final var afterKeyword = input.substring(i + "class ".length());
 			final var i1 = afterKeyword.indexOf("{");
 			if (i1 >= 0) {
-				final var name = afterKeyword.substring(0, i1);
+				final var name = afterKeyword.substring(0, i1).strip();
 				final var substring1 = afterKeyword.substring(i1 + 1).strip();
 				if (substring1.endsWith("}")) {
 					final var body = substring1.substring(0, substring1.length() - 1);
