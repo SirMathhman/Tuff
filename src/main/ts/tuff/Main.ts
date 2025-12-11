@@ -1,5 +1,4 @@
-public class Main {
-	public static void main(String[] args) {
+class Main {public static void main(String[] args) {
 		try {
 			final var input = Files.readString(Paths.get(".", "src", "main", "java", "tuff", "Main.java"));
 			final var target = Paths.get(".", "src", "main", "ts", "tuff", "Main.ts");
@@ -15,7 +14,7 @@ public class Main {
 
 	private static String compile(String input) {
 		final var segments = new ArrayList<String>();
-		var buffer = new StringBuffer();
+		var buffer = new StringBuilder();
 		var depth = 0;
 		for (var i = 0; i < input.length(); i++) {
 			final var c = input.charAt(i);
@@ -23,7 +22,7 @@ public class Main {
 
 			if (c == ';' && depth == 0) {
 				segments.add(buffer.toString());
-				buffer = new StringBuffer();
+				buffer = new StringBuilder();
 			}
 			if (c == '{') {
 				depth++;
@@ -52,6 +51,23 @@ public class Main {
 			return "";
 		}
 
-		return stripped + System.lineSeparator();
+		return compileRootSegmentValue(stripped) + System.lineSeparator();
 	}
-}
+
+	private static String compileRootSegmentValue(String stripped) {
+		final var i = stripped.indexOf("class ");
+		if (i >= 0) {
+			final var afterKeyword = stripped.substring(i + "class ".length());
+			final var i1 = afterKeyword.indexOf("{");
+			if (i1 >= 0) {
+				final var name = afterKeyword.substring(0, i1);
+				final var content = afterKeyword.substring(i1 + 1).strip();
+				if (content.endsWith("}")) {
+					return "class " + name + "{" + content + "}";
+				}
+			}
+		}
+
+		return stripped;
+	}
+}}
