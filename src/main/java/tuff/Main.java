@@ -180,7 +180,7 @@ public class Main {
 	}
 
 	private String wrap(String input) {
-		return "/*Raw*/" + input;
+		return "/*<*/" + input + "/*>*/";
 	}
 
 	private String compileClassSegment(String input, int indent) {
@@ -267,7 +267,8 @@ public class Main {
 					if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
 						final var content = withBraces.substring(1, withBraces.length() - 1);
 						final var joinedParameters = String.join(", ", parameters);
-						return "fn " + name + "(" + joinedParameters + ") : " + type + " => {" + this.wrap(content) + "}";
+						return "fn " + name + "(" + joinedParameters + ") : " + type + " => {" +
+									 this.compileStatements(content, this::compileMethodSegment) + this.createIndent(indent) + "}";
 					}
 				}
 			}
@@ -277,22 +278,66 @@ public class Main {
 
 	}
 
+	private String compileMethodSegment(String input) {
+		final var stripped = input.strip();
+		if (stripped.isEmpty()) {
+			return "";
+		}
+
+		return this.createIndent(2) + this.compileMethodSegmentValue(stripped);
+	}
+
+	private String compileMethodSegmentValue(String input) {
+		final var stripped = input.strip();
+		if (stripped.endsWith(";")) {
+			final var slice = stripped.substring(0, stripped.length() - 1);
+			final var maybeInvokable = this.compileInvokable(slice);
+			if (maybeInvokable.isPresent()) {
+				return maybeInvokable.get();
+			}
+		}
+
+		return this.wrap(stripped);
+	}
+
 	private String compileClassStatement(String input) {
 		final var i = input.indexOf("=");
 		if (i >= 0) {
 			final var substring = input.substring(0, i);
 			final var substring1 = input.substring(i + 1);
-			return "let " + this.compileDefinition(substring) + " = " + this.compileExpression(substring1);
+			return "let " + this.compileDefinition(substring) + " = " + this.compileExpressionOrPlaceholder(substring1);
 		}
 
 		return this.wrap(input);
 	}
 
-	private String compileExpression(String input) {
+	private String compileExpressionOrPlaceholder(String input) {
+		return this.compileExpression(input).orElseGet(() -> this.wrap(input.strip()));
+	}
+
+	private Optional<String> compileExpression(String input) {
+		return this
+				.compileInvokable(input)
+				.or(() -> this.compileAccess(input, ".", Main.this::compileExpressionOrPlaceholder))
+				.or(() -> this.compileAccess(input, "::", Main.this::compileType));
+	}
+
+	private Optional<String> compileAccess(String input, String separator, Function<String, String> mapper) {
+		final var i = input.lastIndexOf(separator);
+		if (i >= 0) {
+			final var substring = input.substring(0, i);
+			final var substring1 = input.substring(i + 1);
+			return Optional.of(mapper.apply(substring) + separator + substring1);
+		}
+
+		return Optional.empty();
+	}
+
+	private Optional<String> compileInvokable(String input) {
 		final var stripped = input.strip();
 		if (stripped.endsWith(")")) {
 			final var substring = stripped.substring(0, stripped.length() - 1);
-			final var i = substring.indexOf("(");
+			final var i = substring.lastIndexOf("(");
 			if (i >= 0) {
 				final var caller = substring.substring(0, i);
 				final var arguments = substring.substring(i + 1);
@@ -300,18 +345,23 @@ public class Main {
 						.stream(arguments.split(Pattern.quote(",")))
 						.map(String::strip)
 						.filter(slice -> !slice.isEmpty())
-						.map(this::compileExpression)
+						.map(this::compileExpressionOrPlaceholder)
 						.collect(Collectors.joining());
 
-				return this.compileCaller(caller) + "(" + joinedArguments + ")";
+				return Optional.of(this.compileCaller(caller) + "(" + joinedArguments + ")");
 			}
 		}
 
-		return this.wrap(stripped);
+		return Optional.empty();
 	}
 
 	private String compileCaller(String input) {
 		final var stripped = input.strip();
+		final var maybeExpression = this.compileExpression(input);
+		if (maybeExpression.isPresent()) {
+			return maybeExpression.get();
+		}
+
 		if (stripped.startsWith("new ")) {
 			final var substring = stripped.substring("new ".length());
 			return this.compileType(substring);
