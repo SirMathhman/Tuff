@@ -395,8 +395,30 @@ public class Main {
 			return this.compileExpressionOrPlaceholder(substring, indent);
 		}
 
-		if (stripped.startsWith("if")) {
-			final var substring = stripped.substring(2).strip();
+		final var maybeIf = this.compileConditional(indent, stripped, "if");
+		if (maybeIf.isPresent()) {
+			return maybeIf.get();
+		}
+
+		final var maybeWhile = this.compileConditional(indent, stripped, "while");
+		if (maybeWhile.isPresent()) {
+			return maybeWhile.get();
+		}
+
+		if (stripped.endsWith(";")) {
+			final var slice = stripped.substring(0, stripped.length() - 1);
+			final var maybeInitialization = this.compileMethodStatementValue(slice, indent);
+			if (maybeInitialization.isPresent()) {
+				return maybeInitialization.get() + ";";
+			}
+		}
+
+		return this.wrap(stripped);
+	}
+
+	private Optional<String> compileConditional(int indent, String input, String type) {
+		if (input.startsWith(type)) {
+			final var substring = input.substring(type.length()).strip();
 			if (substring.startsWith("(")) {
 				final var substring1 = substring.substring(1);
 				var i = -1;
@@ -421,22 +443,14 @@ public class Main {
 					final var condition = this.compileExpressionOrPlaceholder(substring2, indent);
 					if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
 						final var content = withBraces.substring(1, withBraces.length() - 1);
-						return "if (" + condition + ") {" + this.compileMethodStatements(content, indent) +
-									 this.createIndent(indent) + "}";
+						return Optional.of(type + " (" + condition + ") {" + this.compileMethodStatements(content, indent) +
+															 this.createIndent(indent) + "}");
 					}
 				}
 			}
 		}
 
-		if (stripped.endsWith(";")) {
-			final var slice = stripped.substring(0, stripped.length() - 1);
-			final var maybeInitialization = this.compileMethodStatementValue(slice, indent);
-			if (maybeInitialization.isPresent()) {
-				return maybeInitialization.get() + ";";
-			}
-		}
-
-		return this.wrap(stripped);
+		return Optional.empty();
 	}
 
 	private Optional<String> compileMethodStatementValue(String input, int indent) {
