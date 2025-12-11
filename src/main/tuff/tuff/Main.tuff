@@ -351,37 +351,46 @@ class fn Main() => {
 		if (maybeRecord.isPresent()) {
 			return maybeRecord.get();
 		}
-		let i = input.indexOf("(");
-		if (i >= 0) {
-			let substring = input.substring(0, i);
-			let withParameters = input.substring(i + 1);
-			let i2 = withParameters.indexOf(")");
-			if (i2 >= 0) {
-				let parameterString = withParameters.substring(0, i2);
-				let withBraces = withParameters.substring(i2 + 1).strip();
-				let declarationOrPlaceholder = this.parseDefinitionOrPlaceholderToTuff(substring);
-				let parameters = this.compileParameters(parameterString);
-				if (/**/declarationOrPlaceholder instanceof TuffDeclaration/**/(/**/var modifiers/**/, /**/var name/**/, /**/var type/**/)) {
-					if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
-						let content = withBraces.substring(1, withBraces.length() - 1);
-						let joinedParameters = String.join(", ", parameters);
-						outputContent : String
-						if (modifiers.contains("expect")) {
-							outputContent = ";";
-						}
-						else {
-							let compiledContent = this.compileMethodStatements(content, indent);
-							outputContent = " => {" + compiledContent + this.createIndent(indent) + "}";
-						}
-						return this.joinModifiers(modifiers) + "fn " + name + "(" + joinedParameters + ") : " + type + outputContent;
-					}
-				}
-			}
+		let modifiers = this.compileMethod(input, indent);
+		if (modifiers.isPresent()) {
+			return modifiers.get();
 		}
-		if (input.indexOf("@interface") >= 0) {
+		if (input.contains("@interface")) {
 			return "";
 		}
 		return this.wrap(input);
+	}
+	fn compileMethod(input : String, indent : I32) : Optional<String> => {
+		let i = input.indexOf("(");
+		if (i < 0) {
+			return Optional.empty();
+		}
+		let substring = input.substring(0, i);
+		let withParameters = input.substring(i + 1);
+		let i2 = withParameters.indexOf(")");
+		if (i2 < 0) {
+			return Optional.empty();
+		}
+		let parameterString = withParameters.substring(0, i2);
+		let withBraces = withParameters.substring(i2 + 1).strip();
+		let declarationOrPlaceholder = this.parseDefinitionOrPlaceholderToTuff(substring);
+		let parameters = this.compileParameters(parameterString);
+		if (declarationOrPlaceholder is TuffDeclaration { modifiers, name, type }) {
+			if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
+				let content = withBraces.substring(1, withBraces.length() - 1);
+				let joinedParameters = String.join(", ", parameters);
+				outputContent : String
+				if (modifiers.contains("expect")) {
+					outputContent = ";";
+				}
+				else {
+					let compiledContent = this.compileMethodStatements(content, indent);
+					outputContent = " => {" + compiledContent + this.createIndent(indent) + "}";
+				}
+				return Optional.of(this.joinModifiers(modifiers) + "fn " + name + "(" + joinedParameters + ") : " + type + outputContent);
+			}
+		}
+		return Optional.empty();
 	}
 	fn compileMethodSegment(input : String, indent : I32) : String => {
 		let stripped = input.strip();
@@ -537,7 +546,30 @@ class fn Main() => {
 			let substring = stripped.substring(1);
 			return Optional.of("!" + this.compileExpressionOrPlaceholder(substring, indent));
 		}
+		let i1 = input.indexOf("instanceof");
+		if (i1 >= 0) {
+			let substring = input.substring(0, i1);
+			let substring1 = /**/input.substring(i1/**/ + " is ".length {  };
+			if (substring1.endsWith(")")) {
+				let substring2 = substring1.substring(0, substring1.length() - 1);
+				let i2 = substring2.indexOf("(");
+				if (i2 >= 0) {
+					let substring3 = substring2.substring(0, i2).strip();
+					let substring4 = substring2.substring(i2 + 1);
+					let parameters = this.divideValues(substring4).map(String::strip).filter((slice : String) => !slice.isEmpty()).map(this::parseDefinitionOrPlaceholderToTuff).map(this::retainDefinition).flatMap(Optional::stream).toList();
+					let joinedNames = parameters.stream().map((declaration : TuffDeclaration) => declaration.name).collect(Collectors.joining(", "));
+					return Optional.of(this.compileExpressionOrPlaceholder(substring, indent) + " is " + substring3 + " { " + joinedNames +
+							" }");
+				}
+			}
+		}
 		return this.compileInvokable(input, indent).or(() => this.compileString(input)).or(() => this.compileSwitch(input, indent)).or(() => this.compileAccess(input, indent, ".")).or(() => this.compileOperation(indent, input, "<")).or(() => this.compileOperation(indent, input, ">=")).or(() => this.compileOperation(indent, input, "+")).or(() => this.compileOperation(indent, input, "-")).or(() => this.compileOperation(indent, input, "==")).or(() => this.compileOperation(indent, input, "!=")).or(() => this.compileOperation(indent, input, "&&")).or(() => this.compileOperation(indent, input, "||")).or(() => this.compileAccess(input, indent, "::")).or(() => this.compileIdentifier(input)).or(() => this.compileNumber(input)).or(() => this.compileChar(input));
+	}
+	fn retainDefinition(node : TuffDeclarationOrPlaceholder) : Optional<TuffDeclaration> => {
+		return match (node) {
+			Placeholder _ => Optional.empty();
+			TuffDeclaration tuffDeclaration => Optional.of(tuffDeclaration);
+		};
 	}
 	fn compileChar(input : String) : Optional<String> => {
 		let stripped = input.strip();

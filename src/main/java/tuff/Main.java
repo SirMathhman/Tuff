@@ -473,42 +473,51 @@ public class Main {
 			return maybeRecord.get();
 		}
 
-		final var i = input.indexOf("(");
-		if (i >= 0) {
-			final var substring = input.substring(0, i);
-			final var withParameters = input.substring(i + 1);
-			final var i2 = withParameters.indexOf(")");
-			if (i2 >= 0) {
-				final var parameterString = withParameters.substring(0, i2);
-				final var withBraces = withParameters.substring(i2 + 1).strip();
-				final var declarationOrPlaceholder = this.parseDefinitionOrPlaceholderToTuff(substring);
-				final var parameters = this.compileParameters(parameterString);
-
-				if (declarationOrPlaceholder instanceof TuffDeclaration(var modifiers, var name, var type)) {
-					if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
-						final var content = withBraces.substring(1, withBraces.length() - 1);
-						final var joinedParameters = String.join(", ", parameters);
-
-						final String outputContent;
-						if (modifiers.contains("expect")) {
-							outputContent = ";";
-						} else {
-							final var compiledContent = this.compileMethodStatements(content, indent);
-							outputContent = " => {" + compiledContent + this.createIndent(indent) + "}";
-						}
-
-						return this.joinModifiers(modifiers) + "fn " + name + "(" + joinedParameters + ") : " + type +
-									 outputContent;
-					}
-				}
-			}
+		final var modifiers = this.compileMethod(input, indent);
+		if (modifiers.isPresent()) {
+			return modifiers.get();
 		}
 
-		if (input.indexOf("@interface") >= 0) {
+		if (input.contains("@interface")) {
 			return "";
 		}
 
 		return this.wrap(input);
+	}
+
+	private Optional<String> compileMethod(String input, int indent) {
+		final var i = input.indexOf("(");
+		if (i < 0) {return Optional.empty();}
+
+		final var substring = input.substring(0, i);
+		final var withParameters = input.substring(i + 1);
+		final var i2 = withParameters.indexOf(")");
+		if (i2 < 0) {return Optional.empty();}
+
+		final var parameterString = withParameters.substring(0, i2);
+		final var withBraces = withParameters.substring(i2 + 1).strip();
+		final var declarationOrPlaceholder = this.parseDefinitionOrPlaceholderToTuff(substring);
+		final var parameters = this.compileParameters(parameterString);
+
+		if (declarationOrPlaceholder instanceof TuffDeclaration(var modifiers, var name, var type)) {
+			if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
+				final var content = withBraces.substring(1, withBraces.length() - 1);
+				final var joinedParameters = String.join(", ", parameters);
+
+				final String outputContent;
+				if (modifiers.contains("expect")) {
+					outputContent = ";";
+				} else {
+					final var compiledContent = this.compileMethodStatements(content, indent);
+					outputContent = " => {" + compiledContent + this.createIndent(indent) + "}";
+				}
+
+				return Optional.of(
+						this.joinModifiers(modifiers) + "fn " + name + "(" + joinedParameters + ") : " + type + outputContent);
+			}
+		}
+
+		return Optional.empty();
 	}
 
 	private String compileMethodSegment(String input, int indent) {
@@ -702,6 +711,38 @@ public class Main {
 			return Optional.of("!" + this.compileExpressionOrPlaceholder(substring, indent));
 		}
 
+		final var i1 = input.indexOf("instanceof");
+		if (i1 >= 0) {
+			final var substring = input.substring(0, i1);
+			final var substring1 = input.substring(i1 + "instanceof".length()).strip();
+			if (substring1.endsWith(")")) {
+				final var substring2 = substring1.substring(0, substring1.length() - 1);
+				final var i2 = substring2.indexOf("(");
+				if (i2 >= 0) {
+					final var substring3 = substring2.substring(0, i2).strip();
+					final var substring4 = substring2.substring(i2 + 1);
+
+					final var parameters = this
+							.divideValues(substring4)
+							.map(String::strip)
+							.filter((String slice) -> !slice.isEmpty())
+							.map(this::parseDefinitionOrPlaceholderToTuff)
+							.map(this::retainDefinition)
+							.flatMap(Optional::stream)
+							.toList();
+
+					final var joinedNames = parameters
+							.stream()
+							.map((TuffDeclaration declaration) -> declaration.name)
+							.collect(Collectors.joining(", "));
+
+					return Optional.of(
+							this.compileExpressionOrPlaceholder(substring, indent) + " is " + substring3 + " { " + joinedNames +
+							" }");
+				}
+			}
+		}
+
 		return this
 				.compileInvokable(input, indent)
 				.or(() -> this.compileString(input))
@@ -719,6 +760,13 @@ public class Main {
 				.or(() -> this.compileIdentifier(input))
 				.or(() -> this.compileNumber(input))
 				.or(() -> this.compileChar(input));
+	}
+
+	private Optional<TuffDeclaration> retainDefinition(TuffDeclarationOrPlaceholder node) {
+		return switch (node) {
+			case Placeholder _ -> Optional.empty();
+			case TuffDeclaration tuffDeclaration -> Optional.of(tuffDeclaration);
+		};
 	}
 
 	private Optional<String> compileChar(String input) {
