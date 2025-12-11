@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
-import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -28,6 +27,10 @@ public class Main {
 	private sealed interface TuffExpression extends TuffLValue permits WrappedExpression {}
 
 	private sealed interface TuffLValue permits Placeholder, TuffDeclaration, TuffExpression {}
+
+	private sealed interface Folder permits EscapedFolder, StatementFolder, ValueFolder {
+		State apply(State state, Character character);
+	}
 
 	private record Err<T, X>(X error) implements Result<T, X> {}
 
@@ -88,9 +91,90 @@ public class Main {
 		public Optional<State> popAndAppendToOption() {
 			return this.pop().map((Tuple<State, Character> tuple) -> tuple.left.append(tuple.right));
 		}
+
+		public Optional<Tuple<State, Character>> popAndAppendToTuple() {
+			return this.pop().map((Tuple<State, Character> tuple) -> {
+				final var appended = tuple.left.append(tuple.right);
+				return new Tuple<State, Character>(appended, tuple.right);
+			});
+		}
 	}
 
 	private record WrappedExpression(String value) implements TuffExpression {}
+
+	private final class EscapedFolder implements Folder {
+		private final Folder folder;
+
+		public EscapedFolder(Folder folder) {this.folder = folder;}
+
+		@Override
+		public State apply(State state, Character next) {
+			if (next == '\'') {
+				final var appended = state.append(next);
+				return appended
+						.popAndAppendToTuple()
+						.map(Main.this::foldSingleEscapeChar)
+						.flatMap(State::popAndAppendToOption)
+						.orElse(appended);
+			}
+
+			return this.folder.apply(state, next);
+		}
+	}
+
+	private static final class StatementFolder implements Folder {
+		@Override
+		public State apply(State state, Character character) {
+			final var appended = state.append(character);
+			if (character == ';' && appended.isLevel()) {
+				return appended.advance();
+			}
+			if (character == '}' && appended.isShallow()) {
+				var appended1 = appended;
+				final var peeked = appended.peek();
+				if (peeked == ';') {
+					appended1 = appended.popAndAppendToOption().orElse(appended);
+				} else {
+					appended1 = appended1.advance();
+				}
+				return appended1.exit();
+			}
+			if (character == '{' || character == '(') {
+				return appended.enter();
+			}
+			if (character == '}' || character == ')') {
+				return appended.exit();
+			}
+			return appended;
+		}
+	}
+
+	private static final class ValueFolder implements Folder {
+		@Override
+		public State apply(State state, Character character) {
+			if (character == ',' && state.isLevel()) {
+				return state.advance();
+			}
+
+			final var appended = state.append(character);
+			if (character == '-') {
+				if (appended.peek() == '>') {
+					final var state1 = appended.popAndAppendToOption();
+					if (state1.isPresent()) {
+						return state1.get();
+					}
+				}
+			}
+
+			if (character == '<' || character == '(') {
+				return appended.enter();
+			}
+			if (character == '>' || character == ')') {
+				return appended.exit();
+			}
+			return appended;
+		}
+	}
 
 	private final Map<List<String>, List<String>> imports = new HashMap<List<String>, List<String>>();
 
@@ -144,9 +228,19 @@ public class Main {
 		return this.divideStatements(input).map(mapper).collect(Collectors.joining());
 	}
 
-	private Stream<String> divideStatements(String input) {return this.divide(input, Main.this::foldStatement);}
+	private Stream<String> divideStatements(String input) {
+		return this.divide(input, new EscapedFolder(new StatementFolder()));
+	}
 
-	private Stream<String> divide(String input, BiFunction<State, Character, State> folder) {
+	private State foldSingleEscapeChar(Tuple<State, Character> tuple) {
+		if (tuple.right == '\\') {
+			return tuple.left.popAndAppendToOption().orElse(tuple.left);
+		} else {
+			return tuple.left;
+		}
+	}
+
+	private Stream<String> divide(String input, Folder folder) {
 		final var segments = new ArrayList<String>();
 		var buffer = new StringBuilder();
 		var depth = 0;
@@ -154,7 +248,7 @@ public class Main {
 		return this.getStringStream(new State(input, i, buffer, depth, segments), folder);
 	}
 
-	private Stream<String> getStringStream(State state, BiFunction<State, Character, State> folder) {
+	private Stream<String> getStringStream(State state, Folder folder) {
 		var current = state;
 		while (true) {
 			final var maybePopped = current.pop();
@@ -166,30 +260,6 @@ public class Main {
 		}
 
 		return current.advance().stream();
-	}
-
-	private State foldStatement(State state, char c) {
-		final var appended = state.append(c);
-		if (c == ';' && appended.isLevel()) {
-			return appended.advance();
-		}
-		if (c == '}' && appended.isShallow()) {
-			var appended1 = appended;
-			final var peeked = appended.peek();
-			if (peeked == ';') {
-				appended1 = appended.popAndAppendToOption().orElse(appended);
-			} else {
-				appended1 = appended1.advance();
-			}
-			return appended1.exit();
-		}
-		if (c == '{' || c == '(') {
-			return appended.enter();
-		}
-		if (c == '}' || c == ')') {
-			return appended.exit();
-		}
-		return appended;
 	}
 
 	private String compileRootSegment(String input) {
@@ -764,31 +834,7 @@ public class Main {
 	}
 
 	private Stream<String> divideValues(String input) {
-		return this.divide(input, this::foldValue);
-	}
-
-	private State foldValue(State state, Character next) {
-		if (next == ',' && state.isLevel()) {
-			return state.advance();
-		}
-
-		final var appended = state.append(next);
-		if (next == '-') {
-			if (appended.peek() == '>') {
-				final var state1 = appended.popAndAppendToOption();
-				if (state1.isPresent()) {
-					return state1.get();
-				}
-			}
-		}
-
-		if (next == '<' || next == '(') {
-			return appended.enter();
-		}
-		if (next == '>' || next == ')') {
-			return appended.exit();
-		}
-		return appended;
+		return this.divide(input, new EscapedFolder(new ValueFolder()));
 	}
 
 	private String compileCaller(String input, int indent) {

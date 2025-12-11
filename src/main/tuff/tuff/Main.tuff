@@ -1,4 +1,4 @@
-from java::util::function use { BiFunction, Function };
+from java::util::function use { Function };
 from java::util::Map use { Entry };
 from java::util::stream use { Collectors, Stream };
 from java::io use { IOException };
@@ -11,6 +11,7 @@ class fn Main() => {
 	
 	type TuffExpression extends TuffLValue = WrappedExpression;
 	type TuffLValue = Placeholder | TuffDeclaration | TuffExpression;
+	type Folder = EscapedFolder | StatementFolder | ValueFolder;
 	class fn Err<T, X>(error : X) => {
 	}
 	class fn Ok<T, X>(value : T) => {
@@ -59,8 +60,76 @@ class fn Main() => {
 		fn popAndAppendToOption() : Optional<State> => {
 			return this.pop().map((tuple : Tuple<State, U16>) => tuple.left.append(tuple.right));
 		}
+		fn popAndAppendToTuple() : Optional<Tuple<State, U16>> => {
+			return this.pop().map((tuple : Tuple<State, U16>) => {
+				let appended = tuple.left.append(tuple.right);
+				return Tuple<State, U16>(appended, tuple.right);
+			});
+		}
 	}
 	class fn WrappedExpression(value : String) => {
+	}
+	class fn EscapedFolder() => {
+		folder : Folder;
+		fn EscapedFolder(folder : Folder) : public => {
+			this.folder = folder;
+		}
+		fn apply(state : State, next : U16) : State => {
+			if (next == '\'') {
+				let appended = state.append(next);
+				return appended.popAndAppendToTuple().map(Main.this::foldSingleEscapeChar).flatMap(State::popAndAppendToOption).orElse(appended);
+			}
+			return this.folder.apply(state, next);
+		}
+	}
+	class fn StatementFolder() => {
+		fn apply(state : State, character : U16) : State => {
+			let appended = state.append(character);
+			if (character == ';' && appended.isLevel()) {
+				return appended.advance();
+			}
+			if (character == '}' && appended.isShallow()) {
+				let appended1 = appended;
+				let peeked = appended.peek();
+				if (peeked == ';') {
+					/**/appended1 /**/ = appended.popAndAppendToOption().orElse(appended);
+				}
+				/**/else {
+					appended1 = appended1.advance();
+				}/**/
+				return /**/appended1/**/.exit();
+			}
+			/**/if (character == '{' || character == '(') {
+				return appended.enter();
+			}/**/
+			/**/if (character == '}' || character == ')') {
+				return appended.exit();
+			}/**/
+			return appended;
+		}
+	}
+	class fn ValueFolder() => {
+		fn apply(state : State, character : U16) : State => {
+			if (character == ',' && state.isLevel()) {
+				return state.advance();
+			}
+			let appended = state.append(character);
+			if (character == ' - ') {
+				if (appended.peek() == '>') {
+					let state1 = appended.popAndAppendToOption();
+					if (/**/state1/**/.isPresent()) {
+						return /**/state1/**/.get();
+					}
+				}
+			}
+			/**/if (character == '<' || character == '(') {
+				return appended.enter();
+			}/**/
+			/**/if (character == '>' || character == ')') {
+				return appended.exit();
+			}/**/
+			return appended;
+		}
 	}
 	let imports : Map<List<String>, List<String>> = HashMap<List<String>, List<String>>();
 	fn main(args : *[String]) : Void => {
@@ -92,16 +161,24 @@ class fn Main() => {
 		return this.divideStatements(input).map(mapper).collect(Collectors.joining());
 	}
 	fn divideStatements(input : String) : Stream<String> => {
-		return this.divide(input, Main.this::foldStatement);
+		return this.divide(input, EscapedFolder(StatementFolder()));
 	}
-	fn divide(input : String, folder : BiFunction<State, U16, State>) : Stream<String> => {
+	fn foldSingleEscapeChar(tuple : Tuple<State, U16>) : State => {
+		if (tuple.right == '\\') {
+			return tuple.left.popAndAppendToOption().orElse(tuple.left);
+		}
+		/**/else {
+			return tuple.left;
+		}/**/
+	}
+	fn divide(input : String, folder : Folder) : Stream<String> => {
 		let segments = ArrayList<String>();
 		let buffer = StringBuilder();
 		let depth = 0;
 		let i = 0;
 		return this.getStringStream(State(input, i, buffer, depth, segments), folder);
 	}
-	fn getStringStream(state : State, folder : BiFunction<State, U16, State>) : Stream<String> => {
+	fn getStringStream(state : State, folder : Folder) : Stream<String> => {
 		let current = state;
 		while (true) {
 			let maybePopped = current.pop();
@@ -113,126 +190,82 @@ class fn Main() => {
 		}
 		return current.advance().stream();
 	}
-	fn foldStatement(state : State, c : U16) : State => {
-		let appended = state.append(c);
-		if (c == ';' && appended.isLevel()) {
-			return appended.advance();
-		}
-		/**/if (c == '}/**/
-		let appended1 : /**/{
-			var/**/ = appended;
-		let peeked = appended.peek();
-		if (peeked == ';') {
-			/**/appended1 /**/ = appended.popAndAppendToOption().orElse(appended);
-		}
-		/**/else {
-				appended1 = appended1.advance();
-			}/**/
-		return /**/appended1/**/.exit();
-	}
-	/**/if (c == '{' || c == '(') {
-			return appended.enter();
-		}
-		if (c == '}' || c == ')') {
-			return appended.exit();
-		}/**/
-	appended : return;
-}
-/**/private String compileRootSegment(String input) {
-		final var stripped = input.strip();
+	fn compileRootSegment(input : String) : String => {
+		let stripped = input.strip();
 		if (stripped.startsWith("package ")) {
 			return "";
 		}
-
 		if (stripped.startsWith("import ") && stripped.endsWith(";")) {
-			final var slice = stripped.substring("import ".length(), stripped.length() - 1);
-			final var copy = Arrays.asList(slice.split(Pattern.quote(".")));
-			final var namespace = copy.subList(0, copy.size() - 1);
-
-			if (!this.imports.containsKey(namespace)) {
-				this.imports.put(namespace, new ArrayList<String>());
+			let slice = stripped.substring("import ".length(), stripped.length() - 1);
+			let copy = Arrays.asList(slice.split(Pattern.quote(".")));
+			let namespace = copy.subList(0, copy.size() - 1);
+			if (/**/!this/**/.imports.containsKey(namespace)) {
+				this.imports.put(namespace, ArrayList<String>());
 			}
-
 			this.imports.get(namespace).add(copy.getLast());
 			return "";
 		}
-
 		return this.compileRootSegmentValue(stripped) + System.lineSeparator();
-	}/**/
-/**/private String compileRootSegmentValue(String input) {
-		return this.compileStructure("class", input, 0).orElseGet(() -> this.wrap(input));
-	}/**/
-class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
-	Optional.empty() : /**/Optional.of(generated);
+	}
+	fn compileRootSegmentValue(input : String) : String => {
+		return this.compileStructure("class", input, 0).orElseGet((/**//**/) => this.wrap(input));
+	}
+	class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
+		Optional.empty() : /**/Optional.of(generated);
 				}
 			}
 		}
 
 		return/**/;
-}
-/**/private List<String> compileParameters(String input) {
-		return this
-				.divideValues(input)
-				.map(String::strip)
-				.filter((String slice) -> !slice.isEmpty())
-				.map(this::compileDefinitionOrPlaceholder)
-				.toList();
-	}/**/
-/**/private String createIndent(int indent) {
+	}
+	fn compileParameters(input : String) : List<String> => {
+		return this.divideValues(input).map(String::strip).filter((slice : String) => /**/!slice/**/.isEmpty()).map(this::compileDefinitionOrPlaceholder).toList();
+	}
+	fn createIndent(indent : I32) : String => {
 		return System.lineSeparator() + "\t".repeat(indent);
-	}/**/
-/**/private String wrap(String input) {
+	}
+	fn wrap(input : String) : String => {
 		return "/**/" + input + "/**/";
-	}/**/
-/**/private String compileStructureSegment(String input, int indent) {
-		final var stripped = input.strip();
+	}
+	fn compileStructureSegment(input : String, indent : I32) : String => {
+		let stripped = input.strip();
 		if (stripped.isEmpty()) {
 			return "";
 		}
 		return this.createIndent(indent) + this.compileStructureSegmentValue(stripped, indent);
-	}/**/
-/**/private String compileStructureSegmentValue(String input, int indent) {
+	}
+	fn compileStructureSegmentValue(input : String, indent : I32) : String => {
 		if (input.endsWith(";")) {
-			final var slice = input.substring(0, input.length() - 1);
-			return this.compileClassStatement(slice, indent) + ";";
+			let slice = input.substring(0, input.length() - 1);
+			return this.compileClassStatement(slice, indent) + ";
+			/**/";/**/
 		}
-
-		final var i1 = input.indexOf("interface ");
-		if (i1 >= 0) {
-			final var modifiers = Arrays
-					.stream(input.substring(0, i1).split(Pattern.quote(" ")))
-					.map(String::strip)
-					.filter((String slice) -> !slice.isEmpty())
-					.toList();
-
-			final var afterKeyword = input.substring(i1 + "interface ".length());
+		let i1 = input.indexOf("interface ");
+		if (/**/i1 >= 0/**/) {
+			let modifiers = Arrays.stream(input.substring(0, /**/i1/**/).split(Pattern.quote(" "))).map(String::strip).filter((slice : String) => /**/!slice/**/.isEmpty()).toList();
+			let afterKeyword = input.substring(/**/i1/**/ + "interface ".length());
 			if (modifiers.contains("sealed")) {
-				final var i = afterKeyword.indexOf("permits ");
-				if (i >= 0) {
-					var name = afterKeyword.substring(0, i).strip();
-					List<String> typeParameters = new ArrayList<String>();
+				let i = afterKeyword.indexOf("permits ");
+				if (/**/i >= 0/**/) {
+					let name = afterKeyword.substring(0, i).strip();
+					let typeParameters : List<String> = ArrayList<String>();
 					if (name.endsWith(">")) {
-						final var slice = name.substring(0, name.length() - 1);
-						final var i2 = slice.indexOf("<");
-						if (i2 >= 0) {
-							name = slice.substring(0, i2);
-							typeParameters = Arrays
-									.stream(slice.substring(i2 + 1).split(Pattern.quote(",")))
-									.map(String::strip)
-									.filter((String segment) -> !segment.isEmpty())
-									.toList();
+						let slice = name.substring(0, name.length() - 1);
+						let i2 = slice.indexOf("<");
+						if (/**/i2 >= 0/**/) {
+							name = slice.substring(0, /**/i2/**/);
+							typeParameters = Arrays.stream(slice.substring(/**/i2/**/ + 1).split(Pattern.quote(", "))).map(String::strip).filter((segment : String) => /**/!segment/**/.isEmpty()).toList();
 						}
 					}
-
-					final var stripped = afterKeyword.substring(i + "permits ".length()).strip();
-					final String joinedTypeParameters;
+					let stripped = afterKeyword.substring(i + "permits ".length()).strip();
+					/**/final String joinedTypeParameters;/**/
 					if (typeParameters.isEmpty()) {
 						joinedTypeParameters = "";
-					} else {
-						joinedTypeParameters = "<" + String.join(", ", typeParameters) + ">";
 					}
-
-					final var i2 = stripped.indexOf("{");
+					/**/else {
+						joinedTypeParameters = "<" + String.join(", ", typeParameters) + ">";
+					}/**/
+					/**/final var i2 = stripped.indexOf("{");
 					if (i2 >= 0) {
 						final var variants = Arrays
 								.stream(stripped.substring(0, i2).split(Pattern.quote(",")))
@@ -243,21 +276,18 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 
 						return "type " + name + joinedTypeParameters + " = " + variants + ";";
 					}
+				}/**/
 				}
 			}
-		}
-
-		final var maybeClass = this.compileStructure("class", input, indent);
-		if (maybeClass.isPresent()) {
-			return maybeClass.get();
-		}
-
-		final var maybeRecord = this.compileStructure("record", input, indent);
-		if (maybeRecord.isPresent()) {
-			return maybeRecord.get();
-		}
-
-		final var i = input.indexOf("(");
+			let maybeClass = this.compileStructure("class", input, indent);
+			if (maybeClass.isPresent()) {
+				return maybeClass.get();
+			}
+			let maybeRecord = this.compileStructure("record", input, indent);
+			if (maybeRecord.isPresent()) {
+				return maybeRecord.get();
+			}
+			/**/final var i = input.indexOf("(");
 		if (i >= 0) {
 			final var substring = input.substring(0, i);
 			final var withParameters = input.substring(i + 1);
@@ -286,25 +316,21 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 					}
 				}
 			}
+		}/**/
+			if (input.contains("@interface")) {
+				return "";
+			}
+			return this.wrap(input);
 		}
-
-		if (input.contains("@interface")) {
-			return "";
-		}
-
-		return this.wrap(input);
-	}
-
-	private String compileMethodSegment(String input, int indent) {
+		/**/private String compileMethodSegment(String input, int indent) {
 		final var stripped = input.strip();
 		if (stripped.isEmpty()) {
 			return "";
 		}
 
 		return this.createIndent(indent) + this.compileMethodSegmentValue(stripped, indent);
-	}
-
-	private String compileMethodSegmentValue(String input, int indent) {
+	}/**/
+		/**/private String compileMethodSegmentValue(String input, int indent) {
 		final var stripped = input.strip();
 		if (stripped.startsWith("yield ") && stripped.endsWith(";")) {
 			final var substring = stripped.substring("yield ".length(), stripped.length() - 1);
@@ -330,37 +356,33 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 		}
 
 		return this.wrap(stripped);
-	}
-
-	private Optional<String> compileConditional(int indent, String input, String type) {
-		if (input.startsWith(type)) {
-			final var substring = input.substring(type.length()).strip();
+	}/**/
+		let substring = /**/input.substring(type.length()).strip();
 			if (substring.startsWith("(")) {
 				final var substring1 = substring.substring(1);
-				var i = -1;
+				var i =/**/ - /**/1;
 				var depth = 0;
-				for (var i1 = 0; i1 < substring1.length(); i1++) {
+				for (var i1 = 0; i1/**/ < /**/substring1.length(); i1/**/ +  + /**/) {
 					final var c = substring1.charAt(i1);
-					if (c == '(') {
-						depth++;
+					if (c/**/ == /**/'(') {
+						depth/**/ +  + /**/;
 					}
-					if (c == ')') {
-						if (depth == 0) {
+					if (c/**/ == /**/')') {
+						if (depth/**/ == /**/0) {
 							i = i1;
 							break;
 						}
-						depth--;
+						depth/**/ -  - /**/;
 					}
 				}
 
 				if (i >= 0) {
 					final var substring2 = substring1.substring(0, i);
-					final var withBraces = substring1.substring(i + 1).strip();
+					final var withBraces = substring1.substring(i/**/ + /**/1).strip();
 					final var condition = this.compileExpressionOrPlaceholder(substring2, indent);
-					if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
-						final var content = withBraces.substring(1, withBraces.length() - 1);
-						return Optional.of(type + " (" + condition + ") {" + this.compileMethodStatements(content, indent) +
-															 this.createIndent(indent) + "}");
+					if (withBraces/**/.startsWith("{") && /**/withBraces.endsWith("}")) {
+						final var content = withBraces.substring(1, withBraces/**/.length() - /**/1);
+						return Optional.of(type/**/ + " (" + condition + ") {" + this.compileMethodStatements(content, indent) + this.createIndent(indent) + /**/"}");
 					}
 				}
 			}
@@ -369,14 +391,14 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 		return Optional.empty();
 	}
 
-	private Optional<String> compileMethodStatementValue(String input, int indent) {
+	private Optional/**/ < /**/String> compileMethodStatementValue(String input, int indent) {
 		if (input.equals("break") || input.equals("continue")) {
 			return Optional.of(input);
 		}
 
 		if (input.startsWith("return ")) {
 			final var substring = input.substring("return ".length());
-			return Optional.of("return " + this.compileExpressionOrPlaceholder(substring, indent));
+			return Optional.of("return "/**/ + /**/this.compileExpressionOrPlaceholder(substring, indent));
 		}
 
 		final var maybeInitialization = this.compileInitialization(input, indent);
@@ -388,22 +410,19 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 	}
 
 	private String compileClassStatement(String input, int indent) {
-		return this.compileInitialization(input, indent).orElseGet(() -> this.compileDefinitionOrPlaceholder(input));
+		return this.compileInitialization(input, indent).orElseGet(/**/() - /**/> this.compileDefinitionOrPlaceholder(input));
 	}
 
-	private Optional<String> compileInitialization(String input, int indent) {
+	private Optional/**/ < /**/String> compileInitialization(String input, int indent) {
 		final var i = input.indexOf("=");
 		if (i >= 0) {
 			final var substring = input.substring(0, i);
-			final var substring1 = input.substring(i + 1);
-			final var string = this
-					.parseDefinitionToTuff(substring)
-					.<TuffLValue>map((TuffDeclaration value) -> value)
-					.or(() -> this.parseExpression(substring, 0).<TuffLValue>map((TuffExpression value) -> value))
-					.orElseGet(() -> new Placeholder(substring));
+			final var substring1 = input.substring(i/**/ + /**/1);
+			final var string = this/**/.parseDefinitionToTuff(substring). < /**/TuffLValue>map/**/((value : TuffDeclaration) => value).or((/**//**/) => /**/this.parseExpression(substring, 0/**/). < /**/TuffLValue>map/**/(/**/(TuffExpression value/**/) - /**/> value))
+					.orElseGet(()/**/ - /**/> new Placeholder(substring));
 
 			return Optional.of(
-					this.generateAssignable(string) + " = " + this.compileExpressionOrPlaceholder(substring1, indent));
+					this/**/.generateAssignable(string) + " = " + /**/this.compileExpressionOrPlaceholder(substring1, indent));
 		}
 
 		return Optional.empty();
@@ -411,42 +430,42 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 
 	private String generateAssignable(TuffLValue value) {
 		return switch (value) {
-			case Placeholder placeholder -> this.wrap(placeholder.input);
-			case TuffDeclaration tuffDeclaration -> "let " + this.generateDefinitionOrPlaceholder(tuffDeclaration);
-			case TuffExpression tuffExpression -> this.generateExpression(tuffExpression);
+			case Placeholder placeholder/**/ - /**/> this.wrap(placeholder.input);
+			case TuffDeclaration tuffDeclaration/**/ - /**/> "let "/**/ + /**/this.generateDefinitionOrPlaceholder(tuffDeclaration);
+			case TuffExpression tuffExpression/**/ - /**/> this.generateExpression(tuffExpression);
 		};
 	}
 
 	private String compileExpressionOrPlaceholder(String input, int indent) {
-		return this.compileExpression(input, indent).orElseGet(() -> this.wrap(input.strip()));
+		return this/**/.compileExpression(input, indent).orElseGet(/**/(/**/) - /**/> this.wrap(input.strip()));
 	}
 
-	private Optional<String> compileExpression(String input, int indent) {
+	private Optional/**/ < /**/String> compileExpression(String input, int indent) {
 		return this.parseExpression(input, indent).map(this::generateExpression);
 	}
 
 	private String generateExpression(TuffExpression expr) {
 		return switch (expr) {
-			case WrappedExpression(var value) -> value;
+			case WrappedExpression/**/(/**/var value/**/) - /**/> value;
 		};
 	}
 
-	private Optional<TuffExpression> parseExpression(String input, int indent) {
+	private Optional/**/ < /**/TuffExpression> parseExpression(String input, int indent) {
 		return this.compileExpression0(input, indent).map(WrappedExpression::new);
 	}
 
-	private Optional<String> compileExpression0(String input, int indent) {
-		final var i = input.indexOf("->");
+	private Optional/**/ < /**/String> compileExpression0(String input, int indent) {
+		final var i = input.indexOf("/**/ - /**/>");
 		if (i >= 0) {
 			final var beforeArrow = input.substring(0, i).strip();
-			final var maybeWithBraces = input.substring(i + 2).strip();
-			if (beforeArrow.startsWith("(") && beforeArrow.endsWith(")")) {
-				final var substring = beforeArrow.substring(1, beforeArrow.length() - 1);
+			final var maybeWithBraces = input.substring(i/**/ + /**/2).strip();
+			if (beforeArrow/**/.startsWith("(") && /**/beforeArrow.endsWith(")")) {
+				final var substring = beforeArrow.substring(1, beforeArrow/**/.length() - /**/1);
 				final var compiled = this.compileDefinitionOrPlaceholder(substring);
 				final String compiled1;
-				if (maybeWithBraces.startsWith("{") && maybeWithBraces.endsWith("}")) {
-					final var body = maybeWithBraces.substring(1, maybeWithBraces.length() - 1);
-					compiled1 = "{" + this.compileMethodStatements(body, indent) + this.createIndent(indent) + "}";
+				if (maybeWithBraces/**/.startsWith("{") && /**/maybeWithBraces.endsWith("}")) {
+					final var body = maybeWithBraces.substring(1, maybeWithBraces/**/.length() - /**/1);
+					compiled1 = "{"/**/ + this.compileMethodStatements(body, indent) + this.createIndent(indent) + "}";
 				} else {
 					compiled1 = this.compileExpressionOrPlaceholder(maybeWithBraces, indent);
 				}
@@ -460,35 +479,35 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 				.or(() -> this.compileString(input))
 				.or(() -> this.compileSwitch(input, indent))
 				.or(() -> this.compileAccess(input, indent, "."))
-				.or(() -> this.compileOperation(indent, input, "<"))
-				.or(() -> this.compileOperation(indent, input, "+"))
-				.or(() -> this.compileOperation(indent, input, "-"))
-				.or(() -> this.compileOperation(indent, input, "=="))
-				.or(() -> this.compileOperation(indent, input, "&&"))
-				.or(() -> this.compileAccess(input, indent, "::"))
-				.or(() -> this.compileIdentifier(input))
-				.or(() -> this.compileNumber(input))
-				.or(() -> this.compileChar(input));
+				.or(() -> this.compileOperation(indent, input, " < "))
+				.or(() -> this.compileOperation(indent, input, " + /**/"))
+				.or(()/**/ - /**/> this.compileOperation(indent, input, "/**/ - /**/"))
+				.or(()/**/ - /**/> this.compileOperation(indent, input, "/**/ == /**/"))
+				.or(/**/() - /**/> this.compileOperation(indent, input, "/**/ && /**/"))
+				.or(/**/() - /**/> this.compileAccess(input, indent, "::"))
+				.or(/**/() - /**/> this.compileIdentifier(input))
+				.or(/**/() - /**/> this.compileNumber(input))
+				.or(/**/() - /**/> this.compileChar(input));
 	}
 
-	private Optional<String> compileChar(String input) {
+	private Optional/**/ < /**/String> compileChar(String input) {
 		final var stripped = input.strip();
-		if (stripped.startsWith("'") && stripped.endsWith("'")) {
+		if/**/(/**/stripped.startsWith("'""/**/) && /**/stripped.endsWith("'")) {
 			return Optional.of(stripped);
 		} else {
 			return Optional.empty();
 		}
 	}
 
-	private Optional<String> compileAccess(String input, int indent, String separator) {
-		return this.compileAccess(input, separator, (String input1) -> this.compileAccessInstance(indent, input1));
+	private Optional/**/ < /**/String> compileAccess(String input, int indent, String separator) {
+		return this/**/.compileAccess(input, separator, /**/(String input1/**/) - /**/> this.compileAccessInstance(indent, input1));
 	}
 
 	private String compileAccessInstance(int indent, String input) {
-		return Main.this.compileType(input).orElseGet(() -> this.compileExpressionOrPlaceholder(input, indent));
+		return Main.this.compileType(input).orElseGet(/**/() - /**/> this.compileExpressionOrPlaceholder(input, indent));
 	}
 
-	private Optional<String> compileNumber(String input) {
+	private Optional/**/ < /**/String> compileNumber(String input) {
 		final var stripped = input.strip();
 		if (this.isNumber(stripped)) {
 			return Optional.of(stripped);
@@ -498,7 +517,7 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 	}
 
 	private boolean isNumber(String input) {
-		for (var i = 0; i < input.length(); i++) {
+		for (var i = 0; i/**/ < /**/input.length(); i/**/ +  + /**/) {
 			final var c = input.charAt(i);
 			if (Character.isDigit(c)) {
 				continue;
@@ -508,55 +527,54 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 		return true;
 	}
 
-	private Optional<String> compileOperation(int indent, String input, String operator) {
+	private Optional/**/ < /**/String> compileOperation(int indent, String input, String operator) {
 		final var i1 = input.indexOf(operator);
 		if (i1 >= 0) {
 			final var substring = input.substring(0, i1);
-			final var substring1 = input.substring(i1 + operator.length());
-			return Optional.of(this.compileExpressionOrPlaceholder(substring, indent) + " " + operator + " " +
-												 this.compileExpressionOrPlaceholder(substring1, indent));
+			final var substring1 = input.substring(i1/**/ + /**/operator.length());
+			return Optional.of(this/**/.compileExpressionOrPlaceholder(substring, indent) + " " + operator + " " + /**/this.compileExpressionOrPlaceholder(substring1, indent));
 		} else {
 			return Optional.empty();
 		}
 	}
 
-	private Optional<String> compileSwitch(String input, int indent) {
+	private Optional/**/ < /**/String> compileSwitch(String input, int indent) {
 		final var stripped = input.strip();
 		if (stripped.startsWith("switch")) {
 			final var substring = stripped.substring("switch".length()).strip();
 			if (substring.startsWith("(")) {
 				final var withExpr = substring.substring(1);
-				var i = -1;
+				var i =/**/ - /**/1;
 				var depth = 0;
-				for (var i1 = 0; i1 < withExpr.length(); i1++) {
+				for (var i1 = 0; i1/**/ < /**/withExpr.length(); i1/**/ +  + /**/) {
 					final var c = withExpr.charAt(i1);
-					if (c == '(') {
-						depth++;
+					if (c/**/ == /**/'(') {
+						depth/**/ +  + /**/;
 					}
-					if (c == ')') {
-						if (depth == 0) {
+					if (c/**/ == /**/')') {
+						if (depth/**/ == /**/0) {
 							i = i1;
 							break;
 						}
-						depth--;
+						depth/**/ -  - /**/;
 					}
 				}
 
 				if (i >= 0) {
 					final var substring1 = withExpr.substring(0, i);
-					final var withBraces = withExpr.substring(i + 1).strip();
+					final var withBraces = withExpr.substring(i/**/ + /**/1).strip();
 					final var expr = this.compileExpressionOrPlaceholder(substring1, indent);
-					if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
-						final var content = withBraces.substring(1, withBraces.length() - 1);
+					if (withBraces/**/.startsWith("{") && /**/withBraces.endsWith("}")) {
+						final var content = withBraces.substring(1, withBraces/**/.length() - /**/1);
 						final var collect = this
 								.divideStatements(content)
 								.map(String::strip)
-								.filter((String slice) -> !slice.isEmpty())
-								.map((String input1) -> this.compileCase(input1, indent + 1))
-								.map((String slice) -> this.createIndent(indent + 1) + slice)
+								.filter(/**/(/**/String slice/**/) - /**/> !slice.isEmpty())
+								.map(/**/(/**/String input1/**/) - /**/> this.compileCase(input1, indent/**/ + /**/1))
+								.map((String slice)/**/ - /**/> this.createIndent(indent/**/ + /**/1)/**/ + /**/slice)
 								.collect(Collectors.joining());
 
-						return Optional.of("match (" + expr + ") {" + collect + this.createIndent(indent) + "}");
+						return Optional.of("match ("/**/ + expr + ") {" + collect + this.createIndent(indent) + "}");
 					}
 				}
 			}
@@ -569,11 +587,11 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 		final var stripped = input.strip();
 		if (stripped.startsWith("case ")) {
 			final var substring = stripped.substring("case ".length());
-			final var i = substring.indexOf("->");
+			final var i = substring.indexOf(" - /**/>");
 			if (i >= 0) {
 				final var substring1 = substring.substring(0, i);
-				final var substring2 = substring.substring(i + "->".length());
-				return this.compileDestructuring(substring1) + " => " + this.compileCaseValue(substring2, indent);
+				final var substring2 = substring.substring(i/**/ + "->".length(/**/));
+				return this.compileDestructuring(substring1/**/) + " => " + /**/this.compileCaseValue(substring2, indent);
 			}
 		}
 
@@ -588,33 +606,33 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 	private String compileCaseValue(String input, int indent) {
 		final var stripped = input.strip();
 		if (stripped.endsWith(";")) {
-			final var substring = stripped.substring(0, stripped.length() - 1);
-			return this.compileExpressionOrPlaceholder(substring, indent) + ";";
+			final var substring = stripped/**/.substring(0, /**/stripped.length(/**/) - /**/1);
+			return this/**/.compileExpressionOrPlaceholder(substring, indent) + ";";
 		}
 
 		if (stripped.startsWith("{") && stripped.endsWith("}")) {
 			final var substring = stripped.substring(1, stripped.length() - 1);
 			final var compiled = this.compileMethodStatements(substring, indent);
-			return "{" + compiled + this.createIndent(indent) + "}";
+			return "{" + compiled + this.createIndent(indent) + /**/"}";
 		}
 
 		return this.wrap(stripped);
 	}
 
 	private String compileMethodStatements(String input, int indent) {
-		return this.compileStatements(input, (String segment) -> this.compileMethodSegment(segment, indent + 1));
+		return this/**/.compileStatements(input, /**/(String segment/**/) - /**/> this.compileMethodSegment(segment, indent/**/ + /**/1));
 	}
 
-	private Optional<String> compileString(String input) {
+	private Optional/**/ < /**/String> compileString(String input) {
 		final var stripped = input.strip();
-		if (stripped.startsWith("\"") && stripped.endsWith("\"")) {
+		if/**/(/**/stripped.startsWith("\""/**/) && /**/stripped.endsWith("\"")) {
 			return Optional.of(stripped);
 		} else {
 			return Optional.empty();
 		}
 	}
 
-	private Optional<String> compileIdentifier(String input) {
+	private Optional/**/ < /**/String> compileIdentifier(String input) {
 		final var stripped = input.strip();
 		if (this.isIdentifier(stripped)) {
 			return Optional.of(stripped);
@@ -623,82 +641,58 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 		}
 	}
 
-	private Optional<String> compileAccess(String input, String separator, Function<String, String> mapper) {
+	private Optional/**/ < /**/String> compileAccess(String input, String separator, Function/**/ < /**/String, String> mapper) {
 		final var i = input.lastIndexOf(separator);
 		if (i >= 0) {
 			final var substring = input.substring(0, i);
-			final var memberName = input.substring(i + separator.length()).strip();
+			final var memberName = input.substring(i/**/ + /**/separator.length()).strip();
 			if (this.isIdentifier(memberName)) {
-				return Optional.of(mapper.apply(substring) + separator + memberName);
+				return Optional.of(mapper/**/.apply(substring) + separator + /**/memberName);
 			}
 		}
 
 		return Optional.empty();
 	}
 
-	private Optional<String> compileInvokable(String input, int indent) {
+	private Optional/**/ < /**/String> compileInvokable(String input, int indent) {
 		final var stripped = input.strip();
 		if (stripped.endsWith(")")) {
-			final var withoutEnd = stripped.substring(0, stripped.length() - 1);
+			final var withoutEnd = stripped.substring(0, stripped/**/.length() - /**/1);
 
-			var i = -1;
+			var i =/**/ - /**/1;
 			var depth = 0;
-			for (var i1 = 0; i1 < withoutEnd.length(); i1++) {
+			for (var i1 = 0; i1/**/ < /**/withoutEnd.length(); i1/**/ +  + /**/) {
 				final var c = withoutEnd.charAt(i1);
-				if (c == '(') {
-					if (depth == 0) {
+				if (c/**/ == /**/'(') {
+					if (depth/**/ == /**/0) {
 						i = i1;
 					}
-					depth++;
+					depth/**/ +  + /**/;
 				}
-				if (c == ')') {
-					depth--;
+				if (c/**/ == /**/')') {
+					depth/**/ -  - /**/;
 				}
 			}
 
 			if (i >= 0) {
 				final var caller = withoutEnd.substring(0, i);
-				final var arguments = withoutEnd.substring(i + 1);
+				final var arguments = withoutEnd.substring(i/**/ + /**/1);
 				final var joinedArguments = this
 						.divideValues(arguments)
 						.map(String::strip)
-						.filter((String slice) -> !slice.isEmpty())
-						.map((String input1) -> this.compileExpressionOrPlaceholder(input1, indent))
+						.filter(/**/(/**/String slice/**/) - /**/> !slice.isEmpty())
+						.map(/**/(/**/String input1/**/) - /**/> this.compileExpressionOrPlaceholder(input1, indent))
 						.collect(Collectors.joining(", "));
 
-				return Optional.of(this.compileCaller(caller, indent) + "(" + joinedArguments + ")");
+				return Optional.of(this/**/.compileCaller(caller, indent) + "(" + joinedArguments + /**/")");
 			}
 		}
 
 		return Optional.empty();
 	}
 
-	private Stream<String> divideValues(String input) {
-		return this.divide(input, this::foldValue);
-	}
-
-	private State foldValue(State state, Character next) {
-		if (next == ',' && state.isLevel()) {
-			return state.advance();
-		}
-
-		final var appended = state.append(next);
-		if (next == '-') {
-			if (appended.peek() == '>') {
-				final var state1 = appended.popAndAppendToOption();
-				if (state1.isPresent()) {
-					return state1.get();
-				}
-			}
-		}
-
-		if (next == '<' || next == '(') {
-			return appended.enter();
-		}
-		if (next == '>' || next == ')') {
-			return appended.exit();
-		}
-		return appended;
+	private Stream/**/ < /**/String> divideValues(String input) {
+		return this.divide(input, new EscapedFolder(new ValueFolder()));
 	}
 
 	private String compileCaller(String input, int indent) {
@@ -730,57 +724,53 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 
 	private String generateDefinitionOrPlaceholder(TuffDeclarationOrPlaceholder string) {
 		return switch (string) {
-			case TuffDeclaration(var modifiers, var name, var type) -> {
+			case TuffDeclaration/**/(/**/var modifiers/**/, /**/var name/**/, /**/var type/**/) - /**/> {
 				if (type.equals("var")) {
 					yield name;
 				}
 
 				final var joinedModifiers = this.joinModifiers(modifiers);
-				yield joinedModifiers + name + " : " + type;
+				yield joinedModifiers/**/ + name + " : " + /**/type;
 			}
-			case Placeholder placeholder -> this.wrap(placeholder.input);
+			case Placeholder placeholder/**/ - /**/> this.wrap(placeholder.input);
 		};
 	}
 
-	private String joinModifiers(List<String> modifiers) {
-		return modifiers.stream().map((String modifier) -> modifier + " ").collect(Collectors.joining());
+	private String joinModifiers(List/**/ < /**/String> modifiers) {
+		return modifiers.stream().map(/**/(/**/String modifier/**/) - /**/> modifier/**/ + /**/" ").collect(Collectors/**/.joining(/**/));
 	}
 
 	private TuffDeclarationOrPlaceholder parseDefinitionOrPlaceholderToTuff(String input) {
 		return this
-				.parseDefinitionToTuff(input)
-				.<TuffDeclarationOrPlaceholder>map((TuffDeclaration value) -> value)
-				.orElseGet(() -> new Placeholder(input));
+				.parseDefinitionToTuff(input/**/). < /**/TuffDeclarationOrPlaceholder>map/**/(/**/(TuffDeclaration value/**/) - /**/> value)
+				.orElseGet(/**/() - /**/> new Placeholder(input));
 	}
 
-	private Optional<TuffDeclaration> parseDefinitionToTuff(String input) {
+	private Optional/**/ < /**/TuffDeclaration> parseDefinitionToTuff(String input) {
 		final var stripped = input.strip();
 		final var i = stripped.lastIndexOf(" ");
 		if (i >= 0) {
 			final var beforeName = stripped.substring(0, i);
-			final var name = stripped.substring(i + 1);
+			final var name = stripped.substring(i/**/ + /**/1);
 			final var i1 = this.findTypeSeparator(beforeName);
-			if (i1 < 0) {
+			if (i1/**/ < /**/0) {
 				final var compiled = this.compileTypeOrPlaceholder(beforeName);
-				return Optional.of(new TuffDeclaration(new ArrayList<String>(), name, compiled));
+				return Optional.of(new TuffDeclaration(new ArrayList/**/ < /**/String>(), name, compiled));
 			}
 
 			final var beforeType = beforeName.substring(0, i1);
 			final var i2 = beforeType.lastIndexOf("\n");
-			List<String> annotations = new ArrayList<String>();
+			List/**/ < /**/String> annotations = new ArrayList/**/ < /**/String>();
 			if (i2 >= 0) {
 				final var substring = beforeType.substring(0, i2);
-				annotations = Arrays
-						.stream(substring.split(Pattern.quote(" ")))
-						.map(String::strip)
-						.filter((String slice) -> !slice.isEmpty())
-						.map((String slice) -> slice.substring(1))
+				annotations = Arrays/**/.stream(substring.split(Pattern.quote(" "))).map(String::strip).filter(/**/(String slice/**/) - /**/> !slice.isEmpty())
+						.map(/**/(/**/String slice/**/) - /**/> slice.substring(1))
 						.toList();
 			}
 
-			final var type = beforeName.substring(i1 + 1);
+			final var type = beforeName.substring(i1/**/ + /**/1);
 			final var compiled = this.compileTypeOrPlaceholder(type);
-			final List<String> modifiers;
+			final List/**/ < /**/String> modifiers;
 			if (annotations.contains("Actual")) {
 				modifiers = List.of("expect");
 			} else {
@@ -795,17 +785,17 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 	}
 
 	private String compileTypeOrPlaceholder(String input) {
-		return this.compileType(input).orElseGet(() -> this.wrap(input));
+		return this/**/.compileType(input).orElseGet(/**/(/**/) - /**/> this.wrap(input));
 	}
 
-	private Optional<String> compileType(String input) {
+	private Optional/**/ < /**/String> compileType(String input) {
 		final var stripped = input.strip();
 		final var maybePrimitiveType = this.compilePrimitiveType(stripped);
 		if (maybePrimitiveType.isPresent()) {
 			return maybePrimitiveType;
 		}
 
-		final var i = stripped.indexOf("<");
+		final var i = stripped.indexOf("/**/ < ");
 		if (i >= 0) {
 			final var base = stripped.substring(0, i);
 			final var substring1 = stripped.substring(i + 1).strip();
@@ -814,7 +804,7 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 				final var joinedTypeArguments =
 						this.divideValues(args).map(this::compileTypeOrPlaceholder).collect(Collectors.joining(", "));
 
-				return Optional.of(base + "<" + joinedTypeArguments + ">");
+				return Optional.of(base + " < " + joinedTypeArguments + ">");
 			}
 		}
 
@@ -824,21 +814,21 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 
 		if (stripped.endsWith("[]")) {
 			final var substring = stripped.substring(0, stripped.length() - 2);
-			return Optional.of("*[" + substring + "]");
+			return Optional.of("*[" + substring + /**/"]");
 		}
 
 		return Optional.empty();
 	}
 
-	private Optional<String> compilePrimitiveType(String stripped) {
+	private Optional/**/ < /**/String> compilePrimitiveType(String stripped) {
 		switch (stripped) {
-			case "char", "Character" -> {
+			case "char", "Character"/**/ - /**/> {
 				return Optional.of("U16");
 			}
-			case "int" -> {
+			case "int"/**/ - /**/> {
 				return Optional.of("I32");
 			}
-			case "void" -> {
+			case "void"/**/ - /**/> {
 				return Optional.of("Void");
 			}
 		}
@@ -848,7 +838,7 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 
 	private boolean isIdentifier(String input) {
 		final var stripped = input.strip();
-		for (var i = 0; i < stripped.length(); i++) {
+		for (var i = 0; i/**/ < /**/stripped.length(); i/**/ +  + /**/) {
 			final var c = stripped.charAt(i);
 			if (Character.isLetter(c)) {continue;}
 			return false;
@@ -857,20 +847,20 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 	}
 
 	private int findTypeSeparator(String beforeName) {
-		var i1 = -1;
+		var i1 =/**/ - /**/1;
 		var depth = 0;
-		for (var i2 = 0; i2 < beforeName.length(); i2++) {
+		for (var i2 = 0; i2/**/ < /**/beforeName.length(); i2/**/ +  + /**/) {
 			final var c = beforeName.charAt(i2);
-			if (c == ' ' && depth == 0) {
+			if (c/**/ == ' ' && depth == /**/0) {
 				i1 = i2;
 			}
-			if (c == '<') {
-				depth++;
+			if (c/**/ == ' < /**/') {
+				depth/**/ +  + /**/;
 			}
-			if (c == '>') {
-				depth--;
+			if (c/**/ == /**/'>') {
+				depth/**/ -  - /**/;
 			}
 		}
-		return i1;
+		return i1/**/;
 	}
-}/**/
+}
