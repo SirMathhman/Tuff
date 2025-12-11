@@ -104,10 +104,10 @@ public class Main {
 				depth--;
 				continue;
 			}
-			if (c == '{') {
+			if (c == '{' || c == '(') {
 				depth++;
 			}
-			if (c == '}') {
+			if (c == '}' || c == ')') {
 				depth--;
 			}
 		}
@@ -495,11 +495,26 @@ public class Main {
 	private Optional<String> compileInvokable(String input, int indent) {
 		final var stripped = input.strip();
 		if (stripped.endsWith(")")) {
-			final var substring = stripped.substring(0, stripped.length() - 1);
-			final var i = substring.lastIndexOf("(");
+			final var withoutEnd = stripped.substring(0, stripped.length() - 1);
+
+			var i = -1;
+			var depth = 0;
+			for (var i1 = 0; i1 < withoutEnd.length(); i1++) {
+				final var c = withoutEnd.charAt(i1);
+				if (c == '(') {
+					if (depth == 0) {
+						i = i1;
+					}
+					depth++;
+				}
+				if (c == ')') {
+					depth--;
+				}
+			}
+
 			if (i >= 0) {
-				final var caller = substring.substring(0, i);
-				final var arguments = substring.substring(i + 1);
+				final var caller = withoutEnd.substring(0, i);
+				final var arguments = withoutEnd.substring(i + 1);
 				final var joinedArguments = Arrays
 						.stream(arguments.split(Pattern.quote(",")))
 						.map(String::strip)
