@@ -1,16 +1,68 @@
-package tuff;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-
-public class Main {
-	public static void main(String[] args) {
+from java::util::stream use { Collectors };
+from java::io use { IOException };
+from java::nio::file use { Files, Paths };
+from java::util use { ArrayList, Arrays, HashMap, List, Map };
+from java::util::regex use { Pattern };
+/*Raw*/public class Main {
+	private static final Map<List<String>, List<String>> imports = new HashMap<>();
+/*Raw*/public static void main(String[] args) {
 		try {
 			final var input = Files.readString(Paths.get(".", "src", "main", "java", "tuff", "Main.java"));
-			Files.writeString(Paths.get(".", "src", "main", "tuff", "tuff", "Main.tuff"), input);
-		} catch (IOException e) {
+/*Raw*/Files.writeString(Paths.get(".", "src", "main", "tuff", "tuff", "Main.tuff"), compile(input));
+/*Raw*/} catch (IOException e) {
 			throw new RuntimeException(e);
-		}
+/*Raw*/}
 	}
+
+	private static String compile(String input) {
+		final var compiled = compileStatements(input);
+/*Raw*/final var useStatements = imports.entrySet().stream().map(entry -> {
+			final var usedNamespace = String.join("::", entry.getKey());
+/*Raw*/final var usedChildren = String.join(", ", entry.getValue());
+/*Raw*/return "from " + usedNamespace + " use { " + usedChildren + " };
+/*Raw*/" + System.lineSeparator();
+/*Raw*/}).collect(Collectors.joining());
+/*Raw*/return useStatements + compiled;
+/*Raw*/}
+
+	private static String compileStatements(String input) {
+		final var segments = new ArrayList<String>();
+/*Raw*/var buffer = new StringBuilder();
+/*Raw*/for (var i = 0;
+/*Raw*/i < input.length();
+/*Raw*/i++) {
+			final var c = input.charAt(i);
+/*Raw*/buffer.append(c);
+/*Raw*/if (c == ';
+/*Raw*/') {
+				segments.add(buffer.toString());
+/*Raw*/buffer = new StringBuilder();
+/*Raw*/}
+		}
+
+		segments.add(buffer.toString());
+/*Raw*/return segments.stream().map(Main::compileRootSegment).collect(Collectors.joining());
+/*Raw*/}
+
+	private static String compileRootSegment(String input) {
+		final var stripped = input.strip();
+/*Raw*/if (stripped.startsWith("package ")) {
+			return "";
+/*Raw*/}
+
+		if (stripped.startsWith("import ") && stripped.endsWith(";
+/*Raw*/")) {
+			final var slice = stripped.substring("import ".length(), stripped.length() - 1);
+/*Raw*/final var copy = Arrays.asList(slice.split(Pattern.quote(".")));
+/*Raw*/final var namespace = copy.subList(0, copy.size() - 1);
+/*Raw*/if (!imports.containsKey(namespace)) {
+				imports.put(namespace, new ArrayList<String>());
+/*Raw*/}
+
+			imports.get(namespace).add(copy.getLast());
+/*Raw*/return "";
+/*Raw*/}
+
+		return "/*Raw*/" + stripped + System.lineSeparator();
+/*Raw*/}
 }
