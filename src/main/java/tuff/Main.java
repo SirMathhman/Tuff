@@ -538,6 +538,11 @@ public class Main {
 			if (maybeInitialization.isPresent()) {
 				return maybeInitialization.get() + ";";
 			}
+
+			final var maybeDefinition = this.parseDefinitionToTuff(slice);
+			if (maybeDefinition.isPresent()) {
+				return this.generateDefinitionOrPlaceholder(maybeDefinition.get());
+			}
 		}
 
 		if (stripped.startsWith("else")) {

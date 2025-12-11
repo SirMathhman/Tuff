@@ -325,7 +325,7 @@ class fn Main() => {
 						}
 					}
 					let stripped = afterKeyword.substring(i + "permits ".length()).strip();
-					/**/final String joinedTypeParameters;/**/
+					joinedTypeParameters : String
 					if (typeParameters.isEmpty()) {
 						joinedTypeParameters = "";
 					}
@@ -362,7 +362,7 @@ class fn Main() => {
 					if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
 						let content = withBraces.substring(1, withBraces.length() - 1);
 						let joinedParameters = String.join(", ", parameters);
-						/**/final String outputContent;/**/
+						outputContent : String
 						if (modifiers.contains("expect")) {
 							outputContent = ";";
 						}
@@ -406,6 +406,10 @@ class fn Main() => {
 			let maybeInitialization = this.compileMethodStatementValue(slice, indent);
 			if (maybeInitialization.isPresent()) {
 				return maybeInitialization.get() + ";";
+			}
+			let maybeDefinition = this.parseDefinitionToTuff(slice);
+			if (maybeDefinition.isPresent()) {
+				return this.generateDefinitionOrPlaceholder(maybeDefinition.get());
 			}
 		}
 		if (stripped.startsWith("else")) {
@@ -499,7 +503,7 @@ class fn Main() => {
 			if (beforeArrow.startsWith("(") && beforeArrow.endsWith(")")) {
 				let substring = beforeArrow.substring(1, beforeArrow.length() - 1);
 				let compiled = String.join(", ", this.compileParameters(substring));
-				/**/final String compiled1;/**/
+				compiled1 : String
 				if (maybeWithBraces.startsWith("{") && maybeWithBraces.endsWith("}")) {
 					let body = maybeWithBraces.substring(1, maybeWithBraces.length() - 1);
 					compiled1 = "{" + this.compileMethodStatements(body, indent) + this.createIndent(indent) + "}";
@@ -736,7 +740,7 @@ class fn Main() => {
 			}
 			let type = beforeName.substring(i1 + 1);
 			let compiled = this.compileTypeOrPlaceholder(type);
-			/**/final List<String> modifiers;/**/
+			modifiers : List<String>
 			if (annotations.contains("Actual")) {
 				modifiers = List.of("expect");
 			}
