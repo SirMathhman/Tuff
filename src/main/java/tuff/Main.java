@@ -34,26 +34,14 @@ public class Main {
 
 	private record Placeholder(String input) implements TuffDeclarationOrPlaceholder {}
 
-	private static class State {
-		private final String input;
-		private final ArrayList<String> segments;
-		private int index;
-		private StringBuilder buffer;
-		private int depth;
+	private record Tuple<Left, Right>(Left left, Right right) {}
 
-		private State(String input, int index, StringBuilder buffer, int depth, ArrayList<String> segments) {
-			this.input = input;
-			this.index = index;
-			this.buffer = buffer;
-			this.depth = depth;
-			this.segments = segments;
-		}
-
-		private Optional<Character> pop() {
+	private record State(String input, int index, StringBuilder buffer, int depth, ArrayList<String> segments) {
+		private Optional<Tuple<State, Character>> pop() {
 			if (this.index < this.input.length()) {
 				final var c = this.input.charAt(this.index);
-				this.index = this.index + 1;
-				return Optional.of(c);
+				final var state = new State(this.input, this.index + 1, this.buffer, this.depth, this.segments);
+				return Optional.of(new Tuple<State, Character>(state, c));
 			}
 
 			return Optional.empty();
@@ -70,18 +58,15 @@ public class Main {
 
 		private State advance() {
 			this.segments.add(this.buffer.toString());
-			this.buffer = new StringBuilder();
-			return this;
+			return new State(this.input, this.index, new StringBuilder(), this.depth, this.segments);
 		}
 
 		private State exit() {
-			this.depth = this.depth - 1;
-			return this;
+			return new State(this.input, this.index, this.buffer, this.depth - 1, this.segments);
 		}
 
 		private State enter() {
-			this.depth = this.depth + 1;
-			return this;
+			return new State(this.input, this.index, this.buffer, this.depth + 1, this.segments);
 		}
 
 		private boolean isLevel() {
@@ -97,7 +82,7 @@ public class Main {
 		}
 
 		public Optional<State> popAndAppendToOption() {
-			return this.pop().map(this::append);
+			return this.pop().map((Tuple<State, Character> tuple) -> tuple.left.append(tuple.right));
 		}
 	}
 
@@ -171,7 +156,7 @@ public class Main {
 				break;
 			}
 			final var popped = maybePopped.get();
-			current = folder.apply(current, popped);
+			current = folder.apply(popped.left, popped.right);
 		}
 
 		return current.advance().stream();
@@ -219,11 +204,11 @@ public class Main {
 			return "";
 		}
 
-		return this.compileRootSegmentValue(stripped, 0) + System.lineSeparator();
+		return this.compileRootSegmentValue(stripped) + System.lineSeparator();
 	}
 
-	private String compileRootSegmentValue(String input, int indent) {
-		return this.compileStructure("class", input, indent).orElseGet(() -> this.wrap(input));
+	private String compileRootSegmentValue(String input) {
+		return this.compileStructure("class", input, 0).orElseGet(() -> this.wrap(input));
 	}
 
 	private Optional<String> compileStructure(String type, String input, int indent) {
@@ -253,7 +238,7 @@ public class Main {
 				if (substring1.endsWith("}")) {
 					final var body = substring1.substring(0, substring1.length() - 1);
 					final var compiled =
-							this.compileStatements(body, (String input1) -> this.compileClassSegment(input1, indent + 1));
+							this.compileStatements(body, (String input1) -> this.compileStructureSegment(input1, indent + 1));
 					final var generated = "class fn " + name + "(" + String.join(", ", parameters) + ") => {" + compiled +
 																this.createIndent(indent) + "}";
 					return Optional.of(generated);
@@ -281,15 +266,15 @@ public class Main {
 		return "/*<*/" + input + "/*>*/";
 	}
 
-	private String compileClassSegment(String input, int indent) {
+	private String compileStructureSegment(String input, int indent) {
 		final var stripped = input.strip();
 		if (stripped.isEmpty()) {
 			return "";
 		}
-		return this.createIndent(indent) + this.compileClassSegmentValue(stripped, indent);
+		return this.createIndent(indent) + this.compileStructureSegmentValue(stripped, indent);
 	}
 
-	private String compileClassSegmentValue(String input, int indent) {
+	private String compileStructureSegmentValue(String input, int indent) {
 		if (input.endsWith(";")) {
 			final var slice = input.substring(0, input.length() - 1);
 			return this.compileClassStatement(slice, indent) + ";";
@@ -366,7 +351,7 @@ public class Main {
 				final var declarationOrPlaceholder = this.parseDefinitionOrPlaceholderToTuff(substring);
 				final var parameters = this.compileParameters(parameterString);
 
-				if (declarationOrPlaceholder instanceof TuffDeclaration(List<String> modifiers, var name, var type)) {
+				if (declarationOrPlaceholder instanceof TuffDeclaration(var modifiers, var name, var type)) {
 					if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
 						final var content = withBraces.substring(1, withBraces.length() - 1);
 						final var joinedParameters = String.join(", ", parameters);
@@ -487,7 +472,7 @@ public class Main {
 			final var substring = stripped.substring("switch".length()).strip();
 			if (substring.startsWith("(")) {
 				final var withExpr = substring.substring(1);
-				int i = -1;
+				var i = -1;
 				var depth = 0;
 				for (var i1 = 0; i1 < withExpr.length(); i1++) {
 					final var c = withExpr.charAt(i1);
@@ -632,9 +617,7 @@ public class Main {
 	}
 
 	private Stream<String> divideValues(String input) {
-		this.divide(input, this::foldValue);
-
-		return Arrays.stream(input.split(Pattern.quote(",")));
+		return this.divide(input, this::foldValue);
 	}
 
 	private State foldValue(State state, Character next) {
