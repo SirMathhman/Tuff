@@ -300,6 +300,10 @@ public class Main {
 
 	private String compileRootSegment(String input) {
 		final var stripped = input.strip();
+		if (stripped.isEmpty()) {
+			return "";
+		}
+
 		if (stripped.startsWith("package ")) {
 			return "";
 		}
@@ -723,8 +727,15 @@ public class Main {
 	}
 
 	private boolean isNumber(String input) {
-		for (var i = 0; i < input.length(); i++) {
-			final var c = input.charAt(i);
+		final String stripped;
+		if (input.startsWith("-")) {
+			stripped = input.substring(1);
+		} else {
+			stripped = input;
+		}
+
+		for (var i = 0; i < stripped.length(); i++) {
+			final var c = stripped.charAt(i);
 			if (Character.isDigit(c)) {
 				continue;
 			}

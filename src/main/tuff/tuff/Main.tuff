@@ -222,6 +222,9 @@ class fn Main() => {
 	}
 	fn compileRootSegment(input : String) : String => {
 		let stripped = input.strip();
+		if (stripped.isEmpty()) {
+			return "";
+		}
 		if (stripped.startsWith("package ")) {
 			return "";
 		}
@@ -544,8 +547,15 @@ class fn Main() => {
 		return Optional.empty();
 	}
 	fn isNumber(input : String) : boolean => {
-		/**/for (var i = 0; i < input.length(); i++) {
-			final var c = input.charAt(i);
+		stripped : String
+		if (input.startsWith("-")) {
+			stripped = input.substring(1);
+		}
+		else {
+			stripped = input;
+		}
+		/**/for (var i = 0; i < stripped.length(); i++) {
+			final var c = stripped.charAt(i);
 			if (Character.isDigit(c)) {
 				continue;
 			}
@@ -820,4 +830,3 @@ class fn Main() => {
 		return i1;
 	}
 }
-/**//**/
