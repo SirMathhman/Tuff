@@ -791,14 +791,7 @@ public class Main {
 						final var compiledExpr = this.compileExpressionOrPlaceholder(expr, indent);
 						if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
 							final var content = withBraces.substring(1, withBraces.length() - 1);
-							final var collect = this
-									.divideStatements(content)
-									.map(String::strip)
-									.filter((String slice) -> !slice.isEmpty())
-									.map((String input1) -> this.compileCase(input1, indent + 1))
-									.map((String slice) -> this.createIndent(indent + 1) + slice)
-									.collect(Collectors.joining());
-
+							final var collect = this.compileCases(indent, content);
 							return Optional.of("match (" + compiledExpr + ") {" + collect + this.createIndent(indent) + "}");
 						}
 					}
@@ -807,6 +800,16 @@ public class Main {
 		}
 
 		return Optional.empty();
+	}
+
+	private String compileCases(int indent, String content) {
+		return this
+				.divideStatements(content)
+				.map(String::strip)
+				.filter((String slice) -> !slice.isEmpty())
+				.map((String input1) -> this.compileCase(input1, indent + 1))
+				.map((String slice) -> this.createIndent(indent + 1) + slice)
+				.collect(Collectors.joining());
 	}
 
 	private String compileCase(String input, int indent) {
@@ -821,7 +824,7 @@ public class Main {
 			}
 		}
 
-		if(stripped.startsWith("default")) {
+		if (stripped.startsWith("default")) {
 			final var i = stripped.indexOf("->");
 			if (i >= 0) {
 				final var substring2 = stripped.substring(i + "->".length());
@@ -833,7 +836,6 @@ public class Main {
 	}
 
 	private String compileDestructuring(String input) {
-		// I'm lazy to do this properly.
 		return input.replace("var ", "").strip();
 	}
 
@@ -915,7 +917,8 @@ public class Main {
 	private int findInvokableStart(String withoutEnd) {
 		var i = -1;
 		var depth = 0;
-		for (var i1 = 0; i1 < withoutEnd.length(); i1++) {
+		var i1 = 0;
+		while (i1 < withoutEnd.length()) {
 			final var c = withoutEnd.charAt(i1);
 			if (c == '(') {
 				if (depth == 0) {
@@ -926,6 +929,7 @@ public class Main {
 			if (c == ')') {
 				depth--;
 			}
+			i1++;
 		}
 		return i;
 	}

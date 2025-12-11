@@ -600,7 +600,7 @@ class fn Main() => {
 						let compiledExpr = this.compileExpressionOrPlaceholder(expr, indent);
 						if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
 							let content = withBraces.substring(1, withBraces.length() - 1);
-							let collect = this.divideStatements(content).map(String::strip).filter((slice : String) => !slice.isEmpty()).map((input1 : String) => this.compileCase(input1, indent + 1)).map((slice : String) => /**/this.createIndent(indent/**/ + /**/1)/**/ + slice).collect(Collectors.joining());
+							let collect = this.compileCases(indent, content);
 							return Optional.of("match (" + compiledExpr + ") {" + collect + this.createIndent(indent) + "}");
 						}
 					}
@@ -608,6 +608,9 @@ class fn Main() => {
 			}
 		}
 		return Optional.empty();
+	}
+	fn compileCases(indent : I32, content : String) : String => {
+		return this.divideStatements(content).map(String::strip).filter((slice : String) => !slice.isEmpty()).map((input1 : String) => this.compileCase(input1, indent + 1)).map((slice : String) => /**/this.createIndent(indent/**/ + /**/1)/**/ + slice).collect(Collectors.joining());
 	}
 	fn compileCase(input : String, indent : I32) : String => {
 		let stripped = input.strip();
@@ -630,8 +633,7 @@ class fn Main() => {
 		return this.wrap(stripped);
 	}
 	fn compileDestructuring(input : String) : String => {
-		/**/// I'm lazy to do this properly.
-		return input/**/.replace("var ", "").strip();
+		return input.replace("var ", "").strip();
 	}
 	fn compileCaseValue(input : String, indent : I32) : String => {
 		let stripped = input.strip();
@@ -695,8 +697,9 @@ class fn Main() => {
 	fn findInvokableStart(withoutEnd : String) : I32 => {
 		let i =  - 1;
 		let depth = 0;
-		/**/for (var i1 = 0; i1 < withoutEnd.length(); i1++) {
-			final var c = withoutEnd.charAt(i1);
+		let i1 = 0;
+		while (i1 < withoutEnd.length()) {
+			let c = withoutEnd.charAt(i1);
 			if (c == '(') {
 				if (depth == 0) {
 					i = i1;
@@ -706,7 +709,8 @@ class fn Main() => {
 			if (c == ')') {
 				depth--;
 			}
-		}/**/
+			i1++;
+		}
 		return i;
 	}
 	fn divideValues(input : String) : Stream<String> => {
