@@ -1,0 +1,11 @@
+{
+  "name": "self-copy-sample",
+  "version": "1.0.0",
+  "description": "A small Node.js program that copies its own source to a new file",
+  "main": "self_copy.js",
+  "scripts": {
+    "test": "node test_self_copy.js"
+  },
+  "author": "",
+  "license": "MIT"
+}
