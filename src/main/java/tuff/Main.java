@@ -130,8 +130,10 @@ public class Main {
 
 			final var appended = state.append(next);
 			if (next == '\"') {
-				return Optional.ofNullable(this.foldDoubleQuotes(state.append(next)));
+				final var value = this.foldDoubleQuotes(appended);
+				return Optional.of(value);
 			}
+
 			return Optional.of(this.foldSingleQuotes(appended));
 		}
 

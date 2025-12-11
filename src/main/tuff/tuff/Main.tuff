@@ -84,30 +84,44 @@ class fn Main() => {
 			}
 		}
 		fn apply(state : State, next : U16) : State => {
-			if (next == '\'') {
-				let appended = state.append(next);
-				return appended.popAndAppendToTuple().map(EscapedFolder::foldSingleEscapeChar).flatMap(State::popAndAppendToOption).orElse(appended);
+			return this.foldQuotes(state, next).orElseGet(() => this.folder.apply(state, next));
+		}
+		fn foldQuotes(state : State, next : U16) : Optional<State> => {
+			if (next != '\'' && next != '\"') {
+				return Optional.empty();
 			}
+			let appended = state.append(next);
 			if (next == '\"') {
-				let appended = state.append(next);
-				while (true) {
-					let maybeTuple = appended.popAndAppendToTuple();
-					if (maybeTuple.isEmpty()) {
-						break;
-					}
-					let tuple = maybeTuple.get();
-					appended = tuple.left;
-					let withinQuotes = tuple.right;
-					if (withinQuotes == '\\') {
-						appended = appended.popAndAppendToOption().orElse(appended);
-					}
-					if (withinQuotes == '\"') {
-						break;
-					}
-				}
-				return appended;
+				let value = this.foldDoubleQuotes(appended);
+				return Optional.of(value);
 			}
-			return this.folder.apply(state, next);
+			return Optional.of(this.foldSingleQuotes(appended));
+		}
+		fn foldSingleQuotes(appended : State) : State => {
+			return appended.popAndAppendToTuple().map(EscapedFolder::foldSingleEscapeChar).flatMap(State::popAndAppendToOption).orElse(appended);
+		}
+		fn foldDoubleQuotes(appended : State) : State => {
+			let current = Tuple<Boolean, State>(true, appended);
+			while (current.left) {
+				current = this.foldInDoubleQuote(current.right);
+			}
+			return current.right;
+		}
+		fn foldInDoubleQuote(state : State) : Tuple<Boolean, State> => {
+			let maybeTuple = state.popAndAppendToTuple();
+			if (maybeTuple.isEmpty()) {
+				return Tuple<Boolean, State>(false, state);
+			}
+			let tuple = maybeTuple.get();
+			let appended = tuple.left;
+			let withinQuotes = tuple.right;
+			if (withinQuotes == '\\') {
+				appended = appended.popAndAppendToOption().orElse(appended);
+			}
+			if (withinQuotes == '\"') {
+				return Tuple<Boolean, State>(false, appended);
+			}
+			return Tuple<Boolean, State>(true, appended);
 		}
 	}
 	class fn StatementFolder() => {
