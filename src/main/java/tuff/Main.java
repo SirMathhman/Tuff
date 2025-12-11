@@ -704,21 +704,24 @@ public class Main {
 				final var divisions = this.findExprEnd(withExpr);
 
 				if (divisions.size() >= 2) {
-					final var expr = divisions.getFirst();
+					final var exprWithSuffix = divisions.getFirst();
 					final var withBraces = String.join("", divisions.subList(1, divisions.size())).strip();
 
-					final var compiledExpr = this.compileExpressionOrPlaceholder(expr, indent);
-					if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
-						final var content = withBraces.substring(1, withBraces.length() - 1);
-						final var collect = this
-								.divideStatements(content)
-								.map(String::strip)
-								.filter((String slice) -> !slice.isEmpty())
-								.map((String input1) -> this.compileCase(input1, indent + 1))
-								.map((String slice) -> this.createIndent(indent + 1) + slice)
-								.collect(Collectors.joining());
+					if (exprWithSuffix.endsWith(")")) {
+						final var expr = exprWithSuffix.substring(0, exprWithSuffix.length() - 1);
+						final var compiledExpr = this.compileExpressionOrPlaceholder(expr, indent);
+						if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
+							final var content = withBraces.substring(1, withBraces.length() - 1);
+							final var collect = this
+									.divideStatements(content)
+									.map(String::strip)
+									.filter((String slice) -> !slice.isEmpty())
+									.map((String input1) -> this.compileCase(input1, indent + 1))
+									.map((String slice) -> this.createIndent(indent + 1) + slice)
+									.collect(Collectors.joining());
 
-						return Optional.of("match (" + compiledExpr + ") {" + collect + this.createIndent(indent) + "}");
+							return Optional.of("match (" + compiledExpr + ") {" + collect + this.createIndent(indent) + "}");
+						}
 					}
 				}
 			}
