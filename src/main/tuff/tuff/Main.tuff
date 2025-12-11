@@ -115,14 +115,14 @@ class fn Main() => {
 	}
 	fn foldStatement(state : State, c : U16) : State => {
 		let appended = state.append(c);
-		if (c == /**/';' && appended/**/.isLevel()) {
+		if (c == ';' && appended.isLevel()) {
 			return appended.advance();
 		}
 		/**/if (c == '}/**/
 		let appended1 : /**/{
 			var/**/ = appended;
 		let peeked = appended.peek();
-		if (peeked == /**/';'/**/) {
+		if (peeked == ';') {
 			/**/appended1 /**/ = appended.popAndAppendToOption().orElse(appended);
 		}
 		/**/else {
@@ -457,17 +457,27 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 
 		return this
 				.compileInvokable(input, indent)
-				.or(() -> this
-						.compileString(input)
-						.or(() -> this.compileSwitch(input, indent))
-						.or(() -> this.compileAccess(input, indent, "."))
-						.or(() -> this.compileOperation(indent, input, "<"))
-						.or(() -> this.compileOperation(indent, input, "+"))
-						.or(() -> this.compileOperation(indent, input, "-"))
-						.or(() -> this.compileOperation(indent, input, "=="))
-						.or(() -> this.compileAccess(input, indent, "::"))
-						.or(() -> this.compileIdentifier(input)))
-				.or(() -> this.compileNumber(input));
+				.or(() -> this.compileString(input))
+				.or(() -> this.compileSwitch(input, indent))
+				.or(() -> this.compileAccess(input, indent, "."))
+				.or(() -> this.compileOperation(indent, input, "<"))
+				.or(() -> this.compileOperation(indent, input, "+"))
+				.or(() -> this.compileOperation(indent, input, "-"))
+				.or(() -> this.compileOperation(indent, input, "=="))
+				.or(() -> this.compileOperation(indent, input, "&&"))
+				.or(() -> this.compileAccess(input, indent, "::"))
+				.or(() -> this.compileIdentifier(input))
+				.or(() -> this.compileNumber(input))
+				.or(() -> this.compileChar(input));
+	}
+
+	private Optional<String> compileChar(String input) {
+		final var stripped = input.strip();
+		if (stripped.startsWith("'") && stripped.endsWith("'")) {
+			return Optional.of(stripped);
+		} else {
+			return Optional.empty();
+		}
 	}
 
 	private Optional<String> compileAccess(String input, int indent, String separator) {
@@ -739,7 +749,7 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 	private TuffDeclarationOrPlaceholder parseDefinitionOrPlaceholderToTuff(String input) {
 		return this
 				.parseDefinitionToTuff(input)
-				.<TuffDeclarationOrPlaceholder>map(value -> value)
+				.<TuffDeclarationOrPlaceholder>map((TuffDeclaration value) -> value)
 				.orElseGet(() -> new Placeholder(input));
 	}
 

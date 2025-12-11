@@ -547,17 +547,27 @@ public class Main {
 
 		return this
 				.compileInvokable(input, indent)
-				.or(() -> this
-						.compileString(input)
-						.or(() -> this.compileSwitch(input, indent))
-						.or(() -> this.compileAccess(input, indent, "."))
-						.or(() -> this.compileOperation(indent, input, "<"))
-						.or(() -> this.compileOperation(indent, input, "+"))
-						.or(() -> this.compileOperation(indent, input, "-"))
-						.or(() -> this.compileOperation(indent, input, "=="))
-						.or(() -> this.compileAccess(input, indent, "::"))
-						.or(() -> this.compileIdentifier(input)))
-				.or(() -> this.compileNumber(input));
+				.or(() -> this.compileString(input))
+				.or(() -> this.compileSwitch(input, indent))
+				.or(() -> this.compileAccess(input, indent, "."))
+				.or(() -> this.compileOperation(indent, input, "<"))
+				.or(() -> this.compileOperation(indent, input, "+"))
+				.or(() -> this.compileOperation(indent, input, "-"))
+				.or(() -> this.compileOperation(indent, input, "=="))
+				.or(() -> this.compileOperation(indent, input, "&&"))
+				.or(() -> this.compileAccess(input, indent, "::"))
+				.or(() -> this.compileIdentifier(input))
+				.or(() -> this.compileNumber(input))
+				.or(() -> this.compileChar(input));
+	}
+
+	private Optional<String> compileChar(String input) {
+		final var stripped = input.strip();
+		if (stripped.startsWith("'") && stripped.endsWith("'")) {
+			return Optional.of(stripped);
+		} else {
+			return Optional.empty();
+		}
 	}
 
 	private Optional<String> compileAccess(String input, int indent, String separator) {
@@ -829,7 +839,7 @@ public class Main {
 	private TuffDeclarationOrPlaceholder parseDefinitionOrPlaceholderToTuff(String input) {
 		return this
 				.parseDefinitionToTuff(input)
-				.<TuffDeclarationOrPlaceholder>map(value -> value)
+				.<TuffDeclarationOrPlaceholder>map((TuffDeclaration value) -> value)
 				.orElseGet(() -> new Placeholder(input));
 	}
 
