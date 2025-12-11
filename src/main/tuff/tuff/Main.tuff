@@ -210,7 +210,7 @@ class fn Main() => {
 			let slice = stripped.substring("import ".length(), stripped.length() - 1);
 			let copy = Arrays.asList(slice.split(Pattern.quote(".")));
 			let namespace = copy.subList(0, copy.size() - 1);
-			if (/**/!this/**/.imports.containsKey(namespace)) {
+			if (!this.imports.containsKey(namespace)) {
 				this.imports.put(namespace, ArrayList<String>());
 			}
 			this.imports.get(namespace).add(copy.getLast());
@@ -230,7 +230,7 @@ class fn Main() => {
 		return/**/;
 	}
 	fn compileParameters(input : String) : List<String> => {
-		return this.divideValues(input).map(String::strip).filter((slice : String) => /**/!slice/**/.isEmpty()).map(this::compileDefinitionOrPlaceholder).toList();
+		return this.divideValues(input).map(String::strip).filter((slice : String) => !slice.isEmpty()).map(this::compileDefinitionOrPlaceholder).toList();
 	}
 	fn createIndent(indent : I32) : String => {
 		return System.lineSeparator() + "\t".repeat(indent);
@@ -253,7 +253,7 @@ class fn Main() => {
 		}
 		let i1 = input.indexOf("interface ");
 		if (/**/i1 >= 0/**/) {
-			let modifiers = Arrays.stream(input.substring(0, i1).split(Pattern.quote(" "))).map(String::strip).filter((slice : String) => /**/!slice/**/.isEmpty()).toList();
+			let modifiers = Arrays.stream(input.substring(0, i1).split(Pattern.quote(" "))).map(String::strip).filter((slice : String) => !slice.isEmpty()).toList();
 			let afterKeyword = input.substring(i1 + "interface ".length());
 			if (modifiers.contains("sealed")) {
 				let i = afterKeyword.indexOf("permits ");
@@ -265,7 +265,7 @@ class fn Main() => {
 						let i2 = slice.indexOf("<");
 						if (/**/i2 >= 0/**/) {
 							name = slice.substring(0, i2);
-							typeParameters = Arrays.stream(slice.substring(i2 + 1).split(Pattern.quote(", "))).map(String::strip).filter((segment : String) => /**/!segment/**/.isEmpty()).toList();
+							typeParameters = Arrays.stream(slice.substring(i2 + 1).split(Pattern.quote(", "))).map(String::strip).filter((segment : String) => !segment.isEmpty()).toList();
 						}
 					}
 					let stripped = afterKeyword.substring(i + "permits ".length()).strip();
@@ -480,6 +480,12 @@ class fn Main() => {
 
 				return Optional.of("(" + compiled + ")" + " => " + compiled1);
 			}
+		}
+
+		final var stripped = input.strip();
+		if (stripped.startsWith("!")) {
+			final var substring = stripped.substring(1);
+			return Optional.of("!" + this.compileExpressionOrPlaceholder(substring, indent));
 		}
 
 		return this

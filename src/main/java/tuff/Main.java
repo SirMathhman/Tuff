@@ -629,6 +629,12 @@ public class Main {
 			}
 		}
 
+		final var stripped = input.strip();
+		if (stripped.startsWith("!")) {
+			final var substring = stripped.substring(1);
+			return Optional.of("!" + this.compileExpressionOrPlaceholder(substring, indent));
+		}
+
 		return this
 				.compileInvokable(input, indent)
 				.or(() -> this.compileString(input))
