@@ -69,15 +69,19 @@ class fn Main() => {
 	}
 	class fn WrappedExpression(value : String) => {
 	}
-	class fn EscapedFolder() => {
-		folder : Folder;
-		fn EscapedFolder(folder : Folder) : public => {
-			this.folder = folder;
+	class fn EscapedFolder(folder : Folder) => {
+		fn foldSingleEscapeChar(tuple : Tuple<State, U16>) : State => {
+			if (tuple.right == '\\') {
+				return tuple.left.popAndAppendToOption().orElse(tuple.left);
+			}
+			else {
+				return tuple.left;
+			}
 		}
 		fn apply(state : State, next : U16) : State => {
 			if (next == '\'') {
 				let appended = state.append(next);
-				return appended.popAndAppendToTuple().map(Main.this::foldSingleEscapeChar).flatMap(State::popAndAppendToOption).orElse(appended);
+				return appended.popAndAppendToTuple().map(EscapedFolder::foldSingleEscapeChar).flatMap(State::popAndAppendToOption).orElse(appended);
 			}
 			return this.folder.apply(state, next);
 		}
@@ -92,12 +96,12 @@ class fn Main() => {
 				let appended1 = appended;
 				let peeked = appended.peek();
 				if (peeked == ';') {
-					/**/appended1 /**/ = appended.popAndAppendToOption().orElse(appended);
+					appended1 = appended.popAndAppendToOption().orElse(appended);
 				}
-				/**/else {
+				else {
 					appended1 = appended1.advance();
-				}/**/
-				return /**/appended1/**/.exit();
+				}
+				return appended1.exit();
 			}
 			/**/if (character == '{' || character == '(') {
 				return appended.enter();
@@ -117,8 +121,8 @@ class fn Main() => {
 			if (character == ' - ') {
 				if (appended.peek() == '>') {
 					let state1 = appended.popAndAppendToOption();
-					if (/**/state1/**/.isPresent()) {
-						return /**/state1/**/.get();
+					if (state1.isPresent()) {
+						return state1.get();
 					}
 				}
 			}
@@ -162,14 +166,6 @@ class fn Main() => {
 	}
 	fn divideStatements(input : String) : Stream<String> => {
 		return this.divide(input, EscapedFolder(StatementFolder()));
-	}
-	fn foldSingleEscapeChar(tuple : Tuple<State, U16>) : State => {
-		if (tuple.right == '\\') {
-			return tuple.left.popAndAppendToOption().orElse(tuple.left);
-		}
-		/**/else {
-			return tuple.left;
-		}/**/
 	}
 	fn divide(input : String, folder : Folder) : Stream<String> => {
 		let segments = ArrayList<String>();
@@ -242,8 +238,8 @@ class fn Main() => {
 		}
 		let i1 = input.indexOf("interface ");
 		if (/**/i1 >= 0/**/) {
-			let modifiers = Arrays.stream(input.substring(0, /**/i1/**/).split(Pattern.quote(" "))).map(String::strip).filter((slice : String) => /**/!slice/**/.isEmpty()).toList();
-			let afterKeyword = input.substring(/**/i1/**/ + "interface ".length());
+			let modifiers = Arrays.stream(input.substring(0, i1).split(Pattern.quote(" "))).map(String::strip).filter((slice : String) => /**/!slice/**/.isEmpty()).toList();
+			let afterKeyword = input.substring(i1 + "interface ".length());
 			if (modifiers.contains("sealed")) {
 				let i = afterKeyword.indexOf("permits ");
 				if (/**/i >= 0/**/) {
@@ -253,8 +249,8 @@ class fn Main() => {
 						let slice = name.substring(0, name.length() - 1);
 						let i2 = slice.indexOf("<");
 						if (/**/i2 >= 0/**/) {
-							name = slice.substring(0, /**/i2/**/);
-							typeParameters = Arrays.stream(slice.substring(/**/i2/**/ + 1).split(Pattern.quote(", "))).map(String::strip).filter((segment : String) => /**/!segment/**/.isEmpty()).toList();
+							name = slice.substring(0, i2);
+							typeParameters = Arrays.stream(slice.substring(i2 + 1).split(Pattern.quote(", "))).map(String::strip).filter((segment : String) => /**/!segment/**/.isEmpty()).toList();
 						}
 					}
 					let stripped = afterKeyword.substring(i + "permits ".length()).strip();
@@ -262,9 +258,9 @@ class fn Main() => {
 					if (typeParameters.isEmpty()) {
 						joinedTypeParameters = "";
 					}
-					/**/else {
+					else {
 						joinedTypeParameters = "<" + String.join(", ", typeParameters) + ">";
-					}/**/
+					}
 					/**/final var i2 = stripped.indexOf("{");
 					if (i2 >= 0) {
 						final var variants = Arrays
@@ -352,6 +348,14 @@ class fn Main() => {
 			final var maybeInitialization = this.compileMethodStatementValue(slice, indent);
 			if (maybeInitialization.isPresent()) {
 				return maybeInitialization.get() + ";";
+			}
+		}
+
+		if (stripped.startsWith("else")) {
+			final var slice = stripped.substring(4).strip();
+			if (slice.startsWith("{") && slice.endsWith("}")) {
+				final var substring = slice.substring(1, slice.length() - 1);
+				return "else {" + this.compileMethodStatements(substring, indent) + this.createIndent(indent) + "}";
 			}
 		}
 
@@ -840,7 +844,7 @@ class fn Main() => {
 		final var stripped = input.strip();
 		for (var i = 0; i/**/ < /**/stripped.length(); i/**/ +  + /**/) {
 			final var c = stripped.charAt(i);
-			if (Character.isLetter(c)) {continue;}
+			if (Character.isLetter(c) || (i != 0/**/ && /**/Character.isDigit(c))) {continue;}
 			return false;
 		}
 		return true;

@@ -102,10 +102,14 @@ public class Main {
 
 	private record WrappedExpression(String value) implements TuffExpression {}
 
-	private final class EscapedFolder implements Folder {
-		private final Folder folder;
-
-		public EscapedFolder(Folder folder) {this.folder = folder;}
+	private record EscapedFolder(Folder folder) implements Folder {
+		private static State foldSingleEscapeChar(Tuple<State, Character> tuple) {
+			if (tuple.right == '\\') {
+				return tuple.left.popAndAppendToOption().orElse(tuple.left);
+			} else {
+				return tuple.left;
+			}
+		}
 
 		@Override
 		public State apply(State state, Character next) {
@@ -113,7 +117,7 @@ public class Main {
 				final var appended = state.append(next);
 				return appended
 						.popAndAppendToTuple()
-						.map(Main.this::foldSingleEscapeChar)
+						.map(EscapedFolder::foldSingleEscapeChar)
 						.flatMap(State::popAndAppendToOption)
 						.orElse(appended);
 			}
@@ -230,14 +234,6 @@ public class Main {
 
 	private Stream<String> divideStatements(String input) {
 		return this.divide(input, new EscapedFolder(new StatementFolder()));
-	}
-
-	private State foldSingleEscapeChar(Tuple<State, Character> tuple) {
-		if (tuple.right == '\\') {
-			return tuple.left.popAndAppendToOption().orElse(tuple.left);
-		} else {
-			return tuple.left;
-		}
 	}
 
 	private Stream<String> divide(String input, Folder folder) {
@@ -486,6 +482,14 @@ public class Main {
 			final var maybeInitialization = this.compileMethodStatementValue(slice, indent);
 			if (maybeInitialization.isPresent()) {
 				return maybeInitialization.get() + ";";
+			}
+		}
+
+		if (stripped.startsWith("else")) {
+			final var slice = stripped.substring(4).strip();
+			if (slice.startsWith("{") && slice.endsWith("}")) {
+				final var substring = slice.substring(1, slice.length() - 1);
+				return "else {" + this.compileMethodStatements(substring, indent) + this.createIndent(indent) + "}";
 			}
 		}
 
@@ -986,7 +990,7 @@ public class Main {
 		final var stripped = input.strip();
 		for (var i = 0; i < stripped.length(); i++) {
 			final var c = stripped.charAt(i);
-			if (Character.isLetter(c)) {continue;}
+			if (Character.isLetter(c) || (i != 0 && Character.isDigit(c))) {continue;}
 			return false;
 		}
 		return true;
