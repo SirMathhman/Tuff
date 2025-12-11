@@ -620,6 +620,13 @@ class fn Main() => {
 				return this.compileDestructuring(substring1) + " => " + this.compileCaseValue(substring2, indent);
 			}
 		}
+		if (stripped.startsWith("default")) {
+			let i = stripped.indexOf("->");
+			if (i >= 0) {
+				let substring2 = stripped.substring(i + "->".length());
+				return "default => " + this.compileCaseValue(substring2, indent);
+			}
+		}
 		return this.wrap(stripped);
 	}
 	fn compileDestructuring(input : String) : String => {
@@ -805,18 +812,12 @@ class fn Main() => {
 		return Optional.empty();
 	}
 	fn compilePrimitiveType(stripped : String) : Optional<String> => {
-		/**/switch (stripped) {
-			case "char", "Character" -> {
-				return Optional.of("U16");
-			}
-			case "int" -> {
-				return Optional.of("I32");
-			}
-			case "void" -> {
-				return Optional.of("Void");
-			}
-		}/**/
-		return Optional.empty();
+		return match (stripped) {
+			"char", "Character" => Optional.of("U16");
+			"int" => Optional.of("I32");
+			"void" => Optional.of("Void");
+			default => Optional.empty();
+		};
 	}
 	fn isIdentifier(input : String) : boolean => {
 		let stripped = input.strip();

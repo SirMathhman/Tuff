@@ -821,6 +821,14 @@ public class Main {
 			}
 		}
 
+		if(stripped.startsWith("default")) {
+			final var i = stripped.indexOf("->");
+			if (i >= 0) {
+				final var substring2 = stripped.substring(i + "->".length());
+				return "default => " + this.compileCaseValue(substring2, indent);
+			}
+		}
+
 		return this.wrap(stripped);
 	}
 
@@ -1056,19 +1064,12 @@ public class Main {
 	}
 
 	private Optional<String> compilePrimitiveType(String stripped) {
-		switch (stripped) {
-			case "char", "Character" -> {
-				return Optional.of("U16");
-			}
-			case "int" -> {
-				return Optional.of("I32");
-			}
-			case "void" -> {
-				return Optional.of("Void");
-			}
-		}
-
-		return Optional.empty();
+		return switch (stripped) {
+			case "char", "Character" -> Optional.of("U16");
+			case "int" -> Optional.of("I32");
+			case "void" -> Optional.of("Void");
+			default -> Optional.empty();
+		};
 	}
 
 	private boolean isIdentifier(String input) {
