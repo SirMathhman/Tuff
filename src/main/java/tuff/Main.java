@@ -17,9 +17,15 @@ import java.util.stream.Collectors;
 public class Main {
 	private sealed interface Result<T, X> permits Err, Ok {}
 
+	private sealed interface TuffDeclarationOrPlaceholder permits Placeholder, TuffDeclaration {}
+
 	private record Err<T, X>(X error) implements Result<T, X> {}
 
 	private record Ok<T, X>(T value) implements Result<T, X> {}
+
+	private record TuffDeclaration(String name, String type) implements TuffDeclarationOrPlaceholder {}
+
+	private record Placeholder(String input) implements TuffDeclarationOrPlaceholder {}
 
 	private final Map<List<String>, List<String>> imports = new HashMap<List<String>, List<String>>();
 
@@ -236,7 +242,32 @@ public class Main {
 			}
 		}
 
-		return this.compileStructure("record", input, indent).orElseGet(() -> this.wrap(input));
+		final var maybeRecord = this.compileStructure("record", input, indent);
+		if (maybeRecord.isPresent()) {
+			return maybeRecord.get();
+		}
+
+		final var i = input.indexOf("(");
+		if (i >= 0) {
+			final var substring = input.substring(0, i);
+			final var withParameters = input.substring(i + 1);
+			final var i2 = withParameters.indexOf(")");
+			if (i2 >= 0) {
+				final var parameters = withParameters.substring(0, i2);
+				final var withBraces = withParameters.substring(i2 + 1).strip();
+				final var declarationOrPlaceholder = this.parseDefinitionOrPlaceholderToTuff(substring);
+				final var compiledParameters = this.compileDefinition(parameters);
+
+				if (declarationOrPlaceholder instanceof TuffDeclaration(String name, String type)) {
+					if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
+						final var content = withBraces.substring(1, withBraces.length() - 1);
+						return "fn " + name + "(" + compiledParameters + ") : " + type + " => {" + this.wrap(content) + "}";
+					}
+				}
+			}
+		}
+
+		return this.wrap(input);
 
 	}
 
@@ -284,6 +315,17 @@ public class Main {
 	}
 
 	private String compileDefinition(String input) {
+		return this.generateDefinitionOrPlaceholder(this.parseDefinitionOrPlaceholderToTuff(input));
+	}
+
+	private String generateDefinitionOrPlaceholder(TuffDeclarationOrPlaceholder string) {
+		return switch (string) {
+			case TuffDeclaration tuffDeclaration -> tuffDeclaration.name + " : " + tuffDeclaration.type;
+			case Placeholder placeholder -> this.wrap(placeholder.input);
+		};
+	}
+
+	private TuffDeclarationOrPlaceholder parseDefinitionOrPlaceholderToTuff(String input) {
 		final var stripped = input.strip();
 		final var i = stripped.lastIndexOf(" ");
 		if (i >= 0) {
@@ -292,17 +334,23 @@ public class Main {
 			final var i1 = this.findTypeSeparator(beforeName);
 			if (i1 >= 0) {
 				final var type = beforeName.substring(i1 + 1);
-				return name + " : " + this.compileType(type);
+				final var compiled = this.compileType(type);
+				return new TuffDeclaration(name, compiled);
 			} else {
-				return name + " : " + this.compileType(beforeName);
+				final var compiled = this.compileType(beforeName);
+				return new TuffDeclaration(name, compiled);
 			}
 		}
 
-		return this.wrap(stripped);
+		return new Placeholder(stripped);
 	}
 
 	private String compileType(String input) {
 		final var stripped = input.strip();
+		if (stripped.equals("void")) {
+			return "Void";
+		}
+
 		final var i = stripped.indexOf("<");
 		if (i >= 0) {
 			final var base = stripped.substring(0, i);
@@ -318,6 +366,11 @@ public class Main {
 
 		if (this.isIdentifier(stripped)) {
 			return stripped;
+		}
+
+		if (stripped.endsWith("[]")) {
+			final var substring = stripped.substring(0, stripped.length() - 2);
+			return "*[" + substring + "]";
 		}
 
 		return this.wrap(stripped);

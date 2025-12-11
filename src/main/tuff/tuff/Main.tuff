@@ -6,15 +6,20 @@ from java::util use { ArrayList, Arrays, HashMap, List, Map, Optional };
 from java::util::regex use { Pattern };
 class fn Main() => {
 	type Result<T, X> = Err<T, X> | Ok<T, X>;
+	type TuffDeclarationOrPlaceholder = Placeholder | TuffDeclaration;
 	class fn Err<T, X>(error : X) => {
 	}
 	class fn Ok<T, X>(value : T) => {
 	}
+	class fn TuffDeclaration(name : String, type : String) => {
+	}
+	class fn Placeholder(input : String) => {
+	}
 	let imports : Map<List<String>, List<String>> = HashMap<List<String>, List<String>>();
-	/*Raw*/public static void main(String[] args) {
+	fn main(args : *[String]) : Void => {/*Raw*/
 		new Main().run().ifPresent(Throwable::printStackTrace);
 	}
-	/*Raw*/private Optional<IOException> run() {
+	fn run(/*Raw*/) : Optional<IOException> => {/*Raw*/
 		final var source = Paths.get(".", "src", "main", "java", "tuff", "Main.java");
 		final var target = Paths.get(".", "src", "main", "tuff", "tuff", "Main.tuff");
 		return switch (this.readString(source)) {
@@ -25,7 +30,7 @@ class fn Main() => {
 			}
 		};
 	}
-	/*Raw*/private Optional<IOException> writeString(Path target, String output) {
+	fn writeString(output : String) : Optional<IOException> => {/*Raw*/
 		try {
 			Files.writeString(target, output);
 			return Optional.empty();
@@ -33,14 +38,14 @@ class fn Main() => {
 			return Optional.of(e);
 		}
 	}
-	/*Raw*/private Result<String, IOException> readString(Path source) {
+	fn readString(source : Path) : Result<String, IOException> => {/*Raw*/
 		try {
 			return new Ok<String, IOException>(Files.readString(source));
 		} catch (IOException e) {
 			return new Err<String, IOException>(e);
 		}
 	}
-	/*Raw*/private String compile(String input) {
+	fn compile(input : String) : String => {/*Raw*/
 		final var compiled = this.compileStatements(input, this::compileRootSegment);
 		final var useStatements = this.imports.entrySet().stream().map(entry -> {
 			final var usedNamespace = String.join("::", entry.getKey());
@@ -50,7 +55,7 @@ class fn Main() => {
 
 		return useStatements + compiled;
 	}
-	/*Raw*/private String compileStatements(String input, Function<String, String> mapper) {
+	fn compileStatements(mapper : Function<String, String>) : String => {/*Raw*/
 		final var segments = new ArrayList<String>();
 		var buffer = new StringBuilder();
 		var depth = 0;
@@ -181,7 +186,32 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 			}
 		}
 
-		return this.compileStructure("record", input, indent).orElseGet(() -> this.wrap(input));
+		final var maybeRecord = this.compileStructure("record", input, indent);
+		if (maybeRecord.isPresent()) {
+			return maybeRecord.get();
+		}
+
+		final var i = input.indexOf("(");
+		if (i >= 0) {
+			final var substring = input.substring(0, i);
+			final var withParameters = input.substring(i + 1);
+			final var i2 = withParameters.indexOf(")");
+			if (i2 >= 0) {
+				final var parameters = withParameters.substring(0, i2);
+				final var withBraces = withParameters.substring(i2 + 1).strip();
+				final var declarationOrPlaceholder = this.parseDefinitionOrPlaceholderToTuff(substring);
+				final var compiledParameters = this.compileDefinition(parameters);
+
+				if (declarationOrPlaceholder instanceof TuffDeclaration(String name, String type)) {
+					if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
+						final var content = withBraces.substring(1, withBraces.length() - 1);
+						return "fn " + name + "(" + compiledParameters + ") : " + type + " => {" + this.wrap(content) + "}";
+					}
+				}
+			}
+		}
+
+		return this.wrap(input);
 
 	}
 
@@ -229,6 +259,17 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 	}
 
 	private String compileDefinition(String input) {
+		return this.generateDefinitionOrPlaceholder(this.parseDefinitionOrPlaceholderToTuff(input));
+	}
+
+	private String generateDefinitionOrPlaceholder(TuffDeclarationOrPlaceholder string) {
+		return switch (string) {
+			case TuffDeclaration tuffDeclaration -> tuffDeclaration.name + " : " + tuffDeclaration.type;
+			case Placeholder placeholder -> this.wrap(placeholder.input);
+		};
+	}
+
+	private TuffDeclarationOrPlaceholder parseDefinitionOrPlaceholderToTuff(String input) {
 		final var stripped = input.strip();
 		final var i = stripped.lastIndexOf(" ");
 		if (i >= 0) {
@@ -237,17 +278,23 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 			final var i1 = this.findTypeSeparator(beforeName);
 			if (i1 >= 0) {
 				final var type = beforeName.substring(i1 + 1);
-				return name + " : " + this.compileType(type);
+				final var compiled = this.compileType(type);
+				return new TuffDeclaration(name, compiled);
 			} else {
-				return name + " : " + this.compileType(beforeName);
+				final var compiled = this.compileType(beforeName);
+				return new TuffDeclaration(name, compiled);
 			}
 		}
 
-		return this.wrap(stripped);
+		return new Placeholder(stripped);
 	}
 
 	private String compileType(String input) {
 		final var stripped = input.strip();
+		if (stripped.equals("void")) {
+			return "Void";
+		}
+
 		final var i = stripped.indexOf("<");
 		if (i >= 0) {
 			final var base = stripped.substring(0, i);
@@ -263,6 +310,11 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 
 		if (this.isIdentifier(stripped)) {
 			return stripped;
+		}
+
+		if (stripped.endsWith("[]")) {
+			final var substring = stripped.substring(0, stripped.length() - 2);
+			return "*[" + substring + "]";
 		}
 
 		return this.wrap(stripped);
