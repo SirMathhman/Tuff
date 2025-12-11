@@ -120,39 +120,48 @@ public class Main {
 
 		@Override
 		public State apply(State state, Character next) {
-			if (next == '\'') {
-				final var appended = state.append(next);
-				return appended
-						.popAndAppendToTuple()
-						.map(EscapedFolder::foldSingleEscapeChar)
-						.flatMap(State::popAndAppendToOption)
-						.orElse(appended);
+			return this.foldQuotes(state, next).orElseGet(() -> this.folder.apply(state, next));
+		}
+
+		private Optional<State> foldQuotes(State state, Character next) {
+			if (next != '\'' && next != '\"') {
+				return Optional.empty();
 			}
 
+			final var appended = state.append(next);
 			if (next == '\"') {
-				var appended = state.append(next);
-				while (true) {
-					final var maybeTuple = appended.popAndAppendToTuple();
-					if (maybeTuple.isEmpty()) {
-						break;
-					}
+				return Optional.ofNullable(this.foldDoubleQuotes(state.append(next)));
+			}
+			return Optional.of(this.foldSingleQuotes(appended));
+		}
 
-					final var tuple = maybeTuple.get();
-					appended = tuple.left;
+		private State foldSingleQuotes(State appended) {
+			return appended
+					.popAndAppendToTuple()
+					.map(EscapedFolder::foldSingleEscapeChar)
+					.flatMap(State::popAndAppendToOption)
+					.orElse(appended);
+		}
 
-					final var withinQuotes = tuple.right;
-					if (withinQuotes == '\\') {
-						appended = appended.popAndAppendToOption().orElse(appended);
-					}
-					if (withinQuotes == '\"') {
-						break;
-					}
+		private State foldDoubleQuotes(State appended) {
+			while (true) {
+				final var maybeTuple = appended.popAndAppendToTuple();
+				if (maybeTuple.isEmpty()) {
+					break;
 				}
 
-				return appended;
-			}
+				final var tuple = maybeTuple.get();
+				appended = tuple.left;
 
-			return this.folder.apply(state, next);
+				final var withinQuotes = tuple.right;
+				if (withinQuotes == '\\') {
+					appended = appended.popAndAppendToOption().orElse(appended);
+				}
+				if (withinQuotes == '\"') {
+					return appended;
+				}
+			}
+			return appended;
 		}
 	}
 
