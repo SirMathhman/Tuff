@@ -724,6 +724,10 @@ public class Main {
 
 	private String compileType(String input) {
 		final var stripped = input.strip();
+		if (stripped.equals("Character")) {
+			return "U16";
+		}
+
 		if (stripped.equals("int")) {
 			return "I32";
 		}
@@ -739,7 +743,7 @@ public class Main {
 			if (substring1.endsWith(">")) {
 				final var args = substring1.substring(0, substring1.length() - 1);
 				final var joinedTypeArguments =
-						Arrays.stream(args.split(Pattern.quote(","))).map(this::compileType).collect(Collectors.joining(", "));
+						this.divideValues(args).map(this::compileType).collect(Collectors.joining(", "));
 
 				return base + "<" + joinedTypeArguments + ">";
 			}

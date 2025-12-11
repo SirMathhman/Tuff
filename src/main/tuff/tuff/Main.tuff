@@ -20,7 +20,7 @@ class fn Main() => {
 	class fn Tuple<Left, Right>(left : Left, right : Right) => {
 	}
 	class fn State(input : String, index : I32, buffer : StringBuilder, depth : I32, segments : ArrayList<String>) => {
-		fn pop() : Optional</*<*/Tuple<State/*>*/, /*<*/Character>/*>*/> => {
+		fn pop() : Optional<Tuple<State, U16>> => {
 			/*<*/if (this.index < this.input.length()) {
 				final var c = this.input.charAt(this.index);
 				final var state = new State(this.input, this.index + 1, this.buffer, this.depth, this.segments);
@@ -55,7 +55,7 @@ class fn Main() => {
 			return this.segments.stream();
 		}
 		fn popAndAppendToOption() : Optional<State> => {
-			return this.pop().map((tuple : Tuple<State, Character>) => /*<*/ tuple.left.append(tuple.right)/*>*/);
+			return this.pop().map((tuple : Tuple<State, U16>) => /*<*/ tuple.left.append(tuple.right)/*>*/);
 		}
 	}
 	let imports : Map<List<String>, List<String>> = HashMap<List<String>, List<String>>();
@@ -637,6 +637,10 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 
 	private String compileType(String input) {
 		final var stripped = input.strip();
+		if (stripped.equals("Character")) {
+			return "U16";
+		}
+
 		if (stripped.equals("int")) {
 			return "I32";
 		}
@@ -652,7 +656,7 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 			if (substring1.endsWith(">")) {
 				final var args = substring1.substring(0, substring1.length() - 1);
 				final var joinedTypeArguments =
-						Arrays.stream(args.split(Pattern.quote(","))).map(this::compileType).collect(Collectors.joining(", "));
+						this.divideValues(args).map(this::compileType).collect(Collectors.joining(", "));
 
 				return base + "<" + joinedTypeArguments + ">";
 			}
