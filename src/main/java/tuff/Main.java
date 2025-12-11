@@ -122,6 +122,29 @@ public class Main {
 						.orElse(appended);
 			}
 
+			if (next == '\"') {
+				var appended = state.append(next);
+				while (true) {
+					final var maybeTuple = appended.popAndAppendToTuple();
+					if (maybeTuple.isEmpty()) {
+						break;
+					}
+
+					final var tuple = maybeTuple.get();
+					appended = tuple.left;
+
+					final var withinQuotes = tuple.right;
+					if (withinQuotes == '\\') {
+						appended = appended.popAndAppendToOption().orElse(appended);
+					}
+					if (withinQuotes == '\"') {
+						break;
+					}
+				}
+
+				return appended;
+			}
+
 			return this.folder.apply(state, next);
 		}
 	}
@@ -313,6 +336,11 @@ public class Main {
 					name = name.substring(0, i2).strip();
 				}
 
+				final var i4 = name.indexOf(" implements ");
+				if (i4 >= 0) {
+					name = name.substring(0, i4).strip();
+				}
+
 				List<String> parameters = new ArrayList<String>();
 				if (name.endsWith(")")) {
 					final var withParameters = name.substring(0, name.length() - 1).strip();
@@ -324,14 +352,24 @@ public class Main {
 					}
 				}
 
+				if (name.endsWith(">")) {
+					final var stripped = name.substring(0, name.length() - 1).strip();
+					final var i3 = stripped.indexOf("<");
+					if (i3 >= 0) {
+						name = stripped.substring(0, i3).strip();
+					}
+				}
+
 				final var substring1 = afterKeyword.substring(i1 + 1).strip();
 				if (substring1.endsWith("}")) {
 					final var body = substring1.substring(0, substring1.length() - 1);
-					final var compiled =
-							this.compileStatements(body, (String input1) -> this.compileStructureSegment(input1, indent + 1));
-					final var generated = "class fn " + name + "(" + String.join(", ", parameters) + ") => {" + compiled +
-																this.createIndent(indent) + "}";
-					return Optional.of(generated);
+					if (this.isIdentifier(name)) {
+						final var compiled =
+								this.compileStatements(body, (String input1) -> this.compileStructureSegment(input1, indent + 1));
+						final var generated = "class fn " + name + "(" + String.join(", ", parameters) + ") => {" + compiled +
+																	this.createIndent(indent) + "}";
+						return Optional.of(generated);
+					}
 				}
 			}
 		}
@@ -461,7 +499,7 @@ public class Main {
 			}
 		}
 
-		if (input.contains("@interface")) {
+		if (input.indexOf("@interface") >= 0) {
 			return "";
 		}
 
@@ -616,7 +654,7 @@ public class Main {
 			final var maybeWithBraces = input.substring(i + 2).strip();
 			if (beforeArrow.startsWith("(") && beforeArrow.endsWith(")")) {
 				final var substring = beforeArrow.substring(1, beforeArrow.length() - 1);
-				final var compiled = String.join(", ", compileParameters(substring));
+				final var compiled = String.join(", ", this.compileParameters(substring));
 				final String compiled1;
 				if (maybeWithBraces.startsWith("{") && maybeWithBraces.endsWith("}")) {
 					final var body = maybeWithBraces.substring(1, maybeWithBraces.length() - 1);
@@ -641,6 +679,7 @@ public class Main {
 				.or(() -> this.compileSwitch(input, indent))
 				.or(() -> this.compileAccess(input, indent, "."))
 				.or(() -> this.compileOperation(indent, input, "<"))
+				.or(() -> this.compileOperation(indent, input, ">="))
 				.or(() -> this.compileOperation(indent, input, "+"))
 				.or(() -> this.compileOperation(indent, input, "-"))
 				.or(() -> this.compileOperation(indent, input, "=="))

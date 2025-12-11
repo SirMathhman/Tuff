@@ -12,15 +12,15 @@ class fn Main() => {
 	type TuffExpression extends TuffLValue = WrappedExpression;
 	type TuffLValue = Placeholder | TuffDeclaration | TuffExpression;
 	type Folder = EscapedFolder | ExprEndFolder | StatementFolder | ValueFolder;
-	class fn Err<T, X>(error : X) => {
+	class fn Err(error : X) => {
 	}
-	class fn Ok<T, X>(value : T) => {
+	class fn Ok(value : T) => {
 	}
 	class fn TuffDeclaration(modifiers : List<String>, name : String, type : String) => {
 	}
 	class fn Placeholder(input : String) => {
 	}
-	class fn Tuple<Left, Right>(left : Left, right : Right) => {
+	class fn Tuple(left : Left, right : Right) => {
 	}
 	class fn State(input : String, index : I32, buffer : StringBuilder, depth : I32, segments : ArrayList<String>) => {
 		fn pop() : Optional<Tuple<State, U16>> => {
@@ -82,6 +82,25 @@ class fn Main() => {
 			if (next == '\'') {
 				let appended = state.append(next);
 				return appended.popAndAppendToTuple().map(EscapedFolder::foldSingleEscapeChar).flatMap(State::popAndAppendToOption).orElse(appended);
+			}
+			if (next == '\"') {
+				let appended = state.append(next);
+				while (true) {
+					let maybeTuple = appended.popAndAppendToTuple();
+					if (maybeTuple.isEmpty()) {
+						break;
+					}
+					let tuple = maybeTuple.get();
+					appended = tuple.left;
+					let withinQuotes = tuple.right;
+					if (withinQuotes == '\\') {
+						appended = appended.popAndAppendToOption().orElse(appended);
+					}
+					if (withinQuotes == '\"') {
+						break;
+					}
+				}
+				return appended;
 			}
 			return this.folder.apply(state, next);
 		}
@@ -221,13 +240,51 @@ class fn Main() => {
 	fn compileRootSegmentValue(input : String) : String => {
 		return this.compileStructure("class", input, 0).orElseGet(() => this.wrap(input));
 	}
-	class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
-		Optional.empty() : /**/Optional.of(generated);
+	fn compileStructure(type : String, input : String, indent : I32) : Optional<String> => {
+		let i = input.indexOf(type + " ");
+		if (i >= 0) {
+			let afterKeyword = input.substring(i + (type + " ").length());
+			let i1 = afterKeyword.indexOf("{");
+			if (i1 >= 0) {
+				let name = afterKeyword.substring(0, i1).strip();
+				let i2 = name.indexOf("implements ");
+				if (i2 >= 0) {
+					name = name.substring(0, i2).strip();
+				}
+				let i4 = name.indexOf(" implements ");
+				if (i4 >= 0) {
+					name = name.substring(0, i4).strip();
+				}
+				let parameters : List<String> = ArrayList<String>();
+				if (name.endsWith(")")) {
+					let withParameters = name.substring(0, name.length() - 1).strip();
+					let i3 = withParameters.indexOf("(");
+					if (i3 >= 0) {
+						name = withParameters.substring(0, i3).strip();
+						let substring = withParameters.substring(i3 + 1);
+						parameters = this.compileParameters(substring);
+					}
+				}
+				if (name.endsWith(">")) {
+					let stripped = name.substring(0, name.length() - 1).strip();
+					let i3 = stripped.indexOf("<");
+					if (i3 >= 0) {
+						name = stripped.substring(0, i3).strip();
+					}
+				}
+				let substring1 = afterKeyword.substring(i1 + 1).strip();
+				if (substring1.endsWith("}")) {
+					let body = substring1.substring(0, substring1.length() - 1);
+					if (this.isIdentifier(name)) {
+						let compiled = this.compileStatements(body, (input1 : String) => this.compileStructureSegment(input1, indent + 1));
+						let generated = "class fn " + name + "(" + String.join(", ", parameters) + ") => {" + compiled +
+																	this.createIndent(indent) + "}";
+						return Optional.of(generated);
+					}
 				}
 			}
 		}
-
-		return/**/;
+		return Optional.empty();
 	}
 	fn compileParameters(input : String) : List<String> => {
 		return this.divideValues(input).map(String::strip).filter((slice : String) => !slice.isEmpty()).map(this::compileDefinitionOrPlaceholder).toList();
@@ -248,24 +305,23 @@ class fn Main() => {
 	fn compileStructureSegmentValue(input : String, indent : I32) : String => {
 		if (input.endsWith(";")) {
 			let slice = input.substring(0, input.length() - 1);
-			return this.compileClassStatement(slice, indent) + ";
-			/**/";/**/
+			return this.compileClassStatement(slice, indent) + ";";
 		}
 		let i1 = input.indexOf("interface ");
-		if (/**/i1 >= 0/**/) {
+		if (i1 >= 0) {
 			let modifiers = Arrays.stream(input.substring(0, i1).split(Pattern.quote(" "))).map(String::strip).filter((slice : String) => !slice.isEmpty()).toList();
 			let afterKeyword = input.substring(i1 + "interface ".length());
 			if (modifiers.contains("sealed")) {
 				let i = afterKeyword.indexOf("permits ");
-				if (/**/i >= 0/**/) {
+				if (i >= 0) {
 					let name = afterKeyword.substring(0, i).strip();
 					let typeParameters : List<String> = ArrayList<String>();
 					if (name.endsWith(">")) {
 						let slice = name.substring(0, name.length() - 1);
 						let i2 = slice.indexOf("<");
-						if (/**/i2 >= 0/**/) {
+						if (i2 >= 0) {
 							name = slice.substring(0, i2);
-							typeParameters = Arrays.stream(slice.substring(i2 + 1).split(Pattern.quote(", "))).map(String::strip).filter((segment : String) => !segment.isEmpty()).toList();
+							typeParameters = Arrays.stream(slice.substring(i2 + 1).split(Pattern.quote(","))).map(String::strip).filter((segment : String) => !segment.isEmpty()).toList();
 						}
 					}
 					let stripped = afterKeyword.substring(i + "permits ".length()).strip();
@@ -276,121 +332,105 @@ class fn Main() => {
 					else {
 						joinedTypeParameters = "<" + String.join(", ", typeParameters) + ">";
 					}
-					/**/final var i2 = stripped.indexOf("{");
+					let i2 = stripped.indexOf("{");
 					if (i2 >= 0) {
-						final var variants = Arrays
-								.stream(stripped.substring(0, i2).split(Pattern.quote(",")))
-								.map(String::strip)
-								.filter((String slice) -> !slice.isEmpty())
-								.map((String slice) -> slice + joinedTypeParameters)
-								.collect(Collectors.joining(" | "));
-
+						let variants = Arrays.stream(stripped.substring(0, i2).split(Pattern.quote(","))).map(String::strip).filter((slice : String) => !slice.isEmpty()).map((slice : String) => slice + joinedTypeParameters).collect(Collectors.joining(" | "));
 						return "type " + name + joinedTypeParameters + " = " + variants + ";";
 					}
-				}/**/
 				}
 			}
-			let maybeClass = this.compileStructure("class", input, indent);
-			if (maybeClass.isPresent()) {
-				return maybeClass.get();
-			}
-			let maybeRecord = this.compileStructure("record", input, indent);
-			if (maybeRecord.isPresent()) {
-				return maybeRecord.get();
-			}
-			/**/final var i = input.indexOf("(");
+		}
+		let maybeClass = this.compileStructure("class", input, indent);
+		if (maybeClass.isPresent()) {
+			return maybeClass.get();
+		}
+		let maybeRecord = this.compileStructure("record", input, indent);
+		if (maybeRecord.isPresent()) {
+			return maybeRecord.get();
+		}
+		let i = input.indexOf("(");
 		if (i >= 0) {
-			final var substring = input.substring(0, i);
-			final var withParameters = input.substring(i + 1);
-			final var i2 = withParameters.indexOf(")");
+			let substring = input.substring(0, i);
+			let withParameters = input.substring(i + 1);
+			let i2 = withParameters.indexOf(")");
 			if (i2 >= 0) {
-				final var parameterString = withParameters.substring(0, i2);
-				final var withBraces = withParameters.substring(i2 + 1).strip();
-				final var declarationOrPlaceholder = this.parseDefinitionOrPlaceholderToTuff(substring);
-				final var parameters = this.compileParameters(parameterString);
-
-				if (declarationOrPlaceholder instanceof TuffDeclaration(var modifiers, var name, var type)) {
+				let parameterString = withParameters.substring(0, i2);
+				let withBraces = withParameters.substring(i2 + 1).strip();
+				let declarationOrPlaceholder = this.parseDefinitionOrPlaceholderToTuff(substring);
+				let parameters = this.compileParameters(parameterString);
+				if (/**/declarationOrPlaceholder instanceof TuffDeclaration/**/(/**/var modifiers/**/, /**/var name/**/, /**/var type/**/)) {
 					if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
-						final var content = withBraces.substring(1, withBraces.length() - 1);
-						final var joinedParameters = String.join(", ", parameters);
-
-						final String outputContent;
+						let content = withBraces.substring(1, withBraces.length() - 1);
+						let joinedParameters = String.join(", ", parameters);
+						/**/final String outputContent;/**/
 						if (modifiers.contains("expect")) {
 							outputContent = ";";
-						} else {
-							final var compiledContent = this.compileMethodStatements(content, indent);
+						}
+						else {
+							let compiledContent = this.compileMethodStatements(content, indent);
 							outputContent = " => {" + compiledContent + this.createIndent(indent) + "}";
 						}
-
-						return this.joinModifiers(modifiers) + "fn " + name + "(" + joinedParameters + ") : " + type +
-									 outputContent;
+						return this.joinModifiers(modifiers) + "fn " + name + "(" + joinedParameters + ") : " + type + outputContent;
 					}
 				}
 			}
-		}/**/
-			if (input.contains("@interface")) {
-				return "";
-			}
-			return this.wrap(input);
 		}
-		/**/private String compileMethodSegment(String input, int indent) {
-		final var stripped = input.strip();
+		if (input.indexOf("@interface") >= 0) {
+			return "";
+		}
+		return this.wrap(input);
+	}
+	fn compileMethodSegment(input : String, indent : I32) : String => {
+		let stripped = input.strip();
 		if (stripped.isEmpty()) {
 			return "";
 		}
-
 		return this.createIndent(indent) + this.compileMethodSegmentValue(stripped, indent);
-	}/**/
-		/**/private String compileMethodSegmentValue(String input, int indent) {
-		final var stripped = input.strip();
+	}
+	fn compileMethodSegmentValue(input : String, indent : I32) : String => {
+		let stripped = input.strip();
 		if (stripped.startsWith("yield ") && stripped.endsWith(";")) {
-			final var substring = stripped.substring("yield ".length(), stripped.length() - 1);
+			let substring = stripped.substring("yield ".length(), stripped.length() - 1);
 			return this.compileExpressionOrPlaceholder(substring, indent);
 		}
-
-		final var maybeIf = this.compileConditional(indent, stripped, "if");
+		let maybeIf = this.compileConditional(indent, stripped, "if");
 		if (maybeIf.isPresent()) {
 			return maybeIf.get();
 		}
-
-		final var maybeWhile = this.compileConditional(indent, stripped, "while");
+		let maybeWhile = this.compileConditional(indent, stripped, "while");
 		if (maybeWhile.isPresent()) {
 			return maybeWhile.get();
 		}
-
 		if (stripped.endsWith(";")) {
-			final var slice = stripped.substring(0, stripped.length() - 1);
-			final var maybeInitialization = this.compileMethodStatementValue(slice, indent);
+			let slice = stripped.substring(0, stripped.length() - 1);
+			let maybeInitialization = this.compileMethodStatementValue(slice, indent);
 			if (maybeInitialization.isPresent()) {
 				return maybeInitialization.get() + ";";
 			}
 		}
-
 		if (stripped.startsWith("else")) {
-			final var slice = stripped.substring(4).strip();
+			let slice = stripped.substring(4).strip();
 			if (slice.startsWith("{") && slice.endsWith("}")) {
-				final var substring = slice.substring(1, slice.length() - 1);
+				let substring = slice.substring(1, slice.length() - 1);
 				return "else {" + this.compileMethodStatements(substring, indent) + this.createIndent(indent) + "}";
 			}
 		}
-
 		return this.wrap(stripped);
-	}/**/
-		/**/private Optional<String> compileConditional(int indent, String input, String type) {
+	}
+	fn compileConditional(indent : I32, input : String, type : String) : Optional<String> => {
 		if (input.startsWith(type)) {
-			final var substring = input.substring(type.length()).strip();
+			let substring = input.substring(type.length()).strip();
 			if (substring.startsWith("(")) {
-				final var substring1 = substring.substring(1);
-				final var divisions = this.findExprEnd(substring1);
-
+				let substring1 = substring.substring(1);
+				let divisions = this.findExprEnd(substring1);
 				if (divisions.size() >= 2) {
-					final var conditionStringWithSuffix = divisions.getFirst().strip();
-					final var withBraces = String.join("", divisions.subList(1, divisions.size())).strip();
+					let conditionStringWithSuffix = divisions.getFirst().strip();
+					let withBraces = String.join("", divisions.subList(1, divisions.size())).strip();
 					if (conditionStringWithSuffix.endsWith(")")) {
-						final var conditionString = conditionStringWithSuffix.substring(0, conditionStringWithSuffix.length() - 1);
-						final var condition = this.compileExpressionOrPlaceholder(conditionString, indent);
+						let conditionString = conditionStringWithSuffix.substring(0, conditionStringWithSuffix.length() - 1);
+						let condition = this.compileExpressionOrPlaceholder(conditionString, indent);
 						if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
-							final var content = withBraces.substring(1, withBraces.length() - 1);
+							let content = withBraces.substring(1, withBraces.length() - 1);
 							return Optional.of(type + " (" + condition + ") {" + this.compileMethodStatements(content, indent) +
 																 this.createIndent(indent) + "}");
 						}
@@ -398,472 +438,382 @@ class fn Main() => {
 				}
 			}
 		}
-
 		return Optional.empty();
-	}/**/
-		/**/private List<String> findExprEnd(String input) {
-		return this.divide(input, new EscapedFolder(new ExprEndFolder())).toList();
-	}/**/
-		/**/private Optional<String> compileMethodStatementValue(String input, int indent) {
+	}
+	fn findExprEnd(input : String) : List<String> => {
+		return this.divide(input, EscapedFolder(ExprEndFolder())).toList();
+	}
+	fn compileMethodStatementValue(input : String, indent : I32) : Optional<String> => {
 		if (input.equals("break") || input.equals("continue")) {
 			return Optional.of(input);
 		}
-
 		if (input.startsWith("return ")) {
-			final var substring = input.substring("return ".length());
+			let substring = input.substring("return ".length());
 			return Optional.of("return " + this.compileExpressionOrPlaceholder(substring, indent));
 		}
-
-		final var maybeInitialization = this.compileInitialization(input, indent);
+		let maybeInitialization = this.compileInitialization(input, indent);
 		if (maybeInitialization.isPresent()) {
 			return maybeInitialization;
 		}
-
 		return this.compileInvokable(input, indent);
-	}/**/
-		/**/private String compileClassStatement(String input, int indent) {
-		return this.compileInitialization(input, indent).orElseGet(() -> this.compileDefinitionOrPlaceholder(input));
-	}/**/
-		/**/private Optional<String> compileInitialization(String input, int indent) {
-		final var i = input.indexOf("=");
+	}
+	fn compileClassStatement(input : String, indent : I32) : String => {
+		return this.compileInitialization(input, indent).orElseGet(() => this.compileDefinitionOrPlaceholder(input));
+	}
+	fn compileInitialization(input : String, indent : I32) : Optional<String> => {
+		let i = input.indexOf("=");
 		if (i >= 0) {
-			final var substring = input.substring(0, i);
-			final var substring1 = input.substring(i + 1);
-			final var string = this
-					.parseDefinitionToTuff(substring)
-					.<TuffLValue>map((TuffDeclaration value) -> value)
-					.or(() -> this.parseExpression(substring, 0).<TuffLValue>map((TuffExpression value) -> value))
-					.orElseGet(() -> new Placeholder(substring));
-
-			return Optional.of(
-					this.generateAssignable(string) + " = " + this.compileExpressionOrPlaceholder(substring1, indent));
+			let substring = input.substring(0, i);
+			let substring1 = input.substring(i + 1);
+			let string = this.parseDefinitionToTuff(substring). < /**/TuffLValue>map/**/((value : TuffDeclaration) => value).or(() => this.parseExpression(substring, 0). < /**/TuffLValue>map/**/((value : TuffExpression) => value)).orElseGet(() => Placeholder(substring));
+			return Optional.of(this.generateAssignable(string) + " = " + this.compileExpressionOrPlaceholder(substring1, indent));
 		}
-
 		return Optional.empty();
-	}/**/
-		/**/private String generateAssignable(TuffLValue value) {
-		return switch (value) {
-			case Placeholder placeholder -> this.wrap(placeholder.input);
-			case TuffDeclaration tuffDeclaration -> "let " + this.generateDefinitionOrPlaceholder(tuffDeclaration);
-			case TuffExpression tuffExpression -> this.generateExpression(tuffExpression);
+	}
+	fn generateAssignable(value : TuffLValue) : String => {
+		return match (value) {
+			Placeholder placeholder => this.wrap(placeholder.input);
+			TuffDeclaration tuffDeclaration => "let " + this.generateDefinitionOrPlaceholder(tuffDeclaration);
+			TuffExpression tuffExpression => this.generateExpression(tuffExpression);
 		};
-	}/**/
-		/**/private String compileExpressionOrPlaceholder(String input, int indent) {
-		return this.compileExpression(input, indent).orElseGet(() -> this.wrap(input.strip()));
-	}/**/
-		/**/private Optional<String> compileExpression(String input, int indent) {
+	}
+	fn compileExpressionOrPlaceholder(input : String, indent : I32) : String => {
+		return this.compileExpression(input, indent).orElseGet(() => this.wrap(input.strip()));
+	}
+	fn compileExpression(input : String, indent : I32) : Optional<String> => {
 		return this.parseExpression(input, indent).map(this::generateExpression);
-	}/**/
-		/**/private String generateExpression(TuffExpression expr) {
-		return switch (expr) {
-			case WrappedExpression(var value) -> value;
+	}
+	fn generateExpression(expr : TuffExpression) : String => {
+		return match (expr) {
+			WrappedExpression(value) => value;
 		};
-	}/**/
-		/**/private Optional<TuffExpression> parseExpression(String input, int indent) {
+	}
+	fn parseExpression(input : String, indent : I32) : Optional<TuffExpression> => {
 		return this.compileExpression0(input, indent).map(WrappedExpression::new);
-	}/**/
-		/**/private Optional<String> compileExpression0(String input, int indent) {
-		final var i = input.indexOf("->");
+	}
+	fn compileExpression0(input : String, indent : I32) : Optional<String> => {
+		let i = input.indexOf("->");
 		if (i >= 0) {
-			final var beforeArrow = input.substring(0, i).strip();
-			final var maybeWithBraces = input.substring(i + 2).strip();
+			let beforeArrow = input.substring(0, i).strip();
+			let maybeWithBraces = input.substring(i + 2).strip();
 			if (beforeArrow.startsWith("(") && beforeArrow.endsWith(")")) {
-				final var substring = beforeArrow.substring(1, beforeArrow.length() - 1);
-				final var compiled = String.join(", ", compileParameters(substring));
-				final String compiled1;
+				let substring = beforeArrow.substring(1, beforeArrow.length() - 1);
+				let compiled = String.join(", ", this.compileParameters(substring));
+				/**/final String compiled1;/**/
 				if (maybeWithBraces.startsWith("{") && maybeWithBraces.endsWith("}")) {
-					final var body = maybeWithBraces.substring(1, maybeWithBraces.length() - 1);
+					let body = maybeWithBraces.substring(1, maybeWithBraces.length() - 1);
 					compiled1 = "{" + this.compileMethodStatements(body, indent) + this.createIndent(indent) + "}";
-				} else {
+				}
+				else {
 					compiled1 = this.compileExpressionOrPlaceholder(maybeWithBraces, indent);
 				}
-
 				return Optional.of("(" + compiled + ")" + " => " + compiled1);
 			}
 		}
-
-		final var stripped = input.strip();
+		let stripped = input.strip();
 		if (stripped.startsWith("!")) {
-			final var substring = stripped.substring(1);
+			let substring = stripped.substring(1);
 			return Optional.of("!" + this.compileExpressionOrPlaceholder(substring, indent));
 		}
-
-		return this
-				.compileInvokable(input, indent)
-				.or(() -> this.compileString(input))
-				.or(() -> this.compileSwitch(input, indent))
-				.or(() -> this.compileAccess(input, indent, "."))
-				.or(() -> this.compileOperation(indent, input, "<"))
-				.or(() -> this.compileOperation(indent, input, "+"))
-				.or(() -> this.compileOperation(indent, input, "-"))
-				.or(() -> this.compileOperation(indent, input, "=="))
-				.or(() -> this.compileOperation(indent, input, "&&"))
-				.or(() -> this.compileOperation(indent, input, "||"))
-				.or(() -> this.compileAccess(input, indent, "::"))
-				.or(() -> this.compileIdentifier(input))
-				.or(() -> this.compileNumber(input))
-				.or(() -> this.compileChar(input));
-	}/**/
-		let stripped = /**/input.strip();
-		if/**/(/**/stripped.startsWith("'""/**/) && /**/stripped.endsWith("'")) {
+		return this.compileInvokable(input, indent).or(() => this.compileString(input)).or(() => this.compileSwitch(input, indent)).or(() => this.compileAccess(input, indent, ".")).or(() => this.compileOperation(indent, input, "<")).or(() => this.compileOperation(indent, input, ">=")).or(() => this.compileOperation(indent, input, "+")).or(() => this.compileOperation(indent, input, "-")).or(() => this.compileOperation(indent, input, "==")).or(() => this.compileOperation(indent, input, "&&")).or(() => this.compileOperation(indent, input, "||")).or(() => this.compileAccess(input, indent, "::")).or(() => this.compileIdentifier(input)).or(() => this.compileNumber(input)).or(() => this.compileChar(input));
+	}
+	fn compileChar(input : String) : Optional<String> => {
+		let stripped = input.strip();
+		if (stripped.startsWith("'") && stripped.endsWith("'")) {
 			return Optional.of(stripped);
-		} else {
+		}
+		else {
 			return Optional.empty();
 		}
 	}
-
-	private Optional/**/ < /**/String> compileAccess(String input, int indent, String separator) {
-		return this/**/.compileAccess(input, separator, /**/(String input1/**/) - /**/> this.compileAccessInstance(indent, input1));
+	fn compileAccess(input : String, indent : I32, separator : String) : Optional<String> => {
+		return this.compileAccess(input, separator, (input1 : String) => this.compileAccessInstance(indent, input1));
 	}
-
-	private String compileAccessInstance(int indent, String input) {
-		return Main.this.compileType(input).orElseGet(/**/() - /**/> this.compileExpressionOrPlaceholder(input, indent));
+	fn compileAccessInstance(indent : I32, input : String) : String => {
+		return Main.this.compileType(input).orElseGet(() => this.compileExpressionOrPlaceholder(input, indent));
 	}
-
-	private Optional/**/ < /**/String> compileNumber(String input) {
-		final var stripped = input.strip();
+	fn compileNumber(input : String) : Optional<String> => {
+		let stripped = input.strip();
 		if (this.isNumber(stripped)) {
 			return Optional.of(stripped);
 		}
-
 		return Optional.empty();
 	}
-
-	private boolean isNumber(String input) {
-		for (var i = 0; i/**/ < /**/input.length(); i/**/ +  + /**/) {
+	fn isNumber(input : String) : boolean => {
+		/**/for (var i = 0; i < input.length(); i++) {
 			final var c = input.charAt(i);
 			if (Character.isDigit(c)) {
 				continue;
 			}
 			return false;
-		}
+		}/**/
 		return true;
 	}
-
-	private Optional/**/ < /**/String> compileOperation(int indent, String input, String operator) {
-		final var i1 = input.indexOf(operator);
+	fn compileOperation(indent : I32, input : String, operator : String) : Optional<String> => {
+		let i1 = input.indexOf(operator);
 		if (i1 >= 0) {
-			final var substring = input.substring(0, i1);
-			final var substring1 = input.substring(i1/**/ + /**/operator.length());
-			return Optional.of(this/**/.compileExpressionOrPlaceholder(substring, indent) + " " + operator + " " + /**/this.compileExpressionOrPlaceholder(substring1, indent));
-		} else {
+			let substring = input.substring(0, i1);
+			let substring1 = input.substring(i1 + operator.length());
+			return Optional.of(this.compileExpressionOrPlaceholder(substring, indent) + " " + operator + " " + this.compileExpressionOrPlaceholder(substring1, indent));
+		}
+		else {
 			return Optional.empty();
 		}
 	}
-
-	private Optional/**/ < /**/String> compileSwitch(String input, int indent) {
-		final var stripped = input.strip();
+	fn compileSwitch(input : String, indent : I32) : Optional<String> => {
+		let stripped = input.strip();
 		if (stripped.startsWith("switch")) {
-			final var substring = stripped.substring("switch".length()).strip();
+			let substring = stripped.substring("switch".length()).strip();
 			if (substring.startsWith("(")) {
-				final var withExpr = substring.substring(1);
-				final var divisions = this.findExprEnd(withExpr);
-
+				let withExpr = substring.substring(1);
+				let divisions = this.findExprEnd(withExpr);
 				if (divisions.size() >= 2) {
-					final var exprWithSuffix = divisions.getFirst();
-					final var withBraces = String.join("", divisions.subList(1, divisions.size())).strip();
-
+					let exprWithSuffix = divisions.getFirst();
+					let withBraces = String.join("", divisions.subList(1, divisions.size())).strip();
 					if (exprWithSuffix.endsWith(")")) {
-						final var expr = exprWithSuffix/**/.substring(0, /**/exprWithSuffix.length(/**/) - /**/1);
-						final var compiledExpr = this.compileExpressionOrPlaceholder(expr, indent);
-						if (withBraces/**/.startsWith("{") && /**/withBraces.endsWith("}")) {
-							final var content = withBraces.substring(1, withBraces/**/.length() - /**/1);
-							final var collect = this
-									.divideStatements(content)
-									.map(String::strip)
-									.filter(/**/(/**/String slice/**/) - /**/> !slice.isEmpty())
-									.map(/**/(/**/String input1/**/) - /**/> this.compileCase(input1, indent/**/ + /**/1))
-									.map((String slice)/**/ - /**/> this.createIndent(indent/**/ + /**/1)/**/ + /**/slice)
-									.collect(Collectors.joining());
-
-							return Optional.of("match ("/**/ + compiledExpr + ") {" + collect + this.createIndent(indent) + "}");
+						let expr = exprWithSuffix.substring(0, exprWithSuffix.length() - 1);
+						let compiledExpr = this.compileExpressionOrPlaceholder(expr, indent);
+						if (withBraces.startsWith("{") && withBraces.endsWith("}")) {
+							let content = withBraces.substring(1, withBraces.length() - 1);
+							let collect = this.divideStatements(content).map(String::strip).filter((slice : String) => !slice.isEmpty()).map((input1 : String) => this.compileCase(input1, indent + 1)).map((slice : String) => /**/this.createIndent(indent/**/ + /**/1)/**/ + slice).collect(Collectors.joining());
+							return Optional.of("match (" + compiledExpr + ") {" + collect + this.createIndent(indent) + "}");
 						}
 					}
 				}
 			}
 		}
-
 		return Optional.empty();
 	}
-
-	private String compileCase(String input, int indent) {
-		final var stripped = input.strip();
+	fn compileCase(input : String, indent : I32) : String => {
+		let stripped = input.strip();
 		if (stripped.startsWith("case ")) {
-			final var substring = stripped.substring("case ".length());
-			final var i = substring.indexOf(" - /**/>");
+			let substring = stripped.substring("case ".length());
+			let i = substring.indexOf("->");
 			if (i >= 0) {
-				final var substring1 = substring.substring(0, i);
-				final var substring2 = substring.substring(i/**/ + "->".length(/**/));
-				return this.compileDestructuring(substring1/**/) + " => " + /**/this.compileCaseValue(substring2, indent);
+				let substring1 = substring.substring(0, i);
+				let substring2 = substring.substring(i + "->".length());
+				return this.compileDestructuring(substring1) + " => " + this.compileCaseValue(substring2, indent);
 			}
 		}
-
 		return this.wrap(stripped);
 	}
-
-	private String compileDestructuring(String input) {
-		// I'm lazy to do this properly.
-		return input.replace("var ", "").strip();
+	fn compileDestructuring(input : String) : String => {
+		/**/// I'm lazy to do this properly.
+		return input/**/.replace("var ", "").strip();
 	}
-
-	private String compileCaseValue(String input, int indent) {
-		final var stripped = input.strip();
+	fn compileCaseValue(input : String, indent : I32) : String => {
+		let stripped = input.strip();
 		if (stripped.endsWith(";")) {
-			final var substring = stripped/**/.substring(0, /**/stripped.length(/**/) - /**/1);
-			return this/**/.compileExpressionOrPlaceholder(substring, indent) + ";";
+			let substring = stripped.substring(0, stripped.length() - 1);
+			return this.compileExpressionOrPlaceholder(substring, indent) + ";";
 		}
-
 		if (stripped.startsWith("{") && stripped.endsWith("}")) {
-			final var substring = stripped.substring(1, stripped.length() - 1);
-			final var compiled = this.compileMethodStatements(substring, indent);
-			return "{" + compiled + this.createIndent(indent) + /**/"}";
+			let substring = stripped.substring(1, stripped.length() - 1);
+			let compiled = this.compileMethodStatements(substring, indent);
+			return "{" + compiled + this.createIndent(indent) + "}";
 		}
-
 		return this.wrap(stripped);
 	}
-
-	private String compileMethodStatements(String input, int indent) {
-		return this/**/.compileStatements(input, /**/(String segment/**/) - /**/> this.compileMethodSegment(segment, indent/**/ + /**/1));
+	fn compileMethodStatements(input : String, indent : I32) : String => {
+		return this.compileStatements(input, (segment : String) => this.compileMethodSegment(segment, indent + 1));
 	}
-
-	private Optional/**/ < /**/String> compileString(String input) {
-		final var stripped = input.strip();
-		if/**/(/**/stripped.startsWith("\""/**/) && /**/stripped.endsWith("\"")) {
+	fn compileString(input : String) : Optional<String> => {
+		let stripped = input.strip();
+		if (stripped.startsWith("\"") && stripped.endsWith("\"")) {
 			return Optional.of(stripped);
-		} else {
+		}
+		else {
 			return Optional.empty();
 		}
 	}
-
-	private Optional/**/ < /**/String> compileIdentifier(String input) {
-		final var stripped = input.strip();
+	fn compileIdentifier(input : String) : Optional<String> => {
+		let stripped = input.strip();
 		if (this.isIdentifier(stripped)) {
 			return Optional.of(stripped);
-		} else {
+		}
+		else {
 			return Optional.empty();
 		}
 	}
-
-	private Optional/**/ < /**/String> compileAccess(String input, String separator, Function/**/ < /**/String, String> mapper) {
-		final var i = input.lastIndexOf(separator);
+	fn compileAccess(input : String, separator : String, mapper : Function<String, String>) : Optional<String> => {
+		let i = input.lastIndexOf(separator);
 		if (i >= 0) {
-			final var substring = input.substring(0, i);
-			final var memberName = input.substring(i/**/ + /**/separator.length()).strip();
+			let substring = input.substring(0, i);
+			let memberName = input.substring(i + separator.length()).strip();
 			if (this.isIdentifier(memberName)) {
-				return Optional.of(mapper/**/.apply(substring) + separator + /**/memberName);
+				return Optional.of(mapper.apply(substring) + separator + memberName);
 			}
 		}
-
 		return Optional.empty();
 	}
-
-	private Optional/**/ < /**/String> compileInvokable(String input, int indent) {
-		final var stripped = input.strip();
+	fn compileInvokable(input : String, indent : I32) : Optional<String> => {
+		let stripped = input.strip();
 		if (stripped.endsWith(")")) {
-			final var withoutEnd = stripped.substring(0, stripped/**/.length() - /**/1);
-
-			var i =/**/ - /**/1;
-			var depth = 0;
-			for (var i1 = 0; i1/**/ < /**/withoutEnd.length(); i1/**/ +  + /**/) {
+			let withoutEnd = stripped.substring(0, stripped.length() - 1);
+			let i =  - 1;
+			let depth = 0;
+			/**/for (var i1 = 0; i1 < withoutEnd.length(); i1++) {
 				final var c = withoutEnd.charAt(i1);
-				if (c/**/ == /**/'(') {
-					if (depth/**/ == /**/0) {
+				if (c == '(') {
+					if (depth == 0) {
 						i = i1;
 					}
-					depth/**/ +  + /**/;
+					depth++;
 				}
-				if (c/**/ == /**/')') {
-					depth/**/ -  - /**/;
+				if (c == ')') {
+					depth--;
 				}
-			}
-
+			}/**/
 			if (i >= 0) {
-				final var caller = withoutEnd.substring(0, i);
-				final var arguments = withoutEnd.substring(i/**/ + /**/1);
-				final var joinedArguments = this
-						.divideValues(arguments)
-						.map(String::strip)
-						.filter(/**/(/**/String slice/**/) - /**/> !slice.isEmpty())
-						.map(/**/(/**/String input1/**/) - /**/> this.compileExpressionOrPlaceholder(input1, indent))
-						.collect(Collectors.joining(", "));
-
-				return Optional.of(this/**/.compileCaller(caller, indent) + "(" + joinedArguments + /**/")");
+				let caller = withoutEnd.substring(0, i);
+				let arguments = withoutEnd.substring(i + 1);
+				let joinedArguments = this.divideValues(arguments).map(String::strip).filter((slice : String) => !slice.isEmpty()).map((input1 : String) => this.compileExpressionOrPlaceholder(input1, indent)).collect(Collectors.joining(", "));
+				return Optional.of(this.compileCaller(caller, indent) + "(" + joinedArguments + ")");
 			}
 		}
-
 		return Optional.empty();
 	}
-
-	private Stream/**/ < /**/String> divideValues(String input) {
-		return this.divide(input, new EscapedFolder(new ValueFolder()));
+	fn divideValues(input : String) : Stream<String> => {
+		return this.divide(input, EscapedFolder(ValueFolder()));
 	}
-
-	private String compileCaller(String input, int indent) {
-		final var stripped = input.strip();
+	fn compileCaller(input : String, indent : I32) : String => {
+		let stripped = input.strip();
 		if (stripped.startsWith("new ")) {
-			final var substring = stripped.substring("new ".length());
-			final var maybeType = this.compileType(substring);
+			let substring = stripped.substring("new ".length());
+			let maybeType = this.compileType(substring);
 			if (maybeType.isPresent()) {
 				return maybeType.get();
 			}
 		}
-
-		final var maybeExpression = this.compileExpression(input, indent);
+		let maybeExpression = this.compileExpression(input, indent);
 		if (maybeExpression.isPresent()) {
 			return maybeExpression.get();
 		}
-
 		if (stripped.startsWith("new ")) {
-			final var substring = stripped.substring("new ".length());
+			let substring = stripped.substring("new ".length());
 			return this.compileTypeOrPlaceholder(substring);
 		}
-
 		return this.wrap(stripped);
 	}
-
-	private String compileDefinitionOrPlaceholder(String input) {
+	fn compileDefinitionOrPlaceholder(input : String) : String => {
 		return this.generateDefinitionOrPlaceholder(this.parseDefinitionOrPlaceholderToTuff(input));
 	}
-
-	private String generateDefinitionOrPlaceholder(TuffDeclarationOrPlaceholder string) {
-		return switch (string) {
-			case TuffDeclaration/**/(/**/var modifiers/**/, /**/var name/**/, /**/var type/**/) - /**/> {
+	fn generateDefinitionOrPlaceholder(string : TuffDeclarationOrPlaceholder) : String => {
+		return match (string) {
+			TuffDeclaration(modifiers, name, type) => {
 				if (type.equals("var")) {
-					yield name;
+					name
 				}
-
-				final var joinedModifiers = this.joinModifiers(modifiers);
-				yield joinedModifiers/**/ + name + " : " + /**/type;
+				let joinedModifiers = this.joinModifiers(modifiers);
+				joinedModifiers + name + " : " + type
 			}
-			case Placeholder placeholder/**/ - /**/> this.wrap(placeholder.input);
+			Placeholder placeholder => this.wrap(placeholder.input);
 		};
 	}
-
-	private String joinModifiers(List/**/ < /**/String> modifiers) {
-		return modifiers.stream().map(/**/(/**/String modifier/**/) - /**/> modifier/**/ + /**/" ").collect(Collectors/**/.joining(/**/));
+	fn joinModifiers(modifiers : List<String>) : String => {
+		return modifiers.stream().map((modifier : String) => modifier + " ").collect(Collectors.joining());
 	}
-
-	private TuffDeclarationOrPlaceholder parseDefinitionOrPlaceholderToTuff(String input) {
-		return this
-				.parseDefinitionToTuff(input/**/). < /**/TuffDeclarationOrPlaceholder>map/**/(/**/(TuffDeclaration value/**/) - /**/> value)
-				.orElseGet(/**/() - /**/> new Placeholder(input));
+	fn parseDefinitionOrPlaceholderToTuff(input : String) : TuffDeclarationOrPlaceholder => {
+		return this.parseDefinitionToTuff(input). < /**/TuffDeclarationOrPlaceholder>map/**/((value : TuffDeclaration) => value).orElseGet(() => Placeholder(input));
 	}
-
-	private Optional/**/ < /**/TuffDeclaration> parseDefinitionToTuff(String input) {
-		final var stripped = input.strip();
-		final var i = stripped.lastIndexOf(" ");
+	fn parseDefinitionToTuff(input : String) : Optional<TuffDeclaration> => {
+		let stripped = input.strip();
+		let i = stripped.lastIndexOf(" ");
 		if (i >= 0) {
-			final var beforeName = stripped.substring(0, i);
-			final var name = stripped.substring(i/**/ + /**/1);
-			final var i1 = this.findTypeSeparator(beforeName);
-			if (i1/**/ < /**/0) {
-				final var compiled = this.compileTypeOrPlaceholder(beforeName);
-				return Optional.of(new TuffDeclaration(new ArrayList/**/ < /**/String>(), name, compiled));
+			let beforeName = stripped.substring(0, i);
+			let name = stripped.substring(i + 1);
+			let i1 = this.findTypeSeparator(beforeName);
+			if (i1 < 0) {
+				let compiled = this.compileTypeOrPlaceholder(beforeName);
+				return Optional.of(TuffDeclaration(ArrayList<String>(), name, compiled));
 			}
-
-			final var beforeType = beforeName.substring(0, i1);
-			final var i2 = beforeType.lastIndexOf("\n");
-			List/**/ < /**/String> annotations = new ArrayList/**/ < /**/String>();
+			let beforeType = beforeName.substring(0, i1);
+			let i2 = beforeType.lastIndexOf("\n");
+			let annotations : List<String> = ArrayList<String>();
 			if (i2 >= 0) {
-				final var substring = beforeType.substring(0, i2);
-				annotations = Arrays/**/.stream(substring.split(Pattern.quote(" "))).map(String::strip).filter(/**/(String slice/**/) - /**/> !slice.isEmpty())
-						.map(/**/(/**/String slice/**/) - /**/> slice.substring(1))
-						.toList();
+				let substring = beforeType.substring(0, i2);
+				annotations = Arrays.stream(substring.split(Pattern.quote(" "))).map(String::strip).filter((slice : String) => !slice.isEmpty()).map((slice : String) => slice.substring(1)).toList();
 			}
-
-			final var type = beforeName.substring(i1/**/ + /**/1);
-			final var compiled = this.compileTypeOrPlaceholder(type);
-			final List/**/ < /**/String> modifiers;
+			let type = beforeName.substring(i1 + 1);
+			let compiled = this.compileTypeOrPlaceholder(type);
+			/**/final List<String> modifiers;/**/
 			if (annotations.contains("Actual")) {
 				modifiers = List.of("expect");
-			} else {
+			}
+			else {
 				modifiers = Collections.emptyList();
 			}
-
-			return Optional.of(new TuffDeclaration(modifiers, name, compiled));
-
+			return Optional.of(TuffDeclaration(modifiers, name, compiled));
 		}
-
 		return Optional.empty();
 	}
-
-	private String compileTypeOrPlaceholder(String input) {
-		return this/**/.compileType(input).orElseGet(/**/(/**/) - /**/> this.wrap(input));
+	fn compileTypeOrPlaceholder(input : String) : String => {
+		return this.compileType(input).orElseGet(() => this.wrap(input));
 	}
-
-	private Optional/**/ < /**/String> compileType(String input) {
-		final var stripped = input.strip();
-		final var maybePrimitiveType = this.compilePrimitiveType(stripped);
+	fn compileType(input : String) : Optional<String> => {
+		let stripped = input.strip();
+		let maybePrimitiveType = this.compilePrimitiveType(stripped);
 		if (maybePrimitiveType.isPresent()) {
 			return maybePrimitiveType;
 		}
-
-		final var i = stripped.indexOf("/**/ < ");
+		let i = stripped.indexOf("<");
 		if (i >= 0) {
-			final var base = stripped.substring(0, i);
-			final var substring1 = stripped.substring(i + 1).strip();
+			let base = stripped.substring(0, i);
+			let substring1 = stripped.substring(i + 1).strip();
 			if (substring1.endsWith(">")) {
-				final var args = substring1.substring(0, substring1.length() - 1);
-				final var joinedTypeArguments =
-						this.divideValues(args).map(this::compileTypeOrPlaceholder).collect(Collectors.joining(", "));
-
+				let args = substring1.substring(0, substring1.length() - 1);
+				let joinedTypeArguments = this.divideValues(args).map(this::compileTypeOrPlaceholder).collect(Collectors.joining(", "));
 				return Optional.of(base + " < " + joinedTypeArguments + ">");
 			}
 		}
-
 		if (this.isIdentifier(stripped)) {
 			return Optional.of(stripped);
 		}
-
 		if (stripped.endsWith("[]")) {
-			final var substring = stripped.substring(0, stripped.length() - 2);
-			return Optional.of("*[" + substring + /**/"]");
+			let substring = stripped.substring(0, stripped.length() - 2);
+			return Optional.of("*[" + substring + "]");
 		}
-
 		return Optional.empty();
 	}
-
-	private Optional/**/ < /**/String> compilePrimitiveType(String stripped) {
-		switch (stripped) {
-			case "char", "Character"/**/ - /**/> {
+	fn compilePrimitiveType(stripped : String) : Optional<String> => {
+		/**/switch (stripped) {
+			case "char", "Character" -> {
 				return Optional.of("U16");
 			}
-			case "int"/**/ - /**/> {
+			case "int" -> {
 				return Optional.of("I32");
 			}
-			case "void"/**/ - /**/> {
+			case "void" -> {
 				return Optional.of("Void");
 			}
-		}
-
+		}/**/
 		return Optional.empty();
 	}
-
-	private boolean isIdentifier(String input) {
-		final var stripped = input.strip();
-		for (var i = 0; i/**/ < /**/stripped.length(); i/**/ +  + /**/) {
+	fn isIdentifier(input : String) : boolean => {
+		let stripped = input.strip();
+		/**/for (var i = 0; i < stripped.length(); i++) {
 			final var c = stripped.charAt(i);
-			if (Character/**/.isLetter(c) || /**/(i != 0/**/ && /**/Character.isDigit(c))) {continue;}
+			if (Character.isLetter(c) || (i != 0 && Character.isDigit(c))) {continue;}
 			return false;
-		}
+		}/**/
 		return true;
 	}
-
-	private int findTypeSeparator(String beforeName) {
-		var i1 =/**/ - /**/1;
-		var depth = 0;
-		for (var i2 = 0; i2/**/ < /**/beforeName.length(); i2/**/ +  + /**/) {
+	fn findTypeSeparator(beforeName : String) : I32 => {
+		let i1 =  - 1;
+		let depth = 0;
+		/**/for (var i2 = 0; i2 < beforeName.length(); i2++) {
 			final var c = beforeName.charAt(i2);
-			if (c/**/ == ' ' && depth == /**/0) {
+			if (c == ' ' && depth == 0) {
 				i1 = i2;
 			}
-			if (c/**/ == ' < /**/') {
-				depth/**/ +  + /**/;
+			if (c == '<') {
+				depth++;
 			}
-			if (c/**/ == /**/'>') {
-				depth/**/ -  - /**/;
+			if (c == '>') {
+				depth--;
 			}
-		}
-		return i1/**/;
+		}/**/
+		return i1;
 	}
 }
+/**//**/
