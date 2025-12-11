@@ -398,7 +398,7 @@ public class Main {
 			final var substring = stripped.substring(2).strip();
 			if (substring.startsWith("(")) {
 				final var substring1 = substring.substring(1);
-				int i = -1;
+				var i = -1;
 				var depth = 0;
 				for (var i1 = 0; i1 < substring1.length(); i1++) {
 					final var c = substring1.charAt(i1);
@@ -476,11 +476,11 @@ public class Main {
 		final var i = input.indexOf("->");
 		if (i >= 0) {
 			final var beforeArrow = input.substring(0, i).strip();
-			final var substring1 = input.substring(i + 2);
+			final var body = input.substring(i + 2);
 			if (beforeArrow.startsWith("(") && beforeArrow.endsWith(")")) {
 				final var substring = beforeArrow.substring(1, beforeArrow.length() - 1);
 				final var compiled = this.compileDefinitionOrPlaceholder(substring);
-				return Optional.of("(" + compiled + ")" + " => " + this.wrap(substring1));
+				return Optional.of("(" + compiled + ")" + " => " + this.compileExpressionOrPlaceholder(body, indent));
 			}
 		}
 
@@ -495,7 +495,7 @@ public class Main {
 						.or(() -> this.compileAccess(input,
 																				 ".",
 																				 (String input1) -> Main.this.compileExpressionOrPlaceholder(input1, indent)))
-						.or(() -> this.compileAccess(input, "::", Main.this::compileType))
+						.or(() -> this.compileAccess(input, "::", Main.this::compileTypeOrPlaceholder))
 						.or(() -> this.compileIdentifier(input))
 						.or(() -> this.compileSwitch(input, indent)))
 				.or(() -> this.compileNumber(input));
@@ -718,7 +718,7 @@ public class Main {
 		final var stripped = input.strip();
 		if (stripped.startsWith("new ")) {
 			final var substring = stripped.substring("new ".length());
-			return this.compileType(substring);
+			return this.compileTypeOrPlaceholder(substring);
 		}
 
 		final var maybeExpression = this.compileExpression(input, indent);
@@ -728,7 +728,7 @@ public class Main {
 
 		if (stripped.startsWith("new ")) {
 			final var substring = stripped.substring("new ".length());
-			return this.compileType(substring);
+			return this.compileTypeOrPlaceholder(substring);
 		}
 
 		return this.wrap(stripped);
@@ -764,7 +764,7 @@ public class Main {
 			final var name = stripped.substring(i + 1);
 			final var i1 = this.findTypeSeparator(beforeName);
 			if (i1 < 0) {
-				final var compiled = this.compileType(beforeName);
+				final var compiled = this.compileTypeOrPlaceholder(beforeName);
 				return new TuffDeclaration(new ArrayList<String>(), name, compiled);
 			}
 
@@ -782,7 +782,7 @@ public class Main {
 			}
 
 			final var type = beforeName.substring(i1 + 1);
-			final var compiled = this.compileType(type);
+			final var compiled = this.compileTypeOrPlaceholder(type);
 			final List<String> modifiers;
 			if (annotations.contains("Actual")) {
 				modifiers = List.of("expect");
@@ -797,18 +797,15 @@ public class Main {
 		return new Placeholder(stripped);
 	}
 
-	private String compileType(String input) {
+	private String compileTypeOrPlaceholder(String input) {
+		return this.compileType(input).orElseGet(() -> this.wrap(input));
+	}
+
+	private Optional<String> compileType(String input) {
 		final var stripped = input.strip();
-		switch (stripped) {
-			case "char", "Character" -> {
-				return "U16";
-			}
-			case "int" -> {
-				return "I32";
-			}
-			case "void" -> {
-				return "Void";
-			}
+		final var maybePrimitiveType = this.compilePrimitiveType(stripped);
+		if (maybePrimitiveType.isPresent()) {
+			return maybePrimitiveType;
 		}
 
 		final var i = stripped.indexOf("<");
@@ -818,22 +815,38 @@ public class Main {
 			if (substring1.endsWith(">")) {
 				final var args = substring1.substring(0, substring1.length() - 1);
 				final var joinedTypeArguments =
-						this.divideValues(args).map(this::compileType).collect(Collectors.joining(", "));
+						this.divideValues(args).map(this::compileTypeOrPlaceholder).collect(Collectors.joining(", "));
 
-				return base + "<" + joinedTypeArguments + ">";
+				return Optional.of(base + "<" + joinedTypeArguments + ">");
 			}
 		}
 
 		if (this.isIdentifier(stripped)) {
-			return stripped;
+			return Optional.of(stripped);
 		}
 
 		if (stripped.endsWith("[]")) {
 			final var substring = stripped.substring(0, stripped.length() - 2);
-			return "*[" + substring + "]";
+			return Optional.of("*[" + substring + "]");
 		}
 
-		return this.wrap(stripped);
+		return Optional.empty();
+	}
+
+	private Optional<String> compilePrimitiveType(String stripped) {
+		switch (stripped) {
+			case "char", "Character" -> {
+				return Optional.of("U16");
+			}
+			case "int" -> {
+				return Optional.of("I32");
+			}
+			case "void" -> {
+				return Optional.of("Void");
+			}
+		}
+
+		return Optional.empty();
 	}
 
 	private boolean isIdentifier(String input) {
