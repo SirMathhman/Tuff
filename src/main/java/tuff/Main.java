@@ -291,18 +291,21 @@ public class Main {
 		final var stripped = input.strip();
 		if (stripped.endsWith(";")) {
 			final var slice = stripped.substring(0, stripped.length() - 1);
-			final var maybeInitialization = this.compileInitialization(slice);
+			final var maybeInitialization = this.getString(slice);
 			if (maybeInitialization.isPresent()) {
-				return maybeInitialization.get();
-			}
-
-			final var maybeInvokable = this.compileInvokable(slice);
-			if (maybeInvokable.isPresent()) {
-				return maybeInvokable.get();
+				return maybeInitialization.get() + ";";
 			}
 		}
 
 		return this.wrap(stripped);
+	}
+
+	private Optional<String> getString(String slice) {
+		final var maybeInitialization = this.compileInitialization(slice);
+		if (maybeInitialization.isPresent()) {
+			return maybeInitialization;
+		}
+		return this.compileInvokable(slice);
 	}
 
 	private String compileClassStatement(String input) {
@@ -328,10 +331,11 @@ public class Main {
 	private Optional<String> compileExpression(String input) {
 		return this
 				.compileInvokable(input)
-				.or(() -> this.compileAccess(input, ".", Main.this::compileExpressionOrPlaceholder))
-				.or(() -> this.compileAccess(input, "::", Main.this::compileType))
-				.or(() -> this.compileIdentifier(input))
-				.or(() -> this.compileString(input));
+				.or(() -> this
+						.compileString(input)
+						.or(() -> this.compileAccess(input, ".", Main.this::compileExpressionOrPlaceholder))
+						.or(() -> this.compileAccess(input, "::", Main.this::compileType))
+						.or(() -> this.compileIdentifier(input)));
 	}
 
 	private Optional<String> compileString(String input) {
@@ -376,7 +380,7 @@ public class Main {
 						.map(String::strip)
 						.filter(slice -> !slice.isEmpty())
 						.map(this::compileExpressionOrPlaceholder)
-						.collect(Collectors.joining());
+						.collect(Collectors.joining(", "));
 
 				return Optional.of(this.compileCaller(caller) + "(" + joinedArguments + ")");
 			}

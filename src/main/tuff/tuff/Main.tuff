@@ -17,11 +17,11 @@ class fn Main() => {
 	}
 	let imports : Map<List<String>, List<String>> = HashMap<List<String>, List<String>>();
 	fn main(args : *[String]) : Void => {
-		Main().run().ifPresent(Throwable:::printStackTrace)
+		Main().run().ifPresent(Throwable:::printStackTrace);
 	}
 	fn run() : Optional<IOException> => {
-		let source = Paths.get(".""src""main""java""tuff"/*<*/"Main/*>*/.java")
-		let target = Paths.get(".""src""main""tuff""tuff"/*<*/"Main/*>*/.tuff")
+		let source = Paths.get(".", "src", "main", "java", "tuff", "Main.java");
+		let target = Paths.get(".", "src", "main", "tuff", "tuff", "Main.tuff");
 		/*<*/return switch (this.readString(source)) {
 			case Err<String, IOException> v -> Optional.of(v.error);
 			case Ok<String, IOException> v -> {
@@ -49,21 +49,21 @@ class fn Main() => {
 		}/*>*/
 	}
 	fn compile(input : String) : String => {
-		let compiled = this.compileStatements(inputthis:::compileRootSegment)
+		let compiled = this.compileStatements(input, this:::compileRootSegment);
 		/*<*/final var useStatements = this.imports.entrySet().stream().map(entry -> {
 			final var usedNamespace = String.join("::", entry.getKey());
 			final var usedChildren = String.join(", ", entry.getValue());
 			return "from " + usedNamespace + " use { " + usedChildren + " };" + System.lineSeparator();
 		}/*>*/
-		/*<*/)/*>*/.collect(Collectors.joining(/*<*/)/*>*/)
+		/*<*/)/*>*/.collect(Collectors.joining(/*<*/)/*>*/);
 		/*<*/return useStatements + compiled;/*>*/
 	}
 	fn compileStatements(input : String, /*<*/Function<String/*>*/, mapper : /*<*/String>/*>*/) : String => {
-		let segments = ArrayList<String>()
-		let buffer = StringBuilder()
-		let depth = /*<*/0/*>*/
-		let i : /*<*/(var/*>*/ = /*<*/0/*>*/
-		/*<*/i < input/*>*/.length()
+		let segments = ArrayList<String>();
+		let buffer = StringBuilder();
+		let depth = /*<*/0/*>*/;
+		let i : /*<*/(var/*>*/ = /*<*/0/*>*/;
+		/*<*/i < input/*>*/.length();
 		/*<*/i++) {
 			final var c = input.charAt(i);
 			buffer.append(c);
@@ -245,18 +245,21 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 		final var stripped = input.strip();
 		if (stripped.endsWith(";")) {
 			final var slice = stripped.substring(0, stripped.length() - 1);
-			final var maybeInitialization = this.compileInitialization(slice);
+			final var maybeInitialization = this.getString(slice);
 			if (maybeInitialization.isPresent()) {
-				return maybeInitialization.get();
-			}
-
-			final var maybeInvokable = this.compileInvokable(slice);
-			if (maybeInvokable.isPresent()) {
-				return maybeInvokable.get();
+				return maybeInitialization.get() + ";";
 			}
 		}
 
 		return this.wrap(stripped);
+	}
+
+	private Optional<String> getString(String slice) {
+		final var maybeInitialization = this.compileInitialization(slice);
+		if (maybeInitialization.isPresent()) {
+			return maybeInitialization;
+		}
+		return this.compileInvokable(slice);
 	}
 
 	private String compileClassStatement(String input) {
@@ -282,15 +285,16 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 	private Optional<String> compileExpression(String input) {
 		return this
 				.compileInvokable(input)
-				.or(() -> this.compileAccess(input, ".", Main.this::compileExpressionOrPlaceholder))
-				.or(() -> this.compileAccess(input, "::", Main.this::compileType))
-				.or(() -> this.compileIdentifier(input))
-				.or(() -> compileString(input));
+				.or(() -> this
+						.compileString(input)
+						.or(() -> this.compileAccess(input, ".", Main.this::compileExpressionOrPlaceholder))
+						.or(() -> this.compileAccess(input, "::", Main.this::compileType))
+						.or(() -> this.compileIdentifier(input)));
 	}
 
-	private Optional< String> compileString(String input) {
+	private Optional<String> compileString(String input) {
 		final var stripped = input.strip();
-		if(stripped.startsWith("\"") && stripped.endsWith("\"")) {
+		if (stripped.startsWith("\"") && stripped.endsWith("\"")) {
 			return Optional.of(stripped);
 		} else {
 			return Optional.empty();
@@ -330,7 +334,7 @@ class fn fn " + name + "(" + String.join(", ", parameters) + ") =>() => {
 						.map(String::strip)
 						.filter(slice -> !slice.isEmpty())
 						.map(this::compileExpressionOrPlaceholder)
-						.collect(Collectors.joining());
+						.collect(Collectors.joining(", "));
 
 				return Optional.of(this.compileCaller(caller) + "(" + joinedArguments + ")");
 			}
