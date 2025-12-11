@@ -269,7 +269,7 @@ public class Main {
 				.stream(input.split(Pattern.quote(",")))
 				.map(String::strip)
 				.filter((String slice) -> !slice.isEmpty())
-				.map(this::compileDefinition)
+				.map(this::compileDefinitionOrPlaceholder)
 				.toList();
 	}
 
@@ -286,7 +286,7 @@ public class Main {
 		if (stripped.isEmpty()) {
 			return "";
 		}
-		return System.lineSeparator() + "\t" + this.compileClassSegmentValue(stripped, indent);
+		return this.createIndent(indent) + this.compileClassSegmentValue(stripped, indent);
 	}
 
 	private String compileClassSegmentValue(String input, int indent) {
@@ -438,7 +438,7 @@ public class Main {
 	}
 
 	private String compileClassStatement(String input, int indent) {
-		return this.compileInitialization(input, indent).orElseGet(() -> this.wrap(input));
+		return this.compileInitialization(input, indent).orElseGet(() -> this.compileDefinitionOrPlaceholder(input));
 	}
 
 	private Optional<String> compileInitialization(String input, int indent) {
@@ -446,9 +446,8 @@ public class Main {
 		if (i >= 0) {
 			final var substring = input.substring(0, i);
 			final var substring1 = input.substring(i + 1);
-			return Optional.of(
-					"let " + this.compileDefinition(substring) + " = " + this.compileExpressionOrPlaceholder(substring1,
-																																																	 indent));
+			return Optional.of("let " + this.compileDefinitionOrPlaceholder(substring) + " = " +
+												 this.compileExpressionOrPlaceholder(substring1, indent));
 		}
 
 		return Optional.empty();
@@ -465,7 +464,7 @@ public class Main {
 			final var substring1 = input.substring(i + 2);
 			if (beforeArrow.startsWith("(") && beforeArrow.endsWith(")")) {
 				final var substring = beforeArrow.substring(1, beforeArrow.length() - 1);
-				final var compiled = this.compileDefinition(substring);
+				final var compiled = this.compileDefinitionOrPlaceholder(substring);
 				return Optional.of("(" + compiled + ")" + " => " + this.wrap(substring1));
 			}
 		}
@@ -677,7 +676,7 @@ public class Main {
 		return this.wrap(stripped);
 	}
 
-	private String compileDefinition(String input) {
+	private String compileDefinitionOrPlaceholder(String input) {
 		return this.generateDefinitionOrPlaceholder(this.parseDefinitionOrPlaceholderToTuff(input));
 	}
 
