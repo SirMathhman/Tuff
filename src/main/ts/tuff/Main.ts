@@ -1,8 +1,12 @@
+interface Result<T, X> permits Err, Ok {
+}
 class Main {
-	/*private sealed interface Result<T, X> permits Err, Ok {}*/
+	
 	/*private record Err<T, X>(X error) implements Result<T, X> {}
 
 	private record Ok<T, X>(T value) implements Result<T, X> {}
+
+	private static final ArrayList<String> structures = new ArrayList<String>();
 
 	public static void main(String[] args) {
 		run().ifPresent(Throwable::printStackTrace);*/
@@ -60,7 +64,9 @@ class Main {
 	}
 
 	private static String compile(String input) {
-		return compileStatements(input, Main::compileRootSegment);
+		final var generated = compileStatements(input, Main::compileRootSegment);
+		final var joined = String.join("", structures);
+		return joined + generated;
 	}
 
 	private static String compileStatements(String input, Function<String, String> mapper) {
@@ -96,6 +102,7 @@ class Main {
 				.map(mapper)
 				.collect(Collectors.joining());*/
 }
+
 private static String compileRootSegment(String input) {
 		final var stripped = input.strip();
 if (stripped.startsWith("package ")) {
@@ -108,26 +115,43 @@ if (stripped.startsWith("import ")) {
 		return compileRootSegmentValue(stripped) + System.lineSeparator();
 	}
 
-	private static String compileRootSegmentValue(String stripped) {
-		final var i = stripped.indexOf("class ");
+	private static String compileRootSegmentValue(String input) {
+		return compileStructure("class", input).orElse(input);
+	}
+
+	private static Optional<String> compileStructure(String type, String input) {
+		final var i = input.indexOf(type + " ");
 		if (i >= 0) {
-			final var afterKeyword = stripped.substring(i + "class ".length());
-class " + name + "{
-	/*" + compileStatements(content, Main::compileClassSegment) +
-								 System.lineSeparator() + "}";
-				}*/
-}
+			final var afterKeyword = input.substring(i + (type + " ").length());
+final var i1 = afterKeyword.indexOf("{");
+			if (i1 >= 0) {
+				final var name = afterKeyword.substring(0, i1);
+				final var withEnd = afterKeyword.substring(i1 + 1).strip();
+				if (withEnd.endsWith("}")) {
+					final var content = withEnd.substring(0, withEnd.length() - 1);
+					final var generated = type + " " + name + "{" + compileStatements(content, Main::compileStructureSegment) +
+																System.lineSeparator() + "}" + System.lineSeparator();
+
+					structures.add(generated);
+					return Optional.of("");
+				}
+			}
 }
 
-		return stripped;
+		return Optional.empty();
 	}
 
-	private static String compileClassSegment(String input) {
+	private static String compileStructureSegment(String input) {
 		final var stripped = input.strip();
-		return System.lineSeparator() + "\t" + compileMethodSegmentValue(stripped);
+		return generateIndent(1) + compileClassSegmentValue(stripped);
 	}
 
-	private static String compileMethodSegmentValue(String input) {
+	private static String compileClassSegmentValue(String input) {
+		final var maybeInterface = compileStructure("interface", input);
+		if (maybeInterface.isPresent()) {
+			return maybeInterface.get();
+		}
+
 		final var i = input.indexOf("(");
 		if (i >= 0) {
 			final var definition = input.substring(0, i).strip();
