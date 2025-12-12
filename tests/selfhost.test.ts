@@ -43,7 +43,11 @@ describe("selfhost", () => {
 
     const tinyIn = resolve(outDir, "tiny.tuff");
     const tinyOut = resolve(outDir, "tiny.mjs");
-    await writeFile(tinyIn, "fn main() => 123\n", "utf8");
+    await writeFile(
+      tinyIn,
+      "let x = 100; let y = 23; fn main() => x + y\n",
+      "utf8"
+    );
 
     const tuffc = await import(pathToFileURL(tuffcFile).toString());
     expect(typeof tuffc.main).toBe("function");

@@ -15,10 +15,15 @@ extern from rt::vec use { vec_len, vec_get };
 
 // Tiny record type used to return two values from parsing helpers.
 class fn ParsedNumber(v0, v1) => {}
+class fn ParsedIdent(v0, v1) => {}
+class fn ParsedExpr(v0, v1) => {}
 
 // Utility: ASCII checks
 fn is_digit(code) => { code >= 48 && code <= 57 }
 fn is_space(code) => { code == 32 || code == 10 || code == 9 || code == 13 }
+fn is_alpha(code) => { (code >= 65 && code <= 90) || (code >= 97 && code <= 122) }
+fn is_ident_start(code) => { is_alpha(code) || code == 95 }
+fn is_ident_part(code) => { is_ident_start(code) || is_digit(code) }
 
 fn skip_ws(src, i) => {
   let mut j = i;
@@ -44,7 +49,9 @@ fn starts_with_at(src, i, lit) => {
 fn parse_keyword(src, i, lit) => {
   let j = skip_ws(src, i);
   if (!starts_with_at(src, j, lit)) {
-    panic("expected keyword: " + lit);
+    let mut end = j + 16;
+    if (end > stringLen(src)) { end = stringLen(src); }
+    panic("expected keyword: " + lit + " but got '" + stringSlice(src, j, end) + "'");
   }
   j + stringLen(lit)
 }
@@ -66,31 +73,118 @@ fn parse_number(src, i) => {
   ParsedNumber(acc, j)
 }
 
+fn parse_ident(src, i) => {
+  let mut j = skip_ws(src, i);
+  if (!(j < stringLen(src))) { panic("expected identifier"); }
+  let c0 = stringCharCodeAt(src, j);
+  if (!is_ident_start(c0)) { panic("expected identifier"); }
+  let start = j;
+  j = j + 1;
+  while (j < stringLen(src)) {
+    let c = stringCharCodeAt(src, j);
+    if (!is_ident_part(c)) { break; }
+    j = j + 1;
+  }
+  ParsedIdent(stringSlice(src, start, j), j)
+}
+
+fn parse_expr(src, i) => parse_add(src, i)
+
+fn parse_add(src, i) => {
+  let mut left = parse_mul(src, i);
+  let mut j = left.v1;
+  while (true) {
+    j = skip_ws(src, j);
+    if (!(j < stringLen(src))) { break; }
+    let op = stringCharCodeAt(src, j);
+    if (!(op == 43 || op == 45)) { break; } // '+' or '-'
+    let rhs = parse_mul(src, j + 1);
+    let opStr = if (op == 43) "+" else "-";
+    left = ParsedExpr("(" + left.v0 + " " + opStr + " " + rhs.v0 + ")", rhs.v1);
+    j = left.v1;
+  }
+  left
+}
+
+fn parse_mul(src, i) => {
+  let mut left = parse_primary(src, i);
+  let mut j = left.v1;
+  while (true) {
+    j = skip_ws(src, j);
+    if (!(j < stringLen(src))) { break; }
+    let op = stringCharCodeAt(src, j);
+    if (!(op == 42 || op == 47)) { break; } // '*' or '/'
+    let rhs = parse_primary(src, j + 1);
+    let opStr = if (op == 42) "*" else "/";
+    left = ParsedExpr("(" + left.v0 + " " + opStr + " " + rhs.v0 + ")", rhs.v1);
+    j = left.v1;
+  }
+  left
+}
+
+fn parse_primary(src, i) => {
+  let j = skip_ws(src, i);
+  if (!(j < stringLen(src))) { panic("expected expression"); }
+  let c = stringCharCodeAt(src, j);
+  if (c == 40) { // '('
+    let inner = parse_expr(src, j + 1);
+    let k = skip_ws(src, inner.v1);
+    if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 41)) { // ')'
+      panic("expected ')'");
+    }
+    yield ParsedExpr("(" + inner.v0 + ")", k + 1);
+  }
+  if (is_digit(c)) {
+    let n = parse_number(src, j);
+    yield ParsedExpr("" + n.v0, n.v1);
+  }
+  if (is_ident_start(c)) {
+    let id = parse_ident(src, j);
+    yield ParsedExpr(id.v0, id.v1);
+  }
+  panic("expected expression")
+}
+
+fn parse_optional_semicolon(src, i) => {
+  let j = skip_ws(src, i);
+  if (j < stringLen(src) && stringCharCodeAt(src, j) == 59) { yield j + 1; }
+  i
+}
+
 fn compile_tiny(src) => {
-  // Parse: fn main() => <number or { number }>
+  // Parse:
+  //   (let <ident> = <expr>;)*
+  //   fn main() => <expr>
   let mut i = 0;
+
+  let mut out = "// compiled by selfhost tuffc\n";
+
+  // zero or more let statements
+  while (true) {
+    let j = skip_ws(src, i);
+    if (starts_with_at(src, j, "let")) {
+      i = parse_keyword(src, i, "let");
+      let name = parse_ident(src, i);
+      i = name.v1;
+      i = parse_keyword(src, i, "=");
+      let expr = parse_expr(src, i);
+      i = expr.v1;
+      i = parse_optional_semicolon(src, i);
+      out = out + ("const " + name.v0 + " = " + expr.v0 + ";\n");
+      continue;
+    }
+    break;
+  }
+
+  // main
   i = parse_keyword(src, i, "fn");
   i = parse_keyword(src, i, "main");
   i = parse_keyword(src, i, "(");
   i = parse_keyword(src, i, ")");
   i = parse_keyword(src, i, "=>");
-  i = skip_ws(src, i);
+  let mainExpr = parse_expr(src, i);
 
-  let mut value = 0;
-  if (i < stringLen(src) && stringCharCodeAt(src, i) == 123) { // '{'
-    i = i + 1;
-    let parsed = parse_number(src, i);
-    value = parsed.v0;
-    i = skip_ws(src, parsed.v1);
-    if (!(i < stringLen(src) && stringCharCodeAt(src, i) == 125)) {
-      panic("expected '}'");
-    }
-  } else {
-    let parsed = parse_number(src, i);
-    value = parsed.v0;
-  }
-
-  "// compiled by selfhost tuffc\n" + ("export function main() { return " + value + "; }\n")
+  out + ("export function main() { return " + mainExpr.v0 + "; }\n")
 }
 
 // When run as a program, compile stdin-like file input.
