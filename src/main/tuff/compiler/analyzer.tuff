@@ -8,13 +8,30 @@ extern from rt::vec use { vec_new, vec_len, vec_push, vec_get, vec_set };
 from diagnostics use { panic_at };
 from ast use { span_start };
 
+// Binding info tracked per-scope.
+// tyTag is a tiny, analyzer-internal type approximation for Phase 4.
+struct Binding {
+  tag: String,
+  name: String,
+  isMut: Bool,
+  tyTag: String
+}
+
+fn mk_binding(name: String, isMut: Bool, tyTag: String) => Binding { "Binding", name, isMut, tyTag }
+
+fn ty_unknown() : String => "Unknown"
+fn ty_bool() : String => "Bool"
+fn ty_int() : String => "Int"
+fn ty_string() : String => "String"
+
 fn scopes_contains(scopes, depth: I32, name: String) : Bool => {
   let mut si = 0;
   while (si < depth) {
     let scope = vec_get(scopes, si);
     let mut ni = 0;
     while (ni < vec_len(scope)) {
-      if (vec_get(scope, ni) == name) { yield true; }
+      let b = vec_get(scope, ni);
+      if (b.name == name) { yield true; }
       ni = ni + 1;
     }
     si = si + 1;
@@ -29,30 +46,47 @@ fn scopes_enter(scopes, depth: I32) : I32 => {
   depth + 1
 }
 
-fn declare_name(src: String, pos: I32, scopes, depth: I32, name: String) : Void => {
+fn declare_name(src: String, pos: I32, scopes, depth: I32, name: String, isMut: Bool, tyTag: String) : Void => {
   if (scopes_contains(scopes, depth, name)) {
     panic_at(src, pos, "shadowing not allowed: " + name);
   }
   let cur = vec_get(scopes, depth - 1);
-  vec_push(cur, name);
+  vec_push(cur, mk_binding(name, isMut, tyTag));
 }
 
 fn scope_contains(scope, name: String) : Bool => {
   let mut i = 0;
   while (i < vec_len(scope)) {
-    if (vec_get(scope, i) == name) { yield true; }
+    let b = vec_get(scope, i);
+    if (b.name == name) { yield true; }
     i = i + 1;
   }
   false
 }
 
-fn declare_local_name(src: String, pos: I32, scopes, depth: I32, name: String) : Void => {
+fn declare_local_name(src: String, pos: I32, scopes, depth: I32, name: String, isMut: Bool, tyTag: String) : Void => {
   // Declare in the current scope only (no outer-scope shadowing check).
   let cur = vec_get(scopes, depth - 1);
   if (scope_contains(cur, name)) {
     panic_at(src, pos, "duplicate name: " + name);
   }
-  vec_push(cur, name);
+  vec_push(cur, mk_binding(name, isMut, tyTag));
+}
+
+fn lookup_binding(src: String, pos: I32, scopes, depth: I32, name: String) : Binding => {
+  let mut si = 0;
+  while (si < depth) {
+    let scope = vec_get(scopes, si);
+    let mut bi = 0;
+    while (bi < vec_len(scope)) {
+      let b = vec_get(scope, bi);
+      if (b.name == name) { yield b; }
+      bi = bi + 1;
+    }
+    si = si + 1;
+  }
+  panic_at(src, pos, "unknown name: " + name);
+  mk_binding(name, false, ty_unknown())
 }
 
 fn require_name(src: String, pos: I32, scopes, depth: I32, name: String) : Void => {
@@ -69,9 +103,59 @@ fn require_name(src: String, pos: I32, scopes, depth: I32, name: String) : Void 
   if (name == "continue") { yield; }
   if (name == "break") { yield; }
 
-  if (!scopes_contains(scopes, depth, name)) {
-    panic_at(src, pos, "unknown name: " + name);
+  // Normal lookup (panics on missing).
+  lookup_binding(src, pos, scopes, depth, name);
+}
+
+fn infer_expr_type(src: String, scopes, depth: I32, e) : String => {
+  if (e.tag == "EBool") { yield ty_bool(); }
+  if (e.tag == "EInt") { yield ty_int(); }
+  if (e.tag == "EString") { yield ty_string(); }
+  if (e.tag == "EIdent") {
+    // The bootstrap subset still sometimes parses these as identifiers.
+    if (e.name == "true") { yield ty_bool(); }
+    if (e.name == "false") { yield ty_bool(); }
+    let b = lookup_binding(src, span_start(e.span), scopes, depth, e.name);
+    yield b.tyTag;
   }
+
+  if (e.tag == "EUnary") {
+    // Only obvious: !Bool => Bool
+    if (e.op.tag == "OpNot") {
+      let t = infer_expr_type(src, scopes, depth, e.expr);
+      if (t == ty_bool()) { yield ty_bool(); }
+      yield ty_unknown();
+    }
+    if (e.op.tag == "OpNeg") {
+      let t = infer_expr_type(src, scopes, depth, e.expr);
+      if (t == ty_int()) { yield ty_int(); }
+      yield ty_unknown();
+    }
+  }
+
+  if (e.tag == "EBinary") {
+    if (e.op.tag == "OpAnd") { yield ty_bool(); }
+    if (e.op.tag == "OpOr") { yield ty_bool(); }
+    if (e.op.tag == "OpEq") { yield ty_bool(); }
+    if (e.op.tag == "OpNe") { yield ty_bool(); }
+    if (e.op.tag == "OpLt") { yield ty_bool(); }
+    if (e.op.tag == "OpLe") { yield ty_bool(); }
+    if (e.op.tag == "OpGt") { yield ty_bool(); }
+    if (e.op.tag == "OpGe") { yield ty_bool(); }
+    if (e.op.tag == "OpAdd") { yield ty_int(); }
+    if (e.op.tag == "OpSub") { yield ty_int(); }
+    if (e.op.tag == "OpMul") { yield ty_int(); }
+    if (e.op.tag == "OpDiv") { yield ty_int(); }
+  }
+
+  // Everything else: unknown for now.
+  ty_unknown()
+}
+
+fn check_cond_is_bool(src: String, scopes, depth: I32, cond) : Void => {
+  let t = infer_expr_type(src, scopes, depth, cond);
+  if (t == ty_int()) { panic_at(src, span_start(cond.span), "condition must be Bool (got Int)"); }
+  if (t == ty_string()) { panic_at(src, span_start(cond.span), "condition must be Bool (got String)"); }
 }
 
 fn analyze_expr(src: String, scopes, depth: I32, e) : Void => {
@@ -115,6 +199,7 @@ fn analyze_expr(src: String, scopes, depth: I32, e) : Void => {
   }
 
   if (e.tag == "EIf") {
+    check_cond_is_bool(src, scopes, depth, e.cond);
     analyze_expr(src, scopes, depth, e.cond);
     analyze_expr(src, scopes, depth, e.thenExpr);
     analyze_expr(src, scopes, depth, e.elseExpr);
@@ -179,12 +264,16 @@ fn analyze_expr(src: String, scopes, depth: I32, e) : Void => {
 fn analyze_stmt(src: String, scopes, depth: I32, s) : Void => {
   if (s.tag == "SLet") {
     analyze_expr(src, scopes, depth, s.init);
-    declare_name(src, span_start(s.span), scopes, depth, s.name);
+    let initTy = infer_expr_type(src, scopes, depth, s.init);
+    declare_name(src, span_start(s.span), scopes, depth, s.name, s.isMut, initTy);
     yield;
   }
 
   if (s.tag == "SAssign") {
-    require_name(src, span_start(s.span), scopes, depth, s.name);
+    let b = lookup_binding(src, span_start(s.span), scopes, depth, s.name);
+    if (!b.isMut) {
+      panic_at(src, span_start(s.span), "cannot assign to immutable binding: " + s.name);
+    }
     analyze_expr(src, scopes, depth, s.value);
     yield;
   }
@@ -200,6 +289,7 @@ fn analyze_stmt(src: String, scopes, depth: I32, s) : Void => {
   }
 
   if (s.tag == "SWhile") {
+    check_cond_is_bool(src, scopes, depth, s.cond);
     analyze_expr(src, scopes, depth, s.cond);
     let newDepth = scopes_enter(scopes, depth);
     analyze_stmts(src, scopes, newDepth, s.body);
@@ -207,6 +297,7 @@ fn analyze_stmt(src: String, scopes, depth: I32, s) : Void => {
   }
 
   if (s.tag == "SIf") {
+    check_cond_is_bool(src, scopes, depth, s.cond);
     analyze_expr(src, scopes, depth, s.cond);
 
     let thenDepth = scopes_enter(scopes, depth);
@@ -221,6 +312,12 @@ fn analyze_stmt(src: String, scopes, depth: I32, s) : Void => {
   }
 
   if (s.tag == "SIndexAssign") {
+    if (s.base.tag == "EIdent") {
+      let b = lookup_binding(src, span_start(s.span), scopes, depth, s.base.name);
+      if (!b.isMut) {
+        panic_at(src, span_start(s.span), "cannot assign through immutable binding: " + s.base.name);
+      }
+    }
     analyze_expr(src, scopes, depth, s.base);
     analyze_expr(src, scopes, depth, s.index);
     analyze_expr(src, scopes, depth, s.value);
@@ -228,6 +325,12 @@ fn analyze_stmt(src: String, scopes, depth: I32, s) : Void => {
   }
 
   if (s.tag == "SFieldAssign") {
+    if (s.base.tag == "EIdent") {
+      let b = lookup_binding(src, span_start(s.span), scopes, depth, s.base.name);
+      if (!b.isMut) {
+        panic_at(src, span_start(s.span), "cannot assign through immutable binding: " + s.base.name);
+      }
+    }
     analyze_expr(src, scopes, depth, s.base);
     analyze_expr(src, scopes, depth, s.value);
     yield;
@@ -247,7 +350,7 @@ fn analyze_fn_decl(src: String, outerScopes, outerDepth: I32, d) : Void => {
 
   let mut pi = 0;
   while (pi < vec_len(d.params)) {
-    declare_local_name(src, span_start(d.span), outerScopes, depth, vec_get(d.params, pi));
+    declare_local_name(src, span_start(d.span), outerScopes, depth, vec_get(d.params, pi), false, ty_unknown());
     pi = pi + 1;
   }
 
@@ -269,7 +372,7 @@ fn predeclare_decl(src: String, scopes, depth: I32, d) : Void => {
   if (d.tag == "DExternFrom") {
     let mut ni = 0;
     while (ni < vec_len(d.names)) {
-      declare_name(src, span_start(d.span), scopes, depth, vec_get(d.names, ni));
+      declare_name(src, span_start(d.span), scopes, depth, vec_get(d.names, ni), false, ty_unknown());
       ni = ni + 1;
     }
     yield;
@@ -278,7 +381,7 @@ fn predeclare_decl(src: String, scopes, depth: I32, d) : Void => {
   if (d.tag == "DImport") {
     let mut ni = 0;
     while (ni < vec_len(d.names)) {
-      declare_name(src, span_start(d.span), scopes, depth, vec_get(d.names, ni));
+      declare_name(src, span_start(d.span), scopes, depth, vec_get(d.names, ni), false, ty_unknown());
       ni = ni + 1;
     }
     yield;
@@ -289,24 +392,24 @@ fn predeclare_decl(src: String, scopes, depth: I32, d) : Void => {
     let mut vi = 0;
     while (vi < vec_len(d.variants)) {
       let v = vec_get(d.variants, vi);
-      declare_name(src, span_start(v.span), scopes, depth, v.name);
+      declare_name(src, span_start(v.span), scopes, depth, v.name, false, ty_unknown());
       vi = vi + 1;
     }
     yield;
   }
 
   if (d.tag == "DFn") {
-    declare_name(src, span_start(d.span), scopes, depth, d.name);
+    declare_name(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown());
     yield;
   }
 
   if (d.tag == "DClassFn") {
-    declare_name(src, span_start(d.span), scopes, depth, d.name);
+    declare_name(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown());
     yield;
   }
 
   if (d.tag == "DModule") {
-    declare_name(src, span_start(d.span), scopes, depth, d.name);
+    declare_name(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown());
     yield;
   }
 }
@@ -314,7 +417,8 @@ fn predeclare_decl(src: String, scopes, depth: I32, d) : Void => {
 fn analyze_decl_body(src: String, scopes, depth: I32, d) : Void => {
   if (d.tag == "DLet") {
     analyze_expr(src, scopes, depth, d.init);
-    declare_name(src, span_start(d.span), scopes, depth, d.name);
+    let initTy = infer_expr_type(src, scopes, depth, d.init);
+    declare_name(src, span_start(d.span), scopes, depth, d.name, d.isMut, initTy);
     yield;
   }
 

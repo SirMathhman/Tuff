@@ -92,7 +92,7 @@ Acceptance criteria:
 
 Goal: Add name resolution, forbid shadowing, type-check core constructs, and annotate nodes.
 
-Status: in progress (initial no-shadowing/name checks implemented).
+Status: in progress (no-shadowing + unknown-name checks; mutability checks for assignment; basic Bool-only condition checks for `if`/`while` when type is obvious).
 
 Acceptance criteria:
 

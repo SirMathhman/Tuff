@@ -1,0 +1,98 @@
+import { describe, expect, test } from "bun:test";
+
+import { copyFile, mkdir, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+
+import { stagePrebuiltSelfhostCompiler } from "./selfhost_helpers";
+
+describe("selfhost analyzer", () => {
+  test("rejects assignment to immutable let", async () => {
+    const outDir = resolve(
+      ".dist",
+      "selfhost-analyzer-mutability",
+      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    );
+    await mkdir(outDir, { recursive: true });
+
+    // Avoid Bun ESM cache collisions between stage1 and stage2 outputs.
+    const stage1Dir = resolve(outDir, "stage1");
+    const stage2Dir = resolve(outDir, "stage2");
+    await mkdir(stage1Dir, { recursive: true });
+    await mkdir(stage2Dir, { recursive: true });
+
+    const { entryFile: stage1File } = await stagePrebuiltSelfhostCompiler(
+      stage1Dir
+    );
+
+    const stage2RtDir = resolve(stage2Dir, "rt");
+    await mkdir(stage2RtDir, { recursive: true });
+    await copyFile(
+      resolve("rt/stdlib.mjs"),
+      resolve(stage2RtDir, "stdlib.mjs")
+    );
+    await copyFile(resolve("rt/vec.mjs"), resolve(stage2RtDir, "vec.mjs"));
+
+    const stage2In = resolve("src", "main", "tuff", "compiler", "tuffc.tuff");
+    const stage2Out = resolve(stage2Dir, "tuffc.stage2.mjs");
+
+    const tuffc1 = await import(pathToFileURL(stage1File).toString());
+    const rc2 = tuffc1.main([stage2In, stage2Out]);
+    expect(rc2).toBe(0);
+
+    const badIn = resolve(stage2Dir, "bad_immutable_assign.tuff");
+    const badOut = resolve(stage2Dir, "bad_immutable_assign.mjs");
+    await writeFile(badIn, "fn main() => { let x = 1; x = 2; x }\n", "utf8");
+
+    const tuffc2 = await import(pathToFileURL(stage2Out).toString());
+    expect(() => tuffc2.main([badIn, badOut])).toThrow(/immutable|mut/i);
+  });
+
+  test("allows assignment to let mut", async () => {
+    const outDir = resolve(
+      ".dist",
+      "selfhost-analyzer-mutability",
+      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    );
+    await mkdir(outDir, { recursive: true });
+
+    const stage1Dir = resolve(outDir, "stage1");
+    const stage2Dir = resolve(outDir, "stage2");
+    await mkdir(stage1Dir, { recursive: true });
+    await mkdir(stage2Dir, { recursive: true });
+
+    const { entryFile: stage1File } = await stagePrebuiltSelfhostCompiler(
+      stage1Dir
+    );
+
+    const stage2RtDir = resolve(stage2Dir, "rt");
+    await mkdir(stage2RtDir, { recursive: true });
+    await copyFile(
+      resolve("rt/stdlib.mjs"),
+      resolve(stage2RtDir, "stdlib.mjs")
+    );
+    await copyFile(resolve("rt/vec.mjs"), resolve(stage2RtDir, "vec.mjs"));
+
+    const stage2In = resolve("src", "main", "tuff", "compiler", "tuffc.tuff");
+    const stage2Out = resolve(stage2Dir, "tuffc.stage2.mjs");
+
+    const tuffc1 = await import(pathToFileURL(stage1File).toString());
+    const rc2 = tuffc1.main([stage2In, stage2Out]);
+    expect(rc2).toBe(0);
+
+    const okIn = resolve(stage2Dir, "ok_mut_assign.tuff");
+    const okOut = resolve(stage2Dir, "ok_mut_assign.mjs");
+    await writeFile(
+      okIn,
+      "fn main() => { let mut x = 1; x = x + 2; x }\n",
+      "utf8"
+    );
+
+    const tuffc2 = await import(pathToFileURL(stage2Out).toString());
+    const rc = tuffc2.main([okIn, okOut]);
+    expect(rc).toBe(0);
+
+    const mod = await import(pathToFileURL(okOut).toString());
+    expect(mod.main()).toBe(3);
+  });
+});
