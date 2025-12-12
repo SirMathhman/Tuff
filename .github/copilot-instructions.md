@@ -187,8 +187,8 @@ To extend it:
 The language provides standard modules:
 
 - **`std::io`** — `print`, `read_line` (extern wrappers)
-- **`std::test`** — unit testing helpers in pure Tuff (`std/test.tuff`)
-- **`std::prelude`** — common definitions (`std/prelude.tuff`)
+- **`std::test`** — unit testing helpers in pure Tuff (`src/main/tuff/std/test.tuff`)
+- **`std::prelude`** — common definitions (`src/main/tuff/std/prelude.tuff`)
 
 **FFI Implementation**: External functions/types are declared with `extern` and resolved at emit time. The emitter generates JS that calls external functions directly (they exist in the JS runtime).
 

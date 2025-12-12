@@ -53,7 +53,7 @@ async function bootstrapCompileSelfhost(intoDir: string) {
   await mkdir(intoDir, { recursive: true });
   await writeRuntime(intoDir);
 
-  const selfhostDir = resolve("selfhost");
+  const selfhostDir = resolve("src", "main", "tuff", "compiler");
   const entries = await readdir(selfhostDir, { withFileTypes: true });
   for (const ent of entries) {
     if (!ent.isFile()) continue;
@@ -131,7 +131,7 @@ async function main() {
     ? await stagePrebuiltCompiler(stage1Dir)
     : await bootstrapCompileSelfhost(stage1Dir);
 
-  const input = resolve("selfhost", "tuffc.tuff");
+  const input = resolve("src", "main", "tuff", "compiler", "tuffc.tuff");
 
   const s2 = await runCompiler(stage1Entry, input, stage2Dir);
   const s3 = await runCompiler(s2.entry, input, stage3Dir);

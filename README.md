@@ -13,7 +13,7 @@ The compiler is self-hosting and implements a small but growing subset of the la
 
 ## Tuff-written unit testing helpers
 
-There is a tiny, dependency-free unit testing helper module written in Tuff at `std/test.tuff`.
+There is a tiny, dependency-free unit testing helper module written in Tuff at `src/main/tuff/std/test.tuff`.
 
 Example:
 

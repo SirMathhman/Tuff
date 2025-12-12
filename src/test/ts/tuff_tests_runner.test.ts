@@ -29,8 +29,8 @@ async function listTuffTests(rootDir: string): Promise<string[]> {
 }
 
 describe("tuff tests (.tuff)", () => {
-  test("compiles and runs all tests_tuff/*.test.tuff", async () => {
-    const testsRoot = resolve("tests_tuff");
+  test("compiles and runs all src/test/tuff/*.test.tuff", async () => {
+    const testsRoot = resolve("src", "test", "tuff");
 
     const testFiles = await listTuffTests(testsRoot);
     expect(testFiles.length).toBeGreaterThan(0);
@@ -55,7 +55,7 @@ describe("tuff tests (.tuff)", () => {
     for (const testFile of testFiles) {
       // IMPORTANT: compile from a staged copy inside outDir so that module
       // resolution for `from std::test use { ... }` finds outDir/std/test.tuff
-      // (rather than looking for tests_tuff/std/test.tuff in the repo).
+      // (rather than looking for src/test/tuff/std/test.tuff in the repo).
       const relFromTestsRoot = relative(testsRoot, testFile).replaceAll(
         "\\\\",
         "/"
@@ -64,7 +64,10 @@ describe("tuff tests (.tuff)", () => {
       // Stage into outDir root so `std::test` resolves to outDir/std/test.tuff
       // (stagePrebuiltSelfhostCompiler places std/ there).
       const inFile = resolve(outDir, relFromTestsRoot);
-      const outFile = resolve(outDir, relFromTestsRoot.replace(/\.test\.tuff$/, ".test.mjs"));
+      const outFile = resolve(
+        outDir,
+        relFromTestsRoot.replace(/\.test\.tuff$/, ".test.mjs")
+      );
 
       await mkdir(dirname(inFile), { recursive: true });
       await mkdir(dirname(outFile), { recursive: true });

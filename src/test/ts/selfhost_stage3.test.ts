@@ -38,7 +38,7 @@ describe("selfhost stage3", () => {
 
     // Stage 2: stage1 compiles the selfhost compiler source again
     await writeRuntime(stage2Dir);
-    const stage2In = resolve("selfhost", "tuffc.tuff");
+    const stage2In = resolve("src", "main", "tuff", "compiler", "tuffc.tuff");
     const stage2Out = resolve(stage2Dir, "tuffc.mjs");
 
     const tuffc1 = await import(pathToFileURL(stage1File).toString());

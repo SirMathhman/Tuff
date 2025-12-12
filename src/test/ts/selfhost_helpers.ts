@@ -11,8 +11,14 @@ async function writeRuntime(outDir: string) {
 async function writeStdSources(outDir: string) {
   const stdDir = resolve(outDir, "std");
   await mkdir(stdDir, { recursive: true });
-  await copyFile(resolve("std/test.tuff"), resolve(stdDir, "test.tuff"));
-  await copyFile(resolve("std/prelude.tuff"), resolve(stdDir, "prelude.tuff"));
+  await copyFile(
+    resolve("src", "main", "tuff", "std", "test.tuff"),
+    resolve(stdDir, "test.tuff")
+  );
+  await copyFile(
+    resolve("src", "main", "tuff", "std", "prelude.tuff"),
+    resolve(stdDir, "prelude.tuff")
+  );
 
   // The selfhost compiler currently emits rt extern imports as "./rt/<mod>.mjs".
   // When std modules compile to outDir/std/*.mjs, those imports must resolve from
