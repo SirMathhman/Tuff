@@ -1,0 +1,56 @@
+extern from rt::vec use { vec_new, vec_push, vec_get };
+
+from std::test use { reset, suite, it, expect_eq, summary, status };
+
+from src::main::tuff::compiler::ast use { span, decl_import, decl_extern_from };
+from src::main::tuff::compiler::refactor_move_file use { FileAst, move_file_update_imports };
+
+fn main() : I32 => {
+  reset();
+  suite("refactor move file :: update imports (AST-only)");
+
+  // Setup: file A imports ast; file B imports ast too.
+  let names = vec_new();
+  vec_push(names, "span");
+
+  let declsA = vec_new();
+  vec_push(declsA, decl_import(span(0, 0), "src::main::tuff::compiler::ast", names));
+  let fileA = FileAst("src/main/tuff/compiler/a.tuff", declsA);
+
+  let names2 = vec_new();
+  vec_push(names2, "stringLen");
+  let declsB = vec_new();
+  // Include an extern-from to ensure we only update the matching module path.
+  vec_push(declsB, decl_extern_from(span(0, 0), "rt::stdlib", names2));
+  vec_push(declsB, decl_import(span(0, 0), "src::main::tuff::compiler::ast", names));
+  let fileB = FileAst("src/main/tuff/compiler/b.tuff", declsB);
+
+  let declsMoved = vec_new();
+  let moved = FileAst("src/main/tuff/compiler/ast.tuff", declsMoved);
+
+  let files = vec_new();
+  vec_push(files, fileA);
+  vec_push(files, fileB);
+  vec_push(files, moved);
+
+  let outFiles = move_file_update_imports(files, "src/main/tuff/compiler/ast.tuff", "src/main/tuff/compiler/types/ast.tuff");
+
+  // File A import updated.
+  let outA = vec_get(outFiles, 0);
+  let outA0 = vec_get(outA.decls, 0);
+  it("updates DImport modulePath", expect_eq("modulePath", outA0.modulePath, "src::main::tuff::compiler::types::ast"));
+
+  // File B: extern-from untouched; import updated.
+  let outB = vec_get(outFiles, 1);
+  let outB0 = vec_get(outB.decls, 0);
+  let outB1 = vec_get(outB.decls, 1);
+  it("does not touch extern-from", expect_eq("extern", outB0.modulePath, "rt::stdlib"));
+  it("updates second import", expect_eq("modulePath", outB1.modulePath, "src::main::tuff::compiler::types::ast"));
+
+  // Moved file path updated.
+  let outMoved = vec_get(outFiles, 2);
+  it("updates moved file path", expect_eq("filePath", outMoved.filePath, "src/main/tuff/compiler/types/ast.tuff"));
+
+  summary();
+  status()
+}

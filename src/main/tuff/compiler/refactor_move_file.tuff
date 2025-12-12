@@ -1,0 +1,112 @@
+// AST-only refactoring utilities.
+//
+// Goal: support multi-file refactors purely by transforming canonical ASTs.
+//
+// NOTE: Avoid type aliases in exported signatures (type aliases are not runtime exports).
+
+extern from rt::stdlib use { stringLen, stringCharCodeAt, stringFromCharCode, stringSlice };
+extern from rt::vec use { vec_new, vec_len, vec_push, vec_get };
+
+from ast use { span, decl_import, decl_extern_from };
+
+// A simple pairing of a file path with its parsed top-level decls.
+//
+// `decls` is intentionally untyped to avoid exporting type-alias-based signatures.
+// It should be a Vec of Decl-like objects (with `.tag`, `.span`, `.modulePath`, `.names` as needed).
+class fn FileAst(filePath: String, decls) => {}
+
+fn normalize_seps(p: String) : String => {
+  // Normalize '\\' to '/'. Leaves existing '/' intact.
+  let mut out = "";
+  let mut i = 0;
+  while (i < stringLen(p)) {
+    let ch = stringCharCodeAt(p, i);
+    // '\\'
+    if (ch == 92) { out = out + "/"; } else { out = out + stringFromCharCode(ch); }
+    i = i + 1;
+  }
+  out
+}
+
+fn strip_suffix(p: String, suffix: String) : String => {
+  let n = stringLen(p);
+  let m = stringLen(suffix);
+  if (n < m) { yield p; }
+  let tail = stringSlice(p, n - m, n);
+  if (tail == suffix) { yield stringSlice(p, 0, n - m); }
+  p
+}
+
+fn strip_prefix(p: String, prefix: String) : String => {
+  let n = stringLen(p);
+  let m = stringLen(prefix);
+  if (n < m) { yield p; }
+  let head = stringSlice(p, 0, m);
+  if (head == prefix) { yield stringSlice(p, m, n); }
+  p
+}
+
+fn relpath_to_module_path(relPath0: String) : String => {
+  // Convert a project-relative path like `src/main/tuff/compiler/ast.tuff`
+  // (or with Windows separators) into a module path like `src::main::tuff::compiler::ast`.
+  //
+  // This intentionally does *not* try to handle absolute OS paths.
+  let relPath = normalize_seps(relPath0);
+  let p1 = strip_prefix(relPath, "./");
+  let p2 = strip_suffix(p1, ".tuff");
+
+  let mut out = "";
+  let mut i = 0;
+  while (i < stringLen(p2)) {
+    let ch = stringCharCodeAt(p2, i);
+    if (ch == 47) { // '/'
+      out = out + "::";
+    } else {
+      out = out + stringFromCharCode(ch);
+    }
+    i = i + 1;
+  }
+  out
+}
+
+fn refactor_decl_import_path(decl, oldModulePath: String, newModulePath: String) => {
+  if (decl.tag == "DImport" && decl.modulePath == oldModulePath) {
+    yield decl_import(decl.span, newModulePath, decl.names);
+  }
+  if (decl.tag == "DExternFrom" && decl.modulePath == oldModulePath) {
+    yield decl_extern_from(decl.span, newModulePath, decl.names);
+  }
+  decl
+}
+
+fn refactor_decls_import_paths(decls, oldModulePath: String, newModulePath: String) => {
+  let out = vec_new();
+  let mut i = 0;
+  while (i < vec_len(decls)) {
+    vec_push(out, refactor_decl_import_path(vec_get(decls, i), oldModulePath, newModulePath));
+    i = i + 1;
+  }
+  out
+}
+
+// Move a file from `oldFilePath` to `newFilePath` (project-relative paths) and update imports.
+//
+// This is a pure AST transformation:
+// - Updates the moved file's `.filePath` entry.
+// - Rewrites any `DImport`/`DExternFrom` in *all* files whose `modulePath` matches the moved module.
+fn move_file_update_imports(files, oldFilePath: String, newFilePath: String) => {
+  let oldModulePath = relpath_to_module_path(oldFilePath);
+  let newModulePath = relpath_to_module_path(newFilePath);
+
+  let outFiles = vec_new();
+  let mut i = 0;
+  while (i < vec_len(files)) {
+    let f = vec_get(files, i);
+    let updatedPath = if (normalize_seps(f.filePath) == normalize_seps(oldFilePath)) { newFilePath } else { f.filePath };
+    let updatedDecls = refactor_decls_import_paths(f.decls, oldModulePath, newModulePath);
+    vec_push(outFiles, FileAst(updatedPath, updatedDecls));
+    i = i + 1;
+  }
+
+  outFiles
+}
