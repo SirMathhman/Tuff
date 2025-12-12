@@ -129,6 +129,13 @@ si = (si + 1);
 }
 return panic(("unknown struct: " + name));
 }
+export function is_identifier_too_short(text) {
+return (stringLen(text) <= 2);
+}
+export function warn_short_identifier(name) {
+println((("warning: identifier '" + name) + "' is too short (2 chars or less); consider a more descriptive name"));
+return undefined;
+}
 export function is_digit(code) {
 return ((code >= 48) && (code <= 57));
 }
@@ -1185,6 +1192,9 @@ export function parse_fn_decl2(src, i, exportAll) {
 let k = parse_keyword(src, i, "fn");
 const name = parse_ident(src, k);
 k = name.nextPos;
+if (is_identifier_too_short(name.text)) {
+warn_short_identifier(name.text);
+}
 const t0 = skip_ws(src, k);
 if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
 k = skip_angle_brackets(src, t0);
@@ -1208,6 +1218,9 @@ let k = parse_keyword(src, i, "class");
 k = parse_keyword(src, k, "fn");
 const name = parse_ident(src, k);
 k = name.nextPos;
+if (is_identifier_too_short(name.text)) {
+warn_short_identifier(name.text);
+}
 const t0 = skip_ws(src, k);
 if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
 k = skip_angle_brackets(src, t0);
@@ -1314,6 +1327,9 @@ export function parse_struct_decl(src, i) {
 let k = parse_keyword(src, i, "struct");
 const name = parse_ident(src, k);
 k = name.nextPos;
+if (is_identifier_too_short(name.text)) {
+warn_short_identifier(name.text);
+}
 const t0 = skip_ws(src, k);
 if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
 k = skip_angle_brackets(src, t0);
@@ -1350,6 +1366,9 @@ export function parse_type_union_decl(src, i, exportAll) {
 let k = parse_keyword(src, i, "type");
 const _name = parse_ident(src, k);
 k = _name.nextPos;
+if (is_identifier_too_short(_name.text)) {
+warn_short_identifier(_name.text);
+}
 const t0 = skip_ws(src, k);
 if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
 k = skip_angle_brackets(src, t0);
@@ -1446,6 +1465,9 @@ const mutOpt = parse_mut_opt(src, k);
 k = mutOpt.nextPos;
 const name = parse_ident(src, k);
 k = name.nextPos;
+if (is_identifier_too_short(name.text)) {
+warn_short_identifier(name.text);
+}
 const t0 = skip_ws(src, k);
 if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 58))) {
 const _ty = parse_type_expr(src, (t0 + 1));
@@ -1491,6 +1513,9 @@ return ParsedStmt((((("if (" + cond.v0) + ") {\n") + thenB.v0) + "}\n"), k);
 if (is_assign_stmt_start(src, k)) {
 const name = parse_ident(src, k);
 k = name.nextPos;
+if (is_identifier_too_short(name.text)) {
+warn_short_identifier(name.text);
+}
 k = parse_keyword(src, k, "=");
 const expr = parse_expr(src, k);
 k = expr.v1;
