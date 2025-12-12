@@ -63,7 +63,10 @@ async function stagePrebuiltCompiler(intoDir: string) {
   return resolve(intoDir, "tuffc.mjs");
 }
 
-async function collectTuffFiles(dir: string, baseDir: string): Promise<string[]> {
+async function collectTuffFiles(
+  dir: string,
+  baseDir: string
+): Promise<string[]> {
   const files: string[] = [];
   const entries = await readdir(dir, { withFileTypes: true });
   for (const ent of entries) {
@@ -109,7 +112,9 @@ async function bootstrapCompileSelfhost(intoDir: string) {
     }
 
     // Preserve directory structure: e.g., parsing/primitives.tuff -> parsing/primitives.mjs
-    const relPath = resolve(filePath).substring(resolve(selfhostDir).length + 1);
+    const relPath = resolve(filePath).substring(
+      resolve(selfhostDir).length + 1
+    );
     const outFile = resolve(intoDir, relPath.replace(/\.tuff$/, ".mjs"));
     await mkdir(resolve(outFile, ".."), { recursive: true });
     await writeFile(outFile, js, "utf8");

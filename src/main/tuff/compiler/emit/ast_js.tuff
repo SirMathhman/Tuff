@@ -10,6 +10,94 @@ from util::diagnostics use { find_struct_fields };
 from util::lexing use { starts_with_at };
 from parsing::primitives use { module_path_to_relpath };
 
+let mut __current_file_path = "";
+
+fn set_current_file_path(path: String) : Void => {
+  __current_file_path = path;
+}
+
+fn normalize_path_seps(p: String) : String => {
+  // Normalize Windows path separators to '/' so relative-path logic is stable.
+  let mut out = "";
+  let mut i = 0;
+  while (i < stringLen(p)) {
+    let ch = stringCharCodeAt(p, i);
+    if (ch == 92) { // '\\'
+      out = out + "/";
+      i = i + 1;
+      continue;
+    }
+    out = out + stringFromCharCode(ch);
+    i = i + 1;
+  }
+  out
+}
+
+fn split_path(p: String) => {
+  // Split on '/'. Empty segments are skipped.
+  let mut segs = vec_new();
+  let mut start = 0;
+  let mut i = 0;
+  while (i <= stringLen(p)) {
+    if (i == stringLen(p) || stringCharCodeAt(p, i) == 47) {
+      if (i > start) {
+        vec_push(segs, stringSlice(p, start, i));
+      }
+      start = i + 1;
+      i = i + 1;
+      continue;
+    }
+    i = i + 1;
+  }
+  segs
+}
+
+fn rel_import_path(targetRelPath: String) : String => {
+  // Compute a relative import specifier from the current module path to target.
+  // Both paths are expected to be project-relative like:
+  //   __current_file_path = "util/diagnostics.tuff"
+  //   targetRelPath       = "rt/stdlib.mjs" or "util/lexing.mjs"
+  let from = normalize_path_seps(__current_file_path);
+  let to = normalize_path_seps(targetRelPath);
+
+  let fromParts = split_path(from);
+  let toParts = split_path(to);
+
+  // Directory parts for "from" exclude the file name.
+  let mut fromDirLen = vec_len(fromParts) - 1;
+  if (vec_len(fromParts) == 0) { fromDirLen = 0; }
+
+  // Common prefix length.
+  let mut common = 0;
+  while (common < fromDirLen && common < vec_len(toParts)) {
+    if (vec_get(fromParts, common) != vec_get(toParts, common)) { break; }
+    common = common + 1;
+  }
+
+  // How many dirs to go up from fromDir.
+  let mut up = fromDirLen - common;
+  let mut prefix = "";
+  if (up == 0) {
+    prefix = "./";
+  } else {
+    while (up > 0) {
+      prefix = prefix + "../";
+      up = up - 1;
+    }
+  }
+
+  // Join remaining target parts.
+  let mut rest = "";
+  let mut i = common;
+  while (i < vec_len(toParts)) {
+    if (stringLen(rest) == 0) { rest = vec_get(toParts, i); }
+    else { rest = rest + "/" + vec_get(toParts, i); }
+    i = i + 1;
+  }
+
+  prefix + rest
+}
+
 fn escape_js_string(s: String) : String => {
   // Minimal JS string escaping for double-quoted literals.
   // (More escapes can be added as the AST grows.)
@@ -301,7 +389,8 @@ fn emit_names_csv(names) : String => {
 
 fn emit_extern_import_path(modPath: String) : String => {
   if (starts_with_at(modPath, 0, "rt::")) {
-    yield "./rt/" + stringSlice(modPath, 4, stringLen(modPath)) + ".mjs";
+    let rel = "rt/" + stringSlice(modPath, 4, stringLen(modPath)) + ".mjs";
+    yield rel_import_path(rel);
   }
   if (starts_with_at(modPath, 0, "node::")) {
     yield "node:" + stringSlice(modPath, 6, stringLen(modPath));
@@ -379,7 +468,8 @@ fn emit_decl_js(d, exportAll: Bool) : String => {
   }
 
   if (d.tag == "DImport") {
-    let importPath = "./" + module_path_to_relpath(d.modulePath) + ".mjs";
+    let targetRel = module_path_to_relpath(d.modulePath) + ".mjs";
+    let importPath = rel_import_path(targetRel);
     out = "import { " + emit_names_csv(d.names) + " } from \"" + importPath + "\";\n";
   }
 

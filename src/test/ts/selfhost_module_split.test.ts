@@ -20,13 +20,13 @@ describe("selfhost compiler modules", () => {
     const src = await readFile(filePath, "utf8");
 
     // We expect the monolith to start importing extracted modules.
-    expect(src).toContain("from diagnostics use");
-    expect(src).toContain("from lexing use");
+    expect(src).toContain("from util::diagnostics use");
+    expect(src).toContain("from util::lexing use");
 
     // Parsing is also split out of the facade.
-    expect(src).toContain("from parsing_primitives use");
-    expect(src).toContain("from parsing_types use");
-    expect(src).toContain("from parsing_expr_stmt use");
-    expect(src).toContain("from parsing_decls use");
+    expect(src).toContain("from parsing::primitives use");
+    expect(src).toContain("from parsing::types use");
+    expect(src).toContain("from parsing::expr_stmt use");
+    expect(src).toContain("from parsing::decls use");
   });
 });

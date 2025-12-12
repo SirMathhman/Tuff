@@ -1,7 +1,7 @@
 // compiled by selfhost tuffc
-import { stringLen, stringSlice, stringCharCodeAt, stringFromCharCode } from "./rt/stdlib.mjs";
-import { panic_at } from "./../util/diagnostics.mjs";
-import { is_digit, is_space, is_ident_start, is_ident_part, skip_ws, starts_with_at } from "./../util/lexing.mjs";
+import { stringLen, stringSlice, stringCharCodeAt, stringFromCharCode } from "../rt/stdlib.mjs";
+import { panic_at } from "../util/diagnostics.mjs";
+import { is_digit, is_space, is_ident_start, is_ident_part, skip_ws, starts_with_at } from "../util/lexing.mjs";
 export function ParsedNumber(value, nextPos) {
 return { value: value, nextPos: nextPos };
 }

@@ -1,6 +1,6 @@
 from std::test use { reset, suite, it, expect_eq, summary, status };
 
-from src::main::tuff::compiler::lexing use { roundtrip_with_trivia };
+from src::main::tuff::compiler::util::lexing use { roundtrip_with_trivia };
 
 fn main() : I32 => {
   reset();

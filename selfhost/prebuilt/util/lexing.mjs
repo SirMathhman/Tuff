@@ -1,6 +1,6 @@
 // compiled by selfhost tuffc
-import { stringLen, stringSlice, stringCharCodeAt } from "./rt/stdlib.mjs";
-import { vec_new, vec_push, vec_len, vec_get } from "./rt/vec.mjs";
+import { stringLen, stringSlice, stringCharCodeAt } from "../rt/stdlib.mjs";
+import { vec_new, vec_push, vec_len, vec_get } from "../rt/vec.mjs";
 import { panic_at } from "./diagnostics.mjs";
 export function LexItem(tag, startPos, endPos, text) {
 return { tag: tag, startPos: startPos, endPos: endPos, text: text };

@@ -1,6 +1,6 @@
 // compiled by selfhost tuffc
-import { println, panic, stringLen, stringSlice, stringCharCodeAt } from "./rt/stdlib.mjs";
-import { vec_new, vec_len, vec_push, vec_get } from "./rt/vec.mjs";
+import { println, panic, stringLen, stringSlice, stringCharCodeAt } from "../rt/stdlib.mjs";
+import { vec_new, vec_len, vec_push, vec_get } from "../rt/vec.mjs";
 let __tuffc_current_file = "<input>";
 let __tuffc_struct_defs = vec_new();
 export function LineCol(line, col) {

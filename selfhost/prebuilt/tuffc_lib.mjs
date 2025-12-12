@@ -10,13 +10,13 @@ import { ParsedExprAst, parse_expr_ast } from "./parsing/expr_stmt.mjs";
 import { ParsedImports, ParsedFn, parse_imports, parse_extern_decl, parse_module_decl, parse_fn_decl2, parse_class_fn_decl2, parse_struct_decl, parse_type_union_decl, parse_param_list, parse_fn_decl_named, parse_fn_decl } from "./parsing/decls.mjs";
 import { ParsedDeclAst, ParsedDeclsAst, parse_imports_ast, parse_extern_decl_ast, parse_module_decl_ast, parse_fn_decl_ast2, parse_class_fn_decl_ast2, parse_struct_decl_ast, parse_type_union_decl_ast } from "./parsing/decls.mjs";
 import { span, decl_let } from "./ast.mjs";
-import { emit_decl_js } from "./emit/ast_js.mjs";
+import { emit_decl_js, set_current_file_path } from "./emit/ast_js.mjs";
 import { analyze_program } from "./analyzer.mjs";
 import { ParsedProgramWithTrivia, parse_program_with_trivia } from "./util/formatting.mjs";
 export function parse_program_with_trivia_api(src, exportAll) {
 return parse_program_with_trivia(src, exportAll);
 }
-export function compile_tiny2(src, requireMain, exportAll) {
+export function compile_tiny2(src, requireMain, exportAll, filePath) {
 let i = 0;
 reset_struct_defs();
 let out = "// compiled by selfhost tuffc\n";
@@ -113,6 +113,7 @@ if ((requireMain && (!sawMain))) {
 panic_at(src, i, "expected fn main");
 }
 analyze_program(src, decls);
+set_current_file_path(filePath);
 let di = 0;
 while ((di < vec_len(decls))) {
 out = (out + emit_decl_js(vec_get(decls, di), exportAll));
@@ -121,13 +122,57 @@ di = (di + 1);
 return out;
 }
 export function compile_tiny(src) {
-return compile_tiny2(src, true, false);
+return compile_tiny2(src, true, false, "main.tuff");
 }
 export function compile_module(src) {
-return compile_tiny2(src, false, true);
+return compile_tiny2(src, false, true, "module.tuff");
+}
+export function find_substring(hay, needle) {
+let i = 0;
+while (((i + stringLen(needle)) <= stringLen(hay))) {
+if (starts_with_at(hay, i, needle)) {
+return i;
+}
+i = (i + 1);
+}
+return (-1);
+}
+export function workspace_root_from_path(p) {
+let i = find_substring(p, "\\src\\");
+if ((i != (-1))) {
+return stringSlice(p, 0, i);
+}
+i = find_substring(p, "/src/");
+if ((i != (-1))) {
+return stringSlice(p, 0, i);
+}
+i = find_substring(p, "\\std\\");
+if ((i != (-1))) {
+return stringSlice(p, 0, i);
+}
+i = find_substring(p, "/std/");
+if ((i != (-1))) {
+return stringSlice(p, 0, i);
+}
+return pathDirname(p);
+}
+export function compiler_root_from_path(p) {
+const needle1 = "\\src\\main\\tuff\\compiler\\";
+let i = find_substring(p, needle1);
+if ((i != (-1))) {
+return stringSlice(p, 0, (i + stringLen(needle1)));
+}
+const needle2 = "/src/main/tuff/compiler/";
+i = find_substring(p, needle2);
+if ((i != (-1))) {
+return stringSlice(p, 0, (i + stringLen(needle2)));
+}
+return "";
 }
 export function compile_project(entryPath, outPath) {
 const outDir = pathDirname(outPath);
+const entryDir = pathDirname(entryPath);
+const workspaceRoot = workspace_root_from_path(entryPath);
 let queue = vec_new();
 vec_push(queue, entryPath);
 let done = vec_new();
@@ -202,15 +247,20 @@ break;
 panic_at(src, scan, "expected ',' or '}' in import list");
 }
 scan = parse_optional_semicolon(src, scan);
-const baseDir = pathDirname(path);
 const rel = module_path_to_relpath(mod.text);
+let baseDir = pathDirname(path);
+if ((starts_with_at(mod.text, 0, "src::") || starts_with_at(mod.text, 0, "std::"))) {
+baseDir = workspaceRoot;
+} else {
+const cr = compiler_root_from_path(path);
+if ((stringLen(cr) > 0)) {
+baseDir = cr;
+}
+}
 const depPath = pathJoin(baseDir, (rel + ".tuff"));
 vec_push(queue, depPath);
 }
-const js = ((path == entryPath) ? compile_tiny(src) : compile_module(src));
-const outFile = ((path == entryPath) ? outPath : (() => {
-const baseDir = pathDirname(entryPath);
-let prefixLen = stringLen(baseDir);
+let prefixLen = stringLen(entryDir);
 let relStart = prefixLen;
 if ((relStart < stringLen(path))) {
 const ch = stringCharCodeAt(path, relStart);
@@ -220,8 +270,8 @@ relStart = (relStart + 1);
 }
 const relPath = stringSlice(path, relStart, stringLen(path));
 const relNoExt = stringSlice(relPath, 0, (stringLen(relPath) - 5));
-return pathJoin(outDir, (relNoExt + ".mjs"));
-})());
+const outFile = ((path == entryPath) ? outPath : pathJoin(outDir, (relNoExt + ".mjs")));
+const js = ((path == entryPath) ? compile_tiny2(src, true, false, relPath) : compile_tiny2(src, false, true, relPath));
 writeTextFile(outFile, js);
 }
 return undefined;

@@ -1,9 +1,84 @@
 // compiled by selfhost tuffc
-import { panic, stringLen, stringCharCodeAt, stringFromCharCode, stringSlice } from "./rt/stdlib.mjs";
-import { vec_new, vec_push, vec_len, vec_get, vec_set } from "./rt/vec.mjs";
-import { find_struct_fields } from "./../util/diagnostics.mjs";
-import { starts_with_at } from "./../util/lexing.mjs";
-import { module_path_to_relpath } from "./../parsing/primitives.mjs";
+import { panic, stringLen, stringCharCodeAt, stringFromCharCode, stringSlice } from "../rt/stdlib.mjs";
+import { vec_new, vec_push, vec_len, vec_get, vec_set } from "../rt/vec.mjs";
+import { find_struct_fields } from "../util/diagnostics.mjs";
+import { starts_with_at } from "../util/lexing.mjs";
+import { module_path_to_relpath } from "../parsing/primitives.mjs";
+let __current_file_path = "";
+export function set_current_file_path(path) {
+__current_file_path = path;
+return undefined;
+}
+export function normalize_path_seps(p) {
+let out = "";
+let i = 0;
+while ((i < stringLen(p))) {
+const ch = stringCharCodeAt(p, i);
+if ((ch == 92)) {
+out = (out + "/");
+i = (i + 1);
+continue;
+}
+out = (out + stringFromCharCode(ch));
+i = (i + 1);
+}
+return out;
+}
+export function split_path(p) {
+let segs = vec_new();
+let start = 0;
+let i = 0;
+while ((i <= stringLen(p))) {
+if (((i == stringLen(p)) || (stringCharCodeAt(p, i) == 47))) {
+if ((i > start)) {
+vec_push(segs, stringSlice(p, start, i));
+}
+start = (i + 1);
+i = (i + 1);
+continue;
+}
+i = (i + 1);
+}
+return segs;
+}
+export function rel_import_path(targetRelPath) {
+const from = normalize_path_seps(__current_file_path);
+const to = normalize_path_seps(targetRelPath);
+const fromParts = split_path(from);
+const toParts = split_path(to);
+let fromDirLen = (vec_len(fromParts) - 1);
+if ((vec_len(fromParts) == 0)) {
+fromDirLen = 0;
+}
+let common = 0;
+while (((common < fromDirLen) && (common < vec_len(toParts)))) {
+if ((vec_get(fromParts, common) != vec_get(toParts, common))) {
+break;
+}
+common = (common + 1);
+}
+let up = (fromDirLen - common);
+let prefix = "";
+if ((up == 0)) {
+prefix = "./";
+} else {
+while ((up > 0)) {
+prefix = (prefix + "../");
+up = (up - 1);
+}
+}
+let rest = "";
+let i = common;
+while ((i < vec_len(toParts))) {
+if ((stringLen(rest) == 0)) {
+rest = vec_get(toParts, i);
+} else {
+rest = ((rest + "/") + vec_get(toParts, i));
+}
+i = (i + 1);
+}
+return (prefix + rest);
+}
 export function escape_js_string(s) {
 let out = "";
 let i = 0;
@@ -304,7 +379,8 @@ return out;
 }
 export function emit_extern_import_path(modPath) {
 if (starts_with_at(modPath, 0, "rt::")) {
-return (("./rt/" + stringSlice(modPath, 4, stringLen(modPath))) + ".mjs");
+const rel = (("rt/" + stringSlice(modPath, 4, stringLen(modPath))) + ".mjs");
+return rel_import_path(rel);
 }
 if (starts_with_at(modPath, 0, "node::")) {
 return ("node:" + stringSlice(modPath, 6, stringLen(modPath)));
@@ -376,7 +452,8 @@ const importPath = emit_extern_import_path(d.modulePath);
 out = (((("import { " + emit_names_csv(d.names)) + " } from \"") + importPath) + "\";\n");
 }
 if ((d.tag == "DImport")) {
-const importPath = (("./" + module_path_to_relpath(d.modulePath)) + ".mjs");
+const targetRel = (module_path_to_relpath(d.modulePath) + ".mjs");
+const importPath = rel_import_path(targetRel);
 out = (((("import { " + emit_names_csv(d.names)) + " } from \"") + importPath) + "\";\n");
 }
 if ((d.tag == "DTypeUnion")) {

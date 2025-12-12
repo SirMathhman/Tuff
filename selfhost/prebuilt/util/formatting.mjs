@@ -1,13 +1,13 @@
 // compiled by selfhost tuffc
-import { vec_new, vec_len, vec_push, vec_get } from "./rt/vec.mjs";
-import { stringLen } from "./rt/stdlib.mjs";
+import { vec_new, vec_len, vec_push, vec_get } from "../rt/vec.mjs";
+import { stringLen } from "../rt/stdlib.mjs";
 import { panic_at, reset_struct_defs } from "./diagnostics.mjs";
 import { skip_ws, starts_with_at, tokenize_with_trivia, TokenStream } from "./lexing.mjs";
-import { parse_keyword, parse_optional_semicolon, parse_required_semicolon, parse_ident } from "./../parsing/primitives.mjs";
-import { parse_type_expr } from "./../parsing/types.mjs";
-import { parse_expr_ast, parse_mut_opt } from "./../parsing/expr_stmt.mjs";
-import { parse_imports_ast, parse_extern_decl_ast, parse_module_decl_ast, parse_fn_decl_ast2, parse_class_fn_decl_ast2, parse_struct_decl_ast, parse_type_union_decl_ast } from "./../parsing/decls.mjs";
-import { span, decl_let } from "./../ast.mjs";
+import { parse_keyword, parse_optional_semicolon, parse_required_semicolon, parse_ident } from "../parsing/primitives.mjs";
+import { parse_type_expr } from "../parsing/types.mjs";
+import { parse_expr_ast, parse_mut_opt } from "../parsing/expr_stmt.mjs";
+import { parse_imports_ast, parse_extern_decl_ast, parse_module_decl_ast, parse_fn_decl_ast2, parse_class_fn_decl_ast2, parse_struct_decl_ast, parse_type_union_decl_ast } from "../parsing/decls.mjs";
+import { span, decl_let } from "../ast.mjs";
 export function ParsedProgramWithTrivia(decls, tokenStream, nextPos) {
 return { decls: decls, tokenStream: tokenStream, nextPos: nextPos };
 }

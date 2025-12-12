@@ -14,7 +14,7 @@ from src::main::tuff::compiler::ast use {
   expr_if
 };
 
-from src::main::tuff::compiler::emit_ast_js use { emit_expr_js };
+from src::main::tuff::compiler::emit::ast_js use { emit_expr_js };
 
 fn main() : I32 => {
   reset();

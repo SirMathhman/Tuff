@@ -101,7 +101,7 @@ from ast use {
   decl_let
 };
 
-from emit::ast_js use { emit_decl_js };
+from emit::ast_js use { emit_decl_js, set_current_file_path };
 
 from analyzer use { analyze_program };
 
@@ -112,7 +112,7 @@ fn parse_program_with_trivia_api(src: String, exportAll: Bool) : ParsedProgramWi
   parse_program_with_trivia(src, exportAll)
 }
 
-fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool) : String => {
+fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool, filePath: String) : String => {
   // Parse:
   //   (extern from <mod> use { <idents> };)*
   //   (from <mod> use { <idents> };)*
@@ -231,6 +231,9 @@ fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool) : String => {
   // Phase 4 (initial): run analyzer checks before emission.
   analyze_program(src, decls);
 
+  // Set the file path for the emitter to compute correct relative import paths
+  set_current_file_path(filePath);
+
   // Emit decls in order.
   let mut di = 0;
   while (di < vec_len(decls)) {
@@ -241,16 +244,52 @@ fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool) : String => {
   out
 }
 
-fn compile_tiny(src: String) : String => compile_tiny2(src, true, false)
-fn compile_module(src: String) : String => compile_tiny2(src, false, true)
+fn compile_tiny(src: String) : String => compile_tiny2(src, true, false, "main.tuff")
+fn compile_module(src: String) : String => compile_tiny2(src, false, true, "module.tuff")
+
+fn find_substring(hay: String, needle: String) : I32 => {
+  let mut i = 0;
+  while (i + stringLen(needle) <= stringLen(hay)) {
+    if (starts_with_at(hay, i, needle)) { yield i; }
+    i = i + 1;
+  }
+  -1
+}
+
+fn workspace_root_from_path(p: String) : String => {
+  // Try to find a stable staging/workspace root by trimming at common anchors.
+  let mut i = find_substring(p, "\\src\\");
+  if (i != -1) { yield stringSlice(p, 0, i); }
+  i = find_substring(p, "/src/");
+  if (i != -1) { yield stringSlice(p, 0, i); }
+  i = find_substring(p, "\\std\\");
+  if (i != -1) { yield stringSlice(p, 0, i); }
+  i = find_substring(p, "/std/");
+  if (i != -1) { yield stringSlice(p, 0, i); }
+  pathDirname(p)
+}
+
+fn compiler_root_from_path(p: String) : String => {
+  // If we're compiling a compiler source file, resolve short module paths from
+  // the compiler root: <root>/src/main/tuff/compiler/
+  let needle1 = "\\src\\main\\tuff\\compiler\\";
+  let mut i = find_substring(p, needle1);
+  if (i != -1) { yield stringSlice(p, 0, i + stringLen(needle1)); }
+  let needle2 = "/src/main/tuff/compiler/";
+  i = find_substring(p, needle2);
+  if (i != -1) { yield stringSlice(p, 0, i + stringLen(needle2)); }
+  ""
+}
 
 fn compile_project(entryPath: String, outPath: String) : Void => {
   // Very small multi-file compiler:
   // - supports `from <path> use { ... };` for local file modules
-  // - resolves to <path>.tuff relative to the importing file
+  // - all module paths are resolved relative to the entry file's directory
   // - emits to the same relative path under outDir: <path>.mjs
 
   let outDir = pathDirname(outPath);
+  let entryDir = pathDirname(entryPath);
+  let workspaceRoot = workspace_root_from_path(entryPath);
 
   let mut queue = vec_new();
   vec_push(queue, entryPath);
@@ -325,31 +364,39 @@ fn compile_project(entryPath: String, outPath: String) : Void => {
       scan = parse_optional_semicolon(src, scan);
 
       // queue dependency file
-      let baseDir = pathDirname(path);
       let rel = module_path_to_relpath(mod.text);
+
+      // Resolve:
+      // - `src::...` and `std::...` from workspace root (staging root)
+      // - compiler-internal short paths from the compiler root when applicable
+      // - otherwise from the importing file's directory
+      let mut baseDir = pathDirname(path);
+      if (starts_with_at(mod.text, 0, "src::") || starts_with_at(mod.text, 0, "std::")) {
+        baseDir = workspaceRoot;
+      } else {
+        let cr = compiler_root_from_path(path);
+        if (stringLen(cr) > 0) { baseDir = cr; }
+      }
+
       let depPath = pathJoin(baseDir, rel + ".tuff");
       vec_push(queue, depPath);
     }
 
-    let js = if (path == entryPath) compile_tiny(src) else compile_module(src);
-    // choose output name
-    let outFile = if (path == entryPath) outPath else {
-      // Preserve relative path under outDir.
-      // Example: <base>/std/test.tuff -> <outDir>/std/test.mjs
-      // We compute the filename only and keep directories by slicing from baseDir.
-      let baseDir = pathDirname(entryPath);
-      let mut prefixLen = stringLen(baseDir);
-      // If the baseDir doesn't end with a separator, allow one separator.
-      let mut relStart = prefixLen;
-      if (relStart < stringLen(path)) {
-        let ch = stringCharCodeAt(path, relStart);
-        if (ch == 47 || ch == 92) { relStart = relStart + 1; }
-      }
-      let relPath = stringSlice(path, relStart, stringLen(path));
-      // relPath ends with .tuff; replace with .mjs
-      let relNoExt = stringSlice(relPath, 0, stringLen(relPath) - 5);
-      pathJoin(outDir, relNoExt + ".mjs")
-    };
+    // Compute entry-dir-relative path for correct JS import emission.
+    let mut prefixLen = stringLen(entryDir);
+    let mut relStart = prefixLen;
+    if (relStart < stringLen(path)) {
+      let ch = stringCharCodeAt(path, relStart);
+      if (ch == 47 || ch == 92) { relStart = relStart + 1; }
+    }
+    let relPath = stringSlice(path, relStart, stringLen(path));
+    let relNoExt = stringSlice(relPath, 0, stringLen(relPath) - 5);
+
+    // choose output name first (before emit)
+    let outFile = if (path == entryPath) outPath else pathJoin(outDir, relNoExt + ".mjs");
+
+    // Pass relPath to the emitter (not the absolute path).
+    let js = if (path == entryPath) compile_tiny2(src, true, false, relPath) else compile_tiny2(src, false, true, relPath);
     writeTextFile(outFile, js);
   }
 }

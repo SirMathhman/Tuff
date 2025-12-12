@@ -14,12 +14,16 @@ const MAPPINGS = [
   ["refactor_move_file", "refactor/move_file"],
 ];
 
-function fixRelativeImports(source: string, filePath: string, prebuiltRoot: string): string {
+function fixRelativeImports(
+  source: string,
+  filePath: string,
+  prebuiltRoot: string
+): string {
   // For a file at prebuiltRoot/util/lexing.mjs:
   // - The import "./util/diagnostics.mjs" should be "./diagnostics.mjs" (sibling in same dir)
   // - The import "./parsing/primitives.mjs" should be "../parsing/primitives.mjs" (up one, then down)
   // - The import "./ast.mjs" should be "../ast.mjs" (up one level to root)
-  
+
   const fileDir = dirname(relative(prebuiltRoot, filePath));
   let updated = source;
 
@@ -29,10 +33,10 @@ function fixRelativeImports(source: string, filePath: string, prebuiltRoot: stri
     const targetPath = resolve(prebuiltRoot, `${newPath}.mjs`);
     const currentPath = resolve(prebuiltRoot, filePath);
     const relativePath = relative(dirname(currentPath), targetPath);
-    
+
     // Normalize slashes and add ./ prefix if needed
     const normalizedRelativePath = "./" + relativePath.replace(/\\/g, "/");
-    
+
     // Replace old import with new relative import
     const pattern = new RegExp(`from\\s+"\\./[^"]*${newPath}\\.mjs"`, "g");
     updated = updated.replace(pattern, `from "${normalizedRelativePath}"`);
@@ -44,7 +48,7 @@ function fixRelativeImports(source: string, filePath: string, prebuiltRoot: stri
     const targetPath = resolve(prebuiltRoot, rootFile);
     const currentPath = resolve(prebuiltRoot, filePath);
     const relativePath = relative(dirname(currentPath), targetPath);
-    
+
     if (relativePath !== rootFile) {
       // File is in a subdirectory; fix the import
       const normalizedRelativePath = "./" + relativePath.replace(/\\/g, "/");
