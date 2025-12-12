@@ -23,28 +23,28 @@ let mut __tuffc_current_file = "<input>";
 let mut __tuffc_struct_defs = vec_new();
 
 // Tiny record type used to return two values from parsing helpers.
-class fn ParsedNumber(v0, v1) => {}
-class fn ParsedIdent(v0, v1) => {}
+class fn ParsedNumber(value, nextPos) => {}
+class fn ParsedIdent(text, nextPos) => {}
 class fn ParsedExpr(v0, v1) => {}
 class fn ParsedMain(body, expr, v1) => {}
-class fn ParsedBool(v0, v1) => {}
+class fn ParsedBool(ok, nextPos) => {}
 class fn ParsedStmt(v0, v1) => {}
 class fn ParsedParams(v0, v1) => {}
 class fn ParsedType(v0, v1) => {}
 class fn ParsedImports(v0, v1) => {}
 class fn ParsedFn(v0, v1, v2) => {}
 class fn ParsedModule(v0, v1) => {}
-class fn LineCol(v0, v1) => {}
-class fn StructDef(v0, v1) => {} // name, fields(vec)
+class fn LineCol(line, col) => {}
+class fn StructDef(name, fields) => {} // name, fields(vec)
 
 // Diagnostics helpers
-fn set_current_file(path) => {
+fn set_current_file(path: String) : Void => {
   __tuffc_current_file = path;
 }
 
-fn spaces(n) => {
+fn spaces(n: I32) : String => {
   let mut s = "";
-  let mut i = 0;
+  let mut i: I32 = 0;
   while (i < n) {
     s = s + " ";
     i = i + 1;
@@ -52,14 +52,14 @@ fn spaces(n) => {
   s
 }
 
-fn line_col_at(src, i) => {
-  let mut line = 1;
-  let mut col = 1;
-  let mut p = 0;
-  let mut limit = i;
+fn line_col_at(src: String, i: I32) : LineCol => {
+  let mut line: I32 = 1;
+  let mut col: I32 = 1;
+  let mut p: I32 = 0;
+  let mut limit: I32 = i;
   if (limit > stringLen(src)) { limit = stringLen(src); }
   while (p < limit) {
-    let ch = stringCharCodeAt(src, p);
+    let ch: I32 = stringCharCodeAt(src, p);
     if (ch == 10) {
       line = line + 1;
       col = 1;
@@ -71,29 +71,29 @@ fn line_col_at(src, i) => {
   LineCol(line, col)
 }
 
-fn panic_at(src, i, msg) => {
+fn panic_at(src: String, i: I32, msg: String) : Void => {
   let lc = line_col_at(src, i);
 
   // Find bounds of the line containing i.
-  let mut pos = i;
+  let mut pos: I32 = i;
   if (pos > stringLen(src)) { pos = stringLen(src); }
 
-  let mut ls = pos;
+  let mut ls: I32 = pos;
   while (ls > 0) {
     if (stringCharCodeAt(src, ls - 1) == 10) { break; }
     ls = ls - 1;
   }
 
-  let mut le = pos;
+  let mut le: I32 = pos;
   while (le < stringLen(src)) {
     if (stringCharCodeAt(src, le) == 10) { break; }
     le = le + 1;
   }
 
   let lineText = stringSlice(src, ls, le);
-  let header = __tuffc_current_file + ":" + ("" + lc.v0) + ":" + ("" + lc.v1) + " error: " + msg;
+  let header = __tuffc_current_file + ":" + ("" + lc.line) + ":" + ("" + lc.col) + " error: " + msg;
   let frame1 = "  | " + lineText;
-  let frame2 = "  | " + spaces(lc.v1 - 1) + "^";
+  let frame2 = "  | " + spaces(lc.col - 1) + "^";
   panic(header + "\n" + frame1 + "\n" + frame2);
 }
 
@@ -106,7 +106,7 @@ fn add_struct_def(name, fields) => {
   let mut si = 0;
   while (si < vec_len(__tuffc_struct_defs)) {
     let d = vec_get(__tuffc_struct_defs, si);
-    if (d.v0 == name) { panic("duplicate struct: " + name); }
+    if (d.name == name) { panic("duplicate struct: " + name); }
     si = si + 1;
   }
   vec_push(__tuffc_struct_defs, StructDef(name, fields));
@@ -116,7 +116,7 @@ fn find_struct_fields(name) => {
   let mut si = 0;
   while (si < vec_len(__tuffc_struct_defs)) {
     let d = vec_get(__tuffc_struct_defs, si);
-    if (d.v0 == name) { yield d.v1; }
+    if (d.name == name) { yield d.fields; }
     si = si + 1;
   }
   panic("unknown struct: " + name)
@@ -383,8 +383,8 @@ fn parse_postfix(src, i) => {
     // Only treat `<...>` as type args if it is balanced and followed by `(`.
     if (j < stringLen(src) && stringCharCodeAt(src, j) == 60) { // '<'
       let skipped = try_skip_type_args_for_call(src, j);
-      if (skipped.v0) {
-        j = skipped.v1;
+      if (skipped.ok) {
+        j = skipped.nextPos;
         continue;
       }
     }
@@ -400,13 +400,13 @@ fn parse_postfix(src, i) => {
       let t = skip_ws(src, j + 1);
       if (t < stringLen(src) && is_digit(stringCharCodeAt(src, t))) {
         let n = parse_number(src, t);
-        left = ParsedExpr(left.v0 + "[" + ("" + n.v0) + "]", n.v1);
+        left = ParsedExpr(left.v0 + "[" + ("" + n.value) + "]", n.nextPos);
         j = left.v1;
         continue;
       }
 
       let next = parse_ident(src, j + 1);
-      left = ParsedExpr(left.v0 + "." + next.v0, next.v1);
+      left = ParsedExpr(left.v0 + "." + next.text, next.nextPos);
       j = left.v1;
       continue;
     }
@@ -638,19 +638,19 @@ fn parse_primary(src, i) => {
   }
   if (is_digit(c)) {
     let n = parse_number(src, j);
-    yield ParsedExpr("" + n.v0, n.v1);
+    yield ParsedExpr("" + n.value, n.nextPos);
   }
   if (is_ident_start(c)) {
     let id = parse_ident(src, j);
-    let mut k = id.v1;
-    let mut out = id.v0;
+    let mut k = id.nextPos;
+    let mut out = id.text;
     while (true) {
       let t = skip_ws(src, k);
       if (!(t + 1 < stringLen(src))) { break; }
       if (!(stringCharCodeAt(src, t) == 58 && stringCharCodeAt(src, t + 1) == 58)) { break; } // '::'
       let next = parse_ident(src, t + 2);
-      out = out + "." + next.v0;
-      k = next.v1;
+      out = out + "." + next.text;
+      k = next.nextPos;
     }
 
     // Struct literal: Name { <expr>, ... }
@@ -791,12 +791,12 @@ fn parse_match_expr(src, i) => {
     } else {
       if (is_digit(c0)) {
         let n = parse_number(src, k);
-        pat = "" + n.v0;
-        k = n.v1;
+        pat = "" + n.value;
+        k = n.nextPos;
       } else {
         let id = parse_ident(src, k);
-        pat = id.v0;
-        k = id.v1;
+        pat = id.text;
+        k = id.nextPos;
       }
     }
 
@@ -834,7 +834,7 @@ fn parse_match_expr(src, i) => {
 fn parse_fn_decl_named(src, i, jsName, exportThis) => {
   let mut k = parse_keyword(src, i, "fn");
   let name = parse_ident(src, k);
-  k = name.v1;
+  k = name.nextPos;
 
   // Optional generic params: fn name<T, U>(...)
   let t0 = skip_ws(src, k);
@@ -858,14 +858,14 @@ fn parse_fn_decl_named(src, i, jsName, exportThis) => {
 
   let exportKw = if (exportThis) "export " else "";
   let js = exportKw + "function " + jsName + "(" + params.v0 + ") {\n" + body.body + "return " + body.expr + ";\n}\n";
-  ParsedFn(js, k, name.v0)
+  ParsedFn(js, k, name.text)
 }
 
 fn parse_module_decl(src, i, prefix, exportTop) => {
   // module Name { (fn ... | module ...)* }
   let mut k = parse_keyword(src, i, "module");
   let modName = parse_ident(src, k);
-  k = modName.v1;
+  k = modName.nextPos;
   k = parse_keyword(src, k, "{");
 
   let mut decls = "";
@@ -878,27 +878,27 @@ fn parse_module_decl(src, i, prefix, exportTop) => {
     if (stringCharCodeAt(src, t) == 125) { k = t + 1; break; }
 
     if (starts_with_at(src, t, "fn")) {
-      let fnParsed = parse_fn_decl_named(src, k, prefix + "__" + modName.v0 + "__" + "fn" + "__" + "tmp", false);
+      let fnParsed = parse_fn_decl_named(src, k, prefix + "__" + modName.text + "__" + "fn" + "__" + "tmp", false);
       // we emitted with a temp name; re-emit with stable js name including function name
       // (parse again from the same start)
-      let fn2 = parse_fn_decl_named(src, k, prefix + "__" + modName.v0 + "__" + fnParsed.v2, false);
+      let fn2 = parse_fn_decl_named(src, k, prefix + "__" + modName.text + "__" + fnParsed.v2, false);
       decls = decls + fn2.v0;
-      if (first) { entries = entries + (fn2.v2 + ": " + (prefix + "__" + modName.v0 + "__" + fn2.v2)); }
-      else { entries = entries + (", " + fn2.v2 + ": " + (prefix + "__" + modName.v0 + "__" + fn2.v2)); }
+      if (first) { entries = entries + (fn2.v2 + ": " + (prefix + "__" + modName.text + "__" + fn2.v2)); }
+      else { entries = entries + (", " + fn2.v2 + ": " + (prefix + "__" + modName.text + "__" + fn2.v2)); }
       first = false;
       k = fn2.v1;
       continue;
     }
 
     if (starts_with_at(src, t, "module")) {
-      let inner = parse_module_decl(src, k, prefix + "__" + modName.v0, false);
+      let inner = parse_module_decl(src, k, prefix + "__" + modName.text, false);
       decls = decls + inner.v0;
       // inner module exports as const with its own name; include it as property
       // since `exportTop` is false here, inner will be `const <Inner> = {...}`
       // and we reference that name.
       let innerName = parse_ident(src, parse_keyword(src, k, "module"));
       // NOTE: parse_ident above is safe since parse_module_decl already parsed it; this is a tiny hack to recover name.
-      let prop = innerName.v0;
+      let prop = innerName.text;
       if (first) { entries = entries + (prop + ": " + prop); }
       else { entries = entries + (", " + prop + ": " + prop); }
       first = false;
@@ -911,7 +911,7 @@ fn parse_module_decl(src, i, prefix, exportTop) => {
 
   let obj = "{ " + entries + " }";
   let header = if (exportTop) "export const " else "const ";
-  let code = decls + header + modName.v0 + " = " + obj + ";\n";
+  let code = decls + header + modName.text + " = " + obj + ";\n";
   ParsedStmt(code, k)
 }
 
@@ -927,7 +927,7 @@ fn parse_imports(src, i) => {
 
     k = parse_keyword(src, k, "from");
     let mod = parse_module_path(src, k);
-    k = mod.v1;
+    k = mod.nextPos;
     k = parse_keyword(src, k, "use");
     k = parse_keyword(src, k, "{");
 
@@ -938,8 +938,8 @@ fn parse_imports(src, i) => {
       if (!(k < stringLen(src))) { panic_at(src, k, "expected '}'"); }
       if (stringCharCodeAt(src, k) == 125) { k = k + 1; break; }
       let id = parse_ident(src, k);
-      k = id.v1;
-      if (first) { names = names + id.v0; } else { names = names + ", " + id.v0; }
+      k = id.nextPos;
+      if (first) { names = names + id.text; } else { names = names + ", " + id.text; }
       first = false;
       k = skip_ws(src, k);
       if (k < stringLen(src) && stringCharCodeAt(src, k) == 44) { k = k + 1; continue; }
@@ -950,7 +950,7 @@ fn parse_imports(src, i) => {
 
     k = parse_optional_semicolon(src, k);
 
-    let importPath = "./" + module_path_to_relpath(mod.v0) + ".mjs";
+    let importPath = "./" + module_path_to_relpath(mod.text) + ".mjs";
     out = out + ("import { " + names + " } from \"" + importPath + "\";\n");
   }
   ParsedImports(out, k)
@@ -984,8 +984,8 @@ fn parse_type_expr(src, i) => {
       let t = skip_ws(src, k);
       if (!(t < stringLen(src) && stringCharCodeAt(src, t) == 59)) { break; } // ';'
       let n = parse_number(src, t + 1);
-      sizes = sizes + ";" + ("" + n.v0);
-      k = n.v1;
+      sizes = sizes + ";" + ("" + n.value);
+      k = n.nextPos;
     }
     k = parse_keyword(src, k, "]");
     yield ParsedType("[" + inner.v0 + sizes + "]", k);
@@ -1030,8 +1030,8 @@ fn parse_type_expr(src, i) => {
 
   // Name / generic: Ident or Ident<...>
   let name = parse_ident(src, k);
-  k = name.v1;
-  let mut out = name.v0;
+  k = name.nextPos;
+  let mut out = name.text;
 
   let t3 = skip_ws(src, k);
   if (t3 < stringLen(src) && stringCharCodeAt(src, t3) == 60) { // '<'
@@ -1073,7 +1073,7 @@ fn parse_param_list(src, i) => {
   let mut first = true;
   while (true) {
     let id = parse_ident(src, k);
-    k = id.v1;
+    k = id.nextPos;
 
     // Optional param type annotation: `name: Type`
     let t0 = skip_ws(src, k);
@@ -1082,7 +1082,7 @@ fn parse_param_list(src, i) => {
       k = _ty.v1;
     }
 
-    if (first) { out = out + id.v0; } else { out = out + ", " + id.v0; }
+    if (first) { out = out + id.text; } else { out = out + ", " + id.text; }
     first = false;
 
     k = skip_ws(src, k);
@@ -1104,7 +1104,7 @@ fn parse_extern_decl(src, i) => {
   let mut k = parse_keyword(src, i, "extern");
   k = parse_keyword(src, k, "from");
   let mod = parse_module_path(src, k);
-  k = mod.v1;
+  k = mod.nextPos;
   k = parse_keyword(src, k, "use");
   k = parse_keyword(src, k, "{");
 
@@ -1115,8 +1115,8 @@ fn parse_extern_decl(src, i) => {
     if (!(k < stringLen(src))) { panic_at(src, k, "expected '}'"); }
     if (stringCharCodeAt(src, k) == 125) { k = k + 1; break; }
     let id = parse_ident(src, k);
-    k = id.v1;
-    if (first) { names = names + id.v0; } else { names = names + ", " + id.v0; }
+    k = id.nextPos;
+    if (first) { names = names + id.text; } else { names = names + ", " + id.text; }
     first = false;
     k = skip_ws(src, k);
     if (k < stringLen(src) && stringCharCodeAt(src, k) == 44) { k = k + 1; continue; }
@@ -1128,9 +1128,9 @@ fn parse_extern_decl(src, i) => {
   k = parse_optional_semicolon(src, k);
 
   let mut importPath = "";
-  if (starts_with_at(mod.v0, 0, "rt::")) { importPath = "./rt/" + stringSlice(mod.v0, 4, stringLen(mod.v0)) + ".mjs"; }
-  if (importPath == "" && starts_with_at(mod.v0, 0, "node::")) { importPath = "node:" + stringSlice(mod.v0, 6, stringLen(mod.v0)); }
-  if (importPath == "") { panic_at(src, k, "unsupported extern module: " + mod.v0); }
+  if (starts_with_at(mod.text, 0, "rt::")) { importPath = "./rt/" + stringSlice(mod.text, 4, stringLen(mod.text)) + ".mjs"; }
+  if (importPath == "" && starts_with_at(mod.text, 0, "node::")) { importPath = "node:" + stringSlice(mod.text, 6, stringLen(mod.text)); }
+  if (importPath == "") { panic_at(src, k, "unsupported extern module: " + mod.text); }
 
   ParsedStmt("import { " + names + " } from \"" + importPath + "\";\n", k)
 }
@@ -1138,7 +1138,7 @@ fn parse_extern_decl(src, i) => {
 fn parse_fn_decl2(src, i, exportAll) => {
   let mut k = parse_keyword(src, i, "fn");
   let name = parse_ident(src, k);
-  k = name.v1;
+  k = name.nextPos;
 
   // Optional generic params: fn name<T, U>(...)
   let t0 = skip_ws(src, k);
@@ -1160,8 +1160,8 @@ fn parse_fn_decl2(src, i, exportAll) => {
   let body = parse_main_body(src, k);
   k = body.v1;
 
-  let exportKw = if (exportAll || name.v0 == "main") "export " else "";
-  let js = exportKw + "function " + name.v0 + "(" + params.v0 + ") {\n" + body.body + "return " + body.expr + ";\n}\n";
+  let exportKw = if (exportAll || name.text == "main") "export " else "";
+  let js = exportKw + "function " + name.text + "(" + params.v0 + ") {\n" + body.body + "return " + body.expr + ";\n}\n";
   ParsedStmt(js, k)
 }
 
@@ -1169,7 +1169,7 @@ fn parse_class_fn_decl2(src, i, exportAll) => {
   let mut k = parse_keyword(src, i, "class");
   k = parse_keyword(src, k, "fn");
   let name = parse_ident(src, k);
-  k = name.v1;
+  k = name.nextPos;
 
   // Optional generic params: class fn name<T, U>(...)
   let t0 = skip_ws(src, k);
@@ -1194,7 +1194,7 @@ fn parse_class_fn_decl2(src, i, exportAll) => {
   // Minimal `class fn` lowering: execute body statements then yield `this`.
   // For now, `this` is just an object containing parameters.
   // (This is sufficient for our compiler's internal record-like classes.)
-  let exportKw = if (exportAll || name.v0 == "main") "export " else "";
+  let exportKw = if (exportAll || name.text == "main") "export " else "";
   let mut fields = "";
   // params.v0 is the comma-joined param list; we need `{ a: a, b: b }`.
   // Build it by re-parsing the param list text.
@@ -1230,7 +1230,7 @@ fn parse_class_fn_decl2(src, i, exportAll) => {
     }
   }
 
-  let js = exportKw + "function " + name.v0 + "(" + params.v0 + ") {\n" + body.body + "return { " + fields + " };\n}\n";
+  let js = exportKw + "function " + name.text + "(" + params.v0 + ") {\n" + body.body + "return { " + fields + " };\n}\n";
   ParsedStmt(js, k)
 }
 
@@ -1271,7 +1271,7 @@ fn parse_struct_decl(src, i) => {
   // struct Name { field: Type, ... }
   let mut k = parse_keyword(src, i, "struct");
   let name = parse_ident(src, k);
-  k = name.v1;
+  k = name.nextPos;
 
   // Optional generic params: struct Name<T, U> { ... }
   let t0 = skip_ws(src, k);
@@ -1292,12 +1292,12 @@ fn parse_struct_decl(src, i) => {
     }
 
     let field = parse_ident(src, k);
-    k = field.v1;
+    k = field.nextPos;
     k = parse_keyword(src, k, ":");
     let _ty = parse_type_expr(src, k);
     k = _ty.v1;
 
-    vec_push(fields, field.v0);
+    vec_push(fields, field.text);
 
     k = skip_ws(src, k);
     if (k < stringLen(src)) {
@@ -1308,7 +1308,7 @@ fn parse_struct_decl(src, i) => {
     }
   }
 
-  add_struct_def(name.v0, fields);
+  add_struct_def(name.text, fields);
   ParsedStmt("", k)
 }
 
@@ -1316,7 +1316,7 @@ fn parse_type_union_decl(src, i, exportAll) => {
   // type Name<T, ...> = Variant1<X> | Variant2 | ...;
   let mut k = parse_keyword(src, i, "type");
   let _name = parse_ident(src, k);
-  k = _name.v1;
+  k = _name.nextPos;
 
   // optional type params on the alias name
   let t0 = skip_ws(src, k);
@@ -1333,8 +1333,8 @@ fn parse_type_union_decl(src, i, exportAll) => {
     first = false;
 
     let v = parse_ident(src, k);
-    let variant = v.v0;
-    k = v.v1;
+    let variant = v.text;
+    k = v.nextPos;
 
     let mut hasPayload = false;
     let t1 = skip_ws(src, k);
@@ -1418,9 +1418,9 @@ fn parse_stmt(src, i) => {
   if (starts_with_at(src, k, "let")) {
     k = parse_keyword(src, k, "let");
     let mutOpt = parse_mut_opt(src, k);
-    k = mutOpt.v1;
+    k = mutOpt.nextPos;
     let name = parse_ident(src, k);
-    k = name.v1;
+    k = name.nextPos;
 
     // Optional let type annotation: `let x: T = ...`
     let t0 = skip_ws(src, k);
@@ -1433,8 +1433,8 @@ fn parse_stmt(src, i) => {
     let expr = parse_expr(src, k);
     k = expr.v1;
     k = parse_optional_semicolon(src, k);
-    let declKw = if (mutOpt.v0) "let" else "const";
-    yield ParsedStmt(declKw + " " + name.v0 + " = " + expr.v0 + ";\n", k);
+    let declKw = if (mutOpt.ok) "let" else "const";
+    yield ParsedStmt(declKw + " " + name.text + " = " + expr.v0 + ";\n", k);
   }
 
   // while (...) { ... }
@@ -1477,26 +1477,26 @@ fn parse_stmt(src, i) => {
   // assignment: <ident> = <expr>;
   if (is_assign_stmt_start(src, k)) {
     let name = parse_ident(src, k);
-    k = name.v1;
+    k = name.nextPos;
     k = parse_keyword(src, k, "=");
     let expr = parse_expr(src, k);
     k = expr.v1;
     k = parse_optional_semicolon(src, k);
-    yield ParsedStmt(name.v0 + " = " + expr.v0 + ";\n", k);
+    yield ParsedStmt(name.text + " = " + expr.v0 + ";\n", k);
   }
 
   // field assignment: <expr>.<field>(.<field>)* = <expr>;
   if (is_field_assign_stmt_start(src, k)) {
     let base = parse_ident(src, k);
-    k = base.v1;
-    let mut lhs = base.v0;
+    k = base.nextPos;
+    let mut lhs = base.text;
     while (true) {
       let t = skip_ws(src, k);
       if (!(t < stringLen(src) && stringCharCodeAt(src, t) == 46)) { break; } // '.'
       k = parse_keyword(src, k, ".");
       let part = parse_ident(src, k);
-      lhs = lhs + "." + part.v0;
-      k = part.v1;
+      lhs = lhs + "." + part.text;
+      k = part.nextPos;
     }
     k = parse_keyword(src, k, "=");
     let expr = parse_expr(src, k);
@@ -1508,7 +1508,7 @@ fn parse_stmt(src, i) => {
   // index assignment: <ident>[<expr>] = <expr>;
   if (is_index_assign_stmt_start(src, k)) {
     let name = parse_ident(src, k);
-    k = name.v1;
+    k = name.nextPos;
     k = parse_keyword(src, k, "[");
     let idx = parse_expr(src, k);
     k = idx.v1;
@@ -1517,7 +1517,7 @@ fn parse_stmt(src, i) => {
     let val = parse_expr(src, k);
     k = val.v1;
     k = parse_optional_semicolon(src, k);
-    yield ParsedStmt("vec_set(" + name.v0 + ", " + idx.v0 + ", " + val.v0 + ");\n", k);
+    yield ParsedStmt("vec_set(" + name.text + ", " + idx.v0 + ", " + val.v0 + ");\n", k);
   }
 
   // expression statement: <expr>;
@@ -1682,9 +1682,9 @@ fn compile_tiny2(src, requireMain, exportAll) => {
     if (starts_with_at(src, j, "let")) {
       i = parse_keyword(src, i, "let");
       let mutOpt = parse_mut_opt(src, i);
-      i = mutOpt.v1;
+      i = mutOpt.nextPos;
       let name = parse_ident(src, i);
-      i = name.v1;
+      i = name.nextPos;
 
       // Optional let type annotation: `let x: T = ...`
       let t0 = skip_ws(src, i);
@@ -1697,8 +1697,8 @@ fn compile_tiny2(src, requireMain, exportAll) => {
       let expr = parse_expr(src, i);
       i = expr.v1;
       i = parse_optional_semicolon(src, i);
-      let declKw = if (mutOpt.v0) "let" else "const";
-      out = out + (declKw + " " + name.v0 + " = " + expr.v0 + ";\n");
+      let declKw = if (mutOpt.ok) "let" else "const";
+      out = out + (declKw + " " + name.text + " = " + expr.v0 + ";\n");
       continue;
     }
     break;
@@ -1792,7 +1792,7 @@ fn compile_project(entryPath, outPath) => {
       if (!starts_with_at(src, j, "from")) { break; }
       scan = parse_keyword(src, scan, "from");
       let mod = parse_module_path(src, scan);
-      scan = mod.v1;
+      scan = mod.nextPos;
       scan = parse_keyword(src, scan, "use");
       scan = parse_keyword(src, scan, "{");
       // consume name list
@@ -1801,7 +1801,7 @@ fn compile_project(entryPath, outPath) => {
         if (!(scan < stringLen(src))) { panic_at(src, scan, "expected '}'"); }
         if (stringCharCodeAt(src, scan) == 125) { scan = scan + 1; break; }
         let id = parse_ident(src, scan);
-        scan = id.v1;
+        scan = id.nextPos;
         scan = skip_ws(src, scan);
         if (scan < stringLen(src) && stringCharCodeAt(src, scan) == 44) { scan = scan + 1; continue; }
         scan = skip_ws(src, scan);
@@ -1812,7 +1812,7 @@ fn compile_project(entryPath, outPath) => {
 
       // queue dependency file
       let baseDir = pathDirname(path);
-      let rel = module_path_to_relpath(mod.v0);
+      let rel = module_path_to_relpath(mod.text);
       let depPath = pathJoin(baseDir, rel + ".tuff");
       vec_push(queue, depPath);
     }

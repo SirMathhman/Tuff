@@ -3,11 +3,11 @@ import { println, panic, readTextFile, writeTextFile, pathDirname, pathJoin, str
 import { vec_new, vec_len, vec_push, vec_get } from "./rt/vec.mjs";
 let __tuffc_current_file = "<input>";
 let __tuffc_struct_defs = vec_new();
-export function ParsedNumber(v0, v1) {
-return { v0: v0, v1: v1 };
+export function ParsedNumber(value, nextPos) {
+return { value: value, nextPos: nextPos };
 }
-export function ParsedIdent(v0, v1) {
-return { v0: v0, v1: v1 };
+export function ParsedIdent(text, nextPos) {
+return { text: text, nextPos: nextPos };
 }
 export function ParsedExpr(v0, v1) {
 return { v0: v0, v1: v1 };
@@ -15,8 +15,8 @@ return { v0: v0, v1: v1 };
 export function ParsedMain(body, expr, v1) {
 return { body: body, expr: expr, v1: v1 };
 }
-export function ParsedBool(v0, v1) {
-return { v0: v0, v1: v1 };
+export function ParsedBool(ok, nextPos) {
+return { ok: ok, nextPos: nextPos };
 }
 export function ParsedStmt(v0, v1) {
 return { v0: v0, v1: v1 };
@@ -36,11 +36,11 @@ return { v0: v0, v1: v1, v2: v2 };
 export function ParsedModule(v0, v1) {
 return { v0: v0, v1: v1 };
 }
-export function LineCol(v0, v1) {
-return { v0: v0, v1: v1 };
+export function LineCol(line, col) {
+return { line: line, col: col };
 }
-export function StructDef(v0, v1) {
-return { v0: v0, v1: v1 };
+export function StructDef(name, fields) {
+return { name: name, fields: fields };
 }
 export function set_current_file(path) {
 __tuffc_current_file = path;
@@ -96,9 +96,9 @@ break;
 le = (le + 1);
 }
 const lineText = stringSlice(src, ls, le);
-const header = ((((((__tuffc_current_file + ":") + (("" + lc.v0))) + ":") + (("" + lc.v1))) + " error: ") + msg);
+const header = ((((((__tuffc_current_file + ":") + (("" + lc.line))) + ":") + (("" + lc.col))) + " error: ") + msg);
 const frame1 = ("  | " + lineText);
-const frame2 = (("  | " + spaces((lc.v1 - 1))) + "^");
+const frame2 = (("  | " + spaces((lc.col - 1))) + "^");
 panic(((((header + "\n") + frame1) + "\n") + frame2));
 return undefined;
 }
@@ -110,7 +110,7 @@ export function add_struct_def(name, fields) {
 let si = 0;
 while ((si < vec_len(__tuffc_struct_defs))) {
 const d = vec_get(__tuffc_struct_defs, si);
-if ((d.v0 == name)) {
+if ((d.name == name)) {
 panic(("duplicate struct: " + name));
 }
 si = (si + 1);
@@ -122,8 +122,8 @@ export function find_struct_fields(name) {
 let si = 0;
 while ((si < vec_len(__tuffc_struct_defs))) {
 const d = vec_get(__tuffc_struct_defs, si);
-if ((d.v0 == name)) {
-return d.v1;
+if ((d.name == name)) {
+return d.fields;
 }
 si = (si + 1);
 }
@@ -425,8 +425,8 @@ while (true) {
 j = skip_ws(src, j);
 if (((j < stringLen(src)) && (stringCharCodeAt(src, j) == 60))) {
 const skipped = try_skip_type_args_for_call(src, j);
-if (skipped.v0) {
-j = skipped.v1;
+if (skipped.ok) {
+j = skipped.nextPos;
 continue;
 }
 }
@@ -440,12 +440,12 @@ if (((j < stringLen(src)) && (stringCharCodeAt(src, j) == 46))) {
 const t = skip_ws(src, (j + 1));
 if (((t < stringLen(src)) && is_digit(stringCharCodeAt(src, t)))) {
 const n = parse_number(src, t);
-left = ParsedExpr((((left.v0 + "[") + (("" + n.v0))) + "]"), n.v1);
+left = ParsedExpr((((left.v0 + "[") + (("" + n.value))) + "]"), n.nextPos);
 j = left.v1;
 continue;
 }
 const next = parse_ident(src, (j + 1));
-left = ParsedExpr(((left.v0 + ".") + next.v0), next.v1);
+left = ParsedExpr(((left.v0 + ".") + next.text), next.nextPos);
 j = left.v1;
 continue;
 }
@@ -676,12 +676,12 @@ panic_at(src, k, "expected ')'");
 }
 if (is_digit(c)) {
 const n = parse_number(src, j);
-return ParsedExpr(("" + n.v0), n.v1);
+return ParsedExpr(("" + n.value), n.nextPos);
 }
 if (is_ident_start(c)) {
 const id = parse_ident(src, j);
-let k = id.v1;
-let out = id.v0;
+let k = id.nextPos;
+let out = id.text;
 while (true) {
 const t = skip_ws(src, k);
 if ((!(((t + 1) < stringLen(src))))) {
@@ -691,8 +691,8 @@ if ((!(((stringCharCodeAt(src, t) == 58) && (stringCharCodeAt(src, (t + 1)) == 5
 break;
 }
 const next = parse_ident(src, (t + 2));
-out = ((out + ".") + next.v0);
-k = next.v1;
+out = ((out + ".") + next.text);
+k = next.nextPos;
 }
 const t2 = skip_ws(src, k);
 if (((t2 < stringLen(src)) && (stringCharCodeAt(src, t2) == 123))) {
@@ -826,12 +826,12 @@ k = lit.v1;
 } else {
 if (is_digit(c0)) {
 const n = parse_number(src, k);
-pat = ("" + n.v0);
-k = n.v1;
+pat = ("" + n.value);
+k = n.nextPos;
 } else {
 const id = parse_ident(src, k);
-pat = id.v0;
-k = id.v1;
+pat = id.text;
+k = id.nextPos;
 }
 }
 k = parse_keyword(src, k, "=>");
@@ -862,7 +862,7 @@ return ParsedExpr((((((("(() => { switch (" + scrut.v0) + ") {\n") + cases) + "d
 export function parse_fn_decl_named(src, i, jsName, exportThis) {
 let k = parse_keyword(src, i, "fn");
 const name = parse_ident(src, k);
-k = name.v1;
+k = name.nextPos;
 const t0 = skip_ws(src, k);
 if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
 k = skip_angle_brackets(src, t0);
@@ -879,12 +879,12 @@ const body = parse_main_body(src, k);
 k = body.v1;
 const exportKw = (exportThis ? "export " : "");
 const js = (((((((((exportKw + "function ") + jsName) + "(") + params.v0) + ") {\n") + body.body) + "return ") + body.expr) + ";\n}\n");
-return ParsedFn(js, k, name.v0);
+return ParsedFn(js, k, name.text);
 }
 export function parse_module_decl(src, i, prefix, exportTop) {
 let k = parse_keyword(src, i, "module");
 const modName = parse_ident(src, k);
-k = modName.v1;
+k = modName.nextPos;
 k = parse_keyword(src, k, "{");
 let decls = "";
 let entries = "";
@@ -899,23 +899,23 @@ k = (t + 1);
 break;
 }
 if (starts_with_at(src, t, "fn")) {
-const fnParsed = parse_fn_decl_named(src, k, ((((((prefix + "__") + modName.v0) + "__") + "fn") + "__") + "tmp"), false);
-const fn2 = parse_fn_decl_named(src, k, ((((prefix + "__") + modName.v0) + "__") + fnParsed.v2), false);
+const fnParsed = parse_fn_decl_named(src, k, ((((((prefix + "__") + modName.text) + "__") + "fn") + "__") + "tmp"), false);
+const fn2 = parse_fn_decl_named(src, k, ((((prefix + "__") + modName.text) + "__") + fnParsed.v2), false);
 decls = (decls + fn2.v0);
 if (first) {
-entries = (entries + (((fn2.v2 + ": ") + (((((prefix + "__") + modName.v0) + "__") + fn2.v2)))));
+entries = (entries + (((fn2.v2 + ": ") + (((((prefix + "__") + modName.text) + "__") + fn2.v2)))));
 } else {
-entries = (entries + ((((", " + fn2.v2) + ": ") + (((((prefix + "__") + modName.v0) + "__") + fn2.v2)))));
+entries = (entries + ((((", " + fn2.v2) + ": ") + (((((prefix + "__") + modName.text) + "__") + fn2.v2)))));
 }
 first = false;
 k = fn2.v1;
 continue;
 }
 if (starts_with_at(src, t, "module")) {
-const inner = parse_module_decl(src, k, ((prefix + "__") + modName.v0), false);
+const inner = parse_module_decl(src, k, ((prefix + "__") + modName.text), false);
 decls = (decls + inner.v0);
 const innerName = parse_ident(src, parse_keyword(src, k, "module"));
-const prop = innerName.v0;
+const prop = innerName.text;
 if (first) {
 entries = (entries + (((prop + ": ") + prop)));
 } else {
@@ -929,7 +929,7 @@ panic_at(src, t, "expected fn or module inside module");
 }
 const obj = (("{ " + entries) + " }");
 const header = (exportTop ? "export const " : "const ");
-const code = (((((decls + header) + modName.v0) + " = ") + obj) + ";\n");
+const code = (((((decls + header) + modName.text) + " = ") + obj) + ";\n");
 return ParsedStmt(code, k);
 }
 export function parse_imports(src, i) {
@@ -945,7 +945,7 @@ break;
 }
 k = parse_keyword(src, k, "from");
 const mod = parse_module_path(src, k);
-k = mod.v1;
+k = mod.nextPos;
 k = parse_keyword(src, k, "use");
 k = parse_keyword(src, k, "{");
 let names = "";
@@ -960,11 +960,11 @@ k = (k + 1);
 break;
 }
 const id = parse_ident(src, k);
-k = id.v1;
+k = id.nextPos;
 if (first) {
-names = (names + id.v0);
+names = (names + id.text);
 } else {
-names = ((names + ", ") + id.v0);
+names = ((names + ", ") + id.text);
 }
 first = false;
 k = skip_ws(src, k);
@@ -980,7 +980,7 @@ break;
 panic_at(src, k, "expected ',' or '}' in import list");
 }
 k = parse_optional_semicolon(src, k);
-const importPath = (("./" + module_path_to_relpath(mod.v0)) + ".mjs");
+const importPath = (("./" + module_path_to_relpath(mod.text)) + ".mjs");
 out = (out + ((((("import { " + names) + " } from \"") + importPath) + "\";\n")));
 }
 return ParsedImports(out, k);
@@ -1010,8 +1010,8 @@ if ((!(((t < stringLen(src)) && (stringCharCodeAt(src, t) == 59))))) {
 break;
 }
 const n = parse_number(src, (t + 1));
-sizes = ((sizes + ";") + (("" + n.v0)));
-k = n.v1;
+sizes = ((sizes + ";") + (("" + n.value)));
+k = n.nextPos;
 }
 k = parse_keyword(src, k, "]");
 return ParsedType(((("[" + inner.v0) + sizes) + "]"), k);
@@ -1057,8 +1057,8 @@ return ParsedType(((("(" + parts) + ") => ") + ret.v0), ret.v1);
 return ParsedType((("(" + parts) + ")"), k);
 }
 const name = parse_ident(src, k);
-k = name.v1;
-let out = name.v0;
+k = name.nextPos;
+let out = name.text;
 const t3 = skip_ws(src, k);
 if (((t3 < stringLen(src)) && (stringCharCodeAt(src, t3) == 60))) {
 k = parse_keyword(src, t3, "<");
@@ -1102,16 +1102,16 @@ let out = "";
 let first = true;
 while (true) {
 const id = parse_ident(src, k);
-k = id.v1;
+k = id.nextPos;
 const t0 = skip_ws(src, k);
 if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 58))) {
 const _ty = parse_type_expr(src, (t0 + 1));
 k = _ty.v1;
 }
 if (first) {
-out = (out + id.v0);
+out = (out + id.text);
 } else {
-out = ((out + ", ") + id.v0);
+out = ((out + ", ") + id.text);
 }
 first = false;
 k = skip_ws(src, k);
@@ -1134,7 +1134,7 @@ export function parse_extern_decl(src, i) {
 let k = parse_keyword(src, i, "extern");
 k = parse_keyword(src, k, "from");
 const mod = parse_module_path(src, k);
-k = mod.v1;
+k = mod.nextPos;
 k = parse_keyword(src, k, "use");
 k = parse_keyword(src, k, "{");
 let names = "";
@@ -1149,11 +1149,11 @@ k = (k + 1);
 break;
 }
 const id = parse_ident(src, k);
-k = id.v1;
+k = id.nextPos;
 if (first) {
-names = (names + id.v0);
+names = (names + id.text);
 } else {
-names = ((names + ", ") + id.v0);
+names = ((names + ", ") + id.text);
 }
 first = false;
 k = skip_ws(src, k);
@@ -1170,21 +1170,21 @@ panic_at(src, k, "expected ',' or '}' in extern list");
 }
 k = parse_optional_semicolon(src, k);
 let importPath = "";
-if (starts_with_at(mod.v0, 0, "rt::")) {
-importPath = (("./rt/" + stringSlice(mod.v0, 4, stringLen(mod.v0))) + ".mjs");
+if (starts_with_at(mod.text, 0, "rt::")) {
+importPath = (("./rt/" + stringSlice(mod.text, 4, stringLen(mod.text))) + ".mjs");
 }
-if (((importPath == "") && starts_with_at(mod.v0, 0, "node::"))) {
-importPath = ("node:" + stringSlice(mod.v0, 6, stringLen(mod.v0)));
+if (((importPath == "") && starts_with_at(mod.text, 0, "node::"))) {
+importPath = ("node:" + stringSlice(mod.text, 6, stringLen(mod.text)));
 }
 if ((importPath == "")) {
-panic_at(src, k, ("unsupported extern module: " + mod.v0));
+panic_at(src, k, ("unsupported extern module: " + mod.text));
 }
 return ParsedStmt((((("import { " + names) + " } from \"") + importPath) + "\";\n"), k);
 }
 export function parse_fn_decl2(src, i, exportAll) {
 let k = parse_keyword(src, i, "fn");
 const name = parse_ident(src, k);
-k = name.v1;
+k = name.nextPos;
 const t0 = skip_ws(src, k);
 if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
 k = skip_angle_brackets(src, t0);
@@ -1199,15 +1199,15 @@ k = _rt.v1;
 k = parse_keyword(src, k, "=>");
 const body = parse_main_body(src, k);
 k = body.v1;
-const exportKw = ((exportAll || (name.v0 == "main")) ? "export " : "");
-const js = (((((((((exportKw + "function ") + name.v0) + "(") + params.v0) + ") {\n") + body.body) + "return ") + body.expr) + ";\n}\n");
+const exportKw = ((exportAll || (name.text == "main")) ? "export " : "");
+const js = (((((((((exportKw + "function ") + name.text) + "(") + params.v0) + ") {\n") + body.body) + "return ") + body.expr) + ";\n}\n");
 return ParsedStmt(js, k);
 }
 export function parse_class_fn_decl2(src, i, exportAll) {
 let k = parse_keyword(src, i, "class");
 k = parse_keyword(src, k, "fn");
 const name = parse_ident(src, k);
-k = name.v1;
+k = name.nextPos;
 const t0 = skip_ws(src, k);
 if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
 k = skip_angle_brackets(src, t0);
@@ -1222,7 +1222,7 @@ k = _rt.v1;
 k = parse_keyword(src, k, "=>");
 const body = parse_main_body(src, k);
 k = body.v1;
-const exportKw = ((exportAll || (name.v0 == "main")) ? "export " : "");
+const exportKw = ((exportAll || (name.text == "main")) ? "export " : "");
 let fields = "";
 let pi = 0;
 let first = true;
@@ -1266,7 +1266,7 @@ fields = (fields + ((((", " + nameOnly) + ": ") + nameOnly)));
 first = false;
 }
 }
-const js = (((((((((exportKw + "function ") + name.v0) + "(") + params.v0) + ") {\n") + body.body) + "return { ") + fields) + " };\n}\n");
+const js = (((((((((exportKw + "function ") + name.text) + "(") + params.v0) + ") {\n") + body.body) + "return { ") + fields) + " };\n}\n");
 return ParsedStmt(js, k);
 }
 export function parse_fn_decl(src, i) {
@@ -1313,7 +1313,7 @@ return panic_at(src, k, "unterminated type");
 export function parse_struct_decl(src, i) {
 let k = parse_keyword(src, i, "struct");
 const name = parse_ident(src, k);
-k = name.v1;
+k = name.nextPos;
 const t0 = skip_ws(src, k);
 if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
 k = skip_angle_brackets(src, t0);
@@ -1330,11 +1330,11 @@ k = (k + 1);
 break;
 }
 const field = parse_ident(src, k);
-k = field.v1;
+k = field.nextPos;
 k = parse_keyword(src, k, ":");
 const _ty = parse_type_expr(src, k);
 k = _ty.v1;
-vec_push(fields, field.v0);
+vec_push(fields, field.text);
 k = skip_ws(src, k);
 if ((k < stringLen(src))) {
 const ch = stringCharCodeAt(src, k);
@@ -1343,13 +1343,13 @@ k = (k + 1);
 }
 }
 }
-add_struct_def(name.v0, fields);
+add_struct_def(name.text, fields);
 return ParsedStmt("", k);
 }
 export function parse_type_union_decl(src, i, exportAll) {
 let k = parse_keyword(src, i, "type");
 const _name = parse_ident(src, k);
-k = _name.v1;
+k = _name.nextPos;
 const t0 = skip_ws(src, k);
 if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
 k = skip_angle_brackets(src, t0);
@@ -1363,8 +1363,8 @@ k = parse_keyword(src, k, "|");
 }
 first = false;
 const v = parse_ident(src, k);
-const variant = v.v0;
-k = v.v1;
+const variant = v.text;
+k = v.nextPos;
 let hasPayload = false;
 const t1 = skip_ws(src, k);
 if (((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 60))) {
@@ -1443,9 +1443,9 @@ return ParsedStmt((("return " + e.v0) + ";\n"), k);
 if (starts_with_at(src, k, "let")) {
 k = parse_keyword(src, k, "let");
 const mutOpt = parse_mut_opt(src, k);
-k = mutOpt.v1;
+k = mutOpt.nextPos;
 const name = parse_ident(src, k);
-k = name.v1;
+k = name.nextPos;
 const t0 = skip_ws(src, k);
 if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 58))) {
 const _ty = parse_type_expr(src, (t0 + 1));
@@ -1455,8 +1455,8 @@ k = parse_keyword(src, k, "=");
 const expr = parse_expr(src, k);
 k = expr.v1;
 k = parse_optional_semicolon(src, k);
-const declKw = (mutOpt.v0 ? "let" : "const");
-return ParsedStmt((((((declKw + " ") + name.v0) + " = ") + expr.v0) + ";\n"), k);
+const declKw = (mutOpt.ok ? "let" : "const");
+return ParsedStmt((((((declKw + " ") + name.text) + " = ") + expr.v0) + ";\n"), k);
 }
 if (starts_with_at(src, k, "while")) {
 k = parse_keyword(src, k, "while");
@@ -1490,17 +1490,17 @@ return ParsedStmt((((("if (" + cond.v0) + ") {\n") + thenB.v0) + "}\n"), k);
 }
 if (is_assign_stmt_start(src, k)) {
 const name = parse_ident(src, k);
-k = name.v1;
+k = name.nextPos;
 k = parse_keyword(src, k, "=");
 const expr = parse_expr(src, k);
 k = expr.v1;
 k = parse_optional_semicolon(src, k);
-return ParsedStmt((((name.v0 + " = ") + expr.v0) + ";\n"), k);
+return ParsedStmt((((name.text + " = ") + expr.v0) + ";\n"), k);
 }
 if (is_field_assign_stmt_start(src, k)) {
 const base = parse_ident(src, k);
-k = base.v1;
-let lhs = base.v0;
+k = base.nextPos;
+let lhs = base.text;
 while (true) {
 const t = skip_ws(src, k);
 if ((!(((t < stringLen(src)) && (stringCharCodeAt(src, t) == 46))))) {
@@ -1508,8 +1508,8 @@ break;
 }
 k = parse_keyword(src, k, ".");
 const part = parse_ident(src, k);
-lhs = ((lhs + ".") + part.v0);
-k = part.v1;
+lhs = ((lhs + ".") + part.text);
+k = part.nextPos;
 }
 k = parse_keyword(src, k, "=");
 const expr = parse_expr(src, k);
@@ -1519,7 +1519,7 @@ return ParsedStmt((((lhs + " = ") + expr.v0) + ";\n"), k);
 }
 if (is_index_assign_stmt_start(src, k)) {
 const name = parse_ident(src, k);
-k = name.v1;
+k = name.nextPos;
 k = parse_keyword(src, k, "[");
 const idx = parse_expr(src, k);
 k = idx.v1;
@@ -1528,7 +1528,7 @@ k = parse_keyword(src, k, "=");
 const val = parse_expr(src, k);
 k = val.v1;
 k = parse_optional_semicolon(src, k);
-return ParsedStmt((((((("vec_set(" + name.v0) + ", ") + idx.v0) + ", ") + val.v0) + ");\n"), k);
+return ParsedStmt((((((("vec_set(" + name.text) + ", ") + idx.v0) + ", ") + val.v0) + ");\n"), k);
 }
 const e = parse_expr(src, k);
 k = e.v1;
@@ -1693,9 +1693,9 @@ const j = skip_ws(src, i);
 if (starts_with_at(src, j, "let")) {
 i = parse_keyword(src, i, "let");
 const mutOpt = parse_mut_opt(src, i);
-i = mutOpt.v1;
+i = mutOpt.nextPos;
 const name = parse_ident(src, i);
-i = name.v1;
+i = name.nextPos;
 const t0 = skip_ws(src, i);
 if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 58))) {
 const _ty = parse_type_expr(src, (t0 + 1));
@@ -1705,8 +1705,8 @@ i = parse_keyword(src, i, "=");
 const expr = parse_expr(src, i);
 i = expr.v1;
 i = parse_optional_semicolon(src, i);
-const declKw = (mutOpt.v0 ? "let" : "const");
-out = (out + ((((((declKw + " ") + name.v0) + " = ") + expr.v0) + ";\n")));
+const declKw = (mutOpt.ok ? "let" : "const");
+out = (out + ((((((declKw + " ") + name.text) + " = ") + expr.v0) + ";\n")));
 continue;
 }
 break;
@@ -1791,7 +1791,7 @@ break;
 }
 scan = parse_keyword(src, scan, "from");
 const mod = parse_module_path(src, scan);
-scan = mod.v1;
+scan = mod.nextPos;
 scan = parse_keyword(src, scan, "use");
 scan = parse_keyword(src, scan, "{");
 while (true) {
@@ -1804,7 +1804,7 @@ scan = (scan + 1);
 break;
 }
 const id = parse_ident(src, scan);
-scan = id.v1;
+scan = id.nextPos;
 scan = skip_ws(src, scan);
 if (((scan < stringLen(src)) && (stringCharCodeAt(src, scan) == 44))) {
 scan = (scan + 1);
@@ -1819,7 +1819,7 @@ panic_at(src, scan, "expected ',' or '}' in import list");
 }
 scan = parse_optional_semicolon(src, scan);
 const baseDir = pathDirname(path);
-const rel = module_path_to_relpath(mod.v0);
+const rel = module_path_to_relpath(mod.text);
 const depPath = pathJoin(baseDir, (rel + ".tuff"));
 vec_push(queue, depPath);
 }
