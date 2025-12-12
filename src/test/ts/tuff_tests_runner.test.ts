@@ -46,6 +46,7 @@ describe("tuff tests (.tuff)", () => {
       outDir,
       {
         includeStd: true,
+        includeCompilerSources: true,
       }
     );
 

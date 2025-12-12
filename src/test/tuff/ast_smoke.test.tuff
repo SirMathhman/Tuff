@@ -1,0 +1,58 @@
+extern from rt::vec use { vec_new, vec_push, vec_len, vec_get };
+
+from std::test use { reset, suite, it, expect_eq, expect_true, summary, status };
+
+from src::main::tuff::compiler::ast use {
+  span,
+  span_start,
+  span_end,
+
+  EInt,
+  EIdent,
+  EBinary,
+  OpAdd,
+  expr_kind,
+  expr_span
+};
+
+fn main() : I32 => {
+  reset();
+  suite("compiler ast (phase1 smoke)");
+
+  let s = span(10, 12);
+  let e1 = EInt((s, 42));
+
+  it(
+    "expr_kind(EInt) is EInt",
+    expect_eq("kind", expr_kind(e1), "EInt")
+  );
+
+  it(
+    "expr_span(EInt) roundtrips",
+    expect_true(
+      "span",
+      span_start(expr_span(e1)) == 10 && span_end(expr_span(e1)) == 12
+    )
+  );
+
+  let id = EIdent((span(20, 21), "x"));
+  let sum = EBinary((span(30, 35), OpAdd, id, e1));
+
+  it(
+    "binary expr kind is EBinary",
+    expect_eq("kind", expr_kind(sum), "EBinary")
+  );
+
+  // quick Vec smoke: AST payloads are tuples; vec is used later in the refactor
+  let v = vec_new();
+  vec_push(v, 1);
+  vec_push(v, 2);
+
+  it(
+    "vec works in tests",
+    expect_true("vec", vec_len(v) == 2 && vec_get(v, 0) == 1 && vec_get(v, 1) == 2)
+  );
+
+  summary();
+  status()
+}

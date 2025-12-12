@@ -29,9 +29,21 @@ async function writeStdSources(outDir: string) {
   await copyFile(resolve("rt/vec.mjs"), resolve(stdRtDir, "vec.mjs"));
 }
 
+async function writeCompilerSources(outDir: string) {
+  // Stage selected compiler sources so .tuff tests can import them.
+  // We mirror the repo-relative path inside outDir.
+  const compilerDir = resolve(outDir, "src", "main", "tuff", "compiler");
+  await mkdir(compilerDir, { recursive: true });
+
+  await copyFile(
+    resolve("src", "main", "tuff", "compiler", "ast.tuff"),
+    resolve(compilerDir, "ast.tuff")
+  );
+}
+
 export async function stagePrebuiltSelfhostCompiler(
   outDir: string,
-  options?: { includeStd?: boolean }
+  options?: { includeStd?: boolean; includeCompilerSources?: boolean }
 ) {
   const prebuiltDir = resolve("selfhost", "prebuilt");
 
@@ -39,6 +51,9 @@ export async function stagePrebuiltSelfhostCompiler(
   await writeRuntime(outDir);
   if (options?.includeStd) {
     await writeStdSources(outDir);
+  }
+  if (options?.includeCompilerSources) {
+    await writeCompilerSources(outDir);
   }
 
   await copyFile(

@@ -1,0 +1,93 @@
+// Canonical (target-agnostic) AST definitions.
+//
+// Phase 1 goal: introduce shared node definitions + a couple of helpers,
+// without changing the current compiler pipeline yet.
+//
+// NOTE: Keep this file dependency-light. In particular, avoid relying on
+// struct-literal lowering across modules (current selfhost compiler keeps
+// struct field-order defs per-file).
+
+// A source span as (startOffset, endOffset), half-open: [start, end)
+// Stored as a tagged union so it can cross module boundaries reliably.
+//
+// Invariant (by convention): 0 <= start <= end
+// (not enforced here; the analyzer will enforce it later).
+
+type Span = SpanVal<(I32, I32)>;
+
+// Binary operators (syntactic).
+
+type BinOp =
+  OpAdd
+  | OpSub
+  | OpMul
+  | OpDiv
+  | OpEq
+  | OpNe
+  | OpLt
+  | OpLe
+  | OpGt
+  | OpGe
+  | OpAnd
+  | OpOr;
+
+// Type references (syntactic).
+// These are *not* resolved types; the analyzer will transform/annotate.
+
+type TypeRef =
+  TyName<(Span, String)>
+  | TyTuple<(Span, Vec<TypeRef>)>
+  | TyFn<(Span, Vec<TypeRef>, TypeRef)>
+  | TyApp<(Span, String, Vec<TypeRef>)>;
+
+// Expressions.
+// Convention: payload tuple always starts with Span.
+
+type Expr =
+  EInt<(Span, I32)>
+  | EBool<(Span, Bool)>
+  | EString<(Span, String)>
+  | EIdent<(Span, String)>
+  | EBinary<(Span, BinOp, Expr, Expr)>
+  | ECall<(Span, Expr, Vec<Expr>)>
+  | EIf<(Span, Expr, Expr, Expr)>;
+
+// Statements.
+// Convention: payload tuple always starts with Span.
+
+type Stmt =
+  SLet<(Span, Bool, String, Expr)>       // (span, isMut, name, init)
+  | SAssign<(Span, String, Expr)>         // (span, name, value)
+  | SExpr<(Span, Expr)>                   // (span, expr)
+  | SYield<(Span, Expr)>                  // (span, expr)
+  | SWhile<(Span, Expr, Vec<Stmt>)>;      // (span, cond, body)
+
+// Top-level declarations.
+// Convention: payload tuple always starts with Span.
+
+type Decl =
+  DFn<(Span, String, Vec<String>, Vec<Stmt>, Expr)>         // fn name(params) => { stmts; tail }
+  | DStruct<(Span, String, Vec<String>)>                     // struct name { fields }
+  | DTypeUnion<(Span, String, Vec<String>)>                  // type name = Variants...
+  | DModule<(Span, String, Vec<Decl>)>
+  | DImport<(Span, String, Vec<String>)>;                    // from module use { names }
+
+// Helpers
+
+fn span(start: I32, end: I32) : Span => SpanVal((start, end))
+
+fn span_start(s: Span) : I32 => s.value.0
+fn span_end(s: Span) : I32 => s.value.1
+fn span_len(s: Span) : I32 => span_end(s) - span_start(s)
+
+fn type_kind(t: TypeRef) : String => t.tag
+fn type_span(t: TypeRef) : Span => t.value.0
+
+fn expr_kind(e: Expr) : String => e.tag
+fn expr_span(e: Expr) : Span => e.value.0
+
+fn stmt_kind(s: Stmt) : String => s.tag
+fn stmt_span(s: Stmt) : Span => s.value.0
+
+fn decl_kind(d: Decl) : String => d.tag
+fn decl_span(d: Decl) : Span => d.value.0
