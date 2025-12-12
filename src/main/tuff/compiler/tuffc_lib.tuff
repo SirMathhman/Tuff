@@ -105,6 +105,13 @@ from emit_ast_js use { emit_decl_js };
 
 from analyzer use { analyze_program };
 
+// Whitespace-preserving tooling support (formatter/refactors).
+from formatting use { ParsedProgramWithTrivia, parse_program_with_trivia };
+
+fn parse_program_with_trivia_api(src: String, exportAll: Bool) : ParsedProgramWithTrivia => {
+  parse_program_with_trivia(src, exportAll)
+}
+
 fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool) : String => {
   // Parse:
   //   (extern from <mod> use { <idents> };)*
