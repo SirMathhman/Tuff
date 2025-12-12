@@ -18,6 +18,7 @@ class fn ParsedNumber(v0, v1) => {}
 class fn ParsedIdent(v0, v1) => {}
 class fn ParsedExpr(v0, v1) => {}
 class fn ParsedMain(body, expr, v1) => {}
+class fn ParsedBool(v0, v1) => {}
 
 // Utility: ASCII checks
 fn is_digit(code) => { code >= 48 && code <= 57 }
@@ -158,6 +159,27 @@ fn parse_required_semicolon(src, i) => {
   j + 1
 }
 
+fn parse_mut_opt(src, i) => {
+  let j = skip_ws(src, i);
+  if (starts_with_at(src, j, "mut")) { yield ParsedBool(true, j + 3); }
+  ParsedBool(false, i)
+}
+
+fn is_assign_stmt_start(src, i) => {
+  let mut j = skip_ws(src, i);
+  if (!(j < stringLen(src))) { yield false; }
+  let c0 = stringCharCodeAt(src, j);
+  if (!is_ident_start(c0)) { yield false; }
+  j = j + 1;
+  while (j < stringLen(src)) {
+    let c = stringCharCodeAt(src, j);
+    if (!is_ident_part(c)) { break; }
+    j = j + 1;
+  }
+  j = skip_ws(src, j);
+  j < stringLen(src) && stringCharCodeAt(src, j) == 61 // '='
+}
+
 fn parse_main_body(src, i) => {
   let j = skip_ws(src, i);
   if (j < stringLen(src) && stringCharCodeAt(src, j) == 123) { // '{'
@@ -165,20 +187,38 @@ fn parse_main_body(src, i) => {
     let mut k = j + 1;
     let mut body = "";
 
-    // zero or more lets inside block (semicolon required)
+    // statements inside block (semicolon required)
     while (true) {
       let t = skip_ws(src, k);
+
+      // let / let mut
       if (starts_with_at(src, t, "let")) {
         k = parse_keyword(src, k, "let");
+        let mutOpt = parse_mut_opt(src, k);
+        k = mutOpt.v1;
         let name = parse_ident(src, k);
         k = name.v1;
         k = parse_keyword(src, k, "=");
         let expr = parse_expr(src, k);
         k = expr.v1;
         k = parse_required_semicolon(src, k);
-        body = body + ("const " + name.v0 + " = " + expr.v0 + ";\n");
+        let declKw = if (mutOpt.v0) "let" else "const";
+        body = body + (declKw + " " + name.v0 + " = " + expr.v0 + ";\n");
         continue;
       }
+
+      // assignment: <ident> = <expr>;
+      if (is_assign_stmt_start(src, t)) {
+        let name = parse_ident(src, k);
+        k = name.v1;
+        k = parse_keyword(src, k, "=");
+        let expr = parse_expr(src, k);
+        k = expr.v1;
+        k = parse_required_semicolon(src, k);
+        body = body + (name.v0 + " = " + expr.v0 + ";\n");
+        continue;
+      }
+
       break;
     }
 

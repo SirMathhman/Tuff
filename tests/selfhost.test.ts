@@ -45,7 +45,7 @@ describe("selfhost", () => {
     const tinyOut = resolve(outDir, "tiny.mjs");
     await writeFile(
       tinyIn,
-      "fn main() => { let x = 100; let y = 23; x + y }\n",
+      "fn main() => { let mut x = 100; x = x + 23; x }\n",
       "utf8"
     );
 
