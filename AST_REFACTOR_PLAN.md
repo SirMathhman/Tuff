@@ -92,6 +92,8 @@ Acceptance criteria:
 
 Goal: Add name resolution, forbid shadowing, type-check core constructs, and annotate nodes.
 
+Status: in progress (initial no-shadowing/name checks implemented).
+
 Acceptance criteria:
 
 - Analyzer produces consistent diagnostics and is covered by tests.
