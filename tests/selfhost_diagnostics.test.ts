@@ -4,7 +4,7 @@ import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { buildSelfhostCompiler } from "./helpers";
+import { stagePrebuiltSelfhostCompiler } from "./selfhost_helpers";
 
 describe("selfhost diagnostics", () => {
   test("parse error includes location and caret", async () => {
@@ -15,7 +15,7 @@ describe("selfhost diagnostics", () => {
     );
 
     await mkdir(outDir, { recursive: true });
-    const { libFile } = await buildSelfhostCompiler(outDir);
+    const { libFile } = await stagePrebuiltSelfhostCompiler(outDir);
     const stage1lib = (await import(pathToFileURL(libFile).toString())) as any;
 
     // Trigger a simple parser error: missing ')' in paren expression.

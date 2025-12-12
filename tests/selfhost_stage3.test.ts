@@ -4,7 +4,7 @@ import { copyFile, mkdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { buildSelfhostCompiler } from "./helpers";
+import { stagePrebuiltSelfhostCompiler } from "./selfhost_helpers";
 
 async function writeRuntime(outDir: string) {
   const rtDir = resolve(outDir, "rt");
@@ -31,8 +31,10 @@ describe("selfhost stage3", () => {
     await mkdir(stage3Dir, { recursive: true });
     await mkdir(stage4Dir, { recursive: true });
 
-    // Stage 1: bootstrap-compiled selfhost compiler (multi-file)
-    const { entryFile: stage1File } = await buildSelfhostCompiler(stage1Dir);
+    // Stage 1: start from the committed prebuilt selfhost compiler
+    const { entryFile: stage1File } = await stagePrebuiltSelfhostCompiler(
+      stage1Dir
+    );
 
     // Stage 2: stage1 compiles the selfhost compiler source again
     await writeRuntime(stage2Dir);
@@ -67,8 +69,14 @@ describe("selfhost stage3", () => {
     const stage4Entry = await readFile(stage4Out, "utf8");
     expect(stage4Entry).toBe(stage3Entry);
 
-    const stage3Lib = await readFile(resolve(stage3Dir, "tuffc_lib.mjs"), "utf8");
-    const stage4Lib = await readFile(resolve(stage4Dir, "tuffc_lib.mjs"), "utf8");
+    const stage3Lib = await readFile(
+      resolve(stage3Dir, "tuffc_lib.mjs"),
+      "utf8"
+    );
+    const stage4Lib = await readFile(
+      resolve(stage4Dir, "tuffc_lib.mjs"),
+      "utf8"
+    );
     expect(stage4Lib).toBe(stage3Lib);
   });
 });

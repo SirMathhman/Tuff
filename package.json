@@ -6,7 +6,8 @@
   "scripts": {
     "test": "bun test",
     "check": "bun test",
-    "tuffc": "bun run src/cli.ts"
+    "tuffc": "bun run src/cli.ts",
+    "build:selfhost-prebuilt": "bun run tools/build_prebuilt_selfhost.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

@@ -3,13 +3,15 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { buildSelfhostCompiler } from "./helpers";
+import { stagePrebuiltSelfhostCompiler } from "./selfhost_helpers";
 
 describe("selfhost", () => {
   test("selfhost tuffc can compile a tiny program", async () => {
     const outDir = resolve(".dist", "selfhost", `case-${Date.now()}`);
     await mkdir(outDir, { recursive: true });
-    const { entryFile: tuffcFile } = await buildSelfhostCompiler(outDir);
+    const { entryFile: tuffcFile } = await stagePrebuiltSelfhostCompiler(
+      outDir
+    );
 
     const mathIn = resolve(outDir, "math.tuff");
     await writeFile(

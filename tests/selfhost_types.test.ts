@@ -4,13 +4,15 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { buildSelfhostCompiler } from "./helpers";
+import { stagePrebuiltSelfhostCompiler } from "./selfhost_helpers";
 
 describe("selfhost types", () => {
   test("selfhost tuffc accepts type annotations and generics", async () => {
     const outDir = resolve(".dist", "selfhost", `types-${Date.now()}`);
     await mkdir(outDir, { recursive: true });
-    const { entryFile: tuffcFile } = await buildSelfhostCompiler(outDir);
+    const { entryFile: tuffcFile } = await stagePrebuiltSelfhostCompiler(
+      outDir
+    );
 
     const tinyIn = resolve(outDir, "tiny.tuff");
     const tinyOut = resolve(outDir, "tiny.mjs");

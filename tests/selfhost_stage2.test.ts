@@ -4,7 +4,7 @@ import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { buildSelfhostCompiler } from "./helpers";
+import { stagePrebuiltSelfhostCompiler } from "./selfhost_helpers";
 
 describe("selfhost stage2", () => {
   test("selfhost tuffc can compile itself (stage2) and still compile a tiny program", async () => {
@@ -15,8 +15,10 @@ describe("selfhost stage2", () => {
     );
     await mkdir(outDir, { recursive: true });
 
-    // Stage 1: bootstrap-compiled selfhost compiler (multi-file)
-    const { entryFile: stage1File } = await buildSelfhostCompiler(outDir);
+    // Stage 1: start from the committed prebuilt selfhost compiler
+    const { entryFile: stage1File } = await stagePrebuiltSelfhostCompiler(
+      outDir
+    );
 
     // Stage 2: use stage1 to compile the selfhost compiler source again
     const stage2In = resolve("selfhost", "tuffc.tuff");
