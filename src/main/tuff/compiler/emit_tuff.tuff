@@ -31,3 +31,28 @@ fn rename_ident_tokens(ts: TokenStream, fromName: String, toName: String) : Toke
 
   TokenStream(outToks, ts.trailingTrivia)
 }
+
+// Rename identifiers only when the token is fully contained in [rangeStart, rangeEnd).
+// This makes it possible to apply AST-guided edits (e.g. only within a function span)
+// while keeping all trivia byte-for-byte identical.
+fn rename_ident_tokens_in_range(
+  ts: TokenStream,
+  rangeStart: I32,
+  rangeEnd: I32,
+  fromName: String,
+  toName: String
+) : TokenStream => {
+  let outToks = vec_new();
+  let mut i = 0;
+  while (i < vec_len(ts.tokens)) {
+    let t = vec_get(ts.tokens, i);
+
+    let inRange = t.startPos >= rangeStart && t.endPos <= rangeEnd;
+    let newText = if (inRange && t.kind == "Ident" && t.text == fromName) { toName } else { t.text };
+
+    vec_push(outToks, Token(t.kind, t.startPos, t.endPos, newText, t.leadingTrivia));
+    i = i + 1;
+  }
+
+  TokenStream(outToks, ts.trailingTrivia)
+}

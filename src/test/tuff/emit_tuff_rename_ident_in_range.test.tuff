@@ -1,0 +1,31 @@
+extern from rt::stdlib use { stringLen };
+
+from std::test use { reset, suite, it, expect_eq, summary, status };
+
+from src::main::tuff::compiler::formatting use { parse_program_with_trivia };
+from src::main::tuff::compiler::emit_tuff use { rename_ident_tokens_in_range, emit_tuff };
+
+fn main() : I32 => {
+  reset();
+  suite("emit tuff (preserve trivia) :: rename in range");
+
+  let prefix = "fn a() => {\n  // keep me\n  let x = 1 + 2;\n  x\n}\n";
+  let suffix = "fn b() => {\n  // keep me too\n  let x = 3 + 4;\n  x\n}\n";
+
+  let src = prefix + suffix;
+
+  // Rename only inside the first function (the prefix).
+  let rangeStart = 0;
+  let rangeEnd = stringLen(prefix);
+
+  let expected = "fn a() => {\n  // keep me\n  let y = 1 + 2;\n  y\n}\nfn b() => {\n  // keep me too\n  let x = 3 + 4;\n  x\n}\n";
+
+  let p = parse_program_with_trivia(src, false);
+  let ts2 = rename_ident_tokens_in_range(p.tokenStream, rangeStart, rangeEnd, "x", "y");
+  let out = emit_tuff(ts2);
+
+  it("renames only within range", expect_eq("out", out, expected));
+
+  summary();
+  status()
+}
