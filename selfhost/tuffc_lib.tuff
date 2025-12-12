@@ -23,19 +23,19 @@ let mut __tuffc_current_file = "<input>";
 let mut __tuffc_struct_defs = vec_new();
 
 // Tiny record type used to return two values from parsing helpers.
-class fn ParsedNumber(value, nextPos) => {}
-class fn ParsedIdent(text, nextPos) => {}
-class fn ParsedExpr(v0, v1) => {}
-class fn ParsedMain(body, expr, v1) => {}
-class fn ParsedBool(ok, nextPos) => {}
-class fn ParsedStmt(v0, v1) => {}
-class fn ParsedParams(v0, v1) => {}
-class fn ParsedType(v0, v1) => {}
-class fn ParsedImports(v0, v1) => {}
-class fn ParsedFn(v0, v1, v2) => {}
-class fn ParsedModule(v0, v1) => {}
-class fn LineCol(line, col) => {}
-class fn StructDef(name, fields) => {} // name, fields(vec)
+class fn ParsedNumber(value: String, nextPos: I32) => {}
+class fn ParsedIdent(text: String, nextPos: I32) => {}
+class fn ParsedExpr(v0: String, v1: I32) => {}
+class fn ParsedMain(body: String, expr: String, v1: I32) => {}
+class fn ParsedBool(ok: Bool, nextPos: I32) => {}
+class fn ParsedStmt(v0: String, v1: I32) => {}
+class fn ParsedParams(v0: String, v1: I32) => {}
+class fn ParsedType(v0: String, v1: I32) => {}
+class fn ParsedImports(v0: String, v1: I32) => {}
+class fn ParsedFn(v0: String, v1: String, v2: I32) => {}
+class fn ParsedModule(v0: String, v1: I32) => {}
+class fn LineCol(line: I32, col: I32) => {}
+class fn StructDef(name: String, fields: Vec<String>) => {} // name, fields(vec)
 
 // Diagnostics helpers
 fn set_current_file(path: String) : Void => {
