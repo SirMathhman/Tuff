@@ -94,19 +94,19 @@ Source Code (.tuff files)
 
 The self-hosting compiler is located in `src/main/tuff/compiler/` and is split into focused modules to keep file sizes manageable:
 
-| Module | Purpose |
-|--------|---------|
-| **ast.tuff** | Canonical AST definitions (Expr, Stmt, Decl, Span, types) |
-| **lexing.tuff** | Tokenization; whitespace/comment handling; ASCII predicates |
-| **diagnostics.tuff** | Error/warning collection and formatting |
+| Module                      | Purpose                                                         |
+| --------------------------- | --------------------------------------------------------------- |
+| **ast.tuff**                | Canonical AST definitions (Expr, Stmt, Decl, Span, types)       |
+| **lexing.tuff**             | Tokenization; whitespace/comment handling; ASCII predicates     |
+| **diagnostics.tuff**        | Error/warning collection and formatting                         |
 | **parsing_primitives.tuff** | Low-level parsing utilities (tokens, positions, panic handling) |
-| **parsing_types.tuff** | Type expression parsing (`I32`, `String`, generics, etc.) |
-| **parsing_expr_stmt.tuff** | Expression and statement parsing (`if`, `match`, `while`, etc.) |
-| **parsing_decls.tuff** | Declaration parsing (functions, structs, imports, modules) |
-| **emit_ast_js.tuff** | Phase 3 scaffold: AST → JavaScript emitter (partial) |
-| **analyzer.tuff** | Name resolution, type checking, scope validation |
-| **tuffc_lib.tuff** | Compiler facade that orchestrates all modules |
-| **tuffc.tuff** | Main entry point |
+| **parsing_types.tuff**      | Type expression parsing (`I32`, `String`, generics, etc.)       |
+| **parsing_expr_stmt.tuff**  | Expression and statement parsing (`if`, `match`, `while`, etc.) |
+| **parsing_decls.tuff**      | Declaration parsing (functions, structs, imports, modules)      |
+| **emit_ast_js.tuff**        | Phase 3 scaffold: AST → JavaScript emitter (partial)            |
+| **analyzer.tuff**           | Name resolution, type checking, scope validation                |
+| **tuffc_lib.tuff**          | Compiler facade that orchestrates all modules                   |
+| **tuffc.tuff**              | Main entry point                                                |
 
 ### Bootstrap Strategy
 
@@ -126,6 +126,7 @@ bun run build:selfhost-prebuilt
 ```
 
 This script:
+
 1. Compiles all `.tuff` compiler source using the current prebuilt
 2. Verifies Stage 3 == Stage 4 (fixed-point)
 3. Copies all emitted `.mjs` modules to `selfhost/prebuilt/`
@@ -459,20 +460,24 @@ fn main() => {
 **Phase 0**: Diagnostics stability and correctness ✓
 
 **Phase 1**: Canonical AST module introduced ✓
+
 - `src/main/tuff/compiler/ast.tuff` defines all core AST nodes
 - Smoke tests validate AST construction and pattern matching
 
 **Phase 2**: Compiler split into modules ✓
+
 - `diagnostics.tuff`, `lexing.tuff`, `parsing_primitives.tuff`, `parsing_types.tuff`
 - `parsing_expr_stmt.tuff`, `parsing_decls.tuff`
 - `tuffc_lib.tuff` orchestrates all modules
 - Tests confirm no behavioral change from monolith
 
 **Phase 3**: Parser emits canonical AST ✓
+
 - Parser returns `ast::Expr`, `ast::Stmt`, `ast::Decl` instead of string IR
 - Spans are plumbed through for accurate error diagnostics
 
 **Phase 4**: Analyzer pass (in progress) ✓ (partial)
+
 - Name resolution and shadowing checks implemented
 - Type checking framework in place
 - Further type refinement ongoing
@@ -480,15 +485,18 @@ fn main() => {
 ### In-Progress and Planned
 
 **Phase 4 Completion**: Full type checking and annotation
+
 - Union type narrowing
 - Generic type resolution
 - Array initialization tracking
 
 **Phase 5a**: JS Emitter refinement
+
 - Optimize generated ES Modules
 - Improve error diagnostics
 
 **Phase 5b/5c**: Additional backends (planned, not yet started)
+
 - C emitter
 - Native/LLVM support
 - Self-hosting Tuff emitter (meta: Tuff→Tuff compilation)
