@@ -228,6 +228,18 @@ fn parse_primary(src, i) => {
   let j = skip_ws(src, i);
   if (!(j < stringLen(src))) { panic("expected expression"); }
   let c = stringCharCodeAt(src, j);
+  if (starts_with_at(src, j, "if")) {
+    let ie = parse_if_expr(src, j);
+    yield ie;
+  }
+  if (starts_with_at(src, j, "match")) {
+    let me = parse_match_expr(src, j);
+    yield me;
+  }
+  if (c == 123) { // '{'
+    let be = parse_block_expr(src, j);
+    yield be;
+  }
   if (c == 34) { // '"'
     let start = j;
     let mut k = j + 1;
@@ -270,6 +282,117 @@ fn parse_primary(src, i) => {
     yield ParsedExpr(out, k);
   }
   panic("expected expression")
+}
+
+fn parse_block_body(src, i) => {
+  let j = skip_ws(src, i);
+  if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 123)) { panic("expected '{'"); }
+
+  let mut k = j + 1;
+  let mut body = "";
+
+  while (true) {
+    let t = skip_ws(src, k);
+    if (!(t < stringLen(src))) { panic("expected '}'"); }
+    if (stringCharCodeAt(src, t) == 125) { break; }
+
+    let isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") || is_assign_stmt_start(src, t);
+    if (isStmt) {
+      let st = parse_stmt(src, k);
+      body = body + st.v0;
+      k = st.v1;
+      continue;
+    }
+
+    // expression statement vs tail expression
+    let e = parse_expr(src, k);
+    let after = skip_ws(src, e.v1);
+    if (after < stringLen(src) && stringCharCodeAt(src, after) == 59) {
+      body = body + (e.v0 + ";\n");
+      k = after + 1;
+      continue;
+    }
+    break;
+  }
+
+  let tail = parse_expr(src, k);
+  k = skip_ws(src, tail.v1);
+  if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 125)) { panic("expected '}'"); }
+  ParsedMain(body, tail.v0, k + 1)
+}
+
+fn parse_block_expr(src, i) => {
+  let b = parse_block_body(src, i);
+  ParsedExpr("(() => {\n" + b.body + "return " + b.expr + ";\n})()", b.v1)
+}
+
+fn parse_if_expr(src, i) => {
+  let mut k = parse_keyword(src, i, "if");
+  k = parse_keyword(src, k, "(");
+  let cond = parse_expr(src, k);
+  k = cond.v1;
+  k = parse_keyword(src, k, ")");
+  let thenE = parse_block_expr(src, k);
+  k = thenE.v1;
+  k = parse_keyword(src, k, "else");
+  let elseE = parse_block_expr(src, k);
+  ParsedExpr("(" + cond.v0 + " ? " + thenE.v0 + " : " + elseE.v0 + ")", elseE.v1)
+}
+
+fn parse_match_expr(src, i) => {
+  let mut k = parse_keyword(src, i, "match");
+  k = parse_keyword(src, k, "(");
+  let scrut = parse_expr(src, k);
+  k = scrut.v1;
+  k = parse_keyword(src, k, ")");
+  k = parse_keyword(src, k, "{");
+
+  let mut cases = "";
+  let mut def = "";
+
+  while (true) {
+    k = skip_ws(src, k);
+    if (!(k < stringLen(src))) { panic("expected '}'"); }
+    if (stringCharCodeAt(src, k) == 125) { k = k + 1; break; }
+
+    // pattern: number | _
+    let mut pat = "";
+    let c0 = stringCharCodeAt(src, k);
+    if (is_digit(c0)) {
+      let n = parse_number(src, k);
+      pat = "" + n.v0;
+      k = n.v1;
+    } else {
+      let id = parse_ident(src, k);
+      pat = id.v0;
+      k = id.v1;
+    }
+
+    k = parse_keyword(src, k, "=>");
+
+    // arm expression: block expr or normal expr
+    let t = skip_ws(src, k);
+    let arm = if (t < stringLen(src) && stringCharCodeAt(src, t) == 123) parse_block_expr(src, k) else parse_expr(src, k);
+    k = arm.v1;
+
+    if (pat == "_") {
+      def = arm.v0;
+    } else {
+      cases = cases + ("case " + pat + ": return " + arm.v0 + ";\n");
+    }
+
+    k = skip_ws(src, k);
+    if (k < stringLen(src)) {
+      let ch = stringCharCodeAt(src, k);
+      if (ch == 44 || ch == 59) { // ',' or ';'
+        k = k + 1;
+      }
+    }
+  }
+
+  if (def == "") { panic("match requires _ arm"); }
+
+  ParsedExpr("(() => { switch (" + scrut.v0 + ") {\n" + cases + "default: return " + def + ";\n} })()", k)
 }
 
 fn parse_imports(src, i) => {
@@ -492,42 +615,8 @@ fn is_assign_stmt_start(src, i) => {
 fn parse_main_body(src, i) => {
   let j = skip_ws(src, i);
   if (j < stringLen(src) && stringCharCodeAt(src, j) == 123) { // '{'
-    // block main body
-    let mut k = j + 1;
-    let mut body = "";
-
-    // statements inside block
-    while (true) {
-      let t = skip_ws(src, k);
-      if (!(t < stringLen(src))) { panic("expected '}'"); }
-      if (stringCharCodeAt(src, t) == 125) { break; }
-      // stop before tail expression if next token isn't a statement start
-      let isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") || is_assign_stmt_start(src, t);
-      if (isStmt) {
-        let st = parse_stmt(src, k);
-        body = body + st.v0;
-        k = st.v1;
-        continue;
-      }
-
-      // expression statement vs tail expression: if there's a semicolon, it's a statement; otherwise it's the tail.
-      let e = parse_expr(src, k);
-      let after = skip_ws(src, e.v1);
-      if (after < stringLen(src) && stringCharCodeAt(src, after) == 59) {
-        body = body + (e.v0 + ";\n");
-        k = after + 1;
-        continue;
-      }
-      break;
-    }
-
-    // tail expression
-    let tail = parse_expr(src, k);
-    k = skip_ws(src, tail.v1);
-    if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 125)) { // '}'
-      panic("expected '}'");
-    }
-    yield ParsedMain(body, tail.v0, k + 1);
+    let b = parse_block_body(src, i);
+    yield ParsedMain(b.body, b.expr, b.v1);
   }
 
   // expression main body
