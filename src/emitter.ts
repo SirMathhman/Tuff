@@ -572,6 +572,11 @@ function mapExternModule(parts: string[]): string {
   if (parts.length >= 2 && parts[0] === "node") {
     return `node:${parts.slice(1).join("/")}`;
   }
+  // Local runtime modules shipped with this repo.
+  // Example: `extern from rt::stdlib use { ... }` -> "./rt/stdlib.mjs"
+  if (parts.length >= 2 && parts[0] === "rt") {
+    return `./rt/${parts.slice(1).join("/")}.mjs`;
+  }
   return parts.join("/");
 }
 

@@ -1,0 +1,23 @@
+// Prelude for self-hosted Tuff code.
+//
+// The bootstrap compiler understands `extern from ... use { ... }`.
+// These externs are implemented by JS/TS modules under `./rt`.
+
+extern from rt::stdlib use {
+  print,
+  println,
+  panic,
+
+  readTextFile,
+  writeTextFile,
+  mkdirp,
+
+  pathDirname,
+  pathBasename,
+  pathJoin,
+  pathResolve,
+
+  cwd,
+  args,
+  exit
+};

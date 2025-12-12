@@ -2,6 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { compile } from "./helpers";
 
 describe("emit", () => {
+  test("maps extern rt::stdlib to local runtime module", () => {
+    const { js, diagnostics } = compile(`
+      extern from rt::stdlib use { print, readTextFile };
+      fn main() => { 1 }
+    `);
+    expect(diagnostics.some((d) => d.severity === "error")).toBe(false);
+    expect(js).toContain('import { print, readTextFile } from "./rt/stdlib.mjs"');
+  });
+
   test("emits union variant constructors", () => {
     const { js, diagnostics } = compile(`
       type Option<T> = Some<T> | None;
