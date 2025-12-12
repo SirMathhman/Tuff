@@ -219,7 +219,12 @@ export class Lexer {
     const col = this.col;
     if (this.peek() === "-") this.advance();
     while (!this.isEOF() && this.isDigit(this.peek())) this.advance();
-    if (this.peek() === "." && this.isDigit(this.peek2())) {
+
+    // Decimal fraction:
+    // Avoid consuming member-access dots used for tuple indexing chains like `n.0.1`.
+    // If the number is immediately preceded by '.', treat '.' as a separate token.
+    const allowDecimal = start === 0 ? true : this.src[start - 1] !== ".";
+    if (allowDecimal && this.peek() === "." && this.isDigit(this.peek2())) {
       this.advance();
       while (!this.isEOF() && this.isDigit(this.peek())) this.advance();
     }

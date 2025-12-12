@@ -341,6 +341,9 @@ function emitExpr(expr: Expr, w: Writer): string {
         .map((a) => emitExpr(a, w))
         .join(", ")})`;
     case "MemberExpr":
+      if (/^\d+$/.test(expr.member)) {
+        return `${emitExpr(expr.object, w)}[${expr.member}]`;
+      }
       return `${emitExpr(expr.object, w)}.${expr.member}`;
     case "IndexExpr":
       return `${emitExpr(expr.object, w)}[${emitExpr(expr.index, w)}]`;

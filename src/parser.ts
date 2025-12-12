@@ -531,7 +531,19 @@ export class Parser {
       }
       if (this.is("dot")) {
         this.next();
-        const member = this.consumeAnyIdent().text;
+        let memberTok: Token;
+        if (this.is("number")) {
+          memberTok = this.next();
+          if (!/^\d+$/.test(memberTok.text)) {
+            this.diags.error(
+              `Expected tuple index like '.0' but got '.${memberTok.text}'`,
+              this.spanOf(memberTok)
+            );
+          }
+        } else {
+          memberTok = this.consumeAnyIdent();
+        }
+        const member = memberTok.text;
         expr = this.node("MemberExpr", expr.span.start, this.prev().end, {
           object: expr,
           member,
@@ -619,7 +631,7 @@ export class Parser {
       // Could be lambda params: (x: I32) =>
       // We'll parse expression then if fat_arrow follows, treat as lambda.
       const save = this.i;
-      const items: any[] = [];
+      const params: any[] = [];
       let isParamList = true;
       if (!this.is("rparen")) {
         while (true) {
@@ -634,7 +646,7 @@ export class Parser {
             this.next();
             typeAnn = this.parseTypeExpr();
           }
-          items.push(
+          params.push(
             this.node("ParamDecl", pStart.start, this.prev().end, {
               name: pName.text,
               typeAnn,
@@ -662,7 +674,7 @@ export class Parser {
               { stmts: [], tail: bodyExpr }
             );
           return this.node("LambdaExpr", start.start, body.span.end, {
-            params: items,
+            params,
             body,
           });
         }
@@ -670,9 +682,40 @@ export class Parser {
 
       // not lambda: rewind and parse normal expression inside parens
       this.i = save;
-      const expr = this.parseExpr();
+
+      // tuple literal vs parenthesized expression
+      if (this.is("rparen")) {
+        // () is not a value in the bootstrap subset
+        this.diags.error(
+          `Empty parens '()' are not a valid expression`,
+          this.spanOf(this.cur())
+        );
+        this.consume("rparen");
+        return this.node("LiteralExpr", start.start, this.prev().end, {
+          value: null,
+          literalKind: "none",
+          raw: "None",
+        });
+      }
+
+      const firstExpr = this.parseExpr();
+      const items: Expr[] = [firstExpr];
+      if (this.is("comma")) {
+        while (this.is("comma")) {
+          this.next();
+          if (this.is("rparen")) break; // allow trailing comma: (1,)
+          items.push(this.parseExpr());
+        }
+        this.consume("rparen");
+        return this.node("TupleLiteralExpr", start.start, this.prev().end, {
+          items,
+        });
+      }
+
       this.consume("rparen");
-      return this.node("ParenExpr", start.start, this.prev().end, { expr });
+      return this.node("ParenExpr", start.start, this.prev().end, {
+        expr: firstExpr,
+      });
     }
 
     if (this.is("ident") || this.is("kw")) {

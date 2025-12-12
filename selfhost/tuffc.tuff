@@ -393,6 +393,15 @@ fn parse_postfix(src, i) => {
       continue;
     }
     if (j < stringLen(src) && stringCharCodeAt(src, j) == 46) { // '.'
+      // tuple access: expr.0 => expr[0]
+      let t = skip_ws(src, j + 1);
+      if (t < stringLen(src) && is_digit(stringCharCodeAt(src, t))) {
+        let n = parse_number(src, t);
+        left = ParsedExpr(left.v0 + "[" + ("" + n.v0) + "]", n.v1);
+        j = left.v1;
+        continue;
+      }
+
       let next = parse_ident(src, j + 1);
       left = ParsedExpr(left.v0 + "." + next.v0, next.v1);
       j = left.v1;
@@ -585,12 +594,44 @@ fn parse_primary(src, i) => {
     panic_at(src, start, "unterminated string");
   }
   if (c == 40) { // '('
-    let inner = parse_expr(src, j + 1);
-    let k = skip_ws(src, inner.v1);
-    if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 41)) { // ')'
-      panic_at(src, k, "expected ')'");
+    let first = parse_expr(src, j + 1);
+    let mut k = skip_ws(src, first.v1);
+
+    // Parenthesized expression
+    if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) { // ')'
+      yield ParsedExpr("(" + first.v0 + ")", k + 1);
     }
-    yield ParsedExpr("(" + inner.v0 + ")", k + 1);
+
+    // Tuple literal: (a, b, ...)
+    if (k < stringLen(src) && stringCharCodeAt(src, k) == 44) { // ','
+      let mut out = "[" + first.v0;
+      while (true) {
+        // consume ','
+        k = k + 1;
+        k = skip_ws(src, k);
+
+        // allow trailing comma
+        if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) { // ')'
+          yield ParsedExpr(out + "]", k + 1);
+        }
+
+        let e = parse_expr(src, k);
+        out = out + ", " + e.v0;
+        k = skip_ws(src, e.v1);
+
+        if (!(k < stringLen(src))) { panic_at(src, k, "expected ')' in tuple literal"); }
+        let ch = stringCharCodeAt(src, k);
+        if (ch == 44) { // ','
+          continue;
+        }
+        if (ch == 41) { // ')'
+          yield ParsedExpr(out + "]", k + 1);
+        }
+        panic_at(src, k, "expected ',' or ')' in tuple literal");
+      }
+    }
+
+    panic_at(src, k, "expected ')'");
   }
   if (is_digit(c)) {
     let n = parse_number(src, j);
