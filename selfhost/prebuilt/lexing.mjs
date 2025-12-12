@@ -5,6 +5,12 @@ import { panic_at } from "./diagnostics.mjs";
 export function LexItem(tag, startPos, endPos, text) {
 return { tag: tag, startPos: startPos, endPos: endPos, text: text };
 }
+export function Token(kind, startPos, endPos, text, leadingTrivia) {
+return { kind: kind, startPos: startPos, endPos: endPos, text: text, leadingTrivia: leadingTrivia };
+}
+export function TokenStream(tokens, trailingTrivia) {
+return { tokens: tokens, trailingTrivia: trailingTrivia };
+}
 export function is_digit(code) {
 return ((code >= 48) && (code <= 57));
 }
@@ -179,4 +185,122 @@ return out;
 }
 export function roundtrip_with_trivia(src) {
 return emit_lex_items(lex_items_with_trivia(src));
+}
+export function emit_trivia_items(items) {
+let out = "";
+let i = 0;
+while ((i < vec_len(items))) {
+out = (out + vec_get(items, i).text);
+i = (i + 1);
+}
+return out;
+}
+export function emit_token_stream(ts) {
+let out = "";
+let i = 0;
+while ((i < vec_len(ts.tokens))) {
+const tok = vec_get(ts.tokens, i);
+out = (out + emit_trivia_items(tok.leadingTrivia));
+out = (out + tok.text);
+i = (i + 1);
+}
+out = (out + emit_trivia_items(ts.trailingTrivia));
+return out;
+}
+export function tokenize_with_trivia(src) {
+const toks = vec_new();
+const trailing = vec_new();
+let i = 0;
+while ((i < stringLen(src))) {
+const leading = vec_new();
+const j = skip_ws_collect(src, i, leading);
+i = j;
+if ((!(i < stringLen(src)))) {
+let ti = 0;
+while ((ti < vec_len(leading))) {
+vec_push(trailing, vec_get(leading, ti));
+ti = (ti + 1);
+}
+break;
+}
+const c0 = stringCharCodeAt(src, i);
+if (is_digit(c0)) {
+let k = (i + 1);
+while (((k < stringLen(src)) && is_digit(stringCharCodeAt(src, k)))) {
+k = (k + 1);
+}
+vec_push(toks, Token("Number", i, k, stringSlice(src, i, k), leading));
+i = k;
+continue;
+}
+if (is_ident_start(c0)) {
+let k = (i + 1);
+while (((k < stringLen(src)) && is_ident_part(stringCharCodeAt(src, k)))) {
+k = (k + 1);
+}
+vec_push(toks, Token("Ident", i, k, stringSlice(src, i, k), leading));
+i = k;
+continue;
+}
+if ((c0 == 34)) {
+let k = (i + 1);
+let found = false;
+while ((k < stringLen(src))) {
+const c = stringCharCodeAt(src, k);
+if ((c == 92)) {
+k = (k + 2);
+continue;
+}
+if ((c == 34)) {
+k = (k + 1);
+found = true;
+break;
+}
+k = (k + 1);
+}
+if ((!found)) {
+panic_at(src, i, "unterminated string literal");
+}
+vec_push(toks, Token("String", i, k, stringSlice(src, i, k), leading));
+i = k;
+continue;
+}
+if ((c0 == 39)) {
+let k = (i + 1);
+let found = false;
+while ((k < stringLen(src))) {
+const c = stringCharCodeAt(src, k);
+if ((c == 92)) {
+k = (k + 2);
+continue;
+}
+if ((c == 39)) {
+k = (k + 1);
+found = true;
+break;
+}
+k = (k + 1);
+}
+if ((!found)) {
+panic_at(src, i, "unterminated char literal");
+}
+vec_push(toks, Token("Char", i, k, stringSlice(src, i, k), leading));
+i = k;
+continue;
+}
+if (((i + 1) < stringLen(src))) {
+if ((((((((((c0 == 61) && (stringCharCodeAt(src, (i + 1)) == 62)) || ((c0 == 58) && (stringCharCodeAt(src, (i + 1)) == 58))) || ((c0 == 61) && (stringCharCodeAt(src, (i + 1)) == 61))) || ((c0 == 33) && (stringCharCodeAt(src, (i + 1)) == 61))) || ((c0 == 60) && (stringCharCodeAt(src, (i + 1)) == 61))) || ((c0 == 62) && (stringCharCodeAt(src, (i + 1)) == 61))) || ((c0 == 38) && (stringCharCodeAt(src, (i + 1)) == 38))) || ((c0 == 124) && (stringCharCodeAt(src, (i + 1)) == 124)))) {
+vec_push(toks, Token("Op", i, (i + 2), stringSlice(src, i, (i + 2)), leading));
+i = (i + 2);
+continue;
+}
+}
+if ((((((((((((c0 == 43) || (c0 == 45)) || (c0 == 42)) || (c0 == 47)) || (c0 == 37)) || (c0 == 61)) || (c0 == 60)) || (c0 == 62)) || (c0 == 33)) || (c0 == 38)) || (c0 == 124))) {
+vec_push(toks, Token("Op", i, (i + 1), stringSlice(src, i, (i + 1)), leading));
+} else {
+vec_push(toks, Token("Punct", i, (i + 1), stringSlice(src, i, (i + 1)), leading));
+}
+i = (i + 1);
+}
+return TokenStream(toks, trailing);
 }
