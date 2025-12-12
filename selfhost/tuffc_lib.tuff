@@ -97,11 +97,11 @@ fn panic_at(src: String, i: I32, msg: String) : Void => {
   panic(header + "\n" + frame1 + "\n" + frame2);
 }
 
-fn reset_struct_defs() => {
+fn reset_struct_defs() : Void => {
   __tuffc_struct_defs = vec_new();
 }
 
-fn add_struct_def(name, fields) => {
+fn add_struct_def(name: String, fields: Vec<String>) : Void => {
   // Disallow duplicate declarations (consistent with no-shadowing ethos).
   let mut si = 0;
   while (si < vec_len(__tuffc_struct_defs)) {
@@ -112,7 +112,7 @@ fn add_struct_def(name, fields) => {
   vec_push(__tuffc_struct_defs, StructDef(name, fields));
 }
 
-fn find_struct_fields(name) => {
+fn find_struct_fields(name: String) : Vec<String> => {
   let mut si = 0;
   while (si < vec_len(__tuffc_struct_defs)) {
     let d = vec_get(__tuffc_struct_defs, si);
@@ -123,13 +123,13 @@ fn find_struct_fields(name) => {
 }
 
 // Utility: ASCII checks
-fn is_digit(code) => { code >= 48 && code <= 57 }
-fn is_space(code) => { code == 32 || code == 10 || code == 9 || code == 13 }
-fn is_alpha(code) => { (code >= 65 && code <= 90) || (code >= 97 && code <= 122) }
-fn is_ident_start(code) => { is_alpha(code) || code == 95 }
-fn is_ident_part(code) => { is_ident_start(code) || is_digit(code) }
+fn is_digit(code: I32) : Bool => { code >= 48 && code <= 57 }
+fn is_space(code: I32) : Bool => { code == 32 || code == 10 || code == 9 || code == 13 }
+fn is_alpha(code: I32) : Bool => { (code >= 65 && code <= 90) || (code >= 97 && code <= 122) }
+fn is_ident_start(code: I32) : Bool => { is_alpha(code) || code == 95 }
+fn is_ident_part(code: I32) : Bool => { is_ident_start(code) || is_digit(code) }
 
-fn skip_ws(src, i) => {
+fn skip_ws(src: String, i: I32) : I32 => {
   let mut j = i;
   while (j < stringLen(src)) {
     // skip whitespace
@@ -175,7 +175,7 @@ fn skip_ws(src, i) => {
   j
 }
 
-fn starts_with_at(src, i, lit) => {
+fn starts_with_at(src: String, i: I32, lit: String) : Bool => {
   // compare bytewise
   let mut j = 0;
   while (j < stringLen(lit)) {
@@ -186,7 +186,7 @@ fn starts_with_at(src, i, lit) => {
   true
 }
 
-fn parse_keyword(src, i, lit) => {
+fn parse_keyword(src: String, i: I32, lit: String) : I32 => {
   let j = skip_ws(src, i);
   if (!starts_with_at(src, j, lit)) {
     let mut end = j + 16;
@@ -196,7 +196,7 @@ fn parse_keyword(src, i, lit) => {
   j + stringLen(lit)
 }
 
-fn parse_number(src, i) => {
+fn parse_number(src: String, i: I32) : ParsedNumber => {
   let mut j = skip_ws(src, i);
   let mut acc = 0;
   let mut saw = false;
@@ -213,7 +213,7 @@ fn parse_number(src, i) => {
   ParsedNumber(acc, j)
 }
 
-fn parse_ident(src, i) => {
+fn parse_ident(src: String, i: I32) : ParsedIdent => {
   let mut j = skip_ws(src, i);
   if (!(j < stringLen(src))) { panic_at(src, j, "expected identifier"); }
   let c0 = stringCharCodeAt(src, j);
@@ -228,7 +228,7 @@ fn parse_ident(src, i) => {
   ParsedIdent(stringSlice(src, start, j), j)
 }
 
-fn parse_module_path(src, i) => {
+fn parse_module_path(src: String, i: I32) : ParsedIdent => {
   let mut j = skip_ws(src, i);
   let start = j;
   while (j < stringLen(src)) {
@@ -240,7 +240,7 @@ fn parse_module_path(src, i) => {
   ParsedIdent(stringSlice(src, start, j), j)
 }
 
-fn module_path_to_relpath(p) => {
+fn module_path_to_relpath(p: String) : String => {
   // Convert `a::b::c` to `a/b/c` for filesystem + ESM relative imports.
   let mut out = "";
   let mut i = 0;
@@ -256,9 +256,9 @@ fn module_path_to_relpath(p) => {
   out
 }
 
-fn parse_expr(src, i) => parse_or(src, i)
+fn parse_expr(src: String, i: I32) : ParsedExpr => parse_or(src, i)
 
-fn parse_or(src, i) => {
+fn parse_or(src: String, i: I32) : ParsedExpr => {
   let mut left = parse_and(src, i);
   let mut j = left.v1;
   while (true) {
@@ -275,7 +275,7 @@ fn parse_or(src, i) => {
   left
 }
 
-fn parse_and(src, i) => {
+fn parse_and(src: String, i: I32) : ParsedExpr => {
   let mut left = parse_cmp(src, i);
   let mut j = left.v1;
   while (true) {
@@ -292,7 +292,7 @@ fn parse_and(src, i) => {
   left
 }
 
-fn parse_cmp(src, i) => {
+fn parse_cmp(src: String, i: I32) : ParsedExpr => {
   // comparisons: == != < <= > >=
   let mut left = parse_add(src, i);
   let mut j = left.v1;
@@ -328,7 +328,7 @@ fn parse_cmp(src, i) => {
   left
 }
 
-fn parse_add(src, i) => {
+fn parse_add(src: String, i: I32) : ParsedExpr => {
   let mut left = parse_mul(src, i);
   let mut j = left.v1;
   while (true) {
@@ -344,7 +344,7 @@ fn parse_add(src, i) => {
   left
 }
 
-fn parse_mul(src, i) => {
+fn parse_mul(src: String, i: I32) : ParsedExpr => {
   let mut left = parse_unary(src, i);
   let mut j = left.v1;
   while (true) {
@@ -360,7 +360,7 @@ fn parse_mul(src, i) => {
   left
 }
 
-fn parse_unary(src, i) => {
+fn parse_unary(src: String, i: I32) : ParsedExpr => {
   let j = skip_ws(src, i);
   if (j < stringLen(src) && stringCharCodeAt(src, j) == 33) { // '!'
     let inner = parse_unary(src, j + 1);
@@ -373,7 +373,7 @@ fn parse_unary(src, i) => {
   parse_postfix(src, i)
 }
 
-fn parse_postfix(src, i) => {
+fn parse_postfix(src: String, i: I32) : ParsedExpr => {
   let mut left = parse_primary(src, i);
   let mut j = left.v1;
   while (true) {
@@ -425,7 +425,7 @@ fn parse_postfix(src, i) => {
   left
 }
 
-fn try_skip_type_args_for_call(src, i) => {
+fn try_skip_type_args_for_call(src: String, i: I32) : ParsedBool => {
   // Returns ParsedBool(true, endIndexAfterGreaterThan) if `<...>` is balanced
   // and followed by `(` (after ws). Otherwise ParsedBool(false, i).
   let mut k = skip_ws(src, i);
@@ -454,7 +454,7 @@ fn try_skip_type_args_for_call(src, i) => {
   ParsedBool(false, i)
 }
 
-fn parse_arg_list(src, i) => {
+fn parse_arg_list(src: String, i: I32) : ParsedParams => {
   // parses: '(' (expr (',' expr)*)? ')'
   let mut k = skip_ws(src, i);
   k = parse_keyword(src, k, "(");
@@ -489,7 +489,7 @@ fn parse_arg_list(src, i) => {
   ParsedParams(out, k)
 }
 
-fn skip_angle_brackets(src, i) => {
+fn skip_angle_brackets(src: String, i: I32) : I32 => {
   // Skips a possibly-nested '<...>' section. Expects '<' at i (after ws).
   let mut k = skip_ws(src, i);
   if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 60)) { // '<'
@@ -511,7 +511,7 @@ fn skip_angle_brackets(src, i) => {
   panic_at(src, k, "unterminated '<...>'")
 }
 
-fn parse_struct_lit(src, structName, i) => {
+fn parse_struct_lit(src: String, structName: String, i: I32) : ParsedExpr => {
   // Parses: '{' (expr (',' expr)*)? '}' and lowers using struct field order.
   let fields = find_struct_fields(structName);
 
@@ -561,7 +561,7 @@ fn parse_struct_lit(src, structName, i) => {
   ParsedExpr(out + " })", k)
 }
 
-fn parse_primary(src, i) => {
+fn parse_primary(src: String, i: I32) : ParsedExpr => {
   let j = skip_ws(src, i);
   if (!(j < stringLen(src))) { panic_at(src, j, "expected expression"); }
   let c = stringCharCodeAt(src, j);
@@ -667,7 +667,7 @@ fn parse_primary(src, i) => {
   panic_at(src, j, "expected expression near '" + stringSlice(src, j, end) + "'")
 }
 
-fn parse_vec_lit(src, i) => {
+fn parse_vec_lit(src: String, i: I32) : ParsedExpr => {
   // vector literal: '[' (expr (',' expr)*)? ']'
   let mut k = parse_keyword(src, i, "[");
   k = skip_ws(src, k);
@@ -696,7 +696,7 @@ fn parse_vec_lit(src, i) => {
   ParsedExpr("None", k)
 }
 
-fn parse_block_body(src, i) => {
+fn parse_block_body(src: String, i: I32) : ParsedMain => {
   let j = skip_ws(src, i);
   if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 123)) { panic_at(src, j, "expected '{'"); }
 
@@ -745,12 +745,12 @@ fn parse_block_body(src, i) => {
   ParsedMain(body, tail.v0, k + 1)
 }
 
-fn parse_block_expr(src, i) => {
+fn parse_block_expr(src: String, i: I32) : ParsedExpr => {
   let b = parse_block_body(src, i);
   ParsedExpr("(() => {\n" + b.body + "return " + b.expr + ";\n})()", b.v1)
 }
 
-fn parse_if_expr(src, i) => {
+fn parse_if_expr(src: String, i: I32) : ParsedExpr => {
   let mut k = parse_keyword(src, i, "if");
   k = parse_keyword(src, k, "(");
   let cond = parse_expr(src, k);
@@ -765,7 +765,7 @@ fn parse_if_expr(src, i) => {
   ParsedExpr("(" + cond.v0 + " ? " + thenE.v0 + " : " + elseE.v0 + ")", elseE.v1)
 }
 
-fn parse_match_expr(src, i) => {
+fn parse_match_expr(src: String, i: I32) : ParsedExpr => {
   let mut k = parse_keyword(src, i, "match");
   k = parse_keyword(src, k, "(");
   let scrut = parse_expr(src, k);
@@ -831,7 +831,7 @@ fn parse_match_expr(src, i) => {
   ParsedExpr("(() => { switch (" + scrut.v0 + ") {\n" + cases + "default: return " + def + ";\n} })()", k)
 }
 
-fn parse_fn_decl_named(src, i, jsName, exportThis) => {
+fn parse_fn_decl_named(src: String, i: I32, jsName: String, exportThis: Bool) : String => {
   let mut k = parse_keyword(src, i, "fn");
   let name = parse_ident(src, k);
   k = name.nextPos;
@@ -861,7 +861,7 @@ fn parse_fn_decl_named(src, i, jsName, exportThis) => {
   ParsedFn(js, k, name.text)
 }
 
-fn parse_module_decl(src, i, prefix, exportTop) => {
+fn parse_module_decl(src: String, i: I32, prefix: String, exportTop: Bool) : String => {
   // module Name { (fn ... | module ...)* }
   let mut k = parse_keyword(src, i, "module");
   let modName = parse_ident(src, k);
@@ -915,7 +915,7 @@ fn parse_module_decl(src, i, prefix, exportTop) => {
   ParsedStmt(code, k)
 }
 
-fn parse_imports(src, i) => {
+fn parse_imports(src: String, i: I32) : ParsedImports => {
   let mut k = i;
   let mut out = "";
   while (true) {
@@ -956,7 +956,7 @@ fn parse_imports(src, i) => {
   ParsedImports(out, k)
 }
 
-fn parse_type_expr(src, i) => {
+fn parse_type_expr(src: String, i: I32) : ParsedType => {
   // Minimal-but-real type expression parser.
   // Produces a textual representation (v0) and the index after the type (v1).
   let mut k = skip_ws(src, i);
@@ -1062,7 +1062,7 @@ fn parse_type_expr(src, i) => {
   ParsedType(out, k)
 }
 
-fn parse_param_list(src, i) => {
+fn parse_param_list(src: String, i: I32) : ParsedParams => {
   // parses: '(' (ident (',' ident)*)? ')'
   let mut k = parse_keyword(src, i, "(");
   k = skip_ws(src, k);
@@ -1100,7 +1100,7 @@ fn parse_param_list(src, i) => {
   ParsedParams(out, k)
 }
 
-fn parse_extern_decl(src, i) => {
+fn parse_extern_decl(src: String, i: I32) : String => {
   let mut k = parse_keyword(src, i, "extern");
   k = parse_keyword(src, k, "from");
   let mod = parse_module_path(src, k);
@@ -1135,7 +1135,7 @@ fn parse_extern_decl(src, i) => {
   ParsedStmt("import { " + names + " } from \"" + importPath + "\";\n", k)
 }
 
-fn parse_fn_decl2(src, i, exportAll) => {
+fn parse_fn_decl2(src: String, i: I32, exportAll: Bool) : String => {
   let mut k = parse_keyword(src, i, "fn");
   let name = parse_ident(src, k);
   k = name.nextPos;
@@ -1165,7 +1165,7 @@ fn parse_fn_decl2(src, i, exportAll) => {
   ParsedStmt(js, k)
 }
 
-fn parse_class_fn_decl2(src, i, exportAll) => {
+fn parse_class_fn_decl2(src: String, i: I32, exportAll: Bool) : String => {
   let mut k = parse_keyword(src, i, "class");
   k = parse_keyword(src, k, "fn");
   let name = parse_ident(src, k);
@@ -1234,21 +1234,21 @@ fn parse_class_fn_decl2(src, i, exportAll) => {
   ParsedStmt(js, k)
 }
 
-fn parse_fn_decl(src, i) => parse_fn_decl2(src, i, false)
+fn parse_fn_decl(src: String, i: I32) : String => parse_fn_decl2(src, i, false)
 
-fn parse_optional_semicolon(src, i) => {
+fn parse_optional_semicolon(src: String, i: I32) : I32 => {
   let j = skip_ws(src, i);
   if (j < stringLen(src) && stringCharCodeAt(src, j) == 59) { yield j + 1; }
   i
 }
 
-fn parse_required_semicolon(src, i) => {
+fn parse_required_semicolon(src: String, i: I32) : I32 => {
   let j = skip_ws(src, i);
   if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 59)) { panic_at(src, j, "expected ';'"); }
   j + 1
 }
 
-fn skip_type_expr(src, i) => {
+fn skip_type_expr(src: String, i: I32) : I32 => {
   // Skip a type expression in places where we don't need semantics yet.
   // Stops before ',', ';', or '}' when not inside angle brackets.
   let mut k = skip_ws(src, i);
@@ -1267,7 +1267,7 @@ fn skip_type_expr(src, i) => {
   panic_at(src, k, "unterminated type")
 }
 
-fn parse_struct_decl(src, i) => {
+fn parse_struct_decl(src: String, i: I32) : String => {
   // struct Name { field: Type, ... }
   let mut k = parse_keyword(src, i, "struct");
   let name = parse_ident(src, k);
@@ -1312,7 +1312,7 @@ fn parse_struct_decl(src, i) => {
   ParsedStmt("", k)
 }
 
-fn parse_type_union_decl(src, i, exportAll) => {
+fn parse_type_union_decl(src: String, i: I32, exportAll: Bool) : String => {
   // type Name<T, ...> = Variant1<X> | Variant2 | ...;
   let mut k = parse_keyword(src, i, "type");
   let _name = parse_ident(src, k);
@@ -1367,7 +1367,7 @@ fn parse_type_union_decl(src, i, exportAll) => {
   ParsedStmt(out, k)
 }
 
-fn parse_mut_opt(src, i) => {
+fn parse_mut_opt(src: String, i: I32) : ParsedBool => {
   let j = skip_ws(src, i);
   if (starts_with_at(src, j, "mut")) {
     // Require a boundary: next char must not be an identifier character.
@@ -1380,7 +1380,7 @@ fn parse_mut_opt(src, i) => {
   ParsedBool(false, i)
 }
 
-fn parse_stmt_block(src, i) => {
+fn parse_stmt_block(src: String, i: I32) : ParsedStmt => {
   let mut k = skip_ws(src, i);
   if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 123)) { panic_at(src, k, "expected '{'"); }
   k = k + 1;
@@ -1398,7 +1398,7 @@ fn parse_stmt_block(src, i) => {
   ParsedExpr(body, k)
 }
 
-fn parse_stmt(src, i) => {
+fn parse_stmt(src: String, i: I32) : ParsedStmt => {
   let mut k = skip_ws(src, i);
 
   // yield / early return
@@ -1529,7 +1529,7 @@ fn parse_stmt(src, i) => {
   panic_at(src, k, "expected statement")
 }
 
-fn is_index_assign_stmt_start(src, i) => {
+fn is_index_assign_stmt_start(src: String, i: I32) : Bool => {
   let mut j = skip_ws(src, i);
   if (!(j < stringLen(src))) { yield false; }
   let c0 = stringCharCodeAt(src, j);
@@ -1544,7 +1544,7 @@ fn is_index_assign_stmt_start(src, i) => {
   j < stringLen(src) && stringCharCodeAt(src, j) == 91 // '['
 }
 
-fn is_assign_stmt_start(src, i) => {
+fn is_assign_stmt_start(src: String, i: I32) : Bool => {
   let mut j = skip_ws(src, i);
   if (!(j < stringLen(src))) { yield false; }
   let c0 = stringCharCodeAt(src, j);
@@ -1565,7 +1565,7 @@ fn is_assign_stmt_start(src, i) => {
   true
 }
 
-fn is_field_assign_stmt_start(src, i) => {
+fn is_field_assign_stmt_start(src: String, i: I32) : Bool => {
   let mut j = skip_ws(src, i);
   if (!(j < stringLen(src))) { yield false; }
   let c0 = stringCharCodeAt(src, j);
@@ -1605,7 +1605,7 @@ fn is_field_assign_stmt_start(src, i) => {
   true
 }
 
-fn parse_main_body(src, i) => {
+fn parse_main_body(src: String, i: I32) : ParsedMain => {
   let j = skip_ws(src, i);
   if (j < stringLen(src) && stringCharCodeAt(src, j) == 123) { // '{'
     let b = parse_block_body(src, i);
@@ -1617,7 +1617,7 @@ fn parse_main_body(src, i) => {
   ParsedMain("", e.v0, e.v1)
 }
 
-fn compile_tiny2(src, requireMain, exportAll) => {
+fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool) : String => {
   // Parse:
   //   (extern from <mod> use { <idents> };)*
   //   (from <mod> use { <idents> };)*
@@ -1727,10 +1727,10 @@ fn compile_tiny2(src, requireMain, exportAll) => {
   out
 }
 
-fn compile_tiny(src) => compile_tiny2(src, true, false)
-fn compile_module(src) => compile_tiny2(src, false, true)
+fn compile_tiny(src: String) : String => compile_tiny2(src, true, false)
+fn compile_module(src: String) : String => compile_tiny2(src, false, true)
 
-fn compile_project(entryPath, outPath) => {
+fn compile_project(entryPath: String, outPath: String) : Void => {
   // Very small multi-file compiler:
   // - supports `from <path> use { ... };` for local file modules
   // - resolves to <path>.tuff relative to the importing file
