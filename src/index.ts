@@ -16,7 +16,7 @@ export type CompileOutput = {
 
 export function compileToESM(opts: CompileOptions): CompileOutput {
   const diags = new Diagnostics();
-  const tokens = new Lexer(opts.filePath, opts.source).tokenize();
+  const tokens = new Lexer(opts.filePath, opts.source, diags).tokenize();
   const program = new Parser(opts.filePath, tokens, diags).parseProgram();
   analyze(program, diags);
   const { js } = emitESM(program);

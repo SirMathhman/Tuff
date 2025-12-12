@@ -1,4 +1,5 @@
 import { compileToESM } from "./index";
+import { formatDiagnostic } from "./pretty_diagnostics";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
@@ -23,10 +24,7 @@ async function main() {
     source: src,
   });
   const errors = diagnostics.filter((d) => d.severity === "error");
-  for (const d of diagnostics) {
-    const prefix = d.severity === "error" ? "error" : "warn";
-    console.error(`${prefix}: ${d.message}`);
-  }
+  for (const d of diagnostics) console.error(formatDiagnostic(d, src));
   if (errors.length) process.exit(1);
 
   const outFile = resolve(

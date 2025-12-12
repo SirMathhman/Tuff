@@ -1,3 +1,4 @@
+import type { Diagnostics } from "./diagnostics";
 import { KEYWORDS, type Token, type TokenKind } from "./tokens";
 
 export class Lexer {
@@ -7,7 +8,8 @@ export class Lexer {
 
   constructor(
     private readonly filePath: string,
-    private readonly src: string
+    private readonly src: string,
+    private readonly diags?: Diagnostics
   ) {}
 
   tokenize(): Token[] {
@@ -30,7 +32,10 @@ export class Lexer {
         continue;
       }
       if (ch === "/" && this.peek2() === "*") {
-        this.readBlockComment();
+        const start = this.i;
+        const line = this.line;
+        const col = this.col;
+        this.readBlockComment(start, line, col);
         continue;
       }
 
@@ -157,7 +162,7 @@ export class Lexer {
     }
   }
 
-  private readBlockComment() {
+  private readBlockComment(start: number, line: number, col: number) {
     // assumes current is / and next is *
     this.advance();
     this.advance();
@@ -182,6 +187,16 @@ export class Lexer {
         continue;
       }
       this.advance();
+    }
+
+    if (depth > 0) {
+      this.diags?.error("Unterminated block comment", {
+        filePath: this.filePath,
+        start,
+        end: this.i,
+        line,
+        col,
+      });
     }
   }
 
@@ -239,6 +254,15 @@ export class Lexer {
         continue;
       }
       this.advance();
+    }
+    if (this.isEOF() && this.src[this.i - 1] !== '"') {
+      this.diags?.error("Unterminated string literal", {
+        filePath: this.filePath,
+        start,
+        end: this.i,
+        line,
+        col,
+      });
     }
     const text = this.src.slice(start, this.i);
     return this.makeToken("string", text, start, this.i, line, col);

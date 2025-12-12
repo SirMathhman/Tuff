@@ -929,8 +929,9 @@ export class Parser {
   private consume(kind: Token["kind"], text?: string): Token {
     const t = this.cur();
     if (!this.is(kind, text)) {
+      const expected = this.describeExpected(kind, text);
       this.diags.error(
-        `Expected ${text ?? kind} but got '${t.text}'`,
+        `Expected ${expected} but got '${t.text}'`,
         this.spanOf(t)
       );
     }
@@ -960,6 +961,54 @@ export class Parser {
     }
     this.i++;
     return t;
+  }
+
+  private describeExpected(kind: Token["kind"], text?: string): string {
+    if (text !== undefined) {
+      if (kind === "kw") return `'${text}'`;
+      if (kind === "op") return `operator '${text}'`;
+      return `'${text}'`;
+    }
+    switch (kind) {
+      case "lparen":
+        return "'('";
+      case "rparen":
+        return "')'";
+      case "lbrace":
+        return "'{'";
+      case "rbrace":
+        return "'}'";
+      case "lbracket":
+        return "'['";
+      case "rbracket":
+        return "']'";
+      case "comma":
+        return "','";
+      case "colon":
+        return "':'";
+      case "semicolon":
+        return "';'";
+      case "dot":
+        return "'.'";
+      case "arrow":
+        return "'->'";
+      case "fat_arrow":
+        return "'=>'";
+      case "newline":
+        return "newline";
+      case "eof":
+        return "end of file";
+      case "ident":
+        return "identifier";
+      case "number":
+        return "number";
+      case "string":
+        return "string";
+      case "op":
+        return "operator";
+      case "kw":
+        return "keyword";
+    }
   }
 }
 
