@@ -8,7 +8,7 @@ export function is_space(code) {
 return ((((code == 32) || (code == 10)) || (code == 9)) || (code == 13));
 }
 export function is_alpha(code) {
-return ((((code >= 65) && (code <= 90))) || (((code >= 97) && (code <= 122))));
+return (((code >= 65) && (code <= 90)) || ((code >= 97) && (code <= 122)));
 }
 export function is_ident_start(code) {
 return (is_alpha(code) || (code == 95));
@@ -26,7 +26,7 @@ break;
 }
 j = (j + 1);
 }
-if ((!(((j + 1) < stringLen(src))))) {
+if ((!((j + 1) < stringLen(src)))) {
 return j;
 }
 const c0 = stringCharCodeAt(src, j);

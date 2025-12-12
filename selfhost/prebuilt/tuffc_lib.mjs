@@ -6,45 +6,55 @@ import { is_digit, is_space, is_ident_start, is_ident_part, skip_ws, starts_with
 import { ParsedNumber, ParsedIdent, ParsedBool, parse_keyword, parse_number, parse_ident, parse_module_path, module_path_to_relpath, parse_optional_semicolon, parse_required_semicolon } from "./parsing_primitives.mjs";
 import { ParsedType, parse_type_expr, skip_angle_brackets, skip_type_expr } from "./parsing_types.mjs";
 import { ParsedExpr, ParsedMain, ParsedStmt, ParsedParams, parse_expr, parse_stmt, parse_main_body, parse_mut_opt, is_assign_stmt_start, is_field_assign_stmt_start, is_index_assign_stmt_start } from "./parsing_expr_stmt.mjs";
+import { ParsedExprAst, parse_expr_ast } from "./parsing_expr_stmt.mjs";
 import { ParsedImports, ParsedFn, parse_imports, parse_extern_decl, parse_module_decl, parse_fn_decl2, parse_class_fn_decl2, parse_struct_decl, parse_type_union_decl, parse_param_list, parse_fn_decl_named, parse_fn_decl } from "./parsing_decls.mjs";
+import { ParsedDeclAst, ParsedDeclsAst, parse_imports_ast, parse_extern_decl_ast, parse_module_decl_ast, parse_fn_decl_ast2, parse_class_fn_decl_ast2, parse_struct_decl_ast, parse_type_union_decl_ast } from "./parsing_decls.mjs";
+import { span, decl_let } from "./ast.mjs";
+import { emit_decl_js } from "./emit_ast_js.mjs";
+import { analyze_program } from "./analyzer.mjs";
 export function compile_tiny2(src, requireMain, exportAll) {
 let i = 0;
 reset_struct_defs();
 let out = "// compiled by selfhost tuffc\n";
+const decls = vec_new();
 while (true) {
 const j = skip_ws(src, i);
 if (starts_with_at(src, j, "extern")) {
-const ex = parse_extern_decl(src, i);
-out = (out + ex.v0);
-i = ex.v1;
+const ex = parse_extern_decl_ast(src, i);
+vec_push(decls, ex.decl);
+i = ex.nextPos;
 continue;
 }
 break;
 }
-const imps = parse_imports(src, i);
-out = (out + imps.v0);
-i = imps.v1;
+const imps = parse_imports_ast(src, i);
+let ii = 0;
+while ((ii < vec_len(imps.decls))) {
+vec_push(decls, vec_get(imps.decls, ii));
+ii = (ii + 1);
+}
+i = imps.nextPos;
 while (true) {
 const j = skip_ws(src, i);
 if ((!starts_with_at(src, j, "module"))) {
 break;
 }
-const m = parse_module_decl(src, i, "M", true);
-out = (out + m.v0);
-i = m.v1;
+const m = parse_module_decl_ast(src, i);
+vec_push(decls, m.decl);
+i = m.nextPos;
 }
 while (true) {
 const j = skip_ws(src, i);
 if (starts_with_at(src, j, "type")) {
-const td = parse_type_union_decl(src, i, exportAll);
-out = (out + td.v0);
-i = td.v1;
+const td = parse_type_union_decl_ast(src, i, exportAll);
+vec_push(decls, td.decl);
+i = td.nextPos;
 continue;
 }
 if (starts_with_at(src, j, "struct")) {
-const sd = parse_struct_decl(src, i);
-out = (out + sd.v0);
-i = sd.v1;
+const sd = parse_struct_decl_ast(src, i);
+vec_push(decls, sd.decl);
+i = sd.nextPos;
 continue;
 }
 break;
@@ -52,6 +62,7 @@ break;
 while (true) {
 const j = skip_ws(src, i);
 if (starts_with_at(src, j, "let")) {
+const start = skip_ws(src, i);
 i = parse_keyword(src, i, "let");
 const mutOpt = parse_mut_opt(src, i);
 i = mutOpt.nextPos;
@@ -63,11 +74,10 @@ const _ty = parse_type_expr(src, (t0 + 1));
 i = _ty.v1;
 }
 i = parse_keyword(src, i, "=");
-const expr = parse_expr(src, i);
-i = expr.v1;
+const expr = parse_expr_ast(src, i);
+i = expr.nextPos;
 i = parse_optional_semicolon(src, i);
-const declKw = (mutOpt.ok ? "let" : "const");
-out = (out + ((((((declKw + " ") + name.text) + " = ") + expr.v0) + ";\n")));
+vec_push(decls, decl_let(span(start, i), mutOpt.ok, name.text, expr.expr));
 continue;
 }
 break;
@@ -76,24 +86,33 @@ let sawMain = false;
 while (true) {
 const j = skip_ws(src, i);
 if (starts_with_at(src, j, "fn")) {
-const f = parse_fn_decl2(src, i, exportAll);
-if (starts_with_at(f.v0, 0, "export function main")) {
+const f = parse_fn_decl_ast2(src, i, exportAll);
+if (((f.decl.tag == "DFn") && (f.decl.name == "main"))) {
 sawMain = true;
 }
-out = (out + f.v0);
-i = f.v1;
+vec_push(decls, f.decl);
+i = f.nextPos;
 continue;
 }
 if (starts_with_at(src, j, "class")) {
-const f = parse_class_fn_decl2(src, i, exportAll);
-out = (out + f.v0);
-i = f.v1;
+const f = parse_class_fn_decl_ast2(src, i, exportAll);
+if (((f.decl.tag == "DClassFn") && (f.decl.name == "main"))) {
+sawMain = true;
+}
+vec_push(decls, f.decl);
+i = f.nextPos;
 continue;
 }
 break;
 }
 if ((requireMain && (!sawMain))) {
 panic_at(src, i, "expected fn main");
+}
+analyze_program(src, decls);
+let di = 0;
+while ((di < vec_len(decls))) {
+out = (out + emit_decl_js(vec_get(decls, di), exportAll));
+di = (di + 1);
 }
 return out;
 }
@@ -157,7 +176,7 @@ scan = parse_keyword(src, scan, "use");
 scan = parse_keyword(src, scan, "{");
 while (true) {
 scan = skip_ws(src, scan);
-if ((!((scan < stringLen(src))))) {
+if ((!(scan < stringLen(src)))) {
 panic_at(src, scan, "expected '}'");
 }
 if ((stringCharCodeAt(src, scan) == 125)) {

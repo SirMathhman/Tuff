@@ -8,7 +8,7 @@ return { v0: v0, v1: v1 };
 }
 export function skip_angle_brackets(src, i) {
 let k = skip_ws(src, i);
-if ((!(((k < stringLen(src)) && (stringCharCodeAt(src, k) == 60))))) {
+if ((!((k < stringLen(src)) && (stringCharCodeAt(src, k) == 60)))) {
 panic_at(src, k, "expected '<'");
 }
 k = (k + 1);
@@ -34,7 +34,7 @@ return panic_at(src, k, "unterminated '<...>'");
 }
 export function parse_type_expr(src, i) {
 let k = skip_ws(src, i);
-if ((!((k < stringLen(src))))) {
+if ((!(k < stringLen(src)))) {
 panic_at(src, k, "expected type");
 }
 const c = stringCharCodeAt(src, k);
@@ -53,11 +53,11 @@ k = inner.v1;
 let sizes = "";
 while (true) {
 const t = skip_ws(src, k);
-if ((!(((t < stringLen(src)) && (stringCharCodeAt(src, t) == 59))))) {
+if ((!((t < stringLen(src)) && (stringCharCodeAt(src, t) == 59)))) {
 break;
 }
 const n = parse_number(src, (t + 1));
-sizes = ((sizes + ";") + (("" + n.value)));
+sizes = ((sizes + ";") + ("" + n.value));
 k = n.nextPos;
 }
 k = parse_keyword(src, k, "]");
@@ -81,7 +81,7 @@ parts = ((parts + ", ") + t1.v0);
 }
 first = false;
 k = skip_ws(src, k);
-if ((!((k < stringLen(src))))) {
+if ((!(k < stringLen(src)))) {
 panic_at(src, k, "expected ')' in type");
 }
 const ch = stringCharCodeAt(src, k);
@@ -121,7 +121,7 @@ args = ((args + ", ") + a.v0);
 }
 firstArg = false;
 k = skip_ws(src, k);
-if ((!((k < stringLen(src))))) {
+if ((!(k < stringLen(src)))) {
 panic_at(src, k, "expected '>' in generic type");
 }
 const ch = stringCharCodeAt(src, k);
@@ -156,7 +156,7 @@ depth = (depth - 1);
 k = (k + 1);
 continue;
 }
-if (((depth == 0) && ((((ch == 44) || (ch == 59)) || (ch == 125))))) {
+if (((depth == 0) && (((ch == 44) || (ch == 59)) || (ch == 125)))) {
 return k;
 }
 k = (k + 1);

@@ -32,7 +32,7 @@ if ((!is_digit(c))) {
 break;
 }
 saw = true;
-acc = ((acc * 10) + ((c - 48)));
+acc = ((acc * 10) + (c - 48));
 j = (j + 1);
 }
 if ((!saw)) {
@@ -42,7 +42,7 @@ return ParsedNumber(acc, j);
 }
 export function parse_ident(src, i) {
 let j = skip_ws(src, i);
-if ((!((j < stringLen(src))))) {
+if ((!(j < stringLen(src)))) {
 panic_at(src, j, "expected identifier");
 }
 const c0 = stringCharCodeAt(src, j);
@@ -98,7 +98,7 @@ return i;
 }
 export function parse_required_semicolon(src, i) {
 const j = skip_ws(src, i);
-if ((!(((j < stringLen(src)) && (stringCharCodeAt(src, j) == 59))))) {
+if ((!((j < stringLen(src)) && (stringCharCodeAt(src, j) == 59)))) {
 panic_at(src, j, "expected ';'");
 }
 return (j + 1);

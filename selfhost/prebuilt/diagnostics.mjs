@@ -63,7 +63,7 @@ break;
 le = (le + 1);
 }
 const lineText = stringSlice(src, ls, le);
-const header = ((((((__tuffc_current_file + ":") + (("" + lc.line))) + ":") + (("" + lc.col))) + " error: ") + msg);
+const header = ((((((__tuffc_current_file + ":") + ("" + lc.line)) + ":") + ("" + lc.col)) + " error: ") + msg);
 const frame1 = ("  | " + lineText);
 const frame2 = (("  | " + spaces((lc.col - 1))) + "^");
 panic(((((header + "\n") + frame1) + "\n") + frame2));
