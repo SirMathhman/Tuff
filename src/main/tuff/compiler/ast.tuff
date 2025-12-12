@@ -71,13 +71,28 @@ struct TyApp {
 // Convention: payload tuple always starts with Span.
 
 type Expr =
-  EInt
+  EUndefined
+  | EInt
   | EBool
   | EString
+  | EPath
   | EIdent
+  | EUnary
   | EBinary
   | ECall
-  | EIf;
+  | EIf
+  | EBlock
+  | EVecLit
+  | ETupleLit
+  | EIndex
+  | ETupleIndex
+  | EField
+  | EMatch;
+
+struct EUndefined {
+  tag: String,
+  span: Span
+}
 
 struct EInt {
   tag: String,
@@ -103,6 +118,27 @@ struct EIdent {
   name: String
 }
 
+// Canonical module/namespace path, e.g. `Math::add`.
+// Kept separate from `EField` so emitters can map namespaces appropriately.
+struct EPath {
+  tag: String,
+  span: Span,
+  parts: Vec<String>
+}
+
+// Unary operators.
+
+type UnOp =
+  OpNot
+  | OpNeg;
+
+struct EUnary {
+  tag: String,
+  span: Span,
+  op: UnOp,
+  expr: Expr
+}
+
 struct EBinary {
   tag: String,
   span: Span,
@@ -126,6 +162,94 @@ struct EIf {
   elseExpr: Expr
 }
 
+// Block expression: executes statements, returns tail expression.
+struct EBlock {
+  tag: String,
+  span: Span,
+  body: Vec<Stmt>,
+  tail: Expr
+}
+
+struct EVecLit {
+  tag: String,
+  span: Span,
+  items: Vec<Expr>
+}
+
+struct ETupleLit {
+  tag: String,
+  span: Span,
+  items: Vec<Expr>
+}
+
+// Vector indexing (lowers to vec_get/vec_set in JS backend).
+struct EIndex {
+  tag: String,
+  span: Span,
+  base: Expr,
+  index: Expr
+}
+
+// Tuple indexing (lowers to JS bracket indexing with a constant).
+struct ETupleIndex {
+  tag: String,
+  span: Span,
+  base: Expr,
+  index: I32
+}
+
+struct EField {
+  tag: String,
+  span: Span,
+  base: Expr,
+  field: String
+}
+
+// Match expression (restricted patterns for the bootstrap subset).
+
+type MatchPat =
+  MPWildcard
+  | MPInt
+  | MPBool
+  | MPString;
+
+struct MPWildcard {
+  tag: String,
+  span: Span
+}
+
+struct MPInt {
+  tag: String,
+  span: Span,
+  value: I32
+}
+
+struct MPBool {
+  tag: String,
+  span: Span,
+  value: Bool
+}
+
+struct MPString {
+  tag: String,
+  span: Span,
+  value: String
+}
+
+struct MatchArm {
+  tag: String,
+  span: Span,
+  pat: MatchPat,
+  expr: Expr
+}
+
+struct EMatch {
+  tag: String,
+  span: Span,
+  scrut: Expr,
+  arms: Vec<MatchArm>
+}
+
 // Statements.
 // Convention: payload tuple always starts with Span.
 
@@ -134,7 +258,10 @@ type Stmt =
   | SAssign
   | SExpr
   | SYield
-  | SWhile;
+  | SWhile
+  | SIf
+  | SIndexAssign
+  | SFieldAssign;
 
 struct SLet {
   tag: String,
@@ -170,17 +297,70 @@ struct SWhile {
   body: Vec<Stmt>
 }
 
+struct SIf {
+  tag: String,
+  span: Span,
+  cond: Expr,
+  thenBody: Vec<Stmt>,
+  hasElse: Bool,
+  elseBody: Vec<Stmt>
+}
+
+struct SIndexAssign {
+  tag: String,
+  span: Span,
+  base: Expr,
+  index: Expr,
+  value: Expr
+}
+
+struct SFieldAssign {
+  tag: String,
+  span: Span,
+  base: Expr,
+  fields: Vec<String>,
+  value: Expr
+}
+
 // Top-level declarations.
 // Convention: payload tuple always starts with Span.
 
 type Decl =
-  DFn
+  DExternFrom
+  | DLet
+  | DFn
+  | DClassFn
   | DStruct
   | DTypeUnion
   | DModule
   | DImport;
 
+struct DExternFrom {
+  tag: String,
+  span: Span,
+  modulePath: String,
+  names: Vec<String>
+}
+
+struct DLet {
+  tag: String,
+  span: Span,
+  isMut: Bool,
+  name: String,
+  init: Expr
+}
+
 struct DFn {
+  tag: String,
+  span: Span,
+  name: String,
+  params: Vec<String>,
+  body: Vec<Stmt>,
+  tail: Expr
+}
+
+// `class fn` lowering uses a function that returns an object of parameters.
+struct DClassFn {
   tag: String,
   span: Span,
   name: String,
@@ -200,7 +380,14 @@ struct DTypeUnion {
   tag: String,
   span: Span,
   name: String,
-  variants: Vec<String>
+  variants: Vec<TypeUnionVariant>
+}
+
+struct TypeUnionVariant {
+  tag: String,
+  span: Span,
+  name: String,
+  hasPayload: Bool
 }
 
 struct DModule {
@@ -244,10 +431,50 @@ fn ty_tuple(span: Span, items: Vec<TypeRef>) : TypeRef => TyTuple { "TyTuple", s
 fn ty_fn(span: Span, params: Vec<TypeRef>, result: TypeRef) : TypeRef => TyFn { "TyFn", span, params, result }
 fn ty_app(span: Span, callee: String, args: Vec<TypeRef>) : TypeRef => TyApp { "TyApp", span, callee, args }
 
+fn expr_undefined(span: Span) : Expr => EUndefined { "EUndefined", span }
+
 fn expr_int(span: Span, value: I32) : Expr => EInt { "EInt", span, value }
 fn expr_bool(span: Span, value: Bool) : Expr => EBool { "EBool", span, value }
 fn expr_string(span: Span, value: String) : Expr => EString { "EString", span, value }
 fn expr_ident(span: Span, name: String) : Expr => EIdent { "EIdent", span, name }
+fn expr_path(span: Span, parts: Vec<String>) : Expr => EPath { "EPath", span, parts }
+
+fn expr_unary(span: Span, op: UnOp, expr: Expr) : Expr => EUnary { "EUnary", span, op, expr }
 fn expr_binary(span: Span, op: BinOp, left: Expr, right: Expr) : Expr => EBinary { "EBinary", span, op, left, right }
 fn expr_call(span: Span, callee: Expr, args: Vec<Expr>) : Expr => ECall { "ECall", span, callee, args }
 fn expr_if(span: Span, cond: Expr, thenExpr: Expr, elseExpr: Expr) : Expr => EIf { "EIf", span, cond, thenExpr, elseExpr }
+
+fn expr_block(span: Span, body: Vec<Stmt>, tail: Expr) : Expr => EBlock { "EBlock", span, body, tail }
+fn expr_vec_lit(span: Span, items: Vec<Expr>) : Expr => EVecLit { "EVecLit", span, items }
+fn expr_tuple_lit(span: Span, items: Vec<Expr>) : Expr => ETupleLit { "ETupleLit", span, items }
+fn expr_index(span: Span, base: Expr, index: Expr) : Expr => EIndex { "EIndex", span, base, index }
+fn expr_tuple_index(span: Span, base: Expr, index: I32) : Expr => ETupleIndex { "ETupleIndex", span, base, index }
+fn expr_field(span: Span, base: Expr, field: String) : Expr => EField { "EField", span, base, field }
+
+fn pat_wildcard(span: Span) : MatchPat => MPWildcard { "MPWildcard", span }
+fn pat_int(span: Span, value: I32) : MatchPat => MPInt { "MPInt", span, value }
+fn pat_bool(span: Span, value: Bool) : MatchPat => MPBool { "MPBool", span, value }
+fn pat_string(span: Span, value: String) : MatchPat => MPString { "MPString", span, value }
+fn mk_match_arm(span: Span, pat: MatchPat, expr: Expr) : MatchArm => MatchArm { "MatchArm", span, pat, expr }
+fn expr_match(span: Span, scrut: Expr, arms: Vec<MatchArm>) : Expr => EMatch { "EMatch", span, scrut, arms }
+
+// Stmt constructors
+fn stmt_let(span: Span, isMut: Bool, name: String, init: Expr) : Stmt => SLet { "SLet", span, isMut, name, init }
+fn stmt_assign(span: Span, name: String, value: Expr) : Stmt => SAssign { "SAssign", span, name, value }
+fn stmt_expr(span: Span, expr: Expr) : Stmt => SExpr { "SExpr", span, expr }
+fn stmt_yield(span: Span, expr: Expr) : Stmt => SYield { "SYield", span, expr }
+fn stmt_while(span: Span, cond: Expr, body: Vec<Stmt>) : Stmt => SWhile { "SWhile", span, cond, body }
+fn stmt_if(span: Span, cond: Expr, thenBody: Vec<Stmt>, hasElse: Bool, elseBody: Vec<Stmt>) : Stmt => SIf { "SIf", span, cond, thenBody, hasElse, elseBody }
+fn stmt_index_assign(span: Span, base: Expr, index: Expr, value: Expr) : Stmt => SIndexAssign { "SIndexAssign", span, base, index, value }
+fn stmt_field_assign(span: Span, base: Expr, fields: Vec<String>, value: Expr) : Stmt => SFieldAssign { "SFieldAssign", span, base, fields, value }
+
+// Decl constructors
+fn decl_extern_from(span: Span, modulePath: String, names: Vec<String>) : Decl => DExternFrom { "DExternFrom", span, modulePath, names }
+fn decl_import(span: Span, modulePath: String, names: Vec<String>) : Decl => DImport { "DImport", span, modulePath, names }
+fn decl_struct(span: Span, name: String, fields: Vec<String>) : Decl => DStruct { "DStruct", span, name, fields }
+fn type_union_variant(span: Span, name: String, hasPayload: Bool) : TypeUnionVariant => TypeUnionVariant { "TypeUnionVariant", span, name, hasPayload }
+fn decl_type_union(span: Span, name: String, variants: Vec<TypeUnionVariant>) : Decl => DTypeUnion { "DTypeUnion", span, name, variants }
+fn decl_fn(span: Span, name: String, params: Vec<String>, body: Vec<Stmt>, tail: Expr) : Decl => DFn { "DFn", span, name, params, body, tail }
+fn decl_class_fn(span: Span, name: String, params: Vec<String>, body: Vec<Stmt>, tail: Expr) : Decl => DClassFn { "DClassFn", span, name, params, body, tail }
+fn decl_let(span: Span, isMut: Bool, name: String, init: Expr) : Decl => DLet { "DLet", span, isMut, name, init }
+fn decl_module(span: Span, name: String, decls: Vec<Decl>) : Decl => DModule { "DModule", span, name, decls }

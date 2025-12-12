@@ -76,6 +76,8 @@ Acceptance criteria:
 
 Goal: Replace string-based Parsed\* outputs with canonical AST nodes.
 
+Status: done.
+
 Steps:
 
 - Keep the current parsing strategy, but return `ast::Expr/Stmt/Decl` instead of JS strings.

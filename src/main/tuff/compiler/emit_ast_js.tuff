@@ -3,8 +3,12 @@
 // This module is intentionally small and only supports the current subset of
 // `compiler/ast.tuff` nodes.
 
-extern from rt::stdlib use { stringLen, stringCharCodeAt, stringFromCharCode };
-extern from rt::vec use { vec_len, vec_get };
+extern from rt::stdlib use { panic, stringLen, stringCharCodeAt, stringFromCharCode, stringSlice };
+extern from rt::vec use { vec_new, vec_push, vec_len, vec_get, vec_set };
+
+from diagnostics use { find_struct_fields };
+from lexing use { starts_with_at };
+from parsing_primitives use { module_path_to_relpath };
 
 fn escape_js_string(s: String) : String => {
   // Minimal JS string escaping for double-quoted literals.
@@ -13,7 +17,6 @@ fn escape_js_string(s: String) : String => {
   let mut i = 0;
   while (i < stringLen(s)) {
     let ch = stringCharCodeAt(s, i);
-
     // '"'
     if (ch == 34) {
       out = out + "\\\"";
@@ -63,7 +66,6 @@ fn emit_binop_js(op) : String => {
   if (op.tag == "OpAdd") { out = "+"; }
   if (op.tag == "OpSub") { out = "-"; }
   if (op.tag == "OpMul") { out = "*"; }
-  if (op.tag == "OpDiv") { out = "/"; }
   if (op.tag == "OpEq") { out = "=="; }
   if (op.tag == "OpNe") { out = "!="; }
   if (op.tag == "OpLt") { out = "<"; }
@@ -75,9 +77,54 @@ fn emit_binop_js(op) : String => {
   out
 }
 
+fn emit_unop_js(op) : String => {
+  let mut out = "??";
+  if (op.tag == "OpNot") { out = "!"; }
+  if (op.tag == "OpNeg") { out = "-"; }
+  out
+}
+
+fn emit_path_js(parts) : String => {
+  let mut out = "";
+  let mut i = 0;
+  while (i < vec_len(parts)) {
+    if (i > 0) { out = out + "."; }
+    out = out + vec_get(parts, i);
+    i = i + 1;
+  }
+  out
+}
+
+fn struct_name_for_lookup(nameExpr) : String => {
+  if (nameExpr.tag == "EIdent") { yield nameExpr.name; }
+  if (nameExpr.tag == "EPath") { yield emit_path_js(nameExpr.parts); }
+  panic("struct literal name must be ident or path")
+}
+
+fn emit_struct_lit_js(nameExpr, values) : String => {
+  let structName = struct_name_for_lookup(nameExpr);
+  let fields = find_struct_fields(structName);
+
+  if (!(vec_len(fields) == vec_len(values))) {
+    panic("wrong number of values in struct literal for " + structName);
+  }
+
+  let mut out = "({ ";
+  let mut i = 0;
+  while (i < vec_len(fields)) {
+    if (i > 0) { out = out + ", "; }
+    out = out + (vec_get(fields, i) + ": " + emit_expr_js(vec_get(values, i)));
+    i = i + 1;
+  }
+  out = out + " })";
+  out
+}
+
 fn emit_expr_js(e) : String => {
   // Default fallback for nodes we haven't implemented yet.
   let mut out = "undefined";
+
+  if (e.tag == "EUndefined") { out = "undefined"; }
 
   if (e.tag == "EInt") { out = "" + e.value; }
 
@@ -89,24 +136,301 @@ fn emit_expr_js(e) : String => {
   if (e.tag == "EString") { out = "\"" + escape_js_string(e.value) + "\""; }
   if (e.tag == "EIdent") { out = e.name; }
 
+  if (e.tag == "EPath") { out = emit_path_js(e.parts); }
+
+  if (e.tag == "EUnary") {
+    out = "(" + emit_unop_js(e.op) + emit_expr_js(e.expr) + ")";
+  }
+
   if (e.tag == "EBinary") {
     out = "(" + emit_expr_js(e.left) + " " + emit_binop_js(e.op) + " " + emit_expr_js(e.right) + ")";
   }
 
   if (e.tag == "ECall") {
-    let mut s = emit_expr_js(e.callee) + "(";
-    let mut i = 0;
-    while (i < vec_len(e.args)) {
-      if (i > 0) { s = s + ", "; }
-      s = s + emit_expr_js(vec_get(e.args, i));
-      i = i + 1;
+    // Special-case: struct literal encoding used by the Phase 3 parser.
+    // __tuff_struct_lit(<NameExpr>, <v0>, <v1>, ...)
+    if (e.callee.tag == "EIdent" && e.callee.name == "__tuff_struct_lit") {
+      if (vec_len(e.args) < 1) { panic("__tuff_struct_lit expects at least a name"); }
+      let nameExpr = vec_get(e.args, 0);
+      let values = vec_new();
+      let mut i = 1;
+      while (i < vec_len(e.args)) {
+        vec_push(values, vec_get(e.args, i));
+        i = i + 1;
+      }
+      out = emit_struct_lit_js(nameExpr, values);
+    } else {
+      let mut s = emit_expr_js(e.callee) + "(";
+      let mut i = 0;
+      while (i < vec_len(e.args)) {
+        if (i > 0) { s = s + ", "; }
+        s = s + emit_expr_js(vec_get(e.args, i));
+        i = i + 1;
+      }
+      s = s + ")";
+      out = s;
     }
-    s = s + ")";
-    out = s;
   }
 
   if (e.tag == "EIf") {
     out = "(" + emit_expr_js(e.cond) + " ? " + emit_expr_js(e.thenExpr) + " : " + emit_expr_js(e.elseExpr) + ")";
+  }
+
+  if (e.tag == "EBlock") {
+    out = "(() => {\n" + emit_stmts_js(e.body) + "return " + emit_expr_js(e.tail) + ";\n})()";
+  }
+
+  if (e.tag == "EVecLit") {
+    let mut pushes = "";
+    let mut i = 0;
+    while (i < vec_len(e.items)) {
+      pushes = pushes + ("vec_push(__v, " + emit_expr_js(vec_get(e.items, i)) + ");\n");
+      i = i + 1;
+    }
+    out = "(() => { const __v = vec_new();\n" + pushes + "return __v;\n})()";
+  }
+
+  if (e.tag == "ETupleLit") {
+    let mut s = "[";
+    let mut i = 0;
+    while (i < vec_len(e.items)) {
+      if (i > 0) { s = s + ", "; }
+      s = s + emit_expr_js(vec_get(e.items, i));
+      i = i + 1;
+    }
+    s = s + "]";
+    out = s;
+  }
+
+  if (e.tag == "EIndex") {
+    out = "vec_get(" + emit_expr_js(e.base) + ", " + emit_expr_js(e.index) + ")";
+  }
+
+  if (e.tag == "ETupleIndex") {
+    out = emit_expr_js(e.base) + "[" + ("" + e.index) + "]";
+  }
+
+  if (e.tag == "EField") {
+    out = emit_expr_js(e.base) + "." + e.field;
+  }
+
+  if (e.tag == "EMatch") {
+    let mut cases = "";
+    let mut def = "";
+    let mut i = 0;
+    while (i < vec_len(e.arms)) {
+      let arm = vec_get(e.arms, i);
+      if (arm.pat.tag == "MPWildcard") {
+        def = emit_expr_js(arm.expr);
+      } else {
+        let mut patJs = "";
+        if (arm.pat.tag == "MPInt") { patJs = "" + arm.pat.value; }
+        if (arm.pat.tag == "MPBool") { patJs = if (arm.pat.value) "true" else "false"; }
+        if (arm.pat.tag == "MPString") { patJs = "\"" + escape_js_string(arm.pat.value) + "\""; }
+        cases = cases + ("case " + patJs + ": return " + emit_expr_js(arm.expr) + ";\n");
+      }
+      i = i + 1;
+    }
+    if (def == "") { panic("match requires _ arm"); }
+    out = "(() => { switch (" + emit_expr_js(e.scrut) + ") {\n" + cases + "default: return " + def + ";\n} })()";
+  }
+
+  out
+}
+
+fn emit_stmt_js(s) : String => {
+  let mut out = "";
+
+  if (s.tag == "SLet") {
+    let kw = if (s.isMut) "let" else "const";
+    out = kw + " " + s.name + " = " + emit_expr_js(s.init) + ";\n";
+  }
+
+  if (s.tag == "SAssign") {
+    out = s.name + " = " + emit_expr_js(s.value) + ";\n";
+  }
+
+  if (s.tag == "SExpr") {
+    out = emit_expr_js(s.expr) + ";\n";
+  }
+
+  if (s.tag == "SYield") {
+    if (s.expr.tag == "EUndefined") { out = "return;\n"; }
+    else { out = "return " + emit_expr_js(s.expr) + ";\n"; }
+  }
+
+  if (s.tag == "SWhile") {
+    out = "while (" + emit_expr_js(s.cond) + ") {\n" + emit_stmts_js(s.body) + "}\n";
+  }
+
+  if (s.tag == "SIf") {
+    if (s.hasElse) {
+      out = "if (" + emit_expr_js(s.cond) + ") {\n" + emit_stmts_js(s.thenBody) + "} else {\n" + emit_stmts_js(s.elseBody) + "}\n";
+    } else {
+      out = "if (" + emit_expr_js(s.cond) + ") {\n" + emit_stmts_js(s.thenBody) + "}\n";
+    }
+  }
+
+  if (s.tag == "SIndexAssign") {
+    out = "vec_set(" + emit_expr_js(s.base) + ", " + emit_expr_js(s.index) + ", " + emit_expr_js(s.value) + ");\n";
+  }
+
+  if (s.tag == "SFieldAssign") {
+    let mut lhs = emit_expr_js(s.base);
+    let mut i = 0;
+    while (i < vec_len(s.fields)) {
+      lhs = lhs + "." + vec_get(s.fields, i);
+      i = i + 1;
+    }
+    out = lhs + " = " + emit_expr_js(s.value) + ";\n";
+  }
+
+  out
+}
+
+fn emit_stmts_js(stmts) : String => {
+  let mut out = "";
+  let mut i = 0;
+  while (i < vec_len(stmts)) {
+    out = out + emit_stmt_js(vec_get(stmts, i));
+    i = i + 1;
+  }
+  out
+}
+
+fn emit_names_csv(names) : String => {
+  let mut out = "";
+  let mut i = 0;
+  while (i < vec_len(names)) {
+    if (i > 0) { out = out + ", "; }
+    out = out + vec_get(names, i);
+    i = i + 1;
+  }
+  out
+}
+
+fn emit_extern_import_path(modPath: String) : String => {
+  if (starts_with_at(modPath, 0, "rt::")) {
+    yield "./rt/" + stringSlice(modPath, 4, stringLen(modPath)) + ".mjs";
+  }
+  if (starts_with_at(modPath, 0, "node::")) {
+    yield "node:" + stringSlice(modPath, 6, stringLen(modPath));
+  }
+  panic("unsupported extern module: " + modPath)
+}
+
+fn emit_fn_decl_js(d, exportAll: Bool, jsName: String, exportThis: Bool) : String => {
+  let exportKw = if (exportThis) "export " else "";
+  let params = emit_names_csv(d.params);
+  exportKw + "function " + jsName + "(" + params + ") {\n" + emit_stmts_js(d.body) + "return " + emit_expr_js(d.tail) + ";\n}\n"
+}
+
+fn emit_type_union_js(d, exportAll: Bool) : String => {
+  let mut out = "";
+  let dq = "\"";
+  let mut i = 0;
+  while (i < vec_len(d.variants)) {
+    let v = vec_get(d.variants, i);
+    let header = if (exportAll) "export const " else "const ";
+    if (v.hasPayload) {
+      out = out + (header + v.name + " = (value) => { return { tag: " + dq + v.name + dq + ", value: value }; };\n");
+    } else {
+      out = out + (header + v.name + " = { tag: " + dq + v.name + dq + " };\n");
+    }
+    i = i + 1;
+  }
+  out
+}
+
+fn emit_module_decl_js(d, prefix: String, exportThis: Bool) : String => {
+  // Emit inner decls as top-level functions/consts, then expose an object.
+  let mut decls = "";
+  let mut entries = "";
+  let mut first = true;
+
+  let mut i = 0;
+  while (i < vec_len(d.decls)) {
+    let inner = vec_get(d.decls, i);
+
+    if (inner.tag == "DFn") {
+      let jsName = prefix + "__" + d.name + "__" + inner.name;
+      decls = decls + emit_fn_decl_js(inner, false, jsName, false);
+      if (first) { entries = entries + (inner.name + ": " + jsName); }
+      else { entries = entries + (", " + inner.name + ": " + jsName); }
+      first = false;
+      i = i + 1;
+      continue;
+    }
+
+    if (inner.tag == "DModule") {
+      let innerCode = emit_module_decl_js(inner, prefix + "__" + d.name, false);
+      decls = decls + innerCode;
+      let prop = inner.name;
+      if (first) { entries = entries + (prop + ": " + prop); }
+      else { entries = entries + (", " + prop + ": " + prop); }
+      first = false;
+      i = i + 1;
+      continue;
+    }
+
+    panic("unsupported decl inside module")
+  }
+
+  let header = if (exportThis) "export const " else "const ";
+  decls + header + d.name + " = { " + entries + " };\n"
+}
+
+fn emit_decl_js(d, exportAll: Bool) : String => {
+  let mut out = "";
+
+  if (d.tag == "DExternFrom") {
+    let importPath = emit_extern_import_path(d.modulePath);
+    out = "import { " + emit_names_csv(d.names) + " } from \"" + importPath + "\";\n";
+  }
+
+  if (d.tag == "DImport") {
+    let importPath = "./" + module_path_to_relpath(d.modulePath) + ".mjs";
+    out = "import { " + emit_names_csv(d.names) + " } from \"" + importPath + "\";\n";
+  }
+
+  if (d.tag == "DTypeUnion") {
+    out = emit_type_union_js(d, exportAll);
+  }
+
+  if (d.tag == "DStruct") {
+    // Structs are compile-time only for now (field order table is updated during parsing).
+    out = "";
+  }
+
+  if (d.tag == "DLet") {
+    let kw = if (d.isMut) "let" else "const";
+    out = kw + " " + d.name + " = " + emit_expr_js(d.init) + ";\n";
+  }
+
+  if (d.tag == "DFn") {
+    let exportThis = exportAll || d.name == "main";
+    out = emit_fn_decl_js(d, exportAll, d.name, exportThis);
+  }
+
+  if (d.tag == "DClassFn") {
+    // Current behavior: `class fn` becomes a function returning an object of params.
+    // We ignore the AST tail and always return { p: p, ... }.
+    let exportThis = exportAll || d.name == "main";
+    let exportKw = if (exportThis) "export " else "";
+    let params = emit_names_csv(d.params);
+    let mut fields = "";
+    let mut i = 0;
+    while (i < vec_len(d.params)) {
+      if (i > 0) { fields = fields + ", "; }
+      let p = vec_get(d.params, i);
+      fields = fields + (p + ": " + p);
+      i = i + 1;
+    }
+    out = exportKw + "function " + d.name + "(" + params + ") {\n" + emit_stmts_js(d.body) + "return { " + fields + " };\n}\n";
+  }
+
+  if (d.tag == "DModule") {
+    out = emit_module_decl_js(d, "M", true);
   }
 
   out

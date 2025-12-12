@@ -64,6 +64,11 @@ from parsing_expr_stmt use {
   is_index_assign_stmt_start
 };
 
+from parsing_expr_stmt use {
+  ParsedExprAst,
+  parse_expr_ast
+};
+
 from parsing_decls use {
   ParsedImports,
   ParsedFn,
@@ -78,6 +83,25 @@ from parsing_decls use {
   parse_fn_decl_named,
   parse_fn_decl
 };
+
+from parsing_decls use {
+  ParsedDeclAst,
+  ParsedDeclsAst,
+  parse_imports_ast,
+  parse_extern_decl_ast,
+  parse_module_decl_ast,
+  parse_fn_decl_ast2,
+  parse_class_fn_decl_ast2,
+  parse_struct_decl_ast,
+  parse_type_union_decl_ast
+};
+
+from ast use {
+  span,
+  decl_let
+};
+
+from emit_ast_js use { emit_decl_js };
 
 fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool) : String => {
   // Parse:
@@ -94,45 +118,52 @@ fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool) : String => {
 
   let mut out = "// compiled by selfhost tuffc\n";
 
+  // Phase 3: parse into canonical AST decls, then emit JS.
+  let decls = vec_new();
+
   // zero or more extern declarations
   while (true) {
     let j = skip_ws(src, i);
     if (starts_with_at(src, j, "extern")) {
-      let ex = parse_extern_decl(src, i);
-      out = out + ex.v0;
-      i = ex.v1;
+      let ex = parse_extern_decl_ast(src, i);
+      vec_push(decls, ex.decl);
+      i = ex.nextPos;
       continue;
     }
     break;
   }
 
   // zero or more imports
-  let imps = parse_imports(src, i);
-  out = out + imps.v0;
-  i = imps.v1;
+  let imps = parse_imports_ast(src, i);
+  let mut ii = 0;
+  while (ii < vec_len(imps.decls)) {
+    vec_push(decls, vec_get(imps.decls, ii));
+    ii = ii + 1;
+  }
+  i = imps.nextPos;
 
   // zero or more module declarations
   while (true) {
     let j = skip_ws(src, i);
     if (!starts_with_at(src, j, "module")) { break; }
-    let m = parse_module_decl(src, i, "M", true);
-    out = out + m.v0;
-    i = m.v1;
+    let m = parse_module_decl_ast(src, i);
+    vec_push(decls, m.decl);
+    i = m.nextPos;
   }
 
   // zero or more type / struct declarations
   while (true) {
     let j = skip_ws(src, i);
     if (starts_with_at(src, j, "type")) {
-      let td = parse_type_union_decl(src, i, exportAll);
-      out = out + td.v0;
-      i = td.v1;
+      let td = parse_type_union_decl_ast(src, i, exportAll);
+      vec_push(decls, td.decl);
+      i = td.nextPos;
       continue;
     }
     if (starts_with_at(src, j, "struct")) {
-      let sd = parse_struct_decl(src, i);
-      out = out + sd.v0;
-      i = sd.v1;
+      let sd = parse_struct_decl_ast(src, i);
+      vec_push(decls, sd.decl);
+      i = sd.nextPos;
       continue;
     }
     break;
@@ -142,6 +173,7 @@ fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool) : String => {
   while (true) {
     let j = skip_ws(src, i);
     if (starts_with_at(src, j, "let")) {
+      let start = skip_ws(src, i);
       i = parse_keyword(src, i, "let");
       let mutOpt = parse_mut_opt(src, i);
       i = mutOpt.nextPos;
@@ -156,11 +188,10 @@ fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool) : String => {
       }
 
       i = parse_keyword(src, i, "=");
-      let expr = parse_expr(src, i);
-      i = expr.v1;
+      let expr = parse_expr_ast(src, i);
+      i = expr.nextPos;
       i = parse_optional_semicolon(src, i);
-      let declKw = if (mutOpt.ok) "let" else "const";
-      out = out + (declKw + " " + name.text + " = " + expr.v0 + ";\n");
+      vec_push(decls, decl_let(span(start, i), mutOpt.ok, name.text, expr.expr));
       continue;
     }
     break;
@@ -171,21 +202,30 @@ fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool) : String => {
   while (true) {
     let j = skip_ws(src, i);
     if (starts_with_at(src, j, "fn")) {
-      let f = parse_fn_decl2(src, i, exportAll);
-      if (starts_with_at(f.v0, 0, "export function main")) { sawMain = true; }
-      out = out + f.v0;
-      i = f.v1;
+      let f = parse_fn_decl_ast2(src, i, exportAll);
+      if (f.decl.tag == "DFn" && f.decl.name == "main") { sawMain = true; }
+      vec_push(decls, f.decl);
+      i = f.nextPos;
       continue;
     }
     if (starts_with_at(src, j, "class")) {
-      let f = parse_class_fn_decl2(src, i, exportAll);
-      out = out + f.v0;
-      i = f.v1;
+      let f = parse_class_fn_decl_ast2(src, i, exportAll);
+      if (f.decl.tag == "DClassFn" && f.decl.name == "main") { sawMain = true; }
+      vec_push(decls, f.decl);
+      i = f.nextPos;
       continue;
     }
     break;
   }
   if (requireMain && !sawMain) { panic_at(src, i, "expected fn main"); }
+
+  // Emit decls in order.
+  let mut di = 0;
+  while (di < vec_len(decls)) {
+    out = out + emit_decl_js(vec_get(decls, di), exportAll);
+    di = di + 1;
+  }
+
   out
 }
 
@@ -301,3 +341,4 @@ fn compile_project(entryPath: String, outPath: String) : Void => {
     writeTextFile(outFile, js);
   }
 }
+	
