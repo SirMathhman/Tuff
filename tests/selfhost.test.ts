@@ -45,7 +45,7 @@ describe("selfhost", () => {
     const tinyOut = resolve(outDir, "tiny.mjs");
     await writeFile(
       tinyIn,
-      "fn main() => { let mut x = 100; x = x + 23; x }\n",
+      "fn main() => { let mut x = 0; while (x < 3) { x = x + 1; } let mut r = 0; if (x == 3) { r = x; } else { r = 0; } r }\n",
       "utf8"
     );
 
@@ -59,6 +59,6 @@ describe("selfhost", () => {
     expect(emitted).toContain("export function main");
 
     const tinyMod = await import(pathToFileURL(tinyOut).toString());
-    expect(tinyMod.main()).toBe(123);
+    expect(tinyMod.main()).toBe(3);
   });
 });

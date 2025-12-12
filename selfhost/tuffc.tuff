@@ -19,6 +19,7 @@ class fn ParsedIdent(v0, v1) => {}
 class fn ParsedExpr(v0, v1) => {}
 class fn ParsedMain(body, expr, v1) => {}
 class fn ParsedBool(v0, v1) => {}
+class fn ParsedStmt(v0, v1) => {}
 
 // Utility: ASCII checks
 fn is_digit(code) => { code >= 48 && code <= 57 }
@@ -90,7 +91,43 @@ fn parse_ident(src, i) => {
   ParsedIdent(stringSlice(src, start, j), j)
 }
 
-fn parse_expr(src, i) => parse_add(src, i)
+fn parse_expr(src, i) => parse_cmp(src, i)
+
+fn parse_cmp(src, i) => {
+  // comparisons: == != < <= > >=
+  let mut left = parse_add(src, i);
+  let mut j = left.v1;
+  while (true) {
+    j = skip_ws(src, j);
+    if (!(j < stringLen(src))) { break; }
+
+    let c0 = stringCharCodeAt(src, j);
+    let c1 = if (j + 1 < stringLen(src)) stringCharCodeAt(src, j + 1) else 0;
+
+    let mut op = "";
+    let mut adv = 0;
+
+    // ==
+    if (c0 == 61 && c1 == 61) { op = "=="; adv = 2; }
+    // !=
+    if (op == "" && c0 == 33 && c1 == 61) { op = "!="; adv = 2; }
+    // <=
+    if (op == "" && c0 == 60 && c1 == 61) { op = "<="; adv = 2; }
+    // >=
+    if (op == "" && c0 == 62 && c1 == 61) { op = ">="; adv = 2; }
+    // <
+    if (op == "" && c0 == 60) { op = "<"; adv = 1; }
+    // >
+    if (op == "" && c0 == 62) { op = ">"; adv = 1; }
+
+    if (op == "") { break; }
+
+    let rhs = parse_add(src, j + adv);
+    left = ParsedExpr("(" + left.v0 + " " + op + " " + rhs.v0 + ")", rhs.v1);
+    j = left.v1;
+  }
+  left
+}
 
 fn parse_add(src, i) => {
   let mut left = parse_mul(src, i);
@@ -165,6 +202,87 @@ fn parse_mut_opt(src, i) => {
   ParsedBool(false, i)
 }
 
+fn parse_stmt_block(src, i) => {
+  let mut k = skip_ws(src, i);
+  if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 123)) { panic("expected '{'"); }
+  k = k + 1;
+  let mut body = "";
+  while (true) {
+    let t = skip_ws(src, k);
+    if (!(t < stringLen(src))) { panic("expected '}'"); }
+    if (stringCharCodeAt(src, t) == 125) { yield ParsedExpr(body, t + 1); }
+
+    let st = parse_stmt(src, k);
+    body = body + st.v0;
+    k = st.v1;
+  }
+  // unreachable
+  ParsedExpr(body, k)
+}
+
+fn parse_stmt(src, i) => {
+  let mut k = skip_ws(src, i);
+
+  // let / let mut
+  if (starts_with_at(src, k, "let")) {
+    k = parse_keyword(src, k, "let");
+    let mutOpt = parse_mut_opt(src, k);
+    k = mutOpt.v1;
+    let name = parse_ident(src, k);
+    k = name.v1;
+    k = parse_keyword(src, k, "=");
+    let expr = parse_expr(src, k);
+    k = expr.v1;
+    k = parse_required_semicolon(src, k);
+    let declKw = if (mutOpt.v0) "let" else "const";
+    yield ParsedStmt(declKw + " " + name.v0 + " = " + expr.v0 + ";\n", k);
+  }
+
+  // while (...) { ... }
+  if (starts_with_at(src, k, "while")) {
+    k = parse_keyword(src, k, "while");
+    k = parse_keyword(src, k, "(");
+    let cond = parse_expr(src, k);
+    k = cond.v1;
+    k = parse_keyword(src, k, ")");
+    let body = parse_stmt_block(src, k);
+    k = body.v1;
+    // optional semicolon after the while block
+    k = parse_optional_semicolon(src, k);
+    yield ParsedStmt("while (" + cond.v0 + ") {\n" + body.v0 + "}\n", k);
+  }
+
+  // if (...) { ... } else { ... }
+  if (starts_with_at(src, k, "if")) {
+    k = parse_keyword(src, k, "if");
+    k = parse_keyword(src, k, "(");
+    let cond = parse_expr(src, k);
+    k = cond.v1;
+    k = parse_keyword(src, k, ")");
+    let thenB = parse_stmt_block(src, k);
+    k = thenB.v1;
+    k = parse_keyword(src, k, "else");
+    let elseB = parse_stmt_block(src, k);
+    k = elseB.v1;
+    // optional semicolon after the if/else
+    k = parse_optional_semicolon(src, k);
+    yield ParsedStmt("if (" + cond.v0 + ") {\n" + thenB.v0 + "} else {\n" + elseB.v0 + "}\n", k);
+  }
+
+  // assignment: <ident> = <expr>;
+  if (is_assign_stmt_start(src, k)) {
+    let name = parse_ident(src, k);
+    k = name.v1;
+    k = parse_keyword(src, k, "=");
+    let expr = parse_expr(src, k);
+    k = expr.v1;
+    k = parse_required_semicolon(src, k);
+    yield ParsedStmt(name.v0 + " = " + expr.v0 + ";\n", k);
+  }
+
+  panic("expected statement")
+}
+
 fn is_assign_stmt_start(src, i) => {
   let mut j = skip_ws(src, i);
   if (!(j < stringLen(src))) { yield false; }
@@ -187,39 +305,18 @@ fn parse_main_body(src, i) => {
     let mut k = j + 1;
     let mut body = "";
 
-    // statements inside block (semicolon required)
+    // statements inside block
     while (true) {
       let t = skip_ws(src, k);
+      if (!(t < stringLen(src))) { panic("expected '}'"); }
+      if (stringCharCodeAt(src, t) == 125) { break; }
+      // stop before tail expression if next token isn't a statement start
+      let isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") || is_assign_stmt_start(src, t);
+      if (!isStmt) { break; }
 
-      // let / let mut
-      if (starts_with_at(src, t, "let")) {
-        k = parse_keyword(src, k, "let");
-        let mutOpt = parse_mut_opt(src, k);
-        k = mutOpt.v1;
-        let name = parse_ident(src, k);
-        k = name.v1;
-        k = parse_keyword(src, k, "=");
-        let expr = parse_expr(src, k);
-        k = expr.v1;
-        k = parse_required_semicolon(src, k);
-        let declKw = if (mutOpt.v0) "let" else "const";
-        body = body + (declKw + " " + name.v0 + " = " + expr.v0 + ";\n");
-        continue;
-      }
-
-      // assignment: <ident> = <expr>;
-      if (is_assign_stmt_start(src, t)) {
-        let name = parse_ident(src, k);
-        k = name.v1;
-        k = parse_keyword(src, k, "=");
-        let expr = parse_expr(src, k);
-        k = expr.v1;
-        k = parse_required_semicolon(src, k);
-        body = body + (name.v0 + " = " + expr.v0 + ";\n");
-        continue;
-      }
-
-      break;
+      let st = parse_stmt(src, k);
+      body = body + st.v0;
+      k = st.v1;
     }
 
     // tail expression
