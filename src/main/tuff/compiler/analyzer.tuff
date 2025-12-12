@@ -1,0 +1,358 @@
+// Phase 4 (initial): Analyzer pass.
+//
+// For now, this module focuses on enforcing the language's no-shadowing rule
+// (a name may not be redeclared in an enclosing scope).
+
+extern from rt::vec use { vec_new, vec_len, vec_push, vec_get, vec_set };
+
+from diagnostics use { panic_at };
+from ast use { span_start };
+
+fn scopes_contains(scopes, depth: I32, name: String) : Bool => {
+  let mut si = 0;
+  while (si < depth) {
+    let scope = vec_get(scopes, si);
+    let mut ni = 0;
+    while (ni < vec_len(scope)) {
+      if (vec_get(scope, ni) == name) { yield true; }
+      ni = ni + 1;
+    }
+    si = si + 1;
+  }
+  false
+}
+
+fn scopes_enter(scopes, depth: I32) : I32 => {
+  let s = vec_new();
+  if (depth < vec_len(scopes)) { vec_set(scopes, depth, s); }
+  else { vec_push(scopes, s); }
+  depth + 1
+}
+
+fn declare_name(src: String, pos: I32, scopes, depth: I32, name: String) : Void => {
+  if (scopes_contains(scopes, depth, name)) {
+    panic_at(src, pos, "shadowing not allowed: " + name);
+  }
+  let cur = vec_get(scopes, depth - 1);
+  vec_push(cur, name);
+}
+
+fn scope_contains(scope, name: String) : Bool => {
+  let mut i = 0;
+  while (i < vec_len(scope)) {
+    if (vec_get(scope, i) == name) { yield true; }
+    i = i + 1;
+  }
+  false
+}
+
+fn declare_local_name(src: String, pos: I32, scopes, depth: I32, name: String) : Void => {
+  // Declare in the current scope only (no outer-scope shadowing check).
+  let cur = vec_get(scopes, depth - 1);
+  if (scope_contains(cur, name)) {
+    panic_at(src, pos, "duplicate name: " + name);
+  }
+  vec_push(cur, name);
+}
+
+fn require_name(src: String, pos: I32, scopes, depth: I32, name: String) : Void => {
+  // Internal lowering helper: struct literals are encoded as calls to a pseudo-builtin.
+  if (name == "__tuff_struct_lit") { yield; }
+
+  // The current bootstrap subset still parses `true`/`false` as identifiers.
+  // Treat them as built-in literals so the analyzer doesn't reject valid code.
+  if (name == "true") { yield; }
+  if (name == "false") { yield; }
+
+  // The bootstrap parser doesn't have dedicated tokens/stmts for these yet,
+  // but they are valid JS statements and are currently emitted via EIdent.
+  if (name == "continue") { yield; }
+  if (name == "break") { yield; }
+
+  if (!scopes_contains(scopes, depth, name)) {
+    panic_at(src, pos, "unknown name: " + name);
+  }
+}
+
+fn analyze_expr(src: String, scopes, depth: I32, e) : Void => {
+  if (e.tag == "EIdent") {
+    require_name(src, span_start(e.span), scopes, depth, e.name);
+    yield;
+  }
+
+  if (e.tag == "EUnary") {
+    analyze_expr(src, scopes, depth, e.expr);
+    yield;
+  }
+
+  if (e.tag == "EBinary") {
+    analyze_expr(src, scopes, depth, e.left);
+    analyze_expr(src, scopes, depth, e.right);
+    yield;
+  }
+
+  if (e.tag == "ECall") {
+    // __tuff_struct_lit(<NameExpr>, <v0>, <v1>, ...)
+    // The first argument is a struct name marker (EIdent/EPath), not a runtime
+    // value that must be declared.
+    if (e.callee.tag == "EIdent" && e.callee.name == "__tuff_struct_lit") {
+      analyze_expr(src, scopes, depth, e.callee);
+      let mut ai = 1;
+      while (ai < vec_len(e.args)) {
+        analyze_expr(src, scopes, depth, vec_get(e.args, ai));
+        ai = ai + 1;
+      }
+      yield;
+    }
+
+    analyze_expr(src, scopes, depth, e.callee);
+    let mut ai = 0;
+    while (ai < vec_len(e.args)) {
+      analyze_expr(src, scopes, depth, vec_get(e.args, ai));
+      ai = ai + 1;
+    }
+    yield;
+  }
+
+  if (e.tag == "EIf") {
+    analyze_expr(src, scopes, depth, e.cond);
+    analyze_expr(src, scopes, depth, e.thenExpr);
+    analyze_expr(src, scopes, depth, e.elseExpr);
+    yield;
+  }
+
+  if (e.tag == "EBlock") {
+    let newDepth = scopes_enter(scopes, depth);
+    analyze_stmts(src, scopes, newDepth, e.body);
+    analyze_expr(src, scopes, newDepth, e.tail);
+    yield;
+  }
+
+  if (e.tag == "EVecLit") {
+    let mut ii = 0;
+    while (ii < vec_len(e.items)) {
+      analyze_expr(src, scopes, depth, vec_get(e.items, ii));
+      ii = ii + 1;
+    }
+    yield;
+  }
+
+  if (e.tag == "ETupleLit") {
+    let mut ii = 0;
+    while (ii < vec_len(e.items)) {
+      analyze_expr(src, scopes, depth, vec_get(e.items, ii));
+      ii = ii + 1;
+    }
+    yield;
+  }
+
+  if (e.tag == "EIndex") {
+    analyze_expr(src, scopes, depth, e.base);
+    analyze_expr(src, scopes, depth, e.index);
+    yield;
+  }
+
+  if (e.tag == "ETupleIndex") {
+    analyze_expr(src, scopes, depth, e.base);
+    yield;
+  }
+
+  if (e.tag == "EField") {
+    analyze_expr(src, scopes, depth, e.base);
+    yield;
+  }
+
+  if (e.tag == "EMatch") {
+    analyze_expr(src, scopes, depth, e.scrut);
+    let mut mi = 0;
+    while (mi < vec_len(e.arms)) {
+      let arm = vec_get(e.arms, mi);
+      analyze_expr(src, scopes, depth, arm.expr);
+      mi = mi + 1;
+    }
+    yield;
+  }
+
+  // Literals, paths, undefined: nothing to do.
+}
+
+fn analyze_stmt(src: String, scopes, depth: I32, s) : Void => {
+  if (s.tag == "SLet") {
+    analyze_expr(src, scopes, depth, s.init);
+    declare_name(src, span_start(s.span), scopes, depth, s.name);
+    yield;
+  }
+
+  if (s.tag == "SAssign") {
+    require_name(src, span_start(s.span), scopes, depth, s.name);
+    analyze_expr(src, scopes, depth, s.value);
+    yield;
+  }
+
+  if (s.tag == "SExpr") {
+    analyze_expr(src, scopes, depth, s.expr);
+    yield;
+  }
+
+  if (s.tag == "SYield") {
+    analyze_expr(src, scopes, depth, s.expr);
+    yield;
+  }
+
+  if (s.tag == "SWhile") {
+    analyze_expr(src, scopes, depth, s.cond);
+    let newDepth = scopes_enter(scopes, depth);
+    analyze_stmts(src, scopes, newDepth, s.body);
+    yield;
+  }
+
+  if (s.tag == "SIf") {
+    analyze_expr(src, scopes, depth, s.cond);
+
+    let thenDepth = scopes_enter(scopes, depth);
+    analyze_stmts(src, scopes, thenDepth, s.thenBody);
+
+    if (s.hasElse) {
+      let elseDepth = scopes_enter(scopes, depth);
+      analyze_stmts(src, scopes, elseDepth, s.elseBody);
+    }
+
+    yield;
+  }
+
+  if (s.tag == "SIndexAssign") {
+    analyze_expr(src, scopes, depth, s.base);
+    analyze_expr(src, scopes, depth, s.index);
+    analyze_expr(src, scopes, depth, s.value);
+    yield;
+  }
+
+  if (s.tag == "SFieldAssign") {
+    analyze_expr(src, scopes, depth, s.base);
+    analyze_expr(src, scopes, depth, s.value);
+    yield;
+  }
+}
+
+fn analyze_stmts(src: String, scopes, depth: I32, stmts) : Void => {
+  let mut i = 0;
+  while (i < vec_len(stmts)) {
+    analyze_stmt(src, scopes, depth, vec_get(stmts, i));
+    i = i + 1;
+  }
+}
+
+fn analyze_fn_decl(src: String, outerScopes, outerDepth: I32, d) : Void => {
+  let depth = scopes_enter(outerScopes, outerDepth);
+
+  let mut pi = 0;
+  while (pi < vec_len(d.params)) {
+    declare_local_name(src, span_start(d.span), outerScopes, depth, vec_get(d.params, pi));
+    pi = pi + 1;
+  }
+
+  analyze_stmts(src, outerScopes, depth, d.body);
+  analyze_expr(src, outerScopes, depth, d.tail);
+}
+
+fn analyze_module(src: String, d) : Void => {
+  // Modules create a separate namespace; do not treat module members as nested
+  // declarations of the outer scope.
+  let scopes = vec_new();
+  vec_push(scopes, vec_new());
+  let depth: I32 = 1;
+
+  analyze_decls(src, scopes, depth, d.decls);
+}
+
+fn predeclare_decl(src: String, scopes, depth: I32, d) : Void => {
+  if (d.tag == "DExternFrom") {
+    let mut ni = 0;
+    while (ni < vec_len(d.names)) {
+      declare_name(src, span_start(d.span), scopes, depth, vec_get(d.names, ni));
+      ni = ni + 1;
+    }
+    yield;
+  }
+
+  if (d.tag == "DImport") {
+    let mut ni = 0;
+    while (ni < vec_len(d.names)) {
+      declare_name(src, span_start(d.span), scopes, depth, vec_get(d.names, ni));
+      ni = ni + 1;
+    }
+    yield;
+  }
+
+  if (d.tag == "DTypeUnion") {
+    // Union variants are value constructors.
+    let mut vi = 0;
+    while (vi < vec_len(d.variants)) {
+      let v = vec_get(d.variants, vi);
+      declare_name(src, span_start(v.span), scopes, depth, v.name);
+      vi = vi + 1;
+    }
+    yield;
+  }
+
+  if (d.tag == "DFn") {
+    declare_name(src, span_start(d.span), scopes, depth, d.name);
+    yield;
+  }
+
+  if (d.tag == "DClassFn") {
+    declare_name(src, span_start(d.span), scopes, depth, d.name);
+    yield;
+  }
+
+  if (d.tag == "DModule") {
+    declare_name(src, span_start(d.span), scopes, depth, d.name);
+    yield;
+  }
+}
+
+fn analyze_decl_body(src: String, scopes, depth: I32, d) : Void => {
+  if (d.tag == "DLet") {
+    analyze_expr(src, scopes, depth, d.init);
+    declare_name(src, span_start(d.span), scopes, depth, d.name);
+    yield;
+  }
+
+  if (d.tag == "DFn") {
+    analyze_fn_decl(src, scopes, depth, d);
+    yield;
+  }
+
+  if (d.tag == "DClassFn") {
+    analyze_fn_decl(src, scopes, depth, d);
+    yield;
+  }
+
+  if (d.tag == "DModule") {
+    analyze_module(src, d);
+    yield;
+  }
+}
+
+fn analyze_decls(src: String, scopes, depth: I32, decls) : Void => {
+  // Pass 1: predeclare names so later decl bodies can reference earlier/later decls.
+  let mut i = 0;
+  while (i < vec_len(decls)) {
+    predeclare_decl(src, scopes, depth, vec_get(decls, i));
+    i = i + 1;
+  }
+
+  // Pass 2: analyze bodies in order (lets are sequential).
+  i = 0;
+  while (i < vec_len(decls)) {
+    analyze_decl_body(src, scopes, depth, vec_get(decls, i));
+    i = i + 1;
+  }
+}
+
+fn analyze_program(src: String, decls) : Void => {
+  let scopes = vec_new();
+  vec_push(scopes, vec_new());
+  let depth: I32 = 1;
+  analyze_decls(src, scopes, depth, decls);
+}

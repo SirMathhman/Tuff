@@ -103,6 +103,8 @@ from ast use {
 
 from emit_ast_js use { emit_decl_js };
 
+from analyzer use { analyze_program };
+
 fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool) : String => {
   // Parse:
   //   (extern from <mod> use { <idents> };)*
@@ -218,6 +220,9 @@ fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool) : String => {
     break;
   }
   if (requireMain && !sawMain) { panic_at(src, i, "expected fn main"); }
+
+  // Phase 4 (initial): run analyzer checks before emission.
+  analyze_program(src, decls);
 
   // Emit decls in order.
   let mut di = 0;
