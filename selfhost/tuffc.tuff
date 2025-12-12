@@ -27,6 +27,7 @@ class fn ParsedMain(body, expr, v1) => {}
 class fn ParsedBool(v0, v1) => {}
 class fn ParsedStmt(v0, v1) => {}
 class fn ParsedParams(v0, v1) => {}
+class fn ParsedType(v0, v1) => {}
 class fn ParsedImports(v0, v1) => {}
 class fn ParsedFn(v0, v1, v2) => {}
 class fn ParsedModule(v0, v1) => {}
@@ -374,6 +375,17 @@ fn parse_postfix(src, i) => {
   let mut j = left.v1;
   while (true) {
     j = skip_ws(src, j);
+
+    // Generic call sugar: f<T>(...) or obj.f<T>(...).
+    // Only treat `<...>` as type args if it is balanced and followed by `(`.
+    if (j < stringLen(src) && stringCharCodeAt(src, j) == 60) { // '<'
+      let skipped = try_skip_type_args_for_call(src, j);
+      if (skipped.v0) {
+        j = skipped.v1;
+        continue;
+      }
+    }
+
     if (j < stringLen(src) && stringCharCodeAt(src, j) == 40) { // '('
       let args = parse_arg_list(src, j);
       left = ParsedExpr(left.v0 + "(" + args.v0 + ")", args.v1);
@@ -399,6 +411,35 @@ fn parse_postfix(src, i) => {
     break;
   }
   left
+}
+
+fn try_skip_type_args_for_call(src, i) => {
+  // Returns ParsedBool(true, endIndexAfterGreaterThan) if `<...>` is balanced
+  // and followed by `(` (after ws). Otherwise ParsedBool(false, i).
+  let mut k = skip_ws(src, i);
+  if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 60)) { // '<'
+    yield ParsedBool(false, i);
+  }
+  let mut p = k + 1;
+  let mut depth = 1;
+  while (p < stringLen(src)) {
+    let ch = stringCharCodeAt(src, p);
+    if (ch == 60) { depth = depth + 1; p = p + 1; continue; } // '<'
+    if (ch == 62) { // '>'
+      depth = depth - 1;
+      p = p + 1;
+      if (depth == 0) {
+        let after = skip_ws(src, p);
+        if (after < stringLen(src) && stringCharCodeAt(src, after) == 40) { // '('
+          yield ParsedBool(true, p);
+        }
+        yield ParsedBool(false, i);
+      }
+      continue;
+    }
+    p = p + 1;
+  }
+  ParsedBool(false, i)
 }
 
 fn parse_arg_list(src, i) => {
@@ -750,8 +791,23 @@ fn parse_fn_decl_named(src, i, jsName, exportThis) => {
   let mut k = parse_keyword(src, i, "fn");
   let name = parse_ident(src, k);
   k = name.v1;
+
+  // Optional generic params: fn name<T, U>(...)
+  let t0 = skip_ws(src, k);
+  if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) { // '<'
+    k = skip_angle_brackets(src, t0);
+  }
+
   let params = parse_param_list(src, k);
   k = params.v1;
+
+  // Optional return type: : Type
+  let t1 = skip_ws(src, k);
+  if (t1 < stringLen(src) && stringCharCodeAt(src, t1) == 58) { // ':'
+    let _rt = parse_type_expr(src, t1 + 1);
+    k = _rt.v1;
+  }
+
   k = parse_keyword(src, k, "=>");
   let body = parse_main_body(src, k);
   k = body.v1;
@@ -856,6 +912,112 @@ fn parse_imports(src, i) => {
   ParsedImports(out, k)
 }
 
+fn parse_type_expr(src, i) => {
+  // Minimal-but-real type expression parser.
+  // Produces a textual representation (v0) and the index after the type (v1).
+  let mut k = skip_ws(src, i);
+  if (!(k < stringLen(src))) { panic_at(src, k, "expected type"); }
+
+  let c = stringCharCodeAt(src, k);
+
+  // Slice: *[T]
+  if (c == 42) { // '*'
+    k = k + 1;
+    k = parse_keyword(src, k, "[");
+    let inner = parse_type_expr(src, k);
+    k = inner.v1;
+    k = parse_keyword(src, k, "]");
+    yield ParsedType("*[" + inner.v0 + "]", k);
+  }
+
+  // Array: [T; N; M]
+  if (c == 91) { // '['
+    k = parse_keyword(src, k, "[");
+    let inner = parse_type_expr(src, k);
+    k = inner.v1;
+    let mut sizes = "";
+    while (true) {
+      let t = skip_ws(src, k);
+      if (!(t < stringLen(src) && stringCharCodeAt(src, t) == 59)) { break; } // ';'
+      let n = parse_number(src, t + 1);
+      sizes = sizes + ";" + ("" + n.v0);
+      k = n.v1;
+    }
+    k = parse_keyword(src, k, "]");
+    yield ParsedType("[" + inner.v0 + sizes + "]", k);
+  }
+
+  // Tuple / function type: (T, U) or (T, U) => R
+  if (c == 40) { // '('
+    k = parse_keyword(src, k, "(");
+    k = skip_ws(src, k);
+    let mut parts = "";
+    let mut first = true;
+    if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) { // ')'
+      k = k + 1;
+    } else {
+      while (true) {
+        let t1 = parse_type_expr(src, k);
+        k = t1.v1;
+        if (first) { parts = parts + t1.v0; } else { parts = parts + ", " + t1.v0; }
+        first = false;
+        k = skip_ws(src, k);
+        if (!(k < stringLen(src))) { panic_at(src, k, "expected ')' in type"); }
+        let ch = stringCharCodeAt(src, k);
+        if (ch == 44) { // ','
+          k = k + 1;
+          continue;
+        }
+        if (ch == 41) { // ')'
+          k = k + 1;
+          break;
+        }
+        panic_at(src, k, "expected ',' or ')' in type");
+      }
+    }
+
+    let t2 = skip_ws(src, k);
+    if (t2 + 1 < stringLen(src) && stringCharCodeAt(src, t2) == 61 && stringCharCodeAt(src, t2 + 1) == 62) { // '=>'
+      let ret = parse_type_expr(src, t2 + 2);
+      yield ParsedType("(" + parts + ") => " + ret.v0, ret.v1);
+    }
+    yield ParsedType("(" + parts + ")", k);
+  }
+
+  // Name / generic: Ident or Ident<...>
+  let name = parse_ident(src, k);
+  k = name.v1;
+  let mut out = name.v0;
+
+  let t3 = skip_ws(src, k);
+  if (t3 < stringLen(src) && stringCharCodeAt(src, t3) == 60) { // '<'
+    k = parse_keyword(src, t3, "<");
+    let mut args = "";
+    let mut firstArg = true;
+    while (true) {
+      let a = parse_type_expr(src, k);
+      k = a.v1;
+      if (firstArg) { args = args + a.v0; } else { args = args + ", " + a.v0; }
+      firstArg = false;
+      k = skip_ws(src, k);
+      if (!(k < stringLen(src))) { panic_at(src, k, "expected '>' in generic type"); }
+      let ch = stringCharCodeAt(src, k);
+      if (ch == 44) { // ','
+        k = k + 1;
+        continue;
+      }
+      if (ch == 62) { // '>'
+        k = k + 1;
+        break;
+      }
+      panic_at(src, k, "expected ',' or '>' in generic type");
+    }
+    out = out + "<" + args + ">";
+  }
+
+  ParsedType(out, k)
+}
+
 fn parse_param_list(src, i) => {
   // parses: '(' (ident (',' ident)*)? ')'
   let mut k = parse_keyword(src, i, "(");
@@ -868,6 +1030,14 @@ fn parse_param_list(src, i) => {
   while (true) {
     let id = parse_ident(src, k);
     k = id.v1;
+
+    // Optional param type annotation: `name: Type`
+    let t0 = skip_ws(src, k);
+    if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 58) { // ':'
+      let _ty = parse_type_expr(src, t0 + 1);
+      k = _ty.v1;
+    }
+
     if (first) { out = out + id.v0; } else { out = out + ", " + id.v0; }
     first = false;
 
@@ -925,8 +1095,23 @@ fn parse_fn_decl2(src, i, exportAll) => {
   let mut k = parse_keyword(src, i, "fn");
   let name = parse_ident(src, k);
   k = name.v1;
+
+  // Optional generic params: fn name<T, U>(...)
+  let t0 = skip_ws(src, k);
+  if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) { // '<'
+    k = skip_angle_brackets(src, t0);
+  }
+
   let params = parse_param_list(src, k);
   k = params.v1;
+
+  // Optional return type: : Type
+  let t1 = skip_ws(src, k);
+  if (t1 < stringLen(src) && stringCharCodeAt(src, t1) == 58) { // ':'
+    let _rt = parse_type_expr(src, t1 + 1);
+    k = _rt.v1;
+  }
+
   k = parse_keyword(src, k, "=>");
   let body = parse_main_body(src, k);
   k = body.v1;
@@ -941,8 +1126,23 @@ fn parse_class_fn_decl2(src, i, exportAll) => {
   k = parse_keyword(src, k, "fn");
   let name = parse_ident(src, k);
   k = name.v1;
+
+  // Optional generic params: class fn name<T, U>(...)
+  let t0 = skip_ws(src, k);
+  if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) { // '<'
+    k = skip_angle_brackets(src, t0);
+  }
+
   let params = parse_param_list(src, k);
   k = params.v1;
+
+  // Optional return type: : Type
+  let t1 = skip_ws(src, k);
+  if (t1 < stringLen(src) && stringCharCodeAt(src, t1) == 58) { // ':'
+    let _rt = parse_type_expr(src, t1 + 1);
+    k = _rt.v1;
+  }
+
   k = parse_keyword(src, k, "=>");
   let body = parse_main_body(src, k);
   k = body.v1;
@@ -1028,6 +1228,13 @@ fn parse_struct_decl(src, i) => {
   let mut k = parse_keyword(src, i, "struct");
   let name = parse_ident(src, k);
   k = name.v1;
+
+  // Optional generic params: struct Name<T, U> { ... }
+  let t0 = skip_ws(src, k);
+  if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) { // '<'
+    k = skip_angle_brackets(src, t0);
+  }
+
   k = parse_keyword(src, k, "{");
 
   let fields = vec_new();
@@ -1043,7 +1250,8 @@ fn parse_struct_decl(src, i) => {
     let field = parse_ident(src, k);
     k = field.v1;
     k = parse_keyword(src, k, ":");
-    k = skip_type_expr(src, k);
+    let _ty = parse_type_expr(src, k);
+    k = _ty.v1;
 
     vec_push(fields, field.v0);
 
@@ -1169,6 +1377,14 @@ fn parse_stmt(src, i) => {
     k = mutOpt.v1;
     let name = parse_ident(src, k);
     k = name.v1;
+
+    // Optional let type annotation: `let x: T = ...`
+    let t0 = skip_ws(src, k);
+    if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 58) { // ':'
+      let _ty = parse_type_expr(src, t0 + 1);
+      k = _ty.v1;
+    }
+
     k = parse_keyword(src, k, "=");
     let expr = parse_expr(src, k);
     k = expr.v1;
@@ -1425,6 +1641,14 @@ fn compile_tiny2(src, requireMain, exportAll) => {
       i = mutOpt.v1;
       let name = parse_ident(src, i);
       i = name.v1;
+
+      // Optional let type annotation: `let x: T = ...`
+      let t0 = skip_ws(src, i);
+      if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 58) { // ':'
+        let _ty = parse_type_expr(src, t0 + 1);
+        i = _ty.v1;
+      }
+
       i = parse_keyword(src, i, "=");
       let expr = parse_expr(src, i);
       i = expr.v1;
