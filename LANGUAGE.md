@@ -41,10 +41,10 @@ Tuff source files typically end with `.tuff`. A top-level source file may contai
 
 ```tuff
 // file: hello.tuff
-import std.io
+from std::io use { print };
 
 fn main() {
-    io.print("Hello, Tuff!\n")
+    print("Hello, Tuff!\n")
 }
 ```
 
@@ -1405,7 +1405,8 @@ let origin = Graphics::Point(0, 0);
 
 ### Importing modules
 
-Modules from other files can be imported using the `import` keyword. The imported module name becomes available in the current scope:
+Modules from other files are imported using `from <modulePath> use { ... };`.
+This brings the selected names into the current scope.
 
 ```tuff
 // In math.tuff
@@ -1414,11 +1415,12 @@ module Math {
 }
 
 // In main.tuff
-import math
+from math use { Math };
+from std::io use { print };
 
 fn main() {
-    let result = math::add(1, 2);
-    io.print(result);
+    let result = Math::add(1, 2);
+    print(result);
 }
 ```
 
@@ -1672,12 +1674,12 @@ tuff test # run tests
 Hello world (example included above) and a simple program to read from stdin:
 
 ```tuff
-import std.io
+from std::io use { print, read_line };
 
 fn main() {
-    io.print("Enter your name: ")
-    let name = io.read_line()
-    io.print("Hello, " + name + "\n")
+    print("Enter your name: ")
+    let name = read_line()
+    print("Hello, " + name + "\n")
 }
 ```
 

@@ -36,7 +36,6 @@ export const KEYWORDS = new Set([
   "type",
   "struct",
   "module",
-  "import",
   "from",
   "use",
   "extern",

@@ -18,15 +18,15 @@ There is a tiny, dependency-free unit testing helper module written in Tuff at `
 Example:
 
 ```tuff
-import std::test
+from std::test use { reset, it, expect_eq, expect, summary, status };
 
 fn main() => {
-	test::reset();
+	reset();
 
-	test::it("math works", test::expect_eq("1+1", 1 + 1, 2));
-	test::it("truth", test::expect("2==2", 2 == 2));
+	it("math works", expect_eq("1+1", 1 + 1, 2));
+	it("truth", expect("2==2", 2 == 2));
 
-	test::summary();
-	test::status() // 0 when all passed, 1 if any failed
+	summary();
+	status() // 0 when all passed, 1 if any failed
 }
 ```

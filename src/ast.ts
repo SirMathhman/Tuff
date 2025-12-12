@@ -18,14 +18,8 @@ export type TopLevelItem =
   | Stmt
   | TypeUnionDecl
   | ModuleDecl
-  | ImportDecl
   | FromUseDecl
   | ExternFromUseDecl;
-
-export type ImportDecl = NodeBase & {
-  kind: "ImportDecl";
-  modulePath: string[];
-};
 
 export type FromUseDecl = NodeBase & {
   kind: "FromUseDecl";

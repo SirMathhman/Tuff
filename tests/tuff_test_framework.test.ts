@@ -72,13 +72,13 @@ describe("std::test (Tuff-written unit test helpers)", () => {
     );
 
     const programSrc = `
-      import std::test
+      from std::test use { reset, it, expect_eq, expect, status };
 
       fn main() => {
-        test::reset();
-        test::it("eq", test::expect_eq("eq", 1 + 1, 2));
-        test::it("truth", test::expect("truth", 2 == 2));
-        test::status()
+        reset();
+        it("eq", expect_eq("eq", 1 + 1, 2));
+        it("truth", expect("truth", 2 == 2));
+        status()
       }
     `;
 
@@ -117,13 +117,13 @@ describe("std::test (Tuff-written unit test helpers)", () => {
     );
 
     const programSrc = `
-      import std::test
+      from std::test use { reset, it, expect_eq, expect, status };
 
       fn main() => {
-        test::reset();
-        test::it("eq", test::expect_eq("eq", 1, 2));
-        test::it("truth", test::expect("truth", 2 == 2));
-        test::status()
+        reset();
+        it("eq", expect_eq("eq", 1, 2));
+        it("truth", expect("truth", 2 == 2));
+        status()
       }
     `;
 

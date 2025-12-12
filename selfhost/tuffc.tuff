@@ -207,6 +207,22 @@ fn parse_module_path(src, i) => {
   ParsedIdent(stringSlice(src, start, j), j)
 }
 
+fn module_path_to_relpath(p) => {
+  // Convert `a::b::c` to `a/b/c` for filesystem + ESM relative imports.
+  let mut out = "";
+  let mut i = 0;
+  while (i < stringLen(p)) {
+    if (i + 1 < stringLen(p) && stringCharCodeAt(p, i) == 58 && stringCharCodeAt(p, i + 1) == 58) {
+      out = out + "/";
+      i = i + 2;
+      continue;
+    }
+    out = out + stringFromCharCode(stringCharCodeAt(p, i));
+    i = i + 1;
+  }
+  out
+}
+
 fn parse_expr(src, i) => parse_or(src, i)
 
 fn parse_or(src, i) => {
@@ -695,12 +711,38 @@ fn parse_imports(src, i) => {
   let mut out = "";
   while (true) {
     let j = skip_ws(src, k);
-    if (!starts_with_at(src, j, "import")) { break; }
-    k = parse_keyword(src, k, "import");
-    let mod = parse_ident(src, k);
+    if (starts_with_at(src, j, "import")) {
+      panic_at(src, j, "`import` is not supported. Use `from <module> use { ... };` instead.");
+    }
+    if (!starts_with_at(src, j, "from")) { break; }
+
+    k = parse_keyword(src, k, "from");
+    let mod = parse_module_path(src, k);
     k = mod.v1;
+    k = parse_keyword(src, k, "use");
+    k = parse_keyword(src, k, "{");
+
+    let mut names = "";
+    let mut first = true;
+    while (true) {
+      k = skip_ws(src, k);
+      if (!(k < stringLen(src))) { panic_at(src, k, "expected '}'"); }
+      if (stringCharCodeAt(src, k) == 125) { k = k + 1; break; }
+      let id = parse_ident(src, k);
+      k = id.v1;
+      if (first) { names = names + id.v0; } else { names = names + ", " + id.v0; }
+      first = false;
+      k = skip_ws(src, k);
+      if (k < stringLen(src) && stringCharCodeAt(src, k) == 44) { k = k + 1; continue; }
+      k = skip_ws(src, k);
+      if (k < stringLen(src) && stringCharCodeAt(src, k) == 125) { k = k + 1; break; }
+      panic_at(src, k, "expected ',' or '}' in import list");
+    }
+
     k = parse_optional_semicolon(src, k);
-    out = out + ("import * as " + mod.v0 + " from \"./" + mod.v0 + ".mjs\";\n");
+
+    let importPath = "./" + module_path_to_relpath(mod.v0) + ".mjs";
+    out = out + ("import { " + names + " } from \"" + importPath + "\";\n");
   }
   ParsedImports(out, k)
 }
@@ -1038,7 +1080,7 @@ fn parse_main_body(src, i) => {
 fn compile_tiny2(src, requireMain, exportAll) => {
   // Parse:
   //   (extern from <mod> use { <idents> };)*
-  //   (import <ident>;)*
+  //   (from <mod> use { <idents> };)*
   //   (let <ident> = <expr>;)*
   //   (fn <ident>(<params>) => <expr|block>)*
   let mut i = 0;
@@ -1119,9 +1161,9 @@ fn compile_module(src) => compile_tiny2(src, false, true)
 
 fn compile_project(entryPath, outPath) => {
   // Very small multi-file compiler:
-  // - only supports `import <ident>;`
-  // - resolves to sibling file: <ident>.tuff in the entry's directory
-  // - emits sibling output: <ident>.mjs in outDir
+  // - supports `from <path> use { ... };` for local file modules
+  // - resolves to <path>.tuff relative to the importing file
+  // - emits to the same relative path under outDir: <path>.mjs
 
   let outDir = pathDirname(outPath);
 
@@ -1173,33 +1215,55 @@ fn compile_project(entryPath, outPath) => {
     }
     while (true) {
       let j = skip_ws(src, scan);
-      if (!starts_with_at(src, j, "import")) { break; }
-      scan = parse_keyword(src, scan, "import");
-      let mod = parse_ident(src, scan);
+      if (starts_with_at(src, j, "import")) {
+        panic_at(src, j, "`import` is not supported. Use `from <module> use { ... };` instead.");
+      }
+      if (!starts_with_at(src, j, "from")) { break; }
+      scan = parse_keyword(src, scan, "from");
+      let mod = parse_module_path(src, scan);
       scan = mod.v1;
+      scan = parse_keyword(src, scan, "use");
+      scan = parse_keyword(src, scan, "{");
+      // consume name list
+      while (true) {
+        scan = skip_ws(src, scan);
+        if (!(scan < stringLen(src))) { panic_at(src, scan, "expected '}'"); }
+        if (stringCharCodeAt(src, scan) == 125) { scan = scan + 1; break; }
+        let id = parse_ident(src, scan);
+        scan = id.v1;
+        scan = skip_ws(src, scan);
+        if (scan < stringLen(src) && stringCharCodeAt(src, scan) == 44) { scan = scan + 1; continue; }
+        scan = skip_ws(src, scan);
+        if (scan < stringLen(src) && stringCharCodeAt(src, scan) == 125) { scan = scan + 1; break; }
+        panic_at(src, scan, "expected ',' or '}' in import list");
+      }
       scan = parse_optional_semicolon(src, scan);
+
+      // queue dependency file
       let baseDir = pathDirname(path);
-      let depPath = pathJoin(baseDir, mod.v0 + ".tuff");
+      let rel = module_path_to_relpath(mod.v0);
+      let depPath = pathJoin(baseDir, rel + ".tuff");
       vec_push(queue, depPath);
     }
 
     let js = if (path == entryPath) compile_tiny(src) else compile_module(src);
     // choose output name
     let outFile = if (path == entryPath) outPath else {
-      // <ident>.tuff -> <ident>.mjs
-      // We only support sibling modules: /dir/name.tuff
-      // so compute name by scanning for last path separator and stripping .tuff.
-      let mut p = stringLen(path) - 1;
-      let mut slash = -1;
-      while (p >= 0) {
-        let ch = stringCharCodeAt(path, p);
-        if (ch == 47 || ch == 92) { slash = p; break; }
-        p = p - 1;
+      // Preserve relative path under outDir.
+      // Example: <base>/std/test.tuff -> <outDir>/std/test.mjs
+      // We compute the filename only and keep directories by slicing from baseDir.
+      let baseDir = pathDirname(entryPath);
+      let mut prefixLen = stringLen(baseDir);
+      // If the baseDir doesn't end with a separator, allow one separator.
+      let mut relStart = prefixLen;
+      if (relStart < stringLen(path)) {
+        let ch = stringCharCodeAt(path, relStart);
+        if (ch == 47 || ch == 92) { relStart = relStart + 1; }
       }
-      let file = stringSlice(path, slash + 1, stringLen(path));
-      // strip .tuff
-      let name = stringSlice(file, 0, stringLen(file) - 5);
-      pathJoin(outDir, name + ".mjs")
+      let relPath = stringSlice(path, relStart, stringLen(path));
+      // relPath ends with .tuff; replace with .mjs
+      let relNoExt = stringSlice(relPath, 0, stringLen(relPath) - 5);
+      pathJoin(outDir, relNoExt + ".mjs")
     };
     writeTextFile(outFile, js);
   }

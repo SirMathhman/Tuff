@@ -59,7 +59,24 @@ export class Parser {
   }
 
   private parseTopLevelItem(): TopLevelItem | undefined {
-    if (this.isKw("import")) return this.parseImportDecl();
+    // NOTE: The language does not have an `import` keyword.
+    // If we see `import <path>`, provide a targeted error message.
+    if (
+      (this.isKw("import") ||
+        (this.is("ident") && this.cur().text === "import")) &&
+      (this.tokens[this.i + 1]?.kind === "ident" ||
+        this.tokens[this.i + 1]?.kind === "kw")
+    ) {
+      const t = this.cur();
+      this.diags.error(
+        "`import` is not supported. Use `from <module> use { ... };` instead.",
+        this.spanOf(t)
+      );
+      // best-effort recovery: consume tokens until a terminator
+      while (!this.isTerminatorStart()) this.next();
+      this.consumeTerminatorOpt();
+      return undefined;
+    }
     if (this.isKw("from")) return this.parseFromUseDecl(false);
     if (this.isKw("extern") && this.peekKw("from", 1)) {
       return this.parseExternFromUseDecl();
@@ -74,14 +91,6 @@ export class Parser {
     if (stmt && stmt.kind === "FnDecl") return stmt;
     // allow top-level expr statements, but do not export
     return stmt as any;
-  }
-
-  private parseImportDecl(): any {
-    const startTok = this.consume("kw", "import");
-    const modulePath = this.parseModulePath();
-    return this.node("ImportDecl", startTok.start, this.prev().end, {
-      modulePath,
-    });
   }
 
   private parseFromUseDecl(isExtern: boolean): any {

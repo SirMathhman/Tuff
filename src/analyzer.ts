@@ -131,19 +131,12 @@ function analyzeTop(
           analyzeTop(it as any, modEnv, modBindings, diags);
       }
       return;
-    case "ImportDecl":
     case "FromUseDecl":
     case "ExternFromUseDecl":
       // imports create local bindings for last path element or selected names
-      if (node.kind === "ImportDecl") {
-        const localName = node.modulePath[node.modulePath.length - 1];
-        env.declare(localName, node.span);
-        bindings.set(localName, { mutable: false });
-      } else {
-        for (const n of node.names) {
-          env.declare(n, node.span);
-          bindings.set(n, { mutable: false });
-        }
+      for (const n of node.names) {
+        env.declare(n, node.span);
+        bindings.set(n, { mutable: false });
       }
       return;
     default:

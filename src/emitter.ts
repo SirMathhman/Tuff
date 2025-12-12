@@ -35,12 +35,6 @@ export function emitESM(program: Program): EmitResult {
 
 function emitTopLevel(item: TopLevelItem, w: Writer) {
   switch (item.kind) {
-    case "ImportDecl": {
-      const local = item.modulePath[item.modulePath.length - 1];
-      const spec = `./${item.modulePath.join("/")}.mjs`;
-      w.line(`import * as ${local} from ${JSON.stringify(spec)};`);
-      return;
-    }
     case "FromUseDecl": {
       const spec = `./${item.modulePath.join("/")}.mjs`;
       w.line(
