@@ -1,15 +1,15 @@
-# Tuff (bootstrap compiler)
+# Tuff
 
-This repo contains an early bootstrap compiler that compiles `.tuff` source files to JavaScript **ES Modules**.
+This repo contains a self-hosting compiler that compiles `.tuff` source files to JavaScript **ES Modules**.
 
 ## Dev
 
 - Run tests: `bun test`
-- Compile a file: `bun run src/cli.ts path/to/file.tuff --outdir out`
+- Rebuild prebuilt compiler: `bun run build:selfhost-prebuilt`
 
 ## Status
 
-This is a bootstrap compiler: it implements a small but growing subset of the language described in `LANGUAGE.md`.
+The compiler is self-hosting and implements a small but growing subset of the language described in `LANGUAGE.md`.
 
 ## Tuff-written unit testing helpers
 
