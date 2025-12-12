@@ -12,6 +12,10 @@ import { ParsedDeclAst, ParsedDeclsAst, parse_imports_ast, parse_extern_decl_ast
 import { span, decl_let } from "./ast.mjs";
 import { emit_decl_js } from "./emit_ast_js.mjs";
 import { analyze_program } from "./analyzer.mjs";
+import { ParsedProgramWithTrivia, parse_program_with_trivia } from "./formatting.mjs";
+export function parse_program_with_trivia_api(src, exportAll) {
+return parse_program_with_trivia(src, exportAll);
+}
 export function compile_tiny2(src, requireMain, exportAll) {
 let i = 0;
 reset_struct_defs();
