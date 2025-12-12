@@ -1,0 +1,48 @@
+// Minimal unit test helpers, written in Tuff.
+//
+// Design goals:
+// - no exceptions/try-catch required (so tests can continue after failures)
+// - no first-class function plumbing required (caller supplies a Bool)
+// - does not call `exit()` so it can be used from other runners (JS tests, REPL)
+
+extern from rt::stdlib use { println };
+
+let mut __passed = 0;
+let mut __failed = 0;
+
+fn reset() => {
+  __passed = 0;
+  __failed = 0;
+}
+
+fn get_passed() => __passed;
+fn get_failed() => __failed;
+
+fn expect(name, cond) => if (cond) true else {
+  println("  assertion failed: " + name);
+  false
+}
+
+fn expect_eq(name, got, expected) => if (got == expected) true else {
+  println("  assertion failed: " + name);
+  println("    expected: " + expected);
+  println("    got: " + got);
+  false
+}
+
+fn it(name, ok) => {
+  if (ok) {
+    __passed = __passed + 1;
+    println("ok  - " + name);
+  } else {
+    __failed = __failed + 1;
+    println("not ok - " + name);
+  }
+}
+
+fn summary() => {
+  println("passed: " + __passed);
+  println("failed: " + __failed);
+}
+
+fn status() => if (__failed == 0) 0 else 1;
