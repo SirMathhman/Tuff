@@ -92,6 +92,18 @@ fn parse_ident(src, i) => {
   ParsedIdent(stringSlice(src, start, j), j)
 }
 
+fn parse_module_path(src, i) => {
+  let mut j = skip_ws(src, i);
+  let start = j;
+  while (j < stringLen(src)) {
+    let c = stringCharCodeAt(src, j);
+    if (is_space(c) || c == 59) { break; }
+    j = j + 1;
+  }
+  if (start == j) { panic("expected module path"); }
+  ParsedIdent(stringSlice(src, start, j), j)
+}
+
 fn parse_expr(src, i) => parse_cmp(src, i)
 
 fn parse_cmp(src, i) => {
@@ -215,6 +227,21 @@ fn parse_primary(src, i) => {
   let j = skip_ws(src, i);
   if (!(j < stringLen(src))) { panic("expected expression"); }
   let c = stringCharCodeAt(src, j);
+  if (c == 34) { // '"'
+    let start = j;
+    let mut k = j + 1;
+    while (k < stringLen(src)) {
+      let ch = stringCharCodeAt(src, k);
+      if (ch == 34) { yield ParsedExpr(stringSlice(src, start, k + 1), k + 1); }
+      if (ch == 92) { // '\\'
+        k = k + 1;
+        if (k < stringLen(src)) { k = k + 1; continue; }
+        panic("unterminated string");
+      }
+      k = k + 1;
+    }
+    panic("unterminated string");
+  }
   if (c == 40) { // '('
     let inner = parse_expr(src, j + 1);
     let k = skip_ws(src, inner.v1);
@@ -262,6 +289,41 @@ fn parse_param_list(src, i) => {
     panic("expected ',' or ')' in param list")
   }
   ParsedParams(out, k)
+}
+
+fn parse_extern_decl(src, i) => {
+  let mut k = parse_keyword(src, i, "extern");
+  k = parse_keyword(src, k, "from");
+  let mod = parse_module_path(src, k);
+  k = mod.v1;
+  k = parse_keyword(src, k, "use");
+  k = parse_keyword(src, k, "{");
+
+  let mut names = "";
+  let mut first = true;
+  while (true) {
+    k = skip_ws(src, k);
+    if (!(k < stringLen(src))) { panic("expected '}'"); }
+    if (stringCharCodeAt(src, k) == 125) { k = k + 1; break; }
+    let id = parse_ident(src, k);
+    k = id.v1;
+    if (first) { names = names + id.v0; } else { names = names + ", " + id.v0; }
+    first = false;
+    k = skip_ws(src, k);
+    if (k < stringLen(src) && stringCharCodeAt(src, k) == 44) { k = k + 1; continue; }
+    k = skip_ws(src, k);
+    if (k < stringLen(src) && stringCharCodeAt(src, k) == 125) { k = k + 1; break; }
+    panic("expected ',' or '}' in extern list");
+  }
+
+  k = parse_optional_semicolon(src, k);
+
+  let mut importPath = "";
+  if (starts_with_at(mod.v0, 0, "rt::")) { importPath = "./rt/" + stringSlice(mod.v0, 4, stringLen(mod.v0)) + ".mjs"; }
+  if (importPath == "" && starts_with_at(mod.v0, 0, "node::")) { importPath = "node:" + stringSlice(mod.v0, 6, stringLen(mod.v0)); }
+  if (importPath == "") { panic("unsupported extern module: " + mod.v0); }
+
+  ParsedStmt("import { " + names + " } from \"" + importPath + "\";\n", k)
 }
 
 fn parse_fn_decl(src, i) => {
@@ -375,6 +437,12 @@ fn parse_stmt(src, i) => {
     yield ParsedStmt(name.v0 + " = " + expr.v0 + ";\n", k);
   }
 
+  // expression statement: <expr>;
+  let e = parse_expr(src, k);
+  k = e.v1;
+  k = parse_required_semicolon(src, k);
+  yield ParsedStmt(e.v0 + ";\n", k);
+
   panic("expected statement")
 }
 
@@ -407,11 +475,22 @@ fn parse_main_body(src, i) => {
       if (stringCharCodeAt(src, t) == 125) { break; }
       // stop before tail expression if next token isn't a statement start
       let isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") || is_assign_stmt_start(src, t);
-      if (!isStmt) { break; }
+      if (isStmt) {
+        let st = parse_stmt(src, k);
+        body = body + st.v0;
+        k = st.v1;
+        continue;
+      }
 
-      let st = parse_stmt(src, k);
-      body = body + st.v0;
-      k = st.v1;
+      // expression statement vs tail expression: if there's a semicolon, it's a statement; otherwise it's the tail.
+      let e = parse_expr(src, k);
+      let after = skip_ws(src, e.v1);
+      if (after < stringLen(src) && stringCharCodeAt(src, after) == 59) {
+        body = body + (e.v0 + ";\n");
+        k = after + 1;
+        continue;
+      }
+      break;
     }
 
     // tail expression
@@ -430,11 +509,24 @@ fn parse_main_body(src, i) => {
 
 fn compile_tiny(src) => {
   // Parse:
+  //   (extern from <mod> use { <idents> };)*
   //   (let <ident> = <expr>;)*
   //   (fn <ident>(<params>) => <expr|block>)*
   let mut i = 0;
 
   let mut out = "// compiled by selfhost tuffc\n";
+
+  // zero or more extern declarations
+  while (true) {
+    let j = skip_ws(src, i);
+    if (starts_with_at(src, j, "extern")) {
+      let ex = parse_extern_decl(src, i);
+      out = out + ex.v0;
+      i = ex.v1;
+      continue;
+    }
+    break;
+  }
 
   // zero or more let statements
   while (true) {
