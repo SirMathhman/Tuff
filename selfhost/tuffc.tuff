@@ -182,11 +182,23 @@ fn parse_postfix(src, i) => {
   let mut j = left.v1;
   while (true) {
     j = skip_ws(src, j);
-    if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 40)) { break; } // '('
-
-    let args = parse_arg_list(src, j);
-    left = ParsedExpr(left.v0 + "(" + args.v0 + ")", args.v1);
-    j = left.v1;
+    if (j < stringLen(src) && stringCharCodeAt(src, j) == 40) { // '('
+      let args = parse_arg_list(src, j);
+      left = ParsedExpr(left.v0 + "(" + args.v0 + ")", args.v1);
+      j = left.v1;
+      continue;
+    }
+    if (j < stringLen(src) && stringCharCodeAt(src, j) == 91) { // '['
+      let mut k = parse_keyword(src, j, "[");
+      let idx = parse_expr(src, k);
+      k = idx.v1;
+      k = skip_ws(src, k);
+      if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 93)) { panic("expected ']'"); }
+      left = ParsedExpr("vec_get(" + left.v0 + ", " + idx.v0 + ")", k + 1);
+      j = left.v1;
+      continue;
+    }
+    break;
   }
   left
 }
@@ -238,6 +250,10 @@ fn parse_primary(src, i) => {
     let me = parse_match_expr(src, j);
     yield me;
   }
+  if (c == 91) { // '['
+    let ve = parse_vec_lit(src, j);
+    yield ve;
+  }
   if (c == 123) { // '{'
     let be = parse_block_expr(src, j);
     yield be;
@@ -286,6 +302,35 @@ fn parse_primary(src, i) => {
   panic("expected expression")
 }
 
+fn parse_vec_lit(src, i) => {
+  // vector literal: '[' (expr (',' expr)*)? ']'
+  let mut k = parse_keyword(src, i, "[");
+  k = skip_ws(src, k);
+  if (k < stringLen(src) && stringCharCodeAt(src, k) == 93) { // ']'
+    yield ParsedExpr("(() => { const __v = vec_new(); return __v; })()", k + 1);
+  }
+
+  let mut pushes = "";
+  while (true) {
+    let e = parse_expr(src, k);
+    k = e.v1;
+    pushes = pushes + ("vec_push(__v, " + e.v0 + ");\n");
+    k = skip_ws(src, k);
+    if (!(k < stringLen(src))) { panic("expected ']' in vec literal"); }
+    let ch = stringCharCodeAt(src, k);
+    if (ch == 44) { // ','
+      k = k + 1;
+      continue;
+    }
+    if (ch == 93) { // ']'
+      yield ParsedExpr("(() => { const __v = vec_new();\n" + pushes + "return __v;\n})()", k + 1);
+    }
+    panic("expected ',' or ']' in vec literal")
+  }
+  // unreachable
+  ParsedExpr("None", k)
+}
+
 fn parse_block_body(src, i) => {
   let j = skip_ws(src, i);
   if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 123)) { panic("expected '{'"); }
@@ -298,7 +343,7 @@ fn parse_block_body(src, i) => {
     if (!(t < stringLen(src))) { panic("expected '}'"); }
     if (stringCharCodeAt(src, t) == 125) { break; }
 
-    let isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") || is_assign_stmt_start(src, t);
+    let isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") || is_assign_stmt_start(src, t) || is_index_assign_stmt_start(src, t);
     if (isStmt) {
       let st = parse_stmt(src, k);
       body = body + st.v0;
@@ -669,6 +714,21 @@ fn parse_stmt(src, i) => {
     yield ParsedStmt(name.v0 + " = " + expr.v0 + ";\n", k);
   }
 
+  // index assignment: <ident>[<expr>] = <expr>;
+  if (is_index_assign_stmt_start(src, k)) {
+    let name = parse_ident(src, k);
+    k = name.v1;
+    k = parse_keyword(src, k, "[");
+    let idx = parse_expr(src, k);
+    k = idx.v1;
+    k = parse_keyword(src, k, "]");
+    k = parse_keyword(src, k, "=");
+    let val = parse_expr(src, k);
+    k = val.v1;
+    k = parse_required_semicolon(src, k);
+    yield ParsedStmt("vec_set(" + name.v0 + ", " + idx.v0 + ", " + val.v0 + ");\n", k);
+  }
+
   // expression statement: <expr>;
   let e = parse_expr(src, k);
   k = e.v1;
@@ -676,6 +736,21 @@ fn parse_stmt(src, i) => {
   yield ParsedStmt(e.v0 + ";\n", k);
 
   panic("expected statement")
+}
+
+fn is_index_assign_stmt_start(src, i) => {
+  let mut j = skip_ws(src, i);
+  if (!(j < stringLen(src))) { yield false; }
+  let c0 = stringCharCodeAt(src, j);
+  if (!is_ident_start(c0)) { yield false; }
+  j = j + 1;
+  while (j < stringLen(src)) {
+    let c = stringCharCodeAt(src, j);
+    if (!is_ident_part(c)) { break; }
+    j = j + 1;
+  }
+  j = skip_ws(src, j);
+  j < stringLen(src) && stringCharCodeAt(src, j) == 91 // '['
 }
 
 fn is_assign_stmt_start(src, i) => {
