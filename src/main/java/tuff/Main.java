@@ -18,23 +18,30 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 public class Main {
-	private sealed interface Result<T, X> permits Err, Ok {}
+	private sealed interface Result<T, X> permits Err, Ok {
+	}
 
-	private sealed interface TuffDeclarationOrPlaceholder permits Placeholder, TuffDeclaration {}
+	private sealed interface TuffDeclarationOrPlaceholder permits Placeholder, TuffDeclaration {
+	}
 
-	private @interface Actual {}
+	private @interface Actual {
+	}
 
-	private sealed interface TuffExpression extends TuffLValue permits WrappedExpression {}
+	private sealed interface TuffExpression extends TuffLValue permits WrappedExpression {
+	}
 
-	private sealed interface TuffLValue permits Placeholder, TuffDeclaration, TuffExpression {}
+	private sealed interface TuffLValue permits Placeholder, TuffDeclaration, TuffExpression {
+	}
 
 	private sealed interface Folder permits EscapedFolder, ExprEndFolder, OperationFolder, StatementFolder, ValueFolder {
 		State apply(State state, Character character);
 	}
 
-	private record Err<T, X>(X error) implements Result<T, X> {}
+	private record Err<T, X>(X error) implements Result<T, X> {
+	}
 
-	private record Ok<T, X>(T value) implements Result<T, X> {}
+	private record Ok<T, X>(T value) implements Result<T, X> {
+	}
 
 	private record TuffDeclaration(List<String> modifiers, String name, String type, boolean isMutable)
 			implements TuffDeclarationOrPlaceholder, TuffLValue {
@@ -43,11 +50,14 @@ public class Main {
 		}
 	}
 
-	private record Placeholder(String input) implements TuffDeclarationOrPlaceholder, TuffLValue {}
+	private record Placeholder(String input) implements TuffDeclarationOrPlaceholder, TuffLValue {
+	}
 
-	private record Tuple2<A, B>(A a, B b) {}
+	private record Tuple2<A, B>(A a, B b) {
+	}
 
-	private record Tuple3<A, B, C>(A a, B b, C c) {}
+	private record Tuple3<A, B, C>(A a, B b, C c) {
+	}
 
 	private record State(String input, int index, StringBuilder buffer, int depth, ArrayList<String> segments) {
 		private Optional<Tuple2<State, Character>> pop() {
@@ -111,7 +121,8 @@ public class Main {
 		}
 	}
 
-	private record WrappedExpression(String value) implements TuffExpression {}
+	private record WrappedExpression(String value) implements TuffExpression {
+	}
 
 	private record EscapedFolder(Folder folder) implements Folder {
 		private static State foldSingleEscapeChar(Tuple2<State, Character> tuple) {
@@ -229,8 +240,12 @@ public class Main {
 		}
 
 		private Optional<State> foldArrow(State state, char character) {
-			if (character != '-') {return Optional.empty();}
-			if (!state.startsWith(">")) {return Optional.empty();}
+			if (character != '-') {
+				return Optional.empty();
+			}
+			if (!state.startsWith(">")) {
+				return Optional.empty();
+			}
 			return state.popAndAppendToOption();
 		}
 	}
@@ -299,7 +314,7 @@ public class Main {
 		return switch (this.readString(source)) {
 			case Err<String, IOException>(var error) -> Optional.of(error);
 			case Ok<String, IOException>(var value) -> {
-				final var output = this.compile(value);
+				final var output = new Transpiler().transpile(value);
 				yield this.writeString(target, output);
 			}
 		};
@@ -324,7 +339,7 @@ public class Main {
 		}
 	}
 
-	private String compile(String input) {
+	String compile(String input) {
 		final var compiled = this.compileStatements(input, this::compileRootSegment);
 		final var useStatements = this.imports.entrySet().stream().map((Entry<List<String>, List<String>> entry) -> {
 			final var usedNamespace = String.join("::", entry.getKey());
@@ -397,10 +412,14 @@ public class Main {
 
 	private Optional<String> compileStructure(String type, String input, int indent) {
 		final var i = input.indexOf(type + " ");
-		if (i < 0) {return Optional.empty();}
+		if (i < 0) {
+			return Optional.empty();
+		}
 		final var afterKeyword = input.substring(i + (type + " ").length());
 		final var i1 = afterKeyword.indexOf("{");
-		if (i1 < 0) {return Optional.empty();}
+		if (i1 < 0) {
+			return Optional.empty();
+		}
 		var name = afterKeyword.substring(0, i1).strip();
 		final var i2 = name.indexOf("implements ");
 		if (i2 >= 0) {
@@ -436,12 +455,12 @@ public class Main {
 		if (substring1.endsWith("}")) {
 			final var body = substring1.substring(0, substring1.length() - 1);
 			if (this.isIdentifier(name)) {
-				final var compiled =
-						this.compileStatements(body, (String input1) -> this.compileStructureSegment(input1, indent + 1));
+				final var compiled = this.compileStatements(body,
+						(String input1) -> this.compileStructureSegment(input1, indent + 1));
 
 				final var joinedTypeParameters = this.joinTypeParameters(typeParameters);
-				final var generated =
-						"class fn " + name + joinedTypeParameters + "(" + String.join(", ", parameters) + ") => {" + compiled +
+				final var generated = "class fn " + name + joinedTypeParameters + "(" + String.join(", ", parameters) + ") => {"
+						+ compiled +
 						this.createIndent(indent) + "}";
 
 				return Optional.of(generated);
@@ -530,7 +549,9 @@ public class Main {
 
 	private Optional<String> compileSealedInterface(String input) {
 		final var i1 = input.indexOf("interface ");
-		if (i1 < 0) {return Optional.empty();}
+		if (i1 < 0) {
+			return Optional.empty();
+		}
 		final var modifiers = Arrays
 				.stream(input.substring(0, i1).split(Pattern.quote(" ")))
 				.map(String::strip)
@@ -543,7 +564,9 @@ public class Main {
 		}
 
 		final var i = afterKeyword.indexOf("permits ");
-		if (i < 0) {return Optional.empty();}
+		if (i < 0) {
+			return Optional.empty();
+		}
 		var name = afterKeyword.substring(0, i).strip();
 
 		List<String> typeParameters = new ArrayList<String>();
@@ -585,12 +608,16 @@ public class Main {
 
 	private Optional<String> compileMethod(String input, int indent) {
 		final var i = input.indexOf("(");
-		if (i < 0) {return Optional.empty();}
+		if (i < 0) {
+			return Optional.empty();
+		}
 
 		final var substring = input.substring(0, i);
 		final var withParameters = input.substring(i + 1);
 		final var i2 = withParameters.indexOf(")");
-		if (i2 < 0) {return Optional.empty();}
+		if (i2 < 0) {
+			return Optional.empty();
+		}
 
 		final var parameterString = withParameters.substring(0, i2);
 		final var withBraces = withParameters.substring(i2 + 1).strip();
@@ -601,7 +628,9 @@ public class Main {
 			return Optional.empty();
 		}
 
-		if (!withBraces.startsWith("{") || !withBraces.endsWith("}")) {return Optional.empty();}
+		if (!withBraces.startsWith("{") || !withBraces.endsWith("}")) {
+			return Optional.empty();
+		}
 		final var content = withBraces.substring(1, withBraces.length() - 1);
 		final var joinedParameters = String.join(", ", parameters);
 
@@ -668,23 +697,33 @@ public class Main {
 	}
 
 	private Optional<String> compileConditional(int indent, String input, String type) {
-		if (!input.startsWith(type)) {return Optional.empty();}
+		if (!input.startsWith(type)) {
+			return Optional.empty();
+		}
 		final var substring = input.substring(type.length()).strip();
-		if (!substring.startsWith("(")) {return Optional.empty();}
+		if (!substring.startsWith("(")) {
+			return Optional.empty();
+		}
 		final var substring1 = substring.substring(1);
 		final var divisions = this.findExprEnd(substring1);
 
-		if (divisions.size() < 2) {return Optional.empty();}
+		if (divisions.size() < 2) {
+			return Optional.empty();
+		}
 		final var conditionStringWithSuffix = divisions.getFirst().strip();
 		final var withBraces = String.join("", divisions.subList(1, divisions.size())).strip();
-		if (!conditionStringWithSuffix.endsWith(")")) {return Optional.empty();}
+		if (!conditionStringWithSuffix.endsWith(")")) {
+			return Optional.empty();
+		}
 		final var conditionString = conditionStringWithSuffix.substring(0, conditionStringWithSuffix.length() - 1);
 		final var condition = this.compileExpressionOrPlaceholder(conditionString, indent);
-		if (!withBraces.startsWith("{") || !withBraces.endsWith("}")) {return Optional.empty();}
+		if (!withBraces.startsWith("{") || !withBraces.endsWith("}")) {
+			return Optional.empty();
+		}
 		final var content = withBraces.substring(1, withBraces.length() - 1);
 		return Optional.of(
 				type + " (" + condition + ") {" + this.compileMethodStatements(content, indent) + this.createIndent(indent) +
-				"}");
+						"}");
 
 	}
 
@@ -816,10 +855,14 @@ public class Main {
 
 	private Optional<String> compileLambda(String input, int indent) {
 		final var i = input.indexOf("->");
-		if (i < 0) {return Optional.empty();}
+		if (i < 0) {
+			return Optional.empty();
+		}
 		final var beforeArrow = input.substring(0, i).strip();
 		final var maybeWithBraces = input.substring(i + 2).strip();
-		if (!beforeArrow.startsWith("(") || !beforeArrow.endsWith(")")) {return Optional.empty();}
+		if (!beforeArrow.startsWith("(") || !beforeArrow.endsWith(")")) {
+			return Optional.empty();
+		}
 		final var substring = beforeArrow.substring(1, beforeArrow.length() - 1);
 		final var compiled = String.join(", ", this.compileParameters(substring));
 		final String compiled1;
@@ -836,15 +879,21 @@ public class Main {
 	private Optional<String> compileInstanceOf(String input, int indent) {
 		final var divisions = this.divide(input, new EscapedFolder(new OperationFolder("instanceof"))).toList();
 
-		if (divisions.size() < 2) {return Optional.empty();}
+		if (divisions.size() < 2) {
+			return Optional.empty();
+		}
 		final var first = divisions.getFirst();
 		final var substring = first.substring(0, first.length() - "instanceof".length());
 		final var substring1 = String.join("", divisions.subList(1, divisions.size()));
 
-		if (!substring1.endsWith(")")) {return Optional.empty();}
+		if (!substring1.endsWith(")")) {
+			return Optional.empty();
+		}
 		final var substring2 = substring1.substring(0, substring1.length() - 1);
 		final var i2 = substring2.indexOf("(");
-		if (i2 < 0) {return Optional.empty();}
+		if (i2 < 0) {
+			return Optional.empty();
+		}
 		final var substring3 = substring2.substring(0, i2).strip();
 		final var substring4 = substring2.substring(i2 + 1);
 
@@ -857,8 +906,8 @@ public class Main {
 				.flatMap(Optional::stream)
 				.toList();
 
-		final var joinedNames =
-				parameters.stream().map((TuffDeclaration declaration) -> declaration.name).collect(Collectors.joining(", "));
+		final var joinedNames = parameters.stream().map((TuffDeclaration declaration) -> declaration.name)
+				.collect(Collectors.joining(", "));
 
 		return Optional.of(
 				this.compileExpressionOrPlaceholder(substring, indent) + " is " + substring3 + " { " + joinedNames + " }");
@@ -930,20 +979,30 @@ public class Main {
 
 	private Optional<String> compileSwitch(String input, int indent) {
 		final var stripped = input.strip();
-		if (!stripped.startsWith("switch")) {return Optional.empty();}
+		if (!stripped.startsWith("switch")) {
+			return Optional.empty();
+		}
 		final var substring = stripped.substring("switch".length()).strip();
-		if (!substring.startsWith("(")) {return Optional.empty();}
+		if (!substring.startsWith("(")) {
+			return Optional.empty();
+		}
 		final var withExpr = substring.substring(1);
 		final var divisions = this.findExprEnd(withExpr);
 
-		if (divisions.size() < 2) {return Optional.empty();}
+		if (divisions.size() < 2) {
+			return Optional.empty();
+		}
 		final var exprWithSuffix = divisions.getFirst();
 		final var withBraces = String.join("", divisions.subList(1, divisions.size())).strip();
 
-		if (!exprWithSuffix.endsWith(")")) {return Optional.empty();}
+		if (!exprWithSuffix.endsWith(")")) {
+			return Optional.empty();
+		}
 		final var expr = exprWithSuffix.substring(0, exprWithSuffix.length() - 1);
 		final var compiledExpr = this.compileExpressionOrPlaceholder(expr, indent);
-		if (!withBraces.startsWith("{") || !withBraces.endsWith("}")) {return Optional.empty();}
+		if (!withBraces.startsWith("{") || !withBraces.endsWith("}")) {
+			return Optional.empty();
+		}
 		final var content = withBraces.substring(1, withBraces.length() - 1);
 		final var collect = this.compileCases(indent, content);
 		return Optional.of("match (" + compiledExpr + ") {" + collect + this.createIndent(indent) + "}");
@@ -1026,7 +1085,9 @@ public class Main {
 
 	private Optional<String> compileAccess(String input, String separator, Function<String, String> mapper) {
 		final var i = input.lastIndexOf(separator);
-		if (i < 0) {return Optional.empty();}
+		if (i < 0) {
+			return Optional.empty();
+		}
 		final var substring = input.substring(0, i);
 		var memberName = input.substring(i + separator.length()).strip();
 		if (memberName.startsWith("<")) {
@@ -1130,7 +1191,7 @@ public class Main {
 	private String generateDefinitionOrPlaceholder(TuffDeclarationOrPlaceholder string) {
 		return switch (string) {
 			case TuffDeclaration(var modifiers, var name, var type, var isMutable) ->
-					this.generateDefinition(modifiers, name, type, isMutable);
+				this.generateDefinition(modifiers, name, type, isMutable);
 			case Placeholder placeholder -> this.wrap(placeholder.input);
 		};
 	}
@@ -1189,8 +1250,8 @@ public class Main {
 				beforeType = beforeType.substring(i2 + 1).strip();
 			}
 
-			final var oldModifiers =
-					Arrays.stream(beforeType.split(" ")).map(String::strip).filter((String slice) -> !slice.isEmpty()).toList();
+			final var oldModifiers = Arrays.stream(beforeType.split(" ")).map(String::strip)
+					.filter((String slice) -> !slice.isEmpty()).toList();
 
 			final var type = beforeName.substring(i1 + 1);
 			final var compiled = this.compileTypeOrPlaceholder(type);
@@ -1224,8 +1285,8 @@ public class Main {
 			final var substring1 = stripped.substring(i + 1).strip();
 			if (substring1.endsWith(">")) {
 				final var args = substring1.substring(0, substring1.length() - 1);
-				final var joinedTypeArguments =
-						this.divideValues(args).map(this::compileTypeOrPlaceholder).collect(Collectors.joining(", "));
+				final var joinedTypeArguments = this.divideValues(args).map(this::compileTypeOrPlaceholder)
+						.collect(Collectors.joining(", "));
 
 				return Optional.of(base + "<" + joinedTypeArguments + ">");
 			}
