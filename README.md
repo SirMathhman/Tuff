@@ -23,7 +23,7 @@ A modern systems programming language with a self-hosting compiler that compiles
 
 ### Prerequisites
 
-- **Bun** (runtime and package manager): https://bun.sh
+- **Node.js** (for tests + build tooling)
 - **Node.js** or **Deno** (for running compiled output)
 
 ### Installation
@@ -33,17 +33,17 @@ Clone the repository:
 ```bash
 git clone https://github.com/your-repo/tuff.git
 cd tuff
-bun install
+npm install
 ```
 
 ### Running Tests
 
 ```bash
 # Run all tests (TypeScript + Tuff)
-bun test
+npm test
 
 # Rebuild the prebuilt compiler from source
-bun run build:selfhost-prebuilt
+npm run build:selfhost-prebuilt
 ```
 
 ### Writing Your First Program
@@ -122,7 +122,7 @@ Prebuilt artifacts are stored in `selfhost/prebuilt/` and include all compiled `
 **To rebuild the prebuilt compiler after modifying compiler source:**
 
 ```bash
-bun run build:selfhost-prebuilt
+npm run build:selfhost-prebuilt
 ```
 
 This script:
@@ -403,13 +403,13 @@ let (a, b) = (1, 2);
 
 ```bash
 # Run all tests (TypeScript + Tuff)
-bun test
+npm test
 
 # Run only TypeScript tests
-bun test src/test/ts/**
+npm test -- src/test/ts/**
 
 # Run specific test file
-bun test src/test/ts/selfhost.test.ts
+npm test -- src/test/ts/selfhost.test.ts
 ```
 
 ### Test Organization
@@ -574,8 +574,8 @@ We welcome contributions! Here's how to get started:
 4. **Make your changes**:
    - Add tests first (TDD)
    - Write code to pass tests
-   - Ensure `bun test` passes
-   - Rebuild prebuilt: `bun run build:selfhost-prebuilt`
+    - Ensure `npm test` passes
+    - Rebuild prebuilt: `npm run build:selfhost-prebuilt`
 5. **Commit**:
    ```bash
    git add .
@@ -594,7 +594,7 @@ We welcome contributions! Here's how to get started:
 
 - New language features must have corresponding tests in `src/test/tuff/`
 - Bug fixes should include a test that demonstrates the fix
-- Ensure `bun test` passes in full before submitting
+- Ensure `npm test` passes in full before submitting
 
 ---
 
@@ -625,7 +625,7 @@ Tuff/
 ├── tools/                   # Build scripts (build_prebuilt_selfhost.ts)
 ├── LANGUAGE.md              # Language specification
 ├── AST_REFACTOR_PLAN.md     # Compiler refactor roadmap
-├── package.json             # Bun dependencies
+├── package.json             # npm dependencies
 └── README.md                # This file
 ```
 

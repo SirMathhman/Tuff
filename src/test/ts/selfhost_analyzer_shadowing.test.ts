@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -15,7 +15,7 @@ describe("selfhost analyzer", () => {
     );
     await mkdir(outDir, { recursive: true });
 
-    // IMPORTANT: Bun caches ESM modules by URL.
+    // IMPORTANT: Node caches ESM modules by URL.
     // If we stage the prebuilt compiler and also write the freshly-compiled
     // stage2 compiler into the same directory, importing stage2 may reuse the
     // cached stage1 `tuffc_lib.mjs`. That would bypass new pipeline changes.

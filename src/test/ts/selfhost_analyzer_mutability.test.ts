@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -15,7 +15,7 @@ describe("selfhost analyzer", () => {
     );
     await mkdir(outDir, { recursive: true });
 
-    // Avoid Bun ESM cache collisions between stage1 and stage2 outputs.
+    // Avoid ESM cache collisions between stage1 and stage2 outputs.
     const stage1Dir = resolve(outDir, "stage1");
     const stage2Dir = resolve(outDir, "stage2");
     await mkdir(stage1Dir, { recursive: true });

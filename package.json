@@ -4,12 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "bun test",
-    "check": "bun test",
-    "build:selfhost-prebuilt": "bun run tools/build_prebuilt_selfhost.ts"
+    "test": "vitest run",
+    "check": "vitest run",
+    "build:selfhost-prebuilt": "tsx tools/build_prebuilt_selfhost.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
-    "bun-types": "^1.2.21"
+    "typescript": "^5.8.2",
+    "tsx": "^4.19.2",
+    "vitest": "^2.1.8"
   }
 }

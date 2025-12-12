@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
-import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -73,7 +73,7 @@ describe("tuff tests (.tuff)", () => {
       await mkdir(dirname(inFile), { recursive: true });
       await mkdir(dirname(outFile), { recursive: true });
 
-      const src = await Bun.file(testFile).text();
+      const src = await readFile(testFile, "utf8");
       await writeFile(inFile, src, "utf8");
 
       const rcCompile = tuffc.main([inFile, outFile]);
