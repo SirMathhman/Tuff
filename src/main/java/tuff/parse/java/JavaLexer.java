@@ -11,7 +11,8 @@ import java.util.List;
  * Notes:
  * - Skips whitespace.
  * - Skips // line comments and /* block comments *\/.
- * - Does NOT implement Java text blocks ("""..."""); triple quotes will be tokenized as regular strings.
+ * - Does NOT implement Java text blocks ("""..."""); triple quotes will be
+ * tokenized as regular strings.
  */
 public final class JavaLexer {
 	public List<JavaToken> lex(String input) {

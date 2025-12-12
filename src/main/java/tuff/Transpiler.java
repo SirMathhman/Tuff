@@ -1,5 +1,9 @@
 package tuff;
 
+import tuff.parse.java.JavaParser;
+import tuff.print.TuffPrinter;
+import tuff.transform.JavaToTuffTransformer;
+
 /**
  * Public entrypoint for Java -> Tuff transpilation.
  *
@@ -9,6 +13,14 @@ package tuff;
  */
 public final class Transpiler {
 	public String transpile(String javaSource) {
-		return new Main().compile(javaSource);
+		try {
+			var unit = new JavaParser().parse(javaSource);
+			var module = new JavaToTuffTransformer().transform(unit);
+			return new TuffPrinter().print(module);
+		} catch (RuntimeException ex) {
+			// Keep legacy behavior for constructs the new parser/transformer does not
+			// support yet.
+			return new Main().compile(javaSource);
+		}
 	}
 }
