@@ -1,0 +1,70 @@
+// Selfhost compiler: lexing-ish helpers (whitespace/comments + ASCII predicates).
+// Extracted from tuffc_lib.tuff as part of Phase 2 (mechanical split).
+
+extern from rt::stdlib use { stringLen, stringCharCodeAt };
+
+from diagnostics use { panic_at };
+
+// Utility: ASCII checks
+fn is_digit(code: I32) : Bool => { code >= 48 && code <= 57 }
+fn is_space(code: I32) : Bool => { code == 32 || code == 10 || code == 9 || code == 13 }
+fn is_alpha(code: I32) : Bool => { (code >= 65 && code <= 90) || (code >= 97 && code <= 122) }
+fn is_ident_start(code: I32) : Bool => { is_alpha(code) || code == 95 }
+fn is_ident_part(code: I32) : Bool => { is_ident_start(code) || is_digit(code) }
+
+fn skip_ws(src: String, i: I32) : I32 => {
+  let mut j = i;
+  while (j < stringLen(src)) {
+    // skip whitespace
+    while (j < stringLen(src)) {
+      let c = stringCharCodeAt(src, j);
+      if (!is_space(c)) { break; }
+      j = j + 1;
+    }
+
+    if (!(j + 1 < stringLen(src))) { yield j; }
+
+    let c0 = stringCharCodeAt(src, j);
+    let c1 = stringCharCodeAt(src, j + 1);
+
+    // line comment: // ... \n
+    if (c0 == 47 && c1 == 47) {
+      j = j + 2;
+      while (j < stringLen(src)) {
+        let c = stringCharCodeAt(src, j);
+        if (c == 10) { break; }
+        j = j + 1;
+      }
+      continue;
+    }
+
+    // block comment: /* ... */ (non-nested for now)
+    if (c0 == 47 && c1 == 42) {
+      let commentStart = j;
+      j = j + 2;
+      let mut found = false;
+      while (j + 1 < stringLen(src)) {
+        let a = stringCharCodeAt(src, j);
+        let b = stringCharCodeAt(src, j + 1);
+        if (a == 42 && b == 47) { j = j + 2; found = true; break; }
+        j = j + 1;
+      }
+      if (!found) { panic_at(src, commentStart, "unterminated block comment"); }
+      continue;
+    }
+
+    break;
+  }
+  j
+}
+
+fn starts_with_at(src: String, i: I32, lit: String) : Bool => {
+  // compare bytewise
+  let mut j = 0;
+  while (j < stringLen(lit)) {
+    if (i + j >= stringLen(src)) { yield false; }
+    if (stringCharCodeAt(src, i + j) != stringCharCodeAt(lit, j)) { yield false; }
+    j = j + 1;
+  }
+  true
+}

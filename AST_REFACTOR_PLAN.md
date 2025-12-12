@@ -47,6 +47,13 @@ Acceptance criteria:
 
 Goal: Reduce the monolith without changing semantics.
 
+Status: in progress.
+
+Initial extractions:
+
+- `src/main/tuff/compiler/diagnostics.tuff` — diagnostics helpers + per-file mutable state
+- `src/main/tuff/compiler/lexing.tuff` — whitespace/comment skipping + ASCII predicates
+
 Extract into focused modules (names approximate):
 
 - `diagnostics.tuff` (panic_at, line/col, warnings)

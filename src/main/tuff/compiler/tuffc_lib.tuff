@@ -16,11 +16,24 @@ extern from rt::stdlib use { println, panic, readTextFile, writeTextFile, pathDi
 
 extern from rt::vec use { vec_new, vec_len, vec_push, vec_get };
 
-// Current file label for error messages (used by panic_at).
-let mut __tuffc_current_file = "<input>";
+from diagnostics use {
+  set_current_file,
+  panic_at,
+  reset_struct_defs,
+  add_struct_def,
+  find_struct_fields,
+  is_identifier_too_short,
+  warn_short_identifier
+};
 
-// Struct definitions for struct literals (reset per file compilation).
-let mut __tuffc_struct_defs = vec_new();
+from lexing use {
+  is_digit,
+  is_space,
+  is_ident_start,
+  is_ident_part,
+  skip_ws,
+  starts_with_at
+};
 
 // Tiny record type used to return two values from parsing helpers.
 class fn ParsedNumber(value: String, nextPos: I32) => {}
@@ -34,167 +47,6 @@ class fn ParsedType(v0: String, v1: I32) => {}
 class fn ParsedImports(v0: String, v1: I32) => {}
 class fn ParsedFn(v0: String, v1: String, v2: I32) => {}
 class fn ParsedModule(v0: String, v1: I32) => {}
-class fn LineCol(line: I32, col: I32) => {}
-class fn StructDef(name: String, fields: Vec<String>) => {} // name, fields(vec)
-
-// Diagnostics helpers
-fn set_current_file(path: String) : Void => {
-  __tuffc_current_file = path;
-}
-
-fn spaces(n: I32) : String => {
-  let mut s = "";
-  let mut i: I32 = 0;
-  while (i < n) {
-    s = s + " ";
-    i = i + 1;
-  }
-  s
-}
-
-fn line_col_at(src: String, i: I32) : LineCol => {
-  let mut line: I32 = 1;
-  let mut col: I32 = 1;
-  let mut p: I32 = 0;
-  let mut limit: I32 = i;
-  if (limit > stringLen(src)) { limit = stringLen(src); }
-  while (p < limit) {
-    let ch: I32 = stringCharCodeAt(src, p);
-    if (ch == 10) {
-      line = line + 1;
-      col = 1;
-    } else {
-      col = col + 1;
-    }
-    p = p + 1;
-  }
-  LineCol(line, col)
-}
-
-fn panic_at(src: String, i: I32, msg: String) : Void => {
-  let lc = line_col_at(src, i);
-
-  // Find bounds of the line containing i.
-  let mut pos: I32 = i;
-  if (pos > stringLen(src)) { pos = stringLen(src); }
-
-  let mut ls: I32 = pos;
-  while (ls > 0) {
-    if (stringCharCodeAt(src, ls - 1) == 10) { break; }
-    ls = ls - 1;
-  }
-
-  let mut le: I32 = pos;
-  while (le < stringLen(src)) {
-    if (stringCharCodeAt(src, le) == 10) { break; }
-    le = le + 1;
-  }
-
-  let lineText = stringSlice(src, ls, le);
-  let header = __tuffc_current_file + ":" + ("" + lc.line) + ":" + ("" + lc.col) + " error: " + msg;
-  let frame1 = "  | " + lineText;
-  let frame2 = "  | " + spaces(lc.col - 1) + "^";
-  panic(header + "\n" + frame1 + "\n" + frame2);
-}
-
-fn reset_struct_defs() : Void => {
-  __tuffc_struct_defs = vec_new();
-}
-
-fn add_struct_def(name: String, fields: Vec<String>) : Void => {
-  // Disallow duplicate declarations (consistent with no-shadowing ethos).
-  let mut si = 0;
-  while (si < vec_len(__tuffc_struct_defs)) {
-    let d = vec_get(__tuffc_struct_defs, si);
-    if (d.name == name) { panic("duplicate struct: " + name); }
-    si = si + 1;
-  }
-  vec_push(__tuffc_struct_defs, StructDef(name, fields));
-}
-
-fn find_struct_fields(name: String) : Vec<String> => {
-  let mut si = 0;
-  while (si < vec_len(__tuffc_struct_defs)) {
-    let d = vec_get(__tuffc_struct_defs, si);
-    if (d.name == name) { yield d.fields; }
-    si = si + 1;
-  }
-  panic("unknown struct: " + name)
-}
-
-// Identifier quality checks
-fn is_identifier_too_short(text: String) : Bool => {
-  stringLen(text) <= 2
-}
-
-fn warn_short_identifier(src: String, startPos: I32, name: String) : Void => {
-  let lc = line_col_at(src, startPos);
-  println(__tuffc_current_file + ":" + ("" + lc.line) + ":" + ("" + lc.col) + " warning: identifier '" + name + "' is too short (2 chars or less); consider a more descriptive name");
-}
-
-// Utility: ASCII checks
-fn is_digit(code: I32) : Bool => { code >= 48 && code <= 57 }
-fn is_space(code: I32) : Bool => { code == 32 || code == 10 || code == 9 || code == 13 }
-fn is_alpha(code: I32) : Bool => { (code >= 65 && code <= 90) || (code >= 97 && code <= 122) }
-fn is_ident_start(code: I32) : Bool => { is_alpha(code) || code == 95 }
-fn is_ident_part(code: I32) : Bool => { is_ident_start(code) || is_digit(code) }
-
-fn skip_ws(src: String, i: I32) : I32 => {
-  let mut j = i;
-  while (j < stringLen(src)) {
-    // skip whitespace
-    while (j < stringLen(src)) {
-      let c = stringCharCodeAt(src, j);
-      if (!is_space(c)) { break; }
-      j = j + 1;
-    }
-
-    if (!(j + 1 < stringLen(src))) { yield j; }
-
-    let c0 = stringCharCodeAt(src, j);
-    let c1 = stringCharCodeAt(src, j + 1);
-
-    // line comment: // ... \n
-    if (c0 == 47 && c1 == 47) {
-      j = j + 2;
-      while (j < stringLen(src)) {
-        let c = stringCharCodeAt(src, j);
-        if (c == 10) { break; }
-        j = j + 1;
-      }
-      continue;
-    }
-
-    // block comment: /* ... */ (non-nested for now)
-    if (c0 == 47 && c1 == 42) {
-      let commentStart = j;
-      j = j + 2;
-      let mut found = false;
-      while (j + 1 < stringLen(src)) {
-        let a = stringCharCodeAt(src, j);
-        let b = stringCharCodeAt(src, j + 1);
-        if (a == 42 && b == 47) { j = j + 2; found = true; break; }
-        j = j + 1;
-      }
-      if (!found) { panic_at(src, commentStart, "unterminated block comment"); }
-      continue;
-    }
-
-    break;
-  }
-  j
-}
-
-fn starts_with_at(src: String, i: I32, lit: String) : Bool => {
-  // compare bytewise
-  let mut j = 0;
-  while (j < stringLen(lit)) {
-    if (i + j >= stringLen(src)) { yield false; }
-    if (stringCharCodeAt(src, i + j) != stringCharCodeAt(lit, j)) { yield false; }
-    j = j + 1;
-  }
-  true
-}
 
 fn parse_keyword(src: String, i: I32, lit: String) : I32 => {
   let j = skip_ws(src, i);
