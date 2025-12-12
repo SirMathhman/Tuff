@@ -45,7 +45,7 @@ describe("selfhost", () => {
     const tinyOut = resolve(outDir, "tiny.mjs");
     await writeFile(
       tinyIn,
-      "fn main() => { let mut x = 0; while (x < 3) { x = x + 1; } let mut r = 0; if (x == 3) { r = x; } else { r = 0; } r }\n",
+      "fn inc(x) => x + 1\nfn isThree(x) => x == 3\nfn main() => { let mut x = 0; while (x < 3) { x = inc(x); } let mut r = 0; if (isThree(x)) { r = x; } else { r = 0; } r }\n",
       "utf8"
     );
 
