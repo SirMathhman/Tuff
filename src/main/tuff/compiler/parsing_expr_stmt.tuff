@@ -43,6 +43,7 @@ from ast use {
   expr_string,
   expr_ident,
   expr_path,
+  expr_struct_lit,
   expr_unary,
   expr_binary,
   expr_call,
@@ -606,21 +607,9 @@ fn parse_primary_ast(src: String, i: I32) : ParsedExprAst => {
     // Struct literal: Name { <expr>, ... }
     let t2 = skip_ws(src, k);
     if (t2 < stringLen(src) && stringCharCodeAt(src, t2) == 123) {
-      // Phase3 note: struct literals are still lowered in the JS emitter using struct field order.
-      // We represent them as a call-like form: __struct_lit(NameParts, values...)
-      // For now, keep behavior by parsing as a block expression that returns an object literal in emitter.
-      // (Emitter-side lookup uses diagnostics::find_struct_fields.)
-      // We encode it as a path expression and attach a synthetic call in emitter by using ECall with a special callee.
-      // This keeps canonical AST smaller for now.
       let vals = parse_struct_lit_values_ast(src, t2);
       let nameExpr = expr_path(span(j, k), parts);
-      let mut args = vec_new();
-      vec_push(args, nameExpr);
-      // append values
-      let mut vi = 0;
-      while (vi < vec_len(vals.items)) { vec_push(args, vec_get(vals.items, vi)); vi = vi + 1; }
-      let callee = expr_ident(span(j, j), "__tuff_struct_lit");
-      yield ParsedExprAst(expr_call(span(j, vals.nextPos), callee, args), vals.nextPos);
+      yield ParsedExprAst(expr_struct_lit(span(j, vals.nextPos), nameExpr, vals.items), vals.nextPos);
     }
 
     // Plain identifier or module path

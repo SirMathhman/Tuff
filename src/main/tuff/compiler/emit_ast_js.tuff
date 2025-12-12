@@ -138,6 +138,10 @@ fn emit_expr_js(e) : String => {
 
   if (e.tag == "EPath") { out = emit_path_js(e.parts); }
 
+  if (e.tag == "EStructLit") {
+    out = emit_struct_lit_js(e.nameExpr, e.values);
+  }
+
   if (e.tag == "EUnary") {
     out = "(" + emit_unop_js(e.op) + emit_expr_js(e.expr) + ")";
   }
@@ -147,29 +151,15 @@ fn emit_expr_js(e) : String => {
   }
 
   if (e.tag == "ECall") {
-    // Special-case: struct literal encoding used by the Phase 3 parser.
-    // __tuff_struct_lit(<NameExpr>, <v0>, <v1>, ...)
-    if (e.callee.tag == "EIdent" && e.callee.name == "__tuff_struct_lit") {
-      if (vec_len(e.args) < 1) { panic("__tuff_struct_lit expects at least a name"); }
-      let nameExpr = vec_get(e.args, 0);
-      let values = vec_new();
-      let mut i = 1;
-      while (i < vec_len(e.args)) {
-        vec_push(values, vec_get(e.args, i));
-        i = i + 1;
-      }
-      out = emit_struct_lit_js(nameExpr, values);
-    } else {
-      let mut s = emit_expr_js(e.callee) + "(";
-      let mut i = 0;
-      while (i < vec_len(e.args)) {
-        if (i > 0) { s = s + ", "; }
-        s = s + emit_expr_js(vec_get(e.args, i));
-        i = i + 1;
-      }
-      s = s + ")";
-      out = s;
+    let mut s = emit_expr_js(e.callee) + "(";
+    let mut i = 0;
+    while (i < vec_len(e.args)) {
+      if (i > 0) { s = s + ", "; }
+      s = s + emit_expr_js(vec_get(e.args, i));
+      i = i + 1;
     }
+    s = s + ")";
+    out = s;
   }
 
   if (e.tag == "EIf") {

@@ -104,6 +104,8 @@ Acceptance criteria:
 - Phase 5b (later): **C emitter**.
 - Phase 5c (later): **Tuff emitter** (enables deeper self-hosting).
 
+Status: in progress (JS emitter now handles struct literals via a first-class AST node; removed the `__tuff_struct_lit` pseudo-builtin path).
+
 Acceptance criteria:
 
 - JS emitter becomes the default path.

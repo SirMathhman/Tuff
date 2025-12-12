@@ -90,9 +90,6 @@ fn lookup_binding(src: String, pos: I32, scopes, depth: I32, name: String) : Bin
 }
 
 fn require_name(src: String, pos: I32, scopes, depth: I32, name: String) : Void => {
-  // Internal lowering helper: struct literals are encoded as calls to a pseudo-builtin.
-  if (name == "__tuff_struct_lit") { yield; }
-
   // The current bootstrap subset still parses `true`/`false` as identifiers.
   // Treat them as built-in literals so the analyzer doesn't reject valid code.
   if (name == "true") { yield; }
@@ -164,6 +161,16 @@ fn analyze_expr(src: String, scopes, depth: I32, e) : Void => {
     yield;
   }
 
+  if (e.tag == "EStructLit") {
+    // nameExpr is a struct name marker (ident/path), not a runtime value.
+    let mut vi = 0;
+    while (vi < vec_len(e.values)) {
+      analyze_expr(src, scopes, depth, vec_get(e.values, vi));
+      vi = vi + 1;
+    }
+    yield;
+  }
+
   if (e.tag == "EUnary") {
     analyze_expr(src, scopes, depth, e.expr);
     yield;
@@ -176,19 +183,6 @@ fn analyze_expr(src: String, scopes, depth: I32, e) : Void => {
   }
 
   if (e.tag == "ECall") {
-    // __tuff_struct_lit(<NameExpr>, <v0>, <v1>, ...)
-    // The first argument is a struct name marker (EIdent/EPath), not a runtime
-    // value that must be declared.
-    if (e.callee.tag == "EIdent" && e.callee.name == "__tuff_struct_lit") {
-      analyze_expr(src, scopes, depth, e.callee);
-      let mut ai = 1;
-      while (ai < vec_len(e.args)) {
-        analyze_expr(src, scopes, depth, vec_get(e.args, ai));
-        ai = ai + 1;
-      }
-      yield;
-    }
-
     analyze_expr(src, scopes, depth, e.callee);
     let mut ai = 0;
     while (ai < vec_len(e.args)) {

@@ -77,6 +77,7 @@ type Expr =
   | EString
   | EPath
   | EIdent
+  | EStructLit
   | EUnary
   | EBinary
   | ECall
@@ -116,6 +117,18 @@ struct EIdent {
   tag: String,
   span: Span,
   name: String
+}
+
+// Struct literal. The parser keeps this as a dedicated node so the emitter
+// doesn't need to recognize pseudo-builtins.
+//
+// Note: The bootstrap subset uses positional values (not named fields); the
+// JS emitter consults `diagnostics::find_struct_fields` for field order.
+struct EStructLit {
+  tag: String,
+  span: Span,
+  nameExpr: Expr,
+  values: Vec<Expr>
 }
 
 // Canonical module/namespace path, e.g. `Math::add`.
@@ -438,6 +451,8 @@ fn expr_bool(span: Span, value: Bool) : Expr => EBool { "EBool", span, value }
 fn expr_string(span: Span, value: String) : Expr => EString { "EString", span, value }
 fn expr_ident(span: Span, name: String) : Expr => EIdent { "EIdent", span, name }
 fn expr_path(span: Span, parts: Vec<String>) : Expr => EPath { "EPath", span, parts }
+
+fn expr_struct_lit(span: Span, nameExpr: Expr, values: Vec<Expr>) : Expr => EStructLit { "EStructLit", span, nameExpr, values }
 
 fn expr_unary(span: Span, op: UnOp, expr: Expr) : Expr => EUnary { "EUnary", span, op, expr }
 fn expr_binary(span: Span, op: BinOp, left: Expr, right: Expr) : Expr => EBinary { "EBinary", span, op, left, right }
