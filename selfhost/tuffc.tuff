@@ -22,6 +22,8 @@ class fn ParsedBool(v0, v1) => {}
 class fn ParsedStmt(v0, v1) => {}
 class fn ParsedParams(v0, v1) => {}
 class fn ParsedImports(v0, v1) => {}
+class fn ParsedFn(v0, v1, v2) => {}
+class fn ParsedModule(v0, v1) => {}
 
 // Utility: ASCII checks
 fn is_digit(code) => { code >= 48 && code <= 57 }
@@ -355,17 +357,23 @@ fn parse_match_expr(src, i) => {
     if (!(k < stringLen(src))) { panic("expected '}'"); }
     if (stringCharCodeAt(src, k) == 125) { k = k + 1; break; }
 
-    // pattern: number | _
+    // pattern: number | string | true/false | _
     let mut pat = "";
     let c0 = stringCharCodeAt(src, k);
-    if (is_digit(c0)) {
-      let n = parse_number(src, k);
-      pat = "" + n.v0;
-      k = n.v1;
+    if (c0 == 34) { // string
+      let lit = parse_primary(src, k);
+      pat = lit.v0;
+      k = lit.v1;
     } else {
-      let id = parse_ident(src, k);
-      pat = id.v0;
-      k = id.v1;
+      if (is_digit(c0)) {
+        let n = parse_number(src, k);
+        pat = "" + n.v0;
+        k = n.v1;
+      } else {
+        let id = parse_ident(src, k);
+        pat = id.v0;
+        k = id.v1;
+      }
     }
 
     k = parse_keyword(src, k, "=>");
@@ -374,6 +382,10 @@ fn parse_match_expr(src, i) => {
     let t = skip_ws(src, k);
     let arm = if (t < stringLen(src) && stringCharCodeAt(src, t) == 123) parse_block_expr(src, k) else parse_expr(src, k);
     k = arm.v1;
+
+    if (!(pat == "_" || pat == "true" || pat == "false" || is_digit(stringCharCodeAt(pat, 0)) || (stringLen(pat) > 0 && stringCharCodeAt(pat, 0) == 34))) {
+      panic("unsupported match pattern: " + pat);
+    }
 
     if (pat == "_") {
       def = arm.v0;
@@ -393,6 +405,75 @@ fn parse_match_expr(src, i) => {
   if (def == "") { panic("match requires _ arm"); }
 
   ParsedExpr("(() => { switch (" + scrut.v0 + ") {\n" + cases + "default: return " + def + ";\n} })()", k)
+}
+
+fn parse_fn_decl_named(src, i, jsName, exportThis) => {
+  let mut k = parse_keyword(src, i, "fn");
+  let name = parse_ident(src, k);
+  k = name.v1;
+  let params = parse_param_list(src, k);
+  k = params.v1;
+  k = parse_keyword(src, k, "=>");
+  let body = parse_main_body(src, k);
+  k = body.v1;
+
+  let exportKw = if (exportThis) "export " else "";
+  let js = exportKw + "function " + jsName + "(" + params.v0 + ") {\n" + body.body + "return " + body.expr + ";\n}\n";
+  ParsedFn(js, k, name.v0)
+}
+
+fn parse_module_decl(src, i, prefix, exportTop) => {
+  // module Name { (fn ... | module ...)* }
+  let mut k = parse_keyword(src, i, "module");
+  let modName = parse_ident(src, k);
+  k = modName.v1;
+  k = parse_keyword(src, k, "{");
+
+  let mut decls = "";
+  let mut entries = "";
+  let mut first = true;
+
+  while (true) {
+    let t = skip_ws(src, k);
+    if (!(t < stringLen(src))) { panic("expected '}'"); }
+    if (stringCharCodeAt(src, t) == 125) { k = t + 1; break; }
+
+    if (starts_with_at(src, t, "fn")) {
+      let fnParsed = parse_fn_decl_named(src, k, prefix + "__" + modName.v0 + "__" + "fn" + "__" + "tmp", false);
+      // we emitted with a temp name; re-emit with stable js name including function name
+      // (parse again from the same start)
+      let fn2 = parse_fn_decl_named(src, k, prefix + "__" + modName.v0 + "__" + fnParsed.v2, false);
+      decls = decls + fn2.v0;
+      if (first) { entries = entries + (fn2.v2 + ": " + (prefix + "__" + modName.v0 + "__" + fn2.v2)); }
+      else { entries = entries + (", " + fn2.v2 + ": " + (prefix + "__" + modName.v0 + "__" + fn2.v2)); }
+      first = false;
+      k = fn2.v1;
+      continue;
+    }
+
+    if (starts_with_at(src, t, "module")) {
+      let inner = parse_module_decl(src, k, prefix + "__" + modName.v0, false);
+      decls = decls + inner.v0;
+      // inner module exports as const with its own name; include it as property
+      // since `exportTop` is false here, inner will be `const <Inner> = {...}`
+      // and we reference that name.
+      let innerName = parse_ident(src, parse_keyword(src, k, "module"));
+      // NOTE: parse_ident above is safe since parse_module_decl already parsed it; this is a tiny hack to recover name.
+      let prop = innerName.v0;
+      if (first) { entries = entries + (prop + ": " + prop); }
+      else { entries = entries + (", " + prop + ": " + prop); }
+      first = false;
+      k = inner.v1;
+      continue;
+    }
+
+    panic("expected fn or module inside module")
+  }
+
+  let obj = "{ " + entries + " }";
+  let header = if (exportTop) "export const " else "const ";
+  let code = decls + header + modName.v0 + " = " + obj + ";\n";
+  ParsedStmt(code, k)
 }
 
 fn parse_imports(src, i) => {
@@ -650,6 +731,15 @@ fn compile_tiny2(src, requireMain, exportAll) => {
   let imps = parse_imports(src, i);
   out = out + imps.v0;
   i = imps.v1;
+
+  // zero or more module declarations
+  while (true) {
+    let j = skip_ws(src, i);
+    if (!starts_with_at(src, j, "module")) { break; }
+    let m = parse_module_decl(src, i, "M", true);
+    out = out + m.v0;
+    i = m.v1;
+  }
 
   // zero or more let statements
   while (true) {

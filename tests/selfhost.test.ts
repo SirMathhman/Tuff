@@ -44,7 +44,7 @@ describe("selfhost", () => {
     const mathIn = resolve(outDir, "math.tuff");
     await writeFile(
       mathIn,
-      "fn add(a, b) => a + b\nfn mul(a, b) => a * b\n",
+      "module Math { fn add(a, b) => a + b fn mul(a, b) => a * b }\n",
       "utf8"
     );
 
@@ -52,7 +52,7 @@ describe("selfhost", () => {
     const tinyOut = resolve(outDir, "tiny.mjs");
     await writeFile(
       tinyIn,
-      "import math;\nfn main() => { let x = math::add(1, 2); let y = if (x == 3) { let t = math::mul(x, 10); t } else { 0 }; let z = match (y) { 0 => 11, 30 => 22, _ => 33 }; z }\n",
+      'import math;\nfn main() => { let x = math::Math::add(1, 2); let y = if (x == 3) { let t = math::Math::mul(x, 10); t } else { 0 }; let z1 = match (y) { 0 => 11, 30 => 22, _ => 33 }; let s = if (z1 == 22) { "ok" } else { "bad" }; let z2 = match (s) { "ok" => 44, _ => 55 }; z2 }\n',
       "utf8"
     );
 
@@ -67,10 +67,11 @@ describe("selfhost", () => {
     expect(emitted).toContain('import * as math from "./math.mjs"');
     const mathOut = resolve(outDir, "math.mjs");
     const emittedMath = await readFile(mathOut, "utf8");
-    expect(emittedMath).toContain("export function add");
-    expect(emittedMath).toContain("export function mul");
+    expect(emittedMath).toContain("export const Math");
+    expect(emittedMath).toContain("add");
+    expect(emittedMath).toContain("mul");
 
     const tinyMod = await import(pathToFileURL(tinyOut).toString());
-    expect(tinyMod.main()).toBe(22);
+    expect(tinyMod.main()).toBe(44);
   });
 });
