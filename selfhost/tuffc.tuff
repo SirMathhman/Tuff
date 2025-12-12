@@ -16,6 +16,9 @@ extern from rt::vec use { vec_new, vec_len, vec_push, vec_get };
 // Current file label for error messages (used by panic_at).
 let mut __tuffc_current_file = "<input>";
 
+// Struct definitions for struct literals (reset per file compilation).
+let mut __tuffc_struct_defs = vec_new();
+
 // Tiny record type used to return two values from parsing helpers.
 class fn ParsedNumber(v0, v1) => {}
 class fn ParsedIdent(v0, v1) => {}
@@ -28,6 +31,7 @@ class fn ParsedImports(v0, v1) => {}
 class fn ParsedFn(v0, v1, v2) => {}
 class fn ParsedModule(v0, v1) => {}
 class fn LineCol(v0, v1) => {}
+class fn StructDef(v0, v1) => {} // name, fields(vec)
 
 // Diagnostics helpers
 fn set_current_file(path) => {
@@ -87,6 +91,31 @@ fn panic_at(src, i, msg) => {
   let frame1 = "  | " + lineText;
   let frame2 = "  | " + spaces(lc.v1 - 1) + "^";
   panic(header + "\n" + frame1 + "\n" + frame2);
+}
+
+fn reset_struct_defs() => {
+  __tuffc_struct_defs = vec_new();
+}
+
+fn add_struct_def(name, fields) => {
+  // Disallow duplicate declarations (consistent with no-shadowing ethos).
+  let mut si = 0;
+  while (si < vec_len(__tuffc_struct_defs)) {
+    let d = vec_get(__tuffc_struct_defs, si);
+    if (d.v0 == name) { panic("duplicate struct: " + name); }
+    si = si + 1;
+  }
+  vec_push(__tuffc_struct_defs, StructDef(name, fields));
+}
+
+fn find_struct_fields(name) => {
+  let mut si = 0;
+  while (si < vec_len(__tuffc_struct_defs)) {
+    let d = vec_get(__tuffc_struct_defs, si);
+    if (d.v0 == name) { yield d.v1; }
+    si = si + 1;
+  }
+  panic("unknown struct: " + name)
 }
 
 // Utility: ASCII checks
@@ -407,6 +436,78 @@ fn parse_arg_list(src, i) => {
   ParsedParams(out, k)
 }
 
+fn skip_angle_brackets(src, i) => {
+  // Skips a possibly-nested '<...>' section. Expects '<' at i (after ws).
+  let mut k = skip_ws(src, i);
+  if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 60)) { // '<'
+    panic_at(src, k, "expected '<'");
+  }
+  k = k + 1;
+  let mut depth = 1;
+  while (k < stringLen(src)) {
+    let ch = stringCharCodeAt(src, k);
+    if (ch == 60) { depth = depth + 1; k = k + 1; continue; } // '<'
+    if (ch == 62) { // '>'
+      depth = depth - 1;
+      k = k + 1;
+      if (depth == 0) { yield k; }
+      continue;
+    }
+    k = k + 1;
+  }
+  panic_at(src, k, "unterminated '<...>'")
+}
+
+fn parse_struct_lit(src, structName, i) => {
+  // Parses: '{' (expr (',' expr)*)? '}' and lowers using struct field order.
+  let fields = find_struct_fields(structName);
+
+  let mut k = skip_ws(src, i);
+  k = parse_keyword(src, k, "{");
+
+  let mut out = "({ ";
+  let mut idx = 0;
+
+  while (true) {
+    k = skip_ws(src, k);
+    if (!(k < stringLen(src))) { panic_at(src, k, "expected '}' in struct literal"); }
+    if (stringCharCodeAt(src, k) == 125) { // '}'
+      if (!(idx == vec_len(fields))) {
+        panic_at(src, k, "wrong number of values in struct literal for " + structName);
+      }
+      yield ParsedExpr(out + " })", k + 1);
+    }
+
+    if (!(idx < vec_len(fields))) {
+      panic_at(src, k, "too many values in struct literal for " + structName);
+    }
+
+    let e = parse_expr(src, k);
+    k = e.v1;
+
+    let fieldName = vec_get(fields, idx);
+    if (idx == 0) { out = out + (fieldName + ": " + e.v0); }
+    else { out = out + (", " + fieldName + ": " + e.v0); }
+    idx = idx + 1;
+
+    k = skip_ws(src, k);
+    if (!(k < stringLen(src))) { panic_at(src, k, "expected ',' or '}' in struct literal"); }
+    let ch = stringCharCodeAt(src, k);
+    if (ch == 44) { // ','
+      k = k + 1;
+      continue;
+    }
+    if (ch == 125) { // '}'
+      // next loop iteration will close and validate
+      continue;
+    }
+    panic_at(src, k, "expected ',' or '}' in struct literal")
+  }
+
+  // unreachable
+  ParsedExpr(out + " })", k)
+}
+
 fn parse_primary(src, i) => {
   let j = skip_ws(src, i);
   if (!(j < stringLen(src))) { panic_at(src, j, "expected expression"); }
@@ -466,6 +567,14 @@ fn parse_primary(src, i) => {
       out = out + "." + next.v0;
       k = next.v1;
     }
+
+    // Struct literal: Name { <expr>, ... }
+    let t2 = skip_ws(src, k);
+    if (t2 < stringLen(src) && stringCharCodeAt(src, t2) == 123) { // '{'
+      let lit = parse_struct_lit(src, out, t2);
+      yield lit;
+    }
+
     yield ParsedExpr(out, k);
   }
   let mut end = j + 32;
@@ -514,7 +623,7 @@ fn parse_block_body(src, i) => {
     if (!(t < stringLen(src))) { panic_at(src, t, "expected '}'"); }
     if (stringCharCodeAt(src, t) == 125) { break; }
 
-    let isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") || starts_with_at(src, t, "yield") || is_assign_stmt_start(src, t) || is_index_assign_stmt_start(src, t);
+    let isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") || starts_with_at(src, t, "yield") || is_field_assign_stmt_start(src, t) || is_assign_stmt_start(src, t) || is_index_assign_stmt_start(src, t);
     if (isStmt) {
       let st = parse_stmt(src, k);
       body = body + st.v0;
@@ -895,6 +1004,117 @@ fn parse_required_semicolon(src, i) => {
   j + 1
 }
 
+fn skip_type_expr(src, i) => {
+  // Skip a type expression in places where we don't need semantics yet.
+  // Stops before ',', ';', or '}' when not inside angle brackets.
+  let mut k = skip_ws(src, i);
+  let mut depth = 0;
+  while (k < stringLen(src)) {
+    let ch = stringCharCodeAt(src, k);
+    if (ch == 60) { depth = depth + 1; k = k + 1; continue; } // '<'
+    if (ch == 62) { // '>'
+      if (depth > 0) { depth = depth - 1; }
+      k = k + 1;
+      continue;
+    }
+    if (depth == 0 && (ch == 44 || ch == 59 || ch == 125)) { yield k; } // ',', ';', '}'
+    k = k + 1;
+  }
+  panic_at(src, k, "unterminated type")
+}
+
+fn parse_struct_decl(src, i) => {
+  // struct Name { field: Type, ... }
+  let mut k = parse_keyword(src, i, "struct");
+  let name = parse_ident(src, k);
+  k = name.v1;
+  k = parse_keyword(src, k, "{");
+
+  let fields = vec_new();
+
+  while (true) {
+    k = skip_ws(src, k);
+    if (!(k < stringLen(src))) { panic_at(src, k, "expected '}'"); }
+    if (stringCharCodeAt(src, k) == 125) { // '}'
+      k = k + 1;
+      break;
+    }
+
+    let field = parse_ident(src, k);
+    k = field.v1;
+    k = parse_keyword(src, k, ":");
+    k = skip_type_expr(src, k);
+
+    vec_push(fields, field.v0);
+
+    k = skip_ws(src, k);
+    if (k < stringLen(src)) {
+      let ch = stringCharCodeAt(src, k);
+      if (ch == 44 || ch == 59) { // ',' or ';'
+        k = k + 1;
+      }
+    }
+  }
+
+  add_struct_def(name.v0, fields);
+  ParsedStmt("", k)
+}
+
+fn parse_type_union_decl(src, i, exportAll) => {
+  // type Name<T, ...> = Variant1<X> | Variant2 | ...;
+  let mut k = parse_keyword(src, i, "type");
+  let _name = parse_ident(src, k);
+  k = _name.v1;
+
+  // optional type params on the alias name
+  let t0 = skip_ws(src, k);
+  if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) { // '<'
+    k = skip_angle_brackets(src, t0);
+  }
+
+  k = parse_keyword(src, k, "=");
+
+  let mut out = "";
+  let mut first = true;
+  while (true) {
+    if (!first) { k = parse_keyword(src, k, "|"); }
+    first = false;
+
+    let v = parse_ident(src, k);
+    let variant = v.v0;
+    k = v.v1;
+
+    let mut hasPayload = false;
+    let t1 = skip_ws(src, k);
+    if (t1 < stringLen(src) && stringCharCodeAt(src, t1) == 60) { // '<'
+      hasPayload = true;
+      k = skip_angle_brackets(src, t1);
+    }
+
+    let header = if (exportAll) "export const " else "const ";
+    if (hasPayload) {
+      out = out + (header + variant + " = (value) => ({ tag: \"" + variant + "\", value });\n");
+    } else {
+      out = out + (header + variant + " = { tag: \"" + variant + "\" };\n");
+    }
+
+    let t2 = skip_ws(src, k);
+    if (!(t2 < stringLen(src))) { yield ParsedStmt(out, k); }
+    let ch = stringCharCodeAt(src, t2);
+    if (ch == 59) { // ';'
+      k = t2 + 1;
+      break;
+    }
+    if (ch == 124) { // '|'
+      // continue parsing variants
+      continue;
+    }
+    panic_at(src, t2, "expected '|' or ';' in union type")
+  }
+
+  ParsedStmt(out, k)
+}
+
 fn parse_mut_opt(src, i) => {
   let j = skip_ws(src, i);
   if (starts_with_at(src, j, "mut")) {
@@ -1005,6 +1225,26 @@ fn parse_stmt(src, i) => {
     yield ParsedStmt(name.v0 + " = " + expr.v0 + ";\n", k);
   }
 
+  // field assignment: <expr>.<field>(.<field>)* = <expr>;
+  if (is_field_assign_stmt_start(src, k)) {
+    let base = parse_ident(src, k);
+    k = base.v1;
+    let mut lhs = base.v0;
+    while (true) {
+      let t = skip_ws(src, k);
+      if (!(t < stringLen(src) && stringCharCodeAt(src, t) == 46)) { break; } // '.'
+      k = parse_keyword(src, k, ".");
+      let part = parse_ident(src, k);
+      lhs = lhs + "." + part.v0;
+      k = part.v1;
+    }
+    k = parse_keyword(src, k, "=");
+    let expr = parse_expr(src, k);
+    k = expr.v1;
+    k = parse_optional_semicolon(src, k);
+    yield ParsedStmt(lhs + " = " + expr.v0 + ";\n", k);
+  }
+
   // index assignment: <ident>[<expr>] = <expr>;
   if (is_index_assign_stmt_start(src, k)) {
     let name = parse_ident(src, k);
@@ -1065,6 +1305,46 @@ fn is_assign_stmt_start(src, i) => {
   true
 }
 
+fn is_field_assign_stmt_start(src, i) => {
+  let mut j = skip_ws(src, i);
+  if (!(j < stringLen(src))) { yield false; }
+  let c0 = stringCharCodeAt(src, j);
+  if (!is_ident_start(c0)) { yield false; }
+  j = j + 1;
+  while (j < stringLen(src)) {
+    let c = stringCharCodeAt(src, j);
+    if (!is_ident_part(c)) { break; }
+    j = j + 1;
+  }
+  j = skip_ws(src, j);
+
+  // require at least one .ident
+  if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 46)) { yield false; }
+
+  while (j < stringLen(src) && stringCharCodeAt(src, j) == 46) {
+    j = j + 1; // '.'
+    j = skip_ws(src, j);
+    if (!(j < stringLen(src))) { yield false; }
+    let c1 = stringCharCodeAt(src, j);
+    if (!is_ident_start(c1)) { yield false; }
+    j = j + 1;
+    while (j < stringLen(src)) {
+      let c = stringCharCodeAt(src, j);
+      if (!is_ident_part(c)) { break; }
+      j = j + 1;
+    }
+    j = skip_ws(src, j);
+  }
+
+  if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 61)) { yield false; }
+  // exclude '==' and '=>'
+  if (j + 1 < stringLen(src)) {
+    let n = stringCharCodeAt(src, j + 1);
+    if (n == 61 || n == 62) { yield false; }
+  }
+  true
+}
+
 fn parse_main_body(src, i) => {
   let j = skip_ws(src, i);
   if (j < stringLen(src) && stringCharCodeAt(src, j) == 123) { // '{'
@@ -1081,9 +1361,14 @@ fn compile_tiny2(src, requireMain, exportAll) => {
   // Parse:
   //   (extern from <mod> use { <idents> };)*
   //   (from <mod> use { <idents> };)*
+  //   (type <ident>(<typeparams>)? = <variants>;)*
+  //   (struct <ident> { <fields> })*
   //   (let <ident> = <expr>;)*
   //   (fn <ident>(<params>) => <expr|block>)*
   let mut i = 0;
+
+  // Reset per-file state.
+  reset_struct_defs();
 
   let mut out = "// compiled by selfhost tuffc\n";
 
@@ -1111,6 +1396,24 @@ fn compile_tiny2(src, requireMain, exportAll) => {
     let m = parse_module_decl(src, i, "M", true);
     out = out + m.v0;
     i = m.v1;
+  }
+
+  // zero or more type / struct declarations
+  while (true) {
+    let j = skip_ws(src, i);
+    if (starts_with_at(src, j, "type")) {
+      let td = parse_type_union_decl(src, i, exportAll);
+      out = out + td.v0;
+      i = td.v1;
+      continue;
+    }
+    if (starts_with_at(src, j, "struct")) {
+      let sd = parse_struct_decl(src, i);
+      out = out + sd.v0;
+      i = sd.v1;
+      continue;
+    }
+    break;
   }
 
   // zero or more let statements
