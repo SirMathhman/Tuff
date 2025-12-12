@@ -1,0 +1,20 @@
+from std::test use { reset, suite, it, expect_eq, summary, status };
+
+from src::main::tuff::compiler::lexing use { roundtrip_with_trivia };
+
+fn main() : I32 => {
+  reset();
+  suite("whitespace + comments roundtrip");
+
+  // Intentionally gnarly spacing + both comment kinds.
+  let src = "fn main() => {  // hi\n  let x = 1; /* block comment */  x }\n";
+  let out = roundtrip_with_trivia(src);
+
+  it(
+    "roundtrips exactly",
+    expect_eq("src", out, src)
+  );
+
+  summary();
+  status()
+}

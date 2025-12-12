@@ -1,9 +1,15 @@
 // Selfhost compiler: lexing-ish helpers (whitespace/comments + ASCII predicates).
 // Extracted from tuffc_lib.tuff as part of Phase 2 (mechanical split).
 
-extern from rt::stdlib use { stringLen, stringCharCodeAt };
+extern from rt::stdlib use { stringLen, stringSlice, stringCharCodeAt };
+
+extern from rt::vec use { vec_new, vec_push, vec_len, vec_get };
 
 from diagnostics use { panic_at };
+
+// Used by whitespace-preserving tooling (formatter/refactors).
+// `tag` is one of: TriviaWhitespace | TriviaLineComment | TriviaBlockComment | Code.
+class fn LexItem(tag: String, startPos: I32, endPos: I32, text: String) => {}
 
 // Utility: ASCII checks
 fn is_digit(code: I32) : Bool => { code >= 48 && code <= 57 }
@@ -68,3 +74,100 @@ fn starts_with_at(src: String, i: I32, lit: String) : Bool => {
   }
   true
 }
+
+// Like `skip_ws`, but *records* whitespace and comments as `LexItem`s.
+// This is a building block for a whitespace-preserving Tuff backend.
+fn skip_ws_collect(src: String, i: I32, items: Any) : I32 => {
+  let mut j = i;
+  while (j < stringLen(src)) {
+    // whitespace
+    if (is_space(stringCharCodeAt(src, j))) {
+      let start = j;
+      while (j < stringLen(src) && is_space(stringCharCodeAt(src, j))) { j = j + 1; }
+      vec_push(items, LexItem("TriviaWhitespace", start, j, stringSlice(src, start, j)));
+      continue;
+    }
+
+    if (!(j + 1 < stringLen(src))) { yield j; }
+    let c0 = stringCharCodeAt(src, j);
+    let c1 = stringCharCodeAt(src, j + 1);
+
+    // line comment: // ... \n
+    if (c0 == 47 && c1 == 47) {
+      let start = j;
+      j = j + 2;
+      while (j < stringLen(src)) {
+        let c = stringCharCodeAt(src, j);
+        if (c == 10) { break; }
+        j = j + 1;
+      }
+      vec_push(items, LexItem("TriviaLineComment", start, j, stringSlice(src, start, j)));
+      continue;
+    }
+
+    // block comment: /* ... */ (non-nested for now)
+    if (c0 == 47 && c1 == 42) {
+      let commentStart = j;
+      let start = j;
+      j = j + 2;
+      let mut found = false;
+      while (j + 1 < stringLen(src)) {
+        let a = stringCharCodeAt(src, j);
+        let b = stringCharCodeAt(src, j + 1);
+        if (a == 42 && b == 47) { j = j + 2; found = true; break; }
+        j = j + 1;
+      }
+      if (!found) { panic_at(src, commentStart, "unterminated block comment"); }
+      vec_push(items, LexItem("TriviaBlockComment", start, j, stringSlice(src, start, j)));
+      continue;
+    }
+
+    break;
+  }
+  j
+}
+
+// Lossless-ish scan: alternates trivia and "Code" segments.
+// Today it doesn't split code into tokens yet; it preserves the original bytes.
+fn lex_items_with_trivia(src: String) : Any => {
+  let items = vec_new();
+  let mut i = 0;
+  while (i < stringLen(src)) {
+    // Collect any trivia starting at i.
+    let j = skip_ws_collect(src, i, items);
+    if (j != i) { i = j; continue; }
+
+    // Collect a maximal code segment until the next trivia start.
+    let start = i;
+    let mut k = i;
+    while (k < stringLen(src)) {
+      let c = stringCharCodeAt(src, k);
+      if (is_space(c)) { break; }
+      if (c == 47 && k + 1 < stringLen(src)) {
+        let d = stringCharCodeAt(src, k + 1);
+        if (d == 47 || d == 42) { break; }
+      }
+      k = k + 1;
+    }
+    if (k == start) {
+      // Safety net: emit at least one char to avoid infinite loops.
+      k = start + 1;
+    }
+    vec_push(items, LexItem("Code", start, k, stringSlice(src, start, k)));
+    i = k;
+  }
+  items
+}
+
+fn emit_lex_items(items: Any) : String => {
+  let mut out = "";
+  let mut i = 0;
+  while (i < vec_len(items)) {
+    out = out + vec_get(items, i).text;
+    i = i + 1;
+  }
+  out
+}
+
+// Public API for tests/tools: should return `src` exactly.
+fn roundtrip_with_trivia(src: String) : String => emit_lex_items(lex_items_with_trivia(src))
