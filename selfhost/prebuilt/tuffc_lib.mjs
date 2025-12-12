@@ -629,6 +629,46 @@ if ((c == 123)) {
 const be = parse_block_expr(src, j);
 return be;
 }
+if ((c == 39)) {
+const start = j;
+let k = (j + 1);
+if ((!((k < stringLen(src))))) {
+panic_at(src, start, "unterminated char literal");
+}
+let code = 0;
+const ch0 = stringCharCodeAt(src, k);
+if ((ch0 == 92)) {
+k = (k + 1);
+if ((!((k < stringLen(src))))) {
+panic_at(src, start, "unterminated char escape");
+}
+const esc = stringCharCodeAt(src, k);
+code = (() => { switch (esc) {
+case 110: return 10;
+case 114: return 13;
+case 116: return 9;
+case 48: return 0;
+case 92: return 92;
+case 39: return 39;
+case 34: return 34;
+default: return (() => {
+panic_at(src, k, "unknown char escape");
+return 0;
+})();
+} })();
+k = (k + 1);
+} else {
+code = ch0;
+k = (k + 1);
+}
+if ((!((k < stringLen(src))))) {
+panic_at(src, start, "unterminated char literal");
+}
+if ((stringCharCodeAt(src, k) != 39)) {
+panic_at(src, start, "char literal must contain exactly one character");
+}
+return ParsedExpr(("" + code), (k + 1));
+}
 if ((c == 34)) {
 const start = j;
 let k = (j + 1);

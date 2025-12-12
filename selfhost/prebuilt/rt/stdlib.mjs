@@ -76,3 +76,37 @@ export function stringCharCodeAt(s, index) {
 export function stringFromCharCode(code) {
   return String.fromCharCode(code);
 }
+
+// ---- Map helpers ----
+
+export function map_new() {
+  return new Map();
+}
+
+export function map_get(m, key) {
+  return m.get(key);
+}
+
+export function map_set(m, key, value) {
+  m.set(key, value);
+}
+
+export function map_has(m, key) {
+  return m.has(key);
+}
+
+export function map_delete(m, key) {
+  return m.delete(key);
+}
+
+export function map_size(m) {
+  return m.size;
+}
+
+export function map_keys(m) {
+  return Array.from(m.keys());
+}
+
+export function map_values(m) {
+  return Array.from(m.values());
+}

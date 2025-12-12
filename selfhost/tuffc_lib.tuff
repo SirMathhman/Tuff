@@ -590,6 +590,43 @@ fn parse_primary(src: String, i: I32) : ParsedExpr => {
     let be = parse_block_expr(src, j);
     yield be;
   }
+  if (c == 39) { // '\''
+    // Char literal: '\'' <char-or-escape> '\''
+    // Lowered to a numeric code point for JS emission.
+    let start = j;
+    let mut k = j + 1;
+    if (!(k < stringLen(src))) { panic_at(src, start, "unterminated char literal"); }
+
+    let mut code: I32 = 0;
+    let ch0 = stringCharCodeAt(src, k);
+    if (ch0 == 92) { // '\\'
+      // Escape sequence.
+      k = k + 1;
+      if (!(k < stringLen(src))) { panic_at(src, start, "unterminated char escape"); }
+      let esc = stringCharCodeAt(src, k);
+      code = match (esc) {
+        110 => 10, // 'n'
+        114 => 13, // 'r'
+        116 => 9, // 't'
+        48 => 0, // '0'
+        92 => 92, // '\\'
+        39 => 39, // '\''
+        34 => 34, // '"'
+        _ => { panic_at(src, k, "unknown char escape"); 0 }
+      };
+      k = k + 1;
+    } else {
+      // Single character.
+      code = ch0;
+      k = k + 1;
+    }
+
+    if (!(k < stringLen(src))) { panic_at(src, start, "unterminated char literal"); }
+    if (stringCharCodeAt(src, k) != 39) {
+      panic_at(src, start, "char literal must contain exactly one character");
+    }
+    yield ParsedExpr("" + code, k + 1);
+  }
   if (c == 34) { // '"'
     let start = j;
     let mut k = j + 1;
