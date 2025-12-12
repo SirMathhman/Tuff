@@ -13,6 +13,9 @@ extern from rt::stdlib use { println, panic, readTextFile, writeTextFile, pathDi
 
 extern from rt::vec use { vec_new, vec_len, vec_push, vec_get };
 
+// Current file label for error messages (used by panic_at).
+let mut __tuffc_current_file = "<input>";
+
 // Tiny record type used to return two values from parsing helpers.
 class fn ParsedNumber(v0, v1) => {}
 class fn ParsedIdent(v0, v1) => {}
@@ -24,6 +27,67 @@ class fn ParsedParams(v0, v1) => {}
 class fn ParsedImports(v0, v1) => {}
 class fn ParsedFn(v0, v1, v2) => {}
 class fn ParsedModule(v0, v1) => {}
+class fn LineCol(v0, v1) => {}
+
+// Diagnostics helpers
+fn set_current_file(path) => {
+  __tuffc_current_file = path;
+}
+
+fn spaces(n) => {
+  let mut s = "";
+  let mut i = 0;
+  while (i < n) {
+    s = s + " ";
+    i = i + 1;
+  }
+  s
+}
+
+fn line_col_at(src, i) => {
+  let mut line = 1;
+  let mut col = 1;
+  let mut p = 0;
+  let mut limit = i;
+  if (limit > stringLen(src)) { limit = stringLen(src); }
+  while (p < limit) {
+    let ch = stringCharCodeAt(src, p);
+    if (ch == 10) {
+      line = line + 1;
+      col = 1;
+    } else {
+      col = col + 1;
+    }
+    p = p + 1;
+  }
+  LineCol(line, col)
+}
+
+fn panic_at(src, i, msg) => {
+  let lc = line_col_at(src, i);
+
+  // Find bounds of the line containing i.
+  let mut pos = i;
+  if (pos > stringLen(src)) { pos = stringLen(src); }
+
+  let mut ls = pos;
+  while (ls > 0) {
+    if (stringCharCodeAt(src, ls - 1) == 10) { break; }
+    ls = ls - 1;
+  }
+
+  let mut le = pos;
+  while (le < stringLen(src)) {
+    if (stringCharCodeAt(src, le) == 10) { break; }
+    le = le + 1;
+  }
+
+  let lineText = stringSlice(src, ls, le);
+  let header = __tuffc_current_file + ":" + ("" + lc.v0) + ":" + ("" + lc.v1) + " error: " + msg;
+  let frame1 = "  | " + lineText;
+  let frame2 = "  | " + spaces(lc.v1 - 1) + "^";
+  panic(header + "\n" + frame1 + "\n" + frame2);
+}
 
 // Utility: ASCII checks
 fn is_digit(code) => { code >= 48 && code <= 57 }
@@ -60,13 +124,16 @@ fn skip_ws(src, i) => {
 
     // block comment: /* ... */ (non-nested for now)
     if (c0 == 47 && c1 == 42) {
+      let commentStart = j;
       j = j + 2;
+      let mut found = false;
       while (j + 1 < stringLen(src)) {
         let a = stringCharCodeAt(src, j);
         let b = stringCharCodeAt(src, j + 1);
-        if (a == 42 && b == 47) { j = j + 2; break; }
+        if (a == 42 && b == 47) { j = j + 2; found = true; break; }
         j = j + 1;
       }
+      if (!found) { panic_at(src, commentStart, "unterminated block comment"); }
       continue;
     }
 
@@ -91,7 +158,7 @@ fn parse_keyword(src, i, lit) => {
   if (!starts_with_at(src, j, lit)) {
     let mut end = j + 16;
     if (end > stringLen(src)) { end = stringLen(src); }
-    panic("expected keyword: " + lit + " but got '" + stringSlice(src, j, end) + "'");
+    panic_at(src, j, "expected keyword: " + lit + " but got '" + stringSlice(src, j, end) + "'");
   }
   j + stringLen(lit)
 }
@@ -108,16 +175,16 @@ fn parse_number(src, i) => {
     j = j + 1;
   }
   if (!saw) {
-    panic("expected number");
+    panic_at(src, j, "expected number");
   }
   ParsedNumber(acc, j)
 }
 
 fn parse_ident(src, i) => {
   let mut j = skip_ws(src, i);
-  if (!(j < stringLen(src))) { panic("expected identifier"); }
+  if (!(j < stringLen(src))) { panic_at(src, j, "expected identifier"); }
   let c0 = stringCharCodeAt(src, j);
-  if (!is_ident_start(c0)) { panic("expected identifier"); }
+  if (!is_ident_start(c0)) { panic_at(src, j, "expected identifier"); }
   let start = j;
   j = j + 1;
   while (j < stringLen(src)) {
@@ -136,7 +203,7 @@ fn parse_module_path(src, i) => {
     if (is_space(c) || c == 59) { break; }
     j = j + 1;
   }
-  if (start == j) { panic("expected module path"); }
+  if (start == j) { panic_at(src, j, "expected module path"); }
   ParsedIdent(stringSlice(src, start, j), j)
 }
 
@@ -308,7 +375,7 @@ fn parse_arg_list(src, i) => {
     first = false;
 
     k = skip_ws(src, k);
-    if (!(k < stringLen(src))) { panic("expected ')' in arg list"); }
+    if (!(k < stringLen(src))) { panic_at(src, k, "expected ')' in arg list"); }
     let c = stringCharCodeAt(src, k);
     if (c == 44) { // ','
       k = k + 1;
@@ -317,7 +384,7 @@ fn parse_arg_list(src, i) => {
     if (c == 41) { // ')'
       yield ParsedParams(out, k + 1);
     }
-    panic("expected ',' or ')' in arg list")
+    panic_at(src, k, "expected ',' or ')' in arg list")
   }
 
   // unreachable
@@ -326,7 +393,7 @@ fn parse_arg_list(src, i) => {
 
 fn parse_primary(src, i) => {
   let j = skip_ws(src, i);
-  if (!(j < stringLen(src))) { panic("expected expression"); }
+  if (!(j < stringLen(src))) { panic_at(src, j, "expected expression"); }
   let c = stringCharCodeAt(src, j);
   if (starts_with_at(src, j, "if")) {
     let ie = parse_if_expr(src, j);
@@ -353,17 +420,17 @@ fn parse_primary(src, i) => {
       if (ch == 92) { // '\\'
         k = k + 1;
         if (k < stringLen(src)) { k = k + 1; continue; }
-        panic("unterminated string");
+        panic_at(src, start, "unterminated string");
       }
       k = k + 1;
     }
-    panic("unterminated string");
+    panic_at(src, start, "unterminated string");
   }
   if (c == 40) { // '('
     let inner = parse_expr(src, j + 1);
     let k = skip_ws(src, inner.v1);
     if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 41)) { // ')'
-      panic("expected ')'");
+      panic_at(src, k, "expected ')'");
     }
     yield ParsedExpr("(" + inner.v0 + ")", k + 1);
   }
@@ -387,7 +454,7 @@ fn parse_primary(src, i) => {
   }
   let mut end = j + 32;
   if (end > stringLen(src)) { end = stringLen(src); }
-  panic("expected expression near '" + stringSlice(src, j, end) + "'")
+  panic_at(src, j, "expected expression near '" + stringSlice(src, j, end) + "'")
 }
 
 fn parse_vec_lit(src, i) => {
@@ -404,7 +471,7 @@ fn parse_vec_lit(src, i) => {
     k = e.v1;
     pushes = pushes + ("vec_push(__v, " + e.v0 + ");\n");
     k = skip_ws(src, k);
-    if (!(k < stringLen(src))) { panic("expected ']' in vec literal"); }
+    if (!(k < stringLen(src))) { panic_at(src, k, "expected ']' in vec literal"); }
     let ch = stringCharCodeAt(src, k);
     if (ch == 44) { // ','
       k = k + 1;
@@ -413,7 +480,7 @@ fn parse_vec_lit(src, i) => {
     if (ch == 93) { // ']'
       yield ParsedExpr("(() => { const __v = vec_new();\n" + pushes + "return __v;\n})()", k + 1);
     }
-    panic("expected ',' or ']' in vec literal")
+    panic_at(src, k, "expected ',' or ']' in vec literal")
   }
   // unreachable
   ParsedExpr("None", k)
@@ -421,14 +488,14 @@ fn parse_vec_lit(src, i) => {
 
 fn parse_block_body(src, i) => {
   let j = skip_ws(src, i);
-  if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 123)) { panic("expected '{'"); }
+  if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 123)) { panic_at(src, j, "expected '{'"); }
 
   let mut k = j + 1;
   let mut body = "";
 
   while (true) {
     let t = skip_ws(src, k);
-    if (!(t < stringLen(src))) { panic("expected '}'"); }
+    if (!(t < stringLen(src))) { panic_at(src, t, "expected '}'"); }
     if (stringCharCodeAt(src, t) == 125) { break; }
 
     let isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") || starts_with_at(src, t, "yield") || is_assign_stmt_start(src, t) || is_index_assign_stmt_start(src, t);
@@ -464,7 +531,7 @@ fn parse_block_body(src, i) => {
 
   let tail = parse_expr(src, k);
   k = skip_ws(src, tail.v1);
-  if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 125)) { panic("expected '}'"); }
+  if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 125)) { panic_at(src, k, "expected '}'"); }
   ParsedMain(body, tail.v0, k + 1)
 }
 
@@ -501,7 +568,7 @@ fn parse_match_expr(src, i) => {
 
   while (true) {
     k = skip_ws(src, k);
-    if (!(k < stringLen(src))) { panic("expected '}'"); }
+    if (!(k < stringLen(src))) { panic_at(src, k, "expected '}'"); }
     if (stringCharCodeAt(src, k) == 125) { k = k + 1; break; }
 
     // pattern: number | string | true/false | _
@@ -531,7 +598,7 @@ fn parse_match_expr(src, i) => {
     k = arm.v1;
 
     if (!(pat == "_" || pat == "true" || pat == "false" || is_digit(stringCharCodeAt(pat, 0)) || (stringLen(pat) > 0 && stringCharCodeAt(pat, 0) == 34))) {
-      panic("unsupported match pattern: " + pat);
+      panic_at(src, k, "unsupported match pattern: " + pat);
     }
 
     if (pat == "_") {
@@ -549,7 +616,7 @@ fn parse_match_expr(src, i) => {
     }
   }
 
-  if (def == "") { panic("match requires _ arm"); }
+  if (def == "") { panic_at(src, k, "match requires _ arm"); }
 
   ParsedExpr("(() => { switch (" + scrut.v0 + ") {\n" + cases + "default: return " + def + ";\n} })()", k)
 }
@@ -582,7 +649,7 @@ fn parse_module_decl(src, i, prefix, exportTop) => {
 
   while (true) {
     let t = skip_ws(src, k);
-    if (!(t < stringLen(src))) { panic("expected '}'"); }
+    if (!(t < stringLen(src))) { panic_at(src, t, "expected '}'"); }
     if (stringCharCodeAt(src, t) == 125) { k = t + 1; break; }
 
     if (starts_with_at(src, t, "fn")) {
@@ -614,7 +681,7 @@ fn parse_module_decl(src, i, prefix, exportTop) => {
       continue;
     }
 
-    panic("expected fn or module inside module")
+    panic_at(src, t, "expected fn or module inside module")
   }
 
   let obj = "{ " + entries + " }";
@@ -654,7 +721,7 @@ fn parse_param_list(src, i) => {
     first = false;
 
     k = skip_ws(src, k);
-    if (!(k < stringLen(src))) { panic("expected ')' in param list"); }
+    if (!(k < stringLen(src))) { panic_at(src, k, "expected ')' in param list"); }
     let c = stringCharCodeAt(src, k);
     if (c == 44) { // ','
       k = k + 1;
@@ -663,7 +730,7 @@ fn parse_param_list(src, i) => {
     if (c == 41) { // ')'
       yield ParsedParams(out, k + 1);
     }
-    panic("expected ',' or ')' in param list")
+    panic_at(src, k, "expected ',' or ')' in param list")
   }
   ParsedParams(out, k)
 }
@@ -680,7 +747,7 @@ fn parse_extern_decl(src, i) => {
   let mut first = true;
   while (true) {
     k = skip_ws(src, k);
-    if (!(k < stringLen(src))) { panic("expected '}'"); }
+    if (!(k < stringLen(src))) { panic_at(src, k, "expected '}'"); }
     if (stringCharCodeAt(src, k) == 125) { k = k + 1; break; }
     let id = parse_ident(src, k);
     k = id.v1;
@@ -690,7 +757,7 @@ fn parse_extern_decl(src, i) => {
     if (k < stringLen(src) && stringCharCodeAt(src, k) == 44) { k = k + 1; continue; }
     k = skip_ws(src, k);
     if (k < stringLen(src) && stringCharCodeAt(src, k) == 125) { k = k + 1; break; }
-    panic("expected ',' or '}' in extern list");
+    panic_at(src, k, "expected ',' or '}' in extern list");
   }
 
   k = parse_optional_semicolon(src, k);
@@ -698,7 +765,7 @@ fn parse_extern_decl(src, i) => {
   let mut importPath = "";
   if (starts_with_at(mod.v0, 0, "rt::")) { importPath = "./rt/" + stringSlice(mod.v0, 4, stringLen(mod.v0)) + ".mjs"; }
   if (importPath == "" && starts_with_at(mod.v0, 0, "node::")) { importPath = "node:" + stringSlice(mod.v0, 6, stringLen(mod.v0)); }
-  if (importPath == "") { panic("unsupported extern module: " + mod.v0); }
+  if (importPath == "") { panic_at(src, k, "unsupported extern module: " + mod.v0); }
 
   ParsedStmt("import { " + names + " } from \"" + importPath + "\";\n", k)
 }
@@ -782,7 +849,7 @@ fn parse_optional_semicolon(src, i) => {
 
 fn parse_required_semicolon(src, i) => {
   let j = skip_ws(src, i);
-  if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 59)) { panic("expected ';'"); }
+  if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 59)) { panic_at(src, j, "expected ';'"); }
   j + 1
 }
 
@@ -801,12 +868,12 @@ fn parse_mut_opt(src, i) => {
 
 fn parse_stmt_block(src, i) => {
   let mut k = skip_ws(src, i);
-  if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 123)) { panic("expected '{'"); }
+  if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 123)) { panic_at(src, k, "expected '{'"); }
   k = k + 1;
   let mut body = "";
   while (true) {
     let t = skip_ws(src, k);
-    if (!(t < stringLen(src))) { panic("expected '}'"); }
+    if (!(t < stringLen(src))) { panic_at(src, t, "expected '}'"); }
     if (stringCharCodeAt(src, t) == 125) { yield ParsedExpr(body, t + 1); }
 
     let st = parse_stmt(src, k);
@@ -917,7 +984,7 @@ fn parse_stmt(src, i) => {
   k = parse_optional_semicolon(src, k);
   yield ParsedStmt(e.v0 + ";\n", k);
 
-  panic("expected statement")
+  panic_at(src, k, "expected statement")
 }
 
 fn is_index_assign_stmt_start(src, i) => {
@@ -1009,13 +1076,16 @@ fn compile_tiny2(src, requireMain, exportAll) => {
     let j = skip_ws(src, i);
     if (starts_with_at(src, j, "let")) {
       i = parse_keyword(src, i, "let");
+      let mutOpt = parse_mut_opt(src, i);
+      i = mutOpt.v1;
       let name = parse_ident(src, i);
       i = name.v1;
       i = parse_keyword(src, i, "=");
       let expr = parse_expr(src, i);
       i = expr.v1;
       i = parse_optional_semicolon(src, i);
-      out = out + ("const " + name.v0 + " = " + expr.v0 + ";\n");
+      let declKw = if (mutOpt.v0) "let" else "const";
+      out = out + (declKw + " " + name.v0 + " = " + expr.v0 + ";\n");
       continue;
     }
     break;
@@ -1040,7 +1110,7 @@ fn compile_tiny2(src, requireMain, exportAll) => {
     }
     break;
   }
-  if (requireMain && !sawMain) { panic("expected fn main"); }
+  if (requireMain && !sawMain) { panic_at(src, i, "expected fn main"); }
   out
 }
 
@@ -1062,6 +1132,9 @@ fn compile_project(entryPath, outPath) => {
 
   while (vec_len(queue) > 0) {
     let path = vec_get(queue, vec_len(queue) - 1);
+
+    // set current file for better error messages
+    set_current_file(path);
     // pop
     // (no vec_pop; emulate by shrinking via set+len conventions isn't available,
     //  so we'll use a simple index-based loop instead)
