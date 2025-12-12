@@ -165,11 +165,16 @@ The following primitive types are supported:
 - Boolean: `Bool`
 - Character: `Char`
 - String: `String`
+- Void: `Void` (represents no value; used as return type for functions that don't produce a value)
 
 ```tuff
 let pi: F32 = 3.14159
 let count: U32 = 100
 let name: String = "Tuff"
+
+fn doSomething() : Void => {
+    // function that doesn't return a value
+}
 ```
 
 ### Numeric literals and default typing
@@ -362,19 +367,6 @@ let coords = nested.0;       // (I32, I32)
 let x = nested.0.0;         // 10
 let y = nested.0.1;         // 20
 let label = nested.1;       // "point"
-```
-
-#### Unit type
-
-The empty tuple `()` is called the unit type and represents "no value". It's the return type for functions that don't produce a meaningful value:
-
-```tuff
-fn print_message(msg: String) => {
-    io.print(msg);
-    // implicitly returns () (unit)
-}
-
-let result: () = print_message("hello");
 ```
 
 Tuples are useful for returning multiple values from a function without declaring a struct:
@@ -572,7 +564,7 @@ Destructuring provides a concise way to work with composite values, reducing boi
 
 Functions are first-class values in Tuff. They can be declared at the top level with a name, passed as expressions, or defined inline as lambdas. Function return types are specified with `: Type` and the body follows `=>`. The function body is an expression. Return types may be omitted and inferred by the compiler from the function body when possible.
 
-The `yield` keyword is used to produce a value from a block or function: `yield expr;` immediately exits the current function and yields `expr` as the final result. `yield;` without a value can be used to return early from a function that returns unit.
+The `yield` keyword is used to produce a value from a block or function: `yield expr;` immediately exits the current function and yields `expr` as the final result. `yield;` without a value can be used to return early from a function that returns `Void`.
 
 If a function's return type is omitted, the compiler infers the return type from the set of expressions used in `yield` statements within the function as well as the final expression (if present). If different `yield` expressions or the final expression are present and their types conflict, the compiler rejects the function as a type error.
 
@@ -608,7 +600,7 @@ fn add(first : I32, second : I32) : I32 => { first + second }
 
 // Example of early yield from a void function
 fn print_nonzero(x: I32) => {
-    if (x == 0) { yield; } // yields unit
+    if (x == 0) { yield; } // yields Void
     io.print(x);
 }
 
@@ -716,7 +708,7 @@ You can also add logic before the implicit yield:
 ```tuff
 class fn User(name: String, age: I32) => {
     if (age < 0) {
-        yield; // early exit, yields unit (validation failure)
+        yield; // early exit, yields Void (validation failure)
     }
     // implicit yield this at the end
 }
@@ -1470,6 +1462,147 @@ fn main() {
 ```
 
 This implicit module system eliminates boilerplate and naturally maps your project's file structure to its module hierarchy.
+
+## Foreign Function Interface (FFI)
+
+Tuff provides the `extern` keyword for interfacing with external code from other languages and runtimes. This enables interoperability with existing ecosystems while maintaining type safety at the boundary.
+
+### External types
+
+Use `extern type` to declare types defined in foreign code:
+
+```tuff
+extern type MyType;
+extern type FileHandle;
+extern type Promise<T>;
+```
+
+External types are opaque to Tuff — their internal structure is unknown, but you can pass them around and use them with external functions.
+
+Note: Tuff does not support `extern struct`. If you need to reference a foreign struct-like type, use `extern type`. However, you can define a local struct and use it with external functions:
+
+```tuff
+struct Point {
+    x: I32,
+    y: I32
+}
+
+extern fn draw_point(p: Point) : Void;
+```
+
+### External variables
+
+Declare external variables (constants or mutable values from foreign code):
+
+```tuff
+extern let PI : F32;
+extern let mut globalCounter : I32;
+```
+
+These declarations reference values defined externally. You can read from them (and write to mutable ones) as if they were local variables.
+
+### External functions
+
+Declare functions implemented in foreign code:
+
+```tuff
+extern fn doSomething() : Void;
+extern fn compute(x: I32, y: I32) : I32;
+extern fn readFile(path: String) : Promise<String>;
+```
+
+`Void` is a built-in type representing "no value". It's used as the return type for functions that don't produce a meaningful value.
+
+External functions can use both external types and Tuff-defined types:
+
+```tuff
+struct Config {
+    timeout: I32,
+    retries: I32
+}
+
+extern fn initialize(config: Config) : Void;
+extern fn getHandle() : FileHandle;
+```
+
+### External classes
+
+You can declare external class constructors:
+
+```tuff
+extern class fn Buffer(size: I32) => {
+    fn read() : String;
+    fn write(data: String) : Void;
+}
+
+let buf = Buffer(1024);
+buf.write("hello");
+```
+
+External classes follow the same syntax as regular classes but are implemented externally. The method signatures define the expected interface.
+
+### External module imports
+
+Import declarations from external modules using `extern from`:
+
+```tuff
+// Import from Java standard library
+extern from java::util use { List, Map, Set };
+
+// Import from Node.js modules
+extern from fs::promises use { access, readFile, writeFile };
+
+// Import from custom external modules
+extern from native::graphics use { createWindow, drawRect };
+```
+
+External imports allow seamless integration with foreign module systems. The module path syntax follows the same `::` convention as Tuff modules.
+
+### Type safety with FFI
+
+Tuff enforces type checking at FFI boundaries. Type mismatches between Tuff code and external declarations will be caught at compile time where possible. Runtime conversions and marshalling are handled automatically for supported types.
+
+Primitive types map naturally to most foreign runtimes:
+- `I32`, `U32`, etc. map to integer types
+- `F32`, `F64` map to floating-point types
+- `Bool` maps to boolean
+- `String` maps to string types
+- `Void` is used for functions that return nothing
+
+Complex types (structs, classes, unions) can be passed across FFI boundaries. The compiler generates appropriate marshalling code based on the target runtime.
+
+### Example: Complete FFI usage
+
+```tuff
+// External types and functions
+extern from node::fs use { FileHandle };
+extern from node::path use { join };
+
+extern fn open(path: String) : FileHandle;
+extern fn close(handle: FileHandle) : Void;
+
+// Local struct with external function
+struct ReadOptions {
+    encoding: String,
+    bufferSize: I32
+}
+
+extern fn readWithOptions(handle: FileHandle, opts: ReadOptions) : String;
+
+// Usage
+fn processFile(filename: String) => {
+    let fullPath = join("/data", filename);
+    let handle = open(fullPath);
+
+    let opts = ReadOptions { "utf8", 4096 };
+    let content = readWithOptions(handle, opts);
+
+    close(handle);
+    content
+}
+```
+
+The FFI system is designed to be explicit and safe, making foreign code integration straightforward while maintaining Tuff's type safety guarantees.
 
 ## Error Handling
 
