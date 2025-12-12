@@ -151,97 +151,13 @@ y = 20; // OK
 
 Note: semicolons are optional at the end of lines in many contexts; they are shown here for clarity.
 
-### Destructuring
+## Type System
 
-Destructuring allows you to unpack values from composite types (structs, tuples, unions) into individual variables in a single declaration.
+Tuff provides primitive types and composite types.
 
-#### Destructuring structs
+### Primitive types
 
-You can extract struct fields into separate variables using brace syntax:
-
-```tuff
-struct Point {
-    x: I32,
-    y: I32
-}
-
-let p = Point { 10, 20 };
-let { x, y } = p;  // unpack fields into x and y
-
-io.print(x);  // 10
-io.print(y);  // 20
-```
-
-You can also destructure with type annotations:
-
-```tuff
-let { x: I32, y: I32 } = p;
-```
-
-Destructuring also works with `let mut`:
-
-```tuff
-let mut { x, y } = p;
-x = 30;  // x is now mutable
-```
-
-#### Destructuring tuples
-
-Tuples can be destructured using parentheses or brace syntax:
-
-```tuff
-let pair: (I32, String) = (42, "hello");
-
-// Using parentheses
-let (num, str) = pair;
-io.print(num);   // 42
-io.print(str);   // "hello"
-
-// Or with type annotations
-let (n: I32, s: String) = pair;
-```
-
-#### Destructuring unions
-
-When you've used `is` to narrow a union type, you can destructure to access inner values:
-
-```tuff
-let maybe_value: Option<I32> = Some(100);
-
-if (maybe_value is Some) {
-    let { value } = maybe_value;  // extract the inner value
-    io.print(value);  // 100
-}
-
-let result: Result<String, I32> = Ok("success");
-if (result is Ok) {
-    let { value } = result;
-    io.print(value);  // "success"
-}
-```
-
-#### Nested destructuring
-
-You can destructure nested structures:
-
-```tuff
-struct Rectangle {
-    top_left: Point,
-    bottom_right: Point
-}
-
-let rect = Rectangle { Point { 0, 0 }, Point { 100, 100 } };
-let { top_left: { x: x1, y: y1 }, bottom_right: { x: x2, y: y2 } } = rect;
-
-io.print(x1);  // 0
-io.print(y2);  // 100
-```
-
-Destructuring provides a concise way to work with composite values, reducing boilerplate and improving code readability.
-
-### Types
-
-Tuff provides primitive types and composite types. Below are the primitive types supported in Tuff:
+The following primitive types are supported:
 
 - Unsigned integers: `U8`, `U16`, `U32`, `U64`
 - Signed integers: `I8`, `I16`, `I32`, `I64`
@@ -249,105 +165,31 @@ Tuff provides primitive types and composite types. Below are the primitive types
 - Boolean: `Bool`
 - Character: `Char`
 - String: `String`
-- Arrays/slices and tuples
 
 ```tuff
 let pi: F32 = 3.14159
-let names: [String; 3; 3] = ["A", "B", "C"]
-let pair: (I32, String) = (1, "hello")
+let count: U32 = 100
+let name: String = "Tuff"
 ```
 
-### Type aliases
+### Numeric literals and default typing
 
-Type aliases allow you to create an alternative name for an existing type. This is useful for improving code readability and reducing repetition, especially with complex types.
+Integer and floating-point literal types follow simple, predictable rules:
 
-Syntax:
+- Unsuffixed integer literals are by default `I32`.
+- If an unsuffixed integer literal appears in a context requiring a different integer type (e.g., initializing a variable with a typed declaration or participating in an arithmetic expression with a typed operand), it will be inferred to match that type.
+- Integer literals may include an explicit type suffix to disambiguate, e.g., `10U8`, `255U16`, `-5I8`.
+- Unsuffixed floating-point literals are `F32` by default; they can be suffixed as `F32` or `F64` if needed.
+
+Examples:
 
 ```tuff
-type MyType = I32;
-type Coordinate = (I32, I32);
-type Handler = (String) => Bool;
+let a: U32 = 100;        // `100` inferred as U32, with runtime/compile-time range check
+let b = 100;             // `b` inferred as I32 (default)
+let c = 10U8 + 100;      // `100` inferred as U8 because `10U8` is explicitly U8; result is U8
+let d = 3.14;            // `d` inferred as F32 (default float type)
+let e = 3.14F32;         // `e` explicitly F32
 ```
-
-Once a type alias is defined, you can use it anywhere a type is expected:
-
-```tuff
-type UserId = U64;
-type Result<T> = Option<T>;
-
-let user_id: UserId = 12345;
-fn process_user(id: UserId) : Bool => {
-    // implementation
-}
-
-let coords: Coordinate = (10, 20);
-let handlers: [Handler; 2; 2] = [fn1, fn2];
-```
-
-Type aliases are purely for clarity and convenience — they don't create new types. They are fully interchangeable with their underlying types:
-
-```tuff
-type Count = I32;
-let a: Count = 5;
-let b: I32 = a;  // OK: Count and I32 are the same type
-```
-
-### Union types (sum types)
-
-Unions (also called sum types or tagged unions) allow you to define a type that can be one of several variants. Each variant can carry associated data.
-
-Syntax:
-
-```tuff
-type MyUnion = Variant1<Data1> | Variant2<Data2> | Variant3;
-```
-
-The standard library defines `Option<T>` and `Result<T, E>` as unions:
-
-```tuff
-type Option<T> = Some<T> | None;
-type Result<T, E> = Ok<T> | Err<E>;
-```
-
-#### Creating union values
-
-To create a value of a union type, use the variant name with its associated data:
-
-```tuff
-let maybe_value: Option<I32> = Some(42);
-let nothing: Option<String> = None;
-
-let success: Result<I32, String> = Ok(100);
-let failure: Result<I32, String> = Err("something went wrong");
-```
-
-#### Defining custom unions
-
-You can define your own union types for domain-specific problems:
-
-```tuff
-type Status = Running | Paused | Stopped;
-type Response<T> = Success<T> | Failure<String> | Timeout;
-
-let status: Status = Running;
-let resp: Response<I32> = Success(42);
-```
-
-#### Accessing union data
-
-Union values can be destructured and accessed using pattern matching (see the Pattern Matching section), or you can check the variant and unwrap the value:
-
-```tuff
-fn print_option(opt: Option<I32>) => {
-    // Pattern matching approach (described in Pattern Matching section):
-    // match opt {
-    //     Some(x) => io.print(x),
-    //     None => io.print("nothing")
-    // }
-}
-```
-
-Union types provide a type-safe way to represent values that can be one of several states, with compile-time guarantees that all variants are handled correctly.
 
 ### Arrays
 
@@ -546,26 +388,187 @@ let (quotient, remainder) = divmod(17, 5);
 // quotient is 3, remainder is 2
 ```
 
-### Numeric literals and default typing
+### Type aliases
 
-Integer and floating-point literal types follow simple, predictable rules:
+Type aliases allow you to create an alternative name for an existing type. This is useful for improving code readability and reducing repetition, especially with complex types.
 
-- Unsuffixed integer literals are by default `I32`.
-- If an unsuffixed integer literal appears in a context requiring a different integer type (e.g., initializing a variable with a typed declaration or participating in an arithmetic expression with a typed operand), it will be inferred to match that type.
-- Integer literals may include an explicit type suffix to disambiguate, e.g., `10U8`, `255U16`, `-5I8`.
-- Unsuffixed floating-point literals are `F32` by default; they can be suffixed as `F32` or `F64` if needed.
-
-Examples:
+Syntax:
 
 ```tuff
-let a: U32 = 100;        // `100` inferred as U32, with runtime/compile-time range check
-let b = 100;             // `b` inferred as I32 (default)
-let c = 10U8 + 100;      // `100` inferred as U8 because `10U8` is explicitly U8; result is U8
-let d = 3.14;            // `d` inferred as F32 (default float type)
-let e = 3.14F32;         // `e` explicitly F32
+type MyType = I32;
+type Coordinate = (I32, I32);
+type Handler = (String) => Bool;
 ```
 
-### Functions
+Once a type alias is defined, you can use it anywhere a type is expected:
+
+```tuff
+type UserId = U64;
+type Result<T> = Option<T>;
+
+let user_id: UserId = 12345;
+fn process_user(id: UserId) : Bool => {
+    // implementation
+}
+
+let coords: Coordinate = (10, 20);
+let handlers: [Handler; 2; 2] = [fn1, fn2];
+```
+
+Type aliases are purely for clarity and convenience — they don't create new types. They are fully interchangeable with their underlying types:
+
+```tuff
+type Count = I32;
+let a: Count = 5;
+let b: I32 = a;  // OK: Count and I32 are the same type
+```
+
+### Union types (sum types)
+
+Unions (also called sum types or tagged unions) allow you to define a type that can be one of several variants. Each variant can carry associated data.
+
+Syntax:
+
+```tuff
+type MyUnion = Variant1<Data1> | Variant2<Data2> | Variant3;
+```
+
+The standard library defines `Option<T>` and `Result<T, E>` as unions:
+
+```tuff
+type Option<T> = Some<T> | None;
+type Result<T, E> = Ok<T> | Err<E>;
+```
+
+#### Creating union values
+
+To create a value of a union type, use the variant name with its associated data:
+
+```tuff
+let maybe_value: Option<I32> = Some(42);
+let nothing: Option<String> = None;
+
+let success: Result<I32, String> = Ok(100);
+let failure: Result<I32, String> = Err("something went wrong");
+```
+
+#### Defining custom unions
+
+You can define your own union types for domain-specific problems:
+
+```tuff
+type Status = Running | Paused | Stopped;
+type Response<T> = Success<T> | Failure<String> | Timeout;
+
+let status: Status = Running;
+let resp: Response<I32> = Success(42);
+```
+
+#### Accessing union data
+
+Union values can be destructured and accessed using pattern matching (see the Pattern Matching section), or you can check the variant and unwrap the value:
+
+```tuff
+fn print_option(opt: Option<I32>) => {
+    // Pattern matching approach (described in Pattern Matching section):
+    // match opt {
+    //     Some(x) => io.print(x),
+    //     None => io.print("nothing")
+    // }
+}
+```
+
+Union types provide a type-safe way to represent values that can be one of several states, with compile-time guarantees that all variants are handled correctly.
+
+### Destructuring
+
+Destructuring allows you to unpack values from composite types (structs, tuples, unions) into individual variables in a single declaration.
+
+#### Destructuring structs
+
+You can extract struct fields into separate variables using brace syntax:
+
+```tuff
+struct Point {
+    x: I32,
+    y: I32
+}
+
+let p = Point { 10, 20 };
+let { x, y } = p;  // unpack fields into x and y
+
+io.print(x);  // 10
+io.print(y);  // 20
+```
+
+You can also destructure with type annotations:
+
+```tuff
+let { x: I32, y: I32 } = p;
+```
+
+Destructuring also works with `let mut`:
+
+```tuff
+let mut { x, y } = p;
+x = 30;  // x is now mutable
+```
+
+#### Destructuring tuples
+
+Tuples can be destructured using parentheses or brace syntax:
+
+```tuff
+let pair: (I32, String) = (42, "hello");
+
+// Using parentheses
+let (num, str) = pair;
+io.print(num);   // 42
+io.print(str);   // "hello"
+
+// Or with type annotations
+let (n: I32, s: String) = pair;
+```
+
+#### Destructuring unions
+
+When you've used `is` to narrow a union type, you can destructure to access inner values:
+
+```tuff
+let maybe_value: Option<I32> = Some(100);
+
+if (maybe_value is Some) {
+    let { value } = maybe_value;  // extract the inner value
+    io.print(value);  // 100
+}
+
+let result: Result<String, I32> = Ok("success");
+if (result is Ok) {
+    let { value } = result;
+    io.print(value);  // "success"
+}
+```
+
+#### Nested destructuring
+
+You can destructure nested structures:
+
+```tuff
+struct Rectangle {
+    top_left: Point,
+    bottom_right: Point
+}
+
+let rect = Rectangle { Point { 0, 0 }, Point { 100, 100 } };
+let { top_left: { x: x1, y: y1 }, bottom_right: { x: x2, y: y2 } } = rect;
+
+io.print(x1);  // 0
+io.print(y2);  // 100
+```
+
+Destructuring provides a concise way to work with composite values, reducing boilerplate and improving code readability.
+
+## Functions
 
 Functions are first-class values in Tuff. They can be declared at the top level with a name, passed as expressions, or defined inline as lambdas. Function return types are specified with `: Type` and the body follows `=>`. The function body is an expression. Return types may be omitted and inferred by the compiler from the function body when possible.
 
@@ -783,7 +786,78 @@ io.print(origin.x);  // 0
 
 This unification of classes and functions as first-class expressions provides tremendous flexibility for functional and object-oriented programming styles.
 
-### Generics and Type Parameters
+#### The `this` keyword
+
+The `this` keyword is a special value that captures all bindings in the current lexical scope. It behaves like an object whose fields are the variables and functions accessible in that scope.
+
+**Accessing scope members via `this`:**
+
+You can access any variable or function in the current scope using `this`:
+
+```tuff
+let x: I32 = 100;
+let y: I32 = 200;
+let scope_snapshot = this;
+io.print(scope_snapshot.x);  // 100
+io.print(scope_snapshot.y);  // 200
+```
+
+The `this` value is immutable by default and provides read access to the scope. If you modify a variable through `this`, the change is reflected in the original scope (when applicable).
+
+**`this` in functions:**
+
+Inside a function, `this` includes all parameters as fields. This makes functions particularly powerful — they can naturally act as constructors:
+
+```tuff
+fn Point(x: I32, y: I32) => {
+    this  // yields the scope containing x and y as fields
+}
+
+let p = Point(3, 4);  // p has fields x: I32 and y: I32
+io.print(p.x);        // 3
+io.print(p.y);        // 4
+```
+
+The `class` keyword provides syntactic sugar for this pattern:
+
+```tuff
+class fn Point(x: I32, y: I32) => {}  // equivalent to: fn Point(x: I32, y: I32) => this;
+
+let p = Point(3, 4);
+io.print(p.x);  // 3
+io.print(p.y);  // 4
+```
+
+You can also compute derived values before yielding:
+
+```tuff
+fn Rectangle(width: I32, height: I32) => {
+    let area: I32 = width * height;
+    this  // yields scope with width, height, and area
+}
+
+let rect = Rectangle(10, 5);
+io.print(rect.width);   // 10
+io.print(rect.height);  // 5
+io.print(rect.area);    // 50
+```
+
+**Scope composition with `this`:**
+
+When you yield `this` from a block or function, you create a snapshot of that scope's bindings. This is useful for creating data structures on-the-fly without explicit struct declarations.
+
+```tuff
+let user = {
+    let id: I32 = 1;
+    let name: String = "Bob";
+    let email: String = "bob@example.com";
+    this  // creates a value with fields id, name, email
+};
+
+io.print(user.name);  // "Bob"
+```
+
+## Generics and Type Parameters
 
 Structs and functions can be parameterized over types using generic type parameters. Type parameters are specified in angle brackets `< >` following the name.
 
@@ -859,87 +933,7 @@ let text = str_container.get();  // "Tuff"
 
 Type parameters flow naturally through the generic class definition, and the yielded `this` value includes all the type information.
 
-### The `this` Keyword
-
-The `this` keyword is a special value that captures all bindings in the current lexical scope. It behaves like an object whose fields are the variables and functions accessible in that scope.
-
-#### Accessing scope members via `this`
-
-You can access any variable or function in the current scope using `this`:
-
-```tuff
-let x: I32 = 100;
-let y: I32 = 200;
-let scope_snapshot = this;
-io.print(scope_snapshot.x);  // 100
-io.print(scope_snapshot.y);  // 200
-```
-
-The `this` value is immutable by default and provides read access to the scope. If you modify a variable through `this`, the change is reflected in the original scope (when applicable).
-
-#### `this` in functions
-
-Inside a function, `this` includes all parameters as fields. This makes functions particularly powerful — they can naturally act as constructors:
-
-```tuff
-fn Point(x: I32, y: I32) => {
-    this  // yields the scope containing x and y as fields
-}
-
-let p = Point(3, 4);  // p has fields x: I32 and y: I32
-io.print(p.x);        // 3
-io.print(p.y);        // 4
-```
-
-The `class` keyword provides syntactic sugar for this pattern:
-
-```tuff
-class fn Point(x: I32, y: I32) => {}  // equivalent to: fn Point(x: I32, y: I32) => this;
-
-let p = Point(3, 4);
-io.print(p.x);  // 3
-io.print(p.y);  // 4
-```
-
-```tuff
-fn greet(name: String, age: I32) => {
-    // 'this' contains name and age as fields
-    this
-}
-
-let person = greet("Alice", 30);
-io.print(person.name);  // "Alice"
-io.print(person.age);   // 30
-```
-
-You can also selectively yield fields or compute derived values:
-
-```tuff
-fn Rectangle(width: I32, height: I32) => {
-    let area: I32 = width * height;
-    this  // yields scope with width, height, and area
-}
-
-let rect = Rectangle(10, 5);
-io.print(rect.width);   // 10
-io.print(rect.height);  // 5
-io.print(rect.area);    // 50
-```
-
-#### Scope composition with `this`
-
-When you yield `this` from a block or function, you create a snapshot of that scope's bindings. This is useful for creating data structures on-the-fly without explicit struct declarations.
-
-```tuff
-let user: User = {
-    let id: I32 = 1;
-    let name: String = "Bob";
-    let email: String = "bob@example.com";
-    this  // creates a value with fields id, name, email
-};
-```
-
-### Control Flow
+## Control Flow
 
 Standard statements: `if`, `else`, `while`, `loop`, and pattern matching with `match`.
 
@@ -1207,7 +1201,11 @@ match (user_input) {
 
 The `match` expression is powerful for handling multiple variants of union types with exhaustiveness checking and pattern matching.
 
-### Comparison operators
+## Operators
+
+Tuff provides a comprehensive set of operators for comparisons, arithmetic, logic, bitwise operations, and assignments.
+
+#### Comparison operators
 
 Tuff supports the usual comparison operators which return a `Bool`:
 
@@ -1229,7 +1227,7 @@ if s1 == s2 { io.print("equal") }
 if c != 'a' { io.print("not a") }
 ```
 
-### Arithmetic operators
+#### Arithmetic operators
 
 Tuff supports standard arithmetic operations:
 
@@ -1283,7 +1281,7 @@ let not_result = !a;      // false
 if (a && b_func()) { /* ... */ }
 ```
 
-### Bitwise operators
+#### Bitwise operators
 
 For integer types, Tuff provides bitwise operations:
 
@@ -1309,7 +1307,7 @@ let left = a << 1;  // 0b11000 (24)
 let right = a >> 1; // 0b0110 (6)
 ```
 
-### Assignment and compound assignment operators
+#### Assignment and compound assignment operators
 
 Variables can be reassigned (if declared `mut`) using the assignment operator `=`. Compound assignment operators combine an arithmetic operation with assignment:
 
@@ -1341,7 +1339,7 @@ flags |= 0b0101;  // flags is now 0b1111
 flags &= 0b1100;  // flags is now 0b1100
 ```
 
-### Iteration and iterators
+## Iteration and Iterators
 
 Tuff favors iterator-based iteration patterns instead of a C-style `for` statement. The standard library exposes iterator helpers (e.g., `iter()`, `range()`, and collection-specific iterator adapters) that can be composed and applied using methods such as `for_each`, `map`, and `filter`.
 
@@ -1365,11 +1363,11 @@ while (it.has_next()) {
 
 Note: exact iterator APIs and closure syntax are implemented in the standard library and may be refined as the language and standard library evolve.
 
-### Modules and Imports
+## Modules and Imports
 
 Modules are a way to organize code into logical namespaces. Modules can be defined within a file, and their members are accessed using the `::` scope resolution operator.
 
-#### Defining modules
+### Defining modules
 
 A module is declared with the `module` keyword followed by a name and a block containing declarations:
 
@@ -1399,7 +1397,7 @@ module Utils {
 let len = Utils::String::length("hello");
 ```
 
-#### Visibility and module access
+### Visibility and module access
 
 All members of a module are accessible via the `::` operator. Modules provide namespacing and encapsulation, allowing you to organize code without polluting the global scope.
 
@@ -1413,7 +1411,7 @@ let red = Graphics::Color(255, 0, 0);
 let origin = Graphics::Point(0, 0);
 ```
 
-#### Importing modules
+### Importing modules
 
 Modules from other files can be imported using the `import` keyword. The imported module name becomes available in the current scope:
 
@@ -1432,7 +1430,7 @@ fn main() {
 }
 ```
 
-#### File-based modules (implicit modules)
+### File-based modules (implicit modules)
 
 Every file in your project implicitly becomes a module based on its path relative to the project root. The file path is converted to a module path using `::` as the separator.
 
@@ -1473,11 +1471,11 @@ fn main() {
 
 This implicit module system eliminates boilerplate and naturally maps your project's file structure to its module hierarchy.
 
-### Error Handling
+## Error Handling
 
 Tuff provides `Result<T, E>` and `Option<T>` types for error handling and optional values.
 
-#### Result type
+### Result type
 
 `Result<T, E>` represents a value that can be either a success (`Ok(T)`) or an error (`Err(E)`):
 
@@ -1497,7 +1495,7 @@ let error_result = divide(10.0, 0.0);
 // error_result is Err("division by zero")
 ```
 
-#### Option type
+### Option type
 
 `Option<T>` represents a value that may or may not exist — either `Some(T)` or `None`:
 
