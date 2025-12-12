@@ -47,12 +47,19 @@ Acceptance criteria:
 
 Goal: Reduce the monolith without changing semantics.
 
-Status: in progress.
+Status: done.
 
 Initial extractions:
 
 - `src/main/tuff/compiler/diagnostics.tuff` — diagnostics helpers + per-file mutable state
 - `src/main/tuff/compiler/lexing.tuff` — whitespace/comment skipping + ASCII predicates
+
+Further extractions:
+
+- `src/main/tuff/compiler/parsing_primitives.tuff` — keyword/ident/number/module-path helpers
+- `src/main/tuff/compiler/parsing_types.tuff` — minimal type-expression parsing helpers
+- `src/main/tuff/compiler/parsing_expr_stmt.tuff` — expression + statement parsing helpers
+- `src/main/tuff/compiler/parsing_decls.tuff` — extern/import/struct/type/fn/module parsing helpers
 
 Extract into focused modules (names approximate):
 

@@ -22,5 +22,11 @@ describe("selfhost compiler modules", () => {
     // We expect the monolith to start importing extracted modules.
     expect(src).toContain("from diagnostics use");
     expect(src).toContain("from lexing use");
+
+    // Parsing is also split out of the facade.
+    expect(src).toContain("from parsing_primitives use");
+    expect(src).toContain("from parsing_types use");
+    expect(src).toContain("from parsing_expr_stmt use");
+    expect(src).toContain("from parsing_decls use");
   });
 });
