@@ -7,10 +7,10 @@ from src::main::tuff::compiler::ast use {
   span_start,
   span_end,
 
-  EInt,
-  EIdent,
-  EBinary,
   OpAdd,
+  expr_int,
+  expr_ident,
+  expr_binary,
   expr_kind,
   expr_span
 };
@@ -20,7 +20,7 @@ fn main() : I32 => {
   suite("compiler ast (phase1 smoke)");
 
   let s = span(10, 12);
-  let e1 = EInt((s, 42));
+  let e1 = expr_int(s, 42);
 
   it(
     "expr_kind(EInt) is EInt",
@@ -35,8 +35,8 @@ fn main() : I32 => {
     )
   );
 
-  let id = EIdent((span(20, 21), "x"));
-  let sum = EBinary((span(30, 35), OpAdd, id, e1));
+  let id = expr_ident(span(20, 21), "x");
+  let sum = expr_binary(span(30, 35), OpAdd, id, e1);
 
   it(
     "binary expr kind is EBinary",

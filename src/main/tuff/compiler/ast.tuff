@@ -3,9 +3,10 @@
 // Phase 1 goal: introduce shared node definitions + a couple of helpers,
 // without changing the current compiler pipeline yet.
 //
-// NOTE: Keep this file dependency-light. In particular, avoid relying on
-// struct-literal lowering across modules (current selfhost compiler keeps
-// struct field-order defs per-file).
+// NOTE: Keep this file dependency-light.
+// The current selfhost compiler keeps struct field-order defs per-file,
+// so other modules should NOT construct these structs with literals.
+// Instead, use the constructor functions provided below (e.g. `expr_int`).
 
 // A source span as (startOffset, endOffset), half-open: [start, end)
 // Stored as a tagged union so it can cross module boundaries reliably.
@@ -35,42 +36,186 @@ type BinOp =
 // These are *not* resolved types; the analyzer will transform/annotate.
 
 type TypeRef =
-  TyName<(Span, String)>
-  | TyTuple<(Span, Vec<TypeRef>)>
-  | TyFn<(Span, Vec<TypeRef>, TypeRef)>
-  | TyApp<(Span, String, Vec<TypeRef>)>;
+  TyName
+  | TyTuple
+  | TyFn
+  | TyApp;
+
+struct TyName {
+  tag: String,
+  span: Span,
+  name: String
+}
+
+struct TyTuple {
+  tag: String,
+  span: Span,
+  items: Vec<TypeRef>
+}
+
+struct TyFn {
+  tag: String,
+  span: Span,
+  params: Vec<TypeRef>,
+  result: TypeRef
+}
+
+struct TyApp {
+  tag: String,
+  span: Span,
+  callee: String,
+  args: Vec<TypeRef>
+}
 
 // Expressions.
 // Convention: payload tuple always starts with Span.
 
 type Expr =
-  EInt<(Span, I32)>
-  | EBool<(Span, Bool)>
-  | EString<(Span, String)>
-  | EIdent<(Span, String)>
-  | EBinary<(Span, BinOp, Expr, Expr)>
-  | ECall<(Span, Expr, Vec<Expr>)>
-  | EIf<(Span, Expr, Expr, Expr)>;
+  EInt
+  | EBool
+  | EString
+  | EIdent
+  | EBinary
+  | ECall
+  | EIf;
+
+struct EInt {
+  tag: String,
+  span: Span,
+  value: I32
+}
+
+struct EBool {
+  tag: String,
+  span: Span,
+  value: Bool
+}
+
+struct EString {
+  tag: String,
+  span: Span,
+  value: String
+}
+
+struct EIdent {
+  tag: String,
+  span: Span,
+  name: String
+}
+
+struct EBinary {
+  tag: String,
+  span: Span,
+  op: BinOp,
+  left: Expr,
+  right: Expr
+}
+
+struct ECall {
+  tag: String,
+  span: Span,
+  callee: Expr,
+  args: Vec<Expr>
+}
+
+struct EIf {
+  tag: String,
+  span: Span,
+  cond: Expr,
+  thenExpr: Expr,
+  elseExpr: Expr
+}
 
 // Statements.
 // Convention: payload tuple always starts with Span.
 
 type Stmt =
-  SLet<(Span, Bool, String, Expr)>       // (span, isMut, name, init)
-  | SAssign<(Span, String, Expr)>         // (span, name, value)
-  | SExpr<(Span, Expr)>                   // (span, expr)
-  | SYield<(Span, Expr)>                  // (span, expr)
-  | SWhile<(Span, Expr, Vec<Stmt>)>;      // (span, cond, body)
+  SLet
+  | SAssign
+  | SExpr
+  | SYield
+  | SWhile;
+
+struct SLet {
+  tag: String,
+  span: Span,
+  isMut: Bool,
+  name: String,
+  init: Expr
+}
+
+struct SAssign {
+  tag: String,
+  span: Span,
+  name: String,
+  value: Expr
+}
+
+struct SExpr {
+  tag: String,
+  span: Span,
+  expr: Expr
+}
+
+struct SYield {
+  tag: String,
+  span: Span,
+  expr: Expr
+}
+
+struct SWhile {
+  tag: String,
+  span: Span,
+  cond: Expr,
+  body: Vec<Stmt>
+}
 
 // Top-level declarations.
 // Convention: payload tuple always starts with Span.
 
 type Decl =
-  DFn<(Span, String, Vec<String>, Vec<Stmt>, Expr)>         // fn name(params) => { stmts; tail }
-  | DStruct<(Span, String, Vec<String>)>                     // struct name { fields }
-  | DTypeUnion<(Span, String, Vec<String>)>                  // type name = Variants...
-  | DModule<(Span, String, Vec<Decl>)>
-  | DImport<(Span, String, Vec<String>)>;                    // from module use { names }
+  DFn
+  | DStruct
+  | DTypeUnion
+  | DModule
+  | DImport;
+
+struct DFn {
+  tag: String,
+  span: Span,
+  name: String,
+  params: Vec<String>,
+  body: Vec<Stmt>,
+  tail: Expr
+}
+
+struct DStruct {
+  tag: String,
+  span: Span,
+  name: String,
+  fields: Vec<String>
+}
+
+struct DTypeUnion {
+  tag: String,
+  span: Span,
+  name: String,
+  variants: Vec<String>
+}
+
+struct DModule {
+  tag: String,
+  span: Span,
+  name: String,
+  decls: Vec<Decl>
+}
+
+struct DImport {
+  tag: String,
+  span: Span,
+  modulePath: String,
+  names: Vec<String>
+}
 
 // Helpers
 
@@ -81,13 +226,28 @@ fn span_end(s: Span) : I32 => s.value.1
 fn span_len(s: Span) : I32 => span_end(s) - span_start(s)
 
 fn type_kind(t: TypeRef) : String => t.tag
-fn type_span(t: TypeRef) : Span => t.value.0
+fn type_span(t: TypeRef) : Span => t.span
 
 fn expr_kind(e: Expr) : String => e.tag
-fn expr_span(e: Expr) : Span => e.value.0
+fn expr_span(e: Expr) : Span => e.span
 
 fn stmt_kind(s: Stmt) : String => s.tag
-fn stmt_span(s: Stmt) : Span => s.value.0
+fn stmt_span(s: Stmt) : Span => s.span
 
 fn decl_kind(d: Decl) : String => d.tag
-fn decl_span(d: Decl) : Span => d.value.0
+fn decl_span(d: Decl) : Span => d.span
+
+// Constructors (cross-module safe)
+
+fn ty_name(span: Span, name: String) : TypeRef => TyName { "TyName", span, name }
+fn ty_tuple(span: Span, items: Vec<TypeRef>) : TypeRef => TyTuple { "TyTuple", span, items }
+fn ty_fn(span: Span, params: Vec<TypeRef>, result: TypeRef) : TypeRef => TyFn { "TyFn", span, params, result }
+fn ty_app(span: Span, callee: String, args: Vec<TypeRef>) : TypeRef => TyApp { "TyApp", span, callee, args }
+
+fn expr_int(span: Span, value: I32) : Expr => EInt { "EInt", span, value }
+fn expr_bool(span: Span, value: Bool) : Expr => EBool { "EBool", span, value }
+fn expr_string(span: Span, value: String) : Expr => EString { "EString", span, value }
+fn expr_ident(span: Span, name: String) : Expr => EIdent { "EIdent", span, name }
+fn expr_binary(span: Span, op: BinOp, left: Expr, right: Expr) : Expr => EBinary { "EBinary", span, op, left, right }
+fn expr_call(span: Span, callee: Expr, args: Vec<Expr>) : Expr => ECall { "ECall", span, callee, args }
+fn expr_if(span: Span, cond: Expr, thenExpr: Expr, elseExpr: Expr) : Expr => EIf { "EIf", span, cond, thenExpr, elseExpr }
