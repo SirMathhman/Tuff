@@ -79,3 +79,39 @@ export function stringCharCodeAt(s: string, index: number): number {
 export function stringFromCharCode(code: number): string {
   return String.fromCharCode(code);
 }
+
+// ---- Map helpers ----
+
+export type Map_ = Map<unknown, unknown>;
+
+export function map_new(): Map_ {
+  return new Map();
+}
+
+export function map_get(m: Map_, key: unknown): unknown {
+  return m.get(key);
+}
+
+export function map_set(m: Map_, key: unknown, value: unknown): void {
+  m.set(key, value);
+}
+
+export function map_has(m: Map_, key: unknown): boolean {
+  return m.has(key);
+}
+
+export function map_delete(m: Map_, key: unknown): boolean {
+  return m.delete(key);
+}
+
+export function map_size(m: Map_): number {
+  return m.size;
+}
+
+export function map_keys(m: Map_): unknown[] {
+  return Array.from(m.keys());
+}
+
+export function map_values(m: Map_): unknown[] {
+  return Array.from(m.values());
+}
