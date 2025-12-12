@@ -6,8 +6,8 @@ let __tuffc_struct_defs = vec_new();
 export function ParsedNumber(value, nextPos) {
 return { value: value, nextPos: nextPos };
 }
-export function ParsedIdent(text, nextPos) {
-return { text: text, nextPos: nextPos };
+export function ParsedIdent(text, startPos, nextPos) {
+return { text: text, startPos: startPos, nextPos: nextPos };
 }
 export function ParsedExpr(v0, v1) {
 return { v0: v0, v1: v1 };
@@ -132,8 +132,9 @@ return panic(("unknown struct: " + name));
 export function is_identifier_too_short(text) {
 return (stringLen(text) <= 2);
 }
-export function warn_short_identifier(name) {
-println((("warning: identifier '" + name) + "' is too short (2 chars or less); consider a more descriptive name"));
+export function warn_short_identifier(src, startPos, name) {
+const lc = line_col_at(src, startPos);
+println((((((((__tuffc_current_file + ":") + (("" + lc.line))) + ":") + (("" + lc.col))) + " warning: identifier '") + name) + "' is too short (2 chars or less); consider a more descriptive name"));
 return undefined;
 }
 export function is_digit(code) {
@@ -260,7 +261,7 @@ break;
 }
 j = (j + 1);
 }
-return ParsedIdent(stringSlice(src, start, j), j);
+return ParsedIdent(stringSlice(src, start, j), start, j);
 }
 export function parse_module_path(src, i) {
 let j = skip_ws(src, i);
@@ -275,7 +276,7 @@ j = (j + 1);
 if ((start == j)) {
 panic_at(src, j, "expected module path");
 }
-return ParsedIdent(stringSlice(src, start, j), j);
+return ParsedIdent(stringSlice(src, start, j), start, j);
 }
 export function module_path_to_relpath(p) {
 let out = "";
@@ -1233,7 +1234,7 @@ let k = parse_keyword(src, i, "fn");
 const name = parse_ident(src, k);
 k = name.nextPos;
 if (is_identifier_too_short(name.text)) {
-warn_short_identifier(name.text);
+warn_short_identifier(src, name.startPos, name.text);
 }
 const t0 = skip_ws(src, k);
 if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
@@ -1259,7 +1260,7 @@ k = parse_keyword(src, k, "fn");
 const name = parse_ident(src, k);
 k = name.nextPos;
 if (is_identifier_too_short(name.text)) {
-warn_short_identifier(name.text);
+warn_short_identifier(src, name.startPos, name.text);
 }
 const t0 = skip_ws(src, k);
 if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
@@ -1368,7 +1369,7 @@ let k = parse_keyword(src, i, "struct");
 const name = parse_ident(src, k);
 k = name.nextPos;
 if (is_identifier_too_short(name.text)) {
-warn_short_identifier(name.text);
+warn_short_identifier(src, name.startPos, name.text);
 }
 const t0 = skip_ws(src, k);
 if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
@@ -1407,7 +1408,7 @@ let k = parse_keyword(src, i, "type");
 const _name = parse_ident(src, k);
 k = _name.nextPos;
 if (is_identifier_too_short(_name.text)) {
-warn_short_identifier(_name.text);
+warn_short_identifier(src, _name.startPos, _name.text);
 }
 const t0 = skip_ws(src, k);
 if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
@@ -1506,7 +1507,7 @@ k = mutOpt.nextPos;
 const name = parse_ident(src, k);
 k = name.nextPos;
 if (is_identifier_too_short(name.text)) {
-warn_short_identifier(name.text);
+warn_short_identifier(src, name.startPos, name.text);
 }
 const t0 = skip_ws(src, k);
 if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 58))) {
@@ -1554,7 +1555,7 @@ if (is_assign_stmt_start(src, k)) {
 const name = parse_ident(src, k);
 k = name.nextPos;
 if (is_identifier_too_short(name.text)) {
-warn_short_identifier(name.text);
+warn_short_identifier(src, name.startPos, name.text);
 }
 k = parse_keyword(src, k, "=");
 const expr = parse_expr(src, k);

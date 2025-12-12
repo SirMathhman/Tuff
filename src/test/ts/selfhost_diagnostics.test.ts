@@ -34,4 +34,38 @@ describe("selfhost diagnostics", () => {
     expect(msg).toContain("expected");
     expect(msg).toMatch(/\n\s*\|\s*\^/);
   });
+
+  test("warning includes file and line", async () => {
+    const outDir = resolve(
+      ".dist",
+      "selfhost-diagnostics",
+      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    );
+
+    await mkdir(outDir, { recursive: true });
+    const { libFile } = await stagePrebuiltSelfhostCompiler(outDir);
+    const stage1lib = (await import(pathToFileURL(libFile).toString())) as any;
+
+    // Trigger a naming warning: identifier 'k' is too short.
+    // Keep it small and valid so we don't throw.
+    const src = `fn main() => { let k = 1; k }`;
+
+    const chunks: string[] = [];
+    const origWrite = process.stdout.write.bind(process.stdout);
+    (process.stdout as any).write = (chunk: any, ...args: any[]) => {
+      chunks.push(String(chunk));
+      return origWrite(chunk, ...args);
+    };
+
+    try {
+      stage1lib.compile_tiny(src);
+    } finally {
+      (process.stdout as any).write = origWrite;
+    }
+
+    const out = chunks.join("");
+
+    // Must include filename and line/col.
+    expect(out).toMatch(/<input>:\d+:\d+ warning: identifier 'k' is too short/);
+  });
 });
