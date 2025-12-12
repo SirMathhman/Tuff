@@ -9,9 +9,9 @@
 //
 // Output is ESM that exports `main`.
 
-extern from rt::stdlib use { println, panic, readTextFile, writeTextFile, stringLen, stringSlice, stringCharCodeAt, stringFromCharCode };
+extern from rt::stdlib use { println, panic, readTextFile, writeTextFile, pathDirname, pathJoin, stringLen, stringSlice, stringCharCodeAt, stringFromCharCode };
 
-extern from rt::vec use { vec_len, vec_get };
+extern from rt::vec use { vec_new, vec_len, vec_push, vec_get };
 
 // Tiny record type used to return two values from parsing helpers.
 class fn ParsedNumber(v0, v1) => {}
@@ -21,6 +21,7 @@ class fn ParsedMain(body, expr, v1) => {}
 class fn ParsedBool(v0, v1) => {}
 class fn ParsedStmt(v0, v1) => {}
 class fn ParsedParams(v0, v1) => {}
+class fn ParsedImports(v0, v1) => {}
 
 // Utility: ASCII checks
 fn is_digit(code) => { code >= 48 && code <= 57 }
@@ -256,9 +257,34 @@ fn parse_primary(src, i) => {
   }
   if (is_ident_start(c)) {
     let id = parse_ident(src, j);
-    yield ParsedExpr(id.v0, id.v1);
+    let mut k = id.v1;
+    let mut out = id.v0;
+    while (true) {
+      let t = skip_ws(src, k);
+      if (!(t + 1 < stringLen(src))) { break; }
+      if (!(stringCharCodeAt(src, t) == 58 && stringCharCodeAt(src, t + 1) == 58)) { break; } // '::'
+      let next = parse_ident(src, t + 2);
+      out = out + "." + next.v0;
+      k = next.v1;
+    }
+    yield ParsedExpr(out, k);
   }
   panic("expected expression")
+}
+
+fn parse_imports(src, i) => {
+  let mut k = i;
+  let mut out = "";
+  while (true) {
+    let j = skip_ws(src, k);
+    if (!starts_with_at(src, j, "import")) { break; }
+    k = parse_keyword(src, k, "import");
+    let mod = parse_ident(src, k);
+    k = mod.v1;
+    k = parse_optional_semicolon(src, k);
+    out = out + ("import * as " + mod.v0 + " from \"./" + mod.v0 + ".mjs\";\n");
+  }
+  ParsedImports(out, k)
 }
 
 fn parse_param_list(src, i) => {
@@ -326,7 +352,7 @@ fn parse_extern_decl(src, i) => {
   ParsedStmt("import { " + names + " } from \"" + importPath + "\";\n", k)
 }
 
-fn parse_fn_decl(src, i) => {
+fn parse_fn_decl2(src, i, exportAll) => {
   let mut k = parse_keyword(src, i, "fn");
   let name = parse_ident(src, k);
   k = name.v1;
@@ -336,10 +362,12 @@ fn parse_fn_decl(src, i) => {
   let body = parse_main_body(src, k);
   k = body.v1;
 
-  let exportKw = if (name.v0 == "main") "export " else "";
+  let exportKw = if (exportAll || name.v0 == "main") "export " else "";
   let js = exportKw + "function " + name.v0 + "(" + params.v0 + ") {\n" + body.body + "return " + body.expr + ";\n}\n";
   ParsedStmt(js, k)
 }
+
+fn parse_fn_decl(src, i) => parse_fn_decl2(src, i, false)
 
 fn parse_optional_semicolon(src, i) => {
   let j = skip_ws(src, i);
@@ -507,9 +535,10 @@ fn parse_main_body(src, i) => {
   ParsedMain("", e.v0, e.v1)
 }
 
-fn compile_tiny(src) => {
+fn compile_tiny2(src, requireMain, exportAll) => {
   // Parse:
   //   (extern from <mod> use { <idents> };)*
+  //   (import <ident>;)*
   //   (let <ident> = <expr>;)*
   //   (fn <ident>(<params>) => <expr|block>)*
   let mut i = 0;
@@ -527,6 +556,11 @@ fn compile_tiny(src) => {
     }
     break;
   }
+
+  // zero or more imports
+  let imps = parse_imports(src, i);
+  out = out + imps.v0;
+  i = imps.v1;
 
   // zero or more let statements
   while (true) {
@@ -550,13 +584,101 @@ fn compile_tiny(src) => {
   while (true) {
     let j = skip_ws(src, i);
     if (!starts_with_at(src, j, "fn")) { break; }
-    let f = parse_fn_decl(src, i);
+    let f = parse_fn_decl2(src, i, exportAll);
     if (starts_with_at(f.v0, 0, "export function main")) { sawMain = true; }
     out = out + f.v0;
     i = f.v1;
   }
-  if (!sawMain) { panic("expected fn main"); }
+  if (requireMain && !sawMain) { panic("expected fn main"); }
   out
+}
+
+fn compile_tiny(src) => compile_tiny2(src, true, false)
+fn compile_module(src) => compile_tiny2(src, false, true)
+
+fn compile_project(entryPath, outPath) => {
+  // Very small multi-file compiler:
+  // - only supports `import <ident>;`
+  // - resolves to sibling file: <ident>.tuff in the entry's directory
+  // - emits sibling output: <ident>.mjs in outDir
+
+  let outDir = pathDirname(outPath);
+
+  let mut queue = vec_new();
+  vec_push(queue, entryPath);
+
+  let mut done = vec_new();
+
+  while (vec_len(queue) > 0) {
+    let path = vec_get(queue, vec_len(queue) - 1);
+    // pop
+    // (no vec_pop; emulate by shrinking via set+len conventions isn't available,
+    //  so we'll use a simple index-based loop instead)
+    // We'll just process the last item and rebuild the queue without it.
+    let mut newQ = vec_new();
+    let mut qi = 0;
+    while (qi + 1 < vec_len(queue)) {
+      vec_push(newQ, vec_get(queue, qi));
+      qi = qi + 1;
+    }
+    queue = newQ;
+
+    // skip if already done
+    let mut already = false;
+    let mut di = 0;
+    while (di < vec_len(done)) {
+      if (vec_get(done, di) == path) { already = true; break; }
+      di = di + 1;
+    }
+    if (already) { continue; }
+    vec_push(done, path);
+
+    let src = readTextFile(path);
+
+    // discover imports for queueing (same parsing as emitter)
+    let mut scan = 0;
+    // skip externs
+    while (true) {
+      let j = skip_ws(src, scan);
+      if (starts_with_at(src, j, "extern")) {
+        let ex = parse_extern_decl(src, scan);
+        scan = ex.v1;
+        continue;
+      }
+      break;
+    }
+    while (true) {
+      let j = skip_ws(src, scan);
+      if (!starts_with_at(src, j, "import")) { break; }
+      scan = parse_keyword(src, scan, "import");
+      let mod = parse_ident(src, scan);
+      scan = mod.v1;
+      scan = parse_optional_semicolon(src, scan);
+      let baseDir = pathDirname(path);
+      let depPath = pathJoin(baseDir, mod.v0 + ".tuff");
+      vec_push(queue, depPath);
+    }
+
+    let js = if (path == entryPath) compile_tiny(src) else compile_module(src);
+    // choose output name
+    let outFile = if (path == entryPath) outPath else {
+      // <ident>.tuff -> <ident>.mjs
+      // We only support sibling modules: /dir/name.tuff
+      // so compute name by scanning for last path separator and stripping .tuff.
+      let mut p = stringLen(path) - 1;
+      let mut slash = -1;
+      while (p >= 0) {
+        let ch = stringCharCodeAt(path, p);
+        if (ch == 47 || ch == 92) { slash = p; break; }
+        p = p - 1;
+      }
+      let file = stringSlice(path, slash + 1, stringLen(path));
+      // strip .tuff
+      let name = stringSlice(file, 0, stringLen(file) - 5);
+      pathJoin(outDir, name + ".mjs")
+    };
+    writeTextFile(outFile, js);
+  }
 }
 
 // When run as a program, compile stdin-like file input.
@@ -569,8 +691,6 @@ fn main(argv) => {
   let inPath = vec_get(argv, 0);
   let outPath = vec_get(argv, 1);
 
-  let src = readTextFile(inPath);
-  let js = compile_tiny(src);
-  writeTextFile(outPath, js);
+  compile_project(inPath, outPath);
   0
 }

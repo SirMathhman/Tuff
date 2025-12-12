@@ -41,11 +41,18 @@ describe("selfhost", () => {
     const tuffcFile = resolve(outDir, "tuffc.mjs");
     await writeFile(tuffcFile, js, "utf8");
 
+    const mathIn = resolve(outDir, "math.tuff");
+    await writeFile(
+      mathIn,
+      'fn add(a, b) => a + b\n',
+      "utf8"
+    );
+
     const tinyIn = resolve(outDir, "tiny.tuff");
     const tinyOut = resolve(outDir, "tiny.mjs");
     await writeFile(
       tinyIn,
-      "extern from rt::stdlib use { println };\nfn inc(x) => x + 1\nfn isThree(x) => x == 3\nfn main() => { println(\"start\"); let mut x = 0; while (x < 3) { println(\"loop\"); x = inc(x); } let mut r = 0; if (isThree(x)) { r = x; } else { r = 0; } println(\"end\"); r }\n",
+      'extern from rt::stdlib use { println };\nimport math;\nfn main() => { println("start"); let mut x = 0; while (x < 3) { x = math::add(x, 1); } println("end"); x }\n',
       "utf8"
     );
 
@@ -57,6 +64,9 @@ describe("selfhost", () => {
 
     const emitted = await readFile(tinyOut, "utf8");
     expect(emitted).toContain("export function main");
+    const mathOut = resolve(outDir, "math.mjs");
+    const emittedMath = await readFile(mathOut, "utf8");
+    expect(emittedMath).toContain("export function add");
 
     const tinyMod = await import(pathToFileURL(tinyOut).toString());
     expect(tinyMod.main()).toBe(3);
