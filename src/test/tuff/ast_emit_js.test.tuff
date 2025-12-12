@@ -1,0 +1,76 @@
+extern from rt::vec use { vec_new, vec_push };
+
+from std::test use { reset, suite, it, expect_eq, summary, status };
+
+from src::main::tuff::compiler::ast use {
+  span,
+  OpAdd,
+  expr_int,
+  expr_bool,
+  expr_string,
+  expr_ident,
+  expr_binary,
+  expr_call,
+  expr_if
+};
+
+from src::main::tuff::compiler::emit_ast_js use { emit_expr_js };
+
+fn main() : I32 => {
+  reset();
+  suite("compiler ast -> js emit (phase3 scaffold)");
+
+  it(
+    "int emits",
+    expect_eq("emit", emit_expr_js(expr_int(span(0, 0), 42)), "42")
+  );
+
+  it(
+    "bool emits",
+    expect_eq("emit", emit_expr_js(expr_bool(span(0, 0), true)), "true")
+  );
+
+  it(
+    "string emits and escapes",
+    expect_eq("emit", emit_expr_js(expr_string(span(0, 0), "a\"b\\c\n")), "\"a\\\"b\\\\c\\n\"")
+  );
+
+  it(
+    "ident emits",
+    expect_eq("emit", emit_expr_js(expr_ident(span(0, 0), "x")), "x")
+  );
+
+  it(
+    "binary emits with parens",
+    expect_eq(
+      "emit",
+      emit_expr_js(expr_binary(span(0, 0), OpAdd, expr_ident(span(0, 0), "x"), expr_int(span(0, 0), 1))),
+      "(x + 1)"
+    )
+  );
+
+  let args = vec_new();
+  vec_push(args, expr_int(span(0, 0), 1));
+  vec_push(args, expr_int(span(0, 0), 2));
+
+  it(
+    "call emits",
+    expect_eq(
+      "emit",
+      emit_expr_js(expr_call(span(0, 0), expr_ident(span(0, 0), "f"), args)),
+      "f(1, 2)"
+    )
+  );
+
+  it(
+    "if emits as ternary",
+    expect_eq(
+      "emit",
+      emit_expr_js(expr_if(span(0, 0), expr_ident(span(0, 0), "c"), expr_int(span(0, 0), 1), expr_int(span(0, 0), 0))),
+      "(c ? 1 : 0)"
+    )
+  );
+
+  summary();
+  status()
+}

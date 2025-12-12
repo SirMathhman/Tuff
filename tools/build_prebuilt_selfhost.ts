@@ -25,6 +25,17 @@ async function writeRuntime(outDir: string) {
   await copyFile(resolve("rt/vec.mjs"), resolve(rtDir, "vec.mjs"));
 }
 
+async function copyTopLevelMjsFiles(srcDir: string, dstDir: string) {
+  // Copy all top-level emitted compiler modules (e.g. diagnostics.mjs, lexing.mjs)
+  // alongside tuffc.mjs/tuffc_lib.mjs. Subdirs (like rt/) are handled elsewhere.
+  const entries = await readdir(srcDir, { withFileTypes: true });
+  for (const ent of entries) {
+    if (!ent.isFile()) continue;
+    if (!ent.name.endsWith(".mjs")) continue;
+    await copyFile(resolve(srcDir, ent.name), resolve(dstDir, ent.name));
+  }
+}
+
 async function stagePrebuiltCompiler(intoDir: string) {
   const prebuiltDir = resolve("selfhost", "prebuilt");
   const entrySrc = resolve(prebuiltDir, "tuffc.mjs");
@@ -37,8 +48,7 @@ async function stagePrebuiltCompiler(intoDir: string) {
 
   await mkdir(intoDir, { recursive: true });
   await writeRuntime(intoDir);
-  await copyFile(entrySrc, resolve(intoDir, "tuffc.mjs"));
-  await copyFile(libSrc, resolve(intoDir, "tuffc_lib.mjs"));
+  await copyTopLevelMjsFiles(prebuiltDir, intoDir);
 
   return resolve(intoDir, "tuffc.mjs");
 }
@@ -155,8 +165,7 @@ async function main() {
 
   await mkdir(prebuiltDir, { recursive: true });
   await writeRuntime(prebuiltDir);
-  await copyFile(s4.entry, resolve(prebuiltDir, "tuffc.mjs"));
-  await copyFile(s4.lib, resolve(prebuiltDir, "tuffc_lib.mjs"));
+  await copyTopLevelMjsFiles(stage4Dir, prebuiltDir);
 
   console.log(`wrote prebuilt compiler to ${prebuiltDir}`);
 }

@@ -46,8 +46,8 @@ describe("selfhost diagnostics", () => {
     const { libFile } = await stagePrebuiltSelfhostCompiler(outDir);
     const stage1lib = (await import(pathToFileURL(libFile).toString())) as any;
 
-    // Trigger a naming warning: identifier 'k' is too short.
-    // Keep it small and valid so we don't throw.
+    // Historically we emitted a warning for very short identifiers (like `k`).
+    // That check is intentionally removed/disabled now because it was too noisy.
     const src = `fn main() => { let k = 1; k }`;
 
     const chunks: string[] = [];
@@ -65,7 +65,7 @@ describe("selfhost diagnostics", () => {
 
     const out = chunks.join("");
 
-    // Must include filename and line/col.
-    expect(out).toMatch(/<input>:\d+:\d+ warning: identifier 'k' is too short/);
+    // Should NOT emit the old short-identifier warning.
+    expect(out).not.toMatch(/warning: identifier 'k' is too short/);
   });
 });

@@ -1,0 +1,113 @@
+// Phase 3 scaffold: JS-only emitter for the canonical AST.
+//
+// This module is intentionally small and only supports the current subset of
+// `compiler/ast.tuff` nodes.
+
+extern from rt::stdlib use { stringLen, stringCharCodeAt, stringFromCharCode };
+extern from rt::vec use { vec_len, vec_get };
+
+fn escape_js_string(s: String) : String => {
+  // Minimal JS string escaping for double-quoted literals.
+  // (More escapes can be added as the AST grows.)
+  let mut out = "";
+  let mut i = 0;
+  while (i < stringLen(s)) {
+    let ch = stringCharCodeAt(s, i);
+
+    // '"'
+    if (ch == 34) {
+      out = out + "\\\"";
+      i = i + 1;
+      continue;
+    }
+
+    // '\\'
+    if (ch == 92) {
+      out = out + "\\\\";
+      i = i + 1;
+      continue;
+    }
+
+    // '\n'
+    if (ch == 10) {
+      out = out + "\\n";
+      i = i + 1;
+      continue;
+    }
+
+    // '\r'
+    if (ch == 13) {
+      out = out + "\\r";
+      i = i + 1;
+      continue;
+    }
+
+    // '\t'
+    if (ch == 9) {
+      out = out + "\\t";
+      i = i + 1;
+      continue;
+    }
+
+    out = out + stringFromCharCode(ch);
+    i = i + 1;
+  }
+  out
+}
+
+fn emit_binop_js(op) : String => {
+  // NOTE: The current selfhost JS emitter does not fully support `if` as an
+  // expression (it compiles it as a statement). So we avoid relying on the
+  // value of `if` here and in `emit_expr_js`.
+  let mut out = "??";
+  if (op.tag == "OpAdd") { out = "+"; }
+  if (op.tag == "OpSub") { out = "-"; }
+  if (op.tag == "OpMul") { out = "*"; }
+  if (op.tag == "OpDiv") { out = "/"; }
+  if (op.tag == "OpEq") { out = "=="; }
+  if (op.tag == "OpNe") { out = "!="; }
+  if (op.tag == "OpLt") { out = "<"; }
+  if (op.tag == "OpLe") { out = "<="; }
+  if (op.tag == "OpGt") { out = ">"; }
+  if (op.tag == "OpGe") { out = ">="; }
+  if (op.tag == "OpAnd") { out = "&&"; }
+  if (op.tag == "OpOr") { out = "||"; }
+  out
+}
+
+fn emit_expr_js(e) : String => {
+  // Default fallback for nodes we haven't implemented yet.
+  let mut out = "undefined";
+
+  if (e.tag == "EInt") { out = "" + e.value; }
+
+  if (e.tag == "EBool") {
+    if (e.value) { out = "true"; }
+    else { out = "false"; }
+  }
+
+  if (e.tag == "EString") { out = "\"" + escape_js_string(e.value) + "\""; }
+  if (e.tag == "EIdent") { out = e.name; }
+
+  if (e.tag == "EBinary") {
+    out = "(" + emit_expr_js(e.left) + " " + emit_binop_js(e.op) + " " + emit_expr_js(e.right) + ")";
+  }
+
+  if (e.tag == "ECall") {
+    let mut s = emit_expr_js(e.callee) + "(";
+    let mut i = 0;
+    while (i < vec_len(e.args)) {
+      if (i > 0) { s = s + ", "; }
+      s = s + emit_expr_js(vec_get(e.args, i));
+      i = i + 1;
+    }
+    s = s + ")";
+    out = s;
+  }
+
+  if (e.tag == "EIf") {
+    out = "(" + emit_expr_js(e.cond) + " ? " + emit_expr_js(e.thenExpr) + " : " + emit_expr_js(e.elseExpr) + ")";
+  }
+
+  out
+}

@@ -1,5 +1,5 @@
-import { copyFile, mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
+import { copyFile, mkdir, readdir } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 
 async function writeRuntime(outDir: string) {
   const rtDir = resolve(outDir, "rt");
@@ -30,15 +30,43 @@ async function writeStdSources(outDir: string) {
 }
 
 async function writeCompilerSources(outDir: string) {
-  // Stage selected compiler sources so .tuff tests can import them.
+  // Stage compiler sources so .tuff tests can import them.
   // We mirror the repo-relative path inside outDir.
-  const compilerDir = resolve(outDir, "src", "main", "tuff", "compiler");
-  await mkdir(compilerDir, { recursive: true });
+  const repoCompilerDir = resolve("src", "main", "tuff", "compiler");
+  const stagedCompilerDir = resolve(outDir, "src", "main", "tuff", "compiler");
 
+  async function walkAndCopyTuffSources(
+    srcDir: string,
+    dstDir: string
+  ): Promise<void> {
+    const entries = await readdir(srcDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const srcPath = join(srcDir, entry.name);
+      const dstPath = join(dstDir, entry.name);
+      if (entry.isDirectory()) {
+        await walkAndCopyTuffSources(srcPath, dstPath);
+        continue;
+      }
+      if (entry.isFile() && entry.name.endsWith(".tuff")) {
+        await mkdir(dirname(dstPath), { recursive: true });
+        await copyFile(srcPath, dstPath);
+      }
+    }
+  }
+
+  await mkdir(stagedCompilerDir, { recursive: true });
+  await walkAndCopyTuffSources(repoCompilerDir, stagedCompilerDir);
+
+  // The selfhost compiler currently emits rt extern imports as "./rt/<mod>.mjs".
+  // If a module compiles into outDir/src/main/tuff/compiler/*.mjs, those imports
+  // must resolve from within that directory.
+  const compilerRtDir = resolve(stagedCompilerDir, "rt");
+  await mkdir(compilerRtDir, { recursive: true });
   await copyFile(
-    resolve("src", "main", "tuff", "compiler", "ast.tuff"),
-    resolve(compilerDir, "ast.tuff")
+    resolve("rt/stdlib.mjs"),
+    resolve(compilerRtDir, "stdlib.mjs")
   );
+  await copyFile(resolve("rt/vec.mjs"), resolve(compilerRtDir, "vec.mjs"));
 }
 
 export async function stagePrebuiltSelfhostCompiler(
@@ -56,14 +84,13 @@ export async function stagePrebuiltSelfhostCompiler(
     await writeCompilerSources(outDir);
   }
 
-  await copyFile(
-    resolve(prebuiltDir, "tuffc.mjs"),
-    resolve(outDir, "tuffc.mjs")
-  );
-  await copyFile(
-    resolve(prebuiltDir, "tuffc_lib.mjs"),
-    resolve(outDir, "tuffc_lib.mjs")
-  );
+  // Copy all prebuilt compiler modules (the compiler is now split across files).
+  const entries = await readdir(prebuiltDir, { withFileTypes: true });
+  for (const ent of entries) {
+    if (!ent.isFile()) continue;
+    if (!ent.name.endsWith(".mjs")) continue;
+    await copyFile(resolve(prebuiltDir, ent.name), resolve(outDir, ent.name));
+  }
 
   return {
     entryFile: resolve(outDir, "tuffc.mjs"),

@@ -99,10 +99,13 @@ fn find_struct_fields(name: String) : Vec<String> => {
 
 // Identifier quality checks
 fn is_identifier_too_short(text: String) : Bool => {
-  stringLen(text) <= 2
+  // This check was too noisy in practice (especially in tests and small examples).
+  // It remains as a stubbed hook so call-sites don't need to change.
+  false
 }
 
 fn warn_short_identifier(src: String, startPos: I32, name: String) : Void => {
-  let lc = line_col_at(src, startPos);
-  println(__tuffc_current_file + ":" + ("" + lc.line) + ":" + ("" + lc.col) + " warning: identifier '" + name + "' is too short (2 chars or less); consider a more descriptive name");
+  // Intentionally disabled (see is_identifier_too_short).
+  // Keep the signature so call-sites remain stable.
+  // (No-op)
 }
