@@ -8,7 +8,7 @@
 
 extern from rt::vec use { vec_new, vec_len, vec_push, vec_get };
 
-from lexing use { Token, TokenStream, emit_token_stream };
+from util::lexing use { Token, TokenStream, emit_token_stream };
 
 fn emit_tuff(ts: TokenStream) : String => emit_token_stream(ts)
 

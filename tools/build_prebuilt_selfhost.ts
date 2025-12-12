@@ -25,15 +25,25 @@ async function writeRuntime(outDir: string) {
   await copyFile(resolve("rt/vec.mjs"), resolve(rtDir, "vec.mjs"));
 }
 
-async function copyTopLevelMjsFiles(srcDir: string, dstDir: string) {
-  // Copy all top-level emitted compiler modules (e.g. diagnostics.mjs, lexing.mjs)
-  // alongside tuffc.mjs/tuffc_lib.mjs. Subdirs (like rt/) are handled elsewhere.
+async function copyPrebuiltRecursively(srcDir: string, dstDir: string) {
+  // Copy all .mjs files from prebuilt, preserving directory structure
   const entries = await readdir(srcDir, { withFileTypes: true });
   for (const ent of entries) {
-    if (!ent.isFile()) continue;
-    if (!ent.name.endsWith(".mjs")) continue;
-    await copyFile(resolve(srcDir, ent.name), resolve(dstDir, ent.name));
+    const srcPath = resolve(srcDir, ent.name);
+    const dstPath = resolve(dstDir, ent.name);
+    if (ent.isDirectory() && ent.name !== "rt") {
+      // Skip rt; it's handled separately
+      await mkdir(dstPath, { recursive: true });
+      await copyPrebuiltRecursively(srcPath, dstPath);
+    } else if (ent.isFile() && ent.name.endsWith(".mjs")) {
+      await copyFile(srcPath, dstPath);
+    }
   }
+}
+
+async function copyTopLevelMjsFiles(srcDir: string, dstDir: string) {
+  // Copy all emitted compiler modules, preserving directory structure from prebuilt/
+  await copyPrebuiltRecursively(srcDir, dstDir);
 }
 
 async function stagePrebuiltCompiler(intoDir: string) {
@@ -53,6 +63,20 @@ async function stagePrebuiltCompiler(intoDir: string) {
   return resolve(intoDir, "tuffc.mjs");
 }
 
+async function collectTuffFiles(dir: string, baseDir: string): Promise<string[]> {
+  const files: string[] = [];
+  const entries = await readdir(dir, { withFileTypes: true });
+  for (const ent of entries) {
+    const fullPath = resolve(dir, ent.name);
+    if (ent.isDirectory()) {
+      files.push(...(await collectTuffFiles(fullPath, baseDir)));
+    } else if (ent.isFile() && ent.name.endsWith(".tuff")) {
+      files.push(fullPath);
+    }
+  }
+  return files;
+}
+
 async function bootstrapCompileSelfhost(intoDir: string) {
   // Dynamically import the bootstrap compiler so this script can keep working
   // after bootstrap removal, as long as `selfhost/prebuilt` already exists.
@@ -64,12 +88,9 @@ async function bootstrapCompileSelfhost(intoDir: string) {
   await writeRuntime(intoDir);
 
   const selfhostDir = resolve("src", "main", "tuff", "compiler");
-  const entries = await readdir(selfhostDir, { withFileTypes: true });
-  for (const ent of entries) {
-    if (!ent.isFile()) continue;
-    if (!ent.name.endsWith(".tuff")) continue;
+  const allTuffFiles = await collectTuffFiles(selfhostDir, selfhostDir);
 
-    const filePath = resolve(selfhostDir, ent.name);
+  for (const filePath of allTuffFiles) {
     const source = await readFile(filePath, "utf8");
     const { js, diagnostics } = compileToESM({ filePath, source });
     const errors = diagnostics.filter((d) => d.severity === "error");
@@ -87,7 +108,10 @@ async function bootstrapCompileSelfhost(intoDir: string) {
       );
     }
 
-    const outFile = resolve(intoDir, ent.name.replace(/\.tuff$/, ".mjs"));
+    // Preserve directory structure: e.g., parsing/primitives.tuff -> parsing/primitives.mjs
+    const relPath = resolve(filePath).substring(resolve(selfhostDir).length + 1);
+    const outFile = resolve(intoDir, relPath.replace(/\.tuff$/, ".mjs"));
+    await mkdir(resolve(outFile, ".."), { recursive: true });
     await writeFile(outFile, js, "utf8");
   }
 

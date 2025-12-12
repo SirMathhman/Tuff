@@ -1,8 +1,8 @@
 // compiled by selfhost tuffc
 import { stringLen, stringCharCodeAt, stringSlice } from "./rt/stdlib.mjs";
-import { panic_at } from "./diagnostics.mjs";
-import { skip_ws } from "./lexing.mjs";
-import { ParsedIdent, ParsedNumber, parse_ident, parse_keyword, parse_number } from "./parsing_primitives.mjs";
+import { panic_at } from "./../util/diagnostics.mjs";
+import { skip_ws } from "./../util/lexing.mjs";
+import { ParsedIdent, ParsedNumber, parse_ident, parse_keyword, parse_number } from "./primitives.mjs";
 export function ParsedType(v0, v1) {
 return { v0: v0, v1: v1 };
 }

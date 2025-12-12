@@ -1,18 +1,18 @@
 // compiled by selfhost tuffc
 import { println, panic, readTextFile, writeTextFile, pathDirname, pathJoin, stringLen, stringSlice, stringCharCodeAt, stringFromCharCode } from "./rt/stdlib.mjs";
 import { vec_new, vec_len, vec_push, vec_get } from "./rt/vec.mjs";
-import { set_current_file, panic_at, reset_struct_defs, add_struct_def, find_struct_fields, is_identifier_too_short, warn_short_identifier } from "./diagnostics.mjs";
-import { is_digit, is_space, is_ident_start, is_ident_part, skip_ws, starts_with_at } from "./lexing.mjs";
-import { ParsedNumber, ParsedIdent, ParsedBool, parse_keyword, parse_number, parse_ident, parse_module_path, module_path_to_relpath, parse_optional_semicolon, parse_required_semicolon } from "./parsing_primitives.mjs";
-import { ParsedType, parse_type_expr, skip_angle_brackets, skip_type_expr } from "./parsing_types.mjs";
-import { ParsedExpr, ParsedMain, ParsedStmt, ParsedParams, parse_expr, parse_stmt, parse_main_body, parse_mut_opt, is_assign_stmt_start, is_field_assign_stmt_start, is_index_assign_stmt_start } from "./parsing_expr_stmt.mjs";
-import { ParsedExprAst, parse_expr_ast } from "./parsing_expr_stmt.mjs";
-import { ParsedImports, ParsedFn, parse_imports, parse_extern_decl, parse_module_decl, parse_fn_decl2, parse_class_fn_decl2, parse_struct_decl, parse_type_union_decl, parse_param_list, parse_fn_decl_named, parse_fn_decl } from "./parsing_decls.mjs";
-import { ParsedDeclAst, ParsedDeclsAst, parse_imports_ast, parse_extern_decl_ast, parse_module_decl_ast, parse_fn_decl_ast2, parse_class_fn_decl_ast2, parse_struct_decl_ast, parse_type_union_decl_ast } from "./parsing_decls.mjs";
+import { set_current_file, panic_at, reset_struct_defs, add_struct_def, find_struct_fields, is_identifier_too_short, warn_short_identifier } from "./util/diagnostics.mjs";
+import { is_digit, is_space, is_ident_start, is_ident_part, skip_ws, starts_with_at } from "./util/lexing.mjs";
+import { ParsedNumber, ParsedIdent, ParsedBool, parse_keyword, parse_number, parse_ident, parse_module_path, module_path_to_relpath, parse_optional_semicolon, parse_required_semicolon } from "./parsing/primitives.mjs";
+import { ParsedType, parse_type_expr, skip_angle_brackets, skip_type_expr } from "./parsing/types.mjs";
+import { ParsedExpr, ParsedMain, ParsedStmt, ParsedParams, parse_expr, parse_stmt, parse_main_body, parse_mut_opt, is_assign_stmt_start, is_field_assign_stmt_start, is_index_assign_stmt_start } from "./parsing/expr_stmt.mjs";
+import { ParsedExprAst, parse_expr_ast } from "./parsing/expr_stmt.mjs";
+import { ParsedImports, ParsedFn, parse_imports, parse_extern_decl, parse_module_decl, parse_fn_decl2, parse_class_fn_decl2, parse_struct_decl, parse_type_union_decl, parse_param_list, parse_fn_decl_named, parse_fn_decl } from "./parsing/decls.mjs";
+import { ParsedDeclAst, ParsedDeclsAst, parse_imports_ast, parse_extern_decl_ast, parse_module_decl_ast, parse_fn_decl_ast2, parse_class_fn_decl_ast2, parse_struct_decl_ast, parse_type_union_decl_ast } from "./parsing/decls.mjs";
 import { span, decl_let } from "./ast.mjs";
-import { emit_decl_js } from "./emit_ast_js.mjs";
+import { emit_decl_js } from "./emit/ast_js.mjs";
 import { analyze_program } from "./analyzer.mjs";
-import { ParsedProgramWithTrivia, parse_program_with_trivia } from "./formatting.mjs";
+import { ParsedProgramWithTrivia, parse_program_with_trivia } from "./util/formatting.mjs";
 export function parse_program_with_trivia_api(src, exportAll) {
 return parse_program_with_trivia(src, exportAll);
 }

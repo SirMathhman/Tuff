@@ -1,6 +1,6 @@
 // compiled by selfhost tuffc
 import { vec_new, vec_len, vec_push, vec_get, vec_set } from "./rt/vec.mjs";
-import { panic_at } from "./diagnostics.mjs";
+import { panic_at } from "./util/diagnostics.mjs";
 import { span_start } from "./ast.mjs";
 export function mk_binding(name, isMut, tyTag) {
 return ({ tag: "Binding", name: name, isMut: isMut, tyTag: tyTag });

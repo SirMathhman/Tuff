@@ -8,9 +8,9 @@ extern from rt::stdlib use {
   stringFromCharCode
 };
 
-from diagnostics use { panic_at };
+from util::diagnostics use { panic_at };
 
-from lexing use {
+from util::lexing use {
   is_digit,
   is_space,
   is_ident_start,

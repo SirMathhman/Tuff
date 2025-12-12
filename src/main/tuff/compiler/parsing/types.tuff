@@ -3,10 +3,10 @@
 
 extern from rt::stdlib use { stringLen, stringCharCodeAt, stringSlice };
 
-from diagnostics use { panic_at };
-from lexing use { skip_ws };
+from util::diagnostics use { panic_at };
+from util::lexing use { skip_ws };
 
-from parsing_primitives use {
+from parsing::primitives use {
   ParsedIdent,
   ParsedNumber,
   parse_ident,

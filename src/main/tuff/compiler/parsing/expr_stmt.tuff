@@ -4,14 +4,14 @@
 extern from rt::stdlib use { panic, stringLen, stringSlice, stringCharCodeAt, stringFromCharCode };
 extern from rt::vec use { vec_new, vec_push, vec_len, vec_get };
 
-from diagnostics use {
+from util::diagnostics use {
   panic_at,
   find_struct_fields,
   is_identifier_too_short,
   warn_short_identifier
 };
 
-from lexing use {
+from util::lexing use {
   is_digit,
   is_ident_start,
   is_ident_part,
@@ -19,7 +19,7 @@ from lexing use {
   starts_with_at
 };
 
-from parsing_primitives use {
+from parsing::primitives use {
   ParsedBool,
   ParsedIdent,
   ParsedNumber,
@@ -29,7 +29,7 @@ from parsing_primitives use {
   parse_optional_semicolon
 };
 
-from parsing_types use { parse_type_expr };
+from parsing::types use { parse_type_expr };
 
 from ast use {
   span,

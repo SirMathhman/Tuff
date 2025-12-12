@@ -1,13 +1,13 @@
 // compiled by selfhost tuffc
 import { stringLen, stringSlice, stringCharCodeAt } from "./rt/stdlib.mjs";
 import { vec_new, vec_len, vec_push, vec_get } from "./rt/vec.mjs";
-import { panic_at, add_struct_def, is_identifier_too_short, warn_short_identifier } from "./diagnostics.mjs";
-import { is_ident_part, skip_ws, starts_with_at } from "./lexing.mjs";
-import { ParsedIdent, parse_ident, parse_keyword, parse_module_path, module_path_to_relpath, parse_optional_semicolon } from "./parsing_primitives.mjs";
-import { ParsedType, parse_type_expr, skip_angle_brackets } from "./parsing_types.mjs";
-import { ParsedMain, ParsedParams, ParsedStmt, parse_expr, parse_main_body, parse_mut_opt } from "./parsing_expr_stmt.mjs";
-import { ParsedMainAst, parse_main_body_ast } from "./parsing_expr_stmt.mjs";
-import { span, decl_extern_from, decl_import, decl_fn, decl_class_fn, decl_struct, decl_type_union, type_union_variant, decl_module } from "./ast.mjs";
+import { panic_at, add_struct_def, is_identifier_too_short, warn_short_identifier } from "./../util/diagnostics.mjs";
+import { is_ident_part, skip_ws, starts_with_at } from "./../util/lexing.mjs";
+import { ParsedIdent, parse_ident, parse_keyword, parse_module_path, module_path_to_relpath, parse_optional_semicolon } from "./primitives.mjs";
+import { ParsedType, parse_type_expr, skip_angle_brackets } from "./types.mjs";
+import { ParsedMain, ParsedParams, ParsedStmt, parse_expr, parse_main_body, parse_mut_opt } from "./expr_stmt.mjs";
+import { ParsedMainAst, parse_main_body_ast } from "./expr_stmt.mjs";
+import { span, decl_extern_from, decl_import, decl_fn, decl_class_fn, decl_struct, decl_type_union, type_union_variant, decl_module } from "./../ast.mjs";
 export function ParsedDeclAst(decl, nextPos) {
 return { decl: decl, nextPos: nextPos };
 }

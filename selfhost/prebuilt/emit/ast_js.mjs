@@ -1,9 +1,9 @@
 // compiled by selfhost tuffc
 import { panic, stringLen, stringCharCodeAt, stringFromCharCode, stringSlice } from "./rt/stdlib.mjs";
 import { vec_new, vec_push, vec_len, vec_get, vec_set } from "./rt/vec.mjs";
-import { find_struct_fields } from "./diagnostics.mjs";
-import { starts_with_at } from "./lexing.mjs";
-import { module_path_to_relpath } from "./parsing_primitives.mjs";
+import { find_struct_fields } from "./../util/diagnostics.mjs";
+import { starts_with_at } from "./../util/lexing.mjs";
+import { module_path_to_relpath } from "./../parsing/primitives.mjs";
 export function escape_js_string(s) {
 let out = "";
 let i = 0;

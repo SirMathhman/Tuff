@@ -6,9 +6,9 @@
 extern from rt::stdlib use { panic, stringLen, stringCharCodeAt, stringFromCharCode, stringSlice };
 extern from rt::vec use { vec_new, vec_push, vec_len, vec_get, vec_set };
 
-from diagnostics use { find_struct_fields };
-from lexing use { starts_with_at };
-from parsing_primitives use { module_path_to_relpath };
+from util::diagnostics use { find_struct_fields };
+from util::lexing use { starts_with_at };
+from parsing::primitives use { module_path_to_relpath };
 
 fn escape_js_string(s: String) : String => {
   // Minimal JS string escaping for double-quoted literals.

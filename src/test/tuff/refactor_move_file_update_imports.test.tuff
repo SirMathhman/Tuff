@@ -3,7 +3,7 @@ extern from rt::vec use { vec_new, vec_push, vec_get };
 from std::test use { reset, suite, it, expect_eq, summary, status };
 
 from src::main::tuff::compiler::ast use { span, decl_import, decl_extern_from };
-from src::main::tuff::compiler::refactor_move_file use { FileAst, move_file_update_imports };
+from src::main::tuff::compiler::refactor::move_file use { FileAst, move_file_update_imports };
 
 fn main() : I32 => {
   reset();

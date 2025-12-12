@@ -84,13 +84,23 @@ export async function stagePrebuiltSelfhostCompiler(
     await writeCompilerSources(outDir);
   }
 
-  // Copy all prebuilt compiler modules (the compiler is now split across files).
-  const entries = await readdir(prebuiltDir, { withFileTypes: true });
-  for (const ent of entries) {
-    if (!ent.isFile()) continue;
-    if (!ent.name.endsWith(".mjs")) continue;
-    await copyFile(resolve(prebuiltDir, ent.name), resolve(outDir, ent.name));
+  // Copy all prebuilt compiler modules, recursively preserving directory structure.
+  async function copyRecursively(srcDir: string, dstDir: string) {
+    const entries = await readdir(srcDir, { withFileTypes: true });
+    for (const ent of entries) {
+      if (ent.name === "rt") continue; // rt/ is handled separately
+      const srcPath = join(srcDir, ent.name);
+      const dstPath = join(dstDir, ent.name);
+      if (ent.isDirectory()) {
+        await mkdir(dstPath, { recursive: true });
+        await copyRecursively(srcPath, dstPath);
+      } else if (ent.isFile() && ent.name.endsWith(".mjs")) {
+        await copyFile(srcPath, dstPath);
+      }
+    }
   }
+
+  await copyRecursively(prebuiltDir, outDir);
 
   return {
     entryFile: resolve(outDir, "tuffc.mjs"),

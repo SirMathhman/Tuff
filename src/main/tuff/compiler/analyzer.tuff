@@ -5,7 +5,7 @@
 
 extern from rt::vec use { vec_new, vec_len, vec_push, vec_get, vec_set };
 
-from diagnostics use { panic_at };
+from util::diagnostics use { panic_at };
 from ast use { span_start };
 
 // Binding info tracked per-scope.

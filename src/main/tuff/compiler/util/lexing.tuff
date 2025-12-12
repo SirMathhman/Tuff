@@ -5,7 +5,7 @@ extern from rt::stdlib use { stringLen, stringSlice, stringCharCodeAt };
 
 extern from rt::vec use { vec_new, vec_push, vec_len, vec_get };
 
-from diagnostics use { panic_at };
+from util::diagnostics use { panic_at };
 
 // Used by whitespace-preserving tooling (formatter/refactors).
 // `tag` is one of: TriviaWhitespace | TriviaLineComment | TriviaBlockComment | Code.

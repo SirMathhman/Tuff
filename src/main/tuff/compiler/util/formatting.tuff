@@ -10,22 +10,22 @@
 extern from rt::vec use { vec_new, vec_len, vec_push, vec_get };
 extern from rt::stdlib use { stringLen };
 
-from diagnostics use { panic_at, reset_struct_defs };
+from util::diagnostics use { panic_at, reset_struct_defs };
 
-from lexing use { skip_ws, starts_with_at, tokenize_with_trivia, TokenStream };
+from util::lexing use { skip_ws, starts_with_at, tokenize_with_trivia, TokenStream };
 
-from parsing_primitives use {
+from parsing::primitives use {
   parse_keyword,
   parse_optional_semicolon,
   parse_required_semicolon,
   parse_ident
 };
 
-from parsing_types use { parse_type_expr };
+from parsing::types use { parse_type_expr };
 
-from parsing_expr_stmt use { parse_expr_ast, parse_mut_opt };
+from parsing::expr_stmt use { parse_expr_ast, parse_mut_opt };
 
-from parsing_decls use {
+from parsing::decls use {
   parse_imports_ast,
   parse_extern_decl_ast,
   parse_module_decl_ast,
