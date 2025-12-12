@@ -700,7 +700,6 @@ class fn Rectangle(width: I32, height: I32) => {
     let area: I32 = width * height;
     let perimeter: I32 = 2 * (width + height);
 }
-}
 
 let r = Rectangle(10, 5);
 io.print(r.width);      // 10
@@ -860,7 +859,7 @@ let text = str_container.get();  // "Tuff"
 
 Type parameters flow naturally through the generic class definition, and the yielded `this` value includes all the type information.
 
-### Control Flow
+### The `this` Keyword
 
 The `this` keyword is a special value that captures all bindings in the current lexical scope. It behaves like an object whose fields are the variables and functions accessible in that scope.
 
@@ -895,7 +894,7 @@ io.print(p.y);        // 4
 The `class` keyword provides syntactic sugar for this pattern:
 
 ```tuff
-class Point(x: I32, y: I32) {}  // equivalent to: fn Point(x: I32, y: I32) => this;
+class fn Point(x: I32, y: I32) => {}  // equivalent to: fn Point(x: I32, y: I32) => this;
 
 let p = Point(3, 4);
 io.print(p.x);  // 3
@@ -942,7 +941,7 @@ let user: User = {
 
 ### Control Flow
 
-Standard statements: `if`, `else`, `while`.
+Standard statements: `if`, `else`, `while`, `loop`, and pattern matching with `match`.
 
 Note: Tuff deliberately does not include a C-style `for` statement. For iteration, prefer iterator-based solutions (see the "Iteration and iterators" section).
 
@@ -1080,7 +1079,7 @@ if (result is Ok) {
 }
 
 if (result is Err) {
-    let error = result.value;  // access the error message
+    let error = result.error;  // access the error message
     io.print(error);
 }
 ```
@@ -1472,7 +1471,7 @@ fn main() {
 }
 ```
 
-This implicit module system eliminates boilerplate and naturally maps your project's file structure to its module hierarchy.`
+This implicit module system eliminates boilerplate and naturally maps your project's file structure to its module hierarchy.
 
 ### Error Handling
 
