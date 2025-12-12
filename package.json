@@ -9,6 +9,8 @@
     "tuffc": "bun run src/cli.ts"
   },
   "devDependencies": {
+    "@types/node": "^22.10.2",
+    "bun-types": "^1.2.21",
     "typescript": "^5.8.3"
   }
 }

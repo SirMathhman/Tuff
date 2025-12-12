@@ -61,3 +61,21 @@ export function args(): string[] {
 export function exit(code: number): never {
   process.exit(code);
 }
+
+// ---- String helpers (bootstrap) ----
+
+export function stringLen(s: string): number {
+  return String(s).length;
+}
+
+export function stringSlice(s: string, start: number, end: number): string {
+  return String(s).slice(start, end);
+}
+
+export function stringCharCodeAt(s: string, index: number): number {
+  return String(s).charCodeAt(index);
+}
+
+export function stringFromCharCode(code: number): string {
+  return String.fromCharCode(code);
+}

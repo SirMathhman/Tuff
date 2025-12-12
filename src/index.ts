@@ -1,4 +1,4 @@
-import { Diagnostics } from "./diagnostics";
+import { Diagnostic, Diagnostics } from "./diagnostics";
 import { Lexer } from "./lexer";
 import { Parser } from "./parser";
 import { analyze } from "./analyzer";
@@ -11,7 +11,7 @@ export type CompileOptions = {
 
 export type CompileOutput = {
   js: string;
-  diagnostics: readonly { severity: string; message: string }[];
+  diagnostics: readonly Diagnostic[];
 };
 
 export function compileToESM(opts: CompileOptions): CompileOutput {

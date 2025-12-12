@@ -460,7 +460,7 @@ export class Parser {
   }
 
   private parseBinaryExpr(minPrec: number): Expr {
-    let left = this.parsePostfixExpr();
+    let left = this.parsePrefixExpr();
 
     while (this.is("op") || this.is("kw", "is")) {
       const opTok = this.cur();
@@ -482,6 +482,20 @@ export class Parser {
     }
 
     return left;
+  }
+
+  private parsePrefixExpr(): Expr {
+    // Prefix unary operators should bind to the full postfix expression that
+    // follows (e.g. `!f(x)` parses as `!(f(x))`, not `(!f)(x)`).
+    if (this.is("op") && ["-", "!", "~"].includes(this.cur().text)) {
+      const opTok = this.next();
+      const expr = this.parsePrefixExpr();
+      return this.node("UnaryExpr", opTok.start, expr.span.end, {
+        op: opTok.text,
+        expr,
+      });
+    }
+    return this.parsePostfixExpr();
   }
 
   private parsePostfixExpr(): Expr {
@@ -650,16 +664,6 @@ export class Parser {
       const expr = this.parseExpr();
       this.consume("rparen");
       return this.node("ParenExpr", start.start, this.prev().end, { expr });
-    }
-
-    // unary
-    if (this.is("op") && ["-", "!", "~"].includes(tok.text)) {
-      const opTok = this.next();
-      const expr = this.parsePrimaryExpr();
-      return this.node("UnaryExpr", opTok.start, expr.span.end, {
-        op: opTok.text,
-        expr,
-      });
     }
 
     if (this.is("ident") || this.is("kw")) {

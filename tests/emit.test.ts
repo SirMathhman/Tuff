@@ -8,7 +8,9 @@ describe("emit", () => {
       fn main() => { 1 }
     `);
     expect(diagnostics.some((d) => d.severity === "error")).toBe(false);
-    expect(js).toContain('import { print, readTextFile } from "./rt/stdlib.mjs"');
+    expect(js).toContain(
+      'import { print, readTextFile } from "./rt/stdlib.mjs"'
+    );
   });
 
   test("emits union variant constructors", () => {

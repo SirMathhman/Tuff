@@ -1,0 +1,110 @@
+// Self-hosted compiler (first whack)
+//
+// This is a *very* small compiler written in Tuff, intended to prove the loop:
+//   bootstrap TS compiler -> emits JS -> JS runs and can compile a tiny subset.
+//
+// For now, it compiles only a restricted input shape:
+//   fn main() => <number>
+//   fn main() => { <number> }
+//
+// Output is ESM that exports `main`.
+
+extern from rt::stdlib use { println, panic, readTextFile, writeTextFile, stringLen, stringSlice, stringCharCodeAt, stringFromCharCode };
+
+extern from rt::vec use { vec_len, vec_get };
+
+// Tiny record type used to return two values from parsing helpers.
+class fn ParsedNumber(v0, v1) => {}
+
+// Utility: ASCII checks
+fn is_digit(code) => { code >= 48 && code <= 57 }
+fn is_space(code) => { code == 32 || code == 10 || code == 9 || code == 13 }
+
+fn skip_ws(src, i) => {
+  let mut j = i;
+  while (j < stringLen(src)) {
+    let c = stringCharCodeAt(src, j);
+    if (!is_space(c)) { break; }
+    j = j + 1;
+  }
+  j
+}
+
+fn starts_with_at(src, i, lit) => {
+  // compare bytewise
+  let mut j = 0;
+  while (j < stringLen(lit)) {
+    if (i + j >= stringLen(src)) { yield false; }
+    if (stringCharCodeAt(src, i + j) != stringCharCodeAt(lit, j)) { yield false; }
+    j = j + 1;
+  }
+  true
+}
+
+fn parse_keyword(src, i, lit) => {
+  let j = skip_ws(src, i);
+  if (!starts_with_at(src, j, lit)) {
+    panic("expected keyword: " + lit);
+  }
+  j + stringLen(lit)
+}
+
+fn parse_number(src, i) => {
+  let mut j = skip_ws(src, i);
+  let mut acc = 0;
+  let mut saw = false;
+  while (j < stringLen(src)) {
+    let c = stringCharCodeAt(src, j);
+    if (!is_digit(c)) { break; }
+    saw = true;
+    acc = acc * 10 + (c - 48);
+    j = j + 1;
+  }
+  if (!saw) {
+    panic("expected number");
+  }
+  ParsedNumber(acc, j)
+}
+
+fn compile_tiny(src) => {
+  // Parse: fn main() => <number or { number }>
+  let mut i = 0;
+  i = parse_keyword(src, i, "fn");
+  i = parse_keyword(src, i, "main");
+  i = parse_keyword(src, i, "(");
+  i = parse_keyword(src, i, ")");
+  i = parse_keyword(src, i, "=>");
+  i = skip_ws(src, i);
+
+  let mut value = 0;
+  if (i < stringLen(src) && stringCharCodeAt(src, i) == 123) { // '{'
+    i = i + 1;
+    let parsed = parse_number(src, i);
+    value = parsed.v0;
+    i = skip_ws(src, parsed.v1);
+    if (!(i < stringLen(src) && stringCharCodeAt(src, i) == 125)) {
+      panic("expected '}'");
+    }
+  } else {
+    let parsed = parse_number(src, i);
+    value = parsed.v0;
+  }
+
+  "// compiled by selfhost tuffc\n" + ("export function main() { return " + value + "; }\n")
+}
+
+// When run as a program, compile stdin-like file input.
+// We keep it simple: main(argv) where argv = [inPath, outPath]
+fn main(argv) => {
+  if (vec_len(argv) < 2) {
+    println("usage: tuffc <in.tuff> <out.mjs>");
+    yield 1;
+  }
+  let inPath = vec_get(argv, 0);
+  let outPath = vec_get(argv, 1);
+
+  let src = readTextFile(inPath);
+  let js = compile_tiny(src);
+  writeTextFile(outPath, js);
+  0
+}

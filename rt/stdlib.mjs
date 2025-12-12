@@ -58,3 +58,21 @@ export function args() {
 export function exit(code) {
   process.exit(code);
 }
+
+// ---- String helpers (bootstrap) ----
+
+export function stringLen(s) {
+  return String(s).length;
+}
+
+export function stringSlice(s, start, end) {
+  return String(s).slice(start, end);
+}
+
+export function stringCharCodeAt(s, index) {
+  return String(s).charCodeAt(index);
+}
+
+export function stringFromCharCode(code) {
+  return String.fromCharCode(code);
+}
