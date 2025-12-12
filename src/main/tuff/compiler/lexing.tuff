@@ -11,6 +11,12 @@ from diagnostics use { panic_at };
 // `tag` is one of: TriviaWhitespace | TriviaLineComment | TriviaBlockComment | Code.
 class fn LexItem(tag: String, startPos: I32, endPos: I32, text: String) => {}
 
+// Trivia-preserving token stream.
+// `leadingTrivia` is a Vec<LexItem> containing only Trivia* items.
+// `kind` is one of: Ident | Number | String | Char | Op | Punct.
+class fn Token(kind: String, startPos: I32, endPos: I32, text: String, leadingTrivia: Any) => {}
+class fn TokenStream(tokens: Any, trailingTrivia: Any) => {}
+
 // Utility: ASCII checks
 fn is_digit(code: I32) : Bool => { code >= 48 && code <= 57 }
 fn is_space(code: I32) : Bool => { code == 32 || code == 10 || code == 9 || code == 13 }
@@ -171,3 +177,134 @@ fn emit_lex_items(items: Any) : String => {
 
 // Public API for tests/tools: should return `src` exactly.
 fn roundtrip_with_trivia(src: String) : String => emit_lex_items(lex_items_with_trivia(src))
+
+fn emit_trivia_items(items: Any) : String => {
+  let mut out = "";
+  let mut i = 0;
+  while (i < vec_len(items)) {
+    out = out + vec_get(items, i).text;
+    i = i + 1;
+  }
+  out
+}
+
+fn emit_token_stream(ts: TokenStream) : String => {
+  let mut out = "";
+  let mut i = 0;
+  while (i < vec_len(ts.tokens)) {
+    let tok = vec_get(ts.tokens, i);
+    out = out + emit_trivia_items(tok.leadingTrivia);
+    out = out + tok.text;
+    i = i + 1;
+  }
+  out = out + emit_trivia_items(ts.trailingTrivia);
+  out
+}
+
+fn tokenize_with_trivia(src: String) : TokenStream => {
+  let toks = vec_new();
+  let trailing = vec_new();
+
+  let mut i = 0;
+  while (i < stringLen(src)) {
+    let leading = vec_new();
+    let j = skip_ws_collect(src, i, leading);
+    i = j;
+    if (!(i < stringLen(src))) {
+      // trailing trivia after the last token
+      let mut ti = 0;
+      while (ti < vec_len(leading)) {
+        vec_push(trailing, vec_get(leading, ti));
+        ti = ti + 1;
+      }
+      break;
+    }
+
+    let c0 = stringCharCodeAt(src, i);
+
+    // number
+    if (is_digit(c0)) {
+      let mut k = i + 1;
+      while (k < stringLen(src) && is_digit(stringCharCodeAt(src, k))) { k = k + 1; }
+      vec_push(toks, Token("Number", i, k, stringSlice(src, i, k), leading));
+      i = k;
+      continue;
+    }
+
+    // identifier
+    if (is_ident_start(c0)) {
+      let mut k = i + 1;
+      while (k < stringLen(src) && is_ident_part(stringCharCodeAt(src, k))) { k = k + 1; }
+      vec_push(toks, Token("Ident", i, k, stringSlice(src, i, k), leading));
+      i = k;
+      continue;
+    }
+
+    // string literal
+    if (c0 == 34) {
+      let mut k = i + 1;
+      let mut found = false;
+      while (k < stringLen(src)) {
+        let c = stringCharCodeAt(src, k);
+        if (c == 92) { // '\\'
+          // skip escaped byte (best-effort)
+          k = k + 2;
+          continue;
+        }
+        if (c == 34) { k = k + 1; found = true; break; }
+        k = k + 1;
+      }
+      if (!found) { panic_at(src, i, "unterminated string literal"); }
+      vec_push(toks, Token("String", i, k, stringSlice(src, i, k), leading));
+      i = k;
+      continue;
+    }
+
+    // char literal
+    if (c0 == 39) {
+      let mut k = i + 1;
+      let mut found = false;
+      while (k < stringLen(src)) {
+        let c = stringCharCodeAt(src, k);
+        if (c == 92) { // '\\'
+          k = k + 2;
+          continue;
+        }
+        if (c == 39) { k = k + 1; found = true; break; }
+        k = k + 1;
+      }
+      if (!found) { panic_at(src, i, "unterminated char literal"); }
+      vec_push(toks, Token("Char", i, k, stringSlice(src, i, k), leading));
+      i = k;
+      continue;
+    }
+
+    // operators / punctuation
+    if (i + 1 < stringLen(src)) {
+      if ((c0 == 61 && stringCharCodeAt(src, i + 1) == 62) ||
+          (c0 == 58 && stringCharCodeAt(src, i + 1) == 58) ||
+          (c0 == 61 && stringCharCodeAt(src, i + 1) == 61) ||
+          (c0 == 33 && stringCharCodeAt(src, i + 1) == 61) ||
+          (c0 == 60 && stringCharCodeAt(src, i + 1) == 61) ||
+          (c0 == 62 && stringCharCodeAt(src, i + 1) == 61) ||
+          (c0 == 38 && stringCharCodeAt(src, i + 1) == 38) ||
+          (c0 == 124 && stringCharCodeAt(src, i + 1) == 124)
+      ) {
+        vec_push(toks, Token("Op", i, i + 2, stringSlice(src, i, i + 2), leading));
+        i = i + 2;
+        continue;
+      }
+    }
+
+    // single-char punct/op
+    // classify a few common op chars as Op, otherwise Punct.
+    if (c0 == 43 || c0 == 45 || c0 == 42 || c0 == 47 || c0 == 37 || c0 == 61 || c0 == 60 || c0 == 62 || c0 == 33 || c0 == 38 || c0 == 124) {
+      vec_push(toks, Token("Op", i, i + 1, stringSlice(src, i, i + 1), leading));
+    } else {
+      vec_push(toks, Token("Punct", i, i + 1, stringSlice(src, i, i + 1), leading));
+    }
+    i = i + 1;
+  }
+
+  TokenStream(toks, trailing)
+}
