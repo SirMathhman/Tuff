@@ -1,54 +1,25 @@
 import { describe, expect, test } from "bun:test";
-import { compileToESM } from "../src/index";
 
-import { mkdir, readFile, writeFile, copyFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-async function writeRuntime(outDir: string) {
-  const rtDir = resolve(outDir, "rt");
-  await mkdir(rtDir, { recursive: true });
-  await copyFile(resolve("rt/stdlib.mjs"), resolve(rtDir, "stdlib.mjs"));
-  await copyFile(resolve("rt/vec.mjs"), resolve(rtDir, "vec.mjs"));
-}
+import { buildSelfhostCompiler } from "./helpers";
 
 describe("selfhost stage2", () => {
   test("selfhost tuffc can compile itself (stage2) and still compile a tiny program", async () => {
-    const src = await readFile(resolve("selfhost/tuffc.tuff"), "utf8");
-    const { js, diagnostics } = compileToESM({
-      filePath: resolve("selfhost/tuffc.tuff"),
-      source: src,
-    });
-    const errors = diagnostics.filter((d) => d.severity === "error");
-    if (errors.length > 0) {
-      throw new Error(
-        [
-          "bootstrap compiler failed to compile selfhost/tuffc.tuff:",
-          ...errors.map(
-            (e) =>
-              `${e.span?.filePath ?? ""}:${e.span?.line ?? "?"}:${
-                e.span?.col ?? "?"
-              } ${e.message}`
-          ),
-        ].join("\n")
-      );
-    }
-
     const outDir = resolve(
       ".dist",
       "selfhost-stage2",
       `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
     );
     await mkdir(outDir, { recursive: true });
-    await writeRuntime(outDir);
 
-    // Stage 1: bootstrap-compiled selfhost compiler
-    const stage1File = resolve(outDir, "tuffc.stage1.mjs");
-    await writeFile(stage1File, js, "utf8");
+    // Stage 1: bootstrap-compiled selfhost compiler (multi-file)
+    const { entryFile: stage1File } = await buildSelfhostCompiler(outDir);
 
     // Stage 2: use stage1 to compile the selfhost compiler source again
-    const stage2In = resolve(outDir, "tuffc.tuff");
-    await writeFile(stage2In, src, "utf8");
+    const stage2In = resolve("selfhost", "tuffc.tuff");
     const stage2Out = resolve(outDir, "tuffc.stage2.mjs");
 
     const tuffc1 = await import(pathToFileURL(stage1File).toString());

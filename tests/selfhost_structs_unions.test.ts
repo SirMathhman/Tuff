@@ -1,45 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { compileToESM } from "../src/index";
 
-import { mkdir, readFile, writeFile, copyFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-async function writeRuntime(outDir: string) {
-  const rtDir = resolve(outDir, "rt");
-  await mkdir(rtDir, { recursive: true });
-  await copyFile(resolve("rt/stdlib.mjs"), resolve(rtDir, "stdlib.mjs"));
-  await copyFile(resolve("rt/vec.mjs"), resolve(rtDir, "vec.mjs"));
-}
+import { buildSelfhostCompiler } from "./helpers";
 
 describe("selfhost structs + unions", () => {
   test("selfhost tuffc compiles structs and union decls", async () => {
-    const src = await readFile(resolve("selfhost/tuffc.tuff"), "utf8");
-    const { js, diagnostics } = compileToESM({
-      filePath: resolve("selfhost/tuffc.tuff"),
-      source: src,
-    });
-    const errors = diagnostics.filter((d) => d.severity === "error");
-    if (errors.length > 0) {
-      throw new Error(
-        [
-          "bootstrap compiler failed to compile selfhost/tuffc.tuff:",
-          ...errors.map(
-            (e) =>
-              `${e.span?.filePath ?? ""}:${e.span?.line ?? "?"}:${
-                e.span?.col ?? "?"
-              } ${e.message}`
-          ),
-        ].join("\n")
-      );
-    }
-
     const outDir = resolve(".dist", "selfhost", `structs-unions-${Date.now()}`);
     await mkdir(outDir, { recursive: true });
-    await writeRuntime(outDir);
-
-    const tuffcFile = resolve(outDir, "tuffc.mjs");
-    await writeFile(tuffcFile, js, "utf8");
+    const { entryFile: tuffcFile } = await buildSelfhostCompiler(outDir);
 
     const tinyIn = resolve(outDir, "tiny.tuff");
     const tinyOut = resolve(outDir, "tiny.mjs");
