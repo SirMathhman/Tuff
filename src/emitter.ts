@@ -69,7 +69,10 @@ function emitTopLevel(item: TopLevelItem, w: Writer) {
       emitFnDecl(item, w, true);
       return;
     default:
-      // ignore
+      // Allow statement nodes at the top-level (script-style code), e.g.:
+      //   fn main() => { ... }
+      //   main();
+      emitStmt(item as any, w, { isFnBody: false, isClass: false });
       return;
   }
 }

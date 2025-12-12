@@ -31,4 +31,37 @@ describe("e2e", () => {
     expect(typeof mod.main).toBe("function");
     expect(mod.main()).toBe(2);
   });
+
+  test("script-style top-level code runs", async () => {
+    const { js, diagnostics } = compile(`
+      let mut ran = false;
+      fn main() => { ran = true; 0 }
+      main();
+    `);
+    const errors = diagnostics.filter((d) => d.severity === "error");
+    if (errors.length > 0) {
+      throw new Error(
+        [
+          "compile failed:",
+          ...errors.map(
+            (e) =>
+              `${e.span?.filePath ?? ""}:${e.span?.line ?? "?"}:${
+                e.span?.col ?? "?"
+              } ${e.message}`
+          ),
+        ].join("\n")
+      );
+    }
+
+    const outDir = resolve(".dist", "e2e");
+    await mkdir(outDir, { recursive: true });
+    const outFile = resolve(
+      outDir,
+      `case-${Date.now()}-${Math.random().toString(16).slice(2)}.mjs`
+    );
+    await writeFile(outFile, js, "utf8");
+
+    const mod = await import(pathToFileURL(outFile).toString());
+    expect(mod.ran).toBe(true);
+  });
 });

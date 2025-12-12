@@ -15,8 +15,7 @@ export type Program = NodeBase & {
 };
 
 export type TopLevelItem =
-  | LetDecl
-  | FnDecl
+  | Stmt
   | TypeUnionDecl
   | ModuleDecl
   | ImportDecl

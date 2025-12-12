@@ -112,7 +112,7 @@ function analyzeTop(
     case "FnDecl":
       if (node.name) env.declare(node.name, node.span);
       if (node.name) bindings.set(node.name, { mutable: false });
-      analyzeFn(node, env, diags);
+      analyzeFn(node, env, diags, bindings);
       return;
     case "TypeUnionDecl":
       env.declare(node.name, node.span);
@@ -155,9 +155,15 @@ function analyzeTop(
   }
 }
 
-function analyzeFn(fn: FnDecl, outer: NameEnv, diags: Diagnostics) {
+function analyzeFn(
+  fn: FnDecl,
+  outer: NameEnv,
+  diags: Diagnostics,
+  outerBindings: Bindings
+) {
   const env = outer.child(`fn:${fn.name ?? "<anon>"}`);
-  const bindings = new Bindings();
+  // Functions can capture outer bindings (closures).
+  const bindings = outerBindings.child();
   for (const p of fn.params) {
     env.declare(p.name, p.span);
     bindings.set(p.name, { mutable: false });
@@ -238,8 +244,8 @@ function analyzeStmt(
     case "FnDecl": {
       // inner function declaration
       if (stmt.name) env.declare(stmt.name, stmt.span);
-      analyzeFn(stmt, env, diags);
-      bindings.set(stmt.name ?? "<anon>", { mutable: false });
+      if (stmt.name) bindings.set(stmt.name, { mutable: false });
+      analyzeFn(stmt, env, diags, bindings);
       return;
     }
   }
@@ -298,7 +304,6 @@ function analyzeBreak(
     diags.error(`'break <value>' is not allowed in 'while' loops`, stmt.span);
   }
   if (stmt.value && !ctx.inLoopExpr) {
-    // This includes while and loop statements
     // We'll accept break values only in loop-expr lowering context.
     diags.error(
       `'break <value>' is only allowed in 'loop' expression contexts`,
