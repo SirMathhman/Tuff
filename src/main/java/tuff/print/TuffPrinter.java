@@ -1,20 +1,24 @@
 package tuff.print;
 
 import tuff.ast.tuff.TuffDecl;
+import tuff.ast.tuff.TuffImportDecl;
 import tuff.ast.tuff.TuffModule;
 import tuff.ast.tuff.TuffRawDecl;
-import tuff.ast.tuff.TuffUseDecl;
 
 public final class TuffPrinter {
 	public String print(TuffModule module) {
 		StringBuilder out = new StringBuilder();
 		String nl = System.lineSeparator();
 
-		for (TuffUseDecl use : module.uses()) {
+		for (TuffImportDecl imp : module.imports()) {
 			out.append("from ")
-					.append(String.join("::", use.namespace()))
-					.append(" use { ")
-					.append(String.join(", ", use.names()))
+					.append(String.join("::", imp.modulePath()));
+			if (imp.isDefaultImport()) {
+				out.append(";").append(nl);
+				continue;
+			}
+			out.append(" use { ")
+					.append(String.join(", ", imp.names()))
 					.append(" };")
 					.append(nl);
 		}

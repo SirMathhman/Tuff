@@ -17,9 +17,9 @@ import tuff.ast.java.JavaReturnStmt;
 import tuff.ast.java.JavaStmt;
 import tuff.ast.java.JavaTypeDecl;
 import tuff.ast.java.JavaTypeRef;
+import tuff.ast.tuff.TuffImportDecl;
 import tuff.ast.tuff.TuffModule;
 import tuff.ast.tuff.TuffRawDecl;
-import tuff.ast.tuff.TuffUseDecl;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -31,7 +31,7 @@ import java.util.Map;
  */
 public final class JavaToTuffTransformer {
 	public TuffModule transform(JavaCompilationUnit unit) {
-		List<TuffUseDecl> uses = lowerImports(unit.imports());
+		List<TuffImportDecl> imports = lowerImports(unit.imports());
 		List<tuff.ast.tuff.TuffDecl> decls = new ArrayList<>();
 
 		for (JavaTypeDecl type : unit.types()) {
@@ -40,29 +40,43 @@ public final class JavaToTuffTransformer {
 			}
 		}
 
-		return new TuffModule(uses, decls, unit.span());
+		return new TuffModule(imports, decls, unit.span());
 	}
 
-	private List<TuffUseDecl> lowerImports(List<JavaImportDecl> imports) {
-		Map<List<String>, List<String>> grouped = new LinkedHashMap<>();
+	private List<TuffImportDecl> lowerImports(List<JavaImportDecl> imports) {
+		List<TuffImportDecl> out = new ArrayList<>();
 
 		for (JavaImportDecl imp : imports) {
 			String qn = imp.qualifiedName();
-			String[] parts = qn.split("\\.");
-			if (parts.length < 2) {
+			if (qn == null || qn.isBlank()) {
 				continue;
 			}
-			List<String> namespace = List.of(parts).subList(0, parts.length - 1);
-			String name = parts[parts.length - 1];
+			String[] parts = qn.split("\\.");
+			if (parts.length < 1) {
+				continue;
+			}
 
-			grouped.computeIfAbsent(namespace, _ -> new ArrayList<>()).add(name);
+			// Best-effort: ignore on-demand imports for now.
+			if (parts[parts.length - 1].equals("*")) {
+				continue;
+			}
+
+			if (imp.isStatic()) {
+				// import static a.b.C.member;  => from a::b::C use { member };
+				if (parts.length < 2) {
+					continue;
+				}
+				List<String> modulePath = List.of(parts).subList(0, parts.length - 1);
+				String member = parts[parts.length - 1];
+				out.add(new TuffImportDecl(modulePath, List.of(member), SourceSpan.NONE));
+				continue;
+			}
+
+			// import a.b.C; => from a::b::C;
+			out.add(new TuffImportDecl(List.of(parts), List.of(), SourceSpan.NONE));
 		}
 
-		List<TuffUseDecl> uses = new ArrayList<>();
-		for (Map.Entry<List<String>, List<String>> e : grouped.entrySet()) {
-			uses.add(new TuffUseDecl(e.getKey(), e.getValue(), SourceSpan.NONE));
-		}
-		return uses;
+		return out;
 	}
 
 	private String lowerClass(JavaClassDecl clazz) {

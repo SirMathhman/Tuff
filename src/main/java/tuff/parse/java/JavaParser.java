@@ -75,6 +75,7 @@ public final class JavaParser {
 
 	private JavaImportDecl parseImport(Cursor c) {
 		JavaToken start = c.expectIdent("import");
+		boolean isStatic = false;
 
 		StringBuilder qn = new StringBuilder();
 		boolean first = true;
@@ -82,11 +83,12 @@ public final class JavaParser {
 			JavaToken t = c.peek();
 			if (t.type() == JavaTokenType.SYMBOL && t.lexeme().equals(";")) {
 				JavaToken end = c.next();
-				return new JavaImportDecl(qn.toString(), new SourceSpan(start.span().startOffset(), end.span().endOffset()));
+				return new JavaImportDecl(isStatic, qn.toString(), new SourceSpan(start.span().startOffset(), end.span().endOffset()));
 			}
 
-			// ignore 'static' for now
+			// static import
 			if (t.type() == JavaTokenType.IDENT && t.lexeme().equals("static")) {
+				isStatic = true;
 				c.next();
 				continue;
 			}
@@ -96,6 +98,16 @@ public final class JavaParser {
 					qn.append('.');
 				}
 				qn.append(t.lexeme());
+				first = false;
+				c.next();
+				continue;
+			}
+
+			if (t.type() == JavaTokenType.SYMBOL && t.lexeme().equals("*")) {
+				if (!first) {
+					qn.append('.');
+				}
+				qn.append("*");
 				first = false;
 				c.next();
 				continue;
@@ -111,7 +123,7 @@ public final class JavaParser {
 			c.next();
 		}
 
-		return new JavaImportDecl(qn.toString(), start.span());
+		return new JavaImportDecl(isStatic, qn.toString(), start.span());
 	}
 
 	private JavaClassDecl parseClass(Cursor c) {
