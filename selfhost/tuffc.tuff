@@ -17,6 +17,7 @@ extern from rt::vec use { vec_len, vec_get };
 class fn ParsedNumber(v0, v1) => {}
 class fn ParsedIdent(v0, v1) => {}
 class fn ParsedExpr(v0, v1) => {}
+class fn ParsedMain(body, expr, v1) => {}
 
 // Utility: ASCII checks
 fn is_digit(code) => { code >= 48 && code <= 57 }
@@ -151,6 +152,50 @@ fn parse_optional_semicolon(src, i) => {
   i
 }
 
+fn parse_required_semicolon(src, i) => {
+  let j = skip_ws(src, i);
+  if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 59)) { panic("expected ';'"); }
+  j + 1
+}
+
+fn parse_main_body(src, i) => {
+  let j = skip_ws(src, i);
+  if (j < stringLen(src) && stringCharCodeAt(src, j) == 123) { // '{'
+    // block main body
+    let mut k = j + 1;
+    let mut body = "";
+
+    // zero or more lets inside block (semicolon required)
+    while (true) {
+      let t = skip_ws(src, k);
+      if (starts_with_at(src, t, "let")) {
+        k = parse_keyword(src, k, "let");
+        let name = parse_ident(src, k);
+        k = name.v1;
+        k = parse_keyword(src, k, "=");
+        let expr = parse_expr(src, k);
+        k = expr.v1;
+        k = parse_required_semicolon(src, k);
+        body = body + ("const " + name.v0 + " = " + expr.v0 + ";\n");
+        continue;
+      }
+      break;
+    }
+
+    // tail expression
+    let tail = parse_expr(src, k);
+    k = skip_ws(src, tail.v1);
+    if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 125)) { // '}'
+      panic("expected '}'");
+    }
+    yield ParsedMain(body, tail.v0, k + 1);
+  }
+
+  // expression main body
+  let e = parse_expr(src, i);
+  ParsedMain("", e.v0, e.v1)
+}
+
 fn compile_tiny(src) => {
   // Parse:
   //   (let <ident> = <expr>;)*
@@ -182,9 +227,9 @@ fn compile_tiny(src) => {
   i = parse_keyword(src, i, "(");
   i = parse_keyword(src, i, ")");
   i = parse_keyword(src, i, "=>");
-  let mainExpr = parse_expr(src, i);
+  let mainBody = parse_main_body(src, i);
 
-  out + ("export function main() { return " + mainExpr.v0 + "; }\n")
+  out + ("export function main() {\n" + mainBody.body + "return " + mainBody.expr + ";\n}\n")
 }
 
 // When run as a program, compile stdin-like file input.
