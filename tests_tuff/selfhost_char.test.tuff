@@ -1,0 +1,16 @@
+from std::test use { reset, suite, it, expect_eq, summary, status };
+
+fn main() => {
+  reset();
+
+  suite("selfhost Char");
+
+  // 'A' == 65, '\n' == 10
+  let a: Char = 'A';
+  let b: Char = '\n';
+
+  it("compiles and runs char literals", expect_eq("A + \\n", (a + b), 75));
+
+  summary();
+  status()
+}

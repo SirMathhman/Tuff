@@ -1,0 +1,29 @@
+from std::test use { reset, suite, it, expect_eq, summary, status };
+
+type Option<T> = Some<T> | None;
+
+struct Point {
+  x: I32,
+  y: I32
+}
+
+fn main() => {
+  reset();
+
+  suite("selfhost structs + unions");
+
+  let mut point = Point { 10, 20 };
+  point.x = point.x + 1;
+
+  let opt = Some(42);
+  let result = if (opt.tag == "Some") {
+    point.x + point.y + opt.value
+  } else {
+    0
+  };
+
+  it("compiles structs and union decls", expect_eq("result", result, 73));
+
+  summary();
+  status()
+}

@@ -1,0 +1,18 @@
+from std::test use { reset, suite, it, expect_eq, summary, status };
+
+fn main() : I32 => {
+  reset();
+
+  suite("selfhost tuples");
+
+  let tuple_val: (I32, I32) = (1, 2);
+  let tuple2 = (tuple_val.0 + 10, tuple_val.1 + 20);
+
+  it(
+    "compiles tuple literals and .0/.1 access",
+    expect_eq("u.0 + u.1", (tuple2.0 + tuple2.1), 33)
+  );
+
+  summary();
+  status()
+}
