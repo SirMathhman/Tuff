@@ -9,7 +9,10 @@ import { compileAndRunTuffMain } from "../../../tools/tuff_repl";
 describe("tuff repl", () => {
   test("can compile and run a tiny program (smoke)", async () => {
     const root = await (async () => {
-      const base = resolve(tmpdir(), `tuff-repl-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+      const base = resolve(
+        tmpdir(),
+        `tuff-repl-${Date.now()}-${Math.random().toString(16).slice(2)}`
+      );
       await mkdir(base, { recursive: true });
       return base;
     })();
@@ -22,7 +25,7 @@ describe("tuff repl", () => {
       inAbs,
       [
         "extern from rt::stdlib use { println };",
-        "fn main() : I32 => { println(\"hello\"); 0 }",
+        'fn main() : I32 => { println("hello"); 0 }',
         "",
       ].join("\n"),
       "utf8"

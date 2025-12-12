@@ -1,4 +1,11 @@
-import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -92,7 +99,11 @@ function toProjectRelative(projectRoot: string, p: string): string {
 
 export async function moveFileAndUpdateImports(
   opts: MoveFileAndUpdateImportsOptions
-): Promise<{ updatedFiles: string[]; oldModulePath: string; newModulePath: string }> {
+): Promise<{
+  updatedFiles: string[];
+  oldModulePath: string;
+  newModulePath: string;
+}> {
   const projectRoot = resolve(opts.projectRoot);
   const scanRoots = opts.scanRoots?.length ? opts.scanRoots : ["src"];
 
@@ -195,7 +206,10 @@ export async function main(argv: string[]): Promise<number> {
   return 0;
 }
 
-if (process.argv[1] && normalizeSeps(process.argv[1]).endsWith("tools/tuff_refactor.ts")) {
+if (
+  process.argv[1] &&
+  normalizeSeps(process.argv[1]).endsWith("tools/tuff_refactor.ts")
+) {
   // Running via tsx.
   main(process.argv.slice(2)).then(
     (rc) => {

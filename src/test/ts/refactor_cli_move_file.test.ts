@@ -18,7 +18,10 @@ async function exists(p: string): Promise<boolean> {
 describe("tuff refactor CLI", () => {
   test("move-file moves file and updates from/extern-from module paths", async () => {
     const root = await (async () => {
-      const base = resolve(tmpdir(), `tuff-refactor-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+      const base = resolve(
+        tmpdir(),
+        `tuff-refactor-${Date.now()}-${Math.random().toString(16).slice(2)}`
+      );
       await mkdir(base, { recursive: true });
       return base;
     })();
@@ -34,7 +37,7 @@ describe("tuff refactor CLI", () => {
       oldAbs,
       [
         "extern from rt::stdlib use { println };",
-        "fn main() : I32 => { println(\"moved\"); 0 }",
+        'fn main() : I32 => { println("moved"); 0 }',
         "",
       ].join("\n"),
       "utf8"

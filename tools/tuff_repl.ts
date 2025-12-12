@@ -38,7 +38,10 @@ async function stageStdSources(outDir: string) {
   // std/*.mjs import runtime as "./rt/*.mjs".
   const stdRtDir = resolve(stdDir, "rt");
   await mkdir(stdRtDir, { recursive: true });
-  await copyFile(resolve(root, "rt/stdlib.mjs"), resolve(stdRtDir, "stdlib.mjs"));
+  await copyFile(
+    resolve(root, "rt/stdlib.mjs"),
+    resolve(stdRtDir, "stdlib.mjs")
+  );
   await copyFile(resolve(root, "rt/vec.mjs"), resolve(stdRtDir, "vec.mjs"));
 }
 
@@ -48,7 +51,11 @@ function repoRootFromHere(): string {
   return resolve(here, "..");
 }
 
-function captureStdoutStderr<T>(fn: () => T): { value: T; stdout: string; stderr: string } {
+function captureStdoutStderr<T>(fn: () => T): {
+  value: T;
+  stdout: string;
+  stderr: string;
+} {
   let stdout = "";
   let stderr = "";
 
@@ -93,7 +100,9 @@ export async function compileAndRunTuffMain(
   const tuffcFile = resolve(root, "selfhost", "prebuilt", "tuffc.mjs");
   const tuffc = await import(pathToFileURL(tuffcFile).toString());
   if (typeof (tuffc as any).main !== "function") {
-    throw new Error(`expected prebuilt compiler to export main(): ${tuffcFile}`);
+    throw new Error(
+      `expected prebuilt compiler to export main(): ${tuffcFile}`
+    );
   }
 
   const rcCompile = (tuffc as any).main([inFile, outFile]);
@@ -101,12 +110,18 @@ export async function compileAndRunTuffMain(
     return { exitCode: rcCompile, stdout: "", stderr: "" };
   }
 
-  const mod = await import(pathToFileURL(outFile).toString() + `?v=${Date.now()}`);
+  const mod = await import(
+    pathToFileURL(outFile).toString() + `?v=${Date.now()}`
+  );
   if (typeof (mod as any).main !== "function") {
     throw new Error(`expected compiled module to export main(): ${outFile}`);
   }
 
-  const { value: rcRun, stdout, stderr } = captureStdoutStderr(() => (mod as any).main());
+  const {
+    value: rcRun,
+    stdout,
+    stderr,
+  } = captureStdoutStderr(() => (mod as any).main());
   return { exitCode: rcRun ?? 0, stdout, stderr };
 }
 
@@ -194,7 +209,10 @@ async function repl() {
       );
       await writeFile(inFile, program, "utf8");
 
-      const result = await compileAndRunTuffMain({ inputFile: inFile, workDir });
+      const result = await compileAndRunTuffMain({
+        inputFile: inFile,
+        workDir,
+      });
       if (result.stdout) process.stdout.write(result.stdout);
       if (result.stderr) process.stderr.write(result.stderr);
       if (result.exitCode !== 0) {
@@ -222,7 +240,10 @@ export async function main(): Promise<number> {
 }
 
 // Running via: tsx tools/tuff_repl.ts
-if (process.argv[1] && process.argv[1].replaceAll("\\\\", "/").endsWith("tools/tuff_repl.ts")) {
+if (
+  process.argv[1] &&
+  process.argv[1].replaceAll("\\\\", "/").endsWith("tools/tuff_repl.ts")
+) {
   main().catch((e) => {
     // eslint-disable-next-line no-console
     console.error(e);
