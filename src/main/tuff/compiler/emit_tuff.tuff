@@ -1,0 +1,33 @@
+// Whitespace-preserving Tuff emitter utilities.
+//
+// This module intentionally operates on the trivia-preserving TokenStream
+// rather than re-printing the AST.
+//
+// Rationale: for formatters and refactoring tools, we want to preserve
+// untouched whitespace/comments exactly while making localized edits.
+
+extern from rt::vec use { vec_new, vec_len, vec_push, vec_get };
+
+from lexing use { Token, TokenStream, emit_token_stream };
+
+fn emit_tuff(ts: TokenStream) : String => emit_token_stream(ts)
+
+// Minimal editing primitive: rename identifiers in the token stream.
+//
+// NOTE: This is deliberately token-based (not AST-based) so it can preserve
+// formatting byte-for-byte for everything except the changed identifier texts.
+fn rename_ident_tokens(ts: TokenStream, fromName: String, toName: String) : TokenStream => {
+  let outToks = vec_new();
+  let mut i = 0;
+  while (i < vec_len(ts.tokens)) {
+    let t = vec_get(ts.tokens, i);
+
+    let newText = if (t.kind == "Ident" && t.text == fromName) { toName } else { t.text };
+
+    // Keep trivia object identity (we're not modifying it here).
+    vec_push(outToks, Token(t.kind, t.startPos, t.endPos, newText, t.leadingTrivia));
+    i = i + 1;
+  }
+
+  TokenStream(outToks, ts.trailingTrivia)
+}
