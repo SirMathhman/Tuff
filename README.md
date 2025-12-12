@@ -412,6 +412,37 @@ npm test -- src/test/ts/**
 npm test -- src/test/ts/selfhost.test.ts
 ```
 
+### Developer Tools
+
+#### Tuff REPL (minimal)
+
+This is a simple, buffer-based REPL that compiles and runs the current buffer as the body of `main()`.
+
+```bash
+npm run tuff:repl
+```
+
+Commands:
+
+- `:run` — compile + run the current buffer
+- `:show` — print current buffer
+- `:clear` — clear buffer
+- `:quit` — exit
+
+#### Refactor CLI (move-file)
+
+Moves a `.tuff` file on disk and updates `from <module> use ...` / `extern from <module> use ...` import paths across the project.
+
+```bash
+# Run from the repository root
+npm run tuff:refactor -- move-file --from <oldRelPath.tuff> --to <newRelPath.tuff>
+```
+
+Options:
+
+- `--root <dir>` — restrict scanning for `.tuff` files (default: `src`)
+- `--dry-run` — compute changes but do not write files
+
 ### Test Organization
 
 #### TypeScript Tests (`src/test/ts/`)

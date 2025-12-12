@@ -6,7 +6,9 @@
   "scripts": {
     "test": "vitest run",
     "check": "vitest run",
-    "build:selfhost-prebuilt": "tsx tools/build_prebuilt_selfhost.ts"
+    "build:selfhost-prebuilt": "tsx tools/build_prebuilt_selfhost.ts",
+    "tuff:repl": "tsx tools/tuff_repl.ts",
+    "tuff:refactor": "tsx tools/tuff_refactor.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
