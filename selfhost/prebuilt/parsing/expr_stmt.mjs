@@ -646,7 +646,7 @@ panic_at(src, t, "expected '}'");
 if (stringCharCodeAt(src, t) == 125) {
 break;
 }
-const isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") && !scan_if_stmt_has_else(src, t) || starts_with_at(src, t, "yield") || is_field_assign_stmt_start(src, t) || is_assign_stmt_start(src, t) || is_index_assign_stmt_start(src, t);
+const isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "fn") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") && !scan_if_stmt_has_else(src, t) || starts_with_at(src, t, "yield") || is_field_assign_stmt_start(src, t) || is_assign_stmt_start(src, t) || is_index_assign_stmt_start(src, t);
 if (isStmt) {
 const st = parse_stmt_ast(src, k);
 vec_push(body, st.stmt);
@@ -1000,6 +1000,74 @@ if (tyAnn == "") {
 return ParsedStmtAst(stmt_let(span(start, k), mutOpt.ok, name.text, e.expr), k);
 }
 return ParsedStmtAst(stmt_let_typed(span(start, k), mutOpt.ok, name.text, tyAnn, e.expr), k);
+}
+if (starts_with_at(src, k, "fn")) {
+k = parse_keyword(src, k, "fn");
+const name = parse_ident(src, k);
+k = name.nextPos;
+if (is_identifier_too_short(name.text)) {
+warn_short_identifier(src, name.startPos, name.text);
+}
+const t0 = skip_ws(src, k);
+if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) {
+panic_at(src, t0, "local generic `fn` is not supported yet; use a monomorphic helper");
+}
+k = parse_keyword(src, k, "(");
+k = skip_ws(src, k);
+const params = vec_new();
+const paramTyAnns = vec_new();
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) {
+k = k + 1;
+} else {
+while (true) {
+const p = parse_ident(src, k);
+vec_push(params, p.text);
+k = skip_ws(src, p.nextPos);
+let tyAnn = "";
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 58) {
+k = parse_keyword(src, k, ":");
+const ty = parse_type_expr(src, k);
+tyAnn = ty.v0;
+k = ty.v1;
+}
+vec_push(paramTyAnns, tyAnn);
+k = skip_ws(src, k);
+if (!(k < stringLen(src))) {
+panic_at(src, k, "expected ')' in fn params");
+}
+const ch = stringCharCodeAt(src, k);
+if (ch == 44) {
+k = k + 1;
+k = skip_ws(src, k);
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) {
+k = k + 1;
+break;
+}
+continue;
+}
+if (ch == 41) {
+k = k + 1;
+break;
+}
+panic_at(src, k, "expected ',' or ')' in fn params");
+}
+}
+k = skip_ws(src, k);
+let retTyAnn = "";
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 58) {
+k = parse_keyword(src, k, ":");
+const ret = parse_type_expr(src, k);
+retTyAnn = ret.v0;
+k = ret.v1;
+}
+k = parse_keyword(src, k, "=>");
+const bodyStart = skip_ws(src, k);
+const body = parse_main_body_ast(src, k);
+k = body.nextPos;
+const bodyExpr = (vec_len(body.body) == 0 ? body.tail : expr_block(span(bodyStart, body.nextPos), body.body, body.tail));
+const lam = expr_lambda(span(start, body.nextPos), params, paramTyAnns, retTyAnn, bodyExpr);
+k = parse_optional_semicolon(src, k);
+return ParsedStmtAst(stmt_let(span(start, k), false, name.text, lam), k);
 }
 if (starts_with_at(src, k, "while")) {
 k = parse_keyword(src, k, "while");
@@ -1554,7 +1622,7 @@ panic_at(src, t, "expected '}'");
 if (stringCharCodeAt(src, t) == 125) {
 break;
 }
-const isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") || starts_with_at(src, t, "yield") || is_field_assign_stmt_start(src, t) || is_assign_stmt_start(src, t) || is_index_assign_stmt_start(src, t);
+const isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "fn") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") || starts_with_at(src, t, "yield") || is_field_assign_stmt_start(src, t) || is_assign_stmt_start(src, t) || is_index_assign_stmt_start(src, t);
 if (isStmt) {
 const st = parse_stmt(src, k);
 body = body + st.v0;
@@ -1731,6 +1799,69 @@ k = expr.v1;
 k = parse_optional_semicolon(src, k);
 const declKw = (mutOpt.ok ? "let" : "const");
 return ParsedStmt(declKw + " " + name.text + " = " + expr.v0 + ";\n", k);
+}
+if (starts_with_at(src, k, "fn")) {
+k = parse_keyword(src, k, "fn");
+const name = parse_ident(src, k);
+k = name.nextPos;
+if (is_identifier_too_short(name.text)) {
+warn_short_identifier(src, name.startPos, name.text);
+}
+const t0 = skip_ws(src, k);
+if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) {
+panic_at(src, t0, "local generic `fn` is not supported yet");
+}
+k = parse_keyword(src, k, "(");
+k = skip_ws(src, k);
+let paramsCsv = "";
+let first = true;
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) {
+k = k + 1;
+} else {
+while (true) {
+const p = parse_ident(src, k);
+if (first) {
+paramsCsv = paramsCsv + p.text;
+first = false;
+} else {
+paramsCsv = paramsCsv + ", " + p.text;
+}
+k = skip_ws(src, p.nextPos);
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 58) {
+const _ty = parse_type_expr(src, k + 1);
+k = _ty.v1;
+}
+k = skip_ws(src, k);
+if (!(k < stringLen(src))) {
+panic_at(src, k, "expected ')' in fn params");
+}
+const ch = stringCharCodeAt(src, k);
+if (ch == 44) {
+k = k + 1;
+k = skip_ws(src, k);
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) {
+k = k + 1;
+break;
+}
+continue;
+}
+if (ch == 41) {
+k = k + 1;
+break;
+}
+panic_at(src, k, "expected ',' or ')' in fn params");
+}
+}
+k = skip_ws(src, k);
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 58) {
+const _rt = parse_type_expr(src, k + 1);
+k = _rt.v1;
+}
+k = parse_keyword(src, k, "=>");
+const body = parse_main_body(src, k);
+k = body.v1;
+k = parse_optional_semicolon(src, k);
+return ParsedStmt("const " + name.text + " = (" + paramsCsv + ") => {\n" + body.body + "return " + body.expr + ";\n};\n", k);
 }
 if (starts_with_at(src, k, "while")) {
 k = parse_keyword(src, k, "while");

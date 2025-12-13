@@ -667,6 +667,7 @@ fn parse_block_body_ast(src: String, i: I32) : ParsedMainAst => {
     // - `if` with `else` is an expression; allow it to be a tail expression.
     // - `ident[expr]` is only an index-assign statement if followed by `=`.
     let isStmt = starts_with_at(src, t, "let")
+      || starts_with_at(src, t, "fn")
       || starts_with_at(src, t, "while")
       || (starts_with_at(src, t, "if") && !scan_if_stmt_has_else(src, t))
       || starts_with_at(src, t, "yield")
@@ -1021,6 +1022,89 @@ fn parse_stmt_ast(src: String, i: I32) : ParsedStmtAst => {
       yield ParsedStmtAst(stmt_let(span(start, k), mutOpt.ok, name.text, e.expr), k);
     }
     yield ParsedStmtAst(stmt_let_typed(span(start, k), mutOpt.ok, name.text, tyAnn, e.expr), k);
+  }
+
+  // local function declaration (statement):
+  //   fn name(params...) (: RetTy)? => body;
+  // Desugars to an immutable `let` bound to a lambda.
+  if (starts_with_at(src, k, "fn")) {
+    k = parse_keyword(src, k, "fn");
+    let name = parse_ident(src, k);
+    k = name.nextPos;
+    if (is_identifier_too_short(name.text)) { warn_short_identifier(src, name.startPos, name.text); }
+
+    // Generic local fns would require generic lambdas; not supported in this bootstrap subset.
+    let t0 = skip_ws(src, k);
+    if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) { // '<'
+      panic_at(src, t0, "local generic `fn` is not supported yet; use a monomorphic helper");
+    }
+
+    // Parse params: (name (':' Type)? (',' ... )?)
+    k = parse_keyword(src, k, "(");
+    k = skip_ws(src, k);
+
+    let params = vec_new();
+    let paramTyAnns = vec_new();
+
+    if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) { // ')'
+      k = k + 1;
+    } else {
+      while (true) {
+        let p = parse_ident(src, k);
+        vec_push(params, p.text);
+        k = skip_ws(src, p.nextPos);
+
+        // Optional parameter type annotation.
+        let mut tyAnn = "";
+        if (k < stringLen(src) && stringCharCodeAt(src, k) == 58) { // ':'
+          k = parse_keyword(src, k, ":");
+          let ty = parse_type_expr(src, k);
+          tyAnn = ty.v0;
+          k = ty.v1;
+        }
+        vec_push(paramTyAnns, tyAnn);
+        k = skip_ws(src, k);
+
+        if (!(k < stringLen(src))) { panic_at(src, k, "expected ')' in fn params"); }
+        let ch = stringCharCodeAt(src, k);
+        if (ch == 44) { // ','
+          k = k + 1;
+          k = skip_ws(src, k);
+          // Allow trailing comma: fn f(a: I32,)
+          if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) { // ')'
+            k = k + 1;
+            break;
+          }
+          continue;
+        }
+        if (ch == 41) { // ')'
+          k = k + 1;
+          break;
+        }
+        panic_at(src, k, "expected ',' or ')' in fn params")
+      }
+    }
+
+    // Optional return type annotation: `: Type`
+    k = skip_ws(src, k);
+    let mut retTyAnn = "";
+    if (k < stringLen(src) && stringCharCodeAt(src, k) == 58) { // ':'
+      k = parse_keyword(src, k, ":");
+      let ret = parse_type_expr(src, k);
+      retTyAnn = ret.v0;
+      k = ret.v1;
+    }
+
+    k = parse_keyword(src, k, "=>");
+    let bodyStart = skip_ws(src, k);
+    let body = parse_main_body_ast(src, k);
+    k = body.nextPos;
+
+    let bodyExpr = if (vec_len(body.body) == 0) body.tail else expr_block(span(bodyStart, body.nextPos), body.body, body.tail);
+    let lam = expr_lambda(span(start, body.nextPos), params, paramTyAnns, retTyAnn, bodyExpr);
+
+    k = parse_optional_semicolon(src, k);
+    yield ParsedStmtAst(stmt_let(span(start, k), false, name.text, lam), k);
   }
 
   // while (...) { ... }
@@ -1576,7 +1660,7 @@ fn parse_block_body(src: String, i: I32) : ParsedMain => {
     if (!(t < stringLen(src))) { panic_at(src, t, "expected '}'"); }
     if (stringCharCodeAt(src, t) == 125) { break; }
 
-    let isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") || starts_with_at(src, t, "yield") || is_field_assign_stmt_start(src, t) || is_assign_stmt_start(src, t) || is_index_assign_stmt_start(src, t);
+    let isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "fn") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") || starts_with_at(src, t, "yield") || is_field_assign_stmt_start(src, t) || is_assign_stmt_start(src, t) || is_index_assign_stmt_start(src, t);
     if (isStmt) {
       let st = parse_stmt(src, k);
       body = body + st.v0;
@@ -1768,6 +1852,81 @@ fn parse_stmt(src: String, i: I32) : ParsedStmt => {
     k = parse_optional_semicolon(src, k);
     let declKw = if (mutOpt.ok) "let" else "const";
     yield ParsedStmt(declKw + " " + name.text + " = " + expr.v0 + ";\n", k);
+  }
+
+  // local function declaration (statement):
+  //   fn name(params...) (: RetTy)? => body;
+  // Desugars to: const name = (...) => { ...; return tail; };
+  if (starts_with_at(src, k, "fn")) {
+    k = parse_keyword(src, k, "fn");
+    let name = parse_ident(src, k);
+    k = name.nextPos;
+    if (is_identifier_too_short(name.text)) { warn_short_identifier(src, name.startPos, name.text); }
+
+    // Generic local fns are not supported in the tiny emitter path.
+    let t0 = skip_ws(src, k);
+    if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) { // '<'
+      panic_at(src, t0, "local generic `fn` is not supported yet");
+    }
+
+    // Parse params: (name (':' Type)? (',' ... )?)
+    k = parse_keyword(src, k, "(");
+    k = skip_ws(src, k);
+
+    let mut paramsCsv = "";
+    let mut first = true;
+    if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) { // ')'
+      k = k + 1;
+    } else {
+      while (true) {
+        let p = parse_ident(src, k);
+        if (first) { paramsCsv = paramsCsv + p.text; first = false; }
+        else { paramsCsv = paramsCsv + ", " + p.text; }
+        k = skip_ws(src, p.nextPos);
+
+        // Optional parameter type annotation (ignored by tiny JS emitter).
+        if (k < stringLen(src) && stringCharCodeAt(src, k) == 58) { // ':'
+          let _ty = parse_type_expr(src, k + 1);
+          k = _ty.v1;
+        }
+        k = skip_ws(src, k);
+
+        if (!(k < stringLen(src))) { panic_at(src, k, "expected ')' in fn params"); }
+        let ch = stringCharCodeAt(src, k);
+        if (ch == 44) { // ','
+          k = k + 1;
+          k = skip_ws(src, k);
+          // Allow trailing comma.
+          if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) { // ')'
+            k = k + 1;
+            break;
+          }
+          continue;
+        }
+        if (ch == 41) { // ')'
+          k = k + 1;
+          break;
+        }
+        panic_at(src, k, "expected ',' or ')' in fn params")
+      }
+    }
+
+    // Optional return type annotation (ignored by tiny JS emitter).
+    k = skip_ws(src, k);
+    if (k < stringLen(src) && stringCharCodeAt(src, k) == 58) { // ':'
+      let _rt = parse_type_expr(src, k + 1);
+      k = _rt.v1;
+    }
+
+    k = parse_keyword(src, k, "=>");
+    let body = parse_main_body(src, k);
+    k = body.v1;
+    k = parse_optional_semicolon(src, k);
+
+    yield ParsedStmt(
+      "const " + name.text + " = (" + paramsCsv + ") => {\n" + body.body + "return " + body.expr + ";\n};\n",
+      k
+    );
   }
 
   // while (...) { ... }

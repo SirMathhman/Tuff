@@ -1,0 +1,38 @@
+from std::test use { reset, suite, it, expect_eq, summary, status };
+
+// Verifies method-call syntax: `obj.method(args)`.
+// In the current bootstrap subset, methods are represented as function-valued
+// fields (usually lambdas) returned from `class fn`.
+
+class fn Counter(start: I32) => {
+  let mut count = start;
+
+  // "methods" as fields
+  let increment = () => { count = count + 1; };
+  let get_count = () : I32 => count;
+}
+
+// Verifies that `fn name(...) => ...;` inside a class body can be called via
+// `obj.name(...)`.
+class fn Point(x: I32, y: I32) => {
+  fn manhattan() : I32 => x + y;
+}
+
+fn main() : I32 => {
+  reset();
+  suite("method call syntax");
+
+  let c = Counter(0);
+
+  c.increment();
+  it("dot-call invokes function field", expect_eq("count after increment", c.get_count(), 1));
+
+  // Chaining also matters: (Counter(0)).get_count()
+  it("dot-call chaining", expect_eq("direct get_count", Counter(41).get_count(), 41));
+
+  let p = Point(3, 4);
+  it("method decl inside class fn", expect_eq("manhattan", p.manhattan(), 7));
+
+  summary();
+  status()
+}

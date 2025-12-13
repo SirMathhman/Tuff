@@ -318,6 +318,10 @@ Functions and local variables share the same namespace — you cannot declare bo
 
 The `class` keyword provides syntactic sugar for functions that yield `this` (the captured scope):
 
+Methods declared inside a `class fn` are just local functions captured as function-valued fields and invoked with normal dot-call syntax.
+
+> Note: generic local methods (e.g. `fn m<T>(...)`) are not supported yet in the bootstrap compiler.
+
 ```tuff
 class fn Point(x: I32, y: I32) => {
     fn manhattan() => x + y;
