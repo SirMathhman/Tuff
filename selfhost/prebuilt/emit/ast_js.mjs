@@ -231,6 +231,14 @@ out = e.name;
 if ((e.tag == "EPath")) {
 out = emit_path_js(e.parts);
 }
+if ((e.tag == "ELambda")) {
+const params = emit_names_csv(e.params);
+if ((e.body.tag == "EBlock")) {
+out = (((((("((" + params) + ") => {\n") + emit_stmts_js(e.body.body)) + "return ") + emit_expr_js(e.body.tail)) + ";\n})");
+} else {
+out = (((("((" + params) + ") => ") + emit_expr_js(e.body)) + ")");
+}
+}
 if ((e.tag == "EStructLit")) {
 out = emit_struct_lit_js(e.nameExpr, e.values);
 }

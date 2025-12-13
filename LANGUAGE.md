@@ -652,18 +652,30 @@ let result = apply(multiply, 3, 4);
 
 #### Lambda functions (anonymous functions)
 
-You can define functions inline by omitting the function name, using the lambda syntax `(param: Type, ...) => expression`:
+You can define functions inline by omitting the function name.
+
+Current selfhost compiler subset syntax (typed lambdas):
+
+```tuff
+(param: Type, ...) : ReturnType => expressionOrBlock
+```
+
+Notes:
+
+- Parameter type annotations are required.
+- Return type annotation is required.
+- Return type inference for lambdas is planned but not implemented yet.
 
 ```tuff
 // Lambda assigned to a variable
-let add : (I32, I32) => I32 = (a: I32, b: I32) => { a + b };
+let add : (I32, I32) => I32 = (a: I32, b: I32) : I32 => { a + b };
 
 // Lambda passed directly as an argument
 fn apply(f: (I32, I32) => I32, a: I32, b: I32) : I32 => { f(a, b) }
-let result = apply((x: I32, y: I32) => { x * y }, 5, 6);
+let result = apply((x: I32, y: I32) : I32 => { x * y }, 5, 6);
 
-// Lambda with inferred return type
-let double : (I32) => I32 = (x) => { x * 2 };
+// Lambda with expression body
+let double : (I32) => I32 = (x: I32) : I32 => x * 2;
 ```
 
 #### Capturing variables (closures)

@@ -62,6 +62,20 @@ return "String";
 export function ty_void() {
 return "Void";
 }
+export function ty_fn_type(paramTyAnns, retTyAnn) {
+let out = "Fn(";
+let i = 0;
+while ((i < vec_len(paramTyAnns))) {
+if ((i > 0)) {
+out = (out + ",");
+}
+const t = vec_get(paramTyAnns, i);
+out = (out + normalize_ty_ann(((t == "") ? ty_unknown() : t)));
+i = (i + 1);
+}
+out = ((out + ")->") + normalize_ty_ann(retTyAnn));
+return out;
+}
 export function normalize_ty_ann(t) {
 if ((t == "Int")) {
 return ty_i32();
@@ -490,6 +504,9 @@ return ty_bool();
 }
 return infer_lookup_ty(scopes, depth, e.name);
 }
+if ((e.tag == "ELambda")) {
+return ty_fn_type(e.paramTyAnns, e.retTyAnn);
+}
 if ((e.tag == "EStructLit")) {
 return struct_name_of_expr(src, e.nameExpr);
 }
@@ -624,6 +641,11 @@ if ((sig.retTyAnn != "")) {
 return normalize_ty_ann(sig.retTyAnn);
 }
 }
+if ((e.callee.tag == "ELambda")) {
+if ((e.callee.retTyAnn != "")) {
+return normalize_ty_ann(e.callee.retTyAnn);
+}
+}
 return ty_unknown();
 }
 if ((e.tag == "EIf")) {
@@ -705,6 +727,21 @@ i = (i + 1);
 return undefined;
 }
 export function check_call_types(src, structs, fns, scopes, depth, e) {
+if ((e.callee.tag == "ELambda")) {
+if ((!(vec_len(e.args) == vec_len(e.callee.params)))) {
+panic_at(src, span_start(e.span), "wrong number of args in lambda call");
+}
+let i = 0;
+while (((i < vec_len(e.args)) && (i < vec_len(e.callee.paramTyAnns)))) {
+const expected = vec_get(e.callee.paramTyAnns, i);
+if ((expected != "")) {
+const actual = infer_expr_type(src, structs, fns, scopes, depth, vec_get(e.args, i));
+require_type_compatible(src, span_start(e.span), ("lambda arg " + ("" + (i + 1))), structs, expected, actual);
+}
+i = (i + 1);
+}
+return;
+}
 if ((e.callee.tag != "EIdent")) {
 return;
 }
@@ -730,6 +767,28 @@ return undefined;
 export function analyze_expr(src, structs, fns, scopes, depth, e) {
 if ((e.tag == "EIdent")) {
 require_name(src, span_start(e.span), scopes, depth, e.name);
+return;
+}
+if ((e.tag == "ELambda")) {
+const newDepth = scopes_enter(scopes, depth);
+let pi = 0;
+while ((pi < vec_len(e.params))) {
+let pTy = ty_unknown();
+if ((pi < vec_len(e.paramTyAnns))) {
+const ann = vec_get(e.paramTyAnns, pi);
+if ((ann != "")) {
+pTy = normalize_ty_ann(ann);
+}
+}
+declare_local_name(src, span_start(e.span), scopes, newDepth, vec_get(e.params, pi), false, pTy);
+pi = (pi + 1);
+}
+analyze_expr(src, structs, fns, scopes, newDepth, e.body);
+if ((e.retTyAnn != "")) {
+const expected = normalize_ty_ann(e.retTyAnn);
+const bodyTy = infer_expr_type(src, structs, fns, scopes, newDepth, e.body);
+require_type_compatible(src, span_start(e.span), "lambda return", structs, expected, bodyTy);
+}
 return;
 }
 if ((e.tag == "EStructLit")) {

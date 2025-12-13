@@ -45,6 +45,7 @@ from ast use {
   expr_string,
   expr_ident,
   expr_path,
+  expr_lambda,
   expr_struct_lit,
   expr_unary,
   expr_binary,
@@ -105,6 +106,62 @@ class fn ParsedMainAst(body, tail, nextPos: I32) => {}
 class fn ParsedStmtAst(stmt, nextPos: I32) => {}
 class fn ParsedStmtsAst(stmts, nextPos: I32) => {}
 class fn ParsedExprListAst(items, nextPos: I32) => {}
+
+// Lambda params list parser is only used when we've already determined this is
+// a lambda expression (see `parse_primary_ast` disambiguation).
+fn parse_lambda_expr_ast(src: String, i: I32) : ParsedExprAst => {
+  let start = skip_ws(src, i);
+  let mut k = parse_keyword(src, start, "(");
+  k = skip_ws(src, k);
+
+  let params = vec_new();
+  let paramTyAnns = vec_new();
+
+  // Empty param list: ()
+  if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) { // ')'
+    k = k + 1;
+  } else {
+    // One or more typed params: name ':' Type
+    while (true) {
+      let name = parse_ident(src, k);
+      vec_push(params, name.text);
+      k = name.nextPos;
+      k = parse_keyword(src, k, ":");
+      let ty = parse_type_expr(src, k);
+      vec_push(paramTyAnns, ty.v0);
+      k = skip_ws(src, ty.v1);
+
+      if (!(k < stringLen(src))) { panic_at(src, k, "expected ')' in lambda params"); }
+      let ch = stringCharCodeAt(src, k);
+      if (ch == 44) { // ','
+        k = k + 1;
+        k = skip_ws(src, k);
+        // Allow trailing comma: (a: I32,)
+        if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) { // ')'
+          k = k + 1;
+          break;
+        }
+        continue;
+      }
+      if (ch == 41) { // ')'
+        k = k + 1;
+        break;
+      }
+      panic_at(src, k, "expected ',' or ')' in lambda params")
+    }
+  }
+
+  // Return type annotation is required in this first implementation.
+  k = parse_keyword(src, k, ":");
+  let ret = parse_type_expr(src, k);
+  let retTyAnn = ret.v0;
+  k = ret.v1;
+  k = parse_keyword(src, k, "=>");
+
+  let t = skip_ws(src, k);
+  let body = if (t < stringLen(src) && stringCharCodeAt(src, t) == 123) parse_block_expr_ast(src, k) else parse_expr_ast(src, k);
+  ParsedExprAst(expr_lambda(span(start, body.nextPos), params, paramTyAnns, retTyAnn, body.expr), body.nextPos)
+}
 
 fn parse_expr(src: String, i: I32) : ParsedExpr => parse_or(src, i)
 
@@ -559,6 +616,25 @@ fn parse_primary_ast(src: String, i: I32) : ParsedExprAst => {
   }
 
   if (c == 40) { // '('
+    // Disambiguate lambdas from parenthesized expressions / tuples.
+    // Lambda syntax starts with either:
+    //   () : Ret => ...
+    //   (name: Ty, ...) : Ret => ...
+    let t0 = skip_ws(src, j + 1);
+    if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 41) { // ')'
+      let t1 = skip_ws(src, t0 + 1);
+      if (t1 < stringLen(src) && stringCharCodeAt(src, t1) == 58) { // ':'
+        yield parse_lambda_expr_ast(src, j);
+      }
+    }
+    if (t0 < stringLen(src) && is_ident_start(stringCharCodeAt(src, t0))) {
+      let name = parse_ident(src, t0);
+      let t1 = skip_ws(src, name.nextPos);
+      if (t1 < stringLen(src) && stringCharCodeAt(src, t1) == 58) { // ':'
+        yield parse_lambda_expr_ast(src, j);
+      }
+    }
+
     let first = parse_expr_ast(src, j + 1);
     let mut k = skip_ws(src, first.nextPos);
     if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) {

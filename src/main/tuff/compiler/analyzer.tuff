@@ -62,6 +62,21 @@ fn ty_char() : String => "Char"
 fn ty_string() : String => "String"
 fn ty_void() : String => "Void"
 
+fn ty_fn_type(paramTyAnns, retTyAnn: String) : String => {
+  // Compact function type tag used internally by the analyzer.
+  // Example: Fn(I32,I32)->I32
+  let mut out = "Fn(";
+  let mut i = 0;
+  while (i < vec_len(paramTyAnns)) {
+    if (i > 0) { out = out + ","; }
+    let t = vec_get(paramTyAnns, i);
+    out = out + normalize_ty_ann(if (t == "") ty_unknown() else t);
+    i = i + 1;
+  }
+  out = out + ")->" + normalize_ty_ann(retTyAnn);
+  out
+}
+
 fn normalize_ty_ann(t: String) : String => {
   // Keep this minimal (Phase 4). We mostly do string equality checks.
   if (t == "Int") { yield ty_i32(); }
@@ -375,6 +390,10 @@ fn infer_expr_type(src: String, structs, fns, scopes, depth: I32, e) : String =>
     yield infer_lookup_ty(scopes, depth, e.name);
   }
 
+  if (e.tag == "ELambda") {
+    yield ty_fn_type(e.paramTyAnns, e.retTyAnn);
+  }
+
   if (e.tag == "EStructLit") {
     yield struct_name_of_expr(src, e.nameExpr);
   }
@@ -473,6 +492,9 @@ fn infer_expr_type(src: String, structs, fns, scopes, depth: I32, e) : String =>
       let sig = find_fn_sig(fns, e.callee.name);
       if (sig.retTyAnn != "") { yield normalize_ty_ann(sig.retTyAnn); }
     }
+    if (e.callee.tag == "ELambda") {
+      if (e.callee.retTyAnn != "") { yield normalize_ty_ann(e.callee.retTyAnn); }
+    }
     yield ty_unknown();
   }
 
@@ -559,6 +581,22 @@ fn check_struct_lit_types(src: String, structs, fns, scopes, depth: I32, e) : Vo
 }
 
 fn check_call_types(src: String, structs, fns, scopes, depth: I32, e) : Void => {
+  if (e.callee.tag == "ELambda") {
+    if (!(vec_len(e.args) == vec_len(e.callee.params))) {
+      panic_at(src, span_start(e.span), "wrong number of args in lambda call");
+    }
+    let mut i = 0;
+    while (i < vec_len(e.args) && i < vec_len(e.callee.paramTyAnns)) {
+      let expected = vec_get(e.callee.paramTyAnns, i);
+      if (expected != "") {
+        let actual = infer_expr_type(src, structs, fns, scopes, depth, vec_get(e.args, i));
+        require_type_compatible(src, span_start(e.span), "lambda arg " + ("" + (i + 1)), structs, expected, actual);
+      }
+      i = i + 1;
+    }
+    yield;
+  }
+
   if (e.callee.tag != "EIdent") { yield; }
   let name = e.callee.name;
   if (!has_fn_sig(fns, name)) { yield; }
@@ -583,6 +621,31 @@ fn check_call_types(src: String, structs, fns, scopes, depth: I32, e) : Void => 
 fn analyze_expr(src: String, structs, fns, scopes, depth: I32, e) : Void => {
   if (e.tag == "EIdent") {
     require_name(src, span_start(e.span), scopes, depth, e.name);
+    yield;
+  }
+
+  if (e.tag == "ELambda") {
+    // Lambdas introduce a new scope with typed parameters.
+    let newDepth = scopes_enter(scopes, depth);
+    let mut pi = 0;
+    while (pi < vec_len(e.params)) {
+      let mut pTy = ty_unknown();
+      if (pi < vec_len(e.paramTyAnns)) {
+        let ann = vec_get(e.paramTyAnns, pi);
+        if (ann != "") { pTy = normalize_ty_ann(ann); }
+      }
+      declare_local_name(src, span_start(e.span), scopes, newDepth, vec_get(e.params, pi), false, pTy);
+      pi = pi + 1;
+    }
+
+    analyze_expr(src, structs, fns, scopes, newDepth, e.body);
+
+    // Enforce declared return type against body expression.
+    if (e.retTyAnn != "") {
+      let expected = normalize_ty_ann(e.retTyAnn);
+      let bodyTy = infer_expr_type(src, structs, fns, scopes, newDepth, e.body);
+      require_type_compatible(src, span_start(e.span), "lambda return", structs, expected, bodyTy);
+    }
     yield;
   }
 

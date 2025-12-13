@@ -80,6 +80,7 @@ type Expr =
   | EString
   | EPath
   | EIdent
+  | ELambda
   | EStructLit
   | EUnary
   | EBinary
@@ -132,6 +133,23 @@ struct EIdent {
   tag: String,
   span: Span,
   name: String
+}
+
+// Lambda expression.
+//
+// Syntax (initial):
+//   (a: I32, b: I32) : I32 => a + b
+//   () : I32 => 10
+//
+// Note: Type annotations are kept as raw strings (Phase 4 analyzer uses
+// string-based normalization/compatibility checks).
+struct ELambda {
+  tag: String,
+  span: Span,
+  params: Vec<String>,
+  paramTyAnns: Vec<String>,
+  retTyAnn: String,
+  body: Expr
 }
 
 // Struct literal. The parser keeps this as a dedicated node so the emitter
@@ -484,6 +502,9 @@ fn expr_bool(span: Span, value: Bool) : Expr => EBool { "EBool", span, value }
 fn expr_string(span: Span, value: String) : Expr => EString { "EString", span, value }
 fn expr_ident(span: Span, name: String) : Expr => EIdent { "EIdent", span, name }
 fn expr_path(span: Span, parts: Vec<String>) : Expr => EPath { "EPath", span, parts }
+
+fn expr_lambda(span: Span, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String, body: Expr) : Expr =>
+  ELambda { "ELambda", span, params, paramTyAnns, retTyAnn, body }
 
 fn expr_struct_lit(span: Span, nameExpr: Expr, values: Vec<Expr>) : Expr => EStructLit { "EStructLit", span, nameExpr, values }
 

@@ -5,7 +5,7 @@ import { panic_at, panic_at_help, find_struct_fields, is_identifier_too_short, w
 import { is_digit, is_ident_start, is_ident_part, skip_ws, starts_with_at } from "../util/lexing.mjs";
 import { ParsedBool, ParsedIdent, ParsedNumber, parse_ident, parse_keyword, parse_number, parse_optional_semicolon } from "./primitives.mjs";
 import { parse_type_expr } from "./types.mjs";
-import { span, span_start, expr_span, expr_undefined, expr_int, expr_float, expr_bool, expr_string, expr_ident, expr_path, expr_struct_lit, expr_unary, expr_binary, expr_call, expr_if, expr_block, expr_vec_lit, expr_tuple_lit, expr_index, expr_tuple_index, expr_field, expr_match, OpOr, OpAnd, OpEq, OpNe, OpLt, OpLe, OpGt, OpGe, OpAdd, OpSub, OpMul, OpDiv, OpNot, OpNeg, mk_match_arm, pat_wildcard, pat_int, pat_bool, pat_string, stmt_let, stmt_let_typed, stmt_assign, stmt_expr, stmt_yield, stmt_while, stmt_if, stmt_index_assign, stmt_field_assign } from "../ast.mjs";
+import { span, span_start, expr_span, expr_undefined, expr_int, expr_float, expr_bool, expr_string, expr_ident, expr_path, expr_lambda, expr_struct_lit, expr_unary, expr_binary, expr_call, expr_if, expr_block, expr_vec_lit, expr_tuple_lit, expr_index, expr_tuple_index, expr_field, expr_match, OpOr, OpAnd, OpEq, OpNe, OpLt, OpLe, OpGt, OpGe, OpAdd, OpSub, OpMul, OpDiv, OpNot, OpNeg, mk_match_arm, pat_wildcard, pat_int, pat_bool, pat_string, stmt_let, stmt_let_typed, stmt_assign, stmt_expr, stmt_yield, stmt_while, stmt_if, stmt_index_assign, stmt_field_assign } from "../ast.mjs";
 export function ParsedExpr(v0, v1) {
 return { v0: v0, v1: v1 };
 }
@@ -32,6 +32,52 @@ return { stmts: stmts, nextPos: nextPos };
 }
 export function ParsedExprListAst(items, nextPos) {
 return { items: items, nextPos: nextPos };
+}
+export function parse_lambda_expr_ast(src, i) {
+const start = skip_ws(src, i);
+let k = parse_keyword(src, start, "(");
+k = skip_ws(src, k);
+const params = vec_new();
+const paramTyAnns = vec_new();
+if (((k < stringLen(src)) && (stringCharCodeAt(src, k) == 41))) {
+k = (k + 1);
+} else {
+while (true) {
+const name = parse_ident(src, k);
+vec_push(params, name.text);
+k = name.nextPos;
+k = parse_keyword(src, k, ":");
+const ty = parse_type_expr(src, k);
+vec_push(paramTyAnns, ty.v0);
+k = skip_ws(src, ty.v1);
+if ((!(k < stringLen(src)))) {
+panic_at(src, k, "expected ')' in lambda params");
+}
+const ch = stringCharCodeAt(src, k);
+if ((ch == 44)) {
+k = (k + 1);
+k = skip_ws(src, k);
+if (((k < stringLen(src)) && (stringCharCodeAt(src, k) == 41))) {
+k = (k + 1);
+break;
+}
+continue;
+}
+if ((ch == 41)) {
+k = (k + 1);
+break;
+}
+panic_at(src, k, "expected ',' or ')' in lambda params");
+}
+}
+k = parse_keyword(src, k, ":");
+const ret = parse_type_expr(src, k);
+const retTyAnn = ret.v0;
+k = ret.v1;
+k = parse_keyword(src, k, "=>");
+const t = skip_ws(src, k);
+const body = (((t < stringLen(src)) && (stringCharCodeAt(src, t) == 123)) ? parse_block_expr_ast(src, k) : parse_expr_ast(src, k));
+return ParsedExprAst(expr_lambda(span(start, body.nextPos), params, paramTyAnns, retTyAnn, body.expr), body.nextPos);
 }
 export function parse_expr(src, i) {
 return parse_or(src, i);
@@ -541,6 +587,20 @@ const lit = parse_string_lit_value(src, j);
 return ParsedExprAst(expr_string(span(j, lit.nextPos), lit.text), lit.nextPos);
 }
 if ((c == 40)) {
+const t0 = skip_ws(src, (j + 1));
+if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 41))) {
+const t1 = skip_ws(src, (t0 + 1));
+if (((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 58))) {
+return parse_lambda_expr_ast(src, j);
+}
+}
+if (((t0 < stringLen(src)) && is_ident_start(stringCharCodeAt(src, t0)))) {
+const name = parse_ident(src, t0);
+const t1 = skip_ws(src, name.nextPos);
+if (((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 58))) {
+return parse_lambda_expr_ast(src, j);
+}
+}
 const first = parse_expr_ast(src, (j + 1));
 let k = skip_ws(src, first.nextPos);
 if (((k < stringLen(src)) && (stringCharCodeAt(src, k) == 41))) {
