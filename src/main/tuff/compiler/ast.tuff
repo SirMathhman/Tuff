@@ -419,6 +419,8 @@ struct DLet {
 struct DFn {
   tag: String,
   span: Span,
+  // True when declared as `out fn` (public/exported from the module).
+  isOut: Bool,
   name: String,
   // Optional generic params: fn name<T, U>(...)
   typeParams: Vec<String>,
@@ -436,6 +438,8 @@ struct DFn {
 struct DClassFn {
   tag: String,
   span: Span,
+  // True when declared as `out class fn` (public/exported from the module).
+  isOut: Bool,
   name: String,
   // Optional generic params: class fn name<T, U>(...)
   typeParams: Vec<String>,
@@ -498,96 +502,96 @@ struct DImport {
 
 // Helpers
 
-fn span(start: I32, end: I32) : Span => SpanVal((start, end))
+out fn span(start: I32, end: I32) : Span => SpanVal((start, end))
 
-fn span_start(s: Span) : I32 => s.value.0
-fn span_end(s: Span) : I32 => s.value.1
-fn span_len(s: Span) : I32 => span_end(s) - span_start(s)
+out fn span_start(s: Span) : I32 => s.value.0
+out fn span_end(s: Span) : I32 => s.value.1
+out fn span_len(s: Span) : I32 => span_end(s) - span_start(s)
 
-fn type_kind(t: TypeRef) : String => t.tag
-fn type_span(t: TypeRef) : Span => t.span
+out fn type_kind(t: TypeRef) : String => t.tag
+out fn type_span(t: TypeRef) : Span => t.span
 
-fn expr_kind(e: Expr) : String => e.tag
-fn expr_span(e: Expr) : Span => e.span
+out fn expr_kind(e: Expr) : String => e.tag
+out fn expr_span(e: Expr) : Span => e.span
 
-fn stmt_kind(s: Stmt) : String => s.tag
-fn stmt_span(s: Stmt) : Span => s.span
+out fn stmt_kind(s: Stmt) : String => s.tag
+out fn stmt_span(s: Stmt) : Span => s.span
 
-fn decl_kind(d: Decl) : String => d.tag
-fn decl_span(d: Decl) : Span => d.span
+out fn decl_kind(d: Decl) : String => d.tag
+out fn decl_span(d: Decl) : Span => d.span
 
 // Constructors (cross-module safe)
 
-fn ty_name(span: Span, name: String) : TypeRef => TyName { "TyName", span, name }
-fn ty_tuple(span: Span, items: Vec<TypeRef>) : TypeRef => TyTuple { "TyTuple", span, items }
-fn ty_fn(span: Span, params: Vec<TypeRef>, result: TypeRef) : TypeRef => TyFn { "TyFn", span, params, result }
-fn ty_app(span: Span, callee: String, args: Vec<TypeRef>) : TypeRef => TyApp { "TyApp", span, callee, args }
+out fn ty_name(span: Span, name: String) : TypeRef => TyName { "TyName", span, name }
+out fn ty_tuple(span: Span, items: Vec<TypeRef>) : TypeRef => TyTuple { "TyTuple", span, items }
+out fn ty_fn(span: Span, params: Vec<TypeRef>, result: TypeRef) : TypeRef => TyFn { "TyFn", span, params, result }
+out fn ty_app(span: Span, callee: String, args: Vec<TypeRef>) : TypeRef => TyApp { "TyApp", span, callee, args }
 
-fn expr_undefined(span: Span) : Expr => EUndefined { "EUndefined", span }
+out fn expr_undefined(span: Span) : Expr => EUndefined { "EUndefined", span }
 
-fn expr_int(span: Span, value: I32) : Expr => EInt { "EInt", span, value }
-fn expr_float(span: Span, text: String, suffix: String) : Expr => EFloat { "EFloat", span, text, suffix }
-fn expr_bool(span: Span, value: Bool) : Expr => EBool { "EBool", span, value }
-fn expr_string(span: Span, value: String) : Expr => EString { "EString", span, value }
-fn expr_ident(span: Span, name: String) : Expr => EIdent { "EIdent", span, name }
-fn expr_path(span: Span, parts: Vec<String>) : Expr => EPath { "EPath", span, parts }
+out fn expr_int(span: Span, value: I32) : Expr => EInt { "EInt", span, value }
+out fn expr_float(span: Span, text: String, suffix: String) : Expr => EFloat { "EFloat", span, text, suffix }
+out fn expr_bool(span: Span, value: Bool) : Expr => EBool { "EBool", span, value }
+out fn expr_string(span: Span, value: String) : Expr => EString { "EString", span, value }
+out fn expr_ident(span: Span, name: String) : Expr => EIdent { "EIdent", span, name }
+out fn expr_path(span: Span, parts: Vec<String>) : Expr => EPath { "EPath", span, parts }
 
-fn expr_lambda(span: Span, typeParams: Vec<String>, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String, body: Expr) : Expr =>
+out fn expr_lambda(span: Span, typeParams: Vec<String>, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String, body: Expr) : Expr =>
   ELambda { "ELambda", span, typeParams, params, paramTyAnns, retTyAnn, body }
 
-fn expr_struct_lit(span: Span, nameExpr: Expr, values: Vec<Expr>) : Expr => EStructLit { "EStructLit", span, nameExpr, values }
+out fn expr_struct_lit(span: Span, nameExpr: Expr, values: Vec<Expr>) : Expr => EStructLit { "EStructLit", span, nameExpr, values }
 
-fn expr_unary(span: Span, op: UnOp, expr: Expr) : Expr => EUnary { "EUnary", span, op, expr }
-fn expr_binary(span: Span, op: BinOp, left: Expr, right: Expr) : Expr => EBinary { "EBinary", span, op, left, right }
-fn expr_call(span: Span, callee: Expr, args: Vec<Expr>) : Expr => ECall { "ECall", span, callee, vec_new(), args }
-fn expr_call_typed(span: Span, callee: Expr, typeArgs: Vec<String>, args: Vec<Expr>) : Expr => ECall { "ECall", span, callee, typeArgs, args }
-fn expr_if(span: Span, cond: Expr, thenExpr: Expr, elseExpr: Expr) : Expr => EIf { "EIf", span, cond, thenExpr, elseExpr }
+out fn expr_unary(span: Span, op: UnOp, expr: Expr) : Expr => EUnary { "EUnary", span, op, expr }
+out fn expr_binary(span: Span, op: BinOp, left: Expr, right: Expr) : Expr => EBinary { "EBinary", span, op, left, right }
+out fn expr_call(span: Span, callee: Expr, args: Vec<Expr>) : Expr => ECall { "ECall", span, callee, vec_new(), args }
+out fn expr_call_typed(span: Span, callee: Expr, typeArgs: Vec<String>, args: Vec<Expr>) : Expr => ECall { "ECall", span, callee, typeArgs, args }
+out fn expr_if(span: Span, cond: Expr, thenExpr: Expr, elseExpr: Expr) : Expr => EIf { "EIf", span, cond, thenExpr, elseExpr }
 
-fn expr_block(span: Span, body: Vec<Stmt>, tail: Expr) : Expr => EBlock { "EBlock", span, body, tail }
-fn expr_vec_lit(span: Span, items: Vec<Expr>) : Expr => EVecLit { "EVecLit", span, items }
-fn expr_tuple_lit(span: Span, items: Vec<Expr>) : Expr => ETupleLit { "ETupleLit", span, items }
-fn expr_index(span: Span, base: Expr, index: Expr) : Expr => EIndex { "EIndex", span, base, index }
-fn expr_tuple_index(span: Span, base: Expr, index: I32) : Expr => ETupleIndex { "ETupleIndex", span, base, index }
-fn expr_field(span: Span, base: Expr, field: String) : Expr => EField { "EField", span, base, field }
+out fn expr_block(span: Span, body: Vec<Stmt>, tail: Expr) : Expr => EBlock { "EBlock", span, body, tail }
+out fn expr_vec_lit(span: Span, items: Vec<Expr>) : Expr => EVecLit { "EVecLit", span, items }
+out fn expr_tuple_lit(span: Span, items: Vec<Expr>) : Expr => ETupleLit { "ETupleLit", span, items }
+out fn expr_index(span: Span, base: Expr, index: Expr) : Expr => EIndex { "EIndex", span, base, index }
+out fn expr_tuple_index(span: Span, base: Expr, index: I32) : Expr => ETupleIndex { "ETupleIndex", span, base, index }
+out fn expr_field(span: Span, base: Expr, field: String) : Expr => EField { "EField", span, base, field }
 
-fn pat_wildcard(span: Span) : MatchPat => MPWildcard { "MPWildcard", span }
-fn pat_int(span: Span, value: I32) : MatchPat => MPInt { "MPInt", span, value }
-fn pat_bool(span: Span, value: Bool) : MatchPat => MPBool { "MPBool", span, value }
-fn pat_string(span: Span, value: String) : MatchPat => MPString { "MPString", span, value }
-fn pat_variant(span: Span, name: String) : MatchPat => MPVariant { "MPVariant", span, name }
-fn mk_match_arm(span: Span, pat: MatchPat, expr: Expr) : MatchArm => MatchArm { "MatchArm", span, pat, expr }
-fn expr_match(span: Span, scrut: Expr, arms: Vec<MatchArm>) : Expr => EMatch { "EMatch", span, scrut, arms }
+out fn pat_wildcard(span: Span) : MatchPat => MPWildcard { "MPWildcard", span }
+out fn pat_int(span: Span, value: I32) : MatchPat => MPInt { "MPInt", span, value }
+out fn pat_bool(span: Span, value: Bool) : MatchPat => MPBool { "MPBool", span, value }
+out fn pat_string(span: Span, value: String) : MatchPat => MPString { "MPString", span, value }
+out fn pat_variant(span: Span, name: String) : MatchPat => MPVariant { "MPVariant", span, name }
+out fn mk_match_arm(span: Span, pat: MatchPat, expr: Expr) : MatchArm => MatchArm { "MatchArm", span, pat, expr }
+out fn expr_match(span: Span, scrut: Expr, arms: Vec<MatchArm>) : Expr => EMatch { "EMatch", span, scrut, arms }
 
 // Stmt constructors
-fn stmt_let(span: Span, isMut: Bool, name: String, init: Expr) : Stmt => SLet { "SLet", span, isMut, name, "", init }
-fn stmt_let_typed(span: Span, isMut: Bool, name: String, tyAnn: String, init: Expr) : Stmt => SLet { "SLet", span, isMut, name, tyAnn, init }
-fn stmt_assign(span: Span, name: String, value: Expr) : Stmt => SAssign { "SAssign", span, name, value }
-fn stmt_expr(span: Span, expr: Expr) : Stmt => SExpr { "SExpr", span, expr }
-fn stmt_yield(span: Span, expr: Expr) : Stmt => SYield { "SYield", span, expr }
-fn stmt_while(span: Span, cond: Expr, body: Vec<Stmt>) : Stmt => SWhile { "SWhile", span, cond, body }
-fn stmt_if(span: Span, cond: Expr, thenBody: Vec<Stmt>, hasElse: Bool, elseBody: Vec<Stmt>) : Stmt => SIf { "SIf", span, cond, thenBody, hasElse, elseBody }
-fn stmt_index_assign(span: Span, base: Expr, index: Expr, value: Expr) : Stmt => SIndexAssign { "SIndexAssign", span, base, index, value }
-fn stmt_field_assign(span: Span, base: Expr, fields: Vec<String>, value: Expr) : Stmt => SFieldAssign { "SFieldAssign", span, base, fields, value }
+out fn stmt_let(span: Span, isMut: Bool, name: String, init: Expr) : Stmt => SLet { "SLet", span, isMut, name, "", init }
+out fn stmt_let_typed(span: Span, isMut: Bool, name: String, tyAnn: String, init: Expr) : Stmt => SLet { "SLet", span, isMut, name, tyAnn, init }
+out fn stmt_assign(span: Span, name: String, value: Expr) : Stmt => SAssign { "SAssign", span, name, value }
+out fn stmt_expr(span: Span, expr: Expr) : Stmt => SExpr { "SExpr", span, expr }
+out fn stmt_yield(span: Span, expr: Expr) : Stmt => SYield { "SYield", span, expr }
+out fn stmt_while(span: Span, cond: Expr, body: Vec<Stmt>) : Stmt => SWhile { "SWhile", span, cond, body }
+out fn stmt_if(span: Span, cond: Expr, thenBody: Vec<Stmt>, hasElse: Bool, elseBody: Vec<Stmt>) : Stmt => SIf { "SIf", span, cond, thenBody, hasElse, elseBody }
+out fn stmt_index_assign(span: Span, base: Expr, index: Expr, value: Expr) : Stmt => SIndexAssign { "SIndexAssign", span, base, index, value }
+out fn stmt_field_assign(span: Span, base: Expr, fields: Vec<String>, value: Expr) : Stmt => SFieldAssign { "SFieldAssign", span, base, fields, value }
 
 // Decl constructors
-fn decl_extern_from(span: Span, modulePath: String, names: Vec<String>) : Decl => DExternFrom { "DExternFrom", span, modulePath, names }
-fn decl_import(span: Span, modulePath: String, names: Vec<String>) : Decl => DImport { "DImport", span, modulePath, names }
-fn decl_struct(span: Span, name: String, fields: Vec<String>) : Decl => DStruct { "DStruct", span, name, vec_new(), fields, vec_new() }
-fn decl_struct_typed(span: Span, name: String, typeParams: Vec<String>, fields: Vec<String>, fieldTyAnns: Vec<String>) : Decl =>
+out fn decl_extern_from(span: Span, modulePath: String, names: Vec<String>) : Decl => DExternFrom { "DExternFrom", span, modulePath, names }
+out fn decl_import(span: Span, modulePath: String, names: Vec<String>) : Decl => DImport { "DImport", span, modulePath, names }
+out fn decl_struct(span: Span, name: String, fields: Vec<String>) : Decl => DStruct { "DStruct", span, name, vec_new(), fields, vec_new() }
+out fn decl_struct_typed(span: Span, name: String, typeParams: Vec<String>, fields: Vec<String>, fieldTyAnns: Vec<String>) : Decl =>
   DStruct { "DStruct", span, name, typeParams, fields, fieldTyAnns }
-fn type_union_variant(span: Span, name: String, hasPayload: Bool) : TypeUnionVariant => TypeUnionVariant { "TypeUnionVariant", span, name, hasPayload, vec_new() }
-fn type_union_variant_typed(span: Span, name: String, payloadTyAnns: Vec<String>) : TypeUnionVariant =>
+out fn type_union_variant(span: Span, name: String, hasPayload: Bool) : TypeUnionVariant => TypeUnionVariant { "TypeUnionVariant", span, name, hasPayload, vec_new() }
+out fn type_union_variant_typed(span: Span, name: String, payloadTyAnns: Vec<String>) : TypeUnionVariant =>
   TypeUnionVariant { "TypeUnionVariant", span, name, vec_len(payloadTyAnns) > 0, payloadTyAnns }
-fn decl_type_union(span: Span, name: String, typeParams: Vec<String>, variants: Vec<TypeUnionVariant>) : Decl =>
+out fn decl_type_union(span: Span, name: String, typeParams: Vec<String>, variants: Vec<TypeUnionVariant>) : Decl =>
   DTypeUnion { "DTypeUnion", span, name, typeParams, variants }
-fn decl_fn(span: Span, name: String, params: Vec<String>, body: Vec<Stmt>, tail: Expr) : Decl =>
-  DFn { "DFn", span, name, vec_new(), params, vec_new(), "", body, tail }
-fn decl_fn_typed(span: Span, name: String, typeParams: Vec<String>, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String, body: Vec<Stmt>, tail: Expr) : Decl =>
-  DFn { "DFn", span, name, typeParams, params, paramTyAnns, retTyAnn, body, tail }
-fn decl_class_fn(span: Span, name: String, params: Vec<String>, body: Vec<Stmt>, tail: Expr) : Decl =>
-  DClassFn { "DClassFn", span, name, vec_new(), params, vec_new(), "", body, tail }
-fn decl_class_fn_typed(span: Span, name: String, typeParams: Vec<String>, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String, body: Vec<Stmt>, tail: Expr) : Decl =>
-  DClassFn { "DClassFn", span, name, typeParams, params, paramTyAnns, retTyAnn, body, tail }
-fn decl_let(span: Span, isMut: Bool, name: String, init: Expr) : Decl => DLet { "DLet", span, isMut, name, "", init }
-fn decl_let_typed(span: Span, isMut: Bool, name: String, tyAnn: String, init: Expr) : Decl => DLet { "DLet", span, isMut, name, tyAnn, init }
-fn decl_module(span: Span, name: String, decls: Vec<Decl>) : Decl => DModule { "DModule", span, name, decls }
+out fn decl_fn(span: Span, isOut: Bool, name: String, params: Vec<String>, body: Vec<Stmt>, tail: Expr) : Decl =>
+  DFn { "DFn", span, isOut, name, vec_new(), params, vec_new(), "", body, tail }
+out fn decl_fn_typed(span: Span, isOut: Bool, name: String, typeParams: Vec<String>, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String, body: Vec<Stmt>, tail: Expr) : Decl =>
+  DFn { "DFn", span, isOut, name, typeParams, params, paramTyAnns, retTyAnn, body, tail }
+out fn decl_class_fn(span: Span, isOut: Bool, name: String, params: Vec<String>, body: Vec<Stmt>, tail: Expr) : Decl =>
+  DClassFn { "DClassFn", span, isOut, name, vec_new(), params, vec_new(), "", body, tail }
+out fn decl_class_fn_typed(span: Span, isOut: Bool, name: String, typeParams: Vec<String>, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String, body: Vec<Stmt>, tail: Expr) : Decl =>
+  DClassFn { "DClassFn", span, isOut, name, typeParams, params, paramTyAnns, retTyAnn, body, tail }
+out fn decl_let(span: Span, isMut: Bool, name: String, init: Expr) : Decl => DLet { "DLet", span, isMut, name, "", init }
+out fn decl_let_typed(span: Span, isMut: Bool, name: String, tyAnn: String, init: Expr) : Decl => DLet { "DLet", span, isMut, name, tyAnn, init }
+out fn decl_module(span: Span, name: String, decls: Vec<Decl>) : Decl => DModule { "DModule", span, name, decls }

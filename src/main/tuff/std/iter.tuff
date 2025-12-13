@@ -48,7 +48,7 @@ fn iter_new(for_each) => {
   Iter(for_each, map_fn, filter_fn, fold_fn)
 }
 
-fn range(start: I32, end: I32) => {
+out fn range(start: I32, end: I32) => {
   let mut cur: I32 = start;
 
   let has_next = () => cur < end;

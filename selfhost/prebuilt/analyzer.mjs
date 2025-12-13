@@ -2191,3 +2191,18 @@ const fns = vec_new();
 analyze_decls(src, structs, unions, fns, scopes, depth, decls);
 return undefined;
 }
+export function analyze_program_with_fns(src, decls, importedFns) {
+const scopes = vec_new();
+vec_push(scopes, vec_new());
+const depth = 1;
+const structs = vec_new();
+const unions = vec_new();
+const fns = vec_new();
+let i = 0;
+while (i < vec_len(importedFns)) {
+vec_push(fns, vec_get(importedFns, i));
+i = i + 1;
+}
+analyze_decls(src, structs, unions, fns, scopes, depth, decls);
+return undefined;
+}

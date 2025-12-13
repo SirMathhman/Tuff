@@ -1460,10 +1460,12 @@ let origin = Graphics::Point(0, 0);
 Modules from other files are imported using `from <modulePath> use { ... };`.
 This brings the selected names into the current scope.
 
+In multi-file projects, functions (and class constructors) must be explicitly exported from their defining file using the `out` keyword (`out fn` / `out class fn`) before they can be imported from another file. Importing a non-`out` function is a hard error.
+
 ```tuff
 // In math.tuff
 module Math {
-    fn add(a: I32, b: I32) : I32 => { a + b }
+    out fn add(a: I32, b: I32) : I32 => { a + b }
 }
 
 // In main.tuff
@@ -1490,7 +1492,7 @@ Top-level declarations in a file are members of that file's implicit module. You
 // In ./com/example.tuff
 let value: I32 = 100;
 
-fn compute(x: I32) : I32 => { x * 2 }
+out fn compute(x: I32) : I32 => { x * 2 }
 ```
 
 To use these declarations from another file:

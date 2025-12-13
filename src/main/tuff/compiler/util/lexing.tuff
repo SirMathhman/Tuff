@@ -9,22 +9,22 @@ from util::diagnostics use { panic_at };
 
 // Used by whitespace-preserving tooling (formatter/refactors).
 // `tag` is one of: TriviaWhitespace | TriviaLineComment | TriviaBlockComment | Code.
-class fn LexItem(tag: String, startPos: I32, endPos: I32, text: String) => {}
+out class fn LexItem(tag: String, startPos: I32, endPos: I32, text: String) => {}
 
 // Trivia-preserving token stream.
 // `leadingTrivia` is a Vec<LexItem> containing only Trivia* items.
 // `kind` is one of: Ident | Number | String | Char | Op | Punct.
-class fn Token(kind: String, startPos: I32, endPos: I32, text: String, leadingTrivia: Any) => {}
-class fn TokenStream(tokens: Any, trailingTrivia: Any) => {}
+out class fn Token(kind: String, startPos: I32, endPos: I32, text: String, leadingTrivia: Any) => {}
+out class fn TokenStream(tokens: Any, trailingTrivia: Any) => {}
 
 // Utility: ASCII checks
-fn is_digit(code: I32) : Bool => { code >= 48 && code <= 57 }
-fn is_space(code: I32) : Bool => { code == 32 || code == 10 || code == 9 || code == 13 }
-fn is_alpha(code: I32) : Bool => { (code >= 65 && code <= 90) || (code >= 97 && code <= 122) }
-fn is_ident_start(code: I32) : Bool => { is_alpha(code) || code == 95 }
-fn is_ident_part(code: I32) : Bool => { is_ident_start(code) || is_digit(code) }
+out fn is_digit(code: I32) : Bool => { code >= 48 && code <= 57 }
+out fn is_space(code: I32) : Bool => { code == 32 || code == 10 || code == 9 || code == 13 }
+out fn is_alpha(code: I32) : Bool => { (code >= 65 && code <= 90) || (code >= 97 && code <= 122) }
+out fn is_ident_start(code: I32) : Bool => { is_alpha(code) || code == 95 }
+out fn is_ident_part(code: I32) : Bool => { is_ident_start(code) || is_digit(code) }
 
-fn skip_ws(src: String, i: I32) : I32 => {
+out fn skip_ws(src: String, i: I32) : I32 => {
   let mut j = i;
   while (j < stringLen(src)) {
     // skip whitespace
@@ -70,7 +70,7 @@ fn skip_ws(src: String, i: I32) : I32 => {
   j
 }
 
-fn starts_with_at(src: String, i: I32, lit: String) : Bool => {
+out fn starts_with_at(src: String, i: I32, lit: String) : Bool => {
   // compare bytewise
   let mut j = 0;
   while (j < stringLen(lit)) {
@@ -83,7 +83,7 @@ fn starts_with_at(src: String, i: I32, lit: String) : Bool => {
 
 // Like `skip_ws`, but *records* whitespace and comments as `LexItem`s.
 // This is a building block for a whitespace-preserving Tuff backend.
-fn skip_ws_collect(src: String, i: I32, items: Any) : I32 => {
+out fn skip_ws_collect(src: String, i: I32, items: Any) : I32 => {
   let mut j = i;
   while (j < stringLen(src)) {
     // whitespace
@@ -135,7 +135,7 @@ fn skip_ws_collect(src: String, i: I32, items: Any) : I32 => {
 
 // Lossless-ish scan: alternates trivia and "Code" segments.
 // Today it doesn't split code into tokens yet; it preserves the original bytes.
-fn lex_items_with_trivia(src: String) : Any => {
+out fn lex_items_with_trivia(src: String) : Any => {
   let items = vec_new();
   let mut i = 0;
   while (i < stringLen(src)) {
@@ -165,7 +165,7 @@ fn lex_items_with_trivia(src: String) : Any => {
   items
 }
 
-fn emit_lex_items(items: Any) : String => {
+out fn emit_lex_items(items: Any) : String => {
   let mut out = "";
   let mut i = 0;
   while (i < vec_len(items)) {
@@ -176,9 +176,9 @@ fn emit_lex_items(items: Any) : String => {
 }
 
 // Public API for tests/tools: should return `src` exactly.
-fn roundtrip_with_trivia(src: String) : String => emit_lex_items(lex_items_with_trivia(src))
+out fn roundtrip_with_trivia(src: String) : String => emit_lex_items(lex_items_with_trivia(src))
 
-fn emit_trivia_items(items: Any) : String => {
+out fn emit_trivia_items(items: Any) : String => {
   let mut out = "";
   let mut i = 0;
   while (i < vec_len(items)) {
@@ -188,7 +188,7 @@ fn emit_trivia_items(items: Any) : String => {
   out
 }
 
-fn emit_token_stream(ts: TokenStream) : String => {
+out fn emit_token_stream(ts: TokenStream) : String => {
   let mut out = "";
   let mut i = 0;
   while (i < vec_len(ts.tokens)) {
@@ -201,7 +201,7 @@ fn emit_token_stream(ts: TokenStream) : String => {
   out
 }
 
-fn tokenize_with_trivia(src: String) : TokenStream => {
+out fn tokenize_with_trivia(src: String) : TokenStream => {
   let toks = vec_new();
   let trailing = vec_new();
 

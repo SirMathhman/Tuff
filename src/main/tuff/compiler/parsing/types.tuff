@@ -14,9 +14,9 @@ from parsing::primitives use {
   parse_number
 };
 
-class fn ParsedType(v0: String, v1: I32) => {}
+out class fn ParsedType(v0: String, v1: I32) => {}
 
-fn skip_angle_brackets(src: String, i: I32) : I32 => {
+out fn skip_angle_brackets(src: String, i: I32) : I32 => {
   // Skips a possibly-nested '<...>' section. Expects '<' at i (after ws).
   let mut k = skip_ws(src, i);
   if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 60)) { // '<'
@@ -38,7 +38,7 @@ fn skip_angle_brackets(src: String, i: I32) : I32 => {
   panic_at(src, k, "unterminated '<...>'")
 }
 
-fn parse_type_expr(src: String, i: I32) : ParsedType => {
+out fn parse_type_expr(src: String, i: I32) : ParsedType => {
   // Minimal-but-real type expression parser.
   // Produces a textual representation (v0) and the index after the type (v1).
   let mut k = skip_ws(src, i);

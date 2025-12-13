@@ -11,16 +11,16 @@ let mut __passed = 0;
 let mut __failed = 0;
 let mut __suite = "";
 
-fn reset() => {
+out fn reset() => {
   __passed = 0;
   __failed = 0;
   __suite = "";
 }
 
-fn get_passed() => __passed
-fn get_failed() => __failed
+out fn get_passed() => __passed
+out fn get_failed() => __failed
 
-fn suite(name) => {
+out fn suite(name) => {
   __suite = name;
   println("# suite: " + name);
 }
@@ -29,68 +29,68 @@ fn suite(name) => {
 // truncate emission for std modules.
 fn __full_name(name) => if (__suite == "") name else (__suite + " :: " + name)
 
-fn expect(name, cond) => if (cond) true else {
+out fn expect(name, cond) => if (cond) true else {
   println("  assertion failed: " + __full_name(name));
   false
 }
 
-fn expect_eq(name, got, expected) => if (got == expected) true else {
+out fn expect_eq(name, got, expected) => if (got == expected) true else {
   println("  assertion failed: " + __full_name(name));
   println("    expected: " + expected);
   println("    got: " + got);
   false
 }
 
-fn expect_ne(name, got, not_expected) => if (!(got == not_expected)) true else {
+out fn expect_ne(name, got, not_expected) => if (!(got == not_expected)) true else {
   println("  assertion failed: " + __full_name(name));
   println("    expected: (not) " + not_expected);
   println("    got: " + got);
   false
 }
 
-fn expect_true(name, cond) => if (cond) true else {
+out fn expect_true(name, cond) => if (cond) true else {
   println("  assertion failed: " + __full_name(name));
   println("    expected: true");
   println("    got: false");
   false
 }
 
-fn expect_false(name, cond) => if (!cond) true else {
+out fn expect_false(name, cond) => if (!cond) true else {
   println("  assertion failed: " + __full_name(name));
   println("    expected: false");
   println("    got: true");
   false
 }
 
-fn expect_lt(name, got, threshold) => if (got < threshold) true else {
+out fn expect_lt(name, got, threshold) => if (got < threshold) true else {
   println("  assertion failed: " + __full_name(name));
   println("    expected: < " + ("" + threshold));
   println("    got: " + ("" + got));
   false
 }
 
-fn expect_le(name, got, threshold) => if (got < threshold || got == threshold) true else {
+out fn expect_le(name, got, threshold) => if (got < threshold || got == threshold) true else {
   println("  assertion failed: " + __full_name(name));
   println("    expected: <= " + ("" + threshold));
   println("    got: " + ("" + got));
   false
 }
 
-fn expect_gt(name, got, threshold) => if (got > threshold) true else {
+out fn expect_gt(name, got, threshold) => if (got > threshold) true else {
   println("  assertion failed: " + __full_name(name));
   println("    expected: > " + ("" + threshold));
   println("    got: " + ("" + got));
   false
 }
 
-fn expect_ge(name, got, threshold) => if (got > threshold || got == threshold) true else {
+out fn expect_ge(name, got, threshold) => if (got > threshold || got == threshold) true else {
   println("  assertion failed: " + __full_name(name));
   println("    expected: >= " + ("" + threshold));
   println("    got: " + ("" + got));
   false
 }
 
-fn it(name, ok) => {
+out fn it(name, ok) => {
   let full = __full_name(name);
   if (ok) {
     __passed = __passed + 1;
@@ -101,9 +101,9 @@ fn it(name, ok) => {
   }
 }
 
-fn summary() => {
+out fn summary() => {
   println("passed: " + __passed);
   println("failed: " + __failed);
 }
 
-fn status() => if (__failed == 0) 0 else 1
+out fn status() => if (__failed == 0) 0 else 1

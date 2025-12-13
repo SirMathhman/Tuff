@@ -200,48 +200,13 @@ return parse_fn_decl_ast2(src, i, false);
 }
 export function parse_fn_decl_ast2(src, i, exportAll) {
 const start = skip_ws(src, i);
-let k = parse_keyword(src, start, "fn");
-const name = parse_ident(src, k);
-k = name.nextPos;
-if (is_identifier_too_short(name.text)) {
-warn_short_identifier(src, name.startPos, name.text);
+let k = start;
+let isOut = false;
+const j0 = skip_ws(src, k);
+if (starts_with_at(src, j0, "out")) {
+k = parse_keyword(src, k, "out");
+isOut = true;
 }
-let typeParams = vec_new();
-const t0 = skip_ws(src, k);
-if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) {
-const tp = parse_type_params_list_ast(src, t0);
-typeParams = tp.params;
-k = tp.nextPos;
-}
-const params = parse_param_list_ast(src, k);
-k = params.nextPos;
-const t1 = skip_ws(src, k);
-let retTyAnn = "";
-if (t1 < stringLen(src) && stringCharCodeAt(src, t1) == 58) {
-const _rt = parse_type_expr(src, t1 + 1);
-retTyAnn = _rt.v0;
-k = _rt.v1;
-}
-k = parse_keyword(src, k, "=>");
-const body = parse_main_body_ast(src, k);
-k = body.nextPos;
-let anyParamTy = false;
-let pi = 0;
-while (pi < vec_len(params.tyAnns)) {
-if (vec_get(params.tyAnns, pi) != "") {
-anyParamTy = true;
-break;
-}
-pi = pi + 1;
-}
-if (anyParamTy || retTyAnn != "") {
-return ParsedDeclAst(decl_fn_typed(span(start, k), name.text, typeParams, params.names, params.tyAnns, retTyAnn, body.body, body.tail), k);
-}
-return ParsedDeclAst(decl_fn(span(start, k), name.text, params.names, body.body, body.tail), k);
-}
-export function parse_class_fn_decl_ast2(src, i, exportAll) {
-const start = skip_ws(src, i);
-let k = parse_keyword(src, start, "class");
 k = parse_keyword(src, k, "fn");
 const name = parse_ident(src, k);
 k = name.nextPos;
@@ -277,9 +242,58 @@ break;
 pi = pi + 1;
 }
 if (anyParamTy || retTyAnn != "") {
-return ParsedDeclAst(decl_class_fn_typed(span(start, k), name.text, typeParams, params.names, params.tyAnns, retTyAnn, body.body, body.tail), k);
+return ParsedDeclAst(decl_fn_typed(span(start, k), isOut, name.text, typeParams, params.names, params.tyAnns, retTyAnn, body.body, body.tail), k);
 }
-return ParsedDeclAst(decl_class_fn(span(start, k), name.text, params.names, body.body, body.tail), k);
+return ParsedDeclAst(decl_fn(span(start, k), isOut, name.text, params.names, body.body, body.tail), k);
+}
+export function parse_class_fn_decl_ast2(src, i, exportAll) {
+const start = skip_ws(src, i);
+let k = start;
+let isOut = false;
+const j0 = skip_ws(src, k);
+if (starts_with_at(src, j0, "out")) {
+k = parse_keyword(src, k, "out");
+isOut = true;
+}
+k = parse_keyword(src, k, "class");
+k = parse_keyword(src, k, "fn");
+const name = parse_ident(src, k);
+k = name.nextPos;
+if (is_identifier_too_short(name.text)) {
+warn_short_identifier(src, name.startPos, name.text);
+}
+let typeParams = vec_new();
+const t0 = skip_ws(src, k);
+if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) {
+const tp = parse_type_params_list_ast(src, t0);
+typeParams = tp.params;
+k = tp.nextPos;
+}
+const params = parse_param_list_ast(src, k);
+k = params.nextPos;
+const t1 = skip_ws(src, k);
+let retTyAnn = "";
+if (t1 < stringLen(src) && stringCharCodeAt(src, t1) == 58) {
+const _rt = parse_type_expr(src, t1 + 1);
+retTyAnn = _rt.v0;
+k = _rt.v1;
+}
+k = parse_keyword(src, k, "=>");
+const body = parse_main_body_ast(src, k);
+k = body.nextPos;
+let anyParamTy = false;
+let pi = 0;
+while (pi < vec_len(params.tyAnns)) {
+if (vec_get(params.tyAnns, pi) != "") {
+anyParamTy = true;
+break;
+}
+pi = pi + 1;
+}
+if (anyParamTy || retTyAnn != "") {
+return ParsedDeclAst(decl_class_fn_typed(span(start, k), isOut, name.text, typeParams, params.names, params.tyAnns, retTyAnn, body.body, body.tail), k);
+}
+return ParsedDeclAst(decl_class_fn(span(start, k), isOut, name.text, params.names, body.body, body.tail), k);
 }
 export function parse_struct_decl_ast(src, i) {
 const start = skip_ws(src, i);
@@ -409,7 +423,7 @@ if (stringCharCodeAt(src, t) == 125) {
 k = t + 1;
 break;
 }
-if (starts_with_at(src, t, "fn")) {
+if (starts_with_at(src, t, "fn") || starts_with_at(src, t, "out")) {
 const d = parse_fn_decl_ast2(src, k, false);
 vec_push(decls, d.decl);
 k = d.nextPos;

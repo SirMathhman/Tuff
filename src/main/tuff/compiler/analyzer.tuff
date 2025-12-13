@@ -2119,3 +2119,25 @@ fn analyze_program(src: String, decls) : Void => {
   let fns = vec_new();
   analyze_decls(src, structs, unions, fns, scopes, depth, decls);
 }
+
+fn analyze_program_with_fns(src: String, decls, importedFns) : Void => {
+  // Like analyze_program, but pre-seeds the function environment with
+  // signatures imported from other modules. This enables cross-file call
+  // validation (arity + type checks) during analysis.
+  let scopes = vec_new();
+  vec_push(scopes, vec_new());
+  let depth: I32 = 1;
+  let structs = vec_new();
+  let unions = vec_new();
+  let fns = vec_new();
+
+  // Seed imported function signatures first so local decls can reference them
+  // and duplicate name checks fire appropriately.
+  let mut i = 0;
+  while (i < vec_len(importedFns)) {
+    vec_push(fns, vec_get(importedFns, i));
+    i = i + 1;
+  }
+
+  analyze_decls(src, structs, unions, fns, scopes, depth, decls);
+}

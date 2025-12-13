@@ -237,17 +237,17 @@ return ({ tag: "TypeUnionVariant", span: span, name: name, hasPayload: vec_len(p
 export function decl_type_union(span, name, typeParams, variants) {
 return ({ tag: "DTypeUnion", span: span, name: name, typeParams: typeParams, variants: variants });
 }
-export function decl_fn(span, name, params, body, tail) {
-return ({ tag: "DFn", span: span, name: name, typeParams: vec_new(), params: params, paramTyAnns: vec_new(), retTyAnn: "", body: body, tail: tail });
+export function decl_fn(span, isOut, name, params, body, tail) {
+return ({ tag: "DFn", span: span, isOut: isOut, name: name, typeParams: vec_new(), params: params, paramTyAnns: vec_new(), retTyAnn: "", body: body, tail: tail });
 }
-export function decl_fn_typed(span, name, typeParams, params, paramTyAnns, retTyAnn, body, tail) {
-return ({ tag: "DFn", span: span, name: name, typeParams: typeParams, params: params, paramTyAnns: paramTyAnns, retTyAnn: retTyAnn, body: body, tail: tail });
+export function decl_fn_typed(span, isOut, name, typeParams, params, paramTyAnns, retTyAnn, body, tail) {
+return ({ tag: "DFn", span: span, isOut: isOut, name: name, typeParams: typeParams, params: params, paramTyAnns: paramTyAnns, retTyAnn: retTyAnn, body: body, tail: tail });
 }
-export function decl_class_fn(span, name, params, body, tail) {
-return ({ tag: "DClassFn", span: span, name: name, typeParams: vec_new(), params: params, paramTyAnns: vec_new(), retTyAnn: "", body: body, tail: tail });
+export function decl_class_fn(span, isOut, name, params, body, tail) {
+return ({ tag: "DClassFn", span: span, isOut: isOut, name: name, typeParams: vec_new(), params: params, paramTyAnns: vec_new(), retTyAnn: "", body: body, tail: tail });
 }
-export function decl_class_fn_typed(span, name, typeParams, params, paramTyAnns, retTyAnn, body, tail) {
-return ({ tag: "DClassFn", span: span, name: name, typeParams: typeParams, params: params, paramTyAnns: paramTyAnns, retTyAnn: retTyAnn, body: body, tail: tail });
+export function decl_class_fn_typed(span, isOut, name, typeParams, params, paramTyAnns, retTyAnn, body, tail) {
+return ({ tag: "DClassFn", span: span, isOut: isOut, name: name, typeParams: typeParams, params: params, paramTyAnns: paramTyAnns, retTyAnn: retTyAnn, body: body, tail: tail });
 }
 export function decl_let(span, isMut, name, init) {
 return ({ tag: "DLet", span: span, isMut: isMut, name: name, tyAnn: "", init: init });

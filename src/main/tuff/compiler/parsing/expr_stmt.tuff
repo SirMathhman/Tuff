@@ -96,15 +96,15 @@ from ast use {
   stmt_field_assign
 };
 
-class fn ParsedExpr(v0: String, v1: I32) => {}
-class fn ParsedMain(body: String, expr: String, v1: I32) => {}
-class fn ParsedStmt(v0: String, v1: I32) => {}
-class fn ParsedParams(v0: String, v1: I32) => {}
+out class fn ParsedExpr(v0: String, v1: I32) => {}
+out class fn ParsedMain(body: String, expr: String, v1: I32) => {}
+out class fn ParsedStmt(v0: String, v1: I32) => {}
+out class fn ParsedParams(v0: String, v1: I32) => {}
 
 // Phase 3: canonical AST parser outputs
 // NOTE: Avoid type aliases in signatures (type aliases are not runtime exports).
 class fn ParsedExprAst(expr, nextPos: I32) => {}
-class fn ParsedMainAst(body, tail, nextPos: I32) => {}
+out class fn ParsedMainAst(body, tail, nextPos: I32) => {}
 class fn ParsedStmtAst(stmt, nextPos: I32) => {}
 class fn ParsedStmtsAst(stmts, nextPos: I32) => {}
 class fn ParsedExprListAst(items, nextPos: I32) => {}
@@ -268,13 +268,13 @@ fn parse_type_param_names_list_ast(src: String, i: I32) : ParsedTypeParamsForLam
   ParsedTypeParamsForLambdaAst(names, k)
 }
 
-fn parse_expr(src: String, i: I32) : ParsedExpr => parse_or(src, i)
+out fn parse_expr(src: String, i: I32) : ParsedExpr => parse_or(src, i)
 
 // ------------------------------------------------------------
 // AST path (Phase 3)
 // ------------------------------------------------------------
 
-fn parse_expr_ast(src: String, i: I32) : ParsedExprAst => parse_or_ast(src, i)
+out fn parse_expr_ast(src: String, i: I32) : ParsedExprAst => parse_or_ast(src, i)
 
 fn parse_or_ast(src: String, i: I32) : ParsedExprAst => {
   let mut left = parse_and_ast(src, i);
@@ -955,7 +955,6 @@ fn parse_primary_ast(src: String, i: I32) : ParsedExprAst => {
     let rp = find_matching_rparen(src, j);
     if (rp != -1) {
       let after = skip_ws(src, rp + 1);
-      // '=>'
       if (after + 1 < stringLen(src) && stringCharCodeAt(src, after) == 61 && stringCharCodeAt(src, after + 1) == 62) {
         yield parse_lambda_expr_ast(src, j);
       }
@@ -1006,7 +1005,7 @@ fn parse_primary_ast(src: String, i: I32) : ParsedExprAst => {
         m = m + 1;
       }
       let text = stringSlice(src, j, m);
-      
+
       // Check for optional suffix (F32 or F64)
       let mut suffix = "";
       let mut endPos = m;
@@ -1022,7 +1021,7 @@ fn parse_primary_ast(src: String, i: I32) : ParsedExprAst => {
           }
         }
       }
-      
+
       yield ParsedExprAst(expr_float(span(j, endPos), text, suffix), endPos);
     }
 
@@ -1292,7 +1291,7 @@ fn parse_stmt_ast(src: String, i: I32) : ParsedStmtAst => {
   ParsedStmtAst(stmt_expr(span(start, k), e.expr), k)
 }
 
-fn parse_main_body_ast(src: String, i: I32) : ParsedMainAst => {
+out fn parse_main_body_ast(src: String, i: I32) : ParsedMainAst => {
   let j = skip_ws(src, i);
   if (j < stringLen(src) && stringCharCodeAt(src, j) == 123) {
     let b = parse_block_body_ast(src, i);
@@ -1954,7 +1953,7 @@ fn parse_match_expr(src: String, i: I32) : ParsedExpr => {
   ParsedExpr("(() => { switch (" + scrutJs + ") {\n" + cases + "default: return " + def + ";\n} })()", k)
 }
 
-fn parse_mut_opt(src: String, i: I32) : ParsedBool => {
+out fn parse_mut_opt(src: String, i: I32) : ParsedBool => {
   let j = skip_ws(src, i);
   if (starts_with_at(src, j, "mut")) {
     // Require a boundary: next char must not be an identifier character.
@@ -2319,7 +2318,7 @@ fn is_field_assign_stmt_start(src: String, i: I32) : Bool => {
   true
 }
 
-fn parse_main_body(src: String, i: I32) : ParsedMain => {
+out fn parse_main_body(src: String, i: I32) : ParsedMain => {
   let j = skip_ws(src, i);
   if (j < stringLen(src) && stringCharCodeAt(src, j) == 123) { // '{'
     let b = parse_block_body(src, i);

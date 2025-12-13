@@ -396,7 +396,7 @@ fn emit_struct_lit_js(nameExpr, values) : String => {
   out
 }
 
-fn emit_expr_js(e) : String => {
+out fn emit_expr_js(e) : String => {
   // Default fallback for nodes we haven't implemented yet.
   let mut out = "undefined";
 
@@ -640,7 +640,10 @@ fn emit_type_union_js(d, exportAll: Bool) : String => {
   let mut i = 0;
   while (i < vec_len(d.variants)) {
     let v = vec_get(d.variants, i);
-    let header = if (exportAll) "export const " else "const ";
+    // Union variants are runtime constructors/constants and need to be importable
+    // across modules (e.g. `from X use { Some, None }`).
+    // `out fn` gates function exports; unions are always emitted as exported consts.
+    let header = "export const ";
     if (v.hasPayload) {
       out = out + (header + v.name + " = (value) => { return { tag: " + dq + v.name + dq + ", value: value }; };\n");
     } else {
@@ -698,7 +701,16 @@ fn emit_decl_js(d, exportAll: Bool) : String => {
   }
 
   if (d.tag == "DImport") {
-    let targetRel = module_path_to_relpath(d.modulePath) + ".mjs";
+    let mut targetModulePath = d.modulePath;
+    // Allow importing compiler modules using the repository-root path
+    // `src::main::tuff::compiler::...`, but link them using the compiler-root
+    // layout (e.g. `./emit/ast_js.mjs`).
+    let compilerSrcPrefix = "src::main::tuff::compiler::";
+    if (starts_with_at(targetModulePath, 0, compilerSrcPrefix)) {
+      targetModulePath = stringSlice(targetModulePath, stringLen(compilerSrcPrefix), stringLen(targetModulePath));
+    }
+
+    let targetRel = module_path_to_relpath(targetModulePath) + ".mjs";
     let importPath = rel_import_path(targetRel);
     out = "import { " + emit_names_csv(d.names) + " } from \"" + importPath + "\";\n";
   }
@@ -718,7 +730,7 @@ fn emit_decl_js(d, exportAll: Bool) : String => {
   }
 
   if (d.tag == "DFn") {
-    let exportThis = exportAll || d.name == "main";
+    let exportThis = exportAll || d.isOut || d.name == "main";
     out = emit_fn_decl_js(d, exportAll, d.name, exportThis);
   }
 
@@ -726,7 +738,7 @@ fn emit_decl_js(d, exportAll: Bool) : String => {
     // `class fn` becomes a function returning an object of scope fields.
     // In this bootstrap subset, we approximate `this` by returning all params
     // plus any `let` bindings declared in the body (in source order).
-    let exportThis = exportAll || d.name == "main";
+    let exportThis = exportAll || d.isOut || d.name == "main";
     let exportKw = if (exportThis) "export " else "";
     let params = emit_names_csv(d.params);
 

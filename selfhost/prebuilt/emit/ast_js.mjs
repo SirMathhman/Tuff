@@ -673,7 +673,7 @@ const dq = "\"";
 let i = 0;
 while (i < vec_len(d.variants)) {
 const v = vec_get(d.variants, i);
-const header = (exportAll ? "export const " : "const ");
+const header = "export const ";
 if (v.hasPayload) {
 out = out + (header + v.name + " = (value) => { return { tag: " + dq + v.name + dq + ", value: value }; };\n");
 } else {
@@ -727,7 +727,12 @@ const importPath = emit_extern_import_path(d.modulePath);
 out = "import { " + emit_names_csv(d.names) + " } from \"" + importPath + "\";\n";
 }
 if (d.tag == "DImport") {
-const targetRel = module_path_to_relpath(d.modulePath) + ".mjs";
+let targetModulePath = d.modulePath;
+const compilerSrcPrefix = "src::main::tuff::compiler::";
+if (starts_with_at(targetModulePath, 0, compilerSrcPrefix)) {
+targetModulePath = stringSlice(targetModulePath, stringLen(compilerSrcPrefix), stringLen(targetModulePath));
+}
+const targetRel = module_path_to_relpath(targetModulePath) + ".mjs";
 const importPath = rel_import_path(targetRel);
 out = "import { " + emit_names_csv(d.names) + " } from \"" + importPath + "\";\n";
 }
@@ -742,11 +747,11 @@ const kw = (d.isMut ? "let" : "const");
 out = kw + " " + d.name + " = " + emit_expr_js(d.init) + ";\n";
 }
 if (d.tag == "DFn") {
-const exportThis = exportAll || d.name == "main";
+const exportThis = exportAll || d.isOut || d.name == "main";
 out = emit_fn_decl_js(d, exportAll, d.name, exportThis);
 }
 if (d.tag == "DClassFn") {
-const exportThis = exportAll || d.name == "main";
+const exportThis = exportAll || d.isOut || d.name == "main";
 const exportKw = (exportThis ? "export " : "");
 const params = emit_names_csv(d.params);
 const fieldNames = vec_new();

@@ -20,11 +20,11 @@ from util::lexing use {
 };
 
 // Tiny record type used to return two values from parsing helpers.
-class fn ParsedNumber(value: I32, nextPos: I32) => {}
-class fn ParsedIdent(text: String, startPos: I32, nextPos: I32) => {}
-class fn ParsedBool(ok: Bool, nextPos: I32) => {}
+out class fn ParsedNumber(value: I32, nextPos: I32) => {}
+out class fn ParsedIdent(text: String, startPos: I32, nextPos: I32) => {}
+out class fn ParsedBool(ok: Bool, nextPos: I32) => {}
 
-fn parse_keyword(src: String, i: I32, lit: String) : I32 => {
+out fn parse_keyword(src: String, i: I32, lit: String) : I32 => {
   let j = skip_ws(src, i);
   if (!starts_with_at(src, j, lit)) {
     let mut end = j + 16;
@@ -34,7 +34,7 @@ fn parse_keyword(src: String, i: I32, lit: String) : I32 => {
   j + stringLen(lit)
 }
 
-fn parse_number(src: String, i: I32) : ParsedNumber => {
+out fn parse_number(src: String, i: I32) : ParsedNumber => {
   let mut j = skip_ws(src, i);
   let mut acc = 0;
   let mut saw = false;
@@ -51,7 +51,7 @@ fn parse_number(src: String, i: I32) : ParsedNumber => {
   ParsedNumber(acc, j)
 }
 
-fn parse_ident(src: String, i: I32) : ParsedIdent => {
+out fn parse_ident(src: String, i: I32) : ParsedIdent => {
   let mut j = skip_ws(src, i);
   if (!(j < stringLen(src))) { panic_at(src, j, "expected identifier"); }
   let c0 = stringCharCodeAt(src, j);
@@ -66,7 +66,7 @@ fn parse_ident(src: String, i: I32) : ParsedIdent => {
   ParsedIdent(stringSlice(src, start, j), start, j)
 }
 
-fn parse_module_path(src: String, i: I32) : ParsedIdent => {
+out fn parse_module_path(src: String, i: I32) : ParsedIdent => {
   let mut j = skip_ws(src, i);
   let start = j;
   while (j < stringLen(src)) {
@@ -78,7 +78,7 @@ fn parse_module_path(src: String, i: I32) : ParsedIdent => {
   ParsedIdent(stringSlice(src, start, j), start, j)
 }
 
-fn module_path_to_relpath(p: String) : String => {
+out fn module_path_to_relpath(p: String) : String => {
   // Convert `a::b::c` to `a/b/c` for filesystem + ESM relative imports.
   let mut out = "";
   let mut i = 0;
@@ -94,13 +94,13 @@ fn module_path_to_relpath(p: String) : String => {
   out
 }
 
-fn parse_optional_semicolon(src: String, i: I32) : I32 => {
+out fn parse_optional_semicolon(src: String, i: I32) : I32 => {
   let j = skip_ws(src, i);
   if (j < stringLen(src) && stringCharCodeAt(src, j) == 59) { yield j + 1; }
   i
 }
 
-fn parse_required_semicolon(src: String, i: I32) : I32 => {
+out fn parse_required_semicolon(src: String, i: I32) : I32 => {
   let j = skip_ws(src, i);
   if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 59)) { panic_at(src, j, "expected ';'"); }
   j + 1

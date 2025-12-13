@@ -10,13 +10,13 @@ extern from rt::vec use { vec_new, vec_len, vec_push, vec_get };
 
 from util::lexing use { Token, TokenStream, emit_token_stream };
 
-fn emit_tuff(ts: TokenStream) : String => emit_token_stream(ts)
+out fn emit_tuff(ts: TokenStream) : String => emit_token_stream(ts)
 
 // Minimal editing primitive: rename identifiers in the token stream.
 //
 // NOTE: This is deliberately token-based (not AST-based) so it can preserve
 // formatting byte-for-byte for everything except the changed identifier texts.
-fn rename_ident_tokens(ts: TokenStream, fromName: String, toName: String) : TokenStream => {
+out fn rename_ident_tokens(ts: TokenStream, fromName: String, toName: String) : TokenStream => {
   let outToks = vec_new();
   let mut i = 0;
   while (i < vec_len(ts.tokens)) {
@@ -35,7 +35,7 @@ fn rename_ident_tokens(ts: TokenStream, fromName: String, toName: String) : Toke
 // Rename identifiers only when the token is fully contained in [rangeStart, rangeEnd).
 // This makes it possible to apply AST-guided edits (e.g. only within a function span)
 // while keeping all trivia byte-for-byte identical.
-fn rename_ident_tokens_in_range(
+out fn rename_ident_tokens_in_range(
   ts: TokenStream,
   rangeStart: I32,
   rangeEnd: I32,

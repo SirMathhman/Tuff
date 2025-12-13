@@ -37,7 +37,7 @@ from parsing::decls use {
 
 from ast use { span, decl_let };
 
-class fn ParsedProgramWithTrivia(decls: Any, tokenStream: TokenStream, nextPos: I32) => {}
+out class fn ParsedProgramWithTrivia(decls: Any, tokenStream: TokenStream, nextPos: I32) => {}
 
 fn parse_program_decls_ast(src: String, exportAll: Bool) : Any => {
   let decls = vec_new();
@@ -167,7 +167,7 @@ fn parse_program_decls_ast(src: String, exportAll: Bool) : Any => {
   out
 }
 
-fn parse_program_with_trivia(src: String, exportAll: Bool) : ParsedProgramWithTrivia => {
+out fn parse_program_with_trivia(src: String, exportAll: Bool) : ParsedProgramWithTrivia => {
   let ts = tokenize_with_trivia(src);
   let pack = parse_program_decls_ast(src, exportAll);
   let decls = vec_get(pack, 0);

@@ -184,7 +184,7 @@ fn parse_param_list_ast(src: String, i: I32) : ParsedParamsAst => {
   ParsedParamsAst(names, tyAnns, k)
 }
 
-fn parse_extern_decl_ast(src: String, i: I32) : ParsedDeclAst => {
+out fn parse_extern_decl_ast(src: String, i: I32) : ParsedDeclAst => {
   let start = skip_ws(src, i);
   let mut k = parse_keyword(src, start, "extern");
   k = parse_keyword(src, k, "from");
@@ -195,7 +195,7 @@ fn parse_extern_decl_ast(src: String, i: I32) : ParsedDeclAst => {
   ParsedDeclAst(decl_extern_from(span(start, k), mod.text, names.names), k)
 }
 
-fn parse_imports_ast(src: String, i: I32) : ParsedDeclsAst => {
+out fn parse_imports_ast(src: String, i: I32) : ParsedDeclsAst => {
   let mut k = i;
   let decls = vec_new();
   while (true) {
@@ -218,9 +218,16 @@ fn parse_imports_ast(src: String, i: I32) : ParsedDeclsAst => {
 
 fn parse_fn_decl_ast(src: String, i: I32) : ParsedDeclAst => parse_fn_decl_ast2(src, i, false)
 
-fn parse_fn_decl_ast2(src: String, i: I32, exportAll: Bool) : ParsedDeclAst => {
+out fn parse_fn_decl_ast2(src: String, i: I32, exportAll: Bool) : ParsedDeclAst => {
   let start = skip_ws(src, i);
-  let mut k = parse_keyword(src, start, "fn");
+  let mut k = start;
+  let mut isOut = false;
+  let j0 = skip_ws(src, k);
+  if (starts_with_at(src, j0, "out")) {
+    k = parse_keyword(src, k, "out");
+    isOut = true;
+  }
+  k = parse_keyword(src, k, "fn");
   let name = parse_ident(src, k);
   k = name.nextPos;
   if (is_identifier_too_short(name.text)) { warn_short_identifier(src, name.startPos, name.text); }
@@ -256,14 +263,21 @@ fn parse_fn_decl_ast2(src: String, i: I32, exportAll: Bool) : ParsedDeclAst => {
     pi = pi + 1;
   }
   if (anyParamTy || retTyAnn != "") {
-    yield ParsedDeclAst(decl_fn_typed(span(start, k), name.text, typeParams, params.names, params.tyAnns, retTyAnn, body.body, body.tail), k);
+    yield ParsedDeclAst(decl_fn_typed(span(start, k), isOut, name.text, typeParams, params.names, params.tyAnns, retTyAnn, body.body, body.tail), k);
   }
-  ParsedDeclAst(decl_fn(span(start, k), name.text, params.names, body.body, body.tail), k)
+  ParsedDeclAst(decl_fn(span(start, k), isOut, name.text, params.names, body.body, body.tail), k)
 }
 
-fn parse_class_fn_decl_ast2(src: String, i: I32, exportAll: Bool) : ParsedDeclAst => {
+out fn parse_class_fn_decl_ast2(src: String, i: I32, exportAll: Bool) : ParsedDeclAst => {
   let start = skip_ws(src, i);
-  let mut k = parse_keyword(src, start, "class");
+  let mut k = start;
+  let mut isOut = false;
+  let j0 = skip_ws(src, k);
+  if (starts_with_at(src, j0, "out")) {
+    k = parse_keyword(src, k, "out");
+    isOut = true;
+  }
+  k = parse_keyword(src, k, "class");
   k = parse_keyword(src, k, "fn");
   let name = parse_ident(src, k);
   k = name.nextPos;
@@ -299,12 +313,12 @@ fn parse_class_fn_decl_ast2(src: String, i: I32, exportAll: Bool) : ParsedDeclAs
     pi = pi + 1;
   }
   if (anyParamTy || retTyAnn != "") {
-    yield ParsedDeclAst(decl_class_fn_typed(span(start, k), name.text, typeParams, params.names, params.tyAnns, retTyAnn, body.body, body.tail), k);
+    yield ParsedDeclAst(decl_class_fn_typed(span(start, k), isOut, name.text, typeParams, params.names, params.tyAnns, retTyAnn, body.body, body.tail), k);
   }
-  ParsedDeclAst(decl_class_fn(span(start, k), name.text, params.names, body.body, body.tail), k)
+  ParsedDeclAst(decl_class_fn(span(start, k), isOut, name.text, params.names, body.body, body.tail), k)
 }
 
-fn parse_struct_decl_ast(src: String, i: I32) : ParsedDeclAst => {
+out fn parse_struct_decl_ast(src: String, i: I32) : ParsedDeclAst => {
   let start = skip_ws(src, i);
   let mut k = parse_keyword(src, start, "struct");
   let name = parse_ident(src, k);
@@ -344,7 +358,7 @@ fn parse_struct_decl_ast(src: String, i: I32) : ParsedDeclAst => {
   ParsedDeclAst(decl_struct_typed(span(start, k), name.text, typeParams, fields, fieldTyAnns), k)
 }
 
-fn parse_type_union_decl_ast(src: String, i: I32, exportAll: Bool) : ParsedDeclAst => {
+out fn parse_type_union_decl_ast(src: String, i: I32, exportAll: Bool) : ParsedDeclAst => {
   let start = skip_ws(src, i);
   let mut k = parse_keyword(src, start, "type");
   let name = parse_ident(src, k);
@@ -404,7 +418,7 @@ fn parse_type_union_decl_ast(src: String, i: I32, exportAll: Bool) : ParsedDeclA
   ParsedDeclAst(decl_type_union(span(start, k), name.text, typeParams, variants), k)
 }
 
-fn parse_module_decl_ast(src: String, i: I32) : ParsedDeclAst => {
+out fn parse_module_decl_ast(src: String, i: I32) : ParsedDeclAst => {
   let start = skip_ws(src, i);
   let mut k = parse_keyword(src, start, "module");
   let modName = parse_ident(src, k);
@@ -416,7 +430,7 @@ fn parse_module_decl_ast(src: String, i: I32) : ParsedDeclAst => {
     if (!(t < stringLen(src))) { panic_at(src, t, "expected '}'"); }
     if (stringCharCodeAt(src, t) == 125) { k = t + 1; break; }
 
-    if (starts_with_at(src, t, "fn")) {
+    if (starts_with_at(src, t, "fn") || starts_with_at(src, t, "out")) {
       let d = parse_fn_decl_ast2(src, k, false);
       vec_push(decls, d.decl);
       k = d.nextPos;
