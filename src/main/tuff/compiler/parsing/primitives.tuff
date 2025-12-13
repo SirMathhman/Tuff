@@ -20,7 +20,7 @@ from util::lexing use {
 };
 
 // Tiny record type used to return two values from parsing helpers.
-class fn ParsedNumber(value: String, nextPos: I32) => {}
+class fn ParsedNumber(value: I32, nextPos: I32) => {}
 class fn ParsedIdent(text: String, startPos: I32, nextPos: I32) => {}
 class fn ParsedBool(ok: Bool, nextPos: I32) => {}
 

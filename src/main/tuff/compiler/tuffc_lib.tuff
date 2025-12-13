@@ -98,7 +98,8 @@ from parsing::decls use {
 
 from ast use {
   span,
-  decl_let
+  decl_let,
+  decl_let_typed
 };
 
 from emit::ast_js use { emit_decl_js, set_current_file_path };
@@ -190,9 +191,11 @@ fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool, filePath: Stri
       i = name.nextPos;
 
       // Optional let type annotation: `let x: T = ...`
+      let mut tyAnn = "";
       let t0 = skip_ws(src, i);
       if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 58) { // ':'
         let _ty = parse_type_expr(src, t0 + 1);
+        tyAnn = _ty.v0;
         i = _ty.v1;
       }
 
@@ -200,7 +203,11 @@ fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool, filePath: Stri
       let expr = parse_expr_ast(src, i);
       i = expr.nextPos;
       i = parse_optional_semicolon(src, i);
-      vec_push(decls, decl_let(span(start, i), mutOpt.ok, name.text, expr.expr));
+      if (tyAnn == "") {
+        vec_push(decls, decl_let(span(start, i), mutOpt.ok, name.text, expr.expr));
+      } else {
+        vec_push(decls, decl_let_typed(span(start, i), mutOpt.ok, name.text, tyAnn, expr.expr));
+      }
       continue;
     }
     break;

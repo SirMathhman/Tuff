@@ -81,6 +81,7 @@ from ast use {
 
   // Stmt constructors
   stmt_let,
+  stmt_let_typed,
   stmt_assign,
   stmt_expr,
   stmt_yield,
@@ -670,15 +671,20 @@ fn parse_stmt_ast(src: String, i: I32) : ParsedStmtAst => {
     let name = parse_ident(src, k);
     k = name.nextPos;
     if (is_identifier_too_short(name.text)) { warn_short_identifier(src, name.startPos, name.text); }
+    let mut tyAnn = "";
     let t0 = skip_ws(src, k);
     if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 58) {
       let _ty = parse_type_expr(src, t0 + 1);
+      tyAnn = _ty.v0;
       k = _ty.v1;
     }
     k = parse_keyword(src, k, "=");
     let e = parse_expr_ast(src, k);
     k = parse_optional_semicolon(src, e.nextPos);
-    yield ParsedStmtAst(stmt_let(span(start, k), mutOpt.ok, name.text, e.expr), k);
+    if (tyAnn == "") {
+      yield ParsedStmtAst(stmt_let(span(start, k), mutOpt.ok, name.text, e.expr), k);
+    }
+    yield ParsedStmtAst(stmt_let_typed(span(start, k), mutOpt.ok, name.text, tyAnn, e.expr), k);
   }
 
   // while (...) { ... }

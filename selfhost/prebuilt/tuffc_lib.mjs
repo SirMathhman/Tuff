@@ -9,7 +9,7 @@ import { ParsedExpr, ParsedMain, ParsedStmt, ParsedParams, parse_expr, parse_stm
 import { ParsedExprAst, parse_expr_ast } from "./parsing/expr_stmt.mjs";
 import { ParsedImports, ParsedFn, parse_imports, parse_extern_decl, parse_module_decl, parse_fn_decl2, parse_class_fn_decl2, parse_struct_decl, parse_type_union_decl, parse_param_list, parse_fn_decl_named, parse_fn_decl } from "./parsing/decls.mjs";
 import { ParsedDeclAst, ParsedDeclsAst, parse_imports_ast, parse_extern_decl_ast, parse_module_decl_ast, parse_fn_decl_ast2, parse_class_fn_decl_ast2, parse_struct_decl_ast, parse_type_union_decl_ast } from "./parsing/decls.mjs";
-import { span, decl_let } from "./ast.mjs";
+import { span, decl_let, decl_let_typed } from "./ast.mjs";
 import { emit_decl_js, set_current_file_path } from "./emit/ast_js.mjs";
 import { analyze_program } from "./analyzer.mjs";
 import { ParsedProgramWithTrivia, parse_program_with_trivia } from "./util/formatting.mjs";
@@ -72,16 +72,22 @@ const mutOpt = parse_mut_opt(src, i);
 i = mutOpt.nextPos;
 const name = parse_ident(src, i);
 i = name.nextPos;
+let tyAnn = "";
 const t0 = skip_ws(src, i);
 if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 58))) {
 const _ty = parse_type_expr(src, (t0 + 1));
+tyAnn = _ty.v0;
 i = _ty.v1;
 }
 i = parse_keyword(src, i, "=");
 const expr = parse_expr_ast(src, i);
 i = expr.nextPos;
 i = parse_optional_semicolon(src, i);
+if ((tyAnn == "")) {
 vec_push(decls, decl_let(span(start, i), mutOpt.ok, name.text, expr.expr));
+} else {
+vec_push(decls, decl_let_typed(span(start, i), mutOpt.ok, name.text, tyAnn, expr.expr));
+}
 continue;
 }
 break;

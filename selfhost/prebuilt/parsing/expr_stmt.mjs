@@ -5,7 +5,7 @@ import { panic_at, find_struct_fields, is_identifier_too_short, warn_short_ident
 import { is_digit, is_ident_start, is_ident_part, skip_ws, starts_with_at } from "../util/lexing.mjs";
 import { ParsedBool, ParsedIdent, ParsedNumber, parse_ident, parse_keyword, parse_number, parse_optional_semicolon } from "./primitives.mjs";
 import { parse_type_expr } from "./types.mjs";
-import { span, span_start, expr_span, expr_undefined, expr_int, expr_bool, expr_string, expr_ident, expr_path, expr_struct_lit, expr_unary, expr_binary, expr_call, expr_if, expr_block, expr_vec_lit, expr_tuple_lit, expr_index, expr_tuple_index, expr_field, expr_match, OpOr, OpAnd, OpEq, OpNe, OpLt, OpLe, OpGt, OpGe, OpAdd, OpSub, OpMul, OpDiv, OpNot, OpNeg, mk_match_arm, pat_wildcard, pat_int, pat_bool, pat_string, stmt_let, stmt_assign, stmt_expr, stmt_yield, stmt_while, stmt_if, stmt_index_assign, stmt_field_assign } from "../ast.mjs";
+import { span, span_start, expr_span, expr_undefined, expr_int, expr_bool, expr_string, expr_ident, expr_path, expr_struct_lit, expr_unary, expr_binary, expr_call, expr_if, expr_block, expr_vec_lit, expr_tuple_lit, expr_index, expr_tuple_index, expr_field, expr_match, OpOr, OpAnd, OpEq, OpNe, OpLt, OpLe, OpGt, OpGe, OpAdd, OpSub, OpMul, OpDiv, OpNot, OpNeg, mk_match_arm, pat_wildcard, pat_int, pat_bool, pat_string, stmt_let, stmt_let_typed, stmt_assign, stmt_expr, stmt_yield, stmt_while, stmt_if, stmt_index_assign, stmt_field_assign } from "../ast.mjs";
 export function ParsedExpr(v0, v1) {
 return { v0: v0, v1: v1 };
 }
@@ -660,15 +660,20 @@ k = name.nextPos;
 if (is_identifier_too_short(name.text)) {
 warn_short_identifier(src, name.startPos, name.text);
 }
+let tyAnn = "";
 const t0 = skip_ws(src, k);
 if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 58))) {
 const _ty = parse_type_expr(src, (t0 + 1));
+tyAnn = _ty.v0;
 k = _ty.v1;
 }
 k = parse_keyword(src, k, "=");
 const e = parse_expr_ast(src, k);
 k = parse_optional_semicolon(src, e.nextPos);
+if ((tyAnn == "")) {
 return ParsedStmtAst(stmt_let(span(start, k), mutOpt.ok, name.text, e.expr), k);
+}
+return ParsedStmtAst(stmt_let_typed(span(start, k), mutOpt.ok, name.text, tyAnn, e.expr), k);
 }
 if (starts_with_at(src, k, "while")) {
 k = parse_keyword(src, k, "while");

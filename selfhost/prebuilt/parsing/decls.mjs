@@ -7,7 +7,7 @@ import { ParsedIdent, parse_ident, parse_keyword, parse_module_path, module_path
 import { ParsedType, parse_type_expr, skip_angle_brackets } from "./types.mjs";
 import { ParsedMain, ParsedParams, ParsedStmt, parse_expr, parse_main_body, parse_mut_opt } from "./expr_stmt.mjs";
 import { ParsedMainAst, parse_main_body_ast } from "./expr_stmt.mjs";
-import { span, decl_extern_from, decl_import, decl_fn, decl_class_fn, decl_struct, decl_type_union, type_union_variant, decl_module } from "../ast.mjs";
+import { span, decl_extern_from, decl_import, decl_fn, decl_fn_typed, decl_class_fn, decl_class_fn_typed, decl_struct, decl_struct_typed, decl_type_union, type_union_variant, decl_module } from "../ast.mjs";
 export function ParsedDeclAst(decl, nextPos) {
 return { decl: decl, nextPos: nextPos };
 }
@@ -16,6 +16,9 @@ return { decls: decls, nextPos: nextPos };
 }
 export function ParsedNamesAst(names, nextPos) {
 return { names: names, nextPos: nextPos };
+}
+export function ParsedParamsAst(names, tyAnns, nextPos) {
+return { names: names, tyAnns: tyAnns, nextPos: nextPos };
 }
 export function ParsedImports(v0, v1) {
 return { v0: v0, v1: v1 };
@@ -95,8 +98,9 @@ export function parse_param_list_ast(src, i) {
 let k = parse_keyword(src, i, "(");
 k = skip_ws(src, k);
 const names = vec_new();
+const tyAnns = vec_new();
 if (((k < stringLen(src)) && (stringCharCodeAt(src, k) == 41))) {
-return ParsedNamesAst(names, (k + 1));
+return ParsedParamsAst(names, tyAnns, (k + 1));
 }
 while (true) {
 const id = parse_ident(src, k);
@@ -104,7 +108,10 @@ k = id.nextPos;
 const t0 = skip_ws(src, k);
 if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 58))) {
 const _ty = parse_type_expr(src, (t0 + 1));
+vec_push(tyAnns, _ty.v0);
 k = _ty.v1;
+} else {
+vec_push(tyAnns, "");
 }
 vec_push(names, id.text);
 k = skip_ws(src, k);
@@ -117,11 +124,11 @@ k = (k + 1);
 continue;
 }
 if ((c == 41)) {
-return ParsedNamesAst(names, (k + 1));
+return ParsedParamsAst(names, tyAnns, (k + 1));
 }
 panic_at(src, k, "expected ',' or ')' in param list");
 }
-return ParsedNamesAst(names, k);
+return ParsedParamsAst(names, tyAnns, k);
 }
 export function parse_extern_decl_ast(src, i) {
 const start = skip_ws(src, i);
@@ -172,13 +179,27 @@ k = skip_angle_brackets(src, t0);
 const params = parse_param_list_ast(src, k);
 k = params.nextPos;
 const t1 = skip_ws(src, k);
+let retTyAnn = "";
 if (((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 58))) {
 const _rt = parse_type_expr(src, (t1 + 1));
+retTyAnn = _rt.v0;
 k = _rt.v1;
 }
 k = parse_keyword(src, k, "=>");
 const body = parse_main_body_ast(src, k);
 k = body.nextPos;
+let anyParamTy = false;
+let pi = 0;
+while ((pi < vec_len(params.tyAnns))) {
+if ((vec_get(params.tyAnns, pi) != "")) {
+anyParamTy = true;
+break;
+}
+pi = (pi + 1);
+}
+if ((anyParamTy || (retTyAnn != ""))) {
+return ParsedDeclAst(decl_fn_typed(span(start, k), name.text, params.names, params.tyAnns, retTyAnn, body.body, body.tail), k);
+}
 return ParsedDeclAst(decl_fn(span(start, k), name.text, params.names, body.body, body.tail), k);
 }
 export function parse_class_fn_decl_ast2(src, i, exportAll) {
@@ -197,13 +218,27 @@ k = skip_angle_brackets(src, t0);
 const params = parse_param_list_ast(src, k);
 k = params.nextPos;
 const t1 = skip_ws(src, k);
+let retTyAnn = "";
 if (((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 58))) {
 const _rt = parse_type_expr(src, (t1 + 1));
+retTyAnn = _rt.v0;
 k = _rt.v1;
 }
 k = parse_keyword(src, k, "=>");
 const body = parse_main_body_ast(src, k);
 k = body.nextPos;
+let anyParamTy = false;
+let pi = 0;
+while ((pi < vec_len(params.tyAnns))) {
+if ((vec_get(params.tyAnns, pi) != "")) {
+anyParamTy = true;
+break;
+}
+pi = (pi + 1);
+}
+if ((anyParamTy || (retTyAnn != ""))) {
+return ParsedDeclAst(decl_class_fn_typed(span(start, k), name.text, params.names, params.tyAnns, retTyAnn, body.body, body.tail), k);
+}
 return ParsedDeclAst(decl_class_fn(span(start, k), name.text, params.names, body.body, body.tail), k);
 }
 export function parse_struct_decl_ast(src, i) {
@@ -220,6 +255,7 @@ k = skip_angle_brackets(src, t0);
 }
 k = parse_keyword(src, k, "{");
 const fields = vec_new();
+const fieldTyAnns = vec_new();
 while (true) {
 k = skip_ws(src, k);
 if ((!(k < stringLen(src)))) {
@@ -234,6 +270,7 @@ k = parse_keyword(src, field.nextPos, ":");
 const _ty = parse_type_expr(src, k);
 k = _ty.v1;
 vec_push(fields, field.text);
+vec_push(fieldTyAnns, _ty.v0);
 k = skip_ws(src, k);
 if ((k < stringLen(src))) {
 const ch = stringCharCodeAt(src, k);
@@ -243,7 +280,7 @@ k = (k + 1);
 }
 }
 add_struct_def(name.text, fields);
-return ParsedDeclAst(decl_struct(span(start, k), name.text, fields), k);
+return ParsedDeclAst(decl_struct_typed(span(start, k), name.text, fields, fieldTyAnns), k);
 }
 export function parse_type_union_decl_ast(src, i, exportAll) {
 const start = skip_ws(src, i);

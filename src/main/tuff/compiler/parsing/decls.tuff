@@ -36,8 +36,11 @@ from ast use {
   decl_extern_from,
   decl_import,
   decl_fn,
+  decl_fn_typed,
   decl_class_fn,
+  decl_class_fn_typed,
   decl_struct,
+  decl_struct_typed,
   decl_type_union,
   type_union_variant,
   decl_module
@@ -47,6 +50,7 @@ from ast use {
 class fn ParsedDeclAst(decl, nextPos: I32) => {}
 class fn ParsedDeclsAst(decls, nextPos: I32) => {}
 class fn ParsedNamesAst(names: Vec<String>, nextPos: I32) => {}
+class fn ParsedParamsAst(names: Vec<String>, tyAnns: Vec<String>, nextPos: I32) => {}
 
 class fn ParsedImports(v0: String, v1: I32) => {}
 class fn ParsedFn(v0: String, v1: String, v2: I32) => {}
@@ -116,13 +120,14 @@ fn parse_name_list_ast(src: String, i: I32) : ParsedNamesAst => {
   ParsedNamesAst(names, k)
 }
 
-fn parse_param_list_ast(src: String, i: I32) : ParsedNamesAst => {
+fn parse_param_list_ast(src: String, i: I32) : ParsedParamsAst => {
   // parses: '(' (ident (',' ident)*)? ')'
   let mut k = parse_keyword(src, i, "(");
   k = skip_ws(src, k);
   let names = vec_new();
+  let tyAnns = vec_new();
   if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) { // ')'
-    yield ParsedNamesAst(names, k + 1);
+    yield ParsedParamsAst(names, tyAnns, k + 1);
   }
   while (true) {
     let id = parse_ident(src, k);
@@ -130,17 +135,20 @@ fn parse_param_list_ast(src: String, i: I32) : ParsedNamesAst => {
     let t0 = skip_ws(src, k);
     if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 58) {
       let _ty = parse_type_expr(src, t0 + 1);
+      vec_push(tyAnns, _ty.v0);
       k = _ty.v1;
+    } else {
+      vec_push(tyAnns, "");
     }
     vec_push(names, id.text);
     k = skip_ws(src, k);
     if (!(k < stringLen(src))) { panic_at(src, k, "expected ')' in param list"); }
     let c = stringCharCodeAt(src, k);
     if (c == 44) { k = k + 1; continue; }
-    if (c == 41) { yield ParsedNamesAst(names, k + 1); }
+    if (c == 41) { yield ParsedParamsAst(names, tyAnns, k + 1); }
     panic_at(src, k, "expected ',' or ')' in param list")
   }
-  ParsedNamesAst(names, k)
+  ParsedParamsAst(names, tyAnns, k)
 }
 
 fn parse_extern_decl_ast(src: String, i: I32) : ParsedDeclAst => {
@@ -191,8 +199,10 @@ fn parse_fn_decl_ast2(src: String, i: I32, exportAll: Bool) : ParsedDeclAst => {
   k = params.nextPos;
 
   let t1 = skip_ws(src, k);
+  let mut retTyAnn = "";
   if (t1 < stringLen(src) && stringCharCodeAt(src, t1) == 58) {
     let _rt = parse_type_expr(src, t1 + 1);
+    retTyAnn = _rt.v0;
     k = _rt.v1;
   }
 
@@ -200,6 +210,16 @@ fn parse_fn_decl_ast2(src: String, i: I32, exportAll: Bool) : ParsedDeclAst => {
   let body = parse_main_body_ast(src, k);
   k = body.nextPos;
 
+  // If any types were provided, store them; otherwise keep the legacy shape.
+  let mut anyParamTy = false;
+  let mut pi = 0;
+  while (pi < vec_len(params.tyAnns)) {
+    if (vec_get(params.tyAnns, pi) != "") { anyParamTy = true; break; }
+    pi = pi + 1;
+  }
+  if (anyParamTy || retTyAnn != "") {
+    yield ParsedDeclAst(decl_fn_typed(span(start, k), name.text, params.names, params.tyAnns, retTyAnn, body.body, body.tail), k);
+  }
   ParsedDeclAst(decl_fn(span(start, k), name.text, params.names, body.body, body.tail), k)
 }
 
@@ -218,8 +238,10 @@ fn parse_class_fn_decl_ast2(src: String, i: I32, exportAll: Bool) : ParsedDeclAs
   k = params.nextPos;
 
   let t1 = skip_ws(src, k);
+  let mut retTyAnn = "";
   if (t1 < stringLen(src) && stringCharCodeAt(src, t1) == 58) {
     let _rt = parse_type_expr(src, t1 + 1);
+    retTyAnn = _rt.v0;
     k = _rt.v1;
   }
 
@@ -227,6 +249,15 @@ fn parse_class_fn_decl_ast2(src: String, i: I32, exportAll: Bool) : ParsedDeclAs
   let body = parse_main_body_ast(src, k);
   k = body.nextPos;
 
+  let mut anyParamTy = false;
+  let mut pi = 0;
+  while (pi < vec_len(params.tyAnns)) {
+    if (vec_get(params.tyAnns, pi) != "") { anyParamTy = true; break; }
+    pi = pi + 1;
+  }
+  if (anyParamTy || retTyAnn != "") {
+    yield ParsedDeclAst(decl_class_fn_typed(span(start, k), name.text, params.names, params.tyAnns, retTyAnn, body.body, body.tail), k);
+  }
   ParsedDeclAst(decl_class_fn(span(start, k), name.text, params.names, body.body, body.tail), k)
 }
 
@@ -242,6 +273,7 @@ fn parse_struct_decl_ast(src: String, i: I32) : ParsedDeclAst => {
 
   k = parse_keyword(src, k, "{");
   let fields = vec_new();
+  let fieldTyAnns = vec_new();
   while (true) {
     k = skip_ws(src, k);
     if (!(k < stringLen(src))) { panic_at(src, k, "expected '}'"); }
@@ -251,6 +283,7 @@ fn parse_struct_decl_ast(src: String, i: I32) : ParsedDeclAst => {
     let _ty = parse_type_expr(src, k);
     k = _ty.v1;
     vec_push(fields, field.text);
+    vec_push(fieldTyAnns, _ty.v0);
     k = skip_ws(src, k);
     if (k < stringLen(src)) {
       let ch = stringCharCodeAt(src, k);
@@ -260,7 +293,7 @@ fn parse_struct_decl_ast(src: String, i: I32) : ParsedDeclAst => {
 
   // Maintain runtime struct field order table used by struct literals.
   add_struct_def(name.text, fields);
-  ParsedDeclAst(decl_struct(span(start, k), name.text, fields), k)
+  ParsedDeclAst(decl_struct_typed(span(start, k), name.text, fields, fieldTyAnns), k)
 }
 
 fn parse_type_union_decl_ast(src: String, i: I32, exportAll: Bool) : ParsedDeclAst => {

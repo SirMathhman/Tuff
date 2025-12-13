@@ -8,6 +8,8 @@
 // so other modules should NOT construct these structs with literals.
 // Instead, use the constructor functions provided below (e.g. `expr_int`).
 
+extern from rt::vec use { vec_new };
+
 // A source span as (startOffset, endOffset), half-open: [start, end)
 // Stored as a tagged union so it can cross module boundaries reliably.
 //
@@ -281,6 +283,8 @@ struct SLet {
   span: Span,
   isMut: Bool,
   name: String,
+  // Optional type annotation (empty string means none).
+  tyAnn: String,
   init: Expr
 }
 
@@ -360,6 +364,8 @@ struct DLet {
   span: Span,
   isMut: Bool,
   name: String,
+  // Optional type annotation (empty string means none).
+  tyAnn: String,
   init: Expr
 }
 
@@ -368,6 +374,11 @@ struct DFn {
   span: Span,
   name: String,
   params: Vec<String>,
+  // Optional per-parameter type annotations aligned with params.
+  // If absent/untyped, entries are empty strings.
+  paramTyAnns: Vec<String>,
+  // Optional return type annotation (empty string means none).
+  retTyAnn: String,
   body: Vec<Stmt>,
   tail: Expr
 }
@@ -378,6 +389,11 @@ struct DClassFn {
   span: Span,
   name: String,
   params: Vec<String>,
+  // Optional per-parameter type annotations aligned with params.
+  // If absent/untyped, entries are empty strings.
+  paramTyAnns: Vec<String>,
+  // Optional return type annotation (empty string means none).
+  retTyAnn: String,
   body: Vec<Stmt>,
   tail: Expr
 }
@@ -386,7 +402,10 @@ struct DStruct {
   tag: String,
   span: Span,
   name: String,
-  fields: Vec<String>
+  fields: Vec<String>,
+  // Optional field type annotations aligned with fields.
+  // If absent, entries are empty strings.
+  fieldTyAnns: Vec<String>
 }
 
 struct DTypeUnion {
@@ -474,7 +493,8 @@ fn mk_match_arm(span: Span, pat: MatchPat, expr: Expr) : MatchArm => MatchArm { 
 fn expr_match(span: Span, scrut: Expr, arms: Vec<MatchArm>) : Expr => EMatch { "EMatch", span, scrut, arms }
 
 // Stmt constructors
-fn stmt_let(span: Span, isMut: Bool, name: String, init: Expr) : Stmt => SLet { "SLet", span, isMut, name, init }
+fn stmt_let(span: Span, isMut: Bool, name: String, init: Expr) : Stmt => SLet { "SLet", span, isMut, name, "", init }
+fn stmt_let_typed(span: Span, isMut: Bool, name: String, tyAnn: String, init: Expr) : Stmt => SLet { "SLet", span, isMut, name, tyAnn, init }
 fn stmt_assign(span: Span, name: String, value: Expr) : Stmt => SAssign { "SAssign", span, name, value }
 fn stmt_expr(span: Span, expr: Expr) : Stmt => SExpr { "SExpr", span, expr }
 fn stmt_yield(span: Span, expr: Expr) : Stmt => SYield { "SYield", span, expr }
@@ -486,10 +506,14 @@ fn stmt_field_assign(span: Span, base: Expr, fields: Vec<String>, value: Expr) :
 // Decl constructors
 fn decl_extern_from(span: Span, modulePath: String, names: Vec<String>) : Decl => DExternFrom { "DExternFrom", span, modulePath, names }
 fn decl_import(span: Span, modulePath: String, names: Vec<String>) : Decl => DImport { "DImport", span, modulePath, names }
-fn decl_struct(span: Span, name: String, fields: Vec<String>) : Decl => DStruct { "DStruct", span, name, fields }
+fn decl_struct(span: Span, name: String, fields: Vec<String>) : Decl => DStruct { "DStruct", span, name, fields, vec_new() }
+fn decl_struct_typed(span: Span, name: String, fields: Vec<String>, fieldTyAnns: Vec<String>) : Decl => DStruct { "DStruct", span, name, fields, fieldTyAnns }
 fn type_union_variant(span: Span, name: String, hasPayload: Bool) : TypeUnionVariant => TypeUnionVariant { "TypeUnionVariant", span, name, hasPayload }
 fn decl_type_union(span: Span, name: String, variants: Vec<TypeUnionVariant>) : Decl => DTypeUnion { "DTypeUnion", span, name, variants }
-fn decl_fn(span: Span, name: String, params: Vec<String>, body: Vec<Stmt>, tail: Expr) : Decl => DFn { "DFn", span, name, params, body, tail }
-fn decl_class_fn(span: Span, name: String, params: Vec<String>, body: Vec<Stmt>, tail: Expr) : Decl => DClassFn { "DClassFn", span, name, params, body, tail }
-fn decl_let(span: Span, isMut: Bool, name: String, init: Expr) : Decl => DLet { "DLet", span, isMut, name, init }
+fn decl_fn(span: Span, name: String, params: Vec<String>, body: Vec<Stmt>, tail: Expr) : Decl => DFn { "DFn", span, name, params, vec_new(), "", body, tail }
+fn decl_fn_typed(span: Span, name: String, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String, body: Vec<Stmt>, tail: Expr) : Decl => DFn { "DFn", span, name, params, paramTyAnns, retTyAnn, body, tail }
+fn decl_class_fn(span: Span, name: String, params: Vec<String>, body: Vec<Stmt>, tail: Expr) : Decl => DClassFn { "DClassFn", span, name, params, vec_new(), "", body, tail }
+fn decl_class_fn_typed(span: Span, name: String, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String, body: Vec<Stmt>, tail: Expr) : Decl => DClassFn { "DClassFn", span, name, params, paramTyAnns, retTyAnn, body, tail }
+fn decl_let(span: Span, isMut: Bool, name: String, init: Expr) : Decl => DLet { "DLet", span, isMut, name, "", init }
+fn decl_let_typed(span: Span, isMut: Bool, name: String, tyAnn: String, init: Expr) : Decl => DLet { "DLet", span, isMut, name, tyAnn, init }
 fn decl_module(span: Span, name: String, decls: Vec<Decl>) : Decl => DModule { "DModule", span, name, decls }

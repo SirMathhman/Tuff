@@ -155,6 +155,21 @@ Note: semicolons are optional at the end of lines in many contexts; they are sho
 
 Tuff provides primitive types and composite types.
 
+### Bootstrap compiler enforcement status (current)
+
+The language design supports a rich type system, but the **current self-hosted bootstrap compiler** only enforces a **minimal, incremental subset** in its analyzer:
+
+- Type annotations are parsed and preserved in the compiler's canonical AST.
+- The analyzer enforces type compatibility when it is safe to do so:
+    - Primitives: `Bool`, `I32`, `String`, `Void`
+    - User-declared `struct` types (field existence and (when annotated) field value types in struct literals)
+- Function call checking:
+    - Arity is always checked for known functions.
+    - Argument types and return types are checked **only when** the signature annotations are in the enforceable subset above.
+- Complex source-level types (e.g. unions/aliases like `TypeRef`, generics, and most numeric widths) are not fully modeled yet, so the analyzer deliberately avoids enforcing those to keep self-hosting stable.
+
+This is an implementation-status note, not a change to the language design.
+
 ### Primitive types
 
 The following primitive types are supported:
