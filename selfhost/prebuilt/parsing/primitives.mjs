@@ -1,6 +1,6 @@
 // compiled by selfhost tuffc
 import { stringLen, stringSlice, stringCharCodeAt, stringFromCharCode } from "../rt/stdlib.mjs";
-import { panic_at } from "../util/diagnostics.mjs";
+import { panic_at, panic_span_help } from "../util/diagnostics.mjs";
 import { is_digit, is_space, is_ident_start, is_ident_part, skip_ws, starts_with_at } from "../util/lexing.mjs";
 export function ParsedNumber(value, nextPos) {
 return { value: value, nextPos: nextPos };
@@ -18,7 +18,7 @@ let end = (j + 16);
 if ((end > stringLen(src))) {
 end = stringLen(src);
 }
-panic_at(src, j, (((("expected keyword: " + lit) + " but got '") + stringSlice(src, j, end)) + "'"));
+panic_span_help(src, j, end, (((("expected keyword: " + lit) + " but got '") + stringSlice(src, j, end)) + "'"), "");
 }
 return (j + stringLen(lit));
 }

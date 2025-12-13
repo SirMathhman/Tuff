@@ -127,6 +127,8 @@ Compiler errors are formatted consistently to include:
 - **Line** and **column**, plus absolute **offset**
 - A short **reason/message**
 - A **code frame** (source context + caret)
+- The **line before/after** when available (small context window)
+- **Span underlining** (multiple `^`) when the compiler can highlight a range
 - An optional **recommended fix** (`help:`) when the compiler can suggest one
 
 Example shape:

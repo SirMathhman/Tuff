@@ -8,7 +8,7 @@ extern from rt::stdlib use {
   stringFromCharCode
 };
 
-from util::diagnostics use { panic_at };
+from util::diagnostics use { panic_at, panic_span_help };
 
 from util::lexing use {
   is_digit,
@@ -29,7 +29,7 @@ fn parse_keyword(src: String, i: I32, lit: String) : I32 => {
   if (!starts_with_at(src, j, lit)) {
     let mut end = j + 16;
     if (end > stringLen(src)) { end = stringLen(src); }
-    panic_at(src, j, "expected keyword: " + lit + " but got '" + stringSlice(src, j, end) + "'");
+    panic_span_help(src, j, end, "expected keyword: " + lit + " but got '" + stringSlice(src, j, end) + "'", "");
   }
   j + stringLen(lit)
 }

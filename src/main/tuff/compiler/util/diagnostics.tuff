@@ -27,6 +27,18 @@ fn spaces(n: I32) : String => {
   s
 }
 
+fn carets(n: I32) : String => {
+  let mut s = "";
+  let mut i: I32 = 0;
+  let mut k: I32 = n;
+  if (k < 1) { k = 1; }
+  while (i < k) {
+    s = s + "^";
+    i = i + 1;
+  }
+  s
+}
+
 fn line_col_at(src: String, i: I32) : LineCol => {
   let mut line: I32 = 1;
   let mut col: I32 = 1;
@@ -46,44 +58,103 @@ fn line_col_at(src: String, i: I32) : LineCol => {
   LineCol(line, col)
 }
 
-fn panic_at_help(src: String, i: I32, msg: String, help: String) : Void => {
-  // Clamp position for safe slicing (but still report the clamped offset).
-  let mut pos: I32 = i;
-  if (pos < 0) { pos = 0; }
-  if (pos > stringLen(src)) { pos = stringLen(src); }
+fn panic_span_help(src: String, start: I32, end: I32, msg: String, help: String) : Void => {
+  // Clamp span for safe slicing (but still report the clamped offset at start).
+  let mut s: I32 = start;
+  let mut e: I32 = end;
+  if (s < 0) { s = 0; }
+  if (e < 0) { e = 0; }
+  if (s > stringLen(src)) { s = stringLen(src); }
+  if (e > stringLen(src)) { e = stringLen(src); }
+  if (e < s) { e = s; }
 
-  let lc = line_col_at(src, pos);
+  let lc = line_col_at(src, s);
 
-  // Find bounds of the line containing pos.
-  let mut ls: I32 = pos;
+  // Find bounds of the line containing s.
+  let mut ls: I32 = s;
   while (ls > 0) {
     if (stringCharCodeAt(src, ls - 1) == 10) { break; }
     ls = ls - 1;
   }
 
-  let mut le: I32 = pos;
+  let mut le: I32 = s;
   while (le < stringLen(src)) {
     if (stringCharCodeAt(src, le) == 10) { break; }
     le = le + 1;
   }
 
-  let lineText = stringSlice(src, ls, le);
+  // Previous line bounds (if any)
+  let mut pls: I32 = -1;
+  let mut ple: I32 = -1;
+  if (ls > 0) {
+    ple = ls - 1;
+    pls = ple;
+    while (pls > 0) {
+      if (stringCharCodeAt(src, pls - 1) == 10) { break; }
+      pls = pls - 1;
+    }
+  }
+
+  // Next line bounds (if any)
+  let mut nls: I32 = -1;
+  let mut nle: I32 = -1;
+  if (le < stringLen(src) && stringCharCodeAt(src, le) == 10) {
+    nls = le + 1;
+    nle = nls;
+    while (nle < stringLen(src)) {
+      if (stringCharCodeAt(src, nle) == 10) { break; }
+      nle = nle + 1;
+    }
+  }
+
+  // Compute line number width (for nice alignment).
+  let mut width = stringLen("" + lc.line);
+  if (pls != -1) {
+    let w = stringLen("" + (lc.line - 1));
+    if (w > width) { width = w; }
+  }
+  if (nls != -1) {
+    let w = stringLen("" + (lc.line + 1));
+    if (w > width) { width = w; }
+  }
+
+  // Determine underline length (clamped to current line).
+  let mut ue: I32 = e;
+  if (ue > le) { ue = le; }
+  let mut ulen: I32 = ue - s;
+  if (ulen < 1) { ulen = 1; }
+
   let lineStr = ("" + lc.line);
 
-  // Consistent diagnostic shape:
-  //   file:line:col (offset N) error: <message>
-  //   line | <source line>
-  //        | <caret>
-  //   help: <recommended fix>   (optional)
-  let header = __tuffc_current_file + ":" + lineStr + ":" + ("" + lc.col) + " (offset " + ("" + pos) + ") error: " + msg;
-  let frame1 = "  " + lineStr + " | " + lineText;
-  let frame2 = "  " + spaces(stringLen(lineStr)) + " | " + spaces(lc.col - 1) + "^";
+  let header = __tuffc_current_file + ":" + lineStr + ":" + ("" + lc.col) + " (offset " + ("" + s) + ") error: " + msg;
 
-  let mut out = header + "\n" + frame1 + "\n" + frame2;
+  let mut out = header;
+
+  if (pls != -1) {
+    let prevText = stringSlice(src, pls, ple);
+    let prevStr = ("" + (lc.line - 1));
+    out = out + "\n" + spaces(width - stringLen(prevStr)) + prevStr + " | " + prevText;
+  }
+
+  let lineText = stringSlice(src, ls, le);
+  out = out + "\n" + spaces(width - stringLen(lineStr)) + lineStr + " | " + lineText;
+  out = out + "\n" + spaces(width) + " | " + spaces(lc.col - 1) + carets(ulen);
+
+  if (nls != -1) {
+    let nextText = stringSlice(src, nls, nle);
+    let nextStr = ("" + (lc.line + 1));
+    out = out + "\n" + spaces(width - stringLen(nextStr)) + nextStr + " | " + nextText;
+  }
+
   if (help != "") {
     out = out + "\n" + "help: " + help;
   }
+
   panic(out);
+}
+
+fn panic_at_help(src: String, i: I32, msg: String, help: String) : Void => {
+  panic_span_help(src, i, i, msg, help);
 }
 
 fn panic_at(src: String, i: I32, msg: String) : Void => {

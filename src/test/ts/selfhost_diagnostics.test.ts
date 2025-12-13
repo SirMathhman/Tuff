@@ -43,10 +43,82 @@ describe("selfhost diagnostics", () => {
     const norm = msg.replace(/\r\n/g, "\n");
     expect(norm).toMatchInlineSnapshot(`
       "<input>:1:20 (offset 19) error: expected ')'
-        1 | fn main() => (1 + 2
-          |                    ^
+      1 | fn main() => (1 + 2
+        |                    ^
       help: Add ')' to close the opening '('."
     `);
+  });
+
+  test("parse error includes multi-line context", async () => {
+    const outDir = resolve(
+      ".dist",
+      "selfhost-diagnostics",
+      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    );
+
+    await mkdir(outDir, { recursive: true });
+    const { libFile } = await stagePrebuiltSelfhostCompiler(outDir);
+    const stage1lib = (await import(pathToFileURL(libFile).toString())) as any;
+
+    // Error on the middle line so we can assert previous/next lines are shown.
+    // Missing ')' in the let initializer.
+    const badSrc = [
+      "fn main() => {",
+      "  let x = (1 + 2",
+      "  x",
+      "}",
+    ].join("\n");
+
+    let msg = "";
+    try {
+      stage1lib.compile_tiny(badSrc);
+      throw new Error("expected compile_tiny to throw");
+    } catch (e: any) {
+      msg = String(e?.message ?? e);
+    }
+
+    const norm = msg.replace(/\r\n/g, "\n");
+
+    // Should include a 3-line window around the failing line.
+    expect(norm).toContain("2 |   let x = (1 + 2");
+    expect(norm).toContain("3 |   x");
+    expect(norm).toContain("4 | }");
+    expect(norm).toMatch(/\n\s*\|\s*\^/);
+  });
+
+  test("parse error can underline spans", async () => {
+    const outDir = resolve(
+      ".dist",
+      "selfhost-diagnostics",
+      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    );
+
+    await mkdir(outDir, { recursive: true });
+    const { libFile } = await stagePrebuiltSelfhostCompiler(outDir);
+    const stage1lib = (await import(pathToFileURL(libFile).toString())) as any;
+
+    // Force a keyword mismatch so the diagnostic can underline a multi-char span.
+    // We use the full parser entrypoint so we hit `parse_keyword`.
+    const badSrc = [
+      "fn main() => {",
+      "  let x 123;", // missing '=' after identifier
+      "  x",
+      "}",
+    ].join("\n");
+
+    let msg = "";
+    try {
+      stage1lib.parse_program_with_trivia_api(badSrc, false);
+      throw new Error("expected parse_program_with_trivia_api to throw");
+    } catch (e: any) {
+      msg = String(e?.message ?? e);
+    }
+
+    const norm = msg.replace(/\r\n/g, "\n");
+
+    // Caret row should contain multiple carets when a span is highlighted.
+    expect(norm).toMatch(/\^\^\^/);
+    expect(norm).toContain("expected keyword: =");
   });
 
   test("warning includes file and line", async () => {
