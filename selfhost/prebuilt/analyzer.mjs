@@ -74,17 +74,17 @@ export function infer_int_const(e) {
 if (e.tag == "EInt") {
 return e.value;
 }
-return -(1);
+return -1;
 }
 export function type_is_ws(ch) {
-return (((ch == 32) || (ch == 9)) || (ch == 10)) || (ch == 13);
+return ch == 32 || ch == 9 || ch == 10 || ch == 13;
 }
 export function ty_is_digit(ch) {
-return (ch >= 48) && (ch <= 57);
+return ch >= 48 && ch <= 57;
 }
 export function ty_skip_ws(t, i) {
 let k = i;
-while ((k < stringLen(t)) && type_is_ws(stringCharCodeAt(t, k))) {
+while (k < stringLen(t) && type_is_ws(stringCharCodeAt(t, k))) {
 k = k + 1;
 }
 return k;
@@ -92,7 +92,7 @@ return k;
 export function ty_starts_with(t, i, s) {
 let j = 0;
 while (j < stringLen(s)) {
-if (!((i + j) < stringLen(t))) {
+if (!(i + j < stringLen(t))) {
 return false;
 }
 if (stringCharCodeAt(t, i + j) != stringCharCodeAt(s, j)) {
@@ -165,8 +165,25 @@ out = out + normalize_ty_ann((t == "" ? ty_unknown() : t));
 i = i + 1;
 }
 const rt = (retTyAnn == "" ? ty_unknown() : normalize_ty_ann(retTyAnn));
-out = (out + ")->") + rt;
+out = out + ")->" + rt;
 return out;
+}
+export function ty_is_fn_type(t) {
+if (stringLen(t) < 3) {
+return false;
+}
+return stringSlice(t, 0, 3) == "Fn(";
+}
+export function ty_fn_ret(t) {
+const pat = ")->";
+let i = 0;
+while (i + stringLen(pat) <= stringLen(t)) {
+if (stringSlice(t, i, i + stringLen(pat)) == pat) {
+return stringSlice(t, i + stringLen(pat), stringLen(t));
+}
+i = i + 1;
+}
+return ty_unknown();
 }
 export function normalize_ty_ann(t) {
 if (t == "Int") {
@@ -238,7 +255,7 @@ return vec_contains_str(typeParams, t);
 export function ty_parse_app(t) {
 let i = 0;
 i = ty_skip_ws(t, i);
-let lt = -(1);
+let lt = -1;
 let depth = 0;
 while (i < stringLen(t)) {
 const ch = stringCharCodeAt(t, i);
@@ -260,7 +277,7 @@ continue;
 }
 i = i + 1;
 }
-if (lt == -(1)) {
+if (lt == -1) {
 return ParsedTyApp(false, "", vec_new(), 0);
 }
 const callee = stringSlice(t, 0, lt);
@@ -280,7 +297,7 @@ if (aDepth == 0) {
 const part = stringSlice(t, start, k);
 const trimmedStart = ty_skip_ws(part, 0);
 let trimmedEnd = stringLen(part);
-while ((trimmedEnd > 0) && type_is_ws(stringCharCodeAt(part, trimmedEnd - 1))) {
+while (trimmedEnd > 0 && type_is_ws(stringCharCodeAt(part, trimmedEnd - 1))) {
 trimmedEnd = trimmedEnd - 1;
 }
 vec_push(args, stringSlice(part, trimmedStart, trimmedEnd));
@@ -290,11 +307,11 @@ aDepth = aDepth - 1;
 k = k + 1;
 continue;
 }
-if ((ch == 44) && (aDepth == 0)) {
+if (ch == 44 && aDepth == 0) {
 const part = stringSlice(t, start, k);
 const trimmedStart = ty_skip_ws(part, 0);
 let trimmedEnd = stringLen(part);
-while ((trimmedEnd > 0) && type_is_ws(stringCharCodeAt(part, trimmedEnd - 1))) {
+while (trimmedEnd > 0 && type_is_ws(stringCharCodeAt(part, trimmedEnd - 1))) {
 trimmedEnd = trimmedEnd - 1;
 }
 vec_push(args, stringSlice(part, trimmedStart, trimmedEnd));
@@ -308,21 +325,21 @@ return ParsedTyApp(false, "", vec_new(), 0);
 }
 export function ty_parse_array(t) {
 let i = ty_skip_ws(t, 0);
-if (!((i < stringLen(t)) && (stringCharCodeAt(t, i) == 91))) {
+if (!(i < stringLen(t) && stringCharCodeAt(t, i) == 91)) {
 return ParsedTyArray(false, "", 0, 0);
 }
 let end = stringLen(t);
-while ((end > 0) && type_is_ws(stringCharCodeAt(t, end - 1))) {
+while (end > 0 && type_is_ws(stringCharCodeAt(t, end - 1))) {
 end = end - 1;
 }
-if (!((end > 0) && (stringCharCodeAt(t, end - 1) == 93))) {
+if (!(end > 0 && stringCharCodeAt(t, end - 1) == 93)) {
 return ParsedTyArray(false, "", 0, 0);
 }
 let k = i + 1;
 let partStart = k;
 const parts = vec_new();
 let depth = 0;
-while (k < (end - 1)) {
+while (k < end - 1) {
 const ch = stringCharCodeAt(t, k);
 if (ch == 60) {
 depth = depth + 1;
@@ -336,7 +353,7 @@ depth = depth - 1;
 k = k + 1;
 continue;
 }
-if ((ch == 59) && (depth == 0)) {
+if (ch == 59 && depth == 0) {
 vec_push(parts, stringSlice(t, partStart, k));
 k = k + 1;
 partStart = k;
@@ -354,14 +371,14 @@ const initStr = vec_get(parts, 1);
 const lenStr = vec_get(parts, 2);
 let p = ty_skip_ws(initStr, 0);
 let init = 0;
-while ((p < stringLen(initStr)) && ty_is_digit(stringCharCodeAt(initStr, p))) {
-init = (init * 10) + (stringCharCodeAt(initStr, p) - 48);
+while (p < stringLen(initStr) && ty_is_digit(stringCharCodeAt(initStr, p))) {
+init = init * 10 + (stringCharCodeAt(initStr, p) - 48);
 p = p + 1;
 }
 p = ty_skip_ws(lenStr, 0);
 let len = 0;
-while ((p < stringLen(lenStr)) && ty_is_digit(stringCharCodeAt(lenStr, p))) {
-len = (len * 10) + (stringCharCodeAt(lenStr, p) - 48);
+while (p < stringLen(lenStr) && ty_is_digit(stringCharCodeAt(lenStr, p))) {
+len = len * 10 + (stringCharCodeAt(lenStr, p) - 48);
 p = p + 1;
 }
 return ParsedTyArray(true, elem, init, len);
@@ -374,7 +391,7 @@ export function ty_slice_inner(t) {
 const i = ty_skip_ws(t, 0);
 let k = i + 2;
 let end = stringLen(t);
-while ((end > 0) && type_is_ws(stringCharCodeAt(t, end - 1))) {
+while (end > 0 && type_is_ws(stringCharCodeAt(t, end - 1))) {
 end = end - 1;
 }
 return stringSlice(t, k, end - 1);
@@ -391,11 +408,11 @@ return normalize_ty_ann(b);
 const arr = ty_parse_array(tt);
 if (arr.ok) {
 const inner = ty_apply_subst(typeParams, subst, arr.elem);
-return ((((("[" + inner) + ";") + ("" + arr.init)) + ";") + ("" + arr.len)) + "]";
+return "[" + inner + ";" + ("" + arr.init) + ";" + ("" + arr.len) + "]";
 }
 if (ty_is_slice(tt)) {
 const inner = ty_apply_subst(typeParams, subst, ty_slice_inner(tt));
-return ("*[" + inner) + "]";
+return "*[" + inner + "]";
 }
 const app = ty_parse_app(tt);
 if (app.ok) {
@@ -415,7 +432,7 @@ return out;
 return tt;
 }
 export function type_is_unknown(t) {
-return (t == ty_unknown()) || (t == "");
+return t == ty_unknown() || t == "";
 }
 export function type_is_int_like(t) {
 const tt = normalize_ty_ann(t);
@@ -555,23 +572,23 @@ export function type_compatible(structs, expected, actual) {
 if (expected == "") {
 return true;
 }
-if (!(should_enforce_expected_type(structs, expected))) {
+if (!should_enforce_expected_type(structs, expected)) {
 return true;
 }
 if (type_is_unknown(actual)) {
 return true;
 }
-if ((normalize_ty_ann(actual) == ty_int_lit()) && type_is_int_like(expected)) {
+if (normalize_ty_ann(actual) == ty_int_lit() && type_is_int_like(expected)) {
 return true;
 }
-if ((normalize_ty_ann(actual) == ty_float_lit()) && type_is_float_like(expected)) {
+if (normalize_ty_ann(actual) == ty_float_lit() && type_is_float_like(expected)) {
 return true;
 }
 return normalize_ty_ann(expected) == normalize_ty_ann(actual);
 }
 export function require_type_compatible(src, pos, ctx, structs, expected, actual) {
-if (!(type_compatible(structs, expected, actual))) {
-panic_at(src, pos, (((ctx + ": expected ") + normalize_ty_ann(expected)) + ", got ") + normalize_ty_ann(actual));
+if (!type_compatible(structs, expected, actual)) {
+panic_at(src, pos, ctx + ": expected " + normalize_ty_ann(expected) + ", got " + normalize_ty_ann(actual));
 }
 return undefined;
 }
@@ -625,16 +642,16 @@ return i;
 }
 i = i + 1;
 }
-return -(1);
+return -1;
 }
 export function get_struct_field_type(src, pos, structs, structName, field) {
-if (!(has_struct_def(structs, structName))) {
+if (!has_struct_def(structs, structName)) {
 panic_at(src, pos, "unknown struct: " + structName);
 }
 const s = find_struct_def(structs, structName);
 const idx = struct_field_index(s, field);
-if (idx == -(1)) {
-panic_at(src, pos, (("unknown field " + field) + " on struct ") + structName);
+if (idx == -1) {
+panic_at(src, pos, "unknown field " + field + " on struct " + structName);
 }
 if (idx < vec_len(s.fieldTyAnns)) {
 const t = vec_get(s.fieldTyAnns, idx);
@@ -717,18 +734,18 @@ return i;
 }
 i = i + 1;
 }
-return -(1);
+return -1;
 }
 export function union_variant_has_payload(u, variantName) {
 const idx = union_variant_index(u, variantName);
-if (idx == -(1)) {
+if (idx == -1) {
 return false;
 }
 return vec_get(u.variants, idx).hasPayload;
 }
 export function union_variant_payload_ty_anns(u, variantName) {
 const idx = union_variant_index(u, variantName);
-if (idx == -(1)) {
+if (idx == -1) {
 return vec_new();
 }
 return vec_get(u.variants, idx).payloadTyAnns;
@@ -944,60 +961,60 @@ return ty_bool();
 if (e.op.tag == "OpAdd") {
 const lt = infer_expr_type(src, structs, fns, scopes, depth, e.left);
 const rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
-if ((lt == ty_string()) || (rt == ty_string())) {
+if (lt == ty_string() || rt == ty_string()) {
 return ty_string();
 }
 if (type_is_float_like(lt) && type_is_float_like(rt)) {
 const nlt = normalize_ty_ann(lt);
 const nrt = normalize_ty_ann(rt);
-if (type_is_concrete_float(nlt) && (nlt == nrt)) {
+if (type_is_concrete_float(nlt) && nlt == nrt) {
 return nlt;
 }
-if (type_is_concrete_float(nlt) && (nrt == ty_float_lit())) {
+if (type_is_concrete_float(nlt) && nrt == ty_float_lit()) {
 return nlt;
 }
-if (type_is_concrete_float(nrt) && (nlt == ty_float_lit())) {
+if (type_is_concrete_float(nrt) && nlt == ty_float_lit()) {
 return nrt;
 }
 return ty_f64();
 }
 if (type_is_int_like(lt) && type_is_int_like(rt)) {
-if ((normalize_ty_ann(lt) == ty_char()) || (normalize_ty_ann(rt) == ty_char())) {
+if (normalize_ty_ann(lt) == ty_char() || normalize_ty_ann(rt) == ty_char()) {
 return ty_i32();
 }
 const nlt = normalize_ty_ann(lt);
 const nrt = normalize_ty_ann(rt);
-if (type_is_concrete_int(nlt) && (nlt == nrt)) {
+if (type_is_concrete_int(nlt) && nlt == nrt) {
 return nlt;
 }
 return ty_i32();
 }
 return ty_unknown();
 }
-if (((e.op.tag == "OpSub") || (e.op.tag == "OpMul")) || (e.op.tag == "OpDiv")) {
+if (e.op.tag == "OpSub" || e.op.tag == "OpMul" || e.op.tag == "OpDiv") {
 const lt = infer_expr_type(src, structs, fns, scopes, depth, e.left);
 const rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
 if (type_is_float_like(lt) && type_is_float_like(rt)) {
 const nlt = normalize_ty_ann(lt);
 const nrt = normalize_ty_ann(rt);
-if (type_is_concrete_float(nlt) && (nlt == nrt)) {
+if (type_is_concrete_float(nlt) && nlt == nrt) {
 return nlt;
 }
-if (type_is_concrete_float(nlt) && (nrt == ty_float_lit())) {
+if (type_is_concrete_float(nlt) && nrt == ty_float_lit()) {
 return nlt;
 }
-if (type_is_concrete_float(nrt) && (nlt == ty_float_lit())) {
+if (type_is_concrete_float(nrt) && nlt == ty_float_lit()) {
 return nrt;
 }
 return ty_f64();
 }
 if (type_is_int_like(lt) && type_is_int_like(rt)) {
-if ((normalize_ty_ann(lt) == ty_char()) || (normalize_ty_ann(rt) == ty_char())) {
+if (normalize_ty_ann(lt) == ty_char() || normalize_ty_ann(rt) == ty_char()) {
 return ty_i32();
 }
 const nlt = normalize_ty_ann(lt);
 const nrt = normalize_ty_ann(rt);
-if (type_is_concrete_int(nlt) && (nlt == nrt)) {
+if (type_is_concrete_int(nlt) && nlt == nrt) {
 return nlt;
 }
 return ty_i32();
@@ -1007,13 +1024,13 @@ return ty_unknown();
 }
 if (e.tag == "EField") {
 const bt = infer_expr_type(src, structs, fns, scopes, depth, e.base);
-if (!(type_is_unknown(bt)) && has_struct_def(structs, bt)) {
+if (!type_is_unknown(bt) && has_struct_def(structs, bt)) {
 return get_struct_field_type(src, span_start(e.span), structs, bt, e.field);
 }
 return ty_unknown();
 }
 if (e.tag == "ECall") {
-if ((e.callee.tag == "EIdent") && has_fn_sig(fns, e.callee.name)) {
+if (e.callee.tag == "EIdent" && has_fn_sig(fns, e.callee.name)) {
 const sig = find_fn_sig(fns, e.callee.name);
 if (sig.retTyAnn != "") {
 if (vec_len(sig.typeParams) > 0) {
@@ -1029,10 +1046,10 @@ ti = ti + 1;
 }
 } else {
 let ai = 0;
-while ((ai < vec_len(e.args)) && (ai < vec_len(sig.paramTyAnns))) {
+while (ai < vec_len(e.args) && ai < vec_len(sig.paramTyAnns)) {
 const expected = vec_get(sig.paramTyAnns, ai);
 const actual = infer_expr_type(src, structs, fns, scopes, depth, vec_get(e.args, ai));
-if ((expected != "") && ty_is_type_var(sig.typeParams, normalize_ty_ann(expected))) {
+if (expected != "" && ty_is_type_var(sig.typeParams, normalize_ty_ann(expected))) {
 subst_bind(subst, normalize_ty_ann(expected), normalize_ty_ann(actual));
 }
 ai = ai + 1;
@@ -1048,12 +1065,16 @@ if (e.callee.retTyAnn != "") {
 return normalize_ty_ann(e.callee.retTyAnn);
 }
 }
+const ct = infer_expr_type(src, structs, fns, scopes, depth, e.callee);
+if (ty_is_fn_type(ct)) {
+return ty_fn_ret(ct);
+}
 return ty_unknown();
 }
 if (e.tag == "EIf") {
 const t1 = infer_expr_type(src, structs, fns, scopes, depth, e.thenExpr);
 const t2 = infer_expr_type(src, structs, fns, scopes, depth, e.elseExpr);
-if (!(type_is_unknown(t1)) && (normalize_ty_ann(t1) == normalize_ty_ann(t2))) {
+if (!type_is_unknown(t1) && normalize_ty_ann(t1) == normalize_ty_ann(t2)) {
 return normalize_ty_ann(t1);
 }
 return ty_unknown();
@@ -1065,10 +1086,10 @@ return ty_unknown();
 }
 export function check_cond_is_bool(src, structs, fns, scopes, depth, cond) {
 const t = infer_expr_type(src, structs, fns, scopes, depth, cond);
-if ((((t == ty_i32()) || (t == ty_u32())) || (t == ty_char())) || (t == ty_int_lit())) {
+if (t == ty_i32() || t == ty_u32() || t == ty_char() || t == ty_int_lit()) {
 panic_at(src, span_start(cond.span), "condition must be Bool (got I32)");
 }
-if (((t == ty_f32()) || (t == ty_f64())) || (t == ty_float_lit())) {
+if (t == ty_f32() || t == ty_f64() || t == ty_float_lit()) {
 panic_at(src, span_start(cond.span), "condition must be Bool (got F64)");
 }
 if (t == ty_string()) {
@@ -1086,22 +1107,22 @@ if (type_is_unknown(lt) || type_is_unknown(rt)) {
 return;
 }
 if (e.op.tag == "OpAdd") {
-if ((lt == ty_string()) || (rt == ty_string())) {
+if (lt == ty_string() || rt == ty_string()) {
 return;
 }
-if (!((type_is_int_like(lt) && type_is_int_like(rt)) || (type_is_float_like(lt) && type_is_float_like(rt)))) {
+if (!(type_is_int_like(lt) && type_is_int_like(rt) || type_is_float_like(lt) && type_is_float_like(rt))) {
 panic_at(src, span_start(e.span), "invalid operands to '+': expected numbers or strings");
 }
 return;
 }
-if (((e.op.tag == "OpSub") || (e.op.tag == "OpMul")) || (e.op.tag == "OpDiv")) {
-if (!((type_is_int_like(lt) && type_is_int_like(rt)) || (type_is_float_like(lt) && type_is_float_like(rt)))) {
+if (e.op.tag == "OpSub" || e.op.tag == "OpMul" || e.op.tag == "OpDiv") {
+if (!(type_is_int_like(lt) && type_is_int_like(rt) || type_is_float_like(lt) && type_is_float_like(rt))) {
 panic_at(src, span_start(e.span), "invalid operands to arithmetic operator");
 }
 return;
 }
-if ((((e.op.tag == "OpLt") || (e.op.tag == "OpLe")) || (e.op.tag == "OpGt")) || (e.op.tag == "OpGe")) {
-if (!((type_is_int_like(lt) && type_is_int_like(rt)) || (type_is_float_like(lt) && type_is_float_like(rt)))) {
+if (e.op.tag == "OpLt" || e.op.tag == "OpLe" || e.op.tag == "OpGt" || e.op.tag == "OpGe") {
+if (!(type_is_int_like(lt) && type_is_int_like(rt) || type_is_float_like(lt) && type_is_float_like(rt))) {
 panic_at(src, span_start(e.span), "invalid operands to comparison operator: expected numbers");
 }
 return;
@@ -1110,7 +1131,7 @@ return undefined;
 }
 export function check_struct_lit_types(src, structs, fns, scopes, depth, e) {
 const structName = struct_name_of_expr(src, e.nameExpr);
-if (!(has_struct_def(structs, structName))) {
+if (!has_struct_def(structs, structName)) {
 panic_at(src, span_start(e.span), "unknown struct: " + structName);
 }
 const sd = find_struct_def(structs, structName);
@@ -1118,11 +1139,11 @@ if (!(vec_len(sd.fields) == vec_len(e.values))) {
 panic_at(src, span_start(e.span), "wrong number of values in struct literal for " + structName);
 }
 let i = 0;
-while ((i < vec_len(e.values)) && (i < vec_len(sd.fieldTyAnns))) {
+while (i < vec_len(e.values) && i < vec_len(sd.fieldTyAnns)) {
 const expected = vec_get(sd.fieldTyAnns, i);
 if (expected != "") {
 const actual = infer_expr_type(src, structs, fns, scopes, depth, vec_get(e.values, i));
-require_type_compatible(src, span_start(e.span), (("struct " + structName) + " field ") + vec_get(sd.fields, i), structs, expected, actual);
+require_type_compatible(src, span_start(e.span), "struct " + structName + " field " + vec_get(sd.fields, i), structs, expected, actual);
 }
 i = i + 1;
 }
@@ -1134,7 +1155,7 @@ if (!(vec_len(e.args) == vec_len(e.callee.params))) {
 panic_at(src, span_start(e.span), "wrong number of args in lambda call");
 }
 let i = 0;
-while ((i < vec_len(e.args)) && (i < vec_len(e.callee.paramTyAnns))) {
+while (i < vec_len(e.args) && i < vec_len(e.callee.paramTyAnns)) {
 const expected = vec_get(e.callee.paramTyAnns, i);
 if (expected != "") {
 const actual = infer_expr_type(src, structs, fns, scopes, depth, vec_get(e.args, i));
@@ -1148,7 +1169,7 @@ if (e.callee.tag != "EIdent") {
 return;
 }
 const name = e.callee.name;
-if (!(has_fn_sig(fns, name))) {
+if (!has_fn_sig(fns, name)) {
 return;
 }
 const sig = find_fn_sig(fns, name);
@@ -1169,9 +1190,9 @@ ti = ti + 1;
 return undefined;
 })() : (() => {
 let ai = 0;
-while ((ai < vec_len(e.args)) && (ai < vec_len(sig.paramTyAnns))) {
+while (ai < vec_len(e.args) && ai < vec_len(sig.paramTyAnns)) {
 const expected = vec_get(sig.paramTyAnns, ai);
-if ((expected != "") && ty_is_type_var(sig.typeParams, normalize_ty_ann(expected))) {
+if (expected != "" && ty_is_type_var(sig.typeParams, normalize_ty_ann(expected))) {
 const actual = infer_expr_type(src, structs, fns, scopes, depth, vec_get(e.args, ai));
 subst_bind(subst, normalize_ty_ann(expected), normalize_ty_ann(actual));
 }
@@ -1186,12 +1207,12 @@ panic_at(src, span_start(e.span), "cannot supply type args to non-generic functi
 return undefined;
 })());
 let i = 0;
-while ((i < vec_len(e.args)) && (i < vec_len(sig.paramTyAnns))) {
+while (i < vec_len(e.args) && i < vec_len(sig.paramTyAnns)) {
 const expected0 = vec_get(sig.paramTyAnns, i);
 if (expected0 != "") {
 const expected = (vec_len(sig.typeParams) > 0 ? ty_apply_subst(sig.typeParams, subst, expected0) : normalize_ty_ann(expected0));
 const actual = infer_expr_type(src, structs, fns, scopes, depth, vec_get(e.args, i));
-require_type_compatible(src, span_start(e.span), (("arg " + ("" + (i + 1))) + " to ") + name, structs, expected, actual);
+require_type_compatible(src, span_start(e.span), "arg " + ("" + (i + 1)) + " to " + name, structs, expected, actual);
 }
 i = i + 1;
 }
@@ -1207,10 +1228,10 @@ return ParsedTagEq(false, "", "");
 if (cond.op.tag != "OpEq") {
 return ParsedTagEq(false, "", "");
 }
-if ((((cond.left.tag == "EField") && (cond.left.field == "tag")) && (cond.left.base.tag == "EIdent")) && (cond.right.tag == "EString")) {
+if (cond.left.tag == "EField" && cond.left.field == "tag" && cond.left.base.tag == "EIdent" && cond.right.tag == "EString") {
 return ParsedTagEq(true, cond.left.base.name, cond.right.value);
 }
-if ((((cond.right.tag == "EField") && (cond.right.field == "tag")) && (cond.right.base.tag == "EIdent")) && (cond.left.tag == "EString")) {
+if (cond.right.tag == "EField" && cond.right.field == "tag" && cond.right.base.tag == "EIdent" && cond.left.tag == "EString") {
 return ParsedTagEq(true, cond.right.base.name, cond.left.value);
 }
 return ParsedTagEq(false, "", "");
@@ -1334,7 +1355,7 @@ return;
 }
 if (e.tag == "EField") {
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.base);
-if ((e.field == "value") && (e.base.tag == "EIdent")) {
+if (e.field == "value" && e.base.tag == "EIdent") {
 const bt = infer_lookup_ty(scopes, depth, e.base.name);
 const app = ty_parse_app(normalize_ty_ann(bt));
 if (app.ok) {
@@ -1343,16 +1364,16 @@ if (has_union_def(unions, unionName)) {
 const u = find_union_def(unions, unionName);
 const v = narrow_lookup(narrowed, e.base.name);
 if (v == "") {
-panic_at(src, span_start(e.span), ("union payload access requires narrowing (" + unionName) + ".value)");
+panic_at(src, span_start(e.span), "union payload access requires narrowing (" + unionName + ".value)");
 }
-if (!(union_variant_has_payload(u, v))) {
+if (!union_variant_has_payload(u, v)) {
 panic_at(src, span_start(e.span), "union variant has no payload: " + v);
 }
 }
 }
 }
 const bt = infer_expr_type(src, structs, fns, scopes, depth, e.base);
-if (!(type_is_unknown(bt))) {
+if (!type_is_unknown(bt)) {
 if (has_struct_def(structs, bt)) {
 const _ft = get_struct_field_type(src, span_start(e.span), structs, bt, e.field);
 }
@@ -1385,7 +1406,7 @@ return;
 }
 if (s.tag == "SAssign") {
 const b = lookup_binding(src, span_start(s.span), scopes, depth, s.name);
-if (!(b.isMut)) {
+if (!b.isMut) {
 panic_at(src, span_start(s.span), "cannot assign to immutable binding: " + s.name);
 }
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.value);
@@ -1432,7 +1453,7 @@ return;
 if (s.tag == "SIndexAssign") {
 if (s.base.tag == "EIdent") {
 const b = lookup_binding(src, span_start(s.span), scopes, depth, s.base.name);
-if (!(b.isMut)) {
+if (!b.isMut) {
 panic_at(src, span_start(s.span), "cannot assign through immutable binding: " + s.base.name);
 }
 }
@@ -1455,7 +1476,7 @@ const elemExpected = normalize_ty_ann(arr.elem);
 const actual = infer_expr_type(src, structs, fns, scopes, depth, s.value);
 require_type_compatible(src, span_start(s.span), "array element", structs, elemExpected, actual);
 if (idx == arr.init) {
-update_binding_ty(src, span_start(s.span), scopes, depth, s.base.name, ((((("[" + elemExpected) + ";") + ("" + (arr.init + 1))) + ";") + ("" + arr.len)) + "]");
+update_binding_ty(src, span_start(s.span), scopes, depth, s.base.name, "[" + elemExpected + ";" + ("" + (arr.init + 1)) + ";" + ("" + arr.len) + "]");
 }
 }
 }
@@ -1465,7 +1486,7 @@ return;
 if (s.tag == "SFieldAssign") {
 if (s.base.tag == "EIdent") {
 const b = lookup_binding(src, span_start(s.span), scopes, depth, s.base.name);
-if (!(b.isMut)) {
+if (!b.isMut) {
 panic_at(src, span_start(s.span), "cannot assign through immutable binding: " + s.base.name);
 }
 }
@@ -1503,13 +1524,13 @@ analyze_expr(src, structs, unions, fns, outerScopes, depth, narrowed, d.tail);
 if (d.retTyAnn != "") {
 const expected = normalize_ty_ann(d.retTyAnn);
 const tailTy = infer_expr_type(src, structs, fns, outerScopes, depth, d.tail);
-require_type_compatible(src, span_start(d.span), ("function " + d.name) + " return", structs, expected, tailTy);
+require_type_compatible(src, span_start(d.span), "function " + d.name + " return", structs, expected, tailTy);
 let si = 0;
 while (si < vec_len(d.body)) {
 const st = vec_get(d.body, si);
 if (st.tag == "SYield") {
 const yTy = (st.expr.tag == "EUndefined" ? ty_void() : infer_expr_type(src, structs, fns, outerScopes, depth, st.expr));
-require_type_compatible(src, span_start(st.span), ("function " + d.name) + " yield", structs, expected, yTy);
+require_type_compatible(src, span_start(st.span), "function " + d.name + " yield", structs, expected, yTy);
 }
 si = si + 1;
 }

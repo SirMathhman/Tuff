@@ -1,0 +1,19 @@
+from std::iter use { range, map, filter, fold };
+from std::test use { reset, suite, it, expect_eq, summary, status };
+
+fn main() : I32 => {
+  reset();
+  suite("std::iter combinators");
+
+  // 0..6 -> filter x<3 -> map x*2 -> fold sum
+  let r = range(0, 6);
+  let small = filter(r, (x: I32) : Bool => x < 3);
+  let doubled = map(small, (x: I32) : I32 => x * 2);
+  let sum = fold(doubled, 0, (acc: I32, x: I32) : I32 => acc + x);
+
+  // small: 0,1,2 -> doubled: 0,2,4 -> sum = 6
+  it("filter/map/fold", expect_eq("sum", sum, 6));
+
+  summary();
+  status()
+}

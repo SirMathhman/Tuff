@@ -12,16 +12,16 @@ export function TokenStream(tokens, trailingTrivia) {
 return { tokens: tokens, trailingTrivia: trailingTrivia };
 }
 export function is_digit(code) {
-return (code >= 48) && (code <= 57);
+return code >= 48 && code <= 57;
 }
 export function is_space(code) {
-return (((code == 32) || (code == 10)) || (code == 9)) || (code == 13);
+return code == 32 || code == 10 || code == 9 || code == 13;
 }
 export function is_alpha(code) {
-return ((code >= 65) && (code <= 90)) || ((code >= 97) && (code <= 122));
+return code >= 65 && code <= 90 || code >= 97 && code <= 122;
 }
 export function is_ident_start(code) {
-return is_alpha(code) || (code == 95);
+return is_alpha(code) || code == 95;
 }
 export function is_ident_part(code) {
 return is_ident_start(code) || is_digit(code);
@@ -31,17 +31,17 @@ let j = i;
 while (j < stringLen(src)) {
 while (j < stringLen(src)) {
 const c = stringCharCodeAt(src, j);
-if (!(is_space(c))) {
+if (!is_space(c)) {
 break;
 }
 j = j + 1;
 }
-if (!((j + 1) < stringLen(src))) {
+if (!(j + 1 < stringLen(src))) {
 return j;
 }
 const c0 = stringCharCodeAt(src, j);
 const c1 = stringCharCodeAt(src, j + 1);
-if ((c0 == 47) && (c1 == 47)) {
+if (c0 == 47 && c1 == 47) {
 j = j + 2;
 while (j < stringLen(src)) {
 const c = stringCharCodeAt(src, j);
@@ -52,21 +52,21 @@ j = j + 1;
 }
 continue;
 }
-if ((c0 == 47) && (c1 == 42)) {
+if (c0 == 47 && c1 == 42) {
 const commentStart = j;
 j = j + 2;
 let found = false;
-while ((j + 1) < stringLen(src)) {
+while (j + 1 < stringLen(src)) {
 const a = stringCharCodeAt(src, j);
 const b = stringCharCodeAt(src, j + 1);
-if ((a == 42) && (b == 47)) {
+if (a == 42 && b == 47) {
 j = j + 2;
 found = true;
 break;
 }
 j = j + 1;
 }
-if (!(found)) {
+if (!found) {
 panic_at(src, commentStart, "unterminated block comment");
 }
 continue;
@@ -78,7 +78,7 @@ return j;
 export function starts_with_at(src, i, lit) {
 let j = 0;
 while (j < stringLen(lit)) {
-if ((i + j) >= stringLen(src)) {
+if (i + j >= stringLen(src)) {
 return false;
 }
 if (stringCharCodeAt(src, i + j) != stringCharCodeAt(lit, j)) {
@@ -93,18 +93,18 @@ let j = i;
 while (j < stringLen(src)) {
 if (is_space(stringCharCodeAt(src, j))) {
 const start = j;
-while ((j < stringLen(src)) && is_space(stringCharCodeAt(src, j))) {
+while (j < stringLen(src) && is_space(stringCharCodeAt(src, j))) {
 j = j + 1;
 }
 vec_push(items, LexItem("TriviaWhitespace", start, j, stringSlice(src, start, j)));
 continue;
 }
-if (!((j + 1) < stringLen(src))) {
+if (!(j + 1 < stringLen(src))) {
 return j;
 }
 const c0 = stringCharCodeAt(src, j);
 const c1 = stringCharCodeAt(src, j + 1);
-if ((c0 == 47) && (c1 == 47)) {
+if (c0 == 47 && c1 == 47) {
 const start = j;
 j = j + 2;
 while (j < stringLen(src)) {
@@ -117,22 +117,22 @@ j = j + 1;
 vec_push(items, LexItem("TriviaLineComment", start, j, stringSlice(src, start, j)));
 continue;
 }
-if ((c0 == 47) && (c1 == 42)) {
+if (c0 == 47 && c1 == 42) {
 const commentStart = j;
 const start = j;
 j = j + 2;
 let found = false;
-while ((j + 1) < stringLen(src)) {
+while (j + 1 < stringLen(src)) {
 const a = stringCharCodeAt(src, j);
 const b = stringCharCodeAt(src, j + 1);
-if ((a == 42) && (b == 47)) {
+if (a == 42 && b == 47) {
 j = j + 2;
 found = true;
 break;
 }
 j = j + 1;
 }
-if (!(found)) {
+if (!found) {
 panic_at(src, commentStart, "unterminated block comment");
 }
 vec_push(items, LexItem("TriviaBlockComment", start, j, stringSlice(src, start, j)));
@@ -158,9 +158,9 @@ const c = stringCharCodeAt(src, k);
 if (is_space(c)) {
 break;
 }
-if ((c == 47) && ((k + 1) < stringLen(src))) {
+if (c == 47 && k + 1 < stringLen(src)) {
 const d = stringCharCodeAt(src, k + 1);
-if ((d == 47) || (d == 42)) {
+if (d == 47 || d == 42) {
 break;
 }
 }
@@ -226,7 +226,7 @@ break;
 const c0 = stringCharCodeAt(src, i);
 if (is_digit(c0)) {
 let k = i + 1;
-while ((k < stringLen(src)) && is_digit(stringCharCodeAt(src, k))) {
+while (k < stringLen(src) && is_digit(stringCharCodeAt(src, k))) {
 k = k + 1;
 }
 vec_push(toks, Token("Number", i, k, stringSlice(src, i, k), leading));
@@ -235,7 +235,7 @@ continue;
 }
 if (is_ident_start(c0)) {
 let k = i + 1;
-while ((k < stringLen(src)) && is_ident_part(stringCharCodeAt(src, k))) {
+while (k < stringLen(src) && is_ident_part(stringCharCodeAt(src, k))) {
 k = k + 1;
 }
 vec_push(toks, Token("Ident", i, k, stringSlice(src, i, k), leading));
@@ -258,7 +258,7 @@ break;
 }
 k = k + 1;
 }
-if (!(found)) {
+if (!found) {
 panic_at(src, i, "unterminated string literal");
 }
 vec_push(toks, Token("String", i, k, stringSlice(src, i, k), leading));
@@ -281,21 +281,21 @@ break;
 }
 k = k + 1;
 }
-if (!(found)) {
+if (!found) {
 panic_at(src, i, "unterminated char literal");
 }
 vec_push(toks, Token("Char", i, k, stringSlice(src, i, k), leading));
 i = k;
 continue;
 }
-if ((i + 1) < stringLen(src)) {
-if (((((((((c0 == 61) && (stringCharCodeAt(src, i + 1) == 62)) || ((c0 == 58) && (stringCharCodeAt(src, i + 1) == 58))) || ((c0 == 61) && (stringCharCodeAt(src, i + 1) == 61))) || ((c0 == 33) && (stringCharCodeAt(src, i + 1) == 61))) || ((c0 == 60) && (stringCharCodeAt(src, i + 1) == 61))) || ((c0 == 62) && (stringCharCodeAt(src, i + 1) == 61))) || ((c0 == 38) && (stringCharCodeAt(src, i + 1) == 38))) || ((c0 == 124) && (stringCharCodeAt(src, i + 1) == 124))) {
+if (i + 1 < stringLen(src)) {
+if (c0 == 61 && stringCharCodeAt(src, i + 1) == 62 || c0 == 58 && stringCharCodeAt(src, i + 1) == 58 || c0 == 61 && stringCharCodeAt(src, i + 1) == 61 || c0 == 33 && stringCharCodeAt(src, i + 1) == 61 || c0 == 60 && stringCharCodeAt(src, i + 1) == 61 || c0 == 62 && stringCharCodeAt(src, i + 1) == 61 || c0 == 38 && stringCharCodeAt(src, i + 1) == 38 || c0 == 124 && stringCharCodeAt(src, i + 1) == 124) {
 vec_push(toks, Token("Op", i, i + 2, stringSlice(src, i, i + 2), leading));
 i = i + 2;
 continue;
 }
 }
-if (((((((((((c0 == 43) || (c0 == 45)) || (c0 == 42)) || (c0 == 47)) || (c0 == 37)) || (c0 == 61)) || (c0 == 60)) || (c0 == 62)) || (c0 == 33)) || (c0 == 38)) || (c0 == 124)) {
+if (c0 == 43 || c0 == 45 || c0 == 42 || c0 == 47 || c0 == 37 || c0 == 61 || c0 == 60 || c0 == 62 || c0 == 33 || c0 == 38 || c0 == 124) {
 vec_push(toks, Token("Op", i, i + 1, stringSlice(src, i, i + 1), leading));
 } else {
 vec_push(toks, Token("Punct", i, i + 1, stringSlice(src, i, i + 1), leading));

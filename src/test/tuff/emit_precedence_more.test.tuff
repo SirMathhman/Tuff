@@ -1,0 +1,15 @@
+from std::test use { reset, suite, it, expect_eq, summary, status };
+
+fn main() : I32 => {
+  reset();
+  suite("emitter precedence");
+
+  it("mul binds tighter than add", expect_eq("1+2*3", 1 + 2 * 3, 7));
+  it("parens override precedence", expect_eq("(1+2)*3", (1 + 2) * 3, 9));
+  it("unary over parens", expect_eq("-(1+2)", -(1 + 2), -3));
+  it("not over comparison", expect_eq("!(1<2)", !(1 < 2), false));
+  it("and/or precedence", expect_eq("true||false&&false", true || false && false, true));
+
+  summary();
+  status()
+}

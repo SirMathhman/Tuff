@@ -13,12 +13,12 @@ return { ok: ok, nextPos: nextPos };
 }
 export function parse_keyword(src, i, lit) {
 const j = skip_ws(src, i);
-if (!(starts_with_at(src, j, lit))) {
+if (!starts_with_at(src, j, lit)) {
 let end = j + 16;
 if (end > stringLen(src)) {
 end = stringLen(src);
 }
-panic_span_help(src, j, end, ((("expected keyword: " + lit) + " but got '") + stringSlice(src, j, end)) + "'", "");
+panic_span_help(src, j, end, "expected keyword: " + lit + " but got '" + stringSlice(src, j, end) + "'", "");
 }
 return j + stringLen(lit);
 }
@@ -28,14 +28,14 @@ let acc = 0;
 let saw = false;
 while (j < stringLen(src)) {
 const c = stringCharCodeAt(src, j);
-if (!(is_digit(c))) {
+if (!is_digit(c)) {
 break;
 }
 saw = true;
-acc = (acc * 10) + (c - 48);
+acc = acc * 10 + (c - 48);
 j = j + 1;
 }
-if (!(saw)) {
+if (!saw) {
 panic_at(src, j, "expected number");
 }
 return ParsedNumber(acc, j);
@@ -46,14 +46,14 @@ if (!(j < stringLen(src))) {
 panic_at(src, j, "expected identifier");
 }
 const c0 = stringCharCodeAt(src, j);
-if (!(is_ident_start(c0))) {
+if (!is_ident_start(c0)) {
 panic_at(src, j, "expected identifier");
 }
 const start = j;
 j = j + 1;
 while (j < stringLen(src)) {
 const c = stringCharCodeAt(src, j);
-if (!(is_ident_part(c))) {
+if (!is_ident_part(c)) {
 break;
 }
 j = j + 1;
@@ -65,7 +65,7 @@ let j = skip_ws(src, i);
 const start = j;
 while (j < stringLen(src)) {
 const c = stringCharCodeAt(src, j);
-if (is_space(c) || (c == 59)) {
+if (is_space(c) || c == 59) {
 break;
 }
 j = j + 1;
@@ -79,7 +79,7 @@ export function module_path_to_relpath(p) {
 let out = "";
 let i = 0;
 while (i < stringLen(p)) {
-if ((((i + 1) < stringLen(p)) && (stringCharCodeAt(p, i) == 58)) && (stringCharCodeAt(p, i + 1) == 58)) {
+if (i + 1 < stringLen(p) && stringCharCodeAt(p, i) == 58 && stringCharCodeAt(p, i + 1) == 58) {
 out = out + "/";
 i = i + 2;
 continue;
@@ -91,14 +91,14 @@ return out;
 }
 export function parse_optional_semicolon(src, i) {
 const j = skip_ws(src, i);
-if ((j < stringLen(src)) && (stringCharCodeAt(src, j) == 59)) {
+if (j < stringLen(src) && stringCharCodeAt(src, j) == 59) {
 return j + 1;
 }
 return i;
 }
 export function parse_required_semicolon(src, i) {
 const j = skip_ws(src, i);
-if (!((j < stringLen(src)) && (stringCharCodeAt(src, j) == 59))) {
+if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 59)) {
 panic_at(src, j, "expected ';'");
 }
 return j + 1;

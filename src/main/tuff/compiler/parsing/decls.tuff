@@ -691,6 +691,44 @@ fn parse_class_fn_decl2(src: String, i: I32, exportAll: Bool) : String => {
     }
   }
 
+  // Also include `let`/`const` locals from the generated JS body.
+  // This is a simple text scan over `body.body` (which is JS), used only by
+  // the tiny compiler path.
+  let mut bi = 0;
+  while (bi < stringLen(body.body)) {
+    // Find "let " or "const ".
+    if (starts_with_at(body.body, bi, "let ") || starts_with_at(body.body, bi, "const ")) {
+      bi = bi + (if (starts_with_at(body.body, bi, "let ")) 4 else 6);
+      // Read identifier
+      let start2 = bi;
+      while (bi < stringLen(body.body) && is_ident_part(stringCharCodeAt(body.body, bi))) {
+        bi = bi + 1;
+      }
+      let n = stringSlice(body.body, start2, bi);
+      // Avoid duplicates: look for the exact substring "<name>: <name>".
+      let mut already = false;
+      if (n != "") {
+        let pat = n + ": " + n;
+        let mut si = 0;
+        while (si + stringLen(pat) <= stringLen(fields)) {
+          if (stringSlice(fields, si, si + stringLen(pat)) == pat) {
+            already = true;
+            si = stringLen(fields);
+          } else {
+            si = si + 1;
+          }
+        }
+      }
+      if (n != "" && !already) {
+        if (first) { fields = fields + (n + ": " + n); }
+        else { fields = fields + (", " + n + ": " + n); }
+        first = false;
+      }
+      continue;
+    }
+    bi = bi + 1;
+  }
+
   let js = exportKw + "function " + name.text + "(" + params.v0 + ") {\n" + body.body + "return { " + fields + " };\n}\n";
   ParsedStmt(js, k)
 }

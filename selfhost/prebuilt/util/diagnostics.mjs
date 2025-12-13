@@ -88,8 +88,8 @@ break;
 }
 le = le + 1;
 }
-let pls = -(1);
-let ple = -(1);
+let pls = -1;
+let ple = -1;
 if (ls > 0) {
 ple = ls - 1;
 pls = ple;
@@ -100,9 +100,9 @@ break;
 pls = pls - 1;
 }
 }
-let nls = -(1);
-let nle = -(1);
-if ((le < stringLen(src)) && (stringCharCodeAt(src, le) == 10)) {
+let nls = -1;
+let nle = -1;
+if (le < stringLen(src) && stringCharCodeAt(src, le) == 10) {
 nls = le + 1;
 nle = nls;
 while (nle < stringLen(src)) {
@@ -113,13 +113,13 @@ nle = nle + 1;
 }
 }
 let width = stringLen("" + lc.line);
-if (pls != -(1)) {
+if (pls != -1) {
 const w = stringLen("" + (lc.line - 1));
 if (w > width) {
 width = w;
 }
 }
-if (nls != -(1)) {
+if (nls != -1) {
 const w = stringLen("" + (lc.line + 1));
 if (w > width) {
 width = w;
@@ -134,23 +134,23 @@ if (ulen < 1) {
 ulen = 1;
 }
 const lineStr = "" + lc.line;
-const header = (((((((__tuffc_current_file + ":") + lineStr) + ":") + ("" + lc.col)) + " (offset ") + ("" + s)) + ") error: ") + msg;
+const header = __tuffc_current_file + ":" + lineStr + ":" + ("" + lc.col) + " (offset " + ("" + s) + ") error: " + msg;
 let out = header;
-if (pls != -(1)) {
+if (pls != -1) {
 const prevText = stringSlice(src, pls, ple);
 const prevStr = "" + (lc.line - 1);
-out = ((((out + "\n") + spaces(width - stringLen(prevStr))) + prevStr) + " | ") + prevText;
+out = out + "\n" + spaces(width - stringLen(prevStr)) + prevStr + " | " + prevText;
 }
 const lineText = stringSlice(src, ls, le);
-out = ((((out + "\n") + spaces(width - stringLen(lineStr))) + lineStr) + " | ") + lineText;
-out = ((((out + "\n") + spaces(width)) + " | ") + spaces(lc.col - 1)) + carets(ulen);
-if (nls != -(1)) {
+out = out + "\n" + spaces(width - stringLen(lineStr)) + lineStr + " | " + lineText;
+out = out + "\n" + spaces(width) + " | " + spaces(lc.col - 1) + carets(ulen);
+if (nls != -1) {
 const nextText = stringSlice(src, nls, nle);
 const nextStr = "" + (lc.line + 1);
-out = ((((out + "\n") + spaces(width - stringLen(nextStr))) + nextStr) + " | ") + nextText;
+out = out + "\n" + spaces(width - stringLen(nextStr)) + nextStr + " | " + nextText;
 }
 if (help != "") {
-out = ((out + "\n") + "help: ") + help;
+out = out + "\n" + "help: " + help;
 }
 panic(out);
 return undefined;

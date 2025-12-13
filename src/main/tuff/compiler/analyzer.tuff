@@ -188,6 +188,25 @@ fn ty_fn_type(paramTyAnns, retTyAnn: String) : String => {
   out
 }
 
+fn ty_is_fn_type(t: String) : Bool => {
+  // `Fn(...)->Ret`
+  if (stringLen(t) < 3) { yield false; }
+  stringSlice(t, 0, 3) == "Fn("
+}
+
+fn ty_fn_ret(t: String) : String => {
+  // Extract Ret from `Fn(...)->Ret`.
+  let pat = ")->";
+  let mut i = 0;
+  while (i + stringLen(pat) <= stringLen(t)) {
+    if (stringSlice(t, i, i + stringLen(pat)) == pat) {
+      yield stringSlice(t, i + stringLen(pat), stringLen(t));
+    }
+    i = i + 1;
+  }
+  ty_unknown()
+}
+
 fn normalize_ty_ann(t: String) : String => {
   // Keep this minimal (Phase 4). We mostly do string equality checks.
   if (t == "Int") { yield ty_i32(); }
@@ -890,6 +909,11 @@ fn infer_expr_type(src: String, structs, fns, scopes, depth: I32, e) : String =>
     if (e.callee.tag == "ELambda") {
       if (e.callee.retTyAnn != "") { yield normalize_ty_ann(e.callee.retTyAnn); }
     }
+
+    // Calling through a function-typed value (e.g. `let f = (x:I32):I32=>...; f(1)`)
+    // is allowed; infer the return type from the compact `Fn(...)->Ret` tag.
+    let ct = infer_expr_type(src, structs, fns, scopes, depth, e.callee);
+    if (ty_is_fn_type(ct)) { yield ty_fn_ret(ct); }
     yield ty_unknown();
   }
 

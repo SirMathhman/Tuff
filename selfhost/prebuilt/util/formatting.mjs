@@ -34,7 +34,7 @@ ii = ii + 1;
 i = imps.nextPos;
 while (true) {
 const j = skip_ws(src, i);
-if (!(starts_with_at(src, j, "module"))) {
+if (!starts_with_at(src, j, "module")) {
 break;
 }
 const m = parse_module_decl_ast(src, i);
@@ -67,7 +67,7 @@ i = mutOpt.nextPos;
 const name = parse_ident(src, i);
 i = name.nextPos;
 const t0 = skip_ws(src, i);
-if ((t0 < stringLen(src)) && (t0 >= 0)) {
+if (t0 < stringLen(src) && t0 >= 0) {
 }
 const colonPos = skip_ws(src, i);
 if (starts_with_at(src, colonPos, ":")) {

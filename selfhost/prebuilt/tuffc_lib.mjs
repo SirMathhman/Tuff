@@ -40,7 +40,7 @@ ii = ii + 1;
 i = imps.nextPos;
 while (true) {
 const j = skip_ws(src, i);
-if (!(starts_with_at(src, j, "module"))) {
+if (!starts_with_at(src, j, "module")) {
 break;
 }
 const m = parse_module_decl_ast(src, i);
@@ -74,7 +74,7 @@ const name = parse_ident(src, i);
 i = name.nextPos;
 let tyAnn = "";
 const t0 = skip_ws(src, i);
-if ((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 58)) {
+if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 58) {
 const _ty = parse_type_expr(src, t0 + 1);
 tyAnn = _ty.v0;
 i = _ty.v1;
@@ -97,7 +97,7 @@ while (true) {
 const j = skip_ws(src, i);
 if (starts_with_at(src, j, "fn")) {
 const f = parse_fn_decl_ast2(src, i, exportAll);
-if ((f.decl.tag == "DFn") && (f.decl.name == "main")) {
+if (f.decl.tag == "DFn" && f.decl.name == "main") {
 sawMain = true;
 }
 vec_push(decls, f.decl);
@@ -106,7 +106,7 @@ continue;
 }
 if (starts_with_at(src, j, "class")) {
 const f = parse_class_fn_decl_ast2(src, i, exportAll);
-if ((f.decl.tag == "DClassFn") && (f.decl.name == "main")) {
+if (f.decl.tag == "DClassFn" && f.decl.name == "main") {
 sawMain = true;
 }
 vec_push(decls, f.decl);
@@ -115,7 +115,7 @@ continue;
 }
 break;
 }
-if (requireMain && !(sawMain)) {
+if (requireMain && !sawMain) {
 panic_at(src, i, "expected fn main");
 }
 analyze_program(src, decls);
@@ -138,29 +138,29 @@ return compile_tiny2(src, false, true, "module.tuff");
 }
 export function find_substring(hay, needle) {
 let i = 0;
-while ((i + stringLen(needle)) <= stringLen(hay)) {
+while (i + stringLen(needle) <= stringLen(hay)) {
 if (starts_with_at(hay, i, needle)) {
 return i;
 }
 i = i + 1;
 }
-return -(1);
+return -1;
 }
 export function workspace_root_from_path(p) {
 let i = find_substring(p, "\\src\\");
-if (i != -(1)) {
+if (i != -1) {
 return stringSlice(p, 0, i);
 }
 i = find_substring(p, "/src/");
-if (i != -(1)) {
+if (i != -1) {
 return stringSlice(p, 0, i);
 }
 i = find_substring(p, "\\std\\");
-if (i != -(1)) {
+if (i != -1) {
 return stringSlice(p, 0, i);
 }
 i = find_substring(p, "/std/");
-if (i != -(1)) {
+if (i != -1) {
 return stringSlice(p, 0, i);
 }
 return pathDirname(p);
@@ -168,12 +168,12 @@ return pathDirname(p);
 export function compiler_root_from_path(p) {
 const needle1 = "\\src\\main\\tuff\\compiler\\";
 let i = find_substring(p, needle1);
-if (i != -(1)) {
+if (i != -1) {
 return stringSlice(p, 0, i + stringLen(needle1));
 }
 const needle2 = "/src/main/tuff/compiler/";
 i = find_substring(p, needle2);
-if (i != -(1)) {
+if (i != -1) {
 return stringSlice(p, 0, i + stringLen(needle2));
 }
 return "";
@@ -190,7 +190,7 @@ const path = vec_get(queue, vec_len(queue) - 1);
 set_current_file(path);
 let newQ = vec_new();
 let qi = 0;
-while ((qi + 1) < vec_len(queue)) {
+while (qi + 1 < vec_len(queue)) {
 vec_push(newQ, vec_get(queue, qi));
 qi = qi + 1;
 }
@@ -224,7 +224,7 @@ const j = skip_ws(src, scan);
 if (starts_with_at(src, j, "import")) {
 panic_at(src, j, "`import` is not supported. Use `from <module> use { ... };` instead.");
 }
-if (!(starts_with_at(src, j, "from"))) {
+if (!starts_with_at(src, j, "from")) {
 break;
 }
 scan = parse_keyword(src, scan, "from");
@@ -244,12 +244,12 @@ break;
 const id = parse_ident(src, scan);
 scan = id.nextPos;
 scan = skip_ws(src, scan);
-if ((scan < stringLen(src)) && (stringCharCodeAt(src, scan) == 44)) {
+if (scan < stringLen(src) && stringCharCodeAt(src, scan) == 44) {
 scan = scan + 1;
 continue;
 }
 scan = skip_ws(src, scan);
-if ((scan < stringLen(src)) && (stringCharCodeAt(src, scan) == 125)) {
+if (scan < stringLen(src) && stringCharCodeAt(src, scan) == 125) {
 scan = scan + 1;
 break;
 }
@@ -273,7 +273,7 @@ let prefixLen = stringLen(entryDir);
 let relStart = prefixLen;
 if (relStart < stringLen(path)) {
 const ch = stringCharCodeAt(path, relStart);
-if ((ch == 47) || (ch == 92)) {
+if (ch == 47 || ch == 92) {
 relStart = relStart + 1;
 }
 }

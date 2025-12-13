@@ -609,7 +609,7 @@ Common definitions (imports, type aliases, utilities) — automatically availabl
 
 ### `std::iter`
 
-Minimal iterator utilities.
+Minimal iterator utilities (currently: `range`, `map`, `filter`, `fold`).
 
 ```tuff
 from std::iter use { range };
@@ -627,7 +627,7 @@ fn main() => {
 ### Future Stdlib Modules
 
 - **`std::collections`** — Vec, HashMap, BTreeMap, etc.
-- **`std::iter`** — map, filter, fold, etc. (range exists; combinators planned)
+- **`std::iter`** — more iterator utilities and richer iterator types
 - **`std::math`** — sqrt, sin, cos, etc.
 - **`std::string`** — split, contains, trim, etc.
 - **`std::fs`** — file I/O (via FFI)

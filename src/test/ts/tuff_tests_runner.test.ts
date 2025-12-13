@@ -77,7 +77,7 @@ describe("tuff tests (.tuff)", () => {
       await writeFile(inFile, src, "utf8");
 
       const rcCompile = tuffc.main([inFile, outFile]);
-      expect(rcCompile).toBe(0);
+      expect(rcCompile, `compile failed: ${relFromTestsRoot}`).toBe(0);
 
       const mod = await import(
         pathToFileURL(outFile).toString() + `?v=${Date.now()}`
@@ -85,7 +85,7 @@ describe("tuff tests (.tuff)", () => {
       expect(typeof mod.main).toBe("function");
 
       const rcRun = mod.main();
-      expect(rcRun).toBe(0);
+      expect(rcRun, `run failed: ${relFromTestsRoot}`).toBe(0);
     }
   });
 });

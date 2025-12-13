@@ -88,7 +88,7 @@ continue;
 }
 i = i + 1;
 }
-return -(1);
+return -1;
 }
 export function parse_lambda_expr_ast(src, i) {
 const start = skip_ws(src, i);
@@ -96,7 +96,7 @@ let k = parse_keyword(src, start, "(");
 k = skip_ws(src, k);
 const params = vec_new();
 const paramTyAnns = vec_new();
-((k < stringLen(src)) && (stringCharCodeAt(src, k) == 41) ? (() => {
+(k < stringLen(src) && stringCharCodeAt(src, k) == 41 ? (() => {
 k = k + 1;
 return undefined;
 })() : (() => {
@@ -105,7 +105,7 @@ const name = parse_ident(src, k);
 vec_push(params, name.text);
 k = skip_ws(src, name.nextPos);
 let tyAnn = "";
-if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 58)) {
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 58) {
 k = parse_keyword(src, k, ":");
 const ty = parse_type_expr(src, k);
 tyAnn = ty.v0;
@@ -120,7 +120,7 @@ const ch = stringCharCodeAt(src, k);
 if (ch == 44) {
 k = k + 1;
 k = skip_ws(src, k);
-if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 41)) {
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) {
 k = k + 1;
 break;
 }
@@ -136,7 +136,7 @@ return undefined;
 })());
 k = skip_ws(src, k);
 let retTyAnn = "";
-if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 58)) {
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 58) {
 k = parse_keyword(src, k, ":");
 const ret = parse_type_expr(src, k);
 retTyAnn = ret.v0;
@@ -144,7 +144,7 @@ k = ret.v1;
 }
 k = parse_keyword(src, k, "=>");
 const t = skip_ws(src, k);
-const body = ((t < stringLen(src)) && (stringCharCodeAt(src, t) == 123) ? parse_block_expr_ast(src, k) : parse_expr_ast(src, k));
+const body = (t < stringLen(src) && stringCharCodeAt(src, t) == 123 ? parse_block_expr_ast(src, k) : parse_expr_ast(src, k));
 return ParsedExprAst(expr_lambda(span(start, body.nextPos), params, paramTyAnns, retTyAnn, body.expr), body.nextPos);
 }
 export function parse_expr(src, i) {
@@ -158,10 +158,10 @@ let left = parse_and_ast(src, i);
 let j = left.nextPos;
 while (true) {
 j = skip_ws(src, j);
-if (!((j + 1) < stringLen(src))) {
+if (!(j + 1 < stringLen(src))) {
 break;
 }
-if ((stringCharCodeAt(src, j) == 124) && (stringCharCodeAt(src, j + 1) == 124)) {
+if (stringCharCodeAt(src, j) == 124 && stringCharCodeAt(src, j + 1) == 124) {
 const rhs = parse_and_ast(src, j + 2);
 const start = span_start(expr_span(left.expr));
 left = ParsedExprAst(expr_binary(span(start, rhs.nextPos), OpOr, left.expr, rhs.expr), rhs.nextPos);
@@ -177,10 +177,10 @@ let left = parse_cmp_ast(src, i);
 let j = left.nextPos;
 while (true) {
 j = skip_ws(src, j);
-if (!((j + 1) < stringLen(src))) {
+if (!(j + 1 < stringLen(src))) {
 break;
 }
-if ((stringCharCodeAt(src, j) == 38) && (stringCharCodeAt(src, j + 1) == 38)) {
+if (stringCharCodeAt(src, j) == 38 && stringCharCodeAt(src, j + 1) == 38) {
 const rhs = parse_cmp_ast(src, j + 2);
 const start = span_start(expr_span(left.expr));
 left = ParsedExprAst(expr_binary(span(start, rhs.nextPos), OpAnd, left.expr, rhs.expr), rhs.nextPos);
@@ -200,36 +200,36 @@ if (!(j < stringLen(src))) {
 break;
 }
 const c0 = stringCharCodeAt(src, j);
-const c1 = ((j + 1) < stringLen(src) ? stringCharCodeAt(src, j + 1) : 0);
+const c1 = (j + 1 < stringLen(src) ? stringCharCodeAt(src, j + 1) : 0);
 let opTag = "";
 let op = OpEq;
 let adv = 0;
-if ((c0 == 61) && (c1 == 61)) {
+if (c0 == 61 && c1 == 61) {
 opTag = "==";
 op = OpEq;
 adv = 2;
 }
-if (((opTag == "") && (c0 == 33)) && (c1 == 61)) {
+if (opTag == "" && c0 == 33 && c1 == 61) {
 opTag = "!=";
 op = OpNe;
 adv = 2;
 }
-if (((opTag == "") && (c0 == 60)) && (c1 == 61)) {
+if (opTag == "" && c0 == 60 && c1 == 61) {
 opTag = "<=";
 op = OpLe;
 adv = 2;
 }
-if (((opTag == "") && (c0 == 62)) && (c1 == 61)) {
+if (opTag == "" && c0 == 62 && c1 == 61) {
 opTag = ">=";
 op = OpGe;
 adv = 2;
 }
-if ((opTag == "") && (c0 == 60)) {
+if (opTag == "" && c0 == 60) {
 opTag = "<";
 op = OpLt;
 adv = 1;
 }
-if ((opTag == "") && (c0 == 62)) {
+if (opTag == "" && c0 == 62) {
 opTag = ">";
 op = OpGt;
 adv = 1;
@@ -253,7 +253,7 @@ if (!(j < stringLen(src))) {
 break;
 }
 const ch = stringCharCodeAt(src, j);
-if (!((ch == 43) || (ch == 45))) {
+if (!(ch == 43 || ch == 45)) {
 break;
 }
 const rhs = parse_mul_ast(src, j + 1);
@@ -273,7 +273,7 @@ if (!(j < stringLen(src))) {
 break;
 }
 const ch = stringCharCodeAt(src, j);
-if (!((ch == 42) || (ch == 47))) {
+if (!(ch == 42 || ch == 47)) {
 break;
 }
 const rhs = parse_unary_ast(src, j + 1);
@@ -286,11 +286,11 @@ return left;
 }
 export function parse_unary_ast(src, i) {
 const j = skip_ws(src, i);
-if ((j < stringLen(src)) && (stringCharCodeAt(src, j) == 33)) {
+if (j < stringLen(src) && stringCharCodeAt(src, j) == 33) {
 const inner = parse_unary_ast(src, j + 1);
 return ParsedExprAst(expr_unary(span(j, inner.nextPos), OpNot, inner.expr), inner.nextPos);
 }
-if ((j < stringLen(src)) && (stringCharCodeAt(src, j) == 45)) {
+if (j < stringLen(src) && stringCharCodeAt(src, j) == 45) {
 const inner = parse_unary_ast(src, j + 1);
 return ParsedExprAst(expr_unary(span(j, inner.nextPos), OpNeg, inner.expr), inner.nextPos);
 }
@@ -302,7 +302,7 @@ let j = left.nextPos;
 let pendingTypeArgs = vec_new();
 while (true) {
 j = skip_ws(src, j);
-if (((left.expr.tag != "ECall") && (j < stringLen(src))) && (stringCharCodeAt(src, j) == 60)) {
+if (left.expr.tag != "ECall" && j < stringLen(src) && stringCharCodeAt(src, j) == 60) {
 const parsed = try_parse_type_args_for_call_ast(src, j);
 if (parsed.ok) {
 pendingTypeArgs = parsed.typeArgs;
@@ -310,7 +310,7 @@ j = parsed.nextPos;
 continue;
 }
 }
-if ((j < stringLen(src)) && (stringCharCodeAt(src, j) == 40)) {
+if (j < stringLen(src) && stringCharCodeAt(src, j) == 40) {
 const args = parse_arg_list_ast(src, j);
 const start = span_start(expr_span(left.expr));
 const callSpan = span(start, args.nextPos);
@@ -323,9 +323,9 @@ left = ParsedExprAst(expr_call(callSpan, left.expr, args.items), args.nextPos);
 j = left.nextPos;
 continue;
 }
-if ((j < stringLen(src)) && (stringCharCodeAt(src, j) == 46)) {
+if (j < stringLen(src) && stringCharCodeAt(src, j) == 46) {
 const t = skip_ws(src, j + 1);
-if ((t < stringLen(src)) && is_digit(stringCharCodeAt(src, t))) {
+if (t < stringLen(src) && is_digit(stringCharCodeAt(src, t))) {
 const n = parse_number(src, t);
 const start = span_start(expr_span(left.expr));
 left = ParsedExprAst(expr_tuple_index(span(start, n.nextPos), left.expr, n.value), n.nextPos);
@@ -338,12 +338,12 @@ left = ParsedExprAst(expr_field(span(start, next.nextPos), left.expr, next.text)
 j = left.nextPos;
 continue;
 }
-if ((j < stringLen(src)) && (stringCharCodeAt(src, j) == 91)) {
+if (j < stringLen(src) && stringCharCodeAt(src, j) == 91) {
 let k = parse_keyword(src, j, "[");
 const idx = parse_expr_ast(src, k);
 k = idx.nextPos;
 k = skip_ws(src, k);
-if (!((k < stringLen(src)) && (stringCharCodeAt(src, k) == 93))) {
+if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 93)) {
 panic("expected ']'");
 }
 const start = span_start(expr_span(left.expr));
@@ -357,12 +357,12 @@ return left;
 }
 export function try_parse_type_args_for_call_ast(src, i) {
 let k = skip_ws(src, i);
-if (!((k < stringLen(src)) && (stringCharCodeAt(src, k) == 60))) {
+if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 60)) {
 return ParsedTypeArgsForCallAst(false, vec_new(), i);
 }
 let depth = 1;
 let scan = k + 1;
-let endGt = -(1);
+let endGt = -1;
 while (scan < stringLen(src)) {
 const ch = stringCharCodeAt(src, scan);
 if (ch == 60) {
@@ -377,11 +377,11 @@ break;
 }
 scan = scan + 1;
 }
-if (endGt == -(1)) {
+if (endGt == -1) {
 return ParsedTypeArgsForCallAst(false, vec_new(), i);
 }
 const after = skip_ws(src, endGt + 1);
-if (!((after < stringLen(src)) && (stringCharCodeAt(src, after) == 40))) {
+if (!(after < stringLen(src) && stringCharCodeAt(src, after) == 40)) {
 return ParsedTypeArgsForCallAst(false, vec_new(), i);
 }
 k = k + 1;
@@ -415,7 +415,7 @@ let k = skip_ws(src, i);
 k = parse_keyword(src, k, "(");
 k = skip_ws(src, k);
 const items = vec_new();
-if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 41)) {
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) {
 return ParsedExprListAst(items, k + 1);
 }
 while (true) {
@@ -475,7 +475,7 @@ const start = skip_ws(src, i);
 let k = parse_keyword(src, start, "[");
 k = skip_ws(src, k);
 const items = vec_new();
-if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 93)) {
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 93) {
 return ParsedExprAst(expr_vec_lit(span(start, k + 1), items), k + 1);
 }
 while (true) {
@@ -499,7 +499,7 @@ return ParsedExprAst(expr_vec_lit(span(start, k), items), k);
 }
 export function parse_stmt_block_ast(src, i) {
 let k = skip_ws(src, i);
-if (!((k < stringLen(src)) && (stringCharCodeAt(src, k) == 123))) {
+if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 123)) {
 panic_at(src, k, "expected '{'");
 }
 k = k + 1;
@@ -520,17 +520,17 @@ return ParsedStmtsAst(body, k);
 }
 export function scan_if_stmt_has_else(src, i) {
 let j = skip_ws(src, i);
-if (!(starts_with_at(src, j, "if"))) {
+if (!starts_with_at(src, j, "if")) {
 return false;
 }
 j = j + 2;
 j = skip_ws(src, j);
-if (!((j < stringLen(src)) && (stringCharCodeAt(src, j) == 40))) {
+if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 40)) {
 return false;
 }
 let k = j + 1;
 let depth = 1;
-while ((k < stringLen(src)) && (depth > 0)) {
+while (k < stringLen(src) && depth > 0) {
 const ch = stringCharCodeAt(src, k);
 if (ch == 34) {
 k = k + 1;
@@ -577,12 +577,12 @@ continue;
 k = k + 1;
 }
 k = skip_ws(src, k);
-if (!((k < stringLen(src)) && (stringCharCodeAt(src, k) == 123))) {
+if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 123)) {
 return false;
 }
 k = k + 1;
 let bDepth = 1;
-while ((k < stringLen(src)) && (bDepth > 0)) {
+while (k < stringLen(src) && bDepth > 0) {
 const ch = stringCharCodeAt(src, k);
 if (ch == 34) {
 k = k + 1;
@@ -633,7 +633,7 @@ return starts_with_at(src, k, "else");
 }
 export function parse_block_body_ast(src, i) {
 const j = skip_ws(src, i);
-if (!((j < stringLen(src)) && (stringCharCodeAt(src, j) == 123))) {
+if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 123)) {
 panic_at(src, j, "expected '{'");
 }
 let k = j + 1;
@@ -646,7 +646,7 @@ panic_at(src, t, "expected '}'");
 if (stringCharCodeAt(src, t) == 125) {
 break;
 }
-const isStmt = (((((starts_with_at(src, t, "let") || starts_with_at(src, t, "while")) || (starts_with_at(src, t, "if") && !(scan_if_stmt_has_else(src, t)))) || starts_with_at(src, t, "yield")) || is_field_assign_stmt_start(src, t)) || is_assign_stmt_start(src, t)) || is_index_assign_stmt_start(src, t);
+const isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") && !scan_if_stmt_has_else(src, t) || starts_with_at(src, t, "yield") || is_field_assign_stmt_start(src, t) || is_assign_stmt_start(src, t) || is_index_assign_stmt_start(src, t);
 if (isStmt) {
 const st = parse_stmt_ast(src, k);
 vec_push(body, st.stmt);
@@ -655,12 +655,12 @@ continue;
 }
 const e = parse_expr_ast(src, k);
 const after = skip_ws(src, e.nextPos);
-if ((after < stringLen(src)) && (stringCharCodeAt(src, after) == 59)) {
+if (after < stringLen(src) && stringCharCodeAt(src, after) == 59) {
 vec_push(body, stmt_expr(span(span_start(expr_span(e.expr)), after + 1), e.expr));
 k = after + 1;
 continue;
 }
-if ((after < stringLen(src)) && (stringCharCodeAt(src, after) != 125)) {
+if (after < stringLen(src) && stringCharCodeAt(src, after) != 125) {
 vec_push(body, stmt_expr(span(span_start(expr_span(e.expr)), e.nextPos), e.expr));
 k = e.nextPos;
 continue;
@@ -668,12 +668,12 @@ continue;
 break;
 }
 const t2 = skip_ws(src, k);
-if ((t2 < stringLen(src)) && (stringCharCodeAt(src, t2) == 125)) {
+if (t2 < stringLen(src) && stringCharCodeAt(src, t2) == 125) {
 return ParsedMainAst(body, expr_undefined(span(t2, t2)), t2 + 1);
 }
 const tail = parse_expr_ast(src, k);
 k = skip_ws(src, tail.nextPos);
-if (!((k < stringLen(src)) && (stringCharCodeAt(src, k) == 125))) {
+if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 125)) {
 panic_at(src, k, "expected '}'");
 }
 return ParsedMainAst(body, tail.expr, k + 1);
@@ -691,11 +691,11 @@ const cond = parse_expr_ast(src, k);
 k = cond.nextPos;
 k = parse_keyword(src, k, ")");
 const t1 = skip_ws(src, k);
-const thenE = ((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 123) ? parse_block_expr_ast(src, k) : parse_expr_ast(src, k));
+const thenE = (t1 < stringLen(src) && stringCharCodeAt(src, t1) == 123 ? parse_block_expr_ast(src, k) : parse_expr_ast(src, k));
 k = thenE.nextPos;
 k = parse_keyword(src, k, "else");
 const t2 = skip_ws(src, k);
-const elseE = ((t2 < stringLen(src)) && (stringCharCodeAt(src, t2) == 123) ? parse_block_expr_ast(src, k) : parse_expr_ast(src, k));
+const elseE = (t2 < stringLen(src) && stringCharCodeAt(src, t2) == 123 ? parse_block_expr_ast(src, k) : parse_expr_ast(src, k));
 return ParsedExprAst(expr_if(span(start, elseE.nextPos), cond.expr, thenE.expr, elseE.expr), elseE.nextPos);
 }
 export function parse_match_expr_ast(src, i) {
@@ -749,7 +749,7 @@ panic_at(src, patStart, "unsupported match pattern: " + id.text);
 }
 k = parse_keyword(src, k, "=>");
 const t = skip_ws(src, k);
-const armE = ((t < stringLen(src)) && (stringCharCodeAt(src, t) == 123) ? parse_block_expr_ast(src, k) : parse_expr_ast(src, k));
+const armE = (t < stringLen(src) && stringCharCodeAt(src, t) == 123 ? parse_block_expr_ast(src, k) : parse_expr_ast(src, k));
 k = armE.nextPos;
 if (pat.tag == "MPWildcard") {
 sawDefault = true;
@@ -758,12 +758,12 @@ vec_push(arms, mk_match_arm(span(patStart, armE.nextPos), pat, armE.expr));
 k = skip_ws(src, k);
 if (k < stringLen(src)) {
 const ch = stringCharCodeAt(src, k);
-if ((ch == 44) || (ch == 59)) {
+if (ch == 44 || ch == 59) {
 k = k + 1;
 }
 }
 }
-if (!(sawDefault)) {
+if (!sawDefault) {
 panic_at(src, k, "match requires _ arm");
 }
 return ParsedExprAst(expr_match(span(start, k), scrut.expr, arms), k);
@@ -832,27 +832,27 @@ return ParsedExprAst(expr_string(span(j, lit.nextPos), lit.text), lit.nextPos);
 }
 if (c == 40) {
 const rp = find_matching_rparen(src, j);
-if (rp != -(1)) {
+if (rp != -1) {
 const after = skip_ws(src, rp + 1);
-if ((((after + 1) < stringLen(src)) && (stringCharCodeAt(src, after) == 61)) && (stringCharCodeAt(src, after + 1) == 62)) {
+if (after + 1 < stringLen(src) && stringCharCodeAt(src, after) == 61 && stringCharCodeAt(src, after + 1) == 62) {
 return parse_lambda_expr_ast(src, j);
 }
-if ((after < stringLen(src)) && (stringCharCodeAt(src, after) == 58)) {
+if (after < stringLen(src) && stringCharCodeAt(src, after) == 58) {
 return parse_lambda_expr_ast(src, j);
 }
 }
 const first = parse_expr_ast(src, j + 1);
 let k = skip_ws(src, first.nextPos);
-if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 41)) {
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) {
 return ParsedExprAst(first.expr, k + 1);
 }
-if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 44)) {
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 44) {
 const items = vec_new();
 vec_push(items, first.expr);
 while (true) {
 k = k + 1;
 k = skip_ws(src, k);
-if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 41)) {
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) {
 return ParsedExprAst(expr_tuple_lit(span(j, k + 1), items), k + 1);
 }
 const e = parse_expr_ast(src, k);
@@ -875,18 +875,18 @@ panic_at_help(src, k, "expected ')'", "Add ')' to close the opening '('.");
 }
 if (is_digit(c)) {
 let k = j;
-while ((k < stringLen(src)) && is_digit(stringCharCodeAt(src, k))) {
+while (k < stringLen(src) && is_digit(stringCharCodeAt(src, k))) {
 k = k + 1;
 }
-if ((((k + 1) < stringLen(src)) && (stringCharCodeAt(src, k) == 46)) && is_digit(stringCharCodeAt(src, k + 1))) {
+if (k + 1 < stringLen(src) && stringCharCodeAt(src, k) == 46 && is_digit(stringCharCodeAt(src, k + 1))) {
 let m = k + 1;
-while ((m < stringLen(src)) && is_digit(stringCharCodeAt(src, m))) {
+while (m < stringLen(src) && is_digit(stringCharCodeAt(src, m))) {
 m = m + 1;
 }
 const text = stringSlice(src, j, m);
 let suffix = "";
 let endPos = m;
-if ((m + 2) < stringLen(src)) {
+if (m + 2 < stringLen(src)) {
 const s1 = stringSlice(src, m, m + 3);
 if (s1 == "F32") {
 suffix = "F32";
@@ -910,10 +910,10 @@ const parts = vec_new();
 vec_push(parts, id.text);
 while (true) {
 const t = skip_ws(src, k);
-if (!((t + 1) < stringLen(src))) {
+if (!(t + 1 < stringLen(src))) {
 break;
 }
-if (!((stringCharCodeAt(src, t) == 58) && (stringCharCodeAt(src, t + 1) == 58))) {
+if (!(stringCharCodeAt(src, t) == 58 && stringCharCodeAt(src, t + 1) == 58)) {
 break;
 }
 const next = parse_ident(src, t + 2);
@@ -921,7 +921,7 @@ vec_push(parts, next.text);
 k = next.nextPos;
 }
 const t2 = skip_ws(src, k);
-if ((t2 < stringLen(src)) && (stringCharCodeAt(src, t2) == 123)) {
+if (t2 < stringLen(src) && stringCharCodeAt(src, t2) == 123) {
 const vals = parse_struct_lit_values_ast(src, t2);
 const nameExpr = expr_path(span(j, k), parts);
 return ParsedExprAst(expr_struct_lit(span(j, vals.nextPos), nameExpr, vals.items), vals.nextPos);
@@ -935,14 +935,14 @@ let end = j + 32;
 if (end > stringLen(src)) {
 end = stringLen(src);
 }
-return panic_at(src, j, ("expected expression near '" + stringSlice(src, j, end)) + "'");
+return panic_at(src, j, "expected expression near '" + stringSlice(src, j, end) + "'");
 }
 export function parse_struct_lit_values_ast(src, i) {
 let k = skip_ws(src, i);
 k = parse_keyword(src, k, "{");
 k = skip_ws(src, k);
 const items = vec_new();
-if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 125)) {
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 125) {
 return ParsedExprListAst(items, k + 1);
 }
 while (true) {
@@ -970,7 +970,7 @@ const start = k;
 if (starts_with_at(src, k, "yield")) {
 k = parse_keyword(src, k, "yield");
 k = skip_ws(src, k);
-if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 59)) {
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 59) {
 return ParsedStmtAst(stmt_yield(span(start, k + 1), expr_undefined(span(k, k))), k + 1);
 }
 const e = parse_expr_ast(src, k);
@@ -988,7 +988,7 @@ warn_short_identifier(src, name.startPos, name.text);
 }
 let tyAnn = "";
 const t0 = skip_ws(src, k);
-if ((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 58)) {
+if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 58) {
 const _ty = parse_type_expr(src, t0 + 1);
 tyAnn = _ty.v0;
 k = _ty.v1;
@@ -1040,7 +1040,7 @@ k = base.nextPos;
 const fields = vec_new();
 while (true) {
 const t = skip_ws(src, k);
-if (!((t < stringLen(src)) && (stringCharCodeAt(src, t) == 46))) {
+if (!(t < stringLen(src) && stringCharCodeAt(src, t) == 46)) {
 break;
 }
 k = parse_keyword(src, k, ".");
@@ -1071,7 +1071,7 @@ return ParsedStmtAst(stmt_expr(span(start, k), e.expr), k);
 }
 export function parse_main_body_ast(src, i) {
 const j = skip_ws(src, i);
-if ((j < stringLen(src)) && (stringCharCodeAt(src, j) == 123)) {
+if (j < stringLen(src) && stringCharCodeAt(src, j) == 123) {
 const b = parse_block_body_ast(src, i);
 return b;
 }
@@ -1083,12 +1083,12 @@ let left = parse_and(src, i);
 let j = left.v1;
 while (true) {
 j = skip_ws(src, j);
-if (!((j + 1) < stringLen(src))) {
+if (!(j + 1 < stringLen(src))) {
 break;
 }
-if ((stringCharCodeAt(src, j) == 124) && (stringCharCodeAt(src, j + 1) == 124)) {
+if (stringCharCodeAt(src, j) == 124 && stringCharCodeAt(src, j + 1) == 124) {
 const rhs = parse_and(src, j + 2);
-left = ParsedExpr(((("(" + left.v0) + " || ") + rhs.v0) + ")", rhs.v1);
+left = ParsedExpr("(" + left.v0 + " || " + rhs.v0 + ")", rhs.v1);
 j = left.v1;
 continue;
 }
@@ -1101,12 +1101,12 @@ let left = parse_cmp(src, i);
 let j = left.v1;
 while (true) {
 j = skip_ws(src, j);
-if (!((j + 1) < stringLen(src))) {
+if (!(j + 1 < stringLen(src))) {
 break;
 }
-if ((stringCharCodeAt(src, j) == 38) && (stringCharCodeAt(src, j + 1) == 38)) {
+if (stringCharCodeAt(src, j) == 38 && stringCharCodeAt(src, j + 1) == 38) {
 const rhs = parse_cmp(src, j + 2);
-left = ParsedExpr(((("(" + left.v0) + " && ") + rhs.v0) + ")", rhs.v1);
+left = ParsedExpr("(" + left.v0 + " && " + rhs.v0 + ")", rhs.v1);
 j = left.v1;
 continue;
 }
@@ -1123,30 +1123,30 @@ if (!(j < stringLen(src))) {
 break;
 }
 const c0 = stringCharCodeAt(src, j);
-const c1 = ((j + 1) < stringLen(src) ? stringCharCodeAt(src, j + 1) : 0);
+const c1 = (j + 1 < stringLen(src) ? stringCharCodeAt(src, j + 1) : 0);
 let op = "";
 let adv = 0;
-if ((c0 == 61) && (c1 == 61)) {
+if (c0 == 61 && c1 == 61) {
 op = "==";
 adv = 2;
 }
-if (((op == "") && (c0 == 33)) && (c1 == 61)) {
+if (op == "" && c0 == 33 && c1 == 61) {
 op = "!=";
 adv = 2;
 }
-if (((op == "") && (c0 == 60)) && (c1 == 61)) {
+if (op == "" && c0 == 60 && c1 == 61) {
 op = "<=";
 adv = 2;
 }
-if (((op == "") && (c0 == 62)) && (c1 == 61)) {
+if (op == "" && c0 == 62 && c1 == 61) {
 op = ">=";
 adv = 2;
 }
-if ((op == "") && (c0 == 60)) {
+if (op == "" && c0 == 60) {
 op = "<";
 adv = 1;
 }
-if ((op == "") && (c0 == 62)) {
+if (op == "" && c0 == 62) {
 op = ">";
 adv = 1;
 }
@@ -1154,7 +1154,7 @@ if (op == "") {
 break;
 }
 const rhs = parse_add(src, j + adv);
-left = ParsedExpr(((((("(" + left.v0) + " ") + op) + " ") + rhs.v0) + ")", rhs.v1);
+left = ParsedExpr("(" + left.v0 + " " + op + " " + rhs.v0 + ")", rhs.v1);
 j = left.v1;
 }
 return left;
@@ -1168,12 +1168,12 @@ if (!(j < stringLen(src))) {
 break;
 }
 const op = stringCharCodeAt(src, j);
-if (!((op == 43) || (op == 45))) {
+if (!(op == 43 || op == 45)) {
 break;
 }
 const rhs = parse_mul(src, j + 1);
 const opStr = (op == 43 ? "+" : "-");
-left = ParsedExpr(((((("(" + left.v0) + " ") + opStr) + " ") + rhs.v0) + ")", rhs.v1);
+left = ParsedExpr("(" + left.v0 + " " + opStr + " " + rhs.v0 + ")", rhs.v1);
 j = left.v1;
 }
 return left;
@@ -1187,25 +1187,25 @@ if (!(j < stringLen(src))) {
 break;
 }
 const op = stringCharCodeAt(src, j);
-if (!((op == 42) || (op == 47))) {
+if (!(op == 42 || op == 47)) {
 break;
 }
 const rhs = parse_unary(src, j + 1);
 const opStr = (op == 42 ? "*" : "/");
-left = ParsedExpr(((((("(" + left.v0) + " ") + opStr) + " ") + rhs.v0) + ")", rhs.v1);
+left = ParsedExpr("(" + left.v0 + " " + opStr + " " + rhs.v0 + ")", rhs.v1);
 j = left.v1;
 }
 return left;
 }
 export function parse_unary(src, i) {
 const j = skip_ws(src, i);
-if ((j < stringLen(src)) && (stringCharCodeAt(src, j) == 33)) {
+if (j < stringLen(src) && stringCharCodeAt(src, j) == 33) {
 const inner = parse_unary(src, j + 1);
-return ParsedExpr(("(!" + inner.v0) + ")", inner.v1);
+return ParsedExpr("(!" + inner.v0 + ")", inner.v1);
 }
-if ((j < stringLen(src)) && (stringCharCodeAt(src, j) == 45)) {
+if (j < stringLen(src) && stringCharCodeAt(src, j) == 45) {
 const inner = parse_unary(src, j + 1);
-return ParsedExpr(("(-" + inner.v0) + ")", inner.v1);
+return ParsedExpr("(-" + inner.v0 + ")", inner.v1);
 }
 return parse_postfix(src, i);
 }
@@ -1214,41 +1214,41 @@ let left = parse_primary(src, i);
 let j = left.v1;
 while (true) {
 j = skip_ws(src, j);
-if ((j < stringLen(src)) && (stringCharCodeAt(src, j) == 60)) {
+if (j < stringLen(src) && stringCharCodeAt(src, j) == 60) {
 const skipped = try_skip_type_args_for_call(src, j);
 if (skipped.ok) {
 j = skipped.nextPos;
 continue;
 }
 }
-if ((j < stringLen(src)) && (stringCharCodeAt(src, j) == 40)) {
+if (j < stringLen(src) && stringCharCodeAt(src, j) == 40) {
 const args = parse_arg_list(src, j);
-left = ParsedExpr(((left.v0 + "(") + args.v0) + ")", args.v1);
+left = ParsedExpr(left.v0 + "(" + args.v0 + ")", args.v1);
 j = left.v1;
 continue;
 }
-if ((j < stringLen(src)) && (stringCharCodeAt(src, j) == 46)) {
+if (j < stringLen(src) && stringCharCodeAt(src, j) == 46) {
 const t = skip_ws(src, j + 1);
-if ((t < stringLen(src)) && is_digit(stringCharCodeAt(src, t))) {
+if (t < stringLen(src) && is_digit(stringCharCodeAt(src, t))) {
 const n = parse_number(src, t);
-left = ParsedExpr(((left.v0 + "[") + ("" + n.value)) + "]", n.nextPos);
+left = ParsedExpr(left.v0 + "[" + ("" + n.value) + "]", n.nextPos);
 j = left.v1;
 continue;
 }
 const next = parse_ident(src, j + 1);
-left = ParsedExpr((left.v0 + ".") + next.text, next.nextPos);
+left = ParsedExpr(left.v0 + "." + next.text, next.nextPos);
 j = left.v1;
 continue;
 }
-if ((j < stringLen(src)) && (stringCharCodeAt(src, j) == 91)) {
+if (j < stringLen(src) && stringCharCodeAt(src, j) == 91) {
 let k = parse_keyword(src, j, "[");
 const idx = parse_expr(src, k);
 k = idx.v1;
 k = skip_ws(src, k);
-if (!((k < stringLen(src)) && (stringCharCodeAt(src, k) == 93))) {
+if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 93)) {
 panic("expected ']' ");
 }
-left = ParsedExpr(((("vec_get(" + left.v0) + ", ") + idx.v0) + ")", k + 1);
+left = ParsedExpr("vec_get(" + left.v0 + ", " + idx.v0 + ")", k + 1);
 j = left.v1;
 continue;
 }
@@ -1258,7 +1258,7 @@ return left;
 }
 export function try_skip_type_args_for_call(src, i) {
 let k = skip_ws(src, i);
-if (!((k < stringLen(src)) && (stringCharCodeAt(src, k) == 60))) {
+if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 60)) {
 return ParsedBool(false, i);
 }
 let p = k + 1;
@@ -1275,7 +1275,7 @@ depth = depth - 1;
 p = p + 1;
 if (depth == 0) {
 const after = skip_ws(src, p);
-if ((after < stringLen(src)) && (stringCharCodeAt(src, after) == 40)) {
+if (after < stringLen(src) && stringCharCodeAt(src, after) == 40) {
 return ParsedBool(true, p);
 }
 return ParsedBool(false, i);
@@ -1290,7 +1290,7 @@ export function parse_arg_list(src, i) {
 let k = skip_ws(src, i);
 k = parse_keyword(src, k, "(");
 k = skip_ws(src, k);
-if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 41)) {
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) {
 return ParsedParams("", k + 1);
 }
 let out = "";
@@ -1301,7 +1301,7 @@ k = e.v1;
 if (first) {
 out = out + e.v0;
 } else {
-out = (out + ", ") + e.v0;
+out = out + ", " + e.v0;
 }
 first = false;
 k = skip_ws(src, k);
@@ -1344,9 +1344,9 @@ const e = parse_expr(src, k);
 k = e.v1;
 const fieldName = vec_get(fields, idx);
 if (idx == 0) {
-out = out + ((fieldName + ": ") + e.v0);
+out = out + (fieldName + ": " + e.v0);
 } else {
-out = out + (((", " + fieldName) + ": ") + e.v0);
+out = out + (", " + fieldName + ": " + e.v0);
 }
 idx = idx + 1;
 k = skip_ws(src, k);
@@ -1450,19 +1450,19 @@ panic_at(src, start, "unterminated string");
 if (c == 40) {
 const first = parse_expr(src, j + 1);
 let k = skip_ws(src, first.v1);
-if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 41)) {
-return ParsedExpr(("(" + first.v0) + ")", k + 1);
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) {
+return ParsedExpr("(" + first.v0 + ")", k + 1);
 }
-if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 44)) {
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 44) {
 let out = "[" + first.v0;
 while (true) {
 k = k + 1;
 k = skip_ws(src, k);
-if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 41)) {
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) {
 return ParsedExpr(out + "]", k + 1);
 }
 const e = parse_expr(src, k);
-out = (out + ", ") + e.v0;
+out = out + ", " + e.v0;
 k = skip_ws(src, e.v1);
 if (!(k < stringLen(src))) {
 panic_at(src, k, "expected ')' in tuple literal");
@@ -1489,18 +1489,18 @@ let k = id.nextPos;
 let out = id.text;
 while (true) {
 const t = skip_ws(src, k);
-if (!((t + 1) < stringLen(src))) {
+if (!(t + 1 < stringLen(src))) {
 break;
 }
-if (!((stringCharCodeAt(src, t) == 58) && (stringCharCodeAt(src, t + 1) == 58))) {
+if (!(stringCharCodeAt(src, t) == 58 && stringCharCodeAt(src, t + 1) == 58)) {
 break;
 }
 const next = parse_ident(src, t + 2);
-out = (out + ".") + next.text;
+out = out + "." + next.text;
 k = next.nextPos;
 }
 const t2 = skip_ws(src, k);
-if ((t2 < stringLen(src)) && (stringCharCodeAt(src, t2) == 123)) {
+if (t2 < stringLen(src) && stringCharCodeAt(src, t2) == 123) {
 const lit = parse_struct_lit(src, out, t2);
 return lit;
 }
@@ -1510,19 +1510,19 @@ let end = j + 32;
 if (end > stringLen(src)) {
 end = stringLen(src);
 }
-return panic_at(src, j, ("expected expression near '" + stringSlice(src, j, end)) + "'");
+return panic_at(src, j, "expected expression near '" + stringSlice(src, j, end) + "'");
 }
 export function parse_vec_lit(src, i) {
 let k = parse_keyword(src, i, "[");
 k = skip_ws(src, k);
-if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 93)) {
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 93) {
 return ParsedExpr("(() => { const __v = vec_new(); return __v; })()", k + 1);
 }
 let pushes = "";
 while (true) {
 const e = parse_expr(src, k);
 k = e.v1;
-pushes = pushes + (("vec_push(__v, " + e.v0) + ");\n");
+pushes = pushes + ("vec_push(__v, " + e.v0 + ");\n");
 k = skip_ws(src, k);
 if (!(k < stringLen(src))) {
 panic_at(src, k, "expected ']' in vec literal");
@@ -1533,7 +1533,7 @@ k = k + 1;
 continue;
 }
 if (ch == 93) {
-return ParsedExpr(("(() => { const __v = vec_new();\n" + pushes) + "return __v;\n})()", k + 1);
+return ParsedExpr("(() => { const __v = vec_new();\n" + pushes + "return __v;\n})()", k + 1);
 }
 panic_at(src, k, "expected ',' or ']' in vec literal");
 }
@@ -1541,7 +1541,7 @@ return ParsedExpr("None", k);
 }
 export function parse_block_body(src, i) {
 const j = skip_ws(src, i);
-if (!((j < stringLen(src)) && (stringCharCodeAt(src, j) == 123))) {
+if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 123)) {
 panic_at(src, j, "expected '{'");
 }
 let k = j + 1;
@@ -1554,7 +1554,7 @@ panic_at(src, t, "expected '}'");
 if (stringCharCodeAt(src, t) == 125) {
 break;
 }
-const isStmt = (((((starts_with_at(src, t, "let") || starts_with_at(src, t, "while")) || starts_with_at(src, t, "if")) || starts_with_at(src, t, "yield")) || is_field_assign_stmt_start(src, t)) || is_assign_stmt_start(src, t)) || is_index_assign_stmt_start(src, t);
+const isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") || starts_with_at(src, t, "yield") || is_field_assign_stmt_start(src, t) || is_assign_stmt_start(src, t) || is_index_assign_stmt_start(src, t);
 if (isStmt) {
 const st = parse_stmt(src, k);
 body = body + st.v0;
@@ -1563,12 +1563,12 @@ continue;
 }
 const e = parse_expr(src, k);
 const after = skip_ws(src, e.v1);
-if ((after < stringLen(src)) && (stringCharCodeAt(src, after) == 59)) {
+if (after < stringLen(src) && stringCharCodeAt(src, after) == 59) {
 body = body + (e.v0 + ";\n");
 k = after + 1;
 continue;
 }
-if ((after < stringLen(src)) && (stringCharCodeAt(src, after) != 125)) {
+if (after < stringLen(src) && stringCharCodeAt(src, after) != 125) {
 body = body + (e.v0 + ";\n");
 k = e.v1;
 continue;
@@ -1576,19 +1576,19 @@ continue;
 break;
 }
 const t2 = skip_ws(src, k);
-if ((t2 < stringLen(src)) && (stringCharCodeAt(src, t2) == 125)) {
+if (t2 < stringLen(src) && stringCharCodeAt(src, t2) == 125) {
 return ParsedMain(body, "undefined", t2 + 1);
 }
 const tail = parse_expr(src, k);
 k = skip_ws(src, tail.v1);
-if (!((k < stringLen(src)) && (stringCharCodeAt(src, k) == 125))) {
+if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 125)) {
 panic_at(src, k, "expected '}'");
 }
 return ParsedMain(body, tail.v0, k + 1);
 }
 export function parse_block_expr(src, i) {
 const b = parse_block_body(src, i);
-return ParsedExpr(((("(() => {\n" + b.body) + "return ") + b.expr) + ";\n})()", b.v1);
+return ParsedExpr("(() => {\n" + b.body + "return " + b.expr + ";\n})()", b.v1);
 }
 export function parse_if_expr(src, i) {
 let k = parse_keyword(src, i, "if");
@@ -1597,12 +1597,12 @@ const cond = parse_expr(src, k);
 k = cond.v1;
 k = parse_keyword(src, k, ")");
 const t1 = skip_ws(src, k);
-const thenE = ((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 123) ? parse_block_expr(src, k) : parse_expr(src, k));
+const thenE = (t1 < stringLen(src) && stringCharCodeAt(src, t1) == 123 ? parse_block_expr(src, k) : parse_expr(src, k));
 k = thenE.v1;
 k = parse_keyword(src, k, "else");
 const t2 = skip_ws(src, k);
-const elseE = ((t2 < stringLen(src)) && (stringCharCodeAt(src, t2) == 123) ? parse_block_expr(src, k) : parse_expr(src, k));
-return ParsedExpr(((((("(" + cond.v0) + " ? ") + thenE.v0) + " : ") + elseE.v0) + ")", elseE.v1);
+const elseE = (t2 < stringLen(src) && stringCharCodeAt(src, t2) == 123 ? parse_block_expr(src, k) : parse_expr(src, k));
+return ParsedExpr("(" + cond.v0 + " ? " + thenE.v0 + " : " + elseE.v0 + ")", elseE.v1);
 }
 export function parse_match_expr(src, i) {
 let k = parse_keyword(src, i, "match");
@@ -1641,20 +1641,20 @@ k = id.nextPos;
 }
 k = parse_keyword(src, k, "=>");
 const t = skip_ws(src, k);
-const arm = ((t < stringLen(src)) && (stringCharCodeAt(src, t) == 123) ? parse_block_expr(src, k) : parse_expr(src, k));
+const arm = (t < stringLen(src) && stringCharCodeAt(src, t) == 123 ? parse_block_expr(src, k) : parse_expr(src, k));
 k = arm.v1;
-if (!(((((pat == "_") || (pat == "true")) || (pat == "false")) || is_digit(stringCharCodeAt(pat, 0))) || ((stringLen(pat) > 0) && (stringCharCodeAt(pat, 0) == 34)))) {
+if (!(pat == "_" || pat == "true" || pat == "false" || is_digit(stringCharCodeAt(pat, 0)) || stringLen(pat) > 0 && stringCharCodeAt(pat, 0) == 34)) {
 panic_at(src, k, "unsupported match pattern: " + pat);
 }
 if (pat == "_") {
 def = arm.v0;
 } else {
-cases = cases + (((("case " + pat) + ": return ") + arm.v0) + ";\n");
+cases = cases + ("case " + pat + ": return " + arm.v0 + ";\n");
 }
 k = skip_ws(src, k);
 if (k < stringLen(src)) {
 const ch = stringCharCodeAt(src, k);
-if ((ch == 44) || (ch == 59)) {
+if (ch == 44 || ch == 59) {
 k = k + 1;
 }
 }
@@ -1662,12 +1662,12 @@ k = k + 1;
 if (def == "") {
 panic_at(src, k, "match requires _ arm");
 }
-return ParsedExpr(((((("(() => { switch (" + scrut.v0) + ") {\n") + cases) + "default: return ") + def) + ";\n} })()", k);
+return ParsedExpr("(() => { switch (" + scrut.v0 + ") {\n" + cases + "default: return " + def + ";\n} })()", k);
 }
 export function parse_mut_opt(src, i) {
 const j = skip_ws(src, i);
 if (starts_with_at(src, j, "mut")) {
-if ((j + 3) < stringLen(src)) {
+if (j + 3 < stringLen(src)) {
 const n = stringCharCodeAt(src, j + 3);
 if (is_ident_part(n)) {
 return ParsedBool(false, i);
@@ -1679,7 +1679,7 @@ return ParsedBool(false, i);
 }
 export function parse_stmt_block(src, i) {
 let k = skip_ws(src, i);
-if (!((k < stringLen(src)) && (stringCharCodeAt(src, k) == 123))) {
+if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 123)) {
 panic_at(src, k, "expected '{'");
 }
 k = k + 1;
@@ -1703,13 +1703,13 @@ let k = skip_ws(src, i);
 if (starts_with_at(src, k, "yield")) {
 k = parse_keyword(src, k, "yield");
 k = skip_ws(src, k);
-if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 59)) {
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 59) {
 return ParsedStmt("return;\n", k + 1);
 }
 const e = parse_expr(src, k);
 k = e.v1;
 k = parse_optional_semicolon(src, k);
-return ParsedStmt(("return " + e.v0) + ";\n", k);
+return ParsedStmt("return " + e.v0 + ";\n", k);
 }
 if (starts_with_at(src, k, "let")) {
 k = parse_keyword(src, k, "let");
@@ -1721,7 +1721,7 @@ if (is_identifier_too_short(name.text)) {
 warn_short_identifier(src, name.startPos, name.text);
 }
 const t0 = skip_ws(src, k);
-if ((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 58)) {
+if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 58) {
 const _ty = parse_type_expr(src, t0 + 1);
 k = _ty.v1;
 }
@@ -1730,7 +1730,7 @@ const expr = parse_expr(src, k);
 k = expr.v1;
 k = parse_optional_semicolon(src, k);
 const declKw = (mutOpt.ok ? "let" : "const");
-return ParsedStmt(((((declKw + " ") + name.text) + " = ") + expr.v0) + ";\n", k);
+return ParsedStmt(declKw + " " + name.text + " = " + expr.v0 + ";\n", k);
 }
 if (starts_with_at(src, k, "while")) {
 k = parse_keyword(src, k, "while");
@@ -1741,7 +1741,7 @@ k = parse_keyword(src, k, ")");
 const body = parse_stmt_block(src, k);
 k = body.v1;
 k = parse_optional_semicolon(src, k);
-return ParsedStmt(((("while (" + cond.v0) + ") {\n") + body.v0) + "}\n", k);
+return ParsedStmt("while (" + cond.v0 + ") {\n" + body.v0 + "}\n", k);
 }
 if (starts_with_at(src, k, "if")) {
 k = parse_keyword(src, k, "if");
@@ -1757,10 +1757,10 @@ k = parse_keyword(src, k, "else");
 const elseB = parse_stmt_block(src, k);
 k = elseB.v1;
 k = parse_optional_semicolon(src, k);
-return ParsedStmt(((((("if (" + cond.v0) + ") {\n") + thenB.v0) + "} else {\n") + elseB.v0) + "}\n", k);
+return ParsedStmt("if (" + cond.v0 + ") {\n" + thenB.v0 + "} else {\n" + elseB.v0 + "}\n", k);
 }
 k = parse_optional_semicolon(src, k);
-return ParsedStmt(((("if (" + cond.v0) + ") {\n") + thenB.v0) + "}\n", k);
+return ParsedStmt("if (" + cond.v0 + ") {\n" + thenB.v0 + "}\n", k);
 }
 if (is_assign_stmt_start(src, k)) {
 const name = parse_ident(src, k);
@@ -1772,7 +1772,7 @@ k = parse_keyword(src, k, "=");
 const expr = parse_expr(src, k);
 k = expr.v1;
 k = parse_optional_semicolon(src, k);
-return ParsedStmt(((name.text + " = ") + expr.v0) + ";\n", k);
+return ParsedStmt(name.text + " = " + expr.v0 + ";\n", k);
 }
 if (is_field_assign_stmt_start(src, k)) {
 const base = parse_ident(src, k);
@@ -1780,19 +1780,19 @@ k = base.nextPos;
 let lhs = base.text;
 while (true) {
 const t = skip_ws(src, k);
-if (!((t < stringLen(src)) && (stringCharCodeAt(src, t) == 46))) {
+if (!(t < stringLen(src) && stringCharCodeAt(src, t) == 46)) {
 break;
 }
 k = parse_keyword(src, k, ".");
 const part = parse_ident(src, k);
-lhs = (lhs + ".") + part.text;
+lhs = lhs + "." + part.text;
 k = part.nextPos;
 }
 k = parse_keyword(src, k, "=");
 const expr = parse_expr(src, k);
 k = expr.v1;
 k = parse_optional_semicolon(src, k);
-return ParsedStmt(((lhs + " = ") + expr.v0) + ";\n", k);
+return ParsedStmt(lhs + " = " + expr.v0 + ";\n", k);
 }
 if (is_index_assign_stmt_start(src, k)) {
 const name = parse_ident(src, k);
@@ -1805,7 +1805,7 @@ k = parse_keyword(src, k, "=");
 const val = parse_expr(src, k);
 k = val.v1;
 k = parse_optional_semicolon(src, k);
-return ParsedStmt(((((("vec_set(" + name.text) + ", ") + idx.v0) + ", ") + val.v0) + ");\n", k);
+return ParsedStmt("vec_set(" + name.text + ", " + idx.v0 + ", " + val.v0 + ");\n", k);
 }
 const e = parse_expr(src, k);
 k = e.v1;
@@ -1819,24 +1819,24 @@ if (!(j < stringLen(src))) {
 return false;
 }
 const c0 = stringCharCodeAt(src, j);
-if (!(is_ident_start(c0))) {
+if (!is_ident_start(c0)) {
 return false;
 }
 j = j + 1;
 while (j < stringLen(src)) {
 const c = stringCharCodeAt(src, j);
-if (!(is_ident_part(c))) {
+if (!is_ident_part(c)) {
 break;
 }
 j = j + 1;
 }
 j = skip_ws(src, j);
-if (!((j < stringLen(src)) && (stringCharCodeAt(src, j) == 91))) {
+if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 91)) {
 return false;
 }
 let k = j + 1;
 let depth = 1;
-while ((k < stringLen(src)) && (depth > 0)) {
+while (k < stringLen(src) && depth > 0) {
 const ch = stringCharCodeAt(src, k);
 if (ch == 34) {
 k = k + 1;
@@ -1886,12 +1886,12 @@ if (depth != 0) {
 return false;
 }
 k = skip_ws(src, k);
-if (!((k < stringLen(src)) && (stringCharCodeAt(src, k) == 61))) {
+if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 61)) {
 return false;
 }
-if ((k + 1) < stringLen(src)) {
+if (k + 1 < stringLen(src)) {
 const n = stringCharCodeAt(src, k + 1);
-if ((n == 61) || (n == 62)) {
+if (n == 61 || n == 62) {
 return false;
 }
 }
@@ -1903,24 +1903,24 @@ if (!(j < stringLen(src))) {
 return false;
 }
 const c0 = stringCharCodeAt(src, j);
-if (!(is_ident_start(c0))) {
+if (!is_ident_start(c0)) {
 return false;
 }
 j = j + 1;
 while (j < stringLen(src)) {
 const c = stringCharCodeAt(src, j);
-if (!(is_ident_part(c))) {
+if (!is_ident_part(c)) {
 break;
 }
 j = j + 1;
 }
 j = skip_ws(src, j);
-if (!((j < stringLen(src)) && (stringCharCodeAt(src, j) == 61))) {
+if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 61)) {
 return false;
 }
-if ((j + 1) < stringLen(src)) {
+if (j + 1 < stringLen(src)) {
 const n = stringCharCodeAt(src, j + 1);
-if ((n == 61) || (n == 62)) {
+if (n == 61 || n == 62) {
 return false;
 }
 }
@@ -1932,47 +1932,47 @@ if (!(j < stringLen(src))) {
 return false;
 }
 const c0 = stringCharCodeAt(src, j);
-if (!(is_ident_start(c0))) {
+if (!is_ident_start(c0)) {
 return false;
 }
 j = j + 1;
 while (j < stringLen(src)) {
 const c = stringCharCodeAt(src, j);
-if (!(is_ident_part(c))) {
+if (!is_ident_part(c)) {
 break;
 }
 j = j + 1;
 }
 j = skip_ws(src, j);
-if (!((j < stringLen(src)) && (stringCharCodeAt(src, j) == 46))) {
+if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 46)) {
 return false;
 }
-while ((j < stringLen(src)) && (stringCharCodeAt(src, j) == 46)) {
+while (j < stringLen(src) && stringCharCodeAt(src, j) == 46) {
 j = j + 1;
 j = skip_ws(src, j);
 if (!(j < stringLen(src))) {
 return false;
 }
 const c1 = stringCharCodeAt(src, j);
-if (!(is_ident_start(c1))) {
+if (!is_ident_start(c1)) {
 return false;
 }
 j = j + 1;
 while (j < stringLen(src)) {
 const c = stringCharCodeAt(src, j);
-if (!(is_ident_part(c))) {
+if (!is_ident_part(c)) {
 break;
 }
 j = j + 1;
 }
 j = skip_ws(src, j);
 }
-if (!((j < stringLen(src)) && (stringCharCodeAt(src, j) == 61))) {
+if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 61)) {
 return false;
 }
-if ((j + 1) < stringLen(src)) {
+if (j + 1 < stringLen(src)) {
 const n = stringCharCodeAt(src, j + 1);
-if ((n == 61) || (n == 62)) {
+if (n == 61 || n == 62) {
 return false;
 }
 }
@@ -1980,7 +1980,7 @@ return true;
 }
 export function parse_main_body(src, i) {
 const j = skip_ws(src, i);
-if ((j < stringLen(src)) && (stringCharCodeAt(src, j) == 123)) {
+if (j < stringLen(src) && stringCharCodeAt(src, j) == 123) {
 const b = parse_block_body(src, i);
 return ParsedMain(b.body, b.expr, b.v1);
 }

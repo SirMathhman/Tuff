@@ -336,6 +336,26 @@ fn emit_unop_js(op) : String => {
   out
 }
 
+// JS precedence (subset) for minimal parenthesization.
+// Higher number = binds tighter.
+fn binop_prec_js(op) : I32 => {
+  if (op.tag == "OpMul") { yield 14; }
+  if (op.tag == "OpAdd" || op.tag == "OpSub") { yield 13; }
+  if (op.tag == "OpLt" || op.tag == "OpLe" || op.tag == "OpGt" || op.tag == "OpGe") { yield 11; }
+  if (op.tag == "OpEq" || op.tag == "OpNe") { yield 10; }
+  if (op.tag == "OpAnd") { yield 6; }
+  if (op.tag == "OpOr") { yield 5; }
+  0
+}
+
+fn expr_prec_js(e) : I32 => {
+  if (e.tag == "EIf") { yield 4; }
+  if (e.tag == "EBinary") { yield binop_prec_js(e.op); }
+  if (e.tag == "EUnary") { yield 17; }
+  // Calls/field/index and primaries bind tight enough for our needs.
+  20
+}
+
 fn needs_parens_binop_child(childTag: String) : Bool => {
   childTag == "EBinary"
 }
@@ -419,16 +439,20 @@ fn emit_expr_js(e) : String => {
 
   if (e.tag == "EUnary") {
     let inner = emit_expr_js(e.expr);
-    // Always parenthesize the operand to avoid JS precedence pitfalls.
-    // Example: `!(a < b)` must emit as `!((a < b))`, not `(!(a) < b)`.
-    out = emit_unop_js(e.op) + "(" + inner + ")";
+    // Parenthesize only when the operand binds looser than unary.
+    // Example: `!(a < b)` must emit as `!(a < b)`, not `!a < b`.
+    let innerStr = if (expr_prec_js(e.expr) < 17) "(" + inner + ")" else inner;
+    out = emit_unop_js(e.op) + innerStr;
   }
 
   if (e.tag == "EBinary") {
     let left = emit_expr_js(e.left);
     let right = emit_expr_js(e.right);
-    let leftStr = if (needs_parens_binop_child(e.left.tag)) "(" + left + ")" else left;
-    let rightStr = if (needs_parens_binop_child(e.right.tag)) "(" + right + ")" else right;
+    let curPrec = binop_prec_js(e.op);
+    let leftStr = if (expr_prec_js(e.left) < curPrec) "(" + left + ")" else left;
+    // For left-associative ops, we parenthesize RHS when it binds looser OR equally,
+    // preserving explicit grouping like `a - (b - c)`.
+    let rightStr = if (expr_prec_js(e.right) <= curPrec) "(" + right + ")" else right;
     out = leftStr + " " + emit_binop_js(e.op) + " " + rightStr;
   }
 
@@ -690,19 +714,48 @@ fn emit_decl_js(d, exportAll: Bool) : String => {
   }
 
   if (d.tag == "DClassFn") {
-    // Current behavior: `class fn` becomes a function returning an object of params.
-    // We ignore the AST tail and always return { p: p, ... }.
+    // `class fn` becomes a function returning an object of scope fields.
+    // In this bootstrap subset, we approximate `this` by returning all params
+    // plus any `let` bindings declared in the body (in source order).
     let exportThis = exportAll || d.name == "main";
     let exportKw = if (exportThis) "export " else "";
     let params = emit_names_csv(d.params);
-    let mut fields = "";
+
+    let fieldNames = vec_new();
     let mut i = 0;
     while (i < vec_len(d.params)) {
+      vec_push(fieldNames, vec_get(d.params, i));
+      i = i + 1;
+    }
+
+    i = 0;
+    while (i < vec_len(d.body)) {
+      let s = vec_get(d.body, i);
+      if (s.tag == "SLet") {
+        let mut found = false;
+        let mut j = 0;
+        while (j < vec_len(fieldNames)) {
+          if (vec_get(fieldNames, j) == s.name) {
+            found = true;
+            j = vec_len(fieldNames);
+          } else {
+            j = j + 1;
+          }
+        }
+        if (!found) { vec_push(fieldNames, s.name); }
+      }
+      i = i + 1;
+    }
+
+    let mut fields = "";
+    i = 0;
+    while (i < vec_len(fieldNames)) {
       if (i > 0) { fields = fields + ", "; }
-      let p = vec_get(d.params, i);
+      let p = vec_get(fieldNames, i);
       fields = fields + (p + ": " + p);
       i = i + 1;
     }
+
     out = exportKw + "function " + d.name + "(" + params + ") {\n" + emit_stmts_js(d.body) + "return { " + fields + " };\n}\n";
   }
 

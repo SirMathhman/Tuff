@@ -1,0 +1,19 @@
+from std::test use { reset, suite, it, expect_eq, summary, status };
+
+// Regression: `class fn` should return an object that includes locals declared
+// in its body (not just parameters).
+
+class fn Point(x: I32, y: I32) => {
+  let sum: I32 = x + y;
+}
+
+fn main() : I32 => {
+  reset();
+  suite("class fn captures locals");
+
+  let p = Point(3, 4);
+  it("includes local let fields", expect_eq("sum", p.sum, 7));
+
+  summary();
+  status()
+}
