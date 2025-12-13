@@ -161,13 +161,13 @@ The language design supports a rich type system, but the **current self-hosted b
 
 - Type annotations are parsed and preserved in the compiler's canonical AST.
 - The analyzer enforces type compatibility when it is safe to do so:
-    - Primitives (currently): `Bool`, `I32`, `U32`, `Char`, `String`, `Void`
+  - Primitives (currently): `Bool`, `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32`, `U64`, `F32`, `F64`, `Char`, `String`, `Void`
   - User-declared `struct` types (field existence and (when annotated) field value types in struct literals)
 - Function call checking:
   - Arity is always checked for known functions.
   - Argument types and return types are checked **only when** the signature annotations are in the enforceable subset above.
-- The analyzer also performs a small amount of **operand validation** for arithmetic operators to reject obvious mistakes (e.g. `"nope" * 2`).
-- Complex source-level types (e.g. unions/aliases like `TypeRef`, generics, and most numeric widths) are not fully modeled yet, so the analyzer deliberately avoids enforcing those to keep self-hosting stable.
+- The analyzer also performs a small amount of **operand validation** for arithmetic operators to reject obvious mistakes (e.g. `"nope" * 2`, `"nope" * 2.0`).
+- Complex source-level types (e.g. unions/aliases like `TypeRef` and generics) are not fully modeled yet, so the analyzer deliberately avoids enforcing those to keep self-hosting stable.
 
 This is an implementation-status note, not a change to the language design.
 

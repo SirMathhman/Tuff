@@ -75,6 +75,7 @@ struct TyApp {
 type Expr =
   EUndefined
   | EInt
+  | EFloat
   | EBool
   | EString
   | EPath
@@ -101,6 +102,16 @@ struct EInt {
   tag: String,
   span: Span,
   value: I32
+}
+
+// Float literal.
+//
+// Stored as source text to avoid requiring numeric parsing in the bootstrap
+// compiler. Emitters can print this text directly as a JS number literal.
+struct EFloat {
+  tag: String,
+  span: Span,
+  text: String
 }
 
 struct EBool {
@@ -466,6 +477,7 @@ fn ty_app(span: Span, callee: String, args: Vec<TypeRef>) : TypeRef => TyApp { "
 fn expr_undefined(span: Span) : Expr => EUndefined { "EUndefined", span }
 
 fn expr_int(span: Span, value: I32) : Expr => EInt { "EInt", span, value }
+fn expr_float(span: Span, text: String) : Expr => EFloat { "EFloat", span, text }
 fn expr_bool(span: Span, value: Bool) : Expr => EBool { "EBool", span, value }
 fn expr_string(span: Span, value: String) : Expr => EString { "EString", span, value }
 fn expr_ident(span: Span, name: String) : Expr => EIdent { "EIdent", span, name }

@@ -208,6 +208,9 @@ out = "undefined";
 if ((e.tag == "EInt")) {
 out = ("" + e.value);
 }
+if ((e.tag == "EFloat")) {
+out = e.text;
+}
 if ((e.tag == "EBool")) {
 if (e.value) {
 out = "true";

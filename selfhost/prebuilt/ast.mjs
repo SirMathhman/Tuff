@@ -19,6 +19,7 @@ export const TyFn = { tag: "TyFn" };
 export const TyApp = { tag: "TyApp" };
 export const EUndefined = { tag: "EUndefined" };
 export const EInt = { tag: "EInt" };
+export const EFloat = { tag: "EFloat" };
 export const EBool = { tag: "EBool" };
 export const EString = { tag: "EString" };
 export const EPath = { tag: "EPath" };
@@ -110,6 +111,9 @@ return ({ tag: "EUndefined", span: span });
 }
 export function expr_int(span, value) {
 return ({ tag: "EInt", span: span, value: value });
+}
+export function expr_float(span, text) {
+return ({ tag: "EFloat", span: span, text: text });
 }
 export function expr_bool(span, value) {
 return ({ tag: "EBool", span: span, value: value });

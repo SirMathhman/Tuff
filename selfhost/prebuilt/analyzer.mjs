@@ -17,14 +17,41 @@ return "Unknown";
 export function ty_int_lit() {
 return "IntLit";
 }
+export function ty_float_lit() {
+return "FloatLit";
+}
 export function ty_bool() {
 return "Bool";
 }
 export function ty_i32() {
 return "I32";
 }
+export function ty_i8() {
+return "I8";
+}
+export function ty_i16() {
+return "I16";
+}
+export function ty_i64() {
+return "I64";
+}
+export function ty_f32() {
+return "F32";
+}
+export function ty_f64() {
+return "F64";
+}
 export function ty_u32() {
 return "U32";
+}
+export function ty_u8() {
+return "U8";
+}
+export function ty_u16() {
+return "U16";
+}
+export function ty_u64() {
+return "U64";
 }
 export function ty_char() {
 return "Char";
@@ -39,11 +66,35 @@ export function normalize_ty_ann(t) {
 if ((t == "Int")) {
 return ty_i32();
 }
+if ((t == "I8")) {
+return ty_i8();
+}
+if ((t == "I16")) {
+return ty_i16();
+}
 if ((t == "I32")) {
 return ty_i32();
 }
+if ((t == "I64")) {
+return ty_i64();
+}
+if ((t == "F32")) {
+return ty_f32();
+}
+if ((t == "F64")) {
+return ty_f64();
+}
+if ((t == "U8")) {
+return ty_u8();
+}
+if ((t == "U16")) {
+return ty_u16();
+}
 if ((t == "U32")) {
 return ty_u32();
+}
+if ((t == "U64")) {
+return ty_u64();
 }
 if ((t == "Char")) {
 return ty_char();
@@ -67,13 +118,82 @@ const tt = normalize_ty_ann(t);
 if ((tt == ty_int_lit())) {
 return true;
 }
+if ((tt == ty_i8())) {
+return true;
+}
+if ((tt == ty_i16())) {
+return true;
+}
 if ((tt == ty_i32())) {
+return true;
+}
+if ((tt == ty_i64())) {
+return true;
+}
+if ((tt == ty_u8())) {
+return true;
+}
+if ((tt == ty_u16())) {
 return true;
 }
 if ((tt == ty_u32())) {
 return true;
 }
+if ((tt == ty_u64())) {
+return true;
+}
 if ((tt == ty_char())) {
+return true;
+}
+return false;
+}
+export function type_is_concrete_int(t) {
+const tt = normalize_ty_ann(t);
+if ((tt == ty_i8())) {
+return true;
+}
+if ((tt == ty_i16())) {
+return true;
+}
+if ((tt == ty_i32())) {
+return true;
+}
+if ((tt == ty_i64())) {
+return true;
+}
+if ((tt == ty_u8())) {
+return true;
+}
+if ((tt == ty_u16())) {
+return true;
+}
+if ((tt == ty_u32())) {
+return true;
+}
+if ((tt == ty_u64())) {
+return true;
+}
+return false;
+}
+export function type_is_float_like(t) {
+const tt = normalize_ty_ann(t);
+if ((tt == ty_float_lit())) {
+return true;
+}
+if ((tt == ty_f32())) {
+return true;
+}
+if ((tt == ty_f64())) {
+return true;
+}
+return false;
+}
+export function type_is_concrete_float(t) {
+const tt = normalize_ty_ann(t);
+if ((tt == ty_f32())) {
+return true;
+}
+if ((tt == ty_f64())) {
 return true;
 }
 return false;
@@ -83,10 +203,34 @@ const e = normalize_ty_ann(expected);
 if ((e == ty_bool())) {
 return true;
 }
+if ((e == ty_i8())) {
+return true;
+}
+if ((e == ty_i16())) {
+return true;
+}
 if ((e == ty_i32())) {
 return true;
 }
+if ((e == ty_i64())) {
+return true;
+}
+if ((e == ty_f32())) {
+return true;
+}
+if ((e == ty_f64())) {
+return true;
+}
+if ((e == ty_u8())) {
+return true;
+}
+if ((e == ty_u16())) {
+return true;
+}
 if ((e == ty_u32())) {
+return true;
+}
+if ((e == ty_u64())) {
 return true;
 }
 if ((e == ty_char())) {
@@ -114,6 +258,9 @@ if (type_is_unknown(actual)) {
 return true;
 }
 if (((normalize_ty_ann(actual) == ty_int_lit()) && type_is_int_like(expected))) {
+return true;
+}
+if (((normalize_ty_ann(actual) == ty_float_lit()) && type_is_float_like(expected))) {
 return true;
 }
 return (normalize_ty_ann(expected) == normalize_ty_ann(actual));
@@ -322,6 +469,9 @@ return ty_bool();
 if ((e.tag == "EInt")) {
 return ty_int_lit();
 }
+if ((e.tag == "EFloat")) {
+return ty_float_lit();
+}
 if ((e.tag == "EString")) {
 return ty_string();
 }
@@ -352,6 +502,15 @@ return ty_i32();
 }
 if ((t == ty_int_lit())) {
 return ty_i32();
+}
+if ((t == ty_f32())) {
+return ty_f32();
+}
+if ((t == ty_f64())) {
+return ty_f64();
+}
+if ((t == ty_float_lit())) {
+return ty_f64();
 }
 return ty_unknown();
 }
@@ -387,12 +546,28 @@ const rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
 if (((lt == ty_string()) || (rt == ty_string()))) {
 return ty_string();
 }
+if ((type_is_float_like(lt) && type_is_float_like(rt))) {
+const nlt = normalize_ty_ann(lt);
+const nrt = normalize_ty_ann(rt);
+if ((type_is_concrete_float(nlt) && (nlt == nrt))) {
+return nlt;
+}
+if ((type_is_concrete_float(nlt) && (nrt == ty_float_lit()))) {
+return nlt;
+}
+if ((type_is_concrete_float(nrt) && (nlt == ty_float_lit()))) {
+return nrt;
+}
+return ty_f64();
+}
 if ((type_is_int_like(lt) && type_is_int_like(rt))) {
 if (((normalize_ty_ann(lt) == ty_char()) || (normalize_ty_ann(rt) == ty_char()))) {
 return ty_i32();
 }
-if (((normalize_ty_ann(lt) == ty_u32()) && (normalize_ty_ann(rt) == ty_u32()))) {
-return ty_u32();
+const nlt = normalize_ty_ann(lt);
+const nrt = normalize_ty_ann(rt);
+if ((type_is_concrete_int(nlt) && (nlt == nrt))) {
+return nlt;
 }
 return ty_i32();
 }
@@ -401,12 +576,28 @@ return ty_unknown();
 if ((((e.op.tag == "OpSub") || (e.op.tag == "OpMul")) || (e.op.tag == "OpDiv"))) {
 const lt = infer_expr_type(src, structs, fns, scopes, depth, e.left);
 const rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
+if ((type_is_float_like(lt) && type_is_float_like(rt))) {
+const nlt = normalize_ty_ann(lt);
+const nrt = normalize_ty_ann(rt);
+if ((type_is_concrete_float(nlt) && (nlt == nrt))) {
+return nlt;
+}
+if ((type_is_concrete_float(nlt) && (nrt == ty_float_lit()))) {
+return nlt;
+}
+if ((type_is_concrete_float(nrt) && (nlt == ty_float_lit()))) {
+return nrt;
+}
+return ty_f64();
+}
 if ((type_is_int_like(lt) && type_is_int_like(rt))) {
 if (((normalize_ty_ann(lt) == ty_char()) || (normalize_ty_ann(rt) == ty_char()))) {
 return ty_i32();
 }
-if (((normalize_ty_ann(lt) == ty_u32()) && (normalize_ty_ann(rt) == ty_u32()))) {
-return ty_u32();
+const nlt = normalize_ty_ann(lt);
+const nrt = normalize_ty_ann(rt);
+if ((type_is_concrete_int(nlt) && (nlt == nrt))) {
+return nlt;
 }
 return ty_i32();
 }
@@ -447,6 +638,9 @@ const t = infer_expr_type(src, structs, fns, scopes, depth, cond);
 if (((((t == ty_i32()) || (t == ty_u32())) || (t == ty_char())) || (t == ty_int_lit()))) {
 panic_at(src, span_start(cond.span), "condition must be Bool (got I32)");
 }
+if ((((t == ty_f32()) || (t == ty_f64())) || (t == ty_float_lit()))) {
+panic_at(src, span_start(cond.span), "condition must be Bool (got F64)");
+}
 if ((t == ty_string())) {
 panic_at(src, span_start(cond.span), "condition must be Bool (got String)");
 }
@@ -465,13 +659,13 @@ if ((e.op.tag == "OpAdd")) {
 if (((lt == ty_string()) || (rt == ty_string()))) {
 return;
 }
-if ((!(type_is_int_like(lt) && type_is_int_like(rt)))) {
+if ((!((type_is_int_like(lt) && type_is_int_like(rt)) || (type_is_float_like(lt) && type_is_float_like(rt))))) {
 panic_at(src, span_start(e.span), "invalid operands to '+': expected numbers or strings");
 }
 return;
 }
 if ((((e.op.tag == "OpSub") || (e.op.tag == "OpMul")) || (e.op.tag == "OpDiv"))) {
-if ((!(type_is_int_like(lt) && type_is_int_like(rt)))) {
+if ((!((type_is_int_like(lt) && type_is_int_like(rt)) || (type_is_float_like(lt) && type_is_float_like(rt))))) {
 panic_at(src, span_start(e.span), "invalid operands to arithmetic operator");
 }
 return;

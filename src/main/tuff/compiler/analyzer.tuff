@@ -46,9 +46,18 @@ fn mk_binding(name: String, isMut: Bool, tyTag: String) => Binding { "Binding", 
 
 fn ty_unknown() : String => "Unknown"
 fn ty_int_lit() : String => "IntLit"
+fn ty_float_lit() : String => "FloatLit"
 fn ty_bool() : String => "Bool"
 fn ty_i32() : String => "I32"
+fn ty_i8() : String => "I8"
+fn ty_i16() : String => "I16"
+fn ty_i64() : String => "I64"
+fn ty_f32() : String => "F32"
+fn ty_f64() : String => "F64"
 fn ty_u32() : String => "U32"
+fn ty_u8() : String => "U8"
+fn ty_u16() : String => "U16"
+fn ty_u64() : String => "U64"
 fn ty_char() : String => "Char"
 fn ty_string() : String => "String"
 fn ty_void() : String => "Void"
@@ -56,8 +65,16 @@ fn ty_void() : String => "Void"
 fn normalize_ty_ann(t: String) : String => {
   // Keep this minimal (Phase 4). We mostly do string equality checks.
   if (t == "Int") { yield ty_i32(); }
+  if (t == "I8") { yield ty_i8(); }
+  if (t == "I16") { yield ty_i16(); }
   if (t == "I32") { yield ty_i32(); }
+  if (t == "I64") { yield ty_i64(); }
+  if (t == "F32") { yield ty_f32(); }
+  if (t == "F64") { yield ty_f64(); }
+  if (t == "U8") { yield ty_u8(); }
+  if (t == "U16") { yield ty_u16(); }
   if (t == "U32") { yield ty_u32(); }
+  if (t == "U64") { yield ty_u64(); }
   if (t == "Char") { yield ty_char(); }
   if (t == "Bool") { yield ty_bool(); }
   if (t == "String") { yield ty_string(); }
@@ -70,17 +87,60 @@ fn type_is_unknown(t: String) : Bool => t == ty_unknown() || t == ""
 fn type_is_int_like(t: String) : Bool => {
   let tt = normalize_ty_ann(t);
   if (tt == ty_int_lit()) { yield true; }
+  if (tt == ty_i8()) { yield true; }
+  if (tt == ty_i16()) { yield true; }
   if (tt == ty_i32()) { yield true; }
+  if (tt == ty_i64()) { yield true; }
+  if (tt == ty_u8()) { yield true; }
+  if (tt == ty_u16()) { yield true; }
   if (tt == ty_u32()) { yield true; }
+  if (tt == ty_u64()) { yield true; }
   if (tt == ty_char()) { yield true; }
+  false
+}
+
+fn type_is_concrete_int(t: String) : Bool => {
+  // Like type_is_int_like, but excludes literals (IntLit) and Char.
+  let tt = normalize_ty_ann(t);
+  if (tt == ty_i8()) { yield true; }
+  if (tt == ty_i16()) { yield true; }
+  if (tt == ty_i32()) { yield true; }
+  if (tt == ty_i64()) { yield true; }
+  if (tt == ty_u8()) { yield true; }
+  if (tt == ty_u16()) { yield true; }
+  if (tt == ty_u32()) { yield true; }
+  if (tt == ty_u64()) { yield true; }
+  false
+}
+
+fn type_is_float_like(t: String) : Bool => {
+  let tt = normalize_ty_ann(t);
+  if (tt == ty_float_lit()) { yield true; }
+  if (tt == ty_f32()) { yield true; }
+  if (tt == ty_f64()) { yield true; }
+  false
+}
+
+fn type_is_concrete_float(t: String) : Bool => {
+  let tt = normalize_ty_ann(t);
+  if (tt == ty_f32()) { yield true; }
+  if (tt == ty_f64()) { yield true; }
   false
 }
 
 fn should_enforce_expected_type(structs, expected: String) : Bool => {
   let e = normalize_ty_ann(expected);
   if (e == ty_bool()) { yield true; }
+  if (e == ty_i8()) { yield true; }
+  if (e == ty_i16()) { yield true; }
   if (e == ty_i32()) { yield true; }
+  if (e == ty_i64()) { yield true; }
+  if (e == ty_f32()) { yield true; }
+  if (e == ty_f64()) { yield true; }
+  if (e == ty_u8()) { yield true; }
+  if (e == ty_u16()) { yield true; }
   if (e == ty_u32()) { yield true; }
+  if (e == ty_u64()) { yield true; }
   if (e == ty_char()) { yield true; }
   if (e == ty_string()) { yield true; }
   if (e == ty_void()) { yield true; }
@@ -101,6 +161,11 @@ fn type_compatible(structs, expected: String, actual: String) : Bool => {
   // Integer/char literals are context-typed in the language.
   // Model that by allowing `IntLit` to flow into int-like expected types.
   if (normalize_ty_ann(actual) == ty_int_lit() && type_is_int_like(expected)) {
+    yield true;
+  }
+
+  // Float literals are also context-typed.
+  if (normalize_ty_ann(actual) == ty_float_lit() && type_is_float_like(expected)) {
     yield true;
   }
 
@@ -296,6 +361,7 @@ fn require_name(src: String, pos: I32, scopes, depth: I32, name: String) : Void 
 fn infer_expr_type(src: String, structs, fns, scopes, depth: I32, e) : String => {
   if (e.tag == "EBool") { yield ty_bool(); }
   if (e.tag == "EInt") { yield ty_int_lit(); }
+  if (e.tag == "EFloat") { yield ty_float_lit(); }
   if (e.tag == "EString") { yield ty_string(); }
   if (e.tag == "EIdent") {
     // The bootstrap subset still sometimes parses these as identifiers.
@@ -319,6 +385,9 @@ fn infer_expr_type(src: String, structs, fns, scopes, depth: I32, e) : String =>
       let t = infer_expr_type(src, structs, fns, scopes, depth, e.expr);
       if (t == ty_i32()) { yield ty_i32(); }
       if (t == ty_int_lit()) { yield ty_i32(); }
+      if (t == ty_f32()) { yield ty_f32(); }
+      if (t == ty_f64()) { yield ty_f64(); }
+      if (t == ty_float_lit()) { yield ty_f64(); }
       yield ty_unknown();
     }
   }
@@ -338,11 +407,23 @@ fn infer_expr_type(src: String, structs, fns, scopes, depth: I32, e) : String =>
       let lt = infer_expr_type(src, structs, fns, scopes, depth, e.left);
       let rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
       if (lt == ty_string() || rt == ty_string()) { yield ty_string(); }
+
+      if (type_is_float_like(lt) && type_is_float_like(rt)) {
+        let nlt = normalize_ty_ann(lt);
+        let nrt = normalize_ty_ann(rt);
+        if (type_is_concrete_float(nlt) && nlt == nrt) { yield nlt; }
+        if (type_is_concrete_float(nlt) && nrt == ty_float_lit()) { yield nlt; }
+        if (type_is_concrete_float(nrt) && nlt == ty_float_lit()) { yield nrt; }
+        yield ty_f64();
+      }
+
       if (type_is_int_like(lt) && type_is_int_like(rt)) {
         // Char arithmetic yields I32.
         if (normalize_ty_ann(lt) == ty_char() || normalize_ty_ann(rt) == ty_char()) { yield ty_i32(); }
-        // Preserve U32 only when clearly operating on U32s.
-        if (normalize_ty_ann(lt) == ty_u32() && normalize_ty_ann(rt) == ty_u32()) { yield ty_u32(); }
+        // Preserve a concrete int width when both sides are that same width.
+        let nlt = normalize_ty_ann(lt);
+        let nrt = normalize_ty_ann(rt);
+        if (type_is_concrete_int(nlt) && nlt == nrt) { yield nlt; }
         // Otherwise treat as I32 for now.
         yield ty_i32();
       }
@@ -351,11 +432,23 @@ fn infer_expr_type(src: String, structs, fns, scopes, depth: I32, e) : String =>
     if (e.op.tag == "OpSub" || e.op.tag == "OpMul" || e.op.tag == "OpDiv") {
       let lt = infer_expr_type(src, structs, fns, scopes, depth, e.left);
       let rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
+
+      if (type_is_float_like(lt) && type_is_float_like(rt)) {
+        let nlt = normalize_ty_ann(lt);
+        let nrt = normalize_ty_ann(rt);
+        if (type_is_concrete_float(nlt) && nlt == nrt) { yield nlt; }
+        if (type_is_concrete_float(nlt) && nrt == ty_float_lit()) { yield nlt; }
+        if (type_is_concrete_float(nrt) && nlt == ty_float_lit()) { yield nrt; }
+        yield ty_f64();
+      }
+
       if (type_is_int_like(lt) && type_is_int_like(rt)) {
         // Char arithmetic yields I32.
         if (normalize_ty_ann(lt) == ty_char() || normalize_ty_ann(rt) == ty_char()) { yield ty_i32(); }
-        // Preserve U32 only when clearly operating on U32s.
-        if (normalize_ty_ann(lt) == ty_u32() && normalize_ty_ann(rt) == ty_u32()) { yield ty_u32(); }
+        // Preserve a concrete int width when both sides are that same width.
+        let nlt = normalize_ty_ann(lt);
+        let nrt = normalize_ty_ann(rt);
+        if (type_is_concrete_int(nlt) && nlt == nrt) { yield nlt; }
         yield ty_i32();
       }
       yield ty_unknown();
@@ -398,6 +491,7 @@ fn infer_expr_type(src: String, structs, fns, scopes, depth: I32, e) : String =>
 fn check_cond_is_bool(src: String, structs, fns, scopes, depth: I32, cond) : Void => {
   let t = infer_expr_type(src, structs, fns, scopes, depth, cond);
   if (t == ty_i32() || t == ty_u32() || t == ty_char() || t == ty_int_lit()) { panic_at(src, span_start(cond.span), "condition must be Bool (got I32)"); }
+  if (t == ty_f32() || t == ty_f64() || t == ty_float_lit()) { panic_at(src, span_start(cond.span), "condition must be Bool (got F64)"); }
   if (t == ty_string()) { panic_at(src, span_start(cond.span), "condition must be Bool (got String)"); }
 }
 
@@ -415,14 +509,14 @@ fn check_binary_operand_types(src: String, structs, fns, scopes, depth: I32, e) 
   // Arithmetic operators: require int-like operands, except `+` allows String.
   if (e.op.tag == "OpAdd") {
     if (lt == ty_string() || rt == ty_string()) { yield; }
-    if (!(type_is_int_like(lt) && type_is_int_like(rt))) {
+    if (!((type_is_int_like(lt) && type_is_int_like(rt)) || (type_is_float_like(lt) && type_is_float_like(rt)))) {
       panic_at(src, span_start(e.span), "invalid operands to '+': expected numbers or strings");
     }
     yield;
   }
 
   if (e.op.tag == "OpSub" || e.op.tag == "OpMul" || e.op.tag == "OpDiv") {
-    if (!(type_is_int_like(lt) && type_is_int_like(rt))) {
+    if (!((type_is_int_like(lt) && type_is_int_like(rt)) || (type_is_float_like(lt) && type_is_float_like(rt)))) {
       panic_at(src, span_start(e.span), "invalid operands to arithmetic operator");
     }
     yield;

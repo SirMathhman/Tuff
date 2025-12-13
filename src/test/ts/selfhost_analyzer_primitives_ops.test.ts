@@ -76,6 +76,71 @@ describe("selfhost analyzer (primitives + operator typing)", () => {
     }
   });
 
+  test("enforces more integer widths and floats", async () => {
+    const outDir = resolve(
+      ".dist",
+      "selfhost-analyzer-prims-ops",
+      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    );
+
+    const { stage2Dir, tuffc2 } = await buildStage2Compiler(outDir);
+
+    // --- more integer widths: should be enforced ---
+    for (const ty of ["U8", "U16", "U64", "I8", "I16", "I64"]) {
+      const badIn = resolve(stage2Dir, `bad_${ty.toLowerCase()}_annot.tuff`);
+      const badOut = resolve(stage2Dir, `bad_${ty.toLowerCase()}_annot.mjs`);
+      await writeFile(
+        badIn,
+        [
+          "fn main() : I32 => {",
+          `  let x: ${ty} = \"nope\";`,
+          "  0",
+          "}",
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+      expect(() => tuffc2.main([badIn, badOut])).toThrow(
+        new RegExp(`${ty}|String|type`, "i")
+      );
+    }
+
+    // --- floats: annotation mismatch should be enforced ---
+    {
+      const badIn = resolve(stage2Dir, "bad_f32_annot.tuff");
+      const badOut = resolve(stage2Dir, "bad_f32_annot.mjs");
+      await writeFile(
+        badIn,
+        ["fn main() : I32 => {", '  let x: F32 = "nope";', "  0", "}", ""].join(
+          "\n"
+        ),
+        "utf8"
+      );
+      expect(() => tuffc2.main([badIn, badOut])).toThrow(/F32|String|type/i);
+    }
+
+    // This specifically requires float literal parsing: today, `2.0` must be
+    // a float literal, not a tuple index.
+    {
+      const badIn = resolve(stage2Dir, "bad_float_mul_operands.tuff");
+      const badOut = resolve(stage2Dir, "bad_float_mul_operands.mjs");
+      await writeFile(
+        badIn,
+        [
+          "fn main() : I32 => {",
+          '  let x: F32 = "nope" * 2.0;',
+          "  0",
+          "}",
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+      expect(() => tuffc2.main([badIn, badOut])).toThrow(
+        /F32|\*|mul|operand|String|type/i
+      );
+    }
+  });
+
   test("rejects obviously invalid arithmetic operand types", async () => {
     const outDir = resolve(
       ".dist",

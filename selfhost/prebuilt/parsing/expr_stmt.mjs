@@ -5,7 +5,7 @@ import { panic_at, find_struct_fields, is_identifier_too_short, warn_short_ident
 import { is_digit, is_ident_start, is_ident_part, skip_ws, starts_with_at } from "../util/lexing.mjs";
 import { ParsedBool, ParsedIdent, ParsedNumber, parse_ident, parse_keyword, parse_number, parse_optional_semicolon } from "./primitives.mjs";
 import { parse_type_expr } from "./types.mjs";
-import { span, span_start, expr_span, expr_undefined, expr_int, expr_bool, expr_string, expr_ident, expr_path, expr_struct_lit, expr_unary, expr_binary, expr_call, expr_if, expr_block, expr_vec_lit, expr_tuple_lit, expr_index, expr_tuple_index, expr_field, expr_match, OpOr, OpAnd, OpEq, OpNe, OpLt, OpLe, OpGt, OpGe, OpAdd, OpSub, OpMul, OpDiv, OpNot, OpNeg, mk_match_arm, pat_wildcard, pat_int, pat_bool, pat_string, stmt_let, stmt_let_typed, stmt_assign, stmt_expr, stmt_yield, stmt_while, stmt_if, stmt_index_assign, stmt_field_assign } from "../ast.mjs";
+import { span, span_start, expr_span, expr_undefined, expr_int, expr_float, expr_bool, expr_string, expr_ident, expr_path, expr_struct_lit, expr_unary, expr_binary, expr_call, expr_if, expr_block, expr_vec_lit, expr_tuple_lit, expr_index, expr_tuple_index, expr_field, expr_match, OpOr, OpAnd, OpEq, OpNe, OpLt, OpLe, OpGt, OpGe, OpAdd, OpSub, OpMul, OpDiv, OpNot, OpNeg, mk_match_arm, pat_wildcard, pat_int, pat_bool, pat_string, stmt_let, stmt_let_typed, stmt_assign, stmt_expr, stmt_yield, stmt_while, stmt_if, stmt_index_assign, stmt_field_assign } from "../ast.mjs";
 export function ParsedExpr(v0, v1) {
 return { v0: v0, v1: v1 };
 }
@@ -574,6 +574,18 @@ panic_at(src, k, "expected ',' or ')' in tuple literal");
 panic_at(src, k, "expected ')'");
 }
 if (is_digit(c)) {
+let k = j;
+while (((k < stringLen(src)) && is_digit(stringCharCodeAt(src, k)))) {
+k = (k + 1);
+}
+if (((((k + 1) < stringLen(src)) && (stringCharCodeAt(src, k) == 46)) && is_digit(stringCharCodeAt(src, (k + 1))))) {
+let m = (k + 1);
+while (((m < stringLen(src)) && is_digit(stringCharCodeAt(src, m)))) {
+m = (m + 1);
+}
+const text = stringSlice(src, j, m);
+return ParsedExprAst(expr_float(span(j, m), text), m);
+}
 const n = parse_number(src, j);
 return ParsedExprAst(expr_int(span(j, n.nextPos), n.value), n.nextPos);
 }

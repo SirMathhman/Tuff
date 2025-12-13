@@ -216,6 +216,8 @@ fn emit_expr_js(e) : String => {
 
   if (e.tag == "EInt") { out = "" + e.value; }
 
+  if (e.tag == "EFloat") { out = e.text; }
+
   if (e.tag == "EBool") {
     if (e.value) { out = "true"; }
     else { out = "false"; }

@@ -39,6 +39,7 @@ from ast use {
   // Expr constructors
   expr_undefined,
   expr_int,
+  expr_float,
   expr_bool,
   expr_string,
   expr_ident,
@@ -585,6 +586,22 @@ fn parse_primary_ast(src: String, i: I32) : ParsedExprAst => {
   }
 
   if (is_digit(c)) {
+    // Float literal: <digits> '.' <digits>
+    // Parse this before falling back to integer parsing so `2.0` doesn't get
+    // interpreted as tuple indexing on the integer literal `2`.
+    let mut k = j;
+    while (k < stringLen(src) && is_digit(stringCharCodeAt(src, k))) {
+      k = k + 1;
+    }
+    if (k + 1 < stringLen(src) && stringCharCodeAt(src, k) == 46 && is_digit(stringCharCodeAt(src, k + 1))) { // '.'
+      let mut m = k + 1;
+      while (m < stringLen(src) && is_digit(stringCharCodeAt(src, m))) {
+        m = m + 1;
+      }
+      let text = stringSlice(src, j, m);
+      yield ParsedExprAst(expr_float(span(j, m), text), m);
+    }
+
     let n = parse_number(src, j);
     yield ParsedExprAst(expr_int(span(j, n.nextPos), n.value), n.nextPos);
   }
