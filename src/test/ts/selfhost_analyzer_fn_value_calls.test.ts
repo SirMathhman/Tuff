@@ -26,7 +26,10 @@ describe("selfhost analyzer", () => {
 
     const stage2RtDir = resolve(stage2Dir, "rt");
     await mkdir(stage2RtDir, { recursive: true });
-    await copyFile(resolve("rt/stdlib.mjs"), resolve(stage2RtDir, "stdlib.mjs"));
+    await copyFile(
+      resolve("rt/stdlib.mjs"),
+      resolve(stage2RtDir, "stdlib.mjs")
+    );
     await copyFile(resolve("rt/vec.mjs"), resolve(stage2RtDir, "vec.mjs"));
 
     const stage2In = resolve("src", "main", "tuff", "compiler", "tuffc.tuff");
@@ -81,7 +84,10 @@ describe("selfhost analyzer", () => {
 
     const stage2RtDir = resolve(stage2Dir, "rt");
     await mkdir(stage2RtDir, { recursive: true });
-    await copyFile(resolve("rt/stdlib.mjs"), resolve(stage2RtDir, "stdlib.mjs"));
+    await copyFile(
+      resolve("rt/stdlib.mjs"),
+      resolve(stage2RtDir, "stdlib.mjs")
+    );
     await copyFile(resolve("rt/vec.mjs"), resolve(stage2RtDir, "vec.mjs"));
 
     const stage2In = resolve("src", "main", "tuff", "compiler", "tuffc.tuff");

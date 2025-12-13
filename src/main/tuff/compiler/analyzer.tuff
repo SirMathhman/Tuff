@@ -1539,6 +1539,23 @@ fn analyze_stmt(src: String, structs, unions, fns, scopes, depth: I32, narrowed,
 
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.init);
     let initTy = infer_expr_type(src, structs, fns, scopes, depth, s.init);
+
+    // Approach 1: generic functions are allowed, but an unspecialized generic
+    // cannot be treated as a first-class value (no C function pointer exists).
+    // Calls like `id(123)` / `obj.id(123)` are still allowed via generic inference.
+    if (s.init.tag == "EIdent" && has_fn_sig(fns, s.init.name)) {
+      let sig = find_fn_sig(fns, s.init.name);
+      if (vec_len(sig.typeParams) > 0) {
+        panic_at(src, span_start(s.init.span), "generic function requires type args when used as a value: " + s.init.name);
+      }
+    }
+    if (ty_is_fn_type(initTy)) {
+      let tps = ty_fn_type_params(initTy);
+      if (vec_len(tps) > 0) {
+        panic_at(src, span_start(s.init.span), "generic function value must be specialized before use");
+      }
+    }
+
     if (s.tyAnn != "") {
       require_type_compatible(src, span_start(s.span), "let " + s.name, structs, s.tyAnn, initTy);
       declare_name(src, span_start(s.span), scopes, depth, s.name, s.isMut, normalize_ty_ann(s.tyAnn));
@@ -1853,6 +1870,21 @@ fn analyze_decl_body(src: String, structs, unions, fns, scopes, depth: I32, d) :
     let narrowed = vec_new();
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, d.init);
     let initTy = infer_expr_type(src, structs, fns, scopes, depth, d.init);
+
+    // Same rule for top-level/module lets.
+    if (d.init.tag == "EIdent" && has_fn_sig(fns, d.init.name)) {
+      let sig = find_fn_sig(fns, d.init.name);
+      if (vec_len(sig.typeParams) > 0) {
+        panic_at(src, span_start(d.init.span), "generic function requires type args when used as a value: " + d.init.name);
+      }
+    }
+    if (ty_is_fn_type(initTy)) {
+      let tps = ty_fn_type_params(initTy);
+      if (vec_len(tps) > 0) {
+        panic_at(src, span_start(d.init.span), "generic function value must be specialized before use");
+      }
+    }
+
     if (d.tyAnn != "") {
       require_type_compatible(src, span_start(d.span), "let " + d.name, structs, d.tyAnn, initTy);
       declare_name(src, span_start(d.span), scopes, depth, d.name, d.isMut, normalize_ty_ann(d.tyAnn));
