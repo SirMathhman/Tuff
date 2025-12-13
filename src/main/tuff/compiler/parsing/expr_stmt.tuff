@@ -82,6 +82,7 @@ from ast use {
   pat_int,
   pat_bool,
   pat_string,
+  pat_variant,
 
   // Stmt constructors
   stmt_let,
@@ -320,6 +321,8 @@ fn parse_cmp_ast(src: String, i: I32) : ParsedExprAst => {
 
     // `is` narrowing operator (bootstrap subset):
     //   x is Some
+    //   x is M::Some
+    //   x is not Some
     // Desugars to:
     //   x.tag == "Some"
     // so the analyzer can reuse its existing `.tag == "Variant"` narrowing logic.
@@ -329,14 +332,40 @@ fn parse_cmp_ast(src: String, i: I32) : ParsedExprAst => {
       let mut boundaryOk = true;
       if (afterIs < stringLen(src) && is_ident_part(stringCharCodeAt(src, afterIs))) { boundaryOk = false; }
       if (boundaryOk) {
-        let k0 = skip_ws(src, afterIs);
-        let variant = parse_ident(src, k0);
+        let mut k0 = skip_ws(src, afterIs);
+
+        // Optional `not` keyword: `x is not Some`
+        let mut isNot = false;
+        if (starts_with_at(src, k0, "not")) {
+          let afterNot = k0 + 3;
+          let mut notBoundaryOk = true;
+          if (afterNot < stringLen(src) && is_ident_part(stringCharCodeAt(src, afterNot))) { notBoundaryOk = false; }
+          if (notBoundaryOk) {
+            isNot = true;
+            k0 = skip_ws(src, afterNot);
+          }
+        }
+
+        // Variant name: identifier or module path (`A::B::Some`). Use the last segment.
+        let first = parse_ident(src, k0);
+        let mut k = first.nextPos;
+        let mut variantName = first.text;
+        while (true) {
+          let t = skip_ws(src, k);
+          if (!(t + 1 < stringLen(src))) { break; }
+          if (!(stringCharCodeAt(src, t) == 58 && stringCharCodeAt(src, t + 1) == 58)) { break; }
+          let next = parse_ident(src, t + 2);
+          variantName = next.text;
+          k = next.nextPos;
+        }
+
         let start = span_start(expr_span(left.expr));
-        let end = variant.nextPos;
+        let end = k;
 
         let tagExpr = expr_field(span(start, end), left.expr, "tag");
-        let rhs = expr_string(span(variant.startPos, variant.nextPos), variant.text);
-        left = ParsedExprAst(expr_binary(span(start, end), OpEq, tagExpr, rhs), end);
+        let rhs = expr_string(span(first.startPos, end), variantName);
+        let op = if (isNot) OpNe else OpEq;
+        left = ParsedExprAst(expr_binary(span(start, end), op, tagExpr, rhs), end);
         j = left.nextPos;
         continue;
       }
@@ -800,6 +829,7 @@ fn parse_match_expr_ast(src: String, i: I32) : ParsedExprAst => {
 
   let arms = vec_new();
   let mut sawDefault = false;
+  let mut sawVariant = false;
 
   while (true) {
     k = skip_ws(src, k);
@@ -822,6 +852,18 @@ fn parse_match_expr_ast(src: String, i: I32) : ParsedExprAst => {
       } else {
         let id = parse_ident(src, k);
         k = id.nextPos;
+
+        // module path: A::B::C (use the last segment for variant matches)
+        let mut name = id.text;
+        while (true) {
+          let t = skip_ws(src, k);
+          if (!(t + 1 < stringLen(src))) { break; }
+          if (!(stringCharCodeAt(src, t) == 58 && stringCharCodeAt(src, t + 1) == 58)) { break; }
+          let next = parse_ident(src, t + 2);
+          name = next.text;
+          k = next.nextPos;
+        }
+
         if (id.text == "_") {
           pat = pat_wildcard(span(patStart, k));
         } else {
@@ -831,7 +873,9 @@ fn parse_match_expr_ast(src: String, i: I32) : ParsedExprAst => {
             if (id.text == "false") {
               pat = pat_bool(span(patStart, k), false);
             } else {
-              panic_at(src, patStart, "unsupported match pattern: " + id.text);
+              // Union variant pattern.
+              pat = pat_variant(span(patStart, k), name);
+              sawVariant = true;
             }
           }
         }
@@ -853,7 +897,8 @@ fn parse_match_expr_ast(src: String, i: I32) : ParsedExprAst => {
     }
   }
 
-  if (!sawDefault) { panic_at(src, k, "match requires _ arm"); }
+  // Keep the old bootstrap restriction for non-variant matches.
+  if (!sawDefault && !sawVariant) { panic_at(src, k, "match requires _ arm"); }
   ParsedExprAst(expr_match(span(start, k), scrut.expr, arms), k)
 }
 
@@ -1305,11 +1350,37 @@ fn parse_cmp(src: String, i: I32) : ParsedExpr => {
       let mut boundaryOk = true;
       if (afterIs < stringLen(src) && is_ident_part(stringCharCodeAt(src, afterIs))) { boundaryOk = false; }
       if (boundaryOk) {
-        let k0 = skip_ws(src, afterIs);
-        let variant = parse_ident(src, k0);
+        let mut k0 = skip_ws(src, afterIs);
+
+        // Optional `not` keyword: `x is not Some`
+        let mut isNot = false;
+        if (starts_with_at(src, k0, "not")) {
+          let afterNot = k0 + 3;
+          let mut notBoundaryOk = true;
+          if (afterNot < stringLen(src) && is_ident_part(stringCharCodeAt(src, afterNot))) { notBoundaryOk = false; }
+          if (notBoundaryOk) {
+            isNot = true;
+            k0 = skip_ws(src, afterNot);
+          }
+        }
+
+        // Variant name: identifier or module path (`A::B::Some`). Use the last segment.
+        let first = parse_ident(src, k0);
+        let mut k = first.nextPos;
+        let mut variantName = first.text;
+        while (true) {
+          let t = skip_ws(src, k);
+          if (!(t + 1 < stringLen(src))) { break; }
+          if (!(stringCharCodeAt(src, t) == 58 && stringCharCodeAt(src, t + 1) == 58)) { break; }
+          let next = parse_ident(src, t + 2);
+          variantName = next.text;
+          k = next.nextPos;
+        }
+
         let q = stringFromCharCode(34);
-        let rhs = q + variant.text + q;
-        left = ParsedExpr("(" + left.v0 + ".tag == " + rhs + ")", variant.nextPos);
+        let rhs = q + variantName + q;
+        let op = if (isNot) "!=" else "==";
+        left = ParsedExpr("(" + left.v0 + ".tag " + op + " " + rhs + ")", k);
         j = left.v1;
         continue;
       }
@@ -1805,13 +1876,14 @@ fn parse_match_expr(src: String, i: I32) : ParsedExpr => {
 
   let mut cases = "";
   let mut def = "";
+  let mut sawVariant = false;
 
   while (true) {
     k = skip_ws(src, k);
     if (!(k < stringLen(src))) { panic_at(src, k, "expected '}'"); }
     if (stringCharCodeAt(src, k) == 125) { k = k + 1; break; }
 
-    // pattern: number | string | true/false | _
+    // pattern: number | string | true/false | _ | VariantName
     let mut pat = "";
     let c0 = stringCharCodeAt(src, k);
     if (c0 == 34) { // string
@@ -1825,8 +1897,27 @@ fn parse_match_expr(src: String, i: I32) : ParsedExpr => {
         k = n.nextPos;
       } else {
         let id = parse_ident(src, k);
-        pat = id.text;
         k = id.nextPos;
+
+        // module path: A::B::C (use the last segment for variant matches)
+        let mut name = id.text;
+        while (true) {
+          let t = skip_ws(src, k);
+          if (!(t + 1 < stringLen(src))) { break; }
+          if (!(stringCharCodeAt(src, t) == 58 && stringCharCodeAt(src, t + 1) == 58)) { break; }
+          let next = parse_ident(src, t + 2);
+          name = next.text;
+          k = next.nextPos;
+        }
+
+        if (id.text == "_" || id.text == "true" || id.text == "false") {
+          pat = id.text;
+        } else {
+          // Treat bare identifier patterns as union variant names (tags).
+          let q = stringFromCharCode(34);
+          pat = q + name + q;
+          sawVariant = true;
+        }
       }
     }
 
@@ -1856,9 +1947,11 @@ fn parse_match_expr(src: String, i: I32) : ParsedExpr => {
     }
   }
 
-  if (def == "") { panic_at(src, k, "match requires _ arm"); }
+  if (def == "" && !sawVariant) { panic_at(src, k, "match requires _ arm"); }
+  if (def == "" && sawVariant) { def = "(() => { throw new Error(\"non-exhaustive match\"); })()"; }
 
-  ParsedExpr("(() => { switch (" + scrut.v0 + ") {\n" + cases + "default: return " + def + ";\n} })()", k)
+  let scrutJs = if (sawVariant) "(" + scrut.v0 + ").tag" else scrut.v0;
+  ParsedExpr("(() => { switch (" + scrutJs + ") {\n" + cases + "default: return " + def + ";\n} })()", k)
 }
 
 fn parse_mut_opt(src: String, i: I32) : ParsedBool => {

@@ -34,7 +34,14 @@ Suggested tests:
 
 3. **Union payload field typing (`.value`)**
 
+✅ Done
+
 - After narrowing, `.value` access should infer the correct payload type, including basic generic substitution (e.g. `Option<I32>` ⇒ `.value` is `I32`).
+
+Implemented (bootstrap scope):
+
+- `.value` remains **gated** by narrowing.
+- For typed `let` initializers, payload types are inferred under narrowing, including basic generic substitution.
 
 Suggested tests:
 
@@ -43,7 +50,15 @@ Suggested tests:
 
 4. **Match checks for union variants (exhaustiveness-lite)**
 
+✅ Done
+
 - Start with a pragmatic rule: when scrutinee is a known union type, require either `_` arm or all variants appear.
+
+Implemented (bootstrap scope):
+
+- `match (x) { Some => ..., None => ... }` is now accepted (no `_` required when exhaustive).
+- Union-variant patterns (`Some`, `M::Some`) are supported.
+- Analyzer enforces exhaustiveness-lite for union scrutinees.
 
 Suggested tests:
 
@@ -63,7 +78,13 @@ Suggested tests:
 6. **Narrowing propagation rules for `if` and `match`**
 
 - Clarify and enforce what gets narrowed in `then` vs `else`.
-- Optional: support `if (!(x is Some)) { ... }` later.
+
+Implemented (bootstrap scope):
+
+- `if (x is Some)` narrows `then`.
+- `if (x.tag != "Some") { ... } else { ... }` narrows `else`.
+- `if (!(x is Some)) { ... } else { ... }` narrows `else`.
+- `x is not Some` is supported (desugars to `x.tag != "Some"`).
 
 ## Phase 5a (JS Emitter) — smallest next wins
 

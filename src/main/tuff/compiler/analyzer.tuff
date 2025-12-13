@@ -1101,6 +1101,15 @@ fn infer_expr_type(src: String, structs, fns, scopes, depth: I32, e) : String =>
   ty_unknown()
 }
 
+fn infer_expr_type_with_narrowing(src: String, structs, unions, fns, scopes, depth: I32, narrowed, e) : String => {
+  // Minimal: improve typing for union payload `.value` under narrowing.
+  if (e.tag == "EField" && e.field == "value" && e.base.tag == "EIdent") {
+    let t = infer_union_payload_type_from_narrowing(src, unions, scopes, depth, narrowed, e.base.name);
+    if (!type_is_unknown(t)) { yield t; }
+  }
+  infer_expr_type(src, structs, fns, scopes, depth, e)
+}
+
 fn check_cond_is_bool(src: String, structs, fns, scopes, depth: I32, cond) : Void => {
   let t = infer_expr_type(src, structs, fns, scopes, depth, cond);
   if (t == ty_i32() || t == ty_u32() || t == ty_char() || t == ty_int_lit()) { panic_at(src, span_start(cond.span), "condition must be Bool (got I32)"); }
@@ -1335,6 +1344,90 @@ fn parse_tag_eq(cond) : ParsedTagEq => {
   ParsedTagEq(false, "", "")
 }
 
+class fn ParsedTagNarrowing(ok: Bool, name: String, thenVariant: String, elseVariant: String) => {}
+
+fn parse_tag_narrowing(cond) : ParsedTagNarrowing => {
+  // Recognize union tag tests and return which branch (then/else) implies which variant.
+  // Handles:
+  //   o.tag == "Some"            => then: Some
+  //   o.tag != "Some"            => else: Some
+  //   !(o.tag == "Some")         => else: Some
+  //   !(o.tag != "Some")         => then: Some
+  if (cond.tag == "EUnary" && cond.op.tag == "OpNot") {
+    let inner = parse_tag_narrowing(cond.expr);
+    if (inner.ok) { yield ParsedTagNarrowing(true, inner.name, inner.elseVariant, inner.thenVariant); }
+    yield ParsedTagNarrowing(false, "", "", "");
+  }
+
+  if (cond.tag != "EBinary") { yield ParsedTagNarrowing(false, "", "", ""); }
+  if (!(cond.op.tag == "OpEq" || cond.op.tag == "OpNe")) { yield ParsedTagNarrowing(false, "", "", ""); }
+
+  // Left: o.tag
+  if (cond.left.tag == "EField" && cond.left.field == "tag" && cond.left.base.tag == "EIdent" && cond.right.tag == "EString") {
+    let v = cond.right.value;
+    if (cond.op.tag == "OpEq") { yield ParsedTagNarrowing(true, cond.left.base.name, v, ""); }
+    yield ParsedTagNarrowing(true, cond.left.base.name, "", v);
+  }
+  // Right: o.tag
+  if (cond.right.tag == "EField" && cond.right.field == "tag" && cond.right.base.tag == "EIdent" && cond.left.tag == "EString") {
+    let v = cond.left.value;
+    if (cond.op.tag == "OpEq") { yield ParsedTagNarrowing(true, cond.right.base.name, v, ""); }
+    yield ParsedTagNarrowing(true, cond.right.base.name, "", v);
+  }
+  ParsedTagNarrowing(false, "", "", "")
+}
+
+fn validate_union_variant_for_binding(src: String, pos: I32, unions, scopes, depth: I32, name: String, variant: String) : Void => {
+  // Only enforce when the binding is known to be union-typed.
+  let bt0 = infer_lookup_ty(scopes, depth, name);
+  let bt = normalize_ty_ann(bt0);
+  let mut unionName = bt;
+  let app = ty_parse_app(bt);
+  if (app.ok) {
+    unionName = stringSlice(app.callee, ty_skip_ws(app.callee, 0), stringLen(app.callee));
+  }
+  if (!has_union_def(unions, unionName)) { yield; }
+  let u = find_union_def(unions, unionName);
+  if (!union_has_variant(u, variant)) {
+    panic_at(src, pos, "unknown union variant: " + variant + " (for " + unionName + ")");
+  }
+}
+
+fn infer_union_payload_type_from_narrowing(src: String, unions, scopes, depth: I32, narrowed, name: String) : String => {
+  let v = narrow_lookup(narrowed, name);
+  if (v == "") { yield ty_unknown(); }
+
+  let bt0 = infer_lookup_ty(scopes, depth, name);
+  let bt = normalize_ty_ann(bt0);
+  let mut unionName = bt;
+  let mut args = vec_new();
+  let app = ty_parse_app(bt);
+  if (app.ok) {
+    unionName = stringSlice(app.callee, ty_skip_ws(app.callee, 0), stringLen(app.callee));
+    args = app.args;
+  }
+  if (!has_union_def(unions, unionName)) { yield ty_unknown(); }
+  let u = find_union_def(unions, unionName);
+  if (!union_has_variant(u, v)) { yield ty_unknown(); }
+
+  let payloads = union_variant_payload_ty_anns(u, v);
+  if (vec_len(payloads) == 1) {
+    let payload0 = normalize_ty_ann(vec_get(payloads, 0));
+    if (vec_len(u.typeParams) > 0) {
+      let subst = vec_new();
+      let mut ti = 0;
+      while (ti < vec_len(u.typeParams) && ti < vec_len(args)) {
+        subst_bind(subst, vec_get(u.typeParams, ti), normalize_ty_ann(vec_get(args, ti)));
+        ti = ti + 1;
+      }
+      yield ty_apply_subst(u.typeParams, subst, payload0);
+    }
+    yield payload0;
+  }
+
+  ty_unknown()
+}
+
 fn analyze_expr(src: String, structs, unions, fns, scopes, depth: I32, narrowed, e) : Void => {
   if (e.tag == "EIdent") {
     require_name(src, span_start(e.span), scopes, depth, e.name);
@@ -1404,13 +1497,27 @@ fn analyze_expr(src: String, structs, unions, fns, scopes, depth: I32, narrowed,
     check_cond_is_bool(src, structs, fns, scopes, depth, e.cond);
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.cond);
 
-    // Narrowing for unions: if (o.tag == "Some") { ... }
-    let tagEq = parse_tag_eq(e.cond);
-    if (tagEq.ok) {
-      let narrowedThen = narrow_clone(narrowed);
-      vec_push(narrowedThen, mk_narrowed_tag(tagEq.name, tagEq.variant));
-      analyze_expr(src, structs, unions, fns, scopes, depth, narrowedThen, e.thenExpr);
-      analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.elseExpr);
+    // Narrowing for unions: if (o.tag == "Some") { ... } else { ... }
+    // Also supports != and negation.
+    let nar = parse_tag_narrowing(e.cond);
+    if (nar.ok) {
+      if (nar.thenVariant != "") {
+        validate_union_variant_for_binding(src, span_start(e.cond.span), unions, scopes, depth, nar.name, nar.thenVariant);
+        let narrowedThen = narrow_clone(narrowed);
+        vec_push(narrowedThen, mk_narrowed_tag(nar.name, nar.thenVariant));
+        analyze_expr(src, structs, unions, fns, scopes, depth, narrowedThen, e.thenExpr);
+      } else {
+        analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.thenExpr);
+      }
+
+      if (nar.elseVariant != "") {
+        validate_union_variant_for_binding(src, span_start(e.cond.span), unions, scopes, depth, nar.name, nar.elseVariant);
+        let narrowedElse = narrow_clone(narrowed);
+        vec_push(narrowedElse, mk_narrowed_tag(nar.name, nar.elseVariant));
+        analyze_expr(src, structs, unions, fns, scopes, depth, narrowedElse, e.elseExpr);
+      } else {
+        analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.elseExpr);
+      }
       yield;
     }
 
@@ -1487,6 +1594,9 @@ fn analyze_expr(src: String, structs, unions, fns, scopes, depth: I32, narrowed,
           if (v == "") {
             panic_at(src, span_start(e.span), "union payload access requires narrowing (" + unionName + ".value)");
           }
+          if (!union_has_variant(u, v)) {
+            panic_at(src, span_start(e.span), "unknown union variant: " + v);
+          }
           if (!union_variant_has_payload(u, v)) {
             panic_at(src, span_start(e.span), "union variant has no payload: " + v);
           }
@@ -1507,12 +1617,68 @@ fn analyze_expr(src: String, structs, unions, fns, scopes, depth: I32, narrowed,
 
   if (e.tag == "EMatch") {
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.scrut);
+
+    let mut scrutName = "";
+    if (e.scrut.tag == "EIdent") { scrutName = e.scrut.name; }
+
+    // If the scrutinee is a union-typed binding, validate variant patterns and enforce exhaustiveness-lite.
+    let mut scrutIsUnion = false;
+    let mut unionName = "";
+    let mut u = mk_union_def("", vec_new(), vec_new());
+    if (scrutName != "") {
+      let bt0 = infer_lookup_ty(scopes, depth, scrutName);
+      let bt = normalize_ty_ann(bt0);
+      unionName = bt;
+      let app = ty_parse_app(bt);
+      if (app.ok) { unionName = stringSlice(app.callee, ty_skip_ws(app.callee, 0), stringLen(app.callee)); }
+      if (has_union_def(unions, unionName)) {
+        scrutIsUnion = true;
+        u = find_union_def(unions, unionName);
+      }
+    }
+
+    let mut hasWildcard = false;
+    let covered = vec_new();
+
     let mut mi = 0;
     while (mi < vec_len(e.arms)) {
       let arm = vec_get(e.arms, mi);
-      analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, arm.expr);
+      if (arm.pat.tag == "MPWildcard") { hasWildcard = true; }
+
+      if (arm.pat.tag == "MPVariant") {
+        vec_push(covered, arm.pat.name);
+        if (scrutIsUnion) {
+          if (!union_has_variant(u, arm.pat.name)) {
+            panic_at(src, span_start(arm.pat.span), "unknown union variant in match: " + arm.pat.name + " (for " + unionName + ")");
+          }
+        }
+
+        if (scrutName != "") {
+          let narrowedArm = narrow_clone(narrowed);
+          vec_push(narrowedArm, mk_narrowed_tag(scrutName, arm.pat.name));
+          analyze_expr(src, structs, unions, fns, scopes, depth, narrowedArm, arm.expr);
+        } else {
+          analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, arm.expr);
+        }
+      } else {
+        analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, arm.expr);
+      }
+
       mi = mi + 1;
     }
+
+    if (scrutIsUnion && !hasWildcard) {
+      // Exhaustiveness-lite: require every variant be present (wildcard counts as exhaustive).
+      let mut vi = 0;
+      while (vi < vec_len(u.variants)) {
+        let vn = vec_get(u.variants, vi).name;
+        if (!vec_contains_str(covered, vn)) {
+          panic_at(src, span_start(e.span), "non-exhaustive match on " + unionName + ": missing " + vn);
+        }
+        vi = vi + 1;
+      }
+    }
+
     yield;
   }
 
@@ -1538,7 +1704,7 @@ fn analyze_stmt(src: String, structs, unions, fns, scopes, depth: I32, narrowed,
     }
 
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.init);
-    let initTy = infer_expr_type(src, structs, fns, scopes, depth, s.init);
+    let initTy = infer_expr_type_with_narrowing(src, structs, unions, fns, scopes, depth, narrowed, s.init);
 
     // Approach 1: generic functions are allowed, but an unspecialized generic
     // cannot be treated as a first-class value (no C function pointer exists).
@@ -1597,17 +1763,28 @@ fn analyze_stmt(src: String, structs, unions, fns, scopes, depth: I32, narrowed,
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.cond);
 
     // Narrowing for unions in statement if: if (o.tag == "Some") { ... } else { ... }
-    let tagEq = parse_tag_eq(s.cond);
-    if (tagEq.ok) {
-      let narrowedThen = narrow_clone(narrowed);
-      vec_push(narrowedThen, mk_narrowed_tag(tagEq.name, tagEq.variant));
+    // Also supports != and negation.
+    let nar = parse_tag_narrowing(s.cond);
+    if (nar.ok) {
+      let mut thenNar = narrowed;
+      if (nar.thenVariant != "") {
+        validate_union_variant_for_binding(src, span_start(s.cond.span), unions, scopes, depth, nar.name, nar.thenVariant);
+        thenNar = narrow_clone(narrowed);
+        vec_push(thenNar, mk_narrowed_tag(nar.name, nar.thenVariant));
+      }
 
       let thenDepth = scopes_enter(scopes, depth);
-      analyze_stmts(src, structs, unions, fns, scopes, thenDepth, narrowedThen, s.thenBody);
+      analyze_stmts(src, structs, unions, fns, scopes, thenDepth, thenNar, s.thenBody);
 
       if (s.hasElse) {
+        let mut elseNar = narrowed;
+        if (nar.elseVariant != "") {
+          validate_union_variant_for_binding(src, span_start(s.cond.span), unions, scopes, depth, nar.name, nar.elseVariant);
+          elseNar = narrow_clone(narrowed);
+          vec_push(elseNar, mk_narrowed_tag(nar.name, nar.elseVariant));
+        }
         let elseDepth = scopes_enter(scopes, depth);
-        analyze_stmts(src, structs, unions, fns, scopes, elseDepth, narrowed, s.elseBody);
+        analyze_stmts(src, structs, unions, fns, scopes, elseDepth, elseNar, s.elseBody);
       }
       yield;
     }

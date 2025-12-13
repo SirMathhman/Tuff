@@ -237,6 +237,315 @@ describe("selfhost analyzer (phase 4 completion)", () => {
         /value|Some|None|narrow|type/i
       );
     }
+
+    // --- OK: module-qualified variant name in `is` (uses last path segment) ---
+    {
+      const okIn = resolve(stage2Dir, "ok_union_value_guarded_is_path.tuff");
+      const okOut = resolve(stage2Dir, "ok_union_value_guarded_is_path.mjs");
+      await writeFile(
+        okIn,
+        [
+          "type Option<T> = Some<T> | None;",
+          "module M { }",
+          "fn main() : I32 => {",
+          "  let o: Option<I32> = Some(3);",
+          "  if (o is M::Some) { o.value } else { 0 }",
+          "}",
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+
+      const rc = tuffc2.main([okIn, okOut]);
+      expect(rc).toBe(0);
+      const mod = await import(pathToFileURL(okOut).toString());
+      expect(mod.main()).toBe(3);
+    }
+
+    // --- OK: swapped operand order also narrows ("Some" == o.tag) ---
+    {
+      const okIn = resolve(
+        stage2Dir,
+        "ok_union_value_guarded_swapped_tag_eq.tuff"
+      );
+      const okOut = resolve(
+        stage2Dir,
+        "ok_union_value_guarded_swapped_tag_eq.mjs"
+      );
+      await writeFile(
+        okIn,
+        [
+          "type Option<T> = Some<T> | None;",
+          "fn main() : I32 => {",
+          "  let o: Option<I32> = Some(3);",
+          '  if ("Some" == o.tag) { o.value } else { 0 }',
+          "}",
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+
+      const rc = tuffc2.main([okIn, okOut]);
+      expect(rc).toBe(0);
+      const mod = await import(pathToFileURL(okOut).toString());
+      expect(mod.main()).toBe(3);
+    }
+
+    // --- OK: `!=` narrows the else branch to the payload variant ---
+    {
+      const okIn = resolve(
+        stage2Dir,
+        "ok_union_value_guarded_in_else_tag_ne.tuff"
+      );
+      const okOut = resolve(
+        stage2Dir,
+        "ok_union_value_guarded_in_else_tag_ne.mjs"
+      );
+      await writeFile(
+        okIn,
+        [
+          "type Option<T> = Some<T> | None;",
+          "fn main() : I32 => {",
+          "  let o: Option<I32> = Some(3);",
+          '  if (o.tag != "Some") { 0 } else { o.value }',
+          "}",
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+
+      const rc = tuffc2.main([okIn, okOut]);
+      expect(rc).toBe(0);
+      const mod = await import(pathToFileURL(okOut).toString());
+      expect(mod.main()).toBe(3);
+    }
+
+    // --- OK: negation of `is` narrows else branch (if (!(o is Some)) ...) ---
+    {
+      const okIn = resolve(
+        stage2Dir,
+        "ok_union_value_guarded_in_else_not_is.tuff"
+      );
+      const okOut = resolve(
+        stage2Dir,
+        "ok_union_value_guarded_in_else_not_is.mjs"
+      );
+      await writeFile(
+        okIn,
+        [
+          "type Option<T> = Some<T> | None;",
+          "fn main() : I32 => {",
+          "  let o: Option<I32> = Some(3);",
+          "  if (!(o is Some)) { 0 } else { o.value }",
+          "}",
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+
+      const rc = tuffc2.main([okIn, okOut]);
+      expect(rc).toBe(0);
+      const mod = await import(pathToFileURL(okOut).toString());
+      expect(mod.main()).toBe(3);
+    }
+
+    // --- OK: `is not` sugar works and narrows else branch ---
+    {
+      const okIn = resolve(
+        stage2Dir,
+        "ok_union_value_guarded_in_else_is_not.tuff"
+      );
+      const okOut = resolve(
+        stage2Dir,
+        "ok_union_value_guarded_in_else_is_not.mjs"
+      );
+      await writeFile(
+        okIn,
+        [
+          "type Option<T> = Some<T> | None;",
+          "fn main() : I32 => {",
+          "  let o: Option<I32> = Some(3);",
+          "  if (o is not Some) { 0 } else { o.value }",
+          "}",
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+
+      const rc = tuffc2.main([okIn, okOut]);
+      expect(rc).toBe(0);
+      const mod = await import(pathToFileURL(okOut).toString());
+      expect(mod.main()).toBe(3);
+    }
+
+    // --- Error: `is` RHS must be a valid variant of the union ---
+    {
+      const badIn = resolve(stage2Dir, "bad_union_is_unknown_variant.tuff");
+      const badOut = resolve(stage2Dir, "bad_union_is_unknown_variant.mjs");
+      await writeFile(
+        badIn,
+        [
+          "type Option<T> = Some<T> | None;",
+          "fn main() : I32 => {",
+          "  let o: Option<I32> = Some(3);",
+          "  if (o is NotARealVariant) { 1 } else { 0 }",
+          "}",
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+
+      expect(() => tuffc2.main([badIn, badOut])).toThrow(
+        /Option|variant|NotARealVariant|Some|None/i
+      );
+    }
+
+    // --- OK: payload type is inferred after narrowing (Option<I32>.value is I32) ---
+    {
+      const okIn = resolve(stage2Dir, "ok_union_value_has_payload_type.tuff");
+      const okOut = resolve(stage2Dir, "ok_union_value_has_payload_type.mjs");
+      await writeFile(
+        okIn,
+        [
+          "type Option<T> = Some<T> | None;",
+          "fn main() : I32 => {",
+          "  let o: Option<I32> = Some(3);",
+          "  if (o is Some) {",
+          "    let x: I32 = o.value;",
+          "    x",
+          "  } else {",
+          "    0",
+          "  }",
+          "}",
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+
+      const rc = tuffc2.main([okIn, okOut]);
+      expect(rc).toBe(0);
+      const mod = await import(pathToFileURL(okOut).toString());
+      expect(mod.main()).toBe(3);
+    }
+
+    // --- Error: payload type mismatch after narrowing (Option<I32>.value is not String) ---
+    {
+      const badIn = resolve(
+        stage2Dir,
+        "bad_union_value_payload_type_mismatch.tuff"
+      );
+      const badOut = resolve(
+        stage2Dir,
+        "bad_union_value_payload_type_mismatch.mjs"
+      );
+      await writeFile(
+        badIn,
+        [
+          "type Option<T> = Some<T> | None;",
+          "fn main() : I32 => {",
+          "  let o: Option<I32> = Some(3);",
+          "  if (o is Some) {",
+          "    let x: String = o.value;",
+          "    0",
+          "  } else {",
+          "    0",
+          "  }",
+          "}",
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+
+      expect(() => tuffc2.main([badIn, badOut])).toThrow(
+        /String|I32|value|type/i
+      );
+    }
+  });
+
+  test("match exhaustiveness-lite for union variants", async () => {
+    const outDir = resolve(
+      ".dist",
+      "selfhost-analyzer-phase4",
+      `case-union-match-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    );
+
+    const { stage2Dir, tuffc2 } = await buildStage2Compiler(outDir);
+
+    // --- OK: all variants covered without '_' ---
+    {
+      const okIn = resolve(stage2Dir, "ok_match_union_all_variants.tuff");
+      const okOut = resolve(stage2Dir, "ok_match_union_all_variants.mjs");
+      await writeFile(
+        okIn,
+        [
+          "type Option<T> = Some<T> | None;",
+          "fn main() : I32 => {",
+          "  let o: Option<I32> = Some(3);",
+          "  match (o) {",
+          "    Some => o.value,",
+          "    None => 0",
+          "  }",
+          "}",
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+
+      const rc = tuffc2.main([okIn, okOut]);
+      expect(rc).toBe(0);
+      const mod = await import(pathToFileURL(okOut).toString());
+      expect(mod.main()).toBe(3);
+    }
+
+    // --- OK: '_' wildcard allowed ---
+    {
+      const okIn = resolve(stage2Dir, "ok_match_union_with_wildcard.tuff");
+      const okOut = resolve(stage2Dir, "ok_match_union_with_wildcard.mjs");
+      await writeFile(
+        okIn,
+        [
+          "type Option<T> = Some<T> | None;",
+          "fn main() : I32 => {",
+          "  let o: Option<I32> = None;",
+          "  match (o) {",
+          "    Some => 1,",
+          "    _ => 0",
+          "  }",
+          "}",
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+
+      const rc = tuffc2.main([okIn, okOut]);
+      expect(rc).toBe(0);
+      const mod = await import(pathToFileURL(okOut).toString());
+      expect(mod.main()).toBe(0);
+    }
+
+    // --- Error: missing variants and no '_' ---
+    {
+      const badIn = resolve(stage2Dir, "bad_match_union_missing_variant.tuff");
+      const badOut = resolve(stage2Dir, "bad_match_union_missing_variant.mjs");
+      await writeFile(
+        badIn,
+        [
+          "type Option<T> = Some<T> | None;",
+          "fn main() : I32 => {",
+          "  let o: Option<I32> = None;",
+          "  match (o) {",
+          "    Some => 1",
+          "  }",
+          "}",
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+
+      expect(() => tuffc2.main([badIn, badOut])).toThrow(
+        /match|exhaust|None|Some|Option|_/i
+      );
+    }
   });
 
   test("array initialization tracking enforces read/write safety", async () => {

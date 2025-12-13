@@ -264,7 +264,8 @@ type MatchPat =
   MPWildcard
   | MPInt
   | MPBool
-  | MPString;
+  | MPString
+  | MPVariant;
 
 struct MPWildcard {
   tag: String,
@@ -287,6 +288,14 @@ struct MPString {
   tag: String,
   span: Span,
   value: String
+}
+
+// Union variant match pattern (bootstrap subset).
+// Example: `match (o) { Some => ...; None => ... }`
+struct MPVariant {
+  tag: String,
+  span: Span,
+  name: String
 }
 
 struct MatchArm {
@@ -545,6 +554,7 @@ fn pat_wildcard(span: Span) : MatchPat => MPWildcard { "MPWildcard", span }
 fn pat_int(span: Span, value: I32) : MatchPat => MPInt { "MPInt", span, value }
 fn pat_bool(span: Span, value: Bool) : MatchPat => MPBool { "MPBool", span, value }
 fn pat_string(span: Span, value: String) : MatchPat => MPString { "MPString", span, value }
+fn pat_variant(span: Span, name: String) : MatchPat => MPVariant { "MPVariant", span, name }
 fn mk_match_arm(span: Span, pat: MatchPat, expr: Expr) : MatchArm => MatchArm { "MatchArm", span, pat, expr }
 fn expr_match(span: Span, scrut: Expr, arms: Vec<MatchArm>) : Expr => EMatch { "EMatch", span, scrut, arms }
 

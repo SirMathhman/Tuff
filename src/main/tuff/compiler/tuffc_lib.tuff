@@ -164,6 +164,12 @@ fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool, filePath: Stri
   // zero or more type / struct declarations
   while (true) {
     let j = skip_ws(src, i);
+    if (starts_with_at(src, j, "module")) {
+      let m = parse_module_decl_ast(src, i);
+      vec_push(decls, m.decl);
+      i = m.nextPos;
+      continue;
+    }
     if (starts_with_at(src, j, "type")) {
       let td = parse_type_union_decl_ast(src, i, exportAll);
       vec_push(decls, td.decl);

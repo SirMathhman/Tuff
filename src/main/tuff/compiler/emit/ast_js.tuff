@@ -513,6 +513,7 @@ fn emit_expr_js(e) : String => {
   if (e.tag == "EMatch") {
     let mut cases = "";
     let mut def = "";
+    let mut sawVariant = false;
     let mut i = 0;
     while (i < vec_len(e.arms)) {
       let arm = vec_get(e.arms, i);
@@ -523,12 +524,20 @@ fn emit_expr_js(e) : String => {
         if (arm.pat.tag == "MPInt") { patJs = "" + arm.pat.value; }
         if (arm.pat.tag == "MPBool") { patJs = if (arm.pat.value) "true" else "false"; }
         if (arm.pat.tag == "MPString") { patJs = "\"" + escape_js_string(arm.pat.value) + "\""; }
+        if (arm.pat.tag == "MPVariant") {
+          patJs = "\"" + escape_js_string(arm.pat.name) + "\"";
+          sawVariant = true;
+        }
         cases = cases + ("case " + patJs + ": return " + emit_expr_js(arm.expr) + ";\n");
       }
       i = i + 1;
     }
-    if (def == "") { panic("match requires _ arm"); }
-    out = "(() => { switch (" + emit_expr_js(e.scrut) + ") {\n" + cases + "default: return " + def + ";\n} })()";
+    if (def == "" && !sawVariant) { panic("match requires _ arm"); }
+    if (def == "" && sawVariant) {
+      def = "(() => { throw new Error(\"non-exhaustive match\"); })()";
+    }
+    let scrutJs = if (sawVariant) "(" + emit_expr_js(e.scrut) + ").tag" else emit_expr_js(e.scrut);
+    out = "(() => { switch (" + scrutJs + ") {\n" + cases + "default: return " + def + ";\n} })()";
   }
 
   out
