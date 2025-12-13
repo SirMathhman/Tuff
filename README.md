@@ -13,9 +13,10 @@ A modern systems programming language with a self-hosting compiler that compiles
 3. [Language Overview](#language-overview)
 4. [Building and Testing](#building-and-testing)
 5. [Project Status](#project-status)
-6. [Standard Library](#standard-library)
-7. [Contributing](#contributing)
-8. [Documentation](#documentation)
+6. [Long-Term Roadmap](#long-term-roadmap)
+7. [Standard Library](#standard-library)
+8. [Contributing](#contributing)
+9. [Documentation](#documentation)
 
 ---
 
@@ -562,6 +563,52 @@ fn main() => {
 5. **No macro system** — future consideration
 6. **No async/await** — future consideration (may use JS Promises as foundation)
 7. **Arrays and slices** lack rich operations (map, filter, etc. through iterators planned)
+
+---
+
+## Long-Term Roadmap
+
+Tuff's vision is to become a versatile systems programming language with multiple compilation targets and a comprehensive standard library.
+
+### Core Vision
+
+1. **Comprehensive Standard Library**
+   - Essential collections: `Vec`, `HashMap`, `BTreeMap`, `LinkedList`
+   - String utilities: split, replace, trim, case conversion
+   - Math functions: sqrt, sin, cos, floor, ceil, etc.
+   - File I/O and system utilities
+   - Networking and concurrency primitives (future)
+   - Rich iterator and functional programming utilities
+
+2. **Multi-Target Emission**
+   - **JavaScript (ES Modules)** ✓ — Current and primary target
+   - **C** (planned) — For systems programming, embedded systems, and interop with native code
+   - **Tuff** (planned) — Self-hosting at the backend level; Tuff→Tuff compilation for meta-programming and advanced optimizations
+
+### Implementation Strategy
+
+**Phase 5-6**: Standard Library Expansion
+- Build out collections, string utilities, math
+- Develop `std::iter` with functional combinators
+- Add file I/O via FFI (initially JS/node, later native)
+
+**Phase 7-8**: C Backend
+- Implement C emitter alongside JS emitter
+- Support low-level features: pointers, manual memory management (optional)
+- Enable interop between Tuff (compiled to C) and existing C libraries
+- Target: single-language solution for web, CLI, and systems programming
+
+**Phase 9+**: Tuff Backend & Advanced Features
+- Implement Tuff→Tuff compiler (self-hosting at emission level)
+- Enable compile-time meta-programming and code generation
+- Support optional advanced features: custom allocators, inline assembly, etc.
+
+### Community & Ecosystem
+
+- Foster libraries and frameworks built on Tuff
+- Establish package management (registry, dependency resolution)
+- Build community tools: IDE support, debuggers, profilers
+- Create educational resources and guides
 
 ---
 
