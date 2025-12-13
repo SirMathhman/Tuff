@@ -55,6 +55,8 @@ describe("selfhost analyzer", () => {
     );
 
     const tuffc2 = await import(pathToFileURL(stage2Out).toString());
-    expect(() => tuffc2.main([badIn, badOut])).toThrow(/annotation|mismatch|Bool|I32/i);
+    expect(() => tuffc2.main([badIn, badOut])).toThrow(
+      /annotation|mismatch|Bool|I32/i
+    );
   });
 });

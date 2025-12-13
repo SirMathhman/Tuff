@@ -1,0 +1,28 @@
+from std::test use { reset, suite, it, expect_eq, summary, status };
+
+class fn Accumulator(start: I32) => {
+  let mut sum = start;
+
+  fn add(x: I32) : I32 => { sum = sum + x; sum };
+  fn get() : I32 => sum;
+}
+
+fn main() : I32 => {
+  reset();
+  suite("method calls: more");
+
+  let a = Accumulator(10);
+
+  it("method with param", expect_eq("add", a.add(5), 15));
+  it("stateful method", expect_eq("get", a.get(), 15));
+
+  // Taking a method as a value.
+  let g = a.get;
+  it("method as value", expect_eq("g()", g(), 15));
+
+  // Chaining through an expression.
+  it("chaining", expect_eq("Accumulator(1).add(2)", Accumulator(1).add(2), 3));
+
+  summary();
+  status()
+}

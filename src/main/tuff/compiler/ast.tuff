@@ -146,6 +146,10 @@ struct EIdent {
 struct ELambda {
   tag: String,
   span: Span,
+  // Optional generic params for function-valued expressions created via
+  // local `fn name<T>(...) => ...;` desugaring.
+  // Empty for normal lambda syntax.
+  typeParams: Vec<String>,
   params: Vec<String>,
   paramTyAnns: Vec<String>,
   retTyAnn: String,
@@ -519,8 +523,8 @@ fn expr_string(span: Span, value: String) : Expr => EString { "EString", span, v
 fn expr_ident(span: Span, name: String) : Expr => EIdent { "EIdent", span, name }
 fn expr_path(span: Span, parts: Vec<String>) : Expr => EPath { "EPath", span, parts }
 
-fn expr_lambda(span: Span, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String, body: Expr) : Expr =>
-  ELambda { "ELambda", span, params, paramTyAnns, retTyAnn, body }
+fn expr_lambda(span: Span, typeParams: Vec<String>, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String, body: Expr) : Expr =>
+  ELambda { "ELambda", span, typeParams, params, paramTyAnns, retTyAnn, body }
 
 fn expr_struct_lit(span: Span, nameExpr: Expr, values: Vec<Expr>) : Expr => EStructLit { "EStructLit", span, nameExpr, values }
 

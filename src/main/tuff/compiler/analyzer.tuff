@@ -69,6 +69,8 @@ struct NarrowedTag {
   variant: String
 }
 
+fn this_struct_name(className: String) : String => "__This__" + className
+
 fn mk_union_variant_info(name: String, hasPayload: Bool, payloadTyAnns: Vec<String>) =>
   UnionVariantInfo { "UnionVariantInfo", name, hasPayload, payloadTyAnns }
 
@@ -172,10 +174,22 @@ fn ty_char() : String => "Char"
 fn ty_string() : String => "String"
 fn ty_void() : String => "Void"
 
-fn ty_fn_type(paramTyAnns, retTyAnn: String) : String => {
+fn ty_fn_type(typeParams, paramTyAnns, retTyAnn: String) : String => {
   // Compact function type tag used internally by the analyzer.
   // Example: Fn(I32,I32)->I32
-  let mut out = "Fn(";
+  // Generic example: Fn<T>(T)->T
+  let mut out = "Fn";
+  if (vec_len(typeParams) > 0) {
+    out = out + "<";
+    let mut ti = 0;
+    while (ti < vec_len(typeParams)) {
+      if (ti > 0) { out = out + ","; }
+      out = out + normalize_ty_ann(vec_get(typeParams, ti));
+      ti = ti + 1;
+    }
+    out = out + ">";
+  }
+  out = out + "(";
   let mut i = 0;
   while (i < vec_len(paramTyAnns)) {
     if (i > 0) { out = out + ","; }
@@ -189,9 +203,37 @@ fn ty_fn_type(paramTyAnns, retTyAnn: String) : String => {
 }
 
 fn ty_is_fn_type(t: String) : Bool => {
-  // `Fn(...)->Ret`
-  if (stringLen(t) < 3) { yield false; }
-  stringSlice(t, 0, 3) == "Fn("
+  // `Fn(...)->Ret` or `Fn<T>(...)->Ret`
+  if (stringLen(t) < 2) { yield false; }
+  if (!(stringSlice(t, 0, 2) == "Fn")) { yield false; }
+  true
+}
+
+fn ty_fn_type_params(t: String) => {
+  // Extract type params from `Fn<T,U>(...)->...`.
+  // Returns empty vec for non-generic `Fn(...)->...`.
+  let out = vec_new();
+  if (stringLen(t) < 3) { yield out; }
+  if (!(stringSlice(t, 0, 2) == "Fn")) { yield out; }
+  if (!(stringLen(t) >= 3 && stringCharCodeAt(t, 2) == 60)) { yield out; } // '<'
+
+  let mut i = 3;
+  let mut start = i;
+  while (i < stringLen(t)) {
+    let ch = stringCharCodeAt(t, i);
+    if (ch == 44) { // ','
+      vec_push(out, normalize_ty_ann(stringSlice(t, start, i)));
+      i = i + 1;
+      start = i;
+      continue;
+    }
+    if (ch == 62) { // '>'
+      if (i > start) { vec_push(out, normalize_ty_ann(stringSlice(t, start, i))); }
+      yield out;
+    }
+    i = i + 1;
+  }
+  out
 }
 
 fn ty_fn_ret(t: String) : String => {
@@ -775,7 +817,7 @@ fn infer_expr_type(src: String, structs, fns, scopes, depth: I32, e) : String =>
   }
 
   if (e.tag == "ELambda") {
-    yield ty_fn_type(e.paramTyAnns, e.retTyAnn);
+    yield ty_fn_type(e.typeParams, e.paramTyAnns, e.retTyAnn);
   }
 
   if (e.tag == "EStructLit") {
@@ -872,6 +914,14 @@ fn infer_expr_type(src: String, structs, fns, scopes, depth: I32, e) : String =>
   }
 
   if (e.tag == "ECall") {
+    // `class fn Name(...) => { ... }` returns an object of locals/params.
+    // Model this as a synthetic struct `__This__Name` so field access and
+    // method-field calls can be type-checked.
+    if (e.callee.tag == "EIdent") {
+      let thisName = this_struct_name(e.callee.name);
+      if (has_struct_def(structs, thisName)) { yield thisName; }
+    }
+
     if (e.callee.tag == "EIdent" && has_fn_sig(fns, e.callee.name)) {
       let sig = find_fn_sig(fns, e.callee.name);
       if (sig.retTyAnn != "") {
@@ -907,13 +957,57 @@ fn infer_expr_type(src: String, structs, fns, scopes, depth: I32, e) : String =>
       }
     }
     if (e.callee.tag == "ELambda") {
-      if (e.callee.retTyAnn != "") { yield normalize_ty_ann(e.callee.retTyAnn); }
+      if (e.callee.retTyAnn != "") {
+        if (vec_len(e.callee.typeParams) > 0) {
+          // Apply generic substitution using explicit type args (preferred) or simple inference.
+          let subst = vec_new();
+          if (vec_len(e.typeArgs) > 0) {
+            if (!(vec_len(e.typeArgs) == vec_len(e.callee.typeParams))) {
+              panic_at(src, span_start(e.span), "wrong number of type args in lambda call");
+            }
+            let mut ti = 0;
+            while (ti < vec_len(e.callee.typeParams)) {
+              subst_bind(subst, vec_get(e.callee.typeParams, ti), normalize_ty_ann(vec_get(e.typeArgs, ti)));
+              ti = ti + 1;
+            }
+          } else {
+            // Infer only when expected param type is exactly a type var.
+            let mut ai = 0;
+            while (ai < vec_len(e.args) && ai < vec_len(e.callee.paramTyAnns)) {
+              let expected = vec_get(e.callee.paramTyAnns, ai);
+              let actual = infer_expr_type(src, structs, fns, scopes, depth, vec_get(e.args, ai));
+              if (expected != "" && ty_is_type_var(e.callee.typeParams, normalize_ty_ann(expected))) {
+                subst_bind(subst, normalize_ty_ann(expected), normalize_ty_ann(actual));
+              }
+              ai = ai + 1;
+            }
+          }
+          yield ty_apply_subst(e.callee.typeParams, subst, e.callee.retTyAnn);
+        }
+        yield normalize_ty_ann(e.callee.retTyAnn);
+      }
     }
 
     // Calling through a function-typed value (e.g. `let f = (x:I32):I32=>...; f(1)`)
     // is allowed; infer the return type from the compact `Fn(...)->Ret` tag.
     let ct = infer_expr_type(src, structs, fns, scopes, depth, e.callee);
-    if (ty_is_fn_type(ct)) { yield ty_fn_ret(ct); }
+    if (ty_is_fn_type(ct)) {
+      let ret0 = ty_fn_ret(ct);
+      let tps = ty_fn_type_params(ct);
+      if (vec_len(tps) > 0 && vec_len(e.typeArgs) > 0) {
+        if (!(vec_len(e.typeArgs) == vec_len(tps))) {
+          panic_at(src, span_start(e.span), "wrong number of type args in call");
+        }
+        let subst = vec_new();
+        let mut ti = 0;
+        while (ti < vec_len(tps)) {
+          subst_bind(subst, vec_get(tps, ti), normalize_ty_ann(vec_get(e.typeArgs, ti)));
+          ti = ti + 1;
+        }
+        yield ty_apply_subst(tps, subst, ret0);
+      }
+      yield ret0;
+    }
     yield ty_unknown();
   }
 
@@ -1004,12 +1098,43 @@ fn check_call_types(src: String, structs, fns, scopes, depth: I32, e) : Void => 
     if (!(vec_len(e.args) == vec_len(e.callee.params))) {
       panic_at(src, span_start(e.span), "wrong number of args in lambda call");
     }
+
+    let subst = vec_new();
+    if (vec_len(e.callee.typeParams) > 0) {
+      if (vec_len(e.typeArgs) > 0) {
+        if (!(vec_len(e.typeArgs) == vec_len(e.callee.typeParams))) {
+          panic_at(src, span_start(e.span), "wrong number of type args in lambda call");
+        }
+        let mut ti = 0;
+        while (ti < vec_len(e.callee.typeParams)) {
+          subst_bind(subst, vec_get(e.callee.typeParams, ti), normalize_ty_ann(vec_get(e.typeArgs, ti)));
+          ti = ti + 1;
+        }
+      } else {
+        // Inference: bind T from actual arg types when expected is exactly a type var.
+        let mut ai = 0;
+        while (ai < vec_len(e.args) && ai < vec_len(e.callee.paramTyAnns)) {
+          let expected = vec_get(e.callee.paramTyAnns, ai);
+          if (expected != "" && ty_is_type_var(e.callee.typeParams, normalize_ty_ann(expected))) {
+            let actual = infer_expr_type(src, structs, fns, scopes, depth, vec_get(e.args, ai));
+            subst_bind(subst, normalize_ty_ann(expected), normalize_ty_ann(actual));
+          }
+          ai = ai + 1;
+        }
+      }
+    } else {
+      if (vec_len(e.typeArgs) > 0) {
+        panic_at(src, span_start(e.span), "cannot supply type args to non-generic lambda");
+      }
+    }
+
     let mut i = 0;
     while (i < vec_len(e.args) && i < vec_len(e.callee.paramTyAnns)) {
       let expected = vec_get(e.callee.paramTyAnns, i);
       if (expected != "") {
+        let expected1 = if (vec_len(e.callee.typeParams) > 0) ty_apply_subst(e.callee.typeParams, subst, expected) else normalize_ty_ann(expected);
         let actual = infer_expr_type(src, structs, fns, scopes, depth, vec_get(e.args, i));
-        require_type_compatible(src, span_start(e.span), "lambda arg " + ("" + (i + 1)), structs, expected, actual);
+        require_type_compatible(src, span_start(e.span), "lambda arg " + ("" + (i + 1)), structs, expected1, actual);
       }
       i = i + 1;
     }
@@ -1272,6 +1397,22 @@ fn analyze_expr(src: String, structs, unions, fns, scopes, depth: I32, narrowed,
 
 fn analyze_stmt(src: String, structs, unions, fns, scopes, depth: I32, narrowed, s) : Void => {
   if (s.tag == "SLet") {
+    // Predeclare lambda lets so recursion/mutual recursion works.
+    if (s.init.tag == "ELambda") {
+      let initTy0 = infer_expr_type(src, structs, fns, scopes, depth, s.init);
+      let bindTy = if (s.tyAnn != "") normalize_ty_ann(s.tyAnn) else initTy0;
+      let cur = vec_get(scopes, depth - 1);
+      if (!scope_contains(cur, s.name)) {
+        declare_name(src, span_start(s.span), scopes, depth, s.name, s.isMut, bindTy);
+      }
+
+      analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.init);
+      if (s.tyAnn != "") {
+        require_type_compatible(src, span_start(s.span), "let " + s.name, structs, s.tyAnn, initTy0);
+      }
+      yield;
+    }
+
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.init);
     let initTy = infer_expr_type(src, structs, fns, scopes, depth, s.init);
     if (s.tyAnn != "") {
@@ -1395,6 +1536,22 @@ fn analyze_stmt(src: String, structs, unions, fns, scopes, depth: I32, narrowed,
 }
 
 fn analyze_stmts(src: String, structs, unions, fns, scopes, depth: I32, narrowed, stmts) : Void => {
+  // Predeclare all `let name = <lambda>` in this block so local functions can
+  // be recursive and mutually recursive.
+  let cur = vec_get(scopes, depth - 1);
+  let mut pi = 0;
+  while (pi < vec_len(stmts)) {
+    let st = vec_get(stmts, pi);
+    if (st.tag == "SLet" && st.init.tag == "ELambda") {
+      if (!scope_contains(cur, st.name)) {
+        let initTy0 = infer_expr_type(src, structs, fns, scopes, depth, st.init);
+        let bindTy = if (st.tyAnn != "") normalize_ty_ann(st.tyAnn) else initTy0;
+        declare_name(src, span_start(st.span), scopes, depth, st.name, st.isMut, bindTy);
+      }
+    }
+    pi = pi + 1;
+  }
+
   let mut i = 0;
   while (i < vec_len(stmts)) {
     analyze_stmt(src, structs, unions, fns, scopes, depth, narrowed, vec_get(stmts, i));
@@ -1505,6 +1662,46 @@ fn predeclare_decl(src: String, structs, unions, fns, scopes, depth: I32, d) : V
 
   if (d.tag == "DClassFn") {
     declare_name(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown());
+
+    // Synthesize a struct that represents the returned object shape.
+    let thisName = this_struct_name(d.name);
+    if (!has_struct_def(structs, thisName)) {
+      let fields = vec_new();
+      let fieldTyAnns = vec_new();
+
+      // Params are fields.
+      let mut pi = 0;
+      while (pi < vec_len(d.params)) {
+        vec_push(fields, vec_get(d.params, pi));
+        let mut t = "";
+        if (pi < vec_len(d.paramTyAnns)) { t = vec_get(d.paramTyAnns, pi); }
+        vec_push(fieldTyAnns, if (t == "") "" else normalize_ty_ann(t));
+        pi = pi + 1;
+      }
+
+      // Lets in the body become fields. Record only obvious types:
+      // - explicit annotation
+      // - lambda signature (for methods)
+      let mut si = 0;
+      while (si < vec_len(d.body)) {
+        let st = vec_get(d.body, si);
+        if (st.tag == "SLet") {
+          vec_push(fields, st.name);
+          if (st.tyAnn != "") {
+            vec_push(fieldTyAnns, normalize_ty_ann(st.tyAnn));
+          } else {
+            if (st.init.tag == "ELambda") {
+              vec_push(fieldTyAnns, ty_fn_type(st.init.typeParams, st.init.paramTyAnns, st.init.retTyAnn));
+            } else {
+              vec_push(fieldTyAnns, "");
+            }
+          }
+        }
+        si = si + 1;
+      }
+
+      vec_push(structs, mk_struct_def(thisName, fields, fieldTyAnns));
+    }
 
     let mut paramTyAnns = d.paramTyAnns;
     if (vec_len(paramTyAnns) == 0) {

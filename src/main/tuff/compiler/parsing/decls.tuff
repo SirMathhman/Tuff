@@ -55,7 +55,7 @@ class fn ParsedParamsAst(names: Vec<String>, tyAnns: Vec<String>, nextPos: I32) 
 class fn ParsedTypeParamsAst(params: Vec<String>, nextPos: I32) => {}
 
 class fn ParsedImports(v0: String, v1: I32) => {}
-class fn ParsedFn(v0: String, v1: String, v2: I32) => {}
+class fn ParsedFn(v0: String, v1: I32, v2: String) => {}
 
 fn parse_param_list(src: String, i: I32) : ParsedParams => {
   // parses: '(' (ident (',' ident)*)? ')'
@@ -434,7 +434,7 @@ fn parse_module_decl_ast(src: String, i: I32) : ParsedDeclAst => {
   ParsedDeclAst(decl_module(span(start, k), modName.text, decls), k)
 }
 
-fn parse_extern_decl(src: String, i: I32) : String => {
+fn parse_extern_decl(src: String, i: I32) : ParsedStmt => {
   let mut k = parse_keyword(src, i, "extern");
   k = parse_keyword(src, k, "from");
   let mod = parse_module_path(src, k);
@@ -510,7 +510,7 @@ fn parse_imports(src: String, i: I32) : ParsedImports => {
   ParsedImports(out, k)
 }
 
-fn parse_fn_decl_named(src: String, i: I32, jsName: String, exportThis: Bool) : String => {
+fn parse_fn_decl_named(src: String, i: I32, jsName: String, exportThis: Bool) : ParsedFn => {
   let mut k = parse_keyword(src, i, "fn");
   let name = parse_ident(src, k);
   k = name.nextPos;
@@ -540,7 +540,7 @@ fn parse_fn_decl_named(src: String, i: I32, jsName: String, exportThis: Bool) : 
   ParsedFn(js, k, name.text)
 }
 
-fn parse_module_decl(src: String, i: I32, prefix: String, exportTop: Bool) : String => {
+fn parse_module_decl(src: String, i: I32, prefix: String, exportTop: Bool) : ParsedStmt => {
   // module Name { (fn ... | module ...)* }
   let mut k = parse_keyword(src, i, "module");
   let modName = parse_ident(src, k);
@@ -594,7 +594,7 @@ fn parse_module_decl(src: String, i: I32, prefix: String, exportTop: Bool) : Str
   ParsedStmt(code, k)
 }
 
-fn parse_fn_decl2(src: String, i: I32, exportAll: Bool) : String => {
+fn parse_fn_decl2(src: String, i: I32, exportAll: Bool) : ParsedStmt => {
   let mut k = parse_keyword(src, i, "fn");
   let name = parse_ident(src, k);
   k = name.nextPos;
@@ -625,7 +625,7 @@ fn parse_fn_decl2(src: String, i: I32, exportAll: Bool) : String => {
   ParsedStmt(js, k)
 }
 
-fn parse_class_fn_decl2(src: String, i: I32, exportAll: Bool) : String => {
+fn parse_class_fn_decl2(src: String, i: I32, exportAll: Bool) : ParsedStmt => {
   let mut k = parse_keyword(src, i, "class");
   k = parse_keyword(src, k, "fn");
   let name = parse_ident(src, k);
@@ -733,9 +733,9 @@ fn parse_class_fn_decl2(src: String, i: I32, exportAll: Bool) : String => {
   ParsedStmt(js, k)
 }
 
-fn parse_fn_decl(src: String, i: I32) : String => parse_fn_decl2(src, i, false)
+fn parse_fn_decl(src: String, i: I32) : ParsedStmt => parse_fn_decl2(src, i, false)
 
-fn parse_struct_decl(src: String, i: I32) : String => {
+fn parse_struct_decl(src: String, i: I32) : ParsedStmt => {
   // struct Name { field: Type, ... }
   let mut k = parse_keyword(src, i, "struct");
   let name = parse_ident(src, k);
@@ -781,7 +781,7 @@ fn parse_struct_decl(src: String, i: I32) : String => {
   ParsedStmt("", k)
 }
 
-fn parse_type_union_decl(src: String, i: I32, exportAll: Bool) : String => {
+fn parse_type_union_decl(src: String, i: I32, exportAll: Bool) : ParsedStmt => {
   // type Name<T, ...> = Variant1<X> | Variant2 | ...;
   let mut k = parse_keyword(src, i, "type");
   let _name = parse_ident(src, k);

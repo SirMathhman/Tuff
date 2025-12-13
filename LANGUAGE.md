@@ -749,6 +749,12 @@ class fn User(name: String, age: I32) => {
 
 Methods are functions defined within the body of a class. They have access to all bindings in the class scope (parameters and locally-defined values) and are included as fields in the yielded `this` value.
 
+Conceptually, a method declaration is sugar for creating a function-valued field in the class scope (i.e. a `let` binding whose initializer is a lambda). Because methods are just function values:
+
+- You can take a method as a value (`let f = p.manhattan; f();`).
+- Methods can be **generic** (`fn id<T>(x: T) : T => x;`).
+- Methods can be **recursive** and **mutually recursive** within the same class body.
+
 Syntax:
 
 ```tuff
@@ -767,6 +773,13 @@ Methods are invoked using dot notation:
 let p = Point(3, 4);
 let manhattan_dist = p.manhattan();  // 7
 let sum_sq = p.distance_from_origin();  // 25
+```
+
+Since methods are just fields, you can also call them through a local binding:
+
+```tuff
+let f = p.manhattan;
+let d = f();
 ```
 
 Methods capture variables from their enclosing class scope, functioning as closures:

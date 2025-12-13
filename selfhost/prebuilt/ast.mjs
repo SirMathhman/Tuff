@@ -128,8 +128,8 @@ return ({ tag: "EIdent", span: span, name: name });
 export function expr_path(span, parts) {
 return ({ tag: "EPath", span: span, parts: parts });
 }
-export function expr_lambda(span, params, paramTyAnns, retTyAnn, body) {
-return ({ tag: "ELambda", span: span, params: params, paramTyAnns: paramTyAnns, retTyAnn: retTyAnn, body: body });
+export function expr_lambda(span, typeParams, params, paramTyAnns, retTyAnn, body) {
+return ({ tag: "ELambda", span: span, typeParams: typeParams, params: params, paramTyAnns: paramTyAnns, retTyAnn: retTyAnn, body: body });
 }
 export function expr_struct_lit(span, nameExpr, values) {
 return ({ tag: "EStructLit", span: span, nameExpr: nameExpr, values: values });

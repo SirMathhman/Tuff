@@ -36,6 +36,9 @@ return { items: items, nextPos: nextPos };
 export function ParsedTypeArgsForCallAst(ok, typeArgs, nextPos) {
 return { ok: ok, typeArgs: typeArgs, nextPos: nextPos };
 }
+export function ParsedTypeParamsForLambdaAst(typeParams, nextPos) {
+return { typeParams: typeParams, nextPos: nextPos };
+}
 export function find_matching_rparen(src, openPos) {
 let i = openPos;
 let depth = 0;
@@ -145,7 +148,38 @@ k = ret.v1;
 k = parse_keyword(src, k, "=>");
 const t = skip_ws(src, k);
 const body = (t < stringLen(src) && stringCharCodeAt(src, t) == 123 ? parse_block_expr_ast(src, k) : parse_expr_ast(src, k));
-return ParsedExprAst(expr_lambda(span(start, body.nextPos), params, paramTyAnns, retTyAnn, body.expr), body.nextPos);
+return ParsedExprAst(expr_lambda(span(start, body.nextPos), vec_new(), params, paramTyAnns, retTyAnn, body.expr), body.nextPos);
+}
+export function parse_type_param_names_list_ast(src, i) {
+let k = skip_ws(src, i);
+if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 60)) {
+return ParsedTypeParamsForLambdaAst(vec_new(), i);
+}
+k = k + 1;
+k = skip_ws(src, k);
+const names = vec_new();
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 62) {
+return ParsedTypeParamsForLambdaAst(names, k + 1);
+}
+while (true) {
+const id = parse_ident(src, k);
+vec_push(names, id.text);
+k = skip_ws(src, id.nextPos);
+if (!(k < stringLen(src))) {
+panic_at(src, k, "expected '>' in type params");
+}
+const ch = stringCharCodeAt(src, k);
+if (ch == 44) {
+k = k + 1;
+k = skip_ws(src, k);
+continue;
+}
+if (ch == 62) {
+return ParsedTypeParamsForLambdaAst(names, k + 1);
+}
+panic_at(src, k, "expected ',' or '>' in type params");
+}
+return ParsedTypeParamsForLambdaAst(names, k);
 }
 export function parse_expr(src, i) {
 return parse_or(src, i);
@@ -1008,9 +1042,12 @@ k = name.nextPos;
 if (is_identifier_too_short(name.text)) {
 warn_short_identifier(src, name.startPos, name.text);
 }
+let typeParams = vec_new();
 const t0 = skip_ws(src, k);
 if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) {
-panic_at(src, t0, "local generic `fn` is not supported yet; use a monomorphic helper");
+const tp = parse_type_param_names_list_ast(src, t0);
+typeParams = tp.typeParams;
+k = tp.nextPos;
 }
 k = parse_keyword(src, k, "(");
 k = skip_ws(src, k);
@@ -1065,7 +1102,7 @@ const bodyStart = skip_ws(src, k);
 const body = parse_main_body_ast(src, k);
 k = body.nextPos;
 const bodyExpr = (vec_len(body.body) == 0 ? body.tail : expr_block(span(bodyStart, body.nextPos), body.body, body.tail));
-const lam = expr_lambda(span(start, body.nextPos), params, paramTyAnns, retTyAnn, bodyExpr);
+const lam = expr_lambda(span(start, body.nextPos), typeParams, params, paramTyAnns, retTyAnn, bodyExpr);
 k = parse_optional_semicolon(src, k);
 return ParsedStmtAst(stmt_let(span(start, k), false, name.text, lam), k);
 }
@@ -1809,7 +1846,16 @@ warn_short_identifier(src, name.startPos, name.text);
 }
 const t0 = skip_ws(src, k);
 if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) {
-panic_at(src, t0, "local generic `fn` is not supported yet");
+let j = t0 + 1;
+while (j < stringLen(src)) {
+const ch = stringCharCodeAt(src, j);
+if (ch == 62) {
+k = j + 1;
+j = stringLen(src);
+} else {
+j = j + 1;
+}
+}
 }
 k = parse_keyword(src, k, "(");
 k = skip_ws(src, k);

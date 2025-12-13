@@ -108,6 +108,7 @@ class fn ParsedStmtAst(stmt, nextPos: I32) => {}
 class fn ParsedStmtsAst(stmts, nextPos: I32) => {}
 class fn ParsedExprListAst(items, nextPos: I32) => {}
 class fn ParsedTypeArgsForCallAst(ok: Bool, typeArgs, nextPos: I32) => {}
+class fn ParsedTypeParamsForLambdaAst(typeParams, nextPos: I32) => {}
 
 fn find_matching_rparen(src: String, openPos: I32) : I32 => {
   // Returns the index of the ')' that closes the '(' at openPos, or -1.
@@ -229,7 +230,41 @@ fn parse_lambda_expr_ast(src: String, i: I32) : ParsedExprAst => {
 
   let t = skip_ws(src, k);
   let body = if (t < stringLen(src) && stringCharCodeAt(src, t) == 123) parse_block_expr_ast(src, k) else parse_expr_ast(src, k);
-  ParsedExprAst(expr_lambda(span(start, body.nextPos), params, paramTyAnns, retTyAnn, body.expr), body.nextPos)
+  ParsedExprAst(expr_lambda(span(start, body.nextPos), vec_new(), params, paramTyAnns, retTyAnn, body.expr), body.nextPos)
+}
+
+fn parse_type_param_names_list_ast(src: String, i: I32) : ParsedTypeParamsForLambdaAst => {
+  // parses: '<' (ident (',' ident)*)? '>'
+  // empty list is allowed (but rare): fn f<>()
+  let mut k = skip_ws(src, i);
+  if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 60)) { // '<'
+    yield ParsedTypeParamsForLambdaAst(vec_new(), i);
+  }
+  k = k + 1;
+  k = skip_ws(src, k);
+
+  let names = vec_new();
+  if (k < stringLen(src) && stringCharCodeAt(src, k) == 62) { // '>'
+    yield ParsedTypeParamsForLambdaAst(names, k + 1);
+  }
+
+  while (true) {
+    let id = parse_ident(src, k);
+    vec_push(names, id.text);
+    k = skip_ws(src, id.nextPos);
+    if (!(k < stringLen(src))) { panic_at(src, k, "expected '>' in type params"); }
+    let ch = stringCharCodeAt(src, k);
+    if (ch == 44) { // ','
+      k = k + 1;
+      k = skip_ws(src, k);
+      continue;
+    }
+    if (ch == 62) { // '>'
+      yield ParsedTypeParamsForLambdaAst(names, k + 1);
+    }
+    panic_at(src, k, "expected ',' or '>' in type params")
+  }
+  ParsedTypeParamsForLambdaAst(names, k)
 }
 
 fn parse_expr(src: String, i: I32) : ParsedExpr => parse_or(src, i)
@@ -1033,10 +1068,13 @@ fn parse_stmt_ast(src: String, i: I32) : ParsedStmtAst => {
     k = name.nextPos;
     if (is_identifier_too_short(name.text)) { warn_short_identifier(src, name.startPos, name.text); }
 
-    // Generic local fns would require generic lambdas; not supported in this bootstrap subset.
+    // Optional generic params: fn id<T, U>(...)
+    let mut typeParams = vec_new();
     let t0 = skip_ws(src, k);
     if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) { // '<'
-      panic_at(src, t0, "local generic `fn` is not supported yet; use a monomorphic helper");
+      let tp = parse_type_param_names_list_ast(src, t0);
+      typeParams = tp.typeParams;
+      k = tp.nextPos;
     }
 
     // Parse params: (name (':' Type)? (',' ... )?)
@@ -1101,7 +1139,7 @@ fn parse_stmt_ast(src: String, i: I32) : ParsedStmtAst => {
     k = body.nextPos;
 
     let bodyExpr = if (vec_len(body.body) == 0) body.tail else expr_block(span(bodyStart, body.nextPos), body.body, body.tail);
-    let lam = expr_lambda(span(start, body.nextPos), params, paramTyAnns, retTyAnn, bodyExpr);
+    let lam = expr_lambda(span(start, body.nextPos), typeParams, params, paramTyAnns, retTyAnn, bodyExpr);
 
     k = parse_optional_semicolon(src, k);
     yield ParsedStmtAst(stmt_let(span(start, k), false, name.text, lam), k);
@@ -1863,10 +1901,20 @@ fn parse_stmt(src: String, i: I32) : ParsedStmt => {
     k = name.nextPos;
     if (is_identifier_too_short(name.text)) { warn_short_identifier(src, name.startPos, name.text); }
 
-    // Generic local fns are not supported in the tiny emitter path.
+    // Optional generic params: fn id<T, U>(...) -- ignored by tiny JS emitter.
     let t0 = skip_ws(src, k);
     if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) { // '<'
-      panic_at(src, t0, "local generic `fn` is not supported yet");
+      // Scan/consume balanced '<...>' with identifiers and commas.
+      let mut j = t0 + 1;
+      while (j < stringLen(src)) {
+        let ch = stringCharCodeAt(src, j);
+        if (ch == 62) { // '>'
+          k = j + 1;
+          j = stringLen(src);
+        } else {
+          j = j + 1;
+        }
+      }
     }
 
     // Parse params: (name (':' Type)? (',' ... )?)
