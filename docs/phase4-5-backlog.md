@@ -71,7 +71,7 @@ Phase 4/5 is “done enough to move on” when **all** items below are true. Thi
   - `from X use { ... }` resolves and produces correct relative imports
   - `extern from X use { ... }` emits the correct runtime import shape
   - output paths are stable and deterministic
-  - *Note: multi-file support is partially working; single-file bootstrap is complete.*
+  - _Note: multi-file support is partially working; single-file bootstrap is complete._
 
 ### “We can move on” line
 

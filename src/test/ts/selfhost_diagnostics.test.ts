@@ -62,12 +62,9 @@ describe("selfhost diagnostics", () => {
 
     // Error on the middle line so we can assert previous/next lines are shown.
     // Missing ')' in the let initializer.
-    const badSrc = [
-      "fn main() => {",
-      "  let x = (1 + 2",
-      "  x",
-      "}",
-    ].join("\n");
+    const badSrc = ["fn main() => {", "  let x = (1 + 2", "  x", "}"].join(
+      "\n"
+    );
 
     let msg = "";
     try {
@@ -171,7 +168,7 @@ describe("selfhost diagnostics", () => {
     // 2) Unknown name `z`
     const badSrc = [
       "fn main() => {",
-      "  let x: I32 = \"nope\";",
+      '  let x: I32 = "nope";',
       "  let y = z;",
       "  0",
       "}",
