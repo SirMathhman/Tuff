@@ -45,8 +45,11 @@ fn mk_fn_sig(name: String, params: Vec<String>, paramTyAnns: Vec<String>, retTyA
 fn mk_binding(name: String, isMut: Bool, tyTag: String) => Binding { "Binding", name, isMut, tyTag }
 
 fn ty_unknown() : String => "Unknown"
+fn ty_int_lit() : String => "IntLit"
 fn ty_bool() : String => "Bool"
 fn ty_i32() : String => "I32"
+fn ty_u32() : String => "U32"
+fn ty_char() : String => "Char"
 fn ty_string() : String => "String"
 fn ty_void() : String => "Void"
 
@@ -54,6 +57,8 @@ fn normalize_ty_ann(t: String) : String => {
   // Keep this minimal (Phase 4). We mostly do string equality checks.
   if (t == "Int") { yield ty_i32(); }
   if (t == "I32") { yield ty_i32(); }
+  if (t == "U32") { yield ty_u32(); }
+  if (t == "Char") { yield ty_char(); }
   if (t == "Bool") { yield ty_bool(); }
   if (t == "String") { yield ty_string(); }
   if (t == "Void") { yield ty_void(); }
@@ -62,10 +67,21 @@ fn normalize_ty_ann(t: String) : String => {
 
 fn type_is_unknown(t: String) : Bool => t == ty_unknown() || t == ""
 
+fn type_is_int_like(t: String) : Bool => {
+  let tt = normalize_ty_ann(t);
+  if (tt == ty_int_lit()) { yield true; }
+  if (tt == ty_i32()) { yield true; }
+  if (tt == ty_u32()) { yield true; }
+  if (tt == ty_char()) { yield true; }
+  false
+}
+
 fn should_enforce_expected_type(structs, expected: String) : Bool => {
   let e = normalize_ty_ann(expected);
   if (e == ty_bool()) { yield true; }
   if (e == ty_i32()) { yield true; }
+  if (e == ty_u32()) { yield true; }
+  if (e == ty_char()) { yield true; }
   if (e == ty_string()) { yield true; }
   if (e == ty_void()) { yield true; }
   if (has_struct_def(structs, e)) { yield true; }
@@ -81,6 +97,13 @@ fn type_compatible(structs, expected: String, actual: String) : Bool => {
   if (!should_enforce_expected_type(structs, expected)) { yield true; }
 
   if (type_is_unknown(actual)) { yield true; }
+
+  // Integer/char literals are context-typed in the language.
+  // Model that by allowing `IntLit` to flow into int-like expected types.
+  if (normalize_ty_ann(actual) == ty_int_lit() && type_is_int_like(expected)) {
+    yield true;
+  }
+
   normalize_ty_ann(expected) == normalize_ty_ann(actual)
 }
 
@@ -236,6 +259,25 @@ fn lookup_binding(src: String, pos: I32, scopes, depth: I32, name: String) : Bin
   mk_binding(name, false, ty_unknown())
 }
 
+fn infer_lookup_ty(scopes, depth: I32, name: String) : String => {
+  // Best-effort lookup for type inference.
+  // Do NOT panic here: inference may run at an outer depth (e.g. inferring an
+  // `if` expression) while inspecting nested block tails, where block-local
+  // bindings are not visible at the caller's depth.
+  let mut si = 0;
+  while (si < depth) {
+    let scope = vec_get(scopes, si);
+    let mut bi = 0;
+    while (bi < vec_len(scope)) {
+      let b = vec_get(scope, bi);
+      if (b.name == name) { yield b.tyTag; }
+      bi = bi + 1;
+    }
+    si = si + 1;
+  }
+  ty_unknown()
+}
+
 fn require_name(src: String, pos: I32, scopes, depth: I32, name: String) : Void => {
   // The current bootstrap subset still parses `true`/`false` as identifiers.
   // Treat them as built-in literals so the analyzer doesn't reject valid code.
@@ -253,14 +295,13 @@ fn require_name(src: String, pos: I32, scopes, depth: I32, name: String) : Void 
 
 fn infer_expr_type(src: String, structs, fns, scopes, depth: I32, e) : String => {
   if (e.tag == "EBool") { yield ty_bool(); }
-  if (e.tag == "EInt") { yield ty_i32(); }
+  if (e.tag == "EInt") { yield ty_int_lit(); }
   if (e.tag == "EString") { yield ty_string(); }
   if (e.tag == "EIdent") {
     // The bootstrap subset still sometimes parses these as identifiers.
     if (e.name == "true") { yield ty_bool(); }
     if (e.name == "false") { yield ty_bool(); }
-    let b = lookup_binding(src, span_start(e.span), scopes, depth, e.name);
-    yield b.tyTag;
+    yield infer_lookup_ty(scopes, depth, e.name);
   }
 
   if (e.tag == "EStructLit") {
@@ -277,6 +318,7 @@ fn infer_expr_type(src: String, structs, fns, scopes, depth: I32, e) : String =>
     if (e.op.tag == "OpNeg") {
       let t = infer_expr_type(src, structs, fns, scopes, depth, e.expr);
       if (t == ty_i32()) { yield ty_i32(); }
+      if (t == ty_int_lit()) { yield ty_i32(); }
       yield ty_unknown();
     }
   }
@@ -296,12 +338,28 @@ fn infer_expr_type(src: String, structs, fns, scopes, depth: I32, e) : String =>
       let lt = infer_expr_type(src, structs, fns, scopes, depth, e.left);
       let rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
       if (lt == ty_string() || rt == ty_string()) { yield ty_string(); }
-      if (lt == ty_i32() && rt == ty_i32()) { yield ty_i32(); }
+      if (type_is_int_like(lt) && type_is_int_like(rt)) {
+        // Char arithmetic yields I32.
+        if (normalize_ty_ann(lt) == ty_char() || normalize_ty_ann(rt) == ty_char()) { yield ty_i32(); }
+        // Preserve U32 only when clearly operating on U32s.
+        if (normalize_ty_ann(lt) == ty_u32() && normalize_ty_ann(rt) == ty_u32()) { yield ty_u32(); }
+        // Otherwise treat as I32 for now.
+        yield ty_i32();
+      }
       yield ty_unknown();
     }
-    if (e.op.tag == "OpSub") { yield ty_i32(); }
-    if (e.op.tag == "OpMul") { yield ty_i32(); }
-    if (e.op.tag == "OpDiv") { yield ty_i32(); }
+    if (e.op.tag == "OpSub" || e.op.tag == "OpMul" || e.op.tag == "OpDiv") {
+      let lt = infer_expr_type(src, structs, fns, scopes, depth, e.left);
+      let rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
+      if (type_is_int_like(lt) && type_is_int_like(rt)) {
+        // Char arithmetic yields I32.
+        if (normalize_ty_ann(lt) == ty_char() || normalize_ty_ann(rt) == ty_char()) { yield ty_i32(); }
+        // Preserve U32 only when clearly operating on U32s.
+        if (normalize_ty_ann(lt) == ty_u32() && normalize_ty_ann(rt) == ty_u32()) { yield ty_u32(); }
+        yield ty_i32();
+      }
+      yield ty_unknown();
+    }
   }
 
   if (e.tag == "EField") {
@@ -339,8 +397,36 @@ fn infer_expr_type(src: String, structs, fns, scopes, depth: I32, e) : String =>
 
 fn check_cond_is_bool(src: String, structs, fns, scopes, depth: I32, cond) : Void => {
   let t = infer_expr_type(src, structs, fns, scopes, depth, cond);
-  if (t == ty_i32()) { panic_at(src, span_start(cond.span), "condition must be Bool (got I32)"); }
+  if (t == ty_i32() || t == ty_u32() || t == ty_char() || t == ty_int_lit()) { panic_at(src, span_start(cond.span), "condition must be Bool (got I32)"); }
   if (t == ty_string()) { panic_at(src, span_start(cond.span), "condition must be Bool (got String)"); }
+}
+
+fn check_binary_operand_types(src: String, structs, fns, scopes, depth: I32, e) : Void => {
+  // Minimal operand validation to catch obviously-wrong code while keeping
+  // the bootstrap analyzer incremental.
+  if (e.tag != "EBinary") { yield; }
+
+  let lt = infer_expr_type(src, structs, fns, scopes, depth, e.left);
+  let rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
+
+  // If either side is Unknown, do not enforce (avoid false positives).
+  if (type_is_unknown(lt) || type_is_unknown(rt)) { yield; }
+
+  // Arithmetic operators: require int-like operands, except `+` allows String.
+  if (e.op.tag == "OpAdd") {
+    if (lt == ty_string() || rt == ty_string()) { yield; }
+    if (!(type_is_int_like(lt) && type_is_int_like(rt))) {
+      panic_at(src, span_start(e.span), "invalid operands to '+': expected numbers or strings");
+    }
+    yield;
+  }
+
+  if (e.op.tag == "OpSub" || e.op.tag == "OpMul" || e.op.tag == "OpDiv") {
+    if (!(type_is_int_like(lt) && type_is_int_like(rt))) {
+      panic_at(src, span_start(e.span), "invalid operands to arithmetic operator");
+    }
+    yield;
+  }
 }
 
 fn check_struct_lit_types(src: String, structs, fns, scopes, depth: I32, e) : Void => {
@@ -412,6 +498,7 @@ fn analyze_expr(src: String, structs, fns, scopes, depth: I32, e) : Void => {
   if (e.tag == "EBinary") {
     analyze_expr(src, structs, fns, scopes, depth, e.left);
     analyze_expr(src, structs, fns, scopes, depth, e.right);
+    check_binary_operand_types(src, structs, fns, scopes, depth, e);
     yield;
   }
 

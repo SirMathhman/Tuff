@@ -14,11 +14,20 @@ return ({ tag: "Binding", name: name, isMut: isMut, tyTag: tyTag });
 export function ty_unknown() {
 return "Unknown";
 }
+export function ty_int_lit() {
+return "IntLit";
+}
 export function ty_bool() {
 return "Bool";
 }
 export function ty_i32() {
 return "I32";
+}
+export function ty_u32() {
+return "U32";
+}
+export function ty_char() {
+return "Char";
 }
 export function ty_string() {
 return "String";
@@ -32,6 +41,12 @@ return ty_i32();
 }
 if ((t == "I32")) {
 return ty_i32();
+}
+if ((t == "U32")) {
+return ty_u32();
+}
+if ((t == "Char")) {
+return ty_char();
 }
 if ((t == "Bool")) {
 return ty_bool();
@@ -47,12 +62,34 @@ return t;
 export function type_is_unknown(t) {
 return ((t == ty_unknown()) || (t == ""));
 }
+export function type_is_int_like(t) {
+const tt = normalize_ty_ann(t);
+if ((tt == ty_int_lit())) {
+return true;
+}
+if ((tt == ty_i32())) {
+return true;
+}
+if ((tt == ty_u32())) {
+return true;
+}
+if ((tt == ty_char())) {
+return true;
+}
+return false;
+}
 export function should_enforce_expected_type(structs, expected) {
 const e = normalize_ty_ann(expected);
 if ((e == ty_bool())) {
 return true;
 }
 if ((e == ty_i32())) {
+return true;
+}
+if ((e == ty_u32())) {
+return true;
+}
+if ((e == ty_char())) {
 return true;
 }
 if ((e == ty_string())) {
@@ -74,6 +111,9 @@ if ((!should_enforce_expected_type(structs, expected))) {
 return true;
 }
 if (type_is_unknown(actual)) {
+return true;
+}
+if (((normalize_ty_ann(actual) == ty_int_lit()) && type_is_int_like(expected))) {
 return true;
 }
 return (normalize_ty_ann(expected) == normalize_ty_ann(actual));
@@ -243,6 +283,22 @@ si = (si + 1);
 panic_at(src, pos, ("unknown name: " + name));
 return mk_binding(name, false, ty_unknown());
 }
+export function infer_lookup_ty(scopes, depth, name) {
+let si = 0;
+while ((si < depth)) {
+const scope = vec_get(scopes, si);
+let bi = 0;
+while ((bi < vec_len(scope))) {
+const b = vec_get(scope, bi);
+if ((b.name == name)) {
+return b.tyTag;
+}
+bi = (bi + 1);
+}
+si = (si + 1);
+}
+return ty_unknown();
+}
 export function require_name(src, pos, scopes, depth, name) {
 if ((name == "true")) {
 return;
@@ -264,7 +320,7 @@ if ((e.tag == "EBool")) {
 return ty_bool();
 }
 if ((e.tag == "EInt")) {
-return ty_i32();
+return ty_int_lit();
 }
 if ((e.tag == "EString")) {
 return ty_string();
@@ -276,8 +332,7 @@ return ty_bool();
 if ((e.name == "false")) {
 return ty_bool();
 }
-const b = lookup_binding(src, span_start(e.span), scopes, depth, e.name);
-return b.tyTag;
+return infer_lookup_ty(scopes, depth, e.name);
 }
 if ((e.tag == "EStructLit")) {
 return struct_name_of_expr(src, e.nameExpr);
@@ -293,6 +348,9 @@ return ty_unknown();
 if ((e.op.tag == "OpNeg")) {
 const t = infer_expr_type(src, structs, fns, scopes, depth, e.expr);
 if ((t == ty_i32())) {
+return ty_i32();
+}
+if ((t == ty_int_lit())) {
 return ty_i32();
 }
 return ty_unknown();
@@ -329,19 +387,30 @@ const rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
 if (((lt == ty_string()) || (rt == ty_string()))) {
 return ty_string();
 }
-if (((lt == ty_i32()) && (rt == ty_i32()))) {
+if ((type_is_int_like(lt) && type_is_int_like(rt))) {
+if (((normalize_ty_ann(lt) == ty_char()) || (normalize_ty_ann(rt) == ty_char()))) {
+return ty_i32();
+}
+if (((normalize_ty_ann(lt) == ty_u32()) && (normalize_ty_ann(rt) == ty_u32()))) {
+return ty_u32();
+}
 return ty_i32();
 }
 return ty_unknown();
 }
-if ((e.op.tag == "OpSub")) {
+if ((((e.op.tag == "OpSub") || (e.op.tag == "OpMul")) || (e.op.tag == "OpDiv"))) {
+const lt = infer_expr_type(src, structs, fns, scopes, depth, e.left);
+const rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
+if ((type_is_int_like(lt) && type_is_int_like(rt))) {
+if (((normalize_ty_ann(lt) == ty_char()) || (normalize_ty_ann(rt) == ty_char()))) {
 return ty_i32();
 }
-if ((e.op.tag == "OpMul")) {
+if (((normalize_ty_ann(lt) == ty_u32()) && (normalize_ty_ann(rt) == ty_u32()))) {
+return ty_u32();
+}
 return ty_i32();
 }
-if ((e.op.tag == "OpDiv")) {
-return ty_i32();
+return ty_unknown();
 }
 }
 if ((e.tag == "EField")) {
@@ -375,11 +444,37 @@ return ty_unknown();
 }
 export function check_cond_is_bool(src, structs, fns, scopes, depth, cond) {
 const t = infer_expr_type(src, structs, fns, scopes, depth, cond);
-if ((t == ty_i32())) {
+if (((((t == ty_i32()) || (t == ty_u32())) || (t == ty_char())) || (t == ty_int_lit()))) {
 panic_at(src, span_start(cond.span), "condition must be Bool (got I32)");
 }
 if ((t == ty_string())) {
 panic_at(src, span_start(cond.span), "condition must be Bool (got String)");
+}
+return undefined;
+}
+export function check_binary_operand_types(src, structs, fns, scopes, depth, e) {
+if ((e.tag != "EBinary")) {
+return;
+}
+const lt = infer_expr_type(src, structs, fns, scopes, depth, e.left);
+const rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
+if ((type_is_unknown(lt) || type_is_unknown(rt))) {
+return;
+}
+if ((e.op.tag == "OpAdd")) {
+if (((lt == ty_string()) || (rt == ty_string()))) {
+return;
+}
+if ((!(type_is_int_like(lt) && type_is_int_like(rt)))) {
+panic_at(src, span_start(e.span), "invalid operands to '+': expected numbers or strings");
+}
+return;
+}
+if ((((e.op.tag == "OpSub") || (e.op.tag == "OpMul")) || (e.op.tag == "OpDiv"))) {
+if ((!(type_is_int_like(lt) && type_is_int_like(rt)))) {
+panic_at(src, span_start(e.span), "invalid operands to arithmetic operator");
+}
+return;
 }
 return undefined;
 }
@@ -447,6 +542,7 @@ return;
 if ((e.tag == "EBinary")) {
 analyze_expr(src, structs, fns, scopes, depth, e.left);
 analyze_expr(src, structs, fns, scopes, depth, e.right);
+check_binary_operand_types(src, structs, fns, scopes, depth, e);
 return;
 }
 if ((e.tag == "ECall")) {
