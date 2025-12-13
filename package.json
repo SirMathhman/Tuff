@@ -6,6 +6,7 @@
   "scripts": {
     "test": "vitest run",
     "check": "vitest run",
+    "check:bootstrap": "npm test && npm run build:selfhost-prebuilt",
     "build:selfhost-prebuilt": "tsx tools/build_prebuilt_selfhost.ts",
     "tuff:repl": "tsx tools/tuff_repl.ts",
     "tuff:refactor": "tsx tools/tuff_refactor.ts"

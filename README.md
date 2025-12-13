@@ -42,6 +42,9 @@ npm install
 # Run all tests (TypeScript + Tuff)
 npm test
 
+# Run the full bootstrap check (tests + regenerate selfhost/prebuilt)
+npm run check:bootstrap
+
 # Rebuild the prebuilt compiler from source
 npm run build:selfhost-prebuilt
 ```
@@ -604,10 +607,27 @@ fn main() => {
 
 Common definitions (imports, type aliases, utilities) — automatically available in most contexts.
 
+### `std::iter`
+
+Minimal iterator utilities.
+
+```tuff
+from std::iter use { range };
+
+fn main() => {
+    let sum = 0;
+    let r = range(0, 5);
+    while (r.has_next()) {
+        sum = sum + r.next();
+    }
+    sum // 10
+}
+```
+
 ### Future Stdlib Modules
 
 - **`std::collections`** — Vec, HashMap, BTreeMap, etc.
-- **`std::iter`** — range, map, filter, fold, etc.
+- **`std::iter`** — map, filter, fold, etc. (range exists; combinators planned)
 - **`std::math`** — sqrt, sin, cos, etc.
 - **`std::string`** — split, contains, trim, etc.
 - **`std::fs`** — file I/O (via FFI)

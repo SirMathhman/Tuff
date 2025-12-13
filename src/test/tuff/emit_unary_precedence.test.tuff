@@ -1,0 +1,22 @@
+from std::test use { reset, suite, it, expect_eq, summary, status };
+
+fn main() : I32 => {
+  reset();
+  suite("emitter");
+
+  it(
+    "unary ! precedence with binary",
+    expect_eq(
+      "!(a < b)",
+      {
+        let a = 1;
+        let b = 2;
+        !(a < b)
+      },
+      false
+    )
+  );
+
+  summary();
+  status()
+}

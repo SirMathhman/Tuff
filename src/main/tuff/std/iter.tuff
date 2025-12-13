@@ -1,0 +1,29 @@
+// std::iter — minimal iterator utilities
+//
+// Phase 5-6 scaffold: start with a simple integer range iterator.
+//
+// NOTE: The current selfhost compiler lowers `class fn` by yielding an object
+// containing *only parameters* (not locals). To expose methods/state, we pass
+// closures as parameters.
+
+class fn Range(start: I32, end: I32, has_next, next, for_each) => {}
+
+fn range(start: I32, end: I32) => {
+  let mut cur: I32 = start;
+
+  let has_next = () => cur < end;
+
+  let next = () => {
+    let v: I32 = cur;
+    cur = cur + 1;
+    v
+  };
+
+  let for_each = (f) => {
+    while (has_next()) {
+      f(next());
+    }
+  };
+
+  Range(start, end, has_next, next, for_each)
+}

@@ -37,6 +37,7 @@ Tuff will compile to multiple targets, enabling use across different domains:
 - Establish patterns for pure Tuff stdlib modules vs. FFI-based modules
 
 **Success Criteria**:
+
 - Collections (Vec, HashMap) have full feature parity with Rust/Python equivalents
 - Iterator library is rich and composable
 - stdlib can support real-world applications (CLI tools, data processing)
@@ -52,11 +53,13 @@ Tuff will compile to multiple targets, enabling use across different domains:
 - Optimize C output for readability and performance
 
 **Key Challenges**:
+
 - Memory management semantics (garbage-collected Tuff → manual C)
 - FFI boundary semantics
 - Compile-time vs. runtime behavior differences
 
 **Success Criteria**:
+
 - Can compile standard library to both JS and C
 - C output performs comparably to hand-written C for core algorithms
 - Existing C libraries can be wrapped and used from Tuff
@@ -71,6 +74,7 @@ Tuff will compile to multiple targets, enabling use across different domains:
 - Unified compiler that can emit JS, C, and Tuff as first-class targets
 
 **Stretch Goals**:
+
 - Verified compilation (proofs of correctness for compilation stages)
 - Integrated optimization passes (constant folding, dead code elimination, etc.)
 - LLVM backend for native compilation

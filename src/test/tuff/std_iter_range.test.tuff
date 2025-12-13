@@ -1,0 +1,26 @@
+from std::test use { reset, suite, it, expect_eq, summary, status };
+from std::iter use { range };
+
+fn main() : I32 => {
+  reset();
+  suite("std::iter");
+
+  it(
+    "range sums 0..5",
+    expect_eq(
+      "sum",
+      {
+        let mut sum = 0;
+        let r = range(0, 5);
+        while (r.has_next()) {
+          sum = sum + r.next();
+        }
+        sum
+      },
+      10
+    )
+  );
+
+  summary();
+  status()
+}
