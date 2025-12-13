@@ -102,7 +102,7 @@ from ast use {
   decl_let_typed
 };
 
-from emit::ast_js use { emit_decl_js, set_current_file_path };
+from emit::ast_js use { emit_decl_js, set_current_file_path, emit_runtime_vec_imports_js, decls_needs_vec_rt };
 
 from analyzer use { analyze_program };
 
@@ -240,6 +240,12 @@ fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool, filePath: Stri
 
   // Set the file path for the emitter to compute correct relative import paths
   set_current_file_path(filePath);
+
+  // Bring in runtime vec helpers under internal aliases when the emitted JS
+  // will use vec literals/indexing sugar.
+  if (decls_needs_vec_rt(decls)) {
+    out = out + emit_runtime_vec_imports_js();
+  }
 
   // Emit decls in order.
   let mut di = 0;

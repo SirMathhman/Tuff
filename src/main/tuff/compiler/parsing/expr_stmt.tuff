@@ -50,6 +50,7 @@ from ast use {
   expr_unary,
   expr_binary,
   expr_call,
+  expr_call_typed,
   expr_if,
   expr_block,
   expr_vec_lit,
@@ -106,6 +107,7 @@ class fn ParsedMainAst(body, tail, nextPos: I32) => {}
 class fn ParsedStmtAst(stmt, nextPos: I32) => {}
 class fn ParsedStmtsAst(stmts, nextPos: I32) => {}
 class fn ParsedExprListAst(items, nextPos: I32) => {}
+class fn ParsedTypeArgsForCallAst(ok: Bool, typeArgs, nextPos: I32) => {}
 
 fn find_matching_rparen(src: String, openPos: I32) : I32 => {
   // Returns the index of the ')' that closes the '(' at openPos, or -1.
@@ -355,19 +357,33 @@ fn parse_unary_ast(src: String, i: I32) : ParsedExprAst => {
 fn parse_postfix_ast(src: String, i: I32) : ParsedExprAst => {
   let mut left = parse_primary_ast(src, i);
   let mut j = left.nextPos;
+  let mut pendingTypeArgs = vec_new();
   while (true) {
     j = skip_ws(src, j);
 
     // Generic call sugar: f<T>(...) or obj.f<T>(...).
-    if (j < stringLen(src) && stringCharCodeAt(src, j) == 60) { // '<'
-      let skipped = try_skip_type_args_for_call(src, j);
-      if (skipped.ok) { j = skipped.nextPos; continue; }
+    // IMPORTANT: only attempt this before parsing a call; after we already have
+    // an ECall on the left, a following '<' should be treated as a comparison
+    // operator (e.g. `f(x) < 2`).
+    if (left.expr.tag != "ECall" && j < stringLen(src) && stringCharCodeAt(src, j) == 60) { // '<'
+      let parsed = try_parse_type_args_for_call_ast(src, j);
+      if (parsed.ok) {
+        pendingTypeArgs = parsed.typeArgs;
+        j = parsed.nextPos;
+        continue;
+      }
     }
 
     if (j < stringLen(src) && stringCharCodeAt(src, j) == 40) { // '('
       let args = parse_arg_list_ast(src, j);
       let start = span_start(expr_span(left.expr));
-      left = ParsedExprAst(expr_call(span(start, args.nextPos), left.expr, args.items), args.nextPos);
+      let callSpan = span(start, args.nextPos);
+      if (vec_len(pendingTypeArgs) > 0) {
+        left = ParsedExprAst(expr_call_typed(callSpan, left.expr, pendingTypeArgs, args.items), args.nextPos);
+        pendingTypeArgs = vec_new();
+      } else {
+        left = ParsedExprAst(expr_call(callSpan, left.expr, args.items), args.nextPos);
+      }
       j = left.nextPos;
       continue;
     }
@@ -403,6 +419,65 @@ fn parse_postfix_ast(src: String, i: I32) : ParsedExprAst => {
     break;
   }
   left
+}
+
+fn try_parse_type_args_for_call_ast(src: String, i: I32) : ParsedTypeArgsForCallAst => {
+  // Returns ParsedTypeArgsForCallAst(true, typeArgs, endIndexAfterGreaterThan)
+  // if `<...>` is balanced and followed by `(` (after ws). Otherwise ok=false.
+  let mut k = skip_ws(src, i);
+  if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 60)) { // '<'
+    yield ParsedTypeArgsForCallAst(false, vec_new(), i);
+  }
+
+  // First, do a non-panicking scan to find the matching '>' for this '<'.
+  // If we can't find a match, or it isn't followed by '(', this is not a
+  // generic call type-arg list (it's probably a comparison operator).
+  let mut depth = 1;
+  let mut scan = k + 1;
+  let mut endGt = -1;
+  while (scan < stringLen(src)) {
+    let ch = stringCharCodeAt(src, scan);
+    if (ch == 60) { depth = depth + 1; }
+    if (ch == 62) {
+      depth = depth - 1;
+      if (depth == 0) { endGt = scan; break; }
+    }
+    scan = scan + 1;
+  }
+  if (endGt == -1) { yield ParsedTypeArgsForCallAst(false, vec_new(), i); }
+
+  let after = skip_ws(src, endGt + 1);
+  if (!(after < stringLen(src) && stringCharCodeAt(src, after) == 40)) { // '('
+    yield ParsedTypeArgsForCallAst(false, vec_new(), i);
+  }
+
+  // Parse `<` typeExpr (',' typeExpr)* `>` (now that we know it closes).
+  k = k + 1;
+  k = skip_ws(src, k);
+  let typeArgs = vec_new();
+
+  // Empty type arg list is not allowed here.
+  if (k == endGt) { yield ParsedTypeArgsForCallAst(false, vec_new(), i); }
+
+  while (true) {
+    let t = parse_type_expr(src, k);
+    vec_push(typeArgs, t.v0);
+    k = skip_ws(src, t.v1);
+    if (k == endGt) {
+      // ok: consumed up to '>'
+      yield ParsedTypeArgsForCallAst(true, typeArgs, endGt + 1);
+    }
+    if (!(k < stringLen(src))) { panic_at(src, k, "expected '>' in type args"); }
+    let ch = stringCharCodeAt(src, k);
+    if (ch == 44) { // ','
+      k = k + 1;
+      k = skip_ws(src, k);
+      continue;
+    }
+    // We pre-scanned `endGt`, so anything else here is a real parse error.
+    panic_at(src, k, "expected ',' or '>' in type args");
+  }
+  ParsedTypeArgsForCallAst(false, vec_new(), i)
 }
 
 fn parse_arg_list_ast(src: String, i: I32) : ParsedExprListAst => {
@@ -500,6 +575,82 @@ fn parse_stmt_block_ast(src: String, i: I32) : ParsedStmtsAst => {
   ParsedStmtsAst(body, k)
 }
 
+fn scan_if_stmt_has_else(src: String, i: I32) : Bool => {
+  // Best-effort scan: recognizes `if (<...>) { <...> } else`.
+  // Used only to disambiguate statement-vs-expression parsing in blocks.
+  let mut j = skip_ws(src, i);
+  if (!starts_with_at(src, j, "if")) { yield false; }
+  j = j + 2;
+  j = skip_ws(src, j);
+  if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 40)) { yield false; } // '('
+
+  // Skip condition parens.
+  let mut k = j + 1;
+  let mut depth = 1;
+  while (k < stringLen(src) && depth > 0) {
+    let ch = stringCharCodeAt(src, k);
+    if (ch == 34) { // '"'
+      k = k + 1;
+      while (k < stringLen(src)) {
+        let c = stringCharCodeAt(src, k);
+        if (c == 92) { k = k + 2; continue; } // '\\'
+        if (c == 34) { k = k + 1; break; }
+        k = k + 1;
+      }
+      continue;
+    }
+    if (ch == 39) { // '\''
+      k = k + 1;
+      while (k < stringLen(src)) {
+        let c = stringCharCodeAt(src, k);
+        if (c == 92) { k = k + 2; continue; }
+        if (c == 39) { k = k + 1; break; }
+        k = k + 1;
+      }
+      continue;
+    }
+    if (ch == 40) { depth = depth + 1; k = k + 1; continue; }
+    if (ch == 41) { depth = depth - 1; k = k + 1; continue; }
+    k = k + 1;
+  }
+
+  k = skip_ws(src, k);
+  if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 123)) { yield false; } // '{'
+
+  // Skip then block braces.
+  k = k + 1;
+  let mut bDepth = 1;
+  while (k < stringLen(src) && bDepth > 0) {
+    let ch = stringCharCodeAt(src, k);
+    if (ch == 34) {
+      k = k + 1;
+      while (k < stringLen(src)) {
+        let c = stringCharCodeAt(src, k);
+        if (c == 92) { k = k + 2; continue; }
+        if (c == 34) { k = k + 1; break; }
+        k = k + 1;
+      }
+      continue;
+    }
+    if (ch == 39) {
+      k = k + 1;
+      while (k < stringLen(src)) {
+        let c = stringCharCodeAt(src, k);
+        if (c == 92) { k = k + 2; continue; }
+        if (c == 39) { k = k + 1; break; }
+        k = k + 1;
+      }
+      continue;
+    }
+    if (ch == 123) { bDepth = bDepth + 1; k = k + 1; continue; }
+    if (ch == 125) { bDepth = bDepth - 1; k = k + 1; continue; }
+    k = k + 1;
+  }
+
+  k = skip_ws(src, k);
+  starts_with_at(src, k, "else")
+}
+
 fn parse_block_body_ast(src: String, i: I32) : ParsedMainAst => {
   let j = skip_ws(src, i);
   if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 123)) { panic_at(src, j, "expected '{'"); }
@@ -512,7 +663,16 @@ fn parse_block_body_ast(src: String, i: I32) : ParsedMainAst => {
     if (!(t < stringLen(src))) { panic_at(src, t, "expected '}'"); }
     if (stringCharCodeAt(src, t) == 125) { break; }
 
-    let isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") || starts_with_at(src, t, "yield") || is_field_assign_stmt_start(src, t) || is_assign_stmt_start(src, t) || is_index_assign_stmt_start(src, t);
+    // Disambiguation:
+    // - `if` with `else` is an expression; allow it to be a tail expression.
+    // - `ident[expr]` is only an index-assign statement if followed by `=`.
+    let isStmt = starts_with_at(src, t, "let")
+      || starts_with_at(src, t, "while")
+      || (starts_with_at(src, t, "if") && !scan_if_stmt_has_else(src, t))
+      || starts_with_at(src, t, "yield")
+      || is_field_assign_stmt_start(src, t)
+      || is_assign_stmt_start(src, t)
+      || is_index_assign_stmt_start(src, t);
     if (isStmt) {
       let st = parse_stmt_ast(src, k);
       vec_push(body, st.stmt);
@@ -1715,7 +1875,47 @@ fn is_index_assign_stmt_start(src: String, i: I32) : Bool => {
     j = j + 1;
   }
   j = skip_ws(src, j);
-  j < stringLen(src) && stringCharCodeAt(src, j) == 91 // '['
+  if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 91)) { yield false; } // '['
+
+  // Scan to matching ']' and require '=' afterwards.
+  let mut k = j + 1;
+  let mut depth = 1;
+  while (k < stringLen(src) && depth > 0) {
+    let ch = stringCharCodeAt(src, k);
+    if (ch == 34) { // string
+      k = k + 1;
+      while (k < stringLen(src)) {
+        let c = stringCharCodeAt(src, k);
+        if (c == 92) { k = k + 2; continue; }
+        if (c == 34) { k = k + 1; break; }
+        k = k + 1;
+      }
+      continue;
+    }
+    if (ch == 39) { // char
+      k = k + 1;
+      while (k < stringLen(src)) {
+        let c = stringCharCodeAt(src, k);
+        if (c == 92) { k = k + 2; continue; }
+        if (c == 39) { k = k + 1; break; }
+        k = k + 1;
+      }
+      continue;
+    }
+    if (ch == 91) { depth = depth + 1; k = k + 1; continue; }
+    if (ch == 93) { depth = depth - 1; k = k + 1; continue; }
+    k = k + 1;
+  }
+  if (depth != 0) { yield false; }
+
+  k = skip_ws(src, k);
+  if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 61)) { yield false; }
+  // exclude '==' and '=>'
+  if (k + 1 < stringLen(src)) {
+    let n = stringCharCodeAt(src, k + 1);
+    if (n == 61 || n == 62) { yield false; }
+  }
+  true
 }
 
 fn is_assign_stmt_start(src: String, i: I32) : Bool => {

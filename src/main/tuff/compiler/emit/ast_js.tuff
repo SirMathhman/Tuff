@@ -12,6 +12,170 @@ from parsing::primitives use { module_path_to_relpath };
 
 let mut __current_file_path = "";
 
+// Runtime vec helpers used by emitted JS (e.g. vec literals, indexing).
+// We import them under internal aliases to avoid collisions with user code.
+fn emit_runtime_vec_imports_js() : String => {
+  let importPath = rel_import_path("rt/vec.mjs");
+  "import { vec_new as __tuff_vec_new, vec_push as __tuff_vec_push, vec_get as __tuff_vec_get, vec_set as __tuff_vec_set } from \"" + importPath + "\";\n"
+}
+
+fn expr_needs_vec_rt(e) : Bool => {
+  // True when emitting this expression will reference __tuff_vec_* helpers.
+  if (e.tag == "EVecLit") { yield true; }
+  if (e.tag == "EIndex") { yield true; }
+
+  if (e.tag == "EUnary") { yield expr_needs_vec_rt(e.expr); }
+
+  if (e.tag == "EBinary") {
+    if (expr_needs_vec_rt(e.left)) { yield true; }
+    yield expr_needs_vec_rt(e.right);
+  }
+
+  if (e.tag == "ECall") {
+    if (expr_needs_vec_rt(e.callee)) { yield true; }
+    let mut i = 0;
+    while (i < vec_len(e.args)) {
+      if (expr_needs_vec_rt(vec_get(e.args, i))) { yield true; }
+      i = i + 1;
+    }
+    yield false;
+  }
+
+  if (e.tag == "EIf") {
+    if (expr_needs_vec_rt(e.cond)) { yield true; }
+    if (expr_needs_vec_rt(e.thenExpr)) { yield true; }
+    yield expr_needs_vec_rt(e.elseExpr);
+  }
+
+  if (e.tag == "EBlock") {
+    let mut i = 0;
+    while (i < vec_len(e.body)) {
+      if (stmt_needs_vec_rt(vec_get(e.body, i))) { yield true; }
+      i = i + 1;
+    }
+    yield expr_needs_vec_rt(e.tail);
+  }
+
+  if (e.tag == "ELambda") {
+    // Body may be an expr or an EBlock.
+    yield expr_needs_vec_rt(e.body);
+  }
+
+  if (e.tag == "EStructLit") {
+    if (expr_needs_vec_rt(e.nameExpr)) { yield true; }
+    let mut i = 0;
+    while (i < vec_len(e.values)) {
+      if (expr_needs_vec_rt(vec_get(e.values, i))) { yield true; }
+      i = i + 1;
+    }
+    yield false;
+  }
+
+  if (e.tag == "ETupleLit") {
+    let mut i = 0;
+    while (i < vec_len(e.items)) {
+      if (expr_needs_vec_rt(vec_get(e.items, i))) { yield true; }
+      i = i + 1;
+    }
+    yield false;
+  }
+
+  if (e.tag == "ETupleIndex") { yield expr_needs_vec_rt(e.base); }
+  if (e.tag == "EField") { yield expr_needs_vec_rt(e.base); }
+
+  if (e.tag == "EMatch") {
+    if (expr_needs_vec_rt(e.scrut)) { yield true; }
+    let mut i = 0;
+    while (i < vec_len(e.arms)) {
+      let arm = vec_get(e.arms, i);
+      if (expr_needs_vec_rt(arm.expr)) { yield true; }
+      i = i + 1;
+    }
+    yield false;
+  }
+
+  // Leaf nodes / not currently relevant.
+  false
+}
+
+fn stmt_needs_vec_rt(s) : Bool => {
+  if (s.tag == "SIndexAssign") { yield true; }
+
+  if (s.tag == "SLet") { yield expr_needs_vec_rt(s.init); }
+  if (s.tag == "SAssign") { yield expr_needs_vec_rt(s.value); }
+  if (s.tag == "SExpr") { yield expr_needs_vec_rt(s.expr); }
+  if (s.tag == "SYield") { yield expr_needs_vec_rt(s.expr); }
+  if (s.tag == "SWhile") {
+    if (expr_needs_vec_rt(s.cond)) { yield true; }
+    let mut i = 0;
+    while (i < vec_len(s.body)) {
+      if (stmt_needs_vec_rt(vec_get(s.body, i))) { yield true; }
+      i = i + 1;
+    }
+    yield false;
+  }
+  if (s.tag == "SIf") {
+    if (expr_needs_vec_rt(s.cond)) { yield true; }
+    let mut i = 0;
+    while (i < vec_len(s.thenBody)) {
+      if (stmt_needs_vec_rt(vec_get(s.thenBody, i))) { yield true; }
+      i = i + 1;
+    }
+    if (s.hasElse) {
+      i = 0;
+      while (i < vec_len(s.elseBody)) {
+        if (stmt_needs_vec_rt(vec_get(s.elseBody, i))) { yield true; }
+        i = i + 1;
+      }
+    }
+    yield false;
+  }
+  if (s.tag == "SFieldAssign") {
+    if (expr_needs_vec_rt(s.base)) { yield true; }
+    yield expr_needs_vec_rt(s.value);
+  }
+
+  false
+}
+
+fn decl_needs_vec_rt(d) : Bool => {
+  if (d.tag == "DLet") { yield expr_needs_vec_rt(d.init); }
+  if (d.tag == "DFn") {
+    let mut i = 0;
+    while (i < vec_len(d.body)) {
+      if (stmt_needs_vec_rt(vec_get(d.body, i))) { yield true; }
+      i = i + 1;
+    }
+    yield expr_needs_vec_rt(d.tail);
+  }
+  if (d.tag == "DClassFn") {
+    let mut i = 0;
+    while (i < vec_len(d.body)) {
+      if (stmt_needs_vec_rt(vec_get(d.body, i))) { yield true; }
+      i = i + 1;
+    }
+    yield false;
+  }
+  if (d.tag == "DModule") {
+    let mut i = 0;
+    while (i < vec_len(d.decls)) {
+      if (decl_needs_vec_rt(vec_get(d.decls, i))) { yield true; }
+      i = i + 1;
+    }
+    yield false;
+  }
+  false
+}
+
+fn decls_needs_vec_rt(decls) : Bool => {
+  let mut i = 0;
+  while (i < vec_len(decls)) {
+    if (decl_needs_vec_rt(vec_get(decls, i))) { yield true; }
+    i = i + 1;
+  }
+  false
+}
+
 fn set_current_file_path(path: String) : Void => {
   __current_file_path = path;
 }
@@ -281,10 +445,10 @@ fn emit_expr_js(e) : String => {
     let mut pushes = "";
     let mut i = 0;
     while (i < vec_len(e.items)) {
-      pushes = pushes + ("vec_push(__v, " + emit_expr_js(vec_get(e.items, i)) + ");\n");
+      pushes = pushes + ("__tuff_vec_push(__v, " + emit_expr_js(vec_get(e.items, i)) + ");\n");
       i = i + 1;
     }
-    out = "(() => { const __v = vec_new();\n" + pushes + "return __v;\n})()";
+    out = "(() => { const __v = __tuff_vec_new();\n" + pushes + "return __v;\n})()";
   }
 
   if (e.tag == "ETupleLit") {
@@ -300,7 +464,7 @@ fn emit_expr_js(e) : String => {
   }
 
   if (e.tag == "EIndex") {
-    out = "vec_get(" + emit_expr_js(e.base) + ", " + emit_expr_js(e.index) + ")";
+    out = "__tuff_vec_get(" + emit_expr_js(e.base) + ", " + emit_expr_js(e.index) + ")";
   }
 
   if (e.tag == "ETupleIndex") {
@@ -369,7 +533,7 @@ fn emit_stmt_js(s) : String => {
   }
 
   if (s.tag == "SIndexAssign") {
-    out = "vec_set(" + emit_expr_js(s.base) + ", " + emit_expr_js(s.index) + ", " + emit_expr_js(s.value) + ");\n";
+    out = "__tuff_vec_set(" + emit_expr_js(s.base) + ", " + emit_expr_js(s.index) + ", " + emit_expr_js(s.value) + ");\n";
   }
 
   if (s.tag == "SFieldAssign") {

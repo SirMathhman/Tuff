@@ -919,6 +919,8 @@ fn swap<T, U>(pair: Pair<T, U>) : Pair<U, T> => {
 
 Type parameters in function signatures work in both the parameter list and the return type. The compiler infers type arguments from the actual arguments passed, or they can be specified explicitly (when needed for disambiguation).
 
+When specified explicitly at a call site, type arguments appear immediately before the argument list: `fnName<T, U>(...)`.
+
 When assigning a generic function to a local variable, you must specify the type parameters explicitly. You cannot assign an unspecialized generic function to a variable:
 
 ```tuff

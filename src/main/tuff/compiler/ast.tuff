@@ -8,7 +8,7 @@
 // so other modules should NOT construct these structs with literals.
 // Instead, use the constructor functions provided below (e.g. `expr_int`).
 
-extern from rt::vec use { vec_new };
+extern from rt::vec use { vec_new, vec_len };
 
 // A source span as (startOffset, endOffset), half-open: [start, end)
 // Stored as a tagged union so it can cross module boundaries reliably.
@@ -197,6 +197,9 @@ struct ECall {
   tag: String,
   span: Span,
   callee: Expr,
+  // Generic call sugar: f<T>(...) stores type args here.
+  // Empty means no explicit type args.
+  typeArgs: Vec<String>,
   args: Vec<Expr>
 }
 
@@ -404,6 +407,8 @@ struct DFn {
   tag: String,
   span: Span,
   name: String,
+  // Optional generic params: fn name<T, U>(...)
+  typeParams: Vec<String>,
   params: Vec<String>,
   // Optional per-parameter type annotations aligned with params.
   // If absent/untyped, entries are empty strings.
@@ -419,6 +424,8 @@ struct DClassFn {
   tag: String,
   span: Span,
   name: String,
+  // Optional generic params: class fn name<T, U>(...)
+  typeParams: Vec<String>,
   params: Vec<String>,
   // Optional per-parameter type annotations aligned with params.
   // If absent/untyped, entries are empty strings.
@@ -433,6 +440,8 @@ struct DStruct {
   tag: String,
   span: Span,
   name: String,
+  // Optional generic params: struct Name<T, U> { ... }
+  typeParams: Vec<String>,
   fields: Vec<String>,
   // Optional field type annotations aligned with fields.
   // If absent, entries are empty strings.
@@ -443,6 +452,8 @@ struct DTypeUnion {
   tag: String,
   span: Span,
   name: String,
+  // Optional generic params: type Name<T, ...> = ...;
+  typeParams: Vec<String>,
   variants: Vec<TypeUnionVariant>
 }
 
@@ -450,7 +461,12 @@ struct TypeUnionVariant {
   tag: String,
   span: Span,
   name: String,
-  hasPayload: Bool
+  // True when the union variant carries a payload.
+  // In the bootstrap compiler, payloads lower to a single field: `.value`.
+  hasPayload: Bool,
+  // Optional payload type annotations (parsed from Variant<...>).
+  // Phase 4 uses these for type checking and narrowing.
+  payloadTyAnns: Vec<String>
 }
 
 struct DModule {
@@ -510,7 +526,8 @@ fn expr_struct_lit(span: Span, nameExpr: Expr, values: Vec<Expr>) : Expr => EStr
 
 fn expr_unary(span: Span, op: UnOp, expr: Expr) : Expr => EUnary { "EUnary", span, op, expr }
 fn expr_binary(span: Span, op: BinOp, left: Expr, right: Expr) : Expr => EBinary { "EBinary", span, op, left, right }
-fn expr_call(span: Span, callee: Expr, args: Vec<Expr>) : Expr => ECall { "ECall", span, callee, args }
+fn expr_call(span: Span, callee: Expr, args: Vec<Expr>) : Expr => ECall { "ECall", span, callee, vec_new(), args }
+fn expr_call_typed(span: Span, callee: Expr, typeArgs: Vec<String>, args: Vec<Expr>) : Expr => ECall { "ECall", span, callee, typeArgs, args }
 fn expr_if(span: Span, cond: Expr, thenExpr: Expr, elseExpr: Expr) : Expr => EIf { "EIf", span, cond, thenExpr, elseExpr }
 
 fn expr_block(span: Span, body: Vec<Stmt>, tail: Expr) : Expr => EBlock { "EBlock", span, body, tail }
@@ -541,14 +558,22 @@ fn stmt_field_assign(span: Span, base: Expr, fields: Vec<String>, value: Expr) :
 // Decl constructors
 fn decl_extern_from(span: Span, modulePath: String, names: Vec<String>) : Decl => DExternFrom { "DExternFrom", span, modulePath, names }
 fn decl_import(span: Span, modulePath: String, names: Vec<String>) : Decl => DImport { "DImport", span, modulePath, names }
-fn decl_struct(span: Span, name: String, fields: Vec<String>) : Decl => DStruct { "DStruct", span, name, fields, vec_new() }
-fn decl_struct_typed(span: Span, name: String, fields: Vec<String>, fieldTyAnns: Vec<String>) : Decl => DStruct { "DStruct", span, name, fields, fieldTyAnns }
-fn type_union_variant(span: Span, name: String, hasPayload: Bool) : TypeUnionVariant => TypeUnionVariant { "TypeUnionVariant", span, name, hasPayload }
-fn decl_type_union(span: Span, name: String, variants: Vec<TypeUnionVariant>) : Decl => DTypeUnion { "DTypeUnion", span, name, variants }
-fn decl_fn(span: Span, name: String, params: Vec<String>, body: Vec<Stmt>, tail: Expr) : Decl => DFn { "DFn", span, name, params, vec_new(), "", body, tail }
-fn decl_fn_typed(span: Span, name: String, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String, body: Vec<Stmt>, tail: Expr) : Decl => DFn { "DFn", span, name, params, paramTyAnns, retTyAnn, body, tail }
-fn decl_class_fn(span: Span, name: String, params: Vec<String>, body: Vec<Stmt>, tail: Expr) : Decl => DClassFn { "DClassFn", span, name, params, vec_new(), "", body, tail }
-fn decl_class_fn_typed(span: Span, name: String, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String, body: Vec<Stmt>, tail: Expr) : Decl => DClassFn { "DClassFn", span, name, params, paramTyAnns, retTyAnn, body, tail }
+fn decl_struct(span: Span, name: String, fields: Vec<String>) : Decl => DStruct { "DStruct", span, name, vec_new(), fields, vec_new() }
+fn decl_struct_typed(span: Span, name: String, typeParams: Vec<String>, fields: Vec<String>, fieldTyAnns: Vec<String>) : Decl =>
+  DStruct { "DStruct", span, name, typeParams, fields, fieldTyAnns }
+fn type_union_variant(span: Span, name: String, hasPayload: Bool) : TypeUnionVariant => TypeUnionVariant { "TypeUnionVariant", span, name, hasPayload, vec_new() }
+fn type_union_variant_typed(span: Span, name: String, payloadTyAnns: Vec<String>) : TypeUnionVariant =>
+  TypeUnionVariant { "TypeUnionVariant", span, name, vec_len(payloadTyAnns) > 0, payloadTyAnns }
+fn decl_type_union(span: Span, name: String, typeParams: Vec<String>, variants: Vec<TypeUnionVariant>) : Decl =>
+  DTypeUnion { "DTypeUnion", span, name, typeParams, variants }
+fn decl_fn(span: Span, name: String, params: Vec<String>, body: Vec<Stmt>, tail: Expr) : Decl =>
+  DFn { "DFn", span, name, vec_new(), params, vec_new(), "", body, tail }
+fn decl_fn_typed(span: Span, name: String, typeParams: Vec<String>, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String, body: Vec<Stmt>, tail: Expr) : Decl =>
+  DFn { "DFn", span, name, typeParams, params, paramTyAnns, retTyAnn, body, tail }
+fn decl_class_fn(span: Span, name: String, params: Vec<String>, body: Vec<Stmt>, tail: Expr) : Decl =>
+  DClassFn { "DClassFn", span, name, vec_new(), params, vec_new(), "", body, tail }
+fn decl_class_fn_typed(span: Span, name: String, typeParams: Vec<String>, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String, body: Vec<Stmt>, tail: Expr) : Decl =>
+  DClassFn { "DClassFn", span, name, typeParams, params, paramTyAnns, retTyAnn, body, tail }
 fn decl_let(span: Span, isMut: Bool, name: String, init: Expr) : Decl => DLet { "DLet", span, isMut, name, "", init }
 fn decl_let_typed(span: Span, isMut: Bool, name: String, tyAnn: String, init: Expr) : Decl => DLet { "DLet", span, isMut, name, tyAnn, init }
 fn decl_module(span: Span, name: String, decls: Vec<Decl>) : Decl => DModule { "DModule", span, name, decls }

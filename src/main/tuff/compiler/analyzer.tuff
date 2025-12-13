@@ -3,6 +3,7 @@
 // For now, this module focuses on enforcing the language's no-shadowing rule
 // (a name may not be redeclared in an enclosing scope).
 
+extern from rt::stdlib use { stringLen, stringCharCodeAt, stringSlice };
 extern from rt::vec use { vec_new, vec_len, vec_push, vec_get, vec_set };
 
 from util::diagnostics use { panic_at };
@@ -22,9 +23,26 @@ struct StructDef {
 struct FnSig {
   tag: String,
   name: String,
+  // Optional generic params (fn id<T>(...)).
+  typeParams: Vec<String>,
   params: Vec<String>,
   paramTyAnns: Vec<String>,
   retTyAnn: String
+}
+
+struct UnionDef {
+  tag: String,
+  name: String,
+  // Optional generic params (type Option<T> = ...).
+  typeParams: Vec<String>,
+  variants: Vec<UnionVariantInfo>
+}
+
+struct UnionVariantInfo {
+  tag: String,
+  name: String,
+  hasPayload: Bool,
+  payloadTyAnns: Vec<String>
 }
 
 // Binding info tracked per-scope.
@@ -36,13 +54,105 @@ struct Binding {
   tyTag: String
 }
 
+// Generic substitution entry: T -> I32, etc.
+struct TySubst {
+  tag: String,
+  name: String,
+  ty: String
+}
+
+// Flow-sensitive narrowing (Phase 4 completion scaffold).
+// Tracks that a union-typed binding is known to have a particular `tag`.
+struct NarrowedTag {
+  tag: String,
+  name: String,
+  variant: String
+}
+
+fn mk_union_variant_info(name: String, hasPayload: Bool, payloadTyAnns: Vec<String>) =>
+  UnionVariantInfo { "UnionVariantInfo", name, hasPayload, payloadTyAnns }
+
 fn mk_struct_def(name: String, fields: Vec<String>, fieldTyAnns: Vec<String>) =>
   StructDef { "StructDef", name, fields, fieldTyAnns }
 
-fn mk_fn_sig(name: String, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String) =>
-  FnSig { "FnSig", name, params, paramTyAnns, retTyAnn }
+fn mk_fn_sig(name: String, typeParams, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String) =>
+  FnSig { "FnSig", name, typeParams, params, paramTyAnns, retTyAnn }
+
+fn mk_union_def(name: String, typeParams, variants) => UnionDef { "UnionDef", name, typeParams, variants }
 
 fn mk_binding(name: String, isMut: Bool, tyTag: String) => Binding { "Binding", name, isMut, tyTag }
+fn mk_subst(name: String, ty: String) => TySubst { "TySubst", name, ty }
+fn mk_narrowed_tag(name: String, variant: String) => NarrowedTag { "NarrowedTag", name, variant }
+
+fn narrow_lookup(narrowed, name: String) : String => {
+  let mut i = 0;
+  while (i < vec_len(narrowed)) {
+    let n = vec_get(narrowed, i);
+    if (n.name == name) { yield n.variant; }
+    i = i + 1;
+  }
+  ""
+}
+
+fn narrow_clone(narrowed) => {
+  let out = vec_new();
+  let mut i = 0;
+  while (i < vec_len(narrowed)) {
+    vec_push(out, vec_get(narrowed, i));
+    i = i + 1;
+  }
+  out
+}
+
+fn subst_lookup(subst, name: String) : String => {
+  let mut i = 0;
+  while (i < vec_len(subst)) {
+    let s = vec_get(subst, i);
+    if (s.name == name) { yield s.ty; }
+    i = i + 1;
+  }
+  ""
+}
+
+fn subst_bind(subst, name: String, ty: String) : Void => {
+  let mut i = 0;
+  while (i < vec_len(subst)) {
+    let s = vec_get(subst, i);
+    if (s.name == name) {
+      // If already bound, keep the existing binding (must match after normalization).
+      if (normalize_ty_ann(s.ty) != normalize_ty_ann(ty)) {
+        vec_set(subst, i, mk_subst(name, ty_unknown()));
+      }
+      yield;
+    }
+    i = i + 1;
+  }
+  vec_push(subst, mk_subst(name, ty));
+}
+
+fn infer_int_const(e) : I32 => {
+  if (e.tag == "EInt") { yield e.value; }
+  -1
+}
+
+fn type_is_ws(ch: I32) : Bool => ch == 32 || ch == 9 || ch == 10 || ch == 13
+fn ty_is_digit(ch: I32) : Bool => ch >= 48 && ch <= 57
+
+fn ty_skip_ws(t: String, i: I32) : I32 => {
+  let mut k = i;
+  while (k < stringLen(t) && type_is_ws(stringCharCodeAt(t, k))) { k = k + 1; }
+  k
+}
+
+fn ty_starts_with(t: String, i: I32, s: String) : Bool => {
+  let mut j = 0;
+  while (j < stringLen(s)) {
+    if (!(i + j < stringLen(t))) { yield false; }
+    if (stringCharCodeAt(t, i + j) != stringCharCodeAt(s, j)) { yield false; }
+    j = j + 1;
+  }
+  true
+}
 
 fn ty_unknown() : String => "Unknown"
 fn ty_int_lit() : String => "IntLit"
@@ -96,6 +206,181 @@ fn normalize_ty_ann(t: String) : String => {
   if (t == "String") { yield ty_string(); }
   if (t == "Void") { yield ty_void(); }
   t
+}
+
+class fn ParsedTyApp(ok: Bool, callee: String, args, nextPos: I32) => {}
+class fn ParsedTyArray(ok: Bool, elem: String, init: I32, len: I32) => {}
+
+fn vec_contains_str(v, s: String) : Bool => {
+  let mut i = 0;
+  while (i < vec_len(v)) {
+    if (vec_get(v, i) == s) { yield true; }
+    i = i + 1;
+  }
+  false
+}
+
+fn ty_is_type_var(typeParams, t: String) : Bool => vec_contains_str(typeParams, t)
+
+fn ty_parse_app(t: String) : ParsedTyApp => {
+  // Parse `Name<...>` at top-level. Returns ok=false if not an app.
+  let mut i = 0;
+  i = ty_skip_ws(t, i);
+  let mut lt = -1;
+  // Find first '<' at depth 0.
+  let mut depth = 0;
+  while (i < stringLen(t)) {
+    let ch = stringCharCodeAt(t, i);
+    if (ch == 60) { // '<'
+      if (depth == 0) { lt = i; break; }
+      depth = depth + 1;
+      i = i + 1;
+      continue;
+    }
+    if (ch == 62) { // '>'
+      if (depth > 0) { depth = depth - 1; }
+      i = i + 1;
+      continue;
+    }
+    i = i + 1;
+  }
+  if (lt == -1) { yield ParsedTyApp(false, "", vec_new(), 0); }
+
+  let callee = stringSlice(t, 0, lt);
+  // Parse args inside <...>
+  let mut k = lt + 1;
+  let args = vec_new();
+  let mut start = k;
+  let mut aDepth = 0;
+  while (k < stringLen(t)) {
+    let ch = stringCharCodeAt(t, k);
+    if (ch == 60) { aDepth = aDepth + 1; k = k + 1; continue; }
+    if (ch == 62) {
+      if (aDepth == 0) {
+        let part = stringSlice(t, start, k);
+        let trimmedStart = ty_skip_ws(part, 0);
+        let mut trimmedEnd = stringLen(part);
+        while (trimmedEnd > 0 && type_is_ws(stringCharCodeAt(part, trimmedEnd - 1))) { trimmedEnd = trimmedEnd - 1; }
+        vec_push(args, stringSlice(part, trimmedStart, trimmedEnd));
+        yield ParsedTyApp(true, callee, args, k + 1);
+      }
+      aDepth = aDepth - 1;
+      k = k + 1;
+      continue;
+    }
+    if (ch == 44 && aDepth == 0) { // ','
+      let part = stringSlice(t, start, k);
+      let trimmedStart = ty_skip_ws(part, 0);
+      let mut trimmedEnd = stringLen(part);
+      while (trimmedEnd > 0 && type_is_ws(stringCharCodeAt(part, trimmedEnd - 1))) { trimmedEnd = trimmedEnd - 1; }
+      vec_push(args, stringSlice(part, trimmedStart, trimmedEnd));
+      k = k + 1;
+      start = k;
+      continue;
+    }
+    k = k + 1;
+  }
+  ParsedTyApp(false, "", vec_new(), 0)
+}
+
+fn ty_parse_array(t: String) : ParsedTyArray => {
+  // Parse `[Elem;init;len]` (numbers required). Returns ok=false if not array.
+  let mut i = ty_skip_ws(t, 0);
+  if (!(i < stringLen(t) && stringCharCodeAt(t, i) == 91)) { yield ParsedTyArray(false, "", 0, 0); } // '['
+  let mut end = stringLen(t);
+  while (end > 0 && type_is_ws(stringCharCodeAt(t, end - 1))) { end = end - 1; }
+  if (!(end > 0 && stringCharCodeAt(t, end - 1) == 93)) { yield ParsedTyArray(false, "", 0, 0); } // ']'
+
+  // Split inner by ';' at depth 0.
+  let mut k = i + 1;
+  let mut partStart = k;
+  let parts = vec_new();
+  let mut depth = 0;
+  while (k < end - 1) {
+    let ch = stringCharCodeAt(t, k);
+    if (ch == 60) { depth = depth + 1; k = k + 1; continue; }
+    if (ch == 62) { if (depth > 0) { depth = depth - 1; } k = k + 1; continue; }
+    if (ch == 59 && depth == 0) { // ';'
+      vec_push(parts, stringSlice(t, partStart, k));
+      k = k + 1;
+      partStart = k;
+      continue;
+    }
+    k = k + 1;
+  }
+  vec_push(parts, stringSlice(t, partStart, end - 1));
+  if (vec_len(parts) != 3) { yield ParsedTyArray(false, "", 0, 0); }
+
+  let elemRaw = vec_get(parts, 0);
+  let elem = stringSlice(elemRaw, ty_skip_ws(elemRaw, 0), stringLen(elemRaw));
+  let initStr = vec_get(parts, 1);
+  let lenStr = vec_get(parts, 2);
+
+  // Parse integers (no sign).
+  let mut p = ty_skip_ws(initStr, 0);
+  let mut init: I32 = 0;
+  while (p < stringLen(initStr) && ty_is_digit(stringCharCodeAt(initStr, p))) {
+    init = init * 10 + (stringCharCodeAt(initStr, p) - 48);
+    p = p + 1;
+  }
+  p = ty_skip_ws(lenStr, 0);
+  let mut len: I32 = 0;
+  while (p < stringLen(lenStr) && ty_is_digit(stringCharCodeAt(lenStr, p))) {
+    len = len * 10 + (stringCharCodeAt(lenStr, p) - 48);
+    p = p + 1;
+  }
+  ParsedTyArray(true, elem, init, len)
+}
+
+fn ty_is_slice(t: String) : Bool => {
+  let i = ty_skip_ws(t, 0);
+  ty_starts_with(t, i, "*[")
+}
+
+fn ty_slice_inner(t: String) : String => {
+  // assumes ty_is_slice
+  let i = ty_skip_ws(t, 0);
+  let mut k = i + 2;
+  let mut end = stringLen(t);
+  while (end > 0 && type_is_ws(stringCharCodeAt(t, end - 1))) { end = end - 1; }
+  // ends with ']'
+  stringSlice(t, k, end - 1)
+}
+
+fn ty_apply_subst(typeParams, subst, t: String) : String => {
+  let tt = normalize_ty_ann(t);
+  if (ty_is_type_var(typeParams, tt)) {
+    let b = subst_lookup(subst, tt);
+    if (b == "") { yield tt; }
+    yield normalize_ty_ann(b);
+  }
+
+  let arr = ty_parse_array(tt);
+  if (arr.ok) {
+    let inner = ty_apply_subst(typeParams, subst, arr.elem);
+    yield "[" + inner + ";" + ("" + arr.init) + ";" + ("" + arr.len) + "]";
+  }
+
+  if (ty_is_slice(tt)) {
+    let inner = ty_apply_subst(typeParams, subst, ty_slice_inner(tt));
+    yield "*[" + inner + "]";
+  }
+
+  let app = ty_parse_app(tt);
+  if (app.ok) {
+    let mut out = stringSlice(app.callee, ty_skip_ws(app.callee, 0), stringLen(app.callee));
+    out = out + "<";
+    let mut i = 0;
+    while (i < vec_len(app.args)) {
+      if (i > 0) { out = out + ", "; }
+      out = out + ty_apply_subst(typeParams, subst, vec_get(app.args, i));
+      i = i + 1;
+    }
+    out = out + ">";
+    yield out;
+  }
+
+  tt
 }
 
 fn type_is_unknown(t: String) : Bool => t == ty_unknown() || t == ""
@@ -263,7 +548,7 @@ fn find_fn_sig(fns, name: String) : FnSig => {
     if (s.name == name) { yield s; }
     i = i + 1;
   }
-  mk_fn_sig(name, vec_new(), vec_new(), "")
+  mk_fn_sig(name, vec_new(), vec_new(), vec_new(), "")
 }
 
 fn has_fn_sig(fns, name: String) : Bool => {
@@ -273,6 +558,67 @@ fn has_fn_sig(fns, name: String) : Bool => {
     i = i + 1;
   }
   false
+}
+
+fn find_union_def(unions, name: String) : UnionDef => {
+  let mut i = 0;
+  while (i < vec_len(unions)) {
+    let u = vec_get(unions, i);
+    if (u.name == name) { yield u; }
+    i = i + 1;
+  }
+  mk_union_def(name, vec_new(), vec_new())
+}
+
+fn has_union_def(unions, name: String) : Bool => {
+  let mut i = 0;
+  while (i < vec_len(unions)) {
+    if (vec_get(unions, i).name == name) { yield true; }
+    i = i + 1;
+  }
+  false
+}
+
+fn union_has_variant(u: UnionDef, variantName: String) : Bool => {
+  let vs = u.variants;
+  let mut i = 0;
+  while (i < vec_len(vs)) {
+    if (vec_get(vs, i).name == variantName) { yield true; }
+    i = i + 1;
+  }
+  false
+}
+
+fn find_union_by_variant(unions, variantName: String) : UnionDef => {
+  let mut i = 0;
+  while (i < vec_len(unions)) {
+    let u = vec_get(unions, i);
+    if (union_has_variant(u, variantName)) { yield u; }
+    i = i + 1;
+  }
+  mk_union_def("", vec_new(), vec_new())
+}
+
+fn union_variant_index(u: UnionDef, variantName: String) : I32 => {
+  let vs = u.variants;
+  let mut i = 0;
+  while (i < vec_len(vs)) {
+    if (vec_get(vs, i).name == variantName) { yield i; }
+    i = i + 1;
+  }
+  -1
+}
+
+fn union_variant_has_payload(u: UnionDef, variantName: String) : Bool => {
+  let idx = union_variant_index(u, variantName);
+  if (idx == -1) { yield false; }
+  vec_get(u.variants, idx).hasPayload
+}
+
+fn union_variant_payload_ty_anns(u: UnionDef, variantName: String) => {
+  let idx = union_variant_index(u, variantName);
+  if (idx == -1) { yield vec_new(); }
+  vec_get(u.variants, idx).payloadTyAnns
 }
 
 fn scopes_contains(scopes, depth: I32, name: String) : Bool => {
@@ -338,6 +684,24 @@ fn lookup_binding(src: String, pos: I32, scopes, depth: I32, name: String) : Bin
   }
   panic_at(src, pos, "unknown name: " + name);
   mk_binding(name, false, ty_unknown())
+}
+
+fn update_binding_ty(src: String, pos: I32, scopes, depth: I32, name: String, newTyTag: String) : Void => {
+  let mut si = 0;
+  while (si < depth) {
+    let scope = vec_get(scopes, si);
+    let mut bi = 0;
+    while (bi < vec_len(scope)) {
+      let b = vec_get(scope, bi);
+      if (b.name == name) {
+        vec_set(scope, bi, mk_binding(b.name, b.isMut, newTyTag));
+        yield;
+      }
+      bi = bi + 1;
+    }
+    si = si + 1;
+  }
+  panic_at(src, pos, "unknown name: " + name);
 }
 
 fn infer_lookup_ty(scopes, depth: I32, name: String) : String => {
@@ -491,7 +855,37 @@ fn infer_expr_type(src: String, structs, fns, scopes, depth: I32, e) : String =>
   if (e.tag == "ECall") {
     if (e.callee.tag == "EIdent" && has_fn_sig(fns, e.callee.name)) {
       let sig = find_fn_sig(fns, e.callee.name);
-      if (sig.retTyAnn != "") { yield normalize_ty_ann(sig.retTyAnn); }
+      if (sig.retTyAnn != "") {
+        if (vec_len(sig.typeParams) > 0) {
+          // Apply generic substitution (from explicit type args or inferred from args).
+          let subst = vec_new();
+
+          if (vec_len(e.typeArgs) > 0) {
+            if (!(vec_len(e.typeArgs) == vec_len(sig.typeParams))) {
+              panic_at(src, span_start(e.span), "wrong number of type args in call to " + e.callee.name);
+            }
+            let mut ti = 0;
+            while (ti < vec_len(sig.typeParams)) {
+              subst_bind(subst, vec_get(sig.typeParams, ti), normalize_ty_ann(vec_get(e.typeArgs, ti)));
+              ti = ti + 1;
+            }
+          } else {
+            // Infer only the simple/common case used by Phase 4 tests: param type is exactly a type var.
+            let mut ai = 0;
+            while (ai < vec_len(e.args) && ai < vec_len(sig.paramTyAnns)) {
+              let expected = vec_get(sig.paramTyAnns, ai);
+              let actual = infer_expr_type(src, structs, fns, scopes, depth, vec_get(e.args, ai));
+              if (expected != "" && ty_is_type_var(sig.typeParams, normalize_ty_ann(expected))) {
+                subst_bind(subst, normalize_ty_ann(expected), normalize_ty_ann(actual));
+              }
+              ai = ai + 1;
+            }
+          }
+
+          yield ty_apply_subst(sig.typeParams, subst, sig.retTyAnn);
+        }
+        yield normalize_ty_ann(sig.retTyAnn);
+      }
     }
     if (e.callee.tag == "ELambda") {
       if (e.callee.retTyAnn != "") { yield normalize_ty_ann(e.callee.retTyAnn); }
@@ -608,10 +1002,41 @@ fn check_call_types(src: String, structs, fns, scopes, depth: I32, e) : Void => 
   }
 
   // Type-check args when signature annotations are present.
+  // For generic functions, substitute type vars using explicit type args or inference.
+  let subst = vec_new();
+  if (vec_len(sig.typeParams) > 0) {
+    if (vec_len(e.typeArgs) > 0) {
+      if (!(vec_len(e.typeArgs) == vec_len(sig.typeParams))) {
+        panic_at(src, span_start(e.span), "wrong number of type args in call to " + name);
+      }
+      let mut ti = 0;
+      while (ti < vec_len(sig.typeParams)) {
+        subst_bind(subst, vec_get(sig.typeParams, ti), normalize_ty_ann(vec_get(e.typeArgs, ti)));
+        ti = ti + 1;
+      }
+    } else {
+      // Inference: bind T from actual arg types when expected is exactly a type var.
+      let mut ai = 0;
+      while (ai < vec_len(e.args) && ai < vec_len(sig.paramTyAnns)) {
+        let expected = vec_get(sig.paramTyAnns, ai);
+        if (expected != "" && ty_is_type_var(sig.typeParams, normalize_ty_ann(expected))) {
+          let actual = infer_expr_type(src, structs, fns, scopes, depth, vec_get(e.args, ai));
+          subst_bind(subst, normalize_ty_ann(expected), normalize_ty_ann(actual));
+        }
+        ai = ai + 1;
+      }
+    }
+  } else {
+    if (vec_len(e.typeArgs) > 0) {
+      panic_at(src, span_start(e.span), "cannot supply type args to non-generic function: " + name);
+    }
+  }
+
   let mut i = 0;
   while (i < vec_len(e.args) && i < vec_len(sig.paramTyAnns)) {
-    let expected = vec_get(sig.paramTyAnns, i);
-    if (expected != "") {
+    let expected0 = vec_get(sig.paramTyAnns, i);
+    if (expected0 != "") {
+      let expected = if (vec_len(sig.typeParams) > 0) ty_apply_subst(sig.typeParams, subst, expected0) else normalize_ty_ann(expected0);
       let actual = infer_expr_type(src, structs, fns, scopes, depth, vec_get(e.args, i));
       require_type_compatible(src, span_start(e.span), "arg " + ("" + (i + 1)) + " to " + name, structs, expected, actual);
     }
@@ -619,7 +1044,25 @@ fn check_call_types(src: String, structs, fns, scopes, depth: I32, e) : Void => 
   }
 }
 
-fn analyze_expr(src: String, structs, fns, scopes, depth: I32, e) : Void => {
+class fn ParsedTagEq(ok: Bool, name: String, variant: String) => {}
+
+fn parse_tag_eq(cond) : ParsedTagEq => {
+  // Recognize: <ident>.tag == "Variant" (either side).
+  if (cond.tag != "EBinary") { yield ParsedTagEq(false, "", ""); }
+  if (cond.op.tag != "OpEq") { yield ParsedTagEq(false, "", ""); }
+
+  // Left: o.tag
+  if (cond.left.tag == "EField" && cond.left.field == "tag" && cond.left.base.tag == "EIdent" && cond.right.tag == "EString") {
+    yield ParsedTagEq(true, cond.left.base.name, cond.right.value);
+  }
+  // Right: o.tag
+  if (cond.right.tag == "EField" && cond.right.field == "tag" && cond.right.base.tag == "EIdent" && cond.left.tag == "EString") {
+    yield ParsedTagEq(true, cond.right.base.name, cond.left.value);
+  }
+  ParsedTagEq(false, "", "")
+}
+
+fn analyze_expr(src: String, structs, unions, fns, scopes, depth: I32, narrowed, e) : Void => {
   if (e.tag == "EIdent") {
     require_name(src, span_start(e.span), scopes, depth, e.name);
     yield;
@@ -639,7 +1082,7 @@ fn analyze_expr(src: String, structs, fns, scopes, depth: I32, e) : Void => {
       pi = pi + 1;
     }
 
-    analyze_expr(src, structs, fns, scopes, newDepth, e.body);
+    analyze_expr(src, structs, unions, fns, scopes, newDepth, narrowed, e.body);
 
     // Enforce declared return type against body expression.
     if (e.retTyAnn != "") {
@@ -654,7 +1097,7 @@ fn analyze_expr(src: String, structs, fns, scopes, depth: I32, e) : Void => {
     // nameExpr is a struct name marker (ident/path), not a runtime value.
     let mut vi = 0;
     while (vi < vec_len(e.values)) {
-      analyze_expr(src, structs, fns, scopes, depth, vec_get(e.values, vi));
+      analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, vec_get(e.values, vi));
       vi = vi + 1;
     }
     check_struct_lit_types(src, structs, fns, scopes, depth, e);
@@ -662,22 +1105,22 @@ fn analyze_expr(src: String, structs, fns, scopes, depth: I32, e) : Void => {
   }
 
   if (e.tag == "EUnary") {
-    analyze_expr(src, structs, fns, scopes, depth, e.expr);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.expr);
     yield;
   }
 
   if (e.tag == "EBinary") {
-    analyze_expr(src, structs, fns, scopes, depth, e.left);
-    analyze_expr(src, structs, fns, scopes, depth, e.right);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.left);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.right);
     check_binary_operand_types(src, structs, fns, scopes, depth, e);
     yield;
   }
 
   if (e.tag == "ECall") {
-    analyze_expr(src, structs, fns, scopes, depth, e.callee);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.callee);
     let mut ai = 0;
     while (ai < vec_len(e.args)) {
-      analyze_expr(src, structs, fns, scopes, depth, vec_get(e.args, ai));
+      analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, vec_get(e.args, ai));
       ai = ai + 1;
     }
     check_call_types(src, structs, fns, scopes, depth, e);
@@ -686,23 +1129,34 @@ fn analyze_expr(src: String, structs, fns, scopes, depth: I32, e) : Void => {
 
   if (e.tag == "EIf") {
     check_cond_is_bool(src, structs, fns, scopes, depth, e.cond);
-    analyze_expr(src, structs, fns, scopes, depth, e.cond);
-    analyze_expr(src, structs, fns, scopes, depth, e.thenExpr);
-    analyze_expr(src, structs, fns, scopes, depth, e.elseExpr);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.cond);
+
+    // Narrowing for unions: if (o.tag == "Some") { ... }
+    let tagEq = parse_tag_eq(e.cond);
+    if (tagEq.ok) {
+      let narrowedThen = narrow_clone(narrowed);
+      vec_push(narrowedThen, mk_narrowed_tag(tagEq.name, tagEq.variant));
+      analyze_expr(src, structs, unions, fns, scopes, depth, narrowedThen, e.thenExpr);
+      analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.elseExpr);
+      yield;
+    }
+
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.thenExpr);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.elseExpr);
     yield;
   }
 
   if (e.tag == "EBlock") {
     let newDepth = scopes_enter(scopes, depth);
-    analyze_stmts(src, structs, fns, scopes, newDepth, e.body);
-    analyze_expr(src, structs, fns, scopes, newDepth, e.tail);
+    analyze_stmts(src, structs, unions, fns, scopes, newDepth, narrowed, e.body);
+    analyze_expr(src, structs, unions, fns, scopes, newDepth, narrowed, e.tail);
     yield;
   }
 
   if (e.tag == "EVecLit") {
     let mut ii = 0;
     while (ii < vec_len(e.items)) {
-      analyze_expr(src, structs, fns, scopes, depth, vec_get(e.items, ii));
+      analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, vec_get(e.items, ii));
       ii = ii + 1;
     }
     yield;
@@ -711,25 +1165,61 @@ fn analyze_expr(src: String, structs, fns, scopes, depth: I32, e) : Void => {
   if (e.tag == "ETupleLit") {
     let mut ii = 0;
     while (ii < vec_len(e.items)) {
-      analyze_expr(src, structs, fns, scopes, depth, vec_get(e.items, ii));
+      analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, vec_get(e.items, ii));
       ii = ii + 1;
     }
     yield;
   }
 
   if (e.tag == "EIndex") {
-    analyze_expr(src, structs, fns, scopes, depth, e.base);
-    analyze_expr(src, structs, fns, scopes, depth, e.index);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.base);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.index);
+
+    // Array safety: enforce bounds + initialized prefix when index is a literal.
+    if (e.base.tag == "EIdent") {
+      let bt = infer_lookup_ty(scopes, depth, e.base.name);
+      let arr = ty_parse_array(normalize_ty_ann(bt));
+      if (arr.ok) {
+        let idx = infer_int_const(e.index);
+        if (idx >= 0) {
+          if (idx >= arr.len) {
+            panic_at(src, span_start(e.span), "array index out of bounds: " + ("" + idx));
+          }
+          if (!(idx < arr.init)) {
+            panic_at(src, span_start(e.span), "array index uninitialized: " + ("" + idx));
+          }
+        }
+      }
+    }
     yield;
   }
 
   if (e.tag == "ETupleIndex") {
-    analyze_expr(src, structs, fns, scopes, depth, e.base);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.base);
     yield;
   }
 
   if (e.tag == "EField") {
-    analyze_expr(src, structs, fns, scopes, depth, e.base);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.base);
+
+    // Union payload access (`.value`) must be gated by narrowing.
+    if (e.field == "value" && e.base.tag == "EIdent") {
+      let bt = infer_lookup_ty(scopes, depth, e.base.name);
+      let app = ty_parse_app(normalize_ty_ann(bt));
+      if (app.ok) {
+        let unionName = stringSlice(app.callee, ty_skip_ws(app.callee, 0), stringLen(app.callee));
+        if (has_union_def(unions, unionName)) {
+          let u = find_union_def(unions, unionName);
+          let v = narrow_lookup(narrowed, e.base.name);
+          if (v == "") {
+            panic_at(src, span_start(e.span), "union payload access requires narrowing (" + unionName + ".value)");
+          }
+          if (!union_variant_has_payload(u, v)) {
+            panic_at(src, span_start(e.span), "union variant has no payload: " + v);
+          }
+        }
+      }
+    }
 
     // If base is a known struct type, validate field exists.
     let bt = infer_expr_type(src, structs, fns, scopes, depth, e.base);
@@ -743,11 +1233,11 @@ fn analyze_expr(src: String, structs, fns, scopes, depth: I32, e) : Void => {
   }
 
   if (e.tag == "EMatch") {
-    analyze_expr(src, structs, fns, scopes, depth, e.scrut);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.scrut);
     let mut mi = 0;
     while (mi < vec_len(e.arms)) {
       let arm = vec_get(e.arms, mi);
-      analyze_expr(src, structs, fns, scopes, depth, arm.expr);
+      analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, arm.expr);
       mi = mi + 1;
     }
     yield;
@@ -756,9 +1246,9 @@ fn analyze_expr(src: String, structs, fns, scopes, depth: I32, e) : Void => {
   // Literals, paths, undefined: nothing to do.
 }
 
-fn analyze_stmt(src: String, structs, fns, scopes, depth: I32, s) : Void => {
+fn analyze_stmt(src: String, structs, unions, fns, scopes, depth: I32, narrowed, s) : Void => {
   if (s.tag == "SLet") {
-    analyze_expr(src, structs, fns, scopes, depth, s.init);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.init);
     let initTy = infer_expr_type(src, structs, fns, scopes, depth, s.init);
     if (s.tyAnn != "") {
       require_type_compatible(src, span_start(s.span), "let " + s.name, structs, s.tyAnn, initTy);
@@ -774,38 +1264,54 @@ fn analyze_stmt(src: String, structs, fns, scopes, depth: I32, s) : Void => {
     if (!b.isMut) {
       panic_at(src, span_start(s.span), "cannot assign to immutable binding: " + s.name);
     }
-    analyze_expr(src, structs, fns, scopes, depth, s.value);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.value);
     yield;
   }
 
   if (s.tag == "SExpr") {
-    analyze_expr(src, structs, fns, scopes, depth, s.expr);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.expr);
     yield;
   }
 
   if (s.tag == "SYield") {
-    analyze_expr(src, structs, fns, scopes, depth, s.expr);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.expr);
     yield;
   }
 
   if (s.tag == "SWhile") {
     check_cond_is_bool(src, structs, fns, scopes, depth, s.cond);
-    analyze_expr(src, structs, fns, scopes, depth, s.cond);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.cond);
     let newDepth = scopes_enter(scopes, depth);
-    analyze_stmts(src, structs, fns, scopes, newDepth, s.body);
+    analyze_stmts(src, structs, unions, fns, scopes, newDepth, narrowed, s.body);
     yield;
   }
 
   if (s.tag == "SIf") {
     check_cond_is_bool(src, structs, fns, scopes, depth, s.cond);
-    analyze_expr(src, structs, fns, scopes, depth, s.cond);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.cond);
+
+    // Narrowing for unions in statement if: if (o.tag == "Some") { ... } else { ... }
+    let tagEq = parse_tag_eq(s.cond);
+    if (tagEq.ok) {
+      let narrowedThen = narrow_clone(narrowed);
+      vec_push(narrowedThen, mk_narrowed_tag(tagEq.name, tagEq.variant));
+
+      let thenDepth = scopes_enter(scopes, depth);
+      analyze_stmts(src, structs, unions, fns, scopes, thenDepth, narrowedThen, s.thenBody);
+
+      if (s.hasElse) {
+        let elseDepth = scopes_enter(scopes, depth);
+        analyze_stmts(src, structs, unions, fns, scopes, elseDepth, narrowed, s.elseBody);
+      }
+      yield;
+    }
 
     let thenDepth = scopes_enter(scopes, depth);
-    analyze_stmts(src, structs, fns, scopes, thenDepth, s.thenBody);
+    analyze_stmts(src, structs, unions, fns, scopes, thenDepth, narrowed, s.thenBody);
 
     if (s.hasElse) {
       let elseDepth = scopes_enter(scopes, depth);
-      analyze_stmts(src, structs, fns, scopes, elseDepth, s.elseBody);
+      analyze_stmts(src, structs, unions, fns, scopes, elseDepth, narrowed, s.elseBody);
     }
 
     yield;
@@ -818,9 +1324,36 @@ fn analyze_stmt(src: String, structs, fns, scopes, depth: I32, s) : Void => {
         panic_at(src, span_start(s.span), "cannot assign through immutable binding: " + s.base.name);
       }
     }
-    analyze_expr(src, structs, fns, scopes, depth, s.base);
-    analyze_expr(src, structs, fns, scopes, depth, s.index);
-    analyze_expr(src, structs, fns, scopes, depth, s.value);
+
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.base);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.index);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.value);
+
+    // Array initialization tracking / bounds checks on literal index.
+    if (s.base.tag == "EIdent") {
+      let bt = infer_lookup_ty(scopes, depth, s.base.name);
+      let arr = ty_parse_array(normalize_ty_ann(bt));
+      if (arr.ok) {
+        let idx = infer_int_const(s.index);
+        if (idx >= 0) {
+          if (idx >= arr.len) {
+            panic_at(src, span_start(s.span), "array index out of bounds: " + ("" + idx));
+          }
+          if (idx > arr.init) {
+            panic_at(src, span_start(s.span), "cannot skip array initialization at index " + ("" + idx));
+          }
+
+          // Enforce element type when known.
+          let elemExpected = normalize_ty_ann(arr.elem);
+          let actual = infer_expr_type(src, structs, fns, scopes, depth, s.value);
+          require_type_compatible(src, span_start(s.span), "array element", structs, elemExpected, actual);
+
+          if (idx == arr.init) {
+            update_binding_ty(src, span_start(s.span), scopes, depth, s.base.name, "[" + elemExpected + ";" + ("" + (arr.init + 1)) + ";" + ("" + arr.len) + "]");
+          }
+        }
+      }
+    }
     yield;
   }
 
@@ -831,21 +1364,21 @@ fn analyze_stmt(src: String, structs, fns, scopes, depth: I32, s) : Void => {
         panic_at(src, span_start(s.span), "cannot assign through immutable binding: " + s.base.name);
       }
     }
-    analyze_expr(src, structs, fns, scopes, depth, s.base);
-    analyze_expr(src, structs, fns, scopes, depth, s.value);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.base);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.value);
     yield;
   }
 }
 
-fn analyze_stmts(src: String, structs, fns, scopes, depth: I32, stmts) : Void => {
+fn analyze_stmts(src: String, structs, unions, fns, scopes, depth: I32, narrowed, stmts) : Void => {
   let mut i = 0;
   while (i < vec_len(stmts)) {
-    analyze_stmt(src, structs, fns, scopes, depth, vec_get(stmts, i));
+    analyze_stmt(src, structs, unions, fns, scopes, depth, narrowed, vec_get(stmts, i));
     i = i + 1;
   }
 }
 
-fn analyze_fn_decl(src: String, structs, fns, outerScopes, outerDepth: I32, d) : Void => {
+fn analyze_fn_decl(src: String, structs, unions, fns, outerScopes, outerDepth: I32, d) : Void => {
   let depth = scopes_enter(outerScopes, outerDepth);
 
   let mut pi = 0;
@@ -859,8 +1392,9 @@ fn analyze_fn_decl(src: String, structs, fns, outerScopes, outerDepth: I32, d) :
     pi = pi + 1;
   }
 
-  analyze_stmts(src, structs, fns, outerScopes, depth, d.body);
-  analyze_expr(src, structs, fns, outerScopes, depth, d.tail);
+  let narrowed = vec_new();
+  analyze_stmts(src, structs, unions, fns, outerScopes, depth, narrowed, d.body);
+  analyze_expr(src, structs, unions, fns, outerScopes, depth, narrowed, d.tail);
 
   // Enforce declared return type (if present) against tail and explicit yields.
   if (d.retTyAnn != "") {
@@ -892,11 +1426,12 @@ fn analyze_module(src: String, d) : Void => {
 
   // NOTE: module-local typing env not implemented yet; treat as separate namespace.
   let structs = vec_new();
+  let unions = vec_new();
   let fns = vec_new();
-  analyze_decls(src, structs, fns, scopes, depth, d.decls);
+  analyze_decls(src, structs, unions, fns, scopes, depth, d.decls);
 }
 
-fn predeclare_decl(src: String, structs, fns, scopes, depth: I32, d) : Void => {
+fn predeclare_decl(src: String, structs, unions, fns, scopes, depth: I32, d) : Void => {
   if (d.tag == "DExternFrom") {
     let mut ni = 0;
     while (ni < vec_len(d.names)) {
@@ -918,11 +1453,14 @@ fn predeclare_decl(src: String, structs, fns, scopes, depth: I32, d) : Void => {
   if (d.tag == "DTypeUnion") {
     // Union variants are value constructors.
     let mut vi = 0;
+    let infos = vec_new();
     while (vi < vec_len(d.variants)) {
       let v = vec_get(d.variants, vi);
       declare_name(src, span_start(v.span), scopes, depth, v.name, false, ty_unknown());
+      vec_push(infos, mk_union_variant_info(v.name, v.hasPayload, v.payloadTyAnns));
       vi = vi + 1;
     }
+    vec_push(unions, mk_union_def(d.name, d.typeParams, infos));
     yield;
   }
 
@@ -937,7 +1475,7 @@ fn predeclare_decl(src: String, structs, fns, scopes, depth: I32, d) : Void => {
       let mut i = 0;
       while (i < vec_len(d.params)) { vec_push(paramTyAnns, ""); i = i + 1; }
     }
-    vec_push(fns, mk_fn_sig(d.name, d.params, paramTyAnns, d.retTyAnn));
+    vec_push(fns, mk_fn_sig(d.name, d.typeParams, d.params, paramTyAnns, d.retTyAnn));
     yield;
   }
 
@@ -950,7 +1488,7 @@ fn predeclare_decl(src: String, structs, fns, scopes, depth: I32, d) : Void => {
       let mut i = 0;
       while (i < vec_len(d.params)) { vec_push(paramTyAnns, ""); i = i + 1; }
     }
-    vec_push(fns, mk_fn_sig(d.name, d.params, paramTyAnns, d.retTyAnn));
+    vec_push(fns, mk_fn_sig(d.name, d.typeParams, d.params, paramTyAnns, d.retTyAnn));
     yield;
   }
 
@@ -965,9 +1503,10 @@ fn predeclare_decl(src: String, structs, fns, scopes, depth: I32, d) : Void => {
   }
 }
 
-fn analyze_decl_body(src: String, structs, fns, scopes, depth: I32, d) : Void => {
+fn analyze_decl_body(src: String, structs, unions, fns, scopes, depth: I32, d) : Void => {
   if (d.tag == "DLet") {
-    analyze_expr(src, structs, fns, scopes, depth, d.init);
+    let narrowed = vec_new();
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, d.init);
     let initTy = infer_expr_type(src, structs, fns, scopes, depth, d.init);
     if (d.tyAnn != "") {
       require_type_compatible(src, span_start(d.span), "let " + d.name, structs, d.tyAnn, initTy);
@@ -979,12 +1518,12 @@ fn analyze_decl_body(src: String, structs, fns, scopes, depth: I32, d) : Void =>
   }
 
   if (d.tag == "DFn") {
-    analyze_fn_decl(src, structs, fns, scopes, depth, d);
+    analyze_fn_decl(src, structs, unions, fns, scopes, depth, d);
     yield;
   }
 
   if (d.tag == "DClassFn") {
-    analyze_fn_decl(src, structs, fns, scopes, depth, d);
+    analyze_fn_decl(src, structs, unions, fns, scopes, depth, d);
     yield;
   }
 
@@ -994,18 +1533,18 @@ fn analyze_decl_body(src: String, structs, fns, scopes, depth: I32, d) : Void =>
   }
 }
 
-fn analyze_decls(src: String, structs, fns, scopes, depth: I32, decls) : Void => {
+fn analyze_decls(src: String, structs, unions, fns, scopes, depth: I32, decls) : Void => {
   // Pass 1: predeclare names so later decl bodies can reference earlier/later decls.
   let mut i = 0;
   while (i < vec_len(decls)) {
-    predeclare_decl(src, structs, fns, scopes, depth, vec_get(decls, i));
+    predeclare_decl(src, structs, unions, fns, scopes, depth, vec_get(decls, i));
     i = i + 1;
   }
 
   // Pass 2: analyze bodies in order (lets are sequential).
   i = 0;
   while (i < vec_len(decls)) {
-    analyze_decl_body(src, structs, fns, scopes, depth, vec_get(decls, i));
+    analyze_decl_body(src, structs, unions, fns, scopes, depth, vec_get(decls, i));
     i = i + 1;
   }
 }
@@ -1015,6 +1554,7 @@ fn analyze_program(src: String, decls) : Void => {
   vec_push(scopes, vec_new());
   let depth: I32 = 1;
   let structs = vec_new();
+  let unions = vec_new();
   let fns = vec_new();
-  analyze_decls(src, structs, fns, scopes, depth, decls);
+  analyze_decls(src, structs, unions, fns, scopes, depth, decls);
 }
