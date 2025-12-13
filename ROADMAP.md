@@ -111,6 +111,11 @@ The project is currently focused on:
 2. **Phase 5a** (next) — JS emitter optimization
 3. **Foundation for Phase 5-6** — Design stdlib architecture and collection APIs
 
+Phase 5a has begun with correctness-focused emitter work:
+
+- Preserve standalone expression statements (`SExpr`) so side-effecting calls are not dropped
+- Fix unary operator precedence emission (e.g. emit `!(a < b)` safely as `!((a < b))`)
+
 ## Feedback & Contributions
 
 This roadmap is a living document. The community is invited to:

@@ -27,14 +27,14 @@ break;
 }
 const imps = parse_imports_ast(src, i);
 let ii = 0;
-while ((ii < vec_len(imps.decls))) {
+while (ii < vec_len(imps.decls)) {
 vec_push(decls, vec_get(imps.decls, ii));
-ii = (ii + 1);
+ii = ii + 1;
 }
 i = imps.nextPos;
 while (true) {
 const j = skip_ws(src, i);
-if ((!starts_with_at(src, j, "module"))) {
+if (!(starts_with_at(src, j, "module"))) {
 break;
 }
 const m = parse_module_decl_ast(src, i);
@@ -67,11 +67,11 @@ i = mutOpt.nextPos;
 const name = parse_ident(src, i);
 i = name.nextPos;
 const t0 = skip_ws(src, i);
-if (((t0 < stringLen(src)) && (t0 >= 0))) {
+if ((t0 < stringLen(src)) && (t0 >= 0)) {
 }
 const colonPos = skip_ws(src, i);
 if (starts_with_at(src, colonPos, ":")) {
-const _ty = parse_type_expr(src, (colonPos + 1));
+const _ty = parse_type_expr(src, colonPos + 1);
 i = _ty.v1;
 }
 i = parse_keyword(src, i, "=");
@@ -100,7 +100,7 @@ continue;
 break;
 }
 const end = skip_ws(src, i);
-if ((end < stringLen(src))) {
+if (end < stringLen(src)) {
 panic_at(src, end, "unexpected trailing input");
 }
 const out = vec_new();

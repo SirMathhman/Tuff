@@ -419,7 +419,9 @@ fn emit_expr_js(e) : String => {
 
   if (e.tag == "EUnary") {
     let inner = emit_expr_js(e.expr);
-    out = emit_unop_js(e.op) + inner;
+    // Always parenthesize the operand to avoid JS precedence pitfalls.
+    // Example: `!(a < b)` must emit as `!((a < b))`, not `(!(a) < b)`.
+    out = emit_unop_js(e.op) + "(" + inner + ")";
   }
 
   if (e.tag == "EBinary") {
@@ -521,8 +523,9 @@ fn emit_stmt_js(s) : String => {
   }
 
   if (s.tag == "SExpr") {
-    // Dead code: standalone expression statements don't contribute to output
-    out = "";
+    // Standalone expression statements are needed for side effects.
+    // Example: `println("hi");` or `compile_project(inPath, outPath);`
+    out = emit_expr_js(s.expr) + ";\n";
   }
 
   if (s.tag == "SYield") {

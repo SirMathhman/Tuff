@@ -7,7 +7,7 @@ import { ParsedIdent, parse_ident, parse_keyword, parse_module_path, module_path
 import { ParsedType, parse_type_expr, skip_angle_brackets } from "./types.mjs";
 import { ParsedMain, ParsedParams, ParsedStmt, parse_expr, parse_main_body, parse_mut_opt } from "./expr_stmt.mjs";
 import { ParsedMainAst, parse_main_body_ast } from "./expr_stmt.mjs";
-import { span, decl_extern_from, decl_import, decl_fn, decl_fn_typed, decl_class_fn, decl_class_fn_typed, decl_struct, decl_struct_typed, decl_type_union, type_union_variant, decl_module } from "../ast.mjs";
+import { span, decl_extern_from, decl_import, decl_fn, decl_fn_typed, decl_class_fn, decl_class_fn_typed, decl_struct, decl_struct_typed, decl_type_union, type_union_variant, type_union_variant_typed, decl_module } from "../ast.mjs";
 export function ParsedDeclAst(decl, nextPos) {
 return { decl: decl, nextPos: nextPos };
 }
@@ -20,6 +20,9 @@ return { names: names, nextPos: nextPos };
 export function ParsedParamsAst(names, tyAnns, nextPos) {
 return { names: names, tyAnns: tyAnns, nextPos: nextPos };
 }
+export function ParsedTypeParamsAst(params, nextPos) {
+return { params: params, nextPos: nextPos };
+}
 export function ParsedImports(v0, v1) {
 return { v0: v0, v1: v1 };
 }
@@ -29,8 +32,8 @@ return { v0: v0, v1: v1, v2: v2 };
 export function parse_param_list(src, i) {
 let k = parse_keyword(src, i, "(");
 k = skip_ws(src, k);
-if (((k < stringLen(src)) && (stringCharCodeAt(src, k) == 41))) {
-return ParsedParams("", (k + 1));
+if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 41)) {
+return ParsedParams("", k + 1);
 }
 let out = "";
 let first = true;
@@ -38,27 +41,27 @@ while (true) {
 const id = parse_ident(src, k);
 k = id.nextPos;
 const t0 = skip_ws(src, k);
-if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 58))) {
-const _ty = parse_type_expr(src, (t0 + 1));
+if ((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 58)) {
+const _ty = parse_type_expr(src, t0 + 1);
 k = _ty.v1;
 }
 if (first) {
-out = (out + id.text);
+out = out + id.text;
 } else {
-out = ((out + ", ") + id.text);
+out = (out + ", ") + id.text;
 }
 first = false;
 k = skip_ws(src, k);
-if ((!(k < stringLen(src)))) {
+if (!(k < stringLen(src))) {
 panic_at(src, k, "expected ')' in param list");
 }
 const c = stringCharCodeAt(src, k);
-if ((c == 44)) {
-k = (k + 1);
+if (c == 44) {
+k = k + 1;
 continue;
 }
-if ((c == 41)) {
-return ParsedParams(out, (k + 1));
+if (c == 41) {
+return ParsedParams(out, k + 1);
 }
 panic_at(src, k, "expected ',' or ')' in param list");
 }
@@ -68,46 +71,77 @@ export function parse_name_list_ast(src, i) {
 let k = parse_keyword(src, i, "{");
 k = skip_ws(src, k);
 const names = vec_new();
-if (((k < stringLen(src)) && (stringCharCodeAt(src, k) == 125))) {
-return ParsedNamesAst(names, (k + 1));
+if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 125)) {
+return ParsedNamesAst(names, k + 1);
 }
 while (true) {
 k = skip_ws(src, k);
-if ((!(k < stringLen(src)))) {
+if (!(k < stringLen(src))) {
 panic_at(src, k, "expected '}'");
 }
-if ((stringCharCodeAt(src, k) == 125)) {
-return ParsedNamesAst(names, (k + 1));
+if (stringCharCodeAt(src, k) == 125) {
+return ParsedNamesAst(names, k + 1);
 }
 const id = parse_ident(src, k);
 vec_push(names, id.text);
 k = skip_ws(src, id.nextPos);
-if (((k < stringLen(src)) && (stringCharCodeAt(src, k) == 44))) {
-k = (k + 1);
+if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 44)) {
+k = k + 1;
 continue;
 }
 k = skip_ws(src, k);
-if (((k < stringLen(src)) && (stringCharCodeAt(src, k) == 125))) {
-return ParsedNamesAst(names, (k + 1));
+if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 125)) {
+return ParsedNamesAst(names, k + 1);
 }
 panic_at(src, k, "expected ',' or '}' in name list");
 }
 return ParsedNamesAst(names, k);
+}
+export function parse_type_params_list_ast(src, i) {
+let k = skip_ws(src, i);
+if (!((k < stringLen(src)) && (stringCharCodeAt(src, k) == 60))) {
+return ParsedTypeParamsAst(vec_new(), i);
+}
+k = k + 1;
+k = skip_ws(src, k);
+const params = vec_new();
+if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 62)) {
+return ParsedTypeParamsAst(params, k + 1);
+}
+while (true) {
+const id = parse_ident(src, k);
+vec_push(params, id.text);
+k = skip_ws(src, id.nextPos);
+if (!(k < stringLen(src))) {
+panic_at(src, k, "expected '>' in type params");
+}
+const ch = stringCharCodeAt(src, k);
+if (ch == 44) {
+k = k + 1;
+k = skip_ws(src, k);
+continue;
+}
+if (ch == 62) {
+return ParsedTypeParamsAst(params, k + 1);
+}
+panic_at(src, k, "expected ',' or '>' in type params");
+}
+return ParsedTypeParamsAst(params, k);
 }
 export function parse_param_list_ast(src, i) {
 let k = parse_keyword(src, i, "(");
 k = skip_ws(src, k);
 const names = vec_new();
 const tyAnns = vec_new();
-if (((k < stringLen(src)) && (stringCharCodeAt(src, k) == 41))) {
-return ParsedParamsAst(names, tyAnns, (k + 1));
+if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 41)) {
+return ParsedParamsAst(names, tyAnns, k + 1);
 }
 while (true) {
 const id = parse_ident(src, k);
 k = id.nextPos;
 const t0 = skip_ws(src, k);
-if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 58))) {
-const _ty = parse_type_expr(src, (t0 + 1));
+if ((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 58)) {
+const _ty = parse_type_expr(src, t0 + 1);
 vec_push(tyAnns, _ty.v0);
 k = _ty.v1;
 } else {
@@ -115,16 +149,16 @@ vec_push(tyAnns, "");
 }
 vec_push(names, id.text);
 k = skip_ws(src, k);
-if ((!(k < stringLen(src)))) {
+if (!(k < stringLen(src))) {
 panic_at(src, k, "expected ')' in param list");
 }
 const c = stringCharCodeAt(src, k);
-if ((c == 44)) {
-k = (k + 1);
+if (c == 44) {
+k = k + 1;
 continue;
 }
-if ((c == 41)) {
-return ParsedParamsAst(names, tyAnns, (k + 1));
+if (c == 41) {
+return ParsedParamsAst(names, tyAnns, k + 1);
 }
 panic_at(src, k, "expected ',' or ')' in param list");
 }
@@ -148,7 +182,7 @@ const j = skip_ws(src, k);
 if (starts_with_at(src, j, "import")) {
 panic_at(src, j, "`import` is not supported. Use `from <module> use { ... };` instead.");
 }
-if ((!starts_with_at(src, j, "from"))) {
+if (!(starts_with_at(src, j, "from"))) {
 break;
 }
 const start = skip_ws(src, k);
@@ -172,16 +206,19 @@ k = name.nextPos;
 if (is_identifier_too_short(name.text)) {
 warn_short_identifier(src, name.startPos, name.text);
 }
+let typeParams = vec_new();
 const t0 = skip_ws(src, k);
-if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
-k = skip_angle_brackets(src, t0);
+if ((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60)) {
+const tp = parse_type_params_list_ast(src, t0);
+typeParams = tp.params;
+k = tp.nextPos;
 }
 const params = parse_param_list_ast(src, k);
 k = params.nextPos;
 const t1 = skip_ws(src, k);
 let retTyAnn = "";
-if (((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 58))) {
-const _rt = parse_type_expr(src, (t1 + 1));
+if ((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 58)) {
+const _rt = parse_type_expr(src, t1 + 1);
 retTyAnn = _rt.v0;
 k = _rt.v1;
 }
@@ -190,15 +227,15 @@ const body = parse_main_body_ast(src, k);
 k = body.nextPos;
 let anyParamTy = false;
 let pi = 0;
-while ((pi < vec_len(params.tyAnns))) {
-if ((vec_get(params.tyAnns, pi) != "")) {
+while (pi < vec_len(params.tyAnns)) {
+if (vec_get(params.tyAnns, pi) != "") {
 anyParamTy = true;
 break;
 }
-pi = (pi + 1);
+pi = pi + 1;
 }
-if ((anyParamTy || (retTyAnn != ""))) {
-return ParsedDeclAst(decl_fn_typed(span(start, k), name.text, params.names, params.tyAnns, retTyAnn, body.body, body.tail), k);
+if (anyParamTy || (retTyAnn != "")) {
+return ParsedDeclAst(decl_fn_typed(span(start, k), name.text, typeParams, params.names, params.tyAnns, retTyAnn, body.body, body.tail), k);
 }
 return ParsedDeclAst(decl_fn(span(start, k), name.text, params.names, body.body, body.tail), k);
 }
@@ -211,16 +248,19 @@ k = name.nextPos;
 if (is_identifier_too_short(name.text)) {
 warn_short_identifier(src, name.startPos, name.text);
 }
+let typeParams = vec_new();
 const t0 = skip_ws(src, k);
-if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
-k = skip_angle_brackets(src, t0);
+if ((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60)) {
+const tp = parse_type_params_list_ast(src, t0);
+typeParams = tp.params;
+k = tp.nextPos;
 }
 const params = parse_param_list_ast(src, k);
 k = params.nextPos;
 const t1 = skip_ws(src, k);
 let retTyAnn = "";
-if (((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 58))) {
-const _rt = parse_type_expr(src, (t1 + 1));
+if ((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 58)) {
+const _rt = parse_type_expr(src, t1 + 1);
 retTyAnn = _rt.v0;
 k = _rt.v1;
 }
@@ -229,15 +269,15 @@ const body = parse_main_body_ast(src, k);
 k = body.nextPos;
 let anyParamTy = false;
 let pi = 0;
-while ((pi < vec_len(params.tyAnns))) {
-if ((vec_get(params.tyAnns, pi) != "")) {
+while (pi < vec_len(params.tyAnns)) {
+if (vec_get(params.tyAnns, pi) != "") {
 anyParamTy = true;
 break;
 }
-pi = (pi + 1);
+pi = pi + 1;
 }
-if ((anyParamTy || (retTyAnn != ""))) {
-return ParsedDeclAst(decl_class_fn_typed(span(start, k), name.text, params.names, params.tyAnns, retTyAnn, body.body, body.tail), k);
+if (anyParamTy || (retTyAnn != "")) {
+return ParsedDeclAst(decl_class_fn_typed(span(start, k), name.text, typeParams, params.names, params.tyAnns, retTyAnn, body.body, body.tail), k);
 }
 return ParsedDeclAst(decl_class_fn(span(start, k), name.text, params.names, body.body, body.tail), k);
 }
@@ -249,20 +289,23 @@ k = name.nextPos;
 if (is_identifier_too_short(name.text)) {
 warn_short_identifier(src, name.startPos, name.text);
 }
+let typeParams = vec_new();
 const t0 = skip_ws(src, k);
-if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
-k = skip_angle_brackets(src, t0);
+if ((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60)) {
+const tp = parse_type_params_list_ast(src, t0);
+typeParams = tp.params;
+k = tp.nextPos;
 }
 k = parse_keyword(src, k, "{");
 const fields = vec_new();
 const fieldTyAnns = vec_new();
 while (true) {
 k = skip_ws(src, k);
-if ((!(k < stringLen(src)))) {
+if (!(k < stringLen(src))) {
 panic_at(src, k, "expected '}'");
 }
-if ((stringCharCodeAt(src, k) == 125)) {
-k = (k + 1);
+if (stringCharCodeAt(src, k) == 125) {
+k = k + 1;
 break;
 }
 const field = parse_ident(src, k);
@@ -272,15 +315,15 @@ k = _ty.v1;
 vec_push(fields, field.text);
 vec_push(fieldTyAnns, _ty.v0);
 k = skip_ws(src, k);
-if ((k < stringLen(src))) {
+if (k < stringLen(src)) {
 const ch = stringCharCodeAt(src, k);
-if (((ch == 44) || (ch == 59))) {
-k = (k + 1);
+if ((ch == 44) || (ch == 59)) {
+k = k + 1;
 }
 }
 }
 add_struct_def(name.text, fields);
-return ParsedDeclAst(decl_struct_typed(span(start, k), name.text, fields, fieldTyAnns), k);
+return ParsedDeclAst(decl_struct_typed(span(start, k), name.text, typeParams, fields, fieldTyAnns), k);
 }
 export function parse_type_union_decl_ast(src, i, exportAll) {
 const start = skip_ws(src, i);
@@ -290,43 +333,66 @@ k = name.nextPos;
 if (is_identifier_too_short(name.text)) {
 warn_short_identifier(src, name.startPos, name.text);
 }
+let typeParams = vec_new();
 const t0 = skip_ws(src, k);
-if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
-k = skip_angle_brackets(src, t0);
+if ((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60)) {
+const tp = parse_type_params_list_ast(src, t0);
+typeParams = tp.params;
+k = tp.nextPos;
 }
 k = parse_keyword(src, k, "=");
 const variants = vec_new();
 let first = true;
 while (true) {
-if ((!first)) {
+if (!(first)) {
 k = parse_keyword(src, k, "|");
 }
 first = false;
 const vStart = skip_ws(src, k);
 const v = parse_ident(src, vStart);
 k = v.nextPos;
-let hasPayload = false;
 const t1 = skip_ws(src, k);
-if (((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 60))) {
-hasPayload = true;
-k = skip_angle_brackets(src, t1);
+if ((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 60)) {
+let pk = parse_keyword(src, t1, "<");
+const payloadTyAnns = vec_new();
+while (true) {
+const a = parse_type_expr(src, pk);
+vec_push(payloadTyAnns, a.v0);
+pk = skip_ws(src, a.v1);
+if (!(pk < stringLen(src))) {
+panic_at(src, pk, "expected '>' in union variant payload");
 }
-vec_push(variants, type_union_variant(span(vStart, k), v.text, hasPayload));
+const chp = stringCharCodeAt(src, pk);
+if (chp == 44) {
+pk = pk + 1;
+pk = skip_ws(src, pk);
+continue;
+}
+if (chp == 62) {
+k = pk + 1;
+break;
+}
+panic_at(src, pk, "expected ',' or '>' in union variant payload");
+}
+vec_push(variants, type_union_variant_typed(span(vStart, k), v.text, payloadTyAnns));
+} else {
+vec_push(variants, type_union_variant(span(vStart, k), v.text, false));
+}
 const t2 = skip_ws(src, k);
-if ((!(t2 < stringLen(src)))) {
+if (!(t2 < stringLen(src))) {
 break;
 }
 const ch = stringCharCodeAt(src, t2);
-if ((ch == 59)) {
-k = (t2 + 1);
+if (ch == 59) {
+k = t2 + 1;
 break;
 }
-if ((ch == 124)) {
+if (ch == 124) {
 continue;
 }
 panic_at(src, t2, "expected '|' or ';' in union type");
 }
-return ParsedDeclAst(decl_type_union(span(start, k), name.text, variants), k);
+return ParsedDeclAst(decl_type_union(span(start, k), name.text, typeParams, variants), k);
 }
 export function parse_module_decl_ast(src, i) {
 const start = skip_ws(src, i);
@@ -336,11 +402,11 @@ k = parse_keyword(src, modName.nextPos, "{");
 const decls = vec_new();
 while (true) {
 const t = skip_ws(src, k);
-if ((!(t < stringLen(src)))) {
+if (!(t < stringLen(src))) {
 panic_at(src, t, "expected '}'");
 }
-if ((stringCharCodeAt(src, t) == 125)) {
-k = (t + 1);
+if (stringCharCodeAt(src, t) == 125) {
+k = t + 1;
 break;
 }
 if (starts_with_at(src, t, "fn")) {
@@ -370,29 +436,29 @@ let names = "";
 let first = true;
 while (true) {
 k = skip_ws(src, k);
-if ((!(k < stringLen(src)))) {
+if (!(k < stringLen(src))) {
 panic_at(src, k, "expected '}'");
 }
-if ((stringCharCodeAt(src, k) == 125)) {
-k = (k + 1);
+if (stringCharCodeAt(src, k) == 125) {
+k = k + 1;
 break;
 }
 const id = parse_ident(src, k);
 k = id.nextPos;
 if (first) {
-names = (names + id.text);
+names = names + id.text;
 } else {
-names = ((names + ", ") + id.text);
+names = (names + ", ") + id.text;
 }
 first = false;
 k = skip_ws(src, k);
-if (((k < stringLen(src)) && (stringCharCodeAt(src, k) == 44))) {
-k = (k + 1);
+if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 44)) {
+k = k + 1;
 continue;
 }
 k = skip_ws(src, k);
-if (((k < stringLen(src)) && (stringCharCodeAt(src, k) == 125))) {
-k = (k + 1);
+if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 125)) {
+k = k + 1;
 break;
 }
 panic_at(src, k, "expected ',' or '}' in extern list");
@@ -400,15 +466,15 @@ panic_at(src, k, "expected ',' or '}' in extern list");
 k = parse_optional_semicolon(src, k);
 let importPath = "";
 if (starts_with_at(mod.text, 0, "rt::")) {
-importPath = (("./rt/" + stringSlice(mod.text, 4, stringLen(mod.text))) + ".mjs");
+importPath = ("./rt/" + stringSlice(mod.text, 4, stringLen(mod.text))) + ".mjs";
 }
-if (((importPath == "") && starts_with_at(mod.text, 0, "node::"))) {
-importPath = ("node:" + stringSlice(mod.text, 6, stringLen(mod.text)));
+if ((importPath == "") && starts_with_at(mod.text, 0, "node::")) {
+importPath = "node:" + stringSlice(mod.text, 6, stringLen(mod.text));
 }
-if ((importPath == "")) {
-panic_at(src, k, ("unsupported extern module: " + mod.text));
+if (importPath == "") {
+panic_at(src, k, "unsupported extern module: " + mod.text);
 }
-return ParsedStmt((((("import { " + names) + " } from \"") + importPath) + "\";\n"), k);
+return ParsedStmt(((("import { " + names) + " } from \"") + importPath) + "\";\n", k);
 }
 export function parse_imports(src, i) {
 let k = i;
@@ -418,7 +484,7 @@ const j = skip_ws(src, k);
 if (starts_with_at(src, j, "import")) {
 panic_at(src, j, "`import` is not supported. Use `from <module> use { ... };` instead.");
 }
-if ((!starts_with_at(src, j, "from"))) {
+if (!(starts_with_at(src, j, "from"))) {
 break;
 }
 k = parse_keyword(src, k, "from");
@@ -430,36 +496,36 @@ let names = "";
 let first = true;
 while (true) {
 k = skip_ws(src, k);
-if ((!(k < stringLen(src)))) {
+if (!(k < stringLen(src))) {
 panic_at(src, k, "expected '}'");
 }
-if ((stringCharCodeAt(src, k) == 125)) {
-k = (k + 1);
+if (stringCharCodeAt(src, k) == 125) {
+k = k + 1;
 break;
 }
 const id = parse_ident(src, k);
 k = id.nextPos;
 if (first) {
-names = (names + id.text);
+names = names + id.text;
 } else {
-names = ((names + ", ") + id.text);
+names = (names + ", ") + id.text;
 }
 first = false;
 k = skip_ws(src, k);
-if (((k < stringLen(src)) && (stringCharCodeAt(src, k) == 44))) {
-k = (k + 1);
+if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 44)) {
+k = k + 1;
 continue;
 }
 k = skip_ws(src, k);
-if (((k < stringLen(src)) && (stringCharCodeAt(src, k) == 125))) {
-k = (k + 1);
+if ((k < stringLen(src)) && (stringCharCodeAt(src, k) == 125)) {
+k = k + 1;
 break;
 }
 panic_at(src, k, "expected ',' or '}' in import list");
 }
 k = parse_optional_semicolon(src, k);
-const importPath = (("./" + module_path_to_relpath(mod.text)) + ".mjs");
-out = (out + (((("import { " + names) + " } from \"") + importPath) + "\";\n"));
+const importPath = ("./" + module_path_to_relpath(mod.text)) + ".mjs";
+out = out + (((("import { " + names) + " } from \"") + importPath) + "\";\n");
 }
 return ParsedImports(out, k);
 }
@@ -468,21 +534,21 @@ let k = parse_keyword(src, i, "fn");
 const name = parse_ident(src, k);
 k = name.nextPos;
 const t0 = skip_ws(src, k);
-if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
+if ((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60)) {
 k = skip_angle_brackets(src, t0);
 }
 const params = parse_param_list(src, k);
 k = params.v1;
 const t1 = skip_ws(src, k);
-if (((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 58))) {
-const _rt = parse_type_expr(src, (t1 + 1));
+if ((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 58)) {
+const _rt = parse_type_expr(src, t1 + 1);
 k = _rt.v1;
 }
 k = parse_keyword(src, k, "=>");
 const body = parse_main_body(src, k);
 k = body.v1;
 const exportKw = (exportThis ? "export " : "");
-const js = (((((((((exportKw + "function ") + jsName) + "(") + params.v0) + ") {\n") + body.body) + "return ") + body.expr) + ";\n}\n");
+const js = ((((((((exportKw + "function ") + jsName) + "(") + params.v0) + ") {\n") + body.body) + "return ") + body.expr) + ";\n}\n";
 return ParsedFn(js, k, name.text);
 }
 export function parse_module_decl(src, i, prefix, exportTop) {
@@ -495,35 +561,35 @@ let entries = "";
 let first = true;
 while (true) {
 const t = skip_ws(src, k);
-if ((!(t < stringLen(src)))) {
+if (!(t < stringLen(src))) {
 panic_at(src, t, "expected '}'");
 }
-if ((stringCharCodeAt(src, t) == 125)) {
-k = (t + 1);
+if (stringCharCodeAt(src, t) == 125) {
+k = t + 1;
 break;
 }
 if (starts_with_at(src, t, "fn")) {
-const fnParsed = parse_fn_decl_named(src, k, ((((((prefix + "__") + modName.text) + "__") + "fn") + "__") + "tmp"), false);
-const fn2 = parse_fn_decl_named(src, k, ((((prefix + "__") + modName.text) + "__") + fnParsed.v2), false);
-decls = (decls + fn2.v0);
+const fnParsed = parse_fn_decl_named(src, k, (((((prefix + "__") + modName.text) + "__") + "fn") + "__") + "tmp", false);
+const fn2 = parse_fn_decl_named(src, k, (((prefix + "__") + modName.text) + "__") + fnParsed.v2, false);
+decls = decls + fn2.v0;
 if (first) {
-entries = (entries + ((fn2.v2 + ": ") + ((((prefix + "__") + modName.text) + "__") + fn2.v2)));
+entries = entries + ((fn2.v2 + ": ") + ((((prefix + "__") + modName.text) + "__") + fn2.v2));
 } else {
-entries = (entries + (((", " + fn2.v2) + ": ") + ((((prefix + "__") + modName.text) + "__") + fn2.v2)));
+entries = entries + (((", " + fn2.v2) + ": ") + ((((prefix + "__") + modName.text) + "__") + fn2.v2));
 }
 first = false;
 k = fn2.v1;
 continue;
 }
 if (starts_with_at(src, t, "module")) {
-const inner = parse_module_decl(src, k, ((prefix + "__") + modName.text), false);
-decls = (decls + inner.v0);
+const inner = parse_module_decl(src, k, (prefix + "__") + modName.text, false);
+decls = decls + inner.v0;
 const innerName = parse_ident(src, parse_keyword(src, k, "module"));
 const prop = innerName.text;
 if (first) {
-entries = (entries + ((prop + ": ") + prop));
+entries = entries + ((prop + ": ") + prop);
 } else {
-entries = (entries + (((", " + prop) + ": ") + prop));
+entries = entries + (((", " + prop) + ": ") + prop);
 }
 first = false;
 k = inner.v1;
@@ -531,9 +597,9 @@ continue;
 }
 panic_at(src, t, "expected fn or module inside module");
 }
-const obj = (("{ " + entries) + " }");
+const obj = ("{ " + entries) + " }";
 const header = (exportTop ? "export const " : "const ");
-const code = (((((decls + header) + modName.text) + " = ") + obj) + ";\n");
+const code = ((((decls + header) + modName.text) + " = ") + obj) + ";\n";
 return ParsedStmt(code, k);
 }
 export function parse_fn_decl2(src, i, exportAll) {
@@ -544,21 +610,21 @@ if (is_identifier_too_short(name.text)) {
 warn_short_identifier(src, name.startPos, name.text);
 }
 const t0 = skip_ws(src, k);
-if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
+if ((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60)) {
 k = skip_angle_brackets(src, t0);
 }
 const params = parse_param_list(src, k);
 k = params.v1;
 const t1 = skip_ws(src, k);
-if (((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 58))) {
-const _rt = parse_type_expr(src, (t1 + 1));
+if ((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 58)) {
+const _rt = parse_type_expr(src, t1 + 1);
 k = _rt.v1;
 }
 k = parse_keyword(src, k, "=>");
 const body = parse_main_body(src, k);
 k = body.v1;
-const exportKw = ((exportAll || (name.text == "main")) ? "export " : "");
-const js = (((((((((exportKw + "function ") + name.text) + "(") + params.v0) + ") {\n") + body.body) + "return ") + body.expr) + ";\n}\n");
+const exportKw = (exportAll || (name.text == "main") ? "export " : "");
+const js = ((((((((exportKw + "function ") + name.text) + "(") + params.v0) + ") {\n") + body.body) + "return ") + body.expr) + ";\n}\n";
 return ParsedStmt(js, k);
 }
 export function parse_class_fn_decl2(src, i, exportAll) {
@@ -570,64 +636,64 @@ if (is_identifier_too_short(name.text)) {
 warn_short_identifier(src, name.startPos, name.text);
 }
 const t0 = skip_ws(src, k);
-if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
+if ((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60)) {
 k = skip_angle_brackets(src, t0);
 }
 const params = parse_param_list(src, k);
 k = params.v1;
 const t1 = skip_ws(src, k);
-if (((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 58))) {
-const _rt = parse_type_expr(src, (t1 + 1));
+if ((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 58)) {
+const _rt = parse_type_expr(src, t1 + 1);
 k = _rt.v1;
 }
 k = parse_keyword(src, k, "=>");
 const body = parse_main_body(src, k);
 k = body.v1;
-const exportKw = ((exportAll || (name.text == "main")) ? "export " : "");
+const exportKw = (exportAll || (name.text == "main") ? "export " : "");
 let fields = "";
 let pi = 0;
 let first = true;
-while ((pi < stringLen(params.v0))) {
-while ((pi < stringLen(params.v0))) {
+while (pi < stringLen(params.v0)) {
+while (pi < stringLen(params.v0)) {
 const ch = stringCharCodeAt(params.v0, pi);
-if ((((((ch == 32) || (ch == 9)) || (ch == 10)) || (ch == 13)) || (ch == 44))) {
-pi = (pi + 1);
+if (((((ch == 32) || (ch == 9)) || (ch == 10)) || (ch == 13)) || (ch == 44)) {
+pi = pi + 1;
 continue;
 }
 break;
 }
-if ((!(pi < stringLen(params.v0)))) {
+if (!(pi < stringLen(params.v0))) {
 break;
 }
 const start = pi;
-while ((pi < stringLen(params.v0))) {
+while (pi < stringLen(params.v0)) {
 const ch = stringCharCodeAt(params.v0, pi);
-if ((ch == 44)) {
+if (ch == 44) {
 break;
 }
-pi = (pi + 1);
+pi = pi + 1;
 }
 const p = stringSlice(params.v0, start, pi);
 let end = stringLen(p);
-while ((end > 0)) {
-const ch = stringCharCodeAt(p, (end - 1));
-if (((((ch == 32) || (ch == 9)) || (ch == 10)) || (ch == 13))) {
-end = (end - 1);
+while (end > 0) {
+const ch = stringCharCodeAt(p, end - 1);
+if ((((ch == 32) || (ch == 9)) || (ch == 10)) || (ch == 13)) {
+end = end - 1;
 continue;
 }
 break;
 }
 const nameOnly = stringSlice(p, 0, end);
-if ((nameOnly != "")) {
+if (nameOnly != "") {
 if (first) {
-fields = (fields + ((nameOnly + ": ") + nameOnly));
+fields = fields + ((nameOnly + ": ") + nameOnly);
 } else {
-fields = (fields + (((", " + nameOnly) + ": ") + nameOnly));
+fields = fields + (((", " + nameOnly) + ": ") + nameOnly);
 }
 first = false;
 }
 }
-const js = (((((((((exportKw + "function ") + name.text) + "(") + params.v0) + ") {\n") + body.body) + "return { ") + fields) + " };\n}\n");
+const js = ((((((((exportKw + "function ") + name.text) + "(") + params.v0) + ") {\n") + body.body) + "return { ") + fields) + " };\n}\n";
 return ParsedStmt(js, k);
 }
 export function parse_fn_decl(src, i) {
@@ -641,18 +707,18 @@ if (is_identifier_too_short(name.text)) {
 warn_short_identifier(src, name.startPos, name.text);
 }
 const t0 = skip_ws(src, k);
-if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
+if ((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60)) {
 k = skip_angle_brackets(src, t0);
 }
 k = parse_keyword(src, k, "{");
 const fields = vec_new();
 while (true) {
 k = skip_ws(src, k);
-if ((!(k < stringLen(src)))) {
+if (!(k < stringLen(src))) {
 panic_at(src, k, "expected '}'");
 }
-if ((stringCharCodeAt(src, k) == 125)) {
-k = (k + 1);
+if (stringCharCodeAt(src, k) == 125) {
+k = k + 1;
 break;
 }
 const field = parse_ident(src, k);
@@ -662,10 +728,10 @@ const _ty = parse_type_expr(src, k);
 k = _ty.v1;
 vec_push(fields, field.text);
 k = skip_ws(src, k);
-if ((k < stringLen(src))) {
+if (k < stringLen(src)) {
 const ch = stringCharCodeAt(src, k);
-if (((ch == 44) || (ch == 59))) {
-k = (k + 1);
+if ((ch == 44) || (ch == 59)) {
+k = k + 1;
 }
 }
 }
@@ -680,14 +746,14 @@ if (is_identifier_too_short(_name.text)) {
 warn_short_identifier(src, _name.startPos, _name.text);
 }
 const t0 = skip_ws(src, k);
-if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60))) {
+if ((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 60)) {
 k = skip_angle_brackets(src, t0);
 }
 k = parse_keyword(src, k, "=");
 let out = "";
 let first = true;
 while (true) {
-if ((!first)) {
+if (!(first)) {
 k = parse_keyword(src, k, "|");
 }
 first = false;
@@ -696,26 +762,26 @@ const variant = v.text;
 k = v.nextPos;
 let hasPayload = false;
 const t1 = skip_ws(src, k);
-if (((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 60))) {
+if ((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 60)) {
 hasPayload = true;
 k = skip_angle_brackets(src, t1);
 }
 const header = (exportAll ? "export const " : "const ");
 if (hasPayload) {
-out = (out + ((((header + variant) + " = (value) => ({ tag: \"") + variant) + "\", value });\n"));
+out = out + ((((header + variant) + " = (value) => ({ tag: \"") + variant) + "\", value });\n");
 } else {
-out = (out + ((((header + variant) + " = { tag: \"") + variant) + "\" };\n"));
+out = out + ((((header + variant) + " = { tag: \"") + variant) + "\" };\n");
 }
 const t2 = skip_ws(src, k);
-if ((!(t2 < stringLen(src)))) {
+if (!(t2 < stringLen(src))) {
 return ParsedStmt(out, k);
 }
 const ch = stringCharCodeAt(src, t2);
-if ((ch == 59)) {
-k = (t2 + 1);
+if (ch == 59) {
+k = t2 + 1;
 break;
 }
-if ((ch == 124)) {
+if (ch == 124) {
 continue;
 }
 panic_at(src, t2, "expected '|' or ';' in union type");
