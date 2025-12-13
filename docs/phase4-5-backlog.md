@@ -14,28 +14,28 @@ Phase 4/5 is “done enough to move on” when **all** items below are true. Thi
 
 **A. Sound-enough checks for the bootstrap subset**
 
-- [ ] **No-shadowing** is enforced everywhere (already true today).
-- [ ] **Mutability rules** are enforced:
+- [x] **No-shadowing** is enforced everywhere (already true today).
+- [x] **Mutability rules** are enforced:
   - assigning to immutable bindings is rejected
   - assigning through immutable bindings (e.g. `p.x = 1` when `p` is immutable) is rejected
-- [ ] **Function checking** is present and stable:
+- [x] **Function checking** is present and stable:
   - arity checks for known functions
   - when types are enforceable: argument type checks + return type checks
   - generic functions: explicit specialization rules (no unspecialized generic as value)
-- [ ] **Struct checking** is present:
+- [x] **Struct checking** is present:
   - unknown struct rejected
   - wrong number of literal fields rejected
   - field existence checks on access
   - (when annotated) field value type checking
-- [ ] **Tuple checking** is present:
+- [x] **Tuple checking** is present:
   - tuple literal arity preserved
   - `.0/.1/...` indexing is validated
-- [ ] **Union support is present**:
+- [x] **Union support is present**:
   - narrowing (`is`, `is not`, tag comparisons, negation forms) gates payload access
   - union-variant match patterns supported
   - exhaustiveness-lite match check (all variants or `_`)
   - payload typing under narrowing is good enough to typecheck common code (at least typed `let` initializers)
-- [ ] **Array initialization tracking** matches the language rule for literal indices (current scope) and is stable.
+- [x] **Array initialization tracking** matches the language rule for literal indices (current scope) and is stable.
 
 **B. Diagnostics behavior**
 
@@ -44,33 +44,34 @@ Phase 4/5 is “done enough to move on” when **all** items below are true. Thi
 
 **C. Self-host stability gates**
 
-- [ ] `npm test` passes.
-- [ ] `npm run build:selfhost-prebuilt` succeeds and regenerates `selfhost/prebuilt/`.
-- [ ] Stage3 == Stage4 fixed-point checks remain green (via tests / bootstrap check).
+- [x] `npm test` passes.
+- [x] `npm run build:selfhost-prebuilt` succeeds and regenerates `selfhost/prebuilt/`.
+- [x] Stage3 == Stage4 fixed-point checks remain green (via tests / bootstrap check).
 
 ### Phase 5a (JS Emitter) — done when
 
 **A. Coverage (no missing emit cases)**
 
-- [ ] Every AST node produced by the parser/analyzer has a JS emission path.
-- [ ] No emitter panics for valid programs in the bootstrap subset.
+- [x] Every AST node produced by the parser/analyzer has a JS emission path.
+- [x] No emitter panics for valid programs in the bootstrap subset.
 
 **B. Semantic correctness (not prettiness)**
 
-- [ ] Operator precedence is correct (binary/unary/call/index/field).
-- [ ] Side-effecting statements are preserved (no dropped `SExpr`).
-- [ ] `match` emission works for:
+- [x] Operator precedence is correct (binary/unary/call/index/field).
+- [x] Side-effecting statements are preserved (no dropped `SExpr`).
+- [x] `match` emission works for:
   - literals (`I32`, `Bool`, `String`)
   - union variant matches (switching on `.tag`)
-- [ ] `if` as expression is emitted correctly (including block branches).
-- [ ] `while` loops, `loop`, `break`, `continue`, and `yield` emit correctly.
+- [x] `if` as expression is emitted correctly (including block branches).
+- [x] `while` loops, `loop`, `break`, `continue`, and `yield` emit correctly.
 
 **C. Modules and compilation**
 
-- [ ] `compile_project` correctly emits multi-file ES module graphs:
+- [ ] `compile_project` correctly emits multi-file ES module graphs (in progress):
   - `from X use { ... }` resolves and produces correct relative imports
   - `extern from X use { ... }` emits the correct runtime import shape
   - output paths are stable and deterministic
+  - *Note: multi-file support is partially working; single-file bootstrap is complete.*
 
 ### “We can move on” line
 
