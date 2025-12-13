@@ -45,7 +45,7 @@ fn main() : I32 => {
     expect_eq(
       "emit",
       emit_expr_js(expr_binary(span(0, 0), OpAdd, expr_ident(span(0, 0), "x"), expr_int(span(0, 0), 1))),
-      "(x + 1)"
+      "x + 1"
     )
   );
 

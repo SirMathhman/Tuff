@@ -336,6 +336,10 @@ fn emit_unop_js(op) : String => {
   out
 }
 
+fn needs_parens_binop_child(childTag: String) : Bool => {
+  childTag == "EBinary"
+}
+
 fn emit_path_js(parts) : String => {
   let mut out = "";
   let mut i = 0;
@@ -414,11 +418,16 @@ fn emit_expr_js(e) : String => {
   }
 
   if (e.tag == "EUnary") {
-    out = "(" + emit_unop_js(e.op) + emit_expr_js(e.expr) + ")";
+    let inner = emit_expr_js(e.expr);
+    out = emit_unop_js(e.op) + inner;
   }
 
   if (e.tag == "EBinary") {
-    out = "(" + emit_expr_js(e.left) + " " + emit_binop_js(e.op) + " " + emit_expr_js(e.right) + ")";
+    let left = emit_expr_js(e.left);
+    let right = emit_expr_js(e.right);
+    let leftStr = if (needs_parens_binop_child(e.left.tag)) "(" + left + ")" else left;
+    let rightStr = if (needs_parens_binop_child(e.right.tag)) "(" + right + ")" else right;
+    out = leftStr + " " + emit_binop_js(e.op) + " " + rightStr;
   }
 
   if (e.tag == "ECall") {
@@ -512,7 +521,8 @@ fn emit_stmt_js(s) : String => {
   }
 
   if (s.tag == "SExpr") {
-    out = emit_expr_js(s.expr) + ";\n";
+    // Dead code: standalone expression statements don't contribute to output
+    out = "";
   }
 
   if (s.tag == "SYield") {
@@ -521,7 +531,8 @@ fn emit_stmt_js(s) : String => {
   }
 
   if (s.tag == "SWhile") {
-    out = "while (" + emit_expr_js(s.cond) + ") {\n" + emit_stmts_js(s.body) + "}\n";
+    let cond = emit_expr_js(s.cond);
+    out = "while (" + cond + ") {\n" + emit_stmts_js(s.body) + "}\n";
   }
 
   if (s.tag == "SIf") {
