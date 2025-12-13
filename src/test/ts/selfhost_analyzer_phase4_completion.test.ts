@@ -192,6 +192,51 @@ describe("selfhost analyzer (phase 4 completion)", () => {
         /value|Some|None|narrow|type/i
       );
     }
+
+    // --- OK: `is` check narrows to payload variant ---
+    {
+      const okIn = resolve(stage2Dir, "ok_union_value_guarded_is.tuff");
+      const okOut = resolve(stage2Dir, "ok_union_value_guarded_is.mjs");
+      await writeFile(
+        okIn,
+        [
+          "type Option<T> = Some<T> | None;",
+          "fn main() : I32 => {",
+          "  let o: Option<I32> = Some(3);",
+          "  if (o is Some) { o.value } else { 0 }",
+          "}",
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+
+      const rc = tuffc2.main([okIn, okOut]);
+      expect(rc).toBe(0);
+      const mod = await import(pathToFileURL(okOut).toString());
+      expect(mod.main()).toBe(3);
+    }
+
+    // --- Error: else branch is NOT narrowed to payload variant (using `is`) ---
+    {
+      const badIn = resolve(stage2Dir, "bad_union_value_in_else_is.tuff");
+      const badOut = resolve(stage2Dir, "bad_union_value_in_else_is.mjs");
+      await writeFile(
+        badIn,
+        [
+          "type Option<T> = Some<T> | None;",
+          "fn main() : I32 => {",
+          "  let o: Option<I32> = Some(3);",
+          "  if (o is Some) { 0 } else { o.value }",
+          "}",
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+
+      expect(() => tuffc2.main([badIn, badOut])).toThrow(
+        /value|Some|None|narrow|type/i
+      );
+    }
   });
 
   test("array initialization tracking enforces read/write safety", async () => {

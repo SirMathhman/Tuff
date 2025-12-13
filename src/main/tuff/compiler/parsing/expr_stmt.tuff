@@ -318,6 +318,30 @@ fn parse_cmp_ast(src: String, i: I32) : ParsedExprAst => {
     j = skip_ws(src, j);
     if (!(j < stringLen(src))) { break; }
 
+    // `is` narrowing operator (bootstrap subset):
+    //   x is Some
+    // Desugars to:
+    //   x.tag == "Some"
+    // so the analyzer can reuse its existing `.tag == "Variant"` narrowing logic.
+    if (starts_with_at(src, j, "is")) {
+      // Require a boundary after `is` so we don't treat identifiers like `island` as the operator.
+      let afterIs = j + 2;
+      let mut boundaryOk = true;
+      if (afterIs < stringLen(src) && is_ident_part(stringCharCodeAt(src, afterIs))) { boundaryOk = false; }
+      if (boundaryOk) {
+        let k0 = skip_ws(src, afterIs);
+        let variant = parse_ident(src, k0);
+        let start = span_start(expr_span(left.expr));
+        let end = variant.nextPos;
+
+        let tagExpr = expr_field(span(start, end), left.expr, "tag");
+        let rhs = expr_string(span(variant.startPos, variant.nextPos), variant.text);
+        left = ParsedExprAst(expr_binary(span(start, end), OpEq, tagExpr, rhs), end);
+        j = left.nextPos;
+        continue;
+      }
+    }
+
     let c0 = stringCharCodeAt(src, j);
     let c1 = if (j + 1 < stringLen(src)) stringCharCodeAt(src, j + 1) else 0;
 
@@ -1274,6 +1298,22 @@ fn parse_cmp(src: String, i: I32) : ParsedExpr => {
   while (true) {
     j = skip_ws(src, j);
     if (!(j < stringLen(src))) { break; }
+
+    // `is` narrowing operator (legacy JS-string parser): desugar like the AST path.
+    if (starts_with_at(src, j, "is")) {
+      let afterIs = j + 2;
+      let mut boundaryOk = true;
+      if (afterIs < stringLen(src) && is_ident_part(stringCharCodeAt(src, afterIs))) { boundaryOk = false; }
+      if (boundaryOk) {
+        let k0 = skip_ws(src, afterIs);
+        let variant = parse_ident(src, k0);
+        let q = stringFromCharCode(34);
+        let rhs = q + variant.text + q;
+        left = ParsedExpr("(" + left.v0 + ".tag == " + rhs + ")", variant.nextPos);
+        j = left.v1;
+        continue;
+      }
+    }
 
     let c0 = stringCharCodeAt(src, j);
     let c1 = if (j + 1 < stringLen(src)) stringCharCodeAt(src, j + 1) else 0;
