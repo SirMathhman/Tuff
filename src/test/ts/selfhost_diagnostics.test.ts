@@ -30,9 +30,13 @@ describe("selfhost diagnostics", () => {
     }
 
     // Should include file:line:col + a code frame caret.
-    expect(msg).toMatch(/<input>:\d+:\d+/);
+    // New format: always include file, line, col, and absolute offset.
+    expect(msg).toMatch(/<input>:\d+:\d+ \(offset \d+\)/);
     expect(msg).toContain("expected");
     expect(msg).toMatch(/\n\s*\|\s*\^/);
+
+    // For common parse errors, we include a recommended fix.
+    expect(msg).toMatch(/\nhelp: /);
   });
 
   test("warning includes file and line", async () => {

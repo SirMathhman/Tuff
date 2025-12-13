@@ -42,12 +42,15 @@ p = (p + 1);
 }
 return LineCol(line, col);
 }
-export function panic_at(src, i, msg) {
-const lc = line_col_at(src, i);
+export function panic_at_help(src, i, msg, help) {
 let pos = i;
+if ((pos < 0)) {
+pos = 0;
+}
 if ((pos > stringLen(src))) {
 pos = stringLen(src);
 }
+const lc = line_col_at(src, pos);
 let ls = pos;
 while ((ls > 0)) {
 if ((stringCharCodeAt(src, (ls - 1)) == 10)) {
@@ -63,10 +66,19 @@ break;
 le = (le + 1);
 }
 const lineText = stringSlice(src, ls, le);
-const header = ((((((__tuffc_current_file + ":") + ("" + lc.line)) + ":") + ("" + lc.col)) + " error: ") + msg);
-const frame1 = ("  | " + lineText);
-const frame2 = (("  | " + spaces((lc.col - 1))) + "^");
-panic(((((header + "\n") + frame1) + "\n") + frame2));
+const lineStr = ("" + lc.line);
+const header = ((((((((__tuffc_current_file + ":") + lineStr) + ":") + ("" + lc.col)) + " (offset ") + ("" + pos)) + ") error: ") + msg);
+const frame1 = ((("  " + lineStr) + " | ") + lineText);
+const frame2 = (((("  " + spaces(stringLen(lineStr))) + " | ") + spaces((lc.col - 1))) + "^");
+let out = ((((header + "\n") + frame1) + "\n") + frame2);
+if ((help != "")) {
+out = (((out + "\n") + "help: ") + help);
+}
+panic(out);
+return undefined;
+}
+export function panic_at(src, i, msg) {
+panic_at_help(src, i, msg, "");
 return undefined;
 }
 export function reset_struct_defs() {

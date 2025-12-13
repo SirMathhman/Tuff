@@ -46,13 +46,15 @@ fn line_col_at(src: String, i: I32) : LineCol => {
   LineCol(line, col)
 }
 
-fn panic_at(src: String, i: I32, msg: String) : Void => {
-  let lc = line_col_at(src, i);
-
-  // Find bounds of the line containing i.
+fn panic_at_help(src: String, i: I32, msg: String, help: String) : Void => {
+  // Clamp position for safe slicing (but still report the clamped offset).
   let mut pos: I32 = i;
+  if (pos < 0) { pos = 0; }
   if (pos > stringLen(src)) { pos = stringLen(src); }
 
+  let lc = line_col_at(src, pos);
+
+  // Find bounds of the line containing pos.
   let mut ls: I32 = pos;
   while (ls > 0) {
     if (stringCharCodeAt(src, ls - 1) == 10) { break; }
@@ -66,10 +68,26 @@ fn panic_at(src: String, i: I32, msg: String) : Void => {
   }
 
   let lineText = stringSlice(src, ls, le);
-  let header = __tuffc_current_file + ":" + ("" + lc.line) + ":" + ("" + lc.col) + " error: " + msg;
-  let frame1 = "  | " + lineText;
-  let frame2 = "  | " + spaces(lc.col - 1) + "^";
-  panic(header + "\n" + frame1 + "\n" + frame2);
+  let lineStr = ("" + lc.line);
+
+  // Consistent diagnostic shape:
+  //   file:line:col (offset N) error: <message>
+  //   line | <source line>
+  //        | <caret>
+  //   help: <recommended fix>   (optional)
+  let header = __tuffc_current_file + ":" + lineStr + ":" + ("" + lc.col) + " (offset " + ("" + pos) + ") error: " + msg;
+  let frame1 = "  " + lineStr + " | " + lineText;
+  let frame2 = "  " + spaces(stringLen(lineStr)) + " | " + spaces(lc.col - 1) + "^";
+
+  let mut out = header + "\n" + frame1 + "\n" + frame2;
+  if (help != "") {
+    out = out + "\n" + "help: " + help;
+  }
+  panic(out);
+}
+
+fn panic_at(src: String, i: I32, msg: String) : Void => {
+  panic_at_help(src, i, msg, "");
 }
 
 fn reset_struct_defs() : Void => {

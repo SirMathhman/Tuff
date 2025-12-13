@@ -6,6 +6,7 @@ extern from rt::vec use { vec_new, vec_push, vec_len, vec_get };
 
 from util::diagnostics use {
   panic_at,
+  panic_at_help,
   find_struct_fields,
   is_identifier_too_short,
   warn_short_identifier
@@ -582,7 +583,7 @@ fn parse_primary_ast(src: String, i: I32) : ParsedExprAst => {
         panic_at(src, k, "expected ',' or ')' in tuple literal")
       }
     }
-    panic_at(src, k, "expected ')'")
+    panic_at_help(src, k, "expected ')'", "Add ')' to close the opening '('.")
   }
 
   if (is_digit(c)) {

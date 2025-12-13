@@ -1,7 +1,7 @@
 // compiled by selfhost tuffc
 import { panic, stringLen, stringSlice, stringCharCodeAt, stringFromCharCode } from "../rt/stdlib.mjs";
 import { vec_new, vec_push, vec_len, vec_get } from "../rt/vec.mjs";
-import { panic_at, find_struct_fields, is_identifier_too_short, warn_short_identifier } from "../util/diagnostics.mjs";
+import { panic_at, panic_at_help, find_struct_fields, is_identifier_too_short, warn_short_identifier } from "../util/diagnostics.mjs";
 import { is_digit, is_ident_start, is_ident_part, skip_ws, starts_with_at } from "../util/lexing.mjs";
 import { ParsedBool, ParsedIdent, ParsedNumber, parse_ident, parse_keyword, parse_number, parse_optional_semicolon } from "./primitives.mjs";
 import { parse_type_expr } from "./types.mjs";
@@ -571,7 +571,7 @@ return ParsedExprAst(expr_tuple_lit(span(j, (k + 1)), items), (k + 1));
 panic_at(src, k, "expected ',' or ')' in tuple literal");
 }
 }
-panic_at(src, k, "expected ')'");
+panic_at_help(src, k, "expected ')'", "Add ')' to close the opening '('.");
 }
 if (is_digit(c)) {
 let k = j;

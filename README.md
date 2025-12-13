@@ -119,6 +119,25 @@ The compiler achieves self-hosting through a **prebuilt artifact strategy**:
 
 Prebuilt artifacts are stored in `selfhost/prebuilt/` and include all compiled `.mjs` modules (not just `tuffc.mjs`). This allows tests to run without requiring self-compilation on first run.
 
+### Diagnostics format
+
+Compiler errors are formatted consistently to include:
+
+- **File** name
+- **Line** and **column**, plus absolute **offset**
+- A short **reason/message**
+- A **code frame** (source context + caret)
+- An optional **recommended fix** (`help:`) when the compiler can suggest one
+
+Example shape:
+
+```text
+path/to/file.tuff:12:34 (offset 567) error: <message>
+    12 | <source line>
+         |                                  ^
+help: <recommended fix>
+```
+
 **To rebuild the prebuilt compiler after modifying compiler source:**
 
 ```bash
