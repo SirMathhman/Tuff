@@ -470,6 +470,12 @@ if ((e.tag == "EInt")) {
 return ty_int_lit();
 }
 if ((e.tag == "EFloat")) {
+if ((e.suffix == "F32")) {
+return ty_f32();
+}
+if ((e.suffix == "F64")) {
+return ty_f64();
+}
 return ty_float_lit();
 }
 if ((e.tag == "EString")) {
@@ -667,6 +673,12 @@ return;
 if ((((e.op.tag == "OpSub") || (e.op.tag == "OpMul")) || (e.op.tag == "OpDiv"))) {
 if ((!((type_is_int_like(lt) && type_is_int_like(rt)) || (type_is_float_like(lt) && type_is_float_like(rt))))) {
 panic_at(src, span_start(e.span), "invalid operands to arithmetic operator");
+}
+return;
+}
+if (((((e.op.tag == "OpLt") || (e.op.tag == "OpLe")) || (e.op.tag == "OpGt")) || (e.op.tag == "OpGe"))) {
+if ((!((type_is_int_like(lt) && type_is_int_like(rt)) || (type_is_float_like(lt) && type_is_float_like(rt))))) {
+panic_at(src, span_start(e.span), "invalid operands to comparison operator: expected numbers");
 }
 return;
 }

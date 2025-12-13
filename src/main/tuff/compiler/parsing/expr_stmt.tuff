@@ -586,7 +586,7 @@ fn parse_primary_ast(src: String, i: I32) : ParsedExprAst => {
   }
 
   if (is_digit(c)) {
-    // Float literal: <digits> '.' <digits>
+    // Float literal: <digits> '.' <digits> [F32|F64]
     // Parse this before falling back to integer parsing so `2.0` doesn't get
     // interpreted as tuple indexing on the integer literal `2`.
     let mut k = j;
@@ -599,7 +599,24 @@ fn parse_primary_ast(src: String, i: I32) : ParsedExprAst => {
         m = m + 1;
       }
       let text = stringSlice(src, j, m);
-      yield ParsedExprAst(expr_float(span(j, m), text), m);
+      
+      // Check for optional suffix (F32 or F64)
+      let mut suffix = "";
+      let mut endPos = m;
+      if (m + 2 < stringLen(src)) {
+        let s1 = stringSlice(src, m, m + 3);
+        if (s1 == "F32") {
+          suffix = "F32";
+          endPos = m + 3;
+        } else {
+          if (s1 == "F64") {
+            suffix = "F64";
+            endPos = m + 3;
+          }
+        }
+      }
+      
+      yield ParsedExprAst(expr_float(span(j, endPos), text, suffix), endPos);
     }
 
     let n = parse_number(src, j);

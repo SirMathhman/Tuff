@@ -112,8 +112,8 @@ return ({ tag: "EUndefined", span: span });
 export function expr_int(span, value) {
 return ({ tag: "EInt", span: span, value: value });
 }
-export function expr_float(span, text) {
-return ({ tag: "EFloat", span: span, text: text });
+export function expr_float(span, text, suffix) {
+return ({ tag: "EFloat", span: span, text: text, suffix: suffix });
 }
 export function expr_bool(span, value) {
 return ({ tag: "EBool", span: span, value: value });

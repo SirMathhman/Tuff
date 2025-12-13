@@ -584,7 +584,21 @@ while (((m < stringLen(src)) && is_digit(stringCharCodeAt(src, m)))) {
 m = (m + 1);
 }
 const text = stringSlice(src, j, m);
-return ParsedExprAst(expr_float(span(j, m), text), m);
+let suffix = "";
+let endPos = m;
+if (((m + 2) < stringLen(src))) {
+const s1 = stringSlice(src, m, (m + 3));
+if ((s1 == "F32")) {
+suffix = "F32";
+endPos = (m + 3);
+} else {
+if ((s1 == "F64")) {
+suffix = "F64";
+endPos = (m + 3);
+}
+}
+}
+return ParsedExprAst(expr_float(span(j, endPos), text, suffix), endPos);
 }
 const n = parse_number(src, j);
 return ParsedExprAst(expr_int(span(j, n.nextPos), n.value), n.nextPos);

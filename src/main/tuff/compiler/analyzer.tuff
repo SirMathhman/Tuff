@@ -361,7 +361,12 @@ fn require_name(src: String, pos: I32, scopes, depth: I32, name: String) : Void 
 fn infer_expr_type(src: String, structs, fns, scopes, depth: I32, e) : String => {
   if (e.tag == "EBool") { yield ty_bool(); }
   if (e.tag == "EInt") { yield ty_int_lit(); }
-  if (e.tag == "EFloat") { yield ty_float_lit(); }
+  if (e.tag == "EFloat") {
+    // If the float literal has a suffix (F32 or F64), use that; otherwise FloatLit (context-typed).
+    if (e.suffix == "F32") { yield ty_f32(); }
+    if (e.suffix == "F64") { yield ty_f64(); }
+    yield ty_float_lit();
+  }
   if (e.tag == "EString") { yield ty_string(); }
   if (e.tag == "EIdent") {
     // The bootstrap subset still sometimes parses these as identifiers.
@@ -518,6 +523,14 @@ fn check_binary_operand_types(src: String, structs, fns, scopes, depth: I32, e) 
   if (e.op.tag == "OpSub" || e.op.tag == "OpMul" || e.op.tag == "OpDiv") {
     if (!((type_is_int_like(lt) && type_is_int_like(rt)) || (type_is_float_like(lt) && type_is_float_like(rt)))) {
       panic_at(src, span_start(e.span), "invalid operands to arithmetic operator");
+    }
+    yield;
+  }
+
+  // Comparison operators: require both operands to be numeric (int or float), not strings.
+  if (e.op.tag == "OpLt" || e.op.tag == "OpLe" || e.op.tag == "OpGt" || e.op.tag == "OpGe") {
+    if (!((type_is_int_like(lt) && type_is_int_like(rt)) || (type_is_float_like(lt) && type_is_float_like(rt)))) {
+      panic_at(src, span_start(e.span), "invalid operands to comparison operator: expected numbers");
     }
     yield;
   }

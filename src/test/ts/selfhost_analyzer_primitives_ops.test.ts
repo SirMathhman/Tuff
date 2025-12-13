@@ -139,6 +139,81 @@ describe("selfhost analyzer (primitives + operator typing)", () => {
         /F32|\*|mul|operand|String|type/i
       );
     }
+
+    // --- float comparisons: should accept float operands but reject string/float mix ---
+    {
+      const goodIn = resolve(stage2Dir, "good_float_compare.tuff");
+      const goodOut = resolve(stage2Dir, "good_float_compare.mjs");
+      await writeFile(
+        goodIn,
+        [
+          "fn main() : I32 => {",
+          "  let a: F32 = 3.14;",
+          "  let b: F32 = 2.71;",
+          "  if (a > b) { 1 } else { 0 }",
+          "}",
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+      expect(() => tuffc2.main([goodIn, goodOut])).not.toThrow();
+    }
+
+    {
+      const badIn = resolve(stage2Dir, "bad_string_compare_float.tuff");
+      const badOut = resolve(stage2Dir, "bad_string_compare_float.mjs");
+      await writeFile(
+        badIn,
+        [
+          "fn main() : I32 => {",
+          '  let x: Bool = "nope" > 2.0;',
+          "  0",
+          "}",
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+      expect(() => tuffc2.main([badIn, badOut])).toThrow(
+        /operand|comparison|String|type/i
+      );
+    }
+
+    // --- typed float suffixes: F32 and F64 ---
+    {
+      const goodIn = resolve(stage2Dir, "good_typed_floats.tuff");
+      const goodOut = resolve(stage2Dir, "good_typed_floats.mjs");
+      await writeFile(
+        goodIn,
+        [
+          "fn main() : I32 => {",
+          "  let a: F32 = 3.14F32;",
+          "  let b: F64 = 2.71F64;",
+          "  0",
+          "}",
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+      expect(() => tuffc2.main([goodIn, goodOut])).not.toThrow();
+    }
+
+    // Typed float suffix type mismatch should be rejected
+    {
+      const badIn = resolve(stage2Dir, "bad_float_suffix_mismatch.tuff");
+      const badOut = resolve(stage2Dir, "bad_float_suffix_mismatch.mjs");
+      await writeFile(
+        badIn,
+        [
+          "fn main() : I32 => {",
+          "  let x: F64 = 3.14F32;",
+          "  0",
+          "}",
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+      expect(() => tuffc2.main([badIn, badOut])).toThrow(/F32|F64|type/i);
+    }
   });
 
   test("rejects obviously invalid arithmetic operand types", async () => {

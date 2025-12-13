@@ -209,7 +209,11 @@ if ((e.tag == "EInt")) {
 out = ("" + e.value);
 }
 if ((e.tag == "EFloat")) {
+if ((e.suffix == "F32")) {
+out = (("Math.fround(" + e.text) + ")");
+} else {
 out = e.text;
+}
 }
 if ((e.tag == "EBool")) {
 if (e.value) {

@@ -216,7 +216,15 @@ fn emit_expr_js(e) : String => {
 
   if (e.tag == "EInt") { out = "" + e.value; }
 
-  if (e.tag == "EFloat") { out = e.text; }
+  if (e.tag == "EFloat") {
+    // For F32, wrap in Math.fround to simulate 32-bit precision.
+    // For F64 or untyped, emit the literal directly.
+    if (e.suffix == "F32") {
+      out = "Math.fround(" + e.text + ")";
+    } else {
+      out = e.text;
+    }
+  }
 
   if (e.tag == "EBool") {
     if (e.value) { out = "true"; }
