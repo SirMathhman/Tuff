@@ -37,6 +37,16 @@ describe("selfhost diagnostics", () => {
 
     // For common parse errors, we include a recommended fix.
     expect(msg).toMatch(/\nhelp: /);
+
+    // Snapshot the full formatting to prevent accidental regressions.
+    // Normalize Windows newlines so the snapshot is stable across OSes.
+    const norm = msg.replace(/\r\n/g, "\n");
+    expect(norm).toMatchInlineSnapshot(`
+      "<input>:1:20 (offset 19) error: expected ')'
+        1 | fn main() => (1 + 2
+          |                    ^
+      help: Add ')' to close the opening '('."
+    `);
   });
 
   test("warning includes file and line", async () => {
