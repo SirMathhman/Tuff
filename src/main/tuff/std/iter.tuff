@@ -8,9 +8,45 @@
 
 // Generic iterator protocol (bootstrap subset): any value with a `for_each(f)`
 // field is considered an iterator.
-class fn Iter(for_each) => {}
+//
+// We also expose combinators as fields so callers can chain:
+//   range(0, 6).iter().filter(...).map(...).fold(...)
+class fn Iter(for_each, map, filter, fold) => {}
 
-class fn Range(start: I32, end: I32, has_next, next, for_each) => {}
+class fn Range(start: I32, end: I32, has_next, next, for_each, iter) => {}
+
+fn iter_new(for_each) => {
+  let map_fn = (f) => {
+    iter_new((g) => {
+      for_each((x) => {
+        g(f(x));
+        0
+      });
+    })
+  };
+
+  let filter_fn = (pred) => {
+    iter_new((g) => {
+      for_each((x) => {
+        if (pred(x)) {
+          g(x);
+        }
+        0
+      });
+    })
+  };
+
+  let fold_fn = (init, f) => {
+    let mut acc = init;
+    for_each((x) => {
+      acc = f(acc, x);
+      0
+    });
+    acc
+  };
+
+  Iter(for_each, map_fn, filter_fn, fold_fn)
+}
 
 fn range(start: I32, end: I32) => {
   let mut cur: I32 = start;
@@ -29,36 +65,24 @@ fn range(start: I32, end: I32) => {
     }
   };
 
-  Range(start, end, has_next, next, for_each)
+  let iter = () => iter_new(for_each);
+
+  Range(start, end, has_next, next, for_each, iter)
 }
 
-fn map(iter, f) => {
-  let for_each = (g) => {
-    iter.for_each((x) => {
-      g(f(x));
-      0
-    });
-  };
-
-  Iter(for_each)
-}
-
-fn filter(iter, pred) => {
-  let for_each = (g) => {
-    iter.for_each((x) => {
-      if (pred(x)) { g(x); }
-      0
-    });
-  };
-
-  Iter(for_each)
-}
-
-fn fold(iter, init, f) => {
-  let mut acc = init;
+// Compatibility helpers (non-chaining style).
+fn map(iter, f) => iter_new((g) => {
   iter.for_each((x) => {
-    acc = f(acc, x);
+    g(f(x));
     0
   });
-  acc
-}
+})
+
+fn filter(iter, pred) => iter_new((g) => {
+  iter.for_each((x) => {
+    if (pred(x)) { g(x); }
+    0
+  });
+})
+
+fn fold(iter, init, f) => iter_new(iter.for_each).fold(init, f)

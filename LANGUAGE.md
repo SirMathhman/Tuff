@@ -632,6 +632,12 @@ fn main() {
 
 Functions are values and can be passed as arguments, assigned to variables, or used as expressions. A function type is written as `(ParamType, ...) => ReturnType`.
 
+Calling a function through a function-typed value (e.g. `let f = obj.method; f(123)`) uses the same call rules as a named function call:
+
+- The number of arguments must match the function type.
+- If parameter types are known and enforceable, argument types are checked.
+- For generic function values (e.g. `(T) => T`), the compiler may infer type parameters from the provided arguments at the call site (including method-field calls like `obj.id(123)` where `id<T>(x: T): T`).
+
 Functions and local variables share the same namespace — you cannot declare both a function and a variable with the same name in the same scope.
 
 Examples:
