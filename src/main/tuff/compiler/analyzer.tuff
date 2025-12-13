@@ -6,7 +6,7 @@
 extern from rt::stdlib use { stringLen, stringCharCodeAt, stringSlice };
 extern from rt::vec use { vec_new, vec_len, vec_push, vec_get, vec_set };
 
-from util::diagnostics use { panic_at };
+from util::diagnostics use { error_at };
 from ast use { span_start };
 
 // ------------------------------------------------------------
@@ -595,7 +595,7 @@ fn type_compatible(structs, expected: String, actual: String) : Bool => {
 
 fn require_type_compatible(src: String, pos: I32, ctx: String, structs, expected: String, actual: String) : Void => {
   if (!type_compatible(structs, expected, actual)) {
-    panic_at(src, pos, ctx + ": expected " + normalize_ty_ann(expected) + ", got " + normalize_ty_ann(actual));
+    error_at(src, pos, ctx + ": expected " + normalize_ty_ann(expected) + ", got " + normalize_ty_ann(actual));
   }
 }
 
@@ -613,7 +613,8 @@ fn path_dotted(parts) : String => {
 fn struct_name_of_expr(src: String, nameExpr) : String => {
   if (nameExpr.tag == "EIdent") { yield nameExpr.name; }
   if (nameExpr.tag == "EPath") { yield path_dotted(nameExpr.parts); }
-  panic_at(src, span_start(nameExpr.span), "struct literal name must be ident or path")
+  error_at(src, span_start(nameExpr.span), "struct literal name must be ident or path");
+  ""
 }
 
 fn find_struct_def(structs, name: String) : StructDef => {
@@ -647,12 +648,14 @@ fn struct_field_index(s: StructDef, field: String) : I32 => {
 
 fn get_struct_field_type(src: String, pos: I32, structs, structName: String, field: String) : String => {
   if (!has_struct_def(structs, structName)) {
-    panic_at(src, pos, "unknown struct: " + structName);
+    error_at(src, pos, "unknown struct: " + structName);
+    yield ty_unknown();
   }
   let s = find_struct_def(structs, structName);
   let idx = struct_field_index(s, field);
   if (idx == -1) {
-    panic_at(src, pos, "unknown field " + field + " on struct " + structName);
+    error_at(src, pos, "unknown field " + field + " on struct " + structName);
+    yield ty_unknown();
   }
   if (idx < vec_len(s.fieldTyAnns)) {
     let t = vec_get(s.fieldTyAnns, idx);
@@ -765,7 +768,8 @@ fn scopes_enter(scopes, depth: I32) : I32 => {
 
 fn declare_name(src: String, pos: I32, scopes, depth: I32, name: String, isMut: Bool, tyTag: String) : Void => {
   if (scopes_contains(scopes, depth, name)) {
-    panic_at(src, pos, "shadowing not allowed: " + name);
+    // Report and continue (declare anyway to reduce cascades).
+    error_at(src, pos, "shadowing not allowed: " + name);
   }
   let cur = vec_get(scopes, depth - 1);
   vec_push(cur, mk_binding(name, isMut, tyTag));
@@ -785,7 +789,9 @@ fn declare_local_name(src: String, pos: I32, scopes, depth: I32, name: String, i
   // Declare in the current scope only (no outer-scope shadowing check).
   let cur = vec_get(scopes, depth - 1);
   if (scope_contains(cur, name)) {
-    panic_at(src, pos, "duplicate name: " + name);
+    // Keep the original binding; do not redeclare.
+    error_at(src, pos, "duplicate name: " + name);
+    yield;
   }
   vec_push(cur, mk_binding(name, isMut, tyTag));
 }
@@ -802,7 +808,7 @@ fn lookup_binding(src: String, pos: I32, scopes, depth: I32, name: String) : Bin
     }
     si = si + 1;
   }
-  panic_at(src, pos, "unknown name: " + name);
+  error_at(src, pos, "unknown name: " + name);
   mk_binding(name, false, ty_unknown())
 }
 
@@ -821,7 +827,7 @@ fn update_binding_ty(src: String, pos: I32, scopes, depth: I32, name: String, ne
     }
     si = si + 1;
   }
-  panic_at(src, pos, "unknown name: " + name);
+  error_at(src, pos, "unknown name: " + name);
 }
 
 fn infer_lookup_ty(scopes, depth: I32, name: String) : String => {
@@ -990,7 +996,7 @@ fn infer_expr_type(src: String, structs, fns, scopes, depth: I32, e) : String =>
 
           if (vec_len(e.typeArgs) > 0) {
             if (!(vec_len(e.typeArgs) == vec_len(sig.typeParams))) {
-              panic_at(src, span_start(e.span), "wrong number of type args in call to " + e.callee.name);
+              error_at(src, span_start(e.span), "wrong number of type args in call to " + e.callee.name);
             }
             let mut ti = 0;
             while (ti < vec_len(sig.typeParams)) {
@@ -1022,7 +1028,7 @@ fn infer_expr_type(src: String, structs, fns, scopes, depth: I32, e) : String =>
           let subst = vec_new();
           if (vec_len(e.typeArgs) > 0) {
             if (!(vec_len(e.typeArgs) == vec_len(e.callee.typeParams))) {
-              panic_at(src, span_start(e.span), "wrong number of type args in lambda call");
+              error_at(src, span_start(e.span), "wrong number of type args in lambda call");
             }
             let mut ti = 0;
             while (ti < vec_len(e.callee.typeParams)) {
@@ -1057,7 +1063,7 @@ fn infer_expr_type(src: String, structs, fns, scopes, depth: I32, e) : String =>
         let subst = vec_new();
         if (vec_len(e.typeArgs) > 0) {
           if (!(vec_len(e.typeArgs) == vec_len(tps))) {
-            panic_at(src, span_start(e.span), "wrong number of type args in call");
+            error_at(src, span_start(e.span), "wrong number of type args in call");
           }
           let mut ti = 0;
           while (ti < vec_len(tps)) {
@@ -1112,9 +1118,9 @@ fn infer_expr_type_with_narrowing(src: String, structs, unions, fns, scopes, dep
 
 fn check_cond_is_bool(src: String, structs, fns, scopes, depth: I32, cond) : Void => {
   let t = infer_expr_type(src, structs, fns, scopes, depth, cond);
-  if (t == ty_i32() || t == ty_u32() || t == ty_char() || t == ty_int_lit()) { panic_at(src, span_start(cond.span), "condition must be Bool (got I32)"); }
-  if (t == ty_f32() || t == ty_f64() || t == ty_float_lit()) { panic_at(src, span_start(cond.span), "condition must be Bool (got F64)"); }
-  if (t == ty_string()) { panic_at(src, span_start(cond.span), "condition must be Bool (got String)"); }
+  if (t == ty_i32() || t == ty_u32() || t == ty_char() || t == ty_int_lit()) { error_at(src, span_start(cond.span), "condition must be Bool (got I32)"); }
+  if (t == ty_f32() || t == ty_f64() || t == ty_float_lit()) { error_at(src, span_start(cond.span), "condition must be Bool (got F64)"); }
+  if (t == ty_string()) { error_at(src, span_start(cond.span), "condition must be Bool (got String)"); }
 }
 
 fn check_binary_operand_types(src: String, structs, fns, scopes, depth: I32, e) : Void => {
@@ -1132,14 +1138,14 @@ fn check_binary_operand_types(src: String, structs, fns, scopes, depth: I32, e) 
   if (e.op.tag == "OpAdd") {
     if (lt == ty_string() || rt == ty_string()) { yield; }
     if (!((type_is_int_like(lt) && type_is_int_like(rt)) || (type_is_float_like(lt) && type_is_float_like(rt)))) {
-      panic_at(src, span_start(e.span), "invalid operands to '+': expected numbers or strings");
+      error_at(src, span_start(e.span), "invalid operands to '+': expected numbers or strings");
     }
     yield;
   }
 
   if (e.op.tag == "OpSub" || e.op.tag == "OpMul" || e.op.tag == "OpDiv") {
     if (!((type_is_int_like(lt) && type_is_int_like(rt)) || (type_is_float_like(lt) && type_is_float_like(rt)))) {
-      panic_at(src, span_start(e.span), "invalid operands to arithmetic operator");
+      error_at(src, span_start(e.span), "invalid operands to arithmetic operator");
     }
     yield;
   }
@@ -1147,7 +1153,7 @@ fn check_binary_operand_types(src: String, structs, fns, scopes, depth: I32, e) 
   // Comparison operators: require both operands to be numeric (int or float), not strings.
   if (e.op.tag == "OpLt" || e.op.tag == "OpLe" || e.op.tag == "OpGt" || e.op.tag == "OpGe") {
     if (!((type_is_int_like(lt) && type_is_int_like(rt)) || (type_is_float_like(lt) && type_is_float_like(rt)))) {
-      panic_at(src, span_start(e.span), "invalid operands to comparison operator: expected numbers");
+      error_at(src, span_start(e.span), "invalid operands to comparison operator: expected numbers");
     }
     yield;
   }
@@ -1156,11 +1162,12 @@ fn check_binary_operand_types(src: String, structs, fns, scopes, depth: I32, e) 
 fn check_struct_lit_types(src: String, structs, fns, scopes, depth: I32, e) : Void => {
   let structName = struct_name_of_expr(src, e.nameExpr);
   if (!has_struct_def(structs, structName)) {
-    panic_at(src, span_start(e.span), "unknown struct: " + structName);
+    error_at(src, span_start(e.span), "unknown struct: " + structName);
+    yield;
   }
   let sd = find_struct_def(structs, structName);
   if (!(vec_len(sd.fields) == vec_len(e.values))) {
-    panic_at(src, span_start(e.span), "wrong number of values in struct literal for " + structName);
+    error_at(src, span_start(e.span), "wrong number of values in struct literal for " + structName);
   }
 
   // If we have field type annotations, validate positional values against them.
@@ -1178,14 +1185,14 @@ fn check_struct_lit_types(src: String, structs, fns, scopes, depth: I32, e) : Vo
 fn check_call_types(src: String, structs, fns, scopes, depth: I32, e) : Void => {
   if (e.callee.tag == "ELambda") {
     if (!(vec_len(e.args) == vec_len(e.callee.params))) {
-      panic_at(src, span_start(e.span), "wrong number of args in lambda call");
+      error_at(src, span_start(e.span), "wrong number of args in lambda call");
     }
 
     let subst = vec_new();
     if (vec_len(e.callee.typeParams) > 0) {
       if (vec_len(e.typeArgs) > 0) {
         if (!(vec_len(e.typeArgs) == vec_len(e.callee.typeParams))) {
-          panic_at(src, span_start(e.span), "wrong number of type args in lambda call");
+          error_at(src, span_start(e.span), "wrong number of type args in lambda call");
         }
         let mut ti = 0;
         while (ti < vec_len(e.callee.typeParams)) {
@@ -1206,7 +1213,7 @@ fn check_call_types(src: String, structs, fns, scopes, depth: I32, e) : Void => 
       }
     } else {
       if (vec_len(e.typeArgs) > 0) {
-        panic_at(src, span_start(e.span), "cannot supply type args to non-generic lambda");
+        error_at(src, span_start(e.span), "cannot supply type args to non-generic lambda");
       }
     }
 
@@ -1228,7 +1235,7 @@ fn check_call_types(src: String, structs, fns, scopes, depth: I32, e) : Void => 
   if (ty_is_fn_type(ct)) {
     let paramTys = ty_fn_param_tys(ct);
     if (!(vec_len(e.args) == vec_len(paramTys))) {
-      panic_at(src, span_start(e.span), "wrong number of args in call");
+      error_at(src, span_start(e.span), "wrong number of args in call");
     }
 
     let tps = ty_fn_type_params(ct);
@@ -1236,7 +1243,7 @@ fn check_call_types(src: String, structs, fns, scopes, depth: I32, e) : Void => 
     if (vec_len(tps) > 0) {
       if (vec_len(e.typeArgs) > 0) {
         if (!(vec_len(e.typeArgs) == vec_len(tps))) {
-          panic_at(src, span_start(e.span), "wrong number of type args in call");
+          error_at(src, span_start(e.span), "wrong number of type args in call");
         }
         let mut ti = 0;
         while (ti < vec_len(tps)) {
@@ -1257,7 +1264,7 @@ fn check_call_types(src: String, structs, fns, scopes, depth: I32, e) : Void => 
       }
     } else {
       if (vec_len(e.typeArgs) > 0) {
-        panic_at(src, span_start(e.span), "cannot supply type args to non-generic function");
+        error_at(src, span_start(e.span), "cannot supply type args to non-generic function");
       }
     }
 
@@ -1280,7 +1287,7 @@ fn check_call_types(src: String, structs, fns, scopes, depth: I32, e) : Void => 
   let sig = find_fn_sig(fns, name);
 
   if (!(vec_len(e.args) == vec_len(sig.params))) {
-    panic_at(src, span_start(e.span), "wrong number of args in call to " + name);
+    error_at(src, span_start(e.span), "wrong number of args in call to " + name);
   }
 
   // Type-check args when signature annotations are present.
@@ -1289,7 +1296,7 @@ fn check_call_types(src: String, structs, fns, scopes, depth: I32, e) : Void => 
   if (vec_len(sig.typeParams) > 0) {
     if (vec_len(e.typeArgs) > 0) {
       if (!(vec_len(e.typeArgs) == vec_len(sig.typeParams))) {
-        panic_at(src, span_start(e.span), "wrong number of type args in call to " + name);
+        error_at(src, span_start(e.span), "wrong number of type args in call to " + name);
       }
       let mut ti = 0;
       while (ti < vec_len(sig.typeParams)) {
@@ -1310,7 +1317,7 @@ fn check_call_types(src: String, structs, fns, scopes, depth: I32, e) : Void => 
     }
   } else {
     if (vec_len(e.typeArgs) > 0) {
-      panic_at(src, span_start(e.span), "cannot supply type args to non-generic function: " + name);
+      error_at(src, span_start(e.span), "cannot supply type args to non-generic function: " + name);
     }
   }
 
@@ -1389,7 +1396,7 @@ fn validate_union_variant_for_binding(src: String, pos: I32, unions, scopes, dep
   if (!has_union_def(unions, unionName)) { yield; }
   let u = find_union_def(unions, unionName);
   if (!union_has_variant(u, variant)) {
-    panic_at(src, pos, "unknown union variant: " + variant + " (for " + unionName + ")");
+    error_at(src, pos, "unknown union variant: " + variant + " (for " + unionName + ")");
   }
 }
 
@@ -1563,10 +1570,10 @@ fn analyze_expr(src: String, structs, unions, fns, scopes, depth: I32, narrowed,
         let idx = infer_int_const(e.index);
         if (idx >= 0) {
           if (idx >= arr.len) {
-            panic_at(src, span_start(e.span), "array index out of bounds: " + ("" + idx));
+            error_at(src, span_start(e.span), "array index out of bounds: " + ("" + idx));
           }
           if (!(idx < arr.init)) {
-            panic_at(src, span_start(e.span), "array index uninitialized: " + ("" + idx));
+            error_at(src, span_start(e.span), "array index uninitialized: " + ("" + idx));
           }
         }
       }
@@ -1592,13 +1599,13 @@ fn analyze_expr(src: String, structs, unions, fns, scopes, depth: I32, narrowed,
           let u = find_union_def(unions, unionName);
           let v = narrow_lookup(narrowed, e.base.name);
           if (v == "") {
-            panic_at(src, span_start(e.span), "union payload access requires narrowing (" + unionName + ".value)");
+            error_at(src, span_start(e.span), "union payload access requires narrowing (" + unionName + ".value)");
           }
           if (!union_has_variant(u, v)) {
-            panic_at(src, span_start(e.span), "unknown union variant: " + v);
+            error_at(src, span_start(e.span), "unknown union variant: " + v);
           }
           if (!union_variant_has_payload(u, v)) {
-            panic_at(src, span_start(e.span), "union variant has no payload: " + v);
+            error_at(src, span_start(e.span), "union variant has no payload: " + v);
           }
         }
       }
@@ -1649,7 +1656,7 @@ fn analyze_expr(src: String, structs, unions, fns, scopes, depth: I32, narrowed,
         vec_push(covered, arm.pat.name);
         if (scrutIsUnion) {
           if (!union_has_variant(u, arm.pat.name)) {
-            panic_at(src, span_start(arm.pat.span), "unknown union variant in match: " + arm.pat.name + " (for " + unionName + ")");
+            error_at(src, span_start(arm.pat.span), "unknown union variant in match: " + arm.pat.name + " (for " + unionName + ")");
           }
         }
 
@@ -1673,7 +1680,7 @@ fn analyze_expr(src: String, structs, unions, fns, scopes, depth: I32, narrowed,
       while (vi < vec_len(u.variants)) {
         let vn = vec_get(u.variants, vi).name;
         if (!vec_contains_str(covered, vn)) {
-          panic_at(src, span_start(e.span), "non-exhaustive match on " + unionName + ": missing " + vn);
+          error_at(src, span_start(e.span), "non-exhaustive match on " + unionName + ": missing " + vn);
         }
         vi = vi + 1;
       }
@@ -1712,13 +1719,13 @@ fn analyze_stmt(src: String, structs, unions, fns, scopes, depth: I32, narrowed,
     if (s.init.tag == "EIdent" && has_fn_sig(fns, s.init.name)) {
       let sig = find_fn_sig(fns, s.init.name);
       if (vec_len(sig.typeParams) > 0) {
-        panic_at(src, span_start(s.init.span), "generic function requires type args when used as a value: " + s.init.name);
+        error_at(src, span_start(s.init.span), "generic function requires type args when used as a value: " + s.init.name);
       }
     }
     if (ty_is_fn_type(initTy)) {
       let tps = ty_fn_type_params(initTy);
       if (vec_len(tps) > 0) {
-        panic_at(src, span_start(s.init.span), "generic function value must be specialized before use");
+        error_at(src, span_start(s.init.span), "generic function value must be specialized before use");
       }
     }
 
@@ -1734,7 +1741,7 @@ fn analyze_stmt(src: String, structs, unions, fns, scopes, depth: I32, narrowed,
   if (s.tag == "SAssign") {
     let b = lookup_binding(src, span_start(s.span), scopes, depth, s.name);
     if (!b.isMut) {
-      panic_at(src, span_start(s.span), "cannot assign to immutable binding: " + s.name);
+      error_at(src, span_start(s.span), "cannot assign to immutable binding: " + s.name);
     }
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.value);
     yield;
@@ -1804,7 +1811,7 @@ fn analyze_stmt(src: String, structs, unions, fns, scopes, depth: I32, narrowed,
     if (s.base.tag == "EIdent") {
       let b = lookup_binding(src, span_start(s.span), scopes, depth, s.base.name);
       if (!b.isMut) {
-        panic_at(src, span_start(s.span), "cannot assign through immutable binding: " + s.base.name);
+        error_at(src, span_start(s.span), "cannot assign through immutable binding: " + s.base.name);
       }
     }
 
@@ -1820,10 +1827,10 @@ fn analyze_stmt(src: String, structs, unions, fns, scopes, depth: I32, narrowed,
         let idx = infer_int_const(s.index);
         if (idx >= 0) {
           if (idx >= arr.len) {
-            panic_at(src, span_start(s.span), "array index out of bounds: " + ("" + idx));
+            error_at(src, span_start(s.span), "array index out of bounds: " + ("" + idx));
           }
           if (idx > arr.init) {
-            panic_at(src, span_start(s.span), "cannot skip array initialization at index " + ("" + idx));
+            error_at(src, span_start(s.span), "cannot skip array initialization at index " + ("" + idx));
           }
 
           // Enforce element type when known.
@@ -1844,7 +1851,7 @@ fn analyze_stmt(src: String, structs, unions, fns, scopes, depth: I32, narrowed,
     if (s.base.tag == "EIdent") {
       let b = lookup_binding(src, span_start(s.span), scopes, depth, s.base.name);
       if (!b.isMut) {
-        panic_at(src, span_start(s.span), "cannot assign through immutable binding: " + s.base.name);
+        error_at(src, span_start(s.span), "cannot assign through immutable binding: " + s.base.name);
       }
     }
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.base);
@@ -2052,13 +2059,13 @@ fn analyze_decl_body(src: String, structs, unions, fns, scopes, depth: I32, d) :
     if (d.init.tag == "EIdent" && has_fn_sig(fns, d.init.name)) {
       let sig = find_fn_sig(fns, d.init.name);
       if (vec_len(sig.typeParams) > 0) {
-        panic_at(src, span_start(d.init.span), "generic function requires type args when used as a value: " + d.init.name);
+        error_at(src, span_start(d.init.span), "generic function requires type args when used as a value: " + d.init.name);
       }
     }
     if (ty_is_fn_type(initTy)) {
       let tps = ty_fn_type_params(initTy);
       if (vec_len(tps) > 0) {
-        panic_at(src, span_start(d.init.span), "generic function value must be specialized before use");
+        error_at(src, span_start(d.init.span), "generic function value must be specialized before use");
       }
     }
 

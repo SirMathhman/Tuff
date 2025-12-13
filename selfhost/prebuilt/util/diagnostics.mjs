@@ -2,6 +2,7 @@
 import { println, panic, stringLen, stringSlice, stringCharCodeAt } from "../rt/stdlib.mjs";
 import { vec_new, vec_len, vec_push, vec_get } from "../rt/vec.mjs";
 let __tuffc_current_file = "<input>";
+let __tuffc_errors = vec_new();
 let __tuffc_struct_defs = vec_new();
 export function LineCol(line, col) {
 return { line: line, col: col };
@@ -11,6 +12,31 @@ return { name: name, fields: fields };
 }
 export function set_current_file(path) {
 __tuffc_current_file = path;
+return undefined;
+}
+export function reset_errors() {
+__tuffc_errors = vec_new();
+return undefined;
+}
+export function errors_len() {
+return vec_len(__tuffc_errors);
+}
+export function errors_join() {
+let out = "";
+let i = 0;
+while (i < vec_len(__tuffc_errors)) {
+if (i > 0) {
+out = out + "\n\n";
+}
+out = out + vec_get(__tuffc_errors, i);
+i = i + 1;
+}
+return out;
+}
+export function panic_if_errors() {
+if (vec_len(__tuffc_errors) > 0) {
+panic(errors_join());
+}
 return undefined;
 }
 export function spaces(n) {
@@ -55,7 +81,7 @@ p = p + 1;
 }
 return LineCol(line, col);
 }
-export function panic_span_help(src, start, end, msg, help) {
+export function format_span_help(src, start, end, msg, help) {
 let s = start;
 let e = end;
 if (s < 0) {
@@ -152,15 +178,33 @@ out = out + "\n" + spaces(width - stringLen(nextStr)) + nextStr + " | " + nextTe
 if (help != "") {
 out = out + "\n" + "help: " + help;
 }
-panic(out);
+return out;
+}
+export function panic_span_help(src, start, end, msg, help) {
+panic(format_span_help(src, start, end, msg, help));
+return undefined;
+}
+export function error_span_help(src, start, end, msg, help) {
+if (vec_len(__tuffc_errors) >= 50) {
+return;
+}
+vec_push(__tuffc_errors, format_span_help(src, start, end, msg, help));
 return undefined;
 }
 export function panic_at_help(src, i, msg, help) {
 panic_span_help(src, i, i, msg, help);
 return undefined;
 }
+export function error_at_help(src, i, msg, help) {
+error_span_help(src, i, i, msg, help);
+return undefined;
+}
 export function panic_at(src, i, msg) {
 panic_at_help(src, i, msg, "");
+return undefined;
+}
+export function error_at(src, i, msg) {
+error_at_help(src, i, msg, "");
 return undefined;
 }
 export function reset_struct_defs() {

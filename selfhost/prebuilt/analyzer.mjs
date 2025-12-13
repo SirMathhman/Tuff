@@ -1,7 +1,7 @@
 // compiled by selfhost tuffc
 import { stringLen, stringCharCodeAt, stringSlice } from "./rt/stdlib.mjs";
 import { vec_new, vec_len, vec_push, vec_get, vec_set } from "./rt/vec.mjs";
-import { panic_at } from "./util/diagnostics.mjs";
+import { error_at } from "./util/diagnostics.mjs";
 import { span_start } from "./ast.mjs";
 export function this_struct_name(className) {
 return "__This__" + className;
@@ -234,6 +234,92 @@ return stringSlice(t, i + stringLen(pat), stringLen(t));
 i = i + 1;
 }
 return ty_unknown();
+}
+export function ty_fn_param_tys(t) {
+const out = vec_new();
+if (!ty_is_fn_type(t)) {
+return out;
+}
+let i = 2;
+if (i < stringLen(t) && stringCharCodeAt(t, i) == 60) {
+let depth = 1;
+i = i + 1;
+while (i < stringLen(t) && depth > 0) {
+const ch = stringCharCodeAt(t, i);
+if (ch == 60) {
+depth = depth + 1;
+}
+if (ch == 62) {
+depth = depth - 1;
+}
+i = i + 1;
+}
+}
+while (i < stringLen(t) && stringCharCodeAt(t, i) != 40) {
+i = i + 1;
+}
+if (!(i < stringLen(t) && stringCharCodeAt(t, i) == 40)) {
+return out;
+}
+let k = i + 1;
+let start = k;
+let angleDepth = 0;
+let bracketDepth = 0;
+while (k < stringLen(t)) {
+const ch = stringCharCodeAt(t, k);
+if (ch == 60) {
+angleDepth = angleDepth + 1;
+k = k + 1;
+continue;
+}
+if (ch == 62) {
+if (angleDepth > 0) {
+angleDepth = angleDepth - 1;
+}
+k = k + 1;
+continue;
+}
+if (ch == 91) {
+bracketDepth = bracketDepth + 1;
+k = k + 1;
+continue;
+}
+if (ch == 93) {
+if (bracketDepth > 0) {
+bracketDepth = bracketDepth - 1;
+}
+k = k + 1;
+continue;
+}
+if (ch == 44 && angleDepth == 0 && bracketDepth == 0) {
+const part = stringSlice(t, start, k);
+const trimmedStart = ty_skip_ws(part, 0);
+let trimmedEnd = stringLen(part);
+while (trimmedEnd > 0 && type_is_ws(stringCharCodeAt(part, trimmedEnd - 1))) {
+trimmedEnd = trimmedEnd - 1;
+}
+if (trimmedEnd > trimmedStart) {
+vec_push(out, normalize_ty_ann(stringSlice(part, trimmedStart, trimmedEnd)));
+}
+k = k + 1;
+start = k;
+continue;
+}
+if (ch == 41 && angleDepth == 0 && bracketDepth == 0) {
+const part = stringSlice(t, start, k);
+const trimmedStart = ty_skip_ws(part, 0);
+let trimmedEnd = stringLen(part);
+while (trimmedEnd > 0 && type_is_ws(stringCharCodeAt(part, trimmedEnd - 1))) {
+trimmedEnd = trimmedEnd - 1;
+}
+if (trimmedEnd > trimmedStart) {
+vec_push(out, normalize_ty_ann(stringSlice(part, trimmedStart, trimmedEnd)));
+}
+return out;
+}
+k = k + 1;
+}
+return out;
 }
 export function normalize_ty_ann(t) {
 if (t == "Int") {
@@ -638,7 +724,7 @@ return normalize_ty_ann(expected) == normalize_ty_ann(actual);
 }
 export function require_type_compatible(src, pos, ctx, structs, expected, actual) {
 if (!type_compatible(structs, expected, actual)) {
-panic_at(src, pos, ctx + ": expected " + normalize_ty_ann(expected) + ", got " + normalize_ty_ann(actual));
+error_at(src, pos, ctx + ": expected " + normalize_ty_ann(expected) + ", got " + normalize_ty_ann(actual));
 }
 return undefined;
 }
@@ -661,7 +747,8 @@ return nameExpr.name;
 if (nameExpr.tag == "EPath") {
 return path_dotted(nameExpr.parts);
 }
-return panic_at(src, span_start(nameExpr.span), "struct literal name must be ident or path");
+error_at(src, span_start(nameExpr.span), "struct literal name must be ident or path");
+return "";
 }
 export function find_struct_def(structs, name) {
 let i = 0;
@@ -696,12 +783,14 @@ return -1;
 }
 export function get_struct_field_type(src, pos, structs, structName, field) {
 if (!has_struct_def(structs, structName)) {
-panic_at(src, pos, "unknown struct: " + structName);
+error_at(src, pos, "unknown struct: " + structName);
+return ty_unknown();
 }
 const s = find_struct_def(structs, structName);
 const idx = struct_field_index(s, field);
 if (idx == -1) {
-panic_at(src, pos, "unknown field " + field + " on struct " + structName);
+error_at(src, pos, "unknown field " + field + " on struct " + structName);
+return ty_unknown();
 }
 if (idx < vec_len(s.fieldTyAnns)) {
 const t = vec_get(s.fieldTyAnns, idx);
@@ -829,7 +918,7 @@ return depth + 1;
 }
 export function declare_name(src, pos, scopes, depth, name, isMut, tyTag) {
 if (scopes_contains(scopes, depth, name)) {
-panic_at(src, pos, "shadowing not allowed: " + name);
+error_at(src, pos, "shadowing not allowed: " + name);
 }
 const cur = vec_get(scopes, depth - 1);
 vec_push(cur, mk_binding(name, isMut, tyTag));
@@ -849,7 +938,8 @@ return false;
 export function declare_local_name(src, pos, scopes, depth, name, isMut, tyTag) {
 const cur = vec_get(scopes, depth - 1);
 if (scope_contains(cur, name)) {
-panic_at(src, pos, "duplicate name: " + name);
+error_at(src, pos, "duplicate name: " + name);
+return;
 }
 vec_push(cur, mk_binding(name, isMut, tyTag));
 return undefined;
@@ -868,7 +958,7 @@ bi = bi + 1;
 }
 si = si + 1;
 }
-panic_at(src, pos, "unknown name: " + name);
+error_at(src, pos, "unknown name: " + name);
 return mk_binding(name, false, ty_unknown());
 }
 export function update_binding_ty(src, pos, scopes, depth, name, newTyTag) {
@@ -886,7 +976,7 @@ bi = bi + 1;
 }
 si = si + 1;
 }
-panic_at(src, pos, "unknown name: " + name);
+error_at(src, pos, "unknown name: " + name);
 return undefined;
 }
 export function infer_lookup_ty(scopes, depth, name) {
@@ -1093,7 +1183,7 @@ if (vec_len(sig.typeParams) > 0) {
 const subst = vec_new();
 if (vec_len(e.typeArgs) > 0) {
 if (!(vec_len(e.typeArgs) == vec_len(sig.typeParams))) {
-panic_at(src, span_start(e.span), "wrong number of type args in call to " + e.callee.name);
+error_at(src, span_start(e.span), "wrong number of type args in call to " + e.callee.name);
 }
 let ti = 0;
 while (ti < vec_len(sig.typeParams)) {
@@ -1122,7 +1212,7 @@ if (vec_len(e.callee.typeParams) > 0) {
 const subst = vec_new();
 if (vec_len(e.typeArgs) > 0) {
 if (!(vec_len(e.typeArgs) == vec_len(e.callee.typeParams))) {
-panic_at(src, span_start(e.span), "wrong number of type args in lambda call");
+error_at(src, span_start(e.span), "wrong number of type args in lambda call");
 }
 let ti = 0;
 while (ti < vec_len(e.callee.typeParams)) {
@@ -1147,17 +1237,30 @@ return normalize_ty_ann(e.callee.retTyAnn);
 }
 const ct = infer_expr_type(src, structs, fns, scopes, depth, e.callee);
 if (ty_is_fn_type(ct)) {
-const ret0 = ty_fn_ret(ct);
+const ret0 = normalize_ty_ann(ty_fn_ret(ct));
 const tps = ty_fn_type_params(ct);
-if (vec_len(tps) > 0 && vec_len(e.typeArgs) > 0) {
-if (!(vec_len(e.typeArgs) == vec_len(tps))) {
-panic_at(src, span_start(e.span), "wrong number of type args in call");
-}
+if (vec_len(tps) > 0) {
 const subst = vec_new();
+if (vec_len(e.typeArgs) > 0) {
+if (!(vec_len(e.typeArgs) == vec_len(tps))) {
+error_at(src, span_start(e.span), "wrong number of type args in call");
+}
 let ti = 0;
 while (ti < vec_len(tps)) {
 subst_bind(subst, vec_get(tps, ti), normalize_ty_ann(vec_get(e.typeArgs, ti)));
 ti = ti + 1;
+}
+} else {
+const paramTys = ty_fn_param_tys(ct);
+let ai = 0;
+while (ai < vec_len(e.args) && ai < vec_len(paramTys)) {
+const expected = vec_get(paramTys, ai);
+const actual = infer_expr_type(src, structs, fns, scopes, depth, vec_get(e.args, ai));
+if (expected != "" && ty_is_type_var(tps, normalize_ty_ann(expected))) {
+subst_bind(subst, normalize_ty_ann(expected), normalize_ty_ann(actual));
+}
+ai = ai + 1;
+}
 }
 return ty_apply_subst(tps, subst, ret0);
 }
@@ -1178,16 +1281,25 @@ return infer_expr_type(src, structs, fns, scopes, depth, e.tail);
 }
 return ty_unknown();
 }
+export function infer_expr_type_with_narrowing(src, structs, unions, fns, scopes, depth, narrowed, e) {
+if (e.tag == "EField" && e.field == "value" && e.base.tag == "EIdent") {
+const t = infer_union_payload_type_from_narrowing(src, unions, scopes, depth, narrowed, e.base.name);
+if (!type_is_unknown(t)) {
+return t;
+}
+}
+return infer_expr_type(src, structs, fns, scopes, depth, e);
+}
 export function check_cond_is_bool(src, structs, fns, scopes, depth, cond) {
 const t = infer_expr_type(src, structs, fns, scopes, depth, cond);
 if (t == ty_i32() || t == ty_u32() || t == ty_char() || t == ty_int_lit()) {
-panic_at(src, span_start(cond.span), "condition must be Bool (got I32)");
+error_at(src, span_start(cond.span), "condition must be Bool (got I32)");
 }
 if (t == ty_f32() || t == ty_f64() || t == ty_float_lit()) {
-panic_at(src, span_start(cond.span), "condition must be Bool (got F64)");
+error_at(src, span_start(cond.span), "condition must be Bool (got F64)");
 }
 if (t == ty_string()) {
-panic_at(src, span_start(cond.span), "condition must be Bool (got String)");
+error_at(src, span_start(cond.span), "condition must be Bool (got String)");
 }
 return undefined;
 }
@@ -1205,19 +1317,19 @@ if (lt == ty_string() || rt == ty_string()) {
 return;
 }
 if (!(type_is_int_like(lt) && type_is_int_like(rt) || type_is_float_like(lt) && type_is_float_like(rt))) {
-panic_at(src, span_start(e.span), "invalid operands to '+': expected numbers or strings");
+error_at(src, span_start(e.span), "invalid operands to '+': expected numbers or strings");
 }
 return;
 }
 if (e.op.tag == "OpSub" || e.op.tag == "OpMul" || e.op.tag == "OpDiv") {
 if (!(type_is_int_like(lt) && type_is_int_like(rt) || type_is_float_like(lt) && type_is_float_like(rt))) {
-panic_at(src, span_start(e.span), "invalid operands to arithmetic operator");
+error_at(src, span_start(e.span), "invalid operands to arithmetic operator");
 }
 return;
 }
 if (e.op.tag == "OpLt" || e.op.tag == "OpLe" || e.op.tag == "OpGt" || e.op.tag == "OpGe") {
 if (!(type_is_int_like(lt) && type_is_int_like(rt) || type_is_float_like(lt) && type_is_float_like(rt))) {
-panic_at(src, span_start(e.span), "invalid operands to comparison operator: expected numbers");
+error_at(src, span_start(e.span), "invalid operands to comparison operator: expected numbers");
 }
 return;
 }
@@ -1226,11 +1338,12 @@ return undefined;
 export function check_struct_lit_types(src, structs, fns, scopes, depth, e) {
 const structName = struct_name_of_expr(src, e.nameExpr);
 if (!has_struct_def(structs, structName)) {
-panic_at(src, span_start(e.span), "unknown struct: " + structName);
+error_at(src, span_start(e.span), "unknown struct: " + structName);
+return;
 }
 const sd = find_struct_def(structs, structName);
 if (!(vec_len(sd.fields) == vec_len(e.values))) {
-panic_at(src, span_start(e.span), "wrong number of values in struct literal for " + structName);
+error_at(src, span_start(e.span), "wrong number of values in struct literal for " + structName);
 }
 let i = 0;
 while (i < vec_len(e.values) && i < vec_len(sd.fieldTyAnns)) {
@@ -1246,13 +1359,13 @@ return undefined;
 export function check_call_types(src, structs, fns, scopes, depth, e) {
 if (e.callee.tag == "ELambda") {
 if (!(vec_len(e.args) == vec_len(e.callee.params))) {
-panic_at(src, span_start(e.span), "wrong number of args in lambda call");
+error_at(src, span_start(e.span), "wrong number of args in lambda call");
 }
 const subst = vec_new();
 if (vec_len(e.callee.typeParams) > 0) {
 if (vec_len(e.typeArgs) > 0) {
 if (!(vec_len(e.typeArgs) == vec_len(e.callee.typeParams))) {
-panic_at(src, span_start(e.span), "wrong number of type args in lambda call");
+error_at(src, span_start(e.span), "wrong number of type args in lambda call");
 }
 let ti = 0;
 while (ti < vec_len(e.callee.typeParams)) {
@@ -1272,7 +1385,7 @@ ai = ai + 1;
 }
 } else {
 if (vec_len(e.typeArgs) > 0) {
-panic_at(src, span_start(e.span), "cannot supply type args to non-generic lambda");
+error_at(src, span_start(e.span), "cannot supply type args to non-generic lambda");
 }
 }
 let i = 0;
@@ -1287,6 +1400,52 @@ i = i + 1;
 }
 return;
 }
+const ct = infer_expr_type(src, structs, fns, scopes, depth, e.callee);
+if (ty_is_fn_type(ct)) {
+const paramTys = ty_fn_param_tys(ct);
+if (!(vec_len(e.args) == vec_len(paramTys))) {
+error_at(src, span_start(e.span), "wrong number of args in call");
+}
+const tps = ty_fn_type_params(ct);
+const subst = vec_new();
+if (vec_len(tps) > 0) {
+if (vec_len(e.typeArgs) > 0) {
+if (!(vec_len(e.typeArgs) == vec_len(tps))) {
+error_at(src, span_start(e.span), "wrong number of type args in call");
+}
+let ti = 0;
+while (ti < vec_len(tps)) {
+subst_bind(subst, vec_get(tps, ti), normalize_ty_ann(vec_get(e.typeArgs, ti)));
+ti = ti + 1;
+}
+} else {
+let ai = 0;
+while (ai < vec_len(e.args) && ai < vec_len(paramTys)) {
+const expected = vec_get(paramTys, ai);
+if (expected != "" && ty_is_type_var(tps, normalize_ty_ann(expected))) {
+const actual = infer_expr_type(src, structs, fns, scopes, depth, vec_get(e.args, ai));
+subst_bind(subst, normalize_ty_ann(expected), normalize_ty_ann(actual));
+}
+ai = ai + 1;
+}
+}
+} else {
+if (vec_len(e.typeArgs) > 0) {
+error_at(src, span_start(e.span), "cannot supply type args to non-generic function");
+}
+}
+let i = 0;
+while (i < vec_len(e.args) && i < vec_len(paramTys)) {
+const expected0 = vec_get(paramTys, i);
+if (!type_is_unknown(expected0)) {
+const expected = (vec_len(tps) > 0 ? ty_apply_subst(tps, subst, expected0) : normalize_ty_ann(expected0));
+const actual = infer_expr_type(src, structs, fns, scopes, depth, vec_get(e.args, i));
+require_type_compatible(src, span_start(e.span), "arg " + ("" + (i + 1)), structs, expected, actual);
+}
+i = i + 1;
+}
+return;
+}
 if (e.callee.tag != "EIdent") {
 return;
 }
@@ -1296,13 +1455,13 @@ return;
 }
 const sig = find_fn_sig(fns, name);
 if (!(vec_len(e.args) == vec_len(sig.params))) {
-panic_at(src, span_start(e.span), "wrong number of args in call to " + name);
+error_at(src, span_start(e.span), "wrong number of args in call to " + name);
 }
 const subst = vec_new();
 (vec_len(sig.typeParams) > 0 ? (() => {
 return (vec_len(e.typeArgs) > 0 ? (() => {
 if (!(vec_len(e.typeArgs) == vec_len(sig.typeParams))) {
-panic_at(src, span_start(e.span), "wrong number of type args in call to " + name);
+error_at(src, span_start(e.span), "wrong number of type args in call to " + name);
 }
 let ti = 0;
 while (ti < vec_len(sig.typeParams)) {
@@ -1324,7 +1483,7 @@ return undefined;
 })());
 })() : (() => {
 if (vec_len(e.typeArgs) > 0) {
-panic_at(src, span_start(e.span), "cannot supply type args to non-generic function: " + name);
+error_at(src, span_start(e.span), "cannot supply type args to non-generic function: " + name);
 }
 return undefined;
 })());
@@ -1357,6 +1516,93 @@ if (cond.right.tag == "EField" && cond.right.field == "tag" && cond.right.base.t
 return ParsedTagEq(true, cond.right.base.name, cond.left.value);
 }
 return ParsedTagEq(false, "", "");
+}
+export function ParsedTagNarrowing(ok, name, thenVariant, elseVariant) {
+return { ok: ok, name: name, thenVariant: thenVariant, elseVariant: elseVariant };
+}
+export function parse_tag_narrowing(cond) {
+if (cond.tag == "EUnary" && cond.op.tag == "OpNot") {
+const inner = parse_tag_narrowing(cond.expr);
+if (inner.ok) {
+return ParsedTagNarrowing(true, inner.name, inner.elseVariant, inner.thenVariant);
+}
+return ParsedTagNarrowing(false, "", "", "");
+}
+if (cond.tag != "EBinary") {
+return ParsedTagNarrowing(false, "", "", "");
+}
+if (!(cond.op.tag == "OpEq" || cond.op.tag == "OpNe")) {
+return ParsedTagNarrowing(false, "", "", "");
+}
+if (cond.left.tag == "EField" && cond.left.field == "tag" && cond.left.base.tag == "EIdent" && cond.right.tag == "EString") {
+const v = cond.right.value;
+if (cond.op.tag == "OpEq") {
+return ParsedTagNarrowing(true, cond.left.base.name, v, "");
+}
+return ParsedTagNarrowing(true, cond.left.base.name, "", v);
+}
+if (cond.right.tag == "EField" && cond.right.field == "tag" && cond.right.base.tag == "EIdent" && cond.left.tag == "EString") {
+const v = cond.left.value;
+if (cond.op.tag == "OpEq") {
+return ParsedTagNarrowing(true, cond.right.base.name, v, "");
+}
+return ParsedTagNarrowing(true, cond.right.base.name, "", v);
+}
+return ParsedTagNarrowing(false, "", "", "");
+}
+export function validate_union_variant_for_binding(src, pos, unions, scopes, depth, name, variant) {
+const bt0 = infer_lookup_ty(scopes, depth, name);
+const bt = normalize_ty_ann(bt0);
+let unionName = bt;
+const app = ty_parse_app(bt);
+if (app.ok) {
+unionName = stringSlice(app.callee, ty_skip_ws(app.callee, 0), stringLen(app.callee));
+}
+if (!has_union_def(unions, unionName)) {
+return;
+}
+const u = find_union_def(unions, unionName);
+if (!union_has_variant(u, variant)) {
+error_at(src, pos, "unknown union variant: " + variant + " (for " + unionName + ")");
+}
+return undefined;
+}
+export function infer_union_payload_type_from_narrowing(src, unions, scopes, depth, narrowed, name) {
+const v = narrow_lookup(narrowed, name);
+if (v == "") {
+return ty_unknown();
+}
+const bt0 = infer_lookup_ty(scopes, depth, name);
+const bt = normalize_ty_ann(bt0);
+let unionName = bt;
+let args = vec_new();
+const app = ty_parse_app(bt);
+if (app.ok) {
+unionName = stringSlice(app.callee, ty_skip_ws(app.callee, 0), stringLen(app.callee));
+args = app.args;
+}
+if (!has_union_def(unions, unionName)) {
+return ty_unknown();
+}
+const u = find_union_def(unions, unionName);
+if (!union_has_variant(u, v)) {
+return ty_unknown();
+}
+const payloads = union_variant_payload_ty_anns(u, v);
+if (vec_len(payloads) == 1) {
+const payload0 = normalize_ty_ann(vec_get(payloads, 0));
+if (vec_len(u.typeParams) > 0) {
+const subst = vec_new();
+let ti = 0;
+while (ti < vec_len(u.typeParams) && ti < vec_len(args)) {
+subst_bind(subst, vec_get(u.typeParams, ti), normalize_ty_ann(vec_get(args, ti)));
+ti = ti + 1;
+}
+return ty_apply_subst(u.typeParams, subst, payload0);
+}
+return payload0;
+}
+return ty_unknown();
 }
 export function analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e) {
 if (e.tag == "EIdent") {
@@ -1417,12 +1663,24 @@ return;
 if (e.tag == "EIf") {
 check_cond_is_bool(src, structs, fns, scopes, depth, e.cond);
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.cond);
-const tagEq = parse_tag_eq(e.cond);
-if (tagEq.ok) {
+const nar = parse_tag_narrowing(e.cond);
+if (nar.ok) {
+if (nar.thenVariant != "") {
+validate_union_variant_for_binding(src, span_start(e.cond.span), unions, scopes, depth, nar.name, nar.thenVariant);
 const narrowedThen = narrow_clone(narrowed);
-vec_push(narrowedThen, mk_narrowed_tag(tagEq.name, tagEq.variant));
+vec_push(narrowedThen, mk_narrowed_tag(nar.name, nar.thenVariant));
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowedThen, e.thenExpr);
+} else {
+analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.thenExpr);
+}
+if (nar.elseVariant != "") {
+validate_union_variant_for_binding(src, span_start(e.cond.span), unions, scopes, depth, nar.name, nar.elseVariant);
+const narrowedElse = narrow_clone(narrowed);
+vec_push(narrowedElse, mk_narrowed_tag(nar.name, nar.elseVariant));
+analyze_expr(src, structs, unions, fns, scopes, depth, narrowedElse, e.elseExpr);
+} else {
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.elseExpr);
+}
 return;
 }
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.thenExpr);
@@ -1461,10 +1719,10 @@ if (arr.ok) {
 const idx = infer_int_const(e.index);
 if (idx >= 0) {
 if (idx >= arr.len) {
-panic_at(src, span_start(e.span), "array index out of bounds: " + ("" + idx));
+error_at(src, span_start(e.span), "array index out of bounds: " + ("" + idx));
 }
 if (!(idx < arr.init)) {
-panic_at(src, span_start(e.span), "array index uninitialized: " + ("" + idx));
+error_at(src, span_start(e.span), "array index uninitialized: " + ("" + idx));
 }
 }
 }
@@ -1486,10 +1744,13 @@ if (has_union_def(unions, unionName)) {
 const u = find_union_def(unions, unionName);
 const v = narrow_lookup(narrowed, e.base.name);
 if (v == "") {
-panic_at(src, span_start(e.span), "union payload access requires narrowing (" + unionName + ".value)");
+error_at(src, span_start(e.span), "union payload access requires narrowing (" + unionName + ".value)");
+}
+if (!union_has_variant(u, v)) {
+error_at(src, span_start(e.span), "unknown union variant: " + v);
 }
 if (!union_variant_has_payload(u, v)) {
-panic_at(src, span_start(e.span), "union variant has no payload: " + v);
+error_at(src, span_start(e.span), "union variant has no payload: " + v);
 }
 }
 }
@@ -1504,11 +1765,62 @@ return;
 }
 if (e.tag == "EMatch") {
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.scrut);
+let scrutName = "";
+if (e.scrut.tag == "EIdent") {
+scrutName = e.scrut.name;
+}
+let scrutIsUnion = false;
+let unionName = "";
+let u = mk_union_def("", vec_new(), vec_new());
+if (scrutName != "") {
+const bt0 = infer_lookup_ty(scopes, depth, scrutName);
+const bt = normalize_ty_ann(bt0);
+unionName = bt;
+const app = ty_parse_app(bt);
+if (app.ok) {
+unionName = stringSlice(app.callee, ty_skip_ws(app.callee, 0), stringLen(app.callee));
+}
+if (has_union_def(unions, unionName)) {
+scrutIsUnion = true;
+u = find_union_def(unions, unionName);
+}
+}
+let hasWildcard = false;
+const covered = vec_new();
 let mi = 0;
 while (mi < vec_len(e.arms)) {
 const arm = vec_get(e.arms, mi);
+if (arm.pat.tag == "MPWildcard") {
+hasWildcard = true;
+}
+if (arm.pat.tag == "MPVariant") {
+vec_push(covered, arm.pat.name);
+if (scrutIsUnion) {
+if (!union_has_variant(u, arm.pat.name)) {
+error_at(src, span_start(arm.pat.span), "unknown union variant in match: " + arm.pat.name + " (for " + unionName + ")");
+}
+}
+if (scrutName != "") {
+const narrowedArm = narrow_clone(narrowed);
+vec_push(narrowedArm, mk_narrowed_tag(scrutName, arm.pat.name));
+analyze_expr(src, structs, unions, fns, scopes, depth, narrowedArm, arm.expr);
+} else {
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, arm.expr);
+}
+} else {
+analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, arm.expr);
+}
 mi = mi + 1;
+}
+if (scrutIsUnion && !hasWildcard) {
+let vi = 0;
+while (vi < vec_len(u.variants)) {
+const vn = vec_get(u.variants, vi).name;
+if (!vec_contains_str(covered, vn)) {
+error_at(src, span_start(e.span), "non-exhaustive match on " + unionName + ": missing " + vn);
+}
+vi = vi + 1;
+}
 }
 return;
 }
@@ -1530,7 +1842,19 @@ require_type_compatible(src, span_start(s.span), "let " + s.name, structs, s.tyA
 return;
 }
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.init);
-const initTy = infer_expr_type(src, structs, fns, scopes, depth, s.init);
+const initTy = infer_expr_type_with_narrowing(src, structs, unions, fns, scopes, depth, narrowed, s.init);
+if (s.init.tag == "EIdent" && has_fn_sig(fns, s.init.name)) {
+const sig = find_fn_sig(fns, s.init.name);
+if (vec_len(sig.typeParams) > 0) {
+error_at(src, span_start(s.init.span), "generic function requires type args when used as a value: " + s.init.name);
+}
+}
+if (ty_is_fn_type(initTy)) {
+const tps = ty_fn_type_params(initTy);
+if (vec_len(tps) > 0) {
+error_at(src, span_start(s.init.span), "generic function value must be specialized before use");
+}
+}
 if (s.tyAnn != "") {
 require_type_compatible(src, span_start(s.span), "let " + s.name, structs, s.tyAnn, initTy);
 declare_name(src, span_start(s.span), scopes, depth, s.name, s.isMut, normalize_ty_ann(s.tyAnn));
@@ -1542,7 +1866,7 @@ return;
 if (s.tag == "SAssign") {
 const b = lookup_binding(src, span_start(s.span), scopes, depth, s.name);
 if (!b.isMut) {
-panic_at(src, span_start(s.span), "cannot assign to immutable binding: " + s.name);
+error_at(src, span_start(s.span), "cannot assign to immutable binding: " + s.name);
 }
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.value);
 return;
@@ -1565,15 +1889,25 @@ return;
 if (s.tag == "SIf") {
 check_cond_is_bool(src, structs, fns, scopes, depth, s.cond);
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.cond);
-const tagEq = parse_tag_eq(s.cond);
-if (tagEq.ok) {
-const narrowedThen = narrow_clone(narrowed);
-vec_push(narrowedThen, mk_narrowed_tag(tagEq.name, tagEq.variant));
+const nar = parse_tag_narrowing(s.cond);
+if (nar.ok) {
+let thenNar = narrowed;
+if (nar.thenVariant != "") {
+validate_union_variant_for_binding(src, span_start(s.cond.span), unions, scopes, depth, nar.name, nar.thenVariant);
+thenNar = narrow_clone(narrowed);
+vec_push(thenNar, mk_narrowed_tag(nar.name, nar.thenVariant));
+}
 const thenDepth = scopes_enter(scopes, depth);
-analyze_stmts(src, structs, unions, fns, scopes, thenDepth, narrowedThen, s.thenBody);
+analyze_stmts(src, structs, unions, fns, scopes, thenDepth, thenNar, s.thenBody);
 if (s.hasElse) {
+let elseNar = narrowed;
+if (nar.elseVariant != "") {
+validate_union_variant_for_binding(src, span_start(s.cond.span), unions, scopes, depth, nar.name, nar.elseVariant);
+elseNar = narrow_clone(narrowed);
+vec_push(elseNar, mk_narrowed_tag(nar.name, nar.elseVariant));
+}
 const elseDepth = scopes_enter(scopes, depth);
-analyze_stmts(src, structs, unions, fns, scopes, elseDepth, narrowed, s.elseBody);
+analyze_stmts(src, structs, unions, fns, scopes, elseDepth, elseNar, s.elseBody);
 }
 return;
 }
@@ -1589,7 +1923,7 @@ if (s.tag == "SIndexAssign") {
 if (s.base.tag == "EIdent") {
 const b = lookup_binding(src, span_start(s.span), scopes, depth, s.base.name);
 if (!b.isMut) {
-panic_at(src, span_start(s.span), "cannot assign through immutable binding: " + s.base.name);
+error_at(src, span_start(s.span), "cannot assign through immutable binding: " + s.base.name);
 }
 }
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.base);
@@ -1602,10 +1936,10 @@ if (arr.ok) {
 const idx = infer_int_const(s.index);
 if (idx >= 0) {
 if (idx >= arr.len) {
-panic_at(src, span_start(s.span), "array index out of bounds: " + ("" + idx));
+error_at(src, span_start(s.span), "array index out of bounds: " + ("" + idx));
 }
 if (idx > arr.init) {
-panic_at(src, span_start(s.span), "cannot skip array initialization at index " + ("" + idx));
+error_at(src, span_start(s.span), "cannot skip array initialization at index " + ("" + idx));
 }
 const elemExpected = normalize_ty_ann(arr.elem);
 const actual = infer_expr_type(src, structs, fns, scopes, depth, s.value);
@@ -1622,7 +1956,7 @@ if (s.tag == "SFieldAssign") {
 if (s.base.tag == "EIdent") {
 const b = lookup_binding(src, span_start(s.span), scopes, depth, s.base.name);
 if (!b.isMut) {
-panic_at(src, span_start(s.span), "cannot assign through immutable binding: " + s.base.name);
+error_at(src, span_start(s.span), "cannot assign through immutable binding: " + s.base.name);
 }
 }
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.base);
@@ -1800,6 +2134,18 @@ if (d.tag == "DLet") {
 const narrowed = vec_new();
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, d.init);
 const initTy = infer_expr_type(src, structs, fns, scopes, depth, d.init);
+if (d.init.tag == "EIdent" && has_fn_sig(fns, d.init.name)) {
+const sig = find_fn_sig(fns, d.init.name);
+if (vec_len(sig.typeParams) > 0) {
+error_at(src, span_start(d.init.span), "generic function requires type args when used as a value: " + d.init.name);
+}
+}
+if (ty_is_fn_type(initTy)) {
+const tps = ty_fn_type_params(initTy);
+if (vec_len(tps) > 0) {
+error_at(src, span_start(d.init.span), "generic function value must be specialized before use");
+}
+}
 if (d.tyAnn != "") {
 require_type_compatible(src, span_start(d.span), "let " + d.name, structs, d.tyAnn, initTy);
 declare_name(src, span_start(d.span), scopes, depth, d.name, d.isMut, normalize_ty_ann(d.tyAnn));

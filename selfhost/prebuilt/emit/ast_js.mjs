@@ -551,6 +551,7 @@ out = emit_expr_js(e.base) + "." + e.field;
 if (e.tag == "EMatch") {
 let cases = "";
 let def = "";
+let sawVariant = false;
 let i = 0;
 while (i < vec_len(e.arms)) {
 const arm = vec_get(e.arms, i);
@@ -567,14 +568,22 @@ patJs = (arm.pat.value ? "true" : "false");
 if (arm.pat.tag == "MPString") {
 patJs = "\"" + escape_js_string(arm.pat.value) + "\"";
 }
+if (arm.pat.tag == "MPVariant") {
+patJs = "\"" + escape_js_string(arm.pat.name) + "\"";
+sawVariant = true;
+}
 cases = cases + ("case " + patJs + ": return " + emit_expr_js(arm.expr) + ";\n");
 }
 i = i + 1;
 }
-if (def == "") {
+if (def == "" && !sawVariant) {
 panic("match requires _ arm");
 }
-out = "(() => { switch (" + emit_expr_js(e.scrut) + ") {\n" + cases + "default: return " + def + ";\n} })()";
+if (def == "" && sawVariant) {
+def = "(() => { throw new Error(\"non-exhaustive match\"); })()";
+}
+const scrutJs = (sawVariant ? "(" + emit_expr_js(e.scrut) + ").tag" : emit_expr_js(e.scrut));
+out = "(() => { switch (" + scrutJs + ") {\n" + cases + "default: return " + def + ";\n} })()";
 }
 return out;
 }

@@ -154,4 +154,45 @@ describe("selfhost diagnostics", () => {
     // Should NOT emit the old short-identifier warning.
     expect(out).not.toMatch(/warning: identifier 'k' is too short/);
   });
+
+  test("analyzer reports multiple errors in one compile", async () => {
+    const outDir = resolve(
+      ".dist",
+      "selfhost-diagnostics",
+      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    );
+
+    await mkdir(outDir, { recursive: true });
+    const { libFile } = await stagePrebuiltSelfhostCompiler(outDir);
+    const stage1lib = (await import(pathToFileURL(libFile).toString())) as any;
+
+    // Two independent analyzer errors:
+    // 1) Typed let mismatch (I32 vs String)
+    // 2) Unknown name `z`
+    const badSrc = [
+      "fn main() => {",
+      "  let x: I32 = \"nope\";",
+      "  let y = z;",
+      "  0",
+      "}",
+    ].join("\n");
+
+    let msg = "";
+    try {
+      stage1lib.compile_tiny(badSrc);
+      throw new Error("expected compile_tiny to throw");
+    } catch (e: any) {
+      msg = String(e?.message ?? e);
+    }
+
+    const norm = msg.replace(/\r\n/g, "\n");
+
+    // Should include BOTH diagnostics.
+    expect(norm).toContain("let x");
+    expect(norm).toMatch(/expected I32, got String/);
+    expect(norm).toMatch(/unknown name: z/);
+
+    // And it should look like multiple error blocks rather than a single abort.
+    expect((norm.match(/\berror:/g) ?? []).length).toBeGreaterThanOrEqual(2);
+  });
 });

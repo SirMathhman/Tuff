@@ -1,7 +1,7 @@
 // compiled by selfhost tuffc
 import { println, panic, readTextFile, writeTextFile, pathDirname, pathJoin, stringLen, stringSlice, stringCharCodeAt, stringFromCharCode } from "./rt/stdlib.mjs";
 import { vec_new, vec_len, vec_push, vec_get } from "./rt/vec.mjs";
-import { set_current_file, panic_at, reset_struct_defs, add_struct_def, find_struct_fields, is_identifier_too_short, warn_short_identifier } from "./util/diagnostics.mjs";
+import { set_current_file, panic_at, reset_errors, panic_if_errors, reset_struct_defs, add_struct_def, find_struct_fields, is_identifier_too_short, warn_short_identifier } from "./util/diagnostics.mjs";
 import { is_digit, is_space, is_ident_start, is_ident_part, skip_ws, starts_with_at } from "./util/lexing.mjs";
 import { ParsedNumber, ParsedIdent, ParsedBool, parse_keyword, parse_number, parse_ident, parse_module_path, module_path_to_relpath, parse_optional_semicolon, parse_required_semicolon } from "./parsing/primitives.mjs";
 import { ParsedType, parse_type_expr, skip_angle_brackets, skip_type_expr } from "./parsing/types.mjs";
@@ -19,6 +19,7 @@ return parse_program_with_trivia(src, exportAll);
 export function compile_tiny2(src, requireMain, exportAll, filePath) {
 let i = 0;
 reset_struct_defs();
+reset_errors();
 let out = "// compiled by selfhost tuffc\n";
 const decls = vec_new();
 while (true) {
@@ -49,6 +50,12 @@ i = m.nextPos;
 }
 while (true) {
 const j = skip_ws(src, i);
+if (starts_with_at(src, j, "module")) {
+const m = parse_module_decl_ast(src, i);
+vec_push(decls, m.decl);
+i = m.nextPos;
+continue;
+}
 if (starts_with_at(src, j, "type")) {
 const td = parse_type_union_decl_ast(src, i, exportAll);
 vec_push(decls, td.decl);
@@ -119,6 +126,7 @@ if (requireMain && !sawMain) {
 panic_at(src, i, "expected fn main");
 }
 analyze_program(src, decls);
+panic_if_errors();
 set_current_file_path(filePath);
 if (decls_needs_vec_rt(decls)) {
 out = out + emit_runtime_vec_imports_js();

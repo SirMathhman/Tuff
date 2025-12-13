@@ -19,6 +19,8 @@ extern from rt::vec use { vec_new, vec_len, vec_push, vec_get };
 from util::diagnostics use {
   set_current_file,
   panic_at,
+  reset_errors,
+  panic_if_errors,
   reset_struct_defs,
   add_struct_def,
   find_struct_fields,
@@ -125,6 +127,7 @@ fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool, filePath: Stri
 
   // Reset per-file state.
   reset_struct_defs();
+  reset_errors();
 
   let mut out = "// compiled by selfhost tuffc\n";
 
@@ -243,6 +246,7 @@ fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool, filePath: Stri
 
   // Phase 4 (initial): run analyzer checks before emission.
   analyze_program(src, decls);
+  panic_if_errors();
 
   // Set the file path for the emitter to compute correct relative import paths
   set_current_file_path(filePath);

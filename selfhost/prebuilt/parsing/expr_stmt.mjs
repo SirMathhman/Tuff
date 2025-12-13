@@ -5,7 +5,7 @@ import { panic_at, panic_at_help, find_struct_fields, is_identifier_too_short, w
 import { is_digit, is_ident_start, is_ident_part, skip_ws, starts_with_at } from "../util/lexing.mjs";
 import { ParsedBool, ParsedIdent, ParsedNumber, parse_ident, parse_keyword, parse_number, parse_optional_semicolon } from "./primitives.mjs";
 import { parse_type_expr } from "./types.mjs";
-import { span, span_start, expr_span, expr_undefined, expr_int, expr_float, expr_bool, expr_string, expr_ident, expr_path, expr_lambda, expr_struct_lit, expr_unary, expr_binary, expr_call, expr_call_typed, expr_if, expr_block, expr_vec_lit, expr_tuple_lit, expr_index, expr_tuple_index, expr_field, expr_match, OpOr, OpAnd, OpEq, OpNe, OpLt, OpLe, OpGt, OpGe, OpAdd, OpSub, OpMul, OpDiv, OpNot, OpNeg, mk_match_arm, pat_wildcard, pat_int, pat_bool, pat_string, stmt_let, stmt_let_typed, stmt_assign, stmt_expr, stmt_yield, stmt_while, stmt_if, stmt_index_assign, stmt_field_assign } from "../ast.mjs";
+import { span, span_start, expr_span, expr_undefined, expr_int, expr_float, expr_bool, expr_string, expr_ident, expr_path, expr_lambda, expr_struct_lit, expr_unary, expr_binary, expr_call, expr_call_typed, expr_if, expr_block, expr_vec_lit, expr_tuple_lit, expr_index, expr_tuple_index, expr_field, expr_match, OpOr, OpAnd, OpEq, OpNe, OpLt, OpLe, OpGt, OpGe, OpAdd, OpSub, OpMul, OpDiv, OpNot, OpNeg, mk_match_arm, pat_wildcard, pat_int, pat_bool, pat_string, pat_variant, stmt_let, stmt_let_typed, stmt_assign, stmt_expr, stmt_yield, stmt_while, stmt_if, stmt_index_assign, stmt_field_assign } from "../ast.mjs";
 export function ParsedExpr(v0, v1) {
 return { v0: v0, v1: v1 };
 }
@@ -232,6 +232,51 @@ while (true) {
 j = skip_ws(src, j);
 if (!(j < stringLen(src))) {
 break;
+}
+if (starts_with_at(src, j, "is")) {
+const afterIs = j + 2;
+let boundaryOk = true;
+if (afterIs < stringLen(src) && is_ident_part(stringCharCodeAt(src, afterIs))) {
+boundaryOk = false;
+}
+if (boundaryOk) {
+let k0 = skip_ws(src, afterIs);
+let isNot = false;
+if (starts_with_at(src, k0, "not")) {
+const afterNot = k0 + 3;
+let notBoundaryOk = true;
+if (afterNot < stringLen(src) && is_ident_part(stringCharCodeAt(src, afterNot))) {
+notBoundaryOk = false;
+}
+if (notBoundaryOk) {
+isNot = true;
+k0 = skip_ws(src, afterNot);
+}
+}
+const first = parse_ident(src, k0);
+let k = first.nextPos;
+let variantName = first.text;
+while (true) {
+const t = skip_ws(src, k);
+if (!(t + 1 < stringLen(src))) {
+break;
+}
+if (!(stringCharCodeAt(src, t) == 58 && stringCharCodeAt(src, t + 1) == 58)) {
+break;
+}
+const next = parse_ident(src, t + 2);
+variantName = next.text;
+k = next.nextPos;
+}
+const start = span_start(expr_span(left.expr));
+const end = k;
+const tagExpr = expr_field(span(start, end), left.expr, "tag");
+const rhs = expr_string(span(first.startPos, end), variantName);
+const op = (isNot ? OpNe : OpEq);
+left = ParsedExprAst(expr_binary(span(start, end), op, tagExpr, rhs), end);
+j = left.nextPos;
+continue;
+}
 }
 const c0 = stringCharCodeAt(src, j);
 const c1 = (j + 1 < stringLen(src) ? stringCharCodeAt(src, j + 1) : 0);
@@ -742,6 +787,7 @@ k = parse_keyword(src, k, ")");
 k = parse_keyword(src, k, "{");
 const arms = vec_new();
 let sawDefault = false;
+let sawVariant = false;
 while (true) {
 k = skip_ws(src, k);
 if (!(k < stringLen(src))) {
@@ -766,6 +812,19 @@ k = n.nextPos;
 } else {
 const id = parse_ident(src, k);
 k = id.nextPos;
+let name = id.text;
+while (true) {
+const t = skip_ws(src, k);
+if (!(t + 1 < stringLen(src))) {
+break;
+}
+if (!(stringCharCodeAt(src, t) == 58 && stringCharCodeAt(src, t + 1) == 58)) {
+break;
+}
+const next = parse_ident(src, t + 2);
+name = next.text;
+k = next.nextPos;
+}
 if (id.text == "_") {
 pat = pat_wildcard(span(patStart, k));
 } else {
@@ -775,7 +834,8 @@ pat = pat_bool(span(patStart, k), true);
 if (id.text == "false") {
 pat = pat_bool(span(patStart, k), false);
 } else {
-panic_at(src, patStart, "unsupported match pattern: " + id.text);
+pat = pat_variant(span(patStart, k), name);
+sawVariant = true;
 }
 }
 }
@@ -797,7 +857,7 @@ k = k + 1;
 }
 }
 }
-if (!sawDefault) {
+if (!sawDefault && !sawVariant) {
 panic_at(src, k, "match requires _ arm");
 }
 return ParsedExprAst(expr_match(span(start, k), scrut.expr, arms), k);
@@ -1226,6 +1286,49 @@ while (true) {
 j = skip_ws(src, j);
 if (!(j < stringLen(src))) {
 break;
+}
+if (starts_with_at(src, j, "is")) {
+const afterIs = j + 2;
+let boundaryOk = true;
+if (afterIs < stringLen(src) && is_ident_part(stringCharCodeAt(src, afterIs))) {
+boundaryOk = false;
+}
+if (boundaryOk) {
+let k0 = skip_ws(src, afterIs);
+let isNot = false;
+if (starts_with_at(src, k0, "not")) {
+const afterNot = k0 + 3;
+let notBoundaryOk = true;
+if (afterNot < stringLen(src) && is_ident_part(stringCharCodeAt(src, afterNot))) {
+notBoundaryOk = false;
+}
+if (notBoundaryOk) {
+isNot = true;
+k0 = skip_ws(src, afterNot);
+}
+}
+const first = parse_ident(src, k0);
+let k = first.nextPos;
+let variantName = first.text;
+while (true) {
+const t = skip_ws(src, k);
+if (!(t + 1 < stringLen(src))) {
+break;
+}
+if (!(stringCharCodeAt(src, t) == 58 && stringCharCodeAt(src, t + 1) == 58)) {
+break;
+}
+const next = parse_ident(src, t + 2);
+variantName = next.text;
+k = next.nextPos;
+}
+const q = stringFromCharCode(34);
+const rhs = q + variantName + q;
+const op = (isNot ? "!=" : "==");
+left = ParsedExpr("(" + left.v0 + ".tag " + op + " " + rhs + ")", k);
+j = left.v1;
+continue;
+}
 }
 const c0 = stringCharCodeAt(src, j);
 const c1 = (j + 1 < stringLen(src) ? stringCharCodeAt(src, j + 1) : 0);
@@ -1718,6 +1821,7 @@ k = parse_keyword(src, k, ")");
 k = parse_keyword(src, k, "{");
 let cases = "";
 let def = "";
+let sawVariant = false;
 while (true) {
 k = skip_ws(src, k);
 if (!(k < stringLen(src))) {
@@ -1740,8 +1844,27 @@ pat = "" + n.value;
 k = n.nextPos;
 } else {
 const id = parse_ident(src, k);
-pat = id.text;
 k = id.nextPos;
+let name = id.text;
+while (true) {
+const t = skip_ws(src, k);
+if (!(t + 1 < stringLen(src))) {
+break;
+}
+if (!(stringCharCodeAt(src, t) == 58 && stringCharCodeAt(src, t + 1) == 58)) {
+break;
+}
+const next = parse_ident(src, t + 2);
+name = next.text;
+k = next.nextPos;
+}
+if (id.text == "_" || id.text == "true" || id.text == "false") {
+pat = id.text;
+} else {
+const q = stringFromCharCode(34);
+pat = q + name + q;
+sawVariant = true;
+}
 }
 }
 k = parse_keyword(src, k, "=>");
@@ -1764,10 +1887,14 @@ k = k + 1;
 }
 }
 }
-if (def == "") {
+if (def == "" && !sawVariant) {
 panic_at(src, k, "match requires _ arm");
 }
-return ParsedExpr("(() => { switch (" + scrut.v0 + ") {\n" + cases + "default: return " + def + ";\n} })()", k);
+if (def == "" && sawVariant) {
+def = "(() => { throw new Error(\"non-exhaustive match\"); })()";
+}
+const scrutJs = (sawVariant ? "(" + scrut.v0 + ").tag" : scrut.v0);
+return ParsedExpr("(() => { switch (" + scrutJs + ") {\n" + cases + "default: return " + def + ";\n} })()", k);
 }
 export function parse_mut_opt(src, i) {
 const j = skip_ws(src, i);

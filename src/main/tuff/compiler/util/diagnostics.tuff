@@ -7,6 +7,9 @@ extern from rt::vec use { vec_new, vec_len, vec_push, vec_get };
 // Current file label for error messages (used by panic_at).
 let mut __tuffc_current_file = "<input>";
 
+// Accumulated analyzer errors (reset per file compilation).
+let mut __tuffc_errors = vec_new();
+
 // Struct definitions for struct literals (reset per file compilation).
 let mut __tuffc_struct_defs = vec_new();
 
@@ -15,6 +18,29 @@ class fn StructDef(name: String, fields: Vec<String>) => {} // name, fields(vec)
 
 fn set_current_file(path: String) : Void => {
   __tuffc_current_file = path;
+}
+
+fn reset_errors() : Void => {
+  __tuffc_errors = vec_new();
+}
+
+fn errors_len() : I32 => vec_len(__tuffc_errors)
+
+fn errors_join() : String => {
+  let mut out = "";
+  let mut i = 0;
+  while (i < vec_len(__tuffc_errors)) {
+    if (i > 0) { out = out + "\n\n"; }
+    out = out + vec_get(__tuffc_errors, i);
+    i = i + 1;
+  }
+  out
+}
+
+fn panic_if_errors() : Void => {
+  if (vec_len(__tuffc_errors) > 0) {
+    panic(errors_join());
+  }
 }
 
 fn spaces(n: I32) : String => {
@@ -58,7 +84,7 @@ fn line_col_at(src: String, i: I32) : LineCol => {
   LineCol(line, col)
 }
 
-fn panic_span_help(src: String, start: I32, end: I32, msg: String, help: String) : Void => {
+fn format_span_help(src: String, start: I32, end: I32, msg: String, help: String) : String => {
   // Clamp span for safe slicing (but still report the clamped offset at start).
   let mut s: I32 = start;
   let mut e: I32 = end;
@@ -150,15 +176,33 @@ fn panic_span_help(src: String, start: I32, end: I32, msg: String, help: String)
     out = out + "\n" + "help: " + help;
   }
 
-  panic(out);
+  out
+}
+
+fn panic_span_help(src: String, start: I32, end: I32, msg: String, help: String) : Void => {
+  panic(format_span_help(src, start, end, msg, help));
+}
+
+fn error_span_help(src: String, start: I32, end: I32, msg: String, help: String) : Void => {
+  // Avoid runaway cascades.
+  if (vec_len(__tuffc_errors) >= 50) { yield; }
+  vec_push(__tuffc_errors, format_span_help(src, start, end, msg, help));
 }
 
 fn panic_at_help(src: String, i: I32, msg: String, help: String) : Void => {
   panic_span_help(src, i, i, msg, help);
 }
 
+fn error_at_help(src: String, i: I32, msg: String, help: String) : Void => {
+  error_span_help(src, i, i, msg, help);
+}
+
 fn panic_at(src: String, i: I32, msg: String) : Void => {
   panic_at_help(src, i, msg, "");
+}
+
+fn error_at(src: String, i: I32, msg: String) : Void => {
+  error_at_help(src, i, msg, "");
 }
 
 fn reset_struct_defs() : Void => {

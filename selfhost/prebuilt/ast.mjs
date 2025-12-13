@@ -43,6 +43,7 @@ export const MPWildcard = { tag: "MPWildcard" };
 export const MPInt = { tag: "MPInt" };
 export const MPBool = { tag: "MPBool" };
 export const MPString = { tag: "MPString" };
+export const MPVariant = { tag: "MPVariant" };
 export const SLet = { tag: "SLet" };
 export const SAssign = { tag: "SAssign" };
 export const SExpr = { tag: "SExpr" };
@@ -178,6 +179,9 @@ return ({ tag: "MPBool", span: span, value: value });
 }
 export function pat_string(span, value) {
 return ({ tag: "MPString", span: span, value: value });
+}
+export function pat_variant(span, name) {
+return ({ tag: "MPVariant", span: span, name: name });
 }
 export function mk_match_arm(span, pat, expr) {
 return ({ tag: "MatchArm", span: span, pat: pat, expr: expr });

@@ -8,7 +8,7 @@ This is a **working** list of the smallest, highest-leverage items to tackle nex
 
 ## ✅ Definition of “Done” (Phase 4/5 feature-complete, not optimized)
 
-Phase 4/5 is “done enough to move on” when **all** items below are true. This is deliberately **not** an optimization bar; it’s a *feature-completeness + stability* bar.
+Phase 4/5 is “done enough to move on” when **all** items below are true. This is deliberately **not** an optimization bar; it’s a _feature-completeness + stability_ bar.
 
 ### Phase 4 (Analyzer) — done when
 
@@ -16,31 +16,31 @@ Phase 4/5 is “done enough to move on” when **all** items below are true. Thi
 
 - [ ] **No-shadowing** is enforced everywhere (already true today).
 - [ ] **Mutability rules** are enforced:
-	- assigning to immutable bindings is rejected
-	- assigning through immutable bindings (e.g. `p.x = 1` when `p` is immutable) is rejected
+  - assigning to immutable bindings is rejected
+  - assigning through immutable bindings (e.g. `p.x = 1` when `p` is immutable) is rejected
 - [ ] **Function checking** is present and stable:
-	- arity checks for known functions
-	- when types are enforceable: argument type checks + return type checks
-	- generic functions: explicit specialization rules (no unspecialized generic as value)
+  - arity checks for known functions
+  - when types are enforceable: argument type checks + return type checks
+  - generic functions: explicit specialization rules (no unspecialized generic as value)
 - [ ] **Struct checking** is present:
-	- unknown struct rejected
-	- wrong number of literal fields rejected
-	- field existence checks on access
-	- (when annotated) field value type checking
+  - unknown struct rejected
+  - wrong number of literal fields rejected
+  - field existence checks on access
+  - (when annotated) field value type checking
 - [ ] **Tuple checking** is present:
-	- tuple literal arity preserved
-	- `.0/.1/...` indexing is validated
+  - tuple literal arity preserved
+  - `.0/.1/...` indexing is validated
 - [ ] **Union support is present**:
-	- narrowing (`is`, `is not`, tag comparisons, negation forms) gates payload access
-	- union-variant match patterns supported
-	- exhaustiveness-lite match check (all variants or `_`)
-	- payload typing under narrowing is good enough to typecheck common code (at least typed `let` initializers)
+  - narrowing (`is`, `is not`, tag comparisons, negation forms) gates payload access
+  - union-variant match patterns supported
+  - exhaustiveness-lite match check (all variants or `_`)
+  - payload typing under narrowing is good enough to typecheck common code (at least typed `let` initializers)
 - [ ] **Array initialization tracking** matches the language rule for literal indices (current scope) and is stable.
 
 **B. Diagnostics behavior**
 
-- [ ] The analyzer **does not abort on the first error**. It should collect and report multiple errors per file (parser-like behavior).
-- [ ] Diagnostics include file/line/column and a code frame (existing diagnostics format), and are stable across runs.
+- [x] The analyzer **does not abort on the first error**. It collects and reports multiple errors per file (parser-like behavior).
+- [x] Diagnostics include file/line/column and a code frame (existing diagnostics format), and are stable across runs.
 
 **C. Self-host stability gates**
 
@@ -60,30 +60,31 @@ Phase 4/5 is “done enough to move on” when **all** items below are true. Thi
 - [ ] Operator precedence is correct (binary/unary/call/index/field).
 - [ ] Side-effecting statements are preserved (no dropped `SExpr`).
 - [ ] `match` emission works for:
-	- literals (`I32`, `Bool`, `String`)
-	- union variant matches (switching on `.tag`)
+  - literals (`I32`, `Bool`, `String`)
+  - union variant matches (switching on `.tag`)
 - [ ] `if` as expression is emitted correctly (including block branches).
 - [ ] `while` loops, `loop`, `break`, `continue`, and `yield` emit correctly.
 
 **C. Modules and compilation**
 
 - [ ] `compile_project` correctly emits multi-file ES module graphs:
-	- `from X use { ... }` resolves and produces correct relative imports
-	- `extern from X use { ... }` emits the correct runtime import shape
-	- output paths are stable and deterministic
+  - `from X use { ... }` resolves and produces correct relative imports
+  - `extern from X use { ... }` emits the correct runtime import shape
+  - output paths are stable and deterministic
 
 ### “We can move on” line
 
-When Phase 4 and Phase 5a meet the above, we stop calling them “in progress” and move the project’s attention to *new* features (stdlib growth, richer pattern matching, destructuring, constant folding, etc.).
+When Phase 4 and Phase 5a meet the above, we stop calling them “in progress” and move the project’s attention to _new_ features (stdlib growth, richer pattern matching, destructuring, constant folding, etc.).
 
 ## Phase 4 (Analyzer) — smallest next wins
 
 ### P0 — immediate correctness + developer experience
 
-1. **Stop panicking on first analyzer error; collect diagnostics**
+1. **Stop panicking on first analyzer error; collect diagnostics** ✅
 
 - Current analyzer uses `panic_at(...)`, which aborts analysis and limits error feedback.
 - Target behavior: accumulate multiple errors per file and report them together (like parsing).
+  - Implemented: analyzer records errors via `error_at(...)` and compilation flushes once at end.
 
 Suggested tests:
 
