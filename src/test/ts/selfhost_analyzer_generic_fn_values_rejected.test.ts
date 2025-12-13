@@ -14,7 +14,9 @@ async function buildStage2Compiler(outDir: string) {
   await mkdir(stage1Dir, { recursive: true });
   await mkdir(stage2Dir, { recursive: true });
 
-  const { entryFile: stage1File } = await stagePrebuiltSelfhostCompiler(stage1Dir);
+  const { entryFile: stage1File } = await stagePrebuiltSelfhostCompiler(
+    stage1Dir
+  );
 
   // runtime for stage2 output
   const stage2RtDir = resolve(stage2Dir, "rt");
@@ -61,14 +63,18 @@ describe("selfhost analyzer (generic function values)", () => {
       "utf8"
     );
 
-    expect(() => tuffc2.main([badIn, badOut])).toThrow(/generic|type\s*arg|specializ|type\s*param/i);
+    expect(() => tuffc2.main([badIn, badOut])).toThrow(
+      /generic|type\s*arg|specializ|type\s*param/i
+    );
   });
 
   test("rejects extracting unspecialized generic method to a value", async () => {
     const outDir = resolve(
       ".dist",
       "selfhost-analyzer-generic-fn-values",
-      `generic-method-value-${Date.now()}-${Math.random().toString(16).slice(2)}`
+      `generic-method-value-${Date.now()}-${Math.random()
+        .toString(16)
+        .slice(2)}`
     );
 
     const { stage2Dir, tuffc2 } = await buildStage2Compiler(outDir);
@@ -93,6 +99,8 @@ describe("selfhost analyzer (generic function values)", () => {
       "utf8"
     );
 
-    expect(() => tuffc2.main([badIn, badOut])).toThrow(/generic|type\s*arg|specializ|type\s*param/i);
+    expect(() => tuffc2.main([badIn, badOut])).toThrow(
+      /generic|type\s*arg|specializ|type\s*param/i
+    );
   });
 });
