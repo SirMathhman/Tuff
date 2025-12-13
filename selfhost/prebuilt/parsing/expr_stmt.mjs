@@ -33,6 +33,60 @@ return { stmts: stmts, nextPos: nextPos };
 export function ParsedExprListAst(items, nextPos) {
 return { items: items, nextPos: nextPos };
 }
+export function find_matching_rparen(src, openPos) {
+let i = openPos;
+let depth = 0;
+while ((i < stringLen(src))) {
+const ch = stringCharCodeAt(src, i);
+if ((ch == 34)) {
+i = (i + 1);
+while ((i < stringLen(src))) {
+const c = stringCharCodeAt(src, i);
+if ((c == 92)) {
+i = (i + 2);
+continue;
+}
+if ((c == 34)) {
+i = (i + 1);
+break;
+}
+i = (i + 1);
+}
+continue;
+}
+if ((ch == 39)) {
+i = (i + 1);
+while ((i < stringLen(src))) {
+const c = stringCharCodeAt(src, i);
+if ((c == 92)) {
+i = (i + 2);
+continue;
+}
+if ((c == 39)) {
+i = (i + 1);
+break;
+}
+i = (i + 1);
+}
+continue;
+}
+if ((ch == 40)) {
+depth = (depth + 1);
+i = (i + 1);
+continue;
+}
+if ((ch == 41)) {
+depth = (depth - 1);
+if ((depth == 0)) {
+return i;
+}
+i = (i + 1);
+continue;
+}
+i = (i + 1);
+}
+return (-1);
+}
 export function parse_lambda_expr_ast(src, i) {
 const start = skip_ws(src, i);
 let k = parse_keyword(src, start, "(");
@@ -45,11 +99,16 @@ k = (k + 1);
 while (true) {
 const name = parse_ident(src, k);
 vec_push(params, name.text);
-k = name.nextPos;
+k = skip_ws(src, name.nextPos);
+let tyAnn = "";
+if (((k < stringLen(src)) && (stringCharCodeAt(src, k) == 58))) {
 k = parse_keyword(src, k, ":");
 const ty = parse_type_expr(src, k);
-vec_push(paramTyAnns, ty.v0);
-k = skip_ws(src, ty.v1);
+tyAnn = ty.v0;
+k = ty.v1;
+}
+vec_push(paramTyAnns, tyAnn);
+k = skip_ws(src, k);
 if ((!(k < stringLen(src)))) {
 panic_at(src, k, "expected ')' in lambda params");
 }
@@ -70,10 +129,14 @@ break;
 panic_at(src, k, "expected ',' or ')' in lambda params");
 }
 }
+k = skip_ws(src, k);
+let retTyAnn = "";
+if (((k < stringLen(src)) && (stringCharCodeAt(src, k) == 58))) {
 k = parse_keyword(src, k, ":");
 const ret = parse_type_expr(src, k);
-const retTyAnn = ret.v0;
+retTyAnn = ret.v0;
 k = ret.v1;
+}
 k = parse_keyword(src, k, "=>");
 const t = skip_ws(src, k);
 const body = (((t < stringLen(src)) && (stringCharCodeAt(src, t) == 123)) ? parse_block_expr_ast(src, k) : parse_expr_ast(src, k));
@@ -587,17 +650,13 @@ const lit = parse_string_lit_value(src, j);
 return ParsedExprAst(expr_string(span(j, lit.nextPos), lit.text), lit.nextPos);
 }
 if ((c == 40)) {
-const t0 = skip_ws(src, (j + 1));
-if (((t0 < stringLen(src)) && (stringCharCodeAt(src, t0) == 41))) {
-const t1 = skip_ws(src, (t0 + 1));
-if (((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 58))) {
+const rp = find_matching_rparen(src, j);
+if ((rp != (-1))) {
+const after = skip_ws(src, (rp + 1));
+if (((((after + 1) < stringLen(src)) && (stringCharCodeAt(src, after) == 61)) && (stringCharCodeAt(src, (after + 1)) == 62))) {
 return parse_lambda_expr_ast(src, j);
 }
-}
-if (((t0 < stringLen(src)) && is_ident_start(stringCharCodeAt(src, t0)))) {
-const name = parse_ident(src, t0);
-const t1 = skip_ws(src, name.nextPos);
-if (((t1 < stringLen(src)) && (stringCharCodeAt(src, t1) == 58))) {
+if (((after < stringLen(src)) && (stringCharCodeAt(src, after) == 58))) {
 return parse_lambda_expr_ast(src, j);
 }
 }

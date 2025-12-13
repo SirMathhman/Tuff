@@ -73,7 +73,8 @@ fn ty_fn_type(paramTyAnns, retTyAnn: String) : String => {
     out = out + normalize_ty_ann(if (t == "") ty_unknown() else t);
     i = i + 1;
   }
-  out = out + ")->" + normalize_ty_ann(retTyAnn);
+  let rt = if (retTyAnn == "") ty_unknown() else normalize_ty_ann(retTyAnn);
+  out = out + ")->" + rt;
   out
 }
 

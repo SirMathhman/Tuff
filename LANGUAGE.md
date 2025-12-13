@@ -654,28 +654,31 @@ let result = apply(multiply, 3, 4);
 
 You can define functions inline by omitting the function name.
 
-Current selfhost compiler subset syntax (typed lambdas):
+Current selfhost compiler subset syntax:
 
 ```tuff
-(param: Type, ...) : ReturnType => expressionOrBlock
+(param (: Type)?, ...) (: ReturnType)? => expressionOrBlock
 ```
 
 Notes:
 
-- Parameter type annotations are required.
-- Return type annotation is required.
-- Return type inference for lambdas is planned but not implemented yet.
+- Parameter type annotations are optional (when omitted, the analyzer treats the parameter type as `Unknown` in Phase 4).
+- Return type annotation is optional (when omitted, the analyzer does not enforce the lambda's return type in Phase 4).
+- Parsing disambiguation: `( ... )` is treated as a lambda only when the matching `)` is followed by `=>` or by `: ... =>`.
 
 ```tuff
 // Lambda assigned to a variable
-let add : (I32, I32) => I32 = (a: I32, b: I32) : I32 => { a + b };
+let add : (I32, I32) => I32 = (a: I32, b: I32) => { a + b };
 
 // Lambda passed directly as an argument
 fn apply(f: (I32, I32) => I32, a: I32, b: I32) : I32 => { f(a, b) }
 let result = apply((x: I32, y: I32) : I32 => { x * y }, 5, 6);
 
 // Lambda with expression body
-let double : (I32) => I32 = (x: I32) : I32 => x * 2;
+let double : (I32) => I32 = (x: I32) => x * 2;
+
+// Lambda with untyped params (allowed in the selfhost subset)
+let add2 = (a, b) => a + b;
 ```
 
 #### Capturing variables (closures)

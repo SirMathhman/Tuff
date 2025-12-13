@@ -27,6 +27,26 @@ fn main() : I32 => {
     expect_eq("inline", v, 105)
   });
 
+  it("untyped lambda params", {
+    let add = (a, b) => a + b;
+    expect_eq("add(2,3)", add(2, 3), 5)
+  });
+
+  it("untyped lambda no params", {
+    let ten = () => 10;
+    expect_eq("ten()", ten(), 10)
+  });
+
+  it("typed params, inferred return", {
+    let inc = (x: I32) => x + 1;
+    expect_eq("inc(10)", inc(10), 11)
+  });
+
+  it("mixed typed/untyped params", {
+    let add = (a: I32, b) => a + b;
+    expect_eq("add(1,2)", add(1, 2), 3)
+  });
+
   summary();
   status()
 }

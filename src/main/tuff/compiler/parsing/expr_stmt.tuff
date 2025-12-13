@@ -107,6 +107,61 @@ class fn ParsedStmtAst(stmt, nextPos: I32) => {}
 class fn ParsedStmtsAst(stmts, nextPos: I32) => {}
 class fn ParsedExprListAst(items, nextPos: I32) => {}
 
+fn find_matching_rparen(src: String, openPos: I32) : I32 => {
+  // Returns the index of the ')' that closes the '(' at openPos, or -1.
+  // This is used only for lambda disambiguation.
+  let mut i = openPos;
+  let mut depth = 0;
+  while (i < stringLen(src)) {
+    let ch = stringCharCodeAt(src, i);
+
+    // Skip string literals (minimal escape handling).
+    if (ch == 34) { // '"'
+      i = i + 1;
+      while (i < stringLen(src)) {
+        let c = stringCharCodeAt(src, i);
+        if (c == 92) { // '\\'
+          i = i + 2;
+          continue;
+        }
+        if (c == 34) { i = i + 1; break; }
+        i = i + 1;
+      }
+      continue;
+    }
+
+    // Skip char literals (minimal escape handling).
+    if (ch == 39) { // '\''
+      i = i + 1;
+      while (i < stringLen(src)) {
+        let c = stringCharCodeAt(src, i);
+        if (c == 92) { // '\\'
+          i = i + 2;
+          continue;
+        }
+        if (c == 39) { i = i + 1; break; }
+        i = i + 1;
+      }
+      continue;
+    }
+
+    if (ch == 40) { // '('
+      depth = depth + 1;
+      i = i + 1;
+      continue;
+    }
+    if (ch == 41) { // ')'
+      depth = depth - 1;
+      if (depth == 0) { yield i; }
+      i = i + 1;
+      continue;
+    }
+
+    i = i + 1;
+  }
+  -1
+}
+
 // Lambda params list parser is only used when we've already determined this is
 // a lambda expression (see `parse_primary_ast` disambiguation).
 fn parse_lambda_expr_ast(src: String, i: I32) : ParsedExprAst => {
@@ -121,15 +176,22 @@ fn parse_lambda_expr_ast(src: String, i: I32) : ParsedExprAst => {
   if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) { // ')'
     k = k + 1;
   } else {
-    // One or more typed params: name ':' Type
+    // One or more params: name (':' Type)?
     while (true) {
       let name = parse_ident(src, k);
       vec_push(params, name.text);
-      k = name.nextPos;
-      k = parse_keyword(src, k, ":");
-      let ty = parse_type_expr(src, k);
-      vec_push(paramTyAnns, ty.v0);
-      k = skip_ws(src, ty.v1);
+      k = skip_ws(src, name.nextPos);
+
+      // Optional parameter type annotation.
+      let mut tyAnn = "";
+      if (k < stringLen(src) && stringCharCodeAt(src, k) == 58) { // ':'
+        k = parse_keyword(src, k, ":");
+        let ty = parse_type_expr(src, k);
+        tyAnn = ty.v0;
+        k = ty.v1;
+      }
+      vec_push(paramTyAnns, tyAnn);
+      k = skip_ws(src, k);
 
       if (!(k < stringLen(src))) { panic_at(src, k, "expected ')' in lambda params"); }
       let ch = stringCharCodeAt(src, k);
@@ -151,11 +213,16 @@ fn parse_lambda_expr_ast(src: String, i: I32) : ParsedExprAst => {
     }
   }
 
-  // Return type annotation is required in this first implementation.
-  k = parse_keyword(src, k, ":");
-  let ret = parse_type_expr(src, k);
-  let retTyAnn = ret.v0;
-  k = ret.v1;
+  // Optional return type annotation: `: Type`
+  k = skip_ws(src, k);
+  let mut retTyAnn = "";
+  if (k < stringLen(src) && stringCharCodeAt(src, k) == 58) { // ':'
+    k = parse_keyword(src, k, ":");
+    let ret = parse_type_expr(src, k);
+    retTyAnn = ret.v0;
+    k = ret.v1;
+  }
+
   k = parse_keyword(src, k, "=>");
 
   let t = skip_ws(src, k);
@@ -617,20 +684,18 @@ fn parse_primary_ast(src: String, i: I32) : ParsedExprAst => {
 
   if (c == 40) { // '('
     // Disambiguate lambdas from parenthesized expressions / tuples.
-    // Lambda syntax starts with either:
-    //   () : Ret => ...
-    //   (name: Ty, ...) : Ret => ...
-    let t0 = skip_ws(src, j + 1);
-    if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 41) { // ')'
-      let t1 = skip_ws(src, t0 + 1);
-      if (t1 < stringLen(src) && stringCharCodeAt(src, t1) == 58) { // ':'
+    // Lambdas are recognized by what comes *after* the matching ')':
+    //   (params) => body
+    //   (params) : Ret => body
+    let rp = find_matching_rparen(src, j);
+    if (rp != -1) {
+      let after = skip_ws(src, rp + 1);
+      // '=>'
+      if (after + 1 < stringLen(src) && stringCharCodeAt(src, after) == 61 && stringCharCodeAt(src, after + 1) == 62) {
         yield parse_lambda_expr_ast(src, j);
       }
-    }
-    if (t0 < stringLen(src) && is_ident_start(stringCharCodeAt(src, t0))) {
-      let name = parse_ident(src, t0);
-      let t1 = skip_ws(src, name.nextPos);
-      if (t1 < stringLen(src) && stringCharCodeAt(src, t1) == 58) { // ':'
+      // ':' (optional return annotation) followed by '=>'
+      if (after < stringLen(src) && stringCharCodeAt(src, after) == 58) {
         yield parse_lambda_expr_ast(src, j);
       }
     }

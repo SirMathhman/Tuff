@@ -73,7 +73,8 @@ const t = vec_get(paramTyAnns, i);
 out = (out + normalize_ty_ann(((t == "") ? ty_unknown() : t)));
 i = (i + 1);
 }
-out = ((out + ")->") + normalize_ty_ann(retTyAnn));
+const rt = ((retTyAnn == "") ? ty_unknown() : normalize_ty_ann(retTyAnn));
+out = ((out + ")->") + rt);
 return out;
 }
 export function normalize_ty_ann(t) {
