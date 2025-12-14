@@ -55,7 +55,10 @@ struct Binding {
   name: String,
   isMut: Bool,
   tyTag: String,
-  deprecatedReason: String
+  deprecatedReason: String,
+  declPos: I32,
+  used: Bool,
+  isParam: Bool
 }
 
 // Generic substitution entry: T -> I32, etc.
@@ -87,7 +90,8 @@ out fn mk_fn_sig(name: String, deprecatedReason: String, typeParams: Vec<String>
 fn mk_union_def(name: String, typeParams: Vec<String>, variants: Vec<UnionVariantInfo>) =>
   UnionDef { "UnionDef", name, "", typeParams, variants }
 
-fn mk_binding(name: String, isMut: Bool, tyTag: String, deprecatedReason: String) => Binding { "Binding", name, isMut, tyTag, deprecatedReason }
+fn mk_binding(name: String, isMut: Bool, tyTag: String, deprecatedReason: String, declPos: I32, used: Bool, isParam: Bool) =>
+  Binding { "Binding", name, isMut, tyTag, deprecatedReason, declPos, used, isParam }
 fn mk_subst(name: String, ty: String) => TySubst { "TySubst", name, ty }
 fn mk_narrowed_tag(name: String, variant: String) => NarrowedTag { "NarrowedTag", name, variant }
 
@@ -897,7 +901,7 @@ fn declare_name(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, na
     error_at(src, pos, "shadowing not allowed: " + name);
   }
   let cur = vec_get(scopes, depth - 1);
-  vec_push(cur, mk_binding(name, isMut, tyTag, ""));
+  vec_push(cur, mk_binding(name, isMut, tyTag, "", pos, false, false));
 }
 
 fn declare_name_deprecated(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, name: String, isMut: Bool, tyTag: String, deprecatedReason: String) : Void => {
@@ -906,7 +910,7 @@ fn declare_name_deprecated(src: String, pos: I32, scopes: Vec<Vec<Binding>>, dep
     error_at(src, pos, "shadowing not allowed: " + name);
   }
   let cur = vec_get(scopes, depth - 1);
-  vec_push(cur, mk_binding(name, isMut, tyTag, deprecatedReason));
+  vec_push(cur, mk_binding(name, isMut, tyTag, deprecatedReason, pos, false, false));
 }
 
 fn scope_contains(scope: Vec<Binding>, name: String) : Bool => {
@@ -927,7 +931,7 @@ fn declare_local_name(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I
     error_at(src, pos, "duplicate name: " + name);
     yield;
   }
-  vec_push(cur, mk_binding(name, isMut, tyTag, ""));
+  vec_push(cur, mk_binding(name, isMut, tyTag, "", pos, false, true));
 }
 
 fn declare_local_name_deprecated(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, name: String, isMut: Bool, tyTag: String, deprecatedReason: String) : Void => {
@@ -938,7 +942,7 @@ fn declare_local_name_deprecated(src: String, pos: I32, scopes: Vec<Vec<Binding>
     error_at(src, pos, "duplicate name: " + name);
     yield;
   }
-  vec_push(cur, mk_binding(name, isMut, tyTag, deprecatedReason));
+  vec_push(cur, mk_binding(name, isMut, tyTag, deprecatedReason, pos, false, true));
 }
 
 fn lookup_binding(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, name: String) : Binding => {
@@ -954,7 +958,7 @@ fn lookup_binding(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, 
     si = si + 1;
   }
   error_at(src, pos, "unknown name: " + name);
-  mk_binding(name, false, ty_unknown(), "")
+  mk_binding(name, false, ty_unknown(), "", pos, false, false)
 }
 
 fn update_binding_ty(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, name: String, newTyTag: String) : Void => {
@@ -965,7 +969,7 @@ fn update_binding_ty(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I3
     while (bi < vec_len(scope)) {
       let b = vec_get(scope, bi);
       if (b.name == name) {
-        vec_set(scope, bi, mk_binding(b.name, b.isMut, newTyTag, b.deprecatedReason));
+        vec_set(scope, bi, mk_binding(b.name, b.isMut, newTyTag, b.deprecatedReason, b.declPos, b.used, b.isParam));
         yield;
       }
       bi = bi + 1;
@@ -973,6 +977,43 @@ fn update_binding_ty(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I3
     si = si + 1;
   }
   error_at(src, pos, "unknown name: " + name);
+}
+
+fn binding_name_is_intentionally_unused(name: String) : Bool => {
+  if (name == "_") { yield true; }
+  if (stringLen(name) > 0 && stringCharCodeAt(name, 0) == 95) { yield true; }
+  false
+}
+
+fn mark_binding_used(scopes: Vec<Vec<Binding>>, depth: I32, name: String) : Void => {
+  let mut si = 0;
+  while (si < depth) {
+    let scope = vec_get(scopes, si);
+    let mut bi = 0;
+    while (bi < vec_len(scope)) {
+      let b = vec_get(scope, bi);
+      if (b.name == name) {
+        if (!b.used) {
+          vec_set(scope, bi, mk_binding(b.name, b.isMut, b.tyTag, b.deprecatedReason, b.declPos, true, b.isParam));
+        }
+        yield;
+      }
+      bi = bi + 1;
+    }
+    si = si + 1;
+  }
+}
+
+fn warn_unused_locals_in_scope(src: String, scopes: Vec<Vec<Binding>>, depth: I32) : Void => {
+  let scope = vec_get(scopes, depth - 1);
+  let mut bi = 0;
+  while (bi < vec_len(scope)) {
+    let b = vec_get(scope, bi);
+    if (!b.used && !b.isParam && !binding_name_is_intentionally_unused(b.name)) {
+      warn_at(src, b.declPos, "unused local: " + b.name);
+    }
+    bi = bi + 1;
+  }
 }
 
 fn infer_lookup_ty(scopes: Vec<Vec<Binding>>, depth: I32, name: String) : String => {
@@ -1611,6 +1652,7 @@ fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns
 
     // Usage-site deprecation warning.
     if (!(e.name == "true") && !(e.name == "false") && !(e.name == "continue") && !(e.name == "break")) {
+      mark_binding_used(scopes, depth, e.name);
       let b = lookup_binding(src, span_start(e.span), scopes, depth, e.name);
       if (b.deprecatedReason != "") {
         warn_at(src, span_start(e.span), "use of deprecated symbol " + e.name + " - " + b.deprecatedReason);
@@ -1643,6 +1685,8 @@ fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns
       let bodyTy = infer_expr_type(src, structs, fns, scopes, newDepth, e.body);
       require_type_compatible(src, span_start(e.span), "lambda return", structs, expected, bodyTy);
     }
+
+    warn_unused_locals_in_scope(src, scopes, newDepth);
     yield;
   }
 
@@ -1717,6 +1761,8 @@ fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns
     let newDepth = scopes_enter(scopes, depth);
     analyze_stmts(src, structs, unions, fns, scopes, newDepth, narrowed, e.body);
     analyze_expr(src, structs, unions, fns, scopes, newDepth, narrowed, e.tail);
+
+    warn_unused_locals_in_scope(src, scopes, newDepth);
     yield;
   }
 
@@ -1937,6 +1983,7 @@ fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns
     if (!b.isMut) {
       error_at(src, span_start(s.span), "cannot assign to immutable binding: " + s.name);
     }
+    mark_binding_used(scopes, depth, s.name);
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.value);
     yield;
   }
@@ -1956,6 +2003,8 @@ fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.cond);
     let newDepth = scopes_enter(scopes, depth);
     analyze_stmts(src, structs, unions, fns, scopes, newDepth, narrowed, s.body);
+
+    warn_unused_locals_in_scope(src, scopes, newDepth);
     yield;
   }
 
@@ -1977,6 +2026,8 @@ fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns
       let thenDepth = scopes_enter(scopes, depth);
       analyze_stmts(src, structs, unions, fns, scopes, thenDepth, thenNar, s.thenBody);
 
+      warn_unused_locals_in_scope(src, scopes, thenDepth);
+
       if (s.hasElse) {
         let mut elseNar = narrowed;
         if (nar.elseVariant != "") {
@@ -1986,6 +2037,8 @@ fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns
         }
         let elseDepth = scopes_enter(scopes, depth);
         analyze_stmts(src, structs, unions, fns, scopes, elseDepth, elseNar, s.elseBody);
+
+        warn_unused_locals_in_scope(src, scopes, elseDepth);
       }
       yield;
     }
@@ -1993,9 +2046,13 @@ fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns
     let thenDepth = scopes_enter(scopes, depth);
     analyze_stmts(src, structs, unions, fns, scopes, thenDepth, narrowed, s.thenBody);
 
+    warn_unused_locals_in_scope(src, scopes, thenDepth);
+
     if (s.hasElse) {
       let elseDepth = scopes_enter(scopes, depth);
       analyze_stmts(src, structs, unions, fns, scopes, elseDepth, narrowed, s.elseBody);
+
+      warn_unused_locals_in_scope(src, scopes, elseDepth);
     }
 
     yield;
@@ -2115,6 +2172,8 @@ fn analyze_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
       si = si + 1;
     }
   }
+
+  warn_unused_locals_in_scope(src, outerScopes, depth);
 }
 
 fn analyze_class_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, outerScopes: Vec<Vec<Binding>>, outerDepth: I32, d: DClassFn) : Void => {
@@ -2154,6 +2213,8 @@ fn analyze_class_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<Union
       si = si + 1;
     }
   }
+
+  warn_unused_locals_in_scope(src, outerScopes, depth);
 }
 
 fn analyze_module(src: String, d: DModule) : Void => {

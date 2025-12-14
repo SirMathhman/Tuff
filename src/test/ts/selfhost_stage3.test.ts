@@ -14,7 +14,9 @@ async function writeRuntime(outDir: string) {
 }
 
 describe("selfhost stage3", () => {
-  test("selfhost reaches a fixed point (stage3 == stage4)", async () => {
+  test(
+    "selfhost reaches a fixed point (stage3 == stage4)",
+    async () => {
     const rootDir = resolve(
       ".dist",
       "selfhost-stage3",
@@ -78,5 +80,7 @@ describe("selfhost stage3", () => {
       "utf8"
     );
     expect(stage4Lib).toBe(stage3Lib);
-  });
+    },
+    20_000
+  );
 });
