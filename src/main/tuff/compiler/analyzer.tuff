@@ -1849,13 +1849,19 @@ fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns
 
 fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, s: Any) : Void => {
   if (s.tag == "SLet") {
+    let depReason = deprecation_reason_before(src, span_start(s.span));
+
     // Predeclare lambda lets so recursion/mutual recursion works.
     if (s.init.tag == "ELambda") {
       let initTy0 = infer_expr_type(src, structs, fns, scopes, depth, s.init);
       let bindTy = if (s.tyAnn != "") normalize_ty_ann(s.tyAnn) else initTy0;
       let cur = vec_get(scopes, depth - 1);
       if (!scope_contains(cur, s.name)) {
-        declare_name(src, span_start(s.span), scopes, depth, s.name, s.isMut, bindTy);
+        if (depReason != "") {
+          declare_name_deprecated(src, span_start(s.span), scopes, depth, s.name, s.isMut, bindTy, depReason);
+        } else {
+          declare_name(src, span_start(s.span), scopes, depth, s.name, s.isMut, bindTy);
+        }
       }
 
       analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.init);
@@ -1886,10 +1892,18 @@ fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns
 
     if (s.tyAnn != "") {
       require_type_compatible(src, span_start(s.span), "let " + s.name, structs, s.tyAnn, initTy);
-      declare_name(src, span_start(s.span), scopes, depth, s.name, s.isMut, normalize_ty_ann(s.tyAnn));
+      if (depReason != "") {
+        declare_name_deprecated(src, span_start(s.span), scopes, depth, s.name, s.isMut, normalize_ty_ann(s.tyAnn), depReason);
+      } else {
+        declare_name(src, span_start(s.span), scopes, depth, s.name, s.isMut, normalize_ty_ann(s.tyAnn));
+      }
       yield;
     }
-    declare_name(src, span_start(s.span), scopes, depth, s.name, s.isMut, initTy);
+    if (depReason != "") {
+      declare_name_deprecated(src, span_start(s.span), scopes, depth, s.name, s.isMut, initTy, depReason);
+    } else {
+      declare_name(src, span_start(s.span), scopes, depth, s.name, s.isMut, initTy);
+    }
     yield;
   }
 
@@ -2149,12 +2163,17 @@ fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
   }
 
   if (d.tag == "DTypeUnion") {
+    let depReason = deprecation_reason_before(src, span_start(d.span));
     // Union variants are value constructors.
     let mut vi = 0;
     let infos = vec_new();
     while (vi < vec_len(d.variants)) {
       let v = vec_get(d.variants, vi);
-      declare_name(src, span_start(v.span), scopes, depth, v.name, false, ty_unknown());
+      if (depReason != "") {
+        declare_name_deprecated(src, span_start(v.span), scopes, depth, v.name, false, ty_unknown(), depReason);
+      } else {
+        declare_name(src, span_start(v.span), scopes, depth, v.name, false, ty_unknown());
+      }
       vec_push(infos, mk_union_variant_info(v.name, v.hasPayload, v.payloadTyAnns));
       vi = vi + 1;
     }
@@ -2250,7 +2269,12 @@ fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
   }
 
   if (d.tag == "DModule") {
-    declare_name(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown());
+    let depReason = deprecation_reason_before(src, span_start(d.span));
+    if (depReason != "") {
+      declare_name_deprecated(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown(), depReason);
+    } else {
+      declare_name(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown());
+    }
     yield;
   }
 }
@@ -2275,12 +2299,21 @@ fn analyze_decl_body(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>
       }
     }
 
+    let depReason = deprecation_reason_before(src, span_start(d.span));
     if (d.tyAnn != "") {
       require_type_compatible(src, span_start(d.span), "let " + d.name, structs, d.tyAnn, initTy);
-      declare_name(src, span_start(d.span), scopes, depth, d.name, d.isMut, normalize_ty_ann(d.tyAnn));
+      if (depReason != "") {
+        declare_name_deprecated(src, span_start(d.span), scopes, depth, d.name, d.isMut, normalize_ty_ann(d.tyAnn), depReason);
+      } else {
+        declare_name(src, span_start(d.span), scopes, depth, d.name, d.isMut, normalize_ty_ann(d.tyAnn));
+      }
       yield;
     }
-    declare_name(src, span_start(d.span), scopes, depth, d.name, d.isMut, initTy);
+    if (depReason != "") {
+      declare_name_deprecated(src, span_start(d.span), scopes, depth, d.name, d.isMut, initTy, depReason);
+    } else {
+      declare_name(src, span_start(d.span), scopes, depth, d.name, d.isMut, initTy);
+    }
     yield;
   }
 
