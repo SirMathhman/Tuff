@@ -5,7 +5,7 @@
 extern from rt::stdlib use { println, readTextFile, stringLen, stringCharCodeAt, stringSlice };
 extern from rt::vec use { vec_len, vec_get };
 
-from tuffc_lib use { compile_project };
+from tuffc_lib use { compile_project, lint_project };
 from analyzer use { set_lint_options };
 
 fn is_ascii_ws(ch: I32) : Bool => ch == 32 || ch == 9 || ch == 10 || ch == 13
@@ -104,8 +104,10 @@ fn parse_lint_config(src: String, warnUnusedLocals0: Bool, warnUnusedParams0: Bo
 
 fn print_usage() : Void => {
   println("usage: tuffc [options] <in.tuff> <out.mjs>");
+  println("       tuffc [options] --lint-only <in.tuff>");
   println("options:");
   println("  --config <path>                Read config file (key = value)");
+  println("  --lint-only                    Lint only (parse+analyze), do not emit JS");
   println("  --warn-unused-locals            Enable unused local warnings");
   println("  --warn-unused-params            Enable unused parameter warnings");
   println("  --no-warn-unused-locals         Disable unused local warnings");
@@ -119,6 +121,7 @@ fn main(argv: Vec<String>) => {
   // drowning tests/bootstrapping output in warnings.
   let mut warnUnusedLocals = false;
   let mut warnUnusedParams = false;
+  let mut lintOnly = false;
   let mut configPath = "";
 
   let mut inPath = "";
@@ -132,6 +135,8 @@ fn main(argv: Vec<String>) => {
     if (a == "--no-warn-unused-params") { warnUnusedParams = false; i = i + 1; continue; }
     if (a == "--warn-unused-locals") { warnUnusedLocals = true; i = i + 1; continue; }
     if (a == "--warn-unused-params") { warnUnusedParams = true; i = i + 1; continue; }
+
+    if (a == "--lint-only") { lintOnly = true; i = i + 1; continue; }
 
     if (a == "--config") {
       if (i + 1 >= vec_len(argv)) {
@@ -159,9 +164,16 @@ fn main(argv: Vec<String>) => {
     yield 1;
   }
 
-  if (inPath == "" || outPath == "") {
-    print_usage();
-    yield 1;
+  if (lintOnly) {
+    if (inPath == "") {
+      print_usage();
+      yield 1;
+    }
+  } else {
+    if (inPath == "" || outPath == "") {
+      print_usage();
+      yield 1;
+    }
   }
 
   if (configPath != "") {
@@ -172,6 +184,10 @@ fn main(argv: Vec<String>) => {
   }
 
   set_lint_options(warnUnusedLocals, warnUnusedParams);
-  compile_project(inPath, outPath);
+  if (lintOnly) {
+    lint_project(inPath);
+  } else {
+    compile_project(inPath, outPath);
+  }
   0
 }

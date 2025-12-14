@@ -129,9 +129,7 @@ describe("selfhost analyzer linting", () => {
 
     await writeFile(
       inFile,
-      ["fn f(x: I32) : I32 => 0", "", "fn main() : I32 => f(1)", ""].join(
-        "\n"
-      ),
+      ["fn f(x: I32) : I32 => 0", "", "fn main() : I32 => f(1)", ""].join("\n"),
       "utf8"
     );
 
@@ -161,9 +159,7 @@ describe("selfhost analyzer linting", () => {
 
     await writeFile(
       inFile,
-      ["fn f(x: I32) : I32 => 0", "", "fn main() : I32 => f(1)", ""].join(
-        "\n"
-      ),
+      ["fn f(x: I32) : I32 => 0", "", "fn main() : I32 => f(1)", ""].join("\n"),
       "utf8"
     );
 

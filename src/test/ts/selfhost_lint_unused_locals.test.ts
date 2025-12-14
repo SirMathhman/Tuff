@@ -241,13 +241,7 @@ describe("selfhost analyzer linting", () => {
 
     await writeFile(
       inFile,
-      [
-        "fn main() : I32 => {",
-        "  let x: I32 = 1;",
-        "  0",
-        "}",
-        "",
-      ].join("\n"),
+      ["fn main() : I32 => {", "  let x: I32 = 1;", "  0", "}", ""].join("\n"),
       "utf8"
     );
 

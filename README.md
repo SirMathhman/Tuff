@@ -65,7 +65,10 @@ Compile and run:
 
 ```bash
 # Using the self-hosting compiler (via prebuilt)
-node selfhost/prebuilt/tuffc.mjs hello.tuff -o hello.mjs
+node selfhost/prebuilt/tuffc.mjs hello.tuff hello.mjs
+
+# Lint only (parse + analyze), without emitting output
+node selfhost/prebuilt/tuffc.mjs --lint-only hello.tuff
 
 # Run the output
 node hello.mjs
@@ -653,8 +656,8 @@ We welcome contributions! Here's how to get started:
    - Add tests first (TDD)
    - Write code to pass tests
    - Ensure `npm test` passes
-    - Rebuild prebuilt: `npm run build:selfhost-prebuilt`
-    - Verify prebuilt is up-to-date (no diff): `npm run check:prebuilt`
+   - Rebuild prebuilt: `npm run build:selfhost-prebuilt`
+   - Verify prebuilt is up-to-date (no diff): `npm run check:prebuilt`
 5. **Commit**:
    ```bash
    git add .

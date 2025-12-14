@@ -163,6 +163,140 @@ di = di + 1;
 }
 return out;
 }
+export function lint_tiny2_with_imported_fns(src, requireMain, exportAll, importedFns) {
+let i = 0;
+reset_struct_defs();
+reset_errors();
+reset_warnings();
+const decls = vec_new();
+while (true) {
+const j = skip_ws(src, i);
+if (starts_with_at(src, j, "extern")) {
+const ex = parse_extern_decl_ast(src, i);
+vec_push(decls, ex.decl);
+i = ex.nextPos;
+continue;
+}
+break;
+}
+const imps = parse_imports_ast(src, i);
+let ii = 0;
+while (ii < vec_len(imps.decls)) {
+vec_push(decls, vec_get(imps.decls, ii));
+ii = ii + 1;
+}
+i = imps.nextPos;
+while (true) {
+const j = skip_ws(src, i);
+if (!starts_with_at(src, j, "module")) {
+break;
+}
+const m = parse_module_decl_ast(src, i);
+vec_push(decls, m.decl);
+i = m.nextPos;
+}
+while (true) {
+const j = skip_ws(src, i);
+if (starts_with_at(src, j, "module")) {
+const m = parse_module_decl_ast(src, i);
+vec_push(decls, m.decl);
+i = m.nextPos;
+continue;
+}
+if (starts_with_at(src, j, "type")) {
+const td = parse_type_union_decl_ast(src, i, exportAll);
+vec_push(decls, td.decl);
+i = td.nextPos;
+continue;
+}
+if (starts_with_at(src, j, "struct")) {
+const sd = parse_struct_decl_ast(src, i);
+vec_push(decls, sd.decl);
+i = sd.nextPos;
+continue;
+}
+break;
+}
+while (true) {
+const j = skip_ws(src, i);
+if (starts_with_at(src, j, "let")) {
+const start = skip_ws(src, i);
+i = parse_keyword(src, i, "let");
+const mutOpt = parse_mut_opt(src, i);
+i = mutOpt.nextPos;
+const name = parse_ident(src, i);
+i = name.nextPos;
+let tyAnn = "";
+const t0 = skip_ws(src, i);
+if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 58) {
+const _ty = parse_type_expr(src, t0 + 1);
+tyAnn = _ty.v0;
+i = _ty.v1;
+}
+i = parse_keyword(src, i, "=");
+const expr = parse_expr_ast(src, i);
+i = expr.nextPos;
+i = parse_optional_semicolon(src, i);
+if (tyAnn == "") {
+vec_push(decls, decl_let(span(start, i), mutOpt.ok, name.text, expr.expr));
+} else {
+vec_push(decls, decl_let_typed(span(start, i), mutOpt.ok, name.text, tyAnn, expr.expr));
+}
+continue;
+}
+break;
+}
+let sawMain = false;
+while (true) {
+const j = skip_ws(src, i);
+if (starts_with_at(src, j, "fn")) {
+const f = parse_fn_decl_ast2(src, i, exportAll);
+if (f.decl.tag == "DFn" && f.decl.name == "main") {
+sawMain = true;
+}
+vec_push(decls, f.decl);
+i = f.nextPos;
+continue;
+}
+if (starts_with_at(src, j, "class")) {
+const f = parse_class_fn_decl_ast2(src, i, exportAll);
+if (f.decl.tag == "DClassFn" && f.decl.name == "main") {
+sawMain = true;
+}
+vec_push(decls, f.decl);
+i = f.nextPos;
+continue;
+}
+if (starts_with_at(src, j, "out")) {
+const k0 = parse_keyword(src, i, "out");
+const j2 = skip_ws(src, k0);
+if (starts_with_at(src, j2, "class")) {
+const f = parse_class_fn_decl_ast2(src, i, exportAll);
+if (f.decl.tag == "DClassFn" && f.decl.name == "main") {
+sawMain = true;
+}
+vec_push(decls, f.decl);
+i = f.nextPos;
+continue;
+}
+const f = parse_fn_decl_ast2(src, i, exportAll);
+if (f.decl.tag == "DFn" && f.decl.name == "main") {
+sawMain = true;
+}
+vec_push(decls, f.decl);
+i = f.nextPos;
+continue;
+}
+break;
+}
+if (requireMain && !sawMain) {
+panic_at(src, i, "expected fn main");
+}
+analyze_program_with_fns(src, decls, importedFns);
+panic_if_errors();
+emit_warnings();
+return undefined;
+}
 export function compile_tiny(src) {
 return compile_tiny2(src, true, false, "main.mjs");
 }
@@ -735,6 +869,194 @@ return relNoExt + ".mjs";
 const outFile = (path == entryPath ? outPath : pathJoin(outDir, relNoExt + ".mjs"));
 const js = compile_tiny2_with_imported_fns(src, path == entryPath, isCompilerBuild, outRelPath, importedFns);
 writeTextFile(outFile, js);
+oi = oi + 1;
+}
+return undefined;
+}
+export function lint_project(entryPath) {
+const workspaceRoot = workspace_root_from_path(entryPath);
+const isCompilerBuild = stringLen(compiler_root_from_path(entryPath)) > 0;
+let stack = vec_new();
+vec_push(stack, entryPath);
+let visited = vec_new();
+let visiting = vec_new();
+let order = vec_new();
+let modulePaths = vec_new();
+let moduleOutFns = vec_new();
+let modulePrivateTopLevelFnNames = vec_new();
+while (vec_len(stack) > 0) {
+const item = vec_get(stack, vec_len(stack) - 1);
+let newStack = vec_new();
+let qi = 0;
+while (qi + 1 < vec_len(stack)) {
+vec_push(newStack, vec_get(stack, qi));
+qi = qi + 1;
+}
+stack = newStack;
+if (starts_with_at(item, 0, "POST:")) {
+const path = stringSlice(item, 5, stringLen(item));
+visiting = str_list_remove(visiting, path);
+vec_push(order, path);
+continue;
+}
+const path = item;
+if (str_list_contains(visited, path)) {
+continue;
+}
+vec_push(visited, path);
+vec_push(visiting, path);
+vec_push(stack, "POST:" + path);
+set_current_file(path);
+const src = readTextFile(path);
+const ex = scan_top_level_fn_exports(src);
+vec_push(modulePaths, path);
+if (isCompilerBuild) {
+vec_push(moduleOutFns, ex[2]);
+vec_push(modulePrivateTopLevelFnNames, vec_new());
+} else {
+vec_push(moduleOutFns, ex[0]);
+vec_push(modulePrivateTopLevelFnNames, ex[1]);
+}
+let scan = 0;
+while (true) {
+const j = skip_ws(src, scan);
+if (starts_with_at(src, j, "extern")) {
+const ex2 = parse_extern_decl(src, scan);
+scan = ex2.v1;
+continue;
+}
+break;
+}
+while (true) {
+const j = skip_ws(src, scan);
+if (starts_with_at(src, j, "import")) {
+panic_at(src, j, "`import` is not supported. Use `from <module> use { ... };` instead.");
+}
+if (!starts_with_at(src, j, "from")) {
+break;
+}
+scan = parse_keyword(src, scan, "from");
+const mod = parse_module_path(src, scan);
+scan = mod.nextPos;
+scan = parse_keyword(src, scan, "use");
+scan = parse_keyword(src, scan, "{");
+while (true) {
+scan = skip_ws(src, scan);
+if (!(scan < stringLen(src))) {
+panic_at(src, scan, "expected '}'");
+}
+if (stringCharCodeAt(src, scan) == 125) {
+scan = scan + 1;
+break;
+}
+const id = parse_ident(src, scan);
+scan = id.nextPos;
+scan = skip_ws(src, scan);
+if (scan < stringLen(src) && stringCharCodeAt(src, scan) == 44) {
+scan = scan + 1;
+continue;
+}
+scan = skip_ws(src, scan);
+if (scan < stringLen(src) && stringCharCodeAt(src, scan) == 125) {
+scan = scan + 1;
+break;
+}
+panic_at(src, scan, "expected ',' or '}' in import list");
+}
+scan = parse_optional_semicolon(src, scan);
+const compilerSrcPrefix = "src::main::tuff::compiler::";
+let rel = module_path_to_relpath(mod.text);
+let baseDir = pathDirname(path);
+if (starts_with_at(mod.text, 0, compilerSrcPrefix)) {
+const compilerRootDir = pathJoin(workspaceRoot, "src/main/tuff/compiler");
+baseDir = compilerRootDir;
+const rest = stringSlice(mod.text, stringLen(compilerSrcPrefix), stringLen(mod.text));
+rel = module_path_to_relpath(rest);
+} else {
+if (starts_with_at(mod.text, 0, "src::") || starts_with_at(mod.text, 0, "std::")) {
+baseDir = workspaceRoot;
+} else {
+const cr = compiler_root_from_path(path);
+if (stringLen(cr) > 0) {
+baseDir = cr;
+}
+}
+}
+const depPath = pathJoin(baseDir, rel + ".tuff");
+if (str_list_contains(visiting, depPath)) {
+panic_at(src, j, "circular dependency detected");
+}
+vec_push(stack, depPath);
+}
+}
+let oi = 0;
+while (oi < vec_len(order)) {
+const path = vec_get(order, oi);
+set_current_file(path);
+const src = readTextFile(path);
+const importedFns = vec_new();
+const seedImportedFns = !isCompilerBuild && !(stringLen(compiler_root_from_path(path)) > 0);
+if (!isCompilerBuild) {
+let scan = 0;
+while (true) {
+const j = skip_ws(src, scan);
+if (starts_with_at(src, j, "extern")) {
+const ex2 = parse_extern_decl(src, scan);
+scan = ex2.v1;
+continue;
+}
+break;
+}
+const impsAst = parse_imports_ast(src, scan);
+let ii = 0;
+while (ii < vec_len(impsAst.decls)) {
+const imp = vec_get(impsAst.decls, ii);
+if (imp.tag == "DImport") {
+const rel = module_path_to_relpath(imp.modulePath);
+let baseDir = pathDirname(path);
+const compilerSrcPrefix = "src::main::tuff::compiler::";
+let rel2 = rel;
+if (starts_with_at(imp.modulePath, 0, compilerSrcPrefix)) {
+const compilerRootDir = pathJoin(workspaceRoot, "src/main/tuff/compiler");
+baseDir = compilerRootDir;
+const rest = stringSlice(imp.modulePath, stringLen(compilerSrcPrefix), stringLen(imp.modulePath));
+rel2 = module_path_to_relpath(rest);
+} else {
+if (starts_with_at(imp.modulePath, 0, "src::") || starts_with_at(imp.modulePath, 0, "std::")) {
+baseDir = workspaceRoot;
+} else {
+const cr = compiler_root_from_path(path);
+if (stringLen(cr) > 0) {
+baseDir = cr;
+}
+}
+}
+const depPath = pathJoin(baseDir, rel2 + ".tuff");
+const depIdx = module_index(modulePaths, depPath);
+if (depIdx != -1) {
+const outFns = vec_get(moduleOutFns, depIdx);
+const privateNames = vec_get(modulePrivateTopLevelFnNames, depIdx);
+let ni = 0;
+while (ni < vec_len(imp.names)) {
+const name = vec_get(imp.names, ni);
+const sig = fnsig_lookup_by_name(outFns, name);
+if (!(sig.name == "")) {
+if (seedImportedFns) {
+vec_push(importedFns, sig);
+}
+} else {
+if (str_list_contains(privateNames, name)) {
+panic_at(src, span_start(imp.span), "imported function '" + name + "' is not exported (missing `out fn`)");
+}
+}
+ni = ni + 1;
+}
+}
+}
+ii = ii + 1;
+}
+}
+lint_tiny2_with_imported_fns(src, path == entryPath, isCompilerBuild, importedFns);
 oi = oi + 1;
 }
 return undefined;

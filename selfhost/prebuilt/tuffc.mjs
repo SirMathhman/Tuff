@@ -1,7 +1,7 @@
 // compiled by selfhost tuffc
 import { println, readTextFile, stringLen, stringCharCodeAt, stringSlice } from "./rt/stdlib.mjs";
 import { vec_len, vec_get } from "./rt/vec.mjs";
-import { compile_project } from "./tuffc_lib.mjs";
+import { compile_project, lint_project } from "./tuffc_lib.mjs";
 import { set_lint_options } from "./analyzer.mjs";
 export function is_ascii_ws(ch) {
 return ch == 32 || ch == 9 || ch == 10 || ch == 13;
@@ -116,8 +116,10 @@ return LintOptions(warnUnusedLocals, warnUnusedParams);
 }
 export function print_usage() {
 println("usage: tuffc [options] <in.tuff> <out.mjs>");
+println("       tuffc [options] --lint-only <in.tuff>");
 println("options:");
 println("  --config <path>                Read config file (key = value)");
+println("  --lint-only                    Lint only (parse+analyze), do not emit JS");
 println("  --warn-unused-locals            Enable unused local warnings");
 println("  --warn-unused-params            Enable unused parameter warnings");
 println("  --no-warn-unused-locals         Disable unused local warnings");
@@ -127,6 +129,7 @@ return undefined;
 export function main(argv) {
 let warnUnusedLocals = false;
 let warnUnusedParams = false;
+let lintOnly = false;
 let configPath = "";
 let inPath = "";
 let outPath = "";
@@ -150,6 +153,11 @@ continue;
 }
 if (a == "--warn-unused-params") {
 warnUnusedParams = true;
+i = i + 1;
+continue;
+}
+if (a == "--lint-only") {
+lintOnly = true;
 i = i + 1;
 continue;
 }
@@ -181,10 +189,19 @@ println("too many arguments");
 print_usage();
 return 1;
 }
+(lintOnly ? (() => {
+if (inPath == "") {
+print_usage();
+return 1;
+}
+return undefined;
+})() : (() => {
 if (inPath == "" || outPath == "") {
 print_usage();
 return 1;
 }
+return undefined;
+})());
 if (configPath != "") {
 const cfgText = readTextFile(configPath);
 const cfg = parse_lint_config(cfgText, warnUnusedLocals, warnUnusedParams);
@@ -192,6 +209,12 @@ warnUnusedLocals = cfg.warnUnusedLocals;
 warnUnusedParams = cfg.warnUnusedParams;
 }
 set_lint_options(warnUnusedLocals, warnUnusedParams);
+(lintOnly ? (() => {
+lint_project(inPath);
+return undefined;
+})() : (() => {
 compile_project(inPath, outPath);
+return undefined;
+})());
 return 0;
 }
