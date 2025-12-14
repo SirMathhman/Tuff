@@ -9,7 +9,7 @@ from tuffc_lib use { compile_project };
 
 // When run as a program, compile stdin-like file input.
 // We keep it simple: main(argv) where argv = [inPath, outPath]
-fn main(argv) => {
+fn main(argv: Any) => {
   if (vec_len(argv) < 2) {
     println("usage: tuffc <in.tuff> <out.mjs>");
     yield 1;

@@ -19,7 +19,7 @@ fn emit_runtime_vec_imports_js() : String => {
   "import { vec_new as __tuff_vec_new, vec_push as __tuff_vec_push, vec_get as __tuff_vec_get, vec_set as __tuff_vec_set } from \"" + importPath + "\";\n"
 }
 
-fn expr_needs_vec_rt(e) : Bool => {
+fn expr_needs_vec_rt(e: Any) : Bool => {
   // True when emitting this expression will reference __tuff_vec_* helpers.
   if (e.tag == "EVecLit") { yield true; }
   if (e.tag == "EIndex") { yield true; }
@@ -98,7 +98,7 @@ fn expr_needs_vec_rt(e) : Bool => {
   false
 }
 
-fn stmt_needs_vec_rt(s) : Bool => {
+fn stmt_needs_vec_rt(s: Any) : Bool => {
   if (s.tag == "SIndexAssign") { yield true; }
 
   if (s.tag == "SLet") { yield expr_needs_vec_rt(s.init); }
@@ -138,7 +138,7 @@ fn stmt_needs_vec_rt(s) : Bool => {
   false
 }
 
-fn decl_needs_vec_rt(d) : Bool => {
+fn decl_needs_vec_rt(d: Any) : Bool => {
   if (d.tag == "DLet") { yield expr_needs_vec_rt(d.init); }
   if (d.tag == "DFn") {
     let mut i = 0;
@@ -167,7 +167,7 @@ fn decl_needs_vec_rt(d) : Bool => {
   false
 }
 
-fn decls_needs_vec_rt(decls) : Bool => {
+fn decls_needs_vec_rt(decls: Any) : Bool => {
   let mut i = 0;
   while (i < vec_len(decls)) {
     if (decl_needs_vec_rt(vec_get(decls, i))) { yield true; }
@@ -310,7 +310,7 @@ fn escape_js_string(s: String) : String => {
   out
 }
 
-fn emit_binop_js(op) : String => {
+fn emit_binop_js(op: Any) : String => {
   // NOTE: The current selfhost JS emitter does not fully support `if` as an
   // expression (it compiles it as a statement). So we avoid relying on the
   // value of `if` here and in `emit_expr_js`.
@@ -329,7 +329,7 @@ fn emit_binop_js(op) : String => {
   out
 }
 
-fn emit_unop_js(op) : String => {
+fn emit_unop_js(op: Any) : String => {
   let mut out = "??";
   if (op.tag == "OpNot") { out = "!"; }
   if (op.tag == "OpNeg") { out = "-"; }
@@ -338,7 +338,7 @@ fn emit_unop_js(op) : String => {
 
 // JS precedence (subset) for minimal parenthesization.
 // Higher number = binds tighter.
-fn binop_prec_js(op) : I32 => {
+fn binop_prec_js(op: Any) : I32 => {
   if (op.tag == "OpMul") { yield 14; }
   if (op.tag == "OpAdd" || op.tag == "OpSub") { yield 13; }
   if (op.tag == "OpLt" || op.tag == "OpLe" || op.tag == "OpGt" || op.tag == "OpGe") { yield 11; }
@@ -348,7 +348,7 @@ fn binop_prec_js(op) : I32 => {
   0
 }
 
-fn expr_prec_js(e) : I32 => {
+fn expr_prec_js(e: Any) : I32 => {
   if (e.tag == "EIf") { yield 4; }
   if (e.tag == "EBinary") { yield binop_prec_js(e.op); }
   if (e.tag == "EUnary") { yield 17; }
@@ -360,7 +360,7 @@ fn needs_parens_binop_child(childTag: String) : Bool => {
   childTag == "EBinary"
 }
 
-fn emit_path_js(parts) : String => {
+fn emit_path_js(parts: Any) : String => {
   let mut out = "";
   let mut i = 0;
   while (i < vec_len(parts)) {
@@ -371,13 +371,13 @@ fn emit_path_js(parts) : String => {
   out
 }
 
-fn struct_name_for_lookup(nameExpr) : String => {
+fn struct_name_for_lookup(nameExpr: Any) : String => {
   if (nameExpr.tag == "EIdent") { yield nameExpr.name; }
   if (nameExpr.tag == "EPath") { yield emit_path_js(nameExpr.parts); }
   panic("struct literal name must be ident or path")
 }
 
-fn emit_struct_lit_js(nameExpr, values) : String => {
+fn emit_struct_lit_js(nameExpr: Any, values: Any) : String => {
   let structName = struct_name_for_lookup(nameExpr);
   let fields = find_struct_fields(structName);
 
@@ -396,7 +396,7 @@ fn emit_struct_lit_js(nameExpr, values) : String => {
   out
 }
 
-out fn emit_expr_js(e) : String => {
+out fn emit_expr_js(e: Any) : String => {
   // Default fallback for nodes we haven't implemented yet.
   let mut out = "undefined";
 
@@ -543,7 +543,7 @@ out fn emit_expr_js(e) : String => {
   out
 }
 
-fn emit_stmt_js(s) : String => {
+fn emit_stmt_js(s: Any) : String => {
   let mut out = "";
 
   if (s.tag == "SLet") {
@@ -596,7 +596,7 @@ fn emit_stmt_js(s) : String => {
   out
 }
 
-fn emit_stmts_js(stmts) : String => {
+fn emit_stmts_js(stmts: Any) : String => {
   let mut out = "";
   let mut i = 0;
   while (i < vec_len(stmts)) {
@@ -606,7 +606,7 @@ fn emit_stmts_js(stmts) : String => {
   out
 }
 
-fn emit_names_csv(names) : String => {
+fn emit_names_csv(names: Any) : String => {
   let mut out = "";
   let mut i = 0;
   while (i < vec_len(names)) {
@@ -628,13 +628,13 @@ fn emit_extern_import_path(modPath: String) : String => {
   panic("unsupported extern module: " + modPath)
 }
 
-fn emit_fn_decl_js(d, exportAll: Bool, jsName: String, exportThis: Bool) : String => {
+fn emit_fn_decl_js(d: Any, exportAll: Bool, jsName: String, exportThis: Bool) : String => {
   let exportKw = if (exportThis) "export " else "";
   let params = emit_names_csv(d.params);
   exportKw + "function " + jsName + "(" + params + ") {\n" + emit_stmts_js(d.body) + "return " + emit_expr_js(d.tail) + ";\n}\n"
 }
 
-fn emit_type_union_js(d, exportAll: Bool) : String => {
+fn emit_type_union_js(d: Any, exportAll: Bool) : String => {
   let mut out = "";
   let dq = "\"";
   let mut i = 0;
@@ -654,7 +654,7 @@ fn emit_type_union_js(d, exportAll: Bool) : String => {
   out
 }
 
-fn emit_module_decl_js(d, prefix: String, exportThis: Bool) : String => {
+fn emit_module_decl_js(d: Any, prefix: String, exportThis: Bool) : String => {
   // Emit inner decls as top-level functions/consts, then expose an object.
   let mut decls = "";
   let mut entries = "";
@@ -692,7 +692,7 @@ fn emit_module_decl_js(d, prefix: String, exportThis: Bool) : String => {
   decls + header + d.name + " = { " + entries + " };\n"
 }
 
-fn emit_decl_js(d, exportAll: Bool) : String => {
+fn emit_decl_js(d: Any, exportAll: Bool) : String => {
   let mut out = "";
 
   if (d.tag == "DExternFrom") {

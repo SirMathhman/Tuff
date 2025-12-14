@@ -48,8 +48,8 @@ from ast use {
 };
 
 // NOTE: Avoid type aliases in signatures (type aliases are not runtime exports).
-class fn ParsedDeclAst(decl, nextPos: I32) => {}
-class fn ParsedDeclsAst(decls, nextPos: I32) => {}
+class fn ParsedDeclAst(decl: String, nextPos: I32) => {}
+class fn ParsedDeclsAst(decls: Vec<String>, nextPos: I32) => {}
 class fn ParsedNamesAst(names: Vec<String>, nextPos: I32) => {}
 class fn ParsedParamsAst(names: Vec<String>, tyAnns: Vec<String>, nextPos: I32) => {}
 class fn ParsedTypeParamsAst(params: Vec<String>, nextPos: I32) => {}

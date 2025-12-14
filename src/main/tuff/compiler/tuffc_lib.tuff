@@ -119,7 +119,7 @@ fn parse_program_with_trivia_api(src: String, exportAll: Bool) : ParsedProgramWi
 fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool, filePath: String) : String =>
   compile_tiny2_with_imported_fns(src, requireMain, exportAll, filePath, vec_new())
 
-fn compile_tiny2_with_imported_fns(src: String, requireMain: Bool, exportAll: Bool, filePath: String, importedFns) : String => {
+fn compile_tiny2_with_imported_fns(src: String, requireMain: Bool, exportAll: Bool, filePath: String, importedFns: Any) : String => {
   // Parse:
   //   (extern from <mod> use { <idents> };)*
   //   (from <mod> use { <idents> };)*
@@ -331,7 +331,7 @@ fn compiler_root_from_path(p: String) : String => {
 // Multi-file: export tables + import validation (Phase 5)
 // ------------------------------------------------------------
 
-fn str_list_contains(xs, s: String) : Bool => {
+fn str_list_contains(xs: Any, s: String) : Bool => {
   let mut i = 0;
   while (i < vec_len(xs)) {
     if (vec_get(xs, i) == s) { yield true; }
@@ -340,7 +340,7 @@ fn str_list_contains(xs, s: String) : Bool => {
   false
 }
 
-fn str_list_remove(xs, s: String) => {
+fn str_list_remove(xs: Any, s: String) => {
   let out = vec_new();
   let mut i = 0;
   while (i < vec_len(xs)) {
@@ -351,7 +351,7 @@ fn str_list_remove(xs, s: String) => {
   out
 }
 
-fn module_index(modulePaths, path: String) : I32 => {
+fn module_index(modulePaths: Any, path: String) : I32 => {
   let mut i = 0;
   while (i < vec_len(modulePaths)) {
     if (vec_get(modulePaths, i) == path) { yield i; }
@@ -360,7 +360,7 @@ fn module_index(modulePaths, path: String) : I32 => {
   -1
 }
 
-fn fnsig_lookup_by_name(fns, name: String) => {
+fn fnsig_lookup_by_name(fns: Any, name: String) => {
   let mut i = 0;
   while (i < vec_len(fns)) {
     let s = vec_get(fns, i);

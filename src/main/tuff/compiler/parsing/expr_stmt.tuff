@@ -103,13 +103,13 @@ out class fn ParsedParams(v0: String, v1: I32) => {}
 
 // Phase 3: canonical AST parser outputs
 // NOTE: Avoid type aliases in signatures (type aliases are not runtime exports).
-class fn ParsedExprAst(expr, nextPos: I32) => {}
-out class fn ParsedMainAst(body, tail, nextPos: I32) => {}
-class fn ParsedStmtAst(stmt, nextPos: I32) => {}
-class fn ParsedStmtsAst(stmts, nextPos: I32) => {}
-class fn ParsedExprListAst(items, nextPos: I32) => {}
-class fn ParsedTypeArgsForCallAst(ok: Bool, typeArgs, nextPos: I32) => {}
-class fn ParsedTypeParamsForLambdaAst(typeParams, nextPos: I32) => {}
+class fn ParsedExprAst(expr: String, nextPos: I32) => {}
+out class fn ParsedMainAst(body: Vec<String>, tail: String, nextPos: I32) => {}
+class fn ParsedStmtAst(stmt: String, nextPos: I32) => {}
+class fn ParsedStmtsAst(stmts: Vec<String>, nextPos: I32) => {}
+class fn ParsedExprListAst(items: Vec<String>, nextPos: I32) => {}
+class fn ParsedTypeArgsForCallAst(ok: Bool, typeArgs: Vec<String>, nextPos: I32) => {}
+class fn ParsedTypeParamsForLambdaAst(typeParams: Vec<String>, nextPos: I32) => {}
 
 fn find_matching_rparen(src: String, openPos: I32) : I32 => {
   // Returns the index of the ')' that closes the '(' at openPos, or -1.
