@@ -24,8 +24,10 @@ extern from rt::stdlib use {
   // string helpers
   stringLen,
   stringSlice,
-  stringCharCodeAt,
-  stringFromCharCode
+  __stringCharAt,
+  __stringFromChar,
+  __stringCharCodeAt,
+  __stringFromCharCode
 };
 
 // Dynamic arrays (bootstrap): implemented in JS for now.
@@ -36,3 +38,18 @@ extern from rt::vec use {
   vec_get,
   vec_set
 };
+
+// ---- String helpers (public surface) ----
+
+// Char-oriented names.
+out fn stringCharAt(s: String, index: I32) : Char => __stringCharAt(s, index)
+out fn stringFromChar(ch: Char) : String => __stringFromChar(ch)
+
+// ---- Deprecated string code-unit helpers ----
+// These were early bootstrap names. Prefer the Char-oriented names.
+
+// deprecated - use stringCharAt (returns Char) instead
+out fn stringCharCodeAt(s: String, index: I32) : I32 => __stringCharCodeAt(s, index)
+
+// deprecated - use stringFromChar (accepts Char) instead
+out fn stringFromCharCode(code: I32) : String => __stringFromCharCode(code)

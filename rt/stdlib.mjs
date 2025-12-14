@@ -77,6 +77,27 @@ export function stringFromCharCode(code) {
   return String.fromCharCode(code);
 }
 
+// Char helpers
+//
+// NOTE: In the current bootstrap, Tuff `Char` behaves like a numeric code unit.
+// These helpers intentionally operate on UTF-16 code units (JS semantics).
+export function stringCharAt(s, index) {
+  const n = String(s).charCodeAt(index);
+  // JS returns NaN for out-of-range indices. Map that to 0 for stability.
+  if (!Number.isFinite(n)) return 0;
+  return n & 0xffff;
+}
+
+export function stringFromChar(ch) {
+  return String.fromCharCode(Number(ch) & 0xffff);
+}
+
+// Internal aliases for std::prelude (see rt/stdlib.ts).
+export const __stringCharCodeAt = stringCharCodeAt;
+export const __stringFromCharCode = stringFromCharCode;
+export const __stringCharAt = stringCharAt;
+export const __stringFromChar = stringFromChar;
+
 // ---- Map helpers ----
 
 export function map_new() {

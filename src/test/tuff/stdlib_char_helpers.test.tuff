@@ -1,0 +1,14 @@
+from std::test use { reset, suite, it, expect_eq, summary, status };
+from std::prelude use { stringCharAt, stringFromChar };
+
+fn main() : I32 => {
+  reset();
+  suite("stdlib char helpers");
+
+  let c: Char = stringCharAt("A", 0);
+  it("stringCharAt returns a Char", expect_eq("char", c, 65));
+  it("stringFromChar roundtrip", expect_eq("roundtrip", stringFromChar(c), "A"));
+
+  summary();
+  status()
+}
