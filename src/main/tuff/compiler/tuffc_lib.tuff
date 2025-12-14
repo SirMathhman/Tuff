@@ -1067,7 +1067,7 @@ out fn compile_project(entryPath: String, outPath: String) : Void => {
   }
 }
 
-out fn lint_project(entryPath: String) : Void => {
+out fn fluff_project(entryPath: String) : Void => {
   // Like compile_project, but only parse+analyze and emit warnings.
   // No JS is generated and nothing is written to disk.
 

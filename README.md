@@ -73,19 +73,17 @@ Compile and run:
 node selfhost/prebuilt/tuffc.mjs hello.tuff hello.mjs
 
 # Lint only (parse + analyze), without emitting output
-node selfhost/prebuilt/tuffc.mjs lint hello.tuff
-
-# (Alias for lint)
-node selfhost/prebuilt/tuffc.mjs --lint-only hello.tuff
+node selfhost/prebuilt/fluff.mjs hello.tuff
 
 # Run the output
 node hello.mjs
 ```
 
-For CLI help and options (warnings, config, diagnostics format):
+For CLI help and options (config, diagnostics format):
 
 ```bash
 node selfhost/prebuilt/tuffc.mjs
+node selfhost/prebuilt/fluff.mjs
 ```
 
 ---
@@ -126,7 +124,9 @@ The self-hosting compiler is located in `src/main/tuff/compiler/` and is split i
 | Analysis | `analyzer.tuff`           | Scope/type checks + lint plumbing                          |
 | Emit     | `emit/ast_js.tuff`        | AST → JS ESM emitter                                       |
 | Driver   | `tuffc_lib.tuff`          | Multi-file orchestration + emit                            |
-| CLI      | `tuffc.tuff`              | CLI entrypoint (compiled to `selfhost/prebuilt/tuffc.mjs`) |
+| Config   | `build_config.tuff`       | `build.json` discovery + Fluff severity config             |
+| CLI      | `tuffc.tuff`              | Compiler CLI (compiled to `selfhost/prebuilt/tuffc.mjs`)   |
+| CLI      | `fluff.tuff`              | Linter CLI (compiled to `selfhost/prebuilt/fluff.mjs`)     |
 
 ### Bootstrap Strategy
 
@@ -172,18 +172,24 @@ JSON shape (minimal, stable):
 
 ### Lint configuration
 
-Linting can be configured via a simple `key = value` config file:
+Fluff is configured via `build.json`, auto-discovered upward from the input file directory.
 
-- `warn_unused_locals = true|false`
-- `warn_unused_params = true|false`
+Supported shape (all keys optional):
 
-By default, `tuffc` searches upward from the input file directory for `tuffc.conf`.
-You can also pass `--config <path>` explicitly.
+```json
+{
+    "fluff": {
+        "unusedLocals": "off" | "warning" | "error",
+        "unusedParams": "off" | "warning" | "error"
+    }
+}
+```
 
-CLI flags override config:
+Notes:
 
-- `--warn-all` enables all warnings
-- `--no-warn` disables all warnings
+- Defaults to `off` for all lints if no `build.json` is found.
+- `error`-level lints fail the run, but diagnostics are still accumulated.
+- There are no lint-related CLI flags or subcommands on `tuffc`; linting is done via `fluff`.
 
 **To rebuild the prebuilt compiler after modifying compiler source:**
 

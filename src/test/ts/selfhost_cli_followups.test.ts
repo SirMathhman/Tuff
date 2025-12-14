@@ -38,14 +38,14 @@ async function exists(p: string): Promise<boolean> {
 }
 
 describe("selfhost CLI follow-ups", () => {
-  test("`lint` subcommand lints without writing output", async () => {
+  test("fluff lints without writing any output file", async () => {
     const outDir = resolve(
       ".dist",
       "selfhost-cli-followups",
       `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
     );
 
-    const { stage2Dir, tuffc2 } = await buildStage2SelfhostCompiler(outDir);
+    const { stage2Dir, fluff2 } = await buildStage2SelfhostCompiler(outDir);
 
     const inFile = resolve(stage2Dir, "src", "main.tuff");
     const outFile = resolve(stage2Dir, "out.mjs");
@@ -55,19 +55,26 @@ describe("selfhost CLI follow-ups", () => {
       ["fn main() : I32 => {", "  let x: I32 = 1;", "  x", "}", ""].join("\n")
     );
 
-    const rc = tuffc2.main(["lint", inFile]);
+    // Fluff has no output path, so ensure it doesn't incidentally write one.
+    const rc = fluff2.main([inFile]);
     expect(rc).toBe(0);
     expect(await exists(outFile)).toBe(false);
   });
 
-  test("--format json prints JSON warnings", async () => {
+  test("fluff --format json prints JSON warnings", async () => {
     const outDir = resolve(
       ".dist",
       "selfhost-cli-followups",
       `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
     );
 
-    const { stage2Dir, tuffc2 } = await buildStage2SelfhostCompiler(outDir);
+    const { stage2Dir, fluff2 } = await buildStage2SelfhostCompiler(outDir);
+
+    // Enable lint as a warning via build.json (auto-discovered from inFile).
+    await writeText(
+      resolve(stage2Dir, "build.json"),
+      JSON.stringify({ fluff: { unusedLocals: "warning" } }, null, 2) + "\n"
+    );
 
     const inFile = resolve(stage2Dir, "warn.tuff");
     await writeText(
@@ -82,7 +89,7 @@ describe("selfhost CLI follow-ups", () => {
     );
 
     const { value: rc, out } = captureStdout(() =>
-      tuffc2.main(["--format", "json", "--warn-unused-locals", "lint", inFile])
+      fluff2.main(["--format", "json", inFile])
     );
     expect(rc).toBe(0);
 
@@ -98,21 +105,23 @@ describe("selfhost CLI follow-ups", () => {
     expect(String(parsed.text)).toMatch(/unused local/i);
   });
 
-  test("config auto-discovery finds tuffc.conf up the directory tree", async () => {
+  test("config auto-discovery finds build.json up the directory tree", async () => {
     const outDir = resolve(
       ".dist",
       "selfhost-cli-followups",
       `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
     );
 
-    const { stage2Dir, tuffc2 } = await buildStage2SelfhostCompiler(outDir);
+    const { stage2Dir, fluff2 } = await buildStage2SelfhostCompiler(outDir);
 
     const configDir = resolve(stage2Dir, "proj");
-    const configFile = resolve(configDir, "tuffc.conf");
-    await writeText(configFile, "warn_unused_locals=true\n");
+    const configFile = resolve(configDir, "build.json");
+    await writeText(
+      configFile,
+      JSON.stringify({ fluff: { unusedLocals: "warning" } }, null, 2) + "\n"
+    );
 
     const inFile = resolve(configDir, "src", "main.tuff");
-    const outFile = resolve(configDir, "out.mjs");
 
     await writeText(
       inFile,
@@ -120,89 +129,25 @@ describe("selfhost CLI follow-ups", () => {
     );
 
     const { value: rc, out } = captureStdout(() =>
-      tuffc2.main([inFile, outFile])
+      fluff2.main([inFile])
     );
     expect(rc).toBe(0);
     expect(out).toMatch(/unused local/i);
   });
 
-  test("--warn-all enables unused locals and params warnings", async () => {
+  test("fluff can be run twice in the same process", async () => {
     const outDir = resolve(
       ".dist",
       "selfhost-cli-followups",
       `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
     );
 
-    const { stage2Dir, tuffc2 } = await buildStage2SelfhostCompiler(outDir);
-
-    const inFile = resolve(stage2Dir, "warn_all.tuff");
-    const outFile = resolve(stage2Dir, "warn_all.mjs");
+    const { stage2Dir, fluff2 } = await buildStage2SelfhostCompiler(outDir);
 
     await writeText(
-      inFile,
-      [
-        "fn f(x: I32) : I32 => 0",
-        "fn main() : I32 => {",
-        "  let y: I32 = 1;",
-        "  f(1)",
-        "}",
-        "",
-      ].join("\n")
+      resolve(stage2Dir, "build.json"),
+      JSON.stringify({ fluff: { unusedLocals: "warning" } }, null, 2) + "\n"
     );
-
-    const { value: rc, out } = captureStdout(() =>
-      tuffc2.main(["--warn-all", inFile, outFile])
-    );
-    expect(rc).toBe(0);
-    expect(out).toMatch(/unused local/i);
-    expect(out).toMatch(/unused parameter/i);
-  });
-
-  test("--no-warn silences warnings even if config enables them", async () => {
-    const outDir = resolve(
-      ".dist",
-      "selfhost-cli-followups",
-      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
-    );
-
-    const { stage2Dir, tuffc2 } = await buildStage2SelfhostCompiler(outDir);
-
-    const configFile = resolve(stage2Dir, "tuffc.conf");
-    await writeText(
-      configFile,
-      "warn_unused_locals=true\nwarn_unused_params=true\n"
-    );
-
-    const inFile = resolve(stage2Dir, "no_warn.tuff");
-    const outFile = resolve(stage2Dir, "no_warn.mjs");
-
-    await writeText(
-      inFile,
-      [
-        "fn f(x: I32) : I32 => 0",
-        "fn main() : I32 => {",
-        "  let y: I32 = 1;",
-        "  f(1)",
-        "}",
-        "",
-      ].join("\n")
-    );
-
-    const { value: rc, out } = captureStdout(() =>
-      tuffc2.main(["--no-warn", inFile, outFile])
-    );
-    expect(rc).toBe(0);
-    expect(out).not.toMatch(/warning/i);
-  });
-
-  test("lint can be run twice in the same process", async () => {
-    const outDir = resolve(
-      ".dist",
-      "selfhost-cli-followups",
-      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
-    );
-
-    const { stage2Dir, tuffc2 } = await buildStage2SelfhostCompiler(outDir);
 
     const inFile = resolve(stage2Dir, "twice.tuff");
     await writeText(
@@ -210,7 +155,7 @@ describe("selfhost CLI follow-ups", () => {
       ["fn main() : I32 => {", "  let x: I32 = 1;", "  0", "}", ""].join("\n")
     );
 
-    const runOnce = () => tuffc2.main(["--warn-unused-locals", "lint", inFile]);
+    const runOnce = () => fluff2.main([inFile]);
 
     const r1 = captureStdout(runOnce);
     expect(r1.value).toBe(0);

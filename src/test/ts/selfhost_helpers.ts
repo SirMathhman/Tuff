@@ -130,8 +130,11 @@ export async function buildStage2SelfhostCompiler(outDir: string): Promise<{
   stage2Dir: string;
   stage1File: string;
   stage2File: string;
+  stage2FluffFile: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   tuffc2: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  fluff2: any;
 }> {
   await mkdir(outDir, { recursive: true });
 
@@ -149,6 +152,14 @@ export async function buildStage2SelfhostCompiler(outDir: string): Promise<{
 
   const stage2In = resolve("src", "main", "tuff", "compiler", "tuffc.tuff");
   const stage2File = resolve(stage2Dir, "tuffc.stage2.mjs");
+  const stage2FluffIn = resolve(
+    "src",
+    "main",
+    "tuff",
+    "compiler",
+    "fluff.tuff"
+  );
+  const stage2FluffFile = resolve(stage2Dir, "fluff.stage2.mjs");
 
   // Build stage2 compiler using stage1 compiler.
   const tuffc1 = await import(pathToFileURL(stage1File).toString());
@@ -157,9 +168,19 @@ export async function buildStage2SelfhostCompiler(outDir: string): Promise<{
     throw new Error(`stage2 compile failed with code ${rc2}`);
   }
 
+  const rcFluff = (tuffc1 as any).main([stage2FluffIn, stage2FluffFile]);
+  if (rcFluff !== 0) {
+    throw new Error(`stage2 fluff compile failed with code ${rcFluff}`);
+  }
+
   const tuffc2 = await import(pathToFileURL(stage2File).toString());
   if (typeof (tuffc2 as any).main !== "function") {
     throw new Error("stage2 compiler missing main() export");
+  }
+
+  const fluff2 = await import(pathToFileURL(stage2FluffFile).toString());
+  if (typeof (fluff2 as any).main !== "function") {
+    throw new Error("stage2 fluff missing main() export");
   }
 
   return {
@@ -167,6 +188,8 @@ export async function buildStage2SelfhostCompiler(outDir: string): Promise<{
     stage2Dir,
     stage1File,
     stage2File,
+    stage2FluffFile,
     tuffc2: tuffc2 as any,
+    fluff2: fluff2 as any,
   };
 }

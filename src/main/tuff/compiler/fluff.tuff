@@ -1,27 +1,27 @@
-// Self-hosted compiler entrypoint.
+// Fluff: the Tuff linter.
+//
+// Fluff runs parse+analyze across the module graph and reports warnings/errors.
+// Configuration is loaded from build.json (auto-discovered upward).
 
 extern from rt::stdlib use { println, stringLen, stringCharCodeAt };
 extern from rt::vec use { vec_len, vec_get };
 
-from tuffc_lib use { compile_project };
+from tuffc_lib use { fluff_project };
 from analyzer use { set_fluff_options };
 from build_config use { load_fluff_config };
 from util::diagnostics use { set_diagnostics_format };
 
 fn print_usage() : Void => {
-  println("usage: tuffc [options] <in.tuff> <out.mjs>");
+  println("usage: fluff [options] <in.tuff>");
   println("options:");
   println("  --format <human|json>          Diagnostics output format");
   println("config:");
-  println("  build.json (auto-discovered upward from <in.tuff>) controls Fluff rules");
+  println("  build.json (auto-discovered upward from <in.tuff>)");
 }
 
-// When run as a program, compile file input.
 fn main(argv: Vec<String>) => {
   let mut format = "human";
-
   let mut inPath = "";
-  let mut outPath = "";
 
   let mut i = 0;
   while (i < vec_len(argv)) {
@@ -37,7 +37,6 @@ fn main(argv: Vec<String>) => {
       continue;
     }
 
-    // Unknown option.
     if (stringLen(a) > 0 && stringCharCodeAt(a, 0) == 45) {
       println("unknown option: " + a);
       print_usage();
@@ -45,14 +44,13 @@ fn main(argv: Vec<String>) => {
     }
 
     if (inPath == "") { inPath = a; i = i + 1; continue; }
-    if (outPath == "") { outPath = a; i = i + 1; continue; }
 
     println("too many arguments");
     print_usage();
     yield 1;
   }
 
-  if (inPath == "" || outPath == "") {
+  if (inPath == "") {
     print_usage();
     yield 1;
   }
@@ -62,6 +60,6 @@ fn main(argv: Vec<String>) => {
   let cfg = load_fluff_config(inPath);
   set_fluff_options(cfg.unusedLocals, cfg.unusedParams);
 
-  compile_project(inPath, outPath);
+  fluff_project(inPath);
   0
 }

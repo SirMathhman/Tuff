@@ -126,12 +126,13 @@ async function bootstrapCompileSelfhost(intoDir: string) {
 async function runCompiler(
   entryFile: string,
   inputTuff: string,
-  outDir: string
+  outDir: string,
+  outEntryName = "tuffc.mjs"
 ) {
   await mkdir(outDir, { recursive: true });
   await writeRuntime(outDir);
 
-  const outFile = resolve(outDir, "tuffc.mjs");
+  const outFile = resolve(outDir, outEntryName);
 
   const mod = (await import(pathToFileURL(entryFile).toString())) as any;
   if (typeof mod.main !== "function") {
@@ -170,11 +171,12 @@ async function main() {
     ? await stagePrebuiltCompiler(stage1Dir)
     : await bootstrapCompileSelfhost(stage1Dir);
 
-  const input = resolve("src", "main", "tuff", "compiler", "tuffc.tuff");
+  const inputTuffc = resolve("src", "main", "tuff", "compiler", "tuffc.tuff");
+  const inputFluff = resolve("src", "main", "tuff", "compiler", "fluff.tuff");
 
-  const s2 = await runCompiler(stage1Entry, input, stage2Dir);
-  const s3 = await runCompiler(s2.entry, input, stage3Dir);
-  const s4 = await runCompiler(s3.entry, input, stage4Dir);
+  const s2 = await runCompiler(stage1Entry, inputTuffc, stage2Dir, "tuffc.mjs");
+  const s3 = await runCompiler(s2.entry, inputTuffc, stage3Dir, "tuffc.mjs");
+  const s4 = await runCompiler(s3.entry, inputTuffc, stage4Dir, "tuffc.mjs");
 
   const s3Entry = await readFile(s3.entry, "utf8");
   const s4Entry = await readFile(s4.entry, "utf8");
@@ -189,6 +191,28 @@ async function main() {
   if (s3Lib !== s4Lib) {
     throw new Error(
       "selfhost did not reach a fixed point for tuffc_lib.mjs (stage3 != stage4)"
+    );
+  }
+
+  // Also compile Fluff and ensure it is stable.
+  const s3Fluff = await runCompiler(
+    s3.entry,
+    inputFluff,
+    stage3Dir,
+    "fluff.mjs"
+  );
+  const s4Fluff = await runCompiler(
+    s4.entry,
+    inputFluff,
+    stage4Dir,
+    "fluff.mjs"
+  );
+
+  const s3FluffEntry = await readFile(s3Fluff.entry, "utf8");
+  const s4FluffEntry = await readFile(s4Fluff.entry, "utf8");
+  if (s3FluffEntry !== s4FluffEntry) {
+    throw new Error(
+      "selfhost did not reach a fixed point for fluff.mjs (stage3 != stage4)"
     );
   }
 

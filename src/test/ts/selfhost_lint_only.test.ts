@@ -5,6 +5,30 @@ import { dirname, resolve } from "node:path";
 
 import { buildStage2SelfhostCompiler } from "./selfhost_helpers";
 
+type CaptureResult<T> =
+  | { ok: true; value: T; out: string }
+  | { ok: false; error: unknown; out: string };
+
+function captureStdout<T>(fn: () => T): CaptureResult<T> {
+  const orig = process.stdout.write.bind(process.stdout);
+  let out = "";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (process.stdout as any).write = (chunk: any, ...args: any[]) => {
+    out += String(chunk);
+    return orig(chunk, ...args);
+  };
+
+  try {
+    const value = fn();
+    return { ok: true, value, out };
+  } catch (error) {
+    return { ok: false, error, out };
+  } finally {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (process.stdout as any).write = orig;
+  }
+}
+
 async function writeText(p: string, src: string): Promise<void> {
   await mkdir(dirname(p), { recursive: true });
   await writeFile(p, src, "utf8");
@@ -19,92 +43,87 @@ async function exists(p: string): Promise<boolean> {
   }
 }
 
-describe("selfhost lint-only mode", () => {
-  test("--lint-only lints without writing output", async () => {
+describe("selfhost fluff", () => {
+  test("error-level lints fail and still report multiple diagnostics", async () => {
     const outDir = resolve(
       ".dist",
-      "selfhost-lint-only",
+      "selfhost-fluff",
       `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
     );
 
-    const { stage2Dir, tuffc2 } = await buildStage2SelfhostCompiler(outDir);
-
-    const inFile = resolve(stage2Dir, "src", "main.tuff");
-    const outFile = resolve(stage2Dir, "out.mjs");
+    const { stage2Dir, fluff2 } = await buildStage2SelfhostCompiler(outDir);
 
     await writeText(
-      inFile,
-      ["fn main() : I32 => {", "  let x: I32 = 1;", "  x", "}", ""].join("\n")
+      resolve(stage2Dir, "build.json"),
+      JSON.stringify({ fluff: { unusedLocals: "error" } }, null, 2) + "\n"
     );
 
-    const rc = tuffc2.main(["--lint-only", inFile]);
-    expect(rc).toBe(0);
-    expect(await exists(outFile)).toBe(false);
-  });
-
-  test("--lint-only reports errors (and still writes no output)", async () => {
-    const outDir = resolve(
-      ".dist",
-      "selfhost-lint-only",
-      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
-    );
-
-    const { stage2Dir, tuffc2 } = await buildStage2SelfhostCompiler(outDir);
-
-    const inFile = resolve(stage2Dir, "bad.tuff");
-    const outFile = resolve(stage2Dir, "out.mjs");
-
-    // Missing else in if-as-expression is a parse-time error in this compiler.
+    const inFile = resolve(stage2Dir, "multi_error.tuff");
     await writeText(
       inFile,
       [
         "fn main() : I32 => {",
-        "  let x: I32 = if (true) 1;",
-        "  x",
+        "  let a: I32 = 1;",
+        "  let b: I32 = 2;",
+        "  0",
         "}",
         "",
       ].join("\n")
     );
 
-    expect(() => tuffc2.main(["--lint-only", inFile])).toThrow();
-    expect(await exists(outFile)).toBe(false);
+    const r = captureStdout(() => fluff2.main(["--format", "json", inFile]));
+    expect(r.ok).toBe(false);
+
+    const msg =
+      r.ok === false && r.error instanceof Error
+        ? r.error.message
+        : String((r as { error: unknown }).error);
+
+    // In JSON mode, errors are thrown as a single JSON object with the
+    // aggregated diagnostic text.
+    const parsed = JSON.parse(msg);
+    expect(parsed.level).toBe("error");
+    expect(String(parsed.text)).toMatch(/unused local/i);
+    expect(String(parsed.text)).toMatch(/\ba\b/);
+    expect(String(parsed.text)).toMatch(/\bb\b/);
   });
 
-  test("--lint-only walks imports and fails on dependency errors", async () => {
+  test("tuffc compilation fails on error-level lints and writes no output", async () => {
     const outDir = resolve(
       ".dist",
-      "selfhost-lint-only",
+      "selfhost-fluff",
       `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
     );
 
     const { stage2Dir, tuffc2 } = await buildStage2SelfhostCompiler(outDir);
 
-    const entry = resolve(stage2Dir, "src", "main.tuff");
-    const dep = resolve(stage2Dir, "src", "util", "math.tuff");
-    const outFile = resolve(stage2Dir, "out.mjs");
+    await writeText(
+      resolve(stage2Dir, "build.json"),
+      JSON.stringify({ fluff: { unusedLocals: "error" } }, null, 2) + "\n"
+    );
+
+    const inFile = resolve(stage2Dir, "compile_fails_on_lints.tuff");
+    const outFile = resolve(stage2Dir, "compile_fails_on_lints.mjs");
 
     await writeText(
-      dep,
+      inFile,
       [
-        // Shadowing is forbidden; this should be caught by the analyzer.
-        "out fn bad(x: I32) : I32 => {",
+        "fn main() : I32 => {",
         "  let x: I32 = 1;",
-        "  x",
+        "  0",
         "}",
         "",
       ].join("\n")
     );
 
-    await writeText(
-      entry,
-      [
-        "from src::util::math use { bad };",
-        "fn main() : I32 => bad(0);",
-        "",
-      ].join("\n")
-    );
-
-    expect(() => tuffc2.main(["--lint-only", entry])).toThrow(/shadow/i);
+    const r = captureStdout(() => tuffc2.main([inFile, outFile]));
+    expect(r.ok).toBe(false);
     expect(await exists(outFile)).toBe(false);
+
+    const msg =
+      r.ok === false && r.error instanceof Error
+        ? r.error.message
+        : String((r as { error: unknown }).error);
+    expect(msg).toMatch(/unused local/i);
   });
 });

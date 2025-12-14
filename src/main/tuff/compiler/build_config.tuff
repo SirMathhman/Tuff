@@ -1,0 +1,239 @@
+// build.json parsing for selfhost compiler tools.
+//
+// Right now this is intentionally tiny: we only parse the bits we need for
+// Fluff configuration.
+//
+// Supported shape (all keys optional):
+// {
+//   "fluff": {
+//     "unusedLocals": "off" | "warning" | "error",
+//     "unusedParams": "off" | "warning" | "error"
+//   }
+// }
+
+extern from rt::stdlib use {
+  readTextFile,
+  fileExists,
+  pathDirname,
+  pathJoin,
+  stringLen,
+  stringCharCodeAt,
+  stringSlice
+};
+
+fn is_ascii_ws(ch: I32) : Bool => ch == 32 || ch == 9 || ch == 10 || ch == 13
+
+fn ascii_lower(ch: I32) : I32 => {
+  if (ch >= 65 && ch <= 90) { yield ch + 32; }
+  ch
+}
+
+fn trim_ascii_ws(s: String) : String => {
+  let mut start = 0;
+  let mut end = stringLen(s);
+  while (start < end && is_ascii_ws(stringCharCodeAt(s, start))) { start = start + 1; }
+  while (end > start && is_ascii_ws(stringCharCodeAt(s, end - 1))) { end = end - 1; }
+  stringSlice(s, start, end)
+}
+
+fn json_skip_ws(src: String, i0: I32) : I32 => {
+  let mut i = i0;
+  while (i < stringLen(src) && is_ascii_ws(stringCharCodeAt(src, i))) { i = i + 1; }
+  i
+}
+
+// Parse a JSON string starting at a quote.
+// Returns (decodedText-ish, nextPosAfterClosingQuote).
+//
+// We do not fully decode escapes; we only need stable matching for simple
+// ASCII keys/values like "fluff" and "warning".
+fn json_parse_string(src: String, quotePos: I32) => {
+  if (!(quotePos < stringLen(src) && stringCharCodeAt(src, quotePos) == 34)) {
+    yield ("", quotePos);
+  }
+
+  let mut i = quotePos + 1;
+  while (i < stringLen(src)) {
+    let ch = stringCharCodeAt(src, i);
+    if (ch == 34) {
+      let inner = stringSlice(src, quotePos + 1, i);
+      yield (inner, i + 1);
+    }
+    if (ch == 92) { // '\\'
+      // Skip escaped character.
+      i = i + 2;
+      continue;
+    }
+    i = i + 1;
+  }
+
+  // Unterminated string.
+  ("", quotePos)
+}
+
+fn json_find_matching_brace(src: String, openPos: I32) : I32 => {
+  if (!(openPos < stringLen(src) && stringCharCodeAt(src, openPos) == 123)) { yield -1; }
+
+  let mut depth = 1;
+  let mut i = openPos + 1;
+  while (i < stringLen(src)) {
+    let ch = stringCharCodeAt(src, i);
+
+    if (ch == 34) {
+      let s = json_parse_string(src, i);
+      // If parse failed, bail.
+      if (s.1 == i) { yield -1; }
+      i = s.1;
+      continue;
+    }
+
+    if (ch == 123) { depth = depth + 1; i = i + 1; continue; }
+    if (ch == 125) {
+      depth = depth - 1;
+      if (depth == 0) { yield i; }
+      i = i + 1;
+      continue;
+    }
+
+    i = i + 1;
+  }
+
+  -1
+}
+
+// Find the object value for a key at any depth of scan.
+// Returns (openBracePos, closeBracePos) or (-1, -1).
+fn json_find_object_bounds_by_key(src: String, key: String) => {
+  let mut i = 0;
+  while (i < stringLen(src)) {
+    i = json_skip_ws(src, i);
+    if (i >= stringLen(src)) { break; }
+
+    let ch = stringCharCodeAt(src, i);
+
+    if (ch == 34) {
+      let k = json_parse_string(src, i);
+      if (k.1 == i) { yield (-1, -1); }
+      let keyText = k.0;
+      i = json_skip_ws(src, k.1);
+      if (i < stringLen(src) && stringCharCodeAt(src, i) == 58) { // ':'
+        i = json_skip_ws(src, i + 1);
+        if (keyText == key) {
+          if (i < stringLen(src) && stringCharCodeAt(src, i) == 123) { // '{'
+            let close = json_find_matching_brace(src, i);
+            if (close == -1) { yield (-1, -1); }
+            yield (i, close);
+          }
+        }
+      }
+      // continue scanning after the key string.
+      continue;
+    }
+
+    // Skip over objects/arrays conservatively by stepping a char.
+    i = i + 1;
+  }
+
+  (-1, -1)
+}
+
+fn json_find_string_value_in_object(src: String, objOpen: I32, objClose: I32, key: String) : String => {
+  // Scan key/value pairs in [objOpen, objClose].
+  let mut i = objOpen + 1;
+  while (i < objClose) {
+    i = json_skip_ws(src, i);
+    if (i >= objClose) { break; }
+
+    let ch = stringCharCodeAt(src, i);
+    if (ch == 44) { i = i + 1; continue; } // ','
+
+    if (ch == 34) {
+      let k = json_parse_string(src, i);
+      if (k.1 == i) { yield ""; }
+      let keyText = k.0;
+      i = json_skip_ws(src, k.1);
+      if (!(i < objClose && stringCharCodeAt(src, i) == 58)) { // ':'
+        // Not a key/value, keep scanning.
+        continue;
+      }
+      i = json_skip_ws(src, i + 1);
+
+      if (keyText == key) {
+        if (i < objClose && stringCharCodeAt(src, i) == 34) {
+          let v = json_parse_string(src, i);
+          if (v.1 == i) { yield ""; }
+          yield v.0;
+        }
+        // Only support string values for now.
+        yield "";
+      }
+
+      // Skip value if it's a string; otherwise, just keep scanning.
+      if (i < objClose && stringCharCodeAt(src, i) == 34) {
+        let v2 = json_parse_string(src, i);
+        if (v2.1 == i) { yield ""; }
+        i = v2.1;
+      }
+      continue;
+    }
+
+    i = i + 1;
+  }
+
+  ""
+}
+
+fn severity_from_string(s0: String, defaultValue: I32) : I32 => {
+  let s = trim_ascii_ws(s0);
+  // lowercase compare without allocating a full new string
+  // (values are tiny anyway).
+  if (s == "") { yield defaultValue; }
+
+  // Compare case-insensitive against known values.
+  fn eq_ci(a: String, b: String) : Bool => {
+    if (stringLen(a) != stringLen(b)) { yield false; }
+    let mut i = 0;
+    while (i < stringLen(a)) {
+      if (ascii_lower(stringCharCodeAt(a, i)) != ascii_lower(stringCharCodeAt(b, i))) { yield false; }
+      i = i + 1;
+    }
+    true
+  }
+
+  if (eq_ci(s, "off")) { yield 0; }
+  if (eq_ci(s, "warning")) { yield 1; }
+  if (eq_ci(s, "error")) { yield 2; }
+  defaultValue
+}
+
+class fn FluffConfig(unusedLocals: I32, unusedParams: I32) => {}
+
+out fn find_build_json_upwards(inPath: String) : String => {
+  let mut dir = pathDirname(inPath);
+  while (true) {
+    let cand = pathJoin(dir, "build.json");
+    if (fileExists(cand)) { yield cand; }
+    let parent = pathDirname(dir);
+    if (parent == dir) { break; }
+    dir = parent;
+  }
+  ""
+}
+
+out fn load_fluff_config(inPath: String) : FluffConfig => {
+  let path = find_build_json_upwards(inPath);
+  if (path == "") { yield FluffConfig(0, 0); }
+
+  let src = readTextFile(path);
+
+  let fluffObj = json_find_object_bounds_by_key(src, "fluff");
+  if (fluffObj.0 == -1) { yield FluffConfig(0, 0); }
+
+  let unusedLocals0 = json_find_string_value_in_object(src, fluffObj.0, fluffObj.1, "unusedLocals");
+  let unusedParams0 = json_find_string_value_in_object(src, fluffObj.0, fluffObj.1, "unusedParams");
+
+  let unusedLocals = severity_from_string(unusedLocals0, 0);
+  let unusedParams = severity_from_string(unusedParams0, 0);
+
+  FluffConfig(unusedLocals, unusedParams)
+}

@@ -31,7 +31,13 @@ describe("selfhost analyzer linting", () => {
       `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
     );
 
-    const { stage2Dir, tuffc2 } = await buildStage2SelfhostCompiler(outDir);
+    const { stage2Dir, fluff2 } = await buildStage2SelfhostCompiler(outDir);
+
+    await writeFile(
+      resolve(stage2Dir, "build.json"),
+      JSON.stringify({ fluff: { unusedParams: "warning" } }, null, 2) + "\n",
+      "utf8"
+    );
 
     const inFile = resolve(stage2Dir, "unused_params.tuff");
     const outFile = resolve(stage2Dir, "unused_params.mjs");
@@ -42,9 +48,7 @@ describe("selfhost analyzer linting", () => {
       "utf8"
     );
 
-    const { value: rc, out } = captureStdout(() =>
-      tuffc2.main(["--warn-unused-params", inFile, outFile])
-    );
+    const { value: rc, out } = captureStdout(() => fluff2.main([inFile]));
     expect(rc).toBe(0);
 
     expect(out).toMatch(/warning/i);
@@ -59,7 +63,13 @@ describe("selfhost analyzer linting", () => {
       `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
     );
 
-    const { stage2Dir, tuffc2 } = await buildStage2SelfhostCompiler(outDir);
+    const { stage2Dir, fluff2 } = await buildStage2SelfhostCompiler(outDir);
+
+    await writeFile(
+      resolve(stage2Dir, "build.json"),
+      JSON.stringify({ fluff: { unusedParams: "warning" } }, null, 2) + "\n",
+      "utf8"
+    );
 
     const inFile = resolve(stage2Dir, "unused_params_ignored.tuff");
     const outFile = resolve(stage2Dir, "unused_params_ignored.mjs");
@@ -72,25 +82,20 @@ describe("selfhost analyzer linting", () => {
       "utf8"
     );
 
-    const { value: rc, out } = captureStdout(() =>
-      tuffc2.main(["--warn-unused-params", inFile, outFile])
-    );
+    const { value: rc, out } = captureStdout(() => fluff2.main([inFile]));
     expect(rc).toBe(0);
 
     expect(out).not.toMatch(/unused parameter/i);
   });
 
-  test("config can enable unused parameter warnings", async () => {
+  test("build.json can enable unused parameter warnings", async () => {
     const outDir = resolve(
       ".dist",
       "selfhost-lint-unused-params",
       `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
     );
 
-    const { stage2Dir, tuffc2 } = await buildStage2SelfhostCompiler(outDir);
-
-    const configFile = resolve(stage2Dir, "tuffc.conf");
-    await writeFile(configFile, "warn_unused_params=true\n", "utf8");
+    const { stage2Dir, fluff2 } = await buildStage2SelfhostCompiler(outDir);
 
     const inFile = resolve(stage2Dir, "unused_params_cfg.tuff");
     const outFile = resolve(stage2Dir, "unused_params_cfg.mjs");
@@ -101,26 +106,36 @@ describe("selfhost analyzer linting", () => {
       "utf8"
     );
 
-    const { value: rc, out } = captureStdout(() =>
-      tuffc2.main(["--config", configFile, inFile, outFile])
-    );
-    expect(rc).toBe(0);
+    const r0 = captureStdout(() => fluff2.main([inFile]));
+    expect(r0.value).toBe(0);
+    expect(r0.out).not.toMatch(/unused parameter/i);
 
-    expect(out).toMatch(/unused parameter/i);
-    expect(out).toMatch(/\bx\b/);
+    await writeFile(
+      resolve(stage2Dir, "build.json"),
+      JSON.stringify({ fluff: { unusedParams: "warning" } }, null, 2) + "\n",
+      "utf8"
+    );
+
+    const r1 = captureStdout(() => fluff2.main([inFile]));
+    expect(r1.value).toBe(0);
+    expect(r1.out).toMatch(/unused parameter/i);
+    expect(r1.out).toMatch(/\bx\b/);
   });
 
-  test("config can disable unused parameter warnings even if flag enables", async () => {
+  test("build.json can disable unused parameter warnings", async () => {
     const outDir = resolve(
       ".dist",
       "selfhost-lint-unused-params",
       `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
     );
 
-    const { stage2Dir, tuffc2 } = await buildStage2SelfhostCompiler(outDir);
+    const { stage2Dir, fluff2 } = await buildStage2SelfhostCompiler(outDir);
 
-    const configFile = resolve(stage2Dir, "tuffc.conf");
-    await writeFile(configFile, "warn_unused_params=false\n", "utf8");
+    await writeFile(
+      resolve(stage2Dir, "build.json"),
+      JSON.stringify({ fluff: { unusedParams: "off" } }, null, 2) + "\n",
+      "utf8"
+    );
 
     const inFile = resolve(stage2Dir, "unused_params_cfg_disable.tuff");
     const outFile = resolve(stage2Dir, "unused_params_cfg_disable.mjs");
@@ -131,15 +146,7 @@ describe("selfhost analyzer linting", () => {
       "utf8"
     );
 
-    const { value: rc, out } = captureStdout(() =>
-      tuffc2.main([
-        "--warn-unused-params",
-        "--config",
-        configFile,
-        inFile,
-        outFile,
-      ])
-    );
+    const { value: rc, out } = captureStdout(() => fluff2.main([inFile]));
     expect(rc).toBe(0);
     expect(out).not.toMatch(/unused parameter/i);
   });

@@ -77,14 +77,25 @@ struct NarrowedTag {
   variant: String
 }
 
-// Lints are intentionally opt-in by default to keep compiler/test output readable.
-// The CLI (`tuffc.tuff`) and any host tooling can enable them via set_lint_options.
-let mut __lint_warn_unused_locals = false;
-let mut __lint_warn_unused_params = false;
+// Fluff (linting) is intentionally opt-in by default to keep compiler/test
+// output readable.
+//
+// Severity levels:
+//   0 = off
+//   1 = warning
+//   2 = error
+let mut __fluff_unused_locals = 0;
+let mut __fluff_unused_params = 0;
 
-out fn set_lint_options(warnUnusedLocals: Bool, warnUnusedParams: Bool) : Void => {
-  __lint_warn_unused_locals = warnUnusedLocals;
-  __lint_warn_unused_params = warnUnusedParams;
+out fn set_fluff_options(unusedLocalsSeverity: I32, unusedParamsSeverity: I32) : Void => {
+  __fluff_unused_locals = unusedLocalsSeverity;
+  __fluff_unused_params = unusedParamsSeverity;
+}
+
+fn fluff_emit_at(src: String, pos: I32, severity: I32, msg: String) : Void => {
+  if (severity == 1) { warn_at(src, pos, msg); yield; }
+  if (severity == 2) { error_at(src, pos, msg); yield; }
+  // severity 0 (off) or unknown => ignore
 }
 
 fn this_struct_name(className: String) : String => "__This__" + className
@@ -1035,26 +1046,28 @@ fn mark_binding_written(scopes: Vec<Vec<Binding>>, depth: I32, name: String) : V
 }
 
 fn warn_unused_locals_in_scope(src: String, scopes: Vec<Vec<Binding>>, depth: I32) : Void => {
-  if (!__lint_warn_unused_locals) { yield; }
+  let severity = __fluff_unused_locals;
+  if (severity == 0) { yield; }
   let scope = vec_get(scopes, depth - 1);
   let mut bi = 0;
   while (bi < vec_len(scope)) {
     let b = vec_get(scope, bi);
     if (!b.read && !b.isParam && !binding_name_is_intentionally_unused(b.name)) {
-      warn_at(src, b.declPos, "unused local: " + b.name);
+      fluff_emit_at(src, b.declPos, severity, "unused local: " + b.name);
     }
     bi = bi + 1;
   }
 }
 
 fn warn_unused_params_in_scope(src: String, scopes: Vec<Vec<Binding>>, depth: I32) : Void => {
-  if (!__lint_warn_unused_params) { yield; }
+  let severity = __fluff_unused_params;
+  if (severity == 0) { yield; }
   let scope = vec_get(scopes, depth - 1);
   let mut bi = 0;
   while (bi < vec_len(scope)) {
     let b = vec_get(scope, bi);
     if (!b.read && b.isParam && !binding_name_is_intentionally_unused(b.name)) {
-      warn_at(src, b.declPos, "unused parameter: " + b.name);
+      fluff_emit_at(src, b.declPos, severity, "unused parameter: " + b.name);
     }
     bi = bi + 1;
   }
