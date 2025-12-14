@@ -193,6 +193,33 @@ fn doSomething() : Void => {
 }
 ```
 
+#### `Char` is platform-agnostic (via extern)
+
+Tuff is intended to evolve into a systems programming language, so the language **does not** bake in a platform/ABI-specific character encoding (UTF-8 vs UTF-16 vs UTF-32, locale encodings, etc.).
+
+Instead:
+
+- `Char` represents a **Unicode scalar value** (a code point): an integer in $[0, 0x10FFFF]$ excluding the surrogate range $[0xD800, 0xDFFF]$.
+- The **runtime representation** of `Char` is **backend-defined**.
+- All interactions between `String` and `Char` are defined through **extern functions** provided by the runtime for the active backend.
+
+In the current JS runtime backend, `Char` is represented as a number, and the runtime converts between JS UTF-16 strings and Unicode code points.
+
+Current prelude APIs (bootstrap):
+
+```tuff
+from std::prelude use {
+    stringCharAt,       // (String, I32) -> Char (Unicode code point)
+    stringCharWidthAt,  // (String, I32) -> I32  (0, 1, or 2 UTF-16 code units in JS backend)
+    stringFromChar      // (Char) -> String
+};
+```
+
+Notes:
+
+- The `index` parameter is backend-defined. In the JS backend it is a **UTF-16 code unit index**, because that is what the host provides efficiently.
+- Code that needs to iterate characters should use `stringCharWidthAt` to advance correctly on backends where a single character may occupy multiple code units.
+
 ### Numeric literals and default typing
 
 Integer and floating-point literal types follow simple, predictable rules:

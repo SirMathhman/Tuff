@@ -26,6 +26,7 @@ extern from rt::stdlib use {
   stringSlice,
   __stringCharAt,
   __stringFromChar,
+  __stringCharWidthAt,
   __stringCharCodeAt,
   __stringFromCharCode
 };
@@ -43,6 +44,7 @@ extern from rt::vec use {
 
 // Char-oriented names.
 out fn stringCharAt(s: String, index: I32) : Char => __stringCharAt(s, index)
+out fn stringCharWidthAt(s: String, index: I32) : I32 => __stringCharWidthAt(s, index)
 out fn stringFromChar(ch: Char) : String => __stringFromChar(ch)
 
 // ---- Deprecated string code-unit helpers ----

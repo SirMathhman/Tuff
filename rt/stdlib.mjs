@@ -79,17 +79,72 @@ export function stringFromCharCode(code) {
 
 // Char helpers
 //
-// NOTE: In the current bootstrap, Tuff `Char` behaves like a numeric code unit.
-// These helpers intentionally operate on UTF-16 code units (JS semantics).
+// IMPORTANT: Tuff `Char` is intended to be backend-agnostic.
+// In the JS runtime, we represent a Char as a Unicode scalar value (code point)
+// stored in a number.
+//
+// These functions accept indices in UTF-16 code units (JS string indexing), but
+// they *return* / *consume* Unicode code points so the language surface isn't
+// tied to UTF-16.
+
+const REPLACEMENT_CHAR = 0xfffd;
+
+function isHighSurrogate(u16) {
+  return u16 >= 0xd800 && u16 <= 0xdbff;
+}
+
+function isLowSurrogate(u16) {
+  return u16 >= 0xdc00 && u16 <= 0xdfff;
+}
+
+function toCodePoint(high, low) {
+  return (high - 0xd800) * 0x400 + (low - 0xdc00) + 0x10000;
+}
+
+function isValidCodePoint(cp) {
+  return (
+    Number.isFinite(cp) &&
+    cp >= 0 &&
+    cp <= 0x10ffff &&
+    !(cp >= 0xd800 && cp <= 0xdfff)
+  );
+}
+
+export function stringCharWidthAt(s, index) {
+  const str = String(s);
+  const first = str.charCodeAt(index);
+  if (!Number.isFinite(first)) return 0;
+  if (isHighSurrogate(first)) {
+    const second = str.charCodeAt(index + 1);
+    if (Number.isFinite(second) && isLowSurrogate(second)) return 2;
+  }
+  return 1;
+}
+
 export function stringCharAt(s, index) {
-  const n = String(s).charCodeAt(index);
-  // JS returns NaN for out-of-range indices. Map that to 0 for stability.
-  if (!Number.isFinite(n)) return 0;
-  return n & 0xffff;
+  const str = String(s);
+  const first = str.charCodeAt(index);
+  if (!Number.isFinite(first)) return 0;
+
+  if (isHighSurrogate(first)) {
+    const second = str.charCodeAt(index + 1);
+    if (Number.isFinite(second) && isLowSurrogate(second)) {
+      return toCodePoint(first, second);
+    }
+    return REPLACEMENT_CHAR;
+  }
+
+  if (isLowSurrogate(first)) {
+    return REPLACEMENT_CHAR;
+  }
+
+  return first;
 }
 
 export function stringFromChar(ch) {
-  return String.fromCharCode(Number(ch) & 0xffff);
+  const cp = Number(ch);
+  if (!isValidCodePoint(cp)) return String.fromCodePoint(REPLACEMENT_CHAR);
+  return String.fromCodePoint(cp);
 }
 
 // Internal aliases for std::prelude (see rt/stdlib.ts).
@@ -97,6 +152,7 @@ export const __stringCharCodeAt = stringCharCodeAt;
 export const __stringFromCharCode = stringFromCharCode;
 export const __stringCharAt = stringCharAt;
 export const __stringFromChar = stringFromChar;
+export const __stringCharWidthAt = stringCharWidthAt;
 
 // ---- Map helpers ----
 

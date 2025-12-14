@@ -90,7 +90,9 @@ describe("stdlib string helper deprecations", () => {
       "utf8"
     );
 
-    const { value: rc, out } = captureStdout(() => tuffc2.main([inFile, outFile]));
+    const { value: rc, out } = captureStdout(() =>
+      tuffc2.main([inFile, outFile])
+    );
     expect(rc).toBe(0);
 
     // Also execute the compiled program to ensure the exports actually exist

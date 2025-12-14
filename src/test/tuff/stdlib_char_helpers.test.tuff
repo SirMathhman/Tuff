@@ -9,6 +9,13 @@ fn main() : I32 => {
   it("stringCharAt returns a Char", expect_eq("char", c, 65));
   it("stringFromChar roundtrip", expect_eq("roundtrip", stringFromChar(c), "A"));
 
+  // Non-BMP code point (😀 U+1F600 = 128512). In JS this is a surrogate pair,
+  // but Tuff Char is a Unicode code point.
+  let smile: Char = 128512;
+  let smileStr: String = stringFromChar(smile);
+  let smile2: Char = stringCharAt(smileStr, 0);
+  it("non-BMP Char roundtrip", expect_eq("smile", smile2, smile));
+
   summary();
   status()
 }
