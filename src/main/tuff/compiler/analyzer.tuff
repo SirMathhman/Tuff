@@ -6,7 +6,7 @@
 extern from rt::stdlib use { stringLen, stringCharCodeAt, stringSlice };
 extern from rt::vec use { vec_new, vec_len, vec_push, vec_get, vec_set };
 
-from util::diagnostics use { error_at };
+from util::diagnostics use { error_at, warn_at };
 from ast use { span_start };
 
 // ------------------------------------------------------------
@@ -16,6 +16,7 @@ from ast use { span_start };
 struct StructDef {
   tag: String,
   name: String,
+  deprecatedReason: String,
   fields: Vec<String>,
   fieldTyAnns: Vec<String>
 }
@@ -23,6 +24,7 @@ struct StructDef {
 struct FnSig {
   tag: String,
   name: String,
+  deprecatedReason: String,
   // Optional generic params (fn id<T>(...)).
   typeParams: Vec<String>,
   params: Vec<String>,
@@ -33,6 +35,7 @@ struct FnSig {
 struct UnionDef {
   tag: String,
   name: String,
+  deprecatedReason: String,
   // Optional generic params (type Option<T> = ...).
   typeParams: Vec<String>,
   variants: Vec<UnionVariantInfo>
@@ -51,7 +54,8 @@ struct Binding {
   tag: String,
   name: String,
   isMut: Bool,
-  tyTag: String
+  tyTag: String,
+  deprecatedReason: String
 }
 
 // Generic substitution entry: T -> I32, etc.
@@ -75,17 +79,137 @@ fn mk_union_variant_info(name: String, hasPayload: Bool, payloadTyAnns: Vec<Stri
   UnionVariantInfo { "UnionVariantInfo", name, hasPayload, payloadTyAnns }
 
 fn mk_struct_def(name: String, fields: Vec<String>, fieldTyAnns: Vec<String>) =>
-  StructDef { "StructDef", name, fields, fieldTyAnns }
+  StructDef { "StructDef", name, "", fields, fieldTyAnns }
 
-fn mk_fn_sig(name: String, typeParams: Vec<String>, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String) =>
-  FnSig { "FnSig", name, typeParams, params, paramTyAnns, retTyAnn }
+fn mk_fn_sig(name: String, deprecatedReason: String, typeParams: Vec<String>, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String) =>
+  FnSig { "FnSig", name, deprecatedReason, typeParams, params, paramTyAnns, retTyAnn }
 
 fn mk_union_def(name: String, typeParams: Vec<String>, variants: Vec<UnionVariantInfo>) =>
-  UnionDef { "UnionDef", name, typeParams, variants }
+  UnionDef { "UnionDef", name, "", typeParams, variants }
 
-fn mk_binding(name: String, isMut: Bool, tyTag: String) => Binding { "Binding", name, isMut, tyTag }
+fn mk_binding(name: String, isMut: Bool, tyTag: String, deprecatedReason: String) => Binding { "Binding", name, isMut, tyTag, deprecatedReason }
 fn mk_subst(name: String, ty: String) => TySubst { "TySubst", name, ty }
 fn mk_narrowed_tag(name: String, variant: String) => NarrowedTag { "NarrowedTag", name, variant }
+
+// ------------------------------------------------------------
+// Deprecation markers (comment-based)
+//
+// Supported forms (must appear immediately above a decl/use site):
+//   // `deprecated - <reason>`
+//   /* `deprecated - <reason>` */
+//
+// For now we treat an empty/missing reason as "not deprecated".
+// ------------------------------------------------------------
+
+fn is_ascii_ws(ch: I32) : Bool => ch == 32 || ch == 9 || ch == 10 || ch == 13
+fn is_ascii_space_tab(ch: I32) : Bool => ch == 32 || ch == 9
+
+fn ascii_lower(ch: I32) : I32 => {
+  if (ch >= 65 && ch <= 90) { yield ch + 32; }
+  ch
+}
+
+fn trim_ascii_ws(s: String) : String => {
+  let mut start = 0;
+  let mut end = stringLen(s);
+  while (start < end && is_ascii_ws(stringCharCodeAt(s, start))) { start = start + 1; }
+  while (end > start && is_ascii_ws(stringCharCodeAt(s, end - 1))) { end = end - 1; }
+  stringSlice(s, start, end)
+}
+
+fn starts_with_deprecated_ci(s: String) : Bool => {
+  // "deprecated" (10 chars)
+  if (stringLen(s) < 10) { yield false; }
+  let mut i = 0;
+  while (i < 10) {
+    let ch = ascii_lower(stringCharCodeAt(s, i));
+    let want = stringCharCodeAt("deprecated", i);
+    if (ch != want) { yield false; }
+    i = i + 1;
+  }
+  true
+}
+
+fn parse_deprecated_reason_from_comment(commentText: String) : String => {
+  let t0 = trim_ascii_ws(commentText);
+  if (!starts_with_deprecated_ci(t0)) { yield ""; }
+
+  let mut i = 10;
+  while (i < stringLen(t0) && is_ascii_ws(stringCharCodeAt(t0, i))) { i = i + 1; }
+
+  // Require `-` (or `:`) to avoid accidental matches like "deprecatedness".
+  if (i >= stringLen(t0)) { yield ""; }
+  let sep = stringCharCodeAt(t0, i);
+  if (!(sep == 45 || sep == 58)) { yield ""; }
+  i = i + 1;
+  while (i < stringLen(t0) && is_ascii_ws(stringCharCodeAt(t0, i))) { i = i + 1; }
+  trim_ascii_ws(stringSlice(t0, i, stringLen(t0)))
+}
+
+fn skip_ws_back(src: String, pos: I32) : I32 => {
+  let mut i = pos;
+  while (i > 0 && is_ascii_ws(stringCharCodeAt(src, i - 1))) { i = i - 1; }
+  i
+}
+
+fn line_start(src: String, pos: I32) : I32 => {
+  let mut i = pos;
+  while (i > 0 && stringCharCodeAt(src, i - 1) != 10) { i = i - 1; }
+  i
+}
+
+fn line_end(src: String, pos: I32) : I32 => {
+  let mut i = pos;
+  while (i < stringLen(src) && stringCharCodeAt(src, i) != 10) { i = i + 1; }
+  i
+}
+
+fn block_comment_start(src: String, endStarPos: I32) : I32 => {
+  // endStarPos points at the '*' in the trailing "*/".
+  let mut i = endStarPos;
+  while (i >= 2) {
+    if (stringCharCodeAt(src, i - 2) == 47 && stringCharCodeAt(src, i - 1) == 42) { yield i - 2; }
+    i = i - 1;
+  }
+  -1
+}
+
+fn deprecation_reason_before(src: String, pos: I32) : String => {
+  // Walk upward across whitespace and comment-only lines/comments, returning
+  // the first `deprecated - ...` reason found.
+  let mut k = pos;
+  while (true) {
+    k = skip_ws_back(src, k);
+    if (k <= 0) { yield ""; }
+
+    // Block comment ending right before k.
+    if (k >= 2 && stringCharCodeAt(src, k - 2) == 42 && stringCharCodeAt(src, k - 1) == 47) {
+      let start = block_comment_start(src, k - 2);
+      if (start == -1) { yield ""; }
+      let inner = stringSlice(src, start + 2, k - 2);
+      let reason = parse_deprecated_reason_from_comment(inner);
+      if (reason != "") { yield reason; }
+      k = start;
+      continue;
+    }
+
+    // Line comment on the previous non-empty line.
+    let ls = line_start(src, k);
+    let mut p = ls;
+    while (p < k && is_ascii_space_tab(stringCharCodeAt(src, p))) { p = p + 1; }
+    if (p + 1 < stringLen(src) && stringCharCodeAt(src, p) == 47 && stringCharCodeAt(src, p + 1) == 47) {
+      let le = line_end(src, p + 2);
+      let inner = stringSlice(src, p + 2, le);
+      let reason = parse_deprecated_reason_from_comment(inner);
+      if (reason != "") { yield reason; }
+      k = ls;
+      continue;
+    }
+
+    // Hit code (or a non-deprecation comment) => stop.
+    yield "";
+  }
+}
 
 fn narrow_lookup(narrowed: Vec<NarrowedTag>, name: String) : String => {
   let mut i = 0;
@@ -672,7 +796,7 @@ fn find_fn_sig(fns: Vec<FnSig>, name: String) : FnSig => {
     if (s.name == name) { yield s; }
     i = i + 1;
   }
-  mk_fn_sig(name, vec_new(), vec_new(), vec_new(), "")
+  mk_fn_sig(name, "", vec_new(), vec_new(), vec_new(), "")
 }
 
 fn has_fn_sig(fns: Vec<FnSig>, name: String) : Bool => {
@@ -773,7 +897,16 @@ fn declare_name(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, na
     error_at(src, pos, "shadowing not allowed: " + name);
   }
   let cur = vec_get(scopes, depth - 1);
-  vec_push(cur, mk_binding(name, isMut, tyTag));
+  vec_push(cur, mk_binding(name, isMut, tyTag, ""));
+}
+
+fn declare_name_deprecated(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, name: String, isMut: Bool, tyTag: String, deprecatedReason: String) : Void => {
+  if (scopes_contains(scopes, depth, name)) {
+    // Report and continue (declare anyway to reduce cascades).
+    error_at(src, pos, "shadowing not allowed: " + name);
+  }
+  let cur = vec_get(scopes, depth - 1);
+  vec_push(cur, mk_binding(name, isMut, tyTag, deprecatedReason));
 }
 
 fn scope_contains(scope: Vec<Binding>, name: String) : Bool => {
@@ -794,7 +927,18 @@ fn declare_local_name(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I
     error_at(src, pos, "duplicate name: " + name);
     yield;
   }
-  vec_push(cur, mk_binding(name, isMut, tyTag));
+  vec_push(cur, mk_binding(name, isMut, tyTag, ""));
+}
+
+fn declare_local_name_deprecated(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, name: String, isMut: Bool, tyTag: String, deprecatedReason: String) : Void => {
+  // Declare in the current scope only (no outer-scope shadowing check).
+  let cur = vec_get(scopes, depth - 1);
+  if (scope_contains(cur, name)) {
+    // Keep the original binding; do not redeclare.
+    error_at(src, pos, "duplicate name: " + name);
+    yield;
+  }
+  vec_push(cur, mk_binding(name, isMut, tyTag, deprecatedReason));
 }
 
 fn lookup_binding(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, name: String) : Binding => {
@@ -810,7 +954,7 @@ fn lookup_binding(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, 
     si = si + 1;
   }
   error_at(src, pos, "unknown name: " + name);
-  mk_binding(name, false, ty_unknown())
+  mk_binding(name, false, ty_unknown(), "")
 }
 
 fn update_binding_ty(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, name: String, newTyTag: String) : Void => {
@@ -821,7 +965,7 @@ fn update_binding_ty(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I3
     while (bi < vec_len(scope)) {
       let b = vec_get(scope, bi);
       if (b.name == name) {
-        vec_set(scope, bi, mk_binding(b.name, b.isMut, newTyTag));
+        vec_set(scope, bi, mk_binding(b.name, b.isMut, newTyTag, b.deprecatedReason));
         yield;
       }
       bi = bi + 1;
@@ -1439,6 +1583,14 @@ fn infer_union_payload_type_from_narrowing(src: String, unions: Vec<UnionDef>, s
 fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, e: Any) : Void => {
   if (e.tag == "EIdent") {
     require_name(src, span_start(e.span), scopes, depth, e.name);
+
+    // Usage-site deprecation warning.
+    if (!(e.name == "true") && !(e.name == "false") && !(e.name == "continue") && !(e.name == "break")) {
+      let b = lookup_binding(src, span_start(e.span), scopes, depth, e.name);
+      if (b.deprecatedReason != "") {
+        warn_at(src, span_start(e.span), "use of deprecated symbol " + e.name + " - " + b.deprecatedReason);
+      }
+    }
     yield;
   }
 
@@ -1978,7 +2130,19 @@ fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
   if (d.tag == "DImport") {
     let mut ni = 0;
     while (ni < vec_len(d.names)) {
-      declare_name(src, span_start(d.span), scopes, depth, vec_get(d.names, ni), false, ty_unknown());
+      let name = vec_get(d.names, ni);
+      // If the imported binding is a function with a known signature, propagate
+      // its deprecation marker and warn at import time.
+      if (has_fn_sig(fns, name)) {
+        let sig = find_fn_sig(fns, name);
+        if (sig.deprecatedReason != "") {
+          warn_at(src, span_start(d.span), "importing deprecated symbol " + name + " - " + sig.deprecatedReason);
+          declare_name_deprecated(src, span_start(d.span), scopes, depth, name, false, ty_unknown(), sig.deprecatedReason);
+          ni = ni + 1;
+          continue;
+        }
+      }
+      declare_name(src, span_start(d.span), scopes, depth, name, false, ty_unknown());
       ni = ni + 1;
     }
     yield;
@@ -1999,7 +2163,12 @@ fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
   }
 
   if (d.tag == "DFn") {
-    declare_name(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown());
+    let depReason = deprecation_reason_before(src, span_start(d.span));
+    if (depReason != "") {
+      declare_name_deprecated(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown(), depReason);
+    } else {
+      declare_name(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown());
+    }
 
     // Register signature for later call/return checking.
     let mut paramTyAnns = d.paramTyAnns;
@@ -2011,12 +2180,17 @@ fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
     }
 
     require_all_param_types(src, span_start(d.span), "function " + d.name, d.params, paramTyAnns);
-    vec_push(fns, mk_fn_sig(d.name, d.typeParams, d.params, paramTyAnns, d.retTyAnn));
+    vec_push(fns, mk_fn_sig(d.name, depReason, d.typeParams, d.params, paramTyAnns, d.retTyAnn));
     yield;
   }
 
   if (d.tag == "DClassFn") {
-    declare_name(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown());
+    let depReason = deprecation_reason_before(src, span_start(d.span));
+    if (depReason != "") {
+      declare_name_deprecated(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown(), depReason);
+    } else {
+      declare_name(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown());
+    }
 
     // Synthesize a struct that represents the returned object shape.
     let thisName = this_struct_name(d.name);
@@ -2066,7 +2240,7 @@ fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
     }
 
     require_all_param_types(src, span_start(d.span), "class fn " + d.name, d.params, paramTyAnns);
-    vec_push(fns, mk_fn_sig(d.name, d.typeParams, d.params, paramTyAnns, d.retTyAnn));
+    vec_push(fns, mk_fn_sig(d.name, depReason, d.typeParams, d.params, paramTyAnns, d.retTyAnn));
     yield;
   }
 

@@ -20,7 +20,9 @@ from util::diagnostics use {
   set_current_file,
   panic_at,
   reset_errors,
+  reset_warnings,
   panic_if_errors,
+  emit_warnings,
   reset_struct_defs,
   add_struct_def,
   find_struct_fields,
@@ -132,6 +134,7 @@ fn compile_tiny2_with_imported_fns(src: String, requireMain: Bool, exportAll: Bo
   // Reset per-file state.
   reset_struct_defs();
   reset_errors();
+  reset_warnings();
 
   let mut out = "// compiled by selfhost tuffc\n";
 
@@ -270,6 +273,7 @@ fn compile_tiny2_with_imported_fns(src: String, requireMain: Bool, exportAll: Bo
   // signatures so cross-file calls are validated.
   analyze_program_with_fns(src, decls, importedFns);
   panic_if_errors();
+  emit_warnings();
 
   // Set the file path for the emitter to compute correct relative import paths
   set_current_file_path(filePath);
@@ -351,6 +355,115 @@ fn str_list_remove(xs: Any, s: String) => {
   out
 }
 
+// ------------------------------------------------------------
+// Deprecation markers (comment-based)
+//
+// Supported forms:
+//   // `deprecated - <reason>`
+//   /* `deprecated - <reason>` */
+// ------------------------------------------------------------
+
+fn is_ascii_ws(ch: I32) : Bool => ch == 32 || ch == 9 || ch == 10 || ch == 13
+fn is_ascii_space_tab(ch: I32) : Bool => ch == 32 || ch == 9
+
+fn ascii_lower(ch: I32) : I32 => {
+  if (ch >= 65 && ch <= 90) { yield ch + 32; }
+  ch
+}
+
+fn trim_ascii_ws(s: String) : String => {
+  let mut start = 0;
+  let mut end = stringLen(s);
+  while (start < end && is_ascii_ws(stringCharCodeAt(s, start))) { start = start + 1; }
+  while (end > start && is_ascii_ws(stringCharCodeAt(s, end - 1))) { end = end - 1; }
+  stringSlice(s, start, end)
+}
+
+fn starts_with_deprecated_ci(s: String) : Bool => {
+  if (stringLen(s) < 10) { yield false; }
+  let mut i = 0;
+  while (i < 10) {
+    let ch = ascii_lower(stringCharCodeAt(s, i));
+    let want = stringCharCodeAt("deprecated", i);
+    if (ch != want) { yield false; }
+    i = i + 1;
+  }
+  true
+}
+
+fn parse_deprecated_reason_from_comment(commentText: String) : String => {
+  let t0 = trim_ascii_ws(commentText);
+  if (!starts_with_deprecated_ci(t0)) { yield ""; }
+
+  let mut i = 10;
+  while (i < stringLen(t0) && is_ascii_ws(stringCharCodeAt(t0, i))) { i = i + 1; }
+  if (i >= stringLen(t0)) { yield ""; }
+  let sep = stringCharCodeAt(t0, i);
+  if (!(sep == 45 || sep == 58)) { yield ""; }
+  i = i + 1;
+  while (i < stringLen(t0) && is_ascii_ws(stringCharCodeAt(t0, i))) { i = i + 1; }
+  trim_ascii_ws(stringSlice(t0, i, stringLen(t0)))
+}
+
+fn skip_ws_back(src: String, pos: I32) : I32 => {
+  let mut i = pos;
+  while (i > 0 && is_ascii_ws(stringCharCodeAt(src, i - 1))) { i = i - 1; }
+  i
+}
+
+fn line_start(src: String, pos: I32) : I32 => {
+  let mut i = pos;
+  while (i > 0 && stringCharCodeAt(src, i - 1) != 10) { i = i - 1; }
+  i
+}
+
+fn line_end(src: String, pos: I32) : I32 => {
+  let mut i = pos;
+  while (i < stringLen(src) && stringCharCodeAt(src, i) != 10) { i = i + 1; }
+  i
+}
+
+fn block_comment_start(src: String, endStarPos: I32) : I32 => {
+  let mut i = endStarPos;
+  while (i >= 2) {
+    if (stringCharCodeAt(src, i - 2) == 47 && stringCharCodeAt(src, i - 1) == 42) { yield i - 2; }
+    i = i - 1;
+  }
+  -1
+}
+
+fn deprecation_reason_before(src: String, pos: I32) : String => {
+  let mut k = pos;
+  while (true) {
+    k = skip_ws_back(src, k);
+    if (k <= 0) { yield ""; }
+
+    if (k >= 2 && stringCharCodeAt(src, k - 2) == 42 && stringCharCodeAt(src, k - 1) == 47) {
+      let start = block_comment_start(src, k - 2);
+      if (start == -1) { yield ""; }
+      let inner = stringSlice(src, start + 2, k - 2);
+      let reason = parse_deprecated_reason_from_comment(inner);
+      if (reason != "") { yield reason; }
+      k = start;
+      continue;
+    }
+
+    let ls = line_start(src, k);
+    let mut p = ls;
+    while (p < k && is_ascii_space_tab(stringCharCodeAt(src, p))) { p = p + 1; }
+    if (p + 1 < stringLen(src) && stringCharCodeAt(src, p) == 47 && stringCharCodeAt(src, p + 1) == 47) {
+      let le = line_end(src, p + 2);
+      let inner = stringSlice(src, p + 2, le);
+      let reason = parse_deprecated_reason_from_comment(inner);
+      if (reason != "") { yield reason; }
+      k = ls;
+      continue;
+    }
+
+    yield "";
+  }
+}
+
 fn module_index(modulePaths: Any, path: String) : I32 => {
   let mut i = 0;
   while (i < vec_len(modulePaths)) {
@@ -368,7 +481,7 @@ fn fnsig_lookup_by_name(fns: Any, name: String) => {
     i = i + 1;
   }
   // sentinel: empty name means missing
-  mk_fn_sig("", vec_new(), vec_new(), vec_new(), "")
+  mk_fn_sig("", "", vec_new(), vec_new(), vec_new(), "")
 }
 
 fn scan_top_level_fn_exports(src: String) => {
@@ -504,13 +617,15 @@ fn scan_top_level_fn_exports(src: String) => {
   while (di < vec_len(decls)) {
     let d = vec_get(decls, di);
     if (d.tag == "DFn") {
-      let sig = mk_fn_sig(d.name, d.typeParams, d.params, d.paramTyAnns, d.retTyAnn);
+      let depReason = deprecation_reason_before(src, span_start(d.span));
+      let sig = mk_fn_sig(d.name, depReason, d.typeParams, d.params, d.paramTyAnns, d.retTyAnn);
       vec_push(allSigs, sig);
       if (d.isOut) { vec_push(outSigs, sig); }
       else { vec_push(privateNames, d.name); }
     }
     if (d.tag == "DClassFn") {
-      let sig = mk_fn_sig(d.name, d.typeParams, d.params, d.paramTyAnns, d.retTyAnn);
+      let depReason = deprecation_reason_before(src, span_start(d.span));
+      let sig = mk_fn_sig(d.name, depReason, d.typeParams, d.params, d.paramTyAnns, d.retTyAnn);
       vec_push(allSigs, sig);
       if (d.isOut) { vec_push(outSigs, sig); }
       else { vec_push(privateNames, d.name); }

@@ -10,6 +10,10 @@ let mut __tuffc_current_file = "<input>";
 // Accumulated analyzer errors (reset per file compilation).
 let mut __tuffc_errors = vec_new();
 
+// Accumulated warnings (reset per file compilation).
+// Warnings do not fail compilation; they are printed after successful analysis.
+let mut __tuffc_warnings = vec_new();
+
 // Struct definitions for struct literals (reset per file compilation).
 let mut __tuffc_struct_defs = vec_new();
 
@@ -22,6 +26,10 @@ out fn set_current_file(path: String) : Void => {
 
 out fn reset_errors() : Void => {
   __tuffc_errors = vec_new();
+}
+
+out fn reset_warnings() : Void => {
+  __tuffc_warnings = vec_new();
 }
 
 fn errors_len() : I32 => vec_len(__tuffc_errors)
@@ -37,10 +45,58 @@ fn errors_join() : String => {
   out
 }
 
+fn warnings_join() : String => {
+  let mut out = "";
+  let mut i = 0;
+  while (i < vec_len(__tuffc_warnings)) {
+    if (i > 0) { out = out + "\n\n"; }
+    out = out + vec_get(__tuffc_warnings, i);
+    i = i + 1;
+  }
+  out
+}
+
 out fn panic_if_errors() : Void => {
   if (vec_len(__tuffc_errors) > 0) {
     panic(errors_join());
   }
+}
+
+out fn emit_warnings() : Void => {
+  // Print warnings after a successful compile. Keep them separate from errors
+  // so they don't fail compilation.
+  let mut i = 0;
+  while (i < vec_len(__tuffc_warnings)) {
+    println(vec_get(__tuffc_warnings, i));
+    i = i + 1;
+  }
+}
+
+fn ascii_lower(ch: I32) : I32 => {
+  if (ch >= 65 && ch <= 90) { yield ch + 32; }
+  ch
+}
+
+fn replace_error_label_with_warning(s: String) : String => {
+  // The formatter currently hardcodes " error: " in the header.
+  // Rewrite the first occurrence to " warning: " for warnings.
+  let needle = " error: ";
+  let mut i = 0;
+  while (i + stringLen(needle) <= stringLen(s)) {
+    let mut ok = true;
+    let mut j = 0;
+    while (j < stringLen(needle)) {
+      if (stringCharCodeAt(s, i + j) != stringCharCodeAt(needle, j)) { ok = false; break; }
+      j = j + 1;
+    }
+    if (ok) {
+      let before = stringSlice(s, 0, i);
+      let after = stringSlice(s, i + stringLen(needle), stringLen(s));
+      yield before + " warning: " + after;
+    }
+    i = i + 1;
+  }
+  s
 }
 
 fn spaces(n: I32) : String => {
@@ -189,6 +245,13 @@ out fn error_span_help(src: String, start: I32, end: I32, msg: String, help: Str
   vec_push(__tuffc_errors, format_span_help(src, start, end, msg, help));
 }
 
+out fn warn_span_help(src: String, start: I32, end: I32, msg: String, help: String) : Void => {
+  // Avoid runaway cascades.
+  if (vec_len(__tuffc_warnings) >= 200) { yield; }
+  let s = format_span_help(src, start, end, msg, help);
+  vec_push(__tuffc_warnings, replace_error_label_with_warning(s));
+}
+
 out fn panic_at_help(src: String, i: I32, msg: String, help: String) : Void => {
   panic_span_help(src, i, i, msg, help);
 }
@@ -197,12 +260,20 @@ out fn error_at_help(src: String, i: I32, msg: String, help: String) : Void => {
   error_span_help(src, i, i, msg, help);
 }
 
+out fn warn_at_help(src: String, i: I32, msg: String, help: String) : Void => {
+  warn_span_help(src, i, i, msg, help);
+}
+
 out fn panic_at(src: String, i: I32, msg: String) : Void => {
   panic_at_help(src, i, msg, "");
 }
 
 out fn error_at(src: String, i: I32, msg: String) : Void => {
   error_at_help(src, i, msg, "");
+}
+
+out fn warn_at(src: String, i: I32, msg: String) : Void => {
+  warn_at_help(src, i, msg, "");
 }
 
 out fn reset_struct_defs() : Void => {

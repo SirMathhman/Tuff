@@ -20,6 +20,9 @@ The Tuff analyzer currently performs **20+ error checks** (type safety, shadowin
 ### Minimal Warnings ⚠️
 
 - Short identifier detection (mostly disabled in tests)
+- Deprecation markers via comments (warns on both import and usage)
+  - `// deprecated - <reason>`
+  - `/* deprecated - <reason> */`
 
 ---
 
