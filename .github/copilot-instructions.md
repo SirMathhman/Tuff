@@ -13,13 +13,13 @@
 The compiler is split into focused modules under `src/main/tuff/compiler/`:
 
 1. **ast.tuff** — canonical AST definitions (structs, type aliases, constructor helpers)
-2. **lexing.tuff** — tokenization; exports functions like `is_digit`, `is_ident_start`, `skip_ws`
-3. **parsing_primitives.tuff** — low-level parsing (tokens, positions, panic/error handling)
-4. **parsing_types.tuff** — type expression parsing
-5. **parsing_expr_stmt.tuff** — expression and statement parsing; `parse_expr`, `parse_main_body`
-6. **parsing_decls.tuff** — declaration parsing (functions, structs, imports)
-7. **diagnostics.tuff** — error/warning helpers and formatting
-8. **emit_ast_js.tuff** — phase 3 scaffold: AST → JS emitter (partial, for testing)
+2. **util/lexing.tuff** — tokenization; exports functions like `is_digit`, `is_ident_start`, `skip_ws`
+3. **parsing/primitives.tuff** — low-level parsing (tokens, positions, panic/error handling)
+4. **parsing/types.tuff** — type expression parsing
+5. **parsing/expr_stmt.tuff** — expression and statement parsing; `parse_expr`, `parse_main_body`
+6. **parsing/decls.tuff** — declaration parsing (functions, structs, imports)
+7. **util/diagnostics.tuff** — error/warning helpers and formatting
+8. **emit/ast_js.tuff** — AST → JS emitter
 9. **tuffc_lib.tuff** — facade that orchestrates the modules
 10. **tuffc.tuff** — main entry point
 
@@ -52,8 +52,8 @@ The language is expression-oriented with immutable-by-default variables:
 ### Build & Run
 
 ```bash
-bun test              # run all tests (uses Bun test runner)
-bun run build:selfhost-prebuilt  # regenerate selfhost/prebuilt/ (stage2→stage4, then copy to prebuilt)
+npm test                       # run all tests (Vitest)
+npm run build:selfhost-prebuilt # regenerate selfhost/prebuilt/
 ```
 
 ### Test Structure
@@ -144,10 +144,10 @@ let f : (I32) => I32 = id<I32>;  // OK
 
 ### Adding a Language Feature
 
-1. **Extend Lexer** if new tokens are needed (`src/main/tuff/compiler/lexing.tuff`)
-2. **Update Parser** to handle new syntax (`src/main/tuff/compiler/parsing_expr_stmt.tuff` or `parsing_decls.tuff`)
+1. **Extend Lexer** if new tokens are needed (`src/main/tuff/compiler/util/lexing.tuff`)
+2. **Update Parser** to handle new syntax (`src/main/tuff/compiler/parsing/expr_stmt.tuff` or `src/main/tuff/compiler/parsing/decls.tuff`)
 3. **Add Analyzer Rules** for type-checking and validation (currently in TypeScript bootstrap; will move to Tuff later)
-4. **Implement Emitter** to generate JS (`src/main/tuff/compiler/emit_ast_js.tuff` for phase3 scaffold)
+4. **Implement Emitter** to generate JS (`src/main/tuff/compiler/emit/ast_js.tuff`)
 5. **Write Tests** — add `.tuff` test file or add TS tests that stage the prebuilt compiler
 6. **Update LANGUAGE.md** with language semantics
 
@@ -170,13 +170,13 @@ fn main() : I32 => {
 }
 ```
 
-For TypeScript tests, use Bun's test API and stage the prebuilt compiler via `selfhost_helpers.ts`.
+For TypeScript tests in this repo, use Vitest via `npm test`.
 
 ### Selfhost Compiler Architecture
 
 The selfhost compiler is split into **focused modules** to keep file size manageable:
 
-- Each module (`lexing.tuff`, `parsing_primitives.tuff`, etc.) is independently compilable
+- Each module (`util/lexing.tuff`, `parsing/primitives.tuff`, etc.) is independently compilable
 - `tuffc_lib.tuff` is a **facade** that imports all modules and orchestrates the pipeline
 - `tuffc.tuff` is the **entry point** that calls `tuffc_lib`
 
@@ -191,7 +191,7 @@ The selfhost compiler is split into **focused modules** to keep file size manage
 After modifying compiler source files, regenerate prebuilt artifacts:
 
 ```bash
-bun run build:selfhost-prebuilt
+npm run build:selfhost-prebuilt
 ```
 
 This:
@@ -207,13 +207,13 @@ Ensure all compiler modules are copied (not just `tuffc.mjs`/`tuffc_lib.mjs`) by
 | File                                             | Purpose                      | Depends On                                                          |
 | ------------------------------------------------ | ---------------------------- | ------------------------------------------------------------------- |
 | `src/main/tuff/compiler/ast.tuff`                | AST node definitions         | (no deps)                                                           |
-| `src/main/tuff/compiler/lexing.tuff`             | Tokenization                 | `diagnostics.tuff`                                                  |
-| `src/main/tuff/compiler/parsing_primitives.tuff` | Low-level parsing            | `diagnostics.tuff`, `lexing.tuff`                                   |
-| `src/main/tuff/compiler/parsing_types.tuff`      | Type expression parsing      | `parsing_primitives.tuff`                                           |
-| `src/main/tuff/compiler/parsing_expr_stmt.tuff`  | Expr/stmt parsing            | `parsing_primitives.tuff`, `parsing_types.tuff`, `diagnostics.tuff` |
-| `src/main/tuff/compiler/parsing_decls.tuff`      | Declaration parsing          | `parsing_expr_stmt.tuff`, `parsing_primitives.tuff`                 |
-| `src/main/tuff/compiler/diagnostics.tuff`        | Error/warning collection     | (no deps)                                                           |
-| `src/main/tuff/compiler/emit_ast_js.tuff`        | Phase3 scaffold: AST → JS    | `ast.tuff` (imports only via untyped params)                        |
+| `src/main/tuff/compiler/util/lexing.tuff`        | Tokenization                 | `util/diagnostics.tuff`                                             |
+| `src/main/tuff/compiler/parsing/primitives.tuff` | Low-level parsing            | `util/diagnostics.tuff`, `util/lexing.tuff`                         |
+| `src/main/tuff/compiler/parsing/types.tuff`      | Type expression parsing      | `parsing/primitives.tuff`                                           |
+| `src/main/tuff/compiler/parsing/expr_stmt.tuff`  | Expr/stmt parsing            | `parsing/primitives.tuff`, `parsing/types.tuff`, `util/diagnostics.tuff` |
+| `src/main/tuff/compiler/parsing/decls.tuff`      | Declaration parsing          | `parsing/expr_stmt.tuff`, `parsing/primitives.tuff`                 |
+| `src/main/tuff/compiler/util/diagnostics.tuff`   | Error/warning collection     | (no deps)                                                           |
+| `src/main/tuff/compiler/emit/ast_js.tuff`        | AST → JS emitter             | `ast.tuff` (imports only via untyped params)                        |
 | `src/main/tuff/compiler/tuffc_lib.tuff`          | Compiler facade/orchestrator | All parsing/diagnostics modules                                     |
 | `src/main/tuff/compiler/tuffc.tuff`              | Main entry point             | `tuffc_lib.tuff`                                                    |
 | `tools/build_prebuilt_selfhost.ts`               | Prebuilt rebuild script      | Invokes selfhost compiler via `tuffc.mjs`                           |

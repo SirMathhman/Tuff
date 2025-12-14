@@ -19,20 +19,25 @@ The bootstrap version is feature-complete for most application programming tasks
 
 ## Quick Start
 
-This is a high-level reference — if your project has an actual compiler or runtime, replace the command names below (`tuffc`, `tuff`) with your tools.
+This repository includes a runnable compiler build as JavaScript ESM in `selfhost/prebuilt/`.
 
-1. Install the Tuff compiler (placeholder):
+1. Install dependencies:
 
 ```sh
-# On Windows/macOS/Linux — placeholder
-curl -sSL https://example.org/install-tuff | sh
+npm ci
 ```
 
 2. Compile a program:
 
 ```sh
-tuffc hello.tuff -o hello
-./hello
+node selfhost/prebuilt/tuffc.mjs hello.tuff hello.mjs
+node hello.mjs
+```
+
+3. Lint only (parse + analyze, no output written):
+
+```sh
+node selfhost/prebuilt/tuffc.mjs --lint-only hello.tuff
 ```
 
 ## Source File Layout
@@ -43,8 +48,9 @@ Tuff source files typically end with `.tuff`. A top-level source file may contai
 // file: hello.tuff
 from std::io use { print };
 
-fn main() {
-    print("Hello, Tuff!\n")
+fn main() : I32 => {
+    print("Hello, Tuff!\n");
+    0
 }
 ```
 
@@ -652,9 +658,9 @@ fn print_nonzero(x: I32) => {
 
 fn greet(name: String) : String => { "Hello, " + name }
 
-fn main() {
-    let msg = greet("world")
-    io.print(msg + "\n")
+fn main() : Void => {
+    let msg = greet("world");
+    io.print(msg + "\n");
 }
 ```
 
@@ -1494,17 +1500,13 @@ In multi-file projects, functions (and class constructors) must be explicitly ex
 
 ```tuff
 // In math.tuff
-module Math {
-    out fn add(a: I32, b: I32) : I32 => { a + b }
-}
+out fn add(a: I32, b: I32) : I32 => { a + b }
 
 // In main.tuff
-from math use { Math };
-from std::io use { print };
+from math use { add };
 
-fn main() {
-    let result = Math::add(1, 2);
-    print(result);
+fn main() : I32 => {
+    add(1, 2)
 }
 ```
 
@@ -1531,19 +1533,10 @@ To use these declarations from another file:
 // In main.tuff
 from com::example use { value, compute };
 
-fn main() {
-    io.print(value);         // 100
-    io.print(compute(50));   // 100
-}
-```
-
-You can also access them directly via the module path:
-
-```tuff
-// In main.tuff
-fn main() {
-    io.print(com::example::value);
-    io.print(com::example::compute(50));
+fn main() : I32 => {
+    // value is 100
+    // compute(50) is 100
+    value + compute(50)
 }
 ```
 
@@ -1738,20 +1731,13 @@ Both types encourage explicit handling of error and edge cases, making code more
 
 ## Tooling
 
-Common tools for a programming language project:
+In this repository:
 
-- `tuffc`: Compiler for Tuff source files
-- `tuff`: REPL and runner
-- `tuftest`: Test runner (placeholder)
-- `cargo-tuff` or similar package manager (optional)
-
-Example workflow:
-
-```sh
-tuffc -o hello hello.tuff
-./hello
-tuff test # run tests
-```
+- `selfhost/prebuilt/tuffc.mjs` — the compiler CLI (compile + lint)
+- `npm test` — runs the full test suite (TypeScript + compiled `.tuff` tests)
+- `npm run build:selfhost-prebuilt` — regenerates `selfhost/prebuilt/` from the current compiler sources
+- `npm run tuff:repl` — a minimal REPL for compiling/running a snippet as `main()`
+- `npm run tuff:refactor` — refactoring utilities (e.g. move-file that updates imports)
 
 ## Examples
 
@@ -1760,10 +1746,10 @@ Hello world (example included above) and a simple program to read from stdin:
 ```tuff
 from std::io use { print, read_line };
 
-fn main() {
-    print("Enter your name: ")
-    let name = read_line()
-    print("Hello, " + name + "\n")
+fn main() : Void => {
+    print("Enter your name: ");
+    let name = read_line();
+    print("Hello, " + name + "\n");
 }
 ```
 
@@ -1787,11 +1773,11 @@ If you want to contribute to Tuff:
 
 ## License
 
-Specify your project's license here (e.g., MIT, Apache-2.0).
+No license file is currently included in this repository.
 
 ## Notes & TODOs
 
 - Flesh out the concrete syntax and semantics sections.
 - Add comprehensive standard library documentation.
-- Add precise build/testing/benchmarking instructions.
+- Add a small “tour” document with runnable examples that mirror the test suite.
 ````

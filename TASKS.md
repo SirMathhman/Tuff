@@ -86,12 +86,17 @@ ID   Status       Title                                              Description
 Mark a task as in progress:
 
 ```bash
-$ python tasks.py delete 3
-✓ Deleted task #3: Unused local variables detection (linter)
+$ python tasks.py readAll --status not-started
 ```
+
+This task manager currently does **not** support updating task status in-place. If you need to change a status, the simplest options are:
+
+- delete + recreate the task with the new status, or
+- edit `tasks.db` directly with a SQLite client.
 
 ## Notes
 
 - All commands are idempotent where applicable
 - Database is automatically initialized on first use
 - No update command is provided—delete and recreate if needed
+- `tasks.db` is a local developer artifact; consider adding it to `.gitignore` in your environment if you don’t want it tracked

@@ -23,17 +23,18 @@ A modern systems programming language with a self-hosting compiler that compiles
 
 ### Prerequisites
 
-- **Node.js** (for tests + build tooling)
-- **Node.js** or **Deno** (for running compiled output)
+- **Node.js** (for tests + build tooling + running compiled output)
+  - Recommended: Node 20+ (ESM-friendly)
+- Optional: **Python 3** (only for the local task manager `tasks.py`)
 
 ### Installation
 
 Clone the repository:
 
 ```bash
-git clone https://github.com/your-repo/tuff.git
-cd tuff
-npm install
+git clone https://github.com/SirMathhman/Tuff.git
+cd Tuff
+npm ci
 ```
 
 ### Running Tests
@@ -44,6 +45,9 @@ npm test
 
 # Run the full bootstrap check (tests + regenerate selfhost/prebuilt)
 npm run check:bootstrap
+
+# Rebuild and then assert that selfhost/prebuilt has no diff
+npm run check:prebuilt
 
 # Rebuild the prebuilt compiler from source
 npm run build:selfhost-prebuilt
@@ -56,8 +60,9 @@ Create `hello.tuff`:
 ```tuff
 from std::io use { print };
 
-fn main() => {
-    print("Hello, Tuff!\n")
+fn main() : I32 => {
+    print("Hello, Tuff!\n");
+    0
 }
 ```
 
@@ -75,6 +80,12 @@ node selfhost/prebuilt/tuffc.mjs --lint-only hello.tuff
 
 # Run the output
 node hello.mjs
+```
+
+For CLI help and options (warnings, config, diagnostics format):
+
+```bash
+node selfhost/prebuilt/tuffc.mjs
 ```
 
 ---
@@ -101,32 +112,31 @@ Source Code (.tuff files)
 
 ### Compiler Structure
 
-The self-hosting compiler is located in `src/main/tuff/compiler/` and is split into focused modules to keep file sizes manageable:
+The self-hosting compiler is located in `src/main/tuff/compiler/` and is split into focused modules:
 
-| Module                      | Purpose                                                         |
-| --------------------------- | --------------------------------------------------------------- |
-| **ast.tuff**                | Canonical AST definitions (Expr, Stmt, Decl, Span, types)       |
-| **lexing.tuff**             | Tokenization; whitespace/comment handling; ASCII predicates     |
-| **diagnostics.tuff**        | Error/warning collection and formatting                         |
-| **parsing_primitives.tuff** | Low-level parsing utilities (tokens, positions, panic handling) |
-| **parsing_types.tuff**      | Type expression parsing (`I32`, `String`, generics, etc.)       |
-| **parsing_expr_stmt.tuff**  | Expression and statement parsing (`if`, `match`, `while`, etc.) |
-| **parsing_decls.tuff**      | Declaration parsing (functions, structs, imports, modules)      |
-| **emit_ast_js.tuff**        | Phase 3 scaffold: AST → JavaScript emitter (partial)            |
-| **analyzer.tuff**           | Name resolution, type checking, scope validation                |
-| **tuffc_lib.tuff**          | Compiler facade that orchestrates all modules                   |
-| **tuffc.tuff**              | Main entry point                                                |
+| Area     | Module                    | Purpose                                                    |
+| -------- | ------------------------- | ---------------------------------------------------------- |
+| AST      | `ast.tuff`                | Canonical AST definitions                                  |
+| Util     | `util/lexing.tuff`        | Tokenization helpers                                       |
+| Util     | `util/diagnostics.tuff`   | Errors/warnings + formatting                               |
+| Parsing  | `parsing/primitives.tuff` | Low-level parsing utilities                                |
+| Parsing  | `parsing/types.tuff`      | Type-expression parsing                                    |
+| Parsing  | `parsing/expr_stmt.tuff`  | Expression + statement parsing                             |
+| Parsing  | `parsing/decls.tuff`      | Top-level declarations + imports                           |
+| Analysis | `analyzer.tuff`           | Scope/type checks + lint plumbing                          |
+| Emit     | `emit/ast_js.tuff`        | AST → JS ESM emitter                                       |
+| Driver   | `tuffc_lib.tuff`          | Multi-file orchestration + emit                            |
+| CLI      | `tuffc.tuff`              | CLI entrypoint (compiled to `selfhost/prebuilt/tuffc.mjs`) |
 
 ### Bootstrap Strategy
 
 The compiler achieves self-hosting through a **prebuilt artifact strategy**:
 
-1. **Stage 1 (TypeScript)**: Original bootstrap compiler in TypeScript (no longer active for compilation).
-2. **Stage 2 (Tuff via Prebuilt)**: Tuff compiler source compiled by Stage 1 (prebuilt).
-3. **Stage 3 (Self-Compile)**: Prebuilt compiler compiles itself → new compiler.
-4. **Stage 4 (Fixed-Point)**: New compiler compiles itself again → verify Stage 3 == Stage 4.
+1. **Prebuilt**: A checked-in, already-compiled JS version of the selfhost compiler lives in `selfhost/prebuilt/`.
+2. **Self-compile**: The prebuilt compiler compiles the compiler sources in `src/main/tuff/compiler/`.
+3. **Fixed point**: The newly compiled compiler compiles itself again; tests verify the outputs stabilize.
 
-Prebuilt artifacts are stored in `selfhost/prebuilt/` and include all compiled `.mjs` modules (not just `tuffc.mjs`). This allows tests to run without requiring self-compilation on first run.
+Prebuilt artifacts are stored in `selfhost/prebuilt/` and include all compiled `.mjs` modules (not just `tuffc.mjs`). This allows tests to run without compiling on first run.
 
 ### Diagnostics format
 
@@ -157,7 +167,7 @@ The CLI can also emit machine-friendly diagnostics:
 JSON shape (minimal, stable):
 
 ```json
-{"level":"warning","text":"..."}
+{ "level": "warning", "text": "..." }
 ```
 
 ### Lint configuration
@@ -602,7 +612,7 @@ fn main() => {
 6. **No async/await** — future consideration (may use JS Promises as foundation)
 7. **Arrays and slices** lack rich operations (map, filter, etc. through iterators planned)
 
-For a detailed long-term vision and planned features, see [ROADMAP.md](ROADMAP.md).
+For longer-horizon work items, see `TASKS.md` / `tasks.py`.
 
 ---
 
@@ -712,7 +722,6 @@ We welcome contributions! Here's how to get started:
 ## Documentation
 
 - **[LANGUAGE.md](LANGUAGE.md)** — Complete language specification with syntax, semantics, and examples
-- **[AST_REFACTOR_PLAN.md](AST_REFACTOR_PLAN.md)** — Detailed compiler refactor roadmap and phases
 - **[.github/copilot-instructions.md](.github/copilot-instructions.md)** — Architectural overview and development patterns
 - **[src/main/tuff/compiler/](src/main/tuff/compiler/)** — Well-commented compiler source
 
@@ -722,20 +731,20 @@ We welcome contributions! Here's how to get started:
 
 ```
 Tuff/
+├── .dist/                    # Test staging output (generated)
 ├── src/
 │   ├── main/
-│   │   ├── ts/              # TypeScript utilities (unused; archive)
 │   │   └── tuff/
 │   │       ├── compiler/    # Selfhost compiler modules
 │   │       └── std/         # Standard library (test.tuff, io.tuff, etc.)
 │   └── test/
 │       ├── ts/              # TypeScript tests
 │       └── tuff/            # Tuff test suites (.test.tuff)
+├── rt/                       # JS runtime modules used by emitted code
 ├── selfhost/
 │   └── prebuilt/            # Compiled .mjs modules for bootstrap
 ├── tools/                   # Build scripts (build_prebuilt_selfhost.ts)
 ├── LANGUAGE.md              # Language specification
-├── AST_REFACTOR_PLAN.md     # Compiler refactor roadmap
 ├── package.json             # npm dependencies
 └── README.md                # This file
 ```
@@ -744,15 +753,15 @@ Tuff/
 
 ## Quick Links
 
-- **GitHub**: [Tuff on GitHub](https://github.com/your-repo/tuff)
-- **Issues**: [Report bugs or request features](https://github.com/your-repo/tuff/issues)
-- **Discussions**: [Community discussions](https://github.com/your-repo/tuff/discussions)
+- **GitHub**: [SirMathhman/Tuff](https://github.com/SirMathhman/Tuff)
+- **Issues**: [Report bugs or request features](https://github.com/SirMathhman/Tuff/issues)
+- **Discussions**: [Community discussions](https://github.com/SirMathhman/Tuff/discussions)
 
 ---
 
 ## License
 
-Specify your project's license here (e.g., MIT, Apache-2.0).
+No license file is currently included in this repository.
 
 ---
 
