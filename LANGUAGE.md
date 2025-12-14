@@ -160,6 +160,8 @@ Tuff provides primitive types and composite types.
 The language design supports a rich type system, but the **current self-hosted bootstrap compiler** only enforces a **minimal, incremental subset** in its analyzer:
 
 - Type annotations are parsed and preserved in the compiler's canonical AST.
+- For **named functions** (`fn name(...)`) and **class constructors** (`class fn Name(...)`), the analyzer currently requires **explicit type annotations for all parameters**. Missing parameter types are treated as compile-time errors.
+- For **lambdas**, parameter type annotations may be omitted; omitted parameter types are treated as `Unknown` during analysis.
 - The type name `Any` is **not supported** (there is no top/escape-hatch type). Using `Any` in a type annotation is a compile-time error.
 - The analyzer enforces type compatibility when it is safe to do so:
   - Primitives (currently): `Bool`, `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32`, `U64`, `F32`, `F64`, `Char`, `String`, `Void`

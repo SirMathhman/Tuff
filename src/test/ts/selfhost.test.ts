@@ -16,7 +16,7 @@ describe("selfhost", () => {
     const mathIn = resolve(outDir, "math.tuff");
     await writeFile(
       mathIn,
-      "module Math { fn add(a, b) => a + b fn mul(a, b) => a * b }\n",
+      "module Math { fn add(a: I32, b: I32) : I32 => a + b fn mul(a: I32, b: I32) : I32 => a * b }\n",
       "utf8"
     );
 
@@ -24,7 +24,7 @@ describe("selfhost", () => {
     const tinyOut = resolve(outDir, "tiny.mjs");
     await writeFile(
       tinyIn,
-      'extern from rt::vec use { vec_new, vec_push, vec_get, vec_set };\nfrom math use { Math };\nfn main() => { let x = Math::add(1, 2); let y = if (x == 3) { let t = Math::mul(x, 10); t } else { 0 }; let z1 = match (y) { 0 => 11, 30 => 22, _ => 33 }; let s = if (z1 == 22) { "ok" } else { "bad" }; let z2 = match (s) { "ok" => 44, _ => 55 }; let mut v = [10, 20, 30]; v[1] = v[1] + 2; z2 + v[1] }\n',
+      'extern from rt::vec use { vec_new, vec_push, vec_get, vec_set };\nfrom math use { Math };\nfn main() : I32 => { let x = Math::add(1, 2); let y = if (x == 3) { let t = Math::mul(x, 10); t } else { 0 }; let z1 = match (y) { 0 => 11, 30 => 22, _ => 33 }; let s = if (z1 == 22) { "ok" } else { "bad" }; let z2 = match (s) { "ok" => 44, _ => 55 }; let mut v = [10, 20, 30]; v[1] = v[1] + 2; z2 + v[1] }\n',
       "utf8"
     );
 

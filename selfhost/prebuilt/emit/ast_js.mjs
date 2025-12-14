@@ -1,5 +1,5 @@
 // compiled by selfhost tuffc
-import { panic, stringLen, stringCharCodeAt, stringFromCharCode, stringSlice } from "../rt/stdlib.mjs";
+import { panic, stringLen, stringCharAt, stringFromChar, stringSlice } from "../rt/stdlib.mjs";
 import { vec_new, vec_push, vec_len, vec_get, vec_set } from "../rt/vec.mjs";
 import { find_struct_fields } from "../util/diagnostics.mjs";
 import { starts_with_at } from "../util/lexing.mjs";
@@ -218,13 +218,13 @@ export function normalize_path_seps(p) {
 let out = "";
 let i = 0;
 while (i < stringLen(p)) {
-const ch = stringCharCodeAt(p, i);
+const ch = stringCharAt(p, i);
 if (ch == 92) {
 out = out + "/";
 i = i + 1;
 continue;
 }
-out = out + stringFromCharCode(ch);
+out = out + stringFromChar(ch);
 i = i + 1;
 }
 return out;
@@ -234,7 +234,7 @@ let segs = vec_new();
 let start = 0;
 let i = 0;
 while (i <= stringLen(p)) {
-if (i == stringLen(p) || stringCharCodeAt(p, i) == 47) {
+if (i == stringLen(p) || stringCharAt(p, i) == 47) {
 if (i > start) {
 vec_push(segs, stringSlice(p, start, i));
 }
@@ -290,7 +290,7 @@ export function escape_js_string(s) {
 let out = "";
 let i = 0;
 while (i < stringLen(s)) {
-const ch = stringCharCodeAt(s, i);
+const ch = stringCharAt(s, i);
 if (ch == 34) {
 out = out + "\\\"";
 i = i + 1;
@@ -316,7 +316,7 @@ out = out + "\\t";
 i = i + 1;
 continue;
 }
-out = out + stringFromCharCode(ch);
+out = out + stringFromChar(ch);
 i = i + 1;
 }
 return out;

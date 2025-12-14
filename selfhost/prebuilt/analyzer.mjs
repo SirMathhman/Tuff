@@ -1,8 +1,15 @@
 // compiled by selfhost tuffc
 import { stringLen, stringCharCodeAt, stringSlice } from "./rt/stdlib.mjs";
 import { vec_new, vec_len, vec_push, vec_get, vec_set } from "./rt/vec.mjs";
-import { error_at } from "./util/diagnostics.mjs";
+import { error_at, warn_at } from "./util/diagnostics.mjs";
 import { span_start } from "./ast.mjs";
+let __lint_warn_unused_locals = true;
+let __lint_warn_unused_params = true;
+export function set_lint_options(warnUnusedLocals, warnUnusedParams) {
+__lint_warn_unused_locals = warnUnusedLocals;
+__lint_warn_unused_params = warnUnusedParams;
+return undefined;
+}
 export function this_struct_name(className) {
 return "__This__" + className;
 }
@@ -10,22 +17,152 @@ export function mk_union_variant_info(name, hasPayload, payloadTyAnns) {
 return ({ tag: "UnionVariantInfo", name: name, hasPayload: hasPayload, payloadTyAnns: payloadTyAnns });
 }
 export function mk_struct_def(name, fields, fieldTyAnns) {
-return ({ tag: "StructDef", name: name, fields: fields, fieldTyAnns: fieldTyAnns });
+return ({ tag: "StructDef", name: name, deprecatedReason: "", fields: fields, fieldTyAnns: fieldTyAnns });
 }
-export function mk_fn_sig(name, typeParams, params, paramTyAnns, retTyAnn) {
-return ({ tag: "FnSig", name: name, typeParams: typeParams, params: params, paramTyAnns: paramTyAnns, retTyAnn: retTyAnn });
+export function mk_fn_sig(name, deprecatedReason, typeParams, params, paramTyAnns, retTyAnn) {
+return ({ tag: "FnSig", name: name, deprecatedReason: deprecatedReason, typeParams: typeParams, params: params, paramTyAnns: paramTyAnns, retTyAnn: retTyAnn });
 }
 export function mk_union_def(name, typeParams, variants) {
-return ({ tag: "UnionDef", name: name, typeParams: typeParams, variants: variants });
+return ({ tag: "UnionDef", name: name, deprecatedReason: "", typeParams: typeParams, variants: variants });
 }
-export function mk_binding(name, isMut, tyTag) {
-return ({ tag: "Binding", name: name, isMut: isMut, tyTag: tyTag });
+export function mk_binding(name, isMut, tyTag, deprecatedReason, declPos, read, written, isParam) {
+return ({ tag: "Binding", name: name, isMut: isMut, tyTag: tyTag, deprecatedReason: deprecatedReason, declPos: declPos, read: read, written: written, isParam: isParam });
 }
 export function mk_subst(name, ty) {
 return ({ tag: "TySubst", name: name, ty: ty });
 }
 export function mk_narrowed_tag(name, variant) {
 return ({ tag: "NarrowedTag", name: name, variant: variant });
+}
+export function is_ascii_ws(ch) {
+return ch == 32 || ch == 9 || ch == 10 || ch == 13;
+}
+export function is_ascii_space_tab(ch) {
+return ch == 32 || ch == 9;
+}
+export function ascii_lower(ch) {
+if (ch >= 65 && ch <= 90) {
+return ch + 32;
+}
+return ch;
+}
+export function trim_ascii_ws(s) {
+let start = 0;
+let end = stringLen(s);
+while (start < end && is_ascii_ws(stringCharCodeAt(s, start))) {
+start = start + 1;
+}
+while (end > start && is_ascii_ws(stringCharCodeAt(s, end - 1))) {
+end = end - 1;
+}
+return stringSlice(s, start, end);
+}
+export function starts_with_deprecated_ci(s) {
+if (stringLen(s) < 10) {
+return false;
+}
+let i = 0;
+while (i < 10) {
+const ch = ascii_lower(stringCharCodeAt(s, i));
+const want = stringCharCodeAt("deprecated", i);
+if (ch != want) {
+return false;
+}
+i = i + 1;
+}
+return true;
+}
+export function parse_deprecated_reason_from_comment(commentText) {
+const t0 = trim_ascii_ws(commentText);
+if (!starts_with_deprecated_ci(t0)) {
+return "";
+}
+let i = 10;
+while (i < stringLen(t0) && is_ascii_ws(stringCharCodeAt(t0, i))) {
+i = i + 1;
+}
+if (i >= stringLen(t0)) {
+return "";
+}
+const sep = stringCharCodeAt(t0, i);
+if (!(sep == 45 || sep == 58)) {
+return "";
+}
+i = i + 1;
+while (i < stringLen(t0) && is_ascii_ws(stringCharCodeAt(t0, i))) {
+i = i + 1;
+}
+return trim_ascii_ws(stringSlice(t0, i, stringLen(t0)));
+}
+export function skip_ws_back(src, pos) {
+let i = pos;
+while (i > 0 && is_ascii_ws(stringCharCodeAt(src, i - 1))) {
+i = i - 1;
+}
+return i;
+}
+export function line_start(src, pos) {
+let i = pos;
+while (i > 0 && stringCharCodeAt(src, i - 1) != 10) {
+i = i - 1;
+}
+return i;
+}
+export function line_end(src, pos) {
+let i = pos;
+while (i < stringLen(src) && stringCharCodeAt(src, i) != 10) {
+i = i + 1;
+}
+return i;
+}
+export function block_comment_start(src, endStarPos) {
+let i = endStarPos;
+while (i >= 2) {
+if (stringCharCodeAt(src, i - 2) == 47 && stringCharCodeAt(src, i - 1) == 42) {
+return i - 2;
+}
+i = i - 1;
+}
+return -1;
+}
+export function deprecation_reason_before(src, pos) {
+let k = pos;
+while (true) {
+k = skip_ws_back(src, k);
+if (k <= 0) {
+return "";
+}
+if (k >= 2 && stringCharCodeAt(src, k - 2) == 42 && stringCharCodeAt(src, k - 1) == 47) {
+const start = block_comment_start(src, k - 2);
+if (start == -1) {
+return "";
+}
+const inner = stringSlice(src, start + 2, k - 2);
+const reason = parse_deprecated_reason_from_comment(inner);
+if (reason != "") {
+return reason;
+}
+k = start;
+continue;
+}
+const ls = line_start(src, k);
+let p = ls;
+while (p < k && is_ascii_space_tab(stringCharCodeAt(src, p))) {
+p = p + 1;
+}
+if (p + 1 < stringLen(src) && stringCharCodeAt(src, p) == 47 && stringCharCodeAt(src, p + 1) == 47) {
+const le = line_end(src, p + 2);
+const inner = stringSlice(src, p + 2, le);
+const reason = parse_deprecated_reason_from_comment(inner);
+if (reason != "") {
+return reason;
+}
+k = ls;
+continue;
+}
+return "";
+}
+return undefined;
 }
 export function narrow_lookup(narrowed, name) {
 let i = 0;
@@ -809,7 +946,7 @@ return s;
 }
 i = i + 1;
 }
-return mk_fn_sig(name, vec_new(), vec_new(), vec_new(), "");
+return mk_fn_sig(name, "", vec_new(), vec_new(), vec_new(), "");
 }
 export function has_fn_sig(fns, name) {
 let i = 0;
@@ -921,7 +1058,15 @@ if (scopes_contains(scopes, depth, name)) {
 error_at(src, pos, "shadowing not allowed: " + name);
 }
 const cur = vec_get(scopes, depth - 1);
-vec_push(cur, mk_binding(name, isMut, tyTag));
+vec_push(cur, mk_binding(name, isMut, tyTag, "", pos, false, true, false));
+return undefined;
+}
+export function declare_name_deprecated(src, pos, scopes, depth, name, isMut, tyTag, deprecatedReason) {
+if (scopes_contains(scopes, depth, name)) {
+error_at(src, pos, "shadowing not allowed: " + name);
+}
+const cur = vec_get(scopes, depth - 1);
+vec_push(cur, mk_binding(name, isMut, tyTag, deprecatedReason, pos, false, true, false));
 return undefined;
 }
 export function scope_contains(scope, name) {
@@ -941,7 +1086,16 @@ if (scope_contains(cur, name)) {
 error_at(src, pos, "duplicate name: " + name);
 return;
 }
-vec_push(cur, mk_binding(name, isMut, tyTag));
+vec_push(cur, mk_binding(name, isMut, tyTag, "", pos, false, true, true));
+return undefined;
+}
+export function declare_local_name_deprecated(src, pos, scopes, depth, name, isMut, tyTag, deprecatedReason) {
+const cur = vec_get(scopes, depth - 1);
+if (scope_contains(cur, name)) {
+error_at(src, pos, "duplicate name: " + name);
+return;
+}
+vec_push(cur, mk_binding(name, isMut, tyTag, deprecatedReason, pos, false, true, true));
 return undefined;
 }
 export function lookup_binding(src, pos, scopes, depth, name) {
@@ -959,7 +1113,7 @@ bi = bi + 1;
 si = si + 1;
 }
 error_at(src, pos, "unknown name: " + name);
-return mk_binding(name, false, ty_unknown());
+return mk_binding(name, false, ty_unknown(), "", pos, false, false, false);
 }
 export function update_binding_ty(src, pos, scopes, depth, name, newTyTag) {
 let si = 0;
@@ -969,7 +1123,7 @@ let bi = 0;
 while (bi < vec_len(scope)) {
 const b = vec_get(scope, bi);
 if (b.name == name) {
-vec_set(scope, bi, mk_binding(b.name, b.isMut, newTyTag));
+vec_set(scope, bi, mk_binding(b.name, b.isMut, newTyTag, b.deprecatedReason, b.declPos, b.read, b.written, b.isParam));
 return;
 }
 bi = bi + 1;
@@ -977,6 +1131,83 @@ bi = bi + 1;
 si = si + 1;
 }
 error_at(src, pos, "unknown name: " + name);
+return undefined;
+}
+export function binding_name_is_intentionally_unused(name) {
+if (name == "_") {
+return true;
+}
+if (stringLen(name) > 0 && stringCharCodeAt(name, 0) == 95) {
+return true;
+}
+return false;
+}
+export function mark_binding_read(scopes, depth, name) {
+let si = 0;
+while (si < depth) {
+const scope = vec_get(scopes, si);
+let bi = 0;
+while (bi < vec_len(scope)) {
+const b = vec_get(scope, bi);
+if (b.name == name) {
+if (!b.read) {
+vec_set(scope, bi, mk_binding(b.name, b.isMut, b.tyTag, b.deprecatedReason, b.declPos, true, b.written, b.isParam));
+}
+return;
+}
+bi = bi + 1;
+}
+si = si + 1;
+}
+return undefined;
+}
+export function mark_binding_written(scopes, depth, name) {
+let si = 0;
+while (si < depth) {
+const scope = vec_get(scopes, si);
+let bi = 0;
+while (bi < vec_len(scope)) {
+const b = vec_get(scope, bi);
+if (b.name == name) {
+if (!b.written) {
+vec_set(scope, bi, mk_binding(b.name, b.isMut, b.tyTag, b.deprecatedReason, b.declPos, b.read, true, b.isParam));
+}
+return;
+}
+bi = bi + 1;
+}
+si = si + 1;
+}
+return undefined;
+}
+export function warn_unused_locals_in_scope(src, scopes, depth) {
+if (!__lint_warn_unused_locals) {
+return;
+}
+const scope = vec_get(scopes, depth - 1);
+let bi = 0;
+while (bi < vec_len(scope)) {
+const b = vec_get(scope, bi);
+if (!b.read && !b.isParam && !binding_name_is_intentionally_unused(b.name)) {
+warn_at(src, b.declPos, "unused local: " + b.name);
+}
+bi = bi + 1;
+}
+return undefined;
+}
+export function warn_unused_params_in_scope(src, scopes, depth) {
+if (!__lint_warn_unused_params) {
+return;
+}
+const scope = vec_get(scopes, depth - 1);
+let bi = 0;
+while (bi < vec_len(scope)) {
+const b = vec_get(scope, bi);
+if (!b.read && b.isParam && !binding_name_is_intentionally_unused(b.name)) {
+warn_at(src, b.declPos, "unused parameter: " + b.name);
+}
+bi = bi + 1;
+}
 return undefined;
 }
 export function infer_lookup_ty(scopes, depth, name) {
@@ -1604,12 +1835,45 @@ return payload0;
 }
 return ty_unknown();
 }
+export function require_all_param_types(src, pos, prefix, params, paramTyAnns) {
+let anyMissing = false;
+let msg = "";
+let pi = 0;
+while (pi < vec_len(params)) {
+let ann = "";
+if (pi < vec_len(paramTyAnns)) {
+ann = vec_get(paramTyAnns, pi);
+}
+if (ann == "") {
+if (!anyMissing) {
+anyMissing = true;
+msg = prefix + " missing type annotation(s) for parameter(s): ";
+} else {
+msg = msg + ", ";
+}
+msg = msg + vec_get(params, pi);
+}
+pi = pi + 1;
+}
+if (anyMissing) {
+error_at(src, pos, msg);
+}
+return undefined;
+}
 export function analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e) {
 if (e.tag == "EIdent") {
 require_name(src, span_start(e.span), scopes, depth, e.name);
+if (!(e.name == "true") && !(e.name == "false") && !(e.name == "continue") && !(e.name == "break")) {
+mark_binding_read(scopes, depth, e.name);
+const b = lookup_binding(src, span_start(e.span), scopes, depth, e.name);
+if (b.deprecatedReason != "") {
+warn_at(src, span_start(e.span), "use of deprecated symbol " + e.name + " - " + b.deprecatedReason);
+}
+}
 return;
 }
 if (e.tag == "ELambda") {
+require_all_param_types(src, span_start(e.span), "lambda", e.params, e.paramTyAnns);
 const newDepth = scopes_enter(scopes, depth);
 let pi = 0;
 while (pi < vec_len(e.params)) {
@@ -1629,6 +1893,8 @@ const expected = normalize_ty_ann(e.retTyAnn);
 const bodyTy = infer_expr_type(src, structs, fns, scopes, newDepth, e.body);
 require_type_compatible(src, span_start(e.span), "lambda return", structs, expected, bodyTy);
 }
+warn_unused_params_in_scope(src, scopes, newDepth);
+warn_unused_locals_in_scope(src, scopes, newDepth);
 return;
 }
 if (e.tag == "EStructLit") {
@@ -1691,6 +1957,7 @@ if (e.tag == "EBlock") {
 const newDepth = scopes_enter(scopes, depth);
 analyze_stmts(src, structs, unions, fns, scopes, newDepth, narrowed, e.body);
 analyze_expr(src, structs, unions, fns, scopes, newDepth, narrowed, e.tail);
+warn_unused_locals_in_scope(src, scopes, newDepth);
 return;
 }
 if (e.tag == "EVecLit") {
@@ -1828,12 +2095,17 @@ return undefined;
 }
 export function analyze_stmt(src, structs, unions, fns, scopes, depth, narrowed, s) {
 if (s.tag == "SLet") {
+const depReason = deprecation_reason_before(src, span_start(s.span));
 if (s.init.tag == "ELambda") {
 const initTy0 = infer_expr_type(src, structs, fns, scopes, depth, s.init);
 const bindTy = (s.tyAnn != "" ? normalize_ty_ann(s.tyAnn) : initTy0);
 const cur = vec_get(scopes, depth - 1);
 if (!scope_contains(cur, s.name)) {
+if (depReason != "") {
+declare_name_deprecated(src, span_start(s.span), scopes, depth, s.name, s.isMut, bindTy, depReason);
+} else {
 declare_name(src, span_start(s.span), scopes, depth, s.name, s.isMut, bindTy);
+}
 }
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.init);
 if (s.tyAnn != "") {
@@ -1857,10 +2129,18 @@ error_at(src, span_start(s.init.span), "generic function value must be specializ
 }
 if (s.tyAnn != "") {
 require_type_compatible(src, span_start(s.span), "let " + s.name, structs, s.tyAnn, initTy);
+if (depReason != "") {
+declare_name_deprecated(src, span_start(s.span), scopes, depth, s.name, s.isMut, normalize_ty_ann(s.tyAnn), depReason);
+} else {
 declare_name(src, span_start(s.span), scopes, depth, s.name, s.isMut, normalize_ty_ann(s.tyAnn));
+}
 return;
 }
+if (depReason != "") {
+declare_name_deprecated(src, span_start(s.span), scopes, depth, s.name, s.isMut, initTy, depReason);
+} else {
 declare_name(src, span_start(s.span), scopes, depth, s.name, s.isMut, initTy);
+}
 return;
 }
 if (s.tag == "SAssign") {
@@ -1868,6 +2148,7 @@ const b = lookup_binding(src, span_start(s.span), scopes, depth, s.name);
 if (!b.isMut) {
 error_at(src, span_start(s.span), "cannot assign to immutable binding: " + s.name);
 }
+mark_binding_written(scopes, depth, s.name);
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.value);
 return;
 }
@@ -1884,6 +2165,7 @@ check_cond_is_bool(src, structs, fns, scopes, depth, s.cond);
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.cond);
 const newDepth = scopes_enter(scopes, depth);
 analyze_stmts(src, structs, unions, fns, scopes, newDepth, narrowed, s.body);
+warn_unused_locals_in_scope(src, scopes, newDepth);
 return;
 }
 if (s.tag == "SIf") {
@@ -1899,6 +2181,7 @@ vec_push(thenNar, mk_narrowed_tag(nar.name, nar.thenVariant));
 }
 const thenDepth = scopes_enter(scopes, depth);
 analyze_stmts(src, structs, unions, fns, scopes, thenDepth, thenNar, s.thenBody);
+warn_unused_locals_in_scope(src, scopes, thenDepth);
 if (s.hasElse) {
 let elseNar = narrowed;
 if (nar.elseVariant != "") {
@@ -1908,14 +2191,17 @@ vec_push(elseNar, mk_narrowed_tag(nar.name, nar.elseVariant));
 }
 const elseDepth = scopes_enter(scopes, depth);
 analyze_stmts(src, structs, unions, fns, scopes, elseDepth, elseNar, s.elseBody);
+warn_unused_locals_in_scope(src, scopes, elseDepth);
 }
 return;
 }
 const thenDepth = scopes_enter(scopes, depth);
 analyze_stmts(src, structs, unions, fns, scopes, thenDepth, narrowed, s.thenBody);
+warn_unused_locals_in_scope(src, scopes, thenDepth);
 if (s.hasElse) {
 const elseDepth = scopes_enter(scopes, depth);
 analyze_stmts(src, structs, unions, fns, scopes, elseDepth, narrowed, s.elseBody);
+warn_unused_locals_in_scope(src, scopes, elseDepth);
 }
 return;
 }
@@ -2017,6 +2303,43 @@ require_type_compatible(src, span_start(st.span), "function " + d.name + " yield
 si = si + 1;
 }
 }
+warn_unused_params_in_scope(src, outerScopes, depth);
+warn_unused_locals_in_scope(src, outerScopes, depth);
+return undefined;
+}
+export function analyze_class_fn_decl(src, structs, unions, fns, outerScopes, outerDepth, d) {
+const depth = scopes_enter(outerScopes, outerDepth);
+let pi = 0;
+while (pi < vec_len(d.params)) {
+let pTy = ty_unknown();
+if (pi < vec_len(d.paramTyAnns)) {
+const ann = vec_get(d.paramTyAnns, pi);
+if (ann != "") {
+pTy = normalize_ty_ann(ann);
+}
+}
+declare_local_name(src, span_start(d.span), outerScopes, depth, vec_get(d.params, pi), false, pTy);
+pi = pi + 1;
+}
+const narrowed = vec_new();
+analyze_stmts(src, structs, unions, fns, outerScopes, depth, narrowed, d.body);
+analyze_expr(src, structs, unions, fns, outerScopes, depth, narrowed, d.tail);
+if (d.retTyAnn != "") {
+const expected = normalize_ty_ann(d.retTyAnn);
+const tailTy = infer_expr_type(src, structs, fns, outerScopes, depth, d.tail);
+require_type_compatible(src, span_start(d.span), "function " + d.name + " return", structs, expected, tailTy);
+let si = 0;
+while (si < vec_len(d.body)) {
+const st = vec_get(d.body, si);
+if (st.tag == "SYield") {
+const yTy = (st.expr.tag == "EUndefined" ? ty_void() : infer_expr_type(src, structs, fns, outerScopes, depth, st.expr));
+require_type_compatible(src, span_start(st.span), "function " + d.name + " yield", structs, expected, yTy);
+}
+si = si + 1;
+}
+}
+warn_unused_params_in_scope(src, outerScopes, depth);
+warn_unused_locals_in_scope(src, outerScopes, depth);
 return undefined;
 }
 export function analyze_module(src, d) {
@@ -2041,17 +2364,32 @@ return;
 if (d.tag == "DImport") {
 let ni = 0;
 while (ni < vec_len(d.names)) {
-declare_name(src, span_start(d.span), scopes, depth, vec_get(d.names, ni), false, ty_unknown());
+const name = vec_get(d.names, ni);
+if (has_fn_sig(fns, name)) {
+const sig = find_fn_sig(fns, name);
+if (sig.deprecatedReason != "") {
+warn_at(src, span_start(d.span), "importing deprecated symbol " + name + " - " + sig.deprecatedReason);
+declare_name_deprecated(src, span_start(d.span), scopes, depth, name, false, ty_unknown(), sig.deprecatedReason);
+ni = ni + 1;
+continue;
+}
+}
+declare_name(src, span_start(d.span), scopes, depth, name, false, ty_unknown());
 ni = ni + 1;
 }
 return;
 }
 if (d.tag == "DTypeUnion") {
+const depReason = deprecation_reason_before(src, span_start(d.span));
 let vi = 0;
 const infos = vec_new();
 while (vi < vec_len(d.variants)) {
 const v = vec_get(d.variants, vi);
+if (depReason != "") {
+declare_name_deprecated(src, span_start(v.span), scopes, depth, v.name, false, ty_unknown(), depReason);
+} else {
 declare_name(src, span_start(v.span), scopes, depth, v.name, false, ty_unknown());
+}
 vec_push(infos, mk_union_variant_info(v.name, v.hasPayload, v.payloadTyAnns));
 vi = vi + 1;
 }
@@ -2059,7 +2397,12 @@ vec_push(unions, mk_union_def(d.name, d.typeParams, infos));
 return;
 }
 if (d.tag == "DFn") {
+const depReason = deprecation_reason_before(src, span_start(d.span));
+if (depReason != "") {
+declare_name_deprecated(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown(), depReason);
+} else {
 declare_name(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown());
+}
 let paramTyAnns = d.paramTyAnns;
 if (vec_len(paramTyAnns) == 0) {
 paramTyAnns = vec_new();
@@ -2069,11 +2412,17 @@ vec_push(paramTyAnns, "");
 i = i + 1;
 }
 }
-vec_push(fns, mk_fn_sig(d.name, d.typeParams, d.params, paramTyAnns, d.retTyAnn));
+require_all_param_types(src, span_start(d.span), "function " + d.name, d.params, paramTyAnns);
+vec_push(fns, mk_fn_sig(d.name, depReason, d.typeParams, d.params, paramTyAnns, d.retTyAnn));
 return;
 }
 if (d.tag == "DClassFn") {
+const depReason = deprecation_reason_before(src, span_start(d.span));
+if (depReason != "") {
+declare_name_deprecated(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown(), depReason);
+} else {
 declare_name(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown());
+}
 const thisName = this_struct_name(d.name);
 if (!has_struct_def(structs, thisName)) {
 const fields = vec_new();
@@ -2116,7 +2465,8 @@ vec_push(paramTyAnns, "");
 i = i + 1;
 }
 }
-vec_push(fns, mk_fn_sig(d.name, d.typeParams, d.params, paramTyAnns, d.retTyAnn));
+require_all_param_types(src, span_start(d.span), "class fn " + d.name, d.params, paramTyAnns);
+vec_push(fns, mk_fn_sig(d.name, depReason, d.typeParams, d.params, paramTyAnns, d.retTyAnn));
 return;
 }
 if (d.tag == "DStruct") {
@@ -2124,7 +2474,12 @@ vec_push(structs, mk_struct_def(d.name, d.fields, d.fieldTyAnns));
 return;
 }
 if (d.tag == "DModule") {
+const depReason = deprecation_reason_before(src, span_start(d.span));
+if (depReason != "") {
+declare_name_deprecated(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown(), depReason);
+} else {
 declare_name(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown());
+}
 return;
 }
 return undefined;
@@ -2146,12 +2501,21 @@ if (vec_len(tps) > 0) {
 error_at(src, span_start(d.init.span), "generic function value must be specialized before use");
 }
 }
+const depReason = deprecation_reason_before(src, span_start(d.span));
 if (d.tyAnn != "") {
 require_type_compatible(src, span_start(d.span), "let " + d.name, structs, d.tyAnn, initTy);
+if (depReason != "") {
+declare_name_deprecated(src, span_start(d.span), scopes, depth, d.name, d.isMut, normalize_ty_ann(d.tyAnn), depReason);
+} else {
 declare_name(src, span_start(d.span), scopes, depth, d.name, d.isMut, normalize_ty_ann(d.tyAnn));
+}
 return;
 }
+if (depReason != "") {
+declare_name_deprecated(src, span_start(d.span), scopes, depth, d.name, d.isMut, initTy, depReason);
+} else {
 declare_name(src, span_start(d.span), scopes, depth, d.name, d.isMut, initTy);
+}
 return;
 }
 if (d.tag == "DFn") {
@@ -2159,7 +2523,7 @@ analyze_fn_decl(src, structs, unions, fns, scopes, depth, d);
 return;
 }
 if (d.tag == "DClassFn") {
-analyze_fn_decl(src, structs, unions, fns, scopes, depth, d);
+analyze_class_fn_decl(src, structs, unions, fns, scopes, depth, d);
 return;
 }
 if (d.tag == "DModule") {

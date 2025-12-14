@@ -2,21 +2,172 @@
 //
 // The implementation lives in `selfhost/tuffc_lib.tuff`.
 
-extern from rt::stdlib use { println };
+extern from rt::stdlib use { println, readTextFile, stringLen, stringCharCodeAt, stringSlice };
 extern from rt::vec use { vec_len, vec_get };
 
 from tuffc_lib use { compile_project };
+from analyzer use { set_lint_options };
+
+fn is_ascii_ws(ch: I32) : Bool => ch == 32 || ch == 9 || ch == 10 || ch == 13
+
+fn ascii_lower(ch: I32) : I32 => {
+  if (ch >= 65 && ch <= 90) { yield ch + 32; }
+  ch
+}
+
+fn trim_ascii_ws(s: String) : String => {
+  let mut start = 0;
+  let mut end = stringLen(s);
+  while (start < end && is_ascii_ws(stringCharCodeAt(s, start))) { start = start + 1; }
+  while (end > start && is_ascii_ws(stringCharCodeAt(s, end - 1))) { end = end - 1; }
+  stringSlice(s, start, end)
+}
+
+fn starts_with_at(s: String, i: I32, prefix: String) : Bool => {
+  if (i < 0) { yield false; }
+  if (i + stringLen(prefix) > stringLen(s)) { yield false; }
+  let mut j = 0;
+  while (j < stringLen(prefix)) {
+    if (stringCharCodeAt(s, i + j) != stringCharCodeAt(prefix, j)) { yield false; }
+    j = j + 1;
+  }
+  true
+}
+
+fn starts_with_ci(s: String, prefix: String) : Bool => {
+  if (stringLen(prefix) > stringLen(s)) { yield false; }
+  let mut i = 0;
+  while (i < stringLen(prefix)) {
+    if (ascii_lower(stringCharCodeAt(s, i)) != ascii_lower(stringCharCodeAt(prefix, i))) { yield false; }
+    i = i + 1;
+  }
+  true
+}
+
+fn parse_bool_ci(s0: String, defaultValue: Bool) : Bool => {
+  let s = trim_ascii_ws(s0);
+  if (starts_with_ci(s, "true")) { yield true; }
+  if (starts_with_ci(s, "false")) { yield false; }
+  if (s == "1") { yield true; }
+  if (s == "0") { yield false; }
+  defaultValue
+}
+
+fn find_char(s: String, ch: I32) : I32 => {
+  let mut i = 0;
+  while (i < stringLen(s)) {
+    if (stringCharCodeAt(s, i) == ch) { yield i; }
+    i = i + 1;
+  }
+  -1
+}
+
+class fn LintOptions(warnUnusedLocals: Bool, warnUnusedParams: Bool) => {}
+
+fn parse_lint_config(src: String, warnUnusedLocals0: Bool, warnUnusedParams0: Bool) : LintOptions => {
+  let mut warnUnusedLocals = warnUnusedLocals0;
+  let mut warnUnusedParams = warnUnusedParams0;
+
+  let mut i = 0;
+  while (i <= stringLen(src)) {
+    // Extract a line (handles last line without trailing newline).
+    let mut j = i;
+    while (j < stringLen(src) && stringCharCodeAt(src, j) != 10) { j = j + 1; }
+    let mut line = stringSlice(src, i, j);
+    // Trim trailing CR if present.
+    if (stringLen(line) > 0 && stringCharCodeAt(line, stringLen(line) - 1) == 13) {
+      line = stringSlice(line, 0, stringLen(line) - 1);
+    }
+    let t = trim_ascii_ws(line);
+    if (!(t == "")) {
+      // Comments.
+      if (!(stringLen(t) > 0 && stringCharCodeAt(t, 0) == 35) && !starts_with_at(t, 0, "//")) {
+        let eq = find_char(t, 61); // '='
+        if (eq != -1) {
+          let key = trim_ascii_ws(stringSlice(t, 0, eq));
+          let val = trim_ascii_ws(stringSlice(t, eq + 1, stringLen(t)));
+          if (key == "warn_unused_locals") {
+            warnUnusedLocals = parse_bool_ci(val, warnUnusedLocals);
+          }
+          if (key == "warn_unused_params") {
+            warnUnusedParams = parse_bool_ci(val, warnUnusedParams);
+          }
+        }
+      }
+    }
+    // Move to next line.
+    i = j + 1;
+  }
+
+  LintOptions(warnUnusedLocals, warnUnusedParams)
+}
+
+fn print_usage() : Void => {
+  println("usage: tuffc [options] <in.tuff> <out.mjs>");
+  println("options:");
+  println("  --config <path>                Read config file (key = value)");
+  println("  --no-warn-unused-locals         Disable unused local warnings");
+  println("  --no-warn-unused-params         Disable unused parameter warnings");
+}
 
 // When run as a program, compile stdin-like file input.
 // We keep it simple: main(argv) where argv = [inPath, outPath]
 fn main(argv: Vec<String>) => {
-  if (vec_len(argv) < 2) {
-    println("usage: tuffc <in.tuff> <out.mjs>");
+  let mut warnUnusedLocals = true;
+  let mut warnUnusedParams = true;
+  let mut configPath = "";
+
+  let mut inPath = "";
+  let mut outPath = "";
+
+  let mut i = 0;
+  while (i < vec_len(argv)) {
+    let a = vec_get(argv, i);
+
+    if (a == "--no-warn-unused-locals") { warnUnusedLocals = false; i = i + 1; continue; }
+    if (a == "--no-warn-unused-params") { warnUnusedParams = false; i = i + 1; continue; }
+    if (a == "--warn-unused-locals") { warnUnusedLocals = true; i = i + 1; continue; }
+    if (a == "--warn-unused-params") { warnUnusedParams = true; i = i + 1; continue; }
+
+    if (a == "--config") {
+      if (i + 1 >= vec_len(argv)) {
+        print_usage();
+        yield 1;
+      }
+      configPath = vec_get(argv, i + 1);
+      i = i + 2;
+      continue;
+    }
+
+    // Unknown option.
+    if (stringLen(a) > 0 && stringCharCodeAt(a, 0) == 45) {
+      println("unknown option: " + a);
+      print_usage();
+      yield 1;
+    }
+
+    // Positional args.
+    if (inPath == "") { inPath = a; i = i + 1; continue; }
+    if (outPath == "") { outPath = a; i = i + 1; continue; }
+
+    println("too many arguments");
+    print_usage();
     yield 1;
   }
-  let inPath = vec_get(argv, 0);
-  let outPath = vec_get(argv, 1);
 
+  if (inPath == "" || outPath == "") {
+    print_usage();
+    yield 1;
+  }
+
+  if (configPath != "") {
+    let cfgText = readTextFile(configPath);
+    let cfg = parse_lint_config(cfgText, warnUnusedLocals, warnUnusedParams);
+    warnUnusedLocals = cfg.warnUnusedLocals;
+    warnUnusedParams = cfg.warnUnusedParams;
+  }
+
+  set_lint_options(warnUnusedLocals, warnUnusedParams);
   compile_project(inPath, outPath);
   0
 }

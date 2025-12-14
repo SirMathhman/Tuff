@@ -106,6 +106,9 @@ return ParsedType("(" + parts + ")", k);
 const name = parse_ident(src, k);
 k = name.nextPos;
 let out = name.text;
+if (name.text == "Any") {
+panic_at(src, name.startPos, "type 'Any' is unsupported");
+}
 const t3 = skip_ws(src, k);
 if (t3 < stringLen(src) && stringCharCodeAt(src, t3) == 60) {
 k = parse_keyword(src, t3, "<");

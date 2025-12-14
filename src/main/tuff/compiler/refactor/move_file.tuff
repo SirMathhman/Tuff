@@ -13,7 +13,7 @@ from ast use { span, decl_import, decl_extern_from };
 //
 // `decls` is intentionally untyped to avoid exporting type-alias-based signatures.
 // It should be a Vec of Decl-like objects (with `.tag`, `.span`, `.modulePath`, `.names` as needed).
-out class fn FileAst(filePath: String, decls) => {}
+out class fn FileAst(filePath: String, decls: Unknown) => {}
 
 fn normalize_seps(p: String) : String => {
   // Normalize '\\' to '/'. Leaves existing '/' intact.
@@ -69,7 +69,7 @@ fn relpath_to_module_path(relPath0: String) : String => {
   out
 }
 
-fn refactor_decl_import_path(decl, oldModulePath: String, newModulePath: String) => {
+fn refactor_decl_import_path(decl: Unknown, oldModulePath: String, newModulePath: String) : Unknown => {
   if (decl.tag == "DImport" && decl.modulePath == oldModulePath) {
     yield decl_import(decl.span, newModulePath, decl.names);
   }
@@ -79,7 +79,7 @@ fn refactor_decl_import_path(decl, oldModulePath: String, newModulePath: String)
   decl
 }
 
-fn refactor_decls_import_paths(decls, oldModulePath: String, newModulePath: String) => {
+fn refactor_decls_import_paths(decls: Unknown, oldModulePath: String, newModulePath: String) : Unknown => {
   let out = vec_new();
   let mut i = 0;
   while (i < vec_len(decls)) {
@@ -94,7 +94,7 @@ fn refactor_decls_import_paths(decls, oldModulePath: String, newModulePath: Stri
 // This is a pure AST transformation:
 // - Updates the moved file's `.filePath` entry.
 // - Rewrites any `DImport`/`DExternFrom` in *all* files whose `modulePath` matches the moved module.
-out fn move_file_update_imports(files, oldFilePath: String, newFilePath: String) => {
+out fn move_file_update_imports(files: Unknown, oldFilePath: String, newFilePath: String) : Unknown => {
   let oldModulePath = relpath_to_module_path(oldFilePath);
   let newModulePath = relpath_to_module_path(newFilePath);
 

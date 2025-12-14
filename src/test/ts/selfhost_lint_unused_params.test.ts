@@ -56,60 +56,24 @@ function captureStdout<T>(fn: () => T): { value: T; out: string } {
 }
 
 describe("selfhost analyzer linting", () => {
-  test("warns on unused local variables", async () => {
+  test("warns on unused function parameters", async () => {
     const outDir = resolve(
       ".dist",
-      "selfhost-lint-unused-locals",
+      "selfhost-lint-unused-params",
       `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
     );
 
     const { stage2Dir, tuffc2 } = await buildStage2Compiler(outDir);
 
-    const inFile = resolve(stage2Dir, "unused_locals.tuff");
-    const outFile = resolve(stage2Dir, "unused_locals.mjs");
+    const inFile = resolve(stage2Dir, "unused_params.tuff");
+    const outFile = resolve(stage2Dir, "unused_params.mjs");
 
     await writeFile(
       inFile,
       [
-        "fn main() : I32 => {",
-        "  let x: I32 = 1;", // should warn
-        "  0",
-        "}",
+        "fn f(x: I32) : I32 => 0",
         "",
-      ].join("\n"),
-      "utf8"
-    );
-
-    const { value: rc, out } = captureStdout(() =>
-      tuffc2.main([inFile, outFile])
-    );
-    expect(rc).toBe(0);
-
-    expect(out).toMatch(/warning/i);
-    expect(out).toMatch(/unused/i);
-    expect(out).toMatch(/\bx\b/);
-  });
-
-  test("warns when a local is only written (never read)", async () => {
-    const outDir = resolve(
-      ".dist",
-      "selfhost-lint-unused-locals",
-      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
-    );
-
-    const { stage2Dir, tuffc2 } = await buildStage2Compiler(outDir);
-
-    const inFile = resolve(stage2Dir, "unused_locals_written_only.tuff");
-    const outFile = resolve(stage2Dir, "unused_locals_written_only.mjs");
-
-    await writeFile(
-      inFile,
-      [
-        "fn main() : I32 => {",
-        "  let mut x: I32 = 0;",
-        "  x = 1;", // write only
-        "  0",
-        "}",
+        "fn main() : I32 => f(1)",
         "",
       ].join("\n"),
       "utf8"
@@ -119,30 +83,28 @@ describe("selfhost analyzer linting", () => {
     expect(rc).toBe(0);
 
     expect(out).toMatch(/warning/i);
-    expect(out).toMatch(/unused/i);
+    expect(out).toMatch(/unused parameter/i);
     expect(out).toMatch(/\bx\b/);
   });
 
-  test("does not warn when a local is read", async () => {
+  test("does not warn for underscore-prefixed parameters", async () => {
     const outDir = resolve(
       ".dist",
-      "selfhost-lint-unused-locals",
+      "selfhost-lint-unused-params",
       `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
     );
 
     const { stage2Dir, tuffc2 } = await buildStage2Compiler(outDir);
 
-    const inFile = resolve(stage2Dir, "unused_locals_read.tuff");
-    const outFile = resolve(stage2Dir, "unused_locals_read.mjs");
+    const inFile = resolve(stage2Dir, "unused_params_ignored.tuff");
+    const outFile = resolve(stage2Dir, "unused_params_ignored.mjs");
 
     await writeFile(
       inFile,
       [
-        "fn main() : I32 => {",
-        "  let mut x: I32 = 0;",
-        "  x = 1;",
-        "  x",
-        "}",
+        "fn f(_x: I32) : I32 => 0",
+        "",
+        "fn main() : I32 => f(1)",
         "",
       ].join("\n"),
       "utf8"
@@ -151,38 +113,6 @@ describe("selfhost analyzer linting", () => {
     const { value: rc, out } = captureStdout(() => tuffc2.main([inFile, outFile]));
     expect(rc).toBe(0);
 
-    expect(out).not.toMatch(/unused local/i);
-  });
-
-  test("does not warn for underscore-prefixed locals", async () => {
-    const outDir = resolve(
-      ".dist",
-      "selfhost-lint-unused-locals",
-      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
-    );
-
-    const { stage2Dir, tuffc2 } = await buildStage2Compiler(outDir);
-
-    const inFile = resolve(stage2Dir, "unused_locals_ignored.tuff");
-    const outFile = resolve(stage2Dir, "unused_locals_ignored.mjs");
-
-    await writeFile(
-      inFile,
-      [
-        "fn main() : I32 => {",
-        "  let _ignored: I32 = 2;", // should NOT warn
-        "  0",
-        "}",
-        "",
-      ].join("\n"),
-      "utf8"
-    );
-
-    const { value: rc, out } = captureStdout(() =>
-      tuffc2.main([inFile, outFile])
-    );
-    expect(rc).toBe(0);
-
-    expect(out).not.toMatch(/warning/i);
+    expect(out).not.toMatch(/unused parameter/i);
   });
 });

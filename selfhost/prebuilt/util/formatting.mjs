@@ -8,6 +8,9 @@ import { parse_type_expr } from "../parsing/types.mjs";
 import { parse_expr_ast, parse_mut_opt } from "../parsing/expr_stmt.mjs";
 import { parse_imports_ast, parse_extern_decl_ast, parse_module_decl_ast, parse_fn_decl_ast2, parse_class_fn_decl_ast2, parse_struct_decl_ast, parse_type_union_decl_ast } from "../parsing/decls.mjs";
 import { span, decl_let } from "../ast.mjs";
+export function ParsedDeclsPack(decls, nextPos) {
+return { decls: decls, nextPos: nextPos };
+}
 export function ParsedProgramWithTrivia(decls, tokenStream, nextPos) {
 return { decls: decls, tokenStream: tokenStream, nextPos: nextPos };
 }
@@ -103,15 +106,10 @@ const end = skip_ws(src, i);
 if (end < stringLen(src)) {
 panic_at(src, end, "unexpected trailing input");
 }
-const out = vec_new();
-vec_push(out, decls);
-vec_push(out, end);
-return out;
+return ParsedDeclsPack(decls, end);
 }
 export function parse_program_with_trivia(src, exportAll) {
 const ts = tokenize_with_trivia(src);
 const pack = parse_program_decls_ast(src, exportAll);
-const decls = vec_get(pack, 0);
-const nextPos = vec_get(pack, 1);
-return ParsedProgramWithTrivia(decls, ts, nextPos);
+return ParsedProgramWithTrivia(pack.decls, ts, pack.nextPos);
 }

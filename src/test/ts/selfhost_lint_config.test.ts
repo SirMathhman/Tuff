@@ -55,24 +55,24 @@ function captureStdout<T>(fn: () => T): { value: T; out: string } {
   }
 }
 
-describe("selfhost analyzer linting", () => {
-  test("warns on unused local variables", async () => {
+describe("selfhost lint config", () => {
+  test("supports CLI flag to disable unused-locals warnings", async () => {
     const outDir = resolve(
       ".dist",
-      "selfhost-lint-unused-locals",
+      "selfhost-lint-config",
       `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
     );
 
     const { stage2Dir, tuffc2 } = await buildStage2Compiler(outDir);
 
-    const inFile = resolve(stage2Dir, "unused_locals.tuff");
-    const outFile = resolve(stage2Dir, "unused_locals.mjs");
+    const inFile = resolve(stage2Dir, "flag_disable_unused_locals.tuff");
+    const outFile = resolve(stage2Dir, "flag_disable_unused_locals.mjs");
 
     await writeFile(
       inFile,
       [
         "fn main() : I32 => {",
-        "  let x: I32 = 1;", // should warn
+        "  let x: I32 = 1;", // would warn
         "  0",
         "}",
         "",
@@ -81,96 +81,41 @@ describe("selfhost analyzer linting", () => {
     );
 
     const { value: rc, out } = captureStdout(() =>
-      tuffc2.main([inFile, outFile])
+      tuffc2.main(["--no-warn-unused-locals", inFile, outFile])
     );
     expect(rc).toBe(0);
-
-    expect(out).toMatch(/warning/i);
-    expect(out).toMatch(/unused/i);
-    expect(out).toMatch(/\bx\b/);
-  });
-
-  test("warns when a local is only written (never read)", async () => {
-    const outDir = resolve(
-      ".dist",
-      "selfhost-lint-unused-locals",
-      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
-    );
-
-    const { stage2Dir, tuffc2 } = await buildStage2Compiler(outDir);
-
-    const inFile = resolve(stage2Dir, "unused_locals_written_only.tuff");
-    const outFile = resolve(stage2Dir, "unused_locals_written_only.mjs");
-
-    await writeFile(
-      inFile,
-      [
-        "fn main() : I32 => {",
-        "  let mut x: I32 = 0;",
-        "  x = 1;", // write only
-        "  0",
-        "}",
-        "",
-      ].join("\n"),
-      "utf8"
-    );
-
-    const { value: rc, out } = captureStdout(() => tuffc2.main([inFile, outFile]));
-    expect(rc).toBe(0);
-
-    expect(out).toMatch(/warning/i);
-    expect(out).toMatch(/unused/i);
-    expect(out).toMatch(/\bx\b/);
-  });
-
-  test("does not warn when a local is read", async () => {
-    const outDir = resolve(
-      ".dist",
-      "selfhost-lint-unused-locals",
-      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
-    );
-
-    const { stage2Dir, tuffc2 } = await buildStage2Compiler(outDir);
-
-    const inFile = resolve(stage2Dir, "unused_locals_read.tuff");
-    const outFile = resolve(stage2Dir, "unused_locals_read.mjs");
-
-    await writeFile(
-      inFile,
-      [
-        "fn main() : I32 => {",
-        "  let mut x: I32 = 0;",
-        "  x = 1;",
-        "  x",
-        "}",
-        "",
-      ].join("\n"),
-      "utf8"
-    );
-
-    const { value: rc, out } = captureStdout(() => tuffc2.main([inFile, outFile]));
-    expect(rc).toBe(0);
-
     expect(out).not.toMatch(/unused local/i);
   });
 
-  test("does not warn for underscore-prefixed locals", async () => {
+  test("supports config file to disable unused-locals warnings", async () => {
     const outDir = resolve(
       ".dist",
-      "selfhost-lint-unused-locals",
+      "selfhost-lint-config",
       `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
     );
 
     const { stage2Dir, tuffc2 } = await buildStage2Compiler(outDir);
 
-    const inFile = resolve(stage2Dir, "unused_locals_ignored.tuff");
-    const outFile = resolve(stage2Dir, "unused_locals_ignored.mjs");
+    const configFile = resolve(stage2Dir, "tuffc.conf");
+    const inFile = resolve(stage2Dir, "config_disable_unused_locals.tuff");
+    const outFile = resolve(stage2Dir, "config_disable_unused_locals.mjs");
+
+    await writeFile(
+      configFile,
+      [
+        "# simple key=value config",
+        "warn_unused_locals = false",
+        "warn_unused_params = true",
+        "",
+      ].join("\n"),
+      "utf8"
+    );
 
     await writeFile(
       inFile,
       [
         "fn main() : I32 => {",
-        "  let _ignored: I32 = 2;", // should NOT warn
+        "  let x: I32 = 1;", // would warn
         "  0",
         "}",
         "",
@@ -179,10 +124,9 @@ describe("selfhost analyzer linting", () => {
     );
 
     const { value: rc, out } = captureStdout(() =>
-      tuffc2.main([inFile, outFile])
+      tuffc2.main(["--config", configFile, inFile, outFile])
     );
     expect(rc).toBe(0);
-
-    expect(out).not.toMatch(/warning/i);
+    expect(out).not.toMatch(/unused local/i);
   });
 });

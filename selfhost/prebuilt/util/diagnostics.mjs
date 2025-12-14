@@ -3,6 +3,7 @@ import { println, panic, stringLen, stringSlice, stringCharCodeAt } from "../rt/
 import { vec_new, vec_len, vec_push, vec_get } from "../rt/vec.mjs";
 let __tuffc_current_file = "<input>";
 let __tuffc_errors = vec_new();
+let __tuffc_warnings = vec_new();
 let __tuffc_struct_defs = vec_new();
 export function LineCol(line, col) {
 return { line: line, col: col };
@@ -16,6 +17,10 @@ return undefined;
 }
 export function reset_errors() {
 __tuffc_errors = vec_new();
+return undefined;
+}
+export function reset_warnings() {
+__tuffc_warnings = vec_new();
 return undefined;
 }
 export function errors_len() {
@@ -33,11 +38,59 @@ i = i + 1;
 }
 return out;
 }
+export function warnings_join() {
+let out = "";
+let i = 0;
+while (i < vec_len(__tuffc_warnings)) {
+if (i > 0) {
+out = out + "\n\n";
+}
+out = out + vec_get(__tuffc_warnings, i);
+i = i + 1;
+}
+return out;
+}
 export function panic_if_errors() {
 if (vec_len(__tuffc_errors) > 0) {
 panic(errors_join());
 }
 return undefined;
+}
+export function emit_warnings() {
+let i = 0;
+while (i < vec_len(__tuffc_warnings)) {
+println(vec_get(__tuffc_warnings, i));
+i = i + 1;
+}
+return undefined;
+}
+export function ascii_lower(ch) {
+if (ch >= 65 && ch <= 90) {
+return ch + 32;
+}
+return ch;
+}
+export function replace_error_label_with_warning(s) {
+const needle = " error: ";
+let i = 0;
+while (i + stringLen(needle) <= stringLen(s)) {
+let ok = true;
+let j = 0;
+while (j < stringLen(needle)) {
+if (stringCharCodeAt(s, i + j) != stringCharCodeAt(needle, j)) {
+ok = false;
+break;
+}
+j = j + 1;
+}
+if (ok) {
+const before = stringSlice(s, 0, i);
+const after = stringSlice(s, i + stringLen(needle), stringLen(s));
+return before + " warning: " + after;
+}
+i = i + 1;
+}
+return s;
 }
 export function spaces(n) {
 let s = "";
@@ -191,6 +244,14 @@ return;
 vec_push(__tuffc_errors, format_span_help(src, start, end, msg, help));
 return undefined;
 }
+export function warn_span_help(src, start, end, msg, help) {
+if (vec_len(__tuffc_warnings) >= 200) {
+return;
+}
+const s = format_span_help(src, start, end, msg, help);
+vec_push(__tuffc_warnings, replace_error_label_with_warning(s));
+return undefined;
+}
 export function panic_at_help(src, i, msg, help) {
 panic_span_help(src, i, i, msg, help);
 return undefined;
@@ -199,12 +260,20 @@ export function error_at_help(src, i, msg, help) {
 error_span_help(src, i, i, msg, help);
 return undefined;
 }
+export function warn_at_help(src, i, msg, help) {
+warn_span_help(src, i, i, msg, help);
+return undefined;
+}
 export function panic_at(src, i, msg) {
 panic_at_help(src, i, msg, "");
 return undefined;
 }
 export function error_at(src, i, msg) {
 error_at_help(src, i, msg, "");
+return undefined;
+}
+export function warn_at(src, i, msg) {
+warn_at_help(src, i, msg, "");
 return undefined;
 }
 export function reset_struct_defs() {

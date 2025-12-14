@@ -36,7 +36,7 @@ describe("selfhost stage2", () => {
     const mathIn = resolve(outDir, "math.tuff");
     await writeFile(
       mathIn,
-      "module Math { fn add(a, b) => a + b fn mul(a, b) => a * b }\n",
+      "module Math { fn add(a: I32, b: I32) => a + b fn mul(a: I32, b: I32) => a * b }\n",
       "utf8"
     );
 
