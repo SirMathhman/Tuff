@@ -2,6 +2,7 @@
 import { println, panic, stringLen, stringSlice, stringCharCodeAt } from "../rt/stdlib.mjs";
 import { vec_new, vec_len, vec_push, vec_get } from "../rt/vec.mjs";
 let __tuffc_current_file = "<input>";
+let __tuffc_diag_format = "human";
 let __tuffc_errors = vec_new();
 let __tuffc_warnings = vec_new();
 let __tuffc_struct_defs = vec_new();
@@ -14,6 +15,15 @@ return { name: name, fields: fields };
 export function set_current_file(path) {
 __tuffc_current_file = path;
 return undefined;
+}
+export function set_diagnostics_format(format) {
+return (format == "human" || format == "json" ? (() => {
+__tuffc_diag_format = format;
+return undefined;
+})() : (() => {
+panic("unknown diagnostics format: " + format);
+return undefined;
+})());
 }
 export function reset_errors() {
 __tuffc_errors = vec_new();
@@ -50,8 +60,44 @@ i = i + 1;
 }
 return out;
 }
+export function json_escape(s) {
+let out = "";
+let i = 0;
+while (i < stringLen(s)) {
+const ch = stringCharCodeAt(s, i);
+if (ch == 34) {
+out = out + "\\\"";
+} else {
+if (ch == 92) {
+out = out + "\\\\";
+} else {
+if (ch == 10) {
+out = out + "\\n";
+} else {
+if (ch == 13) {
+out = out + "\\r";
+} else {
+if (ch == 9) {
+out = out + "\\t";
+} else {
+out = out + stringSlice(s, i, i + 1);
+}
+}
+}
+}
+}
+i = i + 1;
+}
+return out;
+}
+export function diag_json(level, text) {
+return "{\"level\":\"" + level + "\",\"text\":\"" + json_escape(text) + "\"}";
+}
 export function panic_if_errors() {
 if (vec_len(__tuffc_errors) > 0) {
+if (__tuffc_diag_format == "json") {
+panic(diag_json("error", errors_join()));
+}
 panic(errors_join());
 }
 return undefined;
@@ -59,7 +105,12 @@ return undefined;
 export function emit_warnings() {
 let i = 0;
 while (i < vec_len(__tuffc_warnings)) {
-println(vec_get(__tuffc_warnings, i));
+const w = vec_get(__tuffc_warnings, i);
+if (__tuffc_diag_format == "json") {
+println(diag_json("warning", w));
+} else {
+println(w);
+}
 i = i + 1;
 }
 return undefined;

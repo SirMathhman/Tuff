@@ -7,6 +7,11 @@ extern from rt::vec use { vec_new, vec_len, vec_push, vec_get };
 // Current file label for error messages (used by panic_at).
 let mut __tuffc_current_file = "<input>";
 
+// Diagnostics output mode.
+// - "human": existing multi-line formatted messages
+// - "json": one JSON object per warning; errors are thrown as a JSON object
+let mut __tuffc_diag_format = "human";
+
 // Accumulated analyzer errors (reset per file compilation).
 let mut __tuffc_errors = vec_new();
 
@@ -22,6 +27,15 @@ class fn StructDef(name: String, fields: Vec<String>) => {} // name, fields(vec)
 
 out fn set_current_file(path: String) : Void => {
   __tuffc_current_file = path;
+}
+
+out fn set_diagnostics_format(format: String) : Void => {
+  // Be strict so typos don't silently change output.
+  if (format == "human" || format == "json") {
+    __tuffc_diag_format = format;
+  } else {
+    panic("unknown diagnostics format: " + format);
+  }
 }
 
 out fn reset_errors() : Void => {
@@ -56,8 +70,47 @@ fn warnings_join() : String => {
   out
 }
 
+fn json_escape(s: String) : String => {
+  // Escape only what we need for stable single-line JSON output.
+  let mut out = "";
+  let mut i: I32 = 0;
+  while (i < stringLen(s)) {
+    let ch = stringCharCodeAt(s, i);
+    if (ch == 34) {
+      out = out + "\\\"";
+    } else {
+      if (ch == 92) {
+        out = out + "\\\\";
+      } else {
+        if (ch == 10) {
+          out = out + "\\n";
+        } else {
+          if (ch == 13) {
+            out = out + "\\r";
+          } else {
+            if (ch == 9) {
+              out = out + "\\t";
+            } else {
+              out = out + stringSlice(s, i, i + 1);
+            }
+          }
+        }
+      }
+    }
+    i = i + 1;
+  }
+  out
+}
+
+fn diag_json(level: String, text: String) : String => {
+  "{\"level\":\"" + level + "\",\"text\":\"" + json_escape(text) + "\"}"
+}
+
 out fn panic_if_errors() : Void => {
   if (vec_len(__tuffc_errors) > 0) {
+    if (__tuffc_diag_format == "json") {
+      panic(diag_json("error", errors_join()));
+    }
     panic(errors_join());
   }
 }
@@ -67,7 +120,12 @@ out fn emit_warnings() : Void => {
   // so they don't fail compilation.
   let mut i = 0;
   while (i < vec_len(__tuffc_warnings)) {
-    println(vec_get(__tuffc_warnings, i));
+    let w = vec_get(__tuffc_warnings, i);
+    if (__tuffc_diag_format == "json") {
+      println(diag_json("warning", w));
+    } else {
+      println(w);
+    }
     i = i + 1;
   }
 }

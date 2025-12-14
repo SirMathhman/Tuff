@@ -13,6 +13,23 @@ import { span, span_start, decl_let, decl_let_typed } from "./ast.mjs";
 import { emit_decl_js, set_current_file_path, emit_runtime_vec_imports_js, decls_needs_vec_rt } from "./emit/ast_js.mjs";
 import { analyze_program, analyze_program_with_fns, mk_fn_sig } from "./analyzer.mjs";
 import { ParsedProgramWithTrivia, parse_program_with_trivia } from "./util/formatting.mjs";
+let __tuffc_scan_cache = vec_new();
+export function ScanCacheEntry(path, outSigs, privateNames, allSigs) {
+return { path: path, outSigs: outSigs, privateNames: privateNames, allSigs: allSigs };
+}
+export function cached_scan_top_level_fn_exports(path, src) {
+let i = 0;
+while (i < vec_len(__tuffc_scan_cache)) {
+const e = vec_get(__tuffc_scan_cache, i);
+if (e.path == path) {
+return [e.outSigs, e.privateNames, e.allSigs];
+}
+i = i + 1;
+}
+const ex = scan_top_level_fn_exports(src);
+vec_push(__tuffc_scan_cache, ScanCacheEntry(path, ex[0], ex[1], ex[2]));
+return ex;
+}
 export function parse_program_with_trivia_api(src, exportAll) {
 return parse_program_with_trivia(src, exportAll);
 }
@@ -693,7 +710,7 @@ vec_push(visiting, path);
 vec_push(stack, "POST:" + path);
 set_current_file(path);
 const src = readTextFile(path);
-const ex = scan_top_level_fn_exports(src);
+const ex = cached_scan_top_level_fn_exports(path, src);
 vec_push(modulePaths, path);
 if (isCompilerBuild) {
 vec_push(moduleOutFns, ex[2]);
@@ -908,7 +925,7 @@ vec_push(visiting, path);
 vec_push(stack, "POST:" + path);
 set_current_file(path);
 const src = readTextFile(path);
-const ex = scan_top_level_fn_exports(src);
+const ex = cached_scan_top_level_fn_exports(path, src);
 vec_push(modulePaths, path);
 if (isCompilerBuild) {
 vec_push(moduleOutFns, ex[2]);

@@ -1,5 +1,6 @@
 import { copyFile, mkdir, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 async function writeRuntime(outDir: string) {
   const rtDir = resolve(outDir, "rt");
@@ -121,5 +122,51 @@ export async function stagePrebuiltSelfhostCompiler(
   return {
     entryFile: resolve(outDir, "tuffc.mjs"),
     libFile: resolve(outDir, "tuffc_lib.mjs"),
+  };
+}
+
+export async function buildStage2SelfhostCompiler(outDir: string): Promise<{
+  stage1Dir: string;
+  stage2Dir: string;
+  stage1File: string;
+  stage2File: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tuffc2: any;
+}> {
+  await mkdir(outDir, { recursive: true });
+
+  const stage1Dir = resolve(outDir, "stage1");
+  const stage2Dir = resolve(outDir, "stage2");
+  await mkdir(stage1Dir, { recursive: true });
+  await mkdir(stage2Dir, { recursive: true });
+
+  const { entryFile: stage1File } = await stagePrebuiltSelfhostCompiler(
+    stage1Dir
+  );
+
+  // runtime for stage2 output
+  await writeRuntime(stage2Dir);
+
+  const stage2In = resolve("src", "main", "tuff", "compiler", "tuffc.tuff");
+  const stage2File = resolve(stage2Dir, "tuffc.stage2.mjs");
+
+  // Build stage2 compiler using stage1 compiler.
+  const tuffc1 = await import(pathToFileURL(stage1File).toString());
+  const rc2 = (tuffc1 as any).main([stage2In, stage2File]);
+  if (rc2 !== 0) {
+    throw new Error(`stage2 compile failed with code ${rc2}`);
+  }
+
+  const tuffc2 = await import(pathToFileURL(stage2File).toString());
+  if (typeof (tuffc2 as any).main !== "function") {
+    throw new Error("stage2 compiler missing main() export");
+  }
+
+  return {
+    stage1Dir,
+    stage2Dir,
+    stage1File,
+    stage2File,
+    tuffc2: tuffc2 as any,
   };
 }

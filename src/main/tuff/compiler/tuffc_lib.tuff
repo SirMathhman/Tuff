@@ -114,6 +114,37 @@ from analyzer use { analyze_program, analyze_program_with_fns, mk_fn_sig };
 // Whitespace-preserving tooling support (formatter/refactors).
 from util::formatting use { ParsedProgramWithTrivia, parse_program_with_trivia };
 
+// ------------------------------------------------------------
+// In-process caching (optional speed-up)
+//
+// Bun/Node caches ESM modules by path; our tests and tooling sometimes call
+// lint/compile multiple times within the same process. Export scanning is a
+// pure function of file content, and files are stable during a single run.
+//
+// IMPORTANT: The selfhost compiler's top-level parser expects *all* top-level
+// `let` declarations to appear before any `fn`/`class fn` declarations.
+// Keep this cache definition above the first function in this file.
+// ------------------------------------------------------------
+
+let mut __tuffc_scan_cache = vec_new();
+
+class fn ScanCacheEntry(path: String, outSigs: Vec<FnSig>, privateNames: Vec<String>, allSigs: Vec<FnSig>) => {}
+
+fn cached_scan_top_level_fn_exports(path: String, src: String) => {
+  let mut i = 0;
+  while (i < vec_len(__tuffc_scan_cache)) {
+    let e = vec_get(__tuffc_scan_cache, i);
+    if (e.path == path) {
+      yield (e.outSigs, e.privateNames, e.allSigs);
+    }
+    i = i + 1;
+  }
+
+  let ex = scan_top_level_fn_exports(src);
+  vec_push(__tuffc_scan_cache, ScanCacheEntry(path, ex.0, ex.1, ex.2));
+  ex
+}
+
 fn parse_program_with_trivia_api(src: String, exportAll: Bool) : ParsedProgramWithTrivia => {
   parse_program_with_trivia(src, exportAll)
 }
@@ -779,7 +810,7 @@ fn scan_top_level_fn_exports(src: String) => {
   (outSigs, privateNames, allSigs)
 }
 
-fn compile_project(entryPath: String, outPath: String) : Void => {
+out fn compile_project(entryPath: String, outPath: String) : Void => {
   // Very small multi-file compiler:
   // - supports `from <path> use { ... };` for local file modules
   // - all module paths are resolved relative to the entry file's directory
@@ -834,7 +865,7 @@ fn compile_project(entryPath: String, outPath: String) : Void => {
     let src = readTextFile(path);
 
     // export table for this module
-    let ex = scan_top_level_fn_exports(src);
+    let ex = cached_scan_top_level_fn_exports(path, src);
     vec_push(modulePaths, path);
     if (isCompilerBuild) {
       // Preserve legacy behavior for compiling the compiler itself: allow
@@ -1085,7 +1116,7 @@ out fn lint_project(entryPath: String) : Void => {
     let src = readTextFile(path);
 
     // export table for this module
-    let ex = scan_top_level_fn_exports(src);
+    let ex = cached_scan_top_level_fn_exports(path, src);
     vec_push(modulePaths, path);
     if (isCompilerBuild) {
       // Preserve legacy behavior for compiling the compiler itself.

@@ -1,8 +1,9 @@
 // compiled by selfhost tuffc
-import { println, readTextFile, stringLen, stringCharCodeAt, stringSlice } from "./rt/stdlib.mjs";
+import { println, readTextFile, stringLen, stringCharCodeAt, stringSlice, pathDirname, pathJoin, fileExists } from "./rt/stdlib.mjs";
 import { vec_len, vec_get } from "./rt/vec.mjs";
 import { compile_project, lint_project } from "./tuffc_lib.mjs";
 import { set_lint_options } from "./analyzer.mjs";
+import { set_diagnostics_format } from "./util/diagnostics.mjs";
 export function is_ascii_ws(ch) {
 return ch == 32 || ch == 9 || ch == 10 || ch == 13;
 }
@@ -81,6 +82,21 @@ return -1;
 export function LintOptions(warnUnusedLocals, warnUnusedParams) {
 return { warnUnusedLocals: warnUnusedLocals, warnUnusedParams: warnUnusedParams };
 }
+export function find_config_upwards(inPath) {
+let dir = pathDirname(inPath);
+while (true) {
+const cand = pathJoin(dir, "tuffc.conf");
+if (fileExists(cand)) {
+return cand;
+}
+const parent = pathDirname(dir);
+if (parent == dir) {
+break;
+}
+dir = parent;
+}
+return "";
+}
 export function parse_lint_config(src, warnUnusedLocals0, warnUnusedParams0) {
 let warnUnusedLocals = warnUnusedLocals0;
 let warnUnusedParams = warnUnusedParams0;
@@ -116,10 +132,14 @@ return LintOptions(warnUnusedLocals, warnUnusedParams);
 }
 export function print_usage() {
 println("usage: tuffc [options] <in.tuff> <out.mjs>");
-println("       tuffc [options] --lint-only <in.tuff>");
+println("       tuffc lint [options] <in.tuff>");
+println("       tuffc [options] --lint-only <in.tuff>   (alias for lint)");
 println("options:");
 println("  --config <path>                Read config file (key = value)");
+println("  --format <human|json>          Diagnostics output format");
 println("  --lint-only                    Lint only (parse+analyze), do not emit JS");
+println("  --warn-all                     Enable all warnings");
+println("  --no-warn                      Disable all warnings");
 println("  --warn-unused-locals            Enable unused local warnings");
 println("  --warn-unused-params            Enable unused parameter warnings");
 println("  --no-warn-unused-locals         Disable unused local warnings");
@@ -129,13 +149,26 @@ return undefined;
 export function main(argv) {
 let warnUnusedLocals = false;
 let warnUnusedParams = false;
+let warnMode = "";
 let lintOnly = false;
 let configPath = "";
+let format = "human";
+let command = "";
 let inPath = "";
 let outPath = "";
 let i = 0;
 while (i < vec_len(argv)) {
 const a = vec_get(argv, i);
+if (a == "--warn-all") {
+warnMode = "all";
+i = i + 1;
+continue;
+}
+if (a == "--no-warn") {
+warnMode = "none";
+i = i + 1;
+continue;
+}
 if (a == "--no-warn-unused-locals") {
 warnUnusedLocals = false;
 i = i + 1;
@@ -161,6 +194,15 @@ lintOnly = true;
 i = i + 1;
 continue;
 }
+if (a == "--format") {
+if (i + 1 >= vec_len(argv)) {
+print_usage();
+return 1;
+}
+format = vec_get(argv, i + 1);
+i = i + 2;
+continue;
+}
 if (a == "--config") {
 if (i + 1 >= vec_len(argv)) {
 print_usage();
@@ -174,6 +216,11 @@ if (stringLen(a) > 0 && stringCharCodeAt(a, 0) == 45) {
 println("unknown option: " + a);
 print_usage();
 return 1;
+}
+if (command == "" && inPath == "" && (a == "lint" || a == "compile")) {
+command = a;
+i = i + 1;
+continue;
 }
 if (inPath == "") {
 inPath = a;
@@ -189,8 +236,11 @@ println("too many arguments");
 print_usage();
 return 1;
 }
+if (command == "lint") {
+lintOnly = true;
+}
 (lintOnly ? (() => {
-if (inPath == "") {
+if (inPath == "" || outPath != "") {
 print_usage();
 return 1;
 }
@@ -202,12 +252,24 @@ return 1;
 }
 return undefined;
 })());
+if (configPath == "") {
+configPath = find_config_upwards(inPath);
+}
 if (configPath != "") {
 const cfgText = readTextFile(configPath);
 const cfg = parse_lint_config(cfgText, warnUnusedLocals, warnUnusedParams);
 warnUnusedLocals = cfg.warnUnusedLocals;
 warnUnusedParams = cfg.warnUnusedParams;
 }
+if (warnMode == "none") {
+warnUnusedLocals = false;
+warnUnusedParams = false;
+}
+if (warnMode == "all") {
+warnUnusedLocals = true;
+warnUnusedParams = true;
+}
+set_diagnostics_format(format);
 set_lint_options(warnUnusedLocals, warnUnusedParams);
 (lintOnly ? (() => {
 lint_project(inPath);

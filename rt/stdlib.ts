@@ -4,7 +4,7 @@
 // The bootstrap compiler can import this via:
 //   extern from rt::stdlib use { ... }
 
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, join, resolve, basename } from "node:path";
 
 export function print(s: string): void {
@@ -21,6 +21,10 @@ export function panic(message: string): never {
 
 export function readTextFile(path: string): string {
   return readFileSync(path, "utf8");
+}
+
+export function fileExists(path: string): boolean {
+  return existsSync(path);
 }
 
 export function writeTextFile(path: string, data: string): void {

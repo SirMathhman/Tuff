@@ -2,11 +2,12 @@
 //
 // The implementation lives in `selfhost/tuffc_lib.tuff`.
 
-extern from rt::stdlib use { println, readTextFile, stringLen, stringCharCodeAt, stringSlice };
+extern from rt::stdlib use { println, readTextFile, stringLen, stringCharCodeAt, stringSlice, pathDirname, pathJoin, fileExists };
 extern from rt::vec use { vec_len, vec_get };
 
 from tuffc_lib use { compile_project, lint_project };
 from analyzer use { set_lint_options };
+from util::diagnostics use { set_diagnostics_format };
 
 fn is_ascii_ws(ch: I32) : Bool => ch == 32 || ch == 9 || ch == 10 || ch == 13
 
@@ -64,6 +65,18 @@ fn find_char(s: String, ch: I32) : I32 => {
 
 class fn LintOptions(warnUnusedLocals: Bool, warnUnusedParams: Bool) => {}
 
+fn find_config_upwards(inPath: String) : String => {
+  let mut dir = pathDirname(inPath);
+  while (true) {
+    let cand = pathJoin(dir, "tuffc.conf");
+    if (fileExists(cand)) { yield cand; }
+    let parent = pathDirname(dir);
+    if (parent == dir) { break; }
+    dir = parent;
+  }
+  ""
+}
+
 fn parse_lint_config(src: String, warnUnusedLocals0: Bool, warnUnusedParams0: Bool) : LintOptions => {
   let mut warnUnusedLocals = warnUnusedLocals0;
   let mut warnUnusedParams = warnUnusedParams0;
@@ -104,10 +117,14 @@ fn parse_lint_config(src: String, warnUnusedLocals0: Bool, warnUnusedParams0: Bo
 
 fn print_usage() : Void => {
   println("usage: tuffc [options] <in.tuff> <out.mjs>");
-  println("       tuffc [options] --lint-only <in.tuff>");
+  println("       tuffc lint [options] <in.tuff>");
+  println("       tuffc [options] --lint-only <in.tuff>   (alias for lint)");
   println("options:");
   println("  --config <path>                Read config file (key = value)");
+  println("  --format <human|json>          Diagnostics output format");
   println("  --lint-only                    Lint only (parse+analyze), do not emit JS");
+  println("  --warn-all                     Enable all warnings");
+  println("  --no-warn                      Disable all warnings");
   println("  --warn-unused-locals            Enable unused local warnings");
   println("  --warn-unused-params            Enable unused parameter warnings");
   println("  --no-warn-unused-locals         Disable unused local warnings");
@@ -121,8 +138,12 @@ fn main(argv: Vec<String>) => {
   // drowning tests/bootstrapping output in warnings.
   let mut warnUnusedLocals = false;
   let mut warnUnusedParams = false;
+  let mut warnMode = ""; // "" | "all" | "none"
   let mut lintOnly = false;
   let mut configPath = "";
+  let mut format = "human";
+
+  let mut command = ""; // "" | "lint" | "compile"
 
   let mut inPath = "";
   let mut outPath = "";
@@ -131,12 +152,25 @@ fn main(argv: Vec<String>) => {
   while (i < vec_len(argv)) {
     let a = vec_get(argv, i);
 
+    if (a == "--warn-all") { warnMode = "all"; i = i + 1; continue; }
+    if (a == "--no-warn") { warnMode = "none"; i = i + 1; continue; }
+
     if (a == "--no-warn-unused-locals") { warnUnusedLocals = false; i = i + 1; continue; }
     if (a == "--no-warn-unused-params") { warnUnusedParams = false; i = i + 1; continue; }
     if (a == "--warn-unused-locals") { warnUnusedLocals = true; i = i + 1; continue; }
     if (a == "--warn-unused-params") { warnUnusedParams = true; i = i + 1; continue; }
 
     if (a == "--lint-only") { lintOnly = true; i = i + 1; continue; }
+
+    if (a == "--format") {
+      if (i + 1 >= vec_len(argv)) {
+        print_usage();
+        yield 1;
+      }
+      format = vec_get(argv, i + 1);
+      i = i + 2;
+      continue;
+    }
 
     if (a == "--config") {
       if (i + 1 >= vec_len(argv)) {
@@ -156,6 +190,11 @@ fn main(argv: Vec<String>) => {
     }
 
     // Positional args.
+    if (command == "" && inPath == "" && (a == "lint" || a == "compile")) {
+      command = a;
+      i = i + 1;
+      continue;
+    }
     if (inPath == "") { inPath = a; i = i + 1; continue; }
     if (outPath == "") { outPath = a; i = i + 1; continue; }
 
@@ -164,8 +203,12 @@ fn main(argv: Vec<String>) => {
     yield 1;
   }
 
+  if (command == "lint") {
+    lintOnly = true;
+  }
+
   if (lintOnly) {
-    if (inPath == "") {
+    if (inPath == "" || outPath != "") {
       print_usage();
       yield 1;
     }
@@ -176,12 +219,28 @@ fn main(argv: Vec<String>) => {
     }
   }
 
+  if (configPath == "") {
+    configPath = find_config_upwards(inPath);
+  }
+
   if (configPath != "") {
     let cfgText = readTextFile(configPath);
     let cfg = parse_lint_config(cfgText, warnUnusedLocals, warnUnusedParams);
     warnUnusedLocals = cfg.warnUnusedLocals;
     warnUnusedParams = cfg.warnUnusedParams;
   }
+
+  // Global overrides should beat config, so users can force silence/verbosity.
+  if (warnMode == "none") {
+    warnUnusedLocals = false;
+    warnUnusedParams = false;
+  }
+  if (warnMode == "all") {
+    warnUnusedLocals = true;
+    warnUnusedParams = true;
+  }
+
+  set_diagnostics_format(format);
 
   set_lint_options(warnUnusedLocals, warnUnusedParams);
   if (lintOnly) {

@@ -3,7 +3,7 @@
 // Keep this file dependency-free (other than Node builtins) so emitted `.mjs`
 // from the bootstrap compiler can import it.
 
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, join, resolve, basename } from "node:path";
 
 export function print(s) {
@@ -20,6 +20,10 @@ export function panic(message) {
 
 export function readTextFile(path) {
   return readFileSync(path, "utf8");
+}
+
+export function fileExists(path) {
+  return existsSync(path);
 }
 
 export function writeTextFile(path, data) {

@@ -68,6 +68,9 @@ Compile and run:
 node selfhost/prebuilt/tuffc.mjs hello.tuff hello.mjs
 
 # Lint only (parse + analyze), without emitting output
+node selfhost/prebuilt/tuffc.mjs lint hello.tuff
+
+# (Alias for lint)
 node selfhost/prebuilt/tuffc.mjs --lint-only hello.tuff
 
 # Run the output
@@ -145,6 +148,32 @@ path/to/file.tuff:12:34 (offset 567) error: <message>
          |                                  ^
 help: <recommended fix>
 ```
+
+The CLI can also emit machine-friendly diagnostics:
+
+- `--format human` (default): the multi-line code frame shown above
+- `--format json`: prints one JSON object per warning (one line each); compilation errors are thrown as a single JSON object string
+
+JSON shape (minimal, stable):
+
+```json
+{"level":"warning","text":"..."}
+```
+
+### Lint configuration
+
+Linting can be configured via a simple `key = value` config file:
+
+- `warn_unused_locals = true|false`
+- `warn_unused_params = true|false`
+
+By default, `tuffc` searches upward from the input file directory for `tuffc.conf`.
+You can also pass `--config <path>` explicitly.
+
+CLI flags override config:
+
+- `--warn-all` enables all warnings
+- `--no-warn` disables all warnings
 
 **To rebuild the prebuilt compiler after modifying compiler source:**
 
