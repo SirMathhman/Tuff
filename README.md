@@ -653,7 +653,8 @@ We welcome contributions! Here's how to get started:
    - Add tests first (TDD)
    - Write code to pass tests
    - Ensure `npm test` passes
-   - Rebuild prebuilt: `npm run build:selfhost-prebuilt`
+    - Rebuild prebuilt: `npm run build:selfhost-prebuilt`
+    - Verify prebuilt is up-to-date (no diff): `npm run check:prebuilt`
 5. **Commit**:
    ```bash
    git add .

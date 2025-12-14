@@ -118,13 +118,15 @@ export function print_usage() {
 println("usage: tuffc [options] <in.tuff> <out.mjs>");
 println("options:");
 println("  --config <path>                Read config file (key = value)");
+println("  --warn-unused-locals            Enable unused local warnings");
+println("  --warn-unused-params            Enable unused parameter warnings");
 println("  --no-warn-unused-locals         Disable unused local warnings");
 println("  --no-warn-unused-params         Disable unused parameter warnings");
 return undefined;
 }
 export function main(argv) {
-let warnUnusedLocals = true;
-let warnUnusedParams = true;
+let warnUnusedLocals = false;
+let warnUnusedParams = false;
 let configPath = "";
 let inPath = "";
 let outPath = "";

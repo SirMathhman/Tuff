@@ -11,21 +11,34 @@
 //
 // We also expose combinators as fields so callers can chain:
 //   range(0, 6).iter().filter(...).map(...).fold(...)
-class fn Iter(for_each: Unknown, map: Unknown, filter: Unknown, fold: Unknown) => {}
+class fn Iter(
+  for_each: ((Unknown) => I32) => I32,
+  map: (Unknown) => Iter,
+  filter: (Unknown) => Iter,
+  fold: (Unknown, Unknown) => Unknown
+) => {}
 
-class fn Range(start: I32, end: I32, has_next: Unknown, next: Unknown, for_each: Unknown, iter: Unknown) => {}
+class fn Range(
+  start: I32,
+  end: I32,
+  has_next: () => Bool,
+  next: () => I32,
+  for_each: ((I32) => I32) => I32,
+  iter: () => Iter
+) => {}
 
-fn iter_new(for_each: Unknown) => {
-  let map_fn = (f: Unknown) => {
+fn iter_new(for_each: ((Unknown) => I32) => I32) : Iter => {
+  let map_fn = (f: Unknown) : Iter => {
     iter_new((g: Unknown) => {
       for_each((x: Unknown) => {
         g(f(x));
         0
       });
+      0
     })
   };
 
-  let filter_fn = (pred: Unknown) => {
+  let filter_fn = (pred: Unknown) : Iter => {
     iter_new((g: Unknown) => {
       for_each((x: Unknown) => {
         if (pred(x)) {
@@ -33,10 +46,11 @@ fn iter_new(for_each: Unknown) => {
         }
         0
       });
+      0
     })
   };
 
-  let fold_fn = (init: Unknown, f: Unknown) => {
+  let fold_fn = (init: Unknown, f: Unknown) : Unknown => {
     let mut acc = init;
     for_each((x: Unknown) => {
       acc = f(acc, x);
@@ -51,21 +65,22 @@ fn iter_new(for_each: Unknown) => {
 out fn range(start: I32, end: I32) => {
   let mut cur: I32 = start;
 
-  let has_next = () => cur < end;
+  let has_next = () : Bool => cur < end;
 
-  let next = () => {
+  let next = () : I32 => {
     let v: I32 = cur;
     cur = cur + 1;
     v
   };
 
-  let for_each = (f: Unknown) => {
+  let for_each = (f: (I32) => I32) : I32 => {
     while (has_next()) {
       f(next());
     }
+    0
   };
 
-  let iter = () => iter_new(for_each);
+  let iter = () : Iter => iter_new(for_each);
 
   Range(start, end, has_next, next, for_each, iter)
 }

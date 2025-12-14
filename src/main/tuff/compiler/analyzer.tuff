@@ -77,8 +77,10 @@ struct NarrowedTag {
   variant: String
 }
 
-let mut __lint_warn_unused_locals = true;
-let mut __lint_warn_unused_params = true;
+// Lints are intentionally opt-in by default to keep compiler/test output readable.
+// The CLI (`tuffc.tuff`) and any host tooling can enable them via set_lint_options.
+let mut __lint_warn_unused_locals = false;
+let mut __lint_warn_unused_params = false;
 
 out fn set_lint_options(warnUnusedLocals: Bool, warnUnusedParams: Bool) : Void => {
   __lint_warn_unused_locals = warnUnusedLocals;

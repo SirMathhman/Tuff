@@ -106,6 +106,8 @@ fn print_usage() : Void => {
   println("usage: tuffc [options] <in.tuff> <out.mjs>");
   println("options:");
   println("  --config <path>                Read config file (key = value)");
+  println("  --warn-unused-locals            Enable unused local warnings");
+  println("  --warn-unused-params            Enable unused parameter warnings");
   println("  --no-warn-unused-locals         Disable unused local warnings");
   println("  --no-warn-unused-params         Disable unused parameter warnings");
 }
@@ -113,8 +115,10 @@ fn print_usage() : Void => {
 // When run as a program, compile stdin-like file input.
 // We keep it simple: main(argv) where argv = [inPath, outPath]
 fn main(argv: Vec<String>) => {
-  let mut warnUnusedLocals = true;
-  let mut warnUnusedParams = true;
+  // Default to quiet linting; these are opt-in via flags/config to avoid
+  // drowning tests/bootstrapping output in warnings.
+  let mut warnUnusedLocals = false;
+  let mut warnUnusedParams = false;
   let mut configPath = "";
 
   let mut inPath = "";

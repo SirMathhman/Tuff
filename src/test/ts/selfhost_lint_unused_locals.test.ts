@@ -81,7 +81,7 @@ describe("selfhost analyzer linting", () => {
     );
 
     const { value: rc, out } = captureStdout(() =>
-      tuffc2.main([inFile, outFile])
+      tuffc2.main(["--warn-unused-locals", inFile, outFile])
     );
     expect(rc).toBe(0);
 
@@ -115,7 +115,9 @@ describe("selfhost analyzer linting", () => {
       "utf8"
     );
 
-    const { value: rc, out } = captureStdout(() => tuffc2.main([inFile, outFile]));
+    const { value: rc, out } = captureStdout(() =>
+      tuffc2.main(["--warn-unused-locals", inFile, outFile])
+    );
     expect(rc).toBe(0);
 
     expect(out).toMatch(/warning/i);
@@ -148,7 +150,9 @@ describe("selfhost analyzer linting", () => {
       "utf8"
     );
 
-    const { value: rc, out } = captureStdout(() => tuffc2.main([inFile, outFile]));
+    const { value: rc, out } = captureStdout(() =>
+      tuffc2.main(["--warn-unused-locals", inFile, outFile])
+    );
     expect(rc).toBe(0);
 
     expect(out).not.toMatch(/unused local/i);
@@ -179,10 +183,84 @@ describe("selfhost analyzer linting", () => {
     );
 
     const { value: rc, out } = captureStdout(() =>
-      tuffc2.main([inFile, outFile])
+      tuffc2.main(["--warn-unused-locals", inFile, outFile])
     );
     expect(rc).toBe(0);
 
     expect(out).not.toMatch(/warning/i);
+  });
+
+  test("config can enable unused local warnings", async () => {
+    const outDir = resolve(
+      ".dist",
+      "selfhost-lint-unused-locals",
+      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    );
+
+    const { stage2Dir, tuffc2 } = await buildStage2Compiler(outDir);
+
+    const configFile = resolve(stage2Dir, "tuffc.conf");
+    await writeFile(configFile, "warn_unused_locals=true\n", "utf8");
+
+    const inFile = resolve(stage2Dir, "unused_locals_cfg.tuff");
+    const outFile = resolve(stage2Dir, "unused_locals_cfg.mjs");
+
+    await writeFile(
+      inFile,
+      [
+        "fn main() : I32 => {",
+        "  let x: I32 = 1;", // should warn when config enables
+        "  0",
+        "}",
+        "",
+      ].join("\n"),
+      "utf8"
+    );
+
+    const { value: rc, out } = captureStdout(() =>
+      tuffc2.main(["--config", configFile, inFile, outFile])
+    );
+    expect(rc).toBe(0);
+    expect(out).toMatch(/unused local/i);
+  });
+
+  test("config can disable unused local warnings even if flag enables", async () => {
+    const outDir = resolve(
+      ".dist",
+      "selfhost-lint-unused-locals",
+      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    );
+
+    const { stage2Dir, tuffc2 } = await buildStage2Compiler(outDir);
+
+    const configFile = resolve(stage2Dir, "tuffc.conf");
+    await writeFile(configFile, "warn_unused_locals=false\n", "utf8");
+
+    const inFile = resolve(stage2Dir, "unused_locals_cfg_disable.tuff");
+    const outFile = resolve(stage2Dir, "unused_locals_cfg_disable.mjs");
+
+    await writeFile(
+      inFile,
+      [
+        "fn main() : I32 => {",
+        "  let x: I32 = 1;",
+        "  0",
+        "}",
+        "",
+      ].join("\n"),
+      "utf8"
+    );
+
+    const { value: rc, out } = captureStdout(() =>
+      tuffc2.main([
+        "--warn-unused-locals",
+        "--config",
+        configFile,
+        inFile,
+        outFile,
+      ])
+    );
+    expect(rc).toBe(0);
+    expect(out).not.toMatch(/unused local/i);
   });
 });

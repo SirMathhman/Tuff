@@ -3,8 +3,8 @@ import { stringLen, stringCharCodeAt, stringSlice } from "./rt/stdlib.mjs";
 import { vec_new, vec_len, vec_push, vec_get, vec_set } from "./rt/vec.mjs";
 import { error_at, warn_at } from "./util/diagnostics.mjs";
 import { span_start } from "./ast.mjs";
-let __lint_warn_unused_locals = true;
-let __lint_warn_unused_params = true;
+let __lint_warn_unused_locals = false;
+let __lint_warn_unused_params = false;
 export function set_lint_options(warnUnusedLocals, warnUnusedParams) {
 __lint_warn_unused_locals = warnUnusedLocals;
 __lint_warn_unused_params = warnUnusedParams;
