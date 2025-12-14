@@ -14,8 +14,8 @@ out class fn LexItem(tag: String, startPos: I32, endPos: I32, text: String) => {
 // Trivia-preserving token stream.
 // `leadingTrivia` is a Vec<LexItem> containing only Trivia* items.
 // `kind` is one of: Ident | Number | String | Char | Op | Punct.
-out class fn Token(kind: String, startPos: I32, endPos: I32, text: String, leadingTrivia: Any) => {}
-out class fn TokenStream(tokens: Any, trailingTrivia: Any) => {}
+out class fn Token(kind: String, startPos: I32, endPos: I32, text: String, leadingTrivia: Vec<LexItem>) => {}
+out class fn TokenStream(tokens: Vec<Token>, trailingTrivia: Vec<LexItem>) => {}
 
 // Utility: ASCII checks
 out fn is_digit(code: I32) : Bool => { code >= 48 && code <= 57 }
@@ -83,7 +83,7 @@ out fn starts_with_at(src: String, i: I32, lit: String) : Bool => {
 
 // Like `skip_ws`, but *records* whitespace and comments as `LexItem`s.
 // This is a building block for a whitespace-preserving Tuff backend.
-out fn skip_ws_collect(src: String, i: I32, items: Any) : I32 => {
+out fn skip_ws_collect(src: String, i: I32, items: Vec<LexItem>) : I32 => {
   let mut j = i;
   while (j < stringLen(src)) {
     // whitespace
@@ -135,7 +135,7 @@ out fn skip_ws_collect(src: String, i: I32, items: Any) : I32 => {
 
 // Lossless-ish scan: alternates trivia and "Code" segments.
 // Today it doesn't split code into tokens yet; it preserves the original bytes.
-out fn lex_items_with_trivia(src: String) : Any => {
+out fn lex_items_with_trivia(src: String) : Vec<LexItem> => {
   let items = vec_new();
   let mut i = 0;
   while (i < stringLen(src)) {
@@ -165,7 +165,7 @@ out fn lex_items_with_trivia(src: String) : Any => {
   items
 }
 
-out fn emit_lex_items(items: Any) : String => {
+out fn emit_lex_items(items: Vec<LexItem>) : String => {
   let mut out = "";
   let mut i = 0;
   while (i < vec_len(items)) {
@@ -178,7 +178,7 @@ out fn emit_lex_items(items: Any) : String => {
 // Public API for tests/tools: should return `src` exactly.
 out fn roundtrip_with_trivia(src: String) : String => emit_lex_items(lex_items_with_trivia(src))
 
-out fn emit_trivia_items(items: Any) : String => {
+out fn emit_trivia_items(items: Vec<LexItem>) : String => {
   let mut out = "";
   let mut i = 0;
   while (i < vec_len(items)) {

@@ -81,7 +81,7 @@ fn mk_union_variant_info(name: String, hasPayload: Bool, payloadTyAnns: Vec<Stri
 fn mk_struct_def(name: String, fields: Vec<String>, fieldTyAnns: Vec<String>) =>
   StructDef { "StructDef", name, "", fields, fieldTyAnns }
 
-fn mk_fn_sig(name: String, deprecatedReason: String, typeParams: Vec<String>, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String) =>
+out fn mk_fn_sig(name: String, deprecatedReason: String, typeParams: Vec<String>, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String) =>
   FnSig { "FnSig", name, deprecatedReason, typeParams, params, paramTyAnns, retTyAnn }
 
 fn mk_union_def(name: String, typeParams: Vec<String>, variants: Vec<UnionVariantInfo>) =>
@@ -257,7 +257,7 @@ fn subst_bind(subst: Vec<TySubst>, name: String, ty: String) : Void => {
   vec_push(subst, mk_subst(name, ty));
 }
 
-fn infer_int_const(e: Any) : I32 => {
+fn infer_int_const(e: Expr) : I32 => {
   if (e.tag == "EInt") { yield e.value; }
   -1
 }
@@ -735,7 +735,7 @@ fn path_dotted(parts: Vec<String>) : String => {
   out
 }
 
-fn struct_name_of_expr(src: String, nameExpr: Any) : String => {
+fn struct_name_of_expr(src: String, nameExpr: Expr) : String => {
   if (nameExpr.tag == "EIdent") { yield nameExpr.name; }
   if (nameExpr.tag == "EPath") { yield path_dotted(nameExpr.parts); }
   error_at(src, span_start(nameExpr.span), "struct literal name must be ident or path");
@@ -1009,7 +1009,7 @@ fn require_name(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, na
   lookup_binding(src, pos, scopes, depth, name);
 }
 
-fn infer_expr_type(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, e: Any) : String => {
+fn infer_expr_type(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, e: Expr) : String => {
   if (e.tag == "EBool") { yield ty_bool(); }
   if (e.tag == "EInt") { yield ty_int_lit(); }
   if (e.tag == "EFloat") {
@@ -1252,7 +1252,7 @@ fn infer_expr_type(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, scopes
   ty_unknown()
 }
 
-fn infer_expr_type_with_narrowing(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, e: Any) : String => {
+fn infer_expr_type_with_narrowing(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, e: Expr) : String => {
   // Minimal: improve typing for union payload `.value` under narrowing.
   if (e.tag == "EField" && e.field == "value" && e.base.tag == "EIdent") {
     let t = infer_union_payload_type_from_narrowing(src, unions, scopes, depth, narrowed, e.base.name);
@@ -1261,14 +1261,14 @@ fn infer_expr_type_with_narrowing(src: String, structs: Vec<StructDef>, unions: 
   infer_expr_type(src, structs, fns, scopes, depth, e)
 }
 
-fn check_cond_is_bool(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, cond: Any) : Void => {
+fn check_cond_is_bool(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, cond: Expr) : Void => {
   let t = infer_expr_type(src, structs, fns, scopes, depth, cond);
   if (t == ty_i32() || t == ty_u32() || t == ty_char() || t == ty_int_lit()) { error_at(src, span_start(cond.span), "condition must be Bool (got I32)"); }
   if (t == ty_f32() || t == ty_f64() || t == ty_float_lit()) { error_at(src, span_start(cond.span), "condition must be Bool (got F64)"); }
   if (t == ty_string()) { error_at(src, span_start(cond.span), "condition must be Bool (got String)"); }
 }
 
-fn check_binary_operand_types(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, e: Any) : Void => {
+fn check_binary_operand_types(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, e: Expr) : Void => {
   // Minimal operand validation to catch obviously-wrong code while keeping
   // the bootstrap analyzer incremental.
   if (e.tag != "EBinary") { yield; }
@@ -1304,7 +1304,7 @@ fn check_binary_operand_types(src: String, structs: Vec<StructDef>, fns: Vec<FnS
   }
 }
 
-fn check_struct_lit_types(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, e: Any) : Void => {
+fn check_struct_lit_types(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, e: Expr) : Void => {
   let structName = struct_name_of_expr(src, e.nameExpr);
   if (!has_struct_def(structs, structName)) {
     error_at(src, span_start(e.span), "unknown struct: " + structName);
@@ -1327,7 +1327,7 @@ fn check_struct_lit_types(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>,
   }
 }
 
-fn check_call_types(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, e: Any) : Void => {
+fn check_call_types(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, e: Expr) : Void => {
   if (e.callee.tag == "ELambda") {
     if (!(vec_len(e.args) == vec_len(e.callee.params))) {
       error_at(src, span_start(e.span), "wrong number of args in lambda call");
@@ -1480,7 +1480,7 @@ fn check_call_types(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, scope
 
 class fn ParsedTagEq(ok: Bool, name: String, variant: String) => {}
 
-fn parse_tag_eq(cond: Any) : ParsedTagEq => {
+fn parse_tag_eq(cond: Expr) : ParsedTagEq => {
   // Recognize: <ident>.tag == "Variant" (either side).
   if (cond.tag != "EBinary") { yield ParsedTagEq(false, "", ""); }
   if (cond.op.tag != "OpEq") { yield ParsedTagEq(false, "", ""); }
@@ -1498,7 +1498,7 @@ fn parse_tag_eq(cond: Any) : ParsedTagEq => {
 
 class fn ParsedTagNarrowing(ok: Bool, name: String, thenVariant: String, elseVariant: String) => {}
 
-fn parse_tag_narrowing(cond: Any) : ParsedTagNarrowing => {
+fn parse_tag_narrowing(cond: Expr) : ParsedTagNarrowing => {
   // Recognize union tag tests and return which branch (then/else) implies which variant.
   // Handles:
   //   o.tag == "Some"            => then: Some
@@ -1580,7 +1580,32 @@ fn infer_union_payload_type_from_narrowing(src: String, unions: Vec<UnionDef>, s
   ty_unknown()
 }
 
-fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, e: Any) : Void => {
+// Lint/error: parameters must have explicit type annotations.
+// Reports all missing parameter names in a single diagnostic per function/lambda.
+fn require_all_param_types(src: String, pos: I32, prefix: String, params: Vec<String>, paramTyAnns: Vec<String>) : Void => {
+  let mut anyMissing = false;
+  let mut msg = "";
+  let mut pi = 0;
+  while (pi < vec_len(params)) {
+    let mut ann = "";
+    if (pi < vec_len(paramTyAnns)) { ann = vec_get(paramTyAnns, pi); }
+    if (ann == "") {
+      if (!anyMissing) {
+        anyMissing = true;
+        msg = prefix + " missing type annotation(s) for parameter(s): ";
+      } else {
+        msg = msg + ", ";
+      }
+      msg = msg + vec_get(params, pi);
+    }
+    pi = pi + 1;
+  }
+  if (anyMissing) {
+    error_at(src, pos, msg);
+  }
+}
+
+fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, e: Expr) : Void => {
   if (e.tag == "EIdent") {
     require_name(src, span_start(e.span), scopes, depth, e.name);
 
@@ -1847,7 +1872,7 @@ fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns
   // Literals, paths, undefined: nothing to do.
 }
 
-fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, s: Any) : Void => {
+fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, s: Stmt) : Void => {
   if (s.tag == "SLet") {
     let depReason = deprecation_reason_before(src, span_start(s.span));
 
@@ -2029,7 +2054,7 @@ fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns
   }
 }
 
-fn analyze_stmts(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, stmts: Any) : Void => {
+fn analyze_stmts(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, stmts: Vec<Stmt>) : Void => {
   // Predeclare all `let name = <lambda>` in this block so local functions can
   // be recursive and mutually recursive.
   let cur = vec_get(scopes, depth - 1);
@@ -2053,7 +2078,7 @@ fn analyze_stmts(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fn
   }
 }
 
-fn analyze_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, outerScopes: Vec<Vec<Binding>>, outerDepth: I32, d: Any) : Void => {
+fn analyze_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, outerScopes: Vec<Vec<Binding>>, outerDepth: I32, d: DFn) : Void => {
   let depth = scopes_enter(outerScopes, outerDepth);
 
   let mut pi = 0;
@@ -2092,7 +2117,46 @@ fn analyze_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
   }
 }
 
-fn analyze_module(src: String, d: Any) : Void => {
+fn analyze_class_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, outerScopes: Vec<Vec<Binding>>, outerDepth: I32, d: DClassFn) : Void => {
+  let depth = scopes_enter(outerScopes, outerDepth);
+
+  let mut pi = 0;
+  while (pi < vec_len(d.params)) {
+    let mut pTy = ty_unknown();
+    if (pi < vec_len(d.paramTyAnns)) {
+      let ann = vec_get(d.paramTyAnns, pi);
+      if (ann != "") { pTy = normalize_ty_ann(ann); }
+    }
+    declare_local_name(src, span_start(d.span), outerScopes, depth, vec_get(d.params, pi), false, pTy);
+    pi = pi + 1;
+  }
+
+  let narrowed = vec_new();
+  analyze_stmts(src, structs, unions, fns, outerScopes, depth, narrowed, d.body);
+  analyze_expr(src, structs, unions, fns, outerScopes, depth, narrowed, d.tail);
+
+  // Enforce declared return type (if present) against tail and explicit yields.
+  if (d.retTyAnn != "") {
+    let expected = normalize_ty_ann(d.retTyAnn);
+
+    // tail
+    let tailTy = infer_expr_type(src, structs, fns, outerScopes, depth, d.tail);
+    require_type_compatible(src, span_start(d.span), "function " + d.name + " return", structs, expected, tailTy);
+
+    // yields
+    let mut si = 0;
+    while (si < vec_len(d.body)) {
+      let st = vec_get(d.body, si);
+      if (st.tag == "SYield") {
+        let yTy = if (st.expr.tag == "EUndefined") ty_void() else infer_expr_type(src, structs, fns, outerScopes, depth, st.expr);
+        require_type_compatible(src, span_start(st.span), "function " + d.name + " yield", structs, expected, yTy);
+      }
+      si = si + 1;
+    }
+  }
+}
+
+fn analyze_module(src: String, d: DModule) : Void => {
   // Modules create a separate namespace; do not treat module members as nested
   // declarations of the outer scope.
   let scopes = vec_new();
@@ -2106,32 +2170,7 @@ fn analyze_module(src: String, d: Any) : Void => {
   analyze_decls(src, structs, unions, fns, scopes, depth, d.decls);
 }
 
-// Lint/error: parameters must have explicit type annotations.
-// Reports all missing parameter names in a single diagnostic per function/lambda.
-fn require_all_param_types(src: String, pos: I32, prefix: String, params: Vec<String>, paramTyAnns: Vec<String>) : Void => {
-  let mut anyMissing = false;
-  let mut msg = "";
-  let mut pi = 0;
-  while (pi < vec_len(params)) {
-    let mut ann = "";
-    if (pi < vec_len(paramTyAnns)) { ann = vec_get(paramTyAnns, pi); }
-    if (ann == "") {
-      if (!anyMissing) {
-        anyMissing = true;
-        msg = prefix + " missing type annotation(s) for parameter(s): ";
-      } else {
-        msg = msg + ", ";
-      }
-      msg = msg + vec_get(params, pi);
-    }
-    pi = pi + 1;
-  }
-  if (anyMissing) {
-    error_at(src, pos, msg);
-  }
-}
-
-fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, d: Any) : Void => {
+fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, d: Decl) : Void => {
   if (d.tag == "DExternFrom") {
     let mut ni = 0;
     while (ni < vec_len(d.names)) {
@@ -2279,7 +2318,7 @@ fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
   }
 }
 
-fn analyze_decl_body(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, d: Any) : Void => {
+fn analyze_decl_body(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, d: Decl) : Void => {
   if (d.tag == "DLet") {
     let narrowed = vec_new();
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, d.init);
@@ -2323,7 +2362,7 @@ fn analyze_decl_body(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>
   }
 
   if (d.tag == "DClassFn") {
-    analyze_fn_decl(src, structs, unions, fns, scopes, depth, d);
+    analyze_class_fn_decl(src, structs, unions, fns, scopes, depth, d);
     yield;
   }
 
@@ -2333,7 +2372,7 @@ fn analyze_decl_body(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>
   }
 }
 
-fn analyze_decls(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, decls: Any) : Void => {
+fn analyze_decls(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, decls: Vec<Decl>) : Void => {
   // Pass 1: predeclare names so later decl bodies can reference earlier/later decls.
   let mut i = 0;
   while (i < vec_len(decls)) {
@@ -2349,7 +2388,7 @@ fn analyze_decls(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fn
   }
 }
 
-fn analyze_program(src: String, decls: Any) : Void => {
+out fn analyze_program(src: String, decls: Vec<Decl>) : Void => {
   let scopes = vec_new();
   vec_push(scopes, vec_new());
   let depth: I32 = 1;
@@ -2359,7 +2398,7 @@ fn analyze_program(src: String, decls: Any) : Void => {
   analyze_decls(src, structs, unions, fns, scopes, depth, decls);
 }
 
-fn analyze_program_with_fns(src: String, decls: Any, importedFns: Vec<FnSig>) : Void => {
+out fn analyze_program_with_fns(src: String, decls: Vec<Decl>, importedFns: Vec<FnSig>) : Void => {
   // Like analyze_program, but pre-seeds the function environment with
   // signatures imported from other modules. This enables cross-file call
   // validation (arity + type checks) during analysis.

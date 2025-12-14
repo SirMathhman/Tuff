@@ -37,9 +37,11 @@ from parsing::decls use {
 
 from ast use { span, decl_let };
 
-out class fn ParsedProgramWithTrivia(decls: Any, tokenStream: TokenStream, nextPos: I32) => {}
+class fn ParsedDeclsPack(decls: Vec<Decl>, nextPos: I32) => {}
 
-fn parse_program_decls_ast(src: String, exportAll: Bool) : Any => {
+out class fn ParsedProgramWithTrivia(decls: Vec<Decl>, tokenStream: TokenStream, nextPos: I32) => {}
+
+fn parse_program_decls_ast(src: String, exportAll: Bool) : ParsedDeclsPack => {
   let decls = vec_new();
   let mut i = 0;
 
@@ -159,18 +161,11 @@ fn parse_program_decls_ast(src: String, exportAll: Bool) : Any => {
     panic_at(src, end, "unexpected trailing input");
   }
 
-  // Pack decls + nextPos into a tiny record-like Vec: [decls, nextPos]
-  // (We avoid tuples/structs here to keep bootstrap simple.)
-  let out = vec_new();
-  vec_push(out, decls);
-  vec_push(out, end);
-  out
+  ParsedDeclsPack(decls, end)
 }
 
 out fn parse_program_with_trivia(src: String, exportAll: Bool) : ParsedProgramWithTrivia => {
   let ts = tokenize_with_trivia(src);
   let pack = parse_program_decls_ast(src, exportAll);
-  let decls = vec_get(pack, 0);
-  let nextPos = vec_get(pack, 1);
-  ParsedProgramWithTrivia(decls, ts, nextPos)
+  ParsedProgramWithTrivia(pack.decls, ts, pack.nextPos)
 }
