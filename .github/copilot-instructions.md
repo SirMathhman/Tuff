@@ -231,6 +231,56 @@ The language provides standard modules:
 
 **FFI Implementation**: External functions/types are declared with `extern` and resolved at emit time. The emitter generates JS that calls external functions directly (they exist in the JS runtime).
 
+## Task Management
+
+Tuff uses a SQLite-backed task manager (`tasks.py`) to track **long-term strategic items** — language features, stdlib expansion, tooling, and multi-year roadmap goals. This is distinct from short-term work-in-progress tracking.
+
+### When to Use the Task Manager
+
+Use `python tasks.py` for:
+
+- **Language features** that span multiple phases or require architectural decisions (e.g., "C Backend Implementation")
+- **Stdlib expansion** goals (e.g., "Standard Library Expansion (Phase 5-6)")
+- **Long-horizon infrastructure** (e.g., "IDE/Editor Language Server Protocol (LSP)")
+- **Multi-phase compiler work** (e.g., phases 5-9+)
+
+Do **NOT** use the task manager for:
+
+- Daily/weekly development todos (use git branches and commit messages instead)
+- In-PR work that will be completed in a single session
+- One-off bug fixes that fit in a single commit
+
+### Task Manager Commands
+
+```bash
+# List all tasks
+python tasks.py readAll
+
+# Filter by status
+python tasks.py readAll --status not-started
+python tasks.py readAll --status in-progress
+python tasks.py readAll --status completed
+
+# Create a new long-term task
+python tasks.py create "Language feature or infrastructure goal" -d "Optional details" -s not-started
+
+# Remove a task (once fully shipped and merged)
+python tasks.py delete <task_id>
+```
+
+### Task Lifecycle
+
+1. **Create**: When a multi-phase feature or long-term goal is identified
+2. **Update status**: Mark `in-progress` when work begins; `completed` when shipped
+3. **Delete**: Remove only after the feature is fully merged and validated in testing
+4. **Archival**: Completed tasks are not deleted immediately; rather, they are kept as history until removed
+
+### Integration with Development
+
+- Tasks are **informational** — they guide the roadmap and priority-setting, but do not force commit messages or branch naming
+- After completing work for a task, delete it to keep the active task list lean
+- Tasks can reference multiple PRs; consolidate their work into a single task update when possible
+
 ## Commit Conventions
 
 Commits should reference the feature/fix clearly:
@@ -242,4 +292,9 @@ analyzer: enforce no-shadowing rule
 emitter: generate proper module exports
 ```
 
-This helps track feature provenance across the multi-stage architecture.
+This helps track feature provenance across the multi-stage architecture. For multi-phase work tracked in `tasks.py`, mention the task in the commit message when appropriate:
+
+```
+feat(phase-5): implement iterators with map/filter/fold
+Advances task #22: Iterator library with functional combinators
+```

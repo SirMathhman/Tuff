@@ -9,11 +9,13 @@ The task manager stores all tasks in a local SQLite database (`tasks.db`) and pr
 ### Commands
 
 #### List all tasks
+
 ```bash
 python tasks.py readAll
 ```
 
 Filter by status:
+
 ```bash
 python tasks.py readAll --status not-started
 python tasks.py readAll --status in-progress
@@ -21,21 +23,25 @@ python tasks.py readAll --status completed
 ```
 
 #### Create a new task
+
 ```bash
 python tasks.py create "Task title"
 ```
 
 With description:
+
 ```bash
 python tasks.py create "Task title" -d "Optional description"
 ```
 
 Set initial status (defaults to `not-started`):
+
 ```bash
 python tasks.py create "Task title" -d "Description" -s in-progress
 ```
 
 #### Delete a task
+
 ```bash
 python tasks.py delete 5
 ```
@@ -60,12 +66,14 @@ All tasks are stored in `tasks.db`. The database schema includes:
 ## Examples
 
 Create a new task:
+
 ```bash
 $ python tasks.py create "Implement string interpolation" -d "Add support for \${} syntax in strings"
 ✓ Created task #29: Implement string interpolation
 ```
 
 View all tasks:
+
 ```bash
 $ python tasks.py readAll
 ID   Status       Title                                              Description
@@ -76,6 +84,7 @@ ID   Status       Title                                              Description
 ```
 
 Mark a task as in progress:
+
 ```bash
 $ python tasks.py delete 3
 ✓ Deleted task #3: Unused local variables detection (linter)
