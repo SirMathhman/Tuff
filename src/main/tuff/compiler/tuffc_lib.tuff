@@ -122,6 +122,32 @@ from analyzer use { analyze_program, analyze_program_with_fns, mk_fn_sig };
 from util::formatting use { ParsedProgramWithTrivia, parse_program_with_trivia };
 
 // ------------------------------------------------------------
+// Helpers
+// ------------------------------------------------------------
+
+fn kw_at(src: String, i: I32, kw: String) : Bool => {
+  // Keyword match that rejects identifier continuations.
+  if (!starts_with_at(src, i, kw)) { yield false; }
+  let end = i + stringLen(kw);
+  if (end < stringLen(src) && is_ident_part(stringCharCodeAt(src, end))) { yield false; }
+  true
+}
+
+fn is_extern_decl_start(src: String, i: I32) : Bool => {
+  // Accept:
+  //   extern from ...
+  //   extern type ...
+  //   out extern type ...
+  let j = skip_ws(src, i);
+  if (kw_at(src, j, "extern")) { yield true; }
+  if (kw_at(src, j, "out")) {
+    let k = skip_ws(src, j + 3);
+    if (kw_at(src, k, "extern")) { yield true; }
+  }
+  false
+}
+
+// ------------------------------------------------------------
 // In-process caching (optional speed-up)
 //
 // Bun/Node caches ESM modules by path; our tests and tooling sometimes call
@@ -177,8 +203,7 @@ fn compile_tiny2_with_imported_fns(src: String, requireMain: Bool, exportAll: Bo
 
   // zero or more extern declarations
   while (true) {
-    let j = skip_ws(src, i);
-    if (starts_with_at(src, j, "extern")) {
+    if (is_extern_decl_start(src, i)) {
       let ex = parse_extern_decl_ast(src, i);
       vec_push(decls, ex.decl);
       i = ex.nextPos;
@@ -320,8 +345,7 @@ fn lint_tiny2_with_imported_fns(src: String, requireMain: Bool, exportAll: Bool,
 
   // zero or more extern declarations
   while (true) {
-    let j = skip_ws(src, i);
-    if (starts_with_at(src, j, "extern")) {
+    if (is_extern_decl_start(src, i)) {
       let ex = parse_extern_decl_ast(src, i);
       vec_push(decls, ex.decl);
       i = ex.nextPos;
@@ -633,8 +657,7 @@ fn scan_top_level_fn_exports(src: String) => {
 
   // externs
   while (true) {
-    let j = skip_ws(src, i);
-    if (starts_with_at(src, j, "extern")) {
+    if (is_extern_decl_start(src, i)) {
       let ex = parse_extern_decl_ast(src, i);
       vec_push(decls, ex.decl);
       i = ex.nextPos;
@@ -843,8 +866,7 @@ out fn compile_project(entryPath: String, outPath: String) : Void => {
     let mut scan = 0;
     // skip externs
     while (true) {
-      let j = skip_ws(src, scan);
-      if (starts_with_at(src, j, "extern")) {
+      if (is_extern_decl_start(src, scan)) {
         let ex2 = parse_extern_decl(src, scan);
         scan = ex2.v1;
         continue;
@@ -924,8 +946,7 @@ out fn compile_project(entryPath: String, outPath: String) : Void => {
     if (!isCompilerBuild) {
       let mut scan = 0;
       while (true) {
-        let j = skip_ws(src, scan);
-        if (starts_with_at(src, j, "extern")) {
+        if (is_extern_decl_start(src, scan)) {
           let ex2 = parse_extern_decl(src, scan);
           scan = ex2.v1;
           continue;
@@ -1087,8 +1108,7 @@ out fn fluff_project(entryPath: String) : Void => {
     let mut scan = 0;
     // skip externs
     while (true) {
-      let j = skip_ws(src, scan);
-      if (starts_with_at(src, j, "extern")) {
+      if (is_extern_decl_start(src, scan)) {
         let ex2 = parse_extern_decl(src, scan);
         scan = ex2.v1;
         continue;
@@ -1163,8 +1183,7 @@ out fn fluff_project(entryPath: String) : Void => {
     if (!isCompilerBuild) {
       let mut scan = 0;
       while (true) {
-        let j = skip_ws(src, scan);
-        if (starts_with_at(src, j, "extern")) {
+        if (is_extern_decl_start(src, scan)) {
           let ex2 = parse_extern_decl(src, scan);
           scan = ex2.v1;
           continue;
@@ -1245,8 +1264,7 @@ out fn lsp_check_file(src: String, filePath: String) : Bool => {
 
   // zero or more extern declarations
   while (true) {
-    let j = skip_ws(src, i);
-    if (starts_with_at(src, j, "extern")) {
+    if (is_extern_decl_start(src, i)) {
       let ex = parse_extern_decl_ast(src, i);
       vec_push(decls, ex.decl);
       i = ex.nextPos;
@@ -1870,8 +1888,7 @@ fn lsp_parse_file(src: String) : Vec<Decl> => {
 
   // zero or more extern declarations
   while (true) {
-    let j = skip_ws(src, i);
-    if (starts_with_at(src, j, "extern")) {
+    if (is_extern_decl_start(src, i)) {
       let ex = parse_extern_decl_ast(src, i);
       vec_push(decls, ex.decl);
       i = ex.nextPos;

@@ -391,6 +391,7 @@ struct SFieldAssign {
 
 type Decl =
   DExternFrom
+  | DExternType
   | DLet
   | DFn
   | DClassFn
@@ -404,6 +405,18 @@ struct DExternFrom {
   span: Span,
   modulePath: String,
   names: Vec<String>
+}
+
+// Extern type declaration (no runtime representation).
+// Example: `out extern type Vec<T>;`
+struct DExternType {
+  tag: String,
+  span: Span,
+  // True when declared as `out extern type`.
+  isOut: Bool,
+  name: String,
+  // Optional generic params: extern type Name<T, U>;
+  typeParams: Vec<String>
 }
 
 struct DLet {
@@ -575,6 +588,7 @@ out fn stmt_field_assign(span: Span, base: Expr, fields: Vec<String>, value: Exp
 
 // Decl constructors
 out fn decl_extern_from(span: Span, modulePath: String, names: Vec<String>) : Decl => DExternFrom { "DExternFrom", span, modulePath, names }
+out fn decl_extern_type(span: Span, isOut: Bool, name: String, typeParams: Vec<String>) : Decl => DExternType { "DExternType", span, isOut, name, typeParams }
 out fn decl_import(span: Span, modulePath: String, names: Vec<String>) : Decl => DImport { "DImport", span, modulePath, names }
 out fn decl_struct(span: Span, name: String, fields: Vec<String>) : Decl => DStruct { "DStruct", span, name, vec_new(), fields, vec_new() }
 out fn decl_struct_typed(span: Span, name: String, typeParams: Vec<String>, fields: Vec<String>, fieldTyAnns: Vec<String>) : Decl =>

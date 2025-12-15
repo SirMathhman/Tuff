@@ -726,6 +726,9 @@ if (d.tag == "DExternFrom") {
 const importPath = emit_extern_import_path(d.modulePath);
 out = "import { " + emit_names_csv(d.names) + " } from \"" + importPath + "\";\n";
 }
+if (d.tag == "DExternType") {
+out = "";
+}
 if (d.tag == "DImport") {
 let targetModulePath = d.modulePath;
 const compilerSrcPrefix = "src::main::tuff::compiler::";

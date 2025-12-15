@@ -34,6 +34,7 @@ from parsing::expr_stmt use {
 from ast use {
   span,
   decl_extern_from,
+  decl_extern_type,
   decl_import,
   decl_fn,
   decl_fn_typed,
@@ -186,13 +187,46 @@ fn parse_param_list_ast(src: String, i: I32) : ParsedParamsAst => {
 
 out fn parse_extern_decl_ast(src: String, i: I32) : ParsedDeclAst => {
   let start = skip_ws(src, i);
-  let mut k = parse_keyword(src, start, "extern");
-  k = parse_keyword(src, k, "from");
-  let mod = parse_module_path(src, k);
-  k = parse_keyword(src, mod.nextPos, "use");
-  let names = parse_name_list_ast(src, k);
-  k = parse_optional_semicolon(src, names.nextPos);
-  ParsedDeclAst(decl_extern_from(span(start, k), mod.text, names.names), k)
+  let mut k = start;
+  let mut isOut = false;
+  let j0 = skip_ws(src, k);
+  if (starts_with_at(src, j0, "out")) {
+    k = parse_keyword(src, k, "out");
+    isOut = true;
+  }
+  k = parse_keyword(src, k, "extern");
+  let j1 = skip_ws(src, k);
+
+  // extern from <module> use { ... };
+  if (starts_with_at(src, j1, "from")) {
+    k = parse_keyword(src, k, "from");
+    let mod = parse_module_path(src, k);
+    k = parse_keyword(src, mod.nextPos, "use");
+    let names = parse_name_list_ast(src, k);
+    k = parse_optional_semicolon(src, names.nextPos);
+    yield ParsedDeclAst(decl_extern_from(span(start, k), mod.text, names.names), k);
+  }
+
+  // extern type Name<T, ...>;
+  if (starts_with_at(src, j1, "type")) {
+    k = parse_keyword(src, k, "type");
+    let name = parse_ident(src, k);
+    k = name.nextPos;
+
+    let mut typeParams = vec_new();
+    let t0 = skip_ws(src, k);
+    if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) {
+      let tp = parse_type_params_list_ast(src, t0);
+      typeParams = tp.params;
+      k = tp.nextPos;
+    }
+
+    k = parse_optional_semicolon(src, k);
+    yield ParsedDeclAst(decl_extern_type(span(start, k), isOut, name.text, typeParams), k);
+  }
+
+  panic_at(src, j1, "expected 'from' or 'type' after extern");
+  ParsedDeclAst(decl_extern_from(span(start, k), "", vec_new()), k)
 }
 
 out fn parse_imports_ast(src: String, i: I32) : ParsedDeclsAst => {
@@ -449,7 +483,30 @@ out fn parse_module_decl_ast(src: String, i: I32) : ParsedDeclAst => {
 }
 
 fn parse_extern_decl(src: String, i: I32) : ParsedStmt => {
-  let mut k = parse_keyword(src, i, "extern");
+  let mut k = i;
+  let j0 = skip_ws(src, k);
+  if (starts_with_at(src, j0, "out")) {
+    // `out extern ...` (only meaningful for types today).
+    k = parse_keyword(src, k, "out");
+  }
+  k = parse_keyword(src, k, "extern");
+  let j1 = skip_ws(src, k);
+
+  // `extern type ...;` has no JS import emission.
+  if (starts_with_at(src, j1, "type")) {
+    k = parse_keyword(src, k, "type");
+    let _name = parse_ident(src, k);
+    k = _name.nextPos;
+    let t0 = skip_ws(src, k);
+    if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) { // '<'
+      let tp = parse_type_params_list_ast(src, t0);
+      k = tp.nextPos;
+    }
+    k = parse_optional_semicolon(src, k);
+    yield ParsedStmt("", k);
+  }
+
+  // `extern from <module> use { ... };`
   k = parse_keyword(src, k, "from");
   let mod = parse_module_path(src, k);
   k = mod.nextPos;

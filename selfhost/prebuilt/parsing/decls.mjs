@@ -7,7 +7,7 @@ import { ParsedIdent, parse_ident, parse_keyword, parse_module_path, module_path
 import { ParsedType, parse_type_expr, skip_angle_brackets } from "./types.mjs";
 import { ParsedMain, ParsedParams, ParsedStmt, parse_expr, parse_main_body, parse_mut_opt } from "./expr_stmt.mjs";
 import { ParsedMainAst, parse_main_body_ast } from "./expr_stmt.mjs";
-import { span, decl_extern_from, decl_import, decl_fn, decl_fn_typed, decl_class_fn, decl_class_fn_typed, decl_struct, decl_struct_typed, decl_type_union, type_union_variant, type_union_variant_typed, decl_module } from "../ast.mjs";
+import { span, decl_extern_from, decl_extern_type, decl_import, decl_fn, decl_fn_typed, decl_class_fn, decl_class_fn_typed, decl_struct, decl_struct_typed, decl_type_union, type_union_variant, type_union_variant_typed, decl_module } from "../ast.mjs";
 export function ParsedDeclAst(decl, nextPos) {
 return { decl: decl, nextPos: nextPos };
 }
@@ -166,13 +166,39 @@ return ParsedParamsAst(names, tyAnns, k);
 }
 export function parse_extern_decl_ast(src, i) {
 const start = skip_ws(src, i);
-let k = parse_keyword(src, start, "extern");
+let k = start;
+let isOut = false;
+const j0 = skip_ws(src, k);
+if (starts_with_at(src, j0, "out")) {
+k = parse_keyword(src, k, "out");
+isOut = true;
+}
+k = parse_keyword(src, k, "extern");
+const j1 = skip_ws(src, k);
+if (starts_with_at(src, j1, "from")) {
 k = parse_keyword(src, k, "from");
 const mod = parse_module_path(src, k);
 k = parse_keyword(src, mod.nextPos, "use");
 const names = parse_name_list_ast(src, k);
 k = parse_optional_semicolon(src, names.nextPos);
 return ParsedDeclAst(decl_extern_from(span(start, k), mod.text, names.names), k);
+}
+if (starts_with_at(src, j1, "type")) {
+k = parse_keyword(src, k, "type");
+const name = parse_ident(src, k);
+k = name.nextPos;
+let typeParams = vec_new();
+const t0 = skip_ws(src, k);
+if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) {
+const tp = parse_type_params_list_ast(src, t0);
+typeParams = tp.params;
+k = tp.nextPos;
+}
+k = parse_optional_semicolon(src, k);
+return ParsedDeclAst(decl_extern_type(span(start, k), isOut, name.text, typeParams), k);
+}
+panic_at(src, j1, "expected 'from' or 'type' after extern");
+return ParsedDeclAst(decl_extern_from(span(start, k), "", vec_new()), k);
 }
 export function parse_imports_ast(src, i) {
 let k = i;
@@ -440,7 +466,25 @@ panic_at(src, t, "expected fn or module inside module");
 return ParsedDeclAst(decl_module(span(start, k), modName.text, decls), k);
 }
 export function parse_extern_decl(src, i) {
-let k = parse_keyword(src, i, "extern");
+let k = i;
+const j0 = skip_ws(src, k);
+if (starts_with_at(src, j0, "out")) {
+k = parse_keyword(src, k, "out");
+}
+k = parse_keyword(src, k, "extern");
+const j1 = skip_ws(src, k);
+if (starts_with_at(src, j1, "type")) {
+k = parse_keyword(src, k, "type");
+const _name = parse_ident(src, k);
+k = _name.nextPos;
+const t0 = skip_ws(src, k);
+if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) {
+const tp = parse_type_params_list_ast(src, t0);
+k = tp.nextPos;
+}
+k = parse_optional_semicolon(src, k);
+return ParsedStmt("", k);
+}
 k = parse_keyword(src, k, "from");
 const mod = parse_module_path(src, k);
 k = mod.nextPos;

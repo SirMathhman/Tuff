@@ -3,6 +3,10 @@
 // The bootstrap compiler understands `extern from ... use { ... }`.
 // These externs are implemented by JS/TS modules under `./rt`.
 
+// Dynamic arrays are a runtime concept (provided by rt::vec), but the type name
+// should be a normal declared symbol, not a compiler built-in.
+out extern type Vec<T>;
+
 extern from rt::stdlib use {
   print,
   println,

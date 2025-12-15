@@ -2574,6 +2574,9 @@ ni = ni + 1;
 }
 return;
 }
+if (d.tag == "DExternType") {
+return;
+}
 if (d.tag == "DImport") {
 let ni = 0;
 while (ni < vec_len(d.names)) {

@@ -53,6 +53,7 @@ export const SIf = { tag: "SIf" };
 export const SIndexAssign = { tag: "SIndexAssign" };
 export const SFieldAssign = { tag: "SFieldAssign" };
 export const DExternFrom = { tag: "DExternFrom" };
+export const DExternType = { tag: "DExternType" };
 export const DLet = { tag: "DLet" };
 export const DFn = { tag: "DFn" };
 export const DClassFn = { tag: "DClassFn" };
@@ -218,6 +219,9 @@ return ({ tag: "SFieldAssign", span: span, base: base, fields: fields, value: va
 }
 export function decl_extern_from(span, modulePath, names) {
 return ({ tag: "DExternFrom", span: span, modulePath: modulePath, names: names });
+}
+export function decl_extern_type(span, isOut, name, typeParams) {
+return ({ tag: "DExternType", span: span, isOut: isOut, name: name, typeParams: typeParams });
 }
 export function decl_import(span, modulePath, names) {
 return ({ tag: "DImport", span: span, modulePath: modulePath, names: names });

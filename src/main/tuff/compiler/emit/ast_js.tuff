@@ -700,6 +700,11 @@ fn emit_decl_js(d: Decl, exportAll: Bool) : String => {
     out = "import { " + emit_names_csv(d.names) + " } from \"" + importPath + "\";\n";
   }
 
+  if (d.tag == "DExternType") {
+    // No runtime output for types.
+    out = "";
+  }
+
   if (d.tag == "DImport") {
     let mut targetModulePath = d.modulePath;
     // Allow importing compiler modules using the repository-root path

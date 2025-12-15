@@ -13,6 +13,29 @@ import { span, span_start, span_end, decl_let, decl_let_typed } from "./ast.mjs"
 import { emit_decl_js, set_current_file_path, emit_runtime_vec_imports_js, decls_needs_vec_rt } from "./emit/ast_js.mjs";
 import { analyze_program, analyze_program_with_fns, mk_fn_sig } from "./analyzer.mjs";
 import { ParsedProgramWithTrivia, parse_program_with_trivia } from "./util/formatting.mjs";
+export function kw_at(src, i, kw) {
+if (!starts_with_at(src, i, kw)) {
+return false;
+}
+const end = i + stringLen(kw);
+if (end < stringLen(src) && is_ident_part(stringCharCodeAt(src, end))) {
+return false;
+}
+return true;
+}
+export function is_extern_decl_start(src, i) {
+const j = skip_ws(src, i);
+if (kw_at(src, j, "extern")) {
+return true;
+}
+if (kw_at(src, j, "out")) {
+const k = skip_ws(src, j + 3);
+if (kw_at(src, k, "extern")) {
+return true;
+}
+}
+return false;
+}
 let __tuffc_scan_cache = vec_new();
 export function ScanCacheEntry(path, outSigs, privateNames, allSigs) {
 return { path: path, outSigs: outSigs, privateNames: privateNames, allSigs: allSigs };
@@ -44,8 +67,7 @@ reset_warnings();
 let out = "// compiled by selfhost tuffc\n";
 const decls = vec_new();
 while (true) {
-const j = skip_ws(src, i);
-if (starts_with_at(src, j, "extern")) {
+if (is_extern_decl_start(src, i)) {
 const ex = parse_extern_decl_ast(src, i);
 vec_push(decls, ex.decl);
 i = ex.nextPos;
@@ -170,8 +192,7 @@ reset_errors();
 reset_warnings();
 const decls = vec_new();
 while (true) {
-const j = skip_ws(src, i);
-if (starts_with_at(src, j, "extern")) {
+if (is_extern_decl_start(src, i)) {
 const ex = parse_extern_decl_ast(src, i);
 vec_push(decls, ex.decl);
 i = ex.nextPos;
@@ -508,8 +529,7 @@ const allSigs = vec_new();
 let decls = vec_new();
 let i = 0;
 while (true) {
-const j = skip_ws(src, i);
-if (starts_with_at(src, j, "extern")) {
+if (is_extern_decl_start(src, i)) {
 const ex = parse_extern_decl_ast(src, i);
 vec_push(decls, ex.decl);
 i = ex.nextPos;
@@ -687,8 +707,7 @@ vec_push(modulePrivateTopLevelFnNames, ex[1]);
 }
 let scan = 0;
 while (true) {
-const j = skip_ws(src, scan);
-if (starts_with_at(src, j, "extern")) {
+if (is_extern_decl_start(src, scan)) {
 const ex2 = parse_extern_decl(src, scan);
 scan = ex2.v1;
 continue;
@@ -767,8 +786,7 @@ const seedImportedFns = !(stringLen(compiler_root_from_path(path)) > 0);
 if (!isCompilerBuild) {
 let scan = 0;
 while (true) {
-const j = skip_ws(src, scan);
-if (starts_with_at(src, j, "extern")) {
+if (is_extern_decl_start(src, scan)) {
 const ex2 = parse_extern_decl(src, scan);
 scan = ex2.v1;
 continue;
@@ -902,8 +920,7 @@ vec_push(modulePrivateTopLevelFnNames, ex[1]);
 }
 let scan = 0;
 while (true) {
-const j = skip_ws(src, scan);
-if (starts_with_at(src, j, "extern")) {
+if (is_extern_decl_start(src, scan)) {
 const ex2 = parse_extern_decl(src, scan);
 scan = ex2.v1;
 continue;
@@ -982,8 +999,7 @@ const seedImportedFns = !isCompilerBuild && !(stringLen(compiler_root_from_path(
 if (!isCompilerBuild) {
 let scan = 0;
 while (true) {
-const j = skip_ws(src, scan);
-if (starts_with_at(src, j, "extern")) {
+if (is_extern_decl_start(src, scan)) {
 const ex2 = parse_extern_decl(src, scan);
 scan = ex2.v1;
 continue;
@@ -1052,8 +1068,7 @@ set_current_file(filePath);
 const decls = vec_new();
 let i = 0;
 while (true) {
-const j = skip_ws(src, i);
-if (starts_with_at(src, j, "extern")) {
+if (is_extern_decl_start(src, i)) {
 const ex = parse_extern_decl_ast(src, i);
 vec_push(decls, ex.decl);
 i = ex.nextPos;
@@ -1596,8 +1611,7 @@ export function lsp_parse_file(src) {
 const decls = vec_new();
 let i = 0;
 while (true) {
-const j = skip_ws(src, i);
-if (starts_with_at(src, j, "extern")) {
+if (is_extern_decl_start(src, i)) {
 const ex = parse_extern_decl_ast(src, i);
 vec_push(decls, ex.decl);
 i = ex.nextPos;
