@@ -60,15 +60,7 @@ vec_push(decls, vec_get(imps.decls, ii));
 ii = ii + 1;
 }
 i = imps.nextPos;
-while (true) {
-const j = skip_ws(src, i);
-if (!starts_with_at(src, j, "module")) {
-break;
-}
-const m = parse_module_decl_ast(src, i);
-vec_push(decls, m.decl);
-i = m.nextPos;
-}
+let sawMain = false;
 while (true) {
 const j = skip_ws(src, i);
 if (starts_with_at(src, j, "module")) {
@@ -89,10 +81,6 @@ vec_push(decls, sd.decl);
 i = sd.nextPos;
 continue;
 }
-break;
-}
-while (true) {
-const j = skip_ws(src, i);
 if (starts_with_at(src, j, "let")) {
 const start = skip_ws(src, i);
 i = parse_keyword(src, i, "let");
@@ -118,11 +106,6 @@ vec_push(decls, decl_let_typed(span(start, i), mutOpt.ok, name.text, tyAnn, expr
 }
 continue;
 }
-break;
-}
-let sawMain = false;
-while (true) {
-const j = skip_ws(src, i);
 if (starts_with_at(src, j, "fn")) {
 const f = parse_fn_decl_ast2(src, i, exportAll);
 if (f.decl.tag == "DFn" && f.decl.name == "main") {
@@ -203,15 +186,7 @@ vec_push(decls, vec_get(imps.decls, ii));
 ii = ii + 1;
 }
 i = imps.nextPos;
-while (true) {
-const j = skip_ws(src, i);
-if (!starts_with_at(src, j, "module")) {
-break;
-}
-const m = parse_module_decl_ast(src, i);
-vec_push(decls, m.decl);
-i = m.nextPos;
-}
+let sawMain = false;
 while (true) {
 const j = skip_ws(src, i);
 if (starts_with_at(src, j, "module")) {
@@ -232,10 +207,6 @@ vec_push(decls, sd.decl);
 i = sd.nextPos;
 continue;
 }
-break;
-}
-while (true) {
-const j = skip_ws(src, i);
 if (starts_with_at(src, j, "let")) {
 const start = skip_ws(src, i);
 i = parse_keyword(src, i, "let");
@@ -261,11 +232,6 @@ vec_push(decls, decl_let_typed(span(start, i), mutOpt.ok, name.text, tyAnn, expr
 }
 continue;
 }
-break;
-}
-let sawMain = false;
-while (true) {
-const j = skip_ws(src, i);
 if (starts_with_at(src, j, "fn")) {
 const f = parse_fn_decl_ast2(src, i, exportAll);
 if (f.decl.tag == "DFn" && f.decl.name == "main") {
@@ -1104,15 +1070,6 @@ ii = ii + 1;
 i = imps.nextPos;
 while (true) {
 const j = skip_ws(src, i);
-if (!starts_with_at(src, j, "module")) {
-break;
-}
-const m = parse_module_decl_ast(src, i);
-vec_push(decls, m.decl);
-i = m.nextPos;
-}
-while (true) {
-const j = skip_ws(src, i);
 if (starts_with_at(src, j, "module")) {
 const m = parse_module_decl_ast(src, i);
 vec_push(decls, m.decl);
@@ -1131,10 +1088,6 @@ vec_push(decls, sd.decl);
 i = sd.nextPos;
 continue;
 }
-break;
-}
-while (true) {
-const j = skip_ws(src, i);
 if (starts_with_at(src, j, "let")) {
 const start = skip_ws(src, i);
 i = parse_keyword(src, i, "let");
@@ -1160,10 +1113,6 @@ vec_push(decls, decl_let_typed(span(start, i), mutOpt.ok, name.text, tyAnn, expr
 }
 continue;
 }
-break;
-}
-while (true) {
-const j = skip_ws(src, i);
 if (starts_with_at(src, j, "fn")) {
 const f = parse_fn_decl_ast2(src, i, false);
 vec_push(decls, f.decl);
@@ -1538,15 +1487,6 @@ ii = ii + 1;
 i = imps.nextPos;
 while (true) {
 const j = skip_ws(src, i);
-if (!starts_with_at(src, j, "module")) {
-break;
-}
-const m = parse_module_decl_ast(src, i);
-vec_push(decls, m.decl);
-i = m.nextPos;
-}
-while (true) {
-const j = skip_ws(src, i);
 if (starts_with_at(src, j, "module")) {
 const m = parse_module_decl_ast(src, i);
 vec_push(decls, m.decl);
@@ -1565,10 +1505,6 @@ vec_push(decls, sd.decl);
 i = sd.nextPos;
 continue;
 }
-break;
-}
-while (true) {
-const j = skip_ws(src, i);
 if (starts_with_at(src, j, "let")) {
 const start = skip_ws(src, i);
 i = parse_keyword(src, i, "let");
@@ -1594,10 +1530,6 @@ vec_push(decls, decl_let_typed(span(start, i), mutOpt.ok, name.text, tyAnn, expr
 }
 continue;
 }
-break;
-}
-while (true) {
-const j = skip_ws(src, i);
 if (starts_with_at(src, j, "fn")) {
 const f = parse_fn_decl_ast2(src, i, false);
 vec_push(decls, f.decl);
