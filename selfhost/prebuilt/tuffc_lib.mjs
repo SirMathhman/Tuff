@@ -1207,3 +1207,424 @@ return line_col_at(src, offset);
 export function DefLocation(found, defStart, defEnd, defFile) {
 return { found: found, defStart: defStart, defEnd: defEnd, defFile: defFile };
 }
+export function lsp_def(name, defStart, defEnd, kind) {
+return ({ tag: "LspDef", name: name, defStart: defStart, defEnd: defEnd, kind: kind });
+}
+export function lsp_ref(refStart, refEnd, defStart, defEnd) {
+return ({ tag: "LspRef", refStart: refStart, refEnd: refEnd, defStart: defStart, defEnd: defEnd });
+}
+export function lsp_lookup(defs, name) {
+let i = vec_len(defs) - 1;
+while (i >= 0) {
+const d = vec_get(defs, i);
+if (d.name == name) {
+return d;
+}
+i = i - 1;
+}
+return lsp_def("", -1, -1, "");
+}
+export function lsp_lookup_type(defs, name) {
+let i = vec_len(defs) - 1;
+while (i >= 0) {
+const d = vec_get(defs, i);
+if (d.name == name && (d.kind == "struct" || d.kind == "type")) {
+return d;
+}
+i = i - 1;
+}
+return lsp_def("", -1, -1, "");
+}
+export function lsp_lookup_field(defs, structName, fieldName) {
+const fullName = structName + "." + fieldName;
+let i = 0;
+while (i < vec_len(defs)) {
+const d = vec_get(defs, i);
+if (d.name == fullName && d.kind == "field") {
+return d;
+}
+i = i + 1;
+}
+return lsp_def("", -1, -1, "");
+}
+export function lsp_in_range(offset, start, end) {
+return offset >= start && offset < end;
+}
+export function lsp_collect_decls(decls, defs) {
+let i = 0;
+while (i < vec_len(decls)) {
+lsp_collect_decl(vec_get(decls, i), defs);
+i = i + 1;
+}
+return undefined;
+}
+export function lsp_collect_decl(d, defs) {
+if (d.tag == "DExternFrom") {
+let ni = 0;
+while (ni < vec_len(d.names)) {
+vec_push(defs, lsp_def(vec_get(d.names, ni), span_start(d.span), span_end(d.span), "extern"));
+ni = ni + 1;
+}
+}
+if (d.tag == "DImport") {
+let ni = 0;
+while (ni < vec_len(d.names)) {
+vec_push(defs, lsp_def(vec_get(d.names, ni), span_start(d.span), span_end(d.span), "import"));
+ni = ni + 1;
+}
+}
+if (d.tag == "DLet") {
+vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "var"));
+}
+if (d.tag == "DFn") {
+vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "fn"));
+}
+if (d.tag == "DClassFn") {
+vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "fn"));
+}
+if (d.tag == "DStruct") {
+vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "struct"));
+let fi = 0;
+while (fi < vec_len(d.fields)) {
+const field = vec_get(d.fields, fi);
+vec_push(defs, lsp_def(d.name + "." + field.name, span_start(field.span), span_end(field.span), "field"));
+fi = fi + 1;
+}
+}
+if (d.tag == "DTypeUnion") {
+vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "type"));
+let vi = 0;
+while (vi < vec_len(d.variants)) {
+const v = vec_get(d.variants, vi);
+vec_push(defs, lsp_def(v.name, span_start(v.span), span_end(v.span), "variant"));
+vi = vi + 1;
+}
+}
+if (d.tag == "DModule") {
+vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "module"));
+lsp_collect_decls(d.decls, defs);
+}
+return undefined;
+}
+export function lsp_resolve_expr(e, defs, refs) {
+if (e.tag == "EIdent") {
+const d = lsp_lookup(defs, e.name);
+if (d.defStart >= 0) {
+vec_push(refs, lsp_ref(span_start(e.span), span_end(e.span), d.defStart, d.defEnd));
+}
+return "";
+}
+if (e.tag == "EStructLit") {
+const tyDef = lsp_lookup_type(defs, e.name.name);
+if (tyDef.defStart >= 0) {
+vec_push(refs, lsp_ref(span_start(e.name.span), span_end(e.name.span), tyDef.defStart, tyDef.defEnd));
+}
+let vi = 0;
+while (vi < vec_len(e.values)) {
+lsp_resolve_expr(vec_get(e.values, vi), defs, refs);
+vi = vi + 1;
+}
+return e.name.name;
+}
+if (e.tag == "EField") {
+const baseTy = lsp_resolve_expr(e.base, defs, refs);
+if (stringLen(baseTy) > 0) {
+const fieldDef = lsp_lookup_field(defs, baseTy, e.field);
+if (fieldDef.defStart >= 0) {
+const fieldStart = span_end(e.base.span) + 1;
+vec_push(refs, lsp_ref(fieldStart, span_end(e.span), fieldDef.defStart, fieldDef.defEnd));
+}
+}
+return "";
+}
+if (e.tag == "ECall") {
+lsp_resolve_expr(e.callee, defs, refs);
+let ai = 0;
+while (ai < vec_len(e.args)) {
+lsp_resolve_expr(vec_get(e.args, ai), defs, refs);
+ai = ai + 1;
+}
+}
+if (e.tag == "EBinary") {
+lsp_resolve_expr(e.left, defs, refs);
+lsp_resolve_expr(e.right, defs, refs);
+}
+if (e.tag == "EUnary") {
+lsp_resolve_expr(e.expr, defs, refs);
+}
+if (e.tag == "EIf") {
+lsp_resolve_expr(e.cond, defs, refs);
+lsp_resolve_expr(e.thenExpr, defs, refs);
+lsp_resolve_expr(e.elseExpr, defs, refs);
+}
+if (e.tag == "EBlock") {
+lsp_resolve_stmts(e.body, defs, refs);
+lsp_resolve_expr(e.tail, defs, refs);
+}
+if (e.tag == "ELambda") {
+let pi = 0;
+while (pi < vec_len(e.params)) {
+vec_push(defs, lsp_def(vec_get(e.params, pi), span_start(e.span), span_end(e.span), "param"));
+pi = pi + 1;
+}
+lsp_resolve_expr(e.body, defs, refs);
+}
+if (e.tag == "EMatch") {
+lsp_resolve_expr(e.scrut, defs, refs);
+let mi = 0;
+while (mi < vec_len(e.arms)) {
+const arm = vec_get(e.arms, mi);
+let bi = 0;
+while (bi < vec_len(arm.bindings)) {
+vec_push(defs, lsp_def(vec_get(arm.bindings, bi), span_start(arm.span), span_end(arm.span), "binding"));
+bi = bi + 1;
+}
+lsp_resolve_expr(arm.expr, defs, refs);
+mi = mi + 1;
+}
+}
+if (e.tag == "EIndex") {
+lsp_resolve_expr(e.base, defs, refs);
+lsp_resolve_expr(e.index, defs, refs);
+}
+if (e.tag == "ETupleIndex") {
+lsp_resolve_expr(e.base, defs, refs);
+}
+if (e.tag == "EVecLit") {
+let ii = 0;
+while (ii < vec_len(e.items)) {
+lsp_resolve_expr(vec_get(e.items, ii), defs, refs);
+ii = ii + 1;
+}
+}
+if (e.tag == "ETupleLit") {
+let ii = 0;
+while (ii < vec_len(e.items)) {
+lsp_resolve_expr(vec_get(e.items, ii), defs, refs);
+ii = ii + 1;
+}
+}
+return "";
+}
+export function lsp_resolve_stmt(s, defs, refs) {
+if (s.tag == "SLet") {
+lsp_resolve_expr(s.init, defs, refs);
+vec_push(defs, lsp_def(s.name, span_start(s.span), span_end(s.span), "var"));
+}
+if (s.tag == "SAssign") {
+const d = lsp_lookup(defs, s.name);
+if (d.defStart >= 0) {
+vec_push(refs, lsp_ref(span_start(s.span), span_start(s.span) + stringLen(s.name), d.defStart, d.defEnd));
+}
+lsp_resolve_expr(s.value, defs, refs);
+}
+if (s.tag == "SExpr") {
+lsp_resolve_expr(s.expr, defs, refs);
+}
+if (s.tag == "SYield") {
+lsp_resolve_expr(s.expr, defs, refs);
+}
+if (s.tag == "SWhile") {
+lsp_resolve_expr(s.cond, defs, refs);
+lsp_resolve_stmts(s.body, defs, refs);
+}
+if (s.tag == "SIf") {
+lsp_resolve_expr(s.cond, defs, refs);
+lsp_resolve_stmts(s.thenBody, defs, refs);
+if (s.hasElse) {
+lsp_resolve_stmts(s.elseBody, defs, refs);
+}
+}
+if (s.tag == "SIndexAssign") {
+lsp_resolve_expr(s.base, defs, refs);
+lsp_resolve_expr(s.index, defs, refs);
+lsp_resolve_expr(s.value, defs, refs);
+}
+if (s.tag == "SFieldAssign") {
+lsp_resolve_expr(s.base, defs, refs);
+lsp_resolve_expr(s.value, defs, refs);
+}
+return undefined;
+}
+export function lsp_resolve_stmts(stmts, defs, refs) {
+let i = 0;
+while (i < vec_len(stmts)) {
+lsp_resolve_stmt(vec_get(stmts, i), defs, refs);
+i = i + 1;
+}
+return undefined;
+}
+export function lsp_resolve_decl(d, defs, refs) {
+if (d.tag == "DLet") {
+lsp_resolve_expr(d.init, defs, refs);
+}
+if (d.tag == "DFn") {
+let pi = 0;
+while (pi < vec_len(d.params)) {
+vec_push(defs, lsp_def(vec_get(d.params, pi), span_start(d.span), span_end(d.span), "param"));
+pi = pi + 1;
+}
+lsp_resolve_stmts(d.body, defs, refs);
+lsp_resolve_expr(d.tail, defs, refs);
+}
+if (d.tag == "DClassFn") {
+let pi = 0;
+while (pi < vec_len(d.params)) {
+vec_push(defs, lsp_def(vec_get(d.params, pi), span_start(d.span), span_end(d.span), "param"));
+pi = pi + 1;
+}
+lsp_resolve_stmts(d.body, defs, refs);
+lsp_resolve_expr(d.tail, defs, refs);
+}
+if (d.tag == "DModule") {
+lsp_resolve_decls(d.decls, defs, refs);
+}
+return undefined;
+}
+export function lsp_resolve_decls(decls, defs, refs) {
+let i = 0;
+while (i < vec_len(decls)) {
+lsp_resolve_decl(vec_get(decls, i), defs, refs);
+i = i + 1;
+}
+return undefined;
+}
+export function lsp_find_ref_at(refs, offset) {
+let i = 0;
+while (i < vec_len(refs)) {
+const r = vec_get(refs, i);
+if (lsp_in_range(offset, r.refStart, r.refEnd)) {
+return r;
+}
+i = i + 1;
+}
+return lsp_ref(-1, -1, -1, -1);
+}
+export function lsp_find_definition(src, offset, filePath) {
+reset_struct_defs();
+reset_errors();
+reset_warnings();
+set_current_file(filePath);
+const decls = lsp_parse_file(src);
+const defs = vec_new();
+const refs = vec_new();
+lsp_collect_decls(decls, defs);
+lsp_resolve_decls(decls, defs, refs);
+const r = lsp_find_ref_at(refs, offset);
+if (r.refStart < 0) {
+return DefLocation(false, 0, 0, "");
+}
+return DefLocation(true, r.defStart, r.defEnd, "");
+}
+export function lsp_parse_file(src) {
+const decls = vec_new();
+let i = 0;
+while (true) {
+const j = skip_ws(src, i);
+if (starts_with_at(src, j, "extern")) {
+const ex = parse_extern_decl_ast(src, i);
+vec_push(decls, ex.decl);
+i = ex.nextPos;
+continue;
+}
+break;
+}
+const imps = parse_imports_ast(src, i);
+let ii = 0;
+while (ii < vec_len(imps.decls)) {
+vec_push(decls, vec_get(imps.decls, ii));
+ii = ii + 1;
+}
+i = imps.nextPos;
+while (true) {
+const j = skip_ws(src, i);
+if (!starts_with_at(src, j, "module")) {
+break;
+}
+const m = parse_module_decl_ast(src, i);
+vec_push(decls, m.decl);
+i = m.nextPos;
+}
+while (true) {
+const j = skip_ws(src, i);
+if (starts_with_at(src, j, "module")) {
+const m = parse_module_decl_ast(src, i);
+vec_push(decls, m.decl);
+i = m.nextPos;
+continue;
+}
+if (starts_with_at(src, j, "type")) {
+const td = parse_type_union_decl_ast(src, i, false);
+vec_push(decls, td.decl);
+i = td.nextPos;
+continue;
+}
+if (starts_with_at(src, j, "struct")) {
+const sd = parse_struct_decl_ast(src, i);
+vec_push(decls, sd.decl);
+i = sd.nextPos;
+continue;
+}
+break;
+}
+while (true) {
+const j = skip_ws(src, i);
+if (starts_with_at(src, j, "let")) {
+const start = skip_ws(src, i);
+i = parse_keyword(src, i, "let");
+const mutOpt = parse_mut_opt(src, i);
+i = mutOpt.nextPos;
+const name = parse_ident(src, i);
+i = name.nextPos;
+let tyAnn = "";
+const t0 = skip_ws(src, i);
+if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 58) {
+const _ty = parse_type_expr(src, t0 + 1);
+tyAnn = _ty.v0;
+i = _ty.v1;
+}
+i = parse_keyword(src, i, "=");
+const expr = parse_expr_ast(src, i);
+i = expr.nextPos;
+i = parse_optional_semicolon(src, i);
+if (tyAnn == "") {
+vec_push(decls, decl_let(span(start, i), mutOpt.ok, name.text, expr.expr));
+} else {
+vec_push(decls, decl_let_typed(span(start, i), mutOpt.ok, name.text, tyAnn, expr.expr));
+}
+continue;
+}
+break;
+}
+while (true) {
+const j = skip_ws(src, i);
+if (starts_with_at(src, j, "fn")) {
+const f = parse_fn_decl_ast2(src, i, false);
+vec_push(decls, f.decl);
+i = f.nextPos;
+continue;
+}
+if (starts_with_at(src, j, "class")) {
+const f = parse_class_fn_decl_ast2(src, i, false);
+vec_push(decls, f.decl);
+i = f.nextPos;
+continue;
+}
+if (starts_with_at(src, j, "out")) {
+const k0 = parse_keyword(src, i, "out");
+const j2 = skip_ws(src, k0);
+if (starts_with_at(src, j2, "class")) {
+const f = parse_class_fn_decl_ast2(src, i, false);
+vec_push(decls, f.decl);
+i = f.nextPos;
+continue;
+}
+const f = parse_fn_decl_ast2(src, i, false);
+vec_push(decls, f.decl);
+i = f.nextPos;
+continue;
+}
+break;
+}
+return decls;
+}

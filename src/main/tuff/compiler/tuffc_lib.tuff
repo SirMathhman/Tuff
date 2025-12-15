@@ -122,6 +122,29 @@ from analyzer use { analyze_program, analyze_program_with_fns, mk_fn_sig };
 from util::formatting use { ParsedProgramWithTrivia, parse_program_with_trivia };
 
 // ------------------------------------------------------------
+// LSP: Go-to-definition struct definitions
+// (must appear before any fn declarations per Tuff grammar rules)
+// ------------------------------------------------------------
+
+// Definition entry for the simple symbol table
+struct LspDef {
+  tag: String,
+  name: String,
+  defStart: I32,
+  defEnd: I32,
+  kind: String
+}
+
+// Symbol reference with resolved definition
+struct LspRef {
+  tag: String,
+  refStart: I32,
+  refEnd: I32,
+  defStart: I32,
+  defEnd: I32
+}
+
+// ------------------------------------------------------------
 // In-process caching (optional speed-up)
 //
 // Bun/Node caches ESM modules by path; our tests and tooling sometimes call
@@ -1424,28 +1447,10 @@ out fn lsp_line_col(src: String, offset: I32) : LineCol => line_col_at(src, offs
 // ------------------------------------------------------------
 
 // Result of a go-to-definition lookup.
-out class fn DefLocation(found: Bool, defStart: I32, defEnd: I32, defFile: String) => {}
-
-// Definition entry for the simple symbol table
-struct LspDef {
-  tag: String,
-  name: String,
-  defStart: I32,
-  defEnd: I32,
-  kind: String  // "fn", "var", "type", "struct", "field", "param", "import"
-}
+class fn DefLocation(found: Bool, defStart: I32, defEnd: I32, defFile: String) => {}
 
 fn lsp_def(name: String, defStart: I32, defEnd: I32, kind: String) : LspDef =>
   LspDef { "LspDef", name, defStart, defEnd, kind }
-
-// Symbol reference with resolved definition
-struct LspRef {
-  tag: String,
-  refStart: I32,
-  refEnd: I32,
-  defStart: I32,
-  defEnd: I32
-}
 
 fn lsp_ref(refStart: I32, refEnd: I32, defStart: I32, defEnd: I32) : LspRef =>
   LspRef { "LspRef", refStart, refEnd, defStart, defEnd }
