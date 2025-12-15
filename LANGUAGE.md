@@ -1761,10 +1761,57 @@ Both types encourage explicit handling of error and edge cases, making code more
 In this repository:
 
 - `selfhost/prebuilt/tuffc.mjs` — the compiler CLI (compile + lint)
+- `selfhost/prebuilt/fluff.mjs` — the linter CLI (Fluff linter)
 - `npm test` — runs the full test suite (TypeScript + compiled `.tuff` tests)
 - `npm run build:selfhost-prebuilt` — regenerates `selfhost/prebuilt/` from the current compiler sources
 - `npm run tuff:repl` — a minimal REPL for compiling/running a snippet as `main()`
 - `npm run tuff:refactor` — refactoring utilities (e.g. move-file that updates imports)
+
+## Linting (Fluff)
+
+**Fluff** is Tuff's built-in linter. Configuration is via `build.json` (auto-discovered upward from the source file):
+
+```json
+{
+  "fluff": {
+    "unusedLocals": "warning",
+    "unusedParams": "off",
+    "complexity": "warning",
+    "complexityThreshold": 15
+  }
+}
+```
+
+### Available Rules
+
+| Rule | Description | Values |
+|------|-------------|--------|
+| `unusedLocals` | Warn on unused local variables | `"off"`, `"warning"`, `"error"` |
+| `unusedParams` | Warn on unused function parameters | `"off"`, `"warning"`, `"error"` |
+| `complexity` | Warn when cyclomatic complexity exceeds threshold | `"off"`, `"warning"`, `"error"` |
+| `complexityThreshold` | Maximum allowed cyclomatic complexity | integer (default: 15) |
+
+### Cyclomatic Complexity
+
+The complexity rule calculates cyclomatic complexity (CC) as:
+
+- **Base**: 1
+- **+1** per `if` expression/statement
+- **+1** per `while` loop
+- **+(n-1)** per `match` expression with n arms
+- **+1** per `&&` or `||` operator (short-circuit decision points)
+
+Inner functions (local `fn` declarations and lambdas) are counted independently — their complexity does not add to the outer function's complexity.
+
+**Example**: A function with CC > 15 typically needs refactoring into smaller helper functions.
+
+### Ignoring Warnings
+
+Prefix parameter or variable names with `_` to suppress "unused" warnings:
+
+```tuff
+fn f(_unused: I32) : I32 => 0    // no warning for _unused
+```
 
 ## Examples
 

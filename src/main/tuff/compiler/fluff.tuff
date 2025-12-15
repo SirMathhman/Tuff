@@ -7,7 +7,7 @@ extern from rt::stdlib use { println, stringLen, stringCharCodeAt };
 extern from rt::vec use { vec_len, vec_get };
 
 from tuffc_lib use { fluff_project };
-from analyzer use { set_fluff_options };
+from analyzer use { set_fluff_options, set_fluff_complexity_options };
 from build_config use { load_fluff_config };
 from util::diagnostics use { set_diagnostics_format };
 
@@ -59,6 +59,7 @@ fn main(argv: Vec<String>) => {
 
   let cfg = load_fluff_config(inPath);
   set_fluff_options(cfg.unusedLocals, cfg.unusedParams);
+  set_fluff_complexity_options(cfg.complexity, cfg.complexityThreshold);
 
   fluff_project(inPath);
   0

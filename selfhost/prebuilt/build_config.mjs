@@ -187,8 +187,62 @@ return 2;
 }
 return defaultValue;
 }
-export function FluffConfig(unusedLocals, unusedParams) {
-return { unusedLocals: unusedLocals, unusedParams: unusedParams };
+export function json_find_int_value_in_object(src, objOpen, objClose, key, defaultValue) {
+let i = objOpen + 1;
+while (i < objClose) {
+i = json_skip_ws(src, i);
+if (i >= objClose) {
+break;
+}
+const ch = stringCharCodeAt(src, i);
+if (ch == 44) {
+i = i + 1;
+continue;
+}
+if (ch == 34) {
+const k = json_parse_string(src, i);
+if (k[1] == i) {
+return defaultValue;
+}
+const keyText = k[0];
+i = json_skip_ws(src, k[1]);
+if (!(i < objClose && stringCharCodeAt(src, i) == 58)) {
+continue;
+}
+i = json_skip_ws(src, i + 1);
+if (keyText == key) {
+let result = 0;
+let foundDigit = false;
+while (i < objClose) {
+const digit = stringCharCodeAt(src, i);
+if (digit >= 48 && digit <= 57) {
+result = result * 10 + (digit - 48);
+foundDigit = true;
+i = i + 1;
+} else {
+break;
+}
+}
+if (foundDigit) {
+return result;
+}
+return defaultValue;
+}
+if (i < objClose && stringCharCodeAt(src, i) == 34) {
+const v2 = json_parse_string(src, i);
+if (v2[1] == i) {
+return defaultValue;
+}
+i = v2[1];
+}
+continue;
+}
+i = i + 1;
+}
+return defaultValue;
+}
+export function FluffConfig(unusedLocals, unusedParams, complexity, complexityThreshold) {
+return { unusedLocals: unusedLocals, unusedParams: unusedParams, complexity: complexity, complexityThreshold: complexityThreshold };
 }
 export function find_build_json_upwards(inPath) {
 let dir = pathDirname(inPath);
@@ -208,16 +262,19 @@ return "";
 export function load_fluff_config(inPath) {
 const path = find_build_json_upwards(inPath);
 if (path == "") {
-return FluffConfig(0, 0);
+return FluffConfig(0, 0, 0, 15);
 }
 const src = readTextFile(path);
 const fluffObj = json_find_object_bounds_by_key(src, "fluff");
 if (fluffObj[0] == -1) {
-return FluffConfig(0, 0);
+return FluffConfig(0, 0, 0, 15);
 }
 const unusedLocals0 = json_find_string_value_in_object(src, fluffObj[0], fluffObj[1], "unusedLocals");
 const unusedParams0 = json_find_string_value_in_object(src, fluffObj[0], fluffObj[1], "unusedParams");
+const complexity0 = json_find_string_value_in_object(src, fluffObj[0], fluffObj[1], "complexity");
 const unusedLocals = severity_from_string(unusedLocals0, 0);
 const unusedParams = severity_from_string(unusedParams0, 0);
-return FluffConfig(unusedLocals, unusedParams);
+const complexity = severity_from_string(complexity0, 0);
+const complexityThreshold = json_find_int_value_in_object(src, fluffObj[0], fluffObj[1], "complexityThreshold", 15);
+return FluffConfig(unusedLocals, unusedParams, complexity, complexityThreshold);
 }

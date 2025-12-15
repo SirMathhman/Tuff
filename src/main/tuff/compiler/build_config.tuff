@@ -7,7 +7,9 @@
 // {
 //   "fluff": {
 //     "unusedLocals": "off" | "warning" | "error",
-//     "unusedParams": "off" | "warning" | "error"
+//     "unusedParams": "off" | "warning" | "error",
+//     "complexity": "off" | "warning" | "error",
+//     "complexityThreshold": <number>
 //   }
 // }
 
@@ -206,7 +208,61 @@ fn severity_from_string(s0: String, defaultValue: I32) : I32 => {
   defaultValue
 }
 
-class fn FluffConfig(unusedLocals: I32, unusedParams: I32) => {}
+fn json_find_int_value_in_object(src: String, objOpen: I32, objClose: I32, key: String, defaultValue: I32) : I32 => {
+  // Scan key/value pairs in [objOpen, objClose].
+  let mut i = objOpen + 1;
+  while (i < objClose) {
+    i = json_skip_ws(src, i);
+    if (i >= objClose) { break; }
+
+    let ch = stringCharCodeAt(src, i);
+    if (ch == 44) { i = i + 1; continue; } // ','
+
+    if (ch == 34) {
+      let k = json_parse_string(src, i);
+      if (k.1 == i) { yield defaultValue; }
+      let keyText = k.0;
+      i = json_skip_ws(src, k.1);
+      if (!(i < objClose && stringCharCodeAt(src, i) == 58)) { // ':'
+        // Not a key/value, keep scanning.
+        continue;
+      }
+      i = json_skip_ws(src, i + 1);
+
+      if (keyText == key) {
+        // Try to parse an integer value
+        let mut result = 0;
+        let mut foundDigit = false;
+        while (i < objClose) {
+          let digit = stringCharCodeAt(src, i);
+          if (digit >= 48 && digit <= 57) {
+            result = result * 10 + (digit - 48);
+            foundDigit = true;
+            i = i + 1;
+          } else {
+            break;
+          }
+        }
+        if (foundDigit) { yield result; }
+        yield defaultValue;
+      }
+
+      // Skip value if it's a string; otherwise, just keep scanning.
+      if (i < objClose && stringCharCodeAt(src, i) == 34) {
+        let v2 = json_parse_string(src, i);
+        if (v2.1 == i) { yield defaultValue; }
+        i = v2.1;
+      }
+      continue;
+    }
+
+    i = i + 1;
+  }
+
+  defaultValue
+}
+
+class fn FluffConfig(unusedLocals: I32, unusedParams: I32, complexity: I32, complexityThreshold: I32) => {}
 
 out fn find_build_json_upwards(inPath: String) : String => {
   let mut dir = pathDirname(inPath);
@@ -222,18 +278,21 @@ out fn find_build_json_upwards(inPath: String) : String => {
 
 out fn load_fluff_config(inPath: String) : FluffConfig => {
   let path = find_build_json_upwards(inPath);
-  if (path == "") { yield FluffConfig(0, 0); }
+  if (path == "") { yield FluffConfig(0, 0, 0, 15); }
 
   let src = readTextFile(path);
 
   let fluffObj = json_find_object_bounds_by_key(src, "fluff");
-  if (fluffObj.0 == -1) { yield FluffConfig(0, 0); }
+  if (fluffObj.0 == -1) { yield FluffConfig(0, 0, 0, 15); }
 
   let unusedLocals0 = json_find_string_value_in_object(src, fluffObj.0, fluffObj.1, "unusedLocals");
   let unusedParams0 = json_find_string_value_in_object(src, fluffObj.0, fluffObj.1, "unusedParams");
+  let complexity0 = json_find_string_value_in_object(src, fluffObj.0, fluffObj.1, "complexity");
 
   let unusedLocals = severity_from_string(unusedLocals0, 0);
   let unusedParams = severity_from_string(unusedParams0, 0);
+  let complexity = severity_from_string(complexity0, 0);
+  let complexityThreshold = json_find_int_value_in_object(src, fluffObj.0, fluffObj.1, "complexityThreshold", 15);
 
-  FluffConfig(unusedLocals, unusedParams)
+  FluffConfig(unusedLocals, unusedParams, complexity, complexityThreshold)
 }
