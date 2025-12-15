@@ -15,7 +15,7 @@ import { TextDocument } from "vscode-languageserver-textdocument";
 import { URI } from "vscode-uri";
 import * as path from "path";
 import * as fs from "fs";
-import { pathToFileURL } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 
 // Tuff compiler interface types
 interface DiagInfo {
@@ -49,11 +49,38 @@ const dynamicImport: (specifier: string) => Promise<any> = new Function(
   "return import(specifier)"
 ) as any;
 
+function isProbablyDirectoryPath(p: string): boolean {
+  // A best-effort heuristic. If it has an extension, assume it is a file.
+  // If it ends with a path separator, it is a directory.
+  if (p.endsWith(path.sep) || p.endsWith("/")) return true;
+  return path.extname(p) === "";
+}
+
+function candidateCompilerPaths(input: string): string[] {
+  // Accept either:
+  // - absolute path to tuffc_lib.mjs
+  // - absolute path to a prebuilt/ directory
+  // - file:// URL to either of the above
+  let p = input;
+  try {
+    if (p.startsWith("file:")) {
+      p = fileURLToPath(p);
+    }
+  } catch {
+    // If it's a malformed URL, just treat it as a normal path.
+  }
+
+  if (isProbablyDirectoryPath(p)) {
+    return [path.join(p, "tuffc_lib.mjs")];
+  }
+  return [p];
+}
+
 async function loadTuffCompiler(): Promise<boolean> {
   try {
     const candidates: string[] = [];
     if (prebuiltPathFromClient) {
-      candidates.push(prebuiltPathFromClient);
+      candidates.push(...candidateCompilerPaths(prebuiltPathFromClient));
     }
     // Bundled into extension: <extensionRoot>/prebuilt/tuffc_lib.mjs
     candidates.push(path.resolve(__dirname, "..", "prebuilt", "tuffc_lib.mjs"));

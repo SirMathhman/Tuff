@@ -32,13 +32,15 @@ A minimal LSP server is included as a foundation for future features:
    ```bash
    cd editors/vscode
    npm install
-   npm run compile
+   npm run vscode:prepublish
    npx vsce package
    ```
 
 2. Install locally:
    ```bash
-   code --install-extension tuff-lang-0.1.0.vsix
+   code --install-extension tuff-lang-0.1.1.vsix
+   # or, for VS Code Insiders
+   code-insiders --install-extension tuff-lang-0.1.1.vsix
    ```
 
 ### From Source (Watch Mode)

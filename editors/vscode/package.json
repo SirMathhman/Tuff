@@ -2,7 +2,7 @@
   "name": "tuff-lang",
   "displayName": "Tuff Language",
   "description": "Syntax highlighting and language support for Tuff",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "tuff-lang",
   "license": "MIT",
   "repository": {
@@ -15,7 +15,6 @@
   "categories": [
     "Programming Languages"
   ],
-  "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
     "languages": [
@@ -65,7 +64,8 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "package": "vsce package",
-    "install-local": "code --install-extension tuff-lang-0.1.0.vsix"
+    "install-local": "code --install-extension tuff-lang-0.1.1.vsix",
+    "install-local-insiders": "code-insiders --install-extension tuff-lang-0.1.1.vsix"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
