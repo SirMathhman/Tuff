@@ -1,0 +1,268 @@
+// Expression type inference (best-effort) for Phase 4 analyzer.
+
+extern from rt::stdlib use { stringLen, stringSlice };
+extern from rt::vec use { vec_new, vec_len, vec_get };
+
+from ast use { span_start };
+
+from analyzer::typestrings use {
+  ty_unknown,
+  ty_bool,
+  ty_int_lit,
+  ty_float_lit,
+  ty_i32,
+  ty_f32,
+  ty_f64,
+  ty_char,
+  ty_string,
+  ty_never,
+  ty_fn_type,
+  ty_is_fn_type,
+  ty_fn_type_params,
+  ty_fn_ret,
+  ty_fn_param_tys,
+  normalize_ty_ann,
+  ty_is_type_var,
+  type_is_unknown,
+  type_is_int_like,
+  type_is_concrete_int,
+  type_is_float_like,
+  type_is_concrete_float,
+  ty_parse_app,
+  ty_parse_array,
+  ty_skip_ws
+};
+
+from analyzer::env use { this_struct_name, struct_name_of_expr, has_struct_def, get_struct_field_type, has_fn_sig, find_fn_sig };
+from analyzer::scope use { infer_lookup_ty };
+from analyzer::subst use { subst_bind, ty_apply_subst };
+
+out fn infer_expr_type(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, e: Expr) : String => {
+  if (e.tag == "EBool") { yield ty_bool(); }
+  if (e.tag == "EInt") { yield ty_int_lit(); }
+  if (e.tag == "EFloat") {
+    // If the float literal has a suffix (F32 or F64), use that; otherwise FloatLit (context-typed).
+    if (e.suffix == "F32") { yield ty_f32(); }
+    if (e.suffix == "F64") { yield ty_f64(); }
+    yield ty_float_lit();
+  }
+  if (e.tag == "EString") { yield ty_string(); }
+  if (e.tag == "EIdent") {
+    // The bootstrap subset still sometimes parses these as identifiers.
+    if (e.name == "true") { yield ty_bool(); }
+    if (e.name == "false") { yield ty_bool(); }
+    yield infer_lookup_ty(scopes, depth, e.name);
+  }
+
+  if (e.tag == "ELambda") {
+    yield ty_fn_type(e.typeParams, e.paramTyAnns, e.retTyAnn);
+  }
+
+  if (e.tag == "EStructLit") {
+    yield struct_name_of_expr(src, e.nameExpr);
+  }
+
+  if (e.tag == "EUnary") {
+    // Only obvious: !Bool => Bool
+    if (e.op.tag == "OpNot") {
+      let t = infer_expr_type(src, structs, fns, scopes, depth, e.expr);
+      if (t == ty_bool()) { yield ty_bool(); }
+      yield ty_unknown();
+    }
+    if (e.op.tag == "OpNeg") {
+      let t = infer_expr_type(src, structs, fns, scopes, depth, e.expr);
+      if (t == ty_i32()) { yield ty_i32(); }
+      if (t == ty_int_lit()) { yield ty_i32(); }
+      if (t == ty_f32()) { yield ty_f32(); }
+      if (t == ty_f64()) { yield ty_f64(); }
+      if (t == ty_float_lit()) { yield ty_f64(); }
+      yield ty_unknown();
+    }
+  }
+
+  if (e.tag == "EBinary") {
+    if (e.op.tag == "OpAnd") { yield ty_bool(); }
+    if (e.op.tag == "OpOr") { yield ty_bool(); }
+    if (e.op.tag == "OpEq") { yield ty_bool(); }
+    if (e.op.tag == "OpNe") { yield ty_bool(); }
+    if (e.op.tag == "OpLt") { yield ty_bool(); }
+    if (e.op.tag == "OpLe") { yield ty_bool(); }
+    if (e.op.tag == "OpGt") { yield ty_bool(); }
+    if (e.op.tag == "OpGe") { yield ty_bool(); }
+    if (e.op.tag == "OpAdd") {
+      // In the bootstrap subset, `+` is used both for integer addition and
+      // string concatenation (e.g. while emitting JS source strings).
+      let lt = infer_expr_type(src, structs, fns, scopes, depth, e.left);
+      let rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
+      if (lt == ty_string() || rt == ty_string()) { yield ty_string(); }
+
+      if (type_is_float_like(lt) && type_is_float_like(rt)) {
+        let nlt = normalize_ty_ann(lt);
+        let nrt = normalize_ty_ann(rt);
+        if (type_is_concrete_float(nlt) && nlt == nrt) { yield nlt; }
+        if (type_is_concrete_float(nlt) && nrt == ty_float_lit()) { yield nlt; }
+        if (type_is_concrete_float(nrt) && nlt == ty_float_lit()) { yield nrt; }
+        yield ty_f64();
+      }
+
+      if (type_is_int_like(lt) && type_is_int_like(rt)) {
+        // Char arithmetic yields I32.
+        if (normalize_ty_ann(lt) == ty_char() || normalize_ty_ann(rt) == ty_char()) { yield ty_i32(); }
+        // Preserve a concrete int width when both sides are that same width.
+        let nlt = normalize_ty_ann(lt);
+        let nrt = normalize_ty_ann(rt);
+        if (type_is_concrete_int(nlt) && nlt == nrt) { yield nlt; }
+        // Otherwise treat as I32 for now.
+        yield ty_i32();
+      }
+      yield ty_unknown();
+    }
+    if (e.op.tag == "OpSub" || e.op.tag == "OpMul" || e.op.tag == "OpDiv") {
+      let lt = infer_expr_type(src, structs, fns, scopes, depth, e.left);
+      let rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
+
+      if (type_is_float_like(lt) && type_is_float_like(rt)) {
+        let nlt = normalize_ty_ann(lt);
+        let nrt = normalize_ty_ann(rt);
+        if (type_is_concrete_float(nlt) && nlt == nrt) { yield nlt; }
+        if (type_is_concrete_float(nlt) && nrt == ty_float_lit()) { yield nlt; }
+        if (type_is_concrete_float(nrt) && nlt == ty_float_lit()) { yield nrt; }
+        yield ty_f64();
+      }
+
+      if (type_is_int_like(lt) && type_is_int_like(rt)) {
+        // Char arithmetic yields I32.
+        if (normalize_ty_ann(lt) == ty_char() || normalize_ty_ann(rt) == ty_char()) { yield ty_i32(); }
+        // Preserve a concrete int width when both sides are that same width.
+        let nlt = normalize_ty_ann(lt);
+        let nrt = normalize_ty_ann(rt);
+        if (type_is_concrete_int(nlt) && nlt == nrt) { yield nlt; }
+        yield ty_i32();
+      }
+      yield ty_unknown();
+    }
+  }
+
+  if (e.tag == "EField") {
+    let bt = infer_expr_type(src, structs, fns, scopes, depth, e.base);
+    if (!type_is_unknown(bt) && has_struct_def(structs, bt)) {
+      yield get_struct_field_type(src, span_start(e.span), structs, bt, e.field);
+    }
+    yield ty_unknown();
+  }
+
+  if (e.tag == "EIndex") {
+    // Preserve array/slice element types when possible.
+    let bt = infer_expr_type(src, structs, fns, scopes, depth, e.base);
+
+    let arr = ty_parse_array(bt);
+    if (arr.ok) {
+      yield normalize_ty_ann(arr.elem);
+    }
+
+    if (bt != "" && bt != ty_unknown() && bt != ty_int_lit() && bt != ty_float_lit()) {
+      // Slice: *[T]
+      if (stringLen(bt) >= 2 && stringSlice(bt, 0, 2) == "*[") {
+        // crude parse: *[T]
+        let inner = stringSlice(bt, 2, stringLen(bt) - 1);
+        yield normalize_ty_ann(inner);
+      }
+    }
+
+    ty_unknown();
+  }
+
+  if (e.tag == "ECall") {
+    // Calling through a function-typed value.
+    let ct = infer_expr_type(src, structs, fns, scopes, depth, e.callee);
+    if (ty_is_fn_type(ct)) {
+      let ret0 = ty_fn_ret(ct);
+      let tps = ty_fn_type_params(ct);
+      if (vec_len(tps) > 0) {
+        let subst = vec_new();
+        if (vec_len(e.typeArgs) > 0) {
+          let mut ti = 0;
+          while (ti < vec_len(tps) && ti < vec_len(e.typeArgs)) {
+            subst_bind(subst, vec_get(tps, ti), normalize_ty_ann(vec_get(e.typeArgs, ti)));
+            ti = ti + 1;
+          }
+        } else {
+          // Inference: bind T from actual arg types when expected is exactly a type var.
+          let paramTys = ty_fn_param_tys(ct);
+          let mut ai = 0;
+          while (ai < vec_len(e.args) && ai < vec_len(paramTys)) {
+            let expected = vec_get(paramTys, ai);
+            let actual = infer_expr_type(src, structs, fns, scopes, depth, vec_get(e.args, ai));
+            if (expected != "" && ty_is_type_var(tps, normalize_ty_ann(expected))) {
+              subst_bind(subst, normalize_ty_ann(expected), normalize_ty_ann(actual));
+            }
+            ai = ai + 1;
+          }
+        }
+        yield ty_apply_subst(tps, subst, ret0);
+      }
+      yield ret0;
+    }
+
+    // Direct call by name with known signature.
+    if (e.callee.tag == "EIdent" && has_fn_sig(fns, e.callee.name)) {
+      let sig = find_fn_sig(fns, e.callee.name);
+
+      // If we have a declared return type annotation, use it (with generic substitution).
+      if (sig.retTyAnn != "") {
+        if (vec_len(sig.typeParams) > 0) {
+          let subst = vec_new();
+          if (vec_len(e.typeArgs) > 0) {
+            let mut ti = 0;
+            while (ti < vec_len(sig.typeParams) && ti < vec_len(e.typeArgs)) {
+              subst_bind(subst, vec_get(sig.typeParams, ti), normalize_ty_ann(vec_get(e.typeArgs, ti)));
+              ti = ti + 1;
+            }
+          } else {
+            // Inference: bind T from actual arg types when expected is exactly a type var.
+            let mut ai = 0;
+            while (ai < vec_len(e.args) && ai < vec_len(sig.paramTyAnns)) {
+              let expected = vec_get(sig.paramTyAnns, ai);
+              let actual = infer_expr_type(src, structs, fns, scopes, depth, vec_get(e.args, ai));
+              if (expected != "" && ty_is_type_var(sig.typeParams, normalize_ty_ann(expected))) {
+                subst_bind(subst, normalize_ty_ann(expected), normalize_ty_ann(actual));
+              }
+              ai = ai + 1;
+            }
+          }
+          yield ty_apply_subst(sig.typeParams, subst, sig.retTyAnn);
+        }
+
+        yield normalize_ty_ann(sig.retTyAnn);
+      }
+
+      // Class fns are constructor sugar: even without an explicit return annotation,
+      // we can treat `Name(...)` as returning the synthesized struct `__This__Name`.
+      let thisTy = this_struct_name(e.callee.name);
+      if (has_struct_def(structs, thisTy)) {
+        yield thisTy;
+      }
+    }
+
+    yield ty_unknown();
+  }
+
+  if (e.tag == "EIf") {
+    let t1 = infer_expr_type(src, structs, fns, scopes, depth, e.thenExpr);
+    let t2 = infer_expr_type(src, structs, fns, scopes, depth, e.elseExpr);
+    // Never absorption: if one branch diverges, the result is the other branch's type.
+    if (normalize_ty_ann(t1) == ty_never()) { yield normalize_ty_ann(t2); }
+    if (normalize_ty_ann(t2) == ty_never()) { yield normalize_ty_ann(t1); }
+    if (!type_is_unknown(t1) && normalize_ty_ann(t1) == normalize_ty_ann(t2)) {
+      yield normalize_ty_ann(t1);
+    }
+    yield ty_unknown();
+  }
+
+  if (e.tag == "EBlock") {
+    yield infer_expr_type(src, structs, fns, scopes, depth, e.tail);
+  }
+
+  // Everything else: unknown for now.
+  ty_unknown()
+}

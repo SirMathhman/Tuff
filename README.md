@@ -128,7 +128,7 @@ The self-hosting compiler is located in `src/main/tuff/compiler/` and is split i
 | CLI      | `tuffc.tuff`              | Compiler CLI (compiled to `selfhost/prebuilt/tuffc.mjs`) |
 | CLI      | `fluff.tuff`              | Linter CLI (compiled to `selfhost/prebuilt/fluff.mjs`)   |
 
-Note: `analyzer.tuff` is being actively split into smaller submodules under `src/main/tuff/compiler/analyzer/` (e.g. `deprecation.tuff`, `typestrings.tuff`, `fluff.tuff`) to keep individual files small and focused.
+Note: `analyzer.tuff` is being actively split into smaller submodules under `src/main/tuff/compiler/analyzer/` (e.g. `analyze_expr_stmt.tuff`, `checks.tuff`, `infer_basic.tuff`, `typecheck.tuff`, `scope.tuff`, `deprecation.tuff`, `typestrings.tuff`, `fluff.tuff`) to keep individual files small and focused.
 
 ### Bootstrap Strategy
 

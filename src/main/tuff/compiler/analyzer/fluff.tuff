@@ -100,6 +100,25 @@ out fn fluff_warn_unused_params_in_scope(src: String, scopes: Vec<Vec<Binding>>,
 }
 
 // ------------------------------------------------------------
+// Public wrapper API
+//
+// Other analyzer modules import these names (without the `fluff_` prefix).
+// Keep the `fluff_*` exports as the canonical implementation.
+// ------------------------------------------------------------
+
+out fn warn_unused_locals_in_scope(src: String, scopes: Vec<Vec<Binding>>, depth: I32) : Void =>
+  fluff_warn_unused_locals_in_scope(src, scopes, depth)
+
+out fn warn_unused_params_in_scope(src: String, scopes: Vec<Vec<Binding>>, depth: I32) : Void =>
+  fluff_warn_unused_params_in_scope(src, scopes, depth)
+
+out fn check_fn_complexity(src: String, pos: I32, fnName: String, body: Vec<Stmt>, tail: Expr) : Void =>
+  fluff_check_fn_complexity(src, pos, fnName, body, tail)
+
+out fn check_lambda_complexity(src: String, pos: I32, name: String, body: Expr) : Void =>
+  fluff_check_lambda_complexity(src, pos, name, body)
+
+// ------------------------------------------------------------
 // Cyclomatic Complexity Calculation
 //
 // CC = 1 (base)

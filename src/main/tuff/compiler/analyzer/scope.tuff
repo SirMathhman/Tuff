@@ -1,0 +1,186 @@
+// Scope and binding helpers for the analyzer.
+
+extern from rt::vec use { vec_new, vec_len, vec_push, vec_get, vec_set };
+
+from util::diagnostics use { error_at };
+
+from analyzer::defs use { mk_binding };
+from analyzer::typestrings use { ty_unknown };
+
+out fn scopes_contains(scopes: Vec<Vec<Binding>>, depth: I32, name: String) : Bool => {
+  let mut si = 0;
+  while (si < depth) {
+    let scope = vec_get(scopes, si);
+    let mut ni = 0;
+    while (ni < vec_len(scope)) {
+      let b = vec_get(scope, ni);
+      if (b.name == name) { yield true; }
+      ni = ni + 1;
+    }
+    si = si + 1;
+  }
+  false
+}
+
+out fn scopes_enter(scopes: Vec<Vec<Binding>>, depth: I32) : I32 => {
+  let s = vec_new();
+  if (depth < vec_len(scopes)) { vec_set(scopes, depth, s); }
+  else { vec_push(scopes, s); }
+  depth + 1
+}
+
+out fn declare_name(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, name: String, isMut: Bool, tyTag: String) : Void => {
+  if (scopes_contains(scopes, depth, name)) {
+    // Report and continue (declare anyway to reduce cascades).
+    error_at(src, pos, "shadowing not allowed: " + name);
+  }
+  let cur = vec_get(scopes, depth - 1);
+  vec_push(cur, mk_binding(name, isMut, tyTag, "", pos, false, true, false));
+}
+
+out fn declare_name_deprecated(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, name: String, isMut: Bool, tyTag: String, deprecatedReason: String) : Void => {
+  if (scopes_contains(scopes, depth, name)) {
+    // Report and continue (declare anyway to reduce cascades).
+    error_at(src, pos, "shadowing not allowed: " + name);
+  }
+  let cur = vec_get(scopes, depth - 1);
+  vec_push(cur, mk_binding(name, isMut, tyTag, deprecatedReason, pos, false, true, false));
+}
+
+out fn scope_contains(scope: Vec<Binding>, name: String) : Bool => {
+  let mut i = 0;
+  while (i < vec_len(scope)) {
+    let b = vec_get(scope, i);
+    if (b.name == name) { yield true; }
+    i = i + 1;
+  }
+  false
+}
+
+out fn declare_local_name(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, name: String, isMut: Bool, tyTag: String) : Void => {
+  // Declare in the current scope only (no outer-scope shadowing check).
+  let cur = vec_get(scopes, depth - 1);
+  if (scope_contains(cur, name)) {
+    // Keep the original binding; do not redeclare.
+    error_at(src, pos, "duplicate name: " + name);
+    yield;
+  }
+  vec_push(cur, mk_binding(name, isMut, tyTag, "", pos, false, true, true));
+}
+
+out fn declare_local_name_deprecated(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, name: String, isMut: Bool, tyTag: String, deprecatedReason: String) : Void => {
+  // Declare in the current scope only (no outer-scope shadowing check).
+  let cur = vec_get(scopes, depth - 1);
+  if (scope_contains(cur, name)) {
+    // Keep the original binding; do not redeclare.
+    error_at(src, pos, "duplicate name: " + name);
+    yield;
+  }
+  vec_push(cur, mk_binding(name, isMut, tyTag, deprecatedReason, pos, false, true, true));
+}
+
+out fn lookup_binding(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, name: String) : Binding => {
+  let mut si = 0;
+  while (si < depth) {
+    let scope = vec_get(scopes, si);
+    let mut bi = 0;
+    while (bi < vec_len(scope)) {
+      let b = vec_get(scope, bi);
+      if (b.name == name) { yield b; }
+      bi = bi + 1;
+    }
+    si = si + 1;
+  }
+  error_at(src, pos, "unknown name: " + name);
+  mk_binding(name, false, ty_unknown(), "", pos, false, false, false)
+}
+
+out fn update_binding_ty(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, name: String, newTyTag: String) : Void => {
+  let mut si = 0;
+  while (si < depth) {
+    let scope = vec_get(scopes, si);
+    let mut bi = 0;
+    while (bi < vec_len(scope)) {
+      let b = vec_get(scope, bi);
+      if (b.name == name) {
+        vec_set(scope, bi, mk_binding(b.name, b.isMut, newTyTag, b.deprecatedReason, b.declPos, b.read, b.written, b.isParam));
+        yield;
+      }
+      bi = bi + 1;
+    }
+    si = si + 1;
+  }
+  error_at(src, pos, "unknown name: " + name);
+}
+
+out fn mark_binding_read(scopes: Vec<Vec<Binding>>, depth: I32, name: String) : Void => {
+  let mut si = 0;
+  while (si < depth) {
+    let scope = vec_get(scopes, si);
+    let mut bi = 0;
+    while (bi < vec_len(scope)) {
+      let b = vec_get(scope, bi);
+      if (b.name == name) {
+        if (!b.read) {
+          vec_set(scope, bi, mk_binding(b.name, b.isMut, b.tyTag, b.deprecatedReason, b.declPos, true, b.written, b.isParam));
+        }
+        yield;
+      }
+      bi = bi + 1;
+    }
+    si = si + 1;
+  }
+}
+
+out fn mark_binding_written(scopes: Vec<Vec<Binding>>, depth: I32, name: String) : Void => {
+  let mut si = 0;
+  while (si < depth) {
+    let scope = vec_get(scopes, si);
+    let mut bi = 0;
+    while (bi < vec_len(scope)) {
+      let b = vec_get(scope, bi);
+      if (b.name == name) {
+        if (!b.written) {
+          vec_set(scope, bi, mk_binding(b.name, b.isMut, b.tyTag, b.deprecatedReason, b.declPos, b.read, true, b.isParam));
+        }
+        yield;
+      }
+      bi = bi + 1;
+    }
+    si = si + 1;
+  }
+}
+
+out fn infer_lookup_ty(scopes: Vec<Vec<Binding>>, depth: I32, name: String) : String => {
+  // Best-effort lookup for type inference.
+  // Do NOT panic here: inference may run at an outer depth (e.g. inferring an
+  // `if` expression) while inspecting nested block tails, where block-local
+  // bindings are not visible at the caller's depth.
+  let mut si = 0;
+  while (si < depth) {
+    let scope = vec_get(scopes, si);
+    let mut bi = 0;
+    while (bi < vec_len(scope)) {
+      let b = vec_get(scope, bi);
+      if (b.name == name) { yield b.tyTag; }
+      bi = bi + 1;
+    }
+    si = si + 1;
+  }
+  ty_unknown()
+}
+
+out fn require_name(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, name: String) : Void => {
+  // The current bootstrap subset still parses `true`/`false` as identifiers.
+  // Treat them as built-in literals so the analyzer doesn't reject valid code.
+  if (name == "true") { yield; }
+  if (name == "false") { yield; }
+
+  // The bootstrap parser doesn't have dedicated tokens/stmts for these yet,
+  // but they are valid JS statements and are currently emitted via EIdent.
+  if (name == "continue") { yield; }
+  if (name == "break") { yield; }
+
+  // Normal lookup (panics on missing).
+  lookup_binding(src, pos, scopes, depth, name);
+}

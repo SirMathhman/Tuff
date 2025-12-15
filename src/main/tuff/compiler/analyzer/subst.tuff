@@ -1,0 +1,80 @@
+// Generic substitution helpers for the analyzer.
+
+extern from rt::stdlib use { stringLen, stringCharCodeAt, stringSlice };
+extern from rt::vec use { vec_new, vec_len, vec_push, vec_get, vec_set };
+
+from analyzer::defs use { mk_subst };
+
+from analyzer::typestrings use {
+  type_is_ws,
+  ty_skip_ws,
+  ty_unknown,
+  normalize_ty_ann,
+  ty_is_type_var,
+  ty_parse_app,
+  ty_parse_array,
+  ty_is_slice,
+  ty_slice_inner
+};
+
+out fn subst_lookup(subst: Vec<TySubst>, name: String) : String => {
+  let mut i = 0;
+  while (i < vec_len(subst)) {
+    let s = vec_get(subst, i);
+    if (s.name == name) { yield s.ty; }
+    i = i + 1;
+  }
+  ""
+}
+
+out fn subst_bind(subst: Vec<TySubst>, name: String, ty: String) : Void => {
+  let mut i = 0;
+  while (i < vec_len(subst)) {
+    let s = vec_get(subst, i);
+    if (s.name == name) {
+      // If already bound, keep the existing binding (must match after normalization).
+      if (normalize_ty_ann(s.ty) != normalize_ty_ann(ty)) {
+        vec_set(subst, i, mk_subst(name, ty_unknown()));
+      }
+      yield;
+    }
+    i = i + 1;
+  }
+  vec_push(subst, mk_subst(name, ty));
+}
+
+out fn ty_apply_subst(typeParams: Vec<String>, subst: Vec<TySubst>, t: String) : String => {
+  let tt = normalize_ty_ann(t);
+  if (ty_is_type_var(typeParams, tt)) {
+    let b = subst_lookup(subst, tt);
+    if (b == "") { yield tt; }
+    yield normalize_ty_ann(b);
+  }
+
+  let arr = ty_parse_array(tt);
+  if (arr.ok) {
+    let inner = ty_apply_subst(typeParams, subst, arr.elem);
+    yield "[" + inner + ";" + ("" + arr.init) + ";" + ("" + arr.len) + "]";
+  }
+
+  if (ty_is_slice(tt)) {
+    let inner = ty_apply_subst(typeParams, subst, ty_slice_inner(tt));
+    yield "*[" + inner + "]";
+  }
+
+  let app = ty_parse_app(tt);
+  if (app.ok) {
+    let mut out = stringSlice(app.callee, ty_skip_ws(app.callee, 0), stringLen(app.callee));
+    out = out + "<";
+    let mut i = 0;
+    while (i < vec_len(app.args)) {
+      if (i > 0) { out = out + ", "; }
+      out = out + ty_apply_subst(typeParams, subst, vec_get(app.args, i));
+      i = i + 1;
+    }
+    out = out + ">";
+    yield out;
+  }
+
+  tt
+}

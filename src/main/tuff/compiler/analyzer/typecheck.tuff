@@ -1,0 +1,114 @@
+// Minimal type-compatibility and signature checks for Phase 4 analyzer.
+
+extern from rt::vec use { vec_len, vec_get };
+
+from util::diagnostics use { error_at };
+
+from analyzer::env use { has_struct_def };
+from analyzer::typestrings use {
+  normalize_ty_ann,
+  type_is_unknown,
+  type_is_int_like,
+  type_is_float_like,
+  ty_bool,
+  ty_i8,
+  ty_i16,
+  ty_i32,
+  ty_i64,
+  ty_f32,
+  ty_f64,
+  ty_u8,
+  ty_u16,
+  ty_u32,
+  ty_u64,
+  ty_char,
+  ty_string,
+  ty_void,
+  ty_never,
+  ty_int_lit,
+  ty_float_lit
+};
+
+out fn should_enforce_expected_type(structs: Vec<StructDef>, expected: String) : Bool => {
+  let e = normalize_ty_ann(expected);
+  if (e == ty_bool()) { yield true; }
+  if (e == ty_i8()) { yield true; }
+  if (e == ty_i16()) { yield true; }
+  if (e == ty_i32()) { yield true; }
+  if (e == ty_i64()) { yield true; }
+  if (e == ty_f32()) { yield true; }
+  if (e == ty_f64()) { yield true; }
+  if (e == ty_u8()) { yield true; }
+  if (e == ty_u16()) { yield true; }
+  if (e == ty_u32()) { yield true; }
+  if (e == ty_u64()) { yield true; }
+  if (e == ty_char()) { yield true; }
+  if (e == ty_string()) { yield true; }
+  if (e == ty_void()) { yield true; }
+  if (e == ty_never()) { yield true; }
+  if (has_struct_def(structs, e)) { yield true; }
+  false
+}
+
+out fn type_compatible(structs: Vec<StructDef>, expected: String, actual: String) : Bool => {
+  if (expected == "") { yield true; }
+
+  // Phase 4: only enforce for primitives and known structs.
+  // This avoids false negatives on union aliases (e.g. `TypeRef`), generics,
+  // and other not-yet-modeled types.
+  if (!should_enforce_expected_type(structs, expected)) { yield true; }
+
+  if (type_is_unknown(actual)) { yield true; }
+
+  // Never (bottom type) is compatible with any expected type.
+  // A diverging expression (e.g. panic()) can satisfy any return type.
+  if (normalize_ty_ann(actual) == ty_never()) { yield true; }
+
+  // Integer/char literals are context-typed in the language.
+  // Model that by allowing `IntLit` to flow into int-like expected types.
+  if (normalize_ty_ann(actual) == ty_int_lit() && type_is_int_like(expected)) {
+    yield true;
+  }
+
+  // Float literals are also context-typed.
+  if (normalize_ty_ann(actual) == ty_float_lit() && type_is_float_like(expected)) {
+    yield true;
+  }
+
+  // Bootstrap compatibility: allow any int-like to flow into any other int-like,
+  // (Precise widening/narrowing rules can come later.)
+  if (type_is_int_like(normalize_ty_ann(expected)) && type_is_int_like(normalize_ty_ann(actual))) {
+    yield true;
+  }
+
+  normalize_ty_ann(expected) == normalize_ty_ann(actual)
+}
+
+out fn require_type_compatible(src: String, pos: I32, ctx: String, structs: Vec<StructDef>, expected: String, actual: String) : Void => {
+  if (!type_compatible(structs, expected, actual)) {
+    error_at(src, pos, ctx + ": expected " + normalize_ty_ann(expected) + ", got " + normalize_ty_ann(actual));
+  }
+}
+
+out fn require_all_param_types(src: String, pos: I32, prefix: String, params: Vec<String>, paramTyAnns: Vec<String>) : Void => {
+  let mut anyMissing = false;
+  let mut msg = "";
+  let mut pi = 0;
+  while (pi < vec_len(params)) {
+    let mut ann = "";
+    if (pi < vec_len(paramTyAnns)) { ann = vec_get(paramTyAnns, pi); }
+    if (ann == "") {
+      if (!anyMissing) {
+        anyMissing = true;
+        msg = prefix + " missing type annotation(s) for parameter(s): ";
+      } else {
+        msg = msg + ", ";
+      }
+      msg = msg + vec_get(params, pi);
+    }
+    pi = pi + 1;
+  }
+  if (anyMissing) {
+    error_at(src, pos, msg);
+  }
+}
