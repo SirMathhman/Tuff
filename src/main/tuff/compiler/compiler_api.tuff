@@ -1,0 +1,58 @@
+// Pure in-memory compiler API
+//
+// PLAN (Phase 1 - Architecture):
+// =================================
+// This module will separate compilation logic from file I/O.
+// Tests and tools can use these functions directly without touching disk.
+//
+// Refactoring steps:
+// 1. Extract compile_project's module-graph DFS logic into a pure function
+//    that accepts a (modulePath: String) => String callback for reading sources
+// 2. Extract single-module compilation (parse+analyze+emit) into helpers
+// 3. Create compile_code(entryCode, moduleLookup) and lint_code(entryCode, moduleLookup)
+// 4. Update tuffc.tuff and fluff.tuff to:
+//    - Handle all file I/O at the CLI level
+//    - Call pure API functions with filesystem callbacks
+//
+// Expected API (TypeScript pseudocode):
+// 
+//   type ModuleLookup = (modulePath: string) => string;
+//   
+//   interface CompileOptions {
+//     format?: "human" | "json";
+//     fluffOptions?: FluffConfig;
+//   }
+//   
+//   interface CompileResult {
+//     success: boolean;
+//     code?: string;      // JS output if success
+//     diagnostics?: string; // error/warning text
+//   }
+//   
+//   export function compileCode(
+//     entryCode: string,
+//     moduleLookup: ModuleLookup,
+//     options?: CompileOptions
+//   ): CompileResult;
+//   
+//   export function lintCode(
+//     entryCode: string,
+//     moduleLookup: ModuleLookup,
+//     fluffOptions?: FluffConfig
+//   ): CompileResult;
+//
+// Benefits:
+// - Tests call compileCode/lintCode with in-memory modules (no disk I/O)
+// - CLI layer handles actual filesystem operations
+// - Can be used for REPL, online playgrounds, language servers
+// - Pure functions = easier to test, parallelize, cache
+//
+// TODO (Phase 2 - Implementation):
+// [1] Extract compile_project's DFS module-graph walk into a pure helper
+// [2] Extract single-module parse+analyze+emit logic
+// [3] Implement compileCode() using above helpers
+// [4] Implement lintCode() (analyze-only variant)
+// [5] Update tuffc.tuff CLI to use compileCode()
+// [6] Update fluff.tuff CLI to use lintCode()
+// [7] Create TypeScript wrapper for easier test integration
+// [8] Update test helpers to use new API (no .dist/, just in-memory)
