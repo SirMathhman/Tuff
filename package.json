@@ -6,6 +6,7 @@
   "scripts": {
     "test": "vitest run",
     "check": "vitest run",
+    "lint": "npm test",
     "check:bootstrap": "npm test && npm run build:selfhost-prebuilt",
     "check:prebuilt": "npm run build:selfhost-prebuilt && git diff --exit-code selfhost/prebuilt",
     "build:selfhost-prebuilt": "tsx tools/build_prebuilt_selfhost.ts",
