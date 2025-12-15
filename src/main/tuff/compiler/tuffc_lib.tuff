@@ -1390,6 +1390,41 @@ out fn compile_project(entryPath: String, outPath: String) : Void => {
   }
 }
 
+// Like compile_project, but does not write anything. Callers provide a reader
+// callback for sourcing files and then can decide where/how to write.
+// Returns (outFiles, jsOutputs) aligned by index.
+out fn compile_project_to_outputs(entryPath: String, outPath: String, readSource: (String) => String) => {
+  let outDir = pathDirname(outPath);
+  let workspaceRoot = workspace_root_from_path(entryPath);
+  let isCompilerBuild = stringLen(compiler_root_from_path(entryPath)) > 0;
+
+  let graph = collect_module_graph_info(entryPath, workspaceRoot, isCompilerBuild, readSource);
+  let order = graph.0;
+  let modulePaths = graph.1;
+  let moduleOutFns = graph.2;
+  let modulePrivateTopLevelFnNames = graph.3;
+
+  let outFiles = vec_new();
+  let jsOutputs = vec_new();
+
+  let mut oi = 0;
+  while (oi < vec_len(order)) {
+    let path = vec_get(order, oi);
+    set_current_file(path);
+    let src = readSource(path);
+
+    let r = project_compile_one_module(src, path, entryPath, outDir, outPath, workspaceRoot, isCompilerBuild, modulePaths, moduleOutFns, modulePrivateTopLevelFnNames);
+    let outFile = r.1;
+    let js = r.2;
+    vec_push(outFiles, outFile);
+    vec_push(jsOutputs, js);
+
+    oi = oi + 1;
+  }
+
+  (outFiles, jsOutputs)
+}
+
 // Shared helper: walk the module graph (DFS) to
 //   1) detect circular dependencies (hard error)
 //   2) collect per-module export info (top-level out fns)
@@ -1529,10 +1564,15 @@ out fn fluff_project(entryPath: String) : Void => {
   // Like compile_project, but only parse+analyze and emit warnings.
   // No JS is generated and nothing is written to disk.
 
+  fluff_project_with_reader(entryPath, readTextFile);
+}
+
+// Like fluff_project, but the caller provides the source reader callback.
+out fn fluff_project_with_reader(entryPath: String, readSource: (String) => String) : Void => {
   let workspaceRoot = workspace_root_from_path(entryPath);
   let isCompilerBuild = stringLen(compiler_root_from_path(entryPath)) > 0;
 
-  let graph = collect_module_graph_info(entryPath, workspaceRoot, isCompilerBuild, readTextFile);
+  let graph = collect_module_graph_info(entryPath, workspaceRoot, isCompilerBuild, readSource);
   let order = graph.0;
   let modulePaths = graph.1;
   let moduleOutFns = graph.2;
@@ -1543,7 +1583,7 @@ out fn fluff_project(entryPath: String) : Void => {
   while (oi < vec_len(order)) {
     let path = vec_get(order, oi);
     set_current_file(path);
-    let src = readTextFile(path);
+    let src = readSource(path);
 
     project_lint_one_module(src, path, entryPath, workspaceRoot, isCompilerBuild, modulePaths, moduleOutFns, modulePrivateTopLevelFnNames);
     oi = oi + 1;

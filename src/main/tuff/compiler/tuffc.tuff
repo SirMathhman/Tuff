@@ -1,9 +1,9 @@
 // Self-hosted compiler entrypoint.
 
-extern from rt::stdlib use { println, stringLen, stringCharCodeAt };
-extern from rt::vec use { vec_len, vec_get };
+extern from rt::stdlib use { println, stringLen, stringCharCodeAt, readTextFile, writeTextFile };
+extern from rt::vec use { vec_len, vec_get, vec_push, vec_new };
 
-from tuffc_lib use { compile_project };
+from tuffc_lib use { compile_project_to_outputs };
 from analyzer use { set_fluff_options };
 from build_config use { load_fluff_config };
 from util::diagnostics use { set_diagnostics_format };
@@ -62,6 +62,15 @@ fn main(argv: Vec<String>) => {
   let cfg = load_fluff_config(inPath);
   set_fluff_options(cfg.unusedLocals, cfg.unusedParams);
 
-  compile_project(inPath, outPath);
+  // Compile (no writes), then emit outputs at the CLI layer.
+  let r = compile_project_to_outputs(inPath, outPath, readTextFile);
+  let outFiles = r.0;
+  let jsOutputs = r.1;
+
+  let mut oi = 0;
+  while (oi < vec_len(outFiles)) {
+    writeTextFile(vec_get(outFiles, oi), vec_get(jsOutputs, oi));
+    oi = oi + 1;
+  }
   0
 }
