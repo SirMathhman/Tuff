@@ -17,21 +17,89 @@
  *   }
  */
 
+import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export interface ModuleStore {
   [modulePath: string]: string;
 }
 
+export interface DiagInfo {
+  line: number;
+  col: number;
+  start: number;
+  end: number;
+  msg: string;
+  help: string;
+}
+
 export interface CompileResult {
   success: boolean;
-  code?: string;
+  // In-memory compilation can emit multiple modules.
+  outRelPaths?: string[];
+  jsOutputs?: string[];
+  // Convenience: entry module JS if present.
+  entryJs?: string;
   diagnostics?: string;
 }
 
 export interface LintResult {
   success: boolean;
+  errors?: DiagInfo[];
+  warnings?: DiagInfo[];
   diagnostics?: string;
+}
+
+function prebuiltUrl(relPath: string): string {
+  const abs = resolve("selfhost", "prebuilt", relPath);
+  return pathToFileURL(abs).toString();
+}
+
+type TuffcLib = {
+  compile_code: (
+    entryCode: string,
+    moduleLookup: (p: string) => string
+  ) => [string[], string[]];
+  lint_code: (
+    entryCode: string,
+    moduleLookup: (p: string) => string
+  ) => [DiagInfo[], DiagInfo[]];
+};
+
+type Analyzer = {
+  set_fluff_options: (
+    unusedLocalsSeverity: number,
+    unusedParamsSeverity: number
+  ) => void;
+};
+
+let _tuffcLib: TuffcLib | null = null;
+let _analyzer: Analyzer | null = null;
+
+async function loadTuffcLib(): Promise<TuffcLib> {
+  if (_tuffcLib) return _tuffcLib;
+  const mod = (await import(
+    prebuiltUrl("tuffc_lib.mjs")
+  )) as unknown as TuffcLib;
+  _tuffcLib = mod;
+  return mod;
+}
+
+async function loadAnalyzer(): Promise<Analyzer> {
+  if (_analyzer) return _analyzer;
+  const mod = (await import(
+    prebuiltUrl("analyzer.mjs")
+  )) as unknown as Analyzer;
+  _analyzer = mod;
+  return mod;
+}
+
+export async function setFluffOptions(
+  unusedLocalsSeverity: number,
+  unusedParamsSeverity: number
+): Promise<void> {
+  const a = await loadAnalyzer();
+  a.set_fluff_options(unusedLocalsSeverity | 0, unusedParamsSeverity | 0);
 }
 
 /**
@@ -45,23 +113,19 @@ export async function compileCode(
   entryCode: string,
   modules: ModuleStore
 ): Promise<CompileResult> {
-  // TODO: Once compiler_api.tuff exports compileCode(),
-  // import the prebuilt .mjs and call it:
-  //
-  //   const compilerApi = await import(pathToFileURL(compilerApiMjs).toString());
-  //   const result = compilerApi.compileCode(entryCode, (path) => modules[path] || "");
-  //   return {
-  //     success: !result.hasErrors,
-  //     code: result.code,
-  //     diagnostics: result.diagnosticString,
-  //   };
-
-  // For now, return a placeholder error
-  return {
-    success: false,
-    diagnostics:
-      "compileCode() not yet implemented; waiting for compiler_api.tuff",
-  };
+  const lib = await loadTuffcLib();
+  const moduleLookup = (p: string) => modules[p] ?? "";
+  try {
+    const [outRelPaths, jsOutputs] = lib.compile_code(entryCode, moduleLookup);
+    const entryIdx = outRelPaths.indexOf("entry.mjs");
+    const entryJs = entryIdx >= 0 ? jsOutputs[entryIdx] : undefined;
+    return { success: true, outRelPaths, jsOutputs, entryJs };
+  } catch (e) {
+    return {
+      success: false,
+      diagnostics: e instanceof Error ? e.message : String(e),
+    };
+  }
 }
 
 /**
@@ -75,22 +139,18 @@ export async function lintCode(
   entryCode: string,
   modules: ModuleStore
 ): Promise<LintResult> {
-  // TODO: Once compiler_api.tuff exports lintCode(),
-  // import the prebuilt .mjs and call it:
-  //
-  //   const compilerApi = await import(pathToFileURL(compilerApiMjs).toString());
-  //   const result = compilerApi.lintCode(entryCode, (path) => modules[path] || "");
-  //   return {
-  //     success: !result.hasErrors,
-  //     diagnostics: result.diagnosticString || "",
-  //   };
-
-  // For now, return a placeholder error
-  return {
-    success: false,
-    diagnostics:
-      "lintCode() not yet implemented; waiting for compiler_api.tuff",
-  };
+  const lib = await loadTuffcLib();
+  const moduleLookup = (p: string) => modules[p] ?? "";
+  try {
+    const [errors, warnings] = lib.lint_code(entryCode, moduleLookup);
+    const success = errors.length === 0;
+    return { success, errors, warnings };
+  } catch (e) {
+    return {
+      success: false,
+      diagnostics: e instanceof Error ? e.message : String(e),
+    };
+  }
 }
 
 /**

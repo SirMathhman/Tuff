@@ -4,9 +4,14 @@
 
 We've created the scaffolding for **Option 4: Pure In-Memory Compiler API**. Here's what exists now:
 
-1. **[compiler_api.tuff](../src/main/tuff/compiler/compiler_api.tuff)** — Planning document; signatures TBD
-2. **[compiler-api-refactor.md](../docs/compiler-api-refactor.md)** — Full design doc and risk analysis
-3. **[compiler_api_wrapper.ts](../src/test/ts/compiler_api_wrapper.ts)** — TypeScript wrapper (stubs for now)
+1. **In-memory API (Tuff)** — implemented in **`src/main/tuff/compiler/tuffc_lib.tuff`**:
+  - `out fn compile_code(entryCode, moduleLookup) => (outRelPaths, jsOutputs)`
+  - `out fn lint_code(entryCode, moduleLookup) => (errors, warnings)`
+2. **Callback-based project entrypoints (Tuff)** — also in **`tuffc_lib.tuff`**:
+  - `out fn compile_project_to_outputs(entryPath, outPath, readSource)`
+  - `out fn fluff_project_with_reader(entryPath, readSource)`
+3. **[compiler-api-refactor.md](../docs/compiler-api-refactor.md)** — Full design doc and risk analysis
+4. **[compiler_api_wrapper.ts](../src/test/ts/compiler_api_wrapper.ts)** — TypeScript wrapper (implemented)
 
 ## Implementation Roadmap
 
@@ -65,29 +70,16 @@ fn compile_one_module(
 
 ### Phase 2: Implement Pure API (Days 3-5)
 
-**File**: `src/main/tuff/compiler/compiler_api.tuff`
+**File**: `src/main/tuff/compiler/tuffc_lib.tuff`
 
 Once you have the extracted helpers, implement:
 
 ```tuff
-out fn compile_code(
-  entryCode: String,
-  moduleLookup: (String) => String
-) : CompileResult => {
-  // 1. reset global state
-  // 2. use walk_module_graph with moduleLookup callback
-  // 3. for each module, call compile_one_module
-  // 4. collect all JS outputs into a single string
-  // 5. return success or errors
-}
+out fn compile_code(entryCode: String, moduleLookup: (String) => String)
+  => (outRelPaths, jsOutputs)
 
-out fn lint_code(
-  entryCode: String,
-  moduleLookup: (String) => String
-) : LintResult => {
-  // Like compile_code, but no emit phase
-  // Just parse + analyze, return diagnostics
-}
+out fn lint_code(entryCode: String, moduleLookup: (String) => String)
+  => (errors, warnings)
 ```
 
 ---
@@ -100,19 +92,11 @@ out fn lint_code(
 fn main(argv: Vec<String>) => {
   // ... parse args ...
 
-  let entryCode = readTextFile(inPath);  // File I/O at CLI level
-
-  // Call pure API with filesystem callback
-  let result = compile_code(entryCode, (path) => {
-    readTextFile(resolve_module_path(inPath, path))
-  });
-
-  if (result.success) {
-    writeTextFile(outPath, result.code);
-  } else {
-    println(result.diagnostics);
-    yield 1;
-  }
+  // File I/O at CLI level, compilation logic returns outputs.
+  let r = compile_project_to_outputs(inPath, outPath, readTextFile);
+  let outFiles = r.0;
+  let jsOutputs = r.1;
+  // writeTextFile(outFiles[i], jsOutputs[i])
 
   0
 }
@@ -126,23 +110,16 @@ fn main(argv: Vec<String>) => {
 
 **File**: `src/test/ts/compiler_api_wrapper.ts`
 
-Once compiler_api.tuff is compiled to `.mjs`, update the wrapper:
+The wrapper now imports the prebuilt selfhost modules directly:
 
 ```typescript
 export async function compileCode(
   entryCode: string,
   modules: ModuleStore
 ): Promise<CompileResult> {
-  const compilerApi = await import("./selfhost/prebuilt/compiler_api.mjs");
-  const result = compilerApi.compile_code(
-    entryCode,
-    (path) => modules[path] || ""
-  );
-  return {
-    success: result.isOk(),
-    code: result.code,
-    diagnostics: result.diagnostics,
-  };
+  const tuffcLib = await import("selfhost/prebuilt/tuffc_lib.mjs");
+  const [outRelPaths, jsOutputs] = tuffcLib.compile_code(entryCode, (p) => modules[p] || "");
+  return { success: true, outRelPaths, jsOutputs };
 }
 ```
 
@@ -176,12 +153,11 @@ if (!result.success) {
 // result.code is the JS output
 ```
 
-**Benefits**:
+**Benefits** (incremental):
 
-- No disk I/O
-- Tests run in parallel without contention
-- 10-50x faster
-- Cleaner test output
+- In-memory API tests no longer need stage2 builds or `.dist/` staging
+- Fewer moving parts per test (no runtime copying)
+- Cleaner, more direct tests of the pure APIs
 
 ---
 
@@ -189,9 +165,9 @@ if (!result.success) {
 
 - [ ] `npm run test` passes
 - [ ] `npm run test:verbose` passes
-- [ ] No `.dist/` directory created during tests
-- [ ] Tests complete in <20 seconds (vs. current ~40s)
-- [ ] No regressions in error messages or diagnostics
+- [ ] In-memory API tests do not require `.dist/` staging
+- [ ] `npm run build:selfhost-prebuilt` produces up-to-date `selfhost/prebuilt/`
+- [ ] `editors/vscode/scripts/sync-prebuilt.mjs` keeps extension prebuilt in sync
 
 ---
 

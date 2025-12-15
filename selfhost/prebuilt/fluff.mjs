@@ -1,7 +1,7 @@
 // compiled by selfhost tuffc
-import { println, stringLen, stringCharCodeAt } from "./rt/stdlib.mjs";
+import { println, stringLen, stringCharCodeAt, readTextFile } from "./rt/stdlib.mjs";
 import { vec_len, vec_get } from "./rt/vec.mjs";
-import { fluff_project } from "./tuffc_lib.mjs";
+import { fluff_project_with_reader } from "./tuffc_lib.mjs";
 import { set_fluff_options, set_fluff_complexity_options, set_fluff_file_size_options } from "./analyzer.mjs";
 import { load_fluff_config } from "./build_config.mjs";
 import { set_diagnostics_format, has_project_errors, reset_project_errors } from "./util/diagnostics.mjs";
@@ -52,7 +52,7 @@ const cfg = load_fluff_config(inPath);
 set_fluff_options(cfg.unusedLocals, cfg.unusedParams);
 set_fluff_complexity_options(cfg.complexity, cfg.complexityThreshold);
 set_fluff_file_size_options(cfg.maxFileLines, cfg.maxFileLinesThreshold);
-fluff_project(inPath);
+fluff_project_with_reader(inPath, readTextFile);
 if (has_project_errors()) {
 return 1;
 }

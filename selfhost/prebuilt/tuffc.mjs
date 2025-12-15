@@ -1,7 +1,7 @@
 // compiled by selfhost tuffc
-import { println, stringLen, stringCharCodeAt } from "./rt/stdlib.mjs";
-import { vec_len, vec_get } from "./rt/vec.mjs";
-import { compile_project } from "./tuffc_lib.mjs";
+import { println, stringLen, stringCharCodeAt, readTextFile, writeTextFile } from "./rt/stdlib.mjs";
+import { vec_len, vec_get, vec_push, vec_new } from "./rt/vec.mjs";
+import { compile_project_to_outputs } from "./tuffc_lib.mjs";
 import { set_fluff_options } from "./analyzer.mjs";
 import { load_fluff_config } from "./build_config.mjs";
 import { set_diagnostics_format } from "./util/diagnostics.mjs";
@@ -55,6 +55,13 @@ return 1;
 set_diagnostics_format(format);
 const cfg = load_fluff_config(inPath);
 set_fluff_options(cfg.unusedLocals, cfg.unusedParams);
-compile_project(inPath, outPath);
+const r = compile_project_to_outputs(inPath, outPath, readTextFile);
+const outFiles = r[0];
+const jsOutputs = r[1];
+let oi = 0;
+while (oi < vec_len(outFiles)) {
+writeTextFile(vec_get(outFiles, oi), vec_get(jsOutputs, oi));
+oi = oi + 1;
+}
 return 0;
 }
