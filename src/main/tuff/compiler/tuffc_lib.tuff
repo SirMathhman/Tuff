@@ -80,7 +80,7 @@ from parsing::expr_stmt use {
   parse_expr_ast
 };
 
-from parsing::decls use {
+from parsing::decls_legacy use {
   ParsedImports,
   ParsedFn,
   parse_imports,
@@ -104,7 +104,8 @@ from parsing::decls use {
   parse_fn_decl_ast2,
   parse_class_fn_decl_ast2,
   parse_struct_decl_ast,
-  parse_type_union_decl_ast
+  parse_type_union_decl_ast,
+  parse_type_params_list_ast
 };
 
 from ast use {
@@ -115,7 +116,8 @@ from ast use {
   decl_let_typed
 };
 
-from emit::ast_js use { emit_decl_js, set_current_file_path, emit_runtime_vec_imports_js, decls_needs_vec_rt };
+from emit::ast_js use { emit_decl_js };
+from emit::emit_helpers use { set_current_file_path, emit_runtime_vec_imports_js, decls_needs_vec_rt };
 
 from analyzer use { analyze_program, analyze_program_with_fns, mk_fn_sig, check_file_size };
 

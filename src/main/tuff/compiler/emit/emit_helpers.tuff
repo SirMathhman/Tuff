@@ -1,0 +1,323 @@
+// Emit helpers: runtime checks and path utilities for JS emission.
+//
+// This module provides helper functions used by ast_js.tuff:
+// - Vec runtime dependency detection (*_needs_vec_rt functions)
+// - Path normalization and relative import calculation
+// - String escaping for JS literals
+
+extern from rt::stdlib use { stringLen, stringCharAt, stringFromChar, stringSlice };
+extern from rt::vec use { vec_new, vec_push, vec_len, vec_get };
+
+let mut __current_file_path = "";
+
+out fn set_current_file_path(path: String) : Void => {
+  __current_file_path = path;
+}
+
+out fn get_current_file_path() : String => __current_file_path
+
+// Runtime vec helpers used by emitted JS (e.g. vec literals, indexing).
+// We import them under internal aliases to avoid collisions with user code.
+out fn emit_runtime_vec_imports_js() : String => {
+  let importPath = rel_import_path("rt/vec.mjs");
+  "import { vec_new as __tuff_vec_new, vec_push as __tuff_vec_push, vec_get as __tuff_vec_get, vec_set as __tuff_vec_set } from \"" + importPath + "\";\n"
+}
+
+// ------------------------------------------------------------
+// Vec runtime dependency detection
+// ------------------------------------------------------------
+
+out fn expr_needs_vec_rt(e: Expr) : Bool => {
+  // True when emitting this expression will reference __tuff_vec_* helpers.
+  if (e.tag == "EVecLit") { yield true; }
+  if (e.tag == "EIndex") { yield true; }
+
+  if (e.tag == "EUnary") { yield expr_needs_vec_rt(e.expr); }
+
+  if (e.tag == "EBinary") {
+    if (expr_needs_vec_rt(e.left)) { yield true; }
+    yield expr_needs_vec_rt(e.right);
+  }
+
+  if (e.tag == "ECall") {
+    if (expr_needs_vec_rt(e.callee)) { yield true; }
+    let mut i = 0;
+    while (i < vec_len(e.args)) {
+      if (expr_needs_vec_rt(vec_get(e.args, i))) { yield true; }
+      i = i + 1;
+    }
+    yield false;
+  }
+
+  if (e.tag == "EIf") {
+    if (expr_needs_vec_rt(e.cond)) { yield true; }
+    if (expr_needs_vec_rt(e.thenExpr)) { yield true; }
+    yield expr_needs_vec_rt(e.elseExpr);
+  }
+
+  if (e.tag == "EBlock") {
+    let mut i = 0;
+    while (i < vec_len(e.body)) {
+      if (stmt_needs_vec_rt(vec_get(e.body, i))) { yield true; }
+      i = i + 1;
+    }
+    yield expr_needs_vec_rt(e.tail);
+  }
+
+  if (e.tag == "ELambda") {
+    // Body may be an expr or an EBlock.
+    yield expr_needs_vec_rt(e.body);
+  }
+
+  if (e.tag == "EStructLit") {
+    if (expr_needs_vec_rt(e.nameExpr)) { yield true; }
+    let mut i = 0;
+    while (i < vec_len(e.values)) {
+      if (expr_needs_vec_rt(vec_get(e.values, i))) { yield true; }
+      i = i + 1;
+    }
+    yield false;
+  }
+
+  if (e.tag == "ETupleLit") {
+    let mut i = 0;
+    while (i < vec_len(e.items)) {
+      if (expr_needs_vec_rt(vec_get(e.items, i))) { yield true; }
+      i = i + 1;
+    }
+    yield false;
+  }
+
+  if (e.tag == "ETupleIndex") { yield expr_needs_vec_rt(e.base); }
+  if (e.tag == "EField") { yield expr_needs_vec_rt(e.base); }
+
+  if (e.tag == "EMatch") {
+    if (expr_needs_vec_rt(e.scrut)) { yield true; }
+    let mut i = 0;
+    while (i < vec_len(e.arms)) {
+      let arm = vec_get(e.arms, i);
+      if (expr_needs_vec_rt(arm.expr)) { yield true; }
+      i = i + 1;
+    }
+    yield false;
+  }
+
+  // Leaf nodes / not currently relevant.
+  false
+}
+
+out fn stmt_needs_vec_rt(s: Stmt) : Bool => {
+  if (s.tag == "SIndexAssign") { yield true; }
+
+  if (s.tag == "SLet") { yield expr_needs_vec_rt(s.init); }
+  if (s.tag == "SAssign") { yield expr_needs_vec_rt(s.value); }
+  if (s.tag == "SExpr") { yield expr_needs_vec_rt(s.expr); }
+  if (s.tag == "SYield") { yield expr_needs_vec_rt(s.expr); }
+  if (s.tag == "SWhile") {
+    if (expr_needs_vec_rt(s.cond)) { yield true; }
+    let mut i = 0;
+    while (i < vec_len(s.body)) {
+      if (stmt_needs_vec_rt(vec_get(s.body, i))) { yield true; }
+      i = i + 1;
+    }
+    yield false;
+  }
+  if (s.tag == "SIf") {
+    if (expr_needs_vec_rt(s.cond)) { yield true; }
+    let mut i = 0;
+    while (i < vec_len(s.thenBody)) {
+      if (stmt_needs_vec_rt(vec_get(s.thenBody, i))) { yield true; }
+      i = i + 1;
+    }
+    if (s.hasElse) {
+      i = 0;
+      while (i < vec_len(s.elseBody)) {
+        if (stmt_needs_vec_rt(vec_get(s.elseBody, i))) { yield true; }
+        i = i + 1;
+      }
+    }
+    yield false;
+  }
+  if (s.tag == "SFieldAssign") {
+    if (expr_needs_vec_rt(s.base)) { yield true; }
+    yield expr_needs_vec_rt(s.value);
+  }
+
+  false
+}
+
+out fn decl_needs_vec_rt(d: Decl) : Bool => {
+  if (d.tag == "DLet") { yield expr_needs_vec_rt(d.init); }
+  if (d.tag == "DFn") {
+    let mut i = 0;
+    while (i < vec_len(d.body)) {
+      if (stmt_needs_vec_rt(vec_get(d.body, i))) { yield true; }
+      i = i + 1;
+    }
+    yield expr_needs_vec_rt(d.tail);
+  }
+  if (d.tag == "DClassFn") {
+    let mut i = 0;
+    while (i < vec_len(d.body)) {
+      if (stmt_needs_vec_rt(vec_get(d.body, i))) { yield true; }
+      i = i + 1;
+    }
+    yield false;
+  }
+  if (d.tag == "DModule") {
+    let mut i = 0;
+    while (i < vec_len(d.decls)) {
+      if (decl_needs_vec_rt(vec_get(d.decls, i))) { yield true; }
+      i = i + 1;
+    }
+    yield false;
+  }
+  false
+}
+
+out fn decls_needs_vec_rt(decls: Vec<Decl>) : Bool => {
+  let mut i = 0;
+  while (i < vec_len(decls)) {
+    if (decl_needs_vec_rt(vec_get(decls, i))) { yield true; }
+    i = i + 1;
+  }
+  false
+}
+
+// ------------------------------------------------------------
+// Path utilities
+// ------------------------------------------------------------
+
+fn normalize_path_seps(p: String) : String => {
+  // Normalize Windows path separators to '/' so relative-path logic is stable.
+  let mut out = "";
+  let mut i = 0;
+  while (i < stringLen(p)) {
+    let ch = stringCharAt(p, i);
+    if (ch == 92) { // '\\'
+      out = out + "/";
+      i = i + 1;
+      continue;
+    }
+    out = out + stringFromChar(ch);
+    i = i + 1;
+  }
+  out
+}
+
+fn split_path(p: String) => {
+  // Split on '/'. Empty segments are skipped.
+  let mut segs = vec_new();
+  let mut start = 0;
+  let mut i = 0;
+  while (i <= stringLen(p)) {
+    if (i == stringLen(p) || stringCharAt(p, i) == 47) {
+      if (i > start) {
+        vec_push(segs, stringSlice(p, start, i));
+      }
+      start = i + 1;
+      i = i + 1;
+      continue;
+    }
+    i = i + 1;
+  }
+  segs
+}
+
+out fn rel_import_path(targetRelPath: String) : String => {
+  // Compute a relative import specifier from the current module path to target.
+  // Both paths are expected to be project-relative like:
+  //   __current_file_path = "util/diagnostics.tuff"
+  //   targetRelPath       = "rt/stdlib.mjs" or "util/lexing.mjs"
+  let from = normalize_path_seps(__current_file_path);
+  let to = normalize_path_seps(targetRelPath);
+
+  let fromParts = split_path(from);
+  let toParts = split_path(to);
+
+  // Directory parts for "from" exclude the file name.
+  let mut fromDirLen = vec_len(fromParts) - 1;
+  if (vec_len(fromParts) == 0) { fromDirLen = 0; }
+
+  // Common prefix length.
+  let mut common = 0;
+  while (common < fromDirLen && common < vec_len(toParts)) {
+    if (vec_get(fromParts, common) != vec_get(toParts, common)) { break; }
+    common = common + 1;
+  }
+
+  // How many dirs to go up from fromDir.
+  let mut up = fromDirLen - common;
+  let mut prefix = "";
+  if (up == 0) {
+    prefix = "./";
+  } else {
+    while (up > 0) {
+      prefix = prefix + "../";
+      up = up - 1;
+    }
+  }
+
+  // Join remaining target parts.
+  let mut rest = "";
+  let mut i = common;
+  while (i < vec_len(toParts)) {
+    if (stringLen(rest) == 0) { rest = vec_get(toParts, i); }
+    else { rest = rest + "/" + vec_get(toParts, i); }
+    i = i + 1;
+  }
+
+  prefix + rest
+}
+
+// ------------------------------------------------------------
+// String escaping
+// ------------------------------------------------------------
+
+out fn escape_js_string(s: String) : String => {
+  // Minimal JS string escaping for double-quoted literals.
+  // (More escapes can be added as the AST grows.)
+  let mut out = "";
+  let mut i = 0;
+  while (i < stringLen(s)) {
+    let ch = stringCharAt(s, i);
+    // '"'
+    if (ch == 34) {
+      out = out + "\\\"";
+      i = i + 1;
+      continue;
+    }
+
+    // '\\'
+    if (ch == 92) {
+      out = out + "\\\\";
+      i = i + 1;
+      continue;
+    }
+
+    // '\n'
+    if (ch == 10) {
+      out = out + "\\n";
+      i = i + 1;
+      continue;
+    }
+
+    // '\r'
+    if (ch == 13) {
+      out = out + "\\r";
+      i = i + 1;
+      continue;
+    }
+
+    // '\t'
+    if (ch == 9) {
+      out = out + "\\t";
+      i = i + 1;
+      continue;
+    }
+
+    out = out + stringFromChar(ch);
+    i = i + 1;
+  }
+  out
+}

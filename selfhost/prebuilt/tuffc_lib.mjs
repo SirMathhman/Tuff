@@ -7,10 +7,11 @@ import { ParsedNumber, ParsedIdent, ParsedBool, parse_keyword, parse_number, par
 import { ParsedType, parse_type_expr, skip_angle_brackets, skip_type_expr } from "./parsing/types.mjs";
 import { ParsedExpr, ParsedMain, ParsedStmt, ParsedParams, parse_expr, parse_stmt, parse_main_body, parse_mut_opt, is_assign_stmt_start, is_field_assign_stmt_start, is_index_assign_stmt_start } from "./parsing/expr_stmt.mjs";
 import { ParsedExprAst, parse_expr_ast } from "./parsing/expr_stmt.mjs";
-import { ParsedImports, ParsedFn, parse_imports, parse_extern_decl, parse_module_decl, parse_fn_decl2, parse_class_fn_decl2, parse_struct_decl, parse_type_union_decl, parse_param_list, parse_fn_decl_named, parse_fn_decl } from "./parsing/decls.mjs";
-import { ParsedDeclAst, ParsedDeclsAst, parse_imports_ast, parse_extern_decl_ast, parse_module_decl_ast, parse_fn_decl_ast2, parse_class_fn_decl_ast2, parse_struct_decl_ast, parse_type_union_decl_ast } from "./parsing/decls.mjs";
+import { ParsedImports, ParsedFn, parse_imports, parse_extern_decl, parse_module_decl, parse_fn_decl2, parse_class_fn_decl2, parse_struct_decl, parse_type_union_decl, parse_param_list, parse_fn_decl_named, parse_fn_decl } from "./parsing/decls_legacy.mjs";
+import { ParsedDeclAst, ParsedDeclsAst, parse_imports_ast, parse_extern_decl_ast, parse_module_decl_ast, parse_fn_decl_ast2, parse_class_fn_decl_ast2, parse_struct_decl_ast, parse_type_union_decl_ast, parse_type_params_list_ast } from "./parsing/decls.mjs";
 import { span, span_start, span_end, decl_let, decl_let_typed } from "./ast.mjs";
-import { emit_decl_js, set_current_file_path, emit_runtime_vec_imports_js, decls_needs_vec_rt } from "./emit/ast_js.mjs";
+import { emit_decl_js } from "./emit/ast_js.mjs";
+import { set_current_file_path, emit_runtime_vec_imports_js, decls_needs_vec_rt } from "./emit/emit_helpers.mjs";
 import { analyze_program, analyze_program_with_fns, mk_fn_sig, check_file_size } from "./analyzer.mjs";
 import { ParsedProgramWithTrivia, parse_program_with_trivia } from "./util/formatting.mjs";
 export function kw_at(src, i, kw) {
