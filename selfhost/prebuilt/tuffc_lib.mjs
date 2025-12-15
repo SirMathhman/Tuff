@@ -1,7 +1,7 @@
 // compiled by selfhost tuffc
 import { println, panic, readTextFile, writeTextFile, pathDirname, pathJoin, stringLen, stringSlice, stringCharCodeAt, stringFromCharCode } from "./rt/stdlib.mjs";
 import { vec_new, vec_len, vec_push, vec_get } from "./rt/vec.mjs";
-import { set_current_file, panic_at, reset_errors, reset_warnings, panic_if_errors, emit_warnings, reset_struct_defs, add_struct_def, find_struct_fields, is_identifier_too_short, warn_short_identifier, get_error_infos, get_warning_infos, get_current_file, line_col_at, DiagInfo, LineCol } from "./util/diagnostics.mjs";
+import { set_current_file, panic_at, reset_errors, reset_warnings, panic_if_errors, emit_errors, emit_warnings, reset_struct_defs, add_struct_def, find_struct_fields, is_identifier_too_short, warn_short_identifier, get_error_infos, get_warning_infos, get_current_file, line_col_at, DiagInfo, LineCol } from "./util/diagnostics.mjs";
 import { is_digit, is_space, is_ident_start, is_ident_part, skip_ws, starts_with_at } from "./util/lexing.mjs";
 import { ParsedNumber, ParsedIdent, ParsedBool, parse_keyword, parse_number, parse_ident, parse_module_path, module_path_to_relpath, parse_optional_semicolon, parse_required_semicolon } from "./parsing/primitives.mjs";
 import { ParsedType, parse_type_expr, skip_angle_brackets, skip_type_expr } from "./parsing/types.mjs";
@@ -11,7 +11,7 @@ import { ParsedImports, ParsedFn, parse_imports, parse_extern_decl, parse_module
 import { ParsedDeclAst, ParsedDeclsAst, parse_imports_ast, parse_extern_decl_ast, parse_module_decl_ast, parse_fn_decl_ast2, parse_class_fn_decl_ast2, parse_struct_decl_ast, parse_type_union_decl_ast } from "./parsing/decls.mjs";
 import { span, span_start, span_end, decl_let, decl_let_typed } from "./ast.mjs";
 import { emit_decl_js, set_current_file_path, emit_runtime_vec_imports_js, decls_needs_vec_rt } from "./emit/ast_js.mjs";
-import { analyze_program, analyze_program_with_fns, mk_fn_sig } from "./analyzer.mjs";
+import { analyze_program, analyze_program_with_fns, mk_fn_sig, check_file_size } from "./analyzer.mjs";
 import { ParsedProgramWithTrivia, parse_program_with_trivia } from "./util/formatting.mjs";
 export function kw_at(src, i, kw) {
 if (!starts_with_at(src, i, kw)) {
@@ -190,6 +190,7 @@ let i = 0;
 reset_struct_defs();
 reset_errors();
 reset_warnings();
+check_file_size(src);
 const decls = vec_new();
 while (true) {
 if (is_extern_decl_start(src, i)) {

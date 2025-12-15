@@ -7,6 +7,8 @@ let __fluff_unused_locals = 0;
 let __fluff_unused_params = 0;
 let __fluff_complexity = 0;
 let __fluff_complexity_threshold = 15;
+let __fluff_max_file_lines = 0;
+let __fluff_max_file_lines_threshold = 500;
 export function set_fluff_options(unusedLocalsSeverity, unusedParamsSeverity) {
 __fluff_unused_locals = unusedLocalsSeverity;
 __fluff_unused_params = unusedParamsSeverity;
@@ -17,6 +19,11 @@ __fluff_complexity = complexitySeverity;
 __fluff_complexity_threshold = (threshold > 0 ? threshold : 15);
 return undefined;
 }
+export function set_fluff_file_size_options(severity, threshold) {
+__fluff_max_file_lines = severity;
+__fluff_max_file_lines_threshold = (threshold > 0 ? threshold : 500);
+return undefined;
+}
 export function fluff_emit_at(src, pos, severity, msg) {
 if (severity == 1) {
 warn_at(src, pos, msg);
@@ -25,6 +32,34 @@ return;
 if (severity == 2) {
 error_at(src, pos, msg);
 return;
+}
+return undefined;
+}
+export function count_lines(src) {
+if (stringLen(src) == 0) {
+return 0;
+}
+let count = 0;
+let i = 0;
+while (i < stringLen(src)) {
+if (stringCharCodeAt(src, i) == 10) {
+count = count + 1;
+}
+i = i + 1;
+}
+if (stringCharCodeAt(src, stringLen(src) - 1) != 10) {
+count = count + 1;
+}
+return count;
+}
+export function check_file_size(src) {
+if (__fluff_max_file_lines == 0) {
+return;
+}
+const lineCount = count_lines(src);
+if (lineCount > __fluff_max_file_lines_threshold) {
+const msg = "file has " + lineCount + " lines, exceeds limit of " + __fluff_max_file_lines_threshold;
+fluff_emit_at(src, 0, __fluff_max_file_lines, msg);
 }
 return undefined;
 }

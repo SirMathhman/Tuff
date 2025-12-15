@@ -22,6 +22,7 @@ from util::diagnostics use {
   reset_errors,
   reset_warnings,
   panic_if_errors,
+  emit_errors,
   emit_warnings,
   reset_struct_defs,
   add_struct_def,
@@ -116,7 +117,7 @@ from ast use {
 
 from emit::ast_js use { emit_decl_js, set_current_file_path, emit_runtime_vec_imports_js, decls_needs_vec_rt };
 
-from analyzer use { analyze_program, analyze_program_with_fns, mk_fn_sig };
+from analyzer use { analyze_program, analyze_program_with_fns, mk_fn_sig, check_file_size };
 
 // Whitespace-preserving tooling support (formatter/refactors).
 from util::formatting use { ParsedProgramWithTrivia, parse_program_with_trivia };
@@ -340,6 +341,9 @@ fn lint_tiny2_with_imported_fns(src: String, requireMain: Bool, exportAll: Bool,
   reset_struct_defs();
   reset_errors();
   reset_warnings();
+
+  // Check file size first (before parsing).
+  check_file_size(src);
 
   let decls = vec_new();
 

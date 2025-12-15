@@ -19,6 +19,9 @@ let mut __tuffc_errors = vec_new();
 // Warnings do not fail compilation; they are printed after successful analysis.
 let mut __tuffc_warnings = vec_new();
 
+// Cumulative error count for project-level linting (not reset per file).
+let mut __tuffc_project_error_count = 0;
+
 // Structured diagnostics for LSP integration.
 // Each entry is a DiagInfo with line, col, start, end, msg, help.
 let mut __tuffc_error_infos = vec_new();
@@ -56,7 +59,15 @@ out fn reset_warnings() : Void => {
   __tuffc_warning_infos = vec_new();
 }
 
+out fn reset_project_errors() : Void => {
+  __tuffc_project_error_count = 0;
+}
+
 fn errors_len() : I32 => vec_len(__tuffc_errors)
+
+out fn has_errors() : Bool => vec_len(__tuffc_errors) > 0
+
+out fn has_project_errors() : Bool => __tuffc_project_error_count > 0
 
 fn errors_join() : String => {
   let mut out = "";
@@ -122,6 +133,22 @@ out fn panic_if_errors() : Void => {
       panic(diag_json("error", errors_join()));
     }
     panic(errors_join());
+  }
+}
+
+out fn emit_errors() : Void => {
+  // Print errors without panicking. Used by linting mode (fluff).
+  // Also update the project-level error count for final exit code.
+  __tuffc_project_error_count = __tuffc_project_error_count + vec_len(__tuffc_errors);
+  let mut i = 0;
+  while (i < vec_len(__tuffc_errors)) {
+    let e = vec_get(__tuffc_errors, i);
+    if (__tuffc_diag_format == "json") {
+      println(diag_json("error", e));
+    } else {
+      println(e);
+    }
+    i = i + 1;
   }
 }
 

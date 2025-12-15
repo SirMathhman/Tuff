@@ -88,6 +88,8 @@ let mut __fluff_unused_locals = 0;
 let mut __fluff_unused_params = 0;
 let mut __fluff_complexity = 0;
 let mut __fluff_complexity_threshold = 15;
+let mut __fluff_max_file_lines = 0;
+let mut __fluff_max_file_lines_threshold = 500;
 
 out fn set_fluff_options(unusedLocalsSeverity: I32, unusedParamsSeverity: I32) : Void => {
   __fluff_unused_locals = unusedLocalsSeverity;
@@ -99,10 +101,38 @@ out fn set_fluff_complexity_options(complexitySeverity: I32, threshold: I32) : V
   __fluff_complexity_threshold = if (threshold > 0) threshold else 15;
 }
 
+out fn set_fluff_file_size_options(severity: I32, threshold: I32) : Void => {
+  __fluff_max_file_lines = severity;
+  __fluff_max_file_lines_threshold = if (threshold > 0) threshold else 500;
+}
+
 fn fluff_emit_at(src: String, pos: I32, severity: I32, msg: String) : Void => {
   if (severity == 1) { warn_at(src, pos, msg); yield; }
   if (severity == 2) { error_at(src, pos, msg); yield; }
   // severity 0 (off) or unknown => ignore
+}
+
+fn count_lines(src: String) : I32 => {
+  if (stringLen(src) == 0) { yield 0; }
+  let mut count = 0;
+  let mut i = 0;
+  while (i < stringLen(src)) {
+    if (stringCharCodeAt(src, i) == 10) { count = count + 1; }
+    i = i + 1;
+  }
+  // If the file doesn't end with a newline, add 1 for the last line.
+  // If it ends with a newline, the count of newlines IS the line count.
+  if (stringCharCodeAt(src, stringLen(src) - 1) != 10) { count = count + 1; }
+  count
+}
+
+out fn check_file_size(src: String) : Void => {
+  if (__fluff_max_file_lines == 0) { yield; }
+  let lineCount = count_lines(src);
+  if (lineCount > __fluff_max_file_lines_threshold) {
+    let msg = "file has " + lineCount + " lines, exceeds limit of " + __fluff_max_file_lines_threshold;
+    fluff_emit_at(src, 0, __fluff_max_file_lines, msg);
+  }
 }
 
 fn this_struct_name(className: String) : String => "__This__" + className

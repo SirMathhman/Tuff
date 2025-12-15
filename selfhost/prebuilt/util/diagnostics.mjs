@@ -5,6 +5,7 @@ let __tuffc_current_file = "<input>";
 let __tuffc_diag_format = "human";
 let __tuffc_errors = vec_new();
 let __tuffc_warnings = vec_new();
+let __tuffc_project_error_count = 0;
 let __tuffc_error_infos = vec_new();
 let __tuffc_warning_infos = vec_new();
 let __tuffc_struct_defs = vec_new();
@@ -40,8 +41,18 @@ __tuffc_warnings = vec_new();
 __tuffc_warning_infos = vec_new();
 return undefined;
 }
+export function reset_project_errors() {
+__tuffc_project_error_count = 0;
+return undefined;
+}
 export function errors_len() {
 return vec_len(__tuffc_errors);
+}
+export function has_errors() {
+return vec_len(__tuffc_errors) > 0;
+}
+export function has_project_errors() {
+return __tuffc_project_error_count > 0;
 }
 export function errors_join() {
 let out = "";
@@ -106,6 +117,20 @@ if (__tuffc_diag_format == "json") {
 panic(diag_json("error", errors_join()));
 }
 panic(errors_join());
+}
+return undefined;
+}
+export function emit_errors() {
+__tuffc_project_error_count = __tuffc_project_error_count + vec_len(__tuffc_errors);
+let i = 0;
+while (i < vec_len(__tuffc_errors)) {
+const e = vec_get(__tuffc_errors, i);
+if (__tuffc_diag_format == "json") {
+println(diag_json("error", e));
+} else {
+println(e);
+}
+i = i + 1;
 }
 return undefined;
 }

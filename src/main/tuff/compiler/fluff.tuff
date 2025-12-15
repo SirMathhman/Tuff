@@ -7,9 +7,9 @@ extern from rt::stdlib use { println, stringLen, stringCharCodeAt };
 extern from rt::vec use { vec_len, vec_get };
 
 from tuffc_lib use { fluff_project };
-from analyzer use { set_fluff_options, set_fluff_complexity_options };
+from analyzer use { set_fluff_options, set_fluff_complexity_options, set_fluff_file_size_options };
 from build_config use { load_fluff_config };
-from util::diagnostics use { set_diagnostics_format };
+from util::diagnostics use { set_diagnostics_format, has_project_errors, reset_project_errors };
 
 fn print_usage() : Void => {
   println("usage: fluff [options] <in.tuff>");
@@ -56,11 +56,14 @@ fn main(argv: Vec<String>) => {
   }
 
   set_diagnostics_format(format);
+  reset_project_errors();
 
   let cfg = load_fluff_config(inPath);
   set_fluff_options(cfg.unusedLocals, cfg.unusedParams);
   set_fluff_complexity_options(cfg.complexity, cfg.complexityThreshold);
+  set_fluff_file_size_options(cfg.maxFileLines, cfg.maxFileLinesThreshold);
 
   fluff_project(inPath);
+  if (has_project_errors()) { yield 1; }
   0
 }
