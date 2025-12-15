@@ -170,7 +170,7 @@ The language design supports a rich type system, but the **current self-hosted b
 - For **lambdas**, parameter type annotations may be omitted; omitted parameter types are treated as `Unknown` during analysis.
 - The type name `Any` is **not supported** (there is no top/escape-hatch type). Using `Any` in a type annotation is a compile-time error.
 - The analyzer enforces type compatibility when it is safe to do so:
-  - Primitives (currently): `Bool`, `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32`, `U64`, `F32`, `F64`, `Char`, `String`, `Void`
+  - Primitives (currently): `Bool`, `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32`, `U64`, `F32`, `F64`, `Char`, `String`, `Void`, `Never`
   - User-declared `struct` types (field existence and (when annotated) field value types in struct literals)
 - Function call checking:
   - Arity is always checked for known functions.
@@ -191,6 +191,7 @@ The following primitive types are supported:
 - Character: `Char`
 - String: `String`
 - Void: `Void` (represents no value; used as return type for functions that don't produce a value)
+- Never: `Never` (bottom type; represents a computation that never returns, e.g. `panic()`)
 
 ```tuff
 let pi: F32 = 3.14159
@@ -201,6 +202,32 @@ fn doSomething() : Void => {
     // function that doesn't return a value
 }
 ```
+
+#### Never type (bottom type)
+
+`Never` is the bottom type representing computations that never return. Functions that always panic or loop infinitely can be annotated with `: Never` as their return type.
+
+The key property of `Never` is that it is **compatible with any type**. This enables patterns like:
+
+```tuff
+extern from rt::stdlib use { panic };
+
+fn get_value(opt: Bool) : I32 => {
+    if (!opt) { panic("no value"); }  // panic returns Never, which is compatible with I32
+    42
+}
+
+fn my_panic(msg: String) : Never => panic(msg)  // user-defined non-returning function
+```
+
+**Never absorption in if expressions**: When one branch of an `if` expression returns `Never`, the overall expression type is determined by the other branch:
+
+```tuff
+// then branch is Never, else branch is I32 => result is I32
+let x = if (!cond) { panic("error"); } else { 123 };
+```
+
+This allows idiomatic error handling where error paths call `panic` but the expression still type-checks correctly.
 
 #### `Char` is platform-agnostic (via extern)
 
