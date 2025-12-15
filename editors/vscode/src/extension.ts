@@ -29,6 +29,13 @@ export function activate(context: vscode.ExtensionContext) {
     synchronize: {
       fileEvents: vscode.workspace.createFileSystemWatcher("**/*.tuff"),
     },
+    initializationOptions: {
+      // The server is a separate Node process and cannot access VS Code APIs.
+      // Provide it an absolute path to the bundled prebuilt compiler.
+      prebuiltPath: context.asAbsolutePath(
+        path.join("prebuilt", "tuffc_lib.mjs")
+      ),
+    },
   };
 
   // Check if server exists before trying to start it

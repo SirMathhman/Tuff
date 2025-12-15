@@ -27,7 +27,13 @@ from util::diagnostics use {
   add_struct_def,
   find_struct_fields,
   is_identifier_too_short,
-  warn_short_identifier
+  warn_short_identifier,
+  get_error_infos,
+  get_warning_infos,
+  get_current_file,
+  line_col_at,
+  DiagInfo,
+  LineCol
 };
 
 from util::lexing use {
@@ -1265,4 +1271,150 @@ out fn fluff_project(entryPath: String) : Void => {
     oi = oi + 1;
   }
 }
+
+// ------------------------------------------------------------
+// LSP API: parse+analyze a single file and collect diagnostics
+// without panicking. Returns false if there are errors.
+// ------------------------------------------------------------
+
+out fn lsp_check_file(src: String, filePath: String) : Bool => {
+  // Reset per-file state.
+  reset_struct_defs();
+  reset_errors();
+  reset_warnings();
+  set_current_file(filePath);
+
+  let decls = vec_new();
+  let mut i = 0;
+
+  // zero or more extern declarations
+  while (true) {
+    let j = skip_ws(src, i);
+    if (starts_with_at(src, j, "extern")) {
+      let ex = parse_extern_decl_ast(src, i);
+      vec_push(decls, ex.decl);
+      i = ex.nextPos;
+      continue;
+    }
+    break;
+  }
+
+  // zero or more imports
+  let imps = parse_imports_ast(src, i);
+  let mut ii = 0;
+  while (ii < vec_len(imps.decls)) {
+    vec_push(decls, vec_get(imps.decls, ii));
+    ii = ii + 1;
+  }
+  i = imps.nextPos;
+
+  // zero or more module declarations
+  while (true) {
+    let j = skip_ws(src, i);
+    if (!starts_with_at(src, j, "module")) { break; }
+    let m = parse_module_decl_ast(src, i);
+    vec_push(decls, m.decl);
+    i = m.nextPos;
+  }
+
+  // zero or more type / struct declarations
+  while (true) {
+    let j = skip_ws(src, i);
+    if (starts_with_at(src, j, "module")) {
+      let m = parse_module_decl_ast(src, i);
+      vec_push(decls, m.decl);
+      i = m.nextPos;
+      continue;
+    }
+    if (starts_with_at(src, j, "type")) {
+      let td = parse_type_union_decl_ast(src, i, false);
+      vec_push(decls, td.decl);
+      i = td.nextPos;
+      continue;
+    }
+    if (starts_with_at(src, j, "struct")) {
+      let sd = parse_struct_decl_ast(src, i);
+      vec_push(decls, sd.decl);
+      i = sd.nextPos;
+      continue;
+    }
+    break;
+  }
+
+  // zero or more let statements
+  while (true) {
+    let j = skip_ws(src, i);
+    if (starts_with_at(src, j, "let")) {
+      let start = skip_ws(src, i);
+      i = parse_keyword(src, i, "let");
+      let mutOpt = parse_mut_opt(src, i);
+      i = mutOpt.nextPos;
+      let name = parse_ident(src, i);
+      i = name.nextPos;
+
+      let mut tyAnn = "";
+      let t0 = skip_ws(src, i);
+      if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 58) {
+        let _ty = parse_type_expr(src, t0 + 1);
+        tyAnn = _ty.v0;
+        i = _ty.v1;
+      }
+
+      i = parse_keyword(src, i, "=");
+      let expr = parse_expr_ast(src, i);
+      i = expr.nextPos;
+      i = parse_optional_semicolon(src, i);
+      if (tyAnn == "") {
+        vec_push(decls, decl_let(span(start, i), mutOpt.ok, name.text, expr.expr));
+      } else {
+        vec_push(decls, decl_let_typed(span(start, i), mutOpt.ok, name.text, tyAnn, expr.expr));
+      }
+      continue;
+    }
+    break;
+  }
+
+  // fns
+  while (true) {
+    let j = skip_ws(src, i);
+    if (starts_with_at(src, j, "fn")) {
+      let f = parse_fn_decl_ast2(src, i, false);
+      vec_push(decls, f.decl);
+      i = f.nextPos;
+      continue;
+    }
+    if (starts_with_at(src, j, "class")) {
+      let f = parse_class_fn_decl_ast2(src, i, false);
+      vec_push(decls, f.decl);
+      i = f.nextPos;
+      continue;
+    }
+    if (starts_with_at(src, j, "out")) {
+      let k0 = parse_keyword(src, i, "out");
+      let j2 = skip_ws(src, k0);
+      if (starts_with_at(src, j2, "class")) {
+        let f = parse_class_fn_decl_ast2(src, i, false);
+        vec_push(decls, f.decl);
+        i = f.nextPos;
+        continue;
+      }
+      let f = parse_fn_decl_ast2(src, i, false);
+      vec_push(decls, f.decl);
+      i = f.nextPos;
+      continue;
+    }
+    break;
+  }
+
+  // Run analyzer (won't panic, just collects errors)
+  analyze_program(src, decls);
+
+  // Return true if no errors
+  vec_len(get_error_infos()) == 0
+}
+
+// Re-export diagnostic accessors for TypeScript interop.
+out fn lsp_get_errors() : Vec<DiagInfo> => get_error_infos()
+out fn lsp_get_warnings() : Vec<DiagInfo> => get_warning_infos()
+out fn lsp_line_col(src: String, offset: I32) : LineCol => line_col_at(src, offset)
 	

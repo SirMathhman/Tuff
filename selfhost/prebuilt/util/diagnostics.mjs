@@ -5,12 +5,17 @@ let __tuffc_current_file = "<input>";
 let __tuffc_diag_format = "human";
 let __tuffc_errors = vec_new();
 let __tuffc_warnings = vec_new();
+let __tuffc_error_infos = vec_new();
+let __tuffc_warning_infos = vec_new();
 let __tuffc_struct_defs = vec_new();
 export function LineCol(line, col) {
 return { line: line, col: col };
 }
 export function StructDef(name, fields) {
 return { name: name, fields: fields };
+}
+export function DiagInfo(line, col, start, end, msg, help) {
+return { line: line, col: col, start: start, end: end, msg: msg, help: help };
 }
 export function set_current_file(path) {
 __tuffc_current_file = path;
@@ -27,10 +32,12 @@ return undefined;
 }
 export function reset_errors() {
 __tuffc_errors = vec_new();
+__tuffc_error_infos = vec_new();
 return undefined;
 }
 export function reset_warnings() {
 __tuffc_warnings = vec_new();
+__tuffc_warning_infos = vec_new();
 return undefined;
 }
 export function errors_len() {
@@ -292,6 +299,8 @@ if (vec_len(__tuffc_errors) >= 50) {
 return;
 }
 vec_push(__tuffc_errors, format_span_help(src, start, end, msg, help));
+const lc = line_col_at(src, start);
+vec_push(__tuffc_error_infos, DiagInfo(lc.line, lc.col, start, end, msg, help));
 return undefined;
 }
 export function warn_span_help(src, start, end, msg, help) {
@@ -300,6 +309,8 @@ return;
 }
 const s = format_span_help(src, start, end, msg, help);
 vec_push(__tuffc_warnings, replace_error_label_with_warning(s));
+const lc = line_col_at(src, start);
+vec_push(__tuffc_warning_infos, DiagInfo(lc.line, lc.col, start, end, msg, help));
 return undefined;
 }
 export function panic_at_help(src, i, msg, help) {
@@ -356,4 +367,13 @@ return false;
 }
 export function warn_short_identifier(src, startPos, name) {
 return undefined;
+}
+export function get_error_infos() {
+return __tuffc_error_infos;
+}
+export function get_warning_infos() {
+return __tuffc_warning_infos;
+}
+export function get_current_file() {
+return __tuffc_current_file;
 }

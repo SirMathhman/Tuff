@@ -1,7 +1,7 @@
 // compiled by selfhost tuffc
 import { println, panic, readTextFile, writeTextFile, pathDirname, pathJoin, stringLen, stringSlice, stringCharCodeAt, stringFromCharCode } from "./rt/stdlib.mjs";
 import { vec_new, vec_len, vec_push, vec_get } from "./rt/vec.mjs";
-import { set_current_file, panic_at, reset_errors, reset_warnings, panic_if_errors, emit_warnings, reset_struct_defs, add_struct_def, find_struct_fields, is_identifier_too_short, warn_short_identifier } from "./util/diagnostics.mjs";
+import { set_current_file, panic_at, reset_errors, reset_warnings, panic_if_errors, emit_warnings, reset_struct_defs, add_struct_def, find_struct_fields, is_identifier_too_short, warn_short_identifier, get_error_infos, get_warning_infos, get_current_file, line_col_at, DiagInfo, LineCol } from "./util/diagnostics.mjs";
 import { is_digit, is_space, is_ident_start, is_ident_part, skip_ws, starts_with_at } from "./util/lexing.mjs";
 import { ParsedNumber, ParsedIdent, ParsedBool, parse_keyword, parse_number, parse_ident, parse_module_path, module_path_to_relpath, parse_optional_semicolon, parse_required_semicolon } from "./parsing/primitives.mjs";
 import { ParsedType, parse_type_expr, skip_angle_brackets, skip_type_expr } from "./parsing/types.mjs";
@@ -1077,4 +1077,130 @@ lint_tiny2_with_imported_fns(src, path == entryPath, isCompilerBuild, importedFn
 oi = oi + 1;
 }
 return undefined;
+}
+export function lsp_check_file(src, filePath) {
+reset_struct_defs();
+reset_errors();
+reset_warnings();
+set_current_file(filePath);
+const decls = vec_new();
+let i = 0;
+while (true) {
+const j = skip_ws(src, i);
+if (starts_with_at(src, j, "extern")) {
+const ex = parse_extern_decl_ast(src, i);
+vec_push(decls, ex.decl);
+i = ex.nextPos;
+continue;
+}
+break;
+}
+const imps = parse_imports_ast(src, i);
+let ii = 0;
+while (ii < vec_len(imps.decls)) {
+vec_push(decls, vec_get(imps.decls, ii));
+ii = ii + 1;
+}
+i = imps.nextPos;
+while (true) {
+const j = skip_ws(src, i);
+if (!starts_with_at(src, j, "module")) {
+break;
+}
+const m = parse_module_decl_ast(src, i);
+vec_push(decls, m.decl);
+i = m.nextPos;
+}
+while (true) {
+const j = skip_ws(src, i);
+if (starts_with_at(src, j, "module")) {
+const m = parse_module_decl_ast(src, i);
+vec_push(decls, m.decl);
+i = m.nextPos;
+continue;
+}
+if (starts_with_at(src, j, "type")) {
+const td = parse_type_union_decl_ast(src, i, false);
+vec_push(decls, td.decl);
+i = td.nextPos;
+continue;
+}
+if (starts_with_at(src, j, "struct")) {
+const sd = parse_struct_decl_ast(src, i);
+vec_push(decls, sd.decl);
+i = sd.nextPos;
+continue;
+}
+break;
+}
+while (true) {
+const j = skip_ws(src, i);
+if (starts_with_at(src, j, "let")) {
+const start = skip_ws(src, i);
+i = parse_keyword(src, i, "let");
+const mutOpt = parse_mut_opt(src, i);
+i = mutOpt.nextPos;
+const name = parse_ident(src, i);
+i = name.nextPos;
+let tyAnn = "";
+const t0 = skip_ws(src, i);
+if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 58) {
+const _ty = parse_type_expr(src, t0 + 1);
+tyAnn = _ty.v0;
+i = _ty.v1;
+}
+i = parse_keyword(src, i, "=");
+const expr = parse_expr_ast(src, i);
+i = expr.nextPos;
+i = parse_optional_semicolon(src, i);
+if (tyAnn == "") {
+vec_push(decls, decl_let(span(start, i), mutOpt.ok, name.text, expr.expr));
+} else {
+vec_push(decls, decl_let_typed(span(start, i), mutOpt.ok, name.text, tyAnn, expr.expr));
+}
+continue;
+}
+break;
+}
+while (true) {
+const j = skip_ws(src, i);
+if (starts_with_at(src, j, "fn")) {
+const f = parse_fn_decl_ast2(src, i, false);
+vec_push(decls, f.decl);
+i = f.nextPos;
+continue;
+}
+if (starts_with_at(src, j, "class")) {
+const f = parse_class_fn_decl_ast2(src, i, false);
+vec_push(decls, f.decl);
+i = f.nextPos;
+continue;
+}
+if (starts_with_at(src, j, "out")) {
+const k0 = parse_keyword(src, i, "out");
+const j2 = skip_ws(src, k0);
+if (starts_with_at(src, j2, "class")) {
+const f = parse_class_fn_decl_ast2(src, i, false);
+vec_push(decls, f.decl);
+i = f.nextPos;
+continue;
+}
+const f = parse_fn_decl_ast2(src, i, false);
+vec_push(decls, f.decl);
+i = f.nextPos;
+continue;
+}
+break;
+}
+analyze_program(src, decls);
+return vec_len(get_error_infos()) == 0;
+}
+export function lsp_get_errors() {
+return get_error_infos();
+}
+export function lsp_get_warnings() {
+return get_warning_infos();
+}
+export function lsp_line_col(src, offset) {
+return line_col_at(src, offset);
 }
