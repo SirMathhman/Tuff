@@ -308,12 +308,20 @@ documents.onDidClose((event) => {
 
 // Go-to-definition handler
 connection.onDefinition((params: DefinitionParams): Location | null => {
+  connection.console.log(`[DEBUG] onDefinition called`);
+  connection.console.log(`[DEBUG]   uri: ${params.textDocument.uri}`);
+  connection.console.log(
+    `[DEBUG]   position: line=${params.position.line}, character=${params.position.character}`
+  );
+
   if (!compilerLoaded || !tuffcLib) {
+    connection.console.log(`[DEBUG]   Compiler not loaded, returning null`);
     return null;
   }
 
   const document = documents.get(params.textDocument.uri);
   if (!document) {
+    connection.console.log(`[DEBUG]   Document not found, returning null`);
     return null;
   }
 
@@ -322,6 +330,14 @@ connection.onDefinition((params: DefinitionParams): Location | null => {
 
   // Convert position to byte offset
   const offset = document.offsetAt(params.position);
+  connection.console.log(`[DEBUG]   offset: ${offset}`);
+
+  // Log surrounding text for context
+  const contextStart = Math.max(0, offset - 20);
+  const contextEnd = Math.min(text.length, offset + 20);
+  const before = text.substring(contextStart, offset);
+  const after = text.substring(offset, contextEnd);
+  connection.console.log(`[DEBUG]   context: "${before}|${after}"`);
 
   // Convert URI to file path for the compiler
   let filePath: string;
@@ -330,16 +346,60 @@ connection.onDefinition((params: DefinitionParams): Location | null => {
   } catch {
     filePath = uri;
   }
+  connection.console.log(`[DEBUG]   filePath: ${filePath}`);
 
   try {
     const result = tuffcLib.lsp_find_definition(text, offset, filePath);
+    connection.console.log(
+      `[DEBUG]   result: found=${result.found}, defStart=${result.defStart}, defEnd=${result.defEnd}, defFile="${result.defFile}"`
+    );
 
     if (!result.found) {
+      connection.console.log(`[DEBUG]   Definition not found, returning null`);
       return null;
     }
 
+    // Determine the target URI and text
+    let targetUri = uri;
+    let targetText = text;
+
+    if (result.defFile && result.defFile.length > 0) {
+      // Cross-file definition - construct URI from file path
+      connection.console.log(
+        `[DEBUG]   Cross-file definition to: ${result.defFile}`
+      );
+
+      // The defFile might be relative or absolute - resolve it
+      let targetPath: string;
+      if (path.isAbsolute(result.defFile)) {
+        targetPath = result.defFile;
+      } else {
+        // Resolve relative to the current file's directory
+        const currentDir = path.dirname(filePath);
+        targetPath = path.resolve(currentDir, result.defFile);
+      }
+      connection.console.log(`[DEBUG]   Resolved target path: ${targetPath}`);
+
+      // Read the target file to convert offsets to positions
+      if (fs.existsSync(targetPath)) {
+        targetUri = pathToFileURL(targetPath).href;
+        targetText = fs.readFileSync(targetPath, "utf-8");
+        connection.console.log(
+          `[DEBUG]   Read target file, length: ${targetText.length}`
+        );
+      } else {
+        connection.console.log(
+          `[DEBUG]   Target file not found: ${targetPath}`
+        );
+        return null;
+      }
+    }
+
     // Convert byte offsets to line/col using the compiler's helper
-    const startLineCol = tuffcLib.lsp_line_col(text, result.defStart);
+    const startLineCol = tuffcLib.lsp_line_col(targetText, result.defStart);
+    connection.console.log(
+      `[DEBUG]   startLineCol: line=${startLineCol.line}, col=${startLineCol.col}`
+    );
 
     // LSP uses 0-based line/col, Tuff uses 1-based
     const range: Range = {
@@ -347,12 +407,19 @@ connection.onDefinition((params: DefinitionParams): Location | null => {
       end: { line: startLineCol.line - 1, character: startLineCol.col - 1 + 1 },
     };
 
-    return {
-      uri,
+    const location: Location = {
+      uri: targetUri,
       range,
     };
+    connection.console.log(
+      `[DEBUG]   Returning location: uri=${
+        location.uri
+      }, range=${JSON.stringify(location.range)}`
+    );
+
+    return location;
   } catch (e) {
-    connection.console.error(`Go-to-definition error: ${e}`);
+    connection.console.error(`[DEBUG] Go-to-definition error: ${e}`);
     return null;
   }
 });

@@ -1153,14 +1153,46 @@ return get_warning_infos();
 export function lsp_line_col(src, offset) {
 return line_col_at(src, offset);
 }
+export function lsp_resolve_module_path(modulePath, currentFilePath) {
+const workspaceRoot = workspace_root_from_path(currentFilePath);
+const rel = module_path_to_relpath(modulePath);
+let baseDir = pathDirname(currentFilePath);
+const compilerSrcPrefix = "src::main::tuff::compiler::";
+let rel2 = rel;
+(starts_with_at(modulePath, 0, compilerSrcPrefix) ? (() => {
+const compilerRootDir = pathJoin(workspaceRoot, "src/main/tuff/compiler");
+baseDir = compilerRootDir;
+const rest = stringSlice(modulePath, stringLen(compilerSrcPrefix), stringLen(modulePath));
+rel2 = module_path_to_relpath(rest);
+return undefined;
+})() : (() => {
+return (starts_with_at(modulePath, 0, "src::") || starts_with_at(modulePath, 0, "std::") ? (() => {
+baseDir = workspaceRoot;
+return undefined;
+})() : (() => {
+const cr = compiler_root_from_path(currentFilePath);
+if (stringLen(cr) > 0) {
+baseDir = cr;
+}
+return undefined;
+})());
+})());
+return pathJoin(baseDir, rel2 + ".tuff");
+}
 export function DefLocation(found, defStart, defEnd, defFile) {
 return { found: found, defStart: defStart, defEnd: defEnd, defFile: defFile };
 }
 export function lsp_def(name, defStart, defEnd, kind) {
-return ({ tag: "LspDef", name: name, defStart: defStart, defEnd: defEnd, kind: kind });
+return ({ tag: "LspDef", name: name, defStart: defStart, defEnd: defEnd, kind: kind, defFile: "" });
+}
+export function lsp_def_ext(name, defStart, defEnd, kind, defFile) {
+return ({ tag: "LspDef", name: name, defStart: defStart, defEnd: defEnd, kind: kind, defFile: defFile });
 }
 export function lsp_ref(refStart, refEnd, defStart, defEnd) {
-return ({ tag: "LspRef", refStart: refStart, refEnd: refEnd, defStart: defStart, defEnd: defEnd });
+return ({ tag: "LspRef", refStart: refStart, refEnd: refEnd, defStart: defStart, defEnd: defEnd, defFile: "" });
+}
+export function lsp_ref_ext(refStart, refEnd, defStart, defEnd, defFile) {
+return ({ tag: "LspRef", refStart: refStart, refEnd: refEnd, defStart: defStart, defEnd: defEnd, defFile: defFile });
 }
 export function lsp_lookup(defs, name) {
 let i = vec_len(defs) - 1;
@@ -1199,15 +1231,15 @@ return lsp_def("", -1, -1, "");
 export function lsp_in_range(offset, start, end) {
 return offset >= start && offset < end;
 }
-export function lsp_collect_decls(decls, defs) {
+export function lsp_collect_decls(decls, defs, filePath) {
 let i = 0;
 while (i < vec_len(decls)) {
-lsp_collect_decl(vec_get(decls, i), defs);
+lsp_collect_decl(vec_get(decls, i), defs, filePath);
 i = i + 1;
 }
 return undefined;
 }
-export function lsp_collect_decl(d, defs) {
+export function lsp_collect_decl(d, defs, filePath) {
 if (d.tag == "DExternFrom") {
 let ni = 0;
 while (ni < vec_len(d.names)) {
@@ -1216,9 +1248,10 @@ ni = ni + 1;
 }
 }
 if (d.tag == "DImport") {
+const targetFile = lsp_resolve_module_path(d.modulePath, filePath);
 let ni = 0;
 while (ni < vec_len(d.names)) {
-vec_push(defs, lsp_def(vec_get(d.names, ni), span_start(d.span), span_end(d.span), "import"));
+vec_push(defs, lsp_def_ext(vec_get(d.names, ni), 0, 0, "import", targetFile));
 ni = ni + 1;
 }
 }
@@ -1251,22 +1284,22 @@ vi = vi + 1;
 }
 if (d.tag == "DModule") {
 vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "module"));
-lsp_collect_decls(d.decls, defs);
+lsp_collect_decls(d.decls, defs, filePath);
 }
 return undefined;
 }
 export function lsp_resolve_expr(e, defs, refs) {
 if (e.tag == "EIdent") {
 const d = lsp_lookup(defs, e.name);
-if (d.defStart >= 0) {
-vec_push(refs, lsp_ref(span_start(e.span), span_end(e.span), d.defStart, d.defEnd));
+if (d.defStart >= 0 || stringLen(d.defFile) > 0) {
+vec_push(refs, lsp_ref_ext(span_start(e.span), span_end(e.span), d.defStart, d.defEnd, d.defFile));
 }
 return "";
 }
 if (e.tag == "EStructLit") {
 const tyDef = lsp_lookup_type(defs, e.name.name);
-if (tyDef.defStart >= 0) {
-vec_push(refs, lsp_ref(span_start(e.name.span), span_end(e.name.span), tyDef.defStart, tyDef.defEnd));
+if (tyDef.defStart >= 0 || stringLen(tyDef.defFile) > 0) {
+vec_push(refs, lsp_ref_ext(span_start(e.name.span), span_end(e.name.span), tyDef.defStart, tyDef.defEnd, tyDef.defFile));
 }
 let vi = 0;
 while (vi < vec_len(e.values)) {
@@ -1281,7 +1314,7 @@ if (stringLen(baseTy) > 0) {
 const fieldDef = lsp_lookup_field(defs, baseTy, e.field);
 if (fieldDef.defStart >= 0) {
 const fieldStart = span_end(e.base.span) + 1;
-vec_push(refs, lsp_ref(fieldStart, span_end(e.span), fieldDef.defStart, fieldDef.defEnd));
+vec_push(refs, lsp_ref_ext(fieldStart, span_end(e.span), fieldDef.defStart, fieldDef.defEnd, fieldDef.defFile));
 }
 }
 return "";
@@ -1447,7 +1480,7 @@ return r;
 }
 i = i + 1;
 }
-return lsp_ref(-1, -1, -1, -1);
+return lsp_ref_ext(-1, -1, -1, -1, "");
 }
 export function lsp_find_definition(src, offset, filePath) {
 reset_struct_defs();
@@ -1457,13 +1490,13 @@ set_current_file(filePath);
 const decls = lsp_parse_file(src);
 const defs = vec_new();
 const refs = vec_new();
-lsp_collect_decls(decls, defs);
+lsp_collect_decls(decls, defs, filePath);
 lsp_resolve_decls(decls, defs, refs);
 const r = lsp_find_ref_at(refs, offset);
 if (r.refStart < 0) {
 return DefLocation(false, 0, 0, "");
 }
-return DefLocation(true, r.defStart, r.defEnd, "");
+return DefLocation(true, r.defStart, r.defEnd, r.defFile);
 }
 export function lsp_parse_file(src) {
 const decls = vec_new();

@@ -1354,6 +1354,36 @@ out fn lsp_get_warnings() : Vec<DiagInfo> => get_warning_infos()
 out fn lsp_line_col(src: String, offset: I32) : LineCol => line_col_at(src, offset)
 
 // ------------------------------------------------------------
+// LSP helpers: Module path to file path resolution
+// ------------------------------------------------------------
+
+// Resolve a module path (e.g., "util::diagnostics") to an absolute file path.
+// Uses the same logic as compile_project for resolving imports.
+fn lsp_resolve_module_path(modulePath: String, currentFilePath: String) : String => {
+  let workspaceRoot = workspace_root_from_path(currentFilePath);
+  let rel = module_path_to_relpath(modulePath);
+  let mut baseDir = pathDirname(currentFilePath);
+  let compilerSrcPrefix = "src::main::tuff::compiler::";
+  let mut rel2 = rel;
+
+  if (starts_with_at(modulePath, 0, compilerSrcPrefix)) {
+    let compilerRootDir = pathJoin(workspaceRoot, "src/main/tuff/compiler");
+    baseDir = compilerRootDir;
+    let rest = stringSlice(modulePath, stringLen(compilerSrcPrefix), stringLen(modulePath));
+    rel2 = module_path_to_relpath(rest);
+  } else {
+    if (starts_with_at(modulePath, 0, "src::") || starts_with_at(modulePath, 0, "std::")) {
+      baseDir = workspaceRoot;
+    } else {
+      let cr = compiler_root_from_path(currentFilePath);
+      if (stringLen(cr) > 0) { baseDir = cr; }
+    }
+  }
+
+  pathJoin(baseDir, rel2 + ".tuff")
+}
+
+// ------------------------------------------------------------
 // LSP: Go-to-definition support
 // ------------------------------------------------------------
 
@@ -1363,7 +1393,8 @@ struct LspDef {
   name: String,
   defStart: I32,
   defEnd: I32,
-  kind: String
+  kind: String,
+  defFile: String
 }
 
 // Symbol reference with resolved definition
@@ -1372,17 +1403,24 @@ struct LspRef {
   refStart: I32,
   refEnd: I32,
   defStart: I32,
-  defEnd: I32
+  defEnd: I32,
+  defFile: String
 }
 
 // Result of a go-to-definition lookup.
 class fn DefLocation(found: Bool, defStart: I32, defEnd: I32, defFile: String) => {}
 
 fn lsp_def(name: String, defStart: I32, defEnd: I32, kind: String) : LspDef =>
-  LspDef { "LspDef", name, defStart, defEnd, kind }
+  LspDef { "LspDef", name, defStart, defEnd, kind, "" }
+
+fn lsp_def_ext(name: String, defStart: I32, defEnd: I32, kind: String, defFile: String) : LspDef =>
+  LspDef { "LspDef", name, defStart, defEnd, kind, defFile }
 
 fn lsp_ref(refStart: I32, refEnd: I32, defStart: I32, defEnd: I32) : LspRef =>
-  LspRef { "LspRef", refStart, refEnd, defStart, defEnd }
+  LspRef { "LspRef", refStart, refEnd, defStart, defEnd, "" }
+
+fn lsp_ref_ext(refStart: I32, refEnd: I32, defStart: I32, defEnd: I32, defFile: String) : LspRef =>
+  LspRef { "LspRef", refStart, refEnd, defStart, defEnd, defFile }
 
 // Simple scoped symbol table
 fn lsp_lookup(defs: Vec<LspDef>, name: String) : LspDef => {
@@ -1421,15 +1459,15 @@ fn lsp_lookup_field(defs: Vec<LspDef>, structName: String, fieldName: String) : 
 fn lsp_in_range(offset: I32, start: I32, end: I32) : Bool => offset >= start && offset < end
 
 // Collect declarations from decls into defs
-fn lsp_collect_decls(decls: Vec<Decl>, defs: Vec<LspDef>) : Void => {
+fn lsp_collect_decls(decls: Vec<Decl>, defs: Vec<LspDef>, filePath: String) : Void => {
   let mut i = 0;
   while (i < vec_len(decls)) {
-    lsp_collect_decl(vec_get(decls, i), defs);
+    lsp_collect_decl(vec_get(decls, i), defs, filePath);
     i = i + 1;
   }
 }
 
-fn lsp_collect_decl(d: Decl, defs: Vec<LspDef>) : Void => {
+fn lsp_collect_decl(d: Decl, defs: Vec<LspDef>, filePath: String) : Void => {
   if (d.tag == "DExternFrom") {
     let mut ni = 0;
     while (ni < vec_len(d.names)) {
@@ -1438,9 +1476,12 @@ fn lsp_collect_decl(d: Decl, defs: Vec<LspDef>) : Void => {
     }
   }
   if (d.tag == "DImport") {
+    // Resolve the module path to a file path for cross-file navigation
+    let targetFile = lsp_resolve_module_path(d.modulePath, filePath);
     let mut ni = 0;
     while (ni < vec_len(d.names)) {
-      vec_push(defs, lsp_def(vec_get(d.names, ni), span_start(d.span), span_end(d.span), "import"));
+      // For imported names, store the target file and position 0 (we don't parse the target file yet)
+      vec_push(defs, lsp_def_ext(vec_get(d.names, ni), 0, 0, "import", targetFile));
       ni = ni + 1;
     }
   }
@@ -1474,7 +1515,7 @@ fn lsp_collect_decl(d: Decl, defs: Vec<LspDef>) : Void => {
   }
   if (d.tag == "DModule") {
     vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "module"));
-    lsp_collect_decls(d.decls, defs);
+    lsp_collect_decls(d.decls, defs, filePath);
   }
 }
 
@@ -1482,8 +1523,8 @@ fn lsp_collect_decl(d: Decl, defs: Vec<LspDef>) : Void => {
 fn lsp_resolve_expr(e: Expr, defs: Vec<LspDef>, refs: Vec<LspRef>) : String => {
   if (e.tag == "EIdent") {
     let d = lsp_lookup(defs, e.name);
-    if (d.defStart >= 0) {
-      vec_push(refs, lsp_ref(span_start(e.span), span_end(e.span), d.defStart, d.defEnd));
+    if (d.defStart >= 0 || stringLen(d.defFile) > 0) {
+      vec_push(refs, lsp_ref_ext(span_start(e.span), span_end(e.span), d.defStart, d.defEnd, d.defFile));
     }
     yield "";
   }
@@ -1491,8 +1532,8 @@ fn lsp_resolve_expr(e: Expr, defs: Vec<LspDef>, refs: Vec<LspRef>) : String => {
   if (e.tag == "EStructLit") {
     // Struct name is a type reference
     let tyDef = lsp_lookup_type(defs, e.name.name);
-    if (tyDef.defStart >= 0) {
-      vec_push(refs, lsp_ref(span_start(e.name.span), span_end(e.name.span), tyDef.defStart, tyDef.defEnd));
+    if (tyDef.defStart >= 0 || stringLen(tyDef.defFile) > 0) {
+      vec_push(refs, lsp_ref_ext(span_start(e.name.span), span_end(e.name.span), tyDef.defStart, tyDef.defEnd, tyDef.defFile));
     }
     let mut vi = 0;
     while (vi < vec_len(e.values)) {
@@ -1509,7 +1550,7 @@ fn lsp_resolve_expr(e: Expr, defs: Vec<LspDef>, refs: Vec<LspRef>) : String => {
       if (fieldDef.defStart >= 0) {
         // Field reference starts after the dot
         let fieldStart = span_end(e.base.span) + 1;
-        vec_push(refs, lsp_ref(fieldStart, span_end(e.span), fieldDef.defStart, fieldDef.defEnd));
+        vec_push(refs, lsp_ref_ext(fieldStart, span_end(e.span), fieldDef.defStart, fieldDef.defEnd, fieldDef.defFile));
       }
     }
     yield "";
@@ -1696,7 +1737,7 @@ fn lsp_find_ref_at(refs: Vec<LspRef>, offset: I32) : LspRef => {
     if (lsp_in_range(offset, r.refStart, r.refEnd)) { yield r; }
     i = i + 1;
   }
-  lsp_ref(-1, -1, -1, -1)
+  lsp_ref_ext(-1, -1, -1, -1, "")
 }
 
 // Main LSP go-to-definition API.
@@ -1712,7 +1753,7 @@ out fn lsp_find_definition(src: String, offset: I32, filePath: String) : DefLoca
   let refs = vec_new();
   
   // Pass 1: collect all declarations
-  lsp_collect_decls(decls, defs);
+  lsp_collect_decls(decls, defs, filePath);
   
   // Pass 2: resolve references
   lsp_resolve_decls(decls, defs, refs);
@@ -1723,7 +1764,7 @@ out fn lsp_find_definition(src: String, offset: I32, filePath: String) : DefLoca
     yield DefLocation(false, 0, 0, "");
   }
   
-  DefLocation(true, r.defStart, r.defEnd, "")
+  DefLocation(true, r.defStart, r.defEnd, r.defFile)
 }
 
 // Helper: parse file into decls
