@@ -1,0 +1,80 @@
+{
+  "name": "tuff-lang",
+  "displayName": "Tuff Language",
+  "description": "Syntax highlighting and language support for Tuff",
+  "version": "0.1.0",
+  "publisher": "tuff-lang",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tuff-lang/tuff"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "tuff",
+        "aliases": [
+          "Tuff",
+          "tuff"
+        ],
+        "extensions": [
+          ".tuff"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "tuff",
+        "scopeName": "source.tuff",
+        "path": "./syntaxes/tuff.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Tuff",
+      "properties": {
+        "tuff.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Traces the communication between VS Code and the Tuff language server."
+        },
+        "tuff.enableLanguageServer": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the Tuff language server for advanced features."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "install-local": "code --install-extension tuff-lang-0.1.0.vsix"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.22.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.11"
+  }
+}
