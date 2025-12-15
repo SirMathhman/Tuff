@@ -1496,11 +1496,13 @@ fn lsp_collect_decl(d: Decl, defs: Vec<LspDef>, filePath: String) : Void => {
   }
   if (d.tag == "DStruct") {
     vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "struct"));
-    // Register fields
+    // Register fields.
+    // NOTE: In the canonical AST, `DStruct.fields` is a `Vec<String>` (names only).
+    // We don't currently have per-field spans, so map fields to the struct span.
     let mut fi = 0;
     while (fi < vec_len(d.fields)) {
-      let field = vec_get(d.fields, fi);
-      vec_push(defs, lsp_def(d.name + "." + field.name, span_start(field.span), span_end(field.span), "field"));
+      let fieldName = vec_get(d.fields, fi);
+      vec_push(defs, lsp_def(d.name + "." + fieldName, span_start(d.span), span_end(d.span), "field"));
       fi = fi + 1;
     }
   }
@@ -1530,17 +1532,34 @@ fn lsp_resolve_expr(e: Expr, defs: Vec<LspDef>, refs: Vec<LspRef>) : String => {
   }
   
   if (e.tag == "EStructLit") {
-    // Struct name is a type reference
-    let tyDef = lsp_lookup_type(defs, e.name.name);
-    if (tyDef.defStart >= 0 || stringLen(tyDef.defFile) > 0) {
-      vec_push(refs, lsp_ref_ext(span_start(e.name.span), span_end(e.name.span), tyDef.defStart, tyDef.defEnd, tyDef.defFile));
+    // Struct name is a type reference.
+    // Canonical AST stores it as `nameExpr`.
+    let mut structName = "";
+    let mut nameSpan = e.span;
+    if (e.nameExpr.tag == "EIdent") {
+      structName = e.nameExpr.name;
+      nameSpan = e.nameExpr.span;
+    }
+    if (e.nameExpr.tag == "EPath") {
+      // Use the last path segment as the type name.
+      if (vec_len(e.nameExpr.parts) > 0) {
+        structName = vec_get(e.nameExpr.parts, vec_len(e.nameExpr.parts) - 1);
+        nameSpan = e.nameExpr.span;
+      }
+    }
+
+    if (stringLen(structName) > 0) {
+      let tyDef = lsp_lookup_type(defs, structName);
+      if (tyDef.defStart >= 0 || stringLen(tyDef.defFile) > 0) {
+        vec_push(refs, lsp_ref_ext(span_start(nameSpan), span_end(nameSpan), tyDef.defStart, tyDef.defEnd, tyDef.defFile));
+      }
     }
     let mut vi = 0;
     while (vi < vec_len(e.values)) {
       lsp_resolve_expr(vec_get(e.values, vi), defs, refs);
       vi = vi + 1;
     }
-    yield e.name.name;
+    yield structName;
   }
   
   if (e.tag == "EField") {
@@ -1740,6 +1759,68 @@ fn lsp_find_ref_at(refs: Vec<LspRef>, offset: I32) : LspRef => {
   lsp_ref_ext(-1, -1, -1, -1, "")
 }
 
+// Fallback: extract identifier under (or just left of) the cursor.
+// Used for go-to-definition in places that are not tracked as Expr refs
+// (e.g. import lists, type annotation strings).
+fn lsp_ident_at(src: String, offset: I32) : String => {
+  if (offset < 0 || offset >= stringLen(src)) { yield ""; }
+
+  let mut i = offset;
+  if (!is_ident_part(stringCharCodeAt(src, i)) && i > 0 && is_ident_part(stringCharCodeAt(src, i - 1))) {
+    i = i - 1;
+  }
+  if (!is_ident_part(stringCharCodeAt(src, i))) { yield ""; }
+
+  let mut start = i;
+  while (start > 0 && is_ident_part(stringCharCodeAt(src, start - 1))) { start = start - 1; }
+  if (!is_ident_start(stringCharCodeAt(src, start))) { yield ""; }
+
+  let mut end = i + 1;
+  while (end < stringLen(src) && is_ident_part(stringCharCodeAt(src, end))) { end = end + 1; }
+
+  stringSlice(src, start, end)
+}
+
+fn lsp_has_double_colon(s: String) : Bool => {
+  let mut i = 0;
+  while (i + 1 < stringLen(s)) {
+    if (stringCharCodeAt(s, i) == 58 && stringCharCodeAt(s, i + 1) == 58) { yield true; }
+    i = i + 1;
+  }
+  false
+}
+
+fn lsp_is_module_path_part(code: I32) : Bool => is_ident_part(code) || code == 58
+
+// Fallback: extract module path (containing ::) under the cursor.
+fn lsp_module_path_at(src: String, offset: I32) : String => {
+  if (offset < 0 || offset >= stringLen(src)) { yield ""; }
+  let mut i = offset;
+
+  if (!lsp_is_module_path_part(stringCharCodeAt(src, i)) && i > 0 && lsp_is_module_path_part(stringCharCodeAt(src, i - 1))) {
+    i = i - 1;
+  }
+  if (!lsp_is_module_path_part(stringCharCodeAt(src, i))) { yield ""; }
+
+  let mut start = i;
+  while (start > 0 && lsp_is_module_path_part(stringCharCodeAt(src, start - 1))) { start = start - 1; }
+  let mut end = i + 1;
+  while (end < stringLen(src) && lsp_is_module_path_part(stringCharCodeAt(src, end))) { end = end + 1; }
+
+  let mut s = stringSlice(src, start, end);
+
+  // trim leading/trailing ':'
+  while (stringLen(s) > 0 && stringCharCodeAt(s, 0) == 58) {
+    s = stringSlice(s, 1, stringLen(s));
+  }
+  while (stringLen(s) > 0 && stringCharCodeAt(s, stringLen(s) - 1) == 58) {
+    s = stringSlice(s, 0, stringLen(s) - 1);
+  }
+
+  if (!lsp_has_double_colon(s)) { yield ""; }
+  s
+}
+
 // Main LSP go-to-definition API.
 out fn lsp_find_definition(src: String, offset: I32, filePath: String) : DefLocation => {
   reset_struct_defs();
@@ -1761,6 +1842,21 @@ out fn lsp_find_definition(src: String, offset: I32, filePath: String) : DefLoca
   // Find reference at offset
   let r = lsp_find_ref_at(refs, offset);
   if (r.refStart < 0) {
+    // Fallback for non-expression positions.
+    let modulePath = lsp_module_path_at(src, offset);
+    if (stringLen(modulePath) > 0) {
+      let targetFile = lsp_resolve_module_path(modulePath, filePath);
+      yield DefLocation(true, 0, 0, targetFile);
+    }
+
+    let ident = lsp_ident_at(src, offset);
+    if (stringLen(ident) > 0) {
+      let d = lsp_lookup(defs, ident);
+      if (d.defStart >= 0 || stringLen(d.defFile) > 0) {
+        yield DefLocation(true, d.defStart, d.defEnd, d.defFile);
+      }
+    }
+
     yield DefLocation(false, 0, 0, "");
   }
   

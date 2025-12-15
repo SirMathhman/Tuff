@@ -1268,8 +1268,8 @@ if (d.tag == "DStruct") {
 vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "struct"));
 let fi = 0;
 while (fi < vec_len(d.fields)) {
-const field = vec_get(d.fields, fi);
-vec_push(defs, lsp_def(d.name + "." + field.name, span_start(field.span), span_end(field.span), "field"));
+const fieldName = vec_get(d.fields, fi);
+vec_push(defs, lsp_def(d.name + "." + fieldName, span_start(d.span), span_end(d.span), "field"));
 fi = fi + 1;
 }
 }
@@ -1297,16 +1297,30 @@ vec_push(refs, lsp_ref_ext(span_start(e.span), span_end(e.span), d.defStart, d.d
 return "";
 }
 if (e.tag == "EStructLit") {
-const tyDef = lsp_lookup_type(defs, e.name.name);
+let structName = "";
+let nameSpan = e.span;
+if (e.nameExpr.tag == "EIdent") {
+structName = e.nameExpr.name;
+nameSpan = e.nameExpr.span;
+}
+if (e.nameExpr.tag == "EPath") {
+if (vec_len(e.nameExpr.parts) > 0) {
+structName = vec_get(e.nameExpr.parts, vec_len(e.nameExpr.parts) - 1);
+nameSpan = e.nameExpr.span;
+}
+}
+if (stringLen(structName) > 0) {
+const tyDef = lsp_lookup_type(defs, structName);
 if (tyDef.defStart >= 0 || stringLen(tyDef.defFile) > 0) {
-vec_push(refs, lsp_ref_ext(span_start(e.name.span), span_end(e.name.span), tyDef.defStart, tyDef.defEnd, tyDef.defFile));
+vec_push(refs, lsp_ref_ext(span_start(nameSpan), span_end(nameSpan), tyDef.defStart, tyDef.defEnd, tyDef.defFile));
+}
 }
 let vi = 0;
 while (vi < vec_len(e.values)) {
 lsp_resolve_expr(vec_get(e.values, vi), defs, refs);
 vi = vi + 1;
 }
-return e.name.name;
+return structName;
 }
 if (e.tag == "EField") {
 const baseTy = lsp_resolve_expr(e.base, defs, refs);
@@ -1482,6 +1496,74 @@ i = i + 1;
 }
 return lsp_ref_ext(-1, -1, -1, -1, "");
 }
+export function lsp_ident_at(src, offset) {
+if (offset < 0 || offset >= stringLen(src)) {
+return "";
+}
+let i = offset;
+if (!is_ident_part(stringCharCodeAt(src, i)) && i > 0 && is_ident_part(stringCharCodeAt(src, i - 1))) {
+i = i - 1;
+}
+if (!is_ident_part(stringCharCodeAt(src, i))) {
+return "";
+}
+let start = i;
+while (start > 0 && is_ident_part(stringCharCodeAt(src, start - 1))) {
+start = start - 1;
+}
+if (!is_ident_start(stringCharCodeAt(src, start))) {
+return "";
+}
+let end = i + 1;
+while (end < stringLen(src) && is_ident_part(stringCharCodeAt(src, end))) {
+end = end + 1;
+}
+return stringSlice(src, start, end);
+}
+export function lsp_has_double_colon(s) {
+let i = 0;
+while (i + 1 < stringLen(s)) {
+if (stringCharCodeAt(s, i) == 58 && stringCharCodeAt(s, i + 1) == 58) {
+return true;
+}
+i = i + 1;
+}
+return false;
+}
+export function lsp_is_module_path_part(code) {
+return is_ident_part(code) || code == 58;
+}
+export function lsp_module_path_at(src, offset) {
+if (offset < 0 || offset >= stringLen(src)) {
+return "";
+}
+let i = offset;
+if (!lsp_is_module_path_part(stringCharCodeAt(src, i)) && i > 0 && lsp_is_module_path_part(stringCharCodeAt(src, i - 1))) {
+i = i - 1;
+}
+if (!lsp_is_module_path_part(stringCharCodeAt(src, i))) {
+return "";
+}
+let start = i;
+while (start > 0 && lsp_is_module_path_part(stringCharCodeAt(src, start - 1))) {
+start = start - 1;
+}
+let end = i + 1;
+while (end < stringLen(src) && lsp_is_module_path_part(stringCharCodeAt(src, end))) {
+end = end + 1;
+}
+let s = stringSlice(src, start, end);
+while (stringLen(s) > 0 && stringCharCodeAt(s, 0) == 58) {
+s = stringSlice(s, 1, stringLen(s));
+}
+while (stringLen(s) > 0 && stringCharCodeAt(s, stringLen(s) - 1) == 58) {
+s = stringSlice(s, 0, stringLen(s) - 1);
+}
+if (!lsp_has_double_colon(s)) {
+return "";
+}
+return s;
+}
 export function lsp_find_definition(src, offset, filePath) {
 reset_struct_defs();
 reset_errors();
@@ -1494,6 +1576,18 @@ lsp_collect_decls(decls, defs, filePath);
 lsp_resolve_decls(decls, defs, refs);
 const r = lsp_find_ref_at(refs, offset);
 if (r.refStart < 0) {
+const modulePath = lsp_module_path_at(src, offset);
+if (stringLen(modulePath) > 0) {
+const targetFile = lsp_resolve_module_path(modulePath, filePath);
+return DefLocation(true, 0, 0, targetFile);
+}
+const ident = lsp_ident_at(src, offset);
+if (stringLen(ident) > 0) {
+const d = lsp_lookup(defs, ident);
+if (d.defStart >= 0 || stringLen(d.defFile) > 0) {
+return DefLocation(true, d.defStart, d.defEnd, d.defFile);
+}
+}
 return DefLocation(false, 0, 0, "");
 }
 return DefLocation(true, r.defStart, r.defEnd, r.defFile);

@@ -21,7 +21,10 @@ Full TextMate grammar support for Tuff syntax:
 A minimal LSP server is included as a foundation for future features:
 
 - Document change tracking
-- Future: diagnostics, completions, hover, go-to-definition
+- Go-to-definition (including cross-file navigation for `from <module> use { ... }`)
+- Module path navigation (e.g. `util::diagnostics`)
+- Verbose debug logging in the LSP server (look for `[DEBUG]` in the extension logs)
+- Future: diagnostics, completions, hover
 
 ## Installation
 
