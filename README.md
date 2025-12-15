@@ -40,8 +40,11 @@ npm ci
 ### Running Tests
 
 ```bash
-# Run all tests (TypeScript + Tuff)
-npm test
+# Run all tests (TypeScript + Tuff) (quiet)
+npm run test
+
+# Run all tests with verbose output
+npm run test:verbose
 
 # Run the full bootstrap check (tests + regenerate selfhost/prebuilt)
 npm run check:bootstrap
@@ -480,14 +483,17 @@ let (a, b) = (1, 2);
 ### Run Tests
 
 ```bash
-# Run all tests (TypeScript + Tuff)
-npm test
+# Run all tests (TypeScript + Tuff) (quiet)
+npm run test
+
+# Run all tests with verbose output
+npm run test:verbose
 
 # Run only TypeScript tests
-npm test -- src/test/ts/**
+npm run test -- src/test/ts/**
 
 # Run specific test file
-npm test -- src/test/ts/selfhost.test.ts
+npm run test -- src/test/ts/selfhost.test.ts
 ```
 
 ### Developer Tools

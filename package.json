@@ -4,8 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run",
-    "check": "vitest run",
+    "test": "vitest run --reporter dot --silent",
+    "test:verbose": "cross-env TUFF_TEST_VERBOSE=1 vitest run --reporter verbose --no-silent",
+    "check": "npm run test",
     "lint": "tsx tools/tuff_lint.ts",
     "check:bootstrap": "npm test && npm run build:selfhost-prebuilt",
     "check:prebuilt": "npm run build:selfhost-prebuilt && git diff --exit-code selfhost/prebuilt",
@@ -15,6 +16,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "cross-env": "^7.0.3",
     "typescript": "^5.8.2",
     "tsx": "^4.19.2",
     "vitest": "^2.1.8"
