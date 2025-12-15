@@ -801,6 +801,394 @@ fn scan_top_level_fn_exports(src: String) => {
   (outSigs, privateNames, allSigs)
 }
 
+// ------------------------------------------------------------
+// Project compilation helpers (separating logic from file I/O)
+// ------------------------------------------------------------
+
+fn project_imported_fn_sigs(src: String, path: String, workspaceRoot: String, isCompilerBuild: Bool, modulePaths: Vec<String>, moduleOutFns: Vec<Vec<FnSig>>, modulePrivateTopLevelFnNames: Vec<Vec<String>>) : Vec<FnSig> => {
+  // Build imported function signatures and validate `out` visibility.
+  // Keep behavior consistent with compile_project/fluff_project.
+
+  let importedFns = vec_new();
+
+  // For compile_project (project build): allow imported fn signature seeding
+  // except for compiler-rooted modules (placeholder type annotations).
+  let seedImportedFns = !(stringLen(compiler_root_from_path(path)) > 0);
+
+  if (!isCompilerBuild) {
+    let mut scan = 0;
+    while (true) {
+      if (is_extern_decl_start(src, scan)) {
+        let ex2 = parse_extern_decl(src, scan);
+        scan = ex2.v1;
+        continue;
+      }
+      break;
+    }
+
+    let impsAst = parse_imports_ast(src, scan);
+    let mut ii = 0;
+    while (ii < vec_len(impsAst.decls)) {
+      let imp = vec_get(impsAst.decls, ii);
+      if (imp.tag == "DImport") {
+        let rel = module_path_to_relpath(imp.modulePath);
+        let mut baseDir = pathDirname(path);
+        let compilerSrcPrefix = "src::main::tuff::compiler::";
+        let mut rel2 = rel;
+        if (starts_with_at(imp.modulePath, 0, compilerSrcPrefix)) {
+          let compilerRootDir = pathJoin(workspaceRoot, "src/main/tuff/compiler");
+          baseDir = compilerRootDir;
+          let rest = stringSlice(imp.modulePath, stringLen(compilerSrcPrefix), stringLen(imp.modulePath));
+          rel2 = module_path_to_relpath(rest);
+        } else {
+          if (starts_with_at(imp.modulePath, 0, "src::") || starts_with_at(imp.modulePath, 0, "std::")) {
+            baseDir = workspaceRoot;
+          } else {
+            let cr = compiler_root_from_path(path);
+            if (stringLen(cr) > 0) { baseDir = cr; }
+          }
+        }
+        let depPath = pathJoin(baseDir, rel2 + ".tuff");
+
+        let depIdx = module_index(modulePaths, depPath);
+        if (depIdx != -1) {
+          let outFns = vec_get(moduleOutFns, depIdx);
+          let privateNames = vec_get(modulePrivateTopLevelFnNames, depIdx);
+          let mut ni = 0;
+          while (ni < vec_len(imp.names)) {
+            let name = vec_get(imp.names, ni);
+
+            let sig = fnsig_lookup_by_name(outFns, name);
+            if (!(sig.name == "")) {
+              if (seedImportedFns) {
+                vec_push(importedFns, sig);
+              }
+            } else {
+              // If it's a top-level function but not exported, hard error.
+              if (str_list_contains(privateNames, name)) {
+                panic_at(src, span_start(imp.span), "imported function '" + name + "' is not exported (missing `out fn`)");
+              }
+              // Otherwise, assume it's a module/type/struct/etc and let later
+              // phases handle it.
+            }
+
+            ni = ni + 1;
+          }
+        }
+      }
+      ii = ii + 1;
+    }
+  }
+
+  importedFns
+}
+
+fn project_out_paths(path: String, entryPath: String, outDir: String, outPath: String, workspaceRoot: String) => {
+  // Compute a stable source-relative path for output layout.
+  let crHere = compiler_root_from_path(path);
+  let relRoot = if (stringLen(crHere) > 0) crHere else workspaceRoot;
+
+  let mut prefixLen = stringLen(relRoot);
+  let mut relStart = prefixLen;
+  if (relStart < stringLen(path)) {
+    let ch = stringCharCodeAt(path, relStart);
+    if (ch == 47 || ch == 92) { relStart = relStart + 1; }
+  }
+  let relSrcPath = stringSlice(path, relStart, stringLen(path));
+  let relNoExt = stringSlice(relSrcPath, 0, stringLen(relSrcPath) - 5);
+
+  let outRelPath = if (path == entryPath) {
+    let mut pfx = stringLen(outDir);
+    let mut s = pfx;
+    if (s < stringLen(outPath)) {
+      let ch2 = stringCharCodeAt(outPath, s);
+      if (ch2 == 47 || ch2 == 92) { s = s + 1; }
+    }
+    stringSlice(outPath, s, stringLen(outPath))
+  } else {
+    relNoExt + ".mjs"
+  };
+
+  let outFile = if (path == entryPath) outPath else pathJoin(outDir, relNoExt + ".mjs");
+
+  (outRelPath, outFile)
+}
+
+fn project_compile_one_module(src: String, path: String, entryPath: String, outDir: String, outPath: String, workspaceRoot: String, isCompilerBuild: Bool, modulePaths: Vec<String>, moduleOutFns: Vec<Vec<FnSig>>, modulePrivateTopLevelFnNames: Vec<Vec<String>>) => {
+  let importedFns = project_imported_fn_sigs(src, path, workspaceRoot, isCompilerBuild, modulePaths, moduleOutFns, modulePrivateTopLevelFnNames);
+  let paths = project_out_paths(path, entryPath, outDir, outPath, workspaceRoot);
+  let outRelPath = paths.0;
+  let outFile = paths.1;
+
+  // For project compilation, exports are controlled via `out` (plus `main`).
+  // For compiler bootstrapping, keep legacy `exportAll` to avoid churn.
+  let js = compile_tiny2_with_imported_fns(src, path == entryPath, isCompilerBuild, outRelPath, importedFns);
+  (outRelPath, outFile, js)
+}
+
+fn project_lint_one_module(src: String, path: String, entryPath: String, workspaceRoot: String, isCompilerBuild: Bool, modulePaths: Vec<String>, moduleOutFns: Vec<Vec<FnSig>>, modulePrivateTopLevelFnNames: Vec<Vec<String>>) : Void => {
+  // Fluff uses slightly different seeding rules:
+  let importedFns = vec_new();
+  let seedImportedFns = !isCompilerBuild && !(stringLen(compiler_root_from_path(path)) > 0);
+
+  if (!isCompilerBuild) {
+    let mut scan = 0;
+    while (true) {
+      if (is_extern_decl_start(src, scan)) {
+        let ex2 = parse_extern_decl(src, scan);
+        scan = ex2.v1;
+        continue;
+      }
+      break;
+    }
+
+    let impsAst = parse_imports_ast(src, scan);
+    let mut ii = 0;
+    while (ii < vec_len(impsAst.decls)) {
+      let imp = vec_get(impsAst.decls, ii);
+      if (imp.tag == "DImport") {
+        let rel = module_path_to_relpath(imp.modulePath);
+        let mut baseDir = pathDirname(path);
+        let compilerSrcPrefix = "src::main::tuff::compiler::";
+        let mut rel2 = rel;
+        if (starts_with_at(imp.modulePath, 0, compilerSrcPrefix)) {
+          let compilerRootDir = pathJoin(workspaceRoot, "src/main/tuff/compiler");
+          baseDir = compilerRootDir;
+          let rest = stringSlice(imp.modulePath, stringLen(compilerSrcPrefix), stringLen(imp.modulePath));
+          rel2 = module_path_to_relpath(rest);
+        } else {
+          if (starts_with_at(imp.modulePath, 0, "src::") || starts_with_at(imp.modulePath, 0, "std::")) {
+            baseDir = workspaceRoot;
+          } else {
+            let cr = compiler_root_from_path(path);
+            if (stringLen(cr) > 0) { baseDir = cr; }
+          }
+        }
+        let depPath = pathJoin(baseDir, rel2 + ".tuff");
+
+        let depIdx = module_index(modulePaths, depPath);
+        if (depIdx != -1) {
+          let outFns = vec_get(moduleOutFns, depIdx);
+          let privateNames = vec_get(modulePrivateTopLevelFnNames, depIdx);
+          let mut ni = 0;
+          while (ni < vec_len(imp.names)) {
+            let name = vec_get(imp.names, ni);
+
+            let sig = fnsig_lookup_by_name(outFns, name);
+            if (!(sig.name == "")) {
+              if (seedImportedFns) {
+                vec_push(importedFns, sig);
+              }
+            } else {
+              if (str_list_contains(privateNames, name)) {
+                panic_at(src, span_start(imp.span), "imported function '" + name + "' is not exported (missing `out fn`)");
+              }
+            }
+
+            ni = ni + 1;
+          }
+        }
+      }
+      ii = ii + 1;
+    }
+  }
+
+  lint_tiny2_with_imported_fns(src, path == entryPath, isCompilerBuild, importedFns);
+}
+
+// ------------------------------------------------------------
+// In-memory compilation API (Option 4 building block)
+// ------------------------------------------------------------
+
+fn mem_read(entryCode: String, moduleLookup: (String) => String, key: String) : String => {
+  if (key == "entry") { yield entryCode; }
+  moduleLookup(key)
+}
+
+fn mem_collect_module_graph_info(entryCode: String, moduleLookup: (String) => String, isCompilerBuild: Bool) => {
+  let entryKey = "entry";
+
+  let mut stack = vec_new();
+  vec_push(stack, entryKey);
+
+  let mut visited = vec_new();
+  let mut visiting = vec_new();
+  let mut order = vec_new();
+  let mut moduleKeys = vec_new();
+  let mut moduleOutFns = vec_new();
+  let mut modulePrivateTopLevelFnNames = vec_new();
+
+  while (vec_len(stack) > 0) {
+    let item = vec_get(stack, vec_len(stack) - 1);
+
+    // pop
+    let mut newStack = vec_new();
+    let mut qi = 0;
+    while (qi + 1 < vec_len(stack)) {
+      vec_push(newStack, vec_get(stack, qi));
+      qi = qi + 1;
+    }
+    stack = newStack;
+
+    if (starts_with_at(item, 0, "POST:")) {
+      let key = stringSlice(item, 5, stringLen(item));
+      visiting = str_list_remove(visiting, key);
+      vec_push(order, key);
+      continue;
+    }
+
+    let key = item;
+    if (str_list_contains(visited, key)) { continue; }
+    vec_push(visited, key);
+    vec_push(visiting, key);
+
+    vec_push(stack, "POST:" + key);
+
+    let src = mem_read(entryCode, moduleLookup, key);
+    set_current_file(key);
+
+    let ex = cached_scan_top_level_fn_exports(key, src);
+    vec_push(moduleKeys, key);
+    if (isCompilerBuild) {
+      vec_push(moduleOutFns, ex.2);
+      vec_push(modulePrivateTopLevelFnNames, vec_new());
+    } else {
+      vec_push(moduleOutFns, ex.0);
+      vec_push(modulePrivateTopLevelFnNames, ex.1);
+    }
+
+    // discover imports
+    let mut scan = 0;
+    while (true) {
+      if (is_extern_decl_start(src, scan)) {
+        let ex2 = parse_extern_decl(src, scan);
+        scan = ex2.v1;
+        continue;
+      }
+      break;
+    }
+
+    while (true) {
+      let j = skip_ws(src, scan);
+      if (starts_with_at(src, j, "import")) {
+        panic_at(src, j, "`import` is not supported. Use `from <module> use { ... };` instead.");
+      }
+      if (!starts_with_at(src, j, "from")) { break; }
+      scan = parse_keyword(src, scan, "from");
+      let mod = parse_module_path(src, scan);
+      scan = mod.nextPos;
+      scan = parse_keyword(src, scan, "use");
+      scan = parse_keyword(src, scan, "{");
+      while (true) {
+        scan = skip_ws(src, scan);
+        if (!(scan < stringLen(src))) { panic_at(src, scan, "expected '}'"); }
+        if (stringCharCodeAt(src, scan) == 125) { scan = scan + 1; break; }
+        let id = parse_ident(src, scan);
+        scan = id.nextPos;
+        scan = skip_ws(src, scan);
+        if (scan < stringLen(src) && stringCharCodeAt(src, scan) == 44) { scan = scan + 1; continue; }
+        scan = skip_ws(src, scan);
+        if (scan < stringLen(src) && stringCharCodeAt(src, scan) == 125) { scan = scan + 1; break; }
+        panic_at(src, scan, "expected ',' or '}' in import list");
+      }
+      scan = parse_optional_semicolon(src, scan);
+
+      let depKey = mod.text;
+      if (str_list_contains(visiting, depKey)) {
+        panic_at(src, j, "circular dependency detected");
+      }
+      vec_push(stack, depKey);
+    }
+  }
+
+  (order, moduleKeys, moduleOutFns, modulePrivateTopLevelFnNames)
+}
+
+fn mem_imported_fn_sigs(src: String, key: String, isCompilerBuild: Bool, moduleKeys: Vec<String>, moduleOutFns: Vec<Vec<FnSig>>, modulePrivateTopLevelFnNames: Vec<Vec<String>>) : Vec<FnSig> => {
+  let importedFns = vec_new();
+  let seedImportedFns = !isCompilerBuild;
+
+  if (!isCompilerBuild) {
+    let mut scan = 0;
+    while (true) {
+      if (is_extern_decl_start(src, scan)) {
+        let ex2 = parse_extern_decl(src, scan);
+        scan = ex2.v1;
+        continue;
+      }
+      break;
+    }
+
+    let impsAst = parse_imports_ast(src, scan);
+    let mut ii = 0;
+    while (ii < vec_len(impsAst.decls)) {
+      let imp = vec_get(impsAst.decls, ii);
+      if (imp.tag == "DImport") {
+        let depKey = imp.modulePath;
+        let depIdx = module_index(moduleKeys, depKey);
+        if (depIdx != -1) {
+          let outFns = vec_get(moduleOutFns, depIdx);
+          let privateNames = vec_get(modulePrivateTopLevelFnNames, depIdx);
+          let mut ni = 0;
+          while (ni < vec_len(imp.names)) {
+            let name = vec_get(imp.names, ni);
+
+            let sig = fnsig_lookup_by_name(outFns, name);
+            if (!(sig.name == "")) {
+              if (seedImportedFns) {
+                vec_push(importedFns, sig);
+              }
+            } else {
+              if (str_list_contains(privateNames, name)) {
+                panic_at(src, span_start(imp.span), "imported function '" + name + "' is not exported (missing `out fn`)");
+              }
+            }
+
+            ni = ni + 1;
+          }
+        }
+      }
+      ii = ii + 1;
+    }
+  }
+
+  importedFns
+}
+
+// Compile entryCode and all reachable modules via moduleLookup.
+// Returns (outRelPaths, jsOutputs) aligned by index.
+out fn compile_code(entryCode: String, moduleLookup: (String) => String) => {
+  // For in-memory compilation we always enforce `out` visibility.
+  let isCompilerBuild = false;
+
+  let graph = mem_collect_module_graph_info(entryCode, moduleLookup, isCompilerBuild);
+  let order = graph.0;
+  let moduleKeys = graph.1;
+  let moduleOutFns = graph.2;
+  let modulePrivateTopLevelFnNames = graph.3;
+
+  let outRelPaths = vec_new();
+  let jsOutputs = vec_new();
+
+  let mut oi = 0;
+  while (oi < vec_len(order)) {
+    let key = vec_get(order, oi);
+    let src = mem_read(entryCode, moduleLookup, key);
+    set_current_file(key);
+
+    let importedFns = mem_imported_fn_sigs(src, key, isCompilerBuild, moduleKeys, moduleOutFns, modulePrivateTopLevelFnNames);
+    let outRelPath = if (key == "entry") "entry.mjs" else (module_path_to_relpath(key) + ".mjs");
+
+    let js = compile_tiny2_with_imported_fns(src, key == "entry", isCompilerBuild, outRelPath, importedFns);
+    vec_push(outRelPaths, outRelPath);
+    vec_push(jsOutputs, js);
+
+    oi = oi + 1;
+  }
+
+  (outRelPaths, jsOutputs)
+}
+
 out fn compile_project(entryPath: String, outPath: String) : Void => {
   // Very small multi-file compiler:
   // - supports `from <path> use { ... };` for local file modules
@@ -824,109 +1212,9 @@ out fn compile_project(entryPath: String, outPath: String) : Void => {
     set_current_file(path);
     let src = readTextFile(path);
 
-    // Build imported function signatures and validate `out` visibility.
-    // Now that the analyzer supports the Never type, we can seed imported fn
-    // signatures for all builds including the compiler itself.
-    // However, compiler modules still use placeholder type annotations (String)
-    // for AST types, so we skip signature seeding for compiler-rooted modules.
-    let importedFns = vec_new();
-    let seedImportedFns = !(stringLen(compiler_root_from_path(path)) > 0);
-
-    if (!isCompilerBuild) {
-      let mut scan = 0;
-      while (true) {
-        if (is_extern_decl_start(src, scan)) {
-          let ex2 = parse_extern_decl(src, scan);
-          scan = ex2.v1;
-          continue;
-        }
-        break;
-      }
-
-      let impsAst = parse_imports_ast(src, scan);
-      let mut ii = 0;
-      while (ii < vec_len(impsAst.decls)) {
-        let imp = vec_get(impsAst.decls, ii);
-        if (imp.tag == "DImport") {
-          let rel = module_path_to_relpath(imp.modulePath);
-          let mut baseDir = pathDirname(path);
-          let compilerSrcPrefix = "src::main::tuff::compiler::";
-          let mut rel2 = rel;
-          if (starts_with_at(imp.modulePath, 0, compilerSrcPrefix)) {
-            let compilerRootDir = pathJoin(workspaceRoot, "src/main/tuff/compiler");
-            baseDir = compilerRootDir;
-            let rest = stringSlice(imp.modulePath, stringLen(compilerSrcPrefix), stringLen(imp.modulePath));
-            rel2 = module_path_to_relpath(rest);
-          } else {
-            if (starts_with_at(imp.modulePath, 0, "src::") || starts_with_at(imp.modulePath, 0, "std::")) {
-              baseDir = workspaceRoot;
-            } else {
-              let cr = compiler_root_from_path(path);
-              if (stringLen(cr) > 0) { baseDir = cr; }
-            }
-          }
-          let depPath = pathJoin(baseDir, rel2 + ".tuff");
-
-          let depIdx = module_index(modulePaths, depPath);
-          if (depIdx != -1) {
-            let outFns = vec_get(moduleOutFns, depIdx);
-            let privateNames = vec_get(modulePrivateTopLevelFnNames, depIdx);
-            let mut ni = 0;
-            while (ni < vec_len(imp.names)) {
-              let name = vec_get(imp.names, ni);
-
-              let sig = fnsig_lookup_by_name(outFns, name);
-              if (!(sig.name == "")) {
-                if (seedImportedFns) {
-                  vec_push(importedFns, sig);
-                }
-              } else {
-                // If it's a top-level function but not exported, hard error.
-                if (str_list_contains(privateNames, name)) {
-                  panic_at(src, span_start(imp.span), "imported function '" + name + "' is not exported (missing `out fn`)");
-                }
-                // Otherwise, assume it's a module/type/struct/etc and let later
-                // phases handle it.
-              }
-
-              ni = ni + 1;
-            }
-          }
-        }
-        ii = ii + 1;
-      }
-    }
-
-    // Compute a stable source-relative path for output layout.
-    let crHere = compiler_root_from_path(path);
-    let relRoot = if (stringLen(crHere) > 0) crHere else workspaceRoot;
-
-    let mut prefixLen = stringLen(relRoot);
-    let mut relStart = prefixLen;
-    if (relStart < stringLen(path)) {
-      let ch = stringCharCodeAt(path, relStart);
-      if (ch == 47 || ch == 92) { relStart = relStart + 1; }
-    }
-    let relSrcPath = stringSlice(path, relStart, stringLen(path));
-    let relNoExt = stringSlice(relSrcPath, 0, stringLen(relSrcPath) - 5);
-
-    let outRelPath = if (path == entryPath) {
-      let mut pfx = stringLen(outDir);
-      let mut s = pfx;
-      if (s < stringLen(outPath)) {
-        let ch2 = stringCharCodeAt(outPath, s);
-        if (ch2 == 47 || ch2 == 92) { s = s + 1; }
-      }
-      stringSlice(outPath, s, stringLen(outPath))
-    } else {
-      relNoExt + ".mjs"
-    };
-
-    let outFile = if (path == entryPath) outPath else pathJoin(outDir, relNoExt + ".mjs");
-
-    // For project compilation, exports are controlled via `out` (plus `main`).
-    // For compiler bootstrapping, keep legacy `exportAll` to avoid churn.
-    let js = compile_tiny2_with_imported_fns(src, path == entryPath, isCompilerBuild, outRelPath, importedFns);
+    let r = project_compile_one_module(src, path, entryPath, outDir, outPath, workspaceRoot, isCompilerBuild, modulePaths, moduleOutFns, modulePrivateTopLevelFnNames);
+    let outFile = r.1;
+    let js = r.2;
     writeTextFile(outFile, js);
 
     oi = oi + 1;
@@ -1088,73 +1376,7 @@ out fn fluff_project(entryPath: String) : Void => {
     set_current_file(path);
     let src = readTextFile(path);
 
-    let importedFns = vec_new();
-
-    let seedImportedFns = !isCompilerBuild && !(stringLen(compiler_root_from_path(path)) > 0);
-
-    if (!isCompilerBuild) {
-      let mut scan = 0;
-      while (true) {
-        if (is_extern_decl_start(src, scan)) {
-          let ex2 = parse_extern_decl(src, scan);
-          scan = ex2.v1;
-          continue;
-        }
-        break;
-      }
-
-      let impsAst = parse_imports_ast(src, scan);
-      let mut ii = 0;
-      while (ii < vec_len(impsAst.decls)) {
-        let imp = vec_get(impsAst.decls, ii);
-        if (imp.tag == "DImport") {
-          let rel = module_path_to_relpath(imp.modulePath);
-          let mut baseDir = pathDirname(path);
-          let compilerSrcPrefix = "src::main::tuff::compiler::";
-          let mut rel2 = rel;
-          if (starts_with_at(imp.modulePath, 0, compilerSrcPrefix)) {
-            let compilerRootDir = pathJoin(workspaceRoot, "src/main/tuff/compiler");
-            baseDir = compilerRootDir;
-            let rest = stringSlice(imp.modulePath, stringLen(compilerSrcPrefix), stringLen(imp.modulePath));
-            rel2 = module_path_to_relpath(rest);
-          } else {
-            if (starts_with_at(imp.modulePath, 0, "src::") || starts_with_at(imp.modulePath, 0, "std::")) {
-              baseDir = workspaceRoot;
-            } else {
-              let cr = compiler_root_from_path(path);
-              if (stringLen(cr) > 0) { baseDir = cr; }
-            }
-          }
-          let depPath = pathJoin(baseDir, rel2 + ".tuff");
-
-          let depIdx = module_index(modulePaths, depPath);
-          if (depIdx != -1) {
-            let outFns = vec_get(moduleOutFns, depIdx);
-            let privateNames = vec_get(modulePrivateTopLevelFnNames, depIdx);
-            let mut ni = 0;
-            while (ni < vec_len(imp.names)) {
-              let name = vec_get(imp.names, ni);
-
-              let sig = fnsig_lookup_by_name(outFns, name);
-              if (!(sig.name == "")) {
-                if (seedImportedFns) {
-                  vec_push(importedFns, sig);
-                }
-              } else {
-                if (str_list_contains(privateNames, name)) {
-                  panic_at(src, span_start(imp.span), "imported function '" + name + "' is not exported (missing `out fn`)");
-                }
-              }
-
-              ni = ni + 1;
-            }
-          }
-        }
-        ii = ii + 1;
-      }
-    }
-
-    lint_tiny2_with_imported_fns(src, path == entryPath, isCompilerBuild, importedFns);
+    project_lint_one_module(src, path, entryPath, workspaceRoot, isCompilerBuild, modulePaths, moduleOutFns, modulePrivateTopLevelFnNames);
     oi = oi + 1;
   }
 }
