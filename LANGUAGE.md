@@ -1585,6 +1585,19 @@ extern type Promise<T>;
 
 External types are opaque to Tuff — their internal structure is unknown, but you can pass them around and use them with external functions.
 
+#### Visibility: `out extern type`
+
+By default, `extern type` declarations are private to the module. Use the `out` prefix to make an external type publicly exported:
+
+```tuff
+out extern type Vec<T>;  // Public: available to code that imports this module
+extern type InternalBuffer;  // Private: only for internal use
+```
+
+The standard library declares `Vec<T>` as a public external type in the prelude, allowing all Tuff code to use dynamic arrays with type annotations like `Vec<I32>`.
+
+#### Note on struct types
+
 Note: Tuff does not support `extern struct`. If you need to reference a foreign struct-like type, use `extern type`. However, you can define a local struct and use it with external functions:
 
 ```tuff
