@@ -531,6 +531,7 @@ Options:
 - **selfhost_diagnostics.test.ts** — error message formatting
 - **selfhost_module_split.test.ts** — module architecture validation
 - **tuff_tests_runner.test.ts** — runs all Tuff `.test.tuff` files
+- **rt_stdlib_test_runner_infra.test.ts** — validates Node runtime helpers used by the (future) Tuff-native test runner (file discovery, copying, module execution)
 
 #### Tuff Tests (`src/test/tuff/`)
 
