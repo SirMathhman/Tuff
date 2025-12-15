@@ -9,7 +9,7 @@ import { ParsedExpr, ParsedMain, ParsedStmt, ParsedParams, parse_expr, parse_stm
 import { ParsedExprAst, parse_expr_ast } from "./parsing/expr_stmt.mjs";
 import { ParsedImports, ParsedFn, parse_imports, parse_extern_decl, parse_module_decl, parse_fn_decl2, parse_class_fn_decl2, parse_struct_decl, parse_type_union_decl, parse_param_list, parse_fn_decl_named, parse_fn_decl } from "./parsing/decls.mjs";
 import { ParsedDeclAst, ParsedDeclsAst, parse_imports_ast, parse_extern_decl_ast, parse_module_decl_ast, parse_fn_decl_ast2, parse_class_fn_decl_ast2, parse_struct_decl_ast, parse_type_union_decl_ast } from "./parsing/decls.mjs";
-import { span, span_start, decl_let, decl_let_typed } from "./ast.mjs";
+import { span, span_start, span_end, decl_let, decl_let_typed } from "./ast.mjs";
 import { emit_decl_js, set_current_file_path, emit_runtime_vec_imports_js, decls_needs_vec_rt } from "./emit/ast_js.mjs";
 import { analyze_program, analyze_program_with_fns, mk_fn_sig } from "./analyzer.mjs";
 import { ParsedProgramWithTrivia, parse_program_with_trivia } from "./util/formatting.mjs";
@@ -1203,4 +1203,7 @@ return get_warning_infos();
 }
 export function lsp_line_col(src, offset) {
 return line_col_at(src, offset);
+}
+export function DefLocation(found, defStart, defEnd, defFile) {
+return { found: found, defStart: defStart, defEnd: defEnd, defFile: defFile };
 }

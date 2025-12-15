@@ -10,6 +10,8 @@ import {
   DiagnosticSeverity,
   Range,
   Position,
+  DefinitionParams,
+  Location,
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import { URI } from "vscode-uri";
@@ -32,12 +34,24 @@ interface LineCol {
   col: number;
 }
 
+interface DefLocation {
+  found: boolean;
+  defStart: number;
+  defEnd: number;
+  defFile: string;
+}
+
 // Dynamically import the Tuff compiler modules
 let tuffcLib: {
   lsp_check_file: (src: string, filePath: string) => boolean;
   lsp_get_errors: () => DiagInfo[];
   lsp_get_warnings: () => DiagInfo[];
   lsp_line_col: (src: string, offset: number) => LineCol;
+  lsp_find_definition: (
+    src: string,
+    offset: number,
+    filePath: string
+  ) => DefLocation;
 } | null = null;
 
 let prebuiltPathFromClient: string | undefined;
@@ -141,9 +155,9 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
   const result: InitializeResult = {
     capabilities: {
       textDocumentSync: TextDocumentSyncKind.Full, // Full sync needed for Tuff compiler
+      definitionProvider: true,
       // Future: add more capabilities here
       // hoverProvider: true,
-      // definitionProvider: true,
       // documentSymbolProvider: true,
     },
   };
@@ -290,6 +304,57 @@ documents.onDidChangeContent((change) => {
 // When a document is closed, clear its diagnostics
 documents.onDidClose((event) => {
   connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] });
+});
+
+// Go-to-definition handler
+connection.onDefinition((params: DefinitionParams): Location | null => {
+  if (!compilerLoaded || !tuffcLib) {
+    return null;
+  }
+
+  const document = documents.get(params.textDocument.uri);
+  if (!document) {
+    return null;
+  }
+
+  const text = document.getText();
+  const uri = params.textDocument.uri;
+
+  // Convert position to byte offset
+  const offset = document.offsetAt(params.position);
+
+  // Convert URI to file path for the compiler
+  let filePath: string;
+  try {
+    filePath = URI.parse(uri).fsPath;
+  } catch {
+    filePath = uri;
+  }
+
+  try {
+    const result = tuffcLib.lsp_find_definition(text, offset, filePath);
+
+    if (!result.found) {
+      return null;
+    }
+
+    // Convert byte offsets to line/col using the compiler's helper
+    const startLineCol = tuffcLib.lsp_line_col(text, result.defStart);
+
+    // LSP uses 0-based line/col, Tuff uses 1-based
+    const range: Range = {
+      start: { line: startLineCol.line - 1, character: startLineCol.col - 1 },
+      end: { line: startLineCol.line - 1, character: startLineCol.col - 1 + 1 },
+    };
+
+    return {
+      uri,
+      range,
+    };
+  } catch (e) {
+    connection.console.error(`Go-to-definition error: ${e}`);
+    return null;
+  }
 });
 
 // Make the text document manager listen on the connection
