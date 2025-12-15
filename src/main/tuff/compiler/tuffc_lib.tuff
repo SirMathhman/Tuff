@@ -811,128 +811,11 @@ out fn compile_project(entryPath: String, outPath: String) : Void => {
   let workspaceRoot = workspace_root_from_path(entryPath);
   let isCompilerBuild = stringLen(compiler_root_from_path(entryPath)) > 0;
 
-  // First pass: walk the module graph (DFS) to
-  //   1) detect circular dependencies (hard error)
-  //   2) collect per-module export info (top-level out fns)
-  //   3) compute a safe compilation order (deps before importers)
-  let mut stack = vec_new();
-  vec_push(stack, entryPath);
-
-  let mut visited = vec_new();
-  let mut visiting = vec_new();
-  let mut order = vec_new();
-  let mut modulePaths = vec_new();
-  let mut moduleOutFns = vec_new();
-  let mut modulePrivateTopLevelFnNames = vec_new();
-
-  while (vec_len(stack) > 0) {
-    let item = vec_get(stack, vec_len(stack) - 1);
-
-    // pop
-    let mut newStack = vec_new();
-    let mut qi = 0;
-    while (qi + 1 < vec_len(stack)) {
-      vec_push(newStack, vec_get(stack, qi));
-      qi = qi + 1;
-    }
-    stack = newStack;
-
-    if (starts_with_at(item, 0, "POST:")) {
-      let path = stringSlice(item, 5, stringLen(item));
-      visiting = str_list_remove(visiting, path);
-      vec_push(order, path);
-      continue;
-    }
-
-    let path = item;
-    if (str_list_contains(visited, path)) { continue; }
-    vec_push(visited, path);
-    vec_push(visiting, path);
-
-    // push post marker, then dependencies (LIFO)
-    vec_push(stack, "POST:" + path);
-
-    set_current_file(path);
-    let src = readTextFile(path);
-
-    // export table for this module
-    let ex = cached_scan_top_level_fn_exports(path, src);
-    vec_push(modulePaths, path);
-    if (isCompilerBuild) {
-      // Preserve legacy behavior for compiling the compiler itself: allow
-      // cross-module imports without requiring `out` on every helper.
-      vec_push(moduleOutFns, ex.2);
-      vec_push(modulePrivateTopLevelFnNames, vec_new());
-    } else {
-      vec_push(moduleOutFns, ex.0);
-      vec_push(modulePrivateTopLevelFnNames, ex.1);
-    }
-
-    // discover imports for graph walk
-    let mut scan = 0;
-    // skip externs
-    while (true) {
-      if (is_extern_decl_start(src, scan)) {
-        let ex2 = parse_extern_decl(src, scan);
-        scan = ex2.v1;
-        continue;
-      }
-      break;
-    }
-
-    while (true) {
-      let j = skip_ws(src, scan);
-      if (starts_with_at(src, j, "import")) {
-        panic_at(src, j, "`import` is not supported. Use `from <module> use { ... };` instead.");
-      }
-      if (!starts_with_at(src, j, "from")) { break; }
-      scan = parse_keyword(src, scan, "from");
-      let mod = parse_module_path(src, scan);
-      scan = mod.nextPos;
-      scan = parse_keyword(src, scan, "use");
-      scan = parse_keyword(src, scan, "{");
-      // consume name list
-      while (true) {
-        scan = skip_ws(src, scan);
-        if (!(scan < stringLen(src))) { panic_at(src, scan, "expected '}'"); }
-        if (stringCharCodeAt(src, scan) == 125) { scan = scan + 1; break; }
-        let id = parse_ident(src, scan);
-        scan = id.nextPos;
-        scan = skip_ws(src, scan);
-        if (scan < stringLen(src) && stringCharCodeAt(src, scan) == 44) { scan = scan + 1; continue; }
-        scan = skip_ws(src, scan);
-        if (scan < stringLen(src) && stringCharCodeAt(src, scan) == 125) { scan = scan + 1; break; }
-        panic_at(src, scan, "expected ',' or '}' in import list");
-      }
-      scan = parse_optional_semicolon(src, scan);
-
-      // resolve dependency file
-      let compilerSrcPrefix = "src::main::tuff::compiler::";
-      let mut rel = module_path_to_relpath(mod.text);
-      let mut baseDir = pathDirname(path);
-      if (starts_with_at(mod.text, 0, compilerSrcPrefix)) {
-        // Treat these as compiler-root imports to match internal compiler layout.
-        let compilerRootDir = pathJoin(workspaceRoot, "src/main/tuff/compiler");
-        baseDir = compilerRootDir;
-        let rest = stringSlice(mod.text, stringLen(compilerSrcPrefix), stringLen(mod.text));
-        rel = module_path_to_relpath(rest);
-      } else {
-        if (starts_with_at(mod.text, 0, "src::") || starts_with_at(mod.text, 0, "std::")) {
-          baseDir = workspaceRoot;
-        } else {
-          let cr = compiler_root_from_path(path);
-          if (stringLen(cr) > 0) { baseDir = cr; }
-        }
-      }
-      let depPath = pathJoin(baseDir, rel + ".tuff");
-
-      if (str_list_contains(visiting, depPath)) {
-        panic_at(src, j, "circular dependency detected");
-      }
-
-      vec_push(stack, depPath);
-    }
-  }
+  let graph = collect_module_graph_info(entryPath, workspaceRoot, isCompilerBuild, readTextFile);
+  let order = graph.0;
+  let modulePaths = graph.1;
+  let moduleOutFns = graph.2;
+  let modulePrivateTopLevelFnNames = graph.3;
 
   // Second pass: compile in topo order.
   let mut oi = 0;
@@ -1050,14 +933,19 @@ out fn compile_project(entryPath: String, outPath: String) : Void => {
   }
 }
 
-out fn fluff_project(entryPath: String) : Void => {
-  // Like compile_project, but only parse+analyze and emit warnings.
-  // No JS is generated and nothing is written to disk.
-
-  let workspaceRoot = workspace_root_from_path(entryPath);
-  let isCompilerBuild = stringLen(compiler_root_from_path(entryPath)) > 0;
-
-  // First pass: walk module graph (same behavior as compile_project).
+// Shared helper: walk the module graph (DFS) to
+//   1) detect circular dependencies (hard error)
+//   2) collect per-module export info (top-level out fns)
+//   3) compute a safe compilation order (deps before importers)
+//
+// This is the first step toward separating file I/O from compilation logic.
+// Callers inject the source reader function.
+fn collect_module_graph_info(
+  entryPath: String,
+  workspaceRoot: String,
+  isCompilerBuild: Bool,
+  readSource: (String) => String
+) => {
   let mut stack = vec_new();
   vec_push(stack, entryPath);
 
@@ -1096,13 +984,14 @@ out fn fluff_project(entryPath: String) : Void => {
     vec_push(stack, "POST:" + path);
 
     set_current_file(path);
-    let src = readTextFile(path);
+    let src = readSource(path);
 
     // export table for this module
     let ex = cached_scan_top_level_fn_exports(path, src);
     vec_push(modulePaths, path);
     if (isCompilerBuild) {
-      // Preserve legacy behavior for compiling the compiler itself.
+      // Preserve legacy behavior for compiling the compiler itself: allow
+      // cross-module imports without requiring `out` on every helper.
       vec_push(moduleOutFns, ex.2);
       vec_push(modulePrivateTopLevelFnNames, vec_new());
     } else {
@@ -1153,6 +1042,7 @@ out fn fluff_project(entryPath: String) : Void => {
       let mut rel = module_path_to_relpath(mod.text);
       let mut baseDir = pathDirname(path);
       if (starts_with_at(mod.text, 0, compilerSrcPrefix)) {
+        // Treat these as compiler-root imports to match internal compiler layout.
         let compilerRootDir = pathJoin(workspaceRoot, "src/main/tuff/compiler");
         baseDir = compilerRootDir;
         let rest = stringSlice(mod.text, stringLen(compilerSrcPrefix), stringLen(mod.text));
@@ -1174,6 +1064,22 @@ out fn fluff_project(entryPath: String) : Void => {
       vec_push(stack, depPath);
     }
   }
+
+  (order, modulePaths, moduleOutFns, modulePrivateTopLevelFnNames)
+}
+
+out fn fluff_project(entryPath: String) : Void => {
+  // Like compile_project, but only parse+analyze and emit warnings.
+  // No JS is generated and nothing is written to disk.
+
+  let workspaceRoot = workspace_root_from_path(entryPath);
+  let isCompilerBuild = stringLen(compiler_root_from_path(entryPath)) > 0;
+
+  let graph = collect_module_graph_info(entryPath, workspaceRoot, isCompilerBuild, readTextFile);
+  let order = graph.0;
+  let modulePaths = graph.1;
+  let moduleOutFns = graph.2;
+  let modulePrivateTopLevelFnNames = graph.3;
 
   // Second pass: lint in topo order.
   let mut oi = 0;
