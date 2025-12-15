@@ -1,0 +1,384 @@
+// Analyzer-internal type string utilities.
+//
+// NOTE: The analyzer uses compact string tags for types (Phase 4).
+
+extern from rt::stdlib use { stringLen, stringCharCodeAt, stringSlice };
+extern from rt::vec use { vec_new, vec_len, vec_push, vec_get };
+
+out fn type_is_ws(ch: I32) : Bool => ch == 32 || ch == 9 || ch == 10 || ch == 13
+out fn ty_is_digit(ch: I32) : Bool => ch >= 48 && ch <= 57
+
+out fn ty_skip_ws(t: String, i: I32) : I32 => {
+  let mut k = i;
+  while (k < stringLen(t) && type_is_ws(stringCharCodeAt(t, k))) { k = k + 1; }
+  k
+}
+
+out fn ty_starts_with(t: String, i: I32, s: String) : Bool => {
+  let mut j = 0;
+  while (j < stringLen(s)) {
+    if (!(i + j < stringLen(t))) { yield false; }
+    if (stringCharCodeAt(t, i + j) != stringCharCodeAt(s, j)) { yield false; }
+    j = j + 1;
+  }
+  true
+}
+
+out fn ty_unknown() : String => "Unknown"
+out fn ty_int_lit() : String => "IntLit"
+out fn ty_float_lit() : String => "FloatLit"
+out fn ty_bool() : String => "Bool"
+out fn ty_i32() : String => "I32"
+out fn ty_i8() : String => "I8"
+out fn ty_i16() : String => "I16"
+out fn ty_i64() : String => "I64"
+out fn ty_f32() : String => "F32"
+out fn ty_f64() : String => "F64"
+out fn ty_u32() : String => "U32"
+out fn ty_u8() : String => "U8"
+out fn ty_u16() : String => "U16"
+out fn ty_u64() : String => "U64"
+out fn ty_char() : String => "Char"
+out fn ty_string() : String => "String"
+out fn ty_void() : String => "Void"
+out fn ty_never() : String => "Never"
+
+out fn ty_fn_type(typeParams: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String) : String => {
+  // Compact function type tag used internally by the analyzer.
+  // Example: Fn(I32,I32)->I32
+  // Generic example: Fn<T>(T)->T
+  let mut out = "Fn";
+  if (vec_len(typeParams) > 0) {
+    out = out + "<";
+    let mut ti = 0;
+    while (ti < vec_len(typeParams)) {
+      if (ti > 0) { out = out + ","; }
+      out = out + normalize_ty_ann(vec_get(typeParams, ti));
+      ti = ti + 1;
+    }
+    out = out + ">";
+  }
+  out = out + "(";
+  let mut i = 0;
+  while (i < vec_len(paramTyAnns)) {
+    if (i > 0) { out = out + ","; }
+    let t = vec_get(paramTyAnns, i);
+    out = out + normalize_ty_ann(if (t == "") ty_unknown() else t);
+    i = i + 1;
+  }
+  let rt = if (retTyAnn == "") ty_unknown() else normalize_ty_ann(retTyAnn);
+  out = out + ")->" + rt;
+  out
+}
+
+out fn ty_is_fn_type(t: String) : Bool => {
+  // `Fn(...)->Ret` or `Fn<T>(...)->Ret`
+  if (stringLen(t) < 2) { yield false; }
+  if (!(stringSlice(t, 0, 2) == "Fn")) { yield false; }
+  true
+}
+
+out fn ty_fn_type_params(t: String) => {
+  // Extract type params from `Fn<T,U>(...)->...`.
+  // Returns empty vec for non-generic `Fn(...)->...`.
+  let out = vec_new();
+  if (stringLen(t) < 3) { yield out; }
+  if (!(stringSlice(t, 0, 2) == "Fn")) { yield out; }
+  if (!(stringLen(t) >= 3 && stringCharCodeAt(t, 2) == 60)) { yield out; } // '<'
+
+  let mut i = 3;
+  let mut start = i;
+  while (i < stringLen(t)) {
+    let ch = stringCharCodeAt(t, i);
+    if (ch == 44) { // ','
+      vec_push(out, normalize_ty_ann(stringSlice(t, start, i)));
+      i = i + 1;
+      start = i;
+      continue;
+    }
+    if (ch == 62) { // '>'
+      if (i > start) { vec_push(out, normalize_ty_ann(stringSlice(t, start, i))); }
+      yield out;
+    }
+    i = i + 1;
+  }
+  out
+}
+
+out fn ty_fn_ret(t: String) : String => {
+  // Extract Ret from `Fn(...)->Ret`.
+  let pat = ")->";
+  let mut i = 0;
+  while (i + stringLen(pat) <= stringLen(t)) {
+    if (stringSlice(t, i, i + stringLen(pat)) == pat) {
+      yield stringSlice(t, i + stringLen(pat), stringLen(t));
+    }
+    i = i + 1;
+  }
+  ty_unknown()
+}
+
+out fn ty_fn_param_tys(t: String) => {
+  // Extract param types from `Fn(...)->Ret` or `Fn<T>(...)->Ret`.
+  // Returns a vec of normalized types; Unknown for unannotated params.
+  let out = vec_new();
+  if (!ty_is_fn_type(t)) { yield out; }
+
+  let mut i = 2; // after "Fn"
+  // Skip optional generic params `Fn<...>`.
+  if (i < stringLen(t) && stringCharCodeAt(t, i) == 60) { // '<'
+    let mut depth = 1;
+    i = i + 1;
+    while (i < stringLen(t) && depth > 0) {
+      let ch = stringCharCodeAt(t, i);
+      if (ch == 60) { depth = depth + 1; }
+      if (ch == 62) { depth = depth - 1; }
+      i = i + 1;
+    }
+  }
+
+  // Find '('
+  while (i < stringLen(t) && stringCharCodeAt(t, i) != 40) { i = i + 1; }
+  if (!(i < stringLen(t) && stringCharCodeAt(t, i) == 40)) { yield out; }
+
+  let mut k = i + 1;
+  let mut start = k;
+  let mut angleDepth = 0;
+  let mut bracketDepth = 0;
+  while (k < stringLen(t)) {
+    let ch = stringCharCodeAt(t, k);
+    if (ch == 60) { angleDepth = angleDepth + 1; k = k + 1; continue; } // '<'
+    if (ch == 62) { if (angleDepth > 0) { angleDepth = angleDepth - 1; } k = k + 1; continue; } // '>'
+    if (ch == 91) { bracketDepth = bracketDepth + 1; k = k + 1; continue; } // '['
+    if (ch == 93) { if (bracketDepth > 0) { bracketDepth = bracketDepth - 1; } k = k + 1; continue; } // ']'
+
+    if (ch == 44 && angleDepth == 0 && bracketDepth == 0) { // ','
+      let part = stringSlice(t, start, k);
+      let trimmedStart = ty_skip_ws(part, 0);
+      let mut trimmedEnd = stringLen(part);
+      while (trimmedEnd > 0 && type_is_ws(stringCharCodeAt(part, trimmedEnd - 1))) { trimmedEnd = trimmedEnd - 1; }
+      if (trimmedEnd > trimmedStart) { vec_push(out, normalize_ty_ann(stringSlice(part, trimmedStart, trimmedEnd))); }
+      k = k + 1;
+      start = k;
+      continue;
+    }
+
+    if (ch == 41 && angleDepth == 0 && bracketDepth == 0) { // ')'
+      let part = stringSlice(t, start, k);
+      let trimmedStart = ty_skip_ws(part, 0);
+      let mut trimmedEnd = stringLen(part);
+      while (trimmedEnd > 0 && type_is_ws(stringCharCodeAt(part, trimmedEnd - 1))) { trimmedEnd = trimmedEnd - 1; }
+      if (trimmedEnd > trimmedStart) { vec_push(out, normalize_ty_ann(stringSlice(part, trimmedStart, trimmedEnd))); }
+      yield out;
+    }
+
+    k = k + 1;
+  }
+  out
+}
+
+out fn normalize_ty_ann(t: String) : String => {
+  // Keep this minimal (Phase 4). We mostly do string equality checks.
+  if (t == "Int") { yield ty_i32(); }
+  if (t == "I8") { yield ty_i8(); }
+  if (t == "I16") { yield ty_i16(); }
+  if (t == "I32") { yield ty_i32(); }
+  if (t == "I64") { yield ty_i64(); }
+  if (t == "F32") { yield ty_f32(); }
+  if (t == "F64") { yield ty_f64(); }
+  if (t == "U8") { yield ty_u8(); }
+  if (t == "U16") { yield ty_u16(); }
+  if (t == "U32") { yield ty_u32(); }
+  if (t == "U64") { yield ty_u64(); }
+  if (t == "Char") { yield ty_char(); }
+  if (t == "Bool") { yield ty_bool(); }
+  if (t == "String") { yield ty_string(); }
+  if (t == "Void") { yield ty_void(); }
+  if (t == "Never") { yield ty_never(); }
+  t
+}
+
+class fn ParsedTyApp(ok: Bool, callee: String, args: Vec<String>, nextPos: I32) => {}
+class fn ParsedTyArray(ok: Bool, elem: String, init: I32, len: I32) => {}
+
+out fn vec_contains_str(v: Vec<String>, s: String) : Bool => {
+  let mut i = 0;
+  while (i < vec_len(v)) {
+    if (vec_get(v, i) == s) { yield true; }
+    i = i + 1;
+  }
+  false
+}
+
+out fn ty_is_type_var(typeParams: Vec<String>, t: String) : Bool => vec_contains_str(typeParams, t)
+
+out fn ty_parse_app(t: String) : ParsedTyApp => {
+  // Parse `Name<...>` at top-level. Returns ok=false if not an app.
+  let mut i = 0;
+  i = ty_skip_ws(t, i);
+  let mut lt = -1;
+  // Find first '<' at depth 0.
+  let mut depth = 0;
+  while (i < stringLen(t)) {
+    let ch = stringCharCodeAt(t, i);
+    if (ch == 60) { // '<'
+      if (depth == 0) { lt = i; break; }
+      depth = depth + 1;
+      i = i + 1;
+      continue;
+    }
+    if (ch == 62) { // '>'
+      if (depth > 0) { depth = depth - 1; }
+      i = i + 1;
+      continue;
+    }
+    i = i + 1;
+  }
+  if (lt == -1) { yield ParsedTyApp(false, "", vec_new(), 0); }
+
+  let callee = stringSlice(t, 0, lt);
+  // Parse args inside <...>
+  let mut k = lt + 1;
+  let args = vec_new();
+  let mut start = k;
+  let mut aDepth = 0;
+  while (k < stringLen(t)) {
+    let ch = stringCharCodeAt(t, k);
+    if (ch == 60) { aDepth = aDepth + 1; k = k + 1; continue; }
+    if (ch == 62) {
+      if (aDepth == 0) {
+        let part = stringSlice(t, start, k);
+        let trimmedStart = ty_skip_ws(part, 0);
+        let mut trimmedEnd = stringLen(part);
+        while (trimmedEnd > 0 && type_is_ws(stringCharCodeAt(part, trimmedEnd - 1))) { trimmedEnd = trimmedEnd - 1; }
+        vec_push(args, stringSlice(part, trimmedStart, trimmedEnd));
+        yield ParsedTyApp(true, callee, args, k + 1);
+      }
+      aDepth = aDepth - 1;
+      k = k + 1;
+      continue;
+    }
+    if (ch == 44 && aDepth == 0) { // ','
+      let part = stringSlice(t, start, k);
+      let trimmedStart = ty_skip_ws(part, 0);
+      let mut trimmedEnd = stringLen(part);
+      while (trimmedEnd > 0 && type_is_ws(stringCharCodeAt(part, trimmedEnd - 1))) { trimmedEnd = trimmedEnd - 1; }
+      vec_push(args, stringSlice(part, trimmedStart, trimmedEnd));
+      k = k + 1;
+      start = k;
+      continue;
+    }
+    k = k + 1;
+  }
+  ParsedTyApp(false, "", vec_new(), 0)
+}
+
+out fn ty_parse_array(t: String) : ParsedTyArray => {
+  // Parse `[Elem;init;len]` (numbers required). Returns ok=false if not array.
+  let mut i = ty_skip_ws(t, 0);
+  if (!(i < stringLen(t) && stringCharCodeAt(t, i) == 91)) { yield ParsedTyArray(false, "", 0, 0); } // '['
+  let mut end = stringLen(t);
+  while (end > 0 && type_is_ws(stringCharCodeAt(t, end - 1))) { end = end - 1; }
+  if (!(end > 0 && stringCharCodeAt(t, end - 1) == 93)) { yield ParsedTyArray(false, "", 0, 0); } // ']'
+
+  // Split inner by ';' at depth 0.
+  let mut k = i + 1;
+  let mut partStart = k;
+  let parts = vec_new();
+  let mut depth = 0;
+  while (k < end - 1) {
+    let ch = stringCharCodeAt(t, k);
+    if (ch == 60) { depth = depth + 1; k = k + 1; continue; }
+    if (ch == 62) { if (depth > 0) { depth = depth - 1; } k = k + 1; continue; }
+    if (ch == 59 && depth == 0) { // ';'
+      vec_push(parts, stringSlice(t, partStart, k));
+      k = k + 1;
+      partStart = k;
+      continue;
+    }
+    k = k + 1;
+  }
+  vec_push(parts, stringSlice(t, partStart, end - 1));
+  if (vec_len(parts) != 3) { yield ParsedTyArray(false, "", 0, 0); }
+
+  let elemRaw = vec_get(parts, 0);
+  let elem = stringSlice(elemRaw, ty_skip_ws(elemRaw, 0), stringLen(elemRaw));
+  let initStr = vec_get(parts, 1);
+  let lenStr = vec_get(parts, 2);
+
+  // Parse integers (no sign).
+  let mut p = ty_skip_ws(initStr, 0);
+  let mut init: I32 = 0;
+  while (p < stringLen(initStr) && ty_is_digit(stringCharCodeAt(initStr, p))) {
+    init = init * 10 + (stringCharCodeAt(initStr, p) - 48);
+    p = p + 1;
+  }
+  p = ty_skip_ws(lenStr, 0);
+  let mut len: I32 = 0;
+  while (p < stringLen(lenStr) && ty_is_digit(stringCharCodeAt(lenStr, p))) {
+    len = len * 10 + (stringCharCodeAt(lenStr, p) - 48);
+    p = p + 1;
+  }
+  ParsedTyArray(true, elem, init, len)
+}
+
+out fn ty_is_slice(t: String) : Bool => {
+  let i = ty_skip_ws(t, 0);
+  ty_starts_with(t, i, "*[")
+}
+
+out fn ty_slice_inner(t: String) : String => {
+  // assumes ty_is_slice
+  let i = ty_skip_ws(t, 0);
+  let mut k = i + 2;
+  let mut end = stringLen(t);
+  while (end > 0 && type_is_ws(stringCharCodeAt(t, end - 1))) { end = end - 1; }
+  // ends with ']'
+  stringSlice(t, k, end - 1)
+}
+
+out fn type_is_unknown(t: String) : Bool => t == ty_unknown() || t == ""
+
+out fn type_is_int_like(t: String) : Bool => {
+  let tt = normalize_ty_ann(t);
+  if (tt == ty_int_lit()) { yield true; }
+  if (tt == ty_i8()) { yield true; }
+  if (tt == ty_i16()) { yield true; }
+  if (tt == ty_i32()) { yield true; }
+  if (tt == ty_i64()) { yield true; }
+  if (tt == ty_u8()) { yield true; }
+  if (tt == ty_u16()) { yield true; }
+  if (tt == ty_u32()) { yield true; }
+  if (tt == ty_u64()) { yield true; }
+  if (tt == ty_char()) { yield true; }
+  false
+}
+
+out fn type_is_concrete_int(t: String) : Bool => {
+  // Like type_is_int_like, but excludes literals (IntLit) and Char.
+  let tt = normalize_ty_ann(t);
+  if (tt == ty_i8()) { yield true; }
+  if (tt == ty_i16()) { yield true; }
+  if (tt == ty_i32()) { yield true; }
+  if (tt == ty_i64()) { yield true; }
+  if (tt == ty_u8()) { yield true; }
+  if (tt == ty_u16()) { yield true; }
+  if (tt == ty_u32()) { yield true; }
+  if (tt == ty_u64()) { yield true; }
+  false
+}
+
+out fn type_is_float_like(t: String) : Bool => {
+  let tt = normalize_ty_ann(t);
+  if (tt == ty_float_lit()) { yield true; }
+  if (tt == ty_f32()) { yield true; }
+  if (tt == ty_f64()) { yield true; }
+  false
+}
+
+out fn type_is_concrete_float(t: String) : Bool => {
+  let tt = normalize_ty_ann(t);
+  if (tt == ty_f32()) { yield true; }
+  if (tt == ty_f64()) { yield true; }
+  false
+}
