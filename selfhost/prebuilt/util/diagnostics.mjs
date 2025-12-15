@@ -285,8 +285,7 @@ out = out + "\n" + "help: " + help;
 return out;
 }
 export function panic_span_help(src, start, end, msg, help) {
-panic(format_span_help(src, start, end, msg, help));
-return undefined;
+return panic(format_span_help(src, start, end, msg, help));
 }
 export function error_span_help(src, start, end, msg, help) {
 if (vec_len(__tuffc_errors) >= 50) {
@@ -304,8 +303,7 @@ vec_push(__tuffc_warnings, replace_error_label_with_warning(s));
 return undefined;
 }
 export function panic_at_help(src, i, msg, help) {
-panic_span_help(src, i, i, msg, help);
-return undefined;
+return panic_span_help(src, i, i, msg, help);
 }
 export function error_at_help(src, i, msg, help) {
 error_span_help(src, i, i, msg, help);
@@ -316,8 +314,7 @@ warn_span_help(src, i, i, msg, help);
 return undefined;
 }
 export function panic_at(src, i, msg) {
-panic_at_help(src, i, msg, "");
-return undefined;
+return panic_at_help(src, i, msg, "");
 }
 export function error_at(src, i, msg) {
 error_at_help(src, i, msg, "");

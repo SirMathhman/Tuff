@@ -324,6 +324,7 @@ fn ty_u64() : String => "U64"
 fn ty_char() : String => "Char"
 fn ty_string() : String => "String"
 fn ty_void() : String => "Void"
+fn ty_never() : String => "Never"
 
 fn ty_fn_type(typeParams: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String) : String => {
   // Compact function type tag used internally by the analyzer.
@@ -476,6 +477,7 @@ fn normalize_ty_ann(t: String) : String => {
   if (t == "Bool") { yield ty_bool(); }
   if (t == "String") { yield ty_string(); }
   if (t == "Void") { yield ty_void(); }
+  if (t == "Never") { yield ty_never(); }
   t
 }
 
@@ -716,6 +718,7 @@ fn should_enforce_expected_type(structs: Vec<StructDef>, expected: String) : Boo
   if (e == ty_char()) { yield true; }
   if (e == ty_string()) { yield true; }
   if (e == ty_void()) { yield true; }
+  if (e == ty_never()) { yield true; }
   if (has_struct_def(structs, e)) { yield true; }
   false
 }
@@ -729,6 +732,10 @@ fn type_compatible(structs: Vec<StructDef>, expected: String, actual: String) : 
   if (!should_enforce_expected_type(structs, expected)) { yield true; }
 
   if (type_is_unknown(actual)) { yield true; }
+
+  // Never (bottom type) is compatible with any expected type.
+  // A diverging expression (e.g. panic()) can satisfy any return type.
+  if (normalize_ty_ann(actual) == ty_never()) { yield true; }
 
   // Integer/char literals are context-typed in the language.
   // Model that by allowing `IntLit` to flow into int-like expected types.
@@ -1336,6 +1343,9 @@ fn infer_expr_type(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, scopes
   if (e.tag == "EIf") {
     let t1 = infer_expr_type(src, structs, fns, scopes, depth, e.thenExpr);
     let t2 = infer_expr_type(src, structs, fns, scopes, depth, e.elseExpr);
+    // Never absorption: if one branch diverges, the result is the other branch's type.
+    if (normalize_ty_ann(t1) == ty_never()) { yield normalize_ty_ann(t2); }
+    if (normalize_ty_ann(t2) == ty_never()) { yield normalize_ty_ann(t1); }
     if (!type_is_unknown(t1) && normalize_ty_ann(t1) == normalize_ty_ann(t2)) {
       yield normalize_ty_ann(t1);
     }

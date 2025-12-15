@@ -3,8 +3,17 @@
 // Keep this file dependency-free (other than Node builtins) so emitted `.mjs`
 // from the bootstrap compiler can import it.
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import {
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  existsSync,
+  readdirSync,
+  copyFileSync,
+} from "node:fs";
+import { spawnSync } from "node:child_process";
 import { dirname, join, resolve, basename } from "node:path";
+import { pathToFileURL } from "node:url";
 
 export function print(s) {
   process.stdout.write(String(s));
@@ -190,4 +199,85 @@ export function map_keys(m) {
 
 export function map_values(m) {
   return Array.from(m.values());
+}
+
+// ---- Test runner helpers (Node.js) ----
+
+export function listTestTuffFiles(rootDir) {
+  const root = resolve(String(rootDir));
+  const out = [];
+
+  function walk(dir) {
+    const entries = readdirSync(dir, { withFileTypes: true });
+    for (const ent of entries) {
+      const p = join(dir, ent.name);
+      if (ent.isDirectory()) {
+        walk(p);
+        continue;
+      }
+      if (ent.isFile() && ent.name.endsWith(".test.tuff")) {
+        out.push(p);
+      }
+    }
+  }
+
+  walk(root);
+  return out;
+}
+
+export function listFilesRecursive(rootDir) {
+  const root = resolve(String(rootDir));
+  const out = [];
+
+  function walk(dir) {
+    const entries = readdirSync(dir, { withFileTypes: true });
+    for (const ent of entries) {
+      const p = join(dir, ent.name);
+      if (ent.isDirectory()) {
+        walk(p);
+        continue;
+      }
+      if (ent.isFile()) {
+        out.push(p);
+      }
+    }
+  }
+
+  walk(root);
+  return out;
+}
+
+export function copyFile(srcPath, dstPath) {
+  const src = resolve(String(srcPath));
+  const dst = resolve(String(dstPath));
+  mkdirSync(dirname(dst), { recursive: true });
+  copyFileSync(src, dst);
+}
+
+export function runTuffModule(mjsPath, argv) {
+  const abs = resolve(String(mjsPath));
+  const url = pathToFileURL(abs).toString();
+
+  const driver = [
+    `const mod = await import(${JSON.stringify(url)});`,
+    `if (typeof mod.main !== "function") { process.exit(1); }`,
+    `const argv = ${JSON.stringify((argv ?? []).map(String))};`,
+    `const rc = mod.main.length === 0 ? mod.main() : mod.main(argv);`,
+    `process.exit(Number(rc) | 0);`,
+  ].join("\n");
+
+  const res = spawnSync(
+    process.execPath,
+    ["--input-type=module", "-e", driver],
+    {
+      stdio: "inherit",
+    }
+  );
+
+  if (typeof res.status === "number") return res.status;
+  return 1;
+}
+
+export function runTuffTestModule(mjsPath) {
+  return runTuffModule(mjsPath, []);
 }

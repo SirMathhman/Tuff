@@ -952,18 +952,12 @@ out fn compile_project(entryPath: String, outPath: String) : Void => {
     let src = readTextFile(path);
 
     // Build imported function signatures and validate `out` visibility.
-    // NOTE: For compiler bootstrapping builds, we intentionally do *not* seed
-    // imported fn signatures. The compiler sources rely on `panic_at(...)` as
-    // a non-returning expression in I32-returning helpers, and Phase 4's
-    // current type lattice doesn't model `Never` yet.
+    // Now that the analyzer supports the Never type, we can seed imported fn
+    // signatures for all builds including the compiler itself.
+    // However, compiler modules still use placeholder type annotations (String)
+    // for AST types, so we skip signature seeding for compiler-rooted modules.
     let importedFns = vec_new();
-
-    // Also avoid seeding imported fn signatures for compiler-root modules when
-    // they are compiled as dependencies of a non-compiler project (e.g. .tuff
-    // tests that import compiler modules via src::main::tuff::compiler::...).
-    // Otherwise, the analyzer learns `panic_*` returns Void and rejects helper
-    // functions that treat panic as non-returning.
-    let seedImportedFns = !isCompilerBuild && !(stringLen(compiler_root_from_path(path)) > 0);
+    let seedImportedFns = !(stringLen(compiler_root_from_path(path)) > 0);
 
     if (!isCompilerBuild) {
       let mut scan = 0;

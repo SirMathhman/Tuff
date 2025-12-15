@@ -293,8 +293,8 @@ out fn format_span_help(src: String, start: I32, end: I32, msg: String, help: St
   out
 }
 
-out fn panic_span_help(src: String, start: I32, end: I32, msg: String, help: String) : Void => {
-  panic(format_span_help(src, start, end, msg, help));
+out fn panic_span_help(src: String, start: I32, end: I32, msg: String, help: String) : Never => {
+  panic(format_span_help(src, start, end, msg, help))
 }
 
 out fn error_span_help(src: String, start: I32, end: I32, msg: String, help: String) : Void => {
@@ -310,8 +310,8 @@ out fn warn_span_help(src: String, start: I32, end: I32, msg: String, help: Stri
   vec_push(__tuffc_warnings, replace_error_label_with_warning(s));
 }
 
-out fn panic_at_help(src: String, i: I32, msg: String, help: String) : Void => {
-  panic_span_help(src, i, i, msg, help);
+out fn panic_at_help(src: String, i: I32, msg: String, help: String) : Never => {
+  panic_span_help(src, i, i, msg, help)
 }
 
 out fn error_at_help(src: String, i: I32, msg: String, help: String) : Void => {
@@ -322,8 +322,8 @@ out fn warn_at_help(src: String, i: I32, msg: String, help: String) : Void => {
   warn_span_help(src, i, i, msg, help);
 }
 
-out fn panic_at(src: String, i: I32, msg: String) : Void => {
-  panic_at_help(src, i, msg, "");
+out fn panic_at(src: String, i: I32, msg: String) : Never => {
+  panic_at_help(src, i, msg, "")
 }
 
 out fn error_at(src: String, i: I32, msg: String) : Void => {

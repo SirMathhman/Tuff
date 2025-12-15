@@ -3,11 +3,22 @@ import { stringLen, stringCharCodeAt, stringSlice } from "./rt/stdlib.mjs";
 import { vec_new, vec_len, vec_push, vec_get, vec_set } from "./rt/vec.mjs";
 import { error_at, warn_at } from "./util/diagnostics.mjs";
 import { span_start } from "./ast.mjs";
-let __lint_warn_unused_locals = false;
-let __lint_warn_unused_params = false;
-export function set_lint_options(warnUnusedLocals, warnUnusedParams) {
-__lint_warn_unused_locals = warnUnusedLocals;
-__lint_warn_unused_params = warnUnusedParams;
+let __fluff_unused_locals = 0;
+let __fluff_unused_params = 0;
+export function set_fluff_options(unusedLocalsSeverity, unusedParamsSeverity) {
+__fluff_unused_locals = unusedLocalsSeverity;
+__fluff_unused_params = unusedParamsSeverity;
+return undefined;
+}
+export function fluff_emit_at(src, pos, severity, msg) {
+if (severity == 1) {
+warn_at(src, pos, msg);
+return;
+}
+if (severity == 2) {
+error_at(src, pos, msg);
+return;
+}
 return undefined;
 }
 export function this_struct_name(className) {
@@ -293,6 +304,9 @@ return "String";
 export function ty_void() {
 return "Void";
 }
+export function ty_never() {
+return "Never";
+}
 export function ty_fn_type(typeParams, paramTyAnns, retTyAnn) {
 let out = "Fn";
 if (vec_len(typeParams) > 0) {
@@ -503,6 +517,9 @@ return ty_string();
 }
 if (t == "Void") {
 return ty_void();
+}
+if (t == "Never") {
+return ty_never();
 }
 return t;
 }
@@ -836,6 +853,9 @@ return true;
 if (e == ty_void()) {
 return true;
 }
+if (e == ty_never()) {
+return true;
+}
 if (has_struct_def(structs, e)) {
 return true;
 }
@@ -849,6 +869,9 @@ if (!should_enforce_expected_type(structs, expected)) {
 return true;
 }
 if (type_is_unknown(actual)) {
+return true;
+}
+if (normalize_ty_ann(actual) == ty_never()) {
 return true;
 }
 if (normalize_ty_ann(actual) == ty_int_lit() && type_is_int_like(expected)) {
@@ -1181,7 +1204,8 @@ si = si + 1;
 return undefined;
 }
 export function warn_unused_locals_in_scope(src, scopes, depth) {
-if (!__lint_warn_unused_locals) {
+const severity = __fluff_unused_locals;
+if (severity == 0) {
 return;
 }
 const scope = vec_get(scopes, depth - 1);
@@ -1189,14 +1213,15 @@ let bi = 0;
 while (bi < vec_len(scope)) {
 const b = vec_get(scope, bi);
 if (!b.read && !b.isParam && !binding_name_is_intentionally_unused(b.name)) {
-warn_at(src, b.declPos, "unused local: " + b.name);
+fluff_emit_at(src, b.declPos, severity, "unused local: " + b.name);
 }
 bi = bi + 1;
 }
 return undefined;
 }
 export function warn_unused_params_in_scope(src, scopes, depth) {
-if (!__lint_warn_unused_params) {
+const severity = __fluff_unused_params;
+if (severity == 0) {
 return;
 }
 const scope = vec_get(scopes, depth - 1);
@@ -1204,7 +1229,7 @@ let bi = 0;
 while (bi < vec_len(scope)) {
 const b = vec_get(scope, bi);
 if (!b.read && b.isParam && !binding_name_is_intentionally_unused(b.name)) {
-warn_at(src, b.declPos, "unused parameter: " + b.name);
+fluff_emit_at(src, b.declPos, severity, "unused parameter: " + b.name);
 }
 bi = bi + 1;
 }
@@ -1502,6 +1527,12 @@ return ty_unknown();
 if (e.tag == "EIf") {
 const t1 = infer_expr_type(src, structs, fns, scopes, depth, e.thenExpr);
 const t2 = infer_expr_type(src, structs, fns, scopes, depth, e.elseExpr);
+if (normalize_ty_ann(t1) == ty_never()) {
+return normalize_ty_ann(t2);
+}
+if (normalize_ty_ann(t2) == ty_never()) {
+return normalize_ty_ann(t1);
+}
 if (!type_is_unknown(t1) && normalize_ty_ann(t1) == normalize_ty_ann(t2)) {
 return normalize_ty_ann(t1);
 }

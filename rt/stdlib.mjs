@@ -266,9 +266,13 @@ export function runTuffModule(mjsPath, argv) {
     `process.exit(Number(rc) | 0);`,
   ].join("\n");
 
-  const res = spawnSync(process.execPath, ["--input-type=module", "-e", driver], {
-    stdio: "inherit",
-  });
+  const res = spawnSync(
+    process.execPath,
+    ["--input-type=module", "-e", driver],
+    {
+      stdio: "inherit",
+    }
+  );
 
   if (typeof res.status === "number") return res.status;
   return 1;

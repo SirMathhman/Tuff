@@ -112,21 +112,21 @@ Source Code (.tuff files)
 
 The self-hosting compiler is located in `src/main/tuff/compiler/` and is split into focused modules:
 
-| Area     | Module                    | Purpose                                                    |
-| -------- | ------------------------- | ---------------------------------------------------------- |
-| AST      | `ast.tuff`                | Canonical AST definitions                                  |
-| Util     | `util/lexing.tuff`        | Tokenization helpers                                       |
-| Util     | `util/diagnostics.tuff`   | Errors/warnings + formatting                               |
-| Parsing  | `parsing/primitives.tuff` | Low-level parsing utilities                                |
-| Parsing  | `parsing/types.tuff`      | Type-expression parsing                                    |
-| Parsing  | `parsing/expr_stmt.tuff`  | Expression + statement parsing                             |
-| Parsing  | `parsing/decls.tuff`      | Top-level declarations + imports                           |
-| Analysis | `analyzer.tuff`           | Scope/type checks + lint plumbing                          |
-| Emit     | `emit/ast_js.tuff`        | AST → JS ESM emitter                                       |
-| Driver   | `tuffc_lib.tuff`          | Multi-file orchestration + emit                            |
-| Config   | `build_config.tuff`       | `build.json` discovery + Fluff severity config             |
-| CLI      | `tuffc.tuff`              | Compiler CLI (compiled to `selfhost/prebuilt/tuffc.mjs`)   |
-| CLI      | `fluff.tuff`              | Linter CLI (compiled to `selfhost/prebuilt/fluff.mjs`)     |
+| Area     | Module                    | Purpose                                                  |
+| -------- | ------------------------- | -------------------------------------------------------- |
+| AST      | `ast.tuff`                | Canonical AST definitions                                |
+| Util     | `util/lexing.tuff`        | Tokenization helpers                                     |
+| Util     | `util/diagnostics.tuff`   | Errors/warnings + formatting                             |
+| Parsing  | `parsing/primitives.tuff` | Low-level parsing utilities                              |
+| Parsing  | `parsing/types.tuff`      | Type-expression parsing                                  |
+| Parsing  | `parsing/expr_stmt.tuff`  | Expression + statement parsing                           |
+| Parsing  | `parsing/decls.tuff`      | Top-level declarations + imports                         |
+| Analysis | `analyzer.tuff`           | Scope/type checks + lint plumbing                        |
+| Emit     | `emit/ast_js.tuff`        | AST → JS ESM emitter                                     |
+| Driver   | `tuffc_lib.tuff`          | Multi-file orchestration + emit                          |
+| Config   | `build_config.tuff`       | `build.json` discovery + Fluff severity config           |
+| CLI      | `tuffc.tuff`              | Compiler CLI (compiled to `selfhost/prebuilt/tuffc.mjs`) |
+| CLI      | `fluff.tuff`              | Linter CLI (compiled to `selfhost/prebuilt/fluff.mjs`)   |
 
 ### Bootstrap Strategy
 

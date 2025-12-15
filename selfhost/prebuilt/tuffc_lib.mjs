@@ -797,7 +797,7 @@ const path = vec_get(order, oi);
 set_current_file(path);
 const src = readTextFile(path);
 const importedFns = vec_new();
-const seedImportedFns = !isCompilerBuild && !(stringLen(compiler_root_from_path(path)) > 0);
+const seedImportedFns = !(stringLen(compiler_root_from_path(path)) > 0);
 if (!isCompilerBuild) {
 let scan = 0;
 while (true) {
@@ -890,7 +890,7 @@ oi = oi + 1;
 }
 return undefined;
 }
-export function lint_project(entryPath) {
+export function fluff_project(entryPath) {
 const workspaceRoot = workspace_root_from_path(entryPath);
 const isCompilerBuild = stringLen(compiler_root_from_path(entryPath)) > 0;
 let stack = vec_new();
