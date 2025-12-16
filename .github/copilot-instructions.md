@@ -8,22 +8,36 @@
 
 ## Architecture
 
+**For detailed compiler architecture, see [`../src/main/tuff/compiler/README.md`](../src/main/tuff/compiler/README.md).**
+
 ### Selfhost Compiler (Tuff-written)
 
 The compiler is split into focused modules under `src/main/tuff/compiler/`:
 
-1. **ast.tuff** — canonical AST definitions (structs, type aliases, constructor helpers)
-2. **util/lexing.tuff** — tokenization; exports functions like `is_digit`, `is_ident_start`, `skip_ws`
-3. **parsing/primitives.tuff** — low-level parsing (tokens, positions, panic/error handling)
-4. **parsing/types.tuff** — type expression parsing
-5. **parsing/expr_stmt.tuff** — expression and statement parsing; `parse_expr`, `parse_main_body`
-6. **parsing/decls.tuff** — declaration parsing (functions, structs, imports)
-7. **util/diagnostics.tuff** — error/warning helpers and formatting
-8. **emit/ast_js.tuff** — AST → JS emitter
-9. **tuffc_lib.tuff** — facade that orchestrates the modules
-10. **tuffc.tuff** — main entry point
+**Core Stages:**
+
+- **Lexing**: `util/lexing.tuff` — tokenization
+- **Parsing**: `parsing/` — 22 modules for expressions, statements, declarations, types
+- **Analysis**: `analyzer/` — 15 submodules for type-checking, scope validation, narrowing
+- **Emission**: `emit/ast_js.tuff` — AST → JavaScript code generation
+
+**Support:**
+
+- **ast.tuff** — canonical AST definitions
+- **util/diagnostics.tuff** — error/warning collection and formatting
+- **compile/** — multi-file compilation support
+- **lsp.tuff** — Language Server Protocol implementation
+- **compiler_api.tuff** — public programmatic API
+- **fluff.tuff** — linter CLI
+
+**Entry Points:**
+
+- **tuffc.tuff** — CLI compiler
+- **tuffc_lib.tuff** — compiler orchestrator facade
 
 Each stage collects diagnostics; errors halt compilation gracefully.
+
+**Analyzer Split:** Originally a single file, the analyzer is now split into 15 submodules for maintainability. See [`../src/main/tuff/compiler/analyzer/README.md`](../src/main/tuff/compiler/analyzer/README.md).
 
 ### Key Data Structures
 
@@ -49,6 +63,8 @@ The language is expression-oriented with immutable-by-default variables:
 
 ## Workflow & Testing
 
+**For detailed test structure and organization, see [`../src/test/README.md`](../src/test/README.md).**
+
 ### Build & Run
 
 ```bash
@@ -56,13 +72,13 @@ npm test                       # run all tests (Vitest)
 npm run build:selfhost-prebuilt # regenerate selfhost/prebuilt/
 ```
 
-### Test Structure
+### Test Structure Summary
 
-Tests are organized by layer:
+Tests are organized by layer and located in `src/test/`:
 
 #### TypeScript Tests (`src/test/ts/*.test.ts`)
 
-Active tests:
+Active tests include:
 
 - **`selfhost.test.ts`** — validates `selfhost/tuffc.tuff` can compile a minimal program (Stage1)
 - **`selfhost_stage2.test.ts`** — Stage2: selfhost compiler compiles itself
@@ -204,24 +220,28 @@ Ensure all compiler modules are copied (not just `tuffc.mjs`/`tuffc_lib.mjs`) by
 
 ## Critical Files & Cross-File Communication
 
-| File                                             | Purpose                      | Depends On                                                          |
-| ------------------------------------------------ | ---------------------------- | ------------------------------------------------------------------- |
-| `src/main/tuff/compiler/ast.tuff`                | AST node definitions         | (no deps)                                                           |
-| `src/main/tuff/compiler/util/lexing.tuff`        | Tokenization                 | `util/diagnostics.tuff`                                             |
-| `src/main/tuff/compiler/parsing/primitives.tuff` | Low-level parsing            | `util/diagnostics.tuff`, `util/lexing.tuff`                         |
-| `src/main/tuff/compiler/parsing/types.tuff`      | Type expression parsing      | `parsing/primitives.tuff`                                           |
+| File                                             | Purpose                      | Depends On                                                               |
+| ------------------------------------------------ | ---------------------------- | ------------------------------------------------------------------------ |
+| `src/main/tuff/compiler/ast.tuff`                | AST node definitions         | (no deps)                                                                |
+| `src/main/tuff/compiler/util/lexing.tuff`        | Tokenization                 | `util/diagnostics.tuff`                                                  |
+| `src/main/tuff/compiler/parsing/primitives.tuff` | Low-level parsing            | `util/diagnostics.tuff`, `util/lexing.tuff`                              |
+| `src/main/tuff/compiler/parsing/types.tuff`      | Type expression parsing      | `parsing/primitives.tuff`                                                |
 | `src/main/tuff/compiler/parsing/expr_stmt.tuff`  | Expr/stmt parsing            | `parsing/primitives.tuff`, `parsing/types.tuff`, `util/diagnostics.tuff` |
-| `src/main/tuff/compiler/parsing/decls.tuff`      | Declaration parsing          | `parsing/expr_stmt.tuff`, `parsing/primitives.tuff`                 |
-| `src/main/tuff/compiler/util/diagnostics.tuff`   | Error/warning collection     | (no deps)                                                           |
-| `src/main/tuff/compiler/emit/ast_js.tuff`        | AST → JS emitter             | `ast.tuff` (imports only via untyped params)                        |
-| `src/main/tuff/compiler/tuffc_lib.tuff`          | Compiler facade/orchestrator | All parsing/diagnostics modules                                     |
-| `src/main/tuff/compiler/tuffc.tuff`              | Main entry point             | `tuffc_lib.tuff`                                                    |
-| `tools/build_prebuilt_selfhost.ts`               | Prebuilt rebuild script      | Invokes selfhost compiler via `tuffc.mjs`                           |
-| `src/test/ts/selfhost_helpers.ts`                | Test staging helper          | Copies prebuilt → `.dist/`                                          |
+| `src/main/tuff/compiler/parsing/decls.tuff`      | Declaration parsing          | `parsing/expr_stmt.tuff`, `parsing/primitives.tuff`                      |
+| `src/main/tuff/compiler/util/diagnostics.tuff`   | Error/warning collection     | (no deps)                                                                |
+| `src/main/tuff/compiler/analyzer/*.tuff`         | Type-checking & analysis     | Orchestrated by `analyzer/analyze_expr_stmt.tuff`; 15 submodules         |
+| `src/main/tuff/compiler/emit/ast_js.tuff`        | AST → JS emitter             | `ast.tuff` (imports only via untyped params)                             |
+| `src/main/tuff/compiler/compile/*.tuff`          | Multi-file compilation       | All modules (export scanning, project-wide analysis)                     |
+| `src/main/tuff/compiler/tuffc_lib.tuff`          | Compiler facade/orchestrator | All parsing/analyzer/diagnostics modules                                 |
+| `src/main/tuff/compiler/tuffc.tuff`              | Main entry point             | `tuffc_lib.tuff`                                                         |
+| `tools/build_prebuilt_selfhost.ts`               | Prebuilt rebuild script      | Invokes selfhost compiler via `tuffc.mjs`                                |
+| `src/test/ts/selfhost_helpers.ts`                | Test staging helper          | Copies prebuilt → `.dist/`                                               |
 
 **Data Flow**: Source → Tokens → AST → (future: Analyzer) → JS Emit → Diagnostics logged at each stage.
 
 ## Standard Library & FFI
+
+**For detailed standard library documentation, see [`../src/main/tuff/std/README.md`](../src/main/tuff/std/README.md).**
 
 The language provides standard modules:
 
@@ -230,6 +250,15 @@ The language provides standard modules:
 - **`std::prelude`** — common definitions (`src/main/tuff/std/prelude.tuff`)
 
 **FFI Implementation**: External functions/types are declared with `extern` and resolved at emit time. The emitter generates JS that calls external functions directly (they exist in the JS runtime).
+
+## Compiler Tools
+
+**For detailed tools documentation, see [`../src/main/tuff/tools/README.md`](../src/main/tuff/tools/README.md).**
+
+The `src/main/tuff/tools/` directory contains code generation and analysis utilities:
+
+- **EBNF system** — Parse, validate, and generate code from EBNF grammars
+- **Code generation** — Utilities for generating parser code and refactoring helpers
 
 ## Task Management
 
