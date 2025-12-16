@@ -1,0 +1,31 @@
+// Test for bug: Functions returning tuples without type annotations
+// produce JavaScript that may have invalid module exports or other issues
+
+from std::test use { reset, suite, it, expect_eq, summary, status };
+
+fn parse_something(x: I32) => {
+  (x.toString(), x + 1)
+}
+
+fn process_result(x: I32) => {
+  let result = parse_something(x);
+  let names = result.0;
+  let pos = result.1;
+  (names, pos)
+}
+
+fn main() : I32 => {
+  reset();
+  suite("untyped tuple returns in functions");
+
+  let r1 = parse_something(10);
+  it("parse result first", expect_eq("names", r1.0, "10"));
+  it("parse result second", expect_eq("pos", r1.1, 11));
+
+  let r2 = process_result(20);
+  it("process result first", expect_eq("names", r2.0, "20"));
+  it("process result second", expect_eq("pos", r2.1, 21));
+
+  summary();
+  status()
+}
