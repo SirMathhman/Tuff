@@ -1,0 +1,32 @@
+// Tool: Generate a minimal expression parser from EBNF grammar
+//
+// Usage: compile+run to print the generated parser code to stdout.
+
+extern from rt::stdlib use { println, readTextFile };
+extern from rt::vec use { vec_len };
+
+from src::main::tuff::tools::ebnf_parser use { parse_grammar };
+from src::main::tuff::tools::ebnf_codegen_ast use { generate_ast_parser, default_tuff_ast_config };
+
+fn main() : I32 => {
+  let grammarPath = "grammars/tuff_expr_min.ebnf";
+  let grammarSrc = readTextFile(grammarPath);
+  if (grammarSrc == "") {
+    println("Error: Could not read grammar file: " + grammarPath);
+    yield 1;
+  }
+
+  let result = parse_grammar(grammarSrc);
+  if (result.success == false) {
+    println("Error: Failed to parse grammar");
+    println("  " + result.error);
+    yield 1;
+  }
+
+  println("// Successfully parsed " + vec_len(result.value.rules) + " rules from " + grammarPath);
+
+  let config = default_tuff_ast_config();
+  let parserCode = generate_ast_parser(result.value, config);
+  println(parserCode);
+  0
+}

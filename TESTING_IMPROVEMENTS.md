@@ -26,6 +26,10 @@
 - **Impact**: Maintenance burden; inconsistent behavior across tests
 - **Examples**: Different signature in `selfhost_lint_only.test.ts` vs others
 
+**Recent example**:
+
+- `src/test/ts/generated_expr_parser_compile.test.ts` adds another local stdout-capture helper to validate EBNF-driven parser generation; migrate it to the shared utility when Phase 1 lands.
+
 ### 4. Test Organization
 
 - **Issue**: 38 test files, some with overlapping concerns

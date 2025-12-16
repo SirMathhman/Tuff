@@ -209,7 +209,8 @@ out fn generate_ast_parser(g: Grammar, config: AstConfig) : String => {
   code = code + "fn skip_ws(src: String, pos: I32) : I32 => {\n";
   code = code + "  let len = stringLen(src);\n";
   code = code + "  let mut p = pos;\n";
-  code = code + "  while (p < len && is_ws(stringCharCodeAt(src, p))) {\n";
+  // NOTE: Avoid '<' in generated code; it can be parsed as start of type args.
+  code = code + "  while (len > p && is_ws(stringCharCodeAt(src, p))) {\n";
   code = code + "    p = p + 1;\n";
   code = code + "  }\n";
   code = code + "  p\n";
@@ -257,13 +258,13 @@ out fn generate_ast_parser(g: Grammar, config: AstConfig) : String => {
   code = code + "  let len = stringLen(src);\n";
   code = code + "  if (p >= len) { yield err_i32(p, \"unexpected end\"); }\n";
   code = code + "  let c = stringCharCodeAt(src, p);\n";
-  code = code + "  let is_digit = (c >= 48 && c <= 57);\n";
+  code = code + "  let is_digit = (c >= 48 && 57 >= c);\n";
   code = code + "  if (is_digit == false) { yield err_i32(p, \"expected digit\"); }\n";
   code = code + "  let mut endp = p;\n";
   code = code + "  let mut value = 0;\n";
-  code = code + "  while (endp < len) {\n";
+  code = code + "  while (len > endp) {\n";
   code = code + "    let d = stringCharCodeAt(src, endp);\n";
-  code = code + "    let is_d = (d >= 48 && d <= 57);\n";
+  code = code + "    let is_d = (d >= 48 && 57 >= d);\n";
   code = code + "    if (is_d == false) { break; }\n";
   code = code + "    value = value * 10 + (d - 48);\n";
   code = code + "    endp = endp + 1;\n";
@@ -272,8 +273,8 @@ out fn generate_ast_parser(g: Grammar, config: AstConfig) : String => {
   code = code + "}\n\n";
   
   // Generate parse_ident_raw helper  
-  code = code + "fn is_ident_start(c: I32) : Bool => (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95\n\n";
-  code = code + "fn is_ident_part(c: I32) : Bool => is_ident_start(c) || (c >= 48 && c <= 57)\n\n";
+  code = code + "fn is_ident_start(c: I32) : Bool => (c >= 65 && 90 >= c) || (c >= 97 && 122 >= c) || c == 95\n\n";
+  code = code + "fn is_ident_part(c: I32) : Bool => is_ident_start(c) || (c >= 48 && 57 >= c)\n\n";
   
   code = code + "fn parse_ident_raw(src: String, pos: I32) : ParsedString => {\n";
   code = code + "  let p = skip_ws(src, pos);\n";
@@ -282,7 +283,7 @@ out fn generate_ast_parser(g: Grammar, config: AstConfig) : String => {
   code = code + "  let c = stringCharCodeAt(src, p);\n";
   code = code + "  if (is_ident_start(c) == false) { yield err_string(p, \"expected identifier\"); }\n";
   code = code + "  let mut endp = p + 1;\n";
-  code = code + "  while (endp < len && is_ident_part(stringCharCodeAt(src, endp))) {\n";
+  code = code + "  while (len > endp && is_ident_part(stringCharCodeAt(src, endp))) {\n";
   code = code + "    endp = endp + 1;\n";
   code = code + "  }\n";
   code = code + "  ok_string(stringSlice(src, p, endp), endp)\n";
@@ -311,6 +312,46 @@ fn generate_ast_rule_parser(rule: Rule, config: AstConfig) : String => {
   let mut code = "";
   code = code + "fn parse_" + rule.name + "(src: String, pos: I32) : " + returnType + " => {\n";
   code = code + "  let startPos = skip_ws(src, pos);\n";
+
+  // Hand-written fast paths for common token-like rules.
+  // Without these, a rule like `int_literal ::= [0-9]+` would produce a Vec
+  // of per-digit nodes rather than a single Expr.
+  if (rule.name == "int_literal") {
+    code = code + "  let n = parse_number_raw(src, startPos);\n";
+    code = code + "  if (n.success == false) { yield err_expr(startPos, n.error); }\n";
+    code = code + "  ok_expr(expr_int(span(startPos, n.nextPos), n.value), n.nextPos)\n";
+    code = code + "}\n";
+    yield code;
+  }
+
+  if (rule.name == "ident") {
+    code = code + "  let id = parse_ident_raw(src, startPos);\n";
+    code = code + "  if (id.success == false) { yield err_expr(startPos, id.error); }\n";
+    code = code + "  ok_expr(expr_ident(span(startPos, id.nextPos), id.value), id.nextPos)\n";
+    code = code + "}\n";
+    yield code;
+  }
+
+  if (rule.name == "unary_expr") {
+    code = code + "  let len = stringLen(src);\n";
+    code = code + "  if (len > startPos) {\n";
+    code = code + "    let c = stringCharCodeAt(src, startPos);\n";
+    code = code + "    if (c == 45) { // '-'\n";
+    code = code + "      let inner = parse_unary_expr(src, startPos + 1);\n";
+    code = code + "      if (inner.success == false) { yield inner; }\n";
+    code = code + "      yield ok_expr(expr_unary(span(startPos, inner.nextPos), op_neg(), inner.expr), inner.nextPos);\n";
+    code = code + "    }\n";
+    code = code + "    if (c == 33) { // '!'\n";
+    code = code + "      let inner = parse_unary_expr(src, startPos + 1);\n";
+    code = code + "      if (inner.success == false) { yield inner; }\n";
+    code = code + "      yield ok_expr(expr_unary(span(startPos, inner.nextPos), op_not(), inner.expr), inner.nextPos);\n";
+    code = code + "    }\n";
+    code = code + "  }\n";
+    code = code + "  parse_primary(src, startPos)\n";
+    code = code + "}\n";
+    yield code;
+  }
+
   code = code + generate_ast_production_parser(rule.production, "startPos", rule.name, config, 1);
   code = code + "}\n";
   code
@@ -378,10 +419,23 @@ fn generate_ast_sequence_parser(prod: PSequence, posVar: String, ruleName: Strin
     i = i + 1;
   }
   
-  // Return last part's result (simplified)
-  let lastIdx = vec_len(prod.terms) - 1;
-  if (lastIdx >= 0) {
-    code = code + ind + "part" + lastIdx + "\n";
+  // Return the last *meaningful* part.
+  // Many sequences end with punctuation literals like ")" or ";" which we
+  // don't want to become the returned Expr.
+  let mut retIdx = vec_len(prod.terms) - 1;
+  while (retIdx >= 0) {
+    let p = vec_get(prod.terms, retIdx);
+    if (p is PTerm) {
+      if (p.term is TLiteral) {
+        retIdx = retIdx - 1;
+        continue;
+      }
+    }
+    break;
+  }
+  if (retIdx >= 0) {
+    // Use the selected expr, but advance to the sequence's final position.
+    code = code + ind + "ok_expr(part" + retIdx + ".expr, curPos)\n";
   } else {
     code = code + ind + "ok_expr(expr_int(span(startPos, curPos), 0), curPos)\n";
   }
@@ -422,17 +476,30 @@ fn generate_ast_binary_parser(prod: PSequence, posVar: String, ruleName: String,
   code = code + ind + "  // Check for operators (simplified - would need to extract from grammar)\n";
   code = code + ind + "  let c = stringCharCodeAt(src, opPos);\n";
   code = code + ind + "  let mut opMatch = false;\n";
-  code = code + ind + "  let mut opFn = op_add;\n";
-  code = code + ind + "  if (c == 43) { opMatch = true; opFn = op_add(); } // +\n";
-  code = code + ind + "  if (c == 45) { opMatch = true; opFn = op_sub(); } // -\n";
-  code = code + ind + "  if (c == 42) { opMatch = true; opFn = op_mul(); } // *\n";
-  code = code + ind + "  if (c == 47) { opMatch = true; opFn = op_div(); } // /\n";
+  code = code + ind + "  let mut opVal = op_add();\n";
+
+  // Operator sets are tied to the specific precedence level.
+  if (ruleName == "add_expr") {
+    code = code + ind + "  if (c == 43) { opMatch = true; opVal = op_add(); } // +\n";
+    code = code + ind + "  if (c == 45) { opMatch = true; opVal = op_sub(); } // -\n";
+  } else {
+    if (ruleName == "mul_expr") {
+      code = code + ind + "  if (c == 42) { opMatch = true; opVal = op_mul(); } // *\n";
+      code = code + ind + "  if (c == 47) { opMatch = true; opVal = op_div(); } // /\n";
+    } else {
+      // Fallback (older behavior): accept basic arithmetic ops.
+      code = code + ind + "  if (c == 43) { opMatch = true; opVal = op_add(); } // +\n";
+      code = code + ind + "  if (c == 45) { opMatch = true; opVal = op_sub(); } // -\n";
+      code = code + ind + "  if (c == 42) { opMatch = true; opVal = op_mul(); } // *\n";
+      code = code + ind + "  if (c == 47) { opMatch = true; opVal = op_div(); } // /\n";
+    }
+  }
   code = code + ind + "  if (opMatch == false) { break; }\n";
   code = code + ind + "  let right = {\n";
   code = code + generate_ast_production_parser(firstTerm, "opPos + 1", ruleName + "_right", config, indentLevel + 2);
   code = code + ind + "  };\n";
   code = code + ind + "  if (right.success == false) { break; }\n";
-  code = code + ind + "  left = expr_binary(span(startPos, right.nextPos), opFn, left, right.expr);\n";
+  code = code + ind + "  left = expr_binary(span(startPos, right.nextPos), opVal, left, right.expr);\n";
   code = code + ind + "  curPos = right.nextPos;\n";
   code = code + ind + "}\n";
   code = code + ind + "ok_expr(left, curPos)\n";
@@ -484,14 +551,15 @@ fn generate_ast_char_class_parser(term: TCharClass, posVar: String, ruleName: St
   code = code + ind + "  let cp = skip_ws(src, " + posVar + ");\n";
   code = code + ind + "  if (cp >= len) { yield err_expr(cp, \"unexpected end\"); }\n";
   code = code + ind + "  let c = stringCharCodeAt(src, cp);\n";
-  code = code + ind + "  let matched = ";
+  // IMPORTANT: avoid identifiers that start with keywords like `match`.
+  code = code + ind + "  let inClass = ";
   
   // Generate range checks
   let mut i = 0;
   while (i < vec_len(term.ranges)) {
     let range = vec_get(term.ranges, i);
     if (i > 0) { code = code + " || "; }
-    code = code + "(c >= " + range.start + " && c <= " + range.endChar + ")";
+    code = code + "(c >= " + range.start + " && " + range.endChar + " >= c)";
     i = i + 1;
   }
   
@@ -502,9 +570,9 @@ fn generate_ast_char_class_parser(term: TCharClass, posVar: String, ruleName: St
   code = code + ";\n";
   
   if (term.negated) {
-    code = code + ind + "  if (matched) {\n";
+    code = code + ind + "  if (inClass) {\n";
   } else {
-    code = code + ind + "  if (matched == false) {\n";
+    code = code + ind + "  if (inClass == false) {\n";
   }
   code = code + ind + "    yield err_expr(cp, \"character not in class\");\n";
   code = code + ind + "  }\n";
@@ -535,15 +603,15 @@ fn generate_ast_repeat_parser(term: TRepeat, posVar: String, ruleName: String, c
   // Zero-or-more or one-or-more
   code = code + ind + "{\n";
   code = code + ind + "  let items = vec_new();\n";
-  code = code + ind + "  let mut curPos = " + posVar + ";\n";
+  code = code + ind + "  let mut repPos = " + posVar + ";\n";
   code = code + ind + "  let mut keepGoing = true;\n";
   code = code + ind + "  while (keepGoing) {\n";
   code = code + ind + "    let item = {\n";
-  code = code + generate_ast_production_parser(term.inner, "curPos", ruleName + "_item", config, indentLevel + 3);
+  code = code + generate_ast_production_parser(term.inner, "repPos", ruleName + "_item", config, indentLevel + 3);
   code = code + ind + "    };\n";
   code = code + ind + "    if (item.success) {\n";
   code = code + ind + "      vec_push(items, item.expr);\n";
-  code = code + ind + "      curPos = item.nextPos;\n";
+  code = code + ind + "      repPos = item.nextPos;\n";
   code = code + ind + "    } else {\n";
   code = code + ind + "      keepGoing = false;\n";
   code = code + ind + "    }\n";
@@ -556,7 +624,7 @@ fn generate_ast_repeat_parser(term: TRepeat, posVar: String, ruleName: String, c
   }
   
   code = code + ind + "  // Return vec lit containing the items\n";
-  code = code + ind + "  ok_expr(expr_vec_lit(span(" + posVar + ", curPos), items), curPos)\n";
+  code = code + ind + "  ok_expr(expr_vec_lit(span(" + posVar + ", repPos), items), repPos)\n";
   code = code + ind + "}\n";
   
   code
