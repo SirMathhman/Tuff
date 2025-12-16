@@ -332,6 +332,23 @@ fn generate_ast_rule_parser(rule: Rule, config: AstConfig) : String => {
     yield code;
   }
 
+  if (rule.name == "bool_literal") {
+    code = code + "  let len = stringLen(src);\n";
+    code = code + "  // true\n";
+    code = code + "  if (len >= startPos + 4 && stringCharCodeAt(src, startPos) == 116 && stringCharCodeAt(src, startPos + 1) == 114 && stringCharCodeAt(src, startPos + 2) == 117 && stringCharCodeAt(src, startPos + 3) == 101) {\n";
+    code = code + "    if (len > startPos + 4 && is_ident_part(stringCharCodeAt(src, startPos + 4))) { yield err_expr(startPos, \"expected bool\"); }\n";
+    code = code + "    yield ok_expr(expr_bool(span(startPos, startPos + 4), true), startPos + 4);\n";
+    code = code + "  }\n";
+    code = code + "  // false\n";
+    code = code + "  if (len >= startPos + 5 && stringCharCodeAt(src, startPos) == 102 && stringCharCodeAt(src, startPos + 1) == 97 && stringCharCodeAt(src, startPos + 2) == 108 && stringCharCodeAt(src, startPos + 3) == 115 && stringCharCodeAt(src, startPos + 4) == 101) {\n";
+    code = code + "    if (len > startPos + 5 && is_ident_part(stringCharCodeAt(src, startPos + 5))) { yield err_expr(startPos, \"expected bool\"); }\n";
+    code = code + "    yield ok_expr(expr_bool(span(startPos, startPos + 5), false), startPos + 5);\n";
+    code = code + "  }\n";
+    code = code + "  err_expr(startPos, \"expected bool\")\n";
+    code = code + "}\n";
+    yield code;
+  }
+
   if (rule.name == "unary_expr") {
     code = code + "  let len = stringLen(src);\n";
     code = code + "  if (len > startPos) {\n";
@@ -397,13 +414,32 @@ fn generate_ast_rule_parser(rule: Rule, config: AstConfig) : String => {
     code = code + "  // if_expr | ( expr ) | int_literal | ident\n";
     code = code + "  let parsedIf = parse_if_expr(src, startPos);\n";
     code = code + "  if (parsedIf.success) { yield parsedIf; }\n";
+    code = code + "  let b = parse_bool_literal(src, startPos);\n";
+    code = code + "  if (b.success) { yield b; }\n";
     code = code + "  let len = stringLen(src);\n";
     code = code + "  if (len > startPos && stringCharCodeAt(src, startPos) == 40) { // '('\n";
-    code = code + "    let inner = parse_expr(src, startPos + 1);\n";
-    code = code + "    if (inner.success == false) { yield inner; }\n";
-    code = code + "    let close = expect_lit(src, inner.nextPos, \")\");\n";
-    code = code + "    if (close.success == false) { yield err_expr(inner.nextPos, close.error); }\n";
-    code = code + "    yield ok_expr(inner.expr, close.nextPos);\n";
+    code = code + "    let first = parse_expr(src, startPos + 1);\n";
+    code = code + "    if (first.success == false) { yield first; }\n";
+    code = code + "    let afterFirst = skip_ws(src, first.nextPos);\n";
+    code = code + "    if (len > afterFirst && stringCharCodeAt(src, afterFirst) == 44) { // ',' => tuple literal\n";
+    code = code + "      let mut items = vec_new();\n";
+    code = code + "      vec_push(items, first.expr);\n";
+    code = code + "      let mut tp = afterFirst;\n";
+    code = code + "      while (true) {\n";
+    code = code + "        let comma = expect_lit(src, tp, \",\");\n";
+    code = code + "        if (comma.success == false) { break; }\n";
+    code = code + "        let nx = parse_expr(src, comma.nextPos);\n";
+    code = code + "        if (nx.success == false) { yield nx; }\n";
+    code = code + "        vec_push(items, nx.expr);\n";
+    code = code + "        tp = nx.nextPos;\n";
+    code = code + "      }\n";
+    code = code + "      let close = expect_lit(src, tp, \")\");\n";
+    code = code + "      if (close.success == false) { yield err_expr(tp, close.error); }\n";
+    code = code + "      yield ok_expr(expr_tuple_lit(span(startPos, close.nextPos), items), close.nextPos);\n";
+    code = code + "    }\n";
+    code = code + "    let close = expect_lit(src, first.nextPos, \")\");\n";
+    code = code + "    if (close.success == false) { yield err_expr(first.nextPos, close.error); }\n";
+    code = code + "    yield ok_expr(first.expr, close.nextPos);\n";
     code = code + "  }\n";
     code = code + "  let n = parse_number_raw(src, startPos);\n";
     code = code + "  if (n.success) { yield ok_expr(expr_int(span(startPos, n.nextPos), n.value), n.nextPos); }\n";
@@ -454,8 +490,19 @@ fn generate_ast_rule_parser(rule: Rule, config: AstConfig) : String => {
     code = code + "      continue;\n";
     code = code + "    }\n";
 
-    // field: '.' ident
+    // field: '.' ident  OR tuple index: '.' [0-9]+
     code = code + "    if (c == 46) { // '.'\n";
+    code = code + "      let afterDot = skip_ws(src, opPos + 1);\n";
+    code = code + "      if (len > afterDot) {\n";
+    code = code + "        let d = stringCharCodeAt(src, afterDot);\n";
+    code = code + "        if (d >= 48 && 57 >= d) {\n";
+    code = code + "          let ixn = parse_number_raw(src, afterDot);\n";
+    code = code + "          if (ixn.success == false) { yield err_expr(afterDot, ixn.error); }\n";
+    code = code + "          base = expr_tuple_index(span(startPos, ixn.nextPos), base, ixn.value);\n";
+    code = code + "          p = ixn.nextPos;\n";
+    code = code + "          continue;\n";
+    code = code + "        }\n";
+    code = code + "      }\n";
     code = code + "      let id = parse_ident_raw(src, opPos + 1);\n";
     code = code + "      if (id.success == false) { yield err_expr(opPos + 1, id.error); }\n";
     code = code + "      base = expr_field(span(startPos, id.nextPos), base, id.value);\n";
@@ -530,6 +577,7 @@ fn generate_ast_sequence_parser(prod: PSequence, posVar: String, ruleName: Strin
     yield generate_ast_binary_parser(prod, posVar, ruleName, config, indentLevel);
   }
 
+
   // IMPORTANT: no-shadowing rule means we must avoid generic names like
   // `curPos` / `part0` in nested blocks. Use rule-scoped names instead.
   let seqPos = ruleName + "_pos";
@@ -596,6 +644,7 @@ fn generate_ast_binary_parser(prod: PSequence, posVar: String, ruleName: String,
   let opPosVar = ruleName + "_opPos";
   let opValVar = ruleName + "_opVal";
   let opMatchVar = ruleName + "_opMatch";
+  let opLenVar = ruleName + "_opLen";
   let rightVar = ruleName + "_right";
   
   // Parse first operand
@@ -617,26 +666,47 @@ fn generate_ast_binary_parser(prod: PSequence, posVar: String, ruleName: String,
   code = code + ind + "  let c = stringCharCodeAt(src, " + opPosVar + ");\n";
   code = code + ind + "  let mut " + opMatchVar + " = false;\n";
   code = code + ind + "  let mut " + opValVar + " = op_add();\n";
+  code = code + ind + "  let mut " + opLenVar + " = 1;\n";
 
   // Operator sets are tied to the specific precedence level.
-  if (ruleName == "add_expr") {
-    code = code + ind + "  if (c == 43) { " + opMatchVar + " = true; " + opValVar + " = op_add(); } // +\n";
-    code = code + ind + "  if (c == 45) { " + opMatchVar + " = true; " + opValVar + " = op_sub(); } // -\n";
+  if (ruleName == "or_expr") {
+    code = code + ind + "  if (c == 124 && len > " + opPosVar + " + 1 && stringCharCodeAt(src, " + opPosVar + " + 1) == 124) { " + opMatchVar + " = true; " + opValVar + " = op_or(); " + opLenVar + " = 2; } // ||\n";
   } else {
-    if (ruleName == "mul_expr") {
-      code = code + ind + "  if (c == 42) { " + opMatchVar + " = true; " + opValVar + " = op_mul(); } // *\n";
-      code = code + ind + "  if (c == 47) { " + opMatchVar + " = true; " + opValVar + " = op_div(); } // /\n";
+    if (ruleName == "and_expr") {
+      code = code + ind + "  if (c == 38 && len > " + opPosVar + " + 1 && stringCharCodeAt(src, " + opPosVar + " + 1) == 38) { " + opMatchVar + " = true; " + opValVar + " = op_and(); " + opLenVar + " = 2; } // &&\n";
     } else {
-      // Fallback (older behavior): accept basic arithmetic ops.
-      code = code + ind + "  if (c == 43) { " + opMatchVar + " = true; " + opValVar + " = op_add(); } // +\n";
-      code = code + ind + "  if (c == 45) { " + opMatchVar + " = true; " + opValVar + " = op_sub(); } // -\n";
-      code = code + ind + "  if (c == 42) { " + opMatchVar + " = true; " + opValVar + " = op_mul(); } // *\n";
-      code = code + ind + "  if (c == 47) { " + opMatchVar + " = true; " + opValVar + " = op_div(); } // /\n";
+      if (ruleName == "eq_expr") {
+        code = code + ind + "  if (c == 61 && len > " + opPosVar + " + 1 && stringCharCodeAt(src, " + opPosVar + " + 1) == 61) { " + opMatchVar + " = true; " + opValVar + " = op_eq(); " + opLenVar + " = 2; } // ==\n";
+        code = code + ind + "  if (c == 33 && len > " + opPosVar + " + 1 && stringCharCodeAt(src, " + opPosVar + " + 1) == 61) { " + opMatchVar + " = true; " + opValVar + " = op_ne(); " + opLenVar + " = 2; } // !=\n";
+      } else {
+        if (ruleName == "rel_expr") {
+          code = code + ind + "  if (c == 60 && len > " + opPosVar + " + 1 && stringCharCodeAt(src, " + opPosVar + " + 1) == 61) { " + opMatchVar + " = true; " + opValVar + " = op_le(); " + opLenVar + " = 2; } // <=\n";
+          code = code + ind + "  if (c == 62 && len > " + opPosVar + " + 1 && stringCharCodeAt(src, " + opPosVar + " + 1) == 61) { " + opMatchVar + " = true; " + opValVar + " = op_ge(); " + opLenVar + " = 2; } // >=\n";
+          code = code + ind + "  if (" + opMatchVar + " == false && c == 60) { " + opMatchVar + " = true; " + opValVar + " = op_lt(); " + opLenVar + " = 1; } // <\n";
+          code = code + ind + "  if (" + opMatchVar + " == false && c == 62) { " + opMatchVar + " = true; " + opValVar + " = op_gt(); " + opLenVar + " = 1; } // >\n";
+        } else {
+          if (ruleName == "add_expr") {
+            code = code + ind + "  if (c == 43) { " + opMatchVar + " = true; " + opValVar + " = op_add(); } // +\n";
+            code = code + ind + "  if (c == 45) { " + opMatchVar + " = true; " + opValVar + " = op_sub(); } // -\n";
+          } else {
+            if (ruleName == "mul_expr") {
+              code = code + ind + "  if (c == 42) { " + opMatchVar + " = true; " + opValVar + " = op_mul(); } // *\n";
+              code = code + ind + "  if (c == 47) { " + opMatchVar + " = true; " + opValVar + " = op_div(); } // /\n";
+            } else {
+              // Fallback (older behavior): accept basic arithmetic ops.
+              code = code + ind + "  if (c == 43) { " + opMatchVar + " = true; " + opValVar + " = op_add(); } // +\n";
+              code = code + ind + "  if (c == 45) { " + opMatchVar + " = true; " + opValVar + " = op_sub(); } // -\n";
+              code = code + ind + "  if (c == 42) { " + opMatchVar + " = true; " + opValVar + " = op_mul(); } // *\n";
+              code = code + ind + "  if (c == 47) { " + opMatchVar + " = true; " + opValVar + " = op_div(); } // /\n";
+            }
+          }
+        }
+      }
     }
   }
   code = code + ind + "  if (" + opMatchVar + " == false) { break; }\n";
   code = code + ind + "  let " + rightVar + " = {\n";
-  code = code + generate_ast_production_parser(firstTerm, opPosVar + " + 1", ruleName + "_right", config, indentLevel + 2);
+  code = code + generate_ast_production_parser(firstTerm, opPosVar + " + " + opLenVar, ruleName + "_right", config, indentLevel + 2);
   code = code + ind + "  };\n";
   code = code + ind + "  if (" + rightVar + ".success == false) { break; }\n";
   code = code + ind + "  " + leftVar + " = expr_binary(span(startPos, " + rightVar + ".nextPos), " + opValVar + ", " + leftVar + ", " + rightVar + ".expr);\n";

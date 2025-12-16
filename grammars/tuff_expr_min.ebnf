@@ -1,9 +1,14 @@
 // Minimal expression grammar used to incrementally validate generated parsers.
 // This is intentionally smaller than full tuff.ebnf.
 
-expr ::= if_expr | add_expr ;
+expr ::= if_expr | or_expr ;
 
 if_expr ::= "if" "(" expr ")" expr "else" expr ;
+
+or_expr ::= and_expr ("||" and_expr)* ;
+and_expr ::= eq_expr ("&&" eq_expr)* ;
+eq_expr ::= rel_expr (("==" | "!=") rel_expr)* ;
+rel_expr ::= add_expr (("<=" | ">=" | "<" | ">") add_expr)* ;
 
 add_expr ::= mul_expr (("+" | "-") mul_expr)* ;
 mul_expr ::= unary_expr (("*" | "/") unary_expr)* ;
@@ -13,12 +18,17 @@ unary_expr ::= ("-" unary_expr) | ("!" unary_expr) | postfix_expr ;
 postfix_expr ::= atom postfix* ;
 
 postfix ::= call | field | index ;
+tuple_index ::= "." int_literal ;
 call ::= "(" arg_list? ")" ;
 arg_list ::= expr ("," expr)* ;
 field ::= "." ident ;
 index ::= "[" expr "]" ;
 
-atom ::= int_literal | ident | "(" expr ")" ;
+atom ::= tuple_lit | bool_literal | int_literal | ident | "(" expr ")" ;
+
+tuple_lit ::= "(" expr "," expr ("," expr)* ")" ;
+
+bool_literal ::= "true" | "false" ;
 
 int_literal ::= [0-9]+ ;
 ident ::= [a-zA-Z_][a-zA-Z0-9_]* ;
