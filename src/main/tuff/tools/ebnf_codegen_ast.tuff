@@ -310,7 +310,7 @@ fn generate_ast_rule_parser(rule: Rule, config: AstConfig) : String => {
   let returnType = if (stringLen(mapping.astType) > 0) "Parsed" + mapping.astType else "ParsedExpr";
   
   let mut code = "";
-  code = code + "fn parse_" + rule.name + "(src: String, pos: I32) : " + returnType + " => {\n";
+  code = code + "out fn parse_" + rule.name + "(src: String, pos: I32) : " + returnType + " => {\n";
   code = code + "  let startPos = skip_ws(src, pos);\n";
 
   // Hand-written fast paths for common token-like rules.
@@ -347,7 +347,94 @@ fn generate_ast_rule_parser(rule: Rule, config: AstConfig) : String => {
     code = code + "      yield ok_expr(expr_unary(span(startPos, inner.nextPos), op_not(), inner.expr), inner.nextPos);\n";
     code = code + "    }\n";
     code = code + "  }\n";
-    code = code + "  parse_primary(src, startPos)\n";
+    code = code + "  parse_postfix_expr(src, startPos)\n";
+    code = code + "}\n";
+    yield code;
+  }
+
+  // `atom` is token-ish, but includes parenthesized expressions.
+  if (rule.name == "atom") {
+    code = code + "  // ( expr ) | int_literal | ident\n";
+    code = code + "  let len = stringLen(src);\n";
+    code = code + "  if (len > startPos && stringCharCodeAt(src, startPos) == 40) { // '('\n";
+    code = code + "    let inner = parse_expr(src, startPos + 1);\n";
+    code = code + "    if (inner.success == false) { yield inner; }\n";
+    code = code + "    let close = expect_lit(src, inner.nextPos, \")\");\n";
+    code = code + "    if (close.success == false) { yield err_expr(inner.nextPos, close.error); }\n";
+    code = code + "    yield ok_expr(inner.expr, close.nextPos);\n";
+    code = code + "  }\n";
+    code = code + "  let n = parse_number_raw(src, startPos);\n";
+    code = code + "  if (n.success) { yield ok_expr(expr_int(span(startPos, n.nextPos), n.value), n.nextPos); }\n";
+    code = code + "  let id = parse_ident_raw(src, startPos);\n";
+    code = code + "  if (id.success == false) { yield err_expr(startPos, id.error); }\n";
+    code = code + "  ok_expr(expr_ident(span(startPos, id.nextPos), id.value), id.nextPos)\n";
+    code = code + "}\n";
+    yield code;
+  }
+
+  // Postfix expression builder for: calls, field access, indexing.
+  // This is intentionally handwritten to keep the generator simple while we
+  // iterate on grammar coverage.
+  if (rule.name == "postfix_expr") {
+    code = code + "  let base0 = parse_atom(src, startPos);\n";
+    code = code + "  if (base0.success == false) { yield base0; }\n";
+    code = code + "  let mut base = base0.expr;\n";
+    code = code + "  let mut p = base0.nextPos;\n";
+    code = code + "  let len = stringLen(src);\n";
+    code = code + "  while (true) {\n";
+    code = code + "    let opPos = skip_ws(src, p);\n";
+    code = code + "    if (opPos >= len) { break; }\n";
+    code = code + "    let c = stringCharCodeAt(src, opPos);\n";
+
+    // call: '(' arg_list? ')'
+    code = code + "    if (c == 40) { // '('\n";
+    code = code + "      let mut args = vec_new();\n";
+    code = code + "      let mut ap = opPos + 1;\n";
+    code = code + "      ap = skip_ws(src, ap);\n";
+    code = code + "      if (len > ap && stringCharCodeAt(src, ap) != 41) {\n";
+    code = code + "        let a0 = parse_expr(src, ap);\n";
+    code = code + "        if (a0.success == false) { yield a0; }\n";
+    code = code + "        vec_push(args, a0.expr);\n";
+    code = code + "        ap = a0.nextPos;\n";
+    code = code + "        while (true) {\n";
+    code = code + "          let comma = expect_lit(src, ap, \",\");\n";
+    code = code + "          if (comma.success == false) { break; }\n";
+    code = code + "          let aN = parse_expr(src, comma.nextPos);\n";
+    code = code + "          if (aN.success == false) { yield aN; }\n";
+    code = code + "          vec_push(args, aN.expr);\n";
+    code = code + "          ap = aN.nextPos;\n";
+    code = code + "        }\n";
+    code = code + "      }\n";
+    code = code + "      let close = expect_lit(src, ap, \")\");\n";
+    code = code + "      if (close.success == false) { yield err_expr(ap, close.error); }\n";
+    code = code + "      base = expr_call(span(startPos, close.nextPos), base, args);\n";
+    code = code + "      p = close.nextPos;\n";
+    code = code + "      continue;\n";
+    code = code + "    }\n";
+
+    // field: '.' ident
+    code = code + "    if (c == 46) { // '.'\n";
+    code = code + "      let id = parse_ident_raw(src, opPos + 1);\n";
+    code = code + "      if (id.success == false) { yield err_expr(opPos + 1, id.error); }\n";
+    code = code + "      base = expr_field(span(startPos, id.nextPos), base, id.value);\n";
+    code = code + "      p = id.nextPos;\n";
+    code = code + "      continue;\n";
+    code = code + "    }\n";
+
+    // index: '[' expr ']'
+    code = code + "    if (c == 91) { // '['\n";
+    code = code + "      let ix = parse_expr(src, opPos + 1);\n";
+    code = code + "      if (ix.success == false) { yield ix; }\n";
+    code = code + "      let close = expect_lit(src, ix.nextPos, \"]\");\n";
+    code = code + "      if (close.success == false) { yield err_expr(ix.nextPos, close.error); }\n";
+    code = code + "      base = expr_index(span(startPos, close.nextPos), base, ix.expr);\n";
+    code = code + "      p = close.nextPos;\n";
+    code = code + "      continue;\n";
+    code = code + "    }\n";
+
+    code = code + "    break;\n";
+    code = code + "  }\n";
+    code = code + "  ok_expr(base, p)\n";
     code = code + "}\n";
     yield code;
   }
@@ -377,7 +464,7 @@ fn generate_ast_alternation_parser(prod: PAlternation, posVar: String, ruleName:
   let mut i = 0;
   while (i < vec_len(prod.choices)) {
     let choice = vec_get(prod.choices, i);
-    let tryVar = "try" + i;
+    let tryVar = ruleName + "_try" + i;
     
     code = code + ind + "let " + tryVar + " = {\n";
     code = code + generate_ast_production_parser(choice, posVar, ruleName + "_alt" + i, config, indentLevel + 1);
@@ -400,21 +487,24 @@ fn generate_ast_sequence_parser(prod: PSequence, posVar: String, ruleName: Strin
   if (mapping.astConstructor == "__binary_left") {
     yield generate_ast_binary_parser(prod, posVar, ruleName, config, indentLevel);
   }
-  
-  code = code + ind + "let mut curPos = " + posVar + ";\n";
+
+  // IMPORTANT: no-shadowing rule means we must avoid generic names like
+  // `curPos` / `part0` in nested blocks. Use rule-scoped names instead.
+  let seqPos = ruleName + "_pos";
+  code = code + ind + "let mut " + seqPos + " = " + posVar + ";\n";
   
   let mut i = 0;
   while (i < vec_len(prod.terms)) {
     let term = vec_get(prod.terms, i);
-    let partVar = "part" + i;
+    let partVar = ruleName + "_part" + i;
     
     code = code + ind + "let " + partVar + " = {\n";
-    code = code + generate_ast_production_parser(term, "curPos", ruleName + "_part" + i, config, indentLevel + 1);
+    code = code + generate_ast_production_parser(term, seqPos, ruleName + "_part" + i, config, indentLevel + 1);
     code = code + ind + "};\n";
     code = code + ind + "if (" + partVar + ".success == false) {\n";
-    code = code + ind + "  yield err_expr(curPos, " + partVar + ".error);\n";
+    code = code + ind + "  yield err_expr(" + seqPos + ", " + partVar + ".error);\n";
     code = code + ind + "}\n";
-    code = code + ind + "curPos = " + partVar + ".nextPos;\n";
+    code = code + ind + seqPos + " = " + partVar + ".nextPos;\n";
     
     i = i + 1;
   }
@@ -435,9 +525,9 @@ fn generate_ast_sequence_parser(prod: PSequence, posVar: String, ruleName: Strin
   }
   if (retIdx >= 0) {
     // Use the selected expr, but advance to the sequence's final position.
-    code = code + ind + "ok_expr(part" + retIdx + ".expr, curPos)\n";
+    code = code + ind + "ok_expr(" + ruleName + "_part" + retIdx + ".expr, " + seqPos + ")\n";
   } else {
-    code = code + ind + "ok_expr(expr_int(span(startPos, curPos), 0), curPos)\n";
+    code = code + ind + "ok_expr(expr_int(span(startPos, " + seqPos + "), 0), " + seqPos + ")\n";
   }
   
   code
@@ -457,52 +547,60 @@ fn generate_ast_binary_parser(prod: PSequence, posVar: String, ruleName: String,
   }
   
   let firstTerm = vec_get(prod.terms, 0);
+
+  let firstVar = ruleName + "_first";
+  let leftVar = ruleName + "_left";
+  let curPosVar = ruleName + "_pos";
+  let opPosVar = ruleName + "_opPos";
+  let opValVar = ruleName + "_opVal";
+  let opMatchVar = ruleName + "_opMatch";
+  let rightVar = ruleName + "_right";
   
   // Parse first operand
-  code = code + ind + "let first = {\n";
+  code = code + ind + "let " + firstVar + " = {\n";
   code = code + generate_ast_production_parser(firstTerm, posVar, ruleName + "_first", config, indentLevel + 1);
   code = code + ind + "};\n";
-  code = code + ind + "if (first.success == false) { yield first; }\n";
-  code = code + ind + "let mut left = first.expr;\n";
-  code = code + ind + "let mut curPos = first.nextPos;\n";
+  code = code + ind + "if (" + firstVar + ".success == false) { yield " + firstVar + "; }\n";
+  code = code + ind + "let mut " + leftVar + " = " + firstVar + ".expr;\n";
+  code = code + ind + "let mut " + curPosVar + " = " + firstVar + ".nextPos;\n";
   code = code + ind + "// Parse (op expr)* loop\n";
   code = code + ind + "while (true) {\n";
   
   // Try to parse operators - this is simplified for now
   // In a real implementation, we'd examine the grammar structure
-  code = code + ind + "  let opPos = skip_ws(src, curPos);\n";
+  code = code + ind + "  let " + opPosVar + " = skip_ws(src, " + curPosVar + ");\n";
   code = code + ind + "  let len = stringLen(src);\n";
-  code = code + ind + "  if (opPos >= len) { break; }\n";
+  code = code + ind + "  if (" + opPosVar + " >= len) { break; }\n";
   code = code + ind + "  // Check for operators (simplified - would need to extract from grammar)\n";
-  code = code + ind + "  let c = stringCharCodeAt(src, opPos);\n";
-  code = code + ind + "  let mut opMatch = false;\n";
-  code = code + ind + "  let mut opVal = op_add();\n";
+  code = code + ind + "  let c = stringCharCodeAt(src, " + opPosVar + ");\n";
+  code = code + ind + "  let mut " + opMatchVar + " = false;\n";
+  code = code + ind + "  let mut " + opValVar + " = op_add();\n";
 
   // Operator sets are tied to the specific precedence level.
   if (ruleName == "add_expr") {
-    code = code + ind + "  if (c == 43) { opMatch = true; opVal = op_add(); } // +\n";
-    code = code + ind + "  if (c == 45) { opMatch = true; opVal = op_sub(); } // -\n";
+    code = code + ind + "  if (c == 43) { " + opMatchVar + " = true; " + opValVar + " = op_add(); } // +\n";
+    code = code + ind + "  if (c == 45) { " + opMatchVar + " = true; " + opValVar + " = op_sub(); } // -\n";
   } else {
     if (ruleName == "mul_expr") {
-      code = code + ind + "  if (c == 42) { opMatch = true; opVal = op_mul(); } // *\n";
-      code = code + ind + "  if (c == 47) { opMatch = true; opVal = op_div(); } // /\n";
+      code = code + ind + "  if (c == 42) { " + opMatchVar + " = true; " + opValVar + " = op_mul(); } // *\n";
+      code = code + ind + "  if (c == 47) { " + opMatchVar + " = true; " + opValVar + " = op_div(); } // /\n";
     } else {
       // Fallback (older behavior): accept basic arithmetic ops.
-      code = code + ind + "  if (c == 43) { opMatch = true; opVal = op_add(); } // +\n";
-      code = code + ind + "  if (c == 45) { opMatch = true; opVal = op_sub(); } // -\n";
-      code = code + ind + "  if (c == 42) { opMatch = true; opVal = op_mul(); } // *\n";
-      code = code + ind + "  if (c == 47) { opMatch = true; opVal = op_div(); } // /\n";
+      code = code + ind + "  if (c == 43) { " + opMatchVar + " = true; " + opValVar + " = op_add(); } // +\n";
+      code = code + ind + "  if (c == 45) { " + opMatchVar + " = true; " + opValVar + " = op_sub(); } // -\n";
+      code = code + ind + "  if (c == 42) { " + opMatchVar + " = true; " + opValVar + " = op_mul(); } // *\n";
+      code = code + ind + "  if (c == 47) { " + opMatchVar + " = true; " + opValVar + " = op_div(); } // /\n";
     }
   }
-  code = code + ind + "  if (opMatch == false) { break; }\n";
-  code = code + ind + "  let right = {\n";
-  code = code + generate_ast_production_parser(firstTerm, "opPos + 1", ruleName + "_right", config, indentLevel + 2);
+  code = code + ind + "  if (" + opMatchVar + " == false) { break; }\n";
+  code = code + ind + "  let " + rightVar + " = {\n";
+  code = code + generate_ast_production_parser(firstTerm, opPosVar + " + 1", ruleName + "_right", config, indentLevel + 2);
   code = code + ind + "  };\n";
-  code = code + ind + "  if (right.success == false) { break; }\n";
-  code = code + ind + "  left = expr_binary(span(startPos, right.nextPos), opVal, left, right.expr);\n";
-  code = code + ind + "  curPos = right.nextPos;\n";
+  code = code + ind + "  if (" + rightVar + ".success == false) { break; }\n";
+  code = code + ind + "  " + leftVar + " = expr_binary(span(startPos, " + rightVar + ".nextPos), " + opValVar + ", " + leftVar + ", " + rightVar + ".expr);\n";
+  code = code + ind + "  " + curPosVar + " = " + rightVar + ".nextPos;\n";
   code = code + ind + "}\n";
-  code = code + ind + "ok_expr(left, curPos)\n";
+  code = code + ind + "ok_expr(" + leftVar + ", " + curPosVar + ")\n";
   
   code
 }
@@ -602,29 +700,34 @@ fn generate_ast_repeat_parser(term: TRepeat, posVar: String, ruleName: String, c
   
   // Zero-or-more or one-or-more
   code = code + ind + "{\n";
-  code = code + ind + "  let items = vec_new();\n";
-  code = code + ind + "  let mut repPos = " + posVar + ";\n";
-  code = code + ind + "  let mut keepGoing = true;\n";
-  code = code + ind + "  while (keepGoing) {\n";
-  code = code + ind + "    let item = {\n";
-  code = code + generate_ast_production_parser(term.inner, "repPos", ruleName + "_item", config, indentLevel + 3);
+  let itemsVar = ruleName + "_items";
+  let repPosVar = ruleName + "_repPos";
+  let keepVar = ruleName + "_keepGoing";
+  let itemVar = ruleName + "_item";
+
+  code = code + ind + "  let " + itemsVar + " = vec_new();\n";
+  code = code + ind + "  let mut " + repPosVar + " = " + posVar + ";\n";
+  code = code + ind + "  let mut " + keepVar + " = true;\n";
+  code = code + ind + "  while (" + keepVar + ") {\n";
+  code = code + ind + "    let " + itemVar + " = {\n";
+  code = code + generate_ast_production_parser(term.inner, repPosVar, ruleName + "_item", config, indentLevel + 3);
   code = code + ind + "    };\n";
-  code = code + ind + "    if (item.success) {\n";
-  code = code + ind + "      vec_push(items, item.expr);\n";
-  code = code + ind + "      repPos = item.nextPos;\n";
+  code = code + ind + "    if (" + itemVar + ".success) {\n";
+  code = code + ind + "      vec_push(" + itemsVar + ", " + itemVar + ".expr);\n";
+  code = code + ind + "      " + repPosVar + " = " + itemVar + ".nextPos;\n";
   code = code + ind + "    } else {\n";
-  code = code + ind + "      keepGoing = false;\n";
+  code = code + ind + "      " + keepVar + " = false;\n";
   code = code + ind + "    }\n";
   code = code + ind + "  }\n";
   
   if (term.kind is RepeatOneOrMore) {
-    code = code + ind + "  if (vec_len(items) == 0) {\n";
+    code = code + ind + "  if (vec_len(" + itemsVar + ") == 0) {\n";
     code = code + ind + "    yield err_expr(" + posVar + ", \"expected at least one\");\n";
     code = code + ind + "  }\n";
   }
   
   code = code + ind + "  // Return vec lit containing the items\n";
-  code = code + ind + "  ok_expr(expr_vec_lit(span(" + posVar + ", repPos), items), repPos)\n";
+  code = code + ind + "  ok_expr(expr_vec_lit(span(" + posVar + ", " + repPosVar + "), " + itemsVar + "), " + repPosVar + ")\n";
   code = code + ind + "}\n";
   
   code

@@ -6,9 +6,17 @@ expr ::= add_expr ;
 add_expr ::= mul_expr (("+" | "-") mul_expr)* ;
 mul_expr ::= unary_expr (("*" | "/") unary_expr)* ;
 
-unary_expr ::= ("-" unary_expr) | ("!" unary_expr) | primary ;
+unary_expr ::= ("-" unary_expr) | ("!" unary_expr) | postfix_expr ;
 
-primary ::= int_literal | ident | "(" expr ")" ;
+postfix_expr ::= atom postfix* ;
+
+postfix ::= call | field | index ;
+call ::= "(" arg_list? ")" ;
+arg_list ::= expr ("," expr)* ;
+field ::= "." ident ;
+index ::= "[" expr "]" ;
+
+atom ::= int_literal | ident | "(" expr ")" ;
 
 int_literal ::= [0-9]+ ;
 ident ::= [a-zA-Z_][a-zA-Z0-9_]* ;
