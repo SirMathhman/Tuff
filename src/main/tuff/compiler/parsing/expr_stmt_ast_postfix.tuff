@@ -1,0 +1,178 @@
+// Selfhost compiler: postfix expression parsing (AST-producing path).
+// Split out of expr_stmt_ast.tuff.
+
+extern from rt::stdlib use { panic, stringLen, stringCharCodeAt };
+extern from rt::vec use { vec_new, vec_push, vec_len };
+
+from util::diagnostics use { panic_at };
+from util::lexing use { skip_ws, is_digit };
+
+from parsing::primitives use { parse_ident, parse_keyword, parse_number };
+from parsing::types use { parse_type_expr };
+
+from parsing::expr_stmt_types use { ParsedExprAst, ParsedExprListAst, ParsedTypeArgsForCallAst };
+
+from parsing::expr_stmt_ast_primary use { parse_primary_ast };
+from parsing::expr_stmt_ast_expr use { parse_expr_ast_impl };
+
+from ast use {
+  span,
+  span_start,
+  expr_span,
+
+  expr_call,
+  expr_call_typed,
+  expr_tuple_index,
+  expr_field,
+  expr_index
+};
+
+out fn parse_postfix_ast(src: String, i: I32) : ParsedExprAst => {
+  let mut left = parse_primary_ast(src, i);
+  let mut j = left.nextPos;
+  let mut pendingTypeArgs = vec_new();
+  while (true) {
+    j = skip_ws(src, j);
+
+    // Generic call sugar: f<T>(...) or obj.f<T>(...).
+    // IMPORTANT: only attempt this before parsing a call; after we already have
+    // an ECall on the left, a following '<' should be treated as a comparison
+    // operator (e.g. `f(x) < 2`).
+    if (left.expr.tag != "ECall" && j < stringLen(src) && stringCharCodeAt(src, j) == 60) { // '<'
+      let parsed = try_parse_type_args_for_call_ast(src, j);
+      if (parsed.ok) {
+        pendingTypeArgs = parsed.typeArgs;
+        j = parsed.nextPos;
+        continue;
+      }
+    }
+
+    if (j < stringLen(src) && stringCharCodeAt(src, j) == 40) { // '('
+      let args = parse_arg_list_ast(src, j);
+      let start = span_start(expr_span(left.expr));
+      let callSpan = span(start, args.nextPos);
+      if (vec_len(pendingTypeArgs) > 0) {
+        left = ParsedExprAst(expr_call_typed(callSpan, left.expr, pendingTypeArgs, args.items), args.nextPos);
+        pendingTypeArgs = vec_new();
+      } else {
+        left = ParsedExprAst(expr_call(callSpan, left.expr, args.items), args.nextPos);
+      }
+      j = left.nextPos;
+      continue;
+    }
+
+    if (j < stringLen(src) && stringCharCodeAt(src, j) == 46) { // '.'
+      let t = skip_ws(src, j + 1);
+      if (t < stringLen(src) && is_digit(stringCharCodeAt(src, t))) {
+        let n = parse_number(src, t);
+        let start = span_start(expr_span(left.expr));
+        left = ParsedExprAst(expr_tuple_index(span(start, n.nextPos), left.expr, n.value), n.nextPos);
+        j = left.nextPos;
+        continue;
+      }
+      let next = parse_ident(src, j + 1);
+      let start = span_start(expr_span(left.expr));
+      left = ParsedExprAst(expr_field(span(start, next.nextPos), left.expr, next.text), next.nextPos);
+      j = left.nextPos;
+      continue;
+    }
+
+    if (j < stringLen(src) && stringCharCodeAt(src, j) == 91) { // '['
+      let mut k = parse_keyword(src, j, "[");
+      let idx = parse_expr_ast_impl(src, k);
+      k = idx.nextPos;
+      k = skip_ws(src, k);
+      if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 93)) { panic("expected ']'" ); }
+      let start = span_start(expr_span(left.expr));
+      left = ParsedExprAst(expr_index(span(start, k + 1), left.expr, idx.expr), k + 1);
+      j = left.nextPos;
+      continue;
+    }
+
+    break;
+  }
+  left
+}
+
+fn try_parse_type_args_for_call_ast(src: String, i: I32) : ParsedTypeArgsForCallAst => {
+  // Returns ParsedTypeArgsForCallAst(true, typeArgs, endIndexAfterGreaterThan)
+  // if `<...>` is balanced and followed by `(` (after ws). Otherwise ok=false.
+  let mut k = skip_ws(src, i);
+  if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 60)) { // '<'
+    yield ParsedTypeArgsForCallAst(false, vec_new(), i);
+  }
+
+  // First, do a non-panicking scan to find the matching '>' for this '<'.
+  // If we can't find a match, or it isn't followed by '(', this is not a
+  // generic call type-arg list (it's probably a comparison operator).
+  let mut depth = 1;
+  let mut scan = k + 1;
+  let mut endGt = -1;
+  while (scan < stringLen(src)) {
+    let ch = stringCharCodeAt(src, scan);
+    if (ch == 60) { depth = depth + 1; }
+    if (ch == 62) {
+      depth = depth - 1;
+      if (depth == 0) { endGt = scan; break; }
+    }
+    scan = scan + 1;
+  }
+  if (endGt == -1) { yield ParsedTypeArgsForCallAst(false, vec_new(), i); }
+
+  let after = skip_ws(src, endGt + 1);
+  if (!(after < stringLen(src) && stringCharCodeAt(src, after) == 40)) { // '('
+    yield ParsedTypeArgsForCallAst(false, vec_new(), i);
+  }
+
+  // Parse `<` typeExpr (',' typeExpr)* `>` (now that we know it closes).
+  k = k + 1;
+  k = skip_ws(src, k);
+  let typeArgs = vec_new();
+
+  // Empty type arg list is not allowed here.
+  if (k == endGt) { yield ParsedTypeArgsForCallAst(false, vec_new(), i); }
+
+  while (true) {
+    let t = parse_type_expr(src, k);
+    vec_push(typeArgs, t.v0);
+    k = skip_ws(src, t.v1);
+    if (k == endGt) {
+      // ok: consumed up to '>'
+      yield ParsedTypeArgsForCallAst(true, typeArgs, endGt + 1);
+    }
+    if (!(k < stringLen(src))) { panic_at(src, k, "expected '>' in type args"); }
+    let ch = stringCharCodeAt(src, k);
+    if (ch == 44) { // ','
+      k = k + 1;
+      k = skip_ws(src, k);
+      continue;
+    }
+    // We pre-scanned `endGt`, so anything else here is a real parse error.
+    panic_at(src, k, "expected ',' or '>' in type args");
+  }
+  ParsedTypeArgsForCallAst(false, vec_new(), i)
+}
+
+fn parse_arg_list_ast(src: String, i: I32) : ParsedExprListAst => {
+  // parses: '(' (expr (',' expr)*)? ')'
+  let mut k = skip_ws(src, i);
+  k = parse_keyword(src, k, "(");
+  k = skip_ws(src, k);
+
+  let items = vec_new();
+  if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) { // ')'
+    yield ParsedExprListAst(items, k + 1);
+  }
+
+  while (true) {
+    let e = parse_expr_ast_impl(src, k);
+    vec_push(items, e.expr);
+    k = skip_ws(src, e.nextPos);
+    if (!(k < stringLen(src))) { panic_at(src, k, "expected ')' in arg list"); }
+    let c = stringCharCodeAt(src, k);
+    if (c == 44) { k = k + 1; k = skip_ws(src, k); continue; }
+    if (c == 41) { yield ParsedExprListAst(items, k + 1); }
+    panic_at(src, k, "expected ',' or ')' in arg list")
+  }
+  ParsedExprListAst(items, k)
+}

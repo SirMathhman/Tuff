@@ -1,0 +1,133 @@
+// Analyzer: per-declaration analysis helpers.
+// Split out of analyzer.tuff to keep file sizes under the lint limit.
+
+extern from rt::vec use { vec_new, vec_len, vec_get, vec_push };
+
+from util::diagnostics use { error_at };
+from ast use { span_start };
+
+from analyzer::fluff use {
+  fluff_warn_unused_locals_in_scope,
+  fluff_warn_unused_params_in_scope,
+  fluff_check_fn_complexity,
+  fluff_check_lambda_complexity
+};
+
+from analyzer::typestrings use {
+  ty_unknown,
+  ty_void,
+  ty_fn_type,
+  ty_fn_type_params,
+  ty_is_fn_type,
+  normalize_ty_ann
+};
+
+from analyzer::infer_basic use { infer_expr_type };
+
+from analyzer::scope use {
+  scopes_enter,
+  declare_local_name
+};
+
+from analyzer::typecheck use { require_type_compatible };
+
+from analyzer::analyze_expr_stmt use { analyze_expr, analyze_stmts };
+
+fn warn_unused_locals_in_scope(src: String, scopes: Vec<Vec<Binding>>, depth: I32) : Void =>
+  fluff_warn_unused_locals_in_scope(src, scopes, depth)
+
+fn warn_unused_params_in_scope(src: String, scopes: Vec<Vec<Binding>>, depth: I32) : Void =>
+  fluff_warn_unused_params_in_scope(src, scopes, depth)
+
+fn check_fn_complexity(src: String, pos: I32, fnName: String, body: Vec<Stmt>, tail: Expr) : Void =>
+  fluff_check_fn_complexity(src, pos, fnName, body, tail)
+
+fn check_lambda_complexity(src: String, pos: I32, name: String, body: Expr) : Void =>
+  fluff_check_lambda_complexity(src, pos, name, body)
+
+out fn analyze_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, outerScopes: Vec<Vec<Binding>>, outerDepth: I32, d: DFn) : Void => {
+  let depth = scopes_enter(outerScopes, outerDepth);
+
+  let mut pi = 0;
+  while (pi < vec_len(d.params)) {
+    let mut pTy = ty_unknown();
+    if (pi < vec_len(d.paramTyAnns)) {
+      let ann = vec_get(d.paramTyAnns, pi);
+      if (ann != "") { pTy = normalize_ty_ann(ann); }
+    }
+    declare_local_name(src, span_start(d.span), outerScopes, depth, vec_get(d.params, pi), false, pTy);
+    pi = pi + 1;
+  }
+
+  let narrowed = vec_new();
+  analyze_stmts(src, structs, unions, fns, outerScopes, depth, narrowed, d.body);
+  analyze_expr(src, structs, unions, fns, outerScopes, depth, narrowed, d.tail);
+
+  // Enforce declared return type (if present) against tail and explicit yields.
+  if (d.retTyAnn != "") {
+    let expected = normalize_ty_ann(d.retTyAnn);
+
+    // tail
+    let tailTy = infer_expr_type(src, structs, fns, outerScopes, depth, d.tail);
+    require_type_compatible(src, span_start(d.span), "function " + d.name + " return", structs, expected, tailTy);
+
+    // yields
+    let mut si = 0;
+    while (si < vec_len(d.body)) {
+      let st = vec_get(d.body, si);
+      if (st.tag == "SYield") {
+        let yTy = if (st.expr.tag == "EUndefined") ty_void() else infer_expr_type(src, structs, fns, outerScopes, depth, st.expr);
+        require_type_compatible(src, span_start(st.span), "function " + d.name + " yield", structs, expected, yTy);
+      }
+      si = si + 1;
+    }
+  }
+
+  warn_unused_params_in_scope(src, outerScopes, depth);
+  warn_unused_locals_in_scope(src, outerScopes, depth);
+  check_fn_complexity(src, span_start(d.span), d.name, d.body, d.tail);
+}
+
+out fn analyze_class_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, outerScopes: Vec<Vec<Binding>>, outerDepth: I32, d: DClassFn) : Void => {
+  let depth = scopes_enter(outerScopes, outerDepth);
+
+  let mut pi = 0;
+  while (pi < vec_len(d.params)) {
+    let mut pTy = ty_unknown();
+    if (pi < vec_len(d.paramTyAnns)) {
+      let ann = vec_get(d.paramTyAnns, pi);
+      if (ann != "") { pTy = normalize_ty_ann(ann); }
+    }
+    declare_local_name(src, span_start(d.span), outerScopes, depth, vec_get(d.params, pi), false, pTy);
+    pi = pi + 1;
+  }
+
+  let narrowed = vec_new();
+  analyze_stmts(src, structs, unions, fns, outerScopes, depth, narrowed, d.body);
+  analyze_expr(src, structs, unions, fns, outerScopes, depth, narrowed, d.tail);
+
+  // Enforce declared return type (if present) against tail and explicit yields.
+  if (d.retTyAnn != "") {
+    let expected = normalize_ty_ann(d.retTyAnn);
+
+    // tail
+    let tailTy = infer_expr_type(src, structs, fns, outerScopes, depth, d.tail);
+    require_type_compatible(src, span_start(d.span), "class fn " + d.name + " return", structs, expected, tailTy);
+
+    // yields
+    let mut si = 0;
+    while (si < vec_len(d.body)) {
+      let st = vec_get(d.body, si);
+      if (st.tag == "SYield") {
+        let yTy = if (st.expr.tag == "EUndefined") ty_void() else infer_expr_type(src, structs, fns, outerScopes, depth, st.expr);
+        require_type_compatible(src, span_start(st.span), "class fn " + d.name + " yield", structs, expected, yTy);
+      }
+      si = si + 1;
+    }
+  }
+
+  warn_unused_params_in_scope(src, outerScopes, depth);
+  warn_unused_locals_in_scope(src, outerScopes, depth);
+  check_fn_complexity(src, span_start(d.span), d.name, d.body, d.tail);
+}
+

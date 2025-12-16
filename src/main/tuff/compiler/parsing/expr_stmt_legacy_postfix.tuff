@@ -1,0 +1,130 @@
+// Selfhost compiler: postfix expression parsing (legacy string-emission path).
+// Split out of expr_stmt_legacy.tuff.
+
+extern from rt::stdlib use { panic, stringLen, stringCharCodeAt };
+
+from util::diagnostics use { panic_at };
+from util::lexing use { skip_ws, is_digit };
+
+from parsing::primitives use { ParsedBool, parse_ident, parse_keyword, parse_number };
+
+from parsing::expr_stmt_types use { ParsedExpr, ParsedParams };
+
+from parsing::expr_stmt_legacy_expr use { parse_expr };
+from parsing::expr_stmt_legacy_primary use { parse_primary };
+
+out fn parse_postfix(src: String, i: I32) : ParsedExpr => {
+  let mut left = parse_primary(src, i);
+  let mut j = left.v1;
+  while (true) {
+    j = skip_ws(src, j);
+
+    // Generic call sugar: f<T>(...) or obj.f<T>(...).
+    // Only treat `<...>` as type args if it is balanced and followed by `(`.
+    if (j < stringLen(src) && stringCharCodeAt(src, j) == 60) { // '<'
+      let skipped = try_skip_type_args_for_call(src, j);
+      if (skipped.ok) {
+        j = skipped.v1;
+        continue;
+      }
+    }
+
+    if (j < stringLen(src) && stringCharCodeAt(src, j) == 40) { // '('
+      let args = parse_arg_list(src, j);
+      left = ParsedExpr(left.v0 + "(" + args.v0 + ")", args.v1);
+      j = left.v1;
+      continue;
+    }
+    if (j < stringLen(src) && stringCharCodeAt(src, j) == 46) { // '.'
+      // tuple access: expr.0 => expr[0]
+      let t = skip_ws(src, j + 1);
+      if (t < stringLen(src) && is_digit(stringCharCodeAt(src, t))) {
+        let n = parse_number(src, t);
+        left = ParsedExpr(left.v0 + "[" + ("" + n.value) + "]", n.nextPos);
+        j = left.v1;
+        continue;
+      }
+
+      let next = parse_ident(src, j + 1);
+      left = ParsedExpr(left.v0 + "." + next.text, next.nextPos);
+      j = left.v1;
+      continue;
+    }
+    if (j < stringLen(src) && stringCharCodeAt(src, j) == 91) { // '['
+      let mut k = parse_keyword(src, j, "[");
+      let idx = parse_expr(src, k);
+      k = idx.v1;
+      k = skip_ws(src, k);
+      if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 93)) { panic("expected ']' "); }
+      left = ParsedExpr("vec_get(" + left.v0 + ", " + idx.v0 + ")", k + 1);
+      j = left.v1;
+      continue;
+    }
+    break;
+  }
+  left
+}
+
+fn try_skip_type_args_for_call(src: String, i: I32) : ParsedBool => {
+  // Returns ParsedBool(true, endIndexAfterGreaterThan) if `<...>` is balanced
+  // and followed by `(` (after ws). Otherwise ParsedBool(false, i).
+  let mut k = skip_ws(src, i);
+  if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 60)) { // '<'
+    yield ParsedBool(false, i);
+  }
+  let mut p = k + 1;
+  let mut depth = 1;
+  while (p < stringLen(src)) {
+    let ch = stringCharCodeAt(src, p);
+    if (ch == 60) { depth = depth + 1; p = p + 1; continue; } // '<'
+    if (ch == 62) { // '>'
+      depth = depth - 1;
+      p = p + 1;
+      if (depth == 0) {
+        let after = skip_ws(src, p);
+        if (after < stringLen(src) && stringCharCodeAt(src, after) == 40) { // '('
+          yield ParsedBool(true, p);
+        }
+        yield ParsedBool(false, i);
+      }
+      continue;
+    }
+    p = p + 1;
+  }
+  ParsedBool(false, i)
+}
+
+fn parse_arg_list(src: String, i: I32) : ParsedParams => {
+  // parses: '(' (expr (',' expr)*)? ')'
+  let mut k = skip_ws(src, i);
+  k = parse_keyword(src, k, "(");
+
+  k = skip_ws(src, k);
+  if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) { // ')'
+    yield ParsedParams("", k + 1);
+  }
+
+  let mut out = "";
+  let mut first = true;
+  while (true) {
+    let e = parse_expr(src, k);
+    k = e.v1;
+    if (first) { out = out + e.v0; } else { out = out + ", " + e.v0; }
+    first = false;
+
+    k = skip_ws(src, k);
+    if (!(k < stringLen(src))) { panic_at(src, k, "expected ')' in arg list"); }
+    let c = stringCharCodeAt(src, k);
+    if (c == 44) { // ','
+      k = k + 1;
+      continue;
+    }
+    if (c == 41) { // ')'
+      yield ParsedParams(out, k + 1);
+    }
+    panic_at(src, k, "expected ',' or ')' in arg list")
+  }
+
+  // unreachable
+  ParsedParams(out, k)
+}

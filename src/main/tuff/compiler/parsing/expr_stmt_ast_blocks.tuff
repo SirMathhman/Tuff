@@ -1,0 +1,194 @@
+// Selfhost compiler: block parsing helpers (AST-producing path).
+// Split out of expr_stmt_ast.tuff.
+
+extern from rt::stdlib use { stringLen, stringCharCodeAt };
+extern from rt::vec use { vec_new, vec_push };
+
+from util::diagnostics use { panic_at };
+from util::lexing use { skip_ws, starts_with_at };
+
+from parsing::expr_stmt_stmt_starts use {
+  is_assign_stmt_start_impl,
+  is_field_assign_stmt_start_impl,
+  is_index_assign_stmt_start_impl
+};
+
+from parsing::expr_stmt_types use { ParsedExprAst, ParsedMainAst, ParsedStmtsAst };
+
+from parsing::expr_stmt_ast_expr use { parse_expr_ast_impl };
+from parsing::expr_stmt_ast_stmt use { parse_stmt_ast };
+
+from ast use {
+  span,
+  span_start,
+  expr_span,
+  expr_undefined,
+  expr_block,
+  stmt_expr
+};
+
+fn scan_if_stmt_has_else(src: String, i: I32) : Bool => {
+  // Best-effort scan: recognizes `if (<...>) { <...> } else`.
+  // Used only to disambiguate statement-vs-expression parsing in blocks.
+  let mut j = skip_ws(src, i);
+  if (!starts_with_at(src, j, "if")) { yield false; }
+  j = j + 2;
+  j = skip_ws(src, j);
+  if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 40)) { yield false; } // '('
+
+  // Skip condition parens.
+  let mut k = j + 1;
+  let mut depth = 1;
+  while (k < stringLen(src) && depth > 0) {
+    let ch = stringCharCodeAt(src, k);
+    if (ch == 34) { // '"'
+      k = k + 1;
+      while (k < stringLen(src)) {
+        let c = stringCharCodeAt(src, k);
+        if (c == 92) { k = k + 2; continue; } // '\\'
+        if (c == 34) { k = k + 1; break; }
+        k = k + 1;
+      }
+      continue;
+    }
+    if (ch == 39) { // '\''
+      k = k + 1;
+      while (k < stringLen(src)) {
+        let c = stringCharCodeAt(src, k);
+        if (c == 92) { k = k + 2; continue; }
+        if (c == 39) { k = k + 1; break; }
+        k = k + 1;
+      }
+      continue;
+    }
+    if (ch == 40) { depth = depth + 1; k = k + 1; continue; }
+    if (ch == 41) { depth = depth - 1; k = k + 1; continue; }
+    k = k + 1;
+  }
+
+  k = skip_ws(src, k);
+  if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 123)) { yield false; } // '{'
+
+  // Skip then block braces.
+  k = k + 1;
+  let mut bDepth = 1;
+  while (k < stringLen(src) && bDepth > 0) {
+    let ch = stringCharCodeAt(src, k);
+    if (ch == 34) {
+      k = k + 1;
+      while (k < stringLen(src)) {
+        let c = stringCharCodeAt(src, k);
+        if (c == 92) { k = k + 2; continue; }
+        if (c == 34) { k = k + 1; break; }
+        k = k + 1;
+      }
+      continue;
+    }
+    if (ch == 39) {
+      k = k + 1;
+      while (k < stringLen(src)) {
+        let c = stringCharCodeAt(src, k);
+        if (c == 92) { k = k + 2; continue; }
+        if (c == 39) { k = k + 1; break; }
+        k = k + 1;
+      }
+      continue;
+    }
+    if (ch == 123) { bDepth = bDepth + 1; k = k + 1; continue; }
+    if (ch == 125) { bDepth = bDepth - 1; k = k + 1; continue; }
+    k = k + 1;
+  }
+
+  k = skip_ws(src, k);
+  starts_with_at(src, k, "else")
+}
+
+out fn parse_stmt_block_ast(src: String, i: I32) : ParsedStmtsAst => {
+  let mut k = skip_ws(src, i);
+  if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 123)) { panic_at(src, k, "expected '{'"); }
+  k = k + 1;
+
+  let body = vec_new();
+  while (true) {
+    let t = skip_ws(src, k);
+    if (!(t < stringLen(src))) { panic_at(src, t, "expected '}'"); }
+    if (stringCharCodeAt(src, t) == 125) { yield ParsedStmtsAst(body, t + 1); }
+    let st = parse_stmt_ast(src, k);
+    vec_push(body, st.stmt);
+    k = st.nextPos;
+  }
+  ParsedStmtsAst(body, k)
+}
+
+fn parse_block_body_ast(src: String, i: I32) : ParsedMainAst => {
+  let j = skip_ws(src, i);
+  if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 123)) { panic_at(src, j, "expected '{'"); }
+
+  let mut k = j + 1;
+  let body = vec_new();
+
+  while (true) {
+    let t = skip_ws(src, k);
+    if (!(t < stringLen(src))) { panic_at(src, t, "expected '}'"); }
+    if (stringCharCodeAt(src, t) == 125) { break; }
+
+    // Disambiguation:
+    // - `if` with `else` is an expression; allow it to be a tail expression.
+    // - `ident[expr]` is only an index-assign statement if followed by `=`.
+    let isStmt = starts_with_at(src, t, "let")
+      || starts_with_at(src, t, "fn")
+      || starts_with_at(src, t, "while")
+      || (starts_with_at(src, t, "if") && !scan_if_stmt_has_else(src, t))
+      || starts_with_at(src, t, "yield")
+      || is_field_assign_stmt_start_impl(src, t)
+      || is_assign_stmt_start_impl(src, t)
+      || is_index_assign_stmt_start_impl(src, t);
+    if (isStmt) {
+      let st = parse_stmt_ast(src, k);
+      vec_push(body, st.stmt);
+      k = st.nextPos;
+      continue;
+    }
+
+    // expression statement vs tail expression
+    let e = parse_expr_ast_impl(src, k);
+    let after = skip_ws(src, e.nextPos);
+    if (after < stringLen(src) && stringCharCodeAt(src, after) == 59) {
+      vec_push(body, stmt_expr(span(span_start(expr_span(e.expr)), after + 1), e.expr));
+      k = after + 1;
+      continue;
+    }
+    if (after < stringLen(src) && stringCharCodeAt(src, after) != 125) {
+      vec_push(body, stmt_expr(span(span_start(expr_span(e.expr)), e.nextPos), e.expr));
+      k = e.nextPos;
+      continue;
+    }
+    break;
+  }
+
+  let t2 = skip_ws(src, k);
+  if (t2 < stringLen(src) && stringCharCodeAt(src, t2) == 125) {
+    yield ParsedMainAst(body, expr_undefined(span(t2, t2)), t2 + 1);
+  }
+
+  let tail = parse_expr_ast_impl(src, k);
+  k = skip_ws(src, tail.nextPos);
+  if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 125)) { panic_at(src, k, "expected '}'"); }
+  ParsedMainAst(body, tail.expr, k + 1)
+}
+
+out fn parse_block_expr_ast(src: String, i: I32) : ParsedExprAst => {
+  let start = skip_ws(src, i);
+  let b = parse_block_body_ast(src, start);
+  ParsedExprAst(expr_block(span(start, b.nextPos), b.body, b.tail), b.nextPos)
+}
+
+out fn parse_main_body_ast_impl(src: String, i: I32) : ParsedMainAst => {
+  let j = skip_ws(src, i);
+  if (j < stringLen(src) && stringCharCodeAt(src, j) == 123) {
+    let b = parse_block_body_ast(src, i);
+    yield b;
+  }
+  let e = parse_expr_ast_impl(src, i);
+  ParsedMainAst(vec_new(), e.expr, e.nextPos)
+}

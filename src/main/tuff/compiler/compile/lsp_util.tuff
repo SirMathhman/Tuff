@@ -1,0 +1,144 @@
+// LSP support: small string/path helpers shared by LSP modules.
+
+extern from rt::stdlib use { pathDirname, pathJoin, stringLen, stringSlice, stringCharCodeAt };
+
+from util::lexing use { is_ident_start, is_ident_part };
+from parsing::primitives use { module_path_to_relpath };
+
+fn find_substring(hay: String, needle: String) : I32 => {
+  let mut i = 0;
+  while (i + stringLen(needle) <= stringLen(hay)) {
+    let mut ok = true;
+    let mut j = 0;
+    while (j < stringLen(needle)) {
+      if (stringCharCodeAt(hay, i + j) != stringCharCodeAt(needle, j)) { ok = false; break; }
+      j = j + 1;
+    }
+    if (ok) { yield i; }
+    i = i + 1;
+  }
+  -1
+}
+
+fn workspace_root_from_path(p: String) : String => {
+  // Try to find a stable staging/workspace root by trimming at common anchors.
+  let mut i = find_substring(p, "\\src\\");
+  if (i != -1) { yield stringSlice(p, 0, i); }
+  i = find_substring(p, "/src/");
+  if (i != -1) { yield stringSlice(p, 0, i); }
+  i = find_substring(p, "\\std\\");
+  if (i != -1) { yield stringSlice(p, 0, i); }
+  i = find_substring(p, "/std/");
+  if (i != -1) { yield stringSlice(p, 0, i); }
+  pathDirname(p)
+}
+
+fn compiler_root_from_path(p: String) : String => {
+  // If we're compiling a compiler source file, resolve short module paths from
+  // the compiler root: <root>/src/main/tuff/compiler/
+  let needle1 = "\\src\\main\\tuff\\compiler\\";
+  let mut i = find_substring(p, needle1);
+  if (i != -1) { yield stringSlice(p, 0, i + stringLen(needle1)); }
+  let needle2 = "/src/main/tuff/compiler/";
+  i = find_substring(p, needle2);
+  if (i != -1) { yield stringSlice(p, 0, i + stringLen(needle2)); }
+  ""
+}
+
+fn starts_with_at_simple(s: String, i: I32, prefix: String) : Bool => {
+  if (i < 0) { yield false; }
+  if (i + stringLen(prefix) > stringLen(s)) { yield false; }
+  let mut j = 0;
+  while (j < stringLen(prefix)) {
+    if (stringCharCodeAt(s, i + j) != stringCharCodeAt(prefix, j)) { yield false; }
+    j = j + 1;
+  }
+  true
+}
+
+// Resolve a module path (e.g., "util::diagnostics") to an absolute file path.
+// Uses the same logic as compile_project for resolving imports.
+out fn lsp_resolve_module_path_impl(modulePath: String, currentFilePath: String) : String => {
+  let workspaceRoot = workspace_root_from_path(currentFilePath);
+  let rel = module_path_to_relpath(modulePath);
+  let mut baseDir = pathDirname(currentFilePath);
+  let compilerSrcPrefix = "src::main::tuff::compiler::";
+  let mut rel2 = rel;
+
+  if (starts_with_at_simple(modulePath, 0, compilerSrcPrefix)) {
+    let compilerRootDir = pathJoin(workspaceRoot, "src/main/tuff/compiler");
+    baseDir = compilerRootDir;
+    let rest = stringSlice(modulePath, stringLen(compilerSrcPrefix), stringLen(modulePath));
+    rel2 = module_path_to_relpath(rest);
+  } else {
+    if (starts_with_at_simple(modulePath, 0, "src::") || starts_with_at_simple(modulePath, 0, "std::")) {
+      baseDir = workspaceRoot;
+    } else {
+      let cr = compiler_root_from_path(currentFilePath);
+      if (stringLen(cr) > 0) { baseDir = cr; }
+    }
+  }
+
+  pathJoin(baseDir, rel2 + ".tuff")
+}
+
+// Fallback: extract identifier under (or just left of) the cursor.
+// Used for go-to-definition in places that are not tracked as Expr refs.
+out fn lsp_ident_at_impl(src: String, offset: I32) : String => {
+  if (offset < 0 || offset >= stringLen(src)) { yield ""; }
+
+  let mut i = offset;
+  if (!is_ident_part(stringCharCodeAt(src, i)) && i > 0 && is_ident_part(stringCharCodeAt(src, i - 1))) {
+    i = i - 1;
+  }
+  if (!is_ident_part(stringCharCodeAt(src, i))) { yield ""; }
+
+  let mut start = i;
+  while (start > 0 && is_ident_part(stringCharCodeAt(src, start - 1))) { start = start - 1; }
+  if (!is_ident_start(stringCharCodeAt(src, start))) { yield ""; }
+
+  let mut end = i + 1;
+  while (end < stringLen(src) && is_ident_part(stringCharCodeAt(src, end))) { end = end + 1; }
+
+  stringSlice(src, start, end)
+}
+
+fn lsp_has_double_colon(s: String) : Bool => {
+  let mut i = 0;
+  while (i + 1 < stringLen(s)) {
+    if (stringCharCodeAt(s, i) == 58 && stringCharCodeAt(s, i + 1) == 58) { yield true; }
+    i = i + 1;
+  }
+  false
+}
+
+fn lsp_is_module_path_part(code: I32) : Bool => is_ident_part(code) || code == 58
+
+// Fallback: extract module path (containing ::) under the cursor.
+out fn lsp_module_path_at_impl(src: String, offset: I32) : String => {
+  if (offset < 0 || offset >= stringLen(src)) { yield ""; }
+  let mut i = offset;
+
+  if (!lsp_is_module_path_part(stringCharCodeAt(src, i)) && i > 0 && lsp_is_module_path_part(stringCharCodeAt(src, i - 1))) {
+    i = i - 1;
+  }
+  if (!lsp_is_module_path_part(stringCharCodeAt(src, i))) { yield ""; }
+
+  let mut start = i;
+  while (start > 0 && lsp_is_module_path_part(stringCharCodeAt(src, start - 1))) { start = start - 1; }
+  let mut end = i + 1;
+  while (end < stringLen(src) && lsp_is_module_path_part(stringCharCodeAt(src, end))) { end = end + 1; }
+
+  let mut s = stringSlice(src, start, end);
+
+  // trim leading/trailing ':'
+  while (stringLen(s) > 0 && stringCharCodeAt(s, 0) == 58) {
+    s = stringSlice(s, 1, stringLen(s));
+  }
+  while (stringLen(s) > 0 && stringCharCodeAt(s, stringLen(s) - 1) == 58) {
+    s = stringSlice(s, 0, stringLen(s) - 1);
+  }
+
+  if (!lsp_has_double_colon(s)) { yield ""; }
+  s
+}

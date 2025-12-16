@@ -17,7 +17,9 @@
  *   }
  */
 
-import { posix as pathPosix, resolve } from "node:path";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, posix as pathPosix, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export interface ModuleStore {
@@ -275,6 +277,29 @@ function topoSortOutputs(outRelPaths: string[], jsOutputs: string[]): string[] {
   return ordered;
 }
 
+// For cyclic module graphs, the data: URL approach can't build URLs bottom-up.
+// Node's file-based ESM loader *can* handle cycles, so fall back to that.
+async function importEsmFromOutputsViaFs(
+  outRelPaths: string[],
+  jsOutputs: string[],
+  entryRelPath: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any> {
+  const rels = outRelPaths.map(normalizeOutRelPath);
+  const tmpRoot = await mkdtemp(join(tmpdir(), "tuff-esm-"));
+
+  for (let i = 0; i < rels.length; i++) {
+    const rel = rels[i]!;
+    const abs = join(tmpRoot, rel);
+    await mkdir(dirname(abs), { recursive: true });
+    await writeFile(abs, jsOutputs[i] ?? "", "utf8");
+  }
+
+  const entryRel = normalizeOutRelPath(entryRelPath);
+  const entryAbs = join(tmpRoot, entryRel);
+  return import(pathToFileURL(entryAbs).href);
+}
+
 /**
  * Load the compiled output of compileCode() as an ESM module graph.
  *
@@ -298,7 +323,15 @@ export async function importEsmFromOutputs(
   for (let i = 0; i < rels.length; i++)
     relToSrc.set(rels[i], jsOutputs[i] ?? "");
 
-  const ordered = topoSortOutputs(rels, jsOutputs);
+  let ordered: string[];
+  try {
+    ordered = topoSortOutputs(rels, jsOutputs);
+  } catch (e) {
+    if (String(e).includes("cycle detected in JS outputs")) {
+      return importEsmFromOutputsViaFs(rels, jsOutputs, entryRelPath);
+    }
+    throw e;
+  }
 
   // Build data: URLs bottom-up (dependencies first) so we can inline absolute
   // `data:` URLs into import specifiers.

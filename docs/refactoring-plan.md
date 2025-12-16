@@ -49,7 +49,8 @@ The 500-line file limit linting rule has been implemented. The following files e
 
 - This is the main compiler facade
 - Split by phase:
-  - `compile/module_graph.tuff` - module discovery and ordering
+  - `compile/paths.tuff` - workspace/compiler root path helpers
+  - `compile/project_compile.tuff` - module graph discovery + project compile/lint helpers (closure-injected compile/lint steps to avoid circular deps)
   - `compile/compile.tuff` - compilation logic
   - `compile/lint.tuff` - linting logic
   - `compile/lsp.tuff` - LSP integration

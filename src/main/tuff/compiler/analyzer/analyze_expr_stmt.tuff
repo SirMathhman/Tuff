@@ -1,14 +1,10 @@
-// Expression + statement analysis (scope, deprecations, narrowing, basic type checks).
-
 extern from rt::stdlib use { stringLen, stringSlice };
 extern from rt::vec use { vec_new, vec_len, vec_get, vec_push };
 
 from util::diagnostics use { error_at, warn_at };
 from ast use { span_start };
-
 from analyzer::deprecation use { deprecation_reason_before };
 from analyzer::consts use { infer_int_const };
-
 from analyzer::typestrings use {
   ty_unknown,
   ty_is_fn_type,
@@ -23,7 +19,6 @@ from analyzer::typestrings use {
 
 from analyzer::defs use { mk_narrowed_tag, mk_union_def };
 from analyzer::narrowing use { narrow_lookup, narrow_clone };
-
 from analyzer::scope use {
   scope_contains,
   scopes_enter,
@@ -63,8 +58,6 @@ from analyzer::fluff use {
 out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, e: Expr) : Void => {
   if (e.tag == "EIdent") {
     require_name(src, span_start(e.span), scopes, depth, e.name);
-
-    // Usage-site deprecation warning.
     if (!(e.name == "true") && !(e.name == "false") && !(e.name == "continue") && !(e.name == "break")) {
       mark_binding_read(scopes, depth, e.name);
       let b = lookup_binding(src, span_start(e.span), scopes, depth, e.name);
@@ -74,11 +67,8 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     }
     yield;
   }
-
   if (e.tag == "ELambda") {
     require_all_param_types(src, span_start(e.span), "lambda", e.params, e.paramTyAnns);
-
-    // Lambdas introduce a new scope with typed parameters.
     let newDepth = scopes_enter(scopes, depth);
     let mut pi = 0;
     while (pi < vec_len(e.params)) {
@@ -90,24 +80,19 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
       declare_local_name(src, span_start(e.span), scopes, newDepth, vec_get(e.params, pi), false, pTy);
       pi = pi + 1;
     }
-
     analyze_expr(src, structs, unions, fns, scopes, newDepth, narrowed, e.body);
-
     // Enforce declared return type against body expression.
     if (e.retTyAnn != "") {
       let expected = normalize_ty_ann(e.retTyAnn);
       let bodyTy = infer_expr_type(src, structs, fns, scopes, newDepth, e.body);
       require_type_compatible(src, span_start(e.span), "lambda return", structs, expected, bodyTy);
     }
-
     warn_unused_params_in_scope(src, scopes, newDepth);
     warn_unused_locals_in_scope(src, scopes, newDepth);
     // Note: complexity check for lambdas is deferred to SLet handler where name is available
     yield;
   }
-
   if (e.tag == "EStructLit") {
-    // nameExpr is a struct name marker (ident/path), not a runtime value.
     let mut vi = 0;
     while (vi < vec_len(e.values)) {
       analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, vec_get(e.values, vi));
@@ -116,19 +101,16 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     check_struct_lit_types(src, structs, fns, scopes, depth, e);
     yield;
   }
-
   if (e.tag == "EUnary") {
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.expr);
     yield;
   }
-
   if (e.tag == "EBinary") {
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.left);
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.right);
     check_binary_operand_types(src, structs, fns, scopes, depth, e);
     yield;
   }
-
   if (e.tag == "ECall") {
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.callee);
     let mut ai = 0;
@@ -139,13 +121,9 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     check_call_types(src, structs, fns, scopes, depth, e);
     yield;
   }
-
   if (e.tag == "EIf") {
     check_cond_is_bool(src, structs, fns, scopes, depth, e.cond);
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.cond);
-
-    // Narrowing for unions: if (o.tag == "Some") { ... } else { ... }
-    // Also supports != and negation.
     let nar = parse_tag_narrowing(e.cond);
     if (nar.ok) {
       if (nar.thenVariant != "") {
@@ -172,7 +150,6 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.elseExpr);
     yield;
   }
-
   if (e.tag == "EBlock") {
     let newDepth = scopes_enter(scopes, depth);
     analyze_stmts(src, structs, unions, fns, scopes, newDepth, narrowed, e.body);
@@ -180,7 +157,6 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     warn_unused_locals_in_scope(src, scopes, newDepth);
     yield;
   }
-
   if (e.tag == "EVecLit") {
     let mut ii = 0;
     while (ii < vec_len(e.items)) {
@@ -189,7 +165,6 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     }
     yield;
   }
-
   if (e.tag == "ETupleLit") {
     let mut ii = 0;
     while (ii < vec_len(e.items)) {
@@ -198,12 +173,9 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     }
     yield;
   }
-
   if (e.tag == "EIndex") {
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.base);
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.index);
-
-    // Array safety: enforce bounds + initialized prefix when index is a literal.
     if (e.base.tag == "EIdent") {
       let bt = infer_lookup_ty(scopes, depth, e.base.name);
       let arr = ty_parse_array(normalize_ty_ann(bt));
@@ -221,16 +193,12 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     }
     yield;
   }
-
   if (e.tag == "ETupleIndex") {
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.base);
     yield;
   }
-
   if (e.tag == "EField") {
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.base);
-
-    // Union payload access (`.value`) must be gated by narrowing.
     if (e.field == "value" && e.base.tag == "EIdent") {
       let bt = infer_lookup_ty(scopes, depth, e.base.name);
       let app = ty_parse_app(normalize_ty_ann(bt));
@@ -251,8 +219,6 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
         }
       }
     }
-
-    // If base is a known struct type, validate field exists.
     let bt = infer_expr_type(src, structs, fns, scopes, depth, e.base);
     if (!type_is_unknown(bt)) {
       // Only validate for known structs (avoid false positives for unknown).
@@ -262,7 +228,6 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     }
     yield;
   }
-
   if (e.tag == "EMatch") {
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.scrut);
 
@@ -315,7 +280,6 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     }
 
     if (scrutIsUnion && !hasWildcard) {
-      // Exhaustiveness-lite: require every variant be present (wildcard counts as exhaustive).
       let mut vi = 0;
       while (vi < vec_len(u.variants)) {
         let vn = vec_get(u.variants, vi).name;
@@ -329,14 +293,11 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     yield;
   }
 
-  // Literals, paths, undefined: nothing to do.
 }
 
 out fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, s: Stmt) : Void => {
   if (s.tag == "SLet") {
     let depReason = deprecation_reason_before(src, span_start(s.span));
-
-    // Predeclare lambda lets so recursion/mutual recursion works.
     if (s.init.tag == "ELambda") {
       let initTy0 = infer_expr_type(src, structs, fns, scopes, depth, s.init);
       let bindTy = if (s.tyAnn != "") normalize_ty_ann(s.tyAnn) else initTy0;
@@ -353,17 +314,12 @@ out fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
       if (s.tyAnn != "") {
         require_type_compatible(src, span_start(s.span), "let " + s.name, structs, s.tyAnn, initTy0);
       }
-      // Check complexity for local fn declarations
       check_lambda_complexity(src, span_start(s.span), s.name, s.init.body);
       yield;
     }
 
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.init);
     let initTy = infer_expr_type_with_narrowing(src, structs, unions, fns, scopes, depth, narrowed, s.init);
-
-    // Approach 1: generic functions are allowed, but an unspecialized generic
-    // cannot be treated as a first-class value (no C function pointer exists).
-    // Calls like `id(123)` / `obj.id(123)` are still allowed via generic inference.
     if (s.init.tag == "EIdent" && has_fn_sig(fns, s.init.name)) {
       let sig = find_fn_sig(fns, s.init.name);
       if (vec_len(sig.typeParams) > 0) {
@@ -419,7 +375,6 @@ out fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.cond);
     let newDepth = scopes_enter(scopes, depth);
     analyze_stmts(src, structs, unions, fns, scopes, newDepth, narrowed, s.body);
-
     warn_unused_locals_in_scope(src, scopes, newDepth);
     yield;
   }
@@ -427,9 +382,6 @@ out fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
   if (s.tag == "SIf") {
     check_cond_is_bool(src, structs, fns, scopes, depth, s.cond);
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.cond);
-
-    // Narrowing for unions in statement if: if (o.tag == "Some") { ... } else { ... }
-    // Also supports != and negation.
     let nar = parse_tag_narrowing(s.cond);
     if (nar.ok) {
       let mut thenNar = narrowed;
@@ -485,8 +437,6 @@ out fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.base);
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.index);
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.value);
-
-    // Array initialization tracking / bounds checks on literal index.
     if (s.base.tag == "EIdent") {
       let bt = infer_lookup_ty(scopes, depth, s.base.name);
       let arr = ty_parse_array(normalize_ty_ann(bt));
@@ -528,7 +478,6 @@ out fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
 }
 
 out fn analyze_stmts(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, stmts: Vec<Stmt>) : Void => {
-  // Predeclare all `let name = <lambda>` in this block so local functions can be recursive and mutually recursive.
   let cur = vec_get(scopes, depth - 1);
   let mut pi = 0;
   while (pi < vec_len(stmts)) {

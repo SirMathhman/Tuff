@@ -85,6 +85,7 @@ from analyzer::infer_narrowing use {
   validate_union_variant_for_binding
 };
 from analyzer::analyze_expr_stmt use { analyze_expr, analyze_stmt, analyze_stmts };
+from analyzer::analyze_decls use { analyze_fn_decl, analyze_class_fn_decl };
 
 from analyzer::env use {
   this_struct_name,
@@ -150,104 +151,6 @@ out fn check_file_size(src: String) : Void =>
 
 out fn mk_fn_sig(name: String, deprecatedReason: String, typeParams: Vec<String>, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String) =>
   mk_fn_sig_def(name, deprecatedReason, typeParams, params, paramTyAnns, retTyAnn)
-
-fn warn_unused_locals_in_scope(src: String, scopes: Vec<Vec<Binding>>, depth: I32) : Void =>
-  fluff_warn_unused_locals_in_scope(src, scopes, depth)
-
-fn warn_unused_params_in_scope(src: String, scopes: Vec<Vec<Binding>>, depth: I32) : Void =>
-  fluff_warn_unused_params_in_scope(src, scopes, depth)
-
-fn check_fn_complexity(src: String, pos: I32, fnName: String, body: Vec<Stmt>, tail: Expr) : Void =>
-  fluff_check_fn_complexity(src, pos, fnName, body, tail)
-
-fn check_lambda_complexity(src: String, pos: I32, name: String, body: Expr) : Void =>
-  fluff_check_lambda_complexity(src, pos, name, body)
-
-fn analyze_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, outerScopes: Vec<Vec<Binding>>, outerDepth: I32, d: DFn) : Void => {
-  let depth = scopes_enter(outerScopes, outerDepth);
-
-  let mut pi = 0;
-  while (pi < vec_len(d.params)) {
-    let mut pTy = ty_unknown();
-    if (pi < vec_len(d.paramTyAnns)) {
-      let ann = vec_get(d.paramTyAnns, pi);
-      if (ann != "") { pTy = normalize_ty_ann(ann); }
-    }
-    declare_local_name(src, span_start(d.span), outerScopes, depth, vec_get(d.params, pi), false, pTy);
-    pi = pi + 1;
-  }
-
-  let narrowed = vec_new();
-  analyze_stmts(src, structs, unions, fns, outerScopes, depth, narrowed, d.body);
-  analyze_expr(src, structs, unions, fns, outerScopes, depth, narrowed, d.tail);
-
-  // Enforce declared return type (if present) against tail and explicit yields.
-  if (d.retTyAnn != "") {
-    let expected = normalize_ty_ann(d.retTyAnn);
-
-    // tail
-    let tailTy = infer_expr_type(src, structs, fns, outerScopes, depth, d.tail);
-    require_type_compatible(src, span_start(d.span), "function " + d.name + " return", structs, expected, tailTy);
-
-    // yields
-    let mut si = 0;
-    while (si < vec_len(d.body)) {
-      let st = vec_get(d.body, si);
-      if (st.tag == "SYield") {
-        let yTy = if (st.expr.tag == "EUndefined") ty_void() else infer_expr_type(src, structs, fns, outerScopes, depth, st.expr);
-        require_type_compatible(src, span_start(st.span), "function " + d.name + " yield", structs, expected, yTy);
-      }
-      si = si + 1;
-    }
-  }
-
-  warn_unused_params_in_scope(src, outerScopes, depth);
-  warn_unused_locals_in_scope(src, outerScopes, depth);
-  check_fn_complexity(src, span_start(d.span), d.name, d.body, d.tail);
-}
-
-fn analyze_class_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, outerScopes: Vec<Vec<Binding>>, outerDepth: I32, d: DClassFn) : Void => {
-  let depth = scopes_enter(outerScopes, outerDepth);
-
-  let mut pi = 0;
-  while (pi < vec_len(d.params)) {
-    let mut pTy = ty_unknown();
-    if (pi < vec_len(d.paramTyAnns)) {
-      let ann = vec_get(d.paramTyAnns, pi);
-      if (ann != "") { pTy = normalize_ty_ann(ann); }
-    }
-    declare_local_name(src, span_start(d.span), outerScopes, depth, vec_get(d.params, pi), false, pTy);
-    pi = pi + 1;
-  }
-
-  let narrowed = vec_new();
-  analyze_stmts(src, structs, unions, fns, outerScopes, depth, narrowed, d.body);
-  analyze_expr(src, structs, unions, fns, outerScopes, depth, narrowed, d.tail);
-
-  // Enforce declared return type (if present) against tail and explicit yields.
-  if (d.retTyAnn != "") {
-    let expected = normalize_ty_ann(d.retTyAnn);
-
-    // tail
-    let tailTy = infer_expr_type(src, structs, fns, outerScopes, depth, d.tail);
-    require_type_compatible(src, span_start(d.span), "function " + d.name + " return", structs, expected, tailTy);
-
-    // yields
-    let mut si = 0;
-    while (si < vec_len(d.body)) {
-      let st = vec_get(d.body, si);
-      if (st.tag == "SYield") {
-        let yTy = if (st.expr.tag == "EUndefined") ty_void() else infer_expr_type(src, structs, fns, outerScopes, depth, st.expr);
-        require_type_compatible(src, span_start(st.span), "function " + d.name + " yield", structs, expected, yTy);
-      }
-      si = si + 1;
-    }
-  }
-
-  warn_unused_params_in_scope(src, outerScopes, depth);
-  warn_unused_locals_in_scope(src, outerScopes, depth);
-  check_fn_complexity(src, span_start(d.span), d.name, d.body, d.tail);
-}
 
 fn analyze_module(src: String, d: DModule) : Void => {
   // Modules create a separate namespace; do not treat module members as nested

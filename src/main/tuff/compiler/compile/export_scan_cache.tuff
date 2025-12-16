@@ -1,0 +1,22 @@
+extern from rt::vec use { vec_new, vec_len, vec_get, vec_push };
+
+from compile::export_scan use { scan_top_level_fn_exports };
+
+let mut __tuffc_scan_cache = vec_new();
+
+class fn ScanCacheEntry(path: String, outSigs: Vec<FnSig>, privateNames: Vec<String>, allSigs: Vec<FnSig>) => {}
+
+out fn cached_scan_top_level_fn_exports(path: String, src: String) => {
+  let mut i = 0;
+  while (i < vec_len(__tuffc_scan_cache)) {
+    let e = vec_get(__tuffc_scan_cache, i);
+    if (e.path == path) {
+      yield (e.outSigs, e.privateNames, e.allSigs);
+    }
+    i = i + 1;
+  }
+
+  let ex = scan_top_level_fn_exports(src);
+  vec_push(__tuffc_scan_cache, ScanCacheEntry(path, ex.0, ex.1, ex.2));
+  ex
+}

@@ -13,6 +13,7 @@ import { subst_lookup, subst_bind, ty_apply_subst } from "./analyzer/subst.mjs";
 import { infer_expr_type } from "./analyzer/infer_basic.mjs";
 import { infer_expr_type_with_narrowing, parse_tag_narrowing, validate_union_variant_for_binding } from "./analyzer/infer_narrowing.mjs";
 import { analyze_expr, analyze_stmt, analyze_stmts } from "./analyzer/analyze_expr_stmt.mjs";
+import { analyze_fn_decl, analyze_class_fn_decl } from "./analyzer/analyze_decls.mjs";
 import { this_struct_name, path_dotted, struct_name_of_expr, find_struct_def, has_struct_def, get_struct_field_type, find_fn_sig, has_fn_sig, find_union_def, has_union_def, union_has_variant, find_union_by_variant, union_variant_has_payload, union_variant_payload_ty_anns } from "./analyzer/env.mjs";
 import { scopes_contains, scopes_enter, declare_name, declare_name_deprecated, scope_contains, declare_local_name, declare_local_name_deprecated, lookup_binding, update_binding_ty, mark_binding_read, mark_binding_written, infer_lookup_ty, require_name } from "./analyzer/scope.mjs";
 import { require_type_compatible, require_all_param_types } from "./analyzer/typecheck.mjs";
@@ -31,90 +32,6 @@ return fluff_check_file_size(src);
 }
 export function mk_fn_sig(name, deprecatedReason, typeParams, params, paramTyAnns, retTyAnn) {
 return mk_fn_sig_def(name, deprecatedReason, typeParams, params, paramTyAnns, retTyAnn);
-}
-export function warn_unused_locals_in_scope(src, scopes, depth) {
-return fluff_warn_unused_locals_in_scope(src, scopes, depth);
-}
-export function warn_unused_params_in_scope(src, scopes, depth) {
-return fluff_warn_unused_params_in_scope(src, scopes, depth);
-}
-export function check_fn_complexity(src, pos, fnName, body, tail) {
-return fluff_check_fn_complexity(src, pos, fnName, body, tail);
-}
-export function check_lambda_complexity(src, pos, name, body) {
-return fluff_check_lambda_complexity(src, pos, name, body);
-}
-export function analyze_fn_decl(src, structs, unions, fns, outerScopes, outerDepth, d) {
-const depth = scopes_enter(outerScopes, outerDepth);
-let pi = 0;
-while (pi < vec_len(d.params)) {
-let pTy = ty_unknown();
-if (pi < vec_len(d.paramTyAnns)) {
-const ann = vec_get(d.paramTyAnns, pi);
-if (ann != "") {
-pTy = normalize_ty_ann(ann);
-}
-}
-declare_local_name(src, span_start(d.span), outerScopes, depth, vec_get(d.params, pi), false, pTy);
-pi = pi + 1;
-}
-const narrowed = vec_new();
-analyze_stmts(src, structs, unions, fns, outerScopes, depth, narrowed, d.body);
-analyze_expr(src, structs, unions, fns, outerScopes, depth, narrowed, d.tail);
-if (d.retTyAnn != "") {
-const expected = normalize_ty_ann(d.retTyAnn);
-const tailTy = infer_expr_type(src, structs, fns, outerScopes, depth, d.tail);
-require_type_compatible(src, span_start(d.span), "function " + d.name + " return", structs, expected, tailTy);
-let si = 0;
-while (si < vec_len(d.body)) {
-const st = vec_get(d.body, si);
-if (st.tag == "SYield") {
-const yTy = (st.expr.tag == "EUndefined" ? ty_void() : infer_expr_type(src, structs, fns, outerScopes, depth, st.expr));
-require_type_compatible(src, span_start(st.span), "function " + d.name + " yield", structs, expected, yTy);
-}
-si = si + 1;
-}
-}
-warn_unused_params_in_scope(src, outerScopes, depth);
-warn_unused_locals_in_scope(src, outerScopes, depth);
-check_fn_complexity(src, span_start(d.span), d.name, d.body, d.tail);
-return undefined;
-}
-export function analyze_class_fn_decl(src, structs, unions, fns, outerScopes, outerDepth, d) {
-const depth = scopes_enter(outerScopes, outerDepth);
-let pi = 0;
-while (pi < vec_len(d.params)) {
-let pTy = ty_unknown();
-if (pi < vec_len(d.paramTyAnns)) {
-const ann = vec_get(d.paramTyAnns, pi);
-if (ann != "") {
-pTy = normalize_ty_ann(ann);
-}
-}
-declare_local_name(src, span_start(d.span), outerScopes, depth, vec_get(d.params, pi), false, pTy);
-pi = pi + 1;
-}
-const narrowed = vec_new();
-analyze_stmts(src, structs, unions, fns, outerScopes, depth, narrowed, d.body);
-analyze_expr(src, structs, unions, fns, outerScopes, depth, narrowed, d.tail);
-if (d.retTyAnn != "") {
-const expected = normalize_ty_ann(d.retTyAnn);
-const tailTy = infer_expr_type(src, structs, fns, outerScopes, depth, d.tail);
-require_type_compatible(src, span_start(d.span), "function " + d.name + " return", structs, expected, tailTy);
-let si = 0;
-while (si < vec_len(d.body)) {
-const st = vec_get(d.body, si);
-if (st.tag == "SYield") {
-const yTy = (st.expr.tag == "EUndefined" ? ty_void() : infer_expr_type(src, structs, fns, outerScopes, depth, st.expr));
-require_type_compatible(src, span_start(st.span), "function " + d.name + " yield", structs, expected, yTy);
-}
-si = si + 1;
-}
-}
-warn_unused_params_in_scope(src, outerScopes, depth);
-warn_unused_locals_in_scope(src, outerScopes, depth);
-check_fn_complexity(src, span_start(d.span), d.name, d.body, d.tail);
-return undefined;
 }
 export function analyze_module(src, d) {
 const scopes = vec_new();

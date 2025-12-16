@@ -1,0 +1,20 @@
+extern from rt::vec use { vec_new, vec_len, vec_get, vec_push };
+
+out fn str_list_contains(xs: Vec<String>, s: String) : Bool => {
+  let mut i = 0;
+  while (i < vec_len(xs)) {
+    if (vec_get(xs, i) == s) { yield true; }
+    i = i + 1;
+  }
+  false
+}
+
+out fn str_list_remove(xs: Vec<String>, s: String) : Vec<String> => {
+  let out = vec_new();
+  let mut i = 0;
+  while (i < vec_len(xs)) {
+    if (vec_get(xs, i) != s) { vec_push(out, vec_get(xs, i)); }
+    i = i + 1;
+  }
+  out
+}

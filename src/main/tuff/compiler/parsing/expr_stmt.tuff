@@ -14,8 +14,9 @@ from parsing::expr_stmt_types use {
   ParsedMainAst
 };
 
-from parsing::expr_stmt_ast use { parse_expr_ast_impl, parse_main_body_ast_impl };
-from parsing::expr_stmt_legacy use { parse_expr_impl, parse_stmt_impl, parse_main_body_impl };
+from parsing::expr_stmt_ast_expr use { parse_expr_ast_impl };
+from parsing::expr_stmt_ast_blocks use { parse_main_body_ast_impl };
+from parsing::expr_stmt_legacy_facade use { parse_expr_impl, parse_stmt_impl, parse_main_body_impl };
 from parsing::expr_stmt_helpers use { parse_mut_opt_impl };
 from parsing::expr_stmt_stmt_starts use {
   is_assign_stmt_start_impl,

@@ -1,0 +1,189 @@
+extern from rt::stdlib use { stringLen, stringCharCodeAt, stringSlice };
+extern from rt::vec use { vec_new, vec_len, vec_get, vec_push };
+
+from util::lexing use { is_ident_part, skip_ws, starts_with_at };
+from parsing::primitives use { parse_keyword, parse_ident, parse_optional_semicolon };
+from parsing::types use { parse_type_expr };
+from parsing::expr_stmt use { parse_mut_opt, parse_expr_ast };
+from parsing::decls use { parse_extern_decl_ast, parse_imports_ast, parse_module_decl_ast, parse_fn_decl_ast2, parse_class_fn_decl_ast2, parse_struct_decl_ast, parse_type_union_decl_ast };
+from analyzer use { mk_fn_sig };
+from ast use { span, span_start, decl_let, decl_let_typed };
+from compile::deprecation_comments use { deprecation_reason_before };
+
+fn kw_at(src: String, i: I32, kw: String) : Bool => {
+  if (!starts_with_at(src, i, kw)) { yield false; }
+  let end = i + stringLen(kw);
+  if (end < stringLen(src) && is_ident_part(stringCharCodeAt(src, end))) { yield false; }
+  true
+}
+
+fn is_extern_decl_start(src: String, i: I32) : Bool => {
+  let j = skip_ws(src, i);
+  if (kw_at(src, j, "extern")) { yield true; }
+  if (kw_at(src, j, "out")) {
+    let k = skip_ws(src, j + 3);
+    if (kw_at(src, k, "extern")) { yield true; }
+  }
+  false
+}
+
+out fn module_index(modulePaths: Vec<String>, path: String) : I32 => {
+  let mut i = 0;
+  while (i < vec_len(modulePaths)) {
+    if (vec_get(modulePaths, i) == path) { yield i; }
+    i = i + 1;
+  }
+  -1
+}
+
+out fn fnsig_lookup_by_name(fns: Vec<FnSig>, name: String) : FnSig => {
+  let mut i = 0;
+  while (i < vec_len(fns)) {
+    let s = vec_get(fns, i);
+    if (s.name == name) { yield s; }
+    i = i + 1;
+  }
+  mk_fn_sig("", "", vec_new(), vec_new(), vec_new(), "")
+}
+
+out fn scan_top_level_fn_exports(src: String) => {
+  let outSigs = vec_new();
+  let privateNames = vec_new();
+  let allSigs = vec_new();
+
+  let mut decls = vec_new();
+  let mut i = 0;
+
+  while (true) {
+    if (is_extern_decl_start(src, i)) {
+      let ex = parse_extern_decl_ast(src, i);
+      vec_push(decls, ex.decl);
+      i = ex.nextPos;
+      continue;
+    }
+    break;
+  }
+
+  let imps = parse_imports_ast(src, i);
+  let mut ii = 0;
+  while (ii < vec_len(imps.decls)) {
+    vec_push(decls, vec_get(imps.decls, ii));
+    ii = ii + 1;
+  }
+  i = imps.nextPos;
+
+  while (true) {
+    let j = skip_ws(src, i);
+    if (!starts_with_at(src, j, "module")) { break; }
+    let m = parse_module_decl_ast(src, i);
+    vec_push(decls, m.decl);
+    i = m.nextPos;
+  }
+
+  while (true) {
+    let j = skip_ws(src, i);
+    if (starts_with_at(src, j, "module")) {
+      let m = parse_module_decl_ast(src, i);
+      vec_push(decls, m.decl);
+      i = m.nextPos;
+      continue;
+    }
+    if (starts_with_at(src, j, "type")) {
+      let td = parse_type_union_decl_ast(src, i, false);
+      vec_push(decls, td.decl);
+      i = td.nextPos;
+      continue;
+    }
+    if (starts_with_at(src, j, "struct")) {
+      let sd = parse_struct_decl_ast(src, i);
+      vec_push(decls, sd.decl);
+      i = sd.nextPos;
+      continue;
+    }
+    break;
+  }
+
+  while (true) {
+    let j = skip_ws(src, i);
+    if (!starts_with_at(src, j, "let")) { break; }
+    let start = skip_ws(src, i);
+    i = parse_keyword(src, i, "let");
+    let mutOpt = parse_mut_opt(src, i);
+    i = mutOpt.nextPos;
+
+    let name = parse_ident(src, i);
+    i = name.nextPos;
+
+    let mut tyAnn = "";
+    let t0 = skip_ws(src, i);
+    if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 58) {
+      let _ty = parse_type_expr(src, t0 + 1);
+      tyAnn = _ty.v0;
+      i = _ty.v1;
+    }
+
+    i = parse_keyword(src, i, "=");
+    let expr = parse_expr_ast(src, i);
+    i = expr.nextPos;
+    i = parse_optional_semicolon(src, i);
+
+    if (tyAnn == "") {
+      vec_push(decls, decl_let(span(start, i), mutOpt.ok, name.text, expr.expr));
+    } else {
+      vec_push(decls, decl_let_typed(span(start, i), mutOpt.ok, name.text, tyAnn, expr.expr));
+    }
+  }
+
+  while (true) {
+    let j = skip_ws(src, i);
+    if (starts_with_at(src, j, "fn")) {
+      let f = parse_fn_decl_ast2(src, i, false);
+      vec_push(decls, f.decl);
+      i = f.nextPos;
+      continue;
+    }
+    if (starts_with_at(src, j, "class")) {
+      let f = parse_class_fn_decl_ast2(src, i, false);
+      vec_push(decls, f.decl);
+      i = f.nextPos;
+      continue;
+    }
+    if (starts_with_at(src, j, "out")) {
+      let k0 = parse_keyword(src, i, "out");
+      let j2 = skip_ws(src, k0);
+      if (starts_with_at(src, j2, "class")) {
+        let f = parse_class_fn_decl_ast2(src, i, false);
+        vec_push(decls, f.decl);
+        i = f.nextPos;
+        continue;
+      }
+      let f = parse_fn_decl_ast2(src, i, false);
+      vec_push(decls, f.decl);
+      i = f.nextPos;
+      continue;
+    }
+    break;
+  }
+
+  let mut di = 0;
+  while (di < vec_len(decls)) {
+    let d = vec_get(decls, di);
+    if (d.tag == "DFn") {
+      let depReason = deprecation_reason_before(src, span_start(d.span));
+      let sig = mk_fn_sig(d.name, depReason, d.typeParams, d.params, d.paramTyAnns, d.retTyAnn);
+      vec_push(allSigs, sig);
+      if (d.isOut) { vec_push(outSigs, sig); }
+      else { vec_push(privateNames, d.name); }
+    }
+    if (d.tag == "DClassFn") {
+      let depReason = deprecation_reason_before(src, span_start(d.span));
+      let sig = mk_fn_sig(d.name, depReason, d.typeParams, d.params, d.paramTyAnns, d.retTyAnn);
+      vec_push(allSigs, sig);
+      if (d.isOut) { vec_push(outSigs, sig); }
+      else { vec_push(privateNames, d.name); }
+    }
+    di = di + 1;
+  }
+
+  (outSigs, privateNames, allSigs)
+}

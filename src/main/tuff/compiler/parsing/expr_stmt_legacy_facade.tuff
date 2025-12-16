@@ -1,0 +1,11 @@
+// Selfhost compiler: expression + statement parsing (legacy string-emission path) facade.
+// Delegates to split helper modules to keep file sizes under the lint limit.
+
+from parsing::expr_stmt_types use { ParsedExpr, ParsedMain, ParsedStmt };
+
+from parsing::expr_stmt_legacy_expr use { parse_expr };
+from parsing::expr_stmt_legacy_stmt use { parse_stmt, parse_main_body };
+
+out fn parse_expr_impl(src: String, i: I32) : ParsedExpr => parse_expr(src, i)
+out fn parse_stmt_impl(src: String, i: I32) : ParsedStmt => parse_stmt(src, i)
+out fn parse_main_body_impl(src: String, i: I32) : ParsedMain => parse_main_body(src, i)

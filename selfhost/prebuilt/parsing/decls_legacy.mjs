@@ -5,7 +5,8 @@ import { panic_at, add_struct_def, is_identifier_too_short, warn_short_identifie
 import { is_ident_part, skip_ws, starts_with_at } from "../util/lexing.mjs";
 import { parse_ident, parse_keyword, parse_module_path, module_path_to_relpath, parse_optional_semicolon } from "./primitives.mjs";
 import { parse_type_expr, skip_angle_brackets } from "./types.mjs";
-import { ParsedParams, ParsedStmt, parse_main_body } from "./expr_stmt.mjs";
+import { ParsedParams, ParsedStmt } from "./expr_stmt_types.mjs";
+import { parse_main_body } from "./expr_stmt.mjs";
 export function ParsedImports(v0, v1) {
 return { v0: v0, v1: v1 };
 }

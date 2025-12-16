@@ -1,25 +1,5 @@
-// Canonical (target-agnostic) AST definitions.
-//
-// Phase 1 goal: introduce shared node definitions + a couple of helpers,
-// without changing the current compiler pipeline yet.
-//
-// NOTE: Keep this file dependency-light.
-// The current selfhost compiler keeps struct field-order defs per-file,
-// so other modules should NOT construct these structs with literals.
-// Instead, use the constructor functions provided below (e.g. `expr_int`).
-
 extern from rt::vec use { vec_new, vec_len };
-
-// A source span as (startOffset, endOffset), half-open: [start, end)
-// Stored as a tagged union so it can cross module boundaries reliably.
-//
-// Invariant (by convention): 0 <= start <= end
-// (not enforced here; the analyzer will enforce it later).
-
 type Span = SpanVal<(I32, I32)>;
-
-// Binary operators (syntactic).
-
 type BinOp =
   OpAdd
   | OpSub
@@ -34,9 +14,6 @@ type BinOp =
   | OpAnd
   | OpOr;
 
-// Type references (syntactic).
-// These are *not* resolved types; the analyzer will transform/annotate.
-
 type TypeRef =
   TyName
   | TyTuple
@@ -48,29 +25,23 @@ struct TyName {
   span: Span,
   name: String
 }
-
 struct TyTuple {
   tag: String,
   span: Span,
   items: Vec<TypeRef>
 }
-
 struct TyFn {
   tag: String,
   span: Span,
   params: Vec<TypeRef>,
   result: TypeRef
 }
-
 struct TyApp {
   tag: String,
   span: Span,
   callee: String,
   args: Vec<TypeRef>
 }
-
-// Expressions.
-// Convention: payload tuple always starts with Span.
 
 type Expr =
   EUndefined
@@ -98,85 +69,52 @@ struct EUndefined {
   tag: String,
   span: Span
 }
-
 struct EInt {
   tag: String,
   span: Span,
   value: I32
 }
-
-// Float literal.
-//
-// Stored as source text to avoid requiring numeric parsing in the bootstrap
-// compiler. Emitters can print this text directly as a JS number literal.
-// suffix is "" (untyped), "F32", or "F64".
 struct EFloat {
   tag: String,
   span: Span,
   text: String,
   suffix: String
 }
-
 struct EBool {
   tag: String,
   span: Span,
   value: Bool
 }
-
 struct EString {
   tag: String,
   span: Span,
   value: String
 }
-
 struct EIdent {
   tag: String,
   span: Span,
   name: String
 }
-
-// Lambda expression.
-//
-// Syntax (initial):
-//   (a: I32, b: I32) : I32 => a + b
-//   () : I32 => 10
-//
-// Note: Type annotations are kept as raw strings (Phase 4 analyzer uses
-// string-based normalization/compatibility checks).
 struct ELambda {
   tag: String,
   span: Span,
-  // Optional generic params for function-valued expressions created via
-  // local `fn name<T>(...) => ...;` desugaring.
-  // Empty for normal lambda syntax.
   typeParams: Vec<String>,
   params: Vec<String>,
   paramTyAnns: Vec<String>,
   retTyAnn: String,
   body: Expr
 }
-
-// Struct literal. The parser keeps this as a dedicated node so the emitter
-// doesn't need to recognize pseudo-builtins.
-//
-// Note: The bootstrap subset uses positional values (not named fields); the
-// JS emitter consults `diagnostics::find_struct_fields` for field order.
 struct EStructLit {
   tag: String,
   span: Span,
   nameExpr: Expr,
   values: Vec<Expr>
 }
-
-// Canonical module/namespace path, e.g. `Math::add`.
-// Kept separate from `EField` so emitters can map namespaces appropriately.
 struct EPath {
   tag: String,
   span: Span,
   parts: Vec<String>
 }
-
-// Unary operators.
 
 type UnOp =
   OpNot
@@ -188,7 +126,6 @@ struct EUnary {
   op: UnOp,
   expr: Expr
 }
-
 struct EBinary {
   tag: String,
   span: Span,
@@ -196,17 +133,13 @@ struct EBinary {
   left: Expr,
   right: Expr
 }
-
 struct ECall {
   tag: String,
   span: Span,
   callee: Expr,
-  // Generic call sugar: f<T>(...) stores type args here.
-  // Empty means no explicit type args.
   typeArgs: Vec<String>,
   args: Vec<Expr>
 }
-
 struct EIf {
   tag: String,
   span: Span,
@@ -214,51 +147,40 @@ struct EIf {
   thenExpr: Expr,
   elseExpr: Expr
 }
-
-// Block expression: executes statements, returns tail expression.
 struct EBlock {
   tag: String,
   span: Span,
   body: Vec<Stmt>,
   tail: Expr
 }
-
 struct EVecLit {
   tag: String,
   span: Span,
   items: Vec<Expr>
 }
-
 struct ETupleLit {
   tag: String,
   span: Span,
   items: Vec<Expr>
 }
-
-// Vector indexing (lowers to vec_get/vec_set in JS backend).
 struct EIndex {
   tag: String,
   span: Span,
   base: Expr,
   index: Expr
 }
-
-// Tuple indexing (lowers to JS bracket indexing with a constant).
 struct ETupleIndex {
   tag: String,
   span: Span,
   base: Expr,
   index: I32
 }
-
 struct EField {
   tag: String,
   span: Span,
   base: Expr,
   field: String
 }
-
-// Match expression (restricted patterns for the bootstrap subset).
 
 type MatchPat =
   MPWildcard
@@ -312,9 +234,6 @@ struct EMatch {
   arms: Vec<MatchArm>
 }
 
-// Statements.
-// Convention: payload tuple always starts with Span.
-
 type Stmt =
   SLet
   | SAssign
@@ -330,7 +249,6 @@ struct SLet {
   span: Span,
   isMut: Bool,
   name: String,
-  // Optional type annotation (empty string means none).
   tyAnn: String,
   init: Expr
 }
@@ -386,9 +304,6 @@ struct SFieldAssign {
   value: Expr
 }
 
-// Top-level declarations.
-// Convention: payload tuple always starts with Span.
-
 type Decl =
   DExternFrom
   | DExternType
@@ -406,16 +321,11 @@ struct DExternFrom {
   modulePath: String,
   names: Vec<String>
 }
-
-// Extern type declaration (no runtime representation).
-// Example: `out extern type Vec<T>;`
 struct DExternType {
   tag: String,
   span: Span,
-  // True when declared as `out extern type`.
   isOut: Bool,
   name: String,
-  // Optional generic params: extern type Name<T, U>;
   typeParams: Vec<String>
 }
 
@@ -424,7 +334,6 @@ struct DLet {
   span: Span,
   isMut: Bool,
   name: String,
-  // Optional type annotation (empty string means none).
   tyAnn: String,
   init: Expr
 }
@@ -432,35 +341,23 @@ struct DLet {
 struct DFn {
   tag: String,
   span: Span,
-  // True when declared as `out fn` (public/exported from the module).
   isOut: Bool,
   name: String,
-  // Optional generic params: fn name<T, U>(...)
   typeParams: Vec<String>,
   params: Vec<String>,
-  // Optional per-parameter type annotations aligned with params.
-  // If absent/untyped, entries are empty strings.
   paramTyAnns: Vec<String>,
-  // Optional return type annotation (empty string means none).
   retTyAnn: String,
   body: Vec<Stmt>,
   tail: Expr
 }
-
-// `class fn` lowering uses a function that returns an object of parameters.
 struct DClassFn {
   tag: String,
   span: Span,
-  // True when declared as `out class fn` (public/exported from the module).
   isOut: Bool,
   name: String,
-  // Optional generic params: class fn name<T, U>(...)
   typeParams: Vec<String>,
   params: Vec<String>,
-  // Optional per-parameter type annotations aligned with params.
-  // If absent/untyped, entries are empty strings.
   paramTyAnns: Vec<String>,
-  // Optional return type annotation (empty string means none).
   retTyAnn: String,
   body: Vec<Stmt>,
   tail: Expr
@@ -534,32 +431,25 @@ out fn decl_kind(d: Decl) : String => d.tag
 out fn decl_span(d: Decl) : Span => d.span
 
 // Constructors (cross-module safe)
-
 out fn ty_name(span: Span, name: String) : TypeRef => TyName { "TyName", span, name }
 out fn ty_tuple(span: Span, items: Vec<TypeRef>) : TypeRef => TyTuple { "TyTuple", span, items }
 out fn ty_fn(span: Span, params: Vec<TypeRef>, result: TypeRef) : TypeRef => TyFn { "TyFn", span, params, result }
 out fn ty_app(span: Span, callee: String, args: Vec<TypeRef>) : TypeRef => TyApp { "TyApp", span, callee, args }
-
 out fn expr_undefined(span: Span) : Expr => EUndefined { "EUndefined", span }
-
 out fn expr_int(span: Span, value: I32) : Expr => EInt { "EInt", span, value }
 out fn expr_float(span: Span, text: String, suffix: String) : Expr => EFloat { "EFloat", span, text, suffix }
 out fn expr_bool(span: Span, value: Bool) : Expr => EBool { "EBool", span, value }
 out fn expr_string(span: Span, value: String) : Expr => EString { "EString", span, value }
 out fn expr_ident(span: Span, name: String) : Expr => EIdent { "EIdent", span, name }
 out fn expr_path(span: Span, parts: Vec<String>) : Expr => EPath { "EPath", span, parts }
-
 out fn expr_lambda(span: Span, typeParams: Vec<String>, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String, body: Expr) : Expr =>
   ELambda { "ELambda", span, typeParams, params, paramTyAnns, retTyAnn, body }
-
 out fn expr_struct_lit(span: Span, nameExpr: Expr, values: Vec<Expr>) : Expr => EStructLit { "EStructLit", span, nameExpr, values }
-
 out fn expr_unary(span: Span, op: UnOp, expr: Expr) : Expr => EUnary { "EUnary", span, op, expr }
 out fn expr_binary(span: Span, op: BinOp, left: Expr, right: Expr) : Expr => EBinary { "EBinary", span, op, left, right }
 out fn expr_call(span: Span, callee: Expr, args: Vec<Expr>) : Expr => ECall { "ECall", span, callee, vec_new(), args }
 out fn expr_call_typed(span: Span, callee: Expr, typeArgs: Vec<String>, args: Vec<Expr>) : Expr => ECall { "ECall", span, callee, typeArgs, args }
 out fn expr_if(span: Span, cond: Expr, thenExpr: Expr, elseExpr: Expr) : Expr => EIf { "EIf", span, cond, thenExpr, elseExpr }
-
 out fn expr_block(span: Span, body: Vec<Stmt>, tail: Expr) : Expr => EBlock { "EBlock", span, body, tail }
 out fn expr_vec_lit(span: Span, items: Vec<Expr>) : Expr => EVecLit { "EVecLit", span, items }
 out fn expr_tuple_lit(span: Span, items: Vec<Expr>) : Expr => ETupleLit { "ETupleLit", span, items }
@@ -575,7 +465,6 @@ out fn pat_variant(span: Span, name: String) : MatchPat => MPVariant { "MPVarian
 out fn mk_match_arm(span: Span, pat: MatchPat, expr: Expr) : MatchArm => MatchArm { "MatchArm", span, pat, expr }
 out fn expr_match(span: Span, scrut: Expr, arms: Vec<MatchArm>) : Expr => EMatch { "EMatch", span, scrut, arms }
 
-// Stmt constructors
 out fn stmt_let(span: Span, isMut: Bool, name: String, init: Expr) : Stmt => SLet { "SLet", span, isMut, name, "", init }
 out fn stmt_let_typed(span: Span, isMut: Bool, name: String, tyAnn: String, init: Expr) : Stmt => SLet { "SLet", span, isMut, name, tyAnn, init }
 out fn stmt_assign(span: Span, name: String, value: Expr) : Stmt => SAssign { "SAssign", span, name, value }
@@ -586,7 +475,6 @@ out fn stmt_if(span: Span, cond: Expr, thenBody: Vec<Stmt>, hasElse: Bool, elseB
 out fn stmt_index_assign(span: Span, base: Expr, index: Expr, value: Expr) : Stmt => SIndexAssign { "SIndexAssign", span, base, index, value }
 out fn stmt_field_assign(span: Span, base: Expr, fields: Vec<String>, value: Expr) : Stmt => SFieldAssign { "SFieldAssign", span, base, fields, value }
 
-// Decl constructors
 out fn decl_extern_from(span: Span, modulePath: String, names: Vec<String>) : Decl => DExternFrom { "DExternFrom", span, modulePath, names }
 out fn decl_extern_type(span: Span, isOut: Bool, name: String, typeParams: Vec<String>) : Decl => DExternType { "DExternType", span, isOut, name, typeParams }
 out fn decl_import(span: Span, modulePath: String, names: Vec<String>) : Decl => DImport { "DImport", span, modulePath, names }

@@ -1,0 +1,37 @@
+extern from rt::stdlib use { pathDirname, stringLen, stringSlice };
+
+from util::lexing use { starts_with_at };
+
+fn find_substring(hay: String, needle: String) : I32 => {
+  let mut i = 0;
+  while (i + stringLen(needle) <= stringLen(hay)) {
+    if (starts_with_at(hay, i, needle)) { yield i; }
+    i = i + 1;
+  }
+  -1
+}
+
+out fn workspace_root_from_path(p: String) : String => {
+  // Try to find a stable staging/workspace root by trimming at common anchors.
+  let mut i = find_substring(p, "\\src\\");
+  if (i != -1) { yield stringSlice(p, 0, i); }
+  i = find_substring(p, "/src/");
+  if (i != -1) { yield stringSlice(p, 0, i); }
+  i = find_substring(p, "\\std\\");
+  if (i != -1) { yield stringSlice(p, 0, i); }
+  i = find_substring(p, "/std/");
+  if (i != -1) { yield stringSlice(p, 0, i); }
+  pathDirname(p)
+}
+
+out fn compiler_root_from_path(p: String) : String => {
+  // If we're compiling a compiler source file, resolve short module paths from
+  // the compiler root: <root>/src/main/tuff/compiler/
+  let needle1 = "\\src\\main\\tuff\\compiler\\";
+  let mut i = find_substring(p, needle1);
+  if (i != -1) { yield stringSlice(p, 0, i + stringLen(needle1)); }
+  let needle2 = "/src/main/tuff/compiler/";
+  i = find_substring(p, needle2);
+  if (i != -1) { yield stringSlice(p, 0, i + stringLen(needle2)); }
+  ""
+}

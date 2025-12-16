@@ -1,0 +1,270 @@
+// Selfhost compiler: statement parsing and main-body parsing (legacy string-emission path).
+// Split out of expr_stmt_legacy.tuff.
+
+extern from rt::stdlib use { stringLen, stringCharCodeAt };
+
+from util::diagnostics use { panic_at, is_identifier_too_short, warn_short_identifier };
+from util::lexing use { skip_ws, starts_with_at };
+
+from parsing::primitives use { parse_ident, parse_keyword, parse_optional_semicolon };
+from parsing::types use { parse_type_expr };
+
+from parsing::expr_stmt_types use { ParsedExpr, ParsedMain, ParsedStmt };
+
+from parsing::expr_stmt_helpers use { parse_mut_opt_impl };
+from parsing::expr_stmt_stmt_starts use {
+  is_assign_stmt_start_impl,
+  is_field_assign_stmt_start_impl,
+  is_index_assign_stmt_start_impl
+};
+
+from parsing::expr_stmt_legacy_expr use { parse_expr };
+from parsing::expr_stmt_legacy_primary use { parse_block_body };
+
+out fn parse_stmt_block(src: String, i: I32) : ParsedStmt => {
+  let mut k = skip_ws(src, i);
+  if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 123)) { panic_at(src, k, "expected '{'"); }
+  k = k + 1;
+  let mut body = "";
+  while (true) {
+    let t = skip_ws(src, k);
+    if (!(t < stringLen(src))) { panic_at(src, t, "expected '}'"); }
+    if (stringCharCodeAt(src, t) == 125) { yield ParsedExpr(body, t + 1); }
+
+    let st = parse_stmt(src, k);
+    body = body + st.v0;
+    k = st.v1;
+  }
+  // unreachable
+  ParsedExpr(body, k)
+}
+
+out fn parse_stmt(src: String, i: I32) : ParsedStmt => {
+  let mut k = skip_ws(src, i);
+
+  // yield / early return
+  if (starts_with_at(src, k, "yield")) {
+    k = parse_keyword(src, k, "yield");
+    k = skip_ws(src, k);
+    if (k < stringLen(src) && stringCharCodeAt(src, k) == 59) { // ';'
+      yield ParsedStmt("return;\n", k + 1);
+    }
+    let e = parse_expr(src, k);
+    k = e.v1;
+    k = parse_optional_semicolon(src, k);
+    yield ParsedStmt("return " + e.v0 + ";\n", k);
+  }
+
+  // let / let mut
+  if (starts_with_at(src, k, "let")) {
+    k = parse_keyword(src, k, "let");
+    let mutOpt = parse_mut_opt_impl(src, k);
+    k = mutOpt.nextPos;
+    let name = parse_ident(src, k);
+    k = name.nextPos;
+    if (is_identifier_too_short(name.text)) { warn_short_identifier(src, name.startPos, name.text); }
+
+    // Optional let type annotation: `let x: T = ...`
+    let t0 = skip_ws(src, k);
+    if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 58) { // ':'
+      let _ty = parse_type_expr(src, t0 + 1);
+      k = _ty.v1;
+    }
+
+    k = parse_keyword(src, k, "=");
+    let expr = parse_expr(src, k);
+    k = expr.v1;
+    k = parse_optional_semicolon(src, k);
+    let declKw = if (mutOpt.ok) "let" else "const";
+    yield ParsedStmt(declKw + " " + name.text + " = " + expr.v0 + ";\n", k);
+  }
+
+  // local function declaration (statement):
+  //   fn name(params...) (: RetTy)? => body;
+  // Desugars to: const name = (...) => { ...; return tail; };
+  if (starts_with_at(src, k, "fn")) {
+    k = parse_keyword(src, k, "fn");
+    let name = parse_ident(src, k);
+    k = name.nextPos;
+    if (is_identifier_too_short(name.text)) { warn_short_identifier(src, name.startPos, name.text); }
+
+    // Optional generic params: fn id<T, U>(...) -- ignored by tiny JS emitter.
+    let t0 = skip_ws(src, k);
+    if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) { // '<'
+      // Scan/consume balanced '<...>' with identifiers and commas.
+      let mut j = t0 + 1;
+      while (j < stringLen(src)) {
+        let ch = stringCharCodeAt(src, j);
+        if (ch == 62) { // '>'
+          k = j + 1;
+          j = stringLen(src);
+        } else {
+          j = j + 1;
+        }
+      }
+    }
+
+    // Parse params: (name (':' Type)? (',' ... )?)
+    k = parse_keyword(src, k, "(");
+    k = skip_ws(src, k);
+
+    let mut paramsCsv = "";
+    let mut first = true;
+    if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) { // ')'
+      k = k + 1;
+    } else {
+      while (true) {
+        let p = parse_ident(src, k);
+        if (first) { paramsCsv = paramsCsv + p.text; first = false; }
+        else { paramsCsv = paramsCsv + ", " + p.text; }
+        k = skip_ws(src, p.nextPos);
+
+        // Optional parameter type annotation (ignored by tiny JS emitter).
+        if (k < stringLen(src) && stringCharCodeAt(src, k) == 58) { // ':'
+          let _ty = parse_type_expr(src, k + 1);
+          k = _ty.v1;
+        }
+        k = skip_ws(src, k);
+
+        if (!(k < stringLen(src))) { panic_at(src, k, "expected ')' in fn params"); }
+        let ch = stringCharCodeAt(src, k);
+        if (ch == 44) { // ','
+          k = k + 1;
+          k = skip_ws(src, k);
+          // Allow trailing comma.
+          if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) { // ')'
+            k = k + 1;
+            break;
+          }
+          continue;
+        }
+        if (ch == 41) { // ')'
+          k = k + 1;
+          break;
+        }
+        panic_at(src, k, "expected ',' or ')' in fn params")
+      }
+    }
+
+    // Optional return type annotation (ignored by tiny JS emitter).
+    k = skip_ws(src, k);
+    if (k < stringLen(src) && stringCharCodeAt(src, k) == 58) { // ':'
+      let _rt = parse_type_expr(src, k + 1);
+      k = _rt.v1;
+    }
+
+    k = parse_keyword(src, k, "=>");
+    let body = parse_main_body(src, k);
+    k = body.v1;
+    k = parse_optional_semicolon(src, k);
+
+    yield ParsedStmt(
+      "const " + name.text + " = (" + paramsCsv + ") => {\n" + body.body + "return " + body.expr + ";\n};\n",
+      k
+    );
+  }
+
+  // while (...) { ... }
+  if (starts_with_at(src, k, "while")) {
+    k = parse_keyword(src, k, "while");
+    k = parse_keyword(src, k, "(");
+    let cond = parse_expr(src, k);
+    k = cond.v1;
+    k = parse_keyword(src, k, ")");
+    let body = parse_stmt_block(src, k);
+    k = body.v1;
+    // optional semicolon after the while block
+    k = parse_optional_semicolon(src, k);
+    yield ParsedStmt("while (" + cond.v0 + ") {\n" + body.v0 + "}\n", k);
+  }
+
+  // if (...) { ... } (else { ... })?
+  if (starts_with_at(src, k, "if")) {
+    k = parse_keyword(src, k, "if");
+    k = parse_keyword(src, k, "(");
+    let cond = parse_expr(src, k);
+    k = cond.v1;
+    k = parse_keyword(src, k, ")");
+    let thenB = parse_stmt_block(src, k);
+    k = thenB.v1;
+    let j = skip_ws(src, k);
+    if (starts_with_at(src, j, "else")) {
+      k = parse_keyword(src, k, "else");
+      let elseB = parse_stmt_block(src, k);
+      k = elseB.v1;
+      // optional semicolon after the if/else
+      k = parse_optional_semicolon(src, k);
+      yield ParsedStmt("if (" + cond.v0 + ") {\n" + thenB.v0 + "} else {\n" + elseB.v0 + "}\n", k);
+    }
+    // optional semicolon after the if
+    k = parse_optional_semicolon(src, k);
+    yield ParsedStmt("if (" + cond.v0 + ") {\n" + thenB.v0 + "}\n", k);
+  }
+
+  // assignment: <ident> = <expr>;
+  if (is_assign_stmt_start_impl(src, k)) {
+    let name = parse_ident(src, k);
+    k = name.nextPos;
+    if (is_identifier_too_short(name.text)) { warn_short_identifier(src, name.startPos, name.text); }
+    k = parse_keyword(src, k, "=");
+    let expr = parse_expr(src, k);
+    k = expr.v1;
+    k = parse_optional_semicolon(src, k);
+    yield ParsedStmt(name.text + " = " + expr.v0 + ";\n", k);
+  }
+
+  // field assignment: <expr>.<field>(.<field>)* = <expr>;
+  if (is_field_assign_stmt_start_impl(src, k)) {
+    let base = parse_ident(src, k);
+    k = base.nextPos;
+    let mut lhs = base.text;
+    while (true) {
+      let t = skip_ws(src, k);
+      if (!(t < stringLen(src) && stringCharCodeAt(src, t) == 46)) { break; } // '.'
+      k = parse_keyword(src, k, ".");
+      let part = parse_ident(src, k);
+      lhs = lhs + "." + part.text;
+      k = part.nextPos;
+    }
+    k = parse_keyword(src, k, "=");
+    let expr = parse_expr(src, k);
+    k = expr.v1;
+    k = parse_optional_semicolon(src, k);
+    yield ParsedStmt(lhs + " = " + expr.v0 + ";\n", k);
+  }
+
+  // index assignment: <ident>[<expr>] = <expr>;
+  if (is_index_assign_stmt_start_impl(src, k)) {
+    let name = parse_ident(src, k);
+    k = name.nextPos;
+    k = parse_keyword(src, k, "[");
+    let idx = parse_expr(src, k);
+    k = idx.v1;
+    k = parse_keyword(src, k, "]");
+    k = parse_keyword(src, k, "=");
+    let val = parse_expr(src, k);
+    k = val.v1;
+    k = parse_optional_semicolon(src, k);
+    yield ParsedStmt("vec_set(" + name.text + ", " + idx.v0 + ", " + val.v0 + ");\n", k);
+  }
+
+  // expression statement: <expr>;
+  let e = parse_expr(src, k);
+  k = e.v1;
+  k = parse_optional_semicolon(src, k);
+  yield ParsedStmt(e.v0 + ";\n", k);
+
+  panic_at(src, k, "expected statement")
+}
+
+out fn parse_main_body(src: String, i: I32) : ParsedMain => {
+  let j = skip_ws(src, i);
+  if (j < stringLen(src) && stringCharCodeAt(src, j) == 123) { // '{'
+    let b = parse_block_body(src, i);
+    yield ParsedMain(b.body, b.expr, b.v1);
+  }
+
+  // expression main body
+  let e = parse_expr(src, i);
+  ParsedMain("", e.v0, e.v1)
+}

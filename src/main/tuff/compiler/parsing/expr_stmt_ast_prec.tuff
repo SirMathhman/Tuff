@@ -1,0 +1,139 @@
+// Selfhost compiler: expression parsing precedence chain (AST-producing path).
+
+extern from rt::stdlib use { stringLen };
+extern from rt::vec use { vec_new, vec_push, vec_len, vec_get };
+
+from util::lexing use { skip_ws, starts_with_at };
+from parsing::expr_stmt_types use { ParsedExprAst };
+from parsing::expr_stmt_ast_postfix use { parse_postfix_ast };
+from ast use { Expr, span, span_start, span_end, expr_unary, expr_binary };
+
+fn parse_or_ast(src: String, pos: I32) : ParsedExprAst => {
+  let left0 = parse_and_ast(src, pos);
+  let mut left = left0.expr;
+  let mut i = left0.nextPos;
+
+  while (true) {
+    let j = skip_ws(src, i);
+    if (!starts_with_at(src, j, "||")) { break; }
+    let start = span_start(left.span);
+    let right0 = parse_and_ast(src, j + 2);
+    let right = right0.expr;
+    i = right0.nextPos;
+    left = expr_binary(span(start, span_end(right.span)), left, "||", right);
+  }
+
+  ParsedExprAst(left, i)
+}
+
+fn parse_and_ast(src: String, pos: I32) : ParsedExprAst => {
+  let left0 = parse_cmp_ast(src, pos);
+  let mut left = left0.expr;
+  let mut i = left0.nextPos;
+
+  while (true) {
+    let j = skip_ws(src, i);
+    if (!starts_with_at(src, j, "&&")) { break; }
+    let start = span_start(left.span);
+    let right0 = parse_cmp_ast(src, j + 2);
+    let right = right0.expr;
+    i = right0.nextPos;
+    left = expr_binary(span(start, span_end(right.span)), left, "&&", right);
+  }
+
+  ParsedExprAst(left, i)
+}
+
+fn parse_cmp_ast(src: String, pos: I32) : ParsedExprAst => {
+  let left0 = parse_add_ast(src, pos);
+  let mut left = left0.expr;
+  let mut i = left0.nextPos;
+
+  while (true) {
+    let j = skip_ws(src, i);
+
+    let op = if (starts_with_at(src, j, "==")) {
+      "=="
+    } else if (starts_with_at(src, j, "!=")) {
+      "!="
+    } else if (starts_with_at(src, j, "<=")) {
+      "<="
+    } else if (starts_with_at(src, j, ">=")) {
+      ">="
+    } else if (starts_with_at(src, j, "<")) {
+      "<"
+    } else if (starts_with_at(src, j, ">")) {
+      ">"
+    } else {
+      ""
+    };
+
+    if (op == "") { break; }
+
+    let start = span_start(left.span);
+    let right0 = parse_add_ast(src, j + stringLen(op));
+    let right = right0.expr;
+    i = right0.nextPos;
+    left = expr_binary(span(start, span_end(right.span)), left, op, right);
+  }
+
+  ParsedExprAst(left, i)
+}
+
+fn parse_add_ast(src: String, pos: I32) : ParsedExprAst => {
+  let left0 = parse_mul_ast(src, pos);
+  let mut left = left0.expr;
+  let mut i = left0.nextPos;
+
+  while (true) {
+    let j = skip_ws(src, i);
+    if (!starts_with_at(src, j, "+") && !starts_with_at(src, j, "-")) { break; }
+    let op = if (starts_with_at(src, j, "+")) "+" else "-";
+    let start = span_start(left.span);
+    let right0 = parse_mul_ast(src, j + 1);
+    let right = right0.expr;
+    i = right0.nextPos;
+    left = expr_binary(span(start, span_end(right.span)), left, op, right);
+  }
+
+  ParsedExprAst(left, i)
+}
+
+fn parse_mul_ast(src: String, pos: I32) : ParsedExprAst => {
+  let left0 = parse_unary_ast(src, pos);
+  let mut left = left0.expr;
+  let mut i = left0.nextPos;
+
+  while (true) {
+    let j = skip_ws(src, i);
+    if (!starts_with_at(src, j, "*") && !starts_with_at(src, j, "/")) { break; }
+    let op = if (starts_with_at(src, j, "*")) "*" else "/";
+    let start = span_start(left.span);
+    let right0 = parse_unary_ast(src, j + 1);
+    let right = right0.expr;
+    i = right0.nextPos;
+    left = expr_binary(span(start, span_end(right.span)), left, op, right);
+  }
+
+  ParsedExprAst(left, i)
+}
+
+fn parse_unary_ast(src: String, pos: I32) : ParsedExprAst => {
+  let j = skip_ws(src, pos);
+  if (starts_with_at(src, j, "-")) {
+    let inner0 = parse_unary_ast(src, j + 1);
+    let inner = inner0.expr;
+    let i = inner0.nextPos;
+    yield ParsedExprAst(expr_unary(span(j, span_end(inner.span)), "-", inner), i);
+  }
+  if (starts_with_at(src, j, "!")) {
+    let inner0 = parse_unary_ast(src, j + 1);
+    let inner = inner0.expr;
+    let i = inner0.nextPos;
+    yield ParsedExprAst(expr_unary(span(j, span_end(inner.span)), "!", inner), i);
+  }
+
+  parse_postfix_ast(src, pos)
+}
+
+out fn parse_expr_ast(src: String, pos: I32) : ParsedExprAst => parse_or_ast(src, pos)
