@@ -148,9 +148,8 @@ vec_push(stack, depPath);
 }
 return [order, modulePaths, moduleOutFns, modulePrivateTopLevelFnNames];
 }
-export function project_imported_fn_sigs(src, path, workspaceRoot, isCompilerBuild, modulePaths, moduleOutFns, modulePrivateTopLevelFnNames) {
+export function collect_imported_fn_sigs(src, path, workspaceRoot, isCompilerBuild, seedImportedFns, modulePaths, moduleOutFns, modulePrivateTopLevelFnNames) {
 const importedFns = vec_new();
-const seedImportedFns = !(stringLen(compiler_root_from_path(path)) > 0);
 if (!isCompilerBuild) {
 let scan = 0;
 while (true) {
@@ -212,6 +211,10 @@ ii = ii + 1;
 }
 return importedFns;
 }
+export function project_imported_fn_sigs(src, path, workspaceRoot, isCompilerBuild, modulePaths, moduleOutFns, modulePrivateTopLevelFnNames) {
+const seedImportedFns = !(stringLen(compiler_root_from_path(path)) > 0);
+return collect_imported_fn_sigs(src, path, workspaceRoot, isCompilerBuild, seedImportedFns, modulePaths, moduleOutFns, modulePrivateTopLevelFnNames);
+}
 export function project_out_paths(path, entryPath, outDir, outPath, workspaceRoot) {
 const crHere = compiler_root_from_path(path);
 const relRoot = (stringLen(crHere) > 0 ? crHere : workspaceRoot);
@@ -250,67 +253,8 @@ const js = compile_one(src, path == entryPath, isCompilerBuild, outRelPath, impo
 return [outRelPath, outFile, js];
 }
 export function project_lint_one_module_with(lint_one, src, path, entryPath, workspaceRoot, isCompilerBuild, modulePaths, moduleOutFns, modulePrivateTopLevelFnNames) {
-const importedFns = vec_new();
 const seedImportedFns = !isCompilerBuild && !(stringLen(compiler_root_from_path(path)) > 0);
-if (!isCompilerBuild) {
-let scan = 0;
-while (true) {
-if (is_extern_decl_start(src, scan)) {
-const ex2 = parse_extern_decl(src, scan);
-scan = ex2.v1;
-continue;
-}
-break;
-}
-const impsAst = parse_imports_ast(src, scan);
-let ii = 0;
-while (ii < vec_len(impsAst.decls)) {
-const imp = vec_get(impsAst.decls, ii);
-if ((imp.tag === "DImport")) {
-const rel = module_path_to_relpath(imp.modulePath);
-let baseDir = pathDirname(path);
-const compilerSrcPrefix = "src::main::tuff::compiler::";
-let rel2 = rel;
-if (starts_with_at(imp.modulePath, 0, compilerSrcPrefix)) {
-const compilerRootDir = pathJoin(workspaceRoot, "src/main/tuff/compiler");
-baseDir = compilerRootDir;
-const rest = stringSlice(imp.modulePath, stringLen(compilerSrcPrefix), stringLen(imp.modulePath));
-rel2 = module_path_to_relpath(rest);
-} else {
-if (starts_with_at(imp.modulePath, 0, "src::") || starts_with_at(imp.modulePath, 0, "std::")) {
-baseDir = workspaceRoot;
-} else {
-const cr = compiler_root_from_path(path);
-if (stringLen(cr) > 0) {
-baseDir = cr;
-}
-}
-}
-const depPath = pathJoin(baseDir, rel2 + ".tuff");
-const depIdx = module_index(modulePaths, depPath);
-if (depIdx != -1) {
-const outFns = vec_get(moduleOutFns, depIdx);
-const privateNames = vec_get(modulePrivateTopLevelFnNames, depIdx);
-let ni = 0;
-while (ni < vec_len(imp.names)) {
-const name = vec_get(imp.names, ni);
-const sig = fnsig_lookup_by_name(outFns, name);
-if (!(sig.name == "")) {
-if (seedImportedFns) {
-vec_push(importedFns, sig);
-}
-} else {
-if (str_list_contains(privateNames, name)) {
-panic_at(src, span_start(imp.span), "imported function '" + name + "' is not exported (missing `out fn`)");
-}
-}
-ni = ni + 1;
-}
-}
-}
-ii = ii + 1;
-}
-}
+const importedFns = collect_imported_fn_sigs(src, path, workspaceRoot, isCompilerBuild, seedImportedFns, modulePaths, moduleOutFns, modulePrivateTopLevelFnNames);
 lint_one(src, path == entryPath, isCompilerBuild, importedFns);
 return undefined;
 }
