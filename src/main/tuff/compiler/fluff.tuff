@@ -4,9 +4,9 @@
 // Configuration is loaded from build.json (auto-discovered upward).
 
 extern from rt::stdlib use { println, stringLen, stringCharCodeAt, stringSlice, readTextFile };
-extern from rt::vec use { vec_len, vec_get };
+extern from rt::vec use { vec_new, vec_len, vec_push, vec_get };
 
-from tuffc_lib use { fluff_project_with_reader };
+from tuffc_lib use { fluff_project_with_reader, fluff_files_with_reader };
 from analyzer use { set_fluff_options, set_fluff_debug_options, set_fluff_debug_scopes, set_fluff_complexity_options, set_fluff_file_size_options, set_fluff_max_params_options, set_fluff_single_char_identifiers_options, set_fluff_missing_docs_options, set_fluff_clone_detection_options, set_fluff_clone_parameterized_options };
 from build_config use { load_fluff_config };
 from util::diagnostics use { set_diagnostics_format, has_project_errors, reset_project_errors, get_project_error_count, get_project_warning_count };
@@ -32,7 +32,7 @@ fn starts_with(s: String, prefix: String) : Bool => {
 
 fn main(argv: Vec<String>) => {
   let mut format = "human";
-  let mut inPath = "";
+  let mut inPaths = vec_new();
   let mut debugScopes = "";
 
   let mut i = 0;
@@ -67,14 +67,12 @@ fn main(argv: Vec<String>) => {
       yield 1;
     }
 
-    if (inPath == "") { inPath = a; i = i + 1; continue; }
-
-    println("too many arguments");
-    print_usage();
-    yield 1;
+    vec_push(inPaths, a);
+    i = i + 1;
+    continue;
   }
 
-  if (inPath == "") {
+  if (vec_len(inPaths) == 0) {
     print_usage();
     yield 1;
   }
@@ -82,7 +80,7 @@ fn main(argv: Vec<String>) => {
   set_diagnostics_format(format);
   reset_project_errors();
 
-  let cfg = load_fluff_config(inPath);
+  let cfg = load_fluff_config(vec_get(inPaths, 0));
   set_fluff_options(cfg.unusedLocals, cfg.unusedParams);
   if (debugScopes == "") {
     set_fluff_debug_options(false);
@@ -97,7 +95,11 @@ fn main(argv: Vec<String>) => {
   set_fluff_clone_detection_options(cfg.cloneDetection, cfg.cloneMinTokens, cfg.cloneMinOccurrences);
   set_fluff_clone_parameterized_options(cfg.cloneParameterized);
 
-  fluff_project_with_reader(inPath, readTextFile);
+  if (vec_len(inPaths) == 1) {
+    fluff_project_with_reader(vec_get(inPaths, 0), readTextFile);
+  } else {
+    fluff_files_with_reader(inPaths, readTextFile);
+  }
   if (has_project_errors()) { yield 1; }
   0
 }

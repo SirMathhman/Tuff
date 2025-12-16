@@ -134,6 +134,45 @@ oi = oi + 1;
 }
 return undefined;
 }
+export function fluff_files_with_reader(filePaths, readSource) {
+if (vec_len(filePaths) == 0) {
+return;
+}
+const entryPath = vec_get(filePaths, 0);
+const workspaceRoot = workspace_root_from_path(entryPath);
+const isCompilerBuild = stringLen(compiler_root_from_path(entryPath)) > 0;
+let modulePaths = vec_new();
+let moduleOutFns = vec_new();
+let modulePrivateTopLevelFnNames = vec_new();
+let fi = 0;
+while (fi < vec_len(filePaths)) {
+const rootPath = vec_get(filePaths, fi);
+const graph = collect_module_graph_info(rootPath, workspaceRoot, isCompilerBuild, readSource);
+const gPaths = graph[1];
+const gOutFns = graph[2];
+const gPrivate = graph[3];
+let gi = 0;
+while (gi < vec_len(gPaths)) {
+const p = vec_get(gPaths, gi);
+if (module_index(modulePaths, p) == -1) {
+vec_push(modulePaths, p);
+vec_push(moduleOutFns, vec_get(gOutFns, gi));
+vec_push(modulePrivateTopLevelFnNames, vec_get(gPrivate, gi));
+}
+gi = gi + 1;
+}
+fi = fi + 1;
+}
+let ti = 0;
+while (ti < vec_len(filePaths)) {
+const path = vec_get(filePaths, ti);
+set_current_file(path);
+const src = readSource(path);
+project_lint_one_module_with(lint_tiny2_with_imported_fns, src, path, "", workspaceRoot, isCompilerBuild, modulePaths, moduleOutFns, modulePrivateTopLevelFnNames);
+ti = ti + 1;
+}
+return undefined;
+}
 export function lsp_check_file(src, filePath) {
 return lsp_check_file_impl(src, filePath);
 }

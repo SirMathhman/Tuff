@@ -1,7 +1,7 @@
 // compiled by selfhost tuffc
 import { println, stringLen, stringCharCodeAt, stringSlice, readTextFile } from "./rt/stdlib.mjs";
-import { vec_len, vec_get } from "./rt/vec.mjs";
-import { fluff_project_with_reader } from "./tuffc_lib.mjs";
+import { vec_new, vec_len, vec_push, vec_get } from "./rt/vec.mjs";
+import { fluff_project_with_reader, fluff_files_with_reader } from "./tuffc_lib.mjs";
 import { set_fluff_options, set_fluff_debug_options, set_fluff_debug_scopes, set_fluff_complexity_options, set_fluff_file_size_options, set_fluff_max_params_options, set_fluff_single_char_identifiers_options, set_fluff_missing_docs_options, set_fluff_clone_detection_options, set_fluff_clone_parameterized_options } from "./analyzer.mjs";
 import { load_fluff_config } from "./build_config.mjs";
 import { set_diagnostics_format, has_project_errors, reset_project_errors, get_project_error_count, get_project_warning_count } from "./util/diagnostics.mjs";
@@ -29,7 +29,7 @@ return stringSlice(s, 0, stringLen(prefix)) == prefix;
 }
 export function main(argv) {
 let format = "human";
-let inPath = "";
+let inPaths = vec_new();
 let debugScopes = "";
 let i = 0;
 while (i < vec_len(argv)) {
@@ -58,22 +58,17 @@ println("unknown option: " + a);
 print_usage();
 return 1;
 }
-if (inPath == "") {
-inPath = a;
+vec_push(inPaths, a);
 i = i + 1;
 continue;
 }
-println("too many arguments");
-print_usage();
-return 1;
-}
-if (inPath == "") {
+if (vec_len(inPaths) == 0) {
 print_usage();
 return 1;
 }
 set_diagnostics_format(format);
 reset_project_errors();
-const cfg = load_fluff_config(inPath);
+const cfg = load_fluff_config(vec_get(inPaths, 0));
 set_fluff_options(cfg.unusedLocals, cfg.unusedParams);
 (debugScopes == "" ? (() => {
 set_fluff_debug_options(false);
@@ -89,7 +84,13 @@ set_fluff_single_char_identifiers_options(cfg.singleCharIdentifiers);
 set_fluff_missing_docs_options(cfg.missingDocs);
 set_fluff_clone_detection_options(cfg.cloneDetection, cfg.cloneMinTokens, cfg.cloneMinOccurrences);
 set_fluff_clone_parameterized_options(cfg.cloneParameterized);
-fluff_project_with_reader(inPath, readTextFile);
+(vec_len(inPaths) == 1 ? (() => {
+fluff_project_with_reader(vec_get(inPaths, 0), readTextFile);
+return undefined;
+})() : (() => {
+fluff_files_with_reader(inPaths, readTextFile);
+return undefined;
+})());
 if (has_project_errors()) {
 return 1;
 }

@@ -357,6 +357,68 @@ out fn fluff_project_with_reader(entryPath: String, readSource: (String) => Stri
   }
 }
 
+// Like fluff_project_with_reader, but only lints the provided file list.
+//
+// This is useful for pre-commit hooks and other workflows where we want fast,
+// targeted linting without walking/linting the entire module graph.
+//
+// Note: We still build an export table for the union of the module graphs so
+// imported function signatures can be seeded correctly.
+out fn fluff_files_with_reader(filePaths: Vec<String>, readSource: (String) => String) : Void => {
+  if (vec_len(filePaths) == 0) { yield; }
+
+  let entryPath = vec_get(filePaths, 0);
+  let workspaceRoot = workspace_root_from_path(entryPath);
+  let isCompilerBuild = stringLen(compiler_root_from_path(entryPath)) > 0;
+
+  // Build a merged export table for all target roots (and their deps).
+  let mut modulePaths = vec_new();
+  let mut moduleOutFns = vec_new();
+  let mut modulePrivateTopLevelFnNames = vec_new();
+
+  let mut fi = 0;
+  while (fi < vec_len(filePaths)) {
+    let rootPath = vec_get(filePaths, fi);
+    let graph = collect_module_graph_info(rootPath, workspaceRoot, isCompilerBuild, readSource);
+    let gPaths = graph.1;
+    let gOutFns = graph.2;
+    let gPrivate = graph.3;
+
+    let mut gi = 0;
+    while (gi < vec_len(gPaths)) {
+      let p = vec_get(gPaths, gi);
+      if (module_index(modulePaths, p) == -1) {
+        vec_push(modulePaths, p);
+        vec_push(moduleOutFns, vec_get(gOutFns, gi));
+        vec_push(modulePrivateTopLevelFnNames, vec_get(gPrivate, gi));
+      }
+      gi = gi + 1;
+    }
+
+    fi = fi + 1;
+  }
+
+  // Lint only the requested files. We pass entryPath="" so requireMain is false.
+  let mut ti = 0;
+  while (ti < vec_len(filePaths)) {
+    let path = vec_get(filePaths, ti);
+    set_current_file(path);
+    let src = readSource(path);
+    project_lint_one_module_with(
+      lint_tiny2_with_imported_fns,
+      src,
+      path,
+      "",
+      workspaceRoot,
+      isCompilerBuild,
+      modulePaths,
+      moduleOutFns,
+      modulePrivateTopLevelFnNames
+    );
+    ti = ti + 1;
+  }
+}
+
 // ------------------------------------------------------------
 // LSP API: parse+analyze a single file and collect diagnostics
 // without panicking. Returns false if there are errors.
