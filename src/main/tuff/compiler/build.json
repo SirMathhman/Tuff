@@ -2,7 +2,8 @@
   "fluff": {
     "unusedLocals": "off",
     "unusedParams": "off",
-    "complexity": "off",
+    "complexity": "warning",
+    "complexityThreshold": 15,
     "maxFileLines": "warning",
     "maxFileLinesThreshold": 500
   }
