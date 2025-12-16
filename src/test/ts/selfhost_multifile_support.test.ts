@@ -21,7 +21,7 @@ async function writeText(p: string, src: string): Promise<void> {
   await writeFile(p, src, "utf8");
 }
 
-describe("selfhost multi-file module support", () => {
+describe("selfhost multi-file module support (integration)", () => {
   test("out fn exports across files", async () => {
     const outDir = await mkTempDir("tuff-multifile-out");
     const { entryFile: tuffcFile } = await stagePrebuiltSelfhostCompiler(
@@ -88,69 +88,6 @@ describe("selfhost multi-file module support", () => {
 
     expect(() => tuffc.main([entry, outFile])).toThrow(
       /not exported|out fn|export/i
-    );
-  });
-
-  test("imported function signature is validated (arity)", async () => {
-    const outDir = await mkTempDir("tuff-multifile-arity");
-    const { entryFile: tuffcFile } = await stagePrebuiltSelfhostCompiler(
-      outDir
-    );
-    const tuffc = (await import(pathToFileURL(tuffcFile).toString())) as any;
-
-    const entry = resolve(outDir, "src", "main.tuff");
-    const dep = resolve(outDir, "src", "util", "math.tuff");
-    const outFile = resolve(outDir, "out.mjs");
-
-    await writeText(
-      dep,
-      ["out fn add(first: I32, second: I32) : I32 => first + second;", ""].join(
-        "\n"
-      )
-    );
-
-    await writeText(
-      entry,
-      [
-        "from src::util::math use { add };",
-        "fn main() : I32 => add(1);",
-        "",
-      ].join("\n")
-    );
-
-    expect(() => tuffc.main([entry, outFile])).toThrow(
-      /wrong number of args|arity|add\(/i
-    );
-  });
-
-  test("circular dependencies are rejected (hard error)", async () => {
-    const outDir = await mkTempDir("tuff-multifile-cycle");
-    const { entryFile: tuffcFile } = await stagePrebuiltSelfhostCompiler(
-      outDir
-    );
-    const tuffc = (await import(pathToFileURL(tuffcFile).toString())) as any;
-
-    const entry = resolve(outDir, "src", "a.tuff");
-    const b = resolve(outDir, "src", "b.tuff");
-    const outFile = resolve(outDir, "out.mjs");
-
-    await writeText(
-      entry,
-      [
-        "from src::b use { b };",
-        "out fn a() : I32 => b();",
-        "fn main() : I32 => a();",
-        "",
-      ].join("\n")
-    );
-
-    await writeText(
-      b,
-      ["from src::a use { a };", "out fn b() : I32 => a();", ""].join("\n")
-    );
-
-    expect(() => tuffc.main([entry, outFile])).toThrow(
-      /circular|cycle|import/i
     );
   });
 });

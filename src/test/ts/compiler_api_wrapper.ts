@@ -281,16 +281,20 @@ export async function importEsmFromOutputs(
 
   // Build data: URLs bottom-up (dependencies first) so we can inline absolute
   // `data:` URLs into import specifiers.
+  //
+  // NOTE: Avoid `#fragment` suffixes on base64 data: URLs. Node's ESM loader can
+  // treat fragments as part of the base64 payload for nested imports, causing
+  // Base64DecodeError. Instead, bake a nonce into the module source so the
+  // base64 string (and thus the URL) remains unique.
   const nonce = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const relToUrl = new Map<string, string>();
 
   for (const rel of ordered) {
     const src0 = relToSrc.get(rel) ?? "";
-    const rewritten = rewriteRelativeImportsToDataUrls(src0, rel, relToUrl);
+    const rewritten0 = rewriteRelativeImportsToDataUrls(src0, rel, relToUrl);
+    const rewritten = `// nonce:${nonce}-${rel}\n${rewritten0}`;
     const b64 = Buffer.from(rewritten, "utf8").toString("base64");
-    const url = `data:text/javascript;base64,${b64}#${nonce}-${encodeURIComponent(
-      rel
-    )}`;
+    const url = `data:text/javascript;base64,${b64}`;
     relToUrl.set(rel, url);
   }
 
