@@ -52,7 +52,8 @@ from analyzer::checks use { check_struct_lit_types, check_binary_operand_types, 
 from analyzer::fluff use {
   warn_unused_locals_in_scope,
   warn_unused_params_in_scope,
-  check_lambda_complexity
+  check_lambda_complexity,
+  check_single_char_identifier
 };
 
 out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, e: Expr) : Void => {
@@ -72,12 +73,15 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     let newDepth = scopes_enter(scopes, depth);
     let mut pi = 0;
     while (pi < vec_len(e.params)) {
+      let paramName = vec_get(e.params, pi);
+      check_single_char_identifier(src, span_start(e.span), paramName, "parameter");
+      
       let mut pTy = ty_unknown();
       if (pi < vec_len(e.paramTyAnns)) {
         let ann = vec_get(e.paramTyAnns, pi);
         if (ann != "") { pTy = normalize_ty_ann(ann); }
       }
-      declare_local_name(src, span_start(e.span), scopes, newDepth, vec_get(e.params, pi), false, pTy);
+      declare_local_name(src, span_start(e.span), scopes, newDepth, paramName, false, pTy);
       pi = pi + 1;
     }
     analyze_expr(src, structs, unions, fns, scopes, newDepth, narrowed, e.body);
@@ -297,6 +301,8 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
 
 out fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, s: Stmt) : Void => {
   if (s.tag == "SLet") {
+    check_single_char_identifier(src, span_start(s.span), s.name, "local variable");
+    
     let depReason = deprecation_reason_before(src, span_start(s.span));
     if (s.init.tag == "ELambda") {
       let initTy0 = infer_expr_type(src, structs, fns, scopes, depth, s.init);

@@ -1,0 +1,37 @@
+// Test: single-character identifier linting
+
+from std::test use { reset, suite, it, expect_eq, summary, status };
+
+// This function should trigger warnings for single-char identifiers
+fn bad_example(x: I32, y: I32) : I32 => {
+  let z = x + y;
+  z
+}
+
+// This function should NOT trigger warnings
+fn good_example(count: I32, total: I32) : I32 => {
+  let sum = count + total;
+  sum
+}
+
+// Single-char struct should trigger warning
+struct S {
+  value: I32
+}
+
+// Good struct name should not trigger warning
+struct Point {
+  x_pos: I32,
+  y_pos: I32
+}
+
+fn main() : I32 => {
+  reset();
+  suite("single-char identifier tests");
+  
+  it("bad_example works", expect_eq("result", bad_example(1, 2), 3));
+  it("good_example works", expect_eq("result", good_example(1, 2), 3));
+  
+  summary();
+  status()
+}

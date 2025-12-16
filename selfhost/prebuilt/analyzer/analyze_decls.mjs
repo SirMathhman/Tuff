@@ -2,7 +2,7 @@
 import { vec_new, vec_len, vec_get, vec_push } from "../rt/vec.mjs";
 import { error_at } from "../util/diagnostics.mjs";
 import { span_start } from "../ast.mjs";
-import { fluff_warn_unused_locals_in_scope, fluff_warn_unused_params_in_scope, fluff_check_fn_complexity, fluff_check_lambda_complexity, fluff_check_fn_max_params } from "./fluff.mjs";
+import { fluff_warn_unused_locals_in_scope, fluff_warn_unused_params_in_scope, fluff_check_fn_complexity, fluff_check_lambda_complexity, fluff_check_fn_max_params, fluff_check_single_char_identifier } from "./fluff.mjs";
 import { ty_unknown, ty_void, ty_fn_type, ty_fn_type_params, ty_is_fn_type, normalize_ty_ann } from "./typestrings.mjs";
 import { infer_expr_type } from "./infer_basic.mjs";
 import { scopes_enter, declare_local_name } from "./scope.mjs";
@@ -23,10 +23,16 @@ return fluff_check_lambda_complexity(src, pos, name, body);
 export function check_fn_max_params(src, pos, fnName, paramCount) {
 return fluff_check_fn_max_params(src, pos, fnName, paramCount);
 }
+export function check_single_char_identifier(src, pos, name, kind) {
+return fluff_check_single_char_identifier(src, pos, name, kind);
+}
 export function analyze_fn_decl(src, structs, unions, fns, outerScopes, outerDepth, d) {
+check_single_char_identifier(src, span_start(d.span), d.name, "function");
 const depth = scopes_enter(outerScopes, outerDepth);
 let pi = 0;
 while (pi < vec_len(d.params)) {
+const paramName = vec_get(d.params, pi);
+check_single_char_identifier(src, span_start(d.span), paramName, "parameter");
 let pTy = ty_unknown();
 if (pi < vec_len(d.paramTyAnns)) {
 const ann = vec_get(d.paramTyAnns, pi);
@@ -34,7 +40,7 @@ if (ann != "") {
 pTy = normalize_ty_ann(ann);
 }
 }
-declare_local_name(src, span_start(d.span), outerScopes, depth, vec_get(d.params, pi), false, pTy);
+declare_local_name(src, span_start(d.span), outerScopes, depth, paramName, false, pTy);
 pi = pi + 1;
 }
 const narrowed = vec_new();
@@ -61,9 +67,12 @@ check_fn_max_params(src, span_start(d.span), d.name, vec_len(d.params));
 return undefined;
 }
 export function analyze_class_fn_decl(src, structs, unions, fns, outerScopes, outerDepth, d) {
+check_single_char_identifier(src, span_start(d.span), d.name, "class function");
 const depth = scopes_enter(outerScopes, outerDepth);
 let pi = 0;
 while (pi < vec_len(d.params)) {
+const paramName = vec_get(d.params, pi);
+check_single_char_identifier(src, span_start(d.span), paramName, "parameter");
 let pTy = ty_unknown();
 if (pi < vec_len(d.paramTyAnns)) {
 const ann = vec_get(d.paramTyAnns, pi);
@@ -71,7 +80,7 @@ if (ann != "") {
 pTy = normalize_ty_ann(ann);
 }
 }
-declare_local_name(src, span_start(d.span), outerScopes, depth, vec_get(d.params, pi), false, pTy);
+declare_local_name(src, span_start(d.span), outerScopes, depth, paramName, false, pTy);
 pi = pi + 1;
 }
 const narrowed = vec_new();

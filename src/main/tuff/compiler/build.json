@@ -7,6 +7,7 @@
     "maxFileLines": "warning",
     "maxFileLinesThreshold": 500,
     "maxParams": "warning",
-    "maxParamsThreshold": 3
+    "maxParamsThreshold": 3,
+    "singleCharIdentifiers": "warning"
   }
 }

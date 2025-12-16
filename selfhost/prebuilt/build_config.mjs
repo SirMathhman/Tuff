@@ -241,8 +241,8 @@ i = i + 1;
 }
 return defaultValue;
 }
-export function FluffConfig(unusedLocals, unusedParams, complexity, complexityThreshold, maxFileLines, maxFileLinesThreshold, maxParams, maxParamsThreshold) {
-return { unusedLocals: unusedLocals, unusedParams: unusedParams, complexity: complexity, complexityThreshold: complexityThreshold, maxFileLines: maxFileLines, maxFileLinesThreshold: maxFileLinesThreshold, maxParams: maxParams, maxParamsThreshold: maxParamsThreshold };
+export function FluffConfig(unusedLocals, unusedParams, complexity, complexityThreshold, maxFileLines, maxFileLinesThreshold, maxParams, maxParamsThreshold, singleCharIdentifiers) {
+return { unusedLocals: unusedLocals, unusedParams: unusedParams, complexity: complexity, complexityThreshold: complexityThreshold, maxFileLines: maxFileLines, maxFileLinesThreshold: maxFileLinesThreshold, maxParams: maxParams, maxParamsThreshold: maxParamsThreshold, singleCharIdentifiers: singleCharIdentifiers };
 }
 export function find_build_json_upwards(inPath) {
 let dir = pathDirname(inPath);
@@ -262,25 +262,27 @@ return "";
 export function load_fluff_config(inPath) {
 const path = find_build_json_upwards(inPath);
 if (path == "") {
-return FluffConfig(0, 0, 0, 15, 0, 500, 0, 3);
+return FluffConfig(0, 0, 0, 15, 0, 500, 0, 3, 0);
 }
 const src = readTextFile(path);
 const fluffObj = json_find_object_bounds_by_key(src, "fluff");
 if (fluffObj[0] == -1) {
-return FluffConfig(0, 0, 0, 15, 0, 500, 0, 3);
+return FluffConfig(0, 0, 0, 15, 0, 500, 0, 3, 0);
 }
 const unusedLocals0 = json_find_string_value_in_object(src, fluffObj[0], fluffObj[1], "unusedLocals");
 const unusedParams0 = json_find_string_value_in_object(src, fluffObj[0], fluffObj[1], "unusedParams");
 const complexity0 = json_find_string_value_in_object(src, fluffObj[0], fluffObj[1], "complexity");
 const maxFileLines0 = json_find_string_value_in_object(src, fluffObj[0], fluffObj[1], "maxFileLines");
 const maxParams0 = json_find_string_value_in_object(src, fluffObj[0], fluffObj[1], "maxParams");
+const singleCharIdentifiers0 = json_find_string_value_in_object(src, fluffObj[0], fluffObj[1], "singleCharIdentifiers");
 const unusedLocals = severity_from_string(unusedLocals0, 0);
 const unusedParams = severity_from_string(unusedParams0, 0);
 const complexity = severity_from_string(complexity0, 0);
 const maxFileLines = severity_from_string(maxFileLines0, 0);
 const maxParams = severity_from_string(maxParams0, 0);
+const singleCharIdentifiers = severity_from_string(singleCharIdentifiers0, 0);
 const complexityThreshold = json_find_int_value_in_object(src, fluffObj[0], fluffObj[1], "complexityThreshold", 15);
 const maxFileLinesThreshold = json_find_int_value_in_object(src, fluffObj[0], fluffObj[1], "maxFileLinesThreshold", 500);
 const maxParamsThreshold = json_find_int_value_in_object(src, fluffObj[0], fluffObj[1], "maxParamsThreshold", 3);
-return FluffConfig(unusedLocals, unusedParams, complexity, complexityThreshold, maxFileLines, maxFileLinesThreshold, maxParams, maxParamsThreshold);
+return FluffConfig(unusedLocals, unusedParams, complexity, complexityThreshold, maxFileLines, maxFileLinesThreshold, maxParams, maxParamsThreshold, singleCharIdentifiers);
 }

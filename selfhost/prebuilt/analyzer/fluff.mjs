@@ -10,6 +10,7 @@ let __fluff_max_file_lines = 0;
 let __fluff_max_file_lines_threshold = 500;
 let __fluff_max_params = 0;
 let __fluff_max_params_threshold = 3;
+let __fluff_single_char_identifiers = 0;
 export function fluff_set_options(unusedLocalsSeverity, unusedParamsSeverity) {
 __fluff_unused_locals = unusedLocalsSeverity;
 __fluff_unused_params = unusedParamsSeverity;
@@ -28,6 +29,10 @@ return undefined;
 export function fluff_set_max_params_options(severity, threshold) {
 __fluff_max_params = severity;
 __fluff_max_params_threshold = (threshold > 0 ? threshold : 3);
+return undefined;
+}
+export function fluff_set_single_char_identifiers_options(severity) {
+__fluff_single_char_identifiers = severity;
 return undefined;
 }
 export function fluff_emit_at(src, pos, severity, msg) {
@@ -121,6 +126,9 @@ return fluff_check_lambda_complexity(src, pos, name, body);
 }
 export function check_fn_max_params(src, pos, fnName, paramCount) {
 return fluff_check_fn_max_params(src, pos, fnName, paramCount);
+}
+export function check_single_char_identifier(src, pos, name, kind) {
+return fluff_check_single_char_identifier(src, pos, name, kind);
 }
 export function cc_expr(e) {
 if (e.tag == "EUndefined") {
@@ -302,6 +310,20 @@ return;
 const threshold = __fluff_max_params_threshold;
 if (paramCount > threshold) {
 const msg = "function " + fnName + " has " + ("" + paramCount) + " parameters (threshold: " + ("" + threshold) + ")";
+fluff_emit_at(src, pos, severity, msg);
+}
+return undefined;
+}
+export function fluff_check_single_char_identifier(src, pos, name, kind) {
+const severity = __fluff_single_char_identifiers;
+if (severity == 0) {
+return;
+}
+if (binding_name_is_intentionally_unused(name)) {
+return;
+}
+if (stringLen(name) == 1) {
+const msg = kind + " name '" + name + "' is only a single character; use a more descriptive name";
 fluff_emit_at(src, pos, severity, msg);
 }
 return undefined;

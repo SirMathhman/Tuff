@@ -14,7 +14,7 @@ import { infer_expr_type } from "./infer_basic.mjs";
 import { infer_expr_type_with_narrowing, parse_tag_narrowing, validate_union_variant_for_binding } from "./infer_narrowing.mjs";
 import { require_all_param_types, require_type_compatible } from "./typecheck.mjs";
 import { check_struct_lit_types, check_binary_operand_types, check_call_types, check_cond_is_bool } from "./checks.mjs";
-import { warn_unused_locals_in_scope, warn_unused_params_in_scope, check_lambda_complexity } from "./fluff.mjs";
+import { warn_unused_locals_in_scope, warn_unused_params_in_scope, check_lambda_complexity, check_single_char_identifier } from "./fluff.mjs";
 export function analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e) {
 if (e.tag == "EIdent") {
 require_name(src, span_start(e.span), scopes, depth, e.name);
@@ -32,6 +32,8 @@ require_all_param_types(src, span_start(e.span), "lambda", e.params, e.paramTyAn
 const newDepth = scopes_enter(scopes, depth);
 let pi = 0;
 while (pi < vec_len(e.params)) {
+const paramName = vec_get(e.params, pi);
+check_single_char_identifier(src, span_start(e.span), paramName, "parameter");
 let pTy = ty_unknown();
 if (pi < vec_len(e.paramTyAnns)) {
 const ann = vec_get(e.paramTyAnns, pi);
@@ -39,7 +41,7 @@ if (ann != "") {
 pTy = normalize_ty_ann(ann);
 }
 }
-declare_local_name(src, span_start(e.span), scopes, newDepth, vec_get(e.params, pi), false, pTy);
+declare_local_name(src, span_start(e.span), scopes, newDepth, paramName, false, pTy);
 pi = pi + 1;
 }
 analyze_expr(src, structs, unions, fns, scopes, newDepth, narrowed, e.body);
@@ -250,6 +252,7 @@ return undefined;
 }
 export function analyze_stmt(src, structs, unions, fns, scopes, depth, narrowed, s) {
 if (s.tag == "SLet") {
+check_single_char_identifier(src, span_start(s.span), s.name, "local variable");
 const depReason = deprecation_reason_before(src, span_start(s.span));
 if (s.init.tag == "ELambda") {
 const initTy0 = infer_expr_type(src, structs, fns, scopes, depth, s.init);

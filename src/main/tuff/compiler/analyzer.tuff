@@ -58,11 +58,13 @@ from analyzer::fluff use {
   fluff_set_complexity_options,
   fluff_set_file_size_options,
   fluff_set_max_params_options,
+  fluff_set_single_char_identifiers_options,
   fluff_check_file_size,
   fluff_warn_unused_locals_in_scope,
   fluff_warn_unused_params_in_scope,
   fluff_check_fn_complexity,
-  fluff_check_lambda_complexity
+  fluff_check_lambda_complexity,
+  check_single_char_identifier
 };
 
 from analyzer::defs use {
@@ -150,6 +152,9 @@ out fn set_fluff_file_size_options(severity: I32, threshold: I32) : Void =>
 out fn set_fluff_max_params_options(severity: I32, threshold: I32) : Void =>
   fluff_set_max_params_options(severity, threshold)
 
+out fn set_fluff_single_char_identifiers_options(severity: I32) : Void =>
+  fluff_set_single_char_identifiers_options(severity)
+
 out fn check_file_size(src: String) : Void =>
   fluff_check_file_size(src)
 
@@ -208,12 +213,16 @@ fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
   }
 
   if (d.tag == "DTypeUnion") {
+    check_single_char_identifier(src, span_start(d.span), d.name, "union");
+    
     let depReason = deprecation_reason_before(src, span_start(d.span));
     // Union variants are value constructors.
     let mut vi = 0;
     let infos = vec_new();
     while (vi < vec_len(d.variants)) {
       let v = vec_get(d.variants, vi);
+      check_single_char_identifier(src, span_start(v.span), v.name, "union variant");
+      
       if (depReason != "") {
         declare_name_deprecated(src, span_start(v.span), scopes, depth, v.name, false, ty_unknown(), depReason);
       } else {
@@ -309,6 +318,12 @@ fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
   }
 
   if (d.tag == "DStruct") {
+    check_single_char_identifier(src, span_start(d.span), d.name, "struct");
+    let mut fi = 0;
+    while (fi < vec_len(d.fields)) {
+      check_single_char_identifier(src, span_start(d.span), vec_get(d.fields, fi), "struct field");
+      fi = fi + 1;
+    }
     vec_push(structs, mk_struct_def(d.name, d.fields, d.fieldTyAnns));
     yield;
   }

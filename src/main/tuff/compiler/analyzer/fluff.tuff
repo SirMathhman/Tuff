@@ -22,6 +22,7 @@ let mut __fluff_max_file_lines = 0;
 let mut __fluff_max_file_lines_threshold = 500;
 let mut __fluff_max_params = 0;
 let mut __fluff_max_params_threshold = 3;
+let mut __fluff_single_char_identifiers = 0;
 
 out fn fluff_set_options(unusedLocalsSeverity: I32, unusedParamsSeverity: I32) : Void => {
   __fluff_unused_locals = unusedLocalsSeverity;
@@ -41,6 +42,10 @@ out fn fluff_set_file_size_options(severity: I32, threshold: I32) : Void => {
 out fn fluff_set_max_params_options(severity: I32, threshold: I32) : Void => {
   __fluff_max_params = severity;
   __fluff_max_params_threshold = if (threshold > 0) threshold else 3;
+}
+
+out fn fluff_set_single_char_identifiers_options(severity: I32) : Void => {
+  __fluff_single_char_identifiers = severity;
 }
 
 fn fluff_emit_at(src: String, pos: I32, severity: I32, msg: String) : Void => {
@@ -127,6 +132,9 @@ out fn check_lambda_complexity(src: String, pos: I32, name: String, body: Expr) 
 
 out fn check_fn_max_params(src: String, pos: I32, fnName: String, paramCount: I32) : Void =>
   fluff_check_fn_max_params(src, pos, fnName, paramCount)
+
+out fn check_single_char_identifier(src: String, pos: I32, name: String, kind: String) : Void =>
+  fluff_check_single_char_identifier(src, pos, name, kind)
 
 // ------------------------------------------------------------
 // Cyclomatic Complexity Calculation
@@ -334,6 +342,19 @@ out fn fluff_check_fn_max_params(src: String, pos: I32, fnName: String, paramCou
   let threshold = __fluff_max_params_threshold;
   if (paramCount > threshold) {
     let msg = "function " + fnName + " has " + ("" + paramCount) + " parameters (threshold: " + ("" + threshold) + ")";
+    fluff_emit_at(src, pos, severity, msg);
+  }
+}
+
+out fn fluff_check_single_char_identifier(src: String, pos: I32, name: String, kind: String) : Void => {
+  let severity = __fluff_single_char_identifiers;
+  if (severity == 0) { yield; }
+
+  // Ignore intentionally-unused names (leading underscore)
+  if (binding_name_is_intentionally_unused(name)) { yield; }
+
+  if (stringLen(name) == 1) {
+    let msg = kind + " name '" + name + "' is only a single character; use a more descriptive name";
     fluff_emit_at(src, pos, severity, msg);
   }
 }

@@ -11,7 +11,8 @@ from analyzer::fluff use {
   fluff_warn_unused_params_in_scope,
   fluff_check_fn_complexity,
   fluff_check_lambda_complexity,
-  fluff_check_fn_max_params
+  fluff_check_fn_max_params,
+  fluff_check_single_char_identifier
 };
 
 from analyzer::typestrings use {
@@ -49,17 +50,25 @@ fn check_lambda_complexity(src: String, pos: I32, name: String, body: Expr) : Vo
 fn check_fn_max_params(src: String, pos: I32, fnName: String, paramCount: I32) : Void =>
   fluff_check_fn_max_params(src, pos, fnName, paramCount)
 
+fn check_single_char_identifier(src: String, pos: I32, name: String, kind: String) : Void =>
+  fluff_check_single_char_identifier(src, pos, name, kind)
+
 out fn analyze_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, outerScopes: Vec<Vec<Binding>>, outerDepth: I32, d: DFn) : Void => {
+  check_single_char_identifier(src, span_start(d.span), d.name, "function");
+  
   let depth = scopes_enter(outerScopes, outerDepth);
 
   let mut pi = 0;
   while (pi < vec_len(d.params)) {
+    let paramName = vec_get(d.params, pi);
+    check_single_char_identifier(src, span_start(d.span), paramName, "parameter");
+    
     let mut pTy = ty_unknown();
     if (pi < vec_len(d.paramTyAnns)) {
       let ann = vec_get(d.paramTyAnns, pi);
       if (ann != "") { pTy = normalize_ty_ann(ann); }
     }
-    declare_local_name(src, span_start(d.span), outerScopes, depth, vec_get(d.params, pi), false, pTy);
+    declare_local_name(src, span_start(d.span), outerScopes, depth, paramName, false, pTy);
     pi = pi + 1;
   }
 
@@ -94,16 +103,21 @@ out fn analyze_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDe
 }
 
 out fn analyze_class_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, outerScopes: Vec<Vec<Binding>>, outerDepth: I32, d: DClassFn) : Void => {
+  check_single_char_identifier(src, span_start(d.span), d.name, "class function");
+  
   let depth = scopes_enter(outerScopes, outerDepth);
 
   let mut pi = 0;
   while (pi < vec_len(d.params)) {
+    let paramName = vec_get(d.params, pi);
+    check_single_char_identifier(src, span_start(d.span), paramName, "parameter");
+    
     let mut pTy = ty_unknown();
     if (pi < vec_len(d.paramTyAnns)) {
       let ann = vec_get(d.paramTyAnns, pi);
       if (ann != "") { pTy = normalize_ty_ann(ann); }
     }
-    declare_local_name(src, span_start(d.span), outerScopes, depth, vec_get(d.params, pi), false, pTy);
+    declare_local_name(src, span_start(d.span), outerScopes, depth, paramName, false, pTy);
     pi = pi + 1;
   }
 
