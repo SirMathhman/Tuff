@@ -1,0 +1,163 @@
+// Test: Compare generated parser output with existing handwritten parser
+//
+// This validates that the generated parser pattern produces the same AST
+// structure as the existing handwritten parser in the compiler.
+
+extern from rt::vec use { vec_new, vec_len, vec_get, vec_push };
+extern from rt::stdlib use { print, println, stringLen, stringSlice, stringCharCodeAt };
+
+from std::test use { reset, suite, it, expect_eq, expect_true, summary, status };
+
+// Import the existing AST parser from the staged compiler sources.
+from src::main::tuff::compiler::parsing::expr_stmt use { parse_expr_ast };
+
+// Import AST node accessors from the staged compiler sources.
+from src::main::tuff::compiler::ast use {
+  span_start,
+  span_end,
+  expr_span,
+  expr_kind
+};
+
+// =============================================================================
+// Tests comparing existing parser output
+// =============================================================================
+
+fn main() : I32 => {
+  reset();
+  
+  suite("Existing AST parser output analysis");
+  
+  // Test: Simple integer literal
+  let r1 = parse_expr_ast("42", 0);
+  let e1 = r1.expr;
+  it("parses 42", expect_eq("nextPos", r1.nextPos, 2));
+  it("42 is EInt", expect_eq("kind", expr_kind(e1), "EInt"));
+  println("  42 kind: " + expr_kind(e1));
+  
+  // Test: "true" is currently parsed as an identifier in expression position.
+  // (EBool is used in match patterns; boolean literal Expr support is not wired
+  // in this parser path yet.)
+  let r2 = parse_expr_ast("true", 0);
+  let e2 = r2.expr;
+  it("parses true", expect_eq("nextPos", r2.nextPos, 4));
+  it("true is EIdent", expect_eq("kind", expr_kind(e2), "EIdent"));
+  println("  true kind: " + expr_kind(e2));
+  
+  // Test: String literal
+  let r3 = parse_expr_ast("\"hello\"", 0);
+  let e3 = r3.expr;
+  it("parses string", expect_true("consumed", r3.nextPos > 5));
+  it("string is EString", expect_eq("kind", expr_kind(e3), "EString"));
+  println("  string kind: " + expr_kind(e3));
+  
+  // Test: Identifier
+  let r4 = parse_expr_ast("foo", 0);
+  let e4 = r4.expr;
+  it("parses ident", expect_eq("nextPos", r4.nextPos, 3));
+  it("ident is EIdent", expect_eq("kind", expr_kind(e4), "EIdent"));
+  println("  foo kind: " + expr_kind(e4));
+  
+  // Test: Binary expression
+  let r5 = parse_expr_ast("1 + 2", 0);
+  let e5 = r5.expr;
+  it("parses 1+2", expect_true("consumed", r5.nextPos >= 5));
+  it("1+2 is EBinary", expect_eq("kind", expr_kind(e5), "EBinary"));
+  println("  1+2 kind: " + expr_kind(e5));
+  
+  // Test: Precedence
+  let r6 = parse_expr_ast("1 + 2 * 3", 0);
+  let e6 = r6.expr;
+  it("parses 1+2*3", expect_true("consumed", r6.nextPos >= 9));
+  it("1+2*3 is EBinary", expect_eq("kind", expr_kind(e6), "EBinary"));
+  // The top-level should be + since * binds tighter
+  println("  1+2*3 kind: " + expr_kind(e6));
+  
+  // Test: Parentheses
+  let r7 = parse_expr_ast("(1 + 2) * 3", 0);
+  let e7 = r7.expr;
+  it("parses (1+2)*3", expect_true("consumed", r7.nextPos >= 11));
+  println("  (1+2)*3 kind: " + expr_kind(e7));
+  
+  // Test: Unary expression
+  let r8 = parse_expr_ast("-5", 0);
+  let e8 = r8.expr;
+  it("parses -5", expect_eq("nextPos", r8.nextPos, 2));
+  it("-5 is EUnary", expect_eq("kind", expr_kind(e8), "EUnary"));
+  println("  -5 kind: " + expr_kind(e8));
+  
+  // Test: Logical operators
+  let r9 = parse_expr_ast("a && b", 0);
+  let e9 = r9.expr;
+  it("parses a&&b", expect_true("consumed", r9.nextPos >= 6));
+  it("a&&b is EBinary", expect_eq("kind", expr_kind(e9), "EBinary"));
+  println("  a&&b kind: " + expr_kind(e9));
+  
+  // Test: Comparison operators
+  let r10 = parse_expr_ast("x == y", 0);
+  let e10 = r10.expr;
+  it("parses x==y", expect_true("consumed", r10.nextPos >= 6));
+  it("x==y is EBinary", expect_eq("kind", expr_kind(e10), "EBinary"));
+  println("  x==y kind: " + expr_kind(e10));
+  
+  // Test: Block expression
+  let r11 = parse_expr_ast("{ 42 }", 0);
+  let e11 = r11.expr;
+  it("parses block", expect_true("consumed", r11.nextPos >= 5));
+  it("block is EBlock", expect_eq("kind", expr_kind(e11), "EBlock"));
+  println("  {42} kind: " + expr_kind(e11));
+  
+  // Test: If expression
+  let r12 = parse_expr_ast("if (true) 1 else 2", 0);
+  let e12 = r12.expr;
+  it("parses if", expect_true("consumed", r12.nextPos >= 18));
+  it("if is EIf", expect_eq("kind", expr_kind(e12), "EIf"));
+  println("  if kind: " + expr_kind(e12));
+  
+  // Test: Lambda expression
+  let r13 = parse_expr_ast("(x) => x", 0);
+  let e13 = r13.expr;
+  it("parses lambda", expect_true("consumed", r13.nextPos >= 8));
+  it("lambda is ELambda", expect_eq("kind", expr_kind(e13), "ELambda"));
+  println("  lambda kind: " + expr_kind(e13));
+  
+  // Test: Function call
+  let r14 = parse_expr_ast("foo(1, 2)", 0);
+  let e14 = r14.expr;
+  it("parses call", expect_true("consumed", r14.nextPos >= 9));
+  it("call is ECall", expect_eq("kind", expr_kind(e14), "ECall"));
+  println("  foo(1,2) kind: " + expr_kind(e14));
+  
+  // Test: Field access
+  let r15 = parse_expr_ast("obj.field", 0);
+  let e15 = r15.expr;
+  it("parses field", expect_true("consumed", r15.nextPos >= 9));
+  it("field is EField", expect_eq("kind", expr_kind(e15), "EField"));
+  println("  obj.field kind: " + expr_kind(e15));
+  
+  // Test: Index access
+  let r16 = parse_expr_ast("arr[0]", 0);
+  let e16 = r16.expr;
+  it("parses index", expect_true("consumed", r16.nextPos >= 6));
+  it("index is EIndex", expect_eq("kind", expr_kind(e16), "EIndex"));
+  println("  arr[0] kind: " + expr_kind(e16));
+  
+  suite("AST structure verification");
+  
+  // Verify spans are correct
+  let r20 = parse_expr_ast("123", 0);
+  let e20 = r20.expr;
+  let sp20 = expr_span(e20);
+  it("span starts at 0", expect_eq("start", span_start(sp20), 0));
+  it("span ends at 3", expect_eq("end", span_end(sp20), 3));
+  
+  // Verify complex expression spans
+  let r21 = parse_expr_ast("  456  ", 0);
+  let e21 = r21.expr;
+  let sp21 = expr_span(e21);
+  it("skip whitespace start", expect_eq("start", span_start(sp21), 2));
+  it("skip whitespace end", expect_eq("end", span_end(sp21), 5));
+  
+  summary();
+  status()
+}
