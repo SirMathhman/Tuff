@@ -187,6 +187,31 @@ return 2;
 }
 return defaultValue;
 }
+export function json_parse_int_value(s, i, objClose) {
+let pos = i;
+let result = 0;
+let foundDigit = false;
+while (pos < objClose) {
+const digit = stringCharCodeAt(s, pos);
+if (digit >= 48 && digit <= 57) {
+result = result * 10 + (digit - 48);
+foundDigit = true;
+pos = pos + 1;
+} else {
+break;
+}
+}
+return [foundDigit, result];
+}
+export function json_parse_bool_value(s, i, objClose) {
+if (i + 4 <= objClose && stringSlice(s, i, i + 4) == "true") {
+return [true, true];
+}
+if (i + 5 <= objClose && stringSlice(s, i, i + 5) == "false") {
+return [true, false];
+}
+return [false, false];
+}
 export function json_find_int_value_in_object(src, objOpen, objClose, key, defaultValue) {
 let i = objOpen + 1;
 while (i < objClose) {
@@ -211,20 +236,9 @@ continue;
 }
 i = json_skip_ws(src, i + 1);
 if (keyText == key) {
-let result = 0;
-let foundDigit = false;
-while (i < objClose) {
-const digit = stringCharCodeAt(src, i);
-if (digit >= 48 && digit <= 57) {
-result = result * 10 + (digit - 48);
-foundDigit = true;
-i = i + 1;
-} else {
-break;
-}
-}
-if (foundDigit) {
-return result;
+const result = json_parse_int_value(src, i, objClose);
+if (result[0]) {
+return result[1];
 }
 return defaultValue;
 }
@@ -265,11 +279,9 @@ continue;
 }
 i = json_skip_ws(src, i + 1);
 if (keyText == key) {
-if (i + 4 <= objClose && stringSlice(src, i, i + 4) == "true") {
-return true;
-}
-if (i + 5 <= objClose && stringSlice(src, i, i + 5) == "false") {
-return false;
+const result = json_parse_bool_value(src, i, objClose);
+if (result[0]) {
+return result[1];
 }
 return defaultValue;
 }

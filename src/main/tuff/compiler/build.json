@@ -11,7 +11,7 @@
     "singleCharIdentifiers": "off",
     "simplifyNegation": "off",
     "cloneDetection": "warning",
-    "cloneMinTokens": 150,
+    "cloneMinTokens": 100,
     "cloneMinOccurrences": 2
   }
 }

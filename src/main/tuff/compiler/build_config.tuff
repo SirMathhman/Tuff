@@ -216,6 +216,31 @@ fn severity_from_string(s0: String, defaultValue: I32) : I32 => {
   defaultValue
 }
 
+fn json_parse_int_value(s: String, i: I32, objClose: I32) => {
+  let mut pos = i;
+  let mut result = 0;
+  let mut foundDigit = false;
+  while (pos < objClose) {
+    let digit = stringCharCodeAt(s, pos);
+    if (digit >= 48 && digit <= 57) {
+      result = result * 10 + (digit - 48);
+      foundDigit = true;
+      pos = pos + 1;
+    } else {
+      break;
+    }
+  }
+  (foundDigit, result)
+}
+
+fn json_parse_bool_value(s: String, i: I32, objClose: I32) => {
+  // true
+  if (i + 4 <= objClose && stringSlice(s, i, i + 4) == "true") { yield (true, true); }
+  // false
+  if (i + 5 <= objClose && stringSlice(s, i, i + 5) == "false") { yield (true, false); }
+  (false, false)
+}
+
 fn json_find_int_value_in_object(src: String, objOpen: I32, objClose: I32, key: String, defaultValue: I32) : I32 => {
   // Scan key/value pairs in [objOpen, objClose].
   let mut i = objOpen + 1;
@@ -232,26 +257,13 @@ fn json_find_int_value_in_object(src: String, objOpen: I32, objClose: I32, key: 
       let keyText = k.0;
       i = json_skip_ws(src, k.1);
       if (!(i < objClose && stringCharCodeAt(src, i) == 58)) { // ':'
-        // Not a key/value, keep scanning.
         continue;
       }
       i = json_skip_ws(src, i + 1);
 
       if (keyText == key) {
-        // Try to parse an integer value
-        let mut result = 0;
-        let mut foundDigit = false;
-        while (i < objClose) {
-          let digit = stringCharCodeAt(src, i);
-          if (digit >= 48 && digit <= 57) {
-            result = result * 10 + (digit - 48);
-            foundDigit = true;
-            i = i + 1;
-          } else {
-            break;
-          }
-        }
-        if (foundDigit) { yield result; }
+        let result = json_parse_int_value(src, i, objClose);
+        if (result.0) { yield result.1; }
         yield defaultValue;
       }
 
@@ -271,7 +283,7 @@ fn json_find_int_value_in_object(src: String, objOpen: I32, objClose: I32, key: 
 }
 
 fn json_find_bool_value_in_object(src: String, objOpen: I32, objClose: I32, key: String, defaultValue: Bool) : Bool => {
-  // Scan key/value pairs in [objOpen, objClose]. Only supports literal true/false.
+  // Scan key/value pairs in [objOpen, objClose].
   let mut i = objOpen + 1;
   while (i < objClose) {
     i = json_skip_ws(src, i);
@@ -291,14 +303,12 @@ fn json_find_bool_value_in_object(src: String, objOpen: I32, objClose: I32, key:
       i = json_skip_ws(src, i + 1);
 
       if (keyText == key) {
-        // true
-        if (i + 4 <= objClose && stringSlice(src, i, i + 4) == "true") { yield true; }
-        // false
-        if (i + 5 <= objClose && stringSlice(src, i, i + 5) == "false") { yield false; }
+        let result = json_parse_bool_value(src, i, objClose);
+        if (result.0) { yield result.1; }
         yield defaultValue;
       }
 
-      // Skip value if it's a string; otherwise just keep scanning.
+      // Skip value if it's a string; otherwise, just keep scanning.
       if (i < objClose && stringCharCodeAt(src, i) == 34) {
         let v2 = json_parse_string(src, i);
         if (v2.1 == i) { yield defaultValue; }
