@@ -102,6 +102,40 @@ export async function setFluffOptions(
   a.set_fluff_options(unusedLocalsSeverity | 0, unusedParamsSeverity | 0);
 }
 
+// Load an ESM module from a JS source string, without touching the filesystem.
+// Useful for tests that want to execute compiled output.
+//
+// NOTE: This only works for modules that do not rely on relative file imports.
+export async function importEsmFromSource(
+  jsSource: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any> {
+  let src = String(jsSource);
+
+  // When loading via `data:` URL, relative imports like "./rt/vec.mjs" cannot
+  // be resolved (the base scheme is not hierarchical). Rewrite known runtime
+  // imports to absolute `file:` URLs.
+  const rtStdlibUrl = pathToFileURL(resolve("rt", "stdlib.mjs")).toString();
+  const rtVecUrl = pathToFileURL(resolve("rt", "vec.mjs")).toString();
+
+  src = src
+    // `import { ... } from "./rt/vec.mjs"`
+    .replace(/from\s+["']\.\/rt\/vec\.mjs["']/g, `from "${rtVecUrl}"`)
+    .replace(/from\s+["']\.\/rt\/stdlib\.mjs["']/g, `from "${rtStdlibUrl}"`)
+    // `import "./rt/vec.mjs"`
+    .replace(/import\s+["']\.\/rt\/vec\.mjs["']/g, `import "${rtVecUrl}"`)
+    .replace(
+      /import\s+["']\.\/rt\/stdlib\.mjs["']/g,
+      `import "${rtStdlibUrl}"`
+    );
+
+  const b64 = Buffer.from(src, "utf8").toString("base64");
+  // Ensure a unique URL to avoid ESM cache collisions across tests.
+  const nonce = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const url = `data:text/javascript;base64,${b64}#${nonce}`;
+  return import(url);
+}
+
 /**
  * Compile entry code in-memory using a module store.
  *

@@ -2,20 +2,32 @@
 
 ## What Changed
 
-We've created the scaffolding for **Option 4: Pure In-Memory Compiler API**. Here's what exists now:
+We implemented **Option 4: Pure In-Memory Compiler API** and have begun migrating tests away from `.dist/` staging.
+
+As of **2025-12-15**, most TypeScript tests that only need **parse/analyze/lint** (and many that need **compile+run**) can execute entirely in-memory.
 
 1. **In-memory API (Tuff)** — implemented in **`src/main/tuff/compiler/tuffc_lib.tuff`**:
-  - `out fn compile_code(entryCode, moduleLookup) => (outRelPaths, jsOutputs)`
-  - `out fn lint_code(entryCode, moduleLookup) => (errors, warnings)`
+
+- `out fn compile_code(entryCode, moduleLookup) => (outRelPaths, jsOutputs)`
+- `out fn lint_code(entryCode, moduleLookup) => (errors, warnings)`
+
 2. **Callback-based project entrypoints (Tuff)** — also in **`tuffc_lib.tuff`**:
-  - `out fn compile_project_to_outputs(entryPath, outPath, readSource)`
-  - `out fn fluff_project_with_reader(entryPath, readSource)`
+
+- `out fn compile_project_to_outputs(entryPath, outPath, readSource)`
+- `out fn fluff_project_with_reader(entryPath, readSource)`
+
 3. **[compiler-api-refactor.md](../docs/compiler-api-refactor.md)** — Full design doc and risk analysis
 4. **[compiler_api_wrapper.ts](../src/test/ts/compiler_api_wrapper.ts)** — TypeScript wrapper (implemented)
 
-## Implementation Roadmap
+### Test execution helper (TypeScript)
 
-### Phase 1: Extract Core Logic (Days 1-2)
+The wrapper also exports `importEsmFromSource(jsSource)` which can execute compiled JS via a `data:` URL.
+
+Note: some compiled outputs include runtime imports like `./rt/vec.mjs` / `./rt/stdlib.mjs` (e.g. arrays). Since `data:` URLs have no hierarchical base for relative imports, the helper rewrites these specifiers to absolute `file:` URLs.
+
+## Status / Roadmap
+
+### Phase 1: Extract Core Logic (Done)
 
 **Goal**: Break up `compile_project()` into reusable, testable pieces.
 
@@ -68,7 +80,7 @@ fn compile_one_module(
 
 ---
 
-### Phase 2: Implement Pure API (Days 3-5)
+### Phase 2: Implement Pure API (Done)
 
 **File**: `src/main/tuff/compiler/tuffc_lib.tuff`
 
@@ -84,7 +96,7 @@ out fn lint_code(entryCode: String, moduleLookup: (String) => String)
 
 ---
 
-### Phase 3: Update CLI Wrappers (Days 6-7)
+### Phase 3: Update CLI Wrappers (Done)
 
 **Files**: `src/main/tuff/compiler/tuffc.tuff`, `fluff.tuff`
 
@@ -106,7 +118,7 @@ fn main(argv: Vec<String>) => {
 
 ---
 
-### Phase 4: TypeScript Integration (Days 8-9)
+### Phase 4: TypeScript Integration (Done)
 
 **File**: `src/test/ts/compiler_api_wrapper.ts`
 
@@ -118,14 +130,17 @@ export async function compileCode(
   modules: ModuleStore
 ): Promise<CompileResult> {
   const tuffcLib = await import("selfhost/prebuilt/tuffc_lib.mjs");
-  const [outRelPaths, jsOutputs] = tuffcLib.compile_code(entryCode, (p) => modules[p] || "");
+  const [outRelPaths, jsOutputs] = tuffcLib.compile_code(
+    entryCode,
+    (p) => modules[p] || ""
+  );
   return { success: true, outRelPaths, jsOutputs };
 }
 ```
 
 ---
 
-### Phase 5: Test Migration (Days 10-14)
+### Phase 5: Test Migration (In progress)
 
 **Files**: `src/test/ts/selfhost_helpers.ts` and all `test.ts` files
 
@@ -155,9 +170,16 @@ if (!result.success) {
 
 **Benefits** (incremental):
 
-- In-memory API tests no longer need stage2 builds or `.dist/` staging
+- Many tests no longer need stage2 builds or `.dist/` staging
 - Fewer moving parts per test (no runtime copying)
 - Cleaner, more direct tests of the pure APIs
+
+**Current migration highlights**:
+
+- `selfhost_analyzer_*.test.ts`: now primarily use `lintCode()` (and `compileCode()` + `importEsmFromSource()` when execution is needed)
+- `selfhost_lint_unused_*.test.ts`, `selfhost_lint_only.test.ts`, `selfhost_lint_param_types_required.test.ts`: now use `lintCode()` / `compileCode()` + `setFluffOptions()`
+
+Some integration tests intentionally still use the filesystem (e.g. stage2/stage3 selfhost pipeline, build.json auto-discovery, file size/complexity linting, CLI behavior).
 
 ---
 
@@ -165,7 +187,7 @@ if (!result.success) {
 
 - [ ] `npm run test` passes
 - [ ] `npm run test:verbose` passes
-- [ ] In-memory API tests do not require `.dist/` staging
+- [ ] Migrated API tests do not require `.dist/` staging
 - [ ] `npm run build:selfhost-prebuilt` produces up-to-date `selfhost/prebuilt/`
 - [ ] `editors/vscode/scripts/sync-prebuilt.mjs` keeps extension prebuilt in sync
 

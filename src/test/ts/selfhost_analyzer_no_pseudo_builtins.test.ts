@@ -1,54 +1,15 @@
 import { describe, expect, test } from "vitest";
 
-import { copyFile, mkdir, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
-
-import { stagePrebuiltSelfhostCompiler } from "./selfhost_helpers";
+import { lintCode } from "./compiler_api_wrapper";
 
 describe("selfhost analyzer", () => {
   test("rejects calling __tuff_struct_lit directly", async () => {
-    const outDir = resolve(
-      ".dist",
-      "selfhost-analyzer-no-pseudo-builtins",
-      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const entryCode = "fn main() => { __tuff_struct_lit(Foo, 1) }\n";
+    const r = await lintCode(entryCode, {});
+    expect(r.diagnostics ?? "").toBe("");
+    expect(r.success).toBe(false);
+    expect((r.errors ?? []).some((e) => /unknown name/i.test(e.msg))).toBe(
+      true
     );
-    await mkdir(outDir, { recursive: true });
-
-    // Avoid ESM cache collisions between stage1 and stage2 outputs.
-    const stage1Dir = resolve(outDir, "stage1");
-    const stage2Dir = resolve(outDir, "stage2");
-    await mkdir(stage1Dir, { recursive: true });
-    await mkdir(stage2Dir, { recursive: true });
-
-    const { entryFile: stage1File } = await stagePrebuiltSelfhostCompiler(
-      stage1Dir
-    );
-
-    const stage2RtDir = resolve(stage2Dir, "rt");
-    await mkdir(stage2RtDir, { recursive: true });
-    await copyFile(
-      resolve("rt/stdlib.mjs"),
-      resolve(stage2RtDir, "stdlib.mjs")
-    );
-    await copyFile(resolve("rt/vec.mjs"), resolve(stage2RtDir, "vec.mjs"));
-
-    const stage2In = resolve("src", "main", "tuff", "compiler", "tuffc.tuff");
-    const stage2Out = resolve(stage2Dir, "tuffc.stage2.mjs");
-
-    const tuffc1 = await import(pathToFileURL(stage1File).toString());
-    const rc2 = tuffc1.main([stage2In, stage2Out]);
-    expect(rc2).toBe(0);
-
-    const badIn = resolve(stage2Dir, "bad_pseudo_builtin_call.tuff");
-    const badOut = resolve(stage2Dir, "bad_pseudo_builtin_call.mjs");
-    await writeFile(
-      badIn,
-      "fn main() => { __tuff_struct_lit(Foo, 1) }\n",
-      "utf8"
-    );
-
-    const tuffc2 = await import(pathToFileURL(stage2Out).toString());
-    expect(() => tuffc2.main([badIn, badOut])).toThrow(/unknown name/i);
   });
 });
