@@ -480,3 +480,19 @@ out fn decl_class_fn_typed(span: Span, isOut: Bool, name: String, typeParams: Ve
 out fn decl_let(span: Span, isMut: Bool, name: String, init: Expr) : Decl => DLet { span, isMut, name, "", init }
 out fn decl_let_typed(span: Span, isMut: Bool, name: String, tyAnn: String, init: Expr) : Decl => DLet { span, isMut, name, tyAnn, init }
 out fn decl_module(span: Span, name: String, decls: Vec<Decl>) : Decl => DModule { span, name, decls }
+
+// Operator constructors
+out fn op_add() : BinOp => OpAdd
+out fn op_sub() : BinOp => OpSub
+out fn op_mul() : BinOp => OpMul
+out fn op_div() : BinOp => OpDiv
+out fn op_eq() : BinOp => OpEq
+out fn op_ne() : BinOp => OpNe
+out fn op_lt() : BinOp => OpLt
+out fn op_le() : BinOp => OpLe
+out fn op_gt() : BinOp => OpGt
+out fn op_ge() : BinOp => OpGe
+out fn op_and() : BinOp => OpAnd
+out fn op_or() : BinOp => OpOr
+out fn op_not() : UnOp => OpNot
+out fn op_neg() : UnOp => OpNeg

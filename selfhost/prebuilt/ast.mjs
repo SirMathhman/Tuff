@@ -320,3 +320,45 @@ return ({ tag: "DLet", span: span, isMut: isMut, name: name, tyAnn: tyAnn, init:
 export function decl_module(span, name, decls) {
 return ({ tag: "DModule", span: span, name: name, decls: decls });
 }
+export function op_add() {
+return OpAdd;
+}
+export function op_sub() {
+return OpSub;
+}
+export function op_mul() {
+return OpMul;
+}
+export function op_div() {
+return OpDiv;
+}
+export function op_eq() {
+return OpEq;
+}
+export function op_ne() {
+return OpNe;
+}
+export function op_lt() {
+return OpLt;
+}
+export function op_le() {
+return OpLe;
+}
+export function op_gt() {
+return OpGt;
+}
+export function op_ge() {
+return OpGe;
+}
+export function op_and() {
+return OpAnd;
+}
+export function op_or() {
+return OpOr;
+}
+export function op_not() {
+return OpNot;
+}
+export function op_neg() {
+return OpNeg;
+}

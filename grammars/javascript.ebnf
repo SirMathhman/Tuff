@@ -1,0 +1,345 @@
+(* ============================================================================
+   javascript.ebnf - JavaScript (ES6+) Grammar Specification
+   
+   This grammar defines JavaScript syntax for the emitter side of the 
+   bidirectional grammar system. It's used to generate JS code from a CST.
+   
+   Note: This is a subset focused on common constructs, not the full spec.
+   ============================================================================ *)
+
+
+(* ============================================================================
+   PROGRAM STRUCTURE
+   ============================================================================ *)
+
+program ::= statement* ;
+
+statement ::=
+    var_decl
+  | const_decl
+  | let_decl
+  | fn_decl
+  | class_decl
+  | if_stmt
+  | while_stmt
+  | for_stmt
+  | return_stmt
+  | throw_stmt
+  | try_stmt
+  | expr_stmt
+  | block
+  ;
+
+
+(* ============================================================================
+   VARIABLE DECLARATIONS
+   ============================================================================ *)
+
+var_decl ::= "var" @space var_binding ("," @space var_binding)* ";" ;
+
+const_decl ::= "const" @space var_binding ("," @space var_binding)* ";" ;
+
+let_decl ::= "let" @space var_binding ("," @space var_binding)* ";" ;
+
+var_binding ::= ident ("=" @space expr)? ;
+
+
+(* ============================================================================
+   FUNCTION DECLARATIONS
+   ============================================================================ *)
+
+fn_decl ::= "function" @space ident "(" param_list ")" @space block ;
+
+arrow_fn ::= "(" param_list ")" @space "=>" @space (expr | block) ;
+
+param_list ::= (ident ("," @space ident)*)? ;
+
+
+(* ============================================================================
+   CLASS DECLARATIONS
+   ============================================================================ *)
+
+class_decl ::= "class" @space ident ("extends" @space ident)? @space class_body ;
+
+class_body ::= "{" @break @indent(class_member*) "}" ;
+
+class_member ::=
+    method_def
+  | static_method
+  | field_def
+  ;
+
+method_def ::= ident "(" param_list ")" @space block ;
+
+static_method ::= "static" @space method_def ;
+
+field_def ::= ident ("=" @space expr)? ";" ;
+
+
+(* ============================================================================
+   CONTROL FLOW
+   ============================================================================ *)
+
+if_stmt ::= "if" @space "(" expr ")" @space (block | statement) 
+            ("else" @space (block | statement))? ;
+
+while_stmt ::= "while" @space "(" expr ")" @space (block | statement) ;
+
+for_stmt ::= "for" @space "(" for_init ";" expr? ";" expr? ")" @space (block | statement) ;
+
+for_init ::= var_decl | let_decl | expr? ;
+
+for_of_stmt ::= "for" @space "(" ("const" | "let") @space ident "of" @space expr ")" @space (block | statement) ;
+
+return_stmt ::= "return" (@space expr)? ";" ;
+
+throw_stmt ::= "throw" @space expr ";" ;
+
+try_stmt ::= "try" @space block "catch" @space "(" ident ")" @space block ("finally" @space block)? ;
+
+break_stmt ::= "break" ";" ;
+
+continue_stmt ::= "continue" ";" ;
+
+
+(* ============================================================================
+   BLOCKS
+   ============================================================================ *)
+
+block ::= "{" @break @indent(statement*) "}" ;
+
+
+(* ============================================================================
+   EXPRESSIONS
+   ============================================================================ *)
+
+expr ::= assign_expr ;
+
+assign_expr ::= ternary_expr (assign_op @space assign_expr)? ;
+
+assign_op ::= "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "&&=" | "||=" | "??=" ;
+
+ternary_expr ::= or_expr ("?" @space expr ":" @space ternary_expr)? ;
+
+or_expr ::= and_expr ("||" @space and_expr)* ;
+
+and_expr ::= nullish_expr ("&&" @space nullish_expr)* ;
+
+nullish_expr ::= bitor_expr ("??" @space bitor_expr)* ;
+
+bitor_expr ::= xor_expr ("|" xor_expr)* ;
+
+xor_expr ::= bitand_expr ("^" bitand_expr)* ;
+
+bitand_expr ::= eq_expr ("&" eq_expr)* ;
+
+eq_expr ::= rel_expr (("===" | "!==" | "==" | "!=") @space rel_expr)* ;
+
+rel_expr ::= shift_expr (("<" | "<=" | ">" | ">=" | "instanceof" | "in") @space shift_expr)* ;
+
+shift_expr ::= add_expr (("<<" | ">>" | ">>>") add_expr)* ;
+
+add_expr ::= mul_expr (("+" | "-") @space mul_expr)* ;
+
+mul_expr ::= exp_expr (("*" | "/" | "%") @space exp_expr)* ;
+
+exp_expr ::= unary_expr ("**" exp_expr)? ;
+
+unary_expr ::=
+    "!" unary_expr
+  | "-" unary_expr
+  | "+" unary_expr
+  | "~" unary_expr
+  | "typeof" @space unary_expr
+  | "void" @space unary_expr
+  | "delete" @space unary_expr
+  | "++" unary_expr
+  | "--" unary_expr
+  | "await" @space unary_expr
+  | postfix_expr
+  ;
+
+postfix_expr ::= primary_expr postfix_op* ;
+
+postfix_op ::=
+    call_op
+  | index_op
+  | member_op
+  | optional_chain_op
+  | "++"
+  | "--"
+  ;
+
+call_op ::= "(" arg_list ")" ;
+
+index_op ::= "[" expr "]" ;
+
+member_op ::= "." ident ;
+
+optional_chain_op ::= "?." ident ;
+
+arg_list ::= (expr ("," @space expr)*)? ;
+
+
+(* ============================================================================
+   PRIMARY EXPRESSIONS
+   ============================================================================ *)
+
+primary_expr ::=
+    literal
+  | ident
+  | "this"
+  | "null"
+  | "undefined"
+  | array_lit
+  | object_lit
+  | arrow_fn
+  | fn_expr
+  | new_expr
+  | paren_expr
+  | template_lit
+  ;
+
+paren_expr ::= "(" expr ")" ;
+
+new_expr ::= "new" @space ident "(" arg_list ")" ;
+
+fn_expr ::= "function" ident? "(" param_list ")" @space block ;
+
+
+(* ============================================================================
+   LITERALS
+   ============================================================================ *)
+
+literal ::=
+    number_lit
+  | string_lit
+  | bool_lit
+  | regex_lit
+  ;
+
+number_lit ::= [0-9]+ ("." [0-9]+)? ;
+
+string_lit ::= 
+    '"' string_dq_content* '"'
+  | "'" string_sq_content* "'"
+  ;
+
+string_dq_content ::= [^"\\] | escape_seq ;
+string_sq_content ::= [^'\\] | escape_seq ;
+
+escape_seq ::= "\\" [nrt\\'"] ;
+
+bool_lit ::= "true" | "false" ;
+
+regex_lit ::= "/" regex_body "/" regex_flags? ;
+regex_body ::= [^/\\]+ ;
+regex_flags ::= [gimsuy]+ ;
+
+
+(* ============================================================================
+   ARRAY AND OBJECT LITERALS
+   ============================================================================ *)
+
+array_lit ::= "[" (array_element ("," @space array_element)*)? ","? "]" ;
+
+array_element ::= "..."? expr ;
+
+object_lit ::= "{" @break @indent((property ("," @break property)*)?) "}" ;
+
+property ::=
+    shorthand_prop
+  | computed_prop
+  | method_prop
+  | spread_prop
+  | key_value_prop
+  ;
+
+key_value_prop ::= property_key ":" @space expr ;
+
+shorthand_prop ::= ident ;
+
+computed_prop ::= "[" expr "]" ":" @space expr ;
+
+method_prop ::= ident "(" param_list ")" @space block ;
+
+spread_prop ::= "..." expr ;
+
+property_key ::= ident | string_lit | number_lit ;
+
+
+(* ============================================================================
+   TEMPLATE LITERALS
+   ============================================================================ *)
+
+template_lit ::= "`" template_part* "`" ;
+
+template_part ::= template_chars | template_expr ;
+
+template_chars ::= [^`\\$]+ ;
+
+template_expr ::= "${" expr "}" ;
+
+
+(* ============================================================================
+   DESTRUCTURING
+   ============================================================================ *)
+
+array_pattern ::= "[" (pattern_element ("," pattern_element)*)? "]" ;
+
+object_pattern ::= "{" (pattern_prop ("," pattern_prop)*)? "}" ;
+
+pattern_element ::= "..."? ident ("=" expr)? ;
+
+pattern_prop ::= ident (":" ident)? ("=" expr)? ;
+
+
+(* ============================================================================
+   IMPORT/EXPORT
+   ============================================================================ *)
+
+import_stmt ::= "import" @space import_clause "from" @space string_lit ";" ;
+
+import_clause ::= 
+    ident
+  | "*" @space "as" @space ident
+  | "{" (import_spec ("," @space import_spec)*)? "}"
+  ;
+
+import_spec ::= ident ("as" @space ident)? ;
+
+export_stmt ::=
+    "export" @space "default" @space expr ";"
+  | "export" @space (fn_decl | class_decl | const_decl | let_decl)
+  | "export" @space "{" (export_spec ("," @space export_spec)*)? "}" ";"
+  ;
+
+export_spec ::= ident ("as" @space ident)? ;
+
+
+(* ============================================================================
+   IDENTIFIERS
+   ============================================================================ *)
+
+ident ::= ident_start ident_char* ;
+
+ident_start ::= [a-zA-Z_$] ;
+
+ident_char ::= [a-zA-Z0-9_$] ;
+
+
+(* ============================================================================
+   ASYNC/AWAIT
+   ============================================================================ *)
+
+async_fn ::= "async" @space "function" @space ident "(" param_list ")" @space block ;
+
+async_arrow ::= "async" @space "(" param_list ")" @space "=>" @space (expr | block) ;
+
+
+(* ============================================================================
+   COMMENTS (handled by emitter, not grammar)
+   ============================================================================ *)
+
+(* Line comments: // ...
+   Block comments: /* ... */ (non-nestable) *)
