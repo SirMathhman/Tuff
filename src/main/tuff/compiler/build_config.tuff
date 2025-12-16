@@ -241,8 +241,8 @@ fn json_parse_bool_value(s: String, i: I32, objClose: I32) => {
   (false, false)
 }
 
-fn json_find_int_value_in_object(src: String, objOpen: I32, objClose: I32, key: String, defaultValue: I32) : I32 => {
-  // Scan key/value pairs in [objOpen, objClose].
+// Generic helper: scans JSON object for key and calls parseValue when found.
+fn json_scan_for_key<T>(src: String, objOpen: I32, objClose: I32, key: String, defaultValue: T, parseValue: (String, I32, I32) => (Bool, T)) : T => {
   let mut i = objOpen + 1;
   while (i < objClose) {
     i = json_skip_ws(src, i);
@@ -262,7 +262,7 @@ fn json_find_int_value_in_object(src: String, objOpen: I32, objClose: I32, key: 
       i = json_skip_ws(src, i + 1);
 
       if (keyText == key) {
-        let result = json_parse_int_value(src, i, objClose);
+        let result = parseValue(src, i, objClose);
         if (result.0) { yield result.1; }
         yield defaultValue;
       }
@@ -282,45 +282,12 @@ fn json_find_int_value_in_object(src: String, objOpen: I32, objClose: I32, key: 
   defaultValue
 }
 
+fn json_find_int_value_in_object(src: String, objOpen: I32, objClose: I32, key: String, defaultValue: I32) : I32 => {
+  json_scan_for_key<I32>(src, objOpen, objClose, key, defaultValue, json_parse_int_value)
+}
+
 fn json_find_bool_value_in_object(src: String, objOpen: I32, objClose: I32, key: String, defaultValue: Bool) : Bool => {
-  // Scan key/value pairs in [objOpen, objClose].
-  let mut i = objOpen + 1;
-  while (i < objClose) {
-    i = json_skip_ws(src, i);
-    if (i >= objClose) { break; }
-
-    let ch = stringCharCodeAt(src, i);
-    if (ch == 44) { i = i + 1; continue; } // ','
-
-    if (ch == 34) {
-      let k = json_parse_string(src, i);
-      if (k.1 == i) { yield defaultValue; }
-      let keyText = k.0;
-      i = json_skip_ws(src, k.1);
-      if (!(i < objClose && stringCharCodeAt(src, i) == 58)) { // ':'
-        continue;
-      }
-      i = json_skip_ws(src, i + 1);
-
-      if (keyText == key) {
-        let result = json_parse_bool_value(src, i, objClose);
-        if (result.0) { yield result.1; }
-        yield defaultValue;
-      }
-
-      // Skip value if it's a string; otherwise, just keep scanning.
-      if (i < objClose && stringCharCodeAt(src, i) == 34) {
-        let v2 = json_parse_string(src, i);
-        if (v2.1 == i) { yield defaultValue; }
-        i = v2.1;
-      }
-      continue;
-    }
-
-    i = i + 1;
-  }
-
-  defaultValue
+  json_scan_for_key<Bool>(src, objOpen, objClose, key, defaultValue, json_parse_bool_value)
 }
 
 class fn FluffConfig(unusedLocals: I32, unusedParams: I32, complexity: I32, complexityThreshold: I32, maxFileLines: I32, maxFileLinesThreshold: I32, maxParams: I32, maxParamsThreshold: I32, singleCharIdentifiers: I32, missingDocs: I32, cloneDetection: I32, cloneMinTokens: I32, cloneMinOccurrences: I32, cloneParameterized: Bool) => {}

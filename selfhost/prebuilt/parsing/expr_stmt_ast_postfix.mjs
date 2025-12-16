@@ -73,6 +73,10 @@ let k = skip_ws(src, i);
 if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 60)) {
 return ParsedTypeArgsForCallAst(false, vec_new(), i);
 }
+const nextAfterLt = k + 1;
+if (nextAfterLt < stringLen(src) && stringCharCodeAt(src, nextAfterLt) == 61) {
+return ParsedTypeArgsForCallAst(false, vec_new(), i);
+}
 let depth = 1;
 let scan = k + 1;
 let endGt = -1;

@@ -1,0 +1,229 @@
+from std::test use { reset, suite, it, expect_eq, summary, status };
+
+// Generic function with < operator in if condition
+fn compare_less_than<T>(a: I32, b: I32) : Bool => {
+  if (a < b) {
+    true
+  } else {
+    false
+  }
+}
+
+// Generic function with <= operator in if condition
+fn compare_less_equal<T>(a: I32, b: I32) : Bool => {
+  if (a <= b) {
+    true
+  } else {
+    false
+  }
+}
+
+// Generic function with > operator (should work)
+fn compare_greater_than<T>(a: I32, b: I32) : Bool => {
+  if (a > b) {
+    true
+  } else {
+    false
+  }
+}
+
+// Generic function with >= operator (should work)
+fn compare_greater_equal<T>(a: I32, b: I32) : Bool => {
+  if (a >= b) {
+    true
+  } else {
+    false
+  }
+}
+
+// Generic function with complex < expression
+fn complex_less_than<T>(i: I32, objClose: I32) : Bool => {
+  if (i + 5 < objClose) {
+    true
+  } else {
+    false
+  }
+}
+
+// Generic function with complex <= expression
+fn complex_less_equal<T>(i: I32, objClose: I32) : Bool => {
+  if (i + 5 <= objClose) {
+    true
+  } else {
+    false
+  }
+}
+
+// Non-generic versions for comparison (should work)
+fn non_generic_less_than(a: I32, b: I32) : Bool => {
+  if (a < b) {
+    true
+  } else {
+    false
+  }
+}
+
+fn non_generic_less_equal(a: I32, b: I32) : Bool => {
+  if (a <= b) {
+    true
+  } else {
+    false
+  }
+}
+
+// Generic function with multiple comparison operators
+fn multiple_comparisons<T>(a: I32, b: I32, c: I32) : I32 => {
+  let mut count = 0;
+  
+  if (a < b) {
+    count = count + 1;
+  } else {
+    count = count + 0;
+  };
+  
+  if (b <= c) {
+    count = count + 1;
+  } else {
+    count = count + 0;
+  };
+  
+  if (c > a) {
+    count = count + 1;
+  } else {
+    count = count + 0;
+  };
+  
+  if (c >= b) {
+    count = count + 1;
+  } else {
+    count = count + 0;
+  };
+  
+  count
+}
+
+// Generic function with nested < comparisons
+fn nested_less_than<T>(a: I32, b: I32, c: I32) : Bool => {
+  if (a < b) {
+    if (b < c) {
+      true
+    } else {
+      false
+    }
+  } else {
+    false
+  }
+}
+
+fn main() : I32 => {
+  reset();
+  
+  suite("parser: comparison operators in generic functions");
+  
+  // Test < operator in generic function
+  it(
+    "generic function with < operator (5 < 10)",
+    expect_eq("result", compare_less_than<I32>(5, 10), true)
+  );
+  
+  it(
+    "generic function with < operator (10 < 5)",
+    expect_eq("result", compare_less_than<I32>(10, 5), false)
+  );
+  
+  // Test <= operator in generic function
+  it(
+    "generic function with <= operator (5 <= 10)",
+    expect_eq("result", compare_less_equal<I32>(5, 10), true)
+  );
+  
+  it(
+    "generic function with <= operator (10 <= 10)",
+    expect_eq("result", compare_less_equal<I32>(10, 10), true)
+  );
+  
+  it(
+    "generic function with <= operator (15 <= 10)",
+    expect_eq("result", compare_less_equal<I32>(15, 10), false)
+  );
+  
+  // Test > operator in generic function (should already work)
+  it(
+    "generic function with > operator (10 > 5)",
+    expect_eq("result", compare_greater_than<I32>(10, 5), true)
+  );
+  
+  it(
+    "generic function with > operator (5 > 10)",
+    expect_eq("result", compare_greater_than<I32>(5, 10), false)
+  );
+  
+  // Test >= operator in generic function (should already work)
+  it(
+    "generic function with >= operator (10 >= 5)",
+    expect_eq("result", compare_greater_equal<I32>(10, 5), true)
+  );
+  
+  it(
+    "generic function with >= operator (10 >= 10)",
+    expect_eq("result", compare_greater_equal<I32>(10, 10), true)
+  );
+  
+  it(
+    "generic function with >= operator (5 >= 10)",
+    expect_eq("result", compare_greater_equal<I32>(5, 10), false)
+  );
+  
+  // Test complex < expression
+  it(
+    "generic function with complex < (3 + 5 < 10)",
+    expect_eq("result", complex_less_than<I32>(3, 10), true)
+  );
+  
+  it(
+    "generic function with complex < (7 + 5 < 10)",
+    expect_eq("result", complex_less_than<I32>(7, 10), false)
+  );
+  
+  // Test complex <= expression
+  it(
+    "generic function with complex <= (3 + 5 <= 10)",
+    expect_eq("result", complex_less_equal<I32>(3, 10), true)
+  );
+  
+  it(
+    "generic function with complex <= (5 + 5 <= 10)",
+    expect_eq("result", complex_less_equal<I32>(5, 10), true)
+  );
+  
+  // Test non-generic versions (should work correctly)
+  it(
+    "non-generic function with < operator",
+    expect_eq("result", non_generic_less_than(5, 10), true)
+  );
+  
+  it(
+    "non-generic function with <= operator",
+    expect_eq("result", non_generic_less_equal(5, 10), true)
+  );
+  
+  // Test multiple comparisons in one generic function
+  it(
+    "generic function with multiple comparison operators",
+    expect_eq("result", multiple_comparisons<I32>(1, 5, 10), 4)
+  );
+  
+  // Test nested < comparisons
+  it(
+    "generic function with nested < comparisons (1 < 5 < 10)",
+    expect_eq("result", nested_less_than<I32>(1, 5, 10), true)
+  );
+  
+  it(
+    "generic function with nested < comparisons (5 < 3 < 10)",
+    expect_eq("result", nested_less_than<I32>(5, 3, 10), false)
+  );
+  
+  summary();
+  status()
+}

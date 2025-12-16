@@ -212,7 +212,7 @@ return [true, false];
 }
 return [false, false];
 }
-export function json_find_int_value_in_object(src, objOpen, objClose, key, defaultValue) {
+export function json_scan_for_key(src, objOpen, objClose, key, defaultValue, parseValue) {
 let i = objOpen + 1;
 while (i < objClose) {
 i = json_skip_ws(src, i);
@@ -236,7 +236,7 @@ continue;
 }
 i = json_skip_ws(src, i + 1);
 if (keyText == key) {
-const result = json_parse_int_value(src, i, objClose);
+const result = parseValue(src, i, objClose);
 if (result[0]) {
 return result[1];
 }
@@ -254,49 +254,12 @@ continue;
 i = i + 1;
 }
 return defaultValue;
+}
+export function json_find_int_value_in_object(src, objOpen, objClose, key, defaultValue) {
+return json_scan_for_key(src, objOpen, objClose, key, defaultValue, json_parse_int_value);
 }
 export function json_find_bool_value_in_object(src, objOpen, objClose, key, defaultValue) {
-let i = objOpen + 1;
-while (i < objClose) {
-i = json_skip_ws(src, i);
-if (i >= objClose) {
-break;
-}
-const ch = stringCharCodeAt(src, i);
-if (ch == 44) {
-i = i + 1;
-continue;
-}
-if (ch == 34) {
-const k = json_parse_string(src, i);
-if (k[1] == i) {
-return defaultValue;
-}
-const keyText = k[0];
-i = json_skip_ws(src, k[1]);
-if (!(i < objClose && stringCharCodeAt(src, i) == 58)) {
-continue;
-}
-i = json_skip_ws(src, i + 1);
-if (keyText == key) {
-const result = json_parse_bool_value(src, i, objClose);
-if (result[0]) {
-return result[1];
-}
-return defaultValue;
-}
-if (i < objClose && stringCharCodeAt(src, i) == 34) {
-const v2 = json_parse_string(src, i);
-if (v2[1] == i) {
-return defaultValue;
-}
-i = v2[1];
-}
-continue;
-}
-i = i + 1;
-}
-return defaultValue;
+return json_scan_for_key(src, objOpen, objClose, key, defaultValue, json_parse_bool_value);
 }
 export function FluffConfig(unusedLocals, unusedParams, complexity, complexityThreshold, maxFileLines, maxFileLinesThreshold, maxParams, maxParamsThreshold, singleCharIdentifiers, missingDocs, cloneDetection, cloneMinTokens, cloneMinOccurrences, cloneParameterized) {
 return { unusedLocals: unusedLocals, unusedParams: unusedParams, complexity: complexity, complexityThreshold: complexityThreshold, maxFileLines: maxFileLines, maxFileLinesThreshold: maxFileLinesThreshold, maxParams: maxParams, maxParamsThreshold: maxParamsThreshold, singleCharIdentifiers: singleCharIdentifiers, missingDocs: missingDocs, cloneDetection: cloneDetection, cloneMinTokens: cloneMinTokens, cloneMinOccurrences: cloneMinOccurrences, cloneParameterized: cloneParameterized };

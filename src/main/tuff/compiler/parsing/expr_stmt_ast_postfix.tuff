@@ -101,6 +101,12 @@ fn try_parse_type_args_for_call_ast(src: String, i: I32) : ParsedTypeArgsForCall
   if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 60)) { // '<'
     yield ParsedTypeArgsForCallAst(false, vec_new(), i);
   }
+  
+  // Check for '<=' operator - if next char is '=', this is NOT a type arg list.
+  let nextAfterLt = k + 1;
+  if (nextAfterLt < stringLen(src) && stringCharCodeAt(src, nextAfterLt) == 61) { // '='
+    yield ParsedTypeArgsForCallAst(false, vec_new(), i);
+  }
 
   // First, do a non-panicking scan to find the matching '>' for this '<'.
   // If we can't find a match, or it isn't followed by '(', this is not a
