@@ -65,6 +65,10 @@ fn main() : I32 => {
 
     // Should complete without crashing (return 0)
     expect(result).toBe(0);
+
+    // And should report at least one warning when enabled.
+    expect(typeof fluffModule.project_warning_count).toBe("function");
+    expect(fluffModule.project_warning_count()).toBeGreaterThan(0);
   });
 
   it("supports --debug flag", async () => {
@@ -112,6 +116,80 @@ fn main() : I32 => {
 
     const fluffModule = await import(resolve(stage1, "fluff.mjs"));
     const result = fluffModule.main(["--debug", "--format", "json", testFile]);
+    expect(result).toBe(0);
+  });
+
+  it("supports scoped --debug=clone", async () => {
+    const testId = `case-${Date.now()}-${randomUUID().slice(0, 8)}`;
+    const baseDir = resolve(".dist/selfhost-clone-detection", testId);
+    const stage1 = resolve(baseDir, "stage-debug-scoped");
+
+    await stagePrebuiltSelfhostCompiler(stage1);
+
+    const testFile = resolve(stage1, "clone_test_debug_scoped.tuff");
+    await writeFile(
+      testFile,
+      `
+fn helper_a() : I32 => { let x = 1; let y = 2; let z = x + y; z }
+fn helper_b() : I32 => { let x = 1; let y = 2; let z = x + y; z }
+fn main() : I32 => helper_a() + helper_b()
+`
+    );
+
+    const buildJson = resolve(stage1, "build.json");
+    await writeFile(
+      buildJson,
+      JSON.stringify({
+        fluff: {
+          cloneDetection: "warning",
+          cloneMinTokens: 5,
+          cloneMinOccurrences: 2,
+        },
+      })
+    );
+
+    const fluffModule = await import(resolve(stage1, "fluff.mjs"));
+    const result = fluffModule.main([
+      "--debug=clone",
+      "--format",
+      "json",
+      testFile,
+    ]);
+    expect(result).toBe(0);
+  });
+
+  it("accepts build.json cloneParameterized flag", async () => {
+    const testId = `case-${Date.now()}-${randomUUID().slice(0, 8)}`;
+    const baseDir = resolve(".dist/selfhost-clone-detection", testId);
+    const stage1 = resolve(baseDir, "stage-parameterized");
+
+    await stagePrebuiltSelfhostCompiler(stage1);
+
+    const testFile = resolve(stage1, "clone_test_param.tuff");
+    await writeFile(
+      testFile,
+      `
+fn helper_a() : I32 => { let x = 1; let y = 2; let z = x + y; z }
+fn helper_b() : I32 => { let x = 3; let y = 4; let z = x + y; z }
+fn main() : I32 => helper_a() + helper_b()
+`
+    );
+
+    const buildJson = resolve(stage1, "build.json");
+    await writeFile(
+      buildJson,
+      JSON.stringify({
+        fluff: {
+          cloneDetection: "warning",
+          cloneMinTokens: 5,
+          cloneMinOccurrences: 2,
+          cloneParameterized: true,
+        },
+      })
+    );
+
+    const fluffModule = await import(resolve(stage1, "fluff.mjs"));
+    const result = fluffModule.main(["--format", "json", testFile]);
     expect(result).toBe(0);
   });
 
@@ -163,5 +241,8 @@ fn main() : I32 => {
 
     // Should pass with no issues
     expect(result).toBe(0);
+
+    expect(typeof fluffModule.project_warning_count).toBe("function");
+    expect(fluffModule.project_warning_count()).toBe(0);
   });
 });

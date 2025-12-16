@@ -8,6 +8,8 @@
     "test:verbose": "cross-env TUFF_TEST_VERBOSE=1 vitest run --reporter verbose --no-silent",
     "check": "npm run test",
     "lint": "tsx tools/tuff_lint.ts",
+    "lint:timeout": "tsx tools/tuff_lint_timeout.ts",
+    "bench:clones": "tsx tools/bench_clone_detection.ts",
     "check:bootstrap": "npm test && npm run build:selfhost-prebuilt",
     "check:prebuilt": "npm run build:selfhost-prebuilt && git diff --exit-code selfhost/prebuilt",
     "build:selfhost-prebuilt": "tsx tools/build_prebuilt_selfhost.ts",

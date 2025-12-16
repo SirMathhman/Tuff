@@ -15,7 +15,8 @@
 //     "missingDocs": "off" | "warning" | "error",
 //     "cloneDetection": "off" | "warning" | "error",
 //     "cloneMinTokens": <number>,      // Minimum IR tokens for a clone (default 10)
-//     "cloneMinOccurrences": <number>  // Minimum occurrences to report (default 2)
+//     "cloneMinOccurrences": <number>, // Minimum occurrences to report (default 2)
+//     "cloneParameterized": <bool>     // Enable parameterized clone detection (default false)
 //   }
 // }
 
@@ -268,7 +269,50 @@ fn json_find_int_value_in_object(src: String, objOpen: I32, objClose: I32, key: 
   defaultValue
 }
 
-class fn FluffConfig(unusedLocals: I32, unusedParams: I32, complexity: I32, complexityThreshold: I32, maxFileLines: I32, maxFileLinesThreshold: I32, maxParams: I32, maxParamsThreshold: I32, singleCharIdentifiers: I32, missingDocs: I32, cloneDetection: I32, cloneMinTokens: I32, cloneMinOccurrences: I32) => {}
+fn json_find_bool_value_in_object(src: String, objOpen: I32, objClose: I32, key: String, defaultValue: Bool) : Bool => {
+  // Scan key/value pairs in [objOpen, objClose]. Only supports literal true/false.
+  let mut i = objOpen + 1;
+  while (i < objClose) {
+    i = json_skip_ws(src, i);
+    if (i >= objClose) { break; }
+
+    let ch = stringCharCodeAt(src, i);
+    if (ch == 44) { i = i + 1; continue; } // ','
+
+    if (ch == 34) {
+      let k = json_parse_string(src, i);
+      if (k.1 == i) { yield defaultValue; }
+      let keyText = k.0;
+      i = json_skip_ws(src, k.1);
+      if (!(i < objClose && stringCharCodeAt(src, i) == 58)) { // ':'
+        continue;
+      }
+      i = json_skip_ws(src, i + 1);
+
+      if (keyText == key) {
+        // true
+        if (i + 4 <= objClose && stringSlice(src, i, i + 4) == "true") { yield true; }
+        // false
+        if (i + 5 <= objClose && stringSlice(src, i, i + 5) == "false") { yield false; }
+        yield defaultValue;
+      }
+
+      // Skip value if it's a string; otherwise just keep scanning.
+      if (i < objClose && stringCharCodeAt(src, i) == 34) {
+        let v2 = json_parse_string(src, i);
+        if (v2.1 == i) { yield defaultValue; }
+        i = v2.1;
+      }
+      continue;
+    }
+
+    i = i + 1;
+  }
+
+  defaultValue
+}
+
+class fn FluffConfig(unusedLocals: I32, unusedParams: I32, complexity: I32, complexityThreshold: I32, maxFileLines: I32, maxFileLinesThreshold: I32, maxParams: I32, maxParamsThreshold: I32, singleCharIdentifiers: I32, missingDocs: I32, cloneDetection: I32, cloneMinTokens: I32, cloneMinOccurrences: I32, cloneParameterized: Bool) => {}
 
 out fn find_build_json_upwards(inPath: String) : String => {
   let mut dir = pathDirname(inPath);
@@ -284,12 +328,12 @@ out fn find_build_json_upwards(inPath: String) : String => {
 
 out fn load_fluff_config(inPath: String) : FluffConfig => {
   let path = find_build_json_upwards(inPath);
-  if (path == "") { yield FluffConfig(0, 0, 0, 15, 0, 500, 0, 3, 0, 0, 0, 10, 2); }
+  if (path == "") { yield FluffConfig(0, 0, 0, 15, 0, 500, 0, 3, 0, 0, 0, 10, 2, false); }
 
   let src = readTextFile(path);
 
   let fluffObj = json_find_object_bounds_by_key(src, "fluff");
-  if (fluffObj.0 == -1) { yield FluffConfig(0, 0, 0, 15, 0, 500, 0, 3, 0, 0, 0, 10, 2); }
+  if (fluffObj.0 == -1) { yield FluffConfig(0, 0, 0, 15, 0, 500, 0, 3, 0, 0, 0, 10, 2, false); }
 
   let unusedLocals0 = json_find_string_value_in_object(src, fluffObj.0, fluffObj.1, "unusedLocals");
   let unusedParams0 = json_find_string_value_in_object(src, fluffObj.0, fluffObj.1, "unusedParams");
@@ -313,6 +357,7 @@ out fn load_fluff_config(inPath: String) : FluffConfig => {
   let maxParamsThreshold = json_find_int_value_in_object(src, fluffObj.0, fluffObj.1, "maxParamsThreshold", 3);
   let cloneMinTokens = json_find_int_value_in_object(src, fluffObj.0, fluffObj.1, "cloneMinTokens", 10);
   let cloneMinOccurrences = json_find_int_value_in_object(src, fluffObj.0, fluffObj.1, "cloneMinOccurrences", 2);
+  let cloneParameterized = json_find_bool_value_in_object(src, fluffObj.0, fluffObj.1, "cloneParameterized", false);
 
-  FluffConfig(unusedLocals, unusedParams, complexity, complexityThreshold, maxFileLines, maxFileLinesThreshold, maxParams, maxParamsThreshold, singleCharIdentifiers, missingDocs, cloneDetection, cloneMinTokens, cloneMinOccurrences)
+  FluffConfig(unusedLocals, unusedParams, complexity, complexityThreshold, maxFileLines, maxFileLinesThreshold, maxParams, maxParamsThreshold, singleCharIdentifiers, missingDocs, cloneDetection, cloneMinTokens, cloneMinOccurrences, cloneParameterized)
 }

@@ -56,6 +56,22 @@ npm run check:prebuilt
 npm run build:selfhost-prebuilt
 ```
 
+### Linting
+
+```bash
+# Lint the compiler sources (runs the prebuilt Fluff linter)
+npm run lint
+
+# Scoped debug output for clone detection
+npm run lint -- --debug=clone
+
+# Hard timeout wrapper (useful in CI or when investigating regressions)
+npm run lint:timeout -- --timeout-ms 60000
+
+# Synthetic clone-detection benchmark
+npm run bench:clones
+```
+
 ### Writing Your First Program
 
 Create `hello.tuff`:

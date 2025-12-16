@@ -1,8 +1,8 @@
 // compiled by selfhost tuffc
-import { stringLen, stringCharCodeAt } from "../rt/stdlib.mjs";
+import { stringLen, stringCharCodeAt, stringSlice } from "../rt/stdlib.mjs";
 import { vec_new, vec_len, vec_push, vec_get } from "../rt/vec.mjs";
 import { error_at, warn_at } from "../util/diagnostics.mjs";
-import { set_clone_detection_options, set_clone_detection_debug, analyze_program_for_clones } from "../quality/clone_detection.mjs";
+import { set_clone_detection_options, set_clone_detection_debug, set_clone_parameterized_enabled, analyze_program_for_clones } from "../quality/clone_detection.mjs";
 let __fluff_unused_locals = 0;
 let __fluff_unused_params = 0;
 let __fluff_complexity = 0;
@@ -16,10 +16,72 @@ let __fluff_missing_docs = 0;
 let __fluff_clone_detection = 0;
 let __fluff_clone_min_tokens = 10;
 let __fluff_clone_min_occurrences = 2;
+let __fluff_clone_parameterized = false;
 let __fluff_debug = false;
+let __fluff_debug_scopes = "";
+export function is_ascii_ws(ch) {
+return ch == 32 || ch == 9 || ch == 10 || ch == 13;
+}
+export function trim_ascii_ws(s) {
+let start = 0;
+let end = stringLen(s);
+while (start < end && is_ascii_ws(stringCharCodeAt(s, start))) {
+start = start + 1;
+}
+while (end > start && is_ascii_ws(stringCharCodeAt(s, end - 1))) {
+end = end - 1;
+}
+return stringSlice(s, start, end);
+}
+export function scopes_contains(scopes0, want0) {
+const scopes = trim_ascii_ws(scopes0);
+const want = trim_ascii_ws(want0);
+if (scopes == "") {
+return false;
+}
+if (want == "") {
+return false;
+}
+if (scopes == "all") {
+return true;
+}
+let i = 0;
+while (i < stringLen(scopes)) {
+while (i < stringLen(scopes)) {
+const ch = stringCharCodeAt(scopes, i);
+if (ch == 44 || is_ascii_ws(ch)) {
+i = i + 1;
+continue;
+}
+break;
+}
+const start = i;
+while (i < stringLen(scopes)) {
+const ch = stringCharCodeAt(scopes, i);
+if (ch == 44) {
+break;
+}
+i = i + 1;
+}
+const part = trim_ascii_ws(stringSlice(scopes, start, i));
+if (part == want) {
+return true;
+}
+}
+return false;
+}
+export function debug_enabled(scope) {
+return scopes_contains(__fluff_debug_scopes, scope);
+}
+export function fluff_set_debug_scopes(scopes) {
+__fluff_debug_scopes = scopes;
+__fluff_debug = scopes != "";
+const cloneDbg = debug_enabled("clone") || debug_enabled("all");
+set_clone_detection_debug(cloneDbg);
+return undefined;
+}
 export function fluff_set_debug(enabled) {
-__fluff_debug = enabled;
-set_clone_detection_debug(enabled);
+fluff_set_debug_scopes((enabled ? "all" : ""));
 return undefined;
 }
 export function fluff_set_options(unusedLocalsSeverity, unusedParamsSeverity) {
@@ -55,6 +117,11 @@ __fluff_clone_detection = severity;
 __fluff_clone_min_tokens = (minTokens > 0 ? minTokens : 10);
 __fluff_clone_min_occurrences = (minOccurrences > 0 ? minOccurrences : 2);
 set_clone_detection_options(severity, minTokens, minOccurrences);
+return undefined;
+}
+export function fluff_set_clone_parameterized_enabled(enabled) {
+__fluff_clone_parameterized = enabled;
+set_clone_parameterized_enabled(enabled);
 return undefined;
 }
 export function fluff_get_clone_detection_severity() {

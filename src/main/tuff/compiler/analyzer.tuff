@@ -56,12 +56,14 @@ from analyzer::typestrings use {
 from analyzer::fluff use {
   fluff_set_options,
   fluff_set_debug,
+  fluff_set_debug_scopes,
   fluff_set_complexity_options,
   fluff_set_file_size_options,
   fluff_set_max_params_options,
   fluff_set_single_char_identifiers_options,
   fluff_set_missing_docs_options,
   fluff_set_clone_detection_options,
+  fluff_set_clone_parameterized_enabled,
   fluff_check_file_size,
   fluff_check_clones,
   fluff_warn_unused_locals_in_scope,
@@ -151,6 +153,9 @@ out fn set_fluff_options(unusedLocalsSeverity: I32, unusedParamsSeverity: I32) :
 out fn set_fluff_debug_options(enabled: Bool) : Void =>
   fluff_set_debug(enabled)
 
+out fn set_fluff_debug_scopes(scopes: String) : Void =>
+  fluff_set_debug_scopes(scopes)
+
 out fn set_fluff_complexity_options(complexitySeverity: I32, threshold: I32) : Void =>
   fluff_set_complexity_options(complexitySeverity, threshold)
 
@@ -168,6 +173,9 @@ out fn set_fluff_missing_docs_options(severity: I32) : Void =>
 
 out fn set_fluff_clone_detection_options(severity: I32, minTokens: I32, minOccurrences: I32) : Void =>
   fluff_set_clone_detection_options(severity, minTokens, minOccurrences)
+
+out fn set_fluff_clone_parameterized_options(enabled: Bool) : Void =>
+  fluff_set_clone_parameterized_enabled(enabled)
 
 out fn check_clones(src: String, decls: Vec<Decl>) : Void =>
   fluff_check_clones(src, decls)

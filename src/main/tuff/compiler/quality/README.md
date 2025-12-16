@@ -20,6 +20,10 @@ If clone detection seems slow (or you just want visibility into what it's doing)
 
 - `npm run lint -- --debug`
 
+Or scope debug output to clone detection only:
+
+- `npm run lint -- --debug=clone`
+
 This prints noisy per-module clone detection stats like:
 
 - `[fluff:clone] tokens=... windowSize=... windows=... mapCap=...`
@@ -30,6 +34,14 @@ Notes:
 - Clone detection currently scans a **fixed window size** of `cloneMinTokens` (rather than trying many window sizes).
 - Parameterized clone detection (Type II clones) is currently **disabled by default** because it is very expensive.
 
+If you ever suspect a regression or you need to keep CI moving, there is also a hard timeout wrapper:
+
+- `npm run lint:timeout -- --timeout-ms 60000`
+
+For quick local profiling on synthetic input:
+
+- `npm run bench:clones`
+
 ### Configuration
 
 Clone detection is controlled via `build.json`:
@@ -39,7 +51,8 @@ Clone detection is controlled via `build.json`:
   "fluff": {
     "cloneDetection": "off" | "warning" | "error",
     "cloneMinTokens": 10,       // Minimum IR tokens for a clone (default: 10)
-    "cloneMinOccurrences": 2    // Minimum occurrences to report (default: 2)
+    "cloneMinOccurrences": 2,   // Minimum occurrences to report (default: 2)
+    "cloneParameterized": false // Enable parameterized clone detection (default: false)
   }
 }
 ```

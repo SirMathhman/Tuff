@@ -1,12 +1,13 @@
 // Fluff (linting) helpers used by the analyzer.
 
-extern from rt::stdlib use { stringLen, stringCharCodeAt };
+extern from rt::stdlib use { stringLen, stringCharCodeAt, stringSlice };
 extern from rt::vec use { vec_new, vec_len, vec_push, vec_get };
 
 from util::diagnostics use { error_at, warn_at };
 from quality::clone_detection use {
   set_clone_detection_options,
   set_clone_detection_debug,
+  set_clone_parameterized_enabled,
   analyze_program_for_clones
 };
 
@@ -32,12 +33,64 @@ let mut __fluff_missing_docs = 0;
 let mut __fluff_clone_detection = 0;
 let mut __fluff_clone_min_tokens = 10;
 let mut __fluff_clone_min_occurrences = 2;
+let mut __fluff_clone_parameterized = false;
 let mut __fluff_debug = false;
+let mut __fluff_debug_scopes = "";
+
+fn is_ascii_ws(ch: I32) : Bool => ch == 32 || ch == 9 || ch == 10 || ch == 13
+
+fn trim_ascii_ws(s: String) : String => {
+  let mut start = 0;
+  let mut end = stringLen(s);
+  while (start < end && is_ascii_ws(stringCharCodeAt(s, start))) { start = start + 1; }
+  while (end > start && is_ascii_ws(stringCharCodeAt(s, end - 1))) { end = end - 1; }
+  stringSlice(s, start, end)
+}
+
+fn scopes_contains(scopes0: String, want0: String) : Bool => {
+  let scopes = trim_ascii_ws(scopes0);
+  let want = trim_ascii_ws(want0);
+  if (scopes == "") { yield false; }
+  if (want == "") { yield false; }
+  if (scopes == "all") { yield true; }
+
+  // Comma-separated scopes, optional whitespace.
+  let mut i = 0;
+  while (i < stringLen(scopes)) {
+    // skip commas/whitespace
+    while (i < stringLen(scopes)) {
+      let ch = stringCharCodeAt(scopes, i);
+      if (ch == 44 || is_ascii_ws(ch)) { i = i + 1; continue; } // ','
+      break;
+    }
+
+    let start = i;
+    while (i < stringLen(scopes)) {
+      let ch = stringCharCodeAt(scopes, i);
+      if (ch == 44) { break; }
+      i = i + 1;
+    }
+    let part = trim_ascii_ws(stringSlice(scopes, start, i));
+    if (part == want) { yield true; }
+    // i is at ',' or end; loop continues
+  }
+
+  false
+}
+
+fn debug_enabled(scope: String) : Bool => scopes_contains(__fluff_debug_scopes, scope)
+
+out fn fluff_set_debug_scopes(scopes: String) : Void => {
+  __fluff_debug_scopes = scopes;
+  __fluff_debug = scopes != "";
+
+  // Only enable clone debug if requested.
+  let cloneDbg = debug_enabled("clone") || debug_enabled("all");
+  set_clone_detection_debug(cloneDbg);
+}
 
 out fn fluff_set_debug(enabled: Bool) : Void => {
-  __fluff_debug = enabled;
-  // For now, debug mode only affects expensive lints where we want visibility.
-  set_clone_detection_debug(enabled);
+  fluff_set_debug_scopes(if (enabled) "all" else "");
 }
 
 out fn fluff_set_options(unusedLocalsSeverity: I32, unusedParamsSeverity: I32) : Void => {
@@ -74,6 +127,11 @@ out fn fluff_set_clone_detection_options(severity: I32, minTokens: I32, minOccur
   __fluff_clone_min_occurrences = if (minOccurrences > 0) minOccurrences else 2;
   // Also configure the clone detection module
   set_clone_detection_options(severity, minTokens, minOccurrences);
+}
+
+out fn fluff_set_clone_parameterized_enabled(enabled: Bool) : Void => {
+  __fluff_clone_parameterized = enabled;
+  set_clone_parameterized_enabled(enabled);
 }
 
 out fn fluff_get_clone_detection_severity() : I32 => __fluff_clone_detection

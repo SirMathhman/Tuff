@@ -5,7 +5,7 @@ import { error_at, warn_at } from "./util/diagnostics.mjs";
 import { span_start } from "./ast.mjs";
 import { deprecation_reason_before } from "./analyzer/deprecation.mjs";
 import { type_is_ws, ty_is_digit, ty_skip_ws, ty_starts_with, ty_unknown, ty_int_lit, ty_float_lit, ty_bool, ty_i32, ty_i8, ty_i16, ty_i64, ty_f32, ty_f64, ty_u32, ty_u8, ty_u16, ty_u64, ty_char, ty_string, ty_void, ty_never, ty_fn_type, ty_is_fn_type, ty_fn_type_params, ty_fn_ret, ty_fn_param_tys, normalize_ty_ann, vec_contains_str, ty_is_type_var, ty_parse_app, ty_parse_array, ty_is_slice, ty_slice_inner, type_is_unknown, type_is_int_like, type_is_concrete_int, type_is_float_like, type_is_concrete_float } from "./analyzer/typestrings.mjs";
-import { fluff_set_options, fluff_set_debug, fluff_set_complexity_options, fluff_set_file_size_options, fluff_set_max_params_options, fluff_set_single_char_identifiers_options, fluff_set_missing_docs_options, fluff_set_clone_detection_options, fluff_check_file_size, fluff_check_clones, fluff_warn_unused_locals_in_scope, fluff_warn_unused_params_in_scope, fluff_check_fn_complexity, fluff_check_lambda_complexity, fluff_check_missing_docs, check_single_char_identifier } from "./analyzer/fluff.mjs";
+import { fluff_set_options, fluff_set_debug, fluff_set_debug_scopes, fluff_set_complexity_options, fluff_set_file_size_options, fluff_set_max_params_options, fluff_set_single_char_identifiers_options, fluff_set_missing_docs_options, fluff_set_clone_detection_options, fluff_set_clone_parameterized_enabled, fluff_check_file_size, fluff_check_clones, fluff_warn_unused_locals_in_scope, fluff_warn_unused_params_in_scope, fluff_check_fn_complexity, fluff_check_lambda_complexity, fluff_check_missing_docs, check_single_char_identifier } from "./analyzer/fluff.mjs";
 import { mk_union_variant_info, mk_struct_def, mk_fn_sig_def, mk_union_def, mk_binding, mk_subst, mk_narrowed_tag } from "./analyzer/defs.mjs";
 import { narrow_lookup, narrow_clone } from "./analyzer/narrowing.mjs";
 import { infer_int_const } from "./analyzer/consts.mjs";
@@ -24,6 +24,9 @@ return fluff_set_options(unusedLocalsSeverity, unusedParamsSeverity);
 export function set_fluff_debug_options(enabled) {
 return fluff_set_debug(enabled);
 }
+export function set_fluff_debug_scopes(scopes) {
+return fluff_set_debug_scopes(scopes);
+}
 export function set_fluff_complexity_options(complexitySeverity, threshold) {
 return fluff_set_complexity_options(complexitySeverity, threshold);
 }
@@ -41,6 +44,9 @@ return fluff_set_missing_docs_options(severity);
 }
 export function set_fluff_clone_detection_options(severity, minTokens, minOccurrences) {
 return fluff_set_clone_detection_options(severity, minTokens, minOccurrences);
+}
+export function set_fluff_clone_parameterized_options(enabled) {
+return fluff_set_clone_parameterized_enabled(enabled);
 }
 export function check_clones(src, decls) {
 return fluff_check_clones(src, decls);

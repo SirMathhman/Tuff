@@ -442,7 +442,9 @@ out fn find_clones_fast(tokens: Vec<IRToken>, minTokens: I32) : Vec<CloneGroup> 
   let cap = map_capacity_for(windowCount);
   let used = vec_fill_i32(cap, 0);
   let keys = vec_fill_i32(cap, 0);
-  let vals = vec_fill_i32(cap, -1);
+  // Collision-safe: each slot holds a linked list of group indices.
+  let heads = vec_fill_i32(cap, -1);
+  let next = vec_new();
 
   // Track firstStart per group so we can cheaply confirm equality.
   let firstStarts = vec_new();
@@ -472,33 +474,54 @@ out fn find_clones_fast(tokens: Vec<IRToken>, minTokens: I32) : Vec<CloneGroup> 
       let endToken = vec_get(tokens, i + windowSize - 1);
       vec_push(occs, CloneOccurrence(i, i + windowSize, startToken.spanStart, endToken.spanEnd));
 
-      let sig = "h=" + ("" + key);
+      let sig = "h=" + ("" + key) + ",first=" + ("" + i);
       let newIdx = vec_len(groups);
       vec_push(groups, CloneGroup(sig, windowSize, occs));
       vec_push(firstStarts, i);
-      vec_set(vals, slot, newIdx);
-    } else {
-      let gIdx = vec_get(vals, slot);
-      // Very unlikely: hash collision. If it happens, we conservatively ignore.
-      if (gIdx >= 0) {
-        let firstStart = vec_get(firstStarts, gIdx);
-        if (window_equals(tokens, firstStart, i, windowSize)) {
-          let g = vec_get(groups, gIdx);
-          let nOcc = vec_len(g.occurrences);
-          let startToken = vec_get(tokens, i);
-          let endToken = vec_get(tokens, i + windowSize - 1);
-          let occ = CloneOccurrence(i, i + windowSize, startToken.spanStart, endToken.spanEnd);
 
-          // Avoid counting overlapping windows (keeps counts sane and runtime bounded).
-          if (nOcc == 0) {
+      // Insert into slot chain.
+      vec_push(next, vec_get(heads, slot));
+      vec_set(heads, slot, newIdx);
+    } else {
+      // Find a matching group within this slot's collision chain.
+      let mut gIdx = vec_get(heads, slot);
+      let mut found = -1;
+      while (gIdx >= 0) {
+        let firstStart = vec_get(firstStarts, gIdx);
+        if (window_equals(tokens, firstStart, i, windowSize)) { found = gIdx; break; }
+        gIdx = vec_get(next, gIdx);
+      }
+
+      if (found >= 0) {
+        let g = vec_get(groups, found);
+        let nOcc = vec_len(g.occurrences);
+        let startToken = vec_get(tokens, i);
+        let endToken = vec_get(tokens, i + windowSize - 1);
+        let occ = CloneOccurrence(i, i + windowSize, startToken.spanStart, endToken.spanEnd);
+
+        // Avoid counting overlapping windows (keeps counts sane and runtime bounded).
+        if (nOcc == 0) {
+          vec_push(g.occurrences, occ);
+        } else {
+          let last = vec_get(g.occurrences, nOcc - 1);
+          if (occ.startTokenIdx >= last.endTokenIdx) {
             vec_push(g.occurrences, occ);
-          } else {
-            let last = vec_get(g.occurrences, nOcc - 1);
-            if (occ.startTokenIdx >= last.endTokenIdx) {
-              vec_push(g.occurrences, occ);
-            }
           }
         }
+      } else {
+        // Same rolling hash but distinct sequence => new group in the same slot.
+        let occs = vec_new();
+        let startToken = vec_get(tokens, i);
+        let endToken = vec_get(tokens, i + windowSize - 1);
+        vec_push(occs, CloneOccurrence(i, i + windowSize, startToken.spanStart, endToken.spanEnd));
+
+        let sig = "h=" + ("" + key) + ",first=" + ("" + i);
+        let newIdx = vec_len(groups);
+        vec_push(groups, CloneGroup(sig, windowSize, occs));
+        vec_push(firstStarts, i);
+
+        vec_push(next, vec_get(heads, slot));
+        vec_set(heads, slot, newIdx);
       }
     }
 
@@ -872,6 +895,54 @@ out fn find_parameterized_clones(tokens: Vec<IRToken>, exactClones: Vec<CloneGro
 // Reporting
 // ============================================================================
 
+fn vec_contains_str(v: Vec<String>, s: String) : Bool => {
+  let mut i = 0;
+  while (i < vec_len(v)) {
+    if (vec_get(v, i) == s) { yield true; }
+    i = i + 1;
+  }
+  false
+}
+
+fn pos_to_line_col(src: String, pos0: I32) => {
+  let mut pos = pos0;
+  if (pos < 0) { pos = 0; }
+  if (pos > stringLen(src)) { pos = stringLen(src); }
+
+  let mut line = 1;
+  let mut col = 1;
+  let mut i = 0;
+  while (i < pos) {
+    if (stringCharCodeAt(src, i) == 10) { // '\n'
+      line = line + 1;
+      col = 1;
+    } else {
+      col = col + 1;
+    }
+    i = i + 1;
+  }
+  (line, col)
+}
+
+fn occ_range_str(src: String, occ: CloneOccurrence) : String => {
+  let a = pos_to_line_col(src, occ.spanStart);
+  let b = pos_to_line_col(src, occ.spanEnd);
+  "L" + ("" + a.0) + ":" + ("" + a.1) + "-L" + ("" + b.0) + ":" + ("" + b.1)
+}
+
+fn format_occurrences(src: String, occs: Vec<CloneOccurrence>, maxShow: I32) : String => {
+  let mut out = "";
+  let mut i = 0;
+  let show = if (maxShow > 0) maxShow else 3;
+  while (i < vec_len(occs) && i < show) {
+    if (i > 0) { out = out + ", "; }
+    out = out + occ_range_str(src, vec_get(occs, i));
+    i = i + 1;
+  }
+  if (vec_len(occs) > show) { out = out + ", ..."; }
+  out
+}
+
 fn emit_clone_warning(src: String, severity: I32, pos: I32, msg: String) : Void => {
   if (severity == 1) { warn_at(src, pos, msg); yield; }
   if (severity == 2) { warn_at(src, pos, msg); yield; } // Could use error_at
@@ -879,6 +950,9 @@ fn emit_clone_warning(src: String, severity: I32, pos: I32, msg: String) : Void 
 
 out fn report_clones(src: String, exactClones: Vec<CloneGroup>, paramClones: Vec<ParameterizedClone>) : Void => {
   if (__clone_detection_enabled == 0) { yield; }
+
+  // Dedupe within a single run (avoid emitting the same clone warning multiple times).
+  let seen = vec_new();
 
   // Report exact clones
   let mut gi = 0;
@@ -888,9 +962,14 @@ out fn report_clones(src: String, exactClones: Vec<CloneGroup>, paramClones: Vec
 
     if (occCount >= __clone_min_occurrences && g.tokenCount >= __clone_min_tokens) {
       let firstOcc = vec_get(g.occurrences, 0);
-      let msg = "code clone detected: " + ("" + g.tokenCount) + " IR tokens duplicated " +
-                ("" + occCount) + " times; consider extracting to a function";
-      emit_clone_warning(src, __clone_detection_enabled, firstOcc.spanStart, msg);
+      let key = "exact:" + g.signature + ":" + ("" + g.tokenCount) + ":" + ("" + firstOcc.spanStart);
+      if (!vec_contains_str(seen, key)) {
+        vec_push(seen, key);
+        let where = format_occurrences(src, g.occurrences, 4);
+        let msg = "code clone detected: " + ("" + g.tokenCount) + " IR tokens duplicated " +
+                  ("" + occCount) + " times (" + where + "); consider extracting to a function";
+        emit_clone_warning(src, __clone_detection_enabled, firstOcc.spanStart, msg);
+      }
     }
 
     gi = gi + 1;
@@ -904,10 +983,15 @@ out fn report_clones(src: String, exactClones: Vec<CloneGroup>, paramClones: Vec
 
     if (occCount >= __clone_min_occurrences && p.tokenCount >= __clone_min_tokens) {
       let firstOcc = vec_get(p.occurrences, 0);
-      let msg = "parameterized clone detected: " + ("" + p.tokenCount) +
-                " IR tokens with variations, appears " + ("" + occCount) +
-                " times; consider extracting to a parameterized function";
-      emit_clone_warning(src, __clone_detection_enabled, firstOcc.spanStart, msg);
+      let key = "param:" + p.signature + ":" + ("" + p.tokenCount) + ":" + ("" + firstOcc.spanStart);
+      if (!vec_contains_str(seen, key)) {
+        vec_push(seen, key);
+        let where = format_occurrences(src, p.occurrences, 4);
+        let msg = "parameterized clone detected: " + ("" + p.tokenCount) +
+                  " IR tokens with variations, appears " + ("" + occCount) +
+                  " times (" + where + "); consider extracting to a parameterized function";
+        emit_clone_warning(src, __clone_detection_enabled, firstOcc.spanStart, msg);
+      }
     }
 
     pi = pi + 1;
@@ -930,6 +1014,14 @@ out fn analyze_fn_for_clones(src: String, fnName: String, body: Vec<Stmt>, tail:
 
   // Find exact clones (fast fixed-window implementation)
   let exactClones = find_clones_fast(tokens, __clone_min_tokens);
+
+  if (__clone_parameterized_enabled) {
+    let maximal = extend_clone_maximal(tokens, exactClones);
+    let param = find_parameterized_clones(tokens, maximal, __clone_min_tokens);
+    report_clones(src, maximal, param);
+    yield;
+  }
+
   report_clones(src, exactClones, vec_new());
 }
 
@@ -959,5 +1051,13 @@ out fn analyze_program_for_clones(src: String, decls: Vec<Decl>) : Void => {
 
   // Find exact clones (fast fixed-window implementation)
   let exactClones = find_clones_fast(tokens, __clone_min_tokens);
+
+  if (__clone_parameterized_enabled) {
+    let maximal = extend_clone_maximal(tokens, exactClones);
+    let param = find_parameterized_clones(tokens, maximal, __clone_min_tokens);
+    report_clones(src, maximal, param);
+    yield;
+  }
+
   report_clones(src, exactClones, vec_new());
 }

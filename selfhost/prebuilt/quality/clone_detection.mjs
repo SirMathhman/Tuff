@@ -383,7 +383,8 @@ ti = ti + 1;
 const cap = map_capacity_for(windowCount);
 const used = vec_fill_i32(cap, 0);
 const keys = vec_fill_i32(cap, 0);
-const vals = vec_fill_i32(cap, -1);
+const heads = vec_fill_i32(cap, -1);
+const next = vec_new();
 const firstStarts = vec_new();
 let h = 0;
 let j = 0;
@@ -405,17 +406,25 @@ const occs = vec_new();
 const startToken = vec_get(tokens, i);
 const endToken = vec_get(tokens, i + windowSize - 1);
 vec_push(occs, CloneOccurrence(i, i + windowSize, startToken.spanStart, endToken.spanEnd));
-const sig = "h=" + ("" + key);
+const sig = "h=" + ("" + key) + ",first=" + ("" + i);
 const newIdx = vec_len(groups);
 vec_push(groups, CloneGroup(sig, windowSize, occs));
 vec_push(firstStarts, i);
-vec_set(vals, slot, newIdx);
+vec_push(next, vec_get(heads, slot));
+vec_set(heads, slot, newIdx);
 } else {
-const gIdx = vec_get(vals, slot);
-if (gIdx >= 0) {
+let gIdx = vec_get(heads, slot);
+let found = -1;
+while (gIdx >= 0) {
 const firstStart = vec_get(firstStarts, gIdx);
 if (window_equals(tokens, firstStart, i, windowSize)) {
-const g = vec_get(groups, gIdx);
+found = gIdx;
+break;
+}
+gIdx = vec_get(next, gIdx);
+}
+if (found >= 0) {
+const g = vec_get(groups, found);
 const nOcc = vec_len(g.occurrences);
 const startToken = vec_get(tokens, i);
 const endToken = vec_get(tokens, i + windowSize - 1);
@@ -428,7 +437,17 @@ if (occ.startTokenIdx >= last.endTokenIdx) {
 vec_push(g.occurrences, occ);
 }
 }
-}
+} else {
+const occs = vec_new();
+const startToken = vec_get(tokens, i);
+const endToken = vec_get(tokens, i + windowSize - 1);
+vec_push(occs, CloneOccurrence(i, i + windowSize, startToken.spanStart, endToken.spanEnd));
+const sig = "h=" + ("" + key) + ",first=" + ("" + i);
+const newIdx = vec_len(groups);
+vec_push(groups, CloneGroup(sig, windowSize, occs));
+vec_push(firstStarts, i);
+vec_push(next, vec_get(heads, slot));
+vec_set(heads, slot, newIdx);
 }
 }
 if (i + 1 < windowCount) {
@@ -676,6 +695,59 @@ windowSize = windowSize + 1;
 }
 return paramClones;
 }
+export function vec_contains_str(v, s) {
+let i = 0;
+while (i < vec_len(v)) {
+if (vec_get(v, i) == s) {
+return true;
+}
+i = i + 1;
+}
+return false;
+}
+export function pos_to_line_col(src, pos0) {
+let pos = pos0;
+if (pos < 0) {
+pos = 0;
+}
+if (pos > stringLen(src)) {
+pos = stringLen(src);
+}
+let line = 1;
+let col = 1;
+let i = 0;
+while (i < pos) {
+if (stringCharCodeAt(src, i) == 10) {
+line = line + 1;
+col = 1;
+} else {
+col = col + 1;
+}
+i = i + 1;
+}
+return [line, col];
+}
+export function occ_range_str(src, occ) {
+const a = pos_to_line_col(src, occ.spanStart);
+const b = pos_to_line_col(src, occ.spanEnd);
+return "L" + ("" + a[0]) + ":" + ("" + a[1]) + "-L" + ("" + b[0]) + ":" + ("" + b[1]);
+}
+export function format_occurrences(src, occs, maxShow) {
+let out = "";
+let i = 0;
+const show = (maxShow > 0 ? maxShow : 3);
+while (i < vec_len(occs) && i < show) {
+if (i > 0) {
+out = out + ", ";
+}
+out = out + occ_range_str(src, vec_get(occs, i));
+i = i + 1;
+}
+if (vec_len(occs) > show) {
+out = out + ", ...";
+}
+return out;
+}
 export function emit_clone_warning(src, severity, pos, msg) {
 if (severity == 1) {
 warn_at(src, pos, msg);
@@ -691,14 +763,20 @@ export function report_clones(src, exactClones, paramClones) {
 if (__clone_detection_enabled == 0) {
 return;
 }
+const seen = vec_new();
 let gi = 0;
 while (gi < vec_len(exactClones)) {
 const g = vec_get(exactClones, gi);
 const occCount = vec_len(g.occurrences);
 if (occCount >= __clone_min_occurrences && g.tokenCount >= __clone_min_tokens) {
 const firstOcc = vec_get(g.occurrences, 0);
-const msg = "code clone detected: " + ("" + g.tokenCount) + " IR tokens duplicated " + ("" + occCount) + " times; consider extracting to a function";
+const key = "exact:" + g.signature + ":" + ("" + g.tokenCount) + ":" + ("" + firstOcc.spanStart);
+if (!vec_contains_str(seen, key)) {
+vec_push(seen, key);
+const where = format_occurrences(src, g.occurrences, 4);
+const msg = "code clone detected: " + ("" + g.tokenCount) + " IR tokens duplicated " + ("" + occCount) + " times (" + where + "); consider extracting to a function";
 emit_clone_warning(src, __clone_detection_enabled, firstOcc.spanStart, msg);
+}
 }
 gi = gi + 1;
 }
@@ -708,8 +786,13 @@ const p = vec_get(paramClones, pi);
 const occCount = vec_len(p.occurrences);
 if (occCount >= __clone_min_occurrences && p.tokenCount >= __clone_min_tokens) {
 const firstOcc = vec_get(p.occurrences, 0);
-const msg = "parameterized clone detected: " + ("" + p.tokenCount) + " IR tokens with variations, appears " + ("" + occCount) + " times; consider extracting to a parameterized function";
+const key = "param:" + p.signature + ":" + ("" + p.tokenCount) + ":" + ("" + firstOcc.spanStart);
+if (!vec_contains_str(seen, key)) {
+vec_push(seen, key);
+const where = format_occurrences(src, p.occurrences, 4);
+const msg = "parameterized clone detected: " + ("" + p.tokenCount) + " IR tokens with variations, appears " + ("" + occCount) + " times (" + where + "); consider extracting to a parameterized function";
 emit_clone_warning(src, __clone_detection_enabled, firstOcc.spanStart, msg);
+}
 }
 pi = pi + 1;
 }
@@ -725,6 +808,12 @@ if (vec_len(tokens) < __clone_min_tokens * 2) {
 return;
 }
 const exactClones = find_clones_fast(tokens, __clone_min_tokens);
+if (__clone_parameterized_enabled) {
+const maximal = extend_clone_maximal(tokens, exactClones);
+const param = find_parameterized_clones(tokens, maximal, __clone_min_tokens);
+report_clones(src, maximal, param);
+return;
+}
 report_clones(src, exactClones, vec_new());
 return undefined;
 }
@@ -748,6 +837,12 @@ if (vec_len(tokens) < __clone_min_tokens * 2) {
 return;
 }
 const exactClones = find_clones_fast(tokens, __clone_min_tokens);
+if (__clone_parameterized_enabled) {
+const maximal = extend_clone_maximal(tokens, exactClones);
+const param = find_parameterized_clones(tokens, maximal, __clone_min_tokens);
+report_clones(src, maximal, param);
+return;
+}
 report_clones(src, exactClones, vec_new());
 return undefined;
 }
