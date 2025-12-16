@@ -349,6 +349,33 @@ fn generate_ast_rule_parser(rule: Rule, config: AstConfig) : String => {
     yield code;
   }
 
+  if (rule.name == "block") {
+    code = code + "  let len = stringLen(src);\n";
+    code = code + "  let b0 = skip_ws(src, startPos);\n";
+    code = code + "  if (b0 >= len) { yield err_expr(b0, \"unexpected end\"); }\n";
+    code = code + "  if (!(stringCharCodeAt(src, b0) == 123)) { yield err_expr(b0, \"expected {\"); }\n";
+    code = code + "  let mut p = b0 + 1;\n";
+    code = code + "  let mut body = vec_new();\n";
+    code = code + "  while (true) {\n";
+    code = code + "    let pws = skip_ws(src, p);\n";
+    code = code + "    if (pws >= len) { yield err_expr(pws, \"unexpected end\"); }\n";
+    code = code + "    if (stringCharCodeAt(src, pws) == 125) { yield err_expr(pws, \"expected expression\"); }\n";
+    code = code + "    let e = parse_expr(src, pws);\n";
+    code = code + "    if (e.success == false) { yield e; }\n";
+    code = code + "    let after = skip_ws(src, e.nextPos);\n";
+    code = code + "    if (after < len && stringCharCodeAt(src, after) == 59) { // ';' => stmt expr\n";
+    code = code + "      vec_push(body, stmt_expr(span(pws, after + 1), e.expr));\n";
+    code = code + "      p = after + 1;\n";
+    code = code + "      continue;\n";
+    code = code + "    }\n";
+    code = code + "    let close = expect_lit(src, after, \"}\");\n";
+    code = code + "    if (close.success == false) { yield err_expr(after, close.error); }\n";
+    code = code + "    yield ok_expr(expr_block(span(b0, close.nextPos), body, e.expr), close.nextPos);\n";
+    code = code + "  }\n";
+    code = code + "}\n";
+    yield code;
+  }
+
   if (rule.name == "unary_expr") {
     code = code + "  let len = stringLen(src);\n";
     code = code + "  if (len > startPos) {\n";
@@ -412,6 +439,8 @@ fn generate_ast_rule_parser(rule: Rule, config: AstConfig) : String => {
   // `atom` is token-ish, but includes parenthesized expressions.
   if (rule.name == "atom") {
     code = code + "  // if_expr | ( expr ) | int_literal | ident\n";
+    code = code + "  let blk = parse_block(src, startPos);\n";
+    code = code + "  if (blk.success) { yield blk; }\n";
     code = code + "  let parsedIf = parse_if_expr(src, startPos);\n";
     code = code + "  if (parsedIf.success) { yield parsedIf; }\n";
     code = code + "  let b = parse_bool_literal(src, startPos);\n";

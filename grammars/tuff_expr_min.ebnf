@@ -24,7 +24,9 @@ arg_list ::= expr ("," expr)* ;
 field ::= "." ident ;
 index ::= "[" expr "]" ;
 
-atom ::= tuple_lit | bool_literal | int_literal | ident | "(" expr ")" ;
+atom ::= block | tuple_lit | bool_literal | int_literal | ident | "(" expr ")" ;
+
+block ::= "{" (expr ";")* expr "}" ;
 
 tuple_lit ::= "(" expr "," expr ("," expr)* ")" ;
 
