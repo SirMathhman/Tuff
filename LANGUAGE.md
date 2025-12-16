@@ -1525,6 +1525,8 @@ This brings the selected names into the current scope.
 
 In multi-file projects, functions (and class constructors) must be explicitly exported from their defining file using the `out` keyword (`out fn` / `out class fn`) before they can be imported from another file. Importing a non-`out` function is a hard error.
 
+Circular module dependencies (A imports B, B imports A) are allowed. At runtime, Tuff modules are emitted as JavaScript ES modules, so the semantics follow ESM: imports are *live bindings* and cycles are resolved by the module loader. As with any ESM cycle, avoid eagerly reading imported values during module initialization if the other module hasn't finished initializing yet; instead, access imports inside functions (a common pattern when using closures).
+
 ```tuff
 // In math.tuff
 out fn add(a: I32, b: I32) : I32 => { a + b }

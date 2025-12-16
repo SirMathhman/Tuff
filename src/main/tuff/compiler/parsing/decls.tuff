@@ -245,6 +245,7 @@ out fn parse_fn_decl_ast2(src: String, i: I32, exportAll: Bool) : ParsedDeclAst 
   k = parse_keyword(src, k, "=>");
   let body = parse_main_body_ast(src, k);
   k = body.nextPos;
+  k = parse_optional_semicolon(src, k);
 
   // If any types were provided, store them; otherwise keep the legacy shape.
   let mut anyParamTy = false;
@@ -296,6 +297,7 @@ out fn parse_class_fn_decl_ast2(src: String, i: I32, exportAll: Bool) : ParsedDe
   k = parse_keyword(src, k, "=>");
   let body = parse_main_body_ast(src, k);
   k = body.nextPos;
+  k = parse_optional_semicolon(src, k);
 
   let mut anyParamTy = false;
   let mut pi = 0;

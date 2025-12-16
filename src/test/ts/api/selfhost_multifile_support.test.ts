@@ -26,9 +26,9 @@ describe("selfhost multi-file module support (in-memory)", () => {
     const r = await compileCode(entryCode, modules);
     if (!r.success) {
       throw new Error(
-        `compileCode failed:\n${r.diagnostics ?? ""}\nrequested module keys: ${requestedKeys.join(
-          ", "
-        )}`
+        `compileCode failed:\n${
+          r.diagnostics ?? ""
+        }\nrequested module keys: ${requestedKeys.join(", ")}`
       );
     }
     expect(r.success).toBe(true);
@@ -43,7 +43,9 @@ describe("selfhost multi-file module support (in-memory)", () => {
       );
     } catch (e) {
       throw new Error(
-        `importEsmFromOutputs failed: ${e instanceof Error ? e.message : String(e)}\n` +
+        `importEsmFromOutputs failed: ${
+          e instanceof Error ? e.message : String(e)
+        }\n` +
           `outRelPaths: ${(r.outRelPaths ?? []).join(", ")}\n` +
           `entryJs snippet: ${String(r.entryJs ?? "").slice(0, 300)}\n` +
           `requested module keys: ${requestedKeys.join(", ")}`
@@ -70,24 +72,92 @@ describe("selfhost multi-file module support (in-memory)", () => {
     expect(r.diagnostics ?? "").toMatch(/wrong number of args|arity|add\(/i);
   });
 
-  test("circular dependencies are rejected", async () => {
+  test("circular dependencies are allowed", async () => {
     const modules = {
-      "src::a": ["from src::b use { b };", "out fn a() : I32 => b();", ""].join(
-        "\n"
-      ),
-      "src::b": ["from src::a use { a };", "out fn b() : I32 => a();", ""].join(
-        "\n"
-      ),
+      // Cycle via imports, but no runtime recursion.
+      "src::a": [
+        "from src::b use { b_const };",
+        "out fn a_const() : I32 => 1;",
+        "",
+      ].join("\n"),
+      "src::b": [
+        "from src::a use { a_const };",
+        "out fn b_const() : I32 => 2;",
+        "",
+      ].join("\n"),
     };
 
     const entryCode = [
-      "from src::a use { a };",
-      "fn main() : I32 => a();",
+      "from src::a use { a_const };",
+      "from src::b use { b_const };",
+      "fn main() : I32 => a_const() + b_const();",
       "",
     ].join("\n");
 
     const r = await compileCode(entryCode, modules);
-    expect(r.success).toBe(false);
-    expect(r.diagnostics ?? "").toMatch(/circular|cycle|import/i);
+    if (!r.success) {
+      throw new Error(`compileCode failed:\n${r.diagnostics ?? ""}`);
+    }
+    const mod: any = await importEsmFromOutputs(
+      r.outRelPaths as string[],
+      r.jsOutputs as string[]
+    );
+    expect(mod.main()).toBe(3);
+  });
+
+  test("circular dependencies work with closures", async () => {
+    const modules = {
+      // A imports B and returns a closure that calls B.
+      "src::a": [
+        "from src::b use { b_const };",
+        "out fn make_adder() : () => I32 => {",
+        "  let extra: I32 = 1;",
+        "  () : I32 => b_const() + extra",
+        "};",
+        "",
+      ].join("\n"),
+      // B imports A (cycle) but does not eagerly read it during module init.
+      "src::b": [
+        "from src::a use { make_adder };",
+        "out fn b_const() : I32 => 2;",
+        "out fn run() : I32 => {",
+        "  let f = make_adder();",
+        "  f()",
+        "};",
+        "",
+      ].join("\n"),
+    };
+
+    const entryCode = [
+      "from src::b use { run };",
+      "fn main() : I32 => run();",
+      "",
+    ].join("\n");
+
+    const r = await compileCode(entryCode, modules);
+    if (!r.success) {
+      throw new Error(`compileCode failed:\n${r.diagnostics ?? ""}`);
+    }
+
+    // Import the cyclic module directly to assert its exports exist.
+    const modB: any = await importEsmFromOutputs(
+      r.outRelPaths as string[],
+      r.jsOutputs as string[],
+      "src/b.mjs"
+    );
+    if (typeof modB.run !== "function") {
+      const rels = (r.outRelPaths ?? []) as string[];
+      const idx = rels.findIndex((p) => p.replace(/\\/g, "/") === "src/b.mjs");
+      const bSrc =
+        idx >= 0
+          ? String((r.jsOutputs ?? [])[idx] ?? "")
+          : "<missing src/b.mjs>";
+      throw new Error(
+        `expected src/b.mjs to export run() as a function, but got: ${typeof modB.run}\n` +
+          `exports: ${Object.keys(modB).join(", ")}\n` +
+          `--- src/b.mjs ---\n${bSrc.slice(0, 400)}\n--- end ---\n`
+      );
+    }
+    expect(modB.run()).toBe(3);
   });
 });
