@@ -31,6 +31,31 @@ from parsing::expr_stmt use { parse_main_body };
 out class fn ParsedImports(v0: String, v1: I32) => {}
 out class fn ParsedFn(v0: String, v1: I32, v2: String) => {}
 
+class fn NameListResult(names: String, nextPos: I32) => {}
+
+fn parse_name_list_in_braces(src: String, i: I32, errorMsg: String) : NameListResult => {
+  let mut k = parse_keyword(src, i, "{");
+
+  let mut names = "";
+  let mut first = true;
+  while (true) {
+    k = skip_ws(src, k);
+    if (!(k < stringLen(src))) { panic_at(src, k, "expected '}'"); }
+    if (stringCharCodeAt(src, k) == 125) { k = k + 1; break; }
+    let id = parse_ident(src, k);
+    k = id.nextPos;
+    if (first) { names = names + id.text; } else { names = names + ", " + id.text; }
+    first = false;
+    k = skip_ws(src, k);
+    if (k < stringLen(src) && stringCharCodeAt(src, k) == 44) { k = k + 1; continue; }
+    k = skip_ws(src, k);
+    if (k < stringLen(src) && stringCharCodeAt(src, k) == 125) { k = k + 1; break; }
+    panic_at(src, k, errorMsg);
+  }
+
+  NameListResult(names, k)
+}
+
 out fn parse_param_list(src: String, i: I32) : ParsedParams => {
   // parses: '(' (ident (',' ident)*)? ')'
   let mut k = parse_keyword(src, i, "(");
@@ -97,24 +122,10 @@ out fn parse_extern_decl(src: String, i: I32) : ParsedStmt => {
   let mod = parse_module_path(src, k);
   k = mod.nextPos;
   k = parse_keyword(src, k, "use");
-  k = parse_keyword(src, k, "{");
 
-  let mut names = "";
-  let mut first = true;
-  while (true) {
-    k = skip_ws(src, k);
-    if (!(k < stringLen(src))) { panic_at(src, k, "expected '}'"); }
-    if (stringCharCodeAt(src, k) == 125) { k = k + 1; break; }
-    let id = parse_ident(src, k);
-    k = id.nextPos;
-    if (first) { names = names + id.text; } else { names = names + ", " + id.text; }
-    first = false;
-    k = skip_ws(src, k);
-    if (k < stringLen(src) && stringCharCodeAt(src, k) == 44) { k = k + 1; continue; }
-    k = skip_ws(src, k);
-    if (k < stringLen(src) && stringCharCodeAt(src, k) == 125) { k = k + 1; break; }
-    panic_at(src, k, "expected ',' or '}' in extern list");
-  }
+  let result = parse_name_list_in_braces(src, k, "expected ',' or '}' in extern list");
+  let names = result.names;
+  k = result.nextPos;
 
   k = parse_optional_semicolon(src, k);
 
@@ -140,24 +151,10 @@ out fn parse_imports(src: String, i: I32) : ParsedImports => {
     let mod = parse_module_path(src, k);
     k = mod.nextPos;
     k = parse_keyword(src, k, "use");
-    k = parse_keyword(src, k, "{");
 
-    let mut names = "";
-    let mut first = true;
-    while (true) {
-      k = skip_ws(src, k);
-      if (!(k < stringLen(src))) { panic_at(src, k, "expected '}'"); }
-      if (stringCharCodeAt(src, k) == 125) { k = k + 1; break; }
-      let id = parse_ident(src, k);
-      k = id.nextPos;
-      if (first) { names = names + id.text; } else { names = names + ", " + id.text; }
-      first = false;
-      k = skip_ws(src, k);
-      if (k < stringLen(src) && stringCharCodeAt(src, k) == 44) { k = k + 1; continue; }
-      k = skip_ws(src, k);
-      if (k < stringLen(src) && stringCharCodeAt(src, k) == 125) { k = k + 1; break; }
-      panic_at(src, k, "expected ',' or '}' in import list");
-    }
+    let result = parse_name_list_in_braces(src, k, "expected ',' or '}' in import list");
+    let names = result.names;
+    k = result.nextPos;
 
     k = parse_optional_semicolon(src, k);
 

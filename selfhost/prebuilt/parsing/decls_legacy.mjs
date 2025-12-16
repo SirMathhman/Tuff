@@ -13,6 +13,44 @@ return { v0: v0, v1: v1 };
 export function ParsedFn(v0, v1, v2) {
 return { v0: v0, v1: v1, v2: v2 };
 }
+export function NameListResult(names, nextPos) {
+return { names: names, nextPos: nextPos };
+}
+export function parse_name_list_in_braces(src, i, errorMsg) {
+let k = parse_keyword(src, i, "{");
+let names = "";
+let first = true;
+while (true) {
+k = skip_ws(src, k);
+if (!(k < stringLen(src))) {
+panic_at(src, k, "expected '}'");
+}
+if (stringCharCodeAt(src, k) == 125) {
+k = k + 1;
+break;
+}
+const id = parse_ident(src, k);
+k = id.nextPos;
+if (first) {
+names = names + id.text;
+} else {
+names = names + ", " + id.text;
+}
+first = false;
+k = skip_ws(src, k);
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 44) {
+k = k + 1;
+continue;
+}
+k = skip_ws(src, k);
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 125) {
+k = k + 1;
+break;
+}
+panic_at(src, k, errorMsg);
+}
+return NameListResult(names, k);
+}
 export function parse_param_list(src, i) {
 let k = parse_keyword(src, i, "(");
 k = skip_ws(src, k);
@@ -74,38 +112,9 @@ k = parse_keyword(src, k, "from");
 const mod = parse_module_path(src, k);
 k = mod.nextPos;
 k = parse_keyword(src, k, "use");
-k = parse_keyword(src, k, "{");
-let names = "";
-let first = true;
-while (true) {
-k = skip_ws(src, k);
-if (!(k < stringLen(src))) {
-panic_at(src, k, "expected '}'");
-}
-if (stringCharCodeAt(src, k) == 125) {
-k = k + 1;
-break;
-}
-const id = parse_ident(src, k);
-k = id.nextPos;
-if (first) {
-names = names + id.text;
-} else {
-names = names + ", " + id.text;
-}
-first = false;
-k = skip_ws(src, k);
-if (k < stringLen(src) && stringCharCodeAt(src, k) == 44) {
-k = k + 1;
-continue;
-}
-k = skip_ws(src, k);
-if (k < stringLen(src) && stringCharCodeAt(src, k) == 125) {
-k = k + 1;
-break;
-}
-panic_at(src, k, "expected ',' or '}' in extern list");
-}
+const result = parse_name_list_in_braces(src, k, "expected ',' or '}' in extern list");
+const names = result.names;
+k = result.nextPos;
 k = parse_optional_semicolon(src, k);
 let importPath = "";
 if (starts_with_at(mod.text, 0, "rt::")) {
@@ -134,38 +143,9 @@ k = parse_keyword(src, k, "from");
 const mod = parse_module_path(src, k);
 k = mod.nextPos;
 k = parse_keyword(src, k, "use");
-k = parse_keyword(src, k, "{");
-let names = "";
-let first = true;
-while (true) {
-k = skip_ws(src, k);
-if (!(k < stringLen(src))) {
-panic_at(src, k, "expected '}'");
-}
-if (stringCharCodeAt(src, k) == 125) {
-k = k + 1;
-break;
-}
-const id = parse_ident(src, k);
-k = id.nextPos;
-if (first) {
-names = names + id.text;
-} else {
-names = names + ", " + id.text;
-}
-first = false;
-k = skip_ws(src, k);
-if (k < stringLen(src) && stringCharCodeAt(src, k) == 44) {
-k = k + 1;
-continue;
-}
-k = skip_ws(src, k);
-if (k < stringLen(src) && stringCharCodeAt(src, k) == 125) {
-k = k + 1;
-break;
-}
-panic_at(src, k, "expected ',' or '}' in import list");
-}
+const result = parse_name_list_in_braces(src, k, "expected ',' or '}' in import list");
+const names = result.names;
+k = result.nextPos;
 k = parse_optional_semicolon(src, k);
 const importPath = "./" + module_path_to_relpath(mod.text) + ".mjs";
 out = out + ("import { " + names + " } from \"" + importPath + "\";\n");
