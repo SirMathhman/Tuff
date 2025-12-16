@@ -113,11 +113,14 @@ describe("generated expr parser (EBNF -> Tuff)", () => {
     const cases = [
       "1",
       "42",
+      "x",
+      "foo_bar123",
       "1+2",
       "1+2*3",
       "(1+2)*3",
       "-5",
       "10-3*2",
+      "x*(y+2)",
       "!(1)" // just to ensure unary ! parses
     ];
 
