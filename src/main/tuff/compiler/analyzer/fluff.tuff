@@ -34,6 +34,7 @@ let mut __fluff_clone_detection = 0;
 let mut __fluff_clone_min_tokens = 10;
 let mut __fluff_clone_min_occurrences = 2;
 let mut __fluff_clone_parameterized = false;
+let mut __fluff_simplify_negation = 0;
 let mut __fluff_debug = false;
 let mut __fluff_debug_scopes = "";
 
@@ -98,6 +99,9 @@ out fn fluff_set_options(unusedLocalsSeverity: I32, unusedParamsSeverity: I32) :
   __fluff_unused_params = unusedParamsSeverity;
 }
 
+out fn fluff_set_simplify_negation_options(severity: I32) : Void => {
+  __fluff_simplify_negation = severity;
+}
 out fn fluff_set_complexity_options(complexitySeverity: I32, threshold: I32) : Void => {
   __fluff_complexity = complexitySeverity;
   __fluff_complexity_threshold = if (threshold > 0) threshold else 15;
@@ -144,6 +148,10 @@ fn fluff_emit_at(src: String, pos: I32, severity: I32, msg: String) : Void => {
   if (severity == 1) { warn_at(src, pos, msg); yield; }
   if (severity == 2) { error_at(src, pos, msg); yield; }
   // severity 0 (off) or unknown => ignore
+}
+
+out fn fluff_warn_simplify_negation(src: String, pos: I32, msg: String) : Void => {
+  fluff_emit_at(src, pos, __fluff_simplify_negation, msg);
 }
 
 fn count_lines(src: String) : I32 => {

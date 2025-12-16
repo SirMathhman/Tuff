@@ -16,7 +16,8 @@
 //     "cloneDetection": "off" | "warning" | "error",
 //     "cloneMinTokens": <number>,      // Minimum IR tokens for a clone (default 10)
 //     "cloneMinOccurrences": <number>, // Minimum occurrences to report (default 2)
-//     "cloneParameterized": <bool>     // Enable parameterized clone detection (default false)
+//     "cloneParameterized": <bool>,    // Enable parameterized clone detection (default false)
+//     "simplifyNegation": "off" | "warning" | "error"  // Warn about !(x == y) → x != y
 //   }
 // }
 

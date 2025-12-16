@@ -66,13 +66,7 @@ describe("fluff file-list CLI", () => {
 
     await writeFile(
       cleanFile,
-      [
-        "fn main() : I32 => {",
-        "  let x: I32 = 1;",
-        "  x",
-        "}",
-        "",
-      ].join("\n"),
+      ["fn main() : I32 => {", "  let x: I32 = 1;", "  x", "}", ""].join("\n"),
       "utf8"
     );
 

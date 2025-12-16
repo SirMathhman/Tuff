@@ -28,7 +28,10 @@ describe("tuff_lint_staged helpers", () => {
     const buildC = resolve(c, "build.json");
 
     await writeFile(buildA, JSON.stringify({ fluff: { unusedLocals: "off" } }));
-    await writeFile(buildC, JSON.stringify({ fluff: { unusedLocals: "warning" } }));
+    await writeFile(
+      buildC,
+      JSON.stringify({ fluff: { unusedLocals: "warning" } })
+    );
 
     const f1 = resolve(ab, "one.tuff");
     const f2 = resolve(ab, "two.tuff");

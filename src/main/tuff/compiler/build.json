@@ -9,8 +9,9 @@
     "maxParams": "off",
     "maxParamsThreshold": 3,
     "singleCharIdentifiers": "off",
+    "simplifyNegation": "off",
     "cloneDetection": "warning",
-    "cloneMinTokens": 10,
+    "cloneMinTokens": 15,
     "cloneMinOccurrences": 2
   }
 }

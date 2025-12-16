@@ -53,7 +53,8 @@ from analyzer::fluff use {
   warn_unused_locals_in_scope,
   warn_unused_params_in_scope,
   check_lambda_complexity,
-  check_single_char_identifier
+  check_single_char_identifier,
+  fluff_warn_simplify_negation
 };
 
 out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, e: Expr) : Void => {
@@ -111,10 +112,10 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     // Warn if !(x == y) which simplifies to x != y
     if (e.op is OpNot && e.expr is EBinary) {
       if (e.expr.op is OpEq) {
-        warn_at(src, span_start(e.span), "simplify !(expr == value) to expr != value");
+        fluff_warn_simplify_negation(src, span_start(e.span), "simplify !(expr == value) to expr != value");
       }
       if (e.expr.op is OpNe) {
-        warn_at(src, span_start(e.span), "simplify !(expr != value) to expr == value");
+        fluff_warn_simplify_negation(src, span_start(e.span), "simplify !(expr != value) to expr == value");
       }
     }
     

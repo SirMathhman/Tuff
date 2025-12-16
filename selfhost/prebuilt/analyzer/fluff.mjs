@@ -17,6 +17,7 @@ let __fluff_clone_detection = 0;
 let __fluff_clone_min_tokens = 10;
 let __fluff_clone_min_occurrences = 2;
 let __fluff_clone_parameterized = false;
+let __fluff_simplify_negation = 0;
 let __fluff_debug = false;
 let __fluff_debug_scopes = "";
 export function is_ascii_ws(ch) {
@@ -89,6 +90,10 @@ __fluff_unused_locals = unusedLocalsSeverity;
 __fluff_unused_params = unusedParamsSeverity;
 return undefined;
 }
+export function fluff_set_simplify_negation_options(severity) {
+__fluff_simplify_negation = severity;
+return undefined;
+}
 export function fluff_set_complexity_options(complexitySeverity, threshold) {
 __fluff_complexity = complexitySeverity;
 __fluff_complexity_threshold = (threshold > 0 ? threshold : 15);
@@ -142,6 +147,10 @@ if (severity == 2) {
 error_at(src, pos, msg);
 return;
 }
+return undefined;
+}
+export function fluff_warn_simplify_negation(src, pos, msg) {
+fluff_emit_at(src, pos, __fluff_simplify_negation, msg);
 return undefined;
 }
 export function count_lines(src) {

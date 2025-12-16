@@ -14,7 +14,7 @@ import { infer_expr_type } from "./infer_basic.mjs";
 import { infer_expr_type_with_narrowing, parse_tag_narrowing, validate_union_variant_for_binding } from "./infer_narrowing.mjs";
 import { require_all_param_types, require_type_compatible } from "./typecheck.mjs";
 import { check_struct_lit_types, check_binary_operand_types, check_call_types, check_cond_is_bool } from "./checks.mjs";
-import { warn_unused_locals_in_scope, warn_unused_params_in_scope, check_lambda_complexity, check_single_char_identifier } from "./fluff.mjs";
+import { warn_unused_locals_in_scope, warn_unused_params_in_scope, check_lambda_complexity, check_single_char_identifier, fluff_warn_simplify_negation } from "./fluff.mjs";
 export function analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e) {
 if ((e.tag === "EIdent")) {
 require_name(src, span_start(e.span), scopes, depth, e.name);
@@ -67,10 +67,10 @@ if ((e.tag === "EUnary")) {
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.expr);
 if ((e.op.tag === "OpNot") && (e.expr.tag === "EBinary")) {
 if ((e.expr.op.tag === "OpEq")) {
-warn_at(src, span_start(e.span), "simplify !(expr == value) to expr != value");
+fluff_warn_simplify_negation(src, span_start(e.span), "simplify !(expr == value) to expr != value");
 }
 if ((e.expr.op.tag === "OpNe")) {
-warn_at(src, span_start(e.span), "simplify !(expr != value) to expr == value");
+fluff_warn_simplify_negation(src, span_start(e.span), "simplify !(expr != value) to expr == value");
 }
 }
 return;
