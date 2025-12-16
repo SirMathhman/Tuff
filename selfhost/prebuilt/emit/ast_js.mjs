@@ -112,12 +112,10 @@ const fields = find_struct_fields(structName);
 if (!(vec_len(fields) == vec_len(values))) {
 panic("wrong number of values in struct literal for " + structName);
 }
-let out = "({ ";
+let out = "({ tag: \"" + structName + "\"";
 let i = 0;
 while (i < vec_len(fields)) {
-if (i > 0) {
 out = out + ", ";
-}
 out = out + (vec_get(fields, i) + ": " + emit_expr_js(vec_get(values, i)));
 i = i + 1;
 }

@@ -74,26 +74,80 @@ return s.value[1];
 export function span_len(s) {
 return span_end(s) - span_start(s);
 }
-export function type_kind(t) {
-return t.tag;
+export function expr_kind(e) {
+if ((e.tag === "EUndefined")) {
+return "EUndefined";
+}
+if ((e.tag === "EInt")) {
+return "EInt";
+}
+if ((e.tag === "EFloat")) {
+return "EFloat";
+}
+if ((e.tag === "EBool")) {
+return "EBool";
+}
+if ((e.tag === "EString")) {
+return "EString";
+}
+if ((e.tag === "EPath")) {
+return "EPath";
+}
+if ((e.tag === "EIdent")) {
+return "EIdent";
+}
+if ((e.tag === "ELambda")) {
+return "ELambda";
+}
+if ((e.tag === "EStructLit")) {
+return "EStructLit";
+}
+if ((e.tag === "EUnary")) {
+return "EUnary";
+}
+if ((e.tag === "EBinary")) {
+return "EBinary";
+}
+if ((e.tag === "ECall")) {
+return "ECall";
+}
+if ((e.tag === "EIf")) {
+return "EIf";
+}
+if ((e.tag === "EBlock")) {
+return "EBlock";
+}
+if ((e.tag === "EVecLit")) {
+return "EVecLit";
+}
+if ((e.tag === "ETupleLit")) {
+return "ETupleLit";
+}
+if ((e.tag === "EIndex")) {
+return "EIndex";
+}
+if ((e.tag === "ETupleIndex")) {
+return "ETupleIndex";
+}
+if ((e.tag === "EField")) {
+return "EField";
+}
+if ((e.tag === "EMatch")) {
+return "EMatch";
+}
+if ((e.tag === "EIsType")) {
+return "EIsType";
+}
+return "Unknown";
 }
 export function type_span(t) {
 return t.span;
 }
-export function expr_kind(e) {
-return e.tag;
-}
 export function expr_span(e) {
 return e.span;
 }
-export function stmt_kind(s) {
-return s.tag;
-}
 export function stmt_span(s) {
 return s.span;
-}
-export function decl_kind(d) {
-return d.tag;
 }
 export function decl_span(d) {
 return d.span;

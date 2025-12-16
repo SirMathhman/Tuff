@@ -9,13 +9,13 @@ export function DefLocation(found, defStart, defEnd, defFile) {
 return { found: found, defStart: defStart, defEnd: defEnd, defFile: defFile };
 }
 export function lsp_def(name, defStart, defEnd, kind) {
-return ({ tag: "LspDef", name: name, defStart: defStart, defEnd: defEnd, kind: kind, defFile: "" });
+return ({ tag: "LspDef", tag: "LspDef", name: name, defStart: defStart, defEnd: defEnd, kind: kind, defFile: "" });
 }
 export function lsp_def_ext(name, defStart, defEnd, kind, defFile) {
-return ({ tag: "LspDef", name: name, defStart: defStart, defEnd: defEnd, kind: kind, defFile: defFile });
+return ({ tag: "LspDef", tag: "LspDef", name: name, defStart: defStart, defEnd: defEnd, kind: kind, defFile: defFile });
 }
 export function lsp_ref_ext(refStart, refEnd, defStart, defEnd, defFile) {
-return ({ tag: "LspRef", refStart: refStart, refEnd: refEnd, defStart: defStart, defEnd: defEnd, defFile: defFile });
+return ({ tag: "LspRefInternal", tag: "LspRef", refStart: refStart, refEnd: refEnd, defStart: defStart, defEnd: defEnd, defFile: defFile });
 }
 export function lsp_lookup(defs, name) {
 let i = vec_len(defs) - 1;

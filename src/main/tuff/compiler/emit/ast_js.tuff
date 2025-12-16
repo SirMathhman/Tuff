@@ -85,10 +85,11 @@ fn emit_struct_lit_js(nameExpr: Expr, values: Vec<Expr>) : String => {
     panic("wrong number of values in struct literal for " + structName);
   }
 
-  let mut out = "({ ";
+  // Inject tag field at construction time for union variant discrimination
+  let mut out = "({ tag: \"" + structName + "\"";
   let mut i = 0;
   while (i < vec_len(fields)) {
-    if (i > 0) { out = out + ", "; }
+    out = out + ", ";
     out = out + (vec_get(fields, i) + ": " + emit_expr_js(vec_get(values, i)));
     i = i + 1;
   }
