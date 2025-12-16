@@ -352,9 +352,51 @@ fn generate_ast_rule_parser(rule: Rule, config: AstConfig) : String => {
     yield code;
   }
 
+  // `if (cond) thenExpr else elseExpr`
+  // This cannot be expressed with the generic sequence-return logic because we
+  // need to stitch together multiple Expr parts into a single EIf AST node.
+  if (rule.name == "if_expr") {
+    code = code + "  let len = stringLen(src);\n";
+    code = code + "  // keyword 'if'\n";
+    code = code + "  if (startPos + 2 > len) { yield err_expr(startPos, \"unexpected end\"); }\n";
+    code = code + "  if (!(stringCharCodeAt(src, startPos) == 105 && stringCharCodeAt(src, startPos + 1) == 102)) {\n";
+    code = code + "    yield err_expr(startPos, \"expected if\");\n";
+    code = code + "  }\n";
+    code = code + "  // ensure 'if' is not a prefix of an identifier\n";
+    code = code + "  if (len > startPos + 2 && is_ident_part(stringCharCodeAt(src, startPos + 2))) {\n";
+    code = code + "    yield err_expr(startPos, \"expected if\");\n";
+    code = code + "  }\n";
+
+    code = code + "  let open = expect_lit(src, startPos + 2, \"(\");\n";
+    code = code + "  if (open.success == false) { yield err_expr(startPos + 2, open.error); }\n";
+    code = code + "  let cond = parse_expr(src, open.nextPos);\n";
+    code = code + "  if (cond.success == false) { yield cond; }\n";
+    code = code + "  let close = expect_lit(src, cond.nextPos, \"\)\");\n";
+    code = code + "  if (close.success == false) { yield err_expr(cond.nextPos, close.error); }\n";
+    code = code + "  let thenExpr = parse_expr(src, close.nextPos);\n";
+    code = code + "  if (thenExpr.success == false) { yield thenExpr; }\n";
+
+    code = code + "  let elsePos0 = skip_ws(src, thenExpr.nextPos);\n";
+    code = code + "  if (elsePos0 + 4 > len) { yield err_expr(elsePos0, \"expected else\"); }\n";
+    code = code + "  if (!(stringCharCodeAt(src, elsePos0) == 101 && stringCharCodeAt(src, elsePos0 + 1) == 108 && stringCharCodeAt(src, elsePos0 + 2) == 115 && stringCharCodeAt(src, elsePos0 + 3) == 101)) {\n";
+    code = code + "    yield err_expr(elsePos0, \"expected else\");\n";
+    code = code + "  }\n";
+    code = code + "  if (len > elsePos0 + 4 && is_ident_part(stringCharCodeAt(src, elsePos0 + 4))) {\n";
+    code = code + "    yield err_expr(elsePos0, \"expected else\");\n";
+    code = code + "  }\n";
+
+    code = code + "  let elseExpr = parse_expr(src, elsePos0 + 4);\n";
+    code = code + "  if (elseExpr.success == false) { yield elseExpr; }\n";
+    code = code + "  ok_expr(expr_if(span(startPos, elseExpr.nextPos), cond.expr, thenExpr.expr, elseExpr.expr), elseExpr.nextPos)\n";
+    code = code + "}\n";
+    yield code;
+  }
+
   // `atom` is token-ish, but includes parenthesized expressions.
   if (rule.name == "atom") {
-    code = code + "  // ( expr ) | int_literal | ident\n";
+    code = code + "  // if_expr | ( expr ) | int_literal | ident\n";
+    code = code + "  let parsedIf = parse_if_expr(src, startPos);\n";
+    code = code + "  if (parsedIf.success) { yield parsedIf; }\n";
     code = code + "  let len = stringLen(src);\n";
     code = code + "  if (len > startPos && stringCharCodeAt(src, startPos) == 40) { // '('\n";
     code = code + "    let inner = parse_expr(src, startPos + 1);\n";

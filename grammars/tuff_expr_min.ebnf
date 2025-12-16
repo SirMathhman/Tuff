@@ -1,7 +1,9 @@
 // Minimal expression grammar used to incrementally validate generated parsers.
 // This is intentionally smaller than full tuff.ebnf.
 
-expr ::= add_expr ;
+expr ::= if_expr | add_expr ;
+
+if_expr ::= "if" "(" expr ")" expr "else" expr ;
 
 add_expr ::= mul_expr (("+" | "-") mul_expr)* ;
 mul_expr ::= unary_expr (("*" | "/") unary_expr)* ;

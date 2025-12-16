@@ -138,6 +138,9 @@ describe("generated expr parser (EBNF -> Tuff)", () => {
       "a.b",
       "a[0]",
       "f(1).g[2]",
+      "if (x) 1 else 2",
+      "if (x) f(1) else g(2)",
+      "if (x) 1 else 2+3*4",
       "!(1)", // just to ensure unary ! parses
     ];
 
