@@ -59,7 +59,7 @@ from analyzer::fluff use {
 out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, e: Expr) : Void => {
   if (e is EIdent) {
     require_name(src, span_start(e.span), scopes, depth, e.name);
-    if (!(e.name == "true") && !(e.name == "false") && !(e.name == "continue") && !(e.name == "break")) {
+    if (e.name != "true" && e.name != "false" && e.name != "continue" && e.name != "break") {
       mark_binding_read(scopes, depth, e.name);
       let b = lookup_binding(src, span_start(e.span), scopes, depth, e.name);
       if (b.deprecatedReason != "") {
@@ -107,6 +107,17 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
   }
   if (e is EUnary) {
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.expr);
+    
+    // Warn if !(x == y) which simplifies to x != y
+    if (e.op is OpNot && e.expr is EBinary) {
+      if (e.expr.op is OpEq) {
+        warn_at(src, span_start(e.span), "simplify !(expr == value) to expr != value");
+      }
+      if (e.expr.op is OpNe) {
+        warn_at(src, span_start(e.span), "simplify !(expr != value) to expr == value");
+      }
+    }
+    
     yield;
   }
   if (e is EBinary) {

@@ -18,7 +18,7 @@ import { warn_unused_locals_in_scope, warn_unused_params_in_scope, check_lambda_
 export function analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e) {
 if ((e.tag === "EIdent")) {
 require_name(src, span_start(e.span), scopes, depth, e.name);
-if (!(e.name == "true") && !(e.name == "false") && !(e.name == "continue") && !(e.name == "break")) {
+if (e.name != "true" && e.name != "false" && e.name != "continue" && e.name != "break") {
 mark_binding_read(scopes, depth, e.name);
 const b = lookup_binding(src, span_start(e.span), scopes, depth, e.name);
 if (b.deprecatedReason != "") {
@@ -65,6 +65,14 @@ return;
 }
 if ((e.tag === "EUnary")) {
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.expr);
+if ((e.op.tag === "OpNot") && (e.expr.tag === "EBinary")) {
+if ((e.expr.op.tag === "OpEq")) {
+warn_at(src, span_start(e.span), "simplify !(expr == value) to expr != value");
+}
+if ((e.expr.op.tag === "OpNe")) {
+warn_at(src, span_start(e.span), "simplify !(expr != value) to expr == value");
+}
+}
 return;
 }
 if ((e.tag === "EBinary")) {
