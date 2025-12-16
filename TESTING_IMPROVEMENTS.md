@@ -28,7 +28,7 @@
 
 **Recent example**:
 
-- `src/test/ts/generated_expr_parser_compile.test.ts` adds another local stdout-capture helper to validate EBNF-driven parser generation; migrate it to the shared utility when Phase 1 lands.
+- `src/test/ts/generated_expr_parser_compile.test.ts` adds another local stdout-capture helper to validate EBNF-driven parser generation (now including blocks, match expressions, and string literals); migrate it to the shared utility when Phase 1 lands.
 
 ### 4. Test Organization
 

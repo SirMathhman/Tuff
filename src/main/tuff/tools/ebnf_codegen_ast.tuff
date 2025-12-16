@@ -134,6 +134,16 @@ fn indent(level: I32) : String => {
   s
 }
 
+// The compiler's keyword parser can treat keywords as prefixes (e.g. `match_arm`
+// may be tokenized as `match` + `_arm`). To keep generated parsers robust, make
+// sure all rule-derived local identifiers start with a neutral prefix.
+fn local_rule_prefix(ruleName: String) : String => {
+  if (stringLen(ruleName) >= 2 && stringSlice(ruleName, 0, 2) == "r_") {
+    yield ruleName;
+  }
+  "r_" + ruleName
+}
+
 out fn generate_ast_parser(g: Grammar, config: AstConfig) : String => {
   let mut code = "";
   
@@ -153,6 +163,7 @@ out fn generate_ast_parser(g: Grammar, config: AstConfig) : String => {
   code = code + "  expr_binary, expr_unary, expr_call, expr_if, expr_block,\n";
   code = code + "  expr_vec_lit, expr_tuple_lit, expr_struct_lit, expr_match,\n";
   code = code + "  expr_lambda, expr_field, expr_index, expr_tuple_index,\n";
+  code = code + "  mk_match_arm, pat_wildcard, pat_int, pat_bool, pat_string, pat_variant,\n";
   code = code + "  stmt_let, stmt_assign, stmt_expr, stmt_yield, stmt_while, stmt_if,\n";
   code = code + "  decl_fn, decl_struct, decl_type_union, decl_import, decl_extern_from,\n";
   code = code + "  op_add, op_sub, op_mul, op_div, op_eq, op_ne, op_lt, op_le, op_gt, op_ge, op_and, op_or,\n";
@@ -288,6 +299,40 @@ out fn generate_ast_parser(g: Grammar, config: AstConfig) : String => {
   code = code + "  }\n";
   code = code + "  ok_string(stringSlice(src, p, endp), endp)\n";
   code = code + "}\n\n";
+
+  // String literal helper (unescapes a subset used by the bootstrap compiler)
+  code = code + "fn parse_string_lit_value_raw(src: String, pos: I32) : ParsedString => {\n";
+  code = code + "  let start = skip_ws(src, pos);\n";
+  code = code + "  let len = stringLen(src);\n";
+  code = code + "  if (start >= len) { yield err_string(start, \"unexpected end\"); }\n";
+  code = code + "  if (stringCharCodeAt(src, start) != 34) { yield err_string(start, \"expected string\"); }\n";
+  code = code + "  let mut k = start + 1;\n";
+  code = code + "  let mut out = \"\";\n";
+  code = code + "  while (k < len) {\n";
+  code = code + "    let ch = stringCharCodeAt(src, k);\n";
+  code = code + "    if (ch == 34) { yield ok_string(out, k + 1); }\n";
+  code = code + "    if (ch == 92) {\n";
+  code = code + "      k = k + 1;\n";
+  code = code + "      if (!(k < len)) { yield err_string(start, \"unterminated string\"); }\n";
+  code = code + "      let esc = stringCharCodeAt(src, k);\n";
+  code = code + "      let code = match (esc) {\n";
+  code = code + "        110 => 10,\n";
+  code = code + "        114 => 13,\n";
+  code = code + "        116 => 9,\n";
+  code = code + "        48 => 0,\n";
+  code = code + "        92 => 92,\n";
+  code = code + "        34 => 34,\n";
+  code = code + "        _ => esc\n";
+  code = code + "      };\n";
+  code = code + "      out = out + stringFromCharCode(code);\n";
+  code = code + "      k = k + 1;\n";
+  code = code + "      continue;\n";
+  code = code + "    }\n";
+  code = code + "    out = out + stringFromCharCode(ch);\n";
+  code = code + "    k = k + 1;\n";
+  code = code + "  }\n";
+  code = code + "  err_string(start, \"unterminated string\")\n";
+  code = code + "}\n\n";
   
   // Generate rule parsers
   code = code + "// =============================================================================\n";
@@ -376,6 +421,104 @@ fn generate_ast_rule_parser(rule: Rule, config: AstConfig) : String => {
     yield code;
   }
 
+  if (rule.name == "string_literal") {
+    code = code + "  let lit = parse_string_lit_value_raw(src, startPos);\n";
+    code = code + "  if (lit.success == false) { yield err_expr(lit.nextPos, lit.error); }\n";
+    // NOTE: span should include the quotes; lit.nextPos is after closing quote.
+    code = code + "  ok_expr(expr_string(span(skip_ws(src, startPos), lit.nextPos), lit.value), lit.nextPos)\n";
+    code = code + "}\n";
+    yield code;
+  }
+
+  if (rule.name == "match_expr") {
+    code = code + "  let len = stringLen(src);\n";
+    code = code + "  let start = skip_ws(src, startPos);\n";
+    code = code + "  if (start + 5 > len) { yield err_expr(start, \"unexpected end\"); }\n";
+    code = code + "  if (!(stringCharCodeAt(src, start) == 109 && stringCharCodeAt(src, start + 1) == 97 && stringCharCodeAt(src, start + 2) == 116 && stringCharCodeAt(src, start + 3) == 99 && stringCharCodeAt(src, start + 4) == 104)) {\n";
+    code = code + "    yield err_expr(start, \"expected match\");\n";
+    code = code + "  }\n";
+    code = code + "  if (len > start + 5 && is_ident_part(stringCharCodeAt(src, start + 5))) { yield err_expr(start, \"expected match\"); }\n";
+
+    code = code + "  let open = expect_lit(src, start + 5, \"(\");\n";
+    code = code + "  if (open.success == false) { yield err_expr(open.nextPos, open.error); }\n";
+    code = code + "  let scrut = parse_expr(src, open.nextPos);\n";
+    code = code + "  if (scrut.success == false) { yield scrut; }\n";
+    code = code + "  let close = expect_lit(src, scrut.nextPos, \")\");\n";
+    code = code + "  if (close.success == false) { yield err_expr(scrut.nextPos, close.error); }\n";
+    code = code + "  let openB = expect_lit(src, close.nextPos, \"{\");\n";
+    code = code + "  if (openB.success == false) { yield err_expr(close.nextPos, openB.error); }\n";
+    code = code + "  let mut k = openB.nextPos;\n";
+    code = code + "  let mut arms = vec_new();\n";
+    code = code + "  let mut sawDefault = false;\n";
+    code = code + "  let mut sawVariant = false;\n";
+
+    code = code + "  while (true) {\n";
+    code = code + "    k = skip_ws(src, k);\n";
+    code = code + "    if (!(k < len)) { yield err_expr(k, \"expected }\"); }\n";
+    code = code + "    if (stringCharCodeAt(src, k) == 125) { k = k + 1; break; }\n";
+    code = code + "    let patStart = k;\n";
+    code = code + "    let c0 = stringCharCodeAt(src, k);\n";
+    code = code + "    let mut pat = pat_wildcard(span(patStart, patStart));\n";
+    code = code + "    let mut isDefaultPat = false;\n";
+
+    // string pattern
+    code = code + "    if (c0 == 34) {\n";
+    code = code + "      let lit = parse_string_lit_value_raw(src, k);\n";
+    code = code + "      if (lit.success == false) { yield err_expr(lit.nextPos, lit.error); }\n";
+    code = code + "      pat = pat_string(span(patStart, lit.nextPos), lit.value);\n";
+    code = code + "      k = lit.nextPos;\n";
+    code = code + "    } else {\n";
+    // int pattern
+    code = code + "      if (c0 >= 48 && 57 >= c0) {\n";
+    code = code + "        let n = parse_number_raw(src, k);\n";
+    code = code + "        if (n.success == false) { yield err_expr(k, n.error); }\n";
+    code = code + "        pat = pat_int(span(patStart, n.nextPos), n.value);\n";
+    code = code + "        k = n.nextPos;\n";
+    code = code + "      } else {\n";
+    // ident / path / _ / true / false / variant
+    code = code + "        let id = parse_ident_raw(src, k);\n";
+    code = code + "        if (id.success == false) { yield err_expr(k, id.error); }\n";
+    code = code + "        k = id.nextPos;\n";
+    code = code + "        let mut name = id.value;\n";
+    code = code + "        while (true) {\n";
+    code = code + "          let t = skip_ws(src, k);\n";
+    code = code + "          if (!(t + 1 < len)) { break; }\n";
+    code = code + "          if (!(stringCharCodeAt(src, t) == 58 && stringCharCodeAt(src, t + 1) == 58)) { break; }\n";
+    code = code + "          let next = parse_ident_raw(src, t + 2);\n";
+    code = code + "          if (next.success == false) { yield err_expr(t + 2, next.error); }\n";
+    code = code + "          name = next.value;\n";
+    code = code + "          k = next.nextPos;\n";
+    code = code + "        }\n";
+    code = code + "        if (id.value == \"_\") { pat = pat_wildcard(span(patStart, k)); isDefaultPat = true; } else {\n";
+    code = code + "          if (id.value == \"true\") { pat = pat_bool(span(patStart, k), true); } else {\n";
+    code = code + "            if (id.value == \"false\") { pat = pat_bool(span(patStart, k), false); } else {\n";
+    code = code + "              pat = pat_variant(span(patStart, k), name);\n";
+    code = code + "              sawVariant = true;\n";
+    code = code + "            }\n";
+    code = code + "          }\n";
+    code = code + "        }\n";
+    code = code + "      }\n";
+    code = code + "    }\n";
+
+    code = code + "    let arrow = expect_lit(src, k, \"=>\");\n";
+    code = code + "    if (arrow.success == false) { yield err_expr(k, arrow.error); }\n";
+    code = code + "    let armE = parse_expr(src, arrow.nextPos);\n";
+    code = code + "    if (armE.success == false) { yield armE; }\n";
+    code = code + "    k = armE.nextPos;\n";
+    code = code + "    if (isDefaultPat) { sawDefault = true; }\n";
+    code = code + "    vec_push(arms, mk_match_arm(span(patStart, armE.nextPos), pat, armE.expr));\n";
+    code = code + "    k = skip_ws(src, k);\n";
+    code = code + "    if (k < len) {\n";
+    code = code + "      let ch = stringCharCodeAt(src, k);\n";
+    code = code + "      if (ch == 44 || ch == 59) { k = k + 1; }\n";
+    code = code + "    }\n";
+    code = code + "  }\n";
+    code = code + "  if (!sawDefault && !sawVariant) { yield err_expr(k, \"match requires _ arm\"); }\n";
+    code = code + "  ok_expr(expr_match(span(start, k), scrut.expr, arms), k)\n";
+    code = code + "}\n";
+    yield code;
+  }
+
   if (rule.name == "unary_expr") {
     code = code + "  let len = stringLen(src);\n";
     code = code + "  if (len > startPos) {\n";
@@ -443,8 +586,12 @@ fn generate_ast_rule_parser(rule: Rule, config: AstConfig) : String => {
     code = code + "  if (blk.success) { yield blk; }\n";
     code = code + "  let parsedIf = parse_if_expr(src, startPos);\n";
     code = code + "  if (parsedIf.success) { yield parsedIf; }\n";
+    code = code + "  let m = parse_match_expr(src, startPos);\n";
+    code = code + "  if (m.success) { yield m; }\n";
     code = code + "  let b = parse_bool_literal(src, startPos);\n";
     code = code + "  if (b.success) { yield b; }\n";
+    code = code + "  let s = parse_string_lit_value_raw(src, startPos);\n";
+    code = code + "  if (s.success) { yield ok_expr(expr_string(span(skip_ws(src, startPos), s.nextPos), s.value), s.nextPos); }\n";
     code = code + "  let len = stringLen(src);\n";
     code = code + "  if (len > startPos && stringCharCodeAt(src, startPos) == 40) { // '('\n";
     code = code + "    let first = parse_expr(src, startPos + 1);\n";
@@ -578,14 +725,15 @@ fn generate_ast_production_parser(prod: Production, posVar: String, ruleName: St
 fn generate_ast_alternation_parser(prod: PAlternation, posVar: String, ruleName: String, config: AstConfig, indentLevel: I32) : String => {
   let ind = indent(indentLevel);
   let mut code = "";
+  let rp = local_rule_prefix(ruleName);
   
   let mut i = 0;
   while (i < vec_len(prod.choices)) {
     let choice = vec_get(prod.choices, i);
-    let tryVar = ruleName + "_try" + i;
+    let tryVar = rp + "_try" + i;
     
     code = code + ind + "let " + tryVar + " = {\n";
-    code = code + generate_ast_production_parser(choice, posVar, ruleName + "_alt" + i, config, indentLevel + 1);
+    code = code + generate_ast_production_parser(choice, posVar, rp + "_alt" + i, config, indentLevel + 1);
     code = code + ind + "};\n";
     code = code + ind + "if (" + tryVar + ".success) { yield " + tryVar + "; }\n";
     
@@ -600,6 +748,7 @@ fn generate_ast_sequence_parser(prod: PSequence, posVar: String, ruleName: Strin
   let ind = indent(indentLevel);
   let mapping = find_mapping(config, ruleName);
   let mut code = "";
+  let rp = local_rule_prefix(ruleName);
   
   // Check if this is a binary operator rule
   if (mapping.astConstructor == "__binary_left") {
@@ -609,16 +758,16 @@ fn generate_ast_sequence_parser(prod: PSequence, posVar: String, ruleName: Strin
 
   // IMPORTANT: no-shadowing rule means we must avoid generic names like
   // `curPos` / `part0` in nested blocks. Use rule-scoped names instead.
-  let seqPos = ruleName + "_pos";
+  let seqPos = rp + "_pos";
   code = code + ind + "let mut " + seqPos + " = " + posVar + ";\n";
   
   let mut i = 0;
   while (i < vec_len(prod.terms)) {
     let term = vec_get(prod.terms, i);
-    let partVar = ruleName + "_part" + i;
+    let partVar = rp + "_part" + i;
     
     code = code + ind + "let " + partVar + " = {\n";
-    code = code + generate_ast_production_parser(term, seqPos, ruleName + "_part" + i, config, indentLevel + 1);
+    code = code + generate_ast_production_parser(term, seqPos, rp + "_part" + i, config, indentLevel + 1);
     code = code + ind + "};\n";
     code = code + ind + "if (" + partVar + ".success == false) {\n";
     code = code + ind + "  yield err_expr(" + seqPos + ", " + partVar + ".error);\n";
@@ -644,7 +793,7 @@ fn generate_ast_sequence_parser(prod: PSequence, posVar: String, ruleName: Strin
   }
   if (retIdx >= 0) {
     // Use the selected expr, but advance to the sequence's final position.
-    code = code + ind + "ok_expr(" + ruleName + "_part" + retIdx + ".expr, " + seqPos + ")\n";
+    code = code + ind + "ok_expr(" + rp + "_part" + retIdx + ".expr, " + seqPos + ")\n";
   } else {
     code = code + ind + "ok_expr(expr_int(span(startPos, " + seqPos + "), 0), " + seqPos + ")\n";
   }
@@ -657,6 +806,7 @@ fn generate_ast_binary_parser(prod: PSequence, posVar: String, ruleName: String,
   // Pattern: lower_expr (op lower_expr)*
   let ind = indent(indentLevel);
   let mut code = "";
+  let rp = local_rule_prefix(ruleName);
   
   // We need to find the lower precedence rule and the operators
   // For now, assume the pattern is: first_term (op second_term)*
@@ -667,18 +817,18 @@ fn generate_ast_binary_parser(prod: PSequence, posVar: String, ruleName: String,
   
   let firstTerm = vec_get(prod.terms, 0);
 
-  let firstVar = ruleName + "_first";
-  let leftVar = ruleName + "_left";
-  let curPosVar = ruleName + "_pos";
-  let opPosVar = ruleName + "_opPos";
-  let opValVar = ruleName + "_opVal";
-  let opMatchVar = ruleName + "_opMatch";
-  let opLenVar = ruleName + "_opLen";
-  let rightVar = ruleName + "_right";
+  let firstVar = rp + "_first";
+  let leftVar = rp + "_left";
+  let curPosVar = rp + "_pos";
+  let opPosVar = rp + "_opPos";
+  let opValVar = rp + "_opVal";
+  let opMatchVar = rp + "_opMatch";
+  let opLenVar = rp + "_opLen";
+  let rightVar = rp + "_right";
   
   // Parse first operand
   code = code + ind + "let " + firstVar + " = {\n";
-  code = code + generate_ast_production_parser(firstTerm, posVar, ruleName + "_first", config, indentLevel + 1);
+  code = code + generate_ast_production_parser(firstTerm, posVar, rp + "_first", config, indentLevel + 1);
   code = code + ind + "};\n";
   code = code + ind + "if (" + firstVar + ".success == false) { yield " + firstVar + "; }\n";
   code = code + ind + "let mut " + leftVar + " = " + firstVar + ".expr;\n";
@@ -748,6 +898,7 @@ fn generate_ast_binary_parser(prod: PSequence, posVar: String, ruleName: String,
 
 fn generate_ast_term_parser(term: Term, posVar: String, ruleName: String, config: AstConfig, indentLevel: I32) : String => {
   let ind = indent(indentLevel);
+  let rp = local_rule_prefix(ruleName);
   
   if (term is TNonTerminal) {
     yield ind + "parse_" + term.name + "(src, " + posVar + ")\n";
@@ -771,11 +922,11 @@ fn generate_ast_term_parser(term: Term, posVar: String, ruleName: String, config
   }
   
   if (term is TRepeat) {
-    yield generate_ast_repeat_parser(term, posVar, ruleName, config, indentLevel);
+    yield generate_ast_repeat_parser(term, posVar, rp, config, indentLevel);
   }
   
   if (term is TGroup) {
-    yield generate_ast_production_parser(term.inner, posVar, ruleName + "_group", config, indentLevel);
+    yield generate_ast_production_parser(term.inner, posVar, rp + "_group", config, indentLevel);
   }
   
   ind + "err_expr(" + posVar + ", \"unsupported term type\")\n"
@@ -825,12 +976,13 @@ fn generate_ast_char_class_parser(term: TCharClass, posVar: String, ruleName: St
 fn generate_ast_repeat_parser(term: TRepeat, posVar: String, ruleName: String, config: AstConfig, indentLevel: I32) : String => {
   let ind = indent(indentLevel);
   let mut code = "";
+  let rp = local_rule_prefix(ruleName);
   
   if (term.kind is RepeatOptional) {
     // Optional: try to parse, return empty on failure
     code = code + ind + "{\n";
     code = code + ind + "  let opt = {\n";
-    code = code + generate_ast_production_parser(term.inner, posVar, ruleName + "_opt", config, indentLevel + 2);
+    code = code + generate_ast_production_parser(term.inner, posVar, rp + "_opt", config, indentLevel + 2);
     code = code + ind + "  };\n";
     code = code + ind + "  if (opt.success) { opt } else {\n";
     code = code + ind + "    ok_expr(expr_int(span(" + posVar + ", " + posVar + "), 0), " + posVar + ")\n";
@@ -841,17 +993,17 @@ fn generate_ast_repeat_parser(term: TRepeat, posVar: String, ruleName: String, c
   
   // Zero-or-more or one-or-more
   code = code + ind + "{\n";
-  let itemsVar = ruleName + "_items";
-  let repPosVar = ruleName + "_repPos";
-  let keepVar = ruleName + "_keepGoing";
-  let itemVar = ruleName + "_item";
+  let itemsVar = rp + "_items";
+  let repPosVar = rp + "_repPos";
+  let keepVar = rp + "_keepGoing";
+  let itemVar = rp + "_item";
 
   code = code + ind + "  let " + itemsVar + " = vec_new();\n";
   code = code + ind + "  let mut " + repPosVar + " = " + posVar + ";\n";
   code = code + ind + "  let mut " + keepVar + " = true;\n";
   code = code + ind + "  while (" + keepVar + ") {\n";
   code = code + ind + "    let " + itemVar + " = {\n";
-  code = code + generate_ast_production_parser(term.inner, repPosVar, ruleName + "_item", config, indentLevel + 3);
+  code = code + generate_ast_production_parser(term.inner, repPosVar, rp + "_item", config, indentLevel + 3);
   code = code + ind + "    };\n";
   code = code + ind + "    if (" + itemVar + ".success) {\n";
   code = code + ind + "      vec_push(" + itemsVar + ", " + itemVar + ".expr);\n";
