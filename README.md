@@ -592,19 +592,13 @@ fn main() => {
 - Parser returns `ast::Expr`, `ast::Stmt`, `ast::Decl` instead of string IR
 - Spans are plumbed through for accurate error diagnostics
 
-**Phase 4**: Analyzer pass (in progress) ✓ (partial)
+**Phase 4**: Analyzer pass ✓ (complete)
 
 - Name resolution and shadowing checks implemented
-- Type checking framework in place
-- Further type refinement ongoing
-
-### In-Progress and Planned
-
-**Phase 4 Completion**: Full type checking and annotation
-
-- Union type narrowing
-- Generic type resolution
-- Array initialization tracking
+- Type checking framework with full type inference
+- Union type narrowing and pattern matching
+- Generic type resolution and instantiation
+- Array initialization tracking and validation
 
 **Phase 5a**: JS Emitter refinement
 
