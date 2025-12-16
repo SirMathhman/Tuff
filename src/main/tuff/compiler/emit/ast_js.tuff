@@ -210,6 +210,12 @@ out fn emit_expr_js(e: Expr) : String => {
     out = emit_expr_js(e.base) + "." + e.field;
   }
 
+  if (e is EIsType) {
+    // Emit runtime type check: expr.tag === "TypeName"
+    // TODO: optimize to true/false for statically known types
+    out = "(" + emit_expr_js(e.expr) + ".tag === \"" + e.typeToCheck + "\")";
+  }
+
   if (e is EMatch) {
     let mut cases = "";
     let mut def = "";

@@ -7,13 +7,13 @@ import { this_struct_name, struct_name_of_expr, has_struct_def, get_struct_field
 import { infer_lookup_ty } from "./scope.mjs";
 import { subst_bind, ty_apply_subst } from "./subst.mjs";
 export function infer_expr_type(src, structs, fns, scopes, depth, e) {
-if (e.tag == "EBool") {
+if ((e.tag === "EBool")) {
 return ty_bool();
 }
-if (e.tag == "EInt") {
+if ((e.tag === "EInt")) {
 return ty_int_lit();
 }
-if (e.tag == "EFloat") {
+if ((e.tag === "EFloat")) {
 if (e.suffix == "F32") {
 return ty_f32();
 }
@@ -22,10 +22,10 @@ return ty_f64();
 }
 return ty_float_lit();
 }
-if (e.tag == "EString") {
+if ((e.tag === "EString")) {
 return ty_string();
 }
-if (e.tag == "EIdent") {
+if ((e.tag === "EIdent")) {
 if (e.name == "true") {
 return ty_bool();
 }
@@ -34,21 +34,24 @@ return ty_bool();
 }
 return infer_lookup_ty(scopes, depth, e.name);
 }
-if (e.tag == "ELambda") {
+if ((e.tag === "ELambda")) {
 return ty_fn_type(e.typeParams, e.paramTyAnns, e.retTyAnn);
 }
-if (e.tag == "EStructLit") {
+if ((e.tag === "EStructLit")) {
 return struct_name_of_expr(src, e.nameExpr);
 }
-if (e.tag == "EUnary") {
-if (e.op.tag == "OpNot") {
+if ((e.tag === "EIsType")) {
+return ty_bool();
+}
+if ((e.tag === "EUnary")) {
+if ((e.op.tag === "OpNot")) {
 const t = infer_expr_type(src, structs, fns, scopes, depth, e.expr);
 if (t == ty_bool()) {
 return ty_bool();
 }
 return ty_unknown();
 }
-if (e.op.tag == "OpNeg") {
+if ((e.op.tag === "OpNeg")) {
 const t = infer_expr_type(src, structs, fns, scopes, depth, e.expr);
 if (t == ty_i32()) {
 return ty_i32();
@@ -68,32 +71,32 @@ return ty_f64();
 return ty_unknown();
 }
 }
-if (e.tag == "EBinary") {
-if (e.op.tag == "OpAnd") {
+if ((e.tag === "EBinary")) {
+if ((e.op.tag === "OpAnd")) {
 return ty_bool();
 }
-if (e.op.tag == "OpOr") {
+if ((e.op.tag === "OpOr")) {
 return ty_bool();
 }
-if (e.op.tag == "OpEq") {
+if ((e.op.tag === "OpEq")) {
 return ty_bool();
 }
-if (e.op.tag == "OpNe") {
+if ((e.op.tag === "OpNe")) {
 return ty_bool();
 }
-if (e.op.tag == "OpLt") {
+if ((e.op.tag === "OpLt")) {
 return ty_bool();
 }
-if (e.op.tag == "OpLe") {
+if ((e.op.tag === "OpLe")) {
 return ty_bool();
 }
-if (e.op.tag == "OpGt") {
+if ((e.op.tag === "OpGt")) {
 return ty_bool();
 }
-if (e.op.tag == "OpGe") {
+if ((e.op.tag === "OpGe")) {
 return ty_bool();
 }
-if (e.op.tag == "OpAdd") {
+if ((e.op.tag === "OpAdd")) {
 const lt = infer_expr_type(src, structs, fns, scopes, depth, e.left);
 const rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
 if (lt == ty_string() || rt == ty_string()) {
@@ -126,7 +129,7 @@ return ty_i32();
 }
 return ty_unknown();
 }
-if (e.op.tag == "OpSub" || e.op.tag == "OpMul" || e.op.tag == "OpDiv") {
+if ((e.op.tag === "OpSub") || (e.op.tag === "OpMul") || (e.op.tag === "OpDiv")) {
 const lt = infer_expr_type(src, structs, fns, scopes, depth, e.left);
 const rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
 if (type_is_float_like(lt) && type_is_float_like(rt)) {
@@ -157,14 +160,14 @@ return ty_i32();
 return ty_unknown();
 }
 }
-if (e.tag == "EField") {
+if ((e.tag === "EField")) {
 const bt = infer_expr_type(src, structs, fns, scopes, depth, e.base);
 if (!type_is_unknown(bt) && has_struct_def(structs, bt)) {
 return get_struct_field_type(src, span_start(e.span), structs, bt, e.field);
 }
 return ty_unknown();
 }
-if (e.tag == "EIndex") {
+if ((e.tag === "EIndex")) {
 const bt = infer_expr_type(src, structs, fns, scopes, depth, e.base);
 const arr = ty_parse_array(bt);
 if (arr.ok) {
@@ -178,7 +181,7 @@ return normalize_ty_ann(inner);
 }
 ty_unknown();
 }
-if (e.tag == "ECall") {
+if ((e.tag === "ECall")) {
 const ct = infer_expr_type(src, structs, fns, scopes, depth, e.callee);
 if (ty_is_fn_type(ct)) {
 const ret0 = ty_fn_ret(ct);
@@ -207,7 +210,7 @@ return ty_apply_subst(tps, subst, ret0);
 }
 return ret0;
 }
-if (e.callee.tag == "EIdent" && has_fn_sig(fns, e.callee.name)) {
+if ((e.callee.tag === "EIdent") && has_fn_sig(fns, e.callee.name)) {
 const sig = find_fn_sig(fns, e.callee.name);
 if (sig.retTyAnn != "") {
 if (vec_len(sig.typeParams) > 0) {
@@ -240,7 +243,7 @@ return thisTy;
 }
 return ty_unknown();
 }
-if (e.tag == "EIf") {
+if ((e.tag === "EIf")) {
 const t1 = infer_expr_type(src, structs, fns, scopes, depth, e.thenExpr);
 const t2 = infer_expr_type(src, structs, fns, scopes, depth, e.elseExpr);
 if (normalize_ty_ann(t1) == ty_never()) {
@@ -254,7 +257,7 @@ return normalize_ty_ann(t1);
 }
 return ty_unknown();
 }
-if (e.tag == "EBlock") {
+if ((e.tag === "EBlock")) {
 return infer_expr_type(src, structs, fns, scopes, depth, e.tail);
 }
 return ty_unknown();

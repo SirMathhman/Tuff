@@ -167,7 +167,7 @@ break;
 let di = 0;
 while (di < vec_len(decls)) {
 const d = vec_get(decls, di);
-if (d.tag == "DFn") {
+if ((d.tag === "DFn")) {
 const depReason = deprecation_reason_before(src, span_start(d.span));
 const sig = mk_fn_sig(d.name, depReason, d.typeParams, d.params, d.paramTyAnns, d.retTyAnn);
 vec_push(allSigs, sig);
@@ -177,7 +177,7 @@ vec_push(outSigs, sig);
 vec_push(privateNames, d.name);
 }
 }
-if (d.tag == "DClassFn") {
+if ((d.tag === "DClassFn")) {
 const depReason = deprecation_reason_before(src, span_start(d.span));
 const sig = mk_fn_sig(d.name, depReason, d.typeParams, d.params, d.paramTyAnns, d.retTyAnn);
 vec_push(allSigs, sig);

@@ -7,80 +7,80 @@ import { module_path_to_relpath } from "../parsing/primitives.mjs";
 import { set_current_file_path, emit_runtime_vec_imports_js, decls_needs_vec_rt, rel_import_path, escape_js_string } from "./emit_helpers.mjs";
 export function emit_binop_js(op) {
 let out = "??";
-if (op.tag == "OpAdd") {
+if ((op.tag === "OpAdd")) {
 out = "+";
 }
-if (op.tag == "OpSub") {
+if ((op.tag === "OpSub")) {
 out = "-";
 }
-if (op.tag == "OpMul") {
+if ((op.tag === "OpMul")) {
 out = "*";
 }
-if (op.tag == "OpEq") {
+if ((op.tag === "OpEq")) {
 out = "==";
 }
-if (op.tag == "OpNe") {
+if ((op.tag === "OpNe")) {
 out = "!=";
 }
-if (op.tag == "OpLt") {
+if ((op.tag === "OpLt")) {
 out = "<";
 }
-if (op.tag == "OpLe") {
+if ((op.tag === "OpLe")) {
 out = "<=";
 }
-if (op.tag == "OpGt") {
+if ((op.tag === "OpGt")) {
 out = ">";
 }
-if (op.tag == "OpGe") {
+if ((op.tag === "OpGe")) {
 out = ">=";
 }
-if (op.tag == "OpAnd") {
+if ((op.tag === "OpAnd")) {
 out = "&&";
 }
-if (op.tag == "OpOr") {
+if ((op.tag === "OpOr")) {
 out = "||";
 }
 return out;
 }
 export function emit_unop_js(op) {
 let out = "??";
-if (op.tag == "OpNot") {
+if ((op.tag === "OpNot")) {
 out = "!";
 }
-if (op.tag == "OpNeg") {
+if ((op.tag === "OpNeg")) {
 out = "-";
 }
 return out;
 }
 export function binop_prec_js(op) {
-if (op.tag == "OpMul") {
+if ((op.tag === "OpMul")) {
 return 14;
 }
-if (op.tag == "OpAdd" || op.tag == "OpSub") {
+if ((op.tag === "OpAdd") || (op.tag === "OpSub")) {
 return 13;
 }
-if (op.tag == "OpLt" || op.tag == "OpLe" || op.tag == "OpGt" || op.tag == "OpGe") {
+if ((op.tag === "OpLt") || (op.tag === "OpLe") || (op.tag === "OpGt") || (op.tag === "OpGe")) {
 return 11;
 }
-if (op.tag == "OpEq" || op.tag == "OpNe") {
+if ((op.tag === "OpEq") || (op.tag === "OpNe")) {
 return 10;
 }
-if (op.tag == "OpAnd") {
+if ((op.tag === "OpAnd")) {
 return 6;
 }
-if (op.tag == "OpOr") {
+if ((op.tag === "OpOr")) {
 return 5;
 }
 return 0;
 }
 export function expr_prec_js(e) {
-if (e.tag == "EIf") {
+if ((e.tag === "EIf")) {
 return 4;
 }
-if (e.tag == "EBinary") {
+if ((e.tag === "EBinary")) {
 return binop_prec_js(e.op);
 }
-if (e.tag == "EUnary") {
+if ((e.tag === "EUnary")) {
 return 17;
 }
 return 20;
@@ -98,10 +98,10 @@ i = i + 1;
 return out;
 }
 export function struct_name_for_lookup(nameExpr) {
-if (nameExpr.tag == "EIdent") {
+if ((nameExpr.tag === "EIdent")) {
 return nameExpr.name;
 }
-if (nameExpr.tag == "EPath") {
+if ((nameExpr.tag === "EPath")) {
 return emit_path_js(nameExpr.parts);
 }
 return panic("struct literal name must be ident or path");
@@ -126,52 +126,52 @@ return out;
 }
 export function emit_expr_js(e) {
 let out = "undefined";
-if (e.tag == "EUndefined") {
+if ((e.tag === "EUndefined")) {
 out = "undefined";
 }
-if (e.tag == "EInt") {
+if ((e.tag === "EInt")) {
 out = "" + e.value;
 }
-if (e.tag == "EFloat") {
+if ((e.tag === "EFloat")) {
 if (e.suffix == "F32") {
 out = "Math.fround(" + e.text + ")";
 } else {
 out = e.text;
 }
 }
-if (e.tag == "EBool") {
+if ((e.tag === "EBool")) {
 if (e.value) {
 out = "true";
 } else {
 out = "false";
 }
 }
-if (e.tag == "EString") {
+if ((e.tag === "EString")) {
 out = "\"" + escape_js_string(e.value) + "\"";
 }
-if (e.tag == "EIdent") {
+if ((e.tag === "EIdent")) {
 out = e.name;
 }
-if (e.tag == "EPath") {
+if ((e.tag === "EPath")) {
 out = emit_path_js(e.parts);
 }
-if (e.tag == "ELambda") {
+if ((e.tag === "ELambda")) {
 const params = emit_names_csv(e.params);
-if (e.body.tag == "EBlock") {
+if ((e.body.tag === "EBlock")) {
 out = "((" + params + ") => {\n" + emit_stmts_js(e.body.body) + "return " + emit_expr_js(e.body.tail) + ";\n})";
 } else {
 out = "((" + params + ") => " + emit_expr_js(e.body) + ")";
 }
 }
-if (e.tag == "EStructLit") {
+if ((e.tag === "EStructLit")) {
 out = emit_struct_lit_js(e.nameExpr, e.values);
 }
-if (e.tag == "EUnary") {
+if ((e.tag === "EUnary")) {
 const inner = emit_expr_js(e.expr);
 const innerStr = (expr_prec_js(e.expr) < 17 ? "(" + inner + ")" : inner);
 out = emit_unop_js(e.op) + innerStr;
 }
-if (e.tag == "EBinary") {
+if ((e.tag === "EBinary")) {
 const left = emit_expr_js(e.left);
 const right = emit_expr_js(e.right);
 const curPrec = binop_prec_js(e.op);
@@ -179,7 +179,7 @@ const leftStr = (expr_prec_js(e.left) < curPrec ? "(" + left + ")" : left);
 const rightStr = (expr_prec_js(e.right) <= curPrec ? "(" + right + ")" : right);
 out = leftStr + " " + emit_binop_js(e.op) + " " + rightStr;
 }
-if (e.tag == "ECall") {
+if ((e.tag === "ECall")) {
 let s = emit_expr_js(e.callee) + "(";
 let i = 0;
 while (i < vec_len(e.args)) {
@@ -192,13 +192,13 @@ i = i + 1;
 s = s + ")";
 out = s;
 }
-if (e.tag == "EIf") {
+if ((e.tag === "EIf")) {
 out = "(" + emit_expr_js(e.cond) + " ? " + emit_expr_js(e.thenExpr) + " : " + emit_expr_js(e.elseExpr) + ")";
 }
-if (e.tag == "EBlock") {
+if ((e.tag === "EBlock")) {
 out = "(() => {\n" + emit_stmts_js(e.body) + "return " + emit_expr_js(e.tail) + ";\n})()";
 }
-if (e.tag == "EVecLit") {
+if ((e.tag === "EVecLit")) {
 let pushes = "";
 let i = 0;
 while (i < vec_len(e.items)) {
@@ -207,7 +207,7 @@ i = i + 1;
 }
 out = "(() => { const __v = __tuff_vec_new();\n" + pushes + "return __v;\n})()";
 }
-if (e.tag == "ETupleLit") {
+if ((e.tag === "ETupleLit")) {
 let s = "[";
 let i = 0;
 while (i < vec_len(e.items)) {
@@ -220,36 +220,39 @@ i = i + 1;
 s = s + "]";
 out = s;
 }
-if (e.tag == "EIndex") {
+if ((e.tag === "EIndex")) {
 out = "__tuff_vec_get(" + emit_expr_js(e.base) + ", " + emit_expr_js(e.index) + ")";
 }
-if (e.tag == "ETupleIndex") {
+if ((e.tag === "ETupleIndex")) {
 out = emit_expr_js(e.base) + "[" + ("" + e.index) + "]";
 }
-if (e.tag == "EField") {
+if ((e.tag === "EField")) {
 out = emit_expr_js(e.base) + "." + e.field;
 }
-if (e.tag == "EMatch") {
+if ((e.tag === "EIsType")) {
+out = "(" + emit_expr_js(e.expr) + ".tag === \"" + e.typeToCheck + "\")";
+}
+if ((e.tag === "EMatch")) {
 let cases = "";
 let def = "";
 let sawVariant = false;
 let i = 0;
 while (i < vec_len(e.arms)) {
 const arm = vec_get(e.arms, i);
-if (arm.pat.tag == "MPWildcard") {
+if ((arm.pat.tag === "MPWildcard")) {
 def = emit_expr_js(arm.expr);
 } else {
 let patJs = "";
-if (arm.pat.tag == "MPInt") {
+if ((arm.pat.tag === "MPInt")) {
 patJs = "" + arm.pat.value;
 }
-if (arm.pat.tag == "MPBool") {
+if ((arm.pat.tag === "MPBool")) {
 patJs = (arm.pat.value ? "true" : "false");
 }
-if (arm.pat.tag == "MPString") {
+if ((arm.pat.tag === "MPString")) {
 patJs = "\"" + escape_js_string(arm.pat.value) + "\"";
 }
-if (arm.pat.tag == "MPVariant") {
+if ((arm.pat.tag === "MPVariant")) {
 patJs = "\"" + escape_js_string(arm.pat.name) + "\"";
 sawVariant = true;
 }
@@ -270,38 +273,38 @@ return out;
 }
 export function emit_stmt_js(s) {
 let out = "";
-if (s.tag == "SLet") {
+if ((s.tag === "SLet")) {
 const kw = (s.isMut ? "let" : "const");
 out = kw + " " + s.name + " = " + emit_expr_js(s.init) + ";\n";
 }
-if (s.tag == "SAssign") {
+if ((s.tag === "SAssign")) {
 out = s.name + " = " + emit_expr_js(s.value) + ";\n";
 }
-if (s.tag == "SExpr") {
+if ((s.tag === "SExpr")) {
 out = emit_expr_js(s.expr) + ";\n";
 }
-if (s.tag == "SYield") {
-if (s.expr.tag == "EUndefined") {
+if ((s.tag === "SYield")) {
+if ((s.expr.tag === "EUndefined")) {
 out = "return;\n";
 } else {
 out = "return " + emit_expr_js(s.expr) + ";\n";
 }
 }
-if (s.tag == "SWhile") {
+if ((s.tag === "SWhile")) {
 const cond = emit_expr_js(s.cond);
 out = "while (" + cond + ") {\n" + emit_stmts_js(s.body) + "}\n";
 }
-if (s.tag == "SIf") {
+if ((s.tag === "SIf")) {
 if (s.hasElse) {
 out = "if (" + emit_expr_js(s.cond) + ") {\n" + emit_stmts_js(s.thenBody) + "} else {\n" + emit_stmts_js(s.elseBody) + "}\n";
 } else {
 out = "if (" + emit_expr_js(s.cond) + ") {\n" + emit_stmts_js(s.thenBody) + "}\n";
 }
 }
-if (s.tag == "SIndexAssign") {
+if ((s.tag === "SIndexAssign")) {
 out = "__tuff_vec_set(" + emit_expr_js(s.base) + ", " + emit_expr_js(s.index) + ", " + emit_expr_js(s.value) + ");\n";
 }
-if (s.tag == "SFieldAssign") {
+if ((s.tag === "SFieldAssign")) {
 let lhs = emit_expr_js(s.base);
 let i = 0;
 while (i < vec_len(s.fields)) {
@@ -371,7 +374,7 @@ let first = true;
 let i = 0;
 while (i < vec_len(d.decls)) {
 const inner = vec_get(d.decls, i);
-if (inner.tag == "DFn") {
+if ((inner.tag === "DFn")) {
 const jsName = prefix + "__" + d.name + "__" + inner.name;
 decls = decls + emit_fn_decl_js(inner, false, jsName, false);
 if (first) {
@@ -383,7 +386,7 @@ first = false;
 i = i + 1;
 continue;
 }
-if (inner.tag == "DModule") {
+if ((inner.tag === "DModule")) {
 const innerCode = emit_module_decl_js(inner, prefix + "__" + d.name, false);
 decls = decls + innerCode;
 const prop = inner.name;
@@ -403,14 +406,14 @@ return decls + header + d.name + " = { " + entries + " };\n";
 }
 export function emit_decl_js(d, exportAll) {
 let out = "";
-if (d.tag == "DExternFrom") {
+if ((d.tag === "DExternFrom")) {
 const importPath = emit_extern_import_path(d.modulePath);
 out = "import { " + emit_names_csv(d.names) + " } from \"" + importPath + "\";\n";
 }
-if (d.tag == "DExternType") {
+if ((d.tag === "DExternType")) {
 out = "";
 }
-if (d.tag == "DImport") {
+if ((d.tag === "DImport")) {
 let targetModulePath = d.modulePath;
 const compilerSrcPrefix = "src::main::tuff::compiler::";
 if (starts_with_at(targetModulePath, 0, compilerSrcPrefix)) {
@@ -420,21 +423,21 @@ const targetRel = module_path_to_relpath(targetModulePath) + ".mjs";
 const importPath = rel_import_path(targetRel);
 out = "import { " + emit_names_csv(d.names) + " } from \"" + importPath + "\";\n";
 }
-if (d.tag == "DTypeUnion") {
+if ((d.tag === "DTypeUnion")) {
 out = emit_type_union_js(d, exportAll);
 }
-if (d.tag == "DStruct") {
+if ((d.tag === "DStruct")) {
 out = "";
 }
-if (d.tag == "DLet") {
+if ((d.tag === "DLet")) {
 const kw = (d.isMut ? "let" : "const");
 out = kw + " " + d.name + " = " + emit_expr_js(d.init) + ";\n";
 }
-if (d.tag == "DFn") {
+if ((d.tag === "DFn")) {
 const exportThis = exportAll || d.isOut || d.name == "main";
 out = emit_fn_decl_js(d, exportAll, d.name, exportThis);
 }
-if (d.tag == "DClassFn") {
+if ((d.tag === "DClassFn")) {
 const exportThis = exportAll || d.isOut || d.name == "main";
 const exportKw = (exportThis ? "export " : "");
 const params = emit_names_csv(d.params);
@@ -447,7 +450,7 @@ i = i + 1;
 i = 0;
 while (i < vec_len(d.body)) {
 const s = vec_get(d.body, i);
-if (s.tag == "SLet") {
+if ((s.tag === "SLet")) {
 let found = false;
 let j = 0;
 while (j < vec_len(fieldNames)) {
@@ -476,7 +479,7 @@ i = i + 1;
 }
 out = exportKw + "function " + d.name + "(" + params + ") {\n" + emit_stmts_js(d.body) + "return { " + fields + " };\n}\n";
 }
-if (d.tag == "DModule") {
+if ((d.tag === "DModule")) {
 out = emit_module_decl_js(d, "M", true);
 }
 return out;

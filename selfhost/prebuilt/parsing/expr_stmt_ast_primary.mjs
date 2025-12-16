@@ -179,7 +179,7 @@ k = parse_keyword(src, k, "=>");
 const t = skip_ws(src, k);
 const armE = (t < stringLen(src) && stringCharCodeAt(src, t) == 123 ? parse_block_expr_ast(src, k) : parse_expr_ast_impl(src, k));
 k = armE.nextPos;
-if (pat.tag == "MPWildcard") {
+if ((pat.tag === "MPWildcard")) {
 sawDefault = true;
 }
 vec_push(arms, mk_match_arm(span(patStart, armE.nextPos), pat, armE.expr));

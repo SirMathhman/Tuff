@@ -165,7 +165,7 @@ const impsAst = parse_imports_ast(src, scan);
 let ii = 0;
 while (ii < vec_len(impsAst.decls)) {
 const imp = vec_get(impsAst.decls, ii);
-if (imp.tag == "DImport") {
+if ((imp.tag === "DImport")) {
 const rel = module_path_to_relpath(imp.modulePath);
 let baseDir = pathDirname(path);
 const compilerSrcPrefix = "src::main::tuff::compiler::";
@@ -266,7 +266,7 @@ const impsAst = parse_imports_ast(src, scan);
 let ii = 0;
 while (ii < vec_len(impsAst.decls)) {
 const imp = vec_get(impsAst.decls, ii);
-if (imp.tag == "DImport") {
+if ((imp.tag === "DImport")) {
 const rel = module_path_to_relpath(imp.modulePath);
 let baseDir = pathDirname(path);
 const compilerSrcPrefix = "src::main::tuff::compiler::";

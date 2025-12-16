@@ -53,8 +53,8 @@ require_type_compatible(src, span_start(d.span), "function " + d.name + " return
 let si = 0;
 while (si < vec_len(d.body)) {
 const st = vec_get(d.body, si);
-if (st.tag == "SYield") {
-const yTy = (st.expr.tag == "EUndefined" ? ty_void() : infer_expr_type(src, structs, fns, outerScopes, depth, st.expr));
+if ((st.tag === "SYield")) {
+const yTy = ((st.expr.tag === "EUndefined") ? ty_void() : infer_expr_type(src, structs, fns, outerScopes, depth, st.expr));
 require_type_compatible(src, span_start(st.span), "function " + d.name + " yield", structs, expected, yTy);
 }
 si = si + 1;
@@ -93,8 +93,8 @@ require_type_compatible(src, span_start(d.span), "class fn " + d.name + " return
 let si = 0;
 while (si < vec_len(d.body)) {
 const st = vec_get(d.body, si);
-if (st.tag == "SYield") {
-const yTy = (st.expr.tag == "EUndefined" ? ty_void() : infer_expr_type(src, structs, fns, outerScopes, depth, st.expr));
+if ((st.tag === "SYield")) {
+const yTy = ((st.expr.tag === "EUndefined") ? ty_void() : infer_expr_type(src, structs, fns, outerScopes, depth, st.expr));
 require_type_compatible(src, span_start(st.span), "class fn " + d.name + " yield", structs, expected, yTy);
 }
 si = si + 1;

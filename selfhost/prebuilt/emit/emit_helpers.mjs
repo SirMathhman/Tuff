@@ -14,22 +14,22 @@ const importPath = rel_import_path("rt/vec.mjs");
 return "import { vec_new as __tuff_vec_new, vec_push as __tuff_vec_push, vec_get as __tuff_vec_get, vec_set as __tuff_vec_set } from \"" + importPath + "\";\n";
 }
 export function expr_needs_vec_rt(e) {
-if (e.tag == "EVecLit") {
+if ((e.tag === "EVecLit")) {
 return true;
 }
-if (e.tag == "EIndex") {
+if ((e.tag === "EIndex")) {
 return true;
 }
-if (e.tag == "EUnary") {
+if ((e.tag === "EUnary")) {
 return expr_needs_vec_rt(e.expr);
 }
-if (e.tag == "EBinary") {
+if ((e.tag === "EBinary")) {
 if (expr_needs_vec_rt(e.left)) {
 return true;
 }
 return expr_needs_vec_rt(e.right);
 }
-if (e.tag == "ECall") {
+if ((e.tag === "ECall")) {
 if (expr_needs_vec_rt(e.callee)) {
 return true;
 }
@@ -42,7 +42,7 @@ i = i + 1;
 }
 return false;
 }
-if (e.tag == "EIf") {
+if ((e.tag === "EIf")) {
 if (expr_needs_vec_rt(e.cond)) {
 return true;
 }
@@ -51,7 +51,7 @@ return true;
 }
 return expr_needs_vec_rt(e.elseExpr);
 }
-if (e.tag == "EBlock") {
+if ((e.tag === "EBlock")) {
 let i = 0;
 while (i < vec_len(e.body)) {
 if (stmt_needs_vec_rt(vec_get(e.body, i))) {
@@ -61,10 +61,10 @@ i = i + 1;
 }
 return expr_needs_vec_rt(e.tail);
 }
-if (e.tag == "ELambda") {
+if ((e.tag === "ELambda")) {
 return expr_needs_vec_rt(e.body);
 }
-if (e.tag == "EStructLit") {
+if ((e.tag === "EStructLit")) {
 if (expr_needs_vec_rt(e.nameExpr)) {
 return true;
 }
@@ -77,7 +77,7 @@ i = i + 1;
 }
 return false;
 }
-if (e.tag == "ETupleLit") {
+if ((e.tag === "ETupleLit")) {
 let i = 0;
 while (i < vec_len(e.items)) {
 if (expr_needs_vec_rt(vec_get(e.items, i))) {
@@ -87,13 +87,13 @@ i = i + 1;
 }
 return false;
 }
-if (e.tag == "ETupleIndex") {
+if ((e.tag === "ETupleIndex")) {
 return expr_needs_vec_rt(e.base);
 }
-if (e.tag == "EField") {
+if ((e.tag === "EField")) {
 return expr_needs_vec_rt(e.base);
 }
-if (e.tag == "EMatch") {
+if ((e.tag === "EMatch")) {
 if (expr_needs_vec_rt(e.scrut)) {
 return true;
 }
@@ -110,22 +110,22 @@ return false;
 return false;
 }
 export function stmt_needs_vec_rt(s) {
-if (s.tag == "SIndexAssign") {
+if ((s.tag === "SIndexAssign")) {
 return true;
 }
-if (s.tag == "SLet") {
+if ((s.tag === "SLet")) {
 return expr_needs_vec_rt(s.init);
 }
-if (s.tag == "SAssign") {
+if ((s.tag === "SAssign")) {
 return expr_needs_vec_rt(s.value);
 }
-if (s.tag == "SExpr") {
+if ((s.tag === "SExpr")) {
 return expr_needs_vec_rt(s.expr);
 }
-if (s.tag == "SYield") {
+if ((s.tag === "SYield")) {
 return expr_needs_vec_rt(s.expr);
 }
-if (s.tag == "SWhile") {
+if ((s.tag === "SWhile")) {
 if (expr_needs_vec_rt(s.cond)) {
 return true;
 }
@@ -138,7 +138,7 @@ i = i + 1;
 }
 return false;
 }
-if (s.tag == "SIf") {
+if ((s.tag === "SIf")) {
 if (expr_needs_vec_rt(s.cond)) {
 return true;
 }
@@ -160,7 +160,7 @@ i = i + 1;
 }
 return false;
 }
-if (s.tag == "SFieldAssign") {
+if ((s.tag === "SFieldAssign")) {
 if (expr_needs_vec_rt(s.base)) {
 return true;
 }
@@ -169,10 +169,10 @@ return expr_needs_vec_rt(s.value);
 return false;
 }
 export function decl_needs_vec_rt(d) {
-if (d.tag == "DLet") {
+if ((d.tag === "DLet")) {
 return expr_needs_vec_rt(d.init);
 }
-if (d.tag == "DFn") {
+if ((d.tag === "DFn")) {
 let i = 0;
 while (i < vec_len(d.body)) {
 if (stmt_needs_vec_rt(vec_get(d.body, i))) {
@@ -182,7 +182,7 @@ i = i + 1;
 }
 return expr_needs_vec_rt(d.tail);
 }
-if (d.tag == "DClassFn") {
+if ((d.tag === "DClassFn")) {
 let i = 0;
 while (i < vec_len(d.body)) {
 if (stmt_needs_vec_rt(vec_get(d.body, i))) {
@@ -192,7 +192,7 @@ i = i + 1;
 }
 return false;
 }
-if (d.tag == "DModule") {
+if ((d.tag === "DModule")) {
 let i = 0;
 while (i < vec_len(d.decls)) {
 if (decl_needs_vec_rt(vec_get(d.decls, i))) {

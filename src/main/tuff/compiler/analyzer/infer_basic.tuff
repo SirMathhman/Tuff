@@ -62,6 +62,11 @@ out fn infer_expr_type(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, sc
     yield struct_name_of_expr(src, e.nameExpr);
   }
 
+  if (e is EIsType) {
+    // Type check always returns Bool
+    yield ty_bool();
+  }
+
   if (e is EUnary) {
     // Only obvious: !Bool => Bool
     if (e.op is OpNot) {

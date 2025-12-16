@@ -58,16 +58,27 @@ out fn parse_tag_narrowing(cond: Expr) : ParsedTagNarrowing => {
   // Recognize union tag tests and return which branch (then/else) implies which variant.
   // Handles:
   //   o is Some            => then: Some
-  //   o.tag != "Some"            => else: Some
   //   !(o is Some)         => else: Some
-  //   !(o.tag != "Some")         => then: Some
+  //   o.tag != "Some"      => else: Some (legacy support)
+  //   !(o.tag != "Some")   => then: Some (legacy support)
+  
+  // Handle negation: !(x is Type)
   if (cond is EUnary && cond.op is OpNot) {
     let inner = parse_tag_narrowing(cond.expr);
     if (inner.ok) { yield ParsedTagNarrowing(true, inner.name, inner.elseVariant, inner.thenVariant); }
     yield ParsedTagNarrowing(false, "", "", "");
   }
 
-  if (cond.tag != "EBinary") { yield ParsedTagNarrowing(false, "", "", ""); }
+  // Handle EIsType: x is Type
+  if (cond is EIsType) {
+    if (cond.expr is EIdent) {
+      yield ParsedTagNarrowing(true, cond.expr.name, cond.typeToCheck, "");
+    }
+    yield ParsedTagNarrowing(false, "", "", "");
+  }
+
+  // Legacy support for .tag == comparisons (for backward compatibility during transition)
+  if (!(cond is EBinary)) { yield ParsedTagNarrowing(false, "", "", ""); }
   if (!(cond.op is OpEq || cond.op is OpNe)) { yield ParsedTagNarrowing(false, "", "", ""); }
 
   // Left: o.tag

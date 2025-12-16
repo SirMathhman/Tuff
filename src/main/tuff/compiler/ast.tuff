@@ -63,7 +63,8 @@ type Expr =
   | EIndex
   | ETupleIndex
   | EField
-  | EMatch;
+  | EMatch
+  | EIsType;
 
 struct EUndefined {
   tag: String,
@@ -232,6 +233,13 @@ struct EMatch {
   span: Span,
   scrut: Expr,
   arms: Vec<MatchArm>
+}
+
+struct EIsType {
+  tag: String,
+  span: Span,
+  expr: Expr,
+  typeToCheck: String
 }
 
 type Stmt =
@@ -456,6 +464,7 @@ out fn expr_tuple_lit(span: Span, items: Vec<Expr>) : Expr => ETupleLit { "ETupl
 out fn expr_index(span: Span, base: Expr, index: Expr) : Expr => EIndex { "EIndex", span, base, index }
 out fn expr_tuple_index(span: Span, base: Expr, index: I32) : Expr => ETupleIndex { "ETupleIndex", span, base, index }
 out fn expr_field(span: Span, base: Expr, field: String) : Expr => EField { "EField", span, base, field }
+out fn expr_is_type(span: Span, expr: Expr, typeToCheck: String) : Expr => EIsType { "EIsType", span, expr, typeToCheck }
 
 out fn pat_wildcard(span: Span) : MatchPat => MPWildcard { "MPWildcard", span }
 out fn pat_int(span: Span, value: I32) : MatchPat => MPInt { "MPInt", span, value }

@@ -123,7 +123,7 @@ continue;
 }
 if (starts_with_at(src, j, "fn")) {
 const f = parse_fn_decl_ast2(src, i, exportAll);
-if (f.decl.tag == "DFn" && f.decl.name == "main") {
+if ((f.decl.tag === "DFn") && f.decl.name == "main") {
 sawMain = true;
 }
 vec_push(decls, f.decl);
@@ -132,7 +132,7 @@ continue;
 }
 if (starts_with_at(src, j, "class")) {
 const f = parse_class_fn_decl_ast2(src, i, exportAll);
-if (f.decl.tag == "DClassFn" && f.decl.name == "main") {
+if ((f.decl.tag === "DClassFn") && f.decl.name == "main") {
 sawMain = true;
 }
 vec_push(decls, f.decl);
@@ -144,7 +144,7 @@ const k0 = parse_keyword(src, i, "out");
 const j2 = skip_ws(src, k0);
 if (starts_with_at(src, j2, "class")) {
 const f = parse_class_fn_decl_ast2(src, i, exportAll);
-if (f.decl.tag == "DClassFn" && f.decl.name == "main") {
+if ((f.decl.tag === "DClassFn") && f.decl.name == "main") {
 sawMain = true;
 }
 vec_push(decls, f.decl);
@@ -152,7 +152,7 @@ i = f.nextPos;
 continue;
 }
 const f = parse_fn_decl_ast2(src, i, exportAll);
-if (f.decl.tag == "DFn" && f.decl.name == "main") {
+if ((f.decl.tag === "DFn") && f.decl.name == "main") {
 sawMain = true;
 }
 vec_push(decls, f.decl);
@@ -249,7 +249,7 @@ continue;
 }
 if (starts_with_at(src, j, "fn")) {
 const f = parse_fn_decl_ast2(src, i, exportAll);
-if (f.decl.tag == "DFn" && f.decl.name == "main") {
+if ((f.decl.tag === "DFn") && f.decl.name == "main") {
 sawMain = true;
 }
 vec_push(decls, f.decl);
@@ -258,7 +258,7 @@ continue;
 }
 if (starts_with_at(src, j, "class")) {
 const f = parse_class_fn_decl_ast2(src, i, exportAll);
-if (f.decl.tag == "DClassFn" && f.decl.name == "main") {
+if ((f.decl.tag === "DClassFn") && f.decl.name == "main") {
 sawMain = true;
 }
 vec_push(decls, f.decl);
@@ -270,7 +270,7 @@ const k0 = parse_keyword(src, i, "out");
 const j2 = skip_ws(src, k0);
 if (starts_with_at(src, j2, "class")) {
 const f = parse_class_fn_decl_ast2(src, i, exportAll);
-if (f.decl.tag == "DClassFn" && f.decl.name == "main") {
+if ((f.decl.tag === "DClassFn") && f.decl.name == "main") {
 sawMain = true;
 }
 vec_push(decls, f.decl);
@@ -278,7 +278,7 @@ i = f.nextPos;
 continue;
 }
 const f = parse_fn_decl_ast2(src, i, exportAll);
-if (f.decl.tag == "DFn" && f.decl.name == "main") {
+if ((f.decl.tag === "DFn") && f.decl.name == "main") {
 sawMain = true;
 }
 vec_push(decls, f.decl);
@@ -366,7 +366,7 @@ continue;
 }
 if (starts_with_at(src, j, "fn")) {
 const f = parse_fn_decl_ast2(src, i, exportAll);
-if (f.decl.tag == "DFn" && f.decl.name == "main") {
+if ((f.decl.tag === "DFn") && f.decl.name == "main") {
 sawMain = true;
 }
 vec_push(decls, f.decl);
@@ -375,7 +375,7 @@ continue;
 }
 if (starts_with_at(src, j, "class")) {
 const f = parse_class_fn_decl_ast2(src, i, exportAll);
-if (f.decl.tag == "DClassFn" && f.decl.name == "main") {
+if ((f.decl.tag === "DClassFn") && f.decl.name == "main") {
 sawMain = true;
 }
 vec_push(decls, f.decl);
@@ -387,7 +387,7 @@ const k0 = parse_keyword(src, i, "out");
 const j2 = skip_ws(src, k0);
 if (starts_with_at(src, j2, "class")) {
 const f = parse_class_fn_decl_ast2(src, i, exportAll);
-if (f.decl.tag == "DClassFn" && f.decl.name == "main") {
+if ((f.decl.tag === "DClassFn") && f.decl.name == "main") {
 sawMain = true;
 }
 vec_push(decls, f.decl);
@@ -395,7 +395,7 @@ i = f.nextPos;
 continue;
 }
 const f = parse_fn_decl_ast2(src, i, exportAll);
-if (f.decl.tag == "DFn" && f.decl.name == "main") {
+if ((f.decl.tag === "DFn") && f.decl.name == "main") {
 sawMain = true;
 }
 vec_push(decls, f.decl);

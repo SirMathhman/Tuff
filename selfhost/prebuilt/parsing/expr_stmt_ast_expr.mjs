@@ -4,7 +4,7 @@ import { skip_ws, starts_with_at, is_ident_part } from "../util/lexing.mjs";
 import { parse_ident } from "./primitives.mjs";
 import { ParsedExprAst } from "./expr_stmt_types.mjs";
 import { parse_postfix_ast } from "./expr_stmt_ast_postfix.mjs";
-import { span, span_start, expr_span, expr_field, expr_string, expr_unary, expr_binary, OpOr, OpAnd, OpEq, OpNe, OpLt, OpLe, OpGt, OpGe, OpAdd, OpSub, OpMul, OpDiv, OpNot, OpNeg } from "../ast.mjs";
+import { span, span_start, expr_span, expr_field, expr_string, expr_unary, expr_binary, expr_is_type, OpOr, OpAnd, OpEq, OpNe, OpLt, OpLe, OpGt, OpGe, OpAdd, OpSub, OpMul, OpDiv, OpNot, OpNeg } from "../ast.mjs";
 export function parse_expr_ast_impl(src, i) {
 return parse_or_ast(src, i);
 }
@@ -91,10 +91,12 @@ k = next.nextPos;
 }
 const start = span_start(expr_span(left.expr));
 const end = k;
-const tagExpr = expr_field(span(start, end), left.expr, "tag");
-const rhs = expr_string(span(first.startPos, end), variantName);
-const op = (isNot ? OpNe : OpEq);
-left = ParsedExprAst(expr_binary(span(start, end), op, tagExpr, rhs), end);
+const isCheck = expr_is_type(span(start, end), left.expr, variantName);
+if (isNot) {
+left = ParsedExprAst(expr_unary(span(start, end), OpNot, isCheck), end);
+} else {
+left = ParsedExprAst(isCheck, end);
+}
 j = left.nextPos;
 continue;
 }

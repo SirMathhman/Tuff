@@ -20,10 +20,10 @@ i = i + 1;
 return out;
 }
 export function struct_name_of_expr(src, nameExpr) {
-if (nameExpr.tag == "EIdent") {
+if ((nameExpr.tag === "EIdent")) {
 return nameExpr.name;
 }
-if (nameExpr.tag == "EPath") {
+if ((nameExpr.tag === "EPath")) {
 return path_dotted(nameExpr.parts);
 }
 error_at(src, span_start(nameExpr.span), "struct literal name must be ident or path");

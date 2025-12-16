@@ -37,6 +37,7 @@ export const EIndex = { tag: "EIndex" };
 export const ETupleIndex = { tag: "ETupleIndex" };
 export const EField = { tag: "EField" };
 export const EMatch = { tag: "EMatch" };
+export const EIsType = { tag: "EIsType" };
 export const OpNot = { tag: "OpNot" };
 export const OpNeg = { tag: "OpNeg" };
 export const MPWildcard = { tag: "MPWildcard" };
@@ -168,6 +169,9 @@ return ({ tag: "ETupleIndex", span: span, base: base, index: index });
 }
 export function expr_field(span, base, field) {
 return ({ tag: "EField", span: span, base: base, field: field });
+}
+export function expr_is_type(span, expr, typeToCheck) {
+return ({ tag: "EIsType", span: span, expr: expr, typeToCheck: typeToCheck });
 }
 export function pat_wildcard(span) {
 return ({ tag: "MPWildcard", span: span });

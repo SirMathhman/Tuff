@@ -29,7 +29,7 @@ const rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
 if (type_is_unknown(lt) || type_is_unknown(rt)) {
 return;
 }
-if (e.op.tag == "OpAdd") {
+if ((e.op.tag === "OpAdd")) {
 if (lt == ty_string() || rt == ty_string()) {
 return;
 }
@@ -38,13 +38,13 @@ error_at(src, span_start(e.span), "invalid operands to '+': expected numbers or 
 }
 return;
 }
-if (e.op.tag == "OpSub" || e.op.tag == "OpMul" || e.op.tag == "OpDiv") {
+if ((e.op.tag === "OpSub") || (e.op.tag === "OpMul") || (e.op.tag === "OpDiv")) {
 if (!(type_is_int_like(lt) && type_is_int_like(rt) || type_is_float_like(lt) && type_is_float_like(rt))) {
 error_at(src, span_start(e.span), "invalid operands to arithmetic operator");
 }
 return;
 }
-if (e.op.tag == "OpLt" || e.op.tag == "OpLe" || e.op.tag == "OpGt" || e.op.tag == "OpGe") {
+if ((e.op.tag === "OpLt") || (e.op.tag === "OpLe") || (e.op.tag === "OpGt") || (e.op.tag === "OpGe")) {
 if (!(type_is_int_like(lt) && type_is_int_like(rt) || type_is_float_like(lt) && type_is_float_like(rt))) {
 error_at(src, span_start(e.span), "invalid operands to comparison operator: expected numbers");
 }
@@ -74,7 +74,7 @@ i = i + 1;
 return undefined;
 }
 export function check_call_types(src, structs, fns, scopes, depth, e) {
-if (e.callee.tag == "ELambda") {
+if ((e.callee.tag === "ELambda")) {
 if (!(vec_len(e.args) == vec_len(e.callee.params))) {
 error_at(src, span_start(e.span), "wrong number of args in lambda call");
 }

@@ -18,6 +18,7 @@ from ast use {
   expr_string,
   expr_unary,
   expr_binary,
+  expr_is_type,
 
   OpOr,
   OpAnd,
@@ -123,10 +124,14 @@ fn parse_cmp_ast(src: String, i: I32) : ParsedExprAst => {
         let start = span_start(expr_span(left.expr));
         let end = k;
 
-        let tagExpr = expr_field(span(start, end), left.expr, "tag");
-        let rhs = expr_string(span(first.startPos, end), variantName);
-        let op = if (isNot) OpNe else OpEq;
-        left = ParsedExprAst(expr_binary(span(start, end), op, tagExpr, rhs), end);
+        // Generate EIsType node instead of .tag == check
+        let isCheck = expr_is_type(span(start, end), left.expr, variantName);
+        if (isNot) {
+          // `x is not Type` => !(x is Type)
+          left = ParsedExprAst(expr_unary(span(start, end), OpNot, isCheck), end);
+        } else {
+          left = ParsedExprAst(isCheck, end);
+        }
         j = left.nextPos;
         continue;
       }

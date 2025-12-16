@@ -50,7 +50,7 @@ analyze_decls(src, structs, unions, fns, scopes, depth, d.decls);
 return undefined;
 }
 export function predeclare_decl(src, structs, unions, fns, scopes, depth, d) {
-if (d.tag == "DExternFrom") {
+if ((d.tag === "DExternFrom")) {
 let ni = 0;
 while (ni < vec_len(d.names)) {
 declare_name(src, span_start(d.span), scopes, depth, vec_get(d.names, ni), false, ty_unknown());
@@ -58,10 +58,10 @@ ni = ni + 1;
 }
 return;
 }
-if (d.tag == "DExternType") {
+if ((d.tag === "DExternType")) {
 return;
 }
-if (d.tag == "DImport") {
+if ((d.tag === "DImport")) {
 let ni = 0;
 while (ni < vec_len(d.names)) {
 const name = vec_get(d.names, ni);
@@ -79,7 +79,7 @@ ni = ni + 1;
 }
 return;
 }
-if (d.tag == "DTypeUnion") {
+if ((d.tag === "DTypeUnion")) {
 check_single_char_identifier(src, span_start(d.span), d.name, "union");
 const depReason = deprecation_reason_before(src, span_start(d.span));
 let vi = 0;
@@ -98,7 +98,7 @@ vi = vi + 1;
 vec_push(unions, mk_union_def(d.name, d.typeParams, infos));
 return;
 }
-if (d.tag == "DFn") {
+if ((d.tag === "DFn")) {
 const depReason = deprecation_reason_before(src, span_start(d.span));
 if (depReason != "") {
 declare_name_deprecated(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown(), depReason);
@@ -118,7 +118,7 @@ require_all_param_types(src, span_start(d.span), "function " + d.name, d.params,
 vec_push(fns, mk_fn_sig(d.name, depReason, d.typeParams, d.params, paramTyAnns, d.retTyAnn));
 return;
 }
-if (d.tag == "DClassFn") {
+if ((d.tag === "DClassFn")) {
 const depReason = deprecation_reason_before(src, span_start(d.span));
 if (depReason != "") {
 declare_name_deprecated(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown(), depReason);
@@ -142,12 +142,12 @@ pi = pi + 1;
 let si = 0;
 while (si < vec_len(d.body)) {
 const st = vec_get(d.body, si);
-if (st.tag == "SLet") {
+if ((st.tag === "SLet")) {
 vec_push(fields, st.name);
 if (st.tyAnn != "") {
 vec_push(fieldTyAnns, normalize_ty_ann(st.tyAnn));
 } else {
-if (st.init.tag == "ELambda") {
+if ((st.init.tag === "ELambda")) {
 vec_push(fieldTyAnns, ty_fn_type(st.init.typeParams, st.init.paramTyAnns, st.init.retTyAnn));
 } else {
 vec_push(fieldTyAnns, "");
@@ -171,7 +171,7 @@ require_all_param_types(src, span_start(d.span), "class fn " + d.name, d.params,
 vec_push(fns, mk_fn_sig(d.name, depReason, d.typeParams, d.params, paramTyAnns, d.retTyAnn));
 return;
 }
-if (d.tag == "DStruct") {
+if ((d.tag === "DStruct")) {
 check_single_char_identifier(src, span_start(d.span), d.name, "struct");
 let fi = 0;
 while (fi < vec_len(d.fields)) {
@@ -181,7 +181,7 @@ fi = fi + 1;
 vec_push(structs, mk_struct_def(d.name, d.fields, d.fieldTyAnns));
 return;
 }
-if (d.tag == "DModule") {
+if ((d.tag === "DModule")) {
 const depReason = deprecation_reason_before(src, span_start(d.span));
 if (depReason != "") {
 declare_name_deprecated(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown(), depReason);
@@ -193,11 +193,11 @@ return;
 return undefined;
 }
 export function analyze_decl_body(src, structs, unions, fns, scopes, depth, d) {
-if (d.tag == "DLet") {
+if ((d.tag === "DLet")) {
 const narrowed = vec_new();
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, d.init);
 const initTy = infer_expr_type(src, structs, fns, scopes, depth, d.init);
-if (d.init.tag == "EIdent" && has_fn_sig(fns, d.init.name)) {
+if ((d.init.tag === "EIdent") && has_fn_sig(fns, d.init.name)) {
 const sig = find_fn_sig(fns, d.init.name);
 if (vec_len(sig.typeParams) > 0) {
 error_at(src, span_start(d.init.span), "generic function requires type args when used as a value: " + d.init.name);
@@ -226,15 +226,15 @@ declare_name(src, span_start(d.span), scopes, depth, d.name, d.isMut, initTy);
 }
 return;
 }
-if (d.tag == "DFn") {
+if ((d.tag === "DFn")) {
 analyze_fn_decl(src, structs, unions, fns, scopes, depth, d);
 return;
 }
-if (d.tag == "DClassFn") {
+if ((d.tag === "DClassFn")) {
 analyze_class_fn_decl(src, structs, unions, fns, scopes, depth, d);
 return;
 }
-if (d.tag == "DModule") {
+if ((d.tag === "DModule")) {
 analyze_module(src, d);
 return;
 }

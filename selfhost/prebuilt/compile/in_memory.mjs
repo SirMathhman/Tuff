@@ -169,7 +169,7 @@ const impsAst = parse_imports_ast(src, scan);
 let ii = 0;
 while (ii < vec_len(impsAst.decls)) {
 const imp = vec_get(impsAst.decls, ii);
-if (imp.tag == "DImport") {
+if ((imp.tag === "DImport")) {
 const depKey = imp.modulePath;
 const depIdx = module_index(moduleKeys, depKey);
 if (depIdx != -1) {

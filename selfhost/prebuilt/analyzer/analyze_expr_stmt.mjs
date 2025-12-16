@@ -16,7 +16,7 @@ import { require_all_param_types, require_type_compatible } from "./typecheck.mj
 import { check_struct_lit_types, check_binary_operand_types, check_call_types, check_cond_is_bool } from "./checks.mjs";
 import { warn_unused_locals_in_scope, warn_unused_params_in_scope, check_lambda_complexity, check_single_char_identifier } from "./fluff.mjs";
 export function analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e) {
-if (e.tag == "EIdent") {
+if ((e.tag === "EIdent")) {
 require_name(src, span_start(e.span), scopes, depth, e.name);
 if (!(e.name == "true") && !(e.name == "false") && !(e.name == "continue") && !(e.name == "break")) {
 mark_binding_read(scopes, depth, e.name);
@@ -27,7 +27,7 @@ warn_at(src, span_start(e.span), "use of deprecated symbol " + e.name + " - " + 
 }
 return;
 }
-if (e.tag == "ELambda") {
+if ((e.tag === "ELambda")) {
 require_all_param_types(src, span_start(e.span), "lambda", e.params, e.paramTyAnns);
 const newDepth = scopes_enter(scopes, depth);
 let pi = 0;
@@ -54,7 +54,7 @@ warn_unused_params_in_scope(src, scopes, newDepth);
 warn_unused_locals_in_scope(src, scopes, newDepth);
 return;
 }
-if (e.tag == "EStructLit") {
+if ((e.tag === "EStructLit")) {
 let vi = 0;
 while (vi < vec_len(e.values)) {
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, vec_get(e.values, vi));
@@ -63,17 +63,17 @@ vi = vi + 1;
 check_struct_lit_types(src, structs, fns, scopes, depth, e);
 return;
 }
-if (e.tag == "EUnary") {
+if ((e.tag === "EUnary")) {
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.expr);
 return;
 }
-if (e.tag == "EBinary") {
+if ((e.tag === "EBinary")) {
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.left);
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.right);
 check_binary_operand_types(src, structs, fns, scopes, depth, e);
 return;
 }
-if (e.tag == "ECall") {
+if ((e.tag === "ECall")) {
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.callee);
 let ai = 0;
 while (ai < vec_len(e.args)) {
@@ -83,7 +83,7 @@ ai = ai + 1;
 check_call_types(src, structs, fns, scopes, depth, e);
 return;
 }
-if (e.tag == "EIf") {
+if ((e.tag === "EIf")) {
 check_cond_is_bool(src, structs, fns, scopes, depth, e.cond);
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.cond);
 const nar = parse_tag_narrowing(e.cond);
@@ -110,14 +110,14 @@ analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.thenExpr);
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.elseExpr);
 return;
 }
-if (e.tag == "EBlock") {
+if ((e.tag === "EBlock")) {
 const newDepth = scopes_enter(scopes, depth);
 analyze_stmts(src, structs, unions, fns, scopes, newDepth, narrowed, e.body);
 analyze_expr(src, structs, unions, fns, scopes, newDepth, narrowed, e.tail);
 warn_unused_locals_in_scope(src, scopes, newDepth);
 return;
 }
-if (e.tag == "EVecLit") {
+if ((e.tag === "EVecLit")) {
 let ii = 0;
 while (ii < vec_len(e.items)) {
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, vec_get(e.items, ii));
@@ -125,7 +125,7 @@ ii = ii + 1;
 }
 return;
 }
-if (e.tag == "ETupleLit") {
+if ((e.tag === "ETupleLit")) {
 let ii = 0;
 while (ii < vec_len(e.items)) {
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, vec_get(e.items, ii));
@@ -133,10 +133,10 @@ ii = ii + 1;
 }
 return;
 }
-if (e.tag == "EIndex") {
+if ((e.tag === "EIndex")) {
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.base);
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.index);
-if (e.base.tag == "EIdent") {
+if ((e.base.tag === "EIdent")) {
 const bt = infer_lookup_ty(scopes, depth, e.base.name);
 const arr = ty_parse_array(normalize_ty_ann(bt));
 if (arr.ok) {
@@ -153,13 +153,13 @@ error_at(src, span_start(e.span), "array index uninitialized: " + ("" + idx));
 }
 return;
 }
-if (e.tag == "ETupleIndex") {
+if ((e.tag === "ETupleIndex")) {
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.base);
 return;
 }
-if (e.tag == "EField") {
+if ((e.tag === "EField")) {
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.base);
-if (e.field == "value" && e.base.tag == "EIdent") {
+if (e.field == "value" && (e.base.tag === "EIdent")) {
 const bt = infer_lookup_ty(scopes, depth, e.base.name);
 const app = ty_parse_app(normalize_ty_ann(bt));
 if (app.ok) {
@@ -187,10 +187,10 @@ const _ft = get_struct_field_type(src, span_start(e.span), structs, bt, e.field)
 }
 return;
 }
-if (e.tag == "EMatch") {
+if ((e.tag === "EMatch")) {
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.scrut);
 let scrutName = "";
-if (e.scrut.tag == "EIdent") {
+if ((e.scrut.tag === "EIdent")) {
 scrutName = e.scrut.name;
 }
 let scrutIsUnion = false;
@@ -214,10 +214,10 @@ const covered = vec_new();
 let mi = 0;
 while (mi < vec_len(e.arms)) {
 const arm = vec_get(e.arms, mi);
-if (arm.pat.tag == "MPWildcard") {
+if ((arm.pat.tag === "MPWildcard")) {
 hasWildcard = true;
 }
-if (arm.pat.tag == "MPVariant") {
+if ((arm.pat.tag === "MPVariant")) {
 vec_push(covered, arm.pat.name);
 if (scrutIsUnion) {
 if (!union_has_variant(u, arm.pat.name)) {
@@ -248,13 +248,17 @@ vi = vi + 1;
 }
 return;
 }
+if ((e.tag === "EIsType")) {
+analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.expr);
+return;
+}
 return undefined;
 }
 export function analyze_stmt(src, structs, unions, fns, scopes, depth, narrowed, s) {
-if (s.tag == "SLet") {
+if ((s.tag === "SLet")) {
 check_single_char_identifier(src, span_start(s.span), s.name, "local variable");
 const depReason = deprecation_reason_before(src, span_start(s.span));
-if (s.init.tag == "ELambda") {
+if ((s.init.tag === "ELambda")) {
 const initTy0 = infer_expr_type(src, structs, fns, scopes, depth, s.init);
 const bindTy = (s.tyAnn != "" ? normalize_ty_ann(s.tyAnn) : initTy0);
 const cur = vec_get(scopes, depth - 1);
@@ -274,7 +278,7 @@ return;
 }
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.init);
 const initTy = infer_expr_type_with_narrowing(src, structs, unions, fns, scopes, depth, narrowed, s.init);
-if (s.init.tag == "EIdent" && has_fn_sig(fns, s.init.name)) {
+if ((s.init.tag === "EIdent") && has_fn_sig(fns, s.init.name)) {
 const sig = find_fn_sig(fns, s.init.name);
 if (vec_len(sig.typeParams) > 0) {
 error_at(src, span_start(s.init.span), "generic function requires type args when used as a value: " + s.init.name);
@@ -302,7 +306,7 @@ declare_name(src, span_start(s.span), scopes, depth, s.name, s.isMut, initTy);
 }
 return;
 }
-if (s.tag == "SAssign") {
+if ((s.tag === "SAssign")) {
 const b = lookup_binding(src, span_start(s.span), scopes, depth, s.name);
 if (!b.isMut) {
 error_at(src, span_start(s.span), "cannot assign to immutable binding: " + s.name);
@@ -311,15 +315,15 @@ mark_binding_written(scopes, depth, s.name);
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.value);
 return;
 }
-if (s.tag == "SExpr") {
+if ((s.tag === "SExpr")) {
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.expr);
 return;
 }
-if (s.tag == "SYield") {
+if ((s.tag === "SYield")) {
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.expr);
 return;
 }
-if (s.tag == "SWhile") {
+if ((s.tag === "SWhile")) {
 check_cond_is_bool(src, structs, fns, scopes, depth, s.cond);
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.cond);
 const newDepth = scopes_enter(scopes, depth);
@@ -327,7 +331,7 @@ analyze_stmts(src, structs, unions, fns, scopes, newDepth, narrowed, s.body);
 warn_unused_locals_in_scope(src, scopes, newDepth);
 return;
 }
-if (s.tag == "SIf") {
+if ((s.tag === "SIf")) {
 check_cond_is_bool(src, structs, fns, scopes, depth, s.cond);
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.cond);
 const nar = parse_tag_narrowing(s.cond);
@@ -364,8 +368,8 @@ warn_unused_locals_in_scope(src, scopes, elseDepth);
 }
 return;
 }
-if (s.tag == "SIndexAssign") {
-if (s.base.tag == "EIdent") {
+if ((s.tag === "SIndexAssign")) {
+if ((s.base.tag === "EIdent")) {
 const b = lookup_binding(src, span_start(s.span), scopes, depth, s.base.name);
 if (!b.isMut) {
 error_at(src, span_start(s.span), "cannot assign through immutable binding: " + s.base.name);
@@ -374,7 +378,7 @@ error_at(src, span_start(s.span), "cannot assign through immutable binding: " + 
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.base);
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.index);
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.value);
-if (s.base.tag == "EIdent") {
+if ((s.base.tag === "EIdent")) {
 const bt = infer_lookup_ty(scopes, depth, s.base.name);
 const arr = ty_parse_array(normalize_ty_ann(bt));
 if (arr.ok) {
@@ -397,8 +401,8 @@ update_binding_ty(src, span_start(s.span), scopes, depth, s.base.name, "[" + ele
 }
 return;
 }
-if (s.tag == "SFieldAssign") {
-if (s.base.tag == "EIdent") {
+if ((s.tag === "SFieldAssign")) {
+if ((s.base.tag === "EIdent")) {
 const b = lookup_binding(src, span_start(s.span), scopes, depth, s.base.name);
 if (!b.isMut) {
 error_at(src, span_start(s.span), "cannot assign through immutable binding: " + s.base.name);
@@ -415,7 +419,7 @@ const cur = vec_get(scopes, depth - 1);
 let pi = 0;
 while (pi < vec_len(stmts)) {
 const st = vec_get(stmts, pi);
-if (st.tag == "SLet" && st.init.tag == "ELambda") {
+if ((st.tag === "SLet") && (st.init.tag === "ELambda")) {
 if (!scope_contains(cur, st.name)) {
 const initTy0 = infer_expr_type(src, structs, fns, scopes, depth, st.init);
 const bindTy = (st.tyAnn != "" ? normalize_ty_ann(st.tyAnn) : initTy0);

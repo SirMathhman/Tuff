@@ -131,31 +131,31 @@ export function check_single_char_identifier(src, pos, name, kind) {
 return fluff_check_single_char_identifier(src, pos, name, kind);
 }
 export function cc_expr(e) {
-if (e.tag == "EUndefined") {
+if ((e.tag === "EUndefined")) {
 return 0;
 }
-if (e.tag == "EInt") {
+if ((e.tag === "EInt")) {
 return 0;
 }
-if (e.tag == "EFloat") {
+if ((e.tag === "EFloat")) {
 return 0;
 }
-if (e.tag == "EBool") {
+if ((e.tag === "EBool")) {
 return 0;
 }
-if (e.tag == "EString") {
+if ((e.tag === "EString")) {
 return 0;
 }
-if (e.tag == "EIdent") {
+if ((e.tag === "EIdent")) {
 return 0;
 }
-if (e.tag == "EPath") {
+if ((e.tag === "EPath")) {
 return 0;
 }
-if (e.tag == "ELambda") {
+if ((e.tag === "ELambda")) {
 return 0;
 }
-if (e.tag == "EStructLit") {
+if ((e.tag === "EStructLit")) {
 let cc = 0;
 let i = 0;
 while (i < vec_len(e.values)) {
@@ -164,17 +164,17 @@ i = i + 1;
 }
 return cc;
 }
-if (e.tag == "EUnary") {
+if ((e.tag === "EUnary")) {
 return cc_expr(e.expr);
 }
-if (e.tag == "EBinary") {
+if ((e.tag === "EBinary")) {
 let cc = cc_expr(e.left) + cc_expr(e.right);
-if (e.op.tag == "OpAnd" || e.op.tag == "OpOr") {
+if ((e.op.tag === "OpAnd") || (e.op.tag === "OpOr")) {
 cc = cc + 1;
 }
 return cc;
 }
-if (e.tag == "ECall") {
+if ((e.tag === "ECall")) {
 let cc = cc_expr(e.callee);
 let i = 0;
 while (i < vec_len(e.args)) {
@@ -183,16 +183,16 @@ i = i + 1;
 }
 return cc;
 }
-if (e.tag == "EIf") {
+if ((e.tag === "EIf")) {
 const cc = 1 + cc_expr(e.cond) + cc_expr(e.thenExpr) + cc_expr(e.elseExpr);
 return cc;
 }
-if (e.tag == "EBlock") {
+if ((e.tag === "EBlock")) {
 let cc = cc_stmts(e.body);
 cc = cc + cc_expr(e.tail);
 return cc;
 }
-if (e.tag == "EVecLit") {
+if ((e.tag === "EVecLit")) {
 let cc = 0;
 let i = 0;
 while (i < vec_len(e.items)) {
@@ -201,7 +201,7 @@ i = i + 1;
 }
 return cc;
 }
-if (e.tag == "ETupleLit") {
+if ((e.tag === "ETupleLit")) {
 let cc = 0;
 let i = 0;
 while (i < vec_len(e.items)) {
@@ -210,16 +210,16 @@ i = i + 1;
 }
 return cc;
 }
-if (e.tag == "EIndex") {
+if ((e.tag === "EIndex")) {
 return cc_expr(e.base) + cc_expr(e.index);
 }
-if (e.tag == "ETupleIndex") {
+if ((e.tag === "ETupleIndex")) {
 return cc_expr(e.base);
 }
-if (e.tag == "EField") {
+if ((e.tag === "EField")) {
 return cc_expr(e.base);
 }
-if (e.tag == "EMatch") {
+if ((e.tag === "EMatch")) {
 let cc = cc_expr(e.scrut);
 const armCount = vec_len(e.arms);
 if (armCount > 1) {
@@ -236,33 +236,33 @@ return cc;
 return 0;
 }
 export function cc_stmt(s) {
-if (s.tag == "SLet") {
+if ((s.tag === "SLet")) {
 return cc_expr(s.init);
 }
-if (s.tag == "SAssign") {
+if ((s.tag === "SAssign")) {
 return cc_expr(s.value);
 }
-if (s.tag == "SExpr") {
+if ((s.tag === "SExpr")) {
 return cc_expr(s.expr);
 }
-if (s.tag == "SYield") {
+if ((s.tag === "SYield")) {
 return cc_expr(s.expr);
 }
-if (s.tag == "SWhile") {
+if ((s.tag === "SWhile")) {
 const cc = 1 + cc_expr(s.cond) + cc_stmts(s.body);
 return cc;
 }
-if (s.tag == "SIf") {
+if ((s.tag === "SIf")) {
 let cc = 1 + cc_expr(s.cond) + cc_stmts(s.thenBody);
 if (s.hasElse) {
 cc = cc + cc_stmts(s.elseBody);
 }
 return cc;
 }
-if (s.tag == "SIndexAssign") {
+if ((s.tag === "SIndexAssign")) {
 return cc_expr(s.base) + cc_expr(s.index) + cc_expr(s.value);
 }
-if (s.tag == "SFieldAssign") {
+if ((s.tag === "SFieldAssign")) {
 return cc_expr(s.base) + cc_expr(s.value);
 }
 return 0;

@@ -297,6 +297,17 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     yield;
   }
 
+  if (e is EIsType) {
+    // Analyze the expression being type-checked
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.expr);
+    
+    // Type check: verify the typeToCheck is valid
+    // For now, we defer validation to the emitter/type inference phase
+    // TODO: validate that typeToCheck is a valid variant name for union types
+    
+    yield;
+  }
+
 }
 
 out fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, s: Stmt) : Void => {

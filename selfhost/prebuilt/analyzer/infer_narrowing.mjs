@@ -10,7 +10,7 @@ import { infer_lookup_ty } from "./scope.mjs";
 import { narrow_lookup } from "./narrowing.mjs";
 import { subst_bind, ty_apply_subst } from "./subst.mjs";
 export function infer_expr_type_with_narrowing(src, structs, unions, fns, scopes, depth, narrowed, e) {
-if (e.tag == "EField" && e.field == "value" && e.base.tag == "EIdent") {
+if ((e.tag === "EField") && e.field == "value" && (e.base.tag === "EIdent")) {
 const t = infer_union_payload_type_from_narrowing(src, unions, scopes, depth, narrowed, e.base.name);
 if (!type_is_unknown(t)) {
 return t;
@@ -28,10 +28,10 @@ return ParsedTagEq(false, "", "");
 if (cond.op.tag != "OpEq") {
 return ParsedTagEq(false, "", "");
 }
-if (cond.left.tag == "EField" && cond.left.field == "tag" && cond.left.base.tag == "EIdent" && cond.right.tag == "EString") {
+if ((cond.left.tag === "EField") && cond.left.field == "tag" && (cond.left.base.tag === "EIdent") && (cond.right.tag === "EString")) {
 return ParsedTagEq(true, cond.left.base.name, cond.right.value);
 }
-if (cond.right.tag == "EField" && cond.right.field == "tag" && cond.right.base.tag == "EIdent" && cond.left.tag == "EString") {
+if ((cond.right.tag === "EField") && cond.right.field == "tag" && (cond.right.base.tag === "EIdent") && (cond.left.tag === "EString")) {
 return ParsedTagEq(true, cond.right.base.name, cond.left.value);
 }
 return ParsedTagEq(false, "", "");
@@ -40,29 +40,35 @@ export function ParsedTagNarrowing(ok, name, thenVariant, elseVariant) {
 return { ok: ok, name: name, thenVariant: thenVariant, elseVariant: elseVariant };
 }
 export function parse_tag_narrowing(cond) {
-if (cond.tag == "EUnary" && cond.op.tag == "OpNot") {
+if ((cond.tag === "EUnary") && (cond.op.tag === "OpNot")) {
 const inner = parse_tag_narrowing(cond.expr);
 if (inner.ok) {
 return ParsedTagNarrowing(true, inner.name, inner.elseVariant, inner.thenVariant);
 }
 return ParsedTagNarrowing(false, "", "", "");
 }
-if (cond.tag != "EBinary") {
+if ((cond.tag === "EIsType")) {
+if ((cond.expr.tag === "EIdent")) {
+return ParsedTagNarrowing(true, cond.expr.name, cond.typeToCheck, "");
+}
 return ParsedTagNarrowing(false, "", "", "");
 }
-if (!(cond.op.tag == "OpEq" || cond.op.tag == "OpNe")) {
+if (!(cond.tag === "EBinary")) {
 return ParsedTagNarrowing(false, "", "", "");
 }
-if (cond.left.tag == "EField" && cond.left.field == "tag" && cond.left.base.tag == "EIdent" && cond.right.tag == "EString") {
+if (!((cond.op.tag === "OpEq") || (cond.op.tag === "OpNe"))) {
+return ParsedTagNarrowing(false, "", "", "");
+}
+if ((cond.left.tag === "EField") && cond.left.field == "tag" && (cond.left.base.tag === "EIdent") && (cond.right.tag === "EString")) {
 const v = cond.right.value;
-if (cond.op.tag == "OpEq") {
+if ((cond.op.tag === "OpEq")) {
 return ParsedTagNarrowing(true, cond.left.base.name, v, "");
 }
 return ParsedTagNarrowing(true, cond.left.base.name, "", v);
 }
-if (cond.right.tag == "EField" && cond.right.field == "tag" && cond.right.base.tag == "EIdent" && cond.left.tag == "EString") {
+if ((cond.right.tag === "EField") && cond.right.field == "tag" && (cond.right.base.tag === "EIdent") && (cond.left.tag === "EString")) {
 const v = cond.left.value;
-if (cond.op.tag == "OpEq") {
+if ((cond.op.tag === "OpEq")) {
 return ParsedTagNarrowing(true, cond.right.base.name, v, "");
 }
 return ParsedTagNarrowing(true, cond.right.base.name, "", v);
