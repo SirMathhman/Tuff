@@ -59,11 +59,13 @@ from analyzer::fluff use {
   fluff_set_file_size_options,
   fluff_set_max_params_options,
   fluff_set_single_char_identifiers_options,
+  fluff_set_missing_docs_options,
   fluff_check_file_size,
   fluff_warn_unused_locals_in_scope,
   fluff_warn_unused_params_in_scope,
   fluff_check_fn_complexity,
   fluff_check_lambda_complexity,
+  fluff_check_missing_docs,
   check_single_char_identifier
 };
 
@@ -155,6 +157,9 @@ out fn set_fluff_max_params_options(severity: I32, threshold: I32) : Void =>
 out fn set_fluff_single_char_identifiers_options(severity: I32) : Void =>
   fluff_set_single_char_identifiers_options(severity)
 
+out fn set_fluff_missing_docs_options(severity: I32) : Void =>
+  fluff_set_missing_docs_options(severity)
+
 out fn check_file_size(src: String) : Void =>
   fluff_check_file_size(src)
 
@@ -236,6 +241,7 @@ fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
   }
 
   if (d is DFn) {
+    fluff_check_missing_docs(src, span_start(d.span), d.name, "function", d.isOut);
     let depReason = deprecation_reason_before(src, span_start(d.span));
     if (depReason != "") {
       declare_name_deprecated(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown(), depReason);
@@ -258,6 +264,7 @@ fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
   }
 
   if (d is DClassFn) {
+    fluff_check_missing_docs(src, span_start(d.span), d.name, "class function", d.isOut);
     let depReason = deprecation_reason_before(src, span_start(d.span));
     if (depReason != "") {
       declare_name_deprecated(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown(), depReason);
@@ -318,6 +325,8 @@ fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
   }
 
   if (d is DStruct) {
+    // Note: structs don't have isOut yet; skip missing docs check for now.
+    // TODO: fluff_check_missing_docs(src, span_start(d.span), d.name, "struct", d.isOut);
     check_single_char_identifier(src, span_start(d.span), d.name, "struct");
     let mut fi = 0;
     while (fi < vec_len(d.fields)) {

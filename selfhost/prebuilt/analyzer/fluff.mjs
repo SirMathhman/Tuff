@@ -11,6 +11,7 @@ let __fluff_max_file_lines_threshold = 500;
 let __fluff_max_params = 0;
 let __fluff_max_params_threshold = 3;
 let __fluff_single_char_identifiers = 0;
+let __fluff_missing_docs = 0;
 export function fluff_set_options(unusedLocalsSeverity, unusedParamsSeverity) {
 __fluff_unused_locals = unusedLocalsSeverity;
 __fluff_unused_params = unusedParamsSeverity;
@@ -33,6 +34,10 @@ return undefined;
 }
 export function fluff_set_single_char_identifiers_options(severity) {
 __fluff_single_char_identifiers = severity;
+return undefined;
+}
+export function fluff_set_missing_docs_options(severity) {
+__fluff_missing_docs = severity;
 return undefined;
 }
 export function fluff_emit_at(src, pos, severity, msg) {
@@ -324,6 +329,61 @@ return;
 }
 if (stringLen(name) == 1) {
 const msg = kind + " name '" + name + "' is only a single character; use a more descriptive name";
+fluff_emit_at(src, pos, severity, msg);
+}
+return undefined;
+}
+export function is_whitespace_char(ch) {
+return ch == 32 || ch == 9 || ch == 10 || ch == 13;
+}
+export function has_doc_comment_before(src, pos) {
+if (pos <= 0) {
+return false;
+}
+let i = pos - 1;
+while (i >= 0 && is_whitespace_char(stringCharCodeAt(src, i))) {
+i = i - 1;
+}
+if (i < 0) {
+return false;
+}
+if (i >= 1) {
+const ch1 = stringCharCodeAt(src, i - 1);
+const ch2 = stringCharCodeAt(src, i);
+if (ch1 == 42 && ch2 == 47) {
+return true;
+}
+}
+let lineStart = i;
+while (lineStart > 0 && stringCharCodeAt(src, lineStart - 1) != 10) {
+lineStart = lineStart - 1;
+}
+let j = lineStart;
+while (j <= i && is_whitespace_char(stringCharCodeAt(src, j))) {
+j = j + 1;
+}
+if (j + 1 <= i) {
+const ch1 = stringCharCodeAt(src, j);
+const ch2 = stringCharCodeAt(src, j + 1);
+if (ch1 == 47 && ch2 == 47) {
+return true;
+}
+}
+return false;
+}
+export function fluff_check_missing_docs(src, pos, name, kind, isExported) {
+const severity = __fluff_missing_docs;
+if (severity == 0) {
+return;
+}
+if (!isExported) {
+return;
+}
+if (name == "main") {
+return;
+}
+if (!has_doc_comment_before(src, pos)) {
+const msg = "missing documentation comment for exported " + kind + " '" + name + "'";
 fluff_emit_at(src, pos, severity, msg);
 }
 return undefined;

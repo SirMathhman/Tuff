@@ -78,6 +78,7 @@ type Analyzer = {
     threshold: number
   ) => void;
   set_fluff_file_size_options: (severity: number, threshold: number) => void;
+  set_fluff_missing_docs_options: (severity: number) => void;
 };
 
 let _tuffcLib: TuffcLib | null = null;
@@ -123,6 +124,13 @@ export async function setFluffFileSizeOptions(
 ): Promise<void> {
   const a = await loadAnalyzer();
   a.set_fluff_file_size_options(severity | 0, threshold | 0);
+}
+
+export async function setFluffMissingDocsOptions(
+  severity: number
+): Promise<void> {
+  const a = await loadAnalyzer();
+  a.set_fluff_missing_docs_options(severity | 0);
 }
 
 // Load an ESM module from a JS source string, without touching the filesystem.

@@ -23,6 +23,7 @@ let mut __fluff_max_file_lines_threshold = 500;
 let mut __fluff_max_params = 0;
 let mut __fluff_max_params_threshold = 3;
 let mut __fluff_single_char_identifiers = 0;
+let mut __fluff_missing_docs = 0;
 
 out fn fluff_set_options(unusedLocalsSeverity: I32, unusedParamsSeverity: I32) : Void => {
   __fluff_unused_locals = unusedLocalsSeverity;
@@ -46,6 +47,10 @@ out fn fluff_set_max_params_options(severity: I32, threshold: I32) : Void => {
 
 out fn fluff_set_single_char_identifiers_options(severity: I32) : Void => {
   __fluff_single_char_identifiers = severity;
+}
+
+out fn fluff_set_missing_docs_options(severity: I32) : Void => {
+  __fluff_missing_docs = severity;
 }
 
 fn fluff_emit_at(src: String, pos: I32, severity: I32, msg: String) : Void => {
@@ -355,6 +360,81 @@ out fn fluff_check_single_char_identifier(src: String, pos: I32, name: String, k
 
   if (stringLen(name) == 1) {
     let msg = kind + " name '" + name + "' is only a single character; use a more descriptive name";
+    fluff_emit_at(src, pos, severity, msg);
+  }
+}
+
+// ------------------------------------------------------------
+// Missing Documentation Check
+//
+// Warns when exported declarations (functions, structs) lack a
+// documentation comment (// or /* */) immediately before them.
+// ------------------------------------------------------------
+
+fn is_whitespace_char(ch: I32) : Bool => ch == 32 || ch == 9 || ch == 10 || ch == 13
+
+// Check if there's a comment (line or block) immediately before the declaration.
+// Returns true if a doc comment exists, false otherwise.
+fn has_doc_comment_before(src: String, pos: I32) : Bool => {
+  // Scan backwards from pos to find non-whitespace content.
+  // If we find a comment end (newline after //, or */ for block), it's documented.
+  if (pos <= 0) { yield false; }
+
+  let mut i = pos - 1;
+
+  // Skip whitespace backwards
+  while (i >= 0 && is_whitespace_char(stringCharCodeAt(src, i))) {
+    i = i - 1;
+  }
+
+  if (i < 0) { yield false; }
+
+  // Check for block comment ending: */
+  if (i >= 1) {
+    let ch1 = stringCharCodeAt(src, i - 1);
+    let ch2 = stringCharCodeAt(src, i);
+    if (ch1 == 42 && ch2 == 47) {  // '*' '/'
+      yield true;
+    }
+  }
+
+  // Check for line comment: scan back to find // on this or previous line
+  // We need to find a line that starts with // (after optional whitespace)
+  let mut lineStart = i;
+  while (lineStart > 0 && stringCharCodeAt(src, lineStart - 1) != 10) {
+    lineStart = lineStart - 1;
+  }
+
+  // Skip leading whitespace on this line
+  let mut j = lineStart;
+  while (j <= i && is_whitespace_char(stringCharCodeAt(src, j))) {
+    j = j + 1;
+  }
+
+  // Check if line starts with //
+  if (j + 1 <= i) {
+    let ch1 = stringCharCodeAt(src, j);
+    let ch2 = stringCharCodeAt(src, j + 1);
+    if (ch1 == 47 && ch2 == 47) {  // '/' '/'
+      yield true;
+    }
+  }
+
+  false
+}
+
+out fn fluff_check_missing_docs(src: String, pos: I32, name: String, kind: String, isExported: Bool) : Void => {
+  let severity = __fluff_missing_docs;
+  if (severity == 0) { yield; }
+
+  // Only check exported declarations
+  if (!isExported) { yield; }
+
+  // Skip main function (entry point doesn't need docs)
+  if (name == "main") { yield; }
+
+  if (!has_doc_comment_before(src, pos)) {
+    let msg = "missing documentation comment for exported " + kind + " '" + name + "'";
     fluff_emit_at(src, pos, severity, msg);
   }
 }
