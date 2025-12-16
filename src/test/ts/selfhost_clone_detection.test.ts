@@ -67,6 +67,54 @@ fn main() : I32 => {
     expect(result).toBe(0);
   });
 
+  it("supports --debug flag", async () => {
+    const testId = `case-${Date.now()}-${randomUUID().slice(0, 8)}`;
+    const baseDir = resolve(".dist/selfhost-clone-detection", testId);
+    const stage1 = resolve(baseDir, "stage-debug");
+
+    await stagePrebuiltSelfhostCompiler(stage1);
+
+    const testFile = resolve(stage1, "clone_test_debug.tuff");
+    await writeFile(
+      testFile,
+      `
+fn helper_a() : I32 => {
+  let x = 1;
+  let y = 2;
+  let z = x + y;
+  z
+}
+
+fn helper_b() : I32 => {
+  let x = 1;
+  let y = 2;
+  let z = x + y;
+  z
+}
+
+fn main() : I32 => {
+  helper_a() + helper_b()
+}
+`
+    );
+
+    const buildJson = resolve(stage1, "build.json");
+    await writeFile(
+      buildJson,
+      JSON.stringify({
+        fluff: {
+          cloneDetection: "warning",
+          cloneMinTokens: 5,
+          cloneMinOccurrences: 2,
+        },
+      })
+    );
+
+    const fluffModule = await import(resolve(stage1, "fluff.mjs"));
+    const result = fluffModule.main(["--debug", "--format", "json", testFile]);
+    expect(result).toBe(0);
+  });
+
   it("clone detection is disabled by default", async () => {
     const testId = `case-${Date.now()}-${randomUUID().slice(0, 8)}`;
     const baseDir = resolve(".dist/selfhost-clone-detection", testId);

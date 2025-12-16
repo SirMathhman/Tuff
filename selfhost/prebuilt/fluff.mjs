@@ -2,7 +2,7 @@
 import { println, stringLen, stringCharCodeAt, readTextFile } from "./rt/stdlib.mjs";
 import { vec_len, vec_get } from "./rt/vec.mjs";
 import { fluff_project_with_reader } from "./tuffc_lib.mjs";
-import { set_fluff_options, set_fluff_complexity_options, set_fluff_file_size_options, set_fluff_max_params_options, set_fluff_single_char_identifiers_options, set_fluff_missing_docs_options, set_fluff_clone_detection_options } from "./analyzer.mjs";
+import { set_fluff_options, set_fluff_debug_options, set_fluff_complexity_options, set_fluff_file_size_options, set_fluff_max_params_options, set_fluff_single_char_identifiers_options, set_fluff_missing_docs_options, set_fluff_clone_detection_options } from "./analyzer.mjs";
 import { load_fluff_config } from "./build_config.mjs";
 import { set_diagnostics_format, has_project_errors, reset_project_errors, get_project_error_count, get_project_warning_count } from "./util/diagnostics.mjs";
 export function project_error_count() {
@@ -15,6 +15,7 @@ export function print_usage() {
 println("usage: fluff [options] <in.tuff>");
 println("options:");
 println("  --format <human|json>          Diagnostics output format");
+println("  --debug                       Print debug output (very noisy)");
 println("config:");
 println("  build.json (auto-discovered upward from <in.tuff>)");
 return undefined;
@@ -22,6 +23,7 @@ return undefined;
 export function main(argv) {
 let format = "human";
 let inPath = "";
+let debug = false;
 let i = 0;
 while (i < vec_len(argv)) {
 const a = vec_get(argv, i);
@@ -32,6 +34,11 @@ return 1;
 }
 format = vec_get(argv, i + 1);
 i = i + 2;
+continue;
+}
+if (a == "--debug") {
+debug = true;
+i = i + 1;
 continue;
 }
 if (stringLen(a) > 0 && stringCharCodeAt(a, 0) == 45) {
@@ -56,6 +63,7 @@ set_diagnostics_format(format);
 reset_project_errors();
 const cfg = load_fluff_config(inPath);
 set_fluff_options(cfg.unusedLocals, cfg.unusedParams);
+set_fluff_debug_options(debug);
 set_fluff_complexity_options(cfg.complexity, cfg.complexityThreshold);
 set_fluff_file_size_options(cfg.maxFileLines, cfg.maxFileLinesThreshold);
 set_fluff_max_params_options(cfg.maxParams, cfg.maxParamsThreshold);

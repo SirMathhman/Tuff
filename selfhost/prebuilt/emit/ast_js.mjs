@@ -16,6 +16,9 @@ out = "-";
 if ((op.tag === "OpMul")) {
 out = "*";
 }
+if ((op.tag === "OpDiv")) {
+out = "/";
+}
 if ((op.tag === "OpEq")) {
 out = "==";
 }
@@ -53,7 +56,7 @@ out = "-";
 return out;
 }
 export function binop_prec_js(op) {
-if ((op.tag === "OpMul")) {
+if ((op.tag === "OpMul") || (op.tag === "OpDiv")) {
 return 14;
 }
 if ((op.tag === "OpAdd") || (op.tag === "OpSub")) {

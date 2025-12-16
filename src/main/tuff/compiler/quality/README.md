@@ -14,6 +14,22 @@ The clone detection system is inspired by PMD's CPD (Copy-Paste Detector). It us
 
 3. **Clone Reporting**: When a token sequence appears more than the configured threshold, a warning is emitted suggesting the developer extract the duplicated code into a function.
 
+### Debugging / Performance
+
+If clone detection seems slow (or you just want visibility into what it's doing), run Fluff in debug mode:
+
+- `npm run lint -- --debug`
+
+This prints noisy per-module clone detection stats like:
+
+- `[fluff:clone] tokens=... windowSize=... windows=... mapCap=...`
+- `[fluff:clone] groups=... reported=...`
+
+Notes:
+
+- Clone detection currently scans a **fixed window size** of `cloneMinTokens` (rather than trying many window sizes).
+- Parameterized clone detection (Type II clones) is currently **disabled by default** because it is very expensive.
+
 ### Configuration
 
 Clone detection is controlled via `build.json`:
@@ -74,9 +90,9 @@ warning: code clone detected: 10 IR tokens duplicated 2 times; consider extracti
 
 ## Module Files
 
-| File                  | Purpose                                                              |
-| --------------------- | -------------------------------------------------------------------- |
-| `clone_detection.tuff`| AST serialization, hash-based clone finding, warning emission        |
+| File                   | Purpose                                                       |
+| ---------------------- | ------------------------------------------------------------- |
+| `clone_detection.tuff` | AST serialization, hash-based clone finding, warning emission |
 
 ## Future Enhancements
 

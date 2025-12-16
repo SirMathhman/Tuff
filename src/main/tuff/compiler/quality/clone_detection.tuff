@@ -13,7 +13,7 @@
 // 5. Detect parameterized variants
 // 6. Report with line ranges
 
-extern from rt::stdlib use { stringLen, stringCharCodeAt, stringSlice };
+extern from rt::stdlib use { println, stringLen, stringCharCodeAt, stringSlice };
 extern from rt::vec use { vec_new, vec_len, vec_push, vec_get, vec_set };
 
 from util::diagnostics use { warn_at };
@@ -26,12 +26,17 @@ from ast use { span_start, span_end };
 let mut __clone_detection_enabled = 0;        // 0=off, 1=warning, 2=error
 let mut __clone_min_tokens = 10;              // Minimum IR tokens for a clone
 let mut __clone_min_occurrences = 2;          // Minimum occurrences to report
-let mut __clone_parameterized_enabled = true; // Enable parameterized detection
+let mut __clone_parameterized_enabled = false; // Enable parameterized detection (very expensive)
+let mut __clone_debug = false;
 
 out fn set_clone_detection_options(severity: I32, minTokens: I32, minOccurrences: I32) : Void => {
   __clone_detection_enabled = severity;
   __clone_min_tokens = if (minTokens > 0) minTokens else 10;
   __clone_min_occurrences = if (minOccurrences > 0) minOccurrences else 2;
+}
+
+out fn set_clone_detection_debug(enabled: Bool) : Void => {
+  __clone_debug = enabled;
 }
 
 out fn set_clone_parameterized_enabled(enabled: Bool) : Void => {
@@ -357,6 +362,174 @@ fn hash_string(s: String) : I32 => {
     i = i + 1;
   }
   hash
+}
+
+fn mod_pos(x0: I32, m: I32) : I32 => {
+  // x mod m in [0, m)
+  let q = x0 / m;
+  let mut r = x0 - q * m;
+  if (r < 0) { r = r + m; }
+  r
+}
+
+fn map_capacity_for(n: I32) : I32 => {
+  let mut cap = 16;
+  let want = if (n > 0) n * 4 else 16;
+  while (cap < want) { cap = cap * 2; }
+  cap
+}
+
+fn vec_fill_i32(cap: I32, fill: I32) : Vec<I32> => {
+  let v = vec_new();
+  let mut i = 0;
+  while (i < cap) {
+    vec_push(v, fill);
+    i = i + 1;
+  }
+  v
+}
+
+fn map_find_slot(keys: Vec<I32>, used: Vec<I32>, cap: I32, key: I32) : I32 => {
+  let mut idx = mod_pos(key, cap);
+  while (vec_get(used, idx) == 1) {
+    if (vec_get(keys, idx) == key) { yield idx; }
+    idx = idx + 1;
+    if (idx >= cap) { idx = 0; }
+  }
+  idx
+}
+
+fn window_equals(tokens: Vec<IRToken>, aStart: I32, bStart: I32, len: I32) : Bool => {
+  let mut i = 0;
+  while (i < len) {
+    if (vec_get(tokens, aStart + i).kind != vec_get(tokens, bStart + i).kind) { yield false; }
+    i = i + 1;
+  }
+  true
+}
+
+// Fast clone finding at a fixed window size (minTokens).
+// This avoids the previous approach which scanned window sizes minTokens..n/2
+// and built huge signature strings.
+out fn find_clones_fast(tokens: Vec<IRToken>, minTokens: I32) : Vec<CloneGroup> => {
+  let groups = vec_new();
+  let tokenLen = vec_len(tokens);
+  if (tokenLen < minTokens) { yield groups; }
+
+  let windowSize = minTokens;
+  let windowCount = tokenLen - windowSize + 1;
+  if (windowCount <= 0) { yield groups; }
+
+  let M = 1000000007;
+  let B = 911382;
+
+  let mut powB = 1;
+  let mut k = 0;
+  while (k < windowSize - 1) {
+    powB = mod_pos(powB * B, M);
+    k = k + 1;
+  }
+
+  // Pre-hash token kinds.
+  let kindHashes = vec_new();
+  let mut ti = 0;
+  while (ti < tokenLen) {
+    vec_push(kindHashes, hash_string(vec_get(tokens, ti).kind));
+    ti = ti + 1;
+  }
+
+  // Map: hash -> group index.
+  let cap = map_capacity_for(windowCount);
+  let used = vec_fill_i32(cap, 0);
+  let keys = vec_fill_i32(cap, 0);
+  let vals = vec_fill_i32(cap, -1);
+
+  // Track firstStart per group so we can cheaply confirm equality.
+  let firstStarts = vec_new();
+
+  // Initial rolling hash.
+  let mut h = 0;
+  let mut j = 0;
+  while (j < windowSize) {
+    h = mod_pos(h * B + vec_get(kindHashes, j), M);
+    j = j + 1;
+  }
+
+  if (__clone_debug) {
+    println("[fluff:clone] tokens=" + tokenLen + " windowSize=" + windowSize + " windows=" + windowCount + " mapCap=" + cap);
+  }
+
+  let mut i = 0;
+  while (i < windowCount) {
+    let key = h;
+    let slot = map_find_slot(keys, used, cap, key);
+    if (vec_get(used, slot) == 0) {
+      // New group.
+      vec_set(used, slot, 1);
+      vec_set(keys, slot, key);
+      let occs = vec_new();
+      let startToken = vec_get(tokens, i);
+      let endToken = vec_get(tokens, i + windowSize - 1);
+      vec_push(occs, CloneOccurrence(i, i + windowSize, startToken.spanStart, endToken.spanEnd));
+
+      let sig = "h=" + ("" + key);
+      let newIdx = vec_len(groups);
+      vec_push(groups, CloneGroup(sig, windowSize, occs));
+      vec_push(firstStarts, i);
+      vec_set(vals, slot, newIdx);
+    } else {
+      let gIdx = vec_get(vals, slot);
+      // Very unlikely: hash collision. If it happens, we conservatively ignore.
+      if (gIdx >= 0) {
+        let firstStart = vec_get(firstStarts, gIdx);
+        if (window_equals(tokens, firstStart, i, windowSize)) {
+          let g = vec_get(groups, gIdx);
+          let nOcc = vec_len(g.occurrences);
+          let startToken = vec_get(tokens, i);
+          let endToken = vec_get(tokens, i + windowSize - 1);
+          let occ = CloneOccurrence(i, i + windowSize, startToken.spanStart, endToken.spanEnd);
+
+          // Avoid counting overlapping windows (keeps counts sane and runtime bounded).
+          if (nOcc == 0) {
+            vec_push(g.occurrences, occ);
+          } else {
+            let last = vec_get(g.occurrences, nOcc - 1);
+            if (occ.startTokenIdx >= last.endTokenIdx) {
+              vec_push(g.occurrences, occ);
+            }
+          }
+        }
+      }
+    }
+
+    // Roll forward.
+    if (i + 1 < windowCount) {
+      let outVal = vec_get(kindHashes, i);
+      let inVal = vec_get(kindHashes, i + windowSize);
+      let mut t = mod_pos(h - mod_pos(outVal * powB, M), M);
+      t = mod_pos(t * B + inVal, M);
+      h = t;
+    }
+
+    i = i + 1;
+  }
+
+  // Filter groups by occurrence count.
+  let filtered = vec_new();
+  let mut gi = 0;
+  while (gi < vec_len(groups)) {
+    let g = vec_get(groups, gi);
+    if (vec_len(g.occurrences) >= __clone_min_occurrences) {
+      vec_push(filtered, g);
+    }
+    gi = gi + 1;
+  }
+
+  if (__clone_debug) {
+    println("[fluff:clone] groups=" + vec_len(groups) + " reported=" + vec_len(filtered));
+  }
+
+  filtered
 }
 
 fn compute_sequence_signature(tokens: Vec<IRToken>, start: I32, len: I32) : String => {
@@ -755,17 +928,9 @@ out fn analyze_fn_for_clones(src: String, fnName: String, body: Vec<Stmt>, tail:
   // Skip small functions
   if (vec_len(tokens) < __clone_min_tokens * 2) { yield; }
 
-  // Find exact clones
-  let exactClones = find_clones(tokens, __clone_min_tokens);
-
-  // Extend to maximal
-  let extendedClones = extend_clone_maximal(tokens, exactClones);
-
-  // Find parameterized clones
-  let paramClones = find_parameterized_clones(tokens, extendedClones, __clone_min_tokens);
-
-  // Report
-  report_clones(src, extendedClones, paramClones);
+  // Find exact clones (fast fixed-window implementation)
+  let exactClones = find_clones_fast(tokens, __clone_min_tokens);
+  report_clones(src, exactClones, vec_new());
 }
 
 out fn analyze_program_for_clones(src: String, decls: Vec<Decl>) : Void => {
@@ -792,15 +957,7 @@ out fn analyze_program_for_clones(src: String, decls: Vec<Decl>) : Void => {
   // Skip small programs
   if (vec_len(tokens) < __clone_min_tokens * 2) { yield; }
 
-  // Find exact clones
-  let exactClones = find_clones(tokens, __clone_min_tokens);
-
-  // Extend to maximal
-  let extendedClones = extend_clone_maximal(tokens, exactClones);
-
-  // Find parameterized clones
-  let paramClones = find_parameterized_clones(tokens, extendedClones, __clone_min_tokens);
-
-  // Report
-  report_clones(src, extendedClones, paramClones);
+  // Find exact clones (fast fixed-window implementation)
+  let exactClones = find_clones_fast(tokens, __clone_min_tokens);
+  report_clones(src, exactClones, vec_new());
 }

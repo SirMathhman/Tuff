@@ -22,6 +22,7 @@ fn emit_binop_js(op: BinOp) : String => {
   if (op is OpAdd) { out = "+"; }
   if (op is OpSub) { out = "-"; }
   if (op is OpMul) { out = "*"; }
+  if (op is OpDiv) { out = "/"; }
   if (op is OpEq) { out = "=="; }
   if (op is OpNe) { out = "!="; }
   if (op is OpLt) { out = "<"; }
@@ -43,7 +44,7 @@ fn emit_unop_js(op: UnOp) : String => {
 // JS precedence (subset) for minimal parenthesization.
 // Higher number = binds tighter.
 fn binop_prec_js(op: BinOp) : I32 => {
-  if (op is OpMul) { yield 14; }
+  if (op is OpMul || op is OpDiv) { yield 14; }
   if (op is OpAdd || op is OpSub) { yield 13; }
   if (op is OpLt || op is OpLe || op is OpGt || op is OpGe) { yield 11; }
   if (op is OpEq || op is OpNe) { yield 10; }

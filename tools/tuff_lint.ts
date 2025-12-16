@@ -12,6 +12,13 @@ interface FluffModule {
   project_warning_count: () => number;
 }
 
+export function makeFluffArgv(
+  compilerRoot: string,
+  extraArgs: string[]
+): string[] {
+  return [...extraArgs, compilerRoot];
+}
+
 export async function main(): Promise<number> {
   const root = repoRootFromHere();
   const fluffFile = resolve(root, "selfhost", "prebuilt", "fluff.mjs");
@@ -34,8 +41,12 @@ export async function main(): Promise<number> {
     "tuffc.tuff"
   );
 
+  // Forward any additional CLI args (e.g. `npm run lint -- --debug --format json`).
+  // These are passed directly to the Tuff `fluff` CLI.
+  const extraArgs = process.argv.slice(2);
+
   console.log(`Running Tuff linter on compiler sources...`);
-  const exitCode = await fluff.main([compilerRoot]);
+  const exitCode = await fluff.main(makeFluffArgv(compilerRoot, extraArgs));
 
   // Get counts for summary
   const errorCount =

@@ -55,6 +55,7 @@ from analyzer::typestrings use {
 
 from analyzer::fluff use {
   fluff_set_options,
+  fluff_set_debug,
   fluff_set_complexity_options,
   fluff_set_file_size_options,
   fluff_set_max_params_options,
@@ -146,6 +147,9 @@ from analyzer::checks use {
 // output readable.
 out fn set_fluff_options(unusedLocalsSeverity: I32, unusedParamsSeverity: I32) : Void =>
   fluff_set_options(unusedLocalsSeverity, unusedParamsSeverity)
+
+out fn set_fluff_debug_options(enabled: Bool) : Void =>
+  fluff_set_debug(enabled)
 
 out fn set_fluff_complexity_options(complexitySeverity: I32, threshold: I32) : Void =>
   fluff_set_complexity_options(complexitySeverity, threshold)

@@ -2,7 +2,7 @@
 import { stringLen, stringCharCodeAt } from "../rt/stdlib.mjs";
 import { vec_new, vec_len, vec_push, vec_get } from "../rt/vec.mjs";
 import { error_at, warn_at } from "../util/diagnostics.mjs";
-import { set_clone_detection_options, analyze_program_for_clones } from "../quality/clone_detection.mjs";
+import { set_clone_detection_options, set_clone_detection_debug, analyze_program_for_clones } from "../quality/clone_detection.mjs";
 let __fluff_unused_locals = 0;
 let __fluff_unused_params = 0;
 let __fluff_complexity = 0;
@@ -16,6 +16,12 @@ let __fluff_missing_docs = 0;
 let __fluff_clone_detection = 0;
 let __fluff_clone_min_tokens = 10;
 let __fluff_clone_min_occurrences = 2;
+let __fluff_debug = false;
+export function fluff_set_debug(enabled) {
+__fluff_debug = enabled;
+set_clone_detection_debug(enabled);
+return undefined;
+}
 export function fluff_set_options(unusedLocalsSeverity, unusedParamsSeverity) {
 __fluff_unused_locals = unusedLocalsSeverity;
 __fluff_unused_params = unusedParamsSeverity;

@@ -1,16 +1,21 @@
 // compiled by selfhost tuffc
-import { stringLen, stringCharCodeAt, stringSlice } from "../rt/stdlib.mjs";
+import { println, stringLen, stringCharCodeAt, stringSlice } from "../rt/stdlib.mjs";
 import { vec_new, vec_len, vec_push, vec_get, vec_set } from "../rt/vec.mjs";
 import { warn_at } from "../util/diagnostics.mjs";
 import { span_start, span_end } from "../ast.mjs";
 let __clone_detection_enabled = 0;
 let __clone_min_tokens = 10;
 let __clone_min_occurrences = 2;
-let __clone_parameterized_enabled = true;
+let __clone_parameterized_enabled = false;
+let __clone_debug = false;
 export function set_clone_detection_options(severity, minTokens, minOccurrences) {
 __clone_detection_enabled = severity;
 __clone_min_tokens = (minTokens > 0 ? minTokens : 10);
 __clone_min_occurrences = (minOccurrences > 0 ? minOccurrences : 2);
+return undefined;
+}
+export function set_clone_detection_debug(enabled) {
+__clone_debug = enabled;
 return undefined;
 }
 export function set_clone_parameterized_enabled(enabled) {
@@ -302,6 +307,153 @@ i = i + 1;
 }
 return hash;
 }
+export function mod_pos(x0, m) {
+const q = x0 / m;
+let r = x0 - q * m;
+if (r < 0) {
+r = r + m;
+}
+return r;
+}
+export function map_capacity_for(n) {
+let cap = 16;
+const want = (n > 0 ? n * 4 : 16);
+while (cap < want) {
+cap = cap * 2;
+}
+return cap;
+}
+export function vec_fill_i32(cap, fill) {
+const v = vec_new();
+let i = 0;
+while (i < cap) {
+vec_push(v, fill);
+i = i + 1;
+}
+return v;
+}
+export function map_find_slot(keys, used, cap, key) {
+let idx = mod_pos(key, cap);
+while (vec_get(used, idx) == 1) {
+if (vec_get(keys, idx) == key) {
+return idx;
+}
+idx = idx + 1;
+if (idx >= cap) {
+idx = 0;
+}
+}
+return idx;
+}
+export function window_equals(tokens, aStart, bStart, len) {
+let i = 0;
+while (i < len) {
+if (vec_get(tokens, aStart + i).kind != vec_get(tokens, bStart + i).kind) {
+return false;
+}
+i = i + 1;
+}
+return true;
+}
+export function find_clones_fast(tokens, minTokens) {
+const groups = vec_new();
+const tokenLen = vec_len(tokens);
+if (tokenLen < minTokens) {
+return groups;
+}
+const windowSize = minTokens;
+const windowCount = tokenLen - windowSize + 1;
+if (windowCount <= 0) {
+return groups;
+}
+const M = 1000000007;
+const B = 911382;
+let powB = 1;
+let k = 0;
+while (k < windowSize - 1) {
+powB = mod_pos(powB * B, M);
+k = k + 1;
+}
+const kindHashes = vec_new();
+let ti = 0;
+while (ti < tokenLen) {
+vec_push(kindHashes, hash_string(vec_get(tokens, ti).kind));
+ti = ti + 1;
+}
+const cap = map_capacity_for(windowCount);
+const used = vec_fill_i32(cap, 0);
+const keys = vec_fill_i32(cap, 0);
+const vals = vec_fill_i32(cap, -1);
+const firstStarts = vec_new();
+let h = 0;
+let j = 0;
+while (j < windowSize) {
+h = mod_pos(h * B + vec_get(kindHashes, j), M);
+j = j + 1;
+}
+if (__clone_debug) {
+println("[fluff:clone] tokens=" + tokenLen + " windowSize=" + windowSize + " windows=" + windowCount + " mapCap=" + cap);
+}
+let i = 0;
+while (i < windowCount) {
+const key = h;
+const slot = map_find_slot(keys, used, cap, key);
+if (vec_get(used, slot) == 0) {
+vec_set(used, slot, 1);
+vec_set(keys, slot, key);
+const occs = vec_new();
+const startToken = vec_get(tokens, i);
+const endToken = vec_get(tokens, i + windowSize - 1);
+vec_push(occs, CloneOccurrence(i, i + windowSize, startToken.spanStart, endToken.spanEnd));
+const sig = "h=" + ("" + key);
+const newIdx = vec_len(groups);
+vec_push(groups, CloneGroup(sig, windowSize, occs));
+vec_push(firstStarts, i);
+vec_set(vals, slot, newIdx);
+} else {
+const gIdx = vec_get(vals, slot);
+if (gIdx >= 0) {
+const firstStart = vec_get(firstStarts, gIdx);
+if (window_equals(tokens, firstStart, i, windowSize)) {
+const g = vec_get(groups, gIdx);
+const nOcc = vec_len(g.occurrences);
+const startToken = vec_get(tokens, i);
+const endToken = vec_get(tokens, i + windowSize - 1);
+const occ = CloneOccurrence(i, i + windowSize, startToken.spanStart, endToken.spanEnd);
+if (nOcc == 0) {
+vec_push(g.occurrences, occ);
+} else {
+const last = vec_get(g.occurrences, nOcc - 1);
+if (occ.startTokenIdx >= last.endTokenIdx) {
+vec_push(g.occurrences, occ);
+}
+}
+}
+}
+}
+if (i + 1 < windowCount) {
+const outVal = vec_get(kindHashes, i);
+const inVal = vec_get(kindHashes, i + windowSize);
+let t = mod_pos(h - mod_pos(outVal * powB, M), M);
+t = mod_pos(t * B + inVal, M);
+h = t;
+}
+i = i + 1;
+}
+const filtered = vec_new();
+let gi = 0;
+while (gi < vec_len(groups)) {
+const g = vec_get(groups, gi);
+if (vec_len(g.occurrences) >= __clone_min_occurrences) {
+vec_push(filtered, g);
+}
+gi = gi + 1;
+}
+if (__clone_debug) {
+println("[fluff:clone] groups=" + vec_len(groups) + " reported=" + vec_len(filtered));
+}
+return filtered;
+}
 export function compute_sequence_signature(tokens, start, len) {
 let sig = "";
 let i = 0;
@@ -349,7 +501,7 @@ const tokenLen = vec_len(tokens);
 if (tokenLen < minTokens) {
 return groups;
 }
-const maxWindowSize = tokenLen ?? 2;
+const maxWindowSize = tokenLen / 2;
 let windowSize = minTokens;
 while (windowSize <= maxWindowSize) {
 let i = 0;
@@ -475,7 +627,7 @@ return vec_new();
 }
 const paramClones = vec_new();
 const tokenLen = vec_len(tokens);
-const maxWindowSize = tokenLen ?? 2;
+const maxWindowSize = tokenLen / 2;
 let windowSize = minTokens;
 while (windowSize <= maxWindowSize) {
 const structureGroups = vec_new();
@@ -572,10 +724,8 @@ serialize_fn_body(body, tail, tokens);
 if (vec_len(tokens) < __clone_min_tokens * 2) {
 return;
 }
-const exactClones = find_clones(tokens, __clone_min_tokens);
-const extendedClones = extend_clone_maximal(tokens, exactClones);
-const paramClones = find_parameterized_clones(tokens, extendedClones, __clone_min_tokens);
-report_clones(src, extendedClones, paramClones);
+const exactClones = find_clones_fast(tokens, __clone_min_tokens);
+report_clones(src, exactClones, vec_new());
 return undefined;
 }
 export function analyze_program_for_clones(src, decls) {
@@ -597,9 +747,7 @@ i = i + 1;
 if (vec_len(tokens) < __clone_min_tokens * 2) {
 return;
 }
-const exactClones = find_clones(tokens, __clone_min_tokens);
-const extendedClones = extend_clone_maximal(tokens, exactClones);
-const paramClones = find_parameterized_clones(tokens, extendedClones, __clone_min_tokens);
-report_clones(src, extendedClones, paramClones);
+const exactClones = find_clones_fast(tokens, __clone_min_tokens);
+report_clones(src, exactClones, vec_new());
 return undefined;
 }

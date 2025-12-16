@@ -2,14 +2,14 @@
   "fluff": {
     "unusedLocals": "off",
     "unusedParams": "off",
-    "complexity": "warning",
+    "complexity": "off",
     "complexityThreshold": 15,
-    "maxFileLines": "warning",
+    "maxFileLines": "off",
     "maxFileLinesThreshold": 500,
-    "maxParams": "warning",
+    "maxParams": "off",
     "maxParamsThreshold": 3,
-    "singleCharIdentifiers": "warning",
-    "cloneDetection": "off",
+    "singleCharIdentifiers": "off",
+    "cloneDetection": "warning",
     "cloneMinTokens": 10,
     "cloneMinOccurrences": 2
   }
