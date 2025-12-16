@@ -1,0 +1,352 @@
+(* ============================================================================
+   tuff.ebnf - Formal Grammar Specification for the Tuff Programming Language
+   
+   This file defines the complete grammar of the Tuff language in EBNF notation.
+   It serves as the single source of truth for both parsing and pretty-printing.
+   
+   Notation:
+   - ident        : Non-terminal reference
+   - "keyword"    : Literal keyword/symbol
+   - [a-z]        : Character class
+   - expr*        : Zero or more
+   - expr+        : One or more  
+   - expr?        : Optional (zero or one)
+   - (a | b)      : Alternation/grouping
+   - (* ... *)    : Comment
+   - @directive   : Formatting annotation
+   ============================================================================ *)
+
+
+(* ============================================================================
+   PROGRAM STRUCTURE
+   ============================================================================ *)
+
+program ::= decl* ;
+
+decl ::= 
+    import_decl
+  | extern_decl
+  | struct_decl
+  | type_decl
+  | fn_decl
+  | class_fn_decl
+  | let_decl
+  ;
+
+
+(* ============================================================================
+   IMPORTS
+   ============================================================================ *)
+
+import_decl ::= "from" module_path "use" "{" import_list "}" ";"? ;
+
+module_path ::= ident ("::" ident)* ;
+
+import_list ::= (ident ("," ident)*)? ;
+
+
+(* ============================================================================
+   EXTERN DECLARATIONS
+   ============================================================================ *)
+
+extern_decl ::=
+    extern_from_decl
+  | extern_type_decl
+  | extern_fn_decl
+  | extern_let_decl
+  ;
+
+extern_from_decl ::= "extern" "from" module_path "use" "{" import_list "}" ";"? ;
+
+extern_type_decl ::= "out"? "extern" "type" ident type_params? ";"? ;
+
+extern_fn_decl ::= "out"? "extern" "fn" ident type_params? "(" param_list ")" (":" type)? ";"? ;
+
+extern_let_decl ::= "extern" "let" "mut"? ident ":" type ";"? ;
+
+
+(* ============================================================================
+   TYPE DECLARATIONS
+   ============================================================================ *)
+
+struct_decl ::= "struct" ident type_params? "{" field_list "}" ;
+
+field_list ::= (field ("," field)*)? ","? ;
+
+field ::= ident ":" type ;
+
+type_decl ::= "type" ident type_params? "=" type_body ";"? ;
+
+type_body ::=
+    union_body
+  | type  (* type alias *)
+  ;
+
+union_body ::= variant ("|" variant)* ;
+
+variant ::= ident ("<" type_list ">")? ;
+
+type_list ::= type ("," type)* ;
+
+
+(* ============================================================================
+   FUNCTION DECLARATIONS
+   ============================================================================ *)
+
+fn_decl ::= "out"? "fn" ident type_params? "(" param_list ")" (":" type)? "=>" expr ;
+
+class_fn_decl ::= "out"? "class" "fn" ident type_params? "(" param_list ")" (":" type)? "=>" expr ;
+
+param_list ::= (param ("," param)*)? ;
+
+param ::= ident (":" type)? ;
+
+
+(* ============================================================================
+   LET DECLARATIONS (top-level)
+   ============================================================================ *)
+
+let_decl ::= "out"? "let" "mut"? ident (":" type)? "=" expr ";"? ;
+
+
+(* ============================================================================
+   TYPE EXPRESSIONS
+   ============================================================================ *)
+
+type ::=
+    fn_type
+  | non_fn_type
+  ;
+
+fn_type ::= "(" type_list? ")" "=>" type ;
+
+non_fn_type ::=
+    tuple_type
+  | array_type
+  | slice_type
+  | type_app
+  | simple_type
+  ;
+
+simple_type ::= ident ;
+
+type_app ::= ident "<" type_list ">" ;
+
+tuple_type ::= "(" type "," type_list ")" ;
+
+array_type ::= "[" type ";" int_literal ";" int_literal "]" ;
+
+slice_type ::= "*" "[" type "]" ;
+
+type_params ::= "<" ident ("," ident)* ">" ;
+
+
+(* ============================================================================
+   STATEMENTS
+   ============================================================================ *)
+
+stmt ::=
+    let_stmt
+  | assign_stmt
+  | if_stmt
+  | while_stmt
+  | loop_stmt
+  | yield_stmt
+  | break_stmt
+  | continue_stmt
+  | expr_stmt
+  ;
+
+let_stmt ::= "let" "mut"? ident (":" type)? "=" expr ";"? ;
+
+assign_stmt ::= lvalue "=" expr ";"? ;
+
+lvalue ::=
+    ident
+  | lvalue "." ident
+  | lvalue "[" expr "]"
+  ;
+
+if_stmt ::= "if" "(" expr ")" stmt_body ("else" stmt_body)? ;
+
+while_stmt ::= "while" "(" expr ")" stmt_body ;
+
+loop_stmt ::= "loop" stmt_body ;
+
+yield_stmt ::= "yield" expr? ";"? ;
+
+break_stmt ::= "break" expr? ";"? ;
+
+continue_stmt ::= "continue" ";"? ;
+
+expr_stmt ::= expr ";"? ;
+
+stmt_body ::= block | stmt ;
+
+
+(* ============================================================================
+   EXPRESSIONS
+   ============================================================================ *)
+
+expr ::= or_expr ;
+
+or_expr ::= and_expr ("||" and_expr)* ;
+
+and_expr ::= eq_expr ("&&" eq_expr)* ;
+
+eq_expr ::= rel_expr (("==" | "!=") rel_expr)* ;
+
+rel_expr ::= bitor_expr (("<" | "<=" | ">" | ">=") bitor_expr)* ;
+
+bitor_expr ::= xor_expr ("|" xor_expr)* ;
+
+xor_expr ::= bitand_expr ("^" bitand_expr)* ;
+
+bitand_expr ::= shift_expr ("&" shift_expr)* ;
+
+shift_expr ::= add_expr (("<<" | ">>") add_expr)* ;
+
+add_expr ::= mul_expr (("+" | "-") mul_expr)* ;
+
+mul_expr ::= unary_expr (("*" | "/" | "%") unary_expr)* ;
+
+unary_expr ::=
+    "!" unary_expr
+  | "-" unary_expr
+  | "~" unary_expr
+  | "&" unary_expr     (* address-of for slices *)
+  | postfix_expr
+  ;
+
+postfix_expr ::= primary_expr postfix_op* ;
+
+postfix_op ::=
+    call_op
+  | index_op
+  | field_op
+  | tuple_index_op
+  | is_type_op
+  ;
+
+call_op ::= type_args? "(" arg_list ")" ;
+
+index_op ::= "[" expr "]" ;
+
+field_op ::= "." ident ;
+
+tuple_index_op ::= "." int_literal ;
+
+is_type_op ::= "is" ident ;
+
+type_args ::= "<" type_list ">" ;
+
+arg_list ::= (expr ("," expr)*)? ;
+
+
+(* ============================================================================
+   PRIMARY EXPRESSIONS
+   ============================================================================ *)
+
+primary_expr ::=
+    literal
+  | ident
+  | "this"
+  | block
+  | if_expr
+  | match_expr
+  | lambda_expr
+  | struct_lit
+  | tuple_lit
+  | vec_lit
+  | paren_expr
+  ;
+
+block ::= "{" stmt* expr? "}" ;
+
+if_expr ::= "if" "(" expr ")" expr "else" expr ;
+
+match_expr ::= "match" "(" expr ")" "{" match_arm ("," match_arm)* ","? "}" ;
+
+match_arm ::= pattern "=>" expr ;
+
+pattern ::=
+    "_"
+  | literal
+  | ident
+  ;
+
+lambda_expr ::= "(" lambda_params ")" (":" type)? "=>" expr ;
+
+lambda_params ::= (lambda_param ("," lambda_param)*)? ;
+
+lambda_param ::= ident (":" type)? ;
+
+struct_lit ::= ident "{" struct_field_list "}" ;
+
+struct_field_list ::= (expr ("," expr)*)? ","? ;
+
+tuple_lit ::= "(" expr "," (expr ("," expr)*)? ")" ;
+
+vec_lit ::= "[" (expr ("," expr)*)? ","? "]" ;
+
+paren_expr ::= "(" expr ")" ;
+
+
+(* ============================================================================
+   LITERALS
+   ============================================================================ *)
+
+literal ::=
+    int_literal
+  | float_literal
+  | bool_literal
+  | char_literal
+  | string_literal
+  ;
+
+int_literal ::= [0-9]+ int_suffix? ;
+
+int_suffix ::= "I8" | "I16" | "I32" | "I64" | "U8" | "U16" | "U32" | "U64" ;
+
+float_literal ::= [0-9]+ "." [0-9]+ float_suffix? ;
+
+float_suffix ::= "F32" | "F64" ;
+
+bool_literal ::= "true" | "false" ;
+
+char_literal ::= "'" char_content "'" ;
+
+string_literal ::= '"' string_content* '"' ;
+
+(* Character and string content are simplified - actual lexer handles escapes *)
+char_content ::= [^'\\] | escape_seq ;
+
+string_content ::= [^"\\] | escape_seq ;
+
+escape_seq ::= "\\" [nrt\\'"] ;
+
+
+(* ============================================================================
+   IDENTIFIERS
+   ============================================================================ *)
+
+ident ::= ident_start ident_char* ;
+
+ident_start ::= [a-zA-Z_] ;
+
+ident_char ::= [a-zA-Z0-9_] ;
+
+
+(* ============================================================================
+   COMMENTS (handled by lexer, not parser)
+   ============================================================================ *)
+
+(* Line comments: // ... 
+   Block comments: /* ... */ (nestable) *)
+
+
+(* ============================================================================
+   WHITESPACE (handled by lexer, not parser)
+   ============================================================================ *)
+
+(* Spaces, tabs, newlines are insignificant between tokens *)

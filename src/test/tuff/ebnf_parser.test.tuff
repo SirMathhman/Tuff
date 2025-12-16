@@ -1,13 +1,18 @@
-// Test for the EBNF Parser
+// Test for the EBNF Parser and Validator
 
 extern from rt::vec use { vec_new, vec_len, vec_get };
-extern from rt::stdlib use { print };
+extern from rt::stdlib use { print, readTextFile };
 
-from std::test use { reset, suite, it, expect_eq, expect_true, summary, status };
+from std::test use { reset, suite, it, expect_eq, expect_true, expect_false, summary, status };
 
 from src::main::tuff::tools::ebnf_parser use {
   parse_grammar,
   grammar_to_string
+};
+
+from src::main::tuff::tools::ebnf_validator use {
+  validate_grammar,
+  print_validation_result
 };
 
 fn main() : I32 => {
@@ -91,6 +96,46 @@ fn main() : I32 => {
   let result15 = parse_grammar(complexGrammar);
   it("parses complex arithmetic grammar", expect_true("success", result15.success));
   it("complex grammar has 4 rules", expect_eq("rule count", vec_len(result15.value.rules), 4));
+  
+  // ==========================================================================
+  // VALIDATION TESTS
+  // ==========================================================================
+  
+  suite("EBNF Validator");
+  
+  // Test: Valid grammar passes validation
+  let validGrammar = parse_grammar("a ::= b ; b ::= \"x\" ;");
+  let validResult = validate_grammar(validGrammar.value);
+  it("valid grammar passes", expect_true("valid", validResult.valid));
+  it("valid grammar has no errors", expect_eq("error count", vec_len(validResult.errors), 0));
+  
+  // Test: Undefined non-terminal is detected
+  let undefinedGrammar = parse_grammar("a ::= b c ; b ::= \"x\" ;");
+  let undefinedResult = validate_grammar(undefinedGrammar.value);
+  it("detects undefined non-terminal", expect_false("valid", undefinedResult.valid));
+  it("has error for undefined", expect_eq("error count", vec_len(undefinedResult.errors), 1));
+  
+  // Test: Duplicate rule names are detected
+  let dupGrammar = parse_grammar("a ::= \"x\" ; a ::= \"y\" ;");
+  let dupResult = validate_grammar(dupGrammar.value);
+  it("detects duplicate rule names", expect_false("valid", dupResult.valid));
+  
+  // Test: Self-referential rule is valid (not left recursive in our simple check)
+  let selfRefGrammar = parse_grammar("expr ::= expr \"+\" term | term ; term ::= \"x\" ;");
+  let selfRefResult = validate_grammar(selfRefGrammar.value);
+  it("self-referential rule is syntactically valid", expect_true("valid", selfRefResult.valid));
+  
+  // Test: Complex valid grammar
+  let complexValid = parse_grammar("
+    program ::= decl* ;
+    decl ::= fn_decl | struct_decl ;
+    fn_decl ::= \"fn\" ident \"(\" \")\" ;
+    struct_decl ::= \"struct\" ident \"{\" \"}\" ;
+    ident ::= [a-zA-Z]+ ;
+  ");
+  let complexValidResult = validate_grammar(complexValid.value);
+  it("complex grammar is valid", expect_true("valid", complexValidResult.valid));
+  it("complex grammar has no errors", expect_eq("error count", vec_len(complexValidResult.errors), 0));
   
   summary();
   status()
