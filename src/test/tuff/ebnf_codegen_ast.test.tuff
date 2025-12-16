@@ -1,0 +1,162 @@
+// Test the AST-producing code generator
+// This verifies that generate_ast_parser produces code that builds Tuff AST types
+
+extern from rt::vec use { vec_new, vec_len, vec_get, vec_push };
+extern from rt::stdlib use { print, println, stringLen, stringSlice, stringCharCodeAt };
+
+from std::test use { reset, suite, it, expect_eq, expect_true, expect_false, summary, status };
+
+from src::main::tuff::tools::ebnf_parser use {
+  parse_grammar
+};
+
+from src::main::tuff::tools::ebnf_codegen_ast use {
+  generate_ast_parser,
+  default_tuff_ast_config,
+  mk_ast_config,
+  mk_ast_mapping,
+  config_add_mapping
+};
+
+fn main() : I32 => {
+  reset();
+  
+  suite("AST code generator basics");
+  
+  // Test: Simple expression grammar
+  let exprGrammar = parse_grammar("
+    expr ::= number ;
+    number ::= [0-9]+ ;
+  ");
+  
+  it("grammar parses", expect_true("success", exprGrammar.success));
+  
+  if (exprGrammar.success) {
+    let config = mk_ast_config();
+    config_add_mapping(config, mk_ast_mapping("number", "expr_int", "Expr"));
+    
+    let genCode = generate_ast_parser(exprGrammar.value, config);
+    
+    it("generates code", expect_true("not empty", stringLen(genCode) > 0));
+    it("has parse_expr", expect_true("fn", stringContains(genCode, "fn parse_expr")));
+    it("has parse_number", expect_true("fn", stringContains(genCode, "fn parse_number")));
+    it("imports ast", expect_true("import", stringContains(genCode, "from ast use")));
+    it("uses expr_int", expect_true("constructor", stringContains(genCode, "expr_int")));
+    it("has ParsedExpr type", expect_true("type", stringContains(genCode, "struct ParsedExpr")));
+    it("has ok_expr", expect_true("helper", stringContains(genCode, "fn ok_expr")));
+    
+    // Print sample for inspection
+    println("=== Generated AST Parser (first 800 chars) ===");
+    if (stringLen(genCode) > 800) {
+      println(stringSlice(genCode, 0, 800));
+    } else {
+      println(genCode);
+    }
+  }
+  
+  suite("AST generator with binary operators");
+  
+  // Test: Binary expression grammar with precedence
+  let binGrammar = parse_grammar("
+    expr ::= add_expr ;
+    add_expr ::= mul_expr (('+' | '-') mul_expr)* ;
+    mul_expr ::= primary (('*' | '/') primary)* ;
+    primary ::= number | '(' expr ')' ;
+    number ::= [0-9]+ ;
+  ");
+  
+  it("binary grammar parses", expect_true("success", binGrammar.success));
+  
+  if (binGrammar.success) {
+    let config = default_tuff_ast_config();
+    let genCode = generate_ast_parser(binGrammar.value, config);
+    
+    it("has parse_add_expr", expect_true("fn", stringContains(genCode, "fn parse_add_expr")));
+    it("has parse_mul_expr", expect_true("fn", stringContains(genCode, "fn parse_mul_expr")));
+    it("has expr_binary", expect_true("binary", stringContains(genCode, "expr_binary")));
+    it("has op_add", expect_true("op_add", stringContains(genCode, "op_add")));
+    it("has op_mul", expect_true("op_mul", stringContains(genCode, "op_mul")));
+    
+    // Print sample of add_expr parser for inspection
+    let addExprStart = indexOf(genCode, "fn parse_add_expr");
+    if (addExprStart >= 0) {
+      println("=== parse_add_expr function ===");
+      let endPos = if (addExprStart + 1000 < stringLen(genCode)) addExprStart + 1000 else stringLen(genCode);
+      println(stringSlice(genCode, addExprStart, endPos));
+    }
+  }
+  
+  suite("AST generator with default config");
+  
+  // Test: Full Tuff expression subset
+  let tuffSubset = parse_grammar("
+    expr ::= if_expr | block | primary ;
+    if_expr ::= 'if' '(' expr ')' expr 'else' expr ;
+    block ::= '{' stmt* expr '}' ;
+    stmt ::= 'let' ident '=' expr ';' ;
+    primary ::= number | ident ;
+    number ::= [0-9]+ ;
+    ident ::= [a-zA-Z_] [a-zA-Z0-9_]* ;
+  ");
+  
+  it("Tuff subset grammar parses", expect_true("success", tuffSubset.success));
+  
+  if (tuffSubset.success) {
+    let config = default_tuff_ast_config();
+    let genCode = generate_ast_parser(tuffSubset.value, config);
+    
+    it("has parse_if_expr", expect_true("if", stringContains(genCode, "fn parse_if_expr")));
+    it("has parse_block", expect_true("block", stringContains(genCode, "fn parse_block")));
+    it("has parse_stmt", expect_true("stmt", stringContains(genCode, "fn parse_stmt")));
+    it("has expr_if reference", expect_true("expr_if", stringContains(genCode, "expr_if")));
+  }
+  
+  summary();
+  status()
+}
+
+// Helper to check if string contains substring
+fn stringContains(haystack: String, needle: String) : Bool => {
+  let hLen = stringLen(haystack);
+  let nLen = stringLen(needle);
+  if (nLen > hLen) { yield false; }
+  if (nLen == 0) { yield true; }
+  
+  let mut i = 0;
+  while (i <= hLen - nLen) {
+    let mut j = 0;
+    let mut found = true;
+    while (j < nLen && found) {
+      if (stringCharCodeAt(haystack, i + j) != stringCharCodeAt(needle, j)) {
+        found = false;
+      }
+      j = j + 1;
+    }
+    if (found) { yield true; }
+    i = i + 1;
+  }
+  false
+}
+
+// Helper to find index of substring
+fn indexOf(haystack: String, needle: String) : I32 => {
+  let hLen = stringLen(haystack);
+  let nLen = stringLen(needle);
+  if (nLen > hLen) { yield 0 - 1; }
+  if (nLen == 0) { yield 0; }
+  
+  let mut i = 0;
+  while (i <= hLen - nLen) {
+    let mut j = 0;
+    let mut found = true;
+    while (j < nLen && found) {
+      if (stringCharCodeAt(haystack, i + j) != stringCharCodeAt(needle, j)) {
+        found = false;
+      }
+      j = j + 1;
+    }
+    if (found) { yield i; }
+    i = i + 1;
+  }
+  0 - 1
+}
