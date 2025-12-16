@@ -21,7 +21,7 @@ from parsing::expr_stmt_stmt_starts use {
 
 from parsing::expr_stmt_ast_blocks use { parse_stmt_block_ast, parse_main_body_ast_impl };
 from parsing::expr_stmt_ast_expr use { parse_expr_ast_impl };
-from parsing::expr_stmt_ast_primary use { parse_type_param_names_list_ast };
+from parsing::expr_stmt_ast_lambda use { parse_type_param_names_list_ast };
 
 from util::diagnostics use { is_identifier_too_short, warn_short_identifier };
 

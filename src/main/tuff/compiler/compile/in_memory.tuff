@@ -1,0 +1,288 @@
+// In-memory compilation API: compile/lint from code strings + moduleLookup callback.
+// Zero file I/O is performed by the compiler logic itself.
+
+extern from rt::stdlib use { stringLen, stringSlice, stringCharCodeAt };
+extern from rt::vec use { vec_new, vec_len, vec_push, vec_get };
+
+from util::diagnostics use { set_current_file, panic_at, DiagInfo };
+from util::lexing use { skip_ws, starts_with_at };
+
+from parsing::primitives use { parse_keyword, parse_ident, parse_module_path, module_path_to_relpath, parse_optional_semicolon };
+from parsing::decls_legacy use { parse_extern_decl };
+from parsing::decls use { parse_imports_ast };
+
+from ast use { span_start };
+
+from compile::string_lists use { str_list_contains, str_list_remove };
+from compile::export_scan use { module_index, fnsig_lookup_by_name };
+from compile::export_scan_cache use { cached_scan_top_level_fn_exports };
+
+from analyzer use { mk_fn_sig };
+
+fn kw_at(src: String, i: I32, kw: String) : Bool => {
+  if (!starts_with_at(src, i, kw)) { yield false; }
+  let end = i + stringLen(kw);
+  if (end < stringLen(src) && is_ident_part(stringCharCodeAt(src, end))) { yield false; }
+  true
+}
+
+fn is_ident_part(ch: I32) : Bool => {
+  // ASCII alphanumeric or underscore.
+  if (ch >= 48 && ch <= 57) { yield true; }  // '0'-'9'
+  if (ch >= 65 && ch <= 90) { yield true; }  // 'A'-'Z'
+  if (ch >= 97 && ch <= 122) { yield true; } // 'a'-'z'
+  if (ch == 95) { yield true; }              // '_'
+  false
+}
+
+fn is_extern_decl_start(src: String, i: I32) : Bool => {
+  let j = skip_ws(src, i);
+  if (kw_at(src, j, "extern")) { yield true; }
+  if (kw_at(src, j, "out")) {
+    let k = skip_ws(src, j + 3);
+    if (kw_at(src, k, "extern")) { yield true; }
+  }
+  false
+}
+
+fn mem_read(entryCode: String, moduleLookup: (String) => String, key: String) : String => {
+  if (key == "entry") { yield entryCode; }
+  moduleLookup(key)
+}
+
+fn mem_collect_module_graph_info(entryCode: String, moduleLookup: (String) => String, isCompilerBuild: Bool) => {
+  let entryKey = "entry";
+
+  let mut stack = vec_new();
+  vec_push(stack, entryKey);
+
+  let mut visited = vec_new();
+  let mut visiting = vec_new();
+  let mut order = vec_new();
+  let mut moduleKeys = vec_new();
+  let mut moduleOutFns = vec_new();
+  let mut modulePrivateTopLevelFnNames = vec_new();
+
+  while (vec_len(stack) > 0) {
+    let item = vec_get(stack, vec_len(stack) - 1);
+
+    // pop
+    let mut newStack = vec_new();
+    let mut qi = 0;
+    while (vec_len(stack) > qi + 1) {
+      vec_push(newStack, vec_get(stack, qi));
+      qi = qi + 1;
+    }
+    stack = newStack;
+
+    if (starts_with_at(item, 0, "POST:")) {
+      let key = stringSlice(item, 5, stringLen(item));
+      visiting = str_list_remove(visiting, key);
+      vec_push(order, key);
+      continue;
+    }
+
+    let key = item;
+    if (str_list_contains(visited, key)) { continue; }
+    vec_push(visited, key);
+    vec_push(visiting, key);
+
+    vec_push(stack, "POST:" + key);
+
+    let src = mem_read(entryCode, moduleLookup, key);
+    set_current_file(key);
+
+    let ex = cached_scan_top_level_fn_exports(key, src);
+    vec_push(moduleKeys, key);
+    if (isCompilerBuild) {
+      vec_push(moduleOutFns, ex.2);
+      vec_push(modulePrivateTopLevelFnNames, vec_new());
+    } else {
+      vec_push(moduleOutFns, ex.0);
+      vec_push(modulePrivateTopLevelFnNames, ex.1);
+    }
+
+    // discover imports
+    let mut scan = 0;
+    while (true) {
+      if (is_extern_decl_start(src, scan)) {
+        let ex2 = parse_extern_decl(src, scan);
+        scan = ex2.v1;
+        continue;
+      }
+      break;
+    }
+
+    while (true) {
+      let j = skip_ws(src, scan);
+      if (starts_with_at(src, j, "import")) {
+        panic_at(src, j, "`import` is not supported. Use `from <module> use { ... };` instead.");
+      }
+      if (!starts_with_at(src, j, "from")) { break; }
+      scan = parse_keyword(src, scan, "from");
+      let mod = parse_module_path(src, scan);
+      scan = mod.nextPos;
+      scan = parse_keyword(src, scan, "use");
+      scan = parse_keyword(src, scan, "{");
+      while (true) {
+        scan = skip_ws(src, scan);
+        if (!(scan < stringLen(src))) { panic_at(src, scan, "expected '}'"); }
+        if (stringCharCodeAt(src, scan) == 125) { scan = scan + 1; break; }
+        let id = parse_ident(src, scan);
+        scan = id.nextPos;
+        scan = skip_ws(src, scan);
+        if (scan < stringLen(src) && stringCharCodeAt(src, scan) == 44) { scan = scan + 1; continue; }
+        scan = skip_ws(src, scan);
+        if (scan < stringLen(src) && stringCharCodeAt(src, scan) == 125) { scan = scan + 1; break; }
+        panic_at(src, scan, "expected ',' or '}' in import list");
+      }
+      scan = parse_optional_semicolon(src, scan);
+
+      let depKey = mod.text;
+      if (!str_list_contains(visiting, depKey)) {
+        // Allow module cycles. The graph walk uses `visited` to avoid infinite
+        // recursion; here we just skip the back-edge.
+        vec_push(stack, depKey);
+      }
+    }
+  }
+
+  (order, moduleKeys, moduleOutFns, modulePrivateTopLevelFnNames)
+}
+
+fn mem_imported_fn_sigs(src: String, key: String, isCompilerBuild: Bool, moduleKeys: Vec<String>, moduleOutFns: Vec<Vec<FnSig>>, modulePrivateTopLevelFnNames: Vec<Vec<String>>) : Vec<FnSig> => {
+  let importedFns = vec_new();
+  let seedImportedFns = !isCompilerBuild;
+
+  if (!isCompilerBuild) {
+    let mut scan = 0;
+    while (true) {
+      if (is_extern_decl_start(src, scan)) {
+        let ex2 = parse_extern_decl(src, scan);
+        scan = ex2.v1;
+        continue;
+      }
+      break;
+    }
+
+    let impsAst = parse_imports_ast(src, scan);
+    let mut ii = 0;
+    while (ii < vec_len(impsAst.decls)) {
+      let imp = vec_get(impsAst.decls, ii);
+      if (imp.tag == "DImport") {
+        let depKey = imp.modulePath;
+        let depIdx = module_index(moduleKeys, depKey);
+        if (depIdx != -1) {
+          let outFns = vec_get(moduleOutFns, depIdx);
+          let privateNames = vec_get(modulePrivateTopLevelFnNames, depIdx);
+          let mut ni = 0;
+          while (ni < vec_len(imp.names)) {
+            let name = vec_get(imp.names, ni);
+
+            let sig = fnsig_lookup_by_name(outFns, name);
+            if (!(sig.name == "")) {
+              if (seedImportedFns) {
+                vec_push(importedFns, sig);
+              }
+            } else {
+              if (str_list_contains(privateNames, name)) {
+                panic_at(src, span_start(imp.span), "imported function '" + name + "' is not exported (missing `out fn`)");
+              }
+            }
+
+            ni = ni + 1;
+          }
+        }
+      }
+      ii = ii + 1;
+    }
+  }
+
+  importedFns
+}
+
+// Compile entryCode and all reachable modules via moduleLookup.
+// Returns (outRelPaths, jsOutputs) aligned by index.
+out fn compile_code_with(
+  compile_one: (String, Bool, Bool, String, Vec<FnSig>) => String,
+  entryCode: String,
+  moduleLookup: (String) => String
+) => {
+  // For in-memory compilation we always enforce `out` visibility.
+  let isCompilerBuild = false;
+
+  let graph = mem_collect_module_graph_info(entryCode, moduleLookup, isCompilerBuild);
+  let order = graph.0;
+  let moduleKeys = graph.1;
+  let moduleOutFns = graph.2;
+  let modulePrivateTopLevelFnNames = graph.3;
+
+  let outRelPaths = vec_new();
+  let jsOutputs = vec_new();
+
+  let mut oi = 0;
+  while (vec_len(order) > oi) {
+    let key = vec_get(order, oi);
+    let src = mem_read(entryCode, moduleLookup, key);
+    set_current_file(key);
+
+    let importedFns = mem_imported_fn_sigs(src, key, isCompilerBuild, moduleKeys, moduleOutFns, modulePrivateTopLevelFnNames);
+    let outRelPath = if (key == "entry") "entry.mjs" else (module_path_to_relpath(key) + ".mjs");
+
+    let js = compile_one(src, key == "entry", isCompilerBuild, outRelPath, importedFns);
+    vec_push(outRelPaths, outRelPath);
+    vec_push(jsOutputs, js);
+
+    oi = oi + 1;
+  }
+
+  (outRelPaths, jsOutputs)
+}
+
+// Lint entryCode and all reachable modules via moduleLookup.
+// Returns (allErrors, allWarnings) as Vec<DiagInfo>.
+out fn lint_code_with(
+  lint_one: (String, Bool, Bool, Vec<FnSig>) => (Vec<DiagInfo>, Vec<DiagInfo>),
+  entryCode: String,
+  moduleLookup: (String) => String
+) => {
+  let isCompilerBuild = false;
+
+  let graph = mem_collect_module_graph_info(entryCode, moduleLookup, isCompilerBuild);
+  let order = graph.0;
+  let moduleKeys = graph.1;
+  let moduleOutFns = graph.2;
+  let modulePrivateTopLevelFnNames = graph.3;
+
+  let allErrors = vec_new();
+  let allWarnings = vec_new();
+
+  let mut oi = 0;
+  while (vec_len(order) > oi) {
+    let key = vec_get(order, oi);
+    let src = mem_read(entryCode, moduleLookup, key);
+    set_current_file(key);
+
+    let importedFns = mem_imported_fn_sigs(src, key, isCompilerBuild, moduleKeys, moduleOutFns, modulePrivateTopLevelFnNames);
+    let r = lint_one(src, key == "entry", isCompilerBuild, importedFns);
+
+    // accumulate
+    let errs = r.0;
+    let warns = r.1;
+
+    let mut ei = 0;
+    while (ei < vec_len(errs)) {
+      vec_push(allErrors, vec_get(errs, ei));
+      ei = ei + 1;
+    }
+    let mut wi = 0;
+    while (wi < vec_len(warns)) {
+      vec_push(allWarnings, vec_get(warns, wi));
+      wi = wi + 1;
+    }
+
+    oi = oi + 1;
+  }
+
+  (allErrors, allWarnings)
+}

@@ -10,7 +10,7 @@ import { parse_mut_opt_impl } from "./expr_stmt_helpers.mjs";
 import { is_assign_stmt_start_impl, is_field_assign_stmt_start_impl, is_index_assign_stmt_start_impl } from "./expr_stmt_stmt_starts.mjs";
 import { parse_stmt_block_ast, parse_main_body_ast_impl } from "./expr_stmt_ast_blocks.mjs";
 import { parse_expr_ast_impl } from "./expr_stmt_ast_expr.mjs";
-import { parse_type_param_names_list_ast } from "./expr_stmt_ast_primary.mjs";
+import { parse_type_param_names_list_ast } from "./expr_stmt_ast_lambda.mjs";
 import { is_identifier_too_short, warn_short_identifier } from "../util/diagnostics.mjs";
 import { span, expr_span, expr_undefined, expr_ident, expr_lambda, expr_block, stmt_let, stmt_let_typed, stmt_assign, stmt_expr, stmt_yield, stmt_while, stmt_if, stmt_index_assign, stmt_field_assign } from "../ast.mjs";
 export function parse_stmt_ast(src, i) {

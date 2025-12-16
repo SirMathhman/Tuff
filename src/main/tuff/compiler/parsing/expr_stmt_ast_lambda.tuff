@@ -1,0 +1,179 @@
+// Selfhost compiler: lambda expression parsing (AST-producing path).
+// Split out of expr_stmt_ast_primary.tuff.
+
+extern from rt::stdlib use { panic, stringLen, stringCharCodeAt };
+extern from rt::vec use { vec_new, vec_push };
+
+from util::diagnostics use { panic_at };
+from util::lexing use { skip_ws };
+
+from parsing::primitives use { parse_ident, parse_keyword };
+from parsing::types use { parse_type_expr };
+
+from parsing::expr_stmt_types use { ParsedExprAst, ParsedTypeParamsForLambdaAst };
+
+from parsing::expr_stmt_ast_expr use { parse_expr_ast_impl };
+from parsing::expr_stmt_ast_blocks use { parse_block_expr_ast };
+
+from ast use { span, expr_lambda };
+
+out fn find_matching_rparen(src: String, openPos: I32) : I32 => {
+  // Returns the index of the ')' that closes the '(' at openPos, or -1.
+  // This is used only for lambda disambiguation.
+  let mut i = openPos;
+  let mut depth = 0;
+  while (i < stringLen(src)) {
+    let ch = stringCharCodeAt(src, i);
+
+    // Skip string literals (minimal escape handling).
+    if (ch == 34) { // '"'
+      i = i + 1;
+      while (i < stringLen(src)) {
+        let c = stringCharCodeAt(src, i);
+        if (c == 92) { // '\\'
+          i = i + 2;
+          continue;
+        }
+        if (c == 34) { i = i + 1; break; }
+        i = i + 1;
+      }
+      continue;
+    }
+
+    // Skip char literals (minimal escape handling).
+    if (ch == 39) { // '\''
+      i = i + 1;
+      while (i < stringLen(src)) {
+        let c = stringCharCodeAt(src, i);
+        if (c == 92) { // '\\'
+          i = i + 2;
+          continue;
+        }
+        if (c == 39) { i = i + 1; break; }
+        i = i + 1;
+      }
+      continue;
+    }
+
+    if (ch == 40) { // '('
+      depth = depth + 1;
+      i = i + 1;
+      continue;
+    }
+    if (ch == 41) { // ')'
+      depth = depth - 1;
+      if (depth == 0) { yield i; }
+      i = i + 1;
+      continue;
+    }
+
+    i = i + 1;
+  }
+  -1
+}
+
+// Lambda params list parser is only used when we've already determined this is
+// a lambda expression (see `parse_primary_ast` disambiguation).
+out fn parse_lambda_expr_ast(src: String, i: I32) : ParsedExprAst => {
+  let start = skip_ws(src, i);
+  let mut k = parse_keyword(src, start, "(");
+  k = skip_ws(src, k);
+
+  let params = vec_new();
+  let paramTyAnns = vec_new();
+
+  // Empty param list: ()
+  if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) { // ')'
+    k = k + 1;
+  } else {
+    // One or more params: name (':' Type)?
+    while (true) {
+      let name = parse_ident(src, k);
+      vec_push(params, name.text);
+      k = skip_ws(src, name.nextPos);
+
+      // Optional parameter type annotation.
+      let mut tyAnn = "";
+      if (k < stringLen(src) && stringCharCodeAt(src, k) == 58) { // ':'
+        k = parse_keyword(src, k, ":");
+        let ty = parse_type_expr(src, k);
+        tyAnn = ty.v0;
+        k = ty.v1;
+      }
+      vec_push(paramTyAnns, tyAnn);
+      k = skip_ws(src, k);
+
+      if (!(k < stringLen(src))) { panic_at(src, k, "expected ')' in lambda params"); }
+      let ch = stringCharCodeAt(src, k);
+      if (ch == 44) { // ','
+        k = k + 1;
+        k = skip_ws(src, k);
+        // Allow trailing comma: (a: I32,)
+        if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) { // ')'
+          k = k + 1;
+          break;
+        }
+        continue;
+      }
+      if (ch == 41) { // ')'
+        k = k + 1;
+        break;
+      }
+      panic_at(src, k, "expected ',' or ')' in lambda params")
+    }
+  }
+
+  // Optional return type annotation: `: Type`
+  k = skip_ws(src, k);
+  let mut retTyAnn = "";
+  if (k < stringLen(src) && stringCharCodeAt(src, k) == 58) { // ':'
+    k = parse_keyword(src, k, ":");
+    let ret = parse_type_expr(src, k);
+    retTyAnn = ret.v0;
+    k = ret.v1;
+  }
+
+  k = parse_keyword(src, k, "=>");
+
+  let t = skip_ws(src, k);
+  let body = if (t < stringLen(src) && stringCharCodeAt(src, t) == 123) parse_block_expr_ast(src, k) else parse_expr_ast_impl(src, k);
+  ParsedExprAst(expr_lambda(span(start, body.nextPos), vec_new(), params, paramTyAnns, retTyAnn, body.expr), body.nextPos)
+}
+
+out fn parse_type_param_names_list_ast(src: String, i: I32) : ParsedTypeParamsForLambdaAst => {
+  // parses: '<' (ident (',' ident)*)? '>'
+  // empty list is allowed (but rare): fn f<>()
+  let mut k = skip_ws(src, i);
+  if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 60)) { // '<'
+    yield ParsedTypeParamsForLambdaAst(vec_new(), i);
+  }
+  k = k + 1;
+  k = skip_ws(src, k);
+
+  let names = vec_new();
+
+  if (k < stringLen(src) && stringCharCodeAt(src, k) == 62) { // '>'
+    yield ParsedTypeParamsForLambdaAst(names, k + 1);
+  }
+
+  while (true) {
+    let name = parse_ident(src, k);
+    vec_push(names, name.text);
+    k = skip_ws(src, name.nextPos);
+
+    if (!(k < stringLen(src))) { panic_at(src, k, "expected '>' after type param list"); }
+    let ch = stringCharCodeAt(src, k);
+    if (ch == 44) { // ','
+      k = k + 1;
+      k = skip_ws(src, k);
+      continue;
+    }
+    if (ch == 62) { // '>'
+      k = k + 1;
+      break;
+    }
+    panic_at(src, k, "expected ',' or '>' in type param list")
+  }
+
+  ParsedTypeParamsForLambdaAst(names, k)
+}
