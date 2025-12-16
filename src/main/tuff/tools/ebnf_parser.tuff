@@ -1,0 +1,727 @@
+// EBNF Parser - Phase 1 of the bidirectional grammar system
+// Parses EBNF grammar files into a Grammar AST
+
+extern from rt::stdlib use { panic, stringLen, stringSlice, stringCharCodeAt, stringFromCharCode };
+extern from rt::vec use { vec_new, vec_push, vec_len, vec_get };
+
+// =============================================================================
+// Grammar AST Types
+// =============================================================================
+
+// A complete grammar consisting of rules
+struct Grammar {
+  rules: Vec<Rule>
+}
+
+// A single production rule: name ::= production ;
+struct Rule {
+  name: String,
+  production: Production
+}
+
+// A production is either a sequence or alternation of terms
+type Production =
+  PSequence       // Sequence of terms
+  | PAlternation  // Choice between productions
+  | PTerm;        // Single term wrapper
+
+struct PSequence {
+  terms: Vec<Production>
+}
+
+struct PAlternation {
+  choices: Vec<Production>
+}
+
+struct PTerm {
+  term: Term
+}
+
+// Individual grammar terms
+type Term =
+  TNonTerminal   // Reference to another rule
+  | TLiteral     // Quoted string literal
+  | TCharClass   // Character class [a-z]
+  | TRepeat      // Repetition (*, +, ?)
+  | TGroup       // Parenthesized group
+  | TAnnotation; // @directive(term)
+
+struct TNonTerminal {
+  name: String
+}
+
+struct TLiteral {
+  value: String
+}
+
+struct TCharClass {
+  ranges: Vec<CharRange>,
+  negated: Bool
+}
+
+struct CharRange {
+  start: I32,  // Character code
+  endChar: I32 // Character code (same as start for single char)
+}
+
+type RepeatKind =
+  RepeatZeroOrMore   // *
+  | RepeatOneOrMore  // +
+  | RepeatOptional;  // ?
+
+struct RepeatZeroOrMore {}
+struct RepeatOneOrMore {}
+struct RepeatOptional {}
+
+struct TRepeat {
+  inner: Production,
+  kind: RepeatKind
+}
+
+struct TGroup {
+  inner: Production
+}
+
+struct TAnnotation {
+  name: String,
+  args: Vec<String>,
+  inner: Production
+}
+
+// =============================================================================
+// Parse Result Types
+// =============================================================================
+
+struct ParseResultStr {
+  success: Bool,
+  value: String,
+  nextPos: I32,
+  error: String
+}
+
+struct ParseResultVoid {
+  success: Bool,
+  nextPos: I32,
+  error: String
+}
+
+struct ParseResultI32 {
+  success: Bool,
+  value: I32,
+  nextPos: I32,
+  error: String
+}
+
+struct ParseResultGrammar {
+  success: Bool,
+  value: Grammar,
+  nextPos: I32,
+  error: String
+}
+
+struct ParseResultRule {
+  success: Bool,
+  value: Rule,
+  nextPos: I32,
+  error: String
+}
+
+struct ParseResultProd {
+  success: Bool,
+  value: Production,
+  nextPos: I32,
+  error: String
+}
+
+// Helper constructors
+fn ok_str(value: String, nextPos: I32) : ParseResultStr => 
+  ParseResultStr { true, value, nextPos, "" }
+
+fn err_str(nextPos: I32, error: String) : ParseResultStr => 
+  ParseResultStr { false, "", nextPos, error }
+
+fn ok_void(nextPos: I32) : ParseResultVoid => 
+  ParseResultVoid { true, nextPos, "" }
+
+fn err_void(nextPos: I32, error: String) : ParseResultVoid => 
+  ParseResultVoid { false, nextPos, error }
+
+fn ok_i32(value: I32, nextPos: I32) : ParseResultI32 => 
+  ParseResultI32 { true, value, nextPos, "" }
+
+fn err_i32(nextPos: I32, error: String) : ParseResultI32 => 
+  ParseResultI32 { false, 0, nextPos, error }
+
+fn empty_prod() : Production => PTerm { TNonTerminal { "" } }
+
+fn ok_grammar(value: Grammar, nextPos: I32) : ParseResultGrammar => 
+  ParseResultGrammar { true, value, nextPos, "" }
+
+fn err_grammar(nextPos: I32, error: String) : ParseResultGrammar => 
+  ParseResultGrammar { false, Grammar { vec_new() }, nextPos, error }
+
+fn ok_rule(value: Rule, nextPos: I32) : ParseResultRule => 
+  ParseResultRule { true, value, nextPos, "" }
+
+fn err_rule(nextPos: I32, error: String) : ParseResultRule => 
+  ParseResultRule { false, Rule { "", empty_prod() }, nextPos, error }
+
+fn ok_prod(value: Production, nextPos: I32) : ParseResultProd => 
+  ParseResultProd { true, value, nextPos, "" }
+
+fn err_prod(nextPos: I32, error: String) : ParseResultProd => 
+  ParseResultProd { false, empty_prod(), nextPos, error }
+
+// =============================================================================
+// Lexer Helpers
+// =============================================================================
+
+fn is_whitespace(c: I32) : Bool => c == 32 || c == 9 || c == 10 || c == 13
+
+fn is_alpha(c: I32) : Bool => (c >= 65 && c <= 90) || (c >= 97 && c <= 122)
+
+fn is_digit(c: I32) : Bool => c >= 48 && c <= 57
+
+fn is_ident_start(c: I32) : Bool => is_alpha(c) || c == 95  // _ underscore
+
+fn is_ident_part(c: I32) : Bool => is_ident_start(c) || is_digit(c)
+
+fn skip_whitespace_and_comments(src: String, pos: I32) : I32 => {
+  let len = stringLen(src);
+  let mut p = pos;
+  
+  while (p < len) {
+    let c = stringCharCodeAt(src, p);
+    
+    // Skip whitespace
+    if (is_whitespace(c)) {
+      p = p + 1;
+      continue;
+    }
+    
+    // Skip single-line comments: //
+    if (c == 47 && p + 1 < len && stringCharCodeAt(src, p + 1) == 47) {
+      p = p + 2;
+      while (p < len && stringCharCodeAt(src, p) != 10) {
+        p = p + 1;
+      }
+      continue;
+    }
+    
+    // Skip multi-line comments: (* ... *)
+    if (c == 40 && p + 1 < len && stringCharCodeAt(src, p + 1) == 42) {
+      p = p + 2;
+      while (p + 1 < len) {
+        if (stringCharCodeAt(src, p) == 42 && stringCharCodeAt(src, p + 1) == 41) {
+          p = p + 2;
+          break;
+        }
+        p = p + 1;
+      }
+      continue;
+    }
+    
+    // Not whitespace or comment
+    break;
+  }
+  
+  p
+}
+
+fn parse_ident(src: String, pos: I32) : ParseResultStr => {
+  let len = stringLen(src);
+  let p = skip_whitespace_and_comments(src, pos);
+  
+  if (p >= len || !is_ident_start(stringCharCodeAt(src, p))) {
+    yield err_str(p, "expected identifier");
+  }
+  
+  let start = p;
+  let mut endp = p;
+  while (endp < len && is_ident_part(stringCharCodeAt(src, endp))) {
+    endp = endp + 1;
+  }
+  
+  ok_str(stringSlice(src, start, endp), endp)
+}
+
+fn parse_string_literal(src: String, pos: I32) : ParseResultStr => {
+  let len = stringLen(src);
+  let p = skip_whitespace_and_comments(src, pos);
+  
+  if (p >= len) {
+    yield err_str(p, "expected string literal");
+  }
+  
+  let quote = stringCharCodeAt(src, p);
+  if (quote != 34 && quote != 39) {  // " or '
+    yield err_str(p, "expected string literal");
+  }
+  
+  let mut endp = p + 1;
+  let mut value = "";
+  
+  while (endp < len) {
+    let c = stringCharCodeAt(src, endp);
+    
+    if (c == quote) {
+      yield ok_str(value, endp + 1);
+    }
+    
+    // Handle escape sequences
+    if (c == 92 && endp + 1 < len) {  // backslash
+      let next = stringCharCodeAt(src, endp + 1);
+      if (next == 110) { value = value + stringFromCharCode(10); }       // \n
+      if (next == 116) { value = value + stringFromCharCode(9); }        // \t
+      if (next == 114) { value = value + stringFromCharCode(13); }       // \r
+      if (next == quote) { value = value + stringFromCharCode(quote); }  // \" or \'
+      if (next == 92) { value = value + "\\"; }                          // \\
+      if (next != 110 && next != 116 && next != 114 && next != quote && next != 92) {
+        value = value + stringFromCharCode(next);
+      }
+      endp = endp + 2;
+      continue;
+    }
+    
+    value = value + stringFromCharCode(c);
+    endp = endp + 1;
+  }
+  
+  err_str(endp, "unterminated string literal")
+}
+
+fn expect_literal(src: String, pos: I32, lit: String) : ParseResultVoid => {
+  let p = skip_whitespace_and_comments(src, pos);
+  let len = stringLen(src);
+  let litLen = stringLen(lit);
+  
+  if (p + litLen > len) {
+    yield err_void(p, "expected '" + lit + "'");
+  }
+  
+  let mut i = 0;
+  while (i < litLen) {
+    if (stringCharCodeAt(src, p + i) != stringCharCodeAt(lit, i)) {
+      yield err_void(p, "expected '" + lit + "'");
+    }
+    i = i + 1;
+  }
+  
+  ok_void(p + litLen)
+}
+
+// =============================================================================
+// Grammar Parser
+// =============================================================================
+
+out fn parse_grammar(src: String) : ParseResultGrammar => {
+  let mut pos = 0;
+  let rules = vec_new();
+  let len = stringLen(src);
+  
+  while (true) {
+    pos = skip_whitespace_and_comments(src, pos);
+    if (pos >= len) { break; }
+    
+    let ruleResult = parse_rule(src, pos);
+    if (!ruleResult.success) {
+      yield err_grammar(ruleResult.nextPos, ruleResult.error);
+    }
+    
+    vec_push(rules, ruleResult.value);
+    pos = ruleResult.nextPos;
+  }
+  
+  ok_grammar(Grammar { rules }, pos)
+}
+
+fn parse_rule(src: String, pos: I32) : ParseResultRule => {
+  // rule ::= ident "::=" production ";"
+  
+  let nameResult = parse_ident(src, pos);
+  if (!nameResult.success) {
+    yield err_rule(nameResult.nextPos, nameResult.error);
+  }
+  
+  let colonResult = expect_literal(src, nameResult.nextPos, "::=");
+  if (!colonResult.success) {
+    yield err_rule(colonResult.nextPos, "expected '::=' after rule name");
+  }
+  
+  let prodResult = parse_production(src, colonResult.nextPos);
+  if (!prodResult.success) {
+    yield err_rule(prodResult.nextPos, prodResult.error);
+  }
+  
+  let semiResult = expect_literal(src, prodResult.nextPos, ";");
+  if (!semiResult.success) {
+    yield err_rule(semiResult.nextPos, "expected ';' after rule");
+  }
+  
+  ok_rule(Rule { nameResult.value, prodResult.value }, semiResult.nextPos)
+}
+
+fn parse_production(src: String, pos: I32) : ParseResultProd => {
+  // production ::= sequence ("|" sequence)*
+  
+  let firstResult = parse_sequence(src, pos);
+  if (!firstResult.success) {
+    yield firstResult;
+  }
+  
+  let choices = vec_new();
+  vec_push(choices, firstResult.value);
+  let mut p = firstResult.nextPos;
+  
+  while (true) {
+    let pipeResult = expect_literal(src, p, "|");
+    if (!pipeResult.success) { break; }
+    
+    let nextResult = parse_sequence(src, pipeResult.nextPos);
+    if (!nextResult.success) {
+      yield nextResult;
+    }
+    
+    vec_push(choices, nextResult.value);
+    p = nextResult.nextPos;
+  }
+  
+  if (vec_len(choices) == 1) {
+    yield ok_prod(vec_get(choices, 0), p);
+  }
+  
+  ok_prod(PAlternation { choices }, p)
+}
+
+fn parse_sequence(src: String, pos: I32) : ParseResultProd => {
+  // sequence ::= term+
+  
+  let terms = vec_new();
+  let mut p = pos;
+  
+  while (true) {
+    let termResult = parse_term(src, p);
+    if (!termResult.success) { break; }
+    
+    vec_push(terms, termResult.value);
+    p = termResult.nextPos;
+  }
+  
+  if (vec_len(terms) == 0) {
+    yield err_prod(p, "expected at least one term in sequence");
+  }
+  
+  if (vec_len(terms) == 1) {
+    yield ok_prod(vec_get(terms, 0), p);
+  }
+  
+  ok_prod(PSequence { terms }, p)
+}
+
+fn parse_term(src: String, pos: I32) : ParseResultProd => {
+  let p = skip_whitespace_and_comments(src, pos);
+  let len = stringLen(src);
+  
+  if (p >= len) {
+    yield err_prod(p, "unexpected end of input");
+  }
+  
+  let c = stringCharCodeAt(src, p);
+  
+  // Check for terminators that indicate end of term sequence
+  if (c == 59 || c == 124 || c == 41) {  // ; | )
+    yield err_prod(p, "end of sequence");
+  }
+  
+  let mut result = parse_primary_term(src, p);
+  if (!result.success) {
+    yield result;
+  }
+  
+  // Check for postfix operators: *, +, ?
+  let afterPrimary = skip_whitespace_and_comments(src, result.nextPos);
+  if (afterPrimary < len) {
+    let postfix = stringCharCodeAt(src, afterPrimary);
+    
+    if (postfix == 42) {  // *
+      result = ok_prod(
+        PTerm { TRepeat { result.value, RepeatZeroOrMore {} } },
+        afterPrimary + 1
+      );
+    }
+    
+    if (postfix == 43) {  // +
+      result = ok_prod(
+        PTerm { TRepeat { result.value, RepeatOneOrMore {} } },
+        afterPrimary + 1
+      );
+    }
+    
+    if (postfix == 63) {  // ?
+      result = ok_prod(
+        PTerm { TRepeat { result.value, RepeatOptional {} } },
+        afterPrimary + 1
+      );
+    }
+  }
+  
+  result
+}
+
+fn parse_primary_term(src: String, pos: I32) : ParseResultProd => {
+  let p = skip_whitespace_and_comments(src, pos);
+  let len = stringLen(src);
+  
+  if (p >= len) {
+    yield err_prod(p, "unexpected end of input");
+  }
+  
+  let c = stringCharCodeAt(src, p);
+  
+  // String literal: "..." or '...'
+  if (c == 34 || c == 39) {
+    let strResult = parse_string_literal(src, p);
+    if (strResult.success) {
+      yield ok_prod(PTerm { TLiteral { strResult.value } }, strResult.nextPos);
+    }
+    yield err_prod(strResult.nextPos, strResult.error);
+  }
+  
+  // Character class: [...]
+  if (c == 91) {  // [
+    let classResult = parse_char_class(src, p);
+    yield classResult;
+  }
+  
+  // Grouped production: (...)
+  if (c == 40) {  // (
+    let innerResult = parse_production(src, p + 1);
+    if (!innerResult.success) {
+      yield innerResult;
+    }
+    
+    let closeResult = expect_literal(src, innerResult.nextPos, ")");
+    if (!closeResult.success) {
+      yield err_prod(closeResult.nextPos, "expected ')'");
+    }
+    
+    yield ok_prod(PTerm { TGroup { innerResult.value } }, closeResult.nextPos);
+  }
+  
+  // Annotation: @name or @name(...)
+  if (c == 64) {  // @
+    let annResult = parse_annotation(src, p);
+    yield annResult;
+  }
+  
+  // Non-terminal: identifier
+  if (is_ident_start(c)) {
+    let identResult = parse_ident(src, p);
+    if (identResult.success) {
+      yield ok_prod(PTerm { TNonTerminal { identResult.value } }, identResult.nextPos);
+    }
+  }
+  
+  err_prod(p, "expected term")
+}
+
+fn parse_char_class(src: String, pos: I32) : ParseResultProd => {
+  // Character class: [a-z] or [^a-z] (negated)
+  let len = stringLen(src);
+  let mut p = pos + 1;  // Skip opening [
+  
+  let mut negated = false;
+  if (p < len && stringCharCodeAt(src, p) == 94) {  // ^
+    negated = true;
+    p = p + 1;
+  }
+  
+  let ranges = vec_new();
+  
+  while (p < len) {
+    let c = stringCharCodeAt(src, p);
+    
+    if (c == 93) {  // ]
+      yield ok_prod(PTerm { TCharClass { ranges, negated } }, p + 1);
+    }
+    
+    // Parse a character (possibly escaped)
+    let charResult = parse_char_in_class(src, p);
+    if (!charResult.success) {
+      yield err_prod(charResult.nextPos, charResult.error);
+    }
+    
+    let startChar = charResult.value;
+    p = charResult.nextPos;
+    
+    // Check for range: a-z
+    if (p + 1 < len && stringCharCodeAt(src, p) == 45 && stringCharCodeAt(src, p + 1) != 93) {
+      // - but not followed by ]
+      p = p + 1;  // Skip -
+      let endCharResult = parse_char_in_class(src, p);
+      if (!endCharResult.success) {
+        yield err_prod(endCharResult.nextPos, endCharResult.error);
+      }
+      vec_push(ranges, CharRange { startChar, endCharResult.value });
+      p = endCharResult.nextPos;
+    } else {
+      vec_push(ranges, CharRange { startChar, startChar });
+    }
+  }
+  
+  err_prod(p, "unterminated character class")
+}
+
+fn parse_char_in_class(src: String, pos: I32) : ParseResultI32 => {
+  let len = stringLen(src);
+  if (pos >= len) {
+    yield err_i32(pos, "unexpected end in character class");
+  }
+  
+  let c = stringCharCodeAt(src, pos);
+  
+  // Escape sequence
+  if (c == 92 && pos + 1 < len) {
+    let next = stringCharCodeAt(src, pos + 1);
+    if (next == 110) { yield ok_i32(10, pos + 2); }   // \n
+    if (next == 116) { yield ok_i32(9, pos + 2); }    // \t
+    if (next == 114) { yield ok_i32(13, pos + 2); }   // \r
+    if (next == 93) { yield ok_i32(93, pos + 2); }    // \]
+    if (next == 92) { yield ok_i32(92, pos + 2); }    // \\
+    if (next == 45) { yield ok_i32(45, pos + 2); }    // \-
+    yield ok_i32(next, pos + 2);
+  }
+  
+  ok_i32(c, pos + 1)
+}
+
+fn parse_annotation(src: String, pos: I32) : ParseResultProd => {
+  // Annotation: @name or @name(term) or @name(arg1, arg2)
+  let len = stringLen(src);
+  let mut p = pos + 1;  // Skip @
+  
+  let nameResult = parse_ident(src, p);
+  if (!nameResult.success) {
+    yield err_prod(nameResult.nextPos, "expected annotation name after @");
+  }
+  
+  p = nameResult.nextPos;
+  let args = vec_new();
+  let mut inner = empty_prod();
+  
+  // Check for arguments: @name(...)
+  let parenResult = expect_literal(src, p, "(");
+  if (parenResult.success) {
+    p = parenResult.nextPos;
+    
+    // Parse arguments or inner term
+    let innerResult = parse_production(src, p);
+    if (innerResult.success) {
+      inner = innerResult.value;
+      p = innerResult.nextPos;
+    }
+    
+    let closeResult = expect_literal(src, p, ")");
+    if (!closeResult.success) {
+      yield err_prod(closeResult.nextPos, "expected ')' after annotation arguments");
+    }
+    p = closeResult.nextPos;
+  }
+  
+  ok_prod(PTerm { TAnnotation { nameResult.value, args, inner } }, p)
+}
+
+// =============================================================================
+// Grammar Pretty Printer (for debugging)
+// =============================================================================
+
+out fn grammar_to_string(g: Grammar) : String => {
+  let mut out = "";
+  let mut i = 0;
+  while (i < vec_len(g.rules)) {
+    let rule = vec_get(g.rules, i);
+    out = out + rule.name + " ::= " + production_to_string(rule.production) + " ;\n";
+    i = i + 1;
+  }
+  out
+}
+
+fn production_to_string(p: Production) : String => {
+  if (p is PSequence) {
+    let mut out = "";
+    let mut i = 0;
+    while (i < vec_len(p.terms)) {
+      if (i > 0) { out = out + " "; }
+      out = out + production_to_string(vec_get(p.terms, i));
+      i = i + 1;
+    }
+    yield out;
+  }
+  
+  if (p is PAlternation) {
+    let mut out = "";
+    let mut i = 0;
+    while (i < vec_len(p.choices)) {
+      if (i > 0) { out = out + " | "; }
+      out = out + production_to_string(vec_get(p.choices, i));
+      i = i + 1;
+    }
+    yield out;
+  }
+  
+  if (p is PTerm) {
+    yield term_to_string(p.term);
+  }
+  
+  "<?>"
+}
+
+fn term_to_string(t: Term) : String => {
+  if (t is TNonTerminal) {
+    yield t.name;
+  }
+  
+  if (t is TLiteral) {
+    yield "\"" + t.value + "\"";
+  }
+  
+  if (t is TCharClass) {
+    let mut out = "[";
+    if (t.negated) { out = out + "^"; }
+    let mut i = 0;
+    while (i < vec_len(t.ranges)) {
+      let r = vec_get(t.ranges, i);
+      out = out + stringFromCharCode(r.start);
+      if (r.endChar != r.start) {
+        out = out + "-" + stringFromCharCode(r.endChar);
+      }
+      i = i + 1;
+    }
+    out = out + "]";
+    yield out;
+  }
+  
+  if (t is TRepeat) {
+    let inner = production_to_string(t.inner);
+    let suffix = if (t.kind is RepeatZeroOrMore) "*" 
+                 else if (t.kind is RepeatOneOrMore) "+" 
+                 else "?";
+    yield "(" + inner + ")" + suffix;
+  }
+  
+  if (t is TGroup) {
+    yield "(" + production_to_string(t.inner) + ")";
+  }
+  
+  if (t is TAnnotation) {
+    let mut out = "@" + t.name;
+    // Check if inner is not empty
+    let innerStr = production_to_string(t.inner);
+    if (innerStr != "" && innerStr != "<?>") {
+      out = out + "(" + innerStr + ")";
+    }
+    yield out;
+  }
+  
+  "<?term>"
+}

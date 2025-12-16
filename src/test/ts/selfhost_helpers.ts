@@ -74,6 +74,12 @@ async function writeCompilerSources(outDir: string) {
   await mkdir(stagedCompilerDir, { recursive: true });
   await walkAndCopyTuffSources(repoCompilerDir, stagedCompilerDir);
 
+  // Also stage tools sources so tests can import tools like ebnf_parser.
+  const repoToolsDir = resolve("src", "main", "tuff", "tools");
+  const stagedToolsDir = resolve(outDir, "src", "main", "tuff", "tools");
+  await mkdir(stagedToolsDir, { recursive: true });
+  await walkAndCopyTuffSources(repoToolsDir, stagedToolsDir);
+
   // The selfhost compiler currently emits rt extern imports as "./rt/<mod>.mjs".
   // If a module compiles into outDir/src/main/tuff/compiler/*.mjs, those imports
   // must resolve from within that directory.
@@ -84,6 +90,12 @@ async function writeCompilerSources(outDir: string) {
     resolve(compilerRtDir, "stdlib.mjs")
   );
   await copyFile(resolve("rt/vec.mjs"), resolve(compilerRtDir, "vec.mjs"));
+
+  // Also add rt to tools directory
+  const toolsRtDir = resolve(stagedToolsDir, "rt");
+  await mkdir(toolsRtDir, { recursive: true });
+  await copyFile(resolve("rt/stdlib.mjs"), resolve(toolsRtDir, "stdlib.mjs"));
+  await copyFile(resolve("rt/vec.mjs"), resolve(toolsRtDir, "vec.mjs"));
 }
 
 export async function stagePrebuiltSelfhostCompiler(

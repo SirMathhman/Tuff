@@ -1,0 +1,97 @@
+// Test for the EBNF Parser
+
+extern from rt::vec use { vec_new, vec_len, vec_get };
+extern from rt::stdlib use { print };
+
+from std::test use { reset, suite, it, expect_eq, expect_true, summary, status };
+
+from src::main::tuff::tools::ebnf_parser use {
+  parse_grammar,
+  grammar_to_string
+};
+
+fn main() : I32 => {
+  reset();
+  suite("EBNF Parser");
+  
+  // Test 1: Simple rule with literal
+  let result1 = parse_grammar("foo ::= \"bar\" ;");
+  it("parses simple literal rule", expect_true("success", result1.success));
+  it("has one rule", expect_eq("rule count", vec_len(result1.value.rules), 1));
+  if (result1.success && vec_len(result1.value.rules) > 0) {
+    let rule = vec_get(result1.value.rules, 0);
+    it("rule name is foo", expect_eq("name", rule.name, "foo"));
+  }
+  
+  // Test 2: Rule with alternation
+  let result2 = parse_grammar("digit ::= \"0\" | \"1\" | \"2\" ;");
+  it("parses alternation rule", expect_true("success", result2.success));
+  
+  // Test 3: Rule with sequence
+  let result3 = parse_grammar("pair ::= ident \":\" expr ;");
+  it("parses sequence rule", expect_true("success", result3.success));
+  
+  // Test 4: Rule with repetition
+  let result4 = parse_grammar("list ::= item* ;");
+  it("parses zero-or-more", expect_true("success", result4.success));
+  
+  let result5 = parse_grammar("list ::= item+ ;");
+  it("parses one-or-more", expect_true("success", result5.success));
+  
+  let result6 = parse_grammar("opt ::= item? ;");
+  it("parses optional", expect_true("success", result6.success));
+  
+  // Test 5: Rule with character class
+  let result7 = parse_grammar("digit ::= [0-9] ;");
+  it("parses character class", expect_true("success", result7.success));
+  
+  // Test 6: Rule with grouping
+  let result8 = parse_grammar("expr ::= (\"a\" | \"b\")+ ;");
+  it("parses grouped alternation", expect_true("success", result8.success));
+  
+  // Test 7: Comments
+  let result9 = parse_grammar("(* This is a comment *) foo ::= bar ;");
+  it("ignores multi-line comments", expect_true("success", result9.success));
+  
+  let result10 = parse_grammar("// Single line comment\nfoo ::= bar ;");
+  it("ignores single-line comments", expect_true("success", result10.success));
+  
+  // Test 8: Annotations
+  let result11 = parse_grammar("expr ::= @space foo ;");
+  it("parses annotation without args", expect_true("success", result11.success));
+  
+  let result12 = parse_grammar("expr ::= @indent(foo bar) ;");
+  it("parses annotation with args", expect_true("success", result12.success));
+  
+  // Test 9: Multiple rules
+  let result13 = parse_grammar("a ::= \"x\" ; b ::= \"y\" ; c ::= a b ;");
+  it("parses multiple rules", expect_true("success", result13.success));
+  it("has three rules", expect_eq("rule count", vec_len(result13.value.rules), 3));
+  
+  // Test 10: Round-trip (parse and re-emit)
+  let src = "foo ::= bar | baz ;";
+  let parsed = parse_grammar(src);
+  if (parsed.success) {
+    let emitted = grammar_to_string(parsed.value);
+    print("Original: " + src);
+    print("Emitted:  " + emitted);
+  }
+  
+  // Test 11: Negated character class
+  let result14 = parse_grammar("notdigit ::= [^0-9] ;");
+  it("parses negated character class", expect_true("success", result14.success));
+  
+  // Test 12: Complex expression grammar
+  let complexGrammar = "
+    expr ::= term (('+' | '-') term)* ;
+    term ::= factor (('*' | '/') factor)* ;
+    factor ::= number | '(' expr ')' ;
+    number ::= [0-9]+ ;
+  ";
+  let result15 = parse_grammar(complexGrammar);
+  it("parses complex arithmetic grammar", expect_true("success", result15.success));
+  it("complex grammar has 4 rules", expect_eq("rule count", vec_len(result15.value.rules), 4));
+  
+  summary();
+  status()
+}
