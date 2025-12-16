@@ -410,6 +410,7 @@ rule ::= ident "::=" production ";" ;
 ### 🔴 Critical Issues
 
 1. **Union Variants Across Modules** (BLOCKER)
+
    - Problem: Union variants like `EInt`, `EBool` cause infinite loops when imported cross-module
    - Symptom: Tests crash with "JavaScript heap out of memory"
    - Root Cause: Likely issue in how `is` operator works for union variants across module boundaries
@@ -425,6 +426,7 @@ rule ::= ident "::=" production ";" ;
 ### 🟠 Medium Priority Issues
 
 3. **Comment Preservation**
+
    - Problem: Comments are stripped during parsing
    - Impact: Can't implement true code formatter (loses source information)
    - Workaround: Acceptable for MVP; can add trivia tracking later
@@ -458,6 +460,7 @@ rule ::= ident "::=" production ";" ;
 ### Week 1: Fix Critical Blocker
 
 1. **Debug Union Variant Issue** (2-3 days)
+
    - Reproduce infinite loop in test environment
    - Check if issue is in `is` operator or module system
    - Create minimal reproduction case
@@ -471,11 +474,13 @@ rule ::= ident "::=" production ";" ;
 ### Week 2-3: Complete Phase 5 (Operator Precedence)
 
 1. **Design Precedence Algorithm** (1 day)
+
    - Document how to extract precedence table from grammar
    - Design precedence climbing code generation
    - Specify algorithm for handling mixed-associativity
 
 2. **Implement Parser Codegen Enhancement** (3-4 days)
+
    - Add precedence annotation parsing to Phase 2 validator
    - Modify Phase 3 parser generator for precedence climbing
    - Generate correct precedence-respecting parser
@@ -488,6 +493,7 @@ rule ::= ident "::=" production ";" ;
 ### Week 4: Complete Phase 6 (AST Mapping)
 
 1. **Design AST Mapping System** (1 day)
+
    - Design `@map` annotation syntax
    - Specify variable reference system ($0, $1, ...)
    - Document semantic validation rules
@@ -500,6 +506,7 @@ rule ::= ident "::=" production ";" ;
 ### Week 5: Integration Testing
 
 1. **End-to-End Parse/Emit Test** (2-3 days)
+
    - Parse full Tuff source files
    - Emit back to source code
    - Verify round-trip: `parse(emit(parse(x))) == parse(x)`
