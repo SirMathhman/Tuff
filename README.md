@@ -602,6 +602,8 @@ fn main() => {
 
 ### Phase 5: Post-Bootstrap Expansion
 
+**For detailed implementation plan, see [ROADMAP.md](ROADMAP.md)** — focuses on three backends (JS, C, Tuff) over 12 weeks.
+
 **Phase 5a**: JS Emitter refinement ✓ (partial)
 
 - Reduce unnecessary parentheses in generated code ✓
