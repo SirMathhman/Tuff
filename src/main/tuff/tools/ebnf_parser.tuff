@@ -208,13 +208,22 @@ fn skip_whitespace_and_comments(src: String, pos: I32) : I32 => {
       continue;
     }
     
-    // Skip multi-line comments: (* ... *)
+    // Skip multi-line comments: (* ... *) with nesting support
     if (c == 40 && p + 1 < len && stringCharCodeAt(src, p + 1) == 42) {
       p = p + 2;
-      while (p + 1 < len) {
-        if (stringCharCodeAt(src, p) == 42 && stringCharCodeAt(src, p + 1) == 41) {
+      let mut depth = 1;
+      while (p + 1 < len && depth > 0) {
+        // Check for nested comment start: (*
+        if (stringCharCodeAt(src, p) == 40 && stringCharCodeAt(src, p + 1) == 42) {
+          depth = depth + 1;
           p = p + 2;
-          break;
+          continue;
+        }
+        // Check for comment end: *)
+        if (stringCharCodeAt(src, p) == 42 && stringCharCodeAt(src, p + 1) == 41) {
+          depth = depth - 1;
+          p = p + 2;
+          continue;
         }
         p = p + 1;
       }

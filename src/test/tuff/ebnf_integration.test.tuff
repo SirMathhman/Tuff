@@ -1,0 +1,212 @@
+// Integration tests for the EBNF parser generator
+// Tests that generated parser code can actually work
+
+extern from rt::vec use { vec_new, vec_len, vec_get };
+extern from rt::stdlib use { print, println, readTextFile, stringLen, stringSlice, stringCharCodeAt };
+
+from std::test use { reset, suite, it, expect_eq, expect_true, expect_false, summary, status };
+
+from src::main::tuff::tools::ebnf_parser use {
+  parse_grammar,
+  grammar_to_string,
+  Grammar,
+  Rule
+};
+
+from src::main::tuff::tools::ebnf_validator use {
+  validate_grammar
+};
+
+from src::main::tuff::tools::ebnf_codegen use {
+  generate_parser,
+  generate_emitter,
+  generate_code
+};
+
+fn main() : I32 => {
+  reset();
+  
+  // ==========================================================================
+  // TEST: Parse the actual tuff.ebnf grammar file
+  // ==========================================================================
+  suite("Parse tuff.ebnf grammar");
+  
+  let tuffEbnf = readTextFile("grammars/tuff.ebnf");
+  it("tuff.ebnf file is not empty", expect_true("non-empty", stringLen(tuffEbnf) > 100));
+  
+  let parseResult = parse_grammar(tuffEbnf);
+  it("tuff.ebnf parses successfully", expect_true("success", parseResult.success));
+  
+  if (!parseResult.success) {
+    println("Parse error at position " + parseResult.nextPos + ": " + parseResult.error);
+    // Print context around error
+    let start = if (parseResult.nextPos > 50) parseResult.nextPos - 50 else 0;
+    let endPos = if (parseResult.nextPos + 50 < stringLen(tuffEbnf)) parseResult.nextPos + 50 else stringLen(tuffEbnf);
+    println("Context: " + stringSlice(tuffEbnf, start, endPos));
+  }
+  
+  if (parseResult.success) {
+    let ruleCount = vec_len(parseResult.value.rules);
+    it("tuff.ebnf has many rules", expect_true("has rules", ruleCount > 20));
+    println("Parsed " + ruleCount + " rules from tuff.ebnf");
+    
+    // Print first 10 rule names
+    let mut i = 0;
+    while (i < 10 && i < ruleCount) {
+      let rule = vec_get(parseResult.value.rules, i);
+      println("  Rule " + i + ": " + rule.name);
+      i = i + 1;
+    }
+    
+    // Validate the grammar
+    let validResult = validate_grammar(parseResult.value);
+    it("tuff.ebnf grammar is valid", expect_true("valid", validResult.valid));
+    
+    if (!validResult.valid) {
+      println("Validation errors:");
+      let mut j = 0;
+      while (j < vec_len(validResult.errors)) {
+        println("  - " + vec_get(validResult.errors, j));
+        j = j + 1;
+      }
+    }
+  }
+  
+  // ==========================================================================
+  // TEST: Generate parser for a minimal expression grammar
+  // ==========================================================================
+  suite("Generate and test minimal parser");
+  
+  // A very simple grammar for testing
+  let minimalGrammar = "
+    expr ::= term ('+' term)* ;
+    term ::= number | '(' expr ')' ;
+    number ::= [0-9]+ ;
+  ";
+  
+  let minResult = parse_grammar(minimalGrammar);
+  it("minimal grammar parses", expect_true("success", minResult.success));
+  
+  if (minResult.success) {
+    // Generate parser code
+    let parserCode = generate_parser(minResult.value);
+    it("generated parser is not empty", expect_true("has code", stringLen(parserCode) > 100));
+    
+    // Check for expected functions
+    it("has parse_expr", expect_true("parse_expr", stringContains(parserCode, "fn parse_expr")));
+    it("has parse_term", expect_true("parse_term", stringContains(parserCode, "fn parse_term")));
+    it("has parse_number", expect_true("parse_number", stringContains(parserCode, "fn parse_number")));
+    
+    // Generate emitter code
+    let emitterCode = generate_emitter(minResult.value);
+    it("generated emitter is not empty", expect_true("has code", stringLen(emitterCode) > 100));
+    
+    it("has emit_expr", expect_true("emit_expr", stringContains(emitterCode, "fn emit_expr")));
+  }
+  
+  // ==========================================================================
+  // TEST: Check generated code structure for specific patterns
+  // ==========================================================================
+  suite("Generated code structure");
+  
+  let litGrammar = parse_grammar("keyword ::= \"fn\" | \"let\" | \"if\" ;");
+  let litParser = generate_parser(litGrammar.value);
+  
+  // The parser should try each literal in the alternation
+  it("generates alternation handling", expect_true("try", stringContains(litParser, "try")));
+  it("generates expect_lit calls", expect_true("expect_lit", stringContains(litParser, "expect_lit")));
+  
+  // Check for proper result handling
+  it("has ok_node", expect_true("ok_node", stringContains(litParser, "ok_node")));
+  it("has err_parse", expect_true("err_parse", stringContains(litParser, "err_parse")));
+  
+  // ==========================================================================
+  // TEST: Character class handling
+  // ==========================================================================
+  suite("Character class code generation");
+  
+  let charClassGrammar = parse_grammar("
+    digit ::= [0-9] ;
+    alpha ::= [a-zA-Z] ;
+    ident ::= [a-zA-Z_] [a-zA-Z0-9_]* ;
+  ");
+  
+  it("parses char class grammar", expect_true("success", charClassGrammar.success));
+  
+  if (charClassGrammar.success) {
+    let charParser = generate_parser(charClassGrammar.value);
+    
+    // Should generate character range checks
+    it("generates char code check", expect_true("stringCharCodeAt", stringContains(charParser, "stringCharCodeAt")));
+    it("generates range comparison", expect_true(">=", stringContains(charParser, ">=")));
+  }
+  
+  // ==========================================================================
+  // TEST: Repetition handling
+  // ==========================================================================
+  suite("Repetition code generation");
+  
+  let repeatGrammar = parse_grammar("
+    items ::= item* ;
+    nonempty ::= item+ ;
+    optional ::= item? ;
+    item ::= \"x\" ;
+  ");
+  
+  it("parses repeat grammar", expect_true("success", repeatGrammar.success));
+  
+  if (repeatGrammar.success) {
+    let repeatParser = generate_parser(repeatGrammar.value);
+    
+    // Should generate loop for repetition
+    it("generates while loop", expect_true("while", stringContains(repeatParser, "while")));
+    it("generates items vec", expect_true("items", stringContains(repeatParser, "items")));
+  }
+  
+  // ==========================================================================
+  // TEST: Verify javascript.ebnf can be parsed
+  // ==========================================================================
+  suite("Parse javascript.ebnf grammar");
+  
+  let jsEbnf = readTextFile("grammars/javascript.ebnf");
+  if (stringLen(jsEbnf) > 0) {
+    it("javascript.ebnf file exists", expect_true("non-empty", stringLen(jsEbnf) > 100));
+    
+    let jsResult = parse_grammar(jsEbnf);
+    it("javascript.ebnf parses successfully", expect_true("success", jsResult.success));
+    
+    if (jsResult.success) {
+      println("Parsed " + vec_len(jsResult.value.rules) + " rules from javascript.ebnf");
+    } else {
+      println("JS grammar parse error: " + jsResult.error);
+    }
+  } else {
+    println("javascript.ebnf not found, skipping");
+  }
+  
+  summary();
+  status()
+}
+
+// Helper to check if string contains substring
+fn stringContains(haystack: String, needle: String) : Bool => {
+  let hLen = stringLen(haystack);
+  let nLen = stringLen(needle);
+  if (nLen > hLen) { yield false; }
+  if (nLen == 0) { yield true; }
+  
+  let mut i = 0;
+  while (i <= hLen - nLen) {
+    let mut j = 0;
+    let mut found = true;
+    while (j < nLen && found) {
+      if (stringCharCodeAt(haystack, i + j) != stringCharCodeAt(needle, j)) {
+        found = false;
+      }
+      j = j + 1;
+    }
+    if (found) { yield true; }
+    i = i + 1;
+  }
+  false
+}

@@ -36,6 +36,9 @@ describe("selfhost prebuilt sanity", () => {
       }
     }
 
-    expect(offenders, `Found duplicate tag keys in ${offenders.length} file(s)`).toEqual([]);
+    expect(
+      offenders,
+      `Found duplicate tag keys in ${offenders.length} file(s)`
+    ).toEqual([]);
   });
 });

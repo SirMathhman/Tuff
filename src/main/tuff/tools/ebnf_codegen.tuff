@@ -252,7 +252,7 @@ fn generate_sequence_parser(prod: PSequence, posVar: String, ruleName: String, i
     code = code + ind + "let " + partVar + " = {\n";
     code = code + generate_production_parser(term, "curPos", ruleName + "_part" + i, indentLevel + 1);
     code = code + ind + "};\n";
-    code = code + ind + "if (!" + partVar + ".success) {\n";
+    code = code + ind + "if (" + partVar + ".success == false) {\n";
     code = code + ind + "  yield err_parse(curPos, " + partVar + ".error);\n";
     code = code + ind + "}\n";
     code = code + ind + "vec_push(children, " + partVar + ".node);\n";
@@ -351,7 +351,7 @@ fn generate_char_class_parser(term: TCharClass, posVar: String, ruleName: String
   if (term.negated) {
     code = code + ind + "  if (matched) {\n";
   } else {
-    code = code + ind + "  if (!matched) {\n";
+    code = code + ind + "  if (matched == false) {\n";
   }
   code = code + ind + "    yield err_parse(cp, \"character not in class\");\n";
   code = code + ind + "  }\n";
