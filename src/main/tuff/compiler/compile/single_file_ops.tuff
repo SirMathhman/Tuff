@@ -62,18 +62,10 @@ fn is_extern_decl_start(src: String, i: I32) : Bool => {
   false
 }
 
-out fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool, filePath: String) : String =>
-  compile_tiny2_with_imported_fns(src, requireMain, exportAll, filePath, vec_new())
+class fn ParsedProgram(decls: Vec<Decl>, sawMain: Bool) => {}
 
-out fn compile_tiny2_with_imported_fns(src: String, requireMain: Bool, exportAll: Bool, filePath: String, importedFns: Vec<FnSig>) : String => {
+fn parse_program_decls(src: String, exportAll: Bool, requireMain: Bool) => {
   let mut i = 0;
-
-  reset_struct_defs();
-  reset_errors();
-  reset_warnings();
-
-  let mut out = "// compiled by selfhost tuffc\n";
-
   let decls = vec_new();
 
   while (true) {
@@ -176,12 +168,27 @@ out fn compile_tiny2_with_imported_fns(src: String, requireMain: Bool, exportAll
   }
   if (requireMain && !sawMain) { panic_at(src, i, "expected fn main"); }
 
+  ParsedProgram(decls, sawMain)
+}
+
+out fn compile_tiny2(src: String, requireMain: Bool, exportAll: Bool, filePath: String) : String =>
+  compile_tiny2_with_imported_fns(src, requireMain, exportAll, filePath, vec_new())
+
+out fn compile_tiny2_with_imported_fns(src: String, requireMain: Bool, exportAll: Bool, filePath: String, importedFns: Vec<FnSig>) : String => {
+  reset_struct_defs();
+  reset_errors();
+  reset_warnings();
+
+  let parsed = parse_program_decls(src, exportAll, requireMain);
+  let decls = parsed.decls;
+
   analyze_program_with_fns(src, decls, importedFns);
   panic_if_errors();
   emit_warnings();
 
   set_current_file_path(filePath);
 
+  let mut out = "// compiled by selfhost tuffc\n";
   if (decls_needs_vec_rt(decls)) {
     out = out + emit_runtime_vec_imports_js();
   }
@@ -196,115 +203,14 @@ out fn compile_tiny2_with_imported_fns(src: String, requireMain: Bool, exportAll
 }
 
 out fn lint_tiny2_with_imported_fns(src: String, requireMain: Bool, exportAll: Bool, importedFns: Vec<FnSig>) : Void => {
-  let mut i = 0;
-
   reset_struct_defs();
   reset_errors();
   reset_warnings();
 
   check_file_size(src);
 
-  let decls = vec_new();
-
-  while (true) {
-    if (is_extern_decl_start(src, i)) {
-      let ex = parse_extern_decl_ast(src, i);
-      vec_push(decls, ex.decl);
-      i = ex.nextPos;
-      continue;
-    }
-    break;
-  }
-
-  let imps = parse_imports_ast(src, i);
-  let mut ii = 0;
-  while (ii < vec_len(imps.decls)) {
-    vec_push(decls, vec_get(imps.decls, ii));
-    ii = ii + 1;
-  }
-  i = imps.nextPos;
-
-  let mut sawMain = false;
-  while (true) {
-    let j = skip_ws(src, i);
-    if (starts_with_at(src, j, "module")) {
-      let m = parse_module_decl_ast(src, i);
-      vec_push(decls, m.decl);
-      i = m.nextPos;
-      continue;
-    }
-    if (starts_with_at(src, j, "type")) {
-      let td = parse_type_union_decl_ast(src, i, exportAll);
-      vec_push(decls, td.decl);
-      i = td.nextPos;
-      continue;
-    }
-    if (starts_with_at(src, j, "struct")) {
-      let sd = parse_struct_decl_ast(src, i);
-      vec_push(decls, sd.decl);
-      i = sd.nextPos;
-      continue;
-    }
-    if (starts_with_at(src, j, "let")) {
-      let start = skip_ws(src, i);
-      i = parse_keyword(src, i, "let");
-      let mutOpt = parse_mut_opt(src, i);
-      i = mutOpt.nextPos;
-      let name = parse_ident(src, i);
-      i = name.nextPos;
-
-      let mut tyAnn = "";
-      let t0 = skip_ws(src, i);
-      if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 58) {
-        let _ty = parse_type_expr(src, t0 + 1);
-        tyAnn = _ty.v0;
-        i = _ty.v1;
-      }
-
-      i = parse_keyword(src, i, "=");
-      let expr = parse_expr_ast(src, i);
-      i = expr.nextPos;
-      i = parse_optional_semicolon(src, i);
-      if (tyAnn == "") {
-        vec_push(decls, decl_let(span(start, i), mutOpt.ok, name.text, expr.expr));
-      } else {
-        vec_push(decls, decl_let_typed(span(start, i), mutOpt.ok, name.text, tyAnn, expr.expr));
-      }
-      continue;
-    }
-    if (starts_with_at(src, j, "fn")) {
-      let f = parse_fn_decl_ast2(src, i, exportAll);
-      if (f.decl is DFn && f.decl.name == "main") { sawMain = true; }
-      vec_push(decls, f.decl);
-      i = f.nextPos;
-      continue;
-    }
-    if (starts_with_at(src, j, "class")) {
-      let f = parse_class_fn_decl_ast2(src, i, exportAll);
-      if (f.decl is DClassFn && f.decl.name == "main") { sawMain = true; }
-      vec_push(decls, f.decl);
-      i = f.nextPos;
-      continue;
-    }
-    if (starts_with_at(src, j, "out")) {
-      let k0 = parse_keyword(src, i, "out");
-      let j2 = skip_ws(src, k0);
-      if (starts_with_at(src, j2, "class")) {
-        let f = parse_class_fn_decl_ast2(src, i, exportAll);
-        if (f.decl is DClassFn && f.decl.name == "main") { sawMain = true; }
-        vec_push(decls, f.decl);
-        i = f.nextPos;
-        continue;
-      }
-      let f = parse_fn_decl_ast2(src, i, exportAll);
-      if (f.decl is DFn && f.decl.name == "main") { sawMain = true; }
-      vec_push(decls, f.decl);
-      i = f.nextPos;
-      continue;
-    }
-    break;
-  }
-  if (requireMain && !sawMain) { panic_at(src, i, "expected fn main"); }
+  let parsed = parse_program_decls(src, exportAll, requireMain);
+  let decls = parsed.decls;
 
   analyze_program_with_fns(src, decls, importedFns);
   check_clones(src, decls);
@@ -313,115 +219,14 @@ out fn lint_tiny2_with_imported_fns(src: String, requireMain: Bool, exportAll: B
 }
 
 out fn lint_tiny2_collect_with_imported_fns(src: String, requireMain: Bool, exportAll: Bool, importedFns: Vec<FnSig>) => {
-  let mut i = 0;
-
   reset_struct_defs();
   reset_errors();
   reset_warnings();
 
   check_file_size(src);
 
-  let decls = vec_new();
-
-  while (true) {
-    if (is_extern_decl_start(src, i)) {
-      let ex = parse_extern_decl_ast(src, i);
-      vec_push(decls, ex.decl);
-      i = ex.nextPos;
-      continue;
-    }
-    break;
-  }
-
-  let imps = parse_imports_ast(src, i);
-  let mut ii = 0;
-  while (ii < vec_len(imps.decls)) {
-    vec_push(decls, vec_get(imps.decls, ii));
-    ii = ii + 1;
-  }
-  i = imps.nextPos;
-
-  let mut sawMain = false;
-  while (true) {
-    let j = skip_ws(src, i);
-    if (starts_with_at(src, j, "module")) {
-      let m = parse_module_decl_ast(src, i);
-      vec_push(decls, m.decl);
-      i = m.nextPos;
-      continue;
-    }
-    if (starts_with_at(src, j, "type")) {
-      let td = parse_type_union_decl_ast(src, i, exportAll);
-      vec_push(decls, td.decl);
-      i = td.nextPos;
-      continue;
-    }
-    if (starts_with_at(src, j, "struct")) {
-      let sd = parse_struct_decl_ast(src, i);
-      vec_push(decls, sd.decl);
-      i = sd.nextPos;
-      continue;
-    }
-    if (starts_with_at(src, j, "let")) {
-      let start = skip_ws(src, i);
-      i = parse_keyword(src, i, "let");
-      let mutOpt = parse_mut_opt(src, i);
-      i = mutOpt.nextPos;
-      let name = parse_ident(src, i);
-      i = name.nextPos;
-
-      let mut tyAnn = "";
-      let t0 = skip_ws(src, i);
-      if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 58) {
-        let _ty = parse_type_expr(src, t0 + 1);
-        tyAnn = _ty.v0;
-        i = _ty.v1;
-      }
-
-      i = parse_keyword(src, i, "=");
-      let expr = parse_expr_ast(src, i);
-      i = expr.nextPos;
-      i = parse_optional_semicolon(src, i);
-      if (tyAnn == "") {
-        vec_push(decls, decl_let(span(start, i), mutOpt.ok, name.text, expr.expr));
-      } else {
-        vec_push(decls, decl_let_typed(span(start, i), mutOpt.ok, name.text, tyAnn, expr.expr));
-      }
-      continue;
-    }
-    if (starts_with_at(src, j, "fn")) {
-      let f = parse_fn_decl_ast2(src, i, exportAll);
-      if (f.decl is DFn && f.decl.name == "main") { sawMain = true; }
-      vec_push(decls, f.decl);
-      i = f.nextPos;
-      continue;
-    }
-    if (starts_with_at(src, j, "class")) {
-      let f = parse_class_fn_decl_ast2(src, i, exportAll);
-      if (f.decl is DClassFn && f.decl.name == "main") { sawMain = true; }
-      vec_push(decls, f.decl);
-      i = f.nextPos;
-      continue;
-    }
-    if (starts_with_at(src, j, "out")) {
-      let k0 = parse_keyword(src, i, "out");
-      let j2 = skip_ws(src, k0);
-      if (starts_with_at(src, j2, "class")) {
-        let f = parse_class_fn_decl_ast2(src, i, exportAll);
-        if (f.decl is DClassFn && f.decl.name == "main") { sawMain = true; }
-        vec_push(decls, f.decl);
-        i = f.nextPos;
-        continue;
-      }
-      let f = parse_fn_decl_ast2(src, i, exportAll);
-      if (f.decl is DFn && f.decl.name == "main") { sawMain = true; }
-      vec_push(decls, f.decl);
-      i = f.nextPos;
-      continue;
-    }
-    break;
-  }
-  if (requireMain && !sawMain) { panic_at(src, i, "expected fn main"); }
+  let parsed = parse_program_decls(src, exportAll, requireMain);
+  let decls = parsed.decls;
 
   analyze_program_with_fns(src, decls, importedFns);
 

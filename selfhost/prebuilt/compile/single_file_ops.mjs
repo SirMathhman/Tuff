@@ -49,15 +49,11 @@ return true;
 }
 return false;
 }
-export function compile_tiny2(src, requireMain, exportAll, filePath) {
-return compile_tiny2_with_imported_fns(src, requireMain, exportAll, filePath, vec_new());
+export function ParsedProgram(decls, sawMain) {
+return { decls: decls, sawMain: sawMain };
 }
-export function compile_tiny2_with_imported_fns(src, requireMain, exportAll, filePath, importedFns) {
+export function parse_program_decls(src, exportAll, requireMain) {
 let i = 0;
-reset_struct_defs();
-reset_errors();
-reset_warnings();
-let out = "// compiled by selfhost tuffc\n";
 const decls = vec_new();
 while (true) {
 if (is_extern_decl_start(src, i)) {
@@ -164,10 +160,22 @@ break;
 if (requireMain && !sawMain) {
 panic_at(src, i, "expected fn main");
 }
+return ParsedProgram(decls, sawMain);
+}
+export function compile_tiny2(src, requireMain, exportAll, filePath) {
+return compile_tiny2_with_imported_fns(src, requireMain, exportAll, filePath, vec_new());
+}
+export function compile_tiny2_with_imported_fns(src, requireMain, exportAll, filePath, importedFns) {
+reset_struct_defs();
+reset_errors();
+reset_warnings();
+const parsed = parse_program_decls(src, exportAll, requireMain);
+const decls = parsed.decls;
 analyze_program_with_fns(src, decls, importedFns);
 panic_if_errors();
 emit_warnings();
 set_current_file_path(filePath);
+let out = "// compiled by selfhost tuffc\n";
 if (decls_needs_vec_rt(decls)) {
 out = out + emit_runtime_vec_imports_js();
 }
@@ -179,117 +187,12 @@ di = di + 1;
 return out;
 }
 export function lint_tiny2_with_imported_fns(src, requireMain, exportAll, importedFns) {
-let i = 0;
 reset_struct_defs();
 reset_errors();
 reset_warnings();
 check_file_size(src);
-const decls = vec_new();
-while (true) {
-if (is_extern_decl_start(src, i)) {
-const ex = parse_extern_decl_ast(src, i);
-vec_push(decls, ex.decl);
-i = ex.nextPos;
-continue;
-}
-break;
-}
-const imps = parse_imports_ast(src, i);
-let ii = 0;
-while (ii < vec_len(imps.decls)) {
-vec_push(decls, vec_get(imps.decls, ii));
-ii = ii + 1;
-}
-i = imps.nextPos;
-let sawMain = false;
-while (true) {
-const j = skip_ws(src, i);
-if (starts_with_at(src, j, "module")) {
-const m = parse_module_decl_ast(src, i);
-vec_push(decls, m.decl);
-i = m.nextPos;
-continue;
-}
-if (starts_with_at(src, j, "type")) {
-const td = parse_type_union_decl_ast(src, i, exportAll);
-vec_push(decls, td.decl);
-i = td.nextPos;
-continue;
-}
-if (starts_with_at(src, j, "struct")) {
-const sd = parse_struct_decl_ast(src, i);
-vec_push(decls, sd.decl);
-i = sd.nextPos;
-continue;
-}
-if (starts_with_at(src, j, "let")) {
-const start = skip_ws(src, i);
-i = parse_keyword(src, i, "let");
-const mutOpt = parse_mut_opt(src, i);
-i = mutOpt.nextPos;
-const name = parse_ident(src, i);
-i = name.nextPos;
-let tyAnn = "";
-const t0 = skip_ws(src, i);
-if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 58) {
-const _ty = parse_type_expr(src, t0 + 1);
-tyAnn = _ty.v0;
-i = _ty.v1;
-}
-i = parse_keyword(src, i, "=");
-const expr = parse_expr_ast(src, i);
-i = expr.nextPos;
-i = parse_optional_semicolon(src, i);
-if (tyAnn == "") {
-vec_push(decls, decl_let(span(start, i), mutOpt.ok, name.text, expr.expr));
-} else {
-vec_push(decls, decl_let_typed(span(start, i), mutOpt.ok, name.text, tyAnn, expr.expr));
-}
-continue;
-}
-if (starts_with_at(src, j, "fn")) {
-const f = parse_fn_decl_ast2(src, i, exportAll);
-if ((f.decl.tag === "DFn") && f.decl.name == "main") {
-sawMain = true;
-}
-vec_push(decls, f.decl);
-i = f.nextPos;
-continue;
-}
-if (starts_with_at(src, j, "class")) {
-const f = parse_class_fn_decl_ast2(src, i, exportAll);
-if ((f.decl.tag === "DClassFn") && f.decl.name == "main") {
-sawMain = true;
-}
-vec_push(decls, f.decl);
-i = f.nextPos;
-continue;
-}
-if (starts_with_at(src, j, "out")) {
-const k0 = parse_keyword(src, i, "out");
-const j2 = skip_ws(src, k0);
-if (starts_with_at(src, j2, "class")) {
-const f = parse_class_fn_decl_ast2(src, i, exportAll);
-if ((f.decl.tag === "DClassFn") && f.decl.name == "main") {
-sawMain = true;
-}
-vec_push(decls, f.decl);
-i = f.nextPos;
-continue;
-}
-const f = parse_fn_decl_ast2(src, i, exportAll);
-if ((f.decl.tag === "DFn") && f.decl.name == "main") {
-sawMain = true;
-}
-vec_push(decls, f.decl);
-i = f.nextPos;
-continue;
-}
-break;
-}
-if (requireMain && !sawMain) {
-panic_at(src, i, "expected fn main");
-}
+const parsed = parse_program_decls(src, exportAll, requireMain);
+const decls = parsed.decls;
 analyze_program_with_fns(src, decls, importedFns);
 check_clones(src, decls);
 panic_if_errors();
@@ -297,117 +200,12 @@ emit_warnings();
 return undefined;
 }
 export function lint_tiny2_collect_with_imported_fns(src, requireMain, exportAll, importedFns) {
-let i = 0;
 reset_struct_defs();
 reset_errors();
 reset_warnings();
 check_file_size(src);
-const decls = vec_new();
-while (true) {
-if (is_extern_decl_start(src, i)) {
-const ex = parse_extern_decl_ast(src, i);
-vec_push(decls, ex.decl);
-i = ex.nextPos;
-continue;
-}
-break;
-}
-const imps = parse_imports_ast(src, i);
-let ii = 0;
-while (ii < vec_len(imps.decls)) {
-vec_push(decls, vec_get(imps.decls, ii));
-ii = ii + 1;
-}
-i = imps.nextPos;
-let sawMain = false;
-while (true) {
-const j = skip_ws(src, i);
-if (starts_with_at(src, j, "module")) {
-const m = parse_module_decl_ast(src, i);
-vec_push(decls, m.decl);
-i = m.nextPos;
-continue;
-}
-if (starts_with_at(src, j, "type")) {
-const td = parse_type_union_decl_ast(src, i, exportAll);
-vec_push(decls, td.decl);
-i = td.nextPos;
-continue;
-}
-if (starts_with_at(src, j, "struct")) {
-const sd = parse_struct_decl_ast(src, i);
-vec_push(decls, sd.decl);
-i = sd.nextPos;
-continue;
-}
-if (starts_with_at(src, j, "let")) {
-const start = skip_ws(src, i);
-i = parse_keyword(src, i, "let");
-const mutOpt = parse_mut_opt(src, i);
-i = mutOpt.nextPos;
-const name = parse_ident(src, i);
-i = name.nextPos;
-let tyAnn = "";
-const t0 = skip_ws(src, i);
-if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 58) {
-const _ty = parse_type_expr(src, t0 + 1);
-tyAnn = _ty.v0;
-i = _ty.v1;
-}
-i = parse_keyword(src, i, "=");
-const expr = parse_expr_ast(src, i);
-i = expr.nextPos;
-i = parse_optional_semicolon(src, i);
-if (tyAnn == "") {
-vec_push(decls, decl_let(span(start, i), mutOpt.ok, name.text, expr.expr));
-} else {
-vec_push(decls, decl_let_typed(span(start, i), mutOpt.ok, name.text, tyAnn, expr.expr));
-}
-continue;
-}
-if (starts_with_at(src, j, "fn")) {
-const f = parse_fn_decl_ast2(src, i, exportAll);
-if ((f.decl.tag === "DFn") && f.decl.name == "main") {
-sawMain = true;
-}
-vec_push(decls, f.decl);
-i = f.nextPos;
-continue;
-}
-if (starts_with_at(src, j, "class")) {
-const f = parse_class_fn_decl_ast2(src, i, exportAll);
-if ((f.decl.tag === "DClassFn") && f.decl.name == "main") {
-sawMain = true;
-}
-vec_push(decls, f.decl);
-i = f.nextPos;
-continue;
-}
-if (starts_with_at(src, j, "out")) {
-const k0 = parse_keyword(src, i, "out");
-const j2 = skip_ws(src, k0);
-if (starts_with_at(src, j2, "class")) {
-const f = parse_class_fn_decl_ast2(src, i, exportAll);
-if ((f.decl.tag === "DClassFn") && f.decl.name == "main") {
-sawMain = true;
-}
-vec_push(decls, f.decl);
-i = f.nextPos;
-continue;
-}
-const f = parse_fn_decl_ast2(src, i, exportAll);
-if ((f.decl.tag === "DFn") && f.decl.name == "main") {
-sawMain = true;
-}
-vec_push(decls, f.decl);
-i = f.nextPos;
-continue;
-}
-break;
-}
-if (requireMain && !sawMain) {
-panic_at(src, i, "expected fn main");
-}
+const parsed = parse_program_decls(src, exportAll, requireMain);
+const decls = parsed.decls;
 analyze_program_with_fns(src, decls, importedFns);
 return [get_error_infos(), get_warning_infos()];
 }
