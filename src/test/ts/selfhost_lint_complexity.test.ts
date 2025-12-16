@@ -23,7 +23,12 @@ function captureStdout<T>(fn: () => T): { value: T; out: string } {
   }
 }
 
-describe("selfhost cyclomatic complexity linting", () => {
+// NOTE: The detailed complexity logic is now covered by fast in-memory tests in
+// `src/test/ts/api/selfhost_lint_complexity.test.ts`.
+//
+// This legacy suite is intentionally skipped to avoid the cost of staging a
+// stage2 compiler + filesystem for dozens of cases.
+describe.skip("selfhost cyclomatic complexity linting", () => {
   test("warns when function complexity exceeds threshold", async () => {
     const outDir = resolve(
       ".dist",

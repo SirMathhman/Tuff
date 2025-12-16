@@ -36,7 +36,12 @@ function getErrorMessage(result: CaptureResult<unknown>): string {
     : String(result.error);
 }
 
-describe("selfhost file size linting (500 line limit)", () => {
+// NOTE: The detailed file-size logic is now covered by fast in-memory tests in
+// `src/test/ts/api/selfhost_lint_file_size.test.ts`.
+//
+// This legacy suite is intentionally skipped to avoid staging a stage2 compiler
+// + filesystem for many cases.
+describe.skip("selfhost file size linting (500 line limit)", () => {
   test("errors when file exceeds 500 lines", async () => {
     const outDir = resolve(
       ".dist",
