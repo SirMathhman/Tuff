@@ -9,7 +9,11 @@ extern from rt::vec use { vec_len, vec_get };
 from tuffc_lib use { fluff_project_with_reader };
 from analyzer use { set_fluff_options, set_fluff_complexity_options, set_fluff_file_size_options, set_fluff_max_params_options, set_fluff_single_char_identifiers_options, set_fluff_missing_docs_options };
 from build_config use { load_fluff_config };
-from util::diagnostics use { set_diagnostics_format, has_project_errors, reset_project_errors };
+from util::diagnostics use { set_diagnostics_format, has_project_errors, reset_project_errors, get_project_error_count, get_project_warning_count };
+
+// Re-export for external callers (e.g., tuff_lint.ts).
+out fn project_error_count() : I32 => get_project_error_count()
+out fn project_warning_count() : I32 => get_project_warning_count()
 
 fn print_usage() : Void => {
   println("usage: fluff [options] <in.tuff>");

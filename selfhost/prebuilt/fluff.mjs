@@ -4,7 +4,13 @@ import { vec_len, vec_get } from "./rt/vec.mjs";
 import { fluff_project_with_reader } from "./tuffc_lib.mjs";
 import { set_fluff_options, set_fluff_complexity_options, set_fluff_file_size_options, set_fluff_max_params_options, set_fluff_single_char_identifiers_options, set_fluff_missing_docs_options } from "./analyzer.mjs";
 import { load_fluff_config } from "./build_config.mjs";
-import { set_diagnostics_format, has_project_errors, reset_project_errors } from "./util/diagnostics.mjs";
+import { set_diagnostics_format, has_project_errors, reset_project_errors, get_project_error_count, get_project_warning_count } from "./util/diagnostics.mjs";
+export function project_error_count() {
+return get_project_error_count();
+}
+export function project_warning_count() {
+return get_project_warning_count();
+}
 export function print_usage() {
 println("usage: fluff [options] <in.tuff>");
 println("options:");

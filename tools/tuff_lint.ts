@@ -6,12 +6,18 @@ function repoRootFromHere(): string {
   return resolve(here, "..");
 }
 
+interface FluffModule {
+  main: (argv: string[]) => number;
+  project_error_count: () => number;
+  project_warning_count: () => number;
+}
+
 export async function main(): Promise<number> {
   const root = repoRootFromHere();
   const fluffFile = resolve(root, "selfhost", "prebuilt", "fluff.mjs");
-  const fluff = await import(pathToFileURL(fluffFile).toString());
+  const fluff = (await import(pathToFileURL(fluffFile).toString())) as FluffModule;
 
-  if (typeof (fluff as any).main !== "function") {
+  if (typeof fluff.main !== "function") {
     console.error(`expected prebuilt fluff to export main(): ${fluffFile}`);
     return 1;
   }
@@ -27,12 +33,29 @@ export async function main(): Promise<number> {
   );
 
   console.log(`Running Tuff linter on compiler sources...`);
-  const exitCode = await (fluff as any).main([compilerRoot]);
+  const exitCode = await fluff.main([compilerRoot]);
+
+  // Get counts for summary
+  const errorCount = typeof fluff.project_error_count === "function" 
+    ? fluff.project_error_count() 
+    : 0;
+  const warningCount = typeof fluff.project_warning_count === "function" 
+    ? fluff.project_warning_count() 
+    : 0;
+
+  // Print summary
+  const parts: string[] = [];
+  if (errorCount > 0) parts.push(`${errorCount} error${errorCount === 1 ? "" : "s"}`);
+  if (warningCount > 0) parts.push(`${warningCount} warning${warningCount === 1 ? "" : "s"}`);
 
   if (exitCode === 0) {
-    console.log(`✓ Linting passed`);
+    if (warningCount > 0) {
+      console.log(`✓ Linting passed with ${parts.join(", ")}`);
+    } else {
+      console.log(`✓ Linting passed (no issues found)`);
+    }
   } else {
-    console.error(`✗ Linting failed with exit code ${exitCode}`);
+    console.error(`✗ Linting failed: ${parts.join(", ")}`);
   }
 
   return exitCode;

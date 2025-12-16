@@ -22,6 +22,9 @@ let mut __tuffc_warnings = vec_new();
 // Cumulative error count for project-level linting (not reset per file).
 let mut __tuffc_project_error_count = 0;
 
+// Cumulative warning count for project-level linting (not reset per file).
+let mut __tuffc_project_warning_count = 0;
+
 // Structured diagnostics for LSP integration.
 // Each entry is a DiagInfo with line, col, start, end, msg, help.
 let mut __tuffc_error_infos = vec_new();
@@ -61,6 +64,7 @@ out fn reset_warnings() : Void => {
 
 out fn reset_project_errors() : Void => {
   __tuffc_project_error_count = 0;
+  __tuffc_project_warning_count = 0;
 }
 
 fn errors_len() : I32 => vec_len(__tuffc_errors)
@@ -68,6 +72,10 @@ fn errors_len() : I32 => vec_len(__tuffc_errors)
 out fn has_errors() : Bool => vec_len(__tuffc_errors) > 0
 
 out fn has_project_errors() : Bool => __tuffc_project_error_count > 0
+
+out fn get_project_error_count() : I32 => __tuffc_project_error_count
+
+out fn get_project_warning_count() : I32 => __tuffc_project_warning_count
 
 fn errors_join() : String => {
   let mut out = "";
@@ -155,6 +163,8 @@ out fn emit_errors() : Void => {
 out fn emit_warnings() : Void => {
   // Print warnings after a successful compile. Keep them separate from errors
   // so they don't fail compilation.
+  // Also update the project-level warning count for final summary.
+  __tuffc_project_warning_count = __tuffc_project_warning_count + vec_len(__tuffc_warnings);
   let mut i = 0;
   while (i < vec_len(__tuffc_warnings)) {
     let w = vec_get(__tuffc_warnings, i);
