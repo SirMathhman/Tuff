@@ -209,7 +209,9 @@ out fn parse_imports_ast(src: String, i: I32) : ParsedDeclsAst => {
 
 fn parse_fn_decl_ast(src: String, i: I32) : ParsedDeclAst => parse_fn_decl_ast2(src, i, false)
 
-out fn parse_fn_decl_ast2(src: String, i: I32, exportAll: Bool) : ParsedDeclAst => {
+class fn ParsedFnLike(start: I32, isOut: Bool, name: ParseResult, typeParams: Vec<TypeParam>, params: ParsedParamList, retTyAnn: String, body: ParsedMainBody, nextPos: I32) => {}
+
+fn parse_fn_like_header(src: String, i: I32, isClassFn: Bool) : ParsedFnLike => {
   let start = skip_ws(src, i);
   let mut k = start;
   let mut isOut = false;
@@ -217,6 +219,9 @@ out fn parse_fn_decl_ast2(src: String, i: I32, exportAll: Bool) : ParsedDeclAst 
   if (starts_with_at(src, j0, "out")) {
     k = parse_keyword(src, k, "out");
     isOut = true;
+  }
+  if (isClassFn) {
+    k = parse_keyword(src, k, "class");
   }
   k = parse_keyword(src, k, "fn");
   let name = parse_ident(src, k);
@@ -247,68 +252,37 @@ out fn parse_fn_decl_ast2(src: String, i: I32, exportAll: Bool) : ParsedDeclAst 
   k = body.nextPos;
   k = parse_optional_semicolon(src, k);
 
-  // If any types were provided, store them; otherwise keep the legacy shape.
+  ParsedFnLike(start, isOut, name, typeParams, params, retTyAnn, body, k)
+}
+
+out fn parse_fn_decl_ast2(src: String, i: I32, exportAll: Bool) : ParsedDeclAst => {
+  let fn = parse_fn_like_header(src, i, false);
+  
   let mut anyParamTy = false;
   let mut pi = 0;
-  while (pi < vec_len(params.tyAnns)) {
-    if (vec_get(params.tyAnns, pi) != "") { anyParamTy = true; break; }
+  while (pi < vec_len(fn.params.tyAnns)) {
+    if (vec_get(fn.params.tyAnns, pi) != "") { anyParamTy = true; break; }
     pi = pi + 1;
   }
-  if (anyParamTy || retTyAnn != "") {
-    yield ParsedDeclAst(decl_fn_typed(span(start, k), isOut, name.text, typeParams, params.names, params.tyAnns, retTyAnn, body.body, body.tail), k);
+  if (anyParamTy || fn.retTyAnn != "") {
+    yield ParsedDeclAst(decl_fn_typed(span(fn.start, fn.nextPos), fn.isOut, fn.name.text, fn.typeParams, fn.params.names, fn.params.tyAnns, fn.retTyAnn, fn.body.body, fn.body.tail), fn.nextPos);
   }
-  ParsedDeclAst(decl_fn(span(start, k), isOut, name.text, params.names, body.body, body.tail), k)
+  ParsedDeclAst(decl_fn(span(fn.start, fn.nextPos), fn.isOut, fn.name.text, fn.params.names, fn.body.body, fn.body.tail), fn.nextPos)
 }
 
 out fn parse_class_fn_decl_ast2(src: String, i: I32, exportAll: Bool) : ParsedDeclAst => {
-  let start = skip_ws(src, i);
-  let mut k = start;
-  let mut isOut = false;
-  let j0 = skip_ws(src, k);
-  if (starts_with_at(src, j0, "out")) {
-    k = parse_keyword(src, k, "out");
-    isOut = true;
-  }
-  k = parse_keyword(src, k, "class");
-  k = parse_keyword(src, k, "fn");
-  let name = parse_ident(src, k);
-  k = name.nextPos;
-  if (is_identifier_too_short(name.text)) { warn_short_identifier(src, name.startPos, name.text); }
-
-  let mut typeParams = vec_new();
-  let t0 = skip_ws(src, k);
-  if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) {
-    let tp = parse_type_params_list_ast(src, t0);
-    typeParams = tp.params;
-    k = tp.nextPos;
-  }
-
-  let params = parse_param_list_ast(src, k);
-  k = params.nextPos;
-
-  let t1 = skip_ws(src, k);
-  let mut retTyAnn = "";
-  if (t1 < stringLen(src) && stringCharCodeAt(src, t1) == 58) {
-    let _rt = parse_type_expr(src, t1 + 1);
-    retTyAnn = _rt.v0;
-    k = _rt.v1;
-  }
-
-  k = parse_keyword(src, k, "=>");
-  let body = parse_main_body_ast(src, k);
-  k = body.nextPos;
-  k = parse_optional_semicolon(src, k);
-
+  let fn = parse_fn_like_header(src, i, true);
+  
   let mut anyParamTy = false;
   let mut pi = 0;
-  while (pi < vec_len(params.tyAnns)) {
-    if (vec_get(params.tyAnns, pi) != "") { anyParamTy = true; break; }
+  while (pi < vec_len(fn.params.tyAnns)) {
+    if (vec_get(fn.params.tyAnns, pi) != "") { anyParamTy = true; break; }
     pi = pi + 1;
   }
-  if (anyParamTy || retTyAnn != "") {
-    yield ParsedDeclAst(decl_class_fn_typed(span(start, k), isOut, name.text, typeParams, params.names, params.tyAnns, retTyAnn, body.body, body.tail), k);
+  if (anyParamTy || fn.retTyAnn != "") {
+    yield ParsedDeclAst(decl_class_fn_typed(span(fn.start, fn.nextPos), fn.isOut, fn.name.text, fn.typeParams, fn.params.names, fn.params.tyAnns, fn.retTyAnn, fn.body.body, fn.body.tail), fn.nextPos);
   }
-  ParsedDeclAst(decl_class_fn(span(start, k), isOut, name.text, params.names, body.body, body.tail), k)
+  ParsedDeclAst(decl_class_fn(span(fn.start, fn.nextPos), fn.isOut, fn.name.text, fn.params.names, fn.body.body, fn.body.tail), fn.nextPos)
 }
 
 out fn parse_struct_decl_ast(src: String, i: I32) : ParsedDeclAst => {

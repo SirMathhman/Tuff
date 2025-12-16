@@ -180,7 +180,10 @@ return ParsedDeclsAst(decls, k);
 export function parse_fn_decl_ast(src, i) {
 return parse_fn_decl_ast2(src, i, false);
 }
-export function parse_fn_decl_ast2(src, i, exportAll) {
+export function ParsedFnLike(start, isOut, name, typeParams, params, retTyAnn, body, nextPos) {
+return { start: start, isOut: isOut, name: name, typeParams: typeParams, params: params, retTyAnn: retTyAnn, body: body, nextPos: nextPos };
+}
+export function parse_fn_like_header(src, i, isClassFn) {
 const start = skip_ws(src, i);
 let k = start;
 let isOut = false;
@@ -188,6 +191,9 @@ const j0 = skip_ws(src, k);
 if (starts_with_at(src, j0, "out")) {
 k = parse_keyword(src, k, "out");
 isOut = true;
+}
+if (isClassFn) {
+k = parse_keyword(src, k, "class");
 }
 k = parse_keyword(src, k, "fn");
 const name = parse_ident(src, k);
@@ -215,69 +221,39 @@ k = parse_keyword(src, k, "=>");
 const body = parse_main_body_ast(src, k);
 k = body.nextPos;
 k = parse_optional_semicolon(src, k);
+return ParsedFnLike(start, isOut, name, typeParams, params, retTyAnn, body, k);
+}
+export function parse_fn_decl_ast2(src, i, exportAll) {
+const fn = parse_fn_like_header(src, i, false);
 let anyParamTy = false;
 let pi = 0;
-while (pi < vec_len(params.tyAnns)) {
-if (vec_get(params.tyAnns, pi) != "") {
+while (pi < vec_len(fn.params.tyAnns)) {
+if (vec_get(fn.params.tyAnns, pi) != "") {
 anyParamTy = true;
 break;
 }
 pi = pi + 1;
 }
-if (anyParamTy || retTyAnn != "") {
-return ParsedDeclAst(decl_fn_typed(span(start, k), isOut, name.text, typeParams, params.names, params.tyAnns, retTyAnn, body.body, body.tail), k);
+if (anyParamTy || fn.retTyAnn != "") {
+return ParsedDeclAst(decl_fn_typed(span(fn.start, fn.nextPos), fn.isOut, fn.name.text, fn.typeParams, fn.params.names, fn.params.tyAnns, fn.retTyAnn, fn.body.body, fn.body.tail), fn.nextPos);
 }
-return ParsedDeclAst(decl_fn(span(start, k), isOut, name.text, params.names, body.body, body.tail), k);
+return ParsedDeclAst(decl_fn(span(fn.start, fn.nextPos), fn.isOut, fn.name.text, fn.params.names, fn.body.body, fn.body.tail), fn.nextPos);
 }
 export function parse_class_fn_decl_ast2(src, i, exportAll) {
-const start = skip_ws(src, i);
-let k = start;
-let isOut = false;
-const j0 = skip_ws(src, k);
-if (starts_with_at(src, j0, "out")) {
-k = parse_keyword(src, k, "out");
-isOut = true;
-}
-k = parse_keyword(src, k, "class");
-k = parse_keyword(src, k, "fn");
-const name = parse_ident(src, k);
-k = name.nextPos;
-if (is_identifier_too_short(name.text)) {
-warn_short_identifier(src, name.startPos, name.text);
-}
-let typeParams = vec_new();
-const t0 = skip_ws(src, k);
-if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) {
-const tp = parse_type_params_list_ast(src, t0);
-typeParams = tp.params;
-k = tp.nextPos;
-}
-const params = parse_param_list_ast(src, k);
-k = params.nextPos;
-const t1 = skip_ws(src, k);
-let retTyAnn = "";
-if (t1 < stringLen(src) && stringCharCodeAt(src, t1) == 58) {
-const _rt = parse_type_expr(src, t1 + 1);
-retTyAnn = _rt.v0;
-k = _rt.v1;
-}
-k = parse_keyword(src, k, "=>");
-const body = parse_main_body_ast(src, k);
-k = body.nextPos;
-k = parse_optional_semicolon(src, k);
+const fn = parse_fn_like_header(src, i, true);
 let anyParamTy = false;
 let pi = 0;
-while (pi < vec_len(params.tyAnns)) {
-if (vec_get(params.tyAnns, pi) != "") {
+while (pi < vec_len(fn.params.tyAnns)) {
+if (vec_get(fn.params.tyAnns, pi) != "") {
 anyParamTy = true;
 break;
 }
 pi = pi + 1;
 }
-if (anyParamTy || retTyAnn != "") {
-return ParsedDeclAst(decl_class_fn_typed(span(start, k), isOut, name.text, typeParams, params.names, params.tyAnns, retTyAnn, body.body, body.tail), k);
+if (anyParamTy || fn.retTyAnn != "") {
+return ParsedDeclAst(decl_class_fn_typed(span(fn.start, fn.nextPos), fn.isOut, fn.name.text, fn.typeParams, fn.params.names, fn.params.tyAnns, fn.retTyAnn, fn.body.body, fn.body.tail), fn.nextPos);
 }
-return ParsedDeclAst(decl_class_fn(span(start, k), isOut, name.text, params.names, body.body, body.tail), k);
+return ParsedDeclAst(decl_class_fn(span(fn.start, fn.nextPos), fn.isOut, fn.name.text, fn.params.names, fn.body.body, fn.body.tail), fn.nextPos);
 }
 export function parse_struct_decl_ast(src, i) {
 const start = skip_ws(src, i);
