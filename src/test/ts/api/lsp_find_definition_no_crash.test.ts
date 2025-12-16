@@ -7,7 +7,9 @@ import { prebuiltSelfhostUrl } from "./test_utils";
 
 describe("lsp_find_definition", () => {
   test("does not crash on compiler sources", async () => {
-    const tuffcLib = (await import(prebuiltSelfhostUrl("tuffc_lib.mjs"))) as any;
+    const tuffcLib = (await import(
+      prebuiltSelfhostUrl("tuffc_lib.mjs")
+    )) as any;
 
     expect(typeof tuffcLib.lsp_find_definition).toBe("function");
 

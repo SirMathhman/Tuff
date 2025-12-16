@@ -4,7 +4,9 @@ import { normalizeNewlines, prebuiltSelfhostUrl } from "./test_utils";
 
 describe("selfhost diagnostics", () => {
   test("parse error includes location and caret", async () => {
-    const stage1lib = (await import(prebuiltSelfhostUrl("tuffc_lib.mjs"))) as any;
+    const stage1lib = (await import(
+      prebuiltSelfhostUrl("tuffc_lib.mjs")
+    )) as any;
 
     // Trigger a simple parser error: missing ')' in paren expression.
     const badSrc = `fn main() => (1 + 2`;
@@ -38,7 +40,9 @@ describe("selfhost diagnostics", () => {
   });
 
   test("parse error includes multi-line context", async () => {
-    const stage1lib = (await import(prebuiltSelfhostUrl("tuffc_lib.mjs"))) as any;
+    const stage1lib = (await import(
+      prebuiltSelfhostUrl("tuffc_lib.mjs")
+    )) as any;
 
     // Error on the middle line so we can assert previous/next lines are shown.
     // Missing ')' in the let initializer.
@@ -64,7 +68,9 @@ describe("selfhost diagnostics", () => {
   });
 
   test("parse error can underline spans", async () => {
-    const stage1lib = (await import(prebuiltSelfhostUrl("tuffc_lib.mjs"))) as any;
+    const stage1lib = (await import(
+      prebuiltSelfhostUrl("tuffc_lib.mjs")
+    )) as any;
 
     // Force a keyword mismatch so the diagnostic can underline a multi-char span.
     // We use the full parser entrypoint so we hit `parse_keyword`.
@@ -91,7 +97,9 @@ describe("selfhost diagnostics", () => {
   });
 
   test("warning includes file and line", async () => {
-    const stage1lib = (await import(prebuiltSelfhostUrl("tuffc_lib.mjs"))) as any;
+    const stage1lib = (await import(
+      prebuiltSelfhostUrl("tuffc_lib.mjs")
+    )) as any;
 
     // Historically we emitted a warning for very short identifiers (like `k`).
     // That check is intentionally removed/disabled now because it was too noisy.
@@ -117,7 +125,9 @@ describe("selfhost diagnostics", () => {
   });
 
   test("analyzer reports multiple errors in one compile", async () => {
-    const stage1lib = (await import(prebuiltSelfhostUrl("tuffc_lib.mjs"))) as any;
+    const stage1lib = (await import(
+      prebuiltSelfhostUrl("tuffc_lib.mjs")
+    )) as any;
 
     // Two independent analyzer errors:
     // 1) Typed let mismatch (I32 vs String)
