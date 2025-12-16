@@ -15,7 +15,9 @@ interface FluffModule {
 export async function main(): Promise<number> {
   const root = repoRootFromHere();
   const fluffFile = resolve(root, "selfhost", "prebuilt", "fluff.mjs");
-  const fluff = (await import(pathToFileURL(fluffFile).toString())) as FluffModule;
+  const fluff = (await import(
+    pathToFileURL(fluffFile).toString()
+  )) as FluffModule;
 
   if (typeof fluff.main !== "function") {
     console.error(`expected prebuilt fluff to export main(): ${fluffFile}`);
@@ -36,17 +38,21 @@ export async function main(): Promise<number> {
   const exitCode = await fluff.main([compilerRoot]);
 
   // Get counts for summary
-  const errorCount = typeof fluff.project_error_count === "function" 
-    ? fluff.project_error_count() 
-    : 0;
-  const warningCount = typeof fluff.project_warning_count === "function" 
-    ? fluff.project_warning_count() 
-    : 0;
+  const errorCount =
+    typeof fluff.project_error_count === "function"
+      ? fluff.project_error_count()
+      : 0;
+  const warningCount =
+    typeof fluff.project_warning_count === "function"
+      ? fluff.project_warning_count()
+      : 0;
 
   // Print summary
   const parts: string[] = [];
-  if (errorCount > 0) parts.push(`${errorCount} error${errorCount === 1 ? "" : "s"}`);
-  if (warningCount > 0) parts.push(`${warningCount} warning${warningCount === 1 ? "" : "s"}`);
+  if (errorCount > 0)
+    parts.push(`${errorCount} error${errorCount === 1 ? "" : "s"}`);
+  if (warningCount > 0)
+    parts.push(`${warningCount} warning${warningCount === 1 ? "" : "s"}`);
 
   if (exitCode === 0) {
     if (warningCount > 0) {
