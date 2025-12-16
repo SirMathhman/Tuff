@@ -53,44 +53,59 @@ fn check_fn_max_params(src: String, pos: I32, fnName: String, paramCount: I32) :
 fn check_single_char_identifier(src: String, pos: I32, name: String, kind: String) : Void =>
   fluff_check_single_char_identifier(src, pos, name, kind)
 
-out fn analyze_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, outerScopes: Vec<Vec<Binding>>, outerDepth: I32, d: DFn) : Void => {
-  check_single_char_identifier(src, span_start(d.span), d.name, "function");
+fn analyze_fn_like_decl(
+  src: String,
+  structs: Vec<StructDef>,
+  unions: Vec<UnionDef>,
+  fns: Vec<FnSig>,
+  outerScopes: Vec<Vec<Binding>>,
+  outerDepth: I32,
+  span: Span,
+  name: String,
+  params: Vec<String>,
+  paramTyAnns: Vec<String>,
+  retTyAnn: String,
+  body: Vec<Stmt>,
+  tail: Expr,
+  fnKindName: String
+) : Void => {
+  check_single_char_identifier(src, span_start(span), name, fnKindName);
   
   let depth = scopes_enter(outerScopes, outerDepth);
 
   let mut pi = 0;
-  while (pi < vec_len(d.params)) {
-    let paramName = vec_get(d.params, pi);
-    check_single_char_identifier(src, span_start(d.span), paramName, "parameter");
+  while (pi < vec_len(params)) {
+    let paramName = vec_get(params, pi);
+    check_single_char_identifier(src, span_start(span), paramName, "parameter");
     
     let mut pTy = ty_unknown();
-    if (pi < vec_len(d.paramTyAnns)) {
-      let ann = vec_get(d.paramTyAnns, pi);
+    if (pi < vec_len(paramTyAnns)) {
+      let ann = vec_get(paramTyAnns, pi);
       if (ann != "") { pTy = normalize_ty_ann(ann); }
     }
-    declare_local_name(src, span_start(d.span), outerScopes, depth, paramName, false, pTy);
+    declare_local_name(src, span_start(span), outerScopes, depth, paramName, false, pTy);
     pi = pi + 1;
   }
 
   let narrowed = vec_new();
-  analyze_stmts(src, structs, unions, fns, outerScopes, depth, narrowed, d.body);
-  analyze_expr(src, structs, unions, fns, outerScopes, depth, narrowed, d.tail);
+  analyze_stmts(src, structs, unions, fns, outerScopes, depth, narrowed, body);
+  analyze_expr(src, structs, unions, fns, outerScopes, depth, narrowed, tail);
 
   // Enforce declared return type (if present) against tail and explicit yields.
-  if (d.retTyAnn != "") {
-    let expected = normalize_ty_ann(d.retTyAnn);
+  if (retTyAnn != "") {
+    let expected = normalize_ty_ann(retTyAnn);
 
     // tail
-    let tailTy = infer_expr_type(src, structs, fns, outerScopes, depth, d.tail);
-    require_type_compatible(src, span_start(d.span), "function " + d.name + " return", structs, expected, tailTy);
+    let tailTy = infer_expr_type(src, structs, fns, outerScopes, depth, tail);
+    require_type_compatible(src, span_start(span), fnKindName + " " + name + " return", structs, expected, tailTy);
 
     // yields
     let mut si = 0;
-    while (si < vec_len(d.body)) {
-      let st = vec_get(d.body, si);
+    while (si < vec_len(body)) {
+      let st = vec_get(body, si);
       if (st is SYield) {
         let yTy = if (st.expr is EUndefined) ty_void() else infer_expr_type(src, structs, fns, outerScopes, depth, st.expr);
-        require_type_compatible(src, span_start(st.span), "function " + d.name + " yield", structs, expected, yTy);
+        require_type_compatible(src, span_start(st.span), fnKindName + " " + name + " yield", structs, expected, yTy);
       }
       si = si + 1;
     }
@@ -98,56 +113,15 @@ out fn analyze_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDe
 
   warn_unused_params_in_scope(src, outerScopes, depth);
   warn_unused_locals_in_scope(src, outerScopes, depth);
-  check_fn_complexity(src, span_start(d.span), d.name, d.body, d.tail);
-  check_fn_max_params(src, span_start(d.span), d.name, vec_len(d.params));
+  check_fn_complexity(src, span_start(span), name, body, tail);
+  check_fn_max_params(src, span_start(span), name, vec_len(params));
+}
+
+out fn analyze_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, outerScopes: Vec<Vec<Binding>>, outerDepth: I32, d: DFn) : Void => {
+  analyze_fn_like_decl(src, structs, unions, fns, outerScopes, outerDepth, d.span, d.name, d.params, d.paramTyAnns, d.retTyAnn, d.body, d.tail, "function");
 }
 
 out fn analyze_class_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, outerScopes: Vec<Vec<Binding>>, outerDepth: I32, d: DClassFn) : Void => {
-  check_single_char_identifier(src, span_start(d.span), d.name, "class function");
-  
-  let depth = scopes_enter(outerScopes, outerDepth);
-
-  let mut pi = 0;
-  while (pi < vec_len(d.params)) {
-    let paramName = vec_get(d.params, pi);
-    check_single_char_identifier(src, span_start(d.span), paramName, "parameter");
-    
-    let mut pTy = ty_unknown();
-    if (pi < vec_len(d.paramTyAnns)) {
-      let ann = vec_get(d.paramTyAnns, pi);
-      if (ann != "") { pTy = normalize_ty_ann(ann); }
-    }
-    declare_local_name(src, span_start(d.span), outerScopes, depth, paramName, false, pTy);
-    pi = pi + 1;
-  }
-
-  let narrowed = vec_new();
-  analyze_stmts(src, structs, unions, fns, outerScopes, depth, narrowed, d.body);
-  analyze_expr(src, structs, unions, fns, outerScopes, depth, narrowed, d.tail);
-
-  // Enforce declared return type (if present) against tail and explicit yields.
-  if (d.retTyAnn != "") {
-    let expected = normalize_ty_ann(d.retTyAnn);
-
-    // tail
-    let tailTy = infer_expr_type(src, structs, fns, outerScopes, depth, d.tail);
-    require_type_compatible(src, span_start(d.span), "class fn " + d.name + " return", structs, expected, tailTy);
-
-    // yields
-    let mut si = 0;
-    while (si < vec_len(d.body)) {
-      let st = vec_get(d.body, si);
-      if (st is SYield) {
-        let yTy = if (st.expr is EUndefined) ty_void() else infer_expr_type(src, structs, fns, outerScopes, depth, st.expr);
-        require_type_compatible(src, span_start(st.span), "class fn " + d.name + " yield", structs, expected, yTy);
-      }
-      si = si + 1;
-    }
-  }
-
-  warn_unused_params_in_scope(src, outerScopes, depth);
-  warn_unused_locals_in_scope(src, outerScopes, depth);
-  check_fn_complexity(src, span_start(d.span), d.name, d.body, d.tail);
-  check_fn_max_params(src, span_start(d.span), d.name, vec_len(d.params));
+  analyze_fn_like_decl(src, structs, unions, fns, outerScopes, outerDepth, d.span, d.name, d.params, d.paramTyAnns, d.retTyAnn, d.body, d.tail, "class fn");
 }
 
