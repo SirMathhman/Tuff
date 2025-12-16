@@ -1,7 +1,7 @@
 // Test for the EBNF Parser and Validator
 
 extern from rt::vec use { vec_new, vec_len, vec_get };
-extern from rt::stdlib use { print, readTextFile };
+extern from rt::stdlib use { print, readTextFile, stringLen, stringSlice, stringCharCodeAt };
 
 from std::test use { reset, suite, it, expect_eq, expect_true, expect_false, summary, status };
 
@@ -13,6 +13,12 @@ from src::main::tuff::tools::ebnf_parser use {
 from src::main::tuff::tools::ebnf_validator use {
   validate_grammar,
   print_validation_result
+};
+
+from src::main::tuff::tools::ebnf_codegen use {
+  generate_parser,
+  generate_emitter,
+  generate_code
 };
 
 fn main() : I32 => {
@@ -137,6 +143,71 @@ fn main() : I32 => {
   it("complex grammar is valid", expect_true("valid", complexValidResult.valid));
   it("complex grammar has no errors", expect_eq("error count", vec_len(complexValidResult.errors), 0));
   
+  // ==========================================================================
+  // CODE GENERATION TESTS
+  // ==========================================================================
+  
+  suite("EBNF Code Generator");
+  
+  // Test: Generate parser for simple grammar
+  let simpleGrammar = parse_grammar("foo ::= \"bar\" ;");
+  let parserCode = generate_parser(simpleGrammar.value);
+  it("generates parser code", expect_true("has content", stringLen(parserCode) > 100));
+  
+  // Test: Parser code contains expected function
+  let containsParseFunc = stringContains(parserCode, "fn parse_foo");
+  it("parser has parse_foo function", expect_true("contains fn", containsParseFunc));
+  
+  // Test: Parser code contains helper functions
+  let containsSkipWs = stringContains(parserCode, "fn skip_ws");
+  it("parser has skip_ws helper", expect_true("contains helper", containsSkipWs));
+  
+  // Test: Generate emitter for simple grammar
+  let emitterCode = generate_emitter(simpleGrammar.value);
+  it("generates emitter code", expect_true("has content", stringLen(emitterCode) > 100));
+  
+  // Test: Emitter code contains expected function
+  let containsEmitFunc = stringContains(emitterCode, "fn emit_foo");
+  it("emitter has emit_foo function", expect_true("contains fn", containsEmitFunc));
+  
+  // Test: Generate code for expression grammar
+  let exprGrammar = parse_grammar("
+    expr ::= term (\"+\" term)* ;
+    term ::= \"x\" | \"y\" ;
+  ");
+  let exprCode = generate_code(exprGrammar.value);
+  it("generates both parser and emitter", expect_true("parser exists", stringLen(exprCode.parserCode) > 0));
+  it("emitter exists too", expect_true("emitter exists", stringLen(exprCode.emitterCode) > 0));
+  
+  // Test: Print generated code for inspection
+  print("=== Generated Parser (first 500 chars) ===");
+  print(stringSlice(parserCode, 0, 500));
+  print("=== Generated Emitter (first 500 chars) ===");
+  print(stringSlice(emitterCode, 0, 500));
+  
   summary();
   status()
+}
+
+// Helper to check if string contains substring
+fn stringContains(haystack: String, needle: String) : Bool => {
+  let hLen = stringLen(haystack);
+  let nLen = stringLen(needle);
+  if (nLen > hLen) { yield false; }
+  if (nLen == 0) { yield true; }
+  
+  let mut i = 0;
+  while (i <= hLen - nLen) {
+    let mut j = 0;
+    let mut found = true;
+    while (j < nLen && found) {
+      if (stringCharCodeAt(haystack, i + j) != stringCharCodeAt(needle, j)) {
+        found = false;
+      }
+      j = j + 1;
+    }
+    if (found) { yield true; }
+    i = i + 1;
+  }
+  false
 }

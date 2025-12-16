@@ -1,0 +1,641 @@
+// EBNF Code Generator - Phase 3 & 4 of the bidirectional grammar system
+// Generates both parser and emitter code from EBNF grammar
+
+extern from rt::stdlib use { stringLen, stringSlice, stringCharCodeAt, stringFromCharCode };
+extern from rt::vec use { vec_new, vec_push, vec_len, vec_get };
+
+from src::main::tuff::tools::ebnf_parser use {
+  Grammar,
+  Rule,
+  Production,
+  PSequence,
+  PAlternation,
+  PTerm,
+  Term,
+  TNonTerminal,
+  TLiteral,
+  TCharClass,
+  TRepeat,
+  TGroup,
+  TAnnotation,
+  RepeatKind,
+  RepeatZeroOrMore,
+  RepeatOneOrMore,
+  RepeatOptional,
+  CharRange
+};
+
+// =============================================================================
+// Code Generation Result
+// =============================================================================
+
+struct GeneratedCode {
+  parserCode: String,
+  emitterCode: String
+}
+
+// =============================================================================
+// Helper: Convert rule name to function name
+// =============================================================================
+
+fn rule_to_parse_fn(name: String) : String => "parse_" + name
+
+fn rule_to_emit_fn(name: String) : String => "emit_" + name
+
+fn to_upper_camel(name: String) : String => {
+  // Convert snake_case to UpperCamelCase for type names
+  let len = stringLen(name);
+  if (len == 0) { yield ""; }
+  
+  let mut result = "";
+  let mut capitalize_next = true;
+  let mut i = 0;
+  
+  while (i < len) {
+    let c = stringCharCodeAt(name, i);
+    if (c == 95) {  // underscore
+      capitalize_next = true;
+    } else {
+      if (capitalize_next && c >= 97 && c <= 122) {
+        // lowercase to uppercase
+        result = result + stringFromCharCode(c - 32);
+      } else {
+        result = result + stringFromCharCode(c);
+      }
+      capitalize_next = false;
+    }
+    i = i + 1;
+  }
+  
+  result
+}
+
+// =============================================================================
+// Generate Parser Code
+// =============================================================================
+
+out fn generate_parser(g: Grammar) : String => {
+  let mut code = "";
+  
+  // Header
+  code = code + "// Generated Parser - DO NOT EDIT\n";
+  code = code + "// Generated from EBNF grammar\n\n";
+  code = code + "extern from rt::stdlib use { stringLen, stringSlice, stringCharCodeAt };\n";
+  code = code + "extern from rt::vec use { vec_new, vec_push, vec_len, vec_get };\n\n";
+  
+  // Parse result type
+  code = code + "// =============================================================================\n";
+  code = code + "// Parse Result\n";
+  code = code + "// =============================================================================\n\n";
+  code = code + "struct ParseResult {\n";
+  code = code + "  success: Bool,\n";
+  code = code + "  node: Node,\n";
+  code = code + "  nextPos: I32,\n";
+  code = code + "  error: String\n";
+  code = code + "}\n\n";
+  
+  // Node types (simplified CST)
+  code = code + "type Node =\n";
+  code = code + "    NTerminal\n";
+  code = code + "  | NSequence\n";
+  code = code + "  | NChoice\n";
+  code = code + "  | NEmpty;\n\n";
+  
+  code = code + "struct NTerminal {\n";
+  code = code + "  kind: String,\n";
+  code = code + "  value: String,\n";
+  code = code + "  start: I32,\n";
+  code = code + "  endPos: I32\n";
+  code = code + "}\n\n";
+  
+  code = code + "struct NSequence {\n";
+  code = code + "  kind: String,\n";
+  code = code + "  children: Vec<Node>\n";
+  code = code + "}\n\n";
+  
+  code = code + "struct NChoice {\n";
+  code = code + "  kind: String,\n";
+  code = code + "  child: Node\n";
+  code = code + "}\n\n";
+  
+  code = code + "struct NEmpty {}\n\n";
+  
+  // Helper functions
+  code = code + "// =============================================================================\n";
+  code = code + "// Parser Helpers\n";
+  code = code + "// =============================================================================\n\n";
+  
+  code = code + "fn ok_node(node: Node, nextPos: I32) : ParseResult =>\n";
+  code = code + "  ParseResult { true, node, nextPos, \"\" }\n\n";
+  
+  code = code + "fn err_parse(pos: I32, error: String) : ParseResult =>\n";
+  code = code + "  ParseResult { false, NEmpty {}, pos, error }\n\n";
+  
+  code = code + "fn is_ws(c: I32) : Bool => c == 32 || c == 9 || c == 10 || c == 13\n\n";
+  
+  code = code + "fn skip_ws(src: String, pos: I32) : I32 => {\n";
+  code = code + "  let len = stringLen(src);\n";
+  code = code + "  let mut p = pos;\n";
+  code = code + "  while (p < len && is_ws(stringCharCodeAt(src, p))) {\n";
+  code = code + "    p = p + 1;\n";
+  code = code + "  }\n";
+  code = code + "  p\n";
+  code = code + "}\n\n";
+  
+  code = code + "fn expect_lit(src: String, pos: I32, lit: String) : ParseResult => {\n";
+  code = code + "  let p = skip_ws(src, pos);\n";
+  code = code + "  let len = stringLen(src);\n";
+  code = code + "  let litLen = stringLen(lit);\n";
+  code = code + "  if (p + litLen > len) {\n";
+  code = code + "    yield err_parse(p, \"expected '\" + lit + \"'\");\n";
+  code = code + "  }\n";
+  code = code + "  let mut i = 0;\n";
+  code = code + "  while (i < litLen) {\n";
+  code = code + "    if (stringCharCodeAt(src, p + i) != stringCharCodeAt(lit, i)) {\n";
+  code = code + "      yield err_parse(p, \"expected '\" + lit + \"'\");\n";
+  code = code + "    }\n";
+  code = code + "    i = i + 1;\n";
+  code = code + "  }\n";
+  code = code + "  ok_node(NTerminal { \"literal\", lit, p, p + litLen }, p + litLen)\n";
+  code = code + "}\n\n";
+  
+  // Generate parse function for each rule
+  code = code + "// =============================================================================\n";
+  code = code + "// Generated Parse Functions\n";
+  code = code + "// =============================================================================\n\n";
+  
+  let mut i = 0;
+  while (i < vec_len(g.rules)) {
+    let rule = vec_get(g.rules, i);
+    code = code + generate_parse_function(rule);
+    i = i + 1;
+  }
+  
+  code
+}
+
+fn generate_parse_function(rule: Rule) : String => {
+  let fnName = rule_to_parse_fn(rule.name);
+  let mut code = "fn " + fnName + "(src: String, pos: I32) : ParseResult => {\n";
+  
+  code = code + "  let p = skip_ws(src, pos);\n";
+  code = code + generate_production_parser(rule.production, "p", rule.name, 1);
+  code = code + "}\n\n";
+  
+  code
+}
+
+fn indent(level: I32) : String => {
+  let mut s = "";
+  let mut i = 0;
+  while (i < level) {
+    s = s + "  ";
+    i = i + 1;
+  }
+  s
+}
+
+fn generate_production_parser(prod: Production, posVar: String, ruleName: String, indentLevel: I32) : String => {
+  let ind = indent(indentLevel);
+  
+  if (prod is PAlternation) {
+    yield generate_alternation_parser(prod, posVar, ruleName, indentLevel);
+  }
+  
+  if (prod is PSequence) {
+    yield generate_sequence_parser(prod, posVar, ruleName, indentLevel);
+  }
+  
+  if (prod is PTerm) {
+    yield generate_term_parser(prod.term, posVar, ruleName, indentLevel);
+  }
+  
+  ind + "err_parse(" + posVar + ", \"expected " + ruleName + "\")\n"
+}
+
+fn generate_alternation_parser(prod: PAlternation, posVar: String, ruleName: String, indentLevel: I32) : String => {
+  let ind = indent(indentLevel);
+  let mut code = "";
+  
+  // Try each alternative
+  let mut i = 0;
+  while (i < vec_len(prod.choices)) {
+    let choice = vec_get(prod.choices, i);
+    let tryVar = "try" + i;
+    
+    code = code + ind + "let " + tryVar + " = {\n";
+    code = code + generate_production_parser(choice, posVar, ruleName + "_alt" + i, indentLevel + 1);
+    code = code + ind + "};\n";
+    code = code + ind + "if (" + tryVar + ".success) {\n";
+    code = code + ind + "  yield ok_node(NChoice { \"" + ruleName + "\", " + tryVar + ".node }, " + tryVar + ".nextPos);\n";
+    code = code + ind + "}\n";
+    
+    i = i + 1;
+  }
+  
+  code = code + ind + "err_parse(" + posVar + ", \"expected " + ruleName + "\")\n";
+  code
+}
+
+fn generate_sequence_parser(prod: PSequence, posVar: String, ruleName: String, indentLevel: I32) : String => {
+  let ind = indent(indentLevel);
+  let mut code = "";
+  
+  code = code + ind + "let children = vec_new();\n";
+  code = code + ind + "let mut curPos = " + posVar + ";\n";
+  
+  let mut i = 0;
+  while (i < vec_len(prod.terms)) {
+    let term = vec_get(prod.terms, i);
+    let partVar = "part" + i;
+    
+    code = code + ind + "let " + partVar + " = {\n";
+    code = code + generate_production_parser(term, "curPos", ruleName + "_part" + i, indentLevel + 1);
+    code = code + ind + "};\n";
+    code = code + ind + "if (!" + partVar + ".success) {\n";
+    code = code + ind + "  yield err_parse(curPos, " + partVar + ".error);\n";
+    code = code + ind + "}\n";
+    code = code + ind + "vec_push(children, " + partVar + ".node);\n";
+    code = code + ind + "curPos = " + partVar + ".nextPos;\n";
+    
+    i = i + 1;
+  }
+  
+  code = code + ind + "ok_node(NSequence { \"" + ruleName + "\", children }, curPos)\n";
+  code
+}
+
+fn generate_term_parser(term: Term, posVar: String, ruleName: String, indentLevel: I32) : String => {
+  let ind = indent(indentLevel);
+  
+  if (term is TNonTerminal) {
+    let fnName = rule_to_parse_fn(term.name);
+    yield ind + fnName + "(src, " + posVar + ")\n";
+  }
+  
+  if (term is TLiteral) {
+    yield ind + "expect_lit(src, " + posVar + ", \"" + escape_string(term.value) + "\")\n";
+  }
+  
+  if (term is TCharClass) {
+    yield generate_char_class_parser(term, posVar, ruleName, indentLevel);
+  }
+  
+  if (term is TRepeat) {
+    yield generate_repeat_parser(term, posVar, ruleName, indentLevel);
+  }
+  
+  if (term is TGroup) {
+    yield generate_production_parser(term.inner, posVar, ruleName, indentLevel);
+  }
+  
+  if (term is TAnnotation) {
+    // Annotations are for formatting, ignore in parser
+    yield generate_production_parser(term.inner, posVar, ruleName, indentLevel);
+  }
+  
+  ind + "err_parse(" + posVar + ", \"expected term\")\n"
+}
+
+fn escape_string(s: String) : String => {
+  let len = stringLen(s);
+  let mut result = "";
+  let mut i = 0;
+  while (i < len) {
+    let c = stringCharCodeAt(s, i);
+    if (c == 34) { result = result + "\\\""; }       // "
+    if (c == 92) { result = result + "\\\\"; }       // \
+    if (c == 10) { result = result + "\\n"; }        // newline
+    if (c == 13) { result = result + "\\r"; }        // carriage return
+    if (c == 9) { result = result + "\\t"; }         // tab
+    if (c != 34 && c != 92 && c != 10 && c != 13 && c != 9) {
+      result = result + stringFromCharCode(c);
+    }
+    i = i + 1;
+  }
+  result
+}
+
+fn generate_char_class_parser(term: TCharClass, posVar: String, ruleName: String, indentLevel: I32) : String => {
+  let ind = indent(indentLevel);
+  let mut code = "";
+  
+  code = code + ind + "{\n";
+  code = code + ind + "  let len = stringLen(src);\n";
+  code = code + ind + "  let cp = skip_ws(src, " + posVar + ");\n";
+  code = code + ind + "  if (cp >= len) {\n";
+  code = code + ind + "    yield err_parse(cp, \"unexpected end of input\");\n";
+  code = code + ind + "  }\n";
+  code = code + ind + "  let c = stringCharCodeAt(src, cp);\n";
+  code = code + ind + "  let matched = ";
+  
+  // Generate character class match condition
+  let mut i = 0;
+  while (i < vec_len(term.ranges)) {
+    if (i > 0) { code = code + " || "; }
+    let range = vec_get(term.ranges, i);
+    if (range.start == range.endChar) {
+      code = code + "(c == " + range.start + ")";
+    } else {
+      code = code + "(c >= " + range.start + " && c <= " + range.endChar + ")";
+    }
+    i = i + 1;
+  }
+  
+  if (vec_len(term.ranges) == 0) {
+    code = code + "false";
+  }
+  
+  code = code + ";\n";
+  
+  if (term.negated) {
+    code = code + ind + "  if (matched) {\n";
+  } else {
+    code = code + ind + "  if (!matched) {\n";
+  }
+  code = code + ind + "    yield err_parse(cp, \"character not in class\");\n";
+  code = code + ind + "  }\n";
+  code = code + ind + "  ok_node(NTerminal { \"char\", stringSlice(src, cp, cp + 1), cp, cp + 1 }, cp + 1)\n";
+  code = code + ind + "}\n";
+  
+  code
+}
+
+fn generate_repeat_parser(term: TRepeat, posVar: String, ruleName: String, indentLevel: I32) : String => {
+  let ind = indent(indentLevel);
+  let mut code = "";
+  
+  code = code + ind + "{\n";
+  code = code + ind + "  let items = vec_new();\n";
+  code = code + ind + "  let mut curPos = " + posVar + ";\n";
+  code = code + ind + "  let mut keepGoing = true;\n";
+  code = code + ind + "  while (keepGoing) {\n";
+  code = code + ind + "    let item = {\n";
+  code = code + generate_production_parser(term.inner, "curPos", ruleName + "_item", indentLevel + 3);
+  code = code + ind + "    };\n";
+  code = code + ind + "    if (item.success) {\n";
+  code = code + ind + "      vec_push(items, item.node);\n";
+  code = code + ind + "      curPos = item.nextPos;\n";
+  code = code + ind + "    } else {\n";
+  code = code + ind + "      keepGoing = false;\n";
+  code = code + ind + "    }\n";
+  code = code + ind + "  }\n";
+  
+  if (term.kind is RepeatOneOrMore) {
+    code = code + ind + "  if (vec_len(items) == 0) {\n";
+    code = code + ind + "    yield err_parse(" + posVar + ", \"expected at least one\");\n";
+    code = code + ind + "  }\n";
+  }
+  
+  if (term.kind is RepeatOptional) {
+    code = code + ind + "  if (vec_len(items) > 1) {\n";
+    code = code + ind + "    // Take only first for optional\n";
+    code = code + ind + "  }\n";
+    code = code + ind + "  if (vec_len(items) == 0) {\n";
+    code = code + ind + "    yield ok_node(NEmpty {}, curPos);\n";
+    code = code + ind + "  }\n";
+    code = code + ind + "  ok_node(vec_get(items, 0), curPos)\n";
+  } else {
+    code = code + ind + "  ok_node(NSequence { \"repeat\", items }, curPos)\n";
+  }
+  
+  code = code + ind + "}\n";
+  
+  code
+}
+
+// =============================================================================
+// Generate Emitter Code
+// =============================================================================
+
+out fn generate_emitter(g: Grammar) : String => {
+  let mut code = "";
+  
+  // Header
+  code = code + "// Generated Emitter (Pretty-Printer) - DO NOT EDIT\n";
+  code = code + "// Generated from EBNF grammar\n\n";
+  code = code + "extern from rt::stdlib use { stringLen };\n";
+  code = code + "extern from rt::vec use { vec_new, vec_push, vec_len, vec_get };\n\n";
+  
+  // Import node types from parser
+  code = code + "// Import node types from generated parser\n";
+  code = code + "// from generated_parser use { Node, NTerminal, NSequence, NChoice, NEmpty };\n\n";
+  
+  // Emit context for formatting
+  code = code + "// =============================================================================\n";
+  code = code + "// Emit Context\n";
+  code = code + "// =============================================================================\n\n";
+  
+  code = code + "struct EmitContext {\n";
+  code = code + "  indentLevel: I32,\n";
+  code = code + "  indentStr: String,\n";
+  code = code + "  lineWidth: I32\n";
+  code = code + "}\n\n";
+  
+  code = code + "fn mk_ctx() : EmitContext => EmitContext { 0, \"  \", 80 }\n\n";
+  
+  code = code + "fn get_indent(ctx: EmitContext) : String => {\n";
+  code = code + "  let mut s = \"\";\n";
+  code = code + "  let mut i = 0;\n";
+  code = code + "  while (i < ctx.indentLevel) {\n";
+  code = code + "    s = s + ctx.indentStr;\n";
+  code = code + "    i = i + 1;\n";
+  code = code + "  }\n";
+  code = code + "  s\n";
+  code = code + "}\n\n";
+  
+  code = code + "fn indent_ctx(ctx: EmitContext) : EmitContext =>\n";
+  code = code + "  EmitContext { ctx.indentLevel + 1, ctx.indentStr, ctx.lineWidth }\n\n";
+  
+  // Generate emit function for each rule
+  code = code + "// =============================================================================\n";
+  code = code + "// Generated Emit Functions\n";
+  code = code + "// =============================================================================\n\n";
+  
+  let mut i = 0;
+  while (i < vec_len(g.rules)) {
+    let rule = vec_get(g.rules, i);
+    code = code + generate_emit_function(rule);
+    i = i + 1;
+  }
+  
+  code
+}
+
+fn generate_emit_function(rule: Rule) : String => {
+  let fnName = rule_to_emit_fn(rule.name);
+  let mut code = "fn " + fnName + "(node: Node, ctx: EmitContext) : String => {\n";
+  
+  code = code + generate_production_emitter(rule.production, rule.name, 1);
+  code = code + "}\n\n";
+  
+  code
+}
+
+fn generate_production_emitter(prod: Production, ruleName: String, indentLevel: I32) : String => {
+  let ind = indent(indentLevel);
+  
+  if (prod is PAlternation) {
+    yield generate_alternation_emitter(prod, ruleName, indentLevel);
+  }
+  
+  if (prod is PSequence) {
+    yield generate_sequence_emitter(prod, ruleName, indentLevel);
+  }
+  
+  if (prod is PTerm) {
+    yield generate_term_emitter(prod.term, ruleName, indentLevel);
+  }
+  
+  ind + "\"\"\n"
+}
+
+fn generate_alternation_emitter(prod: PAlternation, ruleName: String, indentLevel: I32) : String => {
+  let ind = indent(indentLevel);
+  let mut code = "";
+  
+  code = code + ind + "// Alternation: emit based on which variant\n";
+  code = code + ind + "if (node is NChoice) {\n";
+  code = code + ind + "  // Emit the chosen child\n";
+  code = code + ind + "  yield emit_node(node.child, ctx);\n";
+  code = code + ind + "}\n";
+  code = code + ind + "\"\"\n";
+  
+  code
+}
+
+fn generate_sequence_emitter(prod: PSequence, ruleName: String, indentLevel: I32) : String => {
+  let ind = indent(indentLevel);
+  let mut code = "";
+  
+  code = code + ind + "if (node is NSequence) {\n";
+  code = code + ind + "  let mut result = \"\";\n";
+  code = code + ind + "  let mut i = 0;\n";
+  code = code + ind + "  while (i < vec_len(node.children)) {\n";
+  code = code + ind + "    let child = vec_get(node.children, i);\n";
+  code = code + ind + "    result = result + emit_node(child, ctx);\n";
+  code = code + ind + "    i = i + 1;\n";
+  code = code + ind + "  }\n";
+  code = code + ind + "  yield result;\n";
+  code = code + ind + "}\n";
+  code = code + ind + "\"\"\n";
+  
+  code
+}
+
+fn generate_term_emitter(term: Term, ruleName: String, indentLevel: I32) : String => {
+  let ind = indent(indentLevel);
+  
+  if (term is TNonTerminal) {
+    let fnName = rule_to_emit_fn(term.name);
+    yield ind + fnName + "(node, ctx)\n";
+  }
+  
+  if (term is TLiteral) {
+    yield ind + "\"" + escape_string(term.value) + "\"\n";
+  }
+  
+  if (term is TCharClass) {
+    yield ind + "if (node is NTerminal) { yield node.value; }\n" + ind + "\"\"\n";
+  }
+  
+  if (term is TRepeat) {
+    yield generate_repeat_emitter(term, ruleName, indentLevel);
+  }
+  
+  if (term is TGroup) {
+    yield generate_production_emitter(term.inner, ruleName, indentLevel);
+  }
+  
+  if (term is TAnnotation) {
+    yield generate_annotation_emitter(term, ruleName, indentLevel);
+  }
+  
+  ind + "\"\"\n"
+}
+
+fn generate_repeat_emitter(term: TRepeat, ruleName: String, indentLevel: I32) : String => {
+  let ind = indent(indentLevel);
+  let mut code = "";
+  
+  code = code + ind + "if (node is NSequence) {\n";
+  code = code + ind + "  let mut result = \"\";\n";
+  code = code + ind + "  let mut i = 0;\n";
+  code = code + ind + "  while (i < vec_len(node.children)) {\n";
+  code = code + ind + "    let child = vec_get(node.children, i);\n";
+  code = code + ind + "    result = result + emit_node(child, ctx);\n";
+  code = code + ind + "    i = i + 1;\n";
+  code = code + ind + "  }\n";
+  code = code + ind + "  yield result;\n";
+  code = code + ind + "}\n";
+  code = code + ind + "\"\"\n";
+  
+  code
+}
+
+fn generate_annotation_emitter(term: TAnnotation, ruleName: String, indentLevel: I32) : String => {
+  let ind = indent(indentLevel);
+  let mut code = "";
+  
+  // Handle formatting annotations
+  if (term.name == "space") {
+    code = code + ind + "\" \" + ";
+    code = code + generate_production_emitter(term.inner, ruleName, 0);
+    yield code;
+  }
+  
+  if (term.name == "break") {
+    code = code + ind + "\"\\n\" + get_indent(ctx) + ";
+    code = code + generate_production_emitter(term.inner, ruleName, 0);
+    yield code;
+  }
+  
+  if (term.name == "indent") {
+    code = code + generate_production_emitter(term.inner, ruleName + "_indented", indentLevel);
+    yield code;
+  }
+  
+  // Unknown annotation, just emit inner
+  code = code + generate_production_emitter(term.inner, ruleName, indentLevel);
+  
+  code
+}
+
+// =============================================================================
+// Combined Generator
+// =============================================================================
+
+out fn generate_code(g: Grammar) : GeneratedCode => {
+  GeneratedCode {
+    generate_parser(g),
+    generate_emitter(g)
+  }
+}
+
+// =============================================================================
+// Generic emit_node helper (for use by generated code)
+// =============================================================================
+
+out fn generate_emit_node_helper() : String => {
+  let mut code = "";
+  code = code + "fn emit_node(node: Node, ctx: EmitContext) : String => {\n";
+  code = code + "  if (node is NTerminal) {\n";
+  code = code + "    yield node.value;\n";
+  code = code + "  }\n";
+  code = code + "  if (node is NSequence) {\n";
+  code = code + "    let mut result = \"\";\n";
+  code = code + "    let mut i = 0;\n";
+  code = code + "    while (i < vec_len(node.children)) {\n";
+  code = code + "      let child = vec_get(node.children, i);\n";
+  code = code + "      result = result + emit_node(child, ctx);\n";
+  code = code + "      i = i + 1;\n";
+  code = code + "    }\n";
+  code = code + "    yield result;\n";
+  code = code + "  }\n";
+  code = code + "  if (node is NChoice) {\n";
+  code = code + "    yield emit_node(node.child, ctx);\n";
+  code = code + "  }\n";
+  code = code + "  \"\"\n";
+  code = code + "}\n\n";
+  code
+}
