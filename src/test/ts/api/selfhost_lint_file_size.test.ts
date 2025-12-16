@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import { lintCode, setFluffFileSizeOptions } from "../compiler_api_wrapper";
 
+import { combinedDiagText } from "./test_utils";
+
 function mkFileWithLines(totalLines: number): string {
   // Keep it parseable: a single function with many comment lines.
   // Ensure final expression is present (no trailing semicolon) for block value.
@@ -31,10 +33,7 @@ describe("selfhost file size linting (in-memory)", () => {
     const r = await lintCode(entryCode, {});
     expect(r.success).toBe(false);
 
-    const combined = [
-      r.diagnostics ?? "",
-      ...(r.errors ?? []).map((e) => `${e.msg}\n${e.help ?? ""}`),
-    ].join("\n");
+    const combined = combinedDiagText(r);
 
     expect(combined).toMatch(/file has \d+ lines, exceeds limit of 500/i);
   });
@@ -52,10 +51,7 @@ describe("selfhost file size linting (in-memory)", () => {
     const r = await lintCode(entryCode, {});
     expect(r.success).toBe(false);
 
-    const combined = [
-      r.diagnostics ?? "",
-      ...(r.errors ?? []).map((e) => `${e.msg}\n${e.help ?? ""}`),
-    ].join("\n");
+    const combined = combinedDiagText(r);
 
     expect(combined).toMatch(/exceeds limit of 10/i);
   });

@@ -2,17 +2,12 @@ import { describe, expect, test } from "vitest";
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 
-function prebuiltTuffcLibUrl(): string {
-  return pathToFileURL(
-    resolve("selfhost", "prebuilt", "tuffc_lib.mjs")
-  ).toString();
-}
+import { prebuiltSelfhostUrl } from "./test_utils";
 
 describe("lsp_find_definition", () => {
   test("does not crash on compiler sources", async () => {
-    const tuffcLib = (await import(prebuiltTuffcLibUrl())) as any;
+    const tuffcLib = (await import(prebuiltSelfhostUrl("tuffc_lib.mjs"))) as any;
 
     expect(typeof tuffcLib.lsp_find_definition).toBe("function");
 

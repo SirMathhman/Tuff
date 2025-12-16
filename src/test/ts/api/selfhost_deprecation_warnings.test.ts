@@ -2,6 +2,8 @@ import { describe, expect, test } from "vitest";
 
 import { lintCode } from "../compiler_api_wrapper";
 
+import { combinedWarnText } from "./test_utils";
+
 describe("selfhost deprecation warnings (in-memory)", () => {
   test("warns on deprecated import and usage (// and /* */ comments)", async () => {
     const modules = {
@@ -33,9 +35,7 @@ describe("selfhost deprecation warnings (in-memory)", () => {
 
     const warnings = r.warnings ?? [];
     expect(warnings.length).toBeGreaterThan(0);
-    const combined = warnings
-      .map((w) => `${w.msg}\n${w.help ?? ""}`)
-      .join("\n");
+    const combined = combinedWarnText(r);
     expect(combined).toMatch(/deprecated/i);
     expect(combined).toMatch(/add/i);
     expect(combined).toMatch(/add2/i);

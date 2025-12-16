@@ -1,17 +1,10 @@
 import { describe, expect, test } from "vitest";
 
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
-
-function prebuiltTuffcLibUrl(): string {
-  return pathToFileURL(
-    resolve("selfhost", "prebuilt", "tuffc_lib.mjs")
-  ).toString();
-}
+import { normalizeNewlines, prebuiltSelfhostUrl } from "./test_utils";
 
 describe("selfhost diagnostics", () => {
   test("parse error includes location and caret", async () => {
-    const stage1lib = (await import(prebuiltTuffcLibUrl())) as any;
+    const stage1lib = (await import(prebuiltSelfhostUrl("tuffc_lib.mjs"))) as any;
 
     // Trigger a simple parser error: missing ')' in paren expression.
     const badSrc = `fn main() => (1 + 2`;
@@ -35,7 +28,7 @@ describe("selfhost diagnostics", () => {
 
     // Snapshot the full formatting to prevent accidental regressions.
     // Normalize Windows newlines so the snapshot is stable across OSes.
-    const norm = msg.replace(/\r\n/g, "\n");
+    const norm = normalizeNewlines(msg);
     expect(norm).toMatchInlineSnapshot(`
       "<input>:1:20 (offset 19) error: expected ')'
       1 | fn main() => (1 + 2
@@ -45,7 +38,7 @@ describe("selfhost diagnostics", () => {
   });
 
   test("parse error includes multi-line context", async () => {
-    const stage1lib = (await import(prebuiltTuffcLibUrl())) as any;
+    const stage1lib = (await import(prebuiltSelfhostUrl("tuffc_lib.mjs"))) as any;
 
     // Error on the middle line so we can assert previous/next lines are shown.
     // Missing ')' in the let initializer.
@@ -61,7 +54,7 @@ describe("selfhost diagnostics", () => {
       msg = String(e?.message ?? e);
     }
 
-    const norm = msg.replace(/\r\n/g, "\n");
+    const norm = normalizeNewlines(msg);
 
     // Should include a 3-line window around the failing line.
     expect(norm).toContain("2 |   let x = (1 + 2");
@@ -71,7 +64,7 @@ describe("selfhost diagnostics", () => {
   });
 
   test("parse error can underline spans", async () => {
-    const stage1lib = (await import(prebuiltTuffcLibUrl())) as any;
+    const stage1lib = (await import(prebuiltSelfhostUrl("tuffc_lib.mjs"))) as any;
 
     // Force a keyword mismatch so the diagnostic can underline a multi-char span.
     // We use the full parser entrypoint so we hit `parse_keyword`.
@@ -90,7 +83,7 @@ describe("selfhost diagnostics", () => {
       msg = String(e?.message ?? e);
     }
 
-    const norm = msg.replace(/\r\n/g, "\n");
+    const norm = normalizeNewlines(msg);
 
     // Caret row should contain multiple carets when a span is highlighted.
     expect(norm).toMatch(/\^\^\^/);
@@ -98,7 +91,7 @@ describe("selfhost diagnostics", () => {
   });
 
   test("warning includes file and line", async () => {
-    const stage1lib = (await import(prebuiltTuffcLibUrl())) as any;
+    const stage1lib = (await import(prebuiltSelfhostUrl("tuffc_lib.mjs"))) as any;
 
     // Historically we emitted a warning for very short identifiers (like `k`).
     // That check is intentionally removed/disabled now because it was too noisy.
@@ -124,7 +117,7 @@ describe("selfhost diagnostics", () => {
   });
 
   test("analyzer reports multiple errors in one compile", async () => {
-    const stage1lib = (await import(prebuiltTuffcLibUrl())) as any;
+    const stage1lib = (await import(prebuiltSelfhostUrl("tuffc_lib.mjs"))) as any;
 
     // Two independent analyzer errors:
     // 1) Typed let mismatch (I32 vs String)
@@ -145,7 +138,7 @@ describe("selfhost diagnostics", () => {
       msg = String(e?.message ?? e);
     }
 
-    const norm = msg.replace(/\r\n/g, "\n");
+    const norm = normalizeNewlines(msg);
 
     // Should include BOTH diagnostics.
     expect(norm).toContain("let x");
