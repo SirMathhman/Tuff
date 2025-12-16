@@ -176,7 +176,7 @@ fn analyze_module(src: String, d: DModule) : Void => {
 }
 
 fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, d: Decl) : Void => {
-  if (d.tag == "DExternFrom") {
+  if (d is DExternFrom) {
     let mut ni = 0;
     while (ni < vec_len(d.names)) {
       declare_name(src, span_start(d.span), scopes, depth, vec_get(d.names, ni), false, ty_unknown());
@@ -185,13 +185,13 @@ fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
     yield;
   }
 
-  if (d.tag == "DExternType") {
+  if (d is DExternType) {
     // Types are compile-time only for now.
     // Future: register in a type environment for validating type annotations.
     yield;
   }
 
-  if (d.tag == "DImport") {
+  if (d is DImport) {
     let mut ni = 0;
     while (ni < vec_len(d.names)) {
       let name = vec_get(d.names, ni);
@@ -212,7 +212,7 @@ fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
     yield;
   }
 
-  if (d.tag == "DTypeUnion") {
+  if (d is DTypeUnion) {
     check_single_char_identifier(src, span_start(d.span), d.name, "union");
     
     let depReason = deprecation_reason_before(src, span_start(d.span));
@@ -235,7 +235,7 @@ fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
     yield;
   }
 
-  if (d.tag == "DFn") {
+  if (d is DFn) {
     let depReason = deprecation_reason_before(src, span_start(d.span));
     if (depReason != "") {
       declare_name_deprecated(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown(), depReason);
@@ -257,7 +257,7 @@ fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
     yield;
   }
 
-  if (d.tag == "DClassFn") {
+  if (d is DClassFn) {
     let depReason = deprecation_reason_before(src, span_start(d.span));
     if (depReason != "") {
       declare_name_deprecated(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown(), depReason);
@@ -287,12 +287,12 @@ fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
       let mut si = 0;
       while (si < vec_len(d.body)) {
         let st = vec_get(d.body, si);
-        if (st.tag == "SLet") {
+        if (st is SLet) {
           vec_push(fields, st.name);
           if (st.tyAnn != "") {
             vec_push(fieldTyAnns, normalize_ty_ann(st.tyAnn));
           } else {
-            if (st.init.tag == "ELambda") {
+            if (st.init is ELambda) {
               vec_push(fieldTyAnns, ty_fn_type(st.init.typeParams, st.init.paramTyAnns, st.init.retTyAnn));
             } else {
               vec_push(fieldTyAnns, "");
@@ -317,7 +317,7 @@ fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
     yield;
   }
 
-  if (d.tag == "DStruct") {
+  if (d is DStruct) {
     check_single_char_identifier(src, span_start(d.span), d.name, "struct");
     let mut fi = 0;
     while (fi < vec_len(d.fields)) {
@@ -328,7 +328,7 @@ fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
     yield;
   }
 
-  if (d.tag == "DModule") {
+  if (d is DModule) {
     let depReason = deprecation_reason_before(src, span_start(d.span));
     if (depReason != "") {
       declare_name_deprecated(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown(), depReason);
@@ -340,13 +340,13 @@ fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
 }
 
 fn analyze_decl_body(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, d: Decl) : Void => {
-  if (d.tag == "DLet") {
+  if (d is DLet) {
     let narrowed = vec_new();
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, d.init);
     let initTy = infer_expr_type(src, structs, fns, scopes, depth, d.init);
 
     // Same rule for top-level/module lets.
-    if (d.init.tag == "EIdent" && has_fn_sig(fns, d.init.name)) {
+    if (d.init is EIdent && has_fn_sig(fns, d.init.name)) {
       let sig = find_fn_sig(fns, d.init.name);
       if (vec_len(sig.typeParams) > 0) {
         error_at(src, span_start(d.init.span), "generic function requires type args when used as a value: " + d.init.name);
@@ -377,17 +377,17 @@ fn analyze_decl_body(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>
     yield;
   }
 
-  if (d.tag == "DFn") {
+  if (d is DFn) {
     analyze_fn_decl(src, structs, unions, fns, scopes, depth, d);
     yield;
   }
 
-  if (d.tag == "DClassFn") {
+  if (d is DClassFn) {
     analyze_class_fn_decl(src, structs, unions, fns, scopes, depth, d);
     yield;
   }
 
-  if (d.tag == "DModule") {
+  if (d is DModule) {
     analyze_module(src, d);
     yield;
   }

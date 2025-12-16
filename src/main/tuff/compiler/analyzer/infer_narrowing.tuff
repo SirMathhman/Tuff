@@ -27,7 +27,7 @@ from analyzer::subst use { subst_bind, ty_apply_subst };
 
 out fn infer_expr_type_with_narrowing(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, e: Expr) : String => {
   // Minimal: improve typing for union payload `.value` under narrowing.
-  if (e.tag == "EField" && e.field == "value" && e.base.tag == "EIdent") {
+  if (e is EField && e.field == "value" && e.base is EIdent) {
     let t = infer_union_payload_type_from_narrowing(src, unions, scopes, depth, narrowed, e.base.name);
     if (!type_is_unknown(t)) { yield t; }
   }
@@ -42,11 +42,11 @@ out fn parse_tag_eq(cond: Expr) : ParsedTagEq => {
   if (cond.op.tag != "OpEq") { yield ParsedTagEq(false, "", ""); }
 
   // Left: o.tag
-  if (cond.left.tag == "EField" && cond.left.field == "tag" && cond.left.base.tag == "EIdent" && cond.right.tag == "EString") {
+  if (cond.left is EField && cond.left.field == "tag" && cond.left.base is EIdent && cond.right is EString) {
     yield ParsedTagEq(true, cond.left.base.name, cond.right.value);
   }
   // Right: o.tag
-  if (cond.right.tag == "EField" && cond.right.field == "tag" && cond.right.base.tag == "EIdent" && cond.left.tag == "EString") {
+  if (cond.right is EField && cond.right.field == "tag" && cond.right.base is EIdent && cond.left is EString) {
     yield ParsedTagEq(true, cond.right.base.name, cond.left.value);
   }
   ParsedTagEq(false, "", "")
@@ -57,29 +57,29 @@ class fn ParsedTagNarrowing(ok: Bool, name: String, thenVariant: String, elseVar
 out fn parse_tag_narrowing(cond: Expr) : ParsedTagNarrowing => {
   // Recognize union tag tests and return which branch (then/else) implies which variant.
   // Handles:
-  //   o.tag == "Some"            => then: Some
+  //   o is Some            => then: Some
   //   o.tag != "Some"            => else: Some
-  //   !(o.tag == "Some")         => else: Some
+  //   !(o is Some)         => else: Some
   //   !(o.tag != "Some")         => then: Some
-  if (cond.tag == "EUnary" && cond.op.tag == "OpNot") {
+  if (cond is EUnary && cond.op is OpNot) {
     let inner = parse_tag_narrowing(cond.expr);
     if (inner.ok) { yield ParsedTagNarrowing(true, inner.name, inner.elseVariant, inner.thenVariant); }
     yield ParsedTagNarrowing(false, "", "", "");
   }
 
   if (cond.tag != "EBinary") { yield ParsedTagNarrowing(false, "", "", ""); }
-  if (!(cond.op.tag == "OpEq" || cond.op.tag == "OpNe")) { yield ParsedTagNarrowing(false, "", "", ""); }
+  if (!(cond.op is OpEq || cond.op is OpNe)) { yield ParsedTagNarrowing(false, "", "", ""); }
 
   // Left: o.tag
-  if (cond.left.tag == "EField" && cond.left.field == "tag" && cond.left.base.tag == "EIdent" && cond.right.tag == "EString") {
+  if (cond.left is EField && cond.left.field == "tag" && cond.left.base is EIdent && cond.right is EString) {
     let v = cond.right.value;
-    if (cond.op.tag == "OpEq") { yield ParsedTagNarrowing(true, cond.left.base.name, v, ""); }
+    if (cond.op is OpEq) { yield ParsedTagNarrowing(true, cond.left.base.name, v, ""); }
     yield ParsedTagNarrowing(true, cond.left.base.name, "", v);
   }
   // Right: o.tag
-  if (cond.right.tag == "EField" && cond.right.field == "tag" && cond.right.base.tag == "EIdent" && cond.left.tag == "EString") {
+  if (cond.right is EField && cond.right.field == "tag" && cond.right.base is EIdent && cond.left is EString) {
     let v = cond.left.value;
-    if (cond.op.tag == "OpEq") { yield ParsedTagNarrowing(true, cond.right.base.name, v, ""); }
+    if (cond.op is OpEq) { yield ParsedTagNarrowing(true, cond.right.base.name, v, ""); }
     yield ParsedTagNarrowing(true, cond.right.base.name, "", v);
   }
   ParsedTagNarrowing(false, "", "", "")

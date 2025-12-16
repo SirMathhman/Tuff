@@ -85,7 +85,7 @@ fn parse_cmp_ast(src: String, i: I32) : ParsedExprAst => {
     //   x is M::Some
     //   x is not Some
     // Desugars to:
-    //   x.tag == "Some"
+    //   x is Some
     // so the analyzer can reuse its existing `.tag == "Variant"` narrowing logic.
     if (starts_with_at(src, j, "is")) {
       // Require a boundary after `is` so we don't treat identifiers like `island` as the operator.

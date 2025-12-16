@@ -144,14 +144,14 @@ out fn compile_tiny2_with_imported_fns(src: String, requireMain: Bool, exportAll
     }
     if (starts_with_at(src, j, "fn")) {
       let f = parse_fn_decl_ast2(src, i, exportAll);
-      if (f.decl.tag == "DFn" && f.decl.name == "main") { sawMain = true; }
+      if (f.decl is DFn && f.decl.name == "main") { sawMain = true; }
       vec_push(decls, f.decl);
       i = f.nextPos;
       continue;
     }
     if (starts_with_at(src, j, "class")) {
       let f = parse_class_fn_decl_ast2(src, i, exportAll);
-      if (f.decl.tag == "DClassFn" && f.decl.name == "main") { sawMain = true; }
+      if (f.decl is DClassFn && f.decl.name == "main") { sawMain = true; }
       vec_push(decls, f.decl);
       i = f.nextPos;
       continue;
@@ -161,13 +161,13 @@ out fn compile_tiny2_with_imported_fns(src: String, requireMain: Bool, exportAll
       let j2 = skip_ws(src, k0);
       if (starts_with_at(src, j2, "class")) {
         let f = parse_class_fn_decl_ast2(src, i, exportAll);
-        if (f.decl.tag == "DClassFn" && f.decl.name == "main") { sawMain = true; }
+        if (f.decl is DClassFn && f.decl.name == "main") { sawMain = true; }
         vec_push(decls, f.decl);
         i = f.nextPos;
         continue;
       }
       let f = parse_fn_decl_ast2(src, i, exportAll);
-      if (f.decl.tag == "DFn" && f.decl.name == "main") { sawMain = true; }
+      if (f.decl is DFn && f.decl.name == "main") { sawMain = true; }
       vec_push(decls, f.decl);
       i = f.nextPos;
       continue;
@@ -274,14 +274,14 @@ out fn lint_tiny2_with_imported_fns(src: String, requireMain: Bool, exportAll: B
     }
     if (starts_with_at(src, j, "fn")) {
       let f = parse_fn_decl_ast2(src, i, exportAll);
-      if (f.decl.tag == "DFn" && f.decl.name == "main") { sawMain = true; }
+      if (f.decl is DFn && f.decl.name == "main") { sawMain = true; }
       vec_push(decls, f.decl);
       i = f.nextPos;
       continue;
     }
     if (starts_with_at(src, j, "class")) {
       let f = parse_class_fn_decl_ast2(src, i, exportAll);
-      if (f.decl.tag == "DClassFn" && f.decl.name == "main") { sawMain = true; }
+      if (f.decl is DClassFn && f.decl.name == "main") { sawMain = true; }
       vec_push(decls, f.decl);
       i = f.nextPos;
       continue;
@@ -291,13 +291,13 @@ out fn lint_tiny2_with_imported_fns(src: String, requireMain: Bool, exportAll: B
       let j2 = skip_ws(src, k0);
       if (starts_with_at(src, j2, "class")) {
         let f = parse_class_fn_decl_ast2(src, i, exportAll);
-        if (f.decl.tag == "DClassFn" && f.decl.name == "main") { sawMain = true; }
+        if (f.decl is DClassFn && f.decl.name == "main") { sawMain = true; }
         vec_push(decls, f.decl);
         i = f.nextPos;
         continue;
       }
       let f = parse_fn_decl_ast2(src, i, exportAll);
-      if (f.decl.tag == "DFn" && f.decl.name == "main") { sawMain = true; }
+      if (f.decl is DFn && f.decl.name == "main") { sawMain = true; }
       vec_push(decls, f.decl);
       i = f.nextPos;
       continue;
@@ -390,14 +390,14 @@ out fn lint_tiny2_collect_with_imported_fns(src: String, requireMain: Bool, expo
     }
     if (starts_with_at(src, j, "fn")) {
       let f = parse_fn_decl_ast2(src, i, exportAll);
-      if (f.decl.tag == "DFn" && f.decl.name == "main") { sawMain = true; }
+      if (f.decl is DFn && f.decl.name == "main") { sawMain = true; }
       vec_push(decls, f.decl);
       i = f.nextPos;
       continue;
     }
     if (starts_with_at(src, j, "class")) {
       let f = parse_class_fn_decl_ast2(src, i, exportAll);
-      if (f.decl.tag == "DClassFn" && f.decl.name == "main") { sawMain = true; }
+      if (f.decl is DClassFn && f.decl.name == "main") { sawMain = true; }
       vec_push(decls, f.decl);
       i = f.nextPos;
       continue;
@@ -407,13 +407,13 @@ out fn lint_tiny2_collect_with_imported_fns(src: String, requireMain: Bool, expo
       let j2 = skip_ws(src, k0);
       if (starts_with_at(src, j2, "class")) {
         let f = parse_class_fn_decl_ast2(src, i, exportAll);
-        if (f.decl.tag == "DClassFn" && f.decl.name == "main") { sawMain = true; }
+        if (f.decl is DClassFn && f.decl.name == "main") { sawMain = true; }
         vec_push(decls, f.decl);
         i = f.nextPos;
         continue;
       }
       let f = parse_fn_decl_ast2(src, i, exportAll);
-      if (f.decl.tag == "DFn" && f.decl.name == "main") { sawMain = true; }
+      if (f.decl is DFn && f.decl.name == "main") { sawMain = true; }
       vec_push(decls, f.decl);
       i = f.nextPos;
       continue;

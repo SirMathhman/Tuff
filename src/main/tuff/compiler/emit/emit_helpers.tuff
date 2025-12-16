@@ -29,17 +29,17 @@ out fn emit_runtime_vec_imports_js() : String => {
 
 out fn expr_needs_vec_rt(e: Expr) : Bool => {
   // True when emitting this expression will reference __tuff_vec_* helpers.
-  if (e.tag == "EVecLit") { yield true; }
-  if (e.tag == "EIndex") { yield true; }
+  if (e is EVecLit) { yield true; }
+  if (e is EIndex) { yield true; }
 
-  if (e.tag == "EUnary") { yield expr_needs_vec_rt(e.expr); }
+  if (e is EUnary) { yield expr_needs_vec_rt(e.expr); }
 
-  if (e.tag == "EBinary") {
+  if (e is EBinary) {
     if (expr_needs_vec_rt(e.left)) { yield true; }
     yield expr_needs_vec_rt(e.right);
   }
 
-  if (e.tag == "ECall") {
+  if (e is ECall) {
     if (expr_needs_vec_rt(e.callee)) { yield true; }
     let mut i = 0;
     while (i < vec_len(e.args)) {
@@ -49,13 +49,13 @@ out fn expr_needs_vec_rt(e: Expr) : Bool => {
     yield false;
   }
 
-  if (e.tag == "EIf") {
+  if (e is EIf) {
     if (expr_needs_vec_rt(e.cond)) { yield true; }
     if (expr_needs_vec_rt(e.thenExpr)) { yield true; }
     yield expr_needs_vec_rt(e.elseExpr);
   }
 
-  if (e.tag == "EBlock") {
+  if (e is EBlock) {
     let mut i = 0;
     while (i < vec_len(e.body)) {
       if (stmt_needs_vec_rt(vec_get(e.body, i))) { yield true; }
@@ -64,12 +64,12 @@ out fn expr_needs_vec_rt(e: Expr) : Bool => {
     yield expr_needs_vec_rt(e.tail);
   }
 
-  if (e.tag == "ELambda") {
+  if (e is ELambda) {
     // Body may be an expr or an EBlock.
     yield expr_needs_vec_rt(e.body);
   }
 
-  if (e.tag == "EStructLit") {
+  if (e is EStructLit) {
     if (expr_needs_vec_rt(e.nameExpr)) { yield true; }
     let mut i = 0;
     while (i < vec_len(e.values)) {
@@ -79,7 +79,7 @@ out fn expr_needs_vec_rt(e: Expr) : Bool => {
     yield false;
   }
 
-  if (e.tag == "ETupleLit") {
+  if (e is ETupleLit) {
     let mut i = 0;
     while (i < vec_len(e.items)) {
       if (expr_needs_vec_rt(vec_get(e.items, i))) { yield true; }
@@ -88,10 +88,10 @@ out fn expr_needs_vec_rt(e: Expr) : Bool => {
     yield false;
   }
 
-  if (e.tag == "ETupleIndex") { yield expr_needs_vec_rt(e.base); }
-  if (e.tag == "EField") { yield expr_needs_vec_rt(e.base); }
+  if (e is ETupleIndex) { yield expr_needs_vec_rt(e.base); }
+  if (e is EField) { yield expr_needs_vec_rt(e.base); }
 
-  if (e.tag == "EMatch") {
+  if (e is EMatch) {
     if (expr_needs_vec_rt(e.scrut)) { yield true; }
     let mut i = 0;
     while (i < vec_len(e.arms)) {
@@ -107,13 +107,13 @@ out fn expr_needs_vec_rt(e: Expr) : Bool => {
 }
 
 out fn stmt_needs_vec_rt(s: Stmt) : Bool => {
-  if (s.tag == "SIndexAssign") { yield true; }
+  if (s is SIndexAssign) { yield true; }
 
-  if (s.tag == "SLet") { yield expr_needs_vec_rt(s.init); }
-  if (s.tag == "SAssign") { yield expr_needs_vec_rt(s.value); }
-  if (s.tag == "SExpr") { yield expr_needs_vec_rt(s.expr); }
-  if (s.tag == "SYield") { yield expr_needs_vec_rt(s.expr); }
-  if (s.tag == "SWhile") {
+  if (s is SLet) { yield expr_needs_vec_rt(s.init); }
+  if (s is SAssign) { yield expr_needs_vec_rt(s.value); }
+  if (s is SExpr) { yield expr_needs_vec_rt(s.expr); }
+  if (s is SYield) { yield expr_needs_vec_rt(s.expr); }
+  if (s is SWhile) {
     if (expr_needs_vec_rt(s.cond)) { yield true; }
     let mut i = 0;
     while (i < vec_len(s.body)) {
@@ -122,7 +122,7 @@ out fn stmt_needs_vec_rt(s: Stmt) : Bool => {
     }
     yield false;
   }
-  if (s.tag == "SIf") {
+  if (s is SIf) {
     if (expr_needs_vec_rt(s.cond)) { yield true; }
     let mut i = 0;
     while (i < vec_len(s.thenBody)) {
@@ -138,7 +138,7 @@ out fn stmt_needs_vec_rt(s: Stmt) : Bool => {
     }
     yield false;
   }
-  if (s.tag == "SFieldAssign") {
+  if (s is SFieldAssign) {
     if (expr_needs_vec_rt(s.base)) { yield true; }
     yield expr_needs_vec_rt(s.value);
   }
@@ -147,8 +147,8 @@ out fn stmt_needs_vec_rt(s: Stmt) : Bool => {
 }
 
 out fn decl_needs_vec_rt(d: Decl) : Bool => {
-  if (d.tag == "DLet") { yield expr_needs_vec_rt(d.init); }
-  if (d.tag == "DFn") {
+  if (d is DLet) { yield expr_needs_vec_rt(d.init); }
+  if (d is DFn) {
     let mut i = 0;
     while (i < vec_len(d.body)) {
       if (stmt_needs_vec_rt(vec_get(d.body, i))) { yield true; }
@@ -156,7 +156,7 @@ out fn decl_needs_vec_rt(d: Decl) : Bool => {
     }
     yield expr_needs_vec_rt(d.tail);
   }
-  if (d.tag == "DClassFn") {
+  if (d is DClassFn) {
     let mut i = 0;
     while (i < vec_len(d.body)) {
       if (stmt_needs_vec_rt(vec_get(d.body, i))) { yield true; }
@@ -164,7 +164,7 @@ out fn decl_needs_vec_rt(d: Decl) : Bool => {
     }
     yield false;
   }
-  if (d.tag == "DModule") {
+  if (d is DModule) {
     let mut i = 0;
     while (i < vec_len(d.decls)) {
       if (decl_needs_vec_rt(vec_get(d.decls, i))) { yield true; }

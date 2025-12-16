@@ -70,10 +70,10 @@ fn relpath_to_module_path(relPath0: String) : String => {
 }
 
 fn refactor_decl_import_path(decl: Unknown, oldModulePath: String, newModulePath: String) : Unknown => {
-  if (decl.tag == "DImport" && decl.modulePath == oldModulePath) {
+  if (decl is DImport && decl.modulePath == oldModulePath) {
     yield decl_import(decl.span, newModulePath, decl.names);
   }
-  if (decl.tag == "DExternFrom" && decl.modulePath == oldModulePath) {
+  if (decl is DExternFrom && decl.modulePath == oldModulePath) {
     yield decl_extern_from(decl.span, newModulePath, decl.names);
   }
   decl

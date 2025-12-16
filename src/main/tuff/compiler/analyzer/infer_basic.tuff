@@ -38,38 +38,38 @@ from analyzer::scope use { infer_lookup_ty };
 from analyzer::subst use { subst_bind, ty_apply_subst };
 
 out fn infer_expr_type(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, e: Expr) : String => {
-  if (e.tag == "EBool") { yield ty_bool(); }
-  if (e.tag == "EInt") { yield ty_int_lit(); }
-  if (e.tag == "EFloat") {
+  if (e is EBool) { yield ty_bool(); }
+  if (e is EInt) { yield ty_int_lit(); }
+  if (e is EFloat) {
     // If the float literal has a suffix (F32 or F64), use that; otherwise FloatLit (context-typed).
     if (e.suffix == "F32") { yield ty_f32(); }
     if (e.suffix == "F64") { yield ty_f64(); }
     yield ty_float_lit();
   }
-  if (e.tag == "EString") { yield ty_string(); }
-  if (e.tag == "EIdent") {
+  if (e is EString) { yield ty_string(); }
+  if (e is EIdent) {
     // The bootstrap subset still sometimes parses these as identifiers.
     if (e.name == "true") { yield ty_bool(); }
     if (e.name == "false") { yield ty_bool(); }
     yield infer_lookup_ty(scopes, depth, e.name);
   }
 
-  if (e.tag == "ELambda") {
+  if (e is ELambda) {
     yield ty_fn_type(e.typeParams, e.paramTyAnns, e.retTyAnn);
   }
 
-  if (e.tag == "EStructLit") {
+  if (e is EStructLit) {
     yield struct_name_of_expr(src, e.nameExpr);
   }
 
-  if (e.tag == "EUnary") {
+  if (e is EUnary) {
     // Only obvious: !Bool => Bool
-    if (e.op.tag == "OpNot") {
+    if (e.op is OpNot) {
       let t = infer_expr_type(src, structs, fns, scopes, depth, e.expr);
       if (t == ty_bool()) { yield ty_bool(); }
       yield ty_unknown();
     }
-    if (e.op.tag == "OpNeg") {
+    if (e.op is OpNeg) {
       let t = infer_expr_type(src, structs, fns, scopes, depth, e.expr);
       if (t == ty_i32()) { yield ty_i32(); }
       if (t == ty_int_lit()) { yield ty_i32(); }
@@ -80,16 +80,16 @@ out fn infer_expr_type(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, sc
     }
   }
 
-  if (e.tag == "EBinary") {
-    if (e.op.tag == "OpAnd") { yield ty_bool(); }
-    if (e.op.tag == "OpOr") { yield ty_bool(); }
-    if (e.op.tag == "OpEq") { yield ty_bool(); }
-    if (e.op.tag == "OpNe") { yield ty_bool(); }
-    if (e.op.tag == "OpLt") { yield ty_bool(); }
-    if (e.op.tag == "OpLe") { yield ty_bool(); }
-    if (e.op.tag == "OpGt") { yield ty_bool(); }
-    if (e.op.tag == "OpGe") { yield ty_bool(); }
-    if (e.op.tag == "OpAdd") {
+  if (e is EBinary) {
+    if (e.op is OpAnd) { yield ty_bool(); }
+    if (e.op is OpOr) { yield ty_bool(); }
+    if (e.op is OpEq) { yield ty_bool(); }
+    if (e.op is OpNe) { yield ty_bool(); }
+    if (e.op is OpLt) { yield ty_bool(); }
+    if (e.op is OpLe) { yield ty_bool(); }
+    if (e.op is OpGt) { yield ty_bool(); }
+    if (e.op is OpGe) { yield ty_bool(); }
+    if (e.op is OpAdd) {
       // In the bootstrap subset, `+` is used both for integer addition and
       // string concatenation (e.g. while emitting JS source strings).
       let lt = infer_expr_type(src, structs, fns, scopes, depth, e.left);
@@ -117,7 +117,7 @@ out fn infer_expr_type(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, sc
       }
       yield ty_unknown();
     }
-    if (e.op.tag == "OpSub" || e.op.tag == "OpMul" || e.op.tag == "OpDiv") {
+    if (e.op is OpSub || e.op is OpMul || e.op is OpDiv) {
       let lt = infer_expr_type(src, structs, fns, scopes, depth, e.left);
       let rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
 
@@ -143,7 +143,7 @@ out fn infer_expr_type(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, sc
     }
   }
 
-  if (e.tag == "EField") {
+  if (e is EField) {
     let bt = infer_expr_type(src, structs, fns, scopes, depth, e.base);
     if (!type_is_unknown(bt) && has_struct_def(structs, bt)) {
       yield get_struct_field_type(src, span_start(e.span), structs, bt, e.field);
@@ -151,7 +151,7 @@ out fn infer_expr_type(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, sc
     yield ty_unknown();
   }
 
-  if (e.tag == "EIndex") {
+  if (e is EIndex) {
     // Preserve array/slice element types when possible.
     let bt = infer_expr_type(src, structs, fns, scopes, depth, e.base);
 
@@ -172,7 +172,7 @@ out fn infer_expr_type(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, sc
     ty_unknown();
   }
 
-  if (e.tag == "ECall") {
+  if (e is ECall) {
     // Calling through a function-typed value.
     let ct = infer_expr_type(src, structs, fns, scopes, depth, e.callee);
     if (ty_is_fn_type(ct)) {
@@ -205,7 +205,7 @@ out fn infer_expr_type(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, sc
     }
 
     // Direct call by name with known signature.
-    if (e.callee.tag == "EIdent" && has_fn_sig(fns, e.callee.name)) {
+    if (e.callee is EIdent && has_fn_sig(fns, e.callee.name)) {
       let sig = find_fn_sig(fns, e.callee.name);
 
       // If we have a declared return type annotation, use it (with generic substitution).
@@ -247,7 +247,7 @@ out fn infer_expr_type(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, sc
     yield ty_unknown();
   }
 
-  if (e.tag == "EIf") {
+  if (e is EIf) {
     let t1 = infer_expr_type(src, structs, fns, scopes, depth, e.thenExpr);
     let t2 = infer_expr_type(src, structs, fns, scopes, depth, e.elseExpr);
     // Never absorption: if one branch diverges, the result is the other branch's type.
@@ -259,7 +259,7 @@ out fn infer_expr_type(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, sc
     yield ty_unknown();
   }
 
-  if (e.tag == "EBlock") {
+  if (e is EBlock) {
     yield infer_expr_type(src, structs, fns, scopes, depth, e.tail);
   }
 

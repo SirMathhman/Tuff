@@ -57,7 +57,7 @@ from analyzer::fluff use {
 };
 
 out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, e: Expr) : Void => {
-  if (e.tag == "EIdent") {
+  if (e is EIdent) {
     require_name(src, span_start(e.span), scopes, depth, e.name);
     if (!(e.name == "true") && !(e.name == "false") && !(e.name == "continue") && !(e.name == "break")) {
       mark_binding_read(scopes, depth, e.name);
@@ -68,7 +68,7 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     }
     yield;
   }
-  if (e.tag == "ELambda") {
+  if (e is ELambda) {
     require_all_param_types(src, span_start(e.span), "lambda", e.params, e.paramTyAnns);
     let newDepth = scopes_enter(scopes, depth);
     let mut pi = 0;
@@ -96,7 +96,7 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     // Note: complexity check for lambdas is deferred to SLet handler where name is available
     yield;
   }
-  if (e.tag == "EStructLit") {
+  if (e is EStructLit) {
     let mut vi = 0;
     while (vi < vec_len(e.values)) {
       analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, vec_get(e.values, vi));
@@ -105,17 +105,17 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     check_struct_lit_types(src, structs, fns, scopes, depth, e);
     yield;
   }
-  if (e.tag == "EUnary") {
+  if (e is EUnary) {
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.expr);
     yield;
   }
-  if (e.tag == "EBinary") {
+  if (e is EBinary) {
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.left);
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.right);
     check_binary_operand_types(src, structs, fns, scopes, depth, e);
     yield;
   }
-  if (e.tag == "ECall") {
+  if (e is ECall) {
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.callee);
     let mut ai = 0;
     while (ai < vec_len(e.args)) {
@@ -125,7 +125,7 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     check_call_types(src, structs, fns, scopes, depth, e);
     yield;
   }
-  if (e.tag == "EIf") {
+  if (e is EIf) {
     check_cond_is_bool(src, structs, fns, scopes, depth, e.cond);
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.cond);
     let nar = parse_tag_narrowing(e.cond);
@@ -154,14 +154,14 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.elseExpr);
     yield;
   }
-  if (e.tag == "EBlock") {
+  if (e is EBlock) {
     let newDepth = scopes_enter(scopes, depth);
     analyze_stmts(src, structs, unions, fns, scopes, newDepth, narrowed, e.body);
     analyze_expr(src, structs, unions, fns, scopes, newDepth, narrowed, e.tail);
     warn_unused_locals_in_scope(src, scopes, newDepth);
     yield;
   }
-  if (e.tag == "EVecLit") {
+  if (e is EVecLit) {
     let mut ii = 0;
     while (ii < vec_len(e.items)) {
       analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, vec_get(e.items, ii));
@@ -169,7 +169,7 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     }
     yield;
   }
-  if (e.tag == "ETupleLit") {
+  if (e is ETupleLit) {
     let mut ii = 0;
     while (ii < vec_len(e.items)) {
       analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, vec_get(e.items, ii));
@@ -177,10 +177,10 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     }
     yield;
   }
-  if (e.tag == "EIndex") {
+  if (e is EIndex) {
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.base);
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.index);
-    if (e.base.tag == "EIdent") {
+    if (e.base is EIdent) {
       let bt = infer_lookup_ty(scopes, depth, e.base.name);
       let arr = ty_parse_array(normalize_ty_ann(bt));
       if (arr.ok) {
@@ -197,13 +197,13 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     }
     yield;
   }
-  if (e.tag == "ETupleIndex") {
+  if (e is ETupleIndex) {
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.base);
     yield;
   }
-  if (e.tag == "EField") {
+  if (e is EField) {
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.base);
-    if (e.field == "value" && e.base.tag == "EIdent") {
+    if (e.field == "value" && e.base is EIdent) {
       let bt = infer_lookup_ty(scopes, depth, e.base.name);
       let app = ty_parse_app(normalize_ty_ann(bt));
       if (app.ok) {
@@ -232,11 +232,11 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     }
     yield;
   }
-  if (e.tag == "EMatch") {
+  if (e is EMatch) {
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.scrut);
 
     let mut scrutName = "";
-    if (e.scrut.tag == "EIdent") { scrutName = e.scrut.name; }
+    if (e.scrut is EIdent) { scrutName = e.scrut.name; }
 
     // If the scrutinee is a union-typed binding, validate variant patterns and enforce exhaustiveness-lite.
     let mut scrutIsUnion = false;
@@ -260,9 +260,9 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     let mut mi = 0;
     while (mi < vec_len(e.arms)) {
       let arm = vec_get(e.arms, mi);
-      if (arm.pat.tag == "MPWildcard") { hasWildcard = true; }
+      if (arm.pat is MPWildcard) { hasWildcard = true; }
 
-      if (arm.pat.tag == "MPVariant") {
+      if (arm.pat is MPVariant) {
         vec_push(covered, arm.pat.name);
         if (scrutIsUnion) {
           if (!union_has_variant(u, arm.pat.name)) {
@@ -300,11 +300,11 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
 }
 
 out fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, s: Stmt) : Void => {
-  if (s.tag == "SLet") {
+  if (s is SLet) {
     check_single_char_identifier(src, span_start(s.span), s.name, "local variable");
     
     let depReason = deprecation_reason_before(src, span_start(s.span));
-    if (s.init.tag == "ELambda") {
+    if (s.init is ELambda) {
       let initTy0 = infer_expr_type(src, structs, fns, scopes, depth, s.init);
       let bindTy = if (s.tyAnn != "") normalize_ty_ann(s.tyAnn) else initTy0;
       let cur = vec_get(scopes, depth - 1);
@@ -326,7 +326,7 @@ out fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
 
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.init);
     let initTy = infer_expr_type_with_narrowing(src, structs, unions, fns, scopes, depth, narrowed, s.init);
-    if (s.init.tag == "EIdent" && has_fn_sig(fns, s.init.name)) {
+    if (s.init is EIdent && has_fn_sig(fns, s.init.name)) {
       let sig = find_fn_sig(fns, s.init.name);
       if (vec_len(sig.typeParams) > 0) {
         error_at(src, span_start(s.init.span), "generic function requires type args when used as a value: " + s.init.name);
@@ -356,7 +356,7 @@ out fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     yield;
   }
 
-  if (s.tag == "SAssign") {
+  if (s is SAssign) {
     let b = lookup_binding(src, span_start(s.span), scopes, depth, s.name);
     if (!b.isMut) {
       error_at(src, span_start(s.span), "cannot assign to immutable binding: " + s.name);
@@ -366,17 +366,17 @@ out fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     yield;
   }
 
-  if (s.tag == "SExpr") {
+  if (s is SExpr) {
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.expr);
     yield;
   }
 
-  if (s.tag == "SYield") {
+  if (s is SYield) {
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.expr);
     yield;
   }
 
-  if (s.tag == "SWhile") {
+  if (s is SWhile) {
     check_cond_is_bool(src, structs, fns, scopes, depth, s.cond);
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.cond);
     let newDepth = scopes_enter(scopes, depth);
@@ -385,7 +385,7 @@ out fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     yield;
   }
 
-  if (s.tag == "SIf") {
+  if (s is SIf) {
     check_cond_is_bool(src, structs, fns, scopes, depth, s.cond);
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.cond);
     let nar = parse_tag_narrowing(s.cond);
@@ -432,8 +432,8 @@ out fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     yield;
   }
 
-  if (s.tag == "SIndexAssign") {
-    if (s.base.tag == "EIdent") {
+  if (s is SIndexAssign) {
+    if (s.base is EIdent) {
       let b = lookup_binding(src, span_start(s.span), scopes, depth, s.base.name);
       if (!b.isMut) {
         error_at(src, span_start(s.span), "cannot assign through immutable binding: " + s.base.name);
@@ -443,7 +443,7 @@ out fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.base);
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.index);
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.value);
-    if (s.base.tag == "EIdent") {
+    if (s.base is EIdent) {
       let bt = infer_lookup_ty(scopes, depth, s.base.name);
       let arr = ty_parse_array(normalize_ty_ann(bt));
       if (arr.ok) {
@@ -470,8 +470,8 @@ out fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     yield;
   }
 
-  if (s.tag == "SFieldAssign") {
-    if (s.base.tag == "EIdent") {
+  if (s is SFieldAssign) {
+    if (s.base is EIdent) {
       let b = lookup_binding(src, span_start(s.span), scopes, depth, s.base.name);
       if (!b.isMut) {
         error_at(src, span_start(s.span), "cannot assign through immutable binding: " + s.base.name);
@@ -488,7 +488,7 @@ out fn analyze_stmts(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>
   let mut pi = 0;
   while (pi < vec_len(stmts)) {
     let st = vec_get(stmts, pi);
-    if (st.tag == "SLet" && st.init.tag == "ELambda") {
+    if (st is SLet && st.init is ELambda) {
       if (!scope_contains(cur, st.name)) {
         let initTy0 = infer_expr_type(src, structs, fns, scopes, depth, st.init);
         let bindTy = if (st.tyAnn != "") normalize_ty_ann(st.tyAnn) else initTy0;

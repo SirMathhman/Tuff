@@ -206,7 +206,7 @@ fn parse_match_expr_ast(src: String, i: I32) : ParsedExprAst => {
     let armE = if (t < stringLen(src) && stringCharCodeAt(src, t) == 123) parse_block_expr_ast(src, k) else parse_expr_ast_impl(src, k);
     k = armE.nextPos;
 
-    if (pat.tag == "MPWildcard") { sawDefault = true; }
+    if (pat is MPWildcard) { sawDefault = true; }
     vec_push(arms, mk_match_arm(span(patStart, armE.nextPos), pat, armE.expr));
 
     k = skip_ws(src, k);

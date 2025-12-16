@@ -19,43 +19,43 @@ fn emit_binop_js(op: BinOp) : String => {
   // expression (it compiles it as a statement). So we avoid relying on the
   // value of `if` here and in `emit_expr_js`.
   let mut out = "??";
-  if (op.tag == "OpAdd") { out = "+"; }
-  if (op.tag == "OpSub") { out = "-"; }
-  if (op.tag == "OpMul") { out = "*"; }
-  if (op.tag == "OpEq") { out = "=="; }
-  if (op.tag == "OpNe") { out = "!="; }
-  if (op.tag == "OpLt") { out = "<"; }
-  if (op.tag == "OpLe") { out = "<="; }
-  if (op.tag == "OpGt") { out = ">"; }
-  if (op.tag == "OpGe") { out = ">="; }
-  if (op.tag == "OpAnd") { out = "&&"; }
-  if (op.tag == "OpOr") { out = "||"; }
+  if (op is OpAdd) { out = "+"; }
+  if (op is OpSub) { out = "-"; }
+  if (op is OpMul) { out = "*"; }
+  if (op is OpEq) { out = "=="; }
+  if (op is OpNe) { out = "!="; }
+  if (op is OpLt) { out = "<"; }
+  if (op is OpLe) { out = "<="; }
+  if (op is OpGt) { out = ">"; }
+  if (op is OpGe) { out = ">="; }
+  if (op is OpAnd) { out = "&&"; }
+  if (op is OpOr) { out = "||"; }
   out
 }
 
 fn emit_unop_js(op: UnOp) : String => {
   let mut out = "??";
-  if (op.tag == "OpNot") { out = "!"; }
-  if (op.tag == "OpNeg") { out = "-"; }
+  if (op is OpNot) { out = "!"; }
+  if (op is OpNeg) { out = "-"; }
   out
 }
 
 // JS precedence (subset) for minimal parenthesization.
 // Higher number = binds tighter.
 fn binop_prec_js(op: BinOp) : I32 => {
-  if (op.tag == "OpMul") { yield 14; }
-  if (op.tag == "OpAdd" || op.tag == "OpSub") { yield 13; }
-  if (op.tag == "OpLt" || op.tag == "OpLe" || op.tag == "OpGt" || op.tag == "OpGe") { yield 11; }
-  if (op.tag == "OpEq" || op.tag == "OpNe") { yield 10; }
-  if (op.tag == "OpAnd") { yield 6; }
-  if (op.tag == "OpOr") { yield 5; }
+  if (op is OpMul) { yield 14; }
+  if (op is OpAdd || op is OpSub) { yield 13; }
+  if (op is OpLt || op is OpLe || op is OpGt || op is OpGe) { yield 11; }
+  if (op is OpEq || op is OpNe) { yield 10; }
+  if (op is OpAnd) { yield 6; }
+  if (op is OpOr) { yield 5; }
   0
 }
 
 fn expr_prec_js(e: Expr) : I32 => {
-  if (e.tag == "EIf") { yield 4; }
-  if (e.tag == "EBinary") { yield binop_prec_js(e.op); }
-  if (e.tag == "EUnary") { yield 17; }
+  if (e is EIf) { yield 4; }
+  if (e is EBinary) { yield binop_prec_js(e.op); }
+  if (e is EUnary) { yield 17; }
   // Calls/field/index and primaries bind tight enough for our needs.
   20
 }
@@ -72,8 +72,8 @@ fn emit_path_js(parts: Vec<String>) : String => {
 }
 
 fn struct_name_for_lookup(nameExpr: Expr) : String => {
-  if (nameExpr.tag == "EIdent") { yield nameExpr.name; }
-  if (nameExpr.tag == "EPath") { yield emit_path_js(nameExpr.parts); }
+  if (nameExpr is EIdent) { yield nameExpr.name; }
+  if (nameExpr is EPath) { yield emit_path_js(nameExpr.parts); }
   panic("struct literal name must be ident or path")
 }
 
@@ -100,11 +100,11 @@ out fn emit_expr_js(e: Expr) : String => {
   // Default fallback for nodes we haven't implemented yet.
   let mut out = "undefined";
 
-  if (e.tag == "EUndefined") { out = "undefined"; }
+  if (e is EUndefined) { out = "undefined"; }
 
-  if (e.tag == "EInt") { out = "" + e.value; }
+  if (e is EInt) { out = "" + e.value; }
 
-  if (e.tag == "EFloat") {
+  if (e is EFloat) {
     // For F32, wrap in Math.fround to simulate 32-bit precision.
     // For F64 or untyped, emit the literal directly.
     if (e.suffix == "F32") {
@@ -114,30 +114,30 @@ out fn emit_expr_js(e: Expr) : String => {
     }
   }
 
-  if (e.tag == "EBool") {
+  if (e is EBool) {
     if (e.value) { out = "true"; }
     else { out = "false"; }
   }
 
-  if (e.tag == "EString") { out = "\"" + escape_js_string(e.value) + "\""; }
-  if (e.tag == "EIdent") { out = e.name; }
+  if (e is EString) { out = "\"" + escape_js_string(e.value) + "\""; }
+  if (e is EIdent) { out = e.name; }
 
-  if (e.tag == "EPath") { out = emit_path_js(e.parts); }
+  if (e is EPath) { out = emit_path_js(e.parts); }
 
-  if (e.tag == "ELambda") {
+  if (e is ELambda) {
     let params = emit_names_csv(e.params);
-    if (e.body.tag == "EBlock") {
+    if (e.body is EBlock) {
       out = "((" + params + ") => {\n" + emit_stmts_js(e.body.body) + "return " + emit_expr_js(e.body.tail) + ";\n})";
     } else {
       out = "((" + params + ") => " + emit_expr_js(e.body) + ")";
     }
   }
 
-  if (e.tag == "EStructLit") {
+  if (e is EStructLit) {
     out = emit_struct_lit_js(e.nameExpr, e.values);
   }
 
-  if (e.tag == "EUnary") {
+  if (e is EUnary) {
     let inner = emit_expr_js(e.expr);
     // Parenthesize only when the operand binds looser than unary.
     // Example: `!(a < b)` must emit as `!(a < b)`, not `!a < b`.
@@ -145,7 +145,7 @@ out fn emit_expr_js(e: Expr) : String => {
     out = emit_unop_js(e.op) + innerStr;
   }
 
-  if (e.tag == "EBinary") {
+  if (e is EBinary) {
     let left = emit_expr_js(e.left);
     let right = emit_expr_js(e.right);
     let curPrec = binop_prec_js(e.op);
@@ -156,7 +156,7 @@ out fn emit_expr_js(e: Expr) : String => {
     out = leftStr + " " + emit_binop_js(e.op) + " " + rightStr;
   }
 
-  if (e.tag == "ECall") {
+  if (e is ECall) {
     let mut s = emit_expr_js(e.callee) + "(";
     let mut i = 0;
     while (i < vec_len(e.args)) {
@@ -168,15 +168,15 @@ out fn emit_expr_js(e: Expr) : String => {
     out = s;
   }
 
-  if (e.tag == "EIf") {
+  if (e is EIf) {
     out = "(" + emit_expr_js(e.cond) + " ? " + emit_expr_js(e.thenExpr) + " : " + emit_expr_js(e.elseExpr) + ")";
   }
 
-  if (e.tag == "EBlock") {
+  if (e is EBlock) {
     out = "(() => {\n" + emit_stmts_js(e.body) + "return " + emit_expr_js(e.tail) + ";\n})()";
   }
 
-  if (e.tag == "EVecLit") {
+  if (e is EVecLit) {
     let mut pushes = "";
     let mut i = 0;
     while (i < vec_len(e.items)) {
@@ -186,7 +186,7 @@ out fn emit_expr_js(e: Expr) : String => {
     out = "(() => { const __v = __tuff_vec_new();\n" + pushes + "return __v;\n})()";
   }
 
-  if (e.tag == "ETupleLit") {
+  if (e is ETupleLit) {
     let mut s = "[";
     let mut i = 0;
     while (i < vec_len(e.items)) {
@@ -198,33 +198,33 @@ out fn emit_expr_js(e: Expr) : String => {
     out = s;
   }
 
-  if (e.tag == "EIndex") {
+  if (e is EIndex) {
     out = "__tuff_vec_get(" + emit_expr_js(e.base) + ", " + emit_expr_js(e.index) + ")";
   }
 
-  if (e.tag == "ETupleIndex") {
+  if (e is ETupleIndex) {
     out = emit_expr_js(e.base) + "[" + ("" + e.index) + "]";
   }
 
-  if (e.tag == "EField") {
+  if (e is EField) {
     out = emit_expr_js(e.base) + "." + e.field;
   }
 
-  if (e.tag == "EMatch") {
+  if (e is EMatch) {
     let mut cases = "";
     let mut def = "";
     let mut sawVariant = false;
     let mut i = 0;
     while (i < vec_len(e.arms)) {
       let arm = vec_get(e.arms, i);
-      if (arm.pat.tag == "MPWildcard") {
+      if (arm.pat is MPWildcard) {
         def = emit_expr_js(arm.expr);
       } else {
         let mut patJs = "";
-        if (arm.pat.tag == "MPInt") { patJs = "" + arm.pat.value; }
-        if (arm.pat.tag == "MPBool") { patJs = if (arm.pat.value) "true" else "false"; }
-        if (arm.pat.tag == "MPString") { patJs = "\"" + escape_js_string(arm.pat.value) + "\""; }
-        if (arm.pat.tag == "MPVariant") {
+        if (arm.pat is MPInt) { patJs = "" + arm.pat.value; }
+        if (arm.pat is MPBool) { patJs = if (arm.pat.value) "true" else "false"; }
+        if (arm.pat is MPString) { patJs = "\"" + escape_js_string(arm.pat.value) + "\""; }
+        if (arm.pat is MPVariant) {
           patJs = "\"" + escape_js_string(arm.pat.name) + "\"";
           sawVariant = true;
         }
@@ -246,32 +246,32 @@ out fn emit_expr_js(e: Expr) : String => {
 fn emit_stmt_js(s: Stmt) : String => {
   let mut out = "";
 
-  if (s.tag == "SLet") {
+  if (s is SLet) {
     let kw = if (s.isMut) "let" else "const";
     out = kw + " " + s.name + " = " + emit_expr_js(s.init) + ";\n";
   }
 
-  if (s.tag == "SAssign") {
+  if (s is SAssign) {
     out = s.name + " = " + emit_expr_js(s.value) + ";\n";
   }
 
-  if (s.tag == "SExpr") {
+  if (s is SExpr) {
     // Standalone expression statements are needed for side effects.
     // Example: `println("hi");` or `compile_project(inPath, outPath);`
     out = emit_expr_js(s.expr) + ";\n";
   }
 
-  if (s.tag == "SYield") {
-    if (s.expr.tag == "EUndefined") { out = "return;\n"; }
+  if (s is SYield) {
+    if (s.expr is EUndefined) { out = "return;\n"; }
     else { out = "return " + emit_expr_js(s.expr) + ";\n"; }
   }
 
-  if (s.tag == "SWhile") {
+  if (s is SWhile) {
     let cond = emit_expr_js(s.cond);
     out = "while (" + cond + ") {\n" + emit_stmts_js(s.body) + "}\n";
   }
 
-  if (s.tag == "SIf") {
+  if (s is SIf) {
     if (s.hasElse) {
       out = "if (" + emit_expr_js(s.cond) + ") {\n" + emit_stmts_js(s.thenBody) + "} else {\n" + emit_stmts_js(s.elseBody) + "}\n";
     } else {
@@ -279,11 +279,11 @@ fn emit_stmt_js(s: Stmt) : String => {
     }
   }
 
-  if (s.tag == "SIndexAssign") {
+  if (s is SIndexAssign) {
     out = "__tuff_vec_set(" + emit_expr_js(s.base) + ", " + emit_expr_js(s.index) + ", " + emit_expr_js(s.value) + ");\n";
   }
 
-  if (s.tag == "SFieldAssign") {
+  if (s is SFieldAssign) {
     let mut lhs = emit_expr_js(s.base);
     let mut i = 0;
     while (i < vec_len(s.fields)) {
@@ -364,7 +364,7 @@ fn emit_module_decl_js(d: DModule, prefix: String, exportThis: Bool) : String =>
   while (i < vec_len(d.decls)) {
     let inner = vec_get(d.decls, i);
 
-    if (inner.tag == "DFn") {
+    if (inner is DFn) {
       let jsName = prefix + "__" + d.name + "__" + inner.name;
       decls = decls + emit_fn_decl_js(inner, false, jsName, false);
       if (first) { entries = entries + (inner.name + ": " + jsName); }
@@ -374,7 +374,7 @@ fn emit_module_decl_js(d: DModule, prefix: String, exportThis: Bool) : String =>
       continue;
     }
 
-    if (inner.tag == "DModule") {
+    if (inner is DModule) {
       let innerCode = emit_module_decl_js(inner, prefix + "__" + d.name, false);
       decls = decls + innerCode;
       let prop = inner.name;
@@ -395,17 +395,17 @@ fn emit_module_decl_js(d: DModule, prefix: String, exportThis: Bool) : String =>
 out fn emit_decl_js(d: Decl, exportAll: Bool) : String => {
   let mut out = "";
 
-  if (d.tag == "DExternFrom") {
+  if (d is DExternFrom) {
     let importPath = emit_extern_import_path(d.modulePath);
     out = "import { " + emit_names_csv(d.names) + " } from \"" + importPath + "\";\n";
   }
 
-  if (d.tag == "DExternType") {
+  if (d is DExternType) {
     // No runtime output for types.
     out = "";
   }
 
-  if (d.tag == "DImport") {
+  if (d is DImport) {
     let mut targetModulePath = d.modulePath;
     // Allow importing compiler modules using the repository-root path
     // `src::main::tuff::compiler::...`, but link them using the compiler-root
@@ -420,26 +420,26 @@ out fn emit_decl_js(d: Decl, exportAll: Bool) : String => {
     out = "import { " + emit_names_csv(d.names) + " } from \"" + importPath + "\";\n";
   }
 
-  if (d.tag == "DTypeUnion") {
+  if (d is DTypeUnion) {
     out = emit_type_union_js(d, exportAll);
   }
 
-  if (d.tag == "DStruct") {
+  if (d is DStruct) {
     // Structs are compile-time only for now (field order table is updated during parsing).
     out = "";
   }
 
-  if (d.tag == "DLet") {
+  if (d is DLet) {
     let kw = if (d.isMut) "let" else "const";
     out = kw + " " + d.name + " = " + emit_expr_js(d.init) + ";\n";
   }
 
-  if (d.tag == "DFn") {
+  if (d is DFn) {
     let exportThis = exportAll || d.isOut || d.name == "main";
     out = emit_fn_decl_js(d, exportAll, d.name, exportThis);
   }
 
-  if (d.tag == "DClassFn") {
+  if (d is DClassFn) {
     // `class fn` becomes a function returning an object of scope fields.
     // In this bootstrap subset, we approximate `this` by returning all params
     // plus any `let` bindings declared in the body (in source order).
@@ -457,7 +457,7 @@ out fn emit_decl_js(d: Decl, exportAll: Bool) : String => {
     i = 0;
     while (i < vec_len(d.body)) {
       let s = vec_get(d.body, i);
-      if (s.tag == "SLet") {
+      if (s is SLet) {
         let mut found = false;
         let mut j = 0;
         while (j < vec_len(fieldNames)) {
@@ -485,7 +485,7 @@ out fn emit_decl_js(d: Decl, exportAll: Bool) : String => {
     out = exportKw + "function " + d.name + "(" + params + ") {\n" + emit_stmts_js(d.body) + "return { " + fields + " };\n}\n";
   }
 
-  if (d.tag == "DModule") {
+  if (d is DModule) {
     out = emit_module_decl_js(d, "M", true);
   }
 

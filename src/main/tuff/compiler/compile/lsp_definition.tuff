@@ -106,14 +106,14 @@ fn lsp_collect_decls(decls: Vec<Decl>, defs: Vec<LspDef>, filePath: String) : Vo
 }
 
 fn lsp_collect_decl(d: Decl, defs: Vec<LspDef>, filePath: String) : Void => {
-  if (d.tag == "DExternFrom") {
+  if (d is DExternFrom) {
     let mut ni = 0;
     while (ni < vec_len(d.names)) {
       vec_push(defs, lsp_def(vec_get(d.names, ni), span_start(d.span), span_end(d.span), "extern"));
       ni = ni + 1;
     }
   }
-  if (d.tag == "DImport") {
+  if (d is DImport) {
     // Resolve the module path to a file path for cross-file navigation
     let targetFile = lsp_resolve_module_path_impl(d.modulePath, filePath);
     let mut ni = 0;
@@ -123,16 +123,16 @@ fn lsp_collect_decl(d: Decl, defs: Vec<LspDef>, filePath: String) : Void => {
       ni = ni + 1;
     }
   }
-  if (d.tag == "DLet") {
+  if (d is DLet) {
     vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "var"));
   }
-  if (d.tag == "DFn") {
+  if (d is DFn) {
     vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "fn"));
   }
-  if (d.tag == "DClassFn") {
+  if (d is DClassFn) {
     vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "fn"));
   }
-  if (d.tag == "DStruct") {
+  if (d is DStruct) {
     vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "struct"));
     // Register fields.
     // NOTE: In the canonical AST, `DStruct.fields` is a `Vec<String>` (names only).
@@ -144,7 +144,7 @@ fn lsp_collect_decl(d: Decl, defs: Vec<LspDef>, filePath: String) : Void => {
       fi = fi + 1;
     }
   }
-  if (d.tag == "DTypeUnion") {
+  if (d is DTypeUnion) {
     vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "type"));
     let mut vi = 0;
     while (vi < vec_len(d.variants)) {
@@ -153,7 +153,7 @@ fn lsp_collect_decl(d: Decl, defs: Vec<LspDef>, filePath: String) : Void => {
       vi = vi + 1;
     }
   }
-  if (d.tag == "DModule") {
+  if (d is DModule) {
     vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "module"));
     lsp_collect_decls(d.decls, defs, filePath);
   }
@@ -161,7 +161,7 @@ fn lsp_collect_decl(d: Decl, defs: Vec<LspDef>, filePath: String) : Void => {
 
 // Resolve references in expressions. Returns inferred type name for field access.
 fn lsp_resolve_expr(e: Expr, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : String => {
-  if (e.tag == "EIdent") {
+  if (e is EIdent) {
     let d = lsp_lookup(defs, e.name);
     if (d.defStart >= 0 || stringLen(d.defFile) > 0) {
       vec_push(refs, lsp_ref_ext(span_start(e.span), span_end(e.span), d.defStart, d.defEnd, d.defFile));
@@ -169,16 +169,16 @@ fn lsp_resolve_expr(e: Expr, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : Str
     yield "";
   }
 
-  if (e.tag == "EStructLit") {
+  if (e is EStructLit) {
     // Struct name is a type reference.
     // Canonical AST stores it as `nameExpr`.
     let mut structName = "";
     let mut nameSpan = e.span;
-    if (e.nameExpr.tag == "EIdent") {
+    if (e.nameExpr is EIdent) {
       structName = e.nameExpr.name;
       nameSpan = e.nameExpr.span;
     }
-    if (e.nameExpr.tag == "EPath") {
+    if (e.nameExpr is EPath) {
       // Use the last path segment as the type name.
       if (vec_len(e.nameExpr.parts) > 0) {
         structName = vec_get(e.nameExpr.parts, vec_len(e.nameExpr.parts) - 1);
@@ -200,7 +200,7 @@ fn lsp_resolve_expr(e: Expr, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : Str
     yield structName;
   }
 
-  if (e.tag == "EField") {
+  if (e is EField) {
     let baseTy = lsp_resolve_expr(e.base, defs, refs);
     if (stringLen(baseTy) > 0) {
       let fieldDef = lsp_lookup_field(defs, baseTy, e.field);
@@ -213,7 +213,7 @@ fn lsp_resolve_expr(e: Expr, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : Str
     yield "";
   }
 
-  if (e.tag == "ECall") {
+  if (e is ECall) {
     lsp_resolve_expr(e.callee, defs, refs);
     let mut ai = 0;
     while (ai < vec_len(e.args)) {
@@ -222,27 +222,27 @@ fn lsp_resolve_expr(e: Expr, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : Str
     }
   }
 
-  if (e.tag == "EBinary") {
+  if (e is EBinary) {
     lsp_resolve_expr(e.left, defs, refs);
     lsp_resolve_expr(e.right, defs, refs);
   }
 
-  if (e.tag == "EUnary") {
+  if (e is EUnary) {
     lsp_resolve_expr(e.expr, defs, refs);
   }
 
-  if (e.tag == "EIf") {
+  if (e is EIf) {
     lsp_resolve_expr(e.cond, defs, refs);
     lsp_resolve_expr(e.thenExpr, defs, refs);
     lsp_resolve_expr(e.elseExpr, defs, refs);
   }
 
-  if (e.tag == "EBlock") {
+  if (e is EBlock) {
     lsp_resolve_stmts(e.body, defs, refs);
     lsp_resolve_expr(e.tail, defs, refs);
   }
 
-  if (e.tag == "ELambda") {
+  if (e is ELambda) {
     let mut pi = 0;
     while (pi < vec_len(e.params)) {
       vec_push(defs, lsp_def(vec_get(e.params, pi), span_start(e.span), span_end(e.span), "param"));
@@ -251,7 +251,7 @@ fn lsp_resolve_expr(e: Expr, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : Str
     lsp_resolve_expr(e.body, defs, refs);
   }
 
-  if (e.tag == "EMatch") {
+  if (e is EMatch) {
     lsp_resolve_expr(e.scrut, defs, refs);
     let mut mi = 0;
     while (mi < vec_len(e.arms)) {
@@ -266,16 +266,16 @@ fn lsp_resolve_expr(e: Expr, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : Str
     }
   }
 
-  if (e.tag == "EIndex") {
+  if (e is EIndex) {
     lsp_resolve_expr(e.base, defs, refs);
     lsp_resolve_expr(e.index, defs, refs);
   }
 
-  if (e.tag == "ETupleIndex") {
+  if (e is ETupleIndex) {
     lsp_resolve_expr(e.base, defs, refs);
   }
 
-  if (e.tag == "EVecLit") {
+  if (e is EVecLit) {
     let mut ii = 0;
     while (ii < vec_len(e.items)) {
       lsp_resolve_expr(vec_get(e.items, ii), defs, refs);
@@ -283,7 +283,7 @@ fn lsp_resolve_expr(e: Expr, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : Str
     }
   }
 
-  if (e.tag == "ETupleLit") {
+  if (e is ETupleLit) {
     let mut ii = 0;
     while (ii < vec_len(e.items)) {
       lsp_resolve_expr(vec_get(e.items, ii), defs, refs);
@@ -295,12 +295,12 @@ fn lsp_resolve_expr(e: Expr, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : Str
 }
 
 fn lsp_resolve_stmt(s: Stmt, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : Void => {
-  if (s.tag == "SLet") {
+  if (s is SLet) {
     lsp_resolve_expr(s.init, defs, refs);
     vec_push(defs, lsp_def(s.name, span_start(s.span), span_end(s.span), "var"));
   }
 
-  if (s.tag == "SAssign") {
+  if (s is SAssign) {
     let d = lsp_lookup(defs, s.name);
     if (d.defStart >= 0) {
       vec_push(refs, lsp_ref_ext(span_start(s.span), span_start(s.span) + stringLen(s.name), d.defStart, d.defEnd, d.defFile));
@@ -308,20 +308,20 @@ fn lsp_resolve_stmt(s: Stmt, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : Voi
     lsp_resolve_expr(s.value, defs, refs);
   }
 
-  if (s.tag == "SExpr") {
+  if (s is SExpr) {
     lsp_resolve_expr(s.expr, defs, refs);
   }
 
-  if (s.tag == "SYield") {
+  if (s is SYield) {
     lsp_resolve_expr(s.expr, defs, refs);
   }
 
-  if (s.tag == "SWhile") {
+  if (s is SWhile) {
     lsp_resolve_expr(s.cond, defs, refs);
     lsp_resolve_stmts(s.body, defs, refs);
   }
 
-  if (s.tag == "SIf") {
+  if (s is SIf) {
     lsp_resolve_expr(s.cond, defs, refs);
     lsp_resolve_stmts(s.thenBody, defs, refs);
     if (s.hasElse) {
@@ -329,13 +329,13 @@ fn lsp_resolve_stmt(s: Stmt, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : Voi
     }
   }
 
-  if (s.tag == "SIndexAssign") {
+  if (s is SIndexAssign) {
     lsp_resolve_expr(s.base, defs, refs);
     lsp_resolve_expr(s.index, defs, refs);
     lsp_resolve_expr(s.value, defs, refs);
   }
 
-  if (s.tag == "SFieldAssign") {
+  if (s is SFieldAssign) {
     lsp_resolve_expr(s.base, defs, refs);
     lsp_resolve_expr(s.value, defs, refs);
   }
@@ -350,11 +350,11 @@ fn lsp_resolve_stmts(stmts: Vec<Stmt>, defs: Vec<LspDef>, refs: Vec<LspRefIntern
 }
 
 fn lsp_resolve_decl(d: Decl, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : Void => {
-  if (d.tag == "DLet") {
+  if (d is DLet) {
     lsp_resolve_expr(d.init, defs, refs);
   }
 
-  if (d.tag == "DFn") {
+  if (d is DFn) {
     let mut pi = 0;
     while (pi < vec_len(d.params)) {
       vec_push(defs, lsp_def(vec_get(d.params, pi), span_start(d.span), span_end(d.span), "param"));
@@ -364,7 +364,7 @@ fn lsp_resolve_decl(d: Decl, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : Voi
     lsp_resolve_expr(d.tail, defs, refs);
   }
 
-  if (d.tag == "DClassFn") {
+  if (d is DClassFn) {
     let mut pi = 0;
     while (pi < vec_len(d.params)) {
       vec_push(defs, lsp_def(vec_get(d.params, pi), span_start(d.span), span_end(d.span), "param"));
@@ -374,7 +374,7 @@ fn lsp_resolve_decl(d: Decl, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : Voi
     lsp_resolve_expr(d.tail, defs, refs);
   }
 
-  if (d.tag == "DModule") {
+  if (d is DModule) {
     lsp_resolve_decls(d.decls, defs, refs);
   }
 }

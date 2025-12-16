@@ -168,14 +168,14 @@ out fn scan_top_level_fn_exports(src: String) => {
   let mut di = 0;
   while (di < vec_len(decls)) {
     let d = vec_get(decls, di);
-    if (d.tag == "DFn") {
+    if (d is DFn) {
       let depReason = deprecation_reason_before(src, span_start(d.span));
       let sig = mk_fn_sig(d.name, depReason, d.typeParams, d.params, d.paramTyAnns, d.retTyAnn);
       vec_push(allSigs, sig);
       if (d.isOut) { vec_push(outSigs, sig); }
       else { vec_push(privateNames, d.name); }
     }
-    if (d.tag == "DClassFn") {
+    if (d is DClassFn) {
       let depReason = deprecation_reason_before(src, span_start(d.span));
       let sig = mk_fn_sig(d.name, depReason, d.typeParams, d.params, d.paramTyAnns, d.retTyAnn);
       vec_push(allSigs, sig);

@@ -55,7 +55,7 @@ out fn check_binary_operand_types(src: String, structs: Vec<StructDef>, fns: Vec
   if (type_is_unknown(lt) || type_is_unknown(rt)) { yield; }
 
   // Arithmetic operators: require int-like operands, except `+` allows String.
-  if (e.op.tag == "OpAdd") {
+  if (e.op is OpAdd) {
     if (lt == ty_string() || rt == ty_string()) { yield; }
     if (!((type_is_int_like(lt) && type_is_int_like(rt)) || (type_is_float_like(lt) && type_is_float_like(rt)))) {
       error_at(src, span_start(e.span), "invalid operands to '+': expected numbers or strings");
@@ -63,7 +63,7 @@ out fn check_binary_operand_types(src: String, structs: Vec<StructDef>, fns: Vec
     yield;
   }
 
-  if (e.op.tag == "OpSub" || e.op.tag == "OpMul" || e.op.tag == "OpDiv") {
+  if (e.op is OpSub || e.op is OpMul || e.op is OpDiv) {
     if (!((type_is_int_like(lt) && type_is_int_like(rt)) || (type_is_float_like(lt) && type_is_float_like(rt)))) {
       error_at(src, span_start(e.span), "invalid operands to arithmetic operator");
     }
@@ -71,7 +71,7 @@ out fn check_binary_operand_types(src: String, structs: Vec<StructDef>, fns: Vec
   }
 
   // Comparison operators: require both operands to be numeric (int or float), not strings.
-  if (e.op.tag == "OpLt" || e.op.tag == "OpLe" || e.op.tag == "OpGt" || e.op.tag == "OpGe") {
+  if (e.op is OpLt || e.op is OpLe || e.op is OpGt || e.op is OpGe) {
     if (!((type_is_int_like(lt) && type_is_int_like(rt)) || (type_is_float_like(lt) && type_is_float_like(rt)))) {
       error_at(src, span_start(e.span), "invalid operands to comparison operator: expected numbers");
     }
@@ -103,7 +103,7 @@ out fn check_struct_lit_types(src: String, structs: Vec<StructDef>, fns: Vec<FnS
 }
 
 out fn check_call_types(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, e: Expr) : Void => {
-  if (e.callee.tag == "ELambda") {
+  if (e.callee is ELambda) {
     if (!(vec_len(e.args) == vec_len(e.callee.params))) {
       error_at(src, span_start(e.span), "wrong number of args in lambda call");
     }

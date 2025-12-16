@@ -204,7 +204,7 @@ out fn project_imported_fn_sigs(
     let mut ii = 0;
     while (ii < vec_len(impsAst.decls)) {
       let imp = vec_get(impsAst.decls, ii);
-      if (imp.tag == "DImport") {
+      if (imp is DImport) {
         let rel = module_path_to_relpath(imp.modulePath);
         let mut baseDir = pathDirname(path);
         let compilerSrcPrefix = "src::main::tuff::compiler::";
@@ -342,7 +342,7 @@ out fn project_lint_one_module_with(
     let mut ii = 0;
     while (ii < vec_len(impsAst.decls)) {
       let imp = vec_get(impsAst.decls, ii);
-      if (imp.tag == "DImport") {
+      if (imp is DImport) {
         let rel = module_path_to_relpath(imp.modulePath);
         let mut baseDir = pathDirname(path);
         let compilerSrcPrefix = "src::main::tuff::compiler::";

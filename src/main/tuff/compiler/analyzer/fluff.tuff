@@ -149,20 +149,20 @@ out fn check_single_char_identifier(src: String, pos: I32, name: String, kind: S
 // ------------------------------------------------------------
 
 fn cc_expr(e: Expr) : I32 => {
-  if (e.tag == "EUndefined") { yield 0; }
-  if (e.tag == "EInt") { yield 0; }
-  if (e.tag == "EFloat") { yield 0; }
-  if (e.tag == "EBool") { yield 0; }
-  if (e.tag == "EString") { yield 0; }
-  if (e.tag == "EIdent") { yield 0; }
-  if (e.tag == "EPath") { yield 0; }
+  if (e is EUndefined) { yield 0; }
+  if (e is EInt) { yield 0; }
+  if (e is EFloat) { yield 0; }
+  if (e is EBool) { yield 0; }
+  if (e is EString) { yield 0; }
+  if (e is EIdent) { yield 0; }
+  if (e is EPath) { yield 0; }
 
-  if (e.tag == "ELambda") {
+  if (e is ELambda) {
     // Inner lambda: counted independently, so return 0 for this expression
     yield 0;
   }
 
-  if (e.tag == "EStructLit") {
+  if (e is EStructLit) {
     let mut cc = 0;
     let mut i = 0;
     while (i < vec_len(e.values)) {
@@ -172,20 +172,20 @@ fn cc_expr(e: Expr) : I32 => {
     yield cc;
   }
 
-  if (e.tag == "EUnary") {
+  if (e is EUnary) {
     yield cc_expr(e.expr);
   }
 
-  if (e.tag == "EBinary") {
+  if (e is EBinary) {
     let mut cc = cc_expr(e.left) + cc_expr(e.right);
     // && and || are decision points
-    if (e.op.tag == "OpAnd" || e.op.tag == "OpOr") {
+    if (e.op is OpAnd || e.op is OpOr) {
       cc = cc + 1;
     }
     yield cc;
   }
 
-  if (e.tag == "ECall") {
+  if (e is ECall) {
     let mut cc = cc_expr(e.callee);
     let mut i = 0;
     while (i < vec_len(e.args)) {
@@ -195,19 +195,19 @@ fn cc_expr(e: Expr) : I32 => {
     yield cc;
   }
 
-  if (e.tag == "EIf") {
+  if (e is EIf) {
     // +1 for the if branch itself
     let cc = 1 + cc_expr(e.cond) + cc_expr(e.thenExpr) + cc_expr(e.elseExpr);
     yield cc;
   }
 
-  if (e.tag == "EBlock") {
+  if (e is EBlock) {
     let mut cc = cc_stmts(e.body);
     cc = cc + cc_expr(e.tail);
     yield cc;
   }
 
-  if (e.tag == "EVecLit") {
+  if (e is EVecLit) {
     let mut cc = 0;
     let mut i = 0;
     while (i < vec_len(e.items)) {
@@ -217,7 +217,7 @@ fn cc_expr(e: Expr) : I32 => {
     yield cc;
   }
 
-  if (e.tag == "ETupleLit") {
+  if (e is ETupleLit) {
     let mut cc = 0;
     let mut i = 0;
     while (i < vec_len(e.items)) {
@@ -227,19 +227,19 @@ fn cc_expr(e: Expr) : I32 => {
     yield cc;
   }
 
-  if (e.tag == "EIndex") {
+  if (e is EIndex) {
     yield cc_expr(e.base) + cc_expr(e.index);
   }
 
-  if (e.tag == "ETupleIndex") {
+  if (e is ETupleIndex) {
     yield cc_expr(e.base);
   }
 
-  if (e.tag == "EField") {
+  if (e is EField) {
     yield cc_expr(e.base);
   }
 
-  if (e.tag == "EMatch") {
+  if (e is EMatch) {
     let mut cc = cc_expr(e.scrut);
     let armCount = vec_len(e.arms);
     // (arms - 1) branches (first arm is the base path)
@@ -258,29 +258,29 @@ fn cc_expr(e: Expr) : I32 => {
 }
 
 fn cc_stmt(s: Stmt) : I32 => {
-  if (s.tag == "SLet") {
+  if (s is SLet) {
     yield cc_expr(s.init);
   }
 
-  if (s.tag == "SAssign") {
+  if (s is SAssign) {
     yield cc_expr(s.value);
   }
 
-  if (s.tag == "SExpr") {
+  if (s is SExpr) {
     yield cc_expr(s.expr);
   }
 
-  if (s.tag == "SYield") {
+  if (s is SYield) {
     yield cc_expr(s.expr);
   }
 
-  if (s.tag == "SWhile") {
+  if (s is SWhile) {
     // +1 for the while loop itself
     let cc = 1 + cc_expr(s.cond) + cc_stmts(s.body);
     yield cc;
   }
 
-  if (s.tag == "SIf") {
+  if (s is SIf) {
     // +1 for the if branch
     let mut cc = 1 + cc_expr(s.cond) + cc_stmts(s.thenBody);
     if (s.hasElse) {
@@ -289,11 +289,11 @@ fn cc_stmt(s: Stmt) : I32 => {
     yield cc;
   }
 
-  if (s.tag == "SIndexAssign") {
+  if (s is SIndexAssign) {
     yield cc_expr(s.base) + cc_expr(s.index) + cc_expr(s.value);
   }
 
-  if (s.tag == "SFieldAssign") {
+  if (s is SFieldAssign) {
     yield cc_expr(s.base) + cc_expr(s.value);
   }
 
