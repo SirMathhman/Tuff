@@ -600,14 +600,26 @@ fn main() => {
 - Generic type resolution and instantiation
 - Array initialization tracking and validation
 
-**Phase 5a**: JS Emitter refinement
+### Phase 5: Post-Bootstrap Expansion
 
-- Optimize generated ES Modules
-- Improve error diagnostics
+**Phase 5a**: JS Emitter refinement ✓ (partial)
 
-**Phase 5b/5c**: Additional backends (planned, not yet started)
+- Reduce unnecessary parentheses in generated code ✓
+- Dead code elimination hints ✓
+- Full ES Module optimization (planned)
 
-- C emitter
+**Phase 5-6**: Standard Library Expansion ✓ (in progress)
+
+- Iterator library with map/filter/fold ✓
+- Test framework and utilities ✓
+- Collections (Vec, HashMap) — planned
+- String utilities — planned
+- Math module — planned
+- File I/O — planned
+
+**Phase 5b/5c**: Additional backends (not yet started)
+
+- C emitter (Phase 7-8 planned)
 - Native/LLVM support
 - Self-hosting Tuff emitter (meta: Tuff→Tuff compilation)
 
