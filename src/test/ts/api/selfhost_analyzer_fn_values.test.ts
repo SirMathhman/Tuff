@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { lintCode } from "./compiler_api_wrapper";
+import { lintCode } from "../compiler_api_wrapper";
 
 describe("selfhost analyzer", () => {
   test("rejects let annotation mismatch for function-value call", async () => {

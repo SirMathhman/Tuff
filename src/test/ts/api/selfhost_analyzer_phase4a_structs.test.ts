@@ -4,7 +4,7 @@ import {
   compileCode,
   importEsmFromSource,
   lintCode,
-} from "./compiler_api_wrapper";
+} from "../compiler_api_wrapper";
 
 describe("selfhost analyzer (phase 4a)", () => {
   test("rejects let annotation mismatch", async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { lintCode } from "./compiler_api_wrapper";
+import { lintCode } from "../compiler_api_wrapper";
 
 describe("selfhost analyzer linting", () => {
   test("rejects missing parameter type annotations (functions + lambdas)", async () => {

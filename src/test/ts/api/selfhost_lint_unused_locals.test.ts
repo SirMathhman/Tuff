@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import { lintCode, setFluffOptions } from "./compiler_api_wrapper";
+import { lintCode, setFluffOptions } from "../compiler_api_wrapper";
 
 describe("selfhost analyzer linting", () => {
   beforeEach(async () => {

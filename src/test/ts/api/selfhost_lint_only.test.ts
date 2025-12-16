@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import { compileCode, lintCode, setFluffOptions } from "./compiler_api_wrapper";
+import {
+  compileCode,
+  lintCode,
+  setFluffOptions,
+} from "../compiler_api_wrapper";
 
 describe("selfhost fluff", () => {
   beforeEach(async () => {

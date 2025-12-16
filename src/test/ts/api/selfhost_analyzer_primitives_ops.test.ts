@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { lintCode } from "./compiler_api_wrapper";
+import { lintCode } from "../compiler_api_wrapper";
 
 describe("selfhost analyzer (primitives + operator typing)", () => {
   test("enforces U32 and Char annotations", async () => {
@@ -42,7 +42,7 @@ describe("selfhost analyzer (primitives + operator typing)", () => {
     for (const ty of ["U8", "U16", "U64", "I8", "I16", "I64"]) {
       const bad = [
         "fn main() : I32 => {",
-        `  let x: ${ty} = \"nope\";`,
+        `  let x: ${ty} = "nope";`,
         "  0",
         "}",
         "",

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { compileCode } from "./compiler_api_wrapper";
+import { compileCode } from "../compiler_api_wrapper";
 
 /**
  * This test drives the "Option 4" refactor:

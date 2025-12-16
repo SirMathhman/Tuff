@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { lintCode } from "./compiler_api_wrapper";
+import { lintCode } from "../compiler_api_wrapper";
 
 describe("selfhost analyzer: Never type", () => {
   test("accepts I32 function with panic branch (Never absorption in if)", async () => {

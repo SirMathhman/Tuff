@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { lintCode, setFluffOptions } from "./compiler_api_wrapper";
+import { lintCode, setFluffOptions } from "../compiler_api_wrapper";
 
 /**
  * Drives the new in-memory lint API:
@@ -16,8 +16,6 @@ describe("compiler API (in-memory lint)", () => {
         "\n"
       ),
     };
-
-    const moduleLookup = (p: string) => modules[p] ?? "";
 
     // Case 1: warning-only
     {

@@ -4,7 +4,7 @@ import {
   compileCode,
   importEsmFromSource,
   lintCode,
-} from "./compiler_api_wrapper";
+} from "../compiler_api_wrapper";
 
 async function expectLintOk(entryCode: string) {
   const r = await lintCode(entryCode, {});

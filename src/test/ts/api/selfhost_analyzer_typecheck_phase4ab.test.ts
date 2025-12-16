@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { lintCode } from "./compiler_api_wrapper";
+import { lintCode } from "../compiler_api_wrapper";
 
 describe("selfhost analyzer (phase4a+4b)", () => {
   test("enforces let annotations, struct fields, function calls, and returns", async () => {

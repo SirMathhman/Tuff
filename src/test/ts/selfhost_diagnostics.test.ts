@@ -1,22 +1,17 @@
 import { describe, expect, test } from "vitest";
 
-import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { stagePrebuiltSelfhostCompiler } from "./selfhost_helpers";
+function prebuiltTuffcLibUrl(): string {
+  return pathToFileURL(
+    resolve("selfhost", "prebuilt", "tuffc_lib.mjs")
+  ).toString();
+}
 
 describe("selfhost diagnostics", () => {
   test("parse error includes location and caret", async () => {
-    const outDir = resolve(
-      ".dist",
-      "selfhost-diagnostics",
-      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
-    );
-
-    await mkdir(outDir, { recursive: true });
-    const { libFile } = await stagePrebuiltSelfhostCompiler(outDir);
-    const stage1lib = (await import(pathToFileURL(libFile).toString())) as any;
+    const stage1lib = (await import(prebuiltTuffcLibUrl())) as any;
 
     // Trigger a simple parser error: missing ')' in paren expression.
     const badSrc = `fn main() => (1 + 2`;
@@ -50,15 +45,7 @@ describe("selfhost diagnostics", () => {
   });
 
   test("parse error includes multi-line context", async () => {
-    const outDir = resolve(
-      ".dist",
-      "selfhost-diagnostics",
-      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
-    );
-
-    await mkdir(outDir, { recursive: true });
-    const { libFile } = await stagePrebuiltSelfhostCompiler(outDir);
-    const stage1lib = (await import(pathToFileURL(libFile).toString())) as any;
+    const stage1lib = (await import(prebuiltTuffcLibUrl())) as any;
 
     // Error on the middle line so we can assert previous/next lines are shown.
     // Missing ')' in the let initializer.
@@ -84,15 +71,7 @@ describe("selfhost diagnostics", () => {
   });
 
   test("parse error can underline spans", async () => {
-    const outDir = resolve(
-      ".dist",
-      "selfhost-diagnostics",
-      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
-    );
-
-    await mkdir(outDir, { recursive: true });
-    const { libFile } = await stagePrebuiltSelfhostCompiler(outDir);
-    const stage1lib = (await import(pathToFileURL(libFile).toString())) as any;
+    const stage1lib = (await import(prebuiltTuffcLibUrl())) as any;
 
     // Force a keyword mismatch so the diagnostic can underline a multi-char span.
     // We use the full parser entrypoint so we hit `parse_keyword`.
@@ -119,15 +98,7 @@ describe("selfhost diagnostics", () => {
   });
 
   test("warning includes file and line", async () => {
-    const outDir = resolve(
-      ".dist",
-      "selfhost-diagnostics",
-      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
-    );
-
-    await mkdir(outDir, { recursive: true });
-    const { libFile } = await stagePrebuiltSelfhostCompiler(outDir);
-    const stage1lib = (await import(pathToFileURL(libFile).toString())) as any;
+    const stage1lib = (await import(prebuiltTuffcLibUrl())) as any;
 
     // Historically we emitted a warning for very short identifiers (like `k`).
     // That check is intentionally removed/disabled now because it was too noisy.
@@ -153,15 +124,7 @@ describe("selfhost diagnostics", () => {
   });
 
   test("analyzer reports multiple errors in one compile", async () => {
-    const outDir = resolve(
-      ".dist",
-      "selfhost-diagnostics",
-      `case-${Date.now()}-${Math.random().toString(16).slice(2)}`
-    );
-
-    await mkdir(outDir, { recursive: true });
-    const { libFile } = await stagePrebuiltSelfhostCompiler(outDir);
-    const stage1lib = (await import(pathToFileURL(libFile).toString())) as any;
+    const stage1lib = (await import(prebuiltTuffcLibUrl())) as any;
 
     // Two independent analyzer errors:
     // 1) Typed let mismatch (I32 vs String)

@@ -17,7 +17,7 @@
  *   }
  */
 
-import { resolve } from "node:path";
+import { posix as pathPosix, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export interface ModuleStore {
@@ -110,6 +110,16 @@ export async function importEsmFromSource(
   jsSource: string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Promise<any> {
+  const src = rewriteRuntimeImportsToFileUrls(String(jsSource));
+
+  const b64 = Buffer.from(src, "utf8").toString("base64");
+  // Ensure a unique URL to avoid ESM cache collisions across tests.
+  const nonce = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const url = `data:text/javascript;base64,${b64}#${nonce}`;
+  return import(url);
+}
+
+function rewriteRuntimeImportsToFileUrls(jsSource: string): string {
   let src = String(jsSource);
 
   // When loading via `data:` URL, relative imports like "./rt/vec.mjs" cannot
@@ -129,11 +139,172 @@ export async function importEsmFromSource(
       `import "${rtStdlibUrl}"`
     );
 
-  const b64 = Buffer.from(src, "utf8").toString("base64");
-  // Ensure a unique URL to avoid ESM cache collisions across tests.
+  return src;
+}
+
+function normalizeOutRelPath(p: string): string {
+  const n = pathPosix.normalize(String(p).replace(/\\/g, "/"));
+  return n.startsWith("./") ? n.slice(2) : n;
+}
+
+function resolveRelativeImport(fromRelPath: string, spec: string): string {
+  const fromDir = pathPosix.dirname(normalizeOutRelPath(fromRelPath));
+  const joined = pathPosix.normalize(pathPosix.join(fromDir, spec));
+  return joined.startsWith("./") ? joined.slice(2) : joined;
+}
+
+function collectStaticImportSpecifiers(jsSource: string): string[] {
+  const src = String(jsSource);
+  const specs: string[] = [];
+
+  // Covers:
+  //   import "./x.mjs";
+  //   import { a } from "./x.mjs";
+  //   export { a } from "./x.mjs";
+  //   export * from "./x.mjs";
+  const re =
+    /\b(?:import|export)\b[\s\S]*?\bfrom\s+["']([^"']+)["']|\bimport\s+["']([^"']+)["']/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(src)) !== null) {
+    const spec = m[1] ?? m[2];
+    if (spec) specs.push(spec);
+  }
+
+  return specs;
+}
+
+function rewriteRelativeImportsToDataUrls(
+  jsSource: string,
+  fromRelPath: string,
+  relPathToDataUrl: Map<string, string>
+): string {
+  let src = rewriteRuntimeImportsToFileUrls(jsSource);
+  const from = normalizeOutRelPath(fromRelPath);
+
+  const replaceFrom = (
+    full: string,
+    pre: string,
+    spec: string,
+    post: string
+  ) => {
+    if (spec.startsWith("./") || spec.startsWith("../")) {
+      const resolved = resolveRelativeImport(from, spec);
+      const target = relPathToDataUrl.get(resolved);
+      if (target) return `${pre}${target}${post}`;
+    }
+    return full;
+  };
+
+  // `... from "./x"`
+  src = src.replace(
+    /(\bfrom\s+["'])([^"']+)(["'])/g,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (...args: any[]) => replaceFrom(args[0], args[1], args[2], args[3])
+  );
+
+  // `import "./x"`
+  src = src.replace(
+    /(\bimport\s+["'])([^"']+)(["'])/g,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (...args: any[]) => replaceFrom(args[0], args[1], args[2], args[3])
+  );
+
+  return src;
+}
+
+function topoSortOutputs(outRelPaths: string[], jsOutputs: string[]): string[] {
+  const rels = outRelPaths.map(normalizeOutRelPath);
+  const relSet = new Set(rels);
+  const relToSrc = new Map<string, string>();
+  for (let i = 0; i < rels.length; i++)
+    relToSrc.set(rels[i], jsOutputs[i] ?? "");
+
+  const deps = new Map<string, string[]>();
+  for (const rel of rels) {
+    const src = relToSrc.get(rel) ?? "";
+    const specs = collectStaticImportSpecifiers(src);
+    const d: string[] = [];
+    for (const spec of specs) {
+      if (!(spec.startsWith("./") || spec.startsWith("../"))) continue;
+      const resolved = resolveRelativeImport(rel, spec);
+      if (relSet.has(resolved)) d.push(resolved);
+    }
+    deps.set(rel, d);
+  }
+
+  const temp = new Set<string>();
+  const perm = new Set<string>();
+  const ordered: string[] = [];
+
+  const visit = (n: string) => {
+    if (perm.has(n)) return;
+    if (temp.has(n)) {
+      throw new Error(
+        `Internal test helper error: cycle detected in JS outputs at ${n}`
+      );
+    }
+    temp.add(n);
+    for (const d of deps.get(n) ?? []) visit(d);
+    temp.delete(n);
+    perm.add(n);
+    ordered.push(n);
+  };
+
+  for (const rel of rels) visit(rel);
+  return ordered;
+}
+
+/**
+ * Load the compiled output of compileCode() as an ESM module graph.
+ *
+ * This allows tests to execute multi-module outputs without writing them to disk
+ * by rewriting relative imports between emitted modules to `data:` URLs.
+ */
+export async function importEsmFromOutputs(
+  outRelPaths: string[],
+  jsOutputs: string[],
+  entryRelPath = "entry.mjs"
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any> {
+  const rels = outRelPaths.map(normalizeOutRelPath);
+  if (rels.length !== jsOutputs.length) {
+    throw new Error(
+      `importEsmFromOutputs: outRelPaths (${rels.length}) and jsOutputs (${jsOutputs.length}) length mismatch`
+    );
+  }
+
+  const relToSrc = new Map<string, string>();
+  for (let i = 0; i < rels.length; i++)
+    relToSrc.set(rels[i], jsOutputs[i] ?? "");
+
+  const ordered = topoSortOutputs(rels, jsOutputs);
+
+  // Build data: URLs bottom-up (dependencies first) so we can inline absolute
+  // `data:` URLs into import specifiers.
   const nonce = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const url = `data:text/javascript;base64,${b64}#${nonce}`;
-  return import(url);
+  const relToUrl = new Map<string, string>();
+
+  for (const rel of ordered) {
+    const src0 = relToSrc.get(rel) ?? "";
+    const rewritten = rewriteRelativeImportsToDataUrls(src0, rel, relToUrl);
+    const b64 = Buffer.from(rewritten, "utf8").toString("base64");
+    const url = `data:text/javascript;base64,${b64}#${nonce}-${encodeURIComponent(
+      rel
+    )}`;
+    relToUrl.set(rel, url);
+  }
+
+  const entryRel = normalizeOutRelPath(entryRelPath);
+  const entryUrl = relToUrl.get(entryRel);
+  if (!entryUrl) {
+    throw new Error(
+      `importEsmFromOutputs: entry module ${entryRel} not found in outputs: ${rels.join(
+        ", "
+      )}`
+    );
+  }
+
+  return import(entryUrl);
 }
 
 /**

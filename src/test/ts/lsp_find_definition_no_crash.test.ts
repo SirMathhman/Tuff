@@ -1,23 +1,18 @@
 import { describe, expect, test } from "vitest";
 
 import { readFileSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { stagePrebuiltSelfhostCompiler } from "./selfhost_helpers";
+function prebuiltTuffcLibUrl(): string {
+  return pathToFileURL(
+    resolve("selfhost", "prebuilt", "tuffc_lib.mjs")
+  ).toString();
+}
 
 describe("lsp_find_definition", () => {
   test("does not crash on compiler sources", async () => {
-    const outDir = resolve(
-      ".dist",
-      "lsp",
-      `lsp-find-definition-no-crash-${Date.now()}`
-    );
-    await mkdir(outDir, { recursive: true });
-
-    const { libFile } = await stagePrebuiltSelfhostCompiler(outDir);
-    const tuffcLib = (await import(pathToFileURL(libFile).toString())) as any;
+    const tuffcLib = (await import(prebuiltTuffcLibUrl())) as any;
 
     expect(typeof tuffcLib.lsp_find_definition).toBe("function");
 
