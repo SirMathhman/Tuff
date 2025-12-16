@@ -2,7 +2,7 @@
 import { vec_new, vec_len, vec_get, vec_push } from "../rt/vec.mjs";
 import { error_at } from "../util/diagnostics.mjs";
 import { span_start } from "../ast.mjs";
-import { fluff_warn_unused_locals_in_scope, fluff_warn_unused_params_in_scope, fluff_check_fn_complexity, fluff_check_lambda_complexity } from "./fluff.mjs";
+import { fluff_warn_unused_locals_in_scope, fluff_warn_unused_params_in_scope, fluff_check_fn_complexity, fluff_check_lambda_complexity, fluff_check_fn_max_params } from "./fluff.mjs";
 import { ty_unknown, ty_void, ty_fn_type, ty_fn_type_params, ty_is_fn_type, normalize_ty_ann } from "./typestrings.mjs";
 import { infer_expr_type } from "./infer_basic.mjs";
 import { scopes_enter, declare_local_name } from "./scope.mjs";
@@ -19,6 +19,9 @@ return fluff_check_fn_complexity(src, pos, fnName, body, tail);
 }
 export function check_lambda_complexity(src, pos, name, body) {
 return fluff_check_lambda_complexity(src, pos, name, body);
+}
+export function check_fn_max_params(src, pos, fnName, paramCount) {
+return fluff_check_fn_max_params(src, pos, fnName, paramCount);
 }
 export function analyze_fn_decl(src, structs, unions, fns, outerScopes, outerDepth, d) {
 const depth = scopes_enter(outerScopes, outerDepth);
@@ -54,6 +57,7 @@ si = si + 1;
 warn_unused_params_in_scope(src, outerScopes, depth);
 warn_unused_locals_in_scope(src, outerScopes, depth);
 check_fn_complexity(src, span_start(d.span), d.name, d.body, d.tail);
+check_fn_max_params(src, span_start(d.span), d.name, vec_len(d.params));
 return undefined;
 }
 export function analyze_class_fn_decl(src, structs, unions, fns, outerScopes, outerDepth, d) {
@@ -90,5 +94,6 @@ si = si + 1;
 warn_unused_params_in_scope(src, outerScopes, depth);
 warn_unused_locals_in_scope(src, outerScopes, depth);
 check_fn_complexity(src, span_start(d.span), d.name, d.body, d.tail);
+check_fn_max_params(src, span_start(d.span), d.name, vec_len(d.params));
 return undefined;
 }

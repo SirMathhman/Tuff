@@ -57,6 +57,7 @@ from analyzer::fluff use {
   fluff_set_options,
   fluff_set_complexity_options,
   fluff_set_file_size_options,
+  fluff_set_max_params_options,
   fluff_check_file_size,
   fluff_warn_unused_locals_in_scope,
   fluff_warn_unused_params_in_scope,
@@ -145,6 +146,9 @@ out fn set_fluff_complexity_options(complexitySeverity: I32, threshold: I32) : V
 
 out fn set_fluff_file_size_options(severity: I32, threshold: I32) : Void =>
   fluff_set_file_size_options(severity, threshold)
+
+out fn set_fluff_max_params_options(severity: I32, threshold: I32) : Void =>
+  fluff_set_max_params_options(severity, threshold)
 
 out fn check_file_size(src: String) : Void =>
   fluff_check_file_size(src)

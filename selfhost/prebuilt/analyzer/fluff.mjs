@@ -8,6 +8,8 @@ let __fluff_complexity = 0;
 let __fluff_complexity_threshold = 15;
 let __fluff_max_file_lines = 0;
 let __fluff_max_file_lines_threshold = 500;
+let __fluff_max_params = 0;
+let __fluff_max_params_threshold = 3;
 export function fluff_set_options(unusedLocalsSeverity, unusedParamsSeverity) {
 __fluff_unused_locals = unusedLocalsSeverity;
 __fluff_unused_params = unusedParamsSeverity;
@@ -21,6 +23,11 @@ return undefined;
 export function fluff_set_file_size_options(severity, threshold) {
 __fluff_max_file_lines = severity;
 __fluff_max_file_lines_threshold = (threshold > 0 ? threshold : 500);
+return undefined;
+}
+export function fluff_set_max_params_options(severity, threshold) {
+__fluff_max_params = severity;
+__fluff_max_params_threshold = (threshold > 0 ? threshold : 3);
 return undefined;
 }
 export function fluff_emit_at(src, pos, severity, msg) {
@@ -111,6 +118,9 @@ return fluff_check_fn_complexity(src, pos, fnName, body, tail);
 }
 export function check_lambda_complexity(src, pos, name, body) {
 return fluff_check_lambda_complexity(src, pos, name, body);
+}
+export function check_fn_max_params(src, pos, fnName, paramCount) {
+return fluff_check_fn_max_params(src, pos, fnName, paramCount);
 }
 export function cc_expr(e) {
 if (e.tag == "EUndefined") {
@@ -280,6 +290,18 @@ const cc = 1 + cc_expr(body);
 const threshold = __fluff_complexity_threshold;
 if (cc > threshold) {
 const msg = "cyclomatic complexity of " + name + " is " + ("" + cc) + " (threshold: " + ("" + threshold) + ")";
+fluff_emit_at(src, pos, severity, msg);
+}
+return undefined;
+}
+export function fluff_check_fn_max_params(src, pos, fnName, paramCount) {
+const severity = __fluff_max_params;
+if (severity == 0) {
+return;
+}
+const threshold = __fluff_max_params_threshold;
+if (paramCount > threshold) {
+const msg = "function " + fnName + " has " + ("" + paramCount) + " parameters (threshold: " + ("" + threshold) + ")";
 fluff_emit_at(src, pos, severity, msg);
 }
 return undefined;

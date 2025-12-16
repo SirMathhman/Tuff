@@ -5,6 +5,8 @@
     "complexity": "warning",
     "complexityThreshold": 15,
     "maxFileLines": "warning",
-    "maxFileLinesThreshold": 500
+    "maxFileLinesThreshold": 500,
+    "maxParams": "warning",
+    "maxParamsThreshold": 3
   }
 }

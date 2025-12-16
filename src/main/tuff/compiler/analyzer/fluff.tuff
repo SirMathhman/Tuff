@@ -20,6 +20,8 @@ let mut __fluff_complexity = 0;
 let mut __fluff_complexity_threshold = 15;
 let mut __fluff_max_file_lines = 0;
 let mut __fluff_max_file_lines_threshold = 500;
+let mut __fluff_max_params = 0;
+let mut __fluff_max_params_threshold = 3;
 
 out fn fluff_set_options(unusedLocalsSeverity: I32, unusedParamsSeverity: I32) : Void => {
   __fluff_unused_locals = unusedLocalsSeverity;
@@ -34,6 +36,11 @@ out fn fluff_set_complexity_options(complexitySeverity: I32, threshold: I32) : V
 out fn fluff_set_file_size_options(severity: I32, threshold: I32) : Void => {
   __fluff_max_file_lines = severity;
   __fluff_max_file_lines_threshold = if (threshold > 0) threshold else 500;
+}
+
+out fn fluff_set_max_params_options(severity: I32, threshold: I32) : Void => {
+  __fluff_max_params = severity;
+  __fluff_max_params_threshold = if (threshold > 0) threshold else 3;
 }
 
 fn fluff_emit_at(src: String, pos: I32, severity: I32, msg: String) : Void => {
@@ -117,6 +124,9 @@ out fn check_fn_complexity(src: String, pos: I32, fnName: String, body: Vec<Stmt
 
 out fn check_lambda_complexity(src: String, pos: I32, name: String, body: Expr) : Void =>
   fluff_check_lambda_complexity(src, pos, name, body)
+
+out fn check_fn_max_params(src: String, pos: I32, fnName: String, paramCount: I32) : Void =>
+  fluff_check_fn_max_params(src, pos, fnName, paramCount)
 
 // ------------------------------------------------------------
 // Cyclomatic Complexity Calculation
@@ -313,6 +323,17 @@ out fn fluff_check_lambda_complexity(src: String, pos: I32, name: String, body: 
   let threshold = __fluff_complexity_threshold;
   if (cc > threshold) {
     let msg = "cyclomatic complexity of " + name + " is " + ("" + cc) + " (threshold: " + ("" + threshold) + ")";
+    fluff_emit_at(src, pos, severity, msg);
+  }
+}
+
+out fn fluff_check_fn_max_params(src: String, pos: I32, fnName: String, paramCount: I32) : Void => {
+  let severity = __fluff_max_params;
+  if (severity == 0) { yield; }
+
+  let threshold = __fluff_max_params_threshold;
+  if (paramCount > threshold) {
+    let msg = "function " + fnName + " has " + ("" + paramCount) + " parameters (threshold: " + ("" + threshold) + ")";
     fluff_emit_at(src, pos, severity, msg);
   }
 }

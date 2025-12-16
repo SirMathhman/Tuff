@@ -10,7 +10,8 @@ from analyzer::fluff use {
   fluff_warn_unused_locals_in_scope,
   fluff_warn_unused_params_in_scope,
   fluff_check_fn_complexity,
-  fluff_check_lambda_complexity
+  fluff_check_lambda_complexity,
+  fluff_check_fn_max_params
 };
 
 from analyzer::typestrings use {
@@ -44,6 +45,9 @@ fn check_fn_complexity(src: String, pos: I32, fnName: String, body: Vec<Stmt>, t
 
 fn check_lambda_complexity(src: String, pos: I32, name: String, body: Expr) : Void =>
   fluff_check_lambda_complexity(src, pos, name, body)
+
+fn check_fn_max_params(src: String, pos: I32, fnName: String, paramCount: I32) : Void =>
+  fluff_check_fn_max_params(src, pos, fnName, paramCount)
 
 out fn analyze_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, outerScopes: Vec<Vec<Binding>>, outerDepth: I32, d: DFn) : Void => {
   let depth = scopes_enter(outerScopes, outerDepth);
@@ -86,6 +90,7 @@ out fn analyze_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDe
   warn_unused_params_in_scope(src, outerScopes, depth);
   warn_unused_locals_in_scope(src, outerScopes, depth);
   check_fn_complexity(src, span_start(d.span), d.name, d.body, d.tail);
+  check_fn_max_params(src, span_start(d.span), d.name, vec_len(d.params));
 }
 
 out fn analyze_class_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, outerScopes: Vec<Vec<Binding>>, outerDepth: I32, d: DClassFn) : Void => {
@@ -129,5 +134,6 @@ out fn analyze_class_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<U
   warn_unused_params_in_scope(src, outerScopes, depth);
   warn_unused_locals_in_scope(src, outerScopes, depth);
   check_fn_complexity(src, span_start(d.span), d.name, d.body, d.tail);
+  check_fn_max_params(src, span_start(d.span), d.name, vec_len(d.params));
 }
 
