@@ -60,7 +60,9 @@ from analyzer::fluff use {
   fluff_set_max_params_options,
   fluff_set_single_char_identifiers_options,
   fluff_set_missing_docs_options,
+  fluff_set_clone_detection_options,
   fluff_check_file_size,
+  fluff_check_clones,
   fluff_warn_unused_locals_in_scope,
   fluff_warn_unused_params_in_scope,
   fluff_check_fn_complexity,
@@ -159,6 +161,12 @@ out fn set_fluff_single_char_identifiers_options(severity: I32) : Void =>
 
 out fn set_fluff_missing_docs_options(severity: I32) : Void =>
   fluff_set_missing_docs_options(severity)
+
+out fn set_fluff_clone_detection_options(severity: I32, minTokens: I32, minOccurrences: I32) : Void =>
+  fluff_set_clone_detection_options(severity, minTokens, minOccurrences)
+
+out fn check_clones(src: String, decls: Vec<Decl>) : Void =>
+  fluff_check_clones(src, decls)
 
 out fn check_file_size(src: String) : Void =>
   fluff_check_file_size(src)

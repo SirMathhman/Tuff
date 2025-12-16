@@ -33,7 +33,7 @@ from parsing::decls use {
 
 from ast use { span, decl_let, decl_let_typed };
 
-from analyzer use { analyze_program_with_fns, check_file_size };
+from analyzer use { analyze_program_with_fns, check_file_size, check_clones };
 from emit::emit_helpers use { decls_needs_vec_rt, emit_runtime_vec_imports_js, set_current_file_path };
 from emit::ast_js use { emit_decl_js };
 
@@ -307,6 +307,7 @@ out fn lint_tiny2_with_imported_fns(src: String, requireMain: Bool, exportAll: B
   if (requireMain && !sawMain) { panic_at(src, i, "expected fn main"); }
 
   analyze_program_with_fns(src, decls, importedFns);
+  check_clones(src, decls);
   panic_if_errors();
   emit_warnings();
 }

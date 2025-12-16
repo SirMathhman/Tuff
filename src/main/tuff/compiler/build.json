@@ -8,6 +8,9 @@
     "maxFileLinesThreshold": 500,
     "maxParams": "warning",
     "maxParamsThreshold": 3,
-    "singleCharIdentifiers": "warning"
+    "singleCharIdentifiers": "warning",
+    "cloneDetection": "off",
+    "cloneMinTokens": 10,
+    "cloneMinOccurrences": 2
   }
 }

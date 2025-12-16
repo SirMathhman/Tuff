@@ -12,7 +12,10 @@
 //     "complexityThreshold": <number>,
 //     "maxFileLines": "off" | "warning" | "error",
 //     "maxFileLinesThreshold": <number>,
-//     "missingDocs": "off" | "warning" | "error"
+//     "missingDocs": "off" | "warning" | "error",
+//     "cloneDetection": "off" | "warning" | "error",
+//     "cloneMinTokens": <number>,      // Minimum IR tokens for a clone (default 10)
+//     "cloneMinOccurrences": <number>  // Minimum occurrences to report (default 2)
 //   }
 // }
 
@@ -265,7 +268,7 @@ fn json_find_int_value_in_object(src: String, objOpen: I32, objClose: I32, key: 
   defaultValue
 }
 
-class fn FluffConfig(unusedLocals: I32, unusedParams: I32, complexity: I32, complexityThreshold: I32, maxFileLines: I32, maxFileLinesThreshold: I32, maxParams: I32, maxParamsThreshold: I32, singleCharIdentifiers: I32, missingDocs: I32) => {}
+class fn FluffConfig(unusedLocals: I32, unusedParams: I32, complexity: I32, complexityThreshold: I32, maxFileLines: I32, maxFileLinesThreshold: I32, maxParams: I32, maxParamsThreshold: I32, singleCharIdentifiers: I32, missingDocs: I32, cloneDetection: I32, cloneMinTokens: I32, cloneMinOccurrences: I32) => {}
 
 out fn find_build_json_upwards(inPath: String) : String => {
   let mut dir = pathDirname(inPath);
@@ -281,12 +284,12 @@ out fn find_build_json_upwards(inPath: String) : String => {
 
 out fn load_fluff_config(inPath: String) : FluffConfig => {
   let path = find_build_json_upwards(inPath);
-  if (path == "") { yield FluffConfig(0, 0, 0, 15, 0, 500, 0, 3, 0, 0); }
+  if (path == "") { yield FluffConfig(0, 0, 0, 15, 0, 500, 0, 3, 0, 0, 0, 10, 2); }
 
   let src = readTextFile(path);
 
   let fluffObj = json_find_object_bounds_by_key(src, "fluff");
-  if (fluffObj.0 == -1) { yield FluffConfig(0, 0, 0, 15, 0, 500, 0, 3, 0, 0); }
+  if (fluffObj.0 == -1) { yield FluffConfig(0, 0, 0, 15, 0, 500, 0, 3, 0, 0, 0, 10, 2); }
 
   let unusedLocals0 = json_find_string_value_in_object(src, fluffObj.0, fluffObj.1, "unusedLocals");
   let unusedParams0 = json_find_string_value_in_object(src, fluffObj.0, fluffObj.1, "unusedParams");
@@ -295,6 +298,7 @@ out fn load_fluff_config(inPath: String) : FluffConfig => {
   let maxParams0 = json_find_string_value_in_object(src, fluffObj.0, fluffObj.1, "maxParams");
   let singleCharIdentifiers0 = json_find_string_value_in_object(src, fluffObj.0, fluffObj.1, "singleCharIdentifiers");
   let missingDocs0 = json_find_string_value_in_object(src, fluffObj.0, fluffObj.1, "missingDocs");
+  let cloneDetection0 = json_find_string_value_in_object(src, fluffObj.0, fluffObj.1, "cloneDetection");
 
   let unusedLocals = severity_from_string(unusedLocals0, 0);
   let unusedParams = severity_from_string(unusedParams0, 0);
@@ -303,9 +307,12 @@ out fn load_fluff_config(inPath: String) : FluffConfig => {
   let maxParams = severity_from_string(maxParams0, 0);
   let singleCharIdentifiers = severity_from_string(singleCharIdentifiers0, 0);
   let missingDocs = severity_from_string(missingDocs0, 0);
+  let cloneDetection = severity_from_string(cloneDetection0, 0);
   let complexityThreshold = json_find_int_value_in_object(src, fluffObj.0, fluffObj.1, "complexityThreshold", 15);
   let maxFileLinesThreshold = json_find_int_value_in_object(src, fluffObj.0, fluffObj.1, "maxFileLinesThreshold", 500);
   let maxParamsThreshold = json_find_int_value_in_object(src, fluffObj.0, fluffObj.1, "maxParamsThreshold", 3);
+  let cloneMinTokens = json_find_int_value_in_object(src, fluffObj.0, fluffObj.1, "cloneMinTokens", 10);
+  let cloneMinOccurrences = json_find_int_value_in_object(src, fluffObj.0, fluffObj.1, "cloneMinOccurrences", 2);
 
-  FluffConfig(unusedLocals, unusedParams, complexity, complexityThreshold, maxFileLines, maxFileLinesThreshold, maxParams, maxParamsThreshold, singleCharIdentifiers, missingDocs)
+  FluffConfig(unusedLocals, unusedParams, complexity, complexityThreshold, maxFileLines, maxFileLinesThreshold, maxParams, maxParamsThreshold, singleCharIdentifiers, missingDocs, cloneDetection, cloneMinTokens, cloneMinOccurrences)
 }

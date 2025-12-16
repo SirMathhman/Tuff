@@ -241,8 +241,8 @@ i = i + 1;
 }
 return defaultValue;
 }
-export function FluffConfig(unusedLocals, unusedParams, complexity, complexityThreshold, maxFileLines, maxFileLinesThreshold, maxParams, maxParamsThreshold, singleCharIdentifiers, missingDocs) {
-return { unusedLocals: unusedLocals, unusedParams: unusedParams, complexity: complexity, complexityThreshold: complexityThreshold, maxFileLines: maxFileLines, maxFileLinesThreshold: maxFileLinesThreshold, maxParams: maxParams, maxParamsThreshold: maxParamsThreshold, singleCharIdentifiers: singleCharIdentifiers, missingDocs: missingDocs };
+export function FluffConfig(unusedLocals, unusedParams, complexity, complexityThreshold, maxFileLines, maxFileLinesThreshold, maxParams, maxParamsThreshold, singleCharIdentifiers, missingDocs, cloneDetection, cloneMinTokens, cloneMinOccurrences) {
+return { unusedLocals: unusedLocals, unusedParams: unusedParams, complexity: complexity, complexityThreshold: complexityThreshold, maxFileLines: maxFileLines, maxFileLinesThreshold: maxFileLinesThreshold, maxParams: maxParams, maxParamsThreshold: maxParamsThreshold, singleCharIdentifiers: singleCharIdentifiers, missingDocs: missingDocs, cloneDetection: cloneDetection, cloneMinTokens: cloneMinTokens, cloneMinOccurrences: cloneMinOccurrences };
 }
 export function find_build_json_upwards(inPath) {
 let dir = pathDirname(inPath);
@@ -262,12 +262,12 @@ return "";
 export function load_fluff_config(inPath) {
 const path = find_build_json_upwards(inPath);
 if (path == "") {
-return FluffConfig(0, 0, 0, 15, 0, 500, 0, 3, 0, 0);
+return FluffConfig(0, 0, 0, 15, 0, 500, 0, 3, 0, 0, 0, 10, 2);
 }
 const src = readTextFile(path);
 const fluffObj = json_find_object_bounds_by_key(src, "fluff");
 if (fluffObj[0] == -1) {
-return FluffConfig(0, 0, 0, 15, 0, 500, 0, 3, 0, 0);
+return FluffConfig(0, 0, 0, 15, 0, 500, 0, 3, 0, 0, 0, 10, 2);
 }
 const unusedLocals0 = json_find_string_value_in_object(src, fluffObj[0], fluffObj[1], "unusedLocals");
 const unusedParams0 = json_find_string_value_in_object(src, fluffObj[0], fluffObj[1], "unusedParams");
@@ -276,6 +276,7 @@ const maxFileLines0 = json_find_string_value_in_object(src, fluffObj[0], fluffOb
 const maxParams0 = json_find_string_value_in_object(src, fluffObj[0], fluffObj[1], "maxParams");
 const singleCharIdentifiers0 = json_find_string_value_in_object(src, fluffObj[0], fluffObj[1], "singleCharIdentifiers");
 const missingDocs0 = json_find_string_value_in_object(src, fluffObj[0], fluffObj[1], "missingDocs");
+const cloneDetection0 = json_find_string_value_in_object(src, fluffObj[0], fluffObj[1], "cloneDetection");
 const unusedLocals = severity_from_string(unusedLocals0, 0);
 const unusedParams = severity_from_string(unusedParams0, 0);
 const complexity = severity_from_string(complexity0, 0);
@@ -283,8 +284,11 @@ const maxFileLines = severity_from_string(maxFileLines0, 0);
 const maxParams = severity_from_string(maxParams0, 0);
 const singleCharIdentifiers = severity_from_string(singleCharIdentifiers0, 0);
 const missingDocs = severity_from_string(missingDocs0, 0);
+const cloneDetection = severity_from_string(cloneDetection0, 0);
 const complexityThreshold = json_find_int_value_in_object(src, fluffObj[0], fluffObj[1], "complexityThreshold", 15);
 const maxFileLinesThreshold = json_find_int_value_in_object(src, fluffObj[0], fluffObj[1], "maxFileLinesThreshold", 500);
 const maxParamsThreshold = json_find_int_value_in_object(src, fluffObj[0], fluffObj[1], "maxParamsThreshold", 3);
-return FluffConfig(unusedLocals, unusedParams, complexity, complexityThreshold, maxFileLines, maxFileLinesThreshold, maxParams, maxParamsThreshold, singleCharIdentifiers, missingDocs);
+const cloneMinTokens = json_find_int_value_in_object(src, fluffObj[0], fluffObj[1], "cloneMinTokens", 10);
+const cloneMinOccurrences = json_find_int_value_in_object(src, fluffObj[0], fluffObj[1], "cloneMinOccurrences", 2);
+return FluffConfig(unusedLocals, unusedParams, complexity, complexityThreshold, maxFileLines, maxFileLinesThreshold, maxParams, maxParamsThreshold, singleCharIdentifiers, missingDocs, cloneDetection, cloneMinTokens, cloneMinOccurrences);
 }

@@ -2,6 +2,7 @@
 import { stringLen, stringCharCodeAt } from "../rt/stdlib.mjs";
 import { vec_new, vec_len, vec_push, vec_get } from "../rt/vec.mjs";
 import { error_at, warn_at } from "../util/diagnostics.mjs";
+import { set_clone_detection_options, analyze_program_for_clones } from "../quality/clone_detection.mjs";
 let __fluff_unused_locals = 0;
 let __fluff_unused_params = 0;
 let __fluff_complexity = 0;
@@ -12,6 +13,9 @@ let __fluff_max_params = 0;
 let __fluff_max_params_threshold = 3;
 let __fluff_single_char_identifiers = 0;
 let __fluff_missing_docs = 0;
+let __fluff_clone_detection = 0;
+let __fluff_clone_min_tokens = 10;
+let __fluff_clone_min_occurrences = 2;
 export function fluff_set_options(unusedLocalsSeverity, unusedParamsSeverity) {
 __fluff_unused_locals = unusedLocalsSeverity;
 __fluff_unused_params = unusedParamsSeverity;
@@ -39,6 +43,22 @@ return undefined;
 export function fluff_set_missing_docs_options(severity) {
 __fluff_missing_docs = severity;
 return undefined;
+}
+export function fluff_set_clone_detection_options(severity, minTokens, minOccurrences) {
+__fluff_clone_detection = severity;
+__fluff_clone_min_tokens = (minTokens > 0 ? minTokens : 10);
+__fluff_clone_min_occurrences = (minOccurrences > 0 ? minOccurrences : 2);
+set_clone_detection_options(severity, minTokens, minOccurrences);
+return undefined;
+}
+export function fluff_get_clone_detection_severity() {
+return __fluff_clone_detection;
+}
+export function fluff_get_clone_min_tokens() {
+return __fluff_clone_min_tokens;
+}
+export function fluff_get_clone_min_occurrences() {
+return __fluff_clone_min_occurrences;
 }
 export function fluff_emit_at(src, pos, severity, msg) {
 if (severity == 1) {
@@ -386,5 +406,12 @@ if (!has_doc_comment_before(src, pos)) {
 const msg = "missing documentation comment for exported " + kind + " '" + name + "'";
 fluff_emit_at(src, pos, severity, msg);
 }
+return undefined;
+}
+export function fluff_check_clones(src, decls) {
+if (__fluff_clone_detection == 0) {
+return;
+}
+analyze_program_for_clones(src, decls);
 return undefined;
 }

@@ -2,7 +2,7 @@
 import { println, stringLen, stringCharCodeAt, readTextFile } from "./rt/stdlib.mjs";
 import { vec_len, vec_get } from "./rt/vec.mjs";
 import { fluff_project_with_reader } from "./tuffc_lib.mjs";
-import { set_fluff_options, set_fluff_complexity_options, set_fluff_file_size_options, set_fluff_max_params_options, set_fluff_single_char_identifiers_options, set_fluff_missing_docs_options } from "./analyzer.mjs";
+import { set_fluff_options, set_fluff_complexity_options, set_fluff_file_size_options, set_fluff_max_params_options, set_fluff_single_char_identifiers_options, set_fluff_missing_docs_options, set_fluff_clone_detection_options } from "./analyzer.mjs";
 import { load_fluff_config } from "./build_config.mjs";
 import { set_diagnostics_format, has_project_errors, reset_project_errors, get_project_error_count, get_project_warning_count } from "./util/diagnostics.mjs";
 export function project_error_count() {
@@ -61,6 +61,7 @@ set_fluff_file_size_options(cfg.maxFileLines, cfg.maxFileLinesThreshold);
 set_fluff_max_params_options(cfg.maxParams, cfg.maxParamsThreshold);
 set_fluff_single_char_identifiers_options(cfg.singleCharIdentifiers);
 set_fluff_missing_docs_options(cfg.missingDocs);
+set_fluff_clone_detection_options(cfg.cloneDetection, cfg.cloneMinTokens, cfg.cloneMinOccurrences);
 fluff_project_with_reader(inPath, readTextFile);
 if (has_project_errors()) {
 return 1;

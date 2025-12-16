@@ -8,7 +8,7 @@ import { parse_type_expr } from "../parsing/types.mjs";
 import { parse_mut_opt, parse_expr_ast } from "../parsing/expr_stmt.mjs";
 import { parse_extern_decl_ast, parse_imports_ast, parse_module_decl_ast, parse_type_union_decl_ast, parse_struct_decl_ast, parse_fn_decl_ast2, parse_class_fn_decl_ast2 } from "../parsing/decls.mjs";
 import { span, decl_let, decl_let_typed } from "../ast.mjs";
-import { analyze_program_with_fns, check_file_size } from "../analyzer.mjs";
+import { analyze_program_with_fns, check_file_size, check_clones } from "../analyzer.mjs";
 import { decls_needs_vec_rt, emit_runtime_vec_imports_js, set_current_file_path } from "../emit/emit_helpers.mjs";
 import { emit_decl_js } from "../emit/ast_js.mjs";
 export function kw_at(src, i, kw) {
@@ -291,6 +291,7 @@ if (requireMain && !sawMain) {
 panic_at(src, i, "expected fn main");
 }
 analyze_program_with_fns(src, decls, importedFns);
+check_clones(src, decls);
 panic_if_errors();
 emit_warnings();
 return undefined;
