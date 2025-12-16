@@ -106,21 +106,39 @@ return emit_path_js(nameExpr.parts);
 }
 return panic("struct literal name must be ident or path");
 }
+export function vec_contains_str(v, s) {
+let i = 0;
+while (i < vec_len(v)) {
+if (vec_get(v, i) == s) {
+return true;
+}
+i = i + 1;
+}
+return false;
+}
 export function emit_struct_lit_js(nameExpr, values) {
 const structName = struct_name_for_lookup(nameExpr);
 const fields = find_struct_fields(structName);
 if (!(vec_len(fields) == vec_len(values))) {
 panic("wrong number of values in struct literal for " + structName);
 }
-let out = "({ tag: \"" + structName + "\"";
+let entries = vec_new();
+let seen = vec_new();
+if (!vec_contains_str(fields, "tag")) {
+vec_push(entries, "tag: \"" + structName + "\"");
+vec_push(seen, "tag");
+}
 let i = 0;
 while (i < vec_len(fields)) {
-out = out + ", ";
-out = out + (vec_get(fields, i) + ": " + emit_expr_js(vec_get(values, i)));
+const fieldName = vec_get(fields, i);
+if (vec_contains_str(seen, fieldName)) {
+panic("duplicate field '" + fieldName + "' in struct literal for " + structName);
+}
+vec_push(seen, fieldName);
+vec_push(entries, fieldName + ": " + emit_expr_js(vec_get(values, i)));
 i = i + 1;
 }
-out = out + " })";
-return out;
+return "({ " + emit_names_csv(entries) + " })";
 }
 export function emit_expr_js(e) {
 let out = "undefined";

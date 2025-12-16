@@ -77,6 +77,15 @@ fn struct_name_for_lookup(nameExpr: Expr) : String => {
   panic("struct literal name must be ident or path")
 }
 
+fn vec_contains_str(v: Vec<String>, s: String) : Bool => {
+  let mut i = 0;
+  while (i < vec_len(v)) {
+    if (vec_get(v, i) == s) { yield true; }
+    i = i + 1;
+  }
+  false
+}
+
 fn emit_struct_lit_js(nameExpr: Expr, values: Vec<Expr>) : String => {
   let structName = struct_name_for_lookup(nameExpr);
   let fields = find_struct_fields(structName);
@@ -85,16 +94,31 @@ fn emit_struct_lit_js(nameExpr: Expr, values: Vec<Expr>) : String => {
     panic("wrong number of values in struct literal for " + structName);
   }
 
-  // Inject tag field at construction time for union variant discrimination
-  let mut out = "({ tag: \"" + structName + "\"";
+  // Emit a JS object literal, defensively asserting that we never generate
+  // duplicate object keys (especially `tag`, which historically caused OOMs in
+  // prebuilt output when emitted twice).
+  let mut entries = vec_new();
+  let mut seen = vec_new();
+
+  // Inject tag field for union variant discrimination, but only if the struct
+  // does not already define a real `tag` field.
+  if (!vec_contains_str(fields, "tag")) {
+    vec_push(entries, "tag: \"" + structName + "\"");
+    vec_push(seen, "tag");
+  }
+
   let mut i = 0;
   while (i < vec_len(fields)) {
-    out = out + ", ";
-    out = out + (vec_get(fields, i) + ": " + emit_expr_js(vec_get(values, i)));
+    let fieldName = vec_get(fields, i);
+    if (vec_contains_str(seen, fieldName)) {
+      panic("duplicate field '" + fieldName + "' in struct literal for " + structName);
+    }
+    vec_push(seen, fieldName);
+    vec_push(entries, fieldName + ": " + emit_expr_js(vec_get(values, i)));
     i = i + 1;
   }
-  out = out + " })";
-  out
+
+  "({ " + emit_names_csv(entries) + " })"
 }
 
 out fn emit_expr_js(e: Expr) : String => {
