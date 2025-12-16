@@ -144,37 +144,31 @@ out fn panic_if_errors() : Void => {
   }
 }
 
-out fn emit_errors() : Void => {
-  // Print errors without panicking. Used by linting mode (fluff).
-  // Also update the project-level error count for final exit code.
-  __tuffc_project_error_count = __tuffc_project_error_count + vec_len(__tuffc_errors);
+fn emit_diagnostics_vec(diagnostics: Vec<String>, severity: String, count: I32) : I32 => {
   let mut i = 0;
-  while (i < vec_len(__tuffc_errors)) {
-    let e = vec_get(__tuffc_errors, i);
+  while (i < vec_len(diagnostics)) {
+    let msg = vec_get(diagnostics, i);
     if (__tuffc_diag_format == "json") {
-      println(diag_json("error", e));
+      println(diag_json(severity, msg));
     } else {
-      println(e);
+      println(msg);
     }
     i = i + 1;
   }
+  count + vec_len(diagnostics)
+}
+
+out fn emit_errors() : Void => {
+  // Print errors without panicking. Used by linting mode (fluff).
+  // Also update the project-level error count for final exit code.
+  __tuffc_project_error_count = emit_diagnostics_vec(__tuffc_errors, "error", __tuffc_project_error_count);
 }
 
 out fn emit_warnings() : Void => {
   // Print warnings after a successful compile. Keep them separate from errors
   // so they don't fail compilation.
   // Also update the project-level warning count for final summary.
-  __tuffc_project_warning_count = __tuffc_project_warning_count + vec_len(__tuffc_warnings);
-  let mut i = 0;
-  while (i < vec_len(__tuffc_warnings)) {
-    let w = vec_get(__tuffc_warnings, i);
-    if (__tuffc_diag_format == "json") {
-      println(diag_json("warning", w));
-    } else {
-      println(w);
-    }
-    i = i + 1;
-  }
+  __tuffc_project_warning_count = emit_diagnostics_vec(__tuffc_warnings, "warning", __tuffc_project_warning_count);
 }
 
 fn ascii_lower(ch: I32) : I32 => {

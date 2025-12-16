@@ -128,32 +128,25 @@ panic(errors_join());
 }
 return undefined;
 }
-export function emit_errors() {
-__tuffc_project_error_count = __tuffc_project_error_count + vec_len(__tuffc_errors);
+export function emit_diagnostics_vec(diagnostics, severity, count) {
 let i = 0;
-while (i < vec_len(__tuffc_errors)) {
-const e = vec_get(__tuffc_errors, i);
+while (i < vec_len(diagnostics)) {
+const msg = vec_get(diagnostics, i);
 if (__tuffc_diag_format == "json") {
-println(diag_json("error", e));
+println(diag_json(severity, msg));
 } else {
-println(e);
+println(msg);
 }
 i = i + 1;
 }
+return count + vec_len(diagnostics);
+}
+export function emit_errors() {
+__tuffc_project_error_count = emit_diagnostics_vec(__tuffc_errors, "error", __tuffc_project_error_count);
 return undefined;
 }
 export function emit_warnings() {
-__tuffc_project_warning_count = __tuffc_project_warning_count + vec_len(__tuffc_warnings);
-let i = 0;
-while (i < vec_len(__tuffc_warnings)) {
-const w = vec_get(__tuffc_warnings, i);
-if (__tuffc_diag_format == "json") {
-println(diag_json("warning", w));
-} else {
-println(w);
-}
-i = i + 1;
-}
+__tuffc_project_warning_count = emit_diagnostics_vec(__tuffc_warnings, "warning", __tuffc_project_warning_count);
 return undefined;
 }
 export function ascii_lower(ch) {
