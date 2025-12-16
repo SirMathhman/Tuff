@@ -27,6 +27,17 @@ from ast use {
   stmt_expr
 };
 
+fn skip_string_literal(src: String, i: I32, quote: I32) : I32 => {
+  let mut k = i + 1;
+  while (k < stringLen(src)) {
+    let c = stringCharCodeAt(src, k);
+    if (c == 92) { k = k + 2; continue; } // '\\'
+    if (c == quote) { k = k + 1; break; }
+    k = k + 1;
+  }
+  k
+}
+
 fn scan_if_stmt_has_else(src: String, i: I32) : Bool => {
   // Best-effort scan: recognizes `if (<...>) { <...> } else`.
   // Used only to disambiguate statement-vs-expression parsing in blocks.
@@ -42,23 +53,11 @@ fn scan_if_stmt_has_else(src: String, i: I32) : Bool => {
   while (k < stringLen(src) && depth > 0) {
     let ch = stringCharCodeAt(src, k);
     if (ch == 34) { // '"'
-      k = k + 1;
-      while (k < stringLen(src)) {
-        let c = stringCharCodeAt(src, k);
-        if (c == 92) { k = k + 2; continue; } // '\\'
-        if (c == 34) { k = k + 1; break; }
-        k = k + 1;
-      }
+      k = skip_string_literal(src, k, 34);
       continue;
     }
     if (ch == 39) { // '\''
-      k = k + 1;
-      while (k < stringLen(src)) {
-        let c = stringCharCodeAt(src, k);
-        if (c == 92) { k = k + 2; continue; }
-        if (c == 39) { k = k + 1; break; }
-        k = k + 1;
-      }
+      k = skip_string_literal(src, k, 39);
       continue;
     }
     if (ch == 40) { depth = depth + 1; k = k + 1; continue; }
@@ -75,23 +74,11 @@ fn scan_if_stmt_has_else(src: String, i: I32) : Bool => {
   while (k < stringLen(src) && bDepth > 0) {
     let ch = stringCharCodeAt(src, k);
     if (ch == 34) {
-      k = k + 1;
-      while (k < stringLen(src)) {
-        let c = stringCharCodeAt(src, k);
-        if (c == 92) { k = k + 2; continue; }
-        if (c == 34) { k = k + 1; break; }
-        k = k + 1;
-      }
+      k = skip_string_literal(src, k, 34);
       continue;
     }
     if (ch == 39) {
-      k = k + 1;
-      while (k < stringLen(src)) {
-        let c = stringCharCodeAt(src, k);
-        if (c == 92) { k = k + 2; continue; }
-        if (c == 39) { k = k + 1; break; }
-        k = k + 1;
-      }
+      k = skip_string_literal(src, k, 39);
       continue;
     }
     if (ch == 123) { bDepth = bDepth + 1; k = k + 1; continue; }

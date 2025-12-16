@@ -8,6 +8,22 @@ import { ParsedExprAst, ParsedMainAst, ParsedStmtsAst } from "./expr_stmt_types.
 import { parse_expr_ast_impl } from "./expr_stmt_ast_expr.mjs";
 import { parse_stmt_ast } from "./expr_stmt_ast_stmt.mjs";
 import { span, span_start, expr_span, expr_undefined, expr_block, stmt_expr } from "../ast.mjs";
+export function skip_string_literal(src, i, quote) {
+let k = i + 1;
+while (k < stringLen(src)) {
+const c = stringCharCodeAt(src, k);
+if (c == 92) {
+k = k + 2;
+continue;
+}
+if (c == quote) {
+k = k + 1;
+break;
+}
+k = k + 1;
+}
+return k;
+}
 export function scan_if_stmt_has_else(src, i) {
 let j = skip_ws(src, i);
 if (!starts_with_at(src, j, "if")) {
@@ -23,35 +39,11 @@ let depth = 1;
 while (k < stringLen(src) && depth > 0) {
 const ch = stringCharCodeAt(src, k);
 if (ch == 34) {
-k = k + 1;
-while (k < stringLen(src)) {
-const c = stringCharCodeAt(src, k);
-if (c == 92) {
-k = k + 2;
-continue;
-}
-if (c == 34) {
-k = k + 1;
-break;
-}
-k = k + 1;
-}
+k = skip_string_literal(src, k, 34);
 continue;
 }
 if (ch == 39) {
-k = k + 1;
-while (k < stringLen(src)) {
-const c = stringCharCodeAt(src, k);
-if (c == 92) {
-k = k + 2;
-continue;
-}
-if (c == 39) {
-k = k + 1;
-break;
-}
-k = k + 1;
-}
+k = skip_string_literal(src, k, 39);
 continue;
 }
 if (ch == 40) {
@@ -75,35 +67,11 @@ let bDepth = 1;
 while (k < stringLen(src) && bDepth > 0) {
 const ch = stringCharCodeAt(src, k);
 if (ch == 34) {
-k = k + 1;
-while (k < stringLen(src)) {
-const c = stringCharCodeAt(src, k);
-if (c == 92) {
-k = k + 2;
-continue;
-}
-if (c == 34) {
-k = k + 1;
-break;
-}
-k = k + 1;
-}
+k = skip_string_literal(src, k, 34);
 continue;
 }
 if (ch == 39) {
-k = k + 1;
-while (k < stringLen(src)) {
-const c = stringCharCodeAt(src, k);
-if (c == 92) {
-k = k + 2;
-continue;
-}
-if (c == 39) {
-k = k + 1;
-break;
-}
-k = k + 1;
-}
+k = skip_string_literal(src, k, 39);
 continue;
 }
 if (ch == 123) {
