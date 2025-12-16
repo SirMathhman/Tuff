@@ -24,7 +24,9 @@ from parsing::primitives use {
 
 from parsing::types use { parse_type_expr, skip_angle_brackets };
 
-from parsing::expr_stmt use { ParsedParams, ParsedStmt, parse_main_body };
+from parsing::expr_stmt_types use { ParsedParams, ParsedStmt };
+
+from parsing::expr_stmt use { parse_main_body };
 
 out class fn ParsedImports(v0: String, v1: I32) => {}
 out class fn ParsedFn(v0: String, v1: I32, v2: String) => {}

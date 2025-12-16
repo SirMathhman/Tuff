@@ -7,7 +7,7 @@ The 500-line file limit linting rule has been implemented. The following files e
 | File                   | Lines | Over by |
 | ---------------------- | ----- | ------- |
 | analyzer.tuff          | 2484  | 1984    |
-| parsing/expr_stmt.tuff | 2100  | 1600    |
+| parsing/expr_stmt.tuff | <500  | 0       |
 | tuffc_lib.tuff         | 1792  | 1292    |
 | parsing/decls.tuff     | 801   | 301     |
 | emit/ast_js.tuff       | 688   | 188     |
@@ -59,13 +59,15 @@ The 500-line file limit linting rule has been implemented. The following files e
 
 **Priority: High**
 
-- Split by expression/statement type:
-  - `parsing/expr_primary.tuff` - literals, identifiers
-  - `parsing/expr_binary.tuff` - binary operators
-  - `parsing/expr_control.tuff` - if/while/loop/match
-  - `parsing/expr_call.tuff` - function calls, method calls
-  - `parsing/stmt.tuff` - statements
-  - `parsing/expr_stmt.tuff` - orchestrator
+Status: **Done**
+
+- `parsing/expr_stmt.tuff` is now a small facade that preserves the public API.
+- Logic was split into:
+  - `parsing/expr_stmt_types.tuff`
+  - `parsing/expr_stmt_helpers.tuff`
+  - `parsing/expr_stmt_stmt_starts.tuff`
+  - `parsing/expr_stmt_legacy.tuff`
+  - `parsing/expr_stmt_ast.tuff`
 
 ### Phase 6: analyzer.tuff (2484 → <500 lines)
 

@@ -1,0 +1,122 @@
+// Selfhost compiler: statement-start disambiguation helpers.
+// Split out of expr_stmt.tuff.
+
+extern from rt::stdlib use { stringLen, stringCharCodeAt };
+
+from util::lexing use { is_ident_part, is_ident_start, skip_ws };
+
+out fn is_index_assign_stmt_start_impl(src: String, i: I32) : Bool => {
+  let mut j = skip_ws(src, i);
+  if (!(j < stringLen(src))) { yield false; }
+  let c0 = stringCharCodeAt(src, j);
+  if (!is_ident_start(c0)) { yield false; }
+  j = j + 1;
+  while (j < stringLen(src)) {
+    let c = stringCharCodeAt(src, j);
+    if (!is_ident_part(c)) { break; }
+    j = j + 1;
+  }
+  j = skip_ws(src, j);
+  if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 91)) { yield false; } // '['
+
+  // Scan to matching ']' and require '=' afterwards.
+  let mut k = j + 1;
+  let mut depth = 1;
+  while (k < stringLen(src) && depth > 0) {
+    let ch = stringCharCodeAt(src, k);
+    if (ch == 34) { // string
+      k = k + 1;
+      while (k < stringLen(src)) {
+        let c = stringCharCodeAt(src, k);
+        if (c == 92) { k = k + 2; continue; }
+        if (c == 34) { k = k + 1; break; }
+        k = k + 1;
+      }
+      continue;
+    }
+    if (ch == 39) { // char
+      k = k + 1;
+      while (k < stringLen(src)) {
+        let c = stringCharCodeAt(src, k);
+        if (c == 92) { k = k + 2; continue; }
+        if (c == 39) { k = k + 1; break; }
+        k = k + 1;
+      }
+      continue;
+    }
+    if (ch == 91) { depth = depth + 1; k = k + 1; continue; }
+    if (ch == 93) { depth = depth - 1; k = k + 1; continue; }
+    k = k + 1;
+  }
+  if (depth != 0) { yield false; }
+
+  k = skip_ws(src, k);
+  if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 61)) { yield false; }
+  // exclude '==' and '=>'
+  if (k + 1 < stringLen(src)) {
+    let n = stringCharCodeAt(src, k + 1);
+    if (n == 61 || n == 62) { yield false; }
+  }
+  true
+}
+
+out fn is_assign_stmt_start_impl(src: String, i: I32) : Bool => {
+  let mut j = skip_ws(src, i);
+  if (!(j < stringLen(src))) { yield false; }
+  let c0 = stringCharCodeAt(src, j);
+  if (!is_ident_start(c0)) { yield false; }
+  j = j + 1;
+  while (j < stringLen(src)) {
+    let c = stringCharCodeAt(src, j);
+    if (!is_ident_part(c)) { break; }
+    j = j + 1;
+  }
+  j = skip_ws(src, j);
+  if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 61)) { yield false; }
+  // exclude '==' and '=>'
+  if (j + 1 < stringLen(src)) {
+    let n = stringCharCodeAt(src, j + 1);
+    if (n == 61 || n == 62) { yield false; }
+  }
+  true
+}
+
+out fn is_field_assign_stmt_start_impl(src: String, i: I32) : Bool => {
+  let mut j = skip_ws(src, i);
+  if (!(j < stringLen(src))) { yield false; }
+  let c0 = stringCharCodeAt(src, j);
+  if (!is_ident_start(c0)) { yield false; }
+  j = j + 1;
+  while (j < stringLen(src)) {
+    let c = stringCharCodeAt(src, j);
+    if (!is_ident_part(c)) { break; }
+    j = j + 1;
+  }
+  j = skip_ws(src, j);
+
+  // require at least one .ident
+  if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 46)) { yield false; }
+
+  while (j < stringLen(src) && stringCharCodeAt(src, j) == 46) {
+    j = j + 1; // '.'
+    j = skip_ws(src, j);
+    if (!(j < stringLen(src))) { yield false; }
+    let c1 = stringCharCodeAt(src, j);
+    if (!is_ident_start(c1)) { yield false; }
+    j = j + 1;
+    while (j < stringLen(src)) {
+      let c = stringCharCodeAt(src, j);
+      if (!is_ident_part(c)) { break; }
+      j = j + 1;
+    }
+    j = skip_ws(src, j);
+  }
+
+  if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 61)) { yield false; }
+  // exclude '==' and '=>'
+  if (j + 1 < stringLen(src)) {
+    let n = stringCharCodeAt(src, j + 1);
+    if (n == 61 || n == 62) { yield false; }
+  }
+  true
+}

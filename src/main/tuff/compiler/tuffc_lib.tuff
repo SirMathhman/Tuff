@@ -61,22 +61,22 @@ from parsing::primitives use {
 
 from parsing::types use { ParsedType, parse_type_expr, skip_angle_brackets, skip_type_expr };
 
-from parsing::expr_stmt use {
+from parsing::expr_stmt_types use {
   ParsedExpr,
   ParsedMain,
   ParsedStmt,
   ParsedParams,
+  ParsedExprAst
+};
+
+from parsing::expr_stmt use {
   parse_expr,
   parse_stmt,
   parse_main_body,
   parse_mut_opt,
   is_assign_stmt_start,
   is_field_assign_stmt_start,
-  is_index_assign_stmt_start
-};
-
-from parsing::expr_stmt use {
-  ParsedExprAst,
+  is_index_assign_stmt_start,
   parse_expr_ast
 };
 

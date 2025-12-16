@@ -22,10 +22,9 @@ from parsing::primitives use {
 
 from parsing::types use { parse_type_expr };
 
-from parsing::expr_stmt use {
-  ParsedMainAst,
-  parse_main_body_ast
-};
+from parsing::expr_stmt_types use { ParsedMainAst };
+
+from parsing::expr_stmt use { parse_main_body_ast };
 
 from ast use {
   span,
