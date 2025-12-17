@@ -1,0 +1,47 @@
+// Test: function modifier order independence
+// Verifies that out, class, and extern can appear in any order before fn
+
+from std::test use { reset, suite, it, expect_eq, summary, status };
+
+// Test all valid orderings of modifiers
+
+// out fn
+out fn test_out_fn() : I32 => 1
+
+// class fn
+class fn TestClassFn1(x: I32) => {}
+
+// out class fn
+out class fn TestOutClassFn(x: I32) => {}
+
+// class out fn (NEW: order should not matter)
+class out fn TestClassOutFn(x: I32) => {}
+
+// extern fn (NEW: extern without body)
+// extern fn test_extern_fn() : I32;  // TODO: implement extern fn without body
+
+// out extern fn (NEW)
+// out extern fn test_out_extern_fn() : I32;  // TODO: implement
+
+fn main() : I32 => {
+  reset();
+  suite("fn modifier order independence");
+  
+  // Test out fn works
+  it("out fn is callable", expect_eq("out fn", test_out_fn(), 1));
+  
+  // Test class fn works
+  let obj1 = TestClassFn1(42);
+  it("class fn creates object", expect_eq("class fn .x", obj1.x, 42));
+  
+  // Test out class fn works
+  let obj2 = TestOutClassFn(10);
+  it("out class fn creates object", expect_eq("out class fn .x", obj2.x, 10));
+  
+  // Test class out fn works (NEW order)
+  let obj3 = TestClassOutFn(20);
+  it("class out fn creates object", expect_eq("class out fn .x", obj3.x, 20));
+  
+  summary();
+  status()
+}

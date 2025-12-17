@@ -6,7 +6,7 @@ import { is_ident_part, skip_ws, starts_with_at } from "../util/lexing.mjs";
 import { parse_keyword, parse_ident, parse_optional_semicolon } from "../parsing/primitives.mjs";
 import { parse_type_expr } from "../parsing/types.mjs";
 import { parse_mut_opt, parse_expr_ast } from "../parsing/expr_stmt.mjs";
-import { parse_imports_ast, parse_extern_decl_ast, parse_module_decl_ast, parse_fn_decl_ast2, parse_class_fn_decl_ast2, parse_struct_decl_ast, parse_type_union_decl_ast } from "../parsing/decls.mjs";
+import { parse_imports_ast, parse_extern_decl_ast, parse_module_decl_ast, parse_fn_decl_ast2, parse_class_fn_decl_ast2, parse_struct_decl_ast, parse_type_union_decl_ast, is_fn_decl_start } from "../parsing/decls.mjs";
 import { span, decl_let, decl_let_typed } from "../ast.mjs";
 import { analyze_program } from "../analyzer.mjs";
 export function kw_at(src, i, kw) {
@@ -102,21 +102,7 @@ vec_push(decls, f.decl);
 i = f.nextPos;
 continue;
 }
-if (starts_with_at(src, j, "class")) {
-const f = parse_class_fn_decl_ast2(src, i, false);
-vec_push(decls, f.decl);
-i = f.nextPos;
-continue;
-}
-if (starts_with_at(src, j, "out")) {
-const k0 = parse_keyword(src, i, "out");
-const j2 = skip_ws(src, k0);
-if (starts_with_at(src, j2, "class")) {
-const f = parse_class_fn_decl_ast2(src, i, false);
-vec_push(decls, f.decl);
-i = f.nextPos;
-continue;
-}
+if (is_fn_decl_start(src, j)) {
 const f = parse_fn_decl_ast2(src, i, false);
 vec_push(decls, f.decl);
 i = f.nextPos;

@@ -2,12 +2,12 @@
 import { stringLen, stringCharCodeAt } from "../rt/stdlib.mjs";
 import { vec_new, vec_len, vec_push, vec_get } from "../rt/vec.mjs";
 import { panic_at, add_struct_def, is_identifier_too_short, warn_short_identifier } from "../util/diagnostics.mjs";
-import { skip_ws, starts_with_at } from "../util/lexing.mjs";
+import { skip_ws, starts_with_at, is_ident_part } from "../util/lexing.mjs";
 import { parse_ident, parse_keyword, parse_module_path, parse_optional_semicolon } from "./primitives.mjs";
 import { parse_type_expr } from "./types.mjs";
 import { ParsedMainAst } from "./expr_stmt_types.mjs";
 import { parse_main_body_ast } from "./expr_stmt.mjs";
-import { span, decl_extern_from, decl_extern_type, decl_import, decl_fn, decl_fn_typed, decl_class_fn, decl_class_fn_typed, decl_struct_typed, decl_type_union, type_union_variant, type_union_variant_typed, decl_module } from "../ast.mjs";
+import { span, decl_extern_from, decl_extern_type, decl_import, decl_fn, decl_fn_typed, decl_fn_full, decl_class_fn, decl_class_fn_typed, decl_struct_typed, decl_type_union, type_union_variant, type_union_variant_typed, decl_module, expr_undefined } from "../ast.mjs";
 export function ParsedDeclAst(decl, nextPos) {
 return { decl: decl, nextPos: nextPos };
 }
@@ -180,21 +180,68 @@ return ParsedDeclsAst(decls, k);
 export function parse_fn_decl_ast(src, i) {
 return parse_fn_decl_ast2(src, i, false);
 }
-export function ParsedFnLike(start, isOut, name, typeParams, params, retTyAnn, body, nextPos) {
-return { start: start, isOut: isOut, name: name, typeParams: typeParams, params: params, retTyAnn: retTyAnn, body: body, nextPos: nextPos };
+export function FnModifiers(isOut, isClass, isExtern, nextPos) {
+return { isOut: isOut, isClass: isClass, isExtern: isExtern, nextPos: nextPos };
 }
-export function parse_fn_like_header(src, i, isClassFn) {
-const start = skip_ws(src, i);
-let k = start;
+export function is_fn_modifier_kw(src, j) {
+if (starts_with_at(src, j, "out")) {
+return true;
+}
+if (starts_with_at(src, j, "class")) {
+return true;
+}
+if (starts_with_at(src, j, "extern")) {
+return true;
+}
+return false;
+}
+export function parse_fn_modifiers(src, i) {
+let k = skip_ws(src, i);
 let isOut = false;
-const j0 = skip_ws(src, k);
-if (starts_with_at(src, j0, "out")) {
+let isClass = false;
+let isExtern = false;
+while (true) {
+const j = skip_ws(src, k);
+if (!isOut && starts_with_at(src, j, "out")) {
+const afterOut = j + 3;
+if (afterOut >= stringLen(src) || !is_ident_part(stringCharCodeAt(src, afterOut))) {
 k = parse_keyword(src, k, "out");
 isOut = true;
+continue;
 }
-if (isClassFn) {
+}
+if (!isClass && starts_with_at(src, j, "class")) {
+const afterClass = j + 5;
+if (afterClass >= stringLen(src) || !is_ident_part(stringCharCodeAt(src, afterClass))) {
 k = parse_keyword(src, k, "class");
+isClass = true;
+continue;
 }
+}
+if (!isExtern && starts_with_at(src, j, "extern")) {
+const afterExtern = j + 6;
+if (afterExtern >= stringLen(src) || !is_ident_part(stringCharCodeAt(src, afterExtern))) {
+k = parse_keyword(src, k, "extern");
+isExtern = true;
+continue;
+}
+}
+break;
+}
+return FnModifiers(isOut, isClass, isExtern, k);
+}
+export function is_fn_decl_start(src, i) {
+const mods = parse_fn_modifiers(src, i);
+const j = skip_ws(src, mods.nextPos);
+return starts_with_at(src, j, "fn");
+}
+export function ParsedFnLike(start, isOut, isClass, isExtern, name, typeParams, params, retTyAnn, body, nextPos) {
+return { start: start, isOut: isOut, isClass: isClass, isExtern: isExtern, name: name, typeParams: typeParams, params: params, retTyAnn: retTyAnn, body: body, nextPos: nextPos };
+}
+export function parse_fn_like_header(src, i) {
+const start = skip_ws(src, i);
+const mods = parse_fn_modifiers(src, start);
+let k = mods.nextPos;
 k = parse_keyword(src, k, "fn");
 const name = parse_ident(src, k);
 k = name.nextPos;
@@ -217,43 +264,31 @@ const _rt = parse_type_expr(src, t1 + 1);
 retTyAnn = _rt.v0;
 k = _rt.v1;
 }
+if (mods.isExtern) {
+const t2 = skip_ws(src, k);
+if (t2 < stringLen(src) && stringCharCodeAt(src, t2) == 59) {
+k = t2 + 1;
+const emptyBody = vec_new();
+const undefinedExpr = expr_undefined(span(k, k));
+return ParsedFnLike(start, mods.isOut, mods.isClass, mods.isExtern, name, typeParams, params, retTyAnn, ParsedMainAst(emptyBody, undefinedExpr, k), k);
+}
+}
 k = parse_keyword(src, k, "=>");
 const body = parse_main_body_ast(src, k);
 k = body.nextPos;
 k = parse_optional_semicolon(src, k);
-return ParsedFnLike(start, isOut, name, typeParams, params, retTyAnn, body, k);
+return ParsedFnLike(start, mods.isOut, mods.isClass, mods.isExtern, name, typeParams, params, retTyAnn, body, k);
 }
 export function parse_fn_decl_ast2(src, i, exportAll) {
-const fn = parse_fn_like_header(src, i, false);
-let anyParamTy = false;
-let pi = 0;
-while (pi < vec_len(fn.params.tyAnns)) {
-if (vec_get(fn.params.tyAnns, pi) != "") {
-anyParamTy = true;
-break;
-}
-pi = pi + 1;
-}
-if (anyParamTy || fn.retTyAnn != "") {
-return ParsedDeclAst(decl_fn_typed(span(fn.start, fn.nextPos), fn.isOut, fn.name.text, fn.typeParams, fn.params.names, fn.params.tyAnns, fn.retTyAnn, fn.body.body, fn.body.tail), fn.nextPos);
-}
-return ParsedDeclAst(decl_fn(span(fn.start, fn.nextPos), fn.isOut, fn.name.text, fn.params.names, fn.body.body, fn.body.tail), fn.nextPos);
-}
-export function parse_class_fn_decl_ast2(src, i, exportAll) {
-const fn = parse_fn_like_header(src, i, true);
-let anyParamTy = false;
-let pi = 0;
-while (pi < vec_len(fn.params.tyAnns)) {
-if (vec_get(fn.params.tyAnns, pi) != "") {
-anyParamTy = true;
-break;
-}
-pi = pi + 1;
-}
-if (anyParamTy || fn.retTyAnn != "") {
+const fn = parse_fn_like_header(src, i);
+if (fn.isClass) {
 return ParsedDeclAst(decl_class_fn_typed(span(fn.start, fn.nextPos), fn.isOut, fn.name.text, fn.typeParams, fn.params.names, fn.params.tyAnns, fn.retTyAnn, fn.body.body, fn.body.tail), fn.nextPos);
 }
-return ParsedDeclAst(decl_class_fn(span(fn.start, fn.nextPos), fn.isOut, fn.name.text, fn.params.names, fn.body.body, fn.body.tail), fn.nextPos);
+const decl = decl_fn_full(span(fn.start, fn.nextPos), fn.isOut, fn.isClass, fn.isExtern, fn.name.text, fn.typeParams, fn.params.names, fn.params.tyAnns, fn.retTyAnn, fn.body.body, fn.body.tail);
+return ParsedDeclAst(decl, fn.nextPos);
+}
+export function parse_class_fn_decl_ast2(src, i, exportAll) {
+return parse_fn_decl_ast2(src, i, exportAll);
 }
 export function parse_struct_decl_ast(src, i) {
 const start = skip_ws(src, i);

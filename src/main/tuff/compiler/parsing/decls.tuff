@@ -11,7 +11,7 @@ from util::diagnostics use {
   warn_short_identifier
 };
 
-from util::lexing use { skip_ws, starts_with_at };
+from util::lexing use { skip_ws, starts_with_at, is_ident_part };
 
 from parsing::primitives use {
   parse_ident,
@@ -33,13 +33,15 @@ from ast use {
   decl_import,
   decl_fn,
   decl_fn_typed,
+  decl_fn_full,
   decl_class_fn,
   decl_class_fn_typed,
   decl_struct_typed,
   decl_type_union,
   type_union_variant,
   type_union_variant_typed,
-  decl_module
+  decl_module,
+  expr_undefined
 };
 
 // NOTE: Avoid type aliases in signatures (type aliases are not runtime exports).
@@ -209,21 +211,87 @@ out fn parse_imports_ast(src: String, i: I32) : ParsedDeclsAst => {
 
 fn parse_fn_decl_ast(src: String, i: I32) : ParsedDeclAst => parse_fn_decl_ast2(src, i, false)
 
-class fn ParsedFnLike(start: I32, isOut: Bool, name: ParseResult, typeParams: Vec<TypeParam>, params: ParsedParamList, retTyAnn: String, body: ParsedMainBody, nextPos: I32) => {}
+// ------------------------------------------------------------
+// Unified function modifiers: out, class, extern in any order
+// ------------------------------------------------------------
 
-fn parse_fn_like_header(src: String, i: I32, isClassFn: Bool) : ParsedFnLike => {
-  let start = skip_ws(src, i);
-  let mut k = start;
+class fn FnModifiers(isOut: Bool, isClass: Bool, isExtern: Bool, nextPos: I32) => {}
+
+fn is_fn_modifier_kw(src: String, j: I32) : Bool => {
+  if (starts_with_at(src, j, "out")) { yield true; }
+  if (starts_with_at(src, j, "class")) { yield true; }
+  if (starts_with_at(src, j, "extern")) { yield true; }
+  false
+}
+
+fn parse_fn_modifiers(src: String, i: I32) : FnModifiers => {
+  let mut k = skip_ws(src, i);
   let mut isOut = false;
-  let j0 = skip_ws(src, k);
-  if (starts_with_at(src, j0, "out")) {
-    k = parse_keyword(src, k, "out");
-    isOut = true;
+  let mut isClass = false;
+  let mut isExtern = false;
+  
+  // Parse modifiers in any order, each at most once
+  while (true) {
+    let j = skip_ws(src, k);
+    
+    // Check for 'out' (only if not already seen)
+    if (!isOut && starts_with_at(src, j, "out")) {
+      // Make sure it's not a prefix of another identifier
+      let afterOut = j + 3;
+      if (afterOut >= stringLen(src) || !is_ident_part(stringCharCodeAt(src, afterOut))) {
+        k = parse_keyword(src, k, "out");
+        isOut = true;
+        continue;
+      }
+    }
+    
+    // Check for 'class' (only if not already seen)
+    if (!isClass && starts_with_at(src, j, "class")) {
+      let afterClass = j + 5;
+      if (afterClass >= stringLen(src) || !is_ident_part(stringCharCodeAt(src, afterClass))) {
+        k = parse_keyword(src, k, "class");
+        isClass = true;
+        continue;
+      }
+    }
+    
+    // Check for 'extern' (only if not already seen)
+    if (!isExtern && starts_with_at(src, j, "extern")) {
+      let afterExtern = j + 6;
+      if (afterExtern >= stringLen(src) || !is_ident_part(stringCharCodeAt(src, afterExtern))) {
+        k = parse_keyword(src, k, "extern");
+        isExtern = true;
+        continue;
+      }
+    }
+    
+    break;
   }
-  if (isClassFn) {
-    k = parse_keyword(src, k, "class");
-  }
+  
+  FnModifiers(isOut, isClass, isExtern, k)
+}
+
+// Check if position starts a fn declaration (with optional modifiers)
+out fn is_fn_decl_start(src: String, i: I32) : Bool => {
+  let mods = parse_fn_modifiers(src, i);
+  let j = skip_ws(src, mods.nextPos);
+  starts_with_at(src, j, "fn")
+}
+
+class fn ParsedFnLike(start: I32, isOut: Bool, isClass: Bool, isExtern: Bool, name: ParseResult, typeParams: Vec<TypeParam>, params: ParsedParamList, retTyAnn: String, body: ParsedMainBody, nextPos: I32) => {}
+
+// Parse a function declaration with unified modifier handling.
+// Modifiers (out, class, extern) can appear in any order before 'fn'.
+out fn parse_fn_like_header(src: String, i: I32) : ParsedFnLike => {
+  let start = skip_ws(src, i);
+  
+  // Parse modifiers in any order
+  let mods = parse_fn_modifiers(src, start);
+  let mut k = mods.nextPos;
+  
+  // Now expect 'fn' keyword
   k = parse_keyword(src, k, "fn");
+  
   let name = parse_ident(src, k);
   k = name.nextPos;
   if (is_identifier_too_short(name.text)) { warn_short_identifier(src, name.startPos, name.text); }
@@ -247,42 +315,75 @@ fn parse_fn_like_header(src: String, i: I32, isClassFn: Bool) : ParsedFnLike => 
     k = _rt.v1;
   }
 
+  // For extern fn, body is optional (just a semicolon)
+  if (mods.isExtern) {
+    let t2 = skip_ws(src, k);
+    // Check if there's '=>' (has body) or ';' (no body)
+    if (t2 < stringLen(src) && stringCharCodeAt(src, t2) == 59) {
+      // extern fn without body: fn name() : RetType;
+      k = t2 + 1;
+      let emptyBody = vec_new();
+      let undefinedExpr = expr_undefined(span(k, k));
+      yield ParsedFnLike(start, mods.isOut, mods.isClass, mods.isExtern, name, typeParams, params, retTyAnn, ParsedMainAst(emptyBody, undefinedExpr, k), k);
+    }
+    // If not semicolon, fall through to parse body normally
+  }
+
   k = parse_keyword(src, k, "=>");
   let body = parse_main_body_ast(src, k);
   k = body.nextPos;
   k = parse_optional_semicolon(src, k);
 
-  ParsedFnLike(start, isOut, name, typeParams, params, retTyAnn, body, k)
+  ParsedFnLike(start, mods.isOut, mods.isClass, mods.isExtern, name, typeParams, params, retTyAnn, body, k)
 }
 
+// Unified function declaration parser that handles all modifier combinations
 out fn parse_fn_decl_ast2(src: String, i: I32, exportAll: Bool) : ParsedDeclAst => {
-  let fn = parse_fn_like_header(src, i, false);
+  let fn = parse_fn_like_header(src, i);
   
-  let mut anyParamTy = false;
-  let mut pi = 0;
-  while (pi < vec_len(fn.params.tyAnns)) {
-    if (vec_get(fn.params.tyAnns, pi) != "") { anyParamTy = true; break; }
-    pi = pi + 1;
+  // Use appropriate constructor based on flags for backward compatibility
+  // If isClass is true, use the legacy DClassFn-producing constructors
+  // This ensures existing `d is DClassFn` checks continue to work
+  if (fn.isClass) {
+    yield ParsedDeclAst(
+      decl_class_fn_typed(
+        span(fn.start, fn.nextPos),
+        fn.isOut,
+        fn.name.text,
+        fn.typeParams,
+        fn.params.names,
+        fn.params.tyAnns,
+        fn.retTyAnn,
+        fn.body.body,
+        fn.body.tail
+      ),
+      fn.nextPos
+    );
   }
-  if (anyParamTy || fn.retTyAnn != "") {
-    yield ParsedDeclAst(decl_fn_typed(span(fn.start, fn.nextPos), fn.isOut, fn.name.text, fn.typeParams, fn.params.names, fn.params.tyAnns, fn.retTyAnn, fn.body.body, fn.body.tail), fn.nextPos);
-  }
-  ParsedDeclAst(decl_fn(span(fn.start, fn.nextPos), fn.isOut, fn.name.text, fn.params.names, fn.body.body, fn.body.tail), fn.nextPos)
+  
+  // For regular fn (not class fn), use DFn with full modifiers
+  // This supports the new isExtern flag
+  let decl = decl_fn_full(
+    span(fn.start, fn.nextPos),
+    fn.isOut,
+    fn.isClass,
+    fn.isExtern,
+    fn.name.text,
+    fn.typeParams,
+    fn.params.names,
+    fn.params.tyAnns,
+    fn.retTyAnn,
+    fn.body.body,
+    fn.body.tail
+  );
+  ParsedDeclAst(decl, fn.nextPos)
 }
 
+// Legacy: parse_class_fn_decl_ast2 - kept for backward compatibility
+// The unified parse_fn_decl_ast2 handles 'class fn' automatically now
 out fn parse_class_fn_decl_ast2(src: String, i: I32, exportAll: Bool) : ParsedDeclAst => {
-  let fn = parse_fn_like_header(src, i, true);
-  
-  let mut anyParamTy = false;
-  let mut pi = 0;
-  while (pi < vec_len(fn.params.tyAnns)) {
-    if (vec_get(fn.params.tyAnns, pi) != "") { anyParamTy = true; break; }
-    pi = pi + 1;
-  }
-  if (anyParamTy || fn.retTyAnn != "") {
-    yield ParsedDeclAst(decl_class_fn_typed(span(fn.start, fn.nextPos), fn.isOut, fn.name.text, fn.typeParams, fn.params.names, fn.params.tyAnns, fn.retTyAnn, fn.body.body, fn.body.tail), fn.nextPos);
-  }
-  ParsedDeclAst(decl_class_fn(span(fn.start, fn.nextPos), fn.isOut, fn.name.text, fn.params.names, fn.body.body, fn.body.tail), fn.nextPos)
+  // Just delegate to the unified parser - it handles 'class' modifier
+  parse_fn_decl_ast2(src, i, exportAll)
 }
 
 out fn parse_struct_decl_ast(src: String, i: I32) : ParsedDeclAst => {

@@ -307,6 +307,8 @@ struct DLet {
 struct DFn {
   span: Span,
   isOut: Bool,
+  isClass: Bool,
+  isExtern: Bool,
   name: String,
   typeParams: Vec<String>,
   params: Vec<String>,
@@ -315,6 +317,7 @@ struct DFn {
   body: Vec<Stmt>,
   tail: Expr
 }
+// DClassFn kept for backward compatibility, but isClass on DFn should be preferred
 struct DClassFn {
   span: Span,
   isOut: Bool,
@@ -469,14 +472,23 @@ out fn type_union_variant_typed(span: Span, name: String, payloadTyAnns: Vec<Str
   TypeUnionVariant { span, name, vec_len(payloadTyAnns) > 0, payloadTyAnns }
 out fn decl_type_union(span: Span, name: String, typeParams: Vec<String>, variants: Vec<TypeUnionVariant>) : Decl =>
   DTypeUnion { span, name, typeParams, variants }
+
+// Legacy constructors for backward compatibility (isClass=false, isExtern=false)
 out fn decl_fn(span: Span, isOut: Bool, name: String, params: Vec<String>, body: Vec<Stmt>, tail: Expr) : Decl =>
-  DFn { span, isOut, name, vec_new(), params, vec_new(), "", body, tail }
+  DFn { span, isOut, false, false, name, vec_new(), params, vec_new(), "", body, tail }
 out fn decl_fn_typed(span: Span, isOut: Bool, name: String, typeParams: Vec<String>, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String, body: Vec<Stmt>, tail: Expr) : Decl =>
-  DFn { span, isOut, name, typeParams, params, paramTyAnns, retTyAnn, body, tail }
+  DFn { span, isOut, false, false, name, typeParams, params, paramTyAnns, retTyAnn, body, tail }
+
+// New unified constructor with all three modifier flags (creates DFn)
+out fn decl_fn_full(span: Span, isOut: Bool, isClass: Bool, isExtern: Bool, name: String, typeParams: Vec<String>, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String, body: Vec<Stmt>, tail: Expr) : Decl =>
+  DFn { span, isOut, isClass, isExtern, name, typeParams, params, paramTyAnns, retTyAnn, body, tail }
+
+// Legacy: class fn declarations use DClassFn for backward compatibility with existing `d is DClassFn` checks
 out fn decl_class_fn(span: Span, isOut: Bool, name: String, params: Vec<String>, body: Vec<Stmt>, tail: Expr) : Decl =>
   DClassFn { span, isOut, name, vec_new(), params, vec_new(), "", body, tail }
 out fn decl_class_fn_typed(span: Span, isOut: Bool, name: String, typeParams: Vec<String>, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String, body: Vec<Stmt>, tail: Expr) : Decl =>
   DClassFn { span, isOut, name, typeParams, params, paramTyAnns, retTyAnn, body, tail }
+
 out fn decl_let(span: Span, isMut: Bool, name: String, init: Expr) : Decl => DLet { span, isMut, name, "", init }
 out fn decl_let_typed(span: Span, isMut: Bool, name: String, tyAnn: String, init: Expr) : Decl => DLet { span, isMut, name, tyAnn, init }
 out fn decl_module(span: Span, name: String, decls: Vec<Decl>) : Decl => DModule { span, name, decls }

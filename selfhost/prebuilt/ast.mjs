@@ -300,10 +300,13 @@ export function decl_type_union(span, name, typeParams, variants) {
 return ({ tag: "DTypeUnion", span: span, name: name, typeParams: typeParams, variants: variants });
 }
 export function decl_fn(span, isOut, name, params, body, tail) {
-return ({ tag: "DFn", span: span, isOut: isOut, name: name, typeParams: vec_new(), params: params, paramTyAnns: vec_new(), retTyAnn: "", body: body, tail: tail });
+return ({ tag: "DFn", span: span, isOut: isOut, isClass: false, isExtern: false, name: name, typeParams: vec_new(), params: params, paramTyAnns: vec_new(), retTyAnn: "", body: body, tail: tail });
 }
 export function decl_fn_typed(span, isOut, name, typeParams, params, paramTyAnns, retTyAnn, body, tail) {
-return ({ tag: "DFn", span: span, isOut: isOut, name: name, typeParams: typeParams, params: params, paramTyAnns: paramTyAnns, retTyAnn: retTyAnn, body: body, tail: tail });
+return ({ tag: "DFn", span: span, isOut: isOut, isClass: false, isExtern: false, name: name, typeParams: typeParams, params: params, paramTyAnns: paramTyAnns, retTyAnn: retTyAnn, body: body, tail: tail });
+}
+export function decl_fn_full(span, isOut, isClass, isExtern, name, typeParams, params, paramTyAnns, retTyAnn, body, tail) {
+return ({ tag: "DFn", span: span, isOut: isOut, isClass: isClass, isExtern: isExtern, name: name, typeParams: typeParams, params: params, paramTyAnns: paramTyAnns, retTyAnn: retTyAnn, body: body, tail: tail });
 }
 export function decl_class_fn(span, isOut, name, params, body, tail) {
 return ({ tag: "DClassFn", span: span, isOut: isOut, name: name, typeParams: vec_new(), params: params, paramTyAnns: vec_new(), retTyAnn: "", body: body, tail: tail });

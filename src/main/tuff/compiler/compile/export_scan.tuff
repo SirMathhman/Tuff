@@ -5,7 +5,7 @@ from util::lexing use { is_ident_part, skip_ws, starts_with_at };
 from parsing::primitives use { parse_keyword, parse_ident, parse_optional_semicolon };
 from parsing::types use { parse_type_expr };
 from parsing::expr_stmt use { parse_mut_opt, parse_expr_ast };
-from parsing::decls use { parse_extern_decl_ast, parse_imports_ast, parse_module_decl_ast, parse_fn_decl_ast2, parse_class_fn_decl_ast2, parse_struct_decl_ast, parse_type_union_decl_ast };
+from parsing::decls use { parse_extern_decl_ast, parse_imports_ast, parse_module_decl_ast, parse_fn_decl_ast2, parse_class_fn_decl_ast2, parse_struct_decl_ast, parse_type_union_decl_ast, is_fn_decl_start };
 from analyzer use { mk_fn_sig };
 from ast use { span, span_start, decl_let, decl_let_typed };
 from compile::deprecation_comments use { deprecation_reason_before };
@@ -142,21 +142,8 @@ out fn scan_top_level_fn_exports(src: String) => {
       i = f.nextPos;
       continue;
     }
-    if (starts_with_at(src, j, "class")) {
-      let f = parse_class_fn_decl_ast2(src, i, false);
-      vec_push(decls, f.decl);
-      i = f.nextPos;
-      continue;
-    }
-    if (starts_with_at(src, j, "out")) {
-      let k0 = parse_keyword(src, i, "out");
-      let j2 = skip_ws(src, k0);
-      if (starts_with_at(src, j2, "class")) {
-        let f = parse_class_fn_decl_ast2(src, i, false);
-        vec_push(decls, f.decl);
-        i = f.nextPos;
-        continue;
-      }
+    // Handle all modifier combinations: out, class, extern in any order before fn
+    if (is_fn_decl_start(src, j)) {
       let f = parse_fn_decl_ast2(src, i, false);
       vec_push(decls, f.decl);
       i = f.nextPos;

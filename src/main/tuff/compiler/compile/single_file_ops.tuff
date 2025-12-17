@@ -28,7 +28,8 @@ from parsing::decls use {
   parse_type_union_decl_ast,
   parse_struct_decl_ast,
   parse_fn_decl_ast2,
-  parse_class_fn_decl_ast2
+  parse_class_fn_decl_ast2,
+  is_fn_decl_start
 };
 
 from ast use { span, decl_let, decl_let_typed };
@@ -137,29 +138,16 @@ fn parse_program_decls(src: String, exportAll: Bool, requireMain: Bool) => {
     if (starts_with_at(src, j, "fn")) {
       let f = parse_fn_decl_ast2(src, i, exportAll);
       if (f.decl is DFn && f.decl.name == "main") { sawMain = true; }
-      vec_push(decls, f.decl);
-      i = f.nextPos;
-      continue;
-    }
-    if (starts_with_at(src, j, "class")) {
-      let f = parse_class_fn_decl_ast2(src, i, exportAll);
       if (f.decl is DClassFn && f.decl.name == "main") { sawMain = true; }
       vec_push(decls, f.decl);
       i = f.nextPos;
       continue;
     }
-    if (starts_with_at(src, j, "out")) {
-      let k0 = parse_keyword(src, i, "out");
-      let j2 = skip_ws(src, k0);
-      if (starts_with_at(src, j2, "class")) {
-        let f = parse_class_fn_decl_ast2(src, i, exportAll);
-        if (f.decl is DClassFn && f.decl.name == "main") { sawMain = true; }
-        vec_push(decls, f.decl);
-        i = f.nextPos;
-        continue;
-      }
+    // Handle all modifier combinations: out, class, extern in any order before fn
+    if (is_fn_decl_start(src, j)) {
       let f = parse_fn_decl_ast2(src, i, exportAll);
       if (f.decl is DFn && f.decl.name == "main") { sawMain = true; }
+      if (f.decl is DClassFn && f.decl.name == "main") { sawMain = true; }
       vec_push(decls, f.decl);
       i = f.nextPos;
       continue;

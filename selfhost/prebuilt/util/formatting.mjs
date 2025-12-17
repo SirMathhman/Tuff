@@ -6,7 +6,7 @@ import { skip_ws, starts_with_at, tokenize_with_trivia, TokenStream } from "./le
 import { parse_keyword, parse_optional_semicolon, parse_required_semicolon, parse_ident } from "../parsing/primitives.mjs";
 import { parse_type_expr } from "../parsing/types.mjs";
 import { parse_expr_ast, parse_mut_opt } from "../parsing/expr_stmt.mjs";
-import { parse_imports_ast, parse_extern_decl_ast, parse_module_decl_ast, parse_fn_decl_ast2, parse_class_fn_decl_ast2, parse_struct_decl_ast, parse_type_union_decl_ast } from "../parsing/decls.mjs";
+import { parse_imports_ast, parse_extern_decl_ast, parse_module_decl_ast, parse_fn_decl_ast2, parse_class_fn_decl_ast2, parse_struct_decl_ast, parse_type_union_decl_ast, is_fn_decl_start } from "../parsing/decls.mjs";
 import { span, decl_let } from "../ast.mjs";
 export function ParsedDeclsPack(decls, nextPos) {
 return { decls: decls, nextPos: nextPos };
@@ -94,8 +94,8 @@ vec_push(decls, f.decl);
 i = f.nextPos;
 continue;
 }
-if (starts_with_at(src, j, "class")) {
-const f = parse_class_fn_decl_ast2(src, i, exportAll);
+if (is_fn_decl_start(src, j)) {
+const f = parse_fn_decl_ast2(src, i, exportAll);
 vec_push(decls, f.decl);
 i = f.nextPos;
 continue;
