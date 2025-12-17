@@ -18,7 +18,8 @@ type TypeRef =
   TyName
   | TyTuple
   | TyFn
-  | TyApp;
+  | TyApp
+  | TyDroppable;
 
 struct TyName {
   span: Span,
@@ -37,6 +38,11 @@ struct TyApp {
   span: Span,
   callee: String,
   args: Vec<TypeRef>
+}
+struct TyDroppable {
+  span: Span,
+  inner: String,
+  dropFn: String
 }
 
 type Expr =

@@ -3,7 +3,7 @@
 // This module is intentionally small and only supports the current subset of
 // `compiler/ast.tuff` nodes.
 
-extern from rt::stdlib use { panic, stringLen, stringSlice };
+extern from rt::stdlib use { panic, stringLen, stringSlice, stringCharCodeAt };
 extern from rt::vec use { vec_new, vec_push, vec_len, vec_get };
 
 from util::diagnostics use { find_struct_fields };
@@ -13,6 +13,36 @@ from emit::emit_helpers use {
   set_current_file_path, emit_runtime_vec_imports_js, decls_needs_vec_rt,
   rel_import_path, escape_js_string
 };
+
+// DroppableVar: tracks a variable that needs drop() on scope exit
+struct DroppableVar {
+  name: String,
+  dropFn: String
+}
+
+// Check if type annotation has !drop suffix
+fn ty_ann_has_drop(tyAnn: String) : Bool => {
+  let mut i = 0;
+  while (i < stringLen(tyAnn)) {
+    if (stringCharCodeAt(tyAnn, i) == 33) { // '!'
+      yield true;
+    }
+    i = i + 1;
+  }
+  false
+}
+
+// Extract drop function name from type annotation (e.g., "I32!drop" -> "drop")
+fn ty_ann_get_drop_fn(tyAnn: String) : String => {
+  let mut i = 0;
+  while (i < stringLen(tyAnn)) {
+    if (stringCharCodeAt(tyAnn, i) == 33) { // '!'
+      yield stringSlice(tyAnn, i + 1, stringLen(tyAnn));
+    }
+    i = i + 1;
+  }
+  ""
+}
 
 fn emit_binop_js(op: BinOp) : String => {
   // NOTE: The current selfhost JS emitter does not fully support `if` as an
@@ -153,7 +183,14 @@ out fn emit_expr_js(e: Expr) : String => {
   if (e is ELambda) {
     let params = emit_names_csv(e.params);
     if (e.body is EBlock) {
-      out = "((" + params + ") => {\n" + emit_stmts_js(e.body.body) + "return " + emit_expr_js(e.body.tail) + ";\n})";
+      let drops = collect_drops(e.body.body);
+      let stmts = emit_stmts_js(e.body.body);
+      if (vec_len(drops) > 0) {
+        let dropCode = emit_drops_js(drops);
+        out = "((" + params + ") => {\n" + stmts + "const __tuff_result = " + emit_expr_js(e.body.tail) + ";\n" + dropCode + "return __tuff_result;\n})";
+      } else {
+        out = "((" + params + ") => {\n" + stmts + "return " + emit_expr_js(e.body.tail) + ";\n})";
+      }
     } else {
       out = "((" + params + ") => " + emit_expr_js(e.body) + ")";
     }
@@ -199,7 +236,14 @@ out fn emit_expr_js(e: Expr) : String => {
   }
 
   if (e is EBlock) {
-    out = "(() => {\n" + emit_stmts_js(e.body) + "return " + emit_expr_js(e.tail) + ";\n})()";
+    let drops = collect_drops(e.body);
+    let stmts = emit_stmts_js(e.body);
+    if (vec_len(drops) > 0) {
+      let dropCode = emit_drops_js(drops);
+      out = "(() => {\n" + stmts + "const __tuff_result = " + emit_expr_js(e.tail) + ";\n" + dropCode + "return __tuff_result;\n})()";
+    } else {
+      out = "(() => {\n" + stmts + "return " + emit_expr_js(e.tail) + ";\n})()";
+    }
   }
 
   if (e is EVecLit) {
@@ -328,6 +372,35 @@ fn emit_stmt_js(s: Stmt) : String => {
   out
 }
 
+// Collect droppable variables from a list of statements
+fn collect_drops(stmts: Vec<Stmt>) : Vec<DroppableVar> => {
+  let drops = vec_new();
+  let mut i = 0;
+  while (i < vec_len(stmts)) {
+    let s = vec_get(stmts, i);
+    if (s is SLet) {
+      if (ty_ann_has_drop(s.tyAnn)) {
+        let dropFn = ty_ann_get_drop_fn(s.tyAnn);
+        vec_push(drops, DroppableVar { s.name, dropFn });
+      }
+    }
+    i = i + 1;
+  }
+  drops
+}
+
+// Emit drop calls in LIFO order (reverse of declaration order)
+fn emit_drops_js(drops: Vec<DroppableVar>) : String => {
+  let mut out = "";
+  let mut i = vec_len(drops) - 1;
+  while (i >= 0) {
+    let d = vec_get(drops, i);
+    out = out + d.dropFn + "(" + d.name + ");\n";
+    i = i - 1;
+  }
+  out
+}
+
 out fn emit_stmts_js(stmts: Vec<Stmt>) : String => {
   let mut out = "";
   let mut i = 0;
@@ -335,6 +408,20 @@ out fn emit_stmts_js(stmts: Vec<Stmt>) : String => {
     out = out + emit_stmt_js(vec_get(stmts, i));
     i = i + 1;
   }
+  out
+}
+
+// Emit statements with drops at the end (for scopes without tail expr)
+out fn emit_stmts_js_with_drops(stmts: Vec<Stmt>) : String => {
+  let mut out = "";
+  let mut i = 0;
+  while (i < vec_len(stmts)) {
+    out = out + emit_stmt_js(vec_get(stmts, i));
+    i = i + 1;
+  }
+  // Emit drops at the end of the scope
+  let drops = collect_drops(stmts);
+  out = out + emit_drops_js(drops);
   out
 }
 
@@ -363,7 +450,14 @@ fn emit_extern_import_path(modPath: String) : String => {
 fn emit_fn_decl_js(d: DFn, exportAll: Bool, jsName: String, exportThis: Bool) : String => {
   let exportKw = if (exportThis) "export " else "";
   let params = emit_names_csv(d.params);
-  exportKw + "function " + jsName + "(" + params + ") {\n" + emit_stmts_js(d.body) + "return " + emit_expr_js(d.tail) + ";\n}\n"
+  let drops = collect_drops(d.body);
+  let stmts = emit_stmts_js(d.body);
+  // If there are droppable variables, save result, drop, then return
+  if (vec_len(drops) > 0) {
+    let dropCode = emit_drops_js(drops);
+    yield exportKw + "function " + jsName + "(" + params + ") {\n" + stmts + "const __tuff_result = " + emit_expr_js(d.tail) + ";\n" + dropCode + "return __tuff_result;\n}\n";
+  }
+  exportKw + "function " + jsName + "(" + params + ") {\n" + stmts + "return " + emit_expr_js(d.tail) + ";\n}\n"
 }
 
 fn emit_type_union_js(d: DTypeUnion, exportAll: Bool) : String => {
@@ -510,7 +604,14 @@ out fn emit_decl_js(d: Decl, exportAll: Bool) : String => {
         i = i + 1;
       }
 
-      out = exportKw + "function " + d.name + "(" + params + ") {\n" + emit_stmts_js(d.body) + "return { " + fields + " };\n}\n";
+      let drops = collect_drops(d.body);
+      let stmts = emit_stmts_js(d.body);
+      if (vec_len(drops) > 0) {
+        let dropCode = emit_drops_js(drops);
+        out = exportKw + "function " + d.name + "(" + params + ") {\n" + stmts + "const __tuff_result = { " + fields + " };\n" + dropCode + "return __tuff_result;\n}\n";
+      } else {
+        out = exportKw + "function " + d.name + "(" + params + ") {\n" + stmts + "return { " + fields + " };\n}\n";
+      }
     } else {
       if (d.isExtern) {
         // extern fn without body - emit nothing (declaration only, no implementation)

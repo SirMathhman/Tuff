@@ -382,3 +382,44 @@ out fn type_is_concrete_float(t: String) : Bool => {
   if (tt == ty_f64()) { yield true; }
   false
 }
+
+// Check if type has a !drop suffix
+out fn ty_has_drop(t: String) : Bool => {
+  let mut i = stringLen(t) - 1;
+  while (i >= 0) {
+    let ch = stringCharCodeAt(t, i);
+    if (ch == 33) { // '!'
+      yield true;
+    }
+    i = i - 1;
+  }
+  false
+}
+
+// Extract the drop function name from a type like "I32!drop"
+out fn ty_get_drop_fn(t: String) : String => {
+  let mut i = stringLen(t) - 1;
+  // Find the last '!'
+  while (i >= 0) {
+    let ch = stringCharCodeAt(t, i);
+    if (ch == 33) { // '!'
+      yield stringSlice(t, i + 1, stringLen(t));
+    }
+    i = i - 1;
+  }
+  ""
+}
+
+// Get the base type without the !drop suffix (e.g., "I32!drop" -> "I32")
+out fn ty_strip_drop(t: String) : String => {
+  let mut i = stringLen(t) - 1;
+  // Find the last '!'
+  while (i >= 0) {
+    let ch = stringCharCodeAt(t, i);
+    if (ch == 33) { // '!'
+      yield stringSlice(t, 0, i);
+    }
+    i = i - 1;
+  }
+  t
+}

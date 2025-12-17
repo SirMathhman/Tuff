@@ -4,8 +4,8 @@ extern from rt::vec use { vec_new, vec_len, vec_push, vec_get, vec_set };
 
 from util::diagnostics use { error_at };
 
-from analyzer::defs use { mk_binding, mk_binding_moved };
-from analyzer::typestrings use { ty_unknown };
+from analyzer::defs use { mk_binding, mk_binding_moved, mk_binding_with_drop };
+from analyzer::typestrings use { ty_unknown, ty_has_drop, ty_get_drop_fn, ty_strip_drop };
 
 out fn scopes_contains(scopes: Vec<Vec<Binding>>, depth: I32, name: String) : Bool => {
   let mut si = 0;
@@ -35,7 +35,14 @@ out fn declare_name(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32
     error_at(src, pos, "shadowing not allowed: " + name);
   }
   let cur = vec_get(scopes, depth - 1);
-  vec_push(cur, mk_binding(name, isMut, tyTag, "", pos, false, true, false));
+  // Check if type has !drop suffix
+  if (ty_has_drop(tyTag)) {
+    let dropFn = ty_get_drop_fn(tyTag);
+    let baseTy = ty_strip_drop(tyTag);
+    vec_push(cur, mk_binding_with_drop(name, isMut, baseTy, "", pos, false, true, false, dropFn));
+  } else {
+    vec_push(cur, mk_binding(name, isMut, tyTag, "", pos, false, true, false));
+  }
 }
 
 out fn declare_name_deprecated(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, name: String, isMut: Bool, tyTag: String, deprecatedReason: String) : Void => {
@@ -44,7 +51,14 @@ out fn declare_name_deprecated(src: String, pos: I32, scopes: Vec<Vec<Binding>>,
     error_at(src, pos, "shadowing not allowed: " + name);
   }
   let cur = vec_get(scopes, depth - 1);
-  vec_push(cur, mk_binding(name, isMut, tyTag, deprecatedReason, pos, false, true, false));
+  // Check if type has !drop suffix
+  if (ty_has_drop(tyTag)) {
+    let dropFn = ty_get_drop_fn(tyTag);
+    let baseTy = ty_strip_drop(tyTag);
+    vec_push(cur, mk_binding_with_drop(name, isMut, baseTy, deprecatedReason, pos, false, true, false, dropFn));
+  } else {
+    vec_push(cur, mk_binding(name, isMut, tyTag, deprecatedReason, pos, false, true, false));
+  }
 }
 
 out fn scope_contains(scope: Vec<Binding>, name: String) : Bool => {
@@ -65,7 +79,14 @@ out fn declare_local_name(src: String, pos: I32, scopes: Vec<Vec<Binding>>, dept
     error_at(src, pos, "duplicate name: " + name);
     yield;
   }
-  vec_push(cur, mk_binding(name, isMut, tyTag, "", pos, false, true, true));
+  // Check if type has !drop suffix
+  if (ty_has_drop(tyTag)) {
+    let dropFn = ty_get_drop_fn(tyTag);
+    let baseTy = ty_strip_drop(tyTag);
+    vec_push(cur, mk_binding_with_drop(name, isMut, baseTy, "", pos, false, true, true, dropFn));
+  } else {
+    vec_push(cur, mk_binding(name, isMut, tyTag, "", pos, false, true, true));
+  }
 }
 
 out fn declare_local_name_deprecated(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, name: String, isMut: Bool, tyTag: String, deprecatedReason: String) : Void => {
@@ -76,7 +97,14 @@ out fn declare_local_name_deprecated(src: String, pos: I32, scopes: Vec<Vec<Bind
     error_at(src, pos, "duplicate name: " + name);
     yield;
   }
-  vec_push(cur, mk_binding(name, isMut, tyTag, deprecatedReason, pos, false, true, true));
+  // Check if type has !drop suffix
+  if (ty_has_drop(tyTag)) {
+    let dropFn = ty_get_drop_fn(tyTag);
+    let baseTy = ty_strip_drop(tyTag);
+    vec_push(cur, mk_binding_with_drop(name, isMut, baseTy, deprecatedReason, pos, false, true, true, dropFn));
+  } else {
+    vec_push(cur, mk_binding(name, isMut, tyTag, deprecatedReason, pos, false, true, true));
+  }
 }
 
 out fn lookup_binding(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth: I32, name: String) : Binding => {

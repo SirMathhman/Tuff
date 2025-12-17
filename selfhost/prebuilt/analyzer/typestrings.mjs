@@ -548,3 +548,36 @@ return true;
 }
 return false;
 }
+export function ty_has_drop(t) {
+let i = stringLen(t) - 1;
+while (i >= 0) {
+const ch = stringCharCodeAt(t, i);
+if (ch == 33) {
+return true;
+}
+i = i - 1;
+}
+return false;
+}
+export function ty_get_drop_fn(t) {
+let i = stringLen(t) - 1;
+while (i >= 0) {
+const ch = stringCharCodeAt(t, i);
+if (ch == 33) {
+return stringSlice(t, i + 1, stringLen(t));
+}
+i = i - 1;
+}
+return "";
+}
+export function ty_strip_drop(t) {
+let i = stringLen(t) - 1;
+while (i >= 0) {
+const ch = stringCharCodeAt(t, i);
+if (ch == 33) {
+return stringSlice(t, 0, i);
+}
+i = i - 1;
+}
+return t;
+}

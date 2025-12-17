@@ -3,8 +3,23 @@ import { stringLen, stringCharCodeAt, stringSlice } from "../rt/stdlib.mjs";
 import { panic_at } from "../util/diagnostics.mjs";
 import { skip_ws } from "../util/lexing.mjs";
 import { ParsedIdent, ParsedNumber, parse_ident, parse_keyword, parse_number } from "./primitives.mjs";
+import { is_ident_start, is_ident_part } from "../util/lexing.mjs";
 export function ParsedType(v0, v1) {
 return { v0: v0, v1: v1 };
+}
+export function ParsedDropSuffix(hasIt, name, nextPos) {
+return { hasIt: hasIt, name: name, nextPos: nextPos };
+}
+export function parse_drop_suffix(src, i) {
+const k = skip_ws(src, i);
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 33) {
+const afterBang = k + 1;
+if (afterBang < stringLen(src) && is_ident_start(stringCharCodeAt(src, afterBang))) {
+const ident = parse_ident(src, afterBang);
+return ParsedDropSuffix(true, ident.text, ident.nextPos);
+}
+}
+return ParsedDropSuffix(false, "", i);
 }
 export function skip_angle_brackets(src, i) {
 let k = skip_ws(src, i);
@@ -44,7 +59,12 @@ k = parse_keyword(src, k, "[");
 const inner = parse_type_expr(src, k);
 k = inner.v1;
 k = parse_keyword(src, k, "]");
-return ParsedType("*[" + inner.v0 + "]", k);
+const base = "*[" + inner.v0 + "]";
+const drop = parse_drop_suffix(src, k);
+if (drop.hasIt) {
+return ParsedType(base + "!" + drop.name, drop.nextPos);
+}
+return ParsedType(base, k);
 }
 if (c == 91) {
 k = parse_keyword(src, k, "[");
@@ -61,7 +81,12 @@ sizes = sizes + ";" + ("" + n.value);
 k = n.nextPos;
 }
 k = parse_keyword(src, k, "]");
-return ParsedType("[" + inner.v0 + sizes + "]", k);
+const base = "[" + inner.v0 + sizes + "]";
+const drop = parse_drop_suffix(src, k);
+if (drop.hasIt) {
+return ParsedType(base + "!" + drop.name, drop.nextPos);
+}
+return ParsedType(base, k);
 }
 if (c == 40) {
 k = parse_keyword(src, k, "(");
@@ -99,9 +124,19 @@ panic_at(src, k, "expected ',' or ')' in type");
 const t2 = skip_ws(src, k);
 if (t2 + 1 < stringLen(src) && stringCharCodeAt(src, t2) == 61 && stringCharCodeAt(src, t2 + 1) == 62) {
 const ret = parse_type_expr(src, t2 + 2);
-return ParsedType("(" + parts + ") => " + ret.v0, ret.v1);
+const base = "(" + parts + ") => " + ret.v0;
+const drop = parse_drop_suffix(src, ret.v1);
+if (drop.hasIt) {
+return ParsedType(base + "!" + drop.name, drop.nextPos);
 }
-return ParsedType("(" + parts + ")", k);
+return ParsedType(base, ret.v1);
+}
+const base = "(" + parts + ")";
+const drop = parse_drop_suffix(src, k);
+if (drop.hasIt) {
+return ParsedType(base + "!" + drop.name, drop.nextPos);
+}
+return ParsedType(base, k);
 }
 const name = parse_ident(src, k);
 k = name.nextPos;
@@ -139,6 +174,10 @@ break;
 panic_at(src, k, "expected ',' or '>' in generic type");
 }
 out = out + "<" + args + ">";
+}
+const drop = parse_drop_suffix(src, k);
+if (drop.hasIt) {
+return ParsedType(out + "!" + drop.name, drop.nextPos);
 }
 return ParsedType(out, k);
 }

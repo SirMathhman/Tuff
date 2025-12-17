@@ -1,8 +1,8 @@
 // compiled by selfhost tuffc
 import { vec_new, vec_len, vec_push, vec_get, vec_set } from "../rt/vec.mjs";
 import { error_at } from "../util/diagnostics.mjs";
-import { mk_binding, mk_binding_moved } from "./defs.mjs";
-import { ty_unknown } from "./typestrings.mjs";
+import { mk_binding, mk_binding_moved, mk_binding_with_drop } from "./defs.mjs";
+import { ty_unknown, ty_has_drop, ty_get_drop_fn, ty_strip_drop } from "./typestrings.mjs";
 export function scopes_contains(scopes, depth, name) {
 let si = 0;
 while (si < depth) {
@@ -35,16 +35,30 @@ if (scopes_contains(scopes, depth, name)) {
 error_at(src, pos, "shadowing not allowed: " + name);
 }
 const cur = vec_get(scopes, depth - 1);
+return (ty_has_drop(tyTag) ? (() => {
+const dropFn = ty_get_drop_fn(tyTag);
+const baseTy = ty_strip_drop(tyTag);
+vec_push(cur, mk_binding_with_drop(name, isMut, baseTy, "", pos, false, true, false, dropFn));
+return undefined;
+})() : (() => {
 vec_push(cur, mk_binding(name, isMut, tyTag, "", pos, false, true, false));
 return undefined;
+})());
 }
 export function declare_name_deprecated(src, pos, scopes, depth, name, isMut, tyTag, deprecatedReason) {
 if (scopes_contains(scopes, depth, name)) {
 error_at(src, pos, "shadowing not allowed: " + name);
 }
 const cur = vec_get(scopes, depth - 1);
+return (ty_has_drop(tyTag) ? (() => {
+const dropFn = ty_get_drop_fn(tyTag);
+const baseTy = ty_strip_drop(tyTag);
+vec_push(cur, mk_binding_with_drop(name, isMut, baseTy, deprecatedReason, pos, false, true, false, dropFn));
+return undefined;
+})() : (() => {
 vec_push(cur, mk_binding(name, isMut, tyTag, deprecatedReason, pos, false, true, false));
 return undefined;
+})());
 }
 export function scope_contains(scope, name) {
 let i = 0;
@@ -63,8 +77,15 @@ if (scope_contains(cur, name)) {
 error_at(src, pos, "duplicate name: " + name);
 return;
 }
+return (ty_has_drop(tyTag) ? (() => {
+const dropFn = ty_get_drop_fn(tyTag);
+const baseTy = ty_strip_drop(tyTag);
+vec_push(cur, mk_binding_with_drop(name, isMut, baseTy, "", pos, false, true, true, dropFn));
+return undefined;
+})() : (() => {
 vec_push(cur, mk_binding(name, isMut, tyTag, "", pos, false, true, true));
 return undefined;
+})());
 }
 export function declare_local_name_deprecated(src, pos, scopes, depth, name, isMut, tyTag, deprecatedReason) {
 const cur = vec_get(scopes, depth - 1);
@@ -72,8 +93,15 @@ if (scope_contains(cur, name)) {
 error_at(src, pos, "duplicate name: " + name);
 return;
 }
+return (ty_has_drop(tyTag) ? (() => {
+const dropFn = ty_get_drop_fn(tyTag);
+const baseTy = ty_strip_drop(tyTag);
+vec_push(cur, mk_binding_with_drop(name, isMut, baseTy, deprecatedReason, pos, false, true, true, dropFn));
+return undefined;
+})() : (() => {
 vec_push(cur, mk_binding(name, isMut, tyTag, deprecatedReason, pos, false, true, true));
 return undefined;
+})());
 }
 export function lookup_binding(src, pos, scopes, depth, name) {
 let si = 0;

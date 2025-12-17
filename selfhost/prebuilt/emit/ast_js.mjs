@@ -1,10 +1,30 @@
 // compiled by selfhost tuffc
-import { panic, stringLen, stringSlice } from "../rt/stdlib.mjs";
+import { panic, stringLen, stringSlice, stringCharCodeAt } from "../rt/stdlib.mjs";
 import { vec_new, vec_push, vec_len, vec_get } from "../rt/vec.mjs";
 import { find_struct_fields } from "../util/diagnostics.mjs";
 import { starts_with_at } from "../util/lexing.mjs";
 import { module_path_to_relpath } from "../parsing/primitives.mjs";
 import { set_current_file_path, emit_runtime_vec_imports_js, decls_needs_vec_rt, rel_import_path, escape_js_string } from "./emit_helpers.mjs";
+export function ty_ann_has_drop(tyAnn) {
+let i = 0;
+while (i < stringLen(tyAnn)) {
+if (stringCharCodeAt(tyAnn, i) == 33) {
+return true;
+}
+i = i + 1;
+}
+return false;
+}
+export function ty_ann_get_drop_fn(tyAnn) {
+let i = 0;
+while (i < stringLen(tyAnn)) {
+if (stringCharCodeAt(tyAnn, i) == 33) {
+return stringSlice(tyAnn, i + 1, stringLen(tyAnn));
+}
+i = i + 1;
+}
+return "";
+}
 export function emit_binop_js(op) {
 let out = "??";
 if ((op.tag === "OpAdd")) {
@@ -177,7 +197,14 @@ out = emit_path_js(e.parts);
 if ((e.tag === "ELambda")) {
 const params = emit_names_csv(e.params);
 if ((e.body.tag === "EBlock")) {
-out = "((" + params + ") => {\n" + emit_stmts_js(e.body.body) + "return " + emit_expr_js(e.body.tail) + ";\n})";
+const drops = collect_drops(e.body.body);
+const stmts = emit_stmts_js(e.body.body);
+if (vec_len(drops) > 0) {
+const dropCode = emit_drops_js(drops);
+out = "((" + params + ") => {\n" + stmts + "const __tuff_result = " + emit_expr_js(e.body.tail) + ";\n" + dropCode + "return __tuff_result;\n})";
+} else {
+out = "((" + params + ") => {\n" + stmts + "return " + emit_expr_js(e.body.tail) + ";\n})";
+}
 } else {
 out = "((" + params + ") => " + emit_expr_js(e.body) + ")";
 }
@@ -215,7 +242,14 @@ if ((e.tag === "EIf")) {
 out = "(" + emit_expr_js(e.cond) + " ? " + emit_expr_js(e.thenExpr) + " : " + emit_expr_js(e.elseExpr) + ")";
 }
 if ((e.tag === "EBlock")) {
-out = "(() => {\n" + emit_stmts_js(e.body) + "return " + emit_expr_js(e.tail) + ";\n})()";
+const drops = collect_drops(e.body);
+const stmts = emit_stmts_js(e.body);
+if (vec_len(drops) > 0) {
+const dropCode = emit_drops_js(drops);
+out = "(() => {\n" + stmts + "const __tuff_result = " + emit_expr_js(e.tail) + ";\n" + dropCode + "return __tuff_result;\n})()";
+} else {
+out = "(() => {\n" + stmts + "return " + emit_expr_js(e.tail) + ";\n})()";
+}
 }
 if ((e.tag === "EVecLit")) {
 let pushes = "";
@@ -334,6 +368,31 @@ out = lhs + " = " + emit_expr_js(s.value) + ";\n";
 }
 return out;
 }
+export function collect_drops(stmts) {
+const drops = vec_new();
+let i = 0;
+while (i < vec_len(stmts)) {
+const s = vec_get(stmts, i);
+if ((s.tag === "SLet")) {
+if (ty_ann_has_drop(s.tyAnn)) {
+const dropFn = ty_ann_get_drop_fn(s.tyAnn);
+vec_push(drops, ({ tag: "DroppableVar", name: s.name, dropFn: dropFn }));
+}
+}
+i = i + 1;
+}
+return drops;
+}
+export function emit_drops_js(drops) {
+let out = "";
+let i = vec_len(drops) - 1;
+while (i >= 0) {
+const d = vec_get(drops, i);
+out = out + d.dropFn + "(" + d.name + ");\n";
+i = i - 1;
+}
+return out;
+}
 export function emit_stmts_js(stmts) {
 let out = "";
 let i = 0;
@@ -341,6 +400,17 @@ while (i < vec_len(stmts)) {
 out = out + emit_stmt_js(vec_get(stmts, i));
 i = i + 1;
 }
+return out;
+}
+export function emit_stmts_js_with_drops(stmts) {
+let out = "";
+let i = 0;
+while (i < vec_len(stmts)) {
+out = out + emit_stmt_js(vec_get(stmts, i));
+i = i + 1;
+}
+const drops = collect_drops(stmts);
+out = out + emit_drops_js(drops);
 return out;
 }
 export function emit_names_csv(names) {
@@ -368,7 +438,13 @@ return panic("unsupported extern module: " + modPath);
 export function emit_fn_decl_js(d, exportAll, jsName, exportThis) {
 const exportKw = (exportThis ? "export " : "");
 const params = emit_names_csv(d.params);
-return exportKw + "function " + jsName + "(" + params + ") {\n" + emit_stmts_js(d.body) + "return " + emit_expr_js(d.tail) + ";\n}\n";
+const drops = collect_drops(d.body);
+const stmts = emit_stmts_js(d.body);
+if (vec_len(drops) > 0) {
+const dropCode = emit_drops_js(drops);
+return exportKw + "function " + jsName + "(" + params + ") {\n" + stmts + "const __tuff_result = " + emit_expr_js(d.tail) + ";\n" + dropCode + "return __tuff_result;\n}\n";
+}
+return exportKw + "function " + jsName + "(" + params + ") {\n" + stmts + "return " + emit_expr_js(d.tail) + ";\n}\n";
 }
 export function emit_type_union_js(d, exportAll) {
 let out = "";
@@ -493,7 +569,14 @@ const p = vec_get(fieldNames, i);
 fields = fields + (p + ": " + p);
 i = i + 1;
 }
-out = exportKw + "function " + d.name + "(" + params + ") {\n" + emit_stmts_js(d.body) + "return { " + fields + " };\n}\n";
+const drops = collect_drops(d.body);
+const stmts = emit_stmts_js(d.body);
+if (vec_len(drops) > 0) {
+const dropCode = emit_drops_js(drops);
+out = exportKw + "function " + d.name + "(" + params + ") {\n" + stmts + "const __tuff_result = { " + fields + " };\n" + dropCode + "return __tuff_result;\n}\n";
+} else {
+out = exportKw + "function " + d.name + "(" + params + ") {\n" + stmts + "return { " + fields + " };\n}\n";
+}
 } else {
 if (d.isExtern) {
 out = "";

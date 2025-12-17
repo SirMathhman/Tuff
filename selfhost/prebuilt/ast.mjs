@@ -17,6 +17,7 @@ export const TyName = { tag: "TyName" };
 export const TyTuple = { tag: "TyTuple" };
 export const TyFn = { tag: "TyFn" };
 export const TyApp = { tag: "TyApp" };
+export const TyDroppable = { tag: "TyDroppable" };
 export const EUndefined = { tag: "EUndefined" };
 export const EInt = { tag: "EInt" };
 export const EFloat = { tag: "EFloat" };

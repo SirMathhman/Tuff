@@ -23,7 +23,7 @@ Each analyzer module is independently compilable and focuses on a specific conce
 | **`analyze_decls.tuff`**     | Per-declaration analysis: function declarations, struct definitions, imports. Calls linting rules. | `analyze_fn_decl()`, `analyze_struct_decl()`                                                           |
 | **`analyze_expr_stmt.tuff`** | Expression and statement analysis: orchestrates analysis of nested expressions, statements         | `analyze_expr()`, `analyze_stmt()`, `analyze_program()`                                                |
 | **`fluff.tuff`**             | Linting rules: unused variable detection, function complexity checks, naming conventions           | `fluff_warn_unused_locals_in_scope()`, `fluff_check_fn_complexity()`                                   |
-| **`owns.tuff`**              | Ownership tracking: Copy/Move type classification, use-after-move detection                       | `is_copy_type()`, `is_move_type()`, `is_primitive_type()`                                              |
+| **`owns.tuff`**              | Ownership tracking: Copy/Move type classification, use-after-move detection                        | `is_copy_type()`, `is_move_type()`, `is_primitive_type()`                                              |
 
 ## Data Flow
 
@@ -104,9 +104,38 @@ let c2 = c1;        // c1 is moved to c2
 ```
 
 **Current limitations (for bootstrap)**:
+
 - String, Unknown types, and generic types are temporarily Copy to allow bootstrapping
 - Function calls don't move arguments (implicit borrow)
 - Future: Add `&T` borrowing syntax and explicit `.copy()` methods
+
+### Destructors (Drop Functions)
+
+Types can have associated drop functions that are called automatically when values go out of scope:
+
+```tuff
+struct FileHandle { fd: I32 }
+
+fn drop_file(f: FileHandle) : Void => {
+  close_file(f.fd);
+}
+
+fn main() => {
+  let f: FileHandle!drop_file = open_file("data.txt");
+  // ... use f ...
+} // drop_file(f) called automatically here
+```
+
+The `T!dropFn` syntax marks a type as droppable:
+
+- `dropFn` is the name of the function to call on scope exit
+- Drop functions are called in LIFO order (last declared, first dropped)
+- Non-droppable types (without `!`) have no automatic cleanup
+
+**Type compatibility:**
+
+- `T` can be assigned to `T!dropFn` (allocate the specified drop)
+- `T!dropFn` cannot be assigned to `T` (would lose the drop obligation)
 
 ### Exhaustiveness Checking
 
