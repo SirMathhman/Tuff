@@ -213,9 +213,19 @@ if ((e.tag === "EStructLit")) {
 out = emit_struct_lit_js(e.nameExpr, e.values);
 }
 if ((e.tag === "EUnary")) {
+if ((e.op.tag === "OpDeref")) {
+const inner = emit_expr_js(e.expr);
+out = inner + ".value";
+} else {
+if ((e.op.tag === "OpAddrOf")) {
+const inner = emit_expr_js(e.expr);
+out = "({ value: " + inner + " })";
+} else {
 const inner = emit_expr_js(e.expr);
 const innerStr = (expr_prec_js(e.expr) < 17 ? "(" + inner + ")" : inner);
 out = emit_unop_js(e.op) + innerStr;
+}
+}
 }
 if ((e.tag === "EBinary")) {
 const left = emit_expr_js(e.left);
@@ -365,6 +375,14 @@ lhs = lhs + "." + vec_get(s.fields, i);
 i = i + 1;
 }
 out = lhs + " = " + emit_expr_js(s.value) + ";\n";
+}
+if ((s.tag === "SDerefAssign")) {
+if ((s.ptr.tag === "EUnary") && (s.ptr.op.tag === "OpDeref")) {
+const ptrCode = emit_expr_js(s.ptr.expr);
+out = ptrCode + ".value = " + emit_expr_js(s.value) + ";\n";
+} else {
+out = emit_expr_js(s.ptr) + " = " + emit_expr_js(s.value) + ";\n";
+}
 }
 return out;
 }

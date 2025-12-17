@@ -423,3 +423,21 @@ out fn ty_strip_drop(t: String) : String => {
   }
   t
 }
+
+// Check if type is a pointer type (*mut T)
+out fn ty_is_pointer(t: String) : Bool => {
+  ty_starts_with(t, 0, "*mut ")
+}
+
+// Get the inner type of a pointer (*mut T -> T)
+out fn ty_ptr_inner(t: String) : String => {
+  if (ty_is_pointer(t)) {
+    yield stringSlice(t, 5, stringLen(t)); // Skip "*mut "
+  }
+  t
+}
+
+// Create a pointer type from an inner type
+out fn ty_ptr(inner: String) : String => {
+  "*mut " + inner
+}

@@ -112,3 +112,59 @@ out fn is_field_assign_stmt_start_impl(src: String, i: I32) : Bool => {
 
   is_assignment_operator(src, j)
 }
+
+// Check if source at position i is a deref assignment: *<expr> = <value>
+// This is a lookahead check - we scan forward to find `*`, then skip the expr, then check for `=`
+out fn is_deref_assign_stmt_start_impl(src: String, i: I32) : Bool => {
+  let j = skip_ws(src, i);
+  if (!(j < stringLen(src))) { yield false; }
+  // Must start with '*'
+  if (!(stringCharCodeAt(src, j) == 42)) { yield false; }
+  
+  // Skip past *<expr> - scan to find `=` that is not `==` or `=>`
+  // Simple approach: scan for `=` followed by non-`=` and non-`>`, at depth 0
+  let mut k = j + 1;
+  let mut depth = 0;
+  while (k < stringLen(src)) {
+    let ch = stringCharCodeAt(src, k);
+    // Skip strings
+    if (ch == 34) {
+      k = k + 1;
+      while (k < stringLen(src)) {
+        let c = stringCharCodeAt(src, k);
+        if (c == 92) { k = k + 2; continue; }
+        if (c == 34) { k = k + 1; break; }
+        k = k + 1;
+      }
+      continue;
+    }
+    // Skip chars
+    if (ch == 39) {
+      k = k + 1;
+      while (k < stringLen(src)) {
+        let c = stringCharCodeAt(src, k);
+        if (c == 92) { k = k + 2; continue; }
+        if (c == 39) { k = k + 1; break; }
+        k = k + 1;
+      }
+      continue;
+    }
+    // Track parens/brackets/braces depth
+    if (ch == 40 || ch == 91 || ch == 123) { depth = depth + 1; k = k + 1; continue; }
+    if (ch == 41 || ch == 93 || ch == 125) { depth = depth - 1; k = k + 1; continue; }
+    // Check for `=` at depth 0
+    if (depth == 0 && ch == 61) {
+      if (k + 1 < stringLen(src)) {
+        let next = stringCharCodeAt(src, k + 1);
+        // Reject `==` and `=>`
+        if (next == 61 || next == 62) { yield false; }
+      }
+      // Found assignment operator
+      yield true;
+    }
+    // Stop at semicolon
+    if (ch == 59) { yield false; }
+    k = k + 1;
+  }
+  false
+}

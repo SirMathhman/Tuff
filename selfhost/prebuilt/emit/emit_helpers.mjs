@@ -166,6 +166,12 @@ return true;
 }
 return expr_needs_vec_rt(s.value);
 }
+if ((s.tag === "SDerefAssign")) {
+if (expr_needs_vec_rt(s.ptr)) {
+return true;
+}
+return expr_needs_vec_rt(s.value);
+}
 return false;
 }
 export function decl_needs_vec_rt(d) {

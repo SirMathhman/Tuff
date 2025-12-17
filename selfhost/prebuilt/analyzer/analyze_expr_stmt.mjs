@@ -434,6 +434,11 @@ analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.base);
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.value);
 return;
 }
+if ((s.tag === "SDerefAssign")) {
+analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.ptr);
+analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.value);
+return;
+}
 return undefined;
 }
 export function analyze_stmts(src, structs, unions, fns, scopes, depth, narrowed, stmts) {

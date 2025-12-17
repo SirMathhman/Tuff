@@ -273,6 +273,12 @@ serialize_expr(s.base, tokens);
 serialize_expr(s.value, tokens);
 return;
 }
+if ((s.tag === "SDerefAssign")) {
+vec_push(tokens, ir_token("stmt_deref_assign", start, end));
+serialize_expr(s.ptr, tokens);
+serialize_expr(s.value, tokens);
+return;
+}
 vec_push(tokens, ir_token("stmt_unknown", start, end));
 return undefined;
 }

@@ -64,8 +64,30 @@ out fn parse_type_expr(src: String, i: I32) : ParsedType => {
 
   let c = stringCharCodeAt(src, k);
 
-  // Slice: *[T]
+  // Pointer: *mut T
   if (c == 42) { // '*'
+    let afterStar = k + 1;
+    // Check for 'mut' keyword
+    let mutPos = skip_ws(src, afterStar);
+    if (mutPos + 2 < stringLen(src) &&
+        stringCharCodeAt(src, mutPos) == 109 &&     // 'm'
+        stringCharCodeAt(src, mutPos + 1) == 117 && // 'u'
+        stringCharCodeAt(src, mutPos + 2) == 116) { // 't'
+      // Ensure 'mut' is not part of a longer identifier
+      let afterMut = mutPos + 3;
+      if (afterMut >= stringLen(src) || !is_ident_part(stringCharCodeAt(src, afterMut))) {
+        // It's *mut T - parse inner type recursively
+        let inner = parse_type_expr(src, afterMut);
+        let base = "*mut " + inner.v0;
+        // Check for !drop suffix
+        let drop = parse_drop_suffix(src, inner.v1);
+        if (drop.hasIt) {
+          yield ParsedType(base + "!" + drop.name, drop.nextPos);
+        }
+        yield ParsedType(base, inner.v1);
+      }
+    }
+    // Fall through to slice syntax: *[T]
     k = k + 1;
     k = parse_keyword(src, k, "[");
     let inner = parse_type_expr(src, k);

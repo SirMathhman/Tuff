@@ -336,6 +336,11 @@ fn lsp_resolve_stmt(s: Stmt, defs: Vec<LspDefEntry>, refs: Vec<LspRefInternal>) 
     lsp_resolve_expr(s.base, defs, refs);
     lsp_resolve_expr(s.value, defs, refs);
   }
+
+  if (s is SDerefAssign) {
+    lsp_resolve_expr(s.ptr, defs, refs);
+    lsp_resolve_expr(s.value, defs, refs);
+  }
 }
 
 fn lsp_resolve_stmts(stmts: Vec<Stmt>, defs: Vec<LspDefEntry>, refs: Vec<LspRefInternal>) : Void => {

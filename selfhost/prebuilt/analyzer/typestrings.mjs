@@ -581,3 +581,15 @@ i = i - 1;
 }
 return t;
 }
+export function ty_is_pointer(t) {
+return ty_starts_with(t, 0, "*mut ");
+}
+export function ty_ptr_inner(t) {
+if (ty_is_pointer(t)) {
+return stringSlice(t, 5, stringLen(t));
+}
+return t;
+}
+export function ty_ptr(inner) {
+return "*mut " + inner;
+}

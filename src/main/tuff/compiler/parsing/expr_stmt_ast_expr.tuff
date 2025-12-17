@@ -33,7 +33,9 @@ from ast use {
   OpMul,
   OpDiv,
   OpNot,
-  OpNeg
+  OpNeg,
+  OpDeref,
+  OpAddrOf
 };
 
 out fn parse_expr_ast_impl(src: String, i: I32) : ParsedExprAst => parse_or_ast(src, i)
@@ -204,6 +206,14 @@ fn parse_unary_ast(src: String, i: I32) : ParsedExprAst => {
   if (j < stringLen(src) && stringCharCodeAt(src, j) == 45) { // '-'
     let inner = parse_unary_ast(src, j + 1);
     yield ParsedExprAst(expr_unary(span(j, inner.nextPos), OpNeg, inner.expr), inner.nextPos);
+  }
+  if (j < stringLen(src) && stringCharCodeAt(src, j) == 42) { // '*' - dereference
+    let inner = parse_unary_ast(src, j + 1);
+    yield ParsedExprAst(expr_unary(span(j, inner.nextPos), OpDeref, inner.expr), inner.nextPos);
+  }
+  if (j < stringLen(src) && stringCharCodeAt(src, j) == 38) { // '&' - address-of
+    let inner = parse_unary_ast(src, j + 1);
+    yield ParsedExprAst(expr_unary(span(j, inner.nextPos), OpAddrOf, inner.expr), inner.nextPos);
   }
   parse_postfix_ast(src, i)
 }

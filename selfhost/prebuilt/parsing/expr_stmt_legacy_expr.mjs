@@ -179,5 +179,13 @@ if (j < stringLen(src) && stringCharCodeAt(src, j) == 45) {
 const inner = parse_unary(src, j + 1);
 return ParsedExpr("(-" + inner.v0 + ")", inner.v1);
 }
+if (j < stringLen(src) && stringCharCodeAt(src, j) == 42) {
+const inner = parse_unary(src, j + 1);
+return ParsedExpr("(*" + inner.v0 + ")", inner.v1);
+}
+if (j < stringLen(src) && stringCharCodeAt(src, j) == 38) {
+const inner = parse_unary(src, j + 1);
+return ParsedExpr("(&" + inner.v0 + ")", inner.v1);
+}
 return parse_postfix(src, i);
 }

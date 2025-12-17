@@ -112,7 +112,9 @@ struct EPath {
 
 type UnOp =
   OpNot
-  | OpNeg;
+  | OpNeg
+  | OpDeref
+  | OpAddrOf;
 
 struct EUnary {
   span: Span,
@@ -225,7 +227,8 @@ type Stmt =
   | SWhile
   | SIf
   | SIndexAssign
-  | SFieldAssign;
+  | SFieldAssign
+  | SDerefAssign;
 
 struct SLet {
   span: Span,
@@ -276,6 +279,12 @@ struct SFieldAssign {
   span: Span,
   base: Expr,
   fields: Vec<String>,
+  value: Expr
+}
+
+struct SDerefAssign {
+  span: Span,
+  ptr: Expr,
   value: Expr
 }
 
@@ -453,6 +462,7 @@ out fn stmt_while(span: Span, cond: Expr, body: Vec<Stmt>) : Stmt => SWhile { sp
 out fn stmt_if(span: Span, cond: Expr, thenBody: Vec<Stmt>, hasElse: Bool, elseBody: Vec<Stmt>) : Stmt => SIf { span, cond, thenBody, hasElse, elseBody }
 out fn stmt_index_assign(span: Span, base: Expr, index: Expr, value: Expr) : Stmt => SIndexAssign { span, base, index, value }
 out fn stmt_field_assign(span: Span, base: Expr, fields: Vec<String>, value: Expr) : Stmt => SFieldAssign { span, base, fields, value }
+out fn stmt_deref_assign(span: Span, ptr: Expr, value: Expr) : Stmt => SDerefAssign { span, ptr, value }
 
 out fn decl_extern_from(span: Span, modulePath: String, names: Vec<String>) : Decl => DExternFrom { span, modulePath, names }
 out fn decl_extern_type(span: Span, isOut: Bool, name: String, typeParams: Vec<String>) : Decl => DExternType { span, isOut, name, typeParams }

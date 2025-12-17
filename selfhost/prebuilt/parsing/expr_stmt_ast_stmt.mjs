@@ -12,7 +12,7 @@ import { parse_stmt_block_ast, parse_main_body_ast_impl } from "./expr_stmt_ast_
 import { parse_expr_ast_impl } from "./expr_stmt_ast_expr.mjs";
 import { parse_type_param_names_list_ast } from "./expr_stmt_ast_lambda.mjs";
 import { is_identifier_too_short, warn_short_identifier } from "../util/diagnostics.mjs";
-import { span, expr_span, expr_undefined, expr_ident, expr_lambda, expr_block, stmt_let, stmt_let_typed, stmt_assign, stmt_expr, stmt_yield, stmt_while, stmt_if, stmt_index_assign, stmt_field_assign } from "../ast.mjs";
+import { span, expr_span, expr_undefined, expr_ident, expr_lambda, expr_block, stmt_let, stmt_let_typed, stmt_assign, stmt_expr, stmt_yield, stmt_while, stmt_if, stmt_index_assign, stmt_field_assign, stmt_deref_assign } from "../ast.mjs";
 export function parse_stmt_ast(src, i) {
 let k = skip_ws(src, i);
 const start = k;
@@ -184,6 +184,18 @@ const val = parse_expr_ast_impl(src, k);
 k = parse_optional_semicolon(src, val.nextPos);
 const baseExpr = expr_ident(span(name.startPos, name.nextPos), name.text);
 return ParsedStmtAst(stmt_index_assign(span(start, k), baseExpr, idx.expr, val.expr), k);
+}
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 42) {
+const ptrExpr = parse_expr_ast_impl(src, k);
+const t = skip_ws(src, ptrExpr.nextPos);
+if (t < stringLen(src) && stringCharCodeAt(src, t) == 61) {
+if (!(t + 1 < stringLen(src) && stringCharCodeAt(src, t + 1) == 61)) {
+k = parse_keyword(src, t, "=");
+const val = parse_expr_ast_impl(src, k);
+k = parse_optional_semicolon(src, val.nextPos);
+return ParsedStmtAst(stmt_deref_assign(span(start, k), ptrExpr.expr, val.expr), k);
+}
+}
 }
 const e = parse_expr_ast_impl(src, k);
 k = parse_optional_semicolon(src, e.nextPos);

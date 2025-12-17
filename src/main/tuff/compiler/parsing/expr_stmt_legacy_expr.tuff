@@ -165,5 +165,13 @@ fn parse_unary(src: String, i: I32) : ParsedExpr => {
     let inner = parse_unary(src, j + 1);
     yield ParsedExpr("(-" + inner.v0 + ")", inner.v1);
   }
+  if (j < stringLen(src) && stringCharCodeAt(src, j) == 42) { // '*' - dereference
+    let inner = parse_unary(src, j + 1);
+    yield ParsedExpr("(*" + inner.v0 + ")", inner.v1);
+  }
+  if (j < stringLen(src) && stringCharCodeAt(src, j) == 38) { // '&' - address-of
+    let inner = parse_unary(src, j + 1);
+    yield ParsedExpr("(&" + inner.v0 + ")", inner.v1);
+  }
   parse_postfix(src, i)
 }

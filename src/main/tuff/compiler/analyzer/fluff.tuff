@@ -397,6 +397,10 @@ fn cc_stmt(s: Stmt) : I32 => {
     yield cc_expr(s.base) + cc_expr(s.value);
   }
 
+  if (s is SDerefAssign) {
+    yield cc_expr(s.ptr) + cc_expr(s.value);
+  }
+
   // Unknown tag: return 0
   0
 }

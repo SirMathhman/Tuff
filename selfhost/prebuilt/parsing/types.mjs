@@ -54,6 +54,20 @@ panic_at(src, k, "expected type");
 }
 const c = stringCharCodeAt(src, k);
 if (c == 42) {
+const afterStar = k + 1;
+const mutPos = skip_ws(src, afterStar);
+if (mutPos + 2 < stringLen(src) && stringCharCodeAt(src, mutPos) == 109 && stringCharCodeAt(src, mutPos + 1) == 117 && stringCharCodeAt(src, mutPos + 2) == 116) {
+const afterMut = mutPos + 3;
+if (afterMut >= stringLen(src) || !is_ident_part(stringCharCodeAt(src, afterMut))) {
+const inner = parse_type_expr(src, afterMut);
+const base = "*mut " + inner.v0;
+const drop = parse_drop_suffix(src, inner.v1);
+if (drop.hasIt) {
+return ParsedType(base + "!" + drop.name, drop.nextPos);
+}
+return ParsedType(base, inner.v1);
+}
+}
 k = k + 1;
 k = parse_keyword(src, k, "[");
 const inner = parse_type_expr(src, k);

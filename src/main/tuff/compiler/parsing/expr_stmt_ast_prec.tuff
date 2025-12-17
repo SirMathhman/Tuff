@@ -132,6 +132,18 @@ fn parse_unary_ast(src: String, pos: I32) : ParsedExprAst => {
     let i = inner0.nextPos;
     yield ParsedExprAst(expr_unary(span(j, span_end(inner.span)), "!", inner), i);
   }
+  if (starts_with_at(src, j, "*")) {
+    let inner0 = parse_unary_ast(src, j + 1);
+    let inner = inner0.expr;
+    let i = inner0.nextPos;
+    yield ParsedExprAst(expr_unary(span(j, span_end(inner.span)), "*", inner), i);
+  }
+  if (starts_with_at(src, j, "&")) {
+    let inner0 = parse_unary_ast(src, j + 1);
+    let inner = inner0.expr;
+    let i = inner0.nextPos;
+    yield ParsedExprAst(expr_unary(span(j, span_end(inner.span)), "&", inner), i);
+  }
 
   parse_postfix_ast(src, pos)
 }

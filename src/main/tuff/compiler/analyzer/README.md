@@ -90,7 +90,7 @@ Checked by `scope.tuff` during declaration analysis.
 
 The analyzer tracks ownership for value types through `owns.tuff`:
 
-- **Copy types**: Primitives (`I32`, `Bool`, etc.), String (temporarily), structs with all-Copy fields
+- **Copy types**: Primitives (`I32`, `Bool`, etc.), String (temporarily), pointers (`*mut T`), structs with all-Copy fields
 - **Move types**: Function types, structs with non-Copy fields
 
 When a Move-type value is assigned to another variable, the original is marked as "moved" and cannot be used:
@@ -136,6 +136,30 @@ The `T!dropFn` syntax marks a type as droppable:
 
 - `T` can be assigned to `T!dropFn` (allocate the specified drop)
 - `T!dropFn` cannot be assigned to `T` (would lose the drop obligation)
+
+### Pointer Types
+
+The language supports mutable pointer types `*mut T`:
+
+```tuff
+let mut pt: Point = Point { 10, 20 };
+let pp: *mut Point = &pt;   // Take pointer to pt
+let x: I32 = (*pp).x;       // Dereference and access field
+*pp = newPoint;             // Assign through pointer
+```
+
+**Type inference for pointers:**
+
+- `&expr` has type `*mut T` where `T` is the type of `expr`
+- `*ptr` has type `T` where `ptr` has type `*mut T`
+- Pointers are always **Copy** types (can be freely assigned without moving)
+
+**JS backend semantics:**
+
+- `&expr` compiles to `{ value: expr }` - a wrapper object
+- `*ptr` compiles to `ptr.value` - accessing the wrapper
+- For struct/object types, the reference is shared (mutations visible through all pointers)
+- For primitives, the value is copied into the wrapper (limited pointer semantics)
 
 ### Exhaustiveness Checking
 

@@ -4,7 +4,7 @@ import { skip_ws, starts_with_at, is_ident_part } from "../util/lexing.mjs";
 import { parse_ident } from "./primitives.mjs";
 import { ParsedExprAst } from "./expr_stmt_types.mjs";
 import { parse_postfix_ast } from "./expr_stmt_ast_postfix.mjs";
-import { span, span_start, expr_span, expr_field, expr_string, expr_unary, expr_binary, expr_is_type, OpOr, OpAnd, OpEq, OpNe, OpLt, OpLe, OpGt, OpGe, OpAdd, OpSub, OpMul, OpDiv, OpNot, OpNeg } from "../ast.mjs";
+import { span, span_start, expr_span, expr_field, expr_string, expr_unary, expr_binary, expr_is_type, OpOr, OpAnd, OpEq, OpNe, OpLt, OpLe, OpGt, OpGe, OpAdd, OpSub, OpMul, OpDiv, OpNot, OpNeg, OpDeref, OpAddrOf } from "../ast.mjs";
 export function parse_expr_ast_impl(src, i) {
 return parse_or_ast(src, i);
 }
@@ -195,6 +195,14 @@ return ParsedExprAst(expr_unary(span(j, inner.nextPos), OpNot, inner.expr), inne
 if (j < stringLen(src) && stringCharCodeAt(src, j) == 45) {
 const inner = parse_unary_ast(src, j + 1);
 return ParsedExprAst(expr_unary(span(j, inner.nextPos), OpNeg, inner.expr), inner.nextPos);
+}
+if (j < stringLen(src) && stringCharCodeAt(src, j) == 42) {
+const inner = parse_unary_ast(src, j + 1);
+return ParsedExprAst(expr_unary(span(j, inner.nextPos), OpDeref, inner.expr), inner.nextPos);
+}
+if (j < stringLen(src) && stringCharCodeAt(src, j) == 38) {
+const inner = parse_unary_ast(src, j + 1);
+return ParsedExprAst(expr_unary(span(j, inner.nextPos), OpAddrOf, inner.expr), inner.nextPos);
 }
 return parse_postfix_ast(src, i);
 }

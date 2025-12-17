@@ -1,7 +1,7 @@
 // compiled by selfhost tuffc
 import { stringLen, stringSlice, stringCharCodeAt } from "../rt/stdlib.mjs";
 import { vec_new, vec_len, vec_get, vec_push } from "../rt/vec.mjs";
-import { ty_i8, ty_i16, ty_i32, ty_i64, ty_u8, ty_u16, ty_u32, ty_u64, ty_f32, ty_f64, ty_bool, ty_char, ty_void, ty_never, ty_string, ty_unknown, ty_int_lit, ty_float_lit, ty_parse_array, ty_parse_app, ty_is_fn_type, normalize_ty_ann, ty_skip_ws } from "./typestrings.mjs";
+import { ty_i8, ty_i16, ty_i32, ty_i64, ty_u8, ty_u16, ty_u32, ty_u64, ty_f32, ty_f64, ty_bool, ty_char, ty_void, ty_never, ty_string, ty_unknown, ty_int_lit, ty_float_lit, ty_parse_array, ty_parse_app, ty_is_fn_type, ty_is_pointer, normalize_ty_ann, ty_skip_ws } from "./typestrings.mjs";
 export function is_primitive_type(t) {
 const tt = normalize_ty_ann(t);
 if (tt == ty_i8()) {
@@ -60,6 +60,9 @@ return false;
 export function is_copy_type(t, structDefs) {
 const tt = normalize_ty_ann(t);
 if (is_primitive_type(tt)) {
+return true;
+}
+if (ty_is_pointer(tt)) {
 return true;
 }
 if (tt == ty_unknown() || tt == "") {

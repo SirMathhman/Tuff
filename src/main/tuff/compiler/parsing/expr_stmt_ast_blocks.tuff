@@ -10,7 +10,8 @@ from util::lexing use { skip_ws, starts_with_at };
 from parsing::expr_stmt_stmt_starts use {
   is_assign_stmt_start_impl,
   is_field_assign_stmt_start_impl,
-  is_index_assign_stmt_start_impl
+  is_index_assign_stmt_start_impl,
+  is_deref_assign_stmt_start_impl
 };
 
 from parsing::expr_stmt_types use { ParsedExprAst, ParsedMainAst, ParsedStmtsAst };
@@ -129,7 +130,8 @@ fn parse_block_body_ast(src: String, i: I32) : ParsedMainAst => {
       || starts_with_at(src, t, "yield")
       || is_field_assign_stmt_start_impl(src, t)
       || is_assign_stmt_start_impl(src, t)
-      || is_index_assign_stmt_start_impl(src, t);
+      || is_index_assign_stmt_start_impl(src, t)
+      || is_deref_assign_stmt_start_impl(src, t);
     if (isStmt) {
       let st = parse_stmt_ast(src, k);
       vec_push(body, st.stmt);

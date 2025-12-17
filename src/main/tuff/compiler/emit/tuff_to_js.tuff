@@ -388,6 +388,16 @@ out fn emit_stmt(s: Stmt, ctx: JsEmitCtx) : String => {
     let value = emit_expr(s.value, ctx);
     yield base + fields + " = " + value + ";";
   }
+
+  if (s is SDerefAssign) {
+    // *ptr = value -> ptr.value = value
+    if (s.ptr is EUnary && s.ptr.op is OpDeref) {
+      let ptrCode = emit_expr(s.ptr.expr, ctx);
+      yield ptrCode + ".value = " + emit_expr(s.value, ctx) + ";";
+    }
+    let ptrCode = emit_expr(s.ptr, ctx);
+    yield ptrCode + " = " + emit_expr(s.value, ctx) + ";";
+  }
   
   "/* unknown stmt */"
 }

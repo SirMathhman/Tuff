@@ -68,6 +68,7 @@ fn emit_unop_js(op: UnOp) : String => {
   let mut out = "??";
   if (op is OpNot) { out = "!"; }
   if (op is OpNeg) { out = "-"; }
+  // OpDeref and OpAddrOf are handled specially, not as simple prefix operators
   out
 }
 
@@ -201,11 +202,25 @@ out fn emit_expr_js(e: Expr) : String => {
   }
 
   if (e is EUnary) {
-    let inner = emit_expr_js(e.expr);
-    // Parenthesize only when the operand binds looser than unary.
-    // Example: `!(a < b)` must emit as `!(a < b)`, not `!a < b`.
-    let innerStr = if (expr_prec_js(e.expr) < 17) "(" + inner + ")" else inner;
-    out = emit_unop_js(e.op) + innerStr;
+    // Handle pointer operations specially
+    if (e.op is OpDeref) {
+      // Dereference: *ptr -> ptr.value
+      let inner = emit_expr_js(e.expr);
+      out = inner + ".value";
+    } else {
+      if (e.op is OpAddrOf) {
+        // Address-of: &expr -> { value: expr }
+        let inner = emit_expr_js(e.expr);
+        out = "({ value: " + inner + " })";
+      } else {
+        // Standard unary operators (!, -)
+        let inner = emit_expr_js(e.expr);
+        // Parenthesize only when the operand binds looser than unary.
+        // Example: `!(a < b)` must emit as `!(a < b)`, not `!a < b`.
+        let innerStr = if (expr_prec_js(e.expr) < 17) "(" + inner + ")" else inner;
+        out = emit_unop_js(e.op) + innerStr;
+      }
+    }
   }
 
   if (e is EBinary) {
@@ -367,6 +382,18 @@ fn emit_stmt_js(s: Stmt) : String => {
       i = i + 1;
     }
     out = lhs + " = " + emit_expr_js(s.value) + ";\n";
+  }
+
+  if (s is SDerefAssign) {
+    // *ptr = value -> emit as ptr.value = value
+    // Note: s.ptr is the *<expr> form (EUnary with OpDeref), so s.ptr.expr is the actual pointer
+    if (s.ptr is EUnary && s.ptr.op is OpDeref) {
+      let ptrCode = emit_expr_js(s.ptr.expr);
+      out = ptrCode + ".value = " + emit_expr_js(s.value) + ";\n";
+    } else {
+      // Fallback: shouldn't happen if parser works correctly
+      out = emit_expr_js(s.ptr) + " = " + emit_expr_js(s.value) + ";\n";
+    }
   }
 
   out

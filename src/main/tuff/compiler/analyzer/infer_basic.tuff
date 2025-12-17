@@ -30,7 +30,10 @@ from analyzer::typestrings use {
   type_is_concrete_float,
   ty_parse_app,
   ty_parse_array,
-  ty_skip_ws
+  ty_skip_ws,
+  ty_is_pointer,
+  ty_ptr_inner,
+  ty_ptr
 };
 
 from analyzer::env use { this_struct_name, struct_name_of_expr, has_struct_def, get_struct_field_type, has_fn_sig, find_fn_sig };
@@ -105,6 +108,19 @@ out fn infer_expr_type(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, sc
       if (t == ty_f64()) { yield ty_f64(); }
       if (t == ty_float_lit()) { yield ty_f64(); }
       yield ty_unknown();
+    }
+    if (e.op is OpDeref) {
+      // *ptr: if ptr is *mut T, result is T
+      let t = infer_expr_type(src, structs, fns, scopes, depth, e.expr);
+      if (ty_is_pointer(t)) {
+        yield ty_ptr_inner(t);
+      }
+      yield ty_unknown();
+    }
+    if (e.op is OpAddrOf) {
+      // &expr: result is *mut T where T is the type of expr
+      let t = infer_expr_type(src, structs, fns, scopes, depth, e.expr);
+      yield ty_ptr(t);
     }
   }
 

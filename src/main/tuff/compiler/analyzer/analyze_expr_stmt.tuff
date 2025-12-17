@@ -529,6 +529,13 @@ out fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.value);
     yield;
   }
+
+  if (s is SDerefAssign) {
+    // Analyze the pointer expression (should be *ptr form)
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.ptr);
+    analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.value);
+    yield;
+  }
 }
 
 out fn analyze_stmts(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, narrowed: Vec<NarrowedTag>, stmts: Vec<Stmt>) : Void => {

@@ -260,6 +260,10 @@ if ((s.tag === "SFieldAssign")) {
 lsp_resolve_expr(s.base, defs, refs);
 lsp_resolve_expr(s.value, defs, refs);
 }
+if ((s.tag === "SDerefAssign")) {
+lsp_resolve_expr(s.ptr, defs, refs);
+lsp_resolve_expr(s.value, defs, refs);
+}
 return undefined;
 }
 export function lsp_resolve_stmts(stmts, defs, refs) {

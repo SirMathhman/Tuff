@@ -143,6 +143,11 @@ out fn stmt_needs_vec_rt(s: Stmt) : Bool => {
     yield expr_needs_vec_rt(s.value);
   }
 
+  if (s is SDerefAssign) {
+    if (expr_needs_vec_rt(s.ptr)) { yield true; }
+    yield expr_needs_vec_rt(s.value);
+  }
+
   false
 }
 

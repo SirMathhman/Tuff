@@ -7,7 +7,7 @@ import { parse_ident, parse_keyword, parse_number } from "./primitives.mjs";
 import { ParsedExpr, ParsedMain } from "./expr_stmt_types.mjs";
 import { parse_expr } from "./expr_stmt_legacy_expr.mjs";
 import { parse_stmt } from "./expr_stmt_legacy_stmt.mjs";
-import { is_assign_stmt_start_impl, is_field_assign_stmt_start_impl, is_index_assign_stmt_start_impl } from "./expr_stmt_stmt_starts.mjs";
+import { is_assign_stmt_start_impl, is_field_assign_stmt_start_impl, is_index_assign_stmt_start_impl, is_deref_assign_stmt_start_impl } from "./expr_stmt_stmt_starts.mjs";
 export function parse_primary(src, i) {
 const j = skip_ws(src, i);
 if (!(j < stringLen(src))) {
@@ -242,7 +242,7 @@ panic_at(src, t, "expected '}'");
 if (stringCharCodeAt(src, t) == 125) {
 break;
 }
-const isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "fn") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") || starts_with_at(src, t, "yield") || is_field_assign_stmt_start_impl(src, t) || is_assign_stmt_start_impl(src, t) || is_index_assign_stmt_start_impl(src, t);
+const isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "fn") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") || starts_with_at(src, t, "yield") || is_field_assign_stmt_start_impl(src, t) || is_assign_stmt_start_impl(src, t) || is_index_assign_stmt_start_impl(src, t) || is_deref_assign_stmt_start_impl(src, t);
 if (isStmt) {
 const st = parse_stmt(src, k);
 body = body + st.v0;

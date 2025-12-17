@@ -372,6 +372,9 @@ return cc_expr(s.base) + cc_expr(s.index) + cc_expr(s.value);
 if ((s.tag === "SFieldAssign")) {
 return cc_expr(s.base) + cc_expr(s.value);
 }
+if ((s.tag === "SDerefAssign")) {
+return cc_expr(s.ptr) + cc_expr(s.value);
+}
 return 0;
 }
 export function cc_stmts(stmts) {

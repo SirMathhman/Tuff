@@ -41,7 +41,8 @@ from ast use {
   stmt_while,
   stmt_if,
   stmt_index_assign,
-  stmt_field_assign
+  stmt_field_assign,
+  stmt_deref_assign
 };
 
 out fn parse_stmt_ast(src: String, i: I32) : ParsedStmtAst => {
@@ -240,6 +241,25 @@ out fn parse_stmt_ast(src: String, i: I32) : ParsedStmtAst => {
     k = parse_optional_semicolon(src, val.nextPos);
     let baseExpr = expr_ident(span(name.startPos, name.nextPos), name.text);
     yield ParsedStmtAst(stmt_index_assign(span(start, k), baseExpr, idx.expr, val.expr), k);
+  }
+
+  // deref assignment: *<expr> = <expr>;
+  if (k < stringLen(src) && stringCharCodeAt(src, k) == 42) { // '*'
+    // Check if this is *<expr> = <value>
+    // Parse the ptr expression (which starts with *)
+    let ptrExpr = parse_expr_ast_impl(src, k);
+    let t = skip_ws(src, ptrExpr.nextPos);
+    if (t < stringLen(src) && stringCharCodeAt(src, t) == 61) { // '='
+      // Check it's not '==' 
+      if (!(t + 1 < stringLen(src) && stringCharCodeAt(src, t + 1) == 61)) {
+        k = parse_keyword(src, t, "=");
+        let val = parse_expr_ast_impl(src, k);
+        k = parse_optional_semicolon(src, val.nextPos);
+        // ptrExpr is *<something>, extract the inner pointer expression
+        // ptrExpr.expr should be EUnary with OpDeref, we want the inner expr
+        yield ParsedStmtAst(stmt_deref_assign(span(start, k), ptrExpr.expr, val.expr), k);
+      }
+    }
   }
 
   // expression statement

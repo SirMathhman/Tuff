@@ -33,6 +33,7 @@ from analyzer::typestrings use {
   ty_parse_array,
   ty_parse_app,
   ty_is_fn_type,
+  ty_is_pointer,
   normalize_ty_ann,
   ty_skip_ws
 };
@@ -69,6 +70,9 @@ out fn is_copy_type(t: String, structDefs: Vec<StructDef>) : Bool => {
   
   // Primitives are always Copy (includes String for now)
   if (is_primitive_type(tt)) { yield true; }
+  
+  // Pointers are always Copy
+  if (ty_is_pointer(tt)) { yield true; }
   
   // Unknown types: treat as Copy for now to allow bootstrapping
   // TODO: Once we have better type inference for imports, treat Unknown as Move

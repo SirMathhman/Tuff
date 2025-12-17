@@ -3,7 +3,7 @@ import { stringLen, stringCharCodeAt } from "../rt/stdlib.mjs";
 import { vec_new, vec_push } from "../rt/vec.mjs";
 import { panic_at } from "../util/diagnostics.mjs";
 import { skip_ws, starts_with_at } from "../util/lexing.mjs";
-import { is_assign_stmt_start_impl, is_field_assign_stmt_start_impl, is_index_assign_stmt_start_impl } from "./expr_stmt_stmt_starts.mjs";
+import { is_assign_stmt_start_impl, is_field_assign_stmt_start_impl, is_index_assign_stmt_start_impl, is_deref_assign_stmt_start_impl } from "./expr_stmt_stmt_starts.mjs";
 import { ParsedExprAst, ParsedMainAst, ParsedStmtsAst } from "./expr_stmt_types.mjs";
 import { parse_expr_ast_impl } from "./expr_stmt_ast_expr.mjs";
 import { parse_stmt_ast } from "./expr_stmt_ast_stmt.mjs";
@@ -125,7 +125,7 @@ panic_at(src, t, "expected '}'");
 if (stringCharCodeAt(src, t) == 125) {
 break;
 }
-const isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "fn") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") && !scan_if_stmt_has_else(src, t) || starts_with_at(src, t, "yield") || is_field_assign_stmt_start_impl(src, t) || is_assign_stmt_start_impl(src, t) || is_index_assign_stmt_start_impl(src, t);
+const isStmt = starts_with_at(src, t, "let") || starts_with_at(src, t, "fn") || starts_with_at(src, t, "while") || starts_with_at(src, t, "if") && !scan_if_stmt_has_else(src, t) || starts_with_at(src, t, "yield") || is_field_assign_stmt_start_impl(src, t) || is_assign_stmt_start_impl(src, t) || is_index_assign_stmt_start_impl(src, t) || is_deref_assign_stmt_start_impl(src, t);
 if (isStmt) {
 const st = parse_stmt_ast(src, k);
 vec_push(body, st.stmt);

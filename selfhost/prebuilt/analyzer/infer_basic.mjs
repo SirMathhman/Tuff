@@ -2,7 +2,7 @@
 import { stringLen, stringSlice } from "../rt/stdlib.mjs";
 import { vec_new, vec_len, vec_get } from "../rt/vec.mjs";
 import { span_start } from "../ast.mjs";
-import { ty_unknown, ty_bool, ty_int_lit, ty_float_lit, ty_i32, ty_f32, ty_f64, ty_char, ty_string, ty_never, ty_fn_type, ty_is_fn_type, ty_fn_type_params, ty_fn_ret, ty_fn_param_tys, normalize_ty_ann, ty_is_type_var, type_is_unknown, type_is_int_like, type_is_concrete_int, type_is_float_like, type_is_concrete_float, ty_parse_app, ty_parse_array, ty_skip_ws } from "./typestrings.mjs";
+import { ty_unknown, ty_bool, ty_int_lit, ty_float_lit, ty_i32, ty_f32, ty_f64, ty_char, ty_string, ty_never, ty_fn_type, ty_is_fn_type, ty_fn_type_params, ty_fn_ret, ty_fn_param_tys, normalize_ty_ann, ty_is_type_var, type_is_unknown, type_is_int_like, type_is_concrete_int, type_is_float_like, type_is_concrete_float, ty_parse_app, ty_parse_array, ty_skip_ws, ty_is_pointer, ty_ptr_inner, ty_ptr } from "./typestrings.mjs";
 import { this_struct_name, struct_name_of_expr, has_struct_def, get_struct_field_type, has_fn_sig, find_fn_sig } from "./env.mjs";
 import { infer_lookup_ty } from "./scope.mjs";
 import { subst_bind, ty_apply_subst } from "./subst.mjs";
@@ -98,6 +98,17 @@ if (t == ty_float_lit()) {
 return ty_f64();
 }
 return ty_unknown();
+}
+if ((e.op.tag === "OpDeref")) {
+const t = infer_expr_type(src, structs, fns, scopes, depth, e.expr);
+if (ty_is_pointer(t)) {
+return ty_ptr_inner(t);
+}
+return ty_unknown();
+}
+if ((e.op.tag === "OpAddrOf")) {
+const t = infer_expr_type(src, structs, fns, scopes, depth, e.expr);
+return ty_ptr(t);
 }
 }
 if ((e.tag === "EBinary")) {

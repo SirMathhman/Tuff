@@ -41,6 +41,8 @@ export const EMatch = { tag: "EMatch" };
 export const EIsType = { tag: "EIsType" };
 export const OpNot = { tag: "OpNot" };
 export const OpNeg = { tag: "OpNeg" };
+export const OpDeref = { tag: "OpDeref" };
+export const OpAddrOf = { tag: "OpAddrOf" };
 export const MPWildcard = { tag: "MPWildcard" };
 export const MPInt = { tag: "MPInt" };
 export const MPBool = { tag: "MPBool" };
@@ -54,6 +56,7 @@ export const SWhile = { tag: "SWhile" };
 export const SIf = { tag: "SIf" };
 export const SIndexAssign = { tag: "SIndexAssign" };
 export const SFieldAssign = { tag: "SFieldAssign" };
+export const SDerefAssign = { tag: "SDerefAssign" };
 export const DExternFrom = { tag: "DExternFrom" };
 export const DExternType = { tag: "DExternType" };
 export const DLet = { tag: "DLet" };
@@ -274,6 +277,9 @@ return ({ tag: "SIndexAssign", span: span, base: base, index: index, value: valu
 }
 export function stmt_field_assign(span, base, fields, value) {
 return ({ tag: "SFieldAssign", span: span, base: base, fields: fields, value: value });
+}
+export function stmt_deref_assign(span, ptr, value) {
+return ({ tag: "SDerefAssign", span: span, ptr: ptr, value: value });
 }
 export function decl_extern_from(span, modulePath, names) {
 return ({ tag: "DExternFrom", span: span, modulePath: modulePath, names: names });
