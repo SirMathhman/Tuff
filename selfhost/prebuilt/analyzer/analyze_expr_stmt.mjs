@@ -8,10 +8,11 @@ import { infer_int_const } from "./consts.mjs";
 import { ty_unknown, ty_is_fn_type, ty_fn_type_params, ty_parse_array, ty_parse_app, ty_skip_ws, normalize_ty_ann, type_is_unknown, vec_contains_str } from "./typestrings.mjs";
 import { mk_narrowed_tag, mk_union_def } from "./defs.mjs";
 import { narrow_lookup, narrow_clone } from "./narrowing.mjs";
-import { scope_contains, scopes_enter, declare_name, declare_name_deprecated, declare_local_name, lookup_binding, update_binding_ty, mark_binding_read, mark_binding_written, infer_lookup_ty, require_name } from "./scope.mjs";
+import { scope_contains, scopes_enter, declare_name, declare_name_deprecated, declare_local_name, lookup_binding, update_binding_ty, mark_binding_read, mark_binding_written, mark_binding_moved, is_binding_moved, infer_lookup_ty, require_name } from "./scope.mjs";
 import { has_struct_def, get_struct_field_type, has_fn_sig, find_fn_sig, has_union_def, find_union_def, union_has_variant, union_variant_has_payload } from "./env.mjs";
 import { infer_expr_type } from "./infer_basic.mjs";
 import { infer_expr_type_with_narrowing, parse_tag_narrowing, validate_union_variant_for_binding } from "./infer_narrowing.mjs";
+import { is_copy_type, is_move_type } from "./owns.mjs";
 import { require_all_param_types, require_type_compatible } from "./typecheck.mjs";
 import { check_struct_lit_types, check_binary_operand_types, check_call_types, check_cond_is_bool } from "./checks.mjs";
 import { warn_unused_locals_in_scope, warn_unused_params_in_scope, check_lambda_complexity, check_single_char_identifier, fluff_warn_simplify_negation } from "./fluff.mjs";
@@ -19,6 +20,9 @@ export function analyze_expr(src, structs, unions, fns, scopes, depth, narrowed,
 if ((e.tag === "EIdent")) {
 require_name(src, span_start(e.span), scopes, depth, e.name);
 if (e.name != "true" && e.name != "false" && e.name != "continue" && e.name != "break") {
+if (is_binding_moved(scopes, depth, e.name)) {
+error_at(src, span_start(e.span), "use of moved value: " + e.name);
+}
 mark_binding_read(scopes, depth, e.name);
 const b = lookup_binding(src, span_start(e.span), scopes, depth, e.name);
 if (b.deprecatedReason != "") {
@@ -85,7 +89,8 @@ if ((e.tag === "ECall")) {
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.callee);
 let ai = 0;
 while (ai < vec_len(e.args)) {
-analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, vec_get(e.args, ai));
+const arg = vec_get(e.args, ai);
+analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, arg);
 ai = ai + 1;
 }
 check_call_types(src, structs, fns, scopes, depth, e);
@@ -286,6 +291,15 @@ return;
 }
 analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.init);
 const initTy = infer_expr_type_with_narrowing(src, structs, unions, fns, scopes, depth, narrowed, s.init);
+if ((s.init.tag === "EIdent")) {
+const initName = s.init.name;
+if (initName != "true" && initName != "false" && initName != "continue" && initName != "break") {
+const initTyNorm = normalize_ty_ann(initTy);
+if (is_move_type(initTyNorm, structs)) {
+mark_binding_moved(scopes, depth, initName, span_start(s.span));
+}
+}
+}
 if ((s.init.tag === "EIdent") && has_fn_sig(fns, s.init.name)) {
 const sig = find_fn_sig(fns, s.init.name);
 if (vec_len(sig.typeParams) > 0) {

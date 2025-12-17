@@ -29,6 +29,8 @@ from analyzer::scope use {
   update_binding_ty,
   mark_binding_read,
   mark_binding_written,
+  mark_binding_moved,
+  is_binding_moved,
   infer_lookup_ty,
   require_name
 };
@@ -46,6 +48,7 @@ from analyzer::env use {
 
 from analyzer::infer_basic use { infer_expr_type };
 from analyzer::infer_narrowing use { infer_expr_type_with_narrowing, parse_tag_narrowing, validate_union_variant_for_binding };
+from analyzer::owns use { is_copy_type, is_move_type };
 
 from analyzer::typecheck use { require_all_param_types, require_type_compatible };
 from analyzer::checks use { check_struct_lit_types, check_binary_operand_types, check_call_types, check_cond_is_bool };
@@ -61,6 +64,10 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
   if (e is EIdent) {
     require_name(src, span_start(e.span), scopes, depth, e.name);
     if (e.name != "true" && e.name != "false" && e.name != "continue" && e.name != "break") {
+      // Check for use-after-move
+      if (is_binding_moved(scopes, depth, e.name)) {
+        error_at(src, span_start(e.span), "use of moved value: " + e.name);
+      }
       mark_binding_read(scopes, depth, e.name);
       let b = lookup_binding(src, span_start(e.span), scopes, depth, e.name);
       if (b.deprecatedReason != "") {
@@ -131,7 +138,13 @@ out fn analyze_expr(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, e.callee);
     let mut ai = 0;
     while (ai < vec_len(e.args)) {
-      analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, vec_get(e.args, ai));
+      let arg = vec_get(e.args, ai);
+      analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, arg);
+      
+      // TODO: Track move for function arguments once we have borrowing
+      // For now, function calls don't consume ownership (implicit borrow)
+      // This will be re-enabled when we add &T syntax
+      
       ai = ai + 1;
     }
     check_call_types(src, structs, fns, scopes, depth, e);
@@ -349,6 +362,18 @@ out fn analyze_stmt(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>,
 
     analyze_expr(src, structs, unions, fns, scopes, depth, narrowed, s.init);
     let initTy = infer_expr_type_with_narrowing(src, structs, unions, fns, scopes, depth, narrowed, s.init);
+    
+    // Track move: if init is an identifier of a Move type, mark it as moved
+    if (s.init is EIdent) {
+      let initName = s.init.name;
+      if (initName != "true" && initName != "false" && initName != "continue" && initName != "break") {
+        let initTyNorm = normalize_ty_ann(initTy);
+        if (is_move_type(initTyNorm, structs)) {
+          mark_binding_moved(scopes, depth, initName, span_start(s.span));
+        }
+      }
+    }
+    
     if (s.init is EIdent && has_fn_sig(fns, s.init.name)) {
       let sig = find_fn_sig(fns, s.init.name);
       if (vec_len(sig.typeParams) > 0) {

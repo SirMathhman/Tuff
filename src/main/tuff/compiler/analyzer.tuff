@@ -115,6 +115,8 @@ from analyzer::env use {
   union_variant_payload_ty_anns
 };
 
+from analyzer::owns use { is_copy_type, is_move_type };
+
 from analyzer::scope use {
   scopes_contains,
   scopes_enter,

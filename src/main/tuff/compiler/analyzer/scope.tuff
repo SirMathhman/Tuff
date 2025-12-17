@@ -4,7 +4,7 @@ extern from rt::vec use { vec_new, vec_len, vec_push, vec_get, vec_set };
 
 from util::diagnostics use { error_at };
 
-from analyzer::defs use { mk_binding };
+from analyzer::defs use { mk_binding, mk_binding_moved };
 from analyzer::typestrings use { ty_unknown };
 
 out fn scopes_contains(scopes: Vec<Vec<Binding>>, depth: I32, name: String) : Bool => {
@@ -103,7 +103,11 @@ out fn update_binding_ty(src: String, pos: I32, scopes: Vec<Vec<Binding>>, depth
     while (bi < vec_len(scope)) {
       let b = vec_get(scope, bi);
       if (b.name == name) {
-        vec_set(scope, bi, mk_binding(b.name, b.isMut, newTyTag, b.deprecatedReason, b.declPos, b.read, b.written, b.isParam));
+        if (b.moved) {
+          vec_set(scope, bi, mk_binding_moved(b.name, b.isMut, newTyTag, b.deprecatedReason, b.declPos, b.read, b.written, b.isParam, b.movePos));
+        } else {
+          vec_set(scope, bi, mk_binding(b.name, b.isMut, newTyTag, b.deprecatedReason, b.declPos, b.read, b.written, b.isParam));
+        }
         yield;
       }
       bi = bi + 1;
@@ -149,6 +153,40 @@ out fn mark_binding_written(scopes: Vec<Vec<Binding>>, depth: I32, name: String)
     }
     si = si + 1;
   }
+}
+
+out fn mark_binding_moved(scopes: Vec<Vec<Binding>>, depth: I32, name: String, pos: I32) : Void => {
+  let mut si = 0;
+  while (si < depth) {
+    let scope = vec_get(scopes, si);
+    let mut bi = 0;
+    while (bi < vec_len(scope)) {
+      let b = vec_get(scope, bi);
+      if (b.name == name) {
+        if (!b.moved) {
+          vec_set(scope, bi, mk_binding_moved(b.name, b.isMut, b.tyTag, b.deprecatedReason, b.declPos, b.read, b.written, b.isParam, pos));
+        }
+        yield;
+      }
+      bi = bi + 1;
+    }
+    si = si + 1;
+  }
+}
+
+out fn is_binding_moved(scopes: Vec<Vec<Binding>>, depth: I32, name: String) : Bool => {
+  let mut si = 0;
+  while (si < depth) {
+    let scope = vec_get(scopes, si);
+    let mut bi = 0;
+    while (bi < vec_len(scope)) {
+      let b = vec_get(scope, bi);
+      if (b.name == name) { yield b.moved; }
+      bi = bi + 1;
+    }
+    si = si + 1;
+  }
+  false
 }
 
 out fn infer_lookup_ty(scopes: Vec<Vec<Binding>>, depth: I32, name: String) : String => {

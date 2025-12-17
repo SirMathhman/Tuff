@@ -23,6 +23,7 @@ Each analyzer module is independently compilable and focuses on a specific conce
 | **`analyze_decls.tuff`**     | Per-declaration analysis: function declarations, struct definitions, imports. Calls linting rules. | `analyze_fn_decl()`, `analyze_struct_decl()`                                                           |
 | **`analyze_expr_stmt.tuff`** | Expression and statement analysis: orchestrates analysis of nested expressions, statements         | `analyze_expr()`, `analyze_stmt()`, `analyze_program()`                                                |
 | **`fluff.tuff`**             | Linting rules: unused variable detection, function complexity checks, naming conventions           | `fluff_warn_unused_locals_in_scope()`, `fluff_check_fn_complexity()`                                   |
+| **`owns.tuff`**              | Ownership tracking: Copy/Move type classification, use-after-move detection                       | `is_copy_type()`, `is_move_type()`, `is_primitive_type()`                                              |
 
 ## Data Flow
 
@@ -84,6 +85,28 @@ let x = 1;
 ```
 
 Checked by `scope.tuff` during declaration analysis.
+
+### Ownership and Move Semantics
+
+The analyzer tracks ownership for value types through `owns.tuff`:
+
+- **Copy types**: Primitives (`I32`, `Bool`, etc.), String (temporarily), structs with all-Copy fields
+- **Move types**: Function types, structs with non-Copy fields
+
+When a Move-type value is assigned to another variable, the original is marked as "moved" and cannot be used:
+
+```tuff
+struct Container { data: String, value: I32 }
+
+let c1 = Container { "hello", 42 };
+let c2 = c1;        // c1 is moved to c2
+// let x = c1.value; // Error: use of moved value: c1
+```
+
+**Current limitations (for bootstrap)**:
+- String, Unknown types, and generic types are temporarily Copy to allow bootstrapping
+- Function calls don't move arguments (implicit borrow)
+- Future: Add `&T` borrowing syntax and explicit `.copy()` methods
 
 ### Exhaustiveness Checking
 

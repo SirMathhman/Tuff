@@ -12,7 +12,10 @@ export function mk_union_def(name, typeParams, variants) {
 return ({ tag: "UnionDef", name: name, deprecatedReason: "", typeParams: typeParams, variants: variants });
 }
 export function mk_binding(name, isMut, tyTag, deprecatedReason, declPos, read, written, isParam) {
-return ({ tag: "Binding", name: name, isMut: isMut, tyTag: tyTag, deprecatedReason: deprecatedReason, declPos: declPos, read: read, written: written, isParam: isParam });
+return ({ tag: "Binding", name: name, isMut: isMut, tyTag: tyTag, deprecatedReason: deprecatedReason, declPos: declPos, read: read, written: written, isParam: isParam, moved: false, movePos: -1 });
+}
+export function mk_binding_moved(name, isMut, tyTag, deprecatedReason, declPos, read, written, isParam, movePos) {
+return ({ tag: "Binding", name: name, isMut: isMut, tyTag: tyTag, deprecatedReason: deprecatedReason, declPos: declPos, read: read, written: written, isParam: isParam, moved: true, movePos: movePos });
 }
 export function mk_subst(name, ty) {
 return ({ tag: "TySubst", name: name, ty: ty });

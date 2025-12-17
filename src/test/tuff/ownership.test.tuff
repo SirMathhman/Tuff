@@ -1,0 +1,81 @@
+// Test ownership and move semantics
+
+extern from rt::stdlib use { stringLen };
+
+from std::test use { reset, suite, it, expect_eq, summary, status };
+
+struct CopyStruct {
+  x: I32,
+  y: I32
+}
+
+struct MoveStruct {
+  name: String,
+  value: I32
+}
+
+struct NestedMove {
+  inner: MoveStruct,
+  count: I32
+}
+
+fn use_string(s: String) : I32 => stringLen(s)
+
+fn use_i32(n: I32) : I32 => n
+
+fn copy_struct_user(c: CopyStruct) : I32 => c.x + c.y
+
+fn move_struct_user(m: MoveStruct) : I32 => m.value
+
+fn main() : I32 => {
+  reset();
+  suite("ownership - copy types");
+
+  // Primitives are copy
+  let x: I32 = 42;
+  let y = x;  // copy
+  it("primitives copy - original still valid", expect_eq("x", x, 42));
+  it("primitives copy - copy has value", expect_eq("y", y, 42));
+
+  // Copy struct (all fields are Copy)
+  let c1 = CopyStruct { 10, 20 };
+  let c2 = c1;  // copy (all fields are I32)
+  it("copy struct - original still valid", expect_eq("c1.x", c1.x, 10));
+  it("copy struct - copy has value", expect_eq("c2.x", c2.x, 10));
+
+  suite("ownership - move types");
+
+  // NOTE: The tests below are EXPECTED TO FAIL until string.copy() is implemented
+  // String is a move type
+  let s1: String = "hello";
+  // Uncomment below to see move violation:
+  // let s2 = s1;  // s1 moves to s2
+  // let len = stringLen(s1);  // ERROR: use of moved value s1
+
+  // For now, just test that strings work in general
+  let s3: String = "world";
+  it("string length works", expect_eq("len", stringLen(s3), 5));
+
+  suite("ownership - function calls");
+
+  // Passing copy type to function - original still usable
+  let n = 100;
+  let result1 = use_i32(n);  // n is copied
+  it("copy type passed to fn - original valid", expect_eq("n after call", n, 100));
+  it("copy type passed to fn - result correct", expect_eq("result", result1, 100));
+
+  // Passing copy struct to function - original still usable
+  let cs = CopyStruct { 5, 10 };
+  let result2 = copy_struct_user(cs);  // cs is copied
+  it("copy struct passed to fn - original valid", expect_eq("cs.x after call", cs.x, 5));
+  it("copy struct passed to fn - result correct", expect_eq("result", result2, 15));
+
+  // NOTE: Passing move type to function would consume it
+  // Uncomment to see move violation:
+  // let ms = MoveStruct { "test", 42 };
+  // let r = move_struct_user(ms);  // ms is moved
+  // let v = ms.value;  // ERROR: use of moved value ms
+
+  summary();
+  status()
+}

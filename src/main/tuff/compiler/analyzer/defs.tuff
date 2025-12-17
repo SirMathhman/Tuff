@@ -42,7 +42,9 @@ struct Binding {
   declPos: I32,
   read: Bool,
   written: Bool,
-  isParam: Bool
+  isParam: Bool,
+  moved: Bool,
+  movePos: I32
 }
 
 struct TySubst {
@@ -70,7 +72,10 @@ out fn mk_union_def(name: String, typeParams: Vec<String>, variants: Vec<UnionVa
   UnionDef { "UnionDef", name, "", typeParams, variants }
 
 out fn mk_binding(name: String, isMut: Bool, tyTag: String, deprecatedReason: String, declPos: I32, read: Bool, written: Bool, isParam: Bool) =>
-  Binding { "Binding", name, isMut, tyTag, deprecatedReason, declPos, read, written, isParam }
+  Binding { "Binding", name, isMut, tyTag, deprecatedReason, declPos, read, written, isParam, false, -1 }
+
+out fn mk_binding_moved(name: String, isMut: Bool, tyTag: String, deprecatedReason: String, declPos: I32, read: Bool, written: Bool, isParam: Bool, movePos: I32) =>
+  Binding { "Binding", name, isMut, tyTag, deprecatedReason, declPos, read, written, isParam, true, movePos }
 
 out fn mk_subst(name: String, ty: String) => TySubst { "TySubst", name, ty }
 

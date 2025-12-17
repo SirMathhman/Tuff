@@ -1,7 +1,7 @@
 // compiled by selfhost tuffc
 import { vec_new, vec_len, vec_push, vec_get, vec_set } from "../rt/vec.mjs";
 import { error_at } from "../util/diagnostics.mjs";
-import { mk_binding } from "./defs.mjs";
+import { mk_binding, mk_binding_moved } from "./defs.mjs";
 import { ty_unknown } from "./typestrings.mjs";
 export function scopes_contains(scopes, depth, name) {
 let si = 0;
@@ -100,7 +100,11 @@ let bi = 0;
 while (bi < vec_len(scope)) {
 const b = vec_get(scope, bi);
 if (b.name == name) {
+if (b.moved) {
+vec_set(scope, bi, mk_binding_moved(b.name, b.isMut, newTyTag, b.deprecatedReason, b.declPos, b.read, b.written, b.isParam, b.movePos));
+} else {
 vec_set(scope, bi, mk_binding(b.name, b.isMut, newTyTag, b.deprecatedReason, b.declPos, b.read, b.written, b.isParam));
+}
 return;
 }
 bi = bi + 1;
@@ -147,6 +151,41 @@ bi = bi + 1;
 si = si + 1;
 }
 return undefined;
+}
+export function mark_binding_moved(scopes, depth, name, pos) {
+let si = 0;
+while (si < depth) {
+const scope = vec_get(scopes, si);
+let bi = 0;
+while (bi < vec_len(scope)) {
+const b = vec_get(scope, bi);
+if (b.name == name) {
+if (!b.moved) {
+vec_set(scope, bi, mk_binding_moved(b.name, b.isMut, b.tyTag, b.deprecatedReason, b.declPos, b.read, b.written, b.isParam, pos));
+}
+return;
+}
+bi = bi + 1;
+}
+si = si + 1;
+}
+return undefined;
+}
+export function is_binding_moved(scopes, depth, name) {
+let si = 0;
+while (si < depth) {
+const scope = vec_get(scopes, si);
+let bi = 0;
+while (bi < vec_len(scope)) {
+const b = vec_get(scope, bi);
+if (b.name == name) {
+return b.moved;
+}
+bi = bi + 1;
+}
+si = si + 1;
+}
+return false;
 }
 export function infer_lookup_ty(scopes, depth, name) {
 let si = 0;

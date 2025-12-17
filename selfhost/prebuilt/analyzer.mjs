@@ -15,6 +15,7 @@ import { infer_expr_type_with_narrowing, parse_tag_narrowing, validate_union_var
 import { analyze_expr, analyze_stmt, analyze_stmts } from "./analyzer/analyze_expr_stmt.mjs";
 import { analyze_fn_decl } from "./analyzer/analyze_decls.mjs";
 import { this_struct_name, path_dotted, struct_name_of_expr, find_struct_def, has_struct_def, get_struct_field_type, find_fn_sig, has_fn_sig, find_union_def, has_union_def, union_has_variant, find_union_by_variant, union_variant_has_payload, union_variant_payload_ty_anns } from "./analyzer/env.mjs";
+import { is_copy_type, is_move_type } from "./analyzer/owns.mjs";
 import { scopes_contains, scopes_enter, declare_name, declare_name_deprecated, scope_contains, declare_local_name, declare_local_name_deprecated, lookup_binding, update_binding_ty, mark_binding_read, mark_binding_written, infer_lookup_ty, require_name } from "./analyzer/scope.mjs";
 import { require_type_compatible, require_all_param_types } from "./analyzer/typecheck.mjs";
 import { check_cond_is_bool, check_binary_operand_types, check_struct_lit_types, check_call_types } from "./analyzer/checks.mjs";
