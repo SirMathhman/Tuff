@@ -836,9 +836,6 @@ const d = vec_get(decls, i);
 if ((d.tag === "DFn")) {
 serialize_fn_body(d.body, d.tail, tokens);
 }
-if ((d.tag === "DClassFn")) {
-serialize_fn_body(d.body, d.tail, tokens);
-}
 i = i + 1;
 }
 if (vec_len(tokens) < __clone_min_tokens * 2) {

@@ -428,11 +428,14 @@ out fn emit_decl(d: Decl, ctx: JsEmitCtx) : String => {
   let ind = get_indent(ctx);
   
   if (d is DFn) {
+    if (d.isClass) {
+      yield emit_class_fn_decl(d, ctx);
+    }
+    if (d.isExtern) {
+      // extern fn without body - emit nothing
+      yield "";
+    }
     yield emit_fn_decl(d, ctx);
-  }
-  
-  if (d is DClassFn) {
-    yield emit_class_fn_decl(d, ctx);
   }
   
   if (d is DStruct) {
@@ -497,7 +500,7 @@ fn emit_fn_decl(d: DFn, ctx: JsEmitCtx) : String => {
   code
 }
 
-fn emit_class_fn_decl(d: DClassFn, ctx: JsEmitCtx) : String => {
+fn emit_class_fn_decl(d: DFn, ctx: JsEmitCtx) : String => {
   // Class functions become factory functions in JS
   let mut params = "";
   let mut i = 0;

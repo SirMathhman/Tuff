@@ -13,7 +13,7 @@ import { subst_lookup, subst_bind, ty_apply_subst } from "./analyzer/subst.mjs";
 import { infer_expr_type } from "./analyzer/infer_basic.mjs";
 import { infer_expr_type_with_narrowing, parse_tag_narrowing, validate_union_variant_for_binding } from "./analyzer/infer_narrowing.mjs";
 import { analyze_expr, analyze_stmt, analyze_stmts } from "./analyzer/analyze_expr_stmt.mjs";
-import { analyze_fn_decl, analyze_class_fn_decl } from "./analyzer/analyze_decls.mjs";
+import { analyze_fn_decl } from "./analyzer/analyze_decls.mjs";
 import { this_struct_name, path_dotted, struct_name_of_expr, find_struct_def, has_struct_def, get_struct_field_type, find_fn_sig, has_fn_sig, find_union_def, has_union_def, union_has_variant, find_union_by_variant, union_variant_has_payload, union_variant_payload_ty_anns } from "./analyzer/env.mjs";
 import { scopes_contains, scopes_enter, declare_name, declare_name_deprecated, scope_contains, declare_local_name, declare_local_name_deprecated, lookup_binding, update_binding_ty, mark_binding_read, mark_binding_written, infer_lookup_ty, require_name } from "./analyzer/scope.mjs";
 import { require_type_compatible, require_all_param_types } from "./analyzer/typecheck.mjs";
@@ -138,60 +138,41 @@ i = i + 1;
 }
 require_all_param_types(src, span_start(d.span), "function " + d.name, d.params, paramTyAnns);
 vec_push(fns, mk_fn_sig(d.name, depReason, d.typeParams, d.params, paramTyAnns, d.retTyAnn));
-return;
-}
-if ((d.tag === "DClassFn")) {
-fluff_check_missing_docs(src, span_start(d.span), d.name, "class function", d.isOut);
-const depReason = deprecation_reason_before(src, span_start(d.span));
-if (depReason != "") {
-declare_name_deprecated(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown(), depReason);
-} else {
-declare_name(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown());
-}
+if (d.isClass) {
 const thisName = this_struct_name(d.name);
 if (!has_struct_def(structs, thisName)) {
-const fields = vec_new();
-const fieldTyAnns = vec_new();
-let pi = 0;
-while (pi < vec_len(d.params)) {
-vec_push(fields, vec_get(d.params, pi));
+const classFields = vec_new();
+const classFieldTyAnns = vec_new();
+let classPI = 0;
+while (classPI < vec_len(d.params)) {
+vec_push(classFields, vec_get(d.params, classPI));
 let t = "";
-if (pi < vec_len(d.paramTyAnns)) {
-t = vec_get(d.paramTyAnns, pi);
+if (classPI < vec_len(d.paramTyAnns)) {
+t = vec_get(d.paramTyAnns, classPI);
 }
-vec_push(fieldTyAnns, (t == "" ? "" : normalize_ty_ann(t)));
-pi = pi + 1;
+vec_push(classFieldTyAnns, (t == "" ? "" : normalize_ty_ann(t)));
+classPI = classPI + 1;
 }
-let si = 0;
-while (si < vec_len(d.body)) {
-const st = vec_get(d.body, si);
+let classSI = 0;
+while (classSI < vec_len(d.body)) {
+const st = vec_get(d.body, classSI);
 if ((st.tag === "SLet")) {
-vec_push(fields, st.name);
+vec_push(classFields, st.name);
 if (st.tyAnn != "") {
-vec_push(fieldTyAnns, normalize_ty_ann(st.tyAnn));
+vec_push(classFieldTyAnns, normalize_ty_ann(st.tyAnn));
 } else {
 if ((st.init.tag === "ELambda")) {
-vec_push(fieldTyAnns, ty_fn_type(st.init.typeParams, st.init.paramTyAnns, st.init.retTyAnn));
+vec_push(classFieldTyAnns, ty_fn_type(st.init.typeParams, st.init.paramTyAnns, st.init.retTyAnn));
 } else {
-vec_push(fieldTyAnns, "");
+vec_push(classFieldTyAnns, "");
 }
 }
 }
-si = si + 1;
+classSI = classSI + 1;
 }
-vec_push(structs, mk_struct_def(thisName, fields, fieldTyAnns));
-}
-let paramTyAnns = d.paramTyAnns;
-if (vec_len(paramTyAnns) == 0) {
-paramTyAnns = vec_new();
-let i = 0;
-while (i < vec_len(d.params)) {
-vec_push(paramTyAnns, "");
-i = i + 1;
+vec_push(structs, mk_struct_def(thisName, classFields, classFieldTyAnns));
 }
 }
-require_all_param_types(src, span_start(d.span), "class fn " + d.name, d.params, paramTyAnns);
-vec_push(fns, mk_fn_sig(d.name, depReason, d.typeParams, d.params, paramTyAnns, d.retTyAnn));
 return;
 }
 if ((d.tag === "DStruct")) {
@@ -251,10 +232,6 @@ return;
 }
 if ((d.tag === "DFn")) {
 analyze_fn_decl(src, structs, unions, fns, scopes, depth, d);
-return;
-}
-if ((d.tag === "DClassFn")) {
-analyze_class_fn_decl(src, structs, unions, fns, scopes, depth, d);
 return;
 }
 if ((d.tag === "DModule")) {

@@ -278,7 +278,6 @@ type Decl =
   | DExternType
   | DLet
   | DFn
-  | DClassFn
   | DStruct
   | DTypeUnion
   | DModule
@@ -309,18 +308,6 @@ struct DFn {
   isOut: Bool,
   isClass: Bool,
   isExtern: Bool,
-  name: String,
-  typeParams: Vec<String>,
-  params: Vec<String>,
-  paramTyAnns: Vec<String>,
-  retTyAnn: String,
-  body: Vec<Stmt>,
-  tail: Expr
-}
-// DClassFn kept for backward compatibility, but isClass on DFn should be preferred
-struct DClassFn {
-  span: Span,
-  isOut: Bool,
   name: String,
   typeParams: Vec<String>,
   params: Vec<String>,
@@ -483,11 +470,11 @@ out fn decl_fn_typed(span: Span, isOut: Bool, name: String, typeParams: Vec<Stri
 out fn decl_fn_full(span: Span, isOut: Bool, isClass: Bool, isExtern: Bool, name: String, typeParams: Vec<String>, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String, body: Vec<Stmt>, tail: Expr) : Decl =>
   DFn { span, isOut, isClass, isExtern, name, typeParams, params, paramTyAnns, retTyAnn, body, tail }
 
-// Legacy: class fn declarations use DClassFn for backward compatibility with existing `d is DClassFn` checks
+// class fn declarations now create DFn with isClass=true
 out fn decl_class_fn(span: Span, isOut: Bool, name: String, params: Vec<String>, body: Vec<Stmt>, tail: Expr) : Decl =>
-  DClassFn { span, isOut, name, vec_new(), params, vec_new(), "", body, tail }
+  DFn { span, isOut, true, false, name, vec_new(), params, vec_new(), "", body, tail }
 out fn decl_class_fn_typed(span: Span, isOut: Bool, name: String, typeParams: Vec<String>, params: Vec<String>, paramTyAnns: Vec<String>, retTyAnn: String, body: Vec<Stmt>, tail: Expr) : Decl =>
-  DClassFn { span, isOut, name, typeParams, params, paramTyAnns, retTyAnn, body, tail }
+  DFn { span, isOut, true, false, name, typeParams, params, paramTyAnns, retTyAnn, body, tail }
 
 out fn decl_let(span: Span, isMut: Bool, name: String, init: Expr) : Decl => DLet { span, isMut, name, "", init }
 out fn decl_let_typed(span: Span, isMut: Bool, name: String, tyAnn: String, init: Expr) : Decl => DLet { span, isMut, name, tyAnn, init }

@@ -156,14 +156,6 @@ out fn decl_needs_vec_rt(d: Decl) : Bool => {
     }
     yield expr_needs_vec_rt(d.tail);
   }
-  if (d is DClassFn) {
-    let mut i = 0;
-    while (i < vec_len(d.body)) {
-      if (stmt_needs_vec_rt(vec_get(d.body, i))) { yield true; }
-      i = i + 1;
-    }
-    yield false;
-  }
   if (d is DModule) {
     let mut i = 0;
     while (i < vec_len(d.decls)) {

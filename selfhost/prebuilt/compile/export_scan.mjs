@@ -22,11 +22,34 @@ return true;
 export function is_extern_decl_start(src, i) {
 const j = skip_ws(src, i);
 if (kw_at(src, j, "extern")) {
+const k = skip_ws(src, j + 6);
+if (kw_at(src, k, "fn")) {
+return false;
+}
+if (kw_at(src, k, "out")) {
+return false;
+}
+if (kw_at(src, k, "class")) {
+return false;
+}
+if (kw_at(src, k, "extern")) {
+return false;
+}
 return true;
 }
 if (kw_at(src, j, "out")) {
 const k = skip_ws(src, j + 3);
 if (kw_at(src, k, "extern")) {
+const m = skip_ws(src, k + 6);
+if (kw_at(src, m, "fn")) {
+return false;
+}
+if (kw_at(src, m, "class")) {
+return false;
+}
+if (kw_at(src, m, "extern")) {
+return false;
+}
 return true;
 }
 }
@@ -154,16 +177,6 @@ let di = 0;
 while (di < vec_len(decls)) {
 const d = vec_get(decls, di);
 if ((d.tag === "DFn")) {
-const depReason = deprecation_reason_before(src, span_start(d.span));
-const sig = mk_fn_sig(d.name, depReason, d.typeParams, d.params, d.paramTyAnns, d.retTyAnn);
-vec_push(allSigs, sig);
-if (d.isOut) {
-vec_push(outSigs, sig);
-} else {
-vec_push(privateNames, d.name);
-}
-}
-if ((d.tag === "DClassFn")) {
 const depReason = deprecation_reason_before(src, span_start(d.span));
 const sig = mk_fn_sig(d.name, depReason, d.typeParams, d.params, d.paramTyAnns, d.retTyAnn);
 vec_push(allSigs, sig);

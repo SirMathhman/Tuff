@@ -202,25 +202,34 @@ let isClass = false;
 let isExtern = false;
 while (true) {
 const j = skip_ws(src, k);
-if (!isOut && starts_with_at(src, j, "out")) {
+if (starts_with_at(src, j, "out")) {
 const afterOut = j + 3;
 if (afterOut >= stringLen(src) || !is_ident_part(stringCharCodeAt(src, afterOut))) {
+if (isOut) {
+panic_at(src, j, "duplicate modifier: 'out' already specified");
+}
 k = parse_keyword(src, k, "out");
 isOut = true;
 continue;
 }
 }
-if (!isClass && starts_with_at(src, j, "class")) {
+if (starts_with_at(src, j, "class")) {
 const afterClass = j + 5;
 if (afterClass >= stringLen(src) || !is_ident_part(stringCharCodeAt(src, afterClass))) {
+if (isClass) {
+panic_at(src, j, "duplicate modifier: 'class' already specified");
+}
 k = parse_keyword(src, k, "class");
 isClass = true;
 continue;
 }
 }
-if (!isExtern && starts_with_at(src, j, "extern")) {
+if (starts_with_at(src, j, "extern")) {
 const afterExtern = j + 6;
 if (afterExtern >= stringLen(src) || !is_ident_part(stringCharCodeAt(src, afterExtern))) {
+if (isExtern) {
+panic_at(src, j, "duplicate modifier: 'extern' already specified");
+}
 k = parse_keyword(src, k, "extern");
 isExtern = true;
 continue;
@@ -281,9 +290,6 @@ return ParsedFnLike(start, mods.isOut, mods.isClass, mods.isExtern, name, typePa
 }
 export function parse_fn_decl_ast2(src, i, exportAll) {
 const fn = parse_fn_like_header(src, i);
-if (fn.isClass) {
-return ParsedDeclAst(decl_class_fn_typed(span(fn.start, fn.nextPos), fn.isOut, fn.name.text, fn.typeParams, fn.params.names, fn.params.tyAnns, fn.retTyAnn, fn.body.body, fn.body.tail), fn.nextPos);
-}
 const decl = decl_fn_full(span(fn.start, fn.nextPos), fn.isOut, fn.isClass, fn.isExtern, fn.name.text, fn.typeParams, fn.params.names, fn.params.tyAnns, fn.retTyAnn, fn.body.body, fn.body.tail);
 return ParsedDeclAst(decl, fn.nextPos);
 }

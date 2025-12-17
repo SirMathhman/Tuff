@@ -118,10 +118,7 @@ fn analyze_fn_like_decl(
 }
 
 out fn analyze_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, outerScopes: Vec<Vec<Binding>>, outerDepth: I32, d: DFn) : Void => {
-  analyze_fn_like_decl(src, structs, unions, fns, outerScopes, outerDepth, d.span, d.name, d.params, d.paramTyAnns, d.retTyAnn, d.body, d.tail, "function");
-}
-
-out fn analyze_class_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, outerScopes: Vec<Vec<Binding>>, outerDepth: I32, d: DClassFn) : Void => {
-  analyze_fn_like_decl(src, structs, unions, fns, outerScopes, outerDepth, d.span, d.name, d.params, d.paramTyAnns, d.retTyAnn, d.body, d.tail, "class fn");
+  let kind = if (d.isClass) "class fn" else "function";
+  analyze_fn_like_decl(src, structs, unions, fns, outerScopes, outerDepth, d.span, d.name, d.params, d.paramTyAnns, d.retTyAnn, d.body, d.tail, kind);
 }
 

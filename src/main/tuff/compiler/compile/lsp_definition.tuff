@@ -29,7 +29,7 @@ from compile::lsp_check use { lsp_parse_file_impl };
 // ------------------------------------------------------------
 
 // Definition entry for the simple symbol table
-struct LspDef {
+struct LspDefEntry {
   tag: String,
   name: String,
   defStart: I32,
@@ -51,17 +51,17 @@ struct LspRefInternal {
 // Result of a go-to-definition lookup.
 class fn DefLocation(found: Bool, defStart: I32, defEnd: I32, defFile: String) => {}
 
-fn lsp_def(name: String, defStart: I32, defEnd: I32, kind: String) : LspDef =>
-  LspDef { "LspDef", name, defStart, defEnd, kind, "" }
+fn lsp_def(name: String, defStart: I32, defEnd: I32, kind: String) : LspDefEntry =>
+  LspDefEntry { "LspDefEntry", name, defStart, defEnd, kind, "" }
 
-fn lsp_def_ext(name: String, defStart: I32, defEnd: I32, kind: String, defFile: String) : LspDef =>
-  LspDef { "LspDef", name, defStart, defEnd, kind, defFile }
+fn lsp_def_ext(name: String, defStart: I32, defEnd: I32, kind: String, defFile: String) : LspDefEntry =>
+  LspDefEntry { "LspDefEntry", name, defStart, defEnd, kind, defFile }
 
 fn lsp_ref_ext(refStart: I32, refEnd: I32, defStart: I32, defEnd: I32, defFile: String) : LspRefInternal =>
   LspRefInternal { "LspRef", refStart, refEnd, defStart, defEnd, defFile }
 
 // Simple scoped symbol table
-fn lsp_lookup(defs: Vec<LspDef>, name: String) : LspDef => {
+fn lsp_lookup(defs: Vec<LspDefEntry>, name: String) : LspDefEntry => {
   // Search from end (most recent) to handle scoping
   let mut i = vec_len(defs) - 1;
   while (i >= 0) {
@@ -72,7 +72,7 @@ fn lsp_lookup(defs: Vec<LspDef>, name: String) : LspDef => {
   lsp_def("", -1, -1, "")
 }
 
-fn lsp_lookup_type(defs: Vec<LspDef>, name: String) : LspDef => {
+fn lsp_lookup_type(defs: Vec<LspDefEntry>, name: String) : LspDefEntry => {
   let mut i = vec_len(defs) - 1;
   while (i >= 0) {
     let d = vec_get(defs, i);
@@ -82,7 +82,7 @@ fn lsp_lookup_type(defs: Vec<LspDef>, name: String) : LspDef => {
   lsp_def("", -1, -1, "")
 }
 
-fn lsp_lookup_field(defs: Vec<LspDef>, structName: String, fieldName: String) : LspDef => {
+fn lsp_lookup_field(defs: Vec<LspDefEntry>, structName: String, fieldName: String) : LspDefEntry => {
   let fullName = structName + "." + fieldName;
   let mut i = 0;
   while (i < vec_len(defs)) {
@@ -97,7 +97,7 @@ fn lsp_lookup_field(defs: Vec<LspDef>, structName: String, fieldName: String) : 
 fn lsp_in_range(offset: I32, start: I32, end: I32) : Bool => offset >= start && offset < end
 
 // Collect declarations from decls into defs
-fn lsp_collect_decls(decls: Vec<Decl>, defs: Vec<LspDef>, filePath: String) : Void => {
+fn lsp_collect_decls(decls: Vec<Decl>, defs: Vec<LspDefEntry>, filePath: String) : Void => {
   let mut i = 0;
   while (i < vec_len(decls)) {
     lsp_collect_decl(vec_get(decls, i), defs, filePath);
@@ -105,7 +105,7 @@ fn lsp_collect_decls(decls: Vec<Decl>, defs: Vec<LspDef>, filePath: String) : Vo
   }
 }
 
-fn lsp_collect_decl(d: Decl, defs: Vec<LspDef>, filePath: String) : Void => {
+fn lsp_collect_decl(d: Decl, defs: Vec<LspDefEntry>, filePath: String) : Void => {
   if (d is DExternFrom) {
     let mut ni = 0;
     while (ni < vec_len(d.names)) {
@@ -127,9 +127,6 @@ fn lsp_collect_decl(d: Decl, defs: Vec<LspDef>, filePath: String) : Void => {
     vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "var"));
   }
   if (d is DFn) {
-    vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "fn"));
-  }
-  if (d is DClassFn) {
     vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "fn"));
   }
   if (d is DStruct) {
@@ -160,7 +157,7 @@ fn lsp_collect_decl(d: Decl, defs: Vec<LspDef>, filePath: String) : Void => {
 }
 
 // Resolve references in expressions. Returns inferred type name for field access.
-fn lsp_resolve_expr(e: Expr, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : String => {
+fn lsp_resolve_expr(e: Expr, defs: Vec<LspDefEntry>, refs: Vec<LspRefInternal>) : String => {
   if (e is EIdent) {
     let d = lsp_lookup(defs, e.name);
     if (d.defStart >= 0 || stringLen(d.defFile) > 0) {
@@ -294,7 +291,7 @@ fn lsp_resolve_expr(e: Expr, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : Str
   ""
 }
 
-fn lsp_resolve_stmt(s: Stmt, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : Void => {
+fn lsp_resolve_stmt(s: Stmt, defs: Vec<LspDefEntry>, refs: Vec<LspRefInternal>) : Void => {
   if (s is SLet) {
     lsp_resolve_expr(s.init, defs, refs);
     vec_push(defs, lsp_def(s.name, span_start(s.span), span_end(s.span), "var"));
@@ -341,7 +338,7 @@ fn lsp_resolve_stmt(s: Stmt, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : Voi
   }
 }
 
-fn lsp_resolve_stmts(stmts: Vec<Stmt>, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : Void => {
+fn lsp_resolve_stmts(stmts: Vec<Stmt>, defs: Vec<LspDefEntry>, refs: Vec<LspRefInternal>) : Void => {
   let mut i = 0;
   while (i < vec_len(stmts)) {
     lsp_resolve_stmt(vec_get(stmts, i), defs, refs);
@@ -349,7 +346,7 @@ fn lsp_resolve_stmts(stmts: Vec<Stmt>, defs: Vec<LspDef>, refs: Vec<LspRefIntern
   }
 }
 
-fn lsp_resolve_decl(d: Decl, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : Void => {
+fn lsp_resolve_decl(d: Decl, defs: Vec<LspDefEntry>, refs: Vec<LspRefInternal>) : Void => {
   if (d is DLet) {
     lsp_resolve_expr(d.init, defs, refs);
   }
@@ -364,22 +361,12 @@ fn lsp_resolve_decl(d: Decl, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : Voi
     lsp_resolve_expr(d.tail, defs, refs);
   }
 
-  if (d is DClassFn) {
-    let mut pi = 0;
-    while (pi < vec_len(d.params)) {
-      vec_push(defs, lsp_def(vec_get(d.params, pi), span_start(d.span), span_end(d.span), "param"));
-      pi = pi + 1;
-    }
-    lsp_resolve_stmts(d.body, defs, refs);
-    lsp_resolve_expr(d.tail, defs, refs);
-  }
-
   if (d is DModule) {
     lsp_resolve_decls(d.decls, defs, refs);
   }
 }
 
-fn lsp_resolve_decls(decls: Vec<Decl>, defs: Vec<LspDef>, refs: Vec<LspRefInternal>) : Void => {
+fn lsp_resolve_decls(decls: Vec<Decl>, defs: Vec<LspDefEntry>, refs: Vec<LspRefInternal>) : Void => {
   let mut i = 0;
   while (i < vec_len(decls)) {
     lsp_resolve_decl(vec_get(decls, i), defs, refs);

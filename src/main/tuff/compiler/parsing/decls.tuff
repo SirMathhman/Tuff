@@ -230,35 +230,44 @@ fn parse_fn_modifiers(src: String, i: I32) : FnModifiers => {
   let mut isClass = false;
   let mut isExtern = false;
   
-  // Parse modifiers in any order, each at most once
+  // Parse modifiers in any order, each at most once (error on duplicates)
   while (true) {
     let j = skip_ws(src, k);
     
-    // Check for 'out' (only if not already seen)
-    if (!isOut && starts_with_at(src, j, "out")) {
+    // Check for 'out'
+    if (starts_with_at(src, j, "out")) {
       // Make sure it's not a prefix of another identifier
       let afterOut = j + 3;
       if (afterOut >= stringLen(src) || !is_ident_part(stringCharCodeAt(src, afterOut))) {
+        if (isOut) {
+          panic_at(src, j, "duplicate modifier: 'out' already specified");
+        }
         k = parse_keyword(src, k, "out");
         isOut = true;
         continue;
       }
     }
     
-    // Check for 'class' (only if not already seen)
-    if (!isClass && starts_with_at(src, j, "class")) {
+    // Check for 'class'
+    if (starts_with_at(src, j, "class")) {
       let afterClass = j + 5;
       if (afterClass >= stringLen(src) || !is_ident_part(stringCharCodeAt(src, afterClass))) {
+        if (isClass) {
+          panic_at(src, j, "duplicate modifier: 'class' already specified");
+        }
         k = parse_keyword(src, k, "class");
         isClass = true;
         continue;
       }
     }
     
-    // Check for 'extern' (only if not already seen)
-    if (!isExtern && starts_with_at(src, j, "extern")) {
+    // Check for 'extern'
+    if (starts_with_at(src, j, "extern")) {
       let afterExtern = j + 6;
       if (afterExtern >= stringLen(src) || !is_ident_part(stringCharCodeAt(src, afterExtern))) {
+        if (isExtern) {
+          panic_at(src, j, "duplicate modifier: 'extern' already specified");
+        }
         k = parse_keyword(src, k, "extern");
         isExtern = true;
         continue;
@@ -341,28 +350,7 @@ out fn parse_fn_like_header(src: String, i: I32) : ParsedFnLike => {
 out fn parse_fn_decl_ast2(src: String, i: I32, exportAll: Bool) : ParsedDeclAst => {
   let fn = parse_fn_like_header(src, i);
   
-  // Use appropriate constructor based on flags for backward compatibility
-  // If isClass is true, use the legacy DClassFn-producing constructors
-  // This ensures existing `d is DClassFn` checks continue to work
-  if (fn.isClass) {
-    yield ParsedDeclAst(
-      decl_class_fn_typed(
-        span(fn.start, fn.nextPos),
-        fn.isOut,
-        fn.name.text,
-        fn.typeParams,
-        fn.params.names,
-        fn.params.tyAnns,
-        fn.retTyAnn,
-        fn.body.body,
-        fn.body.tail
-      ),
-      fn.nextPos
-    );
-  }
-  
-  // For regular fn (not class fn), use DFn with full modifiers
-  // This supports the new isExtern flag
+  // Use decl_fn_full for all function declarations (DClassFn has been removed)
   let decl = decl_fn_full(
     span(fn.start, fn.nextPos),
     fn.isOut,

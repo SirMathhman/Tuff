@@ -55,10 +55,25 @@ fn is_ident_part(ch: I32) : Bool => {
 
 fn is_extern_decl_start(src: String, i: I32) : Bool => {
   let j = skip_ws(src, i);
-  if (kw_at(src, j, "extern")) { yield true; }
+  if (kw_at(src, j, "extern")) {
+    // Check if it's extern fn (handled by fn parser) vs extern from/type
+    let k = skip_ws(src, j + 6);
+    if (kw_at(src, k, "fn")) { yield false; }  // extern fn goes to fn parser
+    if (kw_at(src, k, "out")) { yield false; } // extern out fn
+    if (kw_at(src, k, "class")) { yield false; } // extern class fn
+    if (kw_at(src, k, "extern")) { yield false; } // extern extern fn (duplicate)
+    yield true;
+  }
   if (kw_at(src, j, "out")) {
     let k = skip_ws(src, j + 3);
-    if (kw_at(src, k, "extern")) { yield true; }
+    if (kw_at(src, k, "extern")) {
+      // out extern - check if followed by fn
+      let m = skip_ws(src, k + 6);
+      if (kw_at(src, m, "fn")) { yield false; }  // out extern fn goes to fn parser
+      if (kw_at(src, m, "class")) { yield false; } // out extern class fn
+      if (kw_at(src, m, "extern")) { yield false; } // out extern extern fn (duplicate)
+      yield true;
+    }
   }
   false
 }
@@ -138,7 +153,6 @@ fn parse_program_decls(src: String, exportAll: Bool, requireMain: Bool) => {
     if (starts_with_at(src, j, "fn")) {
       let f = parse_fn_decl_ast2(src, i, exportAll);
       if (f.decl is DFn && f.decl.name == "main") { sawMain = true; }
-      if (f.decl is DClassFn && f.decl.name == "main") { sawMain = true; }
       vec_push(decls, f.decl);
       i = f.nextPos;
       continue;
@@ -147,7 +161,6 @@ fn parse_program_decls(src: String, exportAll: Bool, requireMain: Bool) => {
     if (is_fn_decl_start(src, j)) {
       let f = parse_fn_decl_ast2(src, i, exportAll);
       if (f.decl is DFn && f.decl.name == "main") { sawMain = true; }
-      if (f.decl is DClassFn && f.decl.name == "main") { sawMain = true; }
       vec_push(decls, f.decl);
       i = f.nextPos;
       continue;

@@ -39,11 +39,34 @@ return false;
 export function is_extern_decl_start(src, i) {
 const j = skip_ws(src, i);
 if (kw_at(src, j, "extern")) {
+const k = skip_ws(src, j + 6);
+if (kw_at(src, k, "fn")) {
+return false;
+}
+if (kw_at(src, k, "out")) {
+return false;
+}
+if (kw_at(src, k, "class")) {
+return false;
+}
+if (kw_at(src, k, "extern")) {
+return false;
+}
 return true;
 }
 if (kw_at(src, j, "out")) {
 const k = skip_ws(src, j + 3);
 if (kw_at(src, k, "extern")) {
+const m = skip_ws(src, k + 6);
+if (kw_at(src, m, "fn")) {
+return false;
+}
+if (kw_at(src, m, "class")) {
+return false;
+}
+if (kw_at(src, m, "extern")) {
+return false;
+}
 return true;
 }
 }
@@ -122,9 +145,6 @@ const f = parse_fn_decl_ast2(src, i, exportAll);
 if ((f.decl.tag === "DFn") && f.decl.name == "main") {
 sawMain = true;
 }
-if ((f.decl.tag === "DClassFn") && f.decl.name == "main") {
-sawMain = true;
-}
 vec_push(decls, f.decl);
 i = f.nextPos;
 continue;
@@ -132,9 +152,6 @@ continue;
 if (is_fn_decl_start(src, j)) {
 const f = parse_fn_decl_ast2(src, i, exportAll);
 if ((f.decl.tag === "DFn") && f.decl.name == "main") {
-sawMain = true;
-}
-if ((f.decl.tag === "DClassFn") && f.decl.name == "main") {
 sawMain = true;
 }
 vec_push(decls, f.decl);

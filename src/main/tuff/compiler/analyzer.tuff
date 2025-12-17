@@ -96,7 +96,7 @@ from analyzer::infer_narrowing use {
   validate_union_variant_for_binding
 };
 from analyzer::analyze_expr_stmt use { analyze_expr, analyze_stmt, analyze_stmts };
-from analyzer::analyze_decls use { analyze_fn_decl, analyze_class_fn_decl };
+from analyzer::analyze_decls use { analyze_fn_decl };
 
 from analyzer::env use {
   this_struct_name,
@@ -284,67 +284,49 @@ fn predeclare_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, 
 
     require_all_param_types(src, span_start(d.span), "function " + d.name, d.params, paramTyAnns);
     vec_push(fns, mk_fn_sig(d.name, depReason, d.typeParams, d.params, paramTyAnns, d.retTyAnn));
-    yield;
-  }
+    
+    // Additional handling for class fn
+    if (d.isClass) {
+      // Synthesize a struct that represents the returned object shape.
+      let thisName = this_struct_name(d.name);
+      if (!has_struct_def(structs, thisName)) {
+        let classFields = vec_new();
+        let classFieldTyAnns = vec_new();
 
-  if (d is DClassFn) {
-    fluff_check_missing_docs(src, span_start(d.span), d.name, "class function", d.isOut);
-    let depReason = deprecation_reason_before(src, span_start(d.span));
-    if (depReason != "") {
-      declare_name_deprecated(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown(), depReason);
-    } else {
-      declare_name(src, span_start(d.span), scopes, depth, d.name, false, ty_unknown());
-    }
+        // Params are fields.
+        let mut classPI = 0;
+        while (classPI < vec_len(d.params)) {
+          vec_push(classFields, vec_get(d.params, classPI));
+          let mut t = "";
+          if (classPI < vec_len(d.paramTyAnns)) { t = vec_get(d.paramTyAnns, classPI); }
+          vec_push(classFieldTyAnns, if (t == "") "" else normalize_ty_ann(t));
+          classPI = classPI + 1;
+        }
 
-    // Synthesize a struct that represents the returned object shape.
-    let thisName = this_struct_name(d.name);
-    if (!has_struct_def(structs, thisName)) {
-      let fields = vec_new();
-      let fieldTyAnns = vec_new();
-
-      // Params are fields.
-      let mut pi = 0;
-      while (pi < vec_len(d.params)) {
-        vec_push(fields, vec_get(d.params, pi));
-        let mut t = "";
-        if (pi < vec_len(d.paramTyAnns)) { t = vec_get(d.paramTyAnns, pi); }
-        vec_push(fieldTyAnns, if (t == "") "" else normalize_ty_ann(t));
-        pi = pi + 1;
-      }
-
-      // Lets in the body become fields. Record only obvious types:
-      // - explicit annotation
-      // - lambda signature (for methods)
-      let mut si = 0;
-      while (si < vec_len(d.body)) {
-        let st = vec_get(d.body, si);
-        if (st is SLet) {
-          vec_push(fields, st.name);
-          if (st.tyAnn != "") {
-            vec_push(fieldTyAnns, normalize_ty_ann(st.tyAnn));
-          } else {
-            if (st.init is ELambda) {
-              vec_push(fieldTyAnns, ty_fn_type(st.init.typeParams, st.init.paramTyAnns, st.init.retTyAnn));
+        // Lets in the body become fields. Record only obvious types:
+        // - explicit annotation
+        // - lambda signature (for methods)
+        let mut classSI = 0;
+        while (classSI < vec_len(d.body)) {
+          let st = vec_get(d.body, classSI);
+          if (st is SLet) {
+            vec_push(classFields, st.name);
+            if (st.tyAnn != "") {
+              vec_push(classFieldTyAnns, normalize_ty_ann(st.tyAnn));
             } else {
-              vec_push(fieldTyAnns, "");
+              if (st.init is ELambda) {
+                vec_push(classFieldTyAnns, ty_fn_type(st.init.typeParams, st.init.paramTyAnns, st.init.retTyAnn));
+              } else {
+                vec_push(classFieldTyAnns, "");
+              }
             }
           }
+          classSI = classSI + 1;
         }
-        si = si + 1;
+
+        vec_push(structs, mk_struct_def(thisName, classFields, classFieldTyAnns));
       }
-
-      vec_push(structs, mk_struct_def(thisName, fields, fieldTyAnns));
     }
-
-    let mut paramTyAnns = d.paramTyAnns;
-    if (vec_len(paramTyAnns) == 0) {
-      paramTyAnns = vec_new();
-      let mut i = 0;
-      while (i < vec_len(d.params)) { vec_push(paramTyAnns, ""); i = i + 1; }
-    }
-
-    require_all_param_types(src, span_start(d.span), "class fn " + d.name, d.params, paramTyAnns);
-    vec_push(fns, mk_fn_sig(d.name, depReason, d.typeParams, d.params, paramTyAnns, d.retTyAnn));
     yield;
   }
 
@@ -412,11 +394,6 @@ fn analyze_decl_body(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>
 
   if (d is DFn) {
     analyze_fn_decl(src, structs, unions, fns, scopes, depth, d);
-    yield;
-  }
-
-  if (d is DClassFn) {
-    analyze_class_fn_decl(src, structs, unions, fns, scopes, depth, d);
     yield;
   }
 

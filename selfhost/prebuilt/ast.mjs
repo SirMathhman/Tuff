@@ -57,7 +57,6 @@ export const DExternFrom = { tag: "DExternFrom" };
 export const DExternType = { tag: "DExternType" };
 export const DLet = { tag: "DLet" };
 export const DFn = { tag: "DFn" };
-export const DClassFn = { tag: "DClassFn" };
 export const DStruct = { tag: "DStruct" };
 export const DTypeUnion = { tag: "DTypeUnion" };
 export const DModule = { tag: "DModule" };
@@ -309,10 +308,10 @@ export function decl_fn_full(span, isOut, isClass, isExtern, name, typeParams, p
 return ({ tag: "DFn", span: span, isOut: isOut, isClass: isClass, isExtern: isExtern, name: name, typeParams: typeParams, params: params, paramTyAnns: paramTyAnns, retTyAnn: retTyAnn, body: body, tail: tail });
 }
 export function decl_class_fn(span, isOut, name, params, body, tail) {
-return ({ tag: "DClassFn", span: span, isOut: isOut, name: name, typeParams: vec_new(), params: params, paramTyAnns: vec_new(), retTyAnn: "", body: body, tail: tail });
+return ({ tag: "DFn", span: span, isOut: isOut, isClass: true, isExtern: false, name: name, typeParams: vec_new(), params: params, paramTyAnns: vec_new(), retTyAnn: "", body: body, tail: tail });
 }
 export function decl_class_fn_typed(span, isOut, name, typeParams, params, paramTyAnns, retTyAnn, body, tail) {
-return ({ tag: "DClassFn", span: span, isOut: isOut, name: name, typeParams: typeParams, params: params, paramTyAnns: paramTyAnns, retTyAnn: retTyAnn, body: body, tail: tail });
+return ({ tag: "DFn", span: span, isOut: isOut, isClass: true, isExtern: false, name: name, typeParams: typeParams, params: params, paramTyAnns: paramTyAnns, retTyAnn: retTyAnn, body: body, tail: tail });
 }
 export function decl_let(span, isMut, name, init) {
 return ({ tag: "DLet", span: span, isMut: isMut, name: name, tyAnn: "", init: init });

@@ -25,8 +25,8 @@ describe("lsp_find_definition", () => {
     const offExtern = src.indexOf("vec_len");
     expect(offExtern).toBeGreaterThanOrEqual(0);
 
-    const offTypeUsage = src.indexOf("Vec<LspRef>");
-    const offType = offTypeUsage + "Vec<".length; // position on the `L` in `LspRef`
+    const offTypeUsage = src.indexOf("Vec<LspRefLib>");
+    const offType = offTypeUsage + "Vec<".length; // position on the `L` in `LspRefLib`
     expect(offType).toBeGreaterThanOrEqual(0);
 
     const offModule = src.indexOf("util::diagnostics");

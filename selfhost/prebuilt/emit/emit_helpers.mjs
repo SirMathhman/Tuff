@@ -182,16 +182,6 @@ i = i + 1;
 }
 return expr_needs_vec_rt(d.tail);
 }
-if ((d.tag === "DClassFn")) {
-let i = 0;
-while (i < vec_len(d.body)) {
-if (stmt_needs_vec_rt(vec_get(d.body, i))) {
-return true;
-}
-i = i + 1;
-}
-return false;
-}
 if ((d.tag === "DModule")) {
 let i = 0;
 while (i < vec_len(d.decls)) {

@@ -19,10 +19,25 @@ fn kw_at(src: String, i: I32, kw: String) : Bool => {
 
 fn is_extern_decl_start(src: String, i: I32) : Bool => {
   let j = skip_ws(src, i);
-  if (kw_at(src, j, "extern")) { yield true; }
+  if (kw_at(src, j, "extern")) {
+    // Check if it's extern fn (handled by fn parser) vs extern from/type
+    let k = skip_ws(src, j + 6);
+    if (kw_at(src, k, "fn")) { yield false; }  // extern fn goes to fn parser
+    if (kw_at(src, k, "out")) { yield false; } // extern out fn
+    if (kw_at(src, k, "class")) { yield false; } // extern class fn
+    if (kw_at(src, k, "extern")) { yield false; } // extern extern fn (duplicate, let fn parser error)
+    yield true;
+  }
   if (kw_at(src, j, "out")) {
     let k = skip_ws(src, j + 3);
-    if (kw_at(src, k, "extern")) { yield true; }
+    if (kw_at(src, k, "extern")) {
+      // out extern - check if followed by fn
+      let m = skip_ws(src, k + 6);
+      if (kw_at(src, m, "fn")) { yield false; }  // out extern fn goes to fn parser
+      if (kw_at(src, m, "class")) { yield false; } // out extern class fn
+      if (kw_at(src, m, "extern")) { yield false; } // out extern extern fn (duplicate)
+      yield true;
+    }
   }
   false
 }
@@ -156,13 +171,6 @@ out fn scan_top_level_fn_exports(src: String) => {
   while (di < vec_len(decls)) {
     let d = vec_get(decls, di);
     if (d is DFn) {
-      let depReason = deprecation_reason_before(src, span_start(d.span));
-      let sig = mk_fn_sig(d.name, depReason, d.typeParams, d.params, d.paramTyAnns, d.retTyAnn);
-      vec_push(allSigs, sig);
-      if (d.isOut) { vec_push(outSigs, sig); }
-      else { vec_push(privateNames, d.name); }
-    }
-    if (d is DClassFn) {
       let depReason = deprecation_reason_before(src, span_start(d.span));
       let sig = mk_fn_sig(d.name, depReason, d.typeParams, d.params, d.paramTyAnns, d.retTyAnn);
       vec_push(allSigs, sig);

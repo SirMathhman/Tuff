@@ -28,11 +28,25 @@ fn is_extern_decl_start(src: String, i: I32) : Bool => {
   //   extern from ...
   //   extern type ...
   //   out extern type ...
+  // NOT extern fn (handled by fn parser)
   let j = skip_ws(src, i);
-  if (kw_at(src, j, "extern")) { yield true; }
+  if (kw_at(src, j, "extern")) {
+    let k = skip_ws(src, j + 6);
+    if (kw_at(src, k, "fn")) { yield false; }
+    if (kw_at(src, k, "out")) { yield false; }
+    if (kw_at(src, k, "class")) { yield false; }
+    if (kw_at(src, k, "extern")) { yield false; }
+    yield true;
+  }
   if (kw_at(src, j, "out")) {
     let k = skip_ws(src, j + 3);
-    if (kw_at(src, k, "extern")) { yield true; }
+    if (kw_at(src, k, "extern")) {
+      let m = skip_ws(src, k + 6);
+      if (kw_at(src, m, "fn")) { yield false; }
+      if (kw_at(src, m, "class")) { yield false; }
+      if (kw_at(src, m, "extern")) { yield false; }
+      yield true;
+    }
   }
   false
 }

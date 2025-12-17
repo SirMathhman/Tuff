@@ -9,10 +9,10 @@ export function DefLocation(found, defStart, defEnd, defFile) {
 return { found: found, defStart: defStart, defEnd: defEnd, defFile: defFile };
 }
 export function lsp_def(name, defStart, defEnd, kind) {
-return ({ tag: "LspDef", name: name, defStart: defStart, defEnd: defEnd, kind: kind, defFile: "" });
+return ({ tag: "LspDefEntry", name: name, defStart: defStart, defEnd: defEnd, kind: kind, defFile: "" });
 }
 export function lsp_def_ext(name, defStart, defEnd, kind, defFile) {
-return ({ tag: "LspDef", name: name, defStart: defStart, defEnd: defEnd, kind: kind, defFile: defFile });
+return ({ tag: "LspDefEntry", name: name, defStart: defStart, defEnd: defEnd, kind: kind, defFile: defFile });
 }
 export function lsp_ref_ext(refStart, refEnd, defStart, defEnd, defFile) {
 return ({ tag: "LspRef", refStart: refStart, refEnd: refEnd, defStart: defStart, defEnd: defEnd, defFile: defFile });
@@ -82,9 +82,6 @@ if ((d.tag === "DLet")) {
 vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "var"));
 }
 if ((d.tag === "DFn")) {
-vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "fn"));
-}
-if ((d.tag === "DClassFn")) {
 vec_push(defs, lsp_def(d.name, span_start(d.span), span_end(d.span), "fn"));
 }
 if ((d.tag === "DStruct")) {
@@ -278,15 +275,6 @@ if ((d.tag === "DLet")) {
 lsp_resolve_expr(d.init, defs, refs);
 }
 if ((d.tag === "DFn")) {
-let pi = 0;
-while (pi < vec_len(d.params)) {
-vec_push(defs, lsp_def(vec_get(d.params, pi), span_start(d.span), span_end(d.span), "param"));
-pi = pi + 1;
-}
-lsp_resolve_stmts(d.body, defs, refs);
-lsp_resolve_expr(d.tail, defs, refs);
-}
-if ((d.tag === "DClassFn")) {
 let pi = 0;
 while (pi < vec_len(d.params)) {
 vec_push(defs, lsp_def(vec_get(d.params, pi), span_start(d.span), span_end(d.span), "param"));

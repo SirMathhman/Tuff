@@ -467,54 +467,60 @@ out fn emit_decl_js(d: Decl, exportAll: Bool) : String => {
   }
 
   if (d is DFn) {
-    let exportThis = exportAll || d.isOut || d.name == "main";
-    out = emit_fn_decl_js(d, exportAll, d.name, exportThis);
-  }
+    if (d.isClass) {
+      // `class fn` becomes a function returning an object of scope fields.
+      // In this bootstrap subset, we approximate `this` by returning all params
+      // plus any `let` bindings declared in the body (in source order).
+      let exportThis = exportAll || d.isOut || d.name == "main";
+      let exportKw = if (exportThis) "export " else "";
+      let params = emit_names_csv(d.params);
 
-  if (d is DClassFn) {
-    // `class fn` becomes a function returning an object of scope fields.
-    // In this bootstrap subset, we approximate `this` by returning all params
-    // plus any `let` bindings declared in the body (in source order).
-    let exportThis = exportAll || d.isOut || d.name == "main";
-    let exportKw = if (exportThis) "export " else "";
-    let params = emit_names_csv(d.params);
-
-    let fieldNames = vec_new();
-    let mut i = 0;
-    while (i < vec_len(d.params)) {
-      vec_push(fieldNames, vec_get(d.params, i));
-      i = i + 1;
-    }
-
-    i = 0;
-    while (i < vec_len(d.body)) {
-      let s = vec_get(d.body, i);
-      if (s is SLet) {
-        let mut found = false;
-        let mut j = 0;
-        while (j < vec_len(fieldNames)) {
-          if (vec_get(fieldNames, j) == s.name) {
-            found = true;
-            j = vec_len(fieldNames);
-          } else {
-            j = j + 1;
-          }
-        }
-        if (!found) { vec_push(fieldNames, s.name); }
+      let fieldNames = vec_new();
+      let mut i = 0;
+      while (i < vec_len(d.params)) {
+        vec_push(fieldNames, vec_get(d.params, i));
+        i = i + 1;
       }
-      i = i + 1;
-    }
 
-    let mut fields = "";
-    i = 0;
-    while (i < vec_len(fieldNames)) {
-      if (i > 0) { fields = fields + ", "; }
-      let p = vec_get(fieldNames, i);
-      fields = fields + (p + ": " + p);
-      i = i + 1;
-    }
+      i = 0;
+      while (i < vec_len(d.body)) {
+        let s = vec_get(d.body, i);
+        if (s is SLet) {
+          let mut found = false;
+          let mut j = 0;
+          while (j < vec_len(fieldNames)) {
+            if (vec_get(fieldNames, j) == s.name) {
+              found = true;
+              j = vec_len(fieldNames);
+            } else {
+              j = j + 1;
+            }
+          }
+          if (!found) { vec_push(fieldNames, s.name); }
+        }
+        i = i + 1;
+      }
 
-    out = exportKw + "function " + d.name + "(" + params + ") {\n" + emit_stmts_js(d.body) + "return { " + fields + " };\n}\n";
+      let mut fields = "";
+      i = 0;
+      while (i < vec_len(fieldNames)) {
+        if (i > 0) { fields = fields + ", "; }
+        let p = vec_get(fieldNames, i);
+        fields = fields + (p + ": " + p);
+        i = i + 1;
+      }
+
+      out = exportKw + "function " + d.name + "(" + params + ") {\n" + emit_stmts_js(d.body) + "return { " + fields + " };\n}\n";
+    } else {
+      if (d.isExtern) {
+        // extern fn without body - emit nothing (declaration only, no implementation)
+        out = "";
+      } else {
+        // Regular function
+        let exportThis = exportAll || d.isOut || d.name == "main";
+        out = emit_fn_decl_js(d, exportAll, d.name, exportThis);
+      }
+    }
   }
 
   if (d is DModule) {

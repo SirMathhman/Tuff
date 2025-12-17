@@ -1042,10 +1042,6 @@ out fn analyze_program_for_clones(src: String, decls: Vec<Decl>) : Void => {
       serialize_fn_body(d.body, d.tail, tokens);
     }
 
-    if (d is DClassFn) {
-      serialize_fn_body(d.body, d.tail, tokens);
-    }
-
     i = i + 1;
   }
 

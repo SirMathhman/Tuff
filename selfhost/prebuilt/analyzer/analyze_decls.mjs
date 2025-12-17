@@ -67,10 +67,7 @@ check_fn_max_params(src, span_start(span), name, vec_len(params));
 return undefined;
 }
 export function analyze_fn_decl(src, structs, unions, fns, outerScopes, outerDepth, d) {
-analyze_fn_like_decl(src, structs, unions, fns, outerScopes, outerDepth, d.span, d.name, d.params, d.paramTyAnns, d.retTyAnn, d.body, d.tail, "function");
-return undefined;
-}
-export function analyze_class_fn_decl(src, structs, unions, fns, outerScopes, outerDepth, d) {
-analyze_fn_like_decl(src, structs, unions, fns, outerScopes, outerDepth, d.span, d.name, d.params, d.paramTyAnns, d.retTyAnn, d.body, d.tail, "class fn");
+const kind = (d.isClass ? "class fn" : "function");
+analyze_fn_like_decl(src, structs, unions, fns, outerScopes, outerDepth, d.span, d.name, d.params, d.paramTyAnns, d.retTyAnn, d.body, d.tail, kind);
 return undefined;
 }

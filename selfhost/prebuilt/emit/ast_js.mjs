@@ -453,10 +453,7 @@ const kw = (d.isMut ? "let" : "const");
 out = kw + " " + d.name + " = " + emit_expr_js(d.init) + ";\n";
 }
 if ((d.tag === "DFn")) {
-const exportThis = exportAll || d.isOut || d.name == "main";
-out = emit_fn_decl_js(d, exportAll, d.name, exportThis);
-}
-if ((d.tag === "DClassFn")) {
+if (d.isClass) {
 const exportThis = exportAll || d.isOut || d.name == "main";
 const exportKw = (exportThis ? "export " : "");
 const params = emit_names_csv(d.params);
@@ -497,6 +494,14 @@ fields = fields + (p + ": " + p);
 i = i + 1;
 }
 out = exportKw + "function " + d.name + "(" + params + ") {\n" + emit_stmts_js(d.body) + "return { " + fields + " };\n}\n";
+} else {
+if (d.isExtern) {
+out = "";
+} else {
+const exportThis = exportAll || d.isOut || d.name == "main";
+out = emit_fn_decl_js(d, exportAll, d.name, exportThis);
+}
+}
 }
 if ((d.tag === "DModule")) {
 out = emit_module_decl_js(d, "M", true);
