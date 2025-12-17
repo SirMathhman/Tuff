@@ -37,6 +37,29 @@ from analyzer::env use { this_struct_name, struct_name_of_expr, has_struct_def, 
 from analyzer::scope use { infer_lookup_ty };
 from analyzer::subst use { subst_bind, ty_apply_subst };
 
+fn infer_arithmetic_type(lt: String, rt: String) : String => {
+  if (type_is_float_like(lt) && type_is_float_like(rt)) {
+    let nlt = normalize_ty_ann(lt);
+    let nrt = normalize_ty_ann(rt);
+    if (type_is_concrete_float(nlt) && nlt == nrt) { yield nlt; }
+    if (type_is_concrete_float(nlt) && nrt == ty_float_lit()) { yield nlt; }
+    if (type_is_concrete_float(nrt) && nlt == ty_float_lit()) { yield nrt; }
+    yield ty_f64();
+  }
+
+  if (type_is_int_like(lt) && type_is_int_like(rt)) {
+    // Char arithmetic yields I32.
+    if (normalize_ty_ann(lt) == ty_char() || normalize_ty_ann(rt) == ty_char()) { yield ty_i32(); }
+    // Preserve a concrete int width when both sides are that same width.
+    let nlt = normalize_ty_ann(lt);
+    let nrt = normalize_ty_ann(rt);
+    if (type_is_concrete_int(nlt) && nlt == nrt) { yield nlt; }
+    // Otherwise treat as I32 for now.
+    yield ty_i32();
+  }
+  yield ty_unknown()
+}
+
 out fn infer_expr_type(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, scopes: Vec<Vec<Binding>>, depth: I32, e: Expr) : String => {
   if (e is EBool) { yield ty_bool(); }
   if (e is EInt) { yield ty_int_lit(); }
@@ -101,50 +124,12 @@ out fn infer_expr_type(src: String, structs: Vec<StructDef>, fns: Vec<FnSig>, sc
       let rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
       if (lt == ty_string() || rt == ty_string()) { yield ty_string(); }
 
-      if (type_is_float_like(lt) && type_is_float_like(rt)) {
-        let nlt = normalize_ty_ann(lt);
-        let nrt = normalize_ty_ann(rt);
-        if (type_is_concrete_float(nlt) && nlt == nrt) { yield nlt; }
-        if (type_is_concrete_float(nlt) && nrt == ty_float_lit()) { yield nlt; }
-        if (type_is_concrete_float(nrt) && nlt == ty_float_lit()) { yield nrt; }
-        yield ty_f64();
-      }
-
-      if (type_is_int_like(lt) && type_is_int_like(rt)) {
-        // Char arithmetic yields I32.
-        if (normalize_ty_ann(lt) == ty_char() || normalize_ty_ann(rt) == ty_char()) { yield ty_i32(); }
-        // Preserve a concrete int width when both sides are that same width.
-        let nlt = normalize_ty_ann(lt);
-        let nrt = normalize_ty_ann(rt);
-        if (type_is_concrete_int(nlt) && nlt == nrt) { yield nlt; }
-        // Otherwise treat as I32 for now.
-        yield ty_i32();
-      }
-      yield ty_unknown();
+      yield infer_arithmetic_type(lt, rt);
     }
     if (e.op is OpSub || e.op is OpMul || e.op is OpDiv) {
       let lt = infer_expr_type(src, structs, fns, scopes, depth, e.left);
       let rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
-
-      if (type_is_float_like(lt) && type_is_float_like(rt)) {
-        let nlt = normalize_ty_ann(lt);
-        let nrt = normalize_ty_ann(rt);
-        if (type_is_concrete_float(nlt) && nlt == nrt) { yield nlt; }
-        if (type_is_concrete_float(nlt) && nrt == ty_float_lit()) { yield nlt; }
-        if (type_is_concrete_float(nrt) && nlt == ty_float_lit()) { yield nrt; }
-        yield ty_f64();
-      }
-
-      if (type_is_int_like(lt) && type_is_int_like(rt)) {
-        // Char arithmetic yields I32.
-        if (normalize_ty_ann(lt) == ty_char() || normalize_ty_ann(rt) == ty_char()) { yield ty_i32(); }
-        // Preserve a concrete int width when both sides are that same width.
-        let nlt = normalize_ty_ann(lt);
-        let nrt = normalize_ty_ann(rt);
-        if (type_is_concrete_int(nlt) && nlt == nrt) { yield nlt; }
-        yield ty_i32();
-      }
-      yield ty_unknown();
+      yield infer_arithmetic_type(lt, rt);
     }
   }
 

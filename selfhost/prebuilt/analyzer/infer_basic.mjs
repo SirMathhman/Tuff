@@ -6,6 +6,35 @@ import { ty_unknown, ty_bool, ty_int_lit, ty_float_lit, ty_i32, ty_f32, ty_f64, 
 import { this_struct_name, struct_name_of_expr, has_struct_def, get_struct_field_type, has_fn_sig, find_fn_sig } from "./env.mjs";
 import { infer_lookup_ty } from "./scope.mjs";
 import { subst_bind, ty_apply_subst } from "./subst.mjs";
+export function infer_arithmetic_type(lt, rt) {
+if (type_is_float_like(lt) && type_is_float_like(rt)) {
+const nlt = normalize_ty_ann(lt);
+const nrt = normalize_ty_ann(rt);
+if (type_is_concrete_float(nlt) && nlt == nrt) {
+return nlt;
+}
+if (type_is_concrete_float(nlt) && nrt == ty_float_lit()) {
+return nlt;
+}
+if (type_is_concrete_float(nrt) && nlt == ty_float_lit()) {
+return nrt;
+}
+return ty_f64();
+}
+if (type_is_int_like(lt) && type_is_int_like(rt)) {
+if (normalize_ty_ann(lt) == ty_char() || normalize_ty_ann(rt) == ty_char()) {
+return ty_i32();
+}
+const nlt = normalize_ty_ann(lt);
+const nrt = normalize_ty_ann(rt);
+if (type_is_concrete_int(nlt) && nlt == nrt) {
+return nlt;
+}
+return ty_i32();
+}
+return ty_unknown();
+return undefined;
+}
 export function infer_expr_type(src, structs, fns, scopes, depth, e) {
 if ((e.tag === "EBool")) {
 return ty_bool();
@@ -102,62 +131,12 @@ const rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
 if (lt == ty_string() || rt == ty_string()) {
 return ty_string();
 }
-if (type_is_float_like(lt) && type_is_float_like(rt)) {
-const nlt = normalize_ty_ann(lt);
-const nrt = normalize_ty_ann(rt);
-if (type_is_concrete_float(nlt) && nlt == nrt) {
-return nlt;
-}
-if (type_is_concrete_float(nlt) && nrt == ty_float_lit()) {
-return nlt;
-}
-if (type_is_concrete_float(nrt) && nlt == ty_float_lit()) {
-return nrt;
-}
-return ty_f64();
-}
-if (type_is_int_like(lt) && type_is_int_like(rt)) {
-if (normalize_ty_ann(lt) == ty_char() || normalize_ty_ann(rt) == ty_char()) {
-return ty_i32();
-}
-const nlt = normalize_ty_ann(lt);
-const nrt = normalize_ty_ann(rt);
-if (type_is_concrete_int(nlt) && nlt == nrt) {
-return nlt;
-}
-return ty_i32();
-}
-return ty_unknown();
+return infer_arithmetic_type(lt, rt);
 }
 if ((e.op.tag === "OpSub") || (e.op.tag === "OpMul") || (e.op.tag === "OpDiv")) {
 const lt = infer_expr_type(src, structs, fns, scopes, depth, e.left);
 const rt = infer_expr_type(src, structs, fns, scopes, depth, e.right);
-if (type_is_float_like(lt) && type_is_float_like(rt)) {
-const nlt = normalize_ty_ann(lt);
-const nrt = normalize_ty_ann(rt);
-if (type_is_concrete_float(nlt) && nlt == nrt) {
-return nlt;
-}
-if (type_is_concrete_float(nlt) && nrt == ty_float_lit()) {
-return nlt;
-}
-if (type_is_concrete_float(nrt) && nlt == ty_float_lit()) {
-return nrt;
-}
-return ty_f64();
-}
-if (type_is_int_like(lt) && type_is_int_like(rt)) {
-if (normalize_ty_ann(lt) == ty_char() || normalize_ty_ann(rt) == ty_char()) {
-return ty_i32();
-}
-const nlt = normalize_ty_ann(lt);
-const nrt = normalize_ty_ann(rt);
-if (type_is_concrete_int(nlt) && nlt == nrt) {
-return nlt;
-}
-return ty_i32();
-}
-return ty_unknown();
+return infer_arithmetic_type(lt, rt);
 }
 }
 if ((e.tag === "EField")) {
