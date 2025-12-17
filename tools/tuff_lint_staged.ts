@@ -73,14 +73,16 @@ function listStagedTuffFiles(repoRoot: string): string[] {
     }
   );
 
-  return out
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .filter((p) => p.endsWith(".tuff"))
-    // Exclude test files that use std::test (linter doesn't resolve std:: correctly)
-    .filter((p) => !p.includes("src/test/tuff/"))
-    .map((p) => resolve(repoRoot, p));
+  return (
+    out
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .filter((p) => p.endsWith(".tuff"))
+      // Exclude test files that use std::test (linter doesn't resolve std:: correctly)
+      .filter((p) => !p.includes("src/test/tuff/"))
+      .map((p) => resolve(repoRoot, p))
+  );
 }
 
 export async function main(): Promise<number> {
