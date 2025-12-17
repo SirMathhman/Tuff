@@ -167,7 +167,8 @@ fn parse_program_decls(src: String, exportAll: Bool, requireMain: Bool) => {
     }
     break;
   }
-  if (requireMain && !sawMain) { panic_at(src, i, "expected fn main"); }
+  // NOTE: requireMain check disabled - Tuff uses top-level code execution, no main() required
+  // if (requireMain && !sawMain) { panic_at(src, i, "expected fn main"); }
 
   ParsedProgram(decls, sawMain)
 }

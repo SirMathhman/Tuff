@@ -38,12 +38,12 @@ describe("selfhost stage2", () => {
     const stage2Out = resolve(stage2Dir, "tuffc.stage2.mjs");
 
     const tuffc1 = await import(pathToFileURL(stage1File).toString());
-    expect(typeof tuffc1.main).toBe("function");
-    const rc2 = tuffc1.main([stage2In, stage2Out]);
+    expect(typeof tuffc1.run).toBe("function");
+    const rc2 = tuffc1.run([stage2In, stage2Out]);
     expect(rc2).toBe(0);
 
     const stage2Js = await readFile(stage2Out, "utf8");
-    expect(stage2Js).toContain("export function main");
+    expect(stage2Js).toContain("export function run");
 
     // Now stage2 should still compile the same tiny program as our stage1 e2e.
     const mathIn = resolve(stage2Dir, "math.tuff");
@@ -62,8 +62,8 @@ describe("selfhost stage2", () => {
     );
 
     const tuffc2 = await import(pathToFileURL(stage2Out).toString());
-    expect(typeof tuffc2.main).toBe("function");
-    const rcTiny = tuffc2.main([tinyIn, tinyOut]);
+    expect(typeof tuffc2.run).toBe("function");
+    const rcTiny = tuffc2.run([tinyIn, tinyOut]);
     expect(rcTiny).toBe(0);
 
     const tinyMod = await import(pathToFileURL(tinyOut).toString());

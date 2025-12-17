@@ -68,9 +68,9 @@ describe("tuff std::test migration", () => {
     );
 
     const tuffc = await import(pathToFileURL(tuffcFile).toString());
-    expect(typeof tuffc.main).toBe("function");
+    expect(typeof tuffc.run).toBe("function");
 
-    const rcCompile = tuffc.main([testsIn, testsOut]);
+    const rcCompile = tuffc.run([testsIn, testsOut]);
     expect(rcCompile).toBe(0);
 
     const testsMod = await import(pathToFileURL(testsOut).toString());

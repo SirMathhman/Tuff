@@ -76,7 +76,7 @@ describe.skip("selfhost file size linting (500 line limit)", () => {
 
     await writeFile(inFile, lines.join("\n") + "\n", "utf8");
 
-    const result = captureStdout(() => fluff2.main([inFile]));
+    const result = captureStdout(() => fluff2.run([inFile]));
 
     // Should report an error for exceeding 500 lines (thrown as exception)
     expect(result.ok).toBe(false);
@@ -117,7 +117,7 @@ describe.skip("selfhost file size linting (500 line limit)", () => {
 
     await writeFile(inFile, lines.join("\n") + "\n", "utf8");
 
-    const result = captureStdout(() => fluff2.main([inFile]));
+    const result = captureStdout(() => fluff2.run([inFile]));
 
     // Should succeed without file size error
     expect(result.ok).toBe(true);
@@ -155,7 +155,7 @@ describe.skip("selfhost file size linting (500 line limit)", () => {
 
     await writeFile(inFile, lines.join("\n") + "\n", "utf8");
 
-    const result = captureStdout(() => fluff2.main([inFile]));
+    const result = captureStdout(() => fluff2.run([inFile]));
 
     // Should error with default threshold of 500
     expect(result.ok).toBe(false);
@@ -205,7 +205,7 @@ describe.skip("selfhost file size linting (500 line limit)", () => {
       "utf8"
     );
 
-    const result = captureStdout(() => fluff2.main([inFile]));
+    const result = captureStdout(() => fluff2.run([inFile]));
 
     expect(result.ok).toBe(false);
     const msg = getErrorMessage(result);
@@ -241,7 +241,7 @@ describe.skip("selfhost file size linting (500 line limit)", () => {
 
     await writeFile(inFile, lines.join("\n") + "\n", "utf8");
 
-    const result = captureStdout(() => fluff2.main([inFile]));
+    const result = captureStdout(() => fluff2.run([inFile]));
 
     // Should succeed when rule is off
     expect(result.ok).toBe(true);
@@ -282,7 +282,7 @@ describe.skip("selfhost file size linting (500 line limit)", () => {
 
     await writeFile(inFile, lines.join("\n") + "\n", "utf8");
 
-    const result = captureStdout(() => fluff2.main([inFile]));
+    const result = captureStdout(() => fluff2.run([inFile]));
 
     expect(result.ok).toBe(false);
     const msg = getErrorMessage(result);
@@ -338,7 +338,7 @@ describe.skip("selfhost file size linting (500 line limit)", () => {
 
     await writeFile(subFile, lines.join("\n") + "\n", "utf8");
 
-    const result = captureStdout(() => fluff2.main([mainFile]));
+    const result = captureStdout(() => fluff2.run([mainFile]));
 
     // Should error because submodule exceeds limit
     expect(result.ok).toBe(false);

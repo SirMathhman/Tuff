@@ -61,7 +61,7 @@ fn main() : I32 => {
 
     // Import and run the fluff linter
     const fluffModule = await import(resolve(stage1, "fluff.mjs"));
-    const result = fluffModule.main(["--format", "json", testFile]);
+    const result = fluffModule.run(["--format", "json", testFile]);
 
     // Should complete without crashing (return 0)
     expect(result).toBe(0);
@@ -115,7 +115,7 @@ fn main() : I32 => {
     );
 
     const fluffModule = await import(resolve(stage1, "fluff.mjs"));
-    const result = fluffModule.main(["--debug", "--format", "json", testFile]);
+    const result = fluffModule.run(["--debug", "--format", "json", testFile]);
     expect(result).toBe(0);
   });
 
@@ -149,7 +149,7 @@ fn main() : I32 => helper_a() + helper_b()
     );
 
     const fluffModule = await import(resolve(stage1, "fluff.mjs"));
-    const result = fluffModule.main([
+    const result = fluffModule.run([
       "--debug=clone",
       "--format",
       "json",
@@ -189,7 +189,7 @@ fn main() : I32 => helper_a() + helper_b()
     );
 
     const fluffModule = await import(resolve(stage1, "fluff.mjs"));
-    const result = fluffModule.main(["--format", "json", testFile]);
+    const result = fluffModule.run(["--format", "json", testFile]);
     expect(result).toBe(0);
   });
 
@@ -237,7 +237,7 @@ fn main() : I32 => {
 
     // Import and run the fluff linter
     const fluffModule = await import(resolve(stage1, "fluff.mjs"));
-    const result = fluffModule.main(["--format", "json", testFile]);
+    const result = fluffModule.run(["--format", "json", testFile]);
 
     // Should pass with no issues
     expect(result).toBe(0);

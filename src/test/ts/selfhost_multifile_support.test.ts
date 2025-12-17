@@ -49,7 +49,7 @@ describe("selfhost multi-file module support (integration)", () => {
       ].join("\n")
     );
 
-    const rc = tuffc.main([entry, outFile]);
+    const rc = tuffc.run([entry, outFile]);
     expect(rc).toBe(0);
 
     const mod = (await import(
@@ -86,7 +86,7 @@ describe("selfhost multi-file module support (integration)", () => {
       ].join("\n")
     );
 
-    expect(() => tuffc.main([entry, outFile])).toThrow(
+    expect(() => tuffc.run([entry, outFile])).toThrow(
       /not exported|out fn|export/i
     );
   });

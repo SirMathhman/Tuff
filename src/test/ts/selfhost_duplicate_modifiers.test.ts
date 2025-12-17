@@ -26,7 +26,7 @@ fn main() : I32 => foo()
 
     // Should throw an error with "duplicate modifier"
     await expect(async () => {
-      tuffc.main([inputFile, outputFile]);
+      tuffc.run([inputFile, outputFile]);
     }).rejects.toThrow(/duplicate modifier/);
   });
 
@@ -50,7 +50,7 @@ fn main() : I32 => 0
 
     // Should throw an error with "duplicate modifier"
     await expect(async () => {
-      tuffc.main([inputFile, outputFile]);
+      tuffc.run([inputFile, outputFile]);
     }).rejects.toThrow(/duplicate modifier/);
   });
 
@@ -74,7 +74,7 @@ fn main() : I32 => 0
 
     // Should throw an error with "duplicate modifier"
     await expect(async () => {
-      tuffc.main([inputFile, outputFile]);
+      tuffc.run([inputFile, outputFile]);
     }).rejects.toThrow(/duplicate modifier/);
   });
 
@@ -97,7 +97,7 @@ fn main() : I32 => 0
     await writeFile(inputFile, src);
 
     // Should succeed (exit code 0)
-    const result = tuffc.main([inputFile, outputFile]);
+    const result = tuffc.run([inputFile, outputFile]);
     expect(result).toBe(0);
   });
 
@@ -121,7 +121,7 @@ fn main() : I32 => 0
     await writeFile(inputFile, src);
 
     // Should succeed (exit code 0)
-    const result = tuffc.main([inputFile, outputFile]);
+    const result = tuffc.run([inputFile, outputFile]);
     expect(result).toBe(0);
   });
 });

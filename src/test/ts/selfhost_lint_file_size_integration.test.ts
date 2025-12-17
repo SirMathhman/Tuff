@@ -64,7 +64,7 @@ describe("selfhost file size linting (integration)", () => {
     lines.push("}");
     await writeFile(inFile, lines.join("\n") + "\n", "utf8");
 
-    const result = captureStdout(() => fluff2.main([inFile]));
+    const result = captureStdout(() => fluff2.run([inFile]));
     expect(result.ok).toBe(false);
     const msg = getErrorMessage(result);
     expect(msg).toMatch(/exceeds limit of 10/i);

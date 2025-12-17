@@ -42,8 +42,8 @@ describe("selfhost stage3", () => {
     const stage2Out = resolve(stage2Dir, "tuffc.mjs");
 
     const tuffc1 = await import(pathToFileURL(stage1File).toString());
-    expect(typeof tuffc1.main).toBe("function");
-    const rc2 = tuffc1.main([stage2In, stage2Out]);
+    expect(typeof tuffc1.run).toBe("function");
+    const rc2 = tuffc1.run([stage2In, stage2Out]);
     expect(rc2).toBe(0);
 
     // Stage 3: stage2 compiles the same selfhost source again
@@ -51,8 +51,8 @@ describe("selfhost stage3", () => {
     const stage3Out = resolve(stage3Dir, "tuffc.mjs");
 
     const tuffc2 = await import(pathToFileURL(stage2Out).toString());
-    expect(typeof tuffc2.main).toBe("function");
-    const rc3 = tuffc2.main([stage2In, stage3Out]);
+    expect(typeof tuffc2.run).toBe("function");
+    const rc3 = tuffc2.run([stage2In, stage3Out]);
     expect(rc3).toBe(0);
 
     // Stage 4: stage3 compiles the same selfhost source again
@@ -60,8 +60,8 @@ describe("selfhost stage3", () => {
     const stage4Out = resolve(stage4Dir, "tuffc.mjs");
 
     const tuffc3 = await import(pathToFileURL(stage3Out).toString());
-    expect(typeof tuffc3.main).toBe("function");
-    const rc4 = tuffc3.main([stage2In, stage4Out]);
+    expect(typeof tuffc3.run).toBe("function");
+    const rc4 = tuffc3.run([stage2In, stage4Out]);
     expect(rc4).toBe(0);
 
     // Compare stage3 and stage4 outputs (both entry + lib).

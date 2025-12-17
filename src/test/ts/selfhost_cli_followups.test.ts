@@ -56,7 +56,7 @@ describe("selfhost CLI follow-ups", () => {
     );
 
     // Fluff has no output path, so ensure it doesn't incidentally write one.
-    const rc = fluff2.main([inFile]);
+    const rc = fluff2.run([inFile]);
     expect(rc).toBe(0);
     expect(await exists(outFile)).toBe(false);
   });
@@ -89,7 +89,7 @@ describe("selfhost CLI follow-ups", () => {
     );
 
     const { value: rc, out } = captureStdout(() =>
-      fluff2.main(["--format", "json", inFile])
+      fluff2.run(["--format", "json", inFile])
     );
     expect(rc).toBe(0);
 
@@ -129,7 +129,7 @@ describe("selfhost CLI follow-ups", () => {
     );
 
     const { value: rc, out } = captureStdout(() =>
-      fluff2.main([inFile])
+      fluff2.run([inFile])
     );
     expect(rc).toBe(0);
     expect(out).toMatch(/unused local/i);
@@ -155,7 +155,7 @@ describe("selfhost CLI follow-ups", () => {
       ["fn main() : I32 => {", "  let x: I32 = 1;", "  0", "}", ""].join("\n")
     );
 
-    const runOnce = () => fluff2.main([inFile]);
+    const runOnce = () => fluff2.run([inFile]);
 
     const r1 = captureStdout(runOnce);
     expect(r1.value).toBe(0);

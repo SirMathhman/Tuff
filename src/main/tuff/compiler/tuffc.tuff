@@ -17,7 +17,7 @@ fn print_usage() : Void => {
 }
 
 // When run as a program, compile file input.
-fn main(argv: Vec<String>) => {
+out fn run(argv: Vec<String>) => {
   let mut format = "human";
 
   let mut inPath = "";

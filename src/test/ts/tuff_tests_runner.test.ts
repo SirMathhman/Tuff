@@ -51,7 +51,7 @@ describe("tuff tests (.tuff)", () => {
     );
 
     const tuffc = await import(pathToFileURL(tuffcFile).toString());
-    expect(typeof tuffc.main).toBe("function");
+    expect(typeof tuffc.run).toBe("function");
 
     for (const testFile of testFiles) {
       // IMPORTANT: compile from a staged copy inside outDir so that module
@@ -76,7 +76,7 @@ describe("tuff tests (.tuff)", () => {
       const src = await readFile(testFile, "utf8");
       await writeFile(inFile, src, "utf8");
 
-      const rcCompile = tuffc.main([inFile, outFile]);
+      const rcCompile = tuffc.run([inFile, outFile]);
       expect(rcCompile, `compile failed: ${relFromTestsRoot}`).toBe(0);
 
       const mod = await import(

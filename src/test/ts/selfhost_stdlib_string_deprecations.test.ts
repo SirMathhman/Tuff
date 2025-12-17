@@ -27,11 +27,11 @@ async function buildStage2Compiler(outDir: string) {
   const stage2Out = resolve(stage2Dir, "tuffc.stage2.mjs");
 
   const tuffc1 = await import(pathToFileURL(stage1File).toString());
-  const rc2 = tuffc1.main([stage2In, stage2Out]);
+  const rc2 = tuffc1.run([stage2In, stage2Out]);
   expect(rc2).toBe(0);
 
   const tuffc2 = await import(pathToFileURL(stage2Out).toString());
-  expect(typeof tuffc2.main).toBe("function");
+  expect(typeof tuffc2.run).toBe("function");
 
   return { tuffc2 };
 }
@@ -91,7 +91,7 @@ describe("stdlib string helper deprecations", () => {
     );
 
     const { value: rc, out } = captureStdout(() =>
-      tuffc2.main([inFile, outFile])
+      tuffc2.run([inFile, outFile])
     );
     expect(rc).toBe(0);
 

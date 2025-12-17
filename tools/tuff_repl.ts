@@ -99,13 +99,11 @@ export async function compileAndRunTuffMain(
   const root = repoRootFromHere();
   const tuffcFile = resolve(root, "selfhost", "prebuilt", "tuffc.mjs");
   const tuffc = await import(pathToFileURL(tuffcFile).toString());
-  if (typeof (tuffc as any).main !== "function") {
-    throw new Error(
-      `expected prebuilt compiler to export main(): ${tuffcFile}`
-    );
+  if (typeof (tuffc as any).run !== "function") {
+    throw new Error(`expected prebuilt compiler to export run(): ${tuffcFile}`);
   }
 
-  const rcCompile = (tuffc as any).main([inFile, outFile]);
+  const rcCompile = (tuffc as any).run([inFile, outFile]);
   if (rcCompile !== 0) {
     return { exitCode: rcCompile, stdout: "", stderr: "" };
   }

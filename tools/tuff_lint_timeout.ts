@@ -83,7 +83,7 @@ export async function main(): Promise<number> {
   console.log(
     `Running Tuff linter on compiler sources (timeout ${timeoutMs}ms)...`
   );
-  const exitCode = await fluff.main([...forwardedArgs, compilerRoot]);
+  const exitCode = await fluff.run([...forwardedArgs, compilerRoot]);
 
   const errorCount =
     typeof fluff.project_error_count === "function"

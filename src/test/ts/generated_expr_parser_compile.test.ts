@@ -48,7 +48,7 @@ describe("generated expr parser (EBNF -> Tuff)", () => {
     );
 
     const tuffc = await import(pathToFileURL(tuffcFile).toString());
-    expect(typeof (tuffc as any).main).toBe("function");
+    expect(typeof (tuffc as any).run).toBe("function");
 
     // Copy grammar + generator tool into the staged directory so relative paths work.
     const stagedGrammar = resolve(outDir, "grammars", "tuff_expr_min.ebnf");
@@ -65,7 +65,7 @@ describe("generated expr parser (EBNF -> Tuff)", () => {
 
     const genToolOut = resolve(outDir, "gen_tuff_expr_parser.mjs");
     {
-      const rc = (tuffc as any).main([stagedGenTool, genToolOut]);
+      const rc = (tuffc as any).run([stagedGenTool, genToolOut]);
       expect(rc).toBe(0);
     }
 
@@ -99,7 +99,7 @@ describe("generated expr parser (EBNF -> Tuff)", () => {
 
     const genParserMjs = genParserTuff.replace(/\.tuff$/, ".mjs");
     {
-      const rc = (tuffc as any).main([genParserTuff, genParserMjs]);
+      const rc = (tuffc as any).run([genParserTuff, genParserMjs]);
       expect(rc).toBe(0);
     }
 

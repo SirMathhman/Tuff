@@ -54,7 +54,7 @@ describe("selfhost lint config", () => {
     );
 
     const { value: rc, out } = captureStdout(() =>
-      fluff2.main([inFile])
+      fluff2.run([inFile])
     );
     expect(rc).toBe(0);
     expect(out).not.toMatch(/unused local/i);
@@ -90,7 +90,7 @@ describe("selfhost lint config", () => {
     );
 
     const { value: rc, out } = captureStdout(() =>
-      fluff2.main([inFile])
+      fluff2.run([inFile])
     );
     expect(rc).toBe(0);
     expect(out).toMatch(/unused local/i);

@@ -73,7 +73,7 @@ describe("fluff file-list CLI", () => {
     const fluff = await import(resolve(outDir, "fluff.mjs"));
 
     const { value: rc, out } = captureStdout(() =>
-      fluff.main(["--format", "json", warnFile, cleanFile])
+      fluff.run(["--format", "json", warnFile, cleanFile])
     );
 
     // Should succeed and report exactly one warning.

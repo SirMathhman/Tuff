@@ -135,11 +135,11 @@ async function runCompiler(
   const outFile = resolve(outDir, outEntryName);
 
   const mod = (await import(pathToFileURL(entryFile).toString())) as any;
-  if (typeof mod.main !== "function") {
-    throw new Error(`expected compiler module to export main(): ${entryFile}`);
+  if (typeof mod.run !== "function") {
+    throw new Error(`expected compiler module to export run(): ${entryFile}`);
   }
 
-  const rc = mod.main([inputTuff, outFile]);
+  const rc = mod.run([inputTuff, outFile]);
   if (rc !== 0) {
     throw new Error(`compiler returned nonzero exit code ${rc}`);
   }

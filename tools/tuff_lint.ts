@@ -46,7 +46,7 @@ export async function main(): Promise<number> {
   const extraArgs = process.argv.slice(2);
 
   console.log(`Running Tuff linter on compiler sources...`);
-  const exitCode = await fluff.main(makeFluffArgv(compilerRoot, extraArgs));
+  const exitCode = await fluff.run(makeFluffArgv(compilerRoot, extraArgs));
 
   // Get counts for summary
   const errorCount =

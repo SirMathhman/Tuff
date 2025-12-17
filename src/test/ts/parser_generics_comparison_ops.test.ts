@@ -28,7 +28,7 @@ describe("parser: comparison operators in generic functions", () => {
     await copyFile(srcTestFile, testFile);
 
     // Compile the test file
-    const rc = tuffc.main([testFile, outFile]);
+    const rc = tuffc.run([testFile, outFile]);
 
     // Should compile successfully (rc === 0)
     expect(rc).toBe(0);
@@ -41,7 +41,7 @@ describe("parser: comparison operators in generic functions", () => {
     expect(typeof mod.main).toBe("function");
 
     const rcRun = mod.main();
-    
+
     // main() returns 0 if all tests pass, 1 if any fail
     expect(rcRun).toBe(0);
   });

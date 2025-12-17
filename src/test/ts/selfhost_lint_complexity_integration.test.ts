@@ -58,7 +58,7 @@ describe("selfhost cyclomatic complexity linting (integration)", () => {
       "utf8"
     );
 
-    const { value: rc, out } = captureStdout(() => fluff2.main([inFile]));
+    const { value: rc, out } = captureStdout(() => fluff2.run([inFile]));
     expect(rc).toBe(0);
     expect(out).toMatch(/warning/i);
     expect(out).toMatch(/cyclomatic complexity/i);

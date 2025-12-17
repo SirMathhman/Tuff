@@ -92,8 +92,8 @@ export async function main(): Promise<number> {
     pathToFileURL(fluffFile).toString()
   )) as FluffModule;
 
-  if (typeof fluff.main !== "function") {
-    console.error(`expected prebuilt fluff to export main(): ${fluffFile}`);
+  if (typeof fluff.run !== "function") {
+    console.error(`expected prebuilt fluff to export run(): ${fluffFile}`);
     return 1;
   }
 
@@ -115,7 +115,7 @@ export async function main(): Promise<number> {
     files.sort();
 
     console.log(`Running Tuff linter on ${files.length} staged file(s)...`);
-    const rc = fluff.main([...forwardedArgs, ...files]);
+    const rc = fluff.run([...forwardedArgs, ...files]);
     if (rc !== 0) exitCode = rc;
   }
 

@@ -30,7 +30,7 @@ fn starts_with(s: String, prefix: String) : Bool => {
   stringSlice(s, 0, stringLen(prefix)) == prefix
 }
 
-fn main(argv: Vec<String>) => {
+out fn run(argv: Vec<String>) => {
   let mut format = "human";
   let mut inPaths = vec_new();
   let mut debugScopes = "";

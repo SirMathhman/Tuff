@@ -29,9 +29,9 @@ describe("selfhost", () => {
     );
 
     const tuffc = await import(pathToFileURL(tuffcFile).toString());
-    expect(typeof tuffc.main).toBe("function");
+    expect(typeof tuffc.run).toBe("function");
 
-    const rc = tuffc.main([tinyIn, tinyOut]);
+    const rc = tuffc.run([tinyIn, tinyOut]);
     expect(rc).toBe(0);
 
     const emitted = await readFile(tinyOut, "utf8");

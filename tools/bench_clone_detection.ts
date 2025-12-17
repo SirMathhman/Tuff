@@ -75,7 +75,7 @@ export async function main(): Promise<number> {
   )) as FluffModule;
 
   const t0 = performance.now();
-  const code = fluff.main(["--format", "json", programPath]);
+  const code = fluff.run(["--format", "json", programPath]);
   const t1 = performance.now();
 
   const err =

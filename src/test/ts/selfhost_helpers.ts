@@ -175,24 +175,24 @@ export async function buildStage2SelfhostCompiler(outDir: string): Promise<{
 
   // Build stage2 compiler using stage1 compiler.
   const tuffc1 = await import(pathToFileURL(stage1File).toString());
-  const rc2 = (tuffc1 as any).main([stage2In, stage2File]);
+  const rc2 = (tuffc1 as any).run([stage2In, stage2File]);
   if (rc2 !== 0) {
     throw new Error(`stage2 compile failed with code ${rc2}`);
   }
 
-  const rcFluff = (tuffc1 as any).main([stage2FluffIn, stage2FluffFile]);
+  const rcFluff = (tuffc1 as any).run([stage2FluffIn, stage2FluffFile]);
   if (rcFluff !== 0) {
     throw new Error(`stage2 fluff compile failed with code ${rcFluff}`);
   }
 
   const tuffc2 = await import(pathToFileURL(stage2File).toString());
-  if (typeof (tuffc2 as any).main !== "function") {
-    throw new Error("stage2 compiler missing main() export");
+  if (typeof (tuffc2 as any).run !== "function") {
+    throw new Error("stage2 compiler missing run() export");
   }
 
   const fluff2 = await import(pathToFileURL(stage2FluffFile).toString());
-  if (typeof (fluff2 as any).main !== "function") {
-    throw new Error("stage2 fluff missing main() export");
+  if (typeof (fluff2 as any).run !== "function") {
+    throw new Error("stage2 fluff missing run() export");
   }
 
   return {

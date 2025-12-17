@@ -67,7 +67,7 @@ describe.skip("selfhost cyclomatic complexity linting", () => {
       "utf8"
     );
 
-    const { value: rc, out } = captureStdout(() => fluff2.main([inFile]));
+    const { value: rc, out } = captureStdout(() => fluff2.run([inFile]));
     expect(rc).toBe(0);
 
     expect(out).toMatch(/warning/i);
@@ -111,7 +111,7 @@ describe.skip("selfhost cyclomatic complexity linting", () => {
       "utf8"
     );
 
-    const { value: rc, out } = captureStdout(() => fluff2.main([inFile]));
+    const { value: rc, out } = captureStdout(() => fluff2.run([inFile]));
     expect(rc).toBe(0);
 
     expect(out).not.toMatch(/cyclomatic complexity/i);
@@ -155,7 +155,7 @@ describe.skip("selfhost cyclomatic complexity linting", () => {
       "utf8"
     );
 
-    const { value: rc, out } = captureStdout(() => fluff2.main([inFile]));
+    const { value: rc, out } = captureStdout(() => fluff2.run([inFile]));
     expect(rc).toBe(0);
 
     expect(out).toMatch(/warning/i);
@@ -204,7 +204,7 @@ describe.skip("selfhost cyclomatic complexity linting", () => {
       "utf8"
     );
 
-    const { value: rc, out } = captureStdout(() => fluff2.main([inFile]));
+    const { value: rc, out } = captureStdout(() => fluff2.run([inFile]));
     expect(rc).toBe(0);
 
     expect(out).toMatch(/warning/i);
@@ -248,7 +248,7 @@ describe.skip("selfhost cyclomatic complexity linting", () => {
       "utf8"
     );
 
-    const { value: rc, out } = captureStdout(() => fluff2.main([inFile]));
+    const { value: rc, out } = captureStdout(() => fluff2.run([inFile]));
     expect(rc).toBe(0);
 
     expect(out).toMatch(/warning/i);
@@ -297,7 +297,7 @@ describe.skip("selfhost cyclomatic complexity linting", () => {
       "utf8"
     );
 
-    const { value: rc, out } = captureStdout(() => fluff2.main([inFile]));
+    const { value: rc, out } = captureStdout(() => fluff2.run([inFile]));
     expect(rc).toBe(0);
 
     // Should warn for inner, not for outer
@@ -348,7 +348,7 @@ describe.skip("selfhost cyclomatic complexity linting", () => {
       "utf8"
     );
 
-    const { value: rc, out } = captureStdout(() => fluff2.main([inFile]));
+    const { value: rc, out } = captureStdout(() => fluff2.run([inFile]));
     expect(rc).toBe(0);
 
     // CC = 1 + 9 = 10, should not warn with default threshold 15
@@ -393,7 +393,7 @@ describe.skip("selfhost cyclomatic complexity linting", () => {
       "utf8"
     );
 
-    const { value: rc, out } = captureStdout(() => fluff2.main([inFile]));
+    const { value: rc, out } = captureStdout(() => fluff2.run([inFile]));
     expect(rc).toBe(0);
 
     // Should mention the actual complexity value (4) and threshold (2)
@@ -439,7 +439,7 @@ describe.skip("selfhost cyclomatic complexity linting", () => {
       "utf8"
     );
 
-    const { value: rc, out } = captureStdout(() => fluff2.main([inFile]));
+    const { value: rc, out } = captureStdout(() => fluff2.run([inFile]));
     expect(rc).toBe(0);
 
     // Should not warn when disabled
