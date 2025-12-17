@@ -948,6 +948,13 @@ fn emit_clone_warning(src: String, severity: I32, pos: I32, msg: String) : Void 
   if (severity == 2) { warn_at(src, pos, msg); yield; } // Could use error_at
 }
 
+fn should_report_clone(seen: Vec<String>, key: String, occCount: I32, tokenCount: I32) : Bool => {
+  if (occCount < __clone_min_occurrences) { yield false; }
+  if (tokenCount < __clone_min_tokens) { yield false; }
+  if (vec_contains_str(seen, key)) { yield false; }
+  true
+}
+
 out fn report_clones(src: String, exactClones: Vec<CloneGroup>, paramClones: Vec<ParameterizedClone>) : Void => {
   if (__clone_detection_enabled == 0) { yield; }
 
@@ -959,17 +966,15 @@ out fn report_clones(src: String, exactClones: Vec<CloneGroup>, paramClones: Vec
   while (gi < vec_len(exactClones)) {
     let g = vec_get(exactClones, gi);
     let occCount = vec_len(g.occurrences);
+    let firstOcc = vec_get(g.occurrences, 0);
+    let key = "exact:" + g.signature + ":" + ("" + g.tokenCount) + ":" + ("" + firstOcc.spanStart);
 
-    if (occCount >= __clone_min_occurrences && g.tokenCount >= __clone_min_tokens) {
-      let firstOcc = vec_get(g.occurrences, 0);
-      let key = "exact:" + g.signature + ":" + ("" + g.tokenCount) + ":" + ("" + firstOcc.spanStart);
-      if (!vec_contains_str(seen, key)) {
-        vec_push(seen, key);
-        let where = format_occurrences(src, g.occurrences, 4);
-        let msg = "code clone detected: " + ("" + g.tokenCount) + " IR tokens duplicated " +
-                  ("" + occCount) + " times (" + where + "); consider extracting to a function";
-        emit_clone_warning(src, __clone_detection_enabled, firstOcc.spanStart, msg);
-      }
+    if (should_report_clone(seen, key, occCount, g.tokenCount)) {
+      vec_push(seen, key);
+      let where = format_occurrences(src, g.occurrences, 4);
+      let msg = "code clone detected: " + ("" + g.tokenCount) + " IR tokens duplicated " +
+                ("" + occCount) + " times (" + where + "); consider extracting to a function";
+      emit_clone_warning(src, __clone_detection_enabled, firstOcc.spanStart, msg);
     }
 
     gi = gi + 1;
@@ -980,18 +985,16 @@ out fn report_clones(src: String, exactClones: Vec<CloneGroup>, paramClones: Vec
   while (pi < vec_len(paramClones)) {
     let p = vec_get(paramClones, pi);
     let occCount = vec_len(p.occurrences);
+    let firstOcc = vec_get(p.occurrences, 0);
+    let key = "param:" + p.signature + ":" + ("" + p.tokenCount) + ":" + ("" + firstOcc.spanStart);
 
-    if (occCount >= __clone_min_occurrences && p.tokenCount >= __clone_min_tokens) {
-      let firstOcc = vec_get(p.occurrences, 0);
-      let key = "param:" + p.signature + ":" + ("" + p.tokenCount) + ":" + ("" + firstOcc.spanStart);
-      if (!vec_contains_str(seen, key)) {
-        vec_push(seen, key);
-        let where = format_occurrences(src, p.occurrences, 4);
-        let msg = "parameterized clone detected: " + ("" + p.tokenCount) +
-                  " IR tokens with variations, appears " + ("" + occCount) +
-                  " times (" + where + "); consider extracting to a parameterized function";
-        emit_clone_warning(src, __clone_detection_enabled, firstOcc.spanStart, msg);
-      }
+    if (should_report_clone(seen, key, occCount, p.tokenCount)) {
+      vec_push(seen, key);
+      let where = format_occurrences(src, p.occurrences, 4);
+      let msg = "parameterized clone detected: " + ("" + p.tokenCount) +
+                " IR tokens with variations, appears " + ("" + occCount) +
+                " times (" + where + "); consider extracting to a parameterized function";
+      emit_clone_warning(src, __clone_detection_enabled, firstOcc.spanStart, msg);
     }
 
     pi = pi + 1;

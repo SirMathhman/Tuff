@@ -759,6 +759,18 @@ return;
 }
 return undefined;
 }
+export function should_report_clone(seen, key, occCount, tokenCount) {
+if (occCount < __clone_min_occurrences) {
+return false;
+}
+if (tokenCount < __clone_min_tokens) {
+return false;
+}
+if (vec_contains_str(seen, key)) {
+return false;
+}
+return true;
+}
 export function report_clones(src, exactClones, paramClones) {
 if (__clone_detection_enabled == 0) {
 return;
@@ -768,15 +780,13 @@ let gi = 0;
 while (gi < vec_len(exactClones)) {
 const g = vec_get(exactClones, gi);
 const occCount = vec_len(g.occurrences);
-if (occCount >= __clone_min_occurrences && g.tokenCount >= __clone_min_tokens) {
 const firstOcc = vec_get(g.occurrences, 0);
 const key = "exact:" + g.signature + ":" + ("" + g.tokenCount) + ":" + ("" + firstOcc.spanStart);
-if (!vec_contains_str(seen, key)) {
+if (should_report_clone(seen, key, occCount, g.tokenCount)) {
 vec_push(seen, key);
 const where = format_occurrences(src, g.occurrences, 4);
 const msg = "code clone detected: " + ("" + g.tokenCount) + " IR tokens duplicated " + ("" + occCount) + " times (" + where + "); consider extracting to a function";
 emit_clone_warning(src, __clone_detection_enabled, firstOcc.spanStart, msg);
-}
 }
 gi = gi + 1;
 }
@@ -784,15 +794,13 @@ let pi = 0;
 while (pi < vec_len(paramClones)) {
 const p = vec_get(paramClones, pi);
 const occCount = vec_len(p.occurrences);
-if (occCount >= __clone_min_occurrences && p.tokenCount >= __clone_min_tokens) {
 const firstOcc = vec_get(p.occurrences, 0);
 const key = "param:" + p.signature + ":" + ("" + p.tokenCount) + ":" + ("" + firstOcc.spanStart);
-if (!vec_contains_str(seen, key)) {
+if (should_report_clone(seen, key, occCount, p.tokenCount)) {
 vec_push(seen, key);
 const where = format_occurrences(src, p.occurrences, 4);
 const msg = "parameterized clone detected: " + ("" + p.tokenCount) + " IR tokens with variations, appears " + ("" + occCount) + " times (" + where + "); consider extracting to a parameterized function";
 emit_clone_warning(src, __clone_detection_enabled, firstOcc.spanStart, msg);
-}
 }
 pi = pi + 1;
 }

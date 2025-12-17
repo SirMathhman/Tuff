@@ -225,27 +225,38 @@ const header = (exportTop ? "export const " : "const ");
 const code = decls + header + modName.text + " = " + obj + ";\n";
 return ParsedStmt(code, k);
 }
-export function parse_fn_decl2(src, i, exportAll) {
-let k = parse_keyword(src, i, "fn");
+export function FnHeader(name, params, body, nextPos) {
+return { name: name, params: params, body: body, nextPos: nextPos };
+}
+export function parse_fn_header_and_body(src, k) {
 const name = parse_ident(src, k);
-k = name.nextPos;
+let k2 = name.nextPos;
 if (is_identifier_too_short(name.text)) {
 warn_short_identifier(src, name.startPos, name.text);
 }
-const t0 = skip_ws(src, k);
+const t0 = skip_ws(src, k2);
 if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) {
-k = skip_angle_brackets(src, t0);
+k2 = skip_angle_brackets(src, t0);
 }
-const params = parse_param_list(src, k);
-k = params.v1;
-const t1 = skip_ws(src, k);
+const params = parse_param_list(src, k2);
+k2 = params.v1;
+const t1 = skip_ws(src, k2);
 if (t1 < stringLen(src) && stringCharCodeAt(src, t1) == 58) {
 const _rt = parse_type_expr(src, t1 + 1);
-k = _rt.v1;
+k2 = _rt.v1;
 }
-k = parse_keyword(src, k, "=>");
-const body = parse_main_body(src, k);
-k = body.v1;
+k2 = parse_keyword(src, k2, "=>");
+const body = parse_main_body(src, k2);
+k2 = body.v1;
+return FnHeader(name, params, body, k2);
+}
+export function parse_fn_decl2(src, i, exportAll) {
+let k = parse_keyword(src, i, "fn");
+const header = parse_fn_header_and_body(src, k);
+const name = header.name;
+const params = header.params;
+const body = header.body;
+k = header.nextPos;
 const exportKw = (exportAll || name.text == "main" ? "export " : "");
 const js = exportKw + "function " + name.text + "(" + params.v0 + ") {\n" + body.body + "return " + body.expr + ";\n}\n";
 return ParsedStmt(js, k);
@@ -253,25 +264,11 @@ return ParsedStmt(js, k);
 export function parse_class_fn_decl2(src, i, exportAll) {
 let k = parse_keyword(src, i, "class");
 k = parse_keyword(src, k, "fn");
-const name = parse_ident(src, k);
-k = name.nextPos;
-if (is_identifier_too_short(name.text)) {
-warn_short_identifier(src, name.startPos, name.text);
-}
-const t0 = skip_ws(src, k);
-if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) {
-k = skip_angle_brackets(src, t0);
-}
-const params = parse_param_list(src, k);
-k = params.v1;
-const t1 = skip_ws(src, k);
-if (t1 < stringLen(src) && stringCharCodeAt(src, t1) == 58) {
-const _rt = parse_type_expr(src, t1 + 1);
-k = _rt.v1;
-}
-k = parse_keyword(src, k, "=>");
-const body = parse_main_body(src, k);
-k = body.v1;
+const header = parse_fn_header_and_body(src, k);
+const name = header.name;
+const params = header.params;
+const body = header.body;
+k = header.nextPos;
 const exportKw = (exportAll || name.text == "main" ? "export " : "");
 let fields = "";
 let pi = 0;

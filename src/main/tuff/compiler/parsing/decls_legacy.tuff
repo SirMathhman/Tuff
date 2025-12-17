@@ -248,31 +248,43 @@ out fn parse_module_decl(src: String, i: I32, prefix: String, exportTop: Bool) :
   ParsedStmt(code, k)
 }
 
-out fn parse_fn_decl2(src: String, i: I32, exportAll: Bool) : ParsedStmt => {
-  let mut k = parse_keyword(src, i, "fn");
+class fn FnHeader(name: ParsedIdent, params: (String, I32), body: ParsedBody, nextPos: I32) => {}
+
+fn parse_fn_header_and_body(src: String, k: I32) : FnHeader => {
   let name = parse_ident(src, k);
-  k = name.nextPos;
+  let mut k2 = name.nextPos;
   if (is_identifier_too_short(name.text)) { warn_short_identifier(src, name.startPos, name.text); }
 
   // Optional generic params: fn name<T, U>(...)
-  let t0 = skip_ws(src, k);
+  let t0 = skip_ws(src, k2);
   if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) { // '<'
-    k = skip_angle_brackets(src, t0);
+    k2 = skip_angle_brackets(src, t0);
   }
 
-  let params = parse_param_list(src, k);
-  k = params.v1;
+  let params = parse_param_list(src, k2);
+  k2 = params.v1;
 
   // Optional return type: : Type
-  let t1 = skip_ws(src, k);
+  let t1 = skip_ws(src, k2);
   if (t1 < stringLen(src) && stringCharCodeAt(src, t1) == 58) { // ':'
     let _rt = parse_type_expr(src, t1 + 1);
-    k = _rt.v1;
+    k2 = _rt.v1;
   }
 
-  k = parse_keyword(src, k, "=>");
-  let body = parse_main_body(src, k);
-  k = body.v1;
+  k2 = parse_keyword(src, k2, "=>");
+  let body = parse_main_body(src, k2);
+  k2 = body.v1;
+
+  FnHeader(name, params, body, k2)
+}
+
+out fn parse_fn_decl2(src: String, i: I32, exportAll: Bool) : ParsedStmt => {
+  let mut k = parse_keyword(src, i, "fn");
+  let header = parse_fn_header_and_body(src, k);
+  let name = header.name;
+  let params = header.params;
+  let body = header.body;
+  k = header.nextPos;
 
   let exportKw = if (exportAll || name.text == "main") "export " else "";
   let js = exportKw + "function " + name.text + "(" + params.v0 + ") {\n" + body.body + "return " + body.expr + ";\n}\n";
@@ -282,29 +294,11 @@ out fn parse_fn_decl2(src: String, i: I32, exportAll: Bool) : ParsedStmt => {
 out fn parse_class_fn_decl2(src: String, i: I32, exportAll: Bool) : ParsedStmt => {
   let mut k = parse_keyword(src, i, "class");
   k = parse_keyword(src, k, "fn");
-  let name = parse_ident(src, k);
-  k = name.nextPos;
-  if (is_identifier_too_short(name.text)) { warn_short_identifier(src, name.startPos, name.text); }
-
-  // Optional generic params: class fn name<T, U>(...)
-  let t0 = skip_ws(src, k);
-  if (t0 < stringLen(src) && stringCharCodeAt(src, t0) == 60) { // '<'
-    k = skip_angle_brackets(src, t0);
-  }
-
-  let params = parse_param_list(src, k);
-  k = params.v1;
-
-  // Optional return type: : Type
-  let t1 = skip_ws(src, k);
-  if (t1 < stringLen(src) && stringCharCodeAt(src, t1) == 58) { // ':'
-    let _rt = parse_type_expr(src, t1 + 1);
-    k = _rt.v1;
-  }
-
-  k = parse_keyword(src, k, "=>");
-  let body = parse_main_body(src, k);
-  k = body.v1;
+  let header = parse_fn_header_and_body(src, k);
+  let name = header.name;
+  let params = header.params;
+  let body = header.body;
+  k = header.nextPos;
 
   // Minimal `class fn` lowering: execute body statements then yield `this`.
   // For now, `this` is just an object containing parameters.

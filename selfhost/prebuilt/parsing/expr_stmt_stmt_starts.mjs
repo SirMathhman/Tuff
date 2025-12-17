@@ -1,6 +1,18 @@
 // compiled by selfhost tuffc
 import { stringLen, stringCharCodeAt } from "../rt/stdlib.mjs";
 import { is_ident_part, is_ident_start, skip_ws } from "../util/lexing.mjs";
+export function is_assignment_operator(src, j) {
+if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 61)) {
+return false;
+}
+if (j + 1 < stringLen(src)) {
+const n = stringCharCodeAt(src, j + 1);
+if (n == 61 || n == 62) {
+return false;
+}
+}
+return true;
+}
 export function is_index_assign_stmt_start_impl(src, i) {
 let j = skip_ws(src, i);
 if (!(j < stringLen(src))) {
@@ -74,16 +86,7 @@ if (depth != 0) {
 return false;
 }
 k = skip_ws(src, k);
-if (!(k < stringLen(src) && stringCharCodeAt(src, k) == 61)) {
-return false;
-}
-if (k + 1 < stringLen(src)) {
-const n = stringCharCodeAt(src, k + 1);
-if (n == 61 || n == 62) {
-return false;
-}
-}
-return true;
+return is_assignment_operator(src, k);
 }
 export function is_assign_stmt_start_impl(src, i) {
 let j = skip_ws(src, i);
@@ -103,16 +106,7 @@ break;
 j = j + 1;
 }
 j = skip_ws(src, j);
-if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 61)) {
-return false;
-}
-if (j + 1 < stringLen(src)) {
-const n = stringCharCodeAt(src, j + 1);
-if (n == 61 || n == 62) {
-return false;
-}
-}
-return true;
+return is_assignment_operator(src, j);
 }
 export function is_field_assign_stmt_start_impl(src, i) {
 let j = skip_ws(src, i);
@@ -155,14 +149,5 @@ j = j + 1;
 }
 j = skip_ws(src, j);
 }
-if (!(j < stringLen(src) && stringCharCodeAt(src, j) == 61)) {
-return false;
-}
-if (j + 1 < stringLen(src)) {
-const n = stringCharCodeAt(src, j + 1);
-if (n == 61 || n == 62) {
-return false;
-}
-}
-return true;
+return is_assignment_operator(src, j);
 }
