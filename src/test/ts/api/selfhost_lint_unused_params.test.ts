@@ -17,7 +17,7 @@ describe("selfhost analyzer linting", () => {
     const entryCode = [
       "fn f(x: I32) : I32 => 0",
       "",
-      "fn main() : I32 => f(1)",
+      "out fn run() : I32 => f(1)",
       "",
     ].join("\n");
 
@@ -32,7 +32,7 @@ describe("selfhost analyzer linting", () => {
     const entryCode = [
       "fn f(_x: I32) : I32 => 0",
       "",
-      "fn main() : I32 => f(1)",
+      "out fn run() : I32 => f(1)",
       "",
     ].join("\n");
 

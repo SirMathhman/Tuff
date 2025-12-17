@@ -17,7 +17,7 @@ describe("compiler API (in-memory)", () => {
 
     const entryCode = [
       "from dep::math use { add };",
-      "fn main() : I32 => add(1, 2)",
+      "out fn run() : I32 => add(1, 2)",
       "",
     ].join("\n");
 
@@ -33,7 +33,7 @@ describe("compiler API (in-memory)", () => {
     const entryIdx = outRelPaths.indexOf("entry.mjs");
     expect(entryIdx).toBeGreaterThanOrEqual(0);
     expect(jsOutputs[entryIdx]).toContain("export");
-    expect(jsOutputs[entryIdx]).toContain("main");
+    expect(jsOutputs[entryIdx]).toContain("run");
 
     const depIdx = outRelPaths.findIndex((p: string) =>
       p.endsWith("dep/math.mjs")

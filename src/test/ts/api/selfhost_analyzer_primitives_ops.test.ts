@@ -7,7 +7,7 @@ describe("selfhost analyzer (primitives + operator typing)", () => {
     // U32 should be enforced (string is not assignable)
     {
       const bad = [
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         '  let x: U32 = "nope";',
         "  0",
         "}",
@@ -23,7 +23,7 @@ describe("selfhost analyzer (primitives + operator typing)", () => {
     // Char should be enforced (string is not assignable)
     {
       const bad = [
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         '  let c: Char = "A";',
         "  0",
         "}",
@@ -41,7 +41,7 @@ describe("selfhost analyzer (primitives + operator typing)", () => {
     // --- more integer widths: should be enforced ---
     for (const ty of ["U8", "U16", "U64", "I8", "I16", "I64"]) {
       const bad = [
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         `  let x: ${ty} = "nope";`,
         "  0",
         "}",
@@ -59,7 +59,7 @@ describe("selfhost analyzer (primitives + operator typing)", () => {
     // --- floats: annotation mismatch should be enforced ---
     {
       const bad = [
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         '  let x: F32 = "nope";',
         "  0",
         "}",
@@ -76,7 +76,7 @@ describe("selfhost analyzer (primitives + operator typing)", () => {
     // a float literal, not a tuple index.
     {
       const bad = [
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         '  let x: F32 = "nope" * 2.0;',
         "  0",
         "}",
@@ -94,7 +94,7 @@ describe("selfhost analyzer (primitives + operator typing)", () => {
     // --- float comparisons: should accept float operands but reject string/float mix ---
     {
       const good = [
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let a: F32 = 3.14;",
         "  let b: F32 = 2.71;",
         "  if (a > b) { 1 } else { 0 }",
@@ -108,7 +108,7 @@ describe("selfhost analyzer (primitives + operator typing)", () => {
 
     {
       const bad = [
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         '  let x: Bool = "nope" > 2.0;',
         "  0",
         "}",
@@ -126,7 +126,7 @@ describe("selfhost analyzer (primitives + operator typing)", () => {
     // --- typed float suffixes: F32 and F64 ---
     {
       const good = [
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let a: F32 = 3.14F32;",
         "  let b: F64 = 2.71F64;",
         "  0",
@@ -141,7 +141,7 @@ describe("selfhost analyzer (primitives + operator typing)", () => {
     // Typed float suffix type mismatch should be rejected
     {
       const bad = [
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let x: F64 = 3.14F32;",
         "  0",
         "}",
@@ -157,7 +157,7 @@ describe("selfhost analyzer (primitives + operator typing)", () => {
 
   test("rejects obviously invalid arithmetic operand types", async () => {
     const bad = [
-      "fn main() : I32 => {",
+      "out fn run() : I32 => {",
       '  let x: I32 = "nope" * 2;',
       "  x",
       "}",

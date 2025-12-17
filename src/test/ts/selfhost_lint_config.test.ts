@@ -44,7 +44,7 @@ describe("selfhost lint config", () => {
     await writeFile(
       inFile,
       [
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let x: I32 = 1;", // would warn
         "  0",
         "}",
@@ -80,7 +80,7 @@ describe("selfhost lint config", () => {
     await writeFile(
       inFile,
       [
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let x: I32 = 1;", // would warn
         "  0",
         "}",

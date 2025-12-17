@@ -66,7 +66,7 @@ describe.skip("selfhost file size linting (500 line limit)", () => {
 
     // Generate a file with 501 lines (exceeds 500)
     const lines: string[] = [];
-    lines.push("fn main() : I32 => {");
+    lines.push("out fn run() : I32 => {");
     for (let i = 0; i < 498; i++) {
       lines.push(`  // line ${i + 2}`);
     }
@@ -107,7 +107,7 @@ describe.skip("selfhost file size linting (500 line limit)", () => {
 
     // Generate a file with exactly 500 lines (within limit)
     const lines: string[] = [];
-    lines.push("fn main() : I32 => {");
+    lines.push("out fn run() : I32 => {");
     for (let i = 0; i < 497; i++) {
       lines.push(`  // line ${i + 2}`);
     }
@@ -146,7 +146,7 @@ describe.skip("selfhost file size linting (500 line limit)", () => {
 
     // Generate a file with 501 lines (exceeds default 500)
     const lines: string[] = [];
-    lines.push("fn main() : I32 => {");
+    lines.push("out fn run() : I32 => {");
     for (let i = 0; i < 498; i++) {
       lines.push(`  // line ${i + 2}`);
     }
@@ -189,7 +189,7 @@ describe.skip("selfhost file size linting (500 line limit)", () => {
     await writeFile(
       inFile,
       [
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  // line 2",
         "  // line 3",
         "  // line 4",
@@ -232,7 +232,7 @@ describe.skip("selfhost file size linting (500 line limit)", () => {
 
     // Generate a file with 501 lines
     const lines: string[] = [];
-    lines.push("fn main() : I32 => {");
+    lines.push("out fn run() : I32 => {");
     for (let i = 0; i < 498; i++) {
       lines.push(`  // line ${i + 2}`);
     }
@@ -273,7 +273,7 @@ describe.skip("selfhost file size linting (500 line limit)", () => {
 
     // Generate a file with 150 lines
     const lines: string[] = [];
-    lines.push("fn main() : I32 => {");
+    lines.push("out fn run() : I32 => {");
     for (let i = 0; i < 147; i++) {
       lines.push(`  // line ${i + 2}`);
     }
@@ -320,7 +320,7 @@ describe.skip("selfhost file size linting (500 line limit)", () => {
       [
         "from submod::large use { helper };",
         "",
-        "fn main() : I32 => helper()",
+        "out fn run() : I32 => helper()",
         "",
       ].join("\n"),
       "utf8"

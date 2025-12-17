@@ -4,7 +4,7 @@ import { lintCode } from "../compiler_api_wrapper";
 
 describe("selfhost analyzer", () => {
   test("rejects calling __tuff_struct_lit directly", async () => {
-    const entryCode = "fn main() => { __tuff_struct_lit(Foo, 1) }\n";
+    const entryCode = "out fn run() => { __tuff_struct_lit(Foo, 1) }\n";
     const r = await lintCode(entryCode, {});
     expect(r.diagnostics ?? "").toBe("");
     expect(r.success).toBe(false);

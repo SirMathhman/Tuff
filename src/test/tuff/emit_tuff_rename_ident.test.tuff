@@ -3,7 +3,7 @@ from std::test use { reset, suite, it, expect_eq, summary, status };
 from src::main::tuff::compiler::util::formatting use { parse_program_with_trivia };
 from src::main::tuff::compiler::emit::tuff use { rename_ident_tokens, emit_tuff };
 
-fn main() : I32 => {
+out fn run() : I32 => {
   reset();
   suite("emit tuff (preserve trivia) :: rename");
 

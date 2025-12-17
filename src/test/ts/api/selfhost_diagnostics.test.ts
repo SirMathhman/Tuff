@@ -9,7 +9,7 @@ describe("selfhost diagnostics", () => {
     )) as any;
 
     // Trigger a simple parser error: missing ')' in paren expression.
-    const badSrc = `fn main() => (1 + 2`;
+    const badSrc = `out fn run() => (1 + 2`;
 
     let msg = "";
     try {
@@ -32,9 +32,9 @@ describe("selfhost diagnostics", () => {
     // Normalize Windows newlines so the snapshot is stable across OSes.
     const norm = normalizeNewlines(msg);
     expect(norm).toMatchInlineSnapshot(`
-      "<input>:1:20 (offset 19) error: expected ')'
-      1 | fn main() => (1 + 2
-        |                    ^
+      "<input>:1:23 (offset 22) error: expected ')'
+      1 | out fn run() => (1 + 2
+        |                       ^
       help: Add ')' to close the opening '('."
     `);
   });
@@ -46,7 +46,7 @@ describe("selfhost diagnostics", () => {
 
     // Error on the middle line so we can assert previous/next lines are shown.
     // Missing ')' in the let initializer.
-    const badSrc = ["fn main() => {", "  let x = (1 + 2", "  x", "}"].join(
+    const badSrc = ["out fn run() => {", "  let x = (1 + 2", "  x", "}"].join(
       "\n"
     );
 
@@ -75,7 +75,7 @@ describe("selfhost diagnostics", () => {
     // Force a keyword mismatch so the diagnostic can underline a multi-char span.
     // We use the full parser entrypoint so we hit `parse_keyword`.
     const badSrc = [
-      "fn main() => {",
+      "out fn run() => {",
       "  let x 123;", // missing '=' after identifier
       "  x",
       "}",
@@ -103,7 +103,7 @@ describe("selfhost diagnostics", () => {
 
     // Historically we emitted a warning for very short identifiers (like `k`).
     // That check is intentionally removed/disabled now because it was too noisy.
-    const src = `fn main() => { let k = 1; k }`;
+    const src = `out fn run() => { let k = 1; k }`;
 
     const chunks: string[] = [];
     const origWrite = process.stdout.write.bind(process.stdout);
@@ -133,7 +133,7 @@ describe("selfhost diagnostics", () => {
     // 1) Typed let mismatch (I32 vs String)
     // 2) Unknown name `z`
     const badSrc = [
-      "fn main() => {",
+      "out fn run() => {",
       '  let x: I32 = "nope";',
       "  let y = z;",
       "  0",

@@ -68,6 +68,9 @@ return undefined;
 }
 export function analyze_fn_decl(src, structs, unions, fns, outerScopes, outerDepth, d) {
 const kind = (d.isClass ? "class fn" : "function");
+if (d.name == "main" && outerDepth == 1) {
+error_at(src, span_start(d.span), "'main' is reserved for C entry points. Tuff uses top-level code execution. Rename this function.");
+}
 analyze_fn_like_decl(src, structs, unions, fns, outerScopes, outerDepth, d.span, d.name, d.params, d.paramTyAnns, d.retTyAnn, d.body, d.tail, kind);
 return undefined;
 }

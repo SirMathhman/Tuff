@@ -218,7 +218,7 @@ fn node_to_string(n: Node) : String => {
   "?"
 }
 
-fn main() : I32 => {
+out fn run() : I32 => {
   reset();
   
   suite("Precedence-aware parsing");

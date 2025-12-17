@@ -27,7 +27,7 @@ fn copy_struct_user(c: CopyStruct) : I32 => c.x + c.y
 
 fn move_struct_user(m: MoveStruct) : I32 => m.value
 
-fn main() : I32 => {
+out fn run() : I32 => {
   reset();
   suite("ownership - copy types");
 

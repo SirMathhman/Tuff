@@ -19,7 +19,7 @@ describe("selfhost multi-file module support (in-memory)", () => {
 
     const entryCode = [
       "from src::util::math use { add };",
-      "fn main() : I32 => add(1, 2);",
+      "out fn run() : I32 => add(1, 2);",
       "",
     ].join("\n");
 
@@ -51,8 +51,8 @@ describe("selfhost multi-file module support (in-memory)", () => {
           `requested module keys: ${requestedKeys.join(", ")}`
       );
     }
-    expect(typeof mod.main).toBe("function");
-    expect(mod.main()).toBe(3);
+    expect(typeof mod.run).toBe("function");
+    expect(mod.run()).toBe(3);
   });
 
   test("imported function signature is validated (arity)", async () => {
@@ -63,7 +63,7 @@ describe("selfhost multi-file module support (in-memory)", () => {
 
     const entryCode = [
       "from src::util::math use { add };",
-      "fn main() : I32 => add(1);",
+      "out fn run() : I32 => add(1);",
       "",
     ].join("\n");
 
@@ -90,7 +90,7 @@ describe("selfhost multi-file module support (in-memory)", () => {
     const entryCode = [
       "from src::a use { a_const };",
       "from src::b use { b_const };",
-      "fn main() : I32 => a_const() + b_const();",
+      "out fn run() : I32 => a_const() + b_const();",
       "",
     ].join("\n");
 
@@ -102,7 +102,7 @@ describe("selfhost multi-file module support (in-memory)", () => {
       r.outRelPaths as string[],
       r.jsOutputs as string[]
     );
-    expect(mod.main()).toBe(3);
+    expect(mod.run()).toBe(3);
   });
 
   test("circular dependencies work with closures", async () => {
@@ -120,7 +120,7 @@ describe("selfhost multi-file module support (in-memory)", () => {
       "src::b": [
         "from src::a use { make_adder };",
         "out fn b_const() : I32 => 2;",
-        "out fn run() : I32 => {",
+        "out fn b_run() : I32 => {",
         "  let f = make_adder();",
         "  f()",
         "};",
@@ -129,8 +129,8 @@ describe("selfhost multi-file module support (in-memory)", () => {
     };
 
     const entryCode = [
-      "from src::b use { run };",
-      "fn main() : I32 => run();",
+      "from src::b use { b_run };",
+      "out fn run() : I32 => b_run();",
       "",
     ].join("\n");
 
@@ -145,7 +145,7 @@ describe("selfhost multi-file module support (in-memory)", () => {
       r.jsOutputs as string[],
       "src/b.mjs"
     );
-    if (typeof modB.run !== "function") {
+    if (typeof modB.b_run !== "function") {
       const rels = (r.outRelPaths ?? []) as string[];
       const idx = rels.findIndex((p) => p.replace(/\\/g, "/") === "src/b.mjs");
       const bSrc =
@@ -153,11 +153,11 @@ describe("selfhost multi-file module support (in-memory)", () => {
           ? String((r.jsOutputs ?? [])[idx] ?? "")
           : "<missing src/b.mjs>";
       throw new Error(
-        `expected src/b.mjs to export run() as a function, but got: ${typeof modB.run}\n` +
+        `expected src/b.mjs to export b_run() as a function, but got: ${typeof modB.b_run}\n` +
           `exports: ${Object.keys(modB).join(", ")}\n` +
           `--- src/b.mjs ---\n${bSrc.slice(0, 400)}\n--- end ---\n`
       );
     }
-    expect(modB.run()).toBe(3);
+    expect(modB.b_run()).toBe(3);
   });
 });

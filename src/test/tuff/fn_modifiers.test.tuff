@@ -26,7 +26,7 @@ out extern fn test_out_extern_fn() : I32;
 // extern out fn (alternate order)
 extern out fn test_extern_out_fn() : String;
 
-fn main() : I32 => {
+out fn run() : I32 => {
   reset();
   suite("fn modifier order independence");
   

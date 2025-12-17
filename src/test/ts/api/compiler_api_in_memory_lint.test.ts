@@ -21,7 +21,7 @@ describe("compiler API (in-memory lint)", () => {
     {
       const entryCode = [
         "from dep::math use { add };",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let x: I32 = 1;", // warning: unused local
         "  add(1, 2)",
         "}",
@@ -43,7 +43,7 @@ describe("compiler API (in-memory lint)", () => {
     {
       const entryCode = [
         "from dep::math use { add };",
-        "fn main() : I32 => add(true, 2)",
+        "out fn run() : I32 => add(true, 2)",
         "",
       ].join("\n");
 

@@ -17,7 +17,7 @@ describe("selfhost analyzer linting: missing documentation", () => {
     const entryCode = [
       "out fn helper(x: I32) : I32 => x + 1",
       "",
-      "fn main() : I32 => helper(1)",
+      "out fn run() : I32 => helper(1)",
       "",
     ].join("\n");
 
@@ -33,7 +33,7 @@ describe("selfhost analyzer linting: missing documentation", () => {
       "// Adds one to the input.",
       "out fn helper(x: I32) : I32 => x + 1",
       "",
-      "fn main() : I32 => helper(1)",
+      "out fn run() : I32 => helper(1)",
       "",
     ].join("\n");
 
@@ -47,7 +47,7 @@ describe("selfhost analyzer linting: missing documentation", () => {
     const entryCode = [
       "fn private_helper(x: I32) : I32 => x + 1",
       "",
-      "fn main() : I32 => private_helper(1)",
+      "out fn run() : I32 => private_helper(1)",
       "",
     ].join("\n");
 
@@ -58,7 +58,7 @@ describe("selfhost analyzer linting: missing documentation", () => {
   });
 
   test("does not warn on main function", async () => {
-    const entryCode = ["fn main() : I32 => 0", ""].join("\n");
+    const entryCode = ["out fn run() : I32 => 0", ""].join("\n");
 
     const r = await lintCode(entryCode, {});
     expect(r.success).toBe(true);
@@ -71,7 +71,7 @@ describe("selfhost analyzer linting: missing documentation", () => {
       "/* Returns the input plus one. */",
       "out fn helper(x: I32) : I32 => x + 1",
       "",
-      "fn main() : I32 => helper(1)",
+      "out fn run() : I32 => helper(1)",
       "",
     ].join("\n");
 
@@ -87,7 +87,7 @@ describe("selfhost analyzer linting: missing documentation", () => {
     const entryCode = [
       "out struct Point { x: I32, y: I32 }",
       "",
-      "fn main() : I32 => 0",
+      "out fn run() : I32 => 0",
       "",
     ].join("\n");
 
@@ -103,7 +103,7 @@ describe("selfhost analyzer linting: missing documentation", () => {
       "// A 2D point.",
       "out struct Point { x: I32, y: I32 }",
       "",
-      "fn main() : I32 => 0",
+      "out fn run() : I32 => 0",
       "",
     ].join("\n");
 
@@ -119,7 +119,7 @@ describe("selfhost analyzer linting: missing documentation", () => {
       "",
       "out fn helper(x: I32) : I32 => x + 1",
       "",
-      "fn main() : I32 => helper(1)",
+      "out fn run() : I32 => helper(1)",
       "",
     ].join("\n");
 

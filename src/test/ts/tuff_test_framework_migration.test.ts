@@ -34,7 +34,7 @@ describe("tuff std::test migration", () => {
         "  y: I32",
         "}",
         "",
-        "fn main() => {",
+        "out fn run() => {",
         "  reset();",
         "",
         '  suite("literals");',
@@ -74,9 +74,9 @@ describe("tuff std::test migration", () => {
     expect(rcCompile).toBe(0);
 
     const testsMod = await import(pathToFileURL(testsOut).toString());
-    expect(typeof testsMod.main).toBe("function");
+    expect(typeof testsMod.run).toBe("function");
 
-    const rcTests = testsMod.main();
+    const rcTests = testsMod.run();
     expect(rcTests).toBe(0);
   });
 });

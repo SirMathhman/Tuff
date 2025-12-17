@@ -11,7 +11,7 @@ fn helper(ok: Bool) : I32 => {
   42
 }
 
-fn main() : I32 => helper(true)
+out fn run() : I32 => helper(true)
 `;
 
     const r = await lintCode(entryCode, {});
@@ -29,7 +29,7 @@ fn helper(ok: Bool) : I32 => {
   100
 }
 
-fn main() : I32 => helper(true)
+out fn run() : I32 => helper(true)
 `;
 
     const r = await lintCode(entryCode, {});
@@ -46,7 +46,7 @@ fn get_value(opt: Bool) : I32 => {
   x
 }
 
-fn main() : I32 => get_value(true)
+out fn run() : I32 => get_value(true)
 `;
 
     const r = await lintCode(entryCode, {});
@@ -67,7 +67,7 @@ fn unwrap(opt: MyOption<I32>) : I32 => {
   }
 }
 
-fn main() : I32 => unwrap(Some(42))
+out fn run() : I32 => unwrap(Some(42))
 `;
 
     const r = await lintCode(entryCode, {});
@@ -86,7 +86,7 @@ fn fail_with_i32() : I32 => {
   panic("always fails")
 }
 
-fn main() : I32 => 0
+out fn run() : I32 => 0
 `;
 
     const r = await lintCode(entryCode, {});

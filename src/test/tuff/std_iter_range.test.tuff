@@ -1,7 +1,7 @@
 from std::test use { reset, suite, it, expect_eq, summary, status };
 from std::iter use { range };
 
-fn main() : I32 => {
+out fn run() : I32 => {
   reset();
   suite("std::iter");
 

@@ -34,15 +34,15 @@ describe("parser: comparison operators in generic functions", () => {
     expect(rc).toBe(0);
     expect(existsSync(outFile)).toBe(true);
 
-    // Import and run the compiled test module (must call main() explicitly)
+    // Import and run the compiled test module (must call run() explicitly)
     const mod = await import(
       pathToFileURL(outFile).toString() + `?v=${Date.now()}`
     );
-    expect(typeof mod.main).toBe("function");
+    expect(typeof mod.run).toBe("function");
 
-    const rcRun = mod.main();
+    const rcRun = mod.run();
 
-    // main() returns 0 if all tests pass, 1 if any fail
+    // run() returns 0 if all tests pass, 1 if any fail
     expect(rcRun).toBe(0);
   });
 });

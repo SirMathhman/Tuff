@@ -52,7 +52,7 @@ describe("selfhost CLI follow-ups", () => {
 
     await writeText(
       inFile,
-      ["fn main() : I32 => {", "  let x: I32 = 1;", "  x", "}", ""].join("\n")
+      ["out fn run() : I32 => {", "  let x: I32 = 1;", "  x", "}", ""].join("\n")
     );
 
     // Fluff has no output path, so ensure it doesn't incidentally write one.
@@ -80,7 +80,7 @@ describe("selfhost CLI follow-ups", () => {
     await writeText(
       inFile,
       [
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let x: I32 = 1;", // unused
         "  0",
         "}",
@@ -125,7 +125,7 @@ describe("selfhost CLI follow-ups", () => {
 
     await writeText(
       inFile,
-      ["fn main() : I32 => {", "  let x: I32 = 1;", "  0", "}", ""].join("\n")
+      ["out fn run() : I32 => {", "  let x: I32 = 1;", "  0", "}", ""].join("\n")
     );
 
     const { value: rc, out } = captureStdout(() =>
@@ -152,7 +152,7 @@ describe("selfhost CLI follow-ups", () => {
     const inFile = resolve(stage2Dir, "twice.tuff");
     await writeText(
       inFile,
-      ["fn main() : I32 => {", "  let x: I32 = 1;", "  0", "}", ""].join("\n")
+      ["out fn run() : I32 => {", "  let x: I32 = 1;", "  0", "}", ""].join("\n")
     );
 
     const runOnce = () => fluff2.run([inFile]);

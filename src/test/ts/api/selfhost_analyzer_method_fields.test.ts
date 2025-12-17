@@ -10,7 +10,7 @@ describe("selfhost analyzer", () => {
       "  fn get() : I32 => count;",
       "}",
       "",
-      "fn main() : Bool => {",
+      "out fn run() : Bool => {",
       "  let c = Counter(0);",
       "  let y: Bool = c.get();", // should be I32
       "  y",
@@ -34,7 +34,7 @@ describe("selfhost analyzer", () => {
       "  fn get() : I32 => count;",
       "}",
       "",
-      "fn main() : I32 => {",
+      "out fn run() : I32 => {",
       "  let c = Counter(0);",
       "  let y: I32 = c.get();",
       "  y",

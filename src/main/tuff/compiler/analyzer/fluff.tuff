@@ -529,8 +529,8 @@ out fn fluff_check_missing_docs(src: String, pos: I32, name: String, kind: Strin
   // Only check exported declarations
   if (!isExported) { yield; }
 
-  // Skip main function (entry point doesn't need docs)
-  if (name == "main") { yield; }
+  // Skip run function (entry point doesn't need docs)
+  if (name == "run") { yield; }
 
   if (!has_doc_comment_before(src, pos)) {
     let msg = "missing documentation comment for exported " + kind + " '" + name + "'";

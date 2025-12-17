@@ -8,7 +8,7 @@ function mkFileWithLines(totalLines: number): string {
   // Keep it parseable: a single function with many comment lines.
   // Ensure final expression is present (no trailing semicolon) for block value.
   const lines: string[] = [];
-  lines.push("fn main() : I32 => {");
+  lines.push("out fn run() : I32 => {");
   for (let i = 0; i < totalLines - 3; i++) {
     lines.push(`  // line ${i + 2}`);
   }

@@ -7,7 +7,7 @@ describe("selfhost analyzer (phase4a+4b)", () => {
     // --- let annotation mismatch ---
     {
       const bad = [
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let x: Bool = 1;",
         "  0",
         "}",
@@ -25,7 +25,7 @@ describe("selfhost analyzer (phase4a+4b)", () => {
     {
       const bad = [
         "struct Point { x: I32, y: I32 }",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let p: Point = Point { true, 2 };",
         "  p.x",
         "}",
@@ -44,7 +44,7 @@ describe("selfhost analyzer (phase4a+4b)", () => {
       const bad = [
         "fn add(a: I32, b: I32) : I32 => a + b",
         "fn bad_ret() : Bool => 1",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let x: I32 = add(true, 2);",
         "  if (bad_ret()) { x } else { 0 }",
         "}",

@@ -19,7 +19,7 @@ describe("selfhost fluff", () => {
 
   test("error-level lints fail and still report multiple diagnostics", async () => {
     const entryCode = [
-      "fn main() : I32 => {",
+      "out fn run() : I32 => {",
       "  let a: I32 = 1;",
       "  let b: I32 = 2;",
       "  0",
@@ -37,7 +37,7 @@ describe("selfhost fluff", () => {
 
   test("tuffc compilation fails on error-level lints and writes no output", async () => {
     const entryCode = [
-      "fn main() : I32 => {",
+      "out fn run() : I32 => {",
       "  let x: I32 = 1;",
       "  0",
       "}",

@@ -29,7 +29,7 @@ async function expectRunMain(entryCode: string, expected: unknown) {
   expect(typeof r.entryJs).toBe("string");
 
   const mod = await importEsmFromSource(r.entryJs as string);
-  expect(mod.main()).toBe(expected);
+  expect(mod.run()).toBe(expected);
 }
 
 describe("selfhost analyzer (phase 4 completion)", () => {
@@ -38,7 +38,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     await expectRunMain(
       [
         "fn id<T>(x: T) : T => x",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let a: I32 = id(1);",
         "  a",
         "}",
@@ -51,7 +51,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     await expectLintErr(
       [
         "fn id<T>(x: T) : T => x",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let a: I32 = id<Bool>(1);",
         "  a",
         "}",
@@ -64,7 +64,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     await expectLintErr(
       [
         "fn id<T>(x: T) : T => x",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let b: Bool = id<I32>(1);",
         "  if (b) { 1 } else { 0 }",
         "}",
@@ -79,7 +79,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     await expectLintErr(
       [
         "type Option<T> = Some<T> | None;",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let o: Option<I32> = None;",
         "  o.value",
         "}",
@@ -92,7 +92,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     await expectRunMain(
       [
         "type Option<T> = Some<T> | None;",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let o: Option<I32> = Some(3);",
         '  if (o.tag == "Some") { o.value } else { 0 }',
         "}",
@@ -105,7 +105,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     await expectLintErr(
       [
         "type Option<T> = Some<T> | None;",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let o: Option<I32> = Some(3);",
         '  if (o.tag == "Some") { 0 } else { o.value }',
         "}",
@@ -118,7 +118,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     await expectRunMain(
       [
         "type Option<T> = Some<T> | None;",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let o: Option<I32> = Some(3);",
         "  if (o is Some) { o.value } else { 0 }",
         "}",
@@ -131,7 +131,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     await expectLintErr(
       [
         "type Option<T> = Some<T> | None;",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let o: Option<I32> = Some(3);",
         "  if (o is Some) { 0 } else { o.value }",
         "}",
@@ -145,7 +145,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
       [
         "type Option<T> = Some<T> | None;",
         "module M { }",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let o: Option<I32> = Some(3);",
         "  if (o is M::Some) { o.value } else { 0 }",
         "}",
@@ -158,7 +158,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     await expectRunMain(
       [
         "type Option<T> = Some<T> | None;",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let o: Option<I32> = Some(3);",
         '  if ("Some" == o.tag) { o.value } else { 0 }',
         "}",
@@ -171,7 +171,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     await expectRunMain(
       [
         "type Option<T> = Some<T> | None;",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let o: Option<I32> = Some(3);",
         '  if (o.tag != "Some") { 0 } else { o.value }',
         "}",
@@ -184,7 +184,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     await expectRunMain(
       [
         "type Option<T> = Some<T> | None;",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let o: Option<I32> = Some(3);",
         "  if (!(o is Some)) { 0 } else { o.value }",
         "}",
@@ -197,7 +197,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     await expectRunMain(
       [
         "type Option<T> = Some<T> | None;",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let o: Option<I32> = Some(3);",
         "  if (o is not Some) { 0 } else { o.value }",
         "}",
@@ -210,7 +210,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     await expectLintErr(
       [
         "type Option<T> = Some<T> | None;",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let o: Option<I32> = Some(3);",
         "  if (o is NotARealVariant) { 1 } else { 0 }",
         "}",
@@ -223,7 +223,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     await expectRunMain(
       [
         "type Option<T> = Some<T> | None;",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let o: Option<I32> = Some(3);",
         "  if (o is Some) {",
         "    let x: I32 = o.value;",
@@ -241,7 +241,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     await expectLintErr(
       [
         "type Option<T> = Some<T> | None;",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let o: Option<I32> = Some(3);",
         "  if (o is Some) {",
         "    let x: String = o.value;",
@@ -261,7 +261,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     await expectRunMain(
       [
         "type Option<T> = Some<T> | None;",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let o: Option<I32> = Some(3);",
         "  match (o) {",
         "    Some => o.value,",
@@ -277,7 +277,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     await expectRunMain(
       [
         "type Option<T> = Some<T> | None;",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let o: Option<I32> = None;",
         "  match (o) {",
         "    Some => 1,",
@@ -293,7 +293,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     await expectLintErr(
       [
         "type Option<T> = Some<T> | None;",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let o: Option<I32> = None;",
         "  match (o) {",
         "    Some => 1",
@@ -309,7 +309,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     // --- Error: read beyond initialized prefix ---
     await expectLintErr(
       [
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let buf: [U8; 2; 5] = [10, 20];",
         "  buf[2]",
         "}",
@@ -321,7 +321,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     // --- Error: cannot skip initialization (write past next slot) ---
     await expectLintErr(
       [
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let mut buf: [U8; 2; 5] = [10, 20];",
         "  buf[4] = 77;",
         "  0",
@@ -334,7 +334,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     // --- OK: writing the next index increases initialized and allows read ---
     await expectRunMain(
       [
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let mut buf: [U8; 2; 5] = [10, 20];",
         "  buf[2] = 30;",
         "  buf[2]",
@@ -347,7 +347,7 @@ describe("selfhost analyzer (phase 4 completion)", () => {
     // --- Error: bounds check on literal index ---
     await expectLintErr(
       [
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let mut buf: [U8; 2; 5] = [10, 20];",
         "  buf[5] = 1;",
         "  0",

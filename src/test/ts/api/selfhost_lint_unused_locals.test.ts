@@ -15,7 +15,7 @@ describe("selfhost analyzer linting", () => {
 
   test("warns on unused local variables", async () => {
     const entryCode = [
-      "fn main() : I32 => {",
+      "out fn run() : I32 => {",
       "  let x: I32 = 1;", // should warn
       "  0",
       "}",
@@ -31,7 +31,7 @@ describe("selfhost analyzer linting", () => {
 
   test("warns when a local is only written (never read)", async () => {
     const entryCode = [
-      "fn main() : I32 => {",
+      "out fn run() : I32 => {",
       "  let mut x: I32 = 0;",
       "  x = 1;", // write only
       "  0",
@@ -48,7 +48,7 @@ describe("selfhost analyzer linting", () => {
 
   test("does not warn when a local is read", async () => {
     const entryCode = [
-      "fn main() : I32 => {",
+      "out fn run() : I32 => {",
       "  let mut x: I32 = 0;",
       "  x = 1;",
       "  x",
@@ -64,7 +64,7 @@ describe("selfhost analyzer linting", () => {
 
   test("does not warn for underscore-prefixed locals", async () => {
     const entryCode = [
-      "fn main() : I32 => {",
+      "out fn run() : I32 => {",
       "  let _ignored: I32 = 2;", // should NOT warn
       "  0",
       "}",

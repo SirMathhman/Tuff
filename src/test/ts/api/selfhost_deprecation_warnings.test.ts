@@ -19,7 +19,7 @@ describe("selfhost deprecation warnings (in-memory)", () => {
     const entryCode = [
       "from dep_lib use { add, add2 };",
       "",
-      "fn main() : I32 => {",
+      "out fn run() : I32 => {",
       "  /* deprecated - prefer add2 */",
       "  let x: I32 = add(1, 2);",
       "  add2(x, 3)",

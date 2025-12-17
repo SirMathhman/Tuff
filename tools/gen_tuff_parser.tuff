@@ -15,7 +15,7 @@ from src::main::tuff::tools::ebnf_codegen_ast use {
   default_tuff_ast_config
 };
 
-fn main() : I32 => {
+out fn run() : I32 => {
   // Read the Tuff grammar
   let grammarPath = "grammars/tuff.ebnf";
   let grammarSrc = readTextFile(grammarPath);

@@ -9,13 +9,13 @@ describe("selfhost extern type", () => {
       "",
       "fn idFoo(x: Foo<I32>) : I32 => 0",
       "",
-      "fn main() : I32 => 0",
+      "out fn run() : I32 => 0",
       "",
     ].join("\n");
 
     const result = await compileCode(entryCode, {});
     expect(result.diagnostics ?? "").toBe("");
     expect(result.success).toBe(true);
-    expect(result.entryJs ?? "").toContain("export function main");
+    expect(result.entryJs ?? "").toContain("export function run");
   });
 });

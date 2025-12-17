@@ -61,7 +61,7 @@ describe.skip("selfhost cyclomatic complexity linting", () => {
         "  0",
         "}",
         "",
-        "fn main() : I32 => complex_fn(1, 2, 3, 4)",
+        "out fn run() : I32 => complex_fn(1, 2, 3, 4)",
         "",
       ].join("\n"),
       "utf8"
@@ -105,7 +105,7 @@ describe.skip("selfhost cyclomatic complexity linting", () => {
         "  0",
         "}",
         "",
-        "fn main() : I32 => simple_fn(1)",
+        "out fn run() : I32 => simple_fn(1)",
         "",
       ].join("\n"),
       "utf8"
@@ -149,7 +149,7 @@ describe.skip("selfhost cyclomatic complexity linting", () => {
         "  i",
         "}",
         "",
-        "fn main() : I32 => loop_fn()",
+        "out fn run() : I32 => loop_fn()",
         "",
       ].join("\n"),
       "utf8"
@@ -198,7 +198,7 @@ describe.skip("selfhost cyclomatic complexity linting", () => {
         "  0",
         "}",
         "",
-        "fn main() : I32 => branchy_fn(1)",
+        "out fn run() : I32 => branchy_fn(1)",
         "",
       ].join("\n"),
       "utf8"
@@ -242,7 +242,7 @@ describe.skip("selfhost cyclomatic complexity linting", () => {
         "  0",
         "}",
         "",
-        "fn main() : I32 => logical_fn(true, false, true)",
+        "out fn run() : I32 => logical_fn(true, false, true)",
         "",
       ].join("\n"),
       "utf8"
@@ -291,7 +291,7 @@ describe.skip("selfhost cyclomatic complexity linting", () => {
         "  inner(5)",
         "}",
         "",
-        "fn main() : I32 => outer()",
+        "out fn run() : I32 => outer()",
         "",
       ].join("\n"),
       "utf8"
@@ -342,7 +342,7 @@ describe.skip("selfhost cyclomatic complexity linting", () => {
         "  0",
         "}",
         "",
-        "fn main() : I32 => medium_fn(1, 2, 3, 4, 5, 6, 7, 8, 9)",
+        "out fn run() : I32 => medium_fn(1, 2, 3, 4, 5, 6, 7, 8, 9)",
         "",
       ].join("\n"),
       "utf8"
@@ -387,7 +387,7 @@ describe.skip("selfhost cyclomatic complexity linting", () => {
         "  0",
         "}",
         "",
-        "fn main() : I32 => fn_with_cc_4(1, 2, 3)",
+        "out fn run() : I32 => fn_with_cc_4(1, 2, 3)",
         "",
       ].join("\n"),
       "utf8"
@@ -433,7 +433,7 @@ describe.skip("selfhost cyclomatic complexity linting", () => {
         "  0",
         "}",
         "",
-        "fn main() : I32 => high_cc(1, 2, 3)",
+        "out fn run() : I32 => high_cc(1, 2, 3)",
         "",
       ].join("\n"),
       "utf8"

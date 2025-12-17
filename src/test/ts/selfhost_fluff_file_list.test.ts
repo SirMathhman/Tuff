@@ -55,7 +55,7 @@ describe("fluff file-list CLI", () => {
     await writeFile(
       warnFile,
       [
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         "  let x: I32 = 1;", // unused local
         "  0",
         "}",
@@ -66,7 +66,7 @@ describe("fluff file-list CLI", () => {
 
     await writeFile(
       cleanFile,
-      ["fn main() : I32 => {", "  let x: I32 = 1;", "  x", "}", ""].join("\n"),
+      ["out fn run() : I32 => {", "  let x: I32 = 1;", "  x", "}", ""].join("\n"),
       "utf8"
     );
 

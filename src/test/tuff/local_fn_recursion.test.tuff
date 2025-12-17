@@ -2,7 +2,7 @@ from std::test use { reset, suite, it, expect_eq, expect_true, summary, status }
 
 // Recursion + mutual recursion for local `fn` declarations.
 
-fn main() : I32 => {
+out fn run() : I32 => {
   reset();
   suite("local fn recursion");
 

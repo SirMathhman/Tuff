@@ -23,7 +23,7 @@ describe("selfhost cyclomatic complexity linting (in-memory)", () => {
       "  0",
       "}",
       "",
-      "fn main() : I32 => complex_fn(1, 2, 3, 4)",
+      "out fn run() : I32 => complex_fn(1, 2, 3, 4)",
       "",
     ].join("\n");
 
@@ -46,7 +46,7 @@ describe("selfhost cyclomatic complexity linting (in-memory)", () => {
       "  0",
       "}",
       "",
-      "fn main() : I32 => simple_fn(1)",
+      "out fn run() : I32 => simple_fn(1)",
       "",
     ].join("\n");
 
@@ -69,7 +69,7 @@ describe("selfhost cyclomatic complexity linting (in-memory)", () => {
       "  i",
       "}",
       "",
-      "fn main() : I32 => loop_fn()",
+      "out fn run() : I32 => loop_fn()",
       "",
     ].join("\n");
 
@@ -96,7 +96,7 @@ describe("selfhost cyclomatic complexity linting (in-memory)", () => {
       "  0",
       "}",
       "",
-      "fn main() : I32 => branchy_fn(1)",
+      "out fn run() : I32 => branchy_fn(1)",
       "",
     ].join("\n");
 
@@ -118,7 +118,7 @@ describe("selfhost cyclomatic complexity linting (in-memory)", () => {
       "  0",
       "}",
       "",
-      "fn main() : I32 => logical_fn(1, 2, 3)",
+      "out fn run() : I32 => logical_fn(1, 2, 3)",
       "",
     ].join("\n");
 

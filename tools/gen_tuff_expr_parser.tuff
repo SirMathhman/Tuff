@@ -8,7 +8,7 @@ extern from rt::vec use { vec_len };
 from src::main::tuff::tools::ebnf_parser use { parse_grammar };
 from src::main::tuff::tools::ebnf_codegen_ast use { generate_ast_parser, default_tuff_ast_config };
 
-fn main() : I32 => {
+out fn run() : I32 => {
   let grammarPath = "grammars/tuff_expr_min.ebnf";
   let grammarSrc = readTextFile(grammarPath);
   if (grammarSrc == "") {

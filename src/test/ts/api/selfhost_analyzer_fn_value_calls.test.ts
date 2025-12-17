@@ -9,7 +9,7 @@ describe("selfhost analyzer", () => {
       "  fn add(y: I32) : I32 => x + y;",
       "}",
       "",
-      "fn main() : I32 => {",
+      "out fn run() : I32 => {",
       "  let a = Adder(1);",
       "  let f = a.add;",
       "  let z: I32 = f(true);", // y must be I32
@@ -35,7 +35,7 @@ describe("selfhost analyzer", () => {
       "  fn id<T>(x: T) : T => x;",
       "}",
       "",
-      "fn main() : I32 => {",
+      "out fn run() : I32 => {",
       "  let b = Box();",
       "  let y: I32 = b.id(123);",
       "  y",

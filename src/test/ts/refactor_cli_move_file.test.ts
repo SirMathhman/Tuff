@@ -37,7 +37,7 @@ describe("tuff refactor CLI", () => {
       oldAbs,
       [
         "extern from rt::stdlib use { println };",
-        'fn main() : I32 => { println("moved"); 0 }',
+        'out fn run() : I32 => { println("moved"); 0 }',
         "",
       ].join("\n"),
       "utf8"
@@ -52,7 +52,7 @@ describe("tuff refactor CLI", () => {
         "extern from src::main::tuff::foo::a use { a };",
         "extern from src::main::tuff::foo::a use { b, c };",
         "from src::main::tuff::foo::other use { x };",
-        "fn main() : I32 => 0",
+        "out fn run() : I32 => 0",
         "",
       ].join("\n"),
       "utf8"

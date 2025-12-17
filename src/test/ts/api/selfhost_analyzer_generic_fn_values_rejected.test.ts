@@ -6,7 +6,7 @@ describe("selfhost analyzer (generic function values)", () => {
   test("rejects assigning unspecialized generic function to a value", async () => {
     const entryCode = [
       "fn id<T>(x: T) : T => x",
-      "fn main() : I32 => {",
+      "out fn run() : I32 => {",
       "  let f = id;", // should require specialization before treating as a value
       "  0",
       "}",
@@ -29,7 +29,7 @@ describe("selfhost analyzer (generic function values)", () => {
       "  fn id<T>(x: T) : T => x;",
       "}",
       "",
-      "fn main() : I32 => {",
+      "out fn run() : I32 => {",
       "  let b = Box();",
       "  let f = b.id;", // should require specialization before treating as a value
       "  0",

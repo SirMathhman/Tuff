@@ -1,6 +1,6 @@
 from std::test use { reset, suite, it, expect_eq, summary, status };
 
-fn main() => {
+out fn run() => {
   reset();
 
   suite("selfhost Char");

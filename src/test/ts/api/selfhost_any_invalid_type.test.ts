@@ -7,7 +7,7 @@ import { combinedDiagText } from "./test_utils";
 describe("Any type (in-memory)", () => {
   test("rejects Any in type annotations", async () => {
     const entryCode = [
-      "fn main() : I32 => {",
+      "out fn run() : I32 => {",
       "  let x: Any = 1;",
       "  x",
       "}",

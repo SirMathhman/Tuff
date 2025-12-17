@@ -7,7 +7,7 @@ struct Point {
   y: I32
 }
 
-fn main() => {
+out fn run() => {
   reset();
 
   suite("selfhost structs + unions");

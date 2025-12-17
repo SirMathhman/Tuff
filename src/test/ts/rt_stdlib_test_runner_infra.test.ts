@@ -58,14 +58,14 @@ describe("rt/stdlib test-runner infra", () => {
     const passFile = join(root, "pass.mjs");
     writeFileSync(
       passFile,
-      ["export function main() {", "  return 0;", "}"].join("\n"),
+      ["export function run() {", "  return 0;", "}"].join("\n"),
       "utf8"
     );
 
     const failFile = join(root, "fail.mjs");
     writeFileSync(
       failFile,
-      ["export function main() {", "  return 7;", "}"].join("\n"),
+      ["export function run() {", "  return 7;", "}"].join("\n"),
       "utf8"
     );
 
@@ -80,7 +80,7 @@ describe("rt/stdlib test-runner infra", () => {
     writeFileSync(
       file,
       [
-        "export function main(argv) {",
+        "export function run(argv) {",
         "  // Vec<String> is a JS array in the JS runtime.",
         "  return argv.length;",
         "}",

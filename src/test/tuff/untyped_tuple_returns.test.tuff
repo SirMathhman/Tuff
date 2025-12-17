@@ -14,7 +14,7 @@ fn process_result(x: I32) => {
   (names, pos)
 }
 
-fn main() : I32 => {
+out fn run() : I32 => {
   reset();
   suite("untyped tuple returns in functions");
 

@@ -115,7 +115,7 @@ fn nested_less_than<T>(a: I32, b: I32, c: I32) : Bool => {
   }
 }
 
-fn main() : I32 => {
+out fn run() : I32 => {
   reset();
   
   suite("parser: comparison operators in generic functions");

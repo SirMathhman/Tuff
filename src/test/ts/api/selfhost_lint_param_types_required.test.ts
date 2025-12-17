@@ -9,7 +9,7 @@ describe("selfhost analyzer linting", () => {
       "fn f(a, b: I32, c) : I32 => b",
       "",
       // Missing types in a lambda
-      "fn main() : I32 => {",
+      "out fn run() : I32 => {",
       "  let g = (x, y: I32, z) : I32 => y;",
       "  g(1, 2, 3)",
       "}",

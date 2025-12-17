@@ -8,12 +8,12 @@ describe("unified function/lambda parsing", () => {
     )) as any;
 
     // Single expression function MUST end with semicolon
-    const goodSrc = `fn main() => { fn get() : I32 => 100; get() }`;
+    const goodSrc = `out fn run() => { fn get() : I32 => 100; get() }`;
     const result = stage1lib.compile_tiny(goodSrc);
-    expect(result).toContain("export function main");
+    expect(result).toContain("export function run");
 
     // Without semicolon, should fail
-    const badSrc = `fn main() => { fn get() : I32 => 100 get() }`;
+    const badSrc = `out fn run() => { fn get() : I32 => 100 get() }`;
     let msg = "";
     try {
       stage1lib.compile_tiny(badSrc);
@@ -30,14 +30,14 @@ describe("unified function/lambda parsing", () => {
     )) as any;
 
     // Block body function does NOT require semicolon
-    const goodSrc = `fn main() => { fn get() : I32 => { 100 } get() }`;
+    const goodSrc = `out fn run() => { fn get() : I32 => { 100 } get() }`;
     const result = stage1lib.compile_tiny(goodSrc);
-    expect(result).toContain("export function main");
+    expect(result).toContain("export function run");
 
     // With semicolon is also OK (optional)
-    const alsoGoodSrc = `fn main() => { fn get() : I32 => { 100 }; get() }`;
+    const alsoGoodSrc = `out fn run() => { fn get() : I32 => { 100 }; get() }`;
     const result2 = stage1lib.compile_tiny(alsoGoodSrc);
-    expect(result2).toContain("export function main");
+    expect(result2).toContain("export function run");
   });
 
   test("lambda does not require semicolon", async () => {
@@ -48,10 +48,10 @@ describe("unified function/lambda parsing", () => {
     // Lambda in call doesn't require semicolon
     const goodSrc = `
       fn apply(f: (I32) => I32, x: I32) : I32 => f(x);
-      fn main() : I32 => apply((x: I32) => x + 1, 10)
+      out fn run() : I32 => apply((x: I32) => x + 1, 10)
     `;
     const result = stage1lib.compile_tiny(goodSrc);
-    expect(result).toContain("export function main");
+    expect(result).toContain("export function run");
   });
 
   test("lambda and fn use identical param parsing", async () => {
@@ -62,13 +62,13 @@ describe("unified function/lambda parsing", () => {
     // Both should support trailing comma in params
     const src = `
       fn add(a: I32, b: I32,) : I32 => a + b;
-      fn main() : I32 => {
+      out fn run() : I32 => {
         let f = (x: I32, y: I32,) => x + y;
         add(1, 2) + f(3, 4)
       }
     `;
     const result = stage1lib.compile_tiny(src);
-    expect(result).toContain("export function main");
+    expect(result).toContain("export function run");
   });
 
   test("fn and lambda support same body syntax", async () => {
@@ -80,14 +80,14 @@ describe("unified function/lambda parsing", () => {
     const src = `
       fn single_expr() : I32 => 42;
       fn block_body() : I32 => { let x = 1; x + 41 }
-      fn main() : I32 => {
+      out fn run() : I32 => {
         let f1 = (x: I32) => x * 2;
         let f2 = (x: I32) => { let y = x; y * 2 };
         single_expr() + block_body() + f1(1) + f2(1)
       }
     `;
     const result = stage1lib.compile_tiny(src);
-    expect(result).toContain("export function main");
+    expect(result).toContain("export function run");
   });
 });
 
@@ -107,10 +107,10 @@ describe("type parameter scope inheritance", () => {
         fn inner() : T => value;
         inner()
       }
-      fn main() : I32 => outer<I32>(42)
+      out fn run() : I32 => outer<I32>(42)
     `;
     const result = stage1lib.compile_tiny(src);
-    expect(result).toContain("export function main");
+    expect(result).toContain("export function run");
     expect(result).toContain("function outer");
   });
 
@@ -124,13 +124,13 @@ describe("type parameter scope inheritance", () => {
       class fn Wrapper<T>(value: T) => {
         fn get() : T => value;
       }
-      fn main() : I32 => {
+      out fn run() : I32 => {
         let w = Wrapper<I32>(42);
         w.get()
       }
     `;
     const result = stage1lib.compile_tiny(src);
-    expect(result).toContain("export function main");
+    expect(result).toContain("export function run");
     expect(result).toContain("Wrapper");
   });
 
@@ -145,10 +145,10 @@ describe("type parameter scope inheritance", () => {
         let f = () : T => value;
         f()
       }
-      fn main() : I32 => outer<I32>(42)
+      out fn run() : I32 => outer<I32>(42)
     `;
     const result = stage1lib.compile_tiny(src);
-    expect(result).toContain("export function main");
+    expect(result).toContain("export function run");
   });
 
   test.skip("deeply nested functions inherit type parameters (future)", async () => {
@@ -165,10 +165,10 @@ describe("type parameter scope inheritance", () => {
         }
         middle()
       }
-      fn main() : I32 => outer<I32>(42)
+      out fn run() : I32 => outer<I32>(42)
     `;
     const result = stage1lib.compile_tiny(src);
-    expect(result).toContain("export function main");
+    expect(result).toContain("export function run");
   });
 
   test("inner fn can declare its own independent type parameter", async () => {
@@ -184,9 +184,9 @@ describe("type parameter scope inheritance", () => {
         inner<I32>(42);
         value
       }
-      fn main() : I32 => outer<I32>(10)
+      out fn run() : I32 => outer<I32>(10)
     `;
     const result = stage1lib.compile_tiny(src);
-    expect(result).toContain("export function main");
+    expect(result).toContain("export function run");
   });
 });

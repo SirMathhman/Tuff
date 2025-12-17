@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
 interface FluffModule {
-  main: (argv: string[]) => number;
+  run: (argv: string[]) => number;
   project_error_count: () => number;
   project_warning_count: () => number;
 }

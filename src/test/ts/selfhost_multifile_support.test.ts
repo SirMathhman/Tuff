@@ -44,7 +44,7 @@ describe("selfhost multi-file module support (integration)", () => {
       entry,
       [
         "from src::util::math use { add };",
-        "fn main() : I32 => add(1, 2);",
+        "out fn run() : I32 => add(1, 2);",
         "",
       ].join("\n")
     );
@@ -55,8 +55,8 @@ describe("selfhost multi-file module support (integration)", () => {
     const mod = (await import(
       pathToFileURL(outFile).toString() + `?v=${Date.now()}`
     )) as any;
-    expect(typeof mod.main).toBe("function");
-    expect(mod.main()).toBe(3);
+    expect(typeof mod.run).toBe("function");
+    expect(mod.run()).toBe(3);
   });
 
   test("importing non-out symbol hard-errors", async () => {
@@ -81,7 +81,7 @@ describe("selfhost multi-file module support (integration)", () => {
       entry,
       [
         "from src::util::math use { add };",
-        "fn main() : I32 => add(1, 2);",
+        "out fn run() : I32 => add(1, 2);",
         "",
       ].join("\n")
     );

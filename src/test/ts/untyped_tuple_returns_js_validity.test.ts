@@ -8,7 +8,7 @@ describe("untyped tuple returns JS validity", () => {
         ("hello", x)
       }
       
-      fn main() : I32 => {
+      out fn run() : I32 => {
         let result = make_tuple(42);
         0
       }
@@ -23,7 +23,7 @@ describe("untyped tuple returns JS validity", () => {
     expect(result.entryJs).toBeDefined();
 
     // Verify the generated code has proper structure:
-    // 1. Should have export function main
+    // 1. Should have export function run
     // 2. Should have make_tuple helper
     // 3. Should use array literals for tuples
     // 4. Should access tuple elements via array indexing
@@ -35,7 +35,7 @@ describe("untyped tuple returns JS validity", () => {
 
     // Check for proper function definitions
     expect(js).toContain("function make_tuple");
-    expect(js).toContain("export function main()");
+    expect(js).toContain("export function run()");
 
     // Check that result variable is used (tuple construction and storage)
     expect(js).toContain("result");
@@ -47,7 +47,7 @@ describe("untyped tuple returns JS validity", () => {
         ("test", x)
       }
       
-      fn main() : I32 => {
+      out fn run() : I32 => {
         let result = make_tuple(5);
         result.1
       }
@@ -76,7 +76,7 @@ describe("untyped tuple returns JS validity", () => {
         ("a", (x, "b"))
       }
       
-      fn main() : I32 => {
+      out fn run() : I32 => {
         let result = nested_tuple(10);
         0
       }
@@ -102,7 +102,7 @@ describe("untyped tuple returns JS validity", () => {
         ("first", 42)
       }
       
-      fn main() : I32 => {
+      out fn run() : I32 => {
         let p = get_pair();
         let a = p.0;
         let b = p.1;
@@ -156,7 +156,7 @@ describe("untyped tuple returns JS validity", () => {
         (name, pos)
       }
       
-      fn main() : I32 => {
+      out fn run() : I32 => {
         let final_result = process();
         0
       }

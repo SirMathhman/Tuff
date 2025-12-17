@@ -15,7 +15,7 @@ describe("selfhost types", () => {
       "fn add(a: I32, b: I32) : I32 => a + b",
       "fn id<T>(x: T) : T => x",
       "",
-      "fn main() : I32 => {",
+      "out fn run() : I32 => {",
       "  let p: Point = Point { 1, 2 };",
       "  let n: I32 = add(p.x, p.y);",
       "  let o: Option<I32> = Some(n);",
@@ -30,7 +30,7 @@ describe("selfhost types", () => {
     expect(typeof result.entryJs).toBe("string");
 
     const mod = await importEsmFromSource(result.entryJs ?? "");
-    expect(typeof mod.main).toBe("function");
-    expect(mod.main()).toBe(3);
+    expect(typeof mod.run).toBe("function");
+    expect(mod.run()).toBe(3);
   });
 });

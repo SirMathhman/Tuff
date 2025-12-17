@@ -58,7 +58,7 @@ describe("selfhost file size linting (integration)", () => {
 
     const inFile = resolve(stage2Dir, "large_file.tuff");
     const lines: string[] = [];
-    lines.push("fn main() : I32 => {");
+    lines.push("out fn run() : I32 => {");
     for (let i = 0; i < 8; i++) lines.push(`  // line ${i + 2}`);
     lines.push("  0");
     lines.push("}");

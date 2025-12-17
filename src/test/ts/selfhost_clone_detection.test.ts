@@ -40,7 +40,7 @@ fn helper_c() : I32 => {
   z
 }
 
-fn main() : I32 => {
+out fn run() : I32 => {
   helper_a() + helper_b() + helper_c()
 }
 `
@@ -96,7 +96,7 @@ fn helper_b() : I32 => {
   z
 }
 
-fn main() : I32 => {
+out fn run() : I32 => {
   helper_a() + helper_b()
 }
 `
@@ -132,7 +132,7 @@ fn main() : I32 => {
       `
 fn helper_a() : I32 => { let x = 1; let y = 2; let z = x + y; z }
 fn helper_b() : I32 => { let x = 1; let y = 2; let z = x + y; z }
-fn main() : I32 => helper_a() + helper_b()
+out fn run() : I32 => helper_a() + helper_b()
 `
     );
 
@@ -171,7 +171,7 @@ fn main() : I32 => helper_a() + helper_b()
       `
 fn helper_a() : I32 => { let x = 1; let y = 2; let z = x + y; z }
 fn helper_b() : I32 => { let x = 3; let y = 4; let z = x + y; z }
-fn main() : I32 => helper_a() + helper_b()
+out fn run() : I32 => helper_a() + helper_b()
 `
     );
 
@@ -218,7 +218,7 @@ fn dup_b() : I32 => {
   x + y
 }
 
-fn main() : I32 => {
+out fn run() : I32 => {
   dup_a() + dup_b()
 }
 `

@@ -260,9 +260,9 @@ export function runTuffModule(mjsPath, argv) {
 
   const driver = [
     `const mod = await import(${JSON.stringify(url)});`,
-    `if (typeof mod.main !== "function") { process.exit(1); }`,
+    `if (typeof mod.run !== "function") { process.exit(1); }`,
     `const argv = ${JSON.stringify((argv ?? []).map(String))};`,
-    `const rc = mod.main.length === 0 ? mod.main() : mod.main(argv);`,
+    `const rc = mod.run.length === 0 ? mod.run() : mod.run(argv);`,
     `process.exit(Number(rc) | 0);`,
   ].join("\n");
 

@@ -25,7 +25,7 @@ struct Point {
   y_pos: I32
 }
 
-fn main() : I32 => {
+out fn run() : I32 => {
   reset();
   suite("single-char identifier tests");
   

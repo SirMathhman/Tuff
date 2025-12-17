@@ -9,7 +9,7 @@ fn make_tuple(x: I32) => {
   ("hello", x)
 }
 
-fn main() : I32 => {
+out fn run() : I32 => {
   reset();
   suite("tuple return JS validity");
 

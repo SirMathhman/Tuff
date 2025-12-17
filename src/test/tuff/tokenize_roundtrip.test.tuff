@@ -5,7 +5,7 @@ from src::main::tuff::compiler::util::lexing use {
   emit_token_stream
 };
 
-fn main() : I32 => {
+out fn run() : I32 => {
   reset();
   suite("tokenize + trivia roundtrip");
 

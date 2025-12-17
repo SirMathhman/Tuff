@@ -6,7 +6,7 @@
  *
  * Usage:
  *   const modules = {
- *     "entry": "fn main() => 0",
+ *     "entry": "out fn run() => 0",
  *     "std/prelude": "...",
  *   };
  *   const result = await compileCode(modules["entry"], (path) => modules[path] || "");

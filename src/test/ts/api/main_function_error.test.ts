@@ -1,12 +1,11 @@
 import { describe, expect, test } from "vitest";
 import { prebuiltSelfhostUrl } from "./test_utils";
 
-// NOTE: These tests document the future behavior once all existing tests are migrated
-// away from `fn main()`. The error is currently commented out in analyze_decls.tuff.
-// See TODO(phase2) comment in that file.
+// Tests that 'main' is reserved for C entry point conventions.
+// Tuff uses top-level code execution, not main().
 
 describe("main function error", () => {
-  test.skip("top-level function named 'main' causes error (phase2)", async () => {
+  test("top-level function named 'main' causes error", async () => {
     const stage1lib = (await import(
       prebuiltSelfhostUrl("tuffc_lib.mjs")
     )) as any;
@@ -44,7 +43,7 @@ describe("main function error", () => {
     expect(result).toContain("function outer");
   });
 
-  test.skip("top-level class fn named 'main' causes error (phase2)", async () => {
+  test("top-level class fn named 'main' causes error", async () => {
     const stage1lib = (await import(
       prebuiltSelfhostUrl("tuffc_lib.mjs")
     )) as any;

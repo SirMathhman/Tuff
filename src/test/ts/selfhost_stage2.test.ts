@@ -57,7 +57,7 @@ describe("selfhost stage2", () => {
     const tinyOut = resolve(stage2Dir, "tiny.mjs");
     await writeFile(
       tinyIn,
-      'extern from rt::vec use { vec_new, vec_push, vec_get, vec_set };\nfrom math use { Math };\nfn main() => { let x = Math::add(1, 2); let y = if (x == 3) { let t = Math::mul(x, 10); t } else { 0 }; let z1 = match (y) { 0 => 11, 30 => 22, _ => 33 }; let s = if (z1 == 22) { "ok" } else { "bad" }; let z2 = match (s) { "ok" => 44, _ => 55 }; let mut v = [10, 20, 30]; v[1] = v[1] + 2; z2 + v[1] }\n',
+      'extern from rt::vec use { vec_new, vec_push, vec_get, vec_set };\nfrom math use { Math };\nout fn run() => { let x = Math::add(1, 2); let y = if (x == 3) { let t = Math::mul(x, 10); t } else { 0 }; let z1 = match (y) { 0 => 11, 30 => 22, _ => 33 }; let s = if (z1 == 22) { "ok" } else { "bad" }; let z2 = match (s) { "ok" => 44, _ => 55 }; let mut v = [10, 20, 30]; v[1] = v[1] + 2; z2 + v[1] }\n',
       "utf8"
     );
 
@@ -67,6 +67,6 @@ describe("selfhost stage2", () => {
     expect(rcTiny).toBe(0);
 
     const tinyMod = await import(pathToFileURL(tinyOut).toString());
-    expect(tinyMod.main()).toBe(66);
+    expect(tinyMod.run()).toBe(66);
   });
 });

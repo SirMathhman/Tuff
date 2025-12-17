@@ -18,7 +18,7 @@ from src::main::tuff::tools::ebnf_codegen_ast use {
   config_add_mapping
 };
 
-fn main() : I32 => {
+out fn run() : I32 => {
   reset();
   
   suite("AST code generator basics");

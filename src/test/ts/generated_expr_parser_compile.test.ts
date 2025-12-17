@@ -73,7 +73,7 @@ describe("generated expr parser (EBNF -> Tuff)", () => {
     const genTool = await import(
       pathToFileURL(genToolOut).toString() + `?v=${Date.now()}`
     );
-    const { rc: rcRun, out } = captureStdout(() => (genTool as any).main());
+    const { rc: rcRun, out } = captureStdout(() => (genTool as any).run());
     expect(rcRun).toBe(0);
 
     const marker = "// Generated AST Parser";
@@ -83,7 +83,7 @@ describe("generated expr parser (EBNF -> Tuff)", () => {
     // it with the single-file CLI path used by tests.
     const parserSrc =
       out.slice(idx) +
-      "\n\n// Test harness entrypoint (not used by compiler)\nfn main() : I32 => 0\n";
+      "\n\n// Test harness entrypoint (not used by compiler)\nout fn run() : I32 => 0\n";
 
     // Write generated parser at the staged root so emitted imports like
     // `./rt/stdlib.mjs` and `./ast.mjs` resolve naturally.

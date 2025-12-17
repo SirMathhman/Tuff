@@ -25,7 +25,7 @@ describe("tuff repl", () => {
       inAbs,
       [
         "extern from rt::stdlib use { println };",
-        'fn main() : I32 => { println("hello"); 0 }',
+        'out fn run() : I32 => { println("hello"); 0 }',
         "",
       ].join("\n"),
       "utf8"

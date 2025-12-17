@@ -52,7 +52,7 @@ describe("selfhost cyclomatic complexity linting (integration)", () => {
         "  0",
         "}",
         "",
-        "fn main() : I32 => complex_fn(1)",
+        "out fn run() : I32 => complex_fn(1)",
         "",
       ].join("\n"),
       "utf8"

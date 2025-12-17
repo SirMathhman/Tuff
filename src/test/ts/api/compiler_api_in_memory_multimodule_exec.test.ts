@@ -16,7 +16,7 @@ describe("compiler API (in-memory, multi-module execution)", () => {
 
     const entryCode = [
       "from dep::math use { add };",
-      "fn main() : I32 => add(1, 2)",
+      "out fn run() : I32 => add(1, 2)",
       "",
     ].join("\n");
 
@@ -29,7 +29,7 @@ describe("compiler API (in-memory, multi-module execution)", () => {
     expect(outRelPaths.length).toBe(jsOutputs.length);
 
     const mod = await importEsmFromOutputs(outRelPaths, jsOutputs, "entry.mjs");
-    expect(typeof mod.main).toBe("function");
-    expect(mod.main()).toBe(3);
+    expect(typeof mod.run).toBe("function");
+    expect(mod.run()).toBe(3);
   });
 });

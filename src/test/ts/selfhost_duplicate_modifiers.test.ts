@@ -18,7 +18,7 @@ describe("duplicate modifier errors", () => {
     const tuffc = await import(pathToFileURL(tuffcFile).toString());
 
     const src = `out out fn foo() : I32 => 42
-fn main() : I32 => foo()
+out fn run() : I32 => foo()
 `;
     const inputFile = resolve(outDir, "dup_out.tuff");
     const outputFile = resolve(outDir, "dup_out.mjs");
@@ -42,7 +42,7 @@ fn main() : I32 => foo()
     const tuffc = await import(pathToFileURL(tuffcFile).toString());
 
     const src = `class class fn Foo(x: I32) => {}
-fn main() : I32 => 0
+out fn run() : I32 => 0
 `;
     const inputFile = resolve(outDir, "dup_class.tuff");
     const outputFile = resolve(outDir, "dup_class.mjs");
@@ -66,7 +66,7 @@ fn main() : I32 => 0
     const tuffc = await import(pathToFileURL(tuffcFile).toString());
 
     const src = `extern extern fn bar() : I32;
-fn main() : I32 => 0
+out fn run() : I32 => 0
 `;
     const inputFile = resolve(outDir, "dup_extern.tuff");
     const outputFile = resolve(outDir, "dup_extern.mjs");
@@ -90,7 +90,7 @@ fn main() : I32 => 0
     const tuffc = await import(pathToFileURL(tuffcFile).toString());
 
     const src = `extern fn bar() : I32;
-fn main() : I32 => 0
+out fn run() : I32 => 0
 `;
     const inputFile = resolve(outDir, "extern_fn.tuff");
     const outputFile = resolve(outDir, "extern_fn.mjs");
@@ -114,7 +114,7 @@ fn main() : I32 => 0
 
     const src = `out extern fn bar() : I32;
 extern out fn baz() : String;
-fn main() : I32 => 0
+out fn run() : I32 => 0
 `;
     const inputFile = resolve(outDir, "out_extern_fn.tuff");
     const outputFile = resolve(outDir, "out_extern_fn.mjs");

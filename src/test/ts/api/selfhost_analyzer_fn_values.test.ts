@@ -5,7 +5,7 @@ import { lintCode } from "../compiler_api_wrapper";
 describe("selfhost analyzer", () => {
   test("rejects let annotation mismatch for function-value call", async () => {
     const entryCode = [
-      "fn main() : Bool => {",
+      "out fn run() : Bool => {",
       "  let f = (x: I32) : I32 => x + 1;",
       "  let y: Bool = f(1);", // should be I32
       "  y",

@@ -37,9 +37,9 @@ describe("tuff_lint_staged helpers", () => {
     const f2 = resolve(ab, "two.tuff");
     const f3 = resolve(cd, "three.tuff");
 
-    await writeFile(f1, "fn main() : I32 => 0\n");
-    await writeFile(f2, "fn main() : I32 => 0\n");
-    await writeFile(f3, "fn main() : I32 => 0\n");
+    await writeFile(f1, "out fn run() : I32 => 0\n");
+    await writeFile(f2, "out fn run() : I32 => 0\n");
+    await writeFile(f3, "out fn run() : I32 => 0\n");
 
     expect(await findBuildJsonUpwards(ab, base)).toBe(buildA);
     expect(await findBuildJsonUpwards(cd, base)).toBe(buildC);

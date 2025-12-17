@@ -78,7 +78,7 @@ describe("stdlib string helper deprecations", () => {
       [
         "from std::prelude use { stringCharAt, stringFromChar, stringCharCodeAt, stringFromCharCode };",
         "",
-        "fn main() : I32 => {",
+        "out fn run() : I32 => {",
         '  let c: Char = stringCharAt("A", 0);',
         "  let s: String = stringFromChar(c);",
         '  let x: I32 = stringCharCodeAt("B", 0);',
@@ -100,8 +100,8 @@ describe("stdlib string helper deprecations", () => {
     const mod = await import(
       pathToFileURL(outFile).toString() + `?v=${Date.now()}`
     );
-    expect(typeof mod.main).toBe("function");
-    expect(mod.main()).toBe(0);
+    expect(typeof mod.run).toBe("function");
+    expect(mod.run()).toBe(0);
 
     expect(out).toMatch(/warning/i);
     expect(out).toMatch(/stringCharCodeAt/);

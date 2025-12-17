@@ -111,15 +111,15 @@ export async function compileAndRunTuffMain(
   const mod = await import(
     pathToFileURL(outFile).toString() + `?v=${Date.now()}`
   );
-  if (typeof (mod as any).main !== "function") {
-    throw new Error(`expected compiled module to export main(): ${outFile}`);
+  if (typeof (mod as any).run !== "function") {
+    throw new Error(`expected compiled module to export run(): ${outFile}`);
   }
 
   const {
     value: rcRun,
     stdout,
     stderr,
-  } = captureStdoutStderr(() => (mod as any).main());
+  } = captureStdoutStderr(() => (mod as any).run());
   return { exitCode: rcRun ?? 0, stdout, stderr };
 }
 
@@ -128,7 +128,7 @@ function buildWrapperProgram(body: string): string {
   // They can declare lets, call functions, etc.
   return [
     "extern from rt::stdlib use { print, println };",
-    "fn main() : I32 => {",
+    "out fn run() : I32 => {",
     body.trimEnd(),
     "  0",
     "}",

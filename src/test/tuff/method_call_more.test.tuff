@@ -7,7 +7,7 @@ class fn Accumulator(start: I32) => {
   fn get() : I32 => sum;
 }
 
-fn main() : I32 => {
+out fn run() : I32 => {
   reset();
   suite("method calls: more");
 

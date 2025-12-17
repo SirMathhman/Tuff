@@ -120,11 +120,11 @@ fn analyze_fn_like_decl(
 out fn analyze_fn_decl(src: String, structs: Vec<StructDef>, unions: Vec<UnionDef>, fns: Vec<FnSig>, outerScopes: Vec<Vec<Binding>>, outerDepth: I32, d: DFn) : Void => {
   let kind = if (d.isClass) "class fn" else "function";
   
-  // TODO(phase2): Error on top-level functions named "main" after all tests are migrated.
-  // "main" conflicts with C entry point conventions; Tuff uses top-level code execution.
-  // if (d.name == "main" && outerDepth == 1) {
-  //   error_at(src, span_start(d.span), "'main' is reserved for C entry points. Tuff uses top-level code execution. Rename this function.");
-  // }
+  // Error on top-level functions named "main" - conflicts with C entry point conventions.
+  // Tuff uses top-level code execution, not main() as entry point.
+  if (d.name == "main" && outerDepth == 1) {
+    error_at(src, span_start(d.span), "'main' is reserved for C entry points. Tuff uses top-level code execution. Rename this function.");
+  }
   
   analyze_fn_like_decl(src, structs, unions, fns, outerScopes, outerDepth, d.span, d.name, d.params, d.paramTyAnns, d.retTyAnn, d.body, d.tail, kind);
 }

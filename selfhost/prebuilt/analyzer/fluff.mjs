@@ -484,7 +484,7 @@ return;
 if (!isExported) {
 return;
 }
-if (name == "main") {
+if (name == "run") {
 return;
 }
 if (!has_doc_comment_before(src, pos)) {

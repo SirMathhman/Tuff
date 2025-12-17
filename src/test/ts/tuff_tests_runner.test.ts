@@ -82,9 +82,9 @@ describe("tuff tests (.tuff)", () => {
       const mod = await import(
         pathToFileURL(outFile).toString() + `?v=${Date.now()}`
       );
-      expect(typeof mod.main).toBe("function");
+      expect(typeof mod.run).toBe("function");
 
-      const rcRun = mod.main();
+      const rcRun = mod.run();
       expect(rcRun, `run failed: ${relFromTestsRoot}`).toBe(0);
     }
   });
