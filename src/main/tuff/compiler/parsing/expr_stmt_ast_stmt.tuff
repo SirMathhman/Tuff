@@ -7,7 +7,7 @@ extern from rt::vec use { vec_new, vec_push, vec_len };
 from util::diagnostics use { panic_at };
 from util::lexing use { skip_ws, starts_with_at };
 
-from parsing::primitives use { parse_ident, parse_keyword, parse_optional_semicolon };
+from parsing::primitives use { parse_ident, parse_keyword, parse_optional_semicolon, parse_required_semicolon };
 from parsing::types use { parse_type_expr };
 
 from parsing::expr_stmt_types use { ParsedStmtAst };
@@ -88,6 +88,8 @@ out fn parse_stmt_ast(src: String, i: I32) : ParsedStmtAst => {
   // local function declaration (statement):
   //   fn name(params...) (: RetTy)? => body;
   // Desugars to an immutable `let` bound to a lambda.
+  // Single-expression body requires semicolon: fn get() => 100;
+  // Block body does not require semicolon: fn get() => { 100 }
   if (starts_with_at(src, k, "fn")) {
     k = parse_keyword(src, k, "fn");
     let name = parse_ident(src, k);
@@ -103,7 +105,7 @@ out fn parse_stmt_ast(src: String, i: I32) : ParsedStmtAst => {
       k = tp.nextPos;
     }
 
-    // Parse params: (name (':' Type)? (',' ... )?)
+    // Parse params: (name (':' Type)? (',' ... )?) with trailing comma support
     k = parse_keyword(src, k, "(");
     k = skip_ws(src, k);
 
@@ -161,13 +163,20 @@ out fn parse_stmt_ast(src: String, i: I32) : ParsedStmtAst => {
 
     k = parse_keyword(src, k, "=>");
     let bodyStart = skip_ws(src, k);
+    let isBlockBody = bodyStart < stringLen(src) && stringCharCodeAt(src, bodyStart) == 123; // '{'
     let body = parse_main_body_ast_impl(src, k);
     k = body.nextPos;
 
     let bodyExpr = if (vec_len(body.body) == 0) body.tail else expr_block(span(bodyStart, body.nextPos), body.body, body.tail);
     let lam = expr_lambda(span(start, body.nextPos), typeParams, params, paramTyAnns, retTyAnn, bodyExpr);
 
-    k = parse_optional_semicolon(src, k);
+    // Require semicolon for single-expression functions: fn get() => 100;
+    // Block body functions do not require semicolon: fn get() => { 100 }
+    if (isBlockBody) {
+      k = parse_optional_semicolon(src, k);
+    } else {
+      k = parse_required_semicolon(src, k);
+    }
     yield ParsedStmtAst(stmt_let(span(start, k), false, name.text, lam), k);
   }
 

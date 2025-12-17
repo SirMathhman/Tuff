@@ -17,7 +17,8 @@ from parsing::primitives use {
   parse_ident,
   parse_keyword,
   parse_module_path,
-  parse_optional_semicolon
+  parse_optional_semicolon,
+  parse_required_semicolon
 };
 
 from parsing::types use { parse_type_expr };
@@ -110,7 +111,8 @@ out fn parse_type_params_list_ast(src: String, i: I32) : ParsedTypeParamsAst => 
 }
 
 fn parse_param_list_ast(src: String, i: I32) : ParsedParamsAst => {
-  // parses: '(' (ident (',' ident)*)? ')'
+  // parses: '(' (ident (':' Type)? (',' ident (':' Type)?)*)? (',')? ')'
+  // Supports trailing comma: fn f(a: I32, b: I32,) => ...
   let mut k = parse_keyword(src, i, "(");
   k = skip_ws(src, k);
   let names = vec_new();
@@ -133,7 +135,15 @@ fn parse_param_list_ast(src: String, i: I32) : ParsedParamsAst => {
     k = skip_ws(src, k);
     if (!(k < stringLen(src))) { panic_at(src, k, "expected ')' in param list"); }
     let c = stringCharCodeAt(src, k);
-    if (c == 44) { k = k + 1; continue; }
+    if (c == 44) { // ','
+      k = k + 1;
+      k = skip_ws(src, k);
+      // Allow trailing comma: fn f(a: I32,)
+      if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) { // ')'
+        yield ParsedParamsAst(names, tyAnns, k + 1);
+      }
+      continue;
+    }
     if (c == 41) { yield ParsedParamsAst(names, tyAnns, k + 1); }
     panic_at(src, k, "expected ',' or ')' in param list")
   }
@@ -339,8 +349,11 @@ out fn parse_fn_like_header(src: String, i: I32) : ParsedFnLike => {
   }
 
   k = parse_keyword(src, k, "=>");
+  let bodyStart = skip_ws(src, k);
   let body = parse_main_body_ast(src, k);
   k = body.nextPos;
+  // For top-level function declarations, semicolon is optional for both
+  // single-expression and block body functions.
   k = parse_optional_semicolon(src, k);
 
   ParsedFnLike(start, mods.isOut, mods.isClass, mods.isExtern, name, typeParams, params, retTyAnn, body, k)

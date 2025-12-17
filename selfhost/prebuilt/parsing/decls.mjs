@@ -3,7 +3,7 @@ import { stringLen, stringCharCodeAt } from "../rt/stdlib.mjs";
 import { vec_new, vec_len, vec_push, vec_get } from "../rt/vec.mjs";
 import { panic_at, add_struct_def, is_identifier_too_short, warn_short_identifier } from "../util/diagnostics.mjs";
 import { skip_ws, starts_with_at, is_ident_part } from "../util/lexing.mjs";
-import { parse_ident, parse_keyword, parse_module_path, parse_optional_semicolon } from "./primitives.mjs";
+import { parse_ident, parse_keyword, parse_module_path, parse_optional_semicolon, parse_required_semicolon } from "./primitives.mjs";
 import { parse_type_expr } from "./types.mjs";
 import { ParsedMainAst } from "./expr_stmt_types.mjs";
 import { parse_main_body_ast } from "./expr_stmt.mjs";
@@ -111,6 +111,10 @@ panic_at(src, k, "expected ')' in param list");
 const c = stringCharCodeAt(src, k);
 if (c == 44) {
 k = k + 1;
+k = skip_ws(src, k);
+if (k < stringLen(src) && stringCharCodeAt(src, k) == 41) {
+return ParsedParamsAst(names, tyAnns, k + 1);
+}
 continue;
 }
 if (c == 41) {
@@ -283,6 +287,7 @@ return ParsedFnLike(start, mods.isOut, mods.isClass, mods.isExtern, name, typePa
 }
 }
 k = parse_keyword(src, k, "=>");
+const bodyStart = skip_ws(src, k);
 const body = parse_main_body_ast(src, k);
 k = body.nextPos;
 k = parse_optional_semicolon(src, k);

@@ -3,7 +3,7 @@ import { stringLen, stringCharCodeAt } from "../rt/stdlib.mjs";
 import { vec_new, vec_push, vec_len } from "../rt/vec.mjs";
 import { panic_at } from "../util/diagnostics.mjs";
 import { skip_ws, starts_with_at } from "../util/lexing.mjs";
-import { parse_ident, parse_keyword, parse_optional_semicolon } from "./primitives.mjs";
+import { parse_ident, parse_keyword, parse_optional_semicolon, parse_required_semicolon } from "./primitives.mjs";
 import { parse_type_expr } from "./types.mjs";
 import { ParsedStmtAst } from "./expr_stmt_types.mjs";
 import { parse_mut_opt_impl } from "./expr_stmt_helpers.mjs";
@@ -114,11 +114,16 @@ k = ret.v1;
 }
 k = parse_keyword(src, k, "=>");
 const bodyStart = skip_ws(src, k);
+const isBlockBody = bodyStart < stringLen(src) && stringCharCodeAt(src, bodyStart) == 123;
 const body = parse_main_body_ast_impl(src, k);
 k = body.nextPos;
 const bodyExpr = (vec_len(body.body) == 0 ? body.tail : expr_block(span(bodyStart, body.nextPos), body.body, body.tail));
 const lam = expr_lambda(span(start, body.nextPos), typeParams, params, paramTyAnns, retTyAnn, bodyExpr);
+if (isBlockBody) {
 k = parse_optional_semicolon(src, k);
+} else {
+k = parse_required_semicolon(src, k);
+}
 return ParsedStmtAst(stmt_let(span(start, k), false, name.text, lam), k);
 }
 if (starts_with_at(src, k, "while")) {
