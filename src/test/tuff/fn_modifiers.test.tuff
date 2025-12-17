@@ -17,11 +17,14 @@ out class fn TestOutClassFn(x: I32) => {}
 // class out fn (NEW: order should not matter)
 class out fn TestClassOutFn(x: I32) => {}
 
-// extern fn (NEW: extern without body)
-// extern fn test_extern_fn() : I32;  // TODO: implement extern fn without body
+// extern fn without body - declaration only
+extern fn test_extern_fn() : I32;
 
-// out extern fn (NEW)
-// out extern fn test_out_extern_fn() : I32;  // TODO: implement
+// out extern fn without body
+out extern fn test_out_extern_fn() : I32;
+
+// extern out fn (alternate order)
+extern out fn test_extern_out_fn() : String;
 
 fn main() : I32 => {
   reset();
@@ -41,6 +44,10 @@ fn main() : I32 => {
   // Test class out fn works (NEW order)
   let obj3 = TestClassOutFn(20);
   it("class out fn creates object", expect_eq("class out fn .x", obj3.x, 20));
+  
+  // extern fn declarations compile (we can't call them without implementations)
+  // Just verify they parsed successfully by checking we got here
+  it("extern fn declarations compile", expect_eq("parsed", 1, 1));
   
   summary();
   status()
