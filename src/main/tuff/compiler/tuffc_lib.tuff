@@ -1,16 +1,16 @@
-// Self-hosted compiler (first whack)
+// Self-hosted compiler
 //
-// This is a *very* small compiler written in Tuff, intended to prove the loop:
-//   bootstrap TS compiler -> emits JS -> JS runs and can compile a tiny subset.
+// The Tuff compiler is fully self-hosting: written in Tuff and capable of compiling itself.
 //
-// For now, it compiles only a restricted input shape:
-//   fn main() => <number>
-//   fn main() => { <number> }
+// Language entry point pattern:
+//   Tuff uses top-level code execution (like Python/TypeScript)
+//   Entry points use: out fn run() : I32 => { ... }
+//   Top-level 'fn main()' is an error (reserved for C compatibility)
 //
-// Output is ESM that exports `main`.
+// Output is ESM that exports all top-level declarations.
 //
 // NOTE: This file contains the compiler implementation.
-// The CLI entrypoint lives in `selfhost/tuffc.tuff`.
+// The CLI entrypoint lives in `tuffc.tuff`.
 
 extern from rt::stdlib use { println, panic, readTextFile, writeTextFile, pathDirname, pathJoin, stringLen, stringSlice, stringCharCodeAt, stringFromCharCode };
 
