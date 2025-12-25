@@ -79,11 +79,13 @@ Create `hello.tuff`:
 ```tuff
 from std::io use { print };
 
-// Tuff uses top-level code execution with `out fn run()`
-out fn run() : I32 => {
+// Tuff uses top-level code execution (like Python/TypeScript)
+fn run() : I32 => {
     print("Hello, Tuff!\n");
     0
 }
+
+run();  // Execute the program
 ```
 
 Compile and run:
@@ -376,11 +378,13 @@ fn drop_file(f: FileHandle) : Void => {
   close_file(f.fd);
 }
 
-out fn run() : I32 => {
+fn run() : I32 => {
   let f: FileHandle!drop_file = open_file("data.txt");
   // ... use f ...
   0  // drop_file(f) called automatically here
 }
+
+run();
 ```
 
 The `T!dropFn` syntax marks a type with a destructor:
@@ -512,10 +516,12 @@ File-based implicit modules: a file `com/math.tuff` becomes the module `com::mat
 from std::io use { print };
 from com::math use { add, multiply };
 
-out fn run() : I32 => {
+fn run() : I32 => {
     print(add(2, 3));
     0
 }
+
+run();
 ```
 
 Modules can also be explicitly declared within files:
@@ -537,10 +543,12 @@ extern fn log(msg: String) : Void;
 extern let globalValue : I32;
 extern type Promise<T>;
 
-out fn run() : I32 => {
+fn run() : I32 => {
     log("Hello from Tuff!");
     0
 }
+
+run();
 ```
 
 #### 20. **Destructuring**
@@ -635,7 +643,7 @@ A lightweight, dependency-free unit testing helper is provided in `src/main/tuff
 ```tuff
 from std::test use { reset, it, expect_eq, expect, summary, status };
 
-out fn run() : I32 => {
+fn run() : I32 => {
     reset();
 
     it("addition works", expect_eq("1+1", 1 + 1, 2));
@@ -644,6 +652,8 @@ out fn run() : I32 => {
     summary();
     status()  // 0 on pass, 1 on fail
 }
+
+run();
 ```
 
 ---
@@ -730,12 +740,14 @@ Input/output functions:
 ```tuff
 from std::io use { print, read_line };
 
-out fn run() : I32 => {
+fn run() : I32 => {
     print("Enter your name: ");
     let name = read_line();
     print("Hello, " + name + "\n");
     0
 }
+
+run();
 ```
 
 ### `std::test`
@@ -745,12 +757,14 @@ Unit testing helpers (pure Tuff):
 ```tuff
 from std::test use { reset, it, expect_eq, summary, status };
 
-out fn run() : I32 => {
+fn run() : I32 => {
     reset();
     it("math", expect_eq("add", 1 + 1, 2));
     summary();
     status()
 }
+
+run();
 ```
 
 ### `std::prelude`
@@ -764,14 +778,16 @@ Minimal iterator utilities (currently: `range`, `map`, `filter`, `fold`).
 ```tuff
 from std::iter use { range };
 
-out fn run() : I32 => {
+fn run() : I32 => {
     let mut sum = 0;
     let mut r = range(0, 5);
     while (r.has_next()) {
         sum = sum + r.next();
     }
-    sum // 10
+    sum
 }
+
+run();
 ```
 
 ### Future Stdlib Modules

@@ -26,10 +26,12 @@ Example usage:
 ```tuff
 from std::io use { print };
 
-out fn run() : I32 => {
+fn run() : I32 => {
     print("Hello, world!\n");
     0
 }
+
+run();
 ```
 
 ### `test.tuff`
@@ -50,7 +52,7 @@ Example test:
 ```tuff
 from std::test use { reset, suite, it, expect_eq, summary, status };
 
-out fn run() : I32 => {
+fn run() : I32 => {
   reset();
   suite("arithmetic");
 
@@ -60,6 +62,8 @@ out fn run() : I32 => {
   summary();
   status()
 }
+
+run();
 ```
 
 Run test:

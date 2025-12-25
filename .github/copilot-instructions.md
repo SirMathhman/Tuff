@@ -174,7 +174,7 @@ For `.tuff` tests, use the `std::test` framework:
 ```tuff
 from std::test use { reset, suite, it, expect_eq, summary, status };
 
-out fn run() : I32 => {
+fn run() : I32 => {
   reset();
   suite("my feature");
 
@@ -184,6 +184,8 @@ out fn run() : I32 => {
   summary();
   status()  // 0 on pass, 1 on fail
 }
+
+run();
 ```
 
 For TypeScript tests in this repo, use Vitest via `npm test`.
@@ -264,14 +266,16 @@ The `src/main/tuff/tools/` directory contains code generation and analysis utili
 
 **Important**: The language syntax has evolved recently. Key changes:
 
-1. **Entry points use `out fn run()`** instead of `fn main()`:
+1. **Top-level code execution** (like Python/TypeScript):
    ```tuff
-   out fn run() : I32 => {
-     // top-level code
+   fn run() : I32 => {
+     // program code
      0
    }
+
+   run();  // Execute at top-level
    ```
-   Top-level `fn main()` is now an error — the language uses top-level code execution.
+   Top-level `fn main()` is an error — the language uses top-level code execution, not C-style main().
 
 2. **Pointers implemented**: `*mut T` with `&` (address-of) and `*` (dereference) operators
 3. **Destructors implemented**: `T!dropFn` syntax for automatic cleanup on scope exit
