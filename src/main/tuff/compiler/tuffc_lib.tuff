@@ -4,7 +4,7 @@
 //
 // Language entry point pattern:
 //   Tuff uses top-level code execution (like Python/TypeScript)
-//   Standalone programs: fn run() : I32 => { ... } run();
+//   Standalone programs: fn run() : I32 => { ... }; run()
 //   Top-level 'fn main()' is an error (reserved for C compatibility)
 //
 // Output is ESM that exports all top-level declarations.

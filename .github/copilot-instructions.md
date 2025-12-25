@@ -183,9 +183,9 @@ fn run() : I32 => {
 
   summary();
   status()  // 0 on pass, 1 on fail
-}
+};
 
-run();
+run()
 ```
 
 For TypeScript tests in this repo, use Vitest via `npm test`.
@@ -271,9 +271,9 @@ The `src/main/tuff/tools/` directory contains code generation and analysis utili
    fn run() : I32 => {
      // program code
      0
-   }
+   };
 
-   run();  // Execute at top-level
+   run()  // Expression becomes program result
    ```
    Top-level `fn main()` is an error — the language uses top-level code execution, not C-style main().
 
