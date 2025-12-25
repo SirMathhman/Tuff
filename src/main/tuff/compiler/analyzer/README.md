@@ -118,15 +118,15 @@ struct FileHandle { fd: I32 }
 
 fn drop_file(f: FileHandle) : Void => {
   close_file(f.fd);
-}
+};
 
 fn run() : I32 => {
   let f: FileHandle!drop_file = open_file("data.txt");
   // ... use f ...
   0  // drop_file(f) called automatically here
-}
+};
 
-run();
+run()
 ```
 
 The `T!dropFn` syntax marks a type as droppable:

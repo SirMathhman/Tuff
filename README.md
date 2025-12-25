@@ -83,9 +83,9 @@ from std::io use { print };
 fn run() : I32 => {
     print("Hello, Tuff!\n");
     0
-}
+};
 
-run();  // Execute the program
+run()  // Expression becomes program result
 ```
 
 Compile and run:
@@ -376,15 +376,15 @@ struct FileHandle { fd: I32 }
 
 fn drop_file(f: FileHandle) : Void => {
   close_file(f.fd);
-}
+};
 
 fn run() : I32 => {
   let f: FileHandle!drop_file = open_file("data.txt");
   // ... use f ...
   0  // drop_file(f) called automatically here
-}
+};
 
-run();
+run()
 ```
 
 The `T!dropFn` syntax marks a type with a destructor:
@@ -519,9 +519,9 @@ from com::math use { add, multiply };
 fn run() : I32 => {
     print(add(2, 3));
     0
-}
+};
 
-run();
+run()
 ```
 
 Modules can also be explicitly declared within files:
@@ -546,9 +546,9 @@ extern type Promise<T>;
 fn run() : I32 => {
     log("Hello from Tuff!");
     0
-}
+};
 
-run();
+run()
 ```
 
 #### 20. **Destructuring**
@@ -651,9 +651,9 @@ fn run() : I32 => {
 
     summary();
     status()  // 0 on pass, 1 on fail
-}
+};
 
-run();
+run()
 ```
 
 ---
@@ -745,9 +745,9 @@ fn run() : I32 => {
     let name = read_line();
     print("Hello, " + name + "\n");
     0
-}
+};
 
-run();
+run()
 ```
 
 ### `std::test`
@@ -762,9 +762,9 @@ fn run() : I32 => {
     it("math", expect_eq("add", 1 + 1, 2));
     summary();
     status()
-}
+};
 
-run();
+run()
 ```
 
 ### `std::prelude`
@@ -785,9 +785,9 @@ fn run() : I32 => {
         sum = sum + r.next();
     }
     sum
-}
+};
 
-run();
+run()
 ```
 
 ### Future Stdlib Modules

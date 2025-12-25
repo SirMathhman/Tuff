@@ -29,9 +29,9 @@ from std::io use { print };
 fn run() : I32 => {
     print("Hello, world!\n");
     0
-}
+};
 
-run();
+run()
 ```
 
 ### `test.tuff`
@@ -61,9 +61,9 @@ fn run() : I32 => {
 
   summary();
   status()
-}
+};
 
-run();
+run()
 ```
 
 Run test:
