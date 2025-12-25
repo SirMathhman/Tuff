@@ -44,7 +44,7 @@ Vitest-based tests that validate the compiler stages, CLI, and integration.
 
 | Test                                        | Purpose                                                                                                                                                                  |
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **`tuff_tests_runner.test.ts`**             | **Main language validator**: Compiles all `.tuff` test files (in `src/test/tuff/`) and runs their `main()` functions. Uses Tuff's built-in test framework (`std::test`). |
+| **`tuff_tests_runner.test.ts`**             | **Main language validator**: Compiles all `.tuff` test files (in `src/test/tuff/`) and runs their `run()` functions. Uses Tuff's built-in test framework (`std::test`). |
 | **`generated_expr_parser_compile.test.ts`** | Tests generated expression parser from EBNF grammar.                                                                                                                     |
 | **`tuff_test_framework_migration.test.ts`** | Validates Tuff test framework utilities.                                                                                                                                 |
 
@@ -76,7 +76,7 @@ Vitest-based tests that validate the compiler stages, CLI, and integration.
 Pure Tuff test files that validate language features. Each file:
 
 1. **Imports `std::test`** — testing framework
-2. **Defines `main() : I32`** — entry point that runs tests and returns status (0 = pass, 1 = fail)
+2. **Defines `out fn run() : I32`** — entry point that runs tests and returns status (0 = pass, 1 = fail)
 3. **Uses test helpers** — `reset()`, `suite()`, `it()`, `expect_eq()`, `summary()`, `status()`
 
 ### Example Test File
@@ -85,7 +85,7 @@ Pure Tuff test files that validate language features. Each file:
 // src/test/tuff/my_feature.test.tuff
 from std::test use { reset, suite, it, expect_eq, summary, status };
 
-fn main() : I32 => {
+out fn run() : I32 => {
   reset();
   suite("my feature");
 
@@ -158,7 +158,7 @@ All compiler modules must be included in `selfhost/prebuilt/`, not just `tuffc.m
 
 1. Create `src/test/tuff/my_feature.test.tuff`
 2. Import `std::test` framework
-3. Define `main() : I32` with test cases
+3. Define `out fn run() : I32` with test cases
 4. Run: `npm test -- tuff_tests_runner.test.ts`
 
 ### For Compiler Behavior (TypeScript)

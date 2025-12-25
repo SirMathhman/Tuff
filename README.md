@@ -79,7 +79,8 @@ Create `hello.tuff`:
 ```tuff
 from std::io use { print };
 
-fn main() : I32 => {
+// Tuff uses top-level code execution with `out fn run()`
+out fn run() : I32 => {
     print("Hello, Tuff!\n");
     0
 }
@@ -273,6 +274,8 @@ let f: Char = 'x';         // single character
 let g: Void = {};          // unit type
 ```
 
+Additional integer types: `I8`, `I16`, `I64`, `U8`, `U16`, `U64`; additional float type: `F64`.
+
 Unsuffixed integer literals default to `I32`; unsuffixed floats default to `F32`:
 
 ```tuff
@@ -345,7 +348,65 @@ let f : (I32) => I32 = id<I32>;  // OK: type parameters specified
 // let g = id;                    // Error: type parameters required
 ```
 
-#### 10. **Pattern Matching**
+#### 10. **Pointer Types**
+
+Mutable pointer types allow reference semantics:
+
+```tuff
+let mut pt: Point = Point { 10, 20 };
+let pp: *mut Point = &pt;   // Take pointer to pt
+let x: I32 = (*pp).x;       // Dereference and access field
+(*pp).x = 50;               // Modify through pointer
+```
+
+Operators:
+- `&expr` — Creates a pointer of type `*mut T` to the expression
+- `*ptr` — Dereferences a pointer to access the underlying value
+
+Pointers are Copy types (can be freely copied without moving the underlying value).
+
+#### 11. **Destructors (Drop Functions)**
+
+Types can have associated drop functions called automatically when values go out of scope:
+
+```tuff
+struct FileHandle { fd: I32 }
+
+fn drop_file(f: FileHandle) : Void => {
+  close_file(f.fd);
+}
+
+out fn run() : I32 => {
+  let f: FileHandle!drop_file = open_file("data.txt");
+  // ... use f ...
+  0  // drop_file(f) called automatically here
+}
+```
+
+The `T!dropFn` syntax marks a type with a destructor:
+- Drop functions are called in LIFO order (last declared, first dropped)
+- `T` can be assigned to `T!dropFn` (allocate the specified drop)
+- `T!dropFn` cannot be assigned to `T` (would lose the drop obligation)
+
+#### 12. **Ownership and Move Semantics**
+
+Tuff tracks ownership to prevent use-after-move errors:
+
+```tuff
+struct Container { data: String, value: I32 }
+
+let c1 = Container { "hello", 42 };
+let c2 = c1;        // c1 is moved to c2
+// let x = c1.value; // Error: use of moved value c1
+```
+
+Type classification:
+- **Copy types**: Primitives (`I32`, `Bool`, etc.), pointers (`*mut T`), structs with all-Copy fields
+- **Move types**: Structs with non-Copy fields (e.g., containing function types or other Move types)
+
+When a Move-type value is assigned or passed to a function, the original binding becomes invalid.
+
+#### 13. **Pattern Matching**
 
 Use `is` for simple type narrowing:
 
@@ -353,7 +414,7 @@ Use `is` for simple type narrowing:
 let maybe: Option<I32> = Some(42);
 if (maybe is Some) {
     let { value } = maybe;  // extract inner value
-    io.print(value);
+    print(value);
 }
 ```
 
@@ -368,7 +429,7 @@ let desc = match (status) {
 };
 ```
 
-#### 11. **Functions as First-Class Values**
+#### 14. **Functions as First-Class Values**
 
 Functions can be assigned to variables, passed as arguments, and returned from functions:
 
@@ -383,13 +444,11 @@ let result = apply(add, 3, 4);  // 7
 
 Functions and local variables share the same namespace — you cannot declare both a function and a variable with the same name in the same scope.
 
-#### 12. **Classes (Constructor Sugar)**
+#### 15. **Classes (Constructor Sugar)**
 
 The `class` keyword provides syntactic sugar for functions that yield `this` (the captured scope):
 
 Methods declared inside a `class fn` are just local functions captured as function-valued fields and invoked with normal dot-call syntax.
-
-> Note: generic local methods (e.g. `fn m<T>(...)`) are not supported yet in the bootstrap compiler.
 
 ```tuff
 class fn Point(x: I32, y: I32) => {
@@ -397,10 +456,12 @@ class fn Point(x: I32, y: I32) => {
 }
 
 let p = Point(3, 4);
-io.print(p.manhattan());  // 7
+print(p.manhattan());  // 7
 ```
 
-#### 13. **The `this` Keyword**
+Local functions (including generic ones) are fully supported within class constructors.
+
+#### 16. **The `this` Keyword**
 
 `this` captures the current scope as an object-like value with all visible variables as fields:
 
@@ -411,10 +472,10 @@ let user = {
     this  // yields scope with id and name as fields
 };
 
-io.print(user.name);  // "Alice"
+print(user.name);  // "Alice"
 ```
 
-#### 14. **Control Flow**
+#### 17. **Control Flow**
 
 **If expressions** (require `else` in expression context):
 
@@ -427,7 +488,7 @@ let abs = if (x < 0) -x else x;  // OK: both branches produce I32
 ```tuff
 let mut i = 0;
 while (i < 5) {
-    io.print(i);
+    print(i);
     i = i + 1;
 }
 ```
@@ -443,7 +504,7 @@ let value = loop {
 
 **Break and continue** work as expected in loops.
 
-#### 15. **Modules and Imports**
+#### 18. **Modules and Imports**
 
 File-based implicit modules: a file `com/math.tuff` becomes the module `com::math`. Import with `from ... use { ... }`:
 
@@ -451,8 +512,9 @@ File-based implicit modules: a file `com/math.tuff` becomes the module `com::mat
 from std::io use { print };
 from com::math use { add, multiply };
 
-fn main() => {
+out fn run() : I32 => {
     print(add(2, 3));
+    0
 }
 ```
 
@@ -466,7 +528,7 @@ module Utils {
 let result = Utils::helper();
 ```
 
-#### 16. **Foreign Function Interface (FFI)**
+#### 19. **Foreign Function Interface (FFI)**
 
 Declare external types, variables, and functions to interop with JavaScript:
 
@@ -475,12 +537,13 @@ extern fn log(msg: String) : Void;
 extern let globalValue : I32;
 extern type Promise<T>;
 
-fn my_function() => {
+out fn run() : I32 => {
     log("Hello from Tuff!");
+    0
 }
 ```
 
-#### 17. **Destructuring**
+#### 20. **Destructuring**
 
 Unpack composite values into individual variables:
 
@@ -516,7 +579,7 @@ npm run test -- src/test/ts/selfhost.test.ts
 
 #### Tuff REPL (minimal)
 
-This is a simple, buffer-based REPL that compiles and runs the current buffer as the body of `main()`.
+This is a simple, buffer-based REPL that compiles and runs the current buffer as the body of `run()`.
 
 ```bash
 npm run tuff:repl
@@ -572,7 +635,7 @@ A lightweight, dependency-free unit testing helper is provided in `src/main/tuff
 ```tuff
 from std::test use { reset, it, expect_eq, expect, summary, status };
 
-fn main() => {
+out fn run() : I32 => {
     reset();
 
     it("addition works", expect_eq("1+1", 1 + 1, 2));
@@ -644,12 +707,13 @@ fn main() => {
 ### Known Limitations
 
 1. **No object-oriented features** beyond class constructors and methods
-2. **No lifetime tracking** — garbage-collected only (no borrowing/ownership yet)
+2. **Limited lifetime tracking** — ownership and move semantics implemented; full borrowing system planned
 3. **Limited iterator support** — foundation in place, rich combinators planned
 4. **Incomplete standard library** — io, test, and basic utilities available; math, collections, etc. planned
 5. **No macro system** — future consideration
 6. **No async/await** — future consideration (may use JS Promises as foundation)
 7. **Arrays and slices** lack rich operations (map, filter, etc. through iterators planned)
+8. **Pointers limited to JS semantics** — Pointers work through wrapper objects in the JS backend; true pointer arithmetic planned for C backend
 
 For longer-horizon work items, see `TASKS.md` / `tasks.py`.
 
@@ -666,10 +730,11 @@ Input/output functions:
 ```tuff
 from std::io use { print, read_line };
 
-fn main() => {
+out fn run() : I32 => {
     print("Enter your name: ");
     let name = read_line();
     print("Hello, " + name + "\n");
+    0
 }
 ```
 
@@ -680,7 +745,7 @@ Unit testing helpers (pure Tuff):
 ```tuff
 from std::test use { reset, it, expect_eq, summary, status };
 
-fn main() => {
+out fn run() : I32 => {
     reset();
     it("math", expect_eq("add", 1 + 1, 2));
     summary();
@@ -699,9 +764,9 @@ Minimal iterator utilities (currently: `range`, `map`, `filter`, `fold`).
 ```tuff
 from std::iter use { range };
 
-fn main() => {
-    let sum = 0;
-    let r = range(0, 5);
+out fn run() : I32 => {
+    let mut sum = 0;
+    let mut r = range(0, 5);
     while (r.has_next()) {
         sum = sum + r.next();
     }
@@ -811,4 +876,4 @@ Built with ❤️ by the Tuff community. Special thanks to contributors and ever
 ---
 
 **Last Updated**: December 2025
-**Compiler Status**: Self-hosting ✓ | **Stdlib**: Growing | **Phase**: 4 (Analyzer refinement)
+**Compiler Status**: Self-hosting ✓ | **Stdlib**: Growing | **Phase**: 5 (Post-bootstrap expansion)

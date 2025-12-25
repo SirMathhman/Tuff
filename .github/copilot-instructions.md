@@ -174,7 +174,7 @@ For `.tuff` tests, use the `std::test` framework:
 ```tuff
 from std::test use { reset, suite, it, expect_eq, summary, status };
 
-fn main() : I32 => {
+out fn run() : I32 => {
   reset();
   suite("my feature");
 
@@ -259,6 +259,24 @@ The `src/main/tuff/tools/` directory contains code generation and analysis utili
 
 - **EBNF system** — Parse, validate, and generate code from EBNF grammars
 - **Code generation** — Utilities for generating parser code and refactoring helpers
+
+## Recent Language Changes
+
+**Important**: The language syntax has evolved recently. Key changes:
+
+1. **Entry points use `out fn run()`** instead of `fn main()`:
+   ```tuff
+   out fn run() : I32 => {
+     // top-level code
+     0
+   }
+   ```
+   Top-level `fn main()` is now an error — the language uses top-level code execution.
+
+2. **Pointers implemented**: `*mut T` with `&` (address-of) and `*` (dereference) operators
+3. **Destructors implemented**: `T!dropFn` syntax for automatic cleanup on scope exit
+4. **Ownership tracking**: Copy/Move type classification with use-after-move detection
+5. **Function modifiers**: Unified `out`, `class`, `extern` modifiers (can appear in any order)
 
 ## Task Management
 
