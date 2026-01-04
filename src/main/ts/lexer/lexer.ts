@@ -187,16 +187,7 @@ export class Lexer {
   }
 
   private multiLineComment() {
-    while (
-      !(this.peek() === "*" && this.peekNext() === "/") &&
-      !this.isAtEnd()
-    ) {
-      if (this.peek() === "\n") {
-        this.line++;
-        this.column = 1;
-      }
-      this.advance();
-    }
+    this.consumeUntil(() => this.peek() === "*" && this.peekNext() === "/");
 
     if (this.isAtEnd()) {
       this.error("Unterminated multi-line comment.");
@@ -237,13 +228,7 @@ export class Lexer {
   }
 
   private string() {
-    while (this.peek() !== '"' && !this.isAtEnd()) {
-      if (this.peek() === "\n") {
-        this.line++;
-        this.column = 1;
-      }
-      this.advance();
-    }
+    this.consumeUntil(() => this.peek() === '"');
 
     if (this.isAtEnd()) {
       this.error("Unterminated string.");
@@ -256,6 +241,16 @@ export class Lexer {
     // Trim the surrounding quotes.
     const value = this.source.substring(this.start + 1, this.current - 1);
     this.addToken(TokenType.String, value);
+  }
+
+  private consumeUntil(predicate: () => boolean) {
+    while (!predicate() && !this.isAtEnd()) {
+      if (this.peek() === "\n") {
+        this.line++;
+        this.column = 1;
+      }
+      this.advance();
+    }
   }
 
   private match(expected: string): boolean {
