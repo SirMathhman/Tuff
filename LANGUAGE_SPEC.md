@@ -41,26 +41,33 @@ Fixed-width types for predictable behavior across JS and LLVM targets:
   x[2] = 300; // Error: x[1] has not been set yet
   ```
 
-### 2.3 NativeString
+### 2.3 Slices (Dynamic Arrays)
+
+- **Type**: `&[Type]`.
+- **Behavior**: Slices are dynamic views into arrays or other contiguous memory.
+- **Properties**:
+  - `.length`: Returns the number of elements in the slice.
+
+### 2.4 NativeString
 
 - **Type**: `NativeString`.
 - **Declaration**: `extern intrinsic type NativeString;`.
 - **Behavior**: All double-quoted literals (`"hello"`) are of type `NativeString`. It maps to native strings in JS and `char*` (or similar) in C/LLVM.
 
-### 2.4 Union Types & Aliases
+### 2.5 Union Types & Aliases
 
 - **Syntax**: `type Name = TypeA | TypeB;`.
 - **Type Inspection**: The `is` keyword checks the variant of a union at runtime.
   - Example: `if (value is Some<I32>) { ... }`.
 
-### 2.5 Literals & Constants
+### 2.6 Literals & Constants
 
 - **Booleans**: `true`, `false`.
 - **Numbers**:
   - Decimal: `123`, `1_000_000`.
   - Float: `3.14`.
 
-### 2.6 Operators
+### 2.7 Operators
 
 - **Arithmetic**: `+`, `-`, `*`, `/`, `%`.
 - **Comparison**: `==`, `!=`, `<`, `>`, `<=`, `>=`.
