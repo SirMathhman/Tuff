@@ -93,26 +93,6 @@ type Option<T> = Some<T> | None<T>;
   }
   ```
 
-### 5.2 Class Functions
-
-A hybrid constructor-like syntax:
-
-```rust
-class fn Point(x: I32, y: I32) => {
-    // Encapsulated state and methods
-}
-```
-
-### 5.3 Traits
-
-Define shared behavior:
-
-```rust
-trait Drawable {
-    fn draw(self);
-}
-```
-
 ## 6. Module System
 
 - **Imports**: `from namespace::child use { Member0 Member1 };`.
