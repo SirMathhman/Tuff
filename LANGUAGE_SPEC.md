@@ -8,7 +8,7 @@ This document outlines the syntax, type system, and core features of the Tuff pr
 - **Casing**:
   - **Types**: `PascalCase` (e.g., `I32`, `MyStruct`).
   - **Identifiers**: `camelCase` (e.g., `myVariable`, `calculateValue`).
-- **Expressions**: Most constructs (blocks, `if` statements) are expressions that return values.
+- **Expressions**: Most constructs (blocks, `if` statements) are expressions that return values. Blocks `{ ... }` evaluate to their last expression or an explicit `yield`.
 - **Comments**:
   - Single-line: `// comment`
   - Multi-line: `/* comment */`
@@ -35,7 +35,7 @@ Fixed-width types for predictable behavior across JS and LLVM targets:
 - **Declaration**: `extern intrinsic type NativeString;`.
 - **Behavior**: All double-quoted literals (`"hello"`) are of type `NativeString`. It maps to native strings in JS and `char*` (or similar) in C/LLVM.
 
-### 2.3 Union Types & Aliases
+### 2.4 Union Types & Aliases
 
 - **Syntax**: `type Name = TypeA | TypeB;`.
 - **Type Inspection**: The `is` keyword checks the variant of a union at runtime.
@@ -90,6 +90,7 @@ Fixed-width types for predictable behavior across JS and LLVM targets:
 ### 4.2 Control Flow
 
 - **If Expression**:
+
   ```rust
   let result = if (condition) {
       yield 1;
@@ -99,6 +100,7 @@ Fixed-width types for predictable behavior across JS and LLVM targets:
   ```
 
 - **While Loop**:
+
   ```rust
   while (condition) {
       // ...
@@ -115,11 +117,37 @@ Fixed-width types for predictable behavior across JS and LLVM targets:
 ### 4.3 Entry Point
 
 The compiler looks for a `main` function as the entry point:
+
 ```rust
 fn main(): I32 => {
     yield 0;
 }
 ```
+
+### 4.4 Blocks as Expressions
+
+In Tuff, blocks `{ ... }` are expressions. The right-hand side of the `=>` operator in a function definition is always an expression.
+
+- **Yielding**: The `yield` keyword explicitly returns a value from a block.
+- **Implicit Yield**: If the last statement in a block is an expression, it is implicitly yielded, making the `yield` keyword optional.
+
+Example:
+```rust
+let a = 100;
+let b = 200;
+
+// Explicit yield in a block expression
+let z1 = { 
+    yield a + b; 
+};
+
+// Implicit yield (redundant yield removed)
+let z2 = { 
+    a + b 
+};
+```
+
+This is why `fn add(a: I32, b: I32): I32 => { a + b }` is valid; the block itself is the expression on the RHS of `=>`.
 
 ## 5. Data Structures
 
