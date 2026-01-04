@@ -9,6 +9,7 @@ This document outlines the syntax, type system, and core features of the Tuff pr
   - **Types**: `PascalCase` (e.g., `I32`, `MyStruct`).
   - **Identifiers**: `camelCase` (e.g., `myVariable`, `calculateValue`).
 - **Expressions**: Most constructs (blocks, `if` statements) are expressions that return values. Blocks `{ ... }` evaluate to their last expression or an explicit `yield`.
+- **Top-Level Statements**: Programs can consist of top-level statements; no `main` function is required.
 - **Iterators**: Tuff prefers functional-style iteration via iterators (e.g., `list.iter().sum()`) over traditional `for` loops.
 - **Comments**:
   - Single-line: `// comment`
@@ -104,14 +105,15 @@ Fixed-width types for predictable behavior across JS and LLVM targets:
   }
   ```
 
-### 4.3 Entry Point
+### 4.3 Top-Level Statements
 
-The compiler looks for a `main` function as the entry point:
+Tuff supports top-level statements. A program does not require a `main` function. The last expression in the top-level scope of the entry file determines the program's exit code.
+
+Example:
 
 ```rust
-fn main(): I32 => {
-    yield 0;
-}
+let x = 100;
+x // Program exits with code 100
 ```
 
 ### 4.4 Blocks as Expressions
