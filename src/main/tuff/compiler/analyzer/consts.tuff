@@ -1,6 +1,0 @@
-// Constant-folding helpers for the analyzer.
-
-out fn infer_int_const(e: Expr) : I32 => {
-  if (e is EInt) { yield e.value; }
-  -1
-}
