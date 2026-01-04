@@ -9,6 +9,7 @@ This document outlines the syntax, type system, and core features of the Tuff pr
   - **Types**: `PascalCase` (e.g., `I32`, `MyStruct`).
   - **Identifiers**: `camelCase` (e.g., `myVariable`, `calculateValue`).
 - **Expressions**: Most constructs (blocks, `if` statements) are expressions that return values. Blocks `{ ... }` evaluate to their last expression or an explicit `yield`.
+- **Iterators**: Tuff prefers functional-style iteration via iterators (e.g., `list.iter().sum()`) over traditional `for` loops.
 - **Comments**:
   - Single-line: `// comment`
   - Multi-line: `/* comment */`
@@ -99,13 +100,6 @@ Fixed-width types for predictable behavior across JS and LLVM targets:
 
   ```rust
   while (condition) {
-      // ...
-  }
-  ```
-
-- **For Loop**:
-  ```rust
-  for (item in collection) {
       // ...
   }
   ```
