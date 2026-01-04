@@ -328,7 +328,10 @@ export class Lexer {
     return c;
   }
 
-  private addToken(type: TokenType, literal?: any) {
+  private addToken(
+    type: TokenType,
+    literal?: string | number | boolean | null
+  ) {
     const text = this.source.substring(this.start, this.current);
     this.tokens.push({
       type,

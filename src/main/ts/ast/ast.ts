@@ -142,7 +142,7 @@ export interface ExpressionStmt extends Node {
  */
 export interface LiteralExpr extends RValue {
   kind: "LiteralExpr";
-  value: any;
+  value: string | number | boolean | null;
   token: Token;
 }
 

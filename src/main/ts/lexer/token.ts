@@ -67,7 +67,7 @@ export enum TokenType {
 export interface Token {
   type: TokenType;
   lexeme: string;
-  literal?: any;
+  literal?: string | number | boolean | null;
   line: number;
   column: number;
   offset: number;
