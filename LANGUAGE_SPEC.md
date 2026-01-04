@@ -43,8 +43,10 @@ Fixed-width types for predictable behavior across JS and LLVM targets:
 
 ### 2.3 Slices (Dynamic Arrays)
 
-- **Type**: `&[Type]`.
+- **Type**: `*[Type]` (Immutable) or `*mut [Type]` (Mutable).
 - **Behavior**: Slices are dynamic views into arrays or other contiguous memory.
+- **Creation**: `let s: *[I32] = arr[0..2];`.
+- **Safety**: Slices include mandatory runtime bounds checking.
 - **Properties**:
   - `.length`: Returns the number of elements in the slice.
 
