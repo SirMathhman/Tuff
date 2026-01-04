@@ -12,6 +12,7 @@ export default tseslint.config(
         "warn",
         { argsIgnorePattern: "^_" },
       ],
+      complexity: ["error", 15],
     },
   },
   {

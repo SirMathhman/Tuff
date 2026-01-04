@@ -62,107 +62,11 @@ export class Lexer {
 
   private scanToken() {
     const c = this.advance();
+    if (this.handlePunctuation(c)) return;
+    if (this.handleArithmetic(c)) return;
+    if (this.handleComparison(c)) return;
+
     switch (c) {
-      case "(":
-        this.addToken(TokenType.OpenParen);
-        break;
-      case ")":
-        this.addToken(TokenType.CloseParen);
-        break;
-      case "{":
-        this.addToken(TokenType.OpenBrace);
-        break;
-      case "}":
-        this.addToken(TokenType.CloseBrace);
-        break;
-      case "[":
-        this.addToken(TokenType.OpenBracket);
-        break;
-      case "]":
-        this.addToken(TokenType.CloseBracket);
-        break;
-      case ",":
-        this.addToken(TokenType.Comma);
-        break;
-      case ".":
-        if (this.match(".")) {
-          this.addToken(TokenType.DotDot);
-        } else {
-          this.addToken(TokenType.Dot);
-        }
-        break;
-      case ";":
-        this.addToken(TokenType.Semicolon);
-        break;
-      case ":":
-        this.addToken(
-          this.match(":") ? TokenType.DoubleColon : TokenType.Colon
-        );
-        break;
-      case "+":
-        this.addToken(this.match("=") ? TokenType.PlusEqual : TokenType.Plus);
-        break;
-      case "-":
-        this.addToken(this.match("=") ? TokenType.MinusEqual : TokenType.Minus);
-        break;
-      case "*":
-        this.addToken(this.match("=") ? TokenType.StarEqual : TokenType.Star);
-        break;
-      case "/":
-        if (this.match("/")) {
-          while (this.peek() !== "\n" && !this.isAtEnd()) this.advance();
-        } else if (this.match("*")) {
-          this.multiLineComment();
-        } else {
-          this.addToken(
-            this.match("=") ? TokenType.SlashEqual : TokenType.Slash
-          );
-        }
-        break;
-      case "%":
-        this.addToken(TokenType.Percent);
-        break;
-      case "!":
-        this.addToken(this.match("=") ? TokenType.BangEqual : TokenType.Bang);
-        break;
-      case "=":
-        if (this.match(">")) {
-          this.addToken(TokenType.Arrow);
-        } else if (this.match("=")) {
-          this.addToken(TokenType.EqualEqual);
-        } else {
-          this.addToken(TokenType.Equal);
-        }
-        break;
-      case "<":
-        if (this.match("<")) {
-          this.addToken(TokenType.LessLess);
-        } else if (this.match("=")) {
-          this.addToken(TokenType.LessEqual);
-        } else {
-          this.addToken(TokenType.Less);
-        }
-        break;
-      case ">":
-        if (this.match(">")) {
-          this.addToken(TokenType.GreaterGreater);
-        } else if (this.match("=")) {
-          this.addToken(TokenType.GreaterEqual);
-        } else {
-          this.addToken(TokenType.Greater);
-        }
-        break;
-      case "&":
-        this.addToken(
-          this.match("&") ? TokenType.AmpersandAmpersand : TokenType.Ampersand
-        );
-        break;
-      case "|":
-        this.addToken(this.match("|") ? TokenType.PipePipe : TokenType.Pipe);
-        break;
-      case "^":
-        this.addToken(TokenType.Caret);
-        break;
       case " ":
       case "\r":
       case "\t":
@@ -183,6 +87,137 @@ export class Lexer {
           this.error(`Unexpected character: ${c}`);
         }
         break;
+    }
+  }
+
+  private handlePunctuation(c: string): boolean {
+    switch (c) {
+      case "(":
+        this.addToken(TokenType.OpenParen);
+        return true;
+      case ")":
+        this.addToken(TokenType.CloseParen);
+        return true;
+      case "{":
+        this.addToken(TokenType.OpenBrace);
+        return true;
+      case "}":
+        this.addToken(TokenType.CloseBrace);
+        return true;
+      case "[":
+        this.addToken(TokenType.OpenBracket);
+        return true;
+      case "]":
+        this.addToken(TokenType.CloseBracket);
+        return true;
+      case ",":
+        this.addToken(TokenType.Comma);
+        return true;
+      case ".":
+        this.addToken(this.match(".") ? TokenType.DotDot : TokenType.Dot);
+        return true;
+      case ";":
+        this.addToken(TokenType.Semicolon);
+        return true;
+      case ":":
+        this.addToken(
+          this.match(":") ? TokenType.DoubleColon : TokenType.Colon
+        );
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  private handleArithmetic(c: string): boolean {
+    switch (c) {
+      case "+":
+        this.addToken(this.match("=") ? TokenType.PlusEqual : TokenType.Plus);
+        return true;
+      case "-":
+        this.addToken(this.match("=") ? TokenType.MinusEqual : TokenType.Minus);
+        return true;
+      case "*":
+        this.addToken(this.match("=") ? TokenType.StarEqual : TokenType.Star);
+        return true;
+      case "/":
+        this.handleSlash();
+        return true;
+      case "%":
+        this.addToken(TokenType.Percent);
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  private handleComparison(c: string): boolean {
+    switch (c) {
+      case "!":
+        this.addToken(this.match("=") ? TokenType.BangEqual : TokenType.Bang);
+        return true;
+      case "=":
+        this.handleEqual();
+        return true;
+      case "<":
+        this.handleLess();
+        return true;
+      case ">":
+        this.handleGreater();
+        return true;
+      case "&":
+        this.addToken(
+          this.match("&") ? TokenType.AmpersandAmpersand : TokenType.Ampersand
+        );
+        return true;
+      case "|":
+        this.addToken(this.match("|") ? TokenType.PipePipe : TokenType.Pipe);
+        return true;
+      case "^":
+        this.addToken(TokenType.Caret);
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  private handleSlash() {
+    if (this.match("/")) {
+      while (this.peek() !== "\n" && !this.isAtEnd()) this.advance();
+    } else if (this.match("*")) {
+      this.multiLineComment();
+    } else {
+      this.addToken(this.match("=") ? TokenType.SlashEqual : TokenType.Slash);
+    }
+  }
+
+  private handleEqual() {
+    if (this.match(">")) {
+      this.addToken(TokenType.Arrow);
+    } else if (this.match("=")) {
+      this.addToken(TokenType.EqualEqual);
+    } else {
+      this.addToken(TokenType.Equal);
+    }
+  }
+
+  private handleLess() {
+    if (this.match("<")) {
+      this.addToken(TokenType.LessLess);
+    } else if (this.match("=")) {
+      this.addToken(TokenType.LessEqual);
+    } else {
+      this.addToken(TokenType.Less);
+    }
+  }
+
+  private handleGreater() {
+    if (this.match(">")) {
+      this.addToken(TokenType.GreaterGreater);
+    } else if (this.match("=")) {
+      this.addToken(TokenType.GreaterEqual);
+    } else {
+      this.addToken(TokenType.Greater);
     }
   }
 
