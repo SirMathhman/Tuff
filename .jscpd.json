@@ -1,0 +1,8 @@
+{
+  "mode": "weak",
+  "minLines": 5,
+  "minTokens": 50,
+  "ignore": ["node_modules", "dist", ".jscpd"],
+  "exitCode": 1,
+  "silent": true
+}
