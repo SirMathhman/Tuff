@@ -29,6 +29,12 @@ export type Expression =
   | IsExpr
   | IdentifierExpr;
 
+export type ValueCategory = "LValue" | "RValue" | "XValue";
+
+export interface BaseExpression extends Node {
+  category: ValueCategory;
+}
+
 export type TypeNode =
   | PrimitiveType
   | ArrayType
@@ -140,7 +146,7 @@ export interface ExpressionStmt extends Node {
 /**
  * Example: `123`, `"hello"`, `true`
  */
-export interface LiteralExpr extends Node {
+export interface LiteralExpr extends BaseExpression {
   kind: "LiteralExpr";
   value: any;
   token: Token;
@@ -149,7 +155,7 @@ export interface LiteralExpr extends Node {
 /**
  * Example: `myVar`
  */
-export interface IdentifierExpr extends Node {
+export interface IdentifierExpr extends BaseExpression {
   kind: "IdentifierExpr";
   name: string;
   token: Token;
@@ -158,7 +164,7 @@ export interface IdentifierExpr extends Node {
 /**
  * Example: `a + b`
  */
-export interface BinaryExpr extends Node {
+export interface BinaryExpr extends BaseExpression {
   kind: "BinaryExpr";
   left: Expression;
   operator: Token;
@@ -168,7 +174,7 @@ export interface BinaryExpr extends Node {
 /**
  * Example: `-x`, `!y`
  */
-export interface UnaryExpr extends Node {
+export interface UnaryExpr extends BaseExpression {
   kind: "UnaryExpr";
   operator: Token;
   right: Expression;
@@ -177,7 +183,7 @@ export interface UnaryExpr extends Node {
 /**
  * Example: `{ yield 1; }`
  */
-export interface BlockExpr extends Node {
+export interface BlockExpr extends BaseExpression {
   kind: "BlockExpr";
   statements: Statement[];
 }
@@ -185,7 +191,7 @@ export interface BlockExpr extends Node {
 /**
  * Example: `if (cond) { ... } else { ... }`
  */
-export interface IfExpr extends Node {
+export interface IfExpr extends BaseExpression {
   kind: "IfExpr";
   condition: Expression;
   thenBranch: BlockExpr;
@@ -195,7 +201,7 @@ export interface IfExpr extends Node {
 /**
  * Example: `while (cond) { ... }`
  */
-export interface WhileExpr extends Node {
+export interface WhileExpr extends BaseExpression {
   kind: "WhileExpr";
   condition: Expression;
   body: BlockExpr;
@@ -204,7 +210,7 @@ export interface WhileExpr extends Node {
 /**
  * Example: `func(arg1, arg2)`
  */
-export interface CallExpr extends Node {
+export interface CallExpr extends BaseExpression {
   kind: "CallExpr";
   callee: Expression;
   args: Expression[];
@@ -213,7 +219,7 @@ export interface CallExpr extends Node {
 /**
  * Example: `obj.member`
  */
-export interface AccessExpr extends Node {
+export interface AccessExpr extends BaseExpression {
   kind: "AccessExpr";
   object: Expression;
   member: string;
@@ -222,7 +228,7 @@ export interface AccessExpr extends Node {
 /**
  * Example: `arr[0]`
  */
-export interface IndexExpr extends Node {
+export interface IndexExpr extends BaseExpression {
   kind: "IndexExpr";
   object: Expression;
   index: Expression;
@@ -231,7 +237,7 @@ export interface IndexExpr extends Node {
 /**
  * Example: `arr[0..2]`
  */
-export interface SliceExpr extends Node {
+export interface SliceExpr extends BaseExpression {
   kind: "SliceExpr";
   object: Expression;
   start: Expression;
@@ -241,7 +247,7 @@ export interface SliceExpr extends Node {
 /**
  * Example: `value is Some<I32>`
  */
-export interface IsExpr extends Node {
+export interface IsExpr extends BaseExpression {
   kind: "IsExpr";
   expression: Expression;
   type: TypeNode;
