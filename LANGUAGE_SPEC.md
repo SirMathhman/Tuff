@@ -28,9 +28,18 @@ Fixed-width types for predictable behavior across JS and LLVM targets:
 
 ### 2.2 Arrays
 
-- **Type**: `Array<T>`.
-- **Literal**: `[1, 2, 3]`.
-- **Access**: `arr[0]`.
+- **Type**: `[Type; Initialized; Length]`.
+  - `Type`: The type of elements.
+  - `Initialized`: The number of elements currently initialized.
+  - `Length`: The total capacity of the array.
+- **Initialization Rule**: Elements must be initialized sequentially. Accessing or setting `arr[i]` is only valid if all elements from `0` to `i-1` are already initialized. This prevents uninitialized access and ensures iterators only encounter valid data.
+- **Literal**: `[1, 2, 3]` produces a type of `[I32; 3; 3]`.
+- **Example**:
+  ```rust
+  let mut x: [I32; 0; 3];
+  x[0] = 100; // Valid, type becomes [I32; 1; 3]
+  x[2] = 300; // Error: x[1] has not been set yet
+  ```
 
 ### 2.3 NativeString
 
