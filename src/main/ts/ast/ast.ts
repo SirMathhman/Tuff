@@ -12,7 +12,6 @@ export type Statement =
   | StructDecl
   | ImplDecl
   | TypeAliasDecl
-  | ExternDecl
   | YieldStmt
   | ExpressionStmt;
 
@@ -62,14 +61,17 @@ export interface LetDecl extends Node {
 
 /**
  * Example: `fn add(a: I32, b: I32): I32 => a + b;`
+ * Example: `extern fn native_func(a: I32): Void;`
  */
 export interface FnDecl extends Node {
   kind: "FnDecl";
   isPublic: boolean;
+  isExtern: boolean;
+  isIntrinsic: boolean;
   name: string;
   params: Param[];
   returnType?: TypeNode;
-  body: Expression; // Can be a BlockExpr or a simple Expression
+  body?: Expression; // Can be a BlockExpr or a simple Expression. Optional if isExtern is true.
 }
 
 export interface Param {
@@ -103,23 +105,15 @@ export interface ImplDecl extends Node {
 
 /**
  * Example: `type Name = TypeA | TypeB;`
+ * Example: `extern intrinsic type NativeString;`
  */
 export interface TypeAliasDecl extends Node {
   kind: "TypeAliasDecl";
   isPublic: boolean;
-  name: string;
-  type: TypeNode;
-}
-
-/**
- * Example: `extern intrinsic type NativeString;`
- */
-export interface ExternDecl extends Node {
-  kind: "ExternDecl";
+  isExtern: boolean;
   isIntrinsic: boolean;
   name: string;
-  typeKind: "type" | "fn";
-  type?: TypeNode; // For functions
+  type?: TypeNode; // Optional if isExtern is true.
 }
 
 /**
@@ -308,7 +302,6 @@ export interface AstVisitor<R> {
   visitStructDecl(node: StructDecl): R;
   visitImplDecl(node: ImplDecl): R;
   visitTypeAliasDecl(node: TypeAliasDecl): R;
-  visitExternDecl(node: ExternDecl): R;
   visitYieldStmt(node: YieldStmt): R;
   visitExpressionStmt(node: ExpressionStmt): R;
 
