@@ -47,8 +47,6 @@ Fixed-width types for predictable behavior across JS and LLVM targets:
 - **Booleans**: `true`, `false`.
 - **Numbers**:
   - Decimal: `123`, `1_000_000`.
-  - Hex: `0xFF`.
-  - Binary: `0b1010`.
   - Float: `3.14`.
 
 ### 2.6 Operators
