@@ -36,6 +36,14 @@ export type TypeNode =
   | UnionType
   | NamedType;
 
+export type ModifierKind = "out" | "mut" | "extern" | "intrinsic";
+
+export interface Modifier extends Node {
+  kind: "Modifier";
+  modifier: ModifierKind;
+  token: Token;
+}
+
 // --- Statements ---
 
 /**
@@ -52,8 +60,7 @@ export interface ImportDecl extends Node {
  */
 export interface LetDecl extends Node {
   kind: "LetDecl";
-  isPublic: boolean;
-  isMutable: boolean;
+  modifiers: Modifier[];
   name: string;
   type?: TypeNode;
   initializer: Expression;
@@ -65,9 +72,7 @@ export interface LetDecl extends Node {
  */
 export interface FnDecl extends Node {
   kind: "FnDecl";
-  isPublic: boolean;
-  isExtern: boolean;
-  isIntrinsic: boolean;
+  modifiers: Modifier[];
   name: string;
   params: Param[];
   returnType?: TypeNode;
@@ -84,7 +89,7 @@ export interface Param {
  */
 export interface StructDecl extends Node {
   kind: "StructDecl";
-  isPublic: boolean;
+  modifiers: Modifier[];
   name: string;
   fields: Field[];
 }
@@ -109,9 +114,7 @@ export interface ImplDecl extends Node {
  */
 export interface TypeAliasDecl extends Node {
   kind: "TypeAliasDecl";
-  isPublic: boolean;
-  isExtern: boolean;
-  isIntrinsic: boolean;
+  modifiers: Modifier[];
   name: string;
   type?: TypeNode; // Optional if isExtern is true.
 }
@@ -270,7 +273,7 @@ export interface ArrayType extends Node {
 export interface SliceType extends Node {
   kind: "SliceType";
   elementType: TypeNode;
-  isMutable: boolean;
+  modifiers: Modifier[];
 }
 
 /**
@@ -296,6 +299,7 @@ export interface Program extends Node {
 
 export interface AstVisitor<R> {
   visitProgram(node: Program): R;
+  visitModifier(node: Modifier): R;
   visitImportDecl(node: ImportDecl): R;
   visitLetDecl(node: LetDecl): R;
   visitFnDecl(node: FnDecl): R;
