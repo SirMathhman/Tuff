@@ -15,32 +15,26 @@ export type Statement =
   | YieldStmt
   | ExpressionStmt;
 
-export type Expression =
-  | LiteralExpr
-  | BinaryExpr
-  | UnaryExpr
-  | BlockExpr
-  | IfExpr
-  | WhileExpr
-  | CallExpr
-  | AccessExpr
-  | IndexExpr
-  | SliceExpr
-  | IsExpr
-  | IdentifierExpr;
-
-export type ValueCategory = "LValue" | "RValue" | "XValue";
-
-export interface BaseExpression extends Node {
-  category: ValueCategory;
-}
-
 export type TypeNode =
   | PrimitiveType
   | ArrayType
   | SliceType
   | UnionType
   | NamedType;
+
+export interface LValue extends Node {
+  readonly _lvalue: unique symbol;
+}
+
+export interface RValue extends Node {
+  readonly _rvalue: unique symbol;
+}
+
+export interface XValue extends LValue, RValue {
+  readonly _xvalue: unique symbol;
+}
+
+export type Expression = LValue | RValue;
 
 export type ModifierKind = "out" | "mut" | "extern" | "intrinsic";
 
@@ -146,7 +140,7 @@ export interface ExpressionStmt extends Node {
 /**
  * Example: `123`, `"hello"`, `true`
  */
-export interface LiteralExpr extends BaseExpression {
+export interface LiteralExpr extends RValue {
   kind: "LiteralExpr";
   value: any;
   token: Token;
@@ -155,7 +149,7 @@ export interface LiteralExpr extends BaseExpression {
 /**
  * Example: `myVar`
  */
-export interface IdentifierExpr extends BaseExpression {
+export interface IdentifierExpr extends XValue {
   kind: "IdentifierExpr";
   name: string;
   token: Token;
@@ -164,7 +158,7 @@ export interface IdentifierExpr extends BaseExpression {
 /**
  * Example: `a + b`
  */
-export interface BinaryExpr extends BaseExpression {
+export interface BinaryExpr extends RValue {
   kind: "BinaryExpr";
   left: Expression;
   operator: Token;
@@ -174,7 +168,7 @@ export interface BinaryExpr extends BaseExpression {
 /**
  * Example: `-x`, `!y`
  */
-export interface UnaryExpr extends BaseExpression {
+export interface UnaryExpr extends RValue {
   kind: "UnaryExpr";
   operator: Token;
   right: Expression;
@@ -183,7 +177,7 @@ export interface UnaryExpr extends BaseExpression {
 /**
  * Example: `{ yield 1; }`
  */
-export interface BlockExpr extends BaseExpression {
+export interface BlockExpr extends RValue {
   kind: "BlockExpr";
   statements: Statement[];
 }
@@ -191,7 +185,7 @@ export interface BlockExpr extends BaseExpression {
 /**
  * Example: `if (cond) { ... } else { ... }`
  */
-export interface IfExpr extends BaseExpression {
+export interface IfExpr extends RValue {
   kind: "IfExpr";
   condition: Expression;
   thenBranch: BlockExpr;
@@ -201,7 +195,7 @@ export interface IfExpr extends BaseExpression {
 /**
  * Example: `while (cond) { ... }`
  */
-export interface WhileExpr extends BaseExpression {
+export interface WhileExpr extends RValue {
   kind: "WhileExpr";
   condition: Expression;
   body: BlockExpr;
@@ -210,7 +204,7 @@ export interface WhileExpr extends BaseExpression {
 /**
  * Example: `func(arg1, arg2)`
  */
-export interface CallExpr extends BaseExpression {
+export interface CallExpr extends RValue {
   kind: "CallExpr";
   callee: Expression;
   args: Expression[];
@@ -219,7 +213,7 @@ export interface CallExpr extends BaseExpression {
 /**
  * Example: `obj.member`
  */
-export interface AccessExpr extends BaseExpression {
+export interface AccessExpr extends XValue {
   kind: "AccessExpr";
   object: Expression;
   member: string;
@@ -228,7 +222,7 @@ export interface AccessExpr extends BaseExpression {
 /**
  * Example: `arr[0]`
  */
-export interface IndexExpr extends BaseExpression {
+export interface IndexExpr extends XValue {
   kind: "IndexExpr";
   object: Expression;
   index: Expression;
@@ -237,7 +231,7 @@ export interface IndexExpr extends BaseExpression {
 /**
  * Example: `arr[0..2]`
  */
-export interface SliceExpr extends BaseExpression {
+export interface SliceExpr extends RValue {
   kind: "SliceExpr";
   object: Expression;
   start: Expression;
@@ -247,7 +241,7 @@ export interface SliceExpr extends BaseExpression {
 /**
  * Example: `value is Some<I32>`
  */
-export interface IsExpr extends BaseExpression {
+export interface IsExpr extends RValue {
   kind: "IsExpr";
   expression: Expression;
   type: TypeNode;
