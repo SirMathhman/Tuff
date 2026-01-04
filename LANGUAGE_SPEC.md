@@ -67,12 +67,7 @@ Fixed-width types for predictable behavior across JS and LLVM targets:
   - Example: `out let myConst = 100;`
   - Note: There are no `private`, `protected`, or `pub` keywords.
 
-### 3.2 Type Casting
-
-- **Syntax**: `as` keyword.
-- **Example**: `let x = 10 as I64;`.
-
-### 3.3 Memory Model
+### 3.2 Memory Model
 
 - **Stage 0**: Managed references (JS-style).
 - **Stage 2+**: Ownership and borrowing (Rust-style). _Note: Pointers and explicit borrowing are excluded from the Stage 0 bootstrap to reduce complexity._
