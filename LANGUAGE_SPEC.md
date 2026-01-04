@@ -22,6 +22,7 @@ Fixed-width types for predictable behavior across JS and LLVM targets:
 - **Integers**: `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32`, `U64`, `ISize`, `USize`.
 - **Floats**: `F32`, `F64`.
 - **Boolean**: `Bool`.
+- **Void**: `Void` (Type for empty blocks or functions that return nothing).
 
 ### 2.2 Arrays
 
@@ -129,22 +130,30 @@ fn main(): I32 => {
 In Tuff, blocks `{ ... }` are expressions. The right-hand side of the `=>` operator in a function definition is always an expression.
 
 - **Yielding**: The `yield` keyword explicitly returns a value from a block.
-- **Implicit Yield**: If the last statement in a block is an expression, it is implicitly yielded, making the `yield` keyword optional.
+- **Implicit Yield**: If the last statement in a block is an expression, it is implicitly yielded. A semicolon is **not** required for the last expression to be yielded.
+- **Void Blocks**: Empty blocks `{}` or blocks that do not yield a value (e.g., only contain statements like assignments) have the type `Void`. Standalone blocks are allowed but are not considered expressions in that context.
 
 Example:
+
 ```rust
 let a = 100;
 let b = 200;
 
 // Explicit yield in a block expression
-let z1 = { 
-    yield a + b; 
+let z1 = {
+    yield a + b;
 };
 
-// Implicit yield (redundant yield removed)
-let z2 = { 
-    a + b 
+// Implicit yield (no semicolon required for the yielded expression)
+let z2 = {
+    a + b
 };
+
+// Standalone block (Void type, not an expression)
+let mut x = 100;
+{
+    x = 200;
+}
 ```
 
 This is why `fn add(a: I32, b: I32): I32 => { a + b }` is valid; the block itself is the expression on the RHS of `=>`.
