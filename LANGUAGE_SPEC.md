@@ -9,6 +9,9 @@ This document outlines the syntax, type system, and core features of the Tuff pr
   - **Types**: `PascalCase` (e.g., `I32`, `MyStruct`).
   - **Identifiers**: `camelCase` (e.g., `myVariable`, `calculateValue`).
 - **Expressions**: Most constructs (blocks, `if` statements) are expressions that return values.
+- **Comments**:
+  - Single-line: `// comment`
+  - Multi-line: `/* comment */`
 
 ## 2. Type System
 
@@ -20,7 +23,13 @@ Fixed-width types for predictable behavior across JS and LLVM targets:
 - **Floats**: `F32`, `F64`.
 - **Boolean**: `Bool`.
 
-### 2.2 NativeString
+### 2.2 Arrays
+
+- **Type**: `Array<T>`.
+- **Literal**: `[1, 2, 3]`.
+- **Access**: `arr[0]`.
+
+### 2.3 NativeString
 
 - **Type**: `NativeString`.
 - **Declaration**: `extern intrinsic type NativeString;`.
@@ -32,15 +41,22 @@ Fixed-width types for predictable behavior across JS and LLVM targets:
 - **Type Inspection**: The `is` keyword checks the variant of a union at runtime.
   - Example: `if (value is Some<I32>) { ... }`.
 
-### 2.4 Option Type
+### 2.5 Literals & Constants
 
-Implemented as a union of structs:
+- **Booleans**: `true`, `false`.
+- **Numbers**:
+  - Decimal: `123`, `1_000_000`.
+  - Hex: `0xFF`.
+  - Binary: `0b1010`.
+  - Float: `3.14`.
 
-```rust
-struct Some<T> { value: T }
-struct None<T> {}
-type Option<T> = Some<T> | None<T>;
-```
+### 2.6 Operators
+
+- **Arithmetic**: `+`, `-`, `*`, `/`, `%`.
+- **Comparison**: `==`, `!=`, `<`, `>`, `<=`, `>=`.
+- **Logical**: `&&`, `||`, `!`.
+- **Bitwise**: `&`, `|`, `^`, `<<`, `>>`.
+- **Assignment**: `=`, `+=`, `-=`, `*=`, `/=`.
 
 ## 3. Variables & Memory
 
@@ -48,8 +64,14 @@ type Option<T> = Some<T> | None<T>;
 
 - **Immutable**: `let x: I32 = 10;`.
 - **Mutable**: `let mut y: I32 = 20;`.
+- **Visibility**: `pub let z: I32 = 30;` (Publicly accessible).
 
-### 3.2 Memory Model
+### 3.2 Type Casting
+
+- **Syntax**: `as` keyword.
+- **Example**: `let x = 10 as I64;`.
+
+### 3.3 Memory Model
 
 - **Stage 0**: Managed references (JS-style).
 - **Stage 2+**: Ownership and borrowing (Rust-style). _Note: Pointers and explicit borrowing are excluded from the Stage 0 bootstrap to reduce complexity._
@@ -75,6 +97,29 @@ type Option<T> = Some<T> | None<T>;
       yield 0;
   };
   ```
+
+- **While Loop**:
+  ```rust
+  while (condition) {
+      // ...
+  }
+  ```
+
+- **For Loop**:
+  ```rust
+  for (item in collection) {
+      // ...
+  }
+  ```
+
+### 4.3 Entry Point
+
+The compiler looks for a `main` function as the entry point:
+```rust
+fn main(): I32 => {
+    yield 0;
+}
+```
 
 ## 5. Data Structures
 
