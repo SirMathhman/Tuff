@@ -65,7 +65,9 @@ Fixed-width types for predictable behavior across JS and LLVM targets:
 
 - **Immutable**: `let x: I32 = 10;`.
 - **Mutable**: `let mut y: I32 = 20;`.
-- **Visibility**: `pub let z: I32 = 30;` (Publicly accessible).
+- **Visibility**: Values are private by default. The `out` keyword is used to make a declaration public.
+  - Example: `out let myConst = 100;`
+  - Note: There are no `private`, `protected`, or `pub` keywords.
 
 ### 3.2 Type Casting
 
