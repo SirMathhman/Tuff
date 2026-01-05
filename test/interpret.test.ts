@@ -101,9 +101,15 @@ describe("interpret - functions & errors", () => {
   });
 
   it("supports top-level function definitions and calls without yield", () => {
-    const src =
+    const src1 =
       "fn addTwo(first : I32, second : I32) : I32 => { first + second } addTwo(100, 200)";
-    expect(interpret(src)).toBe(300);
+    const src2 =
+      "fn addTwo(first : I32, second : I32) : I32 => first + second; addTwo(100, 200)";
+    const src3 =
+      "fn addTwo(first : I32, second : I32) => first + second; addTwo(100, 200)";
+    expect(interpret(src1)).toBe(300);
+    expect(interpret(src2)).toBe(300);
+    expect(interpret(src3)).toBe(300);
   });
 
   it("errors for unsupported let type top-level", () => {

@@ -371,6 +371,25 @@ function parseParamList(paramsStr: string): {
   return { ok: okParams, params, paramTypes };
 }
 
+function extractFunctionBody(
+  s: string,
+  bodyStart: number
+): { body: string; rest: string } | undefined {
+  let p = bodyStart;
+  while (p < s.length && s[p] === " ") p++;
+  if (s[p] === "{") {
+    const end = findClosingBrace(s, p);
+    if (end === -1) return undefined;
+    const bodyInner = s.slice(p + 1, end);
+    const rest = s.slice(end + 1).trim();
+    return { body: bodyInner, rest };
+  }
+  const end = findSemicolonAtDepthZero(s, p);
+  if (end === -1) return undefined;
+  const bodyInner = s.slice(p, end).trim();
+  return { body: bodyInner, rest: s.slice(end + 1).trim() };
+}
+
 function parseTopLevelFunctions(expr: string): {
   topFuncs: Map<string, FuncDef>;
   rest: string;
@@ -379,31 +398,32 @@ function parseTopLevelFunctions(expr: string): {
   let s = expr.trim(),
     header: RegExpMatchArray | undefined =
       s.match(
-        /^fn\s+([a-zA-Z_$][\w$]*)\s*\(\s*([^)]*)\s*\)\s*:\s*([A-Za-z_$][\w$]*)\s*=>\s*/
+        /^fn\s+([a-zA-Z_$][\w$]*)\s*\(\s*([^)]*)\s*\)\s*(?::\s*([A-Za-z_$][\w$]*))?\s*=>\s*/
       ) || undefined;
   while (header) {
-    const name = header[1];
-    const paramsStr = header[2];
+    const h = header!;
+    const name = h[1];
+    const paramsStr = h[2];
 
     const parsed = parseParamList(paramsStr);
     if (!parsed.ok) {
       header = undefined;
     } else {
-      const bodyStart = header[0].length;
-      const end = findClosingBrace(s, bodyStart);
-      if (end === -1) {
+      const bodyStart = h[0].length;
+      const extracted = extractFunctionBody(s, bodyStart);
+      if (!extracted) {
         header = undefined;
       } else {
-        const bodyInner = s.slice(bodyStart + 1, end);
         topFuncs.set(name, {
           params: parsed.params,
           paramTypes: parsed.paramTypes,
-          body: bodyInner,
+          body: extracted.body,
         });
-        s = s.slice(end + 1).trim();
+
+        s = extracted.rest;
         header =
           s.match(
-            /^fn\s+([a-zA-Z_$][\w$]*)\s*\(\s*([^)]*)\s*\)\s*:\s*([A-Za-z_$][\w$]*)\s*=>\s*/
+            /^fn\s+([a-zA-Z_$][\w$]*)\s*\(\s*([^)]*)\s*\)\s*(?::\s*([A-Za-z_$][\w$]*))?\s*=>\s*/
           ) || undefined;
       }
     }
