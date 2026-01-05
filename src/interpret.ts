@@ -12,15 +12,15 @@ function replaceParens(expr: string): string {
 
 function replaceIfExpressions(expr: string): string {
   let processing = true;
-  while (expr.indexOf('if') !== -1 && processing) {
-    const idx = expr.indexOf('if');
+  while (expr.indexOf("if") !== -1 && processing) {
+    const idx = expr.indexOf("if");
     let pos = idx + 2;
-    while (pos < expr.length && expr[pos] === ' ') pos++;
+    while (pos < expr.length && expr[pos] === " ") pos++;
 
-    let condStr = '';
+    let condStr = "";
     let malformed = false;
-    if (expr[pos] === '(') {
-      const end = expr.indexOf(')', pos + 1);
+    if (expr[pos] === "(") {
+      const end = expr.indexOf(")", pos + 1);
       if (end === -1) {
         malformed = true;
       } else {
@@ -37,22 +37,21 @@ function replaceIfExpressions(expr: string): string {
       }
     }
 
-    const elseIdx = expr.indexOf('else', pos);
+    const elseIdx = expr.indexOf("else", pos);
     if (elseIdx === -1) malformed = true;
 
-    if (malformed) {
+    if (!malformed) {
+      const thenStr = expr.slice(pos, elseIdx).trim();
+      const elseStr = expr.slice(elseIdx + 4).trim();
+
+      const condVal = interpret(condStr);
+      const chosenStr = condVal && !Number.isNaN(condVal) ? thenStr : elseStr;
+      const chosenVal = interpret(chosenStr);
+
+      expr = expr.slice(0, idx) + String(chosenVal);
+    } else {
       processing = false;
-      continue;
     }
-
-    const thenStr = expr.slice(pos, elseIdx).trim();
-    const elseStr = expr.slice(elseIdx + 4).trim();
-
-    const condVal = interpret(condStr);
-    const chosenStr = condVal && !Number.isNaN(condVal) ? thenStr : elseStr;
-    const chosenVal = interpret(chosenStr);
-
-    expr = expr.slice(0, idx) + String(chosenVal);
   }
   return expr;
 }

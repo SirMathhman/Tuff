@@ -16,11 +16,20 @@ module.exports = {
     semi: ["error", "always"],
     // Limit cyclomatic complexity per function
     complexity: ["error", { max: 15 }],
-    // Disallow 'break' statements for simpler control flow
+    // Disallow 'break' and 'continue' statements for simpler control flow
     "no-restricted-syntax": [
       "error",
-      { selector: "BreakStatement", message: "Avoid 'break' statements; prefer clearer control flow (early returns, flags)." }
-    ]
+      {
+        selector: "BreakStatement",
+        message:
+          "Avoid 'break' statements; prefer clearer control flow (early returns, flags).",
+      },
+      {
+        selector: "ContinueStatement",
+        message:
+          "Avoid 'continue' statements; prefer clearer control flow (early returns, flags).",
+      },
+    ],
   },
   overrides: [
     {
@@ -32,8 +41,17 @@ module.exports = {
         complexity: ["error", { max: 15 }],
         "no-restricted-syntax": [
           "error",
-          { selector: "BreakStatement", message: "Avoid 'break' statements; prefer clearer control flow (early returns, flags)." }
-        ]
+          {
+            selector: "BreakStatement",
+            message:
+              "Avoid 'break' statements; prefer clearer control flow (early returns, flags).",
+          },
+          {
+            selector: "ContinueStatement",
+            message:
+              "Avoid 'continue' statements; prefer clearer control flow (early returns, flags).",
+          },
+        ],
       },
     },
   ],
