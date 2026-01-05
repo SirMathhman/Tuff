@@ -1,3 +1,0 @@
-out struct Location { line: I32, column: I32, offset: I32 }
-
-out struct Span { start: Location, end: Location, sourceFile: NativeString }

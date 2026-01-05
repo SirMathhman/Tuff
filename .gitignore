@@ -1,5 +1,1 @@
-node_modules/
-dist/
-out/
-package-lock.json
-.jscpd/
+node_modules
