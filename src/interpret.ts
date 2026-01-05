@@ -254,14 +254,21 @@ function handleStructDeclaration(input: string): Result<number, string> | undefi
   if (!structMatch) return undefined;
   const fieldsStr = structMatch[2].trim();
   if (fieldsStr.length === 0) return ok(0);
-  // Extract field names and detect duplicates
-  const fieldRe = /([A-Za-z_][A-Za-z0-9_]*)\s*:/g;
+
+  const items = fieldsStr.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
   const seen: Record<string, number> = {};
-  for (const m of fieldsStr.matchAll(fieldRe)) {
-    const fn = m[1];
-    seen[fn] = (seen[fn] || 0) + 1;
-    if (seen[fn] > 1) return err("Duplicate field");
+  const allowedTypes = new Set(["i32", "i64", "bool"]);
+
+  for (const it of items) {
+    const m = it.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z_][A-Za-z0-9_]*)$/);
+    if (!m) return err("Invalid field declaration");
+    const fname = m[1];
+    const ftype = m[2];
+    seen[fname] = (seen[fname] || 0) + 1;
+    if (seen[fname] > 1) return err("Duplicate field");
+    if (!allowedTypes.has(ftype.toLowerCase())) return err(`Unknown type: ${ftype}`);
   }
+
   return ok(0);
 }
 

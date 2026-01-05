@@ -94,12 +94,7 @@ describe("interpret - blocks", () => {
   });
 });
 
-describe("interpret - bindings", () => {
-  it("evaluates let bindings with typed annotation and body", () => {
-    const result = interpret("let x : I32 = (3 + 10 * 5); x");
-    expect(result).toEqual({ ok: true, value: 53 });
-  });
-
+describe("interpret - structs", () => {
   it("empty struct declaration evaluates to 0", () => {
     const result = interpret("struct Empty {}");
     expect(result).toEqual({ ok: true, value: 0 });
@@ -120,9 +115,21 @@ describe("interpret - bindings", () => {
     expect(result.ok).toBe(false);
   });
 
+  it("errors on unknown field types", () => {
+    const result = interpret("struct Empty { x : UndefinedType }");
+    expect(result.ok).toBe(false);
+  });
+
   it("errors on duplicate struct declarations", () => {
     const result = interpret("struct Empty {} struct Empty {}");
     expect(result).toEqual({ ok: false, error: "Duplicate binding" });
+  });
+});
+
+describe("interpret - bindings", () => {
+  it("evaluates let bindings with typed annotation and body", () => {
+    const result = interpret("let x : I32 = (3 + 10 * 5); x");
+    expect(result).toEqual({ ok: true, value: 53 });
   });
 
   it("evaluates let bindings without type annotation", () => {
