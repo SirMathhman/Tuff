@@ -11,7 +11,7 @@
     "coverage": "c8 --reporter=json-summary --reporter=text npm run test:ci",
     "coverage:check": "node scripts/check-coverage.js",
     "test:coverage": "npm run coverage && npm run coverage:check",
-    "jscpd": "jscpd src",
+    "jscpd": "jscpd src --exitCode 1",
     "lint": "eslint src test --ext .ts,.js"
   },
   "repository": {
