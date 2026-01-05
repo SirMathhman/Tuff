@@ -116,12 +116,13 @@ function evalLetBinding(input: string): Result<number, string> {
   const initExpr = afterEq.slice(0, semIdx).trim();
   const body = afterEq.slice(semIdx + 1).trim();
 
-  const m = beforeEq.match(
-    /^([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*([A-Za-z_][A-Za-z0-9_]*))?$/
+  const mm = beforeEq.match(
+    /^(?:mut\s+)?([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*([A-Za-z_][A-Za-z0-9_]*))?$/
   );
-  if (!m) return err("Invalid let binding");
-  const name = m[1];
-  const type = m[2];
+  if (!mm) return err("Invalid let binding");
+  const isMut = Boolean(beforeEq.startsWith("mut "));
+  const name = mm[1];
+  const type = mm[2];
 
   const initRes = interpret(initExpr);
   if (!initRes.ok) return err(initRes.error);
@@ -135,12 +136,75 @@ function evalLetBinding(input: string): Result<number, string> {
   const dupRe = new RegExp("\\blet\\s+" + name + "\\b");
   if (dupRe.test(body)) return err("Duplicate binding");
 
-  // Substitute the variable name in body with its numeric value (word boundary)
-  const replaced = body.replace(
-    new RegExp("\\b" + name + "\\b", "g"),
-    String(value)
-  );
-  return interpret(replaced);
+  if (!isMut) {
+    // Non-mutable: substitute the variable name in body with its numeric value (word boundary)
+    const replaced = body.replace(
+      new RegExp("\\b" + name + "\\b", "g"),
+      String(value)
+    );
+    return interpret(replaced);
+  }
+
+  // Mutable binding: delegate to helper to process assignments sequentially
+  return evalMutableBinding(name, value, body);
+}
+
+function splitAtTopLevelSemicolons(input: string): string[] {
+  const out: string[] = [];
+  let depthParen = 0;
+  let depthBrace = 0;
+  let start = 0;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (ch === "(") depthParen++;
+    else if (ch === ")") depthParen--;
+    else if (ch === "{") depthBrace++;
+    else if (ch === "}") depthBrace--;
+    if (ch === ";" && depthParen === 0 && depthBrace === 0) {
+      out.push(input.slice(start, i));
+      start = i + 1;
+    }
+  }
+  out.push(input.slice(start));
+  return out;
+}
+
+function replaceVars(input: string, vars: Record<string, number>): string {
+  let out = input;
+  for (const k of Object.keys(vars)) {
+    out = out.replace(new RegExp("\\b" + k + "\\b", "g"), String(vars[k]));
+  }
+  return out;
+}
+
+function evalMutableBinding(name: string, initialValue: number, body: string): Result<number, string> {
+  const stmts = splitAtTopLevelSemicolons(body);
+  const vars: Record<string, number> = {};
+  vars[name] = initialValue;
+  let lastExpr: string | undefined;
+  for (const stmt of stmts) {
+    const s = stmt.trim();
+    if (s.length === 0) {
+      // skip empty
+    } else {
+      const assignMatch = s.match(new RegExp('^' + name + '\\s*=\\s*(.+)$'));
+      if (assignMatch) {
+        const rhs = assignMatch[1].trim();
+        const rhsReplaced = replaceVars(rhs, vars);
+        const r = interpret(rhsReplaced);
+        if (!r.ok) return err(r.error);
+        vars[name] = r.value;
+      } else {
+        lastExpr = s;
+      }
+    }
+  }
+
+  if (!lastExpr) return ok(0);
+  const finalExpr = replaceVars(lastExpr, vars);
+  const finalRes = interpret(finalExpr);
+  if (!finalRes.ok) return err(finalRes.error);
+  return finalRes;
 }
 
 function findSemicolonAtDepthZero(input: string, startIdx: number): number {

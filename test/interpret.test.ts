@@ -82,6 +82,11 @@ describe("interpret - blocks", () => {
     const result = interpret("{ let x = 100; } let x = 200; x");
     expect(result).toEqual({ ok: true, value: 200 });
   });
+
+  it("supports mutable reassignment", () => {
+    const result = interpret("let mut x = 0; x = 200; x");
+    expect(result).toEqual({ ok: true, value: 200 });
+  });
 });
 
 describe("interpret - bindings", () => {
