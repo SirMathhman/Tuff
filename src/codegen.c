@@ -227,6 +227,8 @@ static TypeRef *apply_subst(TypeSubst *subst, TypeRef *type)
 		{
 			TypeRef *result = type_ref_clone(s->arg_type);
 			result->pointer_level += type->pointer_level;
+			// Also apply subst to remaining type args in the list
+			result->next = apply_subst(subst, type->next);
 			return result;
 		}
 		s = s->next;
@@ -236,6 +238,7 @@ static TypeRef *apply_subst(TypeSubst *subst, TypeRef *type)
 	TypeRef *result = type_ref_new(type->name);
 	result->pointer_level = type->pointer_level;
 	result->type_args = apply_subst(subst, type->type_args);
+	result->next = apply_subst(subst, type->next);
 	return result;
 }
 
@@ -261,6 +264,7 @@ static void emit_type(CodeGen *gen, TypeRef *type, TypeSubst *subst)
 		{
 			Instantiation *inst = add_instantiation(&gen->struct_instantiations,
 																							resolved->name, resolved->type_args);
+			emit(gen, "struct ");
 			emit(gen, inst->mangled_name);
 		}
 		else
@@ -270,6 +274,12 @@ static void emit_type(CodeGen *gen, TypeRef *type, TypeSubst *subst)
 	}
 	else
 	{
+		// Check if this is a user-defined struct type
+		ASTNode *struct_def = find_struct_def(gen->program, resolved->name);
+		if (struct_def)
+		{
+			emit(gen, "struct ");
+		}
 		emit(gen, resolved->name);
 	}
 

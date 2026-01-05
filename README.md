@@ -5,11 +5,12 @@ SafeC is a superset of C that adds type parameters (generics) to structs and fun
 ## Features
 
 - **Generic Structs**: Define structs with type parameters
+
   ```c
   struct Wrapper<T> {
       T value;
   };
-  
+
   struct Pair<K, V> {
       K key;
       V value;
@@ -17,11 +18,12 @@ SafeC is a superset of C that adds type parameters (generics) to structs and fun
   ```
 
 - **Generic Functions**: Define functions with type parameters
+
   ```c
   T identity<T>(T x) {
       return x;
   }
-  
+
   void swap<T>(T* a, T* b) {
       T temp = *a;
       *a = *b;
@@ -75,6 +77,7 @@ SafeC is a superset of C that adds type parameters (generics) to structs and fun
 ## Example
 
 **Input (example.safec):**
+
 ```c
 struct Wrapper<T> {
     T value;
@@ -93,17 +96,18 @@ void swap<T>(T* a, T* b) {
 int main() {
     Wrapper<int> w;
     w.value = 42;
-    
+
     int x = identity<int>(10);
-    
+
     int a = 1, b = 2;
     swap<int>(&a, &b);
-    
+
     return 0;
 }
 ```
 
 **Output (generated C):**
+
 ```c
 struct Wrapper_int {
     int value;
@@ -122,12 +126,12 @@ void swap_int(int* a, int* b) {
 int main() {
     Wrapper_int w;
     w.value = 42;
-    
+
     int x = identity_int(10);
-    
+
     int a = 1, b = 2;
     swap_int(&a, &b);
-    
+
     return 0;
 }
 ```
@@ -136,7 +140,7 @@ int main() {
 
 1. **Lexing**: Tokenizes the input source code
 2. **Parsing**: Builds an Abstract Syntax Tree (AST)
-3. **Code Generation**: 
+3. **Code Generation**:
    - Collects all generic type/function usages
    - Generates monomorphized (specialized) versions
    - Outputs valid C code
@@ -167,6 +171,7 @@ int main() {
 ## Roadmap
 
 Future features to consider:
+
 - Type inference for generic function calls
 - Constraints on type parameters
 - Generic type aliases
