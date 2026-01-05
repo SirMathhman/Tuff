@@ -24,6 +24,10 @@ module.exports = [
           selector: "Literal[value=null]",
           message: "Do not use `null`; use `undefined` instead.",
         },
+        {
+          selector: "BreakStatement",
+          message: "Avoid using `break`. Use loop conditions or flags instead.",
+        },
       ],
       // Disallow assignments in conditional statements (if/while/for)
       "no-cond-assign": ["error", "always"],

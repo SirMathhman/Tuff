@@ -166,19 +166,28 @@ function popWhileHigherPrecedence(
   precedence: (op: string) => number,
   isLeftAssoc: (op: string) => boolean
 ) {
-  while (true) {
+  let running = true;
+  while (running) {
     const topOp = peekOpValue(ops);
-    if (!topOp) break;
-    const p1 = precedence(currentOpValue);
-    const p2 = precedence(topOp);
-    if (
-      (isLeftAssoc(currentOpValue) && p1 <= p2) ||
-      (!isLeftAssoc(currentOpValue) && p1 < p2)
-    ) {
-      const popped = popOp(ops);
-      if (!popped) break;
-      output.push(popped);
-    } else break;
+    if (!topOp) {
+      running = false;
+    } else {
+      const p1 = precedence(currentOpValue);
+      const p2 = precedence(topOp);
+      if (
+        (isLeftAssoc(currentOpValue) && p1 <= p2) ||
+        (!isLeftAssoc(currentOpValue) && p1 < p2)
+      ) {
+        const popped = popOp(ops);
+        if (!popped) {
+          running = false;
+        } else {
+          output.push(popped);
+        }
+      } else {
+        running = false;
+      }
+    }
   }
 }
 
@@ -187,18 +196,18 @@ function popUntilLeftParen(
   output: (Token | { type: "op"; value: "u-" })[]
 ): Result<void, string> {
   let found = false;
-  while (ops.length > 0) {
+  let error: string | undefined;
+  while (ops.length > 0 && !found && !error) {
     const top = ops.pop()!;
     if (top.type === "paren" && top.value === "(") {
       found = true;
-      break;
-    }
-    if (top.type === "op") {
+    } else if (top.type === "op") {
       output.push(top);
     } else {
-      return err("Mismatched parentheses in expression");
+      error = "Mismatched parentheses in expression";
     }
   }
+  if (error) return err(error);
   if (!found) return err("Mismatched parentheses in expression");
   return ok(undefined);
 }
