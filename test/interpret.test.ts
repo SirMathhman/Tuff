@@ -5,4 +5,9 @@ describe("interpret", () => {
     const result = interpret("1");
     expect(result).toEqual({ ok: true, value: 1 });
   });
+
+  it("evaluates simple addition", () => {
+    const result = interpret("1 + 2");
+    expect(result).toEqual({ ok: true, value: 3 });
+  });
 });
