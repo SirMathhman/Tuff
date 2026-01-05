@@ -110,6 +110,11 @@ describe("interpret - bindings", () => {
     expect(result).toEqual({ ok: true, value: 0 });
   });
 
+  it("struct declaration with multiple fields evaluates to 0", () => {
+    const result = interpret("struct Empty { x : I32, y : I32 }");
+    expect(result).toEqual({ ok: true, value: 0 });
+  });
+
   it("errors on duplicate struct declarations", () => {
     const result = interpret("struct Empty {} struct Empty {}");
     expect(result).toEqual({ ok: false, error: "Duplicate binding" });
