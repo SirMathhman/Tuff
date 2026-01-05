@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "test": "jest",
-    "lint": "eslint \"**/*.{ts,js}\" --quiet && npx jscpd --min-lines 5 --reporters console",
+    "lint": "eslint \"**/*.{ts,js}\" --quiet && npx jscpd --min-lines 5 --mode weak --reporters console",
     "prepare": "husky install"
   },
   "devDependencies": {

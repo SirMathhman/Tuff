@@ -1,6 +1,7 @@
 {
   "minLines": 5,
   "threshold": 0.1,
+  "mode": "weak",
   "ignore": ["node_modules/**", "dist/**", "coverage/**"],
   "reporters": ["console", "json"],
   "output": "jscpd-report.json"
