@@ -52,6 +52,12 @@ npm run build
 node dist/index.js <path-to-file.tuff>
 ```
 
+Stage 0 currently performs lexing + parsing and exits with a process exit code determined by the last top-level expression:
+
+- If the last top-level statement is a numeric literal expression, the process exits with that value (normalized to 0–255).
+- Otherwise, the process exits with 0.
+- If any diagnostics are reported as errors, the process exits with 1.
+
 ## License
 
 MIT

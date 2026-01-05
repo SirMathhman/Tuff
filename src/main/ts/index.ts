@@ -1,5 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
+import { DiagnosticReporter } from "./common/diagnostics.js";
+import { compileSource, computeExitCode } from "./compiler/compile.js";
 
 function main() {
   const args = process.argv.slice(2);
@@ -19,7 +21,17 @@ function main() {
   }
 
   console.log(`Compiling ${absolutePath}...`);
-  // TODO: Initialize Stage 0 Pipeline
+  const source = fs.readFileSync(absolutePath, "utf8");
+
+  const reporter = new DiagnosticReporter();
+  const program = compileSource(source, absolutePath, reporter);
+
+  if (reporter.hasErrors()) {
+    process.exit(1);
+  }
+
+  const exitCode = computeExitCode(program);
+  process.exit(exitCode);
 }
 
 main();
