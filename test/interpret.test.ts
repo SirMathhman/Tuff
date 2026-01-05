@@ -67,6 +67,11 @@ describe("interpret - blocks", () => {
     const result = interpret("let x = 100; { x }");
     expect(result).toEqual({ ok: true, value: 100 });
   });
+
+  it("error when referencing block-local binding outside block", () => {
+    const result = interpret("{ let x = 100; } x");
+    expect(result.ok).toBe(false);
+  });
 });
 
 describe("interpret - bindings", () => {
