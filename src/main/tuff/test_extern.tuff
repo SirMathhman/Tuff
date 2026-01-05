@@ -1,0 +1,4 @@
+extern fn getNativeValue(): I32;
+
+let x = getNativeValue();
+x

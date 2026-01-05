@@ -1,0 +1,4 @@
+from ts_provider use { get };
+
+let result = get();
+result

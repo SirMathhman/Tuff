@@ -25,7 +25,7 @@ describe("TypeScript emitter", () => {
 
     const ts = emitTypeScript(program);
 
-    expect(ts).toContain('import { println } from "System/IO";');
+    expect(ts).toContain('import { println } from "./System/IO.js";');
     expect(ts).toContain("export const x: number = 10;");
     expect(ts).toContain("function add(a: number, b: number): number");
     expect(ts).toContain("export interface Point {");

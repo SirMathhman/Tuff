@@ -74,7 +74,7 @@ function emitStatement(stmt: Statement): string {
 function emitImportDecl(decl: ImportDecl): string {
   const modulePath = decl.namespace.join("/");
   const members = decl.members.join(", ");
-  return `import { ${members} } from "${modulePath}";`;
+  return `import { ${members} } from "./${modulePath}.js";`;
 }
 
 function emitLetDecl(decl: LetDecl): string {
@@ -91,19 +91,13 @@ function emitLetDecl(decl: LetDecl): string {
 
 function emitFnDecl(decl: FnDecl): string {
   const isExported = hasModifier(decl.modifiers, "out");
+  const isExtern = hasModifier(decl.modifiers, "extern");
   const exp = isExported ? "export " : "";
-
-  const params = decl.params
-    .map((p) => `${p.name}: ${emitType(p.type)}`)
-    .join(", ");
-  const returnType = decl.returnType ? `: ${emitType(decl.returnType)}` : "";
+  const decl_ = isExtern ? "declare " : "";
 
   return emitFunctionDecl({
-    exportPrefix: exp,
-    name: decl.name,
-    params,
-    returnType,
-    body: decl.body,
+    exportPrefix: `${exp}${decl_}`,
+    ...prepareFunctionParts(decl),
   });
 }
 
@@ -134,19 +128,25 @@ function emitImplDecl(decl: ImplDecl): string {
 }
 
 function emitImplMethod(decl: FnDecl): string {
+  // Inside a namespace we always export the method.
+  return emitFunctionDecl({
+    exportPrefix: "export ",
+    ...prepareFunctionParts(decl),
+  });
+}
+
+function prepareFunctionParts(decl: FnDecl) {
   const params = decl.params
     .map((p) => `${escapeIdentifier(p.name)}: ${emitType(p.type)}`)
     .join(", ");
   const returnType = decl.returnType ? `: ${emitType(decl.returnType)}` : "";
 
-  // Inside a namespace we always export the method.
-  return emitFunctionDecl({
-    exportPrefix: "export ",
+  return {
     name: decl.name,
     params,
     returnType,
     body: decl.body,
-  });
+  };
 }
 
 function emitTypeAliasDecl(decl: TypeAliasDecl): string {
