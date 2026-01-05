@@ -31,6 +31,12 @@ describe("interpret", () => {
     if (r.ok) expect(r.value).toBe(25);
   });
 
+  test("evaluates parentheses and multiplication", () => {
+    const r = interpret("(10 + 5) * 3");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(45);
+  });
+
   test("evaluates multiplication and parentheses", () => {
     const r = interpret("2*(3+4)/2");
     expect(r.ok).toBe(true);
