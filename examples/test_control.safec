@@ -1,0 +1,6 @@
+int test(int x) {
+    if (x > 0) { return 1; }
+    while (x < 0) { x++; }
+    for (i = 0; i < 10; i++) { }
+    return 0;
+}

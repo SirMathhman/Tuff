@@ -1,0 +1,18 @@
+# Build output
+build/
+
+# Object files
+*.o
+*.obj
+
+# Executables
+*.exe
+
+# Debug files
+*.ilk
+*.pdb
+
+# Editor files
+.vscode/
+*.swp
+*~

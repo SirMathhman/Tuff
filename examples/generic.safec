@@ -1,0 +1,62 @@
+/* SafeC Example - Type Parameters */
+
+// Generic wrapper struct
+struct Wrapper<T> {
+    T value;
+};
+
+// Generic pair struct with two type parameters
+struct Pair<K, V> {
+    K key;
+    V value;
+};
+
+// Generic identity function
+T identity<T>(T x) {
+    return x;
+}
+
+// Generic swap function
+void swap<T>(T* a, T* b) {
+    T temp = *a;
+    *a = *b;
+    *b = temp;
+}
+
+// Regular (non-generic) struct
+struct Point {
+    int x;
+    int y;
+};
+
+// Main function using generics
+int main() {
+    // Instantiate Wrapper with int
+    Wrapper<int> intWrapper;
+    intWrapper.value = 42;
+    
+    // Instantiate Wrapper with char*
+    Wrapper<char*> strWrapper;
+    strWrapper.value = "hello";
+    
+    // Instantiate Pair with int and char*
+    Pair<int, char*> entry;
+    entry.key = 1;
+    entry.value = "one";
+    
+    // Use generic identity function
+    int x = identity<int>(10);
+    char* s = identity<char*>("world");
+    
+    // Use generic swap
+    int a = 1;
+    int b = 2;
+    swap<int>(&a, &b);
+    
+    // Regular struct usage
+    struct Point p;
+    p.x = 10;
+    p.y = 20;
+    
+    return 0;
+}

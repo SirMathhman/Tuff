@@ -1,0 +1,9 @@
+int test<T>(T* a, int b) {
+    return b;
+}
+
+int main() {
+    int x = 1;
+    int z = test<int>(&x, 5);
+    return z;
+}
