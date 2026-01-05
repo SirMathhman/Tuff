@@ -133,7 +133,11 @@ function substituteVarsInString(s: string, vars: Map<string, number>): string {
 function parseLetBindings(
   input: string,
   options: { inBraces?: boolean } = {}
-): { vars: Map<string, number>; body: string; error?: "rhsNaN" | "duplicate" | "badType" } {
+): {
+  vars: Map<string, number>;
+  body: string;
+  error?: "rhsNaN" | "duplicate" | "badType";
+} {
   let text = input;
   const vars = new Map<string, number>();
   let done = false;
@@ -163,7 +167,7 @@ function parseLetBindings(
         done = true;
       } else {
         const type = header[2];
-        if (type !== "I32") {
+        if (type !== "I32" && type !== "Bool") {
           return { vars: new Map(), body: text, error: "badType" };
         }
         if (vars.has(name)) {
@@ -172,10 +176,13 @@ function parseLetBindings(
 
         const rhs = text.slice(header[0].length, endPos).trim();
         const substituted = substituteVarsInString(rhs, vars);
-        const rhsVal = interpret(substituted);
+        let rhsVal = interpret(substituted);
         if (Number.isNaN(rhsVal)) {
           return { vars: new Map(), body: text, error: "rhsNaN" };
         }
+
+        // Coerce bools to 0/1
+        if (type === "Bool") rhsVal = rhsVal ? 1 : 0;
 
         vars.set(name, rhsVal);
         text = text.slice(endPos + 1).trim();
