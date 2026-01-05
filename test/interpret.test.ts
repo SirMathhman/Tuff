@@ -6,6 +6,11 @@ describe("interpret - arithmetic", () => {
     expect(result).toEqual({ ok: true, value: 1 });
   });
 
+  it("returns 0 for empty input", () => {
+    const result = interpret("");
+    expect(result).toEqual({ ok: true, value: 0 });
+  });
+
   it("evaluates simple addition", () => {
     const result = interpret("1 + 2");
     expect(result).toEqual({ ok: true, value: 3 });
