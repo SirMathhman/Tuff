@@ -1,9 +1,7 @@
 import { interpret } from "../src/interpret";
 
 describe("interpret", () => {
-  test("throws not implemented error", () => {
-    expect(() => interpret("any input")).toThrowError(
-      "interpret not implemented"
-    );
+  test("parses integer string to number", () => {
+    expect(interpret("100")).toBe(100);
   });
 });
