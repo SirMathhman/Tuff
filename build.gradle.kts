@@ -14,6 +14,15 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+
+    testLogging {
+        // Show basic events and use short exception format to reduce noisy stack traces
+        events("passed", "skipped", "failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.SHORT
+        showExceptions = true
+        showCauses = true
+        showStackTraces = false
+    }
 }
 
 ktlint {
