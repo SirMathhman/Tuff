@@ -56,8 +56,6 @@ function tokenize(expr: string): Result<Token[], string> {
     .join("");
   if (cleaned !== reconstructed) return err("Invalid character in expression");
   return ok(tokens);
-  if (cleaned !== reconstructed) return err("Invalid character in expression");
-  return ok(tokens);
 }
 
 function markUnaryMinus(
