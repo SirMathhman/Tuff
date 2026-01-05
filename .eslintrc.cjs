@@ -14,6 +14,8 @@ module.exports = {
   rules: {
     // Require semicolons for JS files
     semi: ["error", "always"],
+    // Limit cyclomatic complexity per function
+    complexity: ["error", { max: 15 }],
   },
   overrides: [
     {
