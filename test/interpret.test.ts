@@ -87,6 +87,13 @@ describe("interpret - booleans & conditionals", () => {
     expectOkValue("(if (false) false else true) || true", 1);
   });
 
+  test("let binding with Bool and variable usage", () => {
+    const r = interpret("let x : Bool = if (true) true else false; x");
+    if (!r.ok) console.log("DEBUG LET BINDING:", r);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(1);
+  });
+
   test("division by zero returns error", () => {
     expectErrorContains("10 / (5 - 5)", /division/);
   });

@@ -1,13 +1,22 @@
 import { Result, ok, err } from "./result";
 
-export function interpret(input: string): Result<number, string> {
+export function interpret(
+  input: string,
+  env: Record<string, number> = {}
+): Result<number, string> {
   const trimmed = input.trim();
+
+  // let binding: let name [: Type] = init; expr
+  if (trimmed.startsWith("let ")) {
+    return evalLetBinding(trimmed, env);
+  }
 
   // Conditional expression: if (cond) thenExpr else elseExpr
   if (trimmed.startsWith("if")) {
     const parsed = parseIfElse(trimmed);
     if (parsed) {
-      const condRes = interpret(parsed.cond);
+      // IF DEBUG logs disabled
+      const condRes = interpret(parsed.cond, env);
       if (!condRes.ok) return err(condRes.error);
       const condTruthy = condRes.value !== 0;
       let branch: string;
@@ -16,13 +25,13 @@ export function interpret(input: string): Result<number, string> {
       } else {
         branch = parsed.elseExpr;
       }
-      return interpret(branch);
+      return interpret(branch, env);
     }
   }
 
   // Preprocess parenthesized inline if-expressions (e.g., (if ...))
   let processed = trimmed;
-  const replaced = replaceParenthesizedIfs(processed);
+  const replaced = replaceParenthesizedIfs(processed, env);
   if (!replaced.ok) return err(replaced.error);
   processed = replaced.value;
 
@@ -36,9 +45,9 @@ export function interpret(input: string): Result<number, string> {
     return ok(n);
   }
 
-  // Allow expressions consisting of digits, operators, dots, parentheses, whitespace, logical operators, and booleans
-  if (/^[0-9+\-*/().\s|&a-z]+$/i.test(processed)) {
-    const r = evaluateExpression(processed);
+  // Allow expressions consisting of digits, operators, dots, parentheses, whitespace, logical operators, booleans and variables
+  if (/^[0-9+\-*/().\s|&a-z_]+$/i.test(processed)) {
+    const r = evaluateExpression(processed, env);
     if (r.ok) return ok(r.value);
     return err(r.error);
   }
@@ -58,48 +67,49 @@ function tokenToString(t: Token): string {
   return t.value;
 }
 
-function tokenize(expr: string): Result<Token[], string> {
+function tokenFromString(s: string, env: Record<string, number> = {}): Result<Token, string> {
+  const lower = s.toLowerCase();
+  if (lower === "true" || lower === "false") {
+    if (lower === "true") return ok({ type: "num", value: 1 });
+    return ok({ type: "num", value: 0 });
+  }
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(s)) {
+    if (env && Object.prototype.hasOwnProperty.call(env, s)) {
+      return ok({ type: "num", value: env[s] });
+    }
+    return err(`Unknown variable: ${s}`);
+  }
+  if (s === "(" || s === ")") return ok({ type: "paren", value: s });
+  const operators = new Set(["+", "-", "*", "/", "||", "&&"]);
+  if (operators.has(s)) return ok({ type: "op", value: s });
+  const num = Number(s);
+  if (!Number.isFinite(num)) return err("Invalid number in expression");
+  return ok({ type: "num", value: num });
+}
+
+function tokenize(
+  expr: string,
+  env: Record<string, number> = {}
+): Result<Token[], string> {
   // Regex-based tokenizer using matchAll to simplify control flow
   const tokens: Token[] = [];
-  const tokenRe = /(?:\d+\.\d*|\d*\.\d+|\d+|true|false|\|\||&&)|[()+\-*/]/gi;
+  const tokenRe =
+    /(?:\d+\.\d*|\d*\.\d+|\d+|true|false|\|\||&&|[A-Za-z_][A-Za-z0-9_]*)|[()+\-*/]/gi;
 
   for (const m of expr.matchAll(tokenRe)) {
-    const s = m[0];
-    const lower = s.toLowerCase();
-    if (lower === "true" || lower === "false") {
-      let val = 0;
-      if (lower === "true") {
-        val = 1;
-      } else {
-        val = 0;
-      }
-      tokens.push({ type: "num", value: val });
-      continue;
-    }
-    if (
-      s === "+" ||
-      s === "-" ||
-      s === "*" ||
-      s === "/" ||
-      s === "||" ||
-      s === "&&"
-    ) {
-      tokens.push({ type: "op", value: s });
-      continue;
-    }
-    if (s === "(" || s === ")") {
-      tokens.push({ type: "paren", value: s });
-      continue;
-    }
-    // number
-    const num = Number(s);
-    if (!Number.isFinite(num)) return err("Invalid number in expression");
-    tokens.push({ type: "num", value: num });
+    const tk = tokenFromString(m[0], env);
+    if (!tk.ok) return err(tk.error);
+    tokens.push(tk.value);
   }
 
   // Sanity check: ensure entire input consists of valid tokens
   const cleaned = expr.replace(/\s+/g, "");
-  const normalized = cleaned.replace(/true/gi, "1").replace(/false/gi, "0");
+  let normalized = cleaned.replace(/true/gi, "1").replace(/false/gi, "0");
+  // Replace variable names with their numeric values for comparison
+  for (const k of Object.keys(env)) {
+    const v = String(env[k]);
+    normalized = normalized.replace(new RegExp("\\b" + k + "\\b", "g"), v);
+  }
   const reconstructed = tokens.map((t) => tokenToString(t)).join("");
   if (normalized !== reconstructed) {
     return err("Invalid character in expression");
@@ -305,8 +315,11 @@ function applyBinaryOp(
   return err("Unknown operator");
 }
 
-function evaluateExpression(expr: string): Result<number, string> {
-  const tokensRes = tokenize(expr);
+function evaluateExpression(
+  expr: string,
+  env: Record<string, number> = {}
+): Result<number, string> {
+  const tokensRes = tokenize(expr, env);
   if (!tokensRes.ok) return err(tokensRes.error);
   const rpnRes = toRPN(tokensRes.value);
   if (!rpnRes.ok) return err(rpnRes.error);
@@ -345,6 +358,14 @@ function findElseAtDepthZero(input: string, startIdx: number): number {
   );
 }
 
+function findSemicolonAtDepthZero(input: string, startIdx: number): number {
+  return scanWithDepth(
+    input,
+    startIdx,
+    (input, i, depth) => depth === 0 && input[i] === ";"
+  );
+}
+
 function parseIfElse(
   input: string
 ): { cond: string; thenExpr: string; elseExpr: string } | undefined {
@@ -367,8 +388,43 @@ function parseIfElse(
   if (thenExpr.length === 0 || elseExpr.length === 0) return undefined;
   return { cond, thenExpr, elseExpr };
 }
-
-function replaceParenthesizedIfs(input: string): Result<string, string> {
+function evalLetBinding(
+  input: string,
+  env: Record<string, number> = {}
+): Result<number, string> {
+  // input starts with 'let '
+  const rest = input.slice(4).trim();
+  const eqIdx = rest.indexOf("=");
+  if (eqIdx === -1) return err("Invalid let binding");
+  const beforeEq = rest.slice(0, eqIdx).trim();
+  const afterEq = rest.slice(eqIdx + 1);
+  const m = beforeEq.match(
+    /^([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*([A-Za-z_][A-Za-z0-9_]*))?$/
+  );
+  if (!m) return err("Invalid let binding");
+  const name = m[1];
+  const type = m[2];
+  const semIdx = findSemicolonAtDepthZero(afterEq, 0);
+  if (semIdx === -1) return err("Invalid let binding; missing ';'");
+  const initExpr = afterEq.slice(0, semIdx).trim();
+  const body = afterEq.slice(semIdx + 1).trim();
+  const initRes = interpret(initExpr, env);
+  if (!initRes.ok) return err(initRes.error);
+  let value = initRes.value;
+  if (type && type.toLowerCase() === "bool") {
+    if (value !== 0) {
+      value = 1;
+    } else {
+      value = 0;
+    }
+  }
+  const newEnv = { ...env, [name]: value };
+  return interpret(body, newEnv);
+}
+function replaceParenthesizedIfs(
+  input: string,
+  env: Record<string, number> = {}
+): Result<string, string> {
   let out = input;
   let idx = out.indexOf("(if");
   while (idx !== -1) {
@@ -377,7 +433,7 @@ function replaceParenthesizedIfs(input: string): Result<string, string> {
     const inner = out.slice(idx + 1, matchIdx).trim(); // starts with 'if'
     const parsed = parseIfElse(inner);
     if (!parsed) return err("Invalid inline if");
-    const condRes = interpret(parsed.cond);
+    const condRes = interpret(parsed.cond, env);
     if (!condRes.ok) return err(condRes.error);
     const condTruthy = condRes.value !== 0;
     let branchExpr: string;
@@ -386,7 +442,7 @@ function replaceParenthesizedIfs(input: string): Result<string, string> {
     } else {
       branchExpr = parsed.elseExpr;
     }
-    const branchRes = interpret(branchExpr);
+    const branchRes = interpret(branchExpr, env);
     if (!branchRes.ok) return err(branchRes.error);
     out = out.slice(0, idx) + String(branchRes.value) + out.slice(matchIdx + 1);
     idx = out.indexOf("(if");
