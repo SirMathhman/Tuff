@@ -46,6 +46,11 @@ describe("interpret", () => {
     expect(result).toEqual({ ok: true, value: 53 });
   });
 
+  it("evaluates let binding with no body to 0", () => {
+    const result = interpret("let x : I32 = (3 + 10 * 5);");
+    expect(result).toEqual({ ok: true, value: 0 });
+  });
+
   it("returns an error for division by zero", () => {
     const result = interpret("1 / 0");
     expect(result).toEqual({ ok: false, error: "Division by zero" });
