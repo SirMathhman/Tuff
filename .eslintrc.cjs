@@ -16,6 +16,11 @@ module.exports = {
     semi: ["error", "always"],
     // Limit cyclomatic complexity per function
     complexity: ["error", { max: 15 }],
+    // Limit function length to keep functions small and readable
+    "max-lines-per-function": [
+      "error",
+      { max: 50, skipBlankLines: true, skipComments: true },
+    ],
     // Disallow 'break' and 'continue' statements for simpler control flow
     "no-restricted-syntax": [
       "error",
@@ -39,6 +44,11 @@ module.exports = {
         semi: ["error", "always"],
         // Also enforce complexity for TS files
         complexity: ["error", { max: 15 }],
+        // Limit function length in TypeScript files as well
+        "max-lines-per-function": [
+          "error",
+          { max: 50, skipBlankLines: true, skipComments: true },
+        ],
         "no-restricted-syntax": [
           "error",
           {

@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { interpret } from "../src/interpret";
 
-describe("interpret", () => {
+describe("interpret - basic expressions", () => {
   it("parses numeric strings", () => {
     expect(interpret("100")).toBe(100);
   });
@@ -46,7 +46,9 @@ describe("interpret", () => {
   it("supports braces with if inside parentheses", () => {
     expect(interpret("(3 + { if (true) 10 else 2 }) * (4 + 1)")).toBe(65);
   });
+});
 
+describe("interpret - lets, bools, and functions", () => {
   it("supports let bindings inside braces", () => {
     expect(
       interpret("(3 + { let x : I32 = if (true) 10 else 2; x }) * (4 + 1)")
@@ -89,7 +91,9 @@ describe("interpret", () => {
   it("supports Bool type inside braces", () => {
     expect(interpret("(3 + { let x : Bool = true; x }) * (4 + 1)")).toBe(20);
   });
+});
 
+describe("interpret - functions & errors", () => {
   it("supports top-level function definitions and calls", () => {
     const src =
       "fn addTwo(first : I32, second : I32) : I32 => { yield first + second; } addTwo(100, 200)";

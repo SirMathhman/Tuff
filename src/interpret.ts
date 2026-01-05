@@ -195,6 +195,47 @@ function splitArgs(argsStr: string): string[] {
   return args;
 }
 
+function handleLetDeclaration(
+  text: string,
+  header: RegExpMatchArray,
+  vars: Map<string, number>,
+  options: { inBraces?: boolean }
+): {
+  updatedText: string;
+  vars: Map<string, number>;
+  error?: "rhsNaN" | "duplicate" | "badType";
+} {
+  const name = header[1];
+  let endPos = -1;
+
+  if (options.inBraces) {
+    const semiIdx = text.indexOf(";", header[0].length);
+    if (semiIdx !== -1) endPos = semiIdx;
+  } else {
+    endPos = findSemicolonAtDepthZero(text, header[0].length);
+  }
+
+  if (endPos === -1) return { updatedText: text, vars };
+
+  const type = header[2];
+  if (type !== "I32" && type !== "Bool") {
+    return { updatedText: text, vars, error: "badType" };
+  }
+
+  if (vars.has(name)) return { updatedText: text, vars, error: "duplicate" };
+
+  const rhs = text.slice(header[0].length, endPos).trim();
+  const substituted = substituteVarsInString(rhs, vars);
+  const rhsValRaw = interpret(substituted);
+  if (Number.isNaN(rhsValRaw))
+    return { updatedText: text, vars, error: "rhsNaN" };
+
+  const rhsVal = type === "Bool" ? (rhsValRaw ? 1 : 0) : rhsValRaw;
+  vars.set(name, rhsVal);
+  const updatedText = text.slice(endPos + 1).trim();
+  return { updatedText, vars };
+}
+
 function parseLetBindings(
   input: string,
   options: { inBraces?: boolean } = {}
@@ -205,53 +246,21 @@ function parseLetBindings(
 } {
   let text = input;
   const vars = new Map<string, number>();
-  let done = false;
 
-  while (!done) {
-    const header = text.match(
-      /^let\s+([a-zA-Z_$][\w$]*)\s*:\s*([A-Za-z_$][\w$]*)\s*=\s*/
-    );
-    if (!header) {
-      done = true;
+  let header: RegExpMatchArray | undefined =
+    text.match(/^let\s+([a-zA-Z_$][\w$]*)\s*:\s*([A-Za-z_$][\w$]*)\s*=\s*/) ||
+    undefined;
+  while (header) {
+    const res = handleLetDeclaration(text, header, vars, options);
+    if (res.error) return { vars: new Map(), body: text, error: res.error };
+    if (res.updatedText === text) {
+      header = undefined;
     } else {
-      const name = header[1];
-      let endPos = -1;
-
-      if (options.inBraces) {
-        // In braces: let declaration ends at semicolon
-        const semiIdx = text.indexOf(";", header[0].length);
-        if (semiIdx !== -1) {
-          endPos = semiIdx;
-        }
-      } else {
-        // At top level: use depth tracking
-        endPos = findSemicolonAtDepthZero(text, header[0].length);
-      }
-
-      if (endPos === -1) {
-        done = true;
-      } else {
-        const type = header[2];
-        if (type !== "I32" && type !== "Bool") {
-          return { vars: new Map(), body: text, error: "badType" };
-        }
-        if (vars.has(name)) {
-          return { vars: new Map(), body: text, error: "duplicate" };
-        }
-
-        const rhs = text.slice(header[0].length, endPos).trim();
-        const substituted = substituteVarsInString(rhs, vars);
-        let rhsVal = interpret(substituted);
-        if (Number.isNaN(rhsVal)) {
-          return { vars: new Map(), body: text, error: "rhsNaN" };
-        }
-
-        // Coerce bools to 0/1
-        if (type === "Bool") rhsVal = rhsVal ? 1 : 0;
-
-        vars.set(name, rhsVal);
-        text = text.slice(endPos + 1).trim();
-      }
+      text = res.updatedText;
+      header =
+        text.match(
+          /^let\s+([a-zA-Z_$][\w$]*)\s*:\s*([A-Za-z_$][\w$]*)\s*=\s*/
+        ) || undefined;
     }
   }
 
@@ -271,62 +280,65 @@ function processTopLevelLets(expr: string): number | undefined {
   return undefined;
 }
 
+function evaluateFunctionCallAt(
+  expr: string,
+  i: number,
+  fns: Map<string, FuncDef> | undefined
+): { expr: string; newIndex: number } | undefined {
+  const id = readIdentifierAt(expr, i);
+  if (!id) return undefined;
+  const name = id.name;
+  let k = id.end;
+  while (k < expr.length && expr[k] === " ") k++;
+  if (expr[k] !== "(") return undefined;
+  const end = findMatchingParen(expr, k);
+  if (end === -1) return undefined;
+
+  const argsStr = expr.slice(k + 1, end);
+  const fn = fns?.get(name);
+  if (!fn) return undefined;
+
+  const args = splitArgs(argsStr);
+
+  // evaluate args
+  const vals: number[] = [];
+  for (const a of args) {
+    const replaced = replaceFunctionCalls(a);
+    const v = interpret(replaced);
+    if (Number.isNaN(v)) vals.push(NaN);
+    else vals.push(v);
+  }
+
+  if (vals.length !== fn.params.length) return undefined;
+
+  const paramMap = new Map<string, number>();
+  for (let idx = 0; idx < fn.params.length; idx++)
+    paramMap.set(fn.params[idx], vals[idx]);
+
+  const bodyWithParams = substituteVarsInString(fn.body, paramMap);
+
+  const yieldMatch = bodyWithParams.match(/\byield\s+([\s\S]*?)\s*;?\s*$/);
+  let callVal: number;
+  if (yieldMatch) callVal = interpret(yieldMatch[1]);
+  else {
+    const parsed = parseLetBindings(bodyWithParams, { inBraces: true });
+    if (parsed.error) callVal = NaN;
+    else {
+      const finalBody = substituteVarsInString(parsed.body, parsed.vars);
+      callVal = interpret(finalBody);
+    }
+  }
+
+  const newExpr = expr.slice(0, i) + String(callVal) + expr.slice(end + 1);
+  return { expr: newExpr, newIndex: i + String(callVal).length };
+}
+
 function replaceFunctionCalls(expr: string): string {
   if (!currentTopFuncs || currentTopFuncs.size === 0) return expr;
 
-  function tryReplaceAt(i: number): { expr: string; newIndex: number } | undefined {
-    const id = readIdentifierAt(expr, i);
-    if (!id) return undefined;
-    const name = id.name;
-    let k = id.end;
-    while (k < expr.length && expr[k] === " ") k++;
-    if (expr[k] !== "(") return undefined;
-    const end = findMatchingParen(expr, k);
-    if (end === -1) return undefined;
-
-    const argsStr = expr.slice(k + 1, end);
-    const fn = currentTopFuncs!.get(name);
-    if (!fn) return undefined;
-
-    const args = splitArgs(argsStr);
-
-    // evaluate args
-    const vals: number[] = [];
-    for (const a of args) {
-      const replaced = replaceFunctionCalls(a);
-      const v = interpret(replaced);
-      if (Number.isNaN(v)) {
-        vals.push(NaN);
-      } else vals.push(v);
-    }
-
-    if (vals.length !== fn.params.length) return undefined;
-
-    const paramMap = new Map<string, number>();
-    for (let idx = 0; idx < fn.params.length; idx++)
-      paramMap.set(fn.params[idx], vals[idx]);
-
-    const bodyWithParams = substituteVarsInString(fn.body, paramMap);
-
-    const yieldMatch = bodyWithParams.match(/\byield\s+([\s\S]*?)\s*;?\s*$/);
-    let callVal: number;
-    if (yieldMatch) callVal = interpret(yieldMatch[1]);
-    else {
-      const parsed = parseLetBindings(bodyWithParams, { inBraces: true });
-      if (parsed.error) callVal = NaN;
-      else {
-        const finalBody = substituteVarsInString(parsed.body, parsed.vars);
-        callVal = interpret(finalBody);
-      }
-    }
-
-    const newExpr = expr.slice(0, i) + String(callVal) + expr.slice(end + 1);
-    return { expr: newExpr, newIndex: i + String(callVal).length };
-  }
-
   let i = 0;
   while (i < expr.length) {
-    const result = tryReplaceAt(i);
+    const result = evaluateFunctionCallAt(expr, i, currentTopFuncs);
     if (result) {
       expr = result.expr;
       i = result.newIndex;
@@ -336,53 +348,75 @@ function replaceFunctionCalls(expr: string): string {
   return expr;
 }
 
-export function interpret(input: string): number {
-  let expr = input.trim();
+function parseParamList(paramsStr: string): {
+  ok: boolean;
+  params: string[];
+  paramTypes: string[];
+} {
+  const params: string[] = [];
+  const paramTypes: string[] = [];
+  if (paramsStr.trim().length === 0) return { ok: true, params, paramTypes };
+  const parts = paramsStr.split(",");
+  let okParams = true;
+  parts.some((p) => {
+    const m = p.trim().match(/^([A-Za-z_$][\w$]*)\s*:\s*([A-Za-z_$][\w$]*)$/);
+    if (!m) {
+      okParams = false;
+      return true;
+    }
+    params.push(m[1]);
+    paramTypes.push(m[2]);
+    return false;
+  });
+  return { ok: okParams, params, paramTypes };
+}
 
-  // Top-level function declarations: `fn name(params) : Type => { ... }` (multiple allowed)
+function parseTopLevelFunctions(expr: string): {
+  topFuncs: Map<string, FuncDef>;
+  rest: string;
+} {
   const topFuncs = new Map<string, FuncDef>();
-  let parsing = true;
-  while (parsing && expr.startsWith("fn")) {
-    const header = expr.match(
-      /^fn\s+([a-zA-Z_$][\w$]*)\s*\(\s*([^)]*)\s*\)\s*:\s*([A-Za-z_$][\w$]*)\s*=>\s*/
-    );
-    if (!header) {
-      parsing = false;
+  let s = expr.trim(),
+    header: RegExpMatchArray | undefined =
+      s.match(
+        /^fn\s+([a-zA-Z_$][\w$]*)\s*\(\s*([^)]*)\s*\)\s*:\s*([A-Za-z_$][\w$]*)\s*=>\s*/
+      ) || undefined;
+  while (header) {
+    const name = header[1];
+    const paramsStr = header[2];
+
+    const parsed = parseParamList(paramsStr);
+    if (!parsed.ok) {
+      header = undefined;
     } else {
-      const name = header[1];
-      const paramsStr = header[2];
-
-      // parse params
-      const params: string[] = [];
-      const paramTypes: string[] = [];
-      let ok = true;
-      if (paramsStr.trim().length > 0) {
-        const parts = paramsStr.split(",");
-        ok = parts.every((p) => {
-          const m = p.trim().match(/^([A-Za-z_$][\w$]*)\s*:\s*([A-Za-z_$][\w$]*)$/);
-          if (!m) return false;
-          params.push(m[1]);
-          paramTypes.push(m[2]);
-          return true;
-        });
-      }
-
-      if (!ok) {
-        parsing = false;
+      const bodyStart = header[0].length;
+      const end = findClosingBrace(s, bodyStart);
+      if (end === -1) {
+        header = undefined;
       } else {
-        const bodyStart = header[0].length;
-        // expect body starting with '{'
-        const end = findClosingBrace(expr, bodyStart);
-        if (end === -1) {
-          parsing = false;
-        } else {
-          const bodyInner = expr.slice(bodyStart + 1, end);
-          topFuncs.set(name, { params, paramTypes, body: bodyInner });
-          expr = expr.slice(end + 1).trim();
-        }
+        const bodyInner = s.slice(bodyStart + 1, end);
+        topFuncs.set(name, {
+          params: parsed.params,
+          paramTypes: parsed.paramTypes,
+          body: bodyInner,
+        });
+        s = s.slice(end + 1).trim();
+        header =
+          s.match(
+            /^fn\s+([a-zA-Z_$][\w$]*)\s*\(\s*([^)]*)\s*\)\s*:\s*([A-Za-z_$][\w$]*)\s*=>\s*/
+          ) || undefined;
       }
     }
   }
+
+  return { topFuncs, rest: s };
+}
+
+export function interpret(input: string): number {
+  let expr = input.trim();
+
+  const { topFuncs, rest } = parseTopLevelFunctions(expr);
+  expr = rest;
 
   const prevFuncs = currentTopFuncs;
   currentTopFuncs = topFuncs.size > 0 ? topFuncs : undefined;
