@@ -1,7 +1,14 @@
 import { Result, ok, err } from "./result";
 
 export function interpret(input: string): Result<number, string> {
-  const trimmed = input.trim();
+  let trimmed = input.trim();
+
+  // Reduce parentheses first (evaluate innermost parentheses recursively)
+  if (trimmed.includes("(")) {
+    const reduced = reduceParentheses(trimmed);
+    if (!reduced.ok) return err(reduced.error);
+    trimmed = reduced.value;
+  }
 
   // Direct numeric literal
   const n = Number(trimmed);
@@ -61,6 +68,23 @@ function evaluateArithmetic(expr: string): Result<number, string> {
     else acc -= n;
   }
   return ok(acc);
+}
+
+function reduceParentheses(expr: string): Result<string, string> {
+  let s = expr;
+  // Evaluate innermost parentheses repeatedly
+  while (s.includes("(")) {
+    const openIdx = s.lastIndexOf("(");
+    const closeIdx = s.indexOf(")", openIdx);
+    if (closeIdx === -1) return err("Mismatched parentheses");
+    const inner = s.slice(openIdx + 1, closeIdx).trim();
+    if (inner.length === 0) return err("Empty parentheses");
+    // Evaluate inner expression using existing arithmetic evaluator
+    const evalRes = evaluateArithmetic(inner);
+    if (!evalRes.ok) return err(evalRes.error);
+    s = s.slice(0, openIdx) + String(evalRes.value) + s.slice(closeIdx + 1);
+  }
+  return ok(s);
 }
 
 /* Complex evaluator removed to keep implementation minimal for the requested test case (simple a + b). */
