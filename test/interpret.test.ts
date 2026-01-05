@@ -19,6 +19,12 @@ describe("interpret", () => {
     if (r.ok) expect(r.value).toBe(6);
   });
 
+  test("evaluates mixed addition and subtraction", () => {
+    const r = interpret("10 - 5 + 3");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(8);
+  });
+
   test("evaluates multiplication and parentheses", () => {
     const r = interpret("2*(3+4)/2");
     expect(r.ok).toBe(true);
