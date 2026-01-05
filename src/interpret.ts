@@ -314,30 +314,35 @@ function evaluateExpression(expr: string): Result<number, string> {
   return evalRes;
 }
 
-function findMatchingParen(input: string, startIdx: number): number {
-  let depth = 0;
-  for (let i = startIdx; i < input.length; i++) {
-    const ch = input[i];
-    if (ch === "(") depth++;
-    else if (ch === ")") {
-      depth--;
-      if (depth === 0) return i;
-    }
-  }
-  return -1;
-}
-
-function findElseAtDepthZero(input: string, startIdx: number): number {
+function scanWithDepth(
+  input: string,
+  startIdx: number,
+  match: (input: string, i: number, depth: number) => boolean
+): number {
   let depth = 0;
   for (let i = startIdx; i < input.length; i++) {
     const ch = input[i];
     if (ch === "(") depth++;
     else if (ch === ")") depth--;
-    else if (depth === 0 && input.startsWith("else", i)) {
-      return i;
-    }
+    if (match(input, i, depth)) return i;
   }
   return -1;
+}
+
+function findMatchingParen(input: string, startIdx: number): number {
+  return scanWithDepth(
+    input,
+    startIdx,
+    (_input, i, depth) => _input[i] === ")" && depth === 0
+  );
+}
+
+function findElseAtDepthZero(input: string, startIdx: number): number {
+  return scanWithDepth(
+    input,
+    startIdx,
+    (input, i, depth) => depth === 0 && input.startsWith("else", i)
+  );
 }
 
 function parseIfElse(
