@@ -15,4 +15,9 @@ describe("interpret", () => {
     const result = interpret("1 + 2 + 3");
     expect(result).toEqual({ ok: true, value: 6 });
   });
+
+  it("evaluates additions and subtractions left-to-right", () => {
+    const result = interpret("10 - 5 + 3");
+    expect(result).toEqual({ ok: true, value: 8 });
+  });
 });

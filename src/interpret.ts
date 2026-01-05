@@ -9,14 +9,26 @@ export function interpret(input: string): Result<number, string> {
     return ok(n);
   }
 
-  // Simple addition and chained additions: a + b + c + ...
-  const plusChainRe = /^\s*[+-]?\d+(?:\.\d+)?(?:\s*\+\s*[+-]?\d+(?:\.\d+)?)*\s*$/;
-  if (plusChainRe.test(trimmed)) {
-    const numRe = /[+-]?\d+(?:\.\d+)?/g;
-    const nums = trimmed.match(numRe) || [];
-    const vals = nums.map(Number);
-    if (vals.some((v) => !Number.isFinite(v))) return err("Invalid number in expression");
-    return ok(vals.reduce((s, v) => s + v, 0));
+  // Simple chain of additions and subtractions: a (+|-) b (+|-) c ... evaluated left-to-right
+  const addSubChainRe = /^\s*[+-]?\d+(?:\.\d+)?(?:\s*[+\-]\s*\d+(?:\.\d+)?)*\s*$/;
+  if (addSubChainRe.test(trimmed)) {
+    const nums = trimmed.match(/\d+(?:\.\d+)?/g) || [];
+    const ops = trimmed.match(/[+\-]/g) || [];
+    if (nums.length === 0) return err("Invalid expression");
+
+    // Handle leading sign
+    let acc = Number(nums[0]);
+    const firstTrim = trimmed.trim();
+    if (firstTrim[0] === "-") acc = -acc;
+
+    for (let i = 0; i < ops.length; i++) {
+      const op = ops[i];
+      const next = Number(nums[i + 1]);
+      if (!Number.isFinite(next)) return err("Invalid number in expression");
+      if (op === "+") acc = acc + next;
+      else acc = acc - next;
+    }
+    return ok(acc);
   }
 
   return err("Err");
