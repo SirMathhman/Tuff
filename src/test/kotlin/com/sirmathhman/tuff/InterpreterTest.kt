@@ -24,5 +24,13 @@ class InterpreterTest {
         assertEquals(Result.Ok(8), interpret("10 - 5 + 3"))
         assertEquals(Result.Ok(2), interpret("10-5-3"))
     }
+
+    @Test
+    fun `interpret should support multiplication with precedence`() {
+        assertEquals(Result.Ok(53), interpret("10 * 5 + 3"))
+        assertEquals(Result.Ok(14), interpret("2 + 3 * 4"))
+        assertEquals(Result.Ok(24), interpret("2 * 3 * 4"))
+    }
 }
+
 

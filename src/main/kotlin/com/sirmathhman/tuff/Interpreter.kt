@@ -21,7 +21,8 @@ fun interpret(input: String): Result<Int, String> {
 }
 
 private fun tokenize(input: String): List<String> {
-    val tokenRegex = Regex("\\d+|[+-]")
+    // Support numbers and operators + - * /
+    val tokenRegex = Regex("""\d+|[+\-*/]""")
     return tokenRegex.findAll(input).map { it.value }.toList()
 }
 
@@ -77,7 +78,8 @@ private fun parseFirstNumber(tokens: List<String>, index: Int): Result<Pair<Int,
 private fun parseOperatorAndOperand(tokens: List<String>, index: Int): Result<Triple<String, Int, Int>, String> {
     val i = index
     val op = tokens[i]
-    if (op != OP_PLUS && op != OP_MINUS) return Result.Err("Unexpected token: $op")
+    // accept +, -, * and /
+    if (op != OP_PLUS && op != OP_MINUS && op != "*" && op != "/") return Result.Err("Unexpected token: $op")
     if (i + 1 >= tokens.size) return Result.Err("Missing operand after operator at position ${i + 1}")
 
     return if (tokens[i + 1] == OP_PLUS || tokens[i + 1] == OP_MINUS) {
@@ -97,13 +99,33 @@ private fun parseOperatorAndOperand(tokens: List<String>, index: Int): Result<Tr
 }
 
 private fun evaluate(numbers: List<Int>, ops: List<String>): Int {
-    var result = numbers[0]
-    for (k in ops.indices) {
-        val op = ops[k]
-        val n = numbers[k + 1]
+    // First handle * and / with higher precedence
+    val nums = ArrayList<Int>()
+    val newOps = ArrayList<String>()
+
+    nums.add(numbers[0])
+    for (i in ops.indices) {
+        val op = ops[i]
+        val next = numbers[i + 1]
+        if (op == "*") {
+            nums[nums.lastIndex] = nums[nums.lastIndex] * next
+        } else if (op == "/") {
+            nums[nums.lastIndex] = nums[nums.lastIndex] / next
+        } else {
+            newOps.add(op)
+            nums.add(next)
+        }
+    }
+
+    // Now evaluate + and - left-to-right
+    var result = nums[0]
+    for (k in newOps.indices) {
+        val op = newOps[k]
+        val n = nums[k + 1]
         when (op) {
             "+" -> result += n
             "-" -> result -= n
+            else -> {} // should not reach here
         }
     }
     return result
