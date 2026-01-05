@@ -27,13 +27,12 @@ type Token =
   | { type: "paren"; value: string };
 
 function tokenize(expr: string): Result<Token[], string> {
-  // Regex-based tokenizer: reduces branching and complexity
+  // Regex-based tokenizer using matchAll to simplify control flow
   const tokens: Token[] = [];
-  const tokenRe = /\s+|(?:\d+\.\d*|\d*\.\d+|\d+)|[()+\-*/]/g;
-  let m: RegExpExecArray | undefined;
-  while ((m = tokenRe.exec(expr) || undefined)) {
+  const tokenRe = /(?:\d+\.\d*|\d*\.\d+|\d+)|[()+\-*/]/g;
+
+  for (const m of expr.matchAll(tokenRe)) {
     const s = m[0];
-    if (/^\s+$/.test(s)) continue;
     if (s === "+" || s === "-" || s === "*" || s === "/") {
       tokens.push({ type: "op", value: s });
       continue;
@@ -42,16 +41,21 @@ function tokenize(expr: string): Result<Token[], string> {
       tokens.push({ type: "paren", value: s });
       continue;
     }
+    // number
     const num = Number(s);
     if (!Number.isFinite(num)) return err("Invalid number in expression");
     tokens.push({ type: "num", value: num });
   }
+
   // Sanity check: ensure entire input consists of valid tokens
   const cleaned = expr.replace(/\s+/g, "");
-  let reconstructed = "";
-  for (const tk of tokens)
-    reconstructed +=
-      tk.type === "num" ? String((tk as any).value) : (tk as any).value;
+  const reconstructed = tokens
+    .map((t) =>
+      t.type === "num" ? String((t as any).value) : (t as any).value
+    )
+    .join("");
+  if (cleaned !== reconstructed) return err("Invalid character in expression");
+  return ok(tokens);
   if (cleaned !== reconstructed) return err("Invalid character in expression");
   return ok(tokens);
 }
