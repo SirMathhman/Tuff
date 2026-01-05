@@ -2,9 +2,24 @@ function replaceBraces(expr: string): string {
   const braceRegex = /\{[^{}]*\}/;
   while (braceRegex.test(expr)) {
     expr = expr.replace(braceRegex, (match) => {
-      const inner = match.slice(1, -1);
+      const inner = match.slice(1, -1).trim();
+
+      // Minimal let-binding support: match `let <ident> : I32 = <rhs>; <body>`
+      const letMatch = inner.match(/^let\s+([a-zA-Z_$][\w$]*)\s*:\s*I32\s*=\s*([\s\S]+?)\s*;\s*([\s\S]+)$/);
+      if (letMatch) {
+        const name = letMatch[1];
+        const rhs = letMatch[2].trim();
+        const body = letMatch[3].trim();
+        const rhsVal = interpret(rhs);
+        if (Number.isNaN(rhsVal)) return 'NaN';
+        // Replace occurrences of the variable name in body with the numeric value (simple token replacement)
+        const bodyReplaced = body.replace(new RegExp('\\b' + name + '\\b', 'g'), String(rhsVal));
+        const val = interpret(bodyReplaced);
+        return Number.isNaN(val) ? 'NaN' : String(val);
+      }
+
       const val = interpret(inner);
-      return Number.isNaN(val) ? 'NaN' : String(val);
+      return Number.isNaN(val) ? "NaN" : String(val);
     });
   }
   return expr;
@@ -16,7 +31,7 @@ function replaceParens(expr: string): string {
     expr = expr.replace(parenRegex, (match) => {
       const inner = match.slice(1, -1);
       const val = interpret(inner);
-      return Number.isNaN(val) ? 'NaN' : String(val);
+      return Number.isNaN(val) ? "NaN" : String(val);
     });
   }
   return expr;

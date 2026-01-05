@@ -47,6 +47,10 @@ describe("interpret", () => {
     expect(interpret("(3 + { if (true) 10 else 2 }) * (4 + 1)")).toBe(65);
   });
 
+  it("supports let bindings inside braces", () => {
+    expect(interpret("(3 + { let x : I32 = if (true) 10 else 2; x }) * (4 + 1)")).toBe(65);
+  });
+
   it("returns NaN for malformed leading operator", () => {
     expect(interpret("+ 1")).toBeNaN();
   });
