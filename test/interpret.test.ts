@@ -53,6 +53,11 @@ describe("interpret - control & bindings", () => {
     expect(result).toEqual({ ok: true, value: 53 });
   });
 
+  it("supports referencing previous bindings", () => {
+    const result = interpret("let x = (3 + 10 * 5); let y = x; y");
+    expect(result).toEqual({ ok: true, value: 53 });
+  });
+
   it("errors on duplicate bindings in the same scope", () => {
     const result = interpret("let x = (3 + 10 * 5); let x = 0;");
     expect(result).toEqual({ ok: false, error: "Duplicate binding" });
