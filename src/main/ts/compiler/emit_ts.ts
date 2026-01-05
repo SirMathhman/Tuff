@@ -11,6 +11,7 @@ import {
   FnDecl,
   IdentifierExpr,
   IfExpr,
+  ImplDecl,
   ImportDecl,
   IndexExpr,
   LetDecl,
@@ -55,8 +56,7 @@ function emitStatement(stmt: Statement): string {
     case "StructDecl":
       return emitStructDecl(stmt as StructDecl);
     case "ImplDecl":
-      // Stage-0 minimal: ignore impl blocks for now.
-      return "";
+      return emitImplDecl(stmt as ImplDecl);
     case "TypeAliasDecl":
       return emitTypeAliasDecl(stmt as TypeAliasDecl);
     case "YieldStmt":
@@ -82,7 +82,7 @@ function emitLetDecl(decl: LetDecl): string {
   const exp = isExported ? "export " : "";
 
   const type = decl.type ? `: ${emitType(decl.type)}` : "";
-  return `${exp}${kw} ${decl.name}${type} = ${emitExpression(
+  return `${exp}${kw} ${escapeIdentifier(decl.name)}${type} = ${emitExpression(
     decl.initializer
   )};`;
 }
@@ -96,21 +96,55 @@ function emitFnDecl(decl: FnDecl): string {
     .join(", ");
   const returnType = decl.returnType ? `: ${emitType(decl.returnType)}` : "";
 
-  if (!decl.body) {
-    return `${exp}function ${decl.name}(${params})${returnType};`;
-  }
-
-  const bodyExpr = emitExpression(decl.body);
-  return `${exp}function ${decl.name}(${params})${returnType} {\n  return ${bodyExpr};\n}`;
+  return emitFunctionDecl({
+    exportPrefix: exp,
+    name: decl.name,
+    params,
+    returnType,
+    body: decl.body,
+  });
 }
 
 function emitStructDecl(decl: StructDecl): string {
   const isExported = hasModifier(decl.modifiers, "out");
-  const exp = isExported ? "export " : "export "; // types are safe to export
+  const exp = isExported ? "export " : "export "; // stage-0: export structural types by default
   const fields = decl.fields
-    .map((f: Field) => `  ${f.name}: ${emitType(f.type)};`)
+    .map((f: Field) => `  ${emitPropertyName(f.name)}: ${emitType(f.type)};`)
     .join("\n");
-  return `${exp}type ${decl.name} = {\n${fields}\n};`;
+  return `${exp}interface ${escapeIdentifier(decl.name)} {\n${fields}\n}`;
+}
+
+function emitImplDecl(decl: ImplDecl): string {
+  const ns = escapeIdentifier(decl.target);
+  const lines: string[] = [];
+  lines.push(`export namespace ${ns} {`);
+
+  for (const m of decl.methods) {
+    const rendered = emitImplMethod(m);
+    if (!rendered) continue;
+    for (const l of rendered.split("\n")) {
+      lines.push(`  ${l}`);
+    }
+  }
+
+  lines.push("}");
+  return lines.join("\n");
+}
+
+function emitImplMethod(decl: FnDecl): string {
+  const params = decl.params
+    .map((p) => `${escapeIdentifier(p.name)}: ${emitType(p.type)}`)
+    .join(", ");
+  const returnType = decl.returnType ? `: ${emitType(decl.returnType)}` : "";
+
+  // Inside a namespace we always export the method.
+  return emitFunctionDecl({
+    exportPrefix: "export ",
+    name: decl.name,
+    params,
+    returnType,
+    body: decl.body,
+  });
 }
 
 function emitTypeAliasDecl(decl: TypeAliasDecl): string {
@@ -134,7 +168,7 @@ function emitExpression(expr: Expression): string {
     case "LiteralExpr":
       return emitLiteralExpr(expr as LiteralExpr);
     case "IdentifierExpr":
-      return (expr as IdentifierExpr).name;
+      return escapeIdentifier((expr as IdentifierExpr).name);
     case "UnaryExpr":
       return emitUnaryExpr(expr as UnaryExpr);
     case "BinaryExpr":
@@ -261,7 +295,7 @@ function emitCallExpr(expr: CallExpr): string {
 }
 
 function emitAccessExpr(expr: AccessExpr): string {
-  return `${emitExpression(expr.object)}.${expr.member}`;
+  return `${emitExpression(expr.object)}.${escapeIdentifier(expr.member)}`;
 }
 
 function emitIndexExpr(expr: IndexExpr): string {
@@ -276,10 +310,10 @@ function emitSliceExpr(expr: SliceExpr): string {
 
 function emitStructLiteralExpr(expr: StructLiteralExpr): string {
   const fields = expr.fields
-    .map((f) => `${f.name}: ${emitExpression(f.value)}`)
+    .map((f) => `${emitPropertyName(f.name)}: ${emitExpression(f.value)}`)
     .join(", ");
   // We lower structs to structural types; cast helps TS.
-  return `({ ${fields} } as ${expr.name})`;
+  return `({ ${fields} } as ${escapeIdentifier(expr.name)})`;
 }
 
 function emitArrayLiteralExpr(expr: ArrayLiteralExpr): string {
@@ -321,3 +355,73 @@ function emitPrimitiveType(type: PrimitiveType): string {
 function hasModifier(modifiers: Modifier[], kind: ModifierKind): boolean {
   return modifiers.some((m) => m.modifier === kind);
 }
+
+function emitFunctionDecl(args: {
+  exportPrefix: string;
+  name: string;
+  params: string;
+  returnType: string;
+  body?: Expression;
+}): string {
+  const name = escapeIdentifier(args.name);
+
+  if (!args.body) {
+    return `${args.exportPrefix}function ${name}(${args.params})${args.returnType};`;
+  }
+
+  const bodyExpr = emitExpression(args.body);
+  return `${args.exportPrefix}function ${name}(${args.params})${args.returnType} {\n  return ${bodyExpr};\n}`;
+}
+
+function emitPropertyName(name: string): string {
+  return isSafeIdentifier(name) && !TS_RESERVED.has(name)
+    ? name
+    : JSON.stringify(name);
+}
+
+function escapeIdentifier(name: string): string {
+  if (!isSafeIdentifier(name)) return name.replace(/[^A-Za-z0-9_$]/g, "_");
+  if (TS_RESERVED.has(name)) return `${name}_`;
+  return name;
+}
+
+function isSafeIdentifier(name: string): boolean {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name);
+}
+
+// Minimal reserved word list for Stage 0 TS emission.
+const TS_RESERVED = new Set<string>([
+  "break",
+  "case",
+  "catch",
+  "class",
+  "const",
+  "continue",
+  "debugger",
+  "default",
+  "delete",
+  "do",
+  "else",
+  "export",
+  "extends",
+  "finally",
+  "for",
+  "function",
+  "if",
+  "import",
+  "in",
+  "instanceof",
+  "new",
+  "return",
+  "super",
+  "switch",
+  "this",
+  "throw",
+  "try",
+  "typeof",
+  "var",
+  "void",
+  "while",
+  "with",
+  "yield",
+]);

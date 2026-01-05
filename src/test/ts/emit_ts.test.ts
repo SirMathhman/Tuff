@@ -28,10 +28,32 @@ describe("TypeScript emitter", () => {
     expect(ts).toContain('import { println } from "System/IO";');
     expect(ts).toContain("export const x: number = 10;");
     expect(ts).toContain("function add(a: number, b: number): number");
-    expect(ts).toContain("export type Point = {");
+    expect(ts).toContain("export interface Point {");
     expect(ts).toContain("x: number;");
     expect(ts).toContain("y: number;");
     expect(ts).toContain("export type Num = number | number;");
+  });
+
+  it("should emit impl blocks as namespaces with exported functions", () => {
+    const source = `
+      struct Point { x: I32, y: I32 }
+      impl Point {
+        fn new(x: I32, y: I32): Point => {
+          yield Point { x, y };
+        }
+      }
+    `;
+
+    const program = compileSource(source, "test.tuff", reporter);
+    expect(reporter.report).not.toHaveBeenCalled();
+
+    const ts = emitTypeScript(program);
+
+    expect(ts).toContain("export namespace Point {");
+    // `new` is a reserved word in TS, so we should mangle it.
+    expect(ts).toContain("export function new_(x: number, y: number): Point");
+    expect(ts).toContain("return (() => {");
+    expect(ts).toContain("return ({ x: x, y: y } as Point);");
   });
 
   it("should emit block expressions using an IIFE with returns", () => {
