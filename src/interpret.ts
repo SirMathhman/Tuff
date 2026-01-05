@@ -2,20 +2,40 @@ function replaceBraces(expr: string): string {
   const braceRegex = /\{[^{}]*\}/;
   while (braceRegex.test(expr)) {
     expr = expr.replace(braceRegex, (match) => {
-      const inner = match.slice(1, -1).trim();
+      let inner = match.slice(1, -1).trim();
 
-      // Minimal let-binding support: match `let <ident> : I32 = <rhs>; <body>`
-      const letMatch = inner.match(/^let\s+([a-zA-Z_$][\w$]*)\s*:\s*I32\s*=\s*([\s\S]+?)\s*;\s*([\s\S]+)$/);
-      if (letMatch) {
-        const name = letMatch[1];
-        const rhs = letMatch[2].trim();
-        const body = letMatch[3].trim();
+      // Minimal let-binding support: allow multiple `let <ident> : I32 = <rhs>;` declarations
+      // followed by a body expression.
+      const vars: Record<string, number> = {};
+      let letDecl: RegExpMatchArray | null = null;
+      while (
+        (letDecl = inner.match(
+          /^let\s+([a-zA-Z_$][\w$]*)\s*:\s*I32\s*=\s*([\s\S]*?)\s*;\s*/
+        )) !== null
+      ) {
+        const name = letDecl[1];
+        let rhs = letDecl[2].trim();
+        // Substitute any already-declared vars into rhs
+        for (const [n, v] of Object.entries(vars)) {
+          rhs = rhs.replace(new RegExp('\\b' + n + '\\b', 'g'), String(v));
+        }
         const rhsVal = interpret(rhs);
-        if (Number.isNaN(rhsVal)) return 'NaN';
-        // Replace occurrences of the variable name in body with the numeric value (simple token replacement)
-        const bodyReplaced = body.replace(new RegExp('\\b' + name + '\\b', 'g'), String(rhsVal));
-        const val = interpret(bodyReplaced);
-        return Number.isNaN(val) ? 'NaN' : String(val);
+        if (Number.isNaN(rhsVal)) return "NaN";
+        vars[name] = rhsVal;
+        inner = inner.slice(letDecl[0].length).trim();
+      }
+
+      if (Object.keys(vars).length > 0) {
+        // Remaining inner is the body; replace variable names with values and evaluate
+        let body = inner;
+        for (const [name, val] of Object.entries(vars)) {
+          body = body.replace(
+            new RegExp("\\b" + name + "\\b", "g"),
+            String(val)
+          );
+        }
+        const v = interpret(body);
+        return Number.isNaN(v) ? "NaN" : String(v);
       }
 
       const val = interpret(inner);
