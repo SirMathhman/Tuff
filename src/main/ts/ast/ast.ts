@@ -34,7 +34,21 @@ export interface XValue extends LValue, RValue {
   readonly _xvalue: unique symbol;
 }
 
-export type Expression = LValue | RValue;
+export type Expression =
+  | LiteralExpr
+  | BinaryExpr
+  | UnaryExpr
+  | BlockExpr
+  | IfExpr
+  | WhileExpr
+  | CallExpr
+  | AccessExpr
+  | IndexExpr
+  | SliceExpr
+  | IsExpr
+  | IdentifierExpr
+  | StructLiteralExpr
+  | ArrayLiteralExpr;
 
 export type ModifierKind = "out" | "mut" | "extern" | "intrinsic";
 
@@ -247,6 +261,23 @@ export interface IsExpr extends RValue {
   type: TypeNode;
 }
 
+/**
+ * Example: `Point { x: 10, y: 20 }`
+ */
+export interface StructLiteralExpr extends RValue {
+  kind: "StructLiteralExpr";
+  name: string;
+  fields: { name: string; value: Expression }[];
+}
+
+/**
+ * Example: `[1, 2, 3]`
+ */
+export interface ArrayLiteralExpr extends RValue {
+  kind: "ArrayLiteralExpr";
+  elements: Expression[];
+}
+
 // --- Types ---
 
 /**
@@ -321,6 +352,8 @@ export interface AstVisitor<R> {
   visitIndexExpr(node: IndexExpr): R;
   visitSliceExpr(node: SliceExpr): R;
   visitIsExpr(node: IsExpr): R;
+  visitStructLiteralExpr(node: StructLiteralExpr): R;
+  visitArrayLiteralExpr(node: ArrayLiteralExpr): R;
 
   visitPrimitiveType(node: PrimitiveType): R;
   visitArrayType(node: ArrayType): R;
