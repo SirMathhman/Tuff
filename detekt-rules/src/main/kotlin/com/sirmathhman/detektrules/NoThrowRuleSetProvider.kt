@@ -7,6 +7,9 @@ class NoThrowRuleSetProvider : RuleSetProvider {
     override val ruleSetId: String = "custom-rules"
 
     override fun instance(config: io.gitlab.arturbosch.detekt.api.Config): RuleSet {
-        return RuleSet(ruleSetId, listOf(NoThrowRule(config)))
+        return RuleSet(ruleSetId, listOf(
+            NoThrowRule(config),
+            FunctionLengthRule(config)
+        ))
     }
 }

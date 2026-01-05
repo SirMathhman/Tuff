@@ -8,6 +8,9 @@ custom-rules:
   active: true
   NoThrow:
     active: true
+  FunctionLength:
+    active: true
+    maxLines: 50
 
 style:
   ReturnCount:
