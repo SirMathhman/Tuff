@@ -27,6 +27,23 @@ module.exports = [
       "no-unreachable": "error",
       // Disallow ternary conditional operators
       "no-ternary": "error",
+      // Disallow TypeScript 'as' assertions
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "TSAsExpression",
+          message: "Avoid `as` type assertions; prefer type narrowing instead.",
+        },
+        // Keep previous no-restricted-syntax entries for ThrowStatement and null
+        {
+          selector: "ThrowStatement",
+          message: "Avoid using `throw`. Return a Result<T, E> instead.",
+        },
+        {
+          selector: "Literal[value=null]",
+          message: "Do not use `null`; use `undefined` instead.",
+        },
+      ],
     },
   },
   // TypeScript files

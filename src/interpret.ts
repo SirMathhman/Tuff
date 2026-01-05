@@ -81,6 +81,22 @@ function markUnaryMinus(
   return out;
 }
 
+function popOp(
+  ops: ({ type: "op"; value: string } | { type: "paren"; value: string })[]
+): { type: "op"; value: string } | undefined {
+  const p = ops.pop();
+  if (!p || p.type !== "op") return undefined;
+  return p;
+}
+
+function peekOpValue(
+  ops: ({ type: "op"; value: string } | { type: "paren"; value: string })[]
+): string | undefined {
+  const last = ops[ops.length - 1];
+  if (!last || last.type !== "op") return undefined;
+  return last.value;
+}
+
 function popWhileHigherPrecedence(
   currentOpValue: string,
   ops: ({ type: "op"; value: string } | { type: "paren"; value: string })[],
@@ -88,15 +104,18 @@ function popWhileHigherPrecedence(
   precedence: (op: string) => number,
   isLeftAssoc: (op: string) => boolean
 ) {
-  while (ops.length > 0 && ops[ops.length - 1].type === "op") {
-    const topOp = (ops[ops.length - 1] as { type: "op"; value: string }).value;
+  while (true) {
+    const topOp = peekOpValue(ops);
+    if (!topOp) break;
     const p1 = precedence(currentOpValue);
     const p2 = precedence(topOp);
     if (
       (isLeftAssoc(currentOpValue) && p1 <= p2) ||
       (!isLeftAssoc(currentOpValue) && p1 < p2)
     ) {
-      output.push(ops.pop() as { type: "op"; value: string });
+      const popped = popOp(ops);
+      if (!popped) break;
+      output.push(popped);
     } else break;
   }
 }
@@ -112,7 +131,11 @@ function popUntilLeftParen(
       found = true;
       break;
     }
-    output.push(top as { type: "op"; value: string });
+    if (top.type === 'op') {
+      output.push(top);
+    } else {
+      return err('Mismatched parentheses in expression');
+    }
   }
   if (!found) return err("Mismatched parentheses in expression");
   return ok(undefined);
@@ -160,9 +183,12 @@ function toRPN(
     const top = ops.pop()!;
     if (top.type === "paren")
       return err("Mismatched parentheses in expression");
-    output.push(top as { type: "op"; value: string });
+    if (top.type === "op") {
+      output.push(top);
+    } else {
+      return err("Mismatched parentheses in expression");
+    }
   }
-
   return ok(output);
 }
 
@@ -172,10 +198,11 @@ function evalRPN(
   const stack: number[] = [];
   for (const t of rpn) {
     if (t.type === "num") {
-      stack.push(t.value as number);
+      stack.push(t.value);
       continue;
     }
-    const op = t.value as string;
+    // t.type === 'op'
+    const op = t.value;
     if (op === "u-") {
       const a = stack.pop();
       if (a === undefined) return err("Invalid expression");
