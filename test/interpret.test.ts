@@ -20,4 +20,9 @@ describe("interpret", () => {
     const result = interpret("10 - 5 + 3");
     expect(result).toEqual({ ok: true, value: 8 });
   });
+
+  it("respects multiplication precedence over addition", () => {
+    const result = interpret("10 * 5 + 3");
+    expect(result).toEqual({ ok: true, value: 53 });
+  });
 });
