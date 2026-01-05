@@ -29,22 +29,18 @@ export async function buildOutMain(
 
   const outMain = path.join(outRoot, "main");
   const outMainTs = path.join(outMain, "ts");
-  const outMainTuff = path.join(outMain, "tuff");
 
   // Clean output for deterministic merges.
   await rm(outMain, { recursive: true, force: true });
   await mkdir(outMainTs, { recursive: true });
-  await mkdir(outMainTuff, { recursive: true });
 
   // 1) Copy Stage-0 TS sources directly.
   if (existsSync(srcMainTs)) {
     copyDir(srcMainTs, outMainTs, (p) => p.endsWith(".ts"));
   }
 
-  // 2) Copy original tuff sources into out/main/tuff.
+  // 2) Compile each .tuff file to .ts into out/main/ts (mirroring layout under src/main/tuff).
   if (existsSync(srcMainTuff)) {
-    copyDir(srcMainTuff, outMainTuff, () => true);
-
     // 3) Compile each .tuff file to .ts into out/main/ts (mirroring layout under src/main/tuff).
     const tuffFiles = listFilesRecursive(srcMainTuff).filter((p) =>
       p.toLowerCase().endsWith(".tuff")

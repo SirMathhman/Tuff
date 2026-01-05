@@ -1,0 +1,11 @@
+from common::span use { Span, Location };
+
+fn testInterop(s: Span): I32 => {
+    yield 42;
+}
+
+testInterop(Span { 
+    sourceFile: "test", 
+    start: Location { line: 1, column: 1, offset: 0 }, 
+    end: Location { line: 1, column: 2, offset: 1 } 
+});

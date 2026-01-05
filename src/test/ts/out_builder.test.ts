@@ -44,10 +44,5 @@ describe("out builder", () => {
       path.join(outRoot, "main", "ts", "pkg", "mod.ts")
     );
     expect(compiledTs).toContain("export const x: number = 10;");
-
-    const copiedTuff = await readText(
-      path.join(outRoot, "main", "tuff", "pkg", "mod.tuff")
-    );
-    expect(copiedTuff).toBe("out let x: I32 = 10;\n");
   });
 });
