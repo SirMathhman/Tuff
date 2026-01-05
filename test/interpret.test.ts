@@ -10,4 +10,9 @@ describe("interpret", () => {
     const result = interpret("1 + 2");
     expect(result).toEqual({ ok: true, value: 3 });
   });
+
+  it("evaluates chained additions", () => {
+    const result = interpret("1 + 2 + 3");
+    expect(result).toEqual({ ok: true, value: 6 });
+  });
 });

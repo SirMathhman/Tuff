@@ -9,14 +9,14 @@ export function interpret(input: string): Result<number, string> {
     return ok(n);
   }
 
-  // Simple addition: a + b
-  const addMatch = trimmed.match(
-    /^\s*([+-]?\d+(?:\.\d+)?)\s*\+\s*([+-]?\d+(?:\.\d+)?)\s*$/
-  );
-  if (addMatch) {
-    const a = Number(addMatch[1]);
-    const b = Number(addMatch[2]);
-    return ok(a + b);
+  // Simple addition and chained additions: a + b + c + ...
+  const plusChainRe = /^\s*[+-]?\d+(?:\.\d+)?(?:\s*\+\s*[+-]?\d+(?:\.\d+)?)*\s*$/;
+  if (plusChainRe.test(trimmed)) {
+    const numRe = /[+-]?\d+(?:\.\d+)?/g;
+    const nums = trimmed.match(numRe) || [];
+    const vals = nums.map(Number);
+    if (vals.some((v) => !Number.isFinite(v))) return err("Invalid number in expression");
+    return ok(vals.reduce((s, v) => s + v, 0));
   }
 
   return err("Err");
