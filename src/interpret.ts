@@ -19,6 +19,9 @@ export function interpret(input: string): Result<number, string> {
     return interpret(inner);
   }
 
+  const dupStructs = checkDuplicateStructs(trimmed);
+  if (!dupStructs.ok) return err(dupStructs.error);
+
   // Empty struct declaration: `struct Name {}` evaluates to 0 for now
   if (/^\s*struct\s+[A-Za-z_][A-Za-z0-9_]*\s*\{\s*\}\s*$/i.test(trimmed)) {
     return ok(0);
@@ -157,6 +160,20 @@ function findMatchingBrace(input: string, startIdx: number): number {
     if (depth === 0) return i;
   }
   return -1;
+}
+
+function checkDuplicateStructs(input: string): Result<void, string> {
+  const structRe = /struct\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{\s*\}/gi;
+  const names: string[] = [];
+  for (const m of input.matchAll(structRe)) {
+    names.push(m[1]);
+  }
+  const counts: Record<string, number> = {};
+  for (const n of names) {
+    counts[n] = (counts[n] || 0) + 1;
+    if (counts[n] > 1) return err("Duplicate binding");
+  }
+  return ok(undefined);
 }
 
 function reduceParentheses(expr: string): Result<string, string> {

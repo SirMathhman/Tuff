@@ -90,6 +90,11 @@ describe("interpret - bindings", () => {
     expect(result).toEqual({ ok: true, value: 0 });
   });
 
+  it("errors on duplicate struct declarations", () => {
+    const result = interpret("struct Empty {} struct Empty {}");
+    expect(result).toEqual({ ok: false, error: "Duplicate binding" });
+  });
+
   it("evaluates let bindings without type annotation", () => {
     const result = interpret("let x = (3 + 10 * 5); x");
     expect(result).toEqual({ ok: true, value: 53 });
