@@ -8,6 +8,16 @@ export function interpret(input: string): Result<number, string> {
     return evalLetBinding(trimmed);
   }
 
+  // Block expression: { ... }
+  if (trimmed.startsWith("{")) {
+    const closeIdx = findMatchingBrace(trimmed, 0);
+    if (closeIdx === -1) return err("Mismatched braces");
+    if (trimmed.slice(closeIdx + 1).trim().length !== 0) return err("Invalid block expression");
+    const inner = trimmed.slice(1, closeIdx).trim();
+    if (inner.length === 0) return err("Empty block");
+    return interpret(inner);
+  }
+
   // Reduce parentheses first (evaluate innermost parentheses recursively)
   if (trimmed.includes("(")) {
     const reduced = reduceParentheses(trimmed);
@@ -130,6 +140,17 @@ function findSemicolonAtDepthZero(input: string, startIdx: number): number {
     if (ch === "(") depth++;
     else if (ch === ")") depth--;
     if (depth === 0 && ch === ";") return i;
+  }
+  return -1;
+}
+
+function findMatchingBrace(input: string, startIdx: number): number {
+  let depth = 0;
+  for (let i = startIdx; i < input.length; i++) {
+    const ch = input[i];
+    if (ch === "{") depth++;
+    else if (ch === "}") depth--;
+    if (depth === 0) return i;
   }
   return -1;
 }
