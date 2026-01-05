@@ -77,6 +77,19 @@ export function evalProgram(stmts: string[]): Result<number, string> {
   }
 
   if (!lastExpr) return ok(0);
+  // Handle `expr is Type` predicates directly in program context
+  const isMatch = lastExpr.match(
+    /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s+is\s+([A-Za-z_][A-Za-z0-9_]*)$/i
+  );
+  if (isMatch) {
+    const lhs = isMatch[1];
+    const typeName = isMatch[2];
+    const isRes = evaluateIsExpression(ctx, lhs, typeName);
+    if (!isRes.ok) return err(isRes.error);
+    if (isRes.value) return ok(1);
+    return ok(0);
+  }
+
   return resolveExpression(lastExpr, ctx.vars);
 }
 
@@ -163,13 +176,9 @@ function tryHandleProgramLet(
   // apply type alias resolution and simple bool normalization
   let finalVal = init.value;
   if (parsed.value.type) {
-    let target = parsed.value.type;
-    const visited: Set<string> = new Set();
-    while (ctx.typeAliases[target]) {
-      if (visited.has(target)) return err("Cyclic type alias");
-      visited.add(target);
-      target = ctx.typeAliases[target];
-    }
+    const resolved = resolveTypeAlias(ctx, parsed.value.type);
+    if (!resolved.ok) return err(resolved.error);
+    const target = resolved.value;
     if (target.toLowerCase() === "bool") {
       if (typeof finalVal === "number") {
         if (finalVal !== 0) finalVal = 1;
@@ -246,6 +255,68 @@ function tryHandleProgramAssignment(
   return ok({});
 }
 
+function resolveTypeAlias(
+  ctx: _ProgramContext,
+  name: string
+): Result<string, string> {
+  let target = name;
+  const visited: Set<string> = new Set();
+  while (ctx.typeAliases[target]) {
+    if (visited.has(target)) return err("Cyclic type alias");
+    visited.add(target);
+    target = ctx.typeAliases[target];
+  }
+  return ok(target);
+}
+
+function resolveLhsValue(
+  ctx: _ProgramContext,
+  lhs: string
+): Result<number | Record<string, number>, string> {
+  const parts = lhs.split(".");
+  const name = parts[0];
+  if (!(name in ctx.vars)) return err(`Unknown variable: ${name}`);
+  const val = ctx.vars[name];
+  if (parts.length === 1) return ok(val);
+  // field access
+  if (typeof val === "number") return err(`Not a struct: ${name}`);
+  const field = parts[1];
+  if (!Object.prototype.hasOwnProperty.call(val, field))
+    return err(`Unknown field: ${field}`);
+  const valObj = val;
+  return ok(valObj[field]);
+}
+
+function evaluateIsExpression(
+  ctx: _ProgramContext,
+  lhs: string,
+  typeName: string
+): Result<boolean, string> {
+  const tgt = resolveTypeAlias(ctx, typeName);
+  if (!tgt.ok) return err(tgt.error);
+  const target = tgt.value;
+
+  const lhsVal = resolveLhsValue(ctx, lhs);
+  if (!lhsVal.ok) return err(lhsVal.error);
+  const value = lhsVal.value;
+
+  // Primitive types
+  if (target.toLowerCase() === "i32" || target.toLowerCase() === "i64") {
+    return ok(typeof value === "number");
+  }
+  if (target.toLowerCase() === "bool") {
+    return ok(typeof value === "number" && (value === 0 || value === 1));
+  }
+
+  // Struct type
+  const structFields = ctx.structDefs[target];
+  if (!structFields) return err(`Unknown type: ${typeName}`);
+  if (typeof value === "number") return ok(false);
+  for (const f of structFields) {
+    if (!Object.prototype.hasOwnProperty.call(value, f)) return ok(false);
+  }
+  return ok(true);
+}
 export function resolveExpression(
   expr: string,
   vars: Record<string, _ProgramValue>
