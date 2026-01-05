@@ -15,5 +15,7 @@
       "rules": {}
     }
   ],
-  "rules": {}
+  "rules": {
+    "no-new-func": "error"
+  }
 }
