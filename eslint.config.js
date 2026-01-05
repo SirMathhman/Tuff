@@ -31,6 +31,8 @@ module.exports = [
       "no-unreachable": "error",
       // Disallow ternary conditional operators
       "no-ternary": "error",
+      // Disallow continue statements
+      "no-continue": "error",
       // Limit function length to 50 lines
       "max-lines-per-function": [
         "error",
