@@ -23,12 +23,16 @@ describe("interpret", () => {
     expect(interpret("10 * 5 + 3")).toBe(53);
   });
 
-  it('returns NaN for malformed leading operator', () => {
-    expect(interpret('+ 1')).toBeNaN();
+  it("handles multiplication without space after operator", () => {
+    expect(interpret("3 +10 * 5")).toBe(53);
   });
 
-  it('returns NaN for unknown operator', () => {
-    expect(interpret('1 ^ 2')).toBeNaN();
+  it("returns NaN for malformed leading operator", () => {
+    expect(interpret("+ 1")).toBeNaN();
+  });
+
+  it("returns NaN for unknown operator", () => {
+    expect(interpret("1 ^ 2")).toBeNaN();
   });
 
   it("returns NaN for non-numeric strings", () => {
