@@ -69,6 +69,10 @@ describe("interpret", () => {
     ).toBe(65);
   });
 
+  it("returns 0 for top-level let with no body", () => {
+    expect(interpret("let x : I32 = 100;")).toBe(0);
+  });
+
   it("returns NaN for malformed leading operator", () => {
     expect(interpret("+ 1")).toBeNaN();
   });
