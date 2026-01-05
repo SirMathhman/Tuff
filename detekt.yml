@@ -1,0 +1,14 @@
+processors:
+  active: true
+
+config:
+  validation: true
+
+custom-rules:
+  active: true
+  NoThrow:
+    active: true
+
+style:
+  ReturnCount:
+    active: false
