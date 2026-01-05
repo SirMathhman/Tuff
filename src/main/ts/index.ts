@@ -1,7 +1,12 @@
 import * as fs from "fs";
 import * as path from "path";
 import { DiagnosticReporter } from "./common/diagnostics.js";
-import { compileSource, computeExitCode } from "./compiler/compile.js";
+import {
+  compileSource,
+  computeExitCode,
+  getTypeScriptOutputPath,
+} from "./compiler/compile.js";
+import { emitTypeScript } from "./compiler/emit_ts.js";
 
 function main() {
   const args = process.argv.slice(2);
@@ -29,6 +34,11 @@ function main() {
   if (reporter.hasErrors()) {
     process.exit(1);
   }
+
+  const ts = emitTypeScript(program);
+  const outPath = getTypeScriptOutputPath(absolutePath);
+  fs.writeFileSync(outPath, ts, "utf8");
+  console.log(`Wrote ${outPath}`);
 
   const exitCode = computeExitCode(program);
   process.exit(exitCode);

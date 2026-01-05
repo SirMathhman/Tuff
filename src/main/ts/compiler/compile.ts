@@ -3,6 +3,13 @@ import { DiagnosticReporter } from "../common/diagnostics.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 
+export function getTypeScriptOutputPath(inputPath: string): string {
+  if (inputPath.toLowerCase().endsWith(".tuff")) {
+    return inputPath.slice(0, -".tuff".length) + ".ts";
+  }
+  return inputPath + ".ts";
+}
+
 export function compileSource(
   source: string,
   sourceFile: string,

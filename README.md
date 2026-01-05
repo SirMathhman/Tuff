@@ -52,6 +52,8 @@ npm run build
 node dist/index.js <path-to-file.tuff>
 ```
 
+This will write a TypeScript output file next to the input file (e.g. `main.tuff` -> `main.ts`).
+
 Stage 0 currently performs lexing + parsing and exits with a process exit code determined by the last top-level expression:
 
 - If the last top-level statement is a numeric literal expression, the process exits with that value (normalized to 0–255).

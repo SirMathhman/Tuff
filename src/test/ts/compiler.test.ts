@@ -1,9 +1,10 @@
 import { jest } from "@jest/globals";
-import { DiagnosticReporter } from "../../main/ts/common/diagnostics.js";
+import { DiagnosticReporter } from "../../main/ts/common/diagnostics";
 import {
   compileSource,
   computeExitCode,
-} from "../../main/ts/compiler/compile.js";
+  getTypeScriptOutputPath,
+} from "../../main/ts/compiler/compile";
 
 describe("Stage 0 compiler pipeline", () => {
   let reporter: DiagnosticReporter;
@@ -58,5 +59,11 @@ describe("Stage 0 compiler pipeline", () => {
     expect(reporter.report).not.toHaveBeenCalled();
 
     expect(computeExitCode(program)).toBe(0);
+  });
+
+  it("should compute a .ts output path from input path", () => {
+    expect(getTypeScriptOutputPath("C:/x/main.tuff")).toBe("C:/x/main.ts");
+    expect(getTypeScriptOutputPath("C:/x/main.TUFF")).toBe("C:/x/main.ts");
+    expect(getTypeScriptOutputPath("C:/x/main")).toBe("C:/x/main.ts");
   });
 });

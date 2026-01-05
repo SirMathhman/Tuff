@@ -1,0 +1,323 @@
+import {
+  AccessExpr,
+  ArrayLiteralExpr,
+  ArrayType,
+  BinaryExpr,
+  BlockExpr,
+  CallExpr,
+  Expression,
+  ExpressionStmt,
+  Field,
+  FnDecl,
+  IdentifierExpr,
+  IfExpr,
+  ImportDecl,
+  IndexExpr,
+  LetDecl,
+  LiteralExpr,
+  Modifier,
+  ModifierKind,
+  NamedType,
+  PrimitiveType,
+  Program,
+  SliceExpr,
+  SliceType,
+  Statement,
+  StructDecl,
+  StructLiteralExpr,
+  TypeAliasDecl,
+  TypeNode,
+  UnaryExpr,
+  UnionType,
+  WhileExpr,
+  YieldStmt,
+} from "../ast/ast.js";
+
+export function emitTypeScript(program: Program): string {
+  const out: string[] = [];
+
+  for (const stmt of program.statements) {
+    out.push(emitStatement(stmt));
+  }
+
+  // Ensure trailing newline for tools.
+  return out.filter(Boolean).join("\n") + "\n";
+}
+
+function emitStatement(stmt: Statement): string {
+  switch (stmt.kind) {
+    case "ImportDecl":
+      return emitImportDecl(stmt as ImportDecl);
+    case "LetDecl":
+      return emitLetDecl(stmt as LetDecl);
+    case "FnDecl":
+      return emitFnDecl(stmt as FnDecl);
+    case "StructDecl":
+      return emitStructDecl(stmt as StructDecl);
+    case "ImplDecl":
+      // Stage-0 minimal: ignore impl blocks for now.
+      return "";
+    case "TypeAliasDecl":
+      return emitTypeAliasDecl(stmt as TypeAliasDecl);
+    case "YieldStmt":
+      // Yield only appears inside blocks; it should not appear top-level.
+      return `return ${emitExpression((stmt as YieldStmt).expression)};`;
+    case "ExpressionStmt":
+      return emitExpressionStatement(stmt as ExpressionStmt);
+    default:
+      return "";
+  }
+}
+
+function emitImportDecl(decl: ImportDecl): string {
+  const modulePath = decl.namespace.join("/");
+  const members = decl.members.join(", ");
+  return `import { ${members} } from "${modulePath}";`;
+}
+
+function emitLetDecl(decl: LetDecl): string {
+  const isExported = hasModifier(decl.modifiers, "out");
+  const isMutable = hasModifier(decl.modifiers, "mut");
+  const kw = isMutable ? "let" : "const";
+  const exp = isExported ? "export " : "";
+
+  const type = decl.type ? `: ${emitType(decl.type)}` : "";
+  return `${exp}${kw} ${decl.name}${type} = ${emitExpression(
+    decl.initializer
+  )};`;
+}
+
+function emitFnDecl(decl: FnDecl): string {
+  const isExported = hasModifier(decl.modifiers, "out");
+  const exp = isExported ? "export " : "";
+
+  const params = decl.params
+    .map((p) => `${p.name}: ${emitType(p.type)}`)
+    .join(", ");
+  const returnType = decl.returnType ? `: ${emitType(decl.returnType)}` : "";
+
+  if (!decl.body) {
+    return `${exp}function ${decl.name}(${params})${returnType};`;
+  }
+
+  const bodyExpr = emitExpression(decl.body);
+  return `${exp}function ${decl.name}(${params})${returnType} {\n  return ${bodyExpr};\n}`;
+}
+
+function emitStructDecl(decl: StructDecl): string {
+  const isExported = hasModifier(decl.modifiers, "out");
+  const exp = isExported ? "export " : "export "; // types are safe to export
+  const fields = decl.fields
+    .map((f: Field) => `  ${f.name}: ${emitType(f.type)};`)
+    .join("\n");
+  return `${exp}type ${decl.name} = {\n${fields}\n};`;
+}
+
+function emitTypeAliasDecl(decl: TypeAliasDecl): string {
+  const isExported =
+    hasModifier(decl.modifiers, "out") || decl.modifiers.length === 0;
+  const exp = isExported ? "export " : "";
+  if (!decl.type) {
+    return `${exp}type ${decl.name} = unknown;`;
+  }
+  return `${exp}type ${decl.name} = ${emitType(decl.type)};`;
+}
+
+function emitExpressionStatement(stmt: ExpressionStmt): string {
+  // If it is the last expression in the source, it may be used for exit-code;
+  // but for TS emission we just emit it as a statement.
+  return `${emitExpression(stmt.expression)};`;
+}
+
+function emitExpression(expr: Expression): string {
+  switch (expr.kind) {
+    case "LiteralExpr":
+      return emitLiteralExpr(expr as LiteralExpr);
+    case "IdentifierExpr":
+      return (expr as IdentifierExpr).name;
+    case "UnaryExpr":
+      return emitUnaryExpr(expr as UnaryExpr);
+    case "BinaryExpr":
+      return emitBinaryExpr(expr as BinaryExpr);
+    case "BlockExpr":
+      return emitBlockExpr(expr as BlockExpr);
+    case "IfExpr":
+      return emitIfExpr(expr as IfExpr);
+    case "WhileExpr":
+      return emitWhileExpr(expr as WhileExpr);
+    case "CallExpr":
+      return emitCallExpr(expr as CallExpr);
+    case "AccessExpr":
+      return emitAccessExpr(expr as AccessExpr);
+    case "IndexExpr":
+      return emitIndexExpr(expr as IndexExpr);
+    case "SliceExpr":
+      return emitSliceExpr(expr as SliceExpr);
+    case "StructLiteralExpr":
+      return emitStructLiteralExpr(expr as StructLiteralExpr);
+    case "ArrayLiteralExpr":
+      return emitArrayLiteralExpr(expr as ArrayLiteralExpr);
+    case "IsExpr":
+      // Stage-0 minimal: runtime union tagging not implemented.
+      return "true";
+    default:
+      return "undefined";
+  }
+}
+
+function emitLiteralExpr(expr: LiteralExpr): string {
+  if (typeof expr.value === "string") {
+    return JSON.stringify(expr.value);
+  }
+  if (typeof expr.value === "number") return String(expr.value);
+  if (typeof expr.value === "boolean") return expr.value ? "true" : "false";
+  return "null";
+}
+
+function emitUnaryExpr(expr: UnaryExpr): string {
+  return `${expr.operator.lexeme}${emitExpression(expr.right)}`;
+}
+
+function emitBinaryExpr(expr: BinaryExpr): string {
+  return `${emitExpression(expr.left)} ${expr.operator.lexeme} ${emitExpression(
+    expr.right
+  )}`;
+}
+
+function emitBlockExpr(expr: BlockExpr): string {
+  const lines: string[] = [];
+  lines.push("(() => {");
+
+  for (const s of expr.statements) {
+    if (s.kind === "YieldStmt") {
+      const y = s as YieldStmt;
+      lines.push(`  return ${emitExpression(y.expression)};`);
+      continue;
+    }
+
+    if (s.kind === "ExpressionStmt") {
+      const st = s as ExpressionStmt;
+      lines.push(`  ${emitExpression(st.expression)};`);
+      continue;
+    }
+
+    // Other statements (let, fn, etc.)
+    const rendered = emitStatement(s);
+    if (rendered) {
+      for (const l of rendered.split("\n")) {
+        lines.push(`  ${l}`);
+      }
+    }
+  }
+
+  lines.push("})()");
+  return lines.join("\n");
+}
+
+function emitIfExpr(expr: IfExpr): string {
+  const thenExpr = emitExpression(expr.thenBranch);
+  const elseExpr = expr.elseBranch
+    ? emitExpression(expr.elseBranch)
+    : "undefined";
+  return `(${emitExpression(expr.condition)} ? ${thenExpr} : ${elseExpr})`;
+}
+
+function emitWhileExpr(expr: WhileExpr): string {
+  const body = emitExpression(expr.body);
+  // Body is already an IIFE; we want its inner statements.
+  // Minimal lowering: emit an outer IIFE with a while loop and inline the body statements by emitting the block again.
+  const bodyBlock = emitRawBlockStatements(expr.body);
+  return `(() => {\n  while (${emitExpression(
+    expr.condition
+  )}) {\n${bodyBlock}\n  }\n})()`;
+}
+
+function emitRawBlockStatements(block: BlockExpr): string {
+  const lines: string[] = [];
+  for (const s of block.statements) {
+    if (s.kind === "YieldStmt") {
+      const y = s as YieldStmt;
+      lines.push(`    return ${emitExpression(y.expression)};`);
+      continue;
+    }
+    if (s.kind === "ExpressionStmt") {
+      const st = s as ExpressionStmt;
+      lines.push(`    ${emitExpression(st.expression)};`);
+      continue;
+    }
+    const rendered = emitStatement(s);
+    if (rendered) {
+      for (const l of rendered.split("\n")) {
+        lines.push(`    ${l}`);
+      }
+    }
+  }
+  return lines.join("\n");
+}
+
+function emitCallExpr(expr: CallExpr): string {
+  const args = expr.args.map(emitExpression).join(", ");
+  return `${emitExpression(expr.callee)}(${args})`;
+}
+
+function emitAccessExpr(expr: AccessExpr): string {
+  return `${emitExpression(expr.object)}.${expr.member}`;
+}
+
+function emitIndexExpr(expr: IndexExpr): string {
+  return `${emitExpression(expr.object)}[${emitExpression(expr.index)}]`;
+}
+
+function emitSliceExpr(expr: SliceExpr): string {
+  return `${emitExpression(expr.object)}.slice(${emitExpression(
+    expr.start
+  )}, ${emitExpression(expr.end)})`;
+}
+
+function emitStructLiteralExpr(expr: StructLiteralExpr): string {
+  const fields = expr.fields
+    .map((f) => `${f.name}: ${emitExpression(f.value)}`)
+    .join(", ");
+  // We lower structs to structural types; cast helps TS.
+  return `({ ${fields} } as ${expr.name})`;
+}
+
+function emitArrayLiteralExpr(expr: ArrayLiteralExpr): string {
+  const elements = expr.elements.map(emitExpression).join(", ");
+  return `[${elements}]`;
+}
+
+function emitType(type: TypeNode): string {
+  switch (type.kind) {
+    case "PrimitiveType":
+      return emitPrimitiveType(type as PrimitiveType);
+    case "ArrayType":
+      return `Array<${emitType((type as ArrayType).elementType)}>`;
+    case "SliceType":
+      return `Array<${emitType((type as SliceType).elementType)}>`;
+    case "UnionType":
+      return (type as UnionType).types.map(emitType).join(" | ");
+    case "NamedType":
+      return (type as NamedType).name;
+    default:
+      return "unknown";
+  }
+}
+
+function emitPrimitiveType(type: PrimitiveType): string {
+  switch (type.name) {
+    case "Bool":
+      return "boolean";
+    case "Void":
+      return "void";
+    case "NativeString":
+      return "string";
+    default:
+      // All numeric primitives map to number in stage 0.
+      return "number";
+  }
+}
+
+function hasModifier(modifiers: Modifier[], kind: ModifierKind): boolean {
+  return modifiers.some((m) => m.modifier === kind);
+}
