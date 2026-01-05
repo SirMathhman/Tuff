@@ -5,8 +5,8 @@ function replaceBraces(expr: string): string {
       let inner = match.slice(1, -1).trim();
 
       // Minimal let-binding support: allow multiple `let <ident> : I32 = <rhs>;` declarations
-      // followed by a body expression.
-      const vars: Record<string, number> = {};
+      // followed by a body expression. Use Map instead of Record.
+      const vars = new Map<string, number>();
       let letDecl: RegExpMatchArray | null = null;
       while (
         (letDecl = inner.match(
@@ -16,19 +16,19 @@ function replaceBraces(expr: string): string {
         const name = letDecl[1];
         let rhs = letDecl[2].trim();
         // Substitute any already-declared vars into rhs
-        for (const [n, v] of Object.entries(vars)) {
-          rhs = rhs.replace(new RegExp('\\b' + n + '\\b', 'g'), String(v));
+        for (const [n, v] of vars) {
+          rhs = rhs.replace(new RegExp("\\b" + n + "\\b", "g"), String(v));
         }
         const rhsVal = interpret(rhs);
         if (Number.isNaN(rhsVal)) return "NaN";
-        vars[name] = rhsVal;
+        vars.set(name, rhsVal);
         inner = inner.slice(letDecl[0].length).trim();
       }
 
-      if (Object.keys(vars).length > 0) {
+      if (vars.size > 0) {
         // Remaining inner is the body; replace variable names with values and evaluate
         let body = inner;
-        for (const [name, val] of Object.entries(vars)) {
+        for (const [name, val] of vars) {
           body = body.replace(
             new RegExp("\\b" + name + "\\b", "g"),
             String(val)

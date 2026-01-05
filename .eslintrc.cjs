@@ -51,6 +51,11 @@ module.exports = {
             message:
               "Avoid 'continue' statements; prefer clearer control flow (early returns, flags).",
           },
+          {
+            selector: "TSTypeReference[typeName.name='Record']",
+            message:
+              "Avoid the 'Record' utility type; prefer using a `Map` for mutable keyed collections.",
+          },
         ],
       },
     },
