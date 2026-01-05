@@ -81,6 +81,14 @@ describe("interpret", () => {
     expect(interpret("{ let x : I32 = 1; let x : I32 = 2; x }")).toBeNaN();
   });
 
+  it("errors for unsupported let type top-level", () => {
+    expect(interpret("let x : Bool = 0;")).toBeNaN();
+  });
+
+  it("errors for unsupported let type in braces", () => {
+    expect(interpret("{ let x : Bool = 0; x }")).toBeNaN();
+  });
+
   it("returns NaN for malformed leading operator", () => {
     expect(interpret("+ 1")).toBeNaN();
   });

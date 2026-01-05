@@ -133,13 +133,15 @@ function substituteVarsInString(s: string, vars: Map<string, number>): string {
 function parseLetBindings(
   input: string,
   options: { inBraces?: boolean } = {}
-): { vars: Map<string, number>; body: string; error?: "rhsNaN" | "duplicate" } {
+): { vars: Map<string, number>; body: string; error?: "rhsNaN" | "duplicate" | "badType" } {
   let text = input;
   const vars = new Map<string, number>();
   let done = false;
 
   while (!done) {
-    const header = text.match(/^let\s+([a-zA-Z_$][\w$]*)\s*:\s*I32\s*=\s*/);
+    const header = text.match(
+      /^let\s+([a-zA-Z_$][\w$]*)\s*:\s*([A-Za-z_$][\w$]*)\s*=\s*/
+    );
     if (!header) {
       done = true;
     } else {
@@ -160,6 +162,10 @@ function parseLetBindings(
       if (endPos === -1) {
         done = true;
       } else {
+        const type = header[2];
+        if (type !== "I32") {
+          return { vars: new Map(), body: text, error: "badType" };
+        }
         if (vars.has(name)) {
           return { vars: new Map(), body: text, error: "duplicate" };
         }
