@@ -63,6 +63,11 @@ describe("interpret - blocks", () => {
     expect(result).toEqual({ ok: true, value: 0 });
   });
 
+  it("evaluates boolean binding in block", () => {
+    const result = interpret("{ let x = true; x }");
+    expect(result).toEqual({ ok: true, value: 1 });
+  });
+
   it("block can reference outer let binding", () => {
     const result = interpret("let x = 100; { x }");
     expect(result).toEqual({ ok: true, value: 100 });

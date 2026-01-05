@@ -26,6 +26,10 @@ export function interpret(input: string): Result<number, string> {
     trimmed = reduced.value;
   }
 
+  // Boolean literal support
+  if (trimmed.toLowerCase() === "true") return ok(1);
+  if (trimmed.toLowerCase() === "false") return ok(0);
+
   // Direct numeric literal
   const n = Number(trimmed);
   if (Number.isFinite(n)) {
