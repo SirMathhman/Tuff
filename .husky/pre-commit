@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
 . "$(dirname "$0")/_/husky.sh"
 
-# Run tests, lint, then coverage check (coverage runs tests to generate summary)
-npm run test:coverage && npm run lint && npm run jscpd
+# Run tests, lint, then duplicate detection with PMD CPD
+npm run test:coverage && npm run lint && npm run cpd
