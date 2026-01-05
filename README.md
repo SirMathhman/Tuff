@@ -67,11 +67,23 @@ SafeC is a superset of C that adds type parameters (generics) to structs and fun
 # Compile SafeC to C file
 .\build\safec.exe input.safec -o output.c
 
+# Also generate a header file (output.h)
+.\build\safec.exe input.safec -o output.c --header
+
 # Show tokens (debugging)
 .\build\safec.exe --tokens input.safec
 
 # Show AST (debugging)
 .\build\safec.exe --ast input.safec
+```
+
+### Include Directive
+
+SafeC supports includes without the `.h` extension. The compiler will automatically append `.h`:
+
+```c
+#include "lexer"     // Generates: #include "lexer.h"
+#include <stdio.h>   // System includes work as normal
 ```
 
 ## Example
@@ -158,6 +170,8 @@ int main() {
 │   ├── codegen.c   # C code generator with monomorphization
 │   ├── codegen.h
 │   └── main.c      # CLI driver
+├── safec-src/      # Self-hosting SafeC source files
+│   └── lexer.safec
 ├── tests/
 │   ├── test_lexer.c
 │   ├── test_parser.c
@@ -166,6 +180,15 @@ int main() {
 │   └── generic.safec
 ├── build.ps1       # Build script
 └── README.md
+```
+
+## Self-Hosting
+
+SafeC is designed to eventually compile itself. The `safec-src/` directory contains SafeC source files that will replace the C implementation:
+
+```powershell
+# Compile lexer.safec to C
+.\build\safec.exe safec-src\lexer.safec -o build\gen\lexer.c --header
 ```
 
 ## Roadmap
