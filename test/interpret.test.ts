@@ -124,6 +124,13 @@ describe("interpret - structs", () => {
     const result = interpret("struct Empty {} struct Empty {}");
     expect(result).toEqual({ ok: false, error: "Duplicate binding" });
   });
+
+  it("instantiation and field access works", () => {
+    const result = interpret(
+      "struct Wrapper { x : I32 } let value : Wrapper = Wrapper { 100 }; value.x"
+    );
+    expect(result).toEqual({ ok: true, value: 100 });
+  });
 });
 
 describe("interpret - bindings", () => {
