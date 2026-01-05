@@ -1,10 +1,22 @@
+function replaceBraces(expr: string): string {
+  const braceRegex = /\{[^{}]*\}/;
+  while (braceRegex.test(expr)) {
+    expr = expr.replace(braceRegex, (match) => {
+      const inner = match.slice(1, -1);
+      const val = interpret(inner);
+      return Number.isNaN(val) ? 'NaN' : String(val);
+    });
+  }
+  return expr;
+}
+
 function replaceParens(expr: string): string {
   const parenRegex = /\([^()]*\)/;
   while (parenRegex.test(expr)) {
     expr = expr.replace(parenRegex, (match) => {
       const inner = match.slice(1, -1);
       const val = interpret(inner);
-      return Number.isNaN(val) ? "NaN" : String(val);
+      return Number.isNaN(val) ? 'NaN' : String(val);
     });
   }
   return expr;
@@ -90,6 +102,7 @@ export function interpret(input: string): number {
   if (expr === "true") return 1;
   if (expr === "false") return 0;
 
+  expr = replaceBraces(expr);
   expr = replaceParens(expr);
   expr = replaceIfExpressions(expr);
 
