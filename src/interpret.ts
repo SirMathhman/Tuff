@@ -62,6 +62,13 @@ type Token =
   | { type: "op"; value: string }
   | { type: "paren"; value: string };
 
+interface RPNContext {
+  ops: ({ type: "op"; value: string } | { type: "paren"; value: string })[];
+  output: (Token | { type: "op"; value: "u-" })[];
+  precedence: (op: string) => number;
+  isLeftAssoc: (op: string) => boolean;
+}
+
 function tokenToString(t: Token): string {
   if (t.type === "num") return String(t.value);
   return t.value;
@@ -161,28 +168,25 @@ function peekOpValue(
 
 function popWhileHigherPrecedence(
   currentOpValue: string,
-  ops: ({ type: "op"; value: string } | { type: "paren"; value: string })[],
-  output: (Token | { type: "op"; value: "u-" })[],
-  precedence: (op: string) => number,
-  isLeftAssoc: (op: string) => boolean
+  ctx: RPNContext
 ) {
   let running = true;
   while (running) {
-    const topOp = peekOpValue(ops);
+    const topOp = peekOpValue(ctx.ops);
     if (!topOp) {
       running = false;
     } else {
-      const p1 = precedence(currentOpValue);
-      const p2 = precedence(topOp);
+      const p1 = ctx.precedence(currentOpValue);
+      const p2 = ctx.precedence(topOp);
       if (
-        (isLeftAssoc(currentOpValue) && p1 <= p2) ||
-        (!isLeftAssoc(currentOpValue) && p1 < p2)
+        (ctx.isLeftAssoc(currentOpValue) && p1 <= p2) ||
+        (!ctx.isLeftAssoc(currentOpValue) && p1 < p2)
       ) {
-        const popped = popOp(ops);
+        const popped = popOp(ctx.ops);
         if (!popped) {
           running = false;
         } else {
-          output.push(popped);
+          ctx.output.push(popped);
         }
       } else {
         running = false;
@@ -236,7 +240,12 @@ function toRPN(
     if (t.type === "num") {
       output.push(t);
     } else if (t.type === "op") {
-      popWhileHigherPrecedence(t.value, ops, output, precedence, isLeftAssoc);
+      popWhileHigherPrecedence(t.value, {
+        ops,
+        output,
+        precedence,
+        isLeftAssoc,
+      });
       ops.push(t);
     } else if (t.type === "paren") {
       if (t.value === "(") {

@@ -37,6 +37,8 @@ module.exports = [
       "no-ternary": "error",
       // Disallow continue statements
       "no-continue": "error",
+      // Limit function parameters to 3
+      "max-params": ["error", 3],
       // Limit function length to 50 lines
       "max-lines-per-function": [
         "error",
