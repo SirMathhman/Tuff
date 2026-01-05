@@ -1,0 +1,27 @@
+# Gradle
+.gradle/
+build/
+
+# Gradle wrapper
+gradle/wrapper/
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Kotlin/Java
+*.class
+*.jar
+*.war
+*.ear
+
+# Kotlin/Gradle caches
+/.gradle/
+
+# Misc
+out/
