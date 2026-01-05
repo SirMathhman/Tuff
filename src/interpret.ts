@@ -137,7 +137,10 @@ function evalLetBinding(input: string): Result<number, string> {
   if (dupRe.test(body)) return err("Duplicate binding");
 
   if (!isMut) {
-    // Non-mutable: substitute the variable name in body with its numeric value (word boundary)
+    // Non-mutable: disallow assignment to this name in the body
+    if (new RegExp("\\b" + name + "\\s*=").test(body)) return err("Assignment to immutable variable");
+
+    // Substitute the variable name in body with its numeric value (word boundary)
     const replaced = body.replace(
       new RegExp("\\b" + name + "\\b", "g"),
       String(value)
@@ -177,7 +180,11 @@ function replaceVars(input: string, vars: Record<string, number>): string {
   return out;
 }
 
-function evalMutableBinding(name: string, initialValue: number, body: string): Result<number, string> {
+function evalMutableBinding(
+  name: string,
+  initialValue: number,
+  body: string
+): Result<number, string> {
   const stmts = splitAtTopLevelSemicolons(body);
   const vars: Record<string, number> = {};
   vars[name] = initialValue;
@@ -187,7 +194,7 @@ function evalMutableBinding(name: string, initialValue: number, body: string): R
     if (s.length === 0) {
       // skip empty
     } else {
-      const assignMatch = s.match(new RegExp('^' + name + '\\s*=\\s*(.+)$'));
+      const assignMatch = s.match(new RegExp("^" + name + "\\s*=\\s*(.+)$"));
       if (assignMatch) {
         const rhs = assignMatch[1].trim();
         const rhsReplaced = replaceVars(rhs, vars);

@@ -87,6 +87,11 @@ describe("interpret - blocks", () => {
     const result = interpret("let mut x = 0; x = 200; x");
     expect(result).toEqual({ ok: true, value: 200 });
   });
+
+  it("errors on assignment to immutable binding", () => {
+    const result = interpret("let x = 0; x = 200;");
+    expect(result.ok).toBe(false);
+  });
 });
 
 describe("interpret - bindings", () => {
