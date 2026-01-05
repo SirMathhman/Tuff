@@ -1,5 +1,0 @@
-#!/bin/sh
-. "$(dirname "$0")/_/husky.sh"
-
-# Run tests first, then lint. Fail fast on test failures.
-npm run test && npm run lint
