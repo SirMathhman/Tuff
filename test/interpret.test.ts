@@ -61,6 +61,13 @@ describe("interpret", () => {
     if (r.ok) expect(r.value).toBe(1);
   });
 
+  test("logical OR with if-expression", () => {
+    const r = interpret("(if (false) false else true) || true");
+    if (!r.ok) console.log("DEBUG logical OR:", r);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(1);
+  });
+
   test("division by zero returns error", () => {
     const r = interpret("10 / (5 - 5)");
     expect(r.ok).toBe(false);

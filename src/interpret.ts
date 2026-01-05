@@ -20,19 +20,25 @@ export function interpret(input: string): Result<number, string> {
     }
   }
 
+  // Preprocess parenthesized inline if-expressions (e.g., (if ...))
+  let processed = trimmed;
+  const replaced = replaceParenthesizedIfs(processed);
+  if (!replaced.ok) return err(replaced.error);
+  processed = replaced.value;
+
   // Boolean literal support
-  if (trimmed === "true") return ok(1);
-  if (trimmed === "false") return ok(0);
+  if (processed === "true") return ok(1);
+  if (processed === "false") return ok(0);
 
   // Direct numeric string
-  const n = Number(trimmed);
+  const n = Number(processed);
   if (Number.isFinite(n)) {
     return ok(n);
   }
 
-  // Allow simple arithmetic expressions consisting of digits, operators, dots, parentheses and whitespace
-  if (/^[0-9+\-*/().\s]+$/.test(trimmed)) {
-    const r = evaluateExpression(trimmed);
+  // Allow expressions consisting of digits, operators, dots, parentheses, whitespace, logical operators, and booleans
+  if (/^[0-9+\-*/().\s|&a-z]+$/i.test(processed)) {
+    const r = evaluateExpression(processed);
     if (r.ok) return ok(r.value);
     return err(r.error);
   }
@@ -55,11 +61,29 @@ function tokenToString(t: Token): string {
 function tokenize(expr: string): Result<Token[], string> {
   // Regex-based tokenizer using matchAll to simplify control flow
   const tokens: Token[] = [];
-  const tokenRe = /(?:\d+\.\d*|\d*\.\d+|\d+)|[()+\-*/]/g;
+  const tokenRe = /(?:\d+\.\d*|\d*\.\d+|\d+|true|false|\|\||&&)|[()+\-*/]/gi;
 
   for (const m of expr.matchAll(tokenRe)) {
     const s = m[0];
-    if (s === "+" || s === "-" || s === "*" || s === "/") {
+    const lower = s.toLowerCase();
+    if (lower === "true" || lower === "false") {
+      let val = 0;
+      if (lower === "true") {
+        val = 1;
+      } else {
+        val = 0;
+      }
+      tokens.push({ type: "num", value: val });
+      continue;
+    }
+    if (
+      s === "+" ||
+      s === "-" ||
+      s === "*" ||
+      s === "/" ||
+      s === "||" ||
+      s === "&&"
+    ) {
       tokens.push({ type: "op", value: s });
       continue;
     }
@@ -75,8 +99,11 @@ function tokenize(expr: string): Result<Token[], string> {
 
   // Sanity check: ensure entire input consists of valid tokens
   const cleaned = expr.replace(/\s+/g, "");
+  const normalized = cleaned.replace(/true/gi, "1").replace(/false/gi, "0");
   const reconstructed = tokens.map((t) => tokenToString(t)).join("");
-  if (cleaned !== reconstructed) return err("Invalid character in expression");
+  if (normalized !== reconstructed) {
+    return err("Invalid character in expression");
+  }
   return ok(tokens);
 }
 
@@ -173,9 +200,12 @@ function toRPN(
   )[] = [];
 
   function precedence(op: string): number {
-    if (op === "+" || op === "-") return 1;
-    if (op === "u-") return 3;
-    return 2;
+    if (op === "||") return 0;
+    if (op === "&&") return 1;
+    if (op === "+" || op === "-") return 2;
+    if (op === "*" || op === "/") return 3;
+    if (op === "u-") return 4;
+    return 0;
   }
   const isLeftAssoc = (op: string) => op !== "u-";
 
@@ -234,26 +264,45 @@ function evalRPN(
     const b = stack.pop();
     const a = stack.pop();
     if (a === undefined || b === undefined) return err("Invalid expression");
-    switch (op) {
-      case "+":
-        stack.push(a + b);
-        break;
-      case "-":
-        stack.push(a - b);
-        break;
-      case "*":
-        stack.push(a * b);
-        break;
-      case "/":
-        if (b === 0) return err("Division by zero");
-        stack.push(a / b);
-        break;
-      default:
-        return err("Unknown operator");
-    }
+    const opRes = applyBinaryOp(op, a, b);
+    if (!opRes.ok) return err(opRes.error);
+    stack.push(opRes.value);
   }
   if (stack.length !== 1) return err("Invalid expression");
   return ok(stack[0]);
+}
+
+function applyBinaryOp(
+  op: string,
+  a: number,
+  b: number
+): Result<number, string> {
+  if (op === "+") {
+    return ok(a + b);
+  }
+  if (op === "-") {
+    return ok(a - b);
+  }
+  if (op === "*") {
+    return ok(a * b);
+  }
+  if (op === "/") {
+    if (b === 0) return err("Division by zero");
+    return ok(a / b);
+  }
+  if (op === "&&") {
+    if (a !== 0 && b !== 0) {
+      return ok(1);
+    }
+    return ok(0);
+  }
+  if (op === "||") {
+    if (a !== 0 || b !== 0) {
+      return ok(1);
+    }
+    return ok(0);
+  }
+  return err("Unknown operator");
 }
 
 function evaluateExpression(expr: string): Result<number, string> {
@@ -291,7 +340,9 @@ function findElseAtDepthZero(input: string, startIdx: number): number {
   return -1;
 }
 
-function parseIfElse(input: string): { cond: string; thenExpr: string; elseExpr: string } | undefined {
+function parseIfElse(
+  input: string
+): { cond: string; thenExpr: string; elseExpr: string } | undefined {
   // Expecting: if (cond) thenExpr else elseExpr
   if (!input.startsWith("if")) return undefined;
   let i = 2; // after 'if'
@@ -310,4 +361,30 @@ function parseIfElse(input: string): { cond: string; thenExpr: string; elseExpr:
   const elseExpr = input.slice(elseIdx + 4).trim();
   if (thenExpr.length === 0 || elseExpr.length === 0) return undefined;
   return { cond, thenExpr, elseExpr };
+}
+
+function replaceParenthesizedIfs(input: string): Result<string, string> {
+  let out = input;
+  let idx = out.indexOf("(if");
+  while (idx !== -1) {
+    const matchIdx = findMatchingParen(out, idx);
+    if (matchIdx === -1) return err("Unmatched parentheses in inline if");
+    const inner = out.slice(idx + 1, matchIdx).trim(); // starts with 'if'
+    const parsed = parseIfElse(inner);
+    if (!parsed) return err("Invalid inline if");
+    const condRes = interpret(parsed.cond);
+    if (!condRes.ok) return err(condRes.error);
+    const condTruthy = condRes.value !== 0;
+    let branchExpr: string;
+    if (condTruthy) {
+      branchExpr = parsed.thenExpr;
+    } else {
+      branchExpr = parsed.elseExpr;
+    }
+    const branchRes = interpret(branchExpr);
+    if (!branchRes.ok) return err(branchRes.error);
+    out = out.slice(0, idx) + String(branchRes.value) + out.slice(matchIdx + 1);
+    idx = out.indexOf("(if");
+  }
+  return ok(out);
 }
