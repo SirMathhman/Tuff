@@ -18,4 +18,16 @@ describe("interpret", () => {
   it("handles mixed addition and subtraction", () => {
     expect(interpret("10 - 5 + 3")).toBe(8);
   });
+
+  it("returns NaN for malformed leading operator", () => {
+    expect(interpret("+ 1")).toBeNaN();
+  });
+
+  it("returns NaN for unknown operator", () => {
+    expect(interpret("1 * 2")).toBeNaN();
+  });
+
+  it("returns NaN for non-numeric strings", () => {
+    expect(interpret("foo")).toBeNaN();
+  });
 });
