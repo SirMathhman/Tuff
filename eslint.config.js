@@ -44,6 +44,8 @@ module.exports = [
         "error",
         { max: 50, skipComments: true, skipBlankLines: true },
       ],
+      // Limit file length to 500 lines
+      "max-lines": ["error", { max: 500 }],
     },
   },
   // TypeScript files

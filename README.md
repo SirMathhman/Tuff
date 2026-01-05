@@ -5,7 +5,7 @@ A simple expression interpreter.
 ## Usage
 
 ```typescript
-import { interpret } from './src/interpret';
+import { interpret } from "./src/interpret";
 
 const result = interpret("1 + 1");
 console.log(result);
