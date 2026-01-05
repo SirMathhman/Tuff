@@ -3,6 +3,9 @@ import { Result, ok, err } from "./result";
 export function interpret(input: string): Result<number, string> {
   const trimmed = input.trim();
 
+  // Boolean literal support
+  if (trimmed === "true") return ok(1);
+
   // Direct numeric string
   const n = Number(trimmed);
   if (Number.isFinite(n)) {
@@ -224,7 +227,7 @@ function evalRPN(
         stack.push(a * b);
         break;
       case "/":
-        if (b === 0) return err('Division by zero');
+        if (b === 0) return err("Division by zero");
         stack.push(a / b);
         break;
       default:
