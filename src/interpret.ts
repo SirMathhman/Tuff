@@ -19,6 +19,11 @@ export function interpret(input: string): Result<number, string> {
     return interpret(inner);
   }
 
+  // Empty struct declaration: `struct Name {}` evaluates to 0 for now
+  if (/^\s*struct\s+[A-Za-z_][A-Za-z0-9_]*\s*\{\s*\}\s*$/i.test(trimmed)) {
+    return ok(0);
+  }
+
   // Reduce parentheses first (evaluate innermost parentheses recursively)
   if (trimmed.includes("(")) {
     const reduced = reduceParentheses(trimmed);

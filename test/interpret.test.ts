@@ -85,6 +85,11 @@ describe("interpret - bindings", () => {
     expect(result).toEqual({ ok: true, value: 53 });
   });
 
+  it("empty struct declaration evaluates to 0", () => {
+    const result = interpret("struct Empty {}");
+    expect(result).toEqual({ ok: true, value: 0 });
+  });
+
   it("evaluates let bindings without type annotation", () => {
     const result = interpret("let x = (3 + 10 * 5); x");
     expect(result).toEqual({ ok: true, value: 53 });
