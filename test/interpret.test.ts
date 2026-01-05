@@ -49,6 +49,12 @@ describe("interpret", () => {
     if (r.ok) expect(r.value).toBe(0);
   });
 
+  test("evaluates inline if expression", () => {
+    const r = interpret("if (true) 10 / 2 else 3");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(5);
+  });
+
   test("division by zero returns error", () => {
     const r = interpret("10 / (5 - 5)");
     expect(r.ok).toBe(false);

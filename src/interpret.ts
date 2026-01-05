@@ -3,8 +3,27 @@ import { Result, ok, err } from "./result";
 export function interpret(input: string): Result<number, string> {
   const trimmed = input.trim();
 
+  // Conditional expression: if (cond) thenExpr else elseExpr
+  if (trimmed.startsWith("if")) {
+    const parsed = parseIfElse(trimmed);
+    if (parsed) {
+      const condRes = interpret(parsed.cond);
+      if (!condRes.ok) return err(condRes.error);
+      const condTruthy = condRes.value !== 0;
+      let branch: string;
+      if (condTruthy) {
+        branch = parsed.thenExpr;
+      } else {
+        branch = parsed.elseExpr;
+      }
+      return interpret(branch);
+    }
+  }
+
   // Boolean literal support
-  if (trimmed === "true") return ok(1);  if (trimmed === 'false') return ok(0);
+  if (trimmed === "true") return ok(1);
+  if (trimmed === "false") return ok(0);
+
   // Direct numeric string
   const n = Number(trimmed);
   if (Number.isFinite(n)) {
@@ -244,4 +263,51 @@ function evaluateExpression(expr: string): Result<number, string> {
   if (!rpnRes.ok) return err(rpnRes.error);
   const evalRes = evalRPN(rpnRes.value);
   return evalRes;
+}
+
+function findMatchingParen(input: string, startIdx: number): number {
+  let depth = 0;
+  for (let i = startIdx; i < input.length; i++) {
+    const ch = input[i];
+    if (ch === "(") depth++;
+    else if (ch === ")") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+function findElseAtDepthZero(input: string, startIdx: number): number {
+  let depth = 0;
+  for (let i = startIdx; i < input.length; i++) {
+    const ch = input[i];
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    else if (depth === 0 && input.startsWith("else", i)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function parseIfElse(input: string): { cond: string; thenExpr: string; elseExpr: string } | undefined {
+  // Expecting: if (cond) thenExpr else elseExpr
+  if (!input.startsWith("if")) return undefined;
+  let i = 2; // after 'if'
+  while (i < input.length && /\s/.test(input[i])) i++;
+  if (input[i] !== "(") return undefined;
+  const j = findMatchingParen(input, i);
+  if (j === -1) return undefined;
+  const cond = input.slice(i + 1, j).trim();
+  let pos = j + 1;
+  while (pos < input.length && /\s/.test(input[pos])) pos++;
+
+  const elseIdx = findElseAtDepthZero(input, pos);
+  if (elseIdx === -1) return undefined;
+
+  const thenExpr = input.slice(pos, elseIdx).trim();
+  const elseExpr = input.slice(elseIdx + 4).trim();
+  if (thenExpr.length === 0 || elseExpr.length === 0) return undefined;
+  return { cond, thenExpr, elseExpr };
 }
