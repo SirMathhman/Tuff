@@ -48,6 +48,11 @@ describe("interpret - control & bindings", () => {
     expect(result).toEqual({ ok: true, value: 100 });
   });
 
+  it("evaluates block with local let binding", () => {
+    const result = interpret("{ let x = 100; x }");
+    expect(result).toEqual({ ok: true, value: 100 });
+  });
+
   it("evaluates let bindings with typed annotation and body", () => {
     const result = interpret("let x : I32 = (3 + 10 * 5); x");
     expect(result).toEqual({ ok: true, value: 53 });
