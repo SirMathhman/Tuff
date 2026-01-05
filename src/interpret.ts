@@ -67,7 +67,10 @@ function tokenToString(t: Token): string {
   return t.value;
 }
 
-function tokenFromString(s: string, env: Record<string, number> = {}): Result<Token, string> {
+function tokenFromString(
+  s: string,
+  env: Record<string, number> = {}
+): Result<Token, string> {
   const lower = s.toLowerCase();
   if (lower === "true" || lower === "false") {
     if (lower === "true") return ok({ type: "num", value: 1 });
@@ -123,6 +126,7 @@ function markUnaryMinus(
   const out: (Token | { type: "op"; value: "u-" })[] = [];
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
+    let pushed = false;
     if (t.type === "op" && t.value === "-") {
       const prev = tokens[i - 1];
       const isUnary =
@@ -131,10 +135,10 @@ function markUnaryMinus(
         (prev.type === "paren" && prev.value === "(");
       if (isUnary) {
         out.push({ type: "op", value: "u-" });
-        continue;
+        pushed = true;
       }
     }
-    out.push(t);
+    if (!pushed) out.push(t);
   }
   return out;
 }
@@ -222,21 +226,16 @@ function toRPN(
   for (const t of tks) {
     if (t.type === "num") {
       output.push(t);
-      continue;
-    }
-    if (t.type === "op") {
+    } else if (t.type === "op") {
       popWhileHigherPrecedence(t.value, ops, output, precedence, isLeftAssoc);
       ops.push(t);
-      continue;
-    }
-    if (t.type === "paren") {
+    } else if (t.type === "paren") {
       if (t.value === "(") {
         ops.push(t);
       } else {
         const res = popUntilLeftParen(ops, output);
         if (!res.ok) return err(res.error);
       }
-      continue;
     }
   }
 
@@ -260,23 +259,24 @@ function evalRPN(
   for (const t of rpn) {
     if (t.type === "num") {
       stack.push(t.value);
-      continue;
+    } else {
+      // t.type === 'op'
+      const op = t.value;
+      if (op === "u-") {
+        const a = stack.pop();
+        if (a === undefined) return err("Invalid expression");
+        stack.push(-a);
+      } else {
+        // binary
+        const b = stack.pop();
+        const a = stack.pop();
+        if (a === undefined || b === undefined)
+          return err("Invalid expression");
+        const opRes = applyBinaryOp(op, a, b);
+        if (!opRes.ok) return err(opRes.error);
+        stack.push(opRes.value);
+      }
     }
-    // t.type === 'op'
-    const op = t.value;
-    if (op === "u-") {
-      const a = stack.pop();
-      if (a === undefined) return err("Invalid expression");
-      stack.push(-a);
-      continue;
-    }
-    // binary
-    const b = stack.pop();
-    const a = stack.pop();
-    if (a === undefined || b === undefined) return err("Invalid expression");
-    const opRes = applyBinaryOp(op, a, b);
-    if (!opRes.ok) return err(opRes.error);
-    stack.push(opRes.value);
   }
   if (stack.length !== 1) return err("Invalid expression");
   return ok(stack[0]);
