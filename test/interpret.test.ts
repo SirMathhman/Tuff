@@ -1,5 +1,17 @@
 import { interpret } from "../src/interpret";
 
+function expectOkValue(expr: string, expected: number) {
+  const r = interpret(expr);
+  expect(r.ok).toBe(true);
+  if (r.ok) expect(r.value).toBe(expected);
+}
+
+function expectErrorContains(expr: string, substr: RegExp) {
+  const r = interpret(expr);
+  expect(r.ok).toBe(false);
+  if (!r.ok) expect(r.error.toLowerCase()).toMatch(substr);
+}
+
 describe("interpret - arithmetic", () => {
   test("parses integer string to number", () => {
     const r = interpret("100");
@@ -56,39 +68,26 @@ describe("interpret - arithmetic", () => {
 
 describe("interpret - booleans & conditionals", () => {
   test("parses boolean true to 1", () => {
-    const r = interpret("true");
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.value).toBe(1);
+    expectOkValue("true", 1);
   });
 
   test("parses boolean false to 0", () => {
-    const r = interpret("false");
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.value).toBe(0);
+    expectOkValue("false", 0);
   });
 
   test("evaluates inline if expression", () => {
-    const r = interpret("if (true) 10 / 2 else 3");
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.value).toBe(5);
+    expectOkValue("if (true) 10 / 2 else 3", 5);
   });
 
   test("inline if returning booleans", () => {
-    const r = interpret("if (true) true else false");
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.value).toBe(1);
+    expectOkValue("if (true) true else false", 1);
   });
 
   test("logical OR with if-expression", () => {
-    const r = interpret("(if (false) false else true) || true");
-    if (!r.ok) console.log("DEBUG logical OR:", r);
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.value).toBe(1);
+    expectOkValue("(if (false) false else true) || true", 1);
   });
 
   test("division by zero returns error", () => {
-    const r = interpret("10 / (5 - 5)");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.toLowerCase()).toMatch(/division/);
+    expectErrorContains("10 / (5 - 5)", /division/);
   });
 });
