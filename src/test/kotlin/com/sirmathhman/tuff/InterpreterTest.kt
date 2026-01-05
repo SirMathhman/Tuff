@@ -31,6 +31,12 @@ class InterpreterTest {
         assertEquals(Result.Ok(14), interpret("2 + 3 * 4"))
         assertEquals(Result.Ok(24), interpret("2 * 3 * 4"))
     }
+
+    @Test
+    fun `interpret should support parentheses`() {
+        assertEquals(Result.Ok(80), interpret("10 * (5 + 3)"))
+        assertEquals(Result.Ok(70), interpret("10 * (5 + 2) + 0"))
+    }
 }
 
 

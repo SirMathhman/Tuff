@@ -21,8 +21,8 @@ fun interpret(input: String): Result<Int, String> {
 }
 
 private fun tokenize(input: String): List<String> {
-    // Support numbers and operators + - * /
-    val tokenRegex = Regex("""\d+|[+\-*/]""")
+    // Support numbers, operators + - * /, and parentheses
+    val tokenRegex = Regex("""\d+|[+\-*/()]""")
     return tokenRegex.findAll(input).map { it.value }.toList()
 }
 
@@ -32,28 +32,103 @@ private const val OP_PLUS = "+"
 private const val OP_MINUS = "-"
 
 private fun parseTokens(rawTokens: List<String>): Result<Pair<List<Int>, List<String>>, String> {
-    if (rawTokens.isEmpty()) return Result.Err("Empty tokens")
+    // Normalize unary signs attached to numbers (we only support unary sign directly before a number)
+    val tokens = normalizeUnarySigns(rawTokens) ?: return Result.Err("Unsupported unary sign usage")
 
-    val numbers = mutableListOf<Int>()
-    val ops = mutableListOf<String>()
+    val rpnResult = infixToRpn(tokens)
+    if (rpnResult is Result.Err) return Result.Err((rpnResult as Result.Err).error)
+    val rpn = (rpnResult as Result.Ok<List<String>>).value
 
+    val evalResult = evalRpn(rpn)
+    return if (evalResult is Result.Err) evalResult else Result.Ok(Pair(listOf((evalResult as Result.Ok).value), emptyList()))
+}
+
+private fun normalizeUnarySigns(tokens: List<String>): List<String>? {
+    val out = mutableListOf<String>()
     var i = 0
-    val first = parseFirstNumber(rawTokens, i)
-    if (first is Result.Err) return first
-    val (firstNum, nextIndex) = (first as Result.Ok<Pair<Int, Int>>).value
-    numbers.add(firstNum)
-    i = nextIndex
+    while (i < tokens.size) {
+        val t = tokens[i]
+        if ((t == OP_PLUS || t == OP_MINUS) && (out.isEmpty() || out.last() == "(" || out.last() == OP_PLUS || out.last() == OP_MINUS || out.last() == "*" || out.last() == "/")) {
+            // Unary sign; next token must be a number
+            if (i + 1 < tokens.size && tokens[i + 1].all { it.isDigit() }) {
+                val signed = if (t == OP_MINUS) "-${tokens[i + 1]}" else tokens[i + 1]
+                out.add(signed)
+                i += 2
+                continue
+            } else {
+                return null
+            }
+        } else {
+            out.add(t)
+            i += 1
+        }
+    }
+    return out
+}
 
-    while (i < rawTokens.size) {
-        val parsed = parseOperatorAndOperand(rawTokens, i)
-        if (parsed is Result.Err) return parsed
-        val (op, num, next) = (parsed as Result.Ok<Triple<String, Int, Int>>).value
-        ops.add(op)
-        numbers.add(num)
-        i = next
+private fun infixToRpn(tokens: List<String>): Result<List<String>, String> {
+    val output = mutableListOf<String>()
+    val ops = java.util.ArrayDeque<String>()
+
+    fun precedence(op: String) = when (op) {
+        "*", "/" -> 2
+        "+", "-" -> 1
+        else -> 0
     }
 
-    return Result.Ok(Pair(numbers, ops))
+    for (t in tokens) {
+        if (t.matches(Regex("-?\\d+"))) {
+            output.add(t)
+        } else if (t == "+" || t == "-" || t == "*" || t == "/") {
+            while (ops.isNotEmpty() && ops.peek() != "(" && precedence(ops.peek()) >= precedence(t)) {
+                output.add(ops.pop())
+            }
+            ops.push(t)
+        } else if (t == "(") {
+            ops.push(t)
+        } else if (t == ")") {
+            while (ops.isNotEmpty() && ops.peek() != "(") {
+                output.add(ops.pop())
+            }
+            if (ops.isEmpty() || ops.peek() != "(") return Result.Err("Mismatched parentheses")
+            ops.pop()
+        } else {
+            return Result.Err("Unknown token: $t")
+        }
+    }
+
+    while (ops.isNotEmpty()) {
+        val op = ops.pop()
+        if (op == "(" || op == ")") return Result.Err("Mismatched parentheses")
+        output.add(op)
+    }
+
+    return Result.Ok(output)
+}
+
+private fun evalRpn(rpn: List<String>): Result<Int, String> {
+    val stack = java.util.ArrayDeque<Int>()
+    for (t in rpn) {
+        if (t.matches(Regex("-?\\d+"))) {
+            stack.push(t.toInt())
+        } else if (t == "+" || t == "-" || t == "*" || t == "/") {
+            if (stack.size < 2) return Result.Err("Invalid RPN expression")
+            val b = stack.pop()
+            val a = stack.pop()
+            val res = when (t) {
+                "+" -> a + b
+                "-" -> a - b
+                "*" -> a * b
+                "/" -> if (b == 0) return Result.Err("Division by zero") else a / b
+                else -> return Result.Err("Unsupported operator: $t")
+            }
+            stack.push(res)
+        } else {
+            return Result.Err("Unknown RPN token: $t")
+        }
+    }
+    if (stack.size != 1) return Result.Err("Invalid RPN evaluation")
+    return Result.Ok(stack.pop())
 }
 
 private fun parseFirstNumber(tokens: List<String>, index: Int): Result<Pair<Int, Int>, String> {
