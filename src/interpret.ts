@@ -25,10 +25,8 @@ export function interpret(input: string): Result<number, string> {
   const dupStructs = checkDuplicateStructs(trimmed);
   if (!dupStructs.ok) return err(dupStructs.error);
 
-  // Struct declaration: `struct Name { ... }` evaluates to 0 for now
-  if (/^\s*struct\s+[A-Za-z_][A-Za-z0-9_]*\s*\{[^}]*\}\s*$/i.test(trimmed)) {
-    return ok(0);
-  }
+  const structHandled = handleStructDeclaration(trimmed);
+  if (structHandled) return structHandled;
 
   // Reduce parentheses first (evaluate innermost parentheses recursively)
   if (trimmed.includes("(")) {
@@ -249,6 +247,22 @@ function checkDuplicateStructs(input: string): Result<void, string> {
     if (counts[n] > 1) return err("Duplicate binding");
   }
   return ok(undefined);
+}
+
+function handleStructDeclaration(input: string): Result<number, string> | undefined {
+  const structMatch = input.match(/^\s*struct\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{([^}]*)\}\s*$/i);
+  if (!structMatch) return undefined;
+  const fieldsStr = structMatch[2].trim();
+  if (fieldsStr.length === 0) return ok(0);
+  // Extract field names and detect duplicates
+  const fieldRe = /([A-Za-z_][A-Za-z0-9_]*)\s*:/g;
+  const seen: Record<string, number> = {};
+  for (const m of fieldsStr.matchAll(fieldRe)) {
+    const fn = m[1];
+    seen[fn] = (seen[fn] || 0) + 1;
+    if (seen[fn] > 1) return err("Duplicate field");
+  }
+  return ok(0);
 }
 
 function reduceParentheses(expr: string): Result<string, string> {

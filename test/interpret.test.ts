@@ -115,6 +115,11 @@ describe("interpret - bindings", () => {
     expect(result).toEqual({ ok: true, value: 0 });
   });
 
+  it("errors on duplicate struct fields", () => {
+    const result = interpret("struct Empty { x : I32, x : I32 }");
+    expect(result.ok).toBe(false);
+  });
+
   it("errors on duplicate struct declarations", () => {
     const result = interpret("struct Empty {} struct Empty {}");
     expect(result).toEqual({ ok: false, error: "Duplicate binding" });
