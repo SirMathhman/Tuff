@@ -1,13 +1,11 @@
 package com.sirmathhman.tuff
 
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.api.Assertions.assertEquals
 
 class InterpreterTest {
     @Test
-    fun `interpret should throw unsupported operation`() {
-        assertThrows<UnsupportedOperationException> {
-            interpret("any input")
-        }
+    fun `interpret should parse integer string`() {
+        assertEquals(100, interpret("100"))
     }
 }
