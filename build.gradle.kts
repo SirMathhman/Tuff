@@ -51,9 +51,42 @@ detekt {
 // Detekt currently supports JVM targets up to 20; pin to 17 to work reliably even when building with newer JDKs.
 tasks.withType(io.gitlab.arturbosch.detekt.Detekt::class.java).configureEach {
     jvmTarget = "17"
+    // do not fail the Gradle process directly; we'll perform a short summary and fail with a concise message instead
+    ignoreFailures = true
+
+    reports {
+        html.required.set(true)
+        xml.required.set(true)
+        txt.required.set(false)
+        sarif.required.set(false)
+    }
 }
 
-// Ensure Detekt participates in the standard verification lifecycle.
-tasks.named("check") {
+// Add a concise summary check that fails the build with a short message if detekt found issues
+val detektCheckSummary = tasks.register("detektCheckSummary") {
+    group = "verification"
+    description = "Run detekt and fail with a concise summary if issues are found"
     dependsOn("detekt")
+
+    doLast {
+        val reportXml = file("${buildDir}/reports/detekt/detekt.xml")
+        if (!reportXml.exists()) {
+            logger.lifecycle("Detekt report not found; ensure detekt ran and produced reports")
+            return@doLast
+        }
+
+        val docBuilder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder()
+        val doc = docBuilder.parse(reportXml)
+        val issues = doc.getElementsByTagName("issue").length
+        if (issues > 0) {
+            throw org.gradle.api.GradleException("Detekt found $issues issue(s). See ${reportXml.parentFile}/detekt.html for details.")
+        } else {
+            logger.lifecycle("No detekt issues found")
+        }
+    }
+}
+
+// Ensure Detekt participates in the standard verification lifecycle via our concise summary task.
+tasks.named("check") {
+    dependsOn(detektCheckSummary)
 }

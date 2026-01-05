@@ -10,10 +10,12 @@ A small Kotlin project with a tiny interpreter and a basic quality toolchain.
 ## Lint
 
 This project uses:
+
 - **ktlint** for formatting/style
 - **detekt** for static analysis, including a **custom rule set**
 
 Common commands:
+
 - Check formatting:
   - `gradle ktlintCheck`
 - Auto-format:
