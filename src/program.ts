@@ -3,13 +3,13 @@ import { interpret } from "./interpret";
 import { findMatchingBrace, findSemicolonAtDepthZero } from "./utils";
 import { parseLetBindingHeader } from "./bindings";
 
-export type _ProgramValue = number | Record<string, number>;
+export type _ProgramValue = number | Map<string, number>;
 
 export type _ProgramContext = {
-  structDefs: Record<string, string[]>;
-  vars: Record<string, _ProgramValue>;
-  muts: Record<string, boolean>;
-  typeAliases: Record<string, string>;
+  structDefs: Map<string, string[]>;
+  vars: Map<string, _ProgramValue>;
+  muts: Map<string, boolean>;
+  typeAliases: Map<string, string>;
 };
 
 export function parseTopLevelStatements(input: string): string[] | undefined {
@@ -59,10 +59,10 @@ function readNextTopLevelStatement(
 
 export function evalProgram(stmts: string[]): Result<number, string> {
   const ctx: _ProgramContext = {
-    structDefs: {},
-    vars: {},
-    muts: {},
-    typeAliases: {},
+    structDefs: new Map(),
+    vars: new Map(),
+    muts: new Map(),
+    typeAliases: new Map(),
   };
   let lastExpr: string | undefined;
 
@@ -120,10 +120,10 @@ function tryHandleProgramStruct(
   const m = stmt.match(/^struct\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{([^}]*)\}\s*$/i);
   if (!m) return err("Invalid struct declaration");
   const name = m[1];
-  if (name in ctx.structDefs) return err("Duplicate binding");
+  if (ctx.structDefs.has(name)) return err("Duplicate binding");
   const fields = parseStructFieldNames(m[2]);
   if (!fields.ok) return err(fields.error);
-  ctx.structDefs[name] = fields.value;
+  ctx.structDefs.set(name, fields.value);
   return ok({});
 }
 
@@ -152,10 +152,10 @@ function tryHandleProgramTypeAlias(
   if (!m) return err("Invalid type alias");
   const name = m[1];
   const target = m[2];
-  if (name in ctx.typeAliases) return err("Duplicate binding");
-  if (name in ctx.structDefs) return err("Duplicate binding");
-  if (name in ctx.vars) return err("Duplicate binding");
-  ctx.typeAliases[name] = target;
+  if (ctx.typeAliases.has(name)) return err("Duplicate binding");
+  if (ctx.structDefs.has(name)) return err("Duplicate binding");
+  if (ctx.vars.has(name)) return err("Duplicate binding");
+  ctx.typeAliases.set(name, target);
   return ok({});
 }
 function tryHandleProgramLet(
@@ -166,9 +166,9 @@ function tryHandleProgramLet(
   const parsed = parseProgramLet(stmt);
   if (!parsed.ok) return err(parsed.error);
 
-  if (parsed.value.name in ctx.vars) return err("Duplicate binding");
-  if (parsed.value.name in ctx.structDefs) return err("Duplicate binding");
-  if (parsed.value.name in ctx.typeAliases) return err("Duplicate binding");
+  if (ctx.vars.has(parsed.value.name)) return err("Duplicate binding");
+  if (ctx.structDefs.has(parsed.value.name)) return err("Duplicate binding");
+  if (ctx.typeAliases.has(parsed.value.name)) return err("Duplicate binding");
 
   const init = evalProgramInitializer(ctx, parsed.value.initExpr);
   if (!init.ok) return err(init.error);
@@ -187,8 +187,8 @@ function tryHandleProgramLet(
     }
   }
 
-  ctx.vars[parsed.value.name] = finalVal;
-  ctx.muts[parsed.value.name] = parsed.value.isMut;
+  ctx.vars.set(parsed.value.name, finalVal);
+  ctx.muts.set(parsed.value.name, parsed.value.isMut);
   return ok({});
 }
 
@@ -223,18 +223,18 @@ function evalProgramInitializer(
   if (!cons) return resolveExpression(initExpr, ctx.vars);
   const structName = cons[1];
   const valsStr = cons[2].trim();
-  const fields = ctx.structDefs[structName];
+  const fields = ctx.structDefs.get(structName);
   if (!fields) return err(`Unknown struct: ${structName}`);
   const vals = valsStr
     .split(",")
     .map((x) => x.trim())
     .filter((x) => x.length > 0);
   if (vals.length !== fields.length) return err("Field count mismatch");
-  const obj: Record<string, number> = {};
+  const obj = new Map<string, number>();
   for (let i = 0; i < fields.length; i++) {
     const v = resolveExpression(vals[i], ctx.vars);
     if (!v.ok) return err(v.error);
-    obj[fields[i]] = v.value;
+    obj.set(fields[i], v.value);
   }
   return ok(obj);
 }
@@ -247,11 +247,11 @@ function tryHandleProgramAssignment(
   if (!assign) return undefined;
   const nm = assign[1];
   const rhs = assign[2].trim();
-  if (!(nm in ctx.vars)) return err(`Unknown variable: ${nm}`);
-  if (!ctx.muts[nm]) return err("Assignment to immutable variable");
+  if (!ctx.vars.has(nm)) return err(`Unknown variable: ${nm}`);
+  if (!ctx.muts.get(nm)) return err("Assignment to immutable variable");
   const resolved = resolveExpression(rhs, ctx.vars);
   if (!resolved.ok) return err(resolved.error);
-  ctx.vars[nm] = resolved.value;
+  ctx.vars.set(nm, resolved.value);
   return ok({});
 }
 
@@ -261,10 +261,12 @@ function resolveTypeAlias(
 ): Result<string, string> {
   let target = name;
   const visited: Set<string> = new Set();
-  while (ctx.typeAliases[target]) {
+  while (ctx.typeAliases.has(target)) {
     if (visited.has(target)) return err("Cyclic type alias");
     visited.add(target);
-    target = ctx.typeAliases[target];
+    const next = ctx.typeAliases.get(target);
+    if (!next) return err("Invalid type alias");
+    target = next;
   }
   return ok(target);
 }
@@ -272,19 +274,20 @@ function resolveTypeAlias(
 function resolveLhsValue(
   ctx: _ProgramContext,
   lhs: string
-): Result<number | Record<string, number>, string> {
+): Result<number | Map<string, number>, string> {
   const parts = lhs.split(".");
   const name = parts[0];
-  if (!(name in ctx.vars)) return err(`Unknown variable: ${name}`);
-  const val = ctx.vars[name];
+  if (!ctx.vars.has(name)) return err(`Unknown variable: ${name}`);
+  const val = ctx.vars.get(name);
+  if (val === undefined) return err(`Unknown variable: ${name}`);
   if (parts.length === 1) return ok(val);
   // field access
   if (typeof val === "number") return err(`Not a struct: ${name}`);
   const field = parts[1];
-  if (!Object.prototype.hasOwnProperty.call(val, field))
-    return err(`Unknown field: ${field}`);
-  const valObj = val;
-  return ok(valObj[field]);
+  if (!val.has(field)) return err(`Unknown field: ${field}`);
+  const fieldVal = val.get(field);
+  if (fieldVal === undefined) return err(`Unknown field: ${field}`);
+  return ok(fieldVal);
 }
 
 function evaluateIsExpression(
@@ -309,17 +312,17 @@ function evaluateIsExpression(
   }
 
   // Struct type
-  const structFields = ctx.structDefs[target];
+  const structFields = ctx.structDefs.get(target);
   if (!structFields) return err(`Unknown type: ${typeName}`);
   if (typeof value === "number") return ok(false);
   for (const f of structFields) {
-    if (!Object.prototype.hasOwnProperty.call(value, f)) return ok(false);
+    if (!value.has(f)) return ok(false);
   }
   return ok(true);
 }
 export function resolveExpression(
   expr: string,
-  vars: Record<string, _ProgramValue>
+  vars: Map<string, _ProgramValue>
 ): Result<number, string> {
   const idRe = /([A-Za-z_][A-Za-z0-9_]*)(?:\.([A-Za-z_][A-Za-z0-9_]*))?/g;
   let out = expr;
@@ -327,13 +330,15 @@ export function resolveExpression(
     const full = m[0];
     const name = m[1];
     const field = m[2];
-    if (!(name in vars)) return err(`Unknown variable: ${name}`);
-    const val = vars[name];
+    if (!vars.has(name)) return err(`Unknown variable: ${name}`);
+    const val = vars.get(name);
+    if (val === undefined) return err(`Unknown variable: ${name}`);
     if (field) {
       if (typeof val === "number") return err(`Not a struct: ${name}`);
-      if (!Object.prototype.hasOwnProperty.call(val, field))
-        return err(`Unknown field: ${field}`);
-      out = out.replace(full, String(val[field]));
+      if (!val.has(field)) return err(`Unknown field: ${field}`);
+      const fieldVal = val.get(field);
+      if (fieldVal === undefined) return err(`Unknown field: ${field}`);
+      out = out.replace(full, String(fieldVal));
     } else {
       if (typeof val === "number") out = out.replace(full, String(val));
       else return err(`Cannot use struct value directly: ${name}`);

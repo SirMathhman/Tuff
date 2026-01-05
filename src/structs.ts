@@ -6,10 +6,11 @@ export function checkDuplicateStructs(input: string): Result<void, string> {
   for (const m of input.matchAll(structRe)) {
     names.push(m[1]);
   }
-  const counts: Record<string, number> = {};
+  const counts = new Map<string, number>();
   for (const n of names) {
-    counts[n] = (counts[n] || 0) + 1;
-    if (counts[n] > 1) return err("Duplicate binding");
+    const cur = counts.get(n) || 0;
+    counts.set(n, cur + 1);
+    if (counts.get(n) === 2) return err("Duplicate binding");
   }
   return ok(undefined);
 }
@@ -28,7 +29,7 @@ export function handleStructDeclaration(
     .split(",")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
-  const seen: Record<string, number> = {};
+  const seen = new Map<string, number>();
   const allowedTypes = new Set(["i32", "i64", "bool"]);
 
   for (const it of items) {
@@ -38,8 +39,9 @@ export function handleStructDeclaration(
     if (!m) return err("Invalid field declaration");
     const fname = m[1];
     const ftype = m[2];
-    seen[fname] = (seen[fname] || 0) + 1;
-    if (seen[fname] > 1) return err("Duplicate field");
+    const cur = seen.get(fname) || 0;
+    seen.set(fname, cur + 1);
+    if (seen.get(fname) === 2) return err("Duplicate field");
     if (!allowedTypes.has(ftype.toLowerCase()))
       return err(`Unknown type: ${ftype}`);
   }

@@ -63,8 +63,8 @@ export function evalMutableBinding(
   body: string
 ): Result<number, string> {
   const stmts = splitAtTopLevelSemicolons(body);
-  const vars: Record<string, number> = {};
-  vars[name] = initialValue;
+  const vars = new Map<string, number>();
+  vars.set(name, initialValue);
   let lastExpr: string | undefined;
   for (const stmt of stmts) {
     const s = stmt.trim();
@@ -75,7 +75,7 @@ export function evalMutableBinding(
         const rhsReplaced = replaceVars(rhs, vars);
         const r = interpret(rhsReplaced);
         if (!r.ok) return err(r.error);
-        vars[name] = r.value;
+        vars.set(name, r.value);
       } else {
         lastExpr = s;
       }
@@ -107,10 +107,12 @@ function splitAtTopLevelSemicolons(input: string): string[] {
   return out;
 }
 
-function replaceVars(input: string, vars: Record<string, number>): string {
+function replaceVars(input: string, vars: Map<string, number>): string {
   let out = input;
-  for (const k of Object.keys(vars)) {
-    out = out.replace(new RegExp("\\b" + k + "\\b", "g"), String(vars[k]));
+  for (const k of vars.keys()) {
+    const v = vars.get(k);
+    if (v !== undefined)
+      out = out.replace(new RegExp("\\b" + k + "\\b", "g"), String(v));
   }
   return out;
 }
