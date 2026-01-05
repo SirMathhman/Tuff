@@ -77,9 +77,11 @@ val detektCheckSummary = tasks.register("detektCheckSummary") {
 
         val docBuilder = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder()
         val doc = docBuilder.parse(reportXml)
-        val issues = doc.getElementsByTagName("issue").length
-        if (issues > 0) {
-            throw org.gradle.api.GradleException("Detekt found $issues issue(s). See ${reportXml.parentFile}/detekt.html for details.")
+        val issueCount = doc.getElementsByTagName("issue").length
+        val errorCount = doc.getElementsByTagName("error").length
+        val total = issueCount + errorCount
+        if (total > 0) {
+            throw org.gradle.api.GradleException("Detekt found $total issue(s) (checkstyle errors: $errorCount). See ${reportXml.parentFile}/detekt.html for details.")
         } else {
             logger.lifecycle("No detekt issues found")
         }

@@ -9,7 +9,8 @@ class NoThrowRuleSetProvider : RuleSetProvider {
     override fun instance(config: io.gitlab.arturbosch.detekt.api.Config): RuleSet {
         return RuleSet(ruleSetId, listOf(
             NoThrowRule(config),
-            FunctionLengthRule(config)
+            FunctionLengthRule(config),
+            NoAsRule(config)
         ))
     }
 }

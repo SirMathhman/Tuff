@@ -11,6 +11,8 @@ custom-rules:
   FunctionLength:
     active: true
     maxLines: 50
+  NoAs:
+    active: true
 
 style:
   ReturnCount:
