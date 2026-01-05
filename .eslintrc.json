@@ -16,6 +16,7 @@
     }
   ],
   "rules": {
-    "no-new-func": "error"
+    "no-new-func": "error",
+    "complexity": ["error", { "max": 15 }]
   }
 }

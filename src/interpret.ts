@@ -19,95 +19,108 @@ export function interpret(input: string): number {
     }
   }
 
-  throw new Error('interpret: input is not a number or valid expression');
+  throw new Error("interpret: input is not a number or valid expression");
 }
 
 // --- Expression evaluator (supports +, -, *, /, parentheses, decimals, unary minus)
 
-type Token = { type: 'num'; value: number } | { type: 'op'; value: string } | { type: 'paren'; value: string };
+type Token =
+  | { type: "num"; value: number }
+  | { type: "op"; value: string }
+  | { type: "paren"; value: string };
 
 function tokenize(expr: string): Token[] {
+  // Regex-based tokenizer: reduces branching and complexity
   const tokens: Token[] = [];
-  let i = 0;
-  while (i < expr.length) {
-    const ch = expr[i];
-    if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
-      i++;
+  const tokenRe = /\s+|(?:\d+\.\d*|\d*\.\d+|\d+)|[()+\-*/]/g;
+  let m: RegExpExecArray | null;
+  while ((m = tokenRe.exec(expr)) !== null) {
+    const s = m[0];
+    if (/^\s+$/.test(s)) continue;
+    if (s === "+" || s === "-" || s === "*" || s === "/") {
+      tokens.push({ type: "op", value: s });
       continue;
     }
-    if (ch === '+' || ch === '-' || ch === '*' || ch === '/') {
-      tokens.push({ type: 'op', value: ch });
-      i++;
+    if (s === "(" || s === ")") {
+      tokens.push({ type: "paren", value: s });
       continue;
     }
-    if (ch === '(' || ch === ')') {
-      tokens.push({ type: 'paren', value: ch });
-      i++;
-      continue;
-    }
-    // number (integer or decimal)
-    if ((ch >= '0' && ch <= '9') || ch === '.') {
-      let j = i + 1;
-      while (j < expr.length && ((expr[j] >= '0' && expr[j] <= '9') || expr[j] === '.')) j++;
-      const slice = expr.slice(i, j);
-      const num = Number(slice);
-      if (!Number.isFinite(num)) throw new Error('Invalid number in expression');
-      tokens.push({ type: 'num', value: num });
-      i = j;
-      continue;
-    }
-    throw new Error('Invalid character in expression');
+    const num = Number(s);
+    if (!Number.isFinite(num)) throw new Error("Invalid number in expression");
+    tokens.push({ type: "num", value: num });
   }
+  // Sanity check: ensure entire input consists of valid tokens
+  const cleaned = expr.replace(/\s+/g, "");
+  let reconstructed = "";
+  for (const tk of tokens)
+    reconstructed +=
+      tk.type === "num" ? String((tk as any).value) : (tk as any).value;
+  if (cleaned !== reconstructed)
+    throw new Error("Invalid character in expression");
   return tokens;
 }
 
+function markUnaryMinus(
+  tokens: Token[]
+): (Token | { type: "op"; value: "u-" })[] {
+  const out: (Token | { type: "op"; value: "u-" })[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.type === "op" && t.value === "-") {
+      const prev = tokens[i - 1];
+      const isUnary =
+        !prev ||
+        prev.type === "op" ||
+        (prev.type === "paren" && prev.value === "(");
+      if (isUnary) {
+        out.push({ type: "op", value: "u-" });
+        continue;
+      }
+    }
+    out.push(t);
+  }
+  return out;
+}
+
+function popWhileHigherPrecedence(currentOpValue: string, ops: ({ type: 'op'; value: string } | { type: 'paren'; value: string })[], output: (Token | { type: 'op'; value: 'u-' })[], precedence: (op: string) => number, isLeftAssoc: (op: string) => boolean) {
+  while (ops.length > 0 && ops[ops.length - 1].type === 'op') {
+    const topOp = (ops[ops.length - 1] as { type: 'op'; value: string }).value;
+    const p1 = precedence(currentOpValue);
+    const p2 = precedence(topOp);
+    if ((isLeftAssoc(currentOpValue) && p1 <= p2) || (!isLeftAssoc(currentOpValue) && p1 < p2)) {
+      output.push(ops.pop() as { type: 'op'; value: any });
+    } else break;
+  }
+}
+
+function popUntilLeftParen(ops: ({ type: 'op'; value: string } | { type: 'paren'; value: string })[], output: (Token | { type: 'op'; value: 'u-' })[]) {
+  let found = false;
+  while (ops.length > 0) {
+    const top = ops.pop()!;
+    if (top.type === 'paren' && top.value === '(') {
+      found = true;
+      break;
+    }
+    output.push(top as { type: 'op'; value: string });
+  }
+  if (!found) throw new Error('Mismatched parentheses in expression');
+}
+
 function toRPN(tokens: Token[]): (Token | { type: 'op'; value: 'u-' })[] {
+  const tks = markUnaryMinus(tokens);
   const output: (Token | { type: 'op'; value: 'u-' })[] = [];
   const ops: ({ type: 'op'; value: string } | { type: 'paren'; value: string })[] = [];
 
-  const precedence = (op: string) => (op === '+' || op === '-') ? 1 : 2;
+  const precedence = (op: string) => (op === '+' || op === '-') ? 1 : (op === 'u-' ? 3 : 2);
   const isLeftAssoc = (op: string) => op !== 'u-';
 
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i];
+  for (const t of tks) {
     if (t.type === 'num') {
       output.push(t);
       continue;
     }
     if (t.type === 'op') {
-      // Determine if this is unary minus: if '-' and (at start or after '(' or after another operator)
-      if (t.value === '-') {
-        const prev = tokens[i - 1];
-        const isUnary = !prev || (prev.type === 'op' || (prev.type === 'paren' && prev.value === '('));
-        if (isUnary) {
-          // treat as unary minus with higher precedence
-          const opToken = { type: 'op', value: 'u-' } as { type: 'op'; value: 'u-' };
-          // handle precedence/stack
-          while (ops.length > 0 && ops[ops.length - 1].type === 'op') {
-            const top = ops[ops.length - 1] as { type: 'op'; value: string };
-            const p1 = 3; // unary precedence
-            const p2 = (top.value === 'u-') ? 3 : precedence(top.value);
-            if (isLeftAssoc('u-') && p1 <= p2) {
-              output.push(ops.pop() as { type: 'op'; value: any });
-            } else if (!isLeftAssoc('u-') && p1 < p2) {
-              output.push(ops.pop() as { type: 'op'; value: any });
-            } else break;
-          }
-          ops.push(opToken as any);
-          continue;
-        }
-      }
-      // binary operator
-      while (ops.length > 0) {
-        const top = ops[ops.length - 1];
-        if (top.type !== 'op') break;
-        const topOp = (top as { type: 'op'; value: string }).value;
-        const p1 = precedence(t.value);
-        const p2 = (topOp === 'u-') ? 3 : precedence(topOp);
-        if ((isLeftAssoc(t.value) && p1 <= p2) || (!isLeftAssoc(t.value) && p1 < p2)) {
-          output.push(ops.pop() as { type: 'op'; value: any });
-        } else break;
-      }
+      popWhileHigherPrecedence(t.value, ops, output, precedence, isLeftAssoc);
       ops.push(t);
       continue;
     }
@@ -115,17 +128,7 @@ function toRPN(tokens: Token[]): (Token | { type: 'op'; value: 'u-' })[] {
       if (t.value === '(') {
         ops.push(t);
       } else {
-        // t.value === ')'
-        let found = false;
-        while (ops.length > 0) {
-          const top = ops.pop()!;
-          if (top.type === 'paren' && top.value === '(') {
-            found = true;
-            break;
-          }
-          output.push(top as { type: 'op'; value: string });
-        }
-        if (!found) throw new Error('Mismatched parentheses in expression');
+        popUntilLeftParen(ops, output);
       }
       continue;
     }
@@ -140,33 +143,43 @@ function toRPN(tokens: Token[]): (Token | { type: 'op'; value: 'u-' })[] {
   return output;
 }
 
-function evalRPN(rpn: (Token | { type: 'op'; value: 'u-' })[]): number {
+function evalRPN(rpn: (Token | { type: "op"; value: "u-" })[]): number {
   const stack: number[] = [];
   for (const t of rpn) {
-    if (t.type === 'num') {
+    if (t.type === "num") {
       stack.push(t.value as number);
       continue;
     }
-    const op = (t.value as string);
-    if (op === 'u-') {
+    const op = t.value as string;
+    if (op === "u-") {
       const a = stack.pop();
-      if (a === undefined) throw new Error('Invalid expression');
+      if (a === undefined) throw new Error("Invalid expression");
       stack.push(-a);
       continue;
     }
     // binary
     const b = stack.pop();
     const a = stack.pop();
-    if (a === undefined || b === undefined) throw new Error('Invalid expression');
+    if (a === undefined || b === undefined)
+      throw new Error("Invalid expression");
     switch (op) {
-      case '+': stack.push(a + b); break;
-      case '-': stack.push(a - b); break;
-      case '*': stack.push(a * b); break;
-      case '/': stack.push(a / b); break;
-      default: throw new Error('Unknown operator');
+      case "+":
+        stack.push(a + b);
+        break;
+      case "-":
+        stack.push(a - b);
+        break;
+      case "*":
+        stack.push(a * b);
+        break;
+      case "/":
+        stack.push(a / b);
+        break;
+      default:
+        throw new Error("Unknown operator");
     }
   }
-  if (stack.length !== 1) throw new Error('Invalid expression');
+  if (stack.length !== 1) throw new Error("Invalid expression");
   return stack[0];
 }
 
