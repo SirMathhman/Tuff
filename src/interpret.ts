@@ -12,7 +12,8 @@ export function interpret(input: string): Result<number, string> {
   if (trimmed.startsWith("{")) {
     const closeIdx = findMatchingBrace(trimmed, 0);
     if (closeIdx === -1) return err("Mismatched braces");
-    if (trimmed.slice(closeIdx + 1).trim().length !== 0) return err("Invalid block expression");
+    if (trimmed.slice(closeIdx + 1).trim().length !== 0)
+      return err("Invalid block expression");
     const inner = trimmed.slice(1, closeIdx).trim();
     if (inner.length === 0) return err("Empty block");
     return interpret(inner);
@@ -115,15 +116,9 @@ function evalLetBinding(input: string): Result<number, string> {
     else value = 0;
   }
 
-  // Detect immediate duplicate binding: `let x = ...; let x = ...;`
-  const bodyTrim = body.trim();
-  if (bodyTrim.startsWith("let ")) {
-    const nm = bodyTrim
-      .slice(4)
-      .trim()
-      .match(/^([A-Za-z_][A-Za-z0-9_]*)/);
-    if (nm && nm[1] === name) return err("Duplicate binding");
-  }
+  // Detect duplicate binding anywhere in body (shadowing disallowed)
+  const dupRe = new RegExp("\\blet\\s+" + name + "\\b");
+  if (dupRe.test(body)) return err("Duplicate binding");
 
   // Substitute the variable name in body with its numeric value (word boundary)
   const replaced = body.replace(

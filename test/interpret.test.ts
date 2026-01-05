@@ -83,6 +83,11 @@ describe("interpret - control & bindings", () => {
     expect(result).toEqual({ ok: false, error: "Duplicate binding" });
   });
 
+  it("errors on nested duplicate bindings (shadowing disallowed)", () => {
+    const result = interpret("let x = 100; { let x = 200; }");
+    expect(result).toEqual({ ok: false, error: "Duplicate binding" });
+  });
+
   it("evaluates let binding with no body to 0", () => {
     const result = interpret("let x : I32 = (3 + 10 * 5);");
     expect(result).toEqual({ ok: true, value: 0 });
