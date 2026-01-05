@@ -14,6 +14,7 @@ import {
   ImplDecl,
   ImportDecl,
   IndexExpr,
+  IsExpr,
   LetDecl,
   LiteralExpr,
   Modifier,
@@ -35,6 +36,7 @@ import {
 } from "../ast/ast.js";
 
 export function emitTypeScript(program: Program): string {
+  resetGensym();
   const out: string[] = [];
 
   for (const stmt of program.statements) {
@@ -192,11 +194,18 @@ function emitExpression(expr: Expression): string {
     case "ArrayLiteralExpr":
       return emitArrayLiteralExpr(expr as ArrayLiteralExpr);
     case "IsExpr":
-      // Stage-0 minimal: runtime union tagging not implemented.
-      return "true";
+      return emitIsExpr(expr as IsExpr);
     default:
       return "undefined";
   }
+}
+
+function emitIsExpr(expr: IsExpr): string {
+  // Avoid double-evaluating the LHS by capturing it.
+  const tmp = nextTemp("__is");
+  const lhs = emitExpression(expr.expression);
+  const guard = emitTypeGuard(tmp, expr.type);
+  return `(() => { const ${tmp} = ${lhs}; return ${guard}; })()`;
 }
 
 function emitLiteralExpr(expr: LiteralExpr): string {
@@ -338,6 +347,40 @@ function emitType(type: TypeNode): string {
   }
 }
 
+function emitTypeGuard(valueExpr: string, type: TypeNode): string {
+  switch (type.kind) {
+    case "PrimitiveType":
+      return emitPrimitiveGuard(valueExpr, type as PrimitiveType);
+    case "ArrayType":
+      return `Array.isArray(${valueExpr})`;
+    case "SliceType":
+      return `Array.isArray(${valueExpr})`;
+    case "UnionType":
+      return (type as UnionType).types
+        .map((t) => `(${emitTypeGuard(valueExpr, t)})`)
+        .join(" || ");
+    case "NamedType":
+      // Stage-0: structs lower to plain objects. We can only do a coarse check.
+      return `typeof ${valueExpr} === "object" && ${valueExpr} !== null`;
+    default:
+      return "false";
+  }
+}
+
+function emitPrimitiveGuard(valueExpr: string, type: PrimitiveType): string {
+  switch (type.name) {
+    case "Bool":
+      return `typeof ${valueExpr} === "boolean"`;
+    case "NativeString":
+      return `typeof ${valueExpr} === "string"`;
+    case "Void":
+      return `${valueExpr} === undefined`;
+    default:
+      // All numeric primitives map to number in stage 0.
+      return `typeof ${valueExpr} === "number"`;
+  }
+}
+
 function emitPrimitiveType(type: PrimitiveType): string {
   switch (type.name) {
     case "Bool":
@@ -425,3 +468,15 @@ const TS_RESERVED = new Set<string>([
   "with",
   "yield",
 ]);
+
+let _gensym = 0;
+
+function resetGensym() {
+  _gensym = 0;
+}
+
+function nextTemp(prefix: string): string {
+  const name = `${prefix}${_gensym}`;
+  _gensym += 1;
+  return name;
+}

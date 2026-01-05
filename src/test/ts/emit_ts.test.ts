@@ -88,4 +88,18 @@ describe("TypeScript emitter", () => {
     const ts = emitTypeScript(program);
     expect(ts).toContain("const b: Array<number> = a.slice(0, 2);");
   });
+
+  it("should emit `is` checks for primitive types", () => {
+    const source = `
+      fn isBool(x: I32 | Bool): Bool => x is Bool;
+    `;
+
+    const program = compileSource(source, "test.tuff", reporter);
+    expect(reporter.report).not.toHaveBeenCalled();
+
+    const ts = emitTypeScript(program);
+
+    expect(ts).toContain("const __is0 = x;");
+    expect(ts).toContain('typeof __is0 === "boolean"');
+  });
 });
