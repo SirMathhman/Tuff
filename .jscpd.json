@@ -1,7 +1,7 @@
 {
   "path": ["src"],
   "min-lines": 5,
-  "min-tokens": 50,
+  "min-tokens": 1,
   "languages": ["typescript"],
   "reporters": ["console"],
   "exclude": ["**/node_modules/**", "**/dist/**", "coverage/**", "test/**"]
