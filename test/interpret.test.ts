@@ -90,6 +90,12 @@ describe("interpret", () => {
     expect(interpret("(3 + { let x : Bool = true; x }) * (4 + 1)")).toBe(20);
   });
 
+  it("supports top-level function definitions and calls", () => {
+    const src =
+      "fn addTwo(first : I32, second : I32) : I32 => { yield first + second; } addTwo(100, 200)";
+    expect(interpret(src)).toBe(300);
+  });
+
   it("errors for unsupported let type top-level", () => {
     expect(interpret("let x : Foo = 0;")).toBeNaN();
   });
