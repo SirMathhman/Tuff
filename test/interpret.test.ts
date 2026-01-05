@@ -1,6 +1,6 @@
 import { interpret } from "../src/interpret";
 
-describe("interpret", () => {
+describe("interpret - arithmetic", () => {
   test("parses integer string to number", () => {
     const r = interpret("100");
     expect(r.ok).toBe(true);
@@ -37,6 +37,24 @@ describe("interpret", () => {
     if (r.ok) expect(r.value).toBe(45);
   });
 
+  test("evaluates multiplication and parentheses", () => {
+    const r = interpret("2*(3+4)/2");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(7);
+  });
+
+  test("handles decimals and unary minus", () => {
+    const r1 = interpret("3.5 + 1.5");
+    expect(r1.ok).toBe(true);
+    if (r1.ok) expect(r1.value).toBe(5);
+
+    const r2 = interpret("-1 + 2");
+    expect(r2.ok).toBe(true);
+    if (r2.ok) expect(r2.value).toBe(1);
+  });
+});
+
+describe("interpret - booleans & conditionals", () => {
   test("parses boolean true to 1", () => {
     const r = interpret("true");
     expect(r.ok).toBe(true);
@@ -72,21 +90,5 @@ describe("interpret", () => {
     const r = interpret("10 / (5 - 5)");
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.toLowerCase()).toMatch(/division/);
-  });
-
-  test("evaluates multiplication and parentheses", () => {
-    const r = interpret("2*(3+4)/2");
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.value).toBe(7);
-  });
-
-  test("handles decimals and unary minus", () => {
-    const r1 = interpret("3.5 + 1.5");
-    expect(r1.ok).toBe(true);
-    if (r1.ok) expect(r1.value).toBe(5);
-
-    const r2 = interpret("-1 + 2");
-    expect(r2.ok).toBe(true);
-    if (r2.ok) expect(r2.value).toBe(1);
   });
 });
