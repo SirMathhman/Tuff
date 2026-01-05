@@ -2,4 +2,4 @@
 . "$(dirname "$0")/_/husky.sh"
 
 # Run tests, lint, then coverage check (coverage runs tests to generate summary)
-npm test && npm run lint && npm run test:coverage
+npm run test:coverage && npm run lint && npm run jscpd

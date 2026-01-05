@@ -9,7 +9,10 @@ function replaceBraces(expr: string): string {
       const vars = new Map<string, number>();
       let letDecl: RegExpMatchArray | undefined;
       while (
-        (letDecl = inner.match(/^let\s+([a-zA-Z_$][\w$]*)\s*:\s*I32\s*=\s*([\s\S]*?)\s*;\s*/ ) ?? undefined) !== undefined
+        (letDecl =
+          inner.match(
+            /^let\s+([a-zA-Z_$][\w$]*)\s*:\s*I32\s*=\s*([\s\S]*?)\s*;\s*/
+          ) ?? undefined) !== undefined
       ) {
         const name = letDecl[1];
         let rhs = letDecl[2].trim();
