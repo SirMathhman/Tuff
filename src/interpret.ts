@@ -2,43 +2,15 @@ function replaceBraces(expr: string): string {
   const braceRegex = /\{[^{}]*\}/;
   while (braceRegex.test(expr)) {
     expr = expr.replace(braceRegex, (match) => {
-      let inner = match.slice(1, -1).trim();
-
-      // Minimal let-binding support: allow multiple `let <ident> : I32 = <rhs>;` declarations
-      // followed by a body expression. Use Map instead of Record.
-      const vars = new Map<string, number>();
-      let letDecl: RegExpMatchArray | undefined;
-      while (
-        (letDecl =
-          inner.match(
-            /^let\s+([a-zA-Z_$][\w$]*)\s*:\s*I32\s*=\s*([\s\S]*?)\s*;\s*/
-          ) ?? undefined) !== undefined
-      ) {
-        const name = letDecl[1];
-        let rhs = letDecl[2].trim();
-        // Substitute any already-declared vars into rhs
-        for (const [n, v] of vars) {
-          rhs = rhs.replace(new RegExp("\\b" + n + "\\b", "g"), String(v));
-        }
-        const rhsVal = interpret(rhs);
-        if (Number.isNaN(rhsVal)) return "NaN";
-        vars.set(name, rhsVal);
-        inner = inner.slice(letDecl[0].length).trim();
-      }
+      const inner = match.slice(1, -1).trim();
+      const { vars, body } = parseLetBindings(inner, { inBraces: true });
 
       if (vars.size > 0) {
-        // Remaining inner is the body; replace variable names with values and evaluate
-        let body = inner;
-        for (const [name, val] of vars) {
-          body = body.replace(
-            new RegExp("\\b" + name + "\\b", "g"),
-            String(val)
-          );
-        }
-        return evalToString(body);
+        const substituted = substituteVarsInString(body, vars);
+        return evalToString(substituted);
       }
 
-      return evalToString(inner);
+      return evalToString(body);
     });
   }
   return expr;
@@ -156,34 +128,60 @@ function substituteVarsInString(s: string, vars: Map<string, number>): string {
   return out;
 }
 
-function processTopLevelLets(expr: string): number | undefined {
-  let s = expr.trim();
-  const topVars = new Map<string, number>();
-  let processing = true;
+function parseLetBindings(
+  input: string,
+  options: { inBraces?: boolean } = {}
+): { vars: Map<string, number>; body: string } {
+  let text = input;
+  const vars = new Map<string, number>();
+  let done = false;
 
-  while (s.startsWith("let") && processing) {
-    const header = s.match(/^let\s+([a-zA-Z_$][\w$]*)\s*:\s*I32\s*=\s*/);
+  while (!done) {
+    const header = text.match(/^let\s+([a-zA-Z_$][\w$]*)\s*:\s*I32\s*=\s*/);
     if (!header) {
-      processing = false;
+      done = true;
     } else {
       const name = header[1];
-      const pos = findSemicolonAtDepthZero(s, header[0].length);
-      if (pos === -1) {
-        processing = false;
+      let endPos = -1;
+
+      if (options.inBraces) {
+        // In braces: let declaration ends at semicolon
+        const semiIdx = text.indexOf(";", header[0].length);
+        if (semiIdx !== -1) {
+          endPos = semiIdx;
+        }
       } else {
-        let rhs = s.slice(header[0].length, pos).trim();
-        rhs = substituteVarsInString(rhs, topVars);
-        const rhsVal = interpret(rhs);
-        if (Number.isNaN(rhsVal)) return NaN;
-        topVars.set(name, rhsVal);
-        s = s.slice(pos + 1).trim();
+        // At top level: use depth tracking
+        endPos = findSemicolonAtDepthZero(text, header[0].length);
+      }
+
+      if (endPos === -1) {
+        done = true;
+      } else {
+        const rhs = text.slice(header[0].length, endPos).trim();
+        const substituted = substituteVarsInString(rhs, vars);
+        const rhsVal = interpret(substituted);
+        if (Number.isNaN(rhsVal)) {
+          // Propagate error via NaN in vars, which will be detected by caller
+          return { vars: new Map(), body: text };
+        }
+
+        vars.set(name, rhsVal);
+        text = text.slice(endPos + 1).trim();
       }
     }
   }
 
-  if (topVars.size > 0) {
-    const body = substituteVarsInString(s, topVars);
-    return interpret(body);
+  return { vars, body: text };
+}
+
+function processTopLevelLets(expr: string): number | undefined {
+  const s = expr.trim();
+  const { vars, body } = parseLetBindings(s);
+
+  if (vars.size > 0) {
+    const substituted = substituteVarsInString(body, vars);
+    return interpret(substituted);
   }
   return undefined;
 }
