@@ -17,4 +17,12 @@ class InterpreterTest {
     fun `interpret should evaluate chained addition`() {
         assertEquals(Result.Ok(6), interpret("1 + 2 + 3"))
         assertEquals(Result.Ok(6), interpret("1+2+3"))
-    }}
+    }
+
+    @Test
+    fun `interpret should handle subtraction and mixed operators`() {
+        assertEquals(Result.Ok(8), interpret("10 - 5 + 3"))
+        assertEquals(Result.Ok(2), interpret("10-5-3"))
+    }
+}
+
