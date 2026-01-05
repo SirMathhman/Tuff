@@ -4,24 +4,34 @@
  * Minimal implementation: parse a numeric string and simple `a + b` expressions.
  */
 export function interpret(input: string): number {
-  const trimmed = input.trim();
+  // Evaluate innermost parentheses first by recursion, then evaluate the resulting expression.
+  let expr = input.trim();
+  const parenRegex = /\([^()]*\)/;
+  while (parenRegex.test(expr)) {
+    expr = expr.replace(parenRegex, (match) => {
+      const inner = match.slice(1, -1);
+      const val = interpret(inner);
+      if (Number.isNaN(val)) return "NaN";
+      return String(val);
+    });
+  }
 
   // Tokenize numbers and operators (+, -, *, /). Negative numbers are allowed.
-  const tokens = trimmed.match(/-?\d+(?:\.\d+)?|[+\-*/]/g);
+  const tokens = expr.match(/-?\d+(?:\.\d+)?|[+\-*/]/g);
   if (tokens && tokens.length > 0) {
     // If the first token isn't a number, fallback to numeric coercion
     if (!/^(-?\d)/.test(tokens[0])) {
-      return Number(trimmed);
+      return Number(expr);
     }
 
     // First pass: handle * and / with higher precedence.
     const afterMulDiv: string[] = [];
     for (let i = 0; i < tokens.length; i++) {
       const tk = tokens[i];
-      if ((tk === '*' || tk === '/') && afterMulDiv.length > 0) {
+      if ((tk === "*" || tk === "/") && afterMulDiv.length > 0) {
         const prev = Number(afterMulDiv.pop());
         const next = Number(tokens[++i]);
-        const res = tk === '*' ? prev * next : prev / next;
+        const res = tk === "*" ? prev * next : prev / next;
         afterMulDiv.push(String(res));
       } else {
         afterMulDiv.push(tk);
@@ -33,13 +43,13 @@ export function interpret(input: string): number {
     for (let i = 1; i < afterMulDiv.length; i += 2) {
       const op = afterMulDiv[i];
       const next = Number(afterMulDiv[i + 1]);
-      if (op === '+') acc += next;
-      else if (op === '-') acc -= next;
-      else return Number(trimmed); // unexpected token
+      if (op === "+") acc += next;
+      else if (op === "-") acc -= next;
+      else return Number(expr); // unexpected token
     }
     return acc;
   }
 
   // Default: coerce to number
-  return Number(trimmed);
+  return Number(expr);
 }

@@ -27,6 +27,10 @@ describe("interpret", () => {
     expect(interpret("3 +10 * 5")).toBe(53);
   });
 
+  it("supports parentheses with precedence", () => {
+    expect(interpret("(3 + 10) * 5")).toBe(65);
+  });
+
   it("returns NaN for malformed leading operator", () => {
     expect(interpret("+ 1")).toBeNaN();
   });
