@@ -1044,6 +1044,110 @@ static ASTNode *parse_statement(Parser *parser)
 		return node;
 	}
 
+	// Do-while statement
+	if (match(parser, TOK_DO))
+	{
+		// do { ... } while (...);
+		// Build as passthrough for simplicity
+		size_t cap = 256;
+		size_t len = 3;
+		char *code = (char *)malloc(cap);
+		strcpy(code, "do ");
+
+		// Parse body
+		if (check(parser, TOK_LBRACE))
+		{
+			consume(parser, TOK_LBRACE, "Expected '{'");
+			strcat(code, "{ ");
+			len += 2;
+			int brace_depth = 1;
+
+			while (brace_depth > 0 && !check(parser, TOK_EOF))
+			{
+				char *part = token_to_string(&parser->current);
+				size_t plen = strlen(part);
+				if (len + plen + 2 >= cap)
+				{
+					cap *= 2;
+					code = (char *)realloc(code, cap);
+				}
+				strcat(code, part);
+				strcat(code, " ");
+				len += plen + 1;
+				free(part);
+
+				if (parser->current.type == TOK_LBRACE)
+					brace_depth++;
+				else if (parser->current.type == TOK_RBRACE)
+					brace_depth--;
+
+				advance(parser);
+			}
+		}
+		else
+		{
+			// Single statement - parse until ;
+			while (!check(parser, TOK_SEMICOLON) && !check(parser, TOK_EOF))
+			{
+				char *part = token_to_string(&parser->current);
+				size_t plen = strlen(part);
+				if (len + plen + 2 >= cap)
+				{
+					cap *= 2;
+					code = (char *)realloc(code, cap);
+				}
+				strcat(code, part);
+				strcat(code, " ");
+				len += plen + 1;
+				free(part);
+				advance(parser);
+			}
+			consume(parser, TOK_SEMICOLON, "Expected ';'");
+			strcat(code, "; ");
+			len += 2;
+		}
+
+		// Parse while (...)
+		consume(parser, TOK_WHILE, "Expected 'while' after do body");
+		if (len + 7 >= cap)
+		{
+			cap *= 2;
+			code = (char *)realloc(code, cap);
+		}
+		strcat(code, "while ");
+		len += 6;
+
+		consume(parser, TOK_LPAREN, "Expected '(' after 'while'");
+		strcat(code, "( ");
+		len += 2;
+
+		while (!check(parser, TOK_RPAREN) && !check(parser, TOK_EOF))
+		{
+			char *part = token_to_string(&parser->current);
+			size_t plen = strlen(part);
+			if (len + plen + 2 >= cap)
+			{
+				cap *= 2;
+				code = (char *)realloc(code, cap);
+			}
+			strcat(code, part);
+			strcat(code, " ");
+			len += plen + 1;
+			free(part);
+			advance(parser);
+		}
+		consume(parser, TOK_RPAREN, "Expected ')' after condition");
+		strcat(code, ")");
+		len += 1;
+
+		consume(parser, TOK_SEMICOLON, "Expected ';' after do-while");
+
+		ASTNode *node = ast_new_node(AST_PASSTHROUGH);
+		node->data.passthrough.code = code;
+		node->line = parser->previous.line;
+		return node;
+	}
+
 	// For statement
 	if (match(parser, TOK_FOR))
 	{
