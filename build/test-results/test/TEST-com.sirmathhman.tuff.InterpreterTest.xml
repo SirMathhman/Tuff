@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.sirmathhman.tuff.InterpreterTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-01-05T14:06:47.380Z" hostname="DESKTOP-GRQSPSA" time="0.012">
+  <properties/>
+  <testcase name="interpret should throw unsupported operation()" classname="com.sirmathhman.tuff.InterpreterTest" time="0.012"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
