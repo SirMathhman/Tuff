@@ -1,10 +1,9 @@
 /**
  * Interpret the given string and return a numeric result.
  *
- * Note: This is a stub and intentionally throws until implemented.
+ * Minimal implementation: parse a numeric string and return its numeric value.
  */
 export function interpret(input: string): number {
-  // Mark `input` as used to satisfy lint rules while this is a stub.
-  void input;
-  throw new Error("interpret: not implemented");
+  // Absolute minimum: convert to number and return
+  return Number(input)
 }
