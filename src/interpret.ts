@@ -12,11 +12,14 @@ export function interpret(input: string): Result<number, string> {
   if (trimmed.startsWith("{")) {
     const closeIdx = findMatchingBrace(trimmed, 0);
     if (closeIdx === -1) return err("Mismatched braces");
-    if (trimmed.slice(closeIdx + 1).trim().length !== 0)
-      return err("Invalid block expression");
     const inner = trimmed.slice(1, closeIdx).trim();
     if (inner.length === 0) return err("Empty block");
-    return interpret(inner);
+    const evalRes = interpret(inner);
+    if (!evalRes.ok) return err(evalRes.error);
+    // If there's trailing code after the block, evaluate it next (block-local bindings shouldn't leak)
+    const rest = trimmed.slice(closeIdx + 1).trim();
+    if (rest.length === 0) return evalRes;
+    return interpret(rest);
   }
 
   const dupStructs = checkDuplicateStructs(trimmed);

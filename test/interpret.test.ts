@@ -77,6 +77,11 @@ describe("interpret - blocks", () => {
     const result = interpret("{ let x = 100; } x");
     expect(result.ok).toBe(false);
   });
+
+  it("block followed by let and reference evaluates correctly", () => {
+    const result = interpret("{ let x = 100; } let x = 200; x");
+    expect(result).toEqual({ ok: true, value: 200 });
+  });
 });
 
 describe("interpret - bindings", () => {
