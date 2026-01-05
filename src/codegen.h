@@ -23,6 +23,7 @@ typedef struct
 
 void codegen_init(CodeGen *gen, FILE *output, ASTNode *program);
 void codegen_generate(CodeGen *gen);
+void codegen_generate_header(CodeGen *gen, const char *guard_name);
 void codegen_free(CodeGen *gen);
 
 // For generating mangled names

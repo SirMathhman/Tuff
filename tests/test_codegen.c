@@ -276,6 +276,91 @@ TEST(control_flow_preserved)
 	free(output);
 }
 
+static char *generate_header_str(const char *source, const char *guard_name)
+{
+	Parser parser;
+	parser_init(&parser, source);
+	ASTNode *ast = parser_parse(&parser);
+
+	if (parser.had_error)
+	{
+		printf("Parse error: %s\n", parser_get_error(&parser));
+		ast_free(ast);
+		return NULL;
+	}
+
+	FILE *tmp = tmpfile();
+	if (!tmp)
+	{
+		ast_free(ast);
+		return NULL;
+	}
+
+	CodeGen gen;
+	codegen_init(&gen, tmp, ast);
+	codegen_generate_header(&gen, guard_name);
+	codegen_free(&gen);
+
+	fseek(tmp, 0, SEEK_END);
+	long size = ftell(tmp);
+	fseek(tmp, 0, SEEK_SET);
+
+	char *result = (char *)malloc(size + 1);
+	fread(result, 1, size, tmp);
+	result[size] = '\0';
+
+	fclose(tmp);
+	ast_free(ast);
+
+	return result;
+}
+
+TEST(header_generation_struct)
+{
+	const char *source =
+			"struct Point {\n"
+			"    int x;\n"
+			"    int y;\n"
+			"};\n";
+
+	char *header = generate_header_str(source, "POINT");
+	ASSERT(header != NULL);
+	ASSERT_CONTAINS(header, "#ifndef POINT_H");
+	ASSERT_CONTAINS(header, "#define POINT_H");
+	ASSERT_CONTAINS(header, "struct Point");
+	ASSERT_CONTAINS(header, "#endif");
+	free(header);
+}
+
+TEST(header_generation_function_prototype)
+{
+	const char *source =
+			"int add(int a, int b) {\n"
+			"    return a + b;\n"
+			"}\n";
+
+	char *header = generate_header_str(source, "ADD");
+	ASSERT(header != NULL);
+	ASSERT_CONTAINS(header, "int add(int a, int b);");
+	// Should NOT contain the function body
+	ASSERT_NOT_CONTAINS(header, "return a + b");
+	free(header);
+}
+
+TEST(header_generation_generic_struct)
+{
+	const char *source =
+			"struct Wrapper<T> {\n"
+			"    T value;\n"
+			"};\n";
+
+	char *header = generate_header_str(source, "WRAPPER");
+	ASSERT(header != NULL);
+	// Generic struct template should be in header
+	ASSERT_CONTAINS(header, "Wrapper");
+	free(header);
+}
+
 int main(void)
 {
 	printf("Running CodeGen Tests:\n");
@@ -289,6 +374,9 @@ int main(void)
 	RUN_TEST(pointer_types_in_generics);
 	RUN_TEST(mangle_name_function);
 	RUN_TEST(control_flow_preserved);
+	RUN_TEST(header_generation_struct);
+	RUN_TEST(header_generation_function_prototype);
+	RUN_TEST(header_generation_generic_struct);
 
 	printf("\n%d tests passed, %d tests failed\n", tests_passed, tests_failed);
 	return tests_failed > 0 ? 1 : 0;

@@ -52,6 +52,7 @@ typedef enum
 	AST_CAST,
 	AST_TYPEDEF,
 	AST_ENUM_DEF,
+	AST_INCLUDE,		// #include "path"
 	AST_PASSTHROUGH // Raw C code to pass through
 } ASTNodeType;
 
@@ -208,6 +209,13 @@ typedef struct
 	char *code;
 } Passthrough;
 
+// Include directive
+typedef struct
+{
+	char *path;		 // The path in the include
+	int is_system; // 1 for <...>, 0 for "..."
+} Include;
+
 // Main AST node structure
 struct ASTNode
 {
@@ -239,6 +247,7 @@ struct ASTNode
 		Cast cast;
 		Typedef typedef_stmt;
 		Passthrough passthrough;
+		Include include;
 	} data;
 };
 

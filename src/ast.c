@@ -163,6 +163,9 @@ void ast_free(ASTNode *node)
 		case AST_PASSTHROUGH:
 			free(node->data.passthrough.code);
 			break;
+		case AST_INCLUDE:
+			free(node->data.include.path);
+			break;
 		default:
 			break;
 		}

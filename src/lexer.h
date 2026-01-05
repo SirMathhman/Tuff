@@ -84,7 +84,9 @@ typedef enum
 
 	// Special
 	TOK_EOF,
-	TOK_ERROR
+	TOK_ERROR,
+	TOK_HASH,		// #
+	TOK_INCLUDE // include (after #)
 } TokenType;
 
 typedef struct

@@ -10,7 +10,8 @@ static void print_usage(const char *program)
 	fprintf(stderr, "SafeC Compiler - C with Type Parameters\n\n");
 	fprintf(stderr, "Usage: %s [options] <input.safec>\n\n", program);
 	fprintf(stderr, "Options:\n");
-	fprintf(stderr, "  -o <file>    Output file (default: stdout)\n");
+	fprintf(stderr, "  -o <file>    Output .c file (default: stdout)\n");
+	fprintf(stderr, "  --header     Also generate a .h header file\n");
 	fprintf(stderr, "  -h, --help   Show this help message\n");
 	fprintf(stderr, "  --ast        Print AST (for debugging)\n");
 	fprintf(stderr, "  --tokens     Print tokens (for debugging)\n");
@@ -65,6 +66,7 @@ int main(int argc, char *argv[])
 	const char *output_file = NULL;
 	int print_ast_flag = 0;
 	int print_tokens_flag = 0;
+	int generate_header_flag = 0;
 
 	// Parse arguments
 	for (int i = 1; i < argc; i++)
@@ -82,6 +84,10 @@ int main(int argc, char *argv[])
 				return 1;
 			}
 			output_file = argv[++i];
+		}
+		else if (strcmp(argv[i], "--header") == 0)
+		{
+			generate_header_flag = 1;
 		}
 		else if (strcmp(argv[i], "--ast") == 0)
 		{
@@ -166,6 +172,68 @@ int main(int argc, char *argv[])
 	if (output_file)
 	{
 		fclose(output);
+
+		// Generate header file if requested
+		if (generate_header_flag)
+		{
+			// Create header file name by replacing .c with .h
+			size_t len = strlen(output_file);
+			char *header_file = (char *)malloc(len + 3); // extra space for .h
+			strcpy(header_file, output_file);
+
+			// Find and replace extension
+			char *dot = strrchr(header_file, '.');
+			if (dot && strcmp(dot, ".c") == 0)
+			{
+				strcpy(dot, ".h");
+			}
+			else
+			{
+				strcat(header_file, ".h");
+			}
+
+			FILE *header_output = fopen(header_file, "w");
+			if (header_output)
+			{
+				// Generate guard name from output file (without extension)
+				char *guard = strdup(output_file);
+				char *slash = strrchr(guard, '/');
+				char *bslash = strrchr(guard, '\\');
+				char *name = guard;
+				if (slash && slash > name)
+					name = slash + 1;
+				if (bslash && bslash > name)
+					name = bslash + 1;
+
+				// Remove .c extension if present
+				char *dot = strrchr(name, '.');
+				if (dot)
+					*dot = '\0';
+
+				// Convert to uppercase
+				for (char *p = name; *p; p++)
+				{
+					if (*p >= 'a' && *p <= 'z')
+						*p = *p - 'a' + 'A';
+					else if (!(*p >= 'A' && *p <= 'Z') && !(*p >= '0' && *p <= '9'))
+						*p = '_';
+				}
+
+				CodeGen header_gen;
+				codegen_init(&header_gen, header_output, ast);
+				codegen_generate_header(&header_gen, name);
+				codegen_free(&header_gen);
+				fclose(header_output);
+
+				free(guard);
+			}
+			else
+			{
+				fprintf(stderr, "Warning: Could not create header file '%s'\n", header_file);
+			}
+
+			free(header_file);
+		}
 	}
 
 	// Cleanup

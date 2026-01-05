@@ -185,24 +185,68 @@ static TypeRef *parse_type(Parser *parser)
 	if (match(parser, TOK_STRUCT) || match(parser, TOK_ENUM) || match(parser, TOK_UNION))
 	{
 		TokenType kind = parser->previous.type;
-		if (parser->current.type != TOK_IDENTIFIER)
+
+		// Check if this is an anonymous enum/struct/union with body: enum { ... }
+		if (check(parser, TOK_LBRACE))
+		{
+			// Anonymous definition - collect the whole body as passthrough for the type
+			const char *prefix = kind == TOK_STRUCT ? "struct " : (kind == TOK_ENUM ? "enum " : "union ");
+			size_t cap = 256;
+			size_t len = strlen(prefix);
+			char *body = (char *)malloc(cap);
+			strcpy(body, prefix);
+
+			// Consume the body
+			consume(parser, TOK_LBRACE, "Expected '{'");
+			strcat(body, "{ ");
+			len += 2;
+			int brace_depth = 1;
+
+			while (brace_depth > 0 && !check(parser, TOK_EOF))
+			{
+				char *part = token_to_string(&parser->current);
+				size_t plen = strlen(part);
+				if (len + plen + 2 >= cap)
+				{
+					cap *= 2;
+					body = (char *)realloc(body, cap);
+				}
+				strcat(body, part);
+				strcat(body, " ");
+				len += plen + 1;
+				free(part);
+
+				if (parser->current.type == TOK_LBRACE)
+					brace_depth++;
+				else if (parser->current.type == TOK_RBRACE)
+					brace_depth--;
+
+				advance(parser);
+			}
+
+			ref = type_ref_new(body);
+			free(body);
+		}
+		else if (parser->current.type != TOK_IDENTIFIER)
 		{
 			error(parser, "Expected name after struct/enum/union");
 			return NULL;
 		}
+		else
+		{
+			char *name = token_to_string(&parser->current);
+			advance(parser);
 
-		char *name = token_to_string(&parser->current);
-		advance(parser);
+			// Build full name like "struct Foo"
+			const char *prefix = kind == TOK_STRUCT ? "struct " : (kind == TOK_ENUM ? "enum " : "union ");
+			char *full_name = (char *)malloc(strlen(prefix) + strlen(name) + 1);
+			strcpy(full_name, prefix);
+			strcat(full_name, name);
+			free(name);
 
-		// Build full name like "struct Foo"
-		const char *prefix = kind == TOK_STRUCT ? "struct " : (kind == TOK_ENUM ? "enum " : "union ");
-		char *full_name = (char *)malloc(strlen(prefix) + strlen(name) + 1);
-		strcpy(full_name, prefix);
-		strcat(full_name, name);
-		free(name);
-
-		ref = type_ref_new(full_name);
-		free(full_name);
+			ref = type_ref_new(full_name);
+			free(full_name);
+		}
 	}
 	else if (parser->current.type == TOK_VOID ||
 					 parser->current.type == TOK_INT ||
@@ -479,10 +523,62 @@ static ASTNode *parse_primary(Parser *parser)
 	if (match(parser, TOK_LPAREN))
 	{
 		// Could be a cast or grouping
-		// For now, treat as grouping
-		ASTNode *expr = parse_expression(parser);
-		consume(parser, TOK_RPAREN, "Expected ')' after expression");
-		return expr;
+		// Cast: (type)expr - if what follows is a type keyword, parse as cast
+		// Grouping: (expr) - otherwise, parse as expression
+
+		// Check if this looks like a cast by checking for type keywords
+		int looks_like_cast = 0;
+		switch (parser->current.type)
+		{
+		case TOK_VOID:
+		case TOK_INT:
+		case TOK_CHAR:
+		case TOK_FLOAT:
+		case TOK_DOUBLE:
+		case TOK_LONG:
+		case TOK_SHORT:
+		case TOK_UNSIGNED:
+		case TOK_SIGNED:
+		case TOK_CONST:
+		case TOK_STRUCT:
+		case TOK_ENUM:
+		case TOK_UNION:
+			looks_like_cast = 1;
+			break;
+		case TOK_IDENTIFIER:
+			// Could be a typedef'd type - check if next token after identifier is ) or *
+			{
+				Token peek = lexer_peek_token(&parser->lexer);
+				if (peek.type == TOK_RPAREN || peek.type == TOK_STAR)
+				{
+					looks_like_cast = 1;
+				}
+			}
+			break;
+		default:
+			looks_like_cast = 0;
+			break;
+		}
+
+		if (looks_like_cast)
+		{
+			// Parse as cast
+			TypeRef *cast_type = parse_type(parser);
+			consume(parser, TOK_RPAREN, "Expected ')' after cast type");
+
+			ASTNode *node = ast_new_node(AST_CAST);
+			node->data.cast.type = cast_type;
+			node->data.cast.expr = parse_unary(parser);
+			node->line = parser->previous.line;
+			return node;
+		}
+		else
+		{
+			// Parse as grouping
+			ASTNode *expr = parse_expression(parser);
+			consume(parser, TOK_RPAREN, "Expected ')' after expression");
+			return expr;
+		}
 	}
 
 	if (match(parser, TOK_SIZEOF))
@@ -958,6 +1054,80 @@ static ASTNode *parse_statement(Parser *parser)
 		return node;
 	}
 
+	// Switch statement - for now, parse the whole thing as passthrough
+	if (match(parser, TOK_SWITCH))
+	{
+		// Build the switch statement as passthrough text
+		int brace_depth = 0;
+		size_t cap = 256;
+		size_t len = 7; // "switch "
+		char *code = (char *)malloc(cap);
+		strcpy(code, "switch ");
+
+		// Parse the condition (...)
+		consume(parser, TOK_LPAREN, "Expected '(' after 'switch'");
+		code = (char *)realloc(code, cap + 1);
+		strcat(code, "(");
+		len++;
+
+		while (!check(parser, TOK_RPAREN) && !check(parser, TOK_EOF))
+		{
+			char *part = token_to_string(&parser->current);
+			size_t plen = strlen(part);
+			if (len + plen + 2 >= cap)
+			{
+				cap *= 2;
+				code = (char *)realloc(code, cap);
+			}
+			strcat(code, part);
+			strcat(code, " ");
+			len += plen + 1;
+			free(part);
+			advance(parser);
+		}
+		consume(parser, TOK_RPAREN, "Expected ')' after switch condition");
+		if (len + 2 >= cap)
+		{
+			cap *= 2;
+			code = (char *)realloc(code, cap);
+		}
+		strcat(code, ") ");
+		len += 2;
+
+		// Parse the body { ... }
+		consume(parser, TOK_LBRACE, "Expected '{' after switch condition");
+		strcat(code, "{ ");
+		len += 2;
+		brace_depth = 1;
+
+		while (brace_depth > 0 && !check(parser, TOK_EOF))
+		{
+			char *part = token_to_string(&parser->current);
+			size_t plen = strlen(part);
+			if (len + plen + 2 >= cap)
+			{
+				cap *= 2;
+				code = (char *)realloc(code, cap);
+			}
+			strcat(code, part);
+			strcat(code, " ");
+			len += plen + 1;
+			free(part);
+
+			if (parser->current.type == TOK_LBRACE)
+				brace_depth++;
+			else if (parser->current.type == TOK_RBRACE)
+				brace_depth--;
+
+			advance(parser);
+		}
+
+		ASTNode *node = ast_new_node(AST_PASSTHROUGH);
+		node->data.passthrough.code = code;
+		node->line = parser->previous.line;
+		return node;
+	}
+
 	// Block
 	if (check(parser, TOK_LBRACE))
 	{
@@ -1195,6 +1365,80 @@ static ASTNode *parse_function(Parser *parser, TypeRef *return_type, char *name)
 
 static ASTNode *parse_declaration(Parser *parser)
 {
+	// Check for EOF
+	if (check(parser, TOK_EOF))
+	{
+		return NULL;
+	}
+
+	// Handle #include directive
+	if (match(parser, TOK_HASH))
+	{
+		if (!match(parser, TOK_INCLUDE))
+		{
+			error(parser, "Expected 'include' after '#'");
+			return NULL;
+		}
+
+		ASTNode *node = ast_new_node(AST_INCLUDE);
+		node->line = parser->previous.line;
+
+		if (check(parser, TOK_STRING))
+		{
+			// #include "path"
+			node->data.include.is_system = 0;
+			// Extract the path without quotes
+			char *full = token_to_string(&parser->current);
+			size_t len = strlen(full);
+			if (len >= 2)
+			{
+				node->data.include.path = (char *)malloc(len - 1);
+				strncpy(node->data.include.path, full + 1, len - 2);
+				node->data.include.path[len - 2] = '\0';
+			}
+			else
+			{
+				node->data.include.path = strdup("");
+			}
+			free(full);
+			advance(parser);
+		}
+		else if (match(parser, TOK_LT))
+		{
+			// #include <path>
+			node->data.include.is_system = 1;
+			// Collect tokens until >
+			size_t cap = 64;
+			size_t len = 0;
+			char *path = (char *)malloc(cap);
+			path[0] = '\0';
+
+			while (!check(parser, TOK_GT) && !check(parser, TOK_EOF))
+			{
+				char *part = token_to_string(&parser->current);
+				size_t plen = strlen(part);
+				if (len + plen + 1 >= cap)
+				{
+					cap *= 2;
+					path = (char *)realloc(path, cap);
+				}
+				strcat(path, part);
+				len += plen;
+				free(part);
+				advance(parser);
+			}
+			consume(parser, TOK_GT, "Expected '>' after system include path");
+			node->data.include.path = path;
+		}
+		else
+		{
+			error(parser, "Expected string or '<' after #include");
+			return node;
+		}
+
+		return node;
+	}
+
 	// Struct definition
 	if (check(parser, TOK_STRUCT))
 	{
@@ -1278,7 +1522,7 @@ static ASTNode *parse_declaration(Parser *parser)
 			}
 			else
 			{
-				// It's a variable declaration: struct Name varname;
+				// It's a variable or function with struct return type: struct Name varname; OR struct Name funcname()
 				char *full_name = (char *)malloc(strlen("struct ") + strlen(name) + 1);
 				strcpy(full_name, "struct ");
 				strcat(full_name, name);
@@ -1295,16 +1539,25 @@ static ASTNode *parse_declaration(Parser *parser)
 
 				if (parser->current.type != TOK_IDENTIFIER)
 				{
-					error(parser, "Expected variable name");
+					error(parser, "Expected variable or function name");
 					ast_free_type_ref(type);
 					return NULL;
 				}
 
+				char *var_or_func_name = token_to_string(&parser->current);
+				advance(parser);
+
+				// Check if this is a function: struct Name funcname(...)
+				if (check(parser, TOK_LPAREN))
+				{
+					return parse_function(parser, type, var_or_func_name);
+				}
+
+				// It's a variable declaration
 				ASTNode *node = ast_new_node(AST_VAR_DECL);
 				node->data.var_decl.type = type;
-				node->data.var_decl.name = token_to_string(&parser->current);
-				node->line = parser->current.line;
-				advance(parser);
+				node->data.var_decl.name = var_or_func_name;
+				node->line = parser->previous.line;
 
 				consume(parser, TOK_SEMICOLON, "Expected ';'");
 				return node;
@@ -1330,6 +1583,12 @@ static ASTNode *parse_declaration(Parser *parser)
 		consume(parser, TOK_SEMICOLON, "Expected ';' after typedef");
 		return node;
 	}
+
+	// Handle static/extern storage class specifiers
+	int is_static = match(parser, TOK_STATIC);
+	int is_extern = match(parser, TOK_EXTERN);
+	(void)is_static;
+	(void)is_extern; // TODO: use these later
 
 	// Function or variable
 	TypeRef *type = parse_type(parser);
