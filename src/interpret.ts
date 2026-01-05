@@ -84,18 +84,7 @@ function evalLetBinding(input: string): Result<number, string> {
   const afterEq = rest.slice(eqIdx + 1);
 
   // Find semicolon at depth zero to separate init and body
-  let depth = 0;
-  let semIdx = -1;
-  for (let i = 0; i < afterEq.length; i++) {
-    const ch = afterEq[i];
-    if (ch === "(") depth++;
-    else if (ch === ")") depth--;
-    if (ch === ";" && depth === 0) {
-      semIdx = i;
-      // Avoid `break` (disallowed): advance i to end to exit the loop
-      i = afterEq.length;
-    }
-  }
+  const semIdx = findSemicolonAtDepthZero(afterEq, 0);
   if (semIdx === -1) return err("Invalid let binding; missing ';'");
 
   const initExpr = afterEq.slice(0, semIdx).trim();
@@ -116,12 +105,33 @@ function evalLetBinding(input: string): Result<number, string> {
     else value = 0;
   }
 
+  // Detect immediate duplicate binding: `let x = ...; let x = ...;`
+  const bodyTrim = body.trim();
+  if (bodyTrim.startsWith("let ")) {
+    const nm = bodyTrim
+      .slice(4)
+      .trim()
+      .match(/^([A-Za-z_][A-Za-z0-9_]*)/);
+    if (nm && nm[1] === name) return err("Duplicate binding");
+  }
+
   // Substitute the variable name in body with its numeric value (word boundary)
   const replaced = body.replace(
     new RegExp("\\b" + name + "\\b", "g"),
     String(value)
   );
   return interpret(replaced);
+}
+
+function findSemicolonAtDepthZero(input: string, startIdx: number): number {
+  let depth = 0;
+  for (let i = startIdx; i < input.length; i++) {
+    const ch = input[i];
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    if (depth === 0 && ch === ";") return i;
+  }
+  return -1;
 }
 
 function reduceParentheses(expr: string): Result<string, string> {

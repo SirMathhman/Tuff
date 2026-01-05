@@ -1,6 +1,6 @@
 import { interpret } from "../src/interpret";
 
-describe("interpret", () => {
+describe("interpret - arithmetic", () => {
   it("returns numeric literal", () => {
     const result = interpret("1");
     expect(result).toEqual({ ok: true, value: 1 });
@@ -30,7 +30,9 @@ describe("interpret", () => {
     const result = interpret("3 + 10 * 5");
     expect(result).toEqual({ ok: true, value: 53 });
   });
+});
 
+describe("interpret - control & bindings", () => {
   it("reduces parentheses and evaluates inside them", () => {
     const result = interpret("3 + (10 * 5)");
     expect(result).toEqual({ ok: true, value: 53 });
@@ -49,6 +51,11 @@ describe("interpret", () => {
   it("evaluates let bindings without type annotation", () => {
     const result = interpret("let x = (3 + 10 * 5); x");
     expect(result).toEqual({ ok: true, value: 53 });
+  });
+
+  it("errors on duplicate bindings in the same scope", () => {
+    const result = interpret("let x = (3 + 10 * 5); let x = 0;");
+    expect(result).toEqual({ ok: false, error: "Duplicate binding" });
   });
 
   it("evaluates let binding with no body to 0", () => {
