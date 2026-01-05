@@ -43,6 +43,12 @@ describe("interpret", () => {
     if (r.ok) expect(r.value).toBe(1);
   });
 
+  test("parses boolean false to 0", () => {
+    const r = interpret("false");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(0);
+  });
+
   test("division by zero returns error", () => {
     const r = interpret("10 / (5 - 5)");
     expect(r.ok).toBe(false);

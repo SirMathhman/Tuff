@@ -4,8 +4,7 @@ export function interpret(input: string): Result<number, string> {
   const trimmed = input.trim();
 
   // Boolean literal support
-  if (trimmed === "true") return ok(1);
-
+  if (trimmed === "true") return ok(1);  if (trimmed === 'false') return ok(0);
   // Direct numeric string
   const n = Number(trimmed);
   if (Number.isFinite(n)) {
