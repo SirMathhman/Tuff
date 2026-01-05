@@ -26,7 +26,7 @@ module.exports = [
       // Treat unreachable code as an error (aligns with TS7027)
       "no-unreachable": "error",
       // Disallow ternary conditional operators
-      "no-ternary": "error"
+      "no-ternary": "error",
     },
   },
   // TypeScript files
@@ -39,6 +39,8 @@ module.exports = [
     plugins: {
       "@typescript-eslint": require("@typescript-eslint/eslint-plugin"),
     },
-    rules: {},
+    rules: {
+      "@typescript-eslint/no-explicit-any": "error",
+    },
   },
 ];

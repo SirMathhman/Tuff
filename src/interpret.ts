@@ -26,6 +26,11 @@ type Token =
   | { type: "op"; value: string }
   | { type: "paren"; value: string };
 
+function tokenToString(t: Token): string {
+  if (t.type === "num") return String(t.value);
+  return t.value;
+}
+
 function tokenize(expr: string): Result<Token[], string> {
   // Regex-based tokenizer using matchAll to simplify control flow
   const tokens: Token[] = [];
@@ -49,14 +54,7 @@ function tokenize(expr: string): Result<Token[], string> {
 
   // Sanity check: ensure entire input consists of valid tokens
   const cleaned = expr.replace(/\s+/g, "");
-  const reconstructed = tokens
-    .map((t) => {
-      if (t.type === "num") {
-        return String((t as any).value);
-      }
-      return (t as any).value;
-    })
-    .join("");
+  const reconstructed = tokens.map((t) => tokenToString(t)).join("");
   if (cleaned !== reconstructed) return err("Invalid character in expression");
   return ok(tokens);
 }
@@ -98,7 +96,7 @@ function popWhileHigherPrecedence(
       (isLeftAssoc(currentOpValue) && p1 <= p2) ||
       (!isLeftAssoc(currentOpValue) && p1 < p2)
     ) {
-      output.push(ops.pop() as { type: "op"; value: any });
+      output.push(ops.pop() as { type: "op"; value: string });
     } else break;
   }
 }
