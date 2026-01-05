@@ -1,0 +1,525 @@
+// SafeC AST - Self-hosting version
+// Abstract Syntax Tree node types and utilities
+
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+
+// Forward declarations
+struct ASTNode;
+struct TypeParam;
+struct TypeRef;
+
+// Type parameter: T, K, V, etc.
+struct TypeParam {
+	char *name;
+	struct TypeParam *next;
+};
+
+// Type reference with optional type arguments
+struct TypeRef {
+	char *name;                  // e.g., "int", "Wrapper", "T"
+	struct TypeRef *type_args;   // for Wrapper<int> -> type_args points to "int"
+	int pointer_level;           // number of *
+	struct TypeRef *next;        // for comma-separated type args
+};
+
+// AST Node types
+typedef enum {
+	AST_PROGRAM,
+	AST_STRUCT_DEF,
+	AST_FUNC_DEF,
+	AST_FUNC_DECL,
+	AST_VAR_DECL,
+	AST_PARAM,
+	AST_BLOCK,
+	AST_RETURN,
+	AST_IF,
+	AST_WHILE,
+	AST_FOR,
+	AST_EXPR_STMT,
+	AST_BINARY,
+	AST_UNARY,
+	AST_CALL,
+	AST_MEMBER_ACCESS,
+	AST_ARRAY_ACCESS,
+	AST_IDENTIFIER,
+	AST_NUMBER,
+	AST_STRING,
+	AST_CHAR,
+	AST_SIZEOF,
+	AST_CAST,
+	AST_TYPEDEF,
+	AST_ENUM_DEF,
+	AST_INCLUDE,
+	AST_PASSTHROUGH
+} ASTNodeType;
+
+// Struct definition: struct Name<T, U> { ... };
+struct StructDef {
+	char *name;
+	struct TypeParam *type_params;
+	struct ASTNode *members;
+};
+
+// Function definition/declaration
+struct FuncDef {
+	struct TypeRef *return_type;
+	char *name;
+	struct TypeParam *type_params;
+	struct ASTNode *params;
+	struct ASTNode *body;
+};
+
+// Variable declaration
+struct VarDecl {
+	struct TypeRef *type;
+	char *name;
+	struct ASTNode *init;
+};
+
+// Parameter
+struct Param {
+	struct TypeRef *type;
+	char *name;
+};
+
+// Block statement
+struct Block {
+	struct ASTNode *statements;
+};
+
+// Return statement
+struct Return {
+	struct ASTNode *value;
+};
+
+// If statement
+struct IfStmt {
+	struct ASTNode *condition;
+	struct ASTNode *then_branch;
+	struct ASTNode *else_branch;
+};
+
+// While statement
+struct WhileStmt {
+	struct ASTNode *condition;
+	struct ASTNode *body;
+};
+
+// For statement
+struct ForStmt {
+	struct ASTNode *init;
+	struct ASTNode *condition;
+	struct ASTNode *update;
+	struct ASTNode *body;
+};
+
+// Binary expression
+struct Binary {
+	int op;
+	struct ASTNode *left;
+	struct ASTNode *right;
+};
+
+// Unary expression
+struct Unary {
+	int op;
+	struct ASTNode *operand;
+	int prefix;
+};
+
+// Function call
+struct Call {
+	struct ASTNode *callee;
+	struct TypeRef *type_args;
+	struct ASTNode *args;
+};
+
+// Member access: a.b or a->b
+struct MemberAccess {
+	struct ASTNode *object;
+	char *member;
+	int is_arrow;
+};
+
+// Array access: a[i]
+struct ArrayAccess {
+	struct ASTNode *array;
+	struct ASTNode *index;
+};
+
+// Identifier
+struct Identifier {
+	char *name;
+};
+
+// Number literal
+struct Number {
+	char *value;
+};
+
+// String literal
+struct String {
+	char *value;
+};
+
+// Sizeof expression
+struct SizeofExpr {
+	struct TypeRef *type;
+	struct ASTNode *expr;
+};
+
+// Cast expression
+struct Cast {
+	struct TypeRef *type;
+	struct ASTNode *expr;
+};
+
+// Typedef
+struct TypedefStmt {
+	struct TypeRef *type;
+	char *name;
+};
+
+// Passthrough (raw C code)
+struct Passthrough {
+	char *code;
+};
+
+// Include directive
+struct Include {
+	char *path;
+	int is_system;
+};
+
+// Main AST node structure
+struct ASTNode {
+	ASTNodeType type;
+	int line;
+	int column;
+	struct ASTNode *next;
+
+	union {
+		struct StructDef struct_def;
+		struct FuncDef func_def;
+		struct VarDecl var_decl;
+		struct Param param;
+		struct Block block;
+		struct Return ret;
+		struct IfStmt if_stmt;
+		struct WhileStmt while_stmt;
+		struct ForStmt for_stmt;
+		struct Binary binary;
+		struct Unary unary;
+		struct Call call;
+		struct MemberAccess member;
+		struct ArrayAccess array_access;
+		struct Identifier ident;
+		struct Number number;
+		struct String string;
+		struct SizeofExpr size_of;
+		struct Cast cast;
+		struct TypedefStmt typedef_stmt;
+		struct Passthrough passthrough;
+		struct Include include;
+	} data;
+};
+
+// Memory management
+struct ASTNode *ast_new_node(ASTNodeType type)
+{
+	struct ASTNode *node = (struct ASTNode *)calloc(1, sizeof(struct ASTNode));
+	if (node)
+	{
+		node->type = type;
+	}
+	return node;
+}
+
+struct TypeRef *type_ref_new(const char *name)
+{
+	struct TypeRef *ref = (struct TypeRef *)calloc(1, sizeof(struct TypeRef));
+	if (ref && name)
+	{
+		ref->name = strdup(name);
+	}
+	return ref;
+}
+
+struct TypeParam *type_param_new(const char *name)
+{
+	struct TypeParam *param = (struct TypeParam *)calloc(1, sizeof(struct TypeParam));
+	if (param && name)
+	{
+		param->name = strdup(name);
+	}
+	return param;
+}
+
+struct TypeRef *type_ref_clone(struct TypeRef *ref)
+{
+	if (!ref)
+		return (struct TypeRef *)0;
+
+	struct TypeRef *clone = type_ref_new(ref->name);
+	clone->pointer_level = ref->pointer_level;
+	clone->type_args = type_ref_clone(ref->type_args);
+	clone->next = type_ref_clone(ref->next);
+	return clone;
+}
+
+void ast_free_type_ref(struct TypeRef *ref)
+{
+	while (ref)
+	{
+		struct TypeRef *next = ref->next;
+		free(ref->name);
+		ast_free_type_ref(ref->type_args);
+		free(ref);
+		ref = next;
+	}
+}
+
+void ast_free_type_param(struct TypeParam *param)
+{
+	while (param)
+	{
+		struct TypeParam *next = param->next;
+		free(param->name);
+		free(param);
+		param = next;
+	}
+}
+
+void ast_free(struct ASTNode *node)
+{
+	while (node)
+	{
+		struct ASTNode *next = node->next;
+
+		switch (node->type)
+		{
+		case AST_STRUCT_DEF:
+			free(node->data.struct_def.name);
+			ast_free_type_param(node->data.struct_def.type_params);
+			ast_free(node->data.struct_def.members);
+			break;
+		case AST_FUNC_DEF:
+		case AST_FUNC_DECL:
+			ast_free_type_ref(node->data.func_def.return_type);
+			free(node->data.func_def.name);
+			ast_free_type_param(node->data.func_def.type_params);
+			ast_free(node->data.func_def.params);
+			ast_free(node->data.func_def.body);
+			break;
+		case AST_VAR_DECL:
+			ast_free_type_ref(node->data.var_decl.type);
+			free(node->data.var_decl.name);
+			ast_free(node->data.var_decl.init);
+			break;
+		case AST_PARAM:
+			ast_free_type_ref(node->data.param.type);
+			free(node->data.param.name);
+			break;
+		case AST_BLOCK:
+			ast_free(node->data.block.statements);
+			break;
+		case AST_RETURN:
+			ast_free(node->data.ret.value);
+			break;
+		case AST_IF:
+			ast_free(node->data.if_stmt.condition);
+			ast_free(node->data.if_stmt.then_branch);
+			ast_free(node->data.if_stmt.else_branch);
+			break;
+		case AST_WHILE:
+			ast_free(node->data.while_stmt.condition);
+			ast_free(node->data.while_stmt.body);
+			break;
+		case AST_FOR:
+			ast_free(node->data.for_stmt.init);
+			ast_free(node->data.for_stmt.condition);
+			ast_free(node->data.for_stmt.update);
+			ast_free(node->data.for_stmt.body);
+			break;
+		case AST_BINARY:
+			ast_free(node->data.binary.left);
+			ast_free(node->data.binary.right);
+			break;
+		case AST_UNARY:
+			ast_free(node->data.unary.operand);
+			break;
+		case AST_CALL:
+			ast_free(node->data.call.callee);
+			ast_free_type_ref(node->data.call.type_args);
+			ast_free(node->data.call.args);
+			break;
+		case AST_MEMBER_ACCESS:
+			ast_free(node->data.member.object);
+			free(node->data.member.member);
+			break;
+		case AST_ARRAY_ACCESS:
+			ast_free(node->data.array_access.array);
+			ast_free(node->data.array_access.index);
+			break;
+		case AST_IDENTIFIER:
+			free(node->data.ident.name);
+			break;
+		case AST_NUMBER:
+			free(node->data.number.value);
+			break;
+		case AST_STRING:
+			free(node->data.string.value);
+			break;
+		case AST_SIZEOF:
+			ast_free_type_ref(node->data.size_of.type);
+			ast_free(node->data.size_of.expr);
+			break;
+		case AST_CAST:
+			ast_free_type_ref(node->data.cast.type);
+			ast_free(node->data.cast.expr);
+			break;
+		case AST_TYPEDEF:
+			ast_free_type_ref(node->data.typedef_stmt.type);
+			free(node->data.typedef_stmt.name);
+			break;
+		case AST_PASSTHROUGH:
+			free(node->data.passthrough.code);
+			break;
+		case AST_INCLUDE:
+			free(node->data.include.path);
+			break;
+		default:
+			break;
+		}
+
+		free(node);
+		node = next;
+	}
+}
+
+static void print_indent(int indent)
+{
+	int i = 0;
+	for (i = 0; i < indent; i++)
+	{
+		printf("  ");
+	}
+}
+
+static void print_type_ref(struct TypeRef *ref)
+{
+	if (!ref)
+		return;
+	printf("%s", ref->name);
+	if (ref->type_args)
+	{
+		printf("<");
+		struct TypeRef *arg = ref->type_args;
+		while (arg)
+		{
+			print_type_ref(arg);
+			if (arg->next)
+				printf(", ");
+			arg = arg->next;
+		}
+		printf(">");
+	}
+	int i = 0;
+	for (i = 0; i < ref->pointer_level; i++)
+	{
+		printf("*");
+	}
+}
+
+void ast_print(struct ASTNode *node, int indent)
+{
+	while (node)
+	{
+		print_indent(indent);
+
+		switch (node->type)
+		{
+		case AST_PROGRAM:
+			printf("Program\n");
+			break;
+		case AST_STRUCT_DEF:
+			printf("StructDef: %s", node->data.struct_def.name);
+			if (node->data.struct_def.type_params)
+			{
+				printf("<");
+				struct TypeParam *p = node->data.struct_def.type_params;
+				while (p)
+				{
+					printf("%s", p->name);
+					if (p->next)
+						printf(", ");
+					p = p->next;
+				}
+				printf(">");
+			}
+			printf("\n");
+			ast_print(node->data.struct_def.members, indent + 1);
+			break;
+		case AST_FUNC_DEF:
+			printf("FuncDef: %s", node->data.func_def.name);
+			if (node->data.func_def.type_params)
+			{
+				printf("<");
+				struct TypeParam *p = node->data.func_def.type_params;
+				while (p)
+				{
+					printf("%s", p->name);
+					if (p->next)
+						printf(", ");
+					p = p->next;
+				}
+				printf(">");
+			}
+			printf(" -> ");
+			print_type_ref(node->data.func_def.return_type);
+			printf("\n");
+			ast_print(node->data.func_def.params, indent + 1);
+			ast_print(node->data.func_def.body, indent + 1);
+			break;
+		case AST_VAR_DECL:
+			printf("VarDecl: ");
+			print_type_ref(node->data.var_decl.type);
+			printf(" %s\n", node->data.var_decl.name);
+			break;
+		case AST_PARAM:
+			printf("Param: ");
+			print_type_ref(node->data.param.type);
+			printf(" %s\n", node->data.param.name);
+			break;
+		case AST_BLOCK:
+			printf("Block\n");
+			ast_print(node->data.block.statements, indent + 1);
+			break;
+		case AST_RETURN:
+			printf("Return\n");
+			if (node->data.ret.value)
+			{
+				ast_print(node->data.ret.value, indent + 1);
+			}
+			break;
+		case AST_IDENTIFIER:
+			printf("Identifier: %s\n", node->data.ident.name);
+			break;
+		case AST_NUMBER:
+			printf("Number: %s\n", node->data.number.value);
+			break;
+		case AST_CALL:
+			printf("Call\n");
+			ast_print(node->data.call.callee, indent + 1);
+			break;
+		default:
+			printf("Node type: %d\n", node->type);
+			break;
+		}
+
+		node = node->next;
+	}
+}

@@ -734,6 +734,29 @@ static ASTNode *parse_postfix(Parser *parser)
 					continue;
 				}
 
+				// Additional check: if current is identifier, peek to see if next is ; or ) or other operator
+				// If so, this is a comparison, not generic call
+				if (parser->current.type == TOK_IDENTIFIER)
+				{
+					Token peek = lexer_peek_token(&parser->lexer);
+					// If next token is not >, ,, or *, this is likely a comparison
+					if (peek.type != TOK_GT && peek.type != TOK_COMMA && peek.type != TOK_STAR)
+					{
+						// This is a comparison operator
+						ASTNode *right = parse_binary(parser, get_precedence(TOK_LT) + 1);
+						if (!right)
+							return expr;
+
+						ASTNode *binary = ast_new_node(AST_BINARY);
+						binary->data.binary.op = TOK_LT;
+						binary->data.binary.left = expr;
+						binary->data.binary.right = right;
+						binary->line = parser->previous.line;
+						expr = binary;
+						continue;
+					}
+				}
+
 				// Try to parse as type arguments
 				TypeRef *type_args = NULL;
 				TypeRef *tail = NULL;
@@ -1522,6 +1545,22 @@ static ASTNode *parse_declaration(Parser *parser)
 			}
 			else
 			{
+				// Check for forward declaration: struct Name;
+				if (check(parser, TOK_SEMICOLON))
+				{
+					// Forward declaration - emit as passthrough
+					char *full_name = (char *)malloc(strlen("struct ") + strlen(name) + 1);
+					strcpy(full_name, "struct ");
+					strcat(full_name, name);
+
+					ASTNode *node = ast_new_node(AST_PASSTHROUGH);
+					node->data.passthrough.code = full_name;
+					node->line = parser->previous.line;
+					free(name);
+					consume(parser, TOK_SEMICOLON, "Expected ';'");
+					return node;
+				}
+
 				// It's a variable or function with struct return type: struct Name varname; OR struct Name funcname()
 				char *full_name = (char *)malloc(strlen("struct ") + strlen(name) + 1);
 				strcpy(full_name, "struct ");
