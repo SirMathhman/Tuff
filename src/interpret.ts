@@ -35,12 +35,10 @@ function replaceBraces(expr: string): string {
             String(val)
           );
         }
-        const v = interpret(body);
-        return Number.isNaN(v) ? "NaN" : String(v);
+        return evalToString(body);
       }
 
-      const val = interpret(inner);
-      return Number.isNaN(val) ? "NaN" : String(val);
+      return evalToString(inner);
     });
   }
   return expr;
@@ -51,11 +49,15 @@ function replaceParens(expr: string): string {
   while (parenRegex.test(expr)) {
     expr = expr.replace(parenRegex, (match) => {
       const inner = match.slice(1, -1);
-      const val = interpret(inner);
-      return Number.isNaN(val) ? "NaN" : String(val);
+      return evalToString(inner);
     });
   }
   return expr;
+}
+
+function evalToString(expr: string): string {
+  const val = interpret(expr);
+  return Number.isNaN(val) ? "NaN" : String(val);
 }
 
 function replaceIfExpressions(expr: string): string {
@@ -138,9 +140,9 @@ function findSemicolonAtDepthZero(s: string, startPos: number): number {
   let depth = 0;
   while (pos < s.length) {
     const ch = s[pos];
-    if (ch === '(' || ch === '{') depth++;
-    else if (ch === ')' || ch === '}') depth = Math.max(0, depth - 1);
-    else if (ch === ';' && depth === 0) return pos;
+    if (ch === "(" || ch === "{") depth++;
+    else if (ch === ")" || ch === "}") depth = Math.max(0, depth - 1);
+    else if (ch === ";" && depth === 0) return pos;
     pos++;
   }
   return -1;
@@ -149,7 +151,7 @@ function findSemicolonAtDepthZero(s: string, startPos: number): number {
 function substituteVarsInString(s: string, vars: Map<string, number>): string {
   let out = s;
   for (const [n, v] of vars) {
-    out = out.replace(new RegExp('\\b' + n + '\\b', 'g'), String(v));
+    out = out.replace(new RegExp("\\b" + n + "\\b", "g"), String(v));
   }
   return out;
 }
@@ -159,7 +161,7 @@ function processTopLevelLets(expr: string): number | undefined {
   const topVars = new Map<string, number>();
   let processing = true;
 
-  while (s.startsWith('let') && processing) {
+  while (s.startsWith("let") && processing) {
     const header = s.match(/^let\s+([a-zA-Z_$][\w$]*)\s*:\s*I32\s*=\s*/);
     if (!header) {
       processing = false;
