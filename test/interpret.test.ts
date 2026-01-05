@@ -25,4 +25,14 @@ describe("interpret", () => {
     const result = interpret("10 * 5 + 3");
     expect(result).toEqual({ ok: true, value: 53 });
   });
+
+  it("evaluates mixed precedence left-to-right (addition and multiplication)", () => {
+    const result = interpret("3 + 10 * 5");
+    expect(result).toEqual({ ok: true, value: 53 });
+  });
+
+  it("returns an error for division by zero", () => {
+    const result = interpret("1 / 0");
+    expect(result).toEqual({ ok: false, error: "Division by zero" });
+  });
 });
