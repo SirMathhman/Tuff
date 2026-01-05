@@ -35,6 +35,14 @@ describe("interpret", () => {
     expect(interpret("(3 + 10) * (4 + 1)")).toBe(65);
   });
 
+  it("supports if expressions inside parentheses (true branch)", () => {
+    expect(interpret("(3 + if (true) 10 else 2) * (4 + 1)")).toBe(65);
+  });
+
+  it("supports if expressions inside parentheses (false branch)", () => {
+    expect(interpret("(3 + if (false) 10 else 2) * (4 + 1)")).toBe(25);
+  });
+
   it("returns NaN for malformed leading operator", () => {
     expect(interpret("+ 1")).toBeNaN();
   });
