@@ -6,27 +6,36 @@
 export function interpret(input: string): number {
   const trimmed = input.trim();
 
-  // Minimal expression support: evaluate left-to-right for + and -.
-  // Tokenize numbers and operators (+, -).
-  const tokens = trimmed.match(/-?\d+(?:\.\d+)?|[+\-]/g);
+  // Tokenize numbers and operators (+, -, *, /). Negative numbers are allowed.
+  const tokens = trimmed.match(/-?\d+(?:\.\d+)?|[+\-*/]/g);
   if (tokens && tokens.length > 0) {
-    // First token should be a number for well-formed input; otherwise fall back.
+    // If the first token isn't a number, fallback to numeric coercion
     if (!/^(-?\d)/.test(tokens[0])) {
       return Number(trimmed);
     }
 
-    let acc = Number(tokens[0]);
-    for (let i = 1; i < tokens.length; i += 2) {
-      const op = tokens[i];
-      const next = Number(tokens[i + 1]);
-      if (op === "+") {
-        acc += next;
-      } else if (op === "-") {
-        acc -= next;
+    // First pass: handle * and / with higher precedence.
+    const afterMulDiv: string[] = [];
+    for (let i = 0; i < tokens.length; i++) {
+      const tk = tokens[i];
+      if ((tk === '*' || tk === '/') && afterMulDiv.length > 0) {
+        const prev = Number(afterMulDiv.pop());
+        const next = Number(tokens[++i]);
+        const res = tk === '*' ? prev * next : prev / next;
+        afterMulDiv.push(String(res));
       } else {
-        // Unknown token; fallback to numeric coercion
-        return Number(trimmed);
+        afterMulDiv.push(tk);
       }
+    }
+
+    // Second pass: evaluate + and - left-to-right.
+    let acc = Number(afterMulDiv[0]);
+    for (let i = 1; i < afterMulDiv.length; i += 2) {
+      const op = afterMulDiv[i];
+      const next = Number(afterMulDiv[i + 1]);
+      if (op === '+') acc += next;
+      else if (op === '-') acc -= next;
+      else return Number(trimmed); // unexpected token
     }
     return acc;
   }
