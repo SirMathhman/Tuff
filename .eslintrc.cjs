@@ -12,6 +12,16 @@ module.exports = {
     es6: true,
   },
   rules: {
-    // Add project-specific rule overrides here
+    // Require semicolons for JS files
+    semi: ["error", "always"],
   },
+  overrides: [
+    {
+      files: ["**/*.ts"],
+      rules: {
+        // Ensure semicolons are enforced in TypeScript as well
+        semi: ["error", "always"],
+      },
+    },
+  ],
 };

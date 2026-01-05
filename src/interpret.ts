@@ -4,16 +4,18 @@
  * Minimal implementation: parse a numeric string and simple `a + b` expressions.
  */
 export function interpret(input: string): number {
-  const trimmed = input.trim()
+  const trimmed = input.trim();
 
   // Very small step: support addition of two numbers like `1 + 2` or `1+2`
-  const addMatch = trimmed.match(/^(-?\d+(?:\.\d+)?)\s*\+\s*(-?\d+(?:\.\d+)?)$/)
+  const addMatch = trimmed.match(
+    /^(-?\d+(?:\.\d+)?)\s*\+\s*(-?\d+(?:\.\d+)?)$/
+  );
   if (addMatch) {
-    const a = Number(addMatch[1])
-    const b = Number(addMatch[2])
-    return a + b
+    const a = Number(addMatch[1]);
+    const b = Number(addMatch[2]);
+    return a + b;
   }
 
   // Default: coerce to number
-  return Number(trimmed)
+  return Number(trimmed);
 }
