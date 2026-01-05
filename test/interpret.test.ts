@@ -94,9 +94,15 @@ describe("interpret - lets, bools, and functions", () => {
 });
 
 describe("interpret - functions & errors", () => {
-  it("supports top-level function definitions and calls", () => {
+  it("supports top-level function definitions and calls using yield", () => {
     const src =
       "fn addTwo(first : I32, second : I32) : I32 => { yield first + second; } addTwo(100, 200)";
+    expect(interpret(src)).toBe(300);
+  });
+
+  it("supports top-level function definitions and calls without yield", () => {
+    const src =
+      "fn addTwo(first : I32, second : I32) : I32 => { first + second } addTwo(100, 200)";
     expect(interpret(src)).toBe(300);
   });
 
