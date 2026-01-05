@@ -14,4 +14,8 @@ describe("interpret", () => {
   it("adds multiple terms", () => {
     expect(interpret("1 + 2 + 3")).toBe(6);
   });
+
+  it("handles mixed addition and subtraction", () => {
+    expect(interpret("10 - 5 + 3")).toBe(8);
+  });
 });

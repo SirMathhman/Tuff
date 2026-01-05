@@ -6,10 +6,29 @@
 export function interpret(input: string): number {
   const trimmed = input.trim();
 
-  // Minimal multi-term addition support: split on '+' and sum the numeric parts.
-  const plusParts = trimmed.split("+").map((p) => p.trim());
-  if (plusParts.length > 1) {
-    return plusParts.reduce((acc, part) => acc + Number(part), 0);
+  // Minimal expression support: evaluate left-to-right for + and -.
+  // Tokenize numbers and operators (+, -).
+  const tokens = trimmed.match(/-?\d+(?:\.\d+)?|[+\-]/g);
+  if (tokens && tokens.length > 0) {
+    // First token should be a number for well-formed input; otherwise fall back.
+    if (!/^(-?\d)/.test(tokens[0])) {
+      return Number(trimmed);
+    }
+
+    let acc = Number(tokens[0]);
+    for (let i = 1; i < tokens.length; i += 2) {
+      const op = tokens[i];
+      const next = Number(tokens[i + 1]);
+      if (op === "+") {
+        acc += next;
+      } else if (op === "-") {
+        acc -= next;
+      } else {
+        // Unknown token; fallback to numeric coercion
+        return Number(trimmed);
+      }
+    }
+    return acc;
   }
 
   // Default: coerce to number
