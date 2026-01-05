@@ -7,11 +7,9 @@ function replaceBraces(expr: string): string {
       // Minimal let-binding support: allow multiple `let <ident> : I32 = <rhs>;` declarations
       // followed by a body expression. Use Map instead of Record.
       const vars = new Map<string, number>();
-      let letDecl: RegExpMatchArray | null = null;
+      let letDecl: RegExpMatchArray | undefined;
       while (
-        (letDecl = inner.match(
-          /^let\s+([a-zA-Z_$][\w$]*)\s*:\s*I32\s*=\s*([\s\S]*?)\s*;\s*/
-        )) !== null
+        (letDecl = inner.match(/^let\s+([a-zA-Z_$][\w$]*)\s*:\s*I32\s*=\s*([\s\S]*?)\s*;\s*/ ) ?? undefined) !== undefined
       ) {
         const name = letDecl[1];
         let rhs = letDecl[2].trim();

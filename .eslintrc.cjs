@@ -52,6 +52,15 @@ module.exports = {
               "Avoid 'continue' statements; prefer clearer control flow (early returns, flags).",
           },
           {
+            selector: "Literal[value=null]",
+            message: "Avoid the `null` literal; prefer `undefined` instead.",
+          },
+          {
+            selector: "TSNullKeyword",
+            message:
+              "Avoid using `null` in types; prefer `undefined` in type annotations as needed.",
+          },
+          {
             selector: "TSTypeReference[typeName.name='Record']",
             message:
               "Avoid the 'Record' utility type; prefer using a `Map` for mutable keyed collections.",
