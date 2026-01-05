@@ -25,8 +25,8 @@ export function interpret(input: string): Result<number, string> {
   const dupStructs = checkDuplicateStructs(trimmed);
   if (!dupStructs.ok) return err(dupStructs.error);
 
-  // Empty struct declaration: `struct Name {}` evaluates to 0 for now
-  if (/^\s*struct\s+[A-Za-z_][A-Za-z0-9_]*\s*\{\s*\}\s*$/i.test(trimmed)) {
+  // Struct declaration: `struct Name { ... }` evaluates to 0 for now
+  if (/^\s*struct\s+[A-Za-z_][A-Za-z0-9_]*\s*\{[^}]*\}\s*$/i.test(trimmed)) {
     return ok(0);
   }
 
@@ -138,7 +138,8 @@ function evalLetBinding(input: string): Result<number, string> {
 
   if (!isMut) {
     // Non-mutable: disallow assignment to this name in the body
-    if (new RegExp("\\b" + name + "\\s*=").test(body)) return err("Assignment to immutable variable");
+    if (new RegExp("\\b" + name + "\\s*=").test(body))
+      return err("Assignment to immutable variable");
 
     // Substitute the variable name in body with its numeric value (word boundary)
     const replaced = body.replace(
@@ -237,7 +238,7 @@ function findMatchingBrace(input: string, startIdx: number): number {
 }
 
 function checkDuplicateStructs(input: string): Result<void, string> {
-  const structRe = /struct\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{\s*\}/gi;
+  const structRe = /struct\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{[^}]*\}/gi;
   const names: string[] = [];
   for (const m of input.matchAll(structRe)) {
     names.push(m[1]);
