@@ -6,7 +6,7 @@
   "scripts": {
     "test": "vitest",
     "test:ci": "vitest --run --reporter dot",
-    "lint": "eslint src --ext .ts,.js"
+    "lint": "eslint src test --ext .ts,.js"
   },
   "repository": {
     "type": "git",
