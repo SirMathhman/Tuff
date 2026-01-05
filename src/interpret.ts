@@ -3,7 +3,9 @@ function replaceBraces(expr: string): string {
   while (braceRegex.test(expr)) {
     expr = expr.replace(braceRegex, (match) => {
       const inner = match.slice(1, -1).trim();
-      const { vars, body } = parseLetBindings(inner, { inBraces: true });
+      const { vars, body, error } = parseLetBindings(inner, { inBraces: true });
+
+      if (error) return "NaN";
 
       if (vars.size > 0) {
         const substituted = substituteVarsInString(body, vars);
@@ -131,7 +133,7 @@ function substituteVarsInString(s: string, vars: Map<string, number>): string {
 function parseLetBindings(
   input: string,
   options: { inBraces?: boolean } = {}
-): { vars: Map<string, number>; body: string } {
+): { vars: Map<string, number>; body: string; error?: "rhsNaN" | "duplicate" } {
   let text = input;
   const vars = new Map<string, number>();
   let done = false;
@@ -158,12 +160,15 @@ function parseLetBindings(
       if (endPos === -1) {
         done = true;
       } else {
+        if (vars.has(name)) {
+          return { vars: new Map(), body: text, error: "duplicate" };
+        }
+
         const rhs = text.slice(header[0].length, endPos).trim();
         const substituted = substituteVarsInString(rhs, vars);
         const rhsVal = interpret(substituted);
         if (Number.isNaN(rhsVal)) {
-          // Propagate error via NaN in vars, which will be detected by caller
-          return { vars: new Map(), body: text };
+          return { vars: new Map(), body: text, error: "rhsNaN" };
         }
 
         vars.set(name, rhsVal);
@@ -177,7 +182,9 @@ function parseLetBindings(
 
 function processTopLevelLets(expr: string): number | undefined {
   const s = expr.trim();
-  const { vars, body } = parseLetBindings(s);
+  const { vars, body, error } = parseLetBindings(s);
+
+  if (error) return NaN;
 
   if (vars.size > 0) {
     const substituted = substituteVarsInString(body, vars);

@@ -73,6 +73,14 @@ describe("interpret", () => {
     expect(interpret("let x : I32 = 100;")).toBe(0);
   });
 
+  it("errors for duplicate top-level let declarations", () => {
+    expect(interpret("let x : I32 = 100; let x : I32 = 200;")).toBeNaN();
+  });
+
+  it("errors for duplicate let declarations inside braces", () => {
+    expect(interpret("{ let x : I32 = 1; let x : I32 = 2; x }")).toBeNaN();
+  });
+
   it("returns NaN for malformed leading operator", () => {
     expect(interpret("+ 1")).toBeNaN();
   });
