@@ -1,8 +1,16 @@
 {
   "minLines": 5,
-  "threshold": 0.1,
+  "minTokens": 50,
+  "threshold": 10,
   "mode": "weak",
-  "ignore": ["node_modules/**", "dist/**", "coverage/**"],
+  "ignore": [
+    ".git/**",
+    "node_modules/**",
+    "dist/**",
+    "coverage/**",
+    ".husky/**",
+    "report/**"
+  ],
   "reporters": ["console", "json"],
-  "output": "jscpd-report.json"
+  "output": "report"
 }
