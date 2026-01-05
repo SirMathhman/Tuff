@@ -24,7 +24,9 @@ module.exports = [
       // Disallow assignments in conditional statements (if/while/for)
       "no-cond-assign": ["error", "always"],
       // Treat unreachable code as an error (aligns with TS7027)
-      "no-unreachable": "error"
+      "no-unreachable": "error",
+      // Disallow ternary conditional operators
+      "no-ternary": "error"
     },
   },
   // TypeScript files

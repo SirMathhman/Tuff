@@ -50,9 +50,12 @@ function tokenize(expr: string): Result<Token[], string> {
   // Sanity check: ensure entire input consists of valid tokens
   const cleaned = expr.replace(/\s+/g, "");
   const reconstructed = tokens
-    .map((t) =>
-      t.type === "num" ? String((t as any).value) : (t as any).value
-    )
+    .map((t) => {
+      if (t.type === "num") {
+        return String((t as any).value);
+      }
+      return (t as any).value;
+    })
     .join("");
   if (cleaned !== reconstructed) return err("Invalid character in expression");
   return ok(tokens);
@@ -127,8 +130,11 @@ function toRPN(
     | { type: "paren"; value: string }
   )[] = [];
 
-  const precedence = (op: string) =>
-    op === "+" || op === "-" ? 1 : op === "u-" ? 3 : 2;
+  function precedence(op: string): number {
+    if (op === "+" || op === "-") return 1;
+    if (op === "u-") return 3;
+    return 2;
+  }
   const isLeftAssoc = (op: string) => op !== "u-";
 
   for (const t of tks) {
