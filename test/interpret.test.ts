@@ -55,6 +55,12 @@ describe("interpret", () => {
     if (r.ok) expect(r.value).toBe(5);
   });
 
+  test("inline if returning booleans", () => {
+    const r = interpret("if (true) true else false");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(1);
+  });
+
   test("division by zero returns error", () => {
     const r = interpret("10 / (5 - 5)");
     expect(r.ok).toBe(false);
