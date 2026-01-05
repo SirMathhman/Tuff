@@ -131,6 +131,13 @@ describe("interpret - structs", () => {
     );
     expect(result).toEqual({ ok: true, value: 100 });
   });
+
+  it("type alias works for primitive types", () => {
+    const result = interpret(
+      "type MyAlias = I32; let value : MyAlias = 100; value"
+    );
+    expect(result).toEqual({ ok: true, value: 100 });
+  });
 });
 
 describe("interpret - bindings", () => {

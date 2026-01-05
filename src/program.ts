@@ -9,6 +9,7 @@ export type _ProgramContext = {
   structDefs: Record<string, string[]>;
   vars: Record<string, _ProgramValue>;
   muts: Record<string, boolean>;
+  typeAliases: Record<string, string>;
 };
 
 export function parseTopLevelStatements(input: string): string[] | undefined {
@@ -57,7 +58,12 @@ function readNextTopLevelStatement(
 }
 
 export function evalProgram(stmts: string[]): Result<number, string> {
-  const ctx: _ProgramContext = { structDefs: {}, vars: {}, muts: {} };
+  const ctx: _ProgramContext = {
+    structDefs: {},
+    vars: {},
+    muts: {},
+    typeAliases: {},
+  };
   let lastExpr: string | undefined;
 
   for (const raw of stmts) {
@@ -78,6 +84,9 @@ function evalProgramStatement(
   ctx: _ProgramContext,
   stmt: string
 ): Result<{ lastExpr?: string }, string> {
+  const typeRes = tryHandleProgramTypeAlias(ctx, stmt);
+  if (typeRes) return typeRes;
+
   const structRes = tryHandleProgramStruct(ctx, stmt);
   if (structRes) return structRes;
 
@@ -119,6 +128,23 @@ function parseStructFieldNames(fieldsStr: string): Result<string[], string> {
   return ok(fields);
 }
 
+function tryHandleProgramTypeAlias(
+  ctx: _ProgramContext,
+  stmt: string
+): Result<{ lastExpr?: string }, string> | undefined {
+  if (!stmt.startsWith("type ")) return undefined;
+  const m = stmt.match(
+    /^type\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/i
+  );
+  if (!m) return err("Invalid type alias");
+  const name = m[1];
+  const target = m[2];
+  if (name in ctx.typeAliases) return err("Duplicate binding");
+  if (name in ctx.structDefs) return err("Duplicate binding");
+  if (name in ctx.vars) return err("Duplicate binding");
+  ctx.typeAliases[name] = target;
+  return ok({});
+}
 function tryHandleProgramLet(
   ctx: _ProgramContext,
   stmt: string
@@ -128,18 +154,41 @@ function tryHandleProgramLet(
   if (!parsed.ok) return err(parsed.error);
 
   if (parsed.value.name in ctx.vars) return err("Duplicate binding");
+  if (parsed.value.name in ctx.structDefs) return err("Duplicate binding");
+  if (parsed.value.name in ctx.typeAliases) return err("Duplicate binding");
 
   const init = evalProgramInitializer(ctx, parsed.value.initExpr);
   if (!init.ok) return err(init.error);
 
-  ctx.vars[parsed.value.name] = init.value;
+  // apply type alias resolution and simple bool normalization
+  let finalVal = init.value;
+  if (parsed.value.type) {
+    let target = parsed.value.type;
+    const visited: Set<string> = new Set();
+    while (ctx.typeAliases[target]) {
+      if (visited.has(target)) return err("Cyclic type alias");
+      visited.add(target);
+      target = ctx.typeAliases[target];
+    }
+    if (target.toLowerCase() === "bool") {
+      if (typeof finalVal === "number") {
+        if (finalVal !== 0) finalVal = 1;
+        else finalVal = 0;
+      }
+    }
+  }
+
+  ctx.vars[parsed.value.name] = finalVal;
   ctx.muts[parsed.value.name] = parsed.value.isMut;
   return ok({});
 }
 
 function parseProgramLet(
   stmt: string
-): Result<{ name: string; isMut: boolean; initExpr: string }, string> {
+): Result<
+  { name: string; isMut: boolean; initExpr: string; type?: string },
+  string
+> {
   const rest = stmt.slice(4).trim();
   const eqIdx = rest.indexOf("=");
   if (eqIdx === -1) return err("Invalid let binding");
@@ -149,7 +198,12 @@ function parseProgramLet(
 
   const header = parseLetBindingHeader(beforeEq);
   if (!header.ok) return err(header.error);
-  return ok({ name: header.value.name, isMut: header.value.isMut, initExpr });
+  return ok({
+    name: header.value.name,
+    isMut: header.value.isMut,
+    initExpr,
+    type: header.value.type,
+  });
 }
 
 function evalProgramInitializer(
