@@ -37,6 +37,12 @@ describe("interpret", () => {
     if (r.ok) expect(r.value).toBe(45);
   });
 
+  test("division by zero returns error", () => {
+    const r = interpret("10 / (5 - 5)");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.toLowerCase()).toMatch(/division/);
+  });
+
   test("evaluates multiplication and parentheses", () => {
     const r = interpret("2*(3+4)/2");
     expect(r.ok).toBe(true);

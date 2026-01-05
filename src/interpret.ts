@@ -131,10 +131,10 @@ function popUntilLeftParen(
       found = true;
       break;
     }
-    if (top.type === 'op') {
+    if (top.type === "op") {
       output.push(top);
     } else {
-      return err('Mismatched parentheses in expression');
+      return err("Mismatched parentheses in expression");
     }
   }
   if (!found) return err("Mismatched parentheses in expression");
@@ -224,6 +224,7 @@ function evalRPN(
         stack.push(a * b);
         break;
       case "/":
+        if (b === 0) return err('Division by zero');
         stack.push(a / b);
         break;
       default:
