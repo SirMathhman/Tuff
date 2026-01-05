@@ -16,6 +16,11 @@ module.exports = {
     semi: ["error", "always"],
     // Limit cyclomatic complexity per function
     complexity: ["error", { max: 15 }],
+    // Disallow 'break' statements for simpler control flow
+    "no-restricted-syntax": [
+      "error",
+      { selector: "BreakStatement", message: "Avoid 'break' statements; prefer clearer control flow (early returns, flags)." }
+    ]
   },
   overrides: [
     {
@@ -23,6 +28,12 @@ module.exports = {
       rules: {
         // Ensure semicolons are enforced in TypeScript as well
         semi: ["error", "always"],
+        // Also enforce complexity for TS files
+        complexity: ["error", { max: 15 }],
+        "no-restricted-syntax": [
+          "error",
+          { selector: "BreakStatement", message: "Avoid 'break' statements; prefer clearer control flow (early returns, flags)." }
+        ]
       },
     },
   ],

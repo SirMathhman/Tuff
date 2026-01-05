@@ -11,26 +11,39 @@ function replaceParens(expr: string): string {
 }
 
 function replaceIfExpressions(expr: string): string {
-  while (expr.indexOf("if") !== -1) {
-    const idx = expr.indexOf("if");
+  let processing = true;
+  while (expr.indexOf('if') !== -1 && processing) {
+    const idx = expr.indexOf('if');
     let pos = idx + 2;
-    while (pos < expr.length && expr[pos] === " ") pos++;
+    while (pos < expr.length && expr[pos] === ' ') pos++;
 
-    let condStr = "";
-    if (expr[pos] === "(") {
-      const end = expr.indexOf(")", pos + 1);
-      if (end === -1) break;
-      condStr = expr.slice(pos + 1, end).trim();
-      pos = end + 1;
+    let condStr = '';
+    let malformed = false;
+    if (expr[pos] === '(') {
+      const end = expr.indexOf(')', pos + 1);
+      if (end === -1) {
+        malformed = true;
+      } else {
+        condStr = expr.slice(pos + 1, end).trim();
+        pos = end + 1;
+      }
     } else {
       const m = expr.slice(pos).match(/^\S+/);
-      if (!m) break;
-      condStr = m[0];
-      pos += m[0].length;
+      if (!m) {
+        malformed = true;
+      } else {
+        condStr = m[0];
+        pos += m[0].length;
+      }
     }
 
-    const elseIdx = expr.indexOf("else", pos);
-    if (elseIdx === -1) break;
+    const elseIdx = expr.indexOf('else', pos);
+    if (elseIdx === -1) malformed = true;
+
+    if (malformed) {
+      processing = false;
+      continue;
+    }
 
     const thenStr = expr.slice(pos, elseIdx).trim();
     const elseStr = expr.slice(elseIdx + 4).trim();
