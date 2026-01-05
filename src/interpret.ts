@@ -30,8 +30,8 @@ function tokenize(expr: string): Result<Token[], string> {
   // Regex-based tokenizer: reduces branching and complexity
   const tokens: Token[] = [];
   const tokenRe = /\s+|(?:\d+\.\d*|\d*\.\d+|\d+)|[()+\-*/]/g;
-  let m: RegExpExecArray | null;
-  while ((m = tokenRe.exec(expr)) !== null) {
+  let m: RegExpExecArray | undefined;
+  while ((m = tokenRe.exec(expr) || undefined)) {
     const s = m[0];
     if (/^\s+$/.test(s)) continue;
     if (s === "+" || s === "-" || s === "*" || s === "/") {

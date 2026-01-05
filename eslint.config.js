@@ -11,10 +11,14 @@ module.exports = [
       complexity: ["error", { max: 15 }],
       // Ban throwing; prefer Result<T, E> return values
       "no-restricted-syntax": [
-        "error",
+        'error',
         {
-          selector: "ThrowStatement",
-          message: "Avoid using `throw`. Return a Result<T, E> instead.",
+          selector: 'ThrowStatement',
+          message: 'Avoid using `throw`. Return a Result<T, E> instead.'
+        },
+        {
+          selector: "Literal[value=null]",
+          message: 'Do not use `null`; use `undefined` instead.'
         },
       ],
     },
