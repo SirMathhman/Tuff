@@ -133,8 +133,65 @@ function evalTokens(expr: string): number {
   return acc;
 }
 
+function findSemicolonAtDepthZero(s: string, startPos: number): number {
+  let pos = startPos;
+  let depth = 0;
+  while (pos < s.length) {
+    const ch = s[pos];
+    if (ch === '(' || ch === '{') depth++;
+    else if (ch === ')' || ch === '}') depth = Math.max(0, depth - 1);
+    else if (ch === ';' && depth === 0) return pos;
+    pos++;
+  }
+  return -1;
+}
+
+function substituteVarsInString(s: string, vars: Map<string, number>): string {
+  let out = s;
+  for (const [n, v] of vars) {
+    out = out.replace(new RegExp('\\b' + n + '\\b', 'g'), String(v));
+  }
+  return out;
+}
+
+function processTopLevelLets(expr: string): number | undefined {
+  let s = expr.trim();
+  const topVars = new Map<string, number>();
+  let processing = true;
+
+  while (s.startsWith('let') && processing) {
+    const header = s.match(/^let\s+([a-zA-Z_$][\w$]*)\s*:\s*I32\s*=\s*/);
+    if (!header) {
+      processing = false;
+    } else {
+      const name = header[1];
+      const pos = findSemicolonAtDepthZero(s, header[0].length);
+      if (pos === -1) {
+        processing = false;
+      } else {
+        let rhs = s.slice(header[0].length, pos).trim();
+        rhs = substituteVarsInString(rhs, topVars);
+        const rhsVal = interpret(rhs);
+        if (Number.isNaN(rhsVal)) return NaN;
+        topVars.set(name, rhsVal);
+        s = s.slice(pos + 1).trim();
+      }
+    }
+  }
+
+  if (topVars.size > 0) {
+    const body = substituteVarsInString(s, topVars);
+    return interpret(body);
+  }
+  return undefined;
+}
+
 export function interpret(input: string): number {
   let expr = input.trim();
+
+  const top = processTopLevelLets(expr);
+  if (top !== undefined) return top;
+
   if (expr === "true") return 1;
   if (expr === "false") return 0;
 

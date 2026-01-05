@@ -61,6 +61,14 @@ describe("interpret", () => {
     ).toBe(65);
   });
 
+  it("supports top-level let bindings", () => {
+    expect(
+      interpret(
+        "let z : I32 = (3 + { let x : I32 = if (true) 10 else 2; let y : I32 = x; y }) * (4 + 1); z"
+      )
+    ).toBe(65);
+  });
+
   it("returns NaN for malformed leading operator", () => {
     expect(interpret("+ 1")).toBeNaN();
   });
