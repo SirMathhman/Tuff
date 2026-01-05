@@ -9,6 +9,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "out": "npm run build && node dist/tools/out_builder.js",
     "watch": "tsc -w",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --silent --reporters jest-silent-reporter",
     "start": "node dist/index.js",
