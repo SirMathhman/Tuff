@@ -13,7 +13,7 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --silent --reporters jest-silent-reporter",
     "start": "node dist/index.js",
     "lint": "eslint . --quiet",
-    "cpd": "jscpd src",
+    "cpd": "node scripts/cpd.mjs",
     "prepare": "husky"
   },
   "devDependencies": {
