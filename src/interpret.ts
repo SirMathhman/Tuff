@@ -1,25 +1,22 @@
-export function interpret(input: string): number {
+import { Result, ok, err } from "./result";
+
+export function interpret(input: string): Result<number, string> {
   const trimmed = input.trim();
 
   // Direct numeric string
   const n = Number(trimmed);
   if (Number.isFinite(n)) {
-    return n;
+    return ok(n);
   }
 
   // Allow simple arithmetic expressions consisting of digits, operators, dots, parentheses and whitespace
   if (/^[0-9+\-*/().\s]+$/.test(trimmed)) {
-    try {
-      const result = evaluateExpression(trimmed);
-      if (Number.isFinite(result)) {
-        return result;
-      }
-    } catch (e) {
-      // fall through to throw below
-    }
+    const r = evaluateExpression(trimmed);
+    if (r.ok) return ok(r.value);
+    return err(r.error);
   }
 
-  throw new Error("interpret: input is not a number or valid expression");
+  return err("interpret: input is not a number or valid expression");
 }
 
 // --- Expression evaluator (supports +, -, *, /, parentheses, decimals, unary minus)
@@ -29,7 +26,7 @@ type Token =
   | { type: "op"; value: string }
   | { type: "paren"; value: string };
 
-function tokenize(expr: string): Token[] {
+function tokenize(expr: string): Result<Token[], string> {
   // Regex-based tokenizer: reduces branching and complexity
   const tokens: Token[] = [];
   const tokenRe = /\s+|(?:\d+\.\d*|\d*\.\d+|\d+)|[()+\-*/]/g;
@@ -46,7 +43,7 @@ function tokenize(expr: string): Token[] {
       continue;
     }
     const num = Number(s);
-    if (!Number.isFinite(num)) throw new Error("Invalid number in expression");
+    if (!Number.isFinite(num)) return err("Invalid number in expression");
     tokens.push({ type: "num", value: num });
   }
   // Sanity check: ensure entire input consists of valid tokens
@@ -55,9 +52,8 @@ function tokenize(expr: string): Token[] {
   for (const tk of tokens)
     reconstructed +=
       tk.type === "num" ? String((tk as any).value) : (tk as any).value;
-  if (cleaned !== reconstructed)
-    throw new Error("Invalid character in expression");
-  return tokens;
+  if (cleaned !== reconstructed) return err("Invalid character in expression");
+  return ok(tokens);
 }
 
 function markUnaryMinus(
@@ -82,53 +78,73 @@ function markUnaryMinus(
   return out;
 }
 
-function popWhileHigherPrecedence(currentOpValue: string, ops: ({ type: 'op'; value: string } | { type: 'paren'; value: string })[], output: (Token | { type: 'op'; value: 'u-' })[], precedence: (op: string) => number, isLeftAssoc: (op: string) => boolean) {
-  while (ops.length > 0 && ops[ops.length - 1].type === 'op') {
-    const topOp = (ops[ops.length - 1] as { type: 'op'; value: string }).value;
+function popWhileHigherPrecedence(
+  currentOpValue: string,
+  ops: ({ type: "op"; value: string } | { type: "paren"; value: string })[],
+  output: (Token | { type: "op"; value: "u-" })[],
+  precedence: (op: string) => number,
+  isLeftAssoc: (op: string) => boolean
+) {
+  while (ops.length > 0 && ops[ops.length - 1].type === "op") {
+    const topOp = (ops[ops.length - 1] as { type: "op"; value: string }).value;
     const p1 = precedence(currentOpValue);
     const p2 = precedence(topOp);
-    if ((isLeftAssoc(currentOpValue) && p1 <= p2) || (!isLeftAssoc(currentOpValue) && p1 < p2)) {
-      output.push(ops.pop() as { type: 'op'; value: any });
+    if (
+      (isLeftAssoc(currentOpValue) && p1 <= p2) ||
+      (!isLeftAssoc(currentOpValue) && p1 < p2)
+    ) {
+      output.push(ops.pop() as { type: "op"; value: any });
     } else break;
   }
 }
 
-function popUntilLeftParen(ops: ({ type: 'op'; value: string } | { type: 'paren'; value: string })[], output: (Token | { type: 'op'; value: 'u-' })[]) {
+function popUntilLeftParen(
+  ops: ({ type: "op"; value: string } | { type: "paren"; value: string })[],
+  output: (Token | { type: "op"; value: "u-" })[]
+): Result<void, string> {
   let found = false;
   while (ops.length > 0) {
     const top = ops.pop()!;
-    if (top.type === 'paren' && top.value === '(') {
+    if (top.type === "paren" && top.value === "(") {
       found = true;
       break;
     }
-    output.push(top as { type: 'op'; value: string });
+    output.push(top as { type: "op"; value: string });
   }
-  if (!found) throw new Error('Mismatched parentheses in expression');
+  if (!found) return err("Mismatched parentheses in expression");
+  return ok(undefined);
 }
 
-function toRPN(tokens: Token[]): (Token | { type: 'op'; value: 'u-' })[] {
+function toRPN(
+  tokens: Token[]
+): Result<(Token | { type: "op"; value: "u-" })[], string> {
   const tks = markUnaryMinus(tokens);
-  const output: (Token | { type: 'op'; value: 'u-' })[] = [];
-  const ops: ({ type: 'op'; value: string } | { type: 'paren'; value: string })[] = [];
+  const output: (Token | { type: "op"; value: "u-" })[] = [];
+  const ops: (
+    | { type: "op"; value: string }
+    | { type: "paren"; value: string }
+  )[] = [];
 
-  const precedence = (op: string) => (op === '+' || op === '-') ? 1 : (op === 'u-' ? 3 : 2);
-  const isLeftAssoc = (op: string) => op !== 'u-';
+  const precedence = (op: string) =>
+    op === "+" || op === "-" ? 1 : op === "u-" ? 3 : 2;
+  const isLeftAssoc = (op: string) => op !== "u-";
 
   for (const t of tks) {
-    if (t.type === 'num') {
+    if (t.type === "num") {
       output.push(t);
       continue;
     }
-    if (t.type === 'op') {
+    if (t.type === "op") {
       popWhileHigherPrecedence(t.value, ops, output, precedence, isLeftAssoc);
       ops.push(t);
       continue;
     }
-    if (t.type === 'paren') {
-      if (t.value === '(') {
+    if (t.type === "paren") {
+      if (t.value === "(") {
         ops.push(t);
       } else {
-        popUntilLeftParen(ops, output);
+        const res = popUntilLeftParen(ops, output);
+        if (!res.ok) return err(res.error);
       }
       continue;
     }
@@ -136,14 +152,17 @@ function toRPN(tokens: Token[]): (Token | { type: 'op'; value: 'u-' })[] {
 
   while (ops.length > 0) {
     const top = ops.pop()!;
-    if (top.type === 'paren') throw new Error('Mismatched parentheses in expression');
-    output.push(top as { type: 'op'; value: string });
+    if (top.type === "paren")
+      return err("Mismatched parentheses in expression");
+    output.push(top as { type: "op"; value: string });
   }
 
-  return output;
+  return ok(output);
 }
 
-function evalRPN(rpn: (Token | { type: "op"; value: "u-" })[]): number {
+function evalRPN(
+  rpn: (Token | { type: "op"; value: "u-" })[]
+): Result<number, string> {
   const stack: number[] = [];
   for (const t of rpn) {
     if (t.type === "num") {
@@ -153,15 +172,14 @@ function evalRPN(rpn: (Token | { type: "op"; value: "u-" })[]): number {
     const op = t.value as string;
     if (op === "u-") {
       const a = stack.pop();
-      if (a === undefined) throw new Error("Invalid expression");
+      if (a === undefined) return err("Invalid expression");
       stack.push(-a);
       continue;
     }
     // binary
     const b = stack.pop();
     const a = stack.pop();
-    if (a === undefined || b === undefined)
-      throw new Error("Invalid expression");
+    if (a === undefined || b === undefined) return err("Invalid expression");
     switch (op) {
       case "+":
         stack.push(a + b);
@@ -176,15 +194,18 @@ function evalRPN(rpn: (Token | { type: "op"; value: "u-" })[]): number {
         stack.push(a / b);
         break;
       default:
-        throw new Error("Unknown operator");
+        return err("Unknown operator");
     }
   }
-  if (stack.length !== 1) throw new Error("Invalid expression");
-  return stack[0];
+  if (stack.length !== 1) return err("Invalid expression");
+  return ok(stack[0]);
 }
 
-function evaluateExpression(expr: string): number {
-  const tokens = tokenize(expr);
-  const rpn = toRPN(tokens);
-  return evalRPN(rpn);
+function evaluateExpression(expr: string): Result<number, string> {
+  const tokensRes = tokenize(expr);
+  if (!tokensRes.ok) return err(tokensRes.error);
+  const rpnRes = toRPN(tokensRes.value);
+  if (!rpnRes.ok) return err(rpnRes.error);
+  const evalRes = evalRPN(rpnRes.value);
+  return evalRes;
 }

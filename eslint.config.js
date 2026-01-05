@@ -9,6 +9,14 @@ module.exports = [
     rules: {
       "no-new-func": "error",
       complexity: ["error", { max: 15 }],
+      // Ban throwing; prefer Result<T, E> return values
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "ThrowStatement",
+          message: "Avoid using `throw`. Return a Result<T, E> instead.",
+        },
+      ],
     },
   },
   // TypeScript files
