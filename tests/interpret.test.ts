@@ -62,6 +62,13 @@ describe("interpret", () => {
       value: 2,
     });
     expect(interpret("(2+{let x:I32=10;x})/6")).toEqual({ ok: true, value: 2 });
+
+    // chained declarations referencing previous vars
+    expect(interpret("(2 + { let x : I32 = 10; let y : I32 = x; y }) / 6")).toEqual({
+      ok: true,
+      value: 2,
+    });
+    expect(interpret("(2+{let x:I32=10;let y:I32=x;y})/6")).toEqual({ ok: true, value: 2 });
   });
   test("conditional expressions", () => {
     expect(interpret("(2 + if (true) 10 else 3) / 6")).toEqual({
