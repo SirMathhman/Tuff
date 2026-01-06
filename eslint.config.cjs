@@ -55,4 +55,19 @@ module.exports = [
       },
     },
   },
+
+  // File-specific rules
+  {
+    files: ["src/result.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "VariableDeclarator > ArrowFunctionExpression",
+          message:
+            "Do not assign functions to variables in `result.ts`. Prefer named function declarations (e.g., `function myFunc() {}`).",
+        },
+      ],
+    },
+  },
 ];
