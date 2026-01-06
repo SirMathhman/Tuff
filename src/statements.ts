@@ -6,8 +6,32 @@ interface ParserLike {
   parseExpr(): Result<Value, InterpretError>;
   parseStructDeclaration(): Result<Value, InterpretError>;
   parseLetDeclaration(): Result<Value, InterpretError>;
+  parseFunctionDeclaration(): Result<Value, InterpretError>;
   pushScope(): void;
   popScope(): void;
+}
+
+function handleIdToken(
+  parser: ParserLike,
+  p: Token
+): Result<Value, InterpretError> | undefined {
+  if (p.type !== "id") return undefined;
+  if (p.value === "struct") {
+    const sR = parser.parseStructDeclaration();
+    if (!sR.ok) return sR;
+    return ok(sR.value);
+  }
+  if (p.value === "let") {
+    const declR = parser.parseLetDeclaration();
+    if (!declR.ok) return declR;
+    return ok(declR.value);
+  }
+  if (p.value === "fn") {
+    const fR = parser.parseFunctionDeclaration();
+    if (!fR.ok) return fR;
+    return ok(fR.value);
+  }
+  return undefined;
 }
 
 export function parseStatement(
@@ -18,18 +42,8 @@ export function parseStatement(
   if (!p)
     return err({ type: "InvalidInput", message: "Unable to interpret input" });
 
-  if (p.type === "id") {
-    if (p.value === "struct") {
-      const sR = parser.parseStructDeclaration();
-      if (!sR.ok) return sR;
-      return ok(sR.value);
-    }
-    if (p.value === "let") {
-      const declR = parser.parseLetDeclaration();
-      if (!declR.ok) return declR;
-      return ok(declR.value);
-    }
-  }
+  const idR = handleIdToken(parser, p);
+  if (idR !== undefined) return idR;
 
   const exprR = parser.parseExpr();
   if (!exprR.ok) return exprR;

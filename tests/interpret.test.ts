@@ -207,4 +207,11 @@ describe("interpret", () => {
     const r3 = interpret(base + "myPoint.x + myPoint.y");
     expect(r3).toEqual({ ok: true, value: 7 });
   });
+
+  test("function declaration returns 0", () => {
+    expect(interpret("fn empty() : Void => {}")).toEqual({
+      ok: true,
+      value: 0,
+    });
+  });
 });

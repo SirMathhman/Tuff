@@ -5,6 +5,10 @@ import {
   parseStructLiteral,
   parseMemberAccess,
 } from "./structs";
+import {
+  parseFunctionDeclaration as parseFunctionDeclarationHelper,
+  ParserLike,
+} from "./functions";
 import { parseStatement, parseBraced, parseIfExpression } from "./statements";
 
 const parserScopes = new WeakMap<Parser, Map<string, Value>[]>();
@@ -277,6 +281,10 @@ class Parser {
     // also create a placeholder in variable scope for the type name
     top.set(name, 0);
     return ok(0);
+  }
+
+  public parseFunctionDeclaration(): Result<Value, InterpretError> {
+    return parseFunctionDeclarationHelper(this as unknown as ParserLike);
   }
 
   private requireToken(): Result<Token, InterpretError> {
