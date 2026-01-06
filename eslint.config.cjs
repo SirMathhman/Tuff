@@ -75,6 +75,14 @@ module.exports = [
           message:
             "Do not use 'as' type assertions; prefer typed factory helpers or explicit variable typing.",
         },
+        {
+          selector: "Literal[value=null]",
+          message: "Do not use 'null'; prefer 'undefined' instead.",
+        },
+        {
+          selector: "NullLiteral",
+          message: "Do not use 'null'; prefer 'undefined' instead.",
+        },
       ],
       "@typescript-eslint/no-explicit-any": ["error"],
       ...require("@typescript-eslint/eslint-plugin").configs.recommended.rules,
