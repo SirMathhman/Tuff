@@ -11,6 +11,9 @@ static void test_stub_returns_negative_one(void) {
 	/* New test: simple addition */
 	assert(interpret("1 + 2") == 3);
 	assert(interpret("1+2") == 3);
+	/* New test: chained addition */
+	assert(interpret("1 + 2 + 3") == 6);
+	assert(interpret("1+2+3") == 6);
 	printf("basic tests passed\n");
 }
 

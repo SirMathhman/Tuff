@@ -68,31 +68,40 @@ static int in_int_range(long v) {
 	return v >= INT_MIN && v <= INT_MAX;
 }
 
-/* Try to parse a binary expression `a op b`; on success write result to `out` and return 1 */
-static int parse_binary_expr(const char *s, int *out) {
+/* Try to parse a left-associative chain expression like `a op b op c ...`.
+ * On success write result to `out` and return 1.
+ */
+static int parse_chain_expr(const char *s, int *out)
+{
 	const char *p = s;
 	long a = 0;
 	if (!parse_long(p, &a, &p)) return 0;
 	skip_ws(&p);
-	char op = 0;
-	if (!parse_op_char(&p, &op)) return 0;
-	skip_ws(&p);
-	long b = 0;
-	if (!parse_long(p, &b, &p)) return 0;
-	skip_ws(&p);
-	if (*p != '\0') return 0;
-	if (errno == ERANGE || !in_int_range(a) || !in_int_range(b)) return 0;
-	long long r = 0;
-	if (!compute_op(op, a, b, &r)) return 0;
-	if (r < INT_MIN || r > INT_MAX) return 0;
-	*out = (int)r;
+	/* Start accumulator */
+	if (errno == ERANGE || !in_int_range(a)) return 0;
+	long acc = (long)a;
+	/* Loop over operator and next operand */
+	while (*p != '\0') {
+		char op = 0;
+		if (!parse_op_char(&p, &op)) return 0;
+		skip_ws(&p);
+		long b = 0;
+		if (!parse_long(p, &b, &p)) return 0;
+		skip_ws(&p);
+		if (errno == ERANGE || !in_int_range(b)) return 0;
+		long long r = 0;
+		if (!compute_op(op, acc, b, &r)) return 0;
+		if (r < INT_MIN || r > INT_MAX) return 0;
+		acc = (long)r;
+	}
+	*out = (int)acc;
 	return 1;
 }
 
 int interpret(const char *s) {
 	if (s == NULL) return -1;
 	int result = 0;
-	if (parse_single_expr(s, &result)) return result;
-	if (parse_binary_expr(s, &result)) return result;
+	/* parse_chain_expr handles single, binary, and chained expressions */
+	if (parse_chain_expr(s, &result)) return result;
 	return -1;
 }
