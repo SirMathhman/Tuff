@@ -90,6 +90,9 @@ static int set_var(const char *name, int value, int type) {
 
 /* Forward declarations for recursive-descent parser */
 static int parse_expr(const char **ptr, long long *out_val);
+static int parse_logical_or(const char **ptr, long long *out_val);
+static int parse_logical_and(const char **ptr, long long *out_val);
+static int parse_additive(const char **ptr, long long *out_val);
 static int parse_term(const char **ptr, long long *out_val);
 static int parse_factor(const char **ptr, long long *out_val);
 
@@ -181,14 +184,54 @@ static int parse_term(const char **ptr, long long *out_val) {
 	return 1;
 }
 
-/* expr := term ( ('+' | '-') term )* */
-static int parse_expr(const char **ptr, long long *out_val) {
+/* additive := term ( ('+' | '-') term )* */
+static int parse_additive(const char **ptr, long long *out_val) {
 	long long accum = 0;
 	if (!parse_term(ptr, &accum)) return 0;
 	const binseq_ctx addsub_ctx = {"+-", parse_term};
 	if (!parse_binseq(ptr, &accum, &addsub_ctx)) return 0;
 	*out_val = accum;
 	return 1;
+}
+
+typedef struct {
+	const char *token;
+	int (*rhs_parser)(const char **, long long *);
+	int is_or;
+} token_ctx;
+
+static int parse_binseq_token(const char **ptr, long long *accum, const token_ctx *ctx) {
+	skip_ws(ptr);
+	size_t tlen = strlen(ctx->token);
+	while (**ptr && strncmp(*ptr, ctx->token, tlen) == 0) {
+		(*ptr) += tlen; /* consume token */
+		skip_ws(ptr);
+		long long rhs = 0;
+		if (!ctx->rhs_parser(ptr, &rhs)) return 0;
+		if (ctx->is_or)
+			*accum = (*accum || rhs) ? 1 : 0;
+		else
+			*accum = (*accum && rhs) ? 1 : 0;
+		skip_ws(ptr);
+	}
+	return 1;
+}
+
+static int parse_logical_and(const char **ptr, long long *out_val) {
+	if (!parse_additive(ptr, out_val)) return 0;
+	const token_ctx ctx = {"&&", parse_additive, 0};
+	return parse_binseq_token(ptr, out_val, &ctx);
+}
+
+static int parse_logical_or(const char **ptr, long long *out_val) {
+	if (!parse_logical_and(ptr, out_val)) return 0;
+	const token_ctx ctx = {"||", parse_logical_and, 1};
+	return parse_binseq_token(ptr, out_val, &ctx);
+}
+
+/* top-level expr now handles logical operators */
+static int parse_expr(const char **ptr, long long *out_val) {
+	return parse_logical_or(ptr, out_val);
 }
 
 static void copy_str_bounded(char *dst, const char *src, size_t dst_len) {

@@ -62,6 +62,10 @@ static void test_stub_returns_negative_one(void) {
 	/* Bool declaration and literal */
 	should_eval("let b : Bool = true; b", 1);
 	should_eval("let c : Bool = false; c", 0);
+	/* Bool logical operators */
+	should_eval("let d : Bool = true || false; d", 1);
+	should_eval("let e : Bool = true && false; e", 0);
+	should_eval("let f : Bool = (true || false) && true; f", 1);
 	printf("basic tests passed\n");
 }
 
