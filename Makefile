@@ -19,6 +19,9 @@ format:
 	clang-format -i include/*.h src/*.c tests/*.c
 	@echo "Formatted source files with clang-format (K&R brace style)."
 
+precommit: test lint format
+	@echo "precommit: all checks passed"
+
 lint:
 	@command -v clang-tidy >/dev/null 2>&1 || { echo "clang-tidy not found"; exit 1; }
 	clang-tidy $(SRC) -- -Iinclude

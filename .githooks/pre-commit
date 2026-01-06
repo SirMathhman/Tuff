@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Pre-commit hook: run make test, make lint, make format in that order
+set -euo pipefail
+
+if ! command -v make >/dev/null 2>&1; then
+    echo "make not found in PATH; skipping pre-commit checks"
+    exit 0
+fi
+
+echo "Running pre-commit checks: test, lint, format"
+# Use repo make target
+make precommit
