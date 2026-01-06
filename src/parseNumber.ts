@@ -1,18 +1,23 @@
-export function parseNumber(s: string, i: number): { value: number; nextIndex: number } {
+export interface ParseNumberResult {
+  value: number;
+  nextIndex: number;
+}
+
+export function parseNumber(s: string, i: number): ParseNumberResult {
   const len = s.length;
   let j = i;
 
   // optional sign
   let sign = 1;
-  if (s[j] === '+' || s[j] === '-') {
-    if (s[j] === '-') sign = -1;
+  if (s[j] === "+" || s[j] === "-") {
+    if (s[j] === "-") sign = -1;
     j++;
   }
 
   // skip whitespace between sign and digits
-  while (j < len && s[j] === ' ') j++;
+  while (j < len && s[j] === " ") j++;
 
-  let numStr = '';
+  let numStr = "";
   let hasDigits = false;
   let hasDot = false;
 
@@ -24,7 +29,7 @@ export function parseNumber(s: string, i: number): { value: number; nextIndex: n
       numStr += c;
       hasDigits = true;
       j++;
-    } else if (c === '.' && !hasDot) {
+    } else if (c === "." && !hasDot) {
       numStr += c;
       hasDot = true;
       j++;
@@ -33,10 +38,10 @@ export function parseNumber(s: string, i: number): { value: number; nextIndex: n
     }
   }
 
-  if (!hasDigits) throw new Error('Invalid numeric input');
+  if (!hasDigits) throw new Error("Invalid numeric input");
 
   const value = sign * Number(numStr);
-  if (Number.isNaN(value)) throw new Error('Invalid numeric input');
+  if (Number.isNaN(value)) throw new Error("Invalid numeric input");
 
   return { value, nextIndex: j };
 }
