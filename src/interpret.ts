@@ -1,17 +1,13 @@
 import { tokenize, Token } from "./tokenize";
 import { evalLeftToRight } from "./evalLeftToRight";
-import { Result, ok, err, isOk, isErr } from "./result";
+import { Result, ok, err, isErr } from "./result";
 import {
   Binding,
   InlineIfResult,
   evalInlineMatchToNumToken,
 } from "./matchEval";
-import {
-  indexUntilSemicolon as assignmentIndexUntilSemicolon,
-  evalExprUntilSemicolon,
-  tryAssignment,
-} from "./assignmentEval";
-import { indexUntilSemicolon, findMatchingBrace } from "./commonUtils";
+import { evalExprUntilSemicolon, tryAssignment } from "./assignmentEval";
+import { indexUntilSemicolon } from "./commonUtils";
 
 interface ProcessResult {
   lastVal?: number;
