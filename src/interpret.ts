@@ -81,14 +81,14 @@ class Parser {
     const left = this.parseFactor();
     if (!left.ok) return left;
     let val = left.value;
-    while (true) {
-      const p = this.peek();
-      if (!p || p.type !== "op" || (p.value !== "*" && p.value !== "/")) break;
+    let p = this.peek();
+    while (p && p.type === "op" && (p.value === "*" || p.value === "/")) {
       const op = this.consume()!.value;
       const right = this.parseFactor();
       if (!right.ok) return right;
       const rhs = right.value;
       val = op === "*" ? val * rhs : val / rhs;
+      p = this.peek();
     }
     return ok(val);
   }
@@ -97,14 +97,14 @@ class Parser {
     const left = this.parseTerm();
     if (!left.ok) return left;
     let val = left.value;
-    while (true) {
-      const p = this.peek();
-      if (!p || p.type !== "op" || (p.value !== "+" && p.value !== "-")) break;
+    let p = this.peek();
+    while (p && p.type === "op" && (p.value === "+" || p.value === "-")) {
       const op = this.consume()!.value;
       const right = this.parseTerm();
       if (!right.ok) return right;
       const rhs = right.value;
       val = op === "+" ? val + rhs : val - rhs;
+      p = this.peek();
     }
     return ok(val);
   }
