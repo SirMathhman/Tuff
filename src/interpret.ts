@@ -186,13 +186,20 @@ class Parser {
     return ok(valR.value);
   }
 
-  parsePrimary(): Result<number, InterpretError> {
+  private requireToken(): Result<Token, InterpretError> {
     const tk = this.peek();
     if (!tk)
       return err({
         type: "InvalidInput",
         message: "Unable to interpret input",
       });
+    return ok(tk);
+  }
+
+  parsePrimary(): Result<number, InterpretError> {
+    const tkR = this.requireToken();
+    if (!tkR.ok) return tkR;
+    const tk = tkR.value;
 
     // parentheses
     if (tk.type === "op" && tk.value === "(") {
@@ -228,6 +235,44 @@ class Parser {
     return ok(r.value);
   }
 
+  private parseStatement(allowEof: boolean): Result<number, InterpretError> {
+    const p = this.peek();
+    if (!p)
+      return err({
+        type: "InvalidInput",
+        message: "Unable to interpret input",
+      });
+
+    if (this.isIdToken(p) && p.value === "let") {
+      const declR = this.parseLetDeclaration();
+      if (!declR.ok) return declR;
+      return ok(declR.value);
+    }
+
+    const exprR = this.parseExpr();
+    if (!exprR.ok) return exprR;
+    const val = exprR.value;
+
+    const next = this.peek();
+    if (this.isOpToken(next, ";")) {
+      this.consume();
+      return ok(val);
+    }
+
+    if (this.isOpToken(next, "}")) {
+      return ok(val);
+    }
+
+    if (!next && allowEof) {
+      return ok(val);
+    }
+
+    return err({
+      type: "InvalidInput",
+      message: "Unexpected token in statement",
+    });
+  }
+
   parseBraced(): Result<number, InterpretError> {
     // assume current token is '{'
     this.consume();
@@ -247,35 +292,12 @@ class Parser {
         return ok(lastVal);
       }
 
-      if (this.isIdToken(p) && p.value === "let") {
-        const declR = this.parseLetDeclaration();
-        if (!declR.ok) {
-          this.popScope();
-          return declR;
-        }
-        lastVal = declR.value;
-      } else {
-        const exprR = this.parseExpr();
-        if (!exprR.ok) {
-          this.popScope();
-          return exprR;
-        }
-        lastVal = exprR.value;
-
-        const next = this.peek();
-        if (this.isOpToken(next, ";")) {
-          this.consume();
-          // loop naturally continues
-        } else if (this.isOpToken(next, "}")) {
-          // next iteration will handle closing brace
-        } else {
-          this.popScope();
-          return err({
-            type: "InvalidInput",
-            message: "Unexpected token in block",
-          });
-        }
+      const stmtR = this.parseStatement(false);
+      if (!stmtR.ok) {
+        this.popScope();
+        return stmtR;
       }
+      lastVal = stmtR.value;
     }
   }
 
@@ -359,48 +381,45 @@ class Parser {
     return this.parsePrimary();
   }
 
-  parseTerm(): Result<number, InterpretError> {
-    const left = this.parseFactor();
+  private parseBinary(
+    nextParser: () => Result<number, InterpretError>,
+    ops: Set<string>,
+    apply: (op: string, a: number, b: number) => number
+  ): Result<number, InterpretError> {
+    const left = nextParser();
     if (!left.ok) return left;
     let val = left.value;
     let p = this.peek();
-    while (p && p.type === "op" && (p.value === "*" || p.value === "/")) {
+    while (p && p.type === "op" && ops.has(p.value)) {
       const opToken = this.consume();
       if (!opToken)
         return err({
           type: "InvalidInput",
           message: "Unable to interpret input",
         });
-      const op = opToken.value;
-      const right = this.parseFactor();
+      const op = String(opToken.value);
+      const right = nextParser();
       if (!right.ok) return right;
-      const rhs = right.value;
-      val = op === "*" ? val * rhs : val / rhs;
+      val = apply(op, val, right.value);
       p = this.peek();
     }
     return ok(val);
   }
 
+  parseTerm(): Result<number, InterpretError> {
+    return this.parseBinary(
+      () => this.parseFactor(),
+      new Set(["*", "/"]),
+      (op, a, b) => (op === "*" ? a * b : a / b)
+    );
+  }
+
   parseExpr(): Result<number, InterpretError> {
-    const left = this.parseTerm();
-    if (!left.ok) return left;
-    let val = left.value;
-    let p = this.peek();
-    while (p && p.type === "op" && (p.value === "+" || p.value === "-")) {
-      const opToken = this.consume();
-      if (!opToken)
-        return err({
-          type: "InvalidInput",
-          message: "Unable to interpret input",
-        });
-      const op = opToken.value;
-      const right = this.parseTerm();
-      if (!right.ok) return right;
-      const rhs = right.value;
-      val = op === "+" ? val + rhs : val - rhs;
-      p = this.peek();
-    }
-    return ok(val);
+    return this.parseBinary(
+      () => this.parseTerm(),
+      new Set(["+", "-"]),
+      (op, a, b) => (op === "+" ? a + b : a - b)
+    );
   }
 
   parse(): Result<number, InterpretError> {
@@ -421,36 +440,12 @@ class Parser {
         });
       }
 
-      if (this.isIdToken(p) && p.value === "let") {
-        const declR = this.parseLetDeclaration();
-        if (!declR.ok) {
-          this.popScope();
-          return declR;
-        }
-        lastVal = declR.value;
-        continue;
-      }
-
-      const exprR = this.parseExpr();
-      if (!exprR.ok) {
+      const stmtR = this.parseStatement(true);
+      if (!stmtR.ok) {
         this.popScope();
-        return exprR;
+        return stmtR;
       }
-      lastVal = exprR.value;
-
-      const next = this.peek();
-      if (this.isOpToken(next, ";")) {
-        this.consume();
-        // continue with next statement
-      } else if (this.idx === this.tokens.length) {
-        // end of input, OK
-      } else {
-        this.popScope();
-        return err({
-          type: "InvalidInput",
-          message: "Unable to interpret input",
-        });
-      }
+      lastVal = stmtR.value;
     }
 
     this.popScope();

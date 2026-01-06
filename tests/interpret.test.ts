@@ -13,11 +13,16 @@ describe("interpret", () => {
   });
 
   test("simple addition via split on '+'", () => {
-    expect(interpret("1 + 2")).toEqual({ ok: true, value: 3 });
-    expect(interpret("1+2")).toEqual({ ok: true, value: 3 });
-    expect(interpret(" 1 + 2 ")).toEqual({ ok: true, value: 3 });
-    expect(interpret("1 + 2 + 3")).toEqual({ ok: true, value: 6 });
-    expect(interpret("1+2+3")).toEqual({ ok: true, value: 6 });
+    const cases = [
+      ["1 + 2", 3],
+      ["1+2", 3],
+      [" 1 + 2 ", 3],
+      ["1 + 2 + 3", 6],
+      ["1+2+3", 6],
+    ] as const;
+    for (const [input, expected] of cases) {
+      expect(interpret(input)).toEqual({ ok: true, value: expected });
+    }
   });
 
   test("addition and subtraction combined", () => {
