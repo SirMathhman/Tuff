@@ -254,4 +254,12 @@ describe("interpret", () => {
       },
     });
   });
+
+  test("function invocation without yield returns last expression", () => {
+    expect(
+      interpret(
+        "fn add(first : I32, second : I32) => { first + second } add(2, 3)"
+      )
+    ).toEqual({ ok: true, value: 5 });
+  });
 });
