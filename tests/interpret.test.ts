@@ -135,13 +135,21 @@ describe("interpret - parentheses, division & modulus", () => {
   });
 });
 
-describe("interpret - identifiers and let", () => {
+describe("interpret - identifiers", () => {
   it("returns Err on undefined identifier", () => {
     const r = interpret("a - 1");
     expect(isErr(r)).toBe(true);
     if (isErr(r)) expect(r.error).toBe("Undefined variable");
   });
 
+  it("errors on referencing undefined variable", () => {
+    const r = interpret("x");
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error).toBe("Undefined variable");
+  });
+});
+
+describe("interpret - let & assignment", () => {
   it("supports let bindings and I32 coercion", () => {
     const r = interpret("let x : I32 = (3 + 10) * 5; x");
     expect(isOk(r)).toBe(true);
@@ -171,10 +179,24 @@ describe("interpret - identifiers and let", () => {
     expect(isErr(r2)).toBe(true);
     if (isErr(r2)) expect(r2.error).toBe("Undefined variable");
   });
+});
 
-  it("errors on referencing undefined variable", () => {
-    const r = interpret("x");
-    expect(isErr(r)).toBe(true);
-    if (isErr(r)) expect(r.error).toBe("Undefined variable");
+describe("interpret - if expressions", () => {
+  it("evaluates if with true condition", () => {
+    const r = interpret("let x : I32 = if (true) 3 else 5; x");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(3);
+  });
+
+  it("evaluates if with false condition", () => {
+    const r = interpret("let x : I32 = if (false) 3 else 5; x");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(5);
+  });
+
+  it("evaluates bare if expression", () => {
+    const r = interpret("if (true) 1 else 0");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(1);
   });
 });
