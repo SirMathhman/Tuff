@@ -24,10 +24,10 @@ module.exports = [
         "error",
         { max: 50, skipComments: true, skipBlankLines: true },
       ],
-      // limit file length to encourage smaller modules
+      // limit file length to encourage smaller modules (include comments)
       "max-lines": [
         "error",
-        { max: 500, skipComments: true, skipBlankLines: true },
+        { max: 500, skipComments: false, skipBlankLines: true },
       ],
       // disallow throw statements; use Result<T,E> style returns instead
       "no-restricted-syntax": [
