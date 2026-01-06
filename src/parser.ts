@@ -1,4 +1,4 @@
-/* eslint-disable no-restricted-syntax */
+/* eslint-disable no-restricted-syntax, max-lines */
 import { Result, InterpretError, Token, ok, err, Value } from "./types";
 import {
   parseStructFields,
@@ -14,6 +14,10 @@ import { parseCallExternal } from "./calls";
 
 const parserScopes = new WeakMap<Parser, Map<string, Value>[]>();
 const parserTypeScopes = new WeakMap<Parser, Map<string, string[]>[]>();
+const parserVarTypeScopes = new WeakMap<
+  Parser,
+  Map<string, string | undefined>[]
+>();
 
 class Parser {
   private tokens: Token[];
@@ -60,6 +64,23 @@ class Parser {
     return s[ln - 1];
   }
 
+  private getVarTypeScopes(): Map<string, string | undefined>[] {
+    const s = parserVarTypeScopes.get(this);
+    if (!s) {
+      const arr: Map<string, string | undefined>[] = [];
+      parserVarTypeScopes.set(this, arr);
+      return arr;
+    }
+    return s;
+  }
+
+  private currentVarTypeScope(): Map<string, string | undefined> | undefined {
+    const s = this.getVarTypeScopes();
+    const ln = s.length;
+    if (ln === 0) return undefined;
+    return s[ln - 1];
+  }
+
   private lookupType(name: string): string[] | undefined {
     const s = this.getTypeScopes();
     for (let i = s.length - 1; i >= 0; i--) {
@@ -95,11 +116,14 @@ class Parser {
     this.getScopes().push(new Map<string, Value>());
     // also push a parallel type scope for struct definitions
     this.getTypeScopes().push(new Map<string, string[]>());
+    // and a parallel variable type scope for declared variable types
+    this.getVarTypeScopes().push(new Map<string, string | undefined>());
   }
 
   public popScope(): void {
     this.getScopes().pop();
     this.getTypeScopes().pop();
+    this.getVarTypeScopes().pop();
   }
 
   private isOpToken(tk: Token | undefined, v: string): boolean {
@@ -110,6 +134,37 @@ class Parser {
     tk: Token | undefined
   ): tk is { type: "id"; value: string } {
     return Boolean(tk && tk.type === "id");
+  }
+
+  // peek the token after the current
+  public peekNext(): Token | undefined {
+    return this.tokens[this.idx + 1];
+  }
+
+  // assign to an existing variable in the nearest scope
+  public assignVar(name: string, value: Value): Result<Value, InterpretError> {
+    const s = this.getScopes();
+    for (let i = s.length - 1; i >= 0; i--) {
+      const scope = s[i];
+      if (this.scopeHas(scope, name)) {
+        // check type conformance if declared
+        const vScopes = this.getVarTypeScopes();
+        for (let j = vScopes.length - 1; j >= 0; j--) {
+          const vs = vScopes[j];
+          if (vs.has(name)) {
+            const typeName = vs.get(name);
+            if (typeName) {
+              const tcErr = this.checkTypeConformance(typeName, value);
+              if (tcErr) return err(tcErr);
+            }
+            break;
+          }
+        }
+        scope.set(name, value);
+        return ok(value);
+      }
+    }
+    return err({ type: "UndefinedIdentifier", identifier: name });
   }
 
   private consumeOptionalType(): { typeName?: string; error?: InterpretError } {
@@ -203,26 +258,33 @@ class Parser {
     if (typeRes.error) return err(typeRes.error);
     const typeName = typeRes.typeName;
 
-    const eqErr = this.consumeExpectedOp(
-      "=",
-      "Expected = in variable declaration"
-    );
-    if (eqErr) return err(eqErr);
+    const next = this.peek();
+    let initialValue: Value = 0;
 
-    const valR = this.parseExpr();
-    if (!valR.ok) return valR;
-
-    // simple type checks for named types
-    if (typeName) {
-      const tcErr = this.checkTypeConformance(typeName, valR.value);
-      if (tcErr) return err(tcErr);
+    if (next && next.type === "op" && next.value === "=") {
+      // consume '=' and parse initializer
+      this.consume();
+      const valR = this.parseExpr();
+      if (!valR.ok) return valR;
+      initialValue = valR.value;
+      // simple type checks for named types
+      if (typeName) {
+        const tcErr = this.checkTypeConformance(typeName, initialValue);
+        if (tcErr) return err(tcErr);
+      }
+      const semiErr = this.consumeExpectedOp(
+        ";",
+        "Missing ; after variable declaration"
+      );
+      if (semiErr) return err(semiErr);
+    } else {
+      // declaration without initializer: expect semicolon
+      const semiErr = this.consumeExpectedOp(
+        ";",
+        "Missing ; after variable declaration"
+      );
+      if (semiErr) return err(semiErr);
     }
-
-    const semiErr = this.consumeExpectedOp(
-      ";",
-      "Missing ; after variable declaration"
-    );
-    if (semiErr) return err(semiErr);
 
     const top = this.currentScope();
     if (!top)
@@ -236,8 +298,12 @@ class Parser {
       });
     }
 
-    top.set(name, valR.value);
-    return ok(valR.value);
+    top.set(name, initialValue);
+    // record declared type (if any) in var type scope so future assignments can be checked
+    const vscope = this.currentVarTypeScope();
+    if (vscope) vscope.set(name, typeName);
+
+    return ok(initialValue);
   }
 
   public parseStructDeclaration(): Result<Value, InterpretError> {

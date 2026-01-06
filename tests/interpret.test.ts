@@ -262,4 +262,11 @@ describe("interpret", () => {
       )
     ).toEqual({ ok: true, value: 5 });
   });
+
+  test("variable assignment after declaration", () => {
+    expect(interpret("let result : I32; result = 20; result")).toEqual({
+      ok: true,
+      value: 20,
+    });
+  });
 });

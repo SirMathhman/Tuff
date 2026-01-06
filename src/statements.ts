@@ -10,11 +10,13 @@ import {
 
 interface ParserLike {
   peek(): Token | undefined;
+  peekNext(): Token | undefined;
   consume(): Token | undefined;
   parseExpr(): Result<Value, InterpretError>;
   parseStructDeclaration(): Result<Value, InterpretError>;
   parseLetDeclaration(): Result<Value, InterpretError>;
   parseFunctionDeclaration(): Result<Value, InterpretError>;
+  assignVar(name: string, value: Value): Result<Value, InterpretError>;
   pushScope(): void;
   popScope(): void;
 }
@@ -58,6 +60,23 @@ function handleIdToken(
   return undefined;
 }
 
+function tryHandleAssignment(parser: ParserLike, p: Token): Result<Value, InterpretError> | undefined {
+  if (p.type !== "id") return undefined;
+  const next = parser.peekNext();
+  if (!next || next.type !== "op" || next.value !== "=") return undefined;
+
+  const varName = p.value;
+  parser.consume(); // consume identifier
+  parser.consume(); // consume '='
+  const rhs = parser.parseExpr();
+  if (!rhs.ok) return rhs;
+  const semi = parser.peek();
+  if (semi && semi.type === "op" && semi.value === ";") parser.consume();
+  const assignR = parser.assignVar(varName, rhs.value);
+  if (!assignR.ok) return assignR;
+  return ok(assignR.value);
+}
+
 export function parseStatement(
   parser: ParserLike,
   allowEof: boolean
@@ -68,6 +87,10 @@ export function parseStatement(
 
   const idR = handleIdToken(parser, p);
   if (idR !== undefined) return idR;
+
+  // assignment handling delegated to a helper to reduce complexity
+  const assignR = tryHandleAssignment(parser, p);
+  if (assignR !== undefined) return assignR;
 
   const exprR = parser.parseExpr();
   if (!exprR.ok) return exprR;
