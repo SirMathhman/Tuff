@@ -7,7 +7,7 @@ import {
   evalInlineMatchToNumToken,
 } from "./matchEval";
 import { evalExprUntilSemicolon, tryAssignment } from "./assignmentEval";
-import { indexUntilSemicolon } from "./commonUtils";
+import { indexUntilSemicolon, findMatchingBrace } from "./commonUtils";
 
 interface ProcessResult {
   lastVal?: number;
@@ -137,6 +137,107 @@ function evalIfExpression(
   return ok(branchRes.value.lastVal ?? 0);
 }
 
+interface BlockExprResult {
+  token: Token;
+  consumed: number;
+}
+
+function evalBlockExpression(
+  tokens: Token[],
+  start: number,
+  env: Map<string, Binding>
+): Result<BlockExprResult, string> {
+  if (
+    !tokens[start] ||
+    tokens[start].type !== "punct" ||
+    tokens[start].value !== "{"
+  ) {
+    return err("Invalid numeric input");
+  }
+  const braceEnd = findMatchingBrace(tokens, start);
+  if (braceEnd === -1) return err("Invalid numeric input");
+  const blockTokens = tokens.slice(start + 1, braceEnd);
+  if (blockTokens.length === 0)
+    return err("Block must have a final expression");
+
+  const blockRes = processStatementsTokens(blockTokens, env);
+  if (isErr(blockRes)) return err(blockRes.error);
+
+  const blockValue = blockRes.value.lastVal;
+  if (blockValue === undefined)
+    return err("Block must have a final expression");
+
+  return ok({
+    token: { type: "num", value: blockValue },
+    consumed: braceEnd - start + 1,
+  });
+}
+
+interface SubstituteResult {
+  token: Token;
+  consumed: number;
+}
+
+function substituteIdentToken(
+  tokens: Token[],
+  idx: number,
+  env: Map<string, Binding>
+): Result<SubstituteResult, string> {
+  const t = tokens[idx];
+  if (t.type !== "ident") return err("Invalid numeric input");
+  
+  if (t.value === "true") {
+    return ok({ token: { type: "num", value: 1 }, consumed: 1 });
+  } else if (t.value === "false") {
+    return ok({ token: { type: "num", value: 0 }, consumed: 1 });
+  } else if (t.value === "if") {
+    const inlineRes = evalInlineIfToNumToken(tokens, idx, env);
+    if (isErr(inlineRes)) return err(inlineRes.error);
+    return ok({ token: inlineRes.value.token, consumed: inlineRes.value.consumed });
+  } else if (t.value === "match") {
+    const inlineRes = evalInlineMatchToNumToken(
+      tokens,
+      idx,
+      env,
+      findMatchingParen,
+      evalExprWithEnv
+    );
+    if (isErr(inlineRes)) return err(inlineRes.error);
+    return ok({ token: inlineRes.value.token, consumed: inlineRes.value.consumed });
+  } else {
+    const b = env.get(t.value);
+    if (b === undefined) return err("Undefined variable");
+    if (b.value === undefined) return err("Uninitialized variable");
+    return ok({ token: { type: "num", value: b.value }, consumed: 1 });
+  }
+}
+
+function substituteTokens(
+  tokens: Token[],
+  env: Map<string, Binding>
+): Result<Token[], string> {
+  const substituted: Token[] = [];
+  let i = 0;
+  while (i < tokens.length) {
+    const t = tokens[i];
+    if (t.type === "ident") {
+      const substRes = substituteIdentToken(tokens, i, env);
+      if (isErr(substRes)) return err(substRes.error);
+      substituted.push(substRes.value.token);
+      i += substRes.value.consumed;
+    } else if (t.type === "punct" && t.value === "{") {
+      const blockRes = evalBlockExpression(tokens, i, env);
+      if (isErr(blockRes)) return err(blockRes.error);
+      substituted.push(blockRes.value.token);
+      i += blockRes.value.consumed;
+    } else {
+      substituted.push(t);
+      i++;
+    }
+  }
+  return ok(substituted);
+}
+
 function evalExprWithEnv(tokens: Token[], env: Map<string, Binding>) {
   // If the whole expression is wrapped in outer parentheses, strip them to expose `if` at top-level
   const stripped = stripOuterParens(tokens);
@@ -149,46 +250,9 @@ function evalExprWithEnv(tokens: Token[], env: Map<string, Binding>) {
   }
 
   // Replace identifier tokens with numbers from env; support boolean literals and inline `if` (consumes remainder)
-  const substituted: Token[] = [];
-  let i = 0;
-  while (i < tokens.length) {
-    const t = tokens[i];
-    let consumed = 1;
-    if (t.type === "ident") {
-      if (t.value === "true") {
-        substituted.push({ type: "num", value: 1 });
-      } else if (t.value === "false") {
-        substituted.push({ type: "num", value: 0 });
-      } else if (t.value === "if") {
-        const inlineRes = evalInlineIfToNumToken(tokens, i, env);
-        if (isErr(inlineRes)) return err(inlineRes.error);
-        substituted.push(inlineRes.value.token);
-        consumed = inlineRes.value.consumed;
-      } else if (t.value === "match") {
-        const inlineRes = evalInlineMatchToNumToken(
-          tokens,
-          i,
-          env,
-          findMatchingParen,
-          evalExprWithEnv
-        );
-        if (isErr(inlineRes)) return err(inlineRes.error);
-        substituted.push(inlineRes.value.token);
-        consumed = inlineRes.value.consumed;
-      } else {
-        const b = env.get(t.value);
-        if (b === undefined) return err("Undefined variable");
-        if (b.value === undefined) return err("Uninitialized variable");
-        substituted.push({ type: "num", value: b.value });
-      }
-    } else if (t.type === "punct") {
-      return err("Invalid numeric input");
-    } else {
-      substituted.push(t);
-    }
-    i += consumed;
-  }
-  return evalLeftToRight(substituted);
+  const substRes = substituteTokens(tokens, env);
+  if (isErr(substRes)) return err(substRes.error);
+  return evalLeftToRight(substRes.value);
 }
 
 // Top-level helper types & functions (extracted from interpret to reduce function length)
@@ -271,7 +335,7 @@ function processLetStatement(
   let { value: val, nextIndex: nextIdx } = evalRes.value;
   if (typeName === "I32") val = Math.trunc(val);
   envMap.set(name, { value: val, mutable, typeName });
-  return ok({ nextIndex: nextIdx, value: val });
+  return ok({ nextIndex: nextIdx });
 }
 
 function processExpressionStatement(
@@ -280,12 +344,7 @@ function processExpressionStatement(
   envMap: Map<string, Binding>
 ): Result<StatementResult, string> {
   const start = idx;
-  let j = idx;
-  while (
-    j < tokensArr.length &&
-    !(tokensArr[j].type === "punct" && tokensArr[j].value === ";")
-  )
-    j++;
+  const j = indexUntilSemicolon(tokensArr, idx);
   const exprTokens = tokensArr.slice(start, j);
   const valRes = evalExprWithEnv(exprTokens, envMap);
   if (isErr(valRes)) return err(valRes.error);
@@ -372,6 +431,28 @@ function processIfStatement(
   return ok({ nextIndex, value: branchRes.value.lastVal });
 }
 
+function processBlockStatement(
+  tokensArr: Token[],
+  idx: number,
+  envMap: Map<string, Binding>
+): Result<StatementResult, string> {
+  if (
+    !tokensArr[idx] ||
+    tokensArr[idx].type !== "punct" ||
+    tokensArr[idx].value !== "{"
+  ) {
+    return err("Invalid numeric input");
+  }
+  const braceEnd = findMatchingBrace(tokensArr, idx);
+  if (braceEnd === -1) return err("Invalid numeric input");
+
+  const blockTokens = tokensArr.slice(idx + 1, braceEnd);
+  const blockRes = processStatementsTokens(blockTokens, envMap);
+  if (isErr(blockRes)) return err(blockRes.error);
+
+  return ok({ nextIndex: braceEnd + 1, value: blockRes.value.lastVal });
+}
+
 function processStatement(
   tokensArr: Token[],
   idx: number,
@@ -394,6 +475,9 @@ function processStatement(
 
   if (t.type === "ident" && t.value === "if")
     return processIfStatement(tokensArr, idx, envMap);
+
+  if (t.type === "punct" && t.value === "{")
+    return processBlockStatement(tokensArr, idx, envMap);
 
   // assignment or compound-assignment: ident <punct> ...
   const assignRes = tryAssignment(tokensArr, idx, envMap, evalExprWithEnv);

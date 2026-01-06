@@ -356,3 +356,98 @@ describe("interpret - if expressions (statement branches)", () => {
     if (isOk(r)) expect(r.value).toBe(4);
   });
 });
+
+describe("interpret - block expressions", () => {
+  it("evaluates simple block expression", () => {
+    const r = interpret("{ 100 }");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(100);
+  });
+
+  it("block in arithmetic expression", () => {
+    const r = interpret("1 + { 2 }");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(3);
+  });
+
+  it("block with let statement inside expression", () => {
+    const r = interpret("100 + { let x : I32 = 50; x }");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(150);
+  });
+
+  it("block in let initializer", () => {
+    const r = interpret("let x : I32 = { 100 }; x");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(100);
+  });
+
+  it("nested blocks", () => {
+    const r = interpret("{ { 50 } }");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(50);
+  });
+
+  it("block with multiple statements and final expression", () => {
+    const r = interpret("{ let y : I32 = 5; y * 2 }");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(10);
+  });
+
+  it("block with mutation", () => {
+    const r = interpret("let mut x : I32 = 1; { x = x + 10; } x");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(11);
+  });
+});
+
+describe("interpret - block statements", () => {
+  it("block as statement without final expression", () => {
+    const r = interpret("let x : I32 = 100; {} x");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(100);
+  });
+
+  it("block as statement with let only", () => {
+    const r = interpret("{ let y : I32 = 100; } 50");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(50);
+  });
+
+  it("errors on empty block in expression", () => {
+    const r = interpret("let x = {};");
+    expect(isErr(r)).toBe(true);
+  });
+
+  it("errors on block with only let in expression", () => {
+    const r = interpret("let x : I32 = { let y = 100; };");
+    expect(isErr(r)).toBe(true);
+  });
+
+  it("errors on block with no final expression in arithmetic", () => {
+    const r = interpret("1 + { let x = 100; };");
+    expect(isErr(r)).toBe(true);
+  });
+});
+
+describe("interpret - complex block operations", () => {
+  it("complex block with multiple operations", () => {
+    const r = interpret("let mut x : I32 = 5; { x = x * 2; x = x + 10; } x");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(20);
+  });
+
+  it("block in if condition", () => {
+    const r = interpret("if ({ 1 }) 100 else 0");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(100);
+  });
+
+  it("block in match condition", () => {
+    const r = interpret(
+      "let x : I32; x = match ({ 1 }) { case 1 => 42; default => 0; }; x"
+    );
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(42);
+  });
+});
