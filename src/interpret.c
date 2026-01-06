@@ -32,12 +32,51 @@ static int parse_number(const char **ptr, long *out_val) {
 	return 1;
 }
 
+/* Parse identifier: [A-Za-z_][A-Za-z0-9_]* into out (null-terminated). Advances *ptr. */
+static int parse_identifier(const char **ptr, char *out, size_t out_len) {
+	const char *p = *ptr;
+	if (!((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') || *p == '_')) return 0;
+	size_t i = 0;
+	while ((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') || (*p >= '0' && *p <= '9') || *p == '_') {
+		if (i + 1 < out_len) out[i++] = *p;
+		p++;
+	}
+	out[i] = '\0';
+	*ptr = p;
+	return 1;
+}
+
+/* Simple symbol table for I32 variables */
+#define MAX_VARS 64
+#define MAX_VAR_NAME 32
+struct var_entry { char name[MAX_VAR_NAME]; int value; };
+static struct var_entry vars[MAX_VARS];
+static int vars_count = 0;
+
+static struct var_entry *find_var(const char *name) {
+	for (int i = 0; i < vars_count; ++i) {
+		if (strcmp(vars[i].name, name) == 0) return &vars[i];
+	}
+	return NULL;
+}
+
+static int set_var(const char *name, int value) {
+	struct var_entry *v = find_var(name);
+	if (v) { v->value = value; return 1; }
+	if (vars_count >= MAX_VARS) return 0;
+	strncpy(vars[vars_count].name, name, MAX_VAR_NAME-1);
+	vars[vars_count].name[MAX_VAR_NAME-1] = '\0';
+	vars[vars_count].value = value;
+	vars_count++;
+	return 1;
+}
+
 /* Forward declarations for recursive-descent parser */
 static int parse_expr(const char **ptr, long long *out_val);
 static int parse_term(const char **ptr, long long *out_val);
 static int parse_factor(const char **ptr, long long *out_val);
 
-/* factor := number | '(' expr ')' */
+/* factor := number | identifier | '(' expr ')' */
 static int parse_factor(const char **ptr, long long *out_val) {
 	skip_ws(ptr);
 	if (**ptr == '(') {
@@ -48,6 +87,15 @@ static int parse_factor(const char **ptr, long long *out_val) {
 		if (**ptr != ')') return 0;
 		(*ptr)++;
 		*out_val = val;
+		return 1;
+	}
+	/* identifier? */
+	if ((**ptr >= 'A' && **ptr <= 'Z') || (**ptr >= 'a' && **ptr <= 'z') || **ptr == '_') {
+		char name[MAX_VAR_NAME];
+		if (!parse_identifier(ptr, name, sizeof(name))) return 0;
+		struct var_entry *v = find_var(name);
+		if (!v) return 0; /* unknown identifier */
+		*out_val = v->value;
 		return 1;
 	}
 	long num = 0;
@@ -112,8 +160,45 @@ static int parse_expr(const char **ptr, long long *out_val) {
 	return 1;
 }
 
-/* Try parse full expression and ensure whole string consumed */
+/* Try parse a statement: let <ident> : I32 = <expr> ; */
+static int parse_statement(const char *str, int *out_val) {
+	const char *p = str;
+	skip_ws(&p);
+	/* match 'let' */
+	if (strncmp(p, "let", 3) != 0) return 0;
+	p += 3;
+	if (!isspace((unsigned char)*p)) return 0;
+	skip_ws(&p);
+	char name[MAX_VAR_NAME];
+	if (!parse_identifier(&p, name, sizeof(name))) return 0;
+	skip_ws(&p);
+	if (*p != ':') return 0;
+	p++;
+	skip_ws(&p);
+	/* expect I32 */
+	if (strncmp(p, "I32", 3) != 0) return 0;
+	p += 3;
+	skip_ws(&p);
+	if (*p != '=') return 0;
+	p++;
+	/* parse expression */
+	long long val = 0;
+	if (!parse_expr(&p, &val)) return 0;
+	skip_ws(&p);
+	if (*p != ';') return 0;
+	p++;
+	skip_ws(&p);
+	if (*p != '\0') return 0;
+	if (val < INT_MIN || val > INT_MAX) return 0;
+	if (!set_var(name, (int)val)) return 0;
+	*out_val = 0; /* specification: return 0 on successful declaration */
+	return 1;
+}
+
+/* Try parse full expression or statement and ensure whole string consumed */
 static int parse_full_expr(const char *str, int *out_val) {
+	/* Try statement first */
+	if (parse_statement(str, out_val)) return 1;
 	const char *ptr = str;
 	long long val = 0;
 	if (!parse_expr(&ptr, &val)) return 0;

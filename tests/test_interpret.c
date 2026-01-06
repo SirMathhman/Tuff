@@ -37,6 +37,10 @@ static void test_stub_returns_negative_one(void) {
 	/* Division by zero should produce an error */
 	should_error("10 / 0");
 	should_error("10/0");
+	/* Variable declaration */
+	should_eval("let x : I32 = 1 + 2 + 3;", 0);
+	/* The declared variable can be used in expressions */
+	should_eval("x + 1", 7);
 	printf("basic tests passed\n");
 }
 
