@@ -31,6 +31,22 @@ function handleIdToken(
     if (!fR.ok) return fR;
     return ok(fR.value);
   }
+
+  if (p.value === "yield") {
+    // consume 'yield' and evaluate expression, then return a return-signal value
+    parser.consume();
+    const exprR = parser.parseExpr();
+    if (!exprR.ok) return exprR;
+    if (typeof exprR.value !== "number")
+      return err({
+        type: "InvalidInput",
+        message: "Yield expression must be numeric",
+      });
+    const next = parser.peek();
+    if (next && next.type === "op" && next.value === ";") parser.consume();
+    return ok({ type: "return", value: exprR.value });
+  }
+
   return undefined;
 }
 
@@ -89,6 +105,33 @@ export function parseBraced(parser: ParserLike): Result<Value, InterpretError> {
     if (!stmtR.ok) {
       parser.popScope();
       return stmtR;
+    }
+    // propagate return signals immediately: skip to matching closing brace then return
+    // detect return signal and skip to matching closing brace
+    // eslint-disable-next-line no-restricted-syntax, @typescript-eslint/no-explicit-any
+    if (typeof stmtR.value === "object" && (stmtR.value as any).type === "return") {
+      let depth = 0;
+      for (;;) {
+        const t = parser.peek();
+        if (!t) {
+          parser.popScope();
+          return err({ type: "InvalidInput", message: "Missing closing brace" });
+        }
+        if (t.type === "op" && t.value === "{") {
+          depth++;
+          parser.consume();
+        } else if (t.type === "op" && t.value === "}") {
+          if (depth === 0) {
+            parser.consume();
+            parser.popScope();
+            return ok(stmtR.value);
+          }
+          depth--;
+          parser.consume();
+        } else {
+          parser.consume();
+        }
+      }
     }
     lastVal = stmtR.value;
   }

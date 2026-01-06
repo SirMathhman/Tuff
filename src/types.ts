@@ -32,9 +32,18 @@ export interface IdToken {
 }
 export type Token = NumToken | OpToken | IdToken;
 
-// runtime values can be plain numbers or struct instances (map of field -> number)
+// runtime values can be plain numbers, struct instances (map of field -> number), or functions
 export type StructInstance = Map<string, number>;
-export type Value = number | StructInstance;
+export interface FunctionValue {
+  type: "fn";
+  params: string[];
+  body: Token[];
+}
+export interface ReturnSignalValue {
+  type: "return";
+  value: number;
+}
+export type Value = number | StructInstance | FunctionValue | ReturnSignalValue;
 
 export function ok<T, E>(value: T): Result<T, E> {
   return { ok: true, value };

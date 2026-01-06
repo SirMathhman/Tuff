@@ -214,4 +214,12 @@ describe("interpret", () => {
       value: 0,
     });
   });
+
+  test("function invocation with yield returns correct value", () => {
+    expect(
+      interpret(
+        "fn add(first : I32, second : I32) => { yield first + second; } add(2, 3)"
+      )
+    ).toEqual({ ok: true, value: 5 });
+  });
 });

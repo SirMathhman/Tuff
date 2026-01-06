@@ -5,13 +5,12 @@
   "scripts": {
     "prepare": "husky install",
     "test": "jest",
+    "test:watch": "jest --watchAll",
     "build": "tsc -p tsconfig.json",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "cpd": "pmd cpd -d src,tests -l typescript --minimum-tokens 50 -f text",
-    "cpd:files": "pmd cpd --minimum-tokens 50 --files src,tests --language typescript --format text",
-    "cpd:ignore": "pmd cpd -d src,tests -l typescript --minimum-tokens 50 -f text --ignore-identifiers --ignore-literals",
-    "cpd:ignore:files": "pmd cpd --minimum-tokens 50 --files src,tests --language typescript --format text --ignore-identifiers --ignore-literals"
+    "cpd:ignore": "pmd cpd -d src,tests -l typescript --minimum-tokens 50 -f text --ignore-identifiers --ignore-literals"
   },
   "devDependencies": {
     "@types/jest": "^29.5.3",

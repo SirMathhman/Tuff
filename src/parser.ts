@@ -1,5 +1,12 @@
 /* eslint-disable no-restricted-syntax */
-import { Result, InterpretError, Token, ok, err, Value } from "./types";
+import {
+  Result,
+  InterpretError,
+  Token,
+  ok,
+  err,
+  Value,
+} from "./types";
 import {
   parseStructFields,
   parseStructLiteral,
@@ -10,6 +17,7 @@ import {
   ParserLike,
 } from "./functions";
 import { parseStatement, parseBraced, parseIfExpression } from "./statements";
+import { parseCallExternal } from "./calls";
 
 const parserScopes = new WeakMap<Parser, Map<string, Value>[]>();
 const parserTypeScopes = new WeakMap<Parser, Map<string, string[]>[]>();
@@ -336,6 +344,10 @@ class Parser {
     return ok(r.value);
   }
 
+  private parseCall(name: string): Result<Value, InterpretError> {
+    return parseCallExternal(this as unknown as object, name);
+  }
+
   private parseBooleanIfPresent(): Result<Value, InterpretError> | undefined {
     const tk = this.peek();
     if (
@@ -366,39 +378,57 @@ class Parser {
       return ok(tk.value);
     }
 
-    // identifier: could be a struct literal (TypeName { ... }), a variable or member access
+    // identifier-like literals are handled by a helper to reduce complexity
     if (tk.type === "id") {
-      const next = this.tokens[this.idx + 1];
-
-      // struct literal: TypeName { ... }
-      if (next && next.type === "op" && next.value === "{") {
-        const typeDef = this.lookupType(tk.value);
-        if (!typeDef)
-          return err({
-            type: "InvalidInput",
-            message: `Unknown type: ${tk.value}`,
-          });
-        // consume type name
-        this.consume();
-        return parseStructLiteral(this, typeDef);
-      }
-
-      // member access: var.field
-      const maybeDot = this.tokens[this.idx + 1];
-      if (maybeDot && maybeDot.type === "op" && maybeDot.value === ".") {
-        return parseMemberAccess(this, tk.value);
-      }
-
-      // otherwise variable lookup
-      const v = this.lookupVar(tk.value);
-      if (v !== undefined) {
-        this.consume();
-        return ok(v);
-      }
-      return err({ type: "UndefinedIdentifier", identifier: tk.value });
+      return this.parseIdentifierLike();
     }
 
     return err({ type: "InvalidInput", message: "Unable to interpret input" });
+  }
+
+  private parseIdentifierLike(): Result<Value, InterpretError> {
+    const tk = this.peek();
+    if (!tk || tk.type !== "id")
+      return err({
+        type: "InvalidInput",
+        message: "Unable to interpret input",
+      });
+
+    const next = this.tokens[this.idx + 1];
+
+    // struct literal: TypeName { ... }
+    if (next && next.type === "op" && next.value === "{") {
+      const typeDef = this.lookupType(tk.value);
+      if (!typeDef)
+        return err({
+          type: "InvalidInput",
+          message: `Unknown type: ${tk.value}`,
+        });
+      // consume type name
+      this.consume();
+      return parseStructLiteral(this, typeDef);
+    }
+
+    // function call: id(arg1, arg2)
+    const maybeCall = this.tokens[this.idx + 1];
+    if (maybeCall && maybeCall.type === "op" && maybeCall.value === "(") {
+      return this.parseCall(tk.value);
+    }
+
+    // member access: var.field
+    const maybeDot = this.tokens[this.idx + 1];
+    if (maybeDot && maybeDot.type === "op" && maybeDot.value === ".") {
+      return parseMemberAccess(this, tk.value);
+    }
+
+    // otherwise variable lookup
+    const v = this.lookupVar(tk.value);
+    if (v !== undefined) {
+      this.consume();
+      return ok(v);
+    }
+
+    return err({ type: "UndefinedIdentifier", identifier: tk.value });
   }
 
   parseFactor(): Result<Value, InterpretError> {

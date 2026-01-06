@@ -1,4 +1,12 @@
-import { Result, InterpretError, Value, ok, err, Token } from "./types";
+import {
+  Result,
+  InterpretError,
+  Value,
+  FunctionValue,
+  ok,
+  err,
+  Token,
+} from "./types";
 
 export interface ParserLike {
   peek(): Token | undefined;
@@ -7,11 +15,12 @@ export interface ParserLike {
   getScopes(): Map<string, Value>[];
 }
 
-function parseSingleParam(parser: ParserLike): Result<void, InterpretError> {
+function parseSingleParam(parser: ParserLike): Result<string, InterpretError> {
   const nameTok = parser.consume();
   if (!nameTok || nameTok.type !== "id")
     return err({ type: "InvalidInput", message: "Expected parameter name" });
 
+  const name = nameTok.value;
   const colon = parser.peek();
   if (!colon || colon.type !== "op" || colon.value !== ":")
     return err({
@@ -31,11 +40,12 @@ function parseSingleParam(parser: ParserLike): Result<void, InterpretError> {
     (maybeSep.value === "," || maybeSep.value === ";")
   )
     parser.consume();
-  return ok(undefined);
+  return ok(name);
 }
 
-function parseParamList(parser: ParserLike): Result<void, InterpretError> {
+function parseParamList(parser: ParserLike): Result<string[], InterpretError> {
   // expects '(' already consumed
+  const params: string[] = [];
   while (true) {
     const p = parser.peek();
     if (!p)
@@ -45,21 +55,25 @@ function parseParamList(parser: ParserLike): Result<void, InterpretError> {
       });
     if (p.type === "op" && p.value === ")") {
       parser.consume();
-      return ok(undefined);
+      return ok(params);
     }
 
     const single = parseSingleParam(parser);
     if (!single.ok) return single;
+    params.push(single.value);
   }
 }
 
-function skipBracedBlock(parser: ParserLike): Result<void, InterpretError> {
+function collectBlockTokens(
+  parser: ParserLike
+): Result<Token[], InterpretError> {
   const open = parser.consume();
   if (!open || open.type !== "op" || open.value !== "{")
     return err({
       type: "InvalidInput",
       message: "Missing opening brace in function body",
     });
+  const out: Token[] = [];
   let depth = 1;
   while (depth > 0) {
     const tk = parser.consume();
@@ -69,11 +83,21 @@ function skipBracedBlock(parser: ParserLike): Result<void, InterpretError> {
         message: "Unterminated function body",
       });
     if (tk.type === "op") {
-      if (tk.value === "{") depth++;
-      else if (tk.value === "}") depth--;
+      if (tk.value === "{") {
+        depth++;
+        out.push(tk);
+      } else if (tk.value === "}") {
+        depth--;
+        if (depth === 0) return ok(out);
+        out.push(tk);
+      } else {
+        out.push(tk);
+      }
+    } else {
+      out.push(tk);
     }
   }
-  return ok(undefined);
+  return ok(out);
 }
 
 export function parseFunctionDeclaration(
@@ -108,13 +132,23 @@ export function parseFunctionDeclaration(
   const arrowR = expectArrow(parser);
   if (!arrowR.ok) return arrowR;
 
-  // skip braced body
-  const bodyR = skipBracedBlock(parser);
+  // collect braced body tokens
+  const bodyR = collectBlockTokens(parser);
   if (!bodyR.ok) return bodyR;
 
-  const regR = registerFunctionName(parser, nameTok.value);
-  if (!regR.ok) return regR;
+  const scopes = parser.getScopes();
+  const top = scopes[scopes.length - 1];
+  if (!top)
+    return err({ type: "InvalidInput", message: "Invalid block scope" });
 
+  const params = paramsR.value;
+  const fv: FunctionValue = { type: "fn", params, body: bodyR.value };
+
+  const name = nameTok.value;
+  if (top.has(name))
+    return err({ type: "InvalidInput", message: "Duplicate declaration" });
+
+  top.set(name, fv);
   return ok(0);
 }
 
@@ -147,19 +181,5 @@ function expectArrow(parser: ParserLike): Result<void, InterpretError> {
       type: "InvalidInput",
       message: "Expected => in function declaration",
     });
-  return ok(undefined);
-}
-
-function registerFunctionName(
-  parser: ParserLike,
-  name: string
-): Result<void, InterpretError> {
-  const scopes = parser.getScopes();
-  const top = scopes[scopes.length - 1];
-  if (!top)
-    return err({ type: "InvalidInput", message: "Invalid block scope" });
-  if (top.has(name))
-    return err({ type: "InvalidInput", message: "Duplicate declaration" });
-  top.set(name, 0);
   return ok(undefined);
 }
