@@ -23,6 +23,9 @@ static void test_stub_returns_negative_one(void) {
 	/* New test: parentheses and precedence */
 	assert(interpret("10 * (5 + 3)") == 80);
 	assert(interpret("10*(5+3)") == 80);
+	/* Division by zero should produce an error (return -1) */
+	assert(interpret("10 / 0") == -1);
+	assert(interpret("10/0") == -1);
 	printf("basic tests passed\n");
 }
 
