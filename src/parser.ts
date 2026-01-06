@@ -51,46 +51,33 @@ class Parser implements ParserLike {
     return this.valueScopes;
   }
 
-  private getTypeScopes(): Map<string, string[]>[] {
-    return this.structTypeScopes;
-  }
-
   private currentTypeScope(): Map<string, string[]> | undefined {
-    const s = this.getTypeScopes();
+    const s = this.structTypeScopes;
     const ln = s.length;
     if (ln === 0) return undefined;
     return s[ln - 1];
   }
-  private getVarTypeScopes(): Map<string, string | undefined>[] {
-    return this.varTypeScopes;
-  }
-  private getVarMutabilityScopes(): Map<string, boolean>[] {
-    return this.varMutabilityScopes;
-  }
-  private getVarInitializedScopes(): Map<string, boolean>[] {
-    return this.varInitializedScopes;
-  }
   private currentVarTypeScope(): Map<string, string | undefined> | undefined {
-    const s = this.getVarTypeScopes();
+    const s = this.varTypeScopes;
     const ln = s.length;
     if (ln === 0) return undefined;
     return s[ln - 1];
   }
   private currentVarMutabilityScope(): Map<string, boolean> | undefined {
-    const s = this.getVarMutabilityScopes();
+    const s = this.varMutabilityScopes;
     const ln = s.length;
     if (ln === 0) return undefined;
     return s[ln - 1];
   }
   private currentVarInitializedScope(): Map<string, boolean> | undefined {
-    const s = this.getVarInitializedScopes();
+    const s = this.varInitializedScopes;
     const ln = s.length;
     if (ln === 0) return undefined;
     return s[ln - 1];
   }
 
   public lookupType(name: string): string[] | undefined {
-    const s = this.getTypeScopes();
+    const s = this.structTypeScopes;
     for (let i = s.length - 1; i >= 0; i--) {
       const scope = s[i];
       if (scope.has(name)) return scope.get(name);
@@ -122,26 +109,26 @@ class Parser implements ParserLike {
   public pushScope(): void {
     const scopes = this.getScopes();
     scopes.push(new Map<string, Value>());
-    const typeScopes = this.getTypeScopes();
+    const typeScopes = this.structTypeScopes;
     typeScopes.push(new Map<string, string[]>());
-    const varTypes = this.getVarTypeScopes();
+    const varTypes = this.varTypeScopes;
     varTypes.push(new Map<string, string | undefined>());
-    const varMut = this.getVarMutabilityScopes();
+    const varMut = this.varMutabilityScopes;
     varMut.push(new Map<string, boolean>());
-    const varInit = this.getVarInitializedScopes();
+    const varInit = this.varInitializedScopes;
     varInit.push(new Map<string, boolean>());
   }
 
   public popScope(): void {
     const scopes = this.getScopes();
     scopes.pop();
-    const typeScopes = this.getTypeScopes();
+    const typeScopes = this.structTypeScopes;
     typeScopes.pop();
-    const varTypes = this.getVarTypeScopes();
+    const varTypes = this.varTypeScopes;
     varTypes.pop();
-    const varMut = this.getVarMutabilityScopes();
+    const varMut = this.varMutabilityScopes;
     varMut.pop();
-    const varInit = this.getVarInitializedScopes();
+    const varInit = this.varInitializedScopes;
     varInit.pop();
   }
 
@@ -175,7 +162,7 @@ class Parser implements ParserLike {
       const scope = s[i];
       if (this.scopeHas(scope, name)) {
         const tcErr = checkVarTypeConformanceHelper(
-          this.getVarTypeScopes(),
+          this.varTypeScopes,
           name,
           value,
           (n) => this.lookupType(n)
@@ -183,7 +170,7 @@ class Parser implements ParserLike {
         if (tcErr) return err(tcErr);
 
         const initialR = tryInitialAssignmentHelper(
-          this.getVarInitializedScopes(),
+          this.varInitializedScopes,
           scope,
           name,
           value
@@ -191,7 +178,7 @@ class Parser implements ParserLike {
         if (initialR) return initialR;
 
         const mutErr = ensureVarMutableHelper(
-          this.getVarMutabilityScopes(),
+          this.varMutabilityScopes,
           name
         );
         if (mutErr) return err(mutErr);
@@ -417,16 +404,16 @@ class Parser implements ParserLike {
 
   // expose type scope access for helpers (kept narrow)
   public getTypeScopesPublic(): Map<string, string[]>[] {
-    return this.getTypeScopes();
+    return this.structTypeScopes;
   }
   public getVarTypeScopesPublic(): Map<string, string | undefined>[] {
-    return this.getVarTypeScopes();
+    return this.varTypeScopes;
   }
   public getVarMutabilityScopesPublic(): Map<string, boolean>[] {
-    return this.getVarMutabilityScopes();
+    return this.varMutabilityScopes;
   }
   public getVarInitializedScopesPublic(): Map<string, boolean>[] {
-    return this.getVarInitializedScopes();
+    return this.varInitializedScopes;
   }
 
   private parseBooleanIfPresent(): Result<Value, InterpretError> | undefined {

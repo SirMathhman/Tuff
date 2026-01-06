@@ -14,6 +14,8 @@ A tiny TypeScript interpreter with a strict lint + test gate.
 
 This repo enforces `@typescript-eslint/no-this-alias` as an error, which disallows aliasing `this` to a local variable (e.g. `const self = this`).
 
+This repo also enforces a small local rule (`local/no-simple-getters`) that disallows trivial private `get*()` methods that only return a backing field (e.g. `private getX() { return this.x; }`).
+
 The interpreter is organized into small modules under `src/`.
 
 - `src/parser.ts` contains the main `Parser` implementation.

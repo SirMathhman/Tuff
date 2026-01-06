@@ -16,6 +16,64 @@ module.exports = [
       "@typescript-eslint": require("@typescript-eslint/eslint-plugin"),
       local: {
         rules: {
+          "no-simple-getters": {
+            meta: {
+              type: "suggestion",
+              docs: {
+                description:
+                  "Disallow trivial private get*() methods that only return a field",
+              },
+              schema: [],
+              messages: {
+                simpleGetter:
+                  "Avoid trivial private getter '{{name}}'; access the backing field directly.",
+              },
+            },
+            create(context) {
+              function isPrivate(node) {
+                return node && node.accessibility === "private";
+              }
+
+              function isGetMethodName(node) {
+                const k = node.key;
+                if (!k || k.type !== "Identifier") return false;
+                return typeof k.name === "string" && k.name.startsWith("get");
+              }
+
+              function isTrivialReturnThisField(node) {
+                const fn = node.value;
+                if (!fn || !fn.body || !Array.isArray(fn.body.body)) return false;
+                if (Array.isArray(fn.params) && fn.params.length !== 0) return false;
+                const stmts = fn.body.body;
+                if (stmts.length !== 1) return false;
+                const stmt = stmts[0];
+                if (!stmt || stmt.type !== "ReturnStatement") return false;
+                const arg = stmt.argument;
+                if (!arg || arg.type !== "MemberExpression") return false;
+                if (arg.computed) return false;
+                if (!arg.object || arg.object.type !== "ThisExpression") return false;
+                const prop = arg.property;
+                if (!prop || prop.type !== "Identifier") return false;
+                return true;
+              }
+
+              return {
+                MethodDefinition(node) {
+                  if (!isPrivate(node)) return;
+                  if (node.kind !== "method") return;
+                  if (!isGetMethodName(node)) return;
+                  if (!isTrivialReturnThisField(node)) return;
+
+                  const name = node.key.type === "Identifier" ? node.key.name : "<unknown>";
+                  context.report({
+                    node: node.key,
+                    messageId: "simpleGetter",
+                    data: { name },
+                  });
+                },
+              };
+            },
+          },
           "max-interface-methods": {
             meta: {
               type: "suggestion",
@@ -89,6 +147,7 @@ module.exports = [
       },
     },
     rules: {
+      "local/no-simple-getters": "error",
       "local/max-interface-methods": ["error", { max: 10 }],
       complexity: ["error", { max: 15 }],
       // prefer interfaces over type aliases for object types
