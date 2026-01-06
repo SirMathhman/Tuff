@@ -27,12 +27,8 @@ module.exports = [
           message: "Do not use throw; return Result<T, E> instead.",
         },
         {
-          selector: "VariableDeclarator[id.name=\"ok\"] > ArrowFunctionExpression",
-          message: "Use a named function declaration `function ok(...)` instead of assigning an anonymous arrow function to `ok`.",
-        },
-        {
-          selector: "VariableDeclarator[id.name=\"ok\"] > FunctionExpression",
-          message: "Use a named function declaration `function ok(...)` instead of assigning an anonymous function to `ok`.",
+          selector: "VariableDeclarator > ArrowFunctionExpression, VariableDeclarator > FunctionExpression",
+          message: "Use a function declaration `function name(...) {}` instead of assigning a function expression or arrow function to a variable.",
         }
       ],
       ...require("@typescript-eslint/eslint-plugin").configs.recommended.rules,
