@@ -1,0 +1,14 @@
+# Ignore node modules
+node_modules/
+
+# Build output
+dist/
+
+# Environment files
+.env
+
+# Editor directories
+.vscode/
+
+# OS files
+.DS_Store
