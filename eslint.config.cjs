@@ -17,6 +17,8 @@ module.exports = [
     },
     rules: {
       complexity: ["error", { max: 15 }],
+      // prefer interfaces over type aliases for object types
+      "@typescript-eslint/consistent-type-definitions": ["error", "interface"],
       // disallow throw statements; use Result<T,E> style returns instead
       "no-restricted-syntax": [
         "error",

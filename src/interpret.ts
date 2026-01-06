@@ -7,13 +7,24 @@
  * - identifiers -> UndefinedIdentifier error
  * - otherwise -> InvalidInput error
  */
-export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+export interface Ok<T> {
+  ok: true;
+  value: T;
+}
+export interface Err<E> {
+  ok: false;
+  error: E;
+}
+export type Result<T, E> = Ok<T> | Err<E>;
 
-export type UndefinedIdentifierError = {
+export interface UndefinedIdentifierError {
   type: "UndefinedIdentifier";
   identifier: string;
-};
-export type InvalidInputError = { type: "InvalidInput"; message: string };
+}
+export interface InvalidInputError {
+  type: "InvalidInput";
+  message: string;
+}
 export type InterpretError = UndefinedIdentifierError | InvalidInputError;
 
 const ok = <T, E>(value: T): Result<T, E> => ({ ok: true, value });
@@ -44,10 +55,18 @@ export function interpret(input: string): Result<number, InterpretError> {
     return err({ type: "InvalidInput", message: "Unable to interpret input" });
   }
 
-  type Token = { type: "num"; value: number } | { type: "op"; value: string };
+  interface NumToken {
+    type: "num";
+    value: number;
+  }
+  interface OpToken {
+    type: "op";
+    value: string;
+  }
+  type Token = NumToken | OpToken;
   const tokens: Token[] = raw.map((t) => {
-    if (/^[+\-*/]$/.test(t)) return { type: "op", value: t };
-    return { type: "num", value: Number(t) };
+    if (/^[+\-*/]$/.test(t)) return { type: "op", value: t } as OpToken;
+    return { type: "num", value: Number(t) } as NumToken;
   });
 
   let idx = 0;

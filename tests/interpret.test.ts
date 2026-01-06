@@ -36,9 +36,9 @@ describe("interpret", () => {
   });
 
   test("division and multiplication precedence", () => {
-    expect(interpret('1 + 10 / 5')).toEqual({ ok: true, value: 3 });
-    expect(interpret('1+10/5')).toEqual({ ok: true, value: 3 });
-    expect(interpret('10 / 5 + 1')).toEqual({ ok: true, value: 3 });
+    expect(interpret("1 + 10 / 5")).toEqual({ ok: true, value: 3 });
+    expect(interpret("1+10/5")).toEqual({ ok: true, value: 3 });
+    expect(interpret("10 / 5 + 1")).toEqual({ ok: true, value: 3 });
   });
 
   test("multiplication-only expressions", () => {
