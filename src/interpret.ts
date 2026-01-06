@@ -15,9 +15,11 @@ export function interpret(input: string): number {
     return Number(s);
   }
 
-  // simple addition via splitting on '+', supports multiple operands
-  if (s.includes("+")) {
-    const parts = s.split("+").map((p) => p.trim()).filter((p) => p.length > 0);
+  // simple addition/subtraction via normalizing '-' to '+-' and summing operands
+  if (s.includes("+") || s.includes("-")) {
+    // normalize subtraction into addition of negative numbers, preserving signs
+    const normalized = s.replace(/\s*-\s*/g, "+-").replace(/\s+/g, "");
+    const parts = normalized.split("+").map((p) => p.trim()).filter((p) => p.length > 0);
     if (parts.length >= 2) {
       const numRe = /^-?\d+(?:\.\d+)?$/;
       if (parts.every((p) => numRe.test(p))) {

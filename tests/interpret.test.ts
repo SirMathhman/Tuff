@@ -20,6 +20,12 @@ describe("interpret", () => {
     expect(interpret("1+2+3")).toBe(6);
   });
 
+  test('addition and subtraction combined', () => {
+    expect(interpret('10 - 5 + 3')).toBe(8);
+    expect(interpret('10-5+3')).toBe(8);
+    expect(interpret(' 10 -5 +3 ')).toBe(8);
+  });
+
   test("throws undefined identifier for unknown identifiers like 'wah'", () => {
     expect(() => interpret("wah")).toThrowError("Undefined identifier: wah");
   });
