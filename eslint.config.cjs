@@ -37,6 +37,11 @@ module.exports = [
           message:
             "Do not use `null`. Prefer `undefined`, `Result`, or a discriminated union for missing values.",
         },
+        {
+          selector: "ContinueStatement",
+          message:
+            "Do not use `continue`. Prefer early returns or restructure loops to avoid `continue`.",
+        },
       ],
     },
   },

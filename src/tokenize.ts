@@ -18,12 +18,11 @@ export function tokenize(s: string): Result<Token[], string> {
 
   while (i < len) {
     const ch = s[i];
-    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
-      i++;
-      continue;
-    }
 
-    if (ch === "+" || ch === "-") {
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+      // skip whitespace
+      i++;
+    } else if (ch === "+" || ch === "-") {
       const prev = tokens.length ? tokens[tokens.length - 1] : undefined;
       // unary sign if at start or after an operator
       if (!prev || prev.type === "op") {
@@ -32,24 +31,19 @@ export function tokenize(s: string): Result<Token[], string> {
         const { value, nextIndex } = parsed.value;
         tokens.push({ type: "num", value });
         i = nextIndex;
-        continue;
       } else {
         tokens.push({ type: "op", value: ch });
         i++;
-        continue;
       }
-    }
-
-    if (/[0-9.]/.test(ch)) {
+    } else if (/[0-9.]/.test(ch)) {
       const parsed = parseNumber(s, i);
       if (!isOk(parsed)) return err(parsed.error);
       const { value, nextIndex } = parsed.value;
       tokens.push({ type: "num", value });
       i = nextIndex;
-      continue;
+    } else {
+      return err("Invalid numeric input");
     }
-
-    return err("Invalid numeric input");
   }
 
   return ok(tokens);
