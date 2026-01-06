@@ -203,7 +203,7 @@ static int parse_type_I32(const char **ptr) {
 	return match_literal(ptr, "I32", 0);
 }
 
-static int parse_declaration(const char **ptr, char *name_out, size_t name_len, int *out_val) {
+static int parse_declaration(const char **ptr, char *name_out, size_t name_len, int *out_val, int start_vars) {
 	const char *cursor = *ptr;
 	skip_ws(&cursor);
 	if (!parse_identifier(&cursor, name_out, name_len)) return 0;
@@ -220,7 +220,16 @@ static int parse_declaration(const char **ptr, char *name_out, size_t name_len, 
 	skip_ws(&cursor);
 	if (*cursor != ';') return 0;
 	cursor++;
-	/* successful declaration: store variable */
+	/* successful declaration: ensure not declared earlier in this same parse, then store variable */
+	struct var_entry *existing = find_var(name_out);
+	if (existing) {
+		int idx = (int)(existing - vars);
+		if (idx >= start_vars) {
+			errno = EEXIST;
+			return 0;
+		}
+		/* if existing < start_vars, the variable was declared in a previous interpret call; allow override */
+	}
 	if (val < INT_MIN || val > INT_MAX) return 0;
 	if (!set_var(name_out, (int)val)) return 0;
 	*ptr = cursor;
@@ -228,11 +237,11 @@ static int parse_declaration(const char **ptr, char *name_out, size_t name_len, 
 	return 1;
 }
 
-static int parse_statement_at(const char **ptr, int *out_val) {
+static int parse_statement_at(const char **ptr, int *out_val, int start_vars) {
 	const char *cursor = *ptr;
 	if (!match_let_keyword(&cursor)) return 0;
 	char name[MAX_VAR_NAME];
-	if (!parse_declaration(&cursor, name, sizeof(name), out_val)) return 0;
+	if (!parse_declaration(&cursor, name, sizeof(name), out_val, start_vars)) return 0;
 	*ptr = cursor;
 	return 1;
 }
@@ -245,9 +254,10 @@ static int parse_full_expr(const char *str, int *out_val) {
 	int tmp = 0;
 	int saw_statement = 0;
 	/* parse zero or more statements */
+	int start_vars = vars_count;
 	for (;;) {
 		const char *save = cursor;
-		if (parse_statement_at(&cursor, &tmp)) {
+		if (parse_statement_at(&cursor, &tmp, start_vars)) {
 			saw_statement = 1;
 			skip_ws(&cursor);
 			continue;
