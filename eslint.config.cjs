@@ -16,6 +16,7 @@ module.exports = [
       "@typescript-eslint": require("@typescript-eslint/eslint-plugin"),
     },
     rules: {
+      complexity: ["error", { max: 15 }],
       ...require("@typescript-eslint/eslint-plugin").configs.recommended.rules,
     },
   },
