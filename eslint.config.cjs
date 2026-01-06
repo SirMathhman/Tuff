@@ -16,54 +16,6 @@ module.exports = [
       "@typescript-eslint": require("@typescript-eslint/eslint-plugin"),
       local: {
         rules: {
-          "no-this-scope-argument": {
-            meta: {
-              type: "suggestion",
-              docs: {
-                description:
-                  "Disallow passing `this` into scope helper functions (use a ScopeKey instead)",
-              },
-              schema: [],
-              messages: {
-                noThisScopeArg:
-                  "Do not pass `this` into scope helpers; use `this.scopeKey` (or equivalent) instead.",
-              },
-            },
-            create(context) {
-              const forbiddenCallees = new Set([
-                "initScopes",
-                "getValueScopes",
-                "getStructTypeScopes",
-                "getVarTypeScopes",
-                "getVarMutabilityScopes",
-                "getVarInitializedScopes",
-              ]);
-
-              function isForbiddenIdentifierCallee(node) {
-                if (!node) return false;
-                if (node.type !== "Identifier") return false;
-                return forbiddenCallees.has(node.name);
-              }
-
-              function hasThisArgument(args) {
-                if (!Array.isArray(args)) return false;
-                for (const a of args) {
-                  if (!a) continue;
-                  if (a.type === "ThisExpression") return true;
-                  if (a.type === "SpreadElement" && a.argument?.type === "ThisExpression") return true;
-                }
-                return false;
-              }
-
-              return {
-                CallExpression(node) {
-                  if (!isForbiddenIdentifierCallee(node.callee)) return;
-                  if (!hasThisArgument(node.arguments)) return;
-                  context.report({ node, messageId: "noThisScopeArg" });
-                },
-              };
-            },
-          },
           "max-interface-methods": {
             meta: {
               type: "suggestion",
@@ -137,7 +89,6 @@ module.exports = [
       },
     },
     rules: {
-      "local/no-this-scope-argument": "error",
       "local/max-interface-methods": ["error", { max: 10 }],
       complexity: ["error", { max: 15 }],
       // prefer interfaces over type aliases for object types

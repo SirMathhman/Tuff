@@ -10,15 +10,6 @@ import {
 } from "./functions";
 import { parseBraced, parseIfExpression } from "./statements";
 import { parseCallExternal } from "./calls";
-import {
-  initScopes,
-  getValueScopes,
-  getStructTypeScopes,
-  getVarTypeScopes,
-  getVarMutabilityScopes,
-  getVarInitializedScopes,
-  ScopeKey,
-} from "./scopes";
 import { checkTypeConformance } from "./typeConformance";
 import {
   tryInitialAssignment as tryInitialAssignmentHelper,
@@ -36,11 +27,16 @@ import { runParser } from "./parseRunner";
 class Parser implements ParserLike {
   private tokens: Token[];
   private idx = 0;
-  private readonly scopeKey: ScopeKey;
+
+  // Scope state is stored directly on the parser instance.
+  private readonly valueScopes: Map<string, Value>[] = [];
+  private readonly structTypeScopes: Map<string, string[]>[] = [];
+  private readonly varTypeScopes: Map<string, string | undefined>[] = [];
+  private readonly varMutabilityScopes: Map<string, boolean>[] = [];
+  private readonly varInitializedScopes: Map<string, boolean>[] = [];
+
   constructor(tokens: Token[]) {
     this.tokens = tokens;
-    this.scopeKey = new ScopeKey();
-    initScopes(this.scopeKey);
   }
   peek(): Token | undefined {
     const t = this.tokens;
@@ -52,11 +48,11 @@ class Parser implements ParserLike {
   }
 
   public getScopes(): Map<string, Value>[] {
-    return getValueScopes(this.scopeKey);
+    return this.valueScopes;
   }
 
   private getTypeScopes(): Map<string, string[]>[] {
-    return getStructTypeScopes(this.scopeKey);
+    return this.structTypeScopes;
   }
 
   private currentTypeScope(): Map<string, string[]> | undefined {
@@ -66,13 +62,13 @@ class Parser implements ParserLike {
     return s[ln - 1];
   }
   private getVarTypeScopes(): Map<string, string | undefined>[] {
-    return getVarTypeScopes(this.scopeKey);
+    return this.varTypeScopes;
   }
   private getVarMutabilityScopes(): Map<string, boolean>[] {
-    return getVarMutabilityScopes(this.scopeKey);
+    return this.varMutabilityScopes;
   }
   private getVarInitializedScopes(): Map<string, boolean>[] {
-    return getVarInitializedScopes(this.scopeKey);
+    return this.varInitializedScopes;
   }
   private currentVarTypeScope(): Map<string, string | undefined> | undefined {
     const s = this.getVarTypeScopes();
