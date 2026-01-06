@@ -25,6 +25,12 @@ describe("interpret", () => {
     if (isOk(r)) expect(r.value).toBe(53);
   });
 
+  it("respects multiplication precedence with leading addition", () => {
+    const r = interpret("3 + 10 * 5");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(53);
+  });
+
   it("parses mixed precedence expressions", () => {
     const r1 = interpret("10 + 5 * 3");
     expect(isOk(r1)).toBe(true);
