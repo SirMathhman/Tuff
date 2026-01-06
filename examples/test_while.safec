@@ -1,1 +1,0 @@
-void test() { while (x < 10) { x++; } }

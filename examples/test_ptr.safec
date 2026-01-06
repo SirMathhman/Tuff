@@ -1,9 +1,0 @@
-int* ptr_identity<T>(T* x) {
-    return x;
-}
-
-int main() {
-    int a = 42;
-    int* p = ptr_identity<int>(&a);
-    return 0;
-}

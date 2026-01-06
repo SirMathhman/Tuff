@@ -1,8 +1,0 @@
-int add<T>(T a, T b) {
-    return a + b;
-}
-
-int main() {
-    int z = add<int>(1, 2);
-    return z;
-}

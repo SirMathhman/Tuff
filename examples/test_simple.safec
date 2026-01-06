@@ -1,8 +1,0 @@
-int identity<T>(T x) {
-    return x;
-}
-
-int main() {
-    int y = identity<int>(42);
-    return y;
-}
