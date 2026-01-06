@@ -14,8 +14,78 @@ module.exports = [
     },
     plugins: {
       "@typescript-eslint": require("@typescript-eslint/eslint-plugin"),
+      local: {
+        rules: {
+          "max-interface-methods": {
+            meta: {
+              type: "suggestion",
+              docs: {
+                description:
+                  "Disallow interfaces with too many methods (god-interface prevention)",
+              },
+              schema: [
+                {
+                  type: "object",
+                  properties: {
+                    max: { type: "integer", minimum: 1 },
+                  },
+                  additionalProperties: false,
+                },
+              ],
+              messages: {
+                tooMany:
+                  "Interface '{{name}}' has {{count}} methods; maximum allowed is {{max}}.",
+              },
+            },
+            create(context) {
+              function getMax(option) {
+                if (!option) return 10;
+                const max = option.max;
+                if (typeof max !== "number") return 10;
+                if (!Number.isFinite(max)) return 10;
+                if (max < 1) return 10;
+                return Math.floor(max);
+              }
+
+              function isMethodLike(member) {
+                const t = member.type;
+                if (t === "TSMethodSignature") return true;
+                if (t === "TSCallSignatureDeclaration") return true;
+                if (t === "TSConstructSignatureDeclaration") return true;
+                return false;
+              }
+
+              return {
+                TSInterfaceDeclaration(node) {
+                  const opts = context.options;
+                  const firstOpt = Array.isArray(opts) ? opts[0] : undefined;
+                  const max = getMax(firstOpt);
+
+                  const body = node.body;
+                  const members = body.body;
+                  let methodCount = 0;
+                  for (const m of members) {
+                    if (isMethodLike(m)) methodCount++;
+                  }
+
+                  if (methodCount <= max) return;
+
+                  const id = node.id;
+                  const name = id ? id.name : "<anonymous>";
+                  context.report({
+                    node: node.id ? node.id : node,
+                    messageId: "tooMany",
+                    data: { name, count: String(methodCount), max: String(max) },
+                  });
+                },
+              };
+            },
+          },
+        },
+      },
     },
     rules: {
+      "local/max-interface-methods": ["error", { max: 10 }],
       complexity: ["error", { max: 15 }],
       // prefer interfaces over type aliases for object types
       "@typescript-eslint/consistent-type-definitions": ["error", "interface"],
