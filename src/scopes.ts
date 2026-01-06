@@ -31,9 +31,7 @@ export function getStructTypeScopes(
   return arr;
 }
 
-export function getVarTypeScopes(
-  parser: object
-): Map<string, VarTypeName>[] {
+export function getVarTypeScopes(parser: object): Map<string, VarTypeName>[] {
   const s = varTypeScopes.get(parser);
   if (s) return s;
   const arr: Map<string, VarTypeName>[] = [];

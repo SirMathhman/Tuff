@@ -180,7 +180,6 @@ export function parseBraced(parser: ParserLike): Result<Value, InterpretError> {
   }
 }
 
-
 export function parseIfExpression(
   parser: ParserLike
 ): Result<Value, InterpretError> {

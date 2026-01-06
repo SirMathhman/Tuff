@@ -137,4 +137,3 @@ function runFunctionInvocation(
   if (isReturnSignalValue(value)) return ok(value.value);
   return ok(value);
 }
-

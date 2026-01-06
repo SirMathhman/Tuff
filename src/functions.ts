@@ -114,8 +114,10 @@ function shouldStopExpressionCollection(
   parenDepth: number
 ): { stop: true; consumeToken: boolean } | { stop: false } {
   if (tk.type !== "op") return { stop: false };
-  if (tk.value === ";" && parenDepth === 0) return { stop: true, consumeToken: true };
-  if (tk.value === "}" && parenDepth === 0) return { stop: true, consumeToken: false };
+  if (tk.value === ";" && parenDepth === 0)
+    return { stop: true, consumeToken: true };
+  if (tk.value === "}" && parenDepth === 0)
+    return { stop: true, consumeToken: false };
   return { stop: false };
 }
 
@@ -166,7 +168,9 @@ function consumeFnKeyword(parser: ParserLike): Result<void, InterpretError> {
   return ok(undefined);
 }
 
-function consumeFunctionName(parser: ParserLike): Result<string, InterpretError> {
+function consumeFunctionName(
+  parser: ParserLike
+): Result<string, InterpretError> {
   const nameTok = parser.consume();
   if (!nameTok || nameTok.type !== "id") {
     return err({
@@ -269,4 +273,3 @@ function expectArrow(parser: ParserLike): Result<void, InterpretError> {
     });
   return ok(undefined);
 }
-

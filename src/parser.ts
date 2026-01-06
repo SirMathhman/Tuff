@@ -151,10 +151,8 @@ class Parser implements ParserLike {
           if (vs.has(name)) {
             const typeName = vs.get(name);
             if (typeName) {
-              const tcErr = checkTypeConformance(
-                typeName,
-                value,
-                (n) => this.lookupType(n)
+              const tcErr = checkTypeConformance(typeName, value, (n) =>
+                this.lookupType(n)
               );
               if (tcErr) return err(tcErr);
             }
@@ -221,10 +219,8 @@ class Parser implements ParserLike {
       if (!valR.ok) return valR;
       const initialValue = valR.value;
       if (typeName) {
-        const tcErr = checkTypeConformance(
-          typeName,
-          initialValue,
-          (n) => this.lookupType(n)
+        const tcErr = checkTypeConformance(typeName, initialValue, (n) =>
+          this.lookupType(n)
         );
         if (tcErr) return err(tcErr);
       }
@@ -418,12 +414,13 @@ class Parser implements ParserLike {
 
   private parseIdentifierLike(): Result<Value, InterpretError> {
     const tk = this.peek();
-    if (!tk || tk.type !== "id")
+    if (!tk || tk.type !== "id") {
       return err({
         type: "InvalidInput",
         message: "Unable to interpret input",
       });
-  const next = this.peekNext();
+    }
+    const next = this.peekNext();
 
     // struct literal: TypeName { ... }
     if (next && next.type === "op" && next.value === "{") {
