@@ -3,62 +3,63 @@ import { Value } from "./types";
 type StructTypeDef = string[];
 type VarTypeName = string | undefined;
 
-import type { Parser } from "./parser";
-
-const valueScopes = new WeakMap<Parser, Map<string, Value>[]>();
-const structTypeScopes = new WeakMap<Parser, Map<string, StructTypeDef>[]>();
-const varTypeScopes = new WeakMap<Parser, Map<string, VarTypeName>[]>();
-const varMutabilityScopes = new WeakMap<Parser, Map<string, boolean>[]>();
-const varInitializedScopes = new WeakMap<Parser, Map<string, boolean>[]>();
-
-export function initScopes(parser: Parser): void {
-  valueScopes.set(parser, []);
-  structTypeScopes.set(parser, []);
-  varTypeScopes.set(parser, []);
-  varMutabilityScopes.set(parser, []);
-  varInitializedScopes.set(parser, []);
+export class ScopeKey {
+  // A unique key object used to associate scope state with a parser instance.
+  // Intentionally empty.
 }
 
-export function getValueScopes(parser: Parser): Map<string, Value>[] {
-  const s = valueScopes.get(parser);
+const valueScopes = new WeakMap<ScopeKey, Map<string, Value>[]>();
+const structTypeScopes = new WeakMap<ScopeKey, Map<string, StructTypeDef>[]>();
+const varTypeScopes = new WeakMap<ScopeKey, Map<string, VarTypeName>[]>();
+const varMutabilityScopes = new WeakMap<ScopeKey, Map<string, boolean>[]>();
+const varInitializedScopes = new WeakMap<ScopeKey, Map<string, boolean>[]>();
+
+export function initScopes(key: ScopeKey): void {
+  valueScopes.set(key, []);
+  structTypeScopes.set(key, []);
+  varTypeScopes.set(key, []);
+  varMutabilityScopes.set(key, []);
+  varInitializedScopes.set(key, []);
+}
+
+export function getValueScopes(key: ScopeKey): Map<string, Value>[] {
+  const s = valueScopes.get(key);
   if (s) return s;
   const arr: Map<string, Value>[] = [];
-  valueScopes.set(parser, arr);
+  valueScopes.set(key, arr);
   return arr;
 }
 
-export function getVarMutabilityScopes(parser: Parser): Map<string, boolean>[] {
-  const s = varMutabilityScopes.get(parser);
+export function getVarMutabilityScopes(key: ScopeKey): Map<string, boolean>[] {
+  const s = varMutabilityScopes.get(key);
   if (s) return s;
   const arr: Map<string, boolean>[] = [];
-  varMutabilityScopes.set(parser, arr);
+  varMutabilityScopes.set(key, arr);
   return arr;
 }
 
-export function getVarInitializedScopes(
-  parser: Parser
-): Map<string, boolean>[] {
-  const s = varInitializedScopes.get(parser);
+export function getVarInitializedScopes(key: ScopeKey): Map<string, boolean>[] {
+  const s = varInitializedScopes.get(key);
   if (s) return s;
   const arr: Map<string, boolean>[] = [];
-  varInitializedScopes.set(parser, arr);
+  varInitializedScopes.set(key, arr);
   return arr;
 }
 
 export function getStructTypeScopes(
-  parser: Parser
+  key: ScopeKey
 ): Map<string, StructTypeDef>[] {
-  const s = structTypeScopes.get(parser);
+  const s = structTypeScopes.get(key);
   if (s) return s;
   const arr: Map<string, StructTypeDef>[] = [];
-  structTypeScopes.set(parser, arr);
+  structTypeScopes.set(key, arr);
   return arr;
 }
 
-export function getVarTypeScopes(parser: Parser): Map<string, VarTypeName>[] {
-  const s = varTypeScopes.get(parser);
+export function getVarTypeScopes(key: ScopeKey): Map<string, VarTypeName>[] {
+  const s = varTypeScopes.get(key);
   if (s) return s;
   const arr: Map<string, VarTypeName>[] = [];
-  varTypeScopes.set(parser, arr);
+  varTypeScopes.set(key, arr);
   return arr;
 }

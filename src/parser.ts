@@ -17,6 +17,7 @@ import {
   getVarTypeScopes,
   getVarMutabilityScopes,
   getVarInitializedScopes,
+  ScopeKey,
 } from "./scopes";
 import { checkTypeConformance } from "./typeConformance";
 import {
@@ -35,9 +36,11 @@ import { runParser } from "./parseRunner";
 class Parser implements ParserLike {
   private tokens: Token[];
   private idx = 0;
+  private readonly scopeKey: ScopeKey;
   constructor(tokens: Token[]) {
     this.tokens = tokens;
-    initScopes(this);
+    this.scopeKey = new ScopeKey();
+    initScopes(this.scopeKey);
   }
   peek(): Token | undefined {
     const t = this.tokens;
@@ -49,11 +52,11 @@ class Parser implements ParserLike {
   }
 
   public getScopes(): Map<string, Value>[] {
-    return getValueScopes(this);
+    return getValueScopes(this.scopeKey);
   }
 
   private getTypeScopes(): Map<string, string[]>[] {
-    return getStructTypeScopes(this);
+    return getStructTypeScopes(this.scopeKey);
   }
 
   private currentTypeScope(): Map<string, string[]> | undefined {
@@ -63,13 +66,13 @@ class Parser implements ParserLike {
     return s[ln - 1];
   }
   private getVarTypeScopes(): Map<string, string | undefined>[] {
-    return getVarTypeScopes(this);
+    return getVarTypeScopes(this.scopeKey);
   }
   private getVarMutabilityScopes(): Map<string, boolean>[] {
-    return getVarMutabilityScopes(this);
+    return getVarMutabilityScopes(this.scopeKey);
   }
   private getVarInitializedScopes(): Map<string, boolean>[] {
-    return getVarInitializedScopes(this);
+    return getVarInitializedScopes(this.scopeKey);
   }
   private currentVarTypeScope(): Map<string, string | undefined> | undefined {
     const s = this.getVarTypeScopes();
