@@ -30,3 +30,10 @@ lint:
 	python scripts/check_complexity.py 15
 	@echo "Checking include placement (includes must be at top)"
 	python scripts/check_include_placement.py
+
+# PMD CPD (copy/paste detector) target; requires pmd on PATH
+pmd-cpd:
+	@echo "Running PMD CPD (minimum tokens = 50) on src and tests (C/C++)"
+	@powershell -NoProfile -Command "try { pmd --version > $null } catch { exit 1 }" || (echo "pmd not found in PATH; install PMD and ensure 'pmd' is available" && exit 1)
+	@powershell -NoProfile -Command "pmd cpd --minimum-tokens 50 --dir 'src,tests' -l cpp -f text" || true
+	@echo "PMD checks completed"
