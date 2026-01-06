@@ -18,15 +18,7 @@ import {
 } from "./scopes";
 import { checkTypeConformance } from "./typeConformance";
 
-function requireNumber(
-  value: Value,
-  message: string
-): Result<number, InterpretError> {
-  if (typeof value !== "number") {
-    return err({ type: "InvalidInput", message });
-  }
-  return ok(value);
-}
+import { requireNumber } from "./numberUtils";
 
 class Parser implements ParserLike {
   private tokens: Token[];
@@ -372,6 +364,15 @@ class Parser implements ParserLike {
 
   public createChildParser(tokens: Token[]): Parser {
     return new Parser(tokens);
+  }
+
+  // expose type scope access for helpers (kept narrow)
+  public getTypeScopesPublic(): Map<string, string[]>[] {
+    return this.getTypeScopes();
+  }
+
+  public getVarTypeScopesPublic(): Map<string, string | undefined>[] {
+    return this.getVarTypeScopes();
   }
 
   private parseBooleanIfPresent(): Result<Value, InterpretError> | undefined {

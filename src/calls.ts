@@ -119,8 +119,11 @@ function runFunctionInvocation(
     const paramName = params[i];
     paramScope.set(paramName, args[i]);
   }
+  // bind function name in callee scope to support recursion
+  paramScope.set(name, fn);
   const scopes = p2.getScopes();
   scopes.push(paramScope);
+
   const r = p2.parse();
   if (!r.ok) {
     const error = r.error;

@@ -19,6 +19,11 @@ interface ParserLike {
   assignVar(name: string, value: Value): Result<Value, InterpretError>;
   pushScope(): void;
   popScope(): void;
+  createChildParser(tokens: Token[]): ParserLike;
+  getTypeScopesPublic(): Map<string, string[]>[];
+  getVarTypeScopesPublic(): Map<string, string | undefined>[];
+  getScopes(): Map<string, Value>[];
+  parse(): Result<Value, InterpretError>;
 }
 
 function isReturnSignalValue(value: Value): value is ReturnSignalValue {
@@ -64,6 +69,126 @@ function handleIdToken(
   }
 
   return undefined;
+}
+
+// Helper: collect tokens until top-level 'else' is encountered
+function collectUntilElse(parser: ParserLike): Result<Token[], InterpretError> {
+  const out: Token[] = [];
+  let depth = 0;
+  let tk = parser.peek();
+  while (tk) {
+    if (tk.type === "id" && tk.value === "else" && depth === 0) return ok(out);
+    if (tk.type === "op" && tk.value === "(") {
+      const c = parser.consume();
+      if (!c)
+        return err({ type: "InvalidInput", message: "Missing token in consequent" });
+      depth++;
+      out.push(c);
+    } else if (tk.type === "op" && tk.value === ")") {
+      const c = parser.consume();
+      if (!c)
+        return err({ type: "InvalidInput", message: "Missing token in consequent" });
+      if (depth > 0) depth--;
+      out.push(c);
+    } else {
+      const c = parser.consume();
+      if (!c)
+        return err({ type: "InvalidInput", message: "Missing token in consequent" });
+      out.push(c);
+    }
+    tk = parser.peek();
+  }
+  return err({ type: "InvalidInput", message: "Missing else in conditional" });
+}
+
+type AltOpResult =
+  | { type: "ok"; done: boolean; depth: number }
+  | { type: "return"; value: Result<Token[], InterpretError> };
+
+function handleAltOpToken(
+  parser: ParserLike,
+  tk: Token,
+  depth: number,
+  out: Token[]
+): AltOpResult {
+  if (tk.type !== "op") return { type: "ok", done: false, depth };
+
+  if (tk.value === ";" && depth === 0) {
+    const c = parser.consume();
+    if (!c) return { type: "return", value: ok(out) };
+    out.push(c);
+    return { type: "return", value: ok(out) };
+  }
+
+  if (tk.value === "{") {
+    const c = parser.consume();
+    if (!c) return { type: "return", value: err({ type: "InvalidInput", message: "Missing token in alternative" }) };
+    return { type: "ok", done: false, depth: depth + 1 };
+  }
+
+  if (tk.value === "}") {
+    if (depth === 0) return { type: "ok", done: true, depth };
+    const c = parser.consume();
+    if (!c) return { type: "return", value: err({ type: "InvalidInput", message: "Missing token in alternative" }) };
+    return { type: "ok", done: false, depth: depth - 1 };
+  }
+
+  if (tk.value === ")" && depth === 0) return { type: "ok", done: true, depth };
+
+  return { type: "ok", done: false, depth };
+}
+
+function collectAltTokens(parser: ParserLike): Result<Token[], InterpretError> {
+  const out: Token[] = [];
+  let depth = 0;
+  let tk = parser.peek();
+  while (tk) {
+    const res = handleAltOpToken(parser, tk, depth, out);
+    if (res.type === "return") return res.value;
+    // res.type === 'ok'
+    if (res.done) return ok(out);
+    const newDepth = res.depth;
+    if (newDepth !== depth) {
+      // either entered or exited a block; consume the token that changed depth
+      const c = parser.consume();
+      if (!c) return err({ type: "InvalidInput", message: "Missing token in alternative" });
+      out.push(c);
+      depth = newDepth;
+      tk = parser.peek();
+    } else {
+      // default: consume one token
+      const c = parser.consume();
+      if (!c) return err({ type: "InvalidInput", message: "Missing token in alternative" });
+      out.push(c);
+      tk = parser.peek();
+    }
+  }
+  return ok(out);
+}
+
+function evaluateTokensWithParentScopes(
+  parser: ParserLike,
+  tokens: Token[]
+): Result<Value, InterpretError> {
+  // create child parser via the factory method on parser
+  const child = parser.createChildParser([
+    { type: "op", value: "{" },
+    ...tokens,
+    { type: "op", value: "}" },
+  ]);
+  // copy parent scopes and type scopes
+  const parentScopes = parser.getScopes();
+  const parentTypeScopes = parser.getTypeScopesPublic();
+  const parentVarTypeScopes = parser.getVarTypeScopesPublic();
+  const childScopes = child.getScopes();
+  for (let i = 0; i < parentScopes.length; i++) childScopes.push(parentScopes[i]);
+  const childTypeScopes = child.getTypeScopesPublic();
+  for (let i = 0; i < parentTypeScopes.length; i++)
+    childTypeScopes.push(parentTypeScopes[i]);
+  const childVarTypeScopes = child.getVarTypeScopesPublic();
+  for (let i = 0; i < parentVarTypeScopes.length; i++)
+    childVarTypeScopes.push(parentVarTypeScopes[i]);
+  return child.parse();
 }
 
 function tryHandleAssignment(
@@ -195,15 +320,19 @@ export function parseIfExpression(
   const close = parser.consume();
   if (!close || close.type !== "op" || close.value !== ")")
     return err({ type: "InvalidInput", message: "Expected ) after condition" });
-  const cons = parser.parseExpr();
-  if (!cons.ok) return cons;
-  const e = parser.consume();
-  if (!e || e.type !== "id" || e.value !== "else")
-    return err({
-      type: "InvalidInput",
-      message: "Expected else in conditional",
-    });
-  const alt = parser.parseExpr();
-  if (!alt.ok) return alt;
-  return ok(cond.value !== 0 ? cons.value : alt.value);
+
+  const consTokensR = collectUntilElse(parser);
+  if (!consTokensR.ok) return consTokensR;
+  const consTokens2 = consTokensR.value;
+
+  const elseTok = parser.consume();
+  if (!elseTok || elseTok.type !== "id" || elseTok.value !== "else")
+    return err({ type: "InvalidInput", message: "Expected else in conditional" });
+
+  const altTokensR = collectAltTokens(parser);
+  if (!altTokensR.ok) return altTokensR;
+  const altTokens2 = altTokensR.value;
+
+  if (cond.value !== 0) return evaluateTokensWithParentScopes(parser, consTokens2);
+  return evaluateTokensWithParentScopes(parser, altTokens2);
 }

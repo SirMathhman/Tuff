@@ -269,4 +269,9 @@ describe("interpret", () => {
       value: 20,
     });
   });
+
+  test("simple recursion (factorial)", () => {
+    const src = `fn fact(n : I32) => if (n) n * fact(n - 1) else 1; fact(5)`;
+    expect(interpret(src)).toEqual({ ok: true, value: 120 });
+  });
 });
