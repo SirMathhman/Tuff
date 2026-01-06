@@ -72,7 +72,8 @@ module.exports = [
         },
         {
           selector: "TSAsExpression",
-          message: "Do not use 'as' type assertions; prefer typed factory helpers or explicit variable typing.",
+          message:
+            "Do not use 'as' type assertions; prefer typed factory helpers or explicit variable typing.",
         },
       ],
       "@typescript-eslint/no-explicit-any": ["error"],

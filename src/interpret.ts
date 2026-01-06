@@ -254,9 +254,15 @@ export function interpret(input: string): Result<number, InterpretError> {
   }
 
   // helpers to create strongly-typed tokens (avoid 'as' assertions)
-  function makeOpToken(v: string): OpToken { return { type: 'op', value: v }; }
-  function makeIdToken(v: string): IdToken { return { type: 'id', value: v }; }
-  function makeNumToken(n: number): NumToken { return { type: 'num', value: n }; }
+  function makeOpToken(v: string): OpToken {
+    return { type: "op", value: v };
+  }
+  function makeIdToken(v: string): IdToken {
+    return { type: "id", value: v };
+  }
+  function makeNumToken(n: number): NumToken {
+    return { type: "num", value: n };
+  }
 
   const tokens: Token[] = raw.map((t) => {
     if (/^[+\-*/() ]$/.test(t)) return makeOpToken(t);
