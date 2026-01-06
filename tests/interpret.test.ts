@@ -142,6 +142,11 @@ describe("interpret", () => {
       ok: true,
       value: 0,
     });
+    // point struct with comma separator
+    expect(interpret("struct Point { x : I32, y : I32 }")).toEqual({
+      ok: true,
+      value: 0,
+    });
   });
 
   test("conditional expressions", () => {
