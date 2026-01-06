@@ -19,6 +19,22 @@ describe("interpret", () => {
     if (isOk(r)) expect(r.value).toBe(3);
   });
 
+  it("respects multiplication precedence", () => {
+    const r = interpret("10 * 5 + 3");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(53);
+  });
+
+  it("parses mixed precedence expressions", () => {
+    const r1 = interpret("10 + 5 * 3");
+    expect(isOk(r1)).toBe(true);
+    if (isOk(r1)) expect(r1.value).toBe(25);
+
+    const r2 = interpret("2 * -3 + 1");
+    expect(isOk(r2)).toBe(true);
+    if (isOk(r2)) expect(r2.value).toBe(-5);
+  });
+
   it("parses chained addition expressions", () => {
     const r = interpret("1+2+3");
     expect(isOk(r)).toBe(true);

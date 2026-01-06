@@ -16,6 +16,32 @@ describe("evalLeftToRight", () => {
     if (isOk(r)) expect(r.value).toBe(8);
   });
 
+  it("evaluates multiplication with precedence", () => {
+    const tokens = [
+      { type: "num", value: 10 } as const,
+      { type: "op", value: "*" } as const,
+      { type: "num", value: 5 } as const,
+      { type: "op", value: "+" } as const,
+      { type: "num", value: 3 } as const,
+    ];
+    const r = evalLeftToRight(tokens as any);
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(53);
+  });
+
+  it("evaluates chained multiplication", () => {
+    const tokens = [
+      { type: "num", value: 2 } as const,
+      { type: "op", value: "*" } as const,
+      { type: "num", value: 3 } as const,
+      { type: "op", value: "*" } as const,
+      { type: "num", value: 4 } as const,
+    ];
+    const r = evalLeftToRight(tokens as any);
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(24);
+  });
+
   it("returns Err on invalid token sequence", () => {
     const r = evalLeftToRight([{ type: "op", value: "+" } as any]);
     expect(isErr(r)).toBe(true);

@@ -7,7 +7,7 @@ export interface NumToken {
 }
 export interface OpToken {
   type: "op";
-  value: "+" | "-";
+  value: "+" | "-" | "*";
 }
 export type Token = NumToken | OpToken;
 
@@ -21,6 +21,9 @@ export function tokenize(s: string): Result<Token[], string> {
 
     if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
       // skip whitespace
+      i++;
+    } else if (ch === "*") {
+      tokens.push({ type: "op", value: ch });
       i++;
     } else if (ch === "+" || ch === "-") {
       const prev = tokens.length ? tokens[tokens.length - 1] : undefined;

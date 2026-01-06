@@ -28,11 +28,17 @@ export function map<T, U, E>(r: Result<T, E>, fn: (t: T) => U): Result<U, E> {
   return isOk(r) ? ok(fn(r.value)) : (r as Err<E>);
 }
 
-export function mapErr<T, E, F>(r: Result<T, E>, fn: (e: E) => F): Result<T, F> {
+export function mapErr<T, E, F>(
+  r: Result<T, E>,
+  fn: (e: E) => F
+): Result<T, F> {
   return isErr(r) ? err(fn(r.error)) : (r as Ok<T>);
 }
 
-export function andThen<T, U, E>(r: Result<T, E>, fn: (t: T) => Result<U, E>): Result<U, E> {
+export function andThen<T, U, E>(
+  r: Result<T, E>,
+  fn: (t: T) => Result<U, E>
+): Result<U, E> {
   return isOk(r) ? fn(r.value) : (r as Err<E>);
 }
 
