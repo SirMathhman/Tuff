@@ -52,6 +52,20 @@ describe("interpret", () => {
     expect(interpret("( 2+10 )/6")).toEqual({ ok: true, value: 2 });
     expect(interpret(" ( 2 + 10 ) / 6 ")).toEqual({ ok: true, value: 2 });
   });
+  test("conditional expressions", () => {
+    expect(interpret("(2 + if (true) 10 else 3) / 6")).toEqual({
+      ok: true,
+      value: 2,
+    });
+    expect(interpret("(2+if(true)10 else 3)/6")).toEqual({
+      ok: true,
+      value: 2,
+    });
+    expect(interpret(" ( 2 + if ( false ) 10 else 3 ) / 6 ")).toEqual({
+      ok: true,
+      value: 0.8333333333333334,
+    });
+  });
   test("returns an error for unknown identifiers like 'wah'", () => {
     const r = interpret("wah");
     expect(r.ok).toBe(false);

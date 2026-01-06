@@ -35,7 +35,11 @@ export interface OpToken {
   type: "op";
   value: string;
 }
-export type Token = NumToken | OpToken;
+export interface IdToken {
+  type: "id";
+  value: string;
+}
+export type Token = NumToken | OpToken | IdToken;
 
 function ok<T, E>(value: T): Result<T, E> {
   return { ok: true, value };
@@ -88,9 +92,50 @@ class Parser {
       return ok(r.value);
     }
 
+    // conditional expression: if (cond) consequent else alternative
+    if (tk.type === "id" && tk.value === "if") {
+      this.consume();
+      const open = this.consume();
+      if (!open || open.type !== "op" || open.value !== "(") {
+        return err({ type: "InvalidInput", message: "Expected ( after if" });
+      }
+      const cond = this.parseExpr();
+      if (!cond.ok) return cond;
+      const close = this.consume();
+      if (!close || close.type !== "op" || close.value !== ")") {
+        return err({
+          type: "InvalidInput",
+          message: "Expected ) after condition",
+        });
+      }
+      const cons = this.parseExpr();
+      if (!cons.ok) return cons;
+      const e = this.consume();
+      if (!e || e.type !== "id" || e.value !== "else") {
+        return err({
+          type: "InvalidInput",
+          message: "Expected else in conditional",
+        });
+      }
+      const alt = this.parseExpr();
+      if (!alt.ok) return alt;
+      return ok(cond.value !== 0 ? cons.value : alt.value);
+    }
+
+    // boolean literals
+    if (tk.type === "id" && (tk.value === "true" || tk.value === "false")) {
+      this.consume();
+      return ok(tk.value === "true" ? 1 : 0);
+    }
+
     if (tk.type === "num") {
       this.consume();
       return ok(tk.value);
+    }
+
+    // unknown identifier
+    if (tk.type === "id") {
+      return err({ type: "UndefinedIdentifier", identifier: tk.value });
     }
 
     return err({ type: "InvalidInput", message: "Unable to interpret input" });
@@ -173,20 +218,22 @@ export function interpret(input: string): Result<number, InterpretError> {
     return err({ type: "UndefinedIdentifier", identifier: s });
   }
 
-  // tokenize numbers, parentheses and operators
-  const tokenRe = /\d+(?:\.\d+)?|[+\-*/()]/g;
+  // tokenize numbers, identifiers, parentheses and operators
+  const tokenRe = /\d+(?:\.\d+)?|[A-Za-z_][A-Za-z0-9_]*|[+\-*/()]/g;
   const raw = s.match(tokenRe);
   if (!raw)
     return err({ type: "InvalidInput", message: "Unable to interpret input" });
 
-  // ensure no unexpected characters (allow parentheses)
+  // ensure no unexpected characters (allow parentheses and letters)
   const compact = s.replace(/\s+/g, "");
-  if (compact.match(/[^+\-*/0-9.()]/)) {
+  if (compact.match(/[^+\-*/0-9.()A-Za-z_]/)) {
     return err({ type: "InvalidInput", message: "Unable to interpret input" });
   }
 
   const tokens: Token[] = raw.map((t) => {
     if (/^[+\-*/() ]$/.test(t)) return { type: "op", value: t } as OpToken;
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(t))
+      return { type: "id", value: t } as any;
     return { type: "num", value: Number(t) } as NumToken;
   });
 
