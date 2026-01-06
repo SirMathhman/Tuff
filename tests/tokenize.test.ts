@@ -79,8 +79,14 @@ describe("tokenize", () => {
     expect(isOk(r)).toBe(true);
   });
 
-  it("returns Err on invalid token", () => {
+  it("tokenizes identifiers", () => {
     const r = tokenize("a - 1");
-    expect(isErr(r)).toBe(true);
+    expect(isOk(r)).toBe(true);
+    if (isOk(r))
+      expect(r.value).toEqual([
+        { type: "ident", value: "a" },
+        { type: "op", value: "-" },
+        { type: "num", value: 1 },
+      ]);
   });
 });

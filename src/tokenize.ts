@@ -13,7 +13,15 @@ export interface ParenToken {
   type: "paren";
   value: "(" | ")";
 }
-export type Token = NumToken | OpToken | ParenToken;
+export interface IdentToken {
+  type: "ident";
+  value: string;
+}
+export interface PunctToken {
+  type: "punct";
+  value: ":" | "=" | ";";
+}
+export type Token = NumToken | OpToken | ParenToken | IdentToken | PunctToken;
 
 function parseAndPushNumber(
   s: string,
@@ -27,6 +35,25 @@ function parseAndPushNumber(
   return ok(nextIndex);
 }
 
+function parseAndPushIdentifier(
+  s: string,
+  i: number,
+  tokens: Token[]
+): Result<number, string> {
+  const len = s.length;
+  let j = i;
+  const isStart = (ch: string) => /[A-Za-z_]/.test(ch);
+  const isCont = (ch: string) => /[A-Za-z0-9_]/.test(ch);
+  if (!isStart(s[j])) return err("Invalid token");
+  let ident = "";
+  while (j < len && isCont(s[j])) {
+    ident += s[j];
+    j++;
+  }
+  tokens.push({ type: "ident", value: ident });
+  return ok(j);
+}
+
 function handleSignOrOperator(
   s: string,
   i: number,
@@ -34,8 +61,8 @@ function handleSignOrOperator(
   tokens: Token[]
 ): Result<number, string> {
   const prev = tokens.length ? tokens[tokens.length - 1] : undefined;
-  // unary sign if at start or after a non-number (op or paren)
-  if (!prev || prev.type !== "num") {
+  // unary sign if at start, or after an operator, or after an opening paren
+  if (!prev || (prev.type === "op") || (prev.type === "paren" && prev.value === "(")) {
     return parseAndPushNumber(s, i, tokens);
   }
   tokens.push({ type: "op", value: ch as "+" | "-" });
@@ -69,8 +96,15 @@ export function tokenize(s: string): Result<Token[], string> {
       const nextIndex = parseAndPushNumber(s, i, tokens);
       if (!isOk(nextIndex)) return err(nextIndex.error);
       i = nextIndex.value;
+    } else if (/[A-Za-z_]/.test(ch)) {
+      const nextIndex = parseAndPushIdentifier(s, i, tokens);
+      if (!isOk(nextIndex)) return err(nextIndex.error);
+      i = nextIndex.value;
+    } else if (ch === ":" || ch === "=" || ch === ";") {
+      tokens.push({ type: "punct", value: ch as ":" | "=" | ";" });
+      i++;
     } else {
-      return err("Invalid numeric input");
+      return err("Invalid token");
     }
   }
 

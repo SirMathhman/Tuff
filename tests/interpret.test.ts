@@ -130,8 +130,25 @@ describe("interpret", () => {
     if (isOk(r)) expect(r.value).toBe(3);
   });
 
-  it("returns Err on invalid tokens", () => {
+  it("returns Err on undefined identifier", () => {
     const r = interpret("a - 1");
     expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error).toBe("Undefined variable");
+  });
+
+  it("supports let bindings and I32 coercion", () => {
+    const r = interpret("let x : I32 = (3 + 10) * 5; x");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(65);
+
+    const r2 = interpret("let y : I32 = 1.9; y");
+    expect(isOk(r2)).toBe(true);
+    if (isOk(r2)) expect(r2.value).toBe(1);
+  });
+
+  it("errors on referencing undefined variable", () => {
+    const r = interpret("x");
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error).toBe("Undefined variable");
   });
 });
