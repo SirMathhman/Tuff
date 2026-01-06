@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { tokenize } from "../src/tokenize";
 import { isOk, isErr } from "../src/result";
 
-describe("tokenize", () => {
+describe("tokenize - addition & unary", () => {
   it("tokenizes simple expression", () => {
     const r = tokenize("1 + 2");
     expect(isOk(r)).toBe(true);
@@ -24,7 +24,9 @@ describe("tokenize", () => {
         { type: "num", value: -2 },
       ]);
   });
+});
 
+describe("tokenize - mul/div/mod", () => {
   it("tokenizes multiplication", () => {
     const r = tokenize("2 * 3");
     expect(isOk(r)).toBe(true);
@@ -33,21 +35,6 @@ describe("tokenize", () => {
         { type: "num", value: 2 },
         { type: "op", value: "*" },
         { type: "num", value: 3 },
-      ]);
-  });
-
-  it("tokenizes parentheses", () => {
-    const r = tokenize("(3 + 10) * 5");
-    expect(isOk(r)).toBe(true);
-    if (isOk(r))
-      expect(r.value).toEqual([
-        { type: "paren", value: "(" },
-        { type: "num", value: 3 },
-        { type: "op", value: "+" },
-        { type: "num", value: 10 },
-        { type: "paren", value: ")" },
-        { type: "op", value: "*" },
-        { type: "num", value: 5 },
       ]);
   });
 
@@ -70,6 +57,23 @@ describe("tokenize", () => {
         { type: "num", value: 10 },
         { type: "op", value: "%" },
         { type: "num", value: 3 },
+      ]);
+  });
+});
+
+describe("tokenize - parentheses & identifiers", () => {
+  it("tokenizes parentheses", () => {
+    const r = tokenize("(3 + 10) * 5");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r))
+      expect(r.value).toEqual([
+        { type: "paren", value: "(" },
+        { type: "num", value: 3 },
+        { type: "op", value: "+" },
+        { type: "num", value: 10 },
+        { type: "paren", value: ")" },
+        { type: "op", value: "*" },
+        { type: "num", value: 5 },
       ]);
   });
 

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { evalLeftToRight } from "../src/evalLeftToRight";
 import { isOk, isErr } from "../src/result";
 
-describe("evalLeftToRight", () => {
+describe("evalLeftToRight - addition/subtraction", () => {
   it("evaluates left-to-right", () => {
     const tokens = [
       { type: "num", value: 10 } as const,
@@ -15,7 +15,9 @@ describe("evalLeftToRight", () => {
     expect(isOk(r)).toBe(true);
     if (isOk(r)) expect(r.value).toBe(8);
   });
+});
 
+describe("evalLeftToRight - multiplication", () => {
   it("evaluates multiplication with precedence", () => {
     const tokens = [
       { type: "num", value: 10 } as const,
@@ -41,7 +43,9 @@ describe("evalLeftToRight", () => {
     expect(isOk(r)).toBe(true);
     if (isOk(r)) expect(r.value).toBe(24);
   });
+});
 
+describe("evalLeftToRight - division & modulus", () => {
   it("evaluates division and chained division", () => {
     const tokens = [
       { type: "num", value: 100 } as const,
@@ -84,7 +88,9 @@ describe("evalLeftToRight", () => {
     expect(isOk(r2)).toBe(true);
     if (isOk(r2)) expect(r2.value).toBe(2);
   });
+});
 
+describe("evalLeftToRight - parentheses", () => {
   it("evaluates parentheses grouping", () => {
     const tokens = [
       { type: "paren", value: "(" } as any,
@@ -118,7 +124,9 @@ describe("evalLeftToRight", () => {
     expect(isOk(r)).toBe(true);
     if (isOk(r)) expect(r.value).toBe(6);
   });
+});
 
+describe("evalLeftToRight - errors", () => {
   it("returns Err on invalid token sequence", () => {
     const r = evalLeftToRight([{ type: "op", value: "+" } as any]);
     expect(isErr(r)).toBe(true);

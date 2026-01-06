@@ -19,6 +19,98 @@ function evalExprWithEnv(tokens: Token[], env: Map<string, number>) {
   return evalLeftToRight(substituted);
 }
 
+// Top-level helper types & functions (extracted from interpret to reduce function length)
+interface StatementResult {
+  nextIndex: number;
+  value?: number;
+}
+
+interface TypeParseResult {
+  typeName?: string;
+  nextIndex: number;
+}
+
+function parseOptionalType(
+  tokensArr: Token[],
+  cur: number
+): Result<TypeParseResult, string> {
+  if (
+    tokensArr[cur] &&
+    tokensArr[cur].type === "punct" &&
+    tokensArr[cur].value === ":"
+  ) {
+    cur++;
+    const typeTok = tokensArr[cur];
+    if (!typeTok || typeTok.type !== "ident") return err("Invalid numeric input");
+    return ok({ typeName: typeTok.value, nextIndex: cur + 1 });
+  }
+  return ok({ nextIndex: cur });
+}
+
+function indexUntilSemicolon(tokensArr: Token[], start: number): number {
+  let j = start;
+  while (j < tokensArr.length && !(tokensArr[j].type === "punct" && tokensArr[j].value === ";")) j++;
+  return j;
+}
+
+function processLetStatement(
+  tokensArr: Token[],
+  idx: number,
+  envMap: Map<string, number>
+): Result<StatementResult, string> {
+  let cur = idx + 1;
+  const nameTok = tokensArr[cur];
+  if (!nameTok || nameTok.type !== "ident") return err("Invalid numeric input");
+  const name = nameTok.value;
+  cur++;
+
+  const typeRes = parseOptionalType(tokensArr, cur);
+  if (isErr(typeRes)) return err(typeRes.error);
+  const { typeName, nextIndex } = typeRes.value;
+  cur = nextIndex;
+
+  if (!tokensArr[cur] || tokensArr[cur].type !== "punct" || tokensArr[cur].value !== "=") return err("Invalid numeric input");
+  cur++;
+
+  // collect expression tokens until semicolon
+  const j = indexUntilSemicolon(tokensArr, cur);
+  if (j >= tokensArr.length) return err("Invalid numeric input");
+  const exprTokens = tokensArr.slice(cur, j);
+  const valRes = evalExprWithEnv(exprTokens, envMap);
+  if (isErr(valRes)) return err(valRes.error);
+  let val = valRes.value;
+  if (typeName === "I32") val = Math.trunc(val);
+  envMap.set(name, val);
+  return ok({ nextIndex: j + 1, value: val });
+}
+
+function processExpressionStatement(
+  tokensArr: Token[],
+  idx: number,
+  envMap: Map<string, number>
+): Result<StatementResult, string> {
+  const start = idx;
+  let j = idx;
+  while (j < tokensArr.length && !(tokensArr[j].type === "punct" && tokensArr[j].value === ";")) j++;
+  const exprTokens = tokensArr.slice(start, j);
+  const valRes = evalExprWithEnv(exprTokens, envMap);
+  if (isErr(valRes)) return err(valRes.error);
+  return ok({ nextIndex: j + (j < tokensArr.length && tokensArr[j].type === "punct" ? 1 : 0), value: valRes.value });
+}
+
+function processStatement(tokensArr: Token[], idx: number, envMap: Map<string, number>): Result<StatementResult, string> {
+  // skip stray semicolons
+  if (tokensArr[idx] && tokensArr[idx].type === "punct" && tokensArr[idx].value === ";") {
+    return ok({ nextIndex: idx + 1 });
+  }
+
+  const t = tokensArr[idx];
+  if (!t) return err("Invalid numeric input");
+
+  if (t.type === "ident" && t.value === "let") return processLetStatement(tokensArr, idx, envMap);
+  return processExpressionStatement(tokensArr, idx, envMap);
+}
+
 export function interpret(input: string): Result<number, string> {
   const trimmed = input.trim();
 
@@ -38,70 +130,11 @@ export function interpret(input: string): Result<number, string> {
   let lastVal: number | undefined = undefined;
 
   while (i < tokens.length) {
-    // skip stray semicolons
-    if (tokens[i].type === "punct" && tokens[i].value === ";") {
-      i++;
-      continue;
-    }
-
-    const t = tokens[i];
-
-    // let statement: let <ident> [: <type>] = <expr> ;
-    if (t.type === "ident" && t.value === "let") {
-      i++;
-      const nameTok = tokens[i];
-      if (!nameTok || nameTok.type !== "ident")
-        return err("Invalid numeric input");
-      const name = nameTok.value;
-      i++;
-
-      let typeName: string | undefined;
-      if (tokens[i] && tokens[i].type === "punct" && tokens[i].value === ":") {
-        i++;
-        const typeTok = tokens[i];
-        if (!typeTok || typeTok.type !== "ident")
-          return err("Invalid numeric input");
-        typeName = typeTok.value;
-        i++;
-      }
-
-      if (!tokens[i] || tokens[i].type !== "punct" || tokens[i].value !== "=")
-        return err("Invalid numeric input");
-      i++;
-
-      // collect expression tokens until semicolon
-      const start = i;
-      let j = i;
-      while (
-        j < tokens.length &&
-        !(tokens[j].type === "punct" && tokens[j].value === ";")
-      )
-        j++;
-      if (j >= tokens.length) return err("Invalid numeric input");
-      const exprTokens = tokens.slice(start, j);
-      const valRes = evalExprWithEnv(exprTokens, env);
-      if (isErr(valRes)) return err(valRes.error);
-      let val = valRes.value;
-      if (typeName === "I32") val = Math.trunc(val);
-      env.set(name, val);
-      lastVal = val;
-      i = j + 1; // skip semicolon
-      continue;
-    }
-
-    // otherwise expression: evaluate until semicolon or end
-    const start = i;
-    let j = i;
-    while (
-      j < tokens.length &&
-      !(tokens[j].type === "punct" && tokens[j].value === ";")
-    )
-      j++;
-    const exprTokens = tokens.slice(start, j);
-    const valRes = evalExprWithEnv(exprTokens, env);
-    if (isErr(valRes)) return err(valRes.error);
-    lastVal = valRes.value;
-    i = j + (j < tokens.length && tokens[j].type === "punct" ? 1 : 0);
+    const res = processStatement(tokens, i, env);
+    if (isErr(res)) return err(res.error);
+    const { nextIndex, value } = res.value;
+    if (value !== undefined) lastVal = value;
+    i = nextIndex;
   }
 
   if (lastVal === undefined) return err("Invalid numeric input");

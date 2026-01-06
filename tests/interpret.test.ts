@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { interpret } from "../src/interpret";
 import { isOk, isErr } from "../src/result";
 
-describe("interpret", () => {
+describe("interpret - parsing & simple ops", () => {
   it("is a function", () => {
     expect(typeof interpret).toBe("function");
   });
@@ -19,6 +19,32 @@ describe("interpret", () => {
     if (isOk(r)) expect(r.value).toBe(3);
   });
 
+  it("parses chained addition expressions", () => {
+    const r = interpret("1+2+3");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(6);
+  });
+
+  it("parses spaced chained addition expressions", () => {
+    const r = interpret("1 + 2 + 3");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(6);
+  });
+
+  it("handles decimals and negatives", () => {
+    const r = interpret("-1 + 2.5");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(1.5);
+  });
+
+  it("supports unary minus after operator", () => {
+    const r = interpret("1 - -2");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(3);
+  });
+});
+
+describe("interpret - precedence and mixing", () => {
   it("respects multiplication precedence", () => {
     const r = interpret("10 * 5 + 3");
     expect(isOk(r)).toBe(true);
@@ -41,6 +67,26 @@ describe("interpret", () => {
     if (isOk(r2)) expect(r2.value).toBe(-5);
   });
 
+  it("parses subtraction", () => {
+    const r = interpret("10 - 5");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(5);
+  });
+
+  it("parses mixed left-to-right expressions", () => {
+    const r1 = interpret("10 - 5 + 3");
+    expect(isOk(r1)).toBe(true);
+    if (isOk(r1)) expect(r1.value).toBe(8);
+    const r2 = interpret("1 + 2 - 3");
+    expect(isOk(r2)).toBe(true);
+    if (isOk(r2)) expect(r2.value).toBe(0);
+    const r3 = interpret("1 - 2 - 3");
+    expect(isOk(r3)).toBe(true);
+    if (isOk(r3)) expect(r3.value).toBe(-4);
+  });
+});
+
+describe("interpret - parentheses, division & modulus", () => {
   it("evaluates parentheses expressions", () => {
     const r = interpret("(3 + 10) * 5");
     expect(isOk(r)).toBe(true);
@@ -87,49 +133,9 @@ describe("interpret", () => {
     const r = interpret("(3 + 1");
     expect(isErr(r)).toBe(true);
   });
+});
 
-  it("parses chained addition expressions", () => {
-    const r = interpret("1+2+3");
-    expect(isOk(r)).toBe(true);
-    if (isOk(r)) expect(r.value).toBe(6);
-  });
-
-  it("parses spaced chained addition expressions", () => {
-    const r = interpret("1 + 2 + 3");
-    expect(isOk(r)).toBe(true);
-    if (isOk(r)) expect(r.value).toBe(6);
-  });
-
-  it("parses subtraction", () => {
-    const r = interpret("10 - 5");
-    expect(isOk(r)).toBe(true);
-    if (isOk(r)) expect(r.value).toBe(5);
-  });
-
-  it("parses mixed left-to-right expressions", () => {
-    const r1 = interpret("10 - 5 + 3");
-    expect(isOk(r1)).toBe(true);
-    if (isOk(r1)) expect(r1.value).toBe(8);
-    const r2 = interpret("1 + 2 - 3");
-    expect(isOk(r2)).toBe(true);
-    if (isOk(r2)) expect(r2.value).toBe(0);
-    const r3 = interpret("1 - 2 - 3");
-    expect(isOk(r3)).toBe(true);
-    if (isOk(r3)) expect(r3.value).toBe(-4);
-  });
-
-  it("handles decimals and negatives", () => {
-    const r = interpret("-1 + 2.5");
-    expect(isOk(r)).toBe(true);
-    if (isOk(r)) expect(r.value).toBe(1.5);
-  });
-
-  it("supports unary minus after operator", () => {
-    const r = interpret("1 - -2");
-    expect(isOk(r)).toBe(true);
-    if (isOk(r)) expect(r.value).toBe(3);
-  });
-
+describe("interpret - identifiers and let", () => {
   it("returns Err on undefined identifier", () => {
     const r = interpret("a - 1");
     expect(isErr(r)).toBe(true);

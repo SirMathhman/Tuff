@@ -1,11 +1,5 @@
 /* Flat config for ESLint v9. Recreates settings from previous .eslintrc.cjs
-   See migration guide: https://eslint.org/docs/latest/use/configure/migration-guide
-   
-   Code Quality Standards:
-   - Functions: max 50 lines (enforced via code review)
-   - Complexity: max 15 (enforced via eslint complexity rule)
-   - No throw statements or null values
-   - Early returns preferred over continue/break */
+   See migration guide: https://eslint.org/docs/latest/use/configure/migration-guide */
 
 module.exports = [
   // Ignore patterns (migrated from .eslintignore)
@@ -22,9 +16,11 @@ module.exports = [
     },
     plugins: {
       "@typescript-eslint": require("@typescript-eslint/eslint-plugin"),
+      sonarjs: require("eslint-plugin-sonarjs"),
     },
     rules: {
       complexity: ["error", { max: 15 }],
+      "sonarjs/max-lines-per-function": ["error", { maximum: 50 }],
       "@typescript-eslint/consistent-type-definitions": ["error", "interface"],
       "no-restricted-syntax": [
         "error",
