@@ -8,6 +8,9 @@ static void test_stub_returns_negative_one(void) {
 	assert(interpret(NULL) == -1);
 	/* New test: parse decimal integer */
 	assert(interpret("100") == 100);
+	/* New test: simple addition */
+	assert(interpret("1 + 2") == 3);
+	assert(interpret("1+2") == 3);
 	printf("basic tests passed\n");
 }
 
