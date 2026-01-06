@@ -235,6 +235,24 @@ describe("interpret - if expressions (initializers)", () => {
     expect(isOk(r)).toBe(true);
     if (isOk(r)) expect(r.value).toBe(4);
   });
+
+  it("evaluates match expression in initializer (case match)", () => {
+    const r = interpret("let x : I32 = match(100) { case 100 => 3; case 2 => 4; default => 5; }; x");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(3);
+  });
+
+  it("evaluates match expression in initializer (case 2)", () => {
+    const r = interpret("let x : I32 = match(2) { case 100 => 3; case 2 => 4; default => 5; }; x");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(4);
+  });
+
+  it("evaluates match expression in initializer (default)", () => {
+    const r = interpret("let x : I32 = match(1) { case 100 => 3; case 2 => 4; default => 5; }; x");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(5);
+  });
 });
 
 describe("interpret - if expressions (statement branches)", () => {

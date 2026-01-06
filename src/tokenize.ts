@@ -19,7 +19,7 @@ export interface IdentToken {
 }
 export interface PunctToken {
   type: "punct";
-  value: ":" | "=" | ";";
+  value: ":" | "=" | ";" | "{" | "}" | "=>";
 }
 export type Token = NumToken | OpToken | ParenToken | IdentToken | PunctToken;
 
@@ -73,6 +73,21 @@ function handleSignOrOperator(
   return ok(i + 1);
 }
 
+function handleOperator(
+  s: string,
+  i: number,
+  ch: string,
+  tokens: Token[]
+): Result<number, string> {
+  if (ch === "+" || ch === "-") {
+    const res = handleSignOrOperator(s, i, ch, tokens);
+    if (!isOk(res)) return err(res.error);
+    return ok(res.value);
+  }
+  tokens.push({ type: "op", value: ch as "+" | "-" | "*" | "/" | "%" });
+  return ok(i + 1);
+}
+
 function handleChar(
   s: string,
   i: number,
@@ -82,29 +97,18 @@ function handleChar(
   if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
     return ok(i + 1);
   }
-  if (ch === "(" || ch === ")") {
-    tokens.push({ type: "paren", value: ch });
+  if ("(){}".includes(ch)) {
+    if (ch === "(" || ch === ")") {
+      tokens.push({ type: "paren", value: ch });
+    } else {
+      tokens.push({ type: "punct", value: ch as "{" | "}" });
+    }
     return ok(i + 1);
   }
   if ("+-*/%".includes(ch)) {
     const res = handleOperator(s, i, ch, tokens);
     if (!isOk(res)) return err(res.error);
     return ok(res.value);
-  }
-
-  function handleOperator(
-    s: string,
-    i: number,
-    ch: string,
-    tokens: Token[]
-  ): Result<number, string> {
-    if (ch === "+" || ch === "-") {
-      const res = handleSignOrOperator(s, i, ch, tokens);
-      if (!isOk(res)) return err(res.error);
-      return ok(res.value);
-    }
-    tokens.push({ type: "op", value: ch as "+" | "-" | "*" | "/" | "%" });
-    return ok(i + 1);
   }
   if (/[0-9.]/.test(ch)) return handleNumber(s, i, tokens);
   if (/[A-Za-z_]/.test(ch)) return handleIdentifier(s, i, tokens);
@@ -138,7 +142,12 @@ function handlePunct(
   tokens: Token[]
 ): Result<number, string> {
   const ch = s[i];
-  tokens.push({ type: "punct", value: ch as ":" | "=" | ";" });
+  // handle arrow '=>'
+  if (ch === "=" && s[i + 1] === ">") {
+    tokens.push({ type: "punct", value: "=>" });
+    return ok(i + 2);
+  }
+  tokens.push({ type: "punct", value: ch as ":" | "=" | ";" | "{" | "}" });
   return ok(i + 1);
 }
 export function tokenize(s: string): Result<Token[], string> {
