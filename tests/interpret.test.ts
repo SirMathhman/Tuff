@@ -152,6 +152,26 @@ describe("interpret - identifiers and let", () => {
     if (isOk(r2)) expect(r2.value).toBe(1);
   });
 
+  it("supports mutable binding and assignment", () => {
+    const r = interpret("let mut x : I32 = 0; x = (3 + 10) * 5; x");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(65);
+
+    const r2 = interpret("let mut a : I32 = 2; a = a * 3; a");
+    expect(isOk(r2)).toBe(true);
+    if (isOk(r2)) expect(r2.value).toBe(6);
+  });
+
+  it("errors when assigning to immutable or undefined variables", () => {
+    const r = interpret("let x : I32 = 1; x = 2;");
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error).toBe("Cannot assign to immutable variable");
+
+    const r2 = interpret("y = 1;");
+    expect(isErr(r2)).toBe(true);
+    if (isErr(r2)) expect(r2.error).toBe("Undefined variable");
+  });
+
   it("errors on referencing undefined variable", () => {
     const r = interpret("x");
     expect(isErr(r)).toBe(true);

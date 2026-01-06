@@ -62,50 +62,94 @@ function handleSignOrOperator(
 ): Result<number, string> {
   const prev = tokens.length ? tokens[tokens.length - 1] : undefined;
   // unary sign if at start, or after an operator, or after an opening paren
-  if (!prev || (prev.type === "op") || (prev.type === "paren" && prev.value === "(")) {
+  if (
+    !prev ||
+    prev.type === "op" ||
+    (prev.type === "paren" && prev.value === "(")
+  ) {
     return parseAndPushNumber(s, i, tokens);
   }
   tokens.push({ type: "op", value: ch as "+" | "-" });
   return ok(i + 1);
 }
 
+function handleChar(
+  s: string,
+  i: number,
+  tokens: Token[]
+): Result<number, string> {
+  const ch = s[i];
+  if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+    return ok(i + 1);
+  }
+  if (ch === "(" || ch === ")") {
+    tokens.push({ type: "paren", value: ch });
+    return ok(i + 1);
+  }
+  if ("+-*/%".includes(ch)) {
+    const res = handleOperator(s, i, ch, tokens);
+    if (!isOk(res)) return err(res.error);
+    return ok(res.value);
+  }
+
+  function handleOperator(
+    s: string,
+    i: number,
+    ch: string,
+    tokens: Token[]
+  ): Result<number, string> {
+    if (ch === "+" || ch === "-") {
+      const res = handleSignOrOperator(s, i, ch, tokens);
+      if (!isOk(res)) return err(res.error);
+      return ok(res.value);
+    }
+    tokens.push({ type: "op", value: ch as "+" | "-" | "*" | "/" | "%" });
+    return ok(i + 1);
+  }
+  if (/[0-9.]/.test(ch)) return handleNumber(s, i, tokens);
+  if (/[A-Za-z_]/.test(ch)) return handleIdentifier(s, i, tokens);
+  if (ch === ":" || ch === "=" || ch === ";") return handlePunct(s, i, tokens);
+  return err("Invalid token");
+}
+
+function handleNumber(
+  s: string,
+  i: number,
+  tokens: Token[]
+): Result<number, string> {
+  const nextIndex = parseAndPushNumber(s, i, tokens);
+  if (!isOk(nextIndex)) return err(nextIndex.error);
+  return ok(nextIndex.value);
+}
+
+function handleIdentifier(
+  s: string,
+  i: number,
+  tokens: Token[]
+): Result<number, string> {
+  const nextIndex = parseAndPushIdentifier(s, i, tokens);
+  if (!isOk(nextIndex)) return err(nextIndex.error);
+  return ok(nextIndex.value);
+}
+
+function handlePunct(
+  s: string,
+  i: number,
+  tokens: Token[]
+): Result<number, string> {
+  const ch = s[i];
+  tokens.push({ type: "punct", value: ch as ":" | "=" | ";" });
+  return ok(i + 1);
+}
 export function tokenize(s: string): Result<Token[], string> {
   const tokens: Token[] = [];
   let i = 0;
   const len = s.length;
 
   while (i < len) {
-    const ch = s[i];
-
-    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
-      // skip whitespace
-      i++;
-    } else if (ch === "(" || ch === ")") {
-      tokens.push({ type: "paren", value: ch });
-      i++;
-    } else if ("+-*/%".includes(ch)) {
-      if (ch === "+" || ch === "-") {
-        const res = handleSignOrOperator(s, i, ch, tokens);
-        if (!isOk(res)) return err(res.error);
-        i = res.value;
-      } else {
-        tokens.push({ type: "op", value: ch as "+" | "-" | "*" | "/" | "%" });
-        i++;
-      }
-    } else if (/[0-9.]/.test(ch)) {
-      const nextIndex = parseAndPushNumber(s, i, tokens);
-      if (!isOk(nextIndex)) return err(nextIndex.error);
-      i = nextIndex.value;
-    } else if (/[A-Za-z_]/.test(ch)) {
-      const nextIndex = parseAndPushIdentifier(s, i, tokens);
-      if (!isOk(nextIndex)) return err(nextIndex.error);
-      i = nextIndex.value;
-    } else if (ch === ":" || ch === "=" || ch === ";") {
-      tokens.push({ type: "punct", value: ch as ":" | "=" | ";" });
-      i++;
-    } else {
-      return err("Invalid token");
-    }
+    const res = handleChar(s, i, tokens);
+    if (!isOk(res)) return err(res.error);
+    i = res.value;
   }
 
   return ok(tokens);
