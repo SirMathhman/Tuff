@@ -17,6 +17,9 @@ static void test_stub_returns_negative_one(void) {
 	/* New test: mixed left-associative operators */
 	assert(interpret("10 - 5 + 3") == 8);
 	assert(interpret("10-5+3") == 8);
+	/* New test: multiplication then addition */
+	assert(interpret("10 * 5 + 3") == 53);
+	assert(interpret("10*5+3") == 53);
 	printf("basic tests passed\n");
 }
 
