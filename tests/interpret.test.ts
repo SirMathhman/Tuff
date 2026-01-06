@@ -96,7 +96,10 @@ describe("interpret", () => {
     ).toEqual({ ok: true, value: 2 });
 
     // top-level boolean variable
-    expect(interpret("let foo : Bool = true; foo")).toEqual({ ok: true, value: 1 });
+    expect(interpret("let foo : Bool = true; foo")).toEqual({
+      ok: true,
+      value: 1,
+    });
     expect(interpret("let foo:Bool=true;foo")).toEqual({ ok: true, value: 1 });
   });
   test("conditional expressions", () => {
