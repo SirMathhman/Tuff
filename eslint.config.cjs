@@ -17,6 +17,14 @@ module.exports = [
     },
     rules: {
       complexity: ["error", { max: 15 }],
+      // disallow throw statements; use Result<T,E> style returns instead
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "ThrowStatement",
+          message: "Do not use throw; return Result<T, E> instead.",
+        },
+      ],
       ...require("@typescript-eslint/eslint-plugin").configs.recommended.rules,
     },
   },
