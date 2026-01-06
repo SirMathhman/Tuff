@@ -52,10 +52,12 @@ class Parser {
     this.tokens = tokens;
   }
   peek(): Token | undefined {
-    return this.tokens[this.idx];
+    const t = this.tokens;
+    return t[this.idx];
   }
   consume(): Token | undefined {
-    return this.tokens[this.idx++];
+    const t = this.tokens;
+    return t[this.idx++];
   }
 
   parseFactor(): Result<number, InterpretError> {
@@ -83,7 +85,13 @@ class Parser {
     let val = left.value;
     let p = this.peek();
     while (p && p.type === "op" && (p.value === "*" || p.value === "/")) {
-      const op = this.consume()!.value;
+      const opToken = this.consume();
+      if (!opToken)
+        return err({
+          type: "InvalidInput",
+          message: "Unable to interpret input",
+        });
+      const op = opToken.value;
       const right = this.parseFactor();
       if (!right.ok) return right;
       const rhs = right.value;
@@ -99,7 +107,13 @@ class Parser {
     let val = left.value;
     let p = this.peek();
     while (p && p.type === "op" && (p.value === "+" || p.value === "-")) {
-      const op = this.consume()!.value;
+      const opToken = this.consume();
+      if (!opToken)
+        return err({
+          type: "InvalidInput",
+          message: "Unable to interpret input",
+        });
+      const op = opToken.value;
       const right = this.parseTerm();
       if (!right.ok) return right;
       const rhs = right.value;
@@ -112,7 +126,9 @@ class Parser {
   parse(): Result<number, InterpretError> {
     const result = this.parseExpr();
     if (!result.ok) return result;
-    if (this.idx !== this.tokens.length)
+    const t = this.tokens;
+    const len = t.length;
+    if (this.idx !== len)
       return err({
         type: "InvalidInput",
         message: "Unable to interpret input",
@@ -147,7 +163,8 @@ export function interpret(input: string): Result<number, InterpretError> {
     return err({ type: "InvalidInput", message: "Unable to interpret input" });
 
   // ensure no unexpected characters
-  if (s.replace(/\s+/g, "").match(/[^+\-*/0-9.]/)) {
+  const compact = s.replace(/\s+/g, "");
+  if (compact.match(/[^+\-*/0-9.]/)) {
     return err({ type: "InvalidInput", message: "Unable to interpret input" });
   }
 

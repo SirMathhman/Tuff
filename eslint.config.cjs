@@ -45,11 +45,14 @@ module.exports = [
         },
         {
           selector: "MemberExpression[object.type='MemberExpression']",
-          message: "Avoid chained property access (Law of Demeter): prefer retrieving necessary data via single-level access or helper methods.",
+          message:
+            "Avoid chained property access (Law of Demeter): prefer retrieving necessary data via single-level access or helper methods.",
         },
         {
-          selector: "CallExpression[callee.type='MemberExpression'][callee.object.type='MemberExpression']",
-          message: "Avoid chaining method/property accesses (Law of Demeter): consider extracting into helper functions or intermediate variables.",
+          selector:
+            "CallExpression[callee.type='MemberExpression'][callee.object.type='MemberExpression']",
+          message:
+            "Avoid chaining method/property accesses (Law of Demeter): consider extracting into helper functions or intermediate variables.",
         },
         {
           selector: "BreakStatement",
