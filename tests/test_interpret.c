@@ -20,6 +20,9 @@ static void test_stub_returns_negative_one(void) {
 	/* New test: multiplication then addition */
 	assert(interpret("10 * 5 + 3") == 53);
 	assert(interpret("10*5+3") == 53);
+	/* New test: parentheses and precedence */
+	assert(interpret("10 * (5 + 3)") == 80);
+	assert(interpret("10*(5+3)") == 80);
 	printf("basic tests passed\n");
 }
 

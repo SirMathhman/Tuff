@@ -56,52 +56,113 @@ static int parse_single_expr(const char *s, int *out) {
 	return 1;
 }
 
-static int parse_op_char(const char **pp, char *op) {
-	const char *p = *pp;
-	if (*p != '+' && *p != '-' && *p != '*' && *p != '/') return 0;
-	*op = *p;
-	(*pp)++;
-	return 1;
-}
-
 static int in_int_range(long v) {
 	return v >= INT_MIN && v <= INT_MAX;
 }
 
-/* Try to parse a left-associative chain expression like `a op b op c ...`.
- * On success write result to `out` and return 1.
- */
-static int parse_chain_expr(const char *s, int *out)
+/* Parse a number from *pp using strtol; advance *pp; return 1 on success */
+static int parse_number(const char **pp, long *out)
+{
+	errno = 0;
+	char *end = NULL;
+	long v = strtol(*pp, &end, 10);
+	if (end == *pp) return 0;
+	*out = v;
+	*pp = end;
+	return 1;
+}
+
+/* Forward declarations for recursive-descent parser */
+static int parse_expr(const char **pp, long long *out);
+static int parse_term(const char **pp, long long *out);
+static int parse_factor(const char **pp, long long *out);
+
+/* factor := number | '(' expr ')' */
+static int parse_factor(const char **pp, long long *out)
+{
+	skip_ws(pp);
+	if (**pp == '(') {
+		(*pp)++; /* consume '(' */
+		long long val = 0;
+		if (!parse_expr(pp, &val)) return 0;
+		skip_ws(pp);
+		if (**pp != ')') return 0;
+		(*pp)++;
+		*out = val;
+		return 1;
+	}
+	long v = 0;
+	if (!parse_number(pp, &v)) return 0;
+	*out = v;
+	return 1;
+}
+
+/* term := factor ( ('*' | '/') factor )* */
+static int parse_term(const char **pp, long long *out)
+{
+	long long acc = 0;
+	if (!parse_factor(pp, &acc)) return 0;
+	skip_ws(pp);
+	while (**pp == '*' || **pp == '/') {
+		char op = **pp;
+		(*pp)++;
+		skip_ws(pp);
+		long long rhs = 0;
+		if (!parse_factor(pp, &rhs)) return 0;
+		long long r = 0;
+		if (op == '*') r = acc * rhs;
+		else {
+			if (rhs == 0) return 0;
+			r = acc / rhs;
+		}
+		if (r < INT_MIN || r > INT_MAX) return 0;
+		acc = r;
+		skip_ws(pp);
+	}
+	*out = acc;
+	return 1;
+}
+
+/* expr := term ( ('+' | '-') term )* */
+static int parse_expr(const char **pp, long long *out)
+{
+	long long acc = 0;
+	if (!parse_term(pp, &acc)) return 0;
+	skip_ws(pp);
+	while (**pp == '+' || **pp == '-') {
+		char op = **pp;
+		(*pp)++;
+		skip_ws(pp);
+		long long rhs = 0;
+		if (!parse_term(pp, &rhs)) return 0;
+		long long r = 0;
+		if (op == '+') r = acc + rhs;
+		else r = acc - rhs;
+		if (r < INT_MIN || r > INT_MAX) return 0;
+		acc = r;
+		skip_ws(pp);
+	}
+	*out = acc;
+	return 1;
+}
+
+/* Try parse full expression and ensure whole string consumed */
+static int parse_full_expr(const char *s, int *out)
 {
 	const char *p = s;
-	long a = 0;
-	if (!parse_long(p, &a, &p)) return 0;
+	long long val = 0;
+	if (!parse_expr(&p, &val)) return 0;
 	skip_ws(&p);
-	/* Start accumulator */
-	if (errno == ERANGE || !in_int_range(a)) return 0;
-	long acc = (long)a;
-	/* Loop over operator and next operand */
-	while (*p != '\0') {
-		char op = 0;
-		if (!parse_op_char(&p, &op)) return 0;
-		skip_ws(&p);
-		long b = 0;
-		if (!parse_long(p, &b, &p)) return 0;
-		skip_ws(&p);
-		if (errno == ERANGE || !in_int_range(b)) return 0;
-		long long r = 0;
-		if (!compute_op(op, acc, b, &r)) return 0;
-		if (r < INT_MIN || r > INT_MAX) return 0;
-		acc = (long)r;
-	}
-	*out = (int)acc;
+	if (*p != '\0') return 0;
+	if (val < INT_MIN || val > INT_MAX) return 0;
+	*out = (int)val;
 	return 1;
 }
 
 int interpret(const char *s) {
 	if (s == NULL) return -1;
 	int result = 0;
-	/* parse_chain_expr handles single, binary, and chained expressions */
-	if (parse_chain_expr(s, &result)) return result;
+	/* parse_full_expr handles numbers, precedence, and parentheses */
+	if (parse_full_expr(s, &result)) return result;
 	return -1;
 }
