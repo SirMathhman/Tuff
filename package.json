@@ -6,12 +6,14 @@
     "test": "vitest --run",
     "test:watch": "vitest --watch",
     "build": "tsc -p .",
-    "lint": "eslint . --ext .ts"
+    "lint": "eslint . --ext .ts",
+    "prepare": "husky install"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.52.0",
     "@typescript-eslint/parser": "^8.52.0",
     "eslint": "^9.39.2",
+    "husky": "^8.0.3",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   }
