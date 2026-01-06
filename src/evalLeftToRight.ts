@@ -1,6 +1,35 @@
 import type { Token } from "./tokenize";
 import { Result, err, ok } from "./result";
 
+function applyMultiplicativeOp(
+  op: string,
+  lhs: Token,
+  rhs: Token
+): Result<Token, string> {
+  if (!lhs || lhs.type !== "num" || !rhs || rhs.type !== "num")
+    return err("Invalid numeric input");
+  if (op === "*")
+    return ok({
+      type: "num",
+      value: (lhs.value as number) * (rhs.value as number),
+    });
+  if (op === "/") {
+    if ((rhs.value as number) === 0) return err("Division by zero");
+    return ok({
+      type: "num",
+      value: (lhs.value as number) / (rhs.value as number),
+    });
+  }
+  if (op === "%") {
+    if ((rhs.value as number) === 0) return err("Division by zero");
+    return ok({
+      type: "num",
+      value: (lhs.value as number) % (rhs.value as number),
+    });
+  }
+  return err("Invalid numeric input");
+}
+
 function foldMultiplication(tokens: Token[]): Result<Token[], string> {
   const stack: Token[] = [];
   let i = 0;
@@ -11,22 +40,14 @@ function foldMultiplication(tokens: Token[]): Result<Token[], string> {
       i++;
     } else {
       const op = t;
-      if (op.value === "*") {
+      if (op.type !== "op") return err("Invalid numeric input");
+      if (op.value === "*" || op.value === "/" || op.value === "%") {
         const lhs = stack.pop();
         const rhs = tokens[i + 1];
-        if (!lhs || lhs.type !== "num" || !rhs || rhs.type !== "num")
-          return err("Invalid numeric input");
-        const prod = lhs.value * rhs.value;
-        stack.push({ type: "num", value: prod });
-        i += 2;
-      } else if (op.value === "/") {
-        const lhs = stack.pop();
-        const rhs = tokens[i + 1];
-        if (!lhs || lhs.type !== "num" || !rhs || rhs.type !== "num")
-          return err("Invalid numeric input");
-        if (rhs.value === 0) return err("Division by zero");
-        const div = lhs.value / rhs.value;
-        stack.push({ type: "num", value: div });
+        if (!lhs || !rhs) return err("Invalid numeric input");
+        const res = applyMultiplicativeOp(op.value, lhs, rhs);
+        if (res.ok === false) return res;
+        stack.push(res.value);
         i += 2;
       } else {
         stack.push(op);

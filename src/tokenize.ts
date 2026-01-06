@@ -7,7 +7,7 @@ export interface NumToken {
 }
 export interface OpToken {
   type: "op";
-  value: "+" | "-" | "*" | "/";
+  value: "+" | "-" | "*" | "/" | "%";
 }
 export interface ParenToken {
   type: "paren";
@@ -56,13 +56,15 @@ export function tokenize(s: string): Result<Token[], string> {
     } else if (ch === "(" || ch === ")") {
       tokens.push({ type: "paren", value: ch });
       i++;
-    } else if (ch === "*" || ch === "/") {
-      tokens.push({ type: "op", value: ch });
-      i++;
-    } else if (ch === "+" || ch === "-") {
-      const res = handleSignOrOperator(s, i, ch, tokens);
-      if (!isOk(res)) return err(res.error);
-      i = res.value;
+    } else if ("+-*/%".includes(ch)) {
+      if (ch === "+" || ch === "-") {
+        const res = handleSignOrOperator(s, i, ch, tokens);
+        if (!isOk(res)) return err(res.error);
+        i = res.value;
+      } else {
+        tokens.push({ type: "op", value: ch as "+" | "-" | "*" | "/" | "%" });
+        i++;
+      }
     } else if (/[0-9.]/.test(ch)) {
       const nextIndex = parseAndPushNumber(s, i, tokens);
       if (!isOk(nextIndex)) return err(nextIndex.error);

@@ -69,6 +69,20 @@ describe("interpret", () => {
     if (isOk(r3)) expect(r3.value).toBe(8);
   });
 
+  it("modulus and modulo-by-zero handling", () => {
+    const m1 = interpret("10 % 3");
+    expect(isOk(m1)).toBe(true);
+    if (isOk(m1)) expect(m1.value).toBe(1);
+
+    const m2 = interpret("10 % (5 - 5)");
+    expect(isErr(m2)).toBe(true);
+    if (isErr(m2)) expect(m2.error).toBe("Division by zero");
+
+    const m3 = interpret("10 + 5 % 3");
+    expect(isOk(m3)).toBe(true);
+    if (isOk(m3)) expect(m3.value).toBe(12);
+  });
+
   it("returns Err on malformed parentheses", () => {
     const r = interpret("(3 + 1");
     expect(isErr(r)).toBe(true);

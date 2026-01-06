@@ -62,6 +62,17 @@ describe("tokenize", () => {
       ]);
   });
 
+  it("tokenizes modulus", () => {
+    const r = tokenize("10 % 3");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r))
+      expect(r.value).toEqual([
+        { type: "num", value: 10 },
+        { type: "op", value: "%" },
+        { type: "num", value: 3 },
+      ]);
+  });
+
   it("returns Err on malformed parentheses", () => {
     const r = tokenize("(3 + 2");
     // Tokenizer should still tokenize characters; parenthesis mismatch is detected in evaluation.
