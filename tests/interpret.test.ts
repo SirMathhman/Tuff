@@ -179,6 +179,24 @@ describe("interpret - let & assignment", () => {
     expect(isErr(r2)).toBe(true);
     if (isErr(r2)) expect(r2.error).toBe("Undefined variable");
   });
+
+  it("allows initializing uninitialized variable without mut", () => {
+    const r = interpret("let x : I32; x = 100; x");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(100);
+  });
+
+  it("errors when reading uninitialized variable", () => {
+    const r = interpret("let x : I32; x");
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error).toBe("Uninitialized variable");
+  });
+
+  it("respects I32 coercion on assignment", () => {
+    const r = interpret("let x : I32; x = 1.9; x");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(1);
+  });
 });
 
 describe("interpret - if expressions", () => {

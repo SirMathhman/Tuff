@@ -3,8 +3,29 @@ import { evalLeftToRight } from "./evalLeftToRight";
 import { Result, ok, err, isOk, isErr } from "./result";
 
 interface Binding {
-  value: number;
+  value?: number;
   mutable: boolean;
+  typeName?: string;
+}
+
+interface ProcessResult {
+  lastVal?: number;
+}
+
+function processStatementsTokens(
+  tokens: Token[],
+  env: Map<string, Binding>
+): Result<ProcessResult, string> {
+  let i = 0;
+  let lastVal: number | undefined = undefined;
+  while (i < tokens.length) {
+    const res = processStatement(tokens, i, env);
+    if (isErr(res)) return err(res.error);
+    const { nextIndex, value } = res.value;
+    if (value !== undefined) lastVal = value;
+    i = nextIndex;
+  }
+  return ok({ lastVal });
 }
 
 function findMatchingParen(tokens: Token[], start: number): number {
@@ -61,6 +82,31 @@ function findTopLevelElseIndex(tokens: Token[], start: number): number {
   return -1;
 }
 
+interface InlineIfResult {
+  token: Token;
+  consumed: number;
+}
+
+function evalInlineIfToNumToken(
+  tokens: Token[],
+  start: number,
+  env: Map<string, Binding>
+): Result<InlineIfResult, string> {
+  const subTokens = stripOuterParens(tokens.slice(start));
+  if (
+    subTokens.length === 0 ||
+    subTokens[0].type !== "ident" ||
+    subTokens[0].value !== "if"
+  )
+    return err("Invalid numeric input");
+  const ifRes = evalIfExpression(subTokens, env);
+  if (isErr(ifRes)) return err(ifRes.error);
+  return ok({
+    token: { type: "num", value: ifRes.value },
+    consumed: tokens.length - start,
+  });
+}
+
 function evalIfExpression(
   tokens: Token[],
   env: Map<string, Binding>
@@ -90,9 +136,9 @@ function evalIfExpression(
   if (isErr(condRes)) return err(condRes.error);
   const condVal = condRes.value;
   const chosen = condVal !== 0 ? thenTokens : elseTokens;
-  const branchRes = evalExprWithEnv(chosen, env);
+  const branchRes = processStatementsTokens(chosen, env);
   if (isErr(branchRes)) return err(branchRes.error);
-  return ok(branchRes.value);
+  return ok(branchRes.value.lastVal ?? 0);
 }
 
 function evalExprWithEnv(tokens: Token[], env: Map<string, Binding>) {
@@ -118,22 +164,14 @@ function evalExprWithEnv(tokens: Token[], env: Map<string, Binding>) {
       } else if (t.value === "false") {
         substituted.push({ type: "num", value: 0 });
       } else if (t.value === "if") {
-        // attempt to evaluate `if` from here to the end of tokens
-        const subTokens = stripOuterParens(tokens.slice(i));
-        if (
-          subTokens.length === 0 ||
-          subTokens[0].type !== "ident" ||
-          subTokens[0].value !== "if"
-        )
-          return err("Invalid numeric input");
-        const ifRes = evalIfExpression(subTokens, env);
-        if (isErr(ifRes)) return err(ifRes.error);
-        substituted.push({ type: "num", value: ifRes.value });
-        // consume remainder
-        consumed = tokens.length - i;
+        const inlineRes = evalInlineIfToNumToken(tokens, i, env);
+        if (isErr(inlineRes)) return err(inlineRes.error);
+        substituted.push(inlineRes.value.token);
+        consumed = inlineRes.value.consumed;
       } else {
         const b = env.get(t.value);
         if (b === undefined) return err("Undefined variable");
+        if (b.value === undefined) return err("Uninitialized variable");
         substituted.push({ type: "num", value: b.value });
       }
     } else if (t.type === "punct") {
@@ -227,19 +265,23 @@ function processLetStatement(
   const { typeName, nextIndex } = typeRes.value;
   cur = nextIndex;
 
-  if (
-    !tokensArr[cur] ||
-    tokensArr[cur].type !== "punct" ||
-    tokensArr[cur].value !== "="
-  )
+  if (!tokensArr[cur] || tokensArr[cur].type !== "punct")
     return err("Invalid numeric input");
+
+  // allow declaration without initializer: `let x : I32;`
+  if (tokensArr[cur].value === ";") {
+    envMap.set(name, { value: undefined, mutable, typeName });
+    return ok({ nextIndex: cur + 1 });
+  }
+
+  if (tokensArr[cur].value !== "=") return err("Invalid numeric input");
   cur++;
 
   const evalRes = evalExprUntilSemicolon(tokensArr, cur, envMap);
   if (isErr(evalRes)) return err(evalRes.error);
   let { value: val, nextIndex: nextIdx } = evalRes.value;
   if (typeName === "I32") val = Math.trunc(val);
-  envMap.set(name, { value: val, mutable });
+  envMap.set(name, { value: val, mutable, typeName });
   return ok({ nextIndex: nextIdx, value: val });
 }
 
@@ -280,12 +322,15 @@ function processAssignment(
 
   const binding = envMap.get(name);
   if (!binding) return err("Undefined variable");
-  if (!binding.mutable) return err("Cannot assign to immutable variable");
+  // allow assignment if variable is mutable OR it is uninitialized (first initialization)
+  if (!binding.mutable && binding.value !== undefined)
+    return err("Cannot assign to immutable variable");
 
   const cur = idx + 2;
   const evalRes = evalExprUntilSemicolon(tokensArr, cur, envMap);
   if (isErr(evalRes)) return err(evalRes.error);
-  const { value: val, nextIndex } = evalRes.value;
+  let { value: val, nextIndex } = evalRes.value;
+  if (binding.typeName === "I32") val = Math.trunc(val);
   binding.value = val;
   envMap.set(name, binding);
   return ok({ nextIndex, value: val });
@@ -338,17 +383,9 @@ export function interpret(input: string): Result<number, string> {
 
   // Program-level evaluation supporting 'let', mutable bindings and ';'
   const env = new Map<string, Binding>();
-  let i = 0;
-  let lastVal: number | undefined = undefined;
-
-  while (i < tokens.length) {
-    const res = processStatement(tokens, i, env);
-    if (isErr(res)) return err(res.error);
-    const { nextIndex, value } = res.value;
-    if (value !== undefined) lastVal = value;
-    i = nextIndex;
-  }
-
+  const progRes = processStatementsTokens(tokens, env);
+  if (isErr(progRes)) return err(progRes.error);
+  const lastVal = progRes.value.lastVal;
   if (lastVal === undefined) return err("Invalid numeric input");
   return ok(lastVal);
 }
