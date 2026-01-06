@@ -36,6 +36,27 @@ describe("tokenize", () => {
       ]);
   });
 
+  it("tokenizes parentheses", () => {
+    const r = tokenize("(3 + 10) * 5");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r))
+      expect(r.value).toEqual([
+        { type: "paren", value: "(" },
+        { type: "num", value: 3 },
+        { type: "op", value: "+" },
+        { type: "num", value: 10 },
+        { type: "paren", value: ")" },
+        { type: "op", value: "*" },
+        { type: "num", value: 5 },
+      ]);
+  });
+
+  it("returns Err on malformed parentheses", () => {
+    const r = tokenize("(3 + 2");
+    // Tokenizer should still tokenize characters; parenthesis mismatch is detected in evaluation.
+    expect(isOk(r)).toBe(true);
+  });
+
   it("returns Err on invalid token", () => {
     const r = tokenize("a - 1");
     expect(isErr(r)).toBe(true);

@@ -41,6 +41,25 @@ describe("interpret", () => {
     if (isOk(r2)) expect(r2.value).toBe(-5);
   });
 
+  it("evaluates parentheses expressions", () => {
+    const r = interpret("(3 + 10) * 5");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(65);
+
+    const r2 = interpret("2 * (1 + (3 - 1))");
+    expect(isOk(r2)).toBe(true);
+    if (isOk(r2)) expect(r2.value).toBe(6);
+
+    const r3 = interpret("( -3 + 4 ) * 5");
+    expect(isOk(r3)).toBe(true);
+    if (isOk(r3)) expect(r3.value).toBe(5);
+  });
+
+  it("returns Err on malformed parentheses", () => {
+    const r = interpret("(3 + 1");
+    expect(isErr(r)).toBe(true);
+  });
+
   it("parses chained addition expressions", () => {
     const r = interpret("1+2+3");
     expect(isOk(r)).toBe(true);

@@ -9,7 +9,38 @@ export interface OpToken {
   type: "op";
   value: "+" | "-" | "*";
 }
-export type Token = NumToken | OpToken;
+export interface ParenToken {
+  type: "paren";
+  value: "(" | ")";
+}
+export type Token = NumToken | OpToken | ParenToken;
+
+function parseAndPushNumber(
+  s: string,
+  i: number,
+  tokens: Token[]
+): Result<number, string> {
+  const parsed = parseNumber(s, i);
+  if (!isOk(parsed)) return err(parsed.error);
+  const { value, nextIndex } = parsed.value;
+  tokens.push({ type: "num", value });
+  return ok(nextIndex);
+}
+
+function handleSignOrOperator(
+  s: string,
+  i: number,
+  ch: string,
+  tokens: Token[]
+): Result<number, string> {
+  const prev = tokens.length ? tokens[tokens.length - 1] : undefined;
+  // unary sign if at start or after a non-number (op or paren)
+  if (!prev || prev.type !== "num") {
+    return parseAndPushNumber(s, i, tokens);
+  }
+  tokens.push({ type: "op", value: ch as "+" | "-" });
+  return ok(i + 1);
+}
 
 export function tokenize(s: string): Result<Token[], string> {
   const tokens: Token[] = [];
@@ -22,28 +53,20 @@ export function tokenize(s: string): Result<Token[], string> {
     if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
       // skip whitespace
       i++;
+    } else if (ch === "(" || ch === ")") {
+      tokens.push({ type: "paren", value: ch });
+      i++;
     } else if (ch === "*") {
       tokens.push({ type: "op", value: ch });
       i++;
     } else if (ch === "+" || ch === "-") {
-      const prev = tokens.length ? tokens[tokens.length - 1] : undefined;
-      // unary sign if at start or after an operator
-      if (!prev || prev.type === "op") {
-        const parsed = parseNumber(s, i);
-        if (!isOk(parsed)) return err(parsed.error);
-        const { value, nextIndex } = parsed.value;
-        tokens.push({ type: "num", value });
-        i = nextIndex;
-      } else {
-        tokens.push({ type: "op", value: ch });
-        i++;
-      }
+      const res = handleSignOrOperator(s, i, ch, tokens);
+      if (!isOk(res)) return err(res.error);
+      i = res.value;
     } else if (/[0-9.]/.test(ch)) {
-      const parsed = parseNumber(s, i);
-      if (!isOk(parsed)) return err(parsed.error);
-      const { value, nextIndex } = parsed.value;
-      tokens.push({ type: "num", value });
-      i = nextIndex;
+      const nextIndex = parseAndPushNumber(s, i, tokens);
+      if (!isOk(nextIndex)) return err(nextIndex.error);
+      i = nextIndex.value;
     } else {
       return err("Invalid numeric input");
     }
