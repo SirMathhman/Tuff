@@ -72,10 +72,24 @@ class Parser {
       const r = this.parseFactor();
       return r.ok ? ok(-r.value) : err(r.error);
     }
+
+    // parentheses support
+    if (tk.type === "op" && tk.value === "(") {
+      this.consume();
+      const r = this.parseExpr();
+      if (!r.ok) return r;
+      const closing = this.consume();
+      if (!closing || closing.type !== "op" || closing.value !== ")") {
+        return err({ type: "InvalidInput", message: "Missing closing parenthesis" });
+      }
+      return ok(r.value);
+    }
+
     if (tk.type === "num") {
       this.consume();
       return ok(tk.value);
     }
+
     return err({ type: "InvalidInput", message: "Unable to interpret input" });
   }
 
@@ -156,20 +170,20 @@ export function interpret(input: string): Result<number, InterpretError> {
     return err({ type: "UndefinedIdentifier", identifier: s });
   }
 
-  // tokenize numbers and operators
-  const tokenRe = /\d+(?:\.\d+)?|[+\-*/]/g;
+  // tokenize numbers, parentheses and operators
+  const tokenRe = /\d+(?:\.\d+)?|[+\-*/()]/g;
   const raw = s.match(tokenRe);
   if (!raw)
     return err({ type: "InvalidInput", message: "Unable to interpret input" });
 
-  // ensure no unexpected characters
+  // ensure no unexpected characters (allow parentheses)
   const compact = s.replace(/\s+/g, "");
-  if (compact.match(/[^+\-*/0-9.]/)) {
+  if (compact.match(/[^+\-*/0-9.()]/)) {
     return err({ type: "InvalidInput", message: "Unable to interpret input" });
   }
 
   const tokens: Token[] = raw.map((t) => {
-    if (/^[+\-*/]$/.test(t)) return { type: "op", value: t } as OpToken;
+    if (/^[+\-*/() ]$/.test(t)) return { type: "op", value: t } as OpToken;
     return { type: "num", value: Number(t) } as NumToken;
   });
 
