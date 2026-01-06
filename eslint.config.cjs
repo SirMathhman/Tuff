@@ -1,5 +1,11 @@
 /* Flat config for ESLint v9. Recreates settings from previous .eslintrc.cjs
-   See migration guide: https://eslint.org/docs/latest/use/configure/migration-guide */
+   See migration guide: https://eslint.org/docs/latest/use/configure/migration-guide
+   
+   Code Quality Standards:
+   - Functions: max 50 lines (enforced via code review)
+   - Complexity: max 15 (enforced via eslint complexity rule)
+   - No throw statements or null values
+   - Early returns preferred over continue/break */
 
 module.exports = [
   // Ignore patterns (migrated from .eslintignore)
