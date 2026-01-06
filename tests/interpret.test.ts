@@ -9,10 +9,15 @@ describe("interpret", () => {
   it("parses integer numeric string", () => {
     expect(interpret("100")).toBe(100);
   });
-  it('parses a simple addition expression', () => {
-    expect(interpret('1 + 2')).toBe(3);
+  it("parses a simple addition expression", () => {
+    expect(interpret("1 + 2")).toBe(3);
   });
 
-  it('parses chained addition expressions', () => {
-    expect(interpret('1+2+3')).toBe(6);
-  });});
+  it("parses chained addition expressions", () => {
+    expect(interpret("1+2+3")).toBe(6);
+  });
+
+  it("parses spaced chained addition expressions", () => {
+    expect(interpret("1 + 2 + 3")).toBe(6);
+  });
+});
