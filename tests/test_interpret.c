@@ -3,8 +3,10 @@
 #include <stdio.h>
 
 static void should_eval(const char *s, int expected) {
-	interpret_result r = interpret(s);
-	assert(r.ok && r.value == expected);
+	interpret_result result = interpret(s);
+	assert(result.ok);
+	if (!result.ok) return; /* defend against crashy asserts in CI */
+	assert(result.value == expected);
 }
 
 static void should_error(const char *s) {
@@ -41,6 +43,8 @@ static void test_stub_returns_negative_one(void) {
 	should_eval("let x : I32 = 1 + 2 + 3;", 0);
 	/* The declared variable can be used in expressions */
 	should_eval("x + 1", 7);
+	/* Statement followed by expression should evaluate expression */
+	should_eval("let x : I32 = 1 + 2 + 3; x", 6);
 	printf("basic tests passed\n");
 }
 

@@ -39,7 +39,7 @@ for p in paths:
                     violations.append((str(f), i, line.strip()))
                 # includes before code are fine
                 continue
-            if line.lstrip().startswith('#'):
+            if line.lstrip().startswith("#"):
                 # allow other preprocessor directives (header guards, pragma once) before includes
                 continue
             # first non-comment non-blank non-include non-preprocessor line is code

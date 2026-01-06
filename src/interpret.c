@@ -2,6 +2,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <limits.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -34,38 +35,49 @@ static int parse_number(const char **ptr, long *out_val) {
 
 /* Parse identifier: [A-Za-z_][A-Za-z0-9_]* into out (null-terminated). Advances *ptr. */
 static int parse_identifier(const char **ptr, char *out, size_t out_len) {
-	const char *p = *ptr;
-	if (!((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') || *p == '_')) return 0;
-	size_t i = 0;
-	while ((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') || (*p >= '0' && *p <= '9') || *p == '_') {
-		if (i + 1 < out_len) out[i++] = *p;
-		p++;
+	const char *cursor = *ptr;
+	if (!((*cursor >= 'A' && *cursor <= 'Z') || (*cursor >= 'a' && *cursor <= 'z') ||
+	      *cursor == '_'))
+		return 0;
+	size_t idx = 0;
+	while ((*cursor >= 'A' && *cursor <= 'Z') || (*cursor >= 'a' && *cursor <= 'z') ||
+	       (*cursor >= '0' && *cursor <= '9') || *cursor == '_') {
+		if (idx + 1 < out_len) out[idx++] = *cursor;
+		cursor++;
 	}
-	out[i] = '\0';
-	*ptr = p;
+	out[idx] = '\0';
+	*ptr = cursor;
 	return 1;
 }
 
 /* Simple symbol table for I32 variables */
 #define MAX_VARS 64
 #define MAX_VAR_NAME 32
-struct var_entry { char name[MAX_VAR_NAME]; int value; };
+struct var_entry {
+	char name[MAX_VAR_NAME];
+	int value;
+};
 static struct var_entry vars[MAX_VARS];
 static int vars_count = 0;
 
+/* Helper forward declaration */
+static void copy_str_bounded(char *dst, const char *src, size_t dst_len);
+
 static struct var_entry *find_var(const char *name) {
-	for (int i = 0; i < vars_count; ++i) {
-		if (strcmp(vars[i].name, name) == 0) return &vars[i];
+	for (int idx = 0; idx < vars_count; idx++) {
+		if (strcmp(vars[idx].name, name) == 0) return &vars[idx];
 	}
 	return NULL;
 }
 
 static int set_var(const char *name, int value) {
-	struct var_entry *v = find_var(name);
-	if (v) { v->value = value; return 1; }
+	struct var_entry *entry = find_var(name);
+	if (entry) {
+		entry->value = value;
+		return 1;
+	}
 	if (vars_count >= MAX_VARS) return 0;
-	strncpy(vars[vars_count].name, name, MAX_VAR_NAME-1);
-	vars[vars_count].name[MAX_VAR_NAME-1] = '\0';
+	copy_str_bounded(vars[vars_count].name, name, MAX_VAR_NAME);
 	vars[vars_count].value = value;
 	vars_count++;
 	return 1;
@@ -93,9 +105,9 @@ static int parse_factor(const char **ptr, long long *out_val) {
 	if ((**ptr >= 'A' && **ptr <= 'Z') || (**ptr >= 'a' && **ptr <= 'z') || **ptr == '_') {
 		char name[MAX_VAR_NAME];
 		if (!parse_identifier(ptr, name, sizeof(name))) return 0;
-		struct var_entry *v = find_var(name);
-		if (!v) return 0; /* unknown identifier */
-		*out_val = v->value;
+		struct var_entry *entry = find_var(name);
+		if (!entry) return 0; /* unknown identifier */
+		*out_val = entry->value;
 		return 1;
 	}
 	long num = 0;
@@ -160,50 +172,103 @@ static int parse_expr(const char **ptr, long long *out_val) {
 	return 1;
 }
 
-/* Try parse a statement: let <ident> : I32 = <expr> ; */
-static int parse_statement(const char *str, int *out_val) {
-	const char *p = str;
-	skip_ws(&p);
-	/* match 'let' */
-	if (strncmp(p, "let", 3) != 0) return 0;
-	p += 3;
-	if (!isspace((unsigned char)*p)) return 0;
-	skip_ws(&p);
-	char name[MAX_VAR_NAME];
-	if (!parse_identifier(&p, name, sizeof(name))) return 0;
-	skip_ws(&p);
-	if (*p != ':') return 0;
-	p++;
-	skip_ws(&p);
-	/* expect I32 */
-	if (strncmp(p, "I32", 3) != 0) return 0;
-	p += 3;
-	skip_ws(&p);
-	if (*p != '=') return 0;
-	p++;
-	/* parse expression */
-	long long val = 0;
-	if (!parse_expr(&p, &val)) return 0;
-	skip_ws(&p);
-	if (*p != ';') return 0;
-	p++;
-	skip_ws(&p);
-	if (*p != '\0') return 0;
-	if (val < INT_MIN || val > INT_MAX) return 0;
-	if (!set_var(name, (int)val)) return 0;
-	*out_val = 0; /* specification: return 0 on successful declaration */
+static void copy_str_bounded(char *dst, const char *src, size_t dst_len) {
+	size_t idx = 0;
+	if (dst_len == 0) return;
+	while (idx + 1 < dst_len && src[idx] != '\0') {
+		dst[idx] = src[idx];
+		idx++;
+	}
+	dst[idx] = '\0';
+}
+
+static int match_literal(const char **ptr, const char *lit, int require_word_boundary) {
+	skip_ws(ptr);
+	const char *cur = *ptr;
+	size_t len = strlen(lit);
+	if (strncmp(cur, lit, len) != 0) return 0;
+	if (require_word_boundary) {
+		char next = cur[len];
+		if (next && (isalnum((unsigned char)next) || next == '_')) return 0;
+	}
+	*ptr = cur + len;
 	return 1;
 }
 
-/* Try parse full expression or statement and ensure whole string consumed */
-static int parse_full_expr(const char *str, int *out_val) {
-	/* Try statement first */
-	if (parse_statement(str, out_val)) return 1;
-	const char *ptr = str;
+static int match_let_keyword(const char **ptr) {
+	return match_literal(ptr, "let", 1);
+}
+
+static int parse_type_I32(const char **ptr) {
+	return match_literal(ptr, "I32", 0);
+}
+
+static int parse_declaration(const char **ptr, char *name_out, size_t name_len, int *out_val) {
+	const char *cursor = *ptr;
+	skip_ws(&cursor);
+	if (!parse_identifier(&cursor, name_out, name_len)) return 0;
+	skip_ws(&cursor);
+	if (*cursor != ':') return 0;
+	cursor++;
+	skip_ws(&cursor);
+	if (!parse_type_I32(&cursor)) return 0;
+	skip_ws(&cursor);
+	if (*cursor != '=') return 0;
+	cursor++;
 	long long val = 0;
-	if (!parse_expr(&ptr, &val)) return 0;
-	skip_ws(&ptr);
-	if (*ptr != '\0') return 0;
+	if (!parse_expr(&cursor, &val)) return 0;
+	skip_ws(&cursor);
+	if (*cursor != ';') return 0;
+	cursor++;
+	/* successful declaration: store variable */
+	if (val < INT_MIN || val > INT_MAX) return 0;
+	if (!set_var(name_out, (int)val)) return 0;
+	*ptr = cursor;
+	if (out_val) *out_val = 0;
+	return 1;
+}
+
+static int parse_statement_at(const char **ptr, int *out_val) {
+	const char *cursor = *ptr;
+	if (!match_let_keyword(&cursor)) return 0;
+	char name[MAX_VAR_NAME];
+	if (!parse_declaration(&cursor, name, sizeof(name), out_val)) return 0;
+	*ptr = cursor;
+	return 1;
+}
+
+/* Try parse full expression or sequence of statements and an optional trailing expression
+ * Example: "let x : I32 = 1 + 2 + 3; x"
+ */
+static int parse_full_expr(const char *str, int *out_val) {
+	const char *cursor = str;
+	int tmp = 0;
+	int saw_statement = 0;
+	/* parse zero or more statements */
+	for (;;) {
+		const char *save = cursor;
+		if (parse_statement_at(&cursor, &tmp)) {
+			saw_statement = 1;
+			skip_ws(&cursor);
+			continue;
+		}
+		cursor = save;
+		break;
+	}
+	/* If we only had statements and nothing else, return 0 */
+	skip_ws(&cursor);
+	if (*cursor == '\0') {
+		if (saw_statement) {
+			if (out_val) *out_val = 0;
+			return 1;
+		}
+		return 0;
+	}
+	/* parse trailing expression */
+	long long val = 0;
+	if (!parse_expr(&cursor, &val)) return 0;
+	skip_ws(&cursor);
+	if (*cursor != '\0') return 0;
 	if (val < INT_MIN || val > INT_MAX) return 0;
 	*out_val = (int)val;
 	return 1;
