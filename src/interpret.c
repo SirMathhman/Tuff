@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <limits.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* Helper: skip whitespace in a const char** pointer */
 static void skip_ws(const char **pp) {
@@ -19,45 +20,6 @@ static int parse_long(const char *s, long *out_val, const char **endptr) {
 	*out_val = v;
 	if (endptr) *endptr = end;
 	return 1;
-}
-
-/* Helper: compute a op b, returns 1 on success, 0 on failure (e.g., div by zero) */
-static int compute_op(char op, long a, long b, long long *out) {
-	switch (op) {
-	case '+':
-		*out = (long long)a + (long long)b;
-		return 1;
-	case '-':
-		*out = (long long)a - (long long)b;
-		return 1;
-	case '*':
-		*out = (long long)a * (long long)b;
-		return 1;
-	case '/':
-		if (b == 0) return 0;
-		*out = (long long)a / (long long)b;
-		return 1;
-	default:
-		return 0;
-	}
-}
-
-/* Try to parse a single integer expression that occupies the whole string.
- * On success store result in `out` and return 1, otherwise return 0.
- */
-static int parse_single_expr(const char *s, int *out) {
-	const char *p = s;
-	long v = 0;
-	if (!parse_long(p, &v, &p)) return 0;
-	skip_ws(&p);
-	if (*p != '\0') return 0;
-	if (errno == ERANGE || v < INT_MIN || v > INT_MAX) return 0;
-	*out = (int)v;
-	return 1;
-}
-
-static int in_int_range(long v) {
-	return v >= INT_MIN && v <= INT_MAX;
 }
 
 /* Parse a number from *pp using strtol; advance *pp; return 1 on success */
@@ -95,28 +57,49 @@ static int parse_factor(const char **pp, long long *out) {
 	return 1;
 }
 
-/* term := factor ( ('*' | '/') factor )* */
-static int parse_term(const char **pp, long long *out) {
-	long long acc = 0;
-	if (!parse_factor(pp, &acc)) return 0;
+/* Helper: parse repeated binary operations where rhs_parser parses the right-hand operand.
+ * ops is a NUL-terminated string of valid operator characters (for example, '*' and '/' or '+' and
+ * '-').
+ */
+static int parse_binseq(const char **pp, long long *acc, const char *ops,
+                        int (*rhs_parser)(const char **, long long *)) {
 	skip_ws(pp);
-	while (**pp == '*' || **pp == '/') {
+	while (**pp && strchr(ops, **pp)) {
 		char op = **pp;
 		(*pp)++;
 		skip_ws(pp);
 		long long rhs = 0;
-		if (!parse_factor(pp, &rhs)) return 0;
+		if (!rhs_parser(pp, &rhs)) return 0;
 		long long r = 0;
-		if (op == '*')
-			r = acc * rhs;
-		else {
+		switch (op) {
+		case '+':
+			r = *acc + rhs;
+			break;
+		case '-':
+			r = *acc - rhs;
+			break;
+		case '*':
+			r = *acc * rhs;
+			break;
+		case '/':
 			if (rhs == 0) return 0;
-			r = acc / rhs;
+			r = *acc / rhs;
+			break;
+		default:
+			return 0;
 		}
 		if (r < INT_MIN || r > INT_MAX) return 0;
-		acc = r;
+		*acc = r;
 		skip_ws(pp);
 	}
+	return 1;
+}
+
+/* term := factor ( ('*' | '/') factor )* */
+static int parse_term(const char **pp, long long *out) {
+	long long acc = 0;
+	if (!parse_factor(pp, &acc)) return 0;
+	if (!parse_binseq(pp, &acc, "*/", parse_factor)) return 0;
 	*out = acc;
 	return 1;
 }
@@ -125,22 +108,7 @@ static int parse_term(const char **pp, long long *out) {
 static int parse_expr(const char **pp, long long *out) {
 	long long acc = 0;
 	if (!parse_term(pp, &acc)) return 0;
-	skip_ws(pp);
-	while (**pp == '+' || **pp == '-') {
-		char op = **pp;
-		(*pp)++;
-		skip_ws(pp);
-		long long rhs = 0;
-		if (!parse_term(pp, &rhs)) return 0;
-		long long r = 0;
-		if (op == '+')
-			r = acc + rhs;
-		else
-			r = acc - rhs;
-		if (r < INT_MIN || r > INT_MAX) return 0;
-		acc = r;
-		skip_ws(pp);
-	}
+	if (!parse_binseq(pp, &acc, "+-", parse_term)) return 0;
 	*out = acc;
 	return 1;
 }

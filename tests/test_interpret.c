@@ -2,48 +2,41 @@
 #include <assert.h>
 #include <stdio.h>
 
+static void should_eval(const char *s, int expected) {
+	interpret_result r = interpret(s);
+	assert(r.ok && r.value == expected);
+}
+
+static void should_error(const char *s) {
+	interpret_result r = interpret(s);
+	assert(!r.ok);
+}
+
 static void test_stub_returns_negative_one(void) {
-	interpret_result r;
 	/* Empty or invalid input */
-	r = interpret("");
-	assert(!r.ok);
-	r = interpret("any string");
-	assert(!r.ok);
-	r = interpret(NULL);
-	assert(!r.ok);
+	should_error("");
+	should_error("any string");
+	should_error(NULL);
 	/* New test: parse decimal integer */
-	r = interpret("100");
-	assert(r.ok && r.value == 100);
+	should_eval("100", 100);
 	/* New test: simple addition */
-	r = interpret("1 + 2");
-	assert(r.ok && r.value == 3);
-	r = interpret("1+2");
-	assert(r.ok && r.value == 3);
+	should_eval("1 + 2", 3);
+	should_eval("1+2", 3);
 	/* New test: chained addition */
-	r = interpret("1 + 2 + 3");
-	assert(r.ok && r.value == 6);
-	r = interpret("1+2+3");
-	assert(r.ok && r.value == 6);
+	should_eval("1 + 2 + 3", 6);
+	should_eval("1+2+3", 6);
 	/* New test: mixed left-associative operators */
-	r = interpret("10 - 5 + 3");
-	assert(r.ok && r.value == 8);
-	r = interpret("10-5+3");
-	assert(r.ok && r.value == 8);
+	should_eval("10 - 5 + 3", 8);
+	should_eval("10-5+3", 8);
 	/* New test: multiplication then addition */
-	r = interpret("10 * 5 + 3");
-	assert(r.ok && r.value == 53);
-	r = interpret("10*5+3");
-	assert(r.ok && r.value == 53);
+	should_eval("10 * 5 + 3", 53);
+	should_eval("10*5+3", 53);
 	/* New test: parentheses and precedence */
-	r = interpret("10 * (5 + 3)");
-	assert(r.ok && r.value == 80);
-	r = interpret("10*(5+3)");
-	assert(r.ok && r.value == 80);
+	should_eval("10 * (5 + 3)", 80);
+	should_eval("10*(5+3)", 80);
 	/* Division by zero should produce an error */
-	r = interpret("10 / 0");
-	assert(!r.ok);
-	r = interpret("10/0");
-	assert(!r.ok);
+	should_error("10 / 0");
+	should_error("10/0");
 	printf("basic tests passed\n");
 }
 
