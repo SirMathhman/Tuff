@@ -6,10 +6,7 @@ type VarTypeName = string | undefined;
 import type { Parser } from "./parser";
 
 const valueScopes = new WeakMap<Parser, Map<string, Value>[]>();
-const structTypeScopes = new WeakMap<
-  Parser,
-  Map<string, StructTypeDef>[]
->();
+const structTypeScopes = new WeakMap<Parser, Map<string, StructTypeDef>[]>();
 const varTypeScopes = new WeakMap<Parser, Map<string, VarTypeName>[]>();
 
 export function initScopes(parser: Parser): void {
@@ -36,9 +33,7 @@ export function getStructTypeScopes(
   return arr;
 }
 
-export function getVarTypeScopes(
-  parser: Parser
-): Map<string, VarTypeName>[] {
+export function getVarTypeScopes(parser: Parser): Map<string, VarTypeName>[] {
   const s = varTypeScopes.get(parser);
   if (s) return s;
   const arr: Map<string, VarTypeName>[] = [];
