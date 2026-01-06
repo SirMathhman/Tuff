@@ -54,7 +54,11 @@ export function interpret(input: string): number {
 
   function parseTerm(): number {
     let val = parseFactor();
-    while (peek() && peek().type === "op" && (peek().value === "*" || peek().value === "/")) {
+    while (
+      peek() &&
+      peek().type === "op" &&
+      (peek().value === "*" || peek().value === "/")
+    ) {
       const op = consume().value;
       const rhs = parseFactor();
       if (op === "*") val = val * rhs;
@@ -65,7 +69,11 @@ export function interpret(input: string): number {
 
   function parseExpr(): number {
     let val = parseTerm();
-    while (peek() && peek().type === "op" && (peek().value === "+" || peek().value === "-")) {
+    while (
+      peek() &&
+      peek().type === "op" &&
+      (peek().value === "+" || peek().value === "-")
+    ) {
       const op = consume().value;
       const rhs = parseTerm();
       if (op === "+") val = val + rhs;

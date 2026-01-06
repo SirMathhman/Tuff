@@ -33,10 +33,10 @@ describe("interpret", () => {
     expect(interpret("3+10*5")).toBe(53);
     expect(interpret(" 3 + 10 * 5 ")).toBe(53);
   });
-  test('division and multiplication precedence', () => {
-    expect(interpret('1 + 10 / 5')).toBe(3);
-    expect(interpret('1+10/5')).toBe(3);
-    expect(interpret('10 / 5 + 1')).toBe(3);
+  test("division and multiplication precedence", () => {
+    expect(interpret("1 + 10 / 5")).toBe(3);
+    expect(interpret("1+10/5")).toBe(3);
+    expect(interpret("10 / 5 + 1")).toBe(3);
   });
   test("multiplication-only expressions", () => {
     expect(interpret("6 * 7")).toBe(42);
