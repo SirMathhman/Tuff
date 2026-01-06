@@ -193,8 +193,20 @@ class Parser {
       });
     }
 
+    const top = this.currentScope();
+    if (!top) return err({ type: "InvalidInput", message: "Invalid block scope" });
+
+    const name = nameTok.value;
+
+    // do not allow duplicate declarations in the same scope
+    if (top.has(name)) {
+      return err({ type: "InvalidInput", message: "Duplicate declaration" });
+    }
+
     const fieldsErr = this.parseStructFields();
     if (fieldsErr) return err(fieldsErr);
+
+    top.set(name, 0);
     return ok(0);
   }
 

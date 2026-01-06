@@ -147,6 +147,14 @@ describe("interpret", () => {
       ok: true,
       value: 0,
     });
+
+    // duplicate struct in same scope should error
+    const dupR = interpret("struct Copy {} struct Copy {}");
+    expect(dupR.ok).toBe(false);
+    if (!dupR.ok) {
+      // message lives on InvalidInputError
+      expect((dupR.error as any).message).toMatch(/Duplicate/);
+    }
   });
 
   test("conditional expressions", () => {
