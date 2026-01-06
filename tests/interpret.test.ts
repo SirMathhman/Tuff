@@ -28,8 +28,9 @@ describe("interpret", () => {
   test("multiplication within additions (no precedence)", () => {
     expect(interpret("10 * 5 + 3")).toBe(53);
     expect(interpret("10*5+3")).toBe(53);
-    expect(interpret("2 * 3 * 4 + 1")).toBe(25);
-  });
+    expect(interpret("2 * 3 * 4 + 1")).toBe(25);    expect(interpret('3 + 10 * 5')).toBe(53);
+    expect(interpret('3+10*5')).toBe(53);
+    expect(interpret(' 3 + 10 * 5 ')).toBe(53);  });
 
   test("multiplication-only expressions", () => {
     expect(interpret("6 * 7")).toBe(42);
