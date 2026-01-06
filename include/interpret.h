@@ -2,17 +2,16 @@
 #define INTERPRET_H
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
-	/* interpret - stub function
-	 * Parameters:
-	 *   s: input null-terminated string (may be NULL)
-	 * Returns:
-	 *   int result (stub returns -1)
-	 */
-	int interpret(const char *s);
+/* interpret - stub function
+ * Parameters:
+ *   s: input null-terminated string (may be NULL)
+ * Returns:
+ *   int result (stub returns -1)
+ */
+int interpret(const char *s);
 
 #ifdef __cplusplus
 }

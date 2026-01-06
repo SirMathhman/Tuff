@@ -1,0 +1,9 @@
+---
+# Enable brace checks; clang-tidy can't change brace placement, so we rely on clang-format
+# to enforce K&R. The readability-braces-around-statements check ensures braces exist where needed.
+Checks: '-*,readability-braces-around-statements'
+WarningsAsErrors: ''
+HeaderFilterRegex: '.*'
+AnalyzeTemporaryDtors: false
+CheckOptions: []
+...

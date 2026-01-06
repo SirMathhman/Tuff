@@ -1,0 +1,7 @@
+# clang-format configuration: enforce K&R (Attach) brace style
+# Based on LLVM style with Attach brace placement
+BasedOnStyle: LLVM
+BreakBeforeBraces: Attach
+AllowShortFunctionsOnASingleLine: Empty
+IndentWidth: 4
+ColumnLimit: 100
