@@ -171,8 +171,13 @@ class Parser {
     if (semiErr) return err(semiErr);
 
     const top = this.currentScope();
-    if (!top)
-      return err({ type: "InvalidInput", message: "Invalid block scope" });
+    if (!top) return err({ type: "InvalidInput", message: "Invalid block scope" });
+
+    // do not allow duplicate declarations in the same scope
+    if (top.has(name)) {
+      return err({ type: "InvalidInput", message: "Duplicate variable declaration" });
+    }
+
     top.set(name, valR.value);
     return ok(valR.value);
   }

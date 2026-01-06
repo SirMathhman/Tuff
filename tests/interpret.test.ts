@@ -63,12 +63,24 @@ describe("interpret", () => {
     });
     expect(interpret("(2+{let x:I32=10;x})/6")).toEqual({ ok: true, value: 2 });
 
+    // duplicate declaration in same block should error
+    const r = interpret("(2 + { let x : I32 = 10; let x : I32 = 20; x }) / 6");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error).toEqual({ type: "InvalidInput", message: "Duplicate variable declaration" });
+    }
+
     // chained declarations referencing previous vars
-    expect(interpret("(2 + { let x : I32 = 10; let y : I32 = x; y }) / 6")).toEqual({
+    expect(
+      interpret("(2 + { let x : I32 = 10; let y : I32 = x; y }) / 6")
+    ).toEqual({
       ok: true,
       value: 2,
     });
-    expect(interpret("(2+{let x:I32=10;let y:I32=x;y})/6")).toEqual({ ok: true, value: 2 });
+    expect(interpret("(2+{let x:I32=10;let y:I32=x;y})/6")).toEqual({
+      ok: true,
+      value: 2,
+    });
   });
   test("conditional expressions", () => {
     expect(interpret("(2 + if (true) 10 else 3) / 6")).toEqual({
