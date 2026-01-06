@@ -16,6 +16,53 @@ module.exports = [
       "@typescript-eslint": require("@typescript-eslint/eslint-plugin"),
       local: {
         rules: {
+          "no-this-argument": {
+            meta: {
+              type: "suggestion",
+              docs: {
+                description: "Disallow passing 'this' as a call/new argument",
+              },
+              messages: {
+                noThisArgument:
+                  "Do not pass 'this' as an argument; capture a local alias (e.g. `const self = this`) or refactor to avoid passing the instance explicitly.",
+              },
+            },
+            create(context) {
+              function isCallOrNewExpression(node) {
+                const t = node.type;
+                return t === "CallExpression" || t === "NewExpression";
+              }
+
+              function isThisPassedAsArgument(node) {
+                const parent = node.parent;
+                if (!parent) return false;
+
+                // direct: fn(this)
+                if (isCallOrNewExpression(parent)) {
+                  const args = parent.arguments;
+                  return Array.isArray(args) && args.includes(node);
+                }
+
+                // spread: fn(...this)
+                if (parent.type === "SpreadElement") {
+                  const grandparent = parent.parent;
+                  if (!grandparent) return false;
+                  if (!isCallOrNewExpression(grandparent)) return false;
+                  const args = grandparent.arguments;
+                  return Array.isArray(args) && args.includes(parent);
+                }
+
+                return false;
+              }
+
+              return {
+                ThisExpression(node) {
+                  if (!isThisPassedAsArgument(node)) return;
+                  context.report({ node, messageId: "noThisArgument" });
+                },
+              };
+            },
+          },
           "max-interface-methods": {
             meta: {
               type: "suggestion",
@@ -75,7 +122,11 @@ module.exports = [
                   context.report({
                     node: node.id ? node.id : node,
                     messageId: "tooMany",
-                    data: { name, count: String(methodCount), max: String(max) },
+                    data: {
+                      name,
+                      count: String(methodCount),
+                      max: String(max),
+                    },
                   });
                 },
               };
@@ -85,6 +136,7 @@ module.exports = [
       },
     },
     rules: {
+      "local/no-this-argument": "error",
       "local/max-interface-methods": ["error", { max: 10 }],
       complexity: ["error", { max: 15 }],
       // prefer interfaces over type aliases for object types
