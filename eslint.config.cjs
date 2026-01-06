@@ -70,6 +70,10 @@ module.exports = [
           message:
             "Avoid chained property or call access (a.b.c or a.b().c); prefer Law of Demeter (tell, don't ask).",
         },
+        {
+          selector: "TSAsExpression",
+          message: "Do not use 'as' type assertions; prefer typed factory helpers or explicit variable typing.",
+        },
       ],
       "@typescript-eslint/no-explicit-any": ["error"],
       ...require("@typescript-eslint/eslint-plugin").configs.recommended.rules,
