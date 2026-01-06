@@ -8,7 +8,9 @@ interface Binding {
   typeName?: string;
 }
 
-interface ProcessResult { lastVal?: number }
+interface ProcessResult {
+  lastVal?: number;
+}
 
 function processStatementsTokens(
   tokens: Token[],
@@ -85,13 +87,24 @@ interface InlineIfResult {
   consumed: number;
 }
 
-function evalInlineIfToNumToken(tokens: Token[], start: number, env: Map<string, Binding>): Result<InlineIfResult, string> {
+function evalInlineIfToNumToken(
+  tokens: Token[],
+  start: number,
+  env: Map<string, Binding>
+): Result<InlineIfResult, string> {
   const subTokens = stripOuterParens(tokens.slice(start));
-  if (subTokens.length === 0 || subTokens[0].type !== "ident" || subTokens[0].value !== "if")
+  if (
+    subTokens.length === 0 ||
+    subTokens[0].type !== "ident" ||
+    subTokens[0].value !== "if"
+  )
     return err("Invalid numeric input");
   const ifRes = evalIfExpression(subTokens, env);
   if (isErr(ifRes)) return err(ifRes.error);
-  return ok({ token: { type: "num", value: ifRes.value }, consumed: tokens.length - start });
+  return ok({
+    token: { type: "num", value: ifRes.value },
+    consumed: tokens.length - start,
+  });
 }
 
 function evalIfExpression(
@@ -310,7 +323,8 @@ function processAssignment(
   const binding = envMap.get(name);
   if (!binding) return err("Undefined variable");
   // allow assignment if variable is mutable OR it is uninitialized (first initialization)
-  if (!binding.mutable && binding.value !== undefined) return err("Cannot assign to immutable variable");
+  if (!binding.mutable && binding.value !== undefined)
+    return err("Cannot assign to immutable variable");
 
   const cur = idx + 2;
   const evalRes = evalExprUntilSemicolon(tokensArr, cur, envMap);
