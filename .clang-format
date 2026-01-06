@@ -3,6 +3,8 @@
 BasedOnStyle: LLVM
 BreakBeforeBraces: Attach
 AllowShortFunctionsOnASingleLine: Empty
+# Allow short if statements on a single line, e.g. `if (x) return y;`.
+AllowShortIfStatementsOnASingleLine: true
 # Use tabs for indentation (one tab character). TabWidth controls visual width.
 UseTab: ForIndentation
 TabWidth: 4
