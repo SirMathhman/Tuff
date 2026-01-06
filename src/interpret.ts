@@ -27,6 +27,10 @@ export interface InvalidInputError {
 }
 export type InterpretError = UndefinedIdentifierError | InvalidInputError;
 
+export interface NumToken { type: "num"; value: number }
+export interface OpToken { type: "op"; value: string }
+export type Token = NumToken | OpToken;
+
 function ok<T, E>(value: T): Result<T, E> {
   return { ok: true, value };
 }
@@ -59,15 +63,6 @@ export function interpret(input: string): Result<number, InterpretError> {
     return err({ type: "InvalidInput", message: "Unable to interpret input" });
   }
 
-  interface NumToken {
-    type: "num";
-    value: number;
-  }
-  interface OpToken {
-    type: "op";
-    value: string;
-  }
-  type Token = NumToken | OpToken;
   const tokens: Token[] = raw.map((t) => {
     if (/^[+\-*/]$/.test(t)) return { type: "op", value: t } as OpToken;
     return { type: "num", value: Number(t) } as NumToken;

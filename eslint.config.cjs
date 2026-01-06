@@ -27,9 +27,15 @@ module.exports = [
           message: "Do not use throw; return Result<T, E> instead.",
         },
         {
-          selector: "VariableDeclarator > ArrowFunctionExpression, VariableDeclarator > FunctionExpression",
-          message: "Use a function declaration `function name(...) {}` instead of assigning a function expression or arrow function to a variable.",
-        }
+          selector:
+            "VariableDeclarator > ArrowFunctionExpression, VariableDeclarator > FunctionExpression",
+          message:
+            "Use a function declaration `function name(...) {}` instead of assigning a function expression or arrow function to a variable.",
+        },
+        {
+          selector: "FunctionDeclaration TSInterfaceDeclaration, FunctionExpression TSInterfaceDeclaration, ArrowFunctionExpression TSInterfaceDeclaration",
+          message: "Do not declare interfaces inside functions; declare them at module scope instead.",
+        },
       ],
       ...require("@typescript-eslint/eslint-plugin").configs.recommended.rules,
     },
