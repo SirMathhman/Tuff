@@ -24,6 +24,11 @@ module.exports = [
         "error",
         { max: 50, skipComments: true, skipBlankLines: true },
       ],
+      // limit file length to encourage smaller modules
+      "max-lines": [
+        "error",
+        { max: 500, skipComments: true, skipBlankLines: true },
+      ],
       // disallow throw statements; use Result<T,E> style returns instead
       "no-restricted-syntax": [
         "error",
@@ -84,8 +89,10 @@ module.exports = [
           message: "Do not use 'null'; prefer 'undefined' instead.",
         },
         {
-          selector: "TSTypeReference[typeName.name='Result'] TSTypeParameterInstantiation > TSUndefinedKeyword",
-          message: "Do not use Result<undefined, ...>; prefer returning 'InterpretError | undefined' instead.",
+          selector:
+            "TSTypeReference[typeName.name='Result'] TSTypeParameterInstantiation > TSUndefinedKeyword",
+          message:
+            "Do not use Result<undefined, ...>; prefer returning 'InterpretError | undefined' instead.",
         },
       ],
       "@typescript-eslint/no-explicit-any": ["error"],
