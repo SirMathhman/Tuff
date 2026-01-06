@@ -55,6 +55,13 @@ describe("interpret", () => {
     expect(interpret("(2 + { 10 }) / 6")).toEqual({ ok: true, value: 2 });
     expect(interpret("(2+{10})/6")).toEqual({ ok: true, value: 2 });
     expect(interpret(" ( 2 + { 10 } ) / 6 ")).toEqual({ ok: true, value: 2 });
+
+    // block with variable declaration
+    expect(interpret("(2 + { let x : I32 = 10; x }) / 6")).toEqual({
+      ok: true,
+      value: 2,
+    });
+    expect(interpret("(2+{let x:I32=10;x})/6")).toEqual({ ok: true, value: 2 });
   });
   test("conditional expressions", () => {
     expect(interpret("(2 + if (true) 10 else 3) / 6")).toEqual({
