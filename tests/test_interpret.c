@@ -61,6 +61,8 @@ static void test_stub_returns_negative_one(void) {
 	should_error("let x : I32 = 10; let x : I32 = 20");
 	/* Short declarations without explicit type */
 	should_eval("let x = 100; x", 100);
+	/* Explicit Bool type rejects numeric RHS */
+	should_error("let x : Bool = 100;");
 	/* Bool declaration and literal */
 	should_eval("let b : Bool = true; b", 1);
 	should_eval("let c : Bool = false; c", 0);
