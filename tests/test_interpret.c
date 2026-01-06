@@ -3,29 +3,47 @@
 #include <stdio.h>
 
 static void test_stub_returns_negative_one(void) {
-	assert(interpret("") == -1);
-	assert(interpret("any string") == -1);
-	assert(interpret(NULL) == -1);
+	interpret_result r;
+	/* Empty or invalid input */
+	r = interpret("");
+	assert(!r.ok);
+	r = interpret("any string");
+	assert(!r.ok);
+	r = interpret(NULL);
+	assert(!r.ok);
 	/* New test: parse decimal integer */
-	assert(interpret("100") == 100);
+	r = interpret("100");
+	assert(r.ok && r.value == 100);
 	/* New test: simple addition */
-	assert(interpret("1 + 2") == 3);
-	assert(interpret("1+2") == 3);
+	r = interpret("1 + 2");
+	assert(r.ok && r.value == 3);
+	r = interpret("1+2");
+	assert(r.ok && r.value == 3);
 	/* New test: chained addition */
-	assert(interpret("1 + 2 + 3") == 6);
-	assert(interpret("1+2+3") == 6);
+	r = interpret("1 + 2 + 3");
+	assert(r.ok && r.value == 6);
+	r = interpret("1+2+3");
+	assert(r.ok && r.value == 6);
 	/* New test: mixed left-associative operators */
-	assert(interpret("10 - 5 + 3") == 8);
-	assert(interpret("10-5+3") == 8);
+	r = interpret("10 - 5 + 3");
+	assert(r.ok && r.value == 8);
+	r = interpret("10-5+3");
+	assert(r.ok && r.value == 8);
 	/* New test: multiplication then addition */
-	assert(interpret("10 * 5 + 3") == 53);
-	assert(interpret("10*5+3") == 53);
+	r = interpret("10 * 5 + 3");
+	assert(r.ok && r.value == 53);
+	r = interpret("10*5+3");
+	assert(r.ok && r.value == 53);
 	/* New test: parentheses and precedence */
-	assert(interpret("10 * (5 + 3)") == 80);
-	assert(interpret("10*(5+3)") == 80);
-	/* Division by zero should produce an error (return -1) */
-	assert(interpret("10 / 0") == -1);
-	assert(interpret("10/0") == -1);
+	r = interpret("10 * (5 + 3)");
+	assert(r.ok && r.value == 80);
+	r = interpret("10*(5+3)");
+	assert(r.ok && r.value == 80);
+	/* Division by zero should produce an error */
+	r = interpret("10 / 0");
+	assert(!r.ok);
+	r = interpret("10/0");
+	assert(!r.ok);
 	printf("basic tests passed\n");
 }
 
