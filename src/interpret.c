@@ -157,20 +157,23 @@ static int parse_full_expr(const char *s, int *out) {
 	return 1;
 }
 
-#include <errno.h>
-
-static interpret_result interpret_success(int v)
-{
-	interpret_result r; r.ok = 1; r.value = v; r.err = 0; return r;
+static interpret_result interpret_success(int v) {
+	interpret_result r;
+	r.ok = 1;
+	r.value = v;
+	r.err = 0;
+	return r;
 }
 
-static interpret_result interpret_error(int err)
-{
-	interpret_result r; r.ok = 0; r.value = 0; r.err = err; return r;
+static interpret_result interpret_error(int err) {
+	interpret_result r;
+	r.ok = 0;
+	r.value = 0;
+	r.err = err;
+	return r;
 }
 
-interpret_result interpret(const char *s)
-{
+interpret_result interpret(const char *s) {
 	if (s == NULL) return interpret_error(EINVAL);
 	int result = 0;
 	/* parse_full_expr handles numbers, precedence, and parentheses */

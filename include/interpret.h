@@ -1,11 +1,11 @@
 #ifndef INTERPRET_H
 #define INTERPRET_H
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stddef.h>
 
 /* interpret_result - result of parsing/evaluating an expression
  * Fields:

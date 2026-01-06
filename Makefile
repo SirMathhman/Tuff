@@ -28,6 +28,5 @@ lint:
 	@echo "Ran clang-tidy checks (see output above)."
 	@echo "Running cyclomatic complexity check (threshold = 15)"
 	python scripts/check_complexity.py 15
-
-clean:
-	rm -rf build
+	@echo "Checking include placement (includes must be at top)"
+	python scripts/check_include_placement.py
