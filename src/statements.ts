@@ -8,22 +8,12 @@ import {
   ReturnSignalValue,
 } from "./types";
 
-interface ParserLike {
-  peek(): Token | undefined;
-  peekNext(): Token | undefined;
-  consume(): Token | undefined;
-  parseExpr(): Result<Value, InterpretError>;
-  parseStructDeclaration(): Result<Value, InterpretError>;
-  parseLetDeclaration(): Result<Value, InterpretError>;
-  parseFunctionDeclaration(): Result<Value, InterpretError>;
-  assignVar(name: string, value: Value): Result<Value, InterpretError>;
-  pushScope(): void;
-  popScope(): void;
-  createChildParser(tokens: Token[]): ParserLike;
-  getTypeScopesPublic(): Map<string, string[]>[];
-  getVarTypeScopesPublic(): Map<string, string | undefined>[];
-  getScopes(): Map<string, Value>[];
-  parse(): Result<Value, InterpretError>;
+import { requireNumber } from "./numberUtils";
+
+import { ParserLike } from "./parserInterfaces";
+
+function altMissingTokenError(): InterpretError {
+  return { type: "InvalidInput", message: "Missing token in alternative" };
 }
 
 function isReturnSignalValue(value: Value): value is ReturnSignalValue {
@@ -81,19 +71,28 @@ function collectUntilElse(parser: ParserLike): Result<Token[], InterpretError> {
     if (tk.type === "op" && tk.value === "(") {
       const c = parser.consume();
       if (!c)
-        return err({ type: "InvalidInput", message: "Missing token in consequent" });
+        return err({
+          type: "InvalidInput",
+          message: "Missing token in consequent",
+        });
       depth++;
       out.push(c);
     } else if (tk.type === "op" && tk.value === ")") {
       const c = parser.consume();
       if (!c)
-        return err({ type: "InvalidInput", message: "Missing token in consequent" });
+        return err({
+          type: "InvalidInput",
+          message: "Missing token in consequent",
+        });
       if (depth > 0) depth--;
       out.push(c);
     } else {
       const c = parser.consume();
       if (!c)
-        return err({ type: "InvalidInput", message: "Missing token in consequent" });
+        return err({
+          type: "InvalidInput",
+          message: "Missing token in consequent",
+        });
       out.push(c);
     }
     tk = parser.peek();
@@ -122,14 +121,22 @@ function handleAltOpToken(
 
   if (tk.value === "{") {
     const c = parser.consume();
-    if (!c) return { type: "return", value: err({ type: "InvalidInput", message: "Missing token in alternative" }) };
+    if (!c)
+      return {
+        type: "return",
+        value: err(altMissingTokenError()),
+      };
     return { type: "ok", done: false, depth: depth + 1 };
   }
 
   if (tk.value === "}") {
     if (depth === 0) return { type: "ok", done: true, depth };
     const c = parser.consume();
-    if (!c) return { type: "return", value: err({ type: "InvalidInput", message: "Missing token in alternative" }) };
+    if (!c)
+      return {
+        type: "return",
+        value: err(altMissingTokenError()),
+      };
     return { type: "ok", done: false, depth: depth - 1 };
   }
 
@@ -151,14 +158,22 @@ function collectAltTokens(parser: ParserLike): Result<Token[], InterpretError> {
     if (newDepth !== depth) {
       // either entered or exited a block; consume the token that changed depth
       const c = parser.consume();
-      if (!c) return err({ type: "InvalidInput", message: "Missing token in alternative" });
+      if (!c)
+        return err({
+          type: "InvalidInput",
+          message: "Missing token in alternative",
+        });
       out.push(c);
       depth = newDepth;
       tk = parser.peek();
     } else {
       // default: consume one token
       const c = parser.consume();
-      if (!c) return err({ type: "InvalidInput", message: "Missing token in alternative" });
+      if (!c)
+        return err({
+          type: "InvalidInput",
+          message: "Missing token in alternative",
+        });
       out.push(c);
       tk = parser.peek();
     }
@@ -180,15 +195,75 @@ function evaluateTokensWithParentScopes(
   const parentScopes = parser.getScopes();
   const parentTypeScopes = parser.getTypeScopesPublic();
   const parentVarTypeScopes = parser.getVarTypeScopesPublic();
+  const parentVarMutabilityScopes = parser.getVarMutabilityScopesPublic();
+  const parentVarInitializedScopes = parser.getVarInitializedScopesPublic();
   const childScopes = child.getScopes();
-  for (let i = 0; i < parentScopes.length; i++) childScopes.push(parentScopes[i]);
+  for (let i = 0; i < parentScopes.length; i++)
+    childScopes.push(parentScopes[i]);
   const childTypeScopes = child.getTypeScopesPublic();
   for (let i = 0; i < parentTypeScopes.length; i++)
     childTypeScopes.push(parentTypeScopes[i]);
   const childVarTypeScopes = child.getVarTypeScopesPublic();
   for (let i = 0; i < parentVarTypeScopes.length; i++)
     childVarTypeScopes.push(parentVarTypeScopes[i]);
+  const childVarMutabilityScopes = child.getVarMutabilityScopesPublic();
+  for (let i = 0; i < parentVarMutabilityScopes.length; i++)
+    childVarMutabilityScopes.push(parentVarMutabilityScopes[i]);
+  const childVarInitializedScopes = child.getVarInitializedScopesPublic();
+  for (let i = 0; i < parentVarInitializedScopes.length; i++)
+    childVarInitializedScopes.push(parentVarInitializedScopes[i]);
   return child.parse();
+}
+
+function computeNumericOperation(op: string, a: number, b: number): number {
+  if (op === "+") return a + b;
+  if (op === "-") return a - b;
+  if (op === "*") return a * b;
+  return a / b;
+}
+
+function handleAugmentedAssignment(
+  parser: ParserLike,
+  varName: string,
+  op: string
+): Result<Value, InterpretError> | undefined {
+  // consume identifier, op, and '='
+  parser.consume();
+  parser.consume();
+  parser.consume();
+
+  const rhs = parser.parseExpr();
+  if (!rhs.ok) return rhs;
+
+  // find current variable value from scopes
+  const scopes = parser.getScopes();
+  let found = false;
+  let currVal: Value | undefined = undefined;
+  let i = scopes.length - 1;
+  while (i >= 0 && !found) {
+    const sc = scopes[i];
+    if (sc.has(varName)) {
+      found = true;
+      currVal = sc.get(varName);
+    }
+    i--;
+  }
+  if (!found) return err({ type: "UndefinedIdentifier", identifier: varName });
+
+  // ensure numeric operands
+  const leftNumR = requireNumber(currVal!, "Left operand must be numeric");
+  if (!leftNumR.ok) return leftNumR;
+  const rightNumR = requireNumber(rhs.value, "Right operand must be numeric");
+  if (!rightNumR.ok) return rightNumR;
+
+  const newVal = computeNumericOperation(op, leftNumR.value, rightNumR.value);
+
+  const semi = parser.peek();
+  if (semi && semi.type === "op" && semi.value === ";") parser.consume();
+
+  const assignR = parser.assignVar(varName, newVal);
+  if (!assignR.ok) return assignR;
+  return ok(assignR.value);
 }
 
 function tryHandleAssignment(
@@ -196,19 +271,48 @@ function tryHandleAssignment(
   p: Token
 ): Result<Value, InterpretError> | undefined {
   if (p.type !== "id") return undefined;
-  const next = parser.peekNext();
-  if (!next || next.type !== "op" || next.value !== "=") return undefined;
 
   const varName = p.value;
-  parser.consume(); // consume identifier
-  parser.consume(); // consume '='
-  const rhs = parser.parseExpr();
-  if (!rhs.ok) return rhs;
-  const semi = parser.peek();
-  if (semi && semi.type === "op" && semi.value === ";") parser.consume();
-  const assignR = parser.assignVar(varName, rhs.value);
-  if (!assignR.ok) return assignR;
-  return ok(assignR.value);
+  const next = parser.peekNext();
+  if (!next || next.type !== "op") return undefined;
+
+  // simple assignment: '='
+  function handleSimpleAssignment(
+    parser: ParserLike,
+    varName: string
+  ): Result<Value, InterpretError> | undefined {
+    // consume identifier and '='
+    parser.consume();
+    parser.consume();
+    const rhs = parser.parseExpr();
+    if (!rhs.ok) return rhs;
+    const semi = parser.peek();
+    if (semi && semi.type === "op" && semi.value === ";") parser.consume();
+    const assignR = parser.assignVar(varName, rhs.value);
+    if (!assignR.ok) return assignR;
+    return ok(assignR.value);
+  }
+
+  if (next.value === "=") {
+    return handleSimpleAssignment(parser, varName);
+  }
+
+  // augmented assignment: one of '+', '-', '*', '/'' followed by '=' (two-token lookahead)
+  const maybeOp = next.value;
+  const third = parser.peekAt(2);
+  if (
+    (maybeOp === "+" ||
+      maybeOp === "-" ||
+      maybeOp === "*" ||
+      maybeOp === "/") &&
+    third &&
+    third.type === "op" &&
+    third.value === "="
+  ) {
+    return handleAugmentedAssignment(parser, varName, maybeOp);
+  }
+
+  return undefined;
 }
 
 export function parseStatement(
@@ -327,12 +431,16 @@ export function parseIfExpression(
 
   const elseTok = parser.consume();
   if (!elseTok || elseTok.type !== "id" || elseTok.value !== "else")
-    return err({ type: "InvalidInput", message: "Expected else in conditional" });
+    return err({
+      type: "InvalidInput",
+      message: "Expected else in conditional",
+    });
 
   const altTokensR = collectAltTokens(parser);
   if (!altTokensR.ok) return altTokensR;
   const altTokens2 = altTokensR.value;
 
-  if (cond.value !== 0) return evaluateTokensWithParentScopes(parser, consTokens2);
+  if (cond.value !== 0)
+    return evaluateTokensWithParentScopes(parser, consTokens2);
   return evaluateTokensWithParentScopes(parser, altTokens2);
 }

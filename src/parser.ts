@@ -8,17 +8,29 @@ import {
   parseFunctionDeclaration as parseFunctionDeclarationHelper,
   ParserLike,
 } from "./functions";
-import { parseStatement, parseBraced, parseIfExpression } from "./statements";
+import { parseBraced, parseIfExpression } from "./statements";
 import { parseCallExternal } from "./calls";
 import {
   initScopes,
   getValueScopes,
   getStructTypeScopes,
   getVarTypeScopes,
+  getVarMutabilityScopes,
+  getVarInitializedScopes,
 } from "./scopes";
 import { checkTypeConformance } from "./typeConformance";
-
-import { requireNumber } from "./numberUtils";
+import {
+  tryInitialAssignment as tryInitialAssignmentHelper,
+  ensureVarMutable as ensureVarMutableHelper,
+  checkVarTypeConformance as checkVarTypeConformanceHelper,
+} from "./assignHelpers";
+import {
+  parseFactor as parseFactorHelper,
+  parseBinary as parseBinaryHelper,
+  parseTerm as parseTermHelper,
+  parseExpr as parseExprHelper,
+} from "./expressions";
+import { runParser } from "./parseRunner";
 
 class Parser implements ParserLike {
   private tokens: Token[];
@@ -50,19 +62,35 @@ class Parser implements ParserLike {
     if (ln === 0) return undefined;
     return s[ln - 1];
   }
-
   private getVarTypeScopes(): Map<string, string | undefined>[] {
     return getVarTypeScopes(this);
   }
-
+  private getVarMutabilityScopes(): Map<string, boolean>[] {
+    return getVarMutabilityScopes(this);
+  }
+  private getVarInitializedScopes(): Map<string, boolean>[] {
+    return getVarInitializedScopes(this);
+  }
   private currentVarTypeScope(): Map<string, string | undefined> | undefined {
     const s = this.getVarTypeScopes();
     const ln = s.length;
     if (ln === 0) return undefined;
     return s[ln - 1];
   }
+  private currentVarMutabilityScope(): Map<string, boolean> | undefined {
+    const s = this.getVarMutabilityScopes();
+    const ln = s.length;
+    if (ln === 0) return undefined;
+    return s[ln - 1];
+  }
+  private currentVarInitializedScope(): Map<string, boolean> | undefined {
+    const s = this.getVarInitializedScopes();
+    const ln = s.length;
+    if (ln === 0) return undefined;
+    return s[ln - 1];
+  }
 
-  private lookupType(name: string): string[] | undefined {
+  public lookupType(name: string): string[] | undefined {
     const s = this.getTypeScopes();
     for (let i = s.length - 1; i >= 0; i--) {
       const scope = s[i];
@@ -76,7 +104,6 @@ class Parser implements ParserLike {
     if (ln === 0) return undefined;
     return s[ln - 1];
   }
-
   private scopeHas(scope: Map<string, Value>, key: string): boolean {
     return scope.has(key);
   }
@@ -100,6 +127,10 @@ class Parser implements ParserLike {
     typeScopes.push(new Map<string, string[]>());
     const varTypes = this.getVarTypeScopes();
     varTypes.push(new Map<string, string | undefined>());
+    const varMut = this.getVarMutabilityScopes();
+    varMut.push(new Map<string, boolean>());
+    const varInit = this.getVarInitializedScopes();
+    varInit.push(new Map<string, boolean>());
   }
 
   public popScope(): void {
@@ -109,6 +140,10 @@ class Parser implements ParserLike {
     typeScopes.pop();
     const varTypes = this.getVarTypeScopes();
     varTypes.pop();
+    const varMut = this.getVarMutabilityScopes();
+    varMut.pop();
+    const varInit = this.getVarInitializedScopes();
+    varInit.pop();
   }
 
   private isOpToken(tk: Token | undefined, v: string): boolean {
@@ -128,30 +163,40 @@ class Parser implements ParserLike {
     return t[nextIdx];
   }
 
+  public peekAt(offset: number): Token | undefined {
+    const t = this.tokens;
+    const at = this.idx + offset;
+    return t[at];
+  }
+
   // assign to an existing variable in the nearest scope
   public assignVar(name: string, value: Value): Result<Value, InterpretError> {
     const s = this.getScopes();
     for (let i = s.length - 1; i >= 0; i--) {
       const scope = s[i];
       if (this.scopeHas(scope, name)) {
-        // check type conformance if declared
-        const vScopes = this.getVarTypeScopes();
-        let j = vScopes.length - 1;
-        let foundType = false;
-        while (!foundType && j >= 0) {
-          const vs = vScopes[j];
-          if (vs.has(name)) {
-            const typeName = vs.get(name);
-            if (typeName) {
-              const tcErr = checkTypeConformance(typeName, value, (n) =>
-                this.lookupType(n)
-              );
-              if (tcErr) return err(tcErr);
-            }
-            foundType = true;
-          }
-          j--;
-        }
+        const tcErr = checkVarTypeConformanceHelper(
+          this.getVarTypeScopes(),
+          name,
+          value,
+          (n) => this.lookupType(n)
+        );
+        if (tcErr) return err(tcErr);
+
+        const initialR = tryInitialAssignmentHelper(
+          this.getVarInitializedScopes(),
+          scope,
+          name,
+          value
+        );
+        if (initialR) return initialR;
+
+        const mutErr = ensureVarMutableHelper(
+          this.getVarMutabilityScopes(),
+          name
+        );
+        if (mutErr) return err(mutErr);
+
         scope.set(name, value);
         return ok(value);
       }
@@ -164,14 +209,13 @@ class Parser implements ParserLike {
     if (this.isOpToken(maybeColon, ":")) {
       this.consume();
       const typeTok = this.consume();
-      if (!this.isIdToken(typeTok)) {
+      if (!this.isIdToken(typeTok))
         return {
           error: {
             type: "InvalidInput",
             message: "Expected type name after :",
           },
         };
-      }
       return { typeName: typeTok.value };
     }
     return {};
@@ -182,20 +226,18 @@ class Parser implements ParserLike {
     message: string
   ): InterpretError | undefined {
     const tk = this.consume();
-    if (!tk || tk.type !== "op" || tk.value !== value) {
+    if (!tk || tk.type !== "op" || tk.value !== value)
       return { type: "InvalidInput", message };
-    }
     return undefined;
   }
 
   private consumeLetName(): Result<string, InterpretError> {
     const nameTok = this.consume();
-    if (!nameTok || nameTok.type !== "id") {
+    if (!nameTok || nameTok.type !== "id")
       return err({
         type: "InvalidInput",
         message: "Expected identifier after let",
       });
-    }
     return ok(nameTok.value);
   }
 
@@ -227,8 +269,13 @@ class Parser implements ParserLike {
   }
 
   public parseLetDeclaration(): Result<Value, InterpretError> {
-    // assume current token is 'let'
     this.consume();
+    const maybeMut = this.peek();
+    const isMutable = Boolean(
+      maybeMut && maybeMut.type === "id" && maybeMut.value === "mut"
+    );
+    if (isMutable) this.consume();
+
     const nameR = this.consumeLetName();
     if (!nameR.ok) return nameR;
     const name = nameR.value;
@@ -236,6 +283,10 @@ class Parser implements ParserLike {
     const typeRes = this.consumeOptionalType();
     if (typeRes.error) return err(typeRes.error);
     const typeName = typeRes.typeName;
+
+    const hadInitializer = Boolean(
+      this.peek() && this.peek()!.type === "op" && this.peek()!.value === "="
+    );
 
     const initialValueR = this.parseLetInitializerOrDefault(typeName);
     if (!initialValueR.ok) return initialValueR;
@@ -245,18 +296,19 @@ class Parser implements ParserLike {
     if (!top)
       return err({ type: "InvalidInput", message: "Invalid block scope" });
 
-    // do not allow duplicate declarations in the same scope
-    if (top.has(name)) {
+    if (top.has(name))
       return err({
         type: "InvalidInput",
         message: "Duplicate variable declaration",
       });
-    }
 
     top.set(name, initialValue);
-    // record declared type (if any) in var type scope so future assignments can be checked
-    const vscope = this.currentVarTypeScope();
-    if (vscope) vscope.set(name, typeName);
+    const vts = this.currentVarTypeScope();
+    if (vts) vts.set(name, typeName);
+    const vms = this.currentVarMutabilityScope();
+    if (vms) vms.set(name, isMutable);
+    const vis = this.currentVarInitializedScope();
+    if (vis) vis.set(name, hadInitializer);
 
     return ok(initialValue);
   }
@@ -344,21 +396,19 @@ class Parser implements ParserLike {
   }
 
   parseParenthesized(): Result<Value, InterpretError> {
-    // assume current token is '('
     this.consume();
     const r = this.parseExpr();
     if (!r.ok) return r;
     const closing = this.consume();
-    if (!closing || closing.type !== "op" || closing.value !== ")") {
+    if (!closing || closing.type !== "op" || closing.value !== ")")
       return err({
         type: "InvalidInput",
         message: "Missing closing parenthesis",
       });
-    }
     return ok(r.value);
   }
 
-  private parseCall(name: string): Result<Value, InterpretError> {
+  public parseCall(name: string): Result<Value, InterpretError> {
     return parseCallExternal(this, name);
   }
 
@@ -370,9 +420,14 @@ class Parser implements ParserLike {
   public getTypeScopesPublic(): Map<string, string[]>[] {
     return this.getTypeScopes();
   }
-
   public getVarTypeScopesPublic(): Map<string, string | undefined>[] {
     return this.getVarTypeScopes();
+  }
+  public getVarMutabilityScopesPublic(): Map<string, boolean>[] {
+    return this.getVarMutabilityScopes();
+  }
+  public getVarInitializedScopesPublic(): Map<string, boolean>[] {
+    return this.getVarInitializedScopes();
   }
 
   private parseBooleanIfPresent(): Result<Value, InterpretError> | undefined {
@@ -459,20 +514,7 @@ class Parser implements ParserLike {
   }
 
   parseFactor(): Result<Value, InterpretError> {
-    const tk = this.peek();
-    if (!tk)
-      return err({
-        type: "InvalidInput",
-        message: "Unable to interpret input",
-      });
-
-    if (tk.type === "op" && tk.value === "-") {
-      this.consume();
-      const r = this.parseFactor();
-      return r.ok ? ok(-r.value) : err(r.error);
-    }
-
-    return this.parsePrimary();
+    return parseFactorHelper(this);
   }
 
   private parseBinary(
@@ -480,92 +522,19 @@ class Parser implements ParserLike {
     ops: Set<string>,
     apply: (op: string, a: number, b: number) => number
   ): Result<Value, InterpretError> {
-    const left = nextParser();
-    if (!left.ok) return left;
-
-    // if there's no operator following, just return the parsed value as-is
-    let p = this.peek();
-    if (!p || p.type !== "op" || !ops.has(p.value)) {
-      return ok(left.value);
-    }
-
-    const leftNumR = requireNumber(left.value, "Left operand must be numeric");
-    if (!leftNumR.ok) return leftNumR;
-    let val = leftNumR.value;
-
-    while (p && p.type === "op" && ops.has(p.value)) {
-      const opToken = this.consume();
-      if (!opToken)
-        return err({
-          type: "InvalidInput",
-          message: "Unable to interpret input",
-        });
-      const op = String(opToken.value);
-      const right = nextParser();
-      if (!right.ok) return right;
-      const rightNumR = requireNumber(
-        right.value,
-        "Right operand must be numeric"
-      );
-      if (!rightNumR.ok) return rightNumR;
-      val = apply(op, val, rightNumR.value);
-      p = this.peek();
-    }
-    return ok(val);
+    return parseBinaryHelper(this, nextParser, ops, apply);
   }
 
   parseTerm(): Result<Value, InterpretError> {
-    return this.parseBinary(
-      () => this.parseFactor(),
-      new Set(["*", "/"]),
-      (op, a, b) => (op === "*" ? a * b : a / b)
-    );
+    return parseTermHelper(this);
   }
 
   parseExpr(): Result<Value, InterpretError> {
-    return this.parseBinary(
-      () => this.parseTerm(),
-      new Set(["+", "-"]),
-      (op, a, b) => (op === "+" ? a + b : a - b)
-    );
+    return parseExprHelper(this);
   }
 
   parse(): Result<Value, InterpretError> {
-    // empty token stream represents an empty or whitespace-only input -> 0
-    const tokens = this.tokens;
-    const tokenCount = tokens.length;
-    if (tokenCount === 0) return ok(0);
-
-    // top-level scope for program statements (let declarations, expressions)
-    this.pushScope();
-    let lastVal: Value = 0;
-
-    while (this.idx < tokenCount) {
-      const p = this.peek();
-      if (!p) {
-        this.popScope();
-        return err({
-          type: "InvalidInput",
-          message: "Unable to interpret input",
-        });
-      }
-
-      const stmtR = parseStatement(this, true);
-      if (!stmtR.ok) {
-        this.popScope();
-        return stmtR;
-      }
-      lastVal = stmtR.value;
-    }
-
-    this.popScope();
-
-    if (typeof lastVal === "number" && !Number.isFinite(lastVal))
-      return err({
-        type: "InvalidInput",
-        message: "Unable to interpret input",
-      });
-    return ok(lastVal);
+    return runParser(this);
   }
 }
 

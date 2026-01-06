@@ -274,4 +274,22 @@ describe("interpret", () => {
     const src = `fn fact(n : I32) => if (n) n * fact(n - 1) else 1; fact(5)`;
     expect(interpret(src)).toEqual({ ok: true, value: 120 });
   });
+
+  test("mutable variable and augmented assignment", () => {
+    expect(interpret("let mut x = 0; x += 1; x")).toEqual({
+      ok: true,
+      value: 1,
+    });
+  });
+
+  test("cannot augmented-assign to immutable variable", () => {
+    const r = interpret("let y = 0; y += 1");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error).toEqual({
+        type: "InvalidInput",
+        message: "Cannot assign to immutable variable",
+      });
+    }
+  });
 });
