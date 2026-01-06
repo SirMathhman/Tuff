@@ -1,0 +1,14 @@
+{
+  "name": "tuff-interpreter",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "build": "tsc -p ."
+  },
+  "devDependencies": {
+    "vitest": "^1.0.0",
+    "typescript": "^5.1.0"
+  }
+}
