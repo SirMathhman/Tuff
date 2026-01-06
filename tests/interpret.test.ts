@@ -16,6 +16,8 @@ describe("interpret", () => {
     expect(interpret("1 + 2")).toBe(3);
     expect(interpret("1+2")).toBe(3);
     expect(interpret(" 1 + 2 ")).toBe(3);
+    expect(interpret("1 + 2 + 3")).toBe(6);
+    expect(interpret("1+2+3")).toBe(6);
   });
 
   test("throws undefined identifier for unknown identifiers like 'wah'", () => {

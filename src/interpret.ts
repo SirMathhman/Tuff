@@ -15,15 +15,13 @@ export function interpret(input: string): number {
     return Number(s);
   }
 
-  // simple binary addition via splitting on '+'
+  // simple addition via splitting on '+', supports multiple operands
   if (s.includes("+")) {
-    const parts = s.split("+");
-    if (parts.length === 2) {
-      const left = parts[0].trim();
-      const right = parts[1].trim();
+    const parts = s.split("+").map((p) => p.trim()).filter((p) => p.length > 0);
+    if (parts.length >= 2) {
       const numRe = /^-?\d+(?:\.\d+)?$/;
-      if (numRe.test(left) && numRe.test(right)) {
-        return Number(left) + Number(right);
+      if (parts.every((p) => numRe.test(p))) {
+        return parts.reduce((acc, p) => acc + Number(p), 0);
       }
     }
     // fall through to error if it doesn't match the simple pattern
