@@ -19,6 +19,11 @@ module.exports = [
       complexity: ["error", { max: 15 }],
       // prefer interfaces over type aliases for object types
       "@typescript-eslint/consistent-type-definitions": ["error", "interface"],
+      // limit function body size
+      "max-lines-per-function": [
+        "error",
+        { max: 50, skipComments: true, skipBlankLines: true },
+      ],
       // disallow throw statements; use Result<T,E> style returns instead
       "no-restricted-syntax": [
         "error",
@@ -33,8 +38,10 @@ module.exports = [
             "Use a function declaration `function name(...) {}` instead of assigning a function expression or arrow function to a variable.",
         },
         {
-          selector: "FunctionDeclaration TSInterfaceDeclaration, FunctionExpression TSInterfaceDeclaration, ArrowFunctionExpression TSInterfaceDeclaration",
-          message: "Do not declare interfaces inside functions; declare them at module scope instead.",
+          selector:
+            "FunctionDeclaration TSInterfaceDeclaration, FunctionExpression TSInterfaceDeclaration, ArrowFunctionExpression TSInterfaceDeclaration",
+          message:
+            "Do not declare interfaces inside functions; declare them at module scope instead.",
         },
       ],
       ...require("@typescript-eslint/eslint-plugin").configs.recommended.rules,

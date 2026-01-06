@@ -27,8 +27,14 @@ export interface InvalidInputError {
 }
 export type InterpretError = UndefinedIdentifierError | InvalidInputError;
 
-export interface NumToken { type: "num"; value: number }
-export interface OpToken { type: "op"; value: string }
+export interface NumToken {
+  type: "num";
+  value: number;
+}
+export interface OpToken {
+  type: "op";
+  value: string;
+}
 export type Token = NumToken | OpToken;
 
 function ok<T, E>(value: T): Result<T, E> {
@@ -36,6 +42,88 @@ function ok<T, E>(value: T): Result<T, E> {
 }
 function err<T, E>(error: E): Result<T, E> {
   return { ok: false, error };
+}
+
+// Parser moved to module scope so interpret remains small
+class Parser {
+  private tokens: Token[];
+  private idx = 0;
+  constructor(tokens: Token[]) {
+    this.tokens = tokens;
+  }
+  peek(): Token | undefined {
+    return this.tokens[this.idx];
+  }
+  consume(): Token | undefined {
+    return this.tokens[this.idx++];
+  }
+
+  parseFactor(): Result<number, InterpretError> {
+    const tk = this.peek();
+    if (!tk)
+      return err({
+        type: "InvalidInput",
+        message: "Unable to interpret input",
+      });
+    if (tk.type === "op" && tk.value === "-") {
+      this.consume();
+      const r = this.parseFactor();
+      return r.ok ? ok(-r.value) : err(r.error);
+    }
+    if (tk.type === "num") {
+      this.consume();
+      return ok(tk.value);
+    }
+    return err({ type: "InvalidInput", message: "Unable to interpret input" });
+  }
+
+  parseTerm(): Result<number, InterpretError> {
+    const left = this.parseFactor();
+    if (!left.ok) return left;
+    let val = left.value;
+    while (true) {
+      const p = this.peek();
+      if (!p || p.type !== "op" || (p.value !== "*" && p.value !== "/")) break;
+      const op = this.consume()!.value;
+      const right = this.parseFactor();
+      if (!right.ok) return right;
+      const rhs = right.value;
+      val = op === "*" ? val * rhs : val / rhs;
+    }
+    return ok(val);
+  }
+
+  parseExpr(): Result<number, InterpretError> {
+    const left = this.parseTerm();
+    if (!left.ok) return left;
+    let val = left.value;
+    while (true) {
+      const p = this.peek();
+      if (!p || p.type !== "op" || (p.value !== "+" && p.value !== "-")) break;
+      const op = this.consume()!.value;
+      const right = this.parseTerm();
+      if (!right.ok) return right;
+      const rhs = right.value;
+      val = op === "+" ? val + rhs : val - rhs;
+    }
+    return ok(val);
+  }
+
+  parse(): Result<number, InterpretError> {
+    const result = this.parseExpr();
+    if (!result.ok) return result;
+    if (this.idx !== this.tokens.length)
+      return err({
+        type: "InvalidInput",
+        message: "Unable to interpret input",
+      });
+    if (!Number.isFinite(result.value))
+      return err({
+        type: "InvalidInput",
+        message: "Unable to interpret input",
+      });
+    return result;
+  }
 }
 
 export function interpret(input: string): Result<number, InterpretError> {
@@ -68,70 +156,6 @@ export function interpret(input: string): Result<number, InterpretError> {
     return { type: "num", value: Number(t) } as NumToken;
   });
 
-  let idx = 0;
-  function peek(): Token | undefined {
-    return tokens[idx];
-  }
-  function consume(): Token | undefined {
-    return tokens[idx++];
-  }
-
-  function parseFactor(): Result<number, InterpretError> {
-    const tk = peek();
-    if (!tk)
-      return err({
-        type: "InvalidInput",
-        message: "Unable to interpret input",
-      });
-    if (tk.type === "op" && tk.value === "-") {
-      consume();
-      const r = parseFactor();
-      return r.ok ? ok(-r.value) : err(r.error);
-    }
-    if (tk.type === "num") {
-      consume();
-      return ok(tk.value);
-    }
-    return err({ type: "InvalidInput", message: "Unable to interpret input" });
-  }
-
-  function parseTerm(): Result<number, InterpretError> {
-    const left = parseFactor();
-    if (!left.ok) return left;
-    let val = left.value;
-    while (true) {
-      const p = peek();
-      if (!p || p.type !== "op" || (p.value !== "*" && p.value !== "/")) break;
-      const op = consume()!.value;
-      const right = parseFactor();
-      if (!right.ok) return right;
-      const rhs = right.value;
-      val = op === "*" ? val * rhs : val / rhs;
-    }
-    return ok(val);
-  }
-
-  function parseExpr(): Result<number, InterpretError> {
-    const left = parseTerm();
-    if (!left.ok) return left;
-    let val = left.value;
-    while (true) {
-      const p = peek();
-      if (!p || p.type !== "op" || (p.value !== "+" && p.value !== "-")) break;
-      const op = consume()!.value;
-      const right = parseTerm();
-      if (!right.ok) return right;
-      const rhs = right.value;
-      val = op === "+" ? val + rhs : val - rhs;
-    }
-    return ok(val);
-  }
-
-  const result = parseExpr();
-  if (!result.ok) return result;
-  if (idx !== tokens.length)
-    return err({ type: "InvalidInput", message: "Unable to interpret input" });
-  if (!Number.isFinite(result.value))
-    return err({ type: "InvalidInput", message: "Unable to interpret input" });
-  return result;
+  const parser = new Parser(tokens);
+  return parser.parse();
 }
