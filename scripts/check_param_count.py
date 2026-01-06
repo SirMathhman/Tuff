@@ -12,27 +12,27 @@ from pathlib import Path
 
 def count_params(param_str: str) -> int:
     s = param_str.strip()
-    if s == '' or s == 'void':
+    if s == "" or s == "void":
         return 0
     # Remove parameter attributes like 'int (*f)(int, int)' - naive: remove nested parentheses content
     # We'll replace any parentheses inside params with nothing for counting commas safely
     depth = 0
     out = []
     for ch in s:
-        if ch == '(':
+        if ch == "(":
             depth += 1
-            out.append(' ')
-        elif ch == ')':
+            out.append(" ")
+        elif ch == ")":
             if depth > 0:
                 depth -= 1
-            out.append(' ')
+            out.append(" ")
         else:
             if depth == 0:
                 out.append(ch)
             else:
-                out.append(' ')
-    cleaned = ''.join(out)
-    parts = [p.strip() for p in cleaned.split(',') if p.strip()]
+                out.append(" ")
+    cleaned = "".join(out)
+    parts = [p.strip() for p in cleaned.split(",") if p.strip()]
     return len(parts)
 
 
@@ -40,7 +40,10 @@ def find_excessive_params_in_file(path: Path, max_params: int):
     src = path.read_text()
     # Regex: match function definitions (return_type name(params) { )
     # This is a heuristic and will skip prototypes (ending with ;) and macros.
-    pattern = re.compile(r"(^|\n)[\t ]*([a-zA-Z_][a-zA-Z0-9_\s\*]*?)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^;{}]*)\)\s*\{", re.M)
+    pattern = re.compile(
+        r"(^|\n)[\t ]*([a-zA-Z_][a-zA-Z0-9_\s\*]*?)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^;{}]*)\)\s*\{",
+        re.M,
+    )
     for m in pattern.finditer(src):
         ret = m.group(2)
         name = m.group(3)
@@ -49,7 +52,7 @@ def find_excessive_params_in_file(path: Path, max_params: int):
         if cnt > max_params:
             # Determine line number
             start = m.start(0)
-            line_no = src.count('\n', 0, start) + 1
+            line_no = src.count("\n", 0, start) + 1
             yield (path, line_no, name, cnt)
 
 
@@ -64,19 +67,21 @@ def main(argv):
     else:
         max_params = 3
         rest = []
-    paths = rest if rest else ['src', 'tests']
+    paths = rest if rest else ["src", "tests"]
     bad = []
     for p in paths:
-        for path in Path(p).rglob('*.c'):
+        for path in Path(p).rglob("*.c"):
             for item in find_excessive_params_in_file(path, max_params):
                 bad.append(item)
     if bad:
         for path, line_no, name, cnt in bad:
-            print(f"{path}:{line_no}: function '{name}' has {cnt} parameters (max allowed {max_params})")
+            print(
+                f"{path}:{line_no}: function '{name}' has {cnt} parameters (max allowed {max_params})"
+            )
         print(f"Found {len(bad)} function(s) exceeding {max_params} parameters")
         sys.exit(1)
     print("No functions exceeding parameter count")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main(sys.argv)

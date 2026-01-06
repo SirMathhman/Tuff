@@ -50,18 +50,21 @@ static int parse_identifier(const char **ptr, char *out, size_t out_len) {
 	return 1;
 }
 
-/* Simple symbol table for I32 variables */
+/* Simple symbol table for variables */
 #define MAX_VARS 64
 #define MAX_VAR_NAME 32
+enum var_type { VT_I32 = 0, VT_BOOL = 1 };
 struct var_entry {
 	char name[MAX_VAR_NAME];
-	int value;
+	int value; /* I32 value or Bool as 0/1 */
+	int type;  /* one of enum var_type */
 };
 static struct var_entry vars[MAX_VARS];
 static int vars_count = 0;
 
 /* Helper forward declaration */
 static void copy_str_bounded(char *dst, const char *src, size_t dst_len);
+static int match_literal(const char **ptr, const char *lit, int require_word_boundary);
 
 static struct var_entry *find_var(const char *name) {
 	for (int idx = 0; idx < vars_count; idx++) {
@@ -70,15 +73,17 @@ static struct var_entry *find_var(const char *name) {
 	return NULL;
 }
 
-static int set_var(const char *name, int value) {
+static int set_var(const char *name, int value, int type) {
 	struct var_entry *entry = find_var(name);
 	if (entry) {
 		entry->value = value;
+		entry->type = type;
 		return 1;
 	}
 	if (vars_count >= MAX_VARS) return 0;
 	copy_str_bounded(vars[vars_count].name, name, MAX_VAR_NAME);
 	vars[vars_count].value = value;
+	vars[vars_count].type = type;
 	vars_count++;
 	return 1;
 }
@@ -88,9 +93,18 @@ static int parse_expr(const char **ptr, long long *out_val);
 static int parse_term(const char **ptr, long long *out_val);
 static int parse_factor(const char **ptr, long long *out_val);
 
-/* factor := number | identifier | '(' expr ')' */
+/* factor := number | identifier | '(' expr ')' | boolean */
 static int parse_factor(const char **ptr, long long *out_val) {
 	skip_ws(ptr);
+	/* boolean literals */
+	if (match_literal(ptr, "true", 0)) {
+		*out_val = 1;
+		return 1;
+	}
+	if (match_literal(ptr, "false", 0)) {
+		*out_val = 0;
+		return 1;
+	}
 	if (**ptr == '(') {
 		(*ptr)++; /* consume '(' */
 		long long val = 0;
@@ -204,8 +218,17 @@ static int match_let_keyword(const char **ptr) {
 	return match_literal(ptr, "let", 1);
 }
 
-static int parse_type_I32(const char **ptr) {
-	return match_literal(ptr, "I32", 0);
+static int parse_type(const char **ptr, int *out_type) {
+	skip_ws(ptr);
+	if (match_literal(ptr, "I32", 0)) {
+		if (out_type) *out_type = VT_I32;
+		return 1;
+	}
+	if (match_literal(ptr, "Bool", 0)) {
+		if (out_type) *out_type = VT_BOOL;
+		return 1;
+	}
+	return 0;
 }
 
 static int parse_declaration(const char **ptr, char *name_out, int start_vars) {
@@ -216,7 +239,8 @@ static int parse_declaration(const char **ptr, char *name_out, int start_vars) {
 	if (*cursor != ':') return 0;
 	cursor++;
 	skip_ws(&cursor);
-	if (!parse_type_I32(&cursor)) return 0;
+	int vtype = VT_I32;
+	if (!parse_type(&cursor, &vtype)) return 0;
 	skip_ws(&cursor);
 	if (*cursor != '=') return 0;
 	cursor++;
@@ -237,8 +261,9 @@ static int parse_declaration(const char **ptr, char *name_out, int start_vars) {
 		/* if existing < start_vars, the variable was declared in a previous interpret call; allow
 		 * override */
 	}
+	if (vtype == VT_BOOL) val = (val != 0) ? 1 : 0;
 	if (val < INT_MIN || val > INT_MAX) return 0;
-	if (!set_var(name_out, (int)val)) return 0;
+	if (!set_var(name_out, (int)val, vtype)) return 0;
 	*ptr = cursor;
 	return 1;
 }

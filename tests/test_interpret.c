@@ -59,6 +59,9 @@ static void test_stub_returns_negative_one(void) {
 	should_eval("let x : I32 = 1 + 2 + 3; x", 6);
 	/* Redeclaring the same variable should be an error */
 	should_error("let x : I32 = 10; let x : I32 = 20");
+	/* Bool declaration and literal */
+	should_eval("let b : Bool = true; b", 1);
+	should_eval("let c : Bool = false; c", 0);
 	printf("basic tests passed\n");
 }
 
