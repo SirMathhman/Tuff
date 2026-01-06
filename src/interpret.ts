@@ -27,8 +27,12 @@ export interface InvalidInputError {
 }
 export type InterpretError = UndefinedIdentifierError | InvalidInputError;
 
-const ok = <T, E>(value: T): Result<T, E> => ({ ok: true, value });
-const err = <T, E>(error: E): Result<T, E> => ({ ok: false, error });
+function ok<T, E>(value: T): Result<T, E> {
+  return { ok: true, value };
+}
+function err<T, E>(error: E): Result<T, E> {
+  return { ok: false, error };
+}
 
 export function interpret(input: string): Result<number, InterpretError> {
   const s = input.trim();
@@ -70,8 +74,12 @@ export function interpret(input: string): Result<number, InterpretError> {
   });
 
   let idx = 0;
-  const peek = () => tokens[idx];
-  const consume = () => tokens[idx++];
+  function peek(): Token | undefined {
+    return tokens[idx];
+  }
+  function consume(): Token | undefined {
+    return tokens[idx++];
+  }
 
   function parseFactor(): Result<number, InterpretError> {
     const tk = peek();
@@ -96,12 +104,10 @@ export function interpret(input: string): Result<number, InterpretError> {
     const left = parseFactor();
     if (!left.ok) return left;
     let val = left.value;
-    while (
-      peek() &&
-      peek().type === "op" &&
-      (peek().value === "*" || peek().value === "/")
-    ) {
-      const op = consume().value;
+    while (true) {
+      const p = peek();
+      if (!p || p.type !== "op" || (p.value !== "*" && p.value !== "/")) break;
+      const op = consume()!.value;
       const right = parseFactor();
       if (!right.ok) return right;
       const rhs = right.value;
@@ -114,12 +120,10 @@ export function interpret(input: string): Result<number, InterpretError> {
     const left = parseTerm();
     if (!left.ok) return left;
     let val = left.value;
-    while (
-      peek() &&
-      peek().type === "op" &&
-      (peek().value === "+" || peek().value === "-")
-    ) {
-      const op = consume().value;
+    while (true) {
+      const p = peek();
+      if (!p || p.type !== "op" || (p.value !== "+" && p.value !== "-")) break;
+      const op = consume()!.value;
       const right = parseTerm();
       if (!right.ok) return right;
       const rhs = right.value;
