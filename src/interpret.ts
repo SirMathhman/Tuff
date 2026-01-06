@@ -77,29 +77,18 @@ class Parser {
       return this.parseParenthesized();
     }
 
+    // braces (block/grouping)
+    if (tk.type === "op" && tk.value === "{") {
+      return this.parseBraced();
+    }
+
     // conditional: if (cond) consequent else alternative
     if (tk.type === "id" && tk.value === "if") {
       return this.parseIfExpression();
     }
 
-    // boolean literals
-    if (tk.type === "id" && (tk.value === "true" || tk.value === "false")) {
-      this.consume();
-      return ok(tk.value === "true" ? 1 : 0);
-    }
-
-    // numeric literal
-    if (tk.type === "num") {
-      this.consume();
-      return ok(tk.value);
-    }
-
-    // unknown identifier
-    if (tk.type === "id") {
-      return err({ type: "UndefinedIdentifier", identifier: tk.value });
-    }
-
-    return err({ type: "InvalidInput", message: "Unable to interpret input" });
+    // literals and identifiers
+    return this.parseLiteral();
   }
 
   parseParenthesized(): Result<number, InterpretError> {
@@ -113,6 +102,18 @@ class Parser {
         type: "InvalidInput",
         message: "Missing closing parenthesis",
       });
+    }
+    return ok(r.value);
+  }
+
+  parseBraced(): Result<number, InterpretError> {
+    // assume current token is '{'
+    this.consume();
+    const r = this.parseExpr();
+    if (!r.ok) return r;
+    const closing = this.consume();
+    if (!closing || closing.type !== "op" || closing.value !== "}") {
+      return err({ type: "InvalidInput", message: "Missing closing brace" });
     }
     return ok(r.value);
   }
@@ -145,6 +146,34 @@ class Parser {
     const alt = this.parseExpr();
     if (!alt.ok) return alt;
     return ok(cond.value !== 0 ? cons.value : alt.value);
+  }
+
+  parseLiteral(): Result<number, InterpretError> {
+    const tk = this.peek();
+    if (!tk)
+      return err({
+        type: "InvalidInput",
+        message: "Unable to interpret input",
+      });
+
+    // boolean literals
+    if (tk.type === "id" && (tk.value === "true" || tk.value === "false")) {
+      this.consume();
+      return ok(tk.value === "true" ? 1 : 0);
+    }
+
+    // numeric literal
+    if (tk.type === "num") {
+      this.consume();
+      return ok(tk.value);
+    }
+
+    // unknown identifier
+    if (tk.type === "id") {
+      return err({ type: "UndefinedIdentifier", identifier: tk.value });
+    }
+
+    return err({ type: "InvalidInput", message: "Unable to interpret input" });
   }
 
   parseFactor(): Result<number, InterpretError> {
@@ -241,15 +270,15 @@ export function interpret(input: string): Result<number, InterpretError> {
     return err({ type: "UndefinedIdentifier", identifier: s });
   }
 
-  // tokenize numbers, identifiers, parentheses and operators
-  const tokenRe = /\d+(?:\.\d+)?|[A-Za-z_][A-Za-z0-9_]*|[+\-*/()]/g;
+  // tokenize numbers, identifiers, parentheses/braces and operators
+  const tokenRe = /\d+(?:\.\d+)?|[A-Za-z_][A-Za-z0-9_]*|[+\-*/(){}]/g;
   const raw = s.match(tokenRe);
   if (!raw)
     return err({ type: "InvalidInput", message: "Unable to interpret input" });
 
-  // ensure no unexpected characters (allow parentheses and letters)
+  // ensure no unexpected characters (allow parentheses, braces and letters)
   const compact = s.replace(/\s+/g, "");
-  if (compact.match(/[^+\-*/0-9.()A-Za-z_]/)) {
+  if (compact.match(/[^+\-*/0-9.(){}A-Za-z_]/)) {
     return err({ type: "InvalidInput", message: "Unable to interpret input" });
   }
 
@@ -265,7 +294,7 @@ export function interpret(input: string): Result<number, InterpretError> {
   }
 
   const tokens: Token[] = raw.map((t) => {
-    if (/^[+\-*/() ]$/.test(t)) return makeOpToken(t);
+    if (/^[+\-*/(){}]$/.test(t)) return makeOpToken(t);
     if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(t)) return makeIdToken(t);
     return makeNumToken(Number(t));
   });

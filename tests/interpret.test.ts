@@ -47,10 +47,14 @@ describe("interpret", () => {
     expect(interpret(" -2 * 3 ")).toEqual({ ok: true, value: -6 });
   });
 
-  test("parentheses grouping", () => {
+  test("parentheses/brace grouping", () => {
     expect(interpret("(2 + 10) / 6")).toEqual({ ok: true, value: 2 });
     expect(interpret("( 2+10 )/6")).toEqual({ ok: true, value: 2 });
     expect(interpret(" ( 2 + 10 ) / 6 ")).toEqual({ ok: true, value: 2 });
+
+    expect(interpret("(2 + { 10 }) / 6")).toEqual({ ok: true, value: 2 });
+    expect(interpret("(2+{10})/6")).toEqual({ ok: true, value: 2 });
+    expect(interpret(" ( 2 + { 10 } ) / 6 ")).toEqual({ ok: true, value: 2 });
   });
   test("conditional expressions", () => {
     expect(interpret("(2 + if (true) 10 else 3) / 6")).toEqual({
