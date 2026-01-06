@@ -96,6 +96,18 @@ module.exports = [
         },
       ],
       "@typescript-eslint/no-explicit-any": ["error"],
+      "@typescript-eslint/no-restricted-types": [
+        "error",
+        {
+          types: {
+            object: {
+              message:
+                "Use 'unknown' or a specific interface instead of 'object'",
+              fixWith: "Record<string, unknown>",
+            },
+          },
+        },
+      ],
       ...require("@typescript-eslint/eslint-plugin").configs.recommended.rules,
     },
   },
