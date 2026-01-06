@@ -81,6 +81,8 @@ static void test_stub_returns_negative_one(void) {
 	/* If-expression tests */
 	should_eval("let x = if (true) 3 else 5; x", 3);
 	should_eval("let y = if (false) 3 else 5; y", 5);
+	/* If-branch type mismatch should be an error */
+	should_error("let x = if (true) 3 else true;");
 	printf("basic tests passed\n");
 }
 

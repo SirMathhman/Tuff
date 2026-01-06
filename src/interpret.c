@@ -14,81 +14,6 @@ static int match_let_keyword(const char **ptr) {
 	return match_literal(ptr, "let", 1);
 }
 
-#define TRUE_LEN 4
-#define FALSE_LEN 5
-
-static int match_bool_literal_at(const char *start, const char *end, const char **next) {
-	const char *literals[] = {"true", "false"};
-	size_t lengths[] = {TRUE_LEN, FALSE_LEN};
-	for (int i = 0; i < 2; i++) {
-		const char *lit = literals[i];
-		size_t len = lengths[i];
-		if (start + len <= end && strncmp(start, lit, len) == 0 &&
-		    ((start + len == end) || (!isalnum((unsigned char)start[len]) && start[len] != '_'))) {
-			if (next) *next = start + len;
-			return 1;
-		}
-	}
-	return 0;
-}
-
-static struct var_entry *find_var_by_range(const char *start, size_t len) {
-	for (int idx = 0; idx < vars_count; idx++) {
-		if ((int)strlen(vars[idx].name) == (int)len && memcmp(vars[idx].name, start, len) == 0)
-			return &vars[idx];
-	}
-	return NULL;
-}
-
-static int get_identifier_end(const char *start, const char *end, const char **next_out) {
-	const char *cur = start;
-	if (!(((*cur >= 'A' && *cur <= 'Z') || (*cur >= 'a' && *cur <= 'z') || *cur == '_'))) return 0;
-	const char *scan = cur;
-	while (scan < end && (((*scan >= 'A' && *scan <= 'Z') || (*scan >= 'a' && *scan <= 'z') ||
-	                       (*scan >= '0' && *scan <= '9') || *scan == '_')))
-		scan++;
-	if (next_out) *next_out = scan;
-	return 1;
-}
-
-static int match_bool_identifier(const char *start, const char *end, const char **next_out) {
-	const char *id_end = NULL;
-	if (!get_identifier_end(start, end, &id_end)) return 0;
-	size_t len = (size_t)(id_end - start);
-	struct var_entry *entry = find_var_by_range(start, len);
-	if (!entry) return 0;
-	if (entry->type != VT_BOOL) return 0;
-	if (next_out) *next_out = id_end;
-	return 1;
-}
-
-static int match_bool_operator_at(const char *start, const char *end, const char **next_out) {
-	if (start + 2 <= end && start[0] == '&' && start[1] == '&') {
-		if (next_out) *next_out = start + 2;
-		return 1;
-	}
-	if (start + 2 <= end && start[0] == '|' && start[1] == '|') {
-		if (next_out) *next_out = start + 2;
-		return 1;
-	}
-	if (start < end && start[0] == '!') {
-		if (next_out) *next_out = start + 1;
-		return 1;
-	}
-	return 0;
-}
-
-static int match_paren_at(const char *start, const char *end, const char **next_out) {
-	if (start < end && (start[0] == '(' || start[0] == ')')) {
-		if (next_out) *next_out = start + 1;
-		return 1;
-	}
-	return 0;
-}
-
-/* forward */
-static int is_boolean_expr(const char *start, const char *end);
-
 typedef struct {
 	const char **cursor_ptr;
 	const char *name;
@@ -128,39 +53,11 @@ static int finalize_declaration(const decl_ctx *ctx) {
 	}
 	if (ctx->val < INT_MIN || ctx->val > INT_MAX) return 0;
 	{
-		struct var_entry attrs = { .value = (int)ctx->val, .type = ctx->vtype, .is_mut = ctx->is_mut };
+		struct var_entry attrs = {
+		    .value = (int)ctx->val, .type = ctx->vtype, .is_mut = ctx->is_mut};
 		if (!set_var(ctx->name, &attrs)) return 0;
 	}
 	*ctx->cursor_ptr = cursor;
-	return 1;
-}
-
-int is_boolean_expr(const char *start, const char *end) {
-	const char *ptr = start;
-	while (ptr < end) {
-		while (ptr < end && isspace((unsigned char)*ptr))
-			ptr++;
-		if (ptr >= end) break;
-		const char *next = NULL;
-		if (match_paren_at(ptr, end, &next)) {
-			ptr = next;
-			continue;
-		}
-		if (match_bool_operator_at(ptr, end, &next)) {
-			ptr = next;
-			continue;
-		}
-		if (match_bool_literal_at(ptr, end, &next)) {
-			ptr = next;
-			continue;
-		}
-		if (match_bool_identifier(ptr, end, &next)) {
-			ptr = next;
-			continue;
-		}
-		if (isdigit((unsigned char)*ptr)) return 0;
-		return 0;
-	}
 	return 1;
 }
 
@@ -216,7 +113,6 @@ static int parse_statement_at(const char **ptr, int start_vars) {
 	}
 	/* assignment: identifier '=' expr ';' */
 	{
-		const char *save = cursor;
 		char name[MAX_VAR_NAME];
 		if (!parse_identifier(&cursor, name, sizeof(name))) return 0;
 		skip_ws(&cursor);

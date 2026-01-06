@@ -11,7 +11,7 @@ enum var_type { VT_I32 = 0, VT_BOOL = 1 };
 struct var_entry {
 	char name[MAX_VAR_NAME];
 	int value;
-	int type; /* enum var_type */
+	int type;   /* enum var_type */
 	int is_mut; /* 1 if mutable */
 };
 
