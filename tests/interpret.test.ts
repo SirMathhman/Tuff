@@ -7,7 +7,15 @@ describe("interpret", () => {
   });
 
   test("parses numeric literals", () => {
-    expect(interpret("42")).toBe(42);    expect(interpret('100')).toBe(100);    expect(interpret("-3.14")).toBeCloseTo(-3.14);
+    expect(interpret("42")).toBe(42);
+    expect(interpret("100")).toBe(100);
+    expect(interpret("-3.14")).toBeCloseTo(-3.14);
+  });
+
+  test("simple addition via split on '+'", () => {
+    expect(interpret("1 + 2")).toBe(3);
+    expect(interpret("1+2")).toBe(3);
+    expect(interpret(" 1 + 2 ")).toBe(3);
   });
 
   test("throws undefined identifier for unknown identifiers like 'wah'", () => {
