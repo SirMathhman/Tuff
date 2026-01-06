@@ -56,8 +56,7 @@ static int parse_single_expr(const char *s, int *out) {
 	return 1;
 }
 
-static int parse_op_char(const char **pp, char *op)
-{
+static int parse_op_char(const char **pp, char *op) {
 	const char *p = *pp;
 	if (*p != '+' && *p != '-' && *p != '*' && *p != '/') return 0;
 	*op = *p;
@@ -65,8 +64,7 @@ static int parse_op_char(const char **pp, char *op)
 	return 1;
 }
 
-static int in_int_range(long v)
-{
+static int in_int_range(long v) {
 	return v >= INT_MIN && v <= INT_MAX;
 }
 
