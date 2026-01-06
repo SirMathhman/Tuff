@@ -26,4 +26,13 @@ describe("parseNumber", () => {
       expect(res.value.nextIndex).toBe(3);
     }
   });
+
+  it("stops at first non-digit character", () => {
+    const res = parseNumber("12x3", 0);
+    expect(isOk(res)).toBe(true);
+    if (isOk(res)) {
+      expect(res.value.value).toBe(12);
+      expect(res.value.nextIndex).toBe(2);
+    }
+  });
 });

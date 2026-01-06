@@ -42,6 +42,11 @@ module.exports = [
           message:
             "Do not use `continue`. Prefer early returns or restructure loops to avoid `continue`.",
         },
+        {
+          selector: "BreakStatement",
+          message:
+            "Do not use `break`. Restructure loops or use different control flow to avoid `break`.",
+        },
       ],
     },
   },

@@ -28,19 +28,17 @@ export function parseNumber(
 
   const isDigit = (ch: string) => /[0-9]/.test(ch);
 
-  while (j < len) {
+  while (j < len && (isDigit(s[j]) || (s[j] === "." && !hasDot))) {
     const c = s[j];
     if (isDigit(c)) {
       numStr += c;
       hasDigits = true;
-      j++;
-    } else if (c === "." && !hasDot) {
+    } else {
+      // must be a '.' (and !hasDot) due to loop predicate
       numStr += c;
       hasDot = true;
-      j++;
-    } else {
-      break;
     }
+    j++;
   }
 
   if (!hasDigits) return err("Invalid numeric input");

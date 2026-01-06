@@ -123,4 +123,22 @@ describe("evalLeftToRight", () => {
     const r = evalLeftToRight([{ type: "op", value: "+" } as any]);
     expect(isErr(r)).toBe(true);
   });
+
+  it("returns Err on empty parentheses", () => {
+    const tokens = [
+      { type: "paren", value: "(" } as any,
+      { type: "paren", value: ")" } as any,
+    ];
+    const r = evalLeftToRight(tokens as any);
+    expect(isErr(r)).toBe(true);
+  });
+
+  it("returns Err on unmatched opening parenthesis", () => {
+    const tokens = [
+      { type: "paren", value: "(" } as any,
+      { type: "num", value: 1 } as const,
+    ];
+    const r = evalLeftToRight(tokens as any);
+    expect(isErr(r)).toBe(true);
+  });
 });

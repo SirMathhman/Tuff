@@ -97,18 +97,18 @@ function reduceParentheses(tokens: Token[]): Result<Token[], string> {
           if (u.value === "(") depth++;
           else if (u.value === ")") depth--;
         }
-        if (depth === 0) break;
         j++;
       }
       if (depth !== 0) return err("Invalid numeric input");
-      const sub = tokens.slice(i + 1, j);
+      // j now points just after the matching ')'
+      const sub = tokens.slice(i + 1, j - 1);
       if (sub.length === 0) return err("Invalid numeric input");
       const reducedSub = reduceParentheses(sub);
       if (reducedSub.ok === false) return reducedSub;
       const valRes = evalTokensToNumber(reducedSub.value);
       if (valRes.ok === false) return valRes;
       out.push({ type: "num", value: valRes.value });
-      i = j + 1;
+      i = j;
     } else {
       out.push(t);
       i++;
