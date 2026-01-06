@@ -184,6 +184,7 @@ class Parser {
         message: "Expected identifier after struct",
       });
     }
+
     const open = this.consume();
     if (!open || open.type !== "op" || open.value !== "{") {
       return err({
@@ -191,22 +192,56 @@ class Parser {
         message: "Expected { after struct name",
       });
     }
-    // consume until matching closing brace (supports nested braces)
-    let depth = 1;
+
+    const fieldsErr = this.parseStructFields();
+    if (fieldsErr) return err(fieldsErr);
+    return ok(0);
+  }
+
+  private parseStructFields(): InterpretError | undefined {
     while (true) {
-      const p = this.consume();
+      const p = this.peek();
       if (!p) {
-        return err({ type: "InvalidInput", message: "Missing closing brace" });
+        return { type: "InvalidInput", message: "Missing closing brace" };
       }
-      if (p.type === "op") {
-        if (p.value === "{") depth++;
-        else if (p.value === "}") {
-          depth--;
-          if (depth === 0) break;
-        }
+
+      // end of struct body
+      if (this.isOpToken(p, "}")) {
+        this.consume();
+        return undefined;
+      }
+
+      // skip optional separators
+      if (this.isOpToken(p, ";") || this.isOpToken(p, ",")) {
+        this.consume();
+        continue;
+      }
+
+      // expect field name
+      const fieldTok = this.consume();
+      if (!fieldTok || fieldTok.type !== "id") {
+        return { type: "InvalidInput", message: "Expected field name in struct body" };
+      }
+
+      // expect ':'
+      const colon = this.peek();
+      if (!this.isOpToken(colon, ":")) {
+        return { type: "InvalidInput", message: "Expected : after field name" };
+      }
+      this.consume(); // consume ':'
+
+      // expect type name
+      const typeTok = this.consume();
+      if (!typeTok || typeTok.type !== "id") {
+        return { type: "InvalidInput", message: "Expected type name after :" };
+      }
+
+      // accept optional separator after field
+      const maybeSep = this.peek();
+      if (this.isOpToken(maybeSep, ";") || this.isOpToken(maybeSep, ",")) {
+        this.consume();
       }
     }
-    return ok(0);
   }
 
   private requireToken(): Result<Token, InterpretError> {

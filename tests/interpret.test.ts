@@ -128,6 +128,20 @@ describe("interpret", () => {
       ok: true,
       value: 0,
     });
+    // struct with a single field
+    expect(interpret("struct Wrapper { value : I32 }")).toEqual({
+      ok: true,
+      value: 0,
+    });
+    // multiple fields and separators
+    expect(interpret("struct Pair { a : I32; b : I32 }")).toEqual({
+      ok: true,
+      value: 0,
+    });
+    expect(interpret("struct Pair2 { a : I32, b : I32 }")).toEqual({
+      ok: true,
+      value: 0,
+    });
   });
 
   test("conditional expressions", () => {

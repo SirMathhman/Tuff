@@ -24,12 +24,12 @@ export function interpret(input: string): Result<number, InterpretError> {
   const s = input.trim();
 
   // tokenize numbers, identifiers, parentheses/braces, operators and punctuation
-  const tokenRe = /\d+(?:\.\d+)?|[A-Za-z_][A-Za-z0-9_]*|[+\-*/(){}:;=]/g;
+  const tokenRe = /\d+(?:\.\d+)?|[A-Za-z_][A-Za-z0-9_]*|[+\-*/(){}:;=,]/g;
   const raw = s.match(tokenRe) ?? [];
 
-  // ensure no unexpected characters (allow parentheses, braces, letters, and punctuation : ; =)
+  // ensure no unexpected characters (allow parentheses, braces, letters, and punctuation : ; = ,)
   const compact = s.replace(/\s+/g, "");
-  if (compact.match(/[^+\-*/0-9.(){}:;=A-Za-z_]/)) {
+  if (compact.match(/[^+\-*/0-9.(){}:;=,A-Za-z_]/)) {
     return err({ type: "InvalidInput", message: "Unable to interpret input" });
   }
 
@@ -45,7 +45,7 @@ export function interpret(input: string): Result<number, InterpretError> {
   }
 
   const tokens: Token[] = raw.map((t) => {
-    if (/^[+\-*/(){}:;=]$/.test(t)) return makeOpToken(t);
+    if (/^[+\-*/(){}:;=,]$/.test(t)) return makeOpToken(t);
     if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(t)) return makeIdToken(t);
     return makeNumToken(Number(t));
   });
