@@ -42,6 +42,27 @@ describe("evalLeftToRight", () => {
     if (isOk(r)) expect(r.value).toBe(24);
   });
 
+  it("evaluates division and chained division", () => {
+    const tokens = [
+      { type: "num", value: 100 } as const,
+      { type: "op", value: "/" } as const,
+      { type: "num", value: 2 } as const,
+      { type: "op", value: "/" } as const,
+      { type: "num", value: 5 } as const,
+    ];
+    const r = evalLeftToRight(tokens as any);
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(10);
+
+    const r2 = evalLeftToRight([
+      { type: "num", value: 20 } as const,
+      { type: "op", value: "/" } as const,
+      { type: "num", value: 5 } as const,
+    ] as any);
+    expect(isOk(r2)).toBe(true);
+    if (isOk(r2)) expect(r2.value).toBe(4);
+  });
+
   it("evaluates parentheses grouping", () => {
     const tokens = [
       { type: "paren", value: "(" } as any,

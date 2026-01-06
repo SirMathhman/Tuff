@@ -19,6 +19,15 @@ function foldMultiplication(tokens: Token[]): Result<Token[], string> {
         const prod = lhs.value * rhs.value;
         stack.push({ type: "num", value: prod });
         i += 2;
+      } else if (op.value === "/") {
+        const lhs = stack.pop();
+        const rhs = tokens[i + 1];
+        if (!lhs || lhs.type !== "num" || !rhs || rhs.type !== "num")
+          return err("Invalid numeric input");
+        if (rhs.value === 0) return err("Division by zero");
+        const div = lhs.value / rhs.value;
+        stack.push({ type: "num", value: div });
+        i += 2;
       } else {
         stack.push(op);
         i++;

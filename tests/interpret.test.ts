@@ -55,6 +55,20 @@ describe("interpret", () => {
     if (isOk(r3)) expect(r3.value).toBe(5);
   });
 
+  it("division and divide-by-zero handling", () => {
+    const r1 = interpret("10 / 2");
+    expect(isOk(r1)).toBe(true);
+    if (isOk(r1)) expect(r1.value).toBe(5);
+
+    const r2 = interpret("10 / (2 - 2)");
+    expect(isErr(r2)).toBe(true);
+    if (isErr(r2)) expect(r2.error).toBe("Division by zero");
+
+    const r3 = interpret("10 / 2 + 3");
+    expect(isOk(r3)).toBe(true);
+    if (isOk(r3)) expect(r3.value).toBe(8);
+  });
+
   it("returns Err on malformed parentheses", () => {
     const r = interpret("(3 + 1");
     expect(isErr(r)).toBe(true);
