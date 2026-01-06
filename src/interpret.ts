@@ -1,8 +1,19 @@
 export function interpret(input: string): number {
-  // Simple numeric interpreter: convert input to number and validate
-  const value = Number(input);
-  if (Number.isNaN(value)) {
-    throw new Error('Invalid numeric input');
+  const trimmed = input.trim();
+
+  // Direct numeric literal
+  const numeric = Number(trimmed);
+  if (!Number.isNaN(numeric) && trimmed !== '') {
+    return numeric;
   }
-  return value;
+
+  // Support simple addition: e.g., "1 + 2" or "1+2+3"
+  if (trimmed.includes('+')) {
+    return trimmed
+      .split('+')
+      .map((part) => interpret(part.trim()))
+      .reduce((acc, v) => acc + v, 0);
+  }
+
+  throw new Error('Invalid numeric input');
 }
