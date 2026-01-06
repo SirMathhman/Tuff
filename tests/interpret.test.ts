@@ -47,10 +47,10 @@ describe("interpret", () => {
     expect(interpret(" -2 * 3 ")).toEqual({ ok: true, value: -6 });
   });
 
-  test('parentheses grouping', () => {
-    expect(interpret('(2 + 10) / 6')).toEqual({ ok: true, value: 2 });
-    expect(interpret('( 2+10 )/6')).toEqual({ ok: true, value: 2 });
-    expect(interpret(' ( 2 + 10 ) / 6 ')).toEqual({ ok: true, value: 2 });
+  test("parentheses grouping", () => {
+    expect(interpret("(2 + 10) / 6")).toEqual({ ok: true, value: 2 });
+    expect(interpret("( 2+10 )/6")).toEqual({ ok: true, value: 2 });
+    expect(interpret(" ( 2 + 10 ) / 6 ")).toEqual({ ok: true, value: 2 });
   });
   test("returns an error for unknown identifiers like 'wah'", () => {
     const r = interpret("wah");

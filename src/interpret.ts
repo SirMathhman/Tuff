@@ -80,7 +80,10 @@ class Parser {
       if (!r.ok) return r;
       const closing = this.consume();
       if (!closing || closing.type !== "op" || closing.value !== ")") {
-        return err({ type: "InvalidInput", message: "Missing closing parenthesis" });
+        return err({
+          type: "InvalidInput",
+          message: "Missing closing parenthesis",
+        });
       }
       return ok(r.value);
     }
