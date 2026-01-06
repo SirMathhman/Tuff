@@ -83,6 +83,10 @@ module.exports = [
           selector: "NullLiteral",
           message: "Do not use 'null'; prefer 'undefined' instead.",
         },
+        {
+          selector: "TSTypeReference[typeName.name='Result'] TSTypeParameterInstantiation > TSUndefinedKeyword",
+          message: "Do not use Result<undefined, ...>; prefer returning 'InterpretError | undefined' instead.",
+        },
       ],
       "@typescript-eslint/no-explicit-any": ["error"],
       ...require("@typescript-eslint/eslint-plugin").configs.recommended.rules,

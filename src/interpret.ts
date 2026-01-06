@@ -117,30 +117,27 @@ class Parser {
     return Boolean(tk && tk.type === "id");
   }
 
-  private consumeOptionalType(): Result<undefined, InterpretError> {
+  private consumeOptionalType(): InterpretError | undefined {
     const maybeColon = this.peek();
     if (this.isOpToken(maybeColon, ":")) {
       this.consume();
       const typeTok = this.consume();
       if (!this.isIdToken(typeTok)) {
-        return err({
-          type: "InvalidInput",
-          message: "Expected type name after :",
-        });
+        return { type: "InvalidInput", message: "Expected type name after :" };
       }
     }
-    return ok(undefined);
+    return undefined;
   }
 
   private consumeExpectedOp(
     value: string,
     message: string
-  ): Result<undefined, InterpretError> {
+  ): InterpretError | undefined {
     const tk = this.consume();
     if (!tk || tk.type !== "op" || tk.value !== value) {
-      return err({ type: "InvalidInput", message });
+      return { type: "InvalidInput", message };
     }
-    return ok(undefined);
+    return undefined;
   }
 
   private parseLetDeclaration(): Result<number, InterpretError> {
@@ -155,23 +152,23 @@ class Parser {
     }
     const name = nameTok.value;
 
-    const typeR = this.consumeOptionalType();
-    if (!typeR.ok) return typeR;
+    const typeErr = this.consumeOptionalType();
+    if (typeErr) return err(typeErr);
 
-    const eqR = this.consumeExpectedOp(
+    const eqErr = this.consumeExpectedOp(
       "=",
       "Expected = in variable declaration"
     );
-    if (!eqR.ok) return eqR;
+    if (eqErr) return err(eqErr);
 
     const valR = this.parseExpr();
     if (!valR.ok) return valR;
 
-    const semiR = this.consumeExpectedOp(
+    const semiErr = this.consumeExpectedOp(
       ";",
       "Missing ; after variable declaration"
     );
-    if (!semiR.ok) return semiR;
+    if (semiErr) return err(semiErr);
 
     const top = this.currentScope();
     if (!top)
