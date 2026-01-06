@@ -340,7 +340,8 @@ function findStatementEnd(tokens: Token[], start: number): number {
   const t = tokens[start];
   if (t && t.type === "ident" && t.value === "if") {
     const condParenIdx = start + 1;
-    if (!tokens[condParenIdx] || tokens[condParenIdx].type !== "paren") return -1;
+    if (!tokens[condParenIdx] || tokens[condParenIdx].type !== "paren")
+      return -1;
     const condEndInner = findMatchingParen(tokens, condParenIdx);
     if (condEndInner === -1) return -1;
     const elseIdxInner = findTopLevelElseIndex(tokens, condEndInner + 1);
@@ -357,19 +358,29 @@ function processIfStatement(
   envMap: Map<string, Binding>
 ): Result<StatementResult, string> {
   // parse if header (condition and its top-level else index)
-  interface IfHeader { condTokens: Token[]; condEnd: number; elseIdx: number }
-  function parseIfHeader(tokensArr: Token[], idx: number): Result<IfHeader, string> {
-    const condParenIdx = idx + 1;
-    if (!tokensArr[condParenIdx] || tokensArr[condParenIdx].type !== "paren" || tokensArr[condParenIdx].value !== "(")
-      return err("Invalid numeric input");
-    const condEnd = findMatchingParen(tokensArr, condParenIdx);
-    if (condEnd === -1) return err("Invalid numeric input");
-    const condTokens = tokensArr.slice(condParenIdx + 1, condEnd);
-    if (condTokens.length === 0) return err("Invalid numeric input");
-    const elseIdx = findTopLevelElseIndex(tokensArr, condEnd + 1);
-    if (elseIdx === -1) return err("Invalid numeric input");
-    return ok({ condTokens, condEnd, elseIdx });
-  }
+
+interface IfHeader {
+  condTokens: Token[];
+  condEnd: number;
+  elseIdx: number;
+}
+
+function parseIfHeader(tokensArr: Token[], idx: number): Result<IfHeader, string> {
+  const condParenIdx = idx + 1;
+  if (
+    !tokensArr[condParenIdx] ||
+    tokensArr[condParenIdx].type !== "paren" ||
+    tokensArr[condParenIdx].value !== "("
+  )
+    return err("Invalid numeric input");
+  const condEnd = findMatchingParen(tokensArr, condParenIdx);
+  if (condEnd === -1) return err("Invalid numeric input");
+  const condTokens = tokensArr.slice(condParenIdx + 1, condEnd);
+  if (condTokens.length === 0) return err("Invalid numeric input");
+  const elseIdx = findTopLevelElseIndex(tokensArr, condEnd + 1);
+  if (elseIdx === -1) return err("Invalid numeric input");
+  return ok({ condTokens, condEnd, elseIdx });
+}
 
   const headerRes = parseIfHeader(tokensArr, idx);
   if (isErr(headerRes)) return err(headerRes.error);

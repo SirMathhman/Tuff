@@ -199,7 +199,7 @@ describe("interpret - let & assignment", () => {
   });
 });
 
-describe("interpret - if expressions", () => {
+describe("interpret - if expressions (initializers)", () => {
   it("evaluates if with true condition", () => {
     const r = interpret("let x : I32 = if (true) 3 else 5; x");
     expect(isOk(r)).toBe(true);
@@ -218,6 +218,26 @@ describe("interpret - if expressions", () => {
     if (isOk(r)) expect(r.value).toBe(1);
   });
 
+  it("supports nested else-if in initializer expression (first branch)", () => {
+    const r = interpret("let x : I32 = if (true) 3 else if (true) 5 else 4; x");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(3);
+  });
+
+  it("supports nested else-if in initializer expression (second branch)", () => {
+    const r = interpret("let x : I32 = if (false) 3 else if (true) 5 else 4; x");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(5);
+  });
+
+  it("supports nested else-if in initializer expression (else branch)", () => {
+    const r = interpret("let x : I32 = if (false) 3 else if (false) 5 else 4; x");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(4);
+  });
+});
+
+describe("interpret - if expressions (statement branches)", () => {
   it("allows initializing an uninitialized variable inside if/else branches", () => {
     const r = interpret("let x : I32; if (true) x = 3; else x = 5; x");
     expect(isOk(r)).toBe(true);
