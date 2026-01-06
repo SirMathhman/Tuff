@@ -179,7 +179,59 @@ describe("interpret - let & assignment", () => {
     expect(isErr(r2)).toBe(true);
     if (isErr(r2)) expect(r2.error).toBe("Undefined variable");
   });
+});
 
+describe("interpret - compound assignment", () => {
+  it("supports compound assignment operators", () => {
+    const r1 = interpret("let mut a : I32 = 10; a += 3; a");
+    expect(isOk(r1)).toBe(true);
+    if (isOk(r1)) expect(r1.value).toBe(13);
+
+    const r2 = interpret("let mut b : I32 = 10; b -= 4; b");
+    expect(isOk(r2)).toBe(true);
+    if (isOk(r2)) expect(r2.value).toBe(6);
+
+    const r3 = interpret("let mut c : I32 = 3; c *= 5; c");
+    expect(isOk(r3)).toBe(true);
+    if (isOk(r3)) expect(r3.value).toBe(15);
+
+    const r4 = interpret("let mut d : I32 = 10; d /= 2; d");
+    expect(isOk(r4)).toBe(true);
+    if (isOk(r4)) expect(r4.value).toBe(5);
+
+    const r5 = interpret("let mut e : I32 = 10; e %= 3; e");
+    expect(isOk(r5)).toBe(true);
+    if (isOk(r5)) expect(r5.value).toBe(1);
+  });
+
+  it("applies I32 truncation after compound assignment", () => {
+    const r = interpret("let mut x : I32 = 1; x += 2.5; x");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(3);
+  });
+
+  it("errors on compound assignment to immutable or uninitialized or undefined variables", () => {
+    const r = interpret("let x : I32 = 1; x += 2;");
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error).toBe("Cannot assign to immutable variable");
+
+    const r2 = interpret("let x : I32; x += 2;");
+    expect(isErr(r2)).toBe(true);
+    if (isErr(r2)) expect(r2.error).toBe("Uninitialized variable");
+
+    const r3 = interpret("y += 1;");
+    expect(isErr(r3)).toBe(true);
+    if (isErr(r3)) expect(r3.error).toBe("Undefined variable");
+
+    const r4 = interpret("let mut z : I32 = 1; z /= 0;");
+    expect(isErr(r4)).toBe(true);
+    if (isErr(r4)) expect(r4.error).toBe("Division by zero");
+  });
+});
+
+// Moved misc let/assignment tests to a separate describe to satisfy lint rules
+
+describe("interpret - let & assignment (misc)", () => {
   it("allows initializing uninitialized variable without mut", () => {
     const r = interpret("let x : I32; x = 100; x");
     expect(isOk(r)).toBe(true);
@@ -225,31 +277,43 @@ describe("interpret - if expressions (initializers)", () => {
   });
 
   it("supports nested else-if in initializer expression (second branch)", () => {
-    const r = interpret("let x : I32 = if (false) 3 else if (true) 5 else 4; x");
+    const r = interpret(
+      "let x : I32 = if (false) 3 else if (true) 5 else 4; x"
+    );
     expect(isOk(r)).toBe(true);
     if (isOk(r)) expect(r.value).toBe(5);
   });
 
   it("supports nested else-if in initializer expression (else branch)", () => {
-    const r = interpret("let x : I32 = if (false) 3 else if (false) 5 else 4; x");
+    const r = interpret(
+      "let x : I32 = if (false) 3 else if (false) 5 else 4; x"
+    );
     expect(isOk(r)).toBe(true);
     if (isOk(r)) expect(r.value).toBe(4);
   });
+});
 
+describe("interpret - match expressions (initializers)", () => {
   it("evaluates match expression in initializer (case match)", () => {
-    const r = interpret("let x : I32 = match(100) { case 100 => 3; case 2 => 4; default => 5; }; x");
+    const r = interpret(
+      "let x : I32 = match(100) { case 100 => 3; case 2 => 4; default => 5; }; x"
+    );
     expect(isOk(r)).toBe(true);
     if (isOk(r)) expect(r.value).toBe(3);
   });
 
   it("evaluates match expression in initializer (case 2)", () => {
-    const r = interpret("let x : I32 = match(2) { case 100 => 3; case 2 => 4; default => 5; }; x");
+    const r = interpret(
+      "let x : I32 = match(2) { case 100 => 3; case 2 => 4; default => 5; }; x"
+    );
     expect(isOk(r)).toBe(true);
     if (isOk(r)) expect(r.value).toBe(4);
   });
 
   it("evaluates match expression in initializer (default)", () => {
-    const r = interpret("let x : I32 = match(1) { case 100 => 3; case 2 => 4; default => 5; }; x");
+    const r = interpret(
+      "let x : I32 = match(1) { case 100 => 3; case 2 => 4; default => 5; }; x"
+    );
     expect(isOk(r)).toBe(true);
     if (isOk(r)) expect(r.value).toBe(5);
   });

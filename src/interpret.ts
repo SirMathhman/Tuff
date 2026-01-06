@@ -50,7 +50,12 @@ function findMatchingParen(tokens: Token[], start: number): number {
 }
 
 function findMatchingBrace(tokens: Token[], start: number): number {
-  if (!tokens[start] || tokens[start].type !== "punct" || tokens[start].value !== "{") return -1;
+  if (
+    !tokens[start] ||
+    tokens[start].type !== "punct" ||
+    tokens[start].value !== "{"
+  )
+    return -1;
   let depth = 0;
   for (let i = start; i < tokens.length; i++) {
     const tk = tokens[i];
@@ -123,13 +128,23 @@ function evalInlineIfToNumToken(
   });
 }
 
-interface CaseParseResult { nextIndex: number; matched?: number }
+interface CaseParseResult {
+  nextIndex: number;
+  matched?: number;
+}
 
-function parseCaseAt(sub: Token[], i: number, matchVal: number, braceEnd: number, env: Map<string, Binding>): Result<CaseParseResult, string> {
+function parseCaseAt(
+  sub: Token[],
+  i: number,
+  matchVal: number,
+  braceEnd: number,
+  env: Map<string, Binding>
+): Result<CaseParseResult, string> {
   const patTok = sub[i + 1];
   if (!patTok || patTok.type !== "num") return err("Invalid numeric input");
   const arrowTok = sub[i + 2];
-  if (!arrowTok || arrowTok.type !== "punct" || arrowTok.value !== "=>") return err("Invalid numeric input");
+  if (!arrowTok || arrowTok.type !== "punct" || arrowTok.value !== "=>")
+    return err("Invalid numeric input");
   const exprStart = i + 3;
   const semi = indexUntilSemicolon(sub, exprStart);
   if (semi > braceEnd) return err("Invalid numeric input");
@@ -142,9 +157,15 @@ function parseCaseAt(sub: Token[], i: number, matchVal: number, braceEnd: number
   return ok({ nextIndex: semi + 1 });
 }
 
-function parseDefaultAt(sub: Token[], i: number, braceEnd: number, env: Map<string, Binding>): Result<CaseParseResult, string> {
+function parseDefaultAt(
+  sub: Token[],
+  i: number,
+  braceEnd: number,
+  env: Map<string, Binding>
+): Result<CaseParseResult, string> {
   const arrowTok = sub[i + 1];
-  if (!arrowTok || arrowTok.type !== "punct" || arrowTok.value !== "=>") return err("Invalid numeric input");
+  if (!arrowTok || arrowTok.type !== "punct" || arrowTok.value !== "=>")
+    return err("Invalid numeric input");
   const exprStart = i + 2;
   const semi = indexUntilSemicolon(sub, exprStart);
   if (semi > braceEnd) return err("Invalid numeric input");
@@ -154,13 +175,19 @@ function parseDefaultAt(sub: Token[], i: number, braceEnd: number, env: Map<stri
   return ok({ nextIndex: semi + 1, matched: exprRes.value });
 }
 
-function evalInlineMatchToNumToken(tokens: Token[], start: number, env: Map<string, Binding>): Result<InlineIfResult, string> {
+function evalInlineMatchToNumToken(
+  tokens: Token[],
+  start: number,
+  env: Map<string, Binding>
+): Result<InlineIfResult, string> {
   // tokens[start] === 'match'
   const sub = tokens.slice(start);
-  if (sub.length === 0 || sub[0].type !== "ident" || sub[0].value !== "match") return err("Invalid numeric input");
+  if (sub.length === 0 || sub[0].type !== "ident" || sub[0].value !== "match")
+    return err("Invalid numeric input");
 
   // expect '(' after match
-  if (!sub[1] || sub[1].type !== "paren" || sub[1].value !== "(") return err("Invalid numeric input");
+  if (!sub[1] || sub[1].type !== "paren" || sub[1].value !== "(")
+    return err("Invalid numeric input");
   const condEnd = findMatchingParen(sub, 1);
   if (condEnd === -1) return err("Invalid numeric input");
   const condTokens = sub.slice(2, condEnd);
@@ -170,12 +197,23 @@ function evalInlineMatchToNumToken(tokens: Token[], start: number, env: Map<stri
 
   // expect '{' after condEnd
   const braceIdx = condEnd + 1;
-  if (!sub[braceIdx] || sub[braceIdx].type !== "punct" || sub[braceIdx].value !== "{") return err("Invalid numeric input");
+  if (
+    !sub[braceIdx] ||
+    sub[braceIdx].type !== "punct" ||
+    sub[braceIdx].value !== "{"
+  )
+    return err("Invalid numeric input");
   const braceEnd = findMatchingBrace(sub, braceIdx);
   if (braceEnd === -1) return err("Invalid numeric input");
 
   // parse cases between braceIdx+1 and braceEnd-1
-  const matchRes = findMatchResultInBlock(sub, braceIdx + 1, braceEnd, matchVal, env);
+  const matchRes = findMatchResultInBlock(
+    sub,
+    braceIdx + 1,
+    braceEnd,
+    matchVal,
+    env
+  );
   if (isErr(matchRes)) return err(matchRes.error);
   const matched = matchRes.value;
   if (matched === undefined) return err("Invalid numeric input");
@@ -183,14 +221,24 @@ function evalInlineMatchToNumToken(tokens: Token[], start: number, env: Map<stri
   return ok({ token: { type: "num", value: matched }, consumed });
 }
 
-function handleParseResult(r: Result<CaseParseResult, string>, prevMatched: number | undefined): Result<CaseParseResult, string> {
+function handleParseResult(
+  r: Result<CaseParseResult, string>,
+  prevMatched: number | undefined
+): Result<CaseParseResult, string> {
   if (isErr(r)) return err(r.error);
   const { nextIndex, matched: m } = r.value;
-  const matchedVal = m !== undefined && prevMatched === undefined ? m : prevMatched;
+  const matchedVal =
+    m !== undefined && prevMatched === undefined ? m : prevMatched;
   return ok({ nextIndex, matched: matchedVal });
 }
 
-function findMatchResultInBlock(sub: Token[], startIdx: number, braceEnd: number, matchVal: number, env: Map<string, Binding>): Result<number | undefined, string> {
+function findMatchResultInBlock(
+  sub: Token[],
+  startIdx: number,
+  braceEnd: number,
+  matchVal: number,
+  env: Map<string, Binding>
+): Result<number | undefined, string> {
   let i = startIdx;
   let matched: number | undefined = undefined;
   while (i < braceEnd) {
@@ -340,7 +388,8 @@ function indexUntilSemicolon(tokensArr: Token[], start: number): number {
     } else if (tk.type === "punct") {
       if (tk.value === "{") braceDepth++;
       else if (tk.value === "}") braceDepth--;
-      else if (tk.value === ";" && parenDepth === 0 && braceDepth === 0) return j;
+      else if (tk.value === ";" && parenDepth === 0 && braceDepth === 0)
+        return j;
     }
     j++;
   }
@@ -426,18 +475,32 @@ function processExpressionStatement(
   });
 }
 
+interface IdentPunctResult {
+  name: string;
+  punct: string;
+}
+
+function getIdentAndPunct(
+  tokensArr: Token[],
+  idx: number
+): Result<IdentPunctResult, string> {
+  const nameTok = tokensArr[idx];
+  if (!nameTok || nameTok.type !== "ident") return err("Invalid numeric input");
+  const punctTok = tokensArr[idx + 1];
+  if (!punctTok || punctTok.type !== "punct")
+    return err("Invalid numeric input");
+  return ok({ name: nameTok.value, punct: punctTok.value });
+}
+
 function processAssignment(
   tokensArr: Token[],
   idx: number,
   envMap: Map<string, Binding>
 ): Result<StatementResult, string> {
-  // tokensArr[idx] is the identifier name
-  const nameTok = tokensArr[idx];
-  if (!nameTok || nameTok.type !== "ident") return err("Invalid numeric input");
-  const name = nameTok.value;
-  const eqTok = tokensArr[idx + 1];
-  if (!eqTok || eqTok.type !== "punct" || eqTok.value !== "=")
-    return err("Invalid numeric input");
+  const ip = getIdentAndPunct(tokensArr, idx);
+  if (isErr(ip)) return err(ip.error);
+  const { name, punct } = ip.value;
+  if (punct !== "=") return err("Invalid numeric input");
 
   const binding = envMap.get(name);
   if (!binding) return err("Undefined variable");
@@ -453,6 +516,61 @@ function processAssignment(
   binding.value = val;
   envMap.set(name, binding);
   return ok({ nextIndex, value: val });
+}
+
+function computeCompoundResult(
+  op: string,
+  lhs: number,
+  rhs: number
+): Result<number, string> {
+  if (op === "+=") return ok(lhs + rhs);
+  if (op === "-=") return ok(lhs - rhs);
+  if (op === "*=") return ok(lhs * rhs);
+  if (op === "/=") {
+    if (rhs === 0) return err("Division by zero");
+    return ok(lhs / rhs);
+  }
+  if (op === "%=") {
+    if (rhs === 0) return err("Division by zero");
+    return ok(lhs % rhs);
+  }
+  return err("Invalid numeric input");
+}
+
+function processCompoundAssignment(
+  tokensArr: Token[],
+  idx: number,
+  envMap: Map<string, Binding>
+): Result<StatementResult, string> {
+  const opTok = tokensArr[idx + 1];
+  if (!opTok || opTok.type !== "punct") return err("Invalid numeric input");
+  const op = opTok.value;
+  if (!["+=", "-=", "*=", "/=", "%="].includes(op)) return err("Invalid numeric input");
+
+  const ip = getIdentAndPunct(tokensArr, idx);
+  if (isErr(ip)) return err(ip.error);
+  const { name } = ip.value;
+
+  const binding = envMap.get(name);
+  if (!binding) return err("Undefined variable");
+  // compound assignment requires existing value (read-modify-write) and mutability
+  if (binding.value === undefined) return err("Uninitialized variable");
+  if (!binding.mutable) return err("Cannot assign to immutable variable");
+
+  const cur = idx + 2;
+  const evalRes = evalExprUntilSemicolon(tokensArr, cur, envMap);
+  if (isErr(evalRes)) return err(evalRes.error);
+  let { value: rhs, nextIndex } = evalRes.value;
+
+  const lhs = binding.value as number;
+  const res = computeCompoundResult(op, lhs, rhs);
+  if (isErr(res)) return err(res.error);
+  let newVal = res.value;
+
+  if (binding.typeName === "I32") newVal = Math.trunc(newVal);
+  binding.value = newVal;
+  envMap.set(name, binding);
+  return ok({ nextIndex, value: newVal });
 }
 
 function findStatementEnd(tokens: Token[], start: number): number {
@@ -471,20 +589,16 @@ function findStatementEnd(tokens: Token[], start: number): number {
   return indexUntilSemicolon(tokens, start);
 }
 
-function processIfStatement(
-  tokensArr: Token[],
-  idx: number,
-  envMap: Map<string, Binding>
-): Result<StatementResult, string> {
-  // parse if header (condition and its top-level else index)
-
 interface IfHeader {
   condTokens: Token[];
   condEnd: number;
   elseIdx: number;
 }
 
-function parseIfHeader(tokensArr: Token[], idx: number): Result<IfHeader, string> {
+function parseIfHeader(
+  tokensArr: Token[],
+  idx: number
+): Result<IfHeader, string> {
   const condParenIdx = idx + 1;
   if (
     !tokensArr[condParenIdx] ||
@@ -501,6 +615,11 @@ function parseIfHeader(tokensArr: Token[], idx: number): Result<IfHeader, string
   return ok({ condTokens, condEnd, elseIdx });
 }
 
+function processIfStatement(
+  tokensArr: Token[],
+  idx: number,
+  envMap: Map<string, Binding>
+): Result<StatementResult, string> {
   const headerRes = parseIfHeader(tokensArr, idx);
   if (isErr(headerRes)) return err(headerRes.error);
   const { condTokens, condEnd, elseIdx } = headerRes.value;
@@ -553,14 +672,29 @@ function processStatement(
   if (t.type === "ident" && t.value === "if")
     return processIfStatement(tokensArr, idx, envMap);
 
-  // assignment: ident '=' ...
-  if (
-    t.type === "ident" &&
-    tokensArr[idx + 1] &&
-    tokensArr[idx + 1].type === "punct" &&
-    tokensArr[idx + 1].value === "="
-  )
-    return processAssignment(tokensArr, idx, envMap);
+  function tryAssignment(
+    tokensArr: Token[],
+    idx: number,
+    envMap: Map<string, Binding>
+  ): Result<StatementResult, string> | undefined {
+    const t = tokensArr[idx];
+    if (
+      t &&
+      t.type === "ident" &&
+      tokensArr[idx + 1] &&
+      tokensArr[idx + 1].type === "punct"
+    ) {
+      const op = tokensArr[idx + 1].value;
+      if (op === "=") return processAssignment(tokensArr, idx, envMap);
+      if (["+=", "-=", "*=", "/=", "%="].includes(op as any))
+        return processCompoundAssignment(tokensArr, idx, envMap);
+    }
+    return undefined;
+  }
+
+  // assignment or compound-assignment: ident <punct> ...
+  const assignRes = tryAssignment(tokensArr, idx, envMap);
+  if (assignRes !== undefined) return assignRes;
 
   return processExpressionStatement(tokensArr, idx, envMap);
 }

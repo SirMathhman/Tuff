@@ -94,3 +94,27 @@ describe("tokenize - parentheses & identifiers", () => {
       ]);
   });
 });
+
+describe("tokenize - compound assignment", () => {
+  it("tokenizes += with spaces", () => {
+    const r = tokenize("a += 1");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r))
+      expect(r.value).toEqual([
+        { type: "ident", value: "a" },
+        { type: "punct", value: "+=" },
+        { type: "num", value: 1 },
+      ]);
+  });
+
+  it("tokenizes *= without spaces", () => {
+    const r = tokenize("b*=2");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r))
+      expect(r.value).toEqual([
+        { type: "ident", value: "b" },
+        { type: "punct", value: "*=" },
+        { type: "num", value: 2 },
+      ]);
+  });
+});

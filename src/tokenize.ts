@@ -19,7 +19,7 @@ export interface IdentToken {
 }
 export interface PunctToken {
   type: "punct";
-  value: ":" | "=" | ";" | "{" | "}" | "=>";
+  value: ":" | "=" | ";" | "{" | "}" | "=>" | "+=" | "-=" | "*=" | "/=" | "%=";
 }
 export type Token = NumToken | OpToken | ParenToken | IdentToken | PunctToken;
 
@@ -97,23 +97,42 @@ function handleChar(
   if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
     return ok(i + 1);
   }
+  const parenHandled = tryHandleParenOrBrace(ch, i, tokens);
+  if (parenHandled !== -1) return ok(parenHandled);
+
+  const compHandled = tryHandleCompoundAssign(s, i, tokens);
+  if (compHandled !== -1) return ok(compHandled);
+  if ("+-*/%".includes(ch)) {
+    const res = handleOperator(s, i, ch, tokens);
+    if (!isOk(res)) return err(res.error);
+    return ok(res.value);
+  }
+
+  if (/[0-9.]/.test(ch)) return handleNumber(s, i, tokens);
+  if (/[A-Za-z_]/.test(ch)) return handleIdentifier(s, i, tokens);
+  if (ch === ":" || ch === "=" || ch === ";") return handlePunct(s, i, tokens);
+  return err("Invalid token");
+}
+
+function tryHandleParenOrBrace(ch: string, i: number, tokens: Token[]): number {
   if ("(){}".includes(ch)) {
     if (ch === "(" || ch === ")") {
       tokens.push({ type: "paren", value: ch });
     } else {
       tokens.push({ type: "punct", value: ch as "{" | "}" });
     }
-    return ok(i + 1);
+    return i + 1;
   }
-  if ("+-*/%".includes(ch)) {
-    const res = handleOperator(s, i, ch, tokens);
-    if (!isOk(res)) return err(res.error);
-    return ok(res.value);
+  return -1;
+}
+
+function tryHandleCompoundAssign(s: string, i: number, tokens: Token[]): number {
+  const ch = s[i];
+  if ("+-*/%".includes(ch) && s[i + 1] === "=") {
+    tokens.push({ type: "punct", value: (ch + "=") as "+=" | "-=" | "*=" | "/=" | "%=" });
+    return i + 2;
   }
-  if (/[0-9.]/.test(ch)) return handleNumber(s, i, tokens);
-  if (/[A-Za-z_]/.test(ch)) return handleIdentifier(s, i, tokens);
-  if (ch === ":" || ch === "=" || ch === ";") return handlePunct(s, i, tokens);
-  return err("Invalid token");
+  return -1;
 }
 
 function handleNumber(
@@ -135,7 +154,6 @@ function handleIdentifier(
   if (!isOk(nextIndex)) return err(nextIndex.error);
   return ok(nextIndex.value);
 }
-
 function handlePunct(
   s: string,
   i: number,
