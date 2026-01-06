@@ -220,7 +220,10 @@ class Parser {
       // expect field name
       const fieldTok = this.consume();
       if (!fieldTok || fieldTok.type !== "id") {
-        return { type: "InvalidInput", message: "Expected field name in struct body" };
+        return {
+          type: "InvalidInput",
+          message: "Expected field name in struct body",
+        };
       }
 
       // expect ':'
