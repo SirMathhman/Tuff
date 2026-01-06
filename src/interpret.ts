@@ -15,15 +15,44 @@ export function interpret(input: string): number {
     return Number(s);
   }
 
+  // multiplication-only expressions like '6 * 7'
+  // ensure '-' isn't being used as subtraction (e.g., '10 - 5 * 3')
+  if (s.includes("*") && !s.includes("+") && !/\d\s*-\s*\d/.test(s)) {
+    const parts = s
+      .split("*")
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0);
+    if (parts.length >= 2) {
+      const numRe = /^-?\d+(?:\.\d+)?$/;
+      if (parts.every((p) => numRe.test(p))) {
+        return parts.reduce((acc, p) => acc * Number(p), 1);
+      }
+    }
+    // fall through to error if it doesn't match
+  }
+
   // simple addition/subtraction via normalizing '-' to '+-' and summing operands
   if (s.includes("+") || s.includes("-")) {
     // normalize subtraction into addition of negative numbers, preserving signs
     const normalized = s.replace(/\s*-\s*/g, "+-").replace(/\s+/g, "");
-    const parts = normalized.split("+").map((p) => p.trim()).filter((p) => p.length > 0);
+    const parts = normalized
+      .split("+")
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0);
     if (parts.length >= 2) {
       const numRe = /^-?\d+(?:\.\d+)?$/;
-      if (parts.every((p) => numRe.test(p))) {
-        return parts.reduce((acc, p) => acc + Number(p), 0);
+      const mulRe = /^-?\d+(?:\.\d+)?(?:\*-?\d+(?:\.\d+)?)*$/;
+      if (parts.every((p) => numRe.test(p) || mulRe.test(p))) {
+        const evalPart = (p: string) => {
+          if (p.includes("*")) {
+            return p
+              .split("*")
+              .map(Number)
+              .reduce((a, b) => a * b, 1);
+          }
+          return Number(p);
+        };
+        return parts.reduce((acc, p) => acc + evalPart(p), 0);
       }
     }
     // fall through to error if it doesn't match the simple pattern

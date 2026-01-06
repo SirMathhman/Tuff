@@ -20,12 +20,22 @@ describe("interpret", () => {
     expect(interpret("1+2+3")).toBe(6);
   });
 
-  test('addition and subtraction combined', () => {
-    expect(interpret('10 - 5 + 3')).toBe(8);
-    expect(interpret('10-5+3')).toBe(8);
-    expect(interpret(' 10 -5 +3 ')).toBe(8);
+  test("addition and subtraction combined", () => {
+    expect(interpret("10 - 5 + 3")).toBe(8);
+    expect(interpret("10-5+3")).toBe(8);
+    expect(interpret(" 10 -5 +3 ")).toBe(8);
+  });
+  test("multiplication within additions (no precedence)", () => {
+    expect(interpret("10 * 5 + 3")).toBe(53);
+    expect(interpret("10*5+3")).toBe(53);
+    expect(interpret("2 * 3 * 4 + 1")).toBe(25);
   });
 
+  test("multiplication-only expressions", () => {
+    expect(interpret("6 * 7")).toBe(42);
+    expect(interpret("6*7")).toBe(42);
+    expect(interpret(" -2 * 3 ")).toBe(-6);
+  });
   test("throws undefined identifier for unknown identifiers like 'wah'", () => {
     expect(() => interpret("wah")).toThrowError("Undefined identifier: wah");
   });
