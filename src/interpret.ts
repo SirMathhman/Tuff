@@ -1,7 +1,11 @@
 import { tokenize, Token } from "./tokenize";
 import { evalLeftToRight } from "./evalLeftToRight";
 import { Result, ok, err, isOk, isErr } from "./result";
-import { Binding, InlineIfResult, evalInlineMatchToNumToken } from "./matchEval";
+import {
+  Binding,
+  InlineIfResult,
+  evalInlineMatchToNumToken,
+} from "./matchEval";
 import {
   indexUntilSemicolon as assignmentIndexUntilSemicolon,
   evalExprUntilSemicolon,
@@ -261,7 +265,12 @@ function processLetStatement(
   if (tokensArr[cur].value !== "=") return err("Invalid numeric input");
   cur++;
 
-  const evalRes = evalExprUntilSemicolon(tokensArr, cur, envMap, evalExprWithEnv);
+  const evalRes = evalExprUntilSemicolon(
+    tokensArr,
+    cur,
+    envMap,
+    evalExprWithEnv
+  );
   if (isErr(evalRes)) return err(evalRes.error);
   let { value: val, nextIndex: nextIdx } = evalRes.value;
   if (typeName === "I32") val = Math.trunc(val);

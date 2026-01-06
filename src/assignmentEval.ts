@@ -71,7 +71,12 @@ export function processAssignment(
     return err("Cannot assign to immutable variable");
 
   const cur = idx + 2;
-  const evalRes = evalExprUntilSemicolon(tokensArr, cur, envMap, evalExprWithEnv);
+  const evalRes = evalExprUntilSemicolon(
+    tokensArr,
+    cur,
+    envMap,
+    evalExprWithEnv
+  );
   if (isErr(evalRes)) return err(evalRes.error);
   let { value: val, nextIndex } = evalRes.value;
   if (binding.typeName === "I32") val = Math.trunc(val);
@@ -121,7 +126,12 @@ export function processCompoundAssignment(
   if (!binding.mutable) return err("Cannot assign to immutable variable");
 
   const cur = idx + 2;
-  const evalRes = evalExprUntilSemicolon(tokensArr, cur, envMap, evalExprWithEnv);
+  const evalRes = evalExprUntilSemicolon(
+    tokensArr,
+    cur,
+    envMap,
+    evalExprWithEnv
+  );
   if (isErr(evalRes)) return err(evalRes.error);
   let { value: rhs, nextIndex } = evalRes.value;
 
@@ -141,9 +151,7 @@ export function tryAssignment(
   idx: number,
   envMap: Map<string, Binding>,
   evalExprWithEnv: EvalExprFn
-):
-  | Result<StatementResult, string>
-  | undefined {
+): Result<StatementResult, string> | undefined {
   const t = tokensArr[idx];
   if (
     t &&
@@ -152,7 +160,8 @@ export function tryAssignment(
     tokensArr[idx + 1].type === "punct"
   ) {
     const op = tokensArr[idx + 1].value;
-    if (op === "=") return processAssignment(tokensArr, idx, envMap, evalExprWithEnv);
+    if (op === "=")
+      return processAssignment(tokensArr, idx, envMap, evalExprWithEnv);
     if (["+=", "-=", "*=", "/=", "%="].includes(op as any))
       return processCompoundAssignment(tokensArr, idx, envMap, evalExprWithEnv);
   }

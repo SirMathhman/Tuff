@@ -105,7 +105,10 @@ function findMatchResultInBlock(
   let matched: number | undefined = undefined;
   while (i < braceEnd) {
     const tk = sub[i];
-    if (tk.type === "ident" && (tk.value === "case" || tk.value === "default")) {
+    if (
+      tk.type === "ident" &&
+      (tk.value === "case" || tk.value === "default")
+    ) {
       const isDefault = tk.value === "default";
       const r = handleCaseOrDefault(
         sub,

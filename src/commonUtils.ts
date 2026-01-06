@@ -1,9 +1,6 @@
 import { Token } from "./tokenize";
 
-export function indexUntilSemicolon(
-  tokensArr: Token[],
-  start: number
-): number {
+export function indexUntilSemicolon(tokensArr: Token[], start: number): number {
   let j = start;
   let parenDepth = 0;
   let braceDepth = 0;
