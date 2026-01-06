@@ -20,6 +20,7 @@ module.exports = [
     },
     rules: {
       complexity: ["error", { max: 15 }],
+      "sonarjs/max-lines": ["error", { maximum: 500 }],
       "sonarjs/max-lines-per-function": ["error", { maximum: 50 }],
       "@typescript-eslint/consistent-type-definitions": ["error", "interface"],
       "no-restricted-syntax": [

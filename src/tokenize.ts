@@ -126,10 +126,17 @@ function tryHandleParenOrBrace(ch: string, i: number, tokens: Token[]): number {
   return -1;
 }
 
-function tryHandleCompoundAssign(s: string, i: number, tokens: Token[]): number {
+function tryHandleCompoundAssign(
+  s: string,
+  i: number,
+  tokens: Token[]
+): number {
   const ch = s[i];
   if ("+-*/%".includes(ch) && s[i + 1] === "=") {
-    tokens.push({ type: "punct", value: (ch + "=") as "+=" | "-=" | "*=" | "/=" | "%=" });
+    tokens.push({
+      type: "punct",
+      value: (ch + "=") as "+=" | "-=" | "*=" | "/=" | "%=",
+    });
     return i + 2;
   }
   return -1;
