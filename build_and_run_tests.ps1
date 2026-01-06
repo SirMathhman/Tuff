@@ -7,7 +7,7 @@ else {
     Write-Error "clang or gcc not found in PATH. Please install clang or MinGW and ensure a C compiler is in PATH."
     exit 1
 }
-$srcFiles = @("src\interpret.c")
+$srcFiles = @("src\interpret.c", "src\parser.c", "src\symbols.c")
 $test = "tests\test_interpret.c"
 $binDir = "build"
 $bin = "$binDir\test_interpret.exe"

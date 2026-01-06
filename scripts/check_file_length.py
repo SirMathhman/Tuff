@@ -19,16 +19,16 @@ def main(argv):
     else:
         max_lines = 500
         rest = []
-    paths = rest if rest else ['src', 'include', 'tests']
+    paths = rest if rest else ["src", "include", "tests"]
     violations = []
     for p in paths:
-        for path in Path(p).rglob('*'):
+        for path in Path(p).rglob("*"):
             if not path.is_file():
                 continue
-            if path.suffix not in ['.c', '.h', '.cpp', '.hpp']:
+            if path.suffix not in [".c", ".h", ".cpp", ".hpp"]:
                 continue
             try:
-                with path.open('r', encoding='utf-8') as f:
+                with path.open("r", encoding="utf-8") as f:
                     lines = sum(1 for _ in f)
             except Exception as e:
                 print(f"Could not read {path}: {e}")
@@ -39,13 +39,16 @@ def main(argv):
     if violations:
         for fn, ln in violations:
             if ln >= 0:
-                print(f"{fn}: {ln} lines (max allowed {max_lines})")
+                print(f"{fn}: {ln} lines (max allowed {max_lines})", file=sys.stderr)
             else:
-                print(f"{fn}: unreadable")
-        print(f"Found {len(violations)} file(s) exceeding {max_lines} lines")
+                print(f"{fn}: unreadable", file=sys.stderr)
+        print(
+            f"Found {len(violations)} file(s) exceeding {max_lines} lines",
+            file=sys.stderr,
+        )
         sys.exit(1)
     print("No files exceeding max line count")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main(sys.argv)
