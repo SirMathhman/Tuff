@@ -194,7 +194,8 @@ class Parser {
     }
 
     const top = this.currentScope();
-    if (!top) return err({ type: "InvalidInput", message: "Invalid block scope" });
+    if (!top)
+      return err({ type: "InvalidInput", message: "Invalid block scope" });
 
     const name = nameTok.value;
 
@@ -211,6 +212,7 @@ class Parser {
   }
 
   private parseStructFields(): InterpretError | undefined {
+    const seen = new Set<string>();
     while (true) {
       const p = this.peek();
       if (!p) {
@@ -237,6 +239,12 @@ class Parser {
           message: "Expected field name in struct body",
         };
       }
+
+      // duplicate field in same struct body
+      if (seen.has(fieldTok.value)) {
+        return { type: "InvalidInput", message: "Duplicate field declaration" };
+      }
+      seen.add(fieldTok.value);
 
       // expect ':'
       const colon = this.peek();

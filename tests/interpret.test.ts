@@ -155,6 +155,11 @@ describe("interpret", () => {
       // message lives on InvalidInputError
       expect((dupR.error as any).message).toMatch(/Duplicate/);
     }
+
+    // duplicate field names in the same struct should error
+    const fldR = interpret("struct Test { x : I32, x : I32 }");
+    expect(fldR.ok).toBe(false);
+    if (!fldR.ok) expect((fldR.error as any).message).toMatch(/Duplicate field/);
   });
 
   test("conditional expressions", () => {
