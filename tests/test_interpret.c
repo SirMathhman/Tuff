@@ -70,6 +70,14 @@ static void test_stub_returns_negative_one(void) {
 	should_eval("let d : Bool = true || false; d", 1);
 	should_eval("let e : Bool = true && false; e", 0);
 	should_eval("let f : Bool = (true || false) && true; f", 1);
+	/* Assignment tests */
+	should_eval("let mut x = 0; x = 100; x", 100);
+	/* Assigning to immutable variable should be an error */
+	should_error("let x = 0; x = 100;");
+	/* Assigning to undeclared variable should be an error */
+	should_error("y = 1;");
+	/* Bool assignment */
+	should_eval("let mut b : Bool = false; b = true; b", 1);
 	printf("basic tests passed\n");
 }
 

@@ -24,17 +24,19 @@ struct var_entry *find_var(const char *name) {
 	return NULL;
 }
 
-int set_var(const char *name, int value, int type) {
-	struct var_entry *entry = find_var(name);
-	if (entry) {
-		entry->value = value;
-		entry->type = type;
-		return 1;
-	}
-	if (vars_count >= MAX_VARS) return 0;
-	copy_str_bounded(vars[vars_count].name, name, MAX_VAR_NAME);
-	vars[vars_count].value = value;
-	vars[vars_count].type = type;
-	vars_count++;
-	return 1;
+int set_var(const char *name, const struct var_entry *attrs) {
+    struct var_entry *entry = find_var(name);
+    if (entry) {
+        entry->value = attrs->value;
+        entry->type = attrs->type;
+        entry->is_mut = attrs->is_mut;
+        return 1;
+    }
+    if (vars_count >= MAX_VARS) return 0;
+    copy_str_bounded(vars[vars_count].name, name, MAX_VAR_NAME);
+    vars[vars_count].value = attrs->value;
+    vars[vars_count].type = attrs->type;
+    vars[vars_count].is_mut = attrs->is_mut;
+    vars_count++;
+    return 1;
 }

@@ -10,9 +10,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-
-
-
 static int match_let_keyword(const char **ptr) {
 	return match_literal(ptr, "let", 1);
 }
@@ -97,6 +94,7 @@ typedef struct {
 	const char *name;
 	int vtype;
 	int type_explicit;
+	int is_mut;
 	int start_vars;
 	const char *expr_start;
 	long long val;
@@ -129,7 +127,10 @@ static int finalize_declaration(const decl_ctx *ctx) {
 		/* stored as 0/1 later */
 	}
 	if (ctx->val < INT_MIN || ctx->val > INT_MAX) return 0;
-	if (!set_var(ctx->name, (int)ctx->val, ctx->vtype)) return 0;
+	{
+		struct var_entry attrs = { .value = (int)ctx->val, .type = ctx->vtype, .is_mut = ctx->is_mut };
+		if (!set_var(ctx->name, &attrs)) return 0;
+	}
 	*ctx->cursor_ptr = cursor;
 	return 1;
 }
@@ -166,6 +167,12 @@ int is_boolean_expr(const char *start, const char *end) {
 static int parse_declaration(const char **ptr, char *name_out, int start_vars) {
 	const char *cursor = *ptr;
 	skip_ws(&cursor);
+	int is_mut = 0;
+	/* optional 'mut' token after 'let' */
+	if (match_literal(&cursor, "mut", 1)) {
+		is_mut = 1;
+		skip_ws(&cursor);
+	}
 	if (!parse_identifier(&cursor, name_out, sizeof(vars[0].name))) return 0;
 	skip_ws(&cursor);
 	int vtype = VT_I32;
@@ -189,6 +196,7 @@ static int parse_declaration(const char **ptr, char *name_out, int start_vars) {
 	dctx.name = name_out;
 	dctx.vtype = vtype;
 	dctx.type_explicit = type_explicit;
+	dctx.is_mut = is_mut;
 	dctx.start_vars = start_vars;
 	dctx.expr_start = expr_start;
 	dctx.val = val;
@@ -199,11 +207,50 @@ static int parse_declaration(const char **ptr, char *name_out, int start_vars) {
 
 static int parse_statement_at(const char **ptr, int start_vars) {
 	const char *cursor = *ptr;
-	if (!match_let_keyword(&cursor)) return 0;
-	char name[MAX_VAR_NAME];
-	if (!parse_declaration(&cursor, name, start_vars)) return 0;
-	*ptr = cursor;
-	return 1;
+	/* declaration */
+	if (match_let_keyword(&cursor)) {
+		char name[MAX_VAR_NAME];
+		if (!parse_declaration(&cursor, name, start_vars)) return 0;
+		*ptr = cursor;
+		return 1;
+	}
+	/* assignment: identifier '=' expr ';' */
+	{
+		const char *save = cursor;
+		char name[MAX_VAR_NAME];
+		if (!parse_identifier(&cursor, name, sizeof(name))) return 0;
+		skip_ws(&cursor);
+		if (*cursor != '=') { /* not assignment */
+			return 0;
+		}
+		cursor++; /* consume '=' */
+		const char *expr_start = cursor;
+		long long val = 0;
+		if (!parse_expr(&cursor, &val)) return 0;
+		/* if variable exists and is Bool, ensure RHS is boolean expression */
+		struct var_entry *v = find_var(name);
+		if (!v) {
+			errno = EINVAL;
+			return 0;
+		}
+		if (!v->is_mut) {
+			errno = EPERM;
+			return 0;
+		}
+		if (v->type == VT_BOOL) {
+			if (!is_boolean_expr(expr_start, cursor)) {
+				errno = EINVAL;
+				return 0;
+			}
+			val = (val != 0) ? 1 : 0;
+		}
+		skip_ws(&cursor);
+		if (*cursor != ';') return 0;
+		cursor++;
+		v->value = (int)val;
+		*ptr = cursor;
+		return 1;
+	}
 }
 
 /* Try parse full expression or sequence of statements and an optional trailing expression
