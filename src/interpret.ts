@@ -1,12 +1,12 @@
-import { tokenize } from './tokenize';
-import { evalLeftToRight } from './evalLeftToRight';
+import { tokenize } from "./tokenize";
+import { evalLeftToRight } from "./evalLeftToRight";
 
 export function interpret(input: string): number {
   const trimmed = input.trim();
 
   // Direct numeric literal (fast path)
   const numeric = Number(trimmed);
-  if (!Number.isNaN(numeric) && trimmed !== '') {
+  if (!Number.isNaN(numeric) && trimmed !== "") {
     return numeric;
   }
 
@@ -14,4 +14,3 @@ export function interpret(input: string): number {
   const tokens = tokenize(trimmed);
   return evalLeftToRight(tokens);
 }
-

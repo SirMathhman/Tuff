@@ -1,7 +1,13 @@
 import { parseNumber } from "./parseNumber";
 
-export interface NumToken { type: 'num'; value: number }
-export interface OpToken { type: 'op'; value: '+' | '-' }
+export interface NumToken {
+  type: "num";
+  value: number;
+}
+export interface OpToken {
+  type: "op";
+  value: "+" | "-";
+}
 export type Token = NumToken | OpToken;
 
 export function tokenize(s: string): Token[] {
