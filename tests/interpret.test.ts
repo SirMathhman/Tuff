@@ -159,7 +159,15 @@ describe("interpret", () => {
     // duplicate field names in the same struct should error
     const fldR = interpret("struct Test { x : I32, x : I32 }");
     expect(fldR.ok).toBe(false);
-    if (!fldR.ok) expect((fldR.error as any).message).toMatch(/Duplicate field/);
+    if (!fldR.ok)
+      expect((fldR.error as any).message).toMatch(/Duplicate field/);
+
+    // struct construction and member access
+    expect(
+      interpret(
+        "struct Point { x : I32, y : I32 } let myPoint : Point = Point { 3, 4 }; myPoint.x + myPoint.y"
+      )
+    ).toEqual({ ok: true, value: 7 });
   });
 
   test("conditional expressions", () => {
@@ -185,5 +193,18 @@ describe("interpret", () => {
         identifier: "wah",
       });
     }
+  });
+
+  test("struct construction and member access (isolated)", () => {
+    const base =
+      "struct Point { x : I32, y : I32 } let myPoint : Point = Point { 3, 4 }; ";
+    const r1 = interpret(base + "myPoint.x");
+    expect(r1).toEqual({ ok: true, value: 3 });
+
+    const r2 = interpret(base + "myPoint.y");
+    expect(r2).toEqual({ ok: true, value: 4 });
+
+    const r3 = interpret(base + "myPoint.x + myPoint.y");
+    expect(r3).toEqual({ ok: true, value: 7 });
   });
 });

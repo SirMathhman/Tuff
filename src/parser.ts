@@ -1,7 +1,14 @@
 /* eslint-disable no-restricted-syntax */
-import { Result, InterpretError, Token, ok, err } from "./types";
+import { Result, InterpretError, Token, ok, err, Value } from "./types";
+import {
+  parseStructFields,
+  parseStructLiteral,
+  parseMemberAccess,
+} from "./structs";
+import { parseStatement, parseBraced, parseIfExpression } from "./statements";
 
-const parserScopes = new WeakMap<Parser, Map<string, number>[]>();
+const parserScopes = new WeakMap<Parser, Map<string, Value>[]>();
+const parserTypeScopes = new WeakMap<Parser, Map<string, string[]>[]>();
 
 class Parser {
   private tokens: Token[];
@@ -19,28 +26,55 @@ class Parser {
     return t[this.idx++];
   }
 
-  private getScopes(): Map<string, number>[] {
+  public getScopes(): Map<string, Value>[] {
     const s = parserScopes.get(this);
     if (!s) {
-      const arr: Map<string, number>[] = [];
+      const arr: Map<string, Value>[] = [];
       parserScopes.set(this, arr);
+      // also initialize type scopes for this parser
+      parserTypeScopes.set(this, []);
       return arr;
     }
     return s;
   }
 
-  private currentScope(): Map<string, number> | undefined {
+  private getTypeScopes(): Map<string, string[]>[] {
+    const s = parserTypeScopes.get(this);
+    if (!s) {
+      const arr: Map<string, string[]>[] = [];
+      parserTypeScopes.set(this, arr);
+      return arr;
+    }
+    return s;
+  }
+
+  private currentTypeScope(): Map<string, string[]> | undefined {
+    const s = this.getTypeScopes();
+    const ln = s.length;
+    if (ln === 0) return undefined;
+    return s[ln - 1];
+  }
+
+  private lookupType(name: string): string[] | undefined {
+    const s = this.getTypeScopes();
+    for (let i = s.length - 1; i >= 0; i--) {
+      const scope = s[i];
+      if (scope.has(name)) return scope.get(name);
+    }
+    return undefined;
+  }
+  private currentScope(): Map<string, Value> | undefined {
     const s = this.getScopes();
     const ln = s.length;
     if (ln === 0) return undefined;
     return s[ln - 1];
   }
 
-  private scopeHas(scope: Map<string, number>, key: string): boolean {
+  private scopeHas(scope: Map<string, Value>, key: string): boolean {
     return scope.has(key);
   }
 
-  private lookupVar(name: string): number | undefined {
+  public lookupVar(name: string): Value | undefined {
     const s = this.getScopes();
     const ln = s.length;
     for (let i = ln - 1; i >= 0; i--) {
@@ -52,12 +86,15 @@ class Parser {
     return undefined;
   }
 
-  private pushScope(): void {
-    this.getScopes().push(new Map<string, number>());
+  public pushScope(): void {
+    this.getScopes().push(new Map<string, Value>());
+    // also push a parallel type scope for struct definitions
+    this.getTypeScopes().push(new Map<string, string[]>());
   }
 
-  private popScope(): void {
+  public popScope(): void {
     this.getScopes().pop();
+    this.getTypeScopes().pop();
   }
 
   private isOpToken(tk: Token | undefined, v: string): boolean {
@@ -101,10 +138,11 @@ class Parser {
 
   private checkTypeConformance(
     typeName: string,
-    value: number
+    value: Value
   ): InterpretError | undefined {
+    // named primitive types
     if (typeName === "Bool") {
-      if (!(value === 0 || value === 1)) {
+      if (typeof value !== "number" || !(value === 0 || value === 1)) {
         return {
           type: "InvalidInput",
           message: "Type mismatch: expected Bool",
@@ -113,15 +151,38 @@ class Parser {
       return undefined;
     }
     if (typeName === "I32") {
-      if (!Number.isInteger(value)) {
+      if (typeof value !== "number" || !Number.isInteger(value)) {
         return { type: "InvalidInput", message: "Type mismatch: expected I32" };
       }
       return undefined;
     }
+
+    // user-defined struct types
+    const typeDef = this.lookupType(typeName);
+    if (typeDef !== undefined) {
+      if (!(value instanceof Map)) {
+        return {
+          type: "InvalidInput",
+          message: `Type mismatch: expected ${typeName}`,
+        };
+      }
+      // check all fields exist and are numeric
+      for (const f of typeDef) {
+        const v = value.get(f);
+        if (typeof v !== "number") {
+          return {
+            type: "InvalidInput",
+            message: `Type mismatch: expected ${typeName}`,
+          };
+        }
+      }
+      return undefined;
+    }
+
     return { type: "InvalidInput", message: `Unknown type: ${typeName}` };
   }
 
-  private parseLetDeclaration(): Result<number, InterpretError> {
+  public parseLetDeclaration(): Result<Value, InterpretError> {
     // assume current token is 'let'
     this.consume();
     const nameTok = this.consume();
@@ -174,7 +235,7 @@ class Parser {
     return ok(valR.value);
   }
 
-  private parseStructDeclaration(): Result<number, InterpretError> {
+  public parseStructDeclaration(): Result<Value, InterpretError> {
     // assume current token is 'struct'
     this.consume();
     const nameTok = this.consume();
@@ -204,67 +265,18 @@ class Parser {
       return err({ type: "InvalidInput", message: "Duplicate declaration" });
     }
 
-    const fieldsErr = this.parseStructFields();
-    if (fieldsErr) return err(fieldsErr);
+    const fieldsR = parseStructFields(this);
+    if (!fieldsR.ok) return fieldsR;
 
+    // record type definition in current type scope
+    const curr = this.currentTypeScope();
+    if (!curr)
+      return err({ type: "InvalidInput", message: "Invalid block scope" });
+    curr.set(name, fieldsR.value);
+
+    // also create a placeholder in variable scope for the type name
     top.set(name, 0);
     return ok(0);
-  }
-
-  private parseStructFields(): InterpretError | undefined {
-    const seen = new Set<string>();
-    while (true) {
-      const p = this.peek();
-      if (!p) {
-        return { type: "InvalidInput", message: "Missing closing brace" };
-      }
-
-      // end of struct body
-      if (this.isOpToken(p, "}")) {
-        this.consume();
-        return undefined;
-      }
-
-      // skip optional separators
-      if (this.isOpToken(p, ";") || this.isOpToken(p, ",")) {
-        this.consume();
-        continue;
-      }
-
-      // expect field name
-      const fieldTok = this.consume();
-      if (!fieldTok || fieldTok.type !== "id") {
-        return {
-          type: "InvalidInput",
-          message: "Expected field name in struct body",
-        };
-      }
-
-      // duplicate field in same struct body
-      if (seen.has(fieldTok.value)) {
-        return { type: "InvalidInput", message: "Duplicate field declaration" };
-      }
-      seen.add(fieldTok.value);
-
-      // expect ':'
-      const colon = this.peek();
-      if (!this.isOpToken(colon, ":")) {
-        return { type: "InvalidInput", message: "Expected : after field name" };
-      }
-      this.consume(); // consume ':'
-
-      // expect type name
-      const typeTok = this.consume();
-      if (!typeTok || typeTok.type !== "id") {
-        return { type: "InvalidInput", message: "Expected type name after :" };
-      }
-
-      // accept optional separator after field
-      const maybeSep = this.peek();
-      if (this.isOpToken(maybeSep, ";") || this.isOpToken(maybeSep, ",")) {
-        this.consume();
-      }
-    }
   }
 
   private requireToken(): Result<Token, InterpretError> {
@@ -277,7 +289,7 @@ class Parser {
     return ok(tk);
   }
 
-  parsePrimary(): Result<number, InterpretError> {
+  parsePrimary(): Result<Value, InterpretError> {
     const tkR = this.requireToken();
     if (!tkR.ok) return tkR;
     const tk = tkR.value;
@@ -289,19 +301,19 @@ class Parser {
 
     // braces (block/grouping)
     if (tk.type === "op" && tk.value === "{") {
-      return this.parseBraced();
+      return parseBraced(this);
     }
 
     // conditional: if (cond) consequent else alternative
     if (tk.type === "id" && tk.value === "if") {
-      return this.parseIfExpression();
+      return parseIfExpression(this);
     }
 
     // literals and identifiers
     return this.parseLiteral();
   }
 
-  parseParenthesized(): Result<number, InterpretError> {
+  parseParenthesized(): Result<Value, InterpretError> {
     // assume current token is '('
     this.consume();
     const r = this.parseExpr();
@@ -316,109 +328,20 @@ class Parser {
     return ok(r.value);
   }
 
-  private parseStatement(allowEof: boolean): Result<number, InterpretError> {
-    const p = this.peek();
-    if (!p)
-      return err({
-        type: "InvalidInput",
-        message: "Unable to interpret input",
-      });
-
-    if (this.isIdToken(p) && p.value === "struct") {
-      const sR = this.parseStructDeclaration();
-      if (!sR.ok) return sR;
-      return ok(sR.value);
-    }
-
-    if (this.isIdToken(p) && p.value === "let") {
-      const declR = this.parseLetDeclaration();
-      if (!declR.ok) return declR;
-      return ok(declR.value);
-    }
-
-    const exprR = this.parseExpr();
-    if (!exprR.ok) return exprR;
-    const val = exprR.value;
-
-    const next = this.peek();
-    if (this.isOpToken(next, ";")) {
+  private parseBooleanIfPresent(): Result<Value, InterpretError> | undefined {
+    const tk = this.peek();
+    if (
+      tk &&
+      tk.type === "id" &&
+      (tk.value === "true" || tk.value === "false")
+    ) {
       this.consume();
-      return ok(val);
+      return ok(tk.value === "true" ? 1 : 0);
     }
-
-    if (this.isOpToken(next, "}")) {
-      return ok(val);
-    }
-
-    if (!next && allowEof) {
-      return ok(val);
-    }
-
-    return err({
-      type: "InvalidInput",
-      message: "Unexpected token in statement",
-    });
+    return undefined;
   }
 
-  parseBraced(): Result<number, InterpretError> {
-    // assume current token is '{'
-    this.consume();
-    this.pushScope();
-    let lastVal = 0;
-
-    while (true) {
-      const p = this.peek();
-      if (!p) {
-        this.popScope();
-        return err({ type: "InvalidInput", message: "Missing closing brace" });
-      }
-
-      if (this.isOpToken(p, "}")) {
-        this.consume();
-        this.popScope();
-        return ok(lastVal);
-      }
-
-      const stmtR = this.parseStatement(false);
-      if (!stmtR.ok) {
-        this.popScope();
-        return stmtR;
-      }
-      lastVal = stmtR.value;
-    }
-  }
-
-  parseIfExpression(): Result<number, InterpretError> {
-    // assume current token is 'if'
-    this.consume();
-    const open = this.consume();
-    if (!open || open.type !== "op" || open.value !== "(") {
-      return err({ type: "InvalidInput", message: "Expected ( after if" });
-    }
-    const cond = this.parseExpr();
-    if (!cond.ok) return cond;
-    const close = this.consume();
-    if (!close || close.type !== "op" || close.value !== ")") {
-      return err({
-        type: "InvalidInput",
-        message: "Expected ) after condition",
-      });
-    }
-    const cons = this.parseExpr();
-    if (!cons.ok) return cons;
-    const e = this.consume();
-    if (!e || e.type !== "id" || e.value !== "else") {
-      return err({
-        type: "InvalidInput",
-        message: "Expected else in conditional",
-      });
-    }
-    const alt = this.parseExpr();
-    if (!alt.ok) return alt;
-    return ok(cond.value !== 0 ? cons.value : alt.value);
-  }
-
-  parseLiteral(): Result<number, InterpretError> {
+  parseLiteral(): Result<Value, InterpretError> {
     const tk = this.peek();
     if (!tk)
       return err({
@@ -426,11 +349,8 @@ class Parser {
         message: "Unable to interpret input",
       });
 
-    // boolean literals
-    if (tk.type === "id" && (tk.value === "true" || tk.value === "false")) {
-      this.consume();
-      return ok(tk.value === "true" ? 1 : 0);
-    }
+    const b = this.parseBooleanIfPresent();
+    if (b) return b;
 
     // numeric literal
     if (tk.type === "num") {
@@ -438,8 +358,30 @@ class Parser {
       return ok(tk.value);
     }
 
-    // identifier: try variable lookup in scope
+    // identifier: could be a struct literal (TypeName { ... }), a variable or member access
     if (tk.type === "id") {
+      const next = this.tokens[this.idx + 1];
+
+      // struct literal: TypeName { ... }
+      if (next && next.type === "op" && next.value === "{") {
+        const typeDef = this.lookupType(tk.value);
+        if (!typeDef)
+          return err({
+            type: "InvalidInput",
+            message: `Unknown type: ${tk.value}`,
+          });
+        // consume type name
+        this.consume();
+        return parseStructLiteral(this, typeDef);
+      }
+
+      // member access: var.field
+      const maybeDot = this.tokens[this.idx + 1];
+      if (maybeDot && maybeDot.type === "op" && maybeDot.value === ".") {
+        return parseMemberAccess(this, tk.value);
+      }
+
+      // otherwise variable lookup
       const v = this.lookupVar(tk.value);
       if (v !== undefined) {
         this.consume();
@@ -451,7 +393,7 @@ class Parser {
     return err({ type: "InvalidInput", message: "Unable to interpret input" });
   }
 
-  parseFactor(): Result<number, InterpretError> {
+  parseFactor(): Result<Value, InterpretError> {
     const tk = this.peek();
     if (!tk)
       return err({
@@ -469,14 +411,27 @@ class Parser {
   }
 
   private parseBinary(
-    nextParser: () => Result<number, InterpretError>,
+    nextParser: () => Result<Value, InterpretError>,
     ops: Set<string>,
     apply: (op: string, a: number, b: number) => number
-  ): Result<number, InterpretError> {
+  ): Result<Value, InterpretError> {
     const left = nextParser();
     if (!left.ok) return left;
-    let val = left.value;
+
+    // if there's no operator following, just return the parsed value as-is
     let p = this.peek();
+    if (!p || p.type !== "op" || !ops.has(p.value)) {
+      return ok(left.value);
+    }
+
+    if (typeof left.value !== "number")
+      return err({
+        type: "InvalidInput",
+        message: "Left operand must be numeric",
+      });
+
+    let val = left.value as number;
+
     while (p && p.type === "op" && ops.has(p.value)) {
       const opToken = this.consume();
       if (!opToken)
@@ -487,13 +442,18 @@ class Parser {
       const op = String(opToken.value);
       const right = nextParser();
       if (!right.ok) return right;
-      val = apply(op, val, right.value);
+      if (typeof right.value !== "number")
+        return err({
+          type: "InvalidInput",
+          message: "Right operand must be numeric",
+        });
+      val = apply(op, val, right.value as number);
       p = this.peek();
     }
     return ok(val);
   }
 
-  parseTerm(): Result<number, InterpretError> {
+  parseTerm(): Result<Value, InterpretError> {
     return this.parseBinary(
       () => this.parseFactor(),
       new Set(["*", "/"]),
@@ -501,7 +461,7 @@ class Parser {
     );
   }
 
-  parseExpr(): Result<number, InterpretError> {
+  parseExpr(): Result<Value, InterpretError> {
     return this.parseBinary(
       () => this.parseTerm(),
       new Set(["+", "-"]),
@@ -509,13 +469,13 @@ class Parser {
     );
   }
 
-  parse(): Result<number, InterpretError> {
+  parse(): Result<Value, InterpretError> {
     // empty token stream represents an empty or whitespace-only input -> 0
     if (this.tokens.length === 0) return ok(0);
 
     // top-level scope for program statements (let declarations, expressions)
     this.pushScope();
-    let lastVal = 0;
+    let lastVal: Value = 0;
 
     while (this.idx < this.tokens.length) {
       const p = this.peek();
@@ -527,7 +487,7 @@ class Parser {
         });
       }
 
-      const stmtR = this.parseStatement(true);
+      const stmtR = parseStatement(this, true);
       if (!stmtR.ok) {
         this.popScope();
         return stmtR;
@@ -537,7 +497,7 @@ class Parser {
 
     this.popScope();
 
-    if (!Number.isFinite(lastVal))
+    if (typeof lastVal === "number" && !Number.isFinite(lastVal))
       return err({
         type: "InvalidInput",
         message: "Unable to interpret input",

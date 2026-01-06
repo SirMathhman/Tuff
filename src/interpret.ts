@@ -14,17 +14,18 @@ import {
   OpToken,
   IdToken,
   NumToken,
+  Value,
   err,
 } from "./types";
 import { Parser } from "./parser";
 
 // Parser implementation moved to src/parser.ts
 
-export function interpret(input: string): Result<number, InterpretError> {
+export function interpret(input: string): Result<Value, InterpretError> {
   const s = input.trim();
 
   // tokenize numbers, identifiers, parentheses/braces, operators and punctuation
-  const tokenRe = /\d+(?:\.\d+)?|[A-Za-z_][A-Za-z0-9_]*|[+\-*/(){}:;=,]/g;
+  const tokenRe = /\d+(?:\.\d+)?|[A-Za-z_][A-Za-z0-9_]*|[+\-*/(){}:;=,\.]/g;
   const raw = s.match(tokenRe) ?? [];
 
   // ensure no unexpected characters (allow parentheses, braces, letters, and punctuation : ; = ,)
@@ -45,7 +46,7 @@ export function interpret(input: string): Result<number, InterpretError> {
   }
 
   const tokens: Token[] = raw.map((t) => {
-    if (/^[+\-*/(){}:;=,]$/.test(t)) return makeOpToken(t);
+    if (/^[+\-*/(){}:;=,\.]$/.test(t)) return makeOpToken(t);
     if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(t)) return makeIdToken(t);
     return makeNumToken(Number(t));
   });
