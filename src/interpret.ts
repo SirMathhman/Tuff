@@ -171,11 +171,15 @@ class Parser {
     if (semiErr) return err(semiErr);
 
     const top = this.currentScope();
-    if (!top) return err({ type: "InvalidInput", message: "Invalid block scope" });
+    if (!top)
+      return err({ type: "InvalidInput", message: "Invalid block scope" });
 
     // do not allow duplicate declarations in the same scope
     if (top.has(name)) {
-      return err({ type: "InvalidInput", message: "Duplicate variable declaration" });
+      return err({
+        type: "InvalidInput",
+        message: "Duplicate variable declaration",
+      });
     }
 
     top.set(name, valR.value);
@@ -400,6 +404,9 @@ class Parser {
   }
 
   parse(): Result<number, InterpretError> {
+    // empty token stream represents an empty or whitespace-only input -> 0
+    if (this.tokens.length === 0) return ok(0);
+
     const result = this.parseExpr();
     if (!result.ok) return result;
     const t = this.tokens;
@@ -421,23 +428,10 @@ class Parser {
 
 export function interpret(input: string): Result<number, InterpretError> {
   const s = input.trim();
-  if (s === "") return ok(0);
-
-  // numeric literal (integer or decimal)
-  if (/^-?\d+(?:\.\d+)?$/.test(s)) {
-    return ok(Number(s));
-  }
-
-  // bare identifiers -> undefined identifier error
-  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(s)) {
-    return err({ type: "UndefinedIdentifier", identifier: s });
-  }
 
   // tokenize numbers, identifiers, parentheses/braces, operators and punctuation
   const tokenRe = /\d+(?:\.\d+)?|[A-Za-z_][A-Za-z0-9_]*|[+\-*/(){}:;=]/g;
-  const raw = s.match(tokenRe);
-  if (!raw)
-    return err({ type: "InvalidInput", message: "Unable to interpret input" });
+  const raw = s.match(tokenRe) ?? [];
 
   // ensure no unexpected characters (allow parentheses, braces, letters, and punctuation : ; =)
   const compact = s.replace(/\s+/g, "");
