@@ -21,6 +21,12 @@ interface ParserLike {
   popScope(): void;
 }
 
+function isReturnSignalValue(value: Value): value is ReturnSignalValue {
+  if (typeof value === "number") return false;
+  if (value instanceof Map) return false;
+  return value.type === "return";
+}
+
 function handleIdToken(
   parser: ParserLike,
   p: Token
@@ -60,7 +66,10 @@ function handleIdToken(
   return undefined;
 }
 
-function tryHandleAssignment(parser: ParserLike, p: Token): Result<Value, InterpretError> | undefined {
+function tryHandleAssignment(
+  parser: ParserLike,
+  p: Token
+): Result<Value, InterpretError> | undefined {
   if (p.type !== "id") return undefined;
   const next = parser.peekNext();
   if (!next || next.type !== "op" || next.value !== "=") return undefined;
@@ -161,18 +170,16 @@ export function parseBraced(parser: ParserLike): Result<Value, InterpretError> {
       return stmtR;
     }
     // propagate return signals immediately: skip to matching closing brace then return
-    if (typeof stmtR.value === "object") {
-      // eslint-disable-next-line no-restricted-syntax
-      if ((stmtR.value as ReturnSignalValue).type === "return") {
-        const skip = skipToMatchingBrace(parser);
-        if (!skip.ok) return skip;
-        parser.popScope();
-        return ok(stmtR.value);
-      }
+    if (isReturnSignalValue(stmtR.value)) {
+      const skip = skipToMatchingBrace(parser);
+      if (!skip.ok) return skip;
+      parser.popScope();
+      return ok(stmtR.value);
     }
     lastVal = stmtR.value;
   }
 }
+
 
 export function parseIfExpression(
   parser: ParserLike

@@ -1,4 +1,3 @@
-/* eslint-disable no-restricted-syntax, max-lines */
 import { Result, InterpretError, Token, ok, err, Value } from "./types";
 import {
   parseStructFields,
@@ -11,20 +10,30 @@ import {
 } from "./functions";
 import { parseStatement, parseBraced, parseIfExpression } from "./statements";
 import { parseCallExternal } from "./calls";
+import {
+  initScopes,
+  getValueScopes,
+  getStructTypeScopes,
+  getVarTypeScopes,
+} from "./scopes";
+import { checkTypeConformance } from "./typeConformance";
 
-const parserScopes = new WeakMap<Parser, Map<string, Value>[]>();
-const parserTypeScopes = new WeakMap<Parser, Map<string, string[]>[]>();
-const parserVarTypeScopes = new WeakMap<
-  Parser,
-  Map<string, string | undefined>[]
->();
+function requireNumber(
+  value: Value,
+  message: string
+): Result<number, InterpretError> {
+  if (typeof value !== "number") {
+    return err({ type: "InvalidInput", message });
+  }
+  return ok(value);
+}
 
-class Parser {
+class Parser implements ParserLike {
   private tokens: Token[];
   private idx = 0;
   constructor(tokens: Token[]) {
     this.tokens = tokens;
-    parserScopes.set(this, []);
+    initScopes(this);
   }
   peek(): Token | undefined {
     const t = this.tokens;
@@ -36,25 +45,11 @@ class Parser {
   }
 
   public getScopes(): Map<string, Value>[] {
-    const s = parserScopes.get(this);
-    if (!s) {
-      const arr: Map<string, Value>[] = [];
-      parserScopes.set(this, arr);
-      // also initialize type scopes for this parser
-      parserTypeScopes.set(this, []);
-      return arr;
-    }
-    return s;
+    return getValueScopes(this);
   }
 
   private getTypeScopes(): Map<string, string[]>[] {
-    const s = parserTypeScopes.get(this);
-    if (!s) {
-      const arr: Map<string, string[]>[] = [];
-      parserTypeScopes.set(this, arr);
-      return arr;
-    }
-    return s;
+    return getStructTypeScopes(this);
   }
 
   private currentTypeScope(): Map<string, string[]> | undefined {
@@ -65,13 +60,7 @@ class Parser {
   }
 
   private getVarTypeScopes(): Map<string, string | undefined>[] {
-    const s = parserVarTypeScopes.get(this);
-    if (!s) {
-      const arr: Map<string, string | undefined>[] = [];
-      parserVarTypeScopes.set(this, arr);
-      return arr;
-    }
-    return s;
+    return getVarTypeScopes(this);
   }
 
   private currentVarTypeScope(): Map<string, string | undefined> | undefined {
@@ -113,17 +102,21 @@ class Parser {
   }
 
   public pushScope(): void {
-    this.getScopes().push(new Map<string, Value>());
-    // also push a parallel type scope for struct definitions
-    this.getTypeScopes().push(new Map<string, string[]>());
-    // and a parallel variable type scope for declared variable types
-    this.getVarTypeScopes().push(new Map<string, string | undefined>());
+    const scopes = this.getScopes();
+    scopes.push(new Map<string, Value>());
+    const typeScopes = this.getTypeScopes();
+    typeScopes.push(new Map<string, string[]>());
+    const varTypes = this.getVarTypeScopes();
+    varTypes.push(new Map<string, string | undefined>());
   }
 
   public popScope(): void {
-    this.getScopes().pop();
-    this.getTypeScopes().pop();
-    this.getVarTypeScopes().pop();
+    const scopes = this.getScopes();
+    scopes.pop();
+    const typeScopes = this.getTypeScopes();
+    typeScopes.pop();
+    const varTypes = this.getVarTypeScopes();
+    varTypes.pop();
   }
 
   private isOpToken(tk: Token | undefined, v: string): boolean {
@@ -138,7 +131,9 @@ class Parser {
 
   // peek the token after the current
   public peekNext(): Token | undefined {
-    return this.tokens[this.idx + 1];
+    const t = this.tokens;
+    const nextIdx = this.idx + 1;
+    return t[nextIdx];
   }
 
   // assign to an existing variable in the nearest scope
@@ -149,16 +144,23 @@ class Parser {
       if (this.scopeHas(scope, name)) {
         // check type conformance if declared
         const vScopes = this.getVarTypeScopes();
-        for (let j = vScopes.length - 1; j >= 0; j--) {
+        let j = vScopes.length - 1;
+        let foundType = false;
+        while (!foundType && j >= 0) {
           const vs = vScopes[j];
           if (vs.has(name)) {
             const typeName = vs.get(name);
             if (typeName) {
-              const tcErr = this.checkTypeConformance(typeName, value);
+              const tcErr = checkTypeConformance(
+                typeName,
+                value,
+                (n) => this.lookupType(n)
+              );
               if (tcErr) return err(tcErr);
             }
-            break;
+            foundType = true;
           }
+          j--;
         }
         scope.set(name, value);
         return ok(value);
@@ -196,55 +198,7 @@ class Parser {
     return undefined;
   }
 
-  private checkTypeConformance(
-    typeName: string,
-    value: Value
-  ): InterpretError | undefined {
-    // named primitive types
-    if (typeName === "Bool") {
-      if (typeof value !== "number" || !(value === 0 || value === 1)) {
-        return {
-          type: "InvalidInput",
-          message: "Type mismatch: expected Bool",
-        };
-      }
-      return undefined;
-    }
-    if (typeName === "I32") {
-      if (typeof value !== "number" || !Number.isInteger(value)) {
-        return { type: "InvalidInput", message: "Type mismatch: expected I32" };
-      }
-      return undefined;
-    }
-
-    // user-defined struct types
-    const typeDef = this.lookupType(typeName);
-    if (typeDef !== undefined) {
-      if (!(value instanceof Map)) {
-        return {
-          type: "InvalidInput",
-          message: `Type mismatch: expected ${typeName}`,
-        };
-      }
-      // check all fields exist and are numeric
-      for (const f of typeDef) {
-        const v = value.get(f);
-        if (typeof v !== "number") {
-          return {
-            type: "InvalidInput",
-            message: `Type mismatch: expected ${typeName}`,
-          };
-        }
-      }
-      return undefined;
-    }
-
-    return { type: "InvalidInput", message: `Unknown type: ${typeName}` };
-  }
-
-  public parseLetDeclaration(): Result<Value, InterpretError> {
-    // assume current token is 'let'
-    this.consume();
+  private consumeLetName(): Result<string, InterpretError> {
     const nameTok = this.consume();
     if (!nameTok || nameTok.type !== "id") {
       return err({
@@ -252,39 +206,52 @@ class Parser {
         message: "Expected identifier after let",
       });
     }
-    const name = nameTok.value;
+    return ok(nameTok.value);
+  }
+
+  private parseLetInitializerOrDefault(
+    typeName: string | undefined
+  ): Result<Value, InterpretError> {
+    const next = this.peek();
+    const declSemiMessage = "Missing ; after variable declaration";
+
+    if (next && next.type === "op" && next.value === "=") {
+      this.consume();
+      const valR = this.parseExpr();
+      if (!valR.ok) return valR;
+      const initialValue = valR.value;
+      if (typeName) {
+        const tcErr = checkTypeConformance(
+          typeName,
+          initialValue,
+          (n) => this.lookupType(n)
+        );
+        if (tcErr) return err(tcErr);
+      }
+      const semiErr = this.consumeExpectedOp(";", declSemiMessage);
+      if (semiErr) return err(semiErr);
+      return ok(initialValue);
+    }
+
+    const semiErr = this.consumeExpectedOp(";", declSemiMessage);
+    if (semiErr) return err(semiErr);
+    return ok(0);
+  }
+
+  public parseLetDeclaration(): Result<Value, InterpretError> {
+    // assume current token is 'let'
+    this.consume();
+    const nameR = this.consumeLetName();
+    if (!nameR.ok) return nameR;
+    const name = nameR.value;
 
     const typeRes = this.consumeOptionalType();
     if (typeRes.error) return err(typeRes.error);
     const typeName = typeRes.typeName;
 
-    const next = this.peek();
-    let initialValue: Value = 0;
-
-    if (next && next.type === "op" && next.value === "=") {
-      // consume '=' and parse initializer
-      this.consume();
-      const valR = this.parseExpr();
-      if (!valR.ok) return valR;
-      initialValue = valR.value;
-      // simple type checks for named types
-      if (typeName) {
-        const tcErr = this.checkTypeConformance(typeName, initialValue);
-        if (tcErr) return err(tcErr);
-      }
-      const semiErr = this.consumeExpectedOp(
-        ";",
-        "Missing ; after variable declaration"
-      );
-      if (semiErr) return err(semiErr);
-    } else {
-      // declaration without initializer: expect semicolon
-      const semiErr = this.consumeExpectedOp(
-        ";",
-        "Missing ; after variable declaration"
-      );
-      if (semiErr) return err(semiErr);
-    }
+    const initialValueR = this.parseLetInitializerOrDefault(typeName);
+    if (!initialValueR.ok) return initialValueR;
+    const initialValue = initialValueR.value;
 
     const top = this.currentScope();
     if (!top)
@@ -351,7 +318,7 @@ class Parser {
   }
 
   public parseFunctionDeclaration(): Result<Value, InterpretError> {
-    return parseFunctionDeclarationHelper(this as unknown as ParserLike);
+    return parseFunctionDeclarationHelper(this);
   }
 
   private requireToken(): Result<Token, InterpretError> {
@@ -404,7 +371,11 @@ class Parser {
   }
 
   private parseCall(name: string): Result<Value, InterpretError> {
-    return parseCallExternal(this as unknown as object, name);
+    return parseCallExternal(this, name);
+  }
+
+  public createChildParser(tokens: Token[]): Parser {
+    return new Parser(tokens);
   }
 
   private parseBooleanIfPresent(): Result<Value, InterpretError> | undefined {
@@ -452,8 +423,7 @@ class Parser {
         type: "InvalidInput",
         message: "Unable to interpret input",
       });
-
-    const next = this.tokens[this.idx + 1];
+  const next = this.peekNext();
 
     // struct literal: TypeName { ... }
     if (next && next.type === "op" && next.value === "{") {
@@ -469,13 +439,13 @@ class Parser {
     }
 
     // function call: id(arg1, arg2)
-    const maybeCall = this.tokens[this.idx + 1];
+    const maybeCall = next;
     if (maybeCall && maybeCall.type === "op" && maybeCall.value === "(") {
       return this.parseCall(tk.value);
     }
 
     // member access: var.field
-    const maybeDot = this.tokens[this.idx + 1];
+    const maybeDot = next;
     if (maybeDot && maybeDot.type === "op" && maybeDot.value === ".") {
       return parseMemberAccess(this, tk.value);
     }
@@ -521,13 +491,9 @@ class Parser {
       return ok(left.value);
     }
 
-    if (typeof left.value !== "number")
-      return err({
-        type: "InvalidInput",
-        message: "Left operand must be numeric",
-      });
-
-    let val = left.value as number;
+    const leftNumR = requireNumber(left.value, "Left operand must be numeric");
+    if (!leftNumR.ok) return leftNumR;
+    let val = leftNumR.value;
 
     while (p && p.type === "op" && ops.has(p.value)) {
       const opToken = this.consume();
@@ -539,12 +505,12 @@ class Parser {
       const op = String(opToken.value);
       const right = nextParser();
       if (!right.ok) return right;
-      if (typeof right.value !== "number")
-        return err({
-          type: "InvalidInput",
-          message: "Right operand must be numeric",
-        });
-      val = apply(op, val, right.value as number);
+      const rightNumR = requireNumber(
+        right.value,
+        "Right operand must be numeric"
+      );
+      if (!rightNumR.ok) return rightNumR;
+      val = apply(op, val, rightNumR.value);
       p = this.peek();
     }
     return ok(val);
@@ -568,13 +534,15 @@ class Parser {
 
   parse(): Result<Value, InterpretError> {
     // empty token stream represents an empty or whitespace-only input -> 0
-    if (this.tokens.length === 0) return ok(0);
+    const tokens = this.tokens;
+    const tokenCount = tokens.length;
+    if (tokenCount === 0) return ok(0);
 
     // top-level scope for program statements (let declarations, expressions)
     this.pushScope();
     let lastVal: Value = 0;
 
-    while (this.idx < this.tokens.length) {
+    while (this.idx < tokenCount) {
       const p = this.peek();
       if (!p) {
         this.popScope();
@@ -602,7 +570,5 @@ class Parser {
     return ok(lastVal);
   }
 }
-
-/* eslint-enable no-restricted-syntax */
 
 export { Parser };

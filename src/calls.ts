@@ -1,4 +1,3 @@
-/* eslint-disable no-restricted-syntax, @typescript-eslint/no-explicit-any */
 import {
   Result,
   Value,
@@ -10,12 +9,34 @@ import {
   ReturnSignalValue,
 } from "./types";
 
-// Use runtime constructor from the provided parser instance to avoid circular imports
-function parseArgs(parser: any): Result<Value[], InterpretError> {
+export interface CallParserLike {
+  peek(): Token | undefined;
+  consume(): Token | undefined;
+  parseExpr(): Result<Value, InterpretError>;
+  lookupVar(name: string): Value | undefined;
+  getScopes(): Map<string, Value>[];
+  parse(): Result<Value, InterpretError>;
+  createChildParser(tokens: Token[]): CallParserLike;
+}
+
+function isFunctionValue(value: Value): value is FunctionValue {
+  if (typeof value === "number") return false;
+  if (value instanceof Map) return false;
+  return value.type === "fn";
+}
+
+function isReturnSignalValue(value: Value): value is ReturnSignalValue {
+  if (typeof value === "number") return false;
+  if (value instanceof Map) return false;
+  return value.type === "return";
+}
+
+function parseArgs(parser: CallParserLike): Result<Value[], InterpretError> {
   const args: Value[] = [];
   const next = parser.peek();
   if (next && next.type === "op" && next.value === ")") return ok(args);
-  for (;;) {
+  let done = false;
+  while (!done) {
     const aR = parser.parseExpr();
     if (!aR.ok) return aR;
     if (typeof aR.value === "object")
@@ -27,29 +48,29 @@ function parseArgs(parser: any): Result<Value[], InterpretError> {
     const sep = parser.peek();
     if (sep && sep.type === "op" && (sep.value === "," || sep.value === ";")) {
       parser.consume();
-      // continue reading args
       const maybeNext = parser.peek();
       if (!maybeNext)
         return err({
           type: "InvalidInput",
           message: "Missing closing parenthesis in call",
         });
-      continue;
+      done = false;
+    } else {
+      done = true;
     }
-    break;
   }
   return ok(args);
 }
 
 export function parseCallExternal(
-  parser: any,
+  parser: CallParserLike,
   name: string
 ): Result<Value, InterpretError> {
   // assume '(' is next
   parser.consume(); // consume identifier
   parser.consume(); // consume '('
   const argsR = parseArgs(parser);
-  if (!argsR.ok) return argsR as any;
+  if (!argsR.ok) return err(argsR.error);
   const args = argsR.value;
   const closing = parser.consume();
   if (!closing || closing.type !== "op" || closing.value !== ")")
@@ -61,15 +82,17 @@ export function parseCallExternal(
   const fv = parser.lookupVar(name);
   if (fv === undefined)
     return err({ type: "UndefinedIdentifier", identifier: name });
-  if (typeof fv === "number" || fv instanceof Map)
+  if (!isFunctionValue(fv))
     return err({ type: "InvalidInput", message: "Not a function" });
-
-  const fn = fv as FunctionValue;
+  const fn = fv;
   // arity check
-  if (args.length !== fn.params.length) {
+  const params = fn.params;
+  const expected = params.length;
+  const got = args.length;
+  if (got !== expected) {
     return err({
       type: "InvalidInput",
-      message: `Expected ${fn.params.length} arguments, got ${args.length}`,
+      message: `Expected ${expected} arguments, got ${got}`,
     });
   }
   return runFunctionInvocation(fn, args, name, parser);
@@ -79,37 +102,39 @@ function runFunctionInvocation(
   fn: FunctionValue,
   args: Value[],
   name: string,
-  parser: any
+  parser: CallParserLike
 ): Result<Value, InterpretError> {
+  const body = fn.body;
   const callTokens: Token[] = [
     { type: "op", value: "{" },
-    ...fn.body,
+    ...body,
     { type: "op", value: "}" },
   ];
-  const ParserClass = (parser as any).constructor as new (
-    tokens: Token[]
-  ) => any;
-  const p2 = new ParserClass(callTokens);
+  const p2 = parser.createChildParser(callTokens);
   // param scope for args
   const paramScope = new Map<string, Value>();
-  for (let i = 0; i < fn.params.length; i++)
-    paramScope.set(fn.params[i], args[i]);
-  p2.getScopes().push(paramScope);
+  const params = fn.params;
+  const paramCount = params.length;
+  for (let i = 0; i < paramCount; i++) {
+    const paramName = params[i];
+    paramScope.set(paramName, args[i]);
+  }
+  const scopes = p2.getScopes();
+  scopes.push(paramScope);
   const r = p2.parse();
   if (!r.ok) {
+    const error = r.error;
     const inner =
-      r.error.type === "InvalidInput"
-        ? r.error.message
-        : `Undefined identifier: ${r.error.identifier}`;
+      error.type === "InvalidInput"
+        ? error.message
+        : `Undefined identifier: ${error.identifier}`;
     return err({
       type: "InvalidInput",
       message: `Error while invoking function ${name}: ${inner}`,
     });
   }
-  if (
-    typeof r.value === "object" &&
-    (r.value as ReturnSignalValue).type === "return"
-  )
-    return ok((r.value as ReturnSignalValue).value);
-  return ok(r.value);
+  const value = r.value;
+  if (isReturnSignalValue(value)) return ok(value.value);
+  return ok(value);
 }
+
