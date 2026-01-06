@@ -44,6 +44,14 @@ module.exports = [
             "Do not declare interfaces inside functions; declare them at module scope instead.",
         },
         {
+          selector: "MemberExpression[object.type='MemberExpression']",
+          message: "Avoid chained property access (Law of Demeter): prefer retrieving necessary data via single-level access or helper methods.",
+        },
+        {
+          selector: "CallExpression[callee.type='MemberExpression'][callee.object.type='MemberExpression']",
+          message: "Avoid chaining method/property accesses (Law of Demeter): consider extracting into helper functions or intermediate variables.",
+        },
+        {
           selector: "BreakStatement",
           message:
             "Avoid 'break'; prefer explicit loop conditions or refactor into smaller functions.",
@@ -52,6 +60,12 @@ module.exports = [
           selector: "ContinueStatement",
           message:
             "Avoid 'continue'; prefer clearer control flow or use helper functions.",
+        },
+        {
+          selector:
+            "MemberExpression[object.type=MemberExpression], MemberExpression[object.type=CallExpression]",
+          message:
+            "Avoid chained property or call access (a.b.c or a.b().c); prefer Law of Demeter (tell, don't ask).",
         },
       ],
       ...require("@typescript-eslint/eslint-plugin").configs.recommended.rules,
