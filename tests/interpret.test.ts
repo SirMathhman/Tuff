@@ -67,7 +67,10 @@ describe("interpret", () => {
     const r = interpret("(2 + { let x : I32 = 10; let x : I32 = 20; x }) / 6");
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error).toEqual({ type: "InvalidInput", message: "Duplicate variable declaration" });
+      expect(r.error).toEqual({
+        type: "InvalidInput",
+        message: "Duplicate variable declaration",
+      });
     }
 
     // chained declarations referencing previous vars
@@ -81,6 +84,11 @@ describe("interpret", () => {
       ok: true,
       value: 2,
     });
+
+    // top-level let declaration and subsequent expression
+    expect(
+      interpret("let z : I32 = (2 + { let x : I32 = 10; x }) / 6; z")
+    ).toEqual({ ok: true, value: 2 });
   });
   test("conditional expressions", () => {
     expect(interpret("(2 + if (true) 10 else 3) / 6")).toEqual({

@@ -407,21 +407,60 @@ class Parser {
     // empty token stream represents an empty or whitespace-only input -> 0
     if (this.tokens.length === 0) return ok(0);
 
-    const result = this.parseExpr();
-    if (!result.ok) return result;
-    const t = this.tokens;
-    const len = t.length;
-    if (this.idx !== len)
+    // top-level scope for program statements (let declarations, expressions)
+    this.pushScope();
+    let lastVal = 0;
+
+    while (this.idx < this.tokens.length) {
+      const p = this.peek();
+      if (!p) {
+        this.popScope();
+        return err({
+          type: "InvalidInput",
+          message: "Unable to interpret input",
+        });
+      }
+
+      if (this.isIdToken(p) && p.value === "let") {
+        const declR = this.parseLetDeclaration();
+        if (!declR.ok) {
+          this.popScope();
+          return declR;
+        }
+        lastVal = declR.value;
+        continue;
+      }
+
+      const exprR = this.parseExpr();
+      if (!exprR.ok) {
+        this.popScope();
+        return exprR;
+      }
+      lastVal = exprR.value;
+
+      const next = this.peek();
+      if (this.isOpToken(next, ";")) {
+        this.consume();
+        // continue with next statement
+      } else if (this.idx === this.tokens.length) {
+        // end of input, OK
+      } else {
+        this.popScope();
+        return err({
+          type: "InvalidInput",
+          message: "Unable to interpret input",
+        });
+      }
+    }
+
+    this.popScope();
+
+    if (!Number.isFinite(lastVal))
       return err({
         type: "InvalidInput",
         message: "Unable to interpret input",
       });
-    if (!Number.isFinite(result.value))
-      return err({
-        type: "InvalidInput",
-        message: "Unable to interpret input",
-      });
-    return result;
+    return ok(lastVal);
   }
 }
 /* eslint-enable no-restricted-syntax */
