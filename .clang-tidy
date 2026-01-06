@@ -1,8 +1,0 @@
----
-# clang-tidy config. We prefer to allow omission of braces in simple one-statement ifs
-# so do not enable readability-braces-around-statements here.
-Checks: 'readability-*, -readability-braces-around-statements'
-WarningsAsErrors: ''
-HeaderFilterRegex: '.*'
-CheckOptions: []
-... 
