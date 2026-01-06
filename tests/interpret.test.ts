@@ -94,6 +94,10 @@ describe("interpret", () => {
     expect(
       interpret("let z : I32 = (2 + { let x : I32 = 10; x }) / 6; z")
     ).toEqual({ ok: true, value: 2 });
+
+    // top-level boolean variable
+    expect(interpret("let foo : Bool = true; foo")).toEqual({ ok: true, value: 1 });
+    expect(interpret("let foo:Bool=true;foo")).toEqual({ ok: true, value: 1 });
   });
   test("conditional expressions", () => {
     expect(interpret("(2 + if (true) 10 else 3) / 6")).toEqual({
