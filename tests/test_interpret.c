@@ -14,6 +14,9 @@ static void test_stub_returns_negative_one(void) {
 	/* New test: chained addition */
 	assert(interpret("1 + 2 + 3") == 6);
 	assert(interpret("1+2+3") == 6);
+	/* New test: mixed left-associative operators */
+	assert(interpret("10 - 5 + 3") == 8);
+	assert(interpret("10-5+3") == 8);
 	printf("basic tests passed\n");
 }
 
