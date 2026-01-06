@@ -336,6 +336,49 @@ function processAssignment(
   return ok({ nextIndex, value: val });
 }
 
+function processIfStatement(
+  tokensArr: Token[],
+  idx: number,
+  envMap: Map<string, Binding>
+): Result<StatementResult, string> {
+  // tokensArr[idx] is 'if'
+  const condParenIdx = idx + 1;
+  if (
+    !tokensArr[condParenIdx] ||
+    tokensArr[condParenIdx].type !== "paren" ||
+    tokensArr[condParenIdx].value !== "("
+  )
+    return err("Invalid numeric input");
+  const condEnd = findMatchingParen(tokensArr, condParenIdx);
+  if (condEnd === -1) return err("Invalid numeric input");
+  const condTokens = tokensArr.slice(condParenIdx + 1, condEnd);
+  if (condTokens.length === 0) return err("Invalid numeric input");
+
+  const elseIdx = findTopLevelElseIndex(tokensArr, condEnd + 1);
+  if (elseIdx === -1) return err("Invalid numeric input");
+
+  // find semicolon that ends the else branch (may be at end of tokens)
+  const elseEnd = indexUntilSemicolon(tokensArr, elseIdx + 1);
+
+  const thenTokens = tokensArr.slice(condEnd + 1, elseIdx);
+  // include the terminating semicolon in elseTokens if present so inner statements parse correctly
+  const elseTokens =
+    elseEnd < tokensArr.length
+      ? tokensArr.slice(elseIdx + 1, elseEnd + 1)
+      : tokensArr.slice(elseIdx + 1, elseEnd);
+  if (thenTokens.length === 0 || elseTokens.length === 0)
+    return err("Invalid numeric input");
+
+  const condRes = evalExprWithEnv(condTokens, envMap);
+  if (isErr(condRes)) return err(condRes.error);
+  const condVal = condRes.value;
+  const chosen = condVal !== 0 ? thenTokens : elseTokens;
+  const branchRes = processStatementsTokens(chosen, envMap);
+  if (isErr(branchRes)) return err(branchRes.error);
+  const nextIndex = elseEnd + (elseEnd < tokensArr.length && tokensArr[elseEnd].type === "punct" ? 1 : 0);
+  return ok({ nextIndex, value: branchRes.value.lastVal });
+}
+
 function processStatement(
   tokensArr: Token[],
   idx: number,
@@ -355,6 +398,9 @@ function processStatement(
 
   if (t.type === "ident" && t.value === "let")
     return processLetStatement(tokensArr, idx, envMap);
+
+  if (t.type === "ident" && t.value === "if")
+    return processIfStatement(tokensArr, idx, envMap);
 
   // assignment: ident '=' ...
   if (

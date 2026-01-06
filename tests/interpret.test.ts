@@ -217,4 +217,16 @@ describe("interpret - if expressions", () => {
     expect(isOk(r)).toBe(true);
     if (isOk(r)) expect(r.value).toBe(1);
   });
+
+    it("allows initializing an uninitialized variable inside if/else branches", () => {
+      const r = interpret("let x : I32; if (true) x = 3; else x = 5; x");
+      expect(isOk(r)).toBe(true);
+      if (isOk(r)) expect(r.value).toBe(3);
+    });
+
+    it("assigns the else branch when condition is false", () => {
+      const r = interpret("let x : I32; if (false) x = 3; else x = 5; x");
+      expect(isOk(r)).toBe(true);
+      if (isOk(r)) expect(r.value).toBe(5);
+    });
 });
