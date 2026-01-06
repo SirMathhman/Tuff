@@ -1,4 +1,12 @@
-import { Result, InterpretError, Value, Token, ok, err } from "./types";
+import {
+  Result,
+  InterpretError,
+  Value,
+  Token,
+  ok,
+  err,
+  ReturnSignalValue,
+} from "./types";
 
 interface ParserLike {
   peek(): Token | undefined;
@@ -82,13 +90,36 @@ export function parseStatement(
   });
 }
 
+function skipToMatchingBrace(parser: ParserLike): Result<void, InterpretError> {
+  // consumes tokens until the matching closing brace (handles nested braces)
+  let depth = 0;
+  for (;;) {
+    const t = parser.peek();
+    if (!t)
+      return err({ type: "InvalidInput", message: "Missing closing brace" });
+    if (t.type === "op" && t.value === "{") {
+      depth++;
+      parser.consume();
+    } else if (t.type === "op" && t.value === "}") {
+      if (depth === 0) {
+        parser.consume();
+        return ok(undefined);
+      }
+      depth--;
+      parser.consume();
+    } else {
+      parser.consume();
+    }
+  }
+}
+
 export function parseBraced(parser: ParserLike): Result<Value, InterpretError> {
   // assume current token is '{'
   parser.consume();
   parser.pushScope();
   let lastVal: Value = 0;
 
-  while (true) {
+  for (;;) {
     const p = parser.peek();
     if (!p) {
       parser.popScope();
@@ -107,30 +138,13 @@ export function parseBraced(parser: ParserLike): Result<Value, InterpretError> {
       return stmtR;
     }
     // propagate return signals immediately: skip to matching closing brace then return
-    // detect return signal and skip to matching closing brace
-    // eslint-disable-next-line no-restricted-syntax, @typescript-eslint/no-explicit-any
-    if (typeof stmtR.value === "object" && (stmtR.value as any).type === "return") {
-      let depth = 0;
-      for (;;) {
-        const t = parser.peek();
-        if (!t) {
-          parser.popScope();
-          return err({ type: "InvalidInput", message: "Missing closing brace" });
-        }
-        if (t.type === "op" && t.value === "{") {
-          depth++;
-          parser.consume();
-        } else if (t.type === "op" && t.value === "}") {
-          if (depth === 0) {
-            parser.consume();
-            parser.popScope();
-            return ok(stmtR.value);
-          }
-          depth--;
-          parser.consume();
-        } else {
-          parser.consume();
-        }
+    if (typeof stmtR.value === "object") {
+      // eslint-disable-next-line no-restricted-syntax
+      if ((stmtR.value as ReturnSignalValue).type === "return") {
+        const skip = skipToMatchingBrace(parser);
+        if (!skip.ok) return skip;
+        parser.popScope();
+        return ok(stmtR.value);
       }
     }
     lastVal = stmtR.value;

@@ -222,4 +222,36 @@ describe("interpret", () => {
       )
     ).toEqual({ ok: true, value: 5 });
   });
+
+  test("calling a non-function returns an error", () => {
+    expect(interpret("let x : I32 = 10; x(1)")).toEqual({
+      ok: false,
+      error: { type: "InvalidInput", message: "Not a function" },
+    });
+  });
+
+  test("arity mismatch returns an error", () => {
+    expect(interpret("fn single(a : I32) => { yield a; } single()")).toEqual({
+      ok: false,
+      error: { type: "InvalidInput", message: "Expected 1 arguments, got 0" },
+    });
+    expect(
+      interpret("fn single(a : I32) => { yield a; } single(1, 2)")
+    ).toEqual({
+      ok: false,
+      error: { type: "InvalidInput", message: "Expected 1 arguments, got 2" },
+    });
+  });
+
+  test("wrong-typed argument returns an error", () => {
+    expect(
+      interpret("struct S { x : I32 } fn f(a : I32) => { yield a; } f(S { 1 })")
+    ).toEqual({
+      ok: false,
+      error: {
+        type: "InvalidInput",
+        message: "Function arguments must be numeric or values",
+      },
+    });
+  });
 });

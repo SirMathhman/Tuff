@@ -1,12 +1,5 @@
 /* eslint-disable no-restricted-syntax */
-import {
-  Result,
-  InterpretError,
-  Token,
-  ok,
-  err,
-  Value,
-} from "./types";
+import { Result, InterpretError, Token, ok, err, Value } from "./types";
 import {
   parseStructFields,
   parseStructLiteral,

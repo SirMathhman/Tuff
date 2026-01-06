@@ -64,12 +64,31 @@ export function parseCallExternal(
   if (typeof fv === "number" || fv instanceof Map)
     return err({ type: "InvalidInput", message: "Not a function" });
 
-  const tkOpen = { type: "op", value: "{" } as Token;
-  const tkClose = { type: "op", value: "}" } as Token;
   const fn = fv as FunctionValue;
-  const bodyTokens = fn.body as Token[];
-  const callTokens: Token[] = [tkOpen, ...bodyTokens, tkClose];
-  const ParserClass = (parser as any).constructor as new (tokens: Token[]) => any;
+  // arity check
+  if (args.length !== fn.params.length) {
+    return err({
+      type: "InvalidInput",
+      message: `Expected ${fn.params.length} arguments, got ${args.length}`,
+    });
+  }
+  return runFunctionInvocation(fn, args, name, parser);
+}
+
+function runFunctionInvocation(
+  fn: FunctionValue,
+  args: Value[],
+  name: string,
+  parser: any
+): Result<Value, InterpretError> {
+  const callTokens: Token[] = [
+    { type: "op", value: "{" },
+    ...fn.body,
+    { type: "op", value: "}" },
+  ];
+  const ParserClass = (parser as any).constructor as new (
+    tokens: Token[]
+  ) => any;
   const p2 = new ParserClass(callTokens);
   // param scope for args
   const paramScope = new Map<string, Value>();
@@ -87,7 +106,10 @@ export function parseCallExternal(
       message: `Error while invoking function ${name}: ${inner}`,
     });
   }
-  // unwrap return signal if present
-  if (typeof r.value === "object" && (r.value as ReturnSignalValue).type === "return") return ok((r.value as ReturnSignalValue).value);
+  if (
+    typeof r.value === "object" &&
+    (r.value as ReturnSignalValue).type === "return"
+  )
+    return ok((r.value as ReturnSignalValue).value);
   return ok(r.value);
 }
