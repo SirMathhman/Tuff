@@ -279,12 +279,14 @@ static int parse_declaration(const char **ptr, char *name_out, int start_vars) {
 	skip_ws(&cursor);
 	if (!parse_identifier(&cursor, name_out, sizeof(vars[0].name))) return 0;
 	skip_ws(&cursor);
-	if (*cursor != ':') return 0;
-	cursor++;
-	skip_ws(&cursor);
 	int vtype = VT_I32;
-	if (!parse_type(&cursor, &vtype)) return 0;
-	skip_ws(&cursor);
+	/* optional type annotation: ": I32" or ": Bool" */
+	if (*cursor == ':') {
+		cursor++;
+		skip_ws(&cursor);
+		if (!parse_type(&cursor, &vtype)) return 0;
+		skip_ws(&cursor);
+	}
 	if (*cursor != '=') return 0;
 	cursor++;
 	long long val = 0;
