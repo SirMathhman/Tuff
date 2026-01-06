@@ -78,6 +78,9 @@ static void test_stub_returns_negative_one(void) {
 	should_error("y = 1;");
 	/* Bool assignment */
 	should_eval("let mut b : Bool = false; b = true; b", 1);
+	/* If-expression tests */
+	should_eval("let x = if (true) 3 else 5; x", 3);
+	should_eval("let y = if (false) 3 else 5; y", 5);
 	printf("basic tests passed\n");
 }
 

@@ -82,9 +82,33 @@ static int parse_logical_and(const char **ptr, long long *out_val);
 static int parse_logical_or(const char **ptr, long long *out_val);
 static int parse_factor(const char **ptr, long long *out_val);
 
-/* factor := number | identifier | '(' expr ')' | boolean */
+/* helper: parse the tail of an if expression after 'if' was consumed */
+static int parse_if_tail(const char **ptr, long long *out_val) {
+	skip_ws(ptr);
+	if (**ptr != '(') return 0;
+	(*ptr)++; /* consume '(' */
+	long long cond = 0;
+	if (!parse_expr_internal(ptr, &cond)) return 0;
+	skip_ws(ptr);
+	if (**ptr != ')') return 0;
+	(*ptr)++; /* consume ')' */
+	long long then_val = 0;
+	if (!parse_expr_internal(ptr, &then_val)) return 0;
+	skip_ws(ptr);
+	if (!match_literal(ptr, "else", 1)) return 0;
+	long long else_val = 0;
+	if (!parse_expr_internal(ptr, &else_val)) return 0;
+	*out_val = (cond ? then_val : else_val);
+	return 1;
+}
+
+/* factor := number | identifier | '(' expr ')' | boolean | if-expression */
 static int parse_factor(const char **ptr, long long *out_val) {
 	skip_ws(ptr);
+	/* if-expression: if (cond) then_expr else else_expr */
+	if (match_literal(ptr, "if", 1)) {
+		return parse_if_tail(ptr, out_val);
+	}
 	if (match_literal(ptr, "true", 0)) {
 		*out_val = 1;
 		return 1;
@@ -174,7 +198,11 @@ static int parse_additive(const char **ptr, long long *out_val) {
 }
 
 /* logical */
-typedef struct { const char *token; int (*rhs_parser)(const char **, long long *); int is_or; } token_ctx;
+typedef struct {
+	const char *token;
+	int (*rhs_parser)(const char **, long long *);
+	int is_or;
+} token_ctx;
 
 static int parse_binseq_token(const char **ptr, long long *accum, const token_ctx *ctx) {
 	skip_ws(ptr);
