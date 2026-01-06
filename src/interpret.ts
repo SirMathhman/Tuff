@@ -35,6 +35,11 @@ interface TypeParseResult {
   nextIndex: number;
 }
 
+interface ExpressionEvalResult {
+  value: number;
+  nextIndex: number;
+}
+
 function parseOptionalType(
   tokensArr: Token[],
   cur: number
@@ -61,6 +66,19 @@ function indexUntilSemicolon(tokensArr: Token[], start: number): number {
   )
     j++;
   return j;
+}
+
+function evalExprUntilSemicolon(
+  tokensArr: Token[],
+  cur: number,
+  envMap: Map<string, Binding>
+): Result<ExpressionEvalResult, string> {
+  const j = indexUntilSemicolon(tokensArr, cur);
+  if (j >= tokensArr.length) return err("Invalid numeric input");
+  const exprTokens = tokensArr.slice(cur, j);
+  const valRes = evalExprWithEnv(exprTokens, envMap);
+  if (isErr(valRes)) return err(valRes.error);
+  return ok({ value: valRes.value, nextIndex: j + 1 });
 }
 
 function processLetStatement(
@@ -95,16 +113,12 @@ function processLetStatement(
     return err("Invalid numeric input");
   cur++;
 
-  // collect expression tokens until semicolon
-  const j = indexUntilSemicolon(tokensArr, cur);
-  if (j >= tokensArr.length) return err("Invalid numeric input");
-  const exprTokens = tokensArr.slice(cur, j);
-  const valRes = evalExprWithEnv(exprTokens, envMap);
-  if (isErr(valRes)) return err(valRes.error);
-  let val = valRes.value;
+  const evalRes = evalExprUntilSemicolon(tokensArr, cur, envMap);
+  if (isErr(evalRes)) return err(evalRes.error);
+  let { value: val, nextIndex: nextIdx } = evalRes.value;
   if (typeName === "I32") val = Math.trunc(val);
   envMap.set(name, { value: val, mutable });
-  return ok({ nextIndex: j + 1, value: val });
+  return ok({ nextIndex: nextIdx, value: val });
 }
 
 function processExpressionStatement(
@@ -147,15 +161,12 @@ function processAssignment(
   if (!binding.mutable) return err("Cannot assign to immutable variable");
 
   const cur = idx + 2;
-  const j = indexUntilSemicolon(tokensArr, cur);
-  if (j >= tokensArr.length) return err("Invalid numeric input");
-  const exprTokens = tokensArr.slice(cur, j);
-  const valRes = evalExprWithEnv(exprTokens, envMap);
-  if (isErr(valRes)) return err(valRes.error);
-  const val = valRes.value;
+  const evalRes = evalExprUntilSemicolon(tokensArr, cur, envMap);
+  if (isErr(evalRes)) return err(evalRes.error);
+  const { value: val, nextIndex } = evalRes.value;
   binding.value = val;
   envMap.set(name, binding);
-  return ok({ nextIndex: j + 1, value: val });
+  return ok({ nextIndex, value: val });
 }
 
 function processStatement(
