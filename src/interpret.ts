@@ -64,62 +64,22 @@ class Parser {
     return t[this.idx++];
   }
 
-  parseFactor(): Result<number, InterpretError> {
+  parsePrimary(): Result<number, InterpretError> {
     const tk = this.peek();
     if (!tk)
       return err({
         type: "InvalidInput",
         message: "Unable to interpret input",
       });
-    if (tk.type === "op" && tk.value === "-") {
-      this.consume();
-      const r = this.parseFactor();
-      return r.ok ? ok(-r.value) : err(r.error);
-    }
 
-    // parentheses support
+    // parentheses
     if (tk.type === "op" && tk.value === "(") {
-      this.consume();
-      const r = this.parseExpr();
-      if (!r.ok) return r;
-      const closing = this.consume();
-      if (!closing || closing.type !== "op" || closing.value !== ")") {
-        return err({
-          type: "InvalidInput",
-          message: "Missing closing parenthesis",
-        });
-      }
-      return ok(r.value);
+      return this.parseParenthesized();
     }
 
-    // conditional expression: if (cond) consequent else alternative
+    // conditional: if (cond) consequent else alternative
     if (tk.type === "id" && tk.value === "if") {
-      this.consume();
-      const open = this.consume();
-      if (!open || open.type !== "op" || open.value !== "(") {
-        return err({ type: "InvalidInput", message: "Expected ( after if" });
-      }
-      const cond = this.parseExpr();
-      if (!cond.ok) return cond;
-      const close = this.consume();
-      if (!close || close.type !== "op" || close.value !== ")") {
-        return err({
-          type: "InvalidInput",
-          message: "Expected ) after condition",
-        });
-      }
-      const cons = this.parseExpr();
-      if (!cons.ok) return cons;
-      const e = this.consume();
-      if (!e || e.type !== "id" || e.value !== "else") {
-        return err({
-          type: "InvalidInput",
-          message: "Expected else in conditional",
-        });
-      }
-      const alt = this.parseExpr();
-      if (!alt.ok) return alt;
-      return ok(cond.value !== 0 ? cons.value : alt.value);
+      return this.parseIfExpression();
     }
 
     // boolean literals
@@ -128,6 +88,7 @@ class Parser {
       return ok(tk.value === "true" ? 1 : 0);
     }
 
+    // numeric literal
     if (tk.type === "num") {
       this.consume();
       return ok(tk.value);
@@ -139,6 +100,68 @@ class Parser {
     }
 
     return err({ type: "InvalidInput", message: "Unable to interpret input" });
+  }
+
+  parseParenthesized(): Result<number, InterpretError> {
+    // assume current token is '('
+    this.consume();
+    const r = this.parseExpr();
+    if (!r.ok) return r;
+    const closing = this.consume();
+    if (!closing || closing.type !== "op" || closing.value !== ")") {
+      return err({
+        type: "InvalidInput",
+        message: "Missing closing parenthesis",
+      });
+    }
+    return ok(r.value);
+  }
+
+  parseIfExpression(): Result<number, InterpretError> {
+    // assume current token is 'if'
+    this.consume();
+    const open = this.consume();
+    if (!open || open.type !== "op" || open.value !== "(") {
+      return err({ type: "InvalidInput", message: "Expected ( after if" });
+    }
+    const cond = this.parseExpr();
+    if (!cond.ok) return cond;
+    const close = this.consume();
+    if (!close || close.type !== "op" || close.value !== ")") {
+      return err({
+        type: "InvalidInput",
+        message: "Expected ) after condition",
+      });
+    }
+    const cons = this.parseExpr();
+    if (!cons.ok) return cons;
+    const e = this.consume();
+    if (!e || e.type !== "id" || e.value !== "else") {
+      return err({
+        type: "InvalidInput",
+        message: "Expected else in conditional",
+      });
+    }
+    const alt = this.parseExpr();
+    if (!alt.ok) return alt;
+    return ok(cond.value !== 0 ? cons.value : alt.value);
+  }
+
+  parseFactor(): Result<number, InterpretError> {
+    const tk = this.peek();
+    if (!tk)
+      return err({
+        type: "InvalidInput",
+        message: "Unable to interpret input",
+      });
+
+    if (tk.type === "op" && tk.value === "-") {
+      this.consume();
+      const r = this.parseFactor();
+      return r.ok ? ok(-r.value) : err(r.error);
+    }
+
+    return this.parsePrimary();
   }
 
   parseTerm(): Result<number, InterpretError> {
@@ -233,7 +256,7 @@ export function interpret(input: string): Result<number, InterpretError> {
   const tokens: Token[] = raw.map((t) => {
     if (/^[+\-*/() ]$/.test(t)) return { type: "op", value: t } as OpToken;
     if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(t))
-      return { type: "id", value: t } as any;
+      return { type: "id", value: t } as IdToken;
     return { type: "num", value: Number(t) } as NumToken;
   });
 

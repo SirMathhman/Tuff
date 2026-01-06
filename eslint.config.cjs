@@ -71,6 +71,7 @@ module.exports = [
             "Avoid chained property or call access (a.b.c or a.b().c); prefer Law of Demeter (tell, don't ask).",
         },
       ],
+      "@typescript-eslint/no-explicit-any": ["error"],
       ...require("@typescript-eslint/eslint-plugin").configs.recommended.rules,
     },
   },
