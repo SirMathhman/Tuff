@@ -100,6 +100,71 @@ function collectBlockTokens(
   return ok(out);
 }
 
+/* eslint-disable no-restricted-syntax, complexity */
+function consumeTokenOrError(
+  parser: ParserLike
+): Result<Token, InterpretError> {
+  const consumed = parser.consume();
+  if (!consumed)
+    return err({ type: "InvalidInput", message: "Missing function body" });
+  return ok(consumed);
+}
+
+function collectExpressionTokens(
+  parser: ParserLike
+): Result<Token[], InterpretError> {
+  const out: Token[] = [];
+  let parenDepth = 0;
+  let done = false;
+  while (!done) {
+    const tk = parser.peek();
+    if (!tk) {
+      done = true;
+      break;
+    }
+    // stop at top-level semicolon
+    if (tk.type === "op" && tk.value === ";" && parenDepth === 0) {
+      const consumedR = consumeTokenOrError(parser);
+      if (!consumedR.ok) return consumedR;
+      out.push(consumedR.value);
+      done = true;
+      break;
+    }
+    if (tk.type === "op" && tk.value === "(") {
+      parenDepth++;
+      const consumedR = consumeTokenOrError(parser);
+      if (!consumedR.ok) return consumedR;
+      out.push(consumedR.value);
+      continue;
+    }
+
+    if (tk.type === "op" && tk.value === ")") {
+      if (parenDepth > 0) parenDepth--;
+      const consumedR = consumeTokenOrError(parser);
+      if (!consumedR.ok) return consumedR;
+      out.push(consumedR.value);
+      continue;
+    }
+
+    // stop at closing brace if not inside parens (declaration end)
+    if (tk.type === "op" && tk.value === "}" && parenDepth === 0) {
+      done = true;
+      break;
+    }
+
+    // otherwise consume token as part of expression
+    const consumedR = consumeTokenOrError(parser);
+    if (!consumedR.ok) {
+      done = true;
+      break;
+    }
+    out.push(consumedR.value);
+  }
+  if (out.length === 0)
+    return err({ type: "InvalidInput", message: "Missing function body" });
+  return ok(out);
+}
+
 export function parseFunctionDeclaration(
   parser: ParserLike
 ): Result<Value, InterpretError> {
@@ -132,9 +197,17 @@ export function parseFunctionDeclaration(
   const arrowR = expectArrow(parser);
   if (!arrowR.ok) return arrowR;
 
-  // collect braced body tokens
-  const bodyR = collectBlockTokens(parser);
-  if (!bodyR.ok) return bodyR;
+  // function body can be either a braced block or a single expression
+  const next = parser.peek();
+  let bodyTokensR: Result<Token[], InterpretError>;
+  if (next && next.type === "op" && next.value === "{") {
+    bodyTokensR = collectBlockTokens(parser);
+    if (!bodyTokensR.ok) return err(bodyTokensR.error);
+  } else {
+    // collect tokens for a single expression until optional semicolon
+    bodyTokensR = collectExpressionTokens(parser);
+    if (!bodyTokensR.ok) return err(bodyTokensR.error);
+  }
 
   const scopes = parser.getScopes();
   const top = scopes[scopes.length - 1];
@@ -142,7 +215,7 @@ export function parseFunctionDeclaration(
     return err({ type: "InvalidInput", message: "Invalid block scope" });
 
   const params = paramsR.value;
-  const fv: FunctionValue = { type: "fn", params, body: bodyR.value };
+  const fv: FunctionValue = { type: "fn", params, body: bodyTokensR.value };
 
   const name = nameTok.value;
   if (top.has(name))
