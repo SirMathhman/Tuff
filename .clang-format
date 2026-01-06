@@ -3,5 +3,8 @@
 BasedOnStyle: LLVM
 BreakBeforeBraces: Attach
 AllowShortFunctionsOnASingleLine: Empty
+# Use tabs for indentation (one tab character). TabWidth controls visual width.
+UseTab: ForIndentation
+TabWidth: 4
 IndentWidth: 4
 ColumnLimit: 100
