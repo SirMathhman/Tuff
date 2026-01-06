@@ -6,7 +6,7 @@ describe("interpret", () => {
     expect(typeof interpret).toBe("function");
   });
 
-  it("throws Not implemented error when called", () => {
-    expect(() => interpret("any input")).toThrow("Not implemented");
+  it('parses integer numeric string', () => {
+    expect(interpret('100')).toBe(100);
   });
 });
