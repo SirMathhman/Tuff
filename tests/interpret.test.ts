@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { interpret } from "../src/interpret";
+import { isOk, isErr } from "../src/result";
 
 describe("interpret", () => {
   it("is a function", () => {
@@ -7,40 +8,61 @@ describe("interpret", () => {
   });
 
   it("parses integer numeric string", () => {
-    expect(interpret("100")).toBe(100);
+    const r = interpret("1");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(1);
   });
 
   it("parses a simple addition expression", () => {
-    expect(interpret("1 + 2")).toBe(3);
+    const r = interpret("1 + 2");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(3);
   });
 
   it("parses chained addition expressions", () => {
-    expect(interpret("1+2+3")).toBe(6);
+    const r = interpret("1+2+3");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(6);
   });
 
   it("parses spaced chained addition expressions", () => {
-    expect(interpret("1 + 2 + 3")).toBe(6);
+    const r = interpret("1 + 2 + 3");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(6);
   });
 
   it("parses subtraction", () => {
-    expect(interpret("10 - 5")).toBe(5);
+    const r = interpret("10 - 5");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(5);
   });
 
   it("parses mixed left-to-right expressions", () => {
-    expect(interpret("10 - 5 + 3")).toBe(8);
-    expect(interpret("1 + 2 - 3")).toBe(0);
-    expect(interpret("1 - 2 - 3")).toBe(-4);
+    const r1 = interpret("10 - 5 + 3");
+    expect(isOk(r1)).toBe(true);
+    if (isOk(r1)) expect(r1.value).toBe(8);
+    const r2 = interpret("1 + 2 - 3");
+    expect(isOk(r2)).toBe(true);
+    if (isOk(r2)) expect(r2.value).toBe(0);
+    const r3 = interpret("1 - 2 - 3");
+    expect(isOk(r3)).toBe(true);
+    if (isOk(r3)) expect(r3.value).toBe(-4);
   });
 
   it("handles decimals and negatives", () => {
-    expect(interpret("-1 + 2.5")).toBe(1.5);
+    const r = interpret("-1 + 2.5");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(1.5);
   });
 
   it("supports unary minus after operator", () => {
-    expect(interpret("1 - -2")).toBe(3);
+    const r = interpret("1 - -2");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(3);
   });
 
-  it("throws on invalid tokens", () => {
-    expect(() => interpret("a - 1")).toThrow("Invalid numeric input");
+  it("returns Err on invalid tokens", () => {
+    const r = interpret("a - 1");
+    expect(isErr(r)).toBe(true);
   });
 });

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { evalLeftToRight } from "../src/evalLeftToRight";
+import { isOk, isErr } from "../src/result";
 
 describe("evalLeftToRight", () => {
   it("evaluates left-to-right", () => {
@@ -10,12 +11,13 @@ describe("evalLeftToRight", () => {
       { type: "op", value: "+" } as const,
       { type: "num", value: 3 } as const,
     ];
-    expect(evalLeftToRight(tokens as any)).toBe(8);
+    const r = evalLeftToRight(tokens as any);
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(8);
   });
 
-  it("throws on invalid token sequence", () => {
-    expect(() => evalLeftToRight([{ type: "op", value: "+" } as any])).toThrow(
-      "Invalid numeric input"
-    );
+  it("returns Err on invalid token sequence", () => {
+    const r = evalLeftToRight([{ type: "op", value: "+" } as any]);
+    expect(isErr(r)).toBe(true);
   });
 });

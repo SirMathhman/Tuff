@@ -1,4 +1,5 @@
 import { parseNumber } from "./parseNumber";
+import { Result, ok, err, isOk } from "./result";
 
 export interface NumToken {
   type: "num";
@@ -10,7 +11,7 @@ export interface OpToken {
 }
 export type Token = NumToken | OpToken;
 
-export function tokenize(s: string): Token[] {
+export function tokenize(s: string): Result<Token[], string> {
   const tokens: Token[] = [];
   let i = 0;
   const len = s.length;
@@ -23,10 +24,12 @@ export function tokenize(s: string): Token[] {
     }
 
     if (ch === "+" || ch === "-") {
-      const prev = tokens.length ? tokens[tokens.length - 1] : null;
+      const prev = tokens.length ? tokens[tokens.length - 1] : undefined;
       // unary sign if at start or after an operator
       if (!prev || prev.type === "op") {
-        const { value, nextIndex } = parseNumber(s, i);
+        const parsed = parseNumber(s, i);
+        if (!isOk(parsed)) return err(parsed.error);
+        const { value, nextIndex } = parsed.value;
         tokens.push({ type: "num", value });
         i = nextIndex;
         continue;
@@ -38,14 +41,16 @@ export function tokenize(s: string): Token[] {
     }
 
     if (/[0-9.]/.test(ch)) {
-      const { value, nextIndex } = parseNumber(s, i);
+      const parsed = parseNumber(s, i);
+      if (!isOk(parsed)) return err(parsed.error);
+      const { value, nextIndex } = parsed.value;
       tokens.push({ type: "num", value });
       i = nextIndex;
       continue;
     }
 
-    throw new Error("Invalid numeric input");
+    return err("Invalid numeric input");
   }
 
-  return tokens;
+  return ok(tokens);
 }

@@ -1,9 +1,14 @@
+import { Result, ok, err } from "./result";
+
 export interface ParseNumberResult {
   value: number;
   nextIndex: number;
 }
 
-export function parseNumber(s: string, i: number): ParseNumberResult {
+export function parseNumber(
+  s: string,
+  i: number
+): Result<ParseNumberResult, string> {
   const len = s.length;
   let j = i;
 
@@ -38,10 +43,10 @@ export function parseNumber(s: string, i: number): ParseNumberResult {
     }
   }
 
-  if (!hasDigits) throw new Error("Invalid numeric input");
+  if (!hasDigits) return err("Invalid numeric input");
 
   const value = sign * Number(numStr);
-  if (Number.isNaN(value)) throw new Error("Invalid numeric input");
+  if (Number.isNaN(value)) return err("Invalid numeric input");
 
-  return { value, nextIndex: j };
+  return ok({ value, nextIndex: j });
 }

@@ -27,6 +27,16 @@ module.exports = [
           message:
             "Avoid anonymous object types; use a named `interface` instead.",
         },
+        {
+          selector: "ThrowStatement",
+          message:
+            "Do not use `throw`. Return a `Result<T, X>` value instead of throwing exceptions.",
+        },
+        {
+          selector: "Literal[value=null]",
+          message:
+            "Do not use `null`. Prefer `undefined`, `Result`, or a discriminated union for missing values.",
+        },
       ],
     },
   },
