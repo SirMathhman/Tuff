@@ -50,7 +50,7 @@ function err<T, E>(error: E): Result<T, E> {
 
 // Parser moved to module scope so interpret remains small
 /* eslint-disable no-restricted-syntax */
-const parserScopes = new WeakMap<Parser, Record<string, number>[]>();
+const parserScopes = new WeakMap<Parser, Map<string, number>[]>();
 
 class Parser {
   private tokens: Token[];
@@ -68,25 +68,25 @@ class Parser {
     return t[this.idx++];
   }
 
-  private getScopes(): Record<string, number>[] {
+  private getScopes(): Map<string, number>[] {
     const s = parserScopes.get(this);
     if (!s) {
-      const arr: Record<string, number>[] = [];
+      const arr: Map<string, number>[] = [];
       parserScopes.set(this, arr);
       return arr;
     }
     return s;
   }
 
-  private currentScope(): Record<string, number> | undefined {
+  private currentScope(): Map<string, number> | undefined {
     const s = this.getScopes();
     const ln = s.length;
     if (ln === 0) return undefined;
     return s[ln - 1];
   }
 
-  private hasOwnProp(obj: Record<string, number>, key: string): boolean {
-    return Object.prototype.hasOwnProperty.call(obj, key);
+  private scopeHas(scope: Map<string, number>, key: string): boolean {
+    return scope.has(key);
   }
 
   private lookupVar(name: string): number | undefined {
@@ -94,15 +94,15 @@ class Parser {
     const ln = s.length;
     for (let i = ln - 1; i >= 0; i--) {
       const scope = s[i];
-      if (this.hasOwnProp(scope, name)) {
-        return scope[name];
+      if (this.scopeHas(scope, name)) {
+        return scope.get(name);
       }
     }
     return undefined;
   }
 
   private pushScope(): void {
-    this.getScopes().push({});
+    this.getScopes().push(new Map<string, number>());
   }
 
   private popScope(): void {
@@ -174,9 +174,8 @@ class Parser {
     if (!semiR.ok) return semiR;
 
     const top = this.currentScope();
-    if (!top)
-      return err({ type: "InvalidInput", message: "Invalid block scope" });
-    top[name] = valR.value;
+    if (!top) return err({ type: "InvalidInput", message: "Invalid block scope" });
+    top.set(name, valR.value);
     return ok(valR.value);
   }
 
