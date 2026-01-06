@@ -124,7 +124,10 @@ class Parser {
       const typeTok = this.consume();
       if (!this.isIdToken(typeTok)) {
         return {
-          error: { type: "InvalidInput", message: "Expected type name after :" },
+          error: {
+            type: "InvalidInput",
+            message: "Expected type name after :",
+          },
         };
       }
       return { typeName: typeTok.value };
@@ -141,6 +144,22 @@ class Parser {
       return { type: "InvalidInput", message };
     }
     return undefined;
+  }
+
+  private checkTypeConformance(typeName: string, value: number): InterpretError | undefined {
+    if (typeName === "Bool") {
+      if (!(value === 0 || value === 1)) {
+        return { type: "InvalidInput", message: "Type mismatch: expected Bool" };
+      }
+      return undefined;
+    }
+    if (typeName === "I32") {
+      if (!Number.isInteger(value)) {
+        return { type: "InvalidInput", message: "Type mismatch: expected I32" };
+      }
+      return undefined;
+    }
+    return { type: "InvalidInput", message: `Unknown type: ${typeName}` };
   }
 
   private parseLetDeclaration(): Result<number, InterpretError> {
@@ -170,18 +189,8 @@ class Parser {
 
     // simple type checks for named types
     if (typeName) {
-      if (typeName === "Bool") {
-        // Bool must be 0 or 1 (true/false)
-        if (!(valR.value === 0 || valR.value === 1)) {
-          return err({ type: "InvalidInput", message: "Type mismatch: expected Bool" });
-        }
-      } else if (typeName === "I32") {
-        if (!Number.isInteger(valR.value)) {
-          return err({ type: "InvalidInput", message: "Type mismatch: expected I32" });
-        }
-      } else {
-        return err({ type: "InvalidInput", message: `Unknown type: ${typeName}` });
-      }
+      const tcErr = this.checkTypeConformance(typeName, valR.value);
+      if (tcErr) return err(tcErr);
     }
 
     const semiErr = this.consumeExpectedOp(
@@ -204,6 +213,41 @@ class Parser {
 
     top.set(name, valR.value);
     return ok(valR.value);
+  }
+
+  private parseStructDeclaration(): Result<number, InterpretError> {
+    // assume current token is 'struct'
+    this.consume();
+    const nameTok = this.consume();
+    if (!nameTok || nameTok.type !== "id") {
+      return err({
+        type: "InvalidInput",
+        message: "Expected identifier after struct",
+      });
+    }
+    const open = this.consume();
+    if (!open || open.type !== "op" || open.value !== "{") {
+      return err({
+        type: "InvalidInput",
+        message: "Expected { after struct name",
+      });
+    }
+    // consume until matching closing brace (supports nested braces)
+    let depth = 1;
+    while (true) {
+      const p = this.consume();
+      if (!p) {
+        return err({ type: "InvalidInput", message: "Missing closing brace" });
+      }
+      if (p.type === "op") {
+        if (p.value === "{") depth++;
+        else if (p.value === "}") {
+          depth--;
+          if (depth === 0) break;
+        }
+      }
+    }
+    return ok(0);
   }
 
   private requireToken(): Result<Token, InterpretError> {
@@ -262,6 +306,12 @@ class Parser {
         type: "InvalidInput",
         message: "Unable to interpret input",
       });
+
+    if (this.isIdToken(p) && p.value === "struct") {
+      const sR = this.parseStructDeclaration();
+      if (!sR.ok) return sR;
+      return ok(sR.value);
+    }
 
     if (this.isIdToken(p) && p.value === "let") {
       const declR = this.parseLetDeclaration();

@@ -121,6 +121,15 @@ describe("interpret", () => {
       });
     }
   });
+
+  test("struct declarations return 0", () => {
+    expect(interpret("struct Empty {}")).toEqual({ ok: true, value: 0 });
+    expect(interpret("struct Empty {} struct Other {}")).toEqual({
+      ok: true,
+      value: 0,
+    });
+  });
+
   test("conditional expressions", () => {
     expect(interpret("(2 + if (true) 10 else 3) / 6")).toEqual({
       ok: true,
