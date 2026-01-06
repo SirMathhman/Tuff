@@ -102,6 +102,25 @@ describe("interpret", () => {
     });
     expect(interpret("let foo:Bool=true;foo")).toEqual({ ok: true, value: 1 });
   });
+  test("type checking for let declarations", () => {
+    const r = interpret("let foo : Bool = 100; foo");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error).toEqual({
+        type: "InvalidInput",
+        message: "Type mismatch: expected Bool",
+      });
+    }
+
+    const r2 = interpret("let x : I32 = 1.5; x");
+    expect(r2.ok).toBe(false);
+    if (!r2.ok) {
+      expect(r2.error).toEqual({
+        type: "InvalidInput",
+        message: "Type mismatch: expected I32",
+      });
+    }
+  });
   test("conditional expressions", () => {
     expect(interpret("(2 + if (true) 10 else 3) / 6")).toEqual({
       ok: true,

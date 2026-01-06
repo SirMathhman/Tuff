@@ -117,16 +117,19 @@ class Parser {
     return Boolean(tk && tk.type === "id");
   }
 
-  private consumeOptionalType(): InterpretError | undefined {
+  private consumeOptionalType(): { typeName?: string; error?: InterpretError } {
     const maybeColon = this.peek();
     if (this.isOpToken(maybeColon, ":")) {
       this.consume();
       const typeTok = this.consume();
       if (!this.isIdToken(typeTok)) {
-        return { type: "InvalidInput", message: "Expected type name after :" };
+        return {
+          error: { type: "InvalidInput", message: "Expected type name after :" },
+        };
       }
+      return { typeName: typeTok.value };
     }
-    return undefined;
+    return {};
   }
 
   private consumeExpectedOp(
@@ -152,8 +155,9 @@ class Parser {
     }
     const name = nameTok.value;
 
-    const typeErr = this.consumeOptionalType();
-    if (typeErr) return err(typeErr);
+    const typeRes = this.consumeOptionalType();
+    if (typeRes.error) return err(typeRes.error);
+    const typeName = typeRes.typeName;
 
     const eqErr = this.consumeExpectedOp(
       "=",
@@ -163,6 +167,22 @@ class Parser {
 
     const valR = this.parseExpr();
     if (!valR.ok) return valR;
+
+    // simple type checks for named types
+    if (typeName) {
+      if (typeName === "Bool") {
+        // Bool must be 0 or 1 (true/false)
+        if (!(valR.value === 0 || valR.value === 1)) {
+          return err({ type: "InvalidInput", message: "Type mismatch: expected Bool" });
+        }
+      } else if (typeName === "I32") {
+        if (!Number.isInteger(valR.value)) {
+          return err({ type: "InvalidInput", message: "Type mismatch: expected I32" });
+        }
+      } else {
+        return err({ type: "InvalidInput", message: `Unknown type: ${typeName}` });
+      }
+    }
 
     const semiErr = this.consumeExpectedOp(
       ";",
