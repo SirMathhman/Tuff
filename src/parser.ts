@@ -35,11 +35,9 @@ import { runParser } from "./parseRunner";
 class Parser implements ParserLike {
   private tokens: Token[];
   private idx = 0;
-  private readonly self: Parser;
   constructor(tokens: Token[]) {
     this.tokens = tokens;
-    this.self = this;
-    initScopes(this.self);
+    initScopes(this);
   }
   peek(): Token | undefined {
     const t = this.tokens;
@@ -51,11 +49,11 @@ class Parser implements ParserLike {
   }
 
   public getScopes(): Map<string, Value>[] {
-    return getValueScopes(this.self);
+    return getValueScopes(this);
   }
 
   private getTypeScopes(): Map<string, string[]>[] {
-    return getStructTypeScopes(this.self);
+    return getStructTypeScopes(this);
   }
 
   private currentTypeScope(): Map<string, string[]> | undefined {
@@ -65,13 +63,13 @@ class Parser implements ParserLike {
     return s[ln - 1];
   }
   private getVarTypeScopes(): Map<string, string | undefined>[] {
-    return getVarTypeScopes(this.self);
+    return getVarTypeScopes(this);
   }
   private getVarMutabilityScopes(): Map<string, boolean>[] {
-    return getVarMutabilityScopes(this.self);
+    return getVarMutabilityScopes(this);
   }
   private getVarInitializedScopes(): Map<string, boolean>[] {
-    return getVarInitializedScopes(this.self);
+    return getVarInitializedScopes(this);
   }
   private currentVarTypeScope(): Map<string, string | undefined> | undefined {
     const s = this.getVarTypeScopes();
@@ -345,7 +343,7 @@ class Parser implements ParserLike {
       return err({ type: "InvalidInput", message: "Duplicate declaration" });
     }
 
-    const fieldsR = parseStructFields(this.self);
+    const fieldsR = parseStructFields(this);
     if (!fieldsR.ok) return fieldsR;
 
     // record type definition in current type scope
@@ -360,7 +358,7 @@ class Parser implements ParserLike {
   }
 
   public parseFunctionDeclaration(): Result<Value, InterpretError> {
-    return parseFunctionDeclarationHelper(this.self);
+    return parseFunctionDeclarationHelper(this);
   }
 
   private requireToken(): Result<Token, InterpretError> {
@@ -385,12 +383,12 @@ class Parser implements ParserLike {
 
     // braces (block/grouping)
     if (tk.type === "op" && tk.value === "{") {
-      return parseBraced(this.self);
+      return parseBraced(this);
     }
 
     // conditional: if (cond) consequent else alternative
     if (tk.type === "id" && tk.value === "if") {
-      return parseIfExpression(this.self);
+      return parseIfExpression(this);
     }
 
     // literals and identifiers
@@ -411,7 +409,7 @@ class Parser implements ParserLike {
   }
 
   public parseCall(name: string): Result<Value, InterpretError> {
-    return parseCallExternal(this.self, name);
+    return parseCallExternal(this, name);
   }
 
   public createChildParser(tokens: Token[]): Parser {
@@ -490,7 +488,7 @@ class Parser implements ParserLike {
         });
       // consume type name
       this.consume();
-      return parseStructLiteral(this.self, typeDef);
+      return parseStructLiteral(this, typeDef);
     }
 
     // function call: id(arg1, arg2)
@@ -502,7 +500,7 @@ class Parser implements ParserLike {
     // member access: var.field
     const maybeDot = next;
     if (maybeDot && maybeDot.type === "op" && maybeDot.value === ".") {
-      return parseMemberAccess(this.self, tk.value);
+      return parseMemberAccess(this, tk.value);
     }
 
     // otherwise variable lookup
@@ -516,7 +514,7 @@ class Parser implements ParserLike {
   }
 
   parseFactor(): Result<Value, InterpretError> {
-    return parseFactorHelper(this.self);
+    return parseFactorHelper(this);
   }
 
   private parseBinary(
@@ -524,19 +522,19 @@ class Parser implements ParserLike {
     ops: Set<string>,
     apply: (op: string, a: number, b: number) => number
   ): Result<Value, InterpretError> {
-    return parseBinaryHelper(this.self, nextParser, ops, apply);
+    return parseBinaryHelper(this, nextParser, ops, apply);
   }
 
   parseTerm(): Result<Value, InterpretError> {
-    return parseTermHelper(this.self);
+    return parseTermHelper(this);
   }
 
   parseExpr(): Result<Value, InterpretError> {
-    return parseExprHelper(this.self);
+    return parseExprHelper(this);
   }
 
   parse(): Result<Value, InterpretError> {
-    return runParser(this.self);
+    return runParser(this);
   }
 }
 

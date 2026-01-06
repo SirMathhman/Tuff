@@ -10,11 +10,9 @@ A tiny TypeScript interpreter with a strict lint + test gate.
 
 ## Notes
 
-### Lint rule: do not pass `this` as an argument
+### Lint rule: `@typescript-eslint/no-this-alias`
 
-This repo enforces a custom ESLint rule (`local/no-this-argument`) that disallows passing `this` directly as a function/constructor argument (e.g. `helper(this)`).
-
-If you need to pass the current instance, capture an alias first (e.g. `const self = this; helper(self)`), or refactor so the helper is a method.
+This repo enforces `@typescript-eslint/no-this-alias` as an error, which disallows aliasing `this` to a local variable (e.g. `const self = this`).
 
 The interpreter is organized into small modules under `src/`.
 
