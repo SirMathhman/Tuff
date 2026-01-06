@@ -118,29 +118,48 @@ export function parseFunctionDeclaration(
   return ok(0);
 }
 
-function parseOptionalReturnType(parser: ParserLike): Result<void, InterpretError> {
+function parseOptionalReturnType(
+  parser: ParserLike
+): Result<void, InterpretError> {
   const maybeColon = parser.peek();
   if (maybeColon && maybeColon.type === "op" && maybeColon.value === ":") {
     parser.consume();
     const typeTok = parser.consume();
-    if (!typeTok || typeTok.type !== "id") return err({ type: "InvalidInput", message: "Expected type name after :" });
+    if (!typeTok || typeTok.type !== "id")
+      return err({
+        type: "InvalidInput",
+        message: "Expected type name after :",
+      });
   }
   return ok(undefined);
 }
 
 function expectArrow(parser: ParserLike): Result<void, InterpretError> {
   const a = parser.consume();
-  if (!a || a.type !== "op" || a.value !== "=") return err({ type: "InvalidInput", message: "Expected => in function declaration" });
+  if (!a || a.type !== "op" || a.value !== "=")
+    return err({
+      type: "InvalidInput",
+      message: "Expected => in function declaration",
+    });
   const b = parser.consume();
-  if (!b || b.type !== "op" || b.value !== ">") return err({ type: "InvalidInput", message: "Expected => in function declaration" });
+  if (!b || b.type !== "op" || b.value !== ">")
+    return err({
+      type: "InvalidInput",
+      message: "Expected => in function declaration",
+    });
   return ok(undefined);
 }
 
-function registerFunctionName(parser: ParserLike, name: string): Result<void, InterpretError> {
+function registerFunctionName(
+  parser: ParserLike,
+  name: string
+): Result<void, InterpretError> {
   const scopes = parser.getScopes();
   const top = scopes[scopes.length - 1];
-  if (!top) return err({ type: "InvalidInput", message: "Invalid block scope" });
-  if (top.has(name)) return err({ type: "InvalidInput", message: "Duplicate declaration" });
+  if (!top)
+    return err({ type: "InvalidInput", message: "Invalid block scope" });
+  if (top.has(name))
+    return err({ type: "InvalidInput", message: "Duplicate declaration" });
   top.set(name, 0);
   return ok(undefined);
 }
