@@ -218,15 +218,39 @@ describe("interpret - if expressions", () => {
     if (isOk(r)) expect(r.value).toBe(1);
   });
 
-    it("allows initializing an uninitialized variable inside if/else branches", () => {
-      const r = interpret("let x : I32; if (true) x = 3; else x = 5; x");
-      expect(isOk(r)).toBe(true);
-      if (isOk(r)) expect(r.value).toBe(3);
-    });
+  it("allows initializing an uninitialized variable inside if/else branches", () => {
+    const r = interpret("let x : I32; if (true) x = 3; else x = 5; x");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(3);
+  });
 
-    it("assigns the else branch when condition is false", () => {
-      const r = interpret("let x : I32; if (false) x = 3; else x = 5; x");
-      expect(isOk(r)).toBe(true);
-      if (isOk(r)) expect(r.value).toBe(5);
-    });
+  it("assigns the else branch when condition is false", () => {
+    const r = interpret("let x : I32; if (false) x = 3; else x = 5; x");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(5);
+  });
+
+  it("supports else-if chains (first branch)", () => {
+    const r = interpret(
+      "let x : I32; if (true) x = 3; else if (true) x = 5; else x = 4; x"
+    );
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(3);
+  });
+
+  it("supports else-if chains (second branch)", () => {
+    const r = interpret(
+      "let x : I32; if (false) x = 3; else if (true) x = 5; else x = 4; x"
+    );
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(5);
+  });
+
+  it("supports else-if chains (else branch)", () => {
+    const r = interpret(
+      "let x : I32; if (false) x = 3; else if (false) x = 5; else x = 4; x"
+    );
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toBe(4);
+  });
 });
