@@ -117,7 +117,7 @@ class Parser {
     return Boolean(tk && tk.type === "id");
   }
 
-  private consumeOptionalType(): Result<null, InterpretError> {
+  private consumeOptionalType(): Result<undefined, InterpretError> {
     const maybeColon = this.peek();
     if (this.isOpToken(maybeColon, ":")) {
       this.consume();
@@ -129,18 +129,18 @@ class Parser {
         });
       }
     }
-    return ok(null);
+    return ok(undefined);
   }
 
   private consumeExpectedOp(
     value: string,
     message: string
-  ): Result<null, InterpretError> {
+  ): Result<undefined, InterpretError> {
     const tk = this.consume();
     if (!tk || tk.type !== "op" || tk.value !== value) {
       return err({ type: "InvalidInput", message });
     }
-    return ok(null);
+    return ok(undefined);
   }
 
   private parseLetDeclaration(): Result<number, InterpretError> {
@@ -174,7 +174,8 @@ class Parser {
     if (!semiR.ok) return semiR;
 
     const top = this.currentScope();
-    if (!top) return err({ type: "InvalidInput", message: "Invalid block scope" });
+    if (!top)
+      return err({ type: "InvalidInput", message: "Invalid block scope" });
     top.set(name, valR.value);
     return ok(valR.value);
   }
