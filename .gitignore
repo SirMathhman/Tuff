@@ -19,3 +19,6 @@ tests/**/*.d.ts
 test-debug.js
 test.log
 test_output.txt
+
+# Scripts
+scripts/*.py

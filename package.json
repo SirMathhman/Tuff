@@ -9,6 +9,7 @@
     "lint": "eslint . --ext .ts",
     "cpd": "pmd cpd -d src,tests --minimum-tokens 50 --language typescript --format text --ignore-identifiers --ignore-literals",
     "check-dir-files": "python scripts/check_dir_file_count.py .",
+    "check-dir-files-ci": "python scripts/check_dir_file_count.py . --max 10",
     "prepare": "husky install"
   },
   "devDependencies": {
