@@ -77,6 +77,11 @@ describe("run", () => {
     expect(runModule.run(code, "false")).toBe(0);
   });
 
+  test("assign read<I32>() to variable and return", () => {
+    const code = "let x = read<I32>(); x";
+    expect(runModule.run(code, "100")).toBe(100);
+  });
+
   test("boolean operators work with read<Bool>()", () => {
     expect(runModule.run("read<Bool>() && read<Bool>()", "true false")).toBe(0);
     expect(runModule.run("read<Bool>() && read<Bool>()", "true true")).toBe(1);
