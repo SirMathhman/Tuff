@@ -1,6 +1,33 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 
+const noRecordRule = {
+  meta: {
+    type: "problem",
+    docs: {
+      description: "Disallow Record type, use Map instead",
+    },
+  },
+  create(context) {
+    return {
+      TSTypeReference(node) {
+        if (node.typeName.name === "Record") {
+          context.report({
+            node,
+            message: "Do not use Record type. Use Map instead.",
+          });
+        }
+      },
+    };
+  },
+};
+
+const customPlugin = {
+  rules: {
+    "no-record": noRecordRule,
+  },
+};
+
 export default [
   {
     ignores: ["node_modules/", "dist/", "coverage/"],
@@ -17,14 +44,17 @@ export default [
         sourceType: "module",
       },
     },
+    plugins: {
+      custom: customPlugin,
+    },
     rules: {
       complexity: ["error", 15],
-      "max-depth": ["error", 4],
+      "custom/no-record": "error",
       "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_" },
       ],
-      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-explicit-any": "error",
     },
   },
 ];
