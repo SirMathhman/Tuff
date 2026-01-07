@@ -4,6 +4,8 @@ import { Result, ok, err, isErr } from "./result";
 import {
   Binding,
   InlineIfResult,
+  FunctionBinding,
+  FunctionParameter,
   evalInlineMatchToNumToken,
 } from "./matchEval";
 import { evalExprUntilSemicolon, tryAssignment } from "./assignmentEval";
@@ -170,6 +172,81 @@ interface SubstituteResult {
   consumed: number;
 }
 
+function evaluateFunctionCall(
+  tokens: Token[],
+  idx: number,
+  env: Map<string, Binding>
+): Result<SubstituteResult, string> {
+  const nameTok = tokens[idx];
+  if (nameTok.type !== "ident") return err("Invalid numeric input");
+  const fnName = nameTok.value as string;
+
+  const parenTok = tokens[idx + 1];
+  if (!parenTok || parenTok.type !== "paren" || parenTok.value !== "(") {
+    return err("Invalid numeric input");
+  }
+
+  const fnBinding = env.get(fnName);
+  if (!fnBinding || fnBinding.type !== "fn") {
+    return err("Undefined function");
+  }
+
+  const argEnd = findMatchingParen(tokens, idx + 1);
+  if (argEnd === -1) return err("Invalid numeric input");
+
+  const argTokens = tokens.slice(idx + 2, argEnd);
+
+  if (argTokens.length === 0 && fnBinding.params.length === 0) {
+    const result = executeFunction(fnBinding, [], env);
+    if (isErr(result)) return err(result.error);
+    return ok({
+      token: { type: "num", value: result.value },
+      consumed: argEnd - idx + 1,
+    });
+  }
+
+  const argRes = evalExprWithEnv(argTokens, env);
+  if (isErr(argRes)) return err(argRes.error);
+
+  const args = [argRes.value];
+  const result = executeFunction(fnBinding, args, env);
+  if (isErr(result)) return err(result.error);
+
+  return ok({
+    token: { type: "num", value: result.value },
+    consumed: argEnd - idx + 1,
+  });
+}
+
+function executeFunction(
+  fnBinding: FunctionBinding,
+  args: number[],
+  parentEnv: Map<string, Binding>
+): Result<number, string> {
+  if (args.length !== fnBinding.params.length) {
+    return err("Invalid numeric input");
+  }
+
+  const fnEnv = new Map(parentEnv);
+
+  for (let i = 0; i < fnBinding.params.length; i++) {
+    const param = fnBinding.params[i];
+    let argVal = args[i];
+    if (param.typeName === "I32") {
+      argVal = Math.trunc(argVal);
+    }
+    fnEnv.set(param.name, { type: "var", value: argVal, mutable: false, typeName: param.typeName });
+  }
+
+  const bodyRes = processStatementsTokens(fnBinding.body, fnEnv);
+  if (isErr(bodyRes)) return err(bodyRes.error);
+
+  const result = bodyRes.value.lastVal;
+  if (result === undefined) return err("Function must return a value");
+
+  return ok(result);
+}
+
 function substituteIdentToken(
   tokens: Token[],
   idx: number,
@@ -203,7 +280,14 @@ function substituteIdentToken(
       consumed: inlineRes.value.consumed,
     });
   } else {
-    const b = env.get(t.value);
+    const nextTok = tokens[idx + 1];
+    if (nextTok && nextTok.type === "paren" && nextTok.value === "(") {
+      const callRes = evaluateFunctionCall(tokens, idx, env);
+      if (isErr(callRes)) return err(callRes.error);
+      return ok(callRes.value);
+    }
+
+    const b = env.get(t.value as string);
     if (b === undefined) return err("Undefined variable");
     if (b.type !== "var") return err("Cannot use function as value");
     if (b.value === undefined) return err("Uninitialized variable");
