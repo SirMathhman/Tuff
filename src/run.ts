@@ -62,14 +62,11 @@ function parseFunctions(input: string): ParseFunctionsResult {
     const params = m[2];
     const body = m[3];
     if (names.has(name)) {
-      return {
-        code: input,
-        error: `(function(){ throw new Error("duplicate function declaration '${name}'"); })()`,
-      };
+      return { code: input, error: makeDuplicateError("function declaration", name) };
     }
     names.add(name);
 
-    const paramList = params
+    const paramNames = params
       .split(",")
       .map((p: string) => p.trim())
       .filter(Boolean)
@@ -77,8 +74,21 @@ function parseFunctions(input: string): ParseFunctionsResult {
         const pm = /^([A-Za-z_$][A-Za-z0-9_$]*)/.exec(p);
         return pm ? pm[1] : "";
       })
-      .filter(Boolean)
-      .join(", ");
+      .filter(Boolean);
+
+    // detect duplicate parameter names
+    const seen = new Set<string>();
+    for (const pn of paramNames) {
+      if (seen.has(pn)) {
+        return {
+          code: input,
+          error: `(function(){ throw new Error("duplicate parameter name '${pn}' in function '${name}'"); })()`,
+        };
+      }
+      seen.add(pn);
+    }
+
+    const paramList = paramNames.join(", ");
 
     const transformedBody = body.replace(/\byield\b/g, "return");
     const replacement = `const ${name} = function(${paramList}) { ${transformedBody} };`;
@@ -92,6 +102,10 @@ interface ParseDeclarationsResult {
   error?: string;
 }
 
+function makeDuplicateError(kind: string, name: string): string {
+  return `(function(){ throw new Error("duplicate ${kind} '${name}'"); })()`;
+}
+
 function parseDeclarations(input: string): ParseDeclarationsResult {
   const declRegex = /\blet\s+(mut\s+)?([A-Za-z_$][A-Za-z0-9_$]*)/g;
   const decls = new Map<string, VarDeclaration>();
@@ -103,7 +117,7 @@ function parseDeclarations(input: string): ParseDeclarationsResult {
     if (decls.has(varName)) {
       return {
         decls,
-        error: `(function(){ throw new Error("duplicate variable declaration '${varName}'"); })()`,
+        error: makeDuplicateError("variable declaration", varName),
       };
     }
     decls.set(varName, { mut: !!m[1] });

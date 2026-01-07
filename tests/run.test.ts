@@ -115,4 +115,10 @@ describe("run", () => {
       "fn add(first : I32, second : I32) : I32 => { yield first + second; } fn add(first : I32, second : I32) : I32 => { yield first + second; }";
     expect(() => runModule.run(code)).toThrow(/duplicate function declaration/);
   });
+
+  test("duplicate function parameter name throws", () => {
+    const code =
+      "fn add(first : I32, first : I32) : I32 => { yield first + second; }";
+    expect(() => runModule.run(code)).toThrow(/duplicate parameter name/);
+  });
 });
