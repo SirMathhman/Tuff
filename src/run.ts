@@ -14,8 +14,9 @@ export function compile(input: string): string {
   // illegal assignments to immutable variables.
   const declRegex = /\blet\s+(mut\s+)?([A-Za-z_$][A-Za-z0-9_$]*)/g;
   const decls = new Map<string, { mut: boolean }>();
-  let m: RegExpExecArray | null;
-  while ((m = declRegex.exec(trimmed))) {
+  let m: RegExpExecArray | undefined;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  while ((m = declRegex.exec(trimmed) as any)) {
     decls.set(m[2], { mut: !!m[1] });
   }
 

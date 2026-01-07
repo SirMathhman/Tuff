@@ -39,6 +39,12 @@ const noNullRule = {
           });
         }
       },
+      TSNullKeyword(node) {
+        context.report({
+          node,
+          message: "Do not use null. Use undefined instead.",
+        });
+      },
     };
   },
 };
