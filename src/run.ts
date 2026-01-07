@@ -2,11 +2,11 @@
  * Compile a string into JavaScript source that evaluates to a number
  */
 export function compile(input: string): string {
-  // Recognize `read<I32>()` which should read a signed 32-bit integer from
-  // the provided `stdin` string. The compiled expression references a
-  // `stdin` variable that will be injected by `run` when evaluating.
-  if (/^\s*read<\s*I32\s*>\s*\(\s*\)\s*$/.test(input)) {
-    return 'parseInt(stdin, 10)';
+  // Replace all occurrences of `read<I32>()` with calls to a runtime helper
+  // function `readI32()` which `run` will provide when evaluating.
+  const readRegex = /read<\s*I32\s*>\s*\(\s*\)/g;
+  if (readRegex.test(input)) {
+    return input.replace(readRegex, 'readI32()');
   }
 
   // For now, compile returns a literal expression of the string length.
@@ -24,8 +24,10 @@ export function run(input: string, stdin: string = ""): number {
 
   // Wrap the compiled expression in an IIFE so we can inject `stdin` into
   // the evaluation scope. JSON.stringify is used to safely embed the stdin
-  // string literal.
-  const code = `(function(){ const stdin = ${JSON.stringify(stdin)}; return (${compiledExpr}); })()`;
+  // string literal. We also provide a `readI32` helper that consumes tokens
+  // from `stdin` (split on whitespace) so expressions like
+  // "read<I32>() + read<I32>()" work as expected.
+  const code = `(function(){ const stdin = ${JSON.stringify(stdin)}; const args = stdin.trim() ? stdin.trim().split(/\\s+/) : []; let __readIndex = 0; function readI32(){ return parseInt(args[__readIndex++], 10); } return (${compiledExpr}); })()`;
 
   // eslint-disable-next-line no-eval
   const result = eval(code);
