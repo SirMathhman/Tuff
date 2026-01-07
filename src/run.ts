@@ -258,7 +258,8 @@ function parseDeclarations(input: string): ParseDeclarationsResult {
 }
 
 function stripAnnotationsAndMut(replaced: string): string {
-  replaced = replaced.replace(/:\s*(?:I32|Bool)\b/g, "");
+  // support Char annotation as well
+  replaced = replaced.replace(/:\s*(?:I32|Bool|Char)\b/g, "");
   replaced = replaced.replace(/\b(let|var|const)\s+mut\b/g, "$1");
   return replaced;
 }
@@ -321,6 +322,10 @@ export function compile(input: string): string {
     replaced.indexOf("readBool()") !== -1;
 
   replaced = stripAnnotationsAndMut(replaced);
+
+  // Convert char literals like 'a' -> ('a').charCodeAt(0) so they behave as numeric Char
+  // Supports escaped chars such as '\n' via the capture
+  replaced = replaced.replace(/'([^'\\]|\\.)'/g, "('$1').charCodeAt(0)");
 
   // Replace constructor calls like `Point { expr, expr }` with object literals
   for (const [name, fields] of structs.entries()) {

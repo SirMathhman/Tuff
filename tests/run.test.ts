@@ -82,6 +82,11 @@ describe("run", () => {
     expect(runModule.run(code, "100")).toBe(100);
   });
 
+  test("char literal assigned to variable returns char code", () => {
+    const code = "let x : Char = 'a'; x";
+    expect(runModule.run(code)).toBe(97);
+  });
+
   test("boolean operators work with read<Bool>()", () => {
     expect(runModule.run("read<Bool>() && read<Bool>()", "true false")).toBe(0);
     expect(runModule.run("read<Bool>() && read<Bool>()", "true true")).toBe(1);
@@ -118,6 +123,12 @@ describe("run", () => {
   test("handles mutable declarations with mut", () => {
     const code = "let mut x : I32 = read<I32>(); x = read<I32>(); x";
     expect(runModule.run(code, "1 2")).toBe(2);
+  });
+
+  test("mut assignment inside function updates outer variable", () => {
+    const code =
+      "let mut x = 0; fn get() : Void => { x = read<I32>(); } get(); x";
+    expect(runModule.run(code, "100")).toBe(100);
   });
 
   test("assignment to immutable variable throws", () => {
