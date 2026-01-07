@@ -227,6 +227,12 @@ function applyStringAndCtorTransforms(
   }
 
   // Pointer support
+  // Replace mutable address-of: `&mut x` -> {get:()=>x, set:(v)=>{x=v}}
+  replaced = replaced.replace(
+    /(?<!&)&\s*mut\s+([A-Za-z_$][A-Za-z0-9_$]*)/g,
+    "({get:()=>$1, set:(v)=>{ $1 = v }})"
+  );
+
   // Replace pointer address-of: `&x` -> {get:()=>x, set:(v)=>{x=v}}
   replaced = replaced.replace(
     /(?<!&)&\s*([A-Za-z_$][A-Za-z0-9_$]*)/g,
@@ -303,7 +309,7 @@ function makeDuplicateError(kind: string, name: string): string {
 function parseDeclarations(input: string): ParseDeclarationsResult {
   // Capture optional type annotations like `: I32` or `: &Str`
   const declRegex =
-    /\blet\s+(mut\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?::\s*([&*A-Za-z_$][A-Za-z0-9_$]*))?/g;
+    /\blet\s+(mut\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?::\s*([&*]\s*(?:mut\s+)?[A-Za-z_$][A-Za-z0-9_$]*))?/g;
   const decls = new Map<string, VarDeclaration>();
   let m: RegExpExecArray | undefined;
   while (
@@ -323,8 +329,11 @@ function parseDeclarations(input: string): ParseDeclarationsResult {
 }
 
 function stripAnnotationsAndMut(replaced: string): string {
-  // support Char, &Str and pointer annotations like *I32
-  replaced = replaced.replace(/:\s*(?:I32|Bool|Char|&Str|[*]I32)\b/g, "");
+  // support Char, &Str and pointer annotations like *I32 or *mut I32
+  replaced = replaced.replace(
+    /:\s*(?:I32|Bool|Char|&Str|[*]I32|\*\s*mut\s*[A-Za-z_$][A-Za-z0-9_$]*)\b/g,
+    ""
+  );
   replaced = replaced.replace(/\b(let|var|const)\s+mut\b/g, "$1");
   return replaced;
 }

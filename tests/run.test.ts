@@ -112,6 +112,12 @@ describe("run", () => {
     expect(runModule.run(code)).toBe(200);
   });
 
+  test("mutable pointer via &mut and *mut type", () => {
+    const code =
+      "let mut x = 0; let y : *mut I32 = &mut x; *y = read<I32>(); x";
+    expect(runModule.run(code, "100")).toBe(100);
+  });
+
   test("boolean operators work with read<Bool>()", () => {
     const code1 = "read<Bool>() && read<Bool>()";
     expect(runModule.run(code1, "true false")).toBe(0);
