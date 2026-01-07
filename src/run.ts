@@ -4,6 +4,7 @@
 
 interface VarDeclaration {
   mut: boolean;
+  type?: string;
 }
 
 function replaceReads(input: string): string {
@@ -197,6 +198,38 @@ function getFunctionCallArgs(replaced: string, fname: string): string[][] {
   return results;
 }
 
+function applyStringAndCtorTransforms(replaced: string, structs: Map<string, string[]>, decls: Map<string, VarDeclaration>): string {
+  // Convert char literals like 'a' -> ('a').charCodeAt(0) so they behave as numeric Char
+  // Supports escaped chars such as '\n' via the capture
+  replaced = replaced.replace(/'([^'\\]|\\.)'/g, "('$1').charCodeAt(0)");
+
+  // Convert string literal indexing "foo"[0] -> ("foo").charCodeAt(0)
+  replaced = replaced.replace(/"((?:[^"\\]|\\.)*)"\s*\[\s*(\d+)\s*\]/g, (_m, inner, idx) => `(${JSON.stringify(inner)}).charCodeAt(${idx})`);
+
+  // Replace constructor calls like `Point { expr, expr }` with object literals
+  for (const [name, fields] of structs.entries()) {
+    const ctorRegex = new RegExp("\\b" + name + "\\s*\\{([^}]*)\\}", "g");
+    replaced = replaced.replace(ctorRegex, (_m, inner) => {
+      const args = inner
+        .split(",")
+        .map((s: string) => s.trim())
+        .filter(Boolean);
+      const pairs = fields.map((f, i) => `${f}: ${args[i] ?? "undefined"}`);
+      return `({ ${pairs.join(", ")} })`;
+    });
+  }
+
+  // If any variable is declared as `: &Str`, convert occurrences like `x[0]` to `x.charCodeAt(0)`
+  for (const [name, info] of decls.entries()) {
+    if (info.type === "&Str") {
+      const idxRegex = new RegExp("\\b" + name + "\\s*\\[\\s*(\\d+)\\s*\\]", "g");
+      replaced = replaced.replace(idxRegex, `${name}.charCodeAt($1)`);
+    }
+  }
+
+  return replaced;
+}
+
 function checkFunctionCallTypes(
   replaced: string,
   fnParsed: ParseFunctionsResult
@@ -239,27 +272,30 @@ function makeDuplicateError(kind: string, name: string): string {
 }
 
 function parseDeclarations(input: string): ParseDeclarationsResult {
-  const declRegex = /\blet\s+(mut\s+)?([A-Za-z_$][A-Za-z0-9_$]*)/g;
+  // Capture optional type annotations like `: I32` or `: &Str`
+  const declRegex =
+    /\blet\s+(mut\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?::\s*([&A-Za-z_$][A-Za-z0-9_$]*))?/g;
   const decls = new Map<string, VarDeclaration>();
   let m: RegExpExecArray | undefined;
   while (
     (m = declRegex.exec(input) as unknown as RegExpExecArray | undefined)
   ) {
     const varName = m[2];
+    const type = m[3];
     if (decls.has(varName)) {
       return {
         decls,
         error: makeDuplicateError("variable declaration", varName),
       };
     }
-    decls.set(varName, { mut: !!m[1] });
+    decls.set(varName, { mut: !!m[1], type });
   }
   return { decls };
 }
 
 function stripAnnotationsAndMut(replaced: string): string {
-  // support Char annotation as well
-  replaced = replaced.replace(/:\s*(?:I32|Bool|Char)\b/g, "");
+  // support Char and &Str annotations
+  replaced = replaced.replace(/:\s*(?:I32|Bool|Char|&Str)\b/g, "");
   replaced = replaced.replace(/\b(let|var|const)\s+mut\b/g, "$1");
   return replaced;
 }
@@ -322,26 +358,19 @@ export function compile(input: string): string {
     replaced.indexOf("readBool()") !== -1;
 
   replaced = stripAnnotationsAndMut(replaced);
-
-  // Convert char literals like 'a' -> ('a').charCodeAt(0) so they behave as numeric Char
-  // Supports escaped chars such as '\n' via the capture
-  replaced = replaced.replace(/'([^'\\]|\\.)'/g, "('$1').charCodeAt(0)");
-
-  // Replace constructor calls like `Point { expr, expr }` with object literals
-  for (const [name, fields] of structs.entries()) {
-    const ctorRegex = new RegExp("\\b" + name + "\\s*\\{([^}]*)\\}", "g");
-    replaced = replaced.replace(ctorRegex, (_m, inner) => {
-      const args = inner
-        .split(",")
-        .map((s: string) => s.trim())
-        .filter(Boolean);
-      const pairs = fields.map((f, i) => `${f}: ${args[i] ?? "undefined"}`);
-      return `({ ${pairs.join(", ")} })`;
-    });
-  }
+  replaced = applyStringAndCtorTransforms(replaced, structs, decls);
 
   const assignError = checkImmutableAssignments(replaced, decls);
   if (assignError) return assignError;
+
+  // If transformations produced a different single-expression (e.g., string literal indexing),
+  // return it directly so it evaluates correctly instead of using the length fallback.
+  if (replaced !== codeNoStructs) {
+    if (/;|\b(let|const|var)\b|\n/.test(replaced)) {
+      return wrapStatements(replaced);
+    }
+    return replaced;
+  }
 
   if (hasRead) {
     if (/;|\b(let|const|var)\b|\n/.test(replaced)) {
