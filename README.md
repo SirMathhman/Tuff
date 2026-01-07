@@ -14,3 +14,5 @@ A tiny TypeScript interpreter / expression evaluator used for practicing parsing
 
 - The repository uses a pre-commit hook that runs tests, lint, and CPD.
 - Generated test artifacts (`tests/**/*.js`, `tests/**/*.d.ts`) are intentionally ignored and should not be committed.
+
+> Tip: Run `pnpm run check-dir-files` to check for directories with too many files (ignores `node_modules`).
