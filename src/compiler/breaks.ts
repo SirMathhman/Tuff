@@ -172,27 +172,7 @@ export function blockWouldBeTransformed(
     if (word !== "else") return false;
   }
   if (prevCh === "]") return false;
-  const exprPrevChars = new Set([
-    "=",
-    "(",
-    ":",
-    ",",
-    "?",
-    "!",
-    "+",
-    "-",
-    "*",
-    "/",
-    "%",
-    "^",
-    "&",
-    "|",
-    "~",
-    "[",
-    "{",
-    "",
-  ]);
-  if (!exprPrevChars.has(prevCh)) return false;
+  if (!EXPR_PREV_CHARS.has(prevCh)) return false;
 
   if (prevCh === ")") {
     const word = getWordBeforeParenIfAny(input, prev);
@@ -213,28 +193,7 @@ export function isExprIfAt(input: string, i: number): boolean {
   let ctx = i - 1;
   while (ctx >= 0 && /\s/.test(input[ctx])) ctx--;
   const ctxPrev = ctx >= 0 ? input[ctx] : "";
-  const exprPrevChars = new Set([
-    "=",
-    "(",
-    ")",
-    ":",
-    ",",
-    "?",
-    "!",
-    "+",
-    "-",
-    "*",
-    "/",
-    "%",
-    "^",
-    "&",
-    "|",
-    "~",
-    "[",
-    "{",
-    "",
-  ]);
-  let isExprContext = exprPrevChars.has(ctxPrev);
+  let isExprContext = EXPR_PREV_CHARS.has(ctxPrev);
   if (isExprContext && ctxPrev === ")") {
     const wordBefore = getWordBeforeParenIfAny(input, ctx);
     if (wordBefore === "while" || wordBefore === "for" || wordBefore === "switch") {
@@ -243,7 +202,7 @@ export function isExprIfAt(input: string, i: number): boolean {
       let pre = ctx - 1;
       while (pre >= 0 && /\s/.test(input[pre])) pre--;
       const preCh = pre >= 0 ? input[pre] : "";
-      if (!exprPrevChars.has(preCh)) isExprContext = false;
+      if (!EXPR_PREV_CHARS.has(preCh)) isExprContext = false;
     }
   }
   if (!isExprContext) {
