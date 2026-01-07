@@ -11,7 +11,9 @@ export function compile(input: string): string {
  * run - takes a string and returns a number
  * Implementation: compile the input to JS, eval it, and return the result.
  */
-export function run(input: string): number {
+export function run(input: string, stdin: string = ''): number {
+  // `stdin` is currently an optional parameter (defaults to empty string).
+  // We keep `compile` signature unchanged for now and call it with `input`.
   // Call the exported `compile` to allow runtime spies/mocks to intercept it.
   // Using `exports` keeps the function as a named export while still enabling
   // `jest.spyOn` to replace it at runtime for tests.

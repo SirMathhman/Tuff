@@ -34,4 +34,12 @@ describe("run", () => {
       spy.mockRestore();
     }
   });
-});
+  test('accepts optional stdin parameter without changing behavior', () => {
+    const spy = jest.spyOn(runModule, 'compile');
+    try {
+      expect(runModule.run('abc', 'some-stdin')).toBe(3);
+      expect(spy).toHaveBeenCalledWith('abc');
+    } finally {
+      spy.mockRestore();
+    }
+  });});
