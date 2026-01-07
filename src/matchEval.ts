@@ -55,6 +55,17 @@ export type EvalExprFn = (
   env: Map<string, Binding>
 ) => Result<number, string>;
 
+function evalAndReturnMatched(
+  exprTokens: Token[],
+  env: Map<string, Binding>,
+  evalExprWithEnv: EvalExprFn,
+  nextIndex: number
+): Result<CaseParseResult, string> {
+  const exprRes = evalExprWithEnv(exprTokens, env);
+  if (isErr(exprRes)) return err(exprRes.error);
+  return ok({ nextIndex, matched: exprRes.value });
+}
+
 function parseCaseAt(
   sub: Token[],
   i: number,
@@ -73,9 +84,7 @@ function parseCaseAt(
   if (semi > braceEnd) return err("Invalid numeric input");
   const exprTokens = sub.slice(exprStart, semi);
   if (matchVal === patTok.value) {
-    const exprRes = evalExprWithEnv(exprTokens, env);
-    if (isErr(exprRes)) return err(exprRes.error);
-    return ok({ nextIndex: semi + 1, matched: exprRes.value });
+    return evalAndReturnMatched(exprTokens, env, evalExprWithEnv, semi + 1);
   }
   return ok({ nextIndex: semi + 1 });
 }
@@ -94,9 +103,7 @@ function parseDefaultAt(
   const semi = indexUntilSemicolon(sub, exprStart);
   if (semi > braceEnd) return err("Invalid numeric input");
   const exprTokens = sub.slice(exprStart, semi);
-  const exprRes = evalExprWithEnv(exprTokens, env);
-  if (isErr(exprRes)) return err(exprRes.error);
-  return ok({ nextIndex: semi + 1, matched: exprRes.value });
+  return evalAndReturnMatched(exprTokens, env, evalExprWithEnv, semi + 1);
 }
 
 function handleParseResult(

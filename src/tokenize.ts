@@ -224,37 +224,22 @@ function tryHandleCompoundAssign(
 }
 
 function tryHandleLogicalOp(s: string, i: number, tokens: Token[]): number {
-  const ch = s[i];
-  const nextCh = s[i + 1];
-
-  // Two-character logical operators: &&, ||
-  if ((ch === "&" || ch === "|") && nextCh === ch) {
-    tokens.push({ type: "logop", value: (ch + ch) as "&&" | "||" });
+  const op = s.slice(i, i + 2);
+  if (op === "&&" || op === "||") {
+    tokens.push({ type: "logop", value: op as "&&" | "||" });
     return i + 2;
   }
-
   return -1;
 }
 
 function tryHandleComparison(s: string, i: number, tokens: Token[]): number {
-  const ch = s[i];
-  const nextCh = s[i + 1];
-
-  // Two-character operators: <=, >=, ==, !=
-  if (
-    (ch === "<" || ch === ">" || ch === "=" || ch === "!") &&
-    nextCh === "="
-  ) {
-    let opValue: "<=" | ">=" | "==" | "!=";
-    if (ch === "<") opValue = "<=";
-    else if (ch === ">") opValue = ">=";
-    else if (ch === "=") opValue = "==";
-    else opValue = "!=";
-    tokens.push({ type: "comp", value: opValue });
+  const op2 = s.slice(i, i + 2);
+  if (["<=", ">=", "==", "!="].includes(op2)) {
+    tokens.push({ type: "comp", value: op2 as "<=" | ">=" | "==" | "!=" });
     return i + 2;
   }
 
-  // Single-character operators: <, >
+  const ch = s[i];
   if (ch === "<" || ch === ">") {
     tokens.push({ type: "comp", value: ch });
     return i + 1;

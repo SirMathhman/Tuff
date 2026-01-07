@@ -19,23 +19,33 @@ export function indexUntilSemicolon(tokensArr: Token[], start: number): number {
   return j;
 }
 
-export function findMatchingBrace(tokens: Token[], start: number): number {
+export function findMatching(
+  tokens: Token[],
+  start: number,
+  openType: string,
+  openVal: string,
+  closeVal: string
+): number {
   if (
     !tokens[start] ||
-    tokens[start].type !== "punct" ||
-    tokens[start].value !== "{"
+    tokens[start].type !== openType ||
+    tokens[start].value !== openVal
   )
     return -1;
   let depth = 0;
   for (let i = start; i < tokens.length; i++) {
     const tk = tokens[i];
-    if (tk.type === "punct") {
-      if (tk.value === "{") depth++;
-      else if (tk.value === "}") {
+    if (tk.type === openType) {
+      if (tk.value === openVal) depth++;
+      else if (tk.value === closeVal) {
         depth--;
         if (depth === 0) return i;
       }
     }
   }
   return -1;
+}
+
+export function findMatchingBrace(tokens: Token[], start: number): number {
+  return findMatching(tokens, start, "punct", "{", "}");
 }

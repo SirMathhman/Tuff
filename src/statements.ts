@@ -6,7 +6,11 @@ import { indexUntilSemicolon, findMatchingBrace } from "./commonUtils";
 import { parseFunctionSignature } from "./functions";
 import { parseStructDefinition } from "./structs";
 import { evaluateStructInstantiation } from "./utils/structEval";
-import { findMatchingParen, findTopLevelElseIndex } from "./interpret";
+import {
+  findMatchingParen,
+  findTopLevelElseIndex,
+  evaluateIfBranch,
+} from "./interpret";
 
 export interface StatementResult {
   nextIndex: number;
@@ -265,19 +269,23 @@ function validateConditionParens(
   return ok(condEndInner);
 }
 
-function findIfStatementEnd(tokens: Token[], start: number): number {
+function getConditionEnd(tokens: Token[], start: number): number {
   const condRes = validateConditionParens(tokens, start);
   if (isErr(condRes)) return -1;
-  const condEndInner = condRes.value;
+  return condRes.value;
+}
+
+function findIfStatementEnd(tokens: Token[], start: number): number {
+  const condEndInner = getConditionEnd(tokens, start);
+  if (condEndInner === -1) return -1;
   const elseIdxInner = findTopLevelElseIndex(tokens, condEndInner + 1);
   if (elseIdxInner === -1) return -1;
   return findStatementEnd(tokens, elseIdxInner + 1);
 }
 
 function findWhileStatementEnd(tokens: Token[], start: number): number {
-  const condRes = validateConditionParens(tokens, start);
-  if (isErr(condRes)) return -1;
-  const condEndInner = condRes.value;
+  const condEndInner = getConditionEnd(tokens, start);
+  if (condEndInner === -1) return -1;
   const bodyStart = condEndInner + 1;
   if (bodyStart >= tokens.length) return -1;
   if (tokens[bodyStart].type === "punct" && tokens[bodyStart].value === "{") {
@@ -385,11 +393,14 @@ export function processIfStatement(
   if (thenTokens.length === 0 || elseTokens.length === 0)
     return err("Invalid numeric input");
 
-  const condRes = evalExprWithEnv(condTokens, envMap);
-  if (isErr(condRes)) return err(condRes.error);
-  const condVal = condRes.value;
-  const chosen = condVal !== 0 ? thenTokens : elseTokens;
-  const branchRes = processStatementsTokens(chosen, envMap);
+  const branchRes = evaluateIfBranch(
+    condTokens,
+    thenTokens,
+    elseTokens,
+    envMap,
+    evalExprWithEnv,
+    processStatementsTokens
+  );
   if (isErr(branchRes)) return err(branchRes.error);
   const nextIndex =
     elseEnd +

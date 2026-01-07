@@ -2,6 +2,12 @@ import { describe, it, expect } from "vitest";
 import { interpret } from "../../src/interpret";
 import { isOk, isErr } from "../../src/result";
 
+function checkInterpret(input: string, expected: number) {
+  const r = interpret(input);
+  expect(isOk(r)).toBe(true);
+  if (isOk(r)) expect(r.value).toBe(expected);
+}
+
 describe("interpret - parsing & simple ops", () => {
   it("is a function", () => {
     expect(typeof interpret).toBe("function");
@@ -285,11 +291,7 @@ describe("interpret - if expressions (initializers)", () => {
   });
 
   it("supports nested else-if in initializer expression (else branch)", () => {
-    const r = interpret(
-      "let x : I32 = if (false) 3 else if (false) 5 else 4; x"
-    );
-    expect(isOk(r)).toBe(true);
-    if (isOk(r)) expect(r.value).toBe(4);
+    checkInterpret("let x : I32 = if (false) 3 else if (false) 5 else 4; x", 4);
   });
 });
 
@@ -349,11 +351,10 @@ describe("interpret - if expressions (statement branches)", () => {
   });
 
   it("supports else-if chains (else branch)", () => {
-    const r = interpret(
-      "let x : I32; if (false) x = 3; else if (false) x = 5; else x = 4; x"
+    checkInterpret(
+      "let x : I32; if (false) x = 3; else if (false) x = 5; else x = 4; x",
+      4
     );
-    expect(isOk(r)).toBe(true);
-    if (isOk(r)) expect(r.value).toBe(4);
   });
 });
 

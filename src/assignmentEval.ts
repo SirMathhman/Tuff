@@ -49,6 +49,33 @@ export function getIdentAndPunct(
   return ok({ name: nameTok.value, punct: punctTok.value });
 }
 
+function evalAndFetchResult(
+  tokensArr: Token[],
+  idx: number,
+  envMap: Map<string, Binding>,
+  evalExprWithEnv: EvalExprFn
+): Result<ExpressionEvalResult, string> {
+  const cur = idx + 2;
+  return evalExprUntilSemicolon(tokensArr, cur, envMap, evalExprWithEnv);
+}
+
+interface AssignmentParseResult {
+  val: number;
+  nextIndex: number;
+}
+
+function parseAssignmentValue(
+  tokensArr: Token[],
+  idx: number,
+  envMap: Map<string, Binding>,
+  evalExprWithEnv: EvalExprFn
+): Result<AssignmentParseResult, string> {
+  const evalRes = evalAndFetchResult(tokensArr, idx, envMap, evalExprWithEnv);
+  if (isErr(evalRes)) return err(evalRes.error);
+  const { value: val, nextIndex } = evalRes.value;
+  return ok({ val, nextIndex });
+}
+
 export function processAssignment(
   tokensArr: Token[],
   idx: number,
@@ -66,15 +93,10 @@ export function processAssignment(
   if (!binding.mutable && binding.value !== undefined)
     return err("Cannot assign to immutable variable");
 
-  const cur = idx + 2;
-  const evalRes = evalExprUntilSemicolon(
-    tokensArr,
-    cur,
-    envMap,
-    evalExprWithEnv
-  );
-  if (isErr(evalRes)) return err(evalRes.error);
-  let { value: val, nextIndex } = evalRes.value;
+  const valRes = parseAssignmentValue(tokensArr, idx, envMap, evalExprWithEnv);
+  if (isErr(valRes)) return err(valRes.error);
+  let { val, nextIndex } = valRes.value;
+
   if (binding.typeName === "I32") val = Math.trunc(val);
   binding.value = val;
   envMap.set(name, binding);
@@ -122,15 +144,9 @@ export function processCompoundAssignment(
   if (binding.value === undefined) return err("Uninitialized variable");
   if (!binding.mutable) return err("Cannot assign to immutable variable");
 
-  const cur = idx + 2;
-  const evalRes = evalExprUntilSemicolon(
-    tokensArr,
-    cur,
-    envMap,
-    evalExprWithEnv
-  );
-  if (isErr(evalRes)) return err(evalRes.error);
-  let { value: rhs, nextIndex } = evalRes.value;
+  const valRes = parseAssignmentValue(tokensArr, idx, envMap, evalExprWithEnv);
+  if (isErr(valRes)) return err(valRes.error);
+  let { val: rhs, nextIndex } = valRes.value;
 
   const lhs = binding.value as number;
   const res = computeCompoundResult(op, lhs, rhs);

@@ -43,18 +43,6 @@ export function evaluateStructInstantiation(
   const fieldTokens = tokens.slice(braceIdx + 1, braceEnd);
   const fieldValues = new Map<string, number>();
 
-  if (fieldTokens.length === 0) {
-    if (structBinding.fields.length !== 0) {
-      return err("Struct instantiation: missing field values");
-    }
-
-    const instance: StructInstance = { structName, fieldValues };
-    return ok({
-      token: { type: "struct", value: instance },
-      consumed: braceEnd - nameIdx + 1,
-    });
-  }
-
   const partsRes = splitTopLevelCommaSeparated(fieldTokens);
   if (isErr(partsRes)) return err(partsRes.error);
   const fieldExprs = partsRes.value;
@@ -65,7 +53,10 @@ export function evaluateStructInstantiation(
 
   for (let i = 0; i < fieldExprs.length; i++) {
     const exprRes = evalExprWithEnv(fieldExprs[i], env);
-    if (isErr(exprRes)) return err(exprRes.error);
+    if (isErr(exprRes))
+      return err(
+        exprRes.value === undefined ? "Invalid numeric input" : exprRes.error
+      );
     fieldValues.set(structBinding.fields[i].name, exprRes.value);
   }
 

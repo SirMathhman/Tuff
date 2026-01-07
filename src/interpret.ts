@@ -10,7 +10,11 @@ import {
   VariableValue,
 } from "./matchEval";
 import { evalExprUntilSemicolon, tryAssignment } from "./assignmentEval";
-import { indexUntilSemicolon, findMatchingBrace } from "./commonUtils";
+import {
+  indexUntilSemicolon,
+  findMatchingBrace,
+  findMatching,
+} from "./commonUtils";
 import {
   evaluateFieldAccess,
   evaluateStructInstantiation,
@@ -32,24 +36,7 @@ interface ProcessResult {
 }
 
 export function findMatchingParen(tokens: Token[], start: number): number {
-  if (
-    !tokens[start] ||
-    tokens[start].type !== "paren" ||
-    tokens[start].value !== "("
-  )
-    return -1;
-  let depth = 0;
-  for (let i = start; i < tokens.length; i++) {
-    const tk = tokens[i];
-    if (tk.type === "paren") {
-      if (tk.value === "(") depth++;
-      else if (tk.value === ")") {
-        depth--;
-        if (depth === 0) return i;
-      }
-    }
-  }
-  return -1;
+  return findMatching(tokens, start, "paren", "(", ")");
 }
 
 function stripOuterParens(tokens: Token[]): Token[] {
@@ -121,6 +108,27 @@ function findThenIndex(tokens: Token[], startIdx: number): number {
   return -1;
 }
 
+export function evaluateIfBranch(
+  condTokens: Token[],
+  thenTokens: Token[],
+  elseTokens: Token[],
+  env: Map<string, Binding>,
+  evalExprWithEnv: (
+    tokens: Token[],
+    env: Map<string, Binding>
+  ) => Result<number, string>,
+  processStatementsTokens: (
+    tokens: Token[],
+    env: Map<string, Binding>
+  ) => Result<ProcessResult, string>
+): Result<ProcessResult, string> {
+  const condRes = evalExprWithEnv(condTokens, env);
+  if (isErr(condRes)) return err(condRes.error);
+  const condVal = condRes.value;
+  const chosen = condVal !== 0 ? thenTokens : elseTokens;
+  return processStatementsTokens(chosen, env);
+}
+
 function evalIfExpression(
   tokens: Token[],
   env: Map<string, Binding>
@@ -162,11 +170,14 @@ function evalIfExpression(
   if (thenTokens.length === 0 || elseTokens.length === 0)
     return err("Invalid numeric input");
 
-  const condRes = evalExprWithEnv(condTokens, env);
-  if (isErr(condRes)) return err(condRes.error);
-  const condVal = condRes.value;
-  const chosen = condVal !== 0 ? thenTokens : elseTokens;
-  const branchRes = processStatementsTokens(chosen, env);
+  const branchRes = evaluateIfBranch(
+    condTokens,
+    thenTokens,
+    elseTokens,
+    env,
+    evalExprWithEnv,
+    processStatementsTokens
+  );
   if (isErr(branchRes)) return err(branchRes.error);
   return ok(branchRes.value.lastVal ?? 0);
 }
@@ -249,15 +260,6 @@ function evaluateFunctionCall(
 
   const argTokens = tokens.slice(idx + 2, argEnd);
 
-  if (argTokens.length === 0 && fnBinding.params.length === 0) {
-    const result = executeFunction(fnBinding, [], env);
-    if (isErr(result)) return err(result.error);
-    return ok({
-      token: { type: "num", value: result.value },
-      consumed: argEnd - idx + 1,
-    });
-  }
-
   const splitRes = splitTopLevelCommaSeparated(argTokens);
   if (isErr(splitRes)) return err(splitRes.error);
   const argExprs = splitRes.value;
@@ -328,26 +330,16 @@ function substituteKeywordIdent(
     return ok({ token: { type: "num", value: 0 }, consumed: 1 });
   }
   if (t.value === "if") {
-    const inlineRes = evalInlineIfToNumToken(tokens, idx, env);
-    if (isErr(inlineRes)) return err(inlineRes.error);
-    return ok({
-      token: inlineRes.value.token,
-      consumed: inlineRes.value.consumed,
-    });
+    return evalInlineIfToNumToken(tokens, idx, env);
   }
   if (t.value === "match") {
-    const inlineRes = evalInlineMatchToNumToken(
+    return evalInlineMatchToNumToken(
       tokens,
       idx,
       env,
       findMatchingParen,
       evalExprWithEnv
     );
-    if (isErr(inlineRes)) return err(inlineRes.error);
-    return ok({
-      token: inlineRes.value.token,
-      consumed: inlineRes.value.consumed,
-    });
   }
 
   return undefined;
