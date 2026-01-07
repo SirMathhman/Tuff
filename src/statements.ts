@@ -95,7 +95,7 @@ export function processLetStatement(
     return err("Invalid numeric input");
 
   if (tokensArr[cur].value === ";") {
-    envMap.set(name, { value: undefined, mutable, typeName });
+    envMap.set(name, { type: "var", value: undefined, mutable, typeName });
     return ok({ nextIndex: cur + 1 });
   }
 
@@ -111,7 +111,7 @@ export function processLetStatement(
   if (isErr(evalRes)) return err(evalRes.error);
   let { value: val, nextIndex: nextIdx } = evalRes.value;
   if (typeName === "I32") val = Math.trunc(val);
-  envMap.set(name, { value: val, mutable, typeName });
+  envMap.set(name, { type: "var", value: val, mutable, typeName });
   return ok({ nextIndex: nextIdx });
 }
 

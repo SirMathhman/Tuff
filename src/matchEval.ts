@@ -2,11 +2,26 @@ import { Token } from "./tokenize";
 import { Result, ok, err, isErr } from "./result";
 import { indexUntilSemicolon, findMatchingBrace } from "./commonUtils";
 
-export interface Binding {
+export interface VarBinding {
+  type: "var";
   value?: number;
   mutable: boolean;
   typeName?: string;
 }
+
+export interface FunctionParameter {
+  name: string;
+  typeName?: string;
+}
+
+export interface FunctionBinding {
+  type: "fn";
+  params: FunctionParameter[];
+  returnType?: string;
+  body: Token[];
+}
+
+export type Binding = VarBinding | FunctionBinding;
 
 export interface InlineIfResult {
   token: Token;

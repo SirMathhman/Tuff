@@ -1,12 +1,7 @@
 import { Token } from "./tokenize";
 import { Result, ok, err, isErr } from "./result";
 import { indexUntilSemicolon } from "./commonUtils";
-
-export interface Binding {
-  value?: number;
-  mutable: boolean;
-  typeName?: string;
-}
+import { Binding } from "./matchEval";
 
 interface StatementResult {
   nextIndex: number;
@@ -67,6 +62,7 @@ export function processAssignment(
 
   const binding = envMap.get(name);
   if (!binding) return err("Undefined variable");
+  if (binding.type !== "var") return err("Cannot assign to function");
   if (!binding.mutable && binding.value !== undefined)
     return err("Cannot assign to immutable variable");
 
@@ -122,6 +118,7 @@ export function processCompoundAssignment(
 
   const binding = envMap.get(name);
   if (!binding) return err("Undefined variable");
+  if (binding.type !== "var") return err("Cannot assign to function");
   if (binding.value === undefined) return err("Uninitialized variable");
   if (!binding.mutable) return err("Cannot assign to immutable variable");
 

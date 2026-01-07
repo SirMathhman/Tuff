@@ -204,6 +204,7 @@ function substituteIdentToken(
   } else {
     const b = env.get(t.value);
     if (b === undefined) return err("Undefined variable");
+    if (b.type !== "var") return err("Cannot use function as value");
     if (b.value === undefined) return err("Uninitialized variable");
     return ok({ token: { type: "num", value: b.value }, consumed: 1 });
   }
