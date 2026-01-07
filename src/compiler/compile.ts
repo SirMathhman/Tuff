@@ -8,7 +8,7 @@ import {
   stripAnnotationsAndMut,
   checkImmutableAssignments,
 } from "./declarations";
-import { checkFunctionCallTypes, parseFunctions } from "./functions";
+import { checkFunctionCallTypes, parseFunctions, findMatching } from "./functions";
 import { applyStringAndCtorTransforms, parseStructs } from "./structs";
 
 function replaceReads(input: string): string {
@@ -16,6 +16,87 @@ function replaceReads(input: string): string {
   let out = input.replace(readI32Regex, "readI32()");
   const readBoolRegex = /read<\s*Bool\s*>\s*\(\s*\)/g;
   out = out.replace(readBoolRegex, "readBool()");
+  return out;
+}
+
+interface ParseIfResult { replacement: string; nextIndex: number }
+
+
+
+// eslint-disable-next-line complexity, max-lines-per-function
+function parseIfAt(input: string, idx: number): ParseIfResult | undefined {
+  // Ensure 'if' is a standalone word
+  const before = input[idx - 1];
+  const after = input[idx + 2];
+  if ((before && /[A-Za-z0-9_$]/.test(before)) || (after && /[A-Za-z0-9_$]/.test(after))) {
+    return undefined;
+  }
+
+  let j = idx + 2;
+  while (j < input.length && /\s/.test(input[j])) j++;
+  if (input[j] !== "(") return undefined;
+
+  const k = findMatching(input, j + 1, "(", ")");
+  if (k === undefined) return undefined;
+  const cond = input.slice(j + 1, k - 1).trim();
+
+  let p = k;
+  while (p < input.length && /\s/.test(input[p])) p++;
+  if (input[p] === "{") return undefined; // block true-arm — skip
+
+  const foundElse = ((): number | undefined => {
+    let i = p;
+    let depth = 0;
+    for (; i < input.length; i++) {
+      const ch = input[i];
+      if (ch === "(") depth++;
+      else if (ch === ")") depth--;
+      else if (ch === "{") depth++;
+      else if (ch === "}") depth--;
+      if (depth === 0 && input.startsWith("else", i) && (i === 0 || /\W/.test(input[i - 1]))) return i;
+    }
+    return undefined;
+  })();
+  if (foundElse === undefined) return undefined;
+
+  const thenPart = input.slice(p, foundElse).trim();
+
+  let r = foundElse + 4;
+  while (r < input.length && /\s/.test(input[r])) r++;
+  if (input[r] === "{") return undefined; // block else-arm — skip
+
+  // parse else expression until semicolon/newline/top-level end
+  let s = r;
+  for (; s < input.length; s++) {
+    const ch = input[s];
+    if (ch === ";" || ch === "\n" || ch === "\r") break;
+  }
+  const elsePart = input.slice(r, s).trim();
+
+  return { replacement: `(${cond}) ? (${thenPart}) : (${elsePart})`, nextIndex: s };
+}
+
+function transformIfExpressions(input: string): string {
+  let out = "";
+  let i = 0;
+  while (i < input.length) {
+    const idx = input.indexOf("if", i);
+    if (idx === -1) {
+      out += input.slice(i);
+      break;
+    }
+    out += input.slice(i, idx);
+    const parsed = parseIfAt(input, idx);
+    if (!parsed) {
+      // not a transformable `if` here -> copy 'if' and continue
+      out += "if";
+      i = idx + 2;
+      continue;
+    }
+
+    out += parsed.replacement;
+    i = parsed.nextIndex;
+  }
   return out;
 }
 
@@ -47,6 +128,10 @@ export function compileImpl(input: string): string {
   codeNoStructs = fnParsed.code;
 
   let replaced = replaceReads(codeNoStructs);
+
+  // Convert expression-level `if (cond) a else b` into JS ternary expressions so
+  // they can be used as expressions in compiled output.
+  replaced = transformIfExpressions(replaced);
 
   const typeError = checkFunctionCallTypes(replaced, fnParsed);
   if (typeError) return typeError;

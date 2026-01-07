@@ -69,15 +69,16 @@ export function applyStringAndCtorTransforms(
   );
 
   // Replace pointer assignment `*y = expr` -> `y.set(expr)`
+  // Match only when the `*` is used as unary (preceded by start or punctuation), not as binary multiplication.
   replaced = replaced.replace(
-    /(?<![A-Za-z0-9_)\]"])\*\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*([^;\n]+)/g,
-    (_m, ident, rhs) => `${ident}.set(${rhs.trim()})`
+    /(^|[=({[;:+\-!~&|^<>?])\s*\*\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*([^;\n]+)/g,
+    (_m, before, ident, rhs) => `${before}${ident}.set(${rhs.trim()})`
   );
 
-  // Replace deref use `*y` (unary) -> `y.get()` -- avoid matching multiplication by ensuring star is not binary
+  // Replace deref use `*y` (unary) -> `y.get()` -- match star only when it looks like a unary op
   replaced = replaced.replace(
-    /(?<![A-Za-z0-9_)\]"])\*\s*([A-Za-z_$][A-Za-z0-9_$]*)/g,
-    "$1.get()"
+    /(^|[=({[;:+\-!~&|^<>?])\s*\*\s*([A-Za-z_$][A-Za-z0-9_$]*)/g,
+    (_m, before, ident) => `${before}${ident}.get()`
   );
 
   // If any variable is declared as `: &Str`, convert occurrences like `x[0]` to `x.charCodeAt(0)`

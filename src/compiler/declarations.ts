@@ -60,7 +60,17 @@ export function parseDeclarations(input: string): ParseDeclarationsResult {
 
     const afterNameIdx = (m.index ?? 0) + m[0].length;
     const type = parseTypeAnnotationAfterName(input, afterNameIdx);
-    decls.set(varName, { mut, type });
+
+    // Determine whether this declaration has an initializer by looking ahead
+    // to the next semicolon/newline and checking for an '=' before that.
+    let stmtEnd = input.indexOf(";", afterNameIdx);
+    const nl = input.indexOf("\n", afterNameIdx);
+    if (stmtEnd === -1 || (nl !== -1 && nl < stmtEnd)) stmtEnd = nl;
+    if (stmtEnd === -1) stmtEnd = input.length;
+    const between = input.slice(afterNameIdx, stmtEnd);
+    const initialized = between.indexOf("=") !== -1;
+
+    decls.set(varName, { mut, type, initialized });
   }
   return { decls };
 }
@@ -84,8 +94,15 @@ export function checkImmutableAssignments(
   if (decls.size === 0) return undefined;
   const withoutDecls = replaced.replace(/\blet\b[^;]*;/g, "");
   for (const [name, info] of decls.entries()) {
-    if (!info.mut) {
-      const assignRegex = new RegExp("\\b" + name + "\\s*=");
+    // Allow a single later assignment to a variable that was declared without an
+    // initializer (e.g., `let x : I32; x = read<I32>();`) even if not marked
+    // `mut`. But if the variable had an initializer in the declaration, it's
+    // immutable unless `mut` is specified.
+    if (!info.mut && info.initialized) {
+      // Match plain assignment `=` (excluding `==`) or compound assignment operators like `+=`.
+      const assignRegex = new RegExp(
+        "\\b" + name + "\\s*(?:\\+=|-=|\\*=|/=|%=|<<=|>>=|&=|\\|=|\\^=|=(?!=))"
+      );
       if (assignRegex.test(withoutDecls)) {
         return `(function(){ throw new Error("assignment to immutable variable '${name}'"); })()`;
       }

@@ -27,18 +27,45 @@ function parseParamList(params: string): ParamListResult {
   return { names, types };
 }
 
+export function findMatching(input: string, start: number, open: string = "{", close: string = "}"): number | undefined {
+  let i = start;
+  let depth = 1;
+  for (; i < input.length && depth > 0; i++) {
+    const ch = input[i];
+    if (ch === open) depth++;
+    else if (ch === close) depth--;
+  }
+  return depth === 0 ? i : undefined;
+}
+
+// eslint-disable-next-line max-lines-per-function
 export function parseFunctions(input: string): ParseFunctionsResult {
-  const fnRegex =
-    /fn\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(([^)]*)\)\s*(?::\s*[A-Za-z_$][A-Za-z0-9_$]*)?\s*=>\s*\{([\s\S]*?)\}/g;
-  let out = input;
+  // Use a header regex to find function starts and then scan for the matching
+  // closing brace using helper `findMatchingBrace` so function remains small.
+  const headerRe =
+    /fn\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(([^)]*)\)\s*(?::\s*[A-Za-z_$][A-Za-z0-9_$]*)?\s*=>\s*\{/g;
+  let out = "";
+  let lastIndex = 0;
   const names = new Set<string>();
-  let m: RegExpExecArray | undefined;
   let resultParamTypes: Map<string, string[]> | undefined;
   let resultParamNames: Map<string, string[]> | undefined;
-  while ((m = fnRegex.exec(input) as unknown as RegExpExecArray | undefined)) {
+  let m: RegExpExecArray | undefined;
+
+  while ((m = headerRe.exec(input) as RegExpExecArray | undefined)) {
     const name = m[1];
     const params = m[2];
-    const body = m[3];
+    const headerStart = m.index ?? 0;
+    const braceOpen = headerRe.lastIndex - 1; // position of the '{'
+
+    const matching = findMatching(input, braceOpen + 1, "{", "}");
+    if (matching === undefined) {
+      // Unbalanced braces; return original input so we surface a sensible error later
+      return { code: input };
+    }
+
+    const k = matching;
+    const body = input.slice(braceOpen + 1, k - 1);
+
     if (names.has(name)) {
       return {
         code: input,
@@ -59,22 +86,31 @@ export function parseFunctions(input: string): ParseFunctionsResult {
 
     const paramList = paramNames.join(", ");
 
-    const transformedBody = body.replace(/\byield\b/g, "return");
-    const replacement = `const ${name} = function(${paramList}) { ${transformedBody} };`;
-    out = out.replace(m[0], replacement);
-    if (!out) break; // safety
+    out += input.slice(lastIndex, headerStart) + buildFunctionReplacement(name, paramList, body);
+    lastIndex = k;
 
-    // store param types and names for later checking
+    ensureParamMaps();
+    resultParamTypes!.set(name, paramTypes);
+    resultParamNames!.set(name, paramNames);
+  }
+
+  function ensureParamMaps(): void {
     if (!resultParamTypes) resultParamTypes = new Map<string, string[]>();
     if (!resultParamNames) resultParamNames = new Map<string, string[]>();
-    resultParamTypes.set(name, paramTypes);
-    resultParamNames.set(name, paramNames);
   }
+
+  out += input.slice(lastIndex);
+
   return {
     code: out,
     funcParamTypes: resultParamTypes,
     funcParamNames: resultParamNames,
   };
+}
+
+function buildFunctionReplacement(name: string, paramList: string, body: string): string {
+  const transformedBody = body.replace(/\byield\b/g, "return");
+  return `const ${name} = function(${paramList}) { ${transformedBody} };`;
 }
 
 function inferTypeSimple(expr: string): string {

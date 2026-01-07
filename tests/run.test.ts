@@ -108,6 +108,66 @@ describe("run - strings and chars", () => {
   });
 });
 
+describe("run - control flow", () => {
+  test("if expression with reads returns correct branch", () => {
+    const code = "if (read<Bool>()) 3 else 5";
+    expect(runModule.run(code, "true")).toBe(3);
+    expect(runModule.run(code, "false")).toBe(5);
+  });
+
+  test("if expression with literal condition works", () => {
+    const code = "if (true) 3 else 5";
+    expect(runModule.run(code)).toBe(3);
+    const code2 = "if (false) 3 else 5";
+    expect(runModule.run(code2)).toBe(5);
+  });
+
+  test("if expression assigned to variable returns correct branch", () => {
+    const code = "let x = if (read<Bool>()) 3 else 5; x";
+    expect(runModule.run(code, "true")).toBe(3);
+    expect(runModule.run(code, "false")).toBe(5);
+  });
+
+  test("declaration without initializer can be assigned later", () => {
+    const code = "let x : I32; x = read<I32>(); x";
+    expect(runModule.run(code, "100")).toBe(100);
+  });
+
+  test("compound assignment (+=) on mutable variable works", () => {
+    const code = "let mut x = 0; x += read<I32>(); x";
+    expect(runModule.run(code, "100")).toBe(100);
+  });
+
+  test("compound assignment on immutable variable throws", () => {
+    const code = "let x = 0; x += read<I32>(); x";
+    expect(() => runModule.run(code, "100")).toThrow(/immutable/);
+  });
+
+  test("while loop with single-statement body increments variable", () => {
+    const code = "let mut x = 0; while (x < 3) x = x + 1; x";
+    expect(runModule.run(code)).toBe(3);
+  });
+
+  test("while loop with read in condition works", () => {
+    // this uses read<I32>() as a limit
+    const code =
+      "let mut i = 0; let n = read<I32>(); while (i < n) i = i + 1; i";
+    expect(runModule.run(code, "100")).toBe(100);
+  });
+
+  test("recursive factorial using yield and blocks works", () => {
+    const code = `fn fact(n : I32) : I32 => { if (n == 0) { yield 1; } yield n * fact(n - 1); } fact(read<I32>())`;
+    const compiled = runModule.compile(code);
+    console.log("COMPILED_FACT:", compiled);
+    expect(runModule.run(code, "5")).toBe(120);
+  });
+
+  test("recursive sum without stdin works", () => {
+    const code = `fn sum(n : I32) : I32 => { if (n == 0) { yield 0; } yield n + sum(n - 1); } sum(3)`;
+    expect(runModule.run(code)).toBe(6);
+  });
+});
+
 describe("run - arrays", () => {
   test("array indexing works and sums values", () => {
     const code = "let x : [I32; 3; 3] = [1, 2, 3]; x[0] + x[1] + x[2]";

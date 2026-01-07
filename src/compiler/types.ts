@@ -1,6 +1,7 @@
 export interface VarDeclaration {
   mut: boolean;
   type?: string;
+  initialized?: boolean; // whether the declaration included an initializer (e.g., `let x = ...`)
 }
 
 export interface ParseStructsResult {
