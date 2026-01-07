@@ -114,8 +114,21 @@ describe("run", () => {
 
   test("array initializer length mismatch throws", () => {
     const code = "let x : [I32; 1; 2] = [1, 2];";
-    expect(runModule.compile(code)).toMatch(/array initializer length mismatch/);
-    expect(() => runModule.run(code)).toThrow(/array initializer length mismatch/);
+    expect(runModule.compile(code)).toMatch(
+      /array initializer length mismatch/
+    );
+    expect(() => runModule.run(code)).toThrow(
+      /array initializer length mismatch/
+    );
+  });
+
+  test("array declaration without initializer can be assigned by index and sums values", () => {
+    const code =
+      "let mut x : [I32; 0; 2]; x[0] = read<I32>(); x[1] = read<I32>(); x[0] + x[1]";
+    const compiled = runModule.compile(code);
+    // ensure declaration was initialized
+    expect(compiled).toMatch(/let\s+x\s*=\s*\[/);
+    expect(runModule.run(code, "3 4")).toBe(7);
   });
 
   test("pointer deref returns value", () => {

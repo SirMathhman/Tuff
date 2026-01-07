@@ -302,15 +302,121 @@ interface ParseDeclarationsResult {
   error?: string;
 }
 
+interface ParsedArrayType {
+  inner: string;
+  parts: string[];
+}
+
 function makeDuplicateError(kind: string, name: string): string {
   return `(function(){ throw new Error("duplicate ${kind} '${name}'"); })()`;
 }
 
+function splitArrayTypeInner(typeInner: string): string[] {
+  return typeInner
+    .split(";")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 function parseArrayDeclaredSize(typeInner: string): number | undefined {
-  const parts = typeInner.split(";").map((s) => s.trim()).filter(Boolean);
+  const parts = splitArrayTypeInner(typeInner);
   if (parts.length < 2) return undefined;
   const maybeSize = parts[1];
   return /^\d+$/.test(maybeSize) ? parseInt(maybeSize, 10) : undefined;
+}
+
+function parseArrayRuntimeSize(typeInner: string): number | undefined {
+  const parts = splitArrayTypeInner(typeInner);
+  if (parts.length < 3) return undefined;
+  const maybeSize = parts[2];
+  return /^\d+$/.test(maybeSize) ? parseInt(maybeSize, 10) : undefined;
+}
+
+function defaultValForArrayElemType(t: string): string {
+  const ty = t.trim();
+  if (ty === "I32" || ty === "Bool" || ty === "Char") return "0";
+  return "undefined";
+}
+
+function parseBracketArrayType(
+  typeSpec: string | undefined
+): ParsedArrayType | undefined {
+  if (!typeSpec) return undefined;
+  const t = typeSpec.trim();
+  if (!t.startsWith("[")) return undefined;
+  const inner = t.replace(/^\[|\]$/g, "");
+  const parts = splitArrayTypeInner(inner);
+  return { inner, parts };
+}
+
+function initializeArrayDecls(
+  src: string,
+  declsMap: Map<string, VarDeclaration>
+): string {
+  let out = src;
+  for (const [name, info] of declsMap.entries()) {
+    const parsed = parseBracketArrayType(info.type);
+    if (!parsed) continue;
+    const { inner, parts } = parsed;
+    if (parts.length < 3) continue;
+    const elemType = parts[0] || "";
+    const runtimeSize = parseArrayRuntimeSize(inner);
+    if (runtimeSize === undefined) continue;
+
+    // If the declaration already has an initializer, skip
+    const hasInitRe = new RegExp(
+      "\\blet\\s+(?:mut\\s+)?" + name + "\\s*:\\s*\\[[^\\]]+\\]\\s*="
+    );
+    if (hasInitRe.test(out)) continue;
+
+    const def = defaultValForArrayElemType(elemType);
+    const fill = Array(runtimeSize).fill(def).join(", ");
+    // Replace `let [mut] name : [..];` with `let [mut] name : [..] = [<fill>];`
+    const declRe = new RegExp(
+      "(\\blet\\s+(?:mut\\s+)?" + name + "\\s*:\\s*\\[[^\\]]+\\])\\s*;"
+    );
+    out = out.replace(declRe, (_m, declPart) => `${declPart} = [${fill}];`);
+  }
+  return out;
+}
+
+function skipWhitespace(input: string, start: number): number {
+  let i = start;
+  while (i < input.length && /\s/.test(input[i])) i++;
+  return i;
+}
+
+function parseBracketedType(input: string, start: number): string | undefined {
+  const close = input.indexOf("]", start + 1);
+  if (close === -1) return undefined;
+  return input.slice(start, close + 1).trim();
+}
+
+function parseSimpleType(input: string, start: number): string | undefined {
+  let i = start;
+  while (
+    i < input.length &&
+    input[i] !== "=" &&
+    input[i] !== ";" &&
+    input[i] !== "\n" &&
+    input[i] !== "\r"
+  ) {
+    i++;
+  }
+  const raw = input.slice(start, i).trim();
+  return raw || undefined;
+}
+
+function parseTypeAnnotationAfterName(
+  input: string,
+  start: number
+): string | undefined {
+  let i = skipWhitespace(input, start);
+  if (input[i] !== ":") return undefined;
+  i++;
+  i = skipWhitespace(input, i);
+  if (input[i] === "[") return parseBracketedType(input, i);
+  return parseSimpleType(input, i);
 }
 
 function parseInitializerItems(initInner: string): string[] {
@@ -320,7 +426,11 @@ function parseInitializerItems(initInner: string): string[] {
     .filter(Boolean);
 }
 
-function checkItemsLength(name: string, expected: number, initInner: string): string | undefined {
+function checkItemsLength(
+  name: string,
+  expected: number,
+  initInner: string
+): string | undefined {
   const items = parseInitializerItems(initInner);
   if (items.length !== expected) {
     return `(function(){ throw new Error("array initializer length mismatch for '${name}': expected ${expected} but got ${items.length}"); })()`;
@@ -328,13 +438,15 @@ function checkItemsLength(name: string, expected: number, initInner: string): st
   return undefined;
 }
 
-function checkArrayInitializersInDecls(src: string, decls: Map<string, VarDeclaration>): string | undefined {
+function checkArrayInitializersInDecls(
+  src: string,
+  decls: Map<string, VarDeclaration>
+): string | undefined {
   for (const [name, info] of decls.entries()) {
-    if (!info.type) continue;
-    const t = info.type.trim();
-    if (!t.startsWith("[")) continue;
+    const parsed = parseBracketArrayType(info.type);
+    if (!parsed) continue;
     // parse bracket content split by semicolon: [Type; size; ...]
-    const inner = t.replace(/^\[|\]$/g, "");
+    const { inner } = parsed;
     const expected = parseArrayDeclaredSize(inner);
     if (expected === undefined) continue;
     // Manually find initializer bracket after the declaration to avoid regex pitfalls
@@ -357,7 +469,8 @@ function checkArrayInitializersInDecls(src: string, decls: Map<string, VarDeclar
 }
 
 function checkExplicitArrayDecls(src: string): string | undefined {
-  const re = /\blet\s+(?:mut\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*:\s*\[([^\]]+)\]\s*=\s*\[([^\]]*)\]/g;
+  const re =
+    /\blet\s+(?:mut\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*:\s*\[([^\]]+)\]\s*=\s*\[([^\]]*)\]/g;
   let m: RegExpExecArray | undefined;
   while ((m = re.exec(src) as RegExpExecArray | undefined)) {
     const name = m[1];
@@ -372,23 +485,26 @@ function checkExplicitArrayDecls(src: string): string | undefined {
 }
 
 function parseDeclarations(input: string): ParseDeclarationsResult {
-  // Capture optional type annotations like `: I32` or `: &Str`
-  const declRegex =
-    /\blet\s+(mut\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?::\s*([^=\n]+))?/g;
+  // Capture optional type annotations like `: I32`, `: &Str`, `: *mut I32`, or `: [I32; 0; 2]`.
+  // We avoid a single "capture everything" regex because array types contain semicolons.
   const decls = new Map<string, VarDeclaration>();
+  const declStartRe = /\blet\s+(mut\s+)?([A-Za-z_$][A-Za-z0-9_$]*)/g;
   let m: RegExpExecArray | undefined;
   while (
-    (m = declRegex.exec(input) as unknown as RegExpExecArray | undefined)
+    (m = declStartRe.exec(input) as unknown as RegExpExecArray | undefined)
   ) {
+    const mut = !!m[1];
     const varName = m[2];
-    const type = m[3] ? m[3].trim() : undefined;
     if (decls.has(varName)) {
       return {
         decls,
         error: makeDuplicateError("variable declaration", varName),
       };
     }
-    decls.set(varName, { mut: !!m[1], type });
+
+    const afterNameIdx = (m.index ?? 0) + m[0].length;
+    const type = parseTypeAnnotationAfterName(input, afterNameIdx);
+    decls.set(varName, { mut, type });
   }
   return { decls };
 }
@@ -458,13 +574,16 @@ export function compile(input: string): string {
   if (parsed.error) return parsed.error;
   const decls = parsed.decls;
 
-
-
   const arrInitErr = checkArrayInitializersInDecls(codeNoStructs, decls);
   if (arrInitErr) return arrInitErr;
 
   const arrExplicitErr = checkExplicitArrayDecls(codeNoStructs);
   if (arrExplicitErr) return arrExplicitErr;
+
+  // Initialize arrays declared without an explicit initializer when the
+  // type includes a runtime size (e.g., `[I32; 0; 2]`), creating an array
+  // of the requested length filled with defaults so index assignments work.
+  replaced = initializeArrayDecls(replaced, decls);
 
   const hasRead =
     replaced.indexOf("readI32()") !== -1 ||
