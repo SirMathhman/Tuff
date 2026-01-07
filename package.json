@@ -7,7 +7,7 @@
     "test:watch": "vitest --watch",
     "build": "tsc -p .",
     "lint": "eslint . --ext .ts",
-    "cpd": "pmd cpd -d src --minimum-tokens 50 --language typescript --format text --ignore-identifiers --ignore-literals",
+    "cpd": "pmd cpd -d src,tests --minimum-tokens 50 --language typescript --format text --ignore-identifiers --ignore-literals",
     "prepare": "husky install"
   },
   "devDependencies": {

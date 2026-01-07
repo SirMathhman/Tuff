@@ -1,128 +1,58 @@
 import { describe, it, expect } from "vitest";
 import { evalLeftToRight } from "../src/evalLeftToRight";
 import { isOk, isErr } from "../src/result";
+import { expectOkValue } from "../src/testUtils";
+
+// Helper to build token arrays more concisely
+function mkTokens(spec: Array<number | string>): any[] {
+  const result: any[] = [];
+  for (const item of spec) {
+    if (typeof item === "number") {
+      result.push({ type: "num", value: item } as const);
+    } else if (item === "(" || item === ")") {
+      result.push({ type: "paren", value: item });
+    } else {
+      result.push({ type: "op", value: item } as const);
+    }
+  }
+  return result;
+}
 
 describe("evalLeftToRight - addition/subtraction", () => {
   it("evaluates left-to-right", () => {
-    const tokens = [
-      { type: "num", value: 10 } as const,
-      { type: "op", value: "-" } as const,
-      { type: "num", value: 5 } as const,
-      { type: "op", value: "+" } as const,
-      { type: "num", value: 3 } as const,
-    ];
-    const r = evalLeftToRight(tokens as any);
-    expect(isOk(r)).toBe(true);
-    if (isOk(r)) expect(r.value).toBe(8);
+    expectOkValue(evalLeftToRight(mkTokens([10, "-", 5, "+", 3]) as any), 8);
   });
 });
 
 describe("evalLeftToRight - multiplication", () => {
   it("evaluates multiplication with precedence", () => {
-    const tokens = [
-      { type: "num", value: 10 } as const,
-      { type: "op", value: "*" } as const,
-      { type: "num", value: 5 } as const,
-      { type: "op", value: "+" } as const,
-      { type: "num", value: 3 } as const,
-    ];
-    const r = evalLeftToRight(tokens as any);
-    expect(isOk(r)).toBe(true);
-    if (isOk(r)) expect(r.value).toBe(53);
+    expectOkValue(evalLeftToRight(mkTokens([10, "*", 5, "+", 3]) as any), 53);
   });
 
   it("evaluates chained multiplication", () => {
-    const tokens = [
-      { type: "num", value: 2 } as const,
-      { type: "op", value: "*" } as const,
-      { type: "num", value: 3 } as const,
-      { type: "op", value: "*" } as const,
-      { type: "num", value: 4 } as const,
-    ];
-    const r = evalLeftToRight(tokens as any);
-    expect(isOk(r)).toBe(true);
-    if (isOk(r)) expect(r.value).toBe(24);
+    expectOkValue(evalLeftToRight(mkTokens([2, "*", 3, "*", 4]) as any), 24);
   });
 });
 
 describe("evalLeftToRight - division & modulus", () => {
   it("evaluates division and chained division", () => {
-    const tokens = [
-      { type: "num", value: 100 } as const,
-      { type: "op", value: "/" } as const,
-      { type: "num", value: 2 } as const,
-      { type: "op", value: "/" } as const,
-      { type: "num", value: 5 } as const,
-    ];
-    const r = evalLeftToRight(tokens as any);
-    expect(isOk(r)).toBe(true);
-    if (isOk(r)) expect(r.value).toBe(10);
-
-    const r2 = evalLeftToRight([
-      { type: "num", value: 20 } as const,
-      { type: "op", value: "/" } as const,
-      { type: "num", value: 5 } as const,
-    ] as any);
-    expect(isOk(r2)).toBe(true);
-    if (isOk(r2)) expect(r2.value).toBe(4);
+    expectOkValue(evalLeftToRight(mkTokens([100, "/", 2, "/", 5]) as any), 10);
+    expectOkValue(evalLeftToRight(mkTokens([20, "/", 5]) as any), 4);
   });
 
   it("evaluates modulus and chained modulus", () => {
-    const tokens = [
-      { type: "num", value: 10 } as const,
-      { type: "op", value: "%" } as const,
-      { type: "num", value: 3 } as const,
-    ];
-    const r = evalLeftToRight(tokens as any);
-    expect(isOk(r)).toBe(true);
-    if (isOk(r)) expect(r.value).toBe(1);
-
-    const tokens2 = [
-      { type: "num", value: 20 } as const,
-      { type: "op", value: "%" } as const,
-      { type: "num", value: 6 } as const,
-      { type: "op", value: "%" } as const,
-      { type: "num", value: 4 } as const,
-    ];
-    const r2 = evalLeftToRight(tokens2 as any);
-    expect(isOk(r2)).toBe(true);
-    if (isOk(r2)) expect(r2.value).toBe(2);
+    expectOkValue(evalLeftToRight(mkTokens([10, "%", 3]) as any), 1);
+    expectOkValue(evalLeftToRight(mkTokens([20, "%", 6, "%", 4]) as any), 2);
   });
 });
 
 describe("evalLeftToRight - parentheses", () => {
   it("evaluates parentheses grouping", () => {
-    const tokens = [
-      { type: "paren", value: "(" } as any,
-      { type: "num", value: 3 } as const,
-      { type: "op", value: "+" } as const,
-      { type: "num", value: 10 } as const,
-      { type: "paren", value: ")" } as any,
-      { type: "op", value: "*" } as const,
-      { type: "num", value: 5 } as const,
-    ];
-    const r = evalLeftToRight(tokens as any);
-    expect(isOk(r)).toBe(true);
-    if (isOk(r)) expect(r.value).toBe(65);
+    expectOkValue(evalLeftToRight(mkTokens(["(", 3, "+", 10, ")", "*", 5]) as any), 65);
   });
 
   it("evaluates nested parentheses", () => {
-    const tokens = [
-      { type: "num", value: 2 } as const,
-      { type: "op", value: "*" } as const,
-      { type: "paren", value: "(" } as any,
-      { type: "num", value: 1 } as const,
-      { type: "op", value: "+" } as const,
-      { type: "paren", value: "(" } as any,
-      { type: "num", value: 3 } as const,
-      { type: "op", value: "-" } as const,
-      { type: "num", value: 1 } as const,
-      { type: "paren", value: ")" } as any,
-      { type: "paren", value: ")" } as any,
-    ];
-    const r = evalLeftToRight(tokens as any);
-    expect(isOk(r)).toBe(true);
-    if (isOk(r)) expect(r.value).toBe(6);
+    expectOkValue(evalLeftToRight(mkTokens([2, "*", "(", 1, "+", "(", 3, "-", 1, ")", ")"]) as any), 6);
   });
 });
 
