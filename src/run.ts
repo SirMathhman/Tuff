@@ -12,8 +12,13 @@ export function compile(input: string): string {
 
   // Replace all occurrences of `read<I32>()` with calls to a runtime helper
   // function `readI32()` which `run` will provide when evaluating.
-  const readRegex = /read<\s*I32\s*>\s*\(\s*\)/g;
-  let replaced = trimmed.replace(readRegex, "readI32()");
+  const readI32Regex = /read<\s*I32\s*>\s*\(\s*\)/g;
+  let replaced = trimmed.replace(readI32Regex, "readI32()");
+
+  // Replace all occurrences of `read<Bool>()` with calls to a runtime helper
+  // function `readBool()` which `run` will provide when evaluating.
+  const readBoolRegex = /read<\s*Bool\s*>\s*\(\s*\)/g;
+  replaced = replaced.replace(readBoolRegex, "readBool()");
 
   // Track declarations and whether they are mutable so we can detect
   // illegal assignments to immutable variables.
@@ -31,7 +36,8 @@ export function compile(input: string): string {
     decls.set(varName, { mut: !!m[1] });
   }
 
-  const hasRead = replaced.indexOf("readI32()") !== -1;
+  const hasRead =
+    replaced.indexOf("readI32()") !== -1 || replaced.indexOf("readBool()") !== -1;
 
   // Remove simple type annotations like `: I32` from variable declarations.
   replaced = replaced.replace(/:\s*I32\b/g, "");
@@ -105,12 +111,12 @@ export function run(input: string, stdin: string = ""): number {
 
   // Wrap the compiled expression in an IIFE so we can inject `stdin` into
   // the evaluation scope. JSON.stringify is used to safely embed the stdin
-  // string literal. We also provide a `readI32` helper that consumes tokens
-  // from `stdin` (split on whitespace) so expressions like
-  // "read<I32>() + read<I32>()" work as expected.
+  // string literal. We also provide `readI32` and `readBool` helpers that
+  // consume tokens from `stdin` (split on whitespace) so expressions like
+  // "read<I32>() + read<Bool>()" work as expected.
   const code = `(function(){ const stdin = ${JSON.stringify(
     stdin
-  )}; const args = stdin.trim() ? stdin.trim().split(/\\s+/) : []; let __readIndex = 0; function readI32(){ return parseInt(args[__readIndex++], 10); } return (${compiledExpr}); })()`;
+  )}; const args = stdin.trim() ? stdin.trim().split(/\\s+/) : []; let __readIndex = 0; function readI32(){ return parseInt(args[__readIndex++], 10); } function readBool(){ const val = args[__readIndex++]; return val === 'true' ? 1 : 0; } return (${compiledExpr}); })()`;
 
   const result = eval(code);
   return Number(result);
