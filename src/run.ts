@@ -306,10 +306,75 @@ function makeDuplicateError(kind: string, name: string): string {
   return `(function(){ throw new Error("duplicate ${kind} '${name}'"); })()`;
 }
 
+function parseArrayDeclaredSize(typeInner: string): number | undefined {
+  const parts = typeInner.split(";").map((s) => s.trim()).filter(Boolean);
+  if (parts.length < 2) return undefined;
+  const maybeSize = parts[1];
+  return /^\d+$/.test(maybeSize) ? parseInt(maybeSize, 10) : undefined;
+}
+
+function parseInitializerItems(initInner: string): string[] {
+  return initInner
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function checkItemsLength(name: string, expected: number, initInner: string): string | undefined {
+  const items = parseInitializerItems(initInner);
+  if (items.length !== expected) {
+    return `(function(){ throw new Error("array initializer length mismatch for '${name}': expected ${expected} but got ${items.length}"); })()`;
+  }
+  return undefined;
+}
+
+function checkArrayInitializersInDecls(src: string, decls: Map<string, VarDeclaration>): string | undefined {
+  for (const [name, info] of decls.entries()) {
+    if (!info.type) continue;
+    const t = info.type.trim();
+    if (!t.startsWith("[")) continue;
+    // parse bracket content split by semicolon: [Type; size; ...]
+    const inner = t.replace(/^\[|\]$/g, "");
+    const expected = parseArrayDeclaredSize(inner);
+    if (expected === undefined) continue;
+    // Manually find initializer bracket after the declaration to avoid regex pitfalls
+    let startIdx = src.indexOf("let " + name);
+    while (startIdx !== -1) {
+      const eqIdx = src.indexOf("=", startIdx);
+      if (eqIdx === -1) break;
+      const brOpen = src.indexOf("[", eqIdx);
+      if (brOpen === -1) break;
+      // find closing bracket
+      const brClose = src.indexOf("]", brOpen + 1);
+      if (brClose === -1) break;
+      const innerInit = src.slice(brOpen + 1, brClose);
+      const maybeErr = checkItemsLength(name, expected, innerInit);
+      if (maybeErr) return maybeErr;
+      startIdx = src.indexOf("let " + name, brClose);
+    }
+  }
+  return undefined;
+}
+
+function checkExplicitArrayDecls(src: string): string | undefined {
+  const re = /\blet\s+(?:mut\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*:\s*\[([^\]]+)\]\s*=\s*\[([^\]]*)\]/g;
+  let m: RegExpExecArray | undefined;
+  while ((m = re.exec(src) as RegExpExecArray | undefined)) {
+    const name = m[1];
+    const typeInner = (m[2] || "").trim();
+    const initInner = m[3] || "";
+    const expected = parseArrayDeclaredSize(typeInner);
+    if (expected === undefined) continue;
+    const maybeErr = checkItemsLength(name, expected, initInner);
+    if (maybeErr) return maybeErr;
+  }
+  return undefined;
+}
+
 function parseDeclarations(input: string): ParseDeclarationsResult {
   // Capture optional type annotations like `: I32` or `: &Str`
   const declRegex =
-    /\blet\s+(mut\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?::\s*([^=;\n]+))?/g;
+    /\blet\s+(mut\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?::\s*([^=\n]+))?/g;
   const decls = new Map<string, VarDeclaration>();
   let m: RegExpExecArray | undefined;
   while (
@@ -392,6 +457,14 @@ export function compile(input: string): string {
   const parsed = parseDeclarations(codeNoStructs);
   if (parsed.error) return parsed.error;
   const decls = parsed.decls;
+
+
+
+  const arrInitErr = checkArrayInitializersInDecls(codeNoStructs, decls);
+  if (arrInitErr) return arrInitErr;
+
+  const arrExplicitErr = checkExplicitArrayDecls(codeNoStructs);
+  if (arrExplicitErr) return arrExplicitErr;
 
   const hasRead =
     replaced.indexOf("readI32()") !== -1 ||

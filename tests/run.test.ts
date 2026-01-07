@@ -112,6 +112,12 @@ describe("run", () => {
     expect(runModule.run(code)).toBe(3);
   });
 
+  test("array initializer length mismatch throws", () => {
+    const code = "let x : [I32; 1; 2] = [1, 2];";
+    expect(runModule.compile(code)).toMatch(/array initializer length mismatch/);
+    expect(() => runModule.run(code)).toThrow(/array initializer length mismatch/);
+  });
+
   test("pointer deref returns value", () => {
     const code = "let x = 100; let y : *I32 = &x; *y";
     expect(runModule.run(code)).toBe(100);
