@@ -45,10 +45,30 @@ function parseStructs(input: string): ParseStructsResult {
   return { code: out, structs };
 }
 
+interface ParseFunctionsResult {
+  code: string;
+  error?: string;
+}
+
 // Convert `fn name(params) : Type => { ... }` into JS function declarations
-function parseFunctions(input: string): string {
-  const fnRegex = /fn\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(([^)]*)\)\s*(?::\s*[A-Za-z_$][A-Za-z0-9_$]*)?\s*=>\s*\{([\s\S]*?)\}/g;
-  return input.replace(fnRegex, (_m, name, params, body) => {
+function parseFunctions(input: string): ParseFunctionsResult {
+  const fnRegex =
+    /fn\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(([^)]*)\)\s*(?::\s*[A-Za-z_$][A-Za-z0-9_$]*)?\s*=>\s*\{([\s\S]*?)\}/g;
+  let out = input;
+  const names = new Set<string>();
+  let m: RegExpExecArray | undefined;
+  while ((m = fnRegex.exec(input) as unknown as RegExpExecArray | undefined)) {
+    const name = m[1];
+    const params = m[2];
+    const body = m[3];
+    if (names.has(name)) {
+      return {
+        code: input,
+        error: `(function(){ throw new Error("duplicate function declaration '${name}'"); })()`,
+      };
+    }
+    names.add(name);
+
     const paramList = params
       .split(",")
       .map((p: string) => p.trim())
@@ -61,9 +81,10 @@ function parseFunctions(input: string): string {
       .join(", ");
 
     const transformedBody = body.replace(/\byield\b/g, "return");
-    // Use a const-assigned function expression so it can be used inline
-    return `const ${name} = function(${paramList}) { ${transformedBody} };`;
-  });
+    const replacement = `const ${name} = function(${paramList}) { ${transformedBody} };`;
+    out = out.replace(m[0], replacement);
+  }
+  return { code: out };
 }
 
 interface ParseDeclarationsResult {
@@ -136,7 +157,10 @@ export function compile(input: string): string {
   const structs = structParsed.structs;
 
   // Transform `fn` declarations to JS functions before replacing reads
-  codeNoStructs = parseFunctions(codeNoStructs);
+  const fnParsed = parseFunctions(codeNoStructs);
+  if (fnParsed.error) return fnParsed.error;
+  codeNoStructs = fnParsed.code;
+
   let replaced = replaceReads(codeNoStructs);
 
   const parsed = parseDeclarations(codeNoStructs);

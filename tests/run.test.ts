@@ -87,7 +87,8 @@ describe("run", () => {
   });
 
   test("functions with yield work and read from stdin", () => {
-    const code = "fn add(first : I32, second : I32) : I32 => { yield first + second; } add(read<I32>(), read<I32>())";
+    const code =
+      "fn add(first : I32, second : I32) : I32 => { yield first + second; } add(read<I32>(), read<I32>())";
     expect(runModule.run(code, "3 4")).toBe(7);
   });
   test("handles multi-statement code with reads and returns value", () => {
@@ -107,5 +108,11 @@ describe("run", () => {
   test("duplicate variable declaration throws", () => {
     const code = "let x : I32 = 100; let x : I32 = 200;";
     expect(() => runModule.run(code)).toThrow(/duplicate/);
+  });
+
+  test("duplicate function declaration throws", () => {
+    const code =
+      "fn add(first : I32, second : I32) : I32 => { yield first + second; } fn add(first : I32, second : I32) : I32 => { yield first + second; }";
+    expect(() => runModule.run(code)).toThrow(/duplicate function declaration/);
   });
 });
