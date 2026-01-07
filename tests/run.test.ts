@@ -97,6 +97,11 @@ describe("run", () => {
     expect(runModule.run(code)).toBe(97);
   });
 
+  test("string indexing assigned to Char returns char code", () => {
+    const code = `let x : &Str = "a"; let y : Char = x[0]; y`;
+    expect(runModule.run(code)).toBe(97);
+  });
+
   test("boolean operators work with read<Bool>()", () => {
     expect(runModule.run("read<Bool>() && read<Bool>()", "true false")).toBe(0);
     expect(runModule.run("read<Bool>() && read<Bool>()", "true true")).toBe(1);

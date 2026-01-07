@@ -198,13 +198,20 @@ function getFunctionCallArgs(replaced: string, fname: string): string[][] {
   return results;
 }
 
-function applyStringAndCtorTransforms(replaced: string, structs: Map<string, string[]>, decls: Map<string, VarDeclaration>): string {
+function applyStringAndCtorTransforms(
+  replaced: string,
+  structs: Map<string, string[]>,
+  decls: Map<string, VarDeclaration>
+): string {
   // Convert char literals like 'a' -> ('a').charCodeAt(0) so they behave as numeric Char
   // Supports escaped chars such as '\n' via the capture
   replaced = replaced.replace(/'([^'\\]|\\.)'/g, "('$1').charCodeAt(0)");
 
   // Convert string literal indexing "foo"[0] -> ("foo").charCodeAt(0)
-  replaced = replaced.replace(/"((?:[^"\\]|\\.)*)"\s*\[\s*(\d+)\s*\]/g, (_m, inner, idx) => `(${JSON.stringify(inner)}).charCodeAt(${idx})`);
+  replaced = replaced.replace(
+    /"((?:[^"\\]|\\.)*)"\s*\[\s*(\d+)\s*\]/g,
+    (_m, inner, idx) => `(${JSON.stringify(inner)}).charCodeAt(${idx})`
+  );
 
   // Replace constructor calls like `Point { expr, expr }` with object literals
   for (const [name, fields] of structs.entries()) {
@@ -222,7 +229,10 @@ function applyStringAndCtorTransforms(replaced: string, structs: Map<string, str
   // If any variable is declared as `: &Str`, convert occurrences like `x[0]` to `x.charCodeAt(0)`
   for (const [name, info] of decls.entries()) {
     if (info.type === "&Str") {
-      const idxRegex = new RegExp("\\b" + name + "\\s*\\[\\s*(\\d+)\\s*\\]", "g");
+      const idxRegex = new RegExp(
+        "\\b" + name + "\\s*\\[\\s*(\\d+)\\s*\\]",
+        "g"
+      );
       replaced = replaced.replace(idxRegex, `${name}.charCodeAt($1)`);
     }
   }
