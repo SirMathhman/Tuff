@@ -45,6 +45,27 @@ function parseStructs(input: string): ParseStructsResult {
   return { code: out, structs };
 }
 
+// Convert `fn name(params) : Type => { ... }` into JS function declarations
+function parseFunctions(input: string): string {
+  const fnRegex = /fn\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(([^)]*)\)\s*(?::\s*[A-Za-z_$][A-Za-z0-9_$]*)?\s*=>\s*\{([\s\S]*?)\}/g;
+  return input.replace(fnRegex, (_m, name, params, body) => {
+    const paramList = params
+      .split(",")
+      .map((p: string) => p.trim())
+      .filter(Boolean)
+      .map((p: string) => {
+        const pm = /^([A-Za-z_$][A-Za-z0-9_$]*)/.exec(p);
+        return pm ? pm[1] : "";
+      })
+      .filter(Boolean)
+      .join(", ");
+
+    const transformedBody = body.replace(/\byield\b/g, "return");
+    // Use a const-assigned function expression so it can be used inline
+    return `const ${name} = function(${paramList}) { ${transformedBody} };`;
+  });
+}
+
 interface ParseDeclarationsResult {
   decls: Map<string, VarDeclaration>;
   error?: string;
@@ -111,9 +132,11 @@ export function compile(input: string): string {
 
   // Extract and remove struct declarations first
   const structParsed = parseStructs(trimmed);
-  const codeNoStructs = structParsed.code;
+  let codeNoStructs = structParsed.code;
   const structs = structParsed.structs;
 
+  // Transform `fn` declarations to JS functions before replacing reads
+  codeNoStructs = parseFunctions(codeNoStructs);
   let replaced = replaceReads(codeNoStructs);
 
   const parsed = parseDeclarations(codeNoStructs);

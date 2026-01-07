@@ -85,6 +85,11 @@ describe("run", () => {
       0
     );
   });
+
+  test("functions with yield work and read from stdin", () => {
+    const code = "fn add(first : I32, second : I32) : I32 => { yield first + second; } add(read<I32>(), read<I32>())";
+    expect(runModule.run(code, "3 4")).toBe(7);
+  });
   test("handles multi-statement code with reads and returns value", () => {
     const code = "let x : I32 = read<I32>(); let y : I32 = read<I32>(); x + y";
     expect(runModule.run(code, "1 2")).toBe(3);
