@@ -5,7 +5,7 @@ import { evalExprUntilSemicolon, tryAssignment } from "./assignmentEval";
 import { indexUntilSemicolon, findMatchingBrace } from "./commonUtils";
 import { parseFunctionSignature } from "./functions";
 import { parseStructDefinition } from "./structs";
-import { evaluateStructInstantiation } from "./structEval";
+import { evaluateStructInstantiation } from "./utils/structEval";
 import { findMatchingParen, findTopLevelElseIndex } from "./interpret";
 
 export interface StatementResult {

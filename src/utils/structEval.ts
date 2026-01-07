@@ -1,8 +1,8 @@
-import { findMatchingBrace } from "./commonUtils";
-import { Binding, StructBinding, StructInstance } from "./matchEval";
-import { Result, err, isErr, ok } from "./result";
+import { findMatchingBrace } from "../commonUtils";
+import { Binding, StructBinding, StructInstance } from "../matchEval";
+import { Result, err, isErr, ok } from "../result";
 import { splitTopLevelCommaSeparated } from "./splitTopLevel";
-import { Token } from "./tokenize";
+import { Token } from "../tokenize";
 
 export interface SubstituteResult {
   token: Token;

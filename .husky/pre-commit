@@ -2,4 +2,4 @@
 . "$(dirname "$0")/_/husky.sh"
 
 # Run tests and lint before commit
-npm run test && npm run lint && npm run cpd
+npm run test && npm run lint && npm run cpd && npm run check-dir-files

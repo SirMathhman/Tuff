@@ -11,8 +11,11 @@ import {
 } from "./matchEval";
 import { evalExprUntilSemicolon, tryAssignment } from "./assignmentEval";
 import { indexUntilSemicolon, findMatchingBrace } from "./commonUtils";
-import { evaluateFieldAccess, evaluateStructInstantiation } from "./structEval";
-import { splitTopLevelCommaSeparated } from "./splitTopLevel";
+import {
+  evaluateFieldAccess,
+  evaluateStructInstantiation,
+} from "./utils/structEval";
+import { splitTopLevelCommaSeparated } from "./utils/splitTopLevel";
 import {
   processLetStatement,
   processExpressionStatement,

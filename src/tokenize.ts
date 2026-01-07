@@ -1,4 +1,4 @@
-import { parseNumber } from "./parseNumber";
+import { parseNumber } from "./utils/parseNumber";
 import { Result, ok, err, isOk } from "./result";
 import { StructInstance } from "./matchEval";
 

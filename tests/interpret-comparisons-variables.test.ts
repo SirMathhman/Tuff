@@ -1,6 +1,6 @@
 import { describe, it } from "vitest";
 import { interpret } from "../src/interpret";
-import { expectOkValue } from "../src/testUtils";
+import { expectOkValue } from "../src/utils/testUtils";
 
 describe("interpret - comparisons with variables", () => {
   it("compares variable values", () => {

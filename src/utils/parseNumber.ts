@@ -1,4 +1,4 @@
-import { Result, ok, err } from "./result";
+import { Result, ok, err } from "../result";
 
 export interface ParseNumberResult {
   value: number;

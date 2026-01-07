@@ -1,5 +1,5 @@
 import { assert, expect } from "vitest";
-import { Result, isOk } from "../src/result";
+import { Result, isOk } from "../result";
 
 function assertValue<T>(
   value: T,

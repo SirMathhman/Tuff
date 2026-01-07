@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseNumber } from "../src/parseNumber";
+import { parseNumber } from "../src/utils/parseNumber";
 import { isOk, isErr } from "../src/result";
 
 describe("parseNumber", () => {

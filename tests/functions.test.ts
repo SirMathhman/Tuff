@@ -1,6 +1,6 @@
 import { describe, it } from "vitest";
 import { interpret } from "../src/interpret";
-import { expectOkValue } from "../src/testUtils";
+import { expectOkValue } from "../src/utils/testUtils";
 
 describe("functions - basic declaration and calls", () => {
   it("declares and calls simple function with expression body", () => {

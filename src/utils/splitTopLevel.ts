@@ -1,5 +1,5 @@
-import { Result, err, ok } from "./result";
-import { Token } from "./tokenize";
+import { Result, err, ok } from "../result";
+import { Token } from "../tokenize";
 
 export function splitTopLevelCommaSeparated(
   tokens: Token[]
