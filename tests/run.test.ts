@@ -56,7 +56,11 @@ describe("run", () => {
     expect(runModule.run("read<I32>() + read<I32>()", "1 2")).toBe(3);
     expect(runModule.run("read<I32>() + read<I32>()", "  1   2  ")).toBe(3);
   });
-  test('handles multi-statement code with reads and returns value', () => {
-    const code = 'let x : I32 = read<I32>(); let y : I32 = read<I32>(); x + y';
-    expect(runModule.run(code, '1 2')).toBe(3);
+  test("handles multi-statement code with reads and returns value", () => {
+    const code = "let x : I32 = read<I32>(); let y : I32 = read<I32>(); x + y";
+    expect(runModule.run(code, "1 2")).toBe(3);
+  });
+  test('handles mutable declarations with mut', () => {
+    const code = 'let mut x : I32 = read<I32>(); x = read<I32>(); x';
+    expect(runModule.run(code, '1 2')).toBe(2);
   });});

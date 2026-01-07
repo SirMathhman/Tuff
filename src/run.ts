@@ -8,26 +8,28 @@ export function compile(input: string): string {
   // Replace all occurrences of `read<I32>()` with calls to a runtime helper
   // function `readI32()` which `run` will provide when evaluating.
   const readRegex = /read<\s*I32\s*>\s*\(\s*\)/g;
-  let replaced = trimmed.replace(readRegex, 'readI32()');
+  let replaced = trimmed.replace(readRegex, "readI32()");
 
-  const hasRead = replaced.indexOf('readI32()') !== -1;
+  const hasRead = replaced.indexOf("readI32()") !== -1;
 
   // Remove simple type annotations like `: I32` from variable declarations.
-  replaced = replaced.replace(/:\s*I32\b/g, '');
-
+  replaced = replaced.replace(/:\s*I32\b/g, "");
+  // Remove Rust-style mutability marker (e.g., `let mut x`) so code is valid
+  // JavaScript. Convert `let mut` -> `let` (and similarly for var/const).
+  replaced = replaced.replace(/\b(let|var|const)\s+mut\b/g, '$1');
   if (hasRead) {
     // If the code contains statements (let/var/const or semicolons), wrap it
     // in an IIFE so the returned value comes from the final expression.
     if (/;|\b(let|const|var)\b|\n/.test(replaced)) {
       const parts = replaced
-        .split(';')
+        .split(";")
         .map((s) => s.trim())
         .filter(Boolean);
-      if (parts.length === 0) return '(0)';
+      if (parts.length === 0) return "(0)";
       if (parts.length === 1) return parts[0];
 
       const last = parts.pop();
-      const body = parts.join('; ');
+      const body = parts.join("; ");
       return `(function(){ ${body}; return (${last}); })()`;
     }
 
@@ -39,14 +41,14 @@ export function compile(input: string): string {
   // evaluated as a single expression by `run`.
   if (/;|\b(let|const|var)\b|\n/.test(replaced)) {
     const parts = replaced
-      .split(';')
+      .split(";")
       .map((s) => s.trim())
       .filter(Boolean);
-    if (parts.length === 0) return '(0)';
+    if (parts.length === 0) return "(0)";
     if (parts.length === 1) return parts[0];
 
     const last = parts.pop();
-    const body = parts.join('; ');
+    const body = parts.join("; ");
     return `(function(){ ${body}; return (${last}); })()`;
   }
 
