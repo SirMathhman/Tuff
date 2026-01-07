@@ -3,6 +3,7 @@ import { Result, ok, err, isErr } from "./result";
 import { Binding } from "./matchEval";
 import { evalExprUntilSemicolon, tryAssignment } from "./assignmentEval";
 import { indexUntilSemicolon, findMatchingBrace } from "./commonUtils";
+import { parseFunctionSignature } from "./functions";
 import {
   findMatchingParen,
   findTopLevelElseIndex,
@@ -113,6 +114,27 @@ export function processLetStatement(
   if (typeName === "I32") val = Math.trunc(val);
   envMap.set(name, { type: "var", value: val, mutable, typeName });
   return ok({ nextIndex: nextIdx });
+}
+
+export function processFunctionStatement(
+  tokensArr: Token[],
+  idx: number,
+  envMap: Map<string, Binding>
+): Result<StatementResult, string> {
+  const parseRes = parseFunctionSignature(tokensArr, idx);
+  if (isErr(parseRes)) return err(parseRes.error);
+  
+  const { name, params, returnType, bodyTokens, nextIndex } = parseRes.value;
+  
+  const fnBinding = {
+    type: "fn" as const,
+    params,
+    returnType,
+    body: bodyTokens,
+  };
+  
+  envMap.set(name, fnBinding);
+  return ok({ nextIndex });
 }
 
 export function processExpressionStatement(

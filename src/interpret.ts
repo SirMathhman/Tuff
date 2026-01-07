@@ -14,6 +14,7 @@ import {
   processIfStatement,
   processBlockStatement,
   processWhileStatement,
+  processFunctionStatement,
   StatementResult,
 } from "./statements";
 
@@ -267,6 +268,56 @@ export function processStatementsTokens(
   return ok({ lastVal });
 }
 
+function tryRouteStatement(
+  t: Token | undefined,
+  tokensArr: Token[],
+  idx: number,
+  envMap: Map<string, Binding>
+): Result<StatementResult, string> | undefined {
+  if (!t || t.type !== "ident") return undefined;
+
+  switch (t.value) {
+    case "let":
+      return processLetStatement(tokensArr, idx, envMap, evalExprWithEnv);
+    case "fn":
+      return processFunctionStatement(tokensArr, idx, envMap);
+    case "if":
+      return processIfStatement(
+        tokensArr,
+        idx,
+        envMap,
+        evalExprWithEnv,
+        processStatementsTokens
+      );
+    case "while":
+      return processWhileStatement(
+        tokensArr,
+        idx,
+        envMap,
+        evalExprWithEnv,
+        processStatementsTokens
+      );
+    default:
+      return undefined;
+  }
+}
+
+function tryBlockStatement(
+  t: Token | undefined,
+  tokensArr: Token[],
+  idx: number,
+  envMap: Map<string, Binding>
+): Result<StatementResult, string> | undefined {
+  if (t?.type === "punct" && t.value === "{")
+    return processBlockStatement(
+      tokensArr,
+      idx,
+      envMap,
+      processStatementsTokens
+    );
+  return undefined;
+}
+
 function processStatement(
   tokensArr: Token[],
   idx: number,
@@ -283,34 +334,11 @@ function processStatement(
   const t = tokensArr[idx];
   if (!t) return err("Invalid numeric input");
 
-  if (t.type === "ident" && t.value === "let")
-    return processLetStatement(tokensArr, idx, envMap, evalExprWithEnv);
+  const routed = tryRouteStatement(t, tokensArr, idx, envMap);
+  if (routed !== undefined) return routed;
 
-  if (t.type === "ident" && t.value === "if")
-    return processIfStatement(
-      tokensArr,
-      idx,
-      envMap,
-      evalExprWithEnv,
-      processStatementsTokens
-    );
-
-  if (t.type === "ident" && t.value === "while")
-    return processWhileStatement(
-      tokensArr,
-      idx,
-      envMap,
-      evalExprWithEnv,
-      processStatementsTokens
-    );
-
-  if (t.type === "punct" && t.value === "{")
-    return processBlockStatement(
-      tokensArr,
-      idx,
-      envMap,
-      processStatementsTokens
-    );
+  const block = tryBlockStatement(t, tokensArr, idx, envMap);
+  if (block !== undefined) return block;
 
   const assignRes = tryAssignment(tokensArr, idx, envMap, evalExprWithEnv);
   if (assignRes !== undefined) return assignRes;
