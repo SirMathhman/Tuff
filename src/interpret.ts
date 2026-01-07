@@ -304,7 +304,12 @@ function processStatement(
     );
 
   if (t.type === "punct" && t.value === "{")
-    return processBlockStatement(tokensArr, idx, envMap, processStatementsTokens);
+    return processBlockStatement(
+      tokensArr,
+      idx,
+      envMap,
+      processStatementsTokens
+    );
 
   const assignRes = tryAssignment(tokensArr, idx, envMap, evalExprWithEnv);
   if (assignRes !== undefined) return assignRes;
