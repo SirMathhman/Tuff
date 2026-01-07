@@ -69,4 +69,9 @@ describe("run", () => {
     const code = "let x : I32 = read<I32>(); x = read<I32>(); x";
     expect(() => runModule.run(code, "1 2")).toThrow(/immutable/);
   });
+
+  test("duplicate variable declaration throws", () => {
+    const code = "let x : I32 = 100; let x : I32 = 200;";
+    expect(() => runModule.run(code)).toThrow(/duplicate/);
+  });
 });

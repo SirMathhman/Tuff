@@ -24,7 +24,11 @@ export function compile(input: string): string {
   while (
     (m = declRegex.exec(trimmed) as unknown as RegExpExecArray | undefined)
   ) {
-    decls.set(m[2], { mut: !!m[1] });
+    const varName = m[2];
+    if (decls.has(varName)) {
+      return `(function(){ throw new Error("duplicate variable declaration '${varName}'"); })()`;
+    }
+    decls.set(varName, { mut: !!m[1] });
   }
 
   const hasRead = replaced.indexOf("readI32()") !== -1;
