@@ -13,7 +13,6 @@ interface ExprEvalFn {
   (tokens: Token[], env: Map<string, Binding>): Result<number, string>;
 }
 
-
 function getStructBinding(
   env: Map<string, Binding>,
   structName: string

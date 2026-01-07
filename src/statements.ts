@@ -247,7 +247,8 @@ export function processExpressionStatement(
   if (isErr(valRes)) return err(valRes.error);
 
   return ok({
-    nextIndex: j + (j < tokensArr.length && tokensArr[j].type === "punct" ? 1 : 0),
+    nextIndex:
+      j + (j < tokensArr.length && tokensArr[j].type === "punct" ? 1 : 0),
     value: valRes.value,
   });
 }
