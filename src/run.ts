@@ -88,7 +88,8 @@ export function compile(input: string): string {
  */
 export function run(input: string, stdin: string = ""): number {
   // Call the exported `compile` to allow runtime spies/mocks to intercept it.
-  const compiledExpr = (exports as any).compile(input);
+  // Use NodeJS.Module type to satisfy ESLint's no-explicit-any.
+  const compiledExpr = (exports as NodeJS.Module["exports"]).compile(input);
 
   // Wrap the compiled expression in an IIFE so we can inject `stdin` into
   // the evaluation scope. JSON.stringify is used to safely embed the stdin
@@ -99,7 +100,6 @@ export function run(input: string, stdin: string = ""): number {
     stdin
   )}; const args = stdin.trim() ? stdin.trim().split(/\\s+/) : []; let __readIndex = 0; function readI32(){ return parseInt(args[__readIndex++], 10); } return (${compiledExpr}); })()`;
 
-  // eslint-disable-next-line no-eval
   const result = eval(code);
   return Number(result);
 }
