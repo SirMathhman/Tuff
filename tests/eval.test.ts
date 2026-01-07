@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { evalLeftToRight } from "../src/evalLeftToRight";
-import { isOk, isErr } from "../src/result";
+import { isErr } from "../src/result";
 import { expectOkValue } from "../src/utils/testUtils";
 
 // Helper to build token arrays more concisely

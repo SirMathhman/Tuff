@@ -11,12 +11,6 @@ export interface FunctionParseResult {
   nextIndex: number;
 }
 
-interface FunctionHeaderResult {
-  name: string;
-  params: FunctionParameter[];
-  returnType?: string;
-  nextIndex: number;
-}
 
 interface ParametersParseResult {
   params: FunctionParameter[];

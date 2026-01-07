@@ -23,6 +23,20 @@ module.exports = [
       "sonarjs/max-lines": ["error", { maximum: 500 }],
       "sonarjs/max-lines-per-function": ["error", { maximum: 50 }],
       "@typescript-eslint/consistent-type-definitions": ["error", "interface"],
+
+      // Treat unused vars/params as errors
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          "vars": "all",
+          "args": "after-used",
+          "ignoreRestSiblings": true,
+          "argsIgnorePattern": "^_",
+          "varsIgnorePattern": "^_"
+        }
+      ],
+
       "no-restricted-syntax": [
         "error",
         {

@@ -240,12 +240,6 @@ function getResultValue(res: Result<TokenNext, string>): Result<TokenNext, strin
   return ok(res.value);
 }
 
-function applyResultAndAdvance(res: Result<TokenNext, string>, out: Token[]): Result<number, string> {
-  const v = getResultValue(res);
-  if (isErr(v)) return err(v.error);
-  out.push(v.value.token);
-  return ok(v.value.nextIdx);
-}
 
 function processParenthesized(tokens: Token[], startIdx: number): Result<TokenNext, string> {
   let j = startIdx + 1;

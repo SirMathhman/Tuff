@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { tokenize } from "../src/tokenize";
-import { isOk, isErr } from "../src/result";
+import { isOk } from "../src/result";
 
 function checkTokens(input: string, expected: any[]) {
   const r = tokenize(input);
