@@ -1,4 +1,5 @@
 import { compileImpl } from "./compiler/compile";
+import vm from "node:vm";
 
 export function compile(input: string): string {
   return compileImpl(input);
@@ -8,7 +9,11 @@ export function compile(input: string): string {
  * run - takes a string and returns a number
  * Implementation: compile the input to JS, eval it, and return the result.
  */
-export function run(input: string, stdin: string = ""): number {
+export function run(
+  input: string,
+  stdin: string = "",
+  timeoutMs: number = 1000
+): number {
   // Call the exported `compile` to allow runtime spies/mocks to intercept it.
   // Use NodeJS.Module type to satisfy ESLint's no-explicit-any.
   const compiledExpr = (exports as NodeJS.Module["exports"]).compile(input);
@@ -22,6 +27,8 @@ export function run(input: string, stdin: string = ""): number {
     stdin
   )}; const args = stdin.trim() ? stdin.trim().split(/\\s+/) : []; let __readIndex = 0; function readI32(){ return parseInt(args[__readIndex++], 10); } function readBool(){ const val = args[__readIndex++]; return val === 'true' ? 1 : 0; } return (${compiledExpr}); })()`;
 
-  const result = eval(code);
+  // Use vm timeout to prevent pathological/infinite compiled programs from
+  // hanging the entire Jest process.
+  const result = vm.runInNewContext(code, {}, { timeout: timeoutMs });
   return Number(result);
 }

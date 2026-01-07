@@ -23,6 +23,26 @@ function replaceReads(input: string): string {
   return out;
 }
 
+function iifeReturningLast(stmts: string[]): string {
+  const cleaned = stmts.map((s) => s.trim()).filter(Boolean);
+  let iifeBody: string;
+  if (cleaned.length === 0) {
+    iifeBody = "return (0);";
+  } else if (cleaned.length === 1) {
+    const single = cleaned[0] ?? "";
+    if (/^\s*return\b/.test(single)) iifeBody = single;
+    else iifeBody = `return (${single});`;
+  } else {
+    const restStmts = cleaned.slice(0, -1);
+    const last = (cleaned[cleaned.length - 1] ?? "").trim();
+    const rest = restStmts.join("; ");
+    if (/^\s*return\b/.test(last)) iifeBody = `${rest}; ${last}`;
+    else iifeBody = `${rest}; return (${last});`;
+  }
+
+  return `(function(){ ${iifeBody} })()`;
+}
+
 interface ParseIfResult {
   replacement: string;
   nextIndex: number;
@@ -40,6 +60,44 @@ function parseIfAt(input: string, idx: number): ParseIfResult | undefined {
     return undefined;
   }
 
+  // Determine if this `if` appears in an expression context (e.g., after '=' or 'return')
+  let ctx = idx - 1;
+  while (ctx >= 0 && /\s/.test(input[ctx])) ctx--;
+  const ctxPrev = ctx >= 0 ? input[ctx] : "";
+  const exprPrevChars = new Set([
+    "=",
+    "(",
+    ")",
+    ":",
+    ",",
+    "?",
+    "!",
+    "+",
+    "-",
+    "*",
+    "/",
+    "%",
+    "^",
+    "&",
+    "|",
+    "~",
+    "[",
+    "{",
+    "",
+  ]);
+  let isExprContext = exprPrevChars.has(ctxPrev);
+  if (!isExprContext) {
+    // maybe previous token is `return`
+    const wend = ctx;
+    let wstart = ctx;
+    while (wstart >= 0 && /[A-Za-z0-9_$]/.test(input[wstart])) wstart--;
+    wstart++;
+    const word = input.slice(wstart, wend + 1);
+    if (word === "return") isExprContext = true;
+  }
+
+  if (!isExprContext) return undefined;
+
   let j = idx + 2;
   while (j < input.length && /\s/.test(input[j])) j++;
   if (input[j] !== "(") return undefined;
@@ -50,10 +108,20 @@ function parseIfAt(input: string, idx: number): ParseIfResult | undefined {
 
   let p = k;
   while (p < input.length && /\s/.test(input[p])) p++;
-  if (input[p] === "{") return undefined; // block true-arm — skip
+
+  // Handle block true-arm by converting it to an IIFE for expression use.
+  let thenPart: string | undefined;
+  let searchAfterThen = p;
+  if (input[p] === "{") {
+    const thenClose = findMatching(input, p + 1, "{", "}");
+    if (thenClose === undefined) return undefined;
+    const inner = input.slice(p + 1, thenClose - 1);
+    thenPart = iifeReturningLast(splitTopLevelStatements(inner));
+    searchAfterThen = thenClose;
+  }
 
   const foundElse = ((): number | undefined => {
-    let i = p;
+    let i = searchAfterThen;
     let depth = 0;
     for (; i < input.length; i++) {
       const ch = input[i];
@@ -72,22 +140,34 @@ function parseIfAt(input: string, idx: number): ParseIfResult | undefined {
   })();
   if (foundElse === undefined) return undefined;
 
-  const thenPart = input.slice(p, foundElse).trim();
+  if (!thenPart) {
+    // non-block then-arm: take literal slice
+    thenPart = input.slice(p, foundElse).trim();
+  }
 
   let r = foundElse + 4;
   while (r < input.length && /\s/.test(input[r])) r++;
-  if (input[r] === "{") return undefined; // block else-arm — skip
 
-  // parse else expression until semicolon/newline/top-level end
+  // Handle block else-arm by converting it to an IIFE, otherwise read expression
+  let elsePart: string;
   let s = r;
-  for (; s < input.length; s++) {
-    const ch = input[s];
-    if (ch === ";" || ch === "\n" || ch === "\r") break;
+  if (input[r] === "{") {
+    const elseClose = findMatching(input, r + 1, "{", "}");
+    if (elseClose === undefined) return undefined;
+    const inner = input.slice(r + 1, elseClose - 1);
+    elsePart = iifeReturningLast(splitTopLevelStatements(inner));
+    s = elseClose;
+  } else {
+    for (; s < input.length; s++) {
+      const ch = input[s];
+      if (ch === ";" || ch === "\n" || ch === "\r") break;
+    }
+    elsePart = input.slice(r, s).trim();
   }
-  const elsePart = input.slice(r, s).trim();
 
+  const repl = `(${cond}) ? (${thenPart}) : (${elsePart})`;
   return {
-    replacement: `(${cond}) ? (${thenPart}) : (${elsePart})`,
+    replacement: repl,
     nextIndex: s,
   };
 }
@@ -116,7 +196,7 @@ function transformIfExpressions(input: string): string {
   return out;
 }
 
-// eslint-disable-next-line complexity
+// eslint-disable-next-line complexity, max-lines-per-function
 function splitTopLevelStatements(blockInner: string): string[] {
   const parts: string[] = [];
   let cur = "";
@@ -139,6 +219,31 @@ function splitTopLevelStatements(blockInner: string): string[] {
     } else if (ch === ")" || ch === "}" || ch === "]") {
       depth--;
       cur += ch;
+      // If we've closed a top-level block (depth becomes 0 after a '}'),
+      // treat it as an end of a top-level statement so constructs like
+      // `if (cond) { ... } x` split into `if (cond) { ... }` and `x`.
+      //
+      // IMPORTANT: do NOT split after ')' here. That breaks expressions like
+      // ternaries `(cond) ? a : b` and member access `(...).prop`.
+      if (depth === 0 && ch === "}") {
+        let p = i + 1;
+        while (p < blockInner.length && /\s/.test(blockInner[p])) p++;
+        let nextWord = "";
+        if (p < blockInner.length && /[A-Za-z_$]/.test(blockInner[p])) {
+          const wstart = p;
+          let wend = p;
+          while (
+            wend < blockInner.length &&
+            /[A-Za-z0-9_$]/.test(blockInner[wend])
+          )
+            wend++;
+          nextWord = blockInner.slice(wstart, wend);
+        }
+        if (nextWord !== "else") {
+          parts.push(cur.trim());
+          cur = "";
+        }
+      }
     } else if (ch === ";" && depth === 0) {
       parts.push(cur.trim());
       cur = "";
@@ -150,7 +255,7 @@ function splitTopLevelStatements(blockInner: string): string[] {
   return parts;
 }
 
-// eslint-disable-next-line max-lines-per-function
+// eslint-disable-next-line complexity, max-lines-per-function
 function transformBlockExpressions(input: string): string {
   // Transform blocks used as expressions (e.g., `let x = { let y = 100; y }`)
   // into IIFEs that return the last expression in the block. We only
@@ -170,11 +275,24 @@ function transformBlockExpressions(input: string): string {
     while (prev >= 0 && /\s/.test(input[prev])) prev--;
     const prevCh = prev >= 0 ? input[prev] : "";
 
-    // Skip constructor forms like `Point { ... }` (identifier before '{')
-    if (prevCh && (/[A-Za-z0-9_$]/.test(prevCh) || prevCh === ']' || prevCh === ')')) {
-      out += input.slice(i, idx + 1);
-      i = idx + 1;
-      continue;
+    // Skip constructor forms like `Point { ... }` (identifier before '{'),
+    // except when the word before is `else` (we should transform `else { .. }`).
+    if (prevCh && (/[A-Za-z0-9_$]/.test(prevCh) || prevCh === "]")) {
+      let skip = true;
+      if (/[A-Za-z0-9_$]/.test(prevCh)) {
+        const wend = prev;
+        let wstart = prev;
+        while (wstart >= 0 && /[A-Za-z0-9_$]/.test(input[wstart])) wstart--;
+        wstart++;
+        const word = input.slice(wstart, wend + 1);
+        if (word === "else") skip = false;
+      }
+
+      if (skip) {
+        out += input.slice(i, idx + 1);
+        i = idx + 1;
+        continue;
+      }
     }
 
     // Only transform when previous char suggests expression position
@@ -217,19 +335,7 @@ function transformBlockExpressions(input: string): string {
     const stmts = splitTopLevelStatements(inner).map((s) =>
       transformBlockExpressions(s)
     );
-    let iifeBody: string;
-    if (stmts.length === 0) {
-      iifeBody = `${inner}; return (0);`;
-    } else if (stmts.length === 1) {
-      // single statement - return it (stmt may be another block that got transformed)
-      iifeBody = `return (${stmts[0]});`;
-    } else {
-      const last = stmts.pop()!;
-      const rest = stmts.join("; ");
-      iifeBody = `${rest}; return (${last});`;
-    }
-
-    const iife = `(function(){ ${iifeBody} })()`;
+    const iife = iifeReturningLast(stmts);
     out += input.slice(i, idx) + iife;
     i = matching;
   }
@@ -237,8 +343,7 @@ function transformBlockExpressions(input: string): string {
 }
 
 function wrapStatements(code: string): string {
-  const parts = code
-    .split(";")
+  const parts = splitTopLevelStatements(code)
     .map((s) => s.trim())
     .filter(Boolean);
   if (parts.length === 0) return "(0)";
@@ -265,13 +370,15 @@ export function compileImpl(input: string): string {
 
   let replaced = replaceReads(codeNoStructs);
 
+  // First convert block {...} used as expressions into IIFEs that return the
+  // last expression in the block. Doing this first ensures `if (cond) { ... }
+  // else { ... }` arms are transformed into expressions and can then be
+  // converted by the `if` -> ternary transform.
+  replaced = transformBlockExpressions(replaced);
+
   // Convert expression-level `if (cond) a else b` into JS ternary expressions so
   // they can be used as expressions in compiled output.
   replaced = transformIfExpressions(replaced);
-
-  // Convert block {...} used as expressions into IIFEs that return the last
-  // expression in the block. This preserves block-scoped declarations.
-  replaced = transformBlockExpressions(replaced);
 
   const typeError = checkFunctionCallTypes(replaced, fnParsed);
   if (typeError) return typeError;

@@ -149,6 +149,25 @@ describe("run - control flow", () => {
     expect(runModule.run(code)).toBe(3);
   });
 
+  test("if with block arms as expression returns block results", () => {
+    const code = "let x = if (true) { let y = 1; y } else { 2 }; x";
+    expect(runModule.run(code)).toBe(1);
+    const code2 = "let x = if (false) { let y = 1; y } else { 2 }; x";
+    expect(runModule.run(code2)).toBe(2);
+  });
+
+  test("if with block arms reading stdin works", () => {
+    const code = "let x = if (read<Bool>()) { read<I32>() } else { 0 }; x";
+    expect(runModule.run(code, "true 100")).toBe(100);
+    expect(runModule.run(code, "false 100")).toBe(0);
+  });
+
+  test("if used as statement with block performs side effects", () => {
+    const code = "let mut x = 0; if (read<Bool>()) { x = read<I32>(); } x";
+    expect(runModule.run(code, "true 100")).toBe(100);
+    expect(runModule.run(code, "false 100")).toBe(0);
+  });
+
   test("compound assignment (+=) on mutable variable works", () => {
     const code = "let mut x = 0; x += read<I32>(); x";
     expect(runModule.run(code, "100")).toBe(100);
@@ -173,8 +192,7 @@ describe("run - control flow", () => {
 
   test("recursive factorial using yield and blocks works", () => {
     const code = `fn fact(n : I32) : I32 => { if (n == 0) { yield 1; } yield n * fact(n - 1); } fact(read<I32>())`;
-    const compiled = runModule.compile(code);
-    console.log("COMPILED_FACT:", compiled);
+    runModule.compile(code);
     expect(runModule.run(code, "5")).toBe(120);
   });
 
