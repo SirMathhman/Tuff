@@ -309,14 +309,14 @@ function makeDuplicateError(kind: string, name: string): string {
 function parseDeclarations(input: string): ParseDeclarationsResult {
   // Capture optional type annotations like `: I32` or `: &Str`
   const declRegex =
-    /\blet\s+(mut\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?::\s*([&*]\s*(?:mut\s+)?[A-Za-z_$][A-Za-z0-9_$]*))?/g;
+    /\blet\s+(mut\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?::\s*([^=;\n]+))?/g;
   const decls = new Map<string, VarDeclaration>();
   let m: RegExpExecArray | undefined;
   while (
     (m = declRegex.exec(input) as unknown as RegExpExecArray | undefined)
   ) {
     const varName = m[2];
-    const type = m[3];
+    const type = m[3] ? m[3].trim() : undefined;
     if (decls.has(varName)) {
       return {
         decls,
@@ -334,6 +334,8 @@ function stripAnnotationsAndMut(replaced: string): string {
     /:\s*(?:I32|Bool|Char|&Str|[*]I32|\*\s*mut\s*[A-Za-z_$][A-Za-z0-9_$]*)\b/g,
     ""
   );
+  // strip bracketed array annotations like `[I32; 3; 3]`
+  replaced = replaced.replace(/:\s*\[[^\]]*\]/g, "");
   replaced = replaced.replace(/\b(let|var|const)\s+mut\b/g, "$1");
   return replaced;
 }

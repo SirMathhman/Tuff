@@ -102,6 +102,11 @@ describe("run", () => {
     expect(runModule.run(code)).toBe(97);
   });
 
+  test("array indexing works and sums values", () => {
+    const code = "let x : [I32; 3; 3] = [1, 2, 3]; x[0] + x[1] + x[2]";
+    expect(runModule.run(code)).toBe(6);
+  });
+
   test("pointer deref returns value", () => {
     const code = "let x = 100; let y : *I32 = &x; *y";
     expect(runModule.run(code)).toBe(100);
