@@ -6,7 +6,7 @@ Small TypeScript project that compiles a tiny custom language into JavaScript an
 
 This repo now supports bundling multiple `.tuff` files into one JS expression via `compileBundle`.
 
-- API: `compileBundle(files: Map<string, string>, entry: string, options?: { modulesRoot?: string })`
+- API: `type Namespace = string[]` and `compileBundle(files: Map<Namespace, string>, entry: Namespace, options?: { modulesRoot?: string })`
 - Output: a JavaScript _expression string_ that evaluates to the entry file's result.
 
 ### Java-like `modules/` layout (minimal)
@@ -28,6 +28,11 @@ Example:
 
 - `npm test` — run Jest
 - `npm run lint` — run ESLint
+
+## Testing policy
+
+Unit tests in this repo must be filesystem-free (no `fs`, temp folders, fixture reads, etc.).
+Keep fixtures as in-memory strings.
 
 ## ESLint guardrails
 
