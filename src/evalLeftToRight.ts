@@ -1,6 +1,11 @@
 import type { Token } from "./tokenize";
 import { Result, err, ok } from "./result";
 
+interface ComparisonOperandResult {
+  value: number;
+  nextIdx: number;
+}
+
 function applyComparisonOp(
   op: string,
   lhs: number,
@@ -12,6 +17,16 @@ function applyComparisonOp(
   if (op === ">=") return ok(lhs >= rhs ? 1 : 0);
   if (op === "==") return ok(lhs === rhs ? 1 : 0);
   if (op === "!=") return ok(lhs !== rhs ? 1 : 0);
+  return err("Invalid numeric input");
+}
+
+function applyLogicalOp(
+  op: string,
+  lhs: number,
+  rhs: number
+): Result<number, string> {
+  if (op === "&&") return ok(lhs !== 0 && rhs !== 0 ? 1 : 0);
+  if (op === "||") return ok(lhs !== 0 || rhs !== 0 ? 1 : 0);
   return err("Invalid numeric input");
 }
 
@@ -109,53 +124,107 @@ function evalAddSub(tokens: Token[]): Result<number, string> {
   return evalBinaryOp(tokens, "op", applyAddSubOp);
 }
 
-function evalTokensToNumber(tokens: Token[]): Result<number, string> {
-  // Separate arithmetic tokens from comparison tokens
-  const arithmeticTokens: Token[] = [];
+function evalComparisonOperand(
+  tokens: Token[],
+  startIdx: number
+): Result<ComparisonOperandResult, string> {
+  // Collect tokens until the next comparison or logical operator
+  const operandTokens: Token[] = [];
+  let i = startIdx;
+  while (
+    i < tokens.length &&
+    tokens[i].type !== "comp" &&
+    tokens[i].type !== "logop"
+  ) {
+    operandTokens.push(tokens[i]);
+    i++;
+  }
 
-  // Extract just the arithmetic part (stop at first comparison)
+  if (operandTokens.length === 0) return err("Invalid numeric input");
+
+  // Evaluate the operand
+  const rightFolded = foldMultiplication(operandTokens);
+  if (rightFolded.ok === false) return rightFolded;
+  const rightAddSubRes = evalAddSub(rightFolded.value);
+  if (rightAddSubRes.ok === false) return rightAddSubRes;
+
+  return ok({ value: rightAddSubRes.value, nextIdx: i });
+}
+
+interface LogicalOpResult {
+  value: number;
+  nextIdx: number;
+}
+
+function evalLogicalOperator(
+  tokens: Token[],
+  currentValue: number,
+  opIdx: number
+): Result<LogicalOpResult, string> {
+  const logicalOp = tokens[opIdx].value as unknown as string;
+  let i = opIdx + 1;
+
+  const rhsTokens: Token[] = [];
+  while (i < tokens.length && tokens[i].type !== "logop") {
+    rhsTokens.push(tokens[i]);
+    i++;
+  }
+
+  if (rhsTokens.length === 0) return err("Invalid numeric input");
+  const rhsRes = evalTokensToNumber(rhsTokens);
+  if (rhsRes.ok === false) return rhsRes;
+
+  const logRes = applyLogicalOp(logicalOp, currentValue, rhsRes.value);
+  if (logRes.ok === false) return logRes;
+
+  return ok({ value: logRes.value, nextIdx: i });
+}
+
+function evalComparisonOperator(
+  tokens: Token[],
+  currentValue: number,
+  opIdx: number
+): Result<LogicalOpResult, string> {
+  const op = tokens[opIdx].value as unknown as string;
+  const operandRes = evalComparisonOperand(tokens, opIdx + 1);
+  if (operandRes.ok === false) return operandRes;
+
+  const compRes = applyComparisonOp(op, currentValue, operandRes.value.value);
+  if (compRes.ok === false) return compRes;
+
+  return ok({ value: compRes.value, nextIdx: operandRes.value.nextIdx });
+}
+
+function evalTokensToNumber(tokens: Token[]): Result<number, string> {
+  // Evaluate initial arithmetic expression before any comparisons/logical ops
+  const arithmeticTokens: Token[] = [];
   let i = 0;
-  while (i < tokens.length && tokens[i].type !== "comp") {
+  while (
+    i < tokens.length &&
+    tokens[i].type !== "comp" &&
+    tokens[i].type !== "logop"
+  ) {
     arithmeticTokens.push(tokens[i]);
     i++;
   }
 
-  // Evaluate arithmetic part
   const folded = foldMultiplication(arithmeticTokens);
   if (folded.ok === false) return folded;
   const addSubRes = evalAddSub(folded.value);
   if (addSubRes.ok === false) return addSubRes;
 
-  // If no comparisons, return the arithmetic result
   if (i >= tokens.length) return ok(addSubRes.value);
 
-  // Process comparisons
   let currentValue = addSubRes.value;
   while (i < tokens.length) {
-    if (tokens[i].type !== "comp") return err("Invalid numeric input");
-    const op = tokens[i].value as unknown as string;
-    i++;
+    const opRes =
+      tokens[i].type === "logop"
+        ? evalLogicalOperator(tokens, currentValue, i)
+        : evalComparisonOperator(tokens, currentValue, i);
 
-    // Next token should be a number - could be a literal number or start of an arithmetic expression
-    // We need to parse the next operand
-    const operandTokens: Token[] = [];
-    while (i < tokens.length && tokens[i].type !== "comp") {
-      operandTokens.push(tokens[i]);
-      i++;
-    }
-
-    if (operandTokens.length === 0) return err("Invalid numeric input");
-
-    // Evaluate the right operand
-    const rightFolded = foldMultiplication(operandTokens);
-    if (rightFolded.ok === false) return rightFolded;
-    const rightAddSubRes = evalAddSub(rightFolded.value);
-    if (rightAddSubRes.ok === false) return rightAddSubRes;
-
-    // Apply comparison
-    const compRes = applyComparisonOp(op, currentValue, rightAddSubRes.value);
-    if (compRes.ok === false) return compRes;
-    currentValue = compRes.value;
+    if (opRes.ok === false) return opRes;
+    currentValue = opRes.value.value;
+    i = opRes.value.nextIdx;
   }
 
   return ok(currentValue);

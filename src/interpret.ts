@@ -277,6 +277,11 @@ interface ExpressionEvalResult {
   nextIndex: number;
 }
 
+interface WhileBodyParseResult {
+  bodyTokens: Token[];
+  nextIndex: number;
+}
+
 function parseOptionalType(
   tokensArr: Token[],
   cur: number
@@ -361,18 +366,47 @@ function processExpressionStatement(
   });
 }
 
+function validateConditionParens(
+  tokens: Token[],
+  start: number
+): Result<number, string> {
+  const condParenIdx = start + 1;
+  if (!tokens[condParenIdx] || tokens[condParenIdx].type !== "paren")
+    return err("");
+  const condEndInner = findMatchingParen(tokens, condParenIdx);
+  if (condEndInner === -1) return err("");
+  return ok(condEndInner);
+}
+
+function findIfStatementEnd(tokens: Token[], start: number): number {
+  const condRes = validateConditionParens(tokens, start);
+  if (isErr(condRes)) return -1;
+  const condEndInner = condRes.value;
+  const elseIdxInner = findTopLevelElseIndex(tokens, condEndInner + 1);
+  if (elseIdxInner === -1) return -1;
+  return findStatementEnd(tokens, elseIdxInner + 1);
+}
+
+function findWhileStatementEnd(tokens: Token[], start: number): number {
+  const condRes = validateConditionParens(tokens, start);
+  if (isErr(condRes)) return -1;
+  const condEndInner = condRes.value;
+  const bodyStart = condEndInner + 1;
+  if (bodyStart >= tokens.length) return -1;
+  // Check if body is block or single statement
+  if (tokens[bodyStart].type === "punct" && tokens[bodyStart].value === "{") {
+    return findMatchingBrace(tokens, bodyStart);
+  }
+  return indexUntilSemicolon(tokens, bodyStart);
+}
+
 function findStatementEnd(tokens: Token[], start: number): number {
   const t = tokens[start];
   if (t && t.type === "ident" && t.value === "if") {
-    const condParenIdx = start + 1;
-    if (!tokens[condParenIdx] || tokens[condParenIdx].type !== "paren")
-      return -1;
-    const condEndInner = findMatchingParen(tokens, condParenIdx);
-    if (condEndInner === -1) return -1;
-    const elseIdxInner = findTopLevelElseIndex(tokens, condEndInner + 1);
-    if (elseIdxInner === -1) return -1;
-    const elseEndInner = findStatementEnd(tokens, elseIdxInner + 1);
-    return elseEndInner;
+    return findIfStatementEnd(tokens, start);
+  }
+  if (t && t.type === "ident" && t.value === "while") {
+    return findWhileStatementEnd(tokens, start);
   }
   return indexUntilSemicolon(tokens, start);
 }
@@ -383,10 +417,15 @@ interface IfHeader {
   elseIdx: number;
 }
 
-function parseIfHeader(
+interface ConditionHeader {
+  condTokens: Token[];
+  condEnd: number;
+}
+
+function parseConditionHeader(
   tokensArr: Token[],
   idx: number
-): Result<IfHeader, string> {
+): Result<ConditionHeader, string> {
   const condParenIdx = idx + 1;
   if (
     !tokensArr[condParenIdx] ||
@@ -398,9 +437,28 @@ function parseIfHeader(
   if (condEnd === -1) return err("Invalid numeric input");
   const condTokens = tokensArr.slice(condParenIdx + 1, condEnd);
   if (condTokens.length === 0) return err("Invalid numeric input");
+  return ok({ condTokens, condEnd });
+}
+
+function parseIfHeader(
+  tokensArr: Token[],
+  idx: number
+): Result<IfHeader, string> {
+  const baseRes = parseConditionHeader(tokensArr, idx);
+  if (isErr(baseRes)) return err(baseRes.error);
+  const { condTokens, condEnd } = baseRes.value;
   const elseIdx = findTopLevelElseIndex(tokensArr, condEnd + 1);
   if (elseIdx === -1) return err("Invalid numeric input");
   return ok({ condTokens, condEnd, elseIdx });
+}
+
+function parseWhileHeader(
+  tokensArr: Token[],
+  idx: number
+): Result<WhileHeader, string> {
+  const res = parseConditionHeader(tokensArr, idx);
+  if (isErr(res)) return err(res.error);
+  return ok(res.value);
 }
 
 function processIfStatement(
@@ -459,6 +517,110 @@ function processBlockStatement(
   return ok({ nextIndex: braceEnd + 1, value: blockRes.value.lastVal });
 }
 
+interface WhileHeader {
+  condTokens: Token[];
+  condEnd: number;
+}
+
+
+
+function findWhileStmtEnd(tokensArr: Token[], bodyStart: number): number {
+  let stmtEnd = bodyStart;
+  let depth = 0;
+  while (stmtEnd < tokensArr.length) {
+    const tk = tokensArr[stmtEnd];
+    if (tk.type === "paren") {
+      depth += tk.value === "(" ? 1 : -1;
+    } else if (tk.type === "punct") {
+      if (tk.value === "{") depth++;
+      else if (tk.value === "}") depth--;
+      else if (tk.value === ";" && depth === 0) {
+        return stmtEnd + 1; // Include the semicolon
+      }
+    }
+    stmtEnd++;
+  }
+  return stmtEnd;
+}
+
+function parseSingleStmtWhileBody(
+  tokensArr: Token[],
+  bodyStart: number
+): Result<WhileBodyParseResult, string> {
+  const stmtEnd = findWhileStmtEnd(tokensArr, bodyStart);
+  const bodyTokens = tokensArr.slice(bodyStart, stmtEnd);
+  return ok({ bodyTokens, nextIndex: stmtEnd });
+}
+
+function parseWhileBody(
+  tokensArr: Token[],
+  bodyStart: number
+): Result<WhileBodyParseResult, string> {
+  // Check if body is a block or single statement
+  if (
+    tokensArr[bodyStart].type === "punct" &&
+    tokensArr[bodyStart].value === "{"
+  ) {
+    // Block body
+    const bodyEnd = findMatchingBrace(tokensArr, bodyStart);
+    if (bodyEnd === -1) return err("Invalid numeric input");
+    const bodyTokens = tokensArr.slice(bodyStart + 1, bodyEnd);
+    return ok({ bodyTokens, nextIndex: bodyEnd + 1 });
+  } else {
+    // Single statement body
+    return parseSingleStmtWhileBody(tokensArr, bodyStart);
+  }
+}
+
+function executeWhileLoop(
+  bodyTokens: Token[],
+  condTokens: Token[],
+  envMap: Map<string, Binding>
+): Result<void, string> {
+  const MAX_ITERATIONS = 10000;
+  let iterations = 0;
+
+  while (iterations < MAX_ITERATIONS) {
+    const condRes = evalExprWithEnv(condTokens, envMap);
+    if (isErr(condRes)) return err(condRes.error);
+    const condVal = condRes.value;
+
+    if (condVal === 0) return ok(undefined);
+
+    const bodyRes = processStatementsTokens(bodyTokens, envMap);
+    if (isErr(bodyRes)) return err(bodyRes.error);
+
+    iterations++;
+  }
+
+  return err("Loop exceeded maximum iterations");
+}
+
+function processWhileStatement(
+  tokensArr: Token[],
+  idx: number,
+  envMap: Map<string, Binding>
+): Result<StatementResult, string> {
+  const headerRes = parseWhileHeader(tokensArr, idx);
+  if (isErr(headerRes)) return err(headerRes.error);
+  const { condTokens, condEnd } = headerRes.value;
+
+  // Find body start and end
+  const bodyStart = condEnd + 1;
+  if (bodyStart >= tokensArr.length) return err("Invalid numeric input");
+
+  const bodyRes = parseWhileBody(tokensArr, bodyStart);
+  if (isErr(bodyRes)) return err(bodyRes.error);
+
+  const { bodyTokens, nextIndex } = bodyRes.value;
+  if (bodyTokens.length === 0) return err("Invalid numeric input");
+
+  const execRes = executeWhileLoop(bodyTokens, condTokens, envMap);
+  if (isErr(execRes)) return err(execRes.error);
+
+  return ok({ nextIndex, value: undefined });
+}
+
 function processStatement(
   tokensArr: Token[],
   idx: number,
@@ -481,6 +643,9 @@ function processStatement(
 
   if (t.type === "ident" && t.value === "if")
     return processIfStatement(tokensArr, idx, envMap);
+
+  if (t.type === "ident" && t.value === "while")
+    return processWhileStatement(tokensArr, idx, envMap);
 
   if (t.type === "punct" && t.value === "{")
     return processBlockStatement(tokensArr, idx, envMap);

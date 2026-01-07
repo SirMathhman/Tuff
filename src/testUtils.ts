@@ -5,7 +5,11 @@ function assertOkResult<T, E>(result: Result<T, E>): void {
   expect(isOk(result)).toBe(true);
 }
 
-function assertValue<T>(value: T, expected: T, matcher: "toBe" | "toEqual"): void {
+function assertValue<T>(
+  value: T,
+  expected: T,
+  matcher: "toBe" | "toEqual"
+): void {
   if (matcher === "toBe") {
     expect(value).toBe(expected);
   } else {

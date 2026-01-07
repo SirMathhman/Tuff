@@ -16,7 +16,10 @@ describe("interpret - comparisons with variables", () => {
   });
 
   it("stores comparison result in variable", () => {
-    expectOkValue(interpret("let x : I32 = 5; let result : I32 = x > 3; result"), 1);
+    expectOkValue(
+      interpret("let x : I32 = 5; let result : I32 = x > 3; result"),
+      1
+    );
   });
 
   it("uses block result in comparison through variable binding", () => {

@@ -78,4 +78,12 @@ module.exports = [
       ],
     },
   },
+
+  // interpret.ts needs higher limits due to complexity of language features
+  {
+    files: ["src/interpret.ts"],
+    rules: {
+      "sonarjs/max-lines": ["error", { maximum: 700 }],
+    },
+  },
 ];

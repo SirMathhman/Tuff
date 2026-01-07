@@ -48,11 +48,19 @@ describe("evalLeftToRight - division & modulus", () => {
 
 describe("evalLeftToRight - parentheses", () => {
   it("evaluates parentheses grouping", () => {
-    expectOkValue(evalLeftToRight(mkTokens(["(", 3, "+", 10, ")", "*", 5]) as any), 65);
+    expectOkValue(
+      evalLeftToRight(mkTokens(["(", 3, "+", 10, ")", "*", 5]) as any),
+      65
+    );
   });
 
   it("evaluates nested parentheses", () => {
-    expectOkValue(evalLeftToRight(mkTokens([2, "*", "(", 1, "+", "(", 3, "-", 1, ")", ")"]) as any), 6);
+    expectOkValue(
+      evalLeftToRight(
+        mkTokens([2, "*", "(", 1, "+", "(", 3, "-", 1, ")", ")"]) as any
+      ),
+      6
+    );
   });
 });
 

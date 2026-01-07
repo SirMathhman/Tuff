@@ -25,13 +25,18 @@ export interface CompOpToken {
   type: "comp";
   value: "<" | ">" | "<=" | ">=" | "==" | "!=";
 }
+export interface LogOpToken {
+  type: "logop";
+  value: "&&" | "||";
+}
 export type Token =
   | NumToken
   | OpToken
   | ParenToken
   | IdentToken
   | PunctToken
-  | CompOpToken;
+  | CompOpToken
+  | LogOpToken;
 
 function parseAndPushNumber(
   s: string,
@@ -98,6 +103,17 @@ function handleOperator(
   return ok(i + 1);
 }
 
+function handleNumOrIdent(
+  s: string,
+  i: number,
+  ch: string,
+  tokens: Token[]
+): Result<number, string> | -1 {
+  if (/[0-9.]/.test(ch)) return handleNumber(s, i, tokens);
+  if (/[A-Za-z_]/.test(ch)) return handleIdentifier(s, i, tokens);
+  return -1;
+}
+
 function handleChar(
   s: string,
   i: number,
@@ -107,24 +123,34 @@ function handleChar(
   if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
     return ok(i + 1);
   }
-  const parenHandled = tryHandleParenOrBrace(ch, i, tokens);
-  if (parenHandled !== -1) return ok(parenHandled);
 
-  const compHandled = tryHandleCompoundAssign(s, i, tokens);
-  if (compHandled !== -1) return ok(compHandled);
+  // Try single-token handlers that return position or -1
+  let handled = tryHandleParenOrBrace(ch, i, tokens);
+  if (handled !== -1) return ok(handled);
 
-  const cmpOpHandled = tryHandleComparison(s, i, tokens);
-  if (cmpOpHandled !== -1) return ok(cmpOpHandled);
+  handled = tryHandleLogicalOp(s, i, tokens);
+  if (handled !== -1) return ok(handled);
 
+  handled = tryHandleCompoundAssign(s, i, tokens);
+  if (handled !== -1) return ok(handled);
+
+  handled = tryHandleComparison(s, i, tokens);
+  if (handled !== -1) return ok(handled);
+
+  // Try operators
   if ("+-*/%".includes(ch)) {
     const res = handleOperator(s, i, ch, tokens);
     if (!isOk(res)) return err(res.error);
     return ok(res.value);
   }
 
-  if (/[0-9.]/.test(ch)) return handleNumber(s, i, tokens);
-  if (/[A-Za-z_]/.test(ch)) return handleIdentifier(s, i, tokens);
+  // Try number or identifier
+  const numOrIdentRes = handleNumOrIdent(s, i, ch, tokens);
+  if (numOrIdentRes !== -1) return numOrIdentRes;
+
+  // Try punctuation
   if (ch === ":" || ch === ";" || ch === "=") return handlePunct(s, i, tokens);
+
   return err("Invalid token");
 }
 
@@ -153,6 +179,19 @@ function tryHandleCompoundAssign(
     });
     return i + 2;
   }
+  return -1;
+}
+
+function tryHandleLogicalOp(s: string, i: number, tokens: Token[]): number {
+  const ch = s[i];
+  const nextCh = s[i + 1];
+
+  // Two-character logical operators: &&, ||
+  if ((ch === "&" || ch === "|") && nextCh === ch) {
+    tokens.push({ type: "logop", value: (ch + ch) as "&&" | "||" });
+    return i + 2;
+  }
+
   return -1;
 }
 
