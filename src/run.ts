@@ -1,8 +1,153 @@
-import { compileImpl } from "./compiler/compile";
+import { compileImpl, compileProgramImpl } from "./compiler/compile";
 import vm from "node:vm";
 
 export function compile(input: string): string {
   return compileImpl(input);
+}
+
+export interface CompileBundleOptions {
+  /**
+   * Root folder for Java-like packages. For example, if `modules` is the root,
+   * then `from tuff::stuff use { ... }` resolves to `${modulesRoot}/tuff/stuff/provider.tuff`.
+   *
+   * If omitted, this is inferred from the `entry` path when it contains `/modules/`.
+   */
+  modulesRoot?: string;
+}
+
+interface ParsedModuleSyntax {
+  code: string;
+  imports: string[];
+}
+
+interface BundleOrderResult {
+  order: string[];
+  parsed: Map<string, ParsedModuleSyntax>;
+}
+
+function normalizeId(id: string): string {
+  return id.replace(/\\/g, "/");
+}
+
+function inferModulesRoot(entryId: string): string {
+  const normalized = normalizeId(entryId);
+  const marker = "/modules/";
+  const idx = normalized.lastIndexOf(marker);
+  if (idx === -1) return "modules";
+  return normalized.slice(0, idx + marker.length - 1);
+}
+
+function providerIdFor(moduleSpec: string, modulesRoot: string): string {
+  const rel = moduleSpec.split("::").join("/");
+  return `${modulesRoot}/${rel}/provider.tuff`;
+}
+
+function stripModuleSyntax(src: string): ParsedModuleSyntax {
+  const imports: string[] = [];
+  const importStmt =
+    /^\s*from\s+([A-Za-z_$][A-Za-z0-9_$]*(?:::[A-Za-z_$][A-Za-z0-9_$]*)*)\s+use\s+\{[^}]*\}\s*;\s*$/gm;
+
+  let code = src.replace(importStmt, (_m, mod: string) => {
+    imports.push(mod);
+    return "";
+  });
+
+  // Strip `out` from declarations so they compile to valid JS.
+  code = code.replace(/\bout\s+(fn|let|struct)\b/g, "$1");
+
+  return { code, imports };
+}
+
+function buildBundleOrder(
+  entryId: string,
+  files: Map<string, string>,
+  modulesRoot: string
+): BundleOrderResult {
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const order: string[] = [];
+  const parsed = new Map<string, ParsedModuleSyntax>();
+
+  const getParsed = (id: string): ParsedModuleSyntax => {
+    const existing = parsed.get(id);
+    if (existing) return existing;
+
+    const src = files.get(id);
+    if (src === undefined) throw new Error(`missing source for '${id}'`);
+    const p = stripModuleSyntax(src);
+    parsed.set(id, p);
+    return p;
+  };
+
+  const visit = (id: string): void => {
+    if (visited.has(id)) return;
+    if (visiting.has(id))
+      throw new Error(`cyclic module dependency at '${id}'`);
+    visiting.add(id);
+
+    const p = getParsed(id);
+    for (const mod of p.imports) {
+      const providerId = providerIdFor(mod, modulesRoot);
+      if (!files.has(providerId)) {
+        throw new Error(
+          `missing provider module '${providerId}' (imported from '${id}')`
+        );
+      }
+      visit(providerId);
+    }
+
+    visiting.delete(id);
+    visited.add(id);
+    order.push(id);
+  };
+
+  visit(entryId);
+  return { order, parsed };
+}
+
+/**
+ * compileBundle - compile multiple `.tuff` files into a single JS *expression*
+ * string. The resulting expression evaluates to the entry module's result.
+ */
+export function compileBundle(
+  files: Map<string, string>,
+  entry: string,
+  options: CompileBundleOptions = {}
+): string {
+  const normalizedFiles = new Map<string, string>();
+  for (const [id, src] of files.entries()) {
+    normalizedFiles.set(normalizeId(id), src);
+  }
+
+  const entryId = normalizeId(entry);
+  if (!normalizedFiles.has(entryId)) {
+    throw new Error(`entry file '${entryId}' not found in files map`);
+  }
+
+  const modulesRoot =
+    options.modulesRoot !== undefined
+      ? normalizeId(options.modulesRoot)
+      : inferModulesRoot(entryId);
+
+  const { order, parsed } = buildBundleOrder(
+    entryId,
+    normalizedFiles,
+    modulesRoot
+  );
+
+  let prelude = "";
+  for (const id of order) {
+    if (id === entryId) continue;
+    const code = parsed.get(id)?.code ?? normalizedFiles.get(id) ?? "";
+    const compiled = compileProgramImpl(code);
+    prelude += `\n// ${id}\n${compiled}\n`;
+  }
+
+  const entryCode =
+    parsed.get(entryId)?.code ?? normalizedFiles.get(entryId) ?? "";
+  const entryExpr = compileImpl(entryCode);
+
+  return `(function(){${prelude}\nreturn (${entryExpr});\n})()`;
 }
 
 /**

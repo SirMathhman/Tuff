@@ -43,12 +43,37 @@ export function findMatching(
   return depth === 0 ? i : undefined;
 }
 
+// eslint-disable-next-line complexity
+function findStmtEndTopLevel(input: string, start: number): number {
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = start; i < input.length; i++) {
+    const ch = input[i];
+
+    if (ch === "'" && !inDouble) {
+      inSingle = !inSingle;
+      continue;
+    }
+    if (ch === '"' && !inSingle) {
+      inDouble = !inDouble;
+      continue;
+    }
+    if (inSingle || inDouble) continue;
+
+    if (ch === "(" || ch === "[" || ch === "{") depth++;
+    else if (ch === ")" || ch === "]" || ch === "}") depth--;
+    else if (ch === ";" && depth === 0) return i;
+  }
+  return input.length;
+}
+
 // eslint-disable-next-line max-lines-per-function
 export function parseFunctions(input: string): ParseFunctionsResult {
   // Use a header regex to find function starts and then scan for the matching
   // closing brace using helper `findMatchingBrace` so function remains small.
   const headerRe =
-    /fn\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(([^)]*)\)\s*(?::\s*[A-Za-z_$][A-Za-z0-9_$]*)?\s*=>\s*\{/g;
+    /fn\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(([^)]*)\)\s*(?::\s*[A-Za-z_$][A-Za-z0-9_$]*)?\s*=>\s*/g;
   let out = "";
   let lastIndex = 0;
   const names = new Set<string>();
@@ -60,16 +85,31 @@ export function parseFunctions(input: string): ParseFunctionsResult {
     const name = m[1];
     const params = m[2];
     const headerStart = m.index ?? 0;
-    const braceOpen = headerRe.lastIndex - 1; // position of the '{'
 
-    const matching = findMatching(input, braceOpen + 1, "{", "}");
-    if (matching === undefined) {
-      // Unbalanced braces; return original input so we surface a sensible error later
-      return { code: input };
+    // Decide between `{ ... }` body and expression body `=> expr;`.
+    let p = headerRe.lastIndex;
+    while (p < input.length && /\s/.test(input[p])) p++;
+
+    let body: string;
+    let isExprBody = false;
+    let nextIndex: number;
+    if (input[p] === "{") {
+      const braceOpen = p;
+      const matching = findMatching(input, braceOpen + 1, "{", "}");
+      if (matching === undefined) {
+        // Unbalanced braces; return original input so we surface a sensible error later
+        return { code: input };
+      }
+
+      const k = matching;
+      body = input.slice(braceOpen + 1, k - 1);
+      nextIndex = k;
+    } else {
+      const stmtEnd = findStmtEndTopLevel(input, p);
+      body = input.slice(p, stmtEnd).trim();
+      isExprBody = true;
+      nextIndex = stmtEnd < input.length ? stmtEnd + 1 : stmtEnd;
     }
-
-    const k = matching;
-    const body = input.slice(braceOpen + 1, k - 1);
 
     if (names.has(name)) {
       return {
@@ -91,10 +131,11 @@ export function parseFunctions(input: string): ParseFunctionsResult {
 
     const paramList = paramNames.join(", ");
 
-    out +=
-      input.slice(lastIndex, headerStart) +
-      buildFunctionReplacement(name, paramList, body);
-    lastIndex = k;
+    const replacement = isExprBody
+      ? buildFunctionReplacementExpr(name, paramList, body)
+      : buildFunctionReplacement(name, paramList, body);
+    out += input.slice(lastIndex, headerStart) + replacement;
+    lastIndex = nextIndex;
 
     ensureParamMaps();
     resultParamTypes!.set(name, paramTypes);
@@ -122,6 +163,16 @@ function buildFunctionReplacement(
 ): string {
   const transformedBody = body.replace(/\byield\b/g, "return");
   return `const ${name} = function(${paramList}) { ${transformedBody} };`;
+}
+
+function buildFunctionReplacementExpr(
+  name: string,
+  paramList: string,
+  bodyExpr: string
+): string {
+  const transformedExpr = bodyExpr.replace(/\byield\b/g, "return");
+  // Expression-bodied function: treat it as a single `return (expr)`.
+  return `const ${name} = function(${paramList}) { return (${transformedExpr}); };`;
 }
 
 function inferTypeSimple(expr: string): string {

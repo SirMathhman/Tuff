@@ -22,6 +22,19 @@ import {
 } from "./breaks";
 import { applyStringAndCtorTransforms, parseStructs } from "./structs";
 
+interface CompileCoreOk {
+  trimmed: string;
+  codeNoStructs: string;
+  replaced: string;
+  hasRead: boolean;
+}
+
+interface CompileCoreErr {
+  error: string;
+}
+
+type CompileCoreResult = CompileCoreOk | CompileCoreErr;
+
 function replaceReads(input: string): string {
   const readI32Regex = /read<\s*I32\s*>\s*\(\s*\)/g;
   let out = input.replace(readI32Regex, "readI32()");
@@ -320,7 +333,32 @@ function wrapStatements(code: string): string {
   return `(function(){ ${body}; return (${last}); })()`;
 }
 
-export function compileImpl(input: string): string {
+function looksLikeCodeExpression(trimmed: string): boolean {
+  if (/^-?\d+$/.test(trimmed)) return true;
+  if (/^(true|false)$/.test(trimmed)) return true;
+
+  // Function call / grouping.
+  if (/[A-Za-z_$][A-Za-z0-9_$]*\s*\(/.test(trimmed)) return true;
+
+  // Obvious operators / punctuation that are unlikely to appear in plain text.
+  if (/[()[\]{};=+\-*/%<>!?:]/.test(trimmed)) return true;
+
+  // Module/package syntax.
+  if (trimmed.includes("::")) return true;
+
+  // Keywords strongly indicate code.
+  if (
+    /\b(let|mut|fn|if|else|while|for|break|continue|yield|return|struct|from|use|out)\b/.test(
+      trimmed
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function compileCore(input: string): CompileCoreResult {
   // Normalize input
   const trimmed = input.trim();
 
@@ -331,43 +369,33 @@ export function compileImpl(input: string): string {
 
   // Transform `fn` declarations to JS functions before replacing reads
   const fnParsed = parseFunctions(codeNoStructs);
-  if (fnParsed.error) return fnParsed.error;
+  if (fnParsed.error) return { error: fnParsed.error };
   codeNoStructs = fnParsed.code;
 
   let replaced = replaceReads(codeNoStructs);
 
-  // First convert block {...} used as expressions into IIFEs that return the
-  // last expression in the block. Doing this first ensures `if (cond) { ... }
-  // else { ... }` arms are transformed into expressions and can then be
-  // converted by the `if` -> ternary transform.
   // Validate break/continue usages before we transform blocks/ifs so we can
-  // provide clearer compile-time errors for illegal uses (e.g., break outside
-  // loops or break inside expression-level blocks which become IIFEs).
+  // provide clearer compile-time errors for illegal uses.
   const breakErr = validateBreakContinueUsage(replaced);
-  if (breakErr) return breakErr;
+  if (breakErr) return { error: breakErr };
 
+  // Transform blocks used as expressions before we transform expression-level ifs.
   replaced = transformBlockExpressions(replaced);
-
-  // Convert expression-level `if (cond) a else b` into JS ternary expressions so
-  // they can be used as expressions in compiled output.
   replaced = transformIfExpressions(replaced);
 
   const typeError = checkFunctionCallTypes(replaced, fnParsed);
-  if (typeError) return typeError;
+  if (typeError) return { error: typeError };
 
   const parsed = parseDeclarations(codeNoStructs);
-  if (parsed.error) return parsed.error;
+  if (parsed.error) return { error: parsed.error };
   const decls = parsed.decls;
 
   const arrInitErr = checkArrayInitializersInDecls(codeNoStructs, decls);
-  if (arrInitErr) return arrInitErr;
+  if (arrInitErr) return { error: arrInitErr };
 
   const arrExplicitErr = checkExplicitArrayDecls(codeNoStructs);
-  if (arrExplicitErr) return arrExplicitErr;
+  if (arrExplicitErr) return { error: arrExplicitErr };
 
-  // Initialize arrays declared without an explicit initializer when the
-  // type includes a runtime size (e.g., `[I32; 0; 2]`), creating an array
-  // of the requested length filled with defaults so index assignments work.
   replaced = initializeArrayDecls(replaced, decls);
 
   const hasRead =
@@ -378,7 +406,37 @@ export function compileImpl(input: string): string {
   replaced = applyStringAndCtorTransforms(replaced, structs, decls);
 
   const assignError = checkImmutableAssignments(replaced, decls);
-  if (assignError) return assignError;
+  if (assignError) return { error: assignError };
+
+  return { trimmed, codeNoStructs, replaced, hasRead };
+}
+
+export function compileProgramImpl(input: string): string {
+  const core = compileCore(input);
+  if ("error" in core) return `${core.error};`;
+
+  const { trimmed, replaced, codeNoStructs, hasRead } = core;
+
+  // If we have reads, or transformations, or any obvious statement forms,
+  // emit JS as-is (statement context) and ensure a terminator.
+  const isStatementLike = /;|\b(let|const|var)\b/.test(replaced);
+  if (replaced !== codeNoStructs || hasRead || isStatementLike) {
+    return replaced.trim().endsWith(";") ? replaced : `${replaced};`;
+  }
+
+  // For simple expression inputs, prefer evaluating the expression if it looks
+  // like code; otherwise preserve legacy length-based behavior.
+  if (looksLikeCodeExpression(trimmed)) {
+    return `${replaced};`;
+  }
+  return `(${trimmed.length});`;
+}
+
+export function compileImpl(input: string): string {
+  const core = compileCore(input);
+  if ("error" in core) return core.error;
+
+  const { trimmed, replaced, codeNoStructs, hasRead } = core;
 
   // If transformations produced a different single-expression (e.g., string literal indexing),
   // return it directly so it evaluates correctly instead of using the length fallback.
@@ -404,6 +462,8 @@ export function compileImpl(input: string): string {
     return wrapStatements(replaced);
   }
 
-  // Fallback: return as an expression (e.g., length-based behavior for plain strings)
+  // For simple expression inputs, prefer evaluating the expression if it looks
+  // like code; otherwise preserve legacy length-based behavior for plain text.
+  if (looksLikeCodeExpression(trimmed)) return replaced;
   return `(${trimmed.length})`;
 }
