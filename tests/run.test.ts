@@ -70,6 +70,13 @@ describe("run", () => {
     expect(runModule.run("read<Bool>() + read<Bool>()", "true false")).toBe(1);
     expect(runModule.run("read<Bool>() + read<Bool>()", "true true")).toBe(2);
   });
+
+  test("boolean operators work with read<Bool>()", () => {
+    expect(runModule.run("read<Bool>() && read<Bool>()", "true false")).toBe(0);
+    expect(runModule.run("read<Bool>() && read<Bool>()", "true true")).toBe(1);
+    expect(runModule.run("read<Bool>() || read<Bool>()", "true false")).toBe(1);
+    expect(runModule.run("read<Bool>() || read<Bool>()", "false false")).toBe(0);
+  });
   test("handles multi-statement code with reads and returns value", () => {
     const code = "let x : I32 = read<I32>(); let y : I32 = read<I32>(); x + y";
     expect(runModule.run(code, "1 2")).toBe(3);
