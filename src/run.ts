@@ -226,6 +226,25 @@ function applyStringAndCtorTransforms(
     });
   }
 
+  // Pointer support
+  // Replace pointer address-of: `&x` -> {get:()=>x, set:(v)=>{x=v}}
+  replaced = replaced.replace(
+    /(?<!&)&\s*([A-Za-z_$][A-Za-z0-9_$]*)/g,
+    "({get:()=>$1, set:(v)=>{ $1 = v }})"
+  );
+
+  // Replace pointer assignment `*y = expr` -> `y.set(expr)`
+  replaced = replaced.replace(
+    /(?<![A-Za-z0-9_)\]"])\*\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*([^;\n]+)/g,
+    (_m, ident, rhs) => `${ident}.set(${rhs.trim()})`
+  );
+
+  // Replace deref use `*y` (unary) -> `y.get()` -- avoid matching multiplication by ensuring star is not binary
+  replaced = replaced.replace(
+    /(?<![A-Za-z0-9_)\]"])\*\s*([A-Za-z_$][A-Za-z0-9_$]*)/g,
+    "$1.get()"
+  );
+
   // If any variable is declared as `: &Str`, convert occurrences like `x[0]` to `x.charCodeAt(0)`
   for (const [name, info] of decls.entries()) {
     if (info.type === "&Str") {
@@ -284,7 +303,7 @@ function makeDuplicateError(kind: string, name: string): string {
 function parseDeclarations(input: string): ParseDeclarationsResult {
   // Capture optional type annotations like `: I32` or `: &Str`
   const declRegex =
-    /\blet\s+(mut\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?::\s*([&A-Za-z_$][A-Za-z0-9_$]*))?/g;
+    /\blet\s+(mut\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?::\s*([&*A-Za-z_$][A-Za-z0-9_$]*))?/g;
   const decls = new Map<string, VarDeclaration>();
   let m: RegExpExecArray | undefined;
   while (
@@ -304,8 +323,8 @@ function parseDeclarations(input: string): ParseDeclarationsResult {
 }
 
 function stripAnnotationsAndMut(replaced: string): string {
-  // support Char and &Str annotations
-  replaced = replaced.replace(/:\s*(?:I32|Bool|Char|&Str)\b/g, "");
+  // support Char, &Str and pointer annotations like *I32
+  replaced = replaced.replace(/:\s*(?:I32|Bool|Char|&Str|[*]I32)\b/g, "");
   replaced = replaced.replace(/\b(let|var|const)\s+mut\b/g, "$1");
   return replaced;
 }

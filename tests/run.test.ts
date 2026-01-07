@@ -102,13 +102,23 @@ describe("run", () => {
     expect(runModule.run(code)).toBe(97);
   });
 
+  test("pointer deref returns value", () => {
+    const code = "let x = 100; let y : *I32 = &x; *y";
+    expect(runModule.run(code)).toBe(100);
+  });
+
+  test("pointer assignment updates pointee", () => {
+    const code = "let x = 100; let y : *I32 = &x; *y = 200; x";
+    expect(runModule.run(code)).toBe(200);
+  });
+
   test("boolean operators work with read<Bool>()", () => {
-    expect(runModule.run("read<Bool>() && read<Bool>()", "true false")).toBe(0);
-    expect(runModule.run("read<Bool>() && read<Bool>()", "true true")).toBe(1);
-    expect(runModule.run("read<Bool>() || read<Bool>()", "true false")).toBe(1);
-    expect(runModule.run("read<Bool>() || read<Bool>()", "false false")).toBe(
-      0
-    );
+    const code1 = "read<Bool>() && read<Bool>()";
+    expect(runModule.run(code1, "true false")).toBe(0);
+    expect(runModule.run(code1, "true true")).toBe(1);
+    const code2 = "read<Bool>() || read<Bool>()";
+    expect(runModule.run(code2, "true false")).toBe(1);
+    expect(runModule.run(code2, "false false")).toBe(0);
   });
 
   test("functions with yield work and read from stdin", () => {
