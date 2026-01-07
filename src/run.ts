@@ -10,13 +10,13 @@ export function compile(input: string): string {
   const readRegex = /read<\s*I32\s*>\s*\(\s*\)/g;
   let replaced = trimmed.replace(readRegex, "readI32()");
 
-  // Record declarations and whether they are mutable so we can detect
+  // Track declarations and whether they are mutable so we can detect
   // illegal assignments to immutable variables.
   const declRegex = /\blet\s+(mut\s+)?([A-Za-z_$][A-Za-z0-9_$]*)/g;
-  const decls: Record<string, { mut: boolean }> = {};
+  const decls = new Map<string, { mut: boolean }>();
   let m: RegExpExecArray | null;
   while ((m = declRegex.exec(trimmed))) {
-    decls[m[2]] = { mut: !!m[1] };
+    decls.set(m[2], { mut: !!m[1] });
   }
 
   const hasRead = replaced.indexOf("readI32()") !== -1;
@@ -28,11 +28,11 @@ export function compile(input: string): string {
   replaced = replaced.replace(/\b(let|var|const)\s+mut\b/g, "$1");
 
   // If there are declarations, check for assignments to immutable vars.
-  if (Object.keys(decls).length > 0) {
+  if (decls.size > 0) {
     // Remove declaration statements to avoid matching the initializers as
     // assignments. This leaves only assignment occurrences.
     const withoutDecls = replaced.replace(/\blet\b[^;]*;/g, "");
-    for (const [name, info] of Object.entries(decls)) {
+    for (const [name, info] of decls.entries()) {
       if (!info.mut) {
         const assignRegex = new RegExp("\\b" + name + "\\s*=");
         if (assignRegex.test(withoutDecls)) {
