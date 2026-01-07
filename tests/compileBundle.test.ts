@@ -1,16 +1,9 @@
-import fs from "fs";
-import path from "path";
 import vm from "node:vm";
 
 import { compileBundle, Namespace } from "../src/run";
 
 function evalBundledExpression(expr: string): unknown {
   return vm.runInNewContext(expr, {}, { timeout: 1000 });
-}
-
-interface FixturePaths {
-  providerPath: string;
-  userPath: string;
 }
 
 interface FixtureIds {
@@ -25,42 +18,20 @@ interface FixtureSources {
   userSrc: string;
 }
 
-function getFixturePaths(): FixturePaths {
-  const providerPath = path.join(
-    __dirname,
-    "..",
-    "self_hosting",
-    "modules",
-    "tuff",
-    "stuff",
-    "provider.tuff"
-  );
-  const userPath = path.join(
-    __dirname,
-    "..",
-    "self_hosting",
-    "modules",
-    "tuff",
-    "stuff",
-    "user.tuff"
-  );
-  return { providerPath, userPath };
-}
-
 function getFixtureIds(): FixtureIds {
   return {
-    providerId: "self_hosting/modules/tuff/stuff/provider.tuff",
-    userId: "self_hosting/modules/tuff/stuff/user.tuff",
+    providerId: "(in-memory)",
+    userId: "(in-memory)",
     providerNs: ["tuff", "stuff"],
     userNs: ["tuff", "stuff", "user"],
   };
 }
 
 function readFixtureSources(): FixtureSources {
-  const { providerPath, userPath } = getFixturePaths();
+  // Unit tests must not depend on the filesystem.
   return {
-    providerSrc: fs.readFileSync(providerPath, "utf8"),
-    userSrc: fs.readFileSync(userPath, "utf8"),
+    providerSrc: "out fn getMyValue() => 100;\n",
+    userSrc: "from tuff::stuff use { getMyValue };\n\ngetMyValue()\n",
   };
 }
 

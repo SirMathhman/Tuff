@@ -162,13 +162,20 @@ export function compileBundle(
     : undefined;
 
   if (!entryId) {
-    throw new Error(`entry namespace '${entry.join("::")}' not found in files map`);
+    throw new Error(
+      `entry namespace '${entry.join("::")}' not found in files map`
+    );
   }
 
-  const { order, parsed } = buildBundleOrder(entryId, normalizedFiles, modulesRoot);
+  const { order, parsed } = buildBundleOrder(
+    entryId,
+    normalizedFiles,
+    modulesRoot
+  );
 
   const prelude = buildPrelude(order, entryId, parsed, normalizedFiles);
-  const entryCode = parsed.get(entryId)?.code ?? normalizedFiles.get(entryId) ?? "";
+  const entryCode =
+    parsed.get(entryId)?.code ?? normalizedFiles.get(entryId) ?? "";
   const entryExpr = compileImpl(entryCode);
 
   return `(function(){${prelude}\nreturn (${entryExpr});\n})()`;
