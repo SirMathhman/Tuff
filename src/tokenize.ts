@@ -42,6 +42,10 @@ export interface LogOpToken {
   type: "logop";
   value: "&&" | "||";
 }
+export interface NotToken {
+  type: "not";
+  value: "!";
+}
 export interface DotToken {
   type: "dot";
   value: ".";
@@ -58,6 +62,7 @@ export type Token =
   | PunctToken
   | CompOpToken
   | LogOpToken
+  | NotToken
   | DotToken
   | StructToken;
 
@@ -175,6 +180,9 @@ function handleChar(
   handled = tryHandleLogicalOp(s, i, tokens);
   if (handled !== -1) return ok(handled);
 
+  handled = tryHandleNot(s, i, tokens);
+  if (handled !== -1) return ok(handled);
+
   handled = tryHandleCompoundAssign(s, i, tokens);
   if (handled !== -1) return ok(handled);
 
@@ -245,6 +253,16 @@ function tryHandleComparison(s: string, i: number, tokens: Token[]): number {
     return i + 1;
   }
 
+  return -1;
+}
+
+function tryHandleNot(s: string, i: number, tokens: Token[]): number {
+  // Standalone '!' is unary logical NOT; '!=' is handled by tryHandleComparison
+  if (s[i] === "!") {
+    if (s[i + 1] === "=") return -1; // let comparison handler process '!='
+    tokens.push({ type: "not", value: "!" });
+    return i + 1;
+  }
   return -1;
 }
 

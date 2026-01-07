@@ -1,8 +1,13 @@
-import type { Token } from "./tokenize";
-import { Result, err, ok } from "./result";
+import type { Token, NumToken } from "./tokenize";
+import { Result, err, ok, isErr } from "./result";
 
 interface ComparisonOperandResult {
   value: number;
+  nextIdx: number;
+}
+
+interface TokenNext {
+  token: Token;
   nextIdx: number;
 }
 
@@ -65,24 +70,19 @@ function applyMultiplicativeOp(
   const lhsVal = lhs.value as number;
   const rhsVal = rhs.value as number;
 
-  if (op === "*")
-    return ok({
-      type: "num",
-      value: lhsVal * rhsVal,
-    });
+  if (op === "*") {
+    const numTok: NumToken = { type: "num", value: lhsVal * rhsVal };
+    return ok(numTok);
+  }
   if (op === "/") {
     if (rhsVal === 0) return err("Division by zero");
-    return ok({
-      type: "num",
-      value: lhsVal / rhsVal,
-    });
+    const numTok: NumToken = { type: "num", value: lhsVal / rhsVal };
+    return ok(numTok);
   }
   if (op === "%") {
     if (rhsVal === 0) return err("Division by zero");
-    return ok({
-      type: "num",
-      value: lhsVal % rhsVal,
-    });
+    const numTok: NumToken = { type: "num", value: lhsVal % rhsVal };
+    return ok(numTok);
   }
   return err("Invalid numeric input");
 }
@@ -235,33 +235,93 @@ function evalTokensToNumber(tokens: Token[]): Result<number, string> {
   return ok(currentValue);
 }
 
+function getResultValue(res: Result<TokenNext, string>): Result<TokenNext, string> {
+  if (isErr(res)) return err(res.error);
+  return ok(res.value);
+}
+
+function applyResultAndAdvance(res: Result<TokenNext, string>, out: Token[]): Result<number, string> {
+  const v = getResultValue(res);
+  if (isErr(v)) return err(v.error);
+  out.push(v.value.token);
+  return ok(v.value.nextIdx);
+}
+
+function processParenthesized(tokens: Token[], startIdx: number): Result<TokenNext, string> {
+  let j = startIdx + 1;
+  let depth = 1;
+  while (j < tokens.length && depth > 0) {
+    const u = tokens[j];
+    if (u.type === "paren") {
+      if (u.value === "(") depth++;
+      else if (u.value === ")") depth--;
+    }
+    j++;
+  }
+  if (depth !== 0) return err("Invalid numeric input");
+  const sub = tokens.slice(startIdx + 1, j - 1);
+  if (sub.length === 0) return err("Invalid numeric input");
+  const reducedSub = reduceParentheses(sub);
+  if (reducedSub.ok === false) return reducedSub;
+  const valRes = evalTokensToNumber(reducedSub.value);
+  if (valRes.ok === false) return valRes;
+  const numTok: NumToken = { type: "num", value: valRes.value };
+  const outObj: TokenNext = { token: numTok, nextIdx: j };
+  return ok(outObj);
+}
+
+function processUnaryNot(tokens: Token[], startIdx: number): Result<TokenNext, string> {
+  let i = startIdx;
+  let notCount = 0;
+  while (i < tokens.length && tokens[i].type === "not") {
+    notCount++;
+    i++;
+  }
+
+  if (i >= tokens.length) return err("Invalid numeric input");
+
+  let operandVal: number | undefined = undefined;
+
+  const next = tokens[i];
+  if (next.type === "paren" && next.value === "(") {
+    const subRes = processParenthesized(tokens, i);
+    if (isErr(subRes)) return subRes;
+    operandVal = (subRes as any).value.token.value;
+    i = (subRes as any).value.nextIdx;
+  } else if (
+    next.type === "op" &&
+    next.value === "-" &&
+    tokens[i + 1] &&
+    tokens[i + 1].type === "num"
+  ) {
+    operandVal = -tokens[i + 1].value;
+    i += 2;
+  } else if (next.type === "num") {
+    operandVal = next.value;
+    i++;
+  } else {
+    return err("Invalid numeric input");
+  }
+
+  const resultVal = notCount % 2 === 0 ? operandVal : operandVal === 0 ? 1 : 0;
+  const numTok: NumToken = { type: "num", value: resultVal as number };
+  const outObj: TokenNext = { token: numTok, nextIdx: i };
+  return ok(outObj);
+}
 function reduceParentheses(tokens: Token[]): Result<Token[], string> {
   const out: Token[] = [];
   let i = 0;
   while (i < tokens.length) {
     const t = tokens[i];
-    if (t.type === "paren" && t.value === "(") {
-      // find matching ')'
-      let j = i + 1;
-      let depth = 1;
-      while (j < tokens.length && depth > 0) {
-        const u = tokens[j];
-        if (u.type === "paren") {
-          if (u.value === "(") depth++;
-          else if (u.value === ")") depth--;
-        }
-        j++;
-      }
-      if (depth !== 0) return err("Invalid numeric input");
-      // j now points just after the matching ')'
-      const sub = tokens.slice(i + 1, j - 1);
-      if (sub.length === 0) return err("Invalid numeric input");
-      const reducedSub = reduceParentheses(sub);
-      if (reducedSub.ok === false) return reducedSub;
-      const valRes = evalTokensToNumber(reducedSub.value);
-      if (valRes.ok === false) return valRes;
-      out.push({ type: "num", value: valRes.value });
-      i = j;
+    if ((t.type === "paren" && t.value === "(") || t.type === "not") {
+      const res =
+        t.type === "paren" && t.value === "("
+          ? processParenthesized(tokens, i)
+          : processUnaryNot(tokens, i);
+      const v = getResultValue(res);
+      if (isErr(v)) return err(v.error);
+      out.push(v.value.token);
+      i = v.value.nextIdx;
     } else {
       out.push(t);
       i++;

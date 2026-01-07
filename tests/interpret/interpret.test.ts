@@ -362,6 +362,28 @@ describe("interpret - if expressions (statement branches)", () => {
   });
 });
 
+describe("interpret - unary not operator", () => {
+  it("not on zero -> 1", () => {
+    checkInterpret("!0", 1);
+  });
+
+  it("not on non-zero -> 0", () => {
+    checkInterpret("!5", 0);
+  });
+
+  it("double not: !!0 -> 0", () => {
+    checkInterpret("!!0", 0);
+  });
+
+  it("not on true -> 0", () => {
+    checkInterpret("!true", 0);
+  });
+
+  it("not on parenthesized expr", () => {
+    checkInterpret("!(1 + 1)", 0);
+  });
+});
+
 describe("interpret - block expressions", () => {
   it("evaluates simple block expression", () => {
     const r = interpret("{ 100 }");
