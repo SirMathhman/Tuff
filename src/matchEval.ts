@@ -2,9 +2,21 @@ import { Token } from "./tokenize";
 import { Result, ok, err, isErr } from "./result";
 import { indexUntilSemicolon, findMatchingBrace } from "./commonUtils";
 
+export interface StructField {
+  name: string;
+  typeName: string;
+}
+
+export interface StructInstance {
+  structName: string;
+  fieldValues: Map<string, number>;
+}
+
+export type VariableValue = number | StructInstance;
+
 export interface VarBinding {
   type: "var";
-  value?: number;
+  value?: VariableValue;
   mutable: boolean;
   typeName?: string;
 }
@@ -21,7 +33,12 @@ export interface FunctionBinding {
   body: Token[];
 }
 
-export type Binding = VarBinding | FunctionBinding;
+export interface StructBinding {
+  type: "struct";
+  fields: StructField[];
+}
+
+export type Binding = VarBinding | FunctionBinding | StructBinding;
 
 export interface InlineIfResult {
   token: Token;

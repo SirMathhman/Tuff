@@ -12,3 +12,10 @@ dist/
 
 # OS files
 .DS_Store
+
+# Generated artifacts (do not commit)
+tests/**/*.js
+tests/**/*.d.ts
+test-debug.js
+test.log
+test_output.txt

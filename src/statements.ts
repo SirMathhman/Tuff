@@ -1,15 +1,12 @@
 import { Token } from "./tokenize";
 import { Result, ok, err, isErr } from "./result";
-import { Binding } from "./matchEval";
+import { Binding, StructInstance } from "./matchEval";
 import { evalExprUntilSemicolon, tryAssignment } from "./assignmentEval";
 import { indexUntilSemicolon, findMatchingBrace } from "./commonUtils";
 import { parseFunctionSignature } from "./functions";
-import {
-  findMatchingParen,
-  findTopLevelElseIndex,
-  evalExprWithEnv,
-  processStatementsTokens,
-} from "./interpret";
+import { parseStructDefinition } from "./structs";
+import { evaluateStructInstantiation } from "./structEval";
+import { findMatchingParen, findTopLevelElseIndex } from "./interpret";
 
 export interface StatementResult {
   nextIndex: number;
@@ -17,11 +14,52 @@ export interface StatementResult {
 }
 
 interface ExprEvalFn {
-  (tokens: Token[], env: Map<string, Binding>): any;
+  (tokens: Token[], env: Map<string, Binding>): Result<number, string>;
 }
 
 interface StmtProcessorFn {
   (tokens: Token[], env: Map<string, Binding>): Result<any, string>;
+}
+
+function tryProcessLetStructInstantiation(
+  tokensArr: Token[],
+  cur: number,
+  name: string,
+  mutable: boolean,
+  typeName: string | undefined,
+  envMap: Map<string, Binding>,
+  evalExprWithEnv: ExprEvalFn
+): Result<StatementResult, string> | undefined {
+  if (!isStructInstantiation(tokensArr, cur)) return undefined;
+
+  const braceIdx = cur + 1;
+  const structRes = evaluateStructInstantiation(
+    tokensArr,
+    cur,
+    braceIdx,
+    envMap,
+    evalExprWithEnv
+  );
+  if (isErr(structRes)) return err(structRes.error);
+
+  const { token: structToken, consumed } = structRes.value;
+  if (structToken.type !== "struct")
+    return err("Expected struct instantiation");
+
+  const instance: StructInstance = structToken.value;
+  const nextIdx = cur + consumed;
+
+  let finalIdx = nextIdx;
+  if (
+    tokensArr[nextIdx] &&
+    tokensArr[nextIdx].type === "punct" &&
+    tokensArr[nextIdx].value === ";"
+  ) {
+    finalIdx = nextIdx + 1;
+  }
+
+  envMap.set(name, { type: "var", value: instance, mutable, typeName });
+  return ok({ nextIndex: finalIdx });
 }
 
 interface TypeParseResult {
@@ -50,6 +88,13 @@ interface WhileHeader {
   condEnd: number;
 }
 
+interface LetHeaderParseResult {
+  name: string;
+  mutable: boolean;
+  typeName: string | undefined;
+  cur: number;
+}
+
 export function parseOptionalType(
   tokensArr: Token[],
   cur: number
@@ -68,12 +113,22 @@ export function parseOptionalType(
   return ok({ nextIndex: cur });
 }
 
-export function processLetStatement(
+function isStructInstantiation(tokensArr: Token[], cur: number): boolean {
+  const nameTok = tokensArr[cur];
+  const braceTok = tokensArr[cur + 1];
+  return (
+    nameTok &&
+    nameTok.type === "ident" &&
+    braceTok &&
+    braceTok.type === "punct" &&
+    braceTok.value === "{"
+  );
+}
+
+function parseLetHeader(
   tokensArr: Token[],
-  idx: number,
-  envMap: Map<string, Binding>,
-  evalExprWithEnv: ExprEvalFn
-): Result<StatementResult, string> {
+  idx: number
+): Result<LetHeaderParseResult, string> {
   let cur = idx + 1;
   let mutable = false;
   const maybeTok = tokensArr[cur];
@@ -81,16 +136,26 @@ export function processLetStatement(
     mutable = true;
     cur++;
   }
-
   const nameTok = tokensArr[cur];
   if (!nameTok || nameTok.type !== "ident") return err("Invalid numeric input");
   const name = nameTok.value;
   cur++;
-
   const typeRes = parseOptionalType(tokensArr, cur);
   if (isErr(typeRes)) return err(typeRes.error);
   const { typeName, nextIndex } = typeRes.value;
-  cur = nextIndex;
+  return ok({ name, mutable, typeName, cur: nextIndex });
+}
+
+export function processLetStatement(
+  tokensArr: Token[],
+  idx: number,
+  envMap: Map<string, Binding>,
+  evalExprWithEnv: ExprEvalFn
+): Result<StatementResult, string> {
+  const headerRes = parseLetHeader(tokensArr, idx);
+  if (isErr(headerRes)) return err(headerRes.error);
+  const { name, mutable, typeName } = headerRes.value;
+  let cur = headerRes.value.cur;
 
   if (!tokensArr[cur] || tokensArr[cur].type !== "punct")
     return err("Invalid numeric input");
@@ -103,6 +168,18 @@ export function processLetStatement(
   if (tokensArr[cur].value !== "=") return err("Invalid numeric input");
   cur++;
 
+  const structStmt = tryProcessLetStructInstantiation(
+    tokensArr,
+    cur,
+    name,
+    mutable,
+    typeName,
+    envMap,
+    evalExprWithEnv
+  );
+  if (structStmt !== undefined) return structStmt;
+
+  // Normal numeric expression evaluation
   const evalRes = evalExprUntilSemicolon(
     tokensArr,
     cur,
@@ -123,17 +200,36 @@ export function processFunctionStatement(
 ): Result<StatementResult, string> {
   const parseRes = parseFunctionSignature(tokensArr, idx);
   if (isErr(parseRes)) return err(parseRes.error);
-  
+
   const { name, params, returnType, bodyTokens, nextIndex } = parseRes.value;
-  
+
   const fnBinding = {
     type: "fn" as const,
     params,
     returnType,
     body: bodyTokens,
   };
-  
+
   envMap.set(name, fnBinding);
+  return ok({ nextIndex });
+}
+
+export function processStructStatement(
+  tokensArr: Token[],
+  idx: number,
+  envMap: Map<string, Binding>
+): Result<StatementResult, string> {
+  const parseRes = parseStructDefinition(tokensArr, idx);
+  if (isErr(parseRes)) return err(parseRes.error);
+
+  const { name, fields, nextIndex } = parseRes.value;
+
+  const structBinding = {
+    type: "struct" as const,
+    fields,
+  };
+
+  envMap.set(name, structBinding);
   return ok({ nextIndex });
 }
 
@@ -143,14 +239,15 @@ export function processExpressionStatement(
   envMap: Map<string, Binding>,
   evalExprWithEnv: ExprEvalFn
 ): Result<StatementResult, string> {
-  const start = idx;
   const j = indexUntilSemicolon(tokensArr, idx);
-  const exprTokens = tokensArr.slice(start, j);
+  const exprTokens = tokensArr.slice(idx, j);
+  if (exprTokens.length === 0) return err("Invalid numeric input");
+
   const valRes = evalExprWithEnv(exprTokens, envMap);
   if (isErr(valRes)) return err(valRes.error);
+
   return ok({
-    nextIndex:
-      j + (j < tokensArr.length && tokensArr[j].type === "punct" ? 1 : 0),
+    nextIndex: j + (j < tokensArr.length && tokensArr[j].type === "punct" ? 1 : 0),
     value: valRes.value,
   });
 }
@@ -199,10 +296,7 @@ export function findStatementEnd(tokens: Token[], start: number): number {
   return indexUntilSemicolon(tokens, start);
 }
 
-function findThenKeywordIndex(
-  tokensArr: Token[],
-  startIdx: number
-): number {
+function findThenKeywordIndex(tokensArr: Token[], startIdx: number): number {
   let depth = 0;
   for (let i = startIdx; i < tokensArr.length; i++) {
     if (tokensArr[i].type === "paren") {
@@ -223,7 +317,7 @@ function parseConditionHeader(
   idx: number
 ): Result<ConditionHeader, string> {
   const condParenIdx = idx + 1;
-  
+
   // Check if we have the format with parentheses: if (condition)
   if (
     tokensArr[condParenIdx] &&
@@ -374,11 +468,8 @@ function executeWhileLoop(
   bodyTokens: Token[],
   condTokens: Token[],
   envMap: Map<string, Binding>,
-  evalExprWithEnv: (tokens: Token[], env: Map<string, Binding>) => any,
-  processStatementsTokens: (
-    tokens: Token[],
-    env: Map<string, Binding>
-  ) => Result<any, string>
+  evalExprWithEnv: ExprEvalFn,
+  processStatementsTokens: StmtProcessorFn
 ): Result<void, string> {
   const MAX_ITERATIONS = 10000;
   let iterations = 0;

@@ -60,23 +60,28 @@ function applyMultiplicativeOp(
 ): Result<Token, string> {
   if (!lhs || lhs.type !== "num" || !rhs || rhs.type !== "num")
     return err("Invalid numeric input");
+
+  // Prevent arithmetic on struct instances
+  const lhsVal = lhs.value as number;
+  const rhsVal = rhs.value as number;
+
   if (op === "*")
     return ok({
       type: "num",
-      value: (lhs.value as number) * (rhs.value as number),
+      value: lhsVal * rhsVal,
     });
   if (op === "/") {
-    if ((rhs.value as number) === 0) return err("Division by zero");
+    if (rhsVal === 0) return err("Division by zero");
     return ok({
       type: "num",
-      value: (lhs.value as number) / (rhs.value as number),
+      value: lhsVal / rhsVal,
     });
   }
   if (op === "%") {
-    if ((rhs.value as number) === 0) return err("Division by zero");
+    if (rhsVal === 0) return err("Division by zero");
     return ok({
       type: "num",
-      value: (lhs.value as number) % (rhs.value as number),
+      value: lhsVal % rhsVal,
     });
   }
   return err("Invalid numeric input");

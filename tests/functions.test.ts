@@ -78,9 +78,7 @@ describe("functions - block and expression bodies", () => {
   });
 
   it("expression body without block", () => {
-    const r = interpret(
-      "fn simple(x: I32) : I32 => x + 10; simple(5)"
-    );
+    const r = interpret("fn simple(x: I32) : I32 => x + 10; simple(5)");
     expectOkValue(r, 15);
   });
 });
@@ -109,9 +107,7 @@ describe("functions - return values", () => {
   });
 
   it("function returns value from block", () => {
-    const r = interpret(
-      "fn compute(x: I32) : I32 => { x + 1 }; compute(9)"
-    );
+    const r = interpret("fn compute(x: I32) : I32 => { x + 1 }; compute(9)");
     expectOkValue(r, 10);
   });
 
@@ -155,16 +151,12 @@ describe("functions - basic operations", () => {
   });
 
   it("function with arithmetic operations", () => {
-    const r = interpret(
-      "fn compute(x: I32) : I32 => x * 2 + 3; compute(5)"
-    );
+    const r = interpret("fn compute(x: I32) : I32 => x * 2 + 3; compute(5)");
     expectOkValue(r, 13);
   });
 
   it("function returning computed value", () => {
-    const r = interpret(
-      "fn avg(n: I32) : I32 => n / 2; avg(10)"
-    );
+    const r = interpret("fn avg(n: I32) : I32 => n / 2; avg(10)");
     expectOkValue(r, 5);
   });
 });
@@ -185,9 +177,7 @@ describe("functions - integration with other features", () => {
   });
 
   it("function in block expression", () => {
-    const r = interpret(
-      "fn add(a: I32) : I32 => a + 10; { add(5) + 3 }"
-    );
+    const r = interpret("fn add(a: I32) : I32 => a + 10; { add(5) + 3 }");
     expectOkValue(r, 18);
   });
 

@@ -69,7 +69,10 @@ function parseSingleParameter(
   const paramType = typeTok.value as string;
   cur++;
 
-  return ok({ param: { name: paramName, typeName: paramType }, nextIndex: cur });
+  return ok({
+    param: { name: paramName, typeName: paramType },
+    nextIndex: cur,
+  });
 }
 
 export function parseParameters(
@@ -106,7 +109,11 @@ export function parseParameters(
       return ok({ params, nextIndex: cur + 1 });
     }
 
-    return err("Invalid numeric input");
+    if (checkTok.type === "punct" && checkTok.value === ",") {
+      cur++;
+    } else {
+      return err("Invalid numeric input");
+    }
   }
 
   return err("Invalid numeric input");

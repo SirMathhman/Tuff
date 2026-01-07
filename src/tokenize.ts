@@ -1,5 +1,6 @@
 import { parseNumber } from "./parseNumber";
 import { Result, ok, err, isOk } from "./result";
+import { StructInstance } from "./matchEval";
 
 export interface NumToken {
   type: "num";
@@ -19,7 +20,19 @@ export interface IdentToken {
 }
 export interface PunctToken {
   type: "punct";
-  value: ":" | "=" | ";" | "{" | "}" | "=>" | "+=" | "-=" | "*=" | "/=" | "%=";
+  value:
+    | ":"
+    | "="
+    | ";"
+    | "{"
+    | "}"
+    | "=>"
+    | "+="
+    | "-="
+    | "*="
+    | "/="
+    | "%="
+    | ",";
 }
 export interface CompOpToken {
   type: "comp";
@@ -29,6 +42,14 @@ export interface LogOpToken {
   type: "logop";
   value: "&&" | "||";
 }
+export interface DotToken {
+  type: "dot";
+  value: ".";
+}
+export interface StructToken {
+  type: "struct";
+  value: StructInstance;
+}
 export type Token =
   | NumToken
   | OpToken
@@ -36,7 +57,9 @@ export type Token =
   | IdentToken
   | PunctToken
   | CompOpToken
-  | LogOpToken;
+  | LogOpToken
+  | DotToken
+  | StructToken;
 
 function parseAndPushNumber(
   s: string,
@@ -114,15 +137,36 @@ function handleNumOrIdent(
   return -1;
 }
 
+function isWhitespace(ch: string): boolean {
+  return ch === " " || ch === "\t" || ch === "\n" || ch === "\r";
+}
+
+function handlePunctuationOrOperator(
+  s: string,
+  i: number,
+  ch: string,
+  tokens: Token[]
+): Result<number, string> | undefined {
+  if ("+-*/%".includes(ch)) {
+    const res = handleOperator(s, i, ch, tokens);
+    if (!isOk(res)) return err(res.error);
+    return ok(res.value);
+  }
+
+  if (ch === ":" || ch === ";" || ch === "=" || ch === ",") {
+    return handlePunct(s, i, tokens);
+  }
+
+  return undefined;
+}
+
 function handleChar(
   s: string,
   i: number,
   tokens: Token[]
 ): Result<number, string> {
   const ch = s[i];
-  if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
-    return ok(i + 1);
-  }
+  if (isWhitespace(ch)) return ok(i + 1);
 
   // Try single-token handlers that return position or -1
   let handled = tryHandleParenOrBrace(ch, i, tokens);
@@ -137,19 +181,12 @@ function handleChar(
   handled = tryHandleComparison(s, i, tokens);
   if (handled !== -1) return ok(handled);
 
-  // Try operators
-  if ("+-*/%".includes(ch)) {
-    const res = handleOperator(s, i, ch, tokens);
-    if (!isOk(res)) return err(res.error);
-    return ok(res.value);
-  }
-
   // Try number or identifier
   const numOrIdentRes = handleNumOrIdent(s, i, ch, tokens);
   if (numOrIdentRes !== -1) return numOrIdentRes;
 
-  // Try punctuation
-  if (ch === ":" || ch === ";" || ch === "=") return handlePunct(s, i, tokens);
+  const punctOrOpRes = handlePunctuationOrOperator(s, i, ch, tokens);
+  if (punctOrOpRes !== undefined) return punctOrOpRes;
 
   return err("Invalid token");
 }
@@ -161,6 +198,10 @@ function tryHandleParenOrBrace(ch: string, i: number, tokens: Token[]): number {
     } else {
       tokens.push({ type: "punct", value: ch as "{" | "}" });
     }
+    return i + 1;
+  }
+  if (ch === ".") {
+    tokens.push({ type: "dot", value: "." });
     return i + 1;
   }
   return -1;
@@ -252,7 +293,7 @@ function handlePunct(
     tokens.push({ type: "punct", value: "=>" });
     return ok(i + 2);
   }
-  tokens.push({ type: "punct", value: ch as ":" | ";" | "=" });
+  tokens.push({ type: "punct", value: ch as ":" | ";" | "=" | "," });
   return ok(i + 1);
 }
 export function tokenize(s: string): Result<Token[], string> {

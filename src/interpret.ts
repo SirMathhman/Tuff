@@ -7,9 +7,12 @@ import {
   FunctionBinding,
   FunctionParameter,
   evalInlineMatchToNumToken,
+  VariableValue,
 } from "./matchEval";
 import { evalExprUntilSemicolon, tryAssignment } from "./assignmentEval";
 import { indexUntilSemicolon, findMatchingBrace } from "./commonUtils";
+import { evaluateFieldAccess, evaluateStructInstantiation } from "./structEval";
+import { splitTopLevelCommaSeparated } from "./splitTopLevel";
 import {
   processLetStatement,
   processExpressionStatement,
@@ -17,6 +20,7 @@ import {
   processBlockStatement,
   processWhileStatement,
   processFunctionStatement,
+  processStructStatement,
   StatementResult,
 } from "./statements";
 
@@ -121,16 +125,16 @@ function evalIfExpression(
   // Handle both formats:
   // 1. if (condition) value1 else value2 - with parentheses, no 'then'
   // 2. if condition then value1 else value2 - no parentheses, with 'then'
-  
+
   let condTokens: Token[];
   let valueStartIdx: number;
-  
+
   const condParenIdx = 1;
   const hasParens =
     tokens[condParenIdx] &&
     tokens[condParenIdx].type === "paren" &&
     tokens[condParenIdx].value === "(";
-  
+
   if (hasParens) {
     // Format 1: if (condition) value1 else value2
     const condEnd = findMatchingParen(tokens, condParenIdx);
@@ -144,7 +148,7 @@ function evalIfExpression(
     condTokens = tokens.slice(1, thenIdx);
     valueStartIdx = thenIdx + 1;
   }
-  
+
   if (condTokens.length === 0) return err("Invalid numeric input");
 
   const elseIdx = findTopLevelElseIndex(tokens, valueStartIdx);
@@ -205,6 +209,19 @@ interface SubstituteResult {
   consumed: number;
 }
 
+function evalArgs(
+  argExprs: Token[][],
+  env: Map<string, Binding>
+): Result<number[], string> {
+  const args: number[] = [];
+  for (const argExpr of argExprs) {
+    const argRes = evalExprWithEnv(argExpr, env);
+    if (isErr(argRes)) return err(argRes.error);
+    args.push(argRes.value);
+  }
+  return ok(args);
+}
+
 function evaluateFunctionCall(
   tokens: Token[],
   idx: number,
@@ -238,10 +255,18 @@ function evaluateFunctionCall(
     });
   }
 
-  const argRes = evalExprWithEnv(argTokens, env);
-  if (isErr(argRes)) return err(argRes.error);
+  const splitRes = splitTopLevelCommaSeparated(argTokens);
+  if (isErr(splitRes)) return err(splitRes.error);
+  const argExprs = splitRes.value;
 
-  const args = [argRes.value];
+  if (argExprs.length !== fnBinding.params.length) {
+    return err("Invalid numeric input");
+  }
+
+  const argsRes = evalArgs(argExprs, env);
+  if (isErr(argsRes)) return err(argsRes.error);
+  const args = argsRes.value;
+
   const result = executeFunction(fnBinding, args, env);
   if (isErr(result)) return err(result.error);
 
@@ -268,7 +293,12 @@ function executeFunction(
     if (param.typeName === "I32") {
       argVal = Math.trunc(argVal);
     }
-    fnEnv.set(param.name, { type: "var", value: argVal, mutable: false, typeName: param.typeName });
+    fnEnv.set(param.name, {
+      type: "var",
+      value: argVal,
+      mutable: false,
+      typeName: param.typeName,
+    });
   }
 
   const bodyRes = processStatementsTokens(fnBinding.body, fnEnv);
@@ -280,26 +310,29 @@ function executeFunction(
   return ok(result);
 }
 
-function substituteIdentToken(
+function substituteKeywordIdent(
   tokens: Token[],
   idx: number,
   env: Map<string, Binding>
-): Result<SubstituteResult, string> {
+): Result<SubstituteResult, string> | undefined {
   const t = tokens[idx];
-  if (t.type !== "ident") return err("Invalid numeric input");
+  if (t.type !== "ident") return undefined;
 
   if (t.value === "true") {
     return ok({ token: { type: "num", value: 1 }, consumed: 1 });
-  } else if (t.value === "false") {
+  }
+  if (t.value === "false") {
     return ok({ token: { type: "num", value: 0 }, consumed: 1 });
-  } else if (t.value === "if") {
+  }
+  if (t.value === "if") {
     const inlineRes = evalInlineIfToNumToken(tokens, idx, env);
     if (isErr(inlineRes)) return err(inlineRes.error);
     return ok({
       token: inlineRes.value.token,
       consumed: inlineRes.value.consumed,
     });
-  } else if (t.value === "match") {
+  }
+  if (t.value === "match") {
     const inlineRes = evalInlineMatchToNumToken(
       tokens,
       idx,
@@ -312,20 +345,59 @@ function substituteIdentToken(
       token: inlineRes.value.token,
       consumed: inlineRes.value.consumed,
     });
-  } else {
-    const nextTok = tokens[idx + 1];
-    if (nextTok && nextTok.type === "paren" && nextTok.value === "(") {
-      const callRes = evaluateFunctionCall(tokens, idx, env);
-      if (isErr(callRes)) return err(callRes.error);
-      return ok(callRes.value);
-    }
+  }
 
-    const b = env.get(t.value as string);
-    if (b === undefined) return err("Undefined variable");
-    if (b.type !== "var") return err("Cannot use function as value");
-    if (b.value === undefined) return err("Uninitialized variable");
+  return undefined;
+}
+
+function substituteValueIdent(
+  tokens: Token[],
+  idx: number,
+  env: Map<string, Binding>
+): Result<SubstituteResult, string> {
+  const t = tokens[idx];
+  if (t.type !== "ident") return err("Invalid numeric input");
+
+  const nextTok = tokens[idx + 1];
+
+  if (nextTok && nextTok.type === "dot") {
+    return evaluateFieldAccess(tokens, idx, idx + 1, env);
+  }
+
+  if (nextTok && nextTok.type === "punct" && nextTok.value === "{") {
+    return evaluateStructInstantiation(
+      tokens,
+      idx,
+      idx + 1,
+      env,
+      evalExprWithEnv
+    );
+  }
+
+  if (nextTok && nextTok.type === "paren" && nextTok.value === "(") {
+    return evaluateFunctionCall(tokens, idx, env);
+  }
+
+  const b = env.get(t.value as string);
+  if (b === undefined) return err("Undefined variable");
+  if (b.type !== "var") return err("Cannot use function as value");
+  if (b.value === undefined) return err("Uninitialized variable");
+
+  if (typeof b.value === "number") {
     return ok({ token: { type: "num", value: b.value }, consumed: 1 });
   }
+  return ok({ token: { type: "struct", value: b.value }, consumed: 1 });
+}
+
+function substituteIdentToken(
+  tokens: Token[],
+  idx: number,
+  env: Map<string, Binding>
+): Result<SubstituteResult, string> {
+  const keywordRes = substituteKeywordIdent(tokens, idx, env);
+  if (keywordRes !== undefined) return keywordRes;
+
+  return substituteValueIdent(tokens, idx, env);
 }
 
 function substituteTokens(
@@ -398,6 +470,8 @@ function tryRouteStatement(
       return processLetStatement(tokensArr, idx, envMap, evalExprWithEnv);
     case "fn":
       return processFunctionStatement(tokensArr, idx, envMap);
+    case "struct":
+      return processStructStatement(tokensArr, idx, envMap);
     case "if":
       return processIfStatement(
         tokensArr,
