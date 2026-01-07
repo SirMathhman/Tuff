@@ -96,7 +96,10 @@ export function getWordBeforeIndex(input: string, idx: number): string {
   return wordBeforeParen(input, idx + 1);
 }
 
-export function findMatchingParenAfter(input: string, start: number): number | undefined {
+export function findMatchingParenAfter(
+  input: string,
+  start: number
+): number | undefined {
   let j = start;
   while (j < input.length && /\s/.test(input[j])) j++;
   if (input[j] !== "(") return undefined;
@@ -147,7 +150,10 @@ export function getWordBeforeParenIfAny(
   return undefined;
 }
 
-export function findElseStartAfter(input: string, thenEnd: number): number | undefined {
+export function findElseStartAfter(
+  input: string,
+  thenEnd: number
+): number | undefined {
   const foundElse = input.indexOf("else", thenEnd + 1);
   if (foundElse === -1) return undefined;
   let r = foundElse + 4;
@@ -164,11 +170,7 @@ export function blockWouldBeTransformed(
   const prevCh = prev >= 0 ? input[prev] : "";
 
   if (/[A-Za-z0-9_$]/.test(prevCh)) {
-    const wend = prev;
-    let wstart = prev;
-    while (wstart >= 0 && /[A-Za-z0-9_$]/.test(input[wstart])) wstart--;
-    wstart++;
-    const word = input.slice(wstart, wend + 1);
+    const word = getWordBeforeIndex(input, prev);
     if (word !== "else") return false;
   }
   if (prevCh === "]") return false;
@@ -196,7 +198,11 @@ export function isExprIfAt(input: string, i: number): boolean {
   let isExprContext = EXPR_PREV_CHARS.has(ctxPrev);
   if (isExprContext && ctxPrev === ")") {
     const wordBefore = getWordBeforeParenIfAny(input, ctx);
-    if (wordBefore === "while" || wordBefore === "for" || wordBefore === "switch") {
+    if (
+      wordBefore === "while" ||
+      wordBefore === "for" ||
+      wordBefore === "switch"
+    ) {
       isExprContext = false;
     } else if (wordBefore === "if") {
       let pre = ctx - 1;
@@ -206,11 +212,7 @@ export function isExprIfAt(input: string, i: number): boolean {
     }
   }
   if (!isExprContext) {
-    const wend = ctx;
-    let wstart = ctx;
-    while (wstart >= 0 && /[A-Za-z0-9_$]/.test(input[wstart])) wstart--;
-    wstart++;
-    const word = input.slice(wstart, wend + 1);
+    const word = ctx >= 0 ? getWordBeforeIndex(input, ctx) : "";
     if (word === "return") isExprContext = true;
   }
   return isExprContext;

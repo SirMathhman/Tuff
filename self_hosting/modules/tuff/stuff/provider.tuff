@@ -1,1 +1,3 @@
-out fn getMyValue() => 100;
+extern from tuff::stuff::string use { length };
+
+extern fn length(this : &Str) : USize;

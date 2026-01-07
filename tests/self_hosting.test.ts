@@ -56,9 +56,6 @@ describe("self-hosting initial", () => {
       modulesRoot: "self_hosting/modules",
     });
 
-    // DEBUG: print compiled bundle for inspection when tests fail.
-    console.log(compiled);
-
     // Provide the JS host implementation from string.ts as `length` in the vm context
     const ctx = { length: stringModule.length };
     const result = vm.runInNewContext(compiled, ctx);

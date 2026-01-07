@@ -372,7 +372,10 @@ function looksLikeCodeExpression(trimmed: string): boolean {
 }
 
 // Helper: parse identifier after a dot, e.g., `.foo(` returns { id: 'foo', afterId: idx }
-function getIdentifierAfterDot(input: string, dot: number): IdentifierAfterDot | undefined {
+function getIdentifierAfterDot(
+  input: string,
+  dot: number
+): IdentifierAfterDot | undefined {
   const afterDot = input.slice(dot + 1);
   const idMatch = /^[A-Za-z_$][A-Za-z0-9_$]*/.exec(afterDot);
   if (!idMatch) return undefined;
@@ -415,12 +418,9 @@ function findLhsStart(input: string, dot: number): number | undefined {
 // equivalent function calls `addOnce(100)` so the existing call pipeline
 // and type checking can handle an implicit `this` parameter.
 
-
-
 // Transform method-call syntax like `100.addOnce()` or `(x).foo()` into
 // equivalent function calls `addOnce(100)` so the existing call pipeline
 // and type checking can handle an implicit `this` parameter.
-
 
 // eslint-disable-next-line max-lines-per-function
 function compileCore(input: string): CompileCoreResult {

@@ -116,10 +116,23 @@ describe("run - strings and chars", () => {
 
 /* eslint-disable max-lines-per-function */
 describe("run - control flow", () => {
+  function expectTrueFalse(
+    code: string,
+    trueStdin: string,
+    trueResult: number,
+    falseStdin: string,
+    falseResult: number
+  ): void {
+    expect(runModule.run(code, trueStdin)).toBe(trueResult);
+    expect(runModule.run(code, falseStdin)).toBe(falseResult);
+  }
+
+  function factProgram(): string {
+    return "fn fact(n : I32) : I32 => { if (n == 0) { yield 1; } yield n * fact(n - 1); } fact(read<I32>())";
+  }
+
   test("if expression with reads returns correct branch", () => {
-    const code = "if (read<Bool>()) 3 else 5";
-    expect(runModule.run(code, "true")).toBe(3);
-    expect(runModule.run(code, "false")).toBe(5);
+    expectTrueFalse("if (read<Bool>()) 3 else 5", "true", 3, "false", 5);
   });
 
   test("if expression with literal condition works", () => {
@@ -130,9 +143,13 @@ describe("run - control flow", () => {
   });
 
   test("if expression assigned to variable returns correct branch", () => {
-    const code = "let x = if (read<Bool>()) 3 else 5; x";
-    expect(runModule.run(code, "true")).toBe(3);
-    expect(runModule.run(code, "false")).toBe(5);
+    expectTrueFalse(
+      "let x = if (read<Bool>()) 3 else 5; x",
+      "true",
+      3,
+      "false",
+      5
+    );
   });
 
   test("declaration without initializer can be assigned later", () => {
@@ -163,9 +180,13 @@ describe("run - control flow", () => {
   });
 
   test("if with block arms reading stdin works", () => {
-    const code = "let x = if (read<Bool>()) { read<I32>() } else { 0 }; x";
-    expect(runModule.run(code, "true 100")).toBe(100);
-    expect(runModule.run(code, "false 100")).toBe(0);
+    expectTrueFalse(
+      "let x = if (read<Bool>()) { read<I32>() } else { 0 }; x",
+      "true 100",
+      100,
+      "false 100",
+      0
+    );
   });
 
   test("if used as statement with block performs side effects", () => {
@@ -245,14 +266,17 @@ describe("run - control flow", () => {
   });
 
   test("recursive factorial using yield and blocks works", () => {
-    const code = `fn fact(n : I32) : I32 => { if (n == 0) { yield 1; } yield n * fact(n - 1); } fact(read<I32>())`;
+    const code = factProgram();
     runModule.compile(code);
     expect(runModule.run(code, "5")).toBe(120);
   });
 
   test("recursive sum without stdin works", () => {
-    const code = `fn sum(n : I32) : I32 => { if (n == 0) { yield 0; } yield n + sum(n - 1); } sum(3)`;
-    expect(runModule.run(code)).toBe(6);
+    expect(
+      runModule.run(
+        `fn sum(n : I32) : I32 => { if (n == 0) { yield 0; } yield n + sum(n - 1); } sum(3)`
+      )
+    ).toBe(6);
   });
 });
 /* eslint-enable max-lines-per-function */
