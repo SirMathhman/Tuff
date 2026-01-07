@@ -8,7 +8,7 @@ A tiny TypeScript interpreter / expression evaluator used for practicing parsing
 - `pnpm lint` — run ESLint
 - `pnpm cpd` — run duplicate-code detection (PMD CPD)
 - `pnpm build` — typecheck / build with `tsc`
-- `pnpm run check-dir-files` — check that no directory has more than 10 files (ignoring `node_modules`)
+- `pnpm run check-dir-files` — check that no directory has more than 10 files (ignoring `node_modules`; configurable via `--max`)
 
 ## Notes
 
