@@ -2,16 +2,56 @@
  * Compile a string into JavaScript source that evaluates to a number
  */
 export function compile(input: string): string {
+  // Normalize input
+  const trimmed = input.trim();
+
   // Replace all occurrences of `read<I32>()` with calls to a runtime helper
   // function `readI32()` which `run` will provide when evaluating.
   const readRegex = /read<\s*I32\s*>\s*\(\s*\)/g;
-  if (readRegex.test(input)) {
-    return input.replace(readRegex, 'readI32()');
+  let replaced = trimmed.replace(readRegex, 'readI32()');
+
+  const hasRead = replaced.indexOf('readI32()') !== -1;
+
+  // Remove simple type annotations like `: I32` from variable declarations.
+  replaced = replaced.replace(/:\s*I32\b/g, '');
+
+  if (hasRead) {
+    // If the code contains statements (let/var/const or semicolons), wrap it
+    // in an IIFE so the returned value comes from the final expression.
+    if (/;|\b(let|const|var)\b|\n/.test(replaced)) {
+      const parts = replaced
+        .split(';')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (parts.length === 0) return '(0)';
+      if (parts.length === 1) return parts[0];
+
+      const last = parts.pop();
+      const body = parts.join('; ');
+      return `(function(){ ${body}; return (${last}); })()`;
+    }
+
+    return replaced;
   }
 
-  // For now, compile returns a literal expression of the string length.
-  // Example: input 'abc' -> '(3)'
-  return `(${input.length})`;
+  // If the input contains multiple statements (semicolon or declarations),
+  // wrap it in an IIFE that returns the last expression so it can be
+  // evaluated as a single expression by `run`.
+  if (/;|\b(let|const|var)\b|\n/.test(replaced)) {
+    const parts = replaced
+      .split(';')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (parts.length === 0) return '(0)';
+    if (parts.length === 1) return parts[0];
+
+    const last = parts.pop();
+    const body = parts.join('; ');
+    return `(function(){ ${body}; return (${last}); })()`;
+  }
+
+  // Fallback: return as an expression (e.g., length-based behavior for plain strings)
+  return `(${trimmed.length})`;
 }
 
 /**
@@ -27,7 +67,9 @@ export function run(input: string, stdin: string = ""): number {
   // string literal. We also provide a `readI32` helper that consumes tokens
   // from `stdin` (split on whitespace) so expressions like
   // "read<I32>() + read<I32>()" work as expected.
-  const code = `(function(){ const stdin = ${JSON.stringify(stdin)}; const args = stdin.trim() ? stdin.trim().split(/\\s+/) : []; let __readIndex = 0; function readI32(){ return parseInt(args[__readIndex++], 10); } return (${compiledExpr}); })()`;
+  const code = `(function(){ const stdin = ${JSON.stringify(
+    stdin
+  )}; const args = stdin.trim() ? stdin.trim().split(/\\s+/) : []; let __readIndex = 0; function readI32(){ return parseInt(args[__readIndex++], 10); } return (${compiledExpr}); })()`;
 
   // eslint-disable-next-line no-eval
   const result = eval(code);

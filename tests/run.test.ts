@@ -11,8 +11,10 @@ describe("compile", () => {
   });
 
   test("handles read<I32>() in compile", () => {
-    expect(runModule.compile('read<I32>()')).toBe('readI32()');
-    expect(runModule.compile('read<I32>() + read<I32>()')).toBe('readI32() + readI32()');
+    expect(runModule.compile("read<I32>()")).toBe("readI32()");
+    expect(runModule.compile("read<I32>() + read<I32>()")).toBe(
+      "readI32() + readI32()"
+    );
   });
 });
 
@@ -50,6 +52,11 @@ describe("run", () => {
   });
 
   test("read<I32>() reads from stdin", () => {
-    expect(runModule.run("read<I32>()", "100")).toBe(100);    expect(runModule.run('read<I32>() + read<I32>()', '1 2')).toBe(3);
-    expect(runModule.run('read<I32>() + read<I32>()', '  1   2  ')).toBe(3);  });
-});
+    expect(runModule.run("read<I32>()", "100")).toBe(100);
+    expect(runModule.run("read<I32>() + read<I32>()", "1 2")).toBe(3);
+    expect(runModule.run("read<I32>() + read<I32>()", "  1   2  ")).toBe(3);
+  });
+  test('handles multi-statement code with reads and returns value', () => {
+    const code = 'let x : I32 = read<I32>(); let y : I32 = read<I32>(); x + y';
+    expect(runModule.run(code, '1 2')).toBe(3);
+  });});
