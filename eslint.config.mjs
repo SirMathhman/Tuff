@@ -22,9 +22,31 @@ const noRecordRule = {
   },
 };
 
+const noNullRule = {
+  meta: {
+    type: "problem",
+    docs: {
+      description: "Disallow null, use undefined instead",
+    },
+  },
+  create(context) {
+    return {
+      Literal(node) {
+        if (node.value === null) {
+          context.report({
+            node,
+            message: "Do not use null. Use undefined instead.",
+          });
+        }
+      },
+    };
+  },
+};
+
 const customPlugin = {
   rules: {
     "no-record": noRecordRule,
+    "no-null": noNullRule,
   },
 };
 
@@ -50,6 +72,7 @@ export default [
     rules: {
       complexity: ["error", 15],
       "custom/no-record": "error",
+      "custom/no-null": "error",
       "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_" },
