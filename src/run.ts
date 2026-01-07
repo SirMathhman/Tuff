@@ -14,6 +14,37 @@ function replaceReads(input: string): string {
   return out;
 }
 
+interface ParseStructsResult {
+  code: string;
+  structs: Map<string, string[]>;
+}
+
+function parseStructs(input: string): ParseStructsResult {
+  const structRegex =
+    /struct\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\{\s*([^}]*)\s*\}/g;
+  const structs = new Map<string, string[]>();
+  let out = input;
+  let m: RegExpExecArray | undefined;
+  while (
+    (m = structRegex.exec(input) as unknown as RegExpExecArray | undefined)
+  ) {
+    const name = m[1];
+    const body = m[2];
+    const fields = body
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((f) => {
+        const fm = /^([A-Za-z_$][A-Za-z0-9_$]*)\s*:\s*/.exec(f);
+        return fm ? fm[1] : "";
+      })
+      .filter(Boolean);
+    structs.set(name, fields);
+    out = out.replace(m[0], "");
+  }
+  return { code: out, structs };
+}
+
 interface ParseDeclarationsResult {
   decls: Map<string, VarDeclaration>;
   error?: string;
@@ -78,9 +109,14 @@ export function compile(input: string): string {
   // Normalize input
   const trimmed = input.trim();
 
-  let replaced = replaceReads(trimmed);
+  // Extract and remove struct declarations first
+  const structParsed = parseStructs(trimmed);
+  const codeNoStructs = structParsed.code;
+  const structs = structParsed.structs;
 
-  const parsed = parseDeclarations(trimmed);
+  let replaced = replaceReads(codeNoStructs);
+
+  const parsed = parseDeclarations(codeNoStructs);
   if (parsed.error) return parsed.error;
   const decls = parsed.decls;
 
@@ -89,6 +125,19 @@ export function compile(input: string): string {
     replaced.indexOf("readBool()") !== -1;
 
   replaced = stripAnnotationsAndMut(replaced);
+
+  // Replace constructor calls like `Point { expr, expr }` with object literals
+  for (const [name, fields] of structs.entries()) {
+    const ctorRegex = new RegExp("\\b" + name + "\\s*\\{([^}]*)\\}", "g");
+    replaced = replaced.replace(ctorRegex, (_m, inner) => {
+      const args = inner
+        .split(",")
+        .map((s: string) => s.trim())
+        .filter(Boolean);
+      const pairs = fields.map((f, i) => `${f}: ${args[i] ?? "undefined"}`);
+      return `({ ${pairs.join(", ")} })`;
+    });
+  }
 
   const assignError = checkImmutableAssignments(replaced, decls);
   if (assignError) return assignError;
