@@ -118,9 +118,7 @@ function parseFunctions(input: string): ParseFunctionsResult {
     if (parsed.duplicate) {
       return {
         code: input,
-        error: `(function(){ throw new Error("duplicate parameter name '${
-          parsed.duplicate
-        }' in function '${name}'"); })()`,
+        error: `(function(){ throw new Error("duplicate parameter name '${parsed.duplicate}' in function '${name}'"); })()`,
       };
     }
     const paramNames = parsed.names || [];
@@ -199,17 +197,28 @@ function getFunctionCallArgs(replaced: string, fname: string): string[][] {
   return results;
 }
 
-function checkFunctionCallTypes(replaced: string, fnParsed: ParseFunctionsResult): string | undefined {
+function checkFunctionCallTypes(
+  replaced: string,
+  fnParsed: ParseFunctionsResult
+): string | undefined {
   if (!fnParsed.funcParamTypes) return undefined;
 
   for (const [fname, expectedTypes] of fnParsed.funcParamTypes.entries()) {
     const paramNames = fnParsed.funcParamNames?.get(fname) ?? [];
     const calls = getFunctionCallArgs(replaced, fname);
     for (const args of calls) {
-      for (let iArg = 0; iArg < Math.min(expectedTypes.length, args.length); iArg++) {
+      for (
+        let iArg = 0;
+        iArg < Math.min(expectedTypes.length, args.length);
+        iArg++
+      ) {
         const expected = expectedTypes[iArg];
         const actual = inferTypeSimple(args[iArg]);
-        if (expected !== "unknown" && actual !== "unknown" && expected !== actual) {
+        if (
+          expected !== "unknown" &&
+          actual !== "unknown" &&
+          expected !== actual
+        ) {
           const pname = paramNames[iArg] ?? `#${iArg + 1}`;
           return makeTypeError(fname, pname, expected, actual);
         }

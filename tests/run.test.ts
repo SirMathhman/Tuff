@@ -99,6 +99,13 @@ describe("run", () => {
     expect(runModule.compile(code)).toMatch(/type mismatch/);
     expect(() => runModule.run(code, "true 2")).toThrow(/type mismatch/);
   });
+
+  test("type mismatch with additional fn declaration throws", () => {
+    const code =
+      "fn add(first : I32, second : I32) : I32 => { yield first + second; } fn empty() : Void => {} add(read<Bool>(), read<I32>())";
+    expect(runModule.compile(code)).toMatch(/type mismatch/);
+    expect(() => runModule.run(code, "true 2")).toThrow(/type mismatch/);
+  });
   test("handles multi-statement code with reads and returns value", () => {
     const code = "let x : I32 = read<I32>(); let y : I32 = read<I32>(); x + y";
     expect(runModule.run(code, "1 2")).toBe(3);
