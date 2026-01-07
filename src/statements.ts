@@ -199,22 +199,52 @@ export function findStatementEnd(tokens: Token[], start: number): number {
   return indexUntilSemicolon(tokens, start);
 }
 
+function findThenKeywordIndex(
+  tokensArr: Token[],
+  startIdx: number
+): number {
+  let depth = 0;
+  for (let i = startIdx; i < tokensArr.length; i++) {
+    if (tokensArr[i].type === "paren") {
+      depth += tokensArr[i].value === "(" ? 1 : -1;
+    } else if (
+      tokensArr[i].type === "ident" &&
+      tokensArr[i].value === "then" &&
+      depth === 0
+    ) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 function parseConditionHeader(
   tokensArr: Token[],
   idx: number
 ): Result<ConditionHeader, string> {
   const condParenIdx = idx + 1;
+  
+  // Check if we have the format with parentheses: if (condition)
   if (
-    !tokensArr[condParenIdx] ||
-    tokensArr[condParenIdx].type !== "paren" ||
-    tokensArr[condParenIdx].value !== "("
-  )
-    return err("Invalid numeric input");
-  const condEnd = findMatchingParen(tokensArr, condParenIdx);
-  if (condEnd === -1) return err("Invalid numeric input");
-  const condTokens = tokensArr.slice(condParenIdx + 1, condEnd);
-  if (condTokens.length === 0) return err("Invalid numeric input");
-  return ok({ condTokens, condEnd });
+    tokensArr[condParenIdx] &&
+    tokensArr[condParenIdx].type === "paren" &&
+    tokensArr[condParenIdx].value === "("
+  ) {
+    // Format 1: if (condition) ...
+    const condEnd = findMatchingParen(tokensArr, condParenIdx);
+    if (condEnd === -1) return err("Invalid numeric input");
+    const condTokens = tokensArr.slice(condParenIdx + 1, condEnd);
+    if (condTokens.length === 0) return err("Invalid numeric input");
+    return ok({ condTokens, condEnd });
+  } else {
+    // Format 2: if condition then ...
+    const thenIdx = findThenKeywordIndex(tokensArr, idx + 1);
+    if (thenIdx === -1) return err("Invalid numeric input");
+    const condTokens = tokensArr.slice(idx + 1, thenIdx);
+    if (condTokens.length === 0) return err("Invalid numeric input");
+    // condEnd should point to the 'then' token so that condEnd + 1 skips it
+    return ok({ condTokens, condEnd: thenIdx });
+  }
 }
 
 function parseIfHeader(

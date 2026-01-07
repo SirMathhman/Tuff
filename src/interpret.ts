@@ -98,26 +98,59 @@ function evalInlineIfToNumToken(
   });
 }
 
+function findThenIndex(tokens: Token[], startIdx: number): number {
+  let depth = 0;
+  for (let i = startIdx; i < tokens.length; i++) {
+    if (tokens[i].type === "paren") {
+      depth += tokens[i].value === "(" ? 1 : -1;
+    } else if (
+      tokens[i].type === "ident" &&
+      tokens[i].value === "then" &&
+      depth === 0
+    ) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 function evalIfExpression(
   tokens: Token[],
   env: Map<string, Binding>
 ): Result<number, string> {
+  // Handle both formats:
+  // 1. if (condition) value1 else value2 - with parentheses, no 'then'
+  // 2. if condition then value1 else value2 - no parentheses, with 'then'
+  
+  let condTokens: Token[];
+  let valueStartIdx: number;
+  
   const condParenIdx = 1;
-  if (
-    !tokens[condParenIdx] ||
-    tokens[condParenIdx].type !== "paren" ||
-    tokens[condParenIdx].value !== "("
-  )
-    return err("Invalid numeric input");
-  const condEnd = findMatchingParen(tokens, condParenIdx);
-  if (condEnd === -1) return err("Invalid numeric input");
-  const condTokens = tokens.slice(condParenIdx + 1, condEnd);
+  const hasParens =
+    tokens[condParenIdx] &&
+    tokens[condParenIdx].type === "paren" &&
+    tokens[condParenIdx].value === "(";
+  
+  if (hasParens) {
+    // Format 1: if (condition) value1 else value2
+    const condEnd = findMatchingParen(tokens, condParenIdx);
+    if (condEnd === -1) return err("Invalid numeric input");
+    condTokens = tokens.slice(condParenIdx + 1, condEnd);
+    valueStartIdx = condEnd + 1;
+  } else {
+    // Format 2: if condition then value1 else value2
+    const thenIdx = findThenIndex(tokens, 1);
+    if (thenIdx === -1) return err("Invalid numeric input");
+    condTokens = tokens.slice(1, thenIdx);
+    valueStartIdx = thenIdx + 1;
+  }
+  
   if (condTokens.length === 0) return err("Invalid numeric input");
 
-  const elseIdx = findTopLevelElseIndex(tokens, condEnd + 1);
+  const elseIdx = findTopLevelElseIndex(tokens, valueStartIdx);
   if (elseIdx === -1) return err("Invalid numeric input");
 
-  const thenTokens = tokens.slice(condEnd + 1, elseIdx);
+  const thenTokens = tokens.slice(valueStartIdx, elseIdx);
   const elseTokens = tokens.slice(elseIdx + 1);
   if (thenTokens.length === 0 || elseTokens.length === 0)
     return err("Invalid numeric input");

@@ -1,0 +1,88 @@
+
+> tuff-interpreter@0.1.0 test
+> vitest --run
+
+
+[1m[46m RUN [49m[22m [36mv3.2.4 [39m[90mC:/Users/mathm/IdeaProjects/Tuff[39m
+
+ [32mΓ£ô[39m tests/result.test.js [2m([22m[2m4 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32mΓ£ô[39m tests/result.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32mΓ£ô[39m tests/parseNumber.test.js [2m([22m[2m4 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32mΓ£ô[39m tests/parseNumber.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32mΓ£ô[39m tests/tokenize.test.js [2m([22m[2m10 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32mΓ£ô[39m tests/eval.test.js [2m([22m[2m10 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32mΓ£ô[39m tests/tokenize.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32mΓ£ô[39m tests/eval.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32mΓ£ô[39m tests/interpret-comparisons-variables.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32mΓ£ô[39m tests/interpret-comparisons-precedence.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32mΓ£ô[39m tests/interpret-comparisons-operators.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32mΓ£ô[39m tests/interpret-while.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [31mΓ¥»[39m tests/functions.test.ts [2m([22m[2m35 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 21[2mms[22m[39m
+   [32mΓ£ô[39m functions - basic declaration and calls[2m > [22mdeclares and calls simple function with expression body[32m 4[2mms[22m[39m
+   [32mΓ£ô[39m functions - basic declaration and calls[2m > [22mdeclares and calls function with no parameters[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - basic declaration and calls[2m > [22mdeclares function with block body[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - basic declaration and calls[2m > [22mfunction call returns correct value[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - basic declaration and calls[2m > [22mmultiple function declarations[32m 1[2mms[22m[39m
+   [32mΓ£ô[39m functions - parameter handling[2m > [22mfunction with simple parameter[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - parameter handling[2m > [22mfunction receives and uses parameter[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - parameter handling[2m > [22mfunction parameter shadows outer variable[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - parameter handling[2m > [22mfunction parameter doesn't modify outer scope[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - block and expression bodies[2m > [22mfunction with block body containing single expression[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - block and expression bodies[2m > [22mfunction with block body containing multiple statements[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - block and expression bodies[2m > [22mfunction with block containing variable declaration[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - block and expression bodies[2m > [22mexpression body without block[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - type handling[2m > [22mI32 parameter is truncated[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - type handling[2m > [22muntyped parameter used as is[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - type handling[2m > [22mfunction with return type annotation[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - return values[2m > [22mfunction returns value from expression[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - return values[2m > [22mfunction returns value from block[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - return values[2m > [22mfunction returns last evaluated expression in block[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - composition[2m > [22mcalling function result as argument[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - composition[2m > [22mmultiple function calls in expression[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - composition[2m > [22mfunction using another function's result[32m 0[2mms[22m[39m
+[31m   [31m├ù[31m functions - basic operations[2m > [22mfunction with comparison[39m[32m 8[2mms[22m[39m
+[31m     ΓåÆ expected false to be true // Object.is equality[39m
+   [32mΓ£ô[39m functions - basic operations[2m > [22mfunction with arithmetic operations[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - basic operations[2m > [22mfunction returning computed value[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - integration with other features[2m > [22mfunction called in let binding[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - integration with other features[2m > [22mfunction in expression with variables[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - integration with other features[2m > [22mfunction in block expression[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - integration with other features[2m > [22mfunction after variable mutation[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - integration with other features[2m > [22mfunction defined after variables used[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - edge cases[2m > [22mfunction returning zero[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - edge cases[2m > [22mfunction with negative parameter[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - edge cases[2m > [22mfunction returning negative[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - edge cases[2m > [22mfunction with division[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m functions - edge cases[2m > [22mfunction with modulo[32m 0[2mms[22m[39m
+ [32mΓ£ô[39m tests/interpret.test.js [2m([22m[2m56 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32mΓ£ô[39m tests/interpret.test.ts [2m([22m[2m56 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ» Failed Tests 1 ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+
+ FAIL  tests/functions.test.ts > functions - basic operations > function with comparison
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ Γ¥» assertOkResult src/testUtils.ts:5:24
+      3| 
+      4| function assertOkResult<T, E>(result: Result<T, E>): void {
+      5|   expect(isOk(result)).toBe(true);
+       |                        ^
+      6| }
+      7| 
+ Γ¥» Module.expectOkValue src/testUtils.ts:21:3
+ Γ¥» tests/functions.test.ts:154:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[1/1]ΓÄ»
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m14 passed[39m[22m[90m (15)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m251 passed[39m[22m[90m (252)[39m
+[2m   Start at [22m 19:59:43
+[2m   Duration [22m 581ms[2m (transform 645ms, setup 0ms, collect 2.19s, tests 126ms, environment 2ms, prepare 2.07s)[22m
+

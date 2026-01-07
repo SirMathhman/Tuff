@@ -1,9 +1,5 @@
-import { expect } from "vitest";
+import { assert, expect } from "vitest";
 import { Result, isOk } from "../src/result";
-
-function assertOkResult<T, E>(result: Result<T, E>): void {
-  expect(isOk(result)).toBe(true);
-}
 
 function assertValue<T>(
   value: T,
@@ -18,15 +14,17 @@ function assertValue<T>(
 }
 
 export function expectOkValue<T, E>(result: Result<T, E>, expected: T): void {
-  assertOkResult(result);
   if (isOk(result)) {
     assertValue(result.value, expected, "toBe");
+  } else {
+    assert.fail(String(result.error));
   }
 }
 
 export function expectOkEqual<T, E>(result: Result<T, E>, expected: T): void {
-  assertOkResult(result);
   if (isOk(result)) {
     assertValue(result.value, expected, "toEqual");
+  } else {
+    assert.fail(String(result.error));
   }
 }
