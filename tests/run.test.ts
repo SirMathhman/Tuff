@@ -107,6 +107,11 @@ describe("run", () => {
     expect(runModule.run(code)).toBe(6);
   });
 
+  test("array indexing with size 2 works", () => {
+    const code = "let x : [I32; 2; 2] = [1, 2]; x[0] + x[1]";
+    expect(runModule.run(code)).toBe(3);
+  });
+
   test("pointer deref returns value", () => {
     const code = "let x = 100; let y : *I32 = &x; *y";
     expect(runModule.run(code)).toBe(100);
