@@ -7,7 +7,7 @@ Small TypeScript project that compiles a tiny custom language into JavaScript an
 This repo now supports bundling multiple `.tuff` files into one JS expression via `compileBundle`.
 
 - API: `compileBundle(files: Map<string, string>, entry: string, options?: { modulesRoot?: string })`
-- Output: a JavaScript *expression string* that evaluates to the entry file's result.
+- Output: a JavaScript _expression string_ that evaluates to the entry file's result.
 
 ### Java-like `modules/` layout (minimal)
 
@@ -19,10 +19,10 @@ Tuff is evolving toward Java-like packaging. For now, bundling supports a minima
 Example:
 
 - `modules/tuff/stuff/provider.tuff`
-	- `out fn getMyValue() => 100;`
+  - `out fn getMyValue() => 100;`
 - `modules/tuff/stuff/user.tuff`
-	- `from tuff::stuff use { getMyValue };`
-	- `getMyValue()`
+  - `from tuff::stuff use { getMyValue };`
+  - `getMyValue()`
 
 ## Scripts
 

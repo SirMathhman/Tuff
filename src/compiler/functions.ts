@@ -179,6 +179,10 @@ function inferTypeSimple(expr: string): string {
   const t = expr.trim();
   if (/^readI32\(\)$/.test(t)) return "I32";
   if (/^readBool\(\)$/.test(t)) return "Bool";
+  // read<ISize>() and read<USize>() are replaced with readI32() at compile time
+  // but also accept their explicit forms when inferring types here.
+  if (/^read<\s*ISize\s*>\s*\(\s*\)$/.test(t)) return "ISize";
+  if (/^read<\s*USize\s*>\s*\(\s*\)$/.test(t)) return "USize";
   if (/^\d+$/.test(t)) return "I32";
   if (/^(true|false)$/.test(t)) return "Bool";
   return "unknown";
@@ -229,6 +233,10 @@ function getFunctionCallArgs(replaced: string, fname: string): string[][] {
   return results;
 }
 
+function isNumericFamily(t: string): boolean {
+  return t === "I32" || t === "ISize" || t === "USize";
+}
+
 export function checkFunctionCallTypes(
   replaced: string,
   fnParsed: ParseFunctionsResult
@@ -246,14 +254,14 @@ export function checkFunctionCallTypes(
       ) {
         const expected = expectedTypes[iArg];
         const actual = inferTypeSimple(args[iArg]);
-        if (
-          expected !== "unknown" &&
-          actual !== "unknown" &&
-          expected !== actual
-        ) {
-          const pname = paramNames[iArg] ?? `#${iArg + 1}`;
-          return makeTypeError(fname, pname, expected, actual);
-        }
+        if (expected === "unknown" || actual === "unknown") continue;
+        if (expected === actual) continue;
+
+        // Allow numeric-family interchangeability (I32 / ISize / USize)
+        if (isNumericFamily(expected) && isNumericFamily(actual)) continue;
+
+        const pname = paramNames[iArg] ?? `#${iArg + 1}`;
+        return makeTypeError(fname, pname, expected, actual);
       }
     }
   }

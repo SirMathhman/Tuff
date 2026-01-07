@@ -74,6 +74,12 @@ describe("run - reads", () => {
     expect(runModule.run("read<Bool>() + read<Bool>()", "true true")).toBe(2);
   });
 
+  test("read<ISize>() and read<USize>() read from stdin as numeric", () => {
+    expect(runModule.run("read<ISize>()", "100")).toBe(100);
+    expect(runModule.run("read<USize>()", "42")).toBe(42);
+    expect(runModule.run("read<ISize>() + read<USize>()", "1 2")).toBe(3);
+  });
+
   test("assign read<Bool>() to variable and return", () => {
     const code = "let x : Bool = read<Bool>(); x";
     expect(runModule.run(code, "true")).toBe(1);
@@ -280,6 +286,18 @@ describe("run - arrays", () => {
     expect(runModule.run(code)).toBe(1);
   });
 
+  test("array runtime size padding works for ISize/USize", () => {
+    const code = "let x : [ISize; 1; 2] = [1]; x[0] + x[1]";
+    const compiled = runModule.compile(code);
+    expect(compiled).toMatch(/\[1,\s*0\]/);
+    expect(runModule.run(code)).toBe(1);
+
+    const code2 = "let y : [USize; 1; 2] = [1]; y[0] + y[1]";
+    const compiled2 = runModule.compile(code2);
+    expect(compiled2).toMatch(/\[1,\s*0\]/);
+    expect(runModule.run(code2)).toBe(1);
+  });
+
   test("array declaration without initializer can be assigned by index and sums values", () => {
     const code =
       "let mut x : [I32; 0; 2]; x[0] = read<I32>(); x[1] = read<I32>(); x[0] + x[1]";
@@ -324,6 +342,15 @@ describe("run - functions", () => {
     const code =
       "fn add(first : I32, second : I32) : I32 => { yield first + second; } add(read<I32>(), read<I32>())";
     expect(runModule.run(code, "3 4")).toBe(7);
+  });
+
+  test("functions accept ISize/USize params with literals and reads", () => {
+    const code1 = "fn id(x : ISize) : ISize => { yield x; } id(100)";
+    expect(runModule.run(code1)).toBe(100);
+
+    const code2 =
+      "fn id2(x : USize) : USize => { yield x; } id2(read<USize>())";
+    expect(runModule.run(code2, "42")).toBe(42);
   });
 
   test("type mismatch in function call throws", () => {

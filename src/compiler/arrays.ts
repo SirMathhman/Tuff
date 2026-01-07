@@ -23,7 +23,14 @@ function parseArrayRuntimeSize(typeInner: string): number | undefined {
 
 function defaultValForArrayElemType(t: string): string {
   const ty = t.trim();
-  if (ty === "I32" || ty === "Bool" || ty === "Char") return "0";
+  if (
+    ty === "I32" ||
+    ty === "ISize" ||
+    ty === "USize" ||
+    ty === "Bool" ||
+    ty === "Char"
+  )
+    return "0";
   return "undefined";
 }
 

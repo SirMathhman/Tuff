@@ -60,9 +60,7 @@ function readFixtureSources(): FixtureSources {
   };
 }
 
-function makeFilesMap(
-  entries: Array<[string, string]>
-): Map<string, string> {
+function makeFilesMap(entries: Array<[string, string]>): Map<string, string> {
   return new Map<string, string>(entries);
 }
 

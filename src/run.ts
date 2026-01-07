@@ -55,6 +55,10 @@ function stripModuleSyntax(src: string): ParsedModuleSyntax {
   // Strip `out` from declarations so they compile to valid JS.
   code = code.replace(/\bout\s+(fn|let|struct)\b/g, "$1");
 
+  // Remove simple `extern` declarations (e.g., `extern from length(this: String): USize;`)
+  // These are used for host-provided functions and don't affect bundling.
+  code = code.replace(/^\s*extern\b.*;\s*$/gm, "");
+
   return { code, imports };
 }
 

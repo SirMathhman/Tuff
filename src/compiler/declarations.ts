@@ -78,7 +78,7 @@ export function parseDeclarations(input: string): ParseDeclarationsResult {
 export function stripAnnotationsAndMut(replaced: string): string {
   // support Char, &Str and pointer annotations like *I32 or *mut I32
   replaced = replaced.replace(
-    /:\s*(?:I32|Bool|Char|&Str|[*]I32|\*\s*mut\s*[A-Za-z_$][A-Za-z0-9_$]*)\b/g,
+    /:\s*(?:I32|ISize|USize|Bool|Char|&Str|[*](?:I32|ISize|USize)|\*\s*mut\s*[A-Za-z_$][A-Za-z0-9_$]*)\b/g,
     ""
   );
   // strip bracketed array annotations like `[I32; 3; 3]`

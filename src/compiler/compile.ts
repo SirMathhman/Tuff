@@ -40,6 +40,14 @@ function replaceReads(input: string): string {
   let out = input.replace(readI32Regex, "readI32()");
   const readBoolRegex = /read<\s*Bool\s*>\s*\(\s*\)/g;
   out = out.replace(readBoolRegex, "readBool()");
+
+  // Support read<ISize>() and read<USize>() by treating them as numeric reads
+  // (runtime is JS number) using the same helper as I32.
+  const readISizeRegex = /read<\s*ISize\s*>\s*\(\s*\)/g;
+  out = out.replace(readISizeRegex, "readI32()");
+  const readUSizeRegex = /read<\s*USize\s*>\s*\(\s*\)/g;
+  out = out.replace(readUSizeRegex, "readI32()");
+
   return out;
 }
 
