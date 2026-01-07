@@ -25,7 +25,7 @@ describe("compile", () => {
   });
 });
 
-describe("run", () => {
+describe("run - basics", () => {
   test("returns length of a non-empty string", () => {
     expect(runModule.run("abc")).toBe(3);
   });
@@ -48,6 +48,7 @@ describe("run", () => {
       spy.mockRestore();
     }
   });
+
   test("accepts optional stdin parameter without changing behavior", () => {
     const spy = jest.spyOn(runModule, "compile");
     try {
@@ -57,7 +58,9 @@ describe("run", () => {
       spy.mockRestore();
     }
   });
+});
 
+describe("run - reads", () => {
   test("read<I32>() reads from stdin", () => {
     expect(runModule.run("read<I32>()", "100")).toBe(100);
     expect(runModule.run("read<I32>() + read<I32>()", "1 2")).toBe(3);
@@ -81,7 +84,9 @@ describe("run", () => {
     const code = "let x = read<I32>(); x";
     expect(runModule.run(code, "100")).toBe(100);
   });
+});
 
+describe("run - strings and chars", () => {
   test("char literal assigned to variable returns char code", () => {
     const code = "let x : Char = 'a'; x";
     expect(runModule.run(code)).toBe(97);
@@ -101,7 +106,9 @@ describe("run", () => {
     const code = `let x : &Str = "a"; let y : Char = x[0]; y`;
     expect(runModule.run(code)).toBe(97);
   });
+});
 
+describe("run - arrays", () => {
   test("array indexing works and sums values", () => {
     const code = "let x : [I32; 3; 3] = [1, 2, 3]; x[0] + x[1] + x[2]";
     expect(runModule.run(code)).toBe(6);
@@ -122,6 +129,14 @@ describe("run", () => {
     );
   });
 
+  test("partially initialized array pads with defaults to runtime size", () => {
+    const code = "let x : [I32; 1; 2] = [1]; x[0] + x[1]";
+    // x[1] should be default-initialized to 0
+    const compiled = runModule.compile(code);
+    expect(compiled).toMatch(/\[1,\s*0\]/);
+    expect(runModule.run(code)).toBe(1);
+  });
+
   test("array declaration without initializer can be assigned by index and sums values", () => {
     const code =
       "let mut x : [I32; 0; 2]; x[0] = read<I32>(); x[1] = read<I32>(); x[0] + x[1]";
@@ -130,7 +145,9 @@ describe("run", () => {
     expect(compiled).toMatch(/let\s+x\s*=\s*\[/);
     expect(runModule.run(code, "3 4")).toBe(7);
   });
+});
 
+describe("run - pointers", () => {
   test("pointer deref returns value", () => {
     const code = "let x = 100; let y : *I32 = &x; *y";
     expect(runModule.run(code)).toBe(100);
@@ -146,7 +163,9 @@ describe("run", () => {
       "let mut x = 0; let y : *mut I32 = &mut x; *y = read<I32>(); x";
     expect(runModule.run(code, "100")).toBe(100);
   });
+});
 
+describe("run - boolean operators", () => {
   test("boolean operators work with read<Bool>()", () => {
     const code1 = "read<Bool>() && read<Bool>()";
     expect(runModule.run(code1, "true false")).toBe(0);
@@ -155,7 +174,9 @@ describe("run", () => {
     expect(runModule.run(code2, "true false")).toBe(1);
     expect(runModule.run(code2, "false false")).toBe(0);
   });
+});
 
+describe("run - functions", () => {
   test("functions with yield work and read from stdin", () => {
     const code =
       "fn add(first : I32, second : I32) : I32 => { yield first + second; } add(read<I32>(), read<I32>())";
@@ -176,10 +197,14 @@ describe("run", () => {
     expect(runModule.compile(code)).toMatch(/type mismatch/);
     expect(() => runModule.run(code, "true 2")).toThrow(/type mismatch/);
   });
+});
+
+describe("run - statements and mutability", () => {
   test("handles multi-statement code with reads and returns value", () => {
     const code = "let x : I32 = read<I32>(); let y : I32 = read<I32>(); x + y";
     expect(runModule.run(code, "1 2")).toBe(3);
   });
+
   test("handles mutable declarations with mut", () => {
     const code = "let mut x : I32 = read<I32>(); x = read<I32>(); x";
     expect(runModule.run(code, "1 2")).toBe(2);
@@ -195,7 +220,9 @@ describe("run", () => {
     const code = "let x : I32 = read<I32>(); x = read<I32>(); x";
     expect(() => runModule.run(code, "1 2")).toThrow(/immutable/);
   });
+});
 
+describe("run - duplicates", () => {
   test("duplicate variable declaration throws", () => {
     const code = "let x : I32 = 100; let x : I32 = 200;";
     expect(() => runModule.run(code)).toThrow(/duplicate/);

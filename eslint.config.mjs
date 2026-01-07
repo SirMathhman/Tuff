@@ -109,6 +109,32 @@ const customPlugin = {
   },
 };
 
+const tsLanguageOptions = {
+  parser: tseslint.parser,
+  parserOptions: {
+    project: "./tsconfig.json",
+    ecmaVersion: 2020,
+    sourceType: "module",
+  },
+};
+
+const tsRules = {
+  complexity: ["error", 15],
+  "custom/no-record": "error",
+  "custom/no-null": "error",
+  "custom/no-any": "error",
+  "custom/no-anonymous-object-type": "error",
+  "max-lines": [
+    "error",
+    { max: 500, skipBlankLines: true, skipComments: true },
+  ],
+  "max-lines-per-function": [
+    "error",
+    { max: 50, skipComments: true, skipBlankLines: true },
+  ],
+  "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+};
+
 export default [
   {
     ignores: ["node_modules/", "dist/", "coverage/"],
@@ -116,57 +142,11 @@ export default [
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["src/**/*.ts"],
-    languageOptions: {
-      parser: tseslint.parser,
-      parserOptions: {
-        project: "./tsconfig.json",
-        ecmaVersion: 2020,
-        sourceType: "module",
-      },
-    },
+    files: ["src/**/*.ts", "tests/**/*.ts"],
+    languageOptions: tsLanguageOptions,
     plugins: {
       custom: customPlugin,
     },
-    rules: {
-      complexity: ["error", 15],
-      "custom/no-record": "error",
-      "custom/no-null": "error",
-      "custom/no-any": "error",
-      "custom/no-anonymous-object-type": "error",
-      "max-lines-per-function": [
-        "error",
-        { max: 50, skipComments: true, skipBlankLines: true },
-      ],
-      "@typescript-eslint/no-unused-vars": [
-        "error",
-        { argsIgnorePattern: "^_" },
-      ],
-    },
-  },
-  {
-    files: ["tests/**/*.ts"],
-    languageOptions: {
-      parser: tseslint.parser,
-      parserOptions: {
-        project: "./tsconfig.json",
-        ecmaVersion: 2020,
-        sourceType: "module",
-      },
-    },
-    plugins: {
-      custom: customPlugin,
-    },
-    rules: {
-      complexity: ["error", 15],
-      "custom/no-record": "error",
-      "custom/no-null": "error",
-      "custom/no-any": "error",
-      "custom/no-anonymous-object-type": "error",
-      "@typescript-eslint/no-unused-vars": [
-        "error",
-        { argsIgnorePattern: "^_" },
-      ],
-    },
+    rules: tsRules,
   },
 ];
