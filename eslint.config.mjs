@@ -49,10 +49,38 @@ const noNullRule = {
   },
 };
 
+const noAnyRule = {
+  meta: {
+    type: "problem",
+    docs: {
+      description: "Disallow any type, use unknown or explicit object types instead",
+    },
+  },
+  create(context) {
+    return {
+      TSAnyKeyword(node) {
+        context.report({
+          node,
+          message: "Do not use 'any'. Use an explicit object type or 'unknown' if you don't know the type.",
+        });
+      },
+      TSAsExpression(node) {
+        if (node.typeAnnotation.type === "TSAnyKeyword") {
+          context.report({
+            node: node.typeAnnotation,
+            message: "Do not use 'any'. Use an explicit object type or 'unknown' if you don't know the type.",
+          });
+        }
+      },
+    };
+  },
+};
+
 const customPlugin = {
   rules: {
     "no-record": noRecordRule,
     "no-null": noNullRule,
+    "no-any": noAnyRule,
   },
 };
 
@@ -79,11 +107,11 @@ export default [
       complexity: ["error", 15],
       "custom/no-record": "error",
       "custom/no-null": "error",
+      "custom/no-any": "error",
       "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_" },
       ],
-      "@typescript-eslint/no-explicit-any": "error",
     },
   },
 ];

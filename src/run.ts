@@ -15,8 +15,8 @@ export function compile(input: string): string {
   const declRegex = /\blet\s+(mut\s+)?([A-Za-z_$][A-Za-z0-9_$]*)/g;
   const decls = new Map<string, { mut: boolean }>();
   let m: RegExpExecArray | undefined;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  while ((m = declRegex.exec(trimmed) as any)) {
+  // exec returns null but we're treating it as falsy, so cast to unknown
+  while ((m = declRegex.exec(trimmed) as unknown as RegExpExecArray | undefined)) {
     decls.set(m[2], { mut: !!m[1] });
   }
 
