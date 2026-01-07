@@ -190,6 +190,54 @@ describe("run - control flow", () => {
     expect(runModule.run(code, "100")).toBe(100);
   });
 
+  test("break inside braced while body stops the loop", () => {
+    const code =
+      "let mut x = 0; while (x < 5) { if (x == 3) break; x = x + 1 } x";
+    expect(runModule.run(code)).toBe(3);
+  });
+
+  test("continue inside braced while body skips remainder", () => {
+    const code =
+      "let mut x = 0; let mut sum = 0; while (x < 5) { x = x + 1; if (x % 2 == 0) continue; sum = sum + x } sum";
+    expect(runModule.run(code)).toBe(9); // 1 + 3 + 5
+  });
+
+  test("break in single-statement while body works", () => {
+    const code =
+      "let mut x = 0; while (x < 5) if (x == 2) break; else x = x + 1; x";
+    expect(runModule.run(code)).toBe(2);
+  });
+
+  test("nested loops: break affects only inner loop", () => {
+    const code =
+      "let mut outer = 0; while (outer < 2) { let mut inner = 0; while (inner < 3) { if (inner == 1) break; inner = inner + 1 } outer = outer + inner } outer";
+    expect(runModule.run(code)).toBe(2);
+  });
+
+  test("break outside loop is a compile-time error", () => {
+    const code = "break;";
+    expect(runModule.compile(code)).toMatch(/break/i);
+    expect(() => runModule.run(code)).toThrow(/break/i);
+  });
+
+  test("continue outside loop is a compile-time error", () => {
+    const code = "continue;";
+    expect(runModule.compile(code)).toMatch(/continue/i);
+    expect(() => runModule.run(code)).toThrow(/continue/i);
+  });
+
+  test("break inside expression block (assigned block) is rejected", () => {
+    const code = "let x = { break; 1 }; x";
+    expect(runModule.compile(code)).toMatch(/break/i);
+    expect(() => runModule.run(code)).toThrow(/break/i);
+  });
+
+  test("break inside non-block if-arm (expression if) is rejected", () => {
+    const code = "let x = if (true) break else 1";
+    expect(runModule.compile(code)).toMatch(/break/i);
+    expect(() => runModule.run(code)).toThrow(/break/i);
+  });
+
   test("recursive factorial using yield and blocks works", () => {
     const code = `fn fact(n : I32) : I32 => { if (n == 0) { yield 1; } yield n * fact(n - 1); } fact(read<I32>())`;
     runModule.compile(code);

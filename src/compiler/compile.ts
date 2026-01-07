@@ -13,6 +13,13 @@ import {
   parseFunctions,
   findMatching,
 } from "./functions";
+import {
+  validateBreakContinueUsage,
+  isExprIfAt,
+  getWordBeforeIndex,
+  isExprPrevChar,
+  getWordBeforeParenIfAny,
+} from "./breaks";
 import { applyStringAndCtorTransforms, parseStructs } from "./structs";
 
 function replaceReads(input: string): string {
@@ -61,40 +68,7 @@ function parseIfAt(input: string, idx: number): ParseIfResult | undefined {
   }
 
   // Determine if this `if` appears in an expression context (e.g., after '=' or 'return')
-  let ctx = idx - 1;
-  while (ctx >= 0 && /\s/.test(input[ctx])) ctx--;
-  const ctxPrev = ctx >= 0 ? input[ctx] : "";
-  const exprPrevChars = new Set([
-    "=",
-    "(",
-    ")",
-    ":",
-    ",",
-    "?",
-    "!",
-    "+",
-    "-",
-    "*",
-    "/",
-    "%",
-    "^",
-    "&",
-    "|",
-    "~",
-    "[",
-    "{",
-    "",
-  ]);
-  let isExprContext = exprPrevChars.has(ctxPrev);
-  if (!isExprContext) {
-    // maybe previous token is `return`
-    const wend = ctx;
-    let wstart = ctx;
-    while (wstart >= 0 && /[A-Za-z0-9_$]/.test(input[wstart])) wstart--;
-    wstart++;
-    const word = input.slice(wstart, wend + 1);
-    if (word === "return") isExprContext = true;
-  }
+  const isExprContext = isExprIfAt(input, idx);
 
   if (!isExprContext) return undefined;
 
@@ -280,11 +254,7 @@ function transformBlockExpressions(input: string): string {
     if (prevCh && (/[A-Za-z0-9_$]/.test(prevCh) || prevCh === "]")) {
       let skip = true;
       if (/[A-Za-z0-9_$]/.test(prevCh)) {
-        const wend = prev;
-        let wstart = prev;
-        while (wstart >= 0 && /[A-Za-z0-9_$]/.test(input[wstart])) wstart--;
-        wstart++;
-        const word = input.slice(wstart, wend + 1);
+        const word = getWordBeforeIndex(input, prev);
         if (word === "else") skip = false;
       }
 
@@ -296,30 +266,26 @@ function transformBlockExpressions(input: string): string {
     }
 
     // Only transform when previous char suggests expression position
-    const exprPrevChars = new Set([
-      "=",
-      "(",
-      ":",
-      ",",
-      "?",
-      "!",
-      "+",
-      "-",
-      "*",
-      "/",
-      "%",
-      "^",
-      "&",
-      "|",
-      "~",
-      "[",
-      "{",
-      "",
-    ]);
-    if (!exprPrevChars.has(prevCh)) {
+    if (!isExprPrevChar(prevCh)) {
       out += input.slice(i, idx + 1);
       i = idx + 1;
       continue;
+    }
+
+    // Do not transform function or control-structure bodies into IIFEs.
+    if (prevCh === ")") {
+      const word = getWordBeforeParenIfAny(input, prev);
+      if (
+        word === "function" ||
+        word === "if" ||
+        word === "while" ||
+        word === "for" ||
+        word === "switch"
+      ) {
+        out += input.slice(i, idx + 1);
+        i = idx + 1;
+        continue;
+      }
     }
 
     // find matching brace
@@ -374,6 +340,12 @@ export function compileImpl(input: string): string {
   // last expression in the block. Doing this first ensures `if (cond) { ... }
   // else { ... }` arms are transformed into expressions and can then be
   // converted by the `if` -> ternary transform.
+  // Validate break/continue usages before we transform blocks/ifs so we can
+  // provide clearer compile-time errors for illegal uses (e.g., break outside
+  // loops or break inside expression-level blocks which become IIFEs).
+  const breakErr = validateBreakContinueUsage(replaced);
+  if (breakErr) return breakErr;
+
   replaced = transformBlockExpressions(replaced);
 
   // Convert expression-level `if (cond) a else b` into JS ternary expressions so

@@ -1,0 +1,6 @@
+fn compile(s) => {
+  // Minimal compiler: echo input string
+  return (s);
+}
+
+compile
