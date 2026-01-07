@@ -43,6 +43,16 @@ export function findMatching(
   return depth === 0 ? i : undefined;
 }
 
+function sanitizeThisParam(paramList: string, body: string): { safeParamList: string; safeBody: string } {
+  const safeParamList = paramList
+    .split(",")
+    .map((p) => (p.trim() === "this" ? "__this" : p.trim()))
+    .filter(Boolean)
+    .join(", ");
+  const safeBody = body.replace(/\bthis\b/g, "__this");
+  return { safeParamList, safeBody };
+}
+
 // eslint-disable-next-line complexity
 function findStmtEndTopLevel(input: string, start: number): number {
   let depth = 0;
@@ -162,7 +172,8 @@ function buildFunctionReplacement(
   body: string
 ): string {
   const transformedBody = body.replace(/\byield\b/g, "return");
-  return `const ${name} = function(${paramList}) { ${transformedBody} };`;
+  const { safeParamList, safeBody } = sanitizeThisParam(paramList, transformedBody);
+  return `const ${name} = function(${safeParamList}) { ${safeBody} };`;
 }
 
 function buildFunctionReplacementExpr(
@@ -171,8 +182,9 @@ function buildFunctionReplacementExpr(
   bodyExpr: string
 ): string {
   const transformedExpr = bodyExpr.replace(/\byield\b/g, "return");
+  const { safeParamList, safeBody: safeExpr } = sanitizeThisParam(paramList, transformedExpr);
   // Expression-bodied function: treat it as a single `return (expr)`.
-  return `const ${name} = function(${paramList}) { return (${transformedExpr}); };`;
+  return `const ${name} = function(${safeParamList}) { return (${safeExpr}); };`;
 }
 
 function inferTypeSimple(expr: string): string {

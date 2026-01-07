@@ -33,6 +33,11 @@ interface CompileCoreErr {
   error: string;
 }
 
+interface IdentifierAfterDot {
+  id: string;
+  afterId: number;
+}
+
 type CompileCoreResult = CompileCoreOk | CompileCoreErr;
 
 function replaceReads(input: string): string {
@@ -366,6 +371,58 @@ function looksLikeCodeExpression(trimmed: string): boolean {
   return false;
 }
 
+// Helper: parse identifier after a dot, e.g., `.foo(` returns { id: 'foo', afterId: idx }
+function getIdentifierAfterDot(input: string, dot: number): IdentifierAfterDot | undefined {
+  const afterDot = input.slice(dot + 1);
+  const idMatch = /^[A-Za-z_$][A-Za-z0-9_$]*/.exec(afterDot);
+  if (!idMatch) return undefined;
+  const id = idMatch[0];
+  const afterId = dot + 1 + id.length;
+  return { id, afterId };
+}
+
+// Helper: find the start index of the LHS expression for a dot at `dot`.
+function findLhsStart(input: string, dot: number): number | undefined {
+  let lhsStart = dot - 1;
+  while (lhsStart >= 0 && /\s/.test(input[lhsStart])) lhsStart--;
+  if (lhsStart < 0) return undefined;
+
+  const ch = input[lhsStart];
+  if (ch === ")") {
+    // Find matching '(' backwards
+    let depth = 1;
+    let k = lhsStart - 1;
+    for (; k >= 0 && depth > 0; k--) {
+      const c2 = input[k];
+      if (c2 === ")") depth++;
+      else if (c2 === "(") depth--;
+    }
+    if (depth !== 0) return undefined;
+    return k + 1;
+  }
+
+  // For numeric literals and identifiers, accept the same character class
+  if (/[A-Za-z0-9_$]/.test(ch)) {
+    let k = lhsStart;
+    while (k >= 0 && /[A-Za-z0-9_$]/.test(input[k])) k--;
+    return k + 1;
+  }
+
+  return undefined;
+}
+
+// Transform method-call syntax like `100.addOnce()` or `(x).foo()` into
+// equivalent function calls `addOnce(100)` so the existing call pipeline
+// and type checking can handle an implicit `this` parameter.
+
+
+
+// Transform method-call syntax like `100.addOnce()` or `(x).foo()` into
+// equivalent function calls `addOnce(100)` so the existing call pipeline
+// and type checking can handle an implicit `this` parameter.
+
+
+// eslint-disable-next-line max-lines-per-function
 function compileCore(input: string): CompileCoreResult {
   // Normalize input
   const trimmed = input.trim();
@@ -390,8 +447,66 @@ function compileCore(input: string): CompileCoreResult {
   // Transform blocks used as expressions before we transform expression-level ifs.
   replaced = transformBlockExpressions(replaced);
   replaced = transformIfExpressions(replaced);
+  replaced = transformMethodCalls(replaced);
 
   const typeError = checkFunctionCallTypes(replaced, fnParsed);
+
+  // Transform blocks used as expressions before we transform expression-level ifs.
+  function transformMethodCalls(input: string): string {
+    let out = "";
+    let i = 0;
+    while (i < input.length) {
+      const dot = input.indexOf(".", i);
+      if (dot === -1) {
+        out += input.slice(i);
+        break;
+      }
+
+      const ident = getIdentifierAfterDot(input, dot);
+      if (!ident) {
+        out += input.slice(i, dot + 1);
+        i = dot + 1;
+        continue;
+      }
+      const { id, afterId } = ident;
+
+      // Skip whitespace between identifier and '('
+      let argsOpen = afterId;
+      while (argsOpen < input.length && /\s/.test(input[argsOpen])) argsOpen++;
+      if (input[argsOpen] !== "(") {
+        out += input.slice(i, dot + 1);
+        i = dot + 1;
+        continue;
+      }
+
+      const newLhsStart = findLhsStart(input, dot);
+      if (newLhsStart === undefined) {
+        out += input.slice(i, dot + 1);
+        i = dot + 1;
+        continue;
+      }
+
+      const lhsExpr = input.slice(newLhsStart, dot).trim();
+
+      const matching = findMatching(input, argsOpen + 1, "(", ")");
+      if (matching === undefined) {
+        out += input.slice(i, dot + 1);
+        i = dot + 1;
+        continue;
+      }
+
+      const argsContent = input.slice(argsOpen + 1, matching - 1).trim();
+      const newCall = `${id}(${lhsExpr}${
+        argsContent ? ", " + argsContent : ""
+      })`;
+
+      // Append the part before LHS and the new call
+      out += input.slice(i, newLhsStart) + newCall;
+      i = matching;
+    }
+
+    return out;
+  }
   if (typeError) return { error: typeError };
 
   const parsed = parseDeclarations(codeNoStructs);

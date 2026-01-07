@@ -353,6 +353,11 @@ describe("run - functions", () => {
     expect(runModule.run(code2, "42")).toBe(42);
   });
 
+  test("method-call syntax on literal uses explicit this parameter", () => {
+    const code = "fn addOnce(this : I32) => this + 1; 100.addOnce()";
+    expect(runModule.run(code)).toBe(101);
+  });
+
   test("type mismatch in function call throws", () => {
     const code =
       "fn add(first : I32, second : I32) : I32 => { yield first + second; } add(read<Bool>(), read<I32>())";
