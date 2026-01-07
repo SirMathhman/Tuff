@@ -1,6 +1,11 @@
 /**
  * Compile a string into JavaScript source that evaluates to a number
  */
+
+interface VarDeclaration {
+  mut: boolean;
+}
+
 export function compile(input: string): string {
   // Normalize input
   const trimmed = input.trim();
@@ -13,10 +18,12 @@ export function compile(input: string): string {
   // Track declarations and whether they are mutable so we can detect
   // illegal assignments to immutable variables.
   const declRegex = /\blet\s+(mut\s+)?([A-Za-z_$][A-Za-z0-9_$]*)/g;
-  const decls = new Map<string, { mut: boolean }>();
+  const decls = new Map<string, VarDeclaration>();
   let m: RegExpExecArray | undefined;
   // exec returns null but we're treating it as falsy, so cast to unknown
-  while ((m = declRegex.exec(trimmed) as unknown as RegExpExecArray | undefined)) {
+  while (
+    (m = declRegex.exec(trimmed) as unknown as RegExpExecArray | undefined)
+  ) {
     decls.set(m[2], { mut: !!m[1] });
   }
 

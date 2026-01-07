@@ -53,7 +53,8 @@ const noAnyRule = {
   meta: {
     type: "problem",
     docs: {
-      description: "Disallow any type, use unknown or explicit object types instead",
+      description:
+        "Disallow any type, use unknown or explicit object types instead",
     },
   },
   create(context) {
@@ -61,16 +62,37 @@ const noAnyRule = {
       TSAnyKeyword(node) {
         context.report({
           node,
-          message: "Do not use 'any'. Use an explicit object type or 'unknown' if you don't know the type.",
+          message:
+            "Do not use 'any'. Use an explicit object type or 'unknown' if you don't know the type.",
         });
       },
       TSAsExpression(node) {
         if (node.typeAnnotation.type === "TSAnyKeyword") {
           context.report({
             node: node.typeAnnotation,
-            message: "Do not use 'any'. Use an explicit object type or 'unknown' if you don't know the type.",
+            message:
+              "Do not use 'any'. Use an explicit object type or 'unknown' if you don't know the type.",
           });
         }
+      },
+    };
+  },
+};
+
+const noAnonymousObjectTypeRule = {
+  meta: {
+    type: "problem",
+    docs: {
+      description: "Disallow anonymous object types, use named interfaces instead",
+    },
+  },
+  create(context) {
+    return {
+      TSTypeLiteral(node) {
+        context.report({
+          node,
+          message: "Do not use anonymous object types. Define a named interface instead.",
+        });
       },
     };
   },
@@ -81,6 +103,7 @@ const customPlugin = {
     "no-record": noRecordRule,
     "no-null": noNullRule,
     "no-any": noAnyRule,
+    "no-anonymous-object-type": noAnonymousObjectTypeRule,
   },
 };
 
@@ -108,6 +131,7 @@ export default [
       "custom/no-record": "error",
       "custom/no-null": "error",
       "custom/no-any": "error",
+      "custom/no-anonymous-object-type": "error",
       "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_" },
