@@ -193,6 +193,7 @@ export function processLetStatement(
   if (isErr(evalRes)) return err(evalRes.error);
   let { value: val, nextIndex: nextIdx } = evalRes.value;
   if (typeName === "I32") val = Math.trunc(val);
+  else if (typeName === "Bool") val = val !== 0 ? 1 : 0;
   envMap.set(name, { type: "var", value: val, mutable, typeName });
   return ok({ nextIndex: nextIdx });
 }

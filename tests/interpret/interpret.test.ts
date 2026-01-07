@@ -255,6 +255,10 @@ describe("interpret - let & assignment (misc)", () => {
     expect(isOk(r)).toBe(true);
     if (isOk(r)) expect(r.value).toBe(1);
   });
+
+  it("supports Bool type coercion", () => {
+    checkInterpret("let x : Bool = true; x", 1);
+  });
 });
 
 describe("interpret - if expressions (initializers)", () => {

@@ -98,6 +98,7 @@ export function processAssignment(
   let { val, nextIndex } = valRes.value;
 
   if (binding.typeName === "I32") val = Math.trunc(val);
+  else if (binding.typeName === "Bool") val = val !== 0 ? 1 : 0;
   binding.value = val;
   envMap.set(name, binding);
   return ok({ nextIndex, value: val });
@@ -154,6 +155,7 @@ export function processCompoundAssignment(
   let newVal = res.value;
 
   if (binding.typeName === "I32") newVal = Math.trunc(newVal);
+  else if (binding.typeName === "Bool") newVal = newVal !== 0 ? 1 : 0;
   binding.value = newVal;
   envMap.set(name, binding);
   return ok({ nextIndex, value: newVal });

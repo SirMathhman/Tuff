@@ -297,6 +297,8 @@ function executeFunction(
     let argVal = args[i];
     if (param.typeName === "I32") {
       argVal = Math.trunc(argVal);
+    } else if (param.typeName === "Bool") {
+      argVal = argVal !== 0 ? 1 : 0;
     }
     fnEnv.set(param.name, {
       type: "var",
