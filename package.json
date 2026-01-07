@@ -7,7 +7,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests",
     "lint:fix": "eslint src tests --fix",
-    "cpd": "pmd cpd --minimum-tokens 100 --files src --language typescript --format text --ignore-literals --ignore-identifiers",
+    "cpd": "pmd cpd --minimum-tokens 100 --language typescript --format text --ignore-literals --ignore-identifiers src",
     "prepare": "husky"
   },
   "lint-staged": {

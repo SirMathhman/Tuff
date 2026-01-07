@@ -62,30 +62,8 @@ export function compile(input: string): string {
     }
   }
 
-  if (hasRead) {
-    // If the code contains statements (let/var/const or semicolons), wrap it
-    // in an IIFE so the returned value comes from the final expression.
-    if (/;|\b(let|const|var)\b|\n/.test(replaced)) {
-      const parts = replaced
-        .split(";")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      if (parts.length === 0) return "(0)";
-      if (parts.length === 1) return parts[0];
-
-      const last = parts.pop();
-      const body = parts.join("; ");
-      return `(function(){ ${body}; return (${last}); })()`;
-    }
-
-    return replaced;
-  }
-
-  // If the input contains multiple statements (semicolon or declarations),
-  // wrap it in an IIFE that returns the last expression so it can be
-  // evaluated as a single expression by `run`.
-  if (/;|\b(let|const|var)\b|\n/.test(replaced)) {
-    const parts = replaced
+  function wrapStatements(code: string): string {
+    const parts = code
       .split(";")
       .map((s) => s.trim())
       .filter(Boolean);
@@ -95,6 +73,21 @@ export function compile(input: string): string {
     const last = parts.pop();
     const body = parts.join("; ");
     return `(function(){ ${body}; return (${last}); })()`;
+  }
+
+  if (hasRead) {
+    if (/;|\b(let|const|var)\b|\n/.test(replaced)) {
+      return wrapStatements(replaced);
+    }
+
+    return replaced;
+  }
+
+  // If the input contains multiple statements (semicolon or declarations),
+  // wrap it in an IIFE that returns the last expression so it can be
+  // evaluated as a single expression by `run`.
+  if (/;|\b(let|const|var)\b|\n/.test(replaced)) {
+    return wrapStatements(replaced);
   }
 
   // Fallback: return as an expression (e.g., length-based behavior for plain strings)
