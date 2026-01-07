@@ -34,9 +34,13 @@ def main():
     for dirpath, dirnames, filenames in os.walk(args.root):
         # skip ignored directories immediately
         dirnames[:] = [d for d in dirnames if d not in args.ignore]
-        file_count = len(filenames)
+        # Filter out compiled TypeScript files (.js and .d.ts) to count only source files
+        source_files = [
+            f for f in filenames if not f.endswith(".js") and not f.endswith(".d.ts")
+        ]
+        file_count = len(source_files)
         if file_count > args.max:
-            offenders.append((dirpath, file_count, filenames))
+            offenders.append((dirpath, file_count, source_files))
 
     if not offenders:
         print(f"OK: no directories with more than {args.max} files under '{args.root}'")

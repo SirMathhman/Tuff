@@ -2,6 +2,7 @@ import { Token } from "./tokenize";
 import { Result, ok, err, isErr } from "./result";
 import { indexUntilSemicolon, findMatchingBrace } from "./commonUtils";
 import { FunctionParameter } from "./matchEval";
+import { parseTypeNameAt } from "./utils/parseType";
 
 export interface FunctionParseResult {
   name: string;
@@ -55,12 +56,10 @@ function parseSingleParameter(
   }
   cur++;
 
-  const typeTok = tokensArr[cur];
-  if (!typeTok || typeTok.type !== "ident") {
-    return err("Invalid numeric input");
-  }
-  const paramType = typeTok.value as string;
-  cur++;
+  const parsedType = parseTypeNameAt(tokensArr, cur);
+  if (!parsedType) return err("Invalid numeric input");
+  const paramType = parsedType.typeName;
+  cur = parsedType.nextIndex;
 
   return ok({
     param: { name: paramName, typeName: paramType },
@@ -122,10 +121,28 @@ export function parseReturnType(
     tokensArr[start].value === ":"
   ) {
     const typeTok = tokensArr[start + 1];
-    if (!typeTok || typeTok.type !== "ident") {
-      return err("Invalid numeric input");
+    if (!typeTok) return err("Invalid numeric input");
+
+    if (typeTok.type === "ident") {
+      return ok({ returnType: typeTok.value as string, nextIndex: start + 2 });
     }
-    return ok({ returnType: typeTok.value as string, nextIndex: start + 2 });
+
+    if (typeTok.type === "op" && typeTok.value === "*") {
+      let i = start + 2;
+      let mut = false;
+      const maybeMut = tokensArr[i];
+      if (maybeMut && maybeMut.type === "ident" && maybeMut.value === "mut") {
+        mut = true;
+        i++;
+      }
+      const baseTok = tokensArr[i];
+      if (!baseTok || baseTok.type !== "ident")
+        return err("Invalid numeric input");
+      const typeName = mut ? `*mut ${baseTok.value}` : `*${baseTok.value}`;
+      return ok({ returnType: typeName, nextIndex: i + 1 });
+    }
+
+    return err("Invalid numeric input");
   }
   return ok({ nextIndex: start });
 }

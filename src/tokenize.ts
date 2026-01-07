@@ -46,6 +46,10 @@ export interface NotToken {
   type: "not";
   value: "!";
 }
+export interface AmpToken {
+  type: "amp";
+  value: "&";
+}
 export interface DotToken {
   type: "dot";
   value: ".";
@@ -63,6 +67,7 @@ export type Token =
   | CompOpToken
   | LogOpToken
   | NotToken
+  | AmpToken
   | DotToken
   | StructToken;
 
@@ -180,6 +185,9 @@ function handleChar(
   handled = tryHandleLogicalOp(s, i, tokens);
   if (handled !== -1) return ok(handled);
 
+  handled = tryHandleAmp(s, i, tokens);
+  if (handled !== -1) return ok(handled);
+
   handled = tryHandleNot(s, i, tokens);
   if (handled !== -1) return ok(handled);
 
@@ -261,6 +269,16 @@ function tryHandleNot(s: string, i: number, tokens: Token[]): number {
   if (s[i] === "!") {
     if (s[i + 1] === "=") return -1; // let comparison handler process '!='
     tokens.push({ type: "not", value: "!" });
+    return i + 1;
+  }
+  return -1;
+}
+
+function tryHandleAmp(s: string, i: number, tokens: Token[]): number {
+  // Single '&' for address-of; '&&' handled by tryHandleLogicalOp
+  if (s[i] === "&") {
+    if (s[i + 1] === "&") return -1;
+    tokens.push({ type: "amp", value: "&" });
     return i + 1;
   }
   return -1;

@@ -2,6 +2,8 @@ import { Token } from "./tokenize";
 import { Result, ok, err, isErr } from "./result";
 import { indexUntilSemicolon } from "./commonUtils";
 import { Binding } from "./matchEval";
+import { getAddressInfo, AddressInfo } from "./pointers";
+import { VarBinding } from "./matchEval";
 
 interface StatementResult {
   nextIndex: number;
@@ -16,6 +18,11 @@ interface ExpressionEvalResult {
 interface IdentPunctResult {
   name: string;
   punct: string;
+}
+
+interface ResolveTargetResult {
+  addrInfo: AddressInfo;
+  targetBinding: VarBinding;
 }
 
 export type EvalExprFn = (
@@ -76,12 +83,19 @@ function parseAssignmentValue(
   return ok({ val, nextIndex });
 }
 
+import { validatePointerInit } from "./utils/pointerUtils";
+
+function validatePointerAssignment(typeName: string, val: number) {
+  return validatePointerInit(typeName, val);
+}
+
 export function processAssignment(
   tokensArr: Token[],
   idx: number,
   envMap: Map<string, Binding>,
   evalExprWithEnv: EvalExprFn
 ): Result<StatementResult, string> {
+  // ident = expr
   const ip = getIdentAndPunct(tokensArr, idx);
   if (isErr(ip)) return err(ip.error);
   const { name, punct } = ip.value;
@@ -96,6 +110,12 @@ export function processAssignment(
   const valRes = parseAssignmentValue(tokensArr, idx, envMap, evalExprWithEnv);
   if (isErr(valRes)) return err(valRes.error);
   let { val, nextIndex } = valRes.value;
+
+  // If assigning to a pointer-typed variable, ensure the RHS is an address and types match
+  if (binding.typeName && binding.typeName.startsWith("*")) {
+    const res = validatePointerAssignment(binding.typeName, val);
+    if (isErr(res)) return err(res.error);
+  }
 
   if (binding.typeName === "I32") val = Math.trunc(val);
   else if (binding.typeName === "Bool") val = val !== 0 ? 1 : 0;
@@ -161,6 +181,88 @@ export function processCompoundAssignment(
   return ok({ nextIndex, value: newVal });
 }
 
+// Helper for pointer assignment validation
+function ensureValidPointer(
+  ptrName: string,
+  envMap: Map<string, Binding>
+): Result<VarBinding, string> {
+  const ptrBinding = envMap.get(ptrName);
+  if (!ptrBinding) return err("Undefined variable");
+  if (ptrBinding.type !== "var") return err("Cannot assign to function");
+  if (ptrBinding.value === undefined) return err("Uninitialized variable");
+  if (!ptrBinding.typeName || !ptrBinding.typeName.startsWith("*"))
+    return err("Cannot dereference non-pointer");
+  const declaredIsMut = ptrBinding.typeName.startsWith("*mut");
+  if (!declaredIsMut) return err("Cannot assign through immutable pointer");
+  return ok(ptrBinding as unknown as VarBinding);
+}
+
+// Helper for resolving pointer target
+function resolveTarget(
+  ptrBinding: VarBinding
+): Result<ResolveTargetResult, string> {
+  if (typeof ptrBinding.value !== "number") return err("Invalid pointer");
+  const addrInfo = getAddressInfo(ptrBinding.value);
+  if (!addrInfo) return err("Invalid dereference");
+  const targetBinding = addrInfo.env.get(addrInfo.name);
+  if (!targetBinding || targetBinding.type !== "var")
+    return err("Invalid dereference");
+  if (!(targetBinding as any).mutable)
+    return err("Cannot assign to immutable variable");
+  return ok({ addrInfo, targetBinding: targetBinding as VarBinding });
+}
+
+function processDerefAssignment(
+  tokensArr: Token[],
+  idx: number,
+  envMap: Map<string, Binding>,
+  evalExprWithEnv: EvalExprFn
+): Result<StatementResult, string> | undefined {
+  const nameTok = tokensArr[idx + 1];
+  const punctTok = tokensArr[idx + 2];
+  if (
+    !nameTok ||
+    nameTok.type !== "ident" ||
+    !punctTok ||
+    punctTok.type !== "punct"
+  )
+    return undefined;
+  if (punctTok.value !== "=") return undefined;
+
+  const ptrName = nameTok.value;
+
+  const ensured = ensureValidPointer(ptrName, envMap);
+  if (isErr(ensured)) return err(ensured.error);
+  const ptrBinding = ensured.value;
+
+  const rhsRes = evalExprUntilSemicolon(
+    tokensArr,
+    idx + 3,
+    envMap,
+    evalExprWithEnv
+  );
+  if (isErr(rhsRes)) return err(rhsRes.error);
+  let { value: rhsVal, nextIndex } = rhsRes.value;
+
+  const targetRes = resolveTarget(ptrBinding);
+  if (isErr(targetRes)) return err(targetRes.error);
+  const { addrInfo, targetBinding } = targetRes.value;
+
+  // Check base type compatibility and write value
+  const baseType = ptrBinding
+    .typeName!.replace(/^\*mut\s*/, "")
+    .replace(/^\*\s*/, "");
+  if (targetBinding.typeName && baseType !== targetBinding.typeName)
+    return err("Pointer base type mismatch");
+
+  if (targetBinding.typeName === "I32") rhsVal = Math.trunc(rhsVal);
+  else if (targetBinding.typeName === "Bool") rhsVal = rhsVal !== 0 ? 1 : 0;
+
+  targetBinding.value = rhsVal;
+  addrInfo.env.set(addrInfo.name, targetBinding);
+  return ok({ nextIndex, value: rhsVal });
+}
+
 export function tryAssignment(
   tokensArr: Token[],
   idx: number,
@@ -168,6 +270,14 @@ export function tryAssignment(
   evalExprWithEnv: EvalExprFn
 ): Result<StatementResult, string> | undefined {
   const t = tokensArr[idx];
+
+  // *ptr = expr
+  if (t && t.type === "op" && t.value === "*") {
+    const res = processDerefAssignment(tokensArr, idx, envMap, evalExprWithEnv);
+    if (!res) return undefined;
+    return res;
+  }
+
   if (
     t &&
     t.type === "ident" &&

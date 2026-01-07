@@ -1,5 +1,6 @@
 import type { Token, NumToken } from "./tokenize";
 import { Result, err, ok, isErr } from "./result";
+import { getAddressInfo } from "./pointers";
 
 interface ComparisonOperandResult {
   value: number;
@@ -242,6 +243,16 @@ function getResultValue(
   return ok(res.value);
 }
 
+function applyResultAndAdvance(
+  res: Result<TokenNext, string>,
+  out: Token[]
+): Result<number, string> {
+  const v = getResultValue(res);
+  if (isErr(v)) return err(v.error);
+  out.push(v.value.token);
+  return ok(v.value.nextIdx);
+}
+
 function processParenthesized(
   tokens: Token[],
   startIdx: number
@@ -309,6 +320,54 @@ function processUnaryNot(
   const outObj: TokenNext = { token: numTok, nextIdx: i };
   return ok(outObj);
 }
+
+function processUnaryDeref(
+  tokens: Token[],
+  startIdx: number
+): Result<TokenNext, string> {
+  let i = startIdx;
+  let starCount = 0;
+  while (
+    i < tokens.length &&
+    tokens[i].type === "op" &&
+    tokens[i].value === "*"
+  ) {
+    starCount++;
+    i++;
+  }
+
+  if (i >= tokens.length) return err("Invalid numeric input");
+
+  // Resolve operand
+  let valTok: Token | undefined;
+  const next = tokens[i];
+  if (next.type === "paren" && next.value === "(") {
+    const subRes = processParenthesized(tokens, i);
+    if (isErr(subRes)) return subRes;
+    valTok = subRes.value.token;
+    i = subRes.value.nextIdx;
+  } else if (next.type === "num") {
+    valTok = next;
+    i++;
+  } else if (next.type === "struct") {
+    valTok = next;
+    i++;
+  } else {
+    return err("Invalid numeric input");
+  }
+
+  // Apply dereferences
+  let currentTok = valTok;
+
+  for (let s = 0; s < starCount; s++) {
+    if (!currentTok) return err("Invalid numeric input");
+    const d = derefOnce(currentTok);
+    if (isErr(d)) return err(d.error);
+    currentTok = d.value;
+  }
+
+  return ok({ token: currentTok as Token, nextIdx: i });
+}
 function reduceParentheses(tokens: Token[]): Result<Token[], string> {
   const out: Token[] = [];
   let i = 0;
@@ -319,10 +378,20 @@ function reduceParentheses(tokens: Token[]): Result<Token[], string> {
         t.type === "paren" && t.value === "("
           ? processParenthesized(tokens, i)
           : processUnaryNot(tokens, i);
-      const v = getResultValue(res);
-      if (isErr(v)) return err(v.error);
-      out.push(v.value.token);
-      i = v.value.nextIdx;
+      const adv = applyResultAndAdvance(res, out);
+      if (isErr(adv)) return err(adv.error);
+      i = adv.value;
+    } else if (
+      t.type === "op" &&
+      t.value === "*" &&
+      (out.length === 0 ||
+        (out[out.length - 1].type !== "num" &&
+          out[out.length - 1].type !== "struct"))
+    ) {
+      const res = processUnaryDeref(tokens, i);
+      const adv = applyResultAndAdvance(res, out);
+      if (isErr(adv)) return err(adv.error);
+      i = adv.value;
     } else {
       out.push(t);
       i++;
@@ -340,4 +409,17 @@ export function evalLeftToRight(tokens: Token[]): Result<number, string> {
   if (reduced.value[0].type !== "num") return err("Invalid numeric input");
 
   return evalTokensToNumber(reduced.value);
+}
+
+// Helper for dereference operator
+function derefOnce(tok: Token): Result<Token, string> {
+  if (tok.type !== "num") return err("Invalid dereference");
+  const addr = tok.value;
+  const info = getAddressInfo(addr);
+  if (!info) return err("Invalid dereference");
+  const b = info.env.get(info.name);
+  if (!b || b.type !== "var") return err("Invalid dereference");
+  if (b.value === undefined) return err("Uninitialized variable");
+  if (typeof b.value === "number") return ok({ type: "num", value: b.value });
+  return ok({ type: "struct", value: b.value });
 }

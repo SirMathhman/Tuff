@@ -7,6 +7,7 @@ import {
   FunctionBinding,
   evalInlineMatchToNumToken,
 } from "./matchEval";
+import { resetAddressMap } from "./pointers";
 import { tryAssignment } from "./assignmentEval";
 import { findMatchingBrace, findMatching } from "./commonUtils";
 import {
@@ -24,7 +25,6 @@ import {
   processStructStatement,
   StatementResult,
 } from "./statements";
-
 interface ProcessResult {
   lastVal?: number;
 }
@@ -127,10 +127,8 @@ function evalIfExpression(
   tokens: Token[],
   env: Map<string, Binding>
 ): Result<number, string> {
-  // Handle both formats:
-  // 1. if (condition) value1 else value2 - with parentheses, no 'then'
-  // 2. if condition then value1 else value2 - no parentheses, with 'then'
-
+  // Handle both formats: 1) if (condition) value1 else value2 - with parentheses, no 'then'
+  // 2) if condition then value1 else value2 - no parentheses, with 'then'
   let condTokens: Token[];
   let valueStartIdx: number;
 
@@ -155,7 +153,6 @@ function evalIfExpression(
   }
 
   if (condTokens.length === 0) return err("Invalid numeric input");
-
   const elseIdx = findTopLevelElseIndex(tokens, valueStartIdx);
   if (elseIdx === -1) return err("Invalid numeric input");
 
@@ -391,6 +388,8 @@ function substituteIdentToken(
   return substituteValueIdent(tokens, idx, env);
 }
 
+import { handleAmpSubst } from "./utils/ampSubst";
+
 function substituteTokens(
   tokens: Token[],
   env: Map<string, Binding>
@@ -399,7 +398,12 @@ function substituteTokens(
   let i = 0;
   while (i < tokens.length) {
     const t = tokens[i];
-    if (t.type === "ident") {
+    if (t.type === "amp") {
+      const ampRes = handleAmpSubst(tokens, i, env);
+      if (isErr(ampRes)) return err(ampRes.error);
+      substituted.push(ampRes.value.token);
+      i += ampRes.value.consumed;
+    } else if (t.type === "ident") {
       const substRes = substituteIdentToken(tokens, i, env);
       if (isErr(substRes)) return err(substRes.error);
       substituted.push(substRes.value.token);
@@ -426,7 +430,6 @@ export function evalExprWithEnv(tokens: Token[], env: Map<string, Binding>) {
   ) {
     return evalIfExpression(stripped, env);
   }
-
   const substRes = substituteTokens(tokens, env);
   if (isErr(substRes)) return err(substRes.error);
   return evalLeftToRight(substRes.value);
@@ -447,7 +450,6 @@ export function processStatementsTokens(
   }
   return ok({ lastVal });
 }
-
 function tryRouteStatement(
   t: Token | undefined,
   tokensArr: Token[],
@@ -535,6 +537,9 @@ export function interpret(input: string): Result<number, string> {
   if (!Number.isNaN(numeric) && trimmed !== "") {
     return ok(numeric);
   }
+
+  // Reset address table at start of each interpret run
+  resetAddressMap();
 
   const tokensRes = tokenize(trimmed);
   if (isErr(tokensRes)) return err(tokensRes.error);

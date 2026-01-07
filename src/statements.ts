@@ -6,6 +6,8 @@ import { indexUntilSemicolon, findMatchingBrace } from "./commonUtils";
 import { parseFunctionSignature } from "./functions";
 import { parseStructDefinition } from "./structs";
 import { evaluateStructInstantiation } from "./utils/structEval";
+import { finalizeLet } from "./utils/pointerUtils";
+import { parseTypeNameAt } from "./utils/parseType";
 import {
   findMatchingParen,
   findTopLevelElseIndex,
@@ -109,10 +111,9 @@ export function parseOptionalType(
     tokensArr[cur].value === ":"
   ) {
     cur++;
-    const typeTok = tokensArr[cur];
-    if (!typeTok || typeTok.type !== "ident")
-      return err("Invalid numeric input");
-    return ok({ typeName: typeTok.value, nextIndex: cur + 1 });
+    const parsed = parseTypeNameAt(tokensArr, cur);
+    if (!parsed) return err("Invalid numeric input");
+    return ok({ typeName: parsed.typeName, nextIndex: parsed.nextIndex });
   }
   return ok({ nextIndex: cur });
 }
@@ -192,12 +193,11 @@ export function processLetStatement(
   );
   if (isErr(evalRes)) return err(evalRes.error);
   let { value: val, nextIndex: nextIdx } = evalRes.value;
-  if (typeName === "I32") val = Math.trunc(val);
-  else if (typeName === "Bool") val = val !== 0 ? 1 : 0;
-  envMap.set(name, { type: "var", value: val, mutable, typeName });
+
+  const fin = finalizeLet(name, mutable, typeName, val, envMap);
+  if (isErr(fin)) return err(fin.error);
   return ok({ nextIndex: nextIdx });
 }
-
 export function processFunctionStatement(
   tokensArr: Token[],
   idx: number,
