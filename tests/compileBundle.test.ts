@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import vm from "node:vm";
 
-import { compileBundle } from "../src/run";
+import { compileBundle, Namespace } from "../src/run";
 
 function evalBundledExpression(expr: string): unknown {
   return vm.runInNewContext(expr, {}, { timeout: 1000 });
@@ -16,6 +16,8 @@ interface FixturePaths {
 interface FixtureIds {
   providerId: string;
   userId: string;
+  providerNs: string[];
+  userNs: string[];
 }
 
 interface FixtureSources {
@@ -49,6 +51,8 @@ function getFixtureIds(): FixtureIds {
   return {
     providerId: "self_hosting/modules/tuff/stuff/provider.tuff",
     userId: "self_hosting/modules/tuff/stuff/user.tuff",
+    providerNs: ["tuff", "stuff"],
+    userNs: ["tuff", "stuff", "user"],
   };
 }
 
@@ -60,20 +64,22 @@ function readFixtureSources(): FixtureSources {
   };
 }
 
-function makeFilesMap(entries: Array<[string, string]>): Map<string, string> {
-  return new Map<string, string>(entries);
+function makeFilesMap(
+  entries: Array<[Namespace, string]>
+): Map<Namespace, string> {
+  return new Map<Namespace, string>(entries as Array<[Namespace, string]>);
 }
 
 describe("compileBundle", () => {
   test("bundles modules/provider+user and evaluates entry", () => {
-    const { providerId, userId } = getFixtureIds();
+    const { providerNs, userNs } = getFixtureIds();
     const { providerSrc, userSrc } = readFixtureSources();
     const files = makeFilesMap([
-      [providerId, providerSrc],
-      [userId, userSrc],
+      [providerNs, providerSrc],
+      [userNs, userSrc],
     ]);
 
-    const bundledExpr = compileBundle(files, userId);
+    const bundledExpr = compileBundle(files, userNs);
     expect(typeof bundledExpr).toBe("string");
 
     const result = evalBundledExpression(bundledExpr);
@@ -81,28 +87,28 @@ describe("compileBundle", () => {
   });
 
   test("is deterministic regardless of object insertion order", () => {
-    const { providerId, userId } = getFixtureIds();
+    const { providerNs, userNs } = getFixtureIds();
     const { providerSrc, userSrc } = readFixtureSources();
 
     const filesA = makeFilesMap([
-      [providerId, providerSrc],
-      [userId, userSrc],
+      [providerNs, providerSrc],
+      [userNs, userSrc],
     ]);
     const filesB = makeFilesMap([
-      [userId, userSrc],
-      [providerId, providerSrc],
+      [userNs, userSrc],
+      [providerNs, providerSrc],
     ]);
 
-    const a = compileBundle(filesA, userId);
-    const b = compileBundle(filesB, userId);
+    const a = compileBundle(filesA, userNs);
+    const b = compileBundle(filesB, userNs);
     expect(a).toBe(b);
   });
 
   test("throws when an imported provider module is missing", () => {
-    const { userId } = getFixtureIds();
+    const { userNs } = getFixtureIds();
     const { userSrc } = readFixtureSources();
-    const files = makeFilesMap([[userId, userSrc]]);
+    const files = makeFilesMap([[userNs, userSrc]]);
 
-    expect(() => compileBundle(files, userId)).toThrow(/provider\.tuff/i);
+    expect(() => compileBundle(files, userNs)).toThrow(/provider\.tuff/i);
   });
 });

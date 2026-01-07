@@ -29,17 +29,43 @@ function normalizeId(id: string): string {
   return id.replace(/\\/g, "/");
 }
 
-function inferModulesRoot(entryId: string): string {
-  const normalized = normalizeId(entryId);
-  const marker = "/modules/";
-  const idx = normalized.lastIndexOf(marker);
-  if (idx === -1) return "modules";
-  return normalized.slice(0, idx + marker.length - 1);
-}
-
 function providerIdFor(moduleSpec: string, modulesRoot: string): string {
   const rel = moduleSpec.split("::").join("/");
   return `${modulesRoot}/${rel}/provider.tuff`;
+}
+
+function namespaceToIds(ns: Namespace, mr: string): string[] {
+  const base = `${mr}/${ns.join("/")}`;
+  return [normalizeId(`${base}.tuff`), normalizeId(`${base}/provider.tuff`)];
+}
+
+function normalizeNamespaceFiles(
+  filesMap: Map<Namespace, string>,
+  mr: string
+): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const [ns, src] of filesMap.entries()) {
+    const [id1, id2] = namespaceToIds(ns, mr);
+    if (!out.has(id1)) out.set(id1, src);
+    if (!out.has(id2)) out.set(id2, src);
+  }
+  return out;
+}
+
+function buildPrelude(
+  orderList: string[],
+  entryKey: string,
+  parsedMap: Map<string, ParsedModuleSyntax>,
+  fileMap: Map<string, string>
+): string {
+  let out = "";
+  for (const id of orderList) {
+    if (id === entryKey) continue;
+    const code = parsedMap.get(id)?.code ?? fileMap.get(id) ?? "";
+    const compiled = compileProgramImpl(code);
+    out += `\n// ${id}\n${compiled}\n`;
+  }
+  return out;
 }
 
 function stripModuleSyntax(src: string): ParsedModuleSyntax {
@@ -113,42 +139,36 @@ function buildBundleOrder(
  * compileBundle - compile multiple `.tuff` files into a single JS *expression*
  * string. The resulting expression evaluates to the entry module's result.
  */
+export type Namespace = string[];
+
 export function compileBundle(
-  files: Map<string, string>,
-  entry: string,
+  files: Map<Namespace, string>,
+  entry: Namespace,
   options: CompileBundleOptions = {}
 ): string {
-  const normalizedFiles = new Map<string, string>();
-  for (const [id, src] of files.entries()) {
-    normalizedFiles.set(normalizeId(id), src);
-  }
-
-  const entryId = normalizeId(entry);
-  if (!normalizedFiles.has(entryId)) {
-    throw new Error(`entry file '${entryId}' not found in files map`);
-  }
-
+  // Decide modulesRoot early; we no longer infer from a file path string.
   const modulesRoot =
     options.modulesRoot !== undefined
       ? normalizeId(options.modulesRoot)
-      : inferModulesRoot(entryId);
+      : "modules";
 
-  const { order, parsed } = buildBundleOrder(
-    entryId,
-    normalizedFiles,
-    modulesRoot
-  );
+  const normalizedFiles = normalizeNamespaceFiles(files, modulesRoot);
 
-  let prelude = "";
-  for (const id of order) {
-    if (id === entryId) continue;
-    const code = parsed.get(id)?.code ?? normalizedFiles.get(id) ?? "";
-    const compiled = compileProgramImpl(code);
-    prelude += `\n// ${id}\n${compiled}\n`;
+  const [entryId1, entryId2] = namespaceToIds(entry, modulesRoot);
+  const entryId = normalizedFiles.has(entryId1)
+    ? entryId1
+    : normalizedFiles.has(entryId2)
+    ? entryId2
+    : undefined;
+
+  if (!entryId) {
+    throw new Error(`entry namespace '${entry.join("::")}' not found in files map`);
   }
 
-  const entryCode =
-    parsed.get(entryId)?.code ?? normalizedFiles.get(entryId) ?? "";
+  const { order, parsed } = buildBundleOrder(entryId, normalizedFiles, modulesRoot);
+
+  const prelude = buildPrelude(order, entryId, parsed, normalizedFiles);
+  const entryCode = parsed.get(entryId)?.code ?? normalizedFiles.get(entryId) ?? "";
   const entryExpr = compileImpl(entryCode);
 
   return `(function(){${prelude}\nreturn (${entryExpr});\n})()`;
