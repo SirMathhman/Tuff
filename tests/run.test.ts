@@ -91,6 +91,14 @@ describe("run", () => {
       "fn add(first : I32, second : I32) : I32 => { yield first + second; } add(read<I32>(), read<I32>())";
     expect(runModule.run(code, "3 4")).toBe(7);
   });
+
+  test("type mismatch in function call throws", () => {
+    const code =
+      "fn add(first : I32, second : I32) : I32 => { yield first + second; } add(read<Bool>(), read<I32>())";
+    // compile should report the type error
+    expect(runModule.compile(code)).toMatch(/type mismatch/);
+    expect(() => runModule.run(code, "true 2")).toThrow(/type mismatch/);
+  });
   test("handles multi-statement code with reads and returns value", () => {
     const code = "let x : I32 = read<I32>(); let y : I32 = read<I32>(); x + y";
     expect(runModule.run(code, "1 2")).toBe(3);
