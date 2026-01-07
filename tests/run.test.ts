@@ -9,6 +9,10 @@ describe("compile", () => {
   test("handles unicode characters in compile", () => {
     expect(runModule.compile("💡")).toBe("(2)");
   });
+
+  test('handles read<I32>() in compile', () => {
+    expect(runModule.compile('read<I32>()')).toBe('parseInt(stdin, 10)');
+  });
 });
 
 describe("run", () => {
@@ -34,12 +38,17 @@ describe("run", () => {
       spy.mockRestore();
     }
   });
-  test('accepts optional stdin parameter without changing behavior', () => {
-    const spy = jest.spyOn(runModule, 'compile');
+  test("accepts optional stdin parameter without changing behavior", () => {
+    const spy = jest.spyOn(runModule, "compile");
     try {
-      expect(runModule.run('abc', 'some-stdin')).toBe(3);
-      expect(spy).toHaveBeenCalledWith('abc');
+      expect(runModule.run("abc", "some-stdin")).toBe(3);
+      expect(spy).toHaveBeenCalledWith("abc");
     } finally {
       spy.mockRestore();
     }
-  });});
+  });
+
+  test('read<I32>() reads from stdin', () => {
+    expect(runModule.run('read<I32>()', '100')).toBe(100);
+  });
+});
