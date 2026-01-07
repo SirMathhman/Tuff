@@ -185,7 +185,7 @@ function substituteIdentToken(
 ): Result<SubstituteResult, string> {
   const t = tokens[idx];
   if (t.type !== "ident") return err("Invalid numeric input");
-  
+
   if (t.value === "true") {
     return ok({ token: { type: "num", value: 1 }, consumed: 1 });
   } else if (t.value === "false") {
@@ -193,7 +193,10 @@ function substituteIdentToken(
   } else if (t.value === "if") {
     const inlineRes = evalInlineIfToNumToken(tokens, idx, env);
     if (isErr(inlineRes)) return err(inlineRes.error);
-    return ok({ token: inlineRes.value.token, consumed: inlineRes.value.consumed });
+    return ok({
+      token: inlineRes.value.token,
+      consumed: inlineRes.value.consumed,
+    });
   } else if (t.value === "match") {
     const inlineRes = evalInlineMatchToNumToken(
       tokens,
@@ -203,7 +206,10 @@ function substituteIdentToken(
       evalExprWithEnv
     );
     if (isErr(inlineRes)) return err(inlineRes.error);
-    return ok({ token: inlineRes.value.token, consumed: inlineRes.value.consumed });
+    return ok({
+      token: inlineRes.value.token,
+      consumed: inlineRes.value.consumed,
+    });
   } else {
     const b = env.get(t.value);
     if (b === undefined) return err("Undefined variable");

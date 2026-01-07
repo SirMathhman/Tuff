@@ -1,6 +1,43 @@
 import type { Token } from "./tokenize";
 import { Result, err, ok } from "./result";
 
+function applyComparisonOp(
+  op: string,
+  lhs: number,
+  rhs: number
+): Result<number, string> {
+  if (op === "<") return ok(lhs < rhs ? 1 : 0);
+  if (op === ">") return ok(lhs > rhs ? 1 : 0);
+  if (op === "<=") return ok(lhs <= rhs ? 1 : 0);
+  if (op === ">=") return ok(lhs >= rhs ? 1 : 0);
+  if (op === "==") return ok(lhs === rhs ? 1 : 0);
+  if (op === "!=") return ok(lhs !== rhs ? 1 : 0);
+  return err("Invalid numeric input");
+}
+
+function evalBinaryOp(
+  tokens: Token[],
+  opType: "comp" | "op",
+  applyOp: (op: string, lhs: number, rhs: number) => Result<number, string>
+): Result<number, string> {
+  if (tokens.length === 0) return err("Invalid numeric input");
+  if (tokens[0].type !== "num") return err("Invalid numeric input");
+
+  let acc = tokens[0].value;
+  let idx = 1;
+  while (idx < tokens.length) {
+    const op = tokens[idx];
+    const nxt = tokens[idx + 1];
+    if (!op || !nxt || op.type !== opType || nxt.type !== "num")
+      return err("Invalid numeric input");
+    const res = applyOp(op.value, acc, nxt.value);
+    if (res.ok === false) return res;
+    acc = res.value;
+    idx += 2;
+  }
+  return ok(acc);
+}
+
 function applyMultiplicativeOp(
   op: string,
   lhs: Token,
@@ -58,28 +95,70 @@ function foldMultiplication(tokens: Token[]): Result<Token[], string> {
   return ok(stack);
 }
 
-function evalAddSub(tokens: Token[]): Result<number, string> {
-  if (tokens.length === 0) return err("Invalid numeric input");
-  if (tokens[0].type !== "num") return err("Invalid numeric input");
+function applyAddSubOp(
+  op: string,
+  lhs: number,
+  rhs: number
+): Result<number, string> {
+  if (op === "+") return ok(lhs + rhs);
+  if (op === "-") return ok(lhs - rhs);
+  return err("Invalid numeric input");
+}
 
-  let acc = tokens[0].value;
-  let idx = 1;
-  while (idx < tokens.length) {
-    const op = tokens[idx];
-    const nxt = tokens[idx + 1];
-    if (!op || !nxt || op.type !== "op" || nxt.type !== "num")
-      return err("Invalid numeric input");
-    if (op.value === "+") acc = acc + nxt.value;
-    else acc = acc - nxt.value;
-    idx += 2;
-  }
-  return ok(acc);
+function evalAddSub(tokens: Token[]): Result<number, string> {
+  return evalBinaryOp(tokens, "op", applyAddSubOp);
 }
 
 function evalTokensToNumber(tokens: Token[]): Result<number, string> {
-  const folded = foldMultiplication(tokens);
+  // Separate arithmetic tokens from comparison tokens
+  const arithmeticTokens: Token[] = [];
+
+  // Extract just the arithmetic part (stop at first comparison)
+  let i = 0;
+  while (i < tokens.length && tokens[i].type !== "comp") {
+    arithmeticTokens.push(tokens[i]);
+    i++;
+  }
+
+  // Evaluate arithmetic part
+  const folded = foldMultiplication(arithmeticTokens);
   if (folded.ok === false) return folded;
-  return evalAddSub(folded.value);
+  const addSubRes = evalAddSub(folded.value);
+  if (addSubRes.ok === false) return addSubRes;
+
+  // If no comparisons, return the arithmetic result
+  if (i >= tokens.length) return ok(addSubRes.value);
+
+  // Process comparisons
+  let currentValue = addSubRes.value;
+  while (i < tokens.length) {
+    if (tokens[i].type !== "comp") return err("Invalid numeric input");
+    const op = tokens[i].value as unknown as string;
+    i++;
+
+    // Next token should be a number - could be a literal number or start of an arithmetic expression
+    // We need to parse the next operand
+    const operandTokens: Token[] = [];
+    while (i < tokens.length && tokens[i].type !== "comp") {
+      operandTokens.push(tokens[i]);
+      i++;
+    }
+
+    if (operandTokens.length === 0) return err("Invalid numeric input");
+
+    // Evaluate the right operand
+    const rightFolded = foldMultiplication(operandTokens);
+    if (rightFolded.ok === false) return rightFolded;
+    const rightAddSubRes = evalAddSub(rightFolded.value);
+    if (rightAddSubRes.ok === false) return rightAddSubRes;
+
+    // Apply comparison
+    const compRes = applyComparisonOp(op, currentValue, rightAddSubRes.value);
+    if (compRes.ok === false) return compRes;
+    currentValue = compRes.value;
+  }
+
+  return ok(currentValue);
 }
 
 function reduceParentheses(tokens: Token[]): Result<Token[], string> {

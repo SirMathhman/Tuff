@@ -21,7 +21,17 @@ export interface PunctToken {
   type: "punct";
   value: ":" | "=" | ";" | "{" | "}" | "=>" | "+=" | "-=" | "*=" | "/=" | "%=";
 }
-export type Token = NumToken | OpToken | ParenToken | IdentToken | PunctToken;
+export interface CompOpToken {
+  type: "comp";
+  value: "<" | ">" | "<=" | ">=" | "==" | "!=";
+}
+export type Token =
+  | NumToken
+  | OpToken
+  | ParenToken
+  | IdentToken
+  | PunctToken
+  | CompOpToken;
 
 function parseAndPushNumber(
   s: string,
@@ -102,6 +112,10 @@ function handleChar(
 
   const compHandled = tryHandleCompoundAssign(s, i, tokens);
   if (compHandled !== -1) return ok(compHandled);
+
+  const cmpOpHandled = tryHandleComparison(s, i, tokens);
+  if (cmpOpHandled !== -1) return ok(cmpOpHandled);
+
   if ("+-*/%".includes(ch)) {
     const res = handleOperator(s, i, ch, tokens);
     if (!isOk(res)) return err(res.error);
@@ -110,7 +124,7 @@ function handleChar(
 
   if (/[0-9.]/.test(ch)) return handleNumber(s, i, tokens);
   if (/[A-Za-z_]/.test(ch)) return handleIdentifier(s, i, tokens);
-  if (ch === ":" || ch === "=" || ch === ";") return handlePunct(s, i, tokens);
+  if (ch === ":" || ch === ";" || ch === "=") return handlePunct(s, i, tokens);
   return err("Invalid token");
 }
 
@@ -139,6 +153,33 @@ function tryHandleCompoundAssign(
     });
     return i + 2;
   }
+  return -1;
+}
+
+function tryHandleComparison(s: string, i: number, tokens: Token[]): number {
+  const ch = s[i];
+  const nextCh = s[i + 1];
+
+  // Two-character operators: <=, >=, ==, !=
+  if (
+    (ch === "<" || ch === ">" || ch === "=" || ch === "!") &&
+    nextCh === "="
+  ) {
+    let opValue: "<=" | ">=" | "==" | "!=";
+    if (ch === "<") opValue = "<=";
+    else if (ch === ">") opValue = ">=";
+    else if (ch === "=") opValue = "==";
+    else opValue = "!=";
+    tokens.push({ type: "comp", value: opValue });
+    return i + 2;
+  }
+
+  // Single-character operators: <, >
+  if (ch === "<" || ch === ">") {
+    tokens.push({ type: "comp", value: ch });
+    return i + 1;
+  }
+
   return -1;
 }
 
@@ -172,7 +213,7 @@ function handlePunct(
     tokens.push({ type: "punct", value: "=>" });
     return ok(i + 2);
   }
-  tokens.push({ type: "punct", value: ch as ":" | "=" | ";" | "{" | "}" });
+  tokens.push({ type: "punct", value: ch as ":" | ";" | "=" });
   return ok(i + 1);
 }
 export function tokenize(s: string): Result<Token[], string> {
