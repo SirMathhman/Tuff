@@ -37,10 +37,11 @@ export function compile(input: string): string {
   }
 
   const hasRead =
-    replaced.indexOf("readI32()") !== -1 || replaced.indexOf("readBool()") !== -1;
+    replaced.indexOf("readI32()") !== -1 ||
+    replaced.indexOf("readBool()") !== -1;
 
-  // Remove simple type annotations like `: I32` from variable declarations.
-  replaced = replaced.replace(/:\s*I32\b/g, "");
+  // Remove simple type annotations like `: I32` and `: Bool` from variable declarations.
+  replaced = replaced.replace(/:\s*(?:I32|Bool)\b/g, "");
   // Remove Rust-style mutability marker (e.g., `let mut x`) so code is valid
   // JavaScript. Convert `let mut` -> `let` (and similarly for var/const).
   replaced = replaced.replace(/\b(let|var|const)\s+mut\b/g, "$1");
