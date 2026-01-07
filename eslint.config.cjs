@@ -29,35 +29,40 @@ module.exports = [
       "@typescript-eslint/no-unused-vars": [
         "error",
         {
-          "vars": "all",
-          "args": "after-used",
-          "ignoreRestSiblings": true,
-          "argsIgnorePattern": "^_",
-          "varsIgnorePattern": "^_"
-        }
+          vars: "all",
+          args: "after-used",
+          ignoreRestSiblings: true,
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+        },
       ],
 
       "no-restricted-syntax": [
         "error",
         {
           selector: "TSTypeLiteral",
-          message: "Avoid anonymous object types; use a named `interface` instead.",
+          message:
+            "Avoid anonymous object types; use a named `interface` instead.",
         },
         {
           selector: "ThrowStatement",
-          message: "Do not use `throw`. Return a `Result<T, X>` value instead of throwing exceptions.",
+          message:
+            "Do not use `throw`. Return a `Result<T, X>` value instead of throwing exceptions.",
         },
         {
           selector: "Literal[value=null]",
-          message: "Do not use `null`. Prefer `undefined`, `Result`, or a discriminated union for missing values.",
+          message:
+            "Do not use `null`. Prefer `undefined`, `Result`, or a discriminated union for missing values.",
         },
         {
           selector: "ContinueStatement",
-          message: "Do not use `continue`. Prefer early returns or restructure loops to avoid `continue`.",
+          message:
+            "Do not use `continue`. Prefer early returns or restructure loops to avoid `continue`.",
         },
         {
           selector: "BreakStatement",
-          message: "Do not use `break`. Restructure loops or use different control flow to avoid `break`.",
+          message:
+            "Do not use `break`. Restructure loops or use different control flow to avoid `break`.",
         },
       ],
     },
@@ -81,7 +86,8 @@ module.exports = [
         "error",
         {
           selector: "VariableDeclarator > ArrowFunctionExpression",
-          message: "Do not assign functions to variables in `result.ts`. Prefer named function declarations (e.g., `function myFunc() {}`).",
+          message:
+            "Do not assign functions to variables in `result.ts`. Prefer named function declarations (e.g., `function myFunc() {}`).",
         },
       ],
     },
