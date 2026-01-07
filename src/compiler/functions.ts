@@ -27,7 +27,12 @@ function parseParamList(params: string): ParamListResult {
   return { names, types };
 }
 
-export function findMatching(input: string, start: number, open: string = "{", close: string = "}"): number | undefined {
+export function findMatching(
+  input: string,
+  start: number,
+  open: string = "{",
+  close: string = "}"
+): number | undefined {
   let i = start;
   let depth = 1;
   for (; i < input.length && depth > 0; i++) {
@@ -86,7 +91,9 @@ export function parseFunctions(input: string): ParseFunctionsResult {
 
     const paramList = paramNames.join(", ");
 
-    out += input.slice(lastIndex, headerStart) + buildFunctionReplacement(name, paramList, body);
+    out +=
+      input.slice(lastIndex, headerStart) +
+      buildFunctionReplacement(name, paramList, body);
     lastIndex = k;
 
     ensureParamMaps();
@@ -108,7 +115,11 @@ export function parseFunctions(input: string): ParseFunctionsResult {
   };
 }
 
-function buildFunctionReplacement(name: string, paramList: string, body: string): string {
+function buildFunctionReplacement(
+  name: string,
+  paramList: string,
+  body: string
+): string {
   const transformedBody = body.replace(/\byield\b/g, "return");
   return `const ${name} = function(${paramList}) { ${transformedBody} };`;
 }

@@ -8,7 +8,11 @@ import {
   stripAnnotationsAndMut,
   checkImmutableAssignments,
 } from "./declarations";
-import { checkFunctionCallTypes, parseFunctions, findMatching } from "./functions";
+import {
+  checkFunctionCallTypes,
+  parseFunctions,
+  findMatching,
+} from "./functions";
 import { applyStringAndCtorTransforms, parseStructs } from "./structs";
 
 function replaceReads(input: string): string {
@@ -19,16 +23,20 @@ function replaceReads(input: string): string {
   return out;
 }
 
-interface ParseIfResult { replacement: string; nextIndex: number }
-
-
+interface ParseIfResult {
+  replacement: string;
+  nextIndex: number;
+}
 
 // eslint-disable-next-line complexity, max-lines-per-function
 function parseIfAt(input: string, idx: number): ParseIfResult | undefined {
   // Ensure 'if' is a standalone word
   const before = input[idx - 1];
   const after = input[idx + 2];
-  if ((before && /[A-Za-z0-9_$]/.test(before)) || (after && /[A-Za-z0-9_$]/.test(after))) {
+  if (
+    (before && /[A-Za-z0-9_$]/.test(before)) ||
+    (after && /[A-Za-z0-9_$]/.test(after))
+  ) {
     return undefined;
   }
 
@@ -53,7 +61,12 @@ function parseIfAt(input: string, idx: number): ParseIfResult | undefined {
       else if (ch === ")") depth--;
       else if (ch === "{") depth++;
       else if (ch === "}") depth--;
-      if (depth === 0 && input.startsWith("else", i) && (i === 0 || /\W/.test(input[i - 1]))) return i;
+      if (
+        depth === 0 &&
+        input.startsWith("else", i) &&
+        (i === 0 || /\W/.test(input[i - 1]))
+      )
+        return i;
     }
     return undefined;
   })();
@@ -73,7 +86,10 @@ function parseIfAt(input: string, idx: number): ParseIfResult | undefined {
   }
   const elsePart = input.slice(r, s).trim();
 
-  return { replacement: `(${cond}) ? (${thenPart}) : (${elsePart})`, nextIndex: s };
+  return {
+    replacement: `(${cond}) ? (${thenPart}) : (${elsePart})`,
+    nextIndex: s,
+  };
 }
 
 function transformIfExpressions(input: string): string {
@@ -96,6 +112,126 @@ function transformIfExpressions(input: string): string {
 
     out += parsed.replacement;
     i = parsed.nextIndex;
+  }
+  return out;
+}
+
+// eslint-disable-next-line complexity
+function splitTopLevelStatements(blockInner: string): string[] {
+  const parts: string[] = [];
+  let cur = "";
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < blockInner.length; i++) {
+    const ch = blockInner[i];
+    if (ch === "'" && !inDouble) {
+      inSingle = !inSingle;
+      cur += ch;
+    } else if (ch === '"' && !inSingle) {
+      inDouble = !inDouble;
+      cur += ch;
+    } else if (inSingle || inDouble) {
+      cur += ch;
+    } else if (ch === "(" || ch === "{" || ch === "[") {
+      depth++;
+      cur += ch;
+    } else if (ch === ")" || ch === "}" || ch === "]") {
+      depth--;
+      cur += ch;
+    } else if (ch === ";" && depth === 0) {
+      parts.push(cur.trim());
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  if (cur.trim()) parts.push(cur.trim());
+  return parts;
+}
+
+// eslint-disable-next-line max-lines-per-function
+function transformBlockExpressions(input: string): string {
+  // Transform blocks used as expressions (e.g., `let x = { let y = 100; y }`)
+  // into IIFEs that return the last expression in the block. We only
+  // transform blocks that appear in expression positions -- e.g., after '='
+  // or '(' or ',' or ':' or '?' or start-of-input.
+  let out = "";
+  let i = 0;
+  while (i < input.length) {
+    const idx = input.indexOf("{", i);
+    if (idx === -1) {
+      out += input.slice(i);
+      break;
+    }
+
+    // Look at previous non-space char to decide if this is an expression block
+    let prev = idx - 1;
+    while (prev >= 0 && /\s/.test(input[prev])) prev--;
+    const prevCh = prev >= 0 ? input[prev] : "";
+
+    // Skip constructor forms like `Point { ... }` (identifier before '{')
+    if (prevCh && (/[A-Za-z0-9_$]/.test(prevCh) || prevCh === ']' || prevCh === ')')) {
+      out += input.slice(i, idx + 1);
+      i = idx + 1;
+      continue;
+    }
+
+    // Only transform when previous char suggests expression position
+    const exprPrevChars = new Set([
+      "=",
+      "(",
+      ":",
+      ",",
+      "?",
+      "!",
+      "+",
+      "-",
+      "*",
+      "/",
+      "%",
+      "^",
+      "&",
+      "|",
+      "~",
+      "[",
+      "{",
+      "",
+    ]);
+    if (!exprPrevChars.has(prevCh)) {
+      out += input.slice(i, idx + 1);
+      i = idx + 1;
+      continue;
+    }
+
+    // find matching brace
+    const matching = findMatching(input, idx + 1, "{", "}");
+    if (matching === undefined) {
+      // unbalanced; copy and move on
+      out += input.slice(i, idx + 1);
+      i = idx + 1;
+      continue;
+    }
+
+    const inner = input.slice(idx + 1, matching - 1);
+    const stmts = splitTopLevelStatements(inner).map((s) =>
+      transformBlockExpressions(s)
+    );
+    let iifeBody: string;
+    if (stmts.length === 0) {
+      iifeBody = `${inner}; return (0);`;
+    } else if (stmts.length === 1) {
+      // single statement - return it (stmt may be another block that got transformed)
+      iifeBody = `return (${stmts[0]});`;
+    } else {
+      const last = stmts.pop()!;
+      const rest = stmts.join("; ");
+      iifeBody = `${rest}; return (${last});`;
+    }
+
+    const iife = `(function(){ ${iifeBody} })()`;
+    out += input.slice(i, idx) + iife;
+    i = matching;
   }
   return out;
 }
@@ -132,6 +268,10 @@ export function compileImpl(input: string): string {
   // Convert expression-level `if (cond) a else b` into JS ternary expressions so
   // they can be used as expressions in compiled output.
   replaced = transformIfExpressions(replaced);
+
+  // Convert block {...} used as expressions into IIFEs that return the last
+  // expression in the block. This preserves block-scoped declarations.
+  replaced = transformBlockExpressions(replaced);
 
   const typeError = checkFunctionCallTypes(replaced, fnParsed);
   if (typeError) return typeError;

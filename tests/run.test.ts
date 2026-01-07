@@ -108,6 +108,7 @@ describe("run - strings and chars", () => {
   });
 });
 
+/* eslint-disable max-lines-per-function */
 describe("run - control flow", () => {
   test("if expression with reads returns correct branch", () => {
     const code = "if (read<Bool>()) 3 else 5";
@@ -131,6 +132,21 @@ describe("run - control flow", () => {
   test("declaration without initializer can be assigned later", () => {
     const code = "let x : I32; x = read<I32>(); x";
     expect(runModule.run(code, "100")).toBe(100);
+  });
+
+  test("block expression assigned to variable returns last expression", () => {
+    const code = "let x = { let y = 100; y }; x";
+    expect(runModule.run(code)).toBe(100);
+  });
+
+  test("nested block expressions and reads work", () => {
+    const code = "let x = { let y = { let z = read<I32>(); z }; y }; x";
+    expect(runModule.run(code, "100")).toBe(100);
+  });
+
+  test("block expression with single expression returns it", () => {
+    const code = "let x = { 3 }; x";
+    expect(runModule.run(code)).toBe(3);
   });
 
   test("compound assignment (+=) on mutable variable works", () => {
@@ -167,6 +183,7 @@ describe("run - control flow", () => {
     expect(runModule.run(code)).toBe(6);
   });
 });
+/* eslint-enable max-lines-per-function */
 
 describe("run - arrays", () => {
   test("array indexing works and sums values", () => {
