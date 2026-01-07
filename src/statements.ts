@@ -1,7 +1,7 @@
 import { Token } from "./tokenize";
 import { Result, ok, err, isErr } from "./result";
 import { Binding, StructInstance } from "./matchEval";
-import { evalExprUntilSemicolon, tryAssignment } from "./assignmentEval";
+import { evalExprUntilSemicolon } from "./assignmentEval";
 import { indexUntilSemicolon, findMatchingBrace } from "./commonUtils";
 import { parseFunctionSignature } from "./functions";
 import { parseStructDefinition } from "./structs";

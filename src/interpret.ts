@@ -5,16 +5,10 @@ import {
   Binding,
   InlineIfResult,
   FunctionBinding,
-  FunctionParameter,
   evalInlineMatchToNumToken,
-  VariableValue,
 } from "./matchEval";
-import { evalExprUntilSemicolon, tryAssignment } from "./assignmentEval";
-import {
-  indexUntilSemicolon,
-  findMatchingBrace,
-  findMatching,
-} from "./commonUtils";
+import { tryAssignment } from "./assignmentEval";
+import { findMatchingBrace, findMatching } from "./commonUtils";
 import {
   evaluateFieldAccess,
   evaluateStructInstantiation,
