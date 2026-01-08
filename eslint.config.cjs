@@ -40,11 +40,13 @@ module.exports = [
         },
         {
           selector: "TSAsExpression",
-          message: "Type assertions using 'as' are banned; use type guards or 'in' checks instead",
+          message:
+            "Type assertions using 'as' are banned; use type guards or 'in' checks instead",
         },
         {
           selector: "TSTypeAssertion",
-          message: "Type assertions using <T> are banned; use type guards or 'in' checks instead",
+          message:
+            "Type assertions using <T> are banned; use type guards or 'in' checks instead",
         },
       ],
     },

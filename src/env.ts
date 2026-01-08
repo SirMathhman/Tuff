@@ -38,8 +38,7 @@ function makeProxyFromMap(m: Map<string, unknown>) {
   const proxyTarget = {};
   return new Proxy(proxyTarget, {
     get(_, prop: string | symbol) {
-      if (typeof prop === "symbol")
-        return getSymbolProp(m, prop);
+      if (typeof prop === "symbol") return getSymbolProp(m, prop);
       if (prop === "__isEnvProxy") return true;
       if (prop === "__isMapProxy") return true;
       if (m.has(prop)) return m.get(prop);
@@ -81,12 +80,10 @@ function makeProxyFromObject(obj: { [k: string]: unknown }) {
   const proxyTarget = {};
   return new Proxy(proxyTarget, {
     get(_, prop: string | symbol) {
-      if (typeof prop === "symbol")
-        return getSymbolProp(obj, prop);
+      if (typeof prop === "symbol") return getSymbolProp(obj, prop);
       if (prop === "__isEnvProxy") return true;
       if (prop === "__isMapProxy") return false;
-      if (Object.prototype.hasOwnProperty.call(obj, prop))
-        return obj[prop];
+      if (Object.prototype.hasOwnProperty.call(obj, prop)) return obj[prop];
       // provide Map-like helpers bound to object semantics
       if (prop === "get") return (k: string) => obj[k];
       if (prop === "set") return (k: string, v: unknown) => (obj[k] = v);
@@ -146,8 +143,7 @@ export function envClone(e: Env): Env {
   }
 
   const obj: { [k: string]: unknown } = {};
-  for (const k of Object.keys(e))
-    obj[k] = getStringProp(e, k);
+  for (const k of Object.keys(e)) obj[k] = getStringProp(e, k);
   return makeProxyFromObject(obj);
 }
 
@@ -192,8 +188,7 @@ export function envDelete(e: Env, k: string): void {
 export function envEntries(e: Env): IterableIterator<[string, unknown]> {
   if (isMapProxy(e)) {
     const entriesMethod = getStringProp(e, "entries");
-    if (typeof entriesMethod === "function")
-      return entriesMethod();
+    if (typeof entriesMethod === "function") return entriesMethod();
   }
   // eslint-disable-next-line no-restricted-syntax
   return Object.entries(e)[Symbol.iterator]() as IterableIterator<

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { interpret } from "../src/interpret";
 import { evaluateReturningOperand } from "../src/eval";
-import { interpretAll } from "../src/interpret_helpers";
+import { interpretAll, interpretAllWithNative } from "../src/interpret_helpers";
 import type { Env } from "../src/env";
 import { isPlainObject, isStructInstance, isThisBinding } from "../src/types";
 
@@ -471,6 +471,14 @@ describe("interpret (basic behavior)", () => {
     ).toBe(100);
   });
 
+  it("interpretAll supports nested namespace names via '::' and computed keys", () => {
+    const scripts: { [k: string]: string } = {};
+    scripts["main"] = "from b::lib use { get }; get()";
+    // Simulate a computed array-like key (coerced to "b,lib")
+    scripts[['b', 'lib'].join(',')] = "out fn get() => 100;";
+    expect(interpretAll(scripts, "main")).toBe(100);
+  });
+
   it("interpretAll throws when importing a missing namespace", () => {
     expect(() =>
       interpretAll(
@@ -535,5 +543,11 @@ describe("interpret (basic behavior)", () => {
         "lib"
       )
     ).toBe(0);
+  });
+
+  it("interpretAllWithNative supports native modules and extern declarations", () => {
+    const scripts = { main: "extern from lib use { get }; extern fn get() : I32; get()" };
+    const natives = { lib: "export function get() { return 100; }" };
+    expect(interpretAllWithNative(scripts, natives, "main")).toBe(100);
   });
 });

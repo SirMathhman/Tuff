@@ -85,11 +85,36 @@ function interpretBlockInternal(
       continue;
     }
 
-    // import statement: `from <ns> use { a, b }` — bind symbols from other namespace
-    if (/^from\b/.test(stmt)) {
-      const m = stmt.match(
-        /^from\s+([a-zA-Z_]\w*)\s+use\s*\{\s*([a-zA-Z_]\w*(?:\s*,\s*[a-zA-Z_]\w*)*)\s*\}\s*$/
-      );
+    if (/^extern\s+fn\b/.test(stmt)) {
+      // extern function declaration: `extern fn name(params) : Type` (no body)
+      const m = stmt.match(/^extern\s+fn\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*(?::\s*([^;]+))?\s*;?$/);
+      if (!m) throw new Error("invalid extern fn declaration");
+      const name = m[1];
+      const paramsStr = m[2].trim();
+      const params = paramsStr === "" ? [] : paramsStr.split(",").map((p) => p.trim());
+      const resultAnnotation = m[3] ? m[3].trim() : undefined;
+      if (declared.has(name)) {
+        // symbol already declared (e.g., via an import); extern fn is a no-op here
+        last = undefined;
+        continue;
+      }
+      declared.add(name);
+      // register placeholder fn wrapper (no nativeImpl yet)
+      envSet(localEnv, name, { fn: { params, body: "/* extern */", isBlock: false, resultAnnotation, closureEnv: undefined } });
+      last = undefined;
+      continue;
+    }
+
+    // import statement: optionally prefixed with `extern`: `extern from <ns> use { a, b }`
+    if (/^extern\b/.test(stmt) || /^from\b/.test(stmt)) {
+      let importStmt = stmt;
+      if (/^extern\b/.test(importStmt)) importStmt = importStmt.replace(/^extern\s+/, "");
+      const importRE = /from\s+([a-zA-Z_]\w*(?:::[a-zA-Z_]\w*)*)\s+use\s*\{\s*([a-zA-Z_]\w*(?:\s*,\s*[a-zA-Z_]\w*)*)\s*\}/;
+      let m = importStmt.match(importRE);
+      if (!m) {
+        const idx = importStmt.indexOf("from");
+        if (idx !== -1) m = importStmt.slice(idx).match(importRE);
+      }
       if (!m) throw new Error("invalid import syntax");
       const nsName = m[1];
       const names = m[2].split(",").map((x) => x.trim());
@@ -440,7 +465,10 @@ function interpretBlockInternal(
           const newVal = computeAssignmentValue(op, targetExisting, rhsOperand);
 
           // For deref assignment to a placeholder, validate annotation
-          if (isPlainObject(targetExisting) && hasUninitialized(targetExisting)) {
+          if (
+            isPlainObject(targetExisting) &&
+            hasUninitialized(targetExisting)
+          ) {
             if (
               hasLiteralAnnotation(targetExisting) &&
               targetExisting.literalAnnotation &&
@@ -460,11 +488,8 @@ function interpretBlockInternal(
             ) {
               validateAnnotation(targetExisting.annotation, newVal);
             }
-            // eslint-disable-next-line no-restricted-syntax
-            (targetExisting as unknown as { value: unknown }).value = newVal;
-            // eslint-disable-next-line no-restricted-syntax
-            (targetExisting as unknown as { uninitialized: boolean }).uninitialized = false;
-            envSet(localEnv, targetName, targetExisting);
+            // Use helpers to avoid direct casts and ensure consistent behavior
+            assignToPlaceholder(targetName, targetExisting, newVal, localEnv);
           } else if (
             isPlainObject(targetExisting) &&
             hasValue(targetExisting) &&
@@ -472,9 +497,7 @@ function interpretBlockInternal(
             hasMutable(targetExisting) &&
             targetExisting.mutable
           ) {
-            // eslint-disable-next-line no-restricted-syntax
-            (targetExisting as unknown as { value: unknown }).value = newVal;
-            envSet(localEnv, targetName, targetExisting);
+            assignValueToVariable(targetName, targetExisting, newVal, localEnv);
           } else {
             envSet(localEnv, targetName, newVal);
           }

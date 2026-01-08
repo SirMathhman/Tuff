@@ -38,6 +38,7 @@ import {
   hasIsBlock,
   hasName,
   hasFields,
+  getProp,
 } from "./types";
 
 export function isTruthy(val: unknown): boolean {
@@ -179,7 +180,15 @@ export function applyBinaryOp(
 /**
  * Resolve a function from either a function operand or an identifier name
  */
-import { Env, envHas, envGet, envSet, envEntries, envClone, isEnv } from "./env";
+import {
+  Env,
+  envHas,
+  envGet,
+  envSet,
+  envEntries,
+  envClone,
+  isEnv,
+} from "./env";
 
 function mustGetEnvBinding(env: Env, name: string): unknown {
   if (!envHas(env, name)) throw new Error(`unknown identifier ${name}`);
@@ -192,8 +201,7 @@ function resolveFunctionFromOperand(operand: unknown, localEnv: Env): unknown {
   } else if (hasIdent(operand)) {
     const name = operand.ident;
     const binding = mustGetEnvBinding(localEnv, name);
-    if (!isFnWrapper(binding))
-      throw new Error("not a function");
+    if (!isFnWrapper(binding)) throw new Error("not a function");
     return binding.fn;
   } else {
     throw new Error("cannot call non-function");
@@ -249,7 +257,11 @@ function executeFunctionBody(fn: unknown, callEnv: Env): unknown {
     } = { isThisBinding: true, fieldValues: {} };
     for (const [k, envVal] of envEntries(callEnv)) {
       if (k === "this") continue;
-      if (isPlainObject(envVal) && hasValue(envVal) && envVal.value !== undefined)
+      if (
+        isPlainObject(envVal) &&
+        hasValue(envVal) &&
+        envVal.value !== undefined
+      )
         thisObj.fieldValues[k] = envVal.value;
       else if (
         typeof envVal === "number" ||
@@ -496,7 +508,11 @@ export function evaluateReturningOperand(
   // helper to get binding and deref target
   function getBindingTarget(name: string) {
     const binding = mustGetEnvBinding(localEnv, name);
-    if (isPlainObject(binding) && hasUninitialized(binding) && binding.uninitialized)
+    if (
+      isPlainObject(binding) &&
+      hasUninitialized(binding) &&
+      binding.uninitialized
+    )
       throw new Error(`use of uninitialized variable ${name}`);
     const targetVal = unwrapBindingValue(binding);
     return { binding, targetVal };
@@ -660,7 +676,11 @@ export function evaluateReturningOperand(
         for (const [key, value] of envEntries(localEnv)) {
           if (key !== "this") {
             // Extract the actual value
-            if (isPlainObject(value) && hasValue(value) && value.value !== undefined) {
+            if (
+              isPlainObject(value) &&
+              hasValue(value) &&
+              value.value !== undefined
+            ) {
               thisObj.fieldValues[key] = value.value;
             } else if (
               typeof value === "number" ||
@@ -735,6 +755,20 @@ export function evaluateReturningOperand(
         argOps[j]
       );
       envSet(callEnv, pname, argOps[j]);
+    }
+    // If this function has a native implementation, invoke it directly.
+    // `nativeImpl` is stored on the fn object when created by `interpretAllWithNative`.
+    const maybeNative = getProp(fn, "nativeImpl");
+    if (typeof maybeNative === "function") {
+      const convertArg = (a: unknown) => {
+        if (isIntOperand(a)) return Number(a.valueBig);
+        if (isFloatOperand(a)) return a.floatValue;
+        if (isBoolOperand(a)) return a.boolValue;
+        return a;
+      };
+      const jsArgs = argOps.map(convertArg);
+      // Use Reflect.apply to call the unknown function safely without type casts
+      return Reflect.apply(maybeNative, undefined, jsArgs);
     }
     return executeFunctionBody(fn, callEnv);
   }

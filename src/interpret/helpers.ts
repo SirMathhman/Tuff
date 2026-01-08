@@ -22,7 +22,9 @@ export function computeAssignmentValue(
   let newVal: unknown = rhsOperand;
   if (op) {
     const cur =
-      isPlainObject(existing) && hasValue(existing) && existing.value !== undefined
+      isPlainObject(existing) &&
+      hasValue(existing) &&
+      existing.value !== undefined
         ? existing.value
         : existing;
     newVal = applyBinaryOp(op, cur, rhsOperand);
@@ -74,9 +76,16 @@ export function assignToPlaceholder(
     (!hasMutable(existing) || !existing.mutable)
   )
     throw new Error("cannot reassign annotated literal");
-  if (hasParsedAnnotation(existing) && hasUninitialized(existing) && existing.uninitialized) {
+  if (
+    hasParsedAnnotation(existing) &&
+    hasUninitialized(existing) &&
+    existing.uninitialized
+  ) {
     validateAnnotation(existing.parsedAnnotation, newVal);
-  } else if (hasAnnotation(existing) && typeof existing.annotation === "string") {
+  } else if (
+    hasAnnotation(existing) &&
+    typeof existing.annotation === "string"
+  ) {
     const annotation = existing.annotation;
     const typeOnly = annotation.match(/^\s*([uUiI])\s*(\d+)\s*$/);
     if (typeOnly || /^\s*bool\s*$/i.test(annotation)) {

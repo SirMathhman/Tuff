@@ -10,9 +10,7 @@ export function isPlainObject(v: unknown): v is PlainObject {
 
 export function isBoolOperand(v: unknown): v is { boolValue: boolean } {
   return (
-    isPlainObject(v) &&
-    "boolValue" in v &&
-    typeof v.boolValue === "boolean"
+    isPlainObject(v) && "boolValue" in v && typeof v.boolValue === "boolean"
   );
 }
 
@@ -29,11 +27,7 @@ export function isFloatOperand(
 }
 
 export function isIntOperand(v: unknown): v is { valueBig: bigint } {
-  return (
-    isPlainObject(v) &&
-    "valueBig" in v &&
-    typeof v.valueBig === "bigint"
-  );
+  return isPlainObject(v) && "valueBig" in v && typeof v.valueBig === "bigint";
 }
 
 export function isFnWrapper(v: unknown): v is { fn: PlainObject } {
@@ -65,9 +59,7 @@ export function isStructInstance(
 }
 
 export function isStructDef(v: unknown): v is { isStructDef: true } {
-  return (
-    isPlainObject(v) && "isStructDef" in v && v.isStructDef === true
-  );
+  return isPlainObject(v) && "isStructDef" in v && v.isStructDef === true;
 }
 
 export function isPointer(v: unknown): v is { pointer: true; ptrName: string } {
@@ -108,9 +100,7 @@ export function hasStringProp(obj: unknown, key: string): boolean {
 }
 
 // Type guards for common property shapes
-export function hasKindBits(
-  v: unknown
-): v is { kind: string; bits: number } {
+export function hasKindBits(v: unknown): v is { kind: string; bits: number } {
   return (
     isPlainObject(v) &&
     "kind" in v &&
@@ -147,10 +137,7 @@ export function hasStructInstantiation(
 }
 
 export function hasValue(v: unknown): v is { value: unknown } {
-  return (
-    isPlainObject(v) &&
-    Object.prototype.hasOwnProperty.call(v, "value")
-  );
+  return isPlainObject(v) && Object.prototype.hasOwnProperty.call(v, "value");
 }
 
 export function hasMutable(v: unknown): v is { mutable: unknown } {
@@ -209,14 +196,8 @@ export function hasPtrIsBool(v: unknown): v is { ptrIsBool: unknown } {
   return isPlainObject(v) && "ptrIsBool" in v;
 }
 
-export function hasYield(
-  v: unknown
-): v is { __yield: number } {
-  return (
-    isPlainObject(v) &&
-    "__yield" in v &&
-    typeof v.__yield === "number"
-  );
+export function hasYield(v: unknown): v is { __yield: number } {
+  return isPlainObject(v) && "__yield" in v && typeof v.__yield === "number";
 }
 
 export type InterpretFn = (_input: string, _env?: Env) => number;

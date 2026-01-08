@@ -11,6 +11,7 @@ import {
   getProp,
   hasKindBits,
   hasPtrIsBool,
+  toErrorMessage,
 } from "./types";
 import type { InterpretFn } from "./types";
 /* eslint-disable max-lines */
@@ -72,7 +73,11 @@ export function checkAnnMatchesRhs(ann: unknown, rhsOperand: unknown) {
   if (ann.valueBig !== rhsOperand.valueBig)
     throw new Error("annotation value does not match initializer");
   if (hasKindBits(rhsOperand)) {
-    if (!hasKindBits(ann) || ann.kind !== rhsOperand.kind || ann.bits !== rhsOperand.bits)
+    if (
+      !hasKindBits(ann) ||
+      ann.kind !== rhsOperand.kind ||
+      ann.bits !== rhsOperand.bits
+    )
       throw new Error("annotation kind/bits do not match initializer");
   }
 }
@@ -556,41 +561,114 @@ export function interpretAll(
   scripts: { [k: string]: string },
   mainNamespace: string
 ): number {
+  // Forward to interpretAllWithNative with no native modules
+  return interpretAllWithNative(scripts, {}, mainNamespace);
+}
+
+/**
+ * Interpret scripts with support for native (host) modules provided as plain JS strings.
+ * `nativeModules` maps namespace name to a native module body string. Native modules
+ * may use a simple `export function name(...) { ... }` syntax which gets converted
+ * into `exports.name = function (...) { ... }` at runtime. Native exported functions
+ * are wrapped so they can be imported into scripts and called like normal functions.
+ */
+export function interpretAllWithNative(
+  scripts: { [k: string]: string },
+  nativeModules: { [k: string]: string },
+  mainNamespace: string
+): number {
   if (!scripts || typeof scripts !== "object")
     throw new Error("scripts must be an object");
+  if (!nativeModules || typeof nativeModules !== "object")
+    throw new Error("nativeModules must be an object");
   if (typeof mainNamespace !== "string")
     throw new Error("mainNamespace must be a string");
-  if (!Object.prototype.hasOwnProperty.call(scripts, mainNamespace))
+
+  // Normalize script and native keys (replace comma-based computed keys with ::)
+  const normalizedScripts: { [k: string]: string } = {};
+  for (const k of Object.keys(scripts)) normalizedScripts[k.replace(/,/g, "::")] = scripts[k];
+  const normalizedNative: { [k: string]: string } = {};
+  for (const k of Object.keys(nativeModules))
+    normalizedNative[k.replace(/,/g, "::")] = nativeModules[k];
+
+  if (!Object.prototype.hasOwnProperty.call(normalizedScripts, mainNamespace))
     throw new Error("main namespace not found");
 
   const interpFn = globalThis.interpret;
   if (typeof interpFn !== "function")
     throw new Error("internal error: interpret() is not available");
 
-  // Prepare namespace registry and resolver
+  // Helper to evaluate a native module string into an exports object
+  const evaluateNativeModule = (code: string) => {
+    const exports: { [k: string]: unknown } = {};
+    // Convert `export function name(...) {` into `exports.name = function (...) {`
+    const transformed = code.replace(/(^|\n)\s*export\s+function\s+([a-zA-Z_]\w*)\s*\(/g, (m, p1, name) => {
+      return `${p1}exports.${name} = function (`;
+    });
+    try {
+      const fn = new Function("exports", transformed);
+      fn(exports);
+    } catch (e) {
+      throw new Error(`failed to evaluate native module: ${toErrorMessage(e)}`);
+    }
+    return exports;
+  };
+
+  // Prepare namespace registry and resolver that merges script and native exports
   const namespaceRegistry: { [k: string]: { [k: string]: unknown } } = {};
   const resolveNamespace = (nsName: string) => {
-    if (!scripts || !Object.prototype.hasOwnProperty.call(scripts, nsName))
+    if (!Object.prototype.hasOwnProperty.call(normalizedScripts, nsName) && !Object.prototype.hasOwnProperty.call(normalizedNative, nsName))
       throw new Error("namespace not found");
     if (!Object.prototype.hasOwnProperty.call(namespaceRegistry, nsName)) {
       const nsEnv: { [k: string]: unknown } = {};
       // Exports object where `out` declarations will register their symbols
       nsEnv.__exports = {};
-      interpFn(scripts[nsName], nsEnv);
-      // nsEnv.__exports is guaranteed to be a plain object from isPlainObject check
-      namespaceRegistry[nsName] = isPlainObject(nsEnv.__exports)
-        // eslint-disable-next-line no-restricted-syntax
-        ? (nsEnv.__exports as { [k: string]: unknown })
-        : {};
+      // Run script-backed module first if present
+      if (Object.prototype.hasOwnProperty.call(normalizedScripts, nsName)) {
+        interpFn(normalizedScripts[nsName], nsEnv);
+      }
+      // Merge native module exports (native takes precedence)
+      // Collect exported symbols from script-executed module (if any)
+      const collectedExports: { [k: string]: unknown } = {};
+      if (isPlainObject(nsEnv.__exports)) {
+        for (const [kk, vv] of Object.entries(nsEnv.__exports)) collectedExports[kk] = vv;
+      }
+
+      // Merge native module exports (native takes precedence)
+      if (Object.prototype.hasOwnProperty.call(normalizedNative, nsName)) {
+        const nativeExports = evaluateNativeModule(normalizedNative[nsName]);
+        for (const [k, v] of Object.entries(nativeExports)) {
+          if (typeof v === "function") {
+            // fn wrapper shape expected by interpreter
+            const wrapper = {
+              fn: {
+                params: [],
+                body: "/* native */",
+                isBlock: false,
+                resultAnnotation: undefined,
+                // Provide an empty object env so callers can clone it as a base
+                closureEnv: {},
+                nativeImpl: v,
+              },
+            };
+            collectedExports[k] = wrapper;
+          } else {
+            collectedExports[k] = v;
+          }
+        }
+      }
+
+      // nsEnv.__exports is guaranteed to be a plain object; use the collected map
+      namespaceRegistry[nsName] = collectedExports;
     }
     return namespaceRegistry[nsName];
   };
 
   // Provide resolver and registry to the main env
   const env: { [k: string]: unknown } = {};
-  env.__namespaces = scripts;
+  env.__namespaces = normalizedScripts;
   env.__namespace_registry = namespaceRegistry;
   env.__resolve_namespace = resolveNamespace;
 
-  return interpFn(scripts[mainNamespace], env);
+  return interpFn(normalizedScripts[mainNamespace], env);
 }
