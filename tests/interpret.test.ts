@@ -377,6 +377,10 @@ describe("interpret (basic behavior)", () => {
     ).toBe(7);
   });
 
+  it("returns 'this' from a function used as constructor ('fn Wrapper(value : I32) => this; Wrapper(100).value' => 100)", () => {
+    expect(interpret("fn Wrapper(value : I32) => this; Wrapper(100).value")).toBe(100);
+  });
+
   it("handles empty struct definition ('struct Empty {}' => 0)", () => {
     expect(interpret("struct Empty {}")).toBe(0);
   });
