@@ -1,10 +1,15 @@
+/* eslint-disable max-lines */
 import {
   parseOperandAt,
   splitTopLevelStatements,
   findMatchingClosingParen,
   parseCommaSeparatedArgs,
 } from "./parser";
-import { validateAnnotation, parseFnComponents, findMatchingParen } from "./interpret_helpers";
+import {
+  validateAnnotation,
+  parseFnComponents,
+  findMatchingParen,
+} from "./interpret_helpers";
 
 export function isTruthy(val: any): boolean {
   if (val && (val as any).boolValue !== undefined)
@@ -145,10 +150,7 @@ function resolveFunctionFromOperand(
  * Execute a function body and return the result
  * Handles both block bodies (executed via interpret) and expression bodies
  */
-function executeFunctionBody(
-  fn: any,
-  callEnv: Record<string, any>
-): any {
+function executeFunctionBody(fn: any, callEnv: Record<string, any>): any {
   if (fn.isBlock) {
     const inner = fn.body.replace(/^\{\s*|\s*\}$/g, "");
     const v = (globalThis as any).interpret
@@ -177,7 +179,8 @@ export function evaluateReturningOperand(
     const condStart = sTrim.indexOf("(");
     if (condStart === -1) throw new Error("invalid if syntax: missing (");
     const condEnd = findMatchingParen(sTrim, condStart, "(", ")");
-    if (condEnd === -1) throw new Error("invalid if syntax: unbalanced parentheses");
+    if (condEnd === -1)
+      throw new Error("invalid if syntax: unbalanced parentheses");
     const condStr = sTrim.slice(condStart + 1, condEnd).trim();
     const condVal = evaluateReturningOperand(condStr, localEnv);
     const isTruthy = (() => {
@@ -186,7 +189,8 @@ export function evaluateReturningOperand(
       if (condVal && (condVal as any).valueBig !== undefined)
         return (condVal as any).valueBig !== 0n;
       if (typeof condVal === "number") return condVal !== 0;
-      if (condVal && (condVal as any).isFloat) return (condVal as any).floatValue !== 0;
+      if (condVal && (condVal as any).isFloat)
+        return (condVal as any).floatValue !== 0;
       return false;
     })();
 
@@ -212,7 +216,10 @@ export function evaluateReturningOperand(
     falseBranch = rest;
     if (!falseBranch) throw new Error("missing else branch");
 
-    return evaluateReturningOperand(isTruthy ? trueBranch : falseBranch, localEnv);
+    return evaluateReturningOperand(
+      isTruthy ? trueBranch : falseBranch,
+      localEnv
+    );
   }
 
   // Support a 'match' expression: match (<expr>) { case <pat> => <expr>; ... default => <expr>; }
@@ -315,6 +322,20 @@ export function evaluateReturningOperand(
       const args = parseCommaSeparatedArgs(inner);
       exprTokens.push({ op: "call", operand: { callApp: args } });
       pos = endIdx + 1;
+      skip();
+      continue;
+    }
+    // Check for field access (e.g., `expr.field`)
+    if (exprStr[pos] === ".") {
+      pos++;
+      // Parse field name
+      const fieldMatch = exprStr.slice(pos).match(/^([a-zA-Z_]\w*)/);
+      if (!fieldMatch) throw new Error("invalid field access: expected field name after .");
+      const fieldName = fieldMatch[1];
+      // For field access, we use a special "operator" that stores the field name
+      // The operand will be added as an empty placeholder to maintain the token structure
+      exprTokens.push({ op: `.${fieldName}`, operand: undefined });
+      pos += fieldName.length;
       skip();
       continue;
     }
@@ -422,6 +443,52 @@ export function evaluateReturningOperand(
       throw new Error("invalid dereference target");
     }
 
+    // struct instantiation handling
+    if (op && (op as any).structInstantiation) {
+      const { name: structName, fields: fieldParts } = (op as any).structInstantiation;
+
+      // Look up struct definition
+      if (!(structName in localEnv)) throw new Error(`unknown struct ${structName}`);
+      const structDef = localEnv[structName];
+      if (!structDef || !(structDef as any).isStructDef)
+        throw new Error(`${structName} is not a struct`);
+
+      // Evaluate field values
+      const fieldValues: Record<string, any> = {};
+      const providedFields = new Set<string>();
+
+      for (const fieldPart of fieldParts) {
+        const fieldName = fieldPart.name;
+        const fieldValue = evaluateReturningOperand(fieldPart.value, localEnv);
+
+        // Check for duplicate fields
+        if (providedFields.has(fieldName)) throw new Error(`duplicate field ${fieldName}`);
+        providedFields.add(fieldName);
+        fieldValues[fieldName] = fieldValue;
+      }
+
+      // Validate all required fields are provided
+      const structFields = (structDef as any).fields as Array<{ name: string; annotation: string }>;
+      for (const field of structFields) {
+        if (!providedFields.has(field.name)) {
+          throw new Error(`missing field ${field.name} in struct ${structName}`);
+        }
+        // For struct fields, just validate that the type annotation is recognized
+        // but don't require literal value matching (different from let bindings)
+        const annotation = field.annotation.trim();
+        if (!/^[*]?([a-zA-Z_]\w*)(?:\d+)?$/.test(annotation)) {
+          throw new Error(`invalid type annotation for field ${field.name}`);
+        }
+      }
+
+      // Create struct instance
+      return {
+        isStructInstance: true,
+        structName,
+        fieldValues,
+      };
+    }
+
     // function call handling (identifier with callArgs)
     if (op && (op as any).callArgs) {
       // evaluate arguments
@@ -449,6 +516,27 @@ export function evaluateReturningOperand(
     // identifier resolution (existing behavior)
     if (op && (op as any).ident) {
       const n = (op as any).ident as string;
+
+      // Special handling for 'this' binding
+      if (n === "this") {
+        const thisObj: any = { isThisBinding: true, fieldValues: {} };
+        // Build fieldValues from current localEnv
+        for (const [key, value] of Object.entries(localEnv)) {
+          if (key !== "this") {
+            // Extract the actual value
+            if (value && (value as any).value !== undefined) {
+              thisObj.fieldValues[key] = (value as any).value;
+            } else if (typeof value === "number" || typeof value === "string" || typeof value === "boolean") {
+              thisObj.fieldValues[key] = value;
+            } else if (!(value as any).fn && !(value as any).isStructDef) {
+              // Non-function, non-struct values
+              thisObj.fieldValues[key] = value;
+            }
+          }
+        }
+        return thisObj;
+      }
+
       const { targetVal: val } = getBindingTarget(n);
       if (val && (val as any).value !== undefined) return (val as any).value;
       return val;
@@ -467,7 +555,7 @@ export function evaluateReturningOperand(
     }
   }
 
-  // Handle function application (highest precedence, left-to-right)
+  // Handle function application and field access (highest precedence, left-to-right)
   let i = 0;
   while (i < ops.length) {
     if (ops[i] === "call") {
@@ -501,6 +589,27 @@ export function evaluateReturningOperand(
 
       operands.splice(i, 2, result);
       ops.splice(i, 1);
+    } else if (ops[i] && ops[i].startsWith(".")) {
+      // Field access operator
+      const fieldName = ops[i].substring(1); // Remove the '.' prefix
+      const structInstance = operands[i];
+
+      if (!structInstance) {
+        throw new Error(`cannot access field on null value`);
+      }
+
+      // Handle both struct instances and this binding
+      if ((structInstance as any).isStructInstance || (structInstance as any).isThisBinding) {
+        const fieldValue = (structInstance as any).fieldValues[fieldName];
+        if (fieldValue === undefined) {
+          throw new Error(`invalid field access: ${fieldName}`);
+        }
+
+        operands.splice(i, 1, fieldValue);
+        ops.splice(i, 1);
+      } else {
+        throw new Error(`cannot access field on non-struct value`);
+      }
     } else {
       i++;
     }

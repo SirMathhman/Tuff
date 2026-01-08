@@ -38,6 +38,30 @@ export function findMatchingClosingParen(
 }
 
 /**
+ * Find matching closing delimiter (supports parens, braces, brackets)
+ * Returns the index of the closing delimiter, or -1 if unbalanced
+ */
+export function findMatchingDelimiter(
+  src: string,
+  startPos: number,
+  openChar: string,
+  closeChar: string
+): number {
+  let depth = 0;
+  for (let k = startPos; k < src.length; k++) {
+    const ch = src[k];
+    if (ch === openChar) depth++;
+    else if (ch === closeChar) {
+      depth--;
+      if (depth === 0) {
+        return k;
+      }
+    }
+  }
+  return -1;
+}
+
+/**
  * Parse comma-separated arguments from a string, respecting nested parens and braces
  * Returns array of trimmed argument strings
  */
@@ -136,10 +160,10 @@ export function parseOperandAt(src: string, pos: number) {
   // fallback: identifier
   const id = src.slice(i).match(/^([a-zA-Z_]\w*)/);
   if (id) {
-    // detect function call syntax `name(...)`
+    // detect function call syntax `name(...)` or struct instantiation `name { ... }`
     let operand: any = { ident: id[1] };
 
-    // look ahead for parentheses (allow whitespace)
+    // look ahead for parentheses or braces (allow whitespace)
     let j = i + id[1].length;
     while (j < src.length && /[\s]/.test(src[j])) j++;
     if (src[j] === "(") {
@@ -150,6 +174,27 @@ export function parseOperandAt(src: string, pos: number) {
       operand.callArgs = args;
       operand = applyPrefixes(operand, prefixes);
       return { operand, len: i - pos + id[1].length + (endIdx - j + 1) };
+    } else if (src[j] === "{") {
+      // struct instantiation: Name { field1: value1, field2: value2, ... }
+      const endIdx = findMatchingDelimiter(src, j, "{", "}");
+      if (endIdx === -1) throw new Error("unbalanced braces in struct instantiation");
+      const inner = src.slice(j + 1, endIdx).trim();
+      // Parse field assignments (comma-separated, but values can have operators)
+      const fieldParts = parseCommaSeparatedArgs(inner);
+      const fields: Array<{ name: string; value: string }> = [];
+      for (const fieldPart of fieldParts) {
+        const fm = fieldPart.match(/^([a-zA-Z_]\w*)\s*:\s*(.+)$/);
+        if (!fm) {
+          // Allow positional fields if they're just values
+          fields.push({ name: `_${fields.length}`, value: fieldPart });
+        } else {
+          fields.push({ name: fm[1], value: fm[2].trim() });
+        }
+      }
+      operand.structInstantiation = { name: id[1], fields };
+      operand = applyPrefixes(operand, prefixes);
+      // len should be from start position i to endIdx (inclusive of closing brace)
+      return { operand, len: (i - pos) + (endIdx - i + 1) };
     }
 
     operand = applyPrefixes(operand, prefixes);

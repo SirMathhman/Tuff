@@ -6,6 +6,7 @@
     "cpd": "pmd cpd --minimum-tokens 50 --ignore-literals --ignore-identifiers src tests --language typescript",
     "lint": "eslint --ext .ts src tests",
     "test": "vitest --run",
+    "check": "npm run test && npm run cpd && npm run lint",
     "prepare": "husky install"
   },
   "devDependencies": {

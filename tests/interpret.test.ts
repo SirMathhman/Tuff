@@ -357,9 +357,7 @@ describe("interpret (basic behavior)", () => {
 
   it("supports recursive function calls ('fn fact(n) => if (n <= 1) 1 else n * fact(n - 1); fact(5)' => 120)", () => {
     expect(
-      interpret(
-        "fn fact(n) => if (n <= 1) 1 else n * fact(n - 1); fact(5)"
-      )
+      interpret("fn fact(n) => if (n <= 1) 1 else n * fact(n - 1); fact(5)")
     ).toBe(120);
   });
 
@@ -377,5 +375,29 @@ describe("interpret (basic behavior)", () => {
         "fn outer(first : I32) => fn inner(second : I32) => first + second; outer(3)(4)"
       )
     ).toBe(7);
+  });
+
+  it("handles empty struct definition ('struct Empty {}' => 0)", () => {
+    expect(interpret("struct Empty {}")).toBe(0);
+  });
+
+  it("handles struct with field access ('struct Wrapper { value : I32 } Wrapper { value : 100 }.value' => 100)", () => {
+    expect(interpret("struct Wrapper { value : I32 } Wrapper { value : 100 }.value")).toBe(100);
+  });
+
+  it("handles struct with multiple fields ('struct Point { x : I32, y : I32 } Point { x : 10, y : 20 }.x' => 10)", () => {
+    expect(interpret("struct Point { x : I32, y : I32 } Point { x : 10, y : 20 }.x")).toBe(10);
+  });
+
+  it("handles struct field access with expressions ('struct Point { x : I32, y : I32 } Point { x : 5 + 5, y : 15 + 5 }.y' => 20)", () => {
+    expect(interpret("struct Point { x : I32, y : I32 } Point { x : 5 + 5, y : 15 + 5 }.y")).toBe(20);
+  });
+
+  it("handles this binding for variable access ('let x = 100; this.x' => 100)", () => {
+    expect(interpret("let x = 100; this.x")).toBe(100);
+  });
+
+  it("handles this binding for variable assignment ('let mut x = 100; this.x = 200; x' => 200)", () => {
+    expect(interpret("let mut x = 100; this.x = 200; x")).toBe(200);
   });
 });

@@ -155,9 +155,39 @@ export function extractAssignmentParts(stmt: string): {
   name: string;
   op: string | null;
   rhs: string;
+  isThisField?: boolean;
+  fieldName?: string;
 } | null {
+  // Try this.field compound assignment: this.x += 1
+  let m = stmt.match(/^this\s*\.\s*([a-zA-Z_]\w*)\s*([+\-*/%])=\s*(.+)$/);
+  if (m) {
+    return {
+      isDeref: false,
+      isDeclOnly: false,
+      name: m[1],
+      op: m[2],
+      rhs: m[3].trim(),
+      isThisField: true,
+      fieldName: m[1],
+    };
+  }
+
+  // Try this.field assignment: this.x = ...
+  m = stmt.match(/^this\s*\.\s*([a-zA-Z_]\w*)\s*=\s*(.+)$/);
+  if (m) {
+    return {
+      isDeref: false,
+      isDeclOnly: false,
+      name: m[1],
+      op: null,
+      rhs: m[2].trim(),
+      isThisField: true,
+      fieldName: m[1],
+    };
+  }
+
   // Try deref compound assignment: *x += 1
-  let m = stmt.match(/^\*\s*([a-zA-Z_]\w*)\s*([+\-*/%])=\s*(.+)$/);
+  m = stmt.match(/^\*\s*([a-zA-Z_]\w*)\s*([+\-*/%])=\s*(.+)$/);
   if (m) {
     return {
       isDeref: true,
@@ -417,4 +447,50 @@ export function convertOperandToNumber(operand: any): number {
   if (operand && (operand as any).isFloat)
     return (operand as any).floatValue as number;
   return Number((operand as any).valueBig as bigint);
+}
+
+export function parseStructDef(
+  stmt: string
+): { name: string; fields: Array<{ name: string; annotation: string }>; endPos: number } {
+  // syntax: struct Name { field1 : Type1; field2 : Type2; ... }
+  const m = stmt.match(/^struct\s+([a-zA-Z_]\w*)\s*\{/);
+  if (!m) throw new Error("invalid struct syntax");
+
+  const name = m[1];
+  const braceStart = stmt.indexOf("{");
+  const braceEnd = findMatchingParen(stmt, braceStart, "{", "}");
+  if (braceEnd === -1) throw new Error("unbalanced braces in struct definition");
+
+  const fieldsStr = stmt.slice(braceStart + 1, braceEnd).trim();
+
+  if (!fieldsStr) {
+    // empty struct
+    return { name, fields: [], endPos: braceEnd + 1 };
+  }
+
+  // Split fields by comma (respecting nesting)
+  const fieldParts: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (const ch of fieldsStr) {
+    if (ch === "{" || ch === "(") depth++;
+    else if (ch === "}" || ch === ")") depth = Math.max(0, depth - 1);
+    else if (ch === "," && depth === 0) {
+      if (current.trim()) fieldParts.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) fieldParts.push(current.trim());
+
+  const fields: Array<{ name: string; annotation: string }> = [];
+  for (const fieldPart of fieldParts) {
+    // Each field should be: name : annotation
+    const fm = fieldPart.match(/^([a-zA-Z_]\w*)\s*:\s*(.+)$/);
+    if (!fm) throw new Error("invalid field definition");
+    fields.push({ name: fm[1], annotation: fm[2].trim() });
+  }
+
+  return { name, fields, endPos: braceEnd + 1 };
 }

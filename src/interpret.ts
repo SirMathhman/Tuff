@@ -21,7 +21,80 @@ import {
   expandParensAndBraces,
   convertOperandToNumber,
   registerFunctionFromStmt,
+  parseStructDef,
 } from "./interpret_helpers";
+
+/**
+ * Compute the new value for compound assignment
+ * @param op The compound operator (+=, -=, etc.) or null for plain assignment
+ * @param existing The existing value (may be wrapped in a mutable container)
+ * @param rhsOperand The right-hand side operand
+ * @returns The new value
+ */
+function computeAssignmentValue(op: string | null, existing: any, rhsOperand: any): any {
+  let newVal = rhsOperand;
+  if (op) {
+    const cur =
+      existing && (existing as any).value !== undefined
+        ? (existing as any).value
+        : existing;
+    newVal = applyBinaryOp(op, cur, rhsOperand);
+  }
+  return newVal;
+}
+
+/**
+ * Assign a value to a variable, handling mutable wrappers
+ * @param name Variable name
+ * @param existing The existing value object
+ * @param newVal The new value to assign
+ * @param localEnv The local environment
+ */
+function assignValueToVariable(name: string, existing: any, newVal: any, localEnv: Record<string, any>): void {
+  if (
+    existing &&
+    (existing as any).value !== undefined &&
+    (existing as any).mutable
+  ) {
+    // Mutable wrapper: update its .value
+    (existing as any).value = newVal;
+    localEnv[name] = existing;
+  } else {
+    // Normal binding: replace it
+    localEnv[name] = newVal;
+  }
+}
+
+/**
+ * Assign a value to a placeholder variable (declared-only let)
+ * @param name Variable name
+ * @param existing The existing placeholder value object
+ * @param newVal The new value to assign
+ * @param localEnv The local environment
+ */
+function assignToPlaceholder(name: string, existing: any, newVal: any, localEnv: Record<string, any>): void {
+  if (
+    (existing as any).literalAnnotation &&
+    !(existing as any).uninitialized &&
+    !(existing as any).mutable
+  )
+    throw new Error("cannot reassign annotated literal");
+  if (
+    (existing as any).parsedAnnotation &&
+    (existing as any).uninitialized
+  ) {
+    validateAnnotation((existing as any).parsedAnnotation, newVal);
+  } else if ((existing as any).annotation) {
+    const annotation = (existing as any).annotation as string;
+    const typeOnly = annotation.match(/^\s*([uUiI])\s*(\d+)\s*$/);
+    if (typeOnly || /^\s*bool\s*$/i.test(annotation)) {
+      validateAnnotation(annotation, newVal);
+    }
+  }
+  (existing as any).value = newVal;
+  (existing as any).uninitialized = false;
+  localEnv[name] = existing;
+}
 
 export function interpret(
   input: string,
@@ -54,10 +127,11 @@ export function interpret(
     throw new Error("duplicate declaration");
   }
 
-  // If the input looks like a block (has top-level semicolons, starts with `let`, or is a top-level braced block), evaluate as a block
+  // If the input looks like a block (has top-level semicolons, starts with `let`/`struct`, or is a top-level braced block), evaluate as a block
   if (
     hasTopLevelSemicolon(s) ||
     /^let\b/.test(s) ||
+    /^struct\b/.test(s) ||
     /^\s*\{[\s\S]*\}\s*$/.test(s)
   ) {
     // If the entire input is an outer braced block, strip outer braces so inner
@@ -170,6 +244,27 @@ export function interpret(
           }
         }
       } else {
+        // struct definition: struct Name { field1 : Type1; field2 : Type2; ... }
+        if (/^struct\b/.test(stmt)) {
+          const structDef = parseStructDef(stmt);
+          if (declared.has(structDef.name)) throw new Error("duplicate declaration");
+          declared.add(structDef.name);
+          localEnv[structDef.name] = {
+            isStructDef: true,
+            name: structDef.name,
+            fields: structDef.fields,
+          };
+          last = undefined;
+          // If there's remaining content after the struct definition, parse it as an expression
+          const remaining = stmt.slice(structDef.endPos).trim();
+          if (remaining) {
+            // Evaluate the remaining content as an expression
+            const result = evaluateFlatExpression(remaining, localEnv);
+            last = result;
+          }
+          continue;
+        }
+
         // while loop
         if (/^while\b/.test(stmt)) {
           const start = stmt.indexOf("(");
@@ -246,7 +341,23 @@ export function interpret(
         // Handle all assignment statements: compound assignment, deref assignment, etc.
         const assignParts = extractAssignmentParts(stmt);
         if (assignParts) {
-          const { isDeref, name, op, rhs } = assignParts;
+          const { isDeref, name, op, rhs, isThisField } = assignParts;
+
+          // Handle this.field assignment
+          if (isThisField) {
+            if (!(name in localEnv))
+              throw new Error("assignment to undeclared variable");
+            const existing = localEnv[name] as any;
+
+            const rhsOperand: any = evaluateRhsLocal(rhs, localEnv);
+
+            const newVal = computeAssignmentValue(op, existing, rhsOperand);
+
+            assignValueToVariable(name, existing, newVal, localEnv);
+
+            last = undefined;
+            continue;
+          }
 
           if (!(name in localEnv))
             throw new Error("assignment to undeclared variable");
@@ -282,14 +393,7 @@ export function interpret(
               throw new Error(`unknown identifier ${targetName}`);
             const targetExisting = localEnv[targetName] as any;
 
-            let newVal = rhsOperand;
-            if (op) {
-              const cur =
-                targetExisting && (targetExisting as any).value !== undefined
-                  ? (targetExisting as any).value
-                  : targetExisting;
-              newVal = applyBinaryOp(op, cur, rhsOperand);
-            }
+            const newVal = computeAssignmentValue(op, targetExisting, rhsOperand);
 
             // For deref assignment to a placeholder, validate annotation
             if (
@@ -331,49 +435,13 @@ export function interpret(
             }
           } else {
             // Normal assignment or compound: update variable directly
-            let newVal = rhsOperand;
-            if (op) {
-              const cur =
-                existing && (existing as any).value !== undefined
-                  ? (existing as any).value
-                  : existing;
-              newVal = applyBinaryOp(op, cur, rhsOperand);
-            }
+            const newVal = computeAssignmentValue(op, existing, rhsOperand);
 
             if (existing && (existing as any).uninitialized !== undefined) {
               // Placeholder for declaration-only let
-              if (
-                (existing as any).literalAnnotation &&
-                !(existing as any).uninitialized &&
-                !(existing as any).mutable
-              )
-                throw new Error("cannot reassign annotated literal");
-              if (
-                (existing as any).parsedAnnotation &&
-                (existing as any).uninitialized
-              ) {
-                validateAnnotation((existing as any).parsedAnnotation, newVal);
-              } else if ((existing as any).annotation) {
-                const annotation = (existing as any).annotation as string;
-                const typeOnly = annotation.match(/^\s*([uUiI])\s*(\d+)\s*$/);
-                if (typeOnly || /^\s*bool\s*$/i.test(annotation)) {
-                  validateAnnotation(annotation, newVal);
-                }
-              }
-              (existing as any).value = newVal;
-              (existing as any).uninitialized = false;
-              localEnv[name] = existing;
-            } else if (
-              existing &&
-              (existing as any).value !== undefined &&
-              (existing as any).mutable
-            ) {
-              // Mutable wrapper: update its .value
-              (existing as any).value = newVal;
-              localEnv[name] = existing;
+              assignToPlaceholder(name, existing, newVal, localEnv);
             } else {
-              // Normal binding: replace it
-              localEnv[name] = newVal;
+              assignValueToVariable(name, existing, newVal, localEnv);
             }
           }
 
