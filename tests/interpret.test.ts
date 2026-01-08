@@ -206,6 +206,12 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("{ let x = { let y = 20; y }; x }")).toBe(20);
   });
 
+  it("handles empty block between statements ('let x = 10; {} x' => 10)", () => {
+    expect(interpret("let x = 10; {} x")).toBe(10);
+    // also inside an outer block
+    expect(interpret("{ let x = 10; {} x } ")).toBe(10);
+  });
+
   it("returns 0 for let-only sequences ('let x = 10;' => 0)", () => {
     expect(interpret("let x = 10;")).toBe(0);
     expect(interpret("{ let x = 10; }")).toBe(0);

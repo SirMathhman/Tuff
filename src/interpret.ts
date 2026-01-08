@@ -95,10 +95,13 @@ export function interpret(
         let rhsOperand: any;
         if (/^\s*\{[\s\S]*\}\s*$/.test(rhs)) {
           const inner = rhs.replace(/^\{\s*|\s*\}$/g, "");
-          const parts = splitTopLevelStatements(inner).map((p) => p.trim()).filter(Boolean);
+          const parts = splitTopLevelStatements(inner)
+            .map((p) => p.trim())
+            .filter(Boolean);
           const last = parts.length ? parts[parts.length - 1] : null;
           if (!last) throw new Error("initializer cannot be empty block");
-          if (/^let\b/.test(last)) throw new Error("initializer cannot contain declarations");
+          if (/^let\b/.test(last))
+            throw new Error("initializer cannot contain declarations");
           // evaluate inner block in isolated environment
           rhsOperand = interpret(inner, {});
         } else {
@@ -154,7 +157,43 @@ export function interpret(
         // `let` is a statement and does not return a value for the block/sequence
         last = undefined;
       } else {
-        last = evaluateReturningOperand(stmt, localEnv);
+        // Support statements that begin with a braced block possibly followed by an
+        // expression (e.g., `{ } x`). Evaluate leading braced blocks in sequence and
+        // then evaluate any remaining expression.
+        let remaining = stmt;
+        while (true) {
+          if (/^\s*$/.test(remaining)) {
+            last = undefined;
+            break;
+          }
+          const trimmed = remaining.trimStart();
+          if (trimmed[0] === "{") {
+            // find matching closing brace for the leading braced block
+            let depth = 0;
+            let endIdx = -1;
+            const startIdx = remaining.indexOf("{");
+            for (let j = startIdx; j < remaining.length; j++) {
+              const ch = remaining[j];
+              if (ch === "{") depth++;
+              else if (ch === "}") {
+                depth--;
+                if (depth === 0) {
+                  endIdx = j;
+                  break;
+                }
+              }
+            }
+            if (endIdx === -1) throw new Error("unbalanced braces in statement");
+            const block = remaining.slice(startIdx, endIdx + 1);
+            const inner = block.replace(/^\{\s*|\s*\}$/g, "");
+            last = interpret(inner, localEnv);
+            remaining = remaining.slice(endIdx + 1);
+            continue;
+          }
+          // No leading block left; treat the remainder as a single expression
+          last = evaluateReturningOperand(remaining, localEnv);
+          break;
+        }
       }
     }
     // if the block/sequence contained only statements (no final expression), return 0
@@ -179,13 +218,28 @@ export function interpret(
       const idx = expr.indexOf(m);
       const prefix = expr.slice(0, idx);
       if (/\blet\s+[a-zA-Z_]\w*\s*=\s*$/.test(prefix)) {
-        const parts = splitTopLevelStatements(inner).map((p) => p.trim()).filter(Boolean);
+        const parts = splitTopLevelStatements(inner)
+          .map((p) => p.trim())
+          .filter(Boolean);
         const last = parts.length ? parts[parts.length - 1] : null;
-        if (!last || /^let\b/.test(last)) throw new Error("initializer cannot contain declarations");
+        if (!last || /^let\b/.test(last))
+          throw new Error("initializer cannot contain declarations");
       }
       // recursively interpret the inner group (pass env so variables are scoped if needed)
       const v = interpret(inner, env);
-      expr = expr.replace(m, String(v));
+      // If we replaced a braced block inside another block and the next non-space
+      // character after the block is another expression start (e.g., an identifier),
+      // insert a semicolon to preserve statement separation. This avoids producing
+      // constructs like `0 x` which are invalid when `{}` is used as a standalone
+      // statement within a block.
+      const after = expr.slice(idx + m.length);
+      const afterMatch = after.match(/\s*([^\s])/);
+      const afterNon = afterMatch ? afterMatch[1] : null;
+      let replacement = String(v);
+      if (m[0] === "{" && afterNon && !/[+\-*/%)}\]]/.test(afterNon)) {
+        replacement = replacement + ";";
+      }
+      expr = expr.replace(m, replacement);
     }
     s = expr;
   }
