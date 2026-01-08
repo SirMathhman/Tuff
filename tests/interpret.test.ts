@@ -113,4 +113,9 @@ describe("interpret (basic behavior)", () => {
     expect(() => interpret("4 - 5U8")).toThrow();
     expect(() => interpret("4U8 - 5")).toThrow();
   });
+
+  it("handles multiplication with suffixed and unsuffixed operands (e.g., '2U8 * 3' => 6)", () => {
+    expect(interpret("2U8 * 3")).toBe(6);
+    expect(interpret("3 * 2U8")).toBe(6);
+  });
 });

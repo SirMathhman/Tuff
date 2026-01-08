@@ -62,7 +62,7 @@ export function interpret(input: string): number {
     skipSpacesLocal();
     while (idx < len) {
       const ch = s[idx];
-      if (ch !== "+" && ch !== "-") break;
+      if (ch !== "+" && ch !== "-" && ch !== "*") break;
       const op = ch;
       idx++;
       skipSpacesLocal();
@@ -81,11 +81,13 @@ export function interpret(input: string): number {
     function checkRangeThrow(kind: string, bits: number, sum: bigint) {
       if (kind === "u") {
         const max = (1n << BigInt(bits)) - 1n;
-        if (sum < 0n || sum > max) throw new Error(`value out of range for U${bits}`);
+        if (sum < 0n || sum > max)
+          throw new Error(`value out of range for U${bits}`);
       } else {
         const min = -(1n << BigInt(bits - 1));
         const max = (1n << BigInt(bits - 1)) - 1n;
-        if (sum < min || sum > max) throw new Error(`value out of range for I${bits}`);
+        if (sum < min || sum > max)
+          throw new Error(`value out of range for I${bits}`);
       }
     }
 
@@ -102,17 +104,23 @@ export function interpret(input: string): number {
         const kind = (refer as any).kind as string;
         const bits = (refer as any).bits as number;
         if (curHasKind && nxtHasKind) {
-          if ((current as any).kind !== (nxt as any).kind || (current as any).bits !== (nxt as any).bits)
+          if (
+            (current as any).kind !== (nxt as any).kind ||
+            (current as any).bits !== (nxt as any).bits
+          )
             throw new Error("mismatched suffixes in binary operation");
         }
-        if (!curHasKind && (current as any).isFloat) throw new Error("mixed suffix and float not allowed");
-        if (!nxtHasKind && (nxt as any).isFloat) throw new Error("mixed suffix and float not allowed");
+        if (!curHasKind && (current as any).isFloat)
+          throw new Error("mixed suffix and float not allowed");
+        if (!nxtHasKind && (nxt as any).isFloat)
+          throw new Error("mixed suffix and float not allowed");
 
         let curBig: bigint;
         if (curHasKind) {
           curBig = (current as any).valueBig as bigint;
         } else if (typeof current === "number") {
-          if (!Number.isInteger(current)) throw new Error("mixed suffix and float not allowed");
+          if (!Number.isInteger(current))
+            throw new Error("mixed suffix and float not allowed");
           curBig = BigInt(current);
         } else {
           curBig = (current as any).valueBig as bigint;
@@ -122,7 +130,8 @@ export function interpret(input: string): number {
         if (nxtHasKind) {
           nxtBig = (nxt as any).valueBig as bigint;
         } else if (typeof nxt === "number") {
-          if (!Number.isInteger(nxt)) throw new Error("mixed suffix and float not allowed");
+          if (!Number.isInteger(nxt))
+            throw new Error("mixed suffix and float not allowed");
           nxtBig = BigInt(nxt as number);
         } else {
           nxtBig = (nxt as any).valueBig as bigint;
@@ -130,13 +139,23 @@ export function interpret(input: string): number {
 
         let result: bigint;
         if (op === "+") result = curBig + nxtBig;
-        else result = curBig - nxtBig;
+        else if (op === "-") result = curBig - nxtBig;
+        else if (op === "*") result = curBig * nxtBig;
+        else throw new Error("unsupported operator");
         checkRangeThrow(kind, bits, result);
         current = { valueBig: result, kind: kind, bits: bits };
       } else {
-        const leftNum = (current as any).isFloat ? (current as any).floatValue : Number((current as any).valueBig);
-        const rightNum = (nxt as any).isFloat ? (nxt as any).floatValue : Number((nxt as any).valueBig);
-        const res = op === "+" ? leftNum + rightNum : leftNum - rightNum;
+        const leftNum = (current as any).isFloat
+          ? (current as any).floatValue
+          : Number((current as any).valueBig);
+        const rightNum = (nxt as any).isFloat
+          ? (nxt as any).floatValue
+          : Number((nxt as any).valueBig);
+        let res: number;
+        if (op === "+") res = leftNum + rightNum;
+        else if (op === "-") res = leftNum - rightNum;
+        else if (op === "*") res = leftNum * rightNum;
+        else throw new Error("unsupported operator");
         current = Number(res);
       }
     }
