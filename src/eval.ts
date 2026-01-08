@@ -1,5 +1,5 @@
 import { parseOperandAt, splitTopLevelStatements } from "./parser";
-import { validateAnnotation, parseFnComponents } from "./interpret_helpers";
+import { validateAnnotation, parseFnComponents, findMatchingParen } from "./interpret_helpers";
 
 export function isTruthy(val: any): boolean {
   if (val && (val as any).boolValue !== undefined)
@@ -120,35 +120,60 @@ export function evaluateReturningOperand(
   exprStr: string,
   localEnv: Record<string, any>
 ): any {
-  // Support a 'match' expression: match (<expr>) { case <pat> => <expr>; ... default => <expr>; }
+  // Support an 'if' expression: if (condition) trueBranch else falseBranch
   const sTrim = exprStr.trimStart();
-  if (/^match\b/.test(sTrim)) {
-    // helper to find matching pair
-    function findMatching(
-      str: string,
-      startIdx: number,
-      openChar: string,
-      closeChar: string
-    ) {
-      let depth = 0;
-      for (let k = startIdx; k < str.length; k++) {
-        const ch = str[k];
-        if (ch === openChar) depth++;
-        else if (ch === closeChar) {
-          depth--;
-          if (depth === 0) return k;
-        }
-      }
-      return -1;
+  if (/^if\b/.test(sTrim)) {
+    // parse: if (cond) trueBranch else falseBranch
+    const condStart = sTrim.indexOf("(");
+    if (condStart === -1) throw new Error("invalid if syntax: missing (");
+    const condEnd = findMatchingParen(sTrim, condStart, "(", ")");
+    if (condEnd === -1) throw new Error("invalid if syntax: unbalanced parentheses");
+    const condStr = sTrim.slice(condStart + 1, condEnd).trim();
+    const condVal = evaluateReturningOperand(condStr, localEnv);
+    const isTruthy = (() => {
+      if (condVal && (condVal as any).boolValue !== undefined)
+        return !!(condVal as any).boolValue;
+      if (condVal && (condVal as any).valueBig !== undefined)
+        return (condVal as any).valueBig !== 0n;
+      if (typeof condVal === "number") return condVal !== 0;
+      if (condVal && (condVal as any).isFloat) return (condVal as any).floatValue !== 0;
+      return false;
+    })();
+
+    // rest after condition
+    let rest = sTrim.slice(condEnd + 1).trim();
+    // else could be preceded by braced trueBranch
+    let trueBranch = "";
+    let falseBranch = "";
+
+    if (rest.startsWith("{")) {
+      const bEnd = findMatchingParen(sTrim, sTrim.indexOf(rest), "{", "}");
+      if (bEnd === -1) throw new Error("unbalanced braces in if");
+      trueBranch = sTrim.slice(sTrim.indexOf(rest), bEnd + 1);
+      rest = sTrim.slice(bEnd + 1).trim();
+    } else {
+      // find the else keyword
+      const elseIdx = rest.indexOf(" else ");
+      if (elseIdx === -1) throw new Error("if without else");
+      trueBranch = rest.slice(0, elseIdx).trim();
+      rest = rest.slice(elseIdx + 6).trim(); // " else "
     }
 
+    falseBranch = rest;
+    if (!falseBranch) throw new Error("missing else branch");
+
+    return evaluateReturningOperand(isTruthy ? trueBranch : falseBranch, localEnv);
+  }
+
+  // Support a 'match' expression: match (<expr>) { case <pat> => <expr>; ... default => <expr>; }
+  if (/^match\b/.test(sTrim)) {
     // after 'match', parse the target expression which may be parenthesized or bare
     let afterMatch = sTrim.slice("match".length).trimStart();
     let targetExpr = "";
     let rest = "";
     if (afterMatch.startsWith("(")) {
       const startParen = sTrim.indexOf("(", 0);
-      const endParen = findMatching(sTrim, startParen, "(", ")");
+      const endParen = findMatchingParen(sTrim, startParen, "(", ")");
       if (endParen === -1) throw new Error("unbalanced parentheses in match");
       targetExpr = sTrim.slice(startParen + 1, endParen).trim();
       rest = sTrim.slice(endParen + 1).trimStart();
@@ -167,7 +192,7 @@ export function evaluateReturningOperand(
       "{",
       sTrim.indexOf(targetExpr) + (targetExpr.length || 0)
     );
-    const endBrace = findMatching(sTrim, startBrace, "{", "}");
+    const endBrace = findMatchingParen(sTrim, startBrace, "{", "}");
     if (endBrace === -1) throw new Error("unbalanced braces in match");
     const inner = sTrim.slice(startBrace + 1, endBrace);
 

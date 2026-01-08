@@ -354,4 +354,12 @@ describe("interpret (basic behavior)", () => {
   it("supports inline fn expressions assigned to variables ('let myFunc = fn get() => 100; myFunc()' => 100)", () => {
     expect(interpret("let myFunc = fn get() => 100; myFunc()")).toBe(100);
   });
+
+  it("supports recursive function calls ('fn fact(n) => if (n <= 1) 1 else n * fact(n - 1); fact(5)' => 120)", () => {
+    expect(
+      interpret(
+        "fn fact(n) => if (n <= 1) 1 else n * fact(n - 1); fact(5)"
+      )
+    ).toBe(120);
+  });
 });
