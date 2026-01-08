@@ -223,6 +223,11 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("{ let x = 10; { let y = x; y } } ")).toBe(10);
   });
 
+  it("throws for referencing inner block binding outside its block ('{ let x = 10; } x' => Error)", () => {
+    expect(() => interpret("{ let x = 10; } x")).toThrow();
+    expect(() => interpret("{ { let x = 10; } x } ")).toThrow();
+  });
+
   it("resolves identifier inside a braced block using provided env", () => {
     expect(interpret("{ x }", { x: 10 })).toBe(10);
     expect(interpret("{ x }", { x: { valueBig: 10n } })).toBe(10);

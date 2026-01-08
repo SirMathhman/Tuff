@@ -71,7 +71,11 @@ export function interpret(
   }
 
   // If the input looks like a block (has top-level semicolons, starts with `let`, or is a top-level braced block), evaluate as a block
-  if (hasTopLevelSemicolon(s) || /^let\b/.test(s) || /^\s*\{[\s\S]*\}\s*$/.test(s)) {
+  if (
+    hasTopLevelSemicolon(s) ||
+    /^let\b/.test(s) ||
+    /^\s*\{[\s\S]*\}\s*$/.test(s)
+  ) {
     // If the entire input is an outer braced block, strip outer braces so inner
     // declarations are processed in order and nested groups see earlier declarations.
     if (/^\s*\{[\s\S]*\}\s*$/.test(s)) s = s.replace(/^\{\s*|\s*\}$/g, "");
@@ -187,7 +191,8 @@ export function interpret(
                 }
               }
             }
-            if (endIdx === -1) throw new Error("unbalanced braces in statement");
+            if (endIdx === -1)
+              throw new Error("unbalanced braces in statement");
             const block = remaining.slice(startIdx, endIdx + 1);
             const inner = block.replace(/^\{\s*|\s*\}$/g, "");
             last = interpret(inner, localEnv);
@@ -229,7 +234,7 @@ export function interpret(
         if (!last || /^let\b/.test(last))
           throw new Error("initializer cannot contain declarations");
       }
-      // recursively interpret the inner group (pass env so variables are scoped if needed)
+        // recursively interpret the inner group (pass env so variables are scoped if needed)
       const v = interpret(inner, env);
       // If we replaced a braced block inside another block and the next non-space
       // character after the block is another expression start (e.g., an identifier),
@@ -246,6 +251,13 @@ export function interpret(
       expr = expr.replace(m, replacement);
     }
     s = expr;
+
+    // After replacing groups, it's possible we introduced top-level semicolons
+    // (e.g., "{ let x = 10; } x" -> "0; x"). In that case, re-run the block/sequence
+    // handler by delegating to `interpret` again so declarations remain scoped.
+    if (hasTopLevelSemicolon(s) || /^let\b/.test(s)) {
+      return interpret(s, env);
+    }
   }
 
   // Parse and evaluate expressions with '+' and '-' (left-associative)
@@ -471,7 +483,8 @@ export function interpret(
         const val = env[name];
         if (val && (val as any).kind) return Number((val as any).valueBig);
         if (typeof val === "number") return val;
-        if (val && (val as any).isFloat) return (val as any).floatValue as number;
+        if (val && (val as any).isFloat)
+          return (val as any).floatValue as number;
         return Number((val as any).valueBig as bigint);
       }
     }
