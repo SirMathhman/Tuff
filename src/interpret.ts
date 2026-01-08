@@ -12,22 +12,36 @@ export function interpret(input: string): number {
     const leading = m[0];
     const rest = s.slice(leading.length).trim();
 
-    // If there's a trailing suffix and the number is negative, consider it invalid.
-    if (rest.length > 0 && leading.startsWith("-")) {
-      throw new Error("negative numbers with suffixes are not allowed");
-    }
-
-    // Handle unsigned integer suffixes like U8: require integer and range check.
-    const uMatch = rest.match(/^([uU])(\d+)$/);
-    if (uMatch) {
-      const bits = Number(uMatch[2]);
-      const max = 2 ** bits - 1;
-      const value = Number(leading);
-      // Must be integer and within 0..max
-      if (!Number.isInteger(value) || value < 0 || value > max) {
-        throw new Error(`value out of range for U${bits}`);
+    // If there's a trailing suffix, try to interpret it.
+    if (rest.length > 0) {
+      const suf = rest.match(/^([uUiI])(\d+)$/);
+      if (suf) {
+        const kind = suf[1];
+        const bits = Number(suf[2]);
+        // Suffix requires integer value (no decimal part)
+        if (!/^[-+]?\d+$/.test(leading)) {
+          throw new Error("suffix requires integer value");
+        }
+        const valueBig = BigInt(leading);
+        if (kind === 'u' || kind === 'U') {
+          // Unsigned: value must be >= 0 and <= 2^bits - 1
+          if (valueBig < 0n) throw new Error("negative numbers with suffixes are not allowed");
+          const max = (1n << BigInt(bits)) - 1n;
+          if (valueBig > max) throw new Error(`value out of range for U${bits}`);
+          return Number(valueBig);
+        } else {
+          // Signed: value must be within -(2^(bits-1)) .. 2^(bits-1)-1
+          const min = -(1n << BigInt(bits - 1));
+          const max = (1n << BigInt(bits - 1)) - 1n;
+          if (valueBig < min || valueBig > max) throw new Error(`value out of range for I${bits}`);
+          return Number(valueBig);
+        }
       }
-      return value;
+
+      // If there's a non-recognized suffix and the number is negative, reject it.
+      if (leading.startsWith('-')) {
+        throw new Error('negative numbers with suffixes are not allowed');
+      }
     }
 
     return Number(leading);
