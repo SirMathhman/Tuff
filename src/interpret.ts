@@ -84,10 +84,16 @@ export function interpret(
           // allow type-only annotation like 'I32' or 'U64'
           const typeOnly = annotation.match(/^\s*([uUiI])\s*(\d+)\s*$/);
           if (typeOnly) {
-            const kind = (typeOnly[1] === "u" || typeOnly[1] === "U") ? "u" : "i";
+            const kind = typeOnly[1] === "u" || typeOnly[1] === "U" ? "u" : "i";
             const bits = Number(typeOnly[2]);
-            if (!(rhsOperand as any).valueBig) throw new Error("annotation must be integer type matching initializer");
-            if ((rhsOperand as any).kind !== kind || (rhsOperand as any).bits !== bits)
+            if (!(rhsOperand as any).valueBig)
+              throw new Error(
+                "annotation must be integer type matching initializer"
+              );
+            if (
+              (rhsOperand as any).kind !== kind ||
+              (rhsOperand as any).bits !== bits
+            )
               throw new Error("annotation kind/bits do not match initializer");
           } else {
             const ann = parseOperand(annotation);
