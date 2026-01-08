@@ -370,4 +370,12 @@ describe("interpret (basic behavior)", () => {
       )
     ).toBe(100);
   });
+
+  it("supports curried functions with closure capture ('fn outer(first : I32) => fn inner(second : I32) => first + second; outer(3)(4)' => 7)", () => {
+    expect(
+      interpret(
+        "fn outer(first : I32) => fn inner(second : I32) => first + second; outer(3)(4)"
+      )
+    ).toBe(7);
+  });
 });

@@ -257,6 +257,45 @@ export function evaluateReturningOperand(
   skip();
   while (pos < L) {
     skip();
+    // Check for function application (e.g., `func()(args)`)
+    if (exprStr[pos] === "(") {
+      // This is a function application on the last operand
+      let depth = 0;
+      let endIdx = -1;
+      for (let k = pos; k < exprStr.length; k++) {
+        const ch = exprStr[k];
+        if (ch === "(") depth++;
+        else if (ch === ")") {
+          depth--;
+          if (depth === 0) {
+            endIdx = k;
+            break;
+          }
+        }
+      }
+      if (endIdx === -1) throw new Error("unbalanced parentheses in call");
+      const inner = exprStr.slice(pos + 1, endIdx);
+      // split by top-level commas
+      const args: string[] = [];
+      if (inner.trim() !== "") {
+        let cur = "";
+        let d = 0;
+        for (let k = 0; k < inner.length; k++) {
+          const ch = inner[k];
+          if (ch === "(" || ch === "{") d++;
+          else if (ch === ")" || ch === "}") d = Math.max(0, d - 1);
+          if (ch === "," && d === 0) {
+            args.push(cur.trim());
+            cur = "";
+          } else cur += ch;
+        }
+        if (cur.trim() !== "") args.push(cur.trim());
+      }
+      exprTokens.push({ op: "call", operand: { callApp: args } });
+      pos = endIdx + 1;
+      skip();
+      continue;
+    }
     // support multi-char operators: || && == != <= >=
     let op: string | null = null;
     if (exprStr.startsWith("||", pos)) {
@@ -421,6 +460,72 @@ export function evaluateReturningOperand(
         operands.splice(i, 2, res);
         ops.splice(i, 1);
       } else i++;
+    }
+  }
+
+  // Handle function application (highest precedence, left-to-right)
+  let i = 0;
+  while (i < ops.length) {
+    if (ops[i] === "call") {
+      const funcOperand = operands[i];
+      const callAppOperand = operands[i + 1];
+      const callArgs = (callAppOperand as any).callApp || [];
+
+      // Evaluate the call arguments
+      const argOps = callArgs.map((a: string) =>
+        evaluateReturningOperand(a, localEnv)
+      );
+
+      // The function should be in funcOperand
+      let fn = null;
+      if (funcOperand && (funcOperand as any).fn) {
+        fn = (funcOperand as any).fn;
+      } else if (typeof funcOperand === "object" && (funcOperand as any).ident) {
+        // This shouldn't happen after operand evaluation, but handle it
+        const name = (funcOperand as any).ident as string;
+        if (!(name in localEnv)) throw new Error(`unknown identifier ${name}`);
+        const binding = localEnv[name] as any;
+        if (!binding || !binding.fn) throw new Error("not a function");
+        fn = binding.fn;
+      } else {
+        throw new Error("cannot call non-function");
+      }
+
+      if (fn.params.length !== argOps.length)
+        throw new Error("invalid argument count");
+
+      // prepare call env from closure
+      const callEnv: Record<string, any> = { ...fn.closureEnv };
+      for (let j = 0; j < fn.params.length; j++) {
+        const p = fn.params[j];
+        const pname = p.name || p;
+        const pann = p.annotation || null;
+        validateAnnotation(pann, argOps[j]);
+        callEnv[pname] = argOps[j];
+      }
+
+      // execute body
+      let result: any;
+      if (fn.isBlock) {
+        const inner = fn.body.replace(/^\{\s*|\s*\}$/g, "");
+        const v = (globalThis as any).interpret
+          ? (globalThis as any).interpret(inner, callEnv)
+          : (function () {
+              // fallback if interpret is not globally available (module-local call)
+              // eslint-disable-next-line no-undef
+              const mod = require("./interpret");
+              return mod.interpret(inner, callEnv);
+            })();
+        if (Number.isInteger(v)) result = { valueBig: BigInt(v) };
+        else result = { floatValue: v, isFloat: true };
+      } else {
+        result = evaluateReturningOperand(fn.body, callEnv);
+      }
+
+      operands.splice(i, 2, result);
+      ops.splice(i, 1);
+    } else {
+      i++;
     }
   }
 
