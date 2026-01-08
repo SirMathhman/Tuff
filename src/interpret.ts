@@ -4,18 +4,23 @@
  * - Otherwise returns 0.
  * This allows inputs with type suffixes like `100U8` to be parsed as 100.
  */
-import {
-  splitTopLevelStatements,
-  parseOperand,
-  parseOperandAt,
-} from "./parser";
+import { splitTopLevelStatements, parseOperandAt } from "./parser";
 import {
   evaluateReturningOperand,
   evaluateFlatExpression,
   isTruthy,
   applyBinaryOp,
-  checkRange,
 } from "./eval";
+import {
+  getLastTopLevelStatement,
+  evaluateRhs,
+  checkAnnMatchesRhs,
+  validateTypeOnly,
+  validateAnnotation,
+  findMatchingParen,
+  parseOperand,
+  extractAssignmentParts,
+} from "./interpret_helpers";
 
 export function interpret(
   input: string,
@@ -24,147 +29,16 @@ export function interpret(
   let s = input.trim();
 
   // Helper: check for semicolons at top-level (not nested inside braces/parens)
-
   function hasTopLevelSemicolon(str: string) {
     return splitTopLevelStatements(str).length > 1;
   }
 
-  function getLastTopLevelStatement(str: string) {
-    const parts = splitTopLevelStatements(str)
-      .map((p: string) => p.trim())
-      .filter(Boolean);
-    return parts.length ? parts[parts.length - 1] : null;
-  }
+  // Helper wrapper to adapt imported helpers to local signatures
+  const getLastTopLevelStatementLocal = (str: string) =>
+    getLastTopLevelStatement(str, splitTopLevelStatements);
 
-  // Evaluate an RHS which might be a block or expression; returns the operand-like object
-  function evaluateRhs(rhs: string, envLocal: Record<string, any>): any {
-    if (/^\s*\{[\s\S]*\}\s*$/.test(rhs)) {
-      const inner = rhs.replace(/^\{\s*|\s*\}$/g, "");
-      const lastInner = getLastTopLevelStatement(inner);
-      if (!lastInner) throw new Error("initializer cannot be empty block");
-      if (/^let\b/.test(lastInner))
-        throw new Error("initializer cannot contain declarations");
-      const v = interpret(inner, {});
-      if (Number.isInteger(v)) return { valueBig: BigInt(v) };
-      return { floatValue: v, isFloat: true };
-    }
-    if (/^\s*let\b/.test(rhs) || /\{[^}]*\blet\b/.test(rhs))
-      throw new Error("initializer cannot contain declarations");
-    return evaluateReturningOperand(rhs, envLocal);
-  }
-
-  function checkAnnMatchesRhs(ann: any, rhsOperand: any) {
-    if (!(ann as any).valueBig)
-      throw new Error("annotation must be integer literal with suffix");
-    if (!(rhsOperand as any).valueBig)
-      throw new Error(
-        "initializer must be integer-like to match annotated literal"
-      );
-    if ((ann as any).valueBig !== (rhsOperand as any).valueBig)
-      throw new Error("annotation value does not match initializer");
-    if ((rhsOperand as any).kind) {
-      if (
-        (ann as any).kind !== (rhsOperand as any).kind ||
-        (ann as any).bits !== (rhsOperand as any).bits
-      )
-        throw new Error("annotation kind/bits do not match initializer");
-    }
-  }
-
-  function validateTypeOnly(kind: string, bits: number, rhsOperand: any) {
-    if (!(rhsOperand as any).valueBig)
-      throw new Error("annotation must be integer type matching initializer");
-    if ((rhsOperand as any).kind) {
-      if (
-        (rhsOperand as any).kind !== kind ||
-        (rhsOperand as any).bits !== bits
-      )
-        throw new Error("annotation kind/bits do not match initializer");
-    } else {
-      checkRange(kind, bits, (rhsOperand as any).valueBig as bigint);
-    }
-  }
-
-  function validateAnnotation(
-    annotation: string | null | any,
-    rhsOperand: any
-  ) {
-    if (!annotation) return;
-
-    // pointer annotation: *<inner>
-    if (typeof annotation === "string" && /^\s*\*/.test(annotation)) {
-      const inner = annotation.replace(/^\s*\*/g, "").trim();
-      if (!rhsOperand || !(rhsOperand as any).pointer)
-        throw new Error("annotation requires pointer initializer");
-      // inner can be type-only like I32, Bool, or a literal operand
-      const parsedType = (function (s: string) {
-        const t = s.match(/^\s*([uUiI])\s*(\d+)\s*$/);
-        if (!t) return null;
-        return { kind: t[1] === "u" || t[1] === "U" ? "u" : "i", bits: Number(t[2]) };
-      })(inner);
-      if (parsedType) {
-        validateTypeOnly(parsedType.kind, parsedType.bits, rhsOperand);
-        return;
-      }
-      if (/^\s*bool\s*$/i.test(inner)) {
-        if ((rhsOperand as any).ptrIsBool !== true)
-          throw new Error("annotation Pointer Bool requires boolean initializer");
-        return;
-      }
-      // otherwise inner might be a literal like 1I32
-      const ann = parseOperand(inner);
-      if (!ann) throw new Error("invalid annotation in let");
-      // ensure pointer's pointed literal matches
-      checkAnnMatchesRhs(ann, {
-        valueBig: (rhsOperand as any).valueBig,
-        kind: (rhsOperand as any).kind,
-        bits: (rhsOperand as any).bits,
-      });
-      return;
-    }
-
-    // If annotation is already a parsed operand object (from parsedAnnotation), use it
-    if (typeof annotation !== "string") {
-      checkAnnMatchesRhs(annotation, rhsOperand);
-      return;
-    }
-
-    const typeOnly = annotation.match(/^\s*([uUiI])\s*(\d+)\s*$/);
-    if (typeOnly) {
-      const kind = typeOnly[1] === "u" || typeOnly[1] === "U" ? "u" : "i";
-      const bits = Number(typeOnly[2]);
-      validateTypeOnly(kind, bits, rhsOperand);
-    } else if (/^\s*bool\s*$/i.test(annotation)) {
-      if (
-        !(rhsOperand as any).boolValue &&
-        (rhsOperand as any).boolValue !== false
-      )
-        throw new Error("annotation Bool requires boolean initializer");
-    } else {
-      const ann = parseOperand(annotation);
-      if (!ann) throw new Error("invalid annotation in let");
-      checkAnnMatchesRhs(ann, rhsOperand);
-    }
-  }
-
-  // Find matching closing bracket for parentheses or other paired chars
-  function findMatchingParen(
-    str: string,
-    startIdx: number,
-    openChar = "(",
-    closeChar = ")"
-  ) {
-    let depth = 0;
-    for (let i = startIdx; i < str.length; i++) {
-      const ch = str[i];
-      if (ch === openChar) depth++;
-      else if (ch === closeChar) {
-        depth--;
-        if (depth === 0) return i;
-      }
-    }
-    return -1;
-  }
+  const evaluateRhsLocal = (rhs: string, envLocal: Record<string, any>) =>
+    evaluateRhs(rhs, envLocal, interpret, getLastTopLevelStatementLocal);
 
   // If the input looks like a block (has top-level semicolons, starts with `let`, or is a top-level braced block), evaluate as a block
   if (
@@ -237,7 +111,7 @@ export function interpret(
           // initializer present: validate same as before
           const rhs = rhsRaw!;
           let rhsOperand: any;
-          rhsOperand = evaluateRhs(rhs, localEnv);
+          rhsOperand = evaluateRhsLocal(rhs, localEnv);
 
           if (annotation) {
             validateAnnotation(annotation, rhsOperand);
@@ -326,136 +200,171 @@ export function interpret(
           continue;
         }
 
-        // compound-assignment like `x += 1` or simple assignment `x = ...`
-        const compMatch = stmt.match(/^([a-zA-Z_]\w*)\s*([+\-*/%])=\s*(.+)$/);
-        if (compMatch) {
-          const name = compMatch[1];
-          const op = compMatch[2];
-          const rhs = compMatch[3].trim();
+        // Handle all assignment statements: compound assignment, deref assignment, etc.
+        const assignParts = extractAssignmentParts(stmt);
+        if (assignParts) {
+          const { isDeref, name, op, rhs } = assignParts;
+
           if (!(name in localEnv))
             throw new Error("assignment to undeclared variable");
           const existing = localEnv[name] as any;
-          if (existing && (existing as any).uninitialized)
+          // allow assignment to uninitialized placeholders (from declaration-only lets) or normal vars
+          // only throw if trying to use an uninitialized var in certain contexts (not assignment)
+          if (existing && (existing as any).uninitialized && !(existing as any).annotation && !(existing as any).mutable)
             throw new Error("use of uninitialized variable");
-          let rhsOperand: any;
-          rhsOperand = evaluateRhs(rhs, localEnv);
-          const cur =
-            existing && (existing as any).value !== undefined
-              ? (existing as any).value
-              : existing;
-          const res = applyBinaryOp(op, cur, rhsOperand);
-          if (existing && (existing as any).value !== undefined) {
-            (existing as any).value = res;
-            localEnv[name] = existing;
-          } else {
-            localEnv[name] = res;
+
+          let ptr: any;
+          if (isDeref) {
+            ptr = existing && (existing as any).value !== undefined ? (existing as any).value : existing;
+            if (!ptr || !ptr.pointer)
+              throw new Error("cannot dereference non-pointer");
+            if (!ptr.ptrMutable)
+              throw new Error("cannot assign through immutable pointer");
           }
-          last = undefined;
-          continue;
-        }
 
-        // Assignment statement (e.g., `x = 1` or `x = { ... }`)
-        const assignMatch = stmt.match(/^([a-zA-Z_]\w*)\s*=\s*(.+)$/);
-        if (assignMatch) {
-          const name = assignMatch[1];
-          const rhs = assignMatch[2].trim();
-          if (!(name in localEnv))
-            throw new Error("assignment to undeclared variable");
-          const existing = localEnv[name] as any;
-          let rhsOperand: any;
-          rhsOperand = evaluateRhs(rhs, localEnv);
+          const rhsOperand: any = evaluateRhsLocal(rhs, localEnv);
 
-          // If the existing binding is a placeholder for a declaration-only let,
-          // it will have `uninitialized` and optional `parsedAnnotation` / `literalAnnotation`.
-          if (existing && (existing as any).uninitialized !== undefined) {
-            // if literal-annotated, disallow re-assignment after first assignment unless mutable
-            if (
-              (existing as any).literalAnnotation &&
-              !(existing as any).uninitialized &&
-              !(existing as any).mutable
-            )
-              throw new Error("cannot reassign annotated literal");
+          if (isDeref) {
+            // Deref assignment or compound: update through pointer
+            const targetName = ptr.ptrName as string;
+            if (!(targetName in localEnv))
+              throw new Error(`unknown identifier ${targetName}`);
+            const targetExisting = localEnv[targetName] as any;
 
-            // validate parsed literal annotation (exact-value) on initial assignment
-            if (
-              (existing as any).parsedAnnotation &&
-              (existing as any).uninitialized
-            ) {
-              validateAnnotation(
-                (existing as any).parsedAnnotation,
-                rhsOperand
-              );
-            } else if ((existing as any).annotation) {
-              const annotation = (existing as any).annotation as string;
-              const typeOnly = annotation.match(/^\s*([uUiI])\s*(\d+)\s*$/);
-              if (typeOnly || /^\s*bool\s*$/i.test(annotation)) {
-                validateAnnotation(annotation, rhsOperand);
-              }
+            let newVal = rhsOperand;
+            if (op) {
+              const cur = targetExisting && (targetExisting as any).value !== undefined 
+                ? (targetExisting as any).value 
+                : targetExisting;
+              newVal = applyBinaryOp(op, cur, rhsOperand);
             }
 
-            // perform assignment into the metadata object rather than replacing it
-            (existing as any).value = rhsOperand;
-            (existing as any).uninitialized = false;
-            localEnv[name] = existing;
-            last = undefined;
-            continue;
-          }
+            // For deref assignment to a placeholder, validate annotation
+            if (targetExisting && (targetExisting as any).uninitialized !== undefined) {
+              if (
+                (targetExisting as any).literalAnnotation &&
+                !(targetExisting as any).uninitialized &&
+                !(targetExisting as any).mutable
+              )
+                throw new Error("cannot reassign annotated literal");
+              if (
+                (targetExisting as any).parsedAnnotation &&
+                (targetExisting as any).uninitialized
+              ) {
+                validateAnnotation(
+                  (targetExisting as any).parsedAnnotation,
+                  newVal
+                );
+              } else if ((targetExisting as any).annotation) {
+                validateAnnotation(
+                  (targetExisting as any).annotation as string,
+                  newVal
+                );
+              }
+              (targetExisting as any).value = newVal;
+              (targetExisting as any).uninitialized = false;
+              localEnv[targetName] = targetExisting;
+            } else if (
+              targetExisting &&
+              (targetExisting as any).value !== undefined &&
+              (targetExisting as any).mutable
+            ) {
+              (targetExisting as any).value = newVal;
+              localEnv[targetName] = targetExisting;
+            } else {
+              localEnv[targetName] = newVal;
+            }
+          } else {
+            // Normal assignment or compound: update variable directly
+            let newVal = rhsOperand;
+            if (op) {
+              const cur = existing && (existing as any).value !== undefined
+                ? (existing as any).value
+                : existing;
+              newVal = applyBinaryOp(op, cur, rhsOperand);
+            }
 
-          // If this is a mutable wrapper (declared with `mut`), update its .value
-          if (
-            existing &&
-            (existing as any).value !== undefined &&
-            (existing as any).mutable
-          ) {
-            (existing as any).value = rhsOperand;
-            localEnv[name] = existing;
-            last = undefined;
-            continue;
-          }
-
-          // otherwise this was a normal declared-with-initializer binding; replace it
-          localEnv[name] = rhsOperand;
-          last = undefined;
-          continue;
-        }
-
-        // Support statements that begin with a braced block possibly followed by an
-        // expression (e.g., `{ } x`). Evaluate leading braced blocks in sequence and
-        // then evaluate any remaining expression.
-        let remaining = stmt;
-        while (true) {
-          if (/^\s*$/.test(remaining)) {
-            // nothing left; preserve last (do not overwrite) and exit
-            break;
-          }
-          const trimmed = remaining.trimStart();
-          if (trimmed[0] === "{") {
-            // find matching closing brace for the leading braced block
-            let depth = 0;
-            let endIdx = -1;
-            const startIdx = remaining.indexOf("{");
-            for (let j = startIdx; j < remaining.length; j++) {
-              const ch = remaining[j];
-              if (ch === "{") depth++;
-              else if (ch === "}") {
-                depth--;
-                if (depth === 0) {
-                  endIdx = j;
-                  break;
+            if (existing && (existing as any).uninitialized !== undefined) {
+              // Placeholder for declaration-only let
+              if (
+                (existing as any).literalAnnotation &&
+                !(existing as any).uninitialized &&
+                !(existing as any).mutable
+              )
+                throw new Error("cannot reassign annotated literal");
+              if (
+                (existing as any).parsedAnnotation &&
+                (existing as any).uninitialized
+              ) {
+                validateAnnotation(
+                  (existing as any).parsedAnnotation,
+                  newVal
+                );
+              } else if ((existing as any).annotation) {
+                const annotation = (existing as any).annotation as string;
+                const typeOnly = annotation.match(/^\s*([uUiI])\s*(\d+)\s*$/);
+                if (typeOnly || /^\s*bool\s*$/i.test(annotation)) {
+                  validateAnnotation(annotation, newVal);
                 }
               }
+              (existing as any).value = newVal;
+              (existing as any).uninitialized = false;
+              localEnv[name] = existing;
+            } else if (
+              existing &&
+              (existing as any).value !== undefined &&
+              (existing as any).mutable
+            ) {
+              // Mutable wrapper: update its .value
+              (existing as any).value = newVal;
+              localEnv[name] = existing;
+            } else {
+              // Normal binding: replace it
+              localEnv[name] = newVal;
             }
-            if (endIdx === -1)
-              throw new Error("unbalanced braces in statement");
-            const block = remaining.slice(startIdx, endIdx + 1);
-            const inner = block.replace(/^\{\s*|\s*\}$/g, "");
-            last = interpret(inner, localEnv);
-            remaining = remaining.slice(endIdx + 1);
-            continue;
           }
-          // No leading block left; treat the remainder as a single expression
-          last = evaluateReturningOperand(remaining, localEnv);
-          break;
+
+          last = undefined;
+          continue;
+        } else {
+          // Support statements that begin with a braced block possibly followed by an
+          // expression (e.g., `{ } x`). Evaluate leading braced blocks in sequence and
+          // then evaluate any remaining expression.
+          let remaining = stmt;
+          while (true) {
+            if (/^\s*$/.test(remaining)) {
+              // nothing left; preserve last (do not overwrite) and exit
+              break;
+            }
+            const trimmed = remaining.trimStart();
+            if (trimmed[0] === "{") {
+              // find matching closing brace for the leading braced block
+              let depth = 0;
+              let endIdx = -1;
+              const startIdx = remaining.indexOf("{");
+              for (let j = startIdx; j < remaining.length; j++) {
+                const ch = remaining[j];
+                if (ch === "{") depth++;
+                else if (ch === "}") {
+                  depth--;
+                  if (depth === 0) {
+                    endIdx = j;
+                    break;
+                  }
+                }
+              }
+              if (endIdx === -1)
+                throw new Error("unbalanced braces in statement");
+              const block = remaining.slice(startIdx, endIdx + 1);
+              const inner = block.replace(/^\{\s*|\s*\}$/g, "");
+              last = interpret(inner, localEnv);
+              remaining = remaining.slice(endIdx + 1);
+              continue;
+            }
+            // No leading block left; treat the remainder as a single expression
+            last = evaluateReturningOperand(remaining, localEnv);
+            break;
+          }
         }
       }
     }
@@ -483,7 +392,7 @@ export function interpret(
       const idx = expr.indexOf(m);
       const prefix = expr.slice(0, idx);
       if (/\blet\s+[a-zA-Z_]\w*\s*=\s*$/.test(prefix)) {
-        const last = getLastTopLevelStatement(inner);
+        const last = getLastTopLevelStatementLocal(inner);
         if (!last || /^let\b/.test(last))
           throw new Error("initializer cannot contain declarations");
       }

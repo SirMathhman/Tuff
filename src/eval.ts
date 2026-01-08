@@ -178,7 +178,10 @@ export function evaluateReturningOperand(
     const binding = localEnv[name];
     if (binding && (binding as any).uninitialized)
       throw new Error(`use of uninitialized variable ${name}`);
-    const targetVal = binding && (binding as any).value !== undefined ? (binding as any).value : binding;
+    const targetVal =
+      binding && (binding as any).value !== undefined
+        ? (binding as any).value
+        : binding;
     return { binding, targetVal };
   }
 
@@ -217,7 +220,8 @@ export function evaluateReturningOperand(
       if (inner && (inner as any).ident) {
         const n = (inner as any).ident as string;
         const { binding, targetVal: val } = getBindingTarget(n);
-        if (!val || !(val as any).ptrName) throw new Error("cannot dereference non-pointer");
+        if (!val || !(val as any).ptrName)
+          throw new Error("cannot dereference non-pointer");
         const targetName = (val as any).ptrName as string;
         const { targetVal } = getBindingTarget(targetName);
         return targetVal;
