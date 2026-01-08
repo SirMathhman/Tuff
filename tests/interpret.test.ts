@@ -123,4 +123,9 @@ describe("interpret (basic behavior)", () => {
     expect(() => interpret("2U8 * 128")).toThrow();
     expect(() => interpret("128 * 2U8")).toThrow();
   });
+
+  it("throws when multiplying unsigned by a negative number (e.g., '2U8 * -1' => Error)", () => {
+    expect(() => interpret("2U8 * -1")).toThrow();
+    expect(() => interpret("-1 * 2U8")).toThrow();
+  });
 });
