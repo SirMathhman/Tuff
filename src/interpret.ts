@@ -325,9 +325,21 @@ export function interpret(
       } else if (exprStr.startsWith("&&", pos)) {
         op = "&&";
         pos += 2;
+      } else if (exprStr.startsWith("==", pos)) {
+        op = "==";
+        pos += 2;
+      } else if (exprStr.startsWith("!=", pos)) {
+        op = "!=";
+        pos += 2;
+      } else if (exprStr.startsWith("<=", pos)) {
+        op = "<=";
+        pos += 2;
+      } else if (exprStr.startsWith(">=", pos)) {
+        op = ">=";
+        pos += 2;
       } else {
         const ch = exprStr[pos];
-        if (!/[+\-*/%]/.test(ch)) throw new Error("invalid operator");
+        if (!/[+\-*/%<>]/.test(ch)) throw new Error("invalid operator");
         op = ch;
         pos++;
       }
@@ -368,8 +380,10 @@ export function interpret(
     }
 
     function isTruthy(val: any): boolean {
-      if (val && (val as any).boolValue !== undefined) return !!(val as any).boolValue;
-      if (val && (val as any).valueBig !== undefined) return (val as any).valueBig !== 0n;
+      if (val && (val as any).boolValue !== undefined)
+        return !!(val as any).boolValue;
+      if (val && (val as any).valueBig !== undefined)
+        return (val as any).valueBig !== 0n;
       if (typeof val === "number") return val !== 0;
       if (val && (val as any).isFloat) return (val as any).floatValue !== 0;
       return false;
@@ -457,48 +471,32 @@ export function interpret(
       if (op === "*") return lNum * rNum;
       if (op === "/") return lNum / rNum;
       if (op === "%") return lNum % rNum;
+      if (op === "<") return { boolValue: lNum < rNum };
+      if (op === ">") return { boolValue: lNum > rNum };
+      if (op === "<=") return { boolValue: lNum <= rNum };
+      if (op === ">=") return { boolValue: lNum >= rNum };
+      if (op === "==") return { boolValue: lNum == rNum };
+      if (op === "!=") return { boolValue: lNum != rNum };
       throw new Error("unsupported operator");
     }
 
-    // higher precedence pass for * / %
-    let ii = 0;
-    while (ii < ops.length) {
-      if (ops[ii] === "*" || ops[ii] === "/" || ops[ii] === "%") {
-        const res = applyOpLocal(ops[ii], operands[ii], operands[ii + 1]);
-        operands.splice(ii, 2, res);
-        ops.splice(ii, 1);
-      } else ii++;
+    function applyPrecedence(opSet: Set<string>) {
+      let i = 0;
+      while (i < ops.length) {
+        if (opSet.has(ops[i])) {
+          const res = applyOpLocal(ops[i], operands[i], operands[i + 1]);
+          operands.splice(i, 2, res);
+          ops.splice(i, 1);
+        } else i++;
+      }
     }
 
-    // next precedence: + -
-    ii = 0;
-    while (ii < ops.length) {
-      if (ops[ii] === "+" || ops[ii] === "-") {
-        const res = applyOpLocal(ops[ii], operands[ii], operands[ii + 1]);
-        operands.splice(ii, 2, res);
-        ops.splice(ii, 1);
-      } else ii++;
-    }
-
-    // next precedence: &&
-    ii = 0;
-    while (ii < ops.length) {
-      if (ops[ii] === "&&") {
-        const res = applyOpLocal(ops[ii], operands[ii], operands[ii + 1]);
-        operands.splice(ii, 2, res);
-        ops.splice(ii, 1);
-      } else ii++;
-    }
-
-    // lowest precedence: ||
-    ii = 0;
-    while (ii < ops.length) {
-      if (ops[ii] === "||") {
-        const res = applyOpLocal(ops[ii], operands[ii], operands[ii + 1]);
-        operands.splice(ii, 2, res);
-        ops.splice(ii, 1);
-      } else ii++;
-    }
+    applyPrecedence(new Set(["*", "/", "%"]));
+    applyPrecedence(new Set(["+", "-"]));
+    // comparison operators
+    applyPrecedence(new Set(["<", ">", "<=", ">=", "==", "!="]));
+    applyPrecedence(new Set(["&&"]));
+    applyPrecedence(new Set(["||"]));
 
     // final result is operands[0]
     let result: any = operands[0];
@@ -539,7 +537,8 @@ export function interpret(
   // Evaluate an expression string without parentheses, using operator precedence
   function evaluateFlatExpression(exprStr: string): number {
     const opnd = evaluateReturningOperand(exprStr, env);
-    if (opnd && (opnd as any).boolValue !== undefined) return (opnd as any).boolValue ? 1 : 0;
+    if (opnd && (opnd as any).boolValue !== undefined)
+      return (opnd as any).boolValue ? 1 : 0;
     if (opnd && (opnd as any).kind) return Number((opnd as any).valueBig);
     if (typeof opnd === "number") return opnd;
     if (opnd && (opnd as any).isFloat)
@@ -560,8 +559,8 @@ export function interpret(
     return evaluateFlatExpression(expr);
   }
 
-  // If expression contains any operators (including logical), evaluate it as a flat expression
-  if (/\|\||&&|[+\-*/%]/.test(s)) {
+  // If expression contains any operators (including logical/comparison), evaluate it as a flat expression
+  if (/\|\||&&|<=|>=|==|!=|[+\-*/%<>]/.test(s)) {
     return evaluateFlatExpression(s);
   }
 

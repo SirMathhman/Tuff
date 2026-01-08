@@ -230,6 +230,16 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("false || false")).toBe(0);
   });
 
+  it("handles numeric comparison ('let x = 1; let y = 2; x < y' => 1)", () => {
+    expect(interpret("let x = 1; let y = 2; x < y")).toBe(1);
+    expect(interpret("let x = 2; let y = 1; x < y")).toBe(0);
+    expect(interpret("1 < 2")).toBe(1);
+    expect(interpret("2 <= 2")).toBe(1);
+    expect(interpret("3 >= 4")).toBe(0);
+    expect(interpret("3 == 3")).toBe(1);
+    expect(interpret("3 != 3")).toBe(0);
+  });
+
   it("throws for referencing inner block binding outside its block ('{ let x = 10; } x' => Error)", () => {
     expect(() => interpret("{ let x = 10; } x")).toThrow();
     expect(() => interpret("{ { let x = 10; } x } ")).toThrow();
