@@ -42,8 +42,49 @@ function parseOperand(token: string) {
   return { valueBig: BigInt(numStr), isFloat: false };
 }
 
-export function interpret(input: string): number {
+export function interpret(input: string, env: Record<string, any> = {}): number {
   let s = input.trim();
+
+  // Helper: check for semicolons at top-level (not nested inside braces/parens)
+  function hasTopLevelSemicolon(str: string) {
+    let depth = 0;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str[i];
+      if (ch === '(' || ch === '{') depth++;
+      else if (ch === ')' || ch === '}') depth = Math.max(0, depth - 1);
+      else if (ch === ';' && depth === 0) return true;
+    }
+    return false;
+  }
+
+  // If the input looks like a block (has top-level semicolons or starts with `let`), evaluate as a block
+  if (hasTopLevelSemicolon(s) || /^let\b/.test(s)) {
+    // simple block evaluator with lexical scoping (variables shadow parent env)
+    const localEnv: Record<string, any> = { ...env };
+    let last: any = undefined;
+    const stmts = s.split(";");
+    for (let raw of stmts) {
+      const stmt = raw.trim();
+      if (!stmt) continue;
+      if (/^let\b/.test(stmt)) {
+        const m = stmt.match(/^let\s+([a-zA-Z_]\w*)(?:\s*:\s*[^=;]+)?\s*=\s*(.+)$/);
+        if (!m) throw new Error("invalid let declaration");
+        const name = m[1];
+        const rhs = m[2].trim();
+        // evaluate RHS as an operand (preserving suffix/type when present)
+        const rhsOperand = evaluateReturningOperand(rhs, localEnv);
+        localEnv[name] = rhsOperand;
+        last = rhsOperand;
+      } else {
+        last = evaluateReturningOperand(stmt, localEnv);
+      }
+    }
+    // convert last to number
+    if (last && (last as any).kind) return Number((last as any).valueBig);
+    if (typeof last === "number") return last;
+    if (last && (last as any).isFloat) return (last as any).floatValue as number;
+    return Number((last as any).valueBig as bigint);
+  }
 
   // If expression contains parentheses or braces, evaluate innermost grouped expressions first
   if (s.includes("(") || s.includes("{")) {
@@ -52,8 +93,8 @@ export function interpret(input: string): number {
     while (parenRegex.test(expr)) {
       const m = expr.match(parenRegex)![0];
       const inner = m.slice(1, -1);
-      // recursively interpret the inner group
-      const v = interpret(inner);
+      // recursively interpret the inner group (pass env so variables are scoped if needed)
+      const v = interpret(inner, env);
       expr = expr.replace(m, String(v));
     }
     s = expr;
@@ -69,13 +110,138 @@ export function interpret(input: string): number {
   }
 
   function parseOperandAt(src: string, pos: number) {
+    // Try numeric/suffixed literal first
     const m = src.slice(pos).match(/^([+-]?\d+(?:\.\d+)?(?:[uUiI]\d+)?)/);
-    if (!m) return null;
-    const operand = parseOperand(m[1]);
-    if (!operand) throw new Error("invalid operand");
-    return { operand, len: m[1].length };
+    if (m) {
+      const operand = parseOperand(m[1]);
+      if (!operand) throw new Error("invalid operand");
+      return { operand, len: m[1].length };
+    }
+    // fallback: identifier
+    const id = src.slice(pos).match(/^([a-zA-Z_]\w*)/);
+    if (id) return { operand: { ident: id[1] }, len: id[1].length };
+    return null;
   }
 
+  // Evaluate and return the final operand (object or number) so callers can preserve types
+  function evaluateReturningOperand(exprStr: string, localEnv: Record<string, any>): any {
+    const exprTokens: { op?: string; operand?: any }[] = [];
+    let pos = 0;
+    const L = exprStr.length;
+    function skip() {
+      while (pos < L && exprStr[pos] === ' ') pos++;
+    }
+    skip();
+    const firstMatch = parseOperandAt(exprStr, pos);
+    if (!firstMatch) throw new Error('invalid expression');
+    exprTokens.push({ operand: firstMatch.operand });
+    pos += firstMatch.len;
+    skip();
+    while (pos < L) {
+      const ch = exprStr[pos];
+      if (!/[+\-*/%]/.test(ch)) throw new Error('invalid operator');
+      const op = ch;
+      pos++;
+      skip();
+      const next = parseOperandAt(exprStr, pos);
+      if (!next) throw new Error('invalid operand after operator');
+      exprTokens.push({ op, operand: next.operand });
+      pos += next.len;
+      skip();
+    }
+
+    // build operands and ops
+    let operands = exprTokens.map((t) => t.operand);
+    const ops: string[] = [];
+    for (let i = 1; i < exprTokens.length; i++) ops.push(exprTokens[i].op!);
+
+    // resolve identifiers from localEnv
+    operands = operands.map((op) => {
+      if (op && (op as any).ident) {
+        const n = (op as any).ident as string;
+        if (!(n in localEnv)) throw new Error(`unknown identifier ${n}`);
+        return localEnv[n];
+      }
+      return op;
+    });
+
+    function checkRangeThrow(kind: string, bits: number, sum: bigint) {
+      if (kind === 'u') {
+        const max = (1n << BigInt(bits)) - 1n;
+        if (sum < 0n || sum > max) throw new Error(`value out of range for U${bits}`);
+      } else {
+        const min = -(1n << BigInt(bits - 1));
+        const max = (1n << BigInt(bits - 1)) - 1n;
+        if (sum < min || sum > max) throw new Error(`value out of range for I${bits}`);
+      }
+    }
+
+    function applyOpLocal(op: string, left: any, right: any): any {
+      const leftHasKind = left && (left as any).kind !== undefined;
+      const rightHasKind = right && (right as any).kind !== undefined;
+      if (leftHasKind || rightHasKind) {
+        const ref = leftHasKind ? left : right;
+        const kind = (ref as any).kind as string;
+        const bits = (ref as any).bits as number;
+        if (leftHasKind && rightHasKind) {
+          if ((left as any).kind !== (right as any).kind || (left as any).bits !== (right as any).bits)
+            throw new Error('mismatched suffixes in binary operation');
+        }
+        if (!leftHasKind && (left as any).isFloat) throw new Error('mixed suffix and float not allowed');
+        if (!rightHasKind && (right as any).isFloat) throw new Error('mixed suffix and float not allowed');
+
+        let lBig: bigint;
+        if (leftHasKind) lBig = (left as any).valueBig as bigint;
+        else if (typeof left === 'number') lBig = BigInt(left as number);
+        else lBig = (left as any).valueBig as bigint;
+
+        let rBig: bigint;
+        if (rightHasKind) rBig = (right as any).valueBig as bigint;
+        else if (typeof right === 'number') rBig = BigInt(right as number);
+        else rBig = (right as any).valueBig as bigint;
+
+        let resBig: bigint;
+        if (op === '+') resBig = lBig + rBig;
+        else if (op === '-') resBig = lBig - rBig;
+        else if (op === '*') resBig = lBig * rBig;
+        else if (op === '/') {
+          if (rBig === 0n) throw new Error('division by zero');
+          resBig = lBig / rBig;
+        } else if (op === '%') {
+          if (rBig === 0n) throw new Error('modulo by zero');
+          resBig = lBig % rBig;
+        } else throw new Error('unsupported operator');
+
+        checkRangeThrow(kind, bits, resBig);
+        return { valueBig: resBig, kind: kind, bits };
+      }
+
+      const lNum = typeof left === 'number' ? left : (left as any).isFloat ? (left as any).floatValue : Number((left as any).valueBig);
+      const rNum = typeof right === 'number' ? right : (right as any).isFloat ? (right as any).floatValue : Number((right as any).valueBig);
+      if (op === '+') return lNum + rNum;
+      if (op === '-') return lNum - rNum;
+      if (op === '*') return lNum * rNum;
+      if (op === '/') return lNum / rNum;
+      if (op === '%') return lNum % rNum;
+      throw new Error('unsupported operator');
+    }
+
+    // higher precedence pass
+    let ii = 0;
+    while (ii < ops.length) {
+      if (ops[ii] === '*' || ops[ii] === '/' || ops[ii] === '%') {
+        const res = applyOpLocal(ops[ii], operands[ii], operands[ii + 1]);
+        operands.splice(ii, 2, res);
+        ops.splice(ii, 1);
+      } else ii++;
+    }
+
+    // low precedence
+    let result: any = operands[0];
+    for (let j = 0; j < ops.length; j++) result = applyOpLocal(ops[j], result, operands[j + 1]);
+
+    return result;
+  }
   skipSpacesLocal();
   const first = parseOperandAt(s, idx);
   if (first) {
@@ -99,134 +265,11 @@ export function interpret(input: string): number {
 
   // Evaluate an expression string without parentheses, using operator precedence
   function evaluateFlatExpression(exprStr: string): number {
-    const exprTokens: { op?: string; operand?: any }[] = [];
-    let pos = 0;
-    const L = exprStr.length;
-    function skip() {
-      while (pos < L && exprStr[pos] === " ") pos++;
-    }
-    skip();
-    const firstMatch = parseOperandAt(exprStr, pos);
-    if (!firstMatch) throw new Error('invalid expression');
-    exprTokens.push({ operand: firstMatch.operand });
-    pos += firstMatch.len;
-    skip();
-    while (pos < L) {
-      const ch = exprStr[pos];
-      if (!/[+\-*/%]/.test(ch)) throw new Error('invalid operator');
-      const op = ch;
-      pos++;
-      skip();
-      const next = parseOperandAt(exprStr, pos);
-      if (!next) throw new Error('invalid operand after operator');
-      exprTokens.push({ op, operand: next.operand });
-      pos += next.len;
-      skip();
-    }
-
-    // reuse evaluation logic
-    const operands = exprTokens.map((t) => t.operand);
-    const ops: string[] = [];
-    for (let i = 1; i < exprTokens.length; i++) ops.push(exprTokens[i].op!);
-
-    function checkRangeThrow(kind: string, bits: number, sum: bigint) {
-      if (kind === "u") {
-        const max = (1n << BigInt(bits)) - 1n;
-        if (sum < 0n || sum > max)
-          throw new Error(`value out of range for U${bits}`);
-      } else {
-        const min = -(1n << BigInt(bits - 1));
-        const max = (1n << BigInt(bits - 1)) - 1n;
-        if (sum < min || sum > max)
-          throw new Error(`value out of range for I${bits}`);
-      }
-    }
-
-    function applyOpLocal(op: string, left: any, right: any): any {
-      const leftHasKind = left && (left as any).kind !== undefined;
-      const rightHasKind = right && (right as any).kind !== undefined;
-      if (leftHasKind || rightHasKind) {
-        const ref = leftHasKind ? left : right;
-        const kind = (ref as any).kind as string;
-        const bits = (ref as any).bits as number;
-        if (leftHasKind && rightHasKind) {
-          if (
-            (left as any).kind !== (right as any).kind ||
-            (left as any).bits !== (right as any).bits
-          )
-            throw new Error("mismatched suffixes in binary operation");
-        }
-        if (!leftHasKind && (left as any).isFloat)
-          throw new Error("mixed suffix and float not allowed");
-        if (!rightHasKind && (right as any).isFloat)
-          throw new Error("mixed suffix and float not allowed");
-
-        let lBig: bigint;
-        if (leftHasKind) lBig = (left as any).valueBig as bigint;
-        else if (typeof left === "number") lBig = BigInt(left as number);
-        else lBig = (left as any).valueBig as bigint;
-
-        let rBig: bigint;
-        if (rightHasKind) rBig = (right as any).valueBig as bigint;
-        else if (typeof right === "number") rBig = BigInt(right as number);
-        else rBig = (right as any).valueBig as bigint;
-
-        let resBig: bigint;
-        if (op === "+") resBig = lBig + rBig;
-        else if (op === "-") resBig = lBig - rBig;
-        else if (op === "*") resBig = lBig * rBig;
-        else if (op === "/") {
-          if (rBig === 0n) throw new Error("division by zero");
-          resBig = lBig / rBig;
-        } else if (op === "%") {
-          if (rBig === 0n) throw new Error("modulo by zero");
-          resBig = lBig % rBig;
-        } else throw new Error("unsupported operator");
-
-        checkRangeThrow(kind, bits, resBig);
-        return { valueBig: resBig, kind: kind, bits };
-      }
-
-      const lNum =
-        typeof left === "number"
-          ? left
-          : (left as any).isFloat
-          ? (left as any).floatValue
-          : Number((left as any).valueBig);
-      const rNum =
-        typeof right === "number"
-          ? right
-          : (right as any).isFloat
-          ? (right as any).floatValue
-          : Number((right as any).valueBig);
-      if (op === "+") return lNum + rNum;
-      if (op === "-") return lNum - rNum;
-      if (op === "*") return lNum * rNum;
-      if (op === "/") return lNum / rNum;
-      if (op === "%") return lNum % rNum;
-      throw new Error("unsupported operator");
-    }
-
-    // higher precedence pass
-    let ii = 0;
-    while (ii < ops.length) {
-      if (ops[ii] === "*" || ops[ii] === "/" || ops[ii] === "%") {
-        const res = applyOpLocal(ops[ii], operands[ii], operands[ii + 1]);
-        operands.splice(ii, 2, res);
-        ops.splice(ii, 1);
-      } else ii++;
-    }
-
-    // low precedence
-    let result = operands[0];
-    for (let j = 0; j < ops.length; j++)
-      result = applyOpLocal(ops[j], result, operands[j + 1]);
-
-    if (result && (result as any).kind) return Number((result as any).valueBig);
-    if (typeof result === "number") return result;
-    if (result && (result as any).isFloat)
-      return (result as any).floatValue as number;
-    return Number((result as any).valueBig as bigint);
+    const opnd = evaluateReturningOperand(exprStr, env);
+    if (opnd && (opnd as any).kind) return Number((opnd as any).valueBig);
+    if (typeof opnd === "number") return opnd;
+    if (opnd && (opnd as any).isFloat) return (opnd as any).floatValue as number;
+    return Number((opnd as any).valueBig as bigint);
   }
 
   // If expression contains parentheses, evaluate innermost and replace
