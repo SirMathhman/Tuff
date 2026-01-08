@@ -196,6 +196,24 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("let x = 20; let z = 0; let y : 20I32 = x; x")).toBe(20);
   });
 
+  it("supports declaration-only annotated let followed by assignment ('let x : 1I32; x = 1; x' => 1)", () => {
+    expect(interpret("let x : 1I32; x = 1; x")).toBe(1);
+  });
+
+  it("throws on reassigning annotated literal ('let x : 1I32; x = 1; x = 2; x' => Error)", () => {
+    expect(() => interpret("let x : 1I32; x = 1; x = 2; x")).toThrow();
+  });
+
+  it("allows reassign when declared mutable ('let mut x : I32; x = 1; x = 2; x' => 2)", () => {
+    expect(interpret("let mut x : I32; x = 1; x = 2; x")).toBe(2);
+  });
+
+  it("allows reassign when declared mutable with literal annotation ('let mut x : 1I32; x = 1; x = 2; x' => 2)", () => {
+    expect(interpret("let mut x : 1I32; x = 1; x = 2; x")).toBe(2);
+  });
+  it("handles while loops and compound assignment ('let mut x = 0; while (x < 4) x += 1; x' => 4)", () => {
+    expect(interpret("let mut x = 0; while (x < 4) x += 1; x")).toBe(4);
+  });
   it("throws when assigning a statement-only block to a variable ('let x = { let y = 20; }; x' => Error)", () => {
     expect(() => interpret("let x = { let y = 20; }; x")).toThrow();
     expect(() => interpret("{ let x = { let y = 20; }; x }")).toThrow();

@@ -10,6 +10,111 @@ export function isTruthy(val: any): boolean {
   return false;
 }
 
+// Top-level range-check helper for integer suffix arithmetic
+export function checkRange(kind: string, bits: number, sum: bigint) {
+  if (kind === "u") {
+    const max = (1n << BigInt(bits)) - 1n;
+    if (sum < 0n || sum > max)
+      throw new Error(`value out of range for U${bits}`);
+  } else {
+    const min = -(1n << BigInt(bits - 1));
+    const max = (1n << BigInt(bits - 1)) - 1n;
+    if (sum < min || sum > max)
+      throw new Error(`value out of range for I${bits}`);
+  }
+}
+
+// Exported helper to apply a binary arithmetic operator to two operands using the same rules
+export function applyBinaryOp(op: string, left: any, right: any): any {
+  if (op === "||") {
+    if (isTruthy(left)) return { boolValue: true };
+    return { boolValue: isTruthy(right) };
+  }
+  if (op === "&&") {
+    if (!isTruthy(left)) return { boolValue: false };
+    return { boolValue: isTruthy(right) };
+  }
+
+  const leftHasKind = left && (left as any).kind !== undefined;
+  const rightHasKind = right && (right as any).kind !== undefined;
+  if (leftHasKind || rightHasKind) {
+    const ref = leftHasKind ? left : right;
+    const kind = (ref as any).kind as string;
+    const bits = (ref as any).bits as number;
+    if (leftHasKind && rightHasKind) {
+      if (
+        (left as any).kind !== (right as any).kind ||
+        (left as any).bits !== (right as any).bits
+      )
+        throw new Error("mismatched suffixes in binary operation");
+    }
+    if (!leftHasKind && (left as any).isFloat)
+      throw new Error("mixed suffix and float not allowed");
+    if (!rightHasKind && (right as any).isFloat)
+      throw new Error("mixed suffix and float not allowed");
+
+    let lBig: bigint;
+    if (leftHasKind) lBig = (left as any).valueBig as bigint;
+    else if (typeof left === "number") lBig = BigInt(left as number);
+    else lBig = (left as any).valueBig as bigint;
+
+    let rBig: bigint;
+    if (rightHasKind) rBig = (right as any).valueBig as bigint;
+    else if (typeof right === "number") rBig = BigInt(right as number);
+    else rBig = (right as any).valueBig as bigint;
+
+    let resBig: bigint;
+    if (op === "+") resBig = lBig + rBig;
+    else if (op === "-") resBig = lBig - rBig;
+    else if (op === "*") resBig = lBig * rBig;
+    else if (op === "/") {
+      if (rBig === 0n) throw new Error("division by zero");
+      resBig = lBig / rBig;
+    } else if (op === "%") {
+      if (rBig === 0n) throw new Error("modulo by zero");
+      resBig = lBig % rBig;
+    } else throw new Error("unsupported operator");
+
+    checkRange(kind, bits, resBig);
+    return { valueBig: resBig, kind: kind, bits };
+  }
+
+  const leftIsBool = left && (left as any).boolValue !== undefined;
+  const rightIsBool = right && (right as any).boolValue !== undefined;
+  const lNum =
+    typeof left === "number"
+      ? left
+      : (left as any).isFloat
+      ? (left as any).floatValue
+      : leftIsBool
+      ? (left as any).boolValue
+        ? 1
+        : 0
+      : Number((left as any).valueBig);
+  const rNum =
+    typeof right === "number"
+      ? right
+      : (right as any).isFloat
+      ? (right as any).floatValue
+      : rightIsBool
+      ? (right as any).boolValue
+        ? 1
+        : 0
+      : Number((right as any).valueBig);
+  if (op === "+") return lNum + rNum;
+  if (op === "-") return lNum - rNum;
+  if (op === "*") return lNum * rNum;
+  if (op === "/") return lNum / rNum;
+  if (op === "%") return lNum % rNum;
+  if (op === "<") return { boolValue: lNum < rNum };
+  if (op === ">") return { boolValue: lNum > rNum };
+  if (op === "<=") return { boolValue: lNum <= rNum };
+  if (op === ">=") return { boolValue: lNum >= rNum };
+  if (op === "==") return { boolValue: lNum == rNum };
+  if (op === "!=") return { boolValue: lNum != rNum };
+  throw new Error("unsupported operator");
+}
+
 export function evaluateReturningOperand(
   exprStr: string,
   localEnv: Record<string, any>
@@ -72,119 +177,25 @@ export function evaluateReturningOperand(
     if (op && (op as any).ident) {
       const n = (op as any).ident as string;
       if (!(n in localEnv)) throw new Error(`unknown identifier ${n}`);
-      return localEnv[n];
+      const val = localEnv[n];
+      // If the binding is a placeholder for an uninitialized declaration, ensure it's initialized
+      if (val && (val as any).uninitialized !== undefined) {
+        if ((val as any).uninitialized)
+          throw new Error(`use of uninitialized variable ${n}`);
+        return (val as any).value;
+      }
+      // If the binding is a mutable wrapper (has a .value), return the wrapped value
+      if (val && (val as any).value !== undefined) return (val as any).value;
+      return val;
     }
     return op;
   });
-
-  function checkRangeThrow(kind: string, bits: number, sum: bigint) {
-    if (kind === "u") {
-      const max = (1n << BigInt(bits)) - 1n;
-      if (sum < 0n || sum > max)
-        throw new Error(`value out of range for U${bits}`);
-    } else {
-      const min = -(1n << BigInt(bits - 1));
-      const max = (1n << BigInt(bits - 1)) - 1n;
-      if (sum < min || sum > max)
-        throw new Error(`value out of range for I${bits}`);
-    }
-  }
-
-  function applyOpLocal(op: string, left: any, right: any): any {
-    if (op === "||") {
-      if (isTruthy(left)) return { boolValue: true };
-      return { boolValue: isTruthy(right) };
-    }
-    if (op === "&&") {
-      if (!isTruthy(left)) return { boolValue: false };
-      return { boolValue: isTruthy(right) };
-    }
-
-    const leftHasKind = left && (left as any).kind !== undefined;
-    const rightHasKind = right && (right as any).kind !== undefined;
-    if (leftHasKind || rightHasKind) {
-      const ref = leftHasKind ? left : right;
-      const kind = (ref as any).kind as string;
-      const bits = (ref as any).bits as number;
-      if (leftHasKind && rightHasKind) {
-        if (
-          (left as any).kind !== (right as any).kind ||
-          (left as any).bits !== (right as any).bits
-        )
-          throw new Error("mismatched suffixes in binary operation");
-      }
-      if (!leftHasKind && (left as any).isFloat)
-        throw new Error("mixed suffix and float not allowed");
-      if (!rightHasKind && (right as any).isFloat)
-        throw new Error("mixed suffix and float not allowed");
-
-      let lBig: bigint;
-      if (leftHasKind) lBig = (left as any).valueBig as bigint;
-      else if (typeof left === "number") lBig = BigInt(left as number);
-      else lBig = (left as any).valueBig as bigint;
-
-      let rBig: bigint;
-      if (rightHasKind) rBig = (right as any).valueBig as bigint;
-      else if (typeof right === "number") rBig = BigInt(right as number);
-      else rBig = (right as any).valueBig as bigint;
-
-      let resBig: bigint;
-      if (op === "+") resBig = lBig + rBig;
-      else if (op === "-") resBig = lBig - rBig;
-      else if (op === "*") resBig = lBig * rBig;
-      else if (op === "/") {
-        if (rBig === 0n) throw new Error("division by zero");
-        resBig = lBig / rBig;
-      } else if (op === "%") {
-        if (rBig === 0n) throw new Error("modulo by zero");
-        resBig = lBig % rBig;
-      } else throw new Error("unsupported operator");
-
-      checkRangeThrow(kind, bits, resBig);
-      return { valueBig: resBig, kind: kind, bits };
-    }
-
-    const leftIsBool = left && (left as any).boolValue !== undefined;
-    const rightIsBool = right && (right as any).boolValue !== undefined;
-    const lNum =
-      typeof left === "number"
-        ? left
-        : (left as any).isFloat
-        ? (left as any).floatValue
-        : leftIsBool
-        ? (left as any).boolValue
-          ? 1
-          : 0
-        : Number((left as any).valueBig);
-    const rNum =
-      typeof right === "number"
-        ? right
-        : (right as any).isFloat
-        ? (right as any).floatValue
-        : rightIsBool
-        ? (right as any).boolValue
-          ? 1
-          : 0
-        : Number((right as any).valueBig);
-    if (op === "+") return lNum + rNum;
-    if (op === "-") return lNum - rNum;
-    if (op === "*") return lNum * rNum;
-    if (op === "/") return lNum / rNum;
-    if (op === "%") return lNum % rNum;
-    if (op === "<") return { boolValue: lNum < rNum };
-    if (op === ">") return { boolValue: lNum > rNum };
-    if (op === "<=") return { boolValue: lNum <= rNum };
-    if (op === ">=") return { boolValue: lNum >= rNum };
-    if (op === "==") return { boolValue: lNum == rNum };
-    if (op === "!=") return { boolValue: lNum != rNum };
-    throw new Error("unsupported operator");
-  }
 
   function applyPrecedence(opSet: Set<string>) {
     let i = 0;
     while (i < ops.length) {
       if (opSet.has(ops[i])) {
-        const res = applyOpLocal(ops[i], operands[i], operands[i + 1]);
+        const res = applyBinaryOp(ops[i], operands[i], operands[i + 1]);
         operands.splice(i, 2, res);
         ops.splice(i, 1);
       } else i++;
