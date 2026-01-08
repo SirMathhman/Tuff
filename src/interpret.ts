@@ -90,10 +90,24 @@ export function interpret(
         const after = stmt.slice(endIdx + 1).trim();
         let body: string;
         let isBlock = false;
-        if (after.startsWith("=>")) {
-          body = after.slice(2).trim();
+        // optional result annotation: `: <annotation>` before `=>` or `{`
+        let resultAnnotation: string | null = null;
+        let rest = after;
+        if (rest.startsWith(":")) {
+          const afterAnn = rest.slice(1).trimStart();
+          const idxArrow = afterAnn.indexOf("=>");
+          const idxBrace = afterAnn.indexOf("{");
+          let pos = -1;
+          if (idxArrow !== -1 && (idxBrace === -1 || idxArrow < idxBrace)) pos = idxArrow;
+          else if (idxBrace !== -1) pos = idxBrace;
+          if (pos === -1) throw new Error("invalid fn result annotation");
+          resultAnnotation = afterAnn.slice(0, pos).trim();
+          rest = afterAnn.slice(pos).trimStart();
+        }
+        if (rest.startsWith("=>")) {
+          body = rest.slice(2).trim();
           if (!body) throw new Error("missing fn body");
-        } else if (after.startsWith("{")) {
+        } else if (rest.startsWith("{")) {
           const bStart = stmt.indexOf("{", endIdx + 1);
           const bEnd = findMatchingParen(stmt, bStart, "{", "}");
           if (bEnd === -1) throw new Error("unbalanced braces in fn");
@@ -105,7 +119,7 @@ export function interpret(
 
         // reserve name then attach closure env including the function itself
         declared.add(name);
-        localEnv[name] = { fn: { params, body, isBlock, closureEnv: null } };
+        localEnv[name] = { fn: { params, body, isBlock, resultAnnotation, closureEnv: null } };
         (localEnv[name] as any).fn.closureEnv = { ...localEnv };
 
         last = undefined;

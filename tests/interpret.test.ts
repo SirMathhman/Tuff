@@ -324,4 +324,8 @@ describe("interpret (basic behavior)", () => {
   it("supports functions with multiple named annotated params ('fn add(first : I32, second : I32) => first + second; add(1, 2)' => 3)", () => {
     expect(interpret("fn add(first : I32, second : I32) => first + second; add(1, 2)")).toBe(3);
   });
+
+  it("supports functions with annotated result ('fn add(first : I32, second : I32) : I32 => first + second; add(1, 2)' => 3)", () => {
+    expect(interpret("fn add(first : I32, second : I32) : I32 => first + second; add(1, 2)")).toBe(3);
+  });
 });
