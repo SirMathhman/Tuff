@@ -310,6 +310,7 @@ export function evaluateReturningOperand(
   const firstMatch = parseOperandAt(exprStr, pos);
   if (!firstMatch) throw new Error("invalid expression");
   exprTokens.push({ operand: firstMatch.operand });
+
   pos += firstMatch.len;
   skip();
   while (pos < L) {
@@ -321,6 +322,7 @@ export function evaluateReturningOperand(
       const inner = exprStr.slice(pos + 1, endIdx);
       const args = parseCommaSeparatedArgs(inner);
       exprTokens.push({ op: "call", operand: { callApp: args } });
+      // call does not change the lastPrimary (the function being applied)
       pos = endIdx + 1;
       skip();
       continue;
@@ -333,8 +335,9 @@ export function evaluateReturningOperand(
       if (!fieldMatch)
         throw new Error("invalid field access: expected field name after .");
       const fieldName = fieldMatch[1];
-      // For field access, we use a special "operator" that stores the field name
-      // The operand will be added as an empty placeholder to maintain the token structure
+      // For field access, push the field operator.
+      // The operand will be resolved during evaluation (not by referencing the
+      // potentially-shared parse-time object) to avoid duplicated references.
       exprTokens.push({ op: `.${fieldName}`, operand: undefined });
       pos += fieldName.length;
       skip();
@@ -370,6 +373,7 @@ export function evaluateReturningOperand(
     const next = parseOperandAt(exprStr, pos);
     if (!next) throw new Error("invalid operand after operator");
     exprTokens.push({ op, operand: next.operand });
+
     pos += next.len;
     skip();
   }
@@ -519,7 +523,8 @@ export function evaluateReturningOperand(
         callEnv[pname] = argOps[i];
       }
       // execute body
-      return executeFunctionBody(fn, callEnv);
+      const mapResult = executeFunctionBody(fn, callEnv);
+      return mapResult;
     }
 
     // identifier resolution (existing behavior)
@@ -568,46 +573,121 @@ export function evaluateReturningOperand(
     }
   }
 
+  // helper to evaluate a call and return its result
+  function evaluateCallAt(funcOperand: any, callAppOperand: any) {
+    const callArgs = (callAppOperand as any).callApp || [];
+    const argOps = callArgs.map((a: string) => evaluateReturningOperand(a, localEnv));
+    const fn = resolveFunctionFromOperand(funcOperand, localEnv);
+    if (fn.params.length !== argOps.length) throw new Error("invalid argument count");
+
+    const callEnv: Record<string, any> = { ...fn.closureEnv };
+    for (let j = 0; j < fn.params.length; j++) {
+      const p = fn.params[j];
+      const pname = p.name || p;
+      const pann = p.annotation || null;
+      validateAnnotation(pann, argOps[j]);
+      callEnv[pname] = argOps[j];
+    }
+    return executeFunctionBody(fn, callEnv);
+  }
+
+  // helper to extract and validate a field value from a struct/this instance
+  function getFieldValueFromInstance(maybe: any, fieldName: string) {
+    const fieldValue = (maybe as any).fieldValues[fieldName];
+    if (fieldValue === undefined) throw new Error(`invalid field access: ${fieldName}`);
+    return fieldValue;
+  }
+
   // Handle function application and field access (highest precedence, left-to-right)
   let i = 0;
   while (i < ops.length) {
     if (ops[i] === "call") {
-      const funcOperand = operands[i];
-      const callAppOperand = operands[i + 1];
-      const callArgs = (callAppOperand as any).callApp || [];
+      // If a field access immediately follows a call (call + .field), handle both
+      // together to avoid operand alignment issues.
+      if (
+        ops[i + 1] &&
+        typeof ops[i + 1] === "string" &&
+        ops[i + 1].startsWith(".")
+      ) {
+        const funcOperand = operands[i];
+        const callAppOperand = operands[i + 1];
+        const result = evaluateCallAt(funcOperand, callAppOperand);
 
-      // Evaluate the call arguments
-      const argOps = callArgs.map((a: string) =>
-        evaluateReturningOperand(a, localEnv)
-      );
+        const fieldName = (ops[i + 1] as string).substring(1);
+        if (!result) throw new Error(`cannot access field on null value`);
+        if (
+          !((result as any).isStructInstance || (result as any).isThisBinding)
+        )
+          throw new Error(`cannot access field on non-struct value`);
+        const fieldValue = (result as any).fieldValues[fieldName];
+        if (fieldValue === undefined)
+          throw new Error(`invalid field access: ${fieldName}`);
 
-      // The function should be in funcOperand
-      const fn = resolveFunctionFromOperand(funcOperand, localEnv);
+        // Remove [funcOperand, callApp, undefined] -> replace with the fieldValue
+        operands.splice(i, 3, fieldValue);
+        // remove the 'call' and '.field' operators
+        ops.splice(i, 2);
+        // continue at same index
+      } else {
+        const funcOperand = operands[i];
+        const callAppOperand = operands[i + 1];
+        const result = evaluateCallAt(funcOperand, callAppOperand);
 
-      if (fn.params.length !== argOps.length)
-        throw new Error("invalid argument count");
-
-      // prepare call env from closure
-      const callEnv: Record<string, any> = { ...fn.closureEnv };
-      for (let j = 0; j < fn.params.length; j++) {
-        const p = fn.params[j];
-        const pname = p.name || p;
-        const pann = p.annotation || null;
-        validateAnnotation(pann, argOps[j]);
-        callEnv[pname] = argOps[j];
+        operands.splice(i, 2, result);
+        ops.splice(i, 1);
       }
-
-      // execute body
-      const result = executeFunctionBody(fn, callEnv);
-
-      operands.splice(i, 2, result);
-      ops.splice(i, 1);
     } else if (ops[i] && ops[i].startsWith(".")) {
       // Field access operator
       const fieldName = ops[i].substring(1); // Remove the '.' prefix
       const structInstance = operands[i];
 
       if (!structInstance) {
+        // Attempt to recover: sometimes due to token ordering the actual struct instance
+        // may be to the left (e.g., parsing quirks). Search left for a nearby non-undefined
+        // operand that looks like a struct/this binding and use that.
+        let foundIndex = -1;
+        for (let j = i - 1; j >= 0; j--) {
+          if (operands[j] !== undefined) {
+            foundIndex = j;
+            break;
+          }
+        }
+        if (foundIndex !== -1) {
+          const maybe = operands[foundIndex];
+          if ((maybe as any).isStructInstance || (maybe as any).isThisBinding) {
+            const fieldValue = getFieldValueFromInstance(maybe, fieldName);
+            // Replace the range from foundIndex up to the dot placeholder with the field value
+            const count = i - foundIndex + 1;
+            operands.splice(foundIndex, count, fieldValue);
+            ops.splice(i, 1);
+            // Continue without incrementing i so we re-evaluate at the same position
+            continue;
+          }
+        }
+
+        // Try searching to the right as a fallback
+        let found = false;
+        for (let j = i + 1; j < operands.length; j++) {
+          if (operands[j] !== undefined) {
+            const maybe = operands[j];
+            if (
+              (maybe as any).isStructInstance ||
+              (maybe as any).isThisBinding
+            ) {
+              const fieldValue = getFieldValueFromInstance(maybe, fieldName);
+              // Replace from the dot placeholder up to the found operand inclusive
+              const count = j - i + 1;
+              operands.splice(i, count, fieldValue);
+              ops.splice(i, 1);
+              // Adjust i to j-1 so next iteration continues correctly
+              i = Math.max(0, i);
+              found = true;
+              break;
+            }
+            break;
+          }
+        }
+        if (found) continue;
         throw new Error(`cannot access field on null value`);
       }
 
@@ -616,12 +696,10 @@ export function evaluateReturningOperand(
         (structInstance as any).isStructInstance ||
         (structInstance as any).isThisBinding
       ) {
-        const fieldValue = (structInstance as any).fieldValues[fieldName];
-        if (fieldValue === undefined) {
-          throw new Error(`invalid field access: ${fieldName}`);
-        }
+        const fieldValue = getFieldValueFromInstance(structInstance, fieldName);
 
-        operands.splice(i, 1, fieldValue);
+        // Replace the operand and its following placeholder with the field value
+        operands.splice(i, 2, fieldValue);
         ops.splice(i, 1);
       } else {
         throw new Error(`cannot access field on non-struct value`);

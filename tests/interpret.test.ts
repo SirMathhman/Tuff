@@ -378,7 +378,9 @@ describe("interpret (basic behavior)", () => {
   });
 
   it("returns 'this' from a function used as constructor ('fn Wrapper(value : I32) => this; Wrapper(100).value' => 100)", () => {
-    expect(interpret("fn Wrapper(value : I32) => this; Wrapper(100).value")).toBe(100);
+    expect(
+      interpret("fn Wrapper(value : I32) => this; Wrapper(100).value")
+    ).toBe(100);
   });
 
   it("handles empty struct definition ('struct Empty {}' => 0)", () => {
@@ -386,15 +388,23 @@ describe("interpret (basic behavior)", () => {
   });
 
   it("handles struct with field access ('struct Wrapper { value : I32 } Wrapper { value : 100 }.value' => 100)", () => {
-    expect(interpret("struct Wrapper { value : I32 } Wrapper { value : 100 }.value")).toBe(100);
+    expect(
+      interpret("struct Wrapper { value : I32 } Wrapper { value : 100 }.value")
+    ).toBe(100);
   });
 
   it("handles struct with multiple fields ('struct Point { x : I32, y : I32 } Point { x : 10, y : 20 }.x' => 10)", () => {
-    expect(interpret("struct Point { x : I32, y : I32 } Point { x : 10, y : 20 }.x")).toBe(10);
+    expect(
+      interpret("struct Point { x : I32, y : I32 } Point { x : 10, y : 20 }.x")
+    ).toBe(10);
   });
 
   it("handles struct field access with expressions ('struct Point { x : I32, y : I32 } Point { x : 5 + 5, y : 15 + 5 }.y' => 20)", () => {
-    expect(interpret("struct Point { x : I32, y : I32 } Point { x : 5 + 5, y : 15 + 5 }.y")).toBe(20);
+    expect(
+      interpret(
+        "struct Point { x : I32, y : I32 } Point { x : 5 + 5, y : 15 + 5 }.y"
+      )
+    ).toBe(20);
   });
 
   it("handles this binding for variable access ('let x = 100; this.x' => 100)", () => {
@@ -403,5 +413,13 @@ describe("interpret (basic behavior)", () => {
 
   it("handles this binding for variable assignment ('let mut x = 100; this.x = 200; x' => 200)", () => {
     expect(interpret("let mut x = 100; this.x = 200; x")).toBe(200);
+  });
+
+  it("constructors return separate 'this' instances and allow arithmetic ('fn Wrapper(value : I32) => this; Wrapper(3).value + Wrapper(4).value' => 7)", () => {
+    expect(
+      interpret(
+        "fn Wrapper(value : I32) => this; Wrapper(3).value + Wrapper(4).value"
+      )
+    ).toBe(7);
   });
 });

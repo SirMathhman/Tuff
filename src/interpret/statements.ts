@@ -44,8 +44,11 @@ export function interpretBlock(
     if (/^fn\b/.test(stmt)) {
       // Delegate parsing and registration to helper
       const tExpr = registerFunctionFromStmt(stmt, localEnv, declared);
-      if (tExpr) last = evaluateReturningOperand(tExpr, localEnv);
-      else last = undefined;
+      if (tExpr) {
+        // Evaluate trailing expression as a statement sequence so function calls like
+        // `add()` are executed (interpretExpression can strip calls like `()`).
+        last = interpret(tExpr + ";", localEnv);
+      } else last = undefined;
       continue;
     }
 
