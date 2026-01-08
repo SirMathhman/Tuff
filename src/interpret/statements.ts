@@ -1,3 +1,4 @@
+/* eslint-disable max-lines */
 import { splitTopLevelStatements } from "../parser";
 import {
   evaluateReturningOperand,
@@ -23,9 +24,19 @@ import {
 } from "./helpers";
 import { Env, envClone, envGet, envSet, envHas, envDelete } from "../env";
 import type { InterpretFn } from "../types";
-import { isPlainObject, isIntOperand, isPointer, toErrorMessage, unwrapBindingValue } from "../types";
+import {
+  isPlainObject,
+  isIntOperand,
+  isPointer,
+  toErrorMessage,
+  unwrapBindingValue,
+} from "../types";
 
-export function interpretBlock(s: string, env: Env, interpret: InterpretFn): number {
+export function interpretBlock(
+  s: string,
+  env: Env,
+  interpret: InterpretFn
+): number {
   return interpretBlockInternal(s, env, interpret, false);
 }
 
@@ -105,6 +116,18 @@ function interpretBlockInternal(
       continue;
     }
 
+    // yield statement: `yield <expr>` causes immediate block-level return with <expr>
+    if (/^yield\b/.test(stmt)) {
+      const m = stmt.match(/^yield\s+([\s\S]+)$/);
+      if (!m) throw new Error("yield requires an expression");
+      const rhs = m[1].trim();
+      if (!rhs) throw new Error("yield requires an expression");
+      const rhsOperand = evaluateRhsLocal(rhs, localEnv);
+      // throw a special marker that bubbles out of nested interpret() calls
+      // until it is handled at the expression/initializer boundary
+      throw { __yield: convertOperandToNumber(rhsOperand) };
+    }
+
     if (/^let\b/.test(stmt)) {
       // support `let [mut] name [: annotation] [= rhs]`
       const m = stmt.match(
@@ -168,7 +191,7 @@ function interpretBlockInternal(
           }
         }
 
-  const rhsOperand = evaluateRhsLocal(rhs, localEnv);
+        const rhsOperand = evaluateRhsLocal(rhs, localEnv);
 
         if (annotation) {
           validateAnnotation(annotation, rhsOperand);
@@ -216,6 +239,69 @@ function interpretBlockInternal(
         continue;
       }
 
+      // if statement (statement-level, optional else)
+      if (/^if\b/.test(stmt)) {
+        const start = stmt.indexOf("(");
+        if (start === -1) throw new Error("invalid if syntax");
+        const endIdx = findMatchingParen(stmt, start);
+        if (endIdx === -1)
+          throw new Error("invalid if syntax: unbalanced parentheses");
+        const cond = stmt.slice(start + 1, endIdx).trim();
+        let rest = stmt.slice(endIdx + 1).trim();
+        if (!rest) throw new Error("missing if body");
+
+        // parse true body (braced block or single statement)
+        let trueBody = "";
+        let falseBody: string | null = null;
+        if (rest.startsWith("{")) {
+          const bEnd = findMatchingParen(rest, 0, "{", "}");
+          if (bEnd === -1) throw new Error("unbalanced braces in if");
+          trueBody = rest.slice(0, bEnd + 1).trim();
+          rest = rest.slice(bEnd + 1).trim();
+        } else {
+          // single statement body; could be followed by 'else <body>' in the same statement
+          const elseIdx = rest.indexOf(" else ");
+          if (elseIdx !== -1) {
+            trueBody = rest.slice(0, elseIdx).trim();
+            rest = rest.slice(elseIdx + 6).trim();
+          } else {
+            trueBody = rest.trim();
+            rest = "";
+          }
+        }
+
+        // if an else body remains, parse it similarly
+        if (rest) {
+          if (rest.startsWith("{")) {
+            const bEnd = findMatchingParen(rest, 0, "{", "}");
+            if (bEnd === -1) throw new Error("unbalanced braces in if else");
+            falseBody = rest.slice(0, bEnd + 1).trim();
+          } else {
+            falseBody = rest.trim();
+          }
+        }
+
+        const condOpnd = evaluateReturningOperand(cond, localEnv);
+        if (isTruthy(condOpnd)) {
+          if (/^\s*\{[\s\S]*\}\s*$/.test(trueBody)) {
+            const inner = trueBody.replace(/^\{\s*|\s*\}$/g, "");
+            interpret(inner, localEnv);
+          } else {
+            interpret(trueBody + ";", localEnv);
+          }
+        } else if (falseBody) {
+          if (/^\s*\{[\s\S]*\}\s*$/.test(falseBody)) {
+            const inner = falseBody.replace(/^\{\s*|\s*\}$/g, "");
+            interpret(inner, localEnv);
+          } else {
+            interpret(falseBody + ";", localEnv);
+          }
+        }
+
+        last = undefined;
+        continue;
+      }
+
       // while loop
       if (/^while\b/.test(stmt)) {
         const start = stmt.indexOf("(");
@@ -229,7 +315,7 @@ function interpretBlockInternal(
           const condOpnd = evaluateReturningOperand(cond, localEnv);
           if (!isTruthy(condOpnd)) break;
           if (/^\s*\{[\s\S]*\}\s*$/.test(body)) {
-            const inner = body.replace(/^\{\s*|\s*\}\$/g, "");
+            const inner = body.replace(/^\{\s*|\s*\}$/g, "");
             interpret(inner, localEnv);
           } else {
             interpret(body + ";", localEnv);
@@ -348,30 +434,40 @@ function interpretBlockInternal(
           // For deref assignment to a placeholder, validate annotation
           if (
             isPlainObject(targetExisting) &&
-            Object.prototype.hasOwnProperty.call(targetExisting, "uninitialized")
+            Object.prototype.hasOwnProperty.call(
+              targetExisting,
+              "uninitialized"
+            )
           ) {
             if (
-              (targetExisting as { literalAnnotation?: unknown }).literalAnnotation &&
+              (targetExisting as { literalAnnotation?: unknown })
+                .literalAnnotation &&
               !(targetExisting as { uninitialized?: unknown }).uninitialized &&
               !(targetExisting as { mutable?: unknown }).mutable
             )
               throw new Error("cannot reassign annotated literal");
             if (
-              (targetExisting as { parsedAnnotation?: unknown }).parsedAnnotation &&
+              (targetExisting as { parsedAnnotation?: unknown })
+                .parsedAnnotation &&
               (targetExisting as { uninitialized?: unknown }).uninitialized
             ) {
               validateAnnotation(
-                (targetExisting as { parsedAnnotation?: unknown }).parsedAnnotation,
+                (targetExisting as { parsedAnnotation?: unknown })
+                  .parsedAnnotation,
                 newVal
               );
-            } else if (typeof (targetExisting as { annotation?: unknown }).annotation === "string") {
+            } else if (
+              typeof (targetExisting as { annotation?: unknown }).annotation ===
+              "string"
+            ) {
               validateAnnotation(
                 (targetExisting as { annotation: string }).annotation,
                 newVal
               );
             }
             (targetExisting as { value?: unknown }).value = newVal;
-            (targetExisting as { uninitialized?: unknown }).uninitialized = false;
+            (targetExisting as { uninitialized?: unknown }).uninitialized =
+              false;
             envSet(localEnv, targetName, targetExisting);
           } else if (
             isPlainObject(targetExisting) &&

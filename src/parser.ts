@@ -177,7 +177,8 @@ export function parseOperandAt(src: string, pos: number) {
     } else if (src[j] === "{") {
       // struct instantiation: Name { field1: value1, field2: value2, ... }
       const endIdx = findMatchingDelimiter(src, j, "{", "}");
-      if (endIdx === -1) throw new Error("unbalanced braces in struct instantiation");
+      if (endIdx === -1)
+        throw new Error("unbalanced braces in struct instantiation");
       const inner = src.slice(j + 1, endIdx).trim();
       // Parse field assignments (comma-separated, but values can have operators)
       const fieldParts = parseCommaSeparatedArgs(inner);
@@ -194,7 +195,7 @@ export function parseOperandAt(src: string, pos: number) {
       operand.structInstantiation = { name: id[1], fields };
       operand = applyPrefixes(operand, prefixes);
       // len should be from start position i to endIdx (inclusive of closing brace)
-      return { operand, len: (i - pos) + (endIdx - i + 1) };
+      return { operand, len: i - pos + (endIdx - i + 1) };
     }
 
     operand = applyPrefixes(operand, prefixes);

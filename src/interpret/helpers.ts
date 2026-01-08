@@ -73,7 +73,9 @@ export function assignToPlaceholder(
       (existing as { parsedAnnotation?: unknown }).parsedAnnotation,
       newVal
     );
-  } else if (typeof (existing as { annotation?: unknown }).annotation === "string") {
+  } else if (
+    typeof (existing as { annotation?: unknown }).annotation === "string"
+  ) {
     const annotation = (existing as { annotation: string }).annotation;
     const typeOnly = annotation.match(/^\s*([uUiI])\s*(\d+)\s*$/);
     if (typeOnly || /^\s*bool\s*$/i.test(annotation)) {

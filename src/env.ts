@@ -128,7 +128,10 @@ export function envGet(e: Env, k: string): unknown {
 
 export function envSet(e: Env, k: string, v: unknown): void {
   if ((e as { __isMapProxy?: unknown }).__isMapProxy === true)
-    (e as unknown as { set: (_key: string, _value: unknown) => void }).set(k, v);
+    (e as unknown as { set: (_key: string, _value: unknown) => void }).set(
+      k,
+      v
+    );
   else (e as { [k: string]: unknown })[k] = v;
 }
 
@@ -140,7 +143,9 @@ export function envDelete(e: Env, k: string): void {
 
 export function envEntries(e: Env): IterableIterator<[string, unknown]> {
   if ((e as { __isMapProxy?: unknown }).__isMapProxy === true)
-    return (e as unknown as { entries: () => IterableIterator<[string, unknown]> }).entries();
+    return (
+      e as unknown as { entries: () => IterableIterator<[string, unknown]> }
+    ).entries();
   return Object.entries(e as { [k: string]: unknown })[
     Symbol.iterator
   ]() as IterableIterator<[string, unknown]>;

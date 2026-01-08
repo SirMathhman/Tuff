@@ -24,7 +24,10 @@ export function isFloatOperand(
 }
 
 export function isIntOperand(v: unknown): v is { valueBig: bigint } {
-  return isPlainObject(v) && typeof (v as { valueBig?: unknown }).valueBig === "bigint";
+  return (
+    isPlainObject(v) &&
+    typeof (v as { valueBig?: unknown }).valueBig === "bigint"
+  );
 }
 
 export function isFnWrapper(v: unknown): v is { fn: PlainObject } {
@@ -52,12 +55,12 @@ export function isStructInstance(
 }
 
 export function isStructDef(v: unknown): v is { isStructDef: true } {
-  return isPlainObject(v) && (v as { isStructDef?: unknown }).isStructDef === true;
+  return (
+    isPlainObject(v) && (v as { isStructDef?: unknown }).isStructDef === true
+  );
 }
 
-export function isPointer(
-  v: unknown
-): v is { pointer: true; ptrName: string } {
+export function isPointer(v: unknown): v is { pointer: true; ptrName: string } {
   return (
     isPlainObject(v) &&
     (v as { pointer?: unknown }).pointer === true &&

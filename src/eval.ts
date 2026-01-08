@@ -46,7 +46,11 @@ export function checkRange(kind: string, bits: number, sum: bigint) {
 }
 
 // Exported helper to apply a binary arithmetic operator to two operands using the same rules
-export function applyBinaryOp(op: string, left: unknown, right: unknown): unknown {
+export function applyBinaryOp(
+  op: string,
+  left: unknown,
+  right: unknown
+): unknown {
   if (op === "||") {
     if (isTruthy(left)) return { boolValue: true };
     return { boolValue: isTruthy(right) };
@@ -68,7 +72,8 @@ export function applyBinaryOp(op: string, left: unknown, right: unknown): unknow
       throw new Error("invalid suffix metadata");
     if (leftHasKind && rightHasKind) {
       if (
-        (left as { kind?: unknown }).kind !== (right as { kind?: unknown }).kind ||
+        (left as { kind?: unknown }).kind !==
+          (right as { kind?: unknown }).kind ||
         (left as { bits?: unknown }).bits !== (right as { bits?: unknown }).bits
       )
         throw new Error("mismatched suffixes in binary operation");
@@ -91,12 +96,14 @@ export function applyBinaryOp(op: string, left: unknown, right: unknown): unknow
 
     let rBig: bigint;
     if (rightHasKind) {
-      if (!isIntOperand(right)) throw new Error("invalid right integer operand");
+      if (!isIntOperand(right))
+        throw new Error("invalid right integer operand");
       rBig = right.valueBig;
     } else if (typeof right === "number") {
       rBig = BigInt(right);
     } else {
-      if (!isIntOperand(right)) throw new Error("invalid right integer operand");
+      if (!isIntOperand(right))
+        throw new Error("invalid right integer operand");
       rBig = right.valueBig;
     }
 
@@ -171,12 +178,21 @@ function mustGetEnvBinding(env: Env, name: string): unknown {
 }
 
 function resolveFunctionFromOperand(operand: unknown, localEnv: Env): unknown {
-  if (isPlainObject(operand) && isPlainObject((operand as { fn?: unknown }).fn)) {
+  if (
+    isPlainObject(operand) &&
+    isPlainObject((operand as { fn?: unknown }).fn)
+  ) {
     return (operand as { fn: unknown }).fn;
-  } else if (isPlainObject(operand) && typeof (operand as { ident?: unknown }).ident === "string") {
+  } else if (
+    isPlainObject(operand) &&
+    typeof (operand as { ident?: unknown }).ident === "string"
+  ) {
     const name = (operand as { ident: string }).ident;
     const binding = mustGetEnvBinding(localEnv, name);
-    if (!isPlainObject(binding) || !isPlainObject((binding as { fn?: unknown }).fn))
+    if (
+      !isPlainObject(binding) ||
+      !isPlainObject((binding as { fn?: unknown }).fn)
+    )
       throw new Error("not a function");
     return (binding as { fn: unknown }).fn;
   } else {
@@ -192,7 +208,8 @@ function executeFunctionBody(fn: unknown, callEnv: Env): unknown {
   if (!isPlainObject(fn)) throw new Error("internal error: invalid fn");
   const isBlock = (fn as { isBlock?: unknown }).isBlock === true;
   const body = (fn as { body?: unknown }).body;
-  if (typeof body !== "string") throw new Error("internal error: invalid fn body");
+  if (typeof body !== "string")
+    throw new Error("internal error: invalid fn body");
 
   if (!isBlock) {
     return evaluateReturningOperand(body, callEnv);
@@ -226,8 +243,10 @@ function executeFunctionBody(fn: unknown, callEnv: Env): unknown {
     // Build `this` binding directly from the call env to ensure nested functions
     // declared inside the block are included as direct fields on the resulting
     // `this` object (methods should be callable via `this.method`).
-    const thisObj: { isThisBinding: true; fieldValues: { [k: string]: unknown } } =
-      { isThisBinding: true, fieldValues: {} };
+    const thisObj: {
+      isThisBinding: true;
+      fieldValues: { [k: string]: unknown };
+    } = { isThisBinding: true, fieldValues: {} };
     for (const [k, envVal] of envEntries(callEnv)) {
       if (k === "this") continue;
       if (
@@ -259,7 +278,10 @@ function executeFunctionBody(fn: unknown, callEnv: Env): unknown {
   return v;
 }
 
-export function evaluateReturningOperand(exprStr: string, localEnv: Env): unknown {
+export function evaluateReturningOperand(
+  exprStr: string,
+  localEnv: Env
+): unknown {
   // Support an 'if' expression: if (condition) trueBranch else falseBranch
   const sTrim = exprStr.trimStart();
   if (/^if\b/.test(sTrim)) {
@@ -478,7 +500,10 @@ export function evaluateReturningOperand(exprStr: string, localEnv: Env): unknow
   // helper to get binding and deref target
   function getBindingTarget(name: string) {
     const binding = mustGetEnvBinding(localEnv, name);
-    if (isPlainObject(binding) && (binding as { uninitialized?: unknown }).uninitialized)
+    if (
+      isPlainObject(binding) &&
+      (binding as { uninitialized?: unknown }).uninitialized
+    )
       throw new Error(`use of uninitialized variable ${name}`);
     const targetVal = unwrapBindingValue(binding);
     return { binding, targetVal };
@@ -489,12 +514,18 @@ export function evaluateReturningOperand(exprStr: string, localEnv: Env): unknow
     // address-of: produce a pointer object referring to the binding name and include target metadata
     if (isPlainObject(op) && (op as { addrOf?: unknown }).addrOf) {
       const inner = (op as { addrOf: unknown }).addrOf;
-      if (!isPlainObject(inner) || typeof (inner as { ident?: unknown }).ident !== "string")
+      if (
+        !isPlainObject(inner) ||
+        typeof (inner as { ident?: unknown }).ident !== "string"
+      )
         throw new Error("& must be applied to identifier");
       const n = (inner as { ident: string }).ident;
       const { targetVal } = getBindingTarget(n);
       const ptrObj: { [k: string]: unknown } = { ptrName: n, pointer: true };
-      if (isPlainObject(targetVal) && typeof (targetVal as { kind?: unknown }).kind === "string") {
+      if (
+        isPlainObject(targetVal) &&
+        typeof (targetVal as { kind?: unknown }).kind === "string"
+      ) {
         ptrObj.kind = (targetVal as { kind?: unknown }).kind;
         ptrObj.bits = (targetVal as { bits?: unknown }).bits;
         ptrObj.valueBig = (targetVal as { valueBig?: unknown }).valueBig;
@@ -517,11 +548,13 @@ export function evaluateReturningOperand(exprStr: string, localEnv: Env): unknow
     if (isPlainObject(op) && (op as { deref?: unknown }).deref) {
       const inner = (op as { deref: unknown }).deref;
       // deref of an identifier that holds a pointer
-      if (isPlainObject(inner) && typeof (inner as { ident?: unknown }).ident === "string") {
+      if (
+        isPlainObject(inner) &&
+        typeof (inner as { ident?: unknown }).ident === "string"
+      ) {
         const n = (inner as { ident: string }).ident;
         const { targetVal: val } = getBindingTarget(n);
-        if (!isPointer(val))
-          throw new Error("cannot dereference non-pointer");
+        if (!isPointer(val)) throw new Error("cannot dereference non-pointer");
         const targetName = val.ptrName;
         const { targetVal } = getBindingTarget(targetName);
         return targetVal;
@@ -529,7 +562,10 @@ export function evaluateReturningOperand(exprStr: string, localEnv: Env): unknow
       // deref of an inline &expr like *(&x)
       if (isPlainObject(inner) && (inner as { addrOf?: unknown }).addrOf) {
         const inr = (inner as { addrOf: unknown }).addrOf;
-        if (!isPlainObject(inr) || typeof (inr as { ident?: unknown }).ident !== "string")
+        if (
+          !isPlainObject(inr) ||
+          typeof (inr as { ident?: unknown }).ident !== "string"
+        )
           throw new Error("& must be applied to identifier");
         const n = (inr as { ident: string }).ident;
         const { targetVal } = getBindingTarget(n);
@@ -539,7 +575,10 @@ export function evaluateReturningOperand(exprStr: string, localEnv: Env): unknow
     }
 
     // struct instantiation handling
-    if (isPlainObject(op) && (op as { structInstantiation?: unknown }).structInstantiation) {
+    if (
+      isPlainObject(op) &&
+      (op as { structInstantiation?: unknown }).structInstantiation
+    ) {
       const si = (op as { structInstantiation: unknown }).structInstantiation;
       if (!isPlainObject(si)) throw new Error("invalid struct instantiation");
       const structName = (si as { name?: unknown }).name;
@@ -585,9 +624,7 @@ export function evaluateReturningOperand(exprStr: string, localEnv: Env): unknow
         if (typeof fieldName !== "string" || typeof annotationRaw !== "string")
           throw new Error("invalid struct definition");
         if (!providedFields.has(fieldName)) {
-          throw new Error(
-            `missing field ${fieldName} in struct ${structName}`
-          );
+          throw new Error(`missing field ${fieldName} in struct ${structName}`);
         }
         // For struct fields, just validate that the type annotation is recognized
         // but don't require literal value matching (different from let bindings)
@@ -606,7 +643,10 @@ export function evaluateReturningOperand(exprStr: string, localEnv: Env): unknow
     }
 
     // function call handling (identifier with callArgs)
-    if (isPlainObject(op) && Array.isArray((op as { callArgs?: unknown }).callArgs)) {
+    if (
+      isPlainObject(op) &&
+      Array.isArray((op as { callArgs?: unknown }).callArgs)
+    ) {
       const callArgsRaw = (op as { callArgs: unknown[] }).callArgs;
       // Reuse the shared call evaluator to keep behavior consistent with the
       // explicit "call" operator path and avoid duplicated argument/env logic.
@@ -614,13 +654,18 @@ export function evaluateReturningOperand(exprStr: string, localEnv: Env): unknow
     }
 
     // identifier resolution (existing behavior)
-    if (isPlainObject(op) && typeof (op as { ident?: unknown }).ident === "string") {
+    if (
+      isPlainObject(op) &&
+      typeof (op as { ident?: unknown }).ident === "string"
+    ) {
       const n = (op as { ident: string }).ident;
 
       // Special handling for 'this' binding
       if (n === "this") {
-        const thisObj: { isThisBinding: true; fieldValues: { [k: string]: unknown } } =
-          { isThisBinding: true, fieldValues: {} };
+        const thisObj: {
+          isThisBinding: true;
+          fieldValues: { [k: string]: unknown };
+        } = { isThisBinding: true, fieldValues: {} };
         // Build fieldValues from current localEnv
         for (const [key, value] of envEntries(localEnv)) {
           if (key !== "this") {
@@ -681,7 +726,10 @@ export function evaluateReturningOperand(exprStr: string, localEnv: Env): unknow
       return evaluateReturningOperand(a, localEnv);
     });
     const fn = resolveFunctionFromOperand(funcOperand, localEnv);
-    if (!isPlainObject(fn) || !Array.isArray((fn as { params?: unknown }).params))
+    if (
+      !isPlainObject(fn) ||
+      !Array.isArray((fn as { params?: unknown }).params)
+    )
       throw new Error("internal error: invalid function");
     const fnParams = (fn as { params: unknown[] }).params;
     const fnClosureEnv = (fn as { closureEnv?: unknown }).closureEnv;
@@ -693,9 +741,7 @@ export function evaluateReturningOperand(exprStr: string, localEnv: Env): unknow
     const callEnv: Env = envClone(fnClosureEnv as Env);
     for (let j = 0; j < fnParams.length; j++) {
       const p = fnParams[j];
-      const pname = isPlainObject(p)
-        ? (p as { name?: unknown }).name
-        : p;
+      const pname = isPlainObject(p) ? (p as { name?: unknown }).name : p;
       const pann = isPlainObject(p)
         ? (p as { annotation?: unknown }).annotation
         : null;
@@ -710,7 +756,10 @@ export function evaluateReturningOperand(exprStr: string, localEnv: Env): unknow
   }
 
   // helper to extract and validate a field value from a struct/this instance
-  function getFieldValueFromInstance(maybe: unknown, fieldName: string): unknown {
+  function getFieldValueFromInstance(
+    maybe: unknown,
+    fieldName: string
+  ): unknown {
     if (!(isStructInstance(maybe) || isThisBinding(maybe)))
       throw new Error("cannot access field on non-struct value");
 
@@ -807,10 +856,7 @@ export function evaluateReturningOperand(exprStr: string, localEnv: Env): unknow
 
       // Handle both struct instances and this binding
       if (isStructInstance(structInstance) || isThisBinding(structInstance)) {
-        const fieldValue = getFieldValueFromInstance(
-          structInstance,
-          fieldName
-        );
+        const fieldValue = getFieldValueFromInstance(structInstance, fieldName);
 
         // Replace the operand and its following placeholder with the field value
         operands.splice(i, 2, fieldValue);

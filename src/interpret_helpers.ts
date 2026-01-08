@@ -34,9 +34,24 @@ export function evaluateRhs(
     if (!lastInner) throw new Error("initializer cannot be empty block");
     if (/^let\b/.test(lastInner))
       throw new Error("initializer cannot contain declarations");
-    const v = interpret(inner, {});
-    if (Number.isInteger(v)) return { valueBig: BigInt(v) };
-    return { floatValue: v, isFloat: true };
+    try {
+      const v = interpret(inner, {});
+      if (Number.isInteger(v)) return { valueBig: BigInt(v) };
+      return { floatValue: v, isFloat: true };
+    } catch (e: unknown) {
+      // Handle `yield` signal thrown from nested block execution. If a yield was
+      // signaled, convert the numeric payload into an operand and return it.
+      if (
+        e &&
+        typeof e === "object" &&
+        Object.prototype.hasOwnProperty.call(e, "__yield")
+      ) {
+        const val = (e as { __yield: number }).__yield;
+        if (Number.isInteger(val)) return { valueBig: BigInt(val) };
+        return { floatValue: val, isFloat: true };
+      }
+      throw e;
+    }
   }
   if (/^\s*let\b/.test(rhs) || /\{[^}]*\blet\b/.test(rhs))
     throw new Error("initializer cannot contain declarations");
@@ -62,7 +77,11 @@ export function checkAnnMatchesRhs(ann: unknown, rhsOperand: unknown) {
   }
 }
 
-export function validateTypeOnly(kind: string, bits: number, rhsOperand: unknown) {
+export function validateTypeOnly(
+  kind: string,
+  bits: number,
+  rhsOperand: unknown
+) {
   if (!isIntOperand(rhsOperand))
     throw new Error("annotation must be integer type matching initializer");
   const rhsKind = (rhsOperand as { kind?: unknown }).kind;
@@ -461,7 +480,8 @@ export function registerFunctionFromStmt(
     fn: { params, body, isBlock, resultAnnotation, closureEnv: null },
   });
   const fnObj = envGet(localEnv, name);
-  if (!isFnWrapper(fnObj)) throw new Error("internal error: fn registration failed");
+  if (!isFnWrapper(fnObj))
+    throw new Error("internal error: fn registration failed");
   (fnObj.fn as { closureEnv: Env | null }).closureEnv = envClone(localEnv);
 
   return trailingExpr;
@@ -556,8 +576,9 @@ export function interpretAll(
       // Exports object where `out` declarations will register their symbols
       nsEnv.__exports = {};
       interpFn(scripts[nsName], nsEnv);
-      namespaceRegistry[nsName] =
-        isPlainObject(nsEnv.__exports) ? (nsEnv.__exports as { [k: string]: unknown }) : {};
+      namespaceRegistry[nsName] = isPlainObject(nsEnv.__exports)
+        ? (nsEnv.__exports as { [k: string]: unknown })
+        : {};
     }
     return namespaceRegistry[nsName];
   };

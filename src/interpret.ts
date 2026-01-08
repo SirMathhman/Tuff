@@ -54,7 +54,19 @@ export function interpret(input: string, env: Env = {}): number {
     // Braced blocks are lexically scoped: declarations inside must NOT leak to
     // the outer environment.
     s = s.replace(/^\{\s*|\s*\}$/g, "");
-    return interpretBlock(s, env, interpret);
+    try {
+      return interpretBlock(s, env, interpret);
+    } catch (e: unknown) {
+      // Convert `yield` signals to numeric returns for top-level braced blocks
+      if (
+        e &&
+        typeof e === "object" &&
+        Object.prototype.hasOwnProperty.call(e, "__yield")
+      ) {
+        return (e as { __yield: number }).__yield;
+      }
+      throw e;
+    }
   }
 
   if (

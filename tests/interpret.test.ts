@@ -373,6 +373,14 @@ describe("interpret (basic behavior)", () => {
     ).toBe(100);
   });
 
+  it("yield inside a braced initializer returns early ('let x = { if (true) yield 100; 200 }; x' => 100)", () => {
+    expect(interpret("let x = { if (true) yield 100; 200 }; x")).toBe(100);
+  });
+
+  it("yield is conditional ('let x = { if (false) yield 100; 200 }; x' => 200)", () => {
+    expect(interpret("let x = { if (false) yield 100; 200 }; x")).toBe(200);
+  });
+
   it("supports curried functions with closure capture ('fn outer(first : I32) => fn inner(second : I32) => first + second; outer(3)(4)' => 7)", () => {
     expect(
       interpret(
@@ -404,7 +412,9 @@ describe("interpret (basic behavior)", () => {
     const obj = evaluateReturningOperand("Point(3, 4)", env);
     expect(isThisBinding(obj) || isStructInstance(obj)).toBeTruthy();
     if (isThisBinding(obj) || isStructInstance(obj)) {
-      expect(isPlainObject(obj.fieldValues) && obj.fieldValues.manhattan).toBeTruthy();
+      expect(
+        isPlainObject(obj.fieldValues) && obj.fieldValues.manhattan
+      ).toBeTruthy();
     }
   });
 
