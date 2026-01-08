@@ -4,13 +4,17 @@
   "private": true,
   "scripts": {
     "cpd": "pmd cpd --minimum-tokens 50 --ignore-literals --ignore-identifiers src tests --language typescript",
-    "test": "vitest",
+    "lint": "eslint --ext .ts src tests",
+    "test": "vitest --run",
     "prepare": "husky install"
   },
   "devDependencies": {
     "@types/node": "^25.0.3",
+    "@typescript-eslint/eslint-plugin": "^8.52.0",
+    "@typescript-eslint/parser": "^8.52.0",
+    "eslint": "^9.39.2",
+    "husky": "^8.0.0",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.4",
-    "husky": "^8.0.0"
+    "vitest": "^3.2.4"
   }
 }
