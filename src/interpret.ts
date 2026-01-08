@@ -46,6 +46,13 @@ export function interpret(
   const evaluateRhsLocal = (rhs: string, envLocal: Record<string, any>) =>
     evaluateRhs(rhs, envLocal, interpret, getLastTopLevelStatementLocal);
 
+  // If there are multiple `fn` declarations without top-level semicolons, treat as an error
+  // (we require semicolons between top-level declarations)
+  const fnCount = (s.match(/\bfn\b/g) || []).length;
+  if (fnCount > 1 && !hasTopLevelSemicolon(s)) {
+    throw new Error("duplicate declaration");
+  }
+
   // If the input looks like a block (has top-level semicolons, starts with `let`, or is a top-level braced block), evaluate as a block
   if (
     hasTopLevelSemicolon(s) ||

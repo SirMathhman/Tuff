@@ -328,4 +328,8 @@ describe("interpret (basic behavior)", () => {
   it("supports functions with annotated result ('fn add(first : I32, second : I32) : I32 => first + second; add(1, 2)' => 3)", () => {
     expect(interpret("fn add(first : I32, second : I32) : I32 => first + second; add(1, 2)")).toBe(3);
   });
+
+  it("throws when declaring same fn twice without separators ('fn empty() => {} fn empty() => {}' => Error)", () => {
+    expect(() => interpret("fn empty() => {} fn empty() => {}")).toThrow();
+  });
 });
