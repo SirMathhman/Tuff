@@ -214,6 +214,9 @@ describe("interpret (basic behavior)", () => {
   it("handles while loops and compound assignment ('let mut x = 0; while (x < 4) x += 1; x' => 4)", () => {
     expect(interpret("let mut x = 0; while (x < 4) x += 1; x")).toBe(4);
   });
+  it("handles while with braced body ('let mut x = 0; while (x < 4) { x += 1; }; x' => 4)", () => {
+    expect(interpret("let mut x = 0; while (x < 4) { x += 1; }; x")).toBe(4);
+  });
   it("throws when assigning a statement-only block to a variable ('let x = { let y = 20; }; x' => Error)", () => {
     expect(() => interpret("let x = { let y = 20; }; x")).toThrow();
     expect(() => interpret("{ let x = { let y = 20; }; x }")).toThrow();

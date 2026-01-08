@@ -57,7 +57,9 @@ export function interpret(
     if (!(ann as any).valueBig)
       throw new Error("annotation must be integer literal with suffix");
     if (!(rhsOperand as any).valueBig)
-      throw new Error("initializer must be integer-like to match annotated literal");
+      throw new Error(
+        "initializer must be integer-like to match annotated literal"
+      );
     if ((ann as any).valueBig !== (rhsOperand as any).valueBig)
       throw new Error("annotation value does not match initializer");
     if ((rhsOperand as any).kind) {
@@ -97,13 +99,35 @@ export function interpret(
         checkRange(kind, bits, (rhsOperand as any).valueBig as bigint);
       }
     } else if (/^\s*bool\s*$/i.test(annotation)) {
-      if (!(rhsOperand as any).boolValue && (rhsOperand as any).boolValue !== false)
+      if (
+        !(rhsOperand as any).boolValue &&
+        (rhsOperand as any).boolValue !== false
+      )
         throw new Error("annotation Bool requires boolean initializer");
     } else {
       const ann = parseOperand(annotation);
       if (!ann) throw new Error("invalid annotation in let");
       checkAnnMatchesRhs(ann, rhsOperand);
     }
+  }
+
+  // Find matching closing bracket for parentheses or other paired chars
+  function findMatchingParen(
+    str: string,
+    startIdx: number,
+    openChar = "(",
+    closeChar = ")"
+  ) {
+    let depth = 0;
+    for (let i = startIdx; i < str.length; i++) {
+      const ch = str[i];
+      if (ch === openChar) depth++;
+      else if (ch === closeChar) {
+        depth--;
+        if (depth === 0) return i;
+      }
+    }
+    return -1;
   }
 
   // If the input looks like a block (has top-level semicolons, starts with `let`, or is a top-level braced block), evaluate as a block
@@ -197,19 +221,7 @@ export function interpret(
         if (/^while\b/.test(stmt)) {
           const start = stmt.indexOf("(");
           if (start === -1) throw new Error("invalid while syntax");
-          let depth = 0;
-          let endIdx = -1;
-          for (let i = start; i < stmt.length; i++) {
-            const ch = stmt[i];
-            if (ch === "(") depth++;
-            else if (ch === ")") {
-              depth--;
-              if (depth === 0) {
-                endIdx = i;
-                break;
-              }
-            }
-          }
+          const endIdx = findMatchingParen(stmt, start);
           if (endIdx === -1) throw new Error("unbalanced parentheses in while");
           const cond = stmt.slice(start + 1, endIdx).trim();
           let body = stmt.slice(endIdx + 1).trim();
@@ -224,6 +236,56 @@ export function interpret(
               interpret(body + ";", localEnv);
             }
           }
+          last = undefined;
+          continue;
+        }
+
+        // for loop: `for (let [mut] name in start..end) body`
+        if (/^for\b/.test(stmt)) {
+          const start = stmt.indexOf("(");
+          if (start === -1) throw new Error("invalid for syntax");
+          const endIdx = findMatchingParen(stmt, start);
+          if (endIdx === -1) throw new Error("unbalanced parentheses in for");
+          const cond = stmt.slice(start + 1, endIdx).trim();
+          let body = stmt.slice(endIdx + 1).trim();
+          if (!body) throw new Error("missing for body");
+
+          // cond should be: let [mut] <name> in <start>.. <end>
+          const m = cond.match(
+            /^let\s+(mut\s+)?([a-zA-Z_]\w*)\s+in\s+([\s\S]+)$/
+          );
+          if (!m) throw new Error("invalid for loop header");
+          const mutFlag = !!m[1];
+          const iterName = m[2];
+          const rangeExpr = m[3].trim();
+          const rm = rangeExpr.match(/^([\s\S]+?)\s*\.\.\s*([\s\S]+)$/);
+          if (!rm) throw new Error("invalid for range expression");
+          const startExpr = rm[1].trim();
+          const endExpr = rm[2].trim();
+
+          const startVal = evaluateFlatExpression(startExpr, localEnv);
+          const endVal = evaluateFlatExpression(endExpr, localEnv);
+
+          const hadPrev = iterName in localEnv;
+          const prev = hadPrev ? localEnv[iterName] : undefined;
+
+          for (let i = startVal; i < endVal; i++) {
+            // bind the loop variable in the same env so body can see and update outer vars
+            if (mutFlag) localEnv[iterName] = { mutable: true, value: i };
+            else localEnv[iterName] = i;
+
+            if (/^\s*\{[\s\S]*\}\s*$/.test(body)) {
+              const inner = body.replace(/^\{\s*|\s*\}$/g, "");
+              interpret(inner, localEnv);
+            } else {
+              interpret(body + ";", localEnv);
+            }
+          }
+
+          // restore previous binding
+          if (hadPrev) localEnv[iterName] = prev;
+          else delete localEnv[iterName];
+
           last = undefined;
           continue;
         }
