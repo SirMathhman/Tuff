@@ -103,4 +103,14 @@ describe("interpret (basic behavior)", () => {
     expect(() => interpret("5U8 + 4U16")).toThrow();
     expect(() => interpret("4U16 + 5U8")).toThrow();
   });
+
+  it("handles subtraction with mixed suffixed/unsuffixed operands (e.g., '5 - 4U8' => 1)", () => {
+    expect(interpret("5 - 4U8")).toBe(1);
+    expect(interpret("5U8 - 4")).toBe(1);
+  });
+
+  it("throws when subtraction underflows unsigned range (e.g., '4 - 5U8')", () => {
+    expect(() => interpret("4 - 5U8")).toThrow();
+    expect(() => interpret("4U8 - 5")).toThrow();
+  });
 });

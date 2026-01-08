@@ -45,15 +45,40 @@ function parseOperand(token: string) {
 export function interpret(input: string): number {
   const s = input.trim();
 
-  // Handle addition expressions with one or more '+' operators
-  const tokens = s.split(/\s*\+\s*/);
-  if (tokens.length > 1) {
-    const operands = tokens.map((t) => parseOperand(t.trim()));
-    if (operands.some((op) => op === null))
-      throw new Error("invalid operands for expression");
+  // Parse and evaluate expressions with '+' and '-' (left-associative)
+  // We'll parse tokens: operand (operator operand)* and evaluate left to right.
+  const exprTokens: { op?: string; operand?: any }[] = [];
+  let idx = 0;
+  const len = s.length;
+  function skipSpacesLocal() {
+    while (idx < len && s[idx] === " ") idx++;
+  }
+  skipSpacesLocal();
+  const firstMatch = s.slice(idx).match(/^([+-]?\d+(?:\.\d+)?(?:[uUiI]\d+)?)/);
+  if (firstMatch) {
+    exprTokens.push({ operand: parseOperand(firstMatch[1]) });
+    if (!exprTokens[0].operand) throw new Error("invalid operand");
+    idx += firstMatch[1].length;
+    skipSpacesLocal();
+    while (idx < len) {
+      const ch = s[idx];
+      if (ch !== "+" && ch !== "-") break;
+      const op = ch;
+      idx++;
+      skipSpacesLocal();
+      const m = s.slice(idx).match(/^([+-]?\d+(?:\.\d+)?(?:[uUiI]\d+)?)/);
+      if (!m) throw new Error("invalid operand after operator");
+      const operand = parseOperand(m[1]);
+      if (!operand) throw new Error("invalid operand");
+      exprTokens.push({ op, operand });
+      idx += m[1].length;
+      skipSpacesLocal();
+    }
+  }
 
-    // Helper to check range for a BigInt sum and return as number
-    function checkRangeAndReturn(kind: string, bits: number, sum: bigint) {
+  if (exprTokens.length > 1) {
+    // helper to check range and throw
+    function checkRangeThrow(kind: string, bits: number, sum: bigint) {
       if (kind === "u") {
         const max = (1n << BigInt(bits)) - 1n;
         if (sum < 0n || sum > max) throw new Error(`value out of range for U${bits}`);
@@ -62,54 +87,64 @@ export function interpret(input: string): number {
         const max = (1n << BigInt(bits - 1)) - 1n;
         if (sum < min || sum > max) throw new Error(`value out of range for I${bits}`);
       }
-      return Number(sum);
     }
 
-    // If all operands have kinds (suffixes), enforce same kind and bits and use BigInt arithmetic
-    const allHaveKind = operands.every((op) => (op as any).kind);
-    if (allHaveKind) {
-      const firstKind = (operands[0] as any).kind as string;
-      const firstBits = (operands[0] as any).bits as number;
-      // ensure all match
-      for (const op of operands) {
-        if ((op as any).kind !== firstKind || (op as any).bits !== firstBits)
-          throw new Error("mismatched suffixes in binary operation");
+    let current: any = exprTokens[0].operand;
+    for (let i = 1; i < exprTokens.length; i++) {
+      const op = exprTokens[i].op!;
+      const nxt = exprTokens[i].operand;
+
+      const curHasKind = (current as any).kind !== undefined;
+      const nxtHasKind = (nxt as any).kind !== undefined;
+
+      if (curHasKind || nxtHasKind) {
+        const refer = curHasKind ? current : nxt;
+        const kind = (refer as any).kind as string;
+        const bits = (refer as any).bits as number;
+        if (curHasKind && nxtHasKind) {
+          if ((current as any).kind !== (nxt as any).kind || (current as any).bits !== (nxt as any).bits)
+            throw new Error("mismatched suffixes in binary operation");
+        }
+        if (!curHasKind && (current as any).isFloat) throw new Error("mixed suffix and float not allowed");
+        if (!nxtHasKind && (nxt as any).isFloat) throw new Error("mixed suffix and float not allowed");
+
+        let curBig: bigint;
+        if (curHasKind) {
+          curBig = (current as any).valueBig as bigint;
+        } else if (typeof current === "number") {
+          if (!Number.isInteger(current)) throw new Error("mixed suffix and float not allowed");
+          curBig = BigInt(current);
+        } else {
+          curBig = (current as any).valueBig as bigint;
+        }
+
+        let nxtBig: bigint;
+        if (nxtHasKind) {
+          nxtBig = (nxt as any).valueBig as bigint;
+        } else if (typeof nxt === "number") {
+          if (!Number.isInteger(nxt)) throw new Error("mixed suffix and float not allowed");
+          nxtBig = BigInt(nxt as number);
+        } else {
+          nxtBig = (nxt as any).valueBig as bigint;
+        }
+
+        let result: bigint;
+        if (op === "+") result = curBig + nxtBig;
+        else result = curBig - nxtBig;
+        checkRangeThrow(kind, bits, result);
+        current = { valueBig: result, kind: kind, bits: bits };
+      } else {
+        const leftNum = (current as any).isFloat ? (current as any).floatValue : Number((current as any).valueBig);
+        const rightNum = (nxt as any).isFloat ? (nxt as any).floatValue : Number((nxt as any).valueBig);
+        const res = op === "+" ? leftNum + rightNum : leftNum - rightNum;
+        current = Number(res);
       }
-      // sum with BigInt and check range
-      const sum = operands.reduce((acc, op) => acc + (op as any).valueBig, 0n as bigint);
-      return checkRangeAndReturn(firstKind, firstBits, sum);
     }
 
-    // Handle mixed and unsuffixed cases
-    const anyHaveKind = operands.some((op) => (op as any).kind);
-
-    // If some operands have kinds (mixed), try to promote unsuffixed integers to BigInt
-    if (anyHaveKind) {
-      const firstSuf = operands.find((op) => (op as any).kind) as any;
-      const firstKind = firstSuf.kind as string;
-      const firstBits = firstSuf.bits as number;
-      // ensure all suffixed operands match
-      for (const op of operands) {
-        if ((op as any).kind && ((op as any).kind !== firstKind || (op as any).bits !== firstBits))
-          throw new Error("mismatched suffixes in binary operation");
-      }
-      // convert all operands to BigInt; non-suffixed must be integer
-      const bigs = operands.map((op) => {
-        if ((op as any).kind) return (op as any).valueBig as bigint;
-        // non-suffixed: must be integer
-        if ((op as any).isFloat) throw new Error("mixed suffix and float not allowed");
-        return (op as any).valueBig as bigint;
-      });
-      const sum = bigs.reduce((a, b) => a + b, 0n as bigint);
-      return checkRangeAndReturn(firstKind, firstBits, sum);
-    }
-
-    // All operands have no suffix: sum as numbers (floats or integers)
-    const nums = operands.map((op) => {
-      if ((op as any).isFloat) return (op as any).floatValue as number;
-      return Number((op as any).valueBig as bigint);
-    });
-    return nums.reduce((a, b) => a + b, 0);
+    if ((current as any).kind) return Number((current as any).valueBig);
+    if (typeof current === "number") return current;
+    if ((current as any).isFloat) return (current as any).floatValue as number;
+    return Number((current as any).valueBig as bigint);
   }
 
   // fallback: single operand parse
