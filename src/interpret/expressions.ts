@@ -36,8 +36,16 @@ export function interpretExpression(
   if (s.includes("(")) {
     let expr = s;
     const parenRegex = /\([^()]*\)/;
-    while (parenRegex.test(expr)) {
-      const m = expr.match(parenRegex)![0];
+    while (true) {
+      const match = expr.match(parenRegex);
+      if (!match) break;
+      const m = match[0];
+      const idx = expr.indexOf(m);
+      const before = idx > 0 ? expr[idx - 1] : null;
+      // If the paren is immediately preceded by an identifier/number/closing paren/closing bracket,
+      // it's likely a function call or indexing. Don't evaluate call argument lists as grouped
+      // expressions here; leave them for the expression evaluator.
+      if (before && /[A-Za-z0-9_)\]]/.test(before)) break;
       const inner = m.slice(1, -1);
       const v = evaluateFlatExpression(inner, env);
       expr = expr.replace(m, String(v));

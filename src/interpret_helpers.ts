@@ -251,6 +251,13 @@ export function expandParensAndBraces(
   const parenRegex = /\([^()]*\)|\{[^{}]*\}/;
   const placeholders: string[] = [];
 
+  const replaceWithPlaceholder = (kind: string, matched: string) => {
+    const ph = `__${kind}_PLACEHOLDER_${placeholders.length}__`;
+    placeholders.push(matched);
+    expr = expr.replace(matched, ph);
+    return ph;
+  };
+
   while (parenRegex.test(expr)) {
     const m = expr.match(parenRegex)![0];
     const inner = m.slice(1, -1);
@@ -259,9 +266,21 @@ export function expandParensAndBraces(
 
     // Skip match bodies; they are handled later by expression evaluator
     if (m[0] === "{" && /\bmatch\b(?:\s*\([^()]*\))?\s*$/.test(prefix)) {
-      const ph = `__MATCH_BLOCK_PLACEHOLDER_${placeholders.length}__`;
-      placeholders.push(m);
-      expr = expr.replace(m, ph);
+      replaceWithPlaceholder("MATCH_BLOCK", m);
+      continue;
+    }
+
+    // Skip function bodies - they should not be evaluated at parse time. Detect a
+    // function body by checking for an arrow (`=>`) right before the brace.
+    if (m[0] === "{" && /=>\s*$/.test(prefix)) {
+      replaceWithPlaceholder("FN_BODY", m);
+      continue;
+    }
+
+    // Skip parameter lists belonging to a function header (e.g., `fn name(...)`)
+    // to avoid prematurely evaluating them as grouped expressions.
+    if (m[0] === "(" && /\bfn\s+[a-zA-Z_]\w*\s*$/.test(prefix)) {
+      replaceWithPlaceholder("FN_PARAMS", m);
       continue;
     }
 
@@ -272,7 +291,11 @@ export function expandParensAndBraces(
         throw new Error("initializer cannot contain declarations");
     }
 
-    const v = interpret(inner, env);
+    // IMPORTANT: `{ ... }` is a lexically-scoped block. Evaluate it by passing
+    // the braces through to `interpret()` so it can apply block scoping rules.
+    // Interpreting only the inner text would execute it as a statement sequence
+    // in the outer env, leaking declarations.
+    const v = m[0] === "{" ? interpret(m, env) : interpret(inner, env);
     const after = expr.slice(idx + m.length);
     const afterMatch = after.match(/\s*([^\s])/);
     const afterNon = afterMatch ? afterMatch[1] : null;

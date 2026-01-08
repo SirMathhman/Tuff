@@ -6,7 +6,7 @@
  */
 import { splitTopLevelStatements } from "./parser";
 import { evaluateFlatExpression } from "./eval";
-import { interpretBlock } from "./interpret/statements";
+import { interpretBlock, interpretBlockInPlace } from "./interpret/statements";
 import { interpretExpression } from "./interpret/expressions";
 
 export function interpret(
@@ -26,21 +26,47 @@ export function interpret(
     return splitTopLevelStatements(str).length > 1;
   }
 
-  // If there are multiple `fn` declarations without top-level semicolons, treat as an error
-  // (we require semicolons between top-level declarations)
-  const fnCount = (s.match(/\bfn\b/g) || []).length;
-  if (fnCount > 1 && !hasTopLevelSemicolon(s)) {
+  // Count `fn` tokens that are at depth 0 (not nested inside parens/braces).
+  // This lets us detect multiple top-level `fn` declarations appearing in the same
+  // top-level statement (e.g., `fn a() => {} fn b() => {}`) which is disallowed
+  // unless separated by a top-level semicolon.
+  function countTopLevelFns(str: string) {
+    // Strip out nested (...) and {...} groups iteratively, then count `fn` in the
+    // remaining top-level surface. This avoids duplicating the parser's depth-scan loop.
+    let surface = str;
+    const groupRegex = /\([^()]*\)|\{[^{}]*\}/g;
+    // Keep replacing innermost groups until none remain.
+    while (groupRegex.test(surface)) {
+      surface = surface.replace(groupRegex, (m) => " ".repeat(m.length));
+    }
+    const matches = surface.match(/\bfn\b/g);
+    return matches ? matches.length : 0;
+  }
+
+  const fnTopLevelCount = countTopLevelFns(s);
+  if (fnTopLevelCount > 1 && !hasTopLevelSemicolon(s)) {
     throw new Error("duplicate declaration");
+  }
+
+  const isBracedOnly = /^\s*\{[\s\S]*\}\s*$/.test(s);
+  if (isBracedOnly) {
+    // Braced blocks are lexically scoped: declarations inside must NOT leak to
+    // the outer environment.
+    s = s.replace(/^\{\s*|\s*\}$/g, "");
+    return interpretBlock(s, env, interpret);
   }
 
   if (
     hasTopLevelSemicolon(s) ||
     /^let\b/.test(s) ||
     /^struct\b/.test(s) ||
-    /^\s*\{[\s\S]*\}\s*$/.test(s)
+    /^while\b/.test(s) ||
+    /^for\b/.test(s) ||
+    /^fn\b/.test(s)
   ) {
-    if (/^\s*\{[\s\S]*\}\s*$/.test(s)) s = s.replace(/^\{\s*|\s*\}$/g, "");
-    return interpretBlock(s, env, interpret);
+    // Top-level statement sequences should register declarations into the
+    // provided env so callers can reuse the environment across calls.
+    return interpretBlockInPlace(s, env, interpret);
   }
 
   return interpretExpression(s, env, interpret);

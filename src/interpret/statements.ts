@@ -26,8 +26,18 @@ export function interpretBlock(
   env: Record<string, any>,
   interpret: any
 ): number {
-  // simple block evaluator with lexical scoping (variables shadow parent env)
-  const localEnv: Record<string, any> = { ...env };
+  return interpretBlockInternal(s, env, interpret, false);
+}
+
+function interpretBlockInternal(
+  s: string,
+  env: Record<string, any>,
+  interpret: any,
+  inPlace: boolean
+): number {
+  // Block evaluator with lexical scoping. When inPlace=true, operate directly
+  // on the provided env (used for top-level sequences and function call envs).
+  const localEnv: Record<string, any> = inPlace ? env : { ...env };
   const declared = new Set<string>();
   let last: any = undefined;
 
@@ -372,8 +382,8 @@ export function interpretBlock(
             if (endIdx === -1)
               throw new Error("unbalanced braces in statement");
             const block = remaining.slice(startIdx, endIdx + 1);
-            const inner = block.replace(/^\{\s*|\s*\}$/g, "");
-            last = interpret(inner, localEnv);
+            // Evaluate as a braced block so inner declarations stay scoped.
+            last = interpret(block, localEnv);
             remaining = remaining.slice(endIdx + 1);
             continue;
           }
@@ -400,4 +410,15 @@ export function interpretBlock(
   if (last === undefined) return 0;
   // convert last to number
   return convertOperandToNumber(last);
+}
+
+// Variant of interpretBlock that mutates the provided env in-place. This is used
+// when executing function block bodies so inner declarations (like nested fn)
+// remain visible for subsequent evaluation of `this` within the same call env.
+export function interpretBlockInPlace(
+  s: string,
+  env: Record<string, any>,
+  interpret: any
+): number {
+  return interpretBlockInternal(s, env, interpret, true);
 }

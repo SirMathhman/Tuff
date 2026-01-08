@@ -151,21 +151,55 @@ function resolveFunctionFromOperand(
  * Handles both block bodies (executed via interpret) and expression bodies
  */
 function executeFunctionBody(fn: any, callEnv: Record<string, any>): any {
-  if (fn.isBlock) {
-    const inner = fn.body.replace(/^\{\s*|\s*\}$/g, "");
-    const v = (globalThis as any).interpret
-      ? (globalThis as any).interpret(inner, callEnv)
-      : (function () {
-          // fallback if interpret is not globally available (module-local call)
-          // eslint-disable-next-line no-undef
-          const mod = require("./interpret");
-          return mod.interpret(inner, callEnv);
-        })();
-    if (Number.isInteger(v)) return { valueBig: BigInt(v) };
-    return { floatValue: v, isFloat: true };
-  } else {
+  if (!fn.isBlock) {
     return evaluateReturningOperand(fn.body, callEnv);
   }
+
+  const inner = fn.body.replace(/^\{\s*|\s*\}$/g, "");
+
+  // interpret() mutates the provided env in-place for statement-like inputs.
+  // We expose it on globalThis in src/interpret.ts to avoid circular imports.
+  const interpFunc: any = (globalThis as any).interpret;
+  if (typeof interpFunc !== "function") {
+    throw new Error("internal error: interpret() is not available");
+  }
+
+  const v: any = interpFunc(inner, callEnv);
+
+  // Determine the last top-level statement without importing helpers to avoid
+  // circular import issues.
+  const parts = splitTopLevelStatements(inner)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const lastStmt = parts.length ? parts[parts.length - 1] : null;
+
+  if (lastStmt && lastStmt.trim() === "this") {
+    // Build `this` binding directly from the call env to ensure nested functions
+    // declared inside the block are included as direct fields on the resulting
+    // `this` object (methods should be callable via `this.method`).
+    const thisObj: any = { isThisBinding: true, fieldValues: {} };
+    for (const [k, envVal] of Object.entries(callEnv)) {
+      if (k === "this") continue;
+      if (envVal && (envVal as any).value !== undefined)
+        thisObj.fieldValues[k] = (envVal as any).value;
+      else if (
+        typeof envVal === "number" ||
+        typeof envVal === "string" ||
+        typeof envVal === "boolean"
+      )
+        thisObj.fieldValues[k] = envVal;
+      else if (!(envVal as any).isStructDef) {
+        // include non-struct values (including function wrappers)
+        thisObj.fieldValues[k] = envVal;
+      }
+    }
+    return thisObj;
+  }
+
+  // interpret() returns a JS number. Wrap into our numeric operand representation.
+  if (typeof v === "number" && Number.isInteger(v)) return { valueBig: BigInt(v) };
+  if (typeof v === "number") return { floatValue: v, isFloat: true };
+  return v;
 }
 
 export function evaluateReturningOperand(
@@ -284,7 +318,8 @@ export function evaluateReturningOperand(
   }
 
   // Support an inline function expression: fn name(...) => ... or fn name(...) { ... }
-  if (/^fn\b/.test(sTrim)) {
+  // Use a stricter check to ensure we have a proper fn header (name followed by '(')
+  if (/^fn\s+[a-zA-Z_]\w*\s*\(/.test(sTrim)) {
     const parsed = parseFnComponents(sTrim);
     const { name, params, body, isBlock, resultAnnotation } = parsed;
     const fnObj: any = {
@@ -546,8 +581,9 @@ export function evaluateReturningOperand(
               typeof value === "boolean"
             ) {
               thisObj.fieldValues[key] = value;
-            } else if (!(value as any).fn && !(value as any).isStructDef) {
-              // Non-function, non-struct values
+            } else if (!(value as any).isStructDef) {
+              // Include non-struct values (including functions) so methods defined in
+              // the current function scope are accessible via `this`.
               thisObj.fieldValues[key] = value;
             }
           }
@@ -576,9 +612,12 @@ export function evaluateReturningOperand(
   // helper to evaluate a call and return its result
   function evaluateCallAt(funcOperand: any, callAppOperand: any) {
     const callArgs = (callAppOperand as any).callApp || [];
-    const argOps = callArgs.map((a: string) => evaluateReturningOperand(a, localEnv));
+    const argOps = callArgs.map((a: string) =>
+      evaluateReturningOperand(a, localEnv)
+    );
     const fn = resolveFunctionFromOperand(funcOperand, localEnv);
-    if (fn.params.length !== argOps.length) throw new Error("invalid argument count");
+    if (fn.params.length !== argOps.length)
+      throw new Error("invalid argument count");
 
     const callEnv: Record<string, any> = { ...fn.closureEnv };
     for (let j = 0; j < fn.params.length; j++) {
@@ -594,9 +633,13 @@ export function evaluateReturningOperand(
   // helper to extract and validate a field value from a struct/this instance
   function getFieldValueFromInstance(maybe: any, fieldName: string) {
     const fieldValue = (maybe as any).fieldValues[fieldName];
-    if (fieldValue === undefined) throw new Error(`invalid field access: ${fieldName}`);
+    if (fieldValue === undefined)
+      throw new Error(`invalid field access: ${fieldName}`);
     return fieldValue;
   }
+
+  // Debug: show tokenization for suspicious patterns
+
 
   // Handle function application and field access (highest precedence, left-to-right)
   let i = 0;
@@ -612,7 +655,6 @@ export function evaluateReturningOperand(
         const funcOperand = operands[i];
         const callAppOperand = operands[i + 1];
         const result = evaluateCallAt(funcOperand, callAppOperand);
-
         const fieldName = (ops[i + 1] as string).substring(1);
         if (!result) throw new Error(`cannot access field on null value`);
         if (

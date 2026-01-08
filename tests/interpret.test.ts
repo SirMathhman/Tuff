@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { interpret } from "../src/interpret";
+import { evaluateReturningOperand } from "../src/eval";
 
 describe("interpret (basic behavior)", () => {
   it("returns a number for any input", () => {
@@ -381,6 +382,20 @@ describe("interpret (basic behavior)", () => {
     expect(
       interpret("fn Wrapper(value : I32) => this; Wrapper(100).value")
     ).toBe(100);
+  });
+
+  it("supports methods on returned `this` that capture parameters ('fn Point(x : I32, y : I32) => { fn manhattan() => x + y; this } Point(3, 4).manhattan()' => 7)", () => {
+    expect(
+      interpret("fn Point(x : I32, y : I32) => { fn manhattan() => x + y; this } Point(3, 4).manhattan()")
+    ).toBe(7);
+  });
+
+  it("(debug) constructor returns this binding object for direct call", () => {
+    const env: Record<string, any> = {};
+    interpret("fn Point(x : I32, y : I32) => { fn manhattan() => x + y; this }", env);
+    const obj = evaluateReturningOperand("Point(3, 4)", env);
+    expect(obj && (obj.isThisBinding || obj.isStructInstance)).toBeTruthy();
+    expect(obj.fieldValues && obj.fieldValues.manhattan).toBeTruthy();
   });
 
   it("handles empty struct definition ('struct Empty {}' => 0)", () => {
