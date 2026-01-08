@@ -49,7 +49,8 @@ export function interpret(input: string): number {
   const tokens = s.split(/\s*\+\s*/);
   if (tokens.length > 1) {
     const operands = tokens.map((t) => parseOperand(t.trim()));
-    if (operands.some((op) => op === null)) throw new Error("invalid operands for expression");
+    if (operands.some((op) => op === null))
+      throw new Error("invalid operands for expression");
 
     // If all operands have kinds (suffixes), enforce same kind and bits and use BigInt arithmetic
     const allHaveKind = operands.every((op) => (op as any).kind);
@@ -62,14 +63,19 @@ export function interpret(input: string): number {
           throw new Error("mismatched suffixes in binary operation");
       }
       // sum with BigInt and check range
-      const sum = operands.reduce((acc, op) => acc + (op as any).valueBig, 0n as bigint);
+      const sum = operands.reduce(
+        (acc, op) => acc + (op as any).valueBig,
+        0n as bigint
+      );
       if (firstKind === "u") {
         const max = (1n << BigInt(firstBits)) - 1n;
-        if (sum < 0n || sum > max) throw new Error(`value out of range for U${firstBits}`);
+        if (sum < 0n || sum > max)
+          throw new Error(`value out of range for U${firstBits}`);
       } else {
         const min = -(1n << BigInt(firstBits - 1));
         const max = (1n << BigInt(firstBits - 1)) - 1n;
-        if (sum < min || sum > max) throw new Error(`value out of range for I${firstBits}`);
+        if (sum < min || sum > max)
+          throw new Error(`value out of range for I${firstBits}`);
       }
       return Number(sum);
     }
