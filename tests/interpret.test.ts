@@ -448,7 +448,30 @@ describe("interpret (basic behavior)", () => {
     expect(interpretAll({ main: "1 + 2" }, "main")).toBe(3);
   });
 
-  it.skip("interpretAll will wire multiple namespaces allowing cross-namespace calls (pending)", () => {
-    expect(interpretAll({ a: "fn f() => 100;", main: "f()" }, "main")).toBe(100);
+  it("interpretAll imports from other namespace via 'from .. use' and calls exported function", () => {
+    expect(
+      interpretAll(
+        { main: "from lib use { get }; get()", lib: "out fn get() => 100;" },
+        "main"
+      )
+    ).toBe(100);
+  });
+
+  it("interpretAll throws when importing a missing namespace", () => {
+    expect(() =>
+      interpretAll(
+        { main: "from missing use { a }; a()", lib: "out fn a() => 1;" },
+        "main"
+      )
+    ).toThrow("namespace not found");
+  });
+
+  it("interpretAll throws when importing a missing symbol", () => {
+    expect(() =>
+      interpretAll(
+        { main: "from lib use { missing }; missing()", lib: "out fn a() => 1;" },
+        "main"
+      )
+    ).toThrow("symbol not found in namespace");
   });
 });

@@ -14,6 +14,7 @@ import {
   convertOperandToNumber,
   registerFunctionFromStmt,
   parseStructDef,
+  parseFnComponents,
 } from "../interpret_helpers";
 import {
   computeAssignmentValue,
@@ -51,6 +52,39 @@ function interpretBlockInternal(
   for (let raw of stmts) {
     const stmt = raw.trim();
     if (!stmt) continue;
+
+    // export function: `out fn name(...) => ...` — register like a normal fn
+    // and also export it on localEnv.__exports (if present)
+    if (/^out\s+fn\b/.test(stmt)) {
+      const stripped = stmt.replace(/^out\s+/, "");
+      const parsed = parseFnComponents(stripped);
+      const tExpr = registerFunctionFromStmt(stripped, localEnv, declared);
+      if ((localEnv as any).__exports) (localEnv as any).__exports[parsed.name] = localEnv[parsed.name];
+      if (tExpr) {
+        last = interpret(tExpr + ";", localEnv);
+      } else last = undefined;
+      continue;
+    }
+
+    // import statement: `from <ns> use { a, b }` — bind symbols from other namespace
+    if (/^from\b/.test(stmt)) {
+      const m = stmt.match(/^from\s+([a-zA-Z_]\w*)\s+use\s*\{\s*([a-zA-Z_]\w*(?:\s*,\s*[a-zA-Z_]\w*)*)\s*\}\s*$/);
+      if (!m) throw new Error("invalid import syntax");
+      const nsName = m[1];
+      const names = m[2].split(",").map((x) => x.trim());
+      const resolver = (env as any).__resolve_namespace || (localEnv as any).__resolve_namespace;
+      if (!resolver) throw new Error("namespace resolver not available");
+      const nsExports = resolver(nsName);
+      for (const name of names) {
+        if (!(name in nsExports)) throw new Error("symbol not found in namespace");
+        if (declared.has(name)) throw new Error("duplicate declaration");
+        declared.add(name);
+        localEnv[name] = nsExports[name];
+      }
+      last = undefined;
+      continue;
+    }
+
     if (/^fn\b/.test(stmt)) {
       // Delegate parsing and registration to helper
       const tExpr = registerFunctionFromStmt(stmt, localEnv, declared);
