@@ -586,7 +586,8 @@ export function interpretAllWithNative(
 
   // Normalize script and native keys (replace comma-based computed keys with ::)
   const normalizedScripts: { [k: string]: string } = {};
-  for (const k of Object.keys(scripts)) normalizedScripts[k.replace(/,/g, "::")] = scripts[k];
+  for (const k of Object.keys(scripts))
+    normalizedScripts[k.replace(/,/g, "::")] = scripts[k];
   const normalizedNative: { [k: string]: string } = {};
   for (const k of Object.keys(nativeModules))
     normalizedNative[k.replace(/,/g, "::")] = nativeModules[k];
@@ -602,9 +603,19 @@ export function interpretAllWithNative(
   const evaluateNativeModule = (code: string) => {
     const exports: { [k: string]: unknown } = {};
     // Convert `export function name(...) {` into `exports.name = function (...) {`
-    const transformed = code.replace(/(^|\n)\s*export\s+function\s+([a-zA-Z_]\w*)\s*\(/g, (m, p1, name) => {
-      return `${p1}exports.${name} = function (`;
-    });
+    let transformed = code.replace(
+      /(^|\n)\s*export\s+function\s+([a-zA-Z_]\w*)\s*\(/g,
+      (m, p1, name) => {
+        return `${p1}exports.${name} = function (`;
+      }
+    );
+    // Convert `export const/let/var name =` into `exports.name =`
+    transformed = transformed.replace(
+      /(^|\n)\s*export\s+(?:const|let|var)\s+([a-zA-Z_]\w*)\s*=\s*/g,
+      (m, p1, name) => {
+        return `${p1}exports.${name} = `;
+      }
+    );
     try {
       const fn = new Function("exports", transformed);
       fn(exports);
@@ -617,7 +628,10 @@ export function interpretAllWithNative(
   // Prepare namespace registry and resolver that merges script and native exports
   const namespaceRegistry: { [k: string]: { [k: string]: unknown } } = {};
   const resolveNamespace = (nsName: string) => {
-    if (!Object.prototype.hasOwnProperty.call(normalizedScripts, nsName) && !Object.prototype.hasOwnProperty.call(normalizedNative, nsName))
+    if (
+      !Object.prototype.hasOwnProperty.call(normalizedScripts, nsName) &&
+      !Object.prototype.hasOwnProperty.call(normalizedNative, nsName)
+    )
       throw new Error("namespace not found");
     if (!Object.prototype.hasOwnProperty.call(namespaceRegistry, nsName)) {
       const nsEnv: { [k: string]: unknown } = {};
@@ -631,7 +645,8 @@ export function interpretAllWithNative(
       // Collect exported symbols from script-executed module (if any)
       const collectedExports: { [k: string]: unknown } = {};
       if (isPlainObject(nsEnv.__exports)) {
-        for (const [kk, vv] of Object.entries(nsEnv.__exports)) collectedExports[kk] = vv;
+        for (const [kk, vv] of Object.entries(nsEnv.__exports))
+          collectedExports[kk] = vv;
       }
 
       // Merge native module exports (native takes precedence)

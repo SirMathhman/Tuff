@@ -475,7 +475,7 @@ describe("interpret (basic behavior)", () => {
     const scripts: { [k: string]: string } = {};
     scripts["main"] = "from b::lib use { get }; get()";
     // Simulate a computed array-like key (coerced to "b,lib")
-    scripts[['b', 'lib'].join(',')] = "out fn get() => 100;";
+    scripts[["b", "lib"].join(",")] = "out fn get() => 100;";
     expect(interpretAll(scripts, "main")).toBe(100);
   });
 
@@ -546,8 +546,16 @@ describe("interpret (basic behavior)", () => {
   });
 
   it("interpretAllWithNative supports native modules and extern declarations", () => {
-    const scripts = { main: "extern from lib use { get }; extern fn get() : I32; get()" };
+    const scripts = {
+      main: "extern from lib use { get }; extern fn get() : I32; get()",
+    };
     const natives = { lib: "export function get() { return 100; }" };
+    expect(interpretAllWithNative(scripts, natives, "main")).toBe(100);
+  });
+
+  it("interpretAllWithNative supports native constants and extern let declarations", () => {
+    const scripts = { main: "extern from lib use { myConst }; extern let myConst : I32; myConst" };
+    const natives = { lib: "export const myConst = 100;" };
     expect(interpretAllWithNative(scripts, natives, "main")).toBe(100);
   });
 });

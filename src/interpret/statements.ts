@@ -87,11 +87,14 @@ function interpretBlockInternal(
 
     if (/^extern\s+fn\b/.test(stmt)) {
       // extern function declaration: `extern fn name(params) : Type` (no body)
-      const m = stmt.match(/^extern\s+fn\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*(?::\s*([^;]+))?\s*;?$/);
+      const m = stmt.match(
+        /^extern\s+fn\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*(?::\s*([^;]+))?\s*;?$/
+      );
       if (!m) throw new Error("invalid extern fn declaration");
       const name = m[1];
       const paramsStr = m[2].trim();
-      const params = paramsStr === "" ? [] : paramsStr.split(",").map((p) => p.trim());
+      const params =
+        paramsStr === "" ? [] : paramsStr.split(",").map((p) => p.trim());
       const resultAnnotation = m[3] ? m[3].trim() : undefined;
       if (declared.has(name)) {
         // symbol already declared (e.g., via an import); extern fn is a no-op here
@@ -100,7 +103,39 @@ function interpretBlockInternal(
       }
       declared.add(name);
       // register placeholder fn wrapper (no nativeImpl yet)
-      envSet(localEnv, name, { fn: { params, body: "/* extern */", isBlock: false, resultAnnotation, closureEnv: undefined } });
+      envSet(localEnv, name, {
+        fn: {
+          params,
+          body: "/* extern */",
+          isBlock: false,
+          resultAnnotation,
+          closureEnv: undefined,
+        },
+      });
+      last = undefined;
+      continue;
+    }
+
+    if (/^extern\s+let\b/.test(stmt)) {
+      // extern let declaration: `extern let name [: annotation];`
+      const m = stmt.match(/^extern\s+let\s+([a-zA-Z_]\w*)(?:\s*:\s*([^;]+))?\s*;?$/);
+      if (!m) throw new Error("invalid extern let declaration");
+      const name = m[1];
+      const annotation = m[2] ? m[2].trim() : undefined;
+      if (declared.has(name)) {
+        // already declared by import — no-op
+        last = undefined;
+        continue;
+      }
+      declared.add(name);
+      envSet(localEnv, name, {
+        uninitialized: true,
+        annotation,
+        parsedAnnotation: undefined,
+        literalAnnotation: false,
+        mutable: false,
+        value: undefined,
+      });
       last = undefined;
       continue;
     }
@@ -108,8 +143,10 @@ function interpretBlockInternal(
     // import statement: optionally prefixed with `extern`: `extern from <ns> use { a, b }`
     if (/^extern\b/.test(stmt) || /^from\b/.test(stmt)) {
       let importStmt = stmt;
-      if (/^extern\b/.test(importStmt)) importStmt = importStmt.replace(/^extern\s+/, "");
-      const importRE = /from\s+([a-zA-Z_]\w*(?:::[a-zA-Z_]\w*)*)\s+use\s*\{\s*([a-zA-Z_]\w*(?:\s*,\s*[a-zA-Z_]\w*)*)\s*\}/;
+      if (/^extern\b/.test(importStmt))
+        importStmt = importStmt.replace(/^extern\s+/, "");
+      const importRE =
+        /from\s+([a-zA-Z_]\w*(?:::[a-zA-Z_]\w*)*)\s+use\s*\{\s*([a-zA-Z_]\w*(?:\s*,\s*[a-zA-Z_]\w*)*)\s*\}/;
       let m = importStmt.match(importRE);
       if (!m) {
         const idx = importStmt.indexOf("from");
