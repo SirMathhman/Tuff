@@ -223,6 +223,13 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("{ let x = 10; { let y = x; y } } ")).toBe(10);
   });
 
+  it("handles logical OR between booleans ('let x = true; let y = false; x || y' => 1)", () => {
+    expect(interpret("let x = true; let y = false; x || y")).toBe(1);
+    expect(interpret("let x = false; let y = false; x || y")).toBe(0);
+    expect(interpret("true || false")).toBe(1);
+    expect(interpret("false || false")).toBe(0);
+  });
+
   it("throws for referencing inner block binding outside its block ('{ let x = 10; } x' => Error)", () => {
     expect(() => interpret("{ let x = 10; } x")).toThrow();
     expect(() => interpret("{ { let x = 10; } x } ")).toThrow();

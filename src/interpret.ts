@@ -140,7 +140,10 @@ export function interpret(
               throw new Error("annotation kind/bits do not match initializer");
           } else if (/^\s*bool\s*$/i.test(annotation)) {
             // Bool annotation: initializer must be boolean-like
-            if (!(rhsOperand as any).boolValue && (rhsOperand as any).boolValue !== false)
+            if (
+              !(rhsOperand as any).boolValue &&
+              (rhsOperand as any).boolValue !== false
+            )
               throw new Error("annotation Bool requires boolean initializer");
           } else {
             const ann = parseOperand(annotation);
@@ -281,7 +284,9 @@ export function interpret(
 
   function parseOperandAt(src: string, pos: number) {
     // Try numeric/suffixed literal first
-    const m = src.slice(pos).match(/^([+-]?\d+(?:\.\d+)?(?:[uUiI]\d+)?|true|false)/i);
+    const m = src
+      .slice(pos)
+      .match(/^([+-]?\d+(?:\.\d+)?(?:[uUiI]\d+)?|true|false)/i);
     if (m) {
       const operand = parseOperand(m[1]);
       if (!operand) throw new Error("invalid operand");
@@ -311,10 +316,21 @@ export function interpret(
     pos += firstMatch.len;
     skip();
     while (pos < L) {
-      const ch = exprStr[pos];
-      if (!/[+\-*/%]/.test(ch)) throw new Error("invalid operator");
-      const op = ch;
-      pos++;
+      skip();
+      // support multi-char logical operators '||' and '&&'
+      let op: string | null = null;
+      if (exprStr.startsWith("||", pos)) {
+        op = "||";
+        pos += 2;
+      } else if (exprStr.startsWith("&&", pos)) {
+        op = "&&";
+        pos += 2;
+      } else {
+        const ch = exprStr[pos];
+        if (!/[+\-*/%]/.test(ch)) throw new Error("invalid operator");
+        op = ch;
+        pos++;
+      }
       skip();
       const next = parseOperandAt(exprStr, pos);
       if (!next) throw new Error("invalid operand after operator");
@@ -351,7 +367,25 @@ export function interpret(
       }
     }
 
+    function isTruthy(val: any): boolean {
+      if (val && (val as any).boolValue !== undefined) return !!(val as any).boolValue;
+      if (val && (val as any).valueBig !== undefined) return (val as any).valueBig !== 0n;
+      if (typeof val === "number") return val !== 0;
+      if (val && (val as any).isFloat) return (val as any).floatValue !== 0;
+      return false;
+    }
+
     function applyOpLocal(op: string, left: any, right: any): any {
+      // logical operators are evaluated first here (they can apply to any truthy/falsy values)
+      if (op === "||") {
+        if (isTruthy(left)) return { boolValue: true };
+        return { boolValue: isTruthy(right) };
+      }
+      if (op === "&&") {
+        if (!isTruthy(left)) return { boolValue: false };
+        return { boolValue: isTruthy(right) };
+      }
+
       const leftHasKind = left && (left as any).kind !== undefined;
       const rightHasKind = right && (right as any).kind !== undefined;
       if (leftHasKind || rightHasKind) {
@@ -426,7 +460,7 @@ export function interpret(
       throw new Error("unsupported operator");
     }
 
-    // higher precedence pass
+    // higher precedence pass for * / %
     let ii = 0;
     while (ii < ops.length) {
       if (ops[ii] === "*" || ops[ii] === "/" || ops[ii] === "%") {
@@ -436,11 +470,38 @@ export function interpret(
       } else ii++;
     }
 
-    // low precedence
-    let result: any = operands[0];
-    for (let j = 0; j < ops.length; j++)
-      result = applyOpLocal(ops[j], result, operands[j + 1]);
+    // next precedence: + -
+    ii = 0;
+    while (ii < ops.length) {
+      if (ops[ii] === "+" || ops[ii] === "-") {
+        const res = applyOpLocal(ops[ii], operands[ii], operands[ii + 1]);
+        operands.splice(ii, 2, res);
+        ops.splice(ii, 1);
+      } else ii++;
+    }
 
+    // next precedence: &&
+    ii = 0;
+    while (ii < ops.length) {
+      if (ops[ii] === "&&") {
+        const res = applyOpLocal(ops[ii], operands[ii], operands[ii + 1]);
+        operands.splice(ii, 2, res);
+        ops.splice(ii, 1);
+      } else ii++;
+    }
+
+    // lowest precedence: ||
+    ii = 0;
+    while (ii < ops.length) {
+      if (ops[ii] === "||") {
+        const res = applyOpLocal(ops[ii], operands[ii], operands[ii + 1]);
+        operands.splice(ii, 2, res);
+        ops.splice(ii, 1);
+      } else ii++;
+    }
+
+    // final result is operands[0]
+    let result: any = operands[0];
     return result;
   }
   skipSpacesLocal();
@@ -450,11 +511,22 @@ export function interpret(
     idx += first.len;
     skipSpacesLocal();
     while (idx < len) {
-      const ch = s[idx];
-      if (ch !== "+" && ch !== "-" && ch !== "*" && ch !== "/" && ch !== "%")
-        break;
-      const op = ch;
-      idx++;
+      skipSpacesLocal();
+      // support multi-char logical operators '||' and '&&'
+      let op: string | null = null;
+      if (s.startsWith("||", idx)) {
+        op = "||";
+        idx += 2;
+      } else if (s.startsWith("&&", idx)) {
+        op = "&&";
+        idx += 2;
+      } else {
+        const ch = s[idx];
+        if (ch !== "+" && ch !== "-" && ch !== "*" && ch !== "/" && ch !== "%")
+          break;
+        op = ch;
+        idx++;
+      }
       skipSpacesLocal();
       const nxt = parseOperandAt(s, idx);
       if (!nxt) throw new Error("invalid operand after operator");
@@ -467,6 +539,7 @@ export function interpret(
   // Evaluate an expression string without parentheses, using operator precedence
   function evaluateFlatExpression(exprStr: string): number {
     const opnd = evaluateReturningOperand(exprStr, env);
+    if (opnd && (opnd as any).boolValue !== undefined) return (opnd as any).boolValue ? 1 : 0;
     if (opnd && (opnd as any).kind) return Number((opnd as any).valueBig);
     if (typeof opnd === "number") return opnd;
     if (opnd && (opnd as any).isFloat)
@@ -487,8 +560,8 @@ export function interpret(
     return evaluateFlatExpression(expr);
   }
 
-  // If expression contains any operators, evaluate it as a flat expression
-  if (/[+\-*/%]/.test(s)) {
+  // If expression contains any operators (including logical), evaluate it as a flat expression
+  if (/\|\||&&|[+\-*/%]/.test(s)) {
     return evaluateFlatExpression(s);
   }
 
