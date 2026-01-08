@@ -176,15 +176,17 @@ export function findMatchingParen(
 
 export { parseOperand };
 
-export function extractAssignmentParts(stmt: string): {
-  isDeref: boolean;
-  isDeclOnly: boolean;
-  name: string;
-  op: string | undefined;
-  rhs: string;
-  isThisField?: boolean;
-  fieldName?: string;
-} | undefined {
+export function extractAssignmentParts(stmt: string):
+  | {
+      isDeref: boolean;
+      isDeclOnly: boolean;
+      name: string;
+      op: string | undefined;
+      rhs: string;
+      isThisField?: boolean;
+      fieldName?: string;
+    }
+  | undefined {
   // Try this.field compound assignment: this.x += 1
   let m = stmt.match(/^this\s*\.\s*([a-zA-Z_]\w*)\s*([+\-*/%])=\s*(.+)$/);
   if (m) {
