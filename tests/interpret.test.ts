@@ -300,4 +300,16 @@ describe("interpret (basic behavior)", () => {
     expect(() => interpret("2U8 * -1")).toThrow();
     expect(() => interpret("-1 * 2U8")).toThrow();
   });
+
+  it("supports simple match expressions ('let result = match (100) { case 100 => 4; case 2 => 3; default => 50; } result' => 4)", () => {
+    expect(
+      interpret(
+        "let result = match (100) { case 100 => 4; case 2 => 3; default => 50; } result"
+      )
+    ).toBe(4);
+  });
+
+  it("supports match expression as standalone ('match (100) { case 100 => 4 }' => 4)", () => {
+    expect(interpret("match (100) { case 100 => 4 }")).toBe(4);
+  });
 });

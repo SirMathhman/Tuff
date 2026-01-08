@@ -28,6 +28,12 @@ export function interpret(
 ): number {
   let s = input.trim();
 
+  // If this is a top-level match expression, delegate to the expression evaluator
+  // early so match bodies are not accidentally pre-processed as braced blocks.
+  if (/^match\b/.test(s)) {
+    return evaluateFlatExpression(s, env);
+  }
+
   // Helper: check for semicolons at top-level (not nested inside braces/parens)
   function hasTopLevelSemicolon(str: string) {
     return splitTopLevelStatements(str).length > 1;
@@ -109,9 +115,25 @@ export function interpret(
           last = undefined;
         } else {
           // initializer present: validate same as before
-          const rhs = rhsRaw!;
+          let rhs = rhsRaw!;
+
+          // If rhs contains a top-level braced block that is followed by more tokens
+          // (e.g., `match (...) { ... } result`), split off the trailing tokens so the
+          // initializer is only the braced block and the trailing tokens are evaluated
+          // as a following expression in the same statement.
+          const braceStart = rhs.indexOf("{");
+          let trailingExpr: string | null = null;
+          if (braceStart !== -1) {
+            const endIdx = findMatchingParen(rhs, braceStart, "{", "}");
+            if (endIdx !== -1 && endIdx < rhs.length - 1) {
+              trailingExpr = rhs.slice(endIdx + 1).trim();
+              rhs = rhs.slice(0, endIdx + 1).trim();
+            }
+          }
+
           let rhsOperand: any;
           rhsOperand = evaluateRhsLocal(rhs, localEnv);
+
 
           if (annotation) {
             validateAnnotation(annotation, rhsOperand);
@@ -124,7 +146,13 @@ export function interpret(
           } else {
             localEnv[name] = rhsOperand;
           }
-          last = undefined;
+
+          // If we split off a trailing expression, evaluate it now and use it as `last`
+          if (trailingExpr) {
+            last = evaluateReturningOperand(trailingExpr, localEnv);
+          } else {
+            last = undefined;
+          }
         }
       } else {
         // while loop
@@ -210,12 +238,20 @@ export function interpret(
           const existing = localEnv[name] as any;
           // allow assignment to uninitialized placeholders (from declaration-only lets) or normal vars
           // only throw if trying to use an uninitialized var in certain contexts (not assignment)
-          if (existing && (existing as any).uninitialized && !(existing as any).annotation && !(existing as any).mutable)
+          if (
+            existing &&
+            (existing as any).uninitialized &&
+            !(existing as any).annotation &&
+            !(existing as any).mutable
+          )
             throw new Error("use of uninitialized variable");
 
           let ptr: any;
           if (isDeref) {
-            ptr = existing && (existing as any).value !== undefined ? (existing as any).value : existing;
+            ptr =
+              existing && (existing as any).value !== undefined
+                ? (existing as any).value
+                : existing;
             if (!ptr || !ptr.pointer)
               throw new Error("cannot dereference non-pointer");
             if (!ptr.ptrMutable)
@@ -233,14 +269,18 @@ export function interpret(
 
             let newVal = rhsOperand;
             if (op) {
-              const cur = targetExisting && (targetExisting as any).value !== undefined 
-                ? (targetExisting as any).value 
-                : targetExisting;
+              const cur =
+                targetExisting && (targetExisting as any).value !== undefined
+                  ? (targetExisting as any).value
+                  : targetExisting;
               newVal = applyBinaryOp(op, cur, rhsOperand);
             }
 
             // For deref assignment to a placeholder, validate annotation
-            if (targetExisting && (targetExisting as any).uninitialized !== undefined) {
+            if (
+              targetExisting &&
+              (targetExisting as any).uninitialized !== undefined
+            ) {
               if (
                 (targetExisting as any).literalAnnotation &&
                 !(targetExisting as any).uninitialized &&
@@ -278,9 +318,10 @@ export function interpret(
             // Normal assignment or compound: update variable directly
             let newVal = rhsOperand;
             if (op) {
-              const cur = existing && (existing as any).value !== undefined
-                ? (existing as any).value
-                : existing;
+              const cur =
+                existing && (existing as any).value !== undefined
+                  ? (existing as any).value
+                  : existing;
               newVal = applyBinaryOp(op, cur, rhsOperand);
             }
 
@@ -296,10 +337,7 @@ export function interpret(
                 (existing as any).parsedAnnotation &&
                 (existing as any).uninitialized
               ) {
-                validateAnnotation(
-                  (existing as any).parsedAnnotation,
-                  newVal
-                );
+                validateAnnotation((existing as any).parsedAnnotation, newVal);
               } else if ((existing as any).annotation) {
                 const annotation = (existing as any).annotation as string;
                 const typeOnly = annotation.match(/^\s*([uUiI])\s*(\d+)\s*$/);
@@ -384,13 +422,25 @@ export function interpret(
   if (s.includes("(") || s.includes("{")) {
     let expr = s;
     const parenRegex = /\([^()]*\)|\{[^{}]*\}/;
+    const placeholders: string[] = [];
     while (parenRegex.test(expr)) {
       const m = expr.match(parenRegex)![0];
       const inner = m.slice(1, -1);
-      // if this inner group contains a declaration and it's used as an initializer
-      // (i.e., preceded by a `let <name> =`), disallow it
       const idx = expr.indexOf(m);
       const prefix = expr.slice(0, idx);
+
+      // If this braced group is a match body (preceded by 'match' optionally with parentheses),
+      // skip interpreting it now by replacing with a placeholder. The whole match will be
+      // handled as a unit later by the expression evaluator.
+      if (m[0] === "{" && /\bmatch\b(?:\s*\([^()]*\))?\s*$/.test(prefix)) {
+        const ph = `__MATCH_BLOCK_PLACEHOLDER_${placeholders.length}__`;
+        placeholders.push(m);
+        expr = expr.replace(m, ph);
+        continue;
+      }
+
+      // if this inner group contains a declaration and it's used as an initializer
+      // (i.e., preceded by a `let <name> =`), disallow it
       if (/\blet\s+[a-zA-Z_]\w*\s*=\s*$/.test(prefix)) {
         const last = getLastTopLevelStatementLocal(inner);
         if (!last || /^let\b/.test(last))
@@ -412,6 +462,12 @@ export function interpret(
       }
       expr = expr.replace(m, replacement);
     }
+
+    // restore any skipped match placeholders back to their original braced text
+    for (let i = 0; i < placeholders.length; i++) {
+      expr = expr.replace(`__MATCH_BLOCK_PLACEHOLDER_${i}__`, placeholders[i]);
+    }
+
     s = expr;
 
     // After replacing groups, it's possible we introduced top-level semicolons

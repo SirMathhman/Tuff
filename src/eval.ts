@@ -1,4 +1,4 @@
-import { parseOperandAt } from "./parser";
+import { parseOperandAt, splitTopLevelStatements } from "./parser";
 
 export function isTruthy(val: any): boolean {
   if (val && (val as any).boolValue !== undefined)
@@ -119,6 +119,87 @@ export function evaluateReturningOperand(
   exprStr: string,
   localEnv: Record<string, any>
 ): any {
+  // Support a 'match' expression: match (<expr>) { case <pat> => <expr>; ... default => <expr>; }
+  const sTrim = exprStr.trimStart();
+  if (/^match\b/.test(sTrim)) {
+    // helper to find matching pair
+    function findMatching(
+      str: string,
+      startIdx: number,
+      openChar: string,
+      closeChar: string
+    ) {
+      let depth = 0;
+      for (let k = startIdx; k < str.length; k++) {
+        const ch = str[k];
+        if (ch === openChar) depth++;
+        else if (ch === closeChar) {
+          depth--;
+          if (depth === 0) return k;
+        }
+      }
+      return -1;
+    }
+
+    // after 'match', parse the target expression which may be parenthesized or bare
+    let afterMatch = sTrim.slice("match".length).trimStart();
+    let targetExpr = "";
+    let rest = "";
+    if (afterMatch.startsWith("(")) {
+      const startParen = sTrim.indexOf("(", 0);
+      const endParen = findMatching(sTrim, startParen, "(", ")");
+      if (endParen === -1) throw new Error("unbalanced parentheses in match");
+      targetExpr = sTrim.slice(startParen + 1, endParen).trim();
+      rest = sTrim.slice(endParen + 1).trimStart();
+    } else {
+      // take everything up to the first '{' as the target expression
+      const braceIdx = afterMatch.indexOf("{");
+      if (braceIdx === -1) throw new Error("invalid match syntax");
+      targetExpr = afterMatch.slice(0, braceIdx).trim();
+      rest = afterMatch.slice(braceIdx).trimStart();
+    }
+
+    const targetOp = evaluateReturningOperand(targetExpr, localEnv);
+
+    if (!rest.startsWith("{")) throw new Error("invalid match block");
+    const startBrace = sTrim.indexOf(
+      "{",
+      sTrim.indexOf(targetExpr) + (targetExpr.length || 0)
+    );
+    const endBrace = findMatching(sTrim, startBrace, "{", "}");
+    if (endBrace === -1) throw new Error("unbalanced braces in match");
+    const inner = sTrim.slice(startBrace + 1, endBrace);
+
+    const parts = splitTopLevelStatements(inner)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    
+    let defaultBody: string | null = null;
+    for (const part of parts) {
+      const caseMatch = part.match(/^case\s+([\s\S]+?)\s*=>\s*([\s\S]*)$/);
+      if (caseMatch) {
+        const patStr = caseMatch[1].trim();
+        const bodyStr = caseMatch[2].trim();
+        const patOp = evaluateReturningOperand(patStr, localEnv);
+        const eq = applyBinaryOp("==", targetOp, patOp);
+        if (eq && (eq as any).boolValue) {
+          return evaluateReturningOperand(bodyStr, localEnv);
+        } // no match -> continue to next case
+        continue;
+      }
+      const defMatch = part.match(/^default\s*=>\s*([\s\S]*)$/);
+      if (defMatch) {
+        defaultBody = defMatch[1].trim();
+        continue;
+      }
+      throw new Error("invalid match case");
+    }
+    if (defaultBody !== null) {
+      return evaluateReturningOperand(defaultBody, localEnv);
+    }
+    return { valueBig: 0n };
+  }
+
   const exprTokens: { op?: string; operand?: any }[] = [];
   let pos = 0;
   const L = exprStr.length;
