@@ -156,6 +156,10 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("1 + { let x = 10I32; x } % 3")).toBe(2);
   });
 
+  it("accepts unannotated plain integer let ('1 + { let x = 10; x } % 3' => 2)", () => {
+    expect(interpret("1 + { let x = 10; x } % 3")).toBe(2);
+  });
+
   it("handles division and respects precedence ('1 + 10 / 2' => 6)", () => {
     expect(interpret("1 + 10 / 2")).toBe(6);
   });
