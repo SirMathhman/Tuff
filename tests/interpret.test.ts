@@ -118,4 +118,9 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("2U8 * 3")).toBe(6);
     expect(interpret("3 * 2U8")).toBe(6);
   });
+
+  it("throws on overflow for multiplication (e.g., '2U8 * 128' => Error)", () => {
+    expect(() => interpret("2U8 * 128")).toThrow();
+    expect(() => interpret("128 * 2U8")).toThrow();
+  });
 });
