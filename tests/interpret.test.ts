@@ -144,6 +144,10 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("1 + { let x : 10I32 = 10I32; x } % 3")).toBe(2);
   });
 
+  it("throws when annotation doesn't match initializer ('1 + { let x : 1I32 = 10I32; x } % 3' => Error)", () => {
+    expect(() => interpret("1 + { let x : 1I32 = 10I32; x } % 3")).toThrow();
+  });
+
   it("handles division and respects precedence ('1 + 10 / 2' => 6)", () => {
     expect(interpret("1 + 10 / 2")).toBe(6);
   });

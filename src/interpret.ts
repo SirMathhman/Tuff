@@ -42,7 +42,10 @@ function parseOperand(token: string) {
   return { valueBig: BigInt(numStr), isFloat: false };
 }
 
-export function interpret(input: string, env: Record<string, any> = {}): number {
+export function interpret(
+  input: string,
+  env: Record<string, any> = {}
+): number {
   let s = input.trim();
 
   // Helper: check for semicolons at top-level (not nested inside braces/parens)
@@ -50,9 +53,9 @@ export function interpret(input: string, env: Record<string, any> = {}): number 
     let depth = 0;
     for (let i = 0; i < str.length; i++) {
       const ch = str[i];
-      if (ch === '(' || ch === '{') depth++;
-      else if (ch === ')' || ch === '}') depth = Math.max(0, depth - 1);
-      else if (ch === ';' && depth === 0) return true;
+      if (ch === "(" || ch === "{") depth++;
+      else if (ch === ")" || ch === "}") depth = Math.max(0, depth - 1);
+      else if (ch === ";" && depth === 0) return true;
     }
     return false;
   }
@@ -67,12 +70,27 @@ export function interpret(input: string, env: Record<string, any> = {}): number 
       const stmt = raw.trim();
       if (!stmt) continue;
       if (/^let\b/.test(stmt)) {
-        const m = stmt.match(/^let\s+([a-zA-Z_]\w*)(?:\s*:\s*[^=;]+)?\s*=\s*(.+)$/);
+        const m = stmt.match(
+          /^let\s+([a-zA-Z_]\w*)(?:\s*:\s*([^=;]+))?\s*=\s*(.+)$/
+        );
         if (!m) throw new Error("invalid let declaration");
         const name = m[1];
-        const rhs = m[2].trim();
+        const annotation = m[2] ? m[2].trim() : null;
+        const rhs = m[3].trim();
         // evaluate RHS as an operand (preserving suffix/type when present)
         const rhsOperand = evaluateReturningOperand(rhs, localEnv);
+        // if annotation is present, validate it matches the initializer strictly
+        if (annotation) {
+          const ann = parseOperand(annotation);
+          if (!ann) throw new Error("invalid annotation in let");
+          // require both to be integer-like with suffixes
+          if (!(ann as any).valueBig || !(rhsOperand as any).valueBig)
+            throw new Error("annotation must be integer literal with suffix");
+          if ((ann as any).kind !== (rhsOperand as any).kind || (ann as any).bits !== (rhsOperand as any).bits)
+            throw new Error("annotation kind/bits do not match initializer");
+          if ((ann as any).valueBig !== (rhsOperand as any).valueBig)
+            throw new Error("annotation value does not match initializer");
+        }
         localEnv[name] = rhsOperand;
         last = rhsOperand;
       } else {
@@ -82,7 +100,8 @@ export function interpret(input: string, env: Record<string, any> = {}): number 
     // convert last to number
     if (last && (last as any).kind) return Number((last as any).valueBig);
     if (typeof last === "number") return last;
-    if (last && (last as any).isFloat) return (last as any).floatValue as number;
+    if (last && (last as any).isFloat)
+      return (last as any).floatValue as number;
     return Number((last as any).valueBig as bigint);
   }
 
@@ -124,27 +143,30 @@ export function interpret(input: string, env: Record<string, any> = {}): number 
   }
 
   // Evaluate and return the final operand (object or number) so callers can preserve types
-  function evaluateReturningOperand(exprStr: string, localEnv: Record<string, any>): any {
+  function evaluateReturningOperand(
+    exprStr: string,
+    localEnv: Record<string, any>
+  ): any {
     const exprTokens: { op?: string; operand?: any }[] = [];
     let pos = 0;
     const L = exprStr.length;
     function skip() {
-      while (pos < L && exprStr[pos] === ' ') pos++;
+      while (pos < L && exprStr[pos] === " ") pos++;
     }
     skip();
     const firstMatch = parseOperandAt(exprStr, pos);
-    if (!firstMatch) throw new Error('invalid expression');
+    if (!firstMatch) throw new Error("invalid expression");
     exprTokens.push({ operand: firstMatch.operand });
     pos += firstMatch.len;
     skip();
     while (pos < L) {
       const ch = exprStr[pos];
-      if (!/[+\-*/%]/.test(ch)) throw new Error('invalid operator');
+      if (!/[+\-*/%]/.test(ch)) throw new Error("invalid operator");
       const op = ch;
       pos++;
       skip();
       const next = parseOperandAt(exprStr, pos);
-      if (!next) throw new Error('invalid operand after operator');
+      if (!next) throw new Error("invalid operand after operator");
       exprTokens.push({ op, operand: next.operand });
       pos += next.len;
       skip();
@@ -166,13 +188,15 @@ export function interpret(input: string, env: Record<string, any> = {}): number 
     });
 
     function checkRangeThrow(kind: string, bits: number, sum: bigint) {
-      if (kind === 'u') {
+      if (kind === "u") {
         const max = (1n << BigInt(bits)) - 1n;
-        if (sum < 0n || sum > max) throw new Error(`value out of range for U${bits}`);
+        if (sum < 0n || sum > max)
+          throw new Error(`value out of range for U${bits}`);
       } else {
         const min = -(1n << BigInt(bits - 1));
         const max = (1n << BigInt(bits - 1)) - 1n;
-        if (sum < min || sum > max) throw new Error(`value out of range for I${bits}`);
+        if (sum < min || sum > max)
+          throw new Error(`value out of range for I${bits}`);
       }
     }
 
@@ -184,52 +208,67 @@ export function interpret(input: string, env: Record<string, any> = {}): number 
         const kind = (ref as any).kind as string;
         const bits = (ref as any).bits as number;
         if (leftHasKind && rightHasKind) {
-          if ((left as any).kind !== (right as any).kind || (left as any).bits !== (right as any).bits)
-            throw new Error('mismatched suffixes in binary operation');
+          if (
+            (left as any).kind !== (right as any).kind ||
+            (left as any).bits !== (right as any).bits
+          )
+            throw new Error("mismatched suffixes in binary operation");
         }
-        if (!leftHasKind && (left as any).isFloat) throw new Error('mixed suffix and float not allowed');
-        if (!rightHasKind && (right as any).isFloat) throw new Error('mixed suffix and float not allowed');
+        if (!leftHasKind && (left as any).isFloat)
+          throw new Error("mixed suffix and float not allowed");
+        if (!rightHasKind && (right as any).isFloat)
+          throw new Error("mixed suffix and float not allowed");
 
         let lBig: bigint;
         if (leftHasKind) lBig = (left as any).valueBig as bigint;
-        else if (typeof left === 'number') lBig = BigInt(left as number);
+        else if (typeof left === "number") lBig = BigInt(left as number);
         else lBig = (left as any).valueBig as bigint;
 
         let rBig: bigint;
         if (rightHasKind) rBig = (right as any).valueBig as bigint;
-        else if (typeof right === 'number') rBig = BigInt(right as number);
+        else if (typeof right === "number") rBig = BigInt(right as number);
         else rBig = (right as any).valueBig as bigint;
 
         let resBig: bigint;
-        if (op === '+') resBig = lBig + rBig;
-        else if (op === '-') resBig = lBig - rBig;
-        else if (op === '*') resBig = lBig * rBig;
-        else if (op === '/') {
-          if (rBig === 0n) throw new Error('division by zero');
+        if (op === "+") resBig = lBig + rBig;
+        else if (op === "-") resBig = lBig - rBig;
+        else if (op === "*") resBig = lBig * rBig;
+        else if (op === "/") {
+          if (rBig === 0n) throw new Error("division by zero");
           resBig = lBig / rBig;
-        } else if (op === '%') {
-          if (rBig === 0n) throw new Error('modulo by zero');
+        } else if (op === "%") {
+          if (rBig === 0n) throw new Error("modulo by zero");
           resBig = lBig % rBig;
-        } else throw new Error('unsupported operator');
+        } else throw new Error("unsupported operator");
 
         checkRangeThrow(kind, bits, resBig);
         return { valueBig: resBig, kind: kind, bits };
       }
 
-      const lNum = typeof left === 'number' ? left : (left as any).isFloat ? (left as any).floatValue : Number((left as any).valueBig);
-      const rNum = typeof right === 'number' ? right : (right as any).isFloat ? (right as any).floatValue : Number((right as any).valueBig);
-      if (op === '+') return lNum + rNum;
-      if (op === '-') return lNum - rNum;
-      if (op === '*') return lNum * rNum;
-      if (op === '/') return lNum / rNum;
-      if (op === '%') return lNum % rNum;
-      throw new Error('unsupported operator');
+      const lNum =
+        typeof left === "number"
+          ? left
+          : (left as any).isFloat
+          ? (left as any).floatValue
+          : Number((left as any).valueBig);
+      const rNum =
+        typeof right === "number"
+          ? right
+          : (right as any).isFloat
+          ? (right as any).floatValue
+          : Number((right as any).valueBig);
+      if (op === "+") return lNum + rNum;
+      if (op === "-") return lNum - rNum;
+      if (op === "*") return lNum * rNum;
+      if (op === "/") return lNum / rNum;
+      if (op === "%") return lNum % rNum;
+      throw new Error("unsupported operator");
     }
 
     // higher precedence pass
     let ii = 0;
     while (ii < ops.length) {
-      if (ops[ii] === '*' || ops[ii] === '/' || ops[ii] === '%') {
+      if (ops[ii] === "*" || ops[ii] === "/" || ops[ii] === "%") {
         const res = applyOpLocal(ops[ii], operands[ii], operands[ii + 1]);
         operands.splice(ii, 2, res);
         ops.splice(ii, 1);
@@ -238,7 +277,8 @@ export function interpret(input: string, env: Record<string, any> = {}): number 
 
     // low precedence
     let result: any = operands[0];
-    for (let j = 0; j < ops.length; j++) result = applyOpLocal(ops[j], result, operands[j + 1]);
+    for (let j = 0; j < ops.length; j++)
+      result = applyOpLocal(ops[j], result, operands[j + 1]);
 
     return result;
   }
@@ -268,7 +308,8 @@ export function interpret(input: string, env: Record<string, any> = {}): number 
     const opnd = evaluateReturningOperand(exprStr, env);
     if (opnd && (opnd as any).kind) return Number((opnd as any).valueBig);
     if (typeof opnd === "number") return opnd;
-    if (opnd && (opnd as any).isFloat) return (opnd as any).floatValue as number;
+    if (opnd && (opnd as any).isFloat)
+      return (opnd as any).floatValue as number;
     return Number((opnd as any).valueBig as bigint);
   }
 
