@@ -200,6 +200,10 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("let x : 1I32; x = 1; x")).toBe(1);
   });
 
+  it("supports address-of and dereference ('let x = 100; let y : *I32 = &x; *y' => 100)", () => {
+    expect(interpret("let x = 100; let y : *I32 = &x; *y")).toBe(100);
+  });
+
   it("throws on reassigning annotated literal ('let x : 1I32; x = 1; x = 2; x' => Error)", () => {
     expect(() => interpret("let x : 1I32; x = 1; x = 2; x")).toThrow();
   });

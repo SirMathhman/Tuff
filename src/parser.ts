@@ -58,17 +58,42 @@ export function parseOperand(token: string) {
 }
 
 export function parseOperandAt(src: string, pos: number) {
+  // Support unary address-of '&' and dereference '*' prefixes (allow multiple)
+  let i = pos;
+  let prefixes: string[] = [];
+  while (i < src.length && /[\s]/.test(src[i])) i++;
+  while (i < src.length && (src[i] === "&" || src[i] === "*")) {
+    prefixes.push(src[i]);
+    i++;
+    while (i < src.length && /[\s]/.test(src[i])) i++;
+  }
+
   // Try numeric/suffixed literal or boolean literal first
   const m = src
-    .slice(pos)
+    .slice(i)
     .match(/^([+-]?\d+(?:\.\d+)?(?:[uUiI]\d+)?|true|false)/i);
+  function applyPrefixes(operand: any, prefixes: string[]) {
+    let op = operand;
+    for (let p = prefixes.length - 1; p >= 0; p--) {
+      const pr = prefixes[p];
+      if (pr === "&") op = { addrOf: op };
+      else op = { deref: op };
+    }
+    return op;
+  }
+
   if (m) {
-    const operand = parseOperand(m[1]);
-    if (!operand) throw new Error("invalid operand");
-    return { operand, len: m[1].length };
+    const innerOperand = parseOperand(m[1]);
+    if (!innerOperand) throw new Error("invalid operand");
+    const operand = applyPrefixes(innerOperand, prefixes);
+    return { operand, len: i - pos + m[1].length };
   }
   // fallback: identifier
-  const id = src.slice(pos).match(/^([a-zA-Z_]\w*)/);
-  if (id) return { operand: { ident: id[1] }, len: id[1].length };
+  const id = src.slice(i).match(/^([a-zA-Z_]\w*)/);
+  if (id) {
+    let operand: any = { ident: id[1] };
+    operand = applyPrefixes(operand, prefixes);
+    return { operand, len: i - pos + id[1].length };
+  }
   return null;
 }

@@ -71,11 +71,57 @@ export function interpret(
     }
   }
 
+  function validateTypeOnly(kind: string, bits: number, rhsOperand: any) {
+    if (!(rhsOperand as any).valueBig)
+      throw new Error("annotation must be integer type matching initializer");
+    if ((rhsOperand as any).kind) {
+      if (
+        (rhsOperand as any).kind !== kind ||
+        (rhsOperand as any).bits !== bits
+      )
+        throw new Error("annotation kind/bits do not match initializer");
+    } else {
+      checkRange(kind, bits, (rhsOperand as any).valueBig as bigint);
+    }
+  }
+
   function validateAnnotation(
     annotation: string | null | any,
     rhsOperand: any
   ) {
     if (!annotation) return;
+
+    // pointer annotation: *<inner>
+    if (typeof annotation === "string" && /^\s*\*/.test(annotation)) {
+      const inner = annotation.replace(/^\s*\*/g, "").trim();
+      if (!rhsOperand || !(rhsOperand as any).pointer)
+        throw new Error("annotation requires pointer initializer");
+      // inner can be type-only like I32, Bool, or a literal operand
+      const parsedType = (function (s: string) {
+        const t = s.match(/^\s*([uUiI])\s*(\d+)\s*$/);
+        if (!t) return null;
+        return { kind: t[1] === "u" || t[1] === "U" ? "u" : "i", bits: Number(t[2]) };
+      })(inner);
+      if (parsedType) {
+        validateTypeOnly(parsedType.kind, parsedType.bits, rhsOperand);
+        return;
+      }
+      if (/^\s*bool\s*$/i.test(inner)) {
+        if ((rhsOperand as any).ptrIsBool !== true)
+          throw new Error("annotation Pointer Bool requires boolean initializer");
+        return;
+      }
+      // otherwise inner might be a literal like 1I32
+      const ann = parseOperand(inner);
+      if (!ann) throw new Error("invalid annotation in let");
+      // ensure pointer's pointed literal matches
+      checkAnnMatchesRhs(ann, {
+        valueBig: (rhsOperand as any).valueBig,
+        kind: (rhsOperand as any).kind,
+        bits: (rhsOperand as any).bits,
+      });
+      return;
+    }
 
     // If annotation is already a parsed operand object (from parsedAnnotation), use it
     if (typeof annotation !== "string") {
@@ -87,17 +133,7 @@ export function interpret(
     if (typeOnly) {
       const kind = typeOnly[1] === "u" || typeOnly[1] === "U" ? "u" : "i";
       const bits = Number(typeOnly[2]);
-      if (!(rhsOperand as any).valueBig)
-        throw new Error("annotation must be integer type matching initializer");
-      if ((rhsOperand as any).kind) {
-        if (
-          (rhsOperand as any).kind !== kind ||
-          (rhsOperand as any).bits !== bits
-        )
-          throw new Error("annotation kind/bits do not match initializer");
-      } else {
-        checkRange(kind, bits, (rhsOperand as any).valueBig as bigint);
-      }
+      validateTypeOnly(kind, bits, rhsOperand);
     } else if (/^\s*bool\s*$/i.test(annotation)) {
       if (
         !(rhsOperand as any).boolValue &&

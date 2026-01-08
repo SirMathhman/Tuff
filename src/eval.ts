@@ -172,19 +172,71 @@ export function evaluateReturningOperand(
   const ops: string[] = [];
   for (let i = 1; i < exprTokens.length; i++) ops.push(exprTokens[i].op!);
 
-  // resolve identifiers from localEnv
+  // helper to get binding and deref target
+  function getBindingTarget(name: string) {
+    if (!(name in localEnv)) throw new Error(`unknown identifier ${name}`);
+    const binding = localEnv[name];
+    if (binding && (binding as any).uninitialized)
+      throw new Error(`use of uninitialized variable ${name}`);
+    const targetVal = binding && (binding as any).value !== undefined ? (binding as any).value : binding;
+    return { binding, targetVal };
+  }
+
+  // resolve identifiers, address-of (&) and dereference (*) from localEnv
   operands = operands.map((op) => {
+    // address-of: produce a pointer object referring to the binding name and include target metadata
+    if (op && (op as any).addrOf) {
+      const inner = (op as any).addrOf;
+      if (!inner.ident) throw new Error("& must be applied to identifier");
+      const n = inner.ident as string;
+      const { targetVal } = getBindingTarget(n);
+      const ptrObj: any = { ptrName: n, pointer: true };
+      if (targetVal && (targetVal as any).kind) {
+        ptrObj.kind = (targetVal as any).kind;
+        ptrObj.bits = (targetVal as any).bits;
+        ptrObj.valueBig = (targetVal as any).valueBig;
+      } else if (targetVal && (targetVal as any).valueBig !== undefined) {
+        ptrObj.valueBig = (targetVal as any).valueBig;
+      } else if (targetVal && (targetVal as any).isFloat) {
+        ptrObj.isFloat = true;
+        ptrObj.floatValue = (targetVal as any).floatValue;
+      } else if (targetVal && (targetVal as any).boolValue !== undefined) {
+        ptrObj.ptrIsBool = true;
+        ptrObj.boolValue = (targetVal as any).boolValue;
+      } else if (typeof targetVal === "number") {
+        // plain numeric -> treat as integer literal-like
+        ptrObj.valueBig = BigInt(targetVal as number);
+      }
+      return ptrObj;
+    }
+
+    // dereference: fetch the value pointed to by a pointer (either a named binding or an inline &expr)
+    if (op && (op as any).deref) {
+      const inner = (op as any).deref;
+      // deref of an identifier that holds a pointer
+      if (inner && (inner as any).ident) {
+        const n = (inner as any).ident as string;
+        const { binding, targetVal: val } = getBindingTarget(n);
+        if (!val || !(val as any).ptrName) throw new Error("cannot dereference non-pointer");
+        const targetName = (val as any).ptrName as string;
+        const { targetVal } = getBindingTarget(targetName);
+        return targetVal;
+      }
+      // deref of an inline &expr like *(&x)
+      if (inner && (inner as any).addrOf) {
+        const inr = (inner as any).addrOf;
+        if (!inr.ident) throw new Error("& must be applied to identifier");
+        const n = inr.ident as string;
+        const { targetVal } = getBindingTarget(n);
+        return targetVal;
+      }
+      throw new Error("invalid dereference target");
+    }
+
+    // identifier resolution (existing behavior)
     if (op && (op as any).ident) {
       const n = (op as any).ident as string;
-      if (!(n in localEnv)) throw new Error(`unknown identifier ${n}`);
-      const val = localEnv[n];
-      // If the binding is a placeholder for an uninitialized declaration, ensure it's initialized
-      if (val && (val as any).uninitialized !== undefined) {
-        if ((val as any).uninitialized)
-          throw new Error(`use of uninitialized variable ${n}`);
-        return (val as any).value;
-      }
-      // If the binding is a mutable wrapper (has a .value), return the wrapped value
+      const { targetVal: val } = getBindingTarget(n);
       if (val && (val as any).value !== undefined) return (val as any).value;
       return val;
     }
