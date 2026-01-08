@@ -362,4 +362,12 @@ describe("interpret (basic behavior)", () => {
       )
     ).toBe(120);
   });
+
+  it("supports closures that capture values ('fn capture(value : I32) => fn get() => value; let getter = capture(100); getter()' => 100)", () => {
+    expect(
+      interpret(
+        "fn capture(value : I32) => fn get() => value; let getter = capture(100); getter()"
+      )
+    ).toBe(100);
+  });
 });
