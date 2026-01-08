@@ -369,6 +369,14 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("fn addOnce(this : I32) => this + 1; 100.addOnce()")).toBe(101);
   });
 
+  it("supports method-like calls on struct receivers when function declares `this` ('struct Point { x : I32, y : I32 } fn manhattan(this : Point) => this.x + this.y; let point = Point { x : 3, y : 4 }; point.manhattan()' => 7)", () => {
+    expect(
+      interpret(
+        "struct Point { x : I32, y : I32 } fn manhattan(this : Point) => this.x + this.y; let point = Point { x : 3, y : 4 }; point.manhattan()"
+      )
+    ).toBe(7);
+  });
+
   it("supports closures that capture values ('fn capture(value : I32) => fn get() => value; let getter = capture(100); getter()' => 100)", () => {
     expect(
       interpret(

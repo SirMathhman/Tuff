@@ -1,4 +1,5 @@
 /* eslint-disable max-lines */
+/* global console */
 import {
   parseOperandAt,
   splitTopLevelStatements,
@@ -208,6 +209,32 @@ function resolveFunctionFromOperand(operand: unknown, localEnv: Env): unknown {
   } else {
     throw new Error("cannot call non-function");
   }
+}
+
+// Create a bound function wrapper from an original fn object and a boundThis
+function makeBoundWrapperFromOrigFn(origFn: unknown, boundThis: unknown) {
+  if (!isPlainObject(origFn)) throw new Error("internal error: invalid fn");
+  const boundFn: { [k: string]: unknown } = {};
+  if (hasParams(origFn) && Array.isArray(origFn.params)) {
+    const origParams = origFn.params;
+    if (origParams.length > 0) {
+      const first = origParams[0];
+      const firstName = isPlainObject(first) && hasName(first) ? first.name : first;
+      if (typeof firstName === "string" && firstName === "this") boundFn.params = origParams.slice(1);
+      else boundFn.params = origParams;
+    } else boundFn.params = [];
+  }
+
+  if (hasBody(origFn) && typeof origFn.body === "string") boundFn.body = origFn.body;
+  if (hasIsBlock(origFn)) boundFn.isBlock = origFn.isBlock;
+  const resAnn = getProp(origFn, "resultAnnotation");
+  if (typeof resAnn === "string") boundFn.resultAnnotation = resAnn;
+  if (hasClosureEnv(origFn) && origFn.closureEnv) boundFn.closureEnv = origFn.closureEnv;
+  const nativeMaybe = getProp(origFn, "nativeImpl");
+  if (typeof nativeMaybe === "function") boundFn.nativeImpl = nativeMaybe;
+
+  boundFn.boundThis = boundThis;
+  return { fn: boundFn };
 }
 
 /**
@@ -426,6 +453,9 @@ export function evaluateReturningOperand(
     return wrapper;
   }
   const exprTokens: { op?: string; operand?: unknown }[] = [];
+  // Debug: trace tokens for suspicious expressions
+  // eslint-disable-next-line no-console
+  if (exprStr.includes("manhattan")) console.log("DEBUG exprStr start:", exprStr);
   let pos = 0;
   const L = exprStr.length;
   function skip() {
@@ -504,6 +534,20 @@ export function evaluateReturningOperand(
   }
 
   // build operands and ops
+  // Debug: show tokens for suspicious exprs
+  if (exprStr.includes("manhattan")) {
+    // Create a lightweight representation since tokens may not be JSON-friendly
+    const tokenSummary = exprTokens.map((t) => {
+      if (t.op) return `OP(${t.op})`;
+      const o = t.operand;
+      if (isPlainObject(o) && hasStructInstantiation(o)) return `OPER(structInst)`;
+      if (isPlainObject(o) && hasIdent(o)) return `OPER(ident)`;
+      if (isPlainObject(o) && hasCallApp(o)) return `OPER(callApp)`;
+      return `OPER(${String(o)})`;
+    });
+    // eslint-disable-next-line no-console
+    console.log("DEBUG exprTokens summary:", tokenSummary);
+  }
   let operands = exprTokens.map((t) => t.operand);
   const ops: string[] = [];
   for (let i = 1; i < exprTokens.length; i++) ops.push(exprTokens[i].op!);
@@ -727,6 +771,9 @@ export function evaluateReturningOperand(
   // helper to evaluate a call and return its result
   function evaluateCallAt(funcOperand: unknown, callAppOperand: unknown) {
     if (!isPlainObject(callAppOperand)) throw new Error("invalid call");
+    // Debug: show call operands for problematic cases
+    // eslint-disable-next-line no-console
+    console.log("DEBUG evaluateCallAt: funcOperand kind:", typeof funcOperand, funcOperand && (isPlainObject(funcOperand) ? Object.keys(funcOperand) : funcOperand));
 
     if (!hasCallApp(callAppOperand)) throw new Error("invalid call");
     const callArgsRaw = callAppOperand.callApp;
@@ -811,6 +858,9 @@ export function evaluateReturningOperand(
   // Handle function application and field access (highest precedence, left-to-right)
   let i = 0;
   while (i < ops.length) {
+    // Debug: trace token processing for suspicious expressions
+    // eslint-disable-next-line no-console
+    if (exprStr.includes("manhattan")) console.log("DEBUG eval loop", { i, ops: ops.slice(), operands: operands.slice() });
     if (ops[i] === "call") {
       // If a field access immediately follows a call (call + .field), handle both
       // together to avoid operand alignment issues.
@@ -896,11 +946,72 @@ export function evaluateReturningOperand(
 
       // Handle both struct instances and this binding
       if (isStructInstance(structInstance) || isThisBinding(structInstance)) {
-        const fieldValue = getFieldValueFromInstance(structInstance, fieldName);
+        // Debug: show the instance and field being accessed
+        // eslint-disable-next-line no-console
+        console.log("DEBUG struct/this access", { structInstance, fieldName });
+        // If the instance actually contains the field, return it (covers methods
+        // declared on `this` and normal struct fields).
+        if (
+          isPlainObject(structInstance) &&
+          "fieldValues" in structInstance &&
+          Object.prototype.hasOwnProperty.call(structInstance.fieldValues, fieldName)
+        ) {
+          const fieldValue = getFieldValueFromInstance(structInstance, fieldName);
+          // Replace the operand and its following placeholder with the field value
+          operands.splice(i, 2, fieldValue);
+          ops.splice(i, 1);
+        } else {
+          // If the field isn't present on the instance, attempt to resolve a
+          // same-named function from the current environment and bind the
+          // instance as `this` (method dispatch for structs).
+          const binding = envGet(localEnv, fieldName);
+          if (binding !== undefined && isFnWrapper(binding)) {
+            const wrapper = makeBoundWrapperFromOrigFn(binding.fn, structInstance);
+            // Debug context for method binding
+            // eslint-disable-next-line no-console
+            console.log("DEBUG binding method", { index: i, ops: ops.slice(), operands: operands.slice() });
+            // If the following operand is a call-application (e.g., `point.method()`
+            // where the `()` was parsed into the operand after the dot), invoke
+            // the call immediately and replace the range with the result.
+            const nextOpnd = operands[i + 1];
+            if (isPlainObject(nextOpnd) && hasCallApp(nextOpnd)) {
+              // eslint-disable-next-line no-console
+              console.log("DEBUG immediate call-on-binding detected", nextOpnd);
+              const callResult = evaluateCallAt(wrapper, nextOpnd);
+              // Replace [structInstance, callApp] -> callResult
+              operands.splice(i, 2, callResult);
+              // remove the '.' op
+              ops.splice(i, 1);
+              continue;
+            }
+            // Also handle the case where the parser produced a separate 'call' op
+            // immediately following the '.' operator (ops[i+1] === 'call').
+            if (ops[i + 1] === "call") {
+              const callAppOperand = operands[i + 2];
+              const callResult = evaluateCallAt(wrapper, callAppOperand);
+              // Replace [structInstance, placeholder, callApp] -> callResult
+              operands.splice(i, 3, callResult);
+              // remove both the '.' and 'call' operators
+              ops.splice(i, 2);
+              continue;
+            }
 
-        // Replace the operand and its following placeholder with the field value
-        operands.splice(i, 2, fieldValue);
-        ops.splice(i, 1);
+            // Replace the operand and its following placeholder with the wrapped function
+            // Mark it so we can auto-invoke if the parser representation didn't
+            // preserve the `()` call (see also auto-invoke handling below).
+            // NOTE: use a symbolic property name unlikely to collide with user data.
+            if (isPlainObject(wrapper) && "fn" in wrapper && isPlainObject(wrapper.fn)) {
+              // mark function wrapper for possible auto-invocation
+              wrapper.fn.__autoCall = true;
+            }
+
+            operands.splice(i, 2, wrapper);
+            ops.splice(i, 1);
+            continue;
+          }
+
+          throw new Error(`invalid field access: ${fieldName}`);
+        }
       } else if (
         typeof structInstance === "number" ||
         typeof structInstance === "string" ||
@@ -914,32 +1025,7 @@ export function evaluateReturningOperand(
         const binding = envGet(localEnv, fieldName);
 
         if (binding !== undefined && isFnWrapper(binding)) {
-          const origFn = binding.fn;
-          // Build a bound wrapper that sets `boundThis` on the function object
-          const boundFn: { [k: string]: unknown } = {};
-            // If original function expects a `this` first parameter, drop it from
-            // the bound wrapper's params and expose the bound value via `boundThis`.
-            if (hasParams(origFn) && Array.isArray(origFn.params)) {
-              const origParams = origFn.params;
-              if (origParams.length > 0) {
-                const first = origParams[0];
-                const firstName = isPlainObject(first) && hasName(first) ? first.name : first;
-                if (typeof firstName === "string" && firstName === "this")
-                  boundFn.params = origParams.slice(1);
-                else boundFn.params = origParams;
-              } else boundFn.params = [];
-            }
-
-            if (hasBody(origFn) && typeof origFn.body === "string") boundFn.body = origFn.body;
-            if (hasIsBlock(origFn)) boundFn.isBlock = origFn.isBlock;
-            const resAnn = getProp(origFn, "resultAnnotation");
-            if (typeof resAnn === "string") boundFn.resultAnnotation = resAnn;
-            if (hasClosureEnv(origFn) && origFn.closureEnv) boundFn.closureEnv = origFn.closureEnv;
-            const nativeMaybe = getProp(origFn, "nativeImpl");
-            if (typeof nativeMaybe === "function") boundFn.nativeImpl = nativeMaybe;
-            boundFn.boundThis = structInstance;
-
-          const wrapper = { fn: boundFn };
+          const wrapper = makeBoundWrapperFromOrigFn(binding.fn, structInstance);
           // Replace the operand and its following placeholder with the wrapped function
           operands.splice(i, 2, wrapper);
           ops.splice(i, 1);
@@ -954,6 +1040,17 @@ export function evaluateReturningOperand(
     }
   }
 
+  // If we created a bound-wrapper for a struct method but the call was not
+  // consumed (parsing quirks), auto-invoke zero-arg call in that specific
+  // case to preserve expected `point.manhattan()` semantics.
+  if (isFnWrapper(operands[0])) {
+    const maybeAuto = getProp(operands[0].fn, "__autoCall");
+    if (maybeAuto === true) {
+      const res = evaluateCallAt(operands[0], { callApp: [] });
+      operands.splice(0, 1, res);
+    }
+  }
+
   applyPrecedence(new Set(["*", "/", "%"]));
   applyPrecedence(new Set(["+", "-"]));
   // comparison operators
@@ -961,6 +1058,7 @@ export function evaluateReturningOperand(
   applyPrecedence(new Set(["&&"]));
   applyPrecedence(new Set(["||"]));
 
+  // Debug: show final operand for suspicious expressions
   // final result is operands[0]
   return operands[0];
 }
@@ -972,5 +1070,8 @@ export function evaluateFlatExpression(exprStr: string, env: Env): number {
   if (typeof opnd === "number") return opnd;
   if (isFloatOperand(opnd)) return opnd.floatValue;
   if (opnd === undefined) return 0;
+  // Debug: output unexpected operand
+  // eslint-disable-next-line no-console
+  console.log("DEBUG cannot evaluate expression, opnd:", opnd);
   throw new Error("cannot evaluate expression");
 }

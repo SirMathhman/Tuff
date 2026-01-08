@@ -303,9 +303,10 @@ function interpretBlockInternal(
         // If there's remaining content after the struct definition, parse it as an expression
         const remaining = stmt.slice(structDef.endPos).trim();
         if (remaining) {
-          // Evaluate the remaining content as an expression
-          const result = evaluateFlatExpression(remaining, localEnv);
-          last = result;
+          // Evaluate the remaining content as statements so trailing declarations
+          // (e.g., a function following a struct declaration on the same line)
+          // are handled correctly.
+          last = interpret(remaining + ";", localEnv);
         }
         continue;
       }
