@@ -70,8 +70,12 @@ export function interpret(
     return parts;
   }
 
-  // If the input looks like a block (has top-level semicolons or starts with `let`), evaluate as a block
-  if (hasTopLevelSemicolon(s) || /^let\b/.test(s)) {
+  // If the input looks like a block (has top-level semicolons, starts with `let`, or is a top-level braced block), evaluate as a block
+  if (hasTopLevelSemicolon(s) || /^let\b/.test(s) || /^\s*\{[\s\S]*\}\s*$/.test(s)) {
+    // If the entire input is an outer braced block, strip outer braces so inner
+    // declarations are processed in order and nested groups see earlier declarations.
+    if (/^\s*\{[\s\S]*\}\s*$/.test(s)) s = s.replace(/^\{\s*|\s*\}$/g, "");
+
     // simple block evaluator with lexical scoping (variables shadow parent env)
     const localEnv: Record<string, any> = { ...env };
     const declared = new Set<string>();
@@ -163,7 +167,7 @@ export function interpret(
         let remaining = stmt;
         while (true) {
           if (/^\s*$/.test(remaining)) {
-            last = undefined;
+            // nothing left; preserve last (do not overwrite) and exit
             break;
           }
           const trimmed = remaining.trimStart();
@@ -458,7 +462,21 @@ export function interpret(
 
   // fallback: single operand parse
   const single = parseOperand(s);
-  if (!single) return 0;
+  if (!single) {
+    // if it's a bare identifier, try resolving from env (so `{ x }` yields the value of `x`)
+    const idm = s.match(/^\s*([a-zA-Z_]\w*)\s*$/);
+    if (idm) {
+      const name = idm[1];
+      if (name in env) {
+        const val = env[name];
+        if (val && (val as any).kind) return Number((val as any).valueBig);
+        if (typeof val === "number") return val;
+        if (val && (val as any).isFloat) return (val as any).floatValue as number;
+        return Number((val as any).valueBig as bigint);
+      }
+    }
+    return 0;
+  }
   if ((single as any).kind) {
     const kind = (single as any).kind as string;
     const bits = (single as any).bits as number;

@@ -212,6 +212,17 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("{ let x = 10; {} x } ")).toBe(10);
   });
 
+  it("handles braced expression after a statement ('let x = 10; { x }' => 10)", () => {
+    expect(interpret("let x = 10; { x }")).toBe(10);
+    // also when nested in an outer block
+    expect(interpret("{ let x = 10; { x } } ")).toBe(10);
+  });
+
+  it("resolves identifier inside a braced block using provided env", () => {
+    expect(interpret("{ x }", { x: 10 })).toBe(10);
+    expect(interpret("{ x }", { x: { valueBig: 10n } })).toBe(10);
+  });
+
   it("returns 0 for let-only sequences ('let x = 10;' => 0)", () => {
     expect(interpret("let x = 10;")).toBe(0);
     expect(interpret("{ let x = 10; }")).toBe(0);
