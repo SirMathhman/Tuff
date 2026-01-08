@@ -9,6 +9,7 @@ import {
   validateAnnotation,
   parseFnComponents,
   findMatchingParen,
+  convertOperandToNumber,
 } from "./interpret_helpers";
 
 import {
@@ -40,6 +41,7 @@ import {
   hasFields,
   getProp,
 } from "./types";
+
 
 export function isTruthy(val: unknown): boolean {
   if (isBoolOperand(val)) return val.boolValue;
@@ -215,8 +217,9 @@ function resolveFunctionFromOperand(operand: unknown, localEnv: Env): unknown {
 function executeFunctionBody(fn: unknown, callEnv: Env): unknown {
   if (!isPlainObject(fn)) throw new Error("internal error: invalid fn");
   const isBlock = hasIsBlock(fn) && fn.isBlock === true;
-  if (!hasBody(fn) || typeof fn.body !== "string")
+  if (!hasBody(fn) || typeof fn.body !== "string") {
     throw new Error("internal error: invalid fn body");
+  }
   const body = fn.body;
 
   if (!isBlock) {
@@ -668,6 +671,10 @@ export function evaluateReturningOperand(
 
       // Special handling for 'this' binding
       if (n === "this") {
+        // If `this` is explicitly bound in the environment, return it directly
+        // (used by bound method wrappers to expose primitive receivers).
+        if (envHas(localEnv, "this")) return envGet(localEnv, "this");
+
         const thisObj: {
           isThisBinding: true;
           fieldValues: { [k: string]: unknown };
@@ -720,6 +727,7 @@ export function evaluateReturningOperand(
   // helper to evaluate a call and return its result
   function evaluateCallAt(funcOperand: unknown, callAppOperand: unknown) {
     if (!isPlainObject(callAppOperand)) throw new Error("invalid call");
+
     if (!hasCallApp(callAppOperand)) throw new Error("invalid call");
     const callArgsRaw = callAppOperand.callApp;
     if (!Array.isArray(callArgsRaw)) throw new Error("invalid call");
@@ -744,6 +752,17 @@ export function evaluateReturningOperand(
       throw new Error("invalid argument count");
 
     const callEnv: Env = envClone(fnClosureEnv);
+    // If this function wrapper has a bound `this`, expose it on the callEnv
+    // so that functions may access `this` as a variable inside the body.
+    const boundThis = getProp(fn, "boundThis");
+    if (boundThis !== undefined) {
+      let thisVal: unknown = boundThis;
+      if (isIntOperand(thisVal) || isFloatOperand(thisVal) || isBoolOperand(thisVal))
+        thisVal = convertOperandToNumber(thisVal);
+      envSet(callEnv, "this", thisVal);
+
+    }
+
     for (let j = 0; j < fnParams.length; j++) {
       const p = fnParams[j];
       const pname = isPlainObject(p) && hasName(p) ? p.name : p;
@@ -882,6 +901,51 @@ export function evaluateReturningOperand(
         // Replace the operand and its following placeholder with the field value
         operands.splice(i, 2, fieldValue);
         ops.splice(i, 1);
+      } else if (
+        typeof structInstance === "number" ||
+        typeof structInstance === "string" ||
+        typeof structInstance === "boolean" ||
+        isIntOperand(structInstance) ||
+        isFloatOperand(structInstance) ||
+        isBoolOperand(structInstance)
+      ) {
+        // Allow method-like calls on primitive receivers by resolving a same-named
+        // function in the current localEnv and returning a bound fn wrapper.
+        const binding = envGet(localEnv, fieldName);
+
+        if (binding !== undefined && isFnWrapper(binding)) {
+          const origFn = binding.fn;
+          // Build a bound wrapper that sets `boundThis` on the function object
+          const boundFn: { [k: string]: unknown } = {};
+            // If original function expects a `this` first parameter, drop it from
+            // the bound wrapper's params and expose the bound value via `boundThis`.
+            if (hasParams(origFn) && Array.isArray(origFn.params)) {
+              const origParams = origFn.params;
+              if (origParams.length > 0) {
+                const first = origParams[0];
+                const firstName = isPlainObject(first) && hasName(first) ? first.name : first;
+                if (typeof firstName === "string" && firstName === "this")
+                  boundFn.params = origParams.slice(1);
+                else boundFn.params = origParams;
+              } else boundFn.params = [];
+            }
+
+            if (hasBody(origFn) && typeof origFn.body === "string") boundFn.body = origFn.body;
+            if (hasIsBlock(origFn)) boundFn.isBlock = origFn.isBlock;
+            const resAnn = getProp(origFn, "resultAnnotation");
+            if (typeof resAnn === "string") boundFn.resultAnnotation = resAnn;
+            if (hasClosureEnv(origFn) && origFn.closureEnv) boundFn.closureEnv = origFn.closureEnv;
+            const nativeMaybe = getProp(origFn, "nativeImpl");
+            if (typeof nativeMaybe === "function") boundFn.nativeImpl = nativeMaybe;
+            boundFn.boundThis = structInstance;
+
+          const wrapper = { fn: boundFn };
+          // Replace the operand and its following placeholder with the wrapped function
+          operands.splice(i, 2, wrapper);
+          ops.splice(i, 1);
+          continue;
+        }
+        throw new Error(`cannot access field on non-struct value`);
       } else {
         throw new Error(`cannot access field on non-struct value`);
       }

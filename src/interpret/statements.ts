@@ -118,7 +118,9 @@ function interpretBlockInternal(
 
     if (/^extern\s+let\b/.test(stmt)) {
       // extern let declaration: `extern let name [: annotation];`
-      const m = stmt.match(/^extern\s+let\s+([a-zA-Z_]\w*)(?:\s*:\s*([^;]+))?\s*;?$/);
+      const m = stmt.match(
+        /^extern\s+let\s+([a-zA-Z_]\w*)(?:\s*:\s*([^;]+))?\s*;?$/
+      );
       if (!m) throw new Error("invalid extern let declaration");
       const name = m[1];
       const annotation = m[2] ? m[2].trim() : undefined;

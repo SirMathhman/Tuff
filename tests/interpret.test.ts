@@ -365,6 +365,10 @@ describe("interpret (basic behavior)", () => {
     ).toBe(120);
   });
 
+  it("supports method-like calls on primitives bound by this parameter ('fn addOnce(this : I32) => this + 1; 100.addOnce()' => 101)", () => {
+    expect(interpret("fn addOnce(this : I32) => this + 1; 100.addOnce()")).toBe(101);
+  });
+
   it("supports closures that capture values ('fn capture(value : I32) => fn get() => value; let getter = capture(100); getter()' => 100)", () => {
     expect(
       interpret(
@@ -554,7 +558,9 @@ describe("interpret (basic behavior)", () => {
   });
 
   it("interpretAllWithNative supports native constants and extern let declarations", () => {
-    const scripts = { main: "extern from lib use { myConst }; extern let myConst : I32; myConst" };
+    const scripts = {
+      main: "extern from lib use { myConst }; extern let myConst : I32; myConst",
+    };
     const natives = { lib: "export const myConst = 100;" };
     expect(interpretAllWithNative(scripts, natives, "main")).toBe(100);
   });
