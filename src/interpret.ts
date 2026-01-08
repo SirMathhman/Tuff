@@ -23,24 +23,27 @@ export function interpret(input: string): number {
           throw new Error("suffix requires integer value");
         }
         const valueBig = BigInt(leading);
-        if (kind === 'u' || kind === 'U') {
+        if (kind === "u" || kind === "U") {
           // Unsigned: value must be >= 0 and <= 2^bits - 1
-          if (valueBig < 0n) throw new Error("negative numbers with suffixes are not allowed");
+          if (valueBig < 0n)
+            throw new Error("negative numbers with suffixes are not allowed");
           const max = (1n << BigInt(bits)) - 1n;
-          if (valueBig > max) throw new Error(`value out of range for U${bits}`);
+          if (valueBig > max)
+            throw new Error(`value out of range for U${bits}`);
           return Number(valueBig);
         } else {
           // Signed: value must be within -(2^(bits-1)) .. 2^(bits-1)-1
           const min = -(1n << BigInt(bits - 1));
           const max = (1n << BigInt(bits - 1)) - 1n;
-          if (valueBig < min || valueBig > max) throw new Error(`value out of range for I${bits}`);
+          if (valueBig < min || valueBig > max)
+            throw new Error(`value out of range for I${bits}`);
           return Number(valueBig);
         }
       }
 
       // If there's a non-recognized suffix and the number is negative, reject it.
-      if (leading.startsWith('-')) {
-        throw new Error('negative numbers with suffixes are not allowed');
+      if (leading.startsWith("-")) {
+        throw new Error("negative numbers with suffixes are not allowed");
       }
     }
 

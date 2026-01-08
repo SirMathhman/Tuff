@@ -41,7 +41,7 @@ describe("interpret (basic behavior)", () => {
 
   it("handles U64 boundaries (accepts in-range, throws out-of-range)", () => {
     // 2^64-1 = 18446744073709551615
-    expect(typeof interpret("18446744073709551615U64")).toBe('number');
+    expect(typeof interpret("18446744073709551615U64")).toBe("number");
     expect(() => interpret("18446744073709551616U64")).toThrow();
   });
 
@@ -64,7 +64,7 @@ describe("interpret (basic behavior)", () => {
 
   it("handles I64 boundaries (accepts in-range, throws out-of-range)", () => {
     // min = -2^63 = -9223372036854775808
-    expect(typeof interpret("-9223372036854775808I64")).toBe('number');
+    expect(typeof interpret("-9223372036854775808I64")).toBe("number");
     expect(() => interpret("-9223372036854775809I64")).toThrow();
   });
 
