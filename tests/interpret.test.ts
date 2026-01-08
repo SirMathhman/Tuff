@@ -136,6 +136,10 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("(1 + 5) * 3")).toBe(18);
   });
 
+  it("handles braces and respects grouping ('1 + { 10 } % 3' => 2)", () => {
+    expect(interpret("1 + { 10 } % 3")).toBe(2);
+  });
+
   it("handles division and respects precedence ('1 + 10 / 2' => 6)", () => {
     expect(interpret("1 + 10 / 2")).toBe(6);
   });
