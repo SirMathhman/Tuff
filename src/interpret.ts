@@ -145,12 +145,14 @@ export function interpret(input: string): number {
         checkRangeThrow(kind, bits, result);
         current = { valueBig: result, kind: kind, bits: bits };
       } else {
-        const leftNum = (current as any).isFloat
-          ? (current as any).floatValue
-          : Number((current as any).valueBig);
-        const rightNum = (nxt as any).isFloat
-          ? (nxt as any).floatValue
-          : Number((nxt as any).valueBig);
+        let leftNum: number;
+        if (typeof current === "number") leftNum = current as number;
+        else leftNum = (current as any).isFloat ? (current as any).floatValue : Number((current as any).valueBig);
+
+        let rightNum: number;
+        if (typeof nxt === "number") rightNum = nxt as number;
+        else rightNum = (nxt as any).isFloat ? (nxt as any).floatValue : Number((nxt as any).valueBig);
+
         let res: number;
         if (op === "+") res = leftNum + rightNum;
         else if (op === "-") res = leftNum - rightNum;
