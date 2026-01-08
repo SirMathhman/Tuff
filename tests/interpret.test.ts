@@ -132,6 +132,10 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("1 + 5 * 3")).toBe(16);
   });
 
+  it("handles division and respects precedence ('1 + 10 / 2' => 6)", () => {
+    expect(interpret("1 + 10 / 2")).toBe(6);
+  });
+
   it("throws when multiplying unsigned by a negative number (e.g., '2U8 * -1' => Error)", () => {
     expect(() => interpret("2U8 * -1")).toThrow();
     expect(() => interpret("-1 * 2U8")).toThrow();
