@@ -98,4 +98,9 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("1U8 + 254")).toBe(255);
     expect(interpret("254 + 1U8")).toBe(255);
   });
+
+  it("throws when adding operands with mismatched suffixes (e.g., '5U8 + 4U16')", () => {
+    expect(() => interpret("5U8 + 4U16")).toThrow();
+    expect(() => interpret("4U16 + 5U8")).toThrow();
+  });
 });
