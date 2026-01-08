@@ -164,6 +164,10 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("{ let x = 10; let y = 20; x + y }")).toBe(30);
   });
 
+  it("evaluates top-level statements ('let x = 10; let y = 20; x + y' => 30)", () => {
+    expect(interpret("let x = 10; let y = 20; x + y")).toBe(30);
+  });
+
   it("handles division and respects precedence ('1 + 10 / 2' => 6)", () => {
     expect(interpret("1 + 10 / 2")).toBe(6);
   });
