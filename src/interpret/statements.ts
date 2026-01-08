@@ -26,6 +26,7 @@ import { Env, envClone, envGet, envSet, envHas, envDelete } from "../env";
 import type { InterpretFn } from "../types";
 import {
   isPlainObject,
+  isFnWrapper,
   isIntOperand,
   isPointer,
   toErrorMessage,
@@ -37,6 +38,7 @@ import {
   hasValue,
   hasLiteralAnnotation,
   hasParsedAnnotation,
+  getProp,
 } from "../types";
 
 export function interpretBlock(
@@ -88,19 +90,58 @@ function interpretBlockInternal(
     if (/^extern\s+fn\b/.test(stmt)) {
       // extern function declaration: `extern fn name(params) : Type` (no body)
       const m = stmt.match(
-        /^extern\s+fn\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*(?::\s*([^;]+))?\s*;?$/
+        /^extern\s+fn\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*(?:\s*:\s*([^;]+))?\s*;?$/
       );
       if (!m) throw new Error("invalid extern fn declaration");
       const name = m[1];
       const paramsStr = m[2].trim();
       const params =
-        paramsStr === "" ? [] : paramsStr.split(",").map((p) => p.trim());
+        paramsStr === ""
+          ? []
+          : paramsStr.split(",").map((p) => {
+              const part = p.trim();
+              const parts = part.split(":");
+              const pname = parts[0].trim();
+              const pann = parts[1]
+                ? parts.slice(1).join(":").trim()
+                : undefined;
+              return { name: pname, annotation: pann };
+            });
       const resultAnnotation = m[3] ? m[3].trim() : undefined;
+
+      // If the symbol was already introduced (e.g., via import from a native
+      // module), merge the extern signature into the existing binding so that
+      // native wrappers gain parameter metadata (e.g., a leading `this`).
       if (declared.has(name)) {
-        // symbol already declared (e.g., via an import); extern fn is a no-op here
+        const existing = envGet(localEnv, name);
+        if (isPlainObject(existing) && isFnWrapper(existing)) {
+          // Rebuild a wrapper fn object by copying existing runtime metadata
+          // (including nativeImpl if present) and applying the extern signature.
+          const existingBody = getProp(existing.fn, "body");
+          const existingIsBlock = getProp(existing.fn, "isBlock");
+          const existingClosureEnv = getProp(existing.fn, "closureEnv");
+          const existingNative = getProp(existing.fn, "nativeImpl");
+
+          const newFn: { [k: string]: unknown } = {
+            params,
+            body:
+              typeof existingBody === "string" ? existingBody : "/* extern */",
+            isBlock: existingIsBlock === true,
+            resultAnnotation:
+              typeof resultAnnotation === "string"
+                ? resultAnnotation
+                : getProp(existing.fn, "resultAnnotation"),
+            closureEnv: existingClosureEnv ? existingClosureEnv : undefined,
+          };
+          if (typeof existingNative === "function")
+            newFn.nativeImpl = existingNative;
+
+          envSet(localEnv, name, { fn: newFn });
+        }
         last = undefined;
         continue;
       }
+
       declared.add(name);
       // register placeholder fn wrapper (no nativeImpl yet)
       envSet(localEnv, name, {

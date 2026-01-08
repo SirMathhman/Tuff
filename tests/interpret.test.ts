@@ -366,7 +366,9 @@ describe("interpret (basic behavior)", () => {
   });
 
   it("supports method-like calls on primitives bound by this parameter ('fn addOnce(this : I32) => this + 1; 100.addOnce()' => 101)", () => {
-    expect(interpret("fn addOnce(this : I32) => this + 1; 100.addOnce()")).toBe(101);
+    expect(interpret("fn addOnce(this : I32) => this + 1; 100.addOnce()")).toBe(
+      101
+    );
   });
 
   it("supports method-like calls on struct receivers when function declares `this` ('struct Point { x : I32, y : I32 } fn manhattan(this : Point) => this.x + this.y; let point = Point { x : 3, y : 4 }; point.manhattan()' => 7)", () => {
@@ -571,5 +573,15 @@ describe("interpret (basic behavior)", () => {
     };
     const natives = { lib: "export const myConst = 100;" };
     expect(interpretAllWithNative(scripts, natives, "main")).toBe(100);
+  });
+
+  it("interpretAllWithNative allows extern fn with `this` to bind native impl for primitive receivers", () => {
+    const scripts = {
+      main: "extern from lib use { apply }; extern fn apply(this : I32) : I32; 100.apply()",
+    };
+    const natives = {
+      lib: "export function apply(value : number) { return value + 1; }",
+    };
+    expect(interpretAllWithNative(scripts, natives, "main")).toBe(101);
   });
 });
