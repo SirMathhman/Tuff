@@ -79,4 +79,8 @@ describe("interpret (basic behavior)", () => {
   it("evaluates simple addition of suffixed integers (e.g., '1U8 + 2U8' => 3)", () => {
     expect(interpret("1U8 + 2U8")).toBe(3);
   });
+
+  it("evaluates chained addition of suffixed integers (e.g., '1U8 + 2U8 + 3U8' => 6)", () => {
+    expect(interpret("1U8 + 2U8 + 3U8")).toBe(6);
+  });
 });

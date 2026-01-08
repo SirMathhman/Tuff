@@ -17,23 +17,26 @@ function parseOperand(token: string) {
     const kind = sufMatch[1];
     const bits = Number(sufMatch[2]);
     // Suffix requires integer (no decimal part)
-    if (!/^[-+]?\d+$/.test(numStr)) throw new Error("suffix requires integer value");
+    if (!/^[-+]?\d+$/.test(numStr))
+      throw new Error("suffix requires integer value");
     const valueBig = BigInt(numStr);
-    if (kind === 'u' || kind === 'U') {
-      if (valueBig < 0n) throw new Error("negative numbers with suffixes are not allowed");
+    if (kind === "u" || kind === "U") {
+      if (valueBig < 0n)
+        throw new Error("negative numbers with suffixes are not allowed");
       const max = (1n << BigInt(bits)) - 1n;
       if (valueBig > max) throw new Error(`value out of range for U${bits}`);
-      return { valueBig, kind: 'u', bits };
+      return { valueBig, kind: "u", bits };
     }
     // signed
     const min = -(1n << BigInt(bits - 1));
     const max = (1n << BigInt(bits - 1)) - 1n;
-    if (valueBig < min || valueBig > max) throw new Error(`value out of range for I${bits}`);
-    return { valueBig, kind: 'i', bits };
+    if (valueBig < min || valueBig > max)
+      throw new Error(`value out of range for I${bits}`);
+    return { valueBig, kind: "i", bits };
   }
 
   // no suffix: accept float or integer
-  if (numStr.includes('.')) {
+  if (numStr.includes(".")) {
     return { floatValue: Number(numStr), isFloat: true };
   }
   return { valueBig: BigInt(numStr), isFloat: false };
@@ -42,38 +45,41 @@ function parseOperand(token: string) {
 export function interpret(input: string): number {
   const s = input.trim();
 
-  // Simple binary addition: <left> + <right>
-  const expr = s.match(/^(.+?)\s*\+\s*(.+)$/);
-  if (expr) {
-    const leftTok = expr[1].trim();
-    const rightTok = expr[2].trim();
-    const left = parseOperand(leftTok);
-    const right = parseOperand(rightTok);
-    if (!left || !right) throw new Error('invalid operands for expression');
+  // Handle addition expressions with one or more '+' operators
+  const tokens = s.split(/\s*\+\s*/);
+  if (tokens.length > 1) {
+    const operands = tokens.map((t) => parseOperand(t.trim()));
+    if (operands.some((op) => op === null)) throw new Error("invalid operands for expression");
 
-    // If both have suffix kinds, require same kind/bits and perform BigInt arithmetic with range check
-    if ((left as any).kind && (right as any).kind) {
-      const lk = (left as any).kind as string;
-      const rk = (right as any).kind as string;
-      const lbits = (left as any).bits as number;
-      const rbits = (right as any).bits as number;
-      if (lk !== rk || lbits !== rbits) throw new Error('mismatched suffixes in binary operation');
-      const sum = (left as any).valueBig + (right as any).valueBig;
-      if (lk === 'u') {
-        const max = (1n << BigInt(lbits)) - 1n;
-        if (sum < 0n || sum > max) throw new Error(`value out of range for U${lbits}`);
+    // If all operands have kinds (suffixes), enforce same kind and bits and use BigInt arithmetic
+    const allHaveKind = operands.every((op) => (op as any).kind);
+    if (allHaveKind) {
+      const firstKind = (operands[0] as any).kind as string;
+      const firstBits = (operands[0] as any).bits as number;
+      // ensure all match
+      for (const op of operands) {
+        if ((op as any).kind !== firstKind || (op as any).bits !== firstBits)
+          throw new Error("mismatched suffixes in binary operation");
+      }
+      // sum with BigInt and check range
+      const sum = operands.reduce((acc, op) => acc + (op as any).valueBig, 0n as bigint);
+      if (firstKind === "u") {
+        const max = (1n << BigInt(firstBits)) - 1n;
+        if (sum < 0n || sum > max) throw new Error(`value out of range for U${firstBits}`);
       } else {
-        const min = -(1n << BigInt(lbits - 1));
-        const max = (1n << BigInt(lbits - 1)) - 1n;
-        if (sum < min || sum > max) throw new Error(`value out of range for I${lbits}`);
+        const min = -(1n << BigInt(firstBits - 1));
+        const max = (1n << BigInt(firstBits - 1)) - 1n;
+        if (sum < min || sum > max) throw new Error(`value out of range for I${firstBits}`);
       }
       return Number(sum);
     }
 
-    // Otherwise, handle floats or integers without suffixes
-    const leftNum = (left as any).isFloat ? (left as any).floatValue : Number((left as any).valueBig);
-    const rightNum = (right as any).isFloat ? (right as any).floatValue : Number((right as any).valueBig);
-    return leftNum + rightNum;
+    // Mixed (or all no-suffix): sum as numbers (floats or integers)
+    const nums = operands.map((op) => {
+      if ((op as any).isFloat) return (op as any).floatValue as number;
+      return Number((op as any).valueBig as bigint);
+    });
+    return nums.reduce((a, b) => a + b, 0);
   }
 
   // fallback: single operand parse
