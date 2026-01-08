@@ -222,7 +222,7 @@ function executeFunctionBody(fn: unknown, callEnv: Env): unknown {
   const parts = splitTopLevelStatements(inner)
     .map((p) => p.trim())
     .filter(Boolean);
-  const lastStmt = parts.length ? parts[parts.length - 1] : null;
+  const lastStmt = parts.length ? parts[parts.length - 1] : undefined;
 
   // interpret() mutates the provided env in-place for statement-like inputs.
   // We expose it on globalThis in src/interpret.ts to avoid circular imports.
@@ -364,7 +364,7 @@ export function evaluateReturningOperand(
       .map((p) => p.trim())
       .filter(Boolean);
 
-    let defaultBody: string | null = null;
+    let defaultBody: string | undefined = undefined;
     for (const part of parts) {
       const caseMatch = part.match(/^case\s+([\s\S]+?)\s*=>\s*([\s\S]*)$/);
       if (caseMatch) {
@@ -384,7 +384,7 @@ export function evaluateReturningOperand(
       }
       throw new Error("invalid match case");
     }
-    if (defaultBody !== null) {
+    if (defaultBody !== undefined) {
       return evaluateReturningOperand(defaultBody, localEnv);
     }
     return { valueBig: 0n };
@@ -399,14 +399,14 @@ export function evaluateReturningOperand(
       params: unknown;
       body: string;
       isBlock: boolean;
-      resultAnnotation: string | null;
-      closureEnv: Env | null;
+      resultAnnotation: string | undefined;
+      closureEnv: Env | undefined;
     } = {
       params,
       body,
       isBlock,
       resultAnnotation,
-      closureEnv: null,
+      closureEnv: undefined,
     };
     const wrapper = { fn: fnObj };
     fnObj.closureEnv = envClone(localEnv);
@@ -458,7 +458,7 @@ export function evaluateReturningOperand(
       continue;
     }
     // support multi-char operators: || && == != <= >=
-    let op: string | null = null;
+    let op: string | undefined = undefined;
     if (exprStr.startsWith("||", pos)) {
       op = "||";
       pos += 2;
@@ -744,10 +744,10 @@ export function evaluateReturningOperand(
       const pname = isPlainObject(p) ? (p as { name?: unknown }).name : p;
       const pann = isPlainObject(p)
         ? (p as { annotation?: unknown }).annotation
-        : null;
+        : undefined;
       if (typeof pname !== "string") throw new Error("invalid parameter");
       validateAnnotation(
-        typeof pann === "string" || pann === null ? pann : null,
+        typeof pann === "string" || pann === undefined ? pann : undefined,
         argOps[j]
       );
       envSet(callEnv, pname, argOps[j]);
@@ -786,7 +786,7 @@ export function evaluateReturningOperand(
         const callAppOperand = operands[i + 1];
         const result = evaluateCallAt(funcOperand, callAppOperand);
         const fieldName = (ops[i + 1] as string).substring(1);
-        if (!result) throw new Error(`cannot access field on null value`);
+        if (!result) throw new Error(`cannot access field on missing value`);
         const fieldValue = getFieldValueFromInstance(result, fieldName);
 
         // Remove [funcOperand, callApp, undefined] -> replace with the fieldValue
@@ -851,7 +851,7 @@ export function evaluateReturningOperand(
           }
         }
         if (found) continue;
-        throw new Error(`cannot access field on null value`);
+        throw new Error(`cannot access field on missing value`);
       }
 
       // Handle both struct instances and this binding

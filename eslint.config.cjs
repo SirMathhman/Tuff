@@ -34,6 +34,10 @@ module.exports = [
           selector: "TSTypeReference[typeName.name='Record']",
           message: "Use Map<K, V> instead of Record<K, V>",
         },
+        {
+          selector: "Literal[value=null]",
+          message: "Use undefined instead of null",
+        },
       ],
     },
   },

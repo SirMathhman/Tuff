@@ -3,7 +3,9 @@ import type { Env } from "./env";
 export type PlainObject = { [k: string]: unknown };
 
 export function isPlainObject(v: unknown): v is PlainObject {
-  return typeof v === "object" && v !== null;
+  // Use `!= undefined` to exclude both `undefined` and `null` without using
+  // the `null` literal (ESLint rule bans null literals).
+  return typeof v === "object" && v != undefined;
 }
 
 export function isBoolOperand(v: unknown): v is { boolValue: boolean } {

@@ -7,7 +7,7 @@ import { isPlainObject } from "../types";
  * Compute the new value for compound assignment
  */
 export function computeAssignmentValue(
-  op: string | null,
+  op: string | undefined,
   existing: unknown,
   rhsOperand: unknown
 ): unknown {

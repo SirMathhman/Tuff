@@ -158,7 +158,7 @@ export function envToThisObject(e: Env): { [k: string]: unknown } {
     if (k === "this" || k.startsWith("__")) continue;
     if (
       typeof v === "object" &&
-      v !== null &&
+      v != undefined &&
       Object.prototype.hasOwnProperty.call(v, "value") &&
       (v as { value?: unknown }).value !== undefined
     ) {

@@ -15,18 +15,18 @@ import type { InterpretFn } from "./types";
 export function getLastTopLevelStatement(
   str: string,
   splitTopLevelStatements: (_s: string) => string[]
-): string | null {
+): string | undefined {
   const parts = splitTopLevelStatements(str)
     .map((p: string) => p.trim())
     .filter(Boolean);
-  return parts.length ? parts[parts.length - 1] : null;
+  return parts.length ? parts[parts.length - 1] : undefined;
 }
 
 export function evaluateRhs(
   rhs: string,
   envLocal: Env,
   interpret: InterpretFn,
-  getLastTopLevelStatement_fn: (_s: string) => string | null
+  getLastTopLevelStatement_fn: (_s: string) => string | undefined
 ): unknown {
   if (/^\s*\{[\s\S]*\}\s*$/.test(rhs)) {
     const inner = rhs.replace(/^\{\s*|\s*\}$/g, "");
@@ -95,7 +95,7 @@ export function validateTypeOnly(
 }
 
 export function validateAnnotation(
-  annotation: string | null | unknown,
+  annotation: string | undefined | unknown,
   rhsOperand: unknown
 ) {
   if (!annotation) return;
@@ -108,7 +108,7 @@ export function validateAnnotation(
     // inner can be type-only like I32, Bool, or a literal operand
     const parsedType = (function (s: string) {
       const t = s.match(/^\s*([uUiI])\s*(\d+)\s*$/);
-      if (!t) return null;
+      if (!t) return undefined;
       return {
         kind: t[1] === "u" || t[1] === "U" ? "u" : "i",
         bits: Number(t[2]),
@@ -180,11 +180,11 @@ export function extractAssignmentParts(stmt: string): {
   isDeref: boolean;
   isDeclOnly: boolean;
   name: string;
-  op: string | null;
+  op: string | undefined;
   rhs: string;
   isThisField?: boolean;
   fieldName?: string;
-} | null {
+} | undefined {
   // Try this.field compound assignment: this.x += 1
   let m = stmt.match(/^this\s*\.\s*([a-zA-Z_]\w*)\s*([+\-*/%])=\s*(.+)$/);
   if (m) {
@@ -206,7 +206,7 @@ export function extractAssignmentParts(stmt: string): {
       isDeref: false,
       isDeclOnly: false,
       name: m[1],
-      op: null,
+      op: undefined,
       rhs: m[2].trim(),
       isThisField: true,
       fieldName: m[1],
@@ -244,7 +244,7 @@ export function extractAssignmentParts(stmt: string): {
       isDeref: true,
       isDeclOnly: false,
       name: m[1],
-      op: null,
+      op: undefined,
       rhs: m[2].trim(),
     };
   }
@@ -256,19 +256,19 @@ export function extractAssignmentParts(stmt: string): {
       isDeref: false,
       isDeclOnly: false,
       name: m[1],
-      op: null,
+      op: undefined,
       rhs: m[2].trim(),
     };
   }
 
-  return null;
+  return undefined;
 }
 
 export function expandParensAndBraces(
   s: string,
   env: Env,
   interpret: InterpretFn,
-  getLastTopLevelStatement_fn: (_s: string) => string | null
+  getLastTopLevelStatement_fn: (_s: string) => string | undefined
 ): string {
   if (!s.includes("(") && !s.includes("{")) return s;
 
@@ -323,7 +323,7 @@ export function expandParensAndBraces(
     const v = m[0] === "{" ? interpret(m, env) : interpret(inner, env);
     const after = expr.slice(idx + m.length);
     const afterMatch = after.match(/\s*([^\s])/);
-    const afterNon = afterMatch ? afterMatch[1] : null;
+    const afterNon = afterMatch ? afterMatch[1] : undefined;
     let replacement = String(v);
     if (m[0] === "{" && afterNon && !/[+\-*/%)}\]]/.test(afterNon)) {
       replacement = replacement + ";";
@@ -358,7 +358,7 @@ export function parseExpressionTokens(
     skipSpacesLocal();
     while (idx < len) {
       skipSpacesLocal();
-      let op: string | null = null;
+      let op: string | undefined = undefined;
       if (s.startsWith("||", idx)) {
         op = "||";
         idx += 2;
@@ -398,7 +398,7 @@ export function parseFnComponents(stmt: string) {
     ? paramsRaw.split(",").map((p) => {
         const parts = p.split(":");
         const name = parts[0].trim();
-        const ann = parts[1] ? parts.slice(1).join(":").trim() : null;
+        const ann = parts[1] ? parts.slice(1).join(":").trim() : undefined;
         return { name, annotation: ann };
       })
     : [];
@@ -407,7 +407,7 @@ export function parseFnComponents(stmt: string) {
   let body: string = "";
   let isBlock = false;
   // optional result annotation: `: <annotation>` before `=>` or `{`
-  let resultAnnotation: string | null = null;
+  let resultAnnotation: string | undefined = undefined;
   let rest = after;
   if (rest.startsWith(":")) {
     const afterAnn = rest.slice(1).trimStart();
@@ -422,7 +422,7 @@ export function parseFnComponents(stmt: string) {
     rest = afterAnn.slice(pos).trimStart();
   }
 
-  let trailingExpr: string | null = null;
+  let trailingExpr: string | undefined = undefined;
 
   // helper to extract a braced body and any trailing expression
   function extractBracedBody(startSearchIdx: number) {
@@ -433,7 +433,7 @@ export function parseFnComponents(stmt: string) {
     isBlock = true;
     if (bEnd < stmt.length - 1) {
       trailingExpr = stmt.slice(bEnd + 1).trim();
-      if (trailingExpr === "") trailingExpr = null;
+      if (trailingExpr === "") trailingExpr = undefined;
     }
   }
 
@@ -467,7 +467,7 @@ export function registerFunctionFromStmt(
   stmt: string,
   localEnv: Env,
   declared: Set<string>
-): string | null {
+): string | undefined {
   // support `fn name(<params>) => <expr>` or `fn name(<params>) { <stmts> }`
   const parsed = parseFnComponents(stmt);
   const { name, params, resultAnnotation, body, isBlock, trailingExpr } =
@@ -477,12 +477,12 @@ export function registerFunctionFromStmt(
   // reserve name then attach closure env including the function itself
   declared.add(name);
   envSet(localEnv, name, {
-    fn: { params, body, isBlock, resultAnnotation, closureEnv: null },
+    fn: { params, body, isBlock, resultAnnotation, closureEnv: undefined },
   });
   const fnObj = envGet(localEnv, name);
   if (!isFnWrapper(fnObj))
     throw new Error("internal error: fn registration failed");
-  (fnObj.fn as { closureEnv: Env | null }).closureEnv = envClone(localEnv);
+  (fnObj.fn as { closureEnv: Env | undefined }).closureEnv = envClone(localEnv);
 
   return trailingExpr;
 }

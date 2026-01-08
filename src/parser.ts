@@ -92,7 +92,7 @@ export function parseOperand(token: string) {
 
   // Match integer or float with optional suffix attached (e.g., 123, 1.23, 100U8)
   const m = s.match(/^([+-]?\d+(?:\.\d+)?)([uUiI]\d+)?$/);
-  if (!m) return null;
+  if (!m) return undefined;
   const numStr = m[1];
   const suffix = m[2];
 
@@ -201,5 +201,5 @@ export function parseOperandAt(src: string, pos: number) {
     operand = applyPrefixes(operand, prefixes);
     return { operand, len: i - pos + id[1].length };
   }
-  return null;
+  return undefined;
 }

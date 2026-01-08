@@ -136,16 +136,16 @@ function interpretBlockInternal(
       if (!m) throw new Error("invalid let declaration");
       const mutFlag = !!m[1];
       const name = m[2];
-      const annotation = m[3] ? m[3].trim() : null;
+      const annotation = m[3] ? m[3].trim() : undefined;
       const hasInitializer = m[4] !== undefined;
-      const rhsRaw = hasInitializer ? (m[4] as string).trim() : null;
+      const rhsRaw = hasInitializer ? (m[4] as string).trim() : undefined;
 
       // duplicate declaration in same scope is an error
       if (declared.has(name)) throw new Error("duplicate declaration");
 
       if (!hasInitializer) {
         // validate annotation shape (if present)
-        let parsedAnn: unknown = null;
+        let parsedAnn: unknown = undefined;
         let literalAnnotation = false;
         if (annotation) {
           const typeOnly = annotation.match(/^\s*([uUiI])\s*(\d+)\s*$/);
@@ -182,7 +182,7 @@ function interpretBlockInternal(
         // initializer is only the braced block and the trailing tokens are evaluated
         // as a following expression in the same statement.
         const braceStart = rhs.indexOf("{");
-        let trailingExpr: string | null = null;
+        let trailingExpr: string | undefined = undefined;
         if (braceStart !== -1) {
           const endIdx = findMatchingParen(rhs, braceStart, "{", "}");
           if (endIdx !== -1 && endIdx < rhs.length - 1) {
@@ -252,7 +252,7 @@ function interpretBlockInternal(
 
         // parse true body (braced block or single statement)
         let trueBody = "";
-        let falseBody: string | null = null;
+        let falseBody: string | undefined = undefined;
         if (rest.startsWith("{")) {
           const bEnd = findMatchingParen(rest, 0, "{", "}");
           if (bEnd === -1) throw new Error("unbalanced braces in if");

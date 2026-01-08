@@ -43,7 +43,7 @@ export function interpretExpression(
       if (!match) break;
       const m = match[0];
       const idx = expr.indexOf(m);
-      const before = idx > 0 ? expr[idx - 1] : null;
+      const before = idx > 0 ? expr[idx - 1] : undefined;
       // If the paren is immediately preceded by an identifier/number/closing paren/closing bracket,
       // it's likely a function call or indexing. Don't evaluate call argument lists as grouped
       // expressions here; leave them for the expression evaluator.
