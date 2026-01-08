@@ -231,6 +231,14 @@ describe("interpret (basic behavior)", () => {
   it("resolves identifier inside a braced block using provided env", () => {
     expect(interpret("{ x }", { x: 10 })).toBe(10);
     expect(interpret("{ x }", { x: { valueBig: 10n } })).toBe(10);
+    // booleans in env
+    expect(interpret("{ x }", { x: { boolValue: true } })).toBe(1);
+  });
+
+  it("handles Bool annotations and boolean literals ('let x : Bool = true; x' => 1)", () => {
+    expect(interpret("let x : Bool = true; x")).toBe(1);
+    expect(interpret("let x : Bool = false; x")).toBe(0);
+    expect(interpret("let x = true; x")).toBe(1);
   });
 
   it("returns 0 for let-only sequences ('let x = 10;' => 0)", () => {

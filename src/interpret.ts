@@ -7,6 +7,10 @@
 function parseOperand(token: string) {
   const s = token.trim();
   // Match integer or float with optional suffix attached (e.g., 123, 1.23, 100U8)
+  // boolean literals
+  if (/^true$/i.test(s)) return { boolValue: true };
+  if (/^false$/i.test(s)) return { boolValue: false };
+
   const m = s.match(/^([+-]?\d+(?:\.\d+)?)([uUiI]\d+)?$/);
   if (!m) return null;
   const numStr = m[1];
@@ -134,6 +138,10 @@ export function interpret(
               (rhsOperand as any).bits !== bits
             )
               throw new Error("annotation kind/bits do not match initializer");
+          } else if (/^\s*bool\s*$/i.test(annotation)) {
+            // Bool annotation: initializer must be boolean-like
+            if (!(rhsOperand as any).boolValue && (rhsOperand as any).boolValue !== false)
+              throw new Error("annotation Bool requires boolean initializer");
           } else {
             const ann = parseOperand(annotation);
             if (!ann) throw new Error("invalid annotation in let");
@@ -208,6 +216,8 @@ export function interpret(
     // if the block/sequence contained only statements (no final expression), return 0
     if (last === undefined) return 0;
     // convert last to number
+    if (last && (last as any).boolValue !== undefined)
+      return (last as any).boolValue ? 1 : 0;
     if (last && (last as any).kind) return Number((last as any).valueBig);
     if (typeof last === "number") return last;
     if (last && (last as any).isFloat)
@@ -234,7 +244,7 @@ export function interpret(
         if (!last || /^let\b/.test(last))
           throw new Error("initializer cannot contain declarations");
       }
-        // recursively interpret the inner group (pass env so variables are scoped if needed)
+      // recursively interpret the inner group (pass env so variables are scoped if needed)
       const v = interpret(inner, env);
       // If we replaced a braced block inside another block and the next non-space
       // character after the block is another expression start (e.g., an identifier),
@@ -271,7 +281,7 @@ export function interpret(
 
   function parseOperandAt(src: string, pos: number) {
     // Try numeric/suffixed literal first
-    const m = src.slice(pos).match(/^([+-]?\d+(?:\.\d+)?(?:[uUiI]\d+)?)/);
+    const m = src.slice(pos).match(/^([+-]?\d+(?:\.\d+)?(?:[uUiI]\d+)?|true|false)/i);
     if (m) {
       const operand = parseOperand(m[1]);
       if (!operand) throw new Error("invalid operand");
@@ -386,17 +396,27 @@ export function interpret(
         return { valueBig: resBig, kind: kind, bits };
       }
 
+      const leftIsBool = left && (left as any).boolValue !== undefined;
+      const rightIsBool = right && (right as any).boolValue !== undefined;
       const lNum =
         typeof left === "number"
           ? left
           : (left as any).isFloat
           ? (left as any).floatValue
+          : leftIsBool
+          ? (left as any).boolValue
+            ? 1
+            : 0
           : Number((left as any).valueBig);
       const rNum =
         typeof right === "number"
           ? right
           : (right as any).isFloat
           ? (right as any).floatValue
+          : rightIsBool
+          ? (right as any).boolValue
+            ? 1
+            : 0
           : Number((right as any).valueBig);
       if (op === "+") return lNum + rNum;
       if (op === "-") return lNum - rNum;
