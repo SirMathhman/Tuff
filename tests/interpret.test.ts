@@ -321,6 +321,10 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("fn pass(value : I32) => value; pass(100)")).toBe(100);
   });
 
+  it("allows functions to call other functions ('fn a() => 100; fn b() => a(); b()' => 100)", () => {
+    expect(interpret("fn a() => 100; fn b() => a(); b()")).toBe(100);
+  });
+
   it("supports functions with multiple named annotated params ('fn add(first : I32, second : I32) => first + second; add(1, 2)' => 3)", () => {
     expect(interpret("fn add(first : I32, second : I32) => first + second; add(1, 2)")).toBe(3);
   });
