@@ -15,6 +15,51 @@ export function splitTopLevelStatements(str: string): string[] {
   return parts;
 }
 
+/**
+ * Find matching closing parenthesis starting from an opening paren position
+ * Returns the index of the closing paren, or -1 if unbalanced
+ */
+export function findMatchingClosingParen(
+  src: string,
+  startPos: number
+): number {
+  let depth = 0;
+  for (let k = startPos; k < src.length; k++) {
+    const ch = src[k];
+    if (ch === "(") depth++;
+    else if (ch === ")") {
+      depth--;
+      if (depth === 0) {
+        return k;
+      }
+    }
+  }
+  return -1;
+}
+
+/**
+ * Parse comma-separated arguments from a string, respecting nested parens and braces
+ * Returns array of trimmed argument strings
+ */
+export function parseCommaSeparatedArgs(inner: string): string[] {
+  const args: string[] = [];
+  if (inner.trim() === "") return args;
+
+  let cur = "";
+  let d = 0;
+  for (let k = 0; k < inner.length; k++) {
+    const ch = inner[k];
+    if (ch === "(" || ch === "{") d++;
+    else if (ch === ")" || ch === "}") d = Math.max(0, d - 1);
+    if (ch === "," && d === 0) {
+      args.push(cur.trim());
+      cur = "";
+    } else cur += ch;
+  }
+  if (cur.trim() !== "") args.push(cur.trim());
+  return args;
+}
+
 export function parseOperand(token: string) {
   const s = token.trim();
   // boolean literals
@@ -98,36 +143,10 @@ export function parseOperandAt(src: string, pos: number) {
     let j = i + id[1].length;
     while (j < src.length && /[\s]/.test(src[j])) j++;
     if (src[j] === "(") {
-      // find matching closing paren
-      let depth = 0;
-      let endIdx = -1;
-      for (let k = j; k < src.length; k++) {
-        const ch = src[k];
-        if (ch === "(") depth++;
-        else if (ch === ")") {
-          depth--;
-          if (depth === 0) {
-            endIdx = k;
-            break;
-          }
-        }
-      }
+      const endIdx = findMatchingClosingParen(src, j);
       if (endIdx === -1) throw new Error("unbalanced parentheses in call");
       const inner = src.slice(j + 1, endIdx);
-      // split by top-level commas
-      const args: string[] = [];
-      let cur = "";
-      let d = 0;
-      for (let k = 0; k < inner.length; k++) {
-        const ch = inner[k];
-        if (ch === "(" || ch === "{") d++;
-        else if (ch === ")" || ch === "}") d = Math.max(0, d - 1);
-        if (ch === "," && d === 0) {
-          args.push(cur.trim());
-          cur = "";
-        } else cur += ch;
-      }
-      if (cur.trim() !== "") args.push(cur.trim());
+      const args = parseCommaSeparatedArgs(inner);
       operand.callArgs = args;
       operand = applyPrefixes(operand, prefixes);
       return { operand, len: i - pos + id[1].length + (endIdx - j + 1) };

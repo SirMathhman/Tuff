@@ -1,4 +1,9 @@
-import { parseOperandAt, splitTopLevelStatements } from "./parser";
+import {
+  parseOperandAt,
+  splitTopLevelStatements,
+  findMatchingClosingParen,
+  parseCommaSeparatedArgs,
+} from "./parser";
 import { validateAnnotation, parseFnComponents, findMatchingParen } from "./interpret_helpers";
 
 export function isTruthy(val: any): boolean {
@@ -114,6 +119,51 @@ export function applyBinaryOp(op: string, left: any, right: any): any {
   if (op === "==") return { boolValue: lNum == rNum };
   if (op === "!=") return { boolValue: lNum != rNum };
   throw new Error("unsupported operator");
+}
+
+/**
+ * Resolve a function from either a function operand or an identifier name
+ */
+function resolveFunctionFromOperand(
+  operand: any,
+  localEnv: Record<string, any>
+): any {
+  if (operand && (operand as any).fn) {
+    return (operand as any).fn;
+  } else if (typeof operand === "object" && (operand as any).ident) {
+    const name = (operand as any).ident as string;
+    if (!(name in localEnv)) throw new Error(`unknown identifier ${name}`);
+    const binding = localEnv[name] as any;
+    if (!binding || !binding.fn) throw new Error("not a function");
+    return binding.fn;
+  } else {
+    throw new Error("cannot call non-function");
+  }
+}
+
+/**
+ * Execute a function body and return the result
+ * Handles both block bodies (executed via interpret) and expression bodies
+ */
+function executeFunctionBody(
+  fn: any,
+  callEnv: Record<string, any>
+): any {
+  if (fn.isBlock) {
+    const inner = fn.body.replace(/^\{\s*|\s*\}$/g, "");
+    const v = (globalThis as any).interpret
+      ? (globalThis as any).interpret(inner, callEnv)
+      : (function () {
+          // fallback if interpret is not globally available (module-local call)
+          // eslint-disable-next-line no-undef
+          const mod = require("./interpret");
+          return mod.interpret(inner, callEnv);
+        })();
+    if (Number.isInteger(v)) return { valueBig: BigInt(v) };
+    return { floatValue: v, isFloat: true };
+  } else {
+    return evaluateReturningOperand(fn.body, callEnv);
+  }
 }
 
 export function evaluateReturningOperand(
@@ -259,38 +309,10 @@ export function evaluateReturningOperand(
     skip();
     // Check for function application (e.g., `func()(args)`)
     if (exprStr[pos] === "(") {
-      // This is a function application on the last operand
-      let depth = 0;
-      let endIdx = -1;
-      for (let k = pos; k < exprStr.length; k++) {
-        const ch = exprStr[k];
-        if (ch === "(") depth++;
-        else if (ch === ")") {
-          depth--;
-          if (depth === 0) {
-            endIdx = k;
-            break;
-          }
-        }
-      }
+      const endIdx = findMatchingClosingParen(exprStr, pos);
       if (endIdx === -1) throw new Error("unbalanced parentheses in call");
       const inner = exprStr.slice(pos + 1, endIdx);
-      // split by top-level commas
-      const args: string[] = [];
-      if (inner.trim() !== "") {
-        let cur = "";
-        let d = 0;
-        for (let k = 0; k < inner.length; k++) {
-          const ch = inner[k];
-          if (ch === "(" || ch === "{") d++;
-          else if (ch === ")" || ch === "}") d = Math.max(0, d - 1);
-          if (ch === "," && d === 0) {
-            args.push(cur.trim());
-            cur = "";
-          } else cur += ch;
-        }
-        if (cur.trim() !== "") args.push(cur.trim());
-      }
+      const args = parseCommaSeparatedArgs(inner);
       exprTokens.push({ op: "call", operand: { callApp: args } });
       pos = endIdx + 1;
       skip();
@@ -402,15 +424,11 @@ export function evaluateReturningOperand(
 
     // function call handling (identifier with callArgs)
     if (op && (op as any).callArgs) {
-      const name = (op as any).ident as string;
       // evaluate arguments
       const argOps = (op as any).callArgs.map((a: string) =>
         evaluateReturningOperand(a, localEnv)
       );
-      if (!(name in localEnv)) throw new Error(`unknown identifier ${name}`);
-      const binding = localEnv[name] as any;
-      if (!binding || !binding.fn) throw new Error("not a function");
-      const fn = binding.fn;
+      const fn = resolveFunctionFromOperand(op, localEnv);
       if (fn.params.length !== argOps.length)
         throw new Error("invalid argument count");
 
@@ -425,21 +443,7 @@ export function evaluateReturningOperand(
         callEnv[pname] = argOps[i];
       }
       // execute body
-      if (fn.isBlock) {
-        const inner = fn.body.replace(/^\{\s*|\s*\}$/g, "");
-        const v = (globalThis as any).interpret
-          ? (globalThis as any).interpret(inner, callEnv)
-          : (function () {
-              // fallback if interpret is not globally available (module-local call)
-              // eslint-disable-next-line no-undef
-              const mod = require("./interpret");
-              return mod.interpret(inner, callEnv);
-            })();
-        if (Number.isInteger(v)) return { valueBig: BigInt(v) };
-        return { floatValue: v, isFloat: true };
-      } else {
-        return evaluateReturningOperand(fn.body, callEnv);
-      }
+      return executeFunctionBody(fn, callEnv);
     }
 
     // identifier resolution (existing behavior)
@@ -477,19 +481,7 @@ export function evaluateReturningOperand(
       );
 
       // The function should be in funcOperand
-      let fn = null;
-      if (funcOperand && (funcOperand as any).fn) {
-        fn = (funcOperand as any).fn;
-      } else if (typeof funcOperand === "object" && (funcOperand as any).ident) {
-        // This shouldn't happen after operand evaluation, but handle it
-        const name = (funcOperand as any).ident as string;
-        if (!(name in localEnv)) throw new Error(`unknown identifier ${name}`);
-        const binding = localEnv[name] as any;
-        if (!binding || !binding.fn) throw new Error("not a function");
-        fn = binding.fn;
-      } else {
-        throw new Error("cannot call non-function");
-      }
+      const fn = resolveFunctionFromOperand(funcOperand, localEnv);
 
       if (fn.params.length !== argOps.length)
         throw new Error("invalid argument count");
@@ -505,22 +497,7 @@ export function evaluateReturningOperand(
       }
 
       // execute body
-      let result: any;
-      if (fn.isBlock) {
-        const inner = fn.body.replace(/^\{\s*|\s*\}$/g, "");
-        const v = (globalThis as any).interpret
-          ? (globalThis as any).interpret(inner, callEnv)
-          : (function () {
-              // fallback if interpret is not globally available (module-local call)
-              // eslint-disable-next-line no-undef
-              const mod = require("./interpret");
-              return mod.interpret(inner, callEnv);
-            })();
-        if (Number.isInteger(v)) result = { valueBig: BigInt(v) };
-        else result = { floatValue: v, isFloat: true };
-      } else {
-        result = evaluateReturningOperand(fn.body, callEnv);
-      }
+      const result = executeFunctionBody(fn, callEnv);
 
       operands.splice(i, 2, result);
       ops.splice(i, 1);
