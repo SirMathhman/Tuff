@@ -1,3 +1,0 @@
-extern from tuff::stuff::string use { length };
-
-extern fn length(this : &Str) : USize;

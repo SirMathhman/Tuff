@@ -1,6 +1,0 @@
-from tuff::stuff use { length };
-
-let value : &Str = "Hello World!";
-value.length();
-
-// This should produce 12.
