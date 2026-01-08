@@ -320,4 +320,8 @@ describe("interpret (basic behavior)", () => {
   it("supports simple param annotation ('fn pass(value : I32) => value; pass(100)' => 100)", () => {
     expect(interpret("fn pass(value : I32) => value; pass(100)")).toBe(100);
   });
+
+  it("supports functions with multiple named annotated params ('fn add(first : I32, second : I32) => first + second; add(1, 2)' => 3)", () => {
+    expect(interpret("fn add(first : I32, second : I32) => first + second; add(1, 2)")).toBe(3);
+  });
 });
