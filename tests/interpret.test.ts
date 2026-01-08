@@ -196,6 +196,11 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("let x = 20; let z = 0; let y : 20I32 = x; x")).toBe(20);
   });
 
+  it("throws when assigning a statement-only block to a variable ('let x = { let y = 20; }; x' => Error)", () => {
+    expect(() => interpret("let x = { let y = 20; }; x")).toThrow();
+    expect(() => interpret("{ let x = { let y = 20; }; x }")).toThrow();
+  });
+
   it("returns 0 for let-only sequences ('let x = 10;' => 0)", () => {
     expect(interpret("let x = 10;")).toBe(0);
     expect(interpret("{ let x = 10; }")).toBe(0);

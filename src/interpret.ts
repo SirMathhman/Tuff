@@ -66,7 +66,23 @@ export function interpret(
     const localEnv: Record<string, any> = { ...env };
     const declared = new Set<string>();
     let last: any = undefined;
-    const stmts = s.split(";");
+    function splitTopLevelStatements(str: string) {
+      const parts: string[] = [];
+      let depth = 0;
+      let start = 0;
+      for (let i = 0; i < str.length; i++) {
+        const ch = str[i];
+        if (ch === '(' || ch === '{') depth++;
+        else if (ch === ')' || ch === '}') depth = Math.max(0, depth - 1);
+        else if (ch === ';' && depth === 0) {
+          parts.push(str.slice(start, i));
+          start = i + 1;
+        }
+      }
+      parts.push(str.slice(start));
+      return parts;
+    }
+    const stmts = splitTopLevelStatements(s);
     for (let raw of stmts) {
       const stmt = raw.trim();
       if (!stmt) continue;
@@ -80,6 +96,8 @@ export function interpret(
         const rhs = m[3].trim();
         // duplicate declaration in same scope is an error
         if (declared.has(name)) throw new Error("duplicate declaration");
+        // disallow initializer that is a block containing declarations (e.g., '{ let y = 20; }')
+        if (/^\s*let\b/.test(rhs) || /\{[^}]*\blet\b/.test(rhs)) throw new Error("initializer cannot contain declarations");
         // evaluate RHS as an operand (preserving suffix/type when present)
         const rhsOperand = evaluateReturningOperand(rhs, localEnv);
         // if annotation is present, validate it matches the initializer strictly
@@ -149,6 +167,13 @@ export function interpret(
     while (parenRegex.test(expr)) {
       const m = expr.match(parenRegex)![0];
       const inner = m.slice(1, -1);
+      // if this inner group contains a declaration and it's used as an initializer
+      // (i.e., preceded by a `let <name> =`), disallow it
+      const idx = expr.indexOf(m);
+      const prefix = expr.slice(0, idx);
+      if (/\blet\s+[a-zA-Z_]\w*\s*=\s*$/.test(prefix) && /\blet\b/.test(inner)) {
+        throw new Error("initializer cannot contain declarations");
+      }
       // recursively interpret the inner group (pass env so variables are scoped if needed)
       const v = interpret(inner, env);
       expr = expr.replace(m, String(v));
