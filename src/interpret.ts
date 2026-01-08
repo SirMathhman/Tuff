@@ -9,10 +9,14 @@ import { evaluateFlatExpression } from "./eval";
 import { interpretBlock, interpretBlockInPlace } from "./interpret/statements";
 import { interpretExpression } from "./interpret/expressions";
 
+import { ensureMapEnv, Env } from "./env";
+
 export function interpret(
   input: string,
-  env: Record<string, any> = {}
+  env: Env = {}
 ): number {
+  // Normalize env to Map so downstream code can assume a Map-based env when needed
+  env = ensureMapEnv(env as any) as any;
   let s = input.trim();
 
   // If this is a top-level match expression, delegate to the expression evaluator

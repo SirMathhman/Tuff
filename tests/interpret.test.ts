@@ -394,7 +394,7 @@ describe("interpret (basic behavior)", () => {
   });
 
   it("(debug) constructor returns this binding object for direct call", () => {
-    const env: Record<string, any> = {};
+    const env: any = {};
     interpret(
       "fn Point(x : I32, y : I32) => { fn manhattan() => x + y; this }",
       env
@@ -466,12 +466,60 @@ describe("interpret (basic behavior)", () => {
     ).toThrow("namespace not found");
   });
 
+  it("interpretAll throws when importing from unknown namespace 'blah'", () => {
+    expect(() =>
+      interpretAll(
+        { main: "from blah use { get }; get()", lib: "out fn get() => 100;" },
+        "main"
+      )
+    ).toThrow("namespace not found");
+  });
+
   it("interpretAll throws when importing a missing symbol", () => {
     expect(() =>
       interpretAll(
-        { main: "from lib use { missing }; missing()", lib: "out fn a() => 1;" },
+        {
+          main: "from lib use { missing }; missing()",
+          lib: "out fn a() => 1;",
+        },
         "main"
       )
     ).toThrow("symbol not found in namespace");
+  });
+
+  it("interpretAll throws when importing a non-exported symbol 'foo'", () => {
+    expect(() =>
+      interpretAll(
+        { main: "from lib use { foo }; foo()", lib: "fn get() => 100;" },
+        "main"
+      )
+    ).toThrow("symbol not found in namespace");
+  });
+
+  it("interpretAll throws when importing a non-exported symbol 'get'", () => {
+    expect(() =>
+      interpretAll(
+        { main: "from lib use { get }; get()", lib: "fn get() => 100;" },
+        "main"
+      )
+    ).toThrow("symbol not found in namespace");
+  });
+
+  it("interpretAll throws when main namespace is missing", () => {
+    expect(() =>
+      interpretAll(
+        { main: "from lib use { get }; get()", lib: "out fn get() => 100;" },
+        "somethingElse"
+      )
+    ).toThrow("main namespace not found");
+  });
+
+  it("interpretAll returns 0 when main namespace is lib and lib only declares a function", () => {
+    expect(
+      interpretAll(
+        { main: "from lib use { get }; get()", lib: "fn get() => 100;" },
+        "lib"
+      )
+    ).toBe(0);
   });
 });

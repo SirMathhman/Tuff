@@ -15,9 +15,9 @@ export function getLastTopLevelStatement(
 
 export function evaluateRhs(
   rhs: string,
-  envLocal: Record<string, any>,
+  envLocal: Env,
   // eslint-disable-next-line no-unused-vars
-  interpret: (_input: string, _env?: Record<string, any>) => number,
+  interpret: (_input: string, _env?: Env) => number,
   // eslint-disable-next-line no-unused-vars
   getLastTopLevelStatement_fn: (_s: string) => string | null
 ): any {
@@ -240,9 +240,9 @@ export function extractAssignmentParts(stmt: string): {
 
 export function expandParensAndBraces(
   s: string,
-  env: Record<string, any>,
+  env: Env,
   // eslint-disable-next-line no-unused-vars
-  interpret: (_input: string, _env?: Record<string, any>) => number,
+  interpret: (_input: string, _env?: Env) => number,
   // eslint-disable-next-line no-unused-vars
   getLastTopLevelStatement_fn: (_s: string) => string | null
 ): string {
@@ -441,9 +441,11 @@ export function parseFnComponents(stmt: string) {
   };
 }
 
+import { Env, envSet, envClone, envGet } from "./env";
+
 export function registerFunctionFromStmt(
   stmt: string,
-  localEnv: Record<string, any>,
+  localEnv: Env,
   declared: Set<string>
 ): string | null {
   // support `fn name(<params>) => <expr>` or `fn name(<params>) { <stmts> }`
@@ -454,10 +456,11 @@ export function registerFunctionFromStmt(
 
   // reserve name then attach closure env including the function itself
   declared.add(name);
-  localEnv[name] = {
+  envSet(localEnv, name, {
     fn: { params, body, isBlock, resultAnnotation, closureEnv: null },
-  };
-  (localEnv[name] as any).fn.closureEnv = { ...localEnv };
+  });
+  const fnObj: any = envGet(localEnv, name);
+  fnObj.fn.closureEnv = envClone(localEnv);
 
   return trailingExpr;
 }
@@ -530,38 +533,40 @@ export function parseStructDef(stmt: string): {
  * references so scripts can import symbols from other namespaces.
  */
 export function interpretAll(
-  scripts: Record<string, string>,
+  scripts: { [k: string]: string },
   mainNamespace: string
 ): number {
   if (!scripts || typeof scripts !== "object")
     throw new Error("scripts must be an object");
   if (typeof mainNamespace !== "string")
     throw new Error("mainNamespace must be a string");
-  if (!(mainNamespace in scripts)) throw new Error("main namespace not found");
+  if (!Object.prototype.hasOwnProperty.call(scripts, mainNamespace))
+    throw new Error("main namespace not found");
 
   const interpFn: any = (globalThis as any).interpret;
   if (typeof interpFn !== "function")
     throw new Error("internal error: interpret() is not available");
 
   // Prepare namespace registry and resolver
-  const namespaceRegistry: Record<string, Record<string, any>> = {};
+  const namespaceRegistry: { [k: string]: { [k: string]: any } } = {};
   const resolveNamespace = (nsName: string) => {
-    if (!scripts || !(nsName in scripts)) throw new Error("namespace not found");
-    if (!(nsName in namespaceRegistry)) {
-      const nsEnv: Record<string, any> = {};
+    if (!scripts || !Object.prototype.hasOwnProperty.call(scripts, nsName))
+      throw new Error("namespace not found");
+    if (!Object.prototype.hasOwnProperty.call(namespaceRegistry, nsName)) {
+      const nsEnv: any = {};
       // Exports object where `out` declarations will register their symbols
-      (nsEnv as any).__exports = {};
+      nsEnv.__exports = {};
       interpFn(scripts[nsName], nsEnv);
-      namespaceRegistry[nsName] = (nsEnv as any).__exports || {};
+      namespaceRegistry[nsName] = nsEnv.__exports || {};
     }
     return namespaceRegistry[nsName];
   };
 
   // Provide resolver and registry to the main env
-  const env: Record<string, any> = {};
-  (env as any).__namespaces = scripts;
-  (env as any).__namespace_registry = namespaceRegistry;
-  (env as any).__resolve_namespace = resolveNamespace;
+  const env: any = {};
+  env.__namespaces = scripts;
+  env.__namespace_registry = namespaceRegistry;
+  env.__resolve_namespace = resolveNamespace;
 
   return interpFn(scripts[mainNamespace], env);
 }

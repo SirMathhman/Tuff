@@ -6,10 +6,11 @@ import {
 } from "../interpret_helpers";
 import { splitTopLevelStatements } from "../parser";
 import { evaluateFlatExpression } from "../eval";
+import { Env, envHas, envGet } from "../env";
 
 export function interpretExpression(
   s: string,
-  env: Record<string, any>, 
+  env: Env,
   interpret: any
 ): number {
   const hasTopLevelSemicolon = (str: string) =>
@@ -65,8 +66,8 @@ export function interpretExpression(
     const idm = s.match(/^\s*([a-zA-Z_]\w*)\s*$/);
     if (idm) {
       const name = idm[1];
-      if (name in env) {
-        const val = env[name];
+      if (envHas(env, name)) {
+        const val = envGet(env, name);
         return convertOperandToNumber(val);
       }
     }

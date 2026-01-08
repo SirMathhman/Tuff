@@ -17,7 +17,13 @@ module.exports = [
       "max-lines": [
         "error",
         { max: 500, skipBlankLines: true, skipComments: false },
-      ],
-    },
+      ],      // Disallow use of the `Record` utility type in favor of `Map` via AST selector
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "TSTypeReference[typeName.name='Record']",
+          message: "Use Map<K, V> instead of Record<K, V>",
+        },
+      ],    },
   },
 ];

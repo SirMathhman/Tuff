@@ -1,5 +1,6 @@
 import { applyBinaryOp } from "../eval";
 import { validateAnnotation } from "../interpret_helpers";
+import { Env, envSet } from "../env";
 
 /**
  * Compute the new value for compound assignment
@@ -27,7 +28,7 @@ export function assignValueToVariable(
   name: string,
   existing: any,
   newVal: any,
-  localEnv: Record<string, any>
+  localEnv: Env
 ): void {
   if (
     existing &&
@@ -36,10 +37,10 @@ export function assignValueToVariable(
   ) {
     // Mutable wrapper: update its .value
     (existing as any).value = newVal;
-    localEnv[name] = existing;
+    envSet(localEnv, name, existing);
   } else {
     // Normal binding: replace it
-    localEnv[name] = newVal;
+    envSet(localEnv, name, newVal);
   }
 }
 
@@ -50,7 +51,7 @@ export function assignToPlaceholder(
   name: string,
   existing: any,
   newVal: any,
-  localEnv: Record<string, any>
+  localEnv: Env
 ): void {
   if (
     (existing as any).literalAnnotation &&
@@ -69,5 +70,5 @@ export function assignToPlaceholder(
   }
   (existing as any).value = newVal;
   (existing as any).uninitialized = false;
-  localEnv[name] = existing;
+  envSet(localEnv, name, existing);
 }

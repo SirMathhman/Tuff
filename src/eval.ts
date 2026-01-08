@@ -129,16 +129,18 @@ export function applyBinaryOp(op: string, left: any, right: any): any {
 /**
  * Resolve a function from either a function operand or an identifier name
  */
+import { Env, envHas, envGet, envSet, envEntries, envClone } from "./env";
+
 function resolveFunctionFromOperand(
   operand: any,
-  localEnv: Record<string, any>
+  localEnv: Env
 ): any {
   if (operand && (operand as any).fn) {
     return (operand as any).fn;
   } else if (typeof operand === "object" && (operand as any).ident) {
     const name = (operand as any).ident as string;
-    if (!(name in localEnv)) throw new Error(`unknown identifier ${name}`);
-    const binding = localEnv[name] as any;
+    if (!envHas(localEnv, name)) throw new Error(`unknown identifier ${name}`);
+    const binding = envGet(localEnv, name) as any;
     if (!binding || !binding.fn) throw new Error("not a function");
     return binding.fn;
   } else {
@@ -150,7 +152,7 @@ function resolveFunctionFromOperand(
  * Execute a function body and return the result
  * Handles both block bodies (executed via interpret) and expression bodies
  */
-function executeFunctionBody(fn: any, callEnv: Record<string, any>): any {
+function executeFunctionBody(fn: any, callEnv: Env): any {
   if (!fn.isBlock) {
     return evaluateReturningOperand(fn.body, callEnv);
   }
@@ -178,7 +180,7 @@ function executeFunctionBody(fn: any, callEnv: Record<string, any>): any {
     // declared inside the block are included as direct fields on the resulting
     // `this` object (methods should be callable via `this.method`).
     const thisObj: any = { isThisBinding: true, fieldValues: {} };
-    for (const [k, envVal] of Object.entries(callEnv)) {
+    for (const [k, envVal] of envEntries(callEnv)) {
       if (k === "this") continue;
       if (envVal && (envVal as any).value !== undefined)
         thisObj.fieldValues[k] = (envVal as any).value;
@@ -205,7 +207,7 @@ function executeFunctionBody(fn: any, callEnv: Record<string, any>): any {
 
 export function evaluateReturningOperand(
   exprStr: string,
-  localEnv: Record<string, any>
+  localEnv: Env
 ): any {
   // Support an 'if' expression: if (condition) trueBranch else falseBranch
   const sTrim = exprStr.trimStart();
@@ -421,8 +423,8 @@ export function evaluateReturningOperand(
 
   // helper to get binding and deref target
   function getBindingTarget(name: string) {
-    if (!(name in localEnv)) throw new Error(`unknown identifier ${name}`);
-    const binding = localEnv[name];
+    if (!envHas(localEnv, name)) throw new Error(`unknown identifier ${name}`);
+    const binding = envGet(localEnv, name);
     if (binding && (binding as any).uninitialized)
       throw new Error(`use of uninitialized variable ${name}`);
     const targetVal =
@@ -490,14 +492,13 @@ export function evaluateReturningOperand(
         .structInstantiation;
 
       // Look up struct definition
-      if (!(structName in localEnv))
-        throw new Error(`unknown struct ${structName}`);
-      const structDef = localEnv[structName];
+      if (!envHas(localEnv, structName)) throw new Error(`unknown struct ${structName}`);
+      const structDef = envGet(localEnv, structName);
       if (!structDef || !(structDef as any).isStructDef)
         throw new Error(`${structName} is not a struct`);
 
       // Evaluate field values
-      const fieldValues: Record<string, any> = {};
+      const fieldValues: any = {};
       const providedFields = new Set<string>();
 
       for (const fieldPart of fieldParts) {
@@ -545,18 +546,17 @@ export function evaluateReturningOperand(
         evaluateReturningOperand(a, localEnv)
       );
       const fn = resolveFunctionFromOperand(op, localEnv);
-      if (fn.params.length !== argOps.length)
-        throw new Error("invalid argument count");
+      if (fn.params.length !== argOps.length) throw new Error("invalid argument count");
 
       // prepare call env from closure
-      const callEnv: Record<string, any> = { ...fn.closureEnv };
+      const callEnv: Env = envClone(fn.closureEnv);
       for (let i = 0; i < fn.params.length; i++) {
         const p = fn.params[i];
         const pname = p.name || p;
         const pann = p.annotation || null;
         // reuse interpret_helpers.validateAnnotation to validate
         validateAnnotation(pann, argOps[i]);
-        callEnv[pname] = argOps[i];
+        envSet(callEnv, pname, argOps[i]);
       }
       // execute body
       const mapResult = executeFunctionBody(fn, callEnv);
@@ -571,7 +571,7 @@ export function evaluateReturningOperand(
       if (n === "this") {
         const thisObj: any = { isThisBinding: true, fieldValues: {} };
         // Build fieldValues from current localEnv
-        for (const [key, value] of Object.entries(localEnv)) {
+        for (const [key, value] of envEntries(localEnv)) {
           if (key !== "this") {
             // Extract the actual value
             if (value && (value as any).value !== undefined) {
@@ -620,13 +620,13 @@ export function evaluateReturningOperand(
     if (fn.params.length !== argOps.length)
       throw new Error("invalid argument count");
 
-    const callEnv: Record<string, any> = { ...fn.closureEnv };
+    const callEnv: Env = envClone(fn.closureEnv);
     for (let j = 0; j < fn.params.length; j++) {
       const p = fn.params[j];
       const pname = p.name || p;
       const pann = p.annotation || null;
       validateAnnotation(pann, argOps[j]);
-      callEnv[pname] = argOps[j];
+      envSet(callEnv, pname, argOps[j]);
     }
     return executeFunctionBody(fn, callEnv);
   }
@@ -765,7 +765,7 @@ export function evaluateReturningOperand(
 
 export function evaluateFlatExpression(
   exprStr: string,
-  env: Record<string, any>
+  env: Env
 ): number {
   const opnd = evaluateReturningOperand(exprStr, env);
   if (opnd && (opnd as any).boolValue !== undefined)

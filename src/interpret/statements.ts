@@ -21,10 +21,11 @@ import {
   assignValueToVariable,
   assignToPlaceholder,
 } from "./helpers";
+import { Env, envClone, envGet, envSet, envHas, envDelete } from "../env";
 
 export function interpretBlock(
   s: string,
-  env: Record<string, any>,
+  env: Env,
   interpret: any
 ): number {
   return interpretBlockInternal(s, env, interpret, false);
@@ -32,20 +33,20 @@ export function interpretBlock(
 
 function interpretBlockInternal(
   s: string,
-  env: Record<string, any>,
+  env: Env,
   interpret: any,
   inPlace: boolean
 ): number {
   // Block evaluator with lexical scoping. When inPlace=true, operate directly
   // on the provided env (used for top-level sequences and function call envs).
-  const localEnv: Record<string, any> = inPlace ? env : { ...env };
+  const localEnv: Env = inPlace ? env : envClone(env);
   const declared = new Set<string>();
   let last: any = undefined;
 
   const getLastTopLevelStatementLocal = (str: string) =>
     getLastTopLevelStatement(str, splitTopLevelStatements);
 
-  const evaluateRhsLocal = (rhs: string, envLocal: Record<string, any>) =>
+  const evaluateRhsLocal = (rhs: string, envLocal: Env) =>
     evaluateRhs(rhs, envLocal, interpret, getLastTopLevelStatementLocal);
 
   const stmts = splitTopLevelStatements(s);
@@ -59,7 +60,8 @@ function interpretBlockInternal(
       const stripped = stmt.replace(/^out\s+/, "");
       const parsed = parseFnComponents(stripped);
       const tExpr = registerFunctionFromStmt(stripped, localEnv, declared);
-      if ((localEnv as any).__exports) (localEnv as any).__exports[parsed.name] = localEnv[parsed.name];
+      const __exports = envGet(localEnv, "__exports");
+      if (__exports) __exports[parsed.name] = envGet(localEnv, parsed.name);
       if (tExpr) {
         last = interpret(tExpr + ";", localEnv);
       } else last = undefined;
@@ -68,18 +70,20 @@ function interpretBlockInternal(
 
     // import statement: `from <ns> use { a, b }` — bind symbols from other namespace
     if (/^from\b/.test(stmt)) {
-      const m = stmt.match(/^from\s+([a-zA-Z_]\w*)\s+use\s*\{\s*([a-zA-Z_]\w*(?:\s*,\s*[a-zA-Z_]\w*)*)\s*\}\s*$/);
+      const m = stmt.match(
+        /^from\s+([a-zA-Z_]\w*)\s+use\s*\{\s*([a-zA-Z_]\w*(?:\s*,\s*[a-zA-Z_]\w*)*)\s*\}\s*$/
+      );
       if (!m) throw new Error("invalid import syntax");
       const nsName = m[1];
       const names = m[2].split(",").map((x) => x.trim());
-      const resolver = (env as any).__resolve_namespace || (localEnv as any).__resolve_namespace;
+      const resolver = envGet(env, "__resolve_namespace") || envGet(localEnv, "__resolve_namespace");
       if (!resolver) throw new Error("namespace resolver not available");
       const nsExports = resolver(nsName);
       for (const name of names) {
         if (!(name in nsExports)) throw new Error("symbol not found in namespace");
         if (declared.has(name)) throw new Error("duplicate declaration");
         declared.add(name);
-        localEnv[name] = nsExports[name];
+        envSet(localEnv, name, nsExports[name]);
       }
       last = undefined;
       continue;
@@ -132,14 +136,14 @@ function interpretBlockInternal(
         }
         declared.add(name);
         // store placeholder so assignments later can validate annotations
-        localEnv[name] = {
+        envSet(localEnv, name, {
           uninitialized: true,
           annotation,
           parsedAnnotation: parsedAnn,
           literalAnnotation,
           mutable: mutFlag,
           value: undefined,
-        };
+        });
         last = undefined;
       } else {
         // initializer present: validate same as before
@@ -169,9 +173,9 @@ function interpretBlockInternal(
         declared.add(name);
         if (mutFlag) {
           // store as mutable wrapper so future assignments update .value
-          localEnv[name] = { mutable: true, value: rhsOperand, annotation };
+          envSet(localEnv, name, { mutable: true, value: rhsOperand, annotation });
         } else {
-          localEnv[name] = rhsOperand;
+          envSet(localEnv, name, rhsOperand);
         }
 
         // If we split off a trailing expression, evaluate it now and use it as `last`
@@ -188,11 +192,11 @@ function interpretBlockInternal(
         if (declared.has(structDef.name))
           throw new Error("duplicate declaration");
         declared.add(structDef.name);
-        localEnv[structDef.name] = {
+        envSet(localEnv, structDef.name, {
           isStructDef: true,
           name: structDef.name,
           fields: structDef.fields,
-        };
+        });
         last = undefined;
         // If there's remaining content after the struct definition, parse it as an expression
         const remaining = stmt.slice(structDef.endPos).trim();
@@ -253,13 +257,13 @@ function interpretBlockInternal(
         const startVal = evaluateFlatExpression(startExpr, localEnv);
         const endVal = evaluateFlatExpression(endExpr, localEnv);
 
-        const hadPrev = iterName in localEnv;
-        const prev = hadPrev ? localEnv[iterName] : undefined;
+        const hadPrev = envHas(localEnv, iterName);
+        const prev = hadPrev ? envGet(localEnv, iterName) : undefined;
 
         for (let i = startVal; i < endVal; i++) {
           // bind the loop variable in the same env so body can see and update outer vars
-          if (mutFlag) localEnv[iterName] = { mutable: true, value: i };
-          else localEnv[iterName] = i;
+          if (mutFlag) envSet(localEnv, iterName, { mutable: true, value: i });
+          else envSet(localEnv, iterName, i);
 
           if (/^\s*\{[\s\S]*\}\s*$/.test(body)) {
             const inner = body.replace(/^\{\s*|\s*\}$/g, "");
@@ -270,8 +274,8 @@ function interpretBlockInternal(
         }
 
         // restore previous binding
-        if (hadPrev) localEnv[iterName] = prev;
-        else delete localEnv[iterName];
+        if (hadPrev) envSet(localEnv, iterName, prev);
+        else envDelete(localEnv, iterName);
 
         last = undefined;
         continue;
@@ -284,9 +288,8 @@ function interpretBlockInternal(
 
         // Handle this.field assignment
         if (isThisField) {
-          if (!(name in localEnv))
-            throw new Error("assignment to undeclared variable");
-          const existing = localEnv[name] as any;
+          if (!envHas(localEnv, name)) throw new Error("assignment to undeclared variable");
+          const existing = envGet(localEnv, name) as any;
 
           const rhsOperand: any = evaluateRhsLocal(rhs, localEnv);
 
@@ -298,9 +301,8 @@ function interpretBlockInternal(
           continue;
         }
 
-        if (!(name in localEnv))
-          throw new Error("assignment to undeclared variable");
-        const existing = localEnv[name] as any;
+        if (!envHas(localEnv, name)) throw new Error("assignment to undeclared variable");
+        const existing = envGet(localEnv, name) as any;
         // allow assignment to uninitialized placeholders (from declaration-only lets) or normal vars
         // only throw if trying to use an uninitialized var in certain contexts (not assignment)
         if (
@@ -328,17 +330,13 @@ function interpretBlockInternal(
         if (isDeref) {
           // Deref assignment or compound: update through pointer
           const targetName = ptr.ptrName as string;
-          if (!(targetName in localEnv))
-            throw new Error(`unknown identifier ${targetName}`);
-          const targetExisting = localEnv[targetName] as any;
+          if (!envHas(localEnv, targetName)) throw new Error(`unknown identifier ${targetName}`);
+          const targetExisting = envGet(localEnv, targetName) as any;
 
           const newVal = computeAssignmentValue(op, targetExisting, rhsOperand);
 
           // For deref assignment to a placeholder, validate annotation
-          if (
-            targetExisting &&
-            (targetExisting as any).uninitialized !== undefined
-          ) {
+          if (targetExisting && (targetExisting as any).uninitialized !== undefined) {
             if (
               (targetExisting as any).literalAnnotation &&
               !(targetExisting as any).uninitialized &&
@@ -349,28 +347,22 @@ function interpretBlockInternal(
               (targetExisting as any).parsedAnnotation &&
               (targetExisting as any).uninitialized
             ) {
-              validateAnnotation(
-                (targetExisting as any).parsedAnnotation,
-                newVal
-              );
+              validateAnnotation((targetExisting as any).parsedAnnotation, newVal);
             } else if ((targetExisting as any).annotation) {
-              validateAnnotation(
-                (targetExisting as any).annotation as string,
-                newVal
-              );
+              validateAnnotation((targetExisting as any).annotation as string, newVal);
             }
             (targetExisting as any).value = newVal;
             (targetExisting as any).uninitialized = false;
-            localEnv[targetName] = targetExisting;
+            envSet(localEnv, targetName, targetExisting);
           } else if (
             targetExisting &&
             (targetExisting as any).value !== undefined &&
             (targetExisting as any).mutable
           ) {
             (targetExisting as any).value = newVal;
-            localEnv[targetName] = targetExisting;
+            envSet(localEnv, targetName, targetExisting);
           } else {
-            localEnv[targetName] = newVal;
+            envSet(localEnv, targetName, newVal);
           }
         } else {
           // Normal assignment or compound: update variable directly
@@ -451,7 +443,7 @@ function interpretBlockInternal(
 // remain visible for subsequent evaluation of `this` within the same call env.
 export function interpretBlockInPlace(
   s: string,
-  env: Record<string, any>,
+  env: Env,
   interpret: any
 ): number {
   return interpretBlockInternal(s, env, interpret, true);
