@@ -1,19 +1,52 @@
 export type Env = Map<string, unknown> | { [k: string]: unknown };
 
+// Type guard to check if a value is an Env (Map or plain object)
+export function isEnv(v: unknown): v is Env {
+  if (v instanceof Map) return true;
+  if (typeof v !== "object" || v === undefined) return false;
+  // This is an object; it qualifies as an Env by our type definition
+  return true;
+}
+
 type PropertyKeyed = { [k: string]: unknown } & { [k: symbol]: unknown };
+
+// Helper to check if object has a symbol property (for Proxy handlers)
+function getSymbolProp(obj: object, prop: symbol): unknown {
+  // eslint-disable-next-line no-restricted-syntax
+  return (obj as PropertyKeyed)[prop];
+}
+
+// Helper to set value on object with string key
+function setStringProp(obj: object, key: string, value: unknown): void {
+  // eslint-disable-next-line no-restricted-syntax
+  (obj as PropertyKeyed)[key] = value;
+}
+
+// Helper to get value from object with string key
+function getStringProp(obj: object, key: string): unknown {
+  // eslint-disable-next-line no-restricted-syntax
+  return (obj as PropertyKeyed)[key];
+}
+
+// Helper to delete string key from object
+function deleteStringProp(obj: object, key: string): void {
+  // eslint-disable-next-line no-restricted-syntax
+  delete (obj as PropertyKeyed)[key];
+}
 
 function makeProxyFromMap(m: Map<string, unknown>) {
   const proxyTarget = {};
   return new Proxy(proxyTarget, {
     get(_, prop: string | symbol) {
       if (typeof prop === "symbol")
-        return (m as unknown as PropertyKeyed)[prop];
+        return getSymbolProp(m, prop);
       if (prop === "__isEnvProxy") return true;
       if (prop === "__isMapProxy") return true;
-      if (m.has(prop as string)) return m.get(prop as string);
+      if (m.has(prop)) return m.get(prop);
       // expose Map methods to allow direct map usage
-      const mapMethod = (m as unknown as PropertyKeyed)[prop];
+      const mapMethod = getStringProp(m, prop);
       if (typeof mapMethod === "function")
+        // eslint-disable-next-line no-restricted-syntax
         return (mapMethod as (..._args: unknown[]) => unknown).bind(m);
       return undefined;
     },
@@ -49,11 +82,11 @@ function makeProxyFromObject(obj: { [k: string]: unknown }) {
   return new Proxy(proxyTarget, {
     get(_, prop: string | symbol) {
       if (typeof prop === "symbol")
-        return (obj as unknown as PropertyKeyed)[prop];
+        return getSymbolProp(obj, prop);
       if (prop === "__isEnvProxy") return true;
       if (prop === "__isMapProxy") return false;
-      if (Object.prototype.hasOwnProperty.call(obj, prop as string))
-        return obj[prop as string];
+      if (Object.prototype.hasOwnProperty.call(obj, prop))
+        return obj[prop];
       // provide Map-like helpers bound to object semantics
       if (prop === "get") return (k: string) => obj[k];
       if (prop === "set") return (k: string, v: unknown) => (obj[k] = v);
@@ -90,18 +123,22 @@ function makeProxyFromObject(obj: { [k: string]: unknown }) {
   });
 }
 
+function isMapProxy(e: Env): boolean {
+  return "__isMapProxy" in e && e.__isMapProxy === true;
+}
+
 export function ensureMapEnv(
   input?: { [k: string]: unknown } | Map<string, unknown>
 ): Env {
   if (!input) return makeProxyFromObject({});
   if (input instanceof Map) return makeProxyFromMap(new Map(input));
   // given a plain object, wrap it so mutations reflect back onto it
-  return makeProxyFromObject(input as { [k: string]: unknown });
+  return makeProxyFromObject(input);
 }
 
 export function envClone(e: Env): Env {
   // Clone via iteration to support both map-backed and object-backed proxies.
-  const mapFlag = (e as { __isMapProxy?: unknown }).__isMapProxy === true;
+  const mapFlag = isMapProxy(e);
   if (mapFlag) {
     const m = new Map<string, unknown>();
     for (const [k, v] of envEntries(e)) m.set(k, v);
@@ -109,46 +146,59 @@ export function envClone(e: Env): Env {
   }
 
   const obj: { [k: string]: unknown } = {};
-  for (const k of Object.keys(e as { [k: string]: unknown }))
-    obj[k] = (e as { [k: string]: unknown })[k];
+  for (const k of Object.keys(e))
+    obj[k] = getStringProp(e, k);
   return makeProxyFromObject(obj);
 }
 
 export function envHas(e: Env, k: string): boolean {
-  if ((e as { __isMapProxy?: unknown }).__isMapProxy === true)
-    return (e as unknown as { has: (_key: string) => boolean }).has(k);
-  return Object.prototype.hasOwnProperty.call(e as { [k: string]: unknown }, k);
+  if (isMapProxy(e)) {
+    const hasMethod = getStringProp(e, "has");
+    if (typeof hasMethod === "function") return hasMethod(k);
+  }
+  return Object.prototype.hasOwnProperty.call(e, k);
 }
 
 export function envGet(e: Env, k: string): unknown {
-  if ((e as { __isMapProxy?: unknown }).__isMapProxy === true)
-    return (e as unknown as { get: (_key: string) => unknown }).get(k);
-  return (e as { [k: string]: unknown })[k];
+  if (isMapProxy(e)) {
+    const getMethod = getStringProp(e, "get");
+    if (typeof getMethod === "function") return getMethod(k);
+  }
+  return getStringProp(e, k);
 }
 
 export function envSet(e: Env, k: string, v: unknown): void {
-  if ((e as { __isMapProxy?: unknown }).__isMapProxy === true)
-    (e as unknown as { set: (_key: string, _value: unknown) => void }).set(
-      k,
-      v
-    );
-  else (e as { [k: string]: unknown })[k] = v;
+  if (isMapProxy(e)) {
+    const setMethod = getStringProp(e, "set");
+    if (typeof setMethod === "function") {
+      setMethod(k, v);
+      return;
+    }
+  }
+  setStringProp(e, k, v);
 }
 
 export function envDelete(e: Env, k: string): void {
-  if ((e as { __isMapProxy?: unknown }).__isMapProxy === true)
-    (e as unknown as { delete: (_key: string) => boolean }).delete(k);
-  else delete (e as { [k: string]: unknown })[k];
+  if (isMapProxy(e)) {
+    const deleteMethod = getStringProp(e, "delete");
+    if (typeof deleteMethod === "function") {
+      deleteMethod(k);
+      return;
+    }
+  }
+  deleteStringProp(e, k);
 }
 
 export function envEntries(e: Env): IterableIterator<[string, unknown]> {
-  if ((e as { __isMapProxy?: unknown }).__isMapProxy === true)
-    return (
-      e as unknown as { entries: () => IterableIterator<[string, unknown]> }
-    ).entries();
-  return Object.entries(e as { [k: string]: unknown })[
-    Symbol.iterator
-  ]() as IterableIterator<[string, unknown]>;
+  if (isMapProxy(e)) {
+    const entriesMethod = getStringProp(e, "entries");
+    if (typeof entriesMethod === "function")
+      return entriesMethod();
+  }
+  // eslint-disable-next-line no-restricted-syntax
+  return Object.entries(e)[Symbol.iterator]() as IterableIterator<
+    [string, unknown]
+  >;
 }
 
 export function envToThisObject(e: Env): { [k: string]: unknown } {
@@ -160,9 +210,10 @@ export function envToThisObject(e: Env): { [k: string]: unknown } {
       typeof v === "object" &&
       v != undefined &&
       Object.prototype.hasOwnProperty.call(v, "value") &&
-      (v as { value?: unknown }).value !== undefined
+      "value" in v &&
+      v.value !== undefined
     ) {
-      obj[k] = (v as { value?: unknown }).value;
+      obj[k] = v.value;
     } else {
       obj[k] = v;
     }

@@ -8,6 +8,7 @@ import { splitTopLevelStatements } from "./parser";
 import { evaluateFlatExpression } from "./eval";
 import { interpretBlock, interpretBlockInPlace } from "./interpret/statements";
 import { interpretExpression } from "./interpret/expressions";
+import { hasYield } from "./types";
 
 import { ensureMapEnv, Env } from "./env";
 
@@ -58,12 +59,8 @@ export function interpret(input: string, env: Env = {}): number {
       return interpretBlock(s, env, interpret);
     } catch (e: unknown) {
       // Convert `yield` signals to numeric returns for top-level braced blocks
-      if (
-        e &&
-        typeof e === "object" &&
-        Object.prototype.hasOwnProperty.call(e, "__yield")
-      ) {
-        return (e as { __yield: number }).__yield;
+      if (hasYield(e)) {
+        return e.__yield;
       }
       throw e;
     }

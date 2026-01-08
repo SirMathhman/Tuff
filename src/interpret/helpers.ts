@@ -1,7 +1,15 @@
 import { applyBinaryOp } from "../eval";
 import { validateAnnotation } from "../interpret_helpers";
 import { Env, envSet } from "../env";
-import { isPlainObject } from "../types";
+import {
+  isPlainObject,
+  hasValue,
+  hasMutable,
+  hasUninitialized,
+  hasAnnotation,
+  hasLiteralAnnotation,
+  hasParsedAnnotation,
+} from "../types";
 
 /**
  * Compute the new value for compound assignment
@@ -14,10 +22,8 @@ export function computeAssignmentValue(
   let newVal: unknown = rhsOperand;
   if (op) {
     const cur =
-      isPlainObject(existing) &&
-      Object.prototype.hasOwnProperty.call(existing, "value") &&
-      (existing as { value?: unknown }).value !== undefined
-        ? (existing as { value?: unknown }).value
+      isPlainObject(existing) && hasValue(existing) && existing.value !== undefined
+        ? existing.value
         : existing;
     newVal = applyBinaryOp(op, cur, rhsOperand);
   }
@@ -35,12 +41,14 @@ export function assignValueToVariable(
 ): void {
   if (
     isPlainObject(existing) &&
-    Object.prototype.hasOwnProperty.call(existing, "value") &&
-    (existing as { value?: unknown }).value !== undefined &&
-    (existing as { mutable?: unknown }).mutable
+    hasValue(existing) &&
+    existing.value !== undefined &&
+    hasMutable(existing) &&
+    existing.mutable
   ) {
     // Mutable wrapper: update its .value
-    (existing as { value?: unknown }).value = newVal;
+    // eslint-disable-next-line no-restricted-syntax
+    (existing as { value: unknown }).value = newVal;
     envSet(localEnv, name, existing);
   } else {
     // Normal binding: replace it
@@ -60,29 +68,24 @@ export function assignToPlaceholder(
   if (!isPlainObject(existing))
     throw new Error("internal error: placeholder is not an object");
   if (
-    (existing as { literalAnnotation?: unknown }).literalAnnotation &&
-    !(existing as { uninitialized?: unknown }).uninitialized &&
-    !(existing as { mutable?: unknown }).mutable
+    hasLiteralAnnotation(existing) &&
+    existing.literalAnnotation &&
+    (!hasUninitialized(existing) || !existing.uninitialized) &&
+    (!hasMutable(existing) || !existing.mutable)
   )
     throw new Error("cannot reassign annotated literal");
-  if (
-    (existing as { parsedAnnotation?: unknown }).parsedAnnotation &&
-    (existing as { uninitialized?: unknown }).uninitialized
-  ) {
-    validateAnnotation(
-      (existing as { parsedAnnotation?: unknown }).parsedAnnotation,
-      newVal
-    );
-  } else if (
-    typeof (existing as { annotation?: unknown }).annotation === "string"
-  ) {
-    const annotation = (existing as { annotation: string }).annotation;
+  if (hasParsedAnnotation(existing) && hasUninitialized(existing) && existing.uninitialized) {
+    validateAnnotation(existing.parsedAnnotation, newVal);
+  } else if (hasAnnotation(existing) && typeof existing.annotation === "string") {
+    const annotation = existing.annotation;
     const typeOnly = annotation.match(/^\s*([uUiI])\s*(\d+)\s*$/);
     if (typeOnly || /^\s*bool\s*$/i.test(annotation)) {
       validateAnnotation(annotation, newVal);
     }
   }
-  (existing as { value?: unknown }).value = newVal;
-  (existing as { uninitialized?: unknown }).uninitialized = false;
+  // eslint-disable-next-line no-restricted-syntax
+  (existing as { value: unknown }).value = newVal;
+  // eslint-disable-next-line no-restricted-syntax
+  (existing as { uninitialized: boolean }).uninitialized = false;
   envSet(localEnv, name, existing);
 }

@@ -30,6 +30,13 @@ import {
   isPointer,
   toErrorMessage,
   unwrapBindingValue,
+  hasUninitialized,
+  hasAnnotation,
+  hasMutable,
+  hasPtrMutable,
+  hasValue,
+  hasLiteralAnnotation,
+  hasParsedAnnotation,
 } from "../types";
 
 export function interpretBlock(
@@ -91,7 +98,7 @@ function interpretBlockInternal(
         envGet(localEnv, "__resolve_namespace");
       if (typeof resolver !== "function")
         throw new Error("namespace resolver not available");
-      const nsExports = (resolver as (_name: string) => unknown)(nsName);
+      const nsExports = resolver(nsName);
       if (!isPlainObject(nsExports))
         throw new Error("namespace resolver returned invalid exports");
       for (const name of names) {
@@ -138,7 +145,7 @@ function interpretBlockInternal(
       const name = m[2];
       const annotation = m[3] ? m[3].trim() : undefined;
       const hasInitializer = m[4] !== undefined;
-      const rhsRaw = hasInitializer ? (m[4] as string).trim() : undefined;
+      const rhsRaw = hasInitializer && m[4] ? m[4].trim() : undefined;
 
       // duplicate declaration in same scope is an error
       if (declared.has(name)) throw new Error("duplicate declaration");
@@ -403,9 +410,10 @@ function interpretBlockInternal(
         // only throw if trying to use an uninitialized var in certain contexts (not assignment)
         if (
           isPlainObject(existing) &&
-          (existing as { uninitialized?: unknown }).uninitialized &&
-          !(existing as { annotation?: unknown }).annotation &&
-          !(existing as { mutable?: unknown }).mutable
+          hasUninitialized(existing) &&
+          existing.uninitialized &&
+          !hasAnnotation(existing) &&
+          !hasMutable(existing)
         )
           throw new Error("use of uninitialized variable");
 
@@ -414,7 +422,7 @@ function interpretBlockInternal(
           ptr = unwrapBindingValue(existing);
           if (!isPointer(ptr))
             throw new Error("cannot dereference non-pointer");
-          if ((ptr as { ptrMutable?: unknown }).ptrMutable !== true)
+          if (!hasPtrMutable(ptr) || ptr.ptrMutable !== true)
             throw new Error("cannot assign through immutable pointer");
         }
 
@@ -432,50 +440,40 @@ function interpretBlockInternal(
           const newVal = computeAssignmentValue(op, targetExisting, rhsOperand);
 
           // For deref assignment to a placeholder, validate annotation
-          if (
-            isPlainObject(targetExisting) &&
-            Object.prototype.hasOwnProperty.call(
-              targetExisting,
-              "uninitialized"
-            )
-          ) {
+          if (isPlainObject(targetExisting) && hasUninitialized(targetExisting)) {
             if (
-              (targetExisting as { literalAnnotation?: unknown })
-                .literalAnnotation &&
-              !(targetExisting as { uninitialized?: unknown }).uninitialized &&
-              !(targetExisting as { mutable?: unknown }).mutable
+              hasLiteralAnnotation(targetExisting) &&
+              targetExisting.literalAnnotation &&
+              !targetExisting.uninitialized &&
+              (!hasMutable(targetExisting) || !targetExisting.mutable)
             )
               throw new Error("cannot reassign annotated literal");
             if (
-              (targetExisting as { parsedAnnotation?: unknown })
-                .parsedAnnotation &&
-              (targetExisting as { uninitialized?: unknown }).uninitialized
+              hasParsedAnnotation(targetExisting) &&
+              targetExisting.parsedAnnotation &&
+              targetExisting.uninitialized
             ) {
-              validateAnnotation(
-                (targetExisting as { parsedAnnotation?: unknown })
-                  .parsedAnnotation,
-                newVal
-              );
+              validateAnnotation(targetExisting.parsedAnnotation, newVal);
             } else if (
-              typeof (targetExisting as { annotation?: unknown }).annotation ===
-              "string"
+              hasAnnotation(targetExisting) &&
+              typeof targetExisting.annotation === "string"
             ) {
-              validateAnnotation(
-                (targetExisting as { annotation: string }).annotation,
-                newVal
-              );
+              validateAnnotation(targetExisting.annotation, newVal);
             }
-            (targetExisting as { value?: unknown }).value = newVal;
-            (targetExisting as { uninitialized?: unknown }).uninitialized =
-              false;
+            // eslint-disable-next-line no-restricted-syntax
+            (targetExisting as unknown as { value: unknown }).value = newVal;
+            // eslint-disable-next-line no-restricted-syntax
+            (targetExisting as unknown as { uninitialized: boolean }).uninitialized = false;
             envSet(localEnv, targetName, targetExisting);
           } else if (
             isPlainObject(targetExisting) &&
-            Object.prototype.hasOwnProperty.call(targetExisting, "value") &&
-            (targetExisting as { value?: unknown }).value !== undefined &&
-            (targetExisting as { mutable?: unknown }).mutable
+            hasValue(targetExisting) &&
+            targetExisting.value !== undefined &&
+            hasMutable(targetExisting) &&
+            targetExisting.mutable
           ) {
-            (targetExisting as { value?: unknown }).value = newVal;
+            // eslint-disable-next-line no-restricted-syntax
+            (targetExisting as unknown as { value: unknown }).value = newVal;
             envSet(localEnv, targetName, targetExisting);
           } else {
             envSet(localEnv, targetName, newVal);
@@ -484,10 +482,7 @@ function interpretBlockInternal(
           // Normal assignment or compound: update variable directly
           const newVal = computeAssignmentValue(op, existing, rhsOperand);
 
-          if (
-            isPlainObject(existing) &&
-            Object.prototype.hasOwnProperty.call(existing, "uninitialized")
-          ) {
+          if (isPlainObject(existing) && hasUninitialized(existing)) {
             // Placeholder for declaration-only let
             assignToPlaceholder(name, existing, newVal, localEnv);
           } else {

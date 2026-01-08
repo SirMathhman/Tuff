@@ -21,6 +21,23 @@ import {
   isThisBinding,
   isPointer,
   unwrapBindingValue,
+  isFnWrapper,
+  hasKindBits,
+  hasIdent,
+  hasAddrOf,
+  hasDeref,
+  hasCallArgs,
+  hasCallApp,
+  hasStructInstantiation,
+  hasValue,
+  hasUninitialized,
+  hasAnnotation,
+  hasParams,
+  hasClosureEnv,
+  hasBody,
+  hasIsBlock,
+  hasName,
+  hasFields,
 } from "./types";
 
 export function isTruthy(val: unknown): boolean {
@@ -60,22 +77,14 @@ export function applyBinaryOp(
     return { boolValue: isTruthy(right) };
   }
 
-  const leftHasKind =
-    isPlainObject(left) && (left as { kind?: unknown }).kind !== undefined;
-  const rightHasKind =
-    isPlainObject(right) && (right as { kind?: unknown }).kind !== undefined;
+  const leftHasKind = hasKindBits(left);
+  const rightHasKind = hasKindBits(right);
   if (leftHasKind || rightHasKind) {
     const ref = leftHasKind ? left : right;
-    const kind = (ref as { kind?: unknown }).kind;
-    const bits = (ref as { bits?: unknown }).bits;
-    if (typeof kind !== "string" || typeof bits !== "number")
-      throw new Error("invalid suffix metadata");
+    if (!hasKindBits(ref)) throw new Error("invalid suffix metadata");
+    const { kind, bits } = ref;
     if (leftHasKind && rightHasKind) {
-      if (
-        (left as { kind?: unknown }).kind !==
-          (right as { kind?: unknown }).kind ||
-        (left as { bits?: unknown }).bits !== (right as { bits?: unknown }).bits
-      )
+      if (left.kind !== right.kind || left.bits !== right.bits)
         throw new Error("mismatched suffixes in binary operation");
     }
     if (!leftHasKind && isFloatOperand(left))
@@ -170,7 +179,7 @@ export function applyBinaryOp(
 /**
  * Resolve a function from either a function operand or an identifier name
  */
-import { Env, envHas, envGet, envSet, envEntries, envClone } from "./env";
+import { Env, envHas, envGet, envSet, envEntries, envClone, isEnv } from "./env";
 
 function mustGetEnvBinding(env: Env, name: string): unknown {
   if (!envHas(env, name)) throw new Error(`unknown identifier ${name}`);
@@ -178,23 +187,14 @@ function mustGetEnvBinding(env: Env, name: string): unknown {
 }
 
 function resolveFunctionFromOperand(operand: unknown, localEnv: Env): unknown {
-  if (
-    isPlainObject(operand) &&
-    isPlainObject((operand as { fn?: unknown }).fn)
-  ) {
-    return (operand as { fn: unknown }).fn;
-  } else if (
-    isPlainObject(operand) &&
-    typeof (operand as { ident?: unknown }).ident === "string"
-  ) {
-    const name = (operand as { ident: string }).ident;
+  if (isFnWrapper(operand)) {
+    return operand.fn;
+  } else if (hasIdent(operand)) {
+    const name = operand.ident;
     const binding = mustGetEnvBinding(localEnv, name);
-    if (
-      !isPlainObject(binding) ||
-      !isPlainObject((binding as { fn?: unknown }).fn)
-    )
+    if (!isFnWrapper(binding))
       throw new Error("not a function");
-    return (binding as { fn: unknown }).fn;
+    return binding.fn;
   } else {
     throw new Error("cannot call non-function");
   }
@@ -206,10 +206,10 @@ function resolveFunctionFromOperand(operand: unknown, localEnv: Env): unknown {
  */
 function executeFunctionBody(fn: unknown, callEnv: Env): unknown {
   if (!isPlainObject(fn)) throw new Error("internal error: invalid fn");
-  const isBlock = (fn as { isBlock?: unknown }).isBlock === true;
-  const body = (fn as { body?: unknown }).body;
-  if (typeof body !== "string")
+  const isBlock = hasIsBlock(fn) && fn.isBlock === true;
+  if (!hasBody(fn) || typeof fn.body !== "string")
     throw new Error("internal error: invalid fn body");
+  const body = fn.body;
 
   if (!isBlock) {
     return evaluateReturningOperand(body, callEnv);
@@ -249,12 +249,8 @@ function executeFunctionBody(fn: unknown, callEnv: Env): unknown {
     } = { isThisBinding: true, fieldValues: {} };
     for (const [k, envVal] of envEntries(callEnv)) {
       if (k === "this") continue;
-      if (
-        isPlainObject(envVal) &&
-        Object.prototype.hasOwnProperty.call(envVal, "value") &&
-        (envVal as { value?: unknown }).value !== undefined
-      )
-        thisObj.fieldValues[k] = (envVal as { value?: unknown }).value;
+      if (isPlainObject(envVal) && hasValue(envVal) && envVal.value !== undefined)
+        thisObj.fieldValues[k] = envVal.value;
       else if (
         typeof envVal === "number" ||
         typeof envVal === "string" ||
@@ -500,10 +496,7 @@ export function evaluateReturningOperand(
   // helper to get binding and deref target
   function getBindingTarget(name: string) {
     const binding = mustGetEnvBinding(localEnv, name);
-    if (
-      isPlainObject(binding) &&
-      (binding as { uninitialized?: unknown }).uninitialized
-    )
+    if (isPlainObject(binding) && hasUninitialized(binding) && binding.uninitialized)
       throw new Error(`use of uninitialized variable ${name}`);
     const targetVal = unwrapBindingValue(binding);
     return { binding, targetVal };
@@ -512,23 +505,19 @@ export function evaluateReturningOperand(
   // resolve identifiers, address-of (&) and dereference (*) from localEnv
   operands = operands.map((op) => {
     // address-of: produce a pointer object referring to the binding name and include target metadata
-    if (isPlainObject(op) && (op as { addrOf?: unknown }).addrOf) {
-      const inner = (op as { addrOf: unknown }).addrOf;
-      if (
-        !isPlainObject(inner) ||
-        typeof (inner as { ident?: unknown }).ident !== "string"
-      )
+    if (isPlainObject(op) && hasAddrOf(op)) {
+      const inner = op.addrOf;
+      if (!isPlainObject(inner) || !hasIdent(inner))
         throw new Error("& must be applied to identifier");
-      const n = (inner as { ident: string }).ident;
+      const n = inner.ident;
+      if (typeof n !== "string")
+        throw new Error("& must be applied to identifier");
       const { targetVal } = getBindingTarget(n);
       const ptrObj: { [k: string]: unknown } = { ptrName: n, pointer: true };
-      if (
-        isPlainObject(targetVal) &&
-        typeof (targetVal as { kind?: unknown }).kind === "string"
-      ) {
-        ptrObj.kind = (targetVal as { kind?: unknown }).kind;
-        ptrObj.bits = (targetVal as { bits?: unknown }).bits;
-        ptrObj.valueBig = (targetVal as { valueBig?: unknown }).valueBig;
+      if (isPlainObject(targetVal) && hasKindBits(targetVal)) {
+        ptrObj.kind = targetVal.kind;
+        ptrObj.bits = targetVal.bits;
+        if (hasValue(targetVal)) ptrObj.valueBig = targetVal.value;
       } else if (isIntOperand(targetVal)) {
         ptrObj.valueBig = targetVal.valueBig;
       } else if (isFloatOperand(targetVal)) {
@@ -545,14 +534,12 @@ export function evaluateReturningOperand(
     }
 
     // dereference: fetch the value pointed to by a pointer (either a named binding or an inline &expr)
-    if (isPlainObject(op) && (op as { deref?: unknown }).deref) {
-      const inner = (op as { deref: unknown }).deref;
+    if (isPlainObject(op) && hasDeref(op)) {
+      const inner = op.deref;
       // deref of an identifier that holds a pointer
-      if (
-        isPlainObject(inner) &&
-        typeof (inner as { ident?: unknown }).ident === "string"
-      ) {
-        const n = (inner as { ident: string }).ident;
+      if (isPlainObject(inner) && hasIdent(inner)) {
+        const n = inner.ident;
+        if (typeof n !== "string") throw new Error("invalid deref target");
         const { targetVal: val } = getBindingTarget(n);
         if (!isPointer(val)) throw new Error("cannot dereference non-pointer");
         const targetName = val.ptrName;
@@ -560,14 +547,13 @@ export function evaluateReturningOperand(
         return targetVal;
       }
       // deref of an inline &expr like *(&x)
-      if (isPlainObject(inner) && (inner as { addrOf?: unknown }).addrOf) {
-        const inr = (inner as { addrOf: unknown }).addrOf;
-        if (
-          !isPlainObject(inr) ||
-          typeof (inr as { ident?: unknown }).ident !== "string"
-        )
+      if (isPlainObject(inner) && hasAddrOf(inner)) {
+        const inr = inner.addrOf;
+        if (!isPlainObject(inr) || !hasIdent(inr))
           throw new Error("& must be applied to identifier");
-        const n = (inr as { ident: string }).ident;
+        const n = inr.ident;
+        if (typeof n !== "string")
+          throw new Error("& must be applied to identifier");
         const { targetVal } = getBindingTarget(n);
         return targetVal;
       }
@@ -575,16 +561,15 @@ export function evaluateReturningOperand(
     }
 
     // struct instantiation handling
-    if (
-      isPlainObject(op) &&
-      (op as { structInstantiation?: unknown }).structInstantiation
-    ) {
-      const si = (op as { structInstantiation: unknown }).structInstantiation;
+    if (isPlainObject(op) && hasStructInstantiation(op)) {
+      const si = op.structInstantiation;
       if (!isPlainObject(si)) throw new Error("invalid struct instantiation");
-      const structName = (si as { name?: unknown }).name;
-      const fieldParts = (si as { fields?: unknown }).fields;
-      if (typeof structName !== "string" || !Array.isArray(fieldParts))
+      if (!hasName(si) || typeof si.name !== "string")
         throw new Error("invalid struct instantiation");
+      const structName = si.name;
+      if (!hasFields(si) || !Array.isArray(si.fields))
+        throw new Error("invalid struct instantiation");
+      const fieldParts = si.fields;
 
       // Look up struct definition
       if (!envHas(localEnv, structName))
@@ -600,10 +585,15 @@ export function evaluateReturningOperand(
       for (const fieldPart of fieldParts) {
         if (!isPlainObject(fieldPart))
           throw new Error("invalid struct field initializer");
-        const fieldName = (fieldPart as { name?: unknown }).name;
-        const fieldValueExpr = (fieldPart as { value?: unknown }).value;
-        if (typeof fieldName !== "string" || typeof fieldValueExpr !== "string")
+        if (
+          !hasName(fieldPart) ||
+          typeof fieldPart.name !== "string" ||
+          !hasValue(fieldPart) ||
+          typeof fieldPart.value !== "string"
+        )
           throw new Error("invalid struct field initializer");
+        const fieldName = fieldPart.name;
+        const fieldValueExpr = fieldPart.value;
         const fieldValue = evaluateReturningOperand(fieldValueExpr, localEnv);
 
         // Check for duplicate fields
@@ -614,15 +604,20 @@ export function evaluateReturningOperand(
       }
 
       // Validate all required fields are provided
-      const structFields = (structDef as { fields?: unknown }).fields;
-      if (!Array.isArray(structFields))
+      if (!hasFields(structDef) || !Array.isArray(structDef.fields))
         throw new Error("invalid struct definition");
+      const structFields = structDef.fields;
       for (const field of structFields) {
         if (!isPlainObject(field)) throw new Error("invalid struct definition");
-        const fieldName = (field as { name?: unknown }).name;
-        const annotationRaw = (field as { annotation?: unknown }).annotation;
-        if (typeof fieldName !== "string" || typeof annotationRaw !== "string")
+        if (
+          !hasName(field) ||
+          typeof field.name !== "string" ||
+          !hasAnnotation(field) ||
+          typeof field.annotation !== "string"
+        )
           throw new Error("invalid struct definition");
+        const fieldName = field.name;
+        const annotationRaw = field.annotation;
         if (!providedFields.has(fieldName)) {
           throw new Error(`missing field ${fieldName} in struct ${structName}`);
         }
@@ -643,22 +638,17 @@ export function evaluateReturningOperand(
     }
 
     // function call handling (identifier with callArgs)
-    if (
-      isPlainObject(op) &&
-      Array.isArray((op as { callArgs?: unknown }).callArgs)
-    ) {
-      const callArgsRaw = (op as { callArgs: unknown[] }).callArgs;
+    if (isPlainObject(op) && hasCallArgs(op)) {
+      const callArgsRaw = op.callArgs;
       // Reuse the shared call evaluator to keep behavior consistent with the
       // explicit "call" operator path and avoid duplicated argument/env logic.
       return evaluateCallAt(op, { callApp: callArgsRaw });
     }
 
     // identifier resolution (existing behavior)
-    if (
-      isPlainObject(op) &&
-      typeof (op as { ident?: unknown }).ident === "string"
-    ) {
-      const n = (op as { ident: string }).ident;
+    if (isPlainObject(op) && hasIdent(op)) {
+      const n = op.ident;
+      if (typeof n !== "string") return op;
 
       // Special handling for 'this' binding
       if (n === "this") {
@@ -670,12 +660,8 @@ export function evaluateReturningOperand(
         for (const [key, value] of envEntries(localEnv)) {
           if (key !== "this") {
             // Extract the actual value
-            if (
-              isPlainObject(value) &&
-              Object.prototype.hasOwnProperty.call(value, "value") &&
-              (value as { value?: unknown }).value !== undefined
-            ) {
-              thisObj.fieldValues[key] = (value as { value?: unknown }).value;
+            if (isPlainObject(value) && hasValue(value) && value.value !== undefined) {
+              thisObj.fieldValues[key] = value.value;
             } else if (
               typeof value === "number" ||
               typeof value === "string" ||
@@ -693,12 +679,8 @@ export function evaluateReturningOperand(
       }
 
       const { targetVal: val } = getBindingTarget(n);
-      if (
-        isPlainObject(val) &&
-        Object.prototype.hasOwnProperty.call(val, "value") &&
-        (val as { value?: unknown }).value !== undefined
-      )
-        return (val as { value?: unknown }).value;
+      if (isPlainObject(val) && hasValue(val) && val.value !== undefined)
+        return val.value;
       return val;
     }
     return op;
@@ -718,7 +700,8 @@ export function evaluateReturningOperand(
   // helper to evaluate a call and return its result
   function evaluateCallAt(funcOperand: unknown, callAppOperand: unknown) {
     if (!isPlainObject(callAppOperand)) throw new Error("invalid call");
-    const callArgsRaw = (callAppOperand as { callApp?: unknown }).callApp;
+    if (!hasCallApp(callAppOperand)) throw new Error("invalid call");
+    const callArgsRaw = callAppOperand.callApp;
     if (!Array.isArray(callArgsRaw)) throw new Error("invalid call");
 
     const argOps = callArgsRaw.map((a) => {
@@ -726,25 +709,26 @@ export function evaluateReturningOperand(
       return evaluateReturningOperand(a, localEnv);
     });
     const fn = resolveFunctionFromOperand(funcOperand, localEnv);
-    if (
-      !isPlainObject(fn) ||
-      !Array.isArray((fn as { params?: unknown }).params)
-    )
+    if (!isPlainObject(fn) || !hasParams(fn))
       throw new Error("internal error: invalid function");
-    const fnParams = (fn as { params: unknown[] }).params;
-    const fnClosureEnv = (fn as { closureEnv?: unknown }).closureEnv;
-    if (!fnClosureEnv) throw new Error("internal error: missing closure env");
+    const fnParams = fn.params;
+    if (!Array.isArray(fnParams))
+      throw new Error("internal error: invalid function params");
+    if (!hasClosureEnv(fn) || !fn.closureEnv)
+      throw new Error("internal error: missing closure env");
+    const fnClosureEnv = fn.closureEnv;
+    if (!isEnv(fnClosureEnv))
+      throw new Error("internal error: invalid closure env type");
 
     if (fnParams.length !== argOps.length)
       throw new Error("invalid argument count");
 
-    const callEnv: Env = envClone(fnClosureEnv as Env);
+    const callEnv: Env = envClone(fnClosureEnv);
     for (let j = 0; j < fnParams.length; j++) {
       const p = fnParams[j];
-      const pname = isPlainObject(p) ? (p as { name?: unknown }).name : p;
-      const pann = isPlainObject(p)
-        ? (p as { annotation?: unknown }).annotation
-        : undefined;
+      const pname = isPlainObject(p) && hasName(p) ? p.name : p;
+      const pann =
+        isPlainObject(p) && hasAnnotation(p) ? p.annotation : undefined;
       if (typeof pname !== "string") throw new Error("invalid parameter");
       validateAnnotation(
         typeof pann === "string" || pann === undefined ? pann : undefined,
@@ -785,7 +769,10 @@ export function evaluateReturningOperand(
         const funcOperand = operands[i];
         const callAppOperand = operands[i + 1];
         const result = evaluateCallAt(funcOperand, callAppOperand);
-        const fieldName = (ops[i + 1] as string).substring(1);
+        const nextOp = ops[i + 1];
+        if (typeof nextOp !== "string")
+          throw new Error("invalid field access operator");
+        const fieldName = nextOp.substring(1);
         if (!result) throw new Error(`cannot access field on missing value`);
         const fieldValue = getFieldValueFromInstance(result, fieldName);
 

@@ -8,6 +8,9 @@ import {
   isIntOperand,
   isPointer,
   isFnWrapper,
+  getProp,
+  hasKindBits,
+  hasPtrIsBool,
 } from "./types";
 import type { InterpretFn } from "./types";
 /* eslint-disable max-lines */
@@ -44,9 +47,10 @@ export function evaluateRhs(
       if (
         e &&
         typeof e === "object" &&
-        Object.prototype.hasOwnProperty.call(e, "__yield")
+        "__yield" in e &&
+        typeof e.__yield === "number"
       ) {
-        const val = (e as { __yield: number }).__yield;
+        const val = e.__yield;
         if (Number.isInteger(val)) return { valueBig: BigInt(val) };
         return { floatValue: val, isFloat: true };
       }
@@ -67,12 +71,8 @@ export function checkAnnMatchesRhs(ann: unknown, rhsOperand: unknown) {
     );
   if (ann.valueBig !== rhsOperand.valueBig)
     throw new Error("annotation value does not match initializer");
-  const rhsKind = (rhsOperand as { kind?: unknown }).kind;
-  if (typeof rhsKind === "string") {
-    const rhsBits = (rhsOperand as { bits?: unknown }).bits;
-    const annKind = (ann as { kind?: unknown }).kind;
-    const annBits = (ann as { bits?: unknown }).bits;
-    if (annKind !== rhsKind || annBits !== rhsBits)
+  if (hasKindBits(rhsOperand)) {
+    if (!hasKindBits(ann) || ann.kind !== rhsOperand.kind || ann.bits !== rhsOperand.bits)
       throw new Error("annotation kind/bits do not match initializer");
   }
 }
@@ -84,10 +84,8 @@ export function validateTypeOnly(
 ) {
   if (!isIntOperand(rhsOperand))
     throw new Error("annotation must be integer type matching initializer");
-  const rhsKind = (rhsOperand as { kind?: unknown }).kind;
-  if (typeof rhsKind === "string") {
-    const rhsBits = (rhsOperand as { bits?: unknown }).bits;
-    if (rhsKind !== kind || rhsBits !== bits)
+  if (hasKindBits(rhsOperand)) {
+    if (rhsOperand.kind !== kind || rhsOperand.bits !== bits)
       throw new Error("annotation kind/bits do not match initializer");
   } else {
     checkRange(kind, bits, rhsOperand.valueBig);
@@ -119,7 +117,7 @@ export function validateAnnotation(
       return;
     }
     if (/^\s*bool\s*$/i.test(inner)) {
-      if ((rhsOperand as { ptrIsBool?: unknown }).ptrIsBool !== true)
+      if (!hasPtrIsBool(rhsOperand) || rhsOperand.ptrIsBool !== true)
         throw new Error("annotation Pointer Bool requires boolean initializer");
       return;
     }
@@ -128,9 +126,9 @@ export function validateAnnotation(
     if (!ann) throw new Error("invalid annotation in let");
     // ensure pointer's pointed literal matches
     checkAnnMatchesRhs(ann, {
-      valueBig: (rhsOperand as { valueBig?: unknown }).valueBig,
-      kind: (rhsOperand as { kind?: unknown }).kind,
-      bits: (rhsOperand as { bits?: unknown }).bits,
+      valueBig: getProp(rhsOperand, "valueBig"),
+      kind: getProp(rhsOperand, "kind"),
+      bits: getProp(rhsOperand, "bits"),
     });
     return;
   }
@@ -484,6 +482,7 @@ export function registerFunctionFromStmt(
   const fnObj = envGet(localEnv, name);
   if (!isFnWrapper(fnObj))
     throw new Error("internal error: fn registration failed");
+  // eslint-disable-next-line no-restricted-syntax
   (fnObj.fn as { closureEnv: Env | undefined }).closureEnv = envClone(localEnv);
 
   return trailingExpr;
@@ -578,7 +577,9 @@ export function interpretAll(
       // Exports object where `out` declarations will register their symbols
       nsEnv.__exports = {};
       interpFn(scripts[nsName], nsEnv);
+      // nsEnv.__exports is guaranteed to be a plain object from isPlainObject check
       namespaceRegistry[nsName] = isPlainObject(nsEnv.__exports)
+        // eslint-disable-next-line no-restricted-syntax
         ? (nsEnv.__exports as { [k: string]: unknown })
         : {};
     }
