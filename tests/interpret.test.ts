@@ -128,6 +128,10 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("5 * 3 + 1")).toBe(16);
   });
 
+  it("respects operator precedence ('1 + 5 * 3' => 16)", () => {
+    expect(interpret("1 + 5 * 3")).toBe(16);
+  });
+
   it("throws when multiplying unsigned by a negative number (e.g., '2U8 * -1' => Error)", () => {
     expect(() => interpret("2U8 * -1")).toThrow();
     expect(() => interpret("-1 * 2U8")).toThrow();

@@ -91,81 +91,97 @@ export function interpret(input: string): number {
       }
     }
 
-    let current: any = exprTokens[0].operand;
-    for (let i = 1; i < exprTokens.length; i++) {
-      const op = exprTokens[i].op!;
-      const nxt = exprTokens[i].operand;
+    // build operand and operator arrays
+    const operands = exprTokens.map((t) => t.operand);
+    const ops: string[] = [];
+    for (let i = 1; i < exprTokens.length; i++) ops.push(exprTokens[i].op!);
 
-      const curHasKind = (current as any).kind !== undefined;
-      const nxtHasKind = (nxt as any).kind !== undefined;
+    // helper to apply binary operator for suffixed/mixed/number operands
+    function applyOp(op: string, left: any, right: any): any {
+      const leftHasKind = left && (left as any).kind !== undefined;
+      const rightHasKind = right && (right as any).kind !== undefined;
 
-      if (curHasKind || nxtHasKind) {
-        const refer = curHasKind ? current : nxt;
-        const kind = (refer as any).kind as string;
-        const bits = (refer as any).bits as number;
-        if (curHasKind && nxtHasKind) {
+      // If either has kind, perform BigInt arithmetic with promotion rules
+      if (leftHasKind || rightHasKind) {
+        const ref = leftHasKind ? left : right;
+        const kind = (ref as any).kind as string;
+        const bits = (ref as any).bits as number;
+        // mismatched suffixes?
+        if (leftHasKind && rightHasKind) {
           if (
-            (current as any).kind !== (nxt as any).kind ||
-            (current as any).bits !== (nxt as any).bits
+            (left as any).kind !== (right as any).kind ||
+            (left as any).bits !== (right as any).bits
           )
             throw new Error("mismatched suffixes in binary operation");
         }
-        if (!curHasKind && (current as any).isFloat)
+        // non-suffixed must be integer
+        if (!leftHasKind && (left as any).isFloat)
           throw new Error("mixed suffix and float not allowed");
-        if (!nxtHasKind && (nxt as any).isFloat)
+        if (!rightHasKind && (right as any).isFloat)
           throw new Error("mixed suffix and float not allowed");
 
-        let curBig: bigint;
-        if (curHasKind) {
-          curBig = (current as any).valueBig as bigint;
-        } else if (typeof current === "number") {
-          if (!Number.isInteger(current))
-            throw new Error("mixed suffix and float not allowed");
-          curBig = BigInt(current);
-        } else {
-          curBig = (current as any).valueBig as bigint;
-        }
+        let lBig: bigint;
+        if (leftHasKind) lBig = ((left as any).valueBig as bigint);
+        else if (typeof left === "number") lBig = BigInt(left as number);
+        else lBig = ((left as any).valueBig as bigint);
 
-        let nxtBig: bigint;
-        if (nxtHasKind) {
-          nxtBig = (nxt as any).valueBig as bigint;
-        } else if (typeof nxt === "number") {
-          if (!Number.isInteger(nxt))
-            throw new Error("mixed suffix and float not allowed");
-          nxtBig = BigInt(nxt as number);
-        } else {
-          nxtBig = (nxt as any).valueBig as bigint;
-        }
+        let rBig: bigint;
+        if (rightHasKind) rBig = ((right as any).valueBig as bigint);
+        else if (typeof right === "number") rBig = BigInt(right as number);
+        else rBig = ((right as any).valueBig as bigint);
 
-        let result: bigint;
-        if (op === "+") result = curBig + nxtBig;
-        else if (op === "-") result = curBig - nxtBig;
-        else if (op === "*") result = curBig * nxtBig;
+        let resBig: bigint;
+        if (op === "+") resBig = lBig + rBig;
+        else if (op === "-") resBig = lBig - rBig;
+        else if (op === "*") resBig = lBig * rBig;
         else throw new Error("unsupported operator");
-        checkRangeThrow(kind, bits, result);
-        current = { valueBig: result, kind: kind, bits: bits };
+
+        checkRangeThrow(kind, bits, resBig);
+        return { valueBig: resBig, kind: kind, bits };
+      }
+
+      // both no suffix: numeric (float or integer) arithmetic
+      const lNum =
+        typeof left === "number"
+          ? left
+          : (left as any).isFloat
+          ? (left as any).floatValue
+          : Number((left as any).valueBig);
+      const rNum =
+        typeof right === "number"
+          ? right
+          : (right as any).isFloat
+          ? (right as any).floatValue
+          : Number((right as any).valueBig);
+      if (op === "+") return lNum + rNum;
+      if (op === "-") return lNum - rNum;
+      if (op === "*") return lNum * rNum;
+      throw new Error("unsupported operator");
+    }
+
+    // First pass: handle '*' (higher precedence)
+    let i = 0;
+    while (i < ops.length) {
+      if (ops[i] === "*") {
+        const res = applyOp("*", operands[i], operands[i + 1]);
+        operands.splice(i, 2, res);
+        ops.splice(i, 1);
       } else {
-        let leftNum: number;
-        if (typeof current === "number") leftNum = current as number;
-        else leftNum = (current as any).isFloat ? (current as any).floatValue : Number((current as any).valueBig);
-
-        let rightNum: number;
-        if (typeof nxt === "number") rightNum = nxt as number;
-        else rightNum = (nxt as any).isFloat ? (nxt as any).floatValue : Number((nxt as any).valueBig);
-
-        let res: number;
-        if (op === "+") res = leftNum + rightNum;
-        else if (op === "-") res = leftNum - rightNum;
-        else if (op === "*") res = leftNum * rightNum;
-        else throw new Error("unsupported operator");
-        current = Number(res);
+        i++;
       }
     }
 
-    if ((current as any).kind) return Number((current as any).valueBig);
-    if (typeof current === "number") return current;
-    if ((current as any).isFloat) return (current as any).floatValue as number;
-    return Number((current as any).valueBig as bigint);
+    // Second pass: left-associative '+' and '-'
+    let result = operands[0];
+    for (let j = 0; j < ops.length; j++) {
+      result = applyOp(ops[j], result, operands[j + 1]);
+    }
+
+    if (result && (result as any).kind) return Number((result as any).valueBig);
+    if (typeof result === "number") return result;
+    if (result && (result as any).isFloat)
+      return (result as any).floatValue as number;
+    return Number((result as any).valueBig as bigint);
   }
 
   // fallback: single operand parse
