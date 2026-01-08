@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "cpd": "pmd cpd --minimum-tokens 50 src tests --language typescript",
+    "cpd": "pmd cpd --minimum-tokens 50 --ignore-literals --ignore-identifiers src tests --language typescript",
     "test": "vitest"
   },
   "devDependencies": {
