@@ -62,7 +62,7 @@ export function interpret(input: string): number {
     skipSpacesLocal();
     while (idx < len) {
       const ch = s[idx];
-      if (ch !== "+" && ch !== "-" && ch !== "*" && ch !== "/") break;
+      if (ch !== "+" && ch !== "-" && ch !== "*" && ch !== "/" && ch !== "%") break;
       const op = ch;
       idx++;
       skipSpacesLocal();
@@ -137,6 +137,9 @@ export function interpret(input: string): number {
         else if (op === "/") {
           if (rBig === 0n) throw new Error("division by zero");
           resBig = lBig / rBig;
+        } else if (op === "%") {
+          if (rBig === 0n) throw new Error("modulo by zero");
+          resBig = lBig % rBig;
         } else throw new Error("unsupported operator");
 
         checkRangeThrow(kind, bits, resBig);
@@ -160,13 +163,14 @@ export function interpret(input: string): number {
       if (op === "-") return lNum - rNum;
       if (op === "*") return lNum * rNum;
       if (op === "/") return lNum / rNum;
+      if (op === "%") return lNum % rNum;
       throw new Error("unsupported operator");
     }
 
     // First pass: handle '*' and '/' (higher precedence)
     let i = 0;
     while (i < ops.length) {
-      if (ops[i] === "*" || ops[i] === "/") {
+      if (ops[i] === "*" || ops[i] === "/" || ops[i] === "%") {
         const res = applyOp(ops[i], operands[i], operands[i + 1]);
         operands.splice(i, 2, res);
         ops.splice(i, 1);
