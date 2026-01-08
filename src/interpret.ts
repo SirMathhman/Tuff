@@ -64,6 +64,7 @@ export function interpret(
   if (hasTopLevelSemicolon(s) || /^let\b/.test(s)) {
     // simple block evaluator with lexical scoping (variables shadow parent env)
     const localEnv: Record<string, any> = { ...env };
+    const declared = new Set<string>();
     let last: any = undefined;
     const stmts = s.split(";");
     for (let raw of stmts) {
@@ -77,6 +78,8 @@ export function interpret(
         const name = m[1];
         const annotation = m[2] ? m[2].trim() : null;
         const rhs = m[3].trim();
+        // duplicate declaration in same scope is an error
+        if (declared.has(name)) throw new Error("duplicate declaration");
         // evaluate RHS as an operand (preserving suffix/type when present)
         const rhsOperand = evaluateReturningOperand(rhs, localEnv);
         // if annotation is present, validate it matches the initializer strictly
@@ -109,8 +112,7 @@ export function interpret(
             if ((ann as any).valueBig !== (rhsOperand as any).valueBig)
               throw new Error("annotation value does not match initializer");
           }
-        }
-        localEnv[name] = rhsOperand;
+        }        declared.add(name);        localEnv[name] = rhsOperand;
         // `let` is a statement and does not return a value for the block/sequence
         last = undefined;
       } else {
