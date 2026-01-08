@@ -65,6 +65,48 @@ export function interpret(
     for (let raw of stmts) {
       const stmt = raw.trim();
       if (!stmt) continue;
+      if (/^fn\b/.test(stmt)) {
+        // support `fn name(<params>) => <expr>` or `fn name(<params>) { <stmts> }`
+        const m = stmt.match(/^fn\s+([a-zA-Z_]\w*)/);
+        if (!m) throw new Error("invalid fn declaration");
+        const name = m[1];
+        if (declared.has(name)) throw new Error("duplicate declaration");
+
+        // find parameter parens
+        const start = stmt.indexOf("(");
+        if (start === -1) throw new Error("invalid fn syntax");
+        const endIdx = findMatchingParen(stmt, start);
+        if (endIdx === -1) throw new Error("unbalanced parentheses in fn");
+        const paramsRaw = stmt.slice(start + 1, endIdx).trim();
+        const params = paramsRaw.length
+          ? paramsRaw.split(",").map((p) => p.trim())
+          : [];
+
+        const after = stmt.slice(endIdx + 1).trim();
+        let body: string;
+        let isBlock = false;
+        if (after.startsWith("=>")) {
+          body = after.slice(2).trim();
+          if (!body) throw new Error("missing fn body");
+        } else if (after.startsWith("{")) {
+          const bStart = stmt.indexOf("{", endIdx + 1);
+          const bEnd = findMatchingParen(stmt, bStart, "{", "}");
+          if (bEnd === -1) throw new Error("unbalanced braces in fn");
+          body = stmt.slice(bStart, bEnd + 1);
+          isBlock = true;
+        } else {
+          throw new Error("invalid fn body");
+        }
+
+        // reserve name then attach closure env including the function itself
+        declared.add(name);
+        localEnv[name] = { fn: { params, body, isBlock, closureEnv: null } };
+        (localEnv[name] as any).fn.closureEnv = { ...localEnv };
+
+        last = undefined;
+        continue;
+      }
+
       if (/^let\b/.test(stmt)) {
         // support `let [mut] name [: annotation] [= rhs]`
         const m = stmt.match(
@@ -133,7 +175,6 @@ export function interpret(
 
           let rhsOperand: any;
           rhsOperand = evaluateRhsLocal(rhs, localEnv);
-
 
           if (annotation) {
             validateAnnotation(annotation, rhsOperand);

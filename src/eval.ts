@@ -173,7 +173,7 @@ export function evaluateReturningOperand(
     const parts = splitTopLevelStatements(inner)
       .map((p) => p.trim())
       .filter(Boolean);
-    
+
     let defaultBody: string | null = null;
     for (const part of parts) {
       const caseMatch = part.match(/^case\s+([\s\S]+?)\s*=>\s*([\s\S]*)$/);
@@ -316,6 +316,40 @@ export function evaluateReturningOperand(
         return targetVal;
       }
       throw new Error("invalid dereference target");
+    }
+
+    // function call handling (identifier with callArgs)
+    if (op && (op as any).callArgs) {
+      const name = (op as any).ident as string;
+      // evaluate arguments
+      const argOps = (op as any).callArgs.map((a: string) =>
+        evaluateReturningOperand(a, localEnv)
+      );
+      if (!(name in localEnv)) throw new Error(`unknown identifier ${name}`);
+      const binding = localEnv[name] as any;
+      if (!binding || !binding.fn) throw new Error("not a function");
+      const fn = binding.fn;
+      if (fn.params.length !== argOps.length)
+        throw new Error("invalid argument count");
+      // prepare call env from closure
+      const callEnv: Record<string, any> = { ...fn.closureEnv };
+      for (let i = 0; i < fn.params.length; i++) callEnv[fn.params[i]] = argOps[i];
+      // execute body
+      if (fn.isBlock) {
+        const inner = fn.body.replace(/^\{\s*|\s*\}$/g, "");
+        const v = (globalThis as any).interpret
+          ? (globalThis as any).interpret(inner, callEnv)
+          : (function () {
+              // fallback if interpret is not globally available (module-local call)
+              // (we can import at top if needed, but avoid cyclical import issues)
+              const mod = require("./interpret");
+              return mod.interpret(inner, callEnv);
+            })();
+        if (Number.isInteger(v)) return { valueBig: BigInt(v) };
+        return { floatValue: v, isFloat: true };
+      } else {
+        return evaluateReturningOperand(fn.body, callEnv);
+      }
     }
 
     // identifier resolution (existing behavior)

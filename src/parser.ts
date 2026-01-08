@@ -91,7 +91,48 @@ export function parseOperandAt(src: string, pos: number) {
   // fallback: identifier
   const id = src.slice(i).match(/^([a-zA-Z_]\w*)/);
   if (id) {
+    // detect function call syntax `name(...)`
     let operand: any = { ident: id[1] };
+
+    // look ahead for parentheses (allow whitespace)
+    let j = i + id[1].length;
+    while (j < src.length && /[\s]/.test(src[j])) j++;
+    if (src[j] === "(") {
+      // find matching closing paren
+      let depth = 0;
+      let endIdx = -1;
+      for (let k = j; k < src.length; k++) {
+        const ch = src[k];
+        if (ch === "(") depth++;
+        else if (ch === ")") {
+          depth--;
+          if (depth === 0) {
+            endIdx = k;
+            break;
+          }
+        }
+      }
+      if (endIdx === -1) throw new Error("unbalanced parentheses in call");
+      const inner = src.slice(j + 1, endIdx);
+      // split by top-level commas
+      const args: string[] = [];
+      let cur = "";
+      let d = 0;
+      for (let k = 0; k < inner.length; k++) {
+        const ch = inner[k];
+        if (ch === '(' || ch === '{') d++;
+        else if (ch === ')' || ch === '}') d = Math.max(0, d - 1);
+        if (ch === ',' && d === 0) {
+          args.push(cur.trim());
+          cur = "";
+        } else cur += ch;
+      }
+      if (cur.trim() !== "") args.push(cur.trim());
+      operand.callArgs = args;
+      operand = applyPrefixes(operand, prefixes);
+      return { operand, len: i - pos + id[1].length + (endIdx - j + 1) };
+    }
+
     operand = applyPrefixes(operand, prefixes);
     return { operand, len: i - pos + id[1].length };
   }

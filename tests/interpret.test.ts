@@ -312,4 +312,8 @@ describe("interpret (basic behavior)", () => {
   it("supports match expression as standalone ('match (100) { case 100 => 4 }' => 4)", () => {
     expect(interpret("match (100) { case 100 => 4 }")).toBe(4);
   });
+
+  it("supports simple fn definitions and calls ('fn get() => 100; get()' => 100)", () => {
+    expect(interpret("fn get() => 100; get()")).toBe(100);
+  });
 });
