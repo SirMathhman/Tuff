@@ -81,15 +81,28 @@ export function interpret(
         const rhsOperand = evaluateReturningOperand(rhs, localEnv);
         // if annotation is present, validate it matches the initializer strictly
         if (annotation) {
-          const ann = parseOperand(annotation);
-          if (!ann) throw new Error("invalid annotation in let");
-          // require both to be integer-like with suffixes
-          if (!(ann as any).valueBig || !(rhsOperand as any).valueBig)
-            throw new Error("annotation must be integer literal with suffix");
-          if ((ann as any).kind !== (rhsOperand as any).kind || (ann as any).bits !== (rhsOperand as any).bits)
-            throw new Error("annotation kind/bits do not match initializer");
-          if ((ann as any).valueBig !== (rhsOperand as any).valueBig)
-            throw new Error("annotation value does not match initializer");
+          // allow type-only annotation like 'I32' or 'U64'
+          const typeOnly = annotation.match(/^\s*([uUiI])\s*(\d+)\s*$/);
+          if (typeOnly) {
+            const kind = (typeOnly[1] === "u" || typeOnly[1] === "U") ? "u" : "i";
+            const bits = Number(typeOnly[2]);
+            if (!(rhsOperand as any).valueBig) throw new Error("annotation must be integer type matching initializer");
+            if ((rhsOperand as any).kind !== kind || (rhsOperand as any).bits !== bits)
+              throw new Error("annotation kind/bits do not match initializer");
+          } else {
+            const ann = parseOperand(annotation);
+            if (!ann) throw new Error("invalid annotation in let");
+            // require both to be integer-like with suffixes
+            if (!(ann as any).valueBig || !(rhsOperand as any).valueBig)
+              throw new Error("annotation must be integer literal with suffix");
+            if (
+              (ann as any).kind !== (rhsOperand as any).kind ||
+              (ann as any).bits !== (rhsOperand as any).bits
+            )
+              throw new Error("annotation kind/bits do not match initializer");
+            if ((ann as any).valueBig !== (rhsOperand as any).valueBig)
+              throw new Error("annotation value does not match initializer");
+          }
         }
         localEnv[name] = rhsOperand;
         last = rhsOperand;

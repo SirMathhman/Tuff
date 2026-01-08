@@ -148,6 +148,10 @@ describe("interpret (basic behavior)", () => {
     expect(() => interpret("1 + { let x : 1I32 = 10I32; x } % 3")).toThrow();
   });
 
+  it("accepts type-only annotation ('1 + { let x : I32 = 10I32; x } % 3' => 2)", () => {
+    expect(interpret("1 + { let x : I32 = 10I32; x } % 3")).toBe(2);
+  });
+
   it("handles division and respects precedence ('1 + 10 / 2' => 6)", () => {
     expect(interpret("1 + 10 / 2")).toBe(6);
   });
