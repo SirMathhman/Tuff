@@ -176,6 +176,14 @@ describe("interpret (basic behavior)", () => {
     expect(() => interpret("{ let x = 10; let x = 20; }")).toThrow();
   });
 
+  it("throws when initializer identifier doesn't match annotation ('let x = 10; let y : 20I32 = x;' => Error)", () => {
+    expect(() => interpret("let x = 10; let y : 20I32 = x;")).toThrow();
+  });
+
+  it("throws when initializer identifier doesn't match annotation in block ('{ let x = 10; let y : 20I32 = x; }' => Error)", () => {
+    expect(() => interpret("{ let x = 10; let y : 20I32 = x; }")).toThrow();
+  });
+
   it("returns 0 for let-only sequences ('let x = 10;' => 0)", () => {
     expect(interpret("let x = 10;")).toBe(0);
     expect(interpret("{ let x = 10; }")).toBe(0);
