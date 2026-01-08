@@ -325,12 +325,26 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("fn a() => 100; fn b() => a(); b()")).toBe(100);
   });
 
+  it("mutates outer mutable variable from function ('let mut x = 0; fn add() => { x += 1; } add(); x' => 1)", () => {
+    expect(interpret("let mut x = 0; fn add() => { x += 1; } add(); x")).toBe(
+      1
+    );
+  });
+
   it("supports functions with multiple named annotated params ('fn add(first : I32, second : I32) => first + second; add(1, 2)' => 3)", () => {
-    expect(interpret("fn add(first : I32, second : I32) => first + second; add(1, 2)")).toBe(3);
+    expect(
+      interpret(
+        "fn add(first : I32, second : I32) => first + second; add(1, 2)"
+      )
+    ).toBe(3);
   });
 
   it("supports functions with annotated result ('fn add(first : I32, second : I32) : I32 => first + second; add(1, 2)' => 3)", () => {
-    expect(interpret("fn add(first : I32, second : I32) : I32 => first + second; add(1, 2)")).toBe(3);
+    expect(
+      interpret(
+        "fn add(first : I32, second : I32) : I32 => first + second; add(1, 2)"
+      )
+    ).toBe(3);
   });
 
   it("throws when declaring same fn twice without separators ('fn empty() => {} fn empty() => {}' => Error)", () => {

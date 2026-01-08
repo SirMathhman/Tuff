@@ -1,8 +1,5 @@
 import { parseOperand } from "./parser";
-import {
-  evaluateReturningOperand,
-  checkRange,
-} from "./eval";
+import { evaluateReturningOperand, checkRange } from "./eval";
 
 export function getLastTopLevelStatement(
   str: string,
@@ -308,6 +305,90 @@ export function parseExpressionTokens(
     }
   }
   return exprTokens;
+}
+
+export function registerFunctionFromStmt(
+  stmt: string,
+  localEnv: Record<string, any>,
+  declared: Set<string>
+): string | null {
+  // support `fn name(<params>) => <expr>` or `fn name(<params>) { <stmts> }`
+  const m = stmt.match(/^fn\s+([a-zA-Z_]\w*)/);
+  if (!m) throw new Error("invalid fn declaration");
+  const name = m[1];
+  if (declared.has(name)) throw new Error("duplicate declaration");
+
+  // find parameter parens
+  const start = stmt.indexOf("(");
+  if (start === -1) throw new Error("invalid fn syntax");
+  const endIdx = findMatchingParen(stmt, start);
+  if (endIdx === -1) throw new Error("unbalanced parentheses in fn");
+  const paramsRaw = stmt.slice(start + 1, endIdx).trim();
+  const params = paramsRaw.length
+    ? paramsRaw.split(",").map((p) => {
+        const parts = p.split(":");
+        const name = parts[0].trim();
+        const ann = parts[1] ? parts.slice(1).join(":").trim() : null;
+        return { name, annotation: ann };
+      })
+    : [];
+
+  let after = stmt.slice(endIdx + 1).trim();
+  let body: string = "";
+  let isBlock = false;
+  // optional result annotation: `: <annotation>` before `=>` or `{`
+  let resultAnnotation: string | null = null;
+  let rest = after;
+  if (rest.startsWith(":")) {
+    const afterAnn = rest.slice(1).trimStart();
+    const idxArrow = afterAnn.indexOf("=>");
+    const idxBrace = afterAnn.indexOf("{");
+    let pos = -1;
+    if (idxArrow !== -1 && (idxBrace === -1 || idxArrow < idxBrace)) pos = idxArrow;
+    else if (idxBrace !== -1) pos = idxBrace;
+    if (pos === -1) throw new Error("invalid fn result annotation");
+    resultAnnotation = afterAnn.slice(0, pos).trim();
+    rest = afterAnn.slice(pos).trimStart();
+  }
+
+  let trailingExpr: string | null = null;
+
+  // helper to extract a braced body and any trailing expression
+  function extractBracedBody(startSearchIdx: number) {
+    const bStart = stmt.indexOf("{", startSearchIdx);
+    const bEnd = findMatchingParen(stmt, bStart, "{", "}");
+    if (bEnd === -1) throw new Error("unbalanced braces in fn");
+    body = stmt.slice(bStart, bEnd + 1);
+    isBlock = true;
+    if (bEnd < stmt.length - 1) {
+      trailingExpr = stmt.slice(bEnd + 1).trim();
+      if (trailingExpr === "") trailingExpr = null;
+    }
+  }
+
+  if (rest.startsWith("=>")) {
+    const afterArrow = rest.slice(2).trim();
+    // arrow-body may itself start with a braced block; handle trailing exprs after the block
+    if (afterArrow.startsWith("{")) {
+      extractBracedBody(endIdx + 1);
+    } else {
+      body = afterArrow;
+      if (!body) throw new Error("missing fn body");
+    }
+  } else if (rest.startsWith("{")) {
+    extractBracedBody(endIdx + 1);
+  } else {
+    throw new Error("invalid fn body");
+  }
+
+  // reserve name then attach closure env including the function itself
+  declared.add(name);
+  localEnv[name] = {
+    fn: { params, body, isBlock, resultAnnotation, closureEnv: null },
+  };
+  (localEnv[name] as any).fn.closureEnv = { ...localEnv };
+
+  return trailingExpr;
 }
 
 export function convertOperandToNumber(operand: any): number {

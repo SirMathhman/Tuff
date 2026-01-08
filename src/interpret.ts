@@ -20,6 +20,7 @@ import {
   extractAssignmentParts,
   expandParensAndBraces,
   convertOperandToNumber,
+  registerFunctionFromStmt,
 } from "./interpret_helpers";
 
 export function interpret(
@@ -73,63 +74,10 @@ export function interpret(
       const stmt = raw.trim();
       if (!stmt) continue;
       if (/^fn\b/.test(stmt)) {
-        // support `fn name(<params>) => <expr>` or `fn name(<params>) { <stmts> }`
-        const m = stmt.match(/^fn\s+([a-zA-Z_]\w*)/);
-        if (!m) throw new Error("invalid fn declaration");
-        const name = m[1];
-        if (declared.has(name)) throw new Error("duplicate declaration");
-
-        // find parameter parens
-        const start = stmt.indexOf("(");
-        if (start === -1) throw new Error("invalid fn syntax");
-        const endIdx = findMatchingParen(stmt, start);
-        if (endIdx === -1) throw new Error("unbalanced parentheses in fn");
-        const paramsRaw = stmt.slice(start + 1, endIdx).trim();
-        const params = paramsRaw.length
-          ? paramsRaw.split(",").map((p) => {
-              const parts = p.split(":");
-              const name = parts[0].trim();
-              const ann = parts[1] ? parts.slice(1).join(":").trim() : null;
-              return { name, annotation: ann };
-            })
-          : [];
-
-        const after = stmt.slice(endIdx + 1).trim();
-        let body: string;
-        let isBlock = false;
-        // optional result annotation: `: <annotation>` before `=>` or `{`
-        let resultAnnotation: string | null = null;
-        let rest = after;
-        if (rest.startsWith(":")) {
-          const afterAnn = rest.slice(1).trimStart();
-          const idxArrow = afterAnn.indexOf("=>");
-          const idxBrace = afterAnn.indexOf("{");
-          let pos = -1;
-          if (idxArrow !== -1 && (idxBrace === -1 || idxArrow < idxBrace)) pos = idxArrow;
-          else if (idxBrace !== -1) pos = idxBrace;
-          if (pos === -1) throw new Error("invalid fn result annotation");
-          resultAnnotation = afterAnn.slice(0, pos).trim();
-          rest = afterAnn.slice(pos).trimStart();
-        }
-        if (rest.startsWith("=>")) {
-          body = rest.slice(2).trim();
-          if (!body) throw new Error("missing fn body");
-        } else if (rest.startsWith("{")) {
-          const bStart = stmt.indexOf("{", endIdx + 1);
-          const bEnd = findMatchingParen(stmt, bStart, "{", "}");
-          if (bEnd === -1) throw new Error("unbalanced braces in fn");
-          body = stmt.slice(bStart, bEnd + 1);
-          isBlock = true;
-        } else {
-          throw new Error("invalid fn body");
-        }
-
-        // reserve name then attach closure env including the function itself
-        declared.add(name);
-        localEnv[name] = { fn: { params, body, isBlock, resultAnnotation, closureEnv: null } };
-        (localEnv[name] as any).fn.closureEnv = { ...localEnv };
-
-        last = undefined;
+        // Delegate parsing and registration to helper
+        const tExpr = registerFunctionFromStmt(stmt, localEnv, declared);
+        if (tExpr) last = evaluateReturningOperand(tExpr, localEnv);
+        else last = undefined;
         continue;
       }
 
@@ -528,3 +476,7 @@ export function interpret(
   }
   return convertOperandToNumber(single);
 }
+
+// Expose interpret on globalThis so other modules can call it without causing
+// cyclical require() calls in environments where require() is not available.
+(globalThis as any).interpret = interpret;
