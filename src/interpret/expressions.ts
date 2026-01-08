@@ -9,7 +9,7 @@ import { evaluateFlatExpression } from "../eval";
 
 export function interpretExpression(
   s: string,
-  env: Record<string, any>,
+  env: Record<string, any>, 
   interpret: any
 ): number {
   const hasTopLevelSemicolon = (str: string) =>

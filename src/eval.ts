@@ -197,7 +197,8 @@ function executeFunctionBody(fn: any, callEnv: Record<string, any>): any {
   }
 
   // interpret() returns a JS number. Wrap into our numeric operand representation.
-  if (typeof v === "number" && Number.isInteger(v)) return { valueBig: BigInt(v) };
+  if (typeof v === "number" && Number.isInteger(v))
+    return { valueBig: BigInt(v) };
   if (typeof v === "number") return { floatValue: v, isFloat: true };
   return v;
 }
@@ -639,7 +640,6 @@ export function evaluateReturningOperand(
   }
 
   // Debug: show tokenization for suspicious patterns
-
 
   // Handle function application and field access (highest precedence, left-to-right)
   let i = 0;

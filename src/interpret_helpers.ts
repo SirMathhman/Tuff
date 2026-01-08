@@ -520,3 +520,28 @@ export function parseStructDef(stmt: string): {
 
   return { name, fields, endPos: braceEnd + 1 };
 }
+
+/**
+ * interpretAll executes a mapping of namespace names to script bodies and
+ * runs the script located at `mainNamespace` as an entry point.
+ *
+ * NOTE: This is a minimal stub. Future implementation will wire cross-namespace
+ * references so scripts can import symbols from other namespaces.
+ */
+export function interpretAll(
+  scripts: Record<string, string>,
+  mainNamespace: string
+): number {
+  if (!scripts || typeof scripts !== "object") throw new Error("scripts must be an object");
+  if (typeof mainNamespace !== "string") throw new Error("mainNamespace must be a string");
+  if (!(mainNamespace in scripts)) throw new Error("main namespace not found");
+
+  // For now, create a fresh environment and store the map on a special key;
+  // future implementation will use this registry to resolve namespaces.
+  const env: Record<string, any> = {};
+  (env as any).__namespaces = scripts; // TODO: implement namespace wiring
+
+  const interpFn: any = (globalThis as any).interpret;
+  if (typeof interpFn !== "function") throw new Error("internal error: interpret() is not available");
+  return interpFn(scripts[mainNamespace], env);
+}
