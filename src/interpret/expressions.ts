@@ -1,0 +1,68 @@
+import {
+  expandParensAndBraces,
+  parseOperand,
+  convertOperandToNumber,
+  getLastTopLevelStatement,
+} from "../interpret_helpers";
+import { splitTopLevelStatements } from "../parser";
+import { evaluateFlatExpression } from "../eval";
+
+export function interpretExpression(
+  s: string,
+  env: Record<string, any>,
+  interpret: any
+): number {
+  const hasTopLevelSemicolon = (str: string) =>
+    splitTopLevelStatements(str).length > 1;
+  const getLastTopLevelStatementLocal = (str: string) =>
+    getLastTopLevelStatement(str, splitTopLevelStatements);
+
+  // If expression contains parentheses or braces, evaluate innermost grouped expressions first
+  if (s.includes("(") || s.includes("{")) {
+    s = expandParensAndBraces(s, env, interpret, getLastTopLevelStatementLocal);
+
+    // After replacing groups, it's possible we introduced top-level semicolons
+    // (e.g., "{ let x = 10; } x" -> "0; x"). In that case, re-run the block/sequence
+    // handler by delegating to `interpret` again so declarations remain scoped.
+    if (hasTopLevelSemicolon(s) || /^let\b/.test(s)) {
+      return interpret(s, env);
+    }
+  }
+
+  // Parse and evaluate expressions with '+' and '-' (left-associative)
+  // We'll parse tokens: operand (operator operand)* and evaluate left to right.
+
+  // If expression contains parentheses, evaluate innermost and replace
+  if (s.includes("(")) {
+    let expr = s;
+    const parenRegex = /\([^()]*\)/;
+    while (parenRegex.test(expr)) {
+      const m = expr.match(parenRegex)![0];
+      const inner = m.slice(1, -1);
+      const v = evaluateFlatExpression(inner, env);
+      expr = expr.replace(m, String(v));
+    }
+    return evaluateFlatExpression(expr, env);
+  }
+
+  // If expression contains any operators (including logical/comparison), evaluate it as a flat expression
+  if (/\|\||&&|<=|>=|==|!=|[+\-*/%<>]/.test(s)) {
+    return evaluateFlatExpression(s, env);
+  }
+
+  // fallback: single operand parse
+  const single = parseOperand(s);
+  if (!single) {
+    // if it's a bare identifier, try resolving from env (so `{ x }` yields the value of `x`)
+    const idm = s.match(/^\s*([a-zA-Z_]\w*)\s*$/);
+    if (idm) {
+      const name = idm[1];
+      if (name in env) {
+        const val = env[name];
+        return convertOperandToNumber(val);
+      }
+    }
+    return 0;
+  }
+  return convertOperandToNumber(single);
+}

@@ -330,7 +330,8 @@ export function evaluateReturningOperand(
       pos++;
       // Parse field name
       const fieldMatch = exprStr.slice(pos).match(/^([a-zA-Z_]\w*)/);
-      if (!fieldMatch) throw new Error("invalid field access: expected field name after .");
+      if (!fieldMatch)
+        throw new Error("invalid field access: expected field name after .");
       const fieldName = fieldMatch[1];
       // For field access, we use a special "operator" that stores the field name
       // The operand will be added as an empty placeholder to maintain the token structure
@@ -445,10 +446,12 @@ export function evaluateReturningOperand(
 
     // struct instantiation handling
     if (op && (op as any).structInstantiation) {
-      const { name: structName, fields: fieldParts } = (op as any).structInstantiation;
+      const { name: structName, fields: fieldParts } = (op as any)
+        .structInstantiation;
 
       // Look up struct definition
-      if (!(structName in localEnv)) throw new Error(`unknown struct ${structName}`);
+      if (!(structName in localEnv))
+        throw new Error(`unknown struct ${structName}`);
       const structDef = localEnv[structName];
       if (!structDef || !(structDef as any).isStructDef)
         throw new Error(`${structName} is not a struct`);
@@ -462,16 +465,22 @@ export function evaluateReturningOperand(
         const fieldValue = evaluateReturningOperand(fieldPart.value, localEnv);
 
         // Check for duplicate fields
-        if (providedFields.has(fieldName)) throw new Error(`duplicate field ${fieldName}`);
+        if (providedFields.has(fieldName))
+          throw new Error(`duplicate field ${fieldName}`);
         providedFields.add(fieldName);
         fieldValues[fieldName] = fieldValue;
       }
 
       // Validate all required fields are provided
-      const structFields = (structDef as any).fields as Array<{ name: string; annotation: string }>;
+      const structFields = (structDef as any).fields as Array<{
+        name: string;
+        annotation: string;
+      }>;
       for (const field of structFields) {
         if (!providedFields.has(field.name)) {
-          throw new Error(`missing field ${field.name} in struct ${structName}`);
+          throw new Error(
+            `missing field ${field.name} in struct ${structName}`
+          );
         }
         // For struct fields, just validate that the type annotation is recognized
         // but don't require literal value matching (different from let bindings)
@@ -526,7 +535,11 @@ export function evaluateReturningOperand(
             // Extract the actual value
             if (value && (value as any).value !== undefined) {
               thisObj.fieldValues[key] = (value as any).value;
-            } else if (typeof value === "number" || typeof value === "string" || typeof value === "boolean") {
+            } else if (
+              typeof value === "number" ||
+              typeof value === "string" ||
+              typeof value === "boolean"
+            ) {
               thisObj.fieldValues[key] = value;
             } else if (!(value as any).fn && !(value as any).isStructDef) {
               // Non-function, non-struct values
@@ -599,7 +612,10 @@ export function evaluateReturningOperand(
       }
 
       // Handle both struct instances and this binding
-      if ((structInstance as any).isStructInstance || (structInstance as any).isThisBinding) {
+      if (
+        (structInstance as any).isStructInstance ||
+        (structInstance as any).isThisBinding
+      ) {
         const fieldValue = (structInstance as any).fieldValues[fieldName];
         if (fieldValue === undefined) {
           throw new Error(`invalid field access: ${fieldName}`);

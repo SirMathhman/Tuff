@@ -449,9 +449,11 @@ export function convertOperandToNumber(operand: any): number {
   return Number((operand as any).valueBig as bigint);
 }
 
-export function parseStructDef(
-  stmt: string
-): { name: string; fields: Array<{ name: string; annotation: string }>; endPos: number } {
+export function parseStructDef(stmt: string): {
+  name: string;
+  fields: Array<{ name: string; annotation: string }>;
+  endPos: number;
+} {
   // syntax: struct Name { field1 : Type1; field2 : Type2; ... }
   const m = stmt.match(/^struct\s+([a-zA-Z_]\w*)\s*\{/);
   if (!m) throw new Error("invalid struct syntax");
@@ -459,7 +461,8 @@ export function parseStructDef(
   const name = m[1];
   const braceStart = stmt.indexOf("{");
   const braceEnd = findMatchingParen(stmt, braceStart, "{", "}");
-  if (braceEnd === -1) throw new Error("unbalanced braces in struct definition");
+  if (braceEnd === -1)
+    throw new Error("unbalanced braces in struct definition");
 
   const fieldsStr = stmt.slice(braceStart + 1, braceEnd).trim();
 
