@@ -350,4 +350,8 @@ describe("interpret (basic behavior)", () => {
   it("throws when declaring same fn twice without separators ('fn empty() => {} fn empty() => {}' => Error)", () => {
     expect(() => interpret("fn empty() => {} fn empty() => {}")).toThrow();
   });
+
+  it("supports inline fn expressions assigned to variables ('let myFunc = fn get() => 100; myFunc()' => 100)", () => {
+    expect(interpret("let myFunc = fn get() => 100; myFunc()")).toBe(100);
+  });
 });

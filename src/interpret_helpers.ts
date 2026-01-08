@@ -307,16 +307,10 @@ export function parseExpressionTokens(
   return exprTokens;
 }
 
-export function registerFunctionFromStmt(
-  stmt: string,
-  localEnv: Record<string, any>,
-  declared: Set<string>
-): string | null {
-  // support `fn name(<params>) => <expr>` or `fn name(<params>) { <stmts> }`
+export function parseFnComponents(stmt: string) {
   const m = stmt.match(/^fn\s+([a-zA-Z_]\w*)/);
   if (!m) throw new Error("invalid fn declaration");
   const name = m[1];
-  if (declared.has(name)) throw new Error("duplicate declaration");
 
   // find parameter parens
   const start = stmt.indexOf("(");
@@ -344,7 +338,8 @@ export function registerFunctionFromStmt(
     const idxArrow = afterAnn.indexOf("=>");
     const idxBrace = afterAnn.indexOf("{");
     let pos = -1;
-    if (idxArrow !== -1 && (idxBrace === -1 || idxArrow < idxBrace)) pos = idxArrow;
+    if (idxArrow !== -1 && (idxBrace === -1 || idxArrow < idxBrace))
+      pos = idxArrow;
     else if (idxBrace !== -1) pos = idxBrace;
     if (pos === -1) throw new Error("invalid fn result annotation");
     resultAnnotation = afterAnn.slice(0, pos).trim();
@@ -380,6 +375,28 @@ export function registerFunctionFromStmt(
   } else {
     throw new Error("invalid fn body");
   }
+
+  return {
+    name,
+    params,
+    resultAnnotation,
+    body,
+    isBlock,
+    trailingExpr,
+    endIdx,
+  };
+}
+
+export function registerFunctionFromStmt(
+  stmt: string,
+  localEnv: Record<string, any>,
+  declared: Set<string>
+): string | null {
+  // support `fn name(<params>) => <expr>` or `fn name(<params>) { <stmts> }`
+  const parsed = parseFnComponents(stmt);
+  const { name, params, resultAnnotation, body, isBlock, trailingExpr } =
+    parsed;
+  if (declared.has(name)) throw new Error("duplicate declaration");
 
   // reserve name then attach closure env including the function itself
   declared.add(name);

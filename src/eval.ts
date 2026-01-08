@@ -1,8 +1,5 @@
-import {
-  parseOperandAt,
-  splitTopLevelStatements,
-} from "./parser";
-import { validateAnnotation } from "./interpret_helpers";
+import { parseOperandAt, splitTopLevelStatements } from "./parser";
+import { validateAnnotation, parseFnComponents } from "./interpret_helpers";
 
 export function isTruthy(val: any): boolean {
   if (val && (val as any).boolValue !== undefined)
@@ -204,6 +201,23 @@ export function evaluateReturningOperand(
     return { valueBig: 0n };
   }
 
+  // Support an inline function expression: fn name(...) => ... or fn name(...) { ... }
+  if (/^fn\b/.test(sTrim)) {
+    const parsed = parseFnComponents(sTrim);
+    const { name, params, body, isBlock, resultAnnotation } = parsed;
+    const fnObj: any = {
+      params,
+      body,
+      isBlock,
+      resultAnnotation,
+      closureEnv: null,
+    };
+    const wrapper = { fn: fnObj };
+    fnObj.closureEnv = { ...localEnv };
+    // expose named binding inside closure for recursion
+    fnObj.closureEnv[name] = wrapper;
+    return wrapper;
+  }
   const exprTokens: { op?: string; operand?: any }[] = [];
   let pos = 0;
   const L = exprStr.length;
