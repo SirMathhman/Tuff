@@ -168,6 +168,11 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("let x = 10; let y = 20; x + y")).toBe(30);
   });
 
+  it("returns 0 for let-only sequences ('let x = 10;' => 0)", () => {
+    expect(interpret("let x = 10;")).toBe(0);
+    expect(interpret("{ let x = 10; }")).toBe(0);
+  });
+
   it("handles division and respects precedence ('1 + 10 / 2' => 6)", () => {
     expect(interpret("1 + 10 / 2")).toBe(6);
   });

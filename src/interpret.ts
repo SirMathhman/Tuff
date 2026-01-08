@@ -111,11 +111,14 @@ export function interpret(
           }
         }
         localEnv[name] = rhsOperand;
-        last = rhsOperand;
+        // `let` is a statement and does not return a value for the block/sequence
+        last = undefined;
       } else {
         last = evaluateReturningOperand(stmt, localEnv);
       }
     }
+    // if the block/sequence contained only statements (no final expression), return 0
+    if (last === undefined) return 0;
     // convert last to number
     if (last && (last as any).kind) return Number((last as any).valueBig);
     if (typeof last === "number") return last;
