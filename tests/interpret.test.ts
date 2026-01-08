@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { interpret } from "../src/interpret";
 import { evaluateReturningOperand } from "../src/eval";
 import { interpretAll } from "../src/interpret_helpers";
+import type { Env } from "../src/env";
+import { isPlainObject, isStructInstance, isThisBinding } from "../src/types";
 
 describe("interpret (basic behavior)", () => {
   it("returns a number for any input", () => {
@@ -394,14 +396,16 @@ describe("interpret (basic behavior)", () => {
   });
 
   it("(debug) constructor returns this binding object for direct call", () => {
-    const env: any = {};
+    const env: Env = {};
     interpret(
       "fn Point(x : I32, y : I32) => { fn manhattan() => x + y; this }",
       env
     );
     const obj = evaluateReturningOperand("Point(3, 4)", env);
-    expect(obj && (obj.isThisBinding || obj.isStructInstance)).toBeTruthy();
-    expect(obj.fieldValues && obj.fieldValues.manhattan).toBeTruthy();
+    expect(isThisBinding(obj) || isStructInstance(obj)).toBeTruthy();
+    if (isThisBinding(obj) || isStructInstance(obj)) {
+      expect(isPlainObject(obj.fieldValues) && obj.fieldValues.manhattan).toBeTruthy();
+    }
   });
 
   it("handles empty struct definition ('struct Empty {}' => 0)", () => {

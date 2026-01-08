@@ -141,7 +141,7 @@ export function parseOperandAt(src: string, pos: number) {
   const m = src
     .slice(i)
     .match(/^([+-]?\d+(?:\.\d+)?(?:[uUiI]\d+)?|true|false)/i);
-  function applyPrefixes(operand: any, prefixes: string[]) {
+  function applyPrefixes(operand: unknown, prefixes: string[]) {
     let op = operand;
     for (let p = prefixes.length - 1; p >= 0; p--) {
       const pr = prefixes[p];
@@ -161,7 +161,7 @@ export function parseOperandAt(src: string, pos: number) {
   const id = src.slice(i).match(/^([a-zA-Z_]\w*)/);
   if (id) {
     // detect function call syntax `name(...)` or struct instantiation `name { ... }`
-    let operand: any = { ident: id[1] };
+    let operand: { [k: string]: unknown } = { ident: id[1] };
 
     // look ahead for parentheses or braces (allow whitespace)
     let j = i + id[1].length;

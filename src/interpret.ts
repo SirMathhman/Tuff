@@ -11,12 +11,9 @@ import { interpretExpression } from "./interpret/expressions";
 
 import { ensureMapEnv, Env } from "./env";
 
-export function interpret(
-  input: string,
-  env: Env = {}
-): number {
+export function interpret(input: string, env: Env = {}): number {
   // Normalize env to Map so downstream code can assume a Map-based env when needed
-  env = ensureMapEnv(env as any) as any;
+  env = ensureMapEnv(env);
   let s = input.trim();
 
   // If this is a top-level match expression, delegate to the expression evaluator
@@ -78,4 +75,4 @@ export function interpret(
 
 // Expose interpret on globalThis so other modules can call it without causing
 // cyclical require() calls in environments where require() is not available.
-(globalThis as any).interpret = interpret;
+globalThis.interpret = interpret;

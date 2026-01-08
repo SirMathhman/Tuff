@@ -7,11 +7,12 @@ import {
 import { splitTopLevelStatements } from "../parser";
 import { evaluateFlatExpression } from "../eval";
 import { Env, envHas, envGet } from "../env";
+import type { InterpretFn } from "../types";
 
 export function interpretExpression(
   s: string,
   env: Env,
-  interpret: any
+  interpret: InterpretFn
 ): number {
   const hasTopLevelSemicolon = (str: string) =>
     splitTopLevelStatements(str).length > 1;

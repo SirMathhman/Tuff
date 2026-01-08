@@ -22,26 +22,24 @@ import {
   assignToPlaceholder,
 } from "./helpers";
 import { Env, envClone, envGet, envSet, envHas, envDelete } from "../env";
+import type { InterpretFn } from "../types";
+import { isPlainObject, isIntOperand, isPointer, toErrorMessage, unwrapBindingValue } from "../types";
 
-export function interpretBlock(
-  s: string,
-  env: Env,
-  interpret: any
-): number {
+export function interpretBlock(s: string, env: Env, interpret: InterpretFn): number {
   return interpretBlockInternal(s, env, interpret, false);
 }
 
 function interpretBlockInternal(
   s: string,
   env: Env,
-  interpret: any,
+  interpret: InterpretFn,
   inPlace: boolean
 ): number {
   // Block evaluator with lexical scoping. When inPlace=true, operate directly
   // on the provided env (used for top-level sequences and function call envs).
   const localEnv: Env = inPlace ? env : envClone(env);
   const declared = new Set<string>();
-  let last: any = undefined;
+  let last: unknown = undefined;
 
   const getLastTopLevelStatementLocal = (str: string) =>
     getLastTopLevelStatement(str, splitTopLevelStatements);
@@ -61,7 +59,8 @@ function interpretBlockInternal(
       const parsed = parseFnComponents(stripped);
       const tExpr = registerFunctionFromStmt(stripped, localEnv, declared);
       const __exports = envGet(localEnv, "__exports");
-      if (__exports) __exports[parsed.name] = envGet(localEnv, parsed.name);
+      if (isPlainObject(__exports))
+        __exports[parsed.name] = envGet(localEnv, parsed.name);
       if (tExpr) {
         last = interpret(tExpr + ";", localEnv);
       } else last = undefined;
@@ -76,11 +75,17 @@ function interpretBlockInternal(
       if (!m) throw new Error("invalid import syntax");
       const nsName = m[1];
       const names = m[2].split(",").map((x) => x.trim());
-      const resolver = envGet(env, "__resolve_namespace") || envGet(localEnv, "__resolve_namespace");
-      if (!resolver) throw new Error("namespace resolver not available");
-      const nsExports = resolver(nsName);
+      const resolver =
+        envGet(env, "__resolve_namespace") ||
+        envGet(localEnv, "__resolve_namespace");
+      if (typeof resolver !== "function")
+        throw new Error("namespace resolver not available");
+      const nsExports = (resolver as (_name: string) => unknown)(nsName);
+      if (!isPlainObject(nsExports))
+        throw new Error("namespace resolver returned invalid exports");
       for (const name of names) {
-        if (!(name in nsExports)) throw new Error("symbol not found in namespace");
+        if (!Object.prototype.hasOwnProperty.call(nsExports, name))
+          throw new Error("symbol not found in namespace");
         if (declared.has(name)) throw new Error("duplicate declaration");
         declared.add(name);
         envSet(localEnv, name, nsExports[name]);
@@ -117,7 +122,7 @@ function interpretBlockInternal(
 
       if (!hasInitializer) {
         // validate annotation shape (if present)
-        let parsedAnn: any = null;
+        let parsedAnn: unknown = null;
         let literalAnnotation = false;
         if (annotation) {
           const typeOnly = annotation.match(/^\s*([uUiI])\s*(\d+)\s*$/);
@@ -128,7 +133,7 @@ function interpretBlockInternal(
           } else {
             const ann = parseOperand(annotation);
             if (!ann) throw new Error("invalid annotation in let");
-            if (!(ann as any).valueBig)
+            if (!isIntOperand(ann))
               throw new Error("annotation must be integer literal with suffix");
             parsedAnn = ann;
             literalAnnotation = true;
@@ -163,8 +168,7 @@ function interpretBlockInternal(
           }
         }
 
-        let rhsOperand: any;
-        rhsOperand = evaluateRhsLocal(rhs, localEnv);
+  const rhsOperand = evaluateRhsLocal(rhs, localEnv);
 
         if (annotation) {
           validateAnnotation(annotation, rhsOperand);
@@ -173,7 +177,11 @@ function interpretBlockInternal(
         declared.add(name);
         if (mutFlag) {
           // store as mutable wrapper so future assignments update .value
-          envSet(localEnv, name, { mutable: true, value: rhsOperand, annotation });
+          envSet(localEnv, name, {
+            mutable: true,
+            value: rhsOperand,
+            annotation,
+          });
         } else {
           envSet(localEnv, name, rhsOperand);
         }
@@ -288,10 +296,11 @@ function interpretBlockInternal(
 
         // Handle this.field assignment
         if (isThisField) {
-          if (!envHas(localEnv, name)) throw new Error("assignment to undeclared variable");
-          const existing = envGet(localEnv, name) as any;
+          if (!envHas(localEnv, name))
+            throw new Error("assignment to undeclared variable");
+          const existing = envGet(localEnv, name);
 
-          const rhsOperand: any = evaluateRhsLocal(rhs, localEnv);
+          const rhsOperand = evaluateRhsLocal(rhs, localEnv);
 
           const newVal = computeAssignmentValue(op, existing, rhsOperand);
 
@@ -301,65 +310,76 @@ function interpretBlockInternal(
           continue;
         }
 
-        if (!envHas(localEnv, name)) throw new Error("assignment to undeclared variable");
-        const existing = envGet(localEnv, name) as any;
+        if (!envHas(localEnv, name))
+          throw new Error("assignment to undeclared variable");
+        const existing = envGet(localEnv, name);
         // allow assignment to uninitialized placeholders (from declaration-only lets) or normal vars
         // only throw if trying to use an uninitialized var in certain contexts (not assignment)
         if (
-          existing &&
-          (existing as any).uninitialized &&
-          !(existing as any).annotation &&
-          !(existing as any).mutable
+          isPlainObject(existing) &&
+          (existing as { uninitialized?: unknown }).uninitialized &&
+          !(existing as { annotation?: unknown }).annotation &&
+          !(existing as { mutable?: unknown }).mutable
         )
           throw new Error("use of uninitialized variable");
 
-        let ptr: any;
+        let ptr: unknown;
         if (isDeref) {
-          ptr =
-            existing && (existing as any).value !== undefined
-              ? (existing as any).value
-              : existing;
-          if (!ptr || !ptr.pointer)
+          ptr = unwrapBindingValue(existing);
+          if (!isPointer(ptr))
             throw new Error("cannot dereference non-pointer");
-          if (!ptr.ptrMutable)
+          if ((ptr as { ptrMutable?: unknown }).ptrMutable !== true)
             throw new Error("cannot assign through immutable pointer");
         }
 
-        const rhsOperand: any = evaluateRhsLocal(rhs, localEnv);
+        const rhsOperand = evaluateRhsLocal(rhs, localEnv);
 
         if (isDeref) {
           // Deref assignment or compound: update through pointer
-          const targetName = ptr.ptrName as string;
-          if (!envHas(localEnv, targetName)) throw new Error(`unknown identifier ${targetName}`);
-          const targetExisting = envGet(localEnv, targetName) as any;
+          if (!isPointer(ptr))
+            throw new Error("internal error: deref assignment without pointer");
+          const targetName = ptr.ptrName;
+          if (!envHas(localEnv, targetName))
+            throw new Error(`unknown identifier ${targetName}`);
+          const targetExisting = envGet(localEnv, targetName);
 
           const newVal = computeAssignmentValue(op, targetExisting, rhsOperand);
 
           // For deref assignment to a placeholder, validate annotation
-          if (targetExisting && (targetExisting as any).uninitialized !== undefined) {
+          if (
+            isPlainObject(targetExisting) &&
+            Object.prototype.hasOwnProperty.call(targetExisting, "uninitialized")
+          ) {
             if (
-              (targetExisting as any).literalAnnotation &&
-              !(targetExisting as any).uninitialized &&
-              !(targetExisting as any).mutable
+              (targetExisting as { literalAnnotation?: unknown }).literalAnnotation &&
+              !(targetExisting as { uninitialized?: unknown }).uninitialized &&
+              !(targetExisting as { mutable?: unknown }).mutable
             )
               throw new Error("cannot reassign annotated literal");
             if (
-              (targetExisting as any).parsedAnnotation &&
-              (targetExisting as any).uninitialized
+              (targetExisting as { parsedAnnotation?: unknown }).parsedAnnotation &&
+              (targetExisting as { uninitialized?: unknown }).uninitialized
             ) {
-              validateAnnotation((targetExisting as any).parsedAnnotation, newVal);
-            } else if ((targetExisting as any).annotation) {
-              validateAnnotation((targetExisting as any).annotation as string, newVal);
+              validateAnnotation(
+                (targetExisting as { parsedAnnotation?: unknown }).parsedAnnotation,
+                newVal
+              );
+            } else if (typeof (targetExisting as { annotation?: unknown }).annotation === "string") {
+              validateAnnotation(
+                (targetExisting as { annotation: string }).annotation,
+                newVal
+              );
             }
-            (targetExisting as any).value = newVal;
-            (targetExisting as any).uninitialized = false;
+            (targetExisting as { value?: unknown }).value = newVal;
+            (targetExisting as { uninitialized?: unknown }).uninitialized = false;
             envSet(localEnv, targetName, targetExisting);
           } else if (
-            targetExisting &&
-            (targetExisting as any).value !== undefined &&
-            (targetExisting as any).mutable
+            isPlainObject(targetExisting) &&
+            Object.prototype.hasOwnProperty.call(targetExisting, "value") &&
+            (targetExisting as { value?: unknown }).value !== undefined &&
+            (targetExisting as { mutable?: unknown }).mutable
           ) {
-            (targetExisting as any).value = newVal;
+            (targetExisting as { value?: unknown }).value = newVal;
             envSet(localEnv, targetName, targetExisting);
           } else {
             envSet(localEnv, targetName, newVal);
@@ -368,7 +388,10 @@ function interpretBlockInternal(
           // Normal assignment or compound: update variable directly
           const newVal = computeAssignmentValue(op, existing, rhsOperand);
 
-          if (existing && (existing as any).uninitialized !== undefined) {
+          if (
+            isPlainObject(existing) &&
+            Object.prototype.hasOwnProperty.call(existing, "uninitialized")
+          ) {
             // Placeholder for declaration-only let
             assignToPlaceholder(name, existing, newVal, localEnv);
           } else {
@@ -421,8 +444,8 @@ function interpretBlockInternal(
           }
           try {
             last = evaluateReturningOperand(expr, localEnv);
-          } catch (e: any) {
-            if (e && e.message === "invalid expression") {
+          } catch (e: unknown) {
+            if (toErrorMessage(e) === "invalid expression") {
               // Fall back to interpret for inputs that aren't valid single expressions
               last = interpret(expr, localEnv);
             } else throw e;
@@ -444,7 +467,7 @@ function interpretBlockInternal(
 export function interpretBlockInPlace(
   s: string,
   env: Env,
-  interpret: any
+  interpret: InterpretFn
 ): number {
   return interpretBlockInternal(s, env, interpret, true);
 }

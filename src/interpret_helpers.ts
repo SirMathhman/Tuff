@@ -1,10 +1,19 @@
-import { parseOperand } from "./parser";
+import { parseOperand, parseOperandAt } from "./parser";
 import { evaluateReturningOperand, checkRange } from "./eval";
+import { Env, envSet, envClone, envGet } from "./env";
+import {
+  isPlainObject,
+  isBoolOperand,
+  isFloatOperand,
+  isIntOperand,
+  isPointer,
+  isFnWrapper,
+} from "./types";
+import type { InterpretFn } from "./types";
 /* eslint-disable max-lines */
 
 export function getLastTopLevelStatement(
   str: string,
-  // eslint-disable-next-line no-unused-vars
   splitTopLevelStatements: (_s: string) => string[]
 ): string | null {
   const parts = splitTopLevelStatements(str)
@@ -16,11 +25,9 @@ export function getLastTopLevelStatement(
 export function evaluateRhs(
   rhs: string,
   envLocal: Env,
-  // eslint-disable-next-line no-unused-vars
-  interpret: (_input: string, _env?: Env) => number,
-  // eslint-disable-next-line no-unused-vars
+  interpret: InterpretFn,
   getLastTopLevelStatement_fn: (_s: string) => string | null
-): any {
+): unknown {
   if (/^\s*\{[\s\S]*\}\s*$/.test(rhs)) {
     const inner = rhs.replace(/^\{\s*|\s*\}$/g, "");
     const lastInner = getLastTopLevelStatement_fn(inner);
@@ -36,45 +43,48 @@ export function evaluateRhs(
   return evaluateReturningOperand(rhs, envLocal);
 }
 
-export function checkAnnMatchesRhs(ann: any, rhsOperand: any) {
-  if (!(ann as any).valueBig)
+export function checkAnnMatchesRhs(ann: unknown, rhsOperand: unknown) {
+  if (!isIntOperand(ann))
     throw new Error("annotation must be integer literal with suffix");
-  if (!(rhsOperand as any).valueBig)
+  if (!isIntOperand(rhsOperand))
     throw new Error(
       "initializer must be integer-like to match annotated literal"
     );
-  if ((ann as any).valueBig !== (rhsOperand as any).valueBig)
+  if (ann.valueBig !== rhsOperand.valueBig)
     throw new Error("annotation value does not match initializer");
-  if ((rhsOperand as any).kind) {
-    if (
-      (ann as any).kind !== (rhsOperand as any).kind ||
-      (ann as any).bits !== (rhsOperand as any).bits
-    )
+  const rhsKind = (rhsOperand as { kind?: unknown }).kind;
+  if (typeof rhsKind === "string") {
+    const rhsBits = (rhsOperand as { bits?: unknown }).bits;
+    const annKind = (ann as { kind?: unknown }).kind;
+    const annBits = (ann as { bits?: unknown }).bits;
+    if (annKind !== rhsKind || annBits !== rhsBits)
       throw new Error("annotation kind/bits do not match initializer");
   }
 }
 
-export function validateTypeOnly(kind: string, bits: number, rhsOperand: any) {
-  if (!(rhsOperand as any).valueBig)
+export function validateTypeOnly(kind: string, bits: number, rhsOperand: unknown) {
+  if (!isIntOperand(rhsOperand))
     throw new Error("annotation must be integer type matching initializer");
-  if ((rhsOperand as any).kind) {
-    if ((rhsOperand as any).kind !== kind || (rhsOperand as any).bits !== bits)
+  const rhsKind = (rhsOperand as { kind?: unknown }).kind;
+  if (typeof rhsKind === "string") {
+    const rhsBits = (rhsOperand as { bits?: unknown }).bits;
+    if (rhsKind !== kind || rhsBits !== bits)
       throw new Error("annotation kind/bits do not match initializer");
   } else {
-    checkRange(kind, bits, (rhsOperand as any).valueBig as bigint);
+    checkRange(kind, bits, rhsOperand.valueBig);
   }
 }
 
 export function validateAnnotation(
-  annotation: string | null | any,
-  rhsOperand: any
+  annotation: string | null | unknown,
+  rhsOperand: unknown
 ) {
   if (!annotation) return;
 
   // pointer annotation: *<inner>
   if (typeof annotation === "string" && /^\s*\*/.test(annotation)) {
     const inner = annotation.replace(/^\s*\*/g, "").trim();
-    if (!rhsOperand || !(rhsOperand as any).pointer)
+    if (!isPointer(rhsOperand))
       throw new Error("annotation requires pointer initializer");
     // inner can be type-only like I32, Bool, or a literal operand
     const parsedType = (function (s: string) {
@@ -90,7 +100,7 @@ export function validateAnnotation(
       return;
     }
     if (/^\s*bool\s*$/i.test(inner)) {
-      if ((rhsOperand as any).ptrIsBool !== true)
+      if ((rhsOperand as { ptrIsBool?: unknown }).ptrIsBool !== true)
         throw new Error("annotation Pointer Bool requires boolean initializer");
       return;
     }
@@ -99,9 +109,9 @@ export function validateAnnotation(
     if (!ann) throw new Error("invalid annotation in let");
     // ensure pointer's pointed literal matches
     checkAnnMatchesRhs(ann, {
-      valueBig: (rhsOperand as any).valueBig,
-      kind: (rhsOperand as any).kind,
-      bits: (rhsOperand as any).bits,
+      valueBig: (rhsOperand as { valueBig?: unknown }).valueBig,
+      kind: (rhsOperand as { kind?: unknown }).kind,
+      bits: (rhsOperand as { bits?: unknown }).bits,
     });
     return;
   }
@@ -118,10 +128,7 @@ export function validateAnnotation(
     const bits = Number(typeOnly[2]);
     validateTypeOnly(kind, bits, rhsOperand);
   } else if (/^\s*bool\s*$/i.test(annotation)) {
-    if (
-      !(rhsOperand as any).boolValue &&
-      (rhsOperand as any).boolValue !== false
-    )
+    if (!isBoolOperand(rhsOperand))
       throw new Error("annotation Bool requires boolean initializer");
   } else {
     const ann = parseOperand(annotation);
@@ -241,9 +248,7 @@ export function extractAssignmentParts(stmt: string): {
 export function expandParensAndBraces(
   s: string,
   env: Env,
-  // eslint-disable-next-line no-unused-vars
-  interpret: (_input: string, _env?: Env) => number,
-  // eslint-disable-next-line no-unused-vars
+  interpret: InterpretFn,
   getLastTopLevelStatement_fn: (_s: string) => string | null
 ): string {
   if (!s.includes("(") && !s.includes("{")) return s;
@@ -317,10 +322,8 @@ export function expandParensAndBraces(
 
 export function parseExpressionTokens(
   s: string
-): { op?: string; operand?: any }[] {
-  // eslint-disable-next-line no-undef
-  const { parseOperandAt } = require("./parser");
-  const exprTokens: { op?: string; operand?: any }[] = [];
+): { op?: string; operand?: unknown }[] {
+  const exprTokens: { op?: string; operand?: unknown }[] = [];
   let idx = 0;
   const len = s.length;
 
@@ -441,8 +444,6 @@ export function parseFnComponents(stmt: string) {
   };
 }
 
-import { Env, envSet, envClone, envGet } from "./env";
-
 export function registerFunctionFromStmt(
   stmt: string,
   localEnv: Env,
@@ -459,21 +460,19 @@ export function registerFunctionFromStmt(
   envSet(localEnv, name, {
     fn: { params, body, isBlock, resultAnnotation, closureEnv: null },
   });
-  const fnObj: any = envGet(localEnv, name);
-  fnObj.fn.closureEnv = envClone(localEnv);
+  const fnObj = envGet(localEnv, name);
+  if (!isFnWrapper(fnObj)) throw new Error("internal error: fn registration failed");
+  (fnObj.fn as { closureEnv: Env | null }).closureEnv = envClone(localEnv);
 
   return trailingExpr;
 }
 
-export function convertOperandToNumber(operand: any): number {
-  if (operand && (operand as any).boolValue !== undefined)
-    return (operand as any).boolValue ? 1 : 0;
-  if (operand && (operand as any).kind)
-    return Number((operand as any).valueBig as bigint);
+export function convertOperandToNumber(operand: unknown): number {
+  if (isBoolOperand(operand)) return operand.boolValue ? 1 : 0;
+  if (isIntOperand(operand)) return Number(operand.valueBig);
   if (typeof operand === "number") return operand;
-  if (operand && (operand as any).isFloat)
-    return (operand as any).floatValue as number;
-  return Number((operand as any).valueBig as bigint);
+  if (isFloatOperand(operand)) return operand.floatValue;
+  throw new Error("cannot convert operand to number");
 }
 
 export function parseStructDef(stmt: string): {
@@ -543,27 +542,28 @@ export function interpretAll(
   if (!Object.prototype.hasOwnProperty.call(scripts, mainNamespace))
     throw new Error("main namespace not found");
 
-  const interpFn: any = (globalThis as any).interpret;
+  const interpFn = globalThis.interpret;
   if (typeof interpFn !== "function")
     throw new Error("internal error: interpret() is not available");
 
   // Prepare namespace registry and resolver
-  const namespaceRegistry: { [k: string]: { [k: string]: any } } = {};
+  const namespaceRegistry: { [k: string]: { [k: string]: unknown } } = {};
   const resolveNamespace = (nsName: string) => {
     if (!scripts || !Object.prototype.hasOwnProperty.call(scripts, nsName))
       throw new Error("namespace not found");
     if (!Object.prototype.hasOwnProperty.call(namespaceRegistry, nsName)) {
-      const nsEnv: any = {};
+      const nsEnv: { [k: string]: unknown } = {};
       // Exports object where `out` declarations will register their symbols
       nsEnv.__exports = {};
       interpFn(scripts[nsName], nsEnv);
-      namespaceRegistry[nsName] = nsEnv.__exports || {};
+      namespaceRegistry[nsName] =
+        isPlainObject(nsEnv.__exports) ? (nsEnv.__exports as { [k: string]: unknown }) : {};
     }
     return namespaceRegistry[nsName];
   };
 
   // Provide resolver and registry to the main env
-  const env: any = {};
+  const env: { [k: string]: unknown } = {};
   env.__namespaces = scripts;
   env.__namespace_registry = namespaceRegistry;
   env.__resolve_namespace = resolveNamespace;
