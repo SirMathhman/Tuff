@@ -192,6 +192,10 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("{ let x = 20; let y : 20I32 = x; x }")).toBe(20);
   });
 
+  it("allows unrelated statements between declarations ('let x = 20; let z = 0; let y : 20I32 = x; x' => 20)", () => {
+    expect(interpret("let x = 20; let z = 0; let y : 20I32 = x; x")).toBe(20);
+  });
+
   it("returns 0 for let-only sequences ('let x = 10;' => 0)", () => {
     expect(interpret("let x = 10;")).toBe(0);
     expect(interpret("{ let x = 10; }")).toBe(0);

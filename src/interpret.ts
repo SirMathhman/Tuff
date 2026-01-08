@@ -99,21 +99,33 @@ export function interpret(
             )
               throw new Error("annotation kind/bits do not match initializer");
           } else {
-              const ann = parseOperand(annotation);
+            const ann = parseOperand(annotation);
             if (!ann) throw new Error("invalid annotation in let");
             // require annotation to be integer literal with suffix
-            if (!(ann as any).valueBig) throw new Error("annotation must be integer literal with suffix");
-            if (!(rhsOperand as any).valueBig) throw new Error("initializer must be integer-like to match annotated literal");
+            if (!(ann as any).valueBig)
+              throw new Error("annotation must be integer literal with suffix");
+            if (!(rhsOperand as any).valueBig)
+              throw new Error(
+                "initializer must be integer-like to match annotated literal"
+              );
             // values must match
-            if ((ann as any).valueBig !== (rhsOperand as any).valueBig) throw new Error("annotation value does not match initializer");
+            if ((ann as any).valueBig !== (rhsOperand as any).valueBig)
+              throw new Error("annotation value does not match initializer");
             // if initializer carries a kind, it must match the annotation kind/bits as well
             if ((rhsOperand as any).kind) {
-              if ((ann as any).kind !== (rhsOperand as any).kind || (ann as any).bits !== (rhsOperand as any).bits)
-                throw new Error("annotation kind/bits do not match initializer");
+              if (
+                (ann as any).kind !== (rhsOperand as any).kind ||
+                (ann as any).bits !== (rhsOperand as any).bits
+              )
+                throw new Error(
+                  "annotation kind/bits do not match initializer"
+                );
             }
             // otherwise initializer is plain integer — that's acceptable as long as value matches
           }
-        }        declared.add(name);        localEnv[name] = rhsOperand;
+        }
+        declared.add(name);
+        localEnv[name] = rhsOperand;
         // `let` is a statement and does not return a value for the block/sequence
         last = undefined;
       } else {
