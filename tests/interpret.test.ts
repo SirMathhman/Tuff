@@ -75,4 +75,8 @@ describe("interpret (basic behavior)", () => {
   it("parses negative numbers without suffixes (e.g., '-100' => -100)", () => {
     expect(interpret("-100")).toBe(-100);
   });
+
+  it("evaluates simple addition of suffixed integers (e.g., '1U8 + 2U8' => 3)", () => {
+    expect(interpret("1U8 + 2U8")).toBe(3);
+  });
 });
