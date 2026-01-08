@@ -52,6 +52,19 @@ export function interpret(input: string): number {
     if (operands.some((op) => op === null))
       throw new Error("invalid operands for expression");
 
+    // Helper to check range for a BigInt sum and return as number
+    function checkRangeAndReturn(kind: string, bits: number, sum: bigint) {
+      if (kind === "u") {
+        const max = (1n << BigInt(bits)) - 1n;
+        if (sum < 0n || sum > max) throw new Error(`value out of range for U${bits}`);
+      } else {
+        const min = -(1n << BigInt(bits - 1));
+        const max = (1n << BigInt(bits - 1)) - 1n;
+        if (sum < min || sum > max) throw new Error(`value out of range for I${bits}`);
+      }
+      return Number(sum);
+    }
+
     // If all operands have kinds (suffixes), enforce same kind and bits and use BigInt arithmetic
     const allHaveKind = operands.every((op) => (op as any).kind);
     if (allHaveKind) {
@@ -63,24 +76,35 @@ export function interpret(input: string): number {
           throw new Error("mismatched suffixes in binary operation");
       }
       // sum with BigInt and check range
-      const sum = operands.reduce(
-        (acc, op) => acc + (op as any).valueBig,
-        0n as bigint
-      );
-      if (firstKind === "u") {
-        const max = (1n << BigInt(firstBits)) - 1n;
-        if (sum < 0n || sum > max)
-          throw new Error(`value out of range for U${firstBits}`);
-      } else {
-        const min = -(1n << BigInt(firstBits - 1));
-        const max = (1n << BigInt(firstBits - 1)) - 1n;
-        if (sum < min || sum > max)
-          throw new Error(`value out of range for I${firstBits}`);
-      }
-      return Number(sum);
+      const sum = operands.reduce((acc, op) => acc + (op as any).valueBig, 0n as bigint);
+      return checkRangeAndReturn(firstKind, firstBits, sum);
     }
 
-    // Mixed (or all no-suffix): sum as numbers (floats or integers)
+    // Handle mixed and unsuffixed cases
+    const anyHaveKind = operands.some((op) => (op as any).kind);
+
+    // If some operands have kinds (mixed), try to promote unsuffixed integers to BigInt
+    if (anyHaveKind) {
+      const firstSuf = operands.find((op) => (op as any).kind) as any;
+      const firstKind = firstSuf.kind as string;
+      const firstBits = firstSuf.bits as number;
+      // ensure all suffixed operands match
+      for (const op of operands) {
+        if ((op as any).kind && ((op as any).kind !== firstKind || (op as any).bits !== firstBits))
+          throw new Error("mismatched suffixes in binary operation");
+      }
+      // convert all operands to BigInt; non-suffixed must be integer
+      const bigs = operands.map((op) => {
+        if ((op as any).kind) return (op as any).valueBig as bigint;
+        // non-suffixed: must be integer
+        if ((op as any).isFloat) throw new Error("mixed suffix and float not allowed");
+        return (op as any).valueBig as bigint;
+      });
+      const sum = bigs.reduce((a, b) => a + b, 0n as bigint);
+      return checkRangeAndReturn(firstKind, firstBits, sum);
+    }
+
+    // All operands have no suffix: sum as numbers (floats or integers)
     const nums = operands.map((op) => {
       if ((op as any).isFloat) return (op as any).floatValue as number;
       return Number((op as any).valueBig as bigint);

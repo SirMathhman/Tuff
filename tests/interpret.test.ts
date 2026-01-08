@@ -88,4 +88,14 @@ describe("interpret (basic behavior)", () => {
     expect(interpret("1U8 + 2")).toBe(3);
     expect(interpret("2 + 1U8")).toBe(3);
   });
+
+  it("throws when mixed suffixed addition overflows (e.g., '1U8 + 255' => Error)", () => {
+    expect(() => interpret("1U8 + 255")).toThrow();
+    expect(() => interpret("255 + 1U8")).toThrow();
+  });
+
+  it("accepts mixed suffixed addition when sum fits (e.g., '1U8 + 254' => 255)", () => {
+    expect(interpret("1U8 + 254")).toBe(255);
+    expect(interpret("254 + 1U8")).toBe(255);
+  });
 });
