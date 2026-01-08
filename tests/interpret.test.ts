@@ -201,6 +201,11 @@ describe("interpret (basic behavior)", () => {
     expect(() => interpret("{ let x = { let y = 20; }; x }")).toThrow();
   });
 
+  it("accepts initializer block with final expression ('let x = { let y = 20; y }; x' => 20)", () => {
+    expect(interpret("let x = { let y = 20; y }; x")).toBe(20);
+    expect(interpret("{ let x = { let y = 20; y }; x }")).toBe(20);
+  });
+
   it("returns 0 for let-only sequences ('let x = 10;' => 0)", () => {
     expect(interpret("let x = 10;")).toBe(0);
     expect(interpret("{ let x = 10; }")).toBe(0);

@@ -50,14 +50,24 @@ export function interpret(
 
   // Helper: check for semicolons at top-level (not nested inside braces/parens)
   function hasTopLevelSemicolon(str: string) {
+    return splitTopLevelStatements(str).length > 1;
+  }
+
+  function splitTopLevelStatements(str: string): string[] {
+    const parts: string[] = [];
     let depth = 0;
+    let start = 0;
     for (let i = 0; i < str.length; i++) {
       const ch = str[i];
       if (ch === "(" || ch === "{") depth++;
       else if (ch === ")" || ch === "}") depth = Math.max(0, depth - 1);
-      else if (ch === ";" && depth === 0) return true;
+      else if (ch === ";" && depth === 0) {
+        parts.push(str.slice(start, i));
+        start = i + 1;
+      }
     }
-    return false;
+    parts.push(str.slice(start));
+    return parts;
   }
 
   // If the input looks like a block (has top-level semicolons or starts with `let`), evaluate as a block
@@ -66,22 +76,7 @@ export function interpret(
     const localEnv: Record<string, any> = { ...env };
     const declared = new Set<string>();
     let last: any = undefined;
-    function splitTopLevelStatements(str: string) {
-      const parts: string[] = [];
-      let depth = 0;
-      let start = 0;
-      for (let i = 0; i < str.length; i++) {
-        const ch = str[i];
-        if (ch === '(' || ch === '{') depth++;
-        else if (ch === ')' || ch === '}') depth = Math.max(0, depth - 1);
-        else if (ch === ';' && depth === 0) {
-          parts.push(str.slice(start, i));
-          start = i + 1;
-        }
-      }
-      parts.push(str.slice(start));
-      return parts;
-    }
+
     const stmts = splitTopLevelStatements(s);
     for (let raw of stmts) {
       const stmt = raw.trim();
@@ -96,10 +91,22 @@ export function interpret(
         const rhs = m[3].trim();
         // duplicate declaration in same scope is an error
         if (declared.has(name)) throw new Error("duplicate declaration");
-        // disallow initializer that is a block containing declarations (e.g., '{ let y = 20; }')
-        if (/^\s*let\b/.test(rhs) || /\{[^}]*\blet\b/.test(rhs)) throw new Error("initializer cannot contain declarations");
-        // evaluate RHS as an operand (preserving suffix/type when present)
-        const rhsOperand = evaluateReturningOperand(rhs, localEnv);
+        // Handle initializer blocks: allow if the block's last top-level statement is an expression
+        let rhsOperand: any;
+        if (/^\s*\{[\s\S]*\}\s*$/.test(rhs)) {
+          const inner = rhs.replace(/^\{\s*|\s*\}$/g, "");
+          const parts = splitTopLevelStatements(inner).map((p) => p.trim()).filter(Boolean);
+          const last = parts.length ? parts[parts.length - 1] : null;
+          if (!last) throw new Error("initializer cannot be empty block");
+          if (/^let\b/.test(last)) throw new Error("initializer cannot contain declarations");
+          // evaluate inner block in isolated environment
+          rhsOperand = interpret(inner, {});
+        } else {
+          // RHS is not a block; ensure it doesn't contain declaration keywords
+          if (/^\s*let\b/.test(rhs) || /\{[^}]*\blet\b/.test(rhs))
+            throw new Error("initializer cannot contain declarations");
+          rhsOperand = evaluateReturningOperand(rhs, localEnv);
+        }
         // if annotation is present, validate it matches the initializer strictly
         if (annotation) {
           // allow type-only annotation like 'I32' or 'U64'
@@ -171,8 +178,10 @@ export function interpret(
       // (i.e., preceded by a `let <name> =`), disallow it
       const idx = expr.indexOf(m);
       const prefix = expr.slice(0, idx);
-      if (/\blet\s+[a-zA-Z_]\w*\s*=\s*$/.test(prefix) && /\blet\b/.test(inner)) {
-        throw new Error("initializer cannot contain declarations");
+      if (/\blet\s+[a-zA-Z_]\w*\s*=\s*$/.test(prefix)) {
+        const parts = splitTopLevelStatements(inner).map((p) => p.trim()).filter(Boolean);
+        const last = parts.length ? parts[parts.length - 1] : null;
+        if (!last || /^let\b/.test(last)) throw new Error("initializer cannot contain declarations");
       }
       // recursively interpret the inner group (pass env so variables are scoped if needed)
       const v = interpret(inner, env);
