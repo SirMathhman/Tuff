@@ -4,7 +4,7 @@
  * - Otherwise returns 0.
  * This allows inputs with type suffixes like `100U8` to be parsed as 100.
  */
-import { splitTopLevelStatements, parseOperandAt } from "./parser";
+import { splitTopLevelStatements } from "./parser";
 import {
   evaluateReturningOperand,
   evaluateFlatExpression,
@@ -14,12 +14,12 @@ import {
 import {
   getLastTopLevelStatement,
   evaluateRhs,
-  checkAnnMatchesRhs,
-  validateTypeOnly,
   validateAnnotation,
   findMatchingParen,
   parseOperand,
   extractAssignmentParts,
+  expandParensAndBraces,
+  convertOperandToNumber,
 } from "./interpret_helpers";
 
 export function interpret(
@@ -79,7 +79,12 @@ export function interpret(
         if (endIdx === -1) throw new Error("unbalanced parentheses in fn");
         const paramsRaw = stmt.slice(start + 1, endIdx).trim();
         const params = paramsRaw.length
-          ? paramsRaw.split(",").map((p) => p.trim())
+          ? paramsRaw.split(",").map((p) => {
+              const parts = p.split(":");
+              const name = parts[0].trim();
+              const ann = parts[1] ? parts.slice(1).join(":").trim() : null;
+              return { name, annotation: ann };
+            })
           : [];
 
         const after = stmt.slice(endIdx + 1).trim();
@@ -450,66 +455,12 @@ export function interpret(
     // if the block/sequence contained only statements (no final expression), return 0
     if (last === undefined) return 0;
     // convert last to number
-    if (last && (last as any).boolValue !== undefined)
-      return (last as any).boolValue ? 1 : 0;
-    if (last && (last as any).kind) return Number((last as any).valueBig);
-    if (typeof last === "number") return last;
-    if (last && (last as any).isFloat)
-      return (last as any).floatValue as number;
-    return Number((last as any).valueBig as bigint);
+    return convertOperandToNumber(last);
   }
 
   // If expression contains parentheses or braces, evaluate innermost grouped expressions first
   if (s.includes("(") || s.includes("{")) {
-    let expr = s;
-    const parenRegex = /\([^()]*\)|\{[^{}]*\}/;
-    const placeholders: string[] = [];
-    while (parenRegex.test(expr)) {
-      const m = expr.match(parenRegex)![0];
-      const inner = m.slice(1, -1);
-      const idx = expr.indexOf(m);
-      const prefix = expr.slice(0, idx);
-
-      // If this braced group is a match body (preceded by 'match' optionally with parentheses),
-      // skip interpreting it now by replacing with a placeholder. The whole match will be
-      // handled as a unit later by the expression evaluator.
-      if (m[0] === "{" && /\bmatch\b(?:\s*\([^()]*\))?\s*$/.test(prefix)) {
-        const ph = `__MATCH_BLOCK_PLACEHOLDER_${placeholders.length}__`;
-        placeholders.push(m);
-        expr = expr.replace(m, ph);
-        continue;
-      }
-
-      // if this inner group contains a declaration and it's used as an initializer
-      // (i.e., preceded by a `let <name> =`), disallow it
-      if (/\blet\s+[a-zA-Z_]\w*\s*=\s*$/.test(prefix)) {
-        const last = getLastTopLevelStatementLocal(inner);
-        if (!last || /^let\b/.test(last))
-          throw new Error("initializer cannot contain declarations");
-      }
-      // recursively interpret the inner group (pass env so variables are scoped if needed)
-      const v = interpret(inner, env);
-      // If we replaced a braced block inside another block and the next non-space
-      // character after the block is another expression start (e.g., an identifier),
-      // insert a semicolon to preserve statement separation. This avoids producing
-      // constructs like `0 x` which are invalid when `{}` is used as a standalone
-      // statement within a block.
-      const after = expr.slice(idx + m.length);
-      const afterMatch = after.match(/\s*([^\s])/);
-      const afterNon = afterMatch ? afterMatch[1] : null;
-      let replacement = String(v);
-      if (m[0] === "{" && afterNon && !/[+\-*/%)}\]]/.test(afterNon)) {
-        replacement = replacement + ";";
-      }
-      expr = expr.replace(m, replacement);
-    }
-
-    // restore any skipped match placeholders back to their original braced text
-    for (let i = 0; i < placeholders.length; i++) {
-      expr = expr.replace(`__MATCH_BLOCK_PLACEHOLDER_${i}__`, placeholders[i]);
-    }
-
-    s = expr;
+    s = expandParensAndBraces(s, env, interpret, getLastTopLevelStatementLocal);
 
     // After replacing groups, it's possible we introduced top-level semicolons
     // (e.g., "{ let x = 10; } x" -> "0; x"). In that case, re-run the block/sequence
@@ -521,44 +472,6 @@ export function interpret(
 
   // Parse and evaluate expressions with '+' and '-' (left-associative)
   // We'll parse tokens: operand (operator operand)* and evaluate left to right.
-  const exprTokens: { op?: string; operand?: any }[] = [];
-  let idx = 0;
-  const len = s.length;
-  function skipSpacesLocal() {
-    while (idx < len && s[idx] === " ") idx++;
-  }
-
-  skipSpacesLocal();
-  const first = parseOperandAt(s, idx);
-  if (first) {
-    exprTokens.push({ operand: first.operand });
-    idx += first.len;
-    skipSpacesLocal();
-    while (idx < len) {
-      skipSpacesLocal();
-      // support multi-char logical operators '||' and '&&'
-      let op: string | null = null;
-      if (s.startsWith("||", idx)) {
-        op = "||";
-        idx += 2;
-      } else if (s.startsWith("&&", idx)) {
-        op = "&&";
-        idx += 2;
-      } else {
-        const ch = s[idx];
-        if (ch !== "+" && ch !== "-" && ch !== "*" && ch !== "/" && ch !== "%")
-          break;
-        op = ch;
-        idx++;
-      }
-      skipSpacesLocal();
-      const nxt = parseOperandAt(s, idx);
-      if (!nxt) throw new Error("invalid operand after operator");
-      exprTokens.push({ op, operand: nxt.operand });
-      idx += nxt.len;
-      skipSpacesLocal();
-    }
-  }
 
   // If expression contains parentheses, evaluate innermost and replace
   if (s.includes("(")) {
@@ -587,21 +500,10 @@ export function interpret(
       const name = idm[1];
       if (name in env) {
         const val = env[name];
-        if (val && (val as any).kind) return Number((val as any).valueBig);
-        if (typeof val === "number") return val;
-        if (val && (val as any).isFloat)
-          return (val as any).floatValue as number;
-        return Number((val as any).valueBig as bigint);
+        return convertOperandToNumber(val);
       }
     }
     return 0;
   }
-  if ((single as any).kind) {
-    const kind = (single as any).kind as string;
-    const bits = (single as any).bits as number;
-    const valueBig = (single as any).valueBig as bigint;
-    return Number(valueBig);
-  }
-  if ((single as any).isFloat) return (single as any).floatValue as number;
-  return Number((single as any).valueBig as bigint);
+  return convertOperandToNumber(single);
 }

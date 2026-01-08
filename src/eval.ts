@@ -1,4 +1,8 @@
-import { parseOperandAt, splitTopLevelStatements } from "./parser";
+import {
+  parseOperandAt,
+  splitTopLevelStatements,
+} from "./parser";
+import { validateAnnotation } from "./interpret_helpers";
 
 export function isTruthy(val: any): boolean {
   if (val && (val as any).boolValue !== undefined)
@@ -300,7 +304,7 @@ export function evaluateReturningOperand(
       // deref of an identifier that holds a pointer
       if (inner && (inner as any).ident) {
         const n = (inner as any).ident as string;
-        const { binding, targetVal: val } = getBindingTarget(n);
+        const { targetVal: val } = getBindingTarget(n);
         if (!val || !(val as any).ptrName)
           throw new Error("cannot dereference non-pointer");
         const targetName = (val as any).ptrName as string;
@@ -331,9 +335,17 @@ export function evaluateReturningOperand(
       const fn = binding.fn;
       if (fn.params.length !== argOps.length)
         throw new Error("invalid argument count");
+
       // prepare call env from closure
       const callEnv: Record<string, any> = { ...fn.closureEnv };
-      for (let i = 0; i < fn.params.length; i++) callEnv[fn.params[i]] = argOps[i];
+      for (let i = 0; i < fn.params.length; i++) {
+        const p = fn.params[i];
+        const pname = p.name || p;
+        const pann = p.annotation || null;
+        // reuse interpret_helpers.validateAnnotation to validate
+        validateAnnotation(pann, argOps[i]);
+        callEnv[pname] = argOps[i];
+      }
       // execute body
       if (fn.isBlock) {
         const inner = fn.body.replace(/^\{\s*|\s*\}$/g, "");
@@ -341,7 +353,7 @@ export function evaluateReturningOperand(
           ? (globalThis as any).interpret(inner, callEnv)
           : (function () {
               // fallback if interpret is not globally available (module-local call)
-              // (we can import at top if needed, but avoid cyclical import issues)
+              // eslint-disable-next-line no-undef
               const mod = require("./interpret");
               return mod.interpret(inner, callEnv);
             })();

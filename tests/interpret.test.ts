@@ -316,4 +316,8 @@ describe("interpret (basic behavior)", () => {
   it("supports simple fn definitions and calls ('fn get() => 100; get()' => 100)", () => {
     expect(interpret("fn get() => 100; get()")).toBe(100);
   });
+
+  it("supports simple param annotation ('fn pass(value : I32) => value; pass(100)' => 100)", () => {
+    expect(interpret("fn pass(value : I32) => value; pass(100)")).toBe(100);
+  });
 });

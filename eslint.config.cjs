@@ -1,19 +1,22 @@
+const js = require("@eslint/js");
+const tsPlugin = require("@typescript-eslint/eslint-plugin");
+const tsParser = require("@typescript-eslint/parser");
+
 module.exports = [
   {
     files: ["**/*.ts"],
     languageOptions: {
-      parser: require("@typescript-eslint/parser"),
+      parser: tsParser,
       parserOptions: { ecmaVersion: 2020, sourceType: "module" },
     },
-    settings: {},
-
     plugins: {
-      "@typescript-eslint": require("@typescript-eslint/eslint-plugin"),
+      "@typescript-eslint": tsPlugin,
     },
     rules: {
+      ...js.configs.recommended.rules,
       "max-lines": [
         "error",
-        { max: 500, skipBlankLines: true, skipComments: true },
+        { max: 500, skipBlankLines: true, skipComments: false },
       ],
     },
   },

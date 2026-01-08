@@ -1,15 +1,13 @@
-import { parseOperand, parseOperandAt } from "./parser";
+import { parseOperand } from "./parser";
 import {
   evaluateReturningOperand,
-  evaluateFlatExpression,
-  isTruthy,
-  applyBinaryOp,
   checkRange,
 } from "./eval";
 
 export function getLastTopLevelStatement(
   str: string,
-  splitTopLevelStatements: (s: string) => string[]
+  // eslint-disable-next-line no-unused-vars
+  splitTopLevelStatements: (_s: string) => string[]
 ): string | null {
   const parts = splitTopLevelStatements(str)
     .map((p: string) => p.trim())
@@ -20,8 +18,10 @@ export function getLastTopLevelStatement(
 export function evaluateRhs(
   rhs: string,
   envLocal: Record<string, any>,
-  interpret: (input: string, env?: Record<string, any>) => number,
-  getLastTopLevelStatement_fn: (s: string) => string | null
+  // eslint-disable-next-line no-unused-vars
+  interpret: (_input: string, _env?: Record<string, any>) => number,
+  // eslint-disable-next-line no-unused-vars
+  getLastTopLevelStatement_fn: (_s: string) => string | null
 ): any {
   if (/^\s*\{[\s\S]*\}\s*$/.test(rhs)) {
     const inner = rhs.replace(/^\{\s*|\s*\}$/g, "");
@@ -208,4 +208,115 @@ export function extractAssignmentParts(stmt: string): {
   }
 
   return null;
+}
+
+export function expandParensAndBraces(
+  s: string,
+  env: Record<string, any>,
+  // eslint-disable-next-line no-unused-vars
+  interpret: (_input: string, _env?: Record<string, any>) => number,
+  // eslint-disable-next-line no-unused-vars
+  getLastTopLevelStatement_fn: (_s: string) => string | null
+): string {
+  if (!s.includes("(") && !s.includes("{")) return s;
+
+  let expr = s;
+  const parenRegex = /\([^()]*\)|\{[^{}]*\}/;
+  const placeholders: string[] = [];
+
+  while (parenRegex.test(expr)) {
+    const m = expr.match(parenRegex)![0];
+    const inner = m.slice(1, -1);
+    const idx = expr.indexOf(m);
+    const prefix = expr.slice(0, idx);
+
+    // Skip match bodies; they are handled later by expression evaluator
+    if (m[0] === "{" && /\bmatch\b(?:\s*\([^()]*\))?\s*$/.test(prefix)) {
+      const ph = `__MATCH_BLOCK_PLACEHOLDER_${placeholders.length}__`;
+      placeholders.push(m);
+      expr = expr.replace(m, ph);
+      continue;
+    }
+
+    // Disallow declarations inside initializers
+    if (/\blet\s+[a-zA-Z_]\w*\s*=\s*$/.test(prefix)) {
+      const last = getLastTopLevelStatement_fn(inner);
+      if (!last || /^let\b/.test(last))
+        throw new Error("initializer cannot contain declarations");
+    }
+
+    const v = interpret(inner, env);
+    const after = expr.slice(idx + m.length);
+    const afterMatch = after.match(/\s*([^\s])/);
+    const afterNon = afterMatch ? afterMatch[1] : null;
+    let replacement = String(v);
+    if (m[0] === "{" && afterNon && !/[+\-*/%)}\]]/.test(afterNon)) {
+      replacement = replacement + ";";
+    }
+    expr = expr.replace(m, replacement);
+  }
+
+  // Restore match placeholders
+  for (let i = 0; i < placeholders.length; i++) {
+    expr = expr.replace(`__MATCH_BLOCK_PLACEHOLDER_${i}__`, placeholders[i]);
+  }
+
+  return expr;
+}
+
+export function parseExpressionTokens(
+  s: string
+): { op?: string; operand?: any }[] {
+  // eslint-disable-next-line no-undef
+  const { parseOperandAt } = require("./parser");
+  const exprTokens: { op?: string; operand?: any }[] = [];
+  let idx = 0;
+  const len = s.length;
+
+  function skipSpacesLocal() {
+    while (idx < len && s[idx] === " ") idx++;
+  }
+
+  skipSpacesLocal();
+  const first = parseOperandAt(s, idx);
+  if (first) {
+    exprTokens.push({ operand: first.operand });
+    idx += first.len;
+    skipSpacesLocal();
+    while (idx < len) {
+      skipSpacesLocal();
+      let op: string | null = null;
+      if (s.startsWith("||", idx)) {
+        op = "||";
+        idx += 2;
+      } else if (s.startsWith("&&", idx)) {
+        op = "&&";
+        idx += 2;
+      } else {
+        const ch = s[idx];
+        if (ch !== "+" && ch !== "-" && ch !== "*" && ch !== "/" && ch !== "%")
+          break;
+        op = ch;
+        idx++;
+      }
+      skipSpacesLocal();
+      const nxt = parseOperandAt(s, idx);
+      if (!nxt) throw new Error("invalid operand after operator");
+      exprTokens.push({ op, operand: nxt.operand });
+      idx += nxt.len;
+      skipSpacesLocal();
+    }
+  }
+  return exprTokens;
+}
+
+export function convertOperandToNumber(operand: any): number {
+  if (operand && (operand as any).boolValue !== undefined)
+    return (operand as any).boolValue ? 1 : 0;
+  if (operand && (operand as any).kind)
+    return Number((operand as any).valueBig as bigint);
+  if (typeof operand === "number") return operand;
+  if (operand && (operand as any).isFloat)
+    return (operand as any).floatValue as number;
+  return Number((operand as any).valueBig as bigint);
 }

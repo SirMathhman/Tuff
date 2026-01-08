@@ -120,9 +120,9 @@ export function parseOperandAt(src: string, pos: number) {
       let d = 0;
       for (let k = 0; k < inner.length; k++) {
         const ch = inner[k];
-        if (ch === '(' || ch === '{') d++;
-        else if (ch === ')' || ch === '}') d = Math.max(0, d - 1);
-        if (ch === ',' && d === 0) {
+        if (ch === "(" || ch === "{") d++;
+        else if (ch === ")" || ch === "}") d = Math.max(0, d - 1);
+        if (ch === "," && d === 0) {
           args.push(cur.trim());
           cur = "";
         } else cur += ch;
