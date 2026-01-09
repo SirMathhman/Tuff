@@ -3,8 +3,8 @@
  * Extracted from eval.ts to comply with max-lines ESLint rule.
  */
 import { splitTopLevelStatements } from "../parser";
-import { convertOperandToNumber } from "../interpret_helpers";
-import { Env, envHas, envGet } from "../env";
+import { convertOperandToNumber } from "../interpreter_helpers";
+import { Env, envHas, envGet } from "../runtime/env";
 import {
   isPlainObject,
   isBoolOperand,
@@ -22,7 +22,7 @@ import {
   RuntimeValue,
   FnWrapper,
   FunctionObject,
-} from "../types";
+} from "../runtime/types";
 import { buildThisBindingFromEnv } from "./pure_helpers";
 
 // Forward declaration - will be set by eval.ts to avoid circular imports

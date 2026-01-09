@@ -1,5 +1,5 @@
-import { evaluateReturningOperand } from "../eval";
-import { Env, envSet, envGet, envClone, ensureMapEnv } from "../env";
+import { evaluateReturningOperand } from "../evaluator";
+import { Env, envSet, envGet, envClone, ensureMapEnv } from "../runtime/env";
 import {
   isBoolOperand,
   isFloatOperand,
@@ -10,8 +10,8 @@ import {
   type RuntimeValue,
   type FnWrapper as FnWrapperType,
   type FunctionObject,
-} from "../types";
-import type { InterpretFn } from "../types";
+} from "../runtime/types";
+import type { InterpretFn } from "../runtime/types";
 
 export type StringMap = Map<string, string>;
 

@@ -13,7 +13,7 @@ import {
   type RuntimeValue,
   type BoolOperand,
   type IntOperand,
-} from "../types";
+} from "../runtime/types";
 
 interface SuffixCompatibilityCtx {
   left: RuntimeValue;

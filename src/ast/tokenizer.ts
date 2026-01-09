@@ -87,7 +87,10 @@ function getEscapeChar(c: string): string {
 // Collect consecutive digits matching a pattern
 function collectDigits(state: TokenizerState, pattern: RegExp): string {
   let result = "";
-  while (state.pos < state.input.length && pattern.test(state.input[state.pos])) {
+  while (
+    state.pos < state.input.length &&
+    pattern.test(state.input[state.pos])
+  ) {
     result += state.input[state.pos];
     state.pos++;
   }

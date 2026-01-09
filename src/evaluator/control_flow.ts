@@ -3,8 +3,8 @@
  * Extracted from eval.ts to comply with max-lines ESLint rule.
  */
 import { splitTopLevelStatements } from "../parser";
-import { parseFnComponents, findMatchingParen } from "../interpret_helpers";
-import { Env, envClone, envSet } from "../env";
+import { parseFnComponents, findMatchingParen } from "../interpreter_helpers";
+import { Env, envClone, envSet } from "../runtime/env";
 import {
   isBoolOperand,
   isFloatOperand,
@@ -13,7 +13,7 @@ import {
   type FnWrapper,
   type FunctionObject,
   type IntOperand,
-} from "../types";
+} from "../runtime/types";
 import { applyBinaryOp } from "./operators";
 
 // Type for the evaluateReturningOperand function to avoid circular imports

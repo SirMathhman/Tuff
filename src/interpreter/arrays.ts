@@ -2,7 +2,7 @@ import {
   isArrayInstance,
   type RuntimeValue,
   type ArrayInstance,
-} from "../types";
+} from "../runtime/types";
 
 export interface ArrayAnnotation {
   elemType?: string;

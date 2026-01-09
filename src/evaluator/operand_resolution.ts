@@ -2,7 +2,7 @@
  * Unified operand resolution framework for expression evaluation.
  * Eliminates duplicated search and replacement patterns.
  */
-import type { RuntimeValue } from "../types";
+import type { RuntimeValue } from "../runtime/types";
 
 export interface OperandResolutionCtx {
   operands: RuntimeValue[];

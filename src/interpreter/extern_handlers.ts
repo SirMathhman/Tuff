@@ -1,14 +1,14 @@
 /**
  * Handlers for extern declarations extracted from interpretBlockInternal.
  */
-import { Env, envGet, envSet, ensureMapEnv } from "../env";
+import { Env, envGet, envSet, ensureMapEnv } from "../runtime/env";
 import {
   isPlainObject,
   isFnWrapper,
   getProp,
   type FnWrapper,
   type FunctionObject,
-} from "../types";
+} from "../runtime/types";
 
 function parseExternFnSignature(stmt: string) {
   const m = stmt.match(

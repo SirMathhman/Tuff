@@ -1,4 +1,4 @@
-import { Env, envGet, envEntries } from "../env";
+import { Env, envGet, envEntries } from "../runtime/env";
 import {
   isPlainObject,
   isStructInstance,
@@ -10,8 +10,8 @@ import {
   ThisBinding,
   hasValue,
   isStructDef,
-} from "../types";
-import { ErrorCode, throwError } from "../errors";
+} from "../runtime/types";
+import { ErrorCode, throwError } from "../runtime/errors";
 
 /**
  * Extract and validate a field value from a struct/this instance

@@ -1,4 +1,4 @@
-import { checkRange, type RuntimeValue } from "./types";
+import { checkRange, type RuntimeValue } from "./runtime/types";
 
 // Re-export AST types and functions from the ast module
 export * from "./ast";

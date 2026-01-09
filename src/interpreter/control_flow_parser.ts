@@ -2,8 +2,8 @@
  * Unified control flow statement parser.
  * Handles if/while/for statement parsing with consistent patterns.
  */
-import { findMatchingParen } from "../interpret_helpers";
-import { ErrorCode, throwError } from "../errors";
+import { findMatchingParen } from "../interpreter_helpers";
+import { ErrorCode, throwError } from "../runtime/errors";
 
 export interface ControlFlowConfig {
   type: "if" | "while" | "for";

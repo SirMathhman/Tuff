@@ -1,18 +1,18 @@
-import { applyBinaryOp } from "./eval/operators";
+import { applyBinaryOp } from "./evaluator/operators";
 import {
   handleIfExpression,
   handleMatchExpression,
   handleFnExpression,
-} from "./eval/control_flow";
+} from "./evaluator/control_flow";
 import {
   mustGetEnvBinding,
   setEvaluateReturningOperand,
-} from "./eval/functions";
+} from "./evaluator/functions";
 import {
   tokenizeExpression,
   splitTokensToOperandsAndOps,
-} from "./eval/tokenizer";
-import { Env } from "./env";
+} from "./evaluator/expression_tokenizer";
+import { Env } from "./runtime/env";
 import {
   resolveAddressOf,
   resolveDereference,
@@ -22,12 +22,12 @@ import {
   resolveIdentifier,
   isNotResolved,
   type OperandResolutionContext,
-} from "./eval/operand_resolvers";
+} from "./evaluator/operand_resolvers";
 import {
   evaluateCall,
   type CallEvaluationContext,
-} from "./eval/call_evaluator";
-import { processOperators as processOperatorsImported } from "./eval/process_operators";
+} from "./evaluator/call_evaluator";
+import { processOperators as processOperatorsImported } from "./evaluator/process_operators";
 
 import {
   isPlainObject,
@@ -39,10 +39,10 @@ import {
   hasUninitialized,
   throwUseOfUninitialized,
   type RuntimeValue,
-} from "./types";
+} from "./runtime/types";
 
 // Re-export from operators module for backward compatibility
-export { isTruthy, applyBinaryOp } from "./eval/operators";
+export { isTruthy, applyBinaryOp } from "./evaluator/operators";
 
 const NOT_HANDLED = Symbol("NOT_HANDLED");
 

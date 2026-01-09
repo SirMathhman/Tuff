@@ -1,6 +1,6 @@
-import { Env } from "../env";
-import { evaluateReturningOperand } from "../eval";
-import type { RuntimeValue } from "../types";
+import { Env } from "../runtime/env";
+import { evaluateReturningOperand } from "../evaluator";
+import type { RuntimeValue } from "../runtime/types";
 import {
   handleThisFieldAssignment,
   handleIndexAssignment,

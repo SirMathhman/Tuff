@@ -5,12 +5,12 @@
  * This allows inputs with type suffixes like `100U8` to be parsed as 100.
  */
 import { splitTopLevelStatements, stripAndValidateComments } from "./parser";
-import { evaluateFlatExpression } from "./eval";
-import { interpretBlock, interpretBlockInPlace } from "./interpret/statements";
-import { interpretExpression } from "./interpret/expressions";
-import { hasYield } from "./types";
+import { evaluateFlatExpression } from "./evaluator";
+import { interpretBlock, interpretBlockInPlace } from "./interpreter/statements";
+import { interpretExpression } from "./interpreter/expressions";
+import { hasYield } from "./runtime/types";
 
-import { ensureMapEnv, Env } from "./env";
+import { ensureMapEnv, Env } from "./runtime/env";
 
 export function interpret(input: string, env: Env = {}): number {
   // Normalize env to Map so downstream code can assume a Map-based env when needed

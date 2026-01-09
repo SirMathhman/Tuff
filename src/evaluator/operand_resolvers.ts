@@ -22,8 +22,8 @@ import {
   isArrayInstance,
   type RuntimeValue,
   type Pointer,
-} from "../types";
-import { Env, envHas, envGet } from "../env";
+} from "../runtime/types";
+import { Env, envHas, envGet } from "../runtime/env";
 import { buildThisBindingFromEnv } from "./pure_helpers";
 
 interface BindingTarget {

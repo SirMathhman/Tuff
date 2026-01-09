@@ -1,10 +1,10 @@
-import { applyBinaryOp } from "../eval";
+import { applyBinaryOp } from "../evaluator";
 import {
   validateAnnotation,
   cloneArrayInstance,
   parseSliceAnnotation,
-} from "../interpret_helpers";
-import { Env, envSet } from "../env";
+} from "../interpreter_helpers";
+import { Env, envSet } from "../runtime/env";
 import {
   isPlainObject,
   hasValue,
@@ -17,7 +17,7 @@ import {
   setValue,
   setUninitialized,
   type RuntimeValue,
-} from "../types";
+} from "../runtime/types";
 
 function validatePlaceholderBeforeAssignment(
   existingObj: RuntimeValue,

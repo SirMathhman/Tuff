@@ -3,8 +3,8 @@ import {
   findMatchingClosingParen,
   parseCommaSeparatedArgs,
 } from "../parser";
-import { findMatchingParen } from "../interpret_helpers";
-import type { RuntimeValue } from "../types";
+import { findMatchingParen } from "../interpreter_helpers";
+import type { RuntimeValue } from "../runtime/types";
 
 interface ExprToken {
   op?: string;

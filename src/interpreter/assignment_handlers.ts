@@ -1,7 +1,7 @@
 /**
  * Assignment statement handlers - extracted from statements.ts
  */
-import { Env, envGet, envSet, envHas } from "../env";
+import { Env, envGet, envSet, envHas } from "../runtime/env";
 import {
   isPlainObject,
   isPointer,
@@ -15,8 +15,8 @@ import {
   unwrapBindingValue,
   throwUseOfUninitialized,
   type RuntimeValue,
-} from "../types";
-import { parseArrayAnnotation, validateAnnotation } from "../interpret_helpers";
+} from "../runtime/types";
+import { parseArrayAnnotation, validateAnnotation } from "../interpreter_helpers";
 import {
   computeAssignmentValue,
   assignToPlaceholder,

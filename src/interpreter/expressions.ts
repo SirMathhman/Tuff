@@ -3,11 +3,11 @@ import {
   parseOperand,
   convertOperandToNumber,
   getLastTopLevelStatement,
-} from "../interpret_helpers";
+} from "../interpreter_helpers";
 import { splitTopLevelStatements } from "../parser";
-import { evaluateFlatExpression } from "../eval";
-import { Env, envHas, envGet } from "../env";
-import type { InterpretFn } from "../types";
+import { evaluateFlatExpression } from "../evaluator";
+import { Env, envHas, envGet } from "../runtime/env";
+import type { InterpretFn } from "../runtime/types";
 
 function expandGroupedExpressions(
   s: string,

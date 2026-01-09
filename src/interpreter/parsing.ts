@@ -1,6 +1,6 @@
 import { parseOperandAt } from "../parser";
-import { Env } from "../env";
-import type { InterpretFn, RuntimeValue } from "../types";
+import { Env } from "../runtime/env";
+import type { InterpretFn, RuntimeValue } from "../runtime/types";
 import { type AssignmentParts } from "./assignment_handlers";
 import { extractAssignmentParts as extractAssignmentPartsNew } from "./assignment_parser";
 

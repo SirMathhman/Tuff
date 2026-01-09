@@ -1,4 +1,4 @@
-import { Env, envGet } from "../env";
+import { Env, envGet } from "../runtime/env";
 import {
   getFieldValueFromInstance,
   getArrayElementFromInstance,
@@ -23,8 +23,8 @@ import {
   isFnWrapper,
   RuntimeValue,
   IntOperand,
-} from "../types";
-import { convertOperandToNumber } from "../interpret_helpers";
+} from "../runtime/types";
+import { convertOperandToNumber } from "../interpreter_helpers";
 
 interface BindingTarget {
   binding: RuntimeValue;

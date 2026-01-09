@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { interpret } from "../src/interpret";
+import { interpret } from "../src/interpreter";
 
 describe("arrays and indexing", () => {
   it("supports array literals and indexing ('let x = [1,2,3]; x[0]' => 1)", () => {

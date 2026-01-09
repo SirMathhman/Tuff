@@ -281,11 +281,15 @@ describe("astToString", () => {
   });
 
   it("converts mutable let", () => {
-    expect(astStmtToString(parseProgram("let mut y = 5")[0])).toBe("let mut y = 5");
+    expect(astStmtToString(parseProgram("let mut y = 5")[0])).toBe(
+      "let mut y = 5"
+    );
   });
 
   it("converts let with annotation", () => {
-    expect(astStmtToString(parseProgram("let z: U8 = 3")[0])).toBe("let z: U8 = 3");
+    expect(astStmtToString(parseProgram("let z: U8 = 3")[0])).toBe(
+      "let z: U8 = 3"
+    );
   });
 
   it("converts binary expression", () => {

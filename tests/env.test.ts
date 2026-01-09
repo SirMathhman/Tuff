@@ -5,7 +5,7 @@ import {
   envToThisObject,
   envGet,
   envSet,
-} from "../src/env";
+} from "../src/runtime/env";
 
 describe("env helpers", () => {
   it("ensureMapEnv converts plain object to Map and preserves keys", () => {

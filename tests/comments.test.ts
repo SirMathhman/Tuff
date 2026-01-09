@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { interpret } from "../src/interpret";
+import { interpret } from "../src/interpreter";
 import { stripAndValidateComments } from "../src/parser";
-import { interpretAllWithNative } from "../src/interpret_helpers";
+import { interpretAllWithNative } from "../src/interpreter_helpers";
 
 describe("comments", () => {
   it("line comment trimmed", () => {

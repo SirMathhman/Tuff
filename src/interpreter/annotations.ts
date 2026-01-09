@@ -9,7 +9,7 @@ import {
   hasPtrIsBool,
   checkRange,
   type RuntimeValue,
-} from "../types";
+} from "../runtime/types";
 
 export function checkAnnMatchesRhs(
   ann: RuntimeValue,

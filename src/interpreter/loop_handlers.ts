@@ -6,9 +6,9 @@ import {
   evaluateReturningOperand,
   evaluateFlatExpression,
   isTruthy,
-} from "../eval";
-import { Env, envHas, envGet, envSet, envDelete } from "../env";
-import type { InterpretFn } from "../types";
+} from "../evaluator";
+import { Env, envHas, envGet, envSet, envDelete } from "../runtime/env";
+import type { InterpretFn } from "../runtime/types";
 import { parseControlFlowHeader } from "./control_flow_parser";
 
 /**

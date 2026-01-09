@@ -5,9 +5,9 @@ export {
   parseArrayAnnotation,
   parseSliceAnnotation,
   validateAnnotation,
-} from "./interpret/annotations";
+} from "./interpreter/annotations";
 
-export { cloneArrayInstance, makeArrayInstance } from "./interpret/arrays";
+export { cloneArrayInstance, makeArrayInstance } from "./interpreter/arrays";
 
 export {
   findMatchingParen,
@@ -16,7 +16,7 @@ export {
   parseExpressionTokens,
   parseFnComponents,
   parseStructDef,
-} from "./interpret/parsing";
+} from "./interpreter/parsing";
 
 export {
   getLastTopLevelStatement,
@@ -25,7 +25,7 @@ export {
   convertOperandToNumber,
   interpretAll,
   interpretAllWithNative,
-} from "./interpret/core";
+} from "./interpreter/core";
 
 // Re-export parseOperand from parser for backward compatibility
 export { parseOperand } from "./parser";

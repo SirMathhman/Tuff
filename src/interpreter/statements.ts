@@ -1,5 +1,5 @@
 import { splitTopLevelStatements } from "../parser";
-import { evaluateReturningOperand } from "../eval";
+import { evaluateReturningOperand } from "../evaluator";
 import {
   getLastTopLevelStatement,
   evaluateRhs,
@@ -8,7 +8,7 @@ import {
   registerFunctionFromStmt,
   parseStructDef,
   parseFnComponents,
-} from "../interpret_helpers";
+} from "../interpreter_helpers";
 import { handleWhileStatement, handleForStatement } from "./loop_handlers";
 import { handleIfStatement } from "./if_handlers";
 import {
@@ -18,9 +18,9 @@ import {
 } from "./extern_handlers";
 import { handleLetStatement } from "./let_handlers";
 import { handleAssignmentStatement } from "./assignment_statement";
-import { Env, envClone, envGet, envSet } from "../env";
-import type { InterpretFn, RuntimeValue } from "../types";
-import { isPlainObject, toErrorMessage } from "../types";
+import { Env, envClone, envGet, envSet } from "../runtime/env";
+import type { InterpretFn, RuntimeValue } from "../runtime/types";
+import { isPlainObject, toErrorMessage } from "../runtime/types";
 
 interface BlockCallbacks {
   interpret: InterpretFn;

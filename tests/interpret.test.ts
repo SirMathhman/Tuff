@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { interpret } from "../src/interpret";
-import { evaluateReturningOperand } from "../src/eval";
-import { interpretAll, interpretAllWithNative } from "../src/interpret_helpers";
-import type { Env } from "../src/env";
-import { isStructInstance, isThisBinding } from "../src/types";
+import { interpret } from "../src/interpreter";
+import { evaluateReturningOperand } from "../src/evaluator";
+import { interpretAll, interpretAllWithNative } from "../src/interpreter_helpers";
+import type { Env } from "../src/runtime/env";
+import { isStructInstance, isThisBinding } from "../src/runtime/types";
 
 describe("interpret (basic behavior)", () => {
   it("returns a number for any input", () => {

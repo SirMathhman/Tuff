@@ -14,9 +14,9 @@ import {
   getProp,
   isArrayInstance,
   type RuntimeValue,
-} from "../types";
-import { Env, envClone, envSet, isEnv } from "../env";
-import { validateAnnotation } from "../interpret_helpers";
+} from "../runtime/types";
+import { Env, envClone, envSet, isEnv } from "../runtime/env";
+import { validateAnnotation } from "../interpreter_helpers";
 import { createArrayInstanceFromElements } from "./pure_helpers";
 import {
   resolveFunctionFromOperand,

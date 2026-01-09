@@ -1,10 +1,10 @@
 /**
  * Handlers for if statements extracted from interpretBlockInternal.
  */
-import { evaluateReturningOperand, isTruthy } from "../eval";
+import { evaluateReturningOperand, isTruthy } from "../evaluator";
 import { runBody } from "./loop_handlers";
-import { Env } from "../env";
-import type { InterpretFn } from "../types";
+import { Env } from "../runtime/env";
+import type { InterpretFn } from "../runtime/types";
 import { parseControlFlowHeader } from "./control_flow_parser";
 
 export function handleIfStatement(

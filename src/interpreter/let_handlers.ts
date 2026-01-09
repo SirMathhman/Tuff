@@ -1,4 +1,4 @@
-import { Env, envGet, envSet, envHas } from "../env";
+import { Env, envGet, envSet, envHas } from "../runtime/env";
 import {
   parseArrayAnnotation,
   parseSliceAnnotation,
@@ -6,15 +6,15 @@ import {
   makeArrayInstance,
   parseOperand,
   findMatchingParen,
-} from "../interpret_helpers";
+} from "../interpreter_helpers";
 import {
   isPlainObject,
   isIntOperand,
   isArrayInstance,
   getProp,
   type RuntimeValue,
-} from "../types";
-import { validateAnnotation } from "../interpret_helpers";
+} from "../runtime/types";
+import { validateAnnotation } from "../interpreter_helpers";
 
 export interface LetContext {
   localEnv: Env;
