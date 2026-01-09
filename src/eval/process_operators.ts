@@ -16,6 +16,7 @@ import {
   isArrayInstance,
   isFnWrapper,
   RuntimeValue,
+  IntOperand,
 } from "../types";
 import { convertOperandToNumber } from "../interpret_helpers";
 
@@ -27,10 +28,6 @@ interface BindingTarget {
 interface OperandIndexResult {
   index: number;
   isLeft: boolean;
-}
-
-interface BigIntValue {
-  valueBig: bigint;
 }
 
 interface FieldAccess {
@@ -63,15 +60,15 @@ function replaceWithBigIntNumber(
   n: number,
   i: number
 ) {
-  const val: BigIntValue = { valueBig: BigInt(n) };
+  const val: IntOperand = { type: "int-operand", valueBig: BigInt(n) };
   ctx.operands.splice(i, 2, val);
   ctx.ops.splice(i, 1);
 }
 
 function findNearbyOperandIndex(
-  operands: unknown[],
+  operands: RuntimeValue[],
   i: number,
-  predicate: (v: unknown) => boolean
+  predicate: (v: RuntimeValue) => boolean
 ): OperandIndexResult | undefined {
   for (let j = i - 1; j >= 0; j--) {
     if (operands[j] !== undefined) {
@@ -113,7 +110,7 @@ function tryResolveMissingIndex(
 
 function getArrayTargetFromPointer(
   ctx: ProcessOperatorsCtx,
-  ptrObj: unknown,
+  ptrObj: RuntimeValue,
   kind: "index" | "field"
 ) {
   const ptrName = getProp(ptrObj, "ptrName");
@@ -252,7 +249,7 @@ function handleDotOnArrayLike(
   i: number,
   fieldAccess: MethodAccess
 ): boolean {
-  let arrLike: unknown | undefined = undefined;
+  let arrLike: RuntimeValue | undefined = undefined;
   if (
     isPlainObject(fieldAccess.receiver) &&
     isPointer(fieldAccess.receiver) &&
@@ -298,7 +295,7 @@ function handleStructOrThisField(
 function tryInvokeMethodWrapper(
   ctx: ProcessOperatorsCtx,
   i: number,
-  wrapper: unknown
+  wrapper: RuntimeValue
 ): boolean {
   const nextOpnd = ctx.operands[i + 1];
   if (isPlainObject(nextOpnd) && hasCallApp(nextOpnd)) {
@@ -319,7 +316,7 @@ function tryInvokeMethodWrapper(
   return false;
 }
 
-function markWrapperAutoCall(wrapper: unknown) {
+function markWrapperAutoCall(wrapper: RuntimeValue) {
   if (!isPlainObject(wrapper)) return;
   const fnObj = getProp(wrapper, "fn");
   if (isPlainObject(fnObj)) Reflect.set(fnObj, "__autoCall", true);
@@ -395,7 +392,7 @@ function tryAutoInvokeFirstWrapper(ctx: ProcessOperatorsCtx) {
 }
 
 export function processOperators(
-  operands: unknown[],
+  operands: RuntimeValue[],
   ops: string[],
   context: ProcessOperatorsContext
 ) {

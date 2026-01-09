@@ -32,9 +32,9 @@ export interface CallEvaluationContext {
 }
 
 function evaluateCallArgs(
-  callAppOperand: unknown,
+  callAppOperand: RuntimeValue,
   ctx: CallEvaluationContext
-): unknown[] {
+): RuntimeValue[] {
   if (!isPlainObject(callAppOperand)) throw new Error("invalid call");
   if (!hasCallApp(callAppOperand)) throw new Error("invalid call");
   const callArgsRaw = callAppOperand.callApp;
@@ -47,8 +47,8 @@ function evaluateCallArgs(
 }
 
 function assignParamsToCallEnv(
-  params: unknown[],
-  args: unknown[],
+  params: RuntimeValue[],
+  args: RuntimeValue[],
   callEnv: Env
 ) {
   for (let j = 0; j < params.length; j++) {
@@ -65,7 +65,11 @@ function assignParamsToCallEnv(
   }
 }
 
-function createCallEnv(fn: unknown, fnParams: unknown[], args: unknown[]): Env {
+function createCallEnv(
+  fn: RuntimeValue,
+  fnParams: RuntimeValue[],
+  args: RuntimeValue[]
+): Env {
   if (!isPlainObject(fn) || !hasClosureEnv(fn) || !fn.closureEnv)
     throw new Error("internal error: missing closure env");
   const fnClosureEnv = fn.closureEnv;
@@ -81,7 +85,7 @@ function createCallEnv(fn: unknown, fnParams: unknown[], args: unknown[]): Env {
   return callEnv;
 }
 
-function convertNativeArg(a: unknown): RuntimeValue {
+function convertNativeArg(a: RuntimeValue): RuntimeValue {
   if (isIntOperand(a)) return Number(a.valueBig);
   if (isFloatOperand(a)) return a.floatValue;
   if (isBoolOperand(a)) return a.boolValue;
@@ -89,7 +93,11 @@ function convertNativeArg(a: unknown): RuntimeValue {
   return a;
 }
 
-function callNativeImpl(nativeFn: Function, fn: unknown, args: unknown[]) {
+function callNativeImpl(
+  nativeFn: Function,
+  fn: RuntimeValue,
+  args: RuntimeValue[]
+) {
   const boundThisNative = isPlainObject(fn)
     ? getProp(fn, "boundThis")
     : undefined;
@@ -100,6 +108,7 @@ function callNativeImpl(nativeFn: Function, fn: unknown, args: unknown[]) {
   if (Array.isArray(res)) {
     const elems = res.map((e) => (typeof e === "number" ? e : e));
     return {
+      type: "array-instance",
       isArray: true,
       elements: elems,
       length: elems.length,
@@ -113,8 +122,8 @@ function callNativeImpl(nativeFn: Function, fn: unknown, args: unknown[]) {
  * Evaluate a function call and return its result
  */
 export function evaluateCall(
-  funcOperand: unknown,
-  callAppOperand: unknown,
+  funcOperand: RuntimeValue,
+  callAppOperand: RuntimeValue,
   ctx: CallEvaluationContext
 ): RuntimeValue {
   const argOps = evaluateCallArgs(callAppOperand, ctx);

@@ -7,6 +7,7 @@ import {
   isFnWrapper,
   getProp,
   type RuntimeValue,
+  type FnWrapper,
 } from "../types";
 
 function parseExternFnSignature(stmt: string) {
@@ -64,7 +65,8 @@ function tryMergeExternSignature(ctx: MergeExternContext): boolean {
   };
   if (typeof existingNative === "function") newFn.nativeImpl = existingNative;
 
-  envSet(localEnv, name, { fn: newFn });
+  const wrapper: FnWrapper = { type: "fn-wrapper", fn: newFn };
+  envSet(localEnv, name, wrapper);
   return true;
 }
 

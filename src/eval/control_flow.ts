@@ -10,20 +10,11 @@ import {
   isFloatOperand,
   isIntOperand,
   type RuntimeValue,
+  type FnWrapper,
+  type PlainObject,
+  type IntOperand,
 } from "../types";
 import { applyBinaryOp } from "./operators";
-
-interface FunctionObject {
-  params: RuntimeValue;
-  body: string;
-  isBlock: boolean;
-  resultAnnotation: string | undefined;
-  closureEnv: Env | undefined;
-}
-
-interface FunctionWrapper {
-  fn: FunctionObject;
-}
 
 // Type for the evaluateReturningOperand function to avoid circular imports
 type EvaluateFn = (exprStr: string, localEnv: Env) => RuntimeValue;
@@ -76,7 +67,7 @@ function extractMatchParts(sTrim: string, targetExpr: string, rest: string) {
 /**
  * Check if a condition value is truthy
  */
-function isCondTruthy(condVal: unknown): boolean {
+function isCondTruthy(condVal: RuntimeValue): boolean {
   if (isBoolOperand(condVal)) return condVal.boolValue;
   if (isIntOperand(condVal)) return condVal.valueBig !== 0n;
   if (typeof condVal === "number") return condVal !== 0;
@@ -169,26 +160,24 @@ export function handleMatchExpression(
   if (defaultBody !== undefined) {
     return evaluate(defaultBody, localEnv);
   }
-  return { valueBig: 0n };
+  const zero: IntOperand = { type: "int-operand", valueBig: 0n };
+  return zero;
 }
 
 /**
  * Handle inline function expressions: fn name(...) => ... or fn name(...) { ... }
  */
-export function handleFnExpression(
-  sTrim: string,
-  localEnv: Env
-): FunctionWrapper {
+export function handleFnExpression(sTrim: string, localEnv: Env): FnWrapper {
   const parsed = parseFnComponents(sTrim);
   const { name, params, body, isBlock, resultAnnotation } = parsed;
-  const fnObj: FunctionObject = {
+  const fnObj: PlainObject = {
     params,
     body,
     isBlock,
     resultAnnotation,
     closureEnv: undefined,
   };
-  const wrapper: FunctionWrapper = { fn: fnObj };
+  const wrapper: FnWrapper = { type: "fn-wrapper", fn: fnObj };
   fnObj.closureEnv = envClone(localEnv);
   // expose named binding inside closure for recursion
   envSet(fnObj.closureEnv, name, wrapper);

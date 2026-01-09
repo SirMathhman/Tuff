@@ -1,13 +1,13 @@
 import type { RuntimeValue } from "./types";
 
 export interface PlainEnv {
-  [k: string]: unknown;
+  [k: string]: RuntimeValue;
 }
 
-export type Env = Map<string, unknown> | PlainEnv;
+export type Env = Map<string, RuntimeValue> | PlainEnv;
 
 // Type guard to check if a value is an Env (Map or plain object)
-export function isEnv(v: unknown): v is Env {
+export function isEnv(v: RuntimeValue): v is Env {
   if (v instanceof Map) return true;
   if (typeof v !== "object" || v === undefined) return false;
   // This is an object; it qualifies as an Env by our type definition
@@ -35,8 +35,8 @@ function commonGetPrefix(
 
 // Specialized handler factories to reduce duplication between Map-backed and
 // object-backed proxy implementations without introducing `any` or casts.
-function makeSetHandler(setFn: (k: string, v: unknown) => void) {
-  return function (_: object, prop: string | symbol, value: unknown) {
+function makeSetHandler(setFn: (k: string, v: RuntimeValue) => void) {
+  return function (_: object, prop: string | symbol, value: RuntimeValue) {
     if (typeof prop === "symbol") return Reflect.set(_, prop, value);
     setFn(String(prop), value);
     return true;
@@ -67,7 +67,7 @@ function makeHasHandlerForObj(obj: PlainEnv) {
 }
 
 // Helper to set value on object with string key using Reflect API
-function setStringProp(obj: object, key: string, value: unknown): void {
+function setStringProp(obj: object, key: string, value: RuntimeValue): void {
   Reflect.set(obj, key, value);
 }
 
@@ -81,7 +81,7 @@ function deleteStringProp(obj: object, key: string): void {
   Reflect.deleteProperty(obj, key);
 }
 
-function makeProxyFromMap(m: Map<string, unknown>) {
+function makeProxyFromMap(m: Map<string, RuntimeValue>) {
   const proxyTarget = {};
   return new Proxy(proxyTarget, {
     get(_, prop: string | symbol) {
@@ -93,7 +93,7 @@ function makeProxyFromMap(m: Map<string, unknown>) {
         const mapMethod = getStringProp(m, prop);
         if (typeof mapMethod === "function") {
           // Use Reflect.apply via a wrapper to bind to the map
-          return (...args: unknown[]) => Reflect.apply(mapMethod, m, args);
+          return (...args: RuntimeValue[]) => Reflect.apply(mapMethod, m, args);
         }
       }
       return undefined;
@@ -128,7 +128,7 @@ function makeProxyFromObject(obj: PlainEnv) {
         if (Object.prototype.hasOwnProperty.call(obj, prop)) return obj[prop];
         // provide Map-like helpers bound to object semantics
         if (prop === "get") return (k: string) => obj[k];
-        if (prop === "set") return (k: string, v: unknown) => (obj[k] = v);
+        if (prop === "set") return (k: string, v: RuntimeValue) => (obj[k] = v);
         if (prop === "has")
           return (k: string) => Object.prototype.hasOwnProperty.call(obj, k);
         if (prop === "entries")
@@ -160,7 +160,9 @@ function isMapProxy(e: Env): boolean {
   return "__isMapProxy" in e && e.__isMapProxy === true;
 }
 
-export function ensureMapEnv(input?: PlainEnv | Map<string, unknown>): Env {
+export function ensureMapEnv(
+  input?: PlainEnv | Map<string, RuntimeValue>
+): Env {
   if (!input) return makeProxyFromObject({});
   if (input instanceof Map) return makeProxyFromMap(new Map(input));
   // given a plain object, wrap it so mutations reflect back onto it
@@ -171,7 +173,7 @@ export function envClone(e: Env): Env {
   // Clone via iteration to support both map-backed and object-backed proxies.
   const mapFlag = isMapProxy(e);
   if (mapFlag) {
-    const m = new Map<string, unknown>();
+    const m = new Map<string, RuntimeValue>();
     for (const [k, v] of envEntries(e)) m.set(k, v);
     return makeProxyFromMap(m);
   }
@@ -197,7 +199,7 @@ export function envGet(e: Env, k: string): RuntimeValue {
   return getStringProp(e, k);
 }
 
-export function envSet(e: Env, k: string, v: unknown): void {
+export function envSet(e: Env, k: string, v: RuntimeValue): void {
   if (isMapProxy(e)) {
     const setMethod = getStringProp(e, "set");
     if (typeof setMethod === "function") {
@@ -219,16 +221,16 @@ export function envDelete(e: Env, k: string): void {
   deleteStringProp(e, k);
 }
 
-export function envEntries(e: Env): IterableIterator<[string, unknown]> {
+export function envEntries(e: Env): IterableIterator<[string, RuntimeValue]> {
   if (isMapProxy(e)) {
     const entriesMethod = getStringProp(e, "entries");
     if (typeof entriesMethod === "function") return entriesMethod();
   }
   // Return a generator that iterates over Object.entries to satisfy the
-  // IterableIterator<[string, unknown]> return type without type assertions.
+  // IterableIterator<[string, RuntimeValue]> return type without type assertions.
   return (function* () {
     for (const entry of Object.entries(e)) {
-      yield entry;
+      yield entry as [string, RuntimeValue]; // eslint-disable-line no-restricted-syntax
     }
   })();
 }

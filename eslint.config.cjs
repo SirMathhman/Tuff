@@ -3,6 +3,7 @@ const tsPlugin = require("@typescript-eslint/eslint-plugin");
 const tsParser = require("@typescript-eslint/parser");
 const maxInterfaceFields = require("./eslint-rules/max-interface-fields");
 const noUnknownReturn = require("./eslint-rules/no-unknown-return");
+const noUnknownParam = require("./eslint-rules/no-unknown-param");
 
 module.exports = [
   {
@@ -17,6 +18,7 @@ module.exports = [
         rules: {
           "max-interface-fields": maxInterfaceFields,
           "no-unknown-return": noUnknownReturn,
+          "no-unknown-param": noUnknownParam,
         },
       },
     },
@@ -86,6 +88,8 @@ module.exports = [
       "custom/max-interface-fields": ["error", { max: 5 }],
       // Custom rule: Ban 'unknown' in function return types
       "custom/no-unknown-return": "error",
+      // Custom rule: Ban 'unknown' in function parameter types
+      "custom/no-unknown-param": "error",
     },
   },
   {

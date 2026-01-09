@@ -24,7 +24,7 @@ import { isPlainObject, toErrorMessage } from "../types";
 
 interface BlockCallbacks {
   interpret: InterpretFn;
-  evaluateRhsLocal: (rhs: string, envLocal: Env) => unknown;
+  evaluateRhsLocal: (rhs: string, envLocal: Env) => RuntimeValue;
   getLastTopLevelStatementLocal: (s: string) => string | undefined;
 }
 
@@ -68,6 +68,7 @@ function handleStructDefinition(ctx: BlockCtx, stmt: string) {
     throw new Error("duplicate declaration");
   ctx.declared.add(structDef.name);
   envSet(ctx.localEnv, structDef.name, {
+    type: "struct-def",
     isStructDef: true,
     name: structDef.name,
     fields: structDef.fields,
@@ -192,7 +193,7 @@ function interpretBlockInternal(ctx: InterpretBlockContext): number {
   // on the provided env (used for top-level sequences and function call envs).
   const localEnv: Env = inPlace ? env : envClone(env);
   const declared = new Set<string>();
-  let last: unknown = undefined;
+  let last: RuntimeValue = undefined;
 
   const getLastTopLevelStatementLocal = (str: string) =>
     getLastTopLevelStatement(str, splitTopLevelStatements);
@@ -253,7 +254,7 @@ interface EvalBracedBlockContext {
   starting: string;
   localEnv: Env;
   interpret: InterpretFn;
-  evaluateReturningOperandFn: (expr: string, localEnv: Env) => unknown;
+  evaluateReturningOperandFn: (expr: string, localEnv: Env) => RuntimeValue;
 }
 
 /**
@@ -266,7 +267,7 @@ function evalBracedBlockAndTrailingExpression(
 ): RuntimeValue {
   const { starting, localEnv, interpret, evaluateReturningOperandFn } = ctx;
   let remaining = starting;
-  let last: unknown = undefined;
+  let last: RuntimeValue = undefined;
 
   while (true) {
     if (/^\s*$/.test(remaining)) {

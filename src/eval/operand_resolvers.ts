@@ -21,6 +21,8 @@ import {
   getProp,
   isArrayInstance,
   type RuntimeValue,
+  type ThisBinding,
+  type Pointer,
 } from "../types";
 import { Env, envHas, envGet, envEntries } from "../env";
 
@@ -30,21 +32,14 @@ interface BindingTarget {
 }
 
 interface FieldValuesMap {
-  [k: string]: unknown;
-}
-
-interface ThisBinding {
-  isThisBinding: true;
-  fieldValues: FieldValuesMap;
+  [k: string]: RuntimeValue;
 }
 
 interface FieldValues {
   fieldValues: FieldValuesMap;
   providedFields: Set<string>;
 }
-interface PointerObject {
-  [k: string]: unknown;
-}
+
 /**
  * Context for resolving operands - provides access to the environment
  * and the recursive evaluator
@@ -59,9 +54,9 @@ export interface OperandResolutionContext {
  * Resolve an address-of operand to a pointer object
  */
 export function resolveAddressOf(
-  op: unknown,
+  op: RuntimeValue,
   ctx: OperandResolutionContext
-): PointerObject | undefined {
+): Pointer | undefined {
   if (!isPlainObject(op) || !hasAddrOf(op)) return undefined;
 
   const inner = op.addrOf;
@@ -71,7 +66,7 @@ export function resolveAddressOf(
   if (typeof n !== "string") throw new Error("& must be applied to identifier");
 
   const { binding: targetBinding, targetVal } = ctx.getBindingTarget(n);
-  const ptrObj: PointerObject = { ptrName: n, pointer: true };
+  const ptrObj: Pointer = { type: "pointer", ptrName: n, pointer: true };
 
   attachArraySliceInfo(ptrObj, targetBinding, targetVal);
   attachValueInfo(ptrObj, targetVal);
@@ -80,9 +75,9 @@ export function resolveAddressOf(
 }
 
 function attachArraySliceInfo(
-  ptrObj: PointerObject,
-  targetBinding: unknown,
-  targetVal: unknown
+  ptrObj: Pointer,
+  targetBinding: RuntimeValue,
+  targetVal: RuntimeValue
 ) {
   if (!isArrayInstance(targetVal)) return;
   ptrObj.ptrIsSlice = true;
@@ -92,7 +87,7 @@ function attachArraySliceInfo(
       : false;
 }
 
-function attachValueInfo(ptrObj: PointerObject, targetVal: unknown) {
+function attachValueInfo(ptrObj: Pointer, targetVal: RuntimeValue) {
   if (isPlainObject(targetVal) && hasKindBits(targetVal)) {
     ptrObj.kind = targetVal.kind;
     ptrObj.bits = targetVal.bits;
@@ -124,7 +119,7 @@ function attachValueInfo(ptrObj: PointerObject, targetVal: unknown) {
  * Resolve a dereference operand to the value pointed to
  */
 export function resolveDereference(
-  op: unknown,
+  op: RuntimeValue,
   ctx: OperandResolutionContext
 ): RuntimeValue {
   if (!isPlainObject(op) || !hasDeref(op)) return undefined;
@@ -158,7 +153,7 @@ export function resolveDereference(
  * Resolve a struct instantiation operand
  */
 export function resolveStructInstantiation(
-  op: unknown,
+  op: RuntimeValue,
   ctx: OperandResolutionContext
 ): RuntimeValue {
   if (!isPlainObject(op) || !hasStructInstantiation(op)) return undefined;
@@ -187,6 +182,7 @@ export function resolveStructInstantiation(
 
   // Create struct instance
   return {
+    type: "struct-instance",
     isStructInstance: true,
     structName,
     fieldValues,
@@ -194,7 +190,7 @@ export function resolveStructInstantiation(
 }
 
 function evaluateStructFieldValues(
-  fieldParts: unknown[],
+  fieldParts: RuntimeValue[],
   ctx: OperandResolutionContext
 ): FieldValues {
   const fieldValues: FieldValuesMap = {};
@@ -223,7 +219,7 @@ function evaluateStructFieldValues(
 }
 
 function validateStructFields(
-  def: unknown,
+  def: RuntimeValue,
   provided: Set<string>,
   structName: string
 ) {
@@ -254,19 +250,20 @@ function validateStructFields(
  * Resolve an array literal operand to an array instance
  */
 export function resolveArrayLiteral(
-  op: unknown,
+  op: RuntimeValue,
   ctx: OperandResolutionContext
 ): RuntimeValue {
   if (!isPlainObject(op) || !("arrayLiteral" in op)) return undefined;
 
   const arrLit = getProp(op, "arrayLiteral");
   if (!Array.isArray(arrLit)) throw new Error("invalid array literal");
-  const elems: unknown[] = arrLit.map((part) => {
+  const elems: RuntimeValue[] = arrLit.map((part) => {
     if (typeof part !== "string")
       throw new Error("invalid array literal element");
     return ctx.evaluateExpr(part, ctx.localEnv);
   });
   return {
+    type: "array-instance",
     isArray: true,
     elements: elems,
     length: elems.length,
@@ -278,7 +275,7 @@ export function resolveArrayLiteral(
  * Resolve a grouped expression operand
  */
 export function resolveGroupedExpr(
-  op: unknown,
+  op: RuntimeValue,
   ctx: OperandResolutionContext
 ): RuntimeValue {
   if (!isPlainObject(op) || !("groupedExpr" in op)) return undefined;
@@ -296,9 +293,9 @@ const NOT_RESOLVED = Symbol("NOT_RESOLVED");
  * Returns NOT_RESOLVED sentinel if the operand is not an identifier
  */
 export function resolveIdentifier(
-  op: unknown,
+  op: RuntimeValue,
   ctx: OperandResolutionContext
-): RuntimeValue {
+): RuntimeValue | typeof NOT_RESOLVED {
   if (!isPlainObject(op) || !hasIdent(op)) return NOT_RESOLVED;
 
   const n = op.ident;
@@ -320,7 +317,11 @@ export function resolveIdentifier(
   }
 
   function buildThisBinding(localEnv: Env): ThisBinding {
-    const thisObj: ThisBinding = { isThisBinding: true, fieldValues: {} };
+    const thisObj: ThisBinding = {
+      type: "this-binding",
+      isThisBinding: true,
+      fieldValues: {},
+    };
     for (const [key, value] of envEntries(localEnv)) {
       if (key === "this") continue;
       if (isPlainObject(value) && hasValue(value) && value.value !== undefined)
@@ -353,6 +354,8 @@ export function resolveIdentifier(
 /**
  * Check if result is the NOT_RESOLVED sentinel
  */
-export function isNotResolved(val: unknown): val is typeof NOT_RESOLVED {
+export function isNotResolved(
+  val: RuntimeValue | typeof NOT_RESOLVED
+): val is typeof NOT_RESOLVED {
   return val === NOT_RESOLVED;
 }

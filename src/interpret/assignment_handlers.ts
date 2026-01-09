@@ -23,6 +23,7 @@ import {
   assignValueToVariable,
   doIndexAssignment,
 } from "./helpers";
+import { makeArrayInstance } from "./arrays";
 
 /** Extracted assignment parts */
 export interface ThisFieldTarget {
@@ -52,7 +53,7 @@ export interface AssignmentParts {
 }
 
 /** Type for RHS evaluation callback functions */
-type EvaluateRhsCallback = (expr: string, e: Env) => unknown;
+type EvaluateRhsCallback = (expr: string, e: Env) => RuntimeValue;
 
 /** Result from requireExistingAndEvalRhs */
 interface RequireExistingResult {
@@ -73,7 +74,7 @@ interface AssignmentContext {
 interface IndexAssignmentCallbacks {
   evaluateReturningOperand: EvaluateRhsCallback;
   evaluateRhsLocal: EvaluateRhsCallback;
-  convertOperandToNumber: (op: unknown) => number;
+  convertOperandToNumber: (op: RuntimeValue) => number;
 }
 
 interface IndexAssignmentRhs {
@@ -136,7 +137,9 @@ interface RegularAssignmentContext {
   localEnv: Env;
 }
 
-function getPointerFromExisting(existing: unknown): unknown | undefined {
+function getPointerFromExisting(
+  existing: RuntimeValue
+): RuntimeValue | undefined {
   if (
     isPlainObject(existing) &&
     hasValue(existing) &&
@@ -165,13 +168,7 @@ function materializePlaceholderArray(
   if (!arrAnn) throw new Error("assignment to non-array variable");
   if (!hasMutable(existingObj) || !existingObj.mutable)
     throw new Error("assignment to immutable variable");
-  const arrInst = {
-    isArray: true,
-    elements: new Array(arrAnn.length),
-    length: arrAnn.length,
-    initializedCount: 0,
-    elemType: arrAnn.elemType,
-  };
+  const arrInst = makeArrayInstance(arrAnn);
   envSet(localEnv, name, {
     mutable: true,
     value: arrInst,
@@ -180,7 +177,7 @@ function materializePlaceholderArray(
   return envGet(localEnv, name);
 }
 
-function extractMutableArrayInstance(existingObj: unknown) {
+function extractMutableArrayInstance(existingObj: RuntimeValue) {
   if (
     !(
       isPlainObject(existingObj) &&
@@ -324,7 +321,7 @@ function handlePointerIndexAssignment(ctx: PointerIndexContext): void {
   persistArrayChange({ ptrName, targetBinding, arrInst, localEnv });
 }
 
-function resolveArrayPointerTarget(maybePtr: unknown, localEnv: Env) {
+function resolveArrayPointerTarget(maybePtr: RuntimeValue, localEnv: Env) {
   if (!isPointer(maybePtr)) throw new Error("internal pointer error");
   const ptrName = maybePtr.ptrName;
   if (typeof ptrName !== "string") throw new Error("invalid pointer target");

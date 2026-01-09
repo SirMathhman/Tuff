@@ -19,8 +19,8 @@ import { validateAnnotation } from "../interpret_helpers";
 export interface LetContext {
   localEnv: Env;
   declared: Set<string>;
-  evaluateRhsLocal: (rhs: string, envLocal: Env) => unknown;
-  evaluateReturningOperand: (expr: string, envLocal: Env) => unknown;
+  evaluateRhsLocal: (rhs: string, envLocal: Env) => RuntimeValue;
+  evaluateReturningOperand: (expr: string, envLocal: Env) => RuntimeValue;
 }
 
 interface LetDeclarationInfo {
@@ -180,7 +180,7 @@ function splitTrailingExprAfterBracedBlock(rhsRaw: string) {
 
 function validateLetAnnotation(
   annotation: string,
-  rhsOperand: unknown,
+  rhsOperand: RuntimeValue,
   localEnv: Env
 ) {
   let resolvedAnn = annotation;

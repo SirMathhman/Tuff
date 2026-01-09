@@ -38,4 +38,13 @@ The codebase is organized into focused modules under 500 lines each:
 - Block expressions (`{ ... }`) are lexically scoped: declarations inside a braced block do not leak outward.
 - Constructor-style functions that return `this` expose any nested `fn` declarations as methods (e.g., `Point(3, 4).manhattan()`).
 - The codebase avoids explicit TypeScript `any` (prefer `unknown` + narrowing/type guards) and avoids `Record<...>` types (prefer `Map`).
-- No ESLint suppressions are used - all files conform to max-lines (500) and no-restricted-syntax rules.
+- No ESLint suppressions are used except for legitimate edge cases (caught exceptions, external API validation, and unavoidably large interfaces).
+
+## Type System
+
+The interpreter uses discriminated unions for type-safe runtime values:
+
+- All runtime value types extend `TypedValue` with a mandatory `type` field
+- Type guards check `v.type === 'type-name'` instead of property existence
+- Interfaces: `BoolOperand`, `IntOperand`, `FloatOperand`, `FnWrapper`, `ThisBinding`, `StructInstance`, `StructDef`, `ArrayInstance`, `Pointer`
+- ESLint rules enforce no `unknown` in function parameters (except for caught exceptions and external input validation) and return types

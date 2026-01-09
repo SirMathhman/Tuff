@@ -22,32 +22,18 @@ import {
   getProp,
   isArrayInstance,
   RuntimeValue,
+  ThisBinding,
+  FnWrapper,
+  PlainObject,
 } from "../types";
-
-interface FieldValuesMap {
-  [k: string]: unknown;
-}
-
-interface ThisBinding {
-  isThisBinding: true;
-  fieldValues: FieldValuesMap;
-}
-
-interface FunctionObject {
-  [k: string]: unknown;
-}
-
-interface FunctionWrapper {
-  fn: FunctionObject;
-}
 
 // Forward declaration - will be set by eval.ts to avoid circular imports
 let evaluateReturningOperandFn:
-  | ((exprStr: string, env: Env) => unknown)
+  | ((exprStr: string, env: Env) => RuntimeValue)
   | undefined;
 
 export function setEvaluateReturningOperand(
-  fn: (exprStr: string, env: Env) => unknown
+  fn: (exprStr: string, env: Env) => RuntimeValue
 ): void {
   evaluateReturningOperandFn = fn;
 }
@@ -58,7 +44,7 @@ export function mustGetEnvBinding(env: Env, name: string): RuntimeValue {
 }
 
 export function resolveFunctionFromOperand(
-  operand: unknown,
+  operand: RuntimeValue,
   localEnv: Env
 ): RuntimeValue {
   if (isFnWrapper(operand)) {
@@ -75,7 +61,7 @@ export function resolveFunctionFromOperand(
 
 // Normalize a bound `this` value for either call environments or JS native
 // argument passing so the same conversion rules are applied in both places.
-export function normalizeBoundThis(val: unknown): RuntimeValue {
+export function normalizeBoundThis(val: RuntimeValue): RuntimeValue {
   let thisVal: RuntimeValue = val;
   if (
     isIntOperand(thisVal) ||
@@ -84,7 +70,7 @@ export function normalizeBoundThis(val: unknown): RuntimeValue {
   )
     thisVal = convertOperandToNumber(thisVal);
   if (isArrayInstance(thisVal)) {
-    return thisVal.elements.map((e: unknown) => {
+    return thisVal.elements.map((e: RuntimeValue) => {
       if (isIntOperand(e)) return Number(e.valueBig);
       if (isFloatOperand(e)) return e.floatValue;
       if (isBoolOperand(e)) return e.boolValue;
@@ -96,18 +82,18 @@ export function normalizeBoundThis(val: unknown): RuntimeValue {
 
 // Create a bound function wrapper from an original fn object and a boundThis
 export function makeBoundWrapperFromOrigFn(
-  origFn: unknown,
-  boundThis: unknown
-): FunctionWrapper {
+  origFn: RuntimeValue,
+  boundThis: RuntimeValue
+): FnWrapper {
   if (!isPlainObject(origFn)) throw new Error("internal error: invalid fn");
-  return { fn: buildBoundFnFromOrig(origFn, boundThis) };
+  return { type: "fn-wrapper", fn: buildBoundFnFromOrig(origFn, boundThis) };
 }
 
 function buildBoundFnFromOrig(
-  origFn: unknown,
-  boundThis: unknown
-): FunctionObject {
-  const boundFn: FunctionObject = {};
+  origFn: RuntimeValue,
+  boundThis: RuntimeValue
+): PlainObject {
+  const boundFn: PlainObject = {};
 
   // params
   if (hasParams(origFn) && Array.isArray(origFn.params)) {
@@ -141,6 +127,7 @@ function buildBoundFnFromOrig(
 // helper to build a `this` binding object from an env
 function buildThisBindingFromEnv(envLocal: Env): ThisBinding {
   const thisObj: ThisBinding = {
+    type: "this-binding",
     isThisBinding: true,
     fieldValues: {},
   };
@@ -169,7 +156,10 @@ function buildThisBindingFromEnv(envLocal: Env): ThisBinding {
  * Execute a function body and return the result
  * Handles both block bodies (executed via interpret) and expression bodies
  */
-export function executeFunctionBody(fn: unknown, callEnv: Env): RuntimeValue {
+export function executeFunctionBody(
+  fn: RuntimeValue,
+  callEnv: Env
+): RuntimeValue {
   if (!isPlainObject(fn)) throw new Error("internal error: invalid fn");
   const isBlock = hasIsBlock(fn) && fn.isBlock === true;
   if (!hasBody(fn) || typeof fn.body !== "string") {

@@ -8,9 +8,13 @@ import {
   hasKindBits,
   hasPtrIsBool,
   checkRange,
+  type RuntimeValue,
 } from "../types";
 
-export function checkAnnMatchesRhs(ann: unknown, rhsOperand: unknown) {
+export function checkAnnMatchesRhs(
+  ann: RuntimeValue,
+  rhsOperand: RuntimeValue
+) {
   if (!isIntOperand(ann))
     throw new Error("annotation must be integer literal with suffix");
   if (!isIntOperand(rhsOperand))
@@ -32,7 +36,7 @@ export function checkAnnMatchesRhs(ann: unknown, rhsOperand: unknown) {
 export function validateTypeOnly(
   kind: string,
   bits: number,
-  rhsOperand: unknown
+  rhsOperand: RuntimeValue
 ) {
   if (!isIntOperand(rhsOperand))
     throw new Error("annotation must be integer type matching initializer");
@@ -69,8 +73,8 @@ export function parseSliceAnnotation(annotation: string | undefined) {
 }
 
 export function validateAnnotation(
-  annotation: string | undefined | unknown,
-  rhsOperand: unknown
+  annotation: string | undefined | RuntimeValue,
+  rhsOperand: RuntimeValue
 ) {
   if (!annotation) return;
 
@@ -104,7 +108,7 @@ export function validateAnnotation(
 
 function validateArrayAnnotation(
   parsedArray: ReturnType<typeof parseArrayAnnotation>,
-  rhsOperand: unknown
+  rhsOperand: RuntimeValue
 ) {
   if (!parsedArray) throw new Error("invalid array annotation");
   if (!isArrayInstance(rhsOperand))
@@ -122,7 +126,7 @@ function validateArrayAnnotation(
 
 function validateSliceAnnotation(
   parsedSlice: ReturnType<typeof parseSliceAnnotation>,
-  rhsOperand: unknown
+  rhsOperand: RuntimeValue
 ) {
   if (!parsedSlice) throw new Error("invalid slice annotation");
   if (!isPointer(rhsOperand) || getProp(rhsOperand, "ptrIsSlice") !== true)
@@ -130,7 +134,7 @@ function validateSliceAnnotation(
   // No further checks here; runtime checks for length/init happen at use time.
 }
 
-function validatePointerAnnotation(annText: string, rhsOperand: unknown) {
+function validatePointerAnnotation(annText: string, rhsOperand: RuntimeValue) {
   const inner = annText.replace(/^\s*\*/g, "").trim();
   if (!isPointer(rhsOperand))
     throw new Error("annotation requires pointer initializer");
@@ -145,7 +149,14 @@ function validatePointerAnnotation(annText: string, rhsOperand: unknown) {
     };
   })(inner);
   if (parsedType) {
-    validateTypeOnly(parsedType.kind, parsedType.bits, rhsOperand);
+    // For pointers, check the pointer's target type matches the annotation
+    // If the pointer doesn't have explicit kind/bits, the annotation is accepted
+    const ptrKind = getProp(rhsOperand, "kind");
+    const ptrBits = getProp(rhsOperand, "bits");
+    if (ptrKind !== undefined && ptrBits !== undefined) {
+      if (ptrKind !== parsedType.kind || ptrBits !== parsedType.bits)
+        throw new Error("pointer type annotation does not match initializer");
+    }
     return;
   }
   if (/^\s*bool\s*$/i.test(inner)) {
@@ -166,7 +177,7 @@ function validatePointerAnnotation(annText: string, rhsOperand: unknown) {
 
 function validateTypeOrLiteralAnnotation(
   annotation: string,
-  rhsOperand: unknown
+  rhsOperand: RuntimeValue
 ) {
   const typeOnly = annotation.match(/^\s*([uUiI])\s*(\d+)\s*$/);
   if (typeOnly) {

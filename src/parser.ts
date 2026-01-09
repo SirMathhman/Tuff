@@ -1,8 +1,6 @@
-import { checkRange } from "./types";
+import { checkRange, type RuntimeValue, type PlainObject } from "./types";
 
-export interface OperandObject {
-  [k: string]: unknown;
-}
+export type OperandObject = PlainObject;
 
 export interface StructField {
   name: string;
@@ -123,8 +121,8 @@ export function parseOperand(token: string) {
   }
 
   // boolean literals
-  if (/^true$/i.test(s)) return { boolValue: true };
-  if (/^false$/i.test(s)) return { boolValue: false };
+  if (/^true$/i.test(s)) return { type: "bool-operand", boolValue: true };
+  if (/^false$/i.test(s)) return { type: "bool-operand", boolValue: false };
 
   // Match integer or float with optional suffix attached (e.g., 123, 1.23, 100U8)
   const m = s.match(/^([+-]?\d+(?:\.\d+)?)([uUiI]\d+)?$/);
@@ -144,18 +142,18 @@ export function parseOperand(token: string) {
       if (valueBig < 0n)
         throw new Error("negative numbers with suffixes are not allowed");
       checkRange("u", bits, valueBig);
-      return { valueBig, kind: "u", bits };
+      return { type: "int-operand", valueBig, kind: "u", bits };
     }
     // signed
     checkRange("i", bits, valueBig);
-    return { valueBig, kind: "i", bits };
+    return { type: "int-operand", valueBig, kind: "i", bits };
   }
 
   // no suffix: accept float or integer
   if (numStr.includes(".")) {
-    return { floatValue: Number(numStr), isFloat: true };
+    return { type: "float-operand", floatValue: Number(numStr), isFloat: true };
   }
-  return { valueBig: BigInt(numStr), isFloat: false };
+  return { type: "int-operand", valueBig: BigInt(numStr) };
 }
 
 interface StringState {
@@ -235,8 +233,8 @@ function skipWs(src: string, i: number) {
   return j;
 }
 
-function applyPrefixesToOperand(operand: unknown, prefixes: string[]) {
-  let op = operand;
+function applyPrefixesToOperand(operand: RuntimeValue, prefixes: string[]) {
+  let op: RuntimeValue = operand;
   for (let p = prefixes.length - 1; p >= 0; p--) {
     const pr = prefixes[p];
     if (pr === "&") op = { addrOf: op };
@@ -245,11 +243,11 @@ function applyPrefixesToOperand(operand: unknown, prefixes: string[]) {
   return op;
 }
 
-function isOperandObject(op: unknown): op is OperandObject {
+function isOperandObject(op: RuntimeValue): op is OperandObject {
   return typeof op === "object" && op != undefined;
 }
 
-function finalizeOperand(base: unknown, prefixes: string[]) {
+function finalizeOperand(base: RuntimeValue, prefixes: string[]) {
   const maybeOperand = applyPrefixesToOperand(base, prefixes);
   if (isOperandObject(maybeOperand)) return maybeOperand;
   return { value: maybeOperand };

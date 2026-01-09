@@ -120,7 +120,7 @@ function resolveOperands(
 }
 
 function applyPrecedenceInPlace(
-  operands: unknown[],
+  operands: RuntimeValue[],
   ops: string[],
   opSet: Set<string>
 ) {

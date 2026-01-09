@@ -18,8 +18,8 @@ export interface AssignmentStatementResult {
 export interface AssignmentStatementContext {
   assignParts: AssignmentParts;
   localEnv: Env;
-  evaluateRhsLocal: (rhs: string, envLocal: Env) => unknown;
-  convertOperandToNumber: (op: unknown) => number;
+  evaluateRhsLocal: (rhs: string, envLocal: Env) => RuntimeValue;
+  convertOperandToNumber: (op: RuntimeValue) => number;
 }
 
 export function handleAssignmentStatement(

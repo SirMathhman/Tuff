@@ -20,8 +20,8 @@ import {
 } from "../types";
 
 function validatePlaceholderBeforeAssignment(
-  existingObj: unknown,
-  value: unknown
+  existingObj: RuntimeValue,
+  value: RuntimeValue
 ) {
   if (
     hasParsedAnnotation(existingObj) &&
@@ -58,10 +58,10 @@ function validatePlaceholderBeforeAssignment(
  */
 export function computeAssignmentValue(
   op: string | undefined,
-  existing: unknown,
-  rhsOperand: unknown
+  existing: RuntimeValue,
+  rhsOperand: RuntimeValue
 ): RuntimeValue {
-  let newVal: unknown = rhsOperand;
+  let newVal: RuntimeValue = rhsOperand;
   if (op) {
     const cur =
       isPlainObject(existing) &&

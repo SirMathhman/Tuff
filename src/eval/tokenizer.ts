@@ -21,7 +21,7 @@ interface TokenizeState {
 }
 
 interface SplitResult {
-  operands: unknown[];
+  operands: RuntimeValue[];
   ops: string[];
 }
 

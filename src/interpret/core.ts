@@ -8,6 +8,8 @@ import {
   isPlainObject,
   toErrorMessage,
   type RuntimeValue,
+  type FnWrapper as FnWrapperType,
+  type PlainObject,
 } from "../types";
 import type { InterpretFn } from "../types";
 
@@ -15,11 +17,13 @@ export interface StringMap {
   [k: string]: string;
 }
 
+/* eslint-disable custom/no-unknown-param -- external API validation */
 function validateInterpretAllWithNativeInputs(
   scripts: unknown,
   nativeModules: unknown,
   mainNamespace: unknown
 ): asserts scripts is StringMap {
+  /* eslint-enable custom/no-unknown-param */
   if (!scripts || typeof scripts !== "object")
     throw new Error("scripts must be an object");
   if (!nativeModules || typeof nativeModules !== "object")
@@ -88,30 +92,19 @@ function mergeNativeExportsInto(
   const nativeExports = evaluateNativeModuleExports(code);
   for (const [k, v] of Object.entries(nativeExports)) {
     if (typeof v === "function") {
-      interface FnObject {
-        params: RuntimeValue[];
-        body: string;
-        isBlock: boolean;
-        resultAnnotation: RuntimeValue;
-        closureEnv: UnknownMap;
-      }
-      interface NativeImpl {
-        nativeImpl?: RuntimeValue;
-      }
-      interface FnWrapper {
-        fn: FnObject & NativeImpl;
-      }
       // fn wrapper shape expected by interpreter
-      const wrapper: FnWrapper = {
-        fn: {
-          params: [],
-          body: "/* native */",
-          isBlock: false,
-          resultAnnotation: undefined,
-          // Provide an empty object env so callers can clone it as a base
-          closureEnv: {},
-          nativeImpl: v,
-        },
+      const fnObj: PlainObject = {
+        params: [],
+        body: "/* native */",
+        isBlock: false,
+        resultAnnotation: undefined,
+        // Provide an empty object env so callers can clone it as a base
+        closureEnv: {},
+        nativeImpl: v,
+      };
+      const wrapper: FnWrapperType = {
+        type: "fn-wrapper",
+        fn: fnObj,
       };
       collectedExports[k] = wrapper;
     } else {
@@ -177,10 +170,12 @@ export function getLastTopLevelStatement(
 }
 
 interface IntOperand {
+  type: "int-operand";
   valueBig: bigint;
 }
 
 interface FloatOperand {
+  type: "float-operand";
   floatValue: number;
   isFloat: true;
 }
@@ -197,6 +192,33 @@ export interface EvaluateRhsContext {
   getLastTopLevelStatement_fn: (_s: string) => string | undefined;
 }
 
+// eslint-disable-next-line custom/no-unknown-param -- caught exception is unknown
+function hasYieldProp(obj: unknown): obj is ObjectWithYield {
+  // Use `== undefined` to check both null and undefined without using null literal
+  return typeof obj === "object" && obj != undefined && "__yield" in obj;
+}
+
+// eslint-disable-next-line custom/no-unknown-param -- handles caught exception
+function handleYieldSignal(e: unknown): RuntimeValue | undefined {
+  if (!e || typeof e !== "object" || e === undefined || !("__yield" in e)) {
+    return undefined;
+  }
+  if (!hasYieldProp(e)) return undefined;
+  const yieldProp = e.__yield;
+  if (typeof yieldProp !== "number") return undefined;
+  if (Number.isInteger(yieldProp)) {
+    return { type: "int-operand", valueBig: BigInt(yieldProp) };
+  }
+  return { type: "float-operand", floatValue: yieldProp, isFloat: true };
+}
+
+function makeOperandFromNumber(v: number): IntOperand | FloatOperand {
+  if (Number.isInteger(v)) {
+    return { type: "int-operand", valueBig: BigInt(v) };
+  }
+  return { type: "float-operand", floatValue: v, isFloat: true };
+}
+
 export function evaluateRhs(ctx: EvaluateRhsContext): RuntimeValue {
   const { rhs, envLocal, interpret, getLastTopLevelStatement_fn } = ctx;
   if (/^\s*\{[\s\S]*\}\s*$/.test(rhs)) {
@@ -207,35 +229,10 @@ export function evaluateRhs(ctx: EvaluateRhsContext): RuntimeValue {
       throw new Error("initializer cannot contain declarations");
     try {
       const v = interpret(inner, {});
-      if (Number.isInteger(v)) {
-        const operand: IntOperand = { valueBig: BigInt(v) };
-        return operand;
-      }
-      const operand: FloatOperand = { floatValue: v, isFloat: true };
-      return operand;
+      return makeOperandFromNumber(v);
     } catch (e: unknown) {
-      // Handle `yield` signal thrown from nested block execution. If a yield was
-      // signaled, convert the numeric payload into an operand and return it.
-      if (e && typeof e === "object" && e !== undefined && "__yield" in e) {
-        const signal = e;
-        function hasYieldProp(obj: unknown): obj is ObjectWithYield {
-          return (
-            typeof obj === "object" && obj !== undefined && "__yield" in obj
-          );
-        }
-        if (hasYieldProp(signal)) {
-          const yieldProp = signal.__yield;
-          if (typeof yieldProp === "number") {
-            const val = yieldProp;
-            if (Number.isInteger(val)) {
-              const operand: IntOperand = { valueBig: BigInt(val) };
-              return operand;
-            }
-            const operand: FloatOperand = { floatValue: val, isFloat: true };
-            return operand;
-          }
-        }
-      }
+      const yieldResult = handleYieldSignal(e);
+      if (yieldResult !== undefined) return yieldResult;
       throw e;
     }
   }
@@ -245,18 +242,6 @@ export function evaluateRhs(ctx: EvaluateRhsContext): RuntimeValue {
 }
 
 import { parseFnComponents } from "./parsing";
-
-interface FnParamsObject {
-  params: RuntimeValue;
-  body: string;
-  isBlock: boolean;
-  resultAnnotation: RuntimeValue;
-  closureEnv: RuntimeValue;
-}
-
-interface FnRegistration {
-  fn: FnParamsObject;
-}
 
 export function registerFunctionFromStmt(
   stmt: string,
@@ -271,7 +256,8 @@ export function registerFunctionFromStmt(
 
   // reserve name then attach closure env including the function itself
   declared.add(name);
-  const registration: FnRegistration = {
+  const registration: FnWrapperType = {
+    type: "fn-wrapper",
     fn: { params, body, isBlock, resultAnnotation, closureEnv: undefined },
   };
   envSet(localEnv, name, registration);
@@ -284,7 +270,7 @@ export function registerFunctionFromStmt(
   return trailingExpr;
 }
 
-export function convertOperandToNumber(operand: unknown): number {
+export function convertOperandToNumber(operand: RuntimeValue): number {
   if (isBoolOperand(operand)) return operand.boolValue ? 1 : 0;
   if (isIntOperand(operand)) return Number(operand.valueBig);
   if (typeof operand === "number") return operand;

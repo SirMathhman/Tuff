@@ -11,7 +11,7 @@ import { Env, envGet } from "../env";
  * Extract and validate a field value from a struct/this instance
  */
 export function getFieldValueFromInstance(
-  maybe: unknown,
+  maybe: RuntimeValue,
   fieldName: string
 ): RuntimeValue {
   if (!(isStructInstance(maybe) || isThisBinding(maybe)))
@@ -27,7 +27,7 @@ export function getFieldValueFromInstance(
  * Get array element value with bounds and initialized checks
  */
 export function getArrayElementFromInstance(
-  maybe: unknown,
+  maybe: RuntimeValue,
   indexVal: number
 ): RuntimeValue {
   if (!isArrayInstance(maybe)) throw new Error("cannot index non-array value");
@@ -57,14 +57,14 @@ interface MethodResolverCtx {
   fieldName: string;
   receiver: RuntimeValue;
   localEnv: Env;
-  makeBoundWrapper: (fn: unknown, receiver: unknown) => unknown;
+  makeBoundWrapper: (fn: RuntimeValue, receiver: RuntimeValue) => RuntimeValue;
 }
 
 /**
  * Handle length/init fields on array-like instances
  */
 export function handleArrayLikeFieldAccess(
-  arrLike: unknown,
+  arrLike: RuntimeValue,
   fieldName: string,
   replaceWithNumber: (n: number) => void
 ): boolean {

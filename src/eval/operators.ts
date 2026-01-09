@@ -11,17 +11,9 @@ import {
   getProp,
   checkRange,
   type RuntimeValue,
+  type BoolOperand,
+  type IntOperand,
 } from "../types";
-
-interface BooleanResult {
-  boolValue: boolean;
-}
-
-interface TypedIntegerResult {
-  valueBig: bigint;
-  kind: string;
-  bits: number;
-}
 
 interface SuffixCompatibilityCtx {
   left: RuntimeValue;
@@ -38,7 +30,7 @@ interface TypedIntegerOpCtx {
   rightHasKind: boolean;
 }
 
-export function isTruthy(val: unknown): boolean {
+export function isTruthy(val: RuntimeValue): boolean {
   if (isBoolOperand(val)) return val.boolValue;
   if (isIntOperand(val)) return val.valueBig !== 0n;
   if (typeof val === "number") return val !== 0;
@@ -49,7 +41,7 @@ export function isTruthy(val: unknown): boolean {
 /**
  * Check if a value matches a type expression (used by the `is` operator)
  */
-function checkTypeMatch(leftVal: unknown, tExpr: string): boolean {
+function checkTypeMatch(leftVal: RuntimeValue, tExpr: string): boolean {
   const parts = tExpr
     .split("|")
     .map((p) => p.trim())
@@ -71,7 +63,10 @@ function checkTypeMatch(leftVal: unknown, tExpr: string): boolean {
   return false;
 }
 
-function matchesIntegerTypePart(leftVal: unknown, intMatch: RegExpMatchArray) {
+function matchesIntegerTypePart(
+  leftVal: RuntimeValue,
+  intMatch: RegExpMatchArray
+) {
   const kind = intMatch[1] === "u" || intMatch[1] === "U" ? "u" : "i";
   const bits = Number(intMatch[2]);
   if (isIntOperand(leftVal)) {
@@ -95,7 +90,7 @@ function matchesIntegerTypePart(leftVal: unknown, intMatch: RegExpMatchArray) {
   return false;
 }
 
-function matchesStructOrThisBinding(leftVal: unknown, p: string) {
+function matchesStructOrThisBinding(leftVal: RuntimeValue, p: string) {
   const sname = getProp(leftVal, "structName");
   if (typeof sname === "string" && sname === p) return true;
   if (
@@ -109,7 +104,10 @@ function matchesStructOrThisBinding(leftVal: unknown, p: string) {
 /**
  * Handle the `is` type test operator
  */
-function handleIsOperator(left: unknown, right: unknown): BooleanResult {
+function handleIsOperator(
+  left: RuntimeValue,
+  right: RuntimeValue
+): BoolOperand {
   // Accept either a literal type name, a placeholder { typeName }, or a binding
   // that stores `typeAlias` from a `type` declaration.
   let typeExpr: string | undefined = undefined;
@@ -127,7 +125,7 @@ function handleIsOperator(left: unknown, right: unknown): BooleanResult {
   if (!typeExpr) throw new Error("invalid type in is expression");
   const tnRaw = typeExpr.trim();
 
-  return { boolValue: checkTypeMatch(left, tnRaw) };
+  return { type: "bool-operand", boolValue: checkTypeMatch(left, tnRaw) };
 }
 
 /**
@@ -150,7 +148,11 @@ function ensureSuffixCompatibility(ctx: SuffixCompatibilityCtx) {
   return { kind, bits };
 }
 
-function getBigValue(val: unknown, hasKind: boolean, side: "left" | "right") {
+function getBigValue(
+  val: RuntimeValue,
+  hasKind: boolean,
+  side: "left" | "right"
+) {
   if (typeof val === "number") {
     if (hasKind === true)
       throw new Error(`invalid typed integer ${side} operand`);
@@ -163,7 +165,7 @@ function getBigValue(val: unknown, hasKind: boolean, side: "left" | "right") {
 /**
  * Handle typed integer operations (with kind/bits metadata)
  */
-function handleTypedIntegerOp(ctx: TypedIntegerOpCtx): TypedIntegerResult {
+function handleTypedIntegerOp(ctx: TypedIntegerOpCtx): IntOperand {
   const { kind, bits } = ensureSuffixCompatibility({
     left: ctx.left,
     right: ctx.right,
@@ -187,13 +189,13 @@ function handleTypedIntegerOp(ctx: TypedIntegerOpCtx): TypedIntegerResult {
   } else throw new Error("unsupported operator");
 
   checkRange(kind, bits, resBig);
-  return { valueBig: resBig, kind, bits };
+  return { type: "int-operand", valueBig: resBig, kind, bits };
 }
 
 /**
  * Convert an operand to a numeric value for untyped operations
  */
-function toNumericValue(val: unknown, side: "left" | "right"): number {
+function toNumericValue(val: RuntimeValue, side: "left" | "right"): number {
   if (typeof val === "number") return val;
   if (isFloatOperand(val)) return val.floatValue;
   if (isBoolOperand(val)) return val.boolValue ? 1 : 0;
@@ -204,16 +206,16 @@ function toNumericValue(val: unknown, side: "left" | "right"): number {
 // Exported helper to apply a binary arithmetic operator to two operands using the same rules
 export function applyBinaryOp(
   op: string,
-  left: unknown,
-  right: unknown
+  left: RuntimeValue,
+  right: RuntimeValue
 ): RuntimeValue {
   if (op === "||") {
-    if (isTruthy(left)) return { boolValue: true };
-    return { boolValue: isTruthy(right) };
+    if (isTruthy(left)) return { type: "bool-operand", boolValue: true };
+    return { type: "bool-operand", boolValue: isTruthy(right) };
   }
   if (op === "&&") {
-    if (!isTruthy(left)) return { boolValue: false };
-    return { boolValue: isTruthy(right) };
+    if (!isTruthy(left)) return { type: "bool-operand", boolValue: false };
+    return { type: "bool-operand", boolValue: isTruthy(right) };
   }
 
   // Support a runtime type test operator `is` (e.g., `x is I32`).
@@ -245,11 +247,11 @@ function performNumericOp(op: string, lNum: number, rNum: number) {
   if (op === "*") return lNum * rNum;
   if (op === "/") return lNum / rNum;
   if (op === "%") return lNum % rNum;
-  if (op === "<") return { boolValue: lNum < rNum };
-  if (op === ">") return { boolValue: lNum > rNum };
-  if (op === "<=") return { boolValue: lNum <= rNum };
-  if (op === ">=") return { boolValue: lNum >= rNum };
-  if (op === "==") return { boolValue: lNum == rNum };
-  if (op === "!=") return { boolValue: lNum != rNum };
+  if (op === "<") return { type: "bool-operand", boolValue: lNum < rNum };
+  if (op === ">") return { type: "bool-operand", boolValue: lNum > rNum };
+  if (op === "<=") return { type: "bool-operand", boolValue: lNum <= rNum };
+  if (op === ">=") return { type: "bool-operand", boolValue: lNum >= rNum };
+  if (op === "==") return { type: "bool-operand", boolValue: lNum == rNum };
+  if (op === "!=") return { type: "bool-operand", boolValue: lNum != rNum };
   throw new Error("unsupported operator");
 }
