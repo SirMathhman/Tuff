@@ -132,6 +132,83 @@ function checkDuplicates(sourceWithoutTypes: string): Result<void, string> {
 }
 
 /**
+ * Extracts the last expression from the source code and flattens block scope
+ */
+function flattenBlocksAndGetLastExpression(
+  sourceWithoutTypes: string
+): { flattenedSource: string; lastExpression: string } {
+  const trimmed = sourceWithoutTypes.trim();
+
+  // If source ends with a block, we need to flatten it
+  if (trimmed.endsWith("}")) {
+    // Find the matching opening brace for the last block
+    let braceCount = 0;
+    let blockStart = -1;
+
+    for (let i = trimmed.length - 1; i >= 0; i--) {
+      if (trimmed[i] === "}") braceCount++;
+      else if (trimmed[i] === "{") {
+        braceCount--;
+        if (braceCount === 0) {
+          blockStart = i;
+          break;
+        }
+      }
+    }
+
+    // Get the code before the block and the block content
+    const beforeBlock = trimmed.substring(0, blockStart).trim();
+    const blockContent = trimmed.substring(blockStart + 1, trimmed.length - 1);
+    const blockStatements = blockContent
+      .split(";")
+      .map((s) => s.trim())
+      .filter((s) => s);
+
+    if (blockStatements.length === 0) {
+      return { flattenedSource: beforeBlock, lastExpression: "0" };
+    }
+
+    const lastInBlock = blockStatements[blockStatements.length - 1];
+
+    // If the last statement in the block is a let, flatten and return 0
+    if (lastInBlock.startsWith("let")) {
+      const allStatements = beforeBlock ? [beforeBlock, ...blockStatements] : blockStatements;
+      const flattenedSource = allStatements.join("; ");
+      return { flattenedSource, lastExpression: "0" };
+    }
+
+    // The last thing in the block is an expression
+    // Flatten everything: before block + all block statements except last + last as expression
+    const allStatements = beforeBlock ? [beforeBlock, ...blockStatements.slice(0, -1)] : blockStatements.slice(0, -1);
+    const flattenedSource = allStatements.join("; ");
+    
+    return {
+      flattenedSource: flattenedSource ? `${flattenedSource}; ${lastInBlock}` : lastInBlock,
+      lastExpression: lastInBlock
+    };
+  }
+
+  // Split by semicolon and get the last non-empty part
+  const parts = trimmed
+    .split(";")
+    .map((p) => p.trim())
+    .filter((p) => p);
+
+  if (parts.length === 0) {
+    return { flattenedSource: trimmed, lastExpression: "0" };
+  }
+
+  const last = parts[parts.length - 1];
+
+  // If the last part is a let statement, return 0 instead
+  if (last.startsWith("let")) {
+    return { flattenedSource: trimmed, lastExpression: "0" };
+  }
+
+  return { flattenedSource: trimmed, lastExpression: last };
+}
+
+/**
  * Compiles source code.
  * @param source - The source code to compile
  * @returns Result containing compiled code or error message
@@ -155,14 +232,10 @@ function compile(source: string): Result<string, string> {
     return duplicateCheckResult as Result<string, string>;
   }
 
-  let lastStatement = sourceWithoutTypes.split(";").pop()?.trim() || "";
-
-  if (!lastStatement) {
-    lastStatement = "0";
-  }
+  const { flattenedSource, lastExpression } = flattenBlocksAndGetLastExpression(sourceWithoutTypes);
 
   return new Ok(
-    `(function() { ${sourceWithoutTypes}; return ${lastStatement}; })()`
+    `(function() { ${flattenedSource}; return ${lastExpression}; })()`
   );
 }
 
