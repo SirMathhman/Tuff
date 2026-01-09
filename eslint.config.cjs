@@ -93,9 +93,7 @@ module.exports = [
       // Custom rule: Ban 'unknown' in function parameter types
       "custom/no-unknown-param": "error",
       // Custom rule: Ban object indexing signatures
-      // Note: Currently disabled - requires full refactoring from object index signatures to Map<K, V>
-      // This is a large refactoring affecting PlainObject, PlainEnv, and other dynamic key-value types
-      "custom/no-object-indexing": "off",
+      "custom/no-object-indexing": "error",
     },
   },
   {

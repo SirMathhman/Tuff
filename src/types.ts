@@ -1,9 +1,23 @@
 import type { Env } from "./env";
 
-// Forward declare PlainObject to avoid circular reference issues
-export type PlainObject = {
-  [k: string]: RuntimeValue;
-};
+// Function object core properties (body and structure)
+interface FunctionObjectCore {
+  params: RuntimeValue[];
+  body: string;
+  isBlock: boolean;
+}
+
+// Function object metadata (annotations, environment, implementation)
+interface FunctionObjectMeta {
+  resultAnnotation?: string;
+  closureEnv?: Env;
+  nativeImpl?: Function;
+  boundThis?: RuntimeValue;
+  __autoCall?: boolean;
+}
+
+// Complete function object with all properties
+export type FunctionObject = FunctionObjectCore & FunctionObjectMeta;
 
 // Type discriminator field for discriminated union
 export type RuntimeValueType =
@@ -22,16 +36,8 @@ export interface TypedValue {
   type: RuntimeValueType;
 }
 
-// Runtime value type - represents any value that can exist at runtime in the interpreter
-// This is a union of all possible runtime value types
-export type RuntimeValue =
-  | string
-  | number
-  | bigint
-  | boolean
-  | undefined
-  | null
-  | Env
+// Object-like runtime value types (excludes primitives)
+type PlainObjectTypes = 
   | BoolOperand
   | FloatOperand
   | IntOperand
@@ -40,8 +46,8 @@ export type RuntimeValue =
   | StructInstance
   | StructDef
   | ArrayInstance
-  | ArrayLiteral
   | Pointer
+  | ArrayLiteral
   | KindBits
   | Ident
   | AddrOf
@@ -63,8 +69,20 @@ export type RuntimeValue =
   | Fields
   | PtrMutable
   | PtrIsBool
-  | Yield
-  | PlainObject
+  | Yield;
+
+// Runtime value type - represents any value that can exist at runtime in the interpreter
+// This is a union of all possible runtime value types
+export type RuntimeValue =
+  | string
+  | number
+  | bigint
+  | boolean
+  | undefined
+  | null
+  | Env
+  | PlainObjectTypes
+  | Map<string, RuntimeValue>
   | RuntimeValue[];
 
 export interface BoolOperand {
@@ -87,19 +105,19 @@ export interface IntOperand {
 
 export interface FnWrapper {
   type: "fn-wrapper";
-  fn: PlainObject;
+  fn: FunctionObject;
 }
 
 export interface ThisBinding {
   type: "this-binding";
   isThisBinding: true;
-  fieldValues: PlainObject;
+  fieldValues: Map<string, RuntimeValue>;
 }
 
 export interface StructInstance {
   type: "struct-instance";
   isStructInstance: true;
-  fieldValues: PlainObject;
+  fieldValues: Map<string, RuntimeValue>;
 }
 
 export interface StructDef {
@@ -200,7 +218,7 @@ export interface Annotation {
 }
 
 export interface ParsedAnnotation {
-  parsedAnnotation: PlainObject;
+  parsedAnnotation: Map<string, RuntimeValue>;
 }
 
 export interface LiteralAnnotation {
@@ -228,7 +246,7 @@ export interface Name {
 }
 
 export interface Fields {
-  fields: PlainObject;
+  fields: Map<string, RuntimeValue>;
 }
 
 export interface PtrMutable {
@@ -243,42 +261,52 @@ export interface Yield {
   __yield: number;
 }
 
-export function isPlainObject(v: RuntimeValue): v is PlainObject {
+// Type guard to check if a runtime value is a plain object (non-primitive)
+export function isPlainObject(v: RuntimeValue): v is PlainObjectTypes {
   // Use `!= undefined` to exclude both `undefined` and `null` without using
   // the `null` literal (ESLint rule bans null literals).
-  return typeof v === "object" && v != undefined;
+  return typeof v === "object" && v != undefined && !(v instanceof Map);
+}
+
+export function isFunctionObject(v: RuntimeValue): v is FunctionObject {
+  return (
+    isPlainObject(v) &&
+    "params" in v &&
+    "body" in v &&
+    "isBlock" in v
+  );
 }
 
 export function isBoolOperand(v: RuntimeValue): v is BoolOperand {
-  return isPlainObject(v) && v.type === "bool-operand";
+  return isPlainObject(v) && "type" in v && v.type === "bool-operand";
 }
 
 export function isFloatOperand(v: RuntimeValue): v is FloatOperand {
-  return isPlainObject(v) && v.type === "float-operand";
+  return isPlainObject(v) && "type" in v && v.type === "float-operand";
 }
 
 export function isIntOperand(v: RuntimeValue): v is IntOperand {
-  return isPlainObject(v) && v.type === "int-operand";
+  return isPlainObject(v) && "type" in v && v.type === "int-operand";
 }
 
 export function isFnWrapper(v: RuntimeValue): v is FnWrapper {
-  return isPlainObject(v) && v.type === "fn-wrapper";
+  return isPlainObject(v) && "type" in v && v.type === "fn-wrapper";
 }
 
 export function isThisBinding(v: RuntimeValue): v is ThisBinding {
-  return isPlainObject(v) && v.type === "this-binding";
+  return isPlainObject(v) && "type" in v && v.type === "this-binding";
 }
 
 export function isStructInstance(v: RuntimeValue): v is StructInstance {
-  return isPlainObject(v) && v.type === "struct-instance";
+  return isPlainObject(v) && "type" in v && v.type === "struct-instance";
 }
 
 export function isStructDef(v: RuntimeValue): v is StructDef {
-  return isPlainObject(v) && v.type === "struct-def";
+  return isPlainObject(v) && "type" in v && v.type === "struct-def";
 }
 
 export function isArrayInstance(v: RuntimeValue): v is ArrayInstance {
-  return isPlainObject(v) && v.type === "array-instance";
+  return isPlainObject(v) && "type" in v && v.type === "array-instance";
 }
 
 // parse-time array literal placeholder shape
@@ -289,13 +317,13 @@ export function hasArrayLiteral(v: RuntimeValue): v is ArrayLiteral {
 }
 
 export function isPointer(v: RuntimeValue): v is Pointer {
-  return isPlainObject(v) && v.type === "pointer";
+  return isPlainObject(v) && "type" in v && v.type === "pointer";
 }
 
 export function unwrapBindingValue(binding: RuntimeValue): RuntimeValue {
   if (!isPlainObject(binding)) return binding;
   if (!Object.prototype.hasOwnProperty.call(binding, "value")) return binding;
-  const v = binding.value;
+  const v = Reflect.get(binding, "value");
   return v !== undefined ? v : binding;
 }
 
@@ -328,7 +356,8 @@ export function checkRange(kind: string, bits: number, sum: bigint) {
 export function getProp(obj: RuntimeValue, key: string): RuntimeValue {
   if (!isPlainObject(obj)) return undefined;
   if (!(key in obj)) return undefined;
-  return obj[key];
+  // Use Reflect.get for dynamic property access
+  return Reflect.get(obj, key);
 }
 
 export function hasProp(obj: RuntimeValue, key: string): boolean {
@@ -336,7 +365,10 @@ export function hasProp(obj: RuntimeValue, key: string): boolean {
 }
 
 export function hasStringProp(obj: RuntimeValue, key: string): boolean {
-  return isPlainObject(obj) && key in obj && typeof obj[key] === "string";
+  if (!isPlainObject(obj)) return false;
+  if (!(key in obj)) return false;
+  const val = Reflect.get(obj, key);
+  return typeof val === "string";
 }
 
 // Type guards for common property shapes

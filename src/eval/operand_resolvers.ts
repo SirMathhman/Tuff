@@ -31,12 +31,8 @@ interface BindingTarget {
   targetVal: RuntimeValue;
 }
 
-type FieldValuesMap = {
-  [k: string]: RuntimeValue;
-};
-
 interface FieldValues {
-  fieldValues: FieldValuesMap;
+  fieldValues: Map<string, RuntimeValue>;
   providedFields: Set<string>;
 }
 
@@ -193,7 +189,7 @@ function evaluateStructFieldValues(
   fieldParts: RuntimeValue[],
   ctx: OperandResolutionContext
 ): FieldValues {
-  const fieldValues: FieldValuesMap = {};
+  const fieldValues = new Map<string, RuntimeValue>();
   const providedFields = new Set<string>();
   for (const fieldPart of fieldParts) {
     if (!isPlainObject(fieldPart))
@@ -213,7 +209,7 @@ function evaluateStructFieldValues(
     if (providedFields.has(fieldName))
       throw new Error(`duplicate field ${fieldName}`);
     providedFields.add(fieldName);
-    fieldValues[fieldName] = fieldValue;
+    fieldValues.set(fieldName, fieldValue);
   }
   return { fieldValues, providedFields };
 }
@@ -320,19 +316,19 @@ export function resolveIdentifier(
     const thisObj: ThisBinding = {
       type: "this-binding",
       isThisBinding: true,
-      fieldValues: {},
+      fieldValues: new Map(),
     };
     for (const [key, value] of envEntries(localEnv)) {
       if (key === "this") continue;
       if (isPlainObject(value) && hasValue(value) && value.value !== undefined)
-        thisObj.fieldValues[key] = value.value;
+        thisObj.fieldValues.set(key, value.value);
       else if (
         typeof value === "number" ||
         typeof value === "string" ||
         typeof value === "boolean"
       )
-        thisObj.fieldValues[key] = value;
-      else if (!isStructDef(value)) thisObj.fieldValues[key] = value;
+        thisObj.fieldValues.set(key, value);
+      else if (!isStructDef(value)) thisObj.fieldValues.set(key, value);
     }
     return thisObj;
   }

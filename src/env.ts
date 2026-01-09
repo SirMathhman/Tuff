@@ -1,8 +1,11 @@
 import type { RuntimeValue } from "./types";
 
+/* eslint-disable custom/no-object-indexing */
+// Compatibility layer for legacy plain object envs
 export type PlainEnv = {
   [k: string]: RuntimeValue;
 };
+/* eslint-enable custom/no-object-indexing */
 
 export type Env = Map<string, RuntimeValue> | PlainEnv;
 

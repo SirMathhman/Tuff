@@ -17,7 +17,7 @@ export function getFieldValueFromInstance(
   if (!(isStructInstance(maybe) || isThisBinding(maybe)))
     throw new Error("cannot access field on non-struct value");
 
-  const fieldValue = maybe.fieldValues[fieldName];
+  const fieldValue = maybe.fieldValues.get(fieldName);
   if (fieldValue === undefined)
     throw new Error(`invalid field access: ${fieldName}`);
   return fieldValue;

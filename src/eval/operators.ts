@@ -93,11 +93,7 @@ function matchesIntegerTypePart(
 function matchesStructOrThisBinding(leftVal: RuntimeValue, p: string) {
   const sname = getProp(leftVal, "structName");
   if (typeof sname === "string" && sname === p) return true;
-  if (
-    isThisBinding(leftVal) &&
-    Object.prototype.hasOwnProperty.call(leftVal.fieldValues, p)
-  )
-    return true;
+  if (isThisBinding(leftVal) && leftVal.fieldValues.has(p)) return true;
   return false;
 }
 

@@ -11,7 +11,7 @@ import {
   isIntOperand,
   type RuntimeValue,
   type FnWrapper,
-  type PlainObject,
+  type FunctionObject,
   type IntOperand,
 } from "../types";
 import { applyBinaryOp } from "./operators";
@@ -170,7 +170,7 @@ export function handleMatchExpression(
 export function handleFnExpression(sTrim: string, localEnv: Env): FnWrapper {
   const parsed = parseFnComponents(sTrim);
   const { name, params, body, isBlock, resultAnnotation } = parsed;
-  const fnObj: PlainObject = {
+  const fnObj: FunctionObject = {
     params,
     body,
     isBlock,

@@ -1,5 +1,5 @@
 import { evaluateReturningOperand } from "../eval";
-import { Env, envSet, envGet, envClone } from "../env";
+import { Env, envSet, envGet, envClone, ensureMapEnv } from "../env";
 import {
   isBoolOperand,
   isFloatOperand,
@@ -9,13 +9,11 @@ import {
   toErrorMessage,
   type RuntimeValue,
   type FnWrapper as FnWrapperType,
-  type PlainObject,
+  type FunctionObject,
 } from "../types";
 import type { InterpretFn } from "../types";
 
-export type StringMap = {
-  [k: string]: string;
-};
+export type StringMap = Map<string, string>;
 
 /* eslint-disable custom/no-unknown-param -- external API validation */
 function validateInterpretAllWithNativeInputs(
@@ -24,17 +22,35 @@ function validateInterpretAllWithNativeInputs(
   mainNamespace: unknown
 ): asserts scripts is StringMap {
   /* eslint-enable custom/no-unknown-param */
-  if (!scripts || typeof scripts !== "object")
-    throw new Error("scripts must be an object");
-  if (!nativeModules || typeof nativeModules !== "object")
-    throw new Error("nativeModules must be a string");
+  if (
+    !(scripts instanceof Map) &&
+    (typeof scripts !== "object" || scripts === undefined)
+  )
+    throw new Error("scripts must be a Map or object");
+  if (
+    !(nativeModules instanceof Map) &&
+    (typeof nativeModules !== "object" || nativeModules === undefined)
+  )
+    throw new Error("nativeModules must be a Map or object");
   if (typeof mainNamespace !== "string")
     throw new Error("mainNamespace must be a string");
 }
 
+// Helper to convert plain object or Map to Map
+/* eslint-disable custom/no-object-indexing */
+function ensureStringMap(input: StringMap | { [k: string]: string }): StringMap {
+  if (input instanceof Map) return input;
+  const map = new Map<string, string>();
+  for (const k of Object.keys(input)) map.set(k, input[k]);
+  return map;
+}
+/* eslint-enable custom/no-object-indexing */
+
 function normalizeNamespaceMap(input: StringMap): StringMap {
-  const out: StringMap = {};
-  for (const k of Object.keys(input)) out[k.replace(/,/g, "::")] = input[k];
+  const out = new Map<string, string>();
+  for (const [k, v] of input.entries()) {
+    out.set(k.replace(/,/g, "::"), v);
+  }
   return out;
 }
 
@@ -59,9 +75,12 @@ function transformNativeModuleCode(code: string): string {
   return transformed;
 }
 
+/* eslint-disable custom/no-object-indexing */
+// Internal runtime value storage for native module exports
 export type UnknownMap = {
   [k: string]: RuntimeValue;
 };
+/* eslint-enable custom/no-object-indexing */
 
 function evaluateNativeModuleExports(code: string): UnknownMap {
   const exports: UnknownMap = {};
@@ -93,13 +112,13 @@ function mergeNativeExportsInto(
   for (const [k, v] of Object.entries(nativeExports)) {
     if (typeof v === "function") {
       // fn wrapper shape expected by interpreter
-      const fnObj: PlainObject = {
+      const fnObj: FunctionObject = {
         params: [],
         body: "/* native */",
         isBlock: false,
         resultAnnotation: undefined,
-        // Provide an empty object env so callers can clone it as a base
-        closureEnv: {},
+        // Provide an empty env so callers can clone it as a base
+        closureEnv: ensureMapEnv({}),
         nativeImpl: v,
       };
       const wrapper: FnWrapperType = {
@@ -113,9 +132,12 @@ function mergeNativeExportsInto(
   }
 }
 
+/* eslint-disable custom/no-object-indexing */
+// Internal namespace registry for script modules
 export type NamespaceRegistry = {
   [k: string]: UnknownMap;
 };
+/* eslint-enable custom/no-object-indexing */
 
 export interface ResolveNamespaceArgs {
   nsName: string;
@@ -134,23 +156,22 @@ function resolveNamespaceToExports(args: ResolveNamespaceArgs): UnknownMap {
     interpFn,
   } = args;
 
-  if (
-    !Object.prototype.hasOwnProperty.call(normalizedScripts, nsName) &&
-    !Object.prototype.hasOwnProperty.call(normalizedNative, nsName)
-  )
+  if (!normalizedScripts.has(nsName) && !normalizedNative.has(nsName))
     throw new Error("namespace not found");
 
   if (!Object.prototype.hasOwnProperty.call(namespaceRegistry, nsName)) {
     const nsEnv: UnknownMap = {};
     nsEnv.__exports = {};
 
-    if (Object.prototype.hasOwnProperty.call(normalizedScripts, nsName)) {
-      interpFn(normalizedScripts[nsName], nsEnv);
+    if (normalizedScripts.has(nsName)) {
+      const scriptCode = normalizedScripts.get(nsName);
+      if (scriptCode) interpFn(scriptCode, nsEnv);
     }
 
     const collectedExports = collectExportsFromScriptEnv(nsEnv);
-    if (Object.prototype.hasOwnProperty.call(normalizedNative, nsName)) {
-      mergeNativeExportsInto(collectedExports, normalizedNative[nsName]);
+    if (normalizedNative.has(nsName)) {
+      const nativeCode = normalizedNative.get(nsName);
+      if (nativeCode) mergeNativeExportsInto(collectedExports, nativeCode);
     }
 
     namespaceRegistry[nsName] = collectedExports;
@@ -285,10 +306,12 @@ export function convertOperandToNumber(operand: RuntimeValue): number {
  * NOTE: This is a minimal stub. Future implementation will wire cross-namespace
  * references so scripts can import symbols from other namespaces.
  */
+/* eslint-disable custom/no-object-indexing */
 export function interpretAll(
-  scripts: StringMap,
+  scripts: StringMap | { [k: string]: string },
   mainNamespace: string
 ): number {
+/* eslint-enable custom/no-object-indexing */
   // Forward to interpretAllWithNative with no native modules
   return interpretAllWithNative(scripts, {}, mainNamespace);
 }
@@ -300,17 +323,19 @@ export function interpretAll(
  * into `exports.name = function (...) { ... }` at runtime. Native exported functions
  * are wrapped so they can be imported into scripts and called like normal functions.
  */
+/* eslint-disable custom/no-object-indexing */
 export function interpretAllWithNative(
-  scripts: StringMap,
-  nativeModules: StringMap,
+  scripts: StringMap | { [k: string]: string },
+  nativeModules: StringMap | { [k: string]: string },
   mainNamespace: string
 ): number {
+/* eslint-enable custom/no-object-indexing */
   validateInterpretAllWithNativeInputs(scripts, nativeModules, mainNamespace);
 
-  const normalizedScripts = normalizeNamespaceMap(scripts);
-  const normalizedNative = normalizeNamespaceMap(nativeModules);
+  const normalizedScripts = normalizeNamespaceMap(ensureStringMap(scripts));
+  const normalizedNative = normalizeNamespaceMap(ensureStringMap(nativeModules));
 
-  if (!Object.prototype.hasOwnProperty.call(normalizedScripts, mainNamespace))
+  if (!normalizedScripts.has(mainNamespace))
     throw new Error("main namespace not found");
 
   const interpFn = globalThis.interpret;
@@ -334,5 +359,7 @@ export function interpretAllWithNative(
   env.__namespace_registry = namespaceRegistry;
   env.__resolve_namespace = resolveNamespace;
 
-  return interpFn(normalizedScripts[mainNamespace], env);
+  const mainScript = normalizedScripts.get(mainNamespace);
+  if (!mainScript) throw new Error("main namespace script not found");
+  return interpFn(mainScript, env);
 }

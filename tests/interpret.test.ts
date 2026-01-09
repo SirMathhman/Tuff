@@ -3,7 +3,7 @@ import { interpret } from "../src/interpret";
 import { evaluateReturningOperand } from "../src/eval";
 import { interpretAll, interpretAllWithNative } from "../src/interpret_helpers";
 import type { Env } from "../src/env";
-import { isPlainObject, isStructInstance, isThisBinding } from "../src/types";
+import { isStructInstance, isThisBinding } from "../src/types";
 
 describe("interpret (basic behavior)", () => {
   it("returns a number for any input", () => {
@@ -431,7 +431,7 @@ describe("interpret (basic behavior)", () => {
     expect(isThisBinding(obj) || isStructInstance(obj)).toBeTruthy();
     if (isThisBinding(obj) || isStructInstance(obj)) {
       expect(
-        isPlainObject(obj.fieldValues) && obj.fieldValues.manhattan
+        obj.fieldValues instanceof Map && obj.fieldValues.has("manhattan")
       ).toBeTruthy();
     }
   });
@@ -490,13 +490,10 @@ describe("interpret (basic behavior)", () => {
   });
 
   it("interpretAll supports nested namespace names via '::' and computed keys", () => {
-    type Scripts = {
-      [k: string]: string;
-    };
-    const scripts: Scripts = {};
-    scripts["main"] = "from b::lib use { get }; get()";
+    const scripts = new Map<string, string>();
+    scripts.set("main", "from b::lib use { get }; get()");
     // Simulate a computed array-like key (coerced to "b,lib")
-    scripts[["b", "lib"].join(",")] = "out fn get() => 100;";
+    scripts.set(["b", "lib"].join(","), "out fn get() => 100;");
     expect(interpretAll(scripts, "main")).toBe(100);
   });
 

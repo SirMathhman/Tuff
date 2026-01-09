@@ -1,13 +1,13 @@
 /**
  * Handlers for extern declarations extracted from interpretBlockInternal.
  */
-import { Env, envGet, envSet } from "../env";
+import { Env, envGet, envSet, ensureMapEnv } from "../env";
 import {
   isPlainObject,
   isFnWrapper,
   getProp,
-  type RuntimeValue,
   type FnWrapper,
+  type FunctionObject,
 } from "../types";
 
 function parseExternFnSignature(stmt: string) {
@@ -35,33 +35,31 @@ function parseExternFnSignature(stmt: string) {
 interface MergeExternContext {
   localEnv: Env;
   name: string;
-  params: RuntimeValue;
+  params: { name: string; annotation?: string }[];
   resultAnnotation: string | undefined;
 }
 
 function tryMergeExternSignature(ctx: MergeExternContext): boolean {
-  const { localEnv, name, params, resultAnnotation } = ctx;
+  const { localEnv, name, resultAnnotation } = ctx;
   const existing = envGet(localEnv, name);
   if (!(isPlainObject(existing) && isFnWrapper(existing))) return false;
 
   const existingBody = getProp(existing.fn, "body");
   const existingIsBlock = getProp(existing.fn, "isBlock");
-  const existingClosureEnv = getProp(existing.fn, "closureEnv");
   const existingNative = getProp(existing.fn, "nativeImpl");
 
-  type FnObject = {
-    [k: string]: RuntimeValue;
-  };
-
-  const newFn: FnObject = {
-    params,
+  // For extern functions, params are stored as [] since they're native
+  const newFn: FunctionObject = {
+    params: [],
     body: typeof existingBody === "string" ? existingBody : "/* extern */",
     isBlock: existingIsBlock === true,
     resultAnnotation:
       typeof resultAnnotation === "string"
         ? resultAnnotation
-        : getProp(existing.fn, "resultAnnotation"),
-    closureEnv: existingClosureEnv ? existingClosureEnv : undefined,
+        : typeof getProp(existing.fn, "resultAnnotation") === "string"
+          ? String(getProp(existing.fn, "resultAnnotation"))
+          : undefined,
+    closureEnv: ensureMapEnv({}),
   };
   if (typeof existingNative === "function") newFn.nativeImpl = existingNative;
 
@@ -94,15 +92,18 @@ export function handleExternFn(
 
   declared.add(name);
   // register placeholder fn wrapper (no nativeImpl yet)
-  envSet(localEnv, name, {
-    fn: {
-      params,
-      body: "/* extern */",
-      isBlock: false,
-      resultAnnotation,
-      closureEnv: undefined,
-    },
-  });
+  const fnObj: FunctionObject = {
+    params: [],
+    body: "/* extern */",
+    isBlock: false,
+    resultAnnotation,
+    closureEnv: ensureMapEnv({}),
+  };
+  const wrapper: FnWrapper = {
+    type: "fn-wrapper",
+    fn: fnObj,
+  };
+  envSet(localEnv, name, wrapper);
   return true;
 }
 
@@ -184,7 +185,8 @@ export function handleImportStatement(ctx: ImportStatementContext): boolean {
       throw new Error("symbol not found in namespace");
     if (declared.has(name)) throw new Error("duplicate declaration");
     declared.add(name);
-    envSet(localEnv, name, nsExports[name]);
+    const value = getProp(nsExports, name);
+    envSet(localEnv, name, value);
   }
   return true;
 }

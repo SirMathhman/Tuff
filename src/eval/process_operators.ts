@@ -280,11 +280,11 @@ function handleStructOrThisField(
 ): boolean {
   if (!isPlainObject(fieldAccess.receiver)) throwCannotAccessField();
   const fv = getProp(fieldAccess.receiver, "fieldValues");
-  if (
-    fv === undefined ||
-    !Object.prototype.hasOwnProperty.call(fv, fieldAccess.fieldName)
-  )
-    return false;
+  // Check if fv is a Map and has the field
+  if (fv === undefined) return false;
+  if (fv instanceof Map && !fv.has(fieldAccess.fieldName)) return false;
+  if (!(fv instanceof Map) && !Object.prototype.hasOwnProperty.call(fv, fieldAccess.fieldName)) return false;
+  
   const fieldValue = getFieldValueFromInstance(
     fieldAccess.receiver,
     fieldAccess.fieldName

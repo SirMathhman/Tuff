@@ -24,7 +24,7 @@ import {
   RuntimeValue,
   ThisBinding,
   FnWrapper,
-  PlainObject,
+  FunctionObject,
 } from "../types";
 
 // Forward declaration - will be set by eval.ts to avoid circular imports
@@ -92,8 +92,12 @@ export function makeBoundWrapperFromOrigFn(
 function buildBoundFnFromOrig(
   origFn: RuntimeValue,
   boundThis: RuntimeValue
-): PlainObject {
-  const boundFn: PlainObject = {};
+): FunctionObject {
+  const boundFn: FunctionObject = {
+    params: [],
+    body: "",
+    isBlock: false,
+  };
 
   // params
   if (hasParams(origFn) && Array.isArray(origFn.params)) {
@@ -129,7 +133,7 @@ function buildThisBindingFromEnv(envLocal: Env): ThisBinding {
   const thisObj: ThisBinding = {
     type: "this-binding",
     isThisBinding: true,
-    fieldValues: {},
+    fieldValues: new Map(),
   };
   for (const [k, envVal] of envEntries(envLocal)) {
     if (k === "this") continue;
@@ -138,15 +142,15 @@ function buildThisBindingFromEnv(envLocal: Env): ThisBinding {
       hasValue(envVal) &&
       envVal.value !== undefined
     ) {
-      thisObj.fieldValues[k] = envVal.value;
+      thisObj.fieldValues.set(k, envVal.value);
     } else if (
       typeof envVal === "number" ||
       typeof envVal === "string" ||
       typeof envVal === "boolean"
     ) {
-      thisObj.fieldValues[k] = envVal;
+      thisObj.fieldValues.set(k, envVal);
     } else if (!isStructDef(envVal)) {
-      thisObj.fieldValues[k] = envVal;
+      thisObj.fieldValues.set(k, envVal);
     }
   }
   return thisObj;
