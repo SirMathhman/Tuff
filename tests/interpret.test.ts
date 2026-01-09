@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { interpret } from "../src/interpreter";
 import { evaluateReturningOperand } from "../src/evaluator";
-import { interpretAll, interpretAllWithNative } from "../src/interpreter_helpers";
+import {
+  interpretAll,
+  interpretAllWithNative,
+} from "../src/interpreter_helpers";
 import type { Env } from "../src/runtime/env";
 import { isStructInstance, isThisBinding } from "../src/runtime/types";
 

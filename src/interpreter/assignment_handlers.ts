@@ -16,7 +16,10 @@ import {
   throwUseOfUninitialized,
   type RuntimeValue,
 } from "../runtime/types";
-import { parseArrayAnnotation, validateAnnotation } from "../interpreter_helpers";
+import {
+  parseArrayAnnotation,
+  validateAnnotation,
+} from "../interpreter_helpers";
 import {
   computeAssignmentValue,
   assignToPlaceholder,

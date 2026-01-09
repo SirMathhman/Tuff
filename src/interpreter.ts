@@ -6,7 +6,10 @@
  */
 import { splitTopLevelStatements, stripAndValidateComments } from "./parser";
 import { evaluateFlatExpression } from "./evaluator";
-import { interpretBlock, interpretBlockInPlace } from "./interpreter/statements";
+import {
+  interpretBlock,
+  interpretBlockInPlace,
+} from "./interpreter/statements";
 import { interpretExpression } from "./interpreter/expressions";
 import { hasYield } from "./runtime/types";
 
