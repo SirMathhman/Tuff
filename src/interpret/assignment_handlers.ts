@@ -79,15 +79,13 @@ export function handleVariableOrDerefAssignment(
 /**
  * Handle this.field assignment
  */
-export function handleThisFieldAssignment(
-  args: {
-    name: string;
-    op: string | undefined;
-    rhs: string;
-    localEnv: Env;
-    evaluateRhsLocal: EvaluateRhsCallback;
-  }
-): void {
+export function handleThisFieldAssignment(args: {
+  name: string;
+  op: string | undefined;
+  rhs: string;
+  localEnv: Env;
+  evaluateRhsLocal: EvaluateRhsCallback;
+}): void {
   const { name, op, rhs, localEnv, evaluateRhsLocal } = args;
   const { existing, rhsOperand } = requireExistingAndEvalRhs(
     name,

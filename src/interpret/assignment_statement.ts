@@ -36,7 +36,14 @@ export function handleAssignmentStatement(
     return { handled: true, last: undefined };
   }
 
-  handleVariableOrDerefAssignment(isDeref, name, op, rhs, localEnv, evaluateRhsLocal);
+  handleVariableOrDerefAssignment(
+    isDeref,
+    name,
+    op,
+    rhs,
+    localEnv,
+    evaluateRhsLocal
+  );
 
   return { handled: true, last: undefined };
 }

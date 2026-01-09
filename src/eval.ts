@@ -166,195 +166,176 @@ function processOperators(
     return undefined;
   }
 
+  // Extracted small handlers to keep top-level complexity low.
+  function handleCallAt(i: number) {
+    const funcOperand = operands[i];
+    const callAppOperand = operands[i + 1];
+
+    if (
+      ops[i + 1] &&
+      typeof ops[i + 1] === "string" &&
+      ops[i + 1].startsWith(".")
+    ) {
+      const result = evaluateCallAtFn(funcOperand, callAppOperand);
+      const nextOp = ops[i + 1];
+      if (typeof nextOp !== "string") throw new Error("invalid field access operator");
+      const fieldName = nextOp.substring(1);
+      if (!result) throwCannotAccessFieldMissing();
+      const fieldValue = getFieldValueFromInstance(result, fieldName);
+
+      operands.splice(i, 3, fieldValue);
+      ops.splice(i, 2);
+      return true;
+    }
+
+    const result = evaluateCallAtFn(funcOperand, callAppOperand);
+    operands.splice(i, 2, result);
+    ops.splice(i, 1);
+    return true;
+  }
+
+  function handleIndexAt(i: number) {
+    const indexOpnd = operands[i + 1];
+    const arrOperand = operands[i];
+
+    let idxVal: number;
+    if (isPlainObject(indexOpnd) && getProp(indexOpnd, "indexExpr") !== undefined) {
+      const idxExprProp = getProp(indexOpnd, "indexExpr");
+      if (typeof idxExprProp !== "string") throw new Error("invalid index expression");
+      idxVal = convertOperandToNumber(evaluateReturningOperandFn(String(idxExprProp), localEnv));
+    } else {
+      idxVal = convertOperandToNumber(indexOpnd);
+    }
+
+    if (!arrOperand) {
+      if (tryResolveMissingIndex(i, idxVal, operands, ops)) return true;
+      throw new Error("cannot index missing value");
+    }
+
+    if (isPlainObject(arrOperand) && isPointer(arrOperand) && getProp(arrOperand, "ptrIsSlice") === true) {
+      const targetVal = getArrayTargetFromPointer(arrOperand, "index");
+      const elem = getArrayElementFromInstance(targetVal, idxVal);
+      operands.splice(i, 2, elem);
+      ops.splice(i, 1);
+      return true;
+    }
+
+    if (isArrayInstance(arrOperand)) {
+      const elem = getArrayElementFromInstance(arrOperand, idxVal);
+      operands.splice(i, 2, elem);
+      ops.splice(i, 1);
+      return true;
+    }
+    throw new Error("cannot index non-array value");
+  }
+
+  function handleDotAt(i: number) {
+    const fieldName = ops[i].substring(1);
+    const structInstance = operands[i];
+
+    if (!structInstance) {
+      const found = findNearbyOperandIndex(operands, i, (maybe) => isStructInstance(maybe) || isThisBinding(maybe));
+      if (!found) throwCannotAccessFieldMissing();
+
+      const maybe = operands[found.index];
+      const fieldValue = getFieldValueFromInstance(maybe, fieldName);
+      if (found.isLeft) {
+        const count = i - found.index + 1;
+        operands.splice(found.index, count, fieldValue);
+        ops.splice(i, 1);
+        return true;
+      }
+
+      const count = found.index - i + 1;
+      operands.splice(i, count, fieldValue);
+      ops.splice(i, 1);
+      return true;
+    }
+
+    let arrLike: unknown | undefined = undefined;
+    if (isPlainObject(structInstance) && isPointer(structInstance) && getProp(structInstance, "ptrIsSlice") === true) {
+      arrLike = getArrayTargetFromPointer(structInstance, "field");
+    } else if (isArrayInstance(structInstance)) {
+      arrLike = structInstance;
+    }
+
+    if (arrLike !== undefined) {
+      if (handleArrayLikeFieldAccess(arrLike, fieldName, i, operands, ops)) return true;
+      throw new Error(`invalid field access: ${fieldName}`);
+    }
+
+    if (isStructInstance(structInstance) || isThisBinding(structInstance)) {
+      if (!isPlainObject(structInstance)) throwCannotAccessField();
+
+      const fv = getProp(structInstance, "fieldValues");
+      if (fv !== undefined && Object.prototype.hasOwnProperty.call(fv, fieldName)) {
+        const fieldValue = getFieldValueFromInstance(structInstance, fieldName);
+        operands.splice(i, 2, fieldValue);
+        ops.splice(i, 1);
+        return true;
+      }
+
+      const wrapper = resolveMethodWrapper(fieldName, structInstance);
+      if (!wrapper) throw new Error(`invalid field access: ${fieldName}`);
+
+      const nextOpnd = operands[i + 1];
+      if (isPlainObject(nextOpnd) && hasCallApp(nextOpnd)) {
+        const callResult = evaluateCallAtFn(wrapper, nextOpnd);
+        operands.splice(i, 2, callResult);
+        ops.splice(i, 1);
+        return true;
+      }
+
+      if (ops[i + 1] === "call") {
+        const callAppOperand = operands[i + 2];
+        const callResult = evaluateCallAtFn(wrapper, callAppOperand);
+        operands.splice(i, 3, callResult);
+        ops.splice(i, 2);
+        return true;
+      }
+
+      if (isPlainObject(wrapper)) {
+        const fnObj = getProp(wrapper, "fn");
+        if (isPlainObject(fnObj)) Reflect.set(fnObj, "__autoCall", true);
+      }
+
+      operands.splice(i, 2, wrapper);
+      ops.splice(i, 1);
+      return true;
+    }
+
+    if (
+      typeof structInstance === "number" ||
+      typeof structInstance === "string" ||
+      typeof structInstance === "boolean" ||
+      isIntOperand(structInstance) ||
+      isFloatOperand(structInstance) ||
+      isBoolOperand(structInstance)
+    ) {
+      const wrapper = resolveMethodWrapper(fieldName, structInstance);
+      if (!wrapper) throwCannotAccessField();
+      operands.splice(i, 2, wrapper);
+      ops.splice(i, 1);
+      return true;
+    }
+
+    throwCannotAccessField();
+  }
+
   let i = 0;
   while (i < ops.length) {
     const op = ops[i];
 
     if (op === "call") {
-      // Handle `call` and `call` immediately followed by `.field`.
-      const funcOperand = operands[i];
-      const callAppOperand = operands[i + 1];
-
-      if (
-        ops[i + 1] &&
-        typeof ops[i + 1] === "string" &&
-        ops[i + 1].startsWith(".")
-      ) {
-        const result = evaluateCallAtFn(funcOperand, callAppOperand);
-        const nextOp = ops[i + 1];
-        if (typeof nextOp !== "string")
-          throw new Error("invalid field access operator");
-        const fieldName = nextOp.substring(1);
-        if (!result) throwCannotAccessFieldMissing();
-        const fieldValue = getFieldValueFromInstance(result, fieldName);
-
-        operands.splice(i, 3, fieldValue);
-        ops.splice(i, 2);
-        continue;
-      }
-
-      const result = evaluateCallAtFn(funcOperand, callAppOperand);
-      operands.splice(i, 2, result);
-      ops.splice(i, 1);
-      continue;
+      if (handleCallAt(i)) continue;
     }
 
     if (op === "index") {
-      const indexOpnd = operands[i + 1];
-      const arrOperand = operands[i];
-
-      let idxVal: number;
-      if (
-        isPlainObject(indexOpnd) &&
-        getProp(indexOpnd, "indexExpr") !== undefined
-      ) {
-        const idxExprProp = getProp(indexOpnd, "indexExpr");
-        if (typeof idxExprProp !== "string")
-          throw new Error("invalid index expression");
-        idxVal = convertOperandToNumber(
-          evaluateReturningOperandFn(String(idxExprProp), localEnv)
-        );
-      } else {
-        idxVal = convertOperandToNumber(indexOpnd);
-      }
-
-      if (!arrOperand) {
-        if (tryResolveMissingIndex(i, idxVal, operands, ops)) continue;
-        throw new Error("cannot index missing value");
-      }
-
-      if (
-        isPlainObject(arrOperand) &&
-        isPointer(arrOperand) &&
-        getProp(arrOperand, "ptrIsSlice") === true
-      ) {
-        const targetVal = getArrayTargetFromPointer(arrOperand, "index");
-        const elem = getArrayElementFromInstance(targetVal, idxVal);
-        operands.splice(i, 2, elem);
-        ops.splice(i, 1);
-        continue;
-      }
-
-      if (isArrayInstance(arrOperand)) {
-        const elem = getArrayElementFromInstance(arrOperand, idxVal);
-        operands.splice(i, 2, elem);
-        ops.splice(i, 1);
-        continue;
-      }
-      throw new Error("cannot index non-array value");
+      if (handleIndexAt(i)) continue;
     }
 
     if (op && op.startsWith(".")) {
-      const fieldName = op.substring(1);
-      const structInstance = operands[i];
-
-      if (!structInstance) {
-        const found = findNearbyOperandIndex(
-          operands,
-          i,
-          (maybe) => isStructInstance(maybe) || isThisBinding(maybe)
-        );
-        if (!found) throwCannotAccessFieldMissing();
-
-        const maybe = operands[found.index];
-        const fieldValue = getFieldValueFromInstance(maybe, fieldName);
-        if (found.isLeft) {
-          const count = i - found.index + 1;
-          operands.splice(found.index, count, fieldValue);
-          ops.splice(i, 1);
-          continue;
-        }
-
-        const count = found.index - i + 1;
-        operands.splice(i, count, fieldValue);
-        ops.splice(i, 1);
-        continue;
-      }
-
-      // Array-like accessors (len/length/init) for either pointer-to-slice or array.
-      let arrLike: unknown | undefined = undefined;
-      if (
-        isPlainObject(structInstance) &&
-        isPointer(structInstance) &&
-        getProp(structInstance, "ptrIsSlice") === true
-      ) {
-        arrLike = getArrayTargetFromPointer(structInstance, "field");
-      } else if (isArrayInstance(structInstance)) {
-        arrLike = structInstance;
-      }
-
-      if (arrLike !== undefined) {
-        if (handleArrayLikeFieldAccess(arrLike, fieldName, i, operands, ops))
-          continue;
-        throw new Error(`invalid field access: ${fieldName}`);
-      }
-
-      // Struct/this binding field or method.
-      if (isStructInstance(structInstance) || isThisBinding(structInstance)) {
-        if (!isPlainObject(structInstance)) {
-          throwCannotAccessField();
-        }
-
-        const fv = getProp(structInstance, "fieldValues");
-        if (
-          fv !== undefined &&
-          Object.prototype.hasOwnProperty.call(fv, fieldName)
-        ) {
-          const fieldValue = getFieldValueFromInstance(
-            structInstance,
-            fieldName
-          );
-          operands.splice(i, 2, fieldValue);
-          ops.splice(i, 1);
-          continue;
-        }
-
-        const wrapper = resolveMethodWrapper(fieldName, structInstance);
-        if (!wrapper) throw new Error(`invalid field access: ${fieldName}`);
-
-        const nextOpnd = operands[i + 1];
-        if (isPlainObject(nextOpnd) && hasCallApp(nextOpnd)) {
-          const callResult = evaluateCallAtFn(wrapper, nextOpnd);
-          operands.splice(i, 2, callResult);
-          ops.splice(i, 1);
-          continue;
-        }
-
-        if (ops[i + 1] === "call") {
-          const callAppOperand = operands[i + 2];
-          const callResult = evaluateCallAtFn(wrapper, callAppOperand);
-          operands.splice(i, 3, callResult);
-          ops.splice(i, 2);
-          continue;
-        }
-
-        if (isPlainObject(wrapper)) {
-          const fnObj = getProp(wrapper, "fn");
-          if (isPlainObject(fnObj)) Reflect.set(fnObj, "__autoCall", true);
-        }
-
-        operands.splice(i, 2, wrapper);
-        ops.splice(i, 1);
-        continue;
-      }
-
-      // Primitive receiver method lookup.
-      if (
-        typeof structInstance === "number" ||
-        typeof structInstance === "string" ||
-        typeof structInstance === "boolean" ||
-        isIntOperand(structInstance) ||
-        isFloatOperand(structInstance) ||
-        isBoolOperand(structInstance)
-      ) {
-        const wrapper = resolveMethodWrapper(fieldName, structInstance);
-        if (!wrapper) throwCannotAccessField();
-        operands.splice(i, 2, wrapper);
-        ops.splice(i, 1);
-        continue;
-      }
-
-      throwCannotAccessField();
+      if (handleDotAt(i)) continue;
     }
 
     // Not a high-precedence operator; leave it for precedence handling later.

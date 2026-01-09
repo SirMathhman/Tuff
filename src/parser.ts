@@ -329,7 +329,10 @@ export function parseOperandAt(src: string, pos: number) {
       }
       operand.structInstantiation = { name: id[1], fields };
       // len should be from start position i to endIdx (inclusive of closing brace)
-      return { operand: finalizeOperand(operand), len: i - pos + (endIdx - i + 1) };
+      return {
+        operand: finalizeOperand(operand),
+        len: i - pos + (endIdx - i + 1),
+      };
     }
 
     return { operand: finalizeOperand(operand), len: i - pos + id[1].length };
