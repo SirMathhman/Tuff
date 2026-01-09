@@ -17,11 +17,15 @@ describe("comments", () => {
   });
 
   it("unterminated block comment throws", () => {
-    expect(() => interpret("let x = /* unclosed")).toThrow("unterminated block comment");
+    expect(() => interpret("let x = /* unclosed")).toThrow(
+      "unterminated block comment"
+    );
   });
 
   it("nested block comment throws", () => {
-    expect(() => interpret("/* outer /* inner */")).toThrow("nested block comment");
+    expect(() => interpret("/* outer /* inner */")).toThrow(
+      "nested block comment"
+    );
   });
 
   it("comment-like in string preserved", () => {

@@ -961,8 +961,8 @@ export function evaluateReturningOperand(
   // searching left or right for a nearby array/this operand. Returns true if
   // the index was resolved and splices the operands/ops appropriately.
   function tryResolveMissingIndex(idxVal: number) {
-    const found = findNearbyOperandIndex((maybe) =>
-      isArrayInstance(maybe) || isThisBinding(maybe)
+    const found = findNearbyOperandIndex(
+      (maybe) => isArrayInstance(maybe) || isThisBinding(maybe)
     );
     if (!found) return false;
     const maybe = operands[found.index];
@@ -1190,8 +1190,8 @@ export function evaluateReturningOperand(
         // Attempt to recover: sometimes due to token ordering the actual struct instance
         // may be to the left (e.g., parsing quirks). Search left for a nearby non-undefined
         // operand that looks like a struct/this binding and use that.
-        const found = findNearbyOperandIndex((maybe) =>
-          isStructInstance(maybe) || isThisBinding(maybe)
+        const found = findNearbyOperandIndex(
+          (maybe) => isStructInstance(maybe) || isThisBinding(maybe)
         );
         if (found) {
           const maybe = operands[found.index];
@@ -1346,9 +1346,11 @@ export function evaluateReturningOperand(
           ops.splice(i, 1);
           continue;
         }
-        throw new Error(`cannot access field on non-struct value`);
+        // No method found on primitive receiver; reuse shared throw helper
+        throwCannotAccessField();
       } else {
-        throw new Error(`cannot access field on non-struct value`);
+        // Non-struct and non-primitive receivers fall through to the same error
+        throwCannotAccessField();
       }
     } else {
       i++;
@@ -1364,6 +1366,11 @@ export function evaluateReturningOperand(
       const res = evaluateCallAt(operands[0], { callApp: [] });
       operands.splice(0, 1, res);
     }
+  }
+
+  // helper that throws a consistent error for invalid field access
+  function throwCannotAccessField(): never {
+    throw new Error(`cannot access field on non-struct value`);
   }
 
   applyPrecedence(new Set(["*", "/", "%"]));

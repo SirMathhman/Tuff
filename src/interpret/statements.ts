@@ -88,10 +88,14 @@ function interpretBlockInternal(
       arrInst.elements[idxVal] = rhsOperand2;
     }
 
-    arrInst.initializedCount = Math.max(
-      arrInst.initializedCount,
-      idxVal + 1
-    );
+    arrInst.initializedCount = Math.max(arrInst.initializedCount, idxVal + 1);
+  };
+
+  // helper to extract the trailing loop body and validate presence
+  const extractTrailingBody = (stmtLocal: string, endIdx: number, kind: string) => {
+    const body = stmtLocal.slice(endIdx + 1).trim();
+    if (!body) throw new Error(`missing ${kind} body`);
+    return body;
   };
 
   const stmts = splitTopLevelStatements(s);
@@ -531,8 +535,7 @@ function interpretBlockInternal(
         const endIdx = findMatchingParen(stmt, start);
         if (endIdx === -1) throw new Error("unbalanced parentheses in while");
         const cond = stmt.slice(start + 1, endIdx).trim();
-        let body = stmt.slice(endIdx + 1).trim();
-        if (!body) throw new Error("missing while body");
+        const body = extractTrailingBody(stmt, endIdx, "while");
         while (true) {
           const condOpnd = evaluateReturningOperand(cond, localEnv);
           if (!isTruthy(condOpnd)) break;
@@ -554,8 +557,7 @@ function interpretBlockInternal(
         const endIdx = findMatchingParen(stmt, start);
         if (endIdx === -1) throw new Error("unbalanced parentheses in for");
         const cond = stmt.slice(start + 1, endIdx).trim();
-        let body = stmt.slice(endIdx + 1).trim();
-        if (!body) throw new Error("missing for body");
+        const body = extractTrailingBody(stmt, endIdx, "for");
 
         // cond should be: let [mut] <name> in <start>.. <end>
         const m = cond.match(
