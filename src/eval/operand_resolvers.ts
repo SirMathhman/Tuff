@@ -52,7 +52,7 @@ interface PointerObject {
 export interface OperandResolutionContext {
   localEnv: Env;
   getBindingTarget: (name: string) => BindingTarget;
-  evaluateExpr: (expr: string, env: Env) => unknown;
+  evaluateExpr: (expr: string, env: Env) => RuntimeValue;
 }
 
 /**

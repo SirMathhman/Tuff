@@ -13,6 +13,7 @@ import {
   hasCallApp,
   getProp,
   isArrayInstance,
+  type RuntimeValue,
 } from "../types";
 import { Env, envClone, envSet, isEnv } from "../env";
 import { validateAnnotation } from "../interpret_helpers";
@@ -27,7 +28,7 @@ import {
  */
 export interface CallEvaluationContext {
   localEnv: Env;
-  evaluateExpr: (expr: string, env: Env) => unknown;
+  evaluateExpr: (expr: string, env: Env) => RuntimeValue;
 }
 
 function evaluateCallArgs(

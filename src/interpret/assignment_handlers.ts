@@ -121,9 +121,9 @@ function getPointerFromExisting(existing: unknown): unknown | undefined {
 
 function materializePlaceholderArray(
   name: string,
-  existingObj: unknown,
+  existingObj: RuntimeValue,
   localEnv: Env
-): unknown {
+): RuntimeValue {
   if (
     !isPlainObject(existingObj) ||
     !hasUninitialized(existingObj) ||

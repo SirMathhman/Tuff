@@ -26,7 +26,7 @@ interface FunctionWrapper {
 }
 
 // Type for the evaluateReturningOperand function to avoid circular imports
-type EvaluateFn = (exprStr: string, localEnv: Env) => unknown;
+type EvaluateFn = (exprStr: string, localEnv: Env) => RuntimeValue;
 
 interface MatchTargetAndRest {
   targetExpr: string;

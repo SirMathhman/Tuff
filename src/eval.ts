@@ -38,6 +38,7 @@ import {
   hasCallArgs,
   hasUninitialized,
   throwUseOfUninitialized,
+  type RuntimeValue,
 } from "./types";
 
 // Re-export from operators module for backward compatibility
@@ -48,8 +49,8 @@ const NOT_HANDLED = Symbol("NOT_HANDLED");
 function tryHandleSpecialExpressions(
   exprStr: string,
   localEnv: Env,
-  evaluateExpr: (expr: string, env: Env) => unknown
-): unknown | typeof NOT_HANDLED {
+  evaluateExpr: (expr: string, env: Env) => RuntimeValue
+): RuntimeValue | typeof NOT_HANDLED {
   const sTrim = exprStr.trimStart();
   if (/^if\b/.test(sTrim)) {
     return handleIfExpression(sTrim, localEnv, evaluateExpr);
@@ -83,10 +84,10 @@ function makeGetBindingTarget(localEnv: Env) {
 }
 
 function resolveOperands(
-  operands: unknown[],
+  operands: RuntimeValue[],
   resolutionCtx: OperandResolutionContext,
-  evaluateCallAt: (funcOperand: unknown, callAppOperand: unknown) => unknown
-): unknown[] {
+  evaluateCallAt: (funcOperand: RuntimeValue, callAppOperand: RuntimeValue) => RuntimeValue
+): RuntimeValue[] {
   return operands.map((op) => {
     const groupedResult = resolveGroupedExpr(op, resolutionCtx);
     if (groupedResult !== undefined) return groupedResult;
@@ -133,7 +134,7 @@ function applyPrecedenceInPlace(
 export function evaluateReturningOperand(
   exprStr: string,
   localEnv: Env
-): unknown {
+): RuntimeValue {
   const special = tryHandleSpecialExpressions(
     exprStr,
     localEnv,
@@ -163,7 +164,7 @@ export function evaluateReturningOperand(
   };
 
   // helper to evaluate a call and return its result (delegates to extracted module)
-  function evaluateCallAt(funcOperand: unknown, callAppOperand: unknown) {
+  function evaluateCallAt(funcOperand: RuntimeValue, callAppOperand: RuntimeValue) {
     return evaluateCall(funcOperand, callAppOperand, callCtx);
   }
 

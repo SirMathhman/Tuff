@@ -195,7 +195,7 @@ export interface EvaluateRhsContext {
   getLastTopLevelStatement_fn: (_s: string) => string | undefined;
 }
 
-export function evaluateRhs(ctx: EvaluateRhsContext): unknown {
+export function evaluateRhs(ctx: EvaluateRhsContext): RuntimeValue {
   const { rhs, envLocal, interpret, getLastTopLevelStatement_fn } = ctx;
   if (/^\s*\{[\s\S]*\}\s*$/.test(rhs)) {
     const inner = rhs.replace(/^\{\s*|\s*\}$/g, "");
@@ -214,7 +214,7 @@ export function evaluateRhs(ctx: EvaluateRhsContext): unknown {
     } catch (e: unknown) {
       // Handle `yield` signal thrown from nested block execution. If a yield was
       // signaled, convert the numeric payload into an operand and return it.
-      if (e && typeof e === "object" && "__yield" in e) {
+      if (e && typeof e === "object" && e !== undefined && "__yield" in e) {
         const signal = e;
         function hasYieldProp(obj: unknown): obj is ObjectWithYield {
           return (

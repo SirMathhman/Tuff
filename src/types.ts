@@ -1,13 +1,56 @@
 import type { Env } from "./env";
 
-// Runtime value type - represents any value that can exist at runtime in the interpreter
-// This is intentionally broad to accommodate the dynamic nature of the interpreter
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type RuntimeValue = any;
-
+// Forward declare PlainObject to avoid circular reference issues
 export interface PlainObject {
   [k: string]: RuntimeValue;
 }
+
+// Runtime value type - represents any value that can exist at runtime in the interpreter
+// This is a union of all possible runtime value types
+// Note: 'unknown' is included because Env uses unknown to avoid circular dependencies
+export type RuntimeValue =
+  | string
+  | number
+  | bigint
+  | boolean
+  | undefined
+  | null
+  | unknown
+  | Env
+  | BoolOperand
+  | FloatOperand
+  | IntOperand
+  | FnWrapper
+  | ThisBinding
+  | StructInstance
+  | StructDef
+  | ArrayInstance
+  | ArrayLiteral
+  | Pointer
+  | KindBits
+  | Ident
+  | AddrOf
+  | Deref
+  | CallArgs
+  | CallApp
+  | StructInstantiation
+  | Value
+  | Mutable
+  | Uninitialized
+  | Annotation
+  | ParsedAnnotation
+  | LiteralAnnotation
+  | Params
+  | ClosureEnv
+  | Body
+  | IsBlock
+  | Name
+  | Fields
+  | PtrMutable
+  | PtrIsBool
+  | Yield
+  | PlainObject
+  | RuntimeValue[];
 
 export interface BoolOperand {
   boolValue: boolean;
@@ -231,7 +274,7 @@ export function isPointer(v: unknown): v is Pointer {
   );
 }
 
-export function unwrapBindingValue(binding: unknown): unknown {
+export function unwrapBindingValue(binding: RuntimeValue): RuntimeValue {
   if (!isPlainObject(binding)) return binding;
   if (!Object.prototype.hasOwnProperty.call(binding, "value")) return binding;
   const v = binding.value;
