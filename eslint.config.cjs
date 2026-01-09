@@ -83,6 +83,11 @@ module.exports = [
           message:
             "The 'unknown' type is banned in interface properties; use a more specific type",
         },
+        {
+          selector: "TSInterfaceDeclaration[extends.length>0]",
+          message:
+            "Interface extension is banned; use composition instead (e.g., include fields directly or use intersection types)",
+        },
       ],
       // Custom rule: Limit interface fields to maximum of 5 (excluding methods)
       "custom/max-interface-fields": ["error", { max: 5 }],

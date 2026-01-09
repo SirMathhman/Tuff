@@ -50,10 +50,12 @@ interface ProcessOperatorsContext {
   getBindingTargetFn: (name: string) => BindingTarget;
 }
 
-interface ProcessOperatorsCtx extends ProcessOperatorsContext {
+interface ProcessOperatorsCtxExtra {
   operands: RuntimeValue[];
   ops: string[];
 }
+
+type ProcessOperatorsCtx = ProcessOperatorsContext & ProcessOperatorsCtxExtra;
 
 function replaceWithBigIntNumber(
   ctx: ProcessOperatorsCtx,

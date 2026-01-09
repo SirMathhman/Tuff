@@ -67,42 +67,42 @@ export type RuntimeValue =
   | PlainObject
   | RuntimeValue[];
 
-export interface BoolOperand extends TypedValue {
+export interface BoolOperand {
   type: "bool-operand";
   boolValue: boolean;
 }
 
-export interface FloatOperand extends TypedValue {
+export interface FloatOperand {
   type: "float-operand";
   isFloat: true;
   floatValue: number;
 }
 
-export interface IntOperand extends TypedValue {
+export interface IntOperand {
   type: "int-operand";
   valueBig: bigint;
   kind?: string;
   bits?: number;
 }
 
-export interface FnWrapper extends TypedValue {
+export interface FnWrapper {
   type: "fn-wrapper";
   fn: PlainObject;
 }
 
-export interface ThisBinding extends TypedValue {
+export interface ThisBinding {
   type: "this-binding";
   isThisBinding: true;
   fieldValues: PlainObject;
 }
 
-export interface StructInstance extends TypedValue {
+export interface StructInstance {
   type: "struct-instance";
   isStructInstance: true;
   fieldValues: PlainObject;
 }
 
-export interface StructDef extends TypedValue {
+export interface StructDef {
   type: "struct-def";
   isStructDef: true;
 }
@@ -113,11 +113,13 @@ export interface ArrayMetadata {
   elemType?: string;
 }
 
-export interface ArrayInstance extends TypedValue, ArrayMetadata {
+export interface ArrayInstanceBase {
   type: "array-instance";
   isArray: true;
   elements: RuntimeValue[];
 }
+
+export type ArrayInstance = ArrayInstanceBase & ArrayMetadata;
 
 export interface PointerFlags {
   ptrIsSlice?: boolean;
@@ -137,15 +139,13 @@ export interface PointerStoredValue {
   boolValue?: boolean;
 }
 
-export interface Pointer
-  extends TypedValue,
-    PointerFlags,
-    PointerTypeInfo,
-    PointerStoredValue {
+export interface PointerBase {
   type: "pointer";
   pointer: true;
   ptrName: string;
 }
+
+export type Pointer = PointerBase & PointerFlags & PointerTypeInfo & PointerStoredValue;
 
 export interface ArrayLiteral {
   arrayLiteral: string[];
