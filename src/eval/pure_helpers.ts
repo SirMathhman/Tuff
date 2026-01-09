@@ -96,12 +96,22 @@ export function buildThisBindingFromEnv(envLocal: Env): ThisBinding {
   return thisObj;
 }
 
+interface ArrayInstance {
+  type: "array-instance";
+  isArray: true;
+  elements: RuntimeValue[];
+  length: number;
+  initializedCount: number;
+}
+
 /**
  * Create an array instance from element array
  */
-export function createArrayInstanceFromElements(elems: RuntimeValue[]) {
+export function createArrayInstanceFromElements(
+  elems: RuntimeValue[]
+): ArrayInstance {
   return {
-    type: "array-instance" as const,
+    type: "array-instance",
     isArray: true,
     elements: elems,
     length: elems.length,

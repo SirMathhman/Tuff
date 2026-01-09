@@ -1,11 +1,24 @@
-import { checkRange, type RuntimeValue, type PlainObject } from "./types";
+import { checkRange, type RuntimeValue } from "./types";
 
-export type OperandObject = PlainObject;
+// Re-export AST types and functions from the ast module
+export * from "./ast";
+
+// Operand object for string-based parsing
+/* eslint-disable custom/no-object-indexing -- needed for RuntimeValue compatibility */
+export interface OperandObject {
+  [key: string]: RuntimeValue | string[] | undefined;
+  ident?: string;
+  callArgs?: string[];
+  groupedExpr?: string;
+}
+/* eslint-enable custom/no-object-indexing */
 
 export interface StructField {
   name: string;
   value: string;
 }
+
+// ============= PARSER CONFIGURATION =============
 
 export interface DelimiterConfig {
   src: string;
@@ -20,6 +33,8 @@ export interface ParseContext {
   i: number;
   prefixes: string[];
 }
+
+// ============= STRING-BASED PARSING UTILITIES =============
 
 export function splitTopLevelStatements(str: string): string[] {
   const parts: string[] = [];
@@ -99,7 +114,7 @@ export function parseCommaSeparatedArgs(inner: string): string[] {
 }
 
 function unescapeString(inner: string) {
-  return inner.replace(/\\([\\"'nrtb])/g, (m, ch) => {
+  return inner.replace(/\\([\\"'nrtb])/g, (_m, ch) => {
     if (ch === "n") return "\n";
     if (ch === "r") return "\r";
     if (ch === "t") return "\t";
@@ -110,7 +125,7 @@ function unescapeString(inner: string) {
 
 export function parseOperand(token: string) {
   const s = token.trim();
-  // string literal (single or double quoted) - simple unescape for common escapes
+  // string literal (single or double quoted)
   if (
     (s.startsWith('"') && s.endsWith('"')) ||
     (s.startsWith("'") && s.endsWith("'"))
@@ -124,7 +139,7 @@ export function parseOperand(token: string) {
   if (/^true$/i.test(s)) return { type: "bool-operand", boolValue: true };
   if (/^false$/i.test(s)) return { type: "bool-operand", boolValue: false };
 
-  // Match integer or float with optional suffix attached (e.g., 123, 1.23, 100U8)
+  // Match integer or float with optional suffix
   const m = s.match(/^([+-]?\d+(?:\.\d+)?)([uUiI]\d+)?$/);
   if (!m) return undefined;
   const numStr = m[1];
@@ -134,7 +149,6 @@ export function parseOperand(token: string) {
     const sufMatch = suffix.match(/^([uUiI])(\d+)$/)!;
     const kind = sufMatch[1];
     const bits = Number(sufMatch[2]);
-    // Suffix requires integer (no decimal part)
     if (!/^[-+]?\d+$/.test(numStr))
       throw new Error("suffix requires integer value");
     const valueBig = BigInt(numStr);
@@ -144,17 +158,17 @@ export function parseOperand(token: string) {
       checkRange("u", bits, valueBig);
       return { type: "int-operand", valueBig, kind: "u", bits };
     }
-    // signed
     checkRange("i", bits, valueBig);
     return { type: "int-operand", valueBig, kind: "i", bits };
   }
 
-  // no suffix: accept float or integer
   if (numStr.includes(".")) {
     return { type: "float-operand", floatValue: Number(numStr), isFloat: true };
   }
   return { type: "int-operand", valueBig: BigInt(numStr) };
 }
+
+// ============= COMMENT STRIPPING =============
 
 interface StringState {
   string: string;
@@ -226,6 +240,38 @@ function stepStripString(s: CommentStripState) {
   }
   s.i++;
 }
+
+export function stripAndValidateComments(input: string) {
+  const s: CommentStripState = {
+    input,
+    out: "",
+    i: 0,
+    L: input.length,
+    state: "normal",
+  };
+
+  while (s.i < s.L) {
+    if (s.state === "normal") {
+      stepStripNormal(s);
+      continue;
+    }
+    if (s.state === "line") {
+      stepStripLine(s);
+      continue;
+    }
+    if (s.state === "block") {
+      stepStripBlock(s);
+      continue;
+    }
+    stepStripString(s);
+  }
+  if (s.state === "block") throw new Error("unterminated block comment");
+  if (typeof s.state === "object" && "string" in s.state)
+    throw new Error("unterminated string");
+  return s.out;
+}
+
+// ============= OPERAND PARSING =============
 
 function skipWs(src: string, i: number) {
   let j = i;
@@ -392,36 +438,6 @@ function parseIdentifierAt(ctx: ParseContext) {
     operand: finalizeOperand(base, prefixes),
     len: i - pos + id[1].length,
   };
-}
-
-export function stripAndValidateComments(input: string) {
-  const s: CommentStripState = {
-    input,
-    out: "",
-    i: 0,
-    L: input.length,
-    state: "normal",
-  };
-
-  while (s.i < s.L) {
-    if (s.state === "normal") {
-      stepStripNormal(s);
-      continue;
-    }
-    if (s.state === "line") {
-      stepStripLine(s);
-      continue;
-    }
-    if (s.state === "block") {
-      stepStripBlock(s);
-      continue;
-    }
-    stepStripString(s);
-  }
-  if (s.state === "block") throw new Error("unterminated block comment");
-  if (typeof s.state === "object" && "string" in s.state)
-    throw new Error("unterminated string");
-  return s.out;
 }
 
 export function parseOperandAt(src: string, pos: number) {

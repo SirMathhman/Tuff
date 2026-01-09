@@ -34,7 +34,6 @@ interface AssignmentPatternConfig {
 function makeMapper(
   isDeref: boolean,
   nameIdx: number,
-  // eslint-disable-next-line no-restricted-syntax
   opIdx: number | undefined,
   rhsIdx: number,
   targetType?: "thisField" | "indexed"
@@ -102,9 +101,8 @@ const ASSIGNMENT_PATTERNS: AssignmentPatternConfig[] = [
   // Indexed compound assignment: arr[i] += expr
   {
     name: "indexedCompound",
-    // eslint-disable-next-line no-useless-escape
     pattern:
-      /^([a-zA-Z_]\w*)\s*\[\s*([\s\S]+?)\s*\]\s*([+\-*\/%])=\s*([\s\S]+)$/,
+      /^([a-zA-Z_]\w*)\s*\[\s*([\s\S]+?)\s*\]\s*([+\-*/%])=\s*([\s\S]+)$/,
     mapper: makeMapper(false, 1, 3, 4, "indexed"),
   },
   // Indexed assignment: arr[i] = expr
@@ -116,8 +114,7 @@ const ASSIGNMENT_PATTERNS: AssignmentPatternConfig[] = [
   // Compound assignment: x += expr
   {
     name: "compound",
-    // eslint-disable-next-line no-useless-escape
-    pattern: /^([a-zA-Z_]\w*)\s*([+\-*\/%])=\s*([\s\S]+)$/,
+    pattern: /^([a-zA-Z_]\w*)\s*([+\-*/%])=\s*([\s\S]+)$/,
     mapper: makeMapper(false, 1, 2, 3),
   },
   // Simple assignment: x = expr

@@ -10,7 +10,6 @@ import {
   findOperandMatching,
   applyOperandReplacement,
   replaceOperandRange,
-  type OperandResolutionCtx,
 } from "./operand_resolution";
 import { makeBoundWrapperFromOrigFn } from "./functions";
 import {
@@ -30,11 +29,6 @@ import { convertOperandToNumber } from "../interpret_helpers";
 interface BindingTarget {
   binding: RuntimeValue;
   targetVal: RuntimeValue;
-}
-
-interface OperandIndexResult {
-  index: number;
-  isLeft: boolean;
 }
 
 interface FieldAccess {
@@ -71,7 +65,13 @@ function replaceOperands(
   deleteCount: number,
   newOperand: RuntimeValue
 ) {
-  replaceOperandRange(ctx.operands, ctx.ops, startIdx, deleteCount, newOperand);
+  replaceOperandRange({
+    operands: ctx.operands,
+    ops: ctx.ops,
+    startIdx,
+    count: deleteCount,
+    replacement: newOperand,
+  });
 }
 
 function replaceWithBigIntNumber(
@@ -81,6 +81,25 @@ function replaceWithBigIntNumber(
 ) {
   const val: IntOperand = { type: "int-operand", valueBig: BigInt(n) };
   replaceOperands(ctx, i, 2, val);
+}
+
+interface FoundReplacementArgs {
+  ctx: ProcessOperatorsCtx;
+  index: number;
+  result: { foundIndex: number; isLeft: boolean };
+  operand: RuntimeValue;
+}
+
+// Common helper for resolving and replacing operands based on search result
+function applyFoundOperandReplacement(args: FoundReplacementArgs): void {
+  const { ctx, index, result, operand } = args;
+  applyOperandReplacement({
+    ctx: { operands: ctx.operands, ops: ctx.ops, currentIndex: index },
+    sourceIdx: index,
+    targetIdx: result.foundIndex,
+    operand,
+    isLeftSide: result.isLeft,
+  });
 }
 
 function tryResolveMissingIndex(
@@ -95,13 +114,7 @@ function tryResolveMissingIndex(
   if (!result) return false;
 
   const elem = getArrayElementFromInstance(result.operand, idxVal);
-  applyOperandReplacement(
-    { operands: ctx.operands, ops: ctx.ops, currentIndex: i },
-    i,
-    result.foundIndex,
-    elem,
-    result.isLeft
-  );
+  applyFoundOperandReplacement({ ctx, index: i, result, operand: elem });
   return true;
 }
 
@@ -220,13 +233,7 @@ function handleDotOnMissing(
   if (!result) return false;
 
   const fieldValue = getFieldValueFromInstance(result.operand, fieldName);
-  applyOperandReplacement(
-    { operands: ctx.operands, ops: ctx.ops, currentIndex: i },
-    i,
-    result.foundIndex,
-    fieldValue,
-    result.isLeft
-  );
+  applyFoundOperandReplacement({ ctx, index: i, result, operand: fieldValue });
   return true;
 }
 

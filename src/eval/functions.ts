@@ -4,16 +4,14 @@
  */
 import { splitTopLevelStatements } from "../parser";
 import { convertOperandToNumber } from "../interpret_helpers";
-import { Env, envHas, envGet, envEntries } from "../env";
+import { Env, envHas, envGet } from "../env";
 import {
   isPlainObject,
   isBoolOperand,
   isFloatOperand,
   isIntOperand,
-  isStructDef,
   isFnWrapper,
   hasIdent,
-  hasValue,
   hasParams,
   hasClosureEnv,
   hasBody,
@@ -22,7 +20,6 @@ import {
   getProp,
   isArrayInstance,
   RuntimeValue,
-  ThisBinding,
   FnWrapper,
   FunctionObject,
 } from "../types";

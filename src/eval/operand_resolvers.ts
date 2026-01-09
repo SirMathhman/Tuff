@@ -21,14 +21,10 @@ import {
   getProp,
   isArrayInstance,
   type RuntimeValue,
-  type ThisBinding,
   type Pointer,
 } from "../types";
-import { Env, envHas, envGet, envEntries } from "../env";
-import {
-  buildThisBindingFromEnv,
-  createArrayInstanceFromElements,
-} from "./pure_helpers";
+import { Env, envHas, envGet } from "../env";
+import { buildThisBindingFromEnv } from "./pure_helpers";
 
 interface BindingTarget {
   binding: RuntimeValue;

@@ -1,10 +1,7 @@
 import { parseOperandAt } from "../parser";
 import { Env } from "../env";
 import type { InterpretFn, RuntimeValue } from "../types";
-import {
-  type AssignmentTarget,
-  type AssignmentParts,
-} from "./assignment_handlers";
+import { type AssignmentParts } from "./assignment_handlers";
 import { extractAssignmentParts as extractAssignmentPartsNew } from "./assignment_parser";
 
 export interface DelimiterConfig {

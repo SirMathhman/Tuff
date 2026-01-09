@@ -16,6 +16,22 @@ export interface OperandResolutionResult {
   operand: RuntimeValue;
 }
 
+interface RangeReplacement {
+  operands: RuntimeValue[];
+  ops: string[];
+  startIdx: number;
+  count: number;
+  replacement: RuntimeValue;
+}
+
+interface DirectionalReplacement {
+  ctx: OperandResolutionCtx;
+  sourceIdx: number;
+  targetIdx: number;
+  operand: RuntimeValue;
+  isLeftSide: boolean;
+}
+
 /**
  * Find an operand matching a predicate, searching bidirectionally from current position
  */
@@ -51,13 +67,8 @@ export function findOperandMatching(
 /**
  * Replace a range of operands with a single replacement value
  */
-export function replaceOperandRange(
-  operands: RuntimeValue[],
-  ops: string[],
-  startIdx: number,
-  count: number,
-  replacement: RuntimeValue
-): void {
+export function replaceOperandRange(params: RangeReplacement): void {
+  const { operands, ops, startIdx, count, replacement } = params;
   operands.splice(startIdx, count, replacement);
   ops.splice(startIdx, count - 1);
 }
@@ -65,18 +76,25 @@ export function replaceOperandRange(
 /**
  * Apply operand replacement considering directionality (left vs right)
  */
-export function applyOperandReplacement(
-  ctx: OperandResolutionCtx,
-  sourceIdx: number,
-  targetIdx: number,
-  operand: RuntimeValue,
-  isLeftSide: boolean
-): void {
+export function applyOperandReplacement(params: DirectionalReplacement): void {
+  const { ctx, sourceIdx, targetIdx, operand, isLeftSide } = params;
   if (isLeftSide) {
     const count = sourceIdx - targetIdx + 1;
-    replaceOperandRange(ctx.operands, ctx.ops, targetIdx, count, operand);
+    replaceOperandRange({
+      operands: ctx.operands,
+      ops: ctx.ops,
+      startIdx: targetIdx,
+      count,
+      replacement: operand,
+    });
   } else {
     const count = targetIdx - sourceIdx + 1;
-    replaceOperandRange(ctx.operands, ctx.ops, sourceIdx, count, operand);
+    replaceOperandRange({
+      operands: ctx.operands,
+      ops: ctx.ops,
+      startIdx: sourceIdx,
+      count,
+      replacement: operand,
+    });
   }
 }
