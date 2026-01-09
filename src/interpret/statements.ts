@@ -19,7 +19,7 @@ import {
 import { handleLetStatement } from "./let_handlers";
 import { handleAssignmentStatement } from "./assignment_statement";
 import { Env, envClone, envGet, envSet } from "../env";
-import type { InterpretFn } from "../types";
+import type { InterpretFn, RuntimeValue } from "../types";
 import { isPlainObject, toErrorMessage } from "../types";
 
 interface BlockCallbacks {
@@ -263,7 +263,7 @@ interface EvalBracedBlockContext {
  */
 function evalBracedBlockAndTrailingExpression(
   ctx: EvalBracedBlockContext
-): unknown {
+): RuntimeValue {
   const { starting, localEnv, interpret, evaluateReturningOperandFn } = ctx;
   let remaining = starting;
   let last: unknown = undefined;

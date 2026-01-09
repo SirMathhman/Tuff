@@ -60,7 +60,7 @@ export function computeAssignmentValue(
   op: string | undefined,
   existing: unknown,
   rhsOperand: unknown
-): unknown {
+): RuntimeValue {
   let newVal: unknown = rhsOperand;
   if (op) {
     const cur =

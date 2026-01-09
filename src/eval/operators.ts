@@ -206,7 +206,7 @@ export function applyBinaryOp(
   op: string,
   left: unknown,
   right: unknown
-): unknown {
+): RuntimeValue {
   if (op === "||") {
     if (isTruthy(left)) return { boolValue: true };
     return { boolValue: isTruthy(right) };

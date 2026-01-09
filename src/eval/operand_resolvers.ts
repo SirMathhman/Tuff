@@ -126,7 +126,7 @@ function attachValueInfo(ptrObj: PointerObject, targetVal: unknown) {
 export function resolveDereference(
   op: unknown,
   ctx: OperandResolutionContext
-): unknown {
+): RuntimeValue {
   if (!isPlainObject(op) || !hasDeref(op)) return undefined;
 
   const inner = op.deref;
@@ -160,7 +160,7 @@ export function resolveDereference(
 export function resolveStructInstantiation(
   op: unknown,
   ctx: OperandResolutionContext
-): unknown {
+): RuntimeValue {
   if (!isPlainObject(op) || !hasStructInstantiation(op)) return undefined;
 
   const si = op.structInstantiation;
@@ -256,7 +256,7 @@ function validateStructFields(
 export function resolveArrayLiteral(
   op: unknown,
   ctx: OperandResolutionContext
-): unknown {
+): RuntimeValue {
   if (!isPlainObject(op) || !("arrayLiteral" in op)) return undefined;
 
   const arrLit = getProp(op, "arrayLiteral");
@@ -280,7 +280,7 @@ export function resolveArrayLiteral(
 export function resolveGroupedExpr(
   op: unknown,
   ctx: OperandResolutionContext
-): unknown {
+): RuntimeValue {
   if (!isPlainObject(op) || !("groupedExpr" in op)) return undefined;
 
   const ge = getProp(op, "groupedExpr");
@@ -298,7 +298,7 @@ const NOT_RESOLVED = Symbol("NOT_RESOLVED");
 export function resolveIdentifier(
   op: unknown,
   ctx: OperandResolutionContext
-): unknown {
+): RuntimeValue {
   if (!isPlainObject(op) || !hasIdent(op)) return NOT_RESOLVED;
 
   const n = op.ident;

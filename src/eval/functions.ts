@@ -21,6 +21,7 @@ import {
   hasName,
   getProp,
   isArrayInstance,
+  RuntimeValue,
 } from "../types";
 
 interface FieldValuesMap {
@@ -51,7 +52,7 @@ export function setEvaluateReturningOperand(
   evaluateReturningOperandFn = fn;
 }
 
-export function mustGetEnvBinding(env: Env, name: string): unknown {
+export function mustGetEnvBinding(env: Env, name: string): RuntimeValue {
   if (!envHas(env, name)) throw new Error(`unknown identifier ${name}`);
   return envGet(env, name);
 }
@@ -59,7 +60,7 @@ export function mustGetEnvBinding(env: Env, name: string): unknown {
 export function resolveFunctionFromOperand(
   operand: unknown,
   localEnv: Env
-): unknown {
+): RuntimeValue {
   if (isFnWrapper(operand)) {
     return operand.fn;
   } else if (hasIdent(operand)) {
@@ -74,8 +75,8 @@ export function resolveFunctionFromOperand(
 
 // Normalize a bound `this` value for either call environments or JS native
 // argument passing so the same conversion rules are applied in both places.
-export function normalizeBoundThis(val: unknown): unknown {
-  let thisVal: unknown = val;
+export function normalizeBoundThis(val: unknown): RuntimeValue {
+  let thisVal: RuntimeValue = val;
   if (
     isIntOperand(thisVal) ||
     isFloatOperand(thisVal) ||
@@ -168,7 +169,7 @@ function buildThisBindingFromEnv(envLocal: Env): ThisBinding {
  * Execute a function body and return the result
  * Handles both block bodies (executed via interpret) and expression bodies
  */
-export function executeFunctionBody(fn: unknown, callEnv: Env): unknown {
+export function executeFunctionBody(fn: unknown, callEnv: Env): RuntimeValue {
   if (!isPlainObject(fn)) throw new Error("internal error: invalid fn");
   const isBlock = hasIsBlock(fn) && fn.isBlock === true;
   if (!hasBody(fn) || typeof fn.body !== "string") {

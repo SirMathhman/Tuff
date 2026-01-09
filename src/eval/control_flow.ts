@@ -91,7 +91,7 @@ export function handleIfExpression(
   sTrim: string,
   localEnv: Env,
   evaluate: EvaluateFn
-): unknown {
+): RuntimeValue {
   const condStart = sTrim.indexOf("(");
   if (condStart === -1) throw new Error("invalid if syntax: missing (");
   const condEnd = findMatchingParen(sTrim, {
@@ -141,7 +141,7 @@ export function handleMatchExpression(
   sTrim: string,
   localEnv: Env,
   evaluate: EvaluateFn
-): unknown {
+): RuntimeValue {
   const { targetExpr, rest } = parseMatchTargetAndRest(sTrim);
   const targetOp = evaluate(targetExpr, localEnv);
   const parts = extractMatchParts(sTrim, targetExpr, rest);

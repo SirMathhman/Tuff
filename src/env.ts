@@ -1,3 +1,5 @@
+import type { RuntimeValue } from "./types";
+
 export interface PlainEnv {
   [k: string]: unknown;
 }
@@ -14,7 +16,7 @@ export function isEnv(v: unknown): v is Env {
 
 // Helper to check if object has a symbol property (for Proxy handlers)
 // Uses Reflect API to avoid type assertions
-function getSymbolProp(obj: object, prop: symbol): unknown {
+function getSymbolProp(obj: object, prop: symbol): RuntimeValue {
   return Reflect.get(obj, prop);
 }
 
@@ -24,7 +26,7 @@ function commonGetPrefix(
   container: object,
   prop: string | symbol,
   isMap: boolean
-): unknown {
+): RuntimeValue {
   if (typeof prop === "symbol") return getSymbolProp(container, prop);
   if (prop === "__isEnvProxy") return true;
   if (prop === "__isMapProxy") return isMap;
@@ -70,7 +72,7 @@ function setStringProp(obj: object, key: string, value: unknown): void {
 }
 
 // Helper to get value from object with string key using Reflect API
-function getStringProp(obj: object, key: string): unknown {
+function getStringProp(obj: object, key: string): RuntimeValue {
   return Reflect.get(obj, key);
 }
 
@@ -187,7 +189,7 @@ export function envHas(e: Env, k: string): boolean {
   return Object.prototype.hasOwnProperty.call(e, k);
 }
 
-export function envGet(e: Env, k: string): unknown {
+export function envGet(e: Env, k: string): RuntimeValue {
   if (isMapProxy(e)) {
     const getMethod = getStringProp(e, "get");
     if (typeof getMethod === "function") return getMethod(k);

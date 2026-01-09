@@ -306,7 +306,7 @@ export function checkRange(kind: string, bits: number, sum: bigint) {
 }
 
 // Safe property getters - avoid `as` casts by using `in` checks
-export function getProp(obj: unknown, key: string): unknown {
+export function getProp(obj: unknown, key: string): RuntimeValue {
   if (!isPlainObject(obj)) return undefined;
   if (!(key in obj)) return undefined;
   return obj[key];

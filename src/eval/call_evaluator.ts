@@ -81,7 +81,7 @@ function createCallEnv(fn: unknown, fnParams: unknown[], args: unknown[]): Env {
   return callEnv;
 }
 
-function convertNativeArg(a: unknown): unknown {
+function convertNativeArg(a: unknown): RuntimeValue {
   if (isIntOperand(a)) return Number(a.valueBig);
   if (isFloatOperand(a)) return a.floatValue;
   if (isBoolOperand(a)) return a.boolValue;
@@ -116,7 +116,7 @@ export function evaluateCall(
   funcOperand: unknown,
   callAppOperand: unknown,
   ctx: CallEvaluationContext
-): unknown {
+): RuntimeValue {
   const argOps = evaluateCallArgs(callAppOperand, ctx);
 
   const fn = resolveFunctionFromOperand(funcOperand, ctx.localEnv);

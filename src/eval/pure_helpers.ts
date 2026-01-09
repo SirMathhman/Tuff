@@ -13,7 +13,7 @@ import { Env, envGet } from "../env";
 export function getFieldValueFromInstance(
   maybe: unknown,
   fieldName: string
-): unknown {
+): RuntimeValue {
   if (!(isStructInstance(maybe) || isThisBinding(maybe)))
     throw new Error("cannot access field on non-struct value");
 
@@ -29,7 +29,7 @@ export function getFieldValueFromInstance(
 export function getArrayElementFromInstance(
   maybe: unknown,
   indexVal: number
-): unknown {
+): RuntimeValue {
   if (!isArrayInstance(maybe)) throw new Error("cannot index non-array value");
   const arr = maybe;
   if (!Number.isInteger(indexVal) || indexVal < 0 || indexVal >= arr.length)
@@ -83,7 +83,7 @@ export function handleArrayLikeFieldAccess(
 /**
  * Resolve a method binding and return a bound wrapper or undefined
  */
-export function resolveMethodWrapper(ctx: MethodResolverCtx): unknown {
+export function resolveMethodWrapper(ctx: MethodResolverCtx): RuntimeValue {
   const binding = envGet(ctx.localEnv, ctx.fieldName);
   if (binding !== undefined && isFnWrapper(binding))
     return ctx.makeBoundWrapper(binding.fn, ctx.receiver);
