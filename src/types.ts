@@ -145,7 +145,10 @@ export interface PointerBase {
   ptrName: string;
 }
 
-export type Pointer = PointerBase & PointerFlags & PointerTypeInfo & PointerStoredValue;
+export type Pointer = PointerBase &
+  PointerFlags &
+  PointerTypeInfo &
+  PointerStoredValue;
 
 export interface ArrayLiteral {
   arrayLiteral: string[];

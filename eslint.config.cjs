@@ -4,6 +4,7 @@ const tsParser = require("@typescript-eslint/parser");
 const maxInterfaceFields = require("./eslint-rules/max-interface-fields");
 const noUnknownReturn = require("./eslint-rules/no-unknown-return");
 const noUnknownParam = require("./eslint-rules/no-unknown-param");
+const noObjectIndexing = require("./eslint-rules/no-object-indexing");
 
 module.exports = [
   {
@@ -19,6 +20,7 @@ module.exports = [
           "max-interface-fields": maxInterfaceFields,
           "no-unknown-return": noUnknownReturn,
           "no-unknown-param": noUnknownParam,
+          "no-object-indexing": noObjectIndexing,
         },
       },
     },
@@ -95,6 +97,8 @@ module.exports = [
       "custom/no-unknown-return": "error",
       // Custom rule: Ban 'unknown' in function parameter types
       "custom/no-unknown-param": "error",
+      // Custom rule: Ban object indexing signatures (disabled initially - violations exist that need refactoring)
+      "custom/no-object-indexing": "off",
     },
   },
   {
