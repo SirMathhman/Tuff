@@ -27,7 +27,9 @@ module.exports = [
       "max-lines": [
         "error",
         { max: 500, skipBlankLines: true, skipComments: false },
-      ], // Disallow use of the `Record` utility type in favor of `Map` via AST selector
+      ],
+      // Warn about overly complex functions; set high for now
+      "complexity": ["warn", { max: 30 }], // Disallow use of the `Record` utility type in favor of `Map` via AST selector
       "no-restricted-syntax": [
         "error",
         {
