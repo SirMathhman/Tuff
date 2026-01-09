@@ -63,9 +63,7 @@ export function isStructDef(v: unknown): v is { isStructDef: true } {
 }
 
 // Array runtime instance: { isArray: true, elements: unknown[], length: number, initializedCount: number }
-export function isArrayInstance(
-  v: unknown
-): v is {
+export function isArrayInstance(v: unknown): v is {
   isArray: true;
   elements: unknown[];
   length: number;
@@ -111,6 +109,25 @@ export function unwrapBindingValue(binding: unknown): unknown {
 export function toErrorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
   return String(e);
+}
+
+// Helper to throw a consistent uninitialized-variable error
+export function throwUseOfUninitialized(name: string): never {
+  throw new Error(`use of uninitialized variable ${name}`);
+}
+
+// Helper to validate integer value fits in a typed integer range
+export function checkRange(kind: string, bits: number, sum: bigint) {
+  if (kind === "u") {
+    const max = (1n << BigInt(bits)) - 1n;
+    if (sum < 0n || sum > max)
+      throw new Error(`value out of range for U${bits}`);
+  } else {
+    const min = -(1n << BigInt(bits - 1));
+    const max = (1n << BigInt(bits - 1)) - 1n;
+    if (sum < min || sum > max)
+      throw new Error(`value out of range for I${bits}`);
+  }
 }
 
 // Safe property getters - avoid `as` casts by using `in` checks
@@ -227,6 +244,30 @@ export function hasPtrIsBool(v: unknown): v is { ptrIsBool: unknown } {
 
 export function hasYield(v: unknown): v is { __yield: number } {
   return isPlainObject(v) && "__yield" in v && typeof v.__yield === "number";
+}
+
+// Setter helpers - avoid `as` type assertions by using Object.defineProperty
+// These functions mutate properties on objects that have been verified via type guards.
+
+export function setValue(obj: { value: unknown }, val: unknown): void {
+  Object.defineProperty(obj, "value", {
+    value: val,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
+}
+
+export function setUninitialized(
+  obj: { uninitialized: unknown },
+  val: boolean
+): void {
+  Object.defineProperty(obj, "uninitialized", {
+    value: val,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
 }
 
 export type InterpretFn = (_input: string, _env?: Env) => number;

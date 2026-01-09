@@ -1,3 +1,5 @@
+import { checkRange } from "./types";
+
 export function splitTopLevelStatements(str: string): string[] {
   const parts: string[] = [];
   let depth = 0;
@@ -24,18 +26,7 @@ export function findMatchingClosingParen(
   src: string,
   startPos: number
 ): number {
-  let depth = 0;
-  for (let k = startPos; k < src.length; k++) {
-    const ch = src[k];
-    if (ch === "(") depth++;
-    else if (ch === ")") {
-      depth--;
-      if (depth === 0) {
-        return k;
-      }
-    }
-  }
-  return -1;
+  return findMatchingDelimiter(src, startPos, "(", ")");
 }
 
 /**
@@ -128,15 +119,11 @@ export function parseOperand(token: string) {
     if (kind === "u" || kind === "U") {
       if (valueBig < 0n)
         throw new Error("negative numbers with suffixes are not allowed");
-      const max = (1n << BigInt(bits)) - 1n;
-      if (valueBig > max) throw new Error(`value out of range for U${bits}`);
+      checkRange("u", bits, valueBig);
       return { valueBig, kind: "u", bits };
     }
     // signed
-    const min = -(1n << BigInt(bits - 1));
-    const max = (1n << BigInt(bits - 1)) - 1n;
-    if (valueBig < min || valueBig > max)
-      throw new Error(`value out of range for I${bits}`);
+    checkRange("i", bits, valueBig);
     return { valueBig, kind: "i", bits };
   }
 

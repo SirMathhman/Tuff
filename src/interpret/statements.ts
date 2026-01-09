@@ -1,10 +1,5 @@
-/* eslint-disable max-lines */
 import { splitTopLevelStatements } from "../parser";
-import {
-  evaluateReturningOperand,
-  evaluateFlatExpression,
-  isTruthy,
-} from "../eval";
+import { evaluateReturningOperand } from "../eval";
 import {
   getLastTopLevelStatement,
   evaluateRhs,
@@ -19,17 +14,25 @@ import {
   parseArrayAnnotation,
   parseSliceAnnotation,
   cloneArrayInstance,
+  makeArrayInstance,
 } from "../interpret_helpers";
+import { handleWhileStatement, handleForStatement } from "./loop_handlers";
+import { handleIfStatement } from "./if_handlers";
 import {
-  computeAssignmentValue,
-  assignValueToVariable,
-  assignToPlaceholder,
-} from "./helpers";
-import { Env, envClone, envGet, envSet, envHas, envDelete } from "../env";
+  handleExternFn,
+  handleExternLet,
+  handleImportStatement,
+} from "./extern_handlers";
+import {
+  handleThisFieldAssignment,
+  handleIndexAssignment,
+  handleDerefAssignment,
+  handleRegularAssignment,
+} from "./assignment_handlers";
+import { Env, envClone, envGet, envSet, envHas } from "../env";
 import type { InterpretFn } from "../types";
 import {
   isPlainObject,
-  isFnWrapper,
   isIntOperand,
   isPointer,
   isArrayInstance,
@@ -39,9 +42,6 @@ import {
   hasAnnotation,
   hasMutable,
   hasPtrMutable,
-  hasValue,
-  hasLiteralAnnotation,
-  hasParsedAnnotation,
   getProp,
 } from "../types";
 
@@ -71,47 +71,6 @@ function interpretBlockInternal(
   const evaluateRhsLocal = (rhs: string, envLocal: Env) =>
     evaluateRhs(rhs, envLocal, interpret, getLastTopLevelStatementLocal);
 
-  // helper to perform index assignment into an array instance
-  const doIndexAssignment = (
-    arrInst: { elements: unknown[]; initializedCount: number; length: number },
-    idxVal: number,
-    rhsOperand2: unknown,
-    op: string | undefined
-  ) => {
-    if (op) {
-      if (idxVal >= arrInst.initializedCount)
-        throw new Error("use of uninitialized array element");
-      const cur = arrInst.elements[idxVal];
-      const newElem = computeAssignmentValue(op, cur, rhsOperand2);
-      arrInst.elements[idxVal] = newElem;
-    } else {
-      arrInst.elements[idxVal] = rhsOperand2;
-    }
-
-    arrInst.initializedCount = Math.max(arrInst.initializedCount, idxVal + 1);
-  };
-
-  // helper to execute a loop/if body that may be braced or a single statement
-  const runBody = (body: string) => {
-    if (/^\s*\{[\s\S]*\}\s*$/.test(body)) {
-      const inner = body.replace(/^\{\s*|\s*\}$/g, "");
-      interpret(inner, localEnv);
-    } else {
-      interpret(body + ";", localEnv);
-    }
-  };
-
-  // helper to extract the trailing loop body and validate presence
-  const extractTrailingBody = (
-    stmtLocal: string,
-    endIdx: number,
-    kind: string
-  ) => {
-    const body = stmtLocal.slice(endIdx + 1).trim();
-    if (!body) throw new Error(`missing ${kind} body`);
-    return body;
-  };
-
   const stmts = splitTopLevelStatements(s);
   for (let raw of stmts) {
     const stmt = raw.trim();
@@ -133,131 +92,20 @@ function interpretBlockInternal(
     }
 
     if (/^extern\s+fn\b/.test(stmt)) {
-      // extern function declaration: `extern fn name(params) : Type` (no body)
-      const m = stmt.match(
-        /^extern\s+fn\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*(?:\s*:\s*([^;]+))?\s*;?$/
-      );
-      if (!m) throw new Error("invalid extern fn declaration");
-      const name = m[1];
-      const paramsStr = m[2].trim();
-      const params =
-        paramsStr === ""
-          ? []
-          : paramsStr.split(",").map((p) => {
-              const part = p.trim();
-              const parts = part.split(":");
-              const pname = parts[0].trim();
-              const pann = parts[1]
-                ? parts.slice(1).join(":").trim()
-                : undefined;
-              return { name: pname, annotation: pann };
-            });
-      const resultAnnotation = m[3] ? m[3].trim() : undefined;
-
-      // If the symbol was already introduced (e.g., via import from a native
-      // module), merge the extern signature into the existing binding so that
-      // native wrappers gain parameter metadata (e.g., a leading `this`).
-      if (declared.has(name)) {
-        const existing = envGet(localEnv, name);
-        if (isPlainObject(existing) && isFnWrapper(existing)) {
-          // Rebuild a wrapper fn object by copying existing runtime metadata
-          // (including nativeImpl if present) and applying the extern signature.
-          const existingBody = getProp(existing.fn, "body");
-          const existingIsBlock = getProp(existing.fn, "isBlock");
-          const existingClosureEnv = getProp(existing.fn, "closureEnv");
-          const existingNative = getProp(existing.fn, "nativeImpl");
-
-          const newFn: { [k: string]: unknown } = {
-            params,
-            body:
-              typeof existingBody === "string" ? existingBody : "/* extern */",
-            isBlock: existingIsBlock === true,
-            resultAnnotation:
-              typeof resultAnnotation === "string"
-                ? resultAnnotation
-                : getProp(existing.fn, "resultAnnotation"),
-            closureEnv: existingClosureEnv ? existingClosureEnv : undefined,
-          };
-          if (typeof existingNative === "function")
-            newFn.nativeImpl = existingNative;
-
-          envSet(localEnv, name, { fn: newFn });
-        }
-        last = undefined;
-        continue;
-      }
-
-      declared.add(name);
-      // register placeholder fn wrapper (no nativeImpl yet)
-      envSet(localEnv, name, {
-        fn: {
-          params,
-          body: "/* extern */",
-          isBlock: false,
-          resultAnnotation,
-          closureEnv: undefined,
-        },
-      });
+      handleExternFn(stmt, localEnv, declared);
       last = undefined;
       continue;
     }
 
     if (/^extern\s+let\b/.test(stmt)) {
-      // extern let declaration: `extern let name [: annotation];`
-      const m = stmt.match(
-        /^extern\s+let\s+([a-zA-Z_]\w*)(?:\s*:\s*([^;]+))?\s*;?$/
-      );
-      if (!m) throw new Error("invalid extern let declaration");
-      const name = m[1];
-      const annotation = m[2] ? m[2].trim() : undefined;
-      if (declared.has(name)) {
-        // already declared by import — no-op
-        last = undefined;
-        continue;
-      }
-      declared.add(name);
-      envSet(localEnv, name, {
-        uninitialized: true,
-        annotation,
-        parsedAnnotation: undefined,
-        literalAnnotation: false,
-        mutable: false,
-        value: undefined,
-      });
+      handleExternLet(stmt, localEnv, declared);
       last = undefined;
       continue;
     }
 
     // import statement: optionally prefixed with `extern`: `extern from <ns> use { a, b }`
     if (/^extern\b/.test(stmt) || /^from\b/.test(stmt)) {
-      let importStmt = stmt;
-      if (/^extern\b/.test(importStmt))
-        importStmt = importStmt.replace(/^extern\s+/, "");
-      const importRE =
-        /from\s+([a-zA-Z_]\w*(?:::[a-zA-Z_]\w*)*)\s+use\s*\{\s*([a-zA-Z_]\w*(?:\s*,\s*[a-zA-Z_]\w*)*)\s*\}/;
-      let m = importStmt.match(importRE);
-      if (!m) {
-        const idx = importStmt.indexOf("from");
-        if (idx !== -1) m = importStmt.slice(idx).match(importRE);
-      }
-      if (!m) throw new Error("invalid import syntax");
-      const nsName = m[1];
-      const names = m[2].split(",").map((x) => x.trim());
-      const resolver =
-        envGet(env, "__resolve_namespace") ||
-        envGet(localEnv, "__resolve_namespace");
-      if (typeof resolver !== "function")
-        throw new Error("namespace resolver not available");
-      const nsExports = resolver(nsName);
-      if (!isPlainObject(nsExports))
-        throw new Error("namespace resolver returned invalid exports");
-      for (const name of names) {
-        if (!Object.prototype.hasOwnProperty.call(nsExports, name))
-          throw new Error("symbol not found in namespace");
-        if (declared.has(name)) throw new Error("duplicate declaration");
-        declared.add(name);
-        envSet(localEnv, name, nsExports[name]);
-      }
+      handleImportStatement(stmt, env, localEnv, declared);
       last = undefined;
       continue;
     }
@@ -327,13 +175,7 @@ function interpretBlockInternal(
               throw new Error(
                 "array declaration without initializer requires init count 0"
               );
-            const arrInst = {
-              isArray: true,
-              elements: new Array(arrAnn.length),
-              length: arrAnn.length,
-              initializedCount: 0,
-              elemType: arrAnn.elemType,
-            };
+            const arrInst = makeArrayInstance(arrAnn);
             declared.add(name);
             if (mutFlag)
               envSet(localEnv, name, {
@@ -480,115 +322,19 @@ function interpretBlockInternal(
       }
 
       // if statement (statement-level, optional else)
-      if (/^if\b/.test(stmt)) {
-        const start = stmt.indexOf("(");
-        if (start === -1) throw new Error("invalid if syntax");
-        const endIdx = findMatchingParen(stmt, start);
-        if (endIdx === -1)
-          throw new Error("invalid if syntax: unbalanced parentheses");
-        const cond = stmt.slice(start + 1, endIdx).trim();
-        let rest = stmt.slice(endIdx + 1).trim();
-        if (!rest) throw new Error("missing if body");
-
-        // parse true body (braced block or single statement)
-        let trueBody = "";
-        let falseBody: string | undefined = undefined;
-        if (rest.startsWith("{")) {
-          const bEnd = findMatchingParen(rest, 0, "{", "}");
-          if (bEnd === -1) throw new Error("unbalanced braces in if");
-          trueBody = rest.slice(0, bEnd + 1).trim();
-          rest = rest.slice(bEnd + 1).trim();
-        } else {
-          // single statement body; could be followed by 'else <body>' in the same statement
-          const elseIdx = rest.indexOf(" else ");
-          if (elseIdx !== -1) {
-            trueBody = rest.slice(0, elseIdx).trim();
-            rest = rest.slice(elseIdx + 6).trim();
-          } else {
-            trueBody = rest.trim();
-            rest = "";
-          }
-        }
-
-        // if an else body remains, parse it similarly
-        if (rest) {
-          if (rest.startsWith("{")) {
-            const bEnd = findMatchingParen(rest, 0, "{", "}");
-            if (bEnd === -1) throw new Error("unbalanced braces in if else");
-            falseBody = rest.slice(0, bEnd + 1).trim();
-          } else {
-            falseBody = rest.trim();
-          }
-        }
-
-        const condOpnd = evaluateReturningOperand(cond, localEnv);
-        if (isTruthy(condOpnd)) {
-          runBody(trueBody);
-        } else if (falseBody) {
-          runBody(falseBody);
-        }
-
+      if (handleIfStatement(stmt, localEnv, interpret)) {
         last = undefined;
         continue;
       }
 
-      // while loop
-      if (/^while\b/.test(stmt)) {
-        const start = stmt.indexOf("(");
-        if (start === -1) throw new Error("invalid while syntax");
-        const endIdx = findMatchingParen(stmt, start);
-        if (endIdx === -1) throw new Error("unbalanced parentheses in while");
-        const cond = stmt.slice(start + 1, endIdx).trim();
-        const body = extractTrailingBody(stmt, endIdx, "while");
-        while (true) {
-          const condOpnd = evaluateReturningOperand(cond, localEnv);
-          if (!isTruthy(condOpnd)) break;
-          runBody(body);
-        }
+      // while loop - delegated to extracted handler
+      if (handleWhileStatement(stmt, localEnv, interpret)) {
         last = undefined;
         continue;
       }
 
-      // for loop: `for (let [mut] name in start..end) body`
-      if (/^for\b/.test(stmt)) {
-        const start = stmt.indexOf("(");
-        if (start === -1) throw new Error("invalid for syntax");
-        const endIdx = findMatchingParen(stmt, start);
-        if (endIdx === -1) throw new Error("unbalanced parentheses in for");
-        const cond = stmt.slice(start + 1, endIdx).trim();
-        const body = extractTrailingBody(stmt, endIdx, "for");
-
-        // cond should be: let [mut] <name> in <start>.. <end>
-        const m = cond.match(
-          /^let\s+(mut\s+)?([a-zA-Z_]\w*)\s+in\s+([\s\S]+)$/
-        );
-        if (!m) throw new Error("invalid for loop header");
-        const mutFlag = !!m[1];
-        const iterName = m[2];
-        const rangeExpr = m[3].trim();
-        const rm = rangeExpr.match(/^([\s\S]+?)\s*\.\.\s*([\s\S]+)$/);
-        if (!rm) throw new Error("invalid for range expression");
-        const startExpr = rm[1].trim();
-        const endExpr = rm[2].trim();
-
-        const startVal = evaluateFlatExpression(startExpr, localEnv);
-        const endVal = evaluateFlatExpression(endExpr, localEnv);
-
-        const hadPrev = envHas(localEnv, iterName);
-        const prev = hadPrev ? envGet(localEnv, iterName) : undefined;
-
-        for (let i = startVal; i < endVal; i++) {
-          // bind the loop variable in the same env so body can see and update outer vars
-          if (mutFlag) envSet(localEnv, iterName, { mutable: true, value: i });
-          else envSet(localEnv, iterName, i);
-
-          runBody(body);
-        }
-
-        // restore previous binding
-        if (hadPrev) envSet(localEnv, iterName, prev);
-        else envDelete(localEnv, iterName);
-
+      // for loop - delegated to extracted handler
+      if (handleForStatement(stmt, localEnv, interpret)) {
         last = undefined;
         continue;
       }
@@ -600,150 +346,23 @@ function interpretBlockInternal(
 
         // Handle this.field assignment
         if (isThisField) {
-          if (!envHas(localEnv, name))
-            throw new Error("assignment to undeclared variable");
-          const existing = envGet(localEnv, name);
-
-          const rhsOperand = evaluateRhsLocal(rhs, localEnv);
-
-          const newVal = computeAssignmentValue(op, existing, rhsOperand);
-
-          assignValueToVariable(name, existing, newVal, localEnv);
-
+          handleThisFieldAssignment(name, op, rhs, localEnv, evaluateRhsLocal);
           last = undefined;
           continue;
         }
 
         // Index assignment support: name[index] = rhs or name[index] += rhs
         if (assignParts.indexExpr !== undefined) {
-          const idxExpr = assignParts.indexExpr;
-          const idxVal = convertOperandToNumber(
-            evaluateReturningOperand(idxExpr, localEnv)
+          handleIndexAssignment(
+            name,
+            assignParts.indexExpr,
+            op,
+            rhs,
+            localEnv,
+            evaluateReturningOperand,
+            evaluateRhsLocal,
+            convertOperandToNumber
           );
-
-          if (!envHas(localEnv, name))
-            throw new Error("assignment to undeclared variable");
-          let existing = envGet(localEnv, name);
-
-          // Support indexing into pointer-to-slice variables (p[0] = ...)
-          // Detect pointer stored either directly or inside a mutable wrapper
-          let maybePtr: unknown | undefined = undefined;
-          if (
-            isPlainObject(existing) &&
-            hasValue(existing) &&
-            existing.value !== undefined &&
-            isPointer(existing.value)
-          )
-            maybePtr = existing.value;
-          else if (isPlainObject(existing) && isPointer(existing))
-            maybePtr = existing;
-
-          if (maybePtr) {
-            if (!isPointer(maybePtr)) throw new Error("internal pointer error");
-            const ptrName = maybePtr.ptrName;
-            if (typeof ptrName !== "string")
-              throw new Error("invalid pointer target");
-            if (!envHas(localEnv, ptrName))
-              throw new Error(`unknown identifier ${ptrName}`);
-            const targetBinding = envGet(localEnv, ptrName);
-            if (
-              isPlainObject(targetBinding) &&
-              hasUninitialized(targetBinding) &&
-              targetBinding.uninitialized
-            )
-              throw new Error(`use of uninitialized variable ${ptrName}`);
-            const targetVal = unwrapBindingValue(targetBinding);
-
-            if (!isArrayInstance(targetVal))
-              throw new Error("assignment to non-array variable");
-
-            // require target be mutable to write via pointer
-            if (
-              !(
-                isPlainObject(targetBinding) &&
-                hasMutable(targetBinding) &&
-                targetBinding.mutable
-              )
-            )
-              throw new Error("assignment to immutable variable");
-
-            const arrInst = targetVal;
-            const rhsOperand2 = evaluateRhsLocal(rhs, localEnv);
-
-            doIndexAssignment(arrInst, idxVal, rhsOperand2, op);
-
-            // persist change back into target binding
-            if (
-              isPlainObject(targetBinding) &&
-              hasValue(targetBinding) &&
-              targetBinding.value !== undefined &&
-              hasMutable(targetBinding) &&
-              targetBinding.mutable
-            ) {
-              targetBinding.value = arrInst;
-              envSet(localEnv, ptrName, targetBinding);
-            } else {
-              envSet(localEnv, ptrName, arrInst);
-            }
-
-            last = undefined;
-            continue;
-          }
-
-          // If placeholder declared-only with array annotation, materialize into a mutable wrapper
-          if (
-            isPlainObject(existing) &&
-            hasUninitialized(existing) &&
-            existing.uninitialized
-          ) {
-            if (
-              !hasAnnotation(existing) ||
-              typeof existing.annotation !== "string"
-            )
-              throw new Error("assignment to undeclared variable");
-            const arrAnn = parseArrayAnnotation(String(existing.annotation));
-            if (!arrAnn) throw new Error("assignment to non-array variable");
-            if (!hasMutable(existing) || !existing.mutable)
-              throw new Error("assignment to immutable variable");
-            const arrInst = {
-              isArray: true,
-              elements: new Array(arrAnn.length),
-              length: arrAnn.length,
-              initializedCount: 0,
-              elemType: arrAnn.elemType,
-            };
-            // store as mutable wrapper
-            envSet(localEnv, name, {
-              mutable: true,
-              value: arrInst,
-              annotation: existing.annotation,
-            });
-            existing = envGet(localEnv, name);
-          }
-
-          // Determine mutable wrapper
-          if (
-            !(
-              isPlainObject(existing) &&
-              hasValue(existing) &&
-              existing.value !== undefined &&
-              hasMutable(existing) &&
-              existing.mutable
-            )
-          )
-            throw new Error("assignment to immutable or non-array variable");
-
-          const arrInst = existing.value;
-          if (!isArrayInstance(arrInst))
-            throw new Error("assignment target is not array");
-
-          const rhsOperand2 = evaluateRhsLocal(rhs, localEnv);
-
-          doIndexAssignment(arrInst, idxVal, rhsOperand2, op);
-
-          // persist
-          envSet(localEnv, name, existing);
-
           last = undefined;
           continue;
         }
@@ -774,63 +393,9 @@ function interpretBlockInternal(
         const rhsOperand = evaluateRhsLocal(rhs, localEnv);
 
         if (isDeref) {
-          // Deref assignment or compound: update through pointer
-          if (!isPointer(ptr))
-            throw new Error("internal error: deref assignment without pointer");
-          const targetName = ptr.ptrName;
-          if (!envHas(localEnv, targetName))
-            throw new Error(`unknown identifier ${targetName}`);
-          const targetExisting = envGet(localEnv, targetName);
-
-          const newVal = computeAssignmentValue(op, targetExisting, rhsOperand);
-
-          // For deref assignment to a placeholder, validate annotation
-          if (
-            isPlainObject(targetExisting) &&
-            hasUninitialized(targetExisting)
-          ) {
-            if (
-              hasLiteralAnnotation(targetExisting) &&
-              targetExisting.literalAnnotation &&
-              !targetExisting.uninitialized &&
-              (!hasMutable(targetExisting) || !targetExisting.mutable)
-            )
-              throw new Error("cannot reassign annotated literal");
-            if (
-              hasParsedAnnotation(targetExisting) &&
-              targetExisting.parsedAnnotation &&
-              targetExisting.uninitialized
-            ) {
-              validateAnnotation(targetExisting.parsedAnnotation, newVal);
-            } else if (
-              hasAnnotation(targetExisting) &&
-              typeof targetExisting.annotation === "string"
-            ) {
-              validateAnnotation(targetExisting.annotation, newVal);
-            }
-            // Use helpers to avoid direct casts and ensure consistent behavior
-            assignToPlaceholder(targetName, targetExisting, newVal, localEnv);
-          } else if (
-            isPlainObject(targetExisting) &&
-            hasValue(targetExisting) &&
-            targetExisting.value !== undefined &&
-            hasMutable(targetExisting) &&
-            targetExisting.mutable
-          ) {
-            assignValueToVariable(targetName, targetExisting, newVal, localEnv);
-          } else {
-            envSet(localEnv, targetName, newVal);
-          }
+          handleDerefAssignment(ptr, op, rhsOperand, localEnv);
         } else {
-          // Normal assignment or compound: update variable directly
-          const newVal = computeAssignmentValue(op, existing, rhsOperand);
-
-          if (isPlainObject(existing) && hasUninitialized(existing)) {
-            // Placeholder for declaration-only let
-            assignToPlaceholder(name, existing, newVal, localEnv);
-          } else {
-            assignValueToVariable(name, existing, newVal, localEnv);
-          }
+          handleRegularAssignment(name, op, rhsOperand, existing, localEnv);
         }
 
         last = undefined;

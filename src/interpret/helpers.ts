@@ -14,6 +14,8 @@ import {
   hasLiteralAnnotation,
   hasParsedAnnotation,
   isArrayInstance,
+  setValue,
+  setUninitialized,
 } from "../types";
 
 /**
@@ -53,9 +55,8 @@ export function assignValueToVariable(
     hasMutable(existing) &&
     existing.mutable
   ) {
-    // Mutable wrapper: update its .value
-    // eslint-disable-next-line no-restricted-syntax
-    (existing as { value: unknown }).value = newVal;
+    // Mutable wrapper: update its .value using Object.defineProperty helper
+    setValue(existing, newVal);
     envSet(localEnv, name, existing);
   } else {
     // Normal binding: replace it (clone arrays)
@@ -113,11 +114,36 @@ export function assignToPlaceholder(
   )
     throw new Error("assignment to immutable variable");
 
-  // eslint-disable-next-line no-restricted-syntax
-  (existing as { value: unknown }).value = isArrayInstance(newVal)
-    ? cloneArrayInstance(newVal)
-    : newVal;
-  // eslint-disable-next-line no-restricted-syntax
-  (existing as { uninitialized: boolean }).uninitialized = false;
+  // Use setter helpers to avoid 'as' type assertions
+  if (hasValue(existing)) {
+    setValue(
+      existing,
+      isArrayInstance(newVal) ? cloneArrayInstance(newVal) : newVal
+    );
+  }
+  if (hasUninitialized(existing)) {
+    setUninitialized(existing, false);
+  }
   envSet(localEnv, name, existing);
+}
+
+/**
+ * Perform index assignment into an array instance
+ */
+export function doIndexAssignment(
+  arrInst: { elements: unknown[]; initializedCount: number; length: number },
+  idxVal: number,
+  rhsOperand: unknown,
+  op: string | undefined
+): void {
+  if (op) {
+    if (idxVal >= arrInst.initializedCount)
+      throw new Error("use of uninitialized array element");
+    const cur = arrInst.elements[idxVal];
+    const newElem = computeAssignmentValue(op, cur, rhsOperand);
+    arrInst.elements[idxVal] = newElem;
+  } else {
+    arrInst.elements[idxVal] = rhsOperand;
+  }
+  arrInst.initializedCount = Math.max(arrInst.initializedCount, idxVal + 1);
 }

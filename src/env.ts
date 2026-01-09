@@ -8,12 +8,10 @@ export function isEnv(v: unknown): v is Env {
   return true;
 }
 
-type PropertyKeyed = { [k: string]: unknown } & { [k: symbol]: unknown };
-
 // Helper to check if object has a symbol property (for Proxy handlers)
+// Uses Reflect API to avoid type assertions
 function getSymbolProp(obj: object, prop: symbol): unknown {
-  // eslint-disable-next-line no-restricted-syntax
-  return (obj as PropertyKeyed)[prop];
+  return Reflect.get(obj, prop);
 }
 
 // Common prefix handling for proxy `get` implementations - centralizes
@@ -31,52 +29,50 @@ function commonGetPrefix(
 
 // Specialized handler factories to reduce duplication between Map-backed and
 // object-backed proxy implementations without introducing `any` or casts.
-function makeSetHandlerForMap(m: Map<string, unknown>) {
+function makeSetHandler(setFn: (k: string, v: unknown) => void) {
   return function (_: object, prop: string | symbol, value: unknown) {
     if (typeof prop === "symbol") return Reflect.set(_, prop, value);
-    m.set(String(prop), value);
+    setFn(String(prop), value);
     return true;
   };
+}
+
+function makeHasHandler(hasFn: (k: string) => boolean) {
+  return function (_: object, prop: string | symbol) {
+    if (typeof prop === "symbol") return Reflect.has(_, prop);
+    return hasFn(String(prop));
+  };
+}
+
+function makeSetHandlerForMap(m: Map<string, unknown>) {
+  return makeSetHandler((k, v) => m.set(k, v));
 }
 
 function makeSetHandlerForObj(obj: { [k: string]: unknown }) {
-  return function (_: object, prop: string | symbol, value: unknown) {
-    if (typeof prop === "symbol") return Reflect.set(_, prop, value);
-    obj[String(prop)] = value;
-    return true;
-  };
+  return makeSetHandler((k, v) => (obj[k] = v));
 }
 
 function makeHasHandlerForMap(m: Map<string, unknown>) {
-  return function (_: object, prop: string | symbol) {
-    if (typeof prop === "symbol") return Reflect.has(_, prop);
-    return m.has(String(prop));
-  };
+  return makeHasHandler((k) => m.has(k));
 }
 
 function makeHasHandlerForObj(obj: { [k: string]: unknown }) {
-  return function (_: object, prop: string | symbol) {
-    if (typeof prop === "symbol") return Reflect.has(_, prop);
-    return Object.prototype.hasOwnProperty.call(obj, String(prop));
-  };
+  return makeHasHandler((k) => Object.prototype.hasOwnProperty.call(obj, k));
 }
 
-// Helper to set value on object with string key
+// Helper to set value on object with string key using Reflect API
 function setStringProp(obj: object, key: string, value: unknown): void {
-  // eslint-disable-next-line no-restricted-syntax
-  (obj as PropertyKeyed)[key] = value;
+  Reflect.set(obj, key, value);
 }
 
-// Helper to get value from object with string key
+// Helper to get value from object with string key using Reflect API
 function getStringProp(obj: object, key: string): unknown {
-  // eslint-disable-next-line no-restricted-syntax
-  return (obj as PropertyKeyed)[key];
+  return Reflect.get(obj, key);
 }
 
-// Helper to delete string key from object
+// Helper to delete string key from object using Reflect API
 function deleteStringProp(obj: object, key: string): void {
-  // eslint-disable-next-line no-restricted-syntax
-  delete (obj as PropertyKeyed)[key];
+  Reflect.deleteProperty(obj, key);
 }
 
 function makeProxyFromMap(m: Map<string, unknown>) {
@@ -89,9 +85,10 @@ function makeProxyFromMap(m: Map<string, unknown>) {
         if (m.has(prop)) return m.get(prop);
         // expose Map methods to allow direct map usage
         const mapMethod = getStringProp(m, prop);
-        if (typeof mapMethod === "function")
-          // eslint-disable-next-line no-restricted-syntax
-          return (mapMethod as (..._args: unknown[]) => unknown).bind(m);
+        if (typeof mapMethod === "function") {
+          // Use Reflect.apply via a wrapper to bind to the map
+          return (...args: unknown[]) => Reflect.apply(mapMethod, m, args);
+        }
       }
       return undefined;
     },
@@ -223,10 +220,13 @@ export function envEntries(e: Env): IterableIterator<[string, unknown]> {
     const entriesMethod = getStringProp(e, "entries");
     if (typeof entriesMethod === "function") return entriesMethod();
   }
-  // eslint-disable-next-line no-restricted-syntax
-  return Object.entries(e)[Symbol.iterator]() as IterableIterator<
-    [string, unknown]
-  >;
+  // Return a generator that iterates over Object.entries to satisfy the
+  // IterableIterator<[string, unknown]> return type without type assertions.
+  return (function* () {
+    for (const entry of Object.entries(e)) {
+      yield entry;
+    }
+  })();
 }
 
 export function envToThisObject(e: Env): { [k: string]: unknown } {
