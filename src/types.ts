@@ -107,30 +107,44 @@ export interface StructDef extends TypedValue {
   isStructDef: true;
 }
 
-// eslint-disable-next-line custom/max-interface-fields -- array type requires all fields
-export interface ArrayInstance extends TypedValue {
-  type: "array-instance";
-  isArray: true;
-  elements: RuntimeValue[];
+export interface ArrayMetadata {
   length: number;
   initializedCount: number;
   elemType?: string;
 }
 
-// eslint-disable-next-line custom/max-interface-fields -- pointer type stores cached value info
-export interface Pointer extends TypedValue {
-  type: "pointer";
-  pointer: true;
-  ptrName: string;
+export interface ArrayInstance extends TypedValue, ArrayMetadata {
+  type: "array-instance";
+  isArray: true;
+  elements: RuntimeValue[];
+}
+
+export interface PointerFlags {
   ptrIsSlice?: boolean;
   ptrMutable?: boolean;
   ptrIsBool?: boolean;
+}
+
+export interface PointerTypeInfo {
   kind?: string;
   bits?: number;
+}
+
+export interface PointerStoredValue {
   valueBig?: bigint | RuntimeValue;
   isFloat?: boolean;
   floatValue?: number;
   boolValue?: boolean;
+}
+
+export interface Pointer
+  extends TypedValue,
+    PointerFlags,
+    PointerTypeInfo,
+    PointerStoredValue {
+  type: "pointer";
+  pointer: true;
+  ptrName: string;
 }
 
 export interface ArrayLiteral {
