@@ -1,10 +1,11 @@
+import { Result, Ok, Err } from "./result";
+
 /**
  * Compiles source code.
  * @param source - The source code to compile
- * @returns The compiled code
- * @throws Error if duplicate variable declarations are found or type mismatch occurs
+ * @returns Result containing compiled code or error message
  */
-function compile(source: string): string {
+function compile(source: string): Result<string, string> {
   // Extract type annotations before stripping them
   const typeMatches = source.match(/let\s+(\w+)\s*:\s*(\w+)/g) || [];
   const varTypes = new Map<string, string>();
@@ -25,8 +26,13 @@ function compile(source: string): string {
       const value = match[1].trim();
       // Simple type checking for I32 (must be numeric, not boolean or string literals)
       if (typeName === "I32") {
-        if (value === "true" || value === "false" || value.includes('"') || value.includes("'")) {
-          throw new Error(
+        if (
+          value === "true" ||
+          value === "false" ||
+          value.includes('"') ||
+          value.includes("'")
+        ) {
+          return new Err(
             `Type Error: Cannot assign '${value}' to variable '${varName}' of type '${typeName}'`
           );
         }
@@ -41,7 +47,7 @@ function compile(source: string): string {
   for (const match of varMatches) {
     const varName = match.match(/let\s+(\w+)/)![1];
     if (declaredVars.has(varName)) {
-      throw new Error(
+      return new Err(
         `Compile Error: Identifier '${varName}' has already been declared`
       );
     }
@@ -56,7 +62,9 @@ function compile(source: string): string {
     lastStatement = "0";
   }
 
-  return `(function() { ${sourceWithoutTypes}; return ${lastStatement}; })()`;
+  return new Ok(
+    `(function() { ${sourceWithoutTypes}; return ${lastStatement}; })()`
+  );
 }
 
 /**
@@ -66,7 +74,10 @@ function compile(source: string): string {
  */
 function interpret(source: string): number {
   const compiled = compile(source);
-  return eval(compiled) as number;
+  if (compiled.isErr()) {
+    compiled.getOrThrow();
+  }
+  return eval(compiled.getOrThrow()) as number;
 }
 
 export { interpret, compile };
