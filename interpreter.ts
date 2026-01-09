@@ -1,12 +1,9 @@
 import { Result, Ok, Err } from "./result";
 
 /**
- * Compiles source code.
- * @param source - The source code to compile
- * @returns Result containing compiled code or error message
+ * Extracts and records variable type annotations
  */
-function compile(source: string): Result<string, string> {
-  // Extract type annotations before stripping them
+function extractVarTypes(source: string): Map<string, string> {
   const typeMatches = source.match(/let\s+(\w+)\s*:\s*(\w+)/g) || [];
   const varTypes = new Map<string, string>();
 
@@ -15,25 +12,31 @@ function compile(source: string): Result<string, string> {
     varTypes.set(varName, typeName);
   }
 
-  // Strip type annotations (: TypeName)
-  const sourceWithoutTypes = source.replace(/:\s*\w+/g, "");
+  return varTypes;
+}
 
-  // Track inferred variable types (for variables without explicit types)
+/**
+ * Infers types for variables based on their values
+ */
+function inferVarTypes(
+  sourceWithoutTypes: string,
+  varTypes: Map<string, string>
+): Map<string, string> {
   const inferredTypes = new Map<string, string>();
+  const allVarMatches =
+    sourceWithoutTypes.match(/let\s+(\w+)\s*=\s*([^;]+)/g) || [];
 
-  // First pass: infer types for all variable declarations
-  const allVarMatches = sourceWithoutTypes.match(/let\s+(\w+)\s*=\s*([^;]+)/g) || [];
   for (const varMatch of allVarMatches) {
     const [, varName, value] = varMatch.match(/let\s+(\w+)\s*=\s*([^;]+)/)!;
     const trimmedValue = value.trim();
+
     if (!varTypes.has(varName)) {
-      // Infer type based on value
       if (trimmedValue === "true" || trimmedValue === "false") {
         inferredTypes.set(varName, "Bool");
       } else if (/^\d+$/.test(trimmedValue)) {
         inferredTypes.set(varName, "I32");
       } else if (/^\w+$/.test(trimmedValue)) {
-        // It's a variable reference, propagate its type
+        // Propagate type from referenced variable
         if (inferredTypes.has(trimmedValue)) {
           inferredTypes.set(varName, inferredTypes.get(trimmedValue)!);
         } else if (varTypes.has(trimmedValue)) {
@@ -41,50 +44,77 @@ function compile(source: string): Result<string, string> {
         }
       }
     } else {
-      // Variable has explicit type, record it
       inferredTypes.set(varName, varTypes.get(varName)!);
     }
   }
 
-  // Check for type mismatches
+  return inferredTypes;
+}
+
+/**
+ * Validates type assignments
+ */
+function validateTypes(
+  sourceWithoutTypes: string,
+  varTypes: Map<string, string>,
+  inferredTypes: Map<string, string>
+): Result<void, string> {
   for (const [varName, typeName] of varTypes) {
     const regex = new RegExp(`let\\s+${varName}\\s*=\\s*([^;]+)`);
     const match = sourceWithoutTypes.match(regex);
-    if (match) {
-      const value = match[1].trim();
+    if (!match) continue;
 
-      // Check if the value is a variable reference
-      if (/^\w+$/.test(value) && !(/^\d+$/.test(value)) && value !== "true" && value !== "false") {
-        const sourceVarType = inferredTypes.get(value) || varTypes.get(value);
-        if (sourceVarType && sourceVarType !== typeName) {
-          return new Err(
-            `Type Error: Cannot assign variable '${value}' (type ${sourceVarType}) to variable '${varName}' of type '${typeName}'`
-          );
-        }
-      } else if (typeName === "I32") {
-        // Simple type checking for I32 (must be numeric, not boolean or string literals)
-        if (
-          value === "true" ||
-          value === "false" ||
-          value.includes('"') ||
-          value.includes("'")
-        ) {
-          return new Err(
-            `Type Error: Cannot assign '${value}' to variable '${varName}' of type '${typeName}'`
-          );
-        }
-      } else if (typeName === "Bool") {
-        // Bool can only be assigned true or false
-        if (value !== "true" && value !== "false") {
-          return new Err(
-            `Type Error: Cannot assign '${value}' to variable '${varName}' of type '${typeName}'`
-          );
-        }
+    const value = match[1].trim();
+    const isVarRef =
+      /^\w+$/.test(value) &&
+      !/^\d+$/.test(value) &&
+      value !== "true" &&
+      value !== "false";
+
+    if (isVarRef) {
+      const sourceVarType = inferredTypes.get(value) || varTypes.get(value);
+      if (sourceVarType && sourceVarType !== typeName) {
+        return new Err(
+          `Type Error: Cannot assign variable '${value}' (type ${sourceVarType}) to variable '${varName}' of type '${typeName}'`
+        );
       }
+    } else if (typeName === "I32" && isInvalidI32Value(value)) {
+      return new Err(
+        `Type Error: Cannot assign '${value}' to variable '${varName}' of type '${typeName}'`
+      );
+    } else if (typeName === "Bool" && !isBoolValue(value)) {
+      return new Err(
+        `Type Error: Cannot assign '${value}' to variable '${varName}' of type '${typeName}'`
+      );
     }
   }
 
-  // Check for duplicate variable declarations
+  return new Ok(undefined);
+}
+
+/**
+ * Checks if a value is invalid for I32
+ */
+function isInvalidI32Value(value: string): boolean {
+  return (
+    value === "true" ||
+    value === "false" ||
+    value.includes('"') ||
+    value.includes("'")
+  );
+}
+
+/**
+ * Checks if a value is a valid Bool
+ */
+function isBoolValue(value: string): boolean {
+  return value === "true" || value === "false";
+}
+
+/**
+ * Checks for duplicate variable declarations
+ */
+function checkDuplicates(sourceWithoutTypes: string): Result<void, string> {
   const varMatches = sourceWithoutTypes.match(/let\s+(\w+)\s*=/g) || [];
   const declaredVars = new Set<string>();
 
@@ -98,10 +128,35 @@ function compile(source: string): Result<string, string> {
     declaredVars.add(varName);
   }
 
-  // Wrap in a function to allow 'let' declarations and return the last expression
+  return new Ok(undefined);
+}
+
+/**
+ * Compiles source code.
+ * @param source - The source code to compile
+ * @returns Result containing compiled code or error message
+ */
+function compile(source: string): Result<string, string> {
+  const varTypes = extractVarTypes(source);
+  const sourceWithoutTypes = source.replace(/:\s*\w+/g, "");
+  const inferredTypes = inferVarTypes(sourceWithoutTypes, varTypes);
+
+  const typeCheckResult = validateTypes(
+    sourceWithoutTypes,
+    varTypes,
+    inferredTypes
+  );
+  if (typeCheckResult.isErr()) {
+    return typeCheckResult as Result<string, string>;
+  }
+
+  const duplicateCheckResult = checkDuplicates(sourceWithoutTypes);
+  if (duplicateCheckResult.isErr()) {
+    return duplicateCheckResult as Result<string, string>;
+  }
+
   let lastStatement = sourceWithoutTypes.split(";").pop()?.trim() || "";
 
-  // If there's no last statement or it's empty, return 0 as default exit code
   if (!lastStatement) {
     lastStatement = "0";
   }

@@ -31,6 +31,7 @@ module.exports = [
     rules: {
       ...js.configs.recommended.rules,
       ...tsPlugin.configs.recommended.rules,
+      complexity: ["error", 15],
       "no-restricted-syntax": [
         "error",
         {
