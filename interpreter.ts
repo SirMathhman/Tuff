@@ -4,8 +4,9 @@
  * @returns The compiled code
  */
 function compile(source: string): string {
-  // Return the source as-is; eval will handle it in a non-strict context
-  return source;
+  // Wrap in a function to allow 'let' declarations and return the last expression
+  const lastStatement = source.split(';').pop()?.trim() || source;
+  return `(function() { ${source}; return ${lastStatement}; })()`;
 }
 
 /**
@@ -15,9 +16,7 @@ function compile(source: string): string {
  */
 function interpret(source: string): number {
   const compiled = compile(source);
-  // Use eval in a function context to allow 'let' declarations
-  // eslint-disable-next-line no-eval
-  return (function() { return eval(compiled); }).call({}) as number;
+  return eval(compiled) as number;
 }
 
 export { interpret, compile };
