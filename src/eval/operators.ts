@@ -22,6 +22,21 @@ interface TypedIntegerResult {
   bits: number;
 }
 
+interface SuffixCompatibilityCtx {
+  left: unknown;
+  right: unknown;
+  leftHasKind: boolean;
+  rightHasKind: boolean;
+}
+
+interface TypedIntegerOpCtx {
+  op: string;
+  left: unknown;
+  right: unknown;
+  leftHasKind: boolean;
+  rightHasKind: boolean;
+}
+
 export function isTruthy(val: unknown): boolean {
   if (isBoolOperand(val)) return val.boolValue;
   if (isIntOperand(val)) return val.valueBig !== 0n;
@@ -117,24 +132,19 @@ function handleIsOperator(left: unknown, right: unknown): BooleanResult {
 /**
  * Ensure suffix metadata and compatibility between typed integer operands
  */
-function ensureSuffixCompatibility(
-  left: unknown,
-  right: unknown,
-  leftHasKind: boolean,
-  rightHasKind: boolean
-) {
-  const ref = leftHasKind ? left : right;
+function ensureSuffixCompatibility(ctx: SuffixCompatibilityCtx) {
+  const ref = ctx.leftHasKind ? ctx.left : ctx.right;
   if (!hasKindBits(ref)) throw new Error("invalid suffix metadata");
   const { kind, bits } = ref;
-  if (leftHasKind && rightHasKind) {
-    if (!hasKindBits(left) || !hasKindBits(right))
+  if (ctx.leftHasKind && ctx.rightHasKind) {
+    if (!hasKindBits(ctx.left) || !hasKindBits(ctx.right))
       throw new Error("invalid suffix metadata");
-    if (left.kind !== right.kind || left.bits !== right.bits)
+    if (ctx.left.kind !== ctx.right.kind || ctx.left.bits !== ctx.right.bits)
       throw new Error("mismatched suffixes in binary operation");
   }
-  if (!leftHasKind && isFloatOperand(left))
+  if (!ctx.leftHasKind && isFloatOperand(ctx.left))
     throw new Error("mixed suffix and float not allowed");
-  if (!rightHasKind && isFloatOperand(right))
+  if (!ctx.rightHasKind && isFloatOperand(ctx.right))
     throw new Error("mixed suffix and float not allowed");
   return { kind, bits };
 }
@@ -152,31 +162,25 @@ function getBigValue(val: unknown, hasKind: boolean, side: "left" | "right") {
 /**
  * Handle typed integer operations (with kind/bits metadata)
  */
-function handleTypedIntegerOp(
-  op: string,
-  left: unknown,
-  right: unknown,
-  leftHasKind: boolean,
-  rightHasKind: boolean
-): TypedIntegerResult {
-  const { kind, bits } = ensureSuffixCompatibility(
-    left,
-    right,
-    leftHasKind,
-    rightHasKind
-  );
+function handleTypedIntegerOp(ctx: TypedIntegerOpCtx): TypedIntegerResult {
+  const { kind, bits } = ensureSuffixCompatibility({
+    left: ctx.left,
+    right: ctx.right,
+    leftHasKind: ctx.leftHasKind,
+    rightHasKind: ctx.rightHasKind,
+  });
 
-  const lBig = getBigValue(left, leftHasKind, "left");
-  const rBig = getBigValue(right, rightHasKind, "right");
+  const lBig = getBigValue(ctx.left, ctx.leftHasKind, "left");
+  const rBig = getBigValue(ctx.right, ctx.rightHasKind, "right");
 
   let resBig: bigint;
-  if (op === "+") resBig = lBig + rBig;
-  else if (op === "-") resBig = lBig - rBig;
-  else if (op === "*") resBig = lBig * rBig;
-  else if (op === "/") {
+  if (ctx.op === "+") resBig = lBig + rBig;
+  else if (ctx.op === "-") resBig = lBig - rBig;
+  else if (ctx.op === "*") resBig = lBig * rBig;
+  else if (ctx.op === "/") {
     if (rBig === 0n) throw new Error("division by zero");
     resBig = lBig / rBig;
-  } else if (op === "%") {
+  } else if (ctx.op === "%") {
     if (rBig === 0n) throw new Error("modulo by zero");
     resBig = lBig % rBig;
   } else throw new Error("unsupported operator");
@@ -219,7 +223,13 @@ export function applyBinaryOp(
   const leftHasKind = hasKindBits(left);
   const rightHasKind = hasKindBits(right);
   if (leftHasKind || rightHasKind) {
-    return handleTypedIntegerOp(op, left, right, leftHasKind, rightHasKind);
+    return handleTypedIntegerOp({
+      op,
+      left,
+      right,
+      leftHasKind,
+      rightHasKind,
+    });
   }
 
   const lNum = toNumericValue(left, "left");

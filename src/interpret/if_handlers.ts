@@ -8,7 +8,7 @@ import { Env } from "../env";
 import type { InterpretFn } from "../types";
 
 function findBracedEndOrThrow(s: string, err: string) {
-  const bEnd = findMatchingParen(s, 0, "{", "}");
+  const bEnd = findMatchingParen(s, { start: 0, open: "{", close: "}" });
   if (bEnd === -1) throw new Error(err);
   return bEnd;
 }
@@ -26,7 +26,7 @@ export function handleIfStatement(
 
   const start = stmt.indexOf("(");
   if (start === -1) throw new Error("invalid if syntax");
-  const endIdx = findMatchingParen(stmt, start);
+  const endIdx = findMatchingParen(stmt, { start });
   if (endIdx === -1)
     throw new Error("invalid if syntax: unbalanced parentheses");
   const cond = stmt.slice(start + 1, endIdx).trim();

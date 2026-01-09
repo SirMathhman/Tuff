@@ -2,6 +2,38 @@ import { parseOperandAt } from "../parser";
 import { Env } from "../env";
 import type { InterpretFn } from "../types";
 
+export interface DelimiterConfig {
+  src: string;
+  start: number;
+  open: string;
+  close: string;
+}
+
+export interface FindParenOptions {
+  start: number;
+  open?: string;
+  close?: string;
+}
+
+export interface GroupContext {
+  matched: string;
+  inner: string;
+  index: number;
+}
+
+export interface ExpansionContext {
+  input: string;
+  env: Env;
+  interpret: InterpretFn;
+  getLastTopLevelStatement_fn: (_s: string) => string | undefined;
+}
+
+export interface ExpansionParams {
+  env: Env;
+  interpret: InterpretFn;
+  getLastTopLevelStatement_fn: (_s: string) => string | undefined;
+}
+
 export interface AssignmentParts {
   isDeref: boolean;
   isDeclOnly: boolean;
@@ -106,15 +138,17 @@ function parseSimpleAssignment(stmt: string): AssignmentParts | undefined {
 
 export function findMatchingParen(
   str: string,
-  startIdx: number,
-  openChar = "(",
-  closeChar = ")"
-) {
+  options: FindParenOptions
+): number {
+  const start = options.start;
+  const open = options.open ?? "(";
+  const close = options.close ?? ")";
+
   let depth = 0;
-  for (let i = startIdx; i < str.length; i++) {
+  for (let i = start; i < str.length; i++) {
     const ch = str[i];
-    if (ch === openChar) depth++;
-    else if (ch === closeChar) {
+    if (ch === open) depth++;
+    else if (ch === close) {
       depth--;
       if (depth === 0) return i;
     }
@@ -154,12 +188,8 @@ function replaceWithPlaceholder(
   return ph;
 }
 
-function processMatchedGroup(
-  state: ExpandState,
-  m: string,
-  inner: string,
-  idx: number
-) {
+function processMatchedGroup(state: ExpandState, context: GroupContext) {
+  const { matched: m, index: idx, inner } = context;
   const prefix = state.expr.slice(0, idx);
 
   if (m[0] === "{" && /\bmatch\b(?:\s*\([^()]*\))?\s*$/.test(prefix)) {
@@ -201,7 +231,7 @@ function parseFnHeader(stmt: string) {
   const name = m[1];
   const start = stmt.indexOf("(");
   if (start === -1) throw new Error("invalid fn syntax");
-  const endIdx = findMatchingParen(stmt, start);
+  const endIdx = findMatchingParen(stmt, { start });
   if (endIdx === -1) throw new Error("unbalanced parentheses in fn");
   const paramsRaw = stmt.slice(start + 1, endIdx).trim();
   const params = paramsRaw.length
@@ -251,7 +281,11 @@ function extractBracedFnBody(
   startSearchIdx: number
 ): ExtractBracedFnBodyResult {
   const bStart = stmt.indexOf("{", startSearchIdx);
-  const bEnd = findMatchingParen(stmt, bStart, "{", "}");
+  const bEnd = findMatchingParen(stmt, {
+    start: bStart,
+    open: "{",
+    close: "}",
+  });
   if (bEnd === -1) throw new Error("unbalanced braces in fn");
   const body = stmt.slice(bStart, bEnd + 1);
   let trailingExpr: string | undefined = undefined;
@@ -263,19 +297,22 @@ function extractBracedFnBody(
 }
 
 export function expandParensAndBraces(
-  s: string,
-  env: Env,
-  interpret: InterpretFn,
-  getLastTopLevelStatement_fn: (_s: string) => string | undefined
+  input: string,
+  params: ExpansionParams
 ): string {
+  const s = input;
+  const actualEnv = params.env;
+  const actualInterpret = params.interpret;
+  const actualGetLastTopLevel = params.getLastTopLevelStatement_fn;
+
   if (!s.includes("(") && !s.includes("{")) return s;
 
   const state: ExpandState = {
     expr: s,
     placeholders: [],
-    env,
-    interpret,
-    getLastTopLevelStatement_fn,
+    env: actualEnv,
+    interpret: actualInterpret,
+    getLastTopLevelStatement_fn: actualGetLastTopLevel,
   };
 
   const parenRegex = /\([^()]*\)|\{[^{}]*\}/;
@@ -283,7 +320,11 @@ export function expandParensAndBraces(
     const m = state.expr.match(parenRegex)![0];
     const inner = m.slice(1, -1);
     const idx = state.expr.indexOf(m);
-    processMatchedGroup(state, m, inner, idx);
+    processMatchedGroup(state, {
+      matched: m,
+      inner,
+      index: idx,
+    });
   }
 
   for (let i = 0; i < state.placeholders.length; i++) {
@@ -404,7 +445,11 @@ export function parseStructDef(stmt: string): ParseStructDefResult {
 
   const name = m[1];
   const braceStart = stmt.indexOf("{");
-  const braceEnd = findMatchingParen(stmt, braceStart, "{", "}");
+  const braceEnd = findMatchingParen(stmt, {
+    start: braceStart,
+    open: "{",
+    close: "}",
+  });
   if (braceEnd === -1)
     throw new Error("unbalanced braces in struct definition");
 

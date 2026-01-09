@@ -13,12 +13,19 @@ export interface AssignmentStatementResult {
   last?: unknown;
 }
 
+/** Context for handleAssignmentStatement */
+export interface AssignmentStatementContext {
+  assignParts: AssignmentParts;
+  localEnv: Env;
+  evaluateRhsLocal: (rhs: string, envLocal: Env) => unknown;
+  convertOperandToNumber: (op: unknown) => number;
+}
+
 export function handleAssignmentStatement(
-  assignParts: AssignmentParts,
-  localEnv: Env,
-  evaluateRhsLocal: (rhs: string, envLocal: Env) => unknown,
-  convertOperandToNumber: (op: unknown) => number
+  ctx: AssignmentStatementContext
 ): AssignmentStatementResult {
+  const { assignParts, localEnv, evaluateRhsLocal, convertOperandToNumber } =
+    ctx;
   const { isDeref, name, op, rhs, isThisField } = assignParts;
 
   // Handle this.field assignment
@@ -29,27 +36,26 @@ export function handleAssignmentStatement(
 
   // Index assignment support: name[index] = rhs or name[index] += rhs
   if (assignParts.indexExpr !== undefined) {
-    handleIndexAssignment(
+    handleIndexAssignment({
       name,
-      assignParts.indexExpr,
+      indexExpr: assignParts.indexExpr,
       op,
       rhs,
       localEnv,
       evaluateReturningOperand,
       evaluateRhsLocal,
-      convertOperandToNumber
-    );
+      convertOperandToNumber,
+    });
     return { handled: true, last: undefined };
   }
 
-  handleVariableOrDerefAssignment(
-    isDeref,
+  handleVariableOrDerefAssignment(isDeref, {
     name,
     op,
     rhs,
     localEnv,
-    evaluateRhsLocal
-  );
+    evaluateRhsLocal,
+  });
 
   return { handled: true, last: undefined };
 }

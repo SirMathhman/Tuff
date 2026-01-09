@@ -186,12 +186,16 @@ interface ObjectWithYield {
   __yield?: unknown;
 }
 
-export function evaluateRhs(
-  rhs: string,
-  envLocal: Env,
-  interpret: InterpretFn,
-  getLastTopLevelStatement_fn: (_s: string) => string | undefined
-): unknown {
+/** Context for evaluateRhs */
+export interface EvaluateRhsContext {
+  rhs: string;
+  envLocal: Env;
+  interpret: InterpretFn;
+  getLastTopLevelStatement_fn: (_s: string) => string | undefined;
+}
+
+export function evaluateRhs(ctx: EvaluateRhsContext): unknown {
+  const { rhs, envLocal, interpret, getLastTopLevelStatement_fn } = ctx;
   if (/^\s*\{[\s\S]*\}\s*$/.test(rhs)) {
     const inner = rhs.replace(/^\{\s*|\s*\}$/g, "");
     const lastInner = getLastTopLevelStatement_fn(inner);

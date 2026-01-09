@@ -25,12 +25,16 @@ function parseExternFnSignature(stmt: string) {
   return { name, params, resultAnnotation };
 }
 
-function tryMergeExternSignature(
-  localEnv: Env,
-  name: string,
-  params: unknown,
-  resultAnnotation: string | undefined
-): boolean {
+/** Context for tryMergeExternSignature */
+interface MergeExternContext {
+  localEnv: Env;
+  name: string;
+  params: unknown;
+  resultAnnotation: string | undefined;
+}
+
+function tryMergeExternSignature(ctx: MergeExternContext): boolean {
+  const { localEnv, name, params, resultAnnotation } = ctx;
   const existing = envGet(localEnv, name);
   if (!(isPlainObject(existing) && isFnWrapper(existing))) return false;
 
@@ -77,7 +81,7 @@ export function handleExternFn(
   // module), merge the extern signature into the existing binding so that
   // native wrappers gain parameter metadata (e.g., a leading `this`).
   if (declared.has(name)) {
-    tryMergeExternSignature(localEnv, name, params, resultAnnotation);
+    tryMergeExternSignature({ localEnv, name, params, resultAnnotation });
     return true;
   }
 
@@ -129,15 +133,21 @@ export function handleExternLet(
 }
 
 /**
+ * Context for handleImportStatement
+ */
+export interface ImportStatementContext {
+  stmt: string;
+  localEnv: Env;
+  env: Env;
+  declared: Set<string>;
+}
+
+/**
  * Handle import statement: `from <ns> use { a, b }`
  * Returns true if the statement was handled
  */
-export function handleImportStatement(
-  stmt: string,
-  localEnv: Env,
-  env: Env,
-  declared: Set<string>
-): boolean {
+export function handleImportStatement(ctx: ImportStatementContext): boolean {
+  const { stmt, localEnv, env, declared } = ctx;
   if (!/^extern\b/.test(stmt) && !/^from\b/.test(stmt)) return false;
 
   let importStmt = stmt;

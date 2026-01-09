@@ -64,7 +64,11 @@ function tryParseFieldAt(state: TokenizeState): boolean {
 function tryParseIndexAt(state: TokenizeState): boolean {
   const { exprStr } = state;
   if (exprStr[state.pos] !== "[") return false;
-  const endIdx = findMatchingParen(exprStr, state.pos, "[", "]");
+  const endIdx = findMatchingParen(exprStr, {
+    start: state.pos,
+    open: "[",
+    close: "]",
+  });
   if (endIdx === -1) throw new Error("unbalanced brackets in index");
   const inner = exprStr.slice(state.pos + 1, endIdx);
   state.tokens.push({ op: "index", operand: { indexExpr: inner } });

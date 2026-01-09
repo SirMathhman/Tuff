@@ -32,13 +32,26 @@ interface BigIntValue {
   valueBig: bigint;
 }
 
-interface ProcessOperatorsCtx {
-  operands: unknown[];
-  ops: string[];
+interface FieldAccess {
+  arrLike: unknown;
+  fieldName: string;
+}
+
+interface MethodAccess {
+  fieldName: string;
+  receiver: unknown;
+}
+
+interface ProcessOperatorsContext {
   localEnv: Env;
   evaluateReturningOperandFn: (expr: string, env: Env) => unknown;
   evaluateCallAtFn: (funcOperand: unknown, callAppOperand: unknown) => unknown;
   getBindingTargetFn: (name: string) => BindingTarget;
+}
+
+interface ProcessOperatorsCtx extends ProcessOperatorsContext {
+  operands: unknown[];
+  ops: string[];
 }
 
 function replaceWithBigIntNumber(
@@ -111,31 +124,30 @@ function getArrayTargetFromPointer(
 
 function handleArrayLikeFieldAccess(
   ctx: ProcessOperatorsCtx,
-  arrLike: unknown,
-  fieldName: string,
-  i: number
+  i: number,
+  fieldAccess: FieldAccess
 ): boolean {
-  if (!isArrayInstance(arrLike)) return false;
-  if (fieldName === "length" || fieldName === "len") {
-    replaceWithBigIntNumber(ctx, arrLike.length, i);
+  if (!isArrayInstance(fieldAccess.arrLike)) return false;
+  if (fieldAccess.fieldName === "length" || fieldAccess.fieldName === "len") {
+    replaceWithBigIntNumber(ctx, fieldAccess.arrLike.length, i);
     return true;
   }
-  if (fieldName === "init") {
-    replaceWithBigIntNumber(ctx, arrLike.initializedCount, i);
+  if (fieldAccess.fieldName === "init") {
+    replaceWithBigIntNumber(ctx, fieldAccess.arrLike.initializedCount, i);
     return true;
   }
   return false;
 }
 
-function resolveMethodWrapper(
-  ctx: ProcessOperatorsCtx,
-  fieldName: string,
-  receiver: unknown
-) {
-  const binding = envGet(ctx.localEnv, fieldName);
+function resolveMethodWrapper(ctx: ProcessOperatorsCtx, method: MethodAccess) {
+  const binding = envGet(ctx.localEnv, method.fieldName);
   if (binding !== undefined && isFnWrapper(binding))
-    return makeBoundWrapperFromOrigFn(binding.fn, receiver);
+    return makeBoundWrapperFromOrigFn(binding.fn, method.receiver);
   return undefined;
+}
+
+function throwInvalidFieldAccess(fieldName: string): never {
+  throw new Error(`invalid field access: ${fieldName}`);
 }
 
 function handleCallAt(ctx: ProcessOperatorsCtx, i: number): boolean {
@@ -234,36 +246,46 @@ function handleDotOnMissing(
 function handleDotOnArrayLike(
   ctx: ProcessOperatorsCtx,
   i: number,
-  fieldName: string,
-  receiver: unknown
+  fieldAccess: MethodAccess
 ): boolean {
   let arrLike: unknown | undefined = undefined;
   if (
-    isPlainObject(receiver) &&
-    isPointer(receiver) &&
-    getProp(receiver, "ptrIsSlice") === true
+    isPlainObject(fieldAccess.receiver) &&
+    isPointer(fieldAccess.receiver) &&
+    getProp(fieldAccess.receiver, "ptrIsSlice") === true
   ) {
-    arrLike = getArrayTargetFromPointer(ctx, receiver, "field");
-  } else if (isArrayInstance(receiver)) {
-    arrLike = receiver;
+    arrLike = getArrayTargetFromPointer(ctx, fieldAccess.receiver, "field");
+  } else if (isArrayInstance(fieldAccess.receiver)) {
+    arrLike = fieldAccess.receiver;
   }
   if (arrLike === undefined) return false;
 
-  if (handleArrayLikeFieldAccess(ctx, arrLike, fieldName, i)) return true;
-  throw new Error(`invalid field access: ${fieldName}`);
+  if (
+    handleArrayLikeFieldAccess(ctx, i, {
+      arrLike,
+      fieldName: fieldAccess.fieldName,
+    })
+  )
+    return true;
+  throwInvalidFieldAccess(fieldAccess.fieldName);
 }
 
 function handleStructOrThisField(
   ctx: ProcessOperatorsCtx,
   i: number,
-  fieldName: string,
-  receiver: unknown
+  fieldAccess: MethodAccess
 ): boolean {
-  if (!isPlainObject(receiver)) throwCannotAccessField();
-  const fv = getProp(receiver, "fieldValues");
-  if (fv === undefined || !Object.prototype.hasOwnProperty.call(fv, fieldName))
+  if (!isPlainObject(fieldAccess.receiver)) throwCannotAccessField();
+  const fv = getProp(fieldAccess.receiver, "fieldValues");
+  if (
+    fv === undefined ||
+    !Object.prototype.hasOwnProperty.call(fv, fieldAccess.fieldName)
+  )
     return false;
-  const fieldValue = getFieldValueFromInstance(receiver, fieldName);
+  const fieldValue = getFieldValueFromInstance(
+    fieldAccess.receiver,
+    fieldAccess.fieldName
+  );
   ctx.operands.splice(i, 2, fieldValue);
   ctx.ops.splice(i, 1);
   return true;
@@ -302,14 +324,22 @@ function markWrapperAutoCall(wrapper: unknown) {
 function handleDotOnStructOrThis(
   ctx: ProcessOperatorsCtx,
   i: number,
-  fieldName: string,
-  receiver: unknown
+  fieldAccess: MethodAccess
 ): boolean {
-  if (!(isStructInstance(receiver) || isThisBinding(receiver))) return false;
-  if (handleStructOrThisField(ctx, i, fieldName, receiver)) return true;
+  if (
+    !(
+      isStructInstance(fieldAccess.receiver) ||
+      isThisBinding(fieldAccess.receiver)
+    )
+  )
+    return false;
+  if (handleStructOrThisField(ctx, i, fieldAccess)) return true;
 
-  const wrapper = resolveMethodWrapper(ctx, fieldName, receiver);
-  if (!wrapper) throw new Error(`invalid field access: ${fieldName}`);
+  const wrapper = resolveMethodWrapper(ctx, {
+    fieldName: fieldAccess.fieldName,
+    receiver: fieldAccess.receiver,
+  });
+  if (!wrapper) throwInvalidFieldAccess(fieldAccess.fieldName);
   if (tryInvokeMethodWrapper(ctx, i, wrapper)) return true;
 
   markWrapperAutoCall(wrapper);
@@ -321,10 +351,12 @@ function handleDotOnStructOrThis(
 function handlePrimitiveFieldAccess(
   ctx: ProcessOperatorsCtx,
   i: number,
-  fieldName: string,
-  receiver: unknown
+  fieldAccess: MethodAccess
 ): boolean {
-  const wrapper = resolveMethodWrapper(ctx, fieldName, receiver);
+  const wrapper = resolveMethodWrapper(ctx, {
+    fieldName: fieldAccess.fieldName,
+    receiver: fieldAccess.receiver,
+  });
   if (!wrapper) return false;
   ctx.operands.splice(i, 2, wrapper);
   ctx.ops.splice(i, 1);
@@ -339,9 +371,10 @@ function handleDotAt(ctx: ProcessOperatorsCtx, i: number): boolean {
     if (handleDotOnMissing(ctx, i, fieldName)) return true;
   }
 
-  if (handleDotOnArrayLike(ctx, i, fieldName, receiver)) return true;
-  if (handleDotOnStructOrThis(ctx, i, fieldName, receiver)) return true;
-  if (handlePrimitiveFieldAccess(ctx, i, fieldName, receiver)) return true;
+  const fieldAccess = { fieldName, receiver };
+  if (handleDotOnArrayLike(ctx, i, fieldAccess)) return true;
+  if (handleDotOnStructOrThis(ctx, i, fieldAccess)) return true;
+  if (handlePrimitiveFieldAccess(ctx, i, fieldAccess)) return true;
 
   if (!receiver) throwCannotAccessFieldMissing();
   throwCannotAccessField();
@@ -360,18 +393,12 @@ function tryAutoInvokeFirstWrapper(ctx: ProcessOperatorsCtx) {
 export function processOperators(
   operands: unknown[],
   ops: string[],
-  localEnv: Env,
-  evaluateReturningOperandFn: (expr: string, env: Env) => unknown,
-  evaluateCallAtFn: (funcOperand: unknown, callAppOperand: unknown) => unknown,
-  getBindingTargetFn: (name: string) => BindingTarget
+  context: ProcessOperatorsContext
 ) {
   const ctx: ProcessOperatorsCtx = {
     operands,
     ops,
-    localEnv,
-    evaluateReturningOperandFn,
-    evaluateCallAtFn,
-    getBindingTargetFn,
+    ...context,
   };
 
   let i = 0;

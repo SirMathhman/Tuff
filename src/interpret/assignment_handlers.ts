@@ -42,6 +42,70 @@ interface RequireExistingResult {
   rhsOperand: unknown;
 }
 
+/** Context for assignment operations */
+interface AssignmentContext {
+  name: string;
+  op: string | undefined;
+  rhs: string;
+  localEnv: Env;
+  evaluateRhsLocal: EvaluateRhsCallback;
+}
+
+/** Context for index assignment operations */
+interface IndexAssignmentContext {
+  name: string;
+  indexExpr: string;
+  op: string | undefined;
+  rhs: string;
+  localEnv: Env;
+  evaluateReturningOperand: EvaluateRhsCallback;
+  evaluateRhsLocal: EvaluateRhsCallback;
+  convertOperandToNumber: (op: unknown) => number;
+}
+
+/** Context for deref assignment operations */
+interface DerefAssignmentContext {
+  ptr: unknown;
+  op: string | undefined;
+  rhsOperand: unknown;
+  localEnv: Env;
+}
+
+/** Context for pointer index assignment */
+interface PointerIndexContext {
+  maybePtr: unknown;
+  idxVal: number;
+  op: string | undefined;
+  rhs: string;
+  localEnv: Env;
+  evaluateRhsLocal: EvaluateRhsCallback;
+}
+
+/** Context for validating and assigning deref */
+interface DerefValidationContext {
+  targetName: string;
+  targetExisting: unknown;
+  newVal: unknown;
+  localEnv: Env;
+}
+
+/** Context for persisting array changes */
+interface PersistArrayContext {
+  ptrName: string;
+  targetBinding: unknown;
+  arrInst: unknown;
+  localEnv: Env;
+}
+
+/** Context for regular assignment operations */
+interface RegularAssignmentContext {
+  name: string;
+  op: string | undefined;
+  rhsOperand: unknown;
+  existing: unknown;
+  localEnv: Env;
+}
+
 function getPointerFromExisting(existing: unknown): unknown | undefined {
   if (
     isPlainObject(existing) &&
@@ -103,15 +167,12 @@ function extractMutableArrayInstance(existingObj: unknown) {
 }
 
 function requireExistingAndEvalRhs(
-  name: string,
-  rhs: string,
-  localEnv: Env,
-  evaluateRhsLocal: EvaluateRhsCallback
+  ctx: Pick<AssignmentContext, "name" | "rhs" | "localEnv" | "evaluateRhsLocal">
 ): RequireExistingResult {
-  if (!envHas(localEnv, name))
+  if (!envHas(ctx.localEnv, ctx.name))
     throw new Error("assignment to undeclared variable");
-  const existing = envGet(localEnv, name);
-  const rhsOperand = evaluateRhsLocal(rhs, localEnv);
+  const existing = envGet(ctx.localEnv, ctx.name);
+  const rhsOperand = ctx.evaluateRhsLocal(ctx.rhs, ctx.localEnv);
   return { existing, rhsOperand };
 }
 
@@ -121,24 +182,26 @@ function requireExistingAndEvalRhs(
  */
 export function handleVariableOrDerefAssignment(
   isDeref: boolean,
-  name: string,
-  op: string | undefined,
-  rhs: string,
-  localEnv: Env,
-  evaluateRhsLocal: EvaluateRhsCallback
+  ctx: AssignmentContext
 ): void {
-  const { existing, rhsOperand } = requireExistingAndEvalRhs(
-    name,
-    rhs,
-    localEnv,
-    evaluateRhsLocal
-  );
+  const { existing, rhsOperand } = requireExistingAndEvalRhs(ctx);
 
   if (isDeref) {
     const ptr = unwrapBindingValue(existing);
-    handleDerefAssignment(ptr, op, rhsOperand, localEnv);
+    handleDerefAssignment({
+      ptr,
+      op: ctx.op,
+      rhsOperand,
+      localEnv: ctx.localEnv,
+    });
   } else {
-    handleRegularAssignment(name, op, rhsOperand, existing, localEnv);
+    handleRegularAssignment({
+      name: ctx.name,
+      op: ctx.op,
+      rhsOperand,
+      existing,
+      localEnv: ctx.localEnv,
+    });
   }
 }
 
@@ -160,29 +223,31 @@ export function handleThisFieldAssignment(
   args: HandleThisFieldAssignmentArgs
 ): void {
   const { name, op, rhs, localEnv, evaluateRhsLocal } = args;
-  const { existing, rhsOperand } = requireExistingAndEvalRhs(
+  const { existing, rhsOperand } = requireExistingAndEvalRhs({
     name,
     rhs,
     localEnv,
-    evaluateRhsLocal
-  );
+    evaluateRhsLocal,
+  });
   const newVal = computeAssignmentValue(op, existing, rhsOperand);
-  assignValueToVariable(name, existing, newVal, localEnv);
+  assignValueToVariable({ name, existing, newVal, localEnv });
 }
 
 /**
  * Handle index assignment (arr[i] = v or arr[i] op= v)
  */
-export function handleIndexAssignment(
-  name: string,
-  indexExpr: string,
-  op: string | undefined,
-  rhs: string,
-  localEnv: Env,
-  evaluateReturningOperand: EvaluateRhsCallback,
-  evaluateRhsLocal: EvaluateRhsCallback,
-  convertOperandToNumber: (op: unknown) => number
-): boolean {
+export function handleIndexAssignment(ctx: IndexAssignmentContext): boolean {
+  const {
+    name,
+    indexExpr,
+    op,
+    rhs,
+    localEnv,
+    evaluateReturningOperand,
+    evaluateRhsLocal,
+    convertOperandToNumber,
+  } = ctx;
+
   const idxVal = convertOperandToNumber(
     evaluateReturningOperand(indexExpr, localEnv)
   );
@@ -195,14 +260,14 @@ export function handleIndexAssignment(
   const maybePtr = getPointerFromExisting(existing);
 
   if (maybePtr) {
-    handlePointerIndexAssignment(
+    handlePointerIndexAssignment({
       maybePtr,
       idxVal,
       op,
       rhs,
       localEnv,
-      evaluateRhsLocal
-    );
+      evaluateRhsLocal,
+    });
     return true;
   }
 
@@ -210,7 +275,7 @@ export function handleIndexAssignment(
   const arrInst = extractMutableArrayInstance(existing);
 
   const rhsOperand2 = evaluateRhsLocal(rhs, localEnv);
-  doIndexAssignment(arrInst, idxVal, rhsOperand2, op);
+  doIndexAssignment({ arrInst, idxVal, rhsOperand: rhsOperand2, op });
 
   // persist
   envSet(localEnv, name, existing);
@@ -220,23 +285,18 @@ export function handleIndexAssignment(
 /**
  * Handle pointer index assignment (p[i] = v)
  */
-function handlePointerIndexAssignment(
-  maybePtr: unknown,
-  idxVal: number,
-  op: string | undefined,
-  rhs: string,
-  localEnv: Env,
-  evaluateRhsLocal: EvaluateRhsCallback
-): void {
+function handlePointerIndexAssignment(ctx: PointerIndexContext): void {
+  const { maybePtr, idxVal, op, rhs, localEnv, evaluateRhsLocal } = ctx;
+
   const { ptrName, targetBinding, arrInst } = resolveArrayPointerTarget(
     maybePtr,
     localEnv
   );
   const rhsOperand2 = evaluateRhsLocal(rhs, localEnv);
 
-  doIndexAssignment(arrInst, idxVal, rhsOperand2, op);
+  doIndexAssignment({ arrInst, idxVal, rhsOperand: rhsOperand2, op });
 
-  persistArrayChange(ptrName, targetBinding, arrInst, localEnv);
+  persistArrayChange({ ptrName, targetBinding, arrInst, localEnv });
 }
 
 function resolveArrayPointerTarget(maybePtr: unknown, localEnv: Env) {
@@ -270,12 +330,9 @@ function resolveArrayPointerTarget(maybePtr: unknown, localEnv: Env) {
   return { ptrName, targetBinding, arrInst: targetVal };
 }
 
-function persistArrayChange(
-  ptrName: string,
-  targetBinding: unknown,
-  arrInst: unknown,
-  localEnv: Env
-) {
+function persistArrayChange(ctx: PersistArrayContext) {
+  const { ptrName, targetBinding, arrInst, localEnv } = ctx;
+
   if (
     isPlainObject(targetBinding) &&
     hasValue(targetBinding) &&
@@ -293,12 +350,9 @@ function persistArrayChange(
 /**
  * Handle deref assignment (*p = v or *p op= v)
  */
-export function handleDerefAssignment(
-  ptr: unknown,
-  op: string | undefined,
-  rhsOperand: unknown,
-  localEnv: Env
-): void {
+export function handleDerefAssignment(ctx: DerefAssignmentContext): void {
+  const { ptr, op, rhsOperand, localEnv } = ctx;
+
   if (!isPointer(ptr))
     throw new Error("internal error: deref assignment without pointer");
   const targetName = ptr.ptrName;
@@ -308,39 +362,27 @@ export function handleDerefAssignment(
 
   const newVal = computeAssignmentValue(op, targetExisting, rhsOperand);
 
-  validateAndAssignDeref(targetName, targetExisting, newVal, localEnv);
+  validateAndAssignDeref({ targetName, targetExisting, newVal, localEnv });
 }
 
-function validateAndAssignDeref(
-  targetName: string,
-  targetExisting: unknown,
-  newVal: unknown,
-  localEnv: Env
-) {
+function validateAndAssignDeref(ctx: DerefValidationContext) {
+  const { targetName, targetExisting, newVal, localEnv } = ctx;
+
   // For deref assignment to a placeholder, validate annotation
   if (isPlainObject(targetExisting) && hasUninitialized(targetExisting)) {
-    handlePlaceholderDerefAssignment(
-      targetName,
-      targetExisting,
-      newVal,
-      localEnv
-    );
+    handlePlaceholderDerefAssignment(ctx);
     return;
   }
 
-  if (assignIfMutableBinding(targetName, targetExisting, newVal, localEnv))
-    return;
+  if (assignIfMutableBinding(ctx)) return;
 
   // fallback: set value directly
   envSet(localEnv, targetName, newVal);
 }
 
-function handlePlaceholderDerefAssignment(
-  targetName: string,
-  targetExisting: unknown,
-  newVal: unknown,
-  localEnv: Env
-) {
+function handlePlaceholderDerefAssignment(ctx: DerefValidationContext) {
+  const { targetName, targetExisting, newVal, localEnv } = ctx;
+
   if (!isPlainObject(targetExisting) || !hasUninitialized(targetExisting))
     throw new Error("internal error: expected placeholder binding");
 
@@ -364,15 +406,17 @@ function handlePlaceholderDerefAssignment(
     validateAnnotation(targetExisting.annotation, newVal);
   }
   // Use helpers to avoid direct casts and ensure consistent behavior
-  assignToPlaceholder(targetName, targetExisting, newVal, localEnv);
+  assignToPlaceholder({
+    name: targetName,
+    existing: targetExisting,
+    newVal,
+    localEnv,
+  });
 }
 
-function assignIfMutableBinding(
-  targetName: string,
-  targetExisting: unknown,
-  newVal: unknown,
-  localEnv: Env
-) {
+function assignIfMutableBinding(ctx: DerefValidationContext) {
+  const { targetName, targetExisting, newVal, localEnv } = ctx;
+
   if (
     isPlainObject(targetExisting) &&
     hasValue(targetExisting) &&
@@ -380,7 +424,12 @@ function assignIfMutableBinding(
     hasMutable(targetExisting) &&
     targetExisting.mutable
   ) {
-    assignValueToVariable(targetName, targetExisting, newVal, localEnv);
+    assignValueToVariable({
+      name: targetName,
+      existing: targetExisting,
+      newVal,
+      localEnv,
+    });
     return true;
   }
   return false;
@@ -389,19 +438,15 @@ function assignIfMutableBinding(
 /**
  * Handle regular assignment (x = v or x op= v)
  */
-export function handleRegularAssignment(
-  name: string,
-  op: string | undefined,
-  rhsOperand: unknown,
-  existing: unknown,
-  localEnv: Env
-): void {
+export function handleRegularAssignment(ctx: RegularAssignmentContext): void {
+  const { name, op, rhsOperand, existing, localEnv } = ctx;
+
   const newVal = computeAssignmentValue(op, existing, rhsOperand);
 
   if (isPlainObject(existing) && hasUninitialized(existing)) {
     // Placeholder for declaration-only let
-    assignToPlaceholder(name, existing, newVal, localEnv);
+    assignToPlaceholder({ name, existing, newVal, localEnv });
   } else {
-    assignValueToVariable(name, existing, newVal, localEnv);
+    assignValueToVariable({ name, existing, newVal, localEnv });
   }
 }

@@ -52,6 +52,13 @@ export function throwCannotAccessFieldMissing(): never {
   throw new Error(`cannot access field on missing value`);
 }
 
+interface MethodResolverCtx {
+  fieldName: string;
+  receiver: unknown;
+  localEnv: Env;
+  makeBoundWrapper: (fn: unknown, receiver: unknown) => unknown;
+}
+
 /**
  * Handle length/init fields on array-like instances
  */
@@ -75,14 +82,9 @@ export function handleArrayLikeFieldAccess(
 /**
  * Resolve a method binding and return a bound wrapper or undefined
  */
-export function resolveMethodWrapper(
-  fieldName: string,
-  receiver: unknown,
-  localEnv: Env,
-  makeBoundWrapper: (fn: unknown, receiver: unknown) => unknown
-): unknown {
-  const binding = envGet(localEnv, fieldName);
+export function resolveMethodWrapper(ctx: MethodResolverCtx): unknown {
+  const binding = envGet(ctx.localEnv, ctx.fieldName);
   if (binding !== undefined && isFnWrapper(binding))
-    return makeBoundWrapper(binding.fn, receiver);
+    return ctx.makeBoundWrapper(binding.fn, ctx.receiver);
   return undefined;
 }

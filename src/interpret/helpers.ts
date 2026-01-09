@@ -74,14 +74,20 @@ export function computeAssignmentValue(
 }
 
 /**
+ * Context for assignValueToVariable
+ */
+export interface AssignValueToVariableContext {
+  name: string;
+  existing: unknown;
+  newVal: unknown;
+  localEnv: Env;
+}
+
+/**
  * Assign a value to a variable, handling mutable wrappers
  */
-export function assignValueToVariable(
-  name: string,
-  existing: unknown,
-  newVal: unknown,
-  localEnv: Env
-): void {
+export function assignValueToVariable(ctx: AssignValueToVariableContext): void {
+  const { name, existing, newVal, localEnv } = ctx;
   if (
     isPlainObject(existing) &&
     hasValue(existing) &&
@@ -101,14 +107,20 @@ export function assignValueToVariable(
 }
 
 /**
+ * Context for assignToPlaceholder
+ */
+export interface AssignToPlaceholderContext {
+  name: string;
+  existing: unknown;
+  newVal: unknown;
+  localEnv: Env;
+}
+
+/**
  * Assign a value to a placeholder variable (declared-only let)
  */
-export function assignToPlaceholder(
-  name: string,
-  existing: unknown,
-  newVal: unknown,
-  localEnv: Env
-): void {
+export function assignToPlaceholder(ctx: AssignToPlaceholderContext): void {
+  const { name, existing, newVal, localEnv } = ctx;
   if (!isPlainObject(existing))
     throw new Error("internal error: placeholder is not an object");
   if (
@@ -143,14 +155,20 @@ export interface ArrayInstanceForAssignment {
 }
 
 /**
+ * Context for doIndexAssignment
+ */
+export interface DoIndexAssignmentContext {
+  arrInst: ArrayInstanceForAssignment;
+  idxVal: number;
+  rhsOperand: unknown;
+  op: string | undefined;
+}
+
+/**
  * Perform index assignment into an array instance
  */
-export function doIndexAssignment(
-  arrInst: ArrayInstanceForAssignment,
-  idxVal: number,
-  rhsOperand: unknown,
-  op: string | undefined
-): void {
+export function doIndexAssignment(ctx: DoIndexAssignmentContext): void {
+  const { arrInst, idxVal, rhsOperand, op } = ctx;
   if (op) {
     if (idxVal >= arrInst.initializedCount)
       throw new Error("use of uninitialized array element");

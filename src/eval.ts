@@ -170,14 +170,12 @@ export function evaluateReturningOperand(
   operands = resolveOperands(operands, resolutionCtx, evaluateCallAt);
 
   // Process high-precedence operators (calls, indexing, field access)
-  processOperatorsImported(
-    operands,
-    ops,
+  processOperatorsImported(operands, ops, {
     localEnv,
-    evaluateReturningOperand,
-    evaluateCallAt,
-    getBindingTarget
-  );
+    evaluateReturningOperandFn: evaluateReturningOperand,
+    evaluateCallAtFn: evaluateCallAt,
+    getBindingTargetFn: getBindingTarget,
+  });
 
   applyPrecedenceInPlace(operands, ops, new Set(["*", "/", "%"]));
   applyPrecedenceInPlace(operands, ops, new Set(["+", "-"]));

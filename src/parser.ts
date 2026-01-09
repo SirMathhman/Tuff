@@ -9,6 +9,20 @@ export interface StructField {
   value: string;
 }
 
+export interface DelimiterConfig {
+  src: string;
+  startPos: number;
+  openChar: string;
+  closeChar: string;
+}
+
+export interface ParseContext {
+  src: string;
+  pos: number;
+  i: number;
+  prefixes: string[];
+}
+
 export function splitTopLevelStatements(str: string): string[] {
   const parts: string[] = [];
   let depth = 0;
@@ -35,19 +49,20 @@ export function findMatchingClosingParen(
   src: string,
   startPos: number
 ): number {
-  return findMatchingDelimiter(src, startPos, "(", ")");
+  return findMatchingDelimiter({
+    src,
+    startPos,
+    openChar: "(",
+    closeChar: ")",
+  });
 }
 
 /**
  * Find matching closing delimiter (supports parens, braces, brackets)
  * Returns the index of the closing delimiter, or -1 if unbalanced
  */
-export function findMatchingDelimiter(
-  src: string,
-  startPos: number,
-  openChar: string,
-  closeChar: string
-): number {
+export function findMatchingDelimiter(config: DelimiterConfig): number {
+  const { src, startPos, openChar, closeChar } = config;
   let depth = 0;
   for (let k = startPos; k < src.length; k++) {
     const ch = src[k];
@@ -246,26 +261,23 @@ function parsePrefixesAt(src: string, pos: number) {
   return { i, prefixes };
 }
 
-function parseGroupedExprAt(
-  src: string,
-  pos: number,
-  i: number,
-  prefixes: string[]
-) {
+function parseGroupedExprAt(ctx: ParseContext) {
+  const { src, pos, i, prefixes } = ctx;
   if (src[i] !== "(") return undefined;
-  const endIdx = findMatchingDelimiter(src, i, "(", ")");
+  const endIdx = findMatchingDelimiter({
+    src,
+    startPos: i,
+    openChar: "(",
+    closeChar: ")",
+  });
   if (endIdx === -1) throw new Error("unbalanced parentheses");
   const inner = src.slice(i + 1, endIdx);
   const operand = applyPrefixesToOperand({ groupedExpr: inner }, prefixes);
   return { operand, len: i - pos + (endIdx - i + 1) };
 }
 
-function parseStringLiteralAt(
-  src: string,
-  pos: number,
-  i: number,
-  prefixes: string[]
-) {
+function parseStringLiteralAt(ctx: ParseContext) {
+  const { src, pos, i, prefixes } = ctx;
   if (src[i] !== '"' && src[i] !== "'") return undefined;
   const quote = src[i];
   let j = i + 1;
@@ -288,14 +300,15 @@ function parseStringLiteralAt(
   return { operand, len: i - pos + (j - i + 1) };
 }
 
-function parseArrayLiteralAt(
-  src: string,
-  pos: number,
-  i: number,
-  prefixes: string[]
-) {
+function parseArrayLiteralAt(ctx: ParseContext) {
+  const { src, pos, i, prefixes } = ctx;
   if (src[i] !== "[") return undefined;
-  const endIdx = findMatchingDelimiter(src, i, "[", "]");
+  const endIdx = findMatchingDelimiter({
+    src,
+    startPos: i,
+    openChar: "[",
+    closeChar: "]",
+  });
   if (endIdx === -1) throw new Error("unbalanced brackets in array literal");
   const inner = src.slice(i + 1, endIdx).trim();
   const parts = parseCommaSeparatedArgs(inner);
@@ -325,12 +338,8 @@ function parseStructFields(inner: string) {
   return fields;
 }
 
-function parseLiteralAt(
-  src: string,
-  pos: number,
-  i: number,
-  prefixes: string[]
-) {
+function parseLiteralAt(ctx: ParseContext) {
+  const { src, pos, i, prefixes } = ctx;
   const m = src
     .slice(i)
     .match(/^([+-]?\d+(?:\.\d+)?(?:[uUiI]\d+)?|true|false)/i);
@@ -341,12 +350,8 @@ function parseLiteralAt(
   return { operand, len: i - pos + m[1].length };
 }
 
-function parseIdentifierAt(
-  src: string,
-  pos: number,
-  i: number,
-  prefixes: string[]
-) {
+function parseIdentifierAt(ctx: ParseContext) {
+  const { src, pos, i, prefixes } = ctx;
   const id = src.slice(i).match(/^([a-zA-Z_]\w*)/);
   if (!id) return undefined;
 
@@ -363,7 +368,12 @@ function parseIdentifierAt(
   }
 
   if (src[j] === "{") {
-    const endIdx = findMatchingDelimiter(src, j, "{", "}");
+    const endIdx = findMatchingDelimiter({
+      src,
+      startPos: j,
+      openChar: "{",
+      closeChar: "}",
+    });
     if (endIdx === -1)
       throw new Error("unbalanced braces in struct instantiation");
     const inner = src.slice(j + 1, endIdx).trim();
@@ -412,20 +422,21 @@ export function stripAndValidateComments(input: string) {
 
 export function parseOperandAt(src: string, pos: number) {
   const { i, prefixes } = parsePrefixesAt(src, pos);
+  const ctx: ParseContext = { src, pos, i, prefixes };
 
-  const grouped = parseGroupedExprAt(src, pos, i, prefixes);
+  const grouped = parseGroupedExprAt(ctx);
   if (grouped) return grouped;
 
-  const strLit = parseStringLiteralAt(src, pos, i, prefixes);
+  const strLit = parseStringLiteralAt(ctx);
   if (strLit) return strLit;
 
-  const arrLit = parseArrayLiteralAt(src, pos, i, prefixes);
+  const arrLit = parseArrayLiteralAt(ctx);
   if (arrLit) return arrLit;
 
-  const lit = parseLiteralAt(src, pos, i, prefixes);
+  const lit = parseLiteralAt(ctx);
   if (lit) return lit;
 
-  const idRes = parseIdentifierAt(src, pos, i, prefixes);
+  const idRes = parseIdentifierAt(ctx);
   if (idRes) return idRes;
   return undefined;
 }

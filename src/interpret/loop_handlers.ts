@@ -53,7 +53,7 @@ export function handleWhileStatement(
 
   const start = stmt.indexOf("(");
   if (start === -1) throw new Error("invalid while syntax");
-  const endIdx = findMatchingParen(stmt, start);
+  const endIdx = findMatchingParen(stmt, { start });
   if (endIdx === -1) throw new Error("unbalanced parentheses in while");
   const cond = stmt.slice(start + 1, endIdx).trim();
   const body = extractTrailingBody(stmt, endIdx, "while");
@@ -79,7 +79,7 @@ export function handleForStatement(
 
   const start = stmt.indexOf("(");
   if (start === -1) throw new Error("invalid for syntax");
-  const endIdx = findMatchingParen(stmt, start);
+  const endIdx = findMatchingParen(stmt, { start });
   if (endIdx === -1) throw new Error("unbalanced parentheses in for");
   const cond = stmt.slice(start + 1, endIdx).trim();
   const body = extractTrailingBody(stmt, endIdx, "for");

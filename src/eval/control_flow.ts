@@ -32,7 +32,11 @@ function parseMatchTargetAndRest(sTrim: string): MatchTargetAndRest {
   const afterMatch = sTrim.slice("match".length).trimStart();
   if (afterMatch.startsWith("(")) {
     const startParen = sTrim.indexOf("(", 0);
-    const endParen = findMatchingParen(sTrim, startParen, "(", ")");
+    const endParen = findMatchingParen(sTrim, {
+      start: startParen,
+      open: "(",
+      close: ")",
+    });
     if (endParen === -1) throw new Error("unbalanced parentheses in match");
     const targetExpr = sTrim.slice(startParen + 1, endParen).trim();
     const rest = sTrim.slice(endParen + 1).trimStart();
@@ -52,7 +56,11 @@ function extractMatchParts(sTrim: string, targetExpr: string, rest: string) {
     "{",
     sTrim.indexOf(targetExpr) + (targetExpr.length || 0)
   );
-  const endBrace = findMatchingParen(sTrim, startBrace, "{", "}");
+  const endBrace = findMatchingParen(sTrim, {
+    start: startBrace,
+    open: "{",
+    close: "}",
+  });
   if (endBrace === -1) throw new Error("unbalanced braces in match");
   const inner = sTrim.slice(startBrace + 1, endBrace);
   return splitTopLevelStatements(inner)
@@ -81,7 +89,11 @@ export function handleIfExpression(
 ): unknown {
   const condStart = sTrim.indexOf("(");
   if (condStart === -1) throw new Error("invalid if syntax: missing (");
-  const condEnd = findMatchingParen(sTrim, condStart, "(", ")");
+  const condEnd = findMatchingParen(sTrim, {
+    start: condStart,
+    open: "(",
+    close: ")",
+  });
   if (condEnd === -1)
     throw new Error("invalid if syntax: unbalanced parentheses");
   const condStr = sTrim.slice(condStart + 1, condEnd).trim();
@@ -95,7 +107,11 @@ export function handleIfExpression(
   let falseBranch = "";
 
   if (rest.startsWith("{")) {
-    const bEnd = findMatchingParen(sTrim, sTrim.indexOf(rest), "{", "}");
+    const bEnd = findMatchingParen(sTrim, {
+      start: sTrim.indexOf(rest),
+      open: "{",
+      close: "}",
+    });
     if (bEnd === -1) throw new Error("unbalanced braces in if");
     trueBranch = sTrim.slice(sTrim.indexOf(rest), bEnd + 1);
     rest = sTrim.slice(bEnd + 1).trim();

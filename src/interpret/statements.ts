@@ -105,7 +105,12 @@ function handleLeadingDeclarations(ctx: BlockCtx, stmt: string) {
     return { handled: true, last: undefined };
   }
   if (/^extern\b/.test(stmt) || /^from\b/.test(stmt)) {
-    handleImportStatement(stmt, ctx.env, ctx.localEnv, ctx.declared);
+    handleImportStatement({
+      stmt,
+      localEnv: ctx.localEnv,
+      env: ctx.env,
+      declared: ctx.declared,
+    });
     return { handled: true, last: undefined };
   }
   if (/^fn\b/.test(stmt)) return handleFnDeclaration(ctx, stmt);
@@ -119,13 +124,12 @@ function handleNonLeadingStatement(ctx: BlockCtx, stmt: string) {
   }
 
   if (/^let\b/.test(stmt)) {
-    const res = handleLetStatement(
-      stmt,
-      ctx.localEnv,
-      ctx.declared,
-      ctx.evaluateRhsLocal,
-      evaluateReturningOperand
-    );
+    const res = handleLetStatement(stmt, {
+      localEnv: ctx.localEnv,
+      declared: ctx.declared,
+      evaluateRhsLocal: ctx.evaluateRhsLocal,
+      evaluateReturningOperand,
+    });
     if (res.handled) return { handled: true, last: res.last };
     return { handled: true, last: undefined };
   }
@@ -141,21 +145,21 @@ function handleNonLeadingStatement(ctx: BlockCtx, stmt: string) {
 
   const assignParts = extractAssignmentParts(stmt);
   if (assignParts) {
-    const res = handleAssignmentStatement(
+    const res = handleAssignmentStatement({
       assignParts,
-      ctx.localEnv,
-      ctx.evaluateRhsLocal,
-      convertOperandToNumber
-    );
+      localEnv: ctx.localEnv,
+      evaluateRhsLocal: ctx.evaluateRhsLocal,
+      convertOperandToNumber,
+    });
     return { handled: true, last: res.last };
   }
 
-  const last = evalBracedBlockAndTrailingExpression(
-    stmt,
-    ctx.localEnv,
-    ctx.interpret,
-    evaluateReturningOperand
-  );
+  const last = evalBracedBlockAndTrailingExpression({
+    starting: stmt,
+    localEnv: ctx.localEnv,
+    interpret: ctx.interpret,
+    evaluateReturningOperandFn: evaluateReturningOperand,
+  });
   return { handled: true, last };
 }
 
@@ -164,15 +168,19 @@ export function interpretBlock(
   env: Env,
   interpret: InterpretFn
 ): number {
-  return interpretBlockInternal(s, env, interpret, false);
+  return interpretBlockInternal({ s, env, interpret, inPlace: false });
 }
 
-function interpretBlockInternal(
-  s: string,
-  env: Env,
-  interpret: InterpretFn,
-  inPlace: boolean
-): number {
+/** Context for interpretBlockInternal */
+interface InterpretBlockContext {
+  s: string;
+  env: Env;
+  interpret: InterpretFn;
+  inPlace: boolean;
+}
+
+function interpretBlockInternal(ctx: InterpretBlockContext): number {
+  const { s, env, interpret, inPlace } = ctx;
   // Block evaluator with lexical scoping. When inPlace=true, operate directly
   // on the provided env (used for top-level sequences and function call envs).
   const localEnv: Env = inPlace ? env : envClone(env);
@@ -182,8 +190,13 @@ function interpretBlockInternal(
   const getLastTopLevelStatementLocal = (str: string) =>
     getLastTopLevelStatement(str, splitTopLevelStatements);
   const evaluateRhsLocal = (rhs: string, envLocal: Env) =>
-    evaluateRhs(rhs, envLocal, interpret, getLastTopLevelStatementLocal);
-  const ctx: BlockCtx = {
+    evaluateRhs({
+      rhs,
+      envLocal,
+      interpret,
+      getLastTopLevelStatement_fn: getLastTopLevelStatementLocal,
+    });
+  const blockCtx: BlockCtx = {
     env,
     localEnv,
     declared,
@@ -198,13 +211,13 @@ function interpretBlockInternal(
     const stmt = raw.trim();
     if (!stmt) continue;
 
-    const leading = handleLeadingDeclarations(ctx, stmt);
+    const leading = handleLeadingDeclarations(blockCtx, stmt);
     if (leading.handled) {
       last = leading.last;
       continue;
     }
 
-    const nonLeading = handleNonLeadingStatement(ctx, stmt);
+    const nonLeading = handleNonLeadingStatement(blockCtx, stmt);
     last = nonLeading.last;
   }
   // if the block/sequence contained only statements (no final expression), return 0
@@ -221,7 +234,17 @@ export function interpretBlockInPlace(
   env: Env,
   interpret: InterpretFn
 ): number {
-  return interpretBlockInternal(s, env, interpret, true);
+  return interpretBlockInternal({ s, env, interpret, inPlace: true });
+}
+
+/**
+ * Context for evalBracedBlockAndTrailingExpression
+ */
+interface EvalBracedBlockContext {
+  starting: string;
+  localEnv: Env;
+  interpret: InterpretFn;
+  evaluateReturningOperandFn: (expr: string, localEnv: Env) => unknown;
 }
 
 /**
@@ -230,11 +253,9 @@ export function interpretBlockInPlace(
  * undefined when nothing is present).
  */
 function evalBracedBlockAndTrailingExpression(
-  starting: string,
-  localEnv: Env,
-  interpret: InterpretFn,
-  evaluateReturningOperandFn: (expr: string, localEnv: Env) => unknown
+  ctx: EvalBracedBlockContext
 ): unknown {
+  const { starting, localEnv, interpret, evaluateReturningOperandFn } = ctx;
   let remaining = starting;
   let last: unknown = undefined;
 

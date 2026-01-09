@@ -15,6 +15,19 @@ import {
 } from "../types";
 import { validateAnnotation } from "../interpret_helpers";
 
+export interface LetContext {
+  localEnv: Env;
+  declared: Set<string>;
+  evaluateRhsLocal: (rhs: string, envLocal: Env) => unknown;
+  evaluateReturningOperand: (expr: string, envLocal: Env) => unknown;
+}
+
+interface LetDeclarationInfo {
+  name: string;
+  mutFlag: boolean;
+  annotation: string | undefined;
+}
+
 export interface HandleLetResult {
   handled: true;
   last: unknown;
@@ -26,10 +39,7 @@ export interface HandleLetNoMatch {
 
 export function handleLetStatement(
   stmt: string,
-  localEnv: Env,
-  declared: Set<string>,
-  evaluateRhsLocal: (rhs: string, envLocal: Env) => unknown,
-  evaluateReturningOperand: (expr: string, envLocal: Env) => unknown
+  ctx: LetContext
 ): HandleLetResult | HandleLetNoMatch {
   if (!/^let\b/.test(stmt)) {
     const result: HandleLetNoMatch = { handled: false };
@@ -47,54 +57,33 @@ export function handleLetStatement(
   const rhsRaw = hasInitializer && m[4] ? m[4].trim() : undefined;
 
   // duplicate declaration in same scope is an error
-  if (declared.has(name)) throw new Error("duplicate declaration");
+  if (ctx.declared.has(name)) throw new Error("duplicate declaration");
 
   if (!hasInitializer) {
-    return handleLetWithoutInitializer(
-      name,
-      mutFlag,
-      annotation,
-      declared,
-      localEnv
-    );
+    return handleLetWithoutInitializer({ name, mutFlag, annotation }, ctx);
   } else {
     return handleLetWithInitializer(
-      name,
-      mutFlag,
-      annotation,
+      { name, mutFlag, annotation },
       rhsRaw!,
-      declared,
-      localEnv,
-      evaluateRhsLocal,
-      evaluateReturningOperand
+      ctx
     );
   }
 }
 
 function handleLetWithoutInitializer(
-  name: string,
-  mutFlag: boolean,
-  annotation: string | undefined,
-  declared: Set<string>,
-  localEnv: Env
+  decl: LetDeclarationInfo,
+  ctx: LetContext
 ): HandleLetResult {
   // validate annotation shape (if present)
   let parsedAnn: unknown = undefined;
   let literalAnnotation = false;
-  if (annotation) {
-    const annText = resolveTypeAliasIfNeeded(annotation, localEnv);
+  if (decl.annotation) {
+    const annText = resolveTypeAliasIfNeeded(decl.annotation, ctx.localEnv);
 
     const arrAnn =
       typeof annText === "string" ? parseArrayAnnotation(annText) : undefined;
     if (arrAnn) {
-      return handleArrayDeclarationWithoutInitializer(
-        name,
-        mutFlag,
-        annotation,
-        declared,
-        localEnv,
-        arrAnn
-      );
+      return handleArrayDeclarationWithoutInitializer(decl, ctx, arrAnn);
     }
 
     const parsed = parseNonArrayAnnotation(annText);
@@ -104,14 +93,14 @@ function handleLetWithoutInitializer(
     }
   }
 
-  declared.add(name);
+  ctx.declared.add(decl.name);
   // store placeholder so assignments later can validate annotations
-  envSet(localEnv, name, {
+  envSet(ctx.localEnv, decl.name, {
     uninitialized: true,
-    annotation,
+    annotation: decl.annotation,
     parsedAnnotation: parsedAnn,
     literalAnnotation,
-    mutable: mutFlag,
+    mutable: decl.mutFlag,
     value: undefined,
   });
   return { handled: true, last: undefined };
@@ -132,11 +121,8 @@ function resolveTypeAliasIfNeeded(annText: string, localEnv: Env) {
 }
 
 function handleArrayDeclarationWithoutInitializer(
-  name: string,
-  mutFlag: boolean,
-  annotation: string | undefined,
-  declared: Set<string>,
-  localEnv: Env,
+  decl: LetDeclarationInfo,
+  ctx: LetContext,
   arrAnn: ReturnType<typeof parseArrayAnnotation>
 ): HandleLetResult {
   if (!arrAnn) throw new Error("invalid array annotation");
@@ -145,14 +131,14 @@ function handleArrayDeclarationWithoutInitializer(
       "array declaration without initializer requires init count 0"
     );
   const arrInst = makeArrayInstance(arrAnn);
-  declared.add(name);
-  if (mutFlag)
-    envSet(localEnv, name, {
+  ctx.declared.add(decl.name);
+  if (decl.mutFlag)
+    envSet(ctx.localEnv, decl.name, {
       mutable: true,
       value: arrInst,
-      annotation,
+      annotation: decl.annotation,
     });
-  else envSet(localEnv, name, arrInst);
+  else envSet(ctx.localEnv, decl.name, arrInst);
   return { handled: true, last: undefined };
 }
 
@@ -178,7 +164,11 @@ function splitTrailingExprAfterBracedBlock(rhsRaw: string) {
   const braceStart = rhs.indexOf("{");
   let trailingExpr: string | undefined = undefined;
   if (braceStart !== -1) {
-    const endIdx = findMatchingParen(rhs, braceStart, "{", "}");
+    const endIdx = findMatchingParen(rhs, {
+      start: braceStart,
+      open: "{",
+      close: "}",
+    });
     if (endIdx !== -1 && endIdx < rhs.length - 1) {
       trailingExpr = rhs.slice(endIdx + 1).trim();
       rhs = rhs.slice(0, endIdx + 1).trim();
@@ -205,41 +195,36 @@ function validateLetAnnotation(
 }
 
 function handleLetWithInitializer(
-  name: string,
-  mutFlag: boolean,
-  annotation: string | undefined,
+  decl: LetDeclarationInfo,
   rhsRaw: string,
-  declared: Set<string>,
-  localEnv: Env,
-  evaluateRhsLocal: (rhs: string, envLocal: Env) => unknown,
-  evaluateReturningOperand: (expr: string, envLocal: Env) => unknown
+  ctx: LetContext
 ): HandleLetResult {
   const { rhs, trailingExpr } = splitTrailingExprAfterBracedBlock(rhsRaw);
-  const rhsOperand = evaluateRhsLocal(rhs, localEnv);
+  const rhsOperand = ctx.evaluateRhsLocal(rhs, ctx.localEnv);
 
-  if (annotation) {
-    validateLetAnnotation(annotation, rhsOperand, localEnv);
+  if (decl.annotation) {
+    validateLetAnnotation(decl.annotation, rhsOperand, ctx.localEnv);
   }
 
-  declared.add(name);
+  ctx.declared.add(decl.name);
   // If RHS is an array instance, clone it to enforce copy-on-assignment
   const valToStore = isArrayInstance(rhsOperand)
     ? cloneArrayInstance(rhsOperand)
     : rhsOperand;
-  if (mutFlag) {
+  if (decl.mutFlag) {
     // store as mutable wrapper so future assignments update .value
-    envSet(localEnv, name, {
+    envSet(ctx.localEnv, decl.name, {
       mutable: true,
       value: valToStore,
-      annotation,
+      annotation: decl.annotation,
     });
   } else {
-    envSet(localEnv, name, valToStore);
+    envSet(ctx.localEnv, decl.name, valToStore);
   }
 
   // If we split off a trailing expression, evaluate it now and use it as `last`
   if (trailingExpr) {
-    const last = evaluateReturningOperand(trailingExpr, localEnv);
+    const last = ctx.evaluateReturningOperand(trailingExpr, ctx.localEnv);
     return { handled: true, last };
   } else {
     return { handled: true, last: undefined };
