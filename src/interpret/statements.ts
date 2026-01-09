@@ -260,13 +260,25 @@ function interpretBlockInternal(
         let parsedAnn: unknown = undefined;
         let literalAnnotation = false;
         if (annotation) {
-          const typeOnly = annotation.match(/^\s*([uUiI])\s*(\d+)\s*$/);
+          // resolve type alias if present
+          let annText = annotation;
+          if (typeof annText === "string" && envHas(localEnv, annText)) {
+            const candidate = envGet(localEnv, annText);
+            if (
+              isPlainObject(candidate) &&
+              getProp(candidate, "typeAlias") !== undefined
+            ) {
+              annText = String(getProp(candidate, "typeAlias"));
+            }
+          }
+
+          const typeOnly = String(annText).match(/^\s*([uUiI])\s*(\d+)\s*$/);
           if (typeOnly) {
             // fine, type-only
-          } else if (/^\s*bool\s*$/i.test(annotation)) {
+          } else if (/^\s*bool\s*$/i.test(String(annText))) {
             // fine
           } else {
-            const ann = parseOperand(annotation);
+            const ann = parseOperand(String(annText));
             if (!ann) throw new Error("invalid annotation in let");
             if (!isIntOperand(ann))
               throw new Error("annotation must be integer literal with suffix");
@@ -306,7 +318,14 @@ function interpretBlockInternal(
         const rhsOperand = evaluateRhsLocal(rhs, localEnv);
 
         if (annotation) {
-          validateAnnotation(annotation, rhsOperand);
+          // resolve type aliases for annotations before validation
+          let resolvedAnn = annotation;
+          if (typeof resolvedAnn === "string" && envHas(localEnv, resolvedAnn)) {
+            const candidate = envGet(localEnv, resolvedAnn);
+            if (isPlainObject(candidate) && getProp(candidate, "typeAlias") !== undefined)
+              resolvedAnn = String(getProp(candidate, "typeAlias"));
+          }
+          validateAnnotation(resolvedAnn, rhsOperand);
         }
 
         declared.add(name);
@@ -329,6 +348,19 @@ function interpretBlockInternal(
         }
       }
     } else {
+      // type alias: `type Name = <annotation>`
+      if (/^type\b/.test(stmt)) {
+        const m = stmt.match(/^type\s+([a-zA-Z_]\w*)\s*=\s*([^;]+);?$/);
+        if (!m) throw new Error("invalid type declaration");
+        const name = m[1];
+        const alias = m[2].trim();
+        if (declared.has(name)) throw new Error("duplicate declaration");
+        declared.add(name);
+        envSet(localEnv, name, { typeAlias: alias });
+        last = undefined;
+        continue;
+      }
+
       // struct definition: struct Name { field1 : Type1; field2 : Type2; ... }
       if (/^struct\b/.test(stmt)) {
         const structDef = parseStructDef(stmt);

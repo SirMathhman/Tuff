@@ -618,10 +618,7 @@ export function interpretAllWithNative(
     );
     // Strip TypeScript-like parameter type annotations (e.g., `value : number`)
     // so host-evaluated native modules may be authored with mild type hints.
-    transformed = transformed.replace(
-      /([a-zA-Z_]\w*)\s*:\s*([^\s,)]+)/g,
-      "$1"
-    );
+    transformed = transformed.replace(/([a-zA-Z_]\w*)\s*:\s*([^\s,)]+)/g, "$1");
 
     try {
       const fn = new Function("exports", transformed);

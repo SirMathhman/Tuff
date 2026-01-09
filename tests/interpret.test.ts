@@ -584,4 +584,8 @@ describe("interpret (basic behavior)", () => {
     };
     expect(interpretAllWithNative(scripts, natives, "main")).toBe(101);
   });
+
+  it("supports type aliases ('type MyType = I32; let value : MyType = 100; value' => 100)", () => {
+    expect(interpret("type MyType = I32; let value : MyType = 100; value")).toBe(100);
+  });
 });

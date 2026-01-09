@@ -213,7 +213,11 @@ function resolveFunctionFromOperand(operand: unknown, localEnv: Env): unknown {
 // argument passing so the same conversion rules are applied in both places.
 function normalizeBoundThis(val: unknown): unknown {
   let thisVal: unknown = val;
-  if (isIntOperand(thisVal) || isFloatOperand(thisVal) || isBoolOperand(thisVal))
+  if (
+    isIntOperand(thisVal) ||
+    isFloatOperand(thisVal) ||
+    isBoolOperand(thisVal)
+  )
     thisVal = convertOperandToNumber(thisVal);
   return thisVal;
 }
@@ -976,7 +980,6 @@ export function evaluateReturningOperand(
             // the call immediately and replace the range with the result.
             const nextOpnd = operands[i + 1];
             if (isPlainObject(nextOpnd) && hasCallApp(nextOpnd)) {
-
               const callResult = evaluateCallAt(wrapper, nextOpnd);
               // Replace [structInstance, callApp] -> callResult
               operands.splice(i, 2, callResult);
