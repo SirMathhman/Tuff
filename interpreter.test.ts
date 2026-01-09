@@ -8,4 +8,8 @@ describe("interpret", () => {
   test('interpret("let x = 100; x") should return 100', () => {
     expect(interpret("let x = 100; x")).toBe(100);
   });
+
+  test('interpret("let x = 100; let y = x; y") should return 100', () => {
+    expect(interpret("let x = 100; let y = x; y")).toBe(100);
+  });
 });

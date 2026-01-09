@@ -5,7 +5,7 @@
  */
 function compile(source: string): string {
   // Wrap in a function to allow 'let' declarations and return the last expression
-  const lastStatement = source.split(';').pop()?.trim() || source;
+  const lastStatement = source.split(";").pop()?.trim() || source;
   return `(function() { ${source}; return ${lastStatement}; })()`;
 }
 
