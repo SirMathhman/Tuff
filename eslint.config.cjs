@@ -67,6 +67,12 @@ module.exports = [
           message:
             "Anonymous object types are banned; define a named type instead",
         },
+        {
+          selector:
+            "TSInterfaceBody TSPropertySignature > TSTypeAnnotation > TSUnknownKeyword",
+          message:
+            "The 'unknown' type is banned in interface properties; use a more specific type",
+        },
       ],
     },
   },

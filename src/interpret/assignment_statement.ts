@@ -1,5 +1,6 @@
 import { Env } from "../env";
 import { evaluateReturningOperand } from "../eval";
+import type { RuntimeValue } from "../types";
 import {
   handleThisFieldAssignment,
   handleIndexAssignment,
@@ -10,7 +11,7 @@ import {
 /** Result from handleAssignmentStatement */
 export interface AssignmentStatementResult {
   handled: boolean;
-  last?: unknown;
+  last?: RuntimeValue;
 }
 
 /** Context for handleAssignmentStatement */

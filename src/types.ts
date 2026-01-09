@@ -1,7 +1,12 @@
 import type { Env } from "./env";
 
+// Runtime value type - represents any value that can exist at runtime in the interpreter
+// This is intentionally broad to accommodate the dynamic nature of the interpreter
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type RuntimeValue = any;
+
 export interface PlainObject {
-  [k: string]: unknown;
+  [k: string]: RuntimeValue;
 }
 
 export interface BoolOperand {
@@ -37,7 +42,7 @@ export interface StructDef {
 
 export interface ArrayInstance {
   isArray: true;
-  elements: unknown[];
+  elements: RuntimeValue[];
   length: number;
   initializedCount: number;
   elemType?: string;
@@ -62,79 +67,79 @@ export interface Ident {
 }
 
 export interface AddrOf {
-  addrOf: unknown;
+  addrOf: RuntimeValue;
 }
 
 export interface Deref {
-  deref: unknown;
+  deref: RuntimeValue;
 }
 
 export interface CallArgs {
-  callArgs: unknown[];
+  callArgs: RuntimeValue[];
 }
 
 export interface CallApp {
-  callApp: unknown;
+  callApp: RuntimeValue;
 }
 
 export interface StructInstantiation {
-  structInstantiation: unknown;
+  structInstantiation: RuntimeValue;
 }
 
 export interface Value {
-  value: unknown;
+  value: RuntimeValue;
 }
 
 export interface Mutable {
-  mutable: unknown;
+  mutable: RuntimeValue;
 }
 
 export interface Uninitialized {
-  uninitialized: unknown;
+  uninitialized: boolean;
 }
 
 export interface Annotation {
-  annotation: unknown;
+  annotation: string;
 }
 
 export interface ParsedAnnotation {
-  parsedAnnotation: unknown;
+  parsedAnnotation: PlainObject;
 }
 
 export interface LiteralAnnotation {
-  literalAnnotation: unknown;
+  literalAnnotation: string;
 }
 
 export interface Params {
-  params: unknown[];
+  params: string[];
 }
 
 export interface ClosureEnv {
-  closureEnv: unknown;
+  closureEnv: Env;
 }
 
 export interface Body {
-  body: unknown;
+  body: string;
 }
 
 export interface IsBlock {
-  isBlock: unknown;
+  isBlock: boolean;
 }
 
 export interface Name {
-  name: unknown;
+  name: string;
 }
 
 export interface Fields {
-  fields: unknown;
+  fields: PlainObject;
 }
 
 export interface PtrMutable {
-  ptrMutable: unknown;
+  ptrMutable: boolean;
 }
 
 export interface PtrIsBool {
-  ptrIsBool: unknown;
+  ptrIsBool: boolean;
 }
 
 export interface Yield {

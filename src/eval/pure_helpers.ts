@@ -3,6 +3,7 @@ import {
   isThisBinding,
   isArrayInstance,
   isFnWrapper,
+  type RuntimeValue,
 } from "../types";
 import { Env, envGet } from "../env";
 
@@ -54,7 +55,7 @@ export function throwCannotAccessFieldMissing(): never {
 
 interface MethodResolverCtx {
   fieldName: string;
-  receiver: unknown;
+  receiver: RuntimeValue;
   localEnv: Env;
   makeBoundWrapper: (fn: unknown, receiver: unknown) => unknown;
 }

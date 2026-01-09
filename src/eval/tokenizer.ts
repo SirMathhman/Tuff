@@ -4,10 +4,11 @@ import {
   parseCommaSeparatedArgs,
 } from "../parser";
 import { findMatchingParen } from "../interpret_helpers";
+import type { RuntimeValue } from "../types";
 
 interface ExprToken {
   op?: string;
-  operand?: unknown;
+  operand?: RuntimeValue;
 }
 
 export type { ExprToken };

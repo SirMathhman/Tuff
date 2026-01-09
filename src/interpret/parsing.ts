@@ -1,6 +1,6 @@
 import { parseOperandAt } from "../parser";
 import { Env } from "../env";
-import type { InterpretFn } from "../types";
+import type { InterpretFn, RuntimeValue } from "../types";
 
 export interface DelimiterConfig {
   src: string;
@@ -339,7 +339,7 @@ export function expandParensAndBraces(
 
 export interface ExpressionToken {
   op?: string;
-  operand?: unknown;
+  operand?: RuntimeValue;
 }
 
 export function parseExpressionTokens(s: string): ExpressionToken[] {

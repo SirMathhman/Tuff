@@ -2,7 +2,12 @@
  * Handlers for extern declarations extracted from interpretBlockInternal.
  */
 import { Env, envGet, envSet } from "../env";
-import { isPlainObject, isFnWrapper, getProp } from "../types";
+import {
+  isPlainObject,
+  isFnWrapper,
+  getProp,
+  type RuntimeValue,
+} from "../types";
 
 function parseExternFnSignature(stmt: string) {
   const m = stmt.match(
@@ -29,7 +34,7 @@ function parseExternFnSignature(stmt: string) {
 interface MergeExternContext {
   localEnv: Env;
   name: string;
-  params: unknown;
+  params: RuntimeValue;
   resultAnnotation: string | undefined;
 }
 
@@ -44,7 +49,7 @@ function tryMergeExternSignature(ctx: MergeExternContext): boolean {
   const existingNative = getProp(existing.fn, "nativeImpl");
 
   interface FnObject {
-    [k: string]: unknown;
+    [k: string]: RuntimeValue;
   }
 
   const newFn: FnObject = {

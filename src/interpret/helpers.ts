@@ -16,6 +16,7 @@ import {
   isArrayInstance,
   setValue,
   setUninitialized,
+  type RuntimeValue,
 } from "../types";
 
 function validatePlaceholderBeforeAssignment(
@@ -78,8 +79,8 @@ export function computeAssignmentValue(
  */
 export interface AssignValueToVariableContext {
   name: string;
-  existing: unknown;
-  newVal: unknown;
+  existing: RuntimeValue;
+  newVal: RuntimeValue;
   localEnv: Env;
 }
 
@@ -111,8 +112,8 @@ export function assignValueToVariable(ctx: AssignValueToVariableContext): void {
  */
 export interface AssignToPlaceholderContext {
   name: string;
-  existing: unknown;
-  newVal: unknown;
+  existing: RuntimeValue;
+  newVal: RuntimeValue;
   localEnv: Env;
 }
 
@@ -149,7 +150,7 @@ export function assignToPlaceholder(ctx: AssignToPlaceholderContext): void {
  * Array instance interface for index assignment
  */
 export interface ArrayInstanceForAssignment {
-  elements: unknown[];
+  elements: RuntimeValue[];
   initializedCount: number;
   length: number;
 }
@@ -160,7 +161,7 @@ export interface ArrayInstanceForAssignment {
 export interface DoIndexAssignmentContext {
   arrInst: ArrayInstanceForAssignment;
   idxVal: number;
-  rhsOperand: unknown;
+  rhsOperand: RuntimeValue;
   op: string | undefined;
 }
 

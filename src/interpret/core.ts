@@ -7,6 +7,7 @@ import {
   isFnWrapper,
   isPlainObject,
   toErrorMessage,
+  type RuntimeValue,
 } from "../types";
 import type { InterpretFn } from "../types";
 
@@ -55,7 +56,7 @@ function transformNativeModuleCode(code: string): string {
 }
 
 export interface UnknownMap {
-  [k: string]: unknown;
+  [k: string]: RuntimeValue;
 }
 
 function evaluateNativeModuleExports(code: string): UnknownMap {
@@ -88,12 +89,12 @@ function mergeNativeExportsInto(
   for (const [k, v] of Object.entries(nativeExports)) {
     if (typeof v === "function") {
       interface FnObject {
-        params: unknown[];
+        params: RuntimeValue[];
         body: string;
         isBlock: boolean;
-        resultAnnotation: unknown;
+        resultAnnotation: RuntimeValue;
         closureEnv: UnknownMap;
-        nativeImpl: unknown;
+        nativeImpl: RuntimeValue;
       }
       interface FnWrapper {
         fn: FnObject;
@@ -183,7 +184,7 @@ interface FloatOperand {
 }
 
 interface ObjectWithYield {
-  __yield?: unknown;
+  __yield?: RuntimeValue;
 }
 
 /** Context for evaluateRhs */
@@ -244,11 +245,11 @@ export function evaluateRhs(ctx: EvaluateRhsContext): unknown {
 import { parseFnComponents } from "./parsing";
 
 interface FnParamsObject {
-  params: unknown;
+  params: RuntimeValue;
   body: string;
   isBlock: boolean;
-  resultAnnotation: unknown;
-  closureEnv: unknown;
+  resultAnnotation: RuntimeValue;
+  closureEnv: RuntimeValue;
 }
 
 interface FnRegistration {

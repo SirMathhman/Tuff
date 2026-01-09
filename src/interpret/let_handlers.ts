@@ -12,6 +12,7 @@ import {
   isIntOperand,
   isArrayInstance,
   getProp,
+  type RuntimeValue,
 } from "../types";
 import { validateAnnotation } from "../interpret_helpers";
 
@@ -30,7 +31,7 @@ interface LetDeclarationInfo {
 
 export interface HandleLetResult {
   handled: true;
-  last: unknown;
+  last: RuntimeValue;
 }
 
 export interface HandleLetNoMatch {
@@ -75,7 +76,7 @@ function handleLetWithoutInitializer(
   ctx: LetContext
 ): HandleLetResult {
   // validate annotation shape (if present)
-  let parsedAnn: unknown = undefined;
+  let parsedAnn: RuntimeValue = undefined;
   let literalAnnotation = false;
   if (decl.annotation) {
     const annText = resolveTypeAliasIfNeeded(decl.annotation, ctx.localEnv);

@@ -14,6 +14,7 @@ import {
   hasParsedAnnotation,
   unwrapBindingValue,
   throwUseOfUninitialized,
+  type RuntimeValue,
 } from "../types";
 import { parseArrayAnnotation, validateAnnotation } from "../interpret_helpers";
 import {
@@ -38,8 +39,8 @@ type EvaluateRhsCallback = (expr: string, e: Env) => unknown;
 
 /** Result from requireExistingAndEvalRhs */
 interface RequireExistingResult {
-  existing: unknown;
-  rhsOperand: unknown;
+  existing: RuntimeValue;
+  rhsOperand: RuntimeValue;
 }
 
 /** Context for assignment operations */
@@ -65,15 +66,15 @@ interface IndexAssignmentContext {
 
 /** Context for deref assignment operations */
 interface DerefAssignmentContext {
-  ptr: unknown;
+  ptr: RuntimeValue;
   op: string | undefined;
-  rhsOperand: unknown;
+  rhsOperand: RuntimeValue;
   localEnv: Env;
 }
 
 /** Context for pointer index assignment */
 interface PointerIndexContext {
-  maybePtr: unknown;
+  maybePtr: RuntimeValue;
   idxVal: number;
   op: string | undefined;
   rhs: string;
@@ -84,16 +85,16 @@ interface PointerIndexContext {
 /** Context for validating and assigning deref */
 interface DerefValidationContext {
   targetName: string;
-  targetExisting: unknown;
-  newVal: unknown;
+  targetExisting: RuntimeValue;
+  newVal: RuntimeValue;
   localEnv: Env;
 }
 
 /** Context for persisting array changes */
 interface PersistArrayContext {
   ptrName: string;
-  targetBinding: unknown;
-  arrInst: unknown;
+  targetBinding: RuntimeValue;
+  arrInst: RuntimeValue;
   localEnv: Env;
 }
 
@@ -101,8 +102,8 @@ interface PersistArrayContext {
 interface RegularAssignmentContext {
   name: string;
   op: string | undefined;
-  rhsOperand: unknown;
-  existing: unknown;
+  rhsOperand: RuntimeValue;
+  existing: RuntimeValue;
   localEnv: Env;
 }
 

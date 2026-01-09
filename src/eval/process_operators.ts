@@ -15,12 +15,13 @@ import {
   getProp,
   isArrayInstance,
   isFnWrapper,
+  RuntimeValue,
 } from "../types";
 import { convertOperandToNumber } from "../interpret_helpers";
 
 interface BindingTarget {
-  binding: unknown;
-  targetVal: unknown;
+  binding: RuntimeValue;
+  targetVal: RuntimeValue;
 }
 
 interface OperandIndexResult {
@@ -33,24 +34,27 @@ interface BigIntValue {
 }
 
 interface FieldAccess {
-  arrLike: unknown;
+  arrLike: RuntimeValue;
   fieldName: string;
 }
 
 interface MethodAccess {
   fieldName: string;
-  receiver: unknown;
+  receiver: RuntimeValue;
 }
 
 interface ProcessOperatorsContext {
   localEnv: Env;
-  evaluateReturningOperandFn: (expr: string, env: Env) => unknown;
-  evaluateCallAtFn: (funcOperand: unknown, callAppOperand: unknown) => unknown;
+  evaluateReturningOperandFn: (expr: string, env: Env) => RuntimeValue;
+  evaluateCallAtFn: (
+    funcOperand: RuntimeValue,
+    callAppOperand: RuntimeValue
+  ) => RuntimeValue;
   getBindingTargetFn: (name: string) => BindingTarget;
 }
 
 interface ProcessOperatorsCtx extends ProcessOperatorsContext {
-  operands: unknown[];
+  operands: RuntimeValue[];
   ops: string[];
 }
 

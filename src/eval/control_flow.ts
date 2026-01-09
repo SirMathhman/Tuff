@@ -5,11 +5,16 @@
 import { splitTopLevelStatements } from "../parser";
 import { parseFnComponents, findMatchingParen } from "../interpret_helpers";
 import { Env, envClone, envSet } from "../env";
-import { isBoolOperand, isFloatOperand, isIntOperand } from "../types";
+import {
+  isBoolOperand,
+  isFloatOperand,
+  isIntOperand,
+  type RuntimeValue,
+} from "../types";
 import { applyBinaryOp } from "./operators";
 
 interface FunctionObject {
-  params: unknown;
+  params: RuntimeValue;
   body: string;
   isBlock: boolean;
   resultAnnotation: string | undefined;

@@ -10,6 +10,7 @@ import {
   hasKindBits,
   getProp,
   checkRange,
+  type RuntimeValue,
 } from "../types";
 
 interface BooleanResult {
@@ -23,16 +24,16 @@ interface TypedIntegerResult {
 }
 
 interface SuffixCompatibilityCtx {
-  left: unknown;
-  right: unknown;
+  left: RuntimeValue;
+  right: RuntimeValue;
   leftHasKind: boolean;
   rightHasKind: boolean;
 }
 
 interface TypedIntegerOpCtx {
   op: string;
-  left: unknown;
-  right: unknown;
+  left: RuntimeValue;
+  right: RuntimeValue;
   leftHasKind: boolean;
   rightHasKind: boolean;
 }

@@ -20,12 +20,13 @@ import {
   hasMutable,
   getProp,
   isArrayInstance,
+  type RuntimeValue,
 } from "../types";
 import { Env, envHas, envGet, envEntries } from "../env";
 
 interface BindingTarget {
-  binding: unknown;
-  targetVal: unknown;
+  binding: RuntimeValue;
+  targetVal: RuntimeValue;
 }
 
 interface FieldValuesMap {
