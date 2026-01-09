@@ -20,4 +20,8 @@ describe("interpret", () => {
   test('interpret("let x : I32 = 100; x") should return 100', () => {
     expect(interpret("let x : I32 = 100; x")).toBe(100);
   });
+
+  test('interpret("let x : I32 = 100;") should return 0', () => {
+    expect(interpret("let x : I32 = 100;")).toBe(0);
+  });
 });

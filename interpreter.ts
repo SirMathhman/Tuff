@@ -23,7 +23,13 @@ function compile(source: string): string {
   }
 
   // Wrap in a function to allow 'let' declarations and return the last expression
-  const lastStatement = sourceWithoutTypes.split(";").pop()?.trim() || sourceWithoutTypes;
+  let lastStatement = sourceWithoutTypes.split(";").pop()?.trim() || "";
+
+  // If there's no last statement or it's empty, return 0 as default exit code
+  if (!lastStatement) {
+    lastStatement = "0";
+  }
+
   return `(function() { ${sourceWithoutTypes}; return ${lastStatement}; })()`;
 }
 
