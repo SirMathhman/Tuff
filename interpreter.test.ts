@@ -28,4 +28,8 @@ describe("interpret", () => {
   test('interpret("let x : I32 = true;") should throw Error', () => {
     expect(() => interpret("let x : I32 = true;")).toThrow(Error);
   });
+
+  test('interpret("let x = 100; let y = 200; let z = x; y") should return 200', () => {
+    expect(interpret("let x = 100; let y = 200; let z = x; y")).toBe(200);
+  });
 });
