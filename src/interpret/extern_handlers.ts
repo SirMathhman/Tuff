@@ -49,9 +49,9 @@ function tryMergeExternSignature(ctx: MergeExternContext): boolean {
   const existingClosureEnv = getProp(existing.fn, "closureEnv");
   const existingNative = getProp(existing.fn, "nativeImpl");
 
-  interface FnObject {
+  type FnObject = {
     [k: string]: RuntimeValue;
-  }
+  };
 
   const newFn: FnObject = {
     params,

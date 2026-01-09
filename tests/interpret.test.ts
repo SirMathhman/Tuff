@@ -490,9 +490,9 @@ describe("interpret (basic behavior)", () => {
   });
 
   it("interpretAll supports nested namespace names via '::' and computed keys", () => {
-    interface Scripts {
+    type Scripts = {
       [k: string]: string;
-    }
+    };
     const scripts: Scripts = {};
     scripts["main"] = "from b::lib use { get }; get()";
     // Simulate a computed array-like key (coerced to "b,lib")

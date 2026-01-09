@@ -1,8 +1,8 @@
 import type { RuntimeValue } from "./types";
 
-export interface PlainEnv {
+export type PlainEnv = {
   [k: string]: RuntimeValue;
-}
+};
 
 export type Env = Map<string, RuntimeValue> | PlainEnv;
 

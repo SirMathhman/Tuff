@@ -1,9 +1,9 @@
 import type { Env } from "./env";
 
 // Forward declare PlainObject to avoid circular reference issues
-export interface PlainObject {
+export type PlainObject = {
   [k: string]: RuntimeValue;
-}
+};
 
 // Type discriminator field for discriminated union
 export type RuntimeValueType =

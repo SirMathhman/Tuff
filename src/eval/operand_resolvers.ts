@@ -31,9 +31,9 @@ interface BindingTarget {
   targetVal: RuntimeValue;
 }
 
-interface FieldValuesMap {
+type FieldValuesMap = {
   [k: string]: RuntimeValue;
-}
+};
 
 interface FieldValues {
   fieldValues: FieldValuesMap;

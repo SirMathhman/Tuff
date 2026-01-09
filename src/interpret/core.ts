@@ -13,9 +13,9 @@ import {
 } from "../types";
 import type { InterpretFn } from "../types";
 
-export interface StringMap {
+export type StringMap = {
   [k: string]: string;
-}
+};
 
 /* eslint-disable custom/no-unknown-param -- external API validation */
 function validateInterpretAllWithNativeInputs(
@@ -59,9 +59,9 @@ function transformNativeModuleCode(code: string): string {
   return transformed;
 }
 
-export interface UnknownMap {
+export type UnknownMap = {
   [k: string]: RuntimeValue;
-}
+};
 
 function evaluateNativeModuleExports(code: string): UnknownMap {
   const exports: UnknownMap = {};
@@ -113,9 +113,9 @@ function mergeNativeExportsInto(
   }
 }
 
-export interface NamespaceRegistry {
+export type NamespaceRegistry = {
   [k: string]: UnknownMap;
-}
+};
 
 export interface ResolveNamespaceArgs {
   nsName: string;

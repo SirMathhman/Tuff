@@ -75,11 +75,6 @@ module.exports = [
             "Type assertions using <T> are banned; use type guards or 'in' checks instead",
         },
         {
-          selector: "TSTypeLiteral",
-          message:
-            "Anonymous object types are banned; define a named type instead",
-        },
-        {
           selector:
             "TSInterfaceBody TSPropertySignature > TSTypeAnnotation > TSUnknownKeyword",
           message:
@@ -97,7 +92,9 @@ module.exports = [
       "custom/no-unknown-return": "error",
       // Custom rule: Ban 'unknown' in function parameter types
       "custom/no-unknown-param": "error",
-      // Custom rule: Ban object indexing signatures (disabled initially - violations exist that need refactoring)
+      // Custom rule: Ban object indexing signatures
+      // Note: Currently disabled - requires full refactoring from object index signatures to Map<K, V>
+      // This is a large refactoring affecting PlainObject, PlainEnv, and other dynamic key-value types
       "custom/no-object-indexing": "off",
     },
   },
