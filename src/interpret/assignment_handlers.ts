@@ -25,13 +25,30 @@ import {
 } from "./helpers";
 
 /** Extracted assignment parts */
-export interface AssignmentParts {
+export interface ThisFieldTarget {
+  fieldName: string;
+}
+
+export interface IndexedTarget {
+  indexExpr: string;
+}
+
+export interface AssignmentTarget {
+  thisField?: ThisFieldTarget;
+  indexed?: IndexedTarget;
+}
+
+export interface AssignmentFlags {
   isDeref: boolean;
+  isDeclOnly: boolean;
+}
+
+export interface AssignmentParts {
+  flags: AssignmentFlags;
   name: string;
   op: string | undefined;
   rhs: string;
-  isThisField?: boolean;
-  indexExpr?: string;
+  target?: AssignmentTarget;
 }
 
 /** Type for RHS evaluation callback functions */
@@ -53,15 +70,23 @@ interface AssignmentContext {
 }
 
 /** Context for index assignment operations */
-interface IndexAssignmentContext {
-  name: string;
-  indexExpr: string;
-  op: string | undefined;
-  rhs: string;
-  localEnv: Env;
+interface IndexAssignmentCallbacks {
   evaluateReturningOperand: EvaluateRhsCallback;
   evaluateRhsLocal: EvaluateRhsCallback;
   convertOperandToNumber: (op: unknown) => number;
+}
+
+interface IndexAssignmentRhs {
+  op: string | undefined;
+  rhs: string;
+}
+
+interface IndexAssignmentContext {
+  name: string;
+  indexExpr: string;
+  rhsInfo: IndexAssignmentRhs;
+  localEnv: Env;
+  callbacks: IndexAssignmentCallbacks;
 }
 
 /** Context for deref assignment operations */
@@ -73,13 +98,17 @@ interface DerefAssignmentContext {
 }
 
 /** Context for pointer index assignment */
+interface PointerEnvAndCallback {
+  localEnv: Env;
+  evaluateRhsLocal: EvaluateRhsCallback;
+}
+
 interface PointerIndexContext {
   maybePtr: RuntimeValue;
   idxVal: number;
   op: string | undefined;
   rhs: string;
-  localEnv: Env;
-  evaluateRhsLocal: EvaluateRhsCallback;
+  envAndCallback: PointerEnvAndCallback;
 }
 
 /** Context for validating and assigning deref */
@@ -238,19 +267,11 @@ export function handleThisFieldAssignment(
  * Handle index assignment (arr[i] = v or arr[i] op= v)
  */
 export function handleIndexAssignment(ctx: IndexAssignmentContext): boolean {
-  const {
-    name,
-    indexExpr,
-    op,
-    rhs,
-    localEnv,
-    evaluateReturningOperand,
-    evaluateRhsLocal,
-    convertOperandToNumber,
-  } = ctx;
+  const { name, indexExpr, rhsInfo, localEnv, callbacks } = ctx;
+  const { op, rhs } = rhsInfo;
 
-  const idxVal = convertOperandToNumber(
-    evaluateReturningOperand(indexExpr, localEnv)
+  const idxVal = callbacks.convertOperandToNumber(
+    callbacks.evaluateReturningOperand(indexExpr, localEnv)
   );
 
   if (!envHas(localEnv, name))
@@ -266,8 +287,10 @@ export function handleIndexAssignment(ctx: IndexAssignmentContext): boolean {
       idxVal,
       op,
       rhs,
-      localEnv,
-      evaluateRhsLocal,
+      envAndCallback: {
+        localEnv,
+        evaluateRhsLocal: callbacks.evaluateRhsLocal,
+      },
     });
     return true;
   }
@@ -275,7 +298,7 @@ export function handleIndexAssignment(ctx: IndexAssignmentContext): boolean {
   existing = materializePlaceholderArray(name, existing, localEnv);
   const arrInst = extractMutableArrayInstance(existing);
 
-  const rhsOperand2 = evaluateRhsLocal(rhs, localEnv);
+  const rhsOperand2 = callbacks.evaluateRhsLocal(rhs, localEnv);
   doIndexAssignment({ arrInst, idxVal, rhsOperand: rhsOperand2, op });
 
   // persist
@@ -287,7 +310,8 @@ export function handleIndexAssignment(ctx: IndexAssignmentContext): boolean {
  * Handle pointer index assignment (p[i] = v)
  */
 function handlePointerIndexAssignment(ctx: PointerIndexContext): void {
-  const { maybePtr, idxVal, op, rhs, localEnv, evaluateRhsLocal } = ctx;
+  const { maybePtr, idxVal, op, rhs, envAndCallback } = ctx;
+  const { localEnv, evaluateRhsLocal } = envAndCallback;
 
   const { ptrName, targetBinding, arrInst } = resolveArrayPointerTarget(
     maybePtr,

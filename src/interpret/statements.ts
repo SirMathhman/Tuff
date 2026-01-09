@@ -22,13 +22,17 @@ import { Env, envClone, envGet, envSet } from "../env";
 import type { InterpretFn } from "../types";
 import { isPlainObject, toErrorMessage } from "../types";
 
+interface BlockCallbacks {
+  interpret: InterpretFn;
+  evaluateRhsLocal: (rhs: string, envLocal: Env) => unknown;
+  getLastTopLevelStatementLocal: (s: string) => string | undefined;
+}
+
 interface BlockCtx {
   env: Env;
   localEnv: Env;
   declared: Set<string>;
-  interpret: InterpretFn;
-  evaluateRhsLocal: (rhs: string, envLocal: Env) => unknown;
-  getLastTopLevelStatementLocal: (s: string) => string | undefined;
+  callbacks: BlockCallbacks;
 }
 
 function interpretTrailingExprOrUndefined(
@@ -36,7 +40,10 @@ function interpretTrailingExprOrUndefined(
   tExpr: string | undefined
 ) {
   if (tExpr)
-    return { handled: true, last: ctx.interpret(tExpr + ";", ctx.localEnv) };
+    return {
+      handled: true,
+      last: ctx.callbacks.interpret(tExpr + ";", ctx.localEnv),
+    };
   return { handled: true, last: undefined };
 }
 
@@ -69,7 +76,7 @@ function handleStructDefinition(ctx: BlockCtx, stmt: string) {
   if (remaining)
     return {
       handled: true,
-      last: ctx.interpret(remaining + ";", ctx.localEnv),
+      last: ctx.callbacks.interpret(remaining + ";", ctx.localEnv),
     };
   return { handled: true, last: undefined };
 }
@@ -79,7 +86,7 @@ function handleYieldStatement(ctx: BlockCtx, stmt: string) {
   if (!m) throw new Error("yield requires an expression");
   const rhs = m[1].trim();
   if (!rhs) throw new Error("yield requires an expression");
-  const rhsOperand = ctx.evaluateRhsLocal(rhs, ctx.localEnv);
+  const rhsOperand = ctx.callbacks.evaluateRhsLocal(rhs, ctx.localEnv);
   throw { __yield: convertOperandToNumber(rhsOperand) };
 }
 
@@ -127,7 +134,7 @@ function handleNonLeadingStatement(ctx: BlockCtx, stmt: string) {
     const res = handleLetStatement(stmt, {
       localEnv: ctx.localEnv,
       declared: ctx.declared,
-      evaluateRhsLocal: ctx.evaluateRhsLocal,
+      evaluateRhsLocal: ctx.callbacks.evaluateRhsLocal,
       evaluateReturningOperand,
     });
     if (res.handled) return { handled: true, last: res.last };
@@ -136,11 +143,11 @@ function handleNonLeadingStatement(ctx: BlockCtx, stmt: string) {
 
   if (/^type\b/.test(stmt)) return handleTypeAliasDeclaration(ctx, stmt);
   if (/^struct\b/.test(stmt)) return handleStructDefinition(ctx, stmt);
-  if (handleIfStatement(stmt, ctx.localEnv, ctx.interpret))
+  if (handleIfStatement(stmt, ctx.localEnv, ctx.callbacks.interpret))
     return { handled: true, last: undefined };
-  if (handleWhileStatement(stmt, ctx.localEnv, ctx.interpret))
+  if (handleWhileStatement(stmt, ctx.localEnv, ctx.callbacks.interpret))
     return { handled: true, last: undefined };
-  if (handleForStatement(stmt, ctx.localEnv, ctx.interpret))
+  if (handleForStatement(stmt, ctx.localEnv, ctx.callbacks.interpret))
     return { handled: true, last: undefined };
 
   const assignParts = extractAssignmentParts(stmt);
@@ -148,7 +155,7 @@ function handleNonLeadingStatement(ctx: BlockCtx, stmt: string) {
     const res = handleAssignmentStatement({
       assignParts,
       localEnv: ctx.localEnv,
-      evaluateRhsLocal: ctx.evaluateRhsLocal,
+      evaluateRhsLocal: ctx.callbacks.evaluateRhsLocal,
       convertOperandToNumber,
     });
     return { handled: true, last: res.last };
@@ -157,7 +164,7 @@ function handleNonLeadingStatement(ctx: BlockCtx, stmt: string) {
   const last = evalBracedBlockAndTrailingExpression({
     starting: stmt,
     localEnv: ctx.localEnv,
-    interpret: ctx.interpret,
+    interpret: ctx.callbacks.interpret,
     evaluateReturningOperandFn: evaluateReturningOperand,
   });
   return { handled: true, last };
@@ -200,9 +207,11 @@ function interpretBlockInternal(ctx: InterpretBlockContext): number {
     env,
     localEnv,
     declared,
-    interpret,
-    evaluateRhsLocal,
-    getLastTopLevelStatementLocal,
+    callbacks: {
+      interpret,
+      evaluateRhsLocal,
+      getLastTopLevelStatementLocal,
+    },
   };
 
   const stmts = splitTopLevelStatements(s);

@@ -86,7 +86,10 @@ function makeGetBindingTarget(localEnv: Env) {
 function resolveOperands(
   operands: RuntimeValue[],
   resolutionCtx: OperandResolutionContext,
-  evaluateCallAt: (funcOperand: RuntimeValue, callAppOperand: RuntimeValue) => RuntimeValue
+  evaluateCallAt: (
+    funcOperand: RuntimeValue,
+    callAppOperand: RuntimeValue
+  ) => RuntimeValue
 ): RuntimeValue[] {
   return operands.map((op) => {
     const groupedResult = resolveGroupedExpr(op, resolutionCtx);
@@ -164,7 +167,10 @@ export function evaluateReturningOperand(
   };
 
   // helper to evaluate a call and return its result (delegates to extracted module)
-  function evaluateCallAt(funcOperand: RuntimeValue, callAppOperand: RuntimeValue) {
+  function evaluateCallAt(
+    funcOperand: RuntimeValue,
+    callAppOperand: RuntimeValue
+  ) {
     return evaluateCall(funcOperand, callAppOperand, callCtx);
   }
 

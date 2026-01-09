@@ -1,6 +1,10 @@
 import { parseOperandAt } from "../parser";
 import { Env } from "../env";
 import type { InterpretFn, RuntimeValue } from "../types";
+import {
+  type AssignmentTarget,
+  type AssignmentParts,
+} from "./assignment_handlers";
 
 export interface DelimiterConfig {
   src: string;
@@ -34,37 +38,21 @@ export interface ExpansionParams {
   getLastTopLevelStatement_fn: (_s: string) => string | undefined;
 }
 
-export interface AssignmentParts {
-  isDeref: boolean;
-  isDeclOnly: boolean;
-  name: string;
-  op: string | undefined;
-  rhs: string;
-  isThisField?: boolean;
-  fieldName?: string;
-  indexExpr?: string;
-}
-
 interface BuildAssignResultInput {
   isDeref: boolean;
   name: string;
   op: string | undefined;
   rhs: string;
-  isThisField?: boolean;
-  fieldName?: string;
-  indexExpr?: string;
+  target?: AssignmentTarget;
 }
 
 function buildAssignResult(obj: BuildAssignResultInput): AssignmentParts {
   return {
-    isDeref: obj.isDeref,
-    isDeclOnly: false,
+    flags: { isDeref: obj.isDeref, isDeclOnly: false },
     name: obj.name,
     op: obj.op,
     rhs: obj.rhs.trim(),
-    isThisField: obj.isThisField,
-    fieldName: obj.fieldName,
-    indexExpr: obj.indexExpr,
+    target: obj.target,
   };
 }
 
@@ -78,8 +66,7 @@ function parseThisFieldAssignment(stmt: string): AssignmentParts | undefined {
     name: m[1],
     op: m[2] ? m[2] : undefined,
     rhs: m[3],
-    isThisField: true,
-    fieldName: m[1],
+    target: { thisField: { fieldName: m[1] } },
   });
 }
 
@@ -101,8 +88,7 @@ function parseDerefAssignment(stmt: string): AssignmentParts | undefined {
   const m = stmt.match(/^\*\s*([a-zA-Z_]\w*)\s*=\s*(.+)$/);
   if (!m) return undefined;
   return {
-    isDeref: true,
-    isDeclOnly: false,
+    flags: { isDeref: true, isDeclOnly: false },
     name: m[1],
     op: undefined,
     rhs: m[2].trim(),
@@ -115,12 +101,11 @@ function parseIndexAssignment(stmt: string): AssignmentParts | undefined {
   );
   if (!m) return undefined;
   return {
-    isDeref: false,
-    isDeclOnly: false,
+    flags: { isDeref: false, isDeclOnly: false },
     name: m[1],
     op: m[3],
     rhs: m[4].trim(),
-    indexExpr: m[2].trim(),
+    target: { indexed: { indexExpr: m[2].trim() } },
   };
 }
 
@@ -128,8 +113,7 @@ function parseSimpleAssignment(stmt: string): AssignmentParts | undefined {
   const m = stmt.match(/^([a-zA-Z_]\w*)\s*=\s*(.+)$/);
   if (!m) return undefined;
   return {
-    isDeref: false,
-    isDeclOnly: false,
+    flags: { isDeref: false, isDeclOnly: false },
     name: m[1],
     op: undefined,
     rhs: m[2].trim(),

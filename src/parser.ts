@@ -158,13 +158,16 @@ export function parseOperand(token: string) {
   return { valueBig: BigInt(numStr), isFloat: false };
 }
 
+interface StringState {
+  string: string;
+}
+
 interface CommentStripState {
   input: string;
   out: string;
   i: number;
   L: number;
-  state: "normal" | "line" | "block" | "string";
-  quote: string | undefined;
+  state: "normal" | "line" | "block" | StringState;
 }
 
 function stepStripNormal(s: CommentStripState) {
@@ -180,8 +183,7 @@ function stepStripNormal(s: CommentStripState) {
   }
   const ch = s.input[s.i];
   if (ch === '"' || ch === "'") {
-    s.quote = ch;
-    s.state = "string";
+    s.state = { string: ch };
     s.out += ch;
     s.i++;
     return;
@@ -217,9 +219,12 @@ function stepStripString(s: CommentStripState) {
     return;
   }
   s.out += ch;
-  if (ch === s.quote) {
+  if (
+    typeof s.state === "object" &&
+    "string" in s.state &&
+    ch === s.state.string
+  ) {
     s.state = "normal";
-    s.quote = undefined;
   }
   s.i++;
 }
@@ -398,7 +403,6 @@ export function stripAndValidateComments(input: string) {
     i: 0,
     L: input.length,
     state: "normal",
-    quote: undefined,
   };
 
   while (s.i < s.L) {
@@ -417,6 +421,8 @@ export function stripAndValidateComments(input: string) {
     stepStripString(s);
   }
   if (s.state === "block") throw new Error("unterminated block comment");
+  if (typeof s.state === "object" && "string" in s.state)
+    throw new Error("unterminated string");
   return s.out;
 }
 

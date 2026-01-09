@@ -1,6 +1,7 @@
 const js = require("@eslint/js");
 const tsPlugin = require("@typescript-eslint/eslint-plugin");
 const tsParser = require("@typescript-eslint/parser");
+const maxInterfaceFields = require("./eslint-rules/max-interface-fields");
 
 module.exports = [
   {
@@ -11,6 +12,11 @@ module.exports = [
     },
     plugins: {
       "@typescript-eslint": tsPlugin,
+      custom: {
+        rules: {
+          "max-interface-fields": maxInterfaceFields,
+        },
+      },
     },
     rules: {
       ...js.configs.recommended.rules,
@@ -74,6 +80,8 @@ module.exports = [
             "The 'unknown' type is banned in interface properties; use a more specific type",
         },
       ],
+      // Custom rule: Limit interface fields to maximum of 5 (excluding methods)
+      "custom/max-interface-fields": ["error", { max: 5 }],
     },
   },
   {

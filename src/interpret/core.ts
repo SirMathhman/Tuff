@@ -94,10 +94,12 @@ function mergeNativeExportsInto(
         isBlock: boolean;
         resultAnnotation: RuntimeValue;
         closureEnv: UnknownMap;
-        nativeImpl: RuntimeValue;
+      }
+      interface NativeImpl {
+        nativeImpl?: RuntimeValue;
       }
       interface FnWrapper {
-        fn: FnObject;
+        fn: FnObject & NativeImpl;
       }
       // fn wrapper shape expected by interpreter
       const wrapper: FnWrapper = {

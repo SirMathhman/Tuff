@@ -27,25 +27,27 @@ export function handleAssignmentStatement(
 ): AssignmentStatementResult {
   const { assignParts, localEnv, evaluateRhsLocal, convertOperandToNumber } =
     ctx;
-  const { isDeref, name, op, rhs, isThisField } = assignParts;
+  const { flags, name, op, rhs, target } = assignParts;
+  const { isDeref } = flags;
 
   // Handle this.field assignment
-  if (isThisField) {
+  if (target?.thisField) {
     handleThisFieldAssignment({ name, op, rhs, localEnv, evaluateRhsLocal });
     return { handled: true, last: undefined };
   }
 
   // Index assignment support: name[index] = rhs or name[index] += rhs
-  if (assignParts.indexExpr !== undefined) {
+  if (target?.indexed) {
     handleIndexAssignment({
       name,
-      indexExpr: assignParts.indexExpr,
-      op,
-      rhs,
+      indexExpr: target.indexed.indexExpr,
+      rhsInfo: { op, rhs },
       localEnv,
-      evaluateReturningOperand,
-      evaluateRhsLocal,
-      convertOperandToNumber,
+      callbacks: {
+        evaluateReturningOperand,
+        evaluateRhsLocal,
+        convertOperandToNumber,
+      },
     });
     return { handled: true, last: undefined };
   }
