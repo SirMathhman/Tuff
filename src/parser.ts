@@ -84,8 +84,25 @@ export function parseCommaSeparatedArgs(inner: string): string[] {
   return args;
 }
 
+function unescapeString(inner: string) {
+  return inner.replace(/\\([\\"'nrtb])/g, (m, ch) => {
+    if (ch === "n") return "\n";
+    if (ch === "r") return "\r";
+    if (ch === "t") return "\t";
+    if (ch === "b") return "\b";
+    return ch;
+  });
+}
+
 export function parseOperand(token: string) {
   const s = token.trim();
+  // string literal (single or double quoted) - simple unescape for common escapes
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+    const inner = s.slice(1, -1);
+    const unescaped = unescapeString(inner);
+    return unescaped;
+  }
+
   // boolean literals
   if (/^true$/i.test(s)) return { boolValue: true };
   if (/^false$/i.test(s)) return { boolValue: false };
@@ -135,6 +152,29 @@ export function parseOperandAt(src: string, pos: number) {
     prefixes.push(src[i]);
     i++;
     while (i < src.length && /[\s]/.test(src[i])) i++;
+  }
+
+  // string literal starting with quote
+  if (src[i] === '"' || src[i] === "'") {
+    const quote = src[i];
+    let j = i + 1;
+    let closed = false;
+    while (j < src.length) {
+      if (src[j] === "\\") {
+        j += 2; // skip escaped char
+        continue;
+      }
+      if (src[j] === quote) {
+        closed = true;
+        break;
+      }
+      j++;
+    }
+    if (!closed) throw new Error("unclosed string literal");
+    const inner = src.slice(i + 1, j);
+    const unescaped = unescapeString(inner);
+    const operand = applyPrefixes(unescaped, prefixes);
+    return { operand, len: i - pos + (j - i + 1) };
   }
 
   // Try numeric/suffixed literal or boolean literal first

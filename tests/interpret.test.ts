@@ -585,6 +585,16 @@ describe("interpret (basic behavior)", () => {
     expect(interpretAllWithNative(scripts, natives, "main")).toBe(101);
   });
 
+  it("interpretAllWithNative allows extern fn with `this` to bind native impl for string receivers", () => {
+    const scripts = {
+      main: 'extern from lib use { length }; extern fn length(this : &Str) : USize; "Hello World!".length()',
+    };
+    const natives = {
+      lib: "export function length(value : string) { return value.length; }",
+    };
+    expect(interpretAllWithNative(scripts, natives, "main")).toBe(12);
+  });
+
   it("supports type aliases ('type MyType = I32; let value : MyType = 100; value' => 100)", () => {
     expect(
       interpret("type MyType = I32; let value : MyType = 100; value")
