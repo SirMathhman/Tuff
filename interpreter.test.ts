@@ -32,4 +32,8 @@ describe("interpret", () => {
   test('interpret("let x = 100; let y = 200; let z = x; y") should return 200', () => {
     expect(interpret("let x = 100; let y = 200; let z = x; y")).toBe(200);
   });
+
+  test('interpret("let x = 100; let y : Bool = x;") should throw Error', () => {
+    expect(() => interpret("let x = 100; let y : Bool = x;")).toThrow(Error);
+  });
 });
