@@ -191,55 +191,15 @@ function interpretBlockInternal(
         }
       } else {
         // Support statements that begin with a braced block possibly followed by an
-        // expression (e.g., `{ } x`). Evaluate leading braced blocks in sequence and
-        // then evaluate any remaining expression.
+        // expression (e.g., `{ } x`). Delegate to helper to reduce complexity of the
+        // enclosing function.
         let remaining = stmt;
-        while (true) {
-          if (/^\s*$/.test(remaining)) {
-            // nothing left; preserve last (do not overwrite) and exit
-            break;
-          }
-          const trimmed = remaining.trimStart();
-          if (trimmed[0] === "{") {
-            // find matching closing brace for the leading braced block
-            let depth = 0;
-            let endIdx = -1;
-            const startIdx = remaining.indexOf("{");
-            for (let j = startIdx; j < remaining.length; j++) {
-              const ch = remaining[j];
-              if (ch === "{") depth++;
-              else if (ch === "}") {
-                depth--;
-                if (depth === 0) {
-                  endIdx = j;
-                  break;
-                }
-              }
-            }
-            if (endIdx === -1)
-              throw new Error("unbalanced braces in statement");
-            const block = remaining.slice(startIdx, endIdx + 1);
-            // Evaluate as a braced block so inner declarations stay scoped.
-            last = interpret(block, localEnv);
-            remaining = remaining.slice(endIdx + 1);
-            continue;
-          }
-          // No leading block left; treat the remainder as a single expression
-          const expr = remaining.replace(/^[;\s]*/, "");
-          if (/^\s*$/.test(expr)) {
-            last = undefined;
-            break;
-          }
-          try {
-            last = evaluateReturningOperand(expr, localEnv);
-          } catch (e: unknown) {
-            if (toErrorMessage(e) === "invalid expression") {
-              // Fall back to interpret for inputs that aren't valid single expressions
-              last = interpret(expr, localEnv);
-            } else throw e;
-          }
-          break;
-        }
+        last = evalBracedBlockAndTrailingExpression(
+          remaining,
+          localEnv,
+          interpret,
+          evaluateReturningOperand
+        );
       }
     }
   }
@@ -258,4 +218,68 @@ export function interpretBlockInPlace(
   interpret: InterpretFn
 ): number {
   return interpretBlockInternal(s, env, interpret, true);
+}
+
+/**
+ * Evaluate a leading sequence of braced blocks (e.g., `{ ... } { ... }`) and
+ * then a trailing expression if present. Returns the resulting value (or
+ * undefined when nothing is present).
+ */
+function evalBracedBlockAndTrailingExpression(
+  starting: string,
+  localEnv: Env,
+  interpret: InterpretFn,
+  evaluateReturningOperandFn: (expr: string, localEnv: Env) => unknown
+): unknown {
+  let remaining = starting;
+  let last: unknown = undefined;
+
+  while (true) {
+    if (/^\s*$/.test(remaining)) {
+      // nothing left; preserve last (do not overwrite) and exit
+      break;
+    }
+    const trimmed = remaining.trimStart();
+    if (trimmed[0] === "{") {
+      // find matching closing brace for the leading braced block
+      let depth = 0;
+      let endIdx = -1;
+      const startIdx = remaining.indexOf("{");
+      for (let j = startIdx; j < remaining.length; j++) {
+        const ch = remaining[j];
+        if (ch === "{") depth++;
+        else if (ch === "}") {
+          depth--;
+          if (depth === 0) {
+            endIdx = j;
+            break;
+          }
+        }
+      }
+      if (endIdx === -1) throw new Error("unbalanced braces in statement");
+      const block = remaining.slice(startIdx, endIdx + 1);
+      // Evaluate as a braced block so inner declarations stay scoped.
+      last = interpret(block, localEnv);
+      remaining = remaining.slice(endIdx + 1);
+      continue;
+    }
+
+    // No leading block left; treat the remainder as a single expression
+    const expr = remaining.replace(/^[;\s]*/, "");
+    if (/^\s*$/.test(expr)) {
+      last = undefined;
+      break;
+    }
+    try {
+      last = evaluateReturningOperandFn(expr, localEnv);
+    } catch (e: unknown) {
+      if (toErrorMessage(e) === "invalid expression") {
+        // Fall back to interpret for inputs that aren't valid single expressions
+        last = interpret(expr, localEnv);
+      } else throw e;
+    }
+    break;
+  }
+
+  return last;
 }

@@ -178,7 +178,8 @@ function processOperators(
     ) {
       const result = evaluateCallAtFn(funcOperand, callAppOperand);
       const nextOp = ops[i + 1];
-      if (typeof nextOp !== "string") throw new Error("invalid field access operator");
+      if (typeof nextOp !== "string")
+        throw new Error("invalid field access operator");
       const fieldName = nextOp.substring(1);
       if (!result) throwCannotAccessFieldMissing();
       const fieldValue = getFieldValueFromInstance(result, fieldName);
@@ -199,10 +200,16 @@ function processOperators(
     const arrOperand = operands[i];
 
     let idxVal: number;
-    if (isPlainObject(indexOpnd) && getProp(indexOpnd, "indexExpr") !== undefined) {
+    if (
+      isPlainObject(indexOpnd) &&
+      getProp(indexOpnd, "indexExpr") !== undefined
+    ) {
       const idxExprProp = getProp(indexOpnd, "indexExpr");
-      if (typeof idxExprProp !== "string") throw new Error("invalid index expression");
-      idxVal = convertOperandToNumber(evaluateReturningOperandFn(String(idxExprProp), localEnv));
+      if (typeof idxExprProp !== "string")
+        throw new Error("invalid index expression");
+      idxVal = convertOperandToNumber(
+        evaluateReturningOperandFn(String(idxExprProp), localEnv)
+      );
     } else {
       idxVal = convertOperandToNumber(indexOpnd);
     }
@@ -212,7 +219,11 @@ function processOperators(
       throw new Error("cannot index missing value");
     }
 
-    if (isPlainObject(arrOperand) && isPointer(arrOperand) && getProp(arrOperand, "ptrIsSlice") === true) {
+    if (
+      isPlainObject(arrOperand) &&
+      isPointer(arrOperand) &&
+      getProp(arrOperand, "ptrIsSlice") === true
+    ) {
       const targetVal = getArrayTargetFromPointer(arrOperand, "index");
       const elem = getArrayElementFromInstance(targetVal, idxVal);
       operands.splice(i, 2, elem);
@@ -234,7 +245,11 @@ function processOperators(
     const structInstance = operands[i];
 
     if (!structInstance) {
-      const found = findNearbyOperandIndex(operands, i, (maybe) => isStructInstance(maybe) || isThisBinding(maybe));
+      const found = findNearbyOperandIndex(
+        operands,
+        i,
+        (maybe) => isStructInstance(maybe) || isThisBinding(maybe)
+      );
       if (!found) throwCannotAccessFieldMissing();
 
       const maybe = operands[found.index];
@@ -253,14 +268,19 @@ function processOperators(
     }
 
     let arrLike: unknown | undefined = undefined;
-    if (isPlainObject(structInstance) && isPointer(structInstance) && getProp(structInstance, "ptrIsSlice") === true) {
+    if (
+      isPlainObject(structInstance) &&
+      isPointer(structInstance) &&
+      getProp(structInstance, "ptrIsSlice") === true
+    ) {
       arrLike = getArrayTargetFromPointer(structInstance, "field");
     } else if (isArrayInstance(structInstance)) {
       arrLike = structInstance;
     }
 
     if (arrLike !== undefined) {
-      if (handleArrayLikeFieldAccess(arrLike, fieldName, i, operands, ops)) return true;
+      if (handleArrayLikeFieldAccess(arrLike, fieldName, i, operands, ops))
+        return true;
       throw new Error(`invalid field access: ${fieldName}`);
     }
 
@@ -268,7 +288,10 @@ function processOperators(
       if (!isPlainObject(structInstance)) throwCannotAccessField();
 
       const fv = getProp(structInstance, "fieldValues");
-      if (fv !== undefined && Object.prototype.hasOwnProperty.call(fv, fieldName)) {
+      if (
+        fv !== undefined &&
+        Object.prototype.hasOwnProperty.call(fv, fieldName)
+      ) {
         const fieldValue = getFieldValueFromInstance(structInstance, fieldName);
         operands.splice(i, 2, fieldValue);
         ops.splice(i, 1);
