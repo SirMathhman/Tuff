@@ -1116,7 +1116,7 @@ export function evaluateReturningOperand(
         if (typeof nextOp !== "string")
           throw new Error("invalid field access operator");
         const fieldName = nextOp.substring(1);
-        if (!result) throw new Error(`cannot access field on missing value`);
+        if (!result) throwCannotAccessFieldMissing();
         const fieldValue = getFieldValueFromInstance(result, fieldName);
 
         // Remove [funcOperand, callApp, undefined] -> replace with the fieldValue
@@ -1161,12 +1161,7 @@ export function evaluateReturningOperand(
         isPointer(arrOperand) &&
         getProp(arrOperand, "ptrIsSlice") === true
       ) {
-        const ptrName = getProp(arrOperand, "ptrName");
-        if (typeof ptrName !== "string")
-          throw new Error("invalid pointer target");
-        const { targetVal } = getBindingTarget(ptrName);
-        if (!isArrayInstance(targetVal))
-          throw new Error("cannot index non-array value");
+        const targetVal = getArrayTargetFromPointer(arrOperand, 'index');
         const elem = getArrayElementFromInstance(targetVal, idxVal);
         operands.splice(i, 2, elem);
         ops.splice(i, 1);
@@ -1210,10 +1205,11 @@ export function evaluateReturningOperand(
           i = Math.max(0, i);
           continue;
         }
-        throw new Error(`cannot access field on missing value`);
+        throwCannotAccessFieldMissing();
       }
 
-      // Handle pointer slice field access (e.g., p.length, p.init)
+      // Handle array-like (.len/.length/.init) for either pointer-to-slice or array instance
+      let arrLike: unknown | undefined = undefined;
       if (
         isPlainObject(structInstance) &&
         isPointer(structInstance) &&
@@ -1225,27 +1221,13 @@ export function evaluateReturningOperand(
         const { targetVal } = getBindingTarget(ptrName);
         if (!isArrayInstance(targetVal))
           throw new Error(`cannot access field on non-array value`);
-        if (fieldName === "length" || fieldName === "len") {
-          replaceWithBigIntNumber(targetVal.length);
-          continue;
-        }
-        if (fieldName === "init") {
-          replaceWithBigIntNumber(targetVal.initializedCount);
-          continue;
-        }
-        throw new Error(`invalid field access: ${fieldName}`);
+        arrLike = targetVal;
+      } else if (isArrayInstance(structInstance)) {
+        arrLike = structInstance;
       }
 
-      // Handle arrays specially (.len/.length/.init)
-      if (isArrayInstance(structInstance)) {
-        if (fieldName === "len" || fieldName === "length") {
-          replaceWithBigIntNumber(structInstance.length);
-          continue;
-        }
-        if (fieldName === "init") {
-          replaceWithBigIntNumber(structInstance.initializedCount);
-          continue;
-        }
+      if (arrLike !== undefined) {
+        if (handleArrayLikeFieldAccess(arrLike, fieldName)) continue;
         throw new Error(`invalid field access: ${fieldName}`);
       }
 
@@ -1371,6 +1353,40 @@ export function evaluateReturningOperand(
   // helper that throws a consistent error for invalid field access
   function throwCannotAccessField(): never {
     throw new Error(`cannot access field on non-struct value`);
+  }
+
+  // helper that throws a consistent error when accessing field on missing value
+  function throwCannotAccessFieldMissing(): never {
+    throw new Error(`cannot access field on missing value`);
+  }
+
+  // helper to handle length/init fields on array-like instances
+  function handleArrayLikeFieldAccess(
+    arrLike: unknown,
+    fieldName: string
+  ): boolean {
+    if (!isArrayInstance(arrLike)) return false;
+    if (fieldName === "length" || fieldName === "len") {
+      replaceWithBigIntNumber(arrLike.length);
+      return true;
+    }
+    if (fieldName === "init") {
+      replaceWithBigIntNumber(arrLike.initializedCount);
+      return true;
+    }
+    return false;
+  }
+
+  // helper to resolve a pointer and ensure it points to an array instance
+  function getArrayTargetFromPointer(ptrObj: unknown, kind: 'index' | 'field') {
+    const ptrName = getProp(ptrObj, 'ptrName');
+    if (typeof ptrName !== 'string') throw new Error('invalid pointer target');
+    const { targetVal } = getBindingTarget(ptrName);
+    if (!isArrayInstance(targetVal)) {
+      if (kind === 'index') throw new Error('cannot index non-array value');
+      throw new Error('cannot access field on non-array value');
+    }
+    return targetVal;
   }
 
   applyPrecedence(new Set(["*", "/", "%"]));

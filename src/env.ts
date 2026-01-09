@@ -16,6 +16,51 @@ function getSymbolProp(obj: object, prop: symbol): unknown {
   return (obj as PropertyKeyed)[prop];
 }
 
+// Common prefix handling for proxy `get` implementations - centralizes
+// repeated checks for symbols and env flags to reduce duplication.
+function commonGetPrefix(
+  container: object,
+  prop: string | symbol,
+  isMap: boolean
+): unknown {
+  if (typeof prop === "symbol") return getSymbolProp(container, prop);
+  if (prop === "__isEnvProxy") return true;
+  if (prop === "__isMapProxy") return isMap;
+  return undefined;
+}
+
+// Specialized handler factories to reduce duplication between Map-backed and
+// object-backed proxy implementations without introducing `any` or casts.
+function makeSetHandlerForMap(m: Map<string, unknown>) {
+  return function (_: object, prop: string | symbol, value: unknown) {
+    if (typeof prop === "symbol") return Reflect.set(_, prop, value);
+    m.set(String(prop), value);
+    return true;
+  };
+}
+
+function makeSetHandlerForObj(obj: { [k: string]: unknown }) {
+  return function (_: object, prop: string | symbol, value: unknown) {
+    if (typeof prop === "symbol") return Reflect.set(_, prop, value);
+    obj[String(prop)] = value;
+    return true;
+  };
+}
+
+function makeHasHandlerForMap(m: Map<string, unknown>) {
+  return function (_: object, prop: string | symbol) {
+    if (typeof prop === "symbol") return Reflect.has(_, prop);
+    return m.has(String(prop));
+  };
+}
+
+function makeHasHandlerForObj(obj: { [k: string]: unknown }) {
+  return function (_: object, prop: string | symbol) {
+    if (typeof prop === "symbol") return Reflect.has(_, prop);
+    return Object.prototype.hasOwnProperty.call(obj, String(prop));
+  };
+}
+
 // Helper to set value on object with string key
 function setStringProp(obj: object, key: string, value: unknown): void {
   // eslint-disable-next-line no-restricted-syntax
@@ -38,27 +83,21 @@ function makeProxyFromMap(m: Map<string, unknown>) {
   const proxyTarget = {};
   return new Proxy(proxyTarget, {
     get(_, prop: string | symbol) {
-      if (typeof prop === "symbol") return getSymbolProp(m, prop);
-      if (prop === "__isEnvProxy") return true;
-      if (prop === "__isMapProxy") return true;
-      if (m.has(prop)) return m.get(prop);
-      // expose Map methods to allow direct map usage
-      const mapMethod = getStringProp(m, prop);
-      if (typeof mapMethod === "function")
-        // eslint-disable-next-line no-restricted-syntax
-        return (mapMethod as (..._args: unknown[]) => unknown).bind(m);
+      const pfx = commonGetPrefix(m, prop, true);
+      if (pfx !== undefined) return pfx;
+      if (typeof prop === "string") {
+        if (m.has(prop)) return m.get(prop);
+        // expose Map methods to allow direct map usage
+        const mapMethod = getStringProp(m, prop);
+        if (typeof mapMethod === "function")
+          // eslint-disable-next-line no-restricted-syntax
+          return (mapMethod as (..._args: unknown[]) => unknown).bind(m);
+      }
       return undefined;
     },
 
-    set(_, prop: string | symbol, value: unknown) {
-      if (typeof prop === "symbol") return Reflect.set(_, prop, value);
-      m.set(String(prop), value);
-      return true;
-    },
-    has(_, prop: string | symbol) {
-      if (typeof prop === "symbol") return Reflect.has(_, prop);
-      return m.has(String(prop));
-    },
+    set: makeSetHandlerForMap(m),
+    has: makeHasHandlerForMap(m),
     ownKeys() {
       return Array.from(m.keys());
     },
@@ -80,29 +119,23 @@ function makeProxyFromObject(obj: { [k: string]: unknown }) {
   const proxyTarget = {};
   return new Proxy(proxyTarget, {
     get(_, prop: string | symbol) {
-      if (typeof prop === "symbol") return getSymbolProp(obj, prop);
-      if (prop === "__isEnvProxy") return true;
-      if (prop === "__isMapProxy") return false;
-      if (Object.prototype.hasOwnProperty.call(obj, prop)) return obj[prop];
-      // provide Map-like helpers bound to object semantics
-      if (prop === "get") return (k: string) => obj[k];
-      if (prop === "set") return (k: string, v: unknown) => (obj[k] = v);
-      if (prop === "has")
-        return (k: string) => Object.prototype.hasOwnProperty.call(obj, k);
-      if (prop === "entries")
-        return () => Object.entries(obj)[Symbol.iterator]();
+      const pfx = commonGetPrefix(obj, prop, false);
+      if (pfx !== undefined) return pfx;
+      if (typeof prop === "string") {
+        if (Object.prototype.hasOwnProperty.call(obj, prop)) return obj[prop];
+        // provide Map-like helpers bound to object semantics
+        if (prop === "get") return (k: string) => obj[k];
+        if (prop === "set") return (k: string, v: unknown) => (obj[k] = v);
+        if (prop === "has")
+          return (k: string) => Object.prototype.hasOwnProperty.call(obj, k);
+        if (prop === "entries")
+          return () => Object.entries(obj)[Symbol.iterator]();
+      }
       return undefined;
     },
 
-    set(_, prop: string | symbol, value: unknown) {
-      if (typeof prop === "symbol") return Reflect.set(_, prop, value);
-      obj[String(prop)] = value;
-      return true;
-    },
-    has(_, prop: string | symbol) {
-      if (typeof prop === "symbol") return Reflect.has(_, prop);
-      return Object.prototype.hasOwnProperty.call(obj, String(prop));
-    },
+    set: makeSetHandlerForObj(obj),
+    has: makeHasHandlerForObj(obj),
     ownKeys() {
       return Object.keys(obj);
     },

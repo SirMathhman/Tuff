@@ -91,8 +91,22 @@ function interpretBlockInternal(
     arrInst.initializedCount = Math.max(arrInst.initializedCount, idxVal + 1);
   };
 
+  // helper to execute a loop/if body that may be braced or a single statement
+  const runBody = (body: string) => {
+    if (/^\s*\{[\s\S]*\}\s*$/.test(body)) {
+      const inner = body.replace(/^\{\s*|\s*\}$/g, "");
+      interpret(inner, localEnv);
+    } else {
+      interpret(body + ";", localEnv);
+    }
+  };
+
   // helper to extract the trailing loop body and validate presence
-  const extractTrailingBody = (stmtLocal: string, endIdx: number, kind: string) => {
+  const extractTrailingBody = (
+    stmtLocal: string,
+    endIdx: number,
+    kind: string
+  ) => {
     const body = stmtLocal.slice(endIdx + 1).trim();
     if (!body) throw new Error(`missing ${kind} body`);
     return body;
@@ -509,19 +523,9 @@ function interpretBlockInternal(
 
         const condOpnd = evaluateReturningOperand(cond, localEnv);
         if (isTruthy(condOpnd)) {
-          if (/^\s*\{[\s\S]*\}\s*$/.test(trueBody)) {
-            const inner = trueBody.replace(/^\{\s*|\s*\}$/g, "");
-            interpret(inner, localEnv);
-          } else {
-            interpret(trueBody + ";", localEnv);
-          }
+          runBody(trueBody);
         } else if (falseBody) {
-          if (/^\s*\{[\s\S]*\}\s*$/.test(falseBody)) {
-            const inner = falseBody.replace(/^\{\s*|\s*\}$/g, "");
-            interpret(inner, localEnv);
-          } else {
-            interpret(falseBody + ";", localEnv);
-          }
+          runBody(falseBody);
         }
 
         last = undefined;
@@ -539,12 +543,7 @@ function interpretBlockInternal(
         while (true) {
           const condOpnd = evaluateReturningOperand(cond, localEnv);
           if (!isTruthy(condOpnd)) break;
-          if (/^\s*\{[\s\S]*\}\s*$/.test(body)) {
-            const inner = body.replace(/^\{\s*|\s*\}$/g, "");
-            interpret(inner, localEnv);
-          } else {
-            interpret(body + ";", localEnv);
-          }
+          runBody(body);
         }
         last = undefined;
         continue;
@@ -583,12 +582,7 @@ function interpretBlockInternal(
           if (mutFlag) envSet(localEnv, iterName, { mutable: true, value: i });
           else envSet(localEnv, iterName, i);
 
-          if (/^\s*\{[\s\S]*\}\s*$/.test(body)) {
-            const inner = body.replace(/^\{\s*|\s*\}$/g, "");
-            interpret(inner, localEnv);
-          } else {
-            interpret(body + ";", localEnv);
-          }
+          runBody(body);
         }
 
         // restore previous binding

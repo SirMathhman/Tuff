@@ -258,29 +258,16 @@ export function extractAssignmentParts(stmt: string):
       indexExpr?: string;
     }
   | undefined {
-  // Try this.field compound assignment: this.x += 1
-  let m = stmt.match(/^this\s*\.\s*([a-zA-Z_]\w*)\s*([+\-*/%])=\s*(.+)$/);
+  // Try this.field assignment or compound (this.x += 1 or this.x = ...)
+  let m = stmt.match(/^this\s*\.\s*([a-zA-Z_]\w*)\s*(?:([+\-*/%])=|=)\s*(.+)$/);
   if (m) {
+    const op = m[2] ? m[2] : undefined;
     return {
       isDeref: false,
       isDeclOnly: false,
       name: m[1],
-      op: m[2],
+      op,
       rhs: m[3].trim(),
-      isThisField: true,
-      fieldName: m[1],
-    };
-  }
-
-  // Try this.field assignment: this.x = ...
-  m = stmt.match(/^this\s*\.\s*([a-zA-Z_]\w*)\s*=\s*(.+)$/);
-  if (m) {
-    return {
-      isDeref: false,
-      isDeclOnly: false,
-      name: m[1],
-      op: undefined,
-      rhs: m[2].trim(),
       isThisField: true,
       fieldName: m[1],
     };
