@@ -26,6 +26,7 @@ import {
   FnWrapper,
   FunctionObject,
 } from "../types";
+import { buildThisBindingFromEnv } from "./pure_helpers";
 
 // Forward declaration - will be set by eval.ts to avoid circular imports
 let evaluateReturningOperandFn:
@@ -126,34 +127,6 @@ function buildBoundFnFromOrig(
 
   boundFn.boundThis = boundThis;
   return boundFn;
-}
-
-// helper to build a `this` binding object from an env
-function buildThisBindingFromEnv(envLocal: Env): ThisBinding {
-  const thisObj: ThisBinding = {
-    type: "this-binding",
-    isThisBinding: true,
-    fieldValues: new Map(),
-  };
-  for (const [k, envVal] of envEntries(envLocal)) {
-    if (k === "this") continue;
-    if (
-      isPlainObject(envVal) &&
-      hasValue(envVal) &&
-      envVal.value !== undefined
-    ) {
-      thisObj.fieldValues.set(k, envVal.value);
-    } else if (
-      typeof envVal === "number" ||
-      typeof envVal === "string" ||
-      typeof envVal === "boolean"
-    ) {
-      thisObj.fieldValues.set(k, envVal);
-    } else if (!isStructDef(envVal)) {
-      thisObj.fieldValues.set(k, envVal);
-    }
-  }
-  return thisObj;
 }
 
 /**

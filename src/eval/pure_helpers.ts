@@ -1,11 +1,17 @@
+import { Env, envGet, envEntries } from "../env";
 import {
+  isPlainObject,
   isStructInstance,
   isThisBinding,
+  getProp,
   isArrayInstance,
   isFnWrapper,
-  type RuntimeValue,
+  RuntimeValue,
+  ThisBinding,
+  hasValue,
+  isStructDef,
 } from "../types";
-import { Env, envGet } from "../env";
+import { ErrorCode, throwError } from "../errors";
 
 /**
  * Extract and validate a field value from a struct/this instance
@@ -15,11 +21,11 @@ export function getFieldValueFromInstance(
   fieldName: string
 ): RuntimeValue {
   if (!(isStructInstance(maybe) || isThisBinding(maybe)))
-    throw new Error("cannot access field on non-struct value");
+    throwError(ErrorCode.CANNOT_ACCESS_FIELD);
 
   const fieldValue = maybe.fieldValues.get(fieldName);
   if (fieldValue === undefined)
-    throw new Error(`invalid field access: ${fieldName}`);
+    throwError(ErrorCode.INVALID_FIELD_ACCESS, { fieldName });
   return fieldValue;
 }
 
@@ -30,12 +36,12 @@ export function getArrayElementFromInstance(
   maybe: RuntimeValue,
   indexVal: number
 ): RuntimeValue {
-  if (!isArrayInstance(maybe)) throw new Error("cannot index non-array value");
+  if (!isArrayInstance(maybe)) throwError(ErrorCode.CANNOT_INDEX_NON_ARRAY);
   const arr = maybe;
   if (!Number.isInteger(indexVal) || indexVal < 0 || indexVal >= arr.length)
-    throw new Error("index out of range");
+    throwError(ErrorCode.INDEX_OUT_OF_RANGE);
   if (indexVal >= arr.initializedCount)
-    throw new Error("use of uninitialized array element");
+    throwError(ErrorCode.USE_OF_UNINITIALIZED);
   return arr.elements[indexVal];
 }
 
@@ -43,14 +49,64 @@ export function getArrayElementFromInstance(
  * Throws error for invalid field access on non-struct value
  */
 export function throwCannotAccessField(): never {
-  throw new Error(`cannot access field on non-struct value`);
+  throwError(ErrorCode.CANNOT_ACCESS_FIELD);
 }
 
 /**
  * Throws error when accessing field on missing value
  */
 export function throwCannotAccessFieldMissing(): never {
-  throw new Error(`cannot access field on missing value`);
+  throwError(ErrorCode.CANNOT_ACCESS_FIELD_MISSING);
+}
+
+/**
+ * Throws error for invalid field access with field name
+ */
+export function throwInvalidFieldAccess(fieldName: string): never {
+  throwError(ErrorCode.INVALID_FIELD_ACCESS, { fieldName });
+}
+
+/**
+ * Build a this-binding object from environment entries
+ */
+export function buildThisBindingFromEnv(envLocal: Env): ThisBinding {
+  const thisObj: ThisBinding = {
+    type: "this-binding",
+    isThisBinding: true,
+    fieldValues: new Map(),
+  };
+  for (const [k, envVal] of envEntries(envLocal)) {
+    if (k === "this") continue;
+    if (
+      isPlainObject(envVal) &&
+      hasValue(envVal) &&
+      getProp(envVal, "value") !== undefined
+    ) {
+      thisObj.fieldValues.set(k, getProp(envVal, "value"));
+    } else if (
+      typeof envVal === "number" ||
+      typeof envVal === "string" ||
+      typeof envVal === "boolean"
+    ) {
+      thisObj.fieldValues.set(k, envVal);
+    } else if (!isStructDef(envVal)) {
+      thisObj.fieldValues.set(k, envVal);
+    }
+  }
+  return thisObj;
+}
+
+/**
+ * Create an array instance from element array
+ */
+export function createArrayInstanceFromElements(elems: RuntimeValue[]) {
+  return {
+    type: "array-instance" as const,
+    isArray: true,
+    elements: elems,
+    length: elems.length,
+    initializedCount: elems.length,
+  };
 }
 
 interface MethodResolverCtx {

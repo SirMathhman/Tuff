@@ -5,6 +5,7 @@ import {
   type AssignmentTarget,
   type AssignmentParts,
 } from "./assignment_handlers";
+import { extractAssignmentParts as extractAssignmentPartsNew } from "./assignment_parser";
 
 export interface DelimiterConfig {
   src: string;
@@ -38,88 +39,6 @@ export interface ExpansionParams {
   getLastTopLevelStatement_fn: (_s: string) => string | undefined;
 }
 
-interface BuildAssignResultInput {
-  isDeref: boolean;
-  name: string;
-  op: string | undefined;
-  rhs: string;
-  target?: AssignmentTarget;
-}
-
-function buildAssignResult(obj: BuildAssignResultInput): AssignmentParts {
-  return {
-    flags: { isDeref: obj.isDeref, isDeclOnly: false },
-    name: obj.name,
-    op: obj.op,
-    rhs: obj.rhs.trim(),
-    target: obj.target,
-  };
-}
-
-function parseThisFieldAssignment(stmt: string): AssignmentParts | undefined {
-  const m = stmt.match(
-    /^this\s*\.\s*([a-zA-Z_]\w*)\s*(?:([+\-*/%])=|=)\s*(.+)$/
-  );
-  if (!m) return undefined;
-  return buildAssignResult({
-    isDeref: false,
-    name: m[1],
-    op: m[2] ? m[2] : undefined,
-    rhs: m[3],
-    target: { thisField: { fieldName: m[1] } },
-  });
-}
-
-function parseDerefCompoundAssignment(
-  stmt: string
-): AssignmentParts | undefined {
-  const m = stmt.match(/^\*\s*([a-zA-Z_]\w*)\s*([+\-*/%])=\s*(.+)$/);
-  if (!m) return undefined;
-  return buildAssignResult({ isDeref: true, name: m[1], op: m[2], rhs: m[3] });
-}
-
-function parseCompoundAssignment(stmt: string): AssignmentParts | undefined {
-  const m = stmt.match(/^([a-zA-Z_]\w*)\s*([+\-*/%])=\s*(.+)$/);
-  if (!m) return undefined;
-  return buildAssignResult({ isDeref: false, name: m[1], op: m[2], rhs: m[3] });
-}
-
-function parseDerefAssignment(stmt: string): AssignmentParts | undefined {
-  const m = stmt.match(/^\*\s*([a-zA-Z_]\w*)\s*=\s*(.+)$/);
-  if (!m) return undefined;
-  return {
-    flags: { isDeref: true, isDeclOnly: false },
-    name: m[1],
-    op: undefined,
-    rhs: m[2].trim(),
-  };
-}
-
-function parseIndexAssignment(stmt: string): AssignmentParts | undefined {
-  const m = stmt.match(
-    /^([a-zA-Z_]\w*)\s*\[\s*([\s\S]+?)\s*\]\s*([+\-*/%])?=\s*(.+)$/
-  );
-  if (!m) return undefined;
-  return {
-    flags: { isDeref: false, isDeclOnly: false },
-    name: m[1],
-    op: m[3],
-    rhs: m[4].trim(),
-    target: { indexed: { indexExpr: m[2].trim() } },
-  };
-}
-
-function parseSimpleAssignment(stmt: string): AssignmentParts | undefined {
-  const m = stmt.match(/^([a-zA-Z_]\w*)\s*=\s*(.+)$/);
-  if (!m) return undefined;
-  return {
-    flags: { isDeref: false, isDeclOnly: false },
-    name: m[1],
-    op: undefined,
-    rhs: m[2].trim(),
-  };
-}
-
 export function findMatchingParen(
   str: string,
   options: FindParenOptions
@@ -143,14 +62,7 @@ export function findMatchingParen(
 export function extractAssignmentParts(
   stmt: string
 ): AssignmentParts | undefined {
-  return (
-    parseThisFieldAssignment(stmt) ||
-    parseDerefCompoundAssignment(stmt) ||
-    parseCompoundAssignment(stmt) ||
-    parseDerefAssignment(stmt) ||
-    parseIndexAssignment(stmt) ||
-    parseSimpleAssignment(stmt)
-  );
+  return extractAssignmentPartsNew(stmt);
 }
 
 interface ExpandState {

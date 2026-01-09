@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import { throwError, ErrorCode } from "./errors";
 
 // Function object core properties (body and structure)
 interface FunctionObjectCore {
@@ -371,13 +372,11 @@ export function throwUseOfUninitialized(name: string): never {
 export function checkRange(kind: string, bits: number, sum: bigint) {
   if (kind === "u") {
     const max = (1n << BigInt(bits)) - 1n;
-    if (sum < 0n || sum > max)
-      throw new Error(`value out of range for U${bits}`);
+    if (sum < 0n || sum > max) throwError(ErrorCode.OUT_OF_RANGE_U, { bits });
   } else {
     const min = -(1n << BigInt(bits - 1));
     const max = (1n << BigInt(bits - 1)) - 1n;
-    if (sum < min || sum > max)
-      throw new Error(`value out of range for I${bits}`);
+    if (sum < min || sum > max) throwError(ErrorCode.OUT_OF_RANGE_I, { bits });
   }
 }
 

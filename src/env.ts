@@ -53,22 +53,6 @@ function makeHasHandler(hasFn: (k: string) => boolean) {
   };
 }
 
-function makeSetHandlerForMap(m: Map<string, unknown>) {
-  return makeSetHandler((k, v) => m.set(k, v));
-}
-
-function makeSetHandlerForObj(obj: PlainEnv) {
-  return makeSetHandler((k, v) => (obj[k] = v));
-}
-
-function makeHasHandlerForMap(m: Map<string, unknown>) {
-  return makeHasHandler((k) => m.has(k));
-}
-
-function makeHasHandlerForObj(obj: PlainEnv) {
-  return makeHasHandler((k) => Object.prototype.hasOwnProperty.call(obj, k));
-}
-
 // Helper to set value on object with string key using Reflect API
 function setStringProp(obj: object, key: string, value: RuntimeValue): void {
   Reflect.set(obj, key, value);
@@ -84,79 +68,101 @@ function deleteStringProp(obj: object, key: string): void {
   Reflect.deleteProperty(obj, key);
 }
 
-function makeProxyFromMap(m: Map<string, RuntimeValue>) {
+// Storage adapter interface to unify Map and Object proxy creation
+interface StorageAdapter {
+  has(key: string): boolean;
+  get(key: string): RuntimeValue;
+  set(key: string, value: RuntimeValue): void;
+  delete(key: string): void;
+  keys(): string[];
+  isMap: boolean;
+  container: object;
+  getExtraProperty?(key: string): RuntimeValue;
+}
+
+function createMapAdapter(m: Map<string, RuntimeValue>): StorageAdapter {
+  return {
+    has: (k) => m.has(k),
+    get: (k) => m.get(k),
+    set: (k, v) => m.set(k, v),
+    delete: (k) => m.delete(k),
+    keys: () => Array.from(m.keys()),
+    isMap: true,
+    container: m,
+    getExtraProperty(key: string): RuntimeValue {
+      // expose Map methods to allow direct map usage
+      const mapMethod = getStringProp(m, key);
+      if (typeof mapMethod === "function") {
+        return (...args: RuntimeValue[]) => Reflect.apply(mapMethod, m, args);
+      }
+      return undefined;
+    },
+  };
+}
+
+function createObjectAdapter(obj: PlainEnv): StorageAdapter {
+  return {
+    has: (k) => Object.prototype.hasOwnProperty.call(obj, k),
+    get: (k) => obj[k],
+    set: (k, v) => (obj[k] = v),
+    delete: (k) => delete obj[k],
+    keys: () => Object.keys(obj),
+    isMap: false,
+    container: obj,
+    getExtraProperty(key: string): RuntimeValue {
+      // provide Map-like helpers bound to object semantics
+      if (key === "get") return (k: string) => obj[k];
+      if (key === "set") return (k: string, v: RuntimeValue) => (obj[k] = v);
+      if (key === "has")
+        return (k: string) => Object.prototype.hasOwnProperty.call(obj, k);
+      if (key === "entries")
+        return () => Object.entries(obj)[Symbol.iterator]();
+      return undefined;
+    },
+  };
+}
+
+function makeProxyFromAdapter(adapter: StorageAdapter) {
   const proxyTarget = {};
   return new Proxy(proxyTarget, {
     get(_, prop: string | symbol) {
-      const pfx = commonGetPrefix(m, prop, true);
+      const pfx = commonGetPrefix(adapter.container, prop, adapter.isMap);
       if (pfx !== undefined) return pfx;
       if (typeof prop === "string") {
-        if (m.has(prop)) return m.get(prop);
-        // expose Map methods to allow direct map usage
-        const mapMethod = getStringProp(m, prop);
-        if (typeof mapMethod === "function") {
-          // Use Reflect.apply via a wrapper to bind to the map
-          return (...args: RuntimeValue[]) => Reflect.apply(mapMethod, m, args);
+        if (adapter.has(prop)) return adapter.get(prop);
+        if (adapter.getExtraProperty) {
+          const extra = adapter.getExtraProperty(prop);
+          if (extra !== undefined) return extra;
         }
       }
       return undefined;
     },
 
-    set: makeSetHandlerForMap(m),
-    has: makeHasHandlerForMap(m),
+    set: makeSetHandler((k, v) => adapter.set(k, v)),
+    has: makeHasHandler((k) => adapter.has(k)),
     ownKeys() {
-      return Array.from(m.keys());
+      return adapter.keys();
     },
     getOwnPropertyDescriptor(_, prop: string | symbol) {
       if (typeof prop === "symbol") return undefined;
-      if (m.has(String(prop)))
+      if (adapter.has(String(prop)))
         return {
           configurable: true,
           enumerable: true,
           writable: true,
-          value: m.get(String(prop)),
+          value: adapter.get(String(prop)),
         };
       return undefined;
     },
   });
 }
 
-function makeProxyFromObject(obj: PlainEnv) {
-  const proxyTarget = {};
-  return new Proxy(proxyTarget, {
-    get(_, prop: string | symbol) {
-      const pfx = commonGetPrefix(obj, prop, false);
-      if (pfx !== undefined) return pfx;
-      if (typeof prop === "string") {
-        if (Object.prototype.hasOwnProperty.call(obj, prop)) return obj[prop];
-        // provide Map-like helpers bound to object semantics
-        if (prop === "get") return (k: string) => obj[k];
-        if (prop === "set") return (k: string, v: RuntimeValue) => (obj[k] = v);
-        if (prop === "has")
-          return (k: string) => Object.prototype.hasOwnProperty.call(obj, k);
-        if (prop === "entries")
-          return () => Object.entries(obj)[Symbol.iterator]();
-      }
-      return undefined;
-    },
+function makeProxyFromMap(m: Map<string, RuntimeValue>) {
+  return makeProxyFromAdapter(createMapAdapter(m));
+}
 
-    set: makeSetHandlerForObj(obj),
-    has: makeHasHandlerForObj(obj),
-    ownKeys() {
-      return Object.keys(obj);
-    },
-    getOwnPropertyDescriptor(_, prop: string | symbol) {
-      if (typeof prop === "symbol") return undefined;
-      if (Object.prototype.hasOwnProperty.call(obj, String(prop)))
-        return {
-          configurable: true,
-          enumerable: true,
-          writable: true,
-          value: obj[String(prop)],
-        };
-      return undefined;
-    },
-  });
+function makeProxyFromObject(obj: PlainEnv) {
+  return makeProxyFromAdapter(createObjectAdapter(obj));
 }
 
 function isMapProxy(e: Env): boolean {

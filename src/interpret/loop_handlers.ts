@@ -7,9 +7,9 @@ import {
   evaluateFlatExpression,
   isTruthy,
 } from "../eval";
-import { findMatchingParen } from "../interpret_helpers";
 import { Env, envHas, envGet, envSet, envDelete } from "../env";
 import type { InterpretFn } from "../types";
+import { parseControlFlowHeader } from "./control_flow_parser";
 
 /**
  * Extract the trailing loop body and validate presence
@@ -51,12 +51,13 @@ export function handleWhileStatement(
 ): boolean {
   if (!/^while\b/.test(stmt)) return false;
 
-  const start = stmt.indexOf("(");
-  if (start === -1) throw new Error("invalid while syntax");
-  const endIdx = findMatchingParen(stmt, { start });
-  if (endIdx === -1) throw new Error("unbalanced parentheses in while");
-  const cond = stmt.slice(start + 1, endIdx).trim();
-  const body = extractTrailingBody(stmt, endIdx, "while");
+  const parsed = parseControlFlowHeader(stmt, {
+    type: "while",
+    keyword: "while",
+    hasElse: false,
+  });
+  const cond = parsed.condition;
+  const body = parsed.body;
 
   while (true) {
     const condOpnd = evaluateReturningOperand(cond, localEnv);
@@ -77,12 +78,13 @@ export function handleForStatement(
 ): boolean {
   if (!/^for\b/.test(stmt)) return false;
 
-  const start = stmt.indexOf("(");
-  if (start === -1) throw new Error("invalid for syntax");
-  const endIdx = findMatchingParen(stmt, { start });
-  if (endIdx === -1) throw new Error("unbalanced parentheses in for");
-  const cond = stmt.slice(start + 1, endIdx).trim();
-  const body = extractTrailingBody(stmt, endIdx, "for");
+  const parsed = parseControlFlowHeader(stmt, {
+    type: "for",
+    keyword: "for",
+    hasElse: false,
+  });
+  const cond = parsed.condition;
+  const body = parsed.body;
 
   // cond should be: let [mut] <name> in <start>.. <end>
   const m = cond.match(/^let\s+(mut\s+)?([a-zA-Z_]\w*)\s+in\s+([\s\S]+)$/);

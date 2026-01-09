@@ -17,6 +17,7 @@ import {
 } from "../types";
 import { Env, envClone, envSet, isEnv } from "../env";
 import { validateAnnotation } from "../interpret_helpers";
+import { createArrayInstanceFromElements } from "./pure_helpers";
 import {
   resolveFunctionFromOperand,
   normalizeBoundThis,
@@ -107,13 +108,7 @@ function callNativeImpl(
   const res = Reflect.apply(nativeFn, undefined, jsArgs);
   if (Array.isArray(res)) {
     const elems = res.map((e) => (typeof e === "number" ? e : e));
-    return {
-      type: "array-instance",
-      isArray: true,
-      elements: elems,
-      length: elems.length,
-      initializedCount: elems.length,
-    };
+    return createArrayInstanceFromElements(elems);
   }
   return res;
 }

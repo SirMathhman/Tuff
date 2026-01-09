@@ -25,6 +25,10 @@ import {
   type Pointer,
 } from "../types";
 import { Env, envHas, envGet, envEntries } from "../env";
+import {
+  buildThisBindingFromEnv,
+  createArrayInstanceFromElements,
+} from "./pure_helpers";
 
 interface BindingTarget {
   binding: RuntimeValue;
@@ -305,32 +309,11 @@ export function resolveIdentifier(
       // a `this` object from the current env so method bodies can access
       // fields (this occurs when `this` wasn't set by the call path).
       const val = envGet(ctx.localEnv, "this");
-      if (val === undefined) return buildThisBinding(ctx.localEnv);
+      if (val === undefined) return buildThisBindingFromEnv(ctx.localEnv);
       return val;
     }
 
-    return buildThisBinding(ctx.localEnv);
-  }
-
-  function buildThisBinding(localEnv: Env): ThisBinding {
-    const thisObj: ThisBinding = {
-      type: "this-binding",
-      isThisBinding: true,
-      fieldValues: new Map(),
-    };
-    for (const [key, value] of envEntries(localEnv)) {
-      if (key === "this") continue;
-      if (isPlainObject(value) && hasValue(value) && value.value !== undefined)
-        thisObj.fieldValues.set(key, value.value);
-      else if (
-        typeof value === "number" ||
-        typeof value === "string" ||
-        typeof value === "boolean"
-      )
-        thisObj.fieldValues.set(key, value);
-      else if (!isStructDef(value)) thisObj.fieldValues.set(key, value);
-    }
-    return thisObj;
+    return buildThisBindingFromEnv(ctx.localEnv);
   }
 
   // Type name placeholder

@@ -4,7 +4,14 @@ import {
   getArrayElementFromInstance,
   throwCannotAccessField,
   throwCannotAccessFieldMissing,
+  throwInvalidFieldAccess,
 } from "./pure_helpers";
+import {
+  findOperandMatching,
+  applyOperandReplacement,
+  replaceOperandRange,
+  type OperandResolutionCtx,
+} from "./operand_resolution";
 import { makeBoundWrapperFromOrigFn } from "./functions";
 import {
   isPlainObject,
@@ -57,32 +64,23 @@ interface ProcessOperatorsCtxExtra {
 
 type ProcessOperatorsCtx = ProcessOperatorsContext & ProcessOperatorsCtxExtra;
 
+// eslint-disable-next-line max-params
+function replaceOperands(
+  ctx: ProcessOperatorsCtx,
+  startIdx: number,
+  deleteCount: number,
+  newOperand: RuntimeValue
+) {
+  replaceOperandRange(ctx.operands, ctx.ops, startIdx, deleteCount, newOperand);
+}
+
 function replaceWithBigIntNumber(
   ctx: ProcessOperatorsCtx,
   n: number,
   i: number
 ) {
   const val: IntOperand = { type: "int-operand", valueBig: BigInt(n) };
-  ctx.operands.splice(i, 2, val);
-  ctx.ops.splice(i, 1);
-}
-
-function findNearbyOperandIndex(
-  operands: RuntimeValue[],
-  i: number,
-  predicate: (v: RuntimeValue) => boolean
-): OperandIndexResult | undefined {
-  for (let j = i - 1; j >= 0; j--) {
-    if (operands[j] !== undefined) {
-      if (predicate(operands[j])) return { index: j, isLeft: true };
-    }
-  }
-  for (let j = i + 1; j < operands.length; j++) {
-    if (operands[j] !== undefined) {
-      if (predicate(operands[j])) return { index: j, isLeft: false };
-    }
-  }
-  return undefined;
+  replaceOperands(ctx, i, 2, val);
 }
 
 function tryResolveMissingIndex(
@@ -90,23 +88,20 @@ function tryResolveMissingIndex(
   i: number,
   idxVal: number
 ): boolean {
-  const found = findNearbyOperandIndex(
-    ctx.operands,
-    i,
+  const result = findOperandMatching(
+    { operands: ctx.operands, ops: ctx.ops, currentIndex: i },
     (maybe) => isArrayInstance(maybe) || isThisBinding(maybe)
   );
-  if (!found) return false;
-  const maybe = ctx.operands[found.index];
-  const elem = getArrayElementFromInstance(maybe, idxVal);
-  if (found.isLeft) {
-    const count = i - found.index + 1;
-    ctx.operands.splice(found.index, count, elem);
-    ctx.ops.splice(i, 1);
-  } else {
-    const count = found.index - i + 1;
-    ctx.operands.splice(i, count, elem);
-    ctx.ops.splice(i, 1);
-  }
+  if (!result) return false;
+
+  const elem = getArrayElementFromInstance(result.operand, idxVal);
+  applyOperandReplacement(
+    { operands: ctx.operands, ops: ctx.ops, currentIndex: i },
+    i,
+    result.foundIndex,
+    elem,
+    result.isLeft
+  );
   return true;
 }
 
@@ -147,10 +142,6 @@ function resolveMethodWrapper(ctx: ProcessOperatorsCtx, method: MethodAccess) {
   if (binding !== undefined && isFnWrapper(binding))
     return makeBoundWrapperFromOrigFn(binding.fn, method.receiver);
   return undefined;
-}
-
-function throwInvalidFieldAccess(fieldName: string): never {
-  throw new Error(`invalid field access: ${fieldName}`);
 }
 
 function handleCallAt(ctx: ProcessOperatorsCtx, i: number): boolean {
@@ -205,15 +196,13 @@ function handleIndexAt(ctx: ProcessOperatorsCtx, i: number): boolean {
   ) {
     const targetVal = getArrayTargetFromPointer(ctx, arrOperand, "index");
     const elem = getArrayElementFromInstance(targetVal, idxVal);
-    ctx.operands.splice(i, 2, elem);
-    ctx.ops.splice(i, 1);
+    replaceOperands(ctx, i, 2, elem);
     return true;
   }
 
   if (isArrayInstance(arrOperand)) {
     const elem = getArrayElementFromInstance(arrOperand, idxVal);
-    ctx.operands.splice(i, 2, elem);
-    ctx.ops.splice(i, 1);
+    replaceOperands(ctx, i, 2, elem);
     return true;
   }
   throw new Error("cannot index non-array value");
@@ -224,25 +213,20 @@ function handleDotOnMissing(
   i: number,
   fieldName: string
 ): boolean {
-  const found = findNearbyOperandIndex(
-    ctx.operands,
-    i,
+  const result = findOperandMatching(
+    { operands: ctx.operands, ops: ctx.ops, currentIndex: i },
     (maybe) => isStructInstance(maybe) || isThisBinding(maybe)
   );
-  if (!found) return false;
+  if (!result) return false;
 
-  const maybe = ctx.operands[found.index];
-  const fieldValue = getFieldValueFromInstance(maybe, fieldName);
-  if (found.isLeft) {
-    const count = i - found.index + 1;
-    ctx.operands.splice(found.index, count, fieldValue);
-    ctx.ops.splice(i, 1);
-    return true;
-  }
-
-  const count = found.index - i + 1;
-  ctx.operands.splice(i, count, fieldValue);
-  ctx.ops.splice(i, 1);
+  const fieldValue = getFieldValueFromInstance(result.operand, fieldName);
+  applyOperandReplacement(
+    { operands: ctx.operands, ops: ctx.ops, currentIndex: i },
+    i,
+    result.foundIndex,
+    fieldValue,
+    result.isLeft
+  );
   return true;
 }
 
@@ -271,6 +255,7 @@ function handleDotOnArrayLike(
   )
     return true;
   throwInvalidFieldAccess(fieldAccess.fieldName);
+  return false; // Unreachable, but satisfies type checker
 }
 
 function handleStructOrThisField(
@@ -293,8 +278,7 @@ function handleStructOrThisField(
     fieldAccess.receiver,
     fieldAccess.fieldName
   );
-  ctx.operands.splice(i, 2, fieldValue);
-  ctx.ops.splice(i, 1);
+  replaceOperands(ctx, i, 2, fieldValue);
   return true;
 }
 
@@ -350,8 +334,7 @@ function handleDotOnStructOrThis(
   if (tryInvokeMethodWrapper(ctx, i, wrapper)) return true;
 
   markWrapperAutoCall(wrapper);
-  ctx.operands.splice(i, 2, wrapper);
-  ctx.ops.splice(i, 1);
+  replaceOperands(ctx, i, 2, wrapper);
   return true;
 }
 
@@ -365,8 +348,7 @@ function handlePrimitiveFieldAccess(
     receiver: fieldAccess.receiver,
   });
   if (!wrapper) return false;
-  ctx.operands.splice(i, 2, wrapper);
-  ctx.ops.splice(i, 1);
+  replaceOperands(ctx, i, 2, wrapper);
   return true;
 }
 
