@@ -57,8 +57,8 @@ function tryMergeExternSignature(ctx: MergeExternContext): boolean {
       typeof resultAnnotation === "string"
         ? resultAnnotation
         : typeof getProp(existing.fn, "resultAnnotation") === "string"
-          ? String(getProp(existing.fn, "resultAnnotation"))
-          : undefined,
+        ? String(getProp(existing.fn, "resultAnnotation"))
+        : undefined,
     closureEnv: ensureMapEnv({}),
   };
   if (typeof existingNative === "function") newFn.nativeImpl = existingNative;

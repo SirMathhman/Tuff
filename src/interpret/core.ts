@@ -38,7 +38,9 @@ function validateInterpretAllWithNativeInputs(
 
 // Helper to convert plain object or Map to Map
 /* eslint-disable custom/no-object-indexing */
-function ensureStringMap(input: StringMap | { [k: string]: string }): StringMap {
+function ensureStringMap(
+  input: StringMap | { [k: string]: string }
+): StringMap {
   if (input instanceof Map) return input;
   const map = new Map<string, string>();
   for (const k of Object.keys(input)) map.set(k, input[k]);
@@ -311,7 +313,7 @@ export function interpretAll(
   scripts: StringMap | { [k: string]: string },
   mainNamespace: string
 ): number {
-/* eslint-enable custom/no-object-indexing */
+  /* eslint-enable custom/no-object-indexing */
   // Forward to interpretAllWithNative with no native modules
   return interpretAllWithNative(scripts, {}, mainNamespace);
 }
@@ -329,11 +331,13 @@ export function interpretAllWithNative(
   nativeModules: StringMap | { [k: string]: string },
   mainNamespace: string
 ): number {
-/* eslint-enable custom/no-object-indexing */
+  /* eslint-enable custom/no-object-indexing */
   validateInterpretAllWithNativeInputs(scripts, nativeModules, mainNamespace);
 
   const normalizedScripts = normalizeNamespaceMap(ensureStringMap(scripts));
-  const normalizedNative = normalizeNamespaceMap(ensureStringMap(nativeModules));
+  const normalizedNative = normalizeNamespaceMap(
+    ensureStringMap(nativeModules)
+  );
 
   if (!normalizedScripts.has(mainNamespace))
     throw new Error("main namespace not found");

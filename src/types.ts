@@ -19,71 +19,105 @@ interface FunctionObjectMeta {
 // Complete function object with all properties
 export type FunctionObject = FunctionObjectCore & FunctionObjectMeta;
 
-// Type discriminator field for discriminated union
+// Operand type discriminators (numeric and boolean values)
+export type OperandType = "bool-operand" | "float-operand" | "int-operand";
+
+// Function and binding type discriminators
+export type FunctionBindingType = "fn-wrapper" | "this-binding";
+
+// Structure type discriminators
+export type StructureType = "struct-instance" | "struct-def";
+
+// Collection type discriminators
+export type CollectionType = "array-instance";
+
+// Pointer type discriminator
+export type PointerType = "pointer";
+
+// Type discriminator field for discriminated union (max 5 union members)
 export type RuntimeValueType =
-  | "bool-operand"
-  | "float-operand"
-  | "int-operand"
-  | "fn-wrapper"
-  | "this-binding"
-  | "struct-instance"
-  | "struct-def"
-  | "array-instance"
-  | "pointer";
+  | OperandType
+  | FunctionBindingType
+  | StructureType
+  | CollectionType
+  | PointerType;
 
 // Base interface with optional type discriminator
 export interface TypedValue {
   type: RuntimeValueType;
 }
 
-// Object-like runtime value types (excludes primitives)
-type PlainObjectTypes = 
-  | BoolOperand
-  | FloatOperand
-  | IntOperand
-  | FnWrapper
-  | ThisBinding
-  | StructInstance
-  | StructDef
-  | ArrayInstance
-  | Pointer
-  | ArrayLiteral
-  | KindBits
-  | Ident
-  | AddrOf
-  | Deref
-  | CallArgs
-  | CallApp
-  | StructInstantiation
-  | Value
-  | Mutable
-  | Uninitialized
-  | Annotation
-  | ParsedAnnotation
-  | LiteralAnnotation
-  | Params
-  | ClosureEnv
-  | Body
-  | IsBlock
-  | Name
-  | Fields
-  | PtrMutable
-  | PtrIsBool
-  | Yield;
+// Operand types (numeric and boolean values with metadata)
+type OperandTypes = BoolOperand | FloatOperand | IntOperand;
+
+// Function and binding types
+type FunctionTypes = FnWrapper | ThisBinding;
+
+// Structure types (struct definitions, instances, and instantiation expressions)
+type StructureTypes = StructInstance | StructDef | StructInstantiation;
+
+// Array and collection types
+type ArrayTypes = ArrayInstance | ArrayLiteral;
+
+// Pointer and reference types
+type PointerTypes = Pointer | AddrOf | Deref | PtrMutable | PtrIsBool;
+
+// Identifier and value types
+type IdentifierTypes = Ident | Value | KindBits;
+
+// Call and instantiation expression types
+type CallTypes = CallArgs | CallApp | StructInstantiation;
+
+// Type annotation types
+type TypeAnnotationTypes = Annotation | ParsedAnnotation | LiteralAnnotation;
+
+// Variable state descriptor types
+type StateTypes = Params | Mutable | Uninitialized;
+
+// Function metadata types
+type FunctionMetadataTypes = ClosureEnv | Body | IsBlock;
+
+// Naming and field descriptor types
+type DescriptorTypes = Yield | Name | Fields;
+
+// Type system metadata (annotations, state, function metadata, descriptors)
+type TypeSystemMetadata =
+  | TypeAnnotationTypes
+  | StateTypes
+  | FunctionMetadataTypes
+  | DescriptorTypes;
+
+// Metadata and property descriptor types (used for parsing/evaluation) - max 5 union members
+type MetadataTypes =
+  | PointerTypes
+  | IdentifierTypes
+  | CallTypes
+  | TypeSystemMetadata;
+
+// Object-like runtime value types (excludes primitives) - max 5 union members
+type PlainObjectTypes =
+  | OperandTypes
+  | FunctionTypes
+  | StructureTypes
+  | ArrayTypes
+  | MetadataTypes;
+
+// Numeric primitive types
+type NumericTypes = number | bigint;
+
+// Primitive value types (basic JavaScript primitives) - max 5 union members
+type PrimitiveTypes = string | NumericTypes | boolean | undefined | null;
+
+// Collection types (Map and Array)
+type CollectionTypes = Map<string, RuntimeValue> | RuntimeValue[];
 
 // Runtime value type - represents any value that can exist at runtime in the interpreter
-// This is a union of all possible runtime value types
+// This is a union of all possible runtime value types (max 5 union members)
 export type RuntimeValue =
-  | string
-  | number
-  | bigint
-  | boolean
-  | undefined
-  | null
+  | PrimitiveTypes
   | Env
   | PlainObjectTypes
-  | Map<string, RuntimeValue>
-  | RuntimeValue[];
+  | CollectionTypes;
 
 export interface BoolOperand {
   type: "bool-operand";
@@ -269,12 +303,7 @@ export function isPlainObject(v: RuntimeValue): v is PlainObjectTypes {
 }
 
 export function isFunctionObject(v: RuntimeValue): v is FunctionObject {
-  return (
-    isPlainObject(v) &&
-    "params" in v &&
-    "body" in v &&
-    "isBlock" in v
-  );
+  return isPlainObject(v) && "params" in v && "body" in v && "isBlock" in v;
 }
 
 export function isBoolOperand(v: RuntimeValue): v is BoolOperand {

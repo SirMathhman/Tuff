@@ -5,6 +5,7 @@ const maxInterfaceFields = require("./eslint-rules/max-interface-fields");
 const noUnknownReturn = require("./eslint-rules/no-unknown-return");
 const noUnknownParam = require("./eslint-rules/no-unknown-param");
 const noObjectIndexing = require("./eslint-rules/no-object-indexing");
+const maxUnionTypes = require("./eslint-rules/max-union-types");
 
 module.exports = [
   {
@@ -21,6 +22,7 @@ module.exports = [
           "no-unknown-return": noUnknownReturn,
           "no-unknown-param": noUnknownParam,
           "no-object-indexing": noObjectIndexing,
+          "max-union-types": maxUnionTypes,
         },
       },
     },
@@ -94,6 +96,8 @@ module.exports = [
       "custom/no-unknown-param": "error",
       // Custom rule: Ban object indexing signatures
       "custom/no-object-indexing": "error",
+      // Custom rule: Limit union type members to maximum of 5
+      "custom/max-union-types": ["error", { max: 5 }],
     },
   },
   {
