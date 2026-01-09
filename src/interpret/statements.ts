@@ -320,9 +320,15 @@ function interpretBlockInternal(
         if (annotation) {
           // resolve type aliases for annotations before validation
           let resolvedAnn = annotation;
-          if (typeof resolvedAnn === "string" && envHas(localEnv, resolvedAnn)) {
+          if (
+            typeof resolvedAnn === "string" &&
+            envHas(localEnv, resolvedAnn)
+          ) {
             const candidate = envGet(localEnv, resolvedAnn);
-            if (isPlainObject(candidate) && getProp(candidate, "typeAlias") !== undefined)
+            if (
+              isPlainObject(candidate) &&
+              getProp(candidate, "typeAlias") !== undefined
+            )
               resolvedAnn = String(getProp(candidate, "typeAlias"));
           }
           validateAnnotation(resolvedAnn, rhsOperand);

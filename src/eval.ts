@@ -79,6 +79,54 @@ export function applyBinaryOp(
     return { boolValue: isTruthy(right) };
   }
 
+  // Support a runtime type test operator `is` (e.g., `x is I32`).
+  if (op === "is") {
+    // Right operand may be a typeName placeholder produced during parsing.
+    const getTypeName = (t: unknown): string | undefined => {
+      if (typeof t === "string") return t;
+      const tn = getProp(t, "typeName");
+      if (typeof tn === "string") return tn;
+      return undefined;
+    };
+    const typeName = getTypeName(right);
+    if (!typeName) throw new Error("invalid type in is expression");
+    const tn = typeName.trim();
+    // Integer types: I32, U8, etc.
+    const intMatch = tn.match(/^([uUiI])(\d+)$/);
+    if (intMatch) {
+      const kind = intMatch[1] === "u" || intMatch[1] === "U" ? "u" : "i";
+      const bits = Number(intMatch[2]);
+      // left must be integral-like
+      if (isIntOperand(left)) {
+        if (hasKindBits(left)) {
+          return { boolValue: left.kind === kind && left.bits === bits };
+        }
+        // no suffix on left: accept if within range
+        try {
+          checkRange(kind, bits, left.valueBig);
+          return { boolValue: true };
+        } catch {
+          return { boolValue: false };
+        }
+      }
+      if (typeof left === "number" && Number.isInteger(left)) {
+        try {
+          checkRange(kind, bits, BigInt(left));
+          return { boolValue: true };
+        } catch {
+          return { boolValue: false };
+        }
+      }
+      return { boolValue: false };
+    }
+
+    if (/^bool$/i.test(tn)) {
+      return { boolValue: isBoolOperand(left) };
+    }
+
+    throw new Error("unsupported type in is expression");
+  }
+
   const leftHasKind = hasKindBits(left);
   const rightHasKind = hasKindBits(right);
   if (leftHasKind || rightHasKind) {
@@ -133,7 +181,6 @@ export function applyBinaryOp(
     checkRange(kind, bits, resBig);
     return { valueBig: resBig, kind, bits };
   }
-
   const leftIsBool = isBoolOperand(left);
   const rightIsBool = isBoolOperand(right);
   const lNum =
@@ -511,6 +558,20 @@ export function evaluateReturningOperand(
       skip();
       continue;
     }
+
+    // Check for `is` operator (type test)
+    if (exprStr.slice(pos).startsWith("is") && !/[a-zA-Z0-9_]/.test(exprStr[pos + 2] || "")) {
+      pos += 2;
+      skip();
+      // Parse the right-side operand (we'll treat bare identifiers that look like
+      // types specially during evaluation)
+      const next = parseOperandAt(exprStr, pos);
+      if (!next) throw new Error("invalid operand after operator");
+      exprTokens.push({ op: "is", operand: next.operand });
+      pos += next.len;
+      skip();
+      continue;
+    }
     // support multi-char operators: || && == != <= >=
     let op: string | undefined = undefined;
     if (exprStr.startsWith("||", pos)) {
@@ -748,6 +809,17 @@ export function evaluateReturningOperand(
           }
         }
         return thisObj;
+      }
+
+      // If this identifier names a declared binding, return its value. If it
+      // doesn't exist in the local env but looks like a type name (e.g., I32,
+      // U8, Bool), keep it as a typeName placeholder instead of throwing so
+      // `x is I32` style checks can work.
+      if (!envHas(localEnv, n)) {
+        if (/^\*?([uUiI]\d+|Bool)$/i.test(n)) {
+          return { typeName: n };
+        }
+        throw new Error(`unknown identifier ${n}`);
       }
 
       const { targetVal: val } = getBindingTarget(n);
