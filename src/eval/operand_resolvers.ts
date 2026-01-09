@@ -163,30 +163,35 @@ export function resolveStructInstantiation(
   }
 
   // Validate all required fields are provided
-  if (!hasFields(structDef) || !Array.isArray(structDef.fields))
-    throw new Error("invalid struct definition");
-  const structFields = structDef.fields;
-  for (const field of structFields) {
-    if (!isPlainObject(field)) throw new Error("invalid struct definition");
-    if (
-      !hasName(field) ||
-      typeof field.name !== "string" ||
-      !hasAnnotation(field) ||
-      typeof field.annotation !== "string"
-    )
+  (function validateStructFields(
+    def: unknown,
+    provided: Set<string>,
+    structName: string
+  ) {
+    if (!hasFields(def) || !Array.isArray(def.fields))
       throw new Error("invalid struct definition");
-    const fieldName = field.name;
-    const annotationRaw = field.annotation;
-    if (!providedFields.has(fieldName)) {
-      throw new Error(`missing field ${fieldName} in struct ${structName}`);
+    const structFields = def.fields;
+    for (const field of structFields) {
+      if (!isPlainObject(field)) throw new Error("invalid struct definition");
+      if (
+        !hasName(field) ||
+        typeof field.name !== "string" ||
+        !hasAnnotation(field) ||
+        typeof field.annotation !== "string"
+      )
+        throw new Error("invalid struct definition");
+      const fieldName = field.name;
+      const annotationRaw = field.annotation;
+      if (!provided.has(fieldName))
+        throw new Error(`missing field ${fieldName} in struct ${structName}`);
+      // For struct fields, just validate that the type annotation is recognized
+      // but don't require literal value matching (different from let bindings)
+      const annotation = annotationRaw.trim();
+      if (!/^[*]?([a-zA-Z_]\w*)(?:\d+)?$/.test(annotation)) {
+        throw new Error(`invalid type annotation for field ${fieldName}`);
+      }
     }
-    // For struct fields, just validate that the type annotation is recognized
-    // but don't require literal value matching (different from let bindings)
-    const annotation = annotationRaw.trim();
-    if (!/^[*]?([a-zA-Z_]\w*)(?:\d+)?$/.test(annotation)) {
-      throw new Error(`invalid type annotation for field ${fieldName}`);
-    }
-  }
+  })(structDef, providedFields, structName);
 
   // Create struct instance
   return {

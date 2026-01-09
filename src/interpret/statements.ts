@@ -49,6 +49,61 @@ function interpretBlockInternal(
     evaluateRhs(rhs, envLocal, interpret, getLastTopLevelStatementLocal);
 
   const stmts = splitTopLevelStatements(s);
+
+  function handleOutFnStatement(stmt: string, localEnv: Env, declared: Set<string>, interpret: InterpretFn): { handled: boolean; last?: unknown } {
+    const stripped = stmt.replace(/^out\s+/, "");
+    const parsed = parseFnComponents(stripped);
+    const tExpr = registerFunctionFromStmt(stripped, localEnv, declared);
+    const __exports = envGet(localEnv, "__exports");
+    if (isPlainObject(__exports)) __exports[parsed.name] = envGet(localEnv, parsed.name);
+    if (tExpr) {
+      return { handled: true, last: interpret(tExpr + ";", localEnv) };
+    }
+    return { handled: true, last: undefined };
+  }
+
+  function handleFnDeclaration(stmt: string, localEnv: Env, declared: Set<string>, interpret: InterpretFn): { handled: boolean; last?: unknown } {
+    const tExpr = registerFunctionFromStmt(stmt, localEnv, declared);
+    if (tExpr) return { handled: true, last: interpret(tExpr + ";", localEnv) };
+    return { handled: true, last: undefined };
+  }
+
+  function handleStructDefinition(stmt: string, localEnv: Env, declared: Set<string>, interpret: InterpretFn): { handled: boolean; last?: unknown } {
+    const structDef = parseStructDef(stmt);
+    if (declared.has(structDef.name)) throw new Error("duplicate declaration");
+    declared.add(structDef.name);
+    envSet(localEnv, structDef.name, {
+      isStructDef: true,
+      name: structDef.name,
+      fields: structDef.fields,
+    });
+    const remaining = stmt.slice(structDef.endPos).trim();
+    if (remaining) return { handled: true, last: interpret(remaining + ";", localEnv) };
+    return { handled: true, last: undefined };
+  }
+
+  function handleYieldStatement(stmt: string, localEnv: Env, evaluateRhsLocal: (rhs: string, envLocal: Env) => unknown): { handled: boolean } {
+    const m = stmt.match(/^yield\s+([\s\S]+)$/);
+    if (!m) throw new Error("yield requires an expression");
+    const rhs = m[1].trim();
+    if (!rhs) throw new Error("yield requires an expression");
+    const rhsOperand = evaluateRhsLocal(rhs, localEnv);
+    // throw a special marker that bubbles out of nested interpret() calls
+    // until it is handled at the expression/initializer boundary
+    throw { __yield: convertOperandToNumber(rhsOperand) };
+  }
+
+  function handleTypeAliasDeclaration(stmt: string, localEnv: Env, declared: Set<string>): { handled: boolean; last?: unknown } {
+    const m = stmt.match(/^type\s+([a-zA-Z_]\w*)\s*=\s*([^;]+);?$/);
+    if (!m) throw new Error("invalid type declaration");
+    const name = m[1];
+    const alias = m[2].trim();
+    if (declared.has(name)) throw new Error("duplicate declaration");
+    declared.add(name);
+    envSet(localEnv, name, { typeAlias: alias });
+    return { handled: true, last: undefined };
+  }
+
   for (let raw of stmts) {
     const stmt = raw.trim();
     if (!stmt) continue;
@@ -56,15 +111,8 @@ function interpretBlockInternal(
     // export function: `out fn name(...) => ...` — register like a normal fn
     // and also export it on localEnv.__exports (if present)
     if (/^out\s+fn\b/.test(stmt)) {
-      const stripped = stmt.replace(/^out\s+/, "");
-      const parsed = parseFnComponents(stripped);
-      const tExpr = registerFunctionFromStmt(stripped, localEnv, declared);
-      const __exports = envGet(localEnv, "__exports");
-      if (isPlainObject(__exports))
-        __exports[parsed.name] = envGet(localEnv, parsed.name);
-      if (tExpr) {
-        last = interpret(tExpr + ";", localEnv);
-      } else last = undefined;
+      const res = handleOutFnStatement(stmt, localEnv, declared, interpret);
+      if (res.handled) last = res.last;
       continue;
     }
 
@@ -88,26 +136,14 @@ function interpretBlockInternal(
     }
 
     if (/^fn\b/.test(stmt)) {
-      // Delegate parsing and registration to helper
-      const tExpr = registerFunctionFromStmt(stmt, localEnv, declared);
-      if (tExpr) {
-        // Evaluate trailing expression as a statement sequence so function calls like
-        // `add()` are executed (interpretExpression can strip calls like `()`).
-        last = interpret(tExpr + ";", localEnv);
-      } else last = undefined;
+      const res = handleFnDeclaration(stmt, localEnv, declared, interpret);
+      if (res.handled) last = res.last;
       continue;
     }
 
     // yield statement: `yield <expr>` causes immediate block-level return with <expr>
     if (/^yield\b/.test(stmt)) {
-      const m = stmt.match(/^yield\s+([\s\S]+)$/);
-      if (!m) throw new Error("yield requires an expression");
-      const rhs = m[1].trim();
-      if (!rhs) throw new Error("yield requires an expression");
-      const rhsOperand = evaluateRhsLocal(rhs, localEnv);
-      // throw a special marker that bubbles out of nested interpret() calls
-      // until it is handled at the expression/initializer boundary
-      throw { __yield: convertOperandToNumber(rhsOperand) };
+      handleYieldStatement(stmt, localEnv, evaluateRhsLocal);
     }
 
     // let statements handled by helper
@@ -124,37 +160,15 @@ function interpretBlockInternal(
     } else {
       // type alias: `type Name = <annotation>`
       if (/^type\b/.test(stmt)) {
-        const m = stmt.match(/^type\s+([a-zA-Z_]\w*)\s*=\s*([^;]+);?$/);
-        if (!m) throw new Error("invalid type declaration");
-        const name = m[1];
-        const alias = m[2].trim();
-        if (declared.has(name)) throw new Error("duplicate declaration");
-        declared.add(name);
-        envSet(localEnv, name, { typeAlias: alias });
-        last = undefined;
+        const res = handleTypeAliasDeclaration(stmt, localEnv, declared);
+        if (res.handled) last = res.last;
         continue;
       }
 
       // struct definition: struct Name { field1 : Type1; field2 : Type2; ... }
       if (/^struct\b/.test(stmt)) {
-        const structDef = parseStructDef(stmt);
-        if (declared.has(structDef.name))
-          throw new Error("duplicate declaration");
-        declared.add(structDef.name);
-        envSet(localEnv, structDef.name, {
-          isStructDef: true,
-          name: structDef.name,
-          fields: structDef.fields,
-        });
-        last = undefined;
-        // If there's remaining content after the struct definition, parse it as an expression
-        const remaining = stmt.slice(structDef.endPos).trim();
-        if (remaining) {
-          // Evaluate the remaining content as statements so trailing declarations
-          // (e.g., a function following a struct declaration on the same line)
-          // are handled correctly.
-          last = interpret(remaining + ";", localEnv);
-        }
+        const res = handleStructDefinition(stmt, localEnv, declared, interpret);
+        if (res.handled) last = res.last;
         continue;
       }
 

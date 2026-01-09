@@ -103,16 +103,16 @@ function handleIsOperator(
   return { boolValue: checkTypeMatch(left, tnRaw) };
 }
 
+
 /**
- * Handle typed integer operations (with kind/bits metadata)
+ * Ensure suffix metadata and compatibility between typed integer operands
  */
-function handleTypedIntegerOp(
-  op: string,
+function ensureSuffixCompatibility(
   left: unknown,
   right: unknown,
   leftHasKind: boolean,
   rightHasKind: boolean
-): { valueBig: bigint; kind: string; bits: number } {
+) {
   const ref = leftHasKind ? left : right;
   if (!hasKindBits(ref)) throw new Error("invalid suffix metadata");
   const { kind, bits } = ref;
@@ -126,28 +126,32 @@ function handleTypedIntegerOp(
     throw new Error("mixed suffix and float not allowed");
   if (!rightHasKind && isFloatOperand(right))
     throw new Error("mixed suffix and float not allowed");
+  return { kind, bits };
+}
 
-  let lBig: bigint;
-  if (leftHasKind) {
-    if (!isIntOperand(left)) throw new Error("invalid left integer operand");
-    lBig = left.valueBig;
-  } else if (typeof left === "number") {
-    lBig = BigInt(left);
-  } else {
-    if (!isIntOperand(left)) throw new Error("invalid left integer operand");
-    lBig = left.valueBig;
+function getBigValue(val: unknown, hasKind: boolean, side: "left" | "right") {
+  if (typeof val === "number") {
+    if (hasKind === true) throw new Error(`invalid typed integer ${side} operand`);
+    return BigInt(val);
   }
+  if (!isIntOperand(val)) throw new Error(`invalid ${side} integer operand`);
+  return val.valueBig;
+}
 
-  let rBig: bigint;
-  if (rightHasKind) {
-    if (!isIntOperand(right)) throw new Error("invalid right integer operand");
-    rBig = right.valueBig;
-  } else if (typeof right === "number") {
-    rBig = BigInt(right);
-  } else {
-    if (!isIntOperand(right)) throw new Error("invalid right integer operand");
-    rBig = right.valueBig;
-  }
+/**
+ * Handle typed integer operations (with kind/bits metadata)
+ */
+function handleTypedIntegerOp(
+  op: string,
+  left: unknown,
+  right: unknown,
+  leftHasKind: boolean,
+  rightHasKind: boolean
+): { valueBig: bigint; kind: string; bits: number } {
+  const { kind, bits } = ensureSuffixCompatibility(left, right, leftHasKind, rightHasKind);
+
+  const lBig = getBigValue(left, leftHasKind, "left");
+  const rBig = getBigValue(right, rightHasKind, "right");
 
   let resBig: bigint;
   if (op === "+") resBig = lBig + rBig;

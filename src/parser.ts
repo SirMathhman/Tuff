@@ -284,12 +284,37 @@ export function parseOperandAt(src: string, pos: number) {
     return { value: maybeOperand };
   }
 
-  if (m) {
+  function parseCallAt(j: number) {
+    const endIdx = findMatchingClosingParen(src, j);
+    if (endIdx === -1) throw new Error("unbalanced parentheses in call");
+    const inner = src.slice(j + 1, endIdx);
+    const args = parseCommaSeparatedArgs(inner);
+    return { args, endIdx };
+  }
+
+  function parseStructFields(inner: string) {
+    const fieldParts = parseCommaSeparatedArgs(inner);
+    const fields: Array<{ name: string; value: string }> = [];
+    for (const fieldPart of fieldParts) {
+      const fm = fieldPart.match(/^([a-zA-Z_]\w*)\s*:\s*(.+)$/);
+      if (!fm) {
+        // Allow positional fields if they're just values
+        fields.push({ name: `_${fields.length}`, value: fieldPart });
+      } else {
+        fields.push({ name: fm[1], value: fm[2].trim() });
+      }
+    }
+    return fields;
+  }
+
+  function parseLiteralMatch(m: RegExpMatchArray) {
     const innerOperand = parseOperand(m[1]);
     if (!innerOperand) throw new Error("invalid operand");
     const operand = finalizeOperand(innerOperand);
     return { operand, len: i - pos + m[1].length };
   }
+
+  if (m) return parseLiteralMatch(m);
   // fallback: identifier
   const id = src.slice(i).match(/^([a-zA-Z_]\w*)/);
   if (id) {
@@ -300,10 +325,7 @@ export function parseOperandAt(src: string, pos: number) {
     let j = i + id[1].length;
     while (j < src.length && /[\s]/.test(src[j])) j++;
     if (src[j] === "(") {
-      const endIdx = findMatchingClosingParen(src, j);
-      if (endIdx === -1) throw new Error("unbalanced parentheses in call");
-      const inner = src.slice(j + 1, endIdx);
-      const args = parseCommaSeparatedArgs(inner);
+      const { args, endIdx } = parseCallAt(j);
       operand.callArgs = args;
       return {
         operand: finalizeOperand(operand),
@@ -312,21 +334,9 @@ export function parseOperandAt(src: string, pos: number) {
     } else if (src[j] === "{") {
       // struct instantiation: Name { field1: value1, field2: value2, ... }
       const endIdx = findMatchingDelimiter(src, j, "{", "}");
-      if (endIdx === -1)
-        throw new Error("unbalanced braces in struct instantiation");
+      if (endIdx === -1) throw new Error("unbalanced braces in struct instantiation");
       const inner = src.slice(j + 1, endIdx).trim();
-      // Parse field assignments (comma-separated, but values can have operators)
-      const fieldParts = parseCommaSeparatedArgs(inner);
-      const fields: Array<{ name: string; value: string }> = [];
-      for (const fieldPart of fieldParts) {
-        const fm = fieldPart.match(/^([a-zA-Z_]\w*)\s*:\s*(.+)$/);
-        if (!fm) {
-          // Allow positional fields if they're just values
-          fields.push({ name: `_${fields.length}`, value: fieldPart });
-        } else {
-          fields.push({ name: fm[1], value: fm[2].trim() });
-        }
-      }
+      const fields = parseStructFields(inner);
       operand.structInstantiation = { name: id[1], fields };
       // len should be from start position i to endIdx (inclusive of closing brace)
       return {

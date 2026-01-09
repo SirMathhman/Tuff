@@ -84,35 +84,40 @@ export function assignToPlaceholder(
     (!hasMutable(existing) || !existing.mutable)
   )
     throw new Error("cannot reassign annotated literal");
-  if (
-    hasParsedAnnotation(existing) &&
-    hasUninitialized(existing) &&
-    existing.uninitialized
-  ) {
-    validateAnnotation(existing.parsedAnnotation, newVal);
-  } else if (
-    hasAnnotation(existing) &&
-    typeof existing.annotation === "string"
-  ) {
-    const annotation = existing.annotation;
-    const typeOnly = annotation.match(/^\s*([uUiI])\s*(\d+)\s*$/);
-    if (typeOnly || /^\s*bool\s*$/i.test(annotation)) {
-      validateAnnotation(annotation, newVal);
-    }
-  }
+  // Run annotation-specific validations and checks on the placeholder before assignment.
+  (function validatePlaceholder(existingObj: unknown, value: unknown) {
+    if (
+      hasParsedAnnotation(existingObj) &&
+      hasUninitialized(existingObj) &&
+      existingObj.uninitialized
+    ) {
+      // If the parsed annotation represents a slice (e.g., `*[T]`), ensure the
+      // placeholder is mutable before allowing assignment; otherwise validate
+      // the parsed annotation normally.
+      if (
+        existingObj.parsedAnnotation &&
+        typeof existingObj.parsedAnnotation === "string" &&
+        parseSliceAnnotation(existingObj.parsedAnnotation) &&
+        (!hasMutable(existingObj) || !existingObj.mutable)
+      ) {
+        throw new Error("assignment to immutable variable");
+      }
 
-  // Special-case: if a placeholder had a slice annotation and is uninitialized,
-  // require it to be mutable before assigning to it.
-  if (
-    hasParsedAnnotation(existing) &&
-    existing.parsedAnnotation &&
-    typeof existing.parsedAnnotation === "string" &&
-    parseSliceAnnotation(existing.parsedAnnotation) &&
-    hasUninitialized(existing) &&
-    existing.uninitialized &&
-    (!hasMutable(existing) || !existing.mutable)
-  )
-    throw new Error("assignment to immutable variable");
+      validateAnnotation(existingObj.parsedAnnotation, value);
+      return;
+    }
+
+    if (
+      hasAnnotation(existingObj) &&
+      typeof existingObj.annotation === "string"
+    ) {
+      const annotation = existingObj.annotation;
+      const typeOnly = annotation.match(/^\s*([uUiI])\s*(\d+)\s*$/);
+      if (typeOnly || /^\s*bool\s*$/i.test(annotation)) {
+        validateAnnotation(annotation, value);
+      }
+    }
+  })(existing, newVal);
 
   // Use setter helpers to avoid 'as' type assertions
   if (hasValue(existing)) {

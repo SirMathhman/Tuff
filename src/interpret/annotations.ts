@@ -107,9 +107,14 @@ export function validateAnnotation(
 
   // pointer annotation: *<inner>
   if (typeof annotation === "string" && /^\s*\*/.test(annotation)) {
-    const inner = annotation.replace(/^\s*\*/g, "").trim();
+    return validatePointerAnnotation(annotation, rhsOperand);
+  }
+
+  function validatePointerAnnotation(annText: string, rhsOperand: unknown) {
+    const inner = annText.replace(/^\s*\*/g, "").trim();
     if (!isPointer(rhsOperand))
       throw new Error("annotation requires pointer initializer");
+
     // inner can be type-only like I32, Bool, or a literal operand
     const parsedType = (function (s: string) {
       const t = s.match(/^\s*([uUiI])\s*(\d+)\s*$/);

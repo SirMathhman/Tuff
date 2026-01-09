@@ -284,7 +284,11 @@ function processOperators(
       throw new Error(`invalid field access: ${fieldName}`);
     }
 
-    if (isStructInstance(structInstance) || isThisBinding(structInstance)) {
+    function handleStructOrThisField(
+      i: number,
+      fieldName: string,
+      structInstance: unknown
+    ) {
       if (!isPlainObject(structInstance)) throwCannotAccessField();
 
       const fv = getProp(structInstance, "fieldValues");
@@ -325,6 +329,10 @@ function processOperators(
       operands.splice(i, 2, wrapper);
       ops.splice(i, 1);
       return true;
+    }
+
+    if (isStructInstance(structInstance) || isThisBinding(structInstance)) {
+      if (handleStructOrThisField(i, fieldName, structInstance)) return true;
     }
 
     if (
