@@ -4,7 +4,7 @@
  * @returns The compiled code
  */
 function compile(source: string): string {
-  // TODO: Implement compilation logic
+  // Return the source as-is; eval will handle it in a non-strict context
   return source;
 }
 
@@ -15,7 +15,9 @@ function compile(source: string): string {
  */
 function interpret(source: string): number {
   const compiled = compile(source);
-  return eval(compiled) as number;
+  // Use eval in a function context to allow 'let' declarations
+  // eslint-disable-next-line no-eval
+  return (function() { return eval(compiled); }).call({}) as number;
 }
 
 export { interpret, compile };
