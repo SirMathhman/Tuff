@@ -29,8 +29,8 @@ module.exports = [
         { max: 500, skipBlankLines: true, skipComments: false },
       ],
       // Enforce cyclomatic complexity limit
-      "complexity": ["error", { max: 60 }],
-      // Previously: warn, max 30. Increased to 60 and changed to error to start enforcing in CI
+      complexity: ["error", { max: 50 }],
+      // Previously: error, max 60. Lowered to 50 to tighten complexity checks
       // Disallow use of the `Record` utility type in favor of `Map` via AST selector
       "no-restricted-syntax": [
         "error",

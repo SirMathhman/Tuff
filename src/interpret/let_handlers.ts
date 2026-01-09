@@ -7,7 +7,12 @@ import {
   parseOperand,
   findMatchingParen,
 } from "../interpret_helpers";
-import { isPlainObject, isIntOperand, isArrayInstance, getProp } from "../types";
+import {
+  isPlainObject,
+  isIntOperand,
+  isArrayInstance,
+  getProp,
+} from "../types";
 import { validateAnnotation } from "../interpret_helpers";
 
 export interface HandleLetResult {
@@ -54,10 +59,14 @@ export function handleLetStatement(
         }
       }
 
-      const arrAnn = typeof annText === "string" ? parseArrayAnnotation(annText) : undefined;
+      const arrAnn =
+        typeof annText === "string" ? parseArrayAnnotation(annText) : undefined;
       if (arrAnn) {
         // When declaring without initializer, require initCount === 0
-        if (arrAnn.initCount !== 0) throw new Error("array declaration without initializer requires init count 0");
+        if (arrAnn.initCount !== 0)
+          throw new Error(
+            "array declaration without initializer requires init count 0"
+          );
         const arrInst = makeArrayInstance(arrAnn);
         declared.add(name);
         if (mutFlag)
@@ -76,14 +85,18 @@ export function handleLetStatement(
       } else if (/^\s*bool\s*$/i.test(String(annText))) {
         // fine
       } else {
-        const sliceAnn = typeof annText === "string" ? parseSliceAnnotation(annText) : undefined;
+        const sliceAnn =
+          typeof annText === "string"
+            ? parseSliceAnnotation(annText)
+            : undefined;
         if (sliceAnn) {
           parsedAnn = String(annText);
           literalAnnotation = false;
         } else {
           const ann = parseOperand(String(annText));
           if (!ann) throw new Error("invalid annotation in let");
-          if (!isIntOperand(ann)) throw new Error("annotation must be integer literal with suffix");
+          if (!isIntOperand(ann))
+            throw new Error("annotation must be integer literal with suffix");
           parsedAnn = ann;
           literalAnnotation = true;
         }
@@ -126,7 +139,10 @@ export function handleLetStatement(
       let resolvedAnn = annotation;
       if (typeof resolvedAnn === "string" && envHas(localEnv, resolvedAnn)) {
         const candidate = envGet(localEnv, resolvedAnn);
-        if (isPlainObject(candidate) && getProp(candidate, "typeAlias") !== undefined)
+        if (
+          isPlainObject(candidate) &&
+          getProp(candidate, "typeAlias") !== undefined
+        )
           resolvedAnn = String(getProp(candidate, "typeAlias"));
       }
       validateAnnotation(resolvedAnn, rhsOperand);
@@ -134,7 +150,9 @@ export function handleLetStatement(
 
     declared.add(name);
     // If RHS is an array instance, clone it to enforce copy-on-assignment
-    const valToStore = isArrayInstance(rhsOperand) ? cloneArrayInstance(rhsOperand) : rhsOperand;
+    const valToStore = isArrayInstance(rhsOperand)
+      ? cloneArrayInstance(rhsOperand)
+      : rhsOperand;
     if (mutFlag) {
       // store as mutable wrapper so future assignments update .value
       envSet(localEnv, name, {

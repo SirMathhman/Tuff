@@ -274,10 +274,20 @@ export function parseOperandAt(src: string, pos: number) {
     return op;
   }
 
+  function isOperandObject(op: unknown): op is { [k: string]: unknown } {
+    return typeof op === "object" && op != undefined;
+  }
+
+  function finalizeOperand(base: unknown): { [k: string]: unknown } {
+    const maybeOperand = applyPrefixes(base, prefixes);
+    if (isOperandObject(maybeOperand)) return maybeOperand;
+    return { value: maybeOperand };
+  }
+
   if (m) {
     const innerOperand = parseOperand(m[1]);
     if (!innerOperand) throw new Error("invalid operand");
-    const operand = applyPrefixes(innerOperand, prefixes);
+    const operand = finalizeOperand(innerOperand);
     return { operand, len: i - pos + m[1].length };
   }
   // fallback: identifier
@@ -295,8 +305,10 @@ export function parseOperandAt(src: string, pos: number) {
       const inner = src.slice(j + 1, endIdx);
       const args = parseCommaSeparatedArgs(inner);
       operand.callArgs = args;
-      operand = applyPrefixes(operand, prefixes);
-      return { operand, len: i - pos + id[1].length + (endIdx - j + 1) };
+      return {
+        operand: finalizeOperand(operand),
+        len: i - pos + id[1].length + (endIdx - j + 1),
+      };
     } else if (src[j] === "{") {
       // struct instantiation: Name { field1: value1, field2: value2, ... }
       const endIdx = findMatchingDelimiter(src, j, "{", "}");
@@ -316,13 +328,11 @@ export function parseOperandAt(src: string, pos: number) {
         }
       }
       operand.structInstantiation = { name: id[1], fields };
-      operand = applyPrefixes(operand, prefixes);
       // len should be from start position i to endIdx (inclusive of closing brace)
-      return { operand, len: i - pos + (endIdx - i + 1) };
+      return { operand: finalizeOperand(operand), len: i - pos + (endIdx - i + 1) };
     }
 
-    operand = applyPrefixes(operand, prefixes);
-    return { operand, len: i - pos + id[1].length };
+    return { operand: finalizeOperand(operand), len: i - pos + id[1].length };
   }
   return undefined;
 }

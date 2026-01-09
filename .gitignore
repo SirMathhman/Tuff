@@ -1,1 +1,5 @@
 /node_modules
+
+# Temporary local debug helpers (not part of the project source)
+/scripts/find_unmatched_*.js
+/scripts/ts_parse_eval.js

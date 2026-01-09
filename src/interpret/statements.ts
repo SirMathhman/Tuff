@@ -16,25 +16,11 @@ import {
   handleExternLet,
   handleImportStatement,
 } from "./extern_handlers";
-import {
-  handleThisFieldAssignment,
-  handleIndexAssignment,
-  handleDerefAssignment,
-  handleRegularAssignment,
-} from "./assignment_handlers";
 import { handleLetStatement } from "./let_handlers";
-import { Env, envClone, envGet, envSet, envHas } from "../env";
+import { handleAssignmentStatement } from "./assignment_statement";
+import { Env, envClone, envGet, envSet } from "../env";
 import type { InterpretFn } from "../types";
-import {
-  isPlainObject,
-  isPointer,
-  toErrorMessage,
-  unwrapBindingValue,
-  hasUninitialized,
-  hasAnnotation,
-  hasMutable,
-  hasPtrMutable,
-} from "../types";
+import { isPlainObject, toErrorMessage } from "../types";
 
 export function interpretBlock(
   s: string,
@@ -193,64 +179,16 @@ function interpretBlockInternal(
       // Handle all assignment statements: compound assignment, deref assignment, etc.
       const assignParts = extractAssignmentParts(stmt);
       if (assignParts) {
-        const { isDeref, name, op, rhs, isThisField } = assignParts;
-
-        // Handle this.field assignment
-        if (isThisField) {
-          handleThisFieldAssignment(name, op, rhs, localEnv, evaluateRhsLocal);
-          last = undefined;
+        const res = handleAssignmentStatement(
+          assignParts,
+          localEnv,
+          evaluateRhsLocal,
+          convertOperandToNumber
+        );
+        if (res.handled) {
+          last = res.last;
           continue;
         }
-
-        // Index assignment support: name[index] = rhs or name[index] += rhs
-        if (assignParts.indexExpr !== undefined) {
-          handleIndexAssignment(
-            name,
-            assignParts.indexExpr,
-            op,
-            rhs,
-            localEnv,
-            evaluateReturningOperand,
-            evaluateRhsLocal,
-            convertOperandToNumber
-          );
-          last = undefined;
-          continue;
-        }
-
-        if (!envHas(localEnv, name))
-          throw new Error("assignment to undeclared variable");
-        const existing = envGet(localEnv, name);
-        // allow assignment to uninitialized placeholders (from declaration-only lets) or normal vars
-        // only throw if trying to use an uninitialized var in certain contexts (not assignment)
-        if (
-          isPlainObject(existing) &&
-          hasUninitialized(existing) &&
-          existing.uninitialized &&
-          !hasAnnotation(existing) &&
-          !hasMutable(existing)
-        )
-          throw new Error("use of uninitialized variable");
-
-        let ptr: unknown;
-        if (isDeref) {
-          ptr = unwrapBindingValue(existing);
-          if (!isPointer(ptr))
-            throw new Error("cannot dereference non-pointer");
-          if (!hasPtrMutable(ptr) || ptr.ptrMutable !== true)
-            throw new Error("cannot assign through immutable pointer");
-        }
-
-        const rhsOperand = evaluateRhsLocal(rhs, localEnv);
-
-        if (isDeref) {
-          handleDerefAssignment(ptr, op, rhsOperand, localEnv);
-        } else {
-          handleRegularAssignment(name, op, rhsOperand, existing, localEnv);
-        }
-
-        last = undefined;
-        continue;
       } else {
         // Support statements that begin with a braced block possibly followed by an
         // expression (e.g., `{ } x`). Evaluate leading braced blocks in sequence and

@@ -10,6 +10,8 @@ A small TypeScript interpreter project.
 - Run code duplication check with `pnpm cpd`
 - Run all checks with `pnpm check`
 
+Lint note: ESLint enforces a max cyclomatic complexity of 50 per function.
+
 ## Architecture
 
 The codebase is organized into focused modules under 500 lines each:

@@ -27,29 +27,74 @@ import {
 export interface AssignmentParts {
   isDeref: boolean;
   name: string;
-  op: string;
+  op: string | undefined;
   rhs: string;
-  isThisField: boolean;
-  indexExpr: string | undefined;
+  isThisField?: boolean;
+  indexExpr?: string;
 }
 
 /** Type for RHS evaluation callback functions */
 type EvaluateRhsCallback = (expr: string, e: Env) => unknown;
 
+function requireExistingAndEvalRhs(
+  name: string,
+  rhs: string,
+  localEnv: Env,
+  evaluateRhsLocal: EvaluateRhsCallback
+): { existing: unknown; rhsOperand: unknown } {
+  if (!envHas(localEnv, name))
+    throw new Error("assignment to undeclared variable");
+  const existing = envGet(localEnv, name);
+  const rhsOperand = evaluateRhsLocal(rhs, localEnv);
+  return { existing, rhsOperand };
+}
+
 /**
- * Handle this.field assignment
+ * Shared boilerplate for assignments that target a local binding.
+ * (Kept here to avoid duplication and keep CPD happy.)
  */
-export function handleThisFieldAssignment(
+export function handleVariableOrDerefAssignment(
+  isDeref: boolean,
   name: string,
   op: string | undefined,
   rhs: string,
   localEnv: Env,
   evaluateRhsLocal: EvaluateRhsCallback
 ): void {
-  if (!envHas(localEnv, name))
-    throw new Error("assignment to undeclared variable");
-  const existing = envGet(localEnv, name);
-  const rhsOperand = evaluateRhsLocal(rhs, localEnv);
+  const { existing, rhsOperand } = requireExistingAndEvalRhs(
+    name,
+    rhs,
+    localEnv,
+    evaluateRhsLocal
+  );
+
+  if (isDeref) {
+    const ptr = unwrapBindingValue(existing);
+    handleDerefAssignment(ptr, op, rhsOperand, localEnv);
+  } else {
+    handleRegularAssignment(name, op, rhsOperand, existing, localEnv);
+  }
+}
+
+/**
+ * Handle this.field assignment
+ */
+export function handleThisFieldAssignment(
+  args: {
+    name: string;
+    op: string | undefined;
+    rhs: string;
+    localEnv: Env;
+    evaluateRhsLocal: EvaluateRhsCallback;
+  }
+): void {
+  const { name, op, rhs, localEnv, evaluateRhsLocal } = args;
+  const { existing, rhsOperand } = requireExistingAndEvalRhs(
+    name,
+    rhs,
+    localEnv,
+    evaluateRhsLocal
+  );
   const newVal = computeAssignmentValue(op, existing, rhsOperand);
   assignValueToVariable(name, existing, newVal, localEnv);
 }
