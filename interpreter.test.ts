@@ -24,4 +24,8 @@ describe("interpret", () => {
   test('interpret("let x : I32 = 100;") should return 0', () => {
     expect(interpret("let x : I32 = 100;")).toBe(0);
   });
+
+  test('interpret("let x : I32 = true;") should throw Error', () => {
+    expect(() => interpret("let x : I32 = true;")).toThrow(Error);
+  });
 });
