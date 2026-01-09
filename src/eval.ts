@@ -56,10 +56,7 @@ import {
 // Re-export from operators module for backward compatibility
 export { isTruthy, applyBinaryOp } from "./eval/operators";
 
-import {
-  Env,
-  envGet,
-} from "./env";
+import { Env, envGet } from "./env";
 
 export function evaluateReturningOperand(
   exprStr: string,
@@ -83,7 +80,8 @@ export function evaluateReturningOperand(
   }
 
   const exprTokens = tokenizeExpression(exprStr);
-  const { operands: initialOperands, ops } = splitTokensToOperandsAndOps(exprTokens);
+  const { operands: initialOperands, ops } =
+    splitTokensToOperandsAndOps(exprTokens);
   let operands = initialOperands;
 
   // helper to get binding and deref target

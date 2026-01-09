@@ -105,7 +105,8 @@ export function resolveDereference(
     if (!isPlainObject(inr) || !hasIdent(inr))
       throw new Error("& must be applied to identifier");
     const n = inr.ident;
-    if (typeof n !== "string") throw new Error("& must be applied to identifier");
+    if (typeof n !== "string")
+      throw new Error("& must be applied to identifier");
     const { targetVal } = ctx.getBindingTarget(n);
     return targetVal;
   }

@@ -29,8 +29,7 @@ export function getArrayElementFromInstance(
   maybe: unknown,
   indexVal: number
 ): unknown {
-  if (!isArrayInstance(maybe))
-    throw new Error("cannot index non-array value");
+  if (!isArrayInstance(maybe)) throw new Error("cannot index non-array value");
   const arr = maybe;
   if (!Number.isInteger(indexVal) || indexVal < 0 || indexVal >= arr.length)
     throw new Error("index out of range");

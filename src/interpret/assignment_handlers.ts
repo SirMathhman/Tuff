@@ -36,8 +36,8 @@ export interface AssignmentParts {
 /** Type for RHS evaluation callback functions */
 type EvaluateRhsCallback = (expr: string, e: Env) => unknown;
 
-/** 
- * Handle this.field assignment 
+/**
+ * Handle this.field assignment
  */
 export function handleThisFieldAssignment(
   name: string,
@@ -84,8 +84,7 @@ export function handleIndexAssignment(
     isPointer(existing.value)
   )
     maybePtr = existing.value;
-  else if (isPlainObject(existing) && isPointer(existing))
-    maybePtr = existing;
+  else if (isPlainObject(existing) && isPointer(existing)) maybePtr = existing;
 
   if (maybePtr) {
     handlePointerIndexAssignment(
@@ -105,10 +104,7 @@ export function handleIndexAssignment(
     hasUninitialized(existing) &&
     existing.uninitialized
   ) {
-    if (
-      !hasAnnotation(existing) ||
-      typeof existing.annotation !== "string"
-    )
+    if (!hasAnnotation(existing) || typeof existing.annotation !== "string")
       throw new Error("assignment to undeclared variable");
     const arrAnn = parseArrayAnnotation(String(existing.annotation));
     if (!arrAnn) throw new Error("assignment to non-array variable");
@@ -167,8 +163,7 @@ function handlePointerIndexAssignment(
 ): void {
   if (!isPointer(maybePtr)) throw new Error("internal pointer error");
   const ptrName = maybePtr.ptrName;
-  if (typeof ptrName !== "string")
-    throw new Error("invalid pointer target");
+  if (typeof ptrName !== "string") throw new Error("invalid pointer target");
   if (!envHas(localEnv, ptrName))
     throw new Error(`unknown identifier ${ptrName}`);
   const targetBinding = envGet(localEnv, ptrName);
@@ -232,10 +227,7 @@ export function handleDerefAssignment(
   const newVal = computeAssignmentValue(op, targetExisting, rhsOperand);
 
   // For deref assignment to a placeholder, validate annotation
-  if (
-    isPlainObject(targetExisting) &&
-    hasUninitialized(targetExisting)
-  ) {
+  if (isPlainObject(targetExisting) && hasUninitialized(targetExisting)) {
     if (
       hasLiteralAnnotation(targetExisting) &&
       targetExisting.literalAnnotation &&

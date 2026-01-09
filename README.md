@@ -20,7 +20,6 @@ The codebase is organized into focused modules under 500 lines each:
   - `call_evaluator.ts` - Call evaluation context
   - `operand_resolvers.ts` - Operand resolution (address-of, deref, etc.)
   - `tokenizer.ts` - Expression tokenization
-  
 - `src/interpret/` - Statement interpretation modules:
   - `statements.ts` - Main statement interpreter
   - `loop_handlers.ts` - While/for loop handlers
