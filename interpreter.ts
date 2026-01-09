@@ -2,8 +2,21 @@
  * Compiles source code.
  * @param source - The source code to compile
  * @returns The compiled code
+ * @throws Error if duplicate variable declarations are found
  */
 function compile(source: string): string {
+  // Check for duplicate variable declarations
+  const varMatches = source.match(/let\s+(\w+)\s*=/g) || [];
+  const declaredVars = new Set<string>();
+
+  for (const match of varMatches) {
+    const varName = match.match(/let\s+(\w+)/)![1];
+    if (declaredVars.has(varName)) {
+      throw new Error(`Compile Error: Identifier '${varName}' has already been declared`);
+    }
+    declaredVars.add(varName);
+  }
+
   // Wrap in a function to allow 'let' declarations and return the last expression
   const lastStatement = source.split(";").pop()?.trim() || source;
   return `(function() { ${source}; return ${lastStatement}; })()`;

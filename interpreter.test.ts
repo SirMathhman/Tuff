@@ -12,4 +12,8 @@ describe("interpret", () => {
   test('interpret("let x = 100; let y = x; y") should return 100', () => {
     expect(interpret("let x = 100; let y = x; y")).toBe(100);
   });
+
+  test('interpret("let x = 100; let x = 100;") should throw CompileError', () => {
+    expect(() => interpret("let x = 100; let x = 100;")).toThrow(Error);
+  });
 });
