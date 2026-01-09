@@ -12,6 +12,16 @@ import {
   checkRange,
 } from "../types";
 
+interface BooleanResult {
+  boolValue: boolean;
+}
+
+interface TypedIntegerResult {
+  valueBig: bigint;
+  kind: string;
+  bits: number;
+}
+
 export function isTruthy(val: unknown): boolean {
   if (isBoolOperand(val)) return val.boolValue;
   if (isIntOperand(val)) return val.valueBig !== 0n;
@@ -83,10 +93,7 @@ function matchesStructOrThisBinding(leftVal: unknown, p: string) {
 /**
  * Handle the `is` type test operator
  */
-function handleIsOperator(
-  left: unknown,
-  right: unknown
-): { boolValue: boolean } {
+function handleIsOperator(left: unknown, right: unknown): BooleanResult {
   // Accept either a literal type name, a placeholder { typeName }, or a binding
   // that stores `typeAlias` from a `type` declaration.
   let typeExpr: string | undefined = undefined;
@@ -151,7 +158,7 @@ function handleTypedIntegerOp(
   right: unknown,
   leftHasKind: boolean,
   rightHasKind: boolean
-): { valueBig: bigint; kind: string; bits: number } {
+): TypedIntegerResult {
   const { kind, bits } = ensureSuffixCompatibility(
     left,
     right,

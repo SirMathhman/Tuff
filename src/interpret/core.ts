@@ -10,11 +10,15 @@ import {
 } from "../types";
 import type { InterpretFn } from "../types";
 
+export interface StringMap {
+  [k: string]: string;
+}
+
 function validateInterpretAllWithNativeInputs(
   scripts: unknown,
   nativeModules: unknown,
   mainNamespace: unknown
-): asserts scripts is { [k: string]: string } {
+): asserts scripts is StringMap {
   if (!scripts || typeof scripts !== "object")
     throw new Error("scripts must be an object");
   if (!nativeModules || typeof nativeModules !== "object")
@@ -23,10 +27,8 @@ function validateInterpretAllWithNativeInputs(
     throw new Error("mainNamespace must be a string");
 }
 
-function normalizeNamespaceMap(input: { [k: string]: string }): {
-  [k: string]: string;
-} {
-  const out: { [k: string]: string } = {};
+function normalizeNamespaceMap(input: StringMap): StringMap {
+  const out: StringMap = {};
   for (const k of Object.keys(input)) out[k.replace(/,/g, "::")] = input[k];
   return out;
 }
@@ -52,8 +54,12 @@ function transformNativeModuleCode(code: string): string {
   return transformed;
 }
 
-function evaluateNativeModuleExports(code: string): { [k: string]: unknown } {
-  const exports: { [k: string]: unknown } = {};
+export interface UnknownMap {
+  [k: string]: unknown;
+}
+
+function evaluateNativeModuleExports(code: string): UnknownMap {
+  const exports: UnknownMap = {};
   const transformed = transformNativeModuleCode(code);
 
   try {
@@ -65,10 +71,8 @@ function evaluateNativeModuleExports(code: string): { [k: string]: unknown } {
   return exports;
 }
 
-function collectExportsFromScriptEnv(nsEnv: { [k: string]: unknown }): {
-  [k: string]: unknown;
-} {
-  const collectedExports: { [k: string]: unknown } = {};
+function collectExportsFromScriptEnv(nsEnv: UnknownMap): UnknownMap {
+  const collectedExports: UnknownMap = {};
   if (isPlainObject(nsEnv.__exports)) {
     for (const [kk, vv] of Object.entries(nsEnv.__exports))
       collectedExports[kk] = vv;
@@ -77,14 +81,25 @@ function collectExportsFromScriptEnv(nsEnv: { [k: string]: unknown }): {
 }
 
 function mergeNativeExportsInto(
-  collectedExports: { [k: string]: unknown },
+  collectedExports: UnknownMap,
   code: string
 ): void {
   const nativeExports = evaluateNativeModuleExports(code);
   for (const [k, v] of Object.entries(nativeExports)) {
     if (typeof v === "function") {
+      interface FnObject {
+        params: unknown[];
+        body: string;
+        isBlock: boolean;
+        resultAnnotation: unknown;
+        closureEnv: UnknownMap;
+        nativeImpl: unknown;
+      }
+      interface FnWrapper {
+        fn: FnObject;
+      }
       // fn wrapper shape expected by interpreter
-      const wrapper = {
+      const wrapper: FnWrapper = {
         fn: {
           params: [],
           body: "/* native */",
@@ -102,15 +117,26 @@ function mergeNativeExportsInto(
   }
 }
 
-function resolveNamespaceToExports(args: {
+export interface NamespaceRegistry {
+  [k: string]: UnknownMap;
+}
+
+export interface ResolveNamespaceArgs {
   nsName: string;
-  normalizedScripts: { [k: string]: string };
-  normalizedNative: { [k: string]: string };
-  namespaceRegistry: { [k: string]: { [k: string]: unknown } };
+  normalizedScripts: StringMap;
+  normalizedNative: StringMap;
+  namespaceRegistry: NamespaceRegistry;
   interpFn: InterpretFn;
-}): { [k: string]: unknown } {
-  const { nsName, normalizedScripts, normalizedNative, namespaceRegistry, interpFn } =
-    args;
+}
+
+function resolveNamespaceToExports(args: ResolveNamespaceArgs): UnknownMap {
+  const {
+    nsName,
+    normalizedScripts,
+    normalizedNative,
+    namespaceRegistry,
+    interpFn,
+  } = args;
 
   if (
     !Object.prototype.hasOwnProperty.call(normalizedScripts, nsName) &&
@@ -119,7 +145,7 @@ function resolveNamespaceToExports(args: {
     throw new Error("namespace not found");
 
   if (!Object.prototype.hasOwnProperty.call(namespaceRegistry, nsName)) {
-    const nsEnv: { [k: string]: unknown } = {};
+    const nsEnv: UnknownMap = {};
     nsEnv.__exports = {};
 
     if (Object.prototype.hasOwnProperty.call(normalizedScripts, nsName)) {
@@ -147,6 +173,19 @@ export function getLastTopLevelStatement(
   return parts.length ? parts[parts.length - 1] : undefined;
 }
 
+interface IntOperand {
+  valueBig: bigint;
+}
+
+interface FloatOperand {
+  floatValue: number;
+  isFloat: true;
+}
+
+interface ObjectWithYield {
+  __yield?: unknown;
+}
+
 export function evaluateRhs(
   rhs: string,
   envLocal: Env,
@@ -161,20 +200,34 @@ export function evaluateRhs(
       throw new Error("initializer cannot contain declarations");
     try {
       const v = interpret(inner, {});
-      if (Number.isInteger(v)) return { valueBig: BigInt(v) };
-      return { floatValue: v, isFloat: true };
+      if (Number.isInteger(v)) {
+        const operand: IntOperand = { valueBig: BigInt(v) };
+        return operand;
+      }
+      const operand: FloatOperand = { floatValue: v, isFloat: true };
+      return operand;
     } catch (e: unknown) {
       // Handle `yield` signal thrown from nested block execution. If a yield was
       // signaled, convert the numeric payload into an operand and return it.
-      if (
-        e &&
-        typeof e === "object" &&
-        "__yield" in e &&
-        typeof e.__yield === "number"
-      ) {
-        const val = e.__yield;
-        if (Number.isInteger(val)) return { valueBig: BigInt(val) };
-        return { floatValue: val, isFloat: true };
+      if (e && typeof e === "object" && "__yield" in e) {
+        const signal = e;
+        function hasYieldProp(obj: unknown): obj is ObjectWithYield {
+          return (
+            typeof obj === "object" && obj !== undefined && "__yield" in obj
+          );
+        }
+        if (hasYieldProp(signal)) {
+          const yieldProp = signal.__yield;
+          if (typeof yieldProp === "number") {
+            const val = yieldProp;
+            if (Number.isInteger(val)) {
+              const operand: IntOperand = { valueBig: BigInt(val) };
+              return operand;
+            }
+            const operand: FloatOperand = { floatValue: val, isFloat: true };
+            return operand;
+          }
+        }
       }
       throw e;
     }
@@ -185,6 +238,18 @@ export function evaluateRhs(
 }
 
 import { parseFnComponents } from "./parsing";
+
+interface FnParamsObject {
+  params: unknown;
+  body: string;
+  isBlock: boolean;
+  resultAnnotation: unknown;
+  closureEnv: unknown;
+}
+
+interface FnRegistration {
+  fn: FnParamsObject;
+}
 
 export function registerFunctionFromStmt(
   stmt: string,
@@ -199,9 +264,10 @@ export function registerFunctionFromStmt(
 
   // reserve name then attach closure env including the function itself
   declared.add(name);
-  envSet(localEnv, name, {
+  const registration: FnRegistration = {
     fn: { params, body, isBlock, resultAnnotation, closureEnv: undefined },
-  });
+  };
+  envSet(localEnv, name, registration);
   const fnObj = envGet(localEnv, name);
   if (!isFnWrapper(fnObj))
     throw new Error("internal error: fn registration failed");
@@ -227,7 +293,7 @@ export function convertOperandToNumber(operand: unknown): number {
  * references so scripts can import symbols from other namespaces.
  */
 export function interpretAll(
-  scripts: { [k: string]: string },
+  scripts: StringMap,
   mainNamespace: string
 ): number {
   // Forward to interpretAllWithNative with no native modules
@@ -242,8 +308,8 @@ export function interpretAll(
  * are wrapped so they can be imported into scripts and called like normal functions.
  */
 export function interpretAllWithNative(
-  scripts: { [k: string]: string },
-  nativeModules: { [k: string]: string },
+  scripts: StringMap,
+  nativeModules: StringMap,
   mainNamespace: string
 ): number {
   validateInterpretAllWithNativeInputs(scripts, nativeModules, mainNamespace);
@@ -259,7 +325,7 @@ export function interpretAllWithNative(
     throw new Error("internal error: interpret() is not available");
 
   // Prepare namespace registry and resolver that merges script and native exports
-  const namespaceRegistry: { [k: string]: { [k: string]: unknown } } = {};
+  const namespaceRegistry: NamespaceRegistry = {};
   const resolveNamespace = (nsName: string) =>
     resolveNamespaceToExports({
       nsName,
@@ -270,7 +336,7 @@ export function interpretAllWithNative(
     });
 
   // Provide resolver and registry to the main env
-  const env: { [k: string]: unknown } = {};
+  const env: UnknownMap = {};
   env.__namespaces = normalizedScripts;
   env.__namespace_registry = namespaceRegistry;
   env.__resolve_namespace = resolveNamespace;

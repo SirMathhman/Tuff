@@ -23,13 +23,34 @@ import {
 } from "../types";
 import { Env, envHas, envGet, envEntries } from "../env";
 
+interface BindingTarget {
+  binding: unknown;
+  targetVal: unknown;
+}
+
+interface FieldValuesMap {
+  [k: string]: unknown;
+}
+
+interface ThisBinding {
+  isThisBinding: true;
+  fieldValues: FieldValuesMap;
+}
+
+interface FieldValues {
+  fieldValues: FieldValuesMap;
+  providedFields: Set<string>;
+}
+interface PointerObject {
+  [k: string]: unknown;
+}
 /**
  * Context for resolving operands - provides access to the environment
  * and the recursive evaluator
  */
 export interface OperandResolutionContext {
   localEnv: Env;
-  getBindingTarget: (name: string) => { binding: unknown; targetVal: unknown };
+  getBindingTarget: (name: string) => BindingTarget;
   evaluateExpr: (expr: string, env: Env) => unknown;
 }
 
@@ -39,7 +60,7 @@ export interface OperandResolutionContext {
 export function resolveAddressOf(
   op: unknown,
   ctx: OperandResolutionContext
-): { [k: string]: unknown } | undefined {
+): PointerObject | undefined {
   if (!isPlainObject(op) || !hasAddrOf(op)) return undefined;
 
   const inner = op.addrOf;
@@ -49,7 +70,7 @@ export function resolveAddressOf(
   if (typeof n !== "string") throw new Error("& must be applied to identifier");
 
   const { binding: targetBinding, targetVal } = ctx.getBindingTarget(n);
-  const ptrObj: { [k: string]: unknown } = { ptrName: n, pointer: true };
+  const ptrObj: PointerObject = { ptrName: n, pointer: true };
 
   attachArraySliceInfo(ptrObj, targetBinding, targetVal);
   attachValueInfo(ptrObj, targetVal);
@@ -58,7 +79,7 @@ export function resolveAddressOf(
 }
 
 function attachArraySliceInfo(
-  ptrObj: { [k: string]: unknown },
+  ptrObj: PointerObject,
   targetBinding: unknown,
   targetVal: unknown
 ) {
@@ -70,7 +91,7 @@ function attachArraySliceInfo(
       : false;
 }
 
-function attachValueInfo(ptrObj: { [k: string]: unknown }, targetVal: unknown) {
+function attachValueInfo(ptrObj: PointerObject, targetVal: unknown) {
   if (isPlainObject(targetVal) && hasKindBits(targetVal)) {
     ptrObj.kind = targetVal.kind;
     ptrObj.bits = targetVal.bits;
@@ -157,10 +178,8 @@ export function resolveStructInstantiation(
   if (!isStructDef(structDef)) throw new Error(`${structName} is not a struct`);
 
   // Evaluate field values
-  const { fieldValues, providedFields } = evaluateStructFieldValues(
-    fieldParts,
-    ctx
-  );
+  const fieldValuesResult = evaluateStructFieldValues(fieldParts, ctx);
+  const { fieldValues, providedFields } = fieldValuesResult;
 
   // Validate all required fields are provided
   validateStructFields(structDef, providedFields, structName);
@@ -176,8 +195,8 @@ export function resolveStructInstantiation(
 function evaluateStructFieldValues(
   fieldParts: unknown[],
   ctx: OperandResolutionContext
-) {
-  const fieldValues: { [k: string]: unknown } = {};
+): FieldValues {
+  const fieldValues: FieldValuesMap = {};
   const providedFields = new Set<string>();
   for (const fieldPart of fieldParts) {
     if (!isPlainObject(fieldPart))
@@ -299,11 +318,8 @@ export function resolveIdentifier(
     return buildThisBinding(ctx.localEnv);
   }
 
-  function buildThisBinding(localEnv: Env) {
-    const thisObj: {
-      isThisBinding: true;
-      fieldValues: { [k: string]: unknown };
-    } = { isThisBinding: true, fieldValues: {} };
+  function buildThisBinding(localEnv: Env): ThisBinding {
+    const thisObj: ThisBinding = { isThisBinding: true, fieldValues: {} };
     for (const [key, value] of envEntries(localEnv)) {
       if (key === "this") continue;
       if (isPlainObject(value) && hasValue(value) && value.value !== undefined)

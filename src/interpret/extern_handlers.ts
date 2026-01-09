@@ -39,7 +39,11 @@ function tryMergeExternSignature(
   const existingClosureEnv = getProp(existing.fn, "closureEnv");
   const existingNative = getProp(existing.fn, "nativeImpl");
 
-  const newFn: { [k: string]: unknown } = {
+  interface FnObject {
+    [k: string]: unknown;
+  }
+
+  const newFn: FnObject = {
     params,
     body: typeof existingBody === "string" ? existingBody : "/* extern */",
     isBlock: existingIsBlock === true,

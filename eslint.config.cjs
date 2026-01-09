@@ -60,6 +60,11 @@ module.exports = [
           message:
             "Type assertions using <T> are banned; use type guards or 'in' checks instead",
         },
+        {
+          selector: "TSTypeLiteral",
+          message:
+            "Anonymous object types are banned; define a named type instead",
+        },
       ],
     },
   },
@@ -67,6 +72,7 @@ module.exports = [
     files: ["tests/**/*.ts"],
     rules: {
       "max-lines-per-function": "off",
+      "max-lines": "off",
     },
   },
 ];

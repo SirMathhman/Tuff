@@ -22,16 +22,19 @@ import { Env, envClone, envGet, envSet } from "../env";
 import type { InterpretFn } from "../types";
 import { isPlainObject, toErrorMessage } from "../types";
 
-type BlockCtx = {
+interface BlockCtx {
   env: Env;
   localEnv: Env;
   declared: Set<string>;
   interpret: InterpretFn;
   evaluateRhsLocal: (rhs: string, envLocal: Env) => unknown;
   getLastTopLevelStatementLocal: (s: string) => string | undefined;
-};
+}
 
-function interpretTrailingExprOrUndefined(ctx: BlockCtx, tExpr: string | undefined) {
+function interpretTrailingExprOrUndefined(
+  ctx: BlockCtx,
+  tExpr: string | undefined
+) {
   if (tExpr)
     return { handled: true, last: ctx.interpret(tExpr + ";", ctx.localEnv) };
   return { handled: true, last: undefined };

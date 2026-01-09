@@ -18,24 +18,35 @@ import {
 } from "../types";
 import { convertOperandToNumber } from "../interpret_helpers";
 
-type ProcessOperatorsCtx = {
+interface BindingTarget {
+  binding: unknown;
+  targetVal: unknown;
+}
+
+interface OperandIndexResult {
+  index: number;
+  isLeft: boolean;
+}
+
+interface BigIntValue {
+  valueBig: bigint;
+}
+
+interface ProcessOperatorsCtx {
   operands: unknown[];
   ops: string[];
   localEnv: Env;
   evaluateReturningOperandFn: (expr: string, env: Env) => unknown;
   evaluateCallAtFn: (funcOperand: unknown, callAppOperand: unknown) => unknown;
-  getBindingTargetFn: (name: string) => {
-    binding: unknown;
-    targetVal: unknown;
-  };
-};
+  getBindingTargetFn: (name: string) => BindingTarget;
+}
 
 function replaceWithBigIntNumber(
   ctx: ProcessOperatorsCtx,
   n: number,
   i: number
 ) {
-  const val = { valueBig: BigInt(n) };
+  const val: BigIntValue = { valueBig: BigInt(n) };
   ctx.operands.splice(i, 2, val);
   ctx.ops.splice(i, 1);
 }
@@ -44,7 +55,7 @@ function findNearbyOperandIndex(
   operands: unknown[],
   i: number,
   predicate: (v: unknown) => boolean
-): { index: number; isLeft: boolean } | undefined {
+): OperandIndexResult | undefined {
   for (let j = i - 1; j >= 0; j--) {
     if (operands[j] !== undefined) {
       if (predicate(operands[j])) return { index: j, isLeft: true };
@@ -352,7 +363,7 @@ export function processOperators(
   localEnv: Env,
   evaluateReturningOperandFn: (expr: string, env: Env) => unknown,
   evaluateCallAtFn: (funcOperand: unknown, callAppOperand: unknown) => unknown,
-  getBindingTargetFn: (name: string) => { binding: unknown; targetVal: unknown }
+  getBindingTargetFn: (name: string) => BindingTarget
 ) {
   const ctx: ProcessOperatorsCtx = {
     operands,

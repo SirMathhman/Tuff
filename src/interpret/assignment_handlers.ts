@@ -36,6 +36,12 @@ export interface AssignmentParts {
 /** Type for RHS evaluation callback functions */
 type EvaluateRhsCallback = (expr: string, e: Env) => unknown;
 
+/** Result from requireExistingAndEvalRhs */
+interface RequireExistingResult {
+  existing: unknown;
+  rhsOperand: unknown;
+}
+
 function getPointerFromExisting(existing: unknown): unknown | undefined {
   if (
     isPlainObject(existing) &&
@@ -101,7 +107,7 @@ function requireExistingAndEvalRhs(
   rhs: string,
   localEnv: Env,
   evaluateRhsLocal: EvaluateRhsCallback
-): { existing: unknown; rhsOperand: unknown } {
+): RequireExistingResult {
   if (!envHas(localEnv, name))
     throw new Error("assignment to undeclared variable");
   const existing = envGet(localEnv, name);
@@ -137,15 +143,22 @@ export function handleVariableOrDerefAssignment(
 }
 
 /**
- * Handle this.field assignment
+ * Arguments for handleThisFieldAssignment
  */
-export function handleThisFieldAssignment(args: {
+export interface HandleThisFieldAssignmentArgs {
   name: string;
   op: string | undefined;
   rhs: string;
   localEnv: Env;
   evaluateRhsLocal: EvaluateRhsCallback;
-}): void {
+}
+
+/**
+ * Handle this.field assignment
+ */
+export function handleThisFieldAssignment(
+  args: HandleThisFieldAssignmentArgs
+): void {
   const { name, op, rhs, localEnv, evaluateRhsLocal } = args;
   const { existing, rhsOperand } = requireExistingAndEvalRhs(
     name,

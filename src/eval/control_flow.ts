@@ -8,13 +8,27 @@ import { Env, envClone, envSet } from "../env";
 import { isBoolOperand, isFloatOperand, isIntOperand } from "../types";
 import { applyBinaryOp } from "./operators";
 
+interface FunctionObject {
+  params: unknown;
+  body: string;
+  isBlock: boolean;
+  resultAnnotation: string | undefined;
+  closureEnv: Env | undefined;
+}
+
+interface FunctionWrapper {
+  fn: FunctionObject;
+}
+
 // Type for the evaluateReturningOperand function to avoid circular imports
 type EvaluateFn = (exprStr: string, localEnv: Env) => unknown;
 
-function parseMatchTargetAndRest(sTrim: string): {
+interface MatchTargetAndRest {
   targetExpr: string;
   rest: string;
-} {
+}
+
+function parseMatchTargetAndRest(sTrim: string): MatchTargetAndRest {
   const afterMatch = sTrim.slice("match".length).trimStart();
   if (afterMatch.startsWith("(")) {
     const startParen = sTrim.indexOf("(", 0);
@@ -143,31 +157,17 @@ export function handleMatchExpression(
 export function handleFnExpression(
   sTrim: string,
   localEnv: Env
-): {
-  fn: {
-    params: unknown;
-    body: string;
-    isBlock: boolean;
-    resultAnnotation: string | undefined;
-    closureEnv: Env | undefined;
-  };
-} {
+): FunctionWrapper {
   const parsed = parseFnComponents(sTrim);
   const { name, params, body, isBlock, resultAnnotation } = parsed;
-  const fnObj: {
-    params: unknown;
-    body: string;
-    isBlock: boolean;
-    resultAnnotation: string | undefined;
-    closureEnv: Env | undefined;
-  } = {
+  const fnObj: FunctionObject = {
     params,
     body,
     isBlock,
     resultAnnotation,
     closureEnv: undefined,
   };
-  const wrapper = { fn: fnObj };
+  const wrapper: FunctionWrapper = { fn: fnObj };
   fnObj.closureEnv = envClone(localEnv);
   // expose named binding inside closure for recursion
   envSet(fnObj.closureEnv, name, wrapper);

@@ -20,14 +20,21 @@ export interface HandleLetResult {
   last: unknown;
 }
 
+export interface HandleLetNoMatch {
+  handled: false;
+}
+
 export function handleLetStatement(
   stmt: string,
   localEnv: Env,
   declared: Set<string>,
   evaluateRhsLocal: (rhs: string, envLocal: Env) => unknown,
   evaluateReturningOperand: (expr: string, envLocal: Env) => unknown
-): HandleLetResult | { handled: false } {
-  if (!/^let\b/.test(stmt)) return { handled: false };
+): HandleLetResult | HandleLetNoMatch {
+  if (!/^let\b/.test(stmt)) {
+    const result: HandleLetNoMatch = { handled: false };
+    return result;
+  }
 
   const m = stmt.match(
     /^let\s+(mut\s+)?([a-zA-Z_]\w*)(?:\s*:\s*([^=]+))?(?:\s*=\s*(.+))?$/

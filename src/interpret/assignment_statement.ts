@@ -7,12 +7,18 @@ import {
   type AssignmentParts,
 } from "./assignment_handlers";
 
+/** Result from handleAssignmentStatement */
+export interface AssignmentStatementResult {
+  handled: boolean;
+  last?: unknown;
+}
+
 export function handleAssignmentStatement(
   assignParts: AssignmentParts,
   localEnv: Env,
   evaluateRhsLocal: (rhs: string, envLocal: Env) => unknown,
   convertOperandToNumber: (op: unknown) => number
-): { handled: boolean; last?: unknown } {
+): AssignmentStatementResult {
   const { isDeref, name, op, rhs, isThisField } = assignParts;
 
   // Handle this.field assignment

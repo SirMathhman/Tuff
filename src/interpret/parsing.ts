@@ -2,7 +2,7 @@ import { parseOperandAt } from "../parser";
 import { Env } from "../env";
 import type { InterpretFn } from "../types";
 
-type AssignmentParts = {
+export interface AssignmentParts {
   isDeref: boolean;
   isDeclOnly: boolean;
   name: string;
@@ -11,9 +11,9 @@ type AssignmentParts = {
   isThisField?: boolean;
   fieldName?: string;
   indexExpr?: string;
-};
+}
 
-function buildAssignResult(obj: {
+interface BuildAssignResultInput {
   isDeref: boolean;
   name: string;
   op: string | undefined;
@@ -21,7 +21,9 @@ function buildAssignResult(obj: {
   isThisField?: boolean;
   fieldName?: string;
   indexExpr?: string;
-}): AssignmentParts {
+}
+
+function buildAssignResult(obj: BuildAssignResultInput): AssignmentParts {
   return {
     isDeref: obj.isDeref,
     isDeclOnly: false,
@@ -133,13 +135,13 @@ export function extractAssignmentParts(
   );
 }
 
-type ExpandState = {
+interface ExpandState {
   expr: string;
   placeholders: string[];
   env: Env;
   interpret: InterpretFn;
   getLastTopLevelStatement_fn: (_s: string) => string | undefined;
-};
+}
 
 function replaceWithPlaceholder(
   state: ExpandState,
@@ -213,7 +215,14 @@ function parseFnHeader(stmt: string) {
   return { name, params, endIdx };
 }
 
-function parseOptionalResultAnnotation(afterParams: string) {
+interface OptionalResultAnnotationResult {
+  rest: string;
+  resultAnnotation: string | undefined;
+}
+
+function parseOptionalResultAnnotation(
+  afterParams: string
+): OptionalResultAnnotationResult {
   let rest = afterParams;
   let resultAnnotation: string | undefined = undefined;
   if (!rest.startsWith(":")) return { rest, resultAnnotation };
@@ -231,7 +240,16 @@ function parseOptionalResultAnnotation(afterParams: string) {
   return { rest, resultAnnotation };
 }
 
-function extractBracedFnBody(stmt: string, startSearchIdx: number) {
+interface ExtractBracedFnBodyResult {
+  body: string;
+  isBlock: boolean;
+  trailingExpr: string | undefined;
+}
+
+function extractBracedFnBody(
+  stmt: string,
+  startSearchIdx: number
+): ExtractBracedFnBodyResult {
   const bStart = stmt.indexOf("{", startSearchIdx);
   const bEnd = findMatchingParen(stmt, bStart, "{", "}");
   if (bEnd === -1) throw new Error("unbalanced braces in fn");
@@ -278,10 +296,13 @@ export function expandParensAndBraces(
   return state.expr;
 }
 
-export function parseExpressionTokens(
-  s: string
-): { op?: string; operand?: unknown }[] {
-  const exprTokens: { op?: string; operand?: unknown }[] = [];
+export interface ExpressionToken {
+  op?: string;
+  operand?: unknown;
+}
+
+export function parseExpressionTokens(s: string): ExpressionToken[] {
+  const exprTokens: ExpressionToken[] = [];
   let idx = 0;
   const len = s.length;
 
@@ -365,11 +386,18 @@ export function parseFnComponents(stmt: string) {
   };
 }
 
-export function parseStructDef(stmt: string): {
+export interface StructField {
   name: string;
-  fields: Array<{ name: string; annotation: string }>;
+  annotation: string;
+}
+
+export interface ParseStructDefResult {
+  name: string;
+  fields: StructField[];
   endPos: number;
-} {
+}
+
+export function parseStructDef(stmt: string): ParseStructDefResult {
   // syntax: struct Name { field1 : Type1; field2 : Type2; ... }
   const m = stmt.match(/^struct\s+([a-zA-Z_]\w*)\s*\{/);
   if (!m) throw new Error("invalid struct syntax");
@@ -403,7 +431,7 @@ export function parseStructDef(stmt: string): {
   }
   if (current.trim()) fieldParts.push(current.trim());
 
-  const fields: Array<{ name: string; annotation: string }> = [];
+  const fields: StructField[] = [];
   for (const fieldPart of fieldParts) {
     // Each field should be: name : annotation
     const fm = fieldPart.match(/^([a-zA-Z_]\w*)\s*:\s*(.+)$/);

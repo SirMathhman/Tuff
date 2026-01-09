@@ -5,14 +5,24 @@ import {
 } from "../parser";
 import { findMatchingParen } from "../interpret_helpers";
 
-export type ExprToken = { op?: string; operand?: unknown };
+interface ExprToken {
+  op?: string;
+  operand?: unknown;
+}
 
-type TokenizeState = {
+export type { ExprToken };
+
+interface TokenizeState {
   exprStr: string;
   pos: number;
   L: number;
   tokens: ExprToken[];
-};
+}
+
+interface SplitResult {
+  operands: unknown[];
+  ops: string[];
+}
 
 function skipSpaces(state: TokenizeState) {
   while (state.pos < state.L && state.exprStr[state.pos] === " ") state.pos++;
@@ -143,10 +153,7 @@ export function tokenizeExpression(exprStr: string): ExprToken[] {
 /**
  * Extract operands and operators from tokens
  */
-export function splitTokensToOperandsAndOps(tokens: ExprToken[]): {
-  operands: unknown[];
-  ops: string[];
-} {
+export function splitTokensToOperandsAndOps(tokens: ExprToken[]): SplitResult {
   const operands = tokens.map((t) => t.operand);
   const ops: string[] = [];
   for (let i = 1; i < tokens.length; i++) ops.push(tokens[i].op!);

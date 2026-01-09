@@ -1,4 +1,8 @@
-export type Env = Map<string, unknown> | { [k: string]: unknown };
+export interface PlainEnv {
+  [k: string]: unknown;
+}
+
+export type Env = Map<string, unknown> | PlainEnv;
 
 // Type guard to check if a value is an Env (Map or plain object)
 export function isEnv(v: unknown): v is Env {
@@ -48,7 +52,7 @@ function makeSetHandlerForMap(m: Map<string, unknown>) {
   return makeSetHandler((k, v) => m.set(k, v));
 }
 
-function makeSetHandlerForObj(obj: { [k: string]: unknown }) {
+function makeSetHandlerForObj(obj: PlainEnv) {
   return makeSetHandler((k, v) => (obj[k] = v));
 }
 
@@ -56,7 +60,7 @@ function makeHasHandlerForMap(m: Map<string, unknown>) {
   return makeHasHandler((k) => m.has(k));
 }
 
-function makeHasHandlerForObj(obj: { [k: string]: unknown }) {
+function makeHasHandlerForObj(obj: PlainEnv) {
   return makeHasHandler((k) => Object.prototype.hasOwnProperty.call(obj, k));
 }
 
@@ -112,7 +116,7 @@ function makeProxyFromMap(m: Map<string, unknown>) {
   });
 }
 
-function makeProxyFromObject(obj: { [k: string]: unknown }) {
+function makeProxyFromObject(obj: PlainEnv) {
   const proxyTarget = {};
   return new Proxy(proxyTarget, {
     get(_, prop: string | symbol) {
@@ -154,9 +158,7 @@ function isMapProxy(e: Env): boolean {
   return "__isMapProxy" in e && e.__isMapProxy === true;
 }
 
-export function ensureMapEnv(
-  input?: { [k: string]: unknown } | Map<string, unknown>
-): Env {
+export function ensureMapEnv(input?: PlainEnv | Map<string, unknown>): Env {
   if (!input) return makeProxyFromObject({});
   if (input instanceof Map) return makeProxyFromMap(new Map(input));
   // given a plain object, wrap it so mutations reflect back onto it
@@ -172,7 +174,7 @@ export function envClone(e: Env): Env {
     return makeProxyFromMap(m);
   }
 
-  const obj: { [k: string]: unknown } = {};
+  const obj: PlainEnv = {};
   for (const k of Object.keys(e)) obj[k] = getStringProp(e, k);
   return makeProxyFromObject(obj);
 }
@@ -229,8 +231,8 @@ export function envEntries(e: Env): IterableIterator<[string, unknown]> {
   })();
 }
 
-export function envToThisObject(e: Env): { [k: string]: unknown } {
-  const obj: { [k: string]: unknown } = {};
+export function envToThisObject(e: Env): PlainEnv {
+  const obj: PlainEnv = {};
   const iter = envEntries(e);
   for (const [k, v] of iter) {
     if (k === "this" || k.startsWith("__")) continue;

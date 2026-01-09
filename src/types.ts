@@ -1,6 +1,145 @@
 import type { Env } from "./env";
 
-export type PlainObject = { [k: string]: unknown };
+export interface PlainObject {
+  [k: string]: unknown;
+}
+
+export interface BoolOperand {
+  boolValue: boolean;
+}
+
+export interface FloatOperand {
+  isFloat: true;
+  floatValue: number;
+}
+
+export interface IntOperand {
+  valueBig: bigint;
+}
+
+export interface FnWrapper {
+  fn: PlainObject;
+}
+
+export interface ThisBinding {
+  isThisBinding: true;
+  fieldValues: PlainObject;
+}
+
+export interface StructInstance {
+  isStructInstance: true;
+  fieldValues: PlainObject;
+}
+
+export interface StructDef {
+  isStructDef: true;
+}
+
+export interface ArrayInstance {
+  isArray: true;
+  elements: unknown[];
+  length: number;
+  initializedCount: number;
+  elemType?: string;
+}
+
+export interface ArrayLiteral {
+  arrayLiteral: string[];
+}
+
+export interface Pointer {
+  pointer: true;
+  ptrName: string;
+}
+
+export interface KindBits {
+  kind: string;
+  bits: number;
+}
+
+export interface Ident {
+  ident: string;
+}
+
+export interface AddrOf {
+  addrOf: unknown;
+}
+
+export interface Deref {
+  deref: unknown;
+}
+
+export interface CallArgs {
+  callArgs: unknown[];
+}
+
+export interface CallApp {
+  callApp: unknown;
+}
+
+export interface StructInstantiation {
+  structInstantiation: unknown;
+}
+
+export interface Value {
+  value: unknown;
+}
+
+export interface Mutable {
+  mutable: unknown;
+}
+
+export interface Uninitialized {
+  uninitialized: unknown;
+}
+
+export interface Annotation {
+  annotation: unknown;
+}
+
+export interface ParsedAnnotation {
+  parsedAnnotation: unknown;
+}
+
+export interface LiteralAnnotation {
+  literalAnnotation: unknown;
+}
+
+export interface Params {
+  params: unknown[];
+}
+
+export interface ClosureEnv {
+  closureEnv: unknown;
+}
+
+export interface Body {
+  body: unknown;
+}
+
+export interface IsBlock {
+  isBlock: unknown;
+}
+
+export interface Name {
+  name: unknown;
+}
+
+export interface Fields {
+  fields: unknown;
+}
+
+export interface PtrMutable {
+  ptrMutable: unknown;
+}
+
+export interface PtrIsBool {
+  ptrIsBool: unknown;
+}
+
+export interface Yield {
+  __yield: number;
+}
 
 export function isPlainObject(v: unknown): v is PlainObject {
   // Use `!= undefined` to exclude both `undefined` and `null` without using
@@ -8,15 +147,13 @@ export function isPlainObject(v: unknown): v is PlainObject {
   return typeof v === "object" && v != undefined;
 }
 
-export function isBoolOperand(v: unknown): v is { boolValue: boolean } {
+export function isBoolOperand(v: unknown): v is BoolOperand {
   return (
     isPlainObject(v) && "boolValue" in v && typeof v.boolValue === "boolean"
   );
 }
 
-export function isFloatOperand(
-  v: unknown
-): v is { isFloat: true; floatValue: number } {
+export function isFloatOperand(v: unknown): v is FloatOperand {
   return (
     isPlainObject(v) &&
     "isFloat" in v &&
@@ -26,17 +163,15 @@ export function isFloatOperand(
   );
 }
 
-export function isIntOperand(v: unknown): v is { valueBig: bigint } {
+export function isIntOperand(v: unknown): v is IntOperand {
   return isPlainObject(v) && "valueBig" in v && typeof v.valueBig === "bigint";
 }
 
-export function isFnWrapper(v: unknown): v is { fn: PlainObject } {
+export function isFnWrapper(v: unknown): v is FnWrapper {
   return isPlainObject(v) && "fn" in v && isPlainObject(v.fn);
 }
 
-export function isThisBinding(
-  v: unknown
-): v is { isThisBinding: true; fieldValues: PlainObject } {
+export function isThisBinding(v: unknown): v is ThisBinding {
   return (
     isPlainObject(v) &&
     "isThisBinding" in v &&
@@ -46,9 +181,7 @@ export function isThisBinding(
   );
 }
 
-export function isStructInstance(
-  v: unknown
-): v is { isStructInstance: true; fieldValues: PlainObject } {
+export function isStructInstance(v: unknown): v is StructInstance {
   return (
     isPlainObject(v) &&
     "isStructInstance" in v &&
@@ -58,18 +191,12 @@ export function isStructInstance(
   );
 }
 
-export function isStructDef(v: unknown): v is { isStructDef: true } {
+export function isStructDef(v: unknown): v is StructDef {
   return isPlainObject(v) && "isStructDef" in v && v.isStructDef === true;
 }
 
 // Array runtime instance: { isArray: true, elements: unknown[], length: number, initializedCount: number }
-export function isArrayInstance(v: unknown): v is {
-  isArray: true;
-  elements: unknown[];
-  length: number;
-  initializedCount: number;
-  elemType?: string;
-} {
+export function isArrayInstance(v: unknown): v is ArrayInstance {
   if (!isPlainObject(v)) return false;
   if (!("isArray" in v) || v.isArray !== true) return false;
   const elements = getProp(v, "elements");
@@ -83,13 +210,13 @@ export function isArrayInstance(v: unknown): v is {
 }
 
 // parse-time array literal placeholder shape
-export function hasArrayLiteral(v: unknown): v is { arrayLiteral: string[] } {
+export function hasArrayLiteral(v: unknown): v is ArrayLiteral {
   if (!isPlainObject(v)) return false;
   const arr = getProp(v, "arrayLiteral");
   return Array.isArray(arr);
 }
 
-export function isPointer(v: unknown): v is { pointer: true; ptrName: string } {
+export function isPointer(v: unknown): v is Pointer {
   return (
     isPlainObject(v) &&
     "pointer" in v &&
@@ -146,7 +273,7 @@ export function hasStringProp(obj: unknown, key: string): boolean {
 }
 
 // Type guards for common property shapes
-export function hasKindBits(v: unknown): v is { kind: string; bits: number } {
+export function hasKindBits(v: unknown): v is KindBits {
   return (
     isPlainObject(v) &&
     "kind" in v &&
@@ -156,100 +283,94 @@ export function hasKindBits(v: unknown): v is { kind: string; bits: number } {
   );
 }
 
-export function hasIdent(v: unknown): v is { ident: string } {
+export function hasIdent(v: unknown): v is Ident {
   return isPlainObject(v) && "ident" in v && typeof v.ident === "string";
 }
 
-export function hasAddrOf(v: unknown): v is { addrOf: unknown } {
+export function hasAddrOf(v: unknown): v is AddrOf {
   return isPlainObject(v) && "addrOf" in v;
 }
 
-export function hasDeref(v: unknown): v is { deref: unknown } {
+export function hasDeref(v: unknown): v is Deref {
   return isPlainObject(v) && "deref" in v;
 }
 
-export function hasCallArgs(v: unknown): v is { callArgs: unknown[] } {
+export function hasCallArgs(v: unknown): v is CallArgs {
   return isPlainObject(v) && "callArgs" in v && Array.isArray(v.callArgs);
 }
 
-export function hasCallApp(v: unknown): v is { callApp: unknown } {
+export function hasCallApp(v: unknown): v is CallApp {
   return isPlainObject(v) && "callApp" in v;
 }
 
-export function hasStructInstantiation(
-  v: unknown
-): v is { structInstantiation: unknown } {
+export function hasStructInstantiation(v: unknown): v is StructInstantiation {
   return isPlainObject(v) && "structInstantiation" in v;
 }
 
-export function hasValue(v: unknown): v is { value: unknown } {
+export function hasValue(v: unknown): v is Value {
   return isPlainObject(v) && Object.prototype.hasOwnProperty.call(v, "value");
 }
 
-export function hasMutable(v: unknown): v is { mutable: unknown } {
+export function hasMutable(v: unknown): v is Mutable {
   return isPlainObject(v) && "mutable" in v;
 }
 
-export function hasUninitialized(v: unknown): v is { uninitialized: unknown } {
+export function hasUninitialized(v: unknown): v is Uninitialized {
   return isPlainObject(v) && "uninitialized" in v;
 }
 
-export function hasAnnotation(v: unknown): v is { annotation: unknown } {
+export function hasAnnotation(v: unknown): v is Annotation {
   return isPlainObject(v) && "annotation" in v;
 }
 
-export function hasParsedAnnotation(
-  v: unknown
-): v is { parsedAnnotation: unknown } {
+export function hasParsedAnnotation(v: unknown): v is ParsedAnnotation {
   return isPlainObject(v) && "parsedAnnotation" in v;
 }
 
-export function hasLiteralAnnotation(
-  v: unknown
-): v is { literalAnnotation: unknown } {
+export function hasLiteralAnnotation(v: unknown): v is LiteralAnnotation {
   return isPlainObject(v) && "literalAnnotation" in v;
 }
 
-export function hasParams(v: unknown): v is { params: unknown[] } {
+export function hasParams(v: unknown): v is Params {
   return isPlainObject(v) && "params" in v && Array.isArray(v.params);
 }
 
-export function hasClosureEnv(v: unknown): v is { closureEnv: unknown } {
+export function hasClosureEnv(v: unknown): v is ClosureEnv {
   return isPlainObject(v) && "closureEnv" in v;
 }
 
-export function hasBody(v: unknown): v is { body: unknown } {
+export function hasBody(v: unknown): v is Body {
   return isPlainObject(v) && "body" in v;
 }
 
-export function hasIsBlock(v: unknown): v is { isBlock: unknown } {
+export function hasIsBlock(v: unknown): v is IsBlock {
   return isPlainObject(v) && "isBlock" in v;
 }
 
-export function hasName(v: unknown): v is { name: unknown } {
+export function hasName(v: unknown): v is Name {
   return isPlainObject(v) && "name" in v;
 }
 
-export function hasFields(v: unknown): v is { fields: unknown } {
+export function hasFields(v: unknown): v is Fields {
   return isPlainObject(v) && "fields" in v;
 }
 
-export function hasPtrMutable(v: unknown): v is { ptrMutable: unknown } {
+export function hasPtrMutable(v: unknown): v is PtrMutable {
   return isPlainObject(v) && "ptrMutable" in v;
 }
 
-export function hasPtrIsBool(v: unknown): v is { ptrIsBool: unknown } {
+export function hasPtrIsBool(v: unknown): v is PtrIsBool {
   return isPlainObject(v) && "ptrIsBool" in v;
 }
 
-export function hasYield(v: unknown): v is { __yield: number } {
+export function hasYield(v: unknown): v is Yield {
   return isPlainObject(v) && "__yield" in v && typeof v.__yield === "number";
 }
 
 // Setter helpers - avoid `as` type assertions by using Object.defineProperty
 // These functions mutate properties on objects that have been verified via type guards.
 
-export function setValue(obj: { value: unknown }, val: unknown): void {
+export function setValue(obj: Value, val: unknown): void {
   Object.defineProperty(obj, "value", {
     value: val,
     writable: true,
@@ -258,10 +379,7 @@ export function setValue(obj: { value: unknown }, val: unknown): void {
   });
 }
 
-export function setUninitialized(
-  obj: { uninitialized: unknown },
-  val: boolean
-): void {
+export function setUninitialized(obj: Uninitialized, val: boolean): void {
   Object.defineProperty(obj, "uninitialized", {
     value: val,
     writable: true,

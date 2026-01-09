@@ -134,10 +134,19 @@ export function assignToPlaceholder(
 }
 
 /**
+ * Array instance interface for index assignment
+ */
+export interface ArrayInstanceForAssignment {
+  elements: unknown[];
+  initializedCount: number;
+  length: number;
+}
+
+/**
  * Perform index assignment into an array instance
  */
 export function doIndexAssignment(
-  arrInst: { elements: unknown[]; initializedCount: number; length: number },
+  arrInst: ArrayInstanceForAssignment,
   idxVal: number,
   rhsOperand: unknown,
   op: string | undefined

@@ -23,6 +23,23 @@ import {
   isArrayInstance,
 } from "../types";
 
+interface FieldValuesMap {
+  [k: string]: unknown;
+}
+
+interface ThisBinding {
+  isThisBinding: true;
+  fieldValues: FieldValuesMap;
+}
+
+interface FunctionObject {
+  [k: string]: unknown;
+}
+
+interface FunctionWrapper {
+  fn: FunctionObject;
+}
+
 // Forward declaration - will be set by eval.ts to avoid circular imports
 let evaluateReturningOperandFn:
   | ((exprStr: string, env: Env) => unknown)
@@ -80,13 +97,16 @@ export function normalizeBoundThis(val: unknown): unknown {
 export function makeBoundWrapperFromOrigFn(
   origFn: unknown,
   boundThis: unknown
-): { fn: { [k: string]: unknown } } {
+): FunctionWrapper {
   if (!isPlainObject(origFn)) throw new Error("internal error: invalid fn");
   return { fn: buildBoundFnFromOrig(origFn, boundThis) };
 }
 
-function buildBoundFnFromOrig(origFn: unknown, boundThis: unknown) {
-  const boundFn: { [k: string]: unknown } = {};
+function buildBoundFnFromOrig(
+  origFn: unknown,
+  boundThis: unknown
+): FunctionObject {
+  const boundFn: FunctionObject = {};
 
   // params
   if (hasParams(origFn) && Array.isArray(origFn.params)) {
@@ -118,14 +138,8 @@ function buildBoundFnFromOrig(origFn: unknown, boundThis: unknown) {
 }
 
 // helper to build a `this` binding object from an env
-function buildThisBindingFromEnv(envLocal: Env): {
-  isThisBinding: true;
-  fieldValues: { [k: string]: unknown };
-} {
-  const thisObj: {
-    isThisBinding: true;
-    fieldValues: { [k: string]: unknown };
-  } = {
+function buildThisBindingFromEnv(envLocal: Env): ThisBinding {
+  const thisObj: ThisBinding = {
     isThisBinding: true,
     fieldValues: {},
   };

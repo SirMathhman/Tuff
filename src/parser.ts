@@ -1,5 +1,14 @@
 import { checkRange } from "./types";
 
+export interface OperandObject {
+  [k: string]: unknown;
+}
+
+export interface StructField {
+  name: string;
+  value: string;
+}
+
 export function splitTopLevelStatements(str: string): string[] {
   const parts: string[] = [];
   let depth = 0;
@@ -134,14 +143,14 @@ export function parseOperand(token: string) {
   return { valueBig: BigInt(numStr), isFloat: false };
 }
 
-type CommentStripState = {
+interface CommentStripState {
   input: string;
   out: string;
   i: number;
   L: number;
   state: "normal" | "line" | "block" | "string";
   quote: string | undefined;
-};
+}
 
 function stepStripNormal(s: CommentStripState) {
   if (s.input.startsWith("//", s.i)) {
@@ -216,7 +225,7 @@ function applyPrefixesToOperand(operand: unknown, prefixes: string[]) {
   return op;
 }
 
-function isOperandObject(op: unknown): op is { [k: string]: unknown } {
+function isOperandObject(op: unknown): op is OperandObject {
   return typeof op === "object" && op != undefined;
 }
 
@@ -304,7 +313,7 @@ function parseCallAt(src: string, j: number) {
 
 function parseStructFields(inner: string) {
   const fieldParts = parseCommaSeparatedArgs(inner);
-  const fields: Array<{ name: string; value: string }> = [];
+  const fields: Array<StructField> = [];
   for (const fieldPart of fieldParts) {
     const fm = fieldPart.match(/^([a-zA-Z_]\w*)\s*:\s*(.+)$/);
     if (!fm) {
@@ -341,7 +350,7 @@ function parseIdentifierAt(
   const id = src.slice(i).match(/^([a-zA-Z_]\w*)/);
   if (!id) return undefined;
 
-  const base: { [k: string]: unknown } = { ident: id[1] };
+  const base: OperandObject = { ident: id[1] };
   let j = skipWs(src, i + id[1].length);
 
   if (src[j] === "(") {
