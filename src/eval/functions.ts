@@ -82,19 +82,27 @@ export function makeBoundWrapperFromOrigFn(
   boundThis: unknown
 ): { fn: { [k: string]: unknown } } {
   if (!isPlainObject(origFn)) throw new Error("internal error: invalid fn");
+  return { fn: buildBoundFnFromOrig(origFn, boundThis) };
+}
+
+function buildBoundFnFromOrig(origFn: unknown, boundThis: unknown) {
   const boundFn: { [k: string]: unknown } = {};
+
+  // params
   if (hasParams(origFn) && Array.isArray(origFn.params)) {
     const origParams = origFn.params;
     if (origParams.length > 0) {
       const first = origParams[0];
       const firstName =
         isPlainObject(first) && hasName(first) ? first.name : first;
-      if (typeof firstName === "string" && firstName === "this")
-        boundFn.params = origParams.slice(1);
-      else boundFn.params = origParams;
+      boundFn.params =
+        typeof firstName === "string" && firstName === "this"
+          ? origParams.slice(1)
+          : origParams;
     } else boundFn.params = [];
   }
 
+  // body, flags, annotations, closure, and nativeImpl
   if (hasBody(origFn) && typeof origFn.body === "string")
     boundFn.body = origFn.body;
   if (hasIsBlock(origFn)) boundFn.isBlock = origFn.isBlock;
@@ -106,7 +114,7 @@ export function makeBoundWrapperFromOrigFn(
   if (typeof nativeMaybe === "function") boundFn.nativeImpl = nativeMaybe;
 
   boundFn.boundThis = boundThis;
-  return { fn: boundFn };
+  return boundFn;
 }
 
 // helper to build a `this` binding object from an env

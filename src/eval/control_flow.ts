@@ -11,6 +11,41 @@ import { applyBinaryOp } from "./operators";
 // Type for the evaluateReturningOperand function to avoid circular imports
 type EvaluateFn = (exprStr: string, localEnv: Env) => unknown;
 
+function parseMatchTargetAndRest(sTrim: string): {
+  targetExpr: string;
+  rest: string;
+} {
+  const afterMatch = sTrim.slice("match".length).trimStart();
+  if (afterMatch.startsWith("(")) {
+    const startParen = sTrim.indexOf("(", 0);
+    const endParen = findMatchingParen(sTrim, startParen, "(", ")");
+    if (endParen === -1) throw new Error("unbalanced parentheses in match");
+    const targetExpr = sTrim.slice(startParen + 1, endParen).trim();
+    const rest = sTrim.slice(endParen + 1).trimStart();
+    return { targetExpr, rest };
+  }
+
+  const braceIdx = afterMatch.indexOf("{");
+  if (braceIdx === -1) throw new Error("invalid match syntax");
+  const targetExpr = afterMatch.slice(0, braceIdx).trim();
+  const rest = afterMatch.slice(braceIdx).trimStart();
+  return { targetExpr, rest };
+}
+
+function extractMatchParts(sTrim: string, targetExpr: string, rest: string) {
+  if (!rest.startsWith("{")) throw new Error("invalid match block");
+  const startBrace = sTrim.indexOf(
+    "{",
+    sTrim.indexOf(targetExpr) + (targetExpr.length || 0)
+  );
+  const endBrace = findMatchingParen(sTrim, startBrace, "{", "}");
+  if (endBrace === -1) throw new Error("unbalanced braces in match");
+  const inner = sTrim.slice(startBrace + 1, endBrace);
+  return splitTopLevelStatements(inner)
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+
 /**
  * Check if a condition value is truthy
  */
@@ -72,38 +107,9 @@ export function handleMatchExpression(
   localEnv: Env,
   evaluate: EvaluateFn
 ): unknown {
-  // after 'match', parse the target expression which may be parenthesized or bare
-  let afterMatch = sTrim.slice("match".length).trimStart();
-  let targetExpr = "";
-  let rest = "";
-  if (afterMatch.startsWith("(")) {
-    const startParen = sTrim.indexOf("(", 0);
-    const endParen = findMatchingParen(sTrim, startParen, "(", ")");
-    if (endParen === -1) throw new Error("unbalanced parentheses in match");
-    targetExpr = sTrim.slice(startParen + 1, endParen).trim();
-    rest = sTrim.slice(endParen + 1).trimStart();
-  } else {
-    // take everything up to the first '{' as the target expression
-    const braceIdx = afterMatch.indexOf("{");
-    if (braceIdx === -1) throw new Error("invalid match syntax");
-    targetExpr = afterMatch.slice(0, braceIdx).trim();
-    rest = afterMatch.slice(braceIdx).trimStart();
-  }
-
+  const { targetExpr, rest } = parseMatchTargetAndRest(sTrim);
   const targetOp = evaluate(targetExpr, localEnv);
-
-  if (!rest.startsWith("{")) throw new Error("invalid match block");
-  const startBrace = sTrim.indexOf(
-    "{",
-    sTrim.indexOf(targetExpr) + (targetExpr.length || 0)
-  );
-  const endBrace = findMatchingParen(sTrim, startBrace, "{", "}");
-  if (endBrace === -1) throw new Error("unbalanced braces in match");
-  const inner = sTrim.slice(startBrace + 1, endBrace);
-
-  const parts = splitTopLevelStatements(inner)
-    .map((p) => p.trim())
-    .filter(Boolean);
+  const parts = extractMatchParts(sTrim, targetExpr, rest);
 
   let defaultBody: string | undefined = undefined;
   for (const part of parts) {

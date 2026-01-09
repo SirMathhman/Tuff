@@ -22,6 +22,140 @@ import { Env, envClone, envGet, envSet } from "../env";
 import type { InterpretFn } from "../types";
 import { isPlainObject, toErrorMessage } from "../types";
 
+type BlockCtx = {
+  env: Env;
+  localEnv: Env;
+  declared: Set<string>;
+  interpret: InterpretFn;
+  evaluateRhsLocal: (rhs: string, envLocal: Env) => unknown;
+  getLastTopLevelStatementLocal: (s: string) => string | undefined;
+};
+
+function interpretTrailingExprOrUndefined(ctx: BlockCtx, tExpr: string | undefined) {
+  if (tExpr)
+    return { handled: true, last: ctx.interpret(tExpr + ";", ctx.localEnv) };
+  return { handled: true, last: undefined };
+}
+
+function handleOutFnStatement(ctx: BlockCtx, stmt: string) {
+  const stripped = stmt.replace(/^out\s+/, "");
+  const parsed = parseFnComponents(stripped);
+  const tExpr = registerFunctionFromStmt(stripped, ctx.localEnv, ctx.declared);
+  const __exports = envGet(ctx.localEnv, "__exports");
+  if (isPlainObject(__exports))
+    __exports[parsed.name] = envGet(ctx.localEnv, parsed.name);
+  return interpretTrailingExprOrUndefined(ctx, tExpr);
+}
+
+function handleFnDeclaration(ctx: BlockCtx, stmt: string) {
+  const tExpr = registerFunctionFromStmt(stmt, ctx.localEnv, ctx.declared);
+  return interpretTrailingExprOrUndefined(ctx, tExpr);
+}
+
+function handleStructDefinition(ctx: BlockCtx, stmt: string) {
+  const structDef = parseStructDef(stmt);
+  if (ctx.declared.has(structDef.name))
+    throw new Error("duplicate declaration");
+  ctx.declared.add(structDef.name);
+  envSet(ctx.localEnv, structDef.name, {
+    isStructDef: true,
+    name: structDef.name,
+    fields: structDef.fields,
+  });
+  const remaining = stmt.slice(structDef.endPos).trim();
+  if (remaining)
+    return {
+      handled: true,
+      last: ctx.interpret(remaining + ";", ctx.localEnv),
+    };
+  return { handled: true, last: undefined };
+}
+
+function handleYieldStatement(ctx: BlockCtx, stmt: string) {
+  const m = stmt.match(/^yield\s+([\s\S]+)$/);
+  if (!m) throw new Error("yield requires an expression");
+  const rhs = m[1].trim();
+  if (!rhs) throw new Error("yield requires an expression");
+  const rhsOperand = ctx.evaluateRhsLocal(rhs, ctx.localEnv);
+  throw { __yield: convertOperandToNumber(rhsOperand) };
+}
+
+function handleTypeAliasDeclaration(ctx: BlockCtx, stmt: string) {
+  const m = stmt.match(/^type\s+([a-zA-Z_]\w*)\s*=\s*([^;]+);?$/);
+  if (!m) throw new Error("invalid type declaration");
+  const name = m[1];
+  const alias = m[2].trim();
+  if (ctx.declared.has(name)) throw new Error("duplicate declaration");
+  ctx.declared.add(name);
+  envSet(ctx.localEnv, name, { typeAlias: alias });
+  return { handled: true, last: undefined };
+}
+
+function handleLeadingDeclarations(ctx: BlockCtx, stmt: string) {
+  if (/^out\s+fn\b/.test(stmt)) return handleOutFnStatement(ctx, stmt);
+  if (/^extern\s+fn\b/.test(stmt)) {
+    handleExternFn(stmt, ctx.localEnv, ctx.declared);
+    return { handled: true, last: undefined };
+  }
+  if (/^extern\s+let\b/.test(stmt)) {
+    handleExternLet(stmt, ctx.localEnv, ctx.declared);
+    return { handled: true, last: undefined };
+  }
+  if (/^extern\b/.test(stmt) || /^from\b/.test(stmt)) {
+    handleImportStatement(stmt, ctx.env, ctx.localEnv, ctx.declared);
+    return { handled: true, last: undefined };
+  }
+  if (/^fn\b/.test(stmt)) return handleFnDeclaration(ctx, stmt);
+  return { handled: false, last: undefined };
+}
+
+function handleNonLeadingStatement(ctx: BlockCtx, stmt: string) {
+  if (/^yield\b/.test(stmt)) {
+    handleYieldStatement(ctx, stmt);
+    return { handled: true };
+  }
+
+  if (/^let\b/.test(stmt)) {
+    const res = handleLetStatement(
+      stmt,
+      ctx.localEnv,
+      ctx.declared,
+      ctx.evaluateRhsLocal,
+      evaluateReturningOperand
+    );
+    if (res.handled) return { handled: true, last: res.last };
+    return { handled: true, last: undefined };
+  }
+
+  if (/^type\b/.test(stmt)) return handleTypeAliasDeclaration(ctx, stmt);
+  if (/^struct\b/.test(stmt)) return handleStructDefinition(ctx, stmt);
+  if (handleIfStatement(stmt, ctx.localEnv, ctx.interpret))
+    return { handled: true, last: undefined };
+  if (handleWhileStatement(stmt, ctx.localEnv, ctx.interpret))
+    return { handled: true, last: undefined };
+  if (handleForStatement(stmt, ctx.localEnv, ctx.interpret))
+    return { handled: true, last: undefined };
+
+  const assignParts = extractAssignmentParts(stmt);
+  if (assignParts) {
+    const res = handleAssignmentStatement(
+      assignParts,
+      ctx.localEnv,
+      ctx.evaluateRhsLocal,
+      convertOperandToNumber
+    );
+    return { handled: true, last: res.last };
+  }
+
+  const last = evalBracedBlockAndTrailingExpression(
+    stmt,
+    ctx.localEnv,
+    ctx.interpret,
+    evaluateReturningOperand
+  );
+  return { handled: true, last };
+}
+
 export function interpretBlock(
   s: string,
   env: Env,
@@ -44,208 +178,31 @@ function interpretBlockInternal(
 
   const getLastTopLevelStatementLocal = (str: string) =>
     getLastTopLevelStatement(str, splitTopLevelStatements);
-
   const evaluateRhsLocal = (rhs: string, envLocal: Env) =>
     evaluateRhs(rhs, envLocal, interpret, getLastTopLevelStatementLocal);
+  const ctx: BlockCtx = {
+    env,
+    localEnv,
+    declared,
+    interpret,
+    evaluateRhsLocal,
+    getLastTopLevelStatementLocal,
+  };
 
   const stmts = splitTopLevelStatements(s);
-
-  function handleOutFnStatement(
-    stmt: string,
-    localEnv: Env,
-    declared: Set<string>,
-    interpret: InterpretFn
-  ): { handled: boolean; last?: unknown } {
-    const stripped = stmt.replace(/^out\s+/, "");
-    const parsed = parseFnComponents(stripped);
-    const tExpr = registerFunctionFromStmt(stripped, localEnv, declared);
-    const __exports = envGet(localEnv, "__exports");
-    if (isPlainObject(__exports))
-      __exports[parsed.name] = envGet(localEnv, parsed.name);
-    if (tExpr) {
-      return { handled: true, last: interpret(tExpr + ";", localEnv) };
-    }
-    return { handled: true, last: undefined };
-  }
-
-  function handleFnDeclaration(
-    stmt: string,
-    localEnv: Env,
-    declared: Set<string>,
-    interpret: InterpretFn
-  ): { handled: boolean; last?: unknown } {
-    const tExpr = registerFunctionFromStmt(stmt, localEnv, declared);
-    if (tExpr) return { handled: true, last: interpret(tExpr + ";", localEnv) };
-    return { handled: true, last: undefined };
-  }
-
-  function handleStructDefinition(
-    stmt: string,
-    localEnv: Env,
-    declared: Set<string>,
-    interpret: InterpretFn
-  ): { handled: boolean; last?: unknown } {
-    const structDef = parseStructDef(stmt);
-    if (declared.has(structDef.name)) throw new Error("duplicate declaration");
-    declared.add(structDef.name);
-    envSet(localEnv, structDef.name, {
-      isStructDef: true,
-      name: structDef.name,
-      fields: structDef.fields,
-    });
-    const remaining = stmt.slice(structDef.endPos).trim();
-    if (remaining)
-      return { handled: true, last: interpret(remaining + ";", localEnv) };
-    return { handled: true, last: undefined };
-  }
-
-  function handleYieldStatement(
-    stmt: string,
-    localEnv: Env,
-    evaluateRhsLocal: (rhs: string, envLocal: Env) => unknown
-  ): { handled: boolean } {
-    const m = stmt.match(/^yield\s+([\s\S]+)$/);
-    if (!m) throw new Error("yield requires an expression");
-    const rhs = m[1].trim();
-    if (!rhs) throw new Error("yield requires an expression");
-    const rhsOperand = evaluateRhsLocal(rhs, localEnv);
-    // throw a special marker that bubbles out of nested interpret() calls
-    // until it is handled at the expression/initializer boundary
-    throw { __yield: convertOperandToNumber(rhsOperand) };
-  }
-
-  function handleTypeAliasDeclaration(
-    stmt: string,
-    localEnv: Env,
-    declared: Set<string>
-  ): { handled: boolean; last?: unknown } {
-    const m = stmt.match(/^type\s+([a-zA-Z_]\w*)\s*=\s*([^;]+);?$/);
-    if (!m) throw new Error("invalid type declaration");
-    const name = m[1];
-    const alias = m[2].trim();
-    if (declared.has(name)) throw new Error("duplicate declaration");
-    declared.add(name);
-    envSet(localEnv, name, { typeAlias: alias });
-    return { handled: true, last: undefined };
-  }
 
   for (let raw of stmts) {
     const stmt = raw.trim();
     if (!stmt) continue;
 
-    // Leading declarations and imports
-    function handleLeadingDeclarations(stmt: string) {
-      if (/^out\s+fn\b/.test(stmt)) {
-        const res = handleOutFnStatement(stmt, localEnv, declared, interpret);
-        if (res.handled) last = res.last;
-        return true;
-      }
-
-      if (/^extern\s+fn\b/.test(stmt)) {
-        handleExternFn(stmt, localEnv, declared);
-        last = undefined;
-        return true;
-      }
-
-      if (/^extern\s+let\b/.test(stmt)) {
-        handleExternLet(stmt, localEnv, declared);
-        last = undefined;
-        return true;
-      }
-
-      // import statement: optionally prefixed with `extern`: `extern from <ns> use { a, b }`
-      if (/^extern\b/.test(stmt) || /^from\b/.test(stmt)) {
-        handleImportStatement(stmt, env, localEnv, declared);
-        last = undefined;
-        return true;
-      }
-
-      if (/^fn\b/.test(stmt)) {
-        const res = handleFnDeclaration(stmt, localEnv, declared, interpret);
-        if (res.handled) last = res.last;
-        return true;
-      }
-
-      return false;
-    }
-
-    if (handleLeadingDeclarations(stmt)) continue;
-
-    // yield statement: `yield <expr>` causes immediate block-level return with <expr>
-    if (/^yield\b/.test(stmt)) {
-      handleYieldStatement(stmt, localEnv, evaluateRhsLocal);
-    }
-
-    // let statements handled by helper
-    if (/^let\b/.test(stmt)) {
-      const res = handleLetStatement(
-        stmt,
-        localEnv,
-        declared,
-        evaluateRhsLocal,
-        evaluateReturningOperand
-      );
-      if (res.handled) last = res.last;
+    const leading = handleLeadingDeclarations(ctx, stmt);
+    if (leading.handled) {
+      last = leading.last;
       continue;
-    } else {
-      // type alias: `type Name = <annotation>`
-      if (/^type\b/.test(stmt)) {
-        const res = handleTypeAliasDeclaration(stmt, localEnv, declared);
-        if (res.handled) last = res.last;
-        continue;
-      }
-
-      // struct definition: struct Name { field1 : Type1; field2 : Type2; ... }
-      if (/^struct\b/.test(stmt)) {
-        const res = handleStructDefinition(stmt, localEnv, declared, interpret);
-        if (res.handled) last = res.last;
-        continue;
-      }
-
-      // if statement (statement-level, optional else)
-      if (handleIfStatement(stmt, localEnv, interpret)) {
-        last = undefined;
-        continue;
-      }
-
-      // while loop - delegated to extracted handler
-      if (handleWhileStatement(stmt, localEnv, interpret)) {
-        last = undefined;
-        continue;
-      }
-
-      // for loop - delegated to extracted handler
-      if (handleForStatement(stmt, localEnv, interpret)) {
-        last = undefined;
-        continue;
-      }
-
-      // Handle all assignment statements: compound assignment, deref assignment, etc.
-      const assignParts = extractAssignmentParts(stmt);
-      if (assignParts) {
-        const res = handleAssignmentStatement(
-          assignParts,
-          localEnv,
-          evaluateRhsLocal,
-          convertOperandToNumber
-        );
-        if (res.handled) {
-          last = res.last;
-          continue;
-        }
-      } else {
-        // Support statements that begin with a braced block possibly followed by an
-        // expression (e.g., `{ } x`). Delegate to helper to reduce complexity of the
-        // enclosing function.
-        let remaining = stmt;
-        last = evalBracedBlockAndTrailingExpression(
-          remaining,
-          localEnv,
-          interpret,
-          evaluateReturningOperand
-        );
-      }
     }
+
+    const nonLeading = handleNonLeadingStatement(ctx, stmt);
+    last = nonLeading.last;
   }
   // if the block/sequence contained only statements (no final expression), return 0
   if (last === undefined) return 0;

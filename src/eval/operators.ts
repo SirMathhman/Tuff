@@ -29,29 +29,9 @@ function checkTypeMatch(leftVal: unknown, tExpr: string): boolean {
     .map((p) => p.trim())
     .filter(Boolean);
   for (const p of parts) {
-    // integer types: I32, U8 etc.
     const intMatch = p.match(/^([uUiI])(\d+)$/);
     if (intMatch) {
-      const kind = intMatch[1] === "u" || intMatch[1] === "U" ? "u" : "i";
-      const bits = Number(intMatch[2]);
-      if (isIntOperand(leftVal)) {
-        if (hasKindBits(leftVal))
-          return leftVal.kind === kind && leftVal.bits === bits;
-        try {
-          checkRange(kind, bits, leftVal.valueBig);
-          return true;
-        } catch {
-          return false;
-        }
-      }
-      if (typeof leftVal === "number" && Number.isInteger(leftVal)) {
-        try {
-          checkRange(kind, bits, BigInt(leftVal));
-          return true;
-        } catch {
-          return false;
-        }
-      }
+      if (matchesIntegerTypePart(leftVal, intMatch)) return true;
       continue;
     }
 
@@ -60,19 +40,43 @@ function checkTypeMatch(leftVal: unknown, tExpr: string): boolean {
       continue;
     }
 
-    // struct type: check struct instance name via safe getter
-    const sname = getProp(leftVal, "structName");
-    if (typeof sname === "string" && sname === p) return true;
-
-    // Allow matching constructor-this bindings (from constructor funcs)
-    if (
-      isThisBinding(leftVal) &&
-      Object.prototype.hasOwnProperty.call(leftVal.fieldValues, p)
-    )
-      return true;
-
-    // If p is a plain type name but not matched above, continue to next union part
+    if (matchesStructOrThisBinding(leftVal, p)) return true;
   }
+  return false;
+}
+
+function matchesIntegerTypePart(leftVal: unknown, intMatch: RegExpMatchArray) {
+  const kind = intMatch[1] === "u" || intMatch[1] === "U" ? "u" : "i";
+  const bits = Number(intMatch[2]);
+  if (isIntOperand(leftVal)) {
+    if (hasKindBits(leftVal))
+      return leftVal.kind === kind && leftVal.bits === bits;
+    try {
+      checkRange(kind, bits, leftVal.valueBig);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  if (typeof leftVal === "number" && Number.isInteger(leftVal)) {
+    try {
+      checkRange(kind, bits, BigInt(leftVal));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+function matchesStructOrThisBinding(leftVal: unknown, p: string) {
+  const sname = getProp(leftVal, "structName");
+  if (typeof sname === "string" && sname === p) return true;
+  if (
+    isThisBinding(leftVal) &&
+    Object.prototype.hasOwnProperty.call(leftVal.fieldValues, p)
+  )
+    return true;
   return false;
 }
 
@@ -214,6 +218,10 @@ export function applyBinaryOp(
   const lNum = toNumericValue(left, "left");
   const rNum = toNumericValue(right, "right");
 
+  return performNumericOp(op, lNum, rNum);
+}
+
+function performNumericOp(op: string, lNum: number, rNum: number) {
   if (op === "+") return lNum + rNum;
   if (op === "-") return lNum - rNum;
   if (op === "*") return lNum * rNum;

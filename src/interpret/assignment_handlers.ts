@@ -36,6 +36,66 @@ export interface AssignmentParts {
 /** Type for RHS evaluation callback functions */
 type EvaluateRhsCallback = (expr: string, e: Env) => unknown;
 
+function getPointerFromExisting(existing: unknown): unknown | undefined {
+  if (
+    isPlainObject(existing) &&
+    hasValue(existing) &&
+    existing.value !== undefined &&
+    isPointer(existing.value)
+  )
+    return existing.value;
+  if (isPlainObject(existing) && isPointer(existing)) return existing;
+  return undefined;
+}
+
+function materializePlaceholderArray(
+  name: string,
+  existingObj: unknown,
+  localEnv: Env
+): unknown {
+  if (
+    !isPlainObject(existingObj) ||
+    !hasUninitialized(existingObj) ||
+    !existingObj.uninitialized
+  )
+    return existingObj;
+  if (!hasAnnotation(existingObj) || typeof existingObj.annotation !== "string")
+    throw new Error("assignment to undeclared variable");
+  const arrAnn = parseArrayAnnotation(String(existingObj.annotation));
+  if (!arrAnn) throw new Error("assignment to non-array variable");
+  if (!hasMutable(existingObj) || !existingObj.mutable)
+    throw new Error("assignment to immutable variable");
+  const arrInst = {
+    isArray: true,
+    elements: new Array(arrAnn.length),
+    length: arrAnn.length,
+    initializedCount: 0,
+    elemType: arrAnn.elemType,
+  };
+  envSet(localEnv, name, {
+    mutable: true,
+    value: arrInst,
+    annotation: existingObj.annotation,
+  });
+  return envGet(localEnv, name);
+}
+
+function extractMutableArrayInstance(existingObj: unknown) {
+  if (
+    !(
+      isPlainObject(existingObj) &&
+      hasValue(existingObj) &&
+      existingObj.value !== undefined &&
+      hasMutable(existingObj) &&
+      existingObj.mutable
+    )
+  )
+    throw new Error("assignment to immutable or non-array variable");
+  const arr = existingObj.value;
+  if (!isArrayInstance(arr)) throw new Error("assignment target is not array");
+  return arr;
+}
+
 function requireExistingAndEvalRhs(
   name: string,
   rhs: string,
@@ -119,15 +179,7 @@ export function handleIndexAssignment(
   let existing = envGet(localEnv, name);
 
   // Support indexing into pointer-to-slice variables (p[0] = ...)
-  let maybePtr: unknown | undefined = undefined;
-  if (
-    isPlainObject(existing) &&
-    hasValue(existing) &&
-    existing.value !== undefined &&
-    isPointer(existing.value)
-  )
-    maybePtr = existing.value;
-  else if (isPlainObject(existing) && isPointer(existing)) maybePtr = existing;
+  const maybePtr = getPointerFromExisting(existing);
 
   if (maybePtr) {
     handlePointerIndexAssignment(
@@ -141,56 +193,7 @@ export function handleIndexAssignment(
     return true;
   }
 
-  function materializePlaceholderArray(name: string, existingObj: unknown) {
-    if (
-      !isPlainObject(existingObj) ||
-      !hasUninitialized(existingObj) ||
-      !existingObj.uninitialized
-    )
-      return existingObj;
-    if (
-      !hasAnnotation(existingObj) ||
-      typeof existingObj.annotation !== "string"
-    )
-      throw new Error("assignment to undeclared variable");
-    const arrAnn = parseArrayAnnotation(String(existingObj.annotation));
-    if (!arrAnn) throw new Error("assignment to non-array variable");
-    if (!hasMutable(existingObj) || !existingObj.mutable)
-      throw new Error("assignment to immutable variable");
-    const arrInst = {
-      isArray: true,
-      elements: new Array(arrAnn.length),
-      length: arrAnn.length,
-      initializedCount: 0,
-      elemType: arrAnn.elemType,
-    };
-    envSet(localEnv, name, {
-      mutable: true,
-      value: arrInst,
-      annotation: existingObj.annotation,
-    });
-    return envGet(localEnv, name);
-  }
-
-  existing = materializePlaceholderArray(name, existing);
-
-  function extractMutableArrayInstance(existingObj: unknown) {
-    if (
-      !(
-        isPlainObject(existingObj) &&
-        hasValue(existingObj) &&
-        existingObj.value !== undefined &&
-        hasMutable(existingObj) &&
-        existingObj.mutable
-      )
-    )
-      throw new Error("assignment to immutable or non-array variable");
-    const arr = existingObj.value;
-    if (!isArrayInstance(arr))
-      throw new Error("assignment target is not array");
-    return arr;
-  }
-
+  existing = materializePlaceholderArray(name, existing, localEnv);
   const arrInst = extractMutableArrayInstance(existing);
 
   const rhsOperand2 = evaluateRhsLocal(rhs, localEnv);
@@ -212,6 +215,18 @@ function handlePointerIndexAssignment(
   localEnv: Env,
   evaluateRhsLocal: EvaluateRhsCallback
 ): void {
+  const { ptrName, targetBinding, arrInst } = resolveArrayPointerTarget(
+    maybePtr,
+    localEnv
+  );
+  const rhsOperand2 = evaluateRhsLocal(rhs, localEnv);
+
+  doIndexAssignment(arrInst, idxVal, rhsOperand2, op);
+
+  persistArrayChange(ptrName, targetBinding, arrInst, localEnv);
+}
+
+function resolveArrayPointerTarget(maybePtr: unknown, localEnv: Env) {
   if (!isPointer(maybePtr)) throw new Error("internal pointer error");
   const ptrName = maybePtr.ptrName;
   if (typeof ptrName !== "string") throw new Error("invalid pointer target");
@@ -239,12 +254,15 @@ function handlePointerIndexAssignment(
   )
     throw new Error("assignment to immutable variable");
 
-  const arrInst = targetVal;
-  const rhsOperand2 = evaluateRhsLocal(rhs, localEnv);
+  return { ptrName, targetBinding, arrInst: targetVal };
+}
 
-  doIndexAssignment(arrInst, idxVal, rhsOperand2, op);
-
-  // persist change back into target binding
+function persistArrayChange(
+  ptrName: string,
+  targetBinding: unknown,
+  arrInst: unknown,
+  localEnv: Env
+) {
   if (
     isPlainObject(targetBinding) &&
     hasValue(targetBinding) &&
@@ -277,30 +295,72 @@ export function handleDerefAssignment(
 
   const newVal = computeAssignmentValue(op, targetExisting, rhsOperand);
 
+  validateAndAssignDeref(targetName, targetExisting, newVal, localEnv);
+}
+
+function validateAndAssignDeref(
+  targetName: string,
+  targetExisting: unknown,
+  newVal: unknown,
+  localEnv: Env
+) {
   // For deref assignment to a placeholder, validate annotation
   if (isPlainObject(targetExisting) && hasUninitialized(targetExisting)) {
-    if (
-      hasLiteralAnnotation(targetExisting) &&
-      targetExisting.literalAnnotation &&
-      !targetExisting.uninitialized &&
-      (!hasMutable(targetExisting) || !targetExisting.mutable)
-    )
-      throw new Error("cannot reassign annotated literal");
-    if (
-      hasParsedAnnotation(targetExisting) &&
-      targetExisting.parsedAnnotation &&
-      targetExisting.uninitialized
-    ) {
-      validateAnnotation(targetExisting.parsedAnnotation, newVal);
-    } else if (
-      hasAnnotation(targetExisting) &&
-      typeof targetExisting.annotation === "string"
-    ) {
-      validateAnnotation(targetExisting.annotation, newVal);
-    }
-    // Use helpers to avoid direct casts and ensure consistent behavior
-    assignToPlaceholder(targetName, targetExisting, newVal, localEnv);
+    handlePlaceholderDerefAssignment(
+      targetName,
+      targetExisting,
+      newVal,
+      localEnv
+    );
+    return;
+  }
+
+  if (assignIfMutableBinding(targetName, targetExisting, newVal, localEnv))
+    return;
+
+  // fallback: set value directly
+  envSet(localEnv, targetName, newVal);
+}
+
+function handlePlaceholderDerefAssignment(
+  targetName: string,
+  targetExisting: unknown,
+  newVal: unknown,
+  localEnv: Env
+) {
+  if (!isPlainObject(targetExisting) || !hasUninitialized(targetExisting))
+    throw new Error("internal error: expected placeholder binding");
+
+  if (
+    hasLiteralAnnotation(targetExisting) &&
+    targetExisting.literalAnnotation &&
+    !targetExisting.uninitialized &&
+    (!hasMutable(targetExisting) || !targetExisting.mutable)
+  )
+    throw new Error("cannot reassign annotated literal");
+  if (
+    hasParsedAnnotation(targetExisting) &&
+    targetExisting.parsedAnnotation &&
+    targetExisting.uninitialized
+  ) {
+    validateAnnotation(targetExisting.parsedAnnotation, newVal);
   } else if (
+    hasAnnotation(targetExisting) &&
+    typeof targetExisting.annotation === "string"
+  ) {
+    validateAnnotation(targetExisting.annotation, newVal);
+  }
+  // Use helpers to avoid direct casts and ensure consistent behavior
+  assignToPlaceholder(targetName, targetExisting, newVal, localEnv);
+}
+
+function assignIfMutableBinding(
+  targetName: string,
+  targetExisting: unknown,
+  newVal: unknown,
+  localEnv: Env
+) {
+  if (
     isPlainObject(targetExisting) &&
     hasValue(targetExisting) &&
     targetExisting.value !== undefined &&
@@ -308,9 +368,9 @@ export function handleDerefAssignment(
     targetExisting.mutable
   ) {
     assignValueToVariable(targetName, targetExisting, newVal, localEnv);
-  } else {
-    envSet(localEnv, targetName, newVal);
+    return true;
   }
+  return false;
 }
 
 /**

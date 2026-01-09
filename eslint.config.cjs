@@ -28,9 +28,17 @@ module.exports = [
         "error",
         { max: 500, skipBlankLines: true, skipComments: false },
       ],
+      "max-lines-per-function": [
+        "error",
+        {
+          max: 50,
+          skipBlankLines: true,
+          skipComments: true,
+        },
+      ],
       // Enforce cyclomatic complexity limit
-      complexity: ["error", { max: 20 }],
-      // Previously: error, max 60 -> 50 -> 45 -> 40 -> 35 -> 30 -> 25. Lowered to 20 to further tighten complexity checks
+      complexity: ["error", { max: 15 }],
+      // Previously: error, max 60 -> 50 -> 45 -> 40 -> 35 -> 30 -> 25 -> 20. Lowered to 15 to further tighten complexity checks
       // Disallow use of the `Record` utility type in favor of `Map` via AST selector
       "no-restricted-syntax": [
         "error",
@@ -53,6 +61,12 @@ module.exports = [
             "Type assertions using <T> are banned; use type guards or 'in' checks instead",
         },
       ],
+    },
+  },
+  {
+    files: ["tests/**/*.ts"],
+    rules: {
+      "max-lines-per-function": "off",
     },
   },
 ];

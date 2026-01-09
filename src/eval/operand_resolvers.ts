@@ -51,32 +51,51 @@ export function resolveAddressOf(
   const { binding: targetBinding, targetVal } = ctx.getBindingTarget(n);
   const ptrObj: { [k: string]: unknown } = { ptrName: n, pointer: true };
 
-  // If the address-of targets an array instance, mark this pointer as a slice
-  // and carry the target mutability so writes through the pointer can be validated.
-  if (isArrayInstance(targetVal)) {
-    ptrObj.ptrIsSlice = true;
-    ptrObj.ptrMutable =
-      isPlainObject(targetBinding) && hasMutable(targetBinding)
-        ? targetBinding.mutable === true
-        : false;
-  }
+  attachArraySliceInfo(ptrObj, targetBinding, targetVal);
+  attachValueInfo(ptrObj, targetVal);
+
+  return ptrObj;
+}
+
+function attachArraySliceInfo(
+  ptrObj: { [k: string]: unknown },
+  targetBinding: unknown,
+  targetVal: unknown
+) {
+  if (!isArrayInstance(targetVal)) return;
+  ptrObj.ptrIsSlice = true;
+  ptrObj.ptrMutable =
+    isPlainObject(targetBinding) && hasMutable(targetBinding)
+      ? targetBinding.mutable === true
+      : false;
+}
+
+function attachValueInfo(ptrObj: { [k: string]: unknown }, targetVal: unknown) {
   if (isPlainObject(targetVal) && hasKindBits(targetVal)) {
     ptrObj.kind = targetVal.kind;
     ptrObj.bits = targetVal.bits;
     if (hasValue(targetVal)) ptrObj.valueBig = targetVal.value;
-  } else if (isIntOperand(targetVal)) {
+    return;
+  }
+  if (isIntOperand(targetVal)) {
     ptrObj.valueBig = targetVal.valueBig;
-  } else if (isFloatOperand(targetVal)) {
+    return;
+  }
+  if (isFloatOperand(targetVal)) {
     ptrObj.isFloat = true;
     ptrObj.floatValue = targetVal.floatValue;
-  } else if (isBoolOperand(targetVal)) {
+    return;
+  }
+  if (isBoolOperand(targetVal)) {
     ptrObj.ptrIsBool = true;
     ptrObj.boolValue = targetVal.boolValue;
-  } else if (typeof targetVal === "number") {
+    return;
+  }
+  if (typeof targetVal === "number") {
     // plain numeric -> treat as integer literal-like
     ptrObj.valueBig = BigInt(targetVal);
+    return;
   }
-  return ptrObj;
 }
 
 /**
@@ -138,9 +157,28 @@ export function resolveStructInstantiation(
   if (!isStructDef(structDef)) throw new Error(`${structName} is not a struct`);
 
   // Evaluate field values
+  const { fieldValues, providedFields } = evaluateStructFieldValues(
+    fieldParts,
+    ctx
+  );
+
+  // Validate all required fields are provided
+  validateStructFields(structDef, providedFields, structName);
+
+  // Create struct instance
+  return {
+    isStructInstance: true,
+    structName,
+    fieldValues,
+  };
+}
+
+function evaluateStructFieldValues(
+  fieldParts: unknown[],
+  ctx: OperandResolutionContext
+) {
   const fieldValues: { [k: string]: unknown } = {};
   const providedFields = new Set<string>();
-
   for (const fieldPart of fieldParts) {
     if (!isPlainObject(fieldPart))
       throw new Error("invalid struct field initializer");
@@ -161,44 +199,35 @@ export function resolveStructInstantiation(
     providedFields.add(fieldName);
     fieldValues[fieldName] = fieldValue;
   }
+  return { fieldValues, providedFields };
+}
 
-  // Validate all required fields are provided
-  (function validateStructFields(
-    def: unknown,
-    provided: Set<string>,
-    structName: string
-  ) {
-    if (!hasFields(def) || !Array.isArray(def.fields))
+function validateStructFields(
+  def: unknown,
+  provided: Set<string>,
+  structName: string
+) {
+  if (!hasFields(def) || !Array.isArray(def.fields))
+    throw new Error("invalid struct definition");
+  const structFields = def.fields;
+  for (const field of structFields) {
+    if (!isPlainObject(field)) throw new Error("invalid struct definition");
+    if (
+      !hasName(field) ||
+      typeof field.name !== "string" ||
+      !hasAnnotation(field) ||
+      typeof field.annotation !== "string"
+    )
       throw new Error("invalid struct definition");
-    const structFields = def.fields;
-    for (const field of structFields) {
-      if (!isPlainObject(field)) throw new Error("invalid struct definition");
-      if (
-        !hasName(field) ||
-        typeof field.name !== "string" ||
-        !hasAnnotation(field) ||
-        typeof field.annotation !== "string"
-      )
-        throw new Error("invalid struct definition");
-      const fieldName = field.name;
-      const annotationRaw = field.annotation;
-      if (!provided.has(fieldName))
-        throw new Error(`missing field ${fieldName} in struct ${structName}`);
-      // For struct fields, just validate that the type annotation is recognized
-      // but don't require literal value matching (different from let bindings)
-      const annotation = annotationRaw.trim();
-      if (!/^[*]?([a-zA-Z_]\w*)(?:\d+)?$/.test(annotation)) {
-        throw new Error(`invalid type annotation for field ${fieldName}`);
-      }
+    const fieldName = field.name;
+    const annotationRaw = field.annotation;
+    if (!provided.has(fieldName))
+      throw new Error(`missing field ${fieldName} in struct ${structName}`);
+    const annotation = annotationRaw.trim();
+    if (!/^[*]?([a-zA-Z_]\w*)(?:\d+)?$/.test(annotation)) {
+      throw new Error(`invalid type annotation for field ${fieldName}`);
     }
-  })(structDef, providedFields, structName);
-
-  // Create struct instance
-  return {
-    isStructInstance: true,
-    structName,
-    fieldValues,
-  };
+  }
 }
 
 /**
@@ -258,31 +287,34 @@ export function resolveIdentifier(
   // Special handling for 'this' binding
   if (n === "this") {
     // If `this` is explicitly bound in the environment, return it directly
-    if (envHas(ctx.localEnv, "this")) return envGet(ctx.localEnv, "this");
+    if (envHas(ctx.localEnv, "this")) {
+      // If env has a `this` binding but it's undefined, fall back to building
+      // a `this` object from the current env so method bodies can access
+      // fields (this occurs when `this` wasn't set by the call path).
+      const val = envGet(ctx.localEnv, "this");
+      if (val === undefined) return buildThisBinding(ctx.localEnv);
+      return val;
+    }
 
+    return buildThisBinding(ctx.localEnv);
+  }
+
+  function buildThisBinding(localEnv: Env) {
     const thisObj: {
       isThisBinding: true;
       fieldValues: { [k: string]: unknown };
     } = { isThisBinding: true, fieldValues: {} };
-    // Build fieldValues from current localEnv
-    for (const [key, value] of envEntries(ctx.localEnv)) {
-      if (key !== "this") {
-        if (
-          isPlainObject(value) &&
-          hasValue(value) &&
-          value.value !== undefined
-        ) {
-          thisObj.fieldValues[key] = value.value;
-        } else if (
-          typeof value === "number" ||
-          typeof value === "string" ||
-          typeof value === "boolean"
-        ) {
-          thisObj.fieldValues[key] = value;
-        } else if (!isStructDef(value)) {
-          thisObj.fieldValues[key] = value;
-        }
-      }
+    for (const [key, value] of envEntries(localEnv)) {
+      if (key === "this") continue;
+      if (isPlainObject(value) && hasValue(value) && value.value !== undefined)
+        thisObj.fieldValues[key] = value.value;
+      else if (
+        typeof value === "number" ||
+        typeof value === "string" ||
+        typeof value === "boolean"
+      )
+        thisObj.fieldValues[key] = value;
+      else if (!isStructDef(value)) thisObj.fieldValues[key] = value;
     }
     return thisObj;
   }

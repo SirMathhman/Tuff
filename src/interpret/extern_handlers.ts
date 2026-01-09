@@ -4,18 +4,7 @@
 import { Env, envGet, envSet } from "../env";
 import { isPlainObject, isFnWrapper, getProp } from "../types";
 
-/**
- * Handle extern fn declaration
- * Returns true if the statement was handled
- */
-export function handleExternFn(
-  stmt: string,
-  localEnv: Env,
-  declared: Set<string>
-): boolean {
-  if (!/^extern\s+fn\b/.test(stmt)) return false;
-
-  // extern function declaration: `extern fn name(params) : Type` (no body)
+function parseExternFnSignature(stmt: string) {
   const m = stmt.match(
     /^extern\s+fn\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*(?:\s*:\s*([^;]+))?\s*;?$/
   );
@@ -33,35 +22,58 @@ export function handleExternFn(
           return { name: pname, annotation: pann };
         });
   const resultAnnotation = m[3] ? m[3].trim() : undefined;
+  return { name, params, resultAnnotation };
+}
+
+function tryMergeExternSignature(
+  localEnv: Env,
+  name: string,
+  params: unknown,
+  resultAnnotation: string | undefined
+): boolean {
+  const existing = envGet(localEnv, name);
+  if (!(isPlainObject(existing) && isFnWrapper(existing))) return false;
+
+  const existingBody = getProp(existing.fn, "body");
+  const existingIsBlock = getProp(existing.fn, "isBlock");
+  const existingClosureEnv = getProp(existing.fn, "closureEnv");
+  const existingNative = getProp(existing.fn, "nativeImpl");
+
+  const newFn: { [k: string]: unknown } = {
+    params,
+    body: typeof existingBody === "string" ? existingBody : "/* extern */",
+    isBlock: existingIsBlock === true,
+    resultAnnotation:
+      typeof resultAnnotation === "string"
+        ? resultAnnotation
+        : getProp(existing.fn, "resultAnnotation"),
+    closureEnv: existingClosureEnv ? existingClosureEnv : undefined,
+  };
+  if (typeof existingNative === "function") newFn.nativeImpl = existingNative;
+
+  envSet(localEnv, name, { fn: newFn });
+  return true;
+}
+
+/**
+ * Handle extern fn declaration
+ * Returns true if the statement was handled
+ */
+export function handleExternFn(
+  stmt: string,
+  localEnv: Env,
+  declared: Set<string>
+): boolean {
+  if (!/^extern\s+fn\b/.test(stmt)) return false;
+
+  // extern function declaration: `extern fn name(params) : Type` (no body)
+  const { name, params, resultAnnotation } = parseExternFnSignature(stmt);
 
   // If the symbol was already introduced (e.g., via import from a native
   // module), merge the extern signature into the existing binding so that
   // native wrappers gain parameter metadata (e.g., a leading `this`).
   if (declared.has(name)) {
-    const existing = envGet(localEnv, name);
-    if (isPlainObject(existing) && isFnWrapper(existing)) {
-      // Rebuild a wrapper fn object by copying existing runtime metadata
-      // (including nativeImpl if present) and applying the extern signature.
-      const existingBody = getProp(existing.fn, "body");
-      const existingIsBlock = getProp(existing.fn, "isBlock");
-      const existingClosureEnv = getProp(existing.fn, "closureEnv");
-      const existingNative = getProp(existing.fn, "nativeImpl");
-
-      const newFn: { [k: string]: unknown } = {
-        params,
-        body: typeof existingBody === "string" ? existingBody : "/* extern */",
-        isBlock: existingIsBlock === true,
-        resultAnnotation:
-          typeof resultAnnotation === "string"
-            ? resultAnnotation
-            : getProp(existing.fn, "resultAnnotation"),
-        closureEnv: existingClosureEnv ? existingClosureEnv : undefined,
-      };
-      if (typeof existingNative === "function")
-        newFn.nativeImpl = existingNative;
-
-      envSet(localEnv, name, { fn: newFn });
-    }
+    tryMergeExternSignature(localEnv, name, params, resultAnnotation);
     return true;
   }
 

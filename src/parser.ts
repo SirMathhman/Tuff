@@ -134,225 +134,289 @@ export function parseOperand(token: string) {
   return { valueBig: BigInt(numStr), isFloat: false };
 }
 
-export function stripAndValidateComments(input: string) {
-  let out = "";
-  let i = 0;
-  const L = input.length;
-  let state: "normal" | "line" | "block" | "string" = "normal";
-  let quote: string | undefined = undefined;
-  while (i < L) {
-    if (state === "normal") {
-      if (input.startsWith("//", i)) {
-        state = "line";
-        i += 2;
-        continue;
-      }
-      if (input.startsWith("/*", i)) {
-        state = "block";
-        i += 2;
-        continue;
-      }
-      const ch = input[i];
-      if (ch === '"' || ch === "'") {
-        quote = ch;
-        state = "string";
-        out += ch;
-        i++;
-        continue;
-      }
-      out += ch;
-      i++;
-      continue;
-    }
-    if (state === "line") {
-      // consume until newline or EOF
-      const ch = input[i];
-      if (ch === "\n") {
-        out += ch;
-        state = "normal";
-      }
-      i++;
-      continue;
-    }
-    if (state === "block") {
-      if (input.startsWith("/*", i)) {
-        throw new Error("nested block comment");
-      }
-      if (input.startsWith("*/", i)) {
-        i += 2;
-        state = "normal";
-        continue;
-      }
-      i++;
-      continue;
-    }
-    if (state === "string") {
-      const ch = input[i];
-      if (ch === "\\") {
-        // escape, copy next char as well if present
-        out += input.substr(i, 2);
-        i += 2;
-        continue;
-      }
-      out += ch;
-      if (ch === quote) {
-        state = "normal";
-        quote = undefined;
-      }
-      i++;
-      continue;
-    }
+type CommentStripState = {
+  input: string;
+  out: string;
+  i: number;
+  L: number;
+  state: "normal" | "line" | "block" | "string";
+  quote: string | undefined;
+};
+
+function stepStripNormal(s: CommentStripState) {
+  if (s.input.startsWith("//", s.i)) {
+    s.state = "line";
+    s.i += 2;
+    return;
   }
-  if (state === "block") throw new Error("unterminated block comment");
-  return out;
+  if (s.input.startsWith("/*", s.i)) {
+    s.state = "block";
+    s.i += 2;
+    return;
+  }
+  const ch = s.input[s.i];
+  if (ch === '"' || ch === "'") {
+    s.quote = ch;
+    s.state = "string";
+    s.out += ch;
+    s.i++;
+    return;
+  }
+  s.out += ch;
+  s.i++;
 }
 
-export function parseOperandAt(src: string, pos: number) {
-  // Support unary address-of '&' and dereference '*' prefixes (allow multiple)
-  let i = pos;
-  let prefixes: string[] = [];
-  while (i < src.length && /[\s]/.test(src[i])) i++;
+function stepStripLine(s: CommentStripState) {
+  const ch = s.input[s.i];
+  if (ch === "\n") {
+    s.out += ch;
+    s.state = "normal";
+  }
+  s.i++;
+}
+
+function stepStripBlock(s: CommentStripState) {
+  if (s.input.startsWith("/*", s.i)) throw new Error("nested block comment");
+  if (s.input.startsWith("*/", s.i)) {
+    s.i += 2;
+    s.state = "normal";
+    return;
+  }
+  s.i++;
+}
+
+function stepStripString(s: CommentStripState) {
+  const ch = s.input[s.i];
+  if (ch === "\\") {
+    s.out += s.input.substr(s.i, 2);
+    s.i += 2;
+    return;
+  }
+  s.out += ch;
+  if (ch === s.quote) {
+    s.state = "normal";
+    s.quote = undefined;
+  }
+  s.i++;
+}
+
+function skipWs(src: string, i: number) {
+  let j = i;
+  while (j < src.length && /[\s]/.test(src[j])) j++;
+  return j;
+}
+
+function applyPrefixesToOperand(operand: unknown, prefixes: string[]) {
+  let op = operand;
+  for (let p = prefixes.length - 1; p >= 0; p--) {
+    const pr = prefixes[p];
+    if (pr === "&") op = { addrOf: op };
+    else op = { deref: op };
+  }
+  return op;
+}
+
+function isOperandObject(op: unknown): op is { [k: string]: unknown } {
+  return typeof op === "object" && op != undefined;
+}
+
+function finalizeOperand(base: unknown, prefixes: string[]) {
+  const maybeOperand = applyPrefixesToOperand(base, prefixes);
+  if (isOperandObject(maybeOperand)) return maybeOperand;
+  return { value: maybeOperand };
+}
+
+function parsePrefixesAt(src: string, pos: number) {
+  let i = skipWs(src, pos);
+  const prefixes: string[] = [];
   while (i < src.length && (src[i] === "&" || src[i] === "*")) {
     prefixes.push(src[i]);
     i++;
-    while (i < src.length && /[\s]/.test(src[i])) i++;
+    i = skipWs(src, i);
   }
+  return { i, prefixes };
+}
 
-  // parenthesized grouped expression: treat as an operand so callers may access fields like `(*p).length`
-  if (src[i] === "(") {
-    const endIdx = findMatchingDelimiter(src, i, "(", ")");
-    if (endIdx === -1) throw new Error("unbalanced parentheses");
-    const inner = src.slice(i + 1, endIdx);
-    const operand = applyPrefixes({ groupedExpr: inner }, prefixes);
-    return { operand, len: i - pos + (endIdx - i + 1) };
-  }
+function parseGroupedExprAt(
+  src: string,
+  pos: number,
+  i: number,
+  prefixes: string[]
+) {
+  if (src[i] !== "(") return undefined;
+  const endIdx = findMatchingDelimiter(src, i, "(", ")");
+  if (endIdx === -1) throw new Error("unbalanced parentheses");
+  const inner = src.slice(i + 1, endIdx);
+  const operand = applyPrefixesToOperand({ groupedExpr: inner }, prefixes);
+  return { operand, len: i - pos + (endIdx - i + 1) };
+}
 
-  function parseStringLiteralAt(i: number) {
-    if (src[i] !== '"' && src[i] !== "'") return undefined;
-    const quote = src[i];
-    let j = i + 1;
-    let closed = false;
-    while (j < src.length) {
-      if (src[j] === "\\") {
-        j += 2; // skip escaped char
-        continue;
-      }
-      if (src[j] === quote) {
-        closed = true;
-        break;
-      }
-      j++;
+function parseStringLiteralAt(
+  src: string,
+  pos: number,
+  i: number,
+  prefixes: string[]
+) {
+  if (src[i] !== '"' && src[i] !== "'") return undefined;
+  const quote = src[i];
+  let j = i + 1;
+  let closed = false;
+  while (j < src.length) {
+    if (src[j] === "\\") {
+      j += 2;
+      continue;
     }
-    if (!closed) throw new Error("unclosed string literal");
-    const inner = src.slice(i + 1, j);
-    const unescaped = unescapeString(inner);
-    const operand = applyPrefixes(unescaped, prefixes);
-    return { operand, len: i - pos + (j - i + 1) };
+    if (src[j] === quote) {
+      closed = true;
+      break;
+    }
+    j++;
   }
+  if (!closed) throw new Error("unclosed string literal");
+  const inner = src.slice(i + 1, j);
+  const unescaped = unescapeString(inner);
+  const operand = applyPrefixesToOperand(unescaped, prefixes);
+  return { operand, len: i - pos + (j - i + 1) };
+}
 
-  function parseArrayLiteralAt(i: number) {
-    if (src[i] !== "[") return undefined;
-    const endIdx = findMatchingDelimiter(src, i, "[", "]");
-    if (endIdx === -1) throw new Error("unbalanced brackets in array literal");
-    const inner = src.slice(i + 1, endIdx).trim();
-    const parts = parseCommaSeparatedArgs(inner);
-    const operand = applyPrefixes({ arrayLiteral: parts }, prefixes);
-    return { operand, len: i - pos + (endIdx - i + 1) };
+function parseArrayLiteralAt(
+  src: string,
+  pos: number,
+  i: number,
+  prefixes: string[]
+) {
+  if (src[i] !== "[") return undefined;
+  const endIdx = findMatchingDelimiter(src, i, "[", "]");
+  if (endIdx === -1) throw new Error("unbalanced brackets in array literal");
+  const inner = src.slice(i + 1, endIdx).trim();
+  const parts = parseCommaSeparatedArgs(inner);
+  const operand = applyPrefixesToOperand({ arrayLiteral: parts }, prefixes);
+  return { operand, len: i - pos + (endIdx - i + 1) };
+}
+
+function parseCallAt(src: string, j: number) {
+  const endIdx = findMatchingClosingParen(src, j);
+  if (endIdx === -1) throw new Error("unbalanced parentheses in call");
+  const inner = src.slice(j + 1, endIdx);
+  const args = parseCommaSeparatedArgs(inner);
+  return { args, endIdx };
+}
+
+function parseStructFields(inner: string) {
+  const fieldParts = parseCommaSeparatedArgs(inner);
+  const fields: Array<{ name: string; value: string }> = [];
+  for (const fieldPart of fieldParts) {
+    const fm = fieldPart.match(/^([a-zA-Z_]\w*)\s*:\s*(.+)$/);
+    if (!fm) {
+      fields.push({ name: `_${fields.length}`, value: fieldPart });
+    } else {
+      fields.push({ name: fm[1], value: fm[2].trim() });
+    }
   }
+  return fields;
+}
 
-  const strLit = parseStringLiteralAt(i);
-  if (strLit) return strLit;
-
-  const arrLit = parseArrayLiteralAt(i);
-  if (arrLit) return arrLit;
-
-  // Try numeric/suffixed literal or boolean literal first
+function parseLiteralAt(
+  src: string,
+  pos: number,
+  i: number,
+  prefixes: string[]
+) {
   const m = src
     .slice(i)
     .match(/^([+-]?\d+(?:\.\d+)?(?:[uUiI]\d+)?|true|false)/i);
-  function applyPrefixes(operand: unknown, prefixes: string[]) {
-    let op = operand;
-    for (let p = prefixes.length - 1; p >= 0; p--) {
-      const pr = prefixes[p];
-      if (pr === "&") op = { addrOf: op };
-      else op = { deref: op };
-    }
-    return op;
-  }
+  if (!m) return undefined;
+  const innerOperand = parseOperand(m[1]);
+  if (!innerOperand) throw new Error("invalid operand");
+  const operand = finalizeOperand(innerOperand, prefixes);
+  return { operand, len: i - pos + m[1].length };
+}
 
-  function isOperandObject(op: unknown): op is { [k: string]: unknown } {
-    return typeof op === "object" && op != undefined;
-  }
-
-  function finalizeOperand(base: unknown): { [k: string]: unknown } {
-    const maybeOperand = applyPrefixes(base, prefixes);
-    if (isOperandObject(maybeOperand)) return maybeOperand;
-    return { value: maybeOperand };
-  }
-
-  function parseCallAt(j: number) {
-    const endIdx = findMatchingClosingParen(src, j);
-    if (endIdx === -1) throw new Error("unbalanced parentheses in call");
-    const inner = src.slice(j + 1, endIdx);
-    const args = parseCommaSeparatedArgs(inner);
-    return { args, endIdx };
-  }
-
-  function parseStructFields(inner: string) {
-    const fieldParts = parseCommaSeparatedArgs(inner);
-    const fields: Array<{ name: string; value: string }> = [];
-    for (const fieldPart of fieldParts) {
-      const fm = fieldPart.match(/^([a-zA-Z_]\w*)\s*:\s*(.+)$/);
-      if (!fm) {
-        // Allow positional fields if they're just values
-        fields.push({ name: `_${fields.length}`, value: fieldPart });
-      } else {
-        fields.push({ name: fm[1], value: fm[2].trim() });
-      }
-    }
-    return fields;
-  }
-
-  function parseLiteralMatch(m: RegExpMatchArray) {
-    const innerOperand = parseOperand(m[1]);
-    if (!innerOperand) throw new Error("invalid operand");
-    const operand = finalizeOperand(innerOperand);
-    return { operand, len: i - pos + m[1].length };
-  }
-
-  if (m) return parseLiteralMatch(m);
-  // fallback: identifier
+function parseIdentifierAt(
+  src: string,
+  pos: number,
+  i: number,
+  prefixes: string[]
+) {
   const id = src.slice(i).match(/^([a-zA-Z_]\w*)/);
-  if (id) {
-    // detect function call syntax `name(...)` or struct instantiation `name { ... }`
-    let operand: { [k: string]: unknown } = { ident: id[1] };
+  if (!id) return undefined;
 
-    // look ahead for parentheses or braces (allow whitespace)
-    let j = i + id[1].length;
-    while (j < src.length && /[\s]/.test(src[j])) j++;
-    if (src[j] === "(") {
-      const { args, endIdx } = parseCallAt(j);
-      operand.callArgs = args;
-      return {
-        operand: finalizeOperand(operand),
-        len: i - pos + id[1].length + (endIdx - j + 1),
-      };
-    } else if (src[j] === "{") {
-      // struct instantiation: Name { field1: value1, field2: value2, ... }
-      const endIdx = findMatchingDelimiter(src, j, "{", "}");
-      if (endIdx === -1)
-        throw new Error("unbalanced braces in struct instantiation");
-      const inner = src.slice(j + 1, endIdx).trim();
-      const fields = parseStructFields(inner);
-      operand.structInstantiation = { name: id[1], fields };
-      // len should be from start position i to endIdx (inclusive of closing brace)
-      return {
-        operand: finalizeOperand(operand),
-        len: i - pos + (endIdx - i + 1),
-      };
-    }
+  const base: { [k: string]: unknown } = { ident: id[1] };
+  let j = skipWs(src, i + id[1].length);
 
-    return { operand: finalizeOperand(operand), len: i - pos + id[1].length };
+  if (src[j] === "(") {
+    const { args, endIdx } = parseCallAt(src, j);
+    base.callArgs = args;
+    return {
+      operand: finalizeOperand(base, prefixes),
+      len: i - pos + id[1].length + (endIdx - j + 1),
+    };
   }
+
+  if (src[j] === "{") {
+    const endIdx = findMatchingDelimiter(src, j, "{", "}");
+    if (endIdx === -1)
+      throw new Error("unbalanced braces in struct instantiation");
+    const inner = src.slice(j + 1, endIdx).trim();
+    const fields = parseStructFields(inner);
+    base.structInstantiation = { name: id[1], fields };
+    return {
+      operand: finalizeOperand(base, prefixes),
+      len: i - pos + (endIdx - i + 1),
+    };
+  }
+
+  return {
+    operand: finalizeOperand(base, prefixes),
+    len: i - pos + id[1].length,
+  };
+}
+
+export function stripAndValidateComments(input: string) {
+  const s: CommentStripState = {
+    input,
+    out: "",
+    i: 0,
+    L: input.length,
+    state: "normal",
+    quote: undefined,
+  };
+
+  while (s.i < s.L) {
+    if (s.state === "normal") {
+      stepStripNormal(s);
+      continue;
+    }
+    if (s.state === "line") {
+      stepStripLine(s);
+      continue;
+    }
+    if (s.state === "block") {
+      stepStripBlock(s);
+      continue;
+    }
+    stepStripString(s);
+  }
+  if (s.state === "block") throw new Error("unterminated block comment");
+  return s.out;
+}
+
+export function parseOperandAt(src: string, pos: number) {
+  const { i, prefixes } = parsePrefixesAt(src, pos);
+
+  const grouped = parseGroupedExprAt(src, pos, i, prefixes);
+  if (grouped) return grouped;
+
+  const strLit = parseStringLiteralAt(src, pos, i, prefixes);
+  if (strLit) return strLit;
+
+  const arrLit = parseArrayLiteralAt(src, pos, i, prefixes);
+  if (arrLit) return arrLit;
+
+  const lit = parseLiteralAt(src, pos, i, prefixes);
+  if (lit) return lit;
+
+  const idRes = parseIdentifierAt(src, pos, i, prefixes);
+  if (idRes) return idRes;
   return undefined;
 }

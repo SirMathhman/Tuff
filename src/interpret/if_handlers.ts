@@ -7,6 +7,12 @@ import { runBody } from "./loop_handlers";
 import { Env } from "../env";
 import type { InterpretFn } from "../types";
 
+function findBracedEndOrThrow(s: string, err: string) {
+  const bEnd = findMatchingParen(s, 0, "{", "}");
+  if (bEnd === -1) throw new Error(err);
+  return bEnd;
+}
+
 /**
  * Handle if statement (statement-level, optional else)
  * Returns true if the statement was handled
@@ -26,13 +32,6 @@ export function handleIfStatement(
   const cond = stmt.slice(start + 1, endIdx).trim();
   let rest = stmt.slice(endIdx + 1).trim();
   if (!rest) throw new Error("missing if body");
-
-  // helper to find a braced block end and throw a contextual error
-  function findBracedEndOrThrow(s: string, err: string) {
-    const bEnd = findMatchingParen(s, 0, "{", "}");
-    if (bEnd === -1) throw new Error(err);
-    return bEnd;
-  }
 
   // parse true body (braced block or single statement)
   let trueBody = "";

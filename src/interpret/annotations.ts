@@ -79,70 +79,18 @@ export function validateAnnotation(
     typeof annotation === "string"
       ? parseArrayAnnotation(annotation)
       : undefined;
-  if (parsedArray) {
-    if (!isArrayInstance(rhsOperand))
-      throw new Error("annotation requires array initializer");
-    const arr = rhsOperand;
-    if (arr.length !== parsedArray.length)
-      throw new Error("array length mismatch");
-    if (arr.initializedCount < parsedArray.initCount)
-      throw new Error(
-        "initializer does not provide required number of initialized elements"
-      );
-    // optionally validate element types later
-    return;
-  }
+  if (parsedArray) return validateArrayAnnotation(parsedArray, rhsOperand);
 
   // slice annotation: *[Type]
   const parsedSlice =
     typeof annotation === "string"
       ? parseSliceAnnotation(annotation)
       : undefined;
-  if (parsedSlice) {
-    if (!isPointer(rhsOperand) || getProp(rhsOperand, "ptrIsSlice") !== true)
-      throw new Error("annotation requires slice pointer initializer");
-    // No further checks here; runtime checks for length/init happen at use time.
-    return;
-  }
+  if (parsedSlice) return validateSliceAnnotation(parsedSlice, rhsOperand);
 
   // pointer annotation: *<inner>
   if (typeof annotation === "string" && /^\s*\*/.test(annotation)) {
     return validatePointerAnnotation(annotation, rhsOperand);
-  }
-
-  function validatePointerAnnotation(annText: string, rhsOperand: unknown) {
-    const inner = annText.replace(/^\s*\*/g, "").trim();
-    if (!isPointer(rhsOperand))
-      throw new Error("annotation requires pointer initializer");
-
-    // inner can be type-only like I32, Bool, or a literal operand
-    const parsedType = (function (s: string) {
-      const t = s.match(/^\s*([uUiI])\s*(\d+)\s*$/);
-      if (!t) return undefined;
-      return {
-        kind: t[1] === "u" || t[1] === "U" ? "u" : "i",
-        bits: Number(t[2]),
-      };
-    })(inner);
-    if (parsedType) {
-      validateTypeOnly(parsedType.kind, parsedType.bits, rhsOperand);
-      return;
-    }
-    if (/^\s*bool\s*$/i.test(inner)) {
-      if (!hasPtrIsBool(rhsOperand) || rhsOperand.ptrIsBool !== true)
-        throw new Error("annotation Pointer Bool requires boolean initializer");
-      return;
-    }
-    // otherwise inner might be a literal like 1I32
-    const ann = parseOperand(inner);
-    if (!ann) throw new Error("invalid annotation in let");
-    // ensure pointer's pointed literal matches
-    checkAnnMatchesRhs(ann, {
-      valueBig: getProp(rhsOperand, "valueBig"),
-      kind: getProp(rhsOperand, "kind"),
-      bits: getProp(rhsOperand, "bits"),
-    });
-    return;
   }
 
   // If annotation is already a parsed operand object (from parsedAnnotation), use it
@@ -151,6 +99,75 @@ export function validateAnnotation(
     return;
   }
 
+  validateTypeOrLiteralAnnotation(annotation, rhsOperand);
+}
+
+function validateArrayAnnotation(
+  parsedArray: ReturnType<typeof parseArrayAnnotation>,
+  rhsOperand: unknown
+) {
+  if (!parsedArray) throw new Error("invalid array annotation");
+  if (!isArrayInstance(rhsOperand))
+    throw new Error("annotation requires array initializer");
+  const arrLen = getProp(rhsOperand, "length");
+  const initCount = getProp(rhsOperand, "initializedCount");
+  if (typeof arrLen !== "number" || arrLen !== parsedArray.length)
+    throw new Error("array length mismatch");
+  if (typeof initCount !== "number" || initCount < parsedArray.initCount)
+    throw new Error(
+      "initializer does not provide required number of initialized elements"
+    );
+  // optionally validate element types later
+}
+
+function validateSliceAnnotation(
+  parsedSlice: ReturnType<typeof parseSliceAnnotation>,
+  rhsOperand: unknown
+) {
+  if (!parsedSlice) throw new Error("invalid slice annotation");
+  if (!isPointer(rhsOperand) || getProp(rhsOperand, "ptrIsSlice") !== true)
+    throw new Error("annotation requires slice pointer initializer");
+  // No further checks here; runtime checks for length/init happen at use time.
+}
+
+function validatePointerAnnotation(annText: string, rhsOperand: unknown) {
+  const inner = annText.replace(/^\s*\*/g, "").trim();
+  if (!isPointer(rhsOperand))
+    throw new Error("annotation requires pointer initializer");
+
+  // inner can be type-only like I32, Bool, or a literal operand
+  const parsedType = (function (s: string) {
+    const t = s.match(/^\s*([uUiI])\s*(\d+)\s*$/);
+    if (!t) return undefined;
+    return {
+      kind: t[1] === "u" || t[1] === "U" ? "u" : "i",
+      bits: Number(t[2]),
+    };
+  })(inner);
+  if (parsedType) {
+    validateTypeOnly(parsedType.kind, parsedType.bits, rhsOperand);
+    return;
+  }
+  if (/^\s*bool\s*$/i.test(inner)) {
+    if (!hasPtrIsBool(rhsOperand) || rhsOperand.ptrIsBool !== true)
+      throw new Error("annotation Pointer Bool requires boolean initializer");
+    return;
+  }
+  // otherwise inner might be a literal like 1I32
+  const ann = parseOperand(inner);
+  if (!ann) throw new Error("invalid annotation in let");
+  // ensure pointer's pointed literal matches
+  checkAnnMatchesRhs(ann, {
+    valueBig: getProp(rhsOperand, "valueBig"),
+    kind: getProp(rhsOperand, "kind"),
+    bits: getProp(rhsOperand, "bits"),
+  });
+}
+
+function validateTypeOrLiteralAnnotation(
+  annotation: string,
+  rhsOperand: unknown
+) {
   const typeOnly = annotation.match(/^\s*([uUiI])\s*(\d+)\s*$/);
   if (typeOnly) {
     const kind = typeOnly[1] === "u" || typeOnly[1] === "U" ? "u" : "i";

@@ -10,6 +10,133 @@ import {
 } from "../types";
 import type { InterpretFn } from "../types";
 
+function validateInterpretAllWithNativeInputs(
+  scripts: unknown,
+  nativeModules: unknown,
+  mainNamespace: unknown
+): asserts scripts is { [k: string]: string } {
+  if (!scripts || typeof scripts !== "object")
+    throw new Error("scripts must be an object");
+  if (!nativeModules || typeof nativeModules !== "object")
+    throw new Error("nativeModules must be a string");
+  if (typeof mainNamespace !== "string")
+    throw new Error("mainNamespace must be a string");
+}
+
+function normalizeNamespaceMap(input: { [k: string]: string }): {
+  [k: string]: string;
+} {
+  const out: { [k: string]: string } = {};
+  for (const k of Object.keys(input)) out[k.replace(/,/g, "::")] = input[k];
+  return out;
+}
+
+function transformNativeModuleCode(code: string): string {
+  // Convert `export function name(...) {` into `exports.name = function (...) {`
+  let transformed = code.replace(
+    /(^|\n)\s*export\s+function\s+([a-zA-Z_]\w*)\s*\(/g,
+    (m, p1, name) => {
+      return `${p1}exports.${name} = function (`;
+    }
+  );
+  // Convert `export const/let/var name =` into `exports.name =`
+  transformed = transformed.replace(
+    /(^|\n)\s*export\s+(?:const|let|var)\s+([a-zA-Z_]\w*)\s*=\s*/g,
+    (m, p1, name) => {
+      return `${p1}exports.${name} = `;
+    }
+  );
+  // Strip TypeScript-like parameter type annotations (e.g., `value : number`)
+  // so host-evaluated native modules may be authored with mild type hints.
+  transformed = transformed.replace(/([a-zA-Z_]\w*)\s*:\s*([^\s,)]+)/g, "$1");
+  return transformed;
+}
+
+function evaluateNativeModuleExports(code: string): { [k: string]: unknown } {
+  const exports: { [k: string]: unknown } = {};
+  const transformed = transformNativeModuleCode(code);
+
+  try {
+    const fn = new Function("exports", transformed);
+    fn(exports);
+  } catch (e) {
+    throw new Error(`failed to evaluate native module: ${toErrorMessage(e)}`);
+  }
+  return exports;
+}
+
+function collectExportsFromScriptEnv(nsEnv: { [k: string]: unknown }): {
+  [k: string]: unknown;
+} {
+  const collectedExports: { [k: string]: unknown } = {};
+  if (isPlainObject(nsEnv.__exports)) {
+    for (const [kk, vv] of Object.entries(nsEnv.__exports))
+      collectedExports[kk] = vv;
+  }
+  return collectedExports;
+}
+
+function mergeNativeExportsInto(
+  collectedExports: { [k: string]: unknown },
+  code: string
+): void {
+  const nativeExports = evaluateNativeModuleExports(code);
+  for (const [k, v] of Object.entries(nativeExports)) {
+    if (typeof v === "function") {
+      // fn wrapper shape expected by interpreter
+      const wrapper = {
+        fn: {
+          params: [],
+          body: "/* native */",
+          isBlock: false,
+          resultAnnotation: undefined,
+          // Provide an empty object env so callers can clone it as a base
+          closureEnv: {},
+          nativeImpl: v,
+        },
+      };
+      collectedExports[k] = wrapper;
+    } else {
+      collectedExports[k] = v;
+    }
+  }
+}
+
+function resolveNamespaceToExports(args: {
+  nsName: string;
+  normalizedScripts: { [k: string]: string };
+  normalizedNative: { [k: string]: string };
+  namespaceRegistry: { [k: string]: { [k: string]: unknown } };
+  interpFn: InterpretFn;
+}): { [k: string]: unknown } {
+  const { nsName, normalizedScripts, normalizedNative, namespaceRegistry, interpFn } =
+    args;
+
+  if (
+    !Object.prototype.hasOwnProperty.call(normalizedScripts, nsName) &&
+    !Object.prototype.hasOwnProperty.call(normalizedNative, nsName)
+  )
+    throw new Error("namespace not found");
+
+  if (!Object.prototype.hasOwnProperty.call(namespaceRegistry, nsName)) {
+    const nsEnv: { [k: string]: unknown } = {};
+    nsEnv.__exports = {};
+
+    if (Object.prototype.hasOwnProperty.call(normalizedScripts, nsName)) {
+      interpFn(normalizedScripts[nsName], nsEnv);
+    }
+
+    const collectedExports = collectExportsFromScriptEnv(nsEnv);
+    if (Object.prototype.hasOwnProperty.call(normalizedNative, nsName)) {
+      mergeNativeExportsInto(collectedExports, normalizedNative[nsName]);
+    }
+
+    namespaceRegistry[nsName] = collectedExports;
+  }
+
+  return namespaceRegistry[nsName];
+}
+
 export function getLastTopLevelStatement(
   str: string,
   splitTopLevelStatements: (_s: string) => string[]
@@ -119,20 +246,10 @@ export function interpretAllWithNative(
   nativeModules: { [k: string]: string },
   mainNamespace: string
 ): number {
-  if (!scripts || typeof scripts !== "object")
-    throw new Error("scripts must be an object");
-  if (!nativeModules || typeof nativeModules !== "object")
-    throw new Error("nativeModules must be a string");
-  if (typeof mainNamespace !== "string")
-    throw new Error("mainNamespace must be a string");
+  validateInterpretAllWithNativeInputs(scripts, nativeModules, mainNamespace);
 
-  // Normalize script and native keys (replace comma-based computed keys with ::)
-  const normalizedScripts: { [k: string]: string } = {};
-  for (const k of Object.keys(scripts))
-    normalizedScripts[k.replace(/,/g, "::")] = scripts[k];
-  const normalizedNative: { [k: string]: string } = {};
-  for (const k of Object.keys(nativeModules))
-    normalizedNative[k.replace(/,/g, "::")] = nativeModules[k];
+  const normalizedScripts = normalizeNamespaceMap(scripts);
+  const normalizedNative = normalizeNamespaceMap(nativeModules);
 
   if (!Object.prototype.hasOwnProperty.call(normalizedScripts, mainNamespace))
     throw new Error("main namespace not found");
@@ -141,89 +258,16 @@ export function interpretAllWithNative(
   if (typeof interpFn !== "function")
     throw new Error("internal error: interpret() is not available");
 
-  // Helper to evaluate a native module string into an exports object
-  const evaluateNativeModule = (code: string) => {
-    const exports: { [k: string]: unknown } = {};
-    // Convert `export function name(...) {` into `exports.name = function (...) {`
-    let transformed = code.replace(
-      /(^|\n)\s*export\s+function\s+([a-zA-Z_]\w*)\s*\(/g,
-      (m, p1, name) => {
-        return `${p1}exports.${name} = function (`;
-      }
-    );
-    // Convert `export const/let/var name =` into `exports.name =`
-    transformed = transformed.replace(
-      /(^|\n)\s*export\s+(?:const|let|var)\s+([a-zA-Z_]\w*)\s*=\s*/g,
-      (m, p1, name) => {
-        return `${p1}exports.${name} = `;
-      }
-    );
-    // Strip TypeScript-like parameter type annotations (e.g., `value : number`)
-    // so host-evaluated native modules may be authored with mild type hints.
-    transformed = transformed.replace(/([a-zA-Z_]\w*)\s*:\s*([^\s,)]+)/g, "$1");
-
-    try {
-      const fn = new Function("exports", transformed);
-      fn(exports);
-    } catch (e) {
-      throw new Error(`failed to evaluate native module: ${toErrorMessage(e)}`);
-    }
-    return exports;
-  };
-
   // Prepare namespace registry and resolver that merges script and native exports
   const namespaceRegistry: { [k: string]: { [k: string]: unknown } } = {};
-  const resolveNamespace = (nsName: string) => {
-    if (
-      !Object.prototype.hasOwnProperty.call(normalizedScripts, nsName) &&
-      !Object.prototype.hasOwnProperty.call(normalizedNative, nsName)
-    )
-      throw new Error("namespace not found");
-    if (!Object.prototype.hasOwnProperty.call(namespaceRegistry, nsName)) {
-      const nsEnv: { [k: string]: unknown } = {};
-      // Exports object where `out` declarations will register their symbols
-      nsEnv.__exports = {};
-      // Run script-backed module first if present
-      if (Object.prototype.hasOwnProperty.call(normalizedScripts, nsName)) {
-        interpFn(normalizedScripts[nsName], nsEnv);
-      }
-      // Merge native module exports (native takes precedence)
-      // Collect exported symbols from script-executed module (if any)
-      const collectedExports: { [k: string]: unknown } = {};
-      if (isPlainObject(nsEnv.__exports)) {
-        for (const [kk, vv] of Object.entries(nsEnv.__exports))
-          collectedExports[kk] = vv;
-      }
-
-      // Merge native module exports (native takes precedence)
-      if (Object.prototype.hasOwnProperty.call(normalizedNative, nsName)) {
-        const nativeExports = evaluateNativeModule(normalizedNative[nsName]);
-        for (const [k, v] of Object.entries(nativeExports)) {
-          if (typeof v === "function") {
-            // fn wrapper shape expected by interpreter
-            const wrapper = {
-              fn: {
-                params: [],
-                body: "/* native */",
-                isBlock: false,
-                resultAnnotation: undefined,
-                // Provide an empty object env so callers can clone it as a base
-                closureEnv: {},
-                nativeImpl: v,
-              },
-            };
-            collectedExports[k] = wrapper;
-          } else {
-            collectedExports[k] = v;
-          }
-        }
-      }
-
-      // nsEnv.__exports is guaranteed to be a plain object; use the collected map
-      namespaceRegistry[nsName] = collectedExports;
-    }
-    return namespaceRegistry[nsName];
-  };
+  const resolveNamespace = (nsName: string) =>
+    resolveNamespaceToExports({
+      nsName,
+      normalizedScripts,
+      normalizedNative,
+      namespaceRegistry,
+      interpFn,
+    });
 
   // Provide resolver and registry to the main env
   const env: { [k: string]: unknown } = {};
