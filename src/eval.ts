@@ -82,49 +82,78 @@ export function applyBinaryOp(
   // Support a runtime type test operator `is` (e.g., `x is I32`).
   if (op === "is") {
     // Right operand may be a typeName placeholder produced during parsing.
-    const getTypeName = (t: unknown): string | undefined => {
-      if (typeof t === "string") return t;
-      const tn = getProp(t, "typeName");
-      if (typeof tn === "string") return tn;
-      return undefined;
-    };
-    const typeName = getTypeName(right);
-    if (!typeName) throw new Error("invalid type in is expression");
-    const tn = typeName.trim();
-    // Integer types: I32, U8, etc.
-    const intMatch = tn.match(/^([uUiI])(\d+)$/);
-    if (intMatch) {
-      const kind = intMatch[1] === "u" || intMatch[1] === "U" ? "u" : "i";
-      const bits = Number(intMatch[2]);
-      // left must be integral-like
-      if (isIntOperand(left)) {
-        if (hasKindBits(left)) {
-          return { boolValue: left.kind === kind && left.bits === bits };
+
+    // Accept either a literal type name, a placeholder { typeName }, or a binding
+    // that stores `typeAlias` from a `type` declaration.
+    let typeExpr: string | undefined = undefined;
+    if (typeof right === "string") typeExpr = right;
+    else if (
+      getProp(right, "typeName") &&
+      typeof getProp(right, "typeName") === "string"
+    )
+      typeExpr = String(getProp(right, "typeName"));
+    else if (
+      getProp(right, "typeAlias") &&
+      typeof getProp(right, "typeAlias") === "string"
+    )
+      typeExpr = String(getProp(right, "typeAlias"));
+    if (!typeExpr) throw new Error("invalid type in is expression");
+    const tnRaw = typeExpr.trim();
+
+    function checkTypeMatch(leftVal: unknown, tExpr: string): boolean {
+      const parts = tExpr
+        .split("|")
+        .map((p) => p.trim())
+        .filter(Boolean);
+      for (const p of parts) {
+        // integer types: I32, U8 etc.
+        const intMatch = p.match(/^([uUiI])(\d+)$/);
+        if (intMatch) {
+          const kind = intMatch[1] === "u" || intMatch[1] === "U" ? "u" : "i";
+          const bits = Number(intMatch[2]);
+          if (isIntOperand(leftVal)) {
+            if (hasKindBits(leftVal))
+              return leftVal.kind === kind && leftVal.bits === bits;
+            try {
+              checkRange(kind, bits, leftVal.valueBig);
+              return true;
+            } catch {
+              return false;
+            }
+          }
+          if (typeof leftVal === "number" && Number.isInteger(leftVal)) {
+            try {
+              checkRange(kind, bits, BigInt(leftVal));
+              return true;
+            } catch {
+              return false;
+            }
+          }
+          continue;
         }
-        // no suffix on left: accept if within range
-        try {
-          checkRange(kind, bits, left.valueBig);
-          return { boolValue: true };
-        } catch {
-          return { boolValue: false };
+
+        if (/^bool$/i.test(p)) {
+          if (isBoolOperand(leftVal)) return true;
+          continue;
         }
+
+        // struct type: check struct instance name via safe getter
+        const sname = getProp(leftVal, "structName");
+        if (typeof sname === "string" && sname === p) return true;
+
+        // Allow matching constructor-this bindings (from constructor funcs)
+        if (
+          isThisBinding(leftVal) &&
+          Object.prototype.hasOwnProperty.call(leftVal.fieldValues, p)
+        )
+          return true;
+
+        // If p is a plain type name but not matched above, continue to next union part
       }
-      if (typeof left === "number" && Number.isInteger(left)) {
-        try {
-          checkRange(kind, bits, BigInt(left));
-          return { boolValue: true };
-        } catch {
-          return { boolValue: false };
-        }
-      }
-      return { boolValue: false };
+      return false;
     }
 
-    if (/^bool$/i.test(tn)) {
-      return { boolValue: isBoolOperand(left) };
-    }
-
-    throw new Error("unsupported type in is expression");
+    return { boolValue: checkTypeMatch(left, tnRaw) };
   }
 
   const leftHasKind = hasKindBits(left);
@@ -560,7 +589,10 @@ export function evaluateReturningOperand(
     }
 
     // Check for `is` operator (type test)
-    if (exprStr.slice(pos).startsWith("is") && !/[a-zA-Z0-9_]/.test(exprStr[pos + 2] || "")) {
+    if (
+      exprStr.slice(pos).startsWith("is") &&
+      !/[a-zA-Z0-9_]/.test(exprStr[pos + 2] || "")
+    ) {
       pos += 2;
       skip();
       // Parse the right-side operand (we'll treat bare identifiers that look like
