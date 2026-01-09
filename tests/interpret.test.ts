@@ -587,7 +587,7 @@ describe("interpret (basic behavior)", () => {
 
   it("interpretAllWithNative allows extern fn with `this` to bind native impl for string receivers", () => {
     const scripts = {
-      main: 'extern from lib use { length }; extern fn length(this : &Str) : USize; "Hello World!".length()',
+      main: 'extern from lib use { length }; extern fn length(this : *Str) : USize; "Hello World!".length()',
     };
     const natives = {
       lib: "export function length(value : string) { return value.length; }",

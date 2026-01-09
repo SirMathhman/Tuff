@@ -39,7 +39,10 @@ import {
   hasIsBlock,
   hasName,
   hasFields,
+  hasMutable,
   getProp,
+  isArrayInstance,
+  hasArrayLiteral,
 } from "./types";
 
 export function isTruthy(val: unknown): boolean {
@@ -295,6 +298,14 @@ function normalizeBoundThis(val: unknown): unknown {
     isBoolOperand(thisVal)
   )
     thisVal = convertOperandToNumber(thisVal);
+  if (isArrayInstance(thisVal)) {
+    return thisVal.elements.map((e: unknown) => {
+      if (isIntOperand(e)) return Number(e.valueBig);
+      if (isFloatOperand(e)) return e.floatValue;
+      if (isBoolOperand(e)) return e.boolValue;
+      return e;
+    });
+  }
   return thisVal;
 }
 
@@ -588,6 +599,17 @@ export function evaluateReturningOperand(
       continue;
     }
 
+    // Check for indexing operator (e.g., `arr[index]`)
+    if (exprStr[pos] === "[") {
+      const endIdx = findMatchingParen(exprStr, pos, "[", "]");
+      if (endIdx === -1) throw new Error("unbalanced brackets in index");
+      const inner = exprStr.slice(pos + 1, endIdx);
+      exprTokens.push({ op: "index", operand: { indexExpr: inner } });
+      pos = endIdx + 1;
+      skip();
+      continue;
+    }
+
     // Check for `is` operator (type test)
     if (
       exprStr.slice(pos).startsWith("is") &&
@@ -661,6 +683,29 @@ export function evaluateReturningOperand(
 
   // resolve identifiers, address-of (&) and dereference (*) from localEnv
   operands = operands.map((op) => {
+    // parenthesized grouped expression handling: evaluate the inner expression now
+    if (isPlainObject(op) && "groupedExpr" in op) {
+      const ge = getProp(op, "groupedExpr");
+      if (typeof ge !== "string") throw new Error("invalid grouped expression");
+      return evaluateReturningOperand(ge, localEnv);
+    }
+
+    // array literal handling (parse-time placeholder -> runtime instance)
+    if (isPlainObject(op) && hasArrayLiteral(op)) {
+      const arrLit = op.arrayLiteral;
+      if (!Array.isArray(arrLit)) throw new Error("invalid array literal");
+      const elems: unknown[] = arrLit.map((part) => {
+        if (typeof part !== "string")
+          throw new Error("invalid array literal element");
+        return evaluateReturningOperand(part, localEnv);
+      });
+      return {
+        isArray: true,
+        elements: elems,
+        length: elems.length,
+        initializedCount: elems.length,
+      };
+    }
     // address-of: produce a pointer object referring to the binding name and include target metadata
     if (isPlainObject(op) && hasAddrOf(op)) {
       const inner = op.addrOf;
@@ -669,8 +714,17 @@ export function evaluateReturningOperand(
       const n = inner.ident;
       if (typeof n !== "string")
         throw new Error("& must be applied to identifier");
-      const { targetVal } = getBindingTarget(n);
+      const { binding: targetBinding, targetVal } = getBindingTarget(n);
       const ptrObj: { [k: string]: unknown } = { ptrName: n, pointer: true };
+      // If the address-of targets an array instance, mark this pointer as a slice
+      // and carry the target mutability so writes through the pointer can be validated.
+      if (isArrayInstance(targetVal)) {
+        ptrObj.ptrIsSlice = true;
+        ptrObj.ptrMutable =
+          isPlainObject(targetBinding) && hasMutable(targetBinding)
+            ? targetBinding.mutable === true
+            : false;
+      }
       if (isPlainObject(targetVal) && hasKindBits(targetVal)) {
         ptrObj.kind = targetVal.kind;
         ptrObj.bits = targetVal.bits;
@@ -873,6 +927,58 @@ export function evaluateReturningOperand(
     }
   }
 
+  // helper to replace an array length/init field with a numeric operand
+  function replaceWithBigIntNumber(n: number) {
+    const val = { valueBig: BigInt(n) };
+    operands.splice(i, 2, val);
+    ops.splice(i, 1);
+  }
+
+  // helper to find a nearby non-undefined operand either to the left or
+  // to the right of the current index `i` that satisfies the provided
+  // predicate. Returns an object with the found index and a boolean `isLeft`.
+  function findNearbyOperandIndex(
+    predicate: (v: unknown) => boolean
+  ): { index: number; isLeft: boolean } | undefined {
+    // search left
+    for (let j = i - 1; j >= 0; j--) {
+      if (operands[j] !== undefined) {
+        if (predicate(operands[j])) return { index: j, isLeft: true };
+        break;
+      }
+    }
+    // search right
+    for (let j = i + 1; j < operands.length; j++) {
+      if (operands[j] !== undefined) {
+        if (predicate(operands[j])) return { index: j, isLeft: false };
+        break;
+      }
+    }
+    return undefined;
+  }
+
+  // helper to resolve an index operation when the left operand is missing by
+  // searching left or right for a nearby array/this operand. Returns true if
+  // the index was resolved and splices the operands/ops appropriately.
+  function tryResolveMissingIndex(idxVal: number) {
+    const found = findNearbyOperandIndex((maybe) =>
+      isArrayInstance(maybe) || isThisBinding(maybe)
+    );
+    if (!found) return false;
+    const maybe = operands[found.index];
+    const elem = getArrayElementFromInstance(maybe, idxVal);
+    if (found.isLeft) {
+      const count = i - found.index + 1;
+      operands.splice(found.index, count, elem);
+      ops.splice(i, 1);
+    } else {
+      const count = found.index - i + 1;
+      operands.splice(i, count, elem);
+      ops.splice(i, 1);
+    }
+    return true;
+  }
+
   // helper to evaluate a call and return its result
   function evaluateCallAt(funcOperand: unknown, callAppOperand: unknown) {
     if (!isPlainObject(callAppOperand)) throw new Error("invalid call");
@@ -925,10 +1031,11 @@ export function evaluateReturningOperand(
     // `nativeImpl` is stored on the fn object when created by `interpretAllWithNative`.
     const maybeNative = getProp(fn, "nativeImpl");
     if (typeof maybeNative === "function") {
-      const convertArg = (a: unknown) => {
+      const convertArg = (a: unknown): unknown => {
         if (isIntOperand(a)) return Number(a.valueBig);
         if (isFloatOperand(a)) return a.floatValue;
         if (isBoolOperand(a)) return a.boolValue;
+        if (isArrayInstance(a)) return a.elements.map(convertArg);
         return a;
       };
       let jsArgs = argOps.map(convertArg);
@@ -940,7 +1047,21 @@ export function evaluateReturningOperand(
         jsArgs = [normalizeBoundThis(boundThis), ...jsArgs];
       }
       // Use Reflect.apply to call the unknown function safely without type casts
-      return Reflect.apply(maybeNative, undefined, jsArgs);
+      const res = Reflect.apply(maybeNative, undefined, jsArgs);
+      // If native returned a JS array, wrap into an interpreter array instance
+      if (Array.isArray(res)) {
+        const elems = res.map((e) => {
+          // convert primitive JS numbers to number operands (leave as JS number is fine)
+          return typeof e === "number" ? e : e;
+        });
+        return {
+          isArray: true,
+          elements: elems,
+          length: elems.length,
+          initializedCount: elems.length,
+        };
+      }
+      return res;
     }
     return executeFunctionBody(fn, callEnv);
   }
@@ -957,6 +1078,21 @@ export function evaluateReturningOperand(
     if (fieldValue === undefined)
       throw new Error(`invalid field access: ${fieldName}`);
     return fieldValue;
+  }
+
+  // helper to get array element value with bounds and initialized checks
+  function getArrayElementFromInstance(
+    maybe: unknown,
+    indexVal: number
+  ): unknown {
+    if (!isArrayInstance(maybe))
+      throw new Error("cannot index non-array value");
+    const arr = maybe;
+    if (!Number.isInteger(indexVal) || indexVal < 0 || indexVal >= arr.length)
+      throw new Error("index out of range");
+    if (indexVal >= arr.initializedCount)
+      throw new Error("use of uninitialized array element");
+    return arr.elements[indexVal];
   }
 
   // Debug: show tokenization for suspicious patterns
@@ -996,6 +1132,55 @@ export function evaluateReturningOperand(
         operands.splice(i, 2, result);
         ops.splice(i, 1);
       }
+    } else if (ops[i] === "index") {
+      // index operator
+      const indexOpnd = operands[i + 1];
+      const arrOperand = operands[i];
+
+      // Evaluate index expression
+      let idxVal: number;
+      if (isPlainObject(indexOpnd) && "indexExpr" in indexOpnd) {
+        if (typeof indexOpnd.indexExpr !== "string")
+          throw new Error("invalid index expression");
+        idxVal = convertOperandToNumber(
+          evaluateReturningOperand(indexOpnd.indexExpr, localEnv)
+        );
+      } else {
+        // index was parsed as an operand; evaluate it normally
+        idxVal = convertOperandToNumber(indexOpnd);
+      }
+
+      if (!arrOperand) {
+        if (tryResolveMissingIndex(idxVal)) continue;
+        throw new Error("cannot index missing value");
+      }
+
+      // pointer slice indexing
+      if (
+        isPlainObject(arrOperand) &&
+        isPointer(arrOperand) &&
+        getProp(arrOperand, "ptrIsSlice") === true
+      ) {
+        const ptrName = getProp(arrOperand, "ptrName");
+        if (typeof ptrName !== "string")
+          throw new Error("invalid pointer target");
+        const { targetVal } = getBindingTarget(ptrName);
+        if (!isArrayInstance(targetVal))
+          throw new Error("cannot index non-array value");
+        const elem = getArrayElementFromInstance(targetVal, idxVal);
+        operands.splice(i, 2, elem);
+        ops.splice(i, 1);
+        continue;
+      }
+
+      if (isArrayInstance(arrOperand)) {
+        const elem = getArrayElementFromInstance(arrOperand, idxVal);
+        // Replace [arrOperand, indexExpr] -> elem
+        operands.splice(i, 2, elem);
+        ops.splice(i, 1);
+      } else {
+        throw new Error("cannot index non-array value");
+      }
     } else if (ops[i] && ops[i].startsWith(".")) {
       // Field access operator
       const fieldName = ops[i].substring(1); // Remove the '.' prefix
@@ -1005,47 +1190,63 @@ export function evaluateReturningOperand(
         // Attempt to recover: sometimes due to token ordering the actual struct instance
         // may be to the left (e.g., parsing quirks). Search left for a nearby non-undefined
         // operand that looks like a struct/this binding and use that.
-        let foundIndex = -1;
-        for (let j = i - 1; j >= 0; j--) {
-          if (operands[j] !== undefined) {
-            foundIndex = j;
-            break;
-          }
-        }
-        if (foundIndex !== -1) {
-          const maybe = operands[foundIndex];
-          if (isStructInstance(maybe) || isThisBinding(maybe)) {
-            const fieldValue = getFieldValueFromInstance(maybe, fieldName);
-            // Replace the range from foundIndex up to the dot placeholder with the field value
-            const count = i - foundIndex + 1;
-            operands.splice(foundIndex, count, fieldValue);
+        const found = findNearbyOperandIndex((maybe) =>
+          isStructInstance(maybe) || isThisBinding(maybe)
+        );
+        if (found) {
+          const maybe = operands[found.index];
+          const fieldValue = getFieldValueFromInstance(maybe, fieldName);
+          if (found.isLeft) {
+            const count = i - found.index + 1;
+            operands.splice(found.index, count, fieldValue);
             ops.splice(i, 1);
-            // Continue without incrementing i so we re-evaluate at the same position
             continue;
           }
-        }
 
-        // Try searching to the right as a fallback
-        let found = false;
-        for (let j = i + 1; j < operands.length; j++) {
-          if (operands[j] !== undefined) {
-            const maybe = operands[j];
-            if (isStructInstance(maybe) || isThisBinding(maybe)) {
-              const fieldValue = getFieldValueFromInstance(maybe, fieldName);
-              // Replace from the dot placeholder up to the found operand inclusive
-              const count = j - i + 1;
-              operands.splice(i, count, fieldValue);
-              ops.splice(i, 1);
-              // Adjust i to j-1 so next iteration continues correctly
-              i = Math.max(0, i);
-              found = true;
-              break;
-            }
-            break;
-          }
+          // found on right
+          const count = found.index - i + 1;
+          operands.splice(i, count, fieldValue);
+          ops.splice(i, 1);
+          i = Math.max(0, i);
+          continue;
         }
-        if (found) continue;
         throw new Error(`cannot access field on missing value`);
+      }
+
+      // Handle pointer slice field access (e.g., p.length, p.init)
+      if (
+        isPlainObject(structInstance) &&
+        isPointer(structInstance) &&
+        getProp(structInstance, "ptrIsSlice") === true
+      ) {
+        const ptrName = getProp(structInstance, "ptrName");
+        if (typeof ptrName !== "string")
+          throw new Error("invalid pointer target");
+        const { targetVal } = getBindingTarget(ptrName);
+        if (!isArrayInstance(targetVal))
+          throw new Error(`cannot access field on non-array value`);
+        if (fieldName === "length" || fieldName === "len") {
+          replaceWithBigIntNumber(targetVal.length);
+          continue;
+        }
+        if (fieldName === "init") {
+          replaceWithBigIntNumber(targetVal.initializedCount);
+          continue;
+        }
+        throw new Error(`invalid field access: ${fieldName}`);
+      }
+
+      // Handle arrays specially (.len/.length/.init)
+      if (isArrayInstance(structInstance)) {
+        if (fieldName === "len" || fieldName === "length") {
+          replaceWithBigIntNumber(structInstance.length);
+          continue;
+        }
+        if (fieldName === "init") {
+          replaceWithBigIntNumber(structInstance.initializedCount);
+          continue;
+        }
+        throw new Error(`invalid field access: ${fieldName}`);
       }
 
       // Handle both struct instances and this binding

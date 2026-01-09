@@ -4,8 +4,9 @@ export function splitTopLevelStatements(str: string): string[] {
   let start = 0;
   for (let i = 0; i < str.length; i++) {
     const ch = str[i];
-    if (ch === "(" || ch === "{") depth++;
-    else if (ch === ")" || ch === "}") depth = Math.max(0, depth - 1);
+    if (ch === "(" || ch === "{" || ch === "[") depth++;
+    else if (ch === ")" || ch === "}" || ch === "]")
+      depth = Math.max(0, depth - 1);
     else if (ch === ";" && depth === 0) {
       parts.push(str.slice(start, i));
       start = i + 1;
@@ -73,8 +74,8 @@ export function parseCommaSeparatedArgs(inner: string): string[] {
   let d = 0;
   for (let k = 0; k < inner.length; k++) {
     const ch = inner[k];
-    if (ch === "(" || ch === "{") d++;
-    else if (ch === ")" || ch === "}") d = Math.max(0, d - 1);
+    if (ch === "(" || ch === "{" || ch === "[") d++;
+    else if (ch === ")" || ch === "}" || ch === "]") d = Math.max(0, d - 1);
     if (ch === "," && d === 0) {
       args.push(cur.trim());
       cur = "";
@@ -97,7 +98,10 @@ function unescapeString(inner: string) {
 export function parseOperand(token: string) {
   const s = token.trim();
   // string literal (single or double quoted) - simple unescape for common escapes
-  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+  if (
+    (s.startsWith('"') && s.endsWith('"')) ||
+    (s.startsWith("'") && s.endsWith("'"))
+  ) {
     const inner = s.slice(1, -1);
     const unescaped = unescapeString(inner);
     return unescaped;
@@ -143,6 +147,79 @@ export function parseOperand(token: string) {
   return { valueBig: BigInt(numStr), isFloat: false };
 }
 
+export function stripAndValidateComments(input: string) {
+  let out = "";
+  let i = 0;
+  const L = input.length;
+  let state: "normal" | "line" | "block" | "string" = "normal";
+  let quote: string | undefined = undefined;
+  while (i < L) {
+    if (state === "normal") {
+      if (input.startsWith("//", i)) {
+        state = "line";
+        i += 2;
+        continue;
+      }
+      if (input.startsWith("/*", i)) {
+        state = "block";
+        i += 2;
+        continue;
+      }
+      const ch = input[i];
+      if (ch === '"' || ch === "'") {
+        quote = ch;
+        state = "string";
+        out += ch;
+        i++;
+        continue;
+      }
+      out += ch;
+      i++;
+      continue;
+    }
+    if (state === "line") {
+      // consume until newline or EOF
+      const ch = input[i];
+      if (ch === "\n") {
+        out += ch;
+        state = "normal";
+      }
+      i++;
+      continue;
+    }
+    if (state === "block") {
+      if (input.startsWith("/*", i)) {
+        throw new Error("nested block comment");
+      }
+      if (input.startsWith("*/", i)) {
+        i += 2;
+        state = "normal";
+        continue;
+      }
+      i++;
+      continue;
+    }
+    if (state === "string") {
+      const ch = input[i];
+      if (ch === "\\") {
+        // escape, copy next char as well if present
+        out += input.substr(i, 2);
+        i += 2;
+        continue;
+      }
+      out += ch;
+      if (ch === quote) {
+        state = "normal";
+        quote = undefined;
+      }
+      i++;
+      continue;
+    }
+  }
+  if (state === "block") throw new Error("unterminated block comment");
+  return out;
+}
+
 export function parseOperandAt(src: string, pos: number) {
   // Support unary address-of '&' and dereference '*' prefixes (allow multiple)
   let i = pos;
@@ -152,6 +229,15 @@ export function parseOperandAt(src: string, pos: number) {
     prefixes.push(src[i]);
     i++;
     while (i < src.length && /[\s]/.test(src[i])) i++;
+  }
+
+  // parenthesized grouped expression: treat as an operand so callers may access fields like `(*p).length`
+  if (src[i] === "(") {
+    const endIdx = findMatchingDelimiter(src, i, "(", ")");
+    if (endIdx === -1) throw new Error("unbalanced parentheses");
+    const inner = src.slice(i + 1, endIdx);
+    const operand = applyPrefixes({ groupedExpr: inner }, prefixes);
+    return { operand, len: i - pos + (endIdx - i + 1) };
   }
 
   // string literal starting with quote
@@ -175,6 +261,16 @@ export function parseOperandAt(src: string, pos: number) {
     const unescaped = unescapeString(inner);
     const operand = applyPrefixes(unescaped, prefixes);
     return { operand, len: i - pos + (j - i + 1) };
+  }
+
+  // array literal starting with '['
+  if (src[i] === "[") {
+    const endIdx = findMatchingDelimiter(src, i, "[", "]");
+    if (endIdx === -1) throw new Error("unbalanced brackets in array literal");
+    const inner = src.slice(i + 1, endIdx).trim();
+    const parts = parseCommaSeparatedArgs(inner);
+    const operand = applyPrefixes({ arrayLiteral: parts }, prefixes);
+    return { operand, len: i - pos + (endIdx - i + 1) };
   }
 
   // Try numeric/suffixed literal or boolean literal first

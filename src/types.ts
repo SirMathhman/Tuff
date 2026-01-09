@@ -62,6 +62,35 @@ export function isStructDef(v: unknown): v is { isStructDef: true } {
   return isPlainObject(v) && "isStructDef" in v && v.isStructDef === true;
 }
 
+// Array runtime instance: { isArray: true, elements: unknown[], length: number, initializedCount: number }
+export function isArrayInstance(
+  v: unknown
+): v is {
+  isArray: true;
+  elements: unknown[];
+  length: number;
+  initializedCount: number;
+  elemType?: string;
+} {
+  if (!isPlainObject(v)) return false;
+  if (!("isArray" in v) || v.isArray !== true) return false;
+  const elements = getProp(v, "elements");
+  const length = getProp(v, "length");
+  const initializedCount = getProp(v, "initializedCount");
+  return (
+    Array.isArray(elements) &&
+    typeof length === "number" &&
+    typeof initializedCount === "number"
+  );
+}
+
+// parse-time array literal placeholder shape
+export function hasArrayLiteral(v: unknown): v is { arrayLiteral: string[] } {
+  if (!isPlainObject(v)) return false;
+  const arr = getProp(v, "arrayLiteral");
+  return Array.isArray(arr);
+}
+
 export function isPointer(v: unknown): v is { pointer: true; ptrName: string } {
   return (
     isPlainObject(v) &&

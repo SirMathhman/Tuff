@@ -1,5 +1,9 @@
 import { applyBinaryOp } from "../eval";
-import { validateAnnotation } from "../interpret_helpers";
+import {
+  validateAnnotation,
+  cloneArrayInstance,
+  parseSliceAnnotation,
+} from "../interpret_helpers";
 import { Env, envSet } from "../env";
 import {
   isPlainObject,
@@ -9,6 +13,7 @@ import {
   hasAnnotation,
   hasLiteralAnnotation,
   hasParsedAnnotation,
+  isArrayInstance,
 } from "../types";
 
 /**
@@ -53,8 +58,10 @@ export function assignValueToVariable(
     (existing as { value: unknown }).value = newVal;
     envSet(localEnv, name, existing);
   } else {
-    // Normal binding: replace it
-    envSet(localEnv, name, newVal);
+    // Normal binding: replace it (clone arrays)
+    if (isArrayInstance(newVal))
+      envSet(localEnv, name, cloneArrayInstance(newVal));
+    else envSet(localEnv, name, newVal);
   }
 }
 
@@ -92,8 +99,24 @@ export function assignToPlaceholder(
       validateAnnotation(annotation, newVal);
     }
   }
+
+  // Special-case: if a placeholder had a slice annotation and is uninitialized,
+  // require it to be mutable before assigning to it.
+  if (
+    hasParsedAnnotation(existing) &&
+    existing.parsedAnnotation &&
+    typeof existing.parsedAnnotation === "string" &&
+    parseSliceAnnotation(existing.parsedAnnotation) &&
+    hasUninitialized(existing) &&
+    existing.uninitialized &&
+    (!hasMutable(existing) || !existing.mutable)
+  )
+    throw new Error("assignment to immutable variable");
+
   // eslint-disable-next-line no-restricted-syntax
-  (existing as { value: unknown }).value = newVal;
+  (existing as { value: unknown }).value = isArrayInstance(newVal)
+    ? cloneArrayInstance(newVal)
+    : newVal;
   // eslint-disable-next-line no-restricted-syntax
   (existing as { uninitialized: boolean }).uninitialized = false;
   envSet(localEnv, name, existing);

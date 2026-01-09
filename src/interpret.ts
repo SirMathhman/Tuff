@@ -4,7 +4,7 @@
  * - Otherwise returns 0.
  * This allows inputs with type suffixes like `100U8` to be parsed as 100.
  */
-import { splitTopLevelStatements } from "./parser";
+import { splitTopLevelStatements, stripAndValidateComments } from "./parser";
 import { evaluateFlatExpression } from "./eval";
 import { interpretBlock, interpretBlockInPlace } from "./interpret/statements";
 import { interpretExpression } from "./interpret/expressions";
@@ -15,7 +15,8 @@ import { ensureMapEnv, Env } from "./env";
 export function interpret(input: string, env: Env = {}): number {
   // Normalize env to Map so downstream code can assume a Map-based env when needed
   env = ensureMapEnv(env);
-  let s = input.trim();
+  // Strip and validate C-style comments before parsing
+  let s = stripAndValidateComments(input).trim();
 
   // If this is a top-level match expression, delegate to the expression evaluator
   // early so match bodies are not accidentally pre-processed as braced blocks.

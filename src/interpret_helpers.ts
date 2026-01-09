@@ -8,6 +8,7 @@ import {
   isIntOperand,
   isPointer,
   isFnWrapper,
+  isArrayInstance,
   getProp,
   hasKindBits,
   hasPtrIsBool,
@@ -97,11 +98,77 @@ export function validateTypeOnly(
   }
 }
 
+export function parseArrayAnnotation(annotation: string | undefined) {
+  if (!annotation || typeof annotation !== "string") return undefined;
+  const m = annotation.match(
+    /^\s*\[\s*([^;]+?)\s*;\s*(\d+)\s*;\s*(\d+)\s*\]\s*$/
+  );
+  if (!m) return undefined;
+  const elemType = m[1].trim();
+  const initCount = Number(m[2]);
+  const length = Number(m[3]);
+  if (!Number.isInteger(initCount) || !Number.isInteger(length))
+    throw new Error("invalid array annotation");
+  if (initCount < 0 || length < 0 || initCount > length)
+    throw new Error("invalid array annotation counts");
+  return { elemType, initCount, length };
+}
+
+// Slice annotation syntax: *[Type]
+export function parseSliceAnnotation(annotation: string | undefined) {
+  if (!annotation || typeof annotation !== "string") return undefined;
+  const m = annotation.match(/^\s*\*\s*\[\s*([a-zA-Z_]\w*)\s*\]\s*$/);
+  if (!m) return undefined;
+  return { elemType: m[1].trim() };
+}
+
+export function cloneArrayInstance(arr: unknown) {
+  if (!isArrayInstance(arr)) throw new Error("internal error: invalid array");
+  return {
+    isArray: true,
+    elements: arr.elements.slice(),
+    length: arr.length,
+    initializedCount: arr.initializedCount,
+    elemType: arr.elemType,
+  };
+}
+
 export function validateAnnotation(
   annotation: string | undefined | unknown,
   rhsOperand: unknown
 ) {
   if (!annotation) return;
+
+  // array annotation: [Type; init; len]
+  const parsedArray =
+    typeof annotation === "string"
+      ? parseArrayAnnotation(annotation)
+      : undefined;
+  if (parsedArray) {
+    if (!isArrayInstance(rhsOperand))
+      throw new Error("annotation requires array initializer");
+    const arr = rhsOperand;
+    if (arr.length !== parsedArray.length)
+      throw new Error("array length mismatch");
+    if (arr.initializedCount < parsedArray.initCount)
+      throw new Error(
+        "initializer does not provide required number of initialized elements"
+      );
+    // optionally validate element types later
+    return;
+  }
+
+  // slice annotation: *[Type]
+  const parsedSlice =
+    typeof annotation === "string"
+      ? parseSliceAnnotation(annotation)
+      : undefined;
+  if (parsedSlice) {
+    if (!isPointer(rhsOperand) || getProp(rhsOperand, "ptrIsSlice") !== true)
+      throw new Error("annotation requires slice pointer initializer");
+    // No further checks here; runtime checks for length/init happen at use time.
+    return;
+  }
 
   // pointer annotation: *<inner>
   if (typeof annotation === "string" && /^\s*\*/.test(annotation)) {
@@ -188,6 +255,7 @@ export function extractAssignmentParts(stmt: string):
       rhs: string;
       isThisField?: boolean;
       fieldName?: string;
+      indexExpr?: string;
     }
   | undefined {
   // Try this.field compound assignment: this.x += 1
@@ -251,6 +319,21 @@ export function extractAssignmentParts(stmt: string):
       name: m[1],
       op: undefined,
       rhs: m[2].trim(),
+    };
+  }
+
+  // Try index assignment: x[expr] = ... or x[expr] += ...
+  m = stmt.match(
+    /^([a-zA-Z_]\w*)\s*\[\s*([\s\S]+?)\s*\]\s*([+\-*/%])?=\s*(.+)$/
+  );
+  if (m) {
+    return {
+      isDeref: false,
+      isDeclOnly: false,
+      name: m[1],
+      op: m[3],
+      rhs: m[4].trim(),
+      indexExpr: m[2].trim(),
     };
   }
 
@@ -487,8 +570,8 @@ export function registerFunctionFromStmt(
   const fnObj = envGet(localEnv, name);
   if (!isFnWrapper(fnObj))
     throw new Error("internal error: fn registration failed");
-  // eslint-disable-next-line no-restricted-syntax
-  (fnObj.fn as { closureEnv: Env | undefined }).closureEnv = envClone(localEnv);
+  // attach closure env
+  fnObj.fn.closureEnv = envClone(localEnv);
 
   return trailingExpr;
 }

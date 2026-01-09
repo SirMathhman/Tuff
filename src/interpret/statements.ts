@@ -16,6 +16,9 @@ import {
   registerFunctionFromStmt,
   parseStructDef,
   parseFnComponents,
+  parseArrayAnnotation,
+  parseSliceAnnotation,
+  cloneArrayInstance,
 } from "../interpret_helpers";
 import {
   computeAssignmentValue,
@@ -29,6 +32,7 @@ import {
   isFnWrapper,
   isIntOperand,
   isPointer,
+  isArrayInstance,
   toErrorMessage,
   unwrapBindingValue,
   hasUninitialized,
@@ -66,6 +70,29 @@ function interpretBlockInternal(
 
   const evaluateRhsLocal = (rhs: string, envLocal: Env) =>
     evaluateRhs(rhs, envLocal, interpret, getLastTopLevelStatementLocal);
+
+  // helper to perform index assignment into an array instance
+  const doIndexAssignment = (
+    arrInst: { elements: unknown[]; initializedCount: number; length: number },
+    idxVal: number,
+    rhsOperand2: unknown,
+    op: string | undefined
+  ) => {
+    if (op) {
+      if (idxVal >= arrInst.initializedCount)
+        throw new Error("use of uninitialized array element");
+      const cur = arrInst.elements[idxVal];
+      const newElem = computeAssignmentValue(op, cur, rhsOperand2);
+      arrInst.elements[idxVal] = newElem;
+    } else {
+      arrInst.elements[idxVal] = rhsOperand2;
+    }
+
+    arrInst.initializedCount = Math.max(
+      arrInst.initializedCount,
+      idxVal + 1
+    );
+  };
 
   const stmts = splitTopLevelStatements(s);
   for (let raw of stmts) {
@@ -243,7 +270,7 @@ function interpretBlockInternal(
     if (/^let\b/.test(stmt)) {
       // support `let [mut] name [: annotation] [= rhs]`
       const m = stmt.match(
-        /^let\s+(mut\s+)?([a-zA-Z_]\w*)(?:\s*:\s*([^=;]+))?(?:\s*=\s*(.+))?$/
+        /^let\s+(mut\s+)?([a-zA-Z_]\w*)(?:\s*:\s*([^=]+))?(?:\s*=\s*(.+))?$/
       );
       if (!m) throw new Error("invalid let declaration");
       const mutFlag = !!m[1];
@@ -272,18 +299,58 @@ function interpretBlockInternal(
             }
           }
 
+          const arrAnn =
+            typeof annText === "string"
+              ? parseArrayAnnotation(annText)
+              : undefined;
+          if (arrAnn) {
+            // When declaring without initializer, require initCount === 0
+            if (arrAnn.initCount !== 0)
+              throw new Error(
+                "array declaration without initializer requires init count 0"
+              );
+            const arrInst = {
+              isArray: true,
+              elements: new Array(arrAnn.length),
+              length: arrAnn.length,
+              initializedCount: 0,
+              elemType: arrAnn.elemType,
+            };
+            declared.add(name);
+            if (mutFlag)
+              envSet(localEnv, name, {
+                mutable: true,
+                value: arrInst,
+                annotation,
+              });
+            else envSet(localEnv, name, arrInst);
+            last = undefined;
+            continue;
+          }
+
           const typeOnly = String(annText).match(/^\s*([uUiI])\s*(\d+)\s*$/);
           if (typeOnly) {
             // fine, type-only
           } else if (/^\s*bool\s*$/i.test(String(annText))) {
             // fine
           } else {
-            const ann = parseOperand(String(annText));
-            if (!ann) throw new Error("invalid annotation in let");
-            if (!isIntOperand(ann))
-              throw new Error("annotation must be integer literal with suffix");
-            parsedAnn = ann;
-            literalAnnotation = true;
+            const sliceAnn =
+              typeof annText === "string"
+                ? parseSliceAnnotation(annText)
+                : undefined;
+            if (sliceAnn) {
+              parsedAnn = String(annText);
+              literalAnnotation = false;
+            } else {
+              const ann = parseOperand(String(annText));
+              if (!ann) throw new Error("invalid annotation in let");
+              if (!isIntOperand(ann))
+                throw new Error(
+                  "annotation must be integer literal with suffix"
+                );
+              parsedAnn = ann;
+              literalAnnotation = true;
+            }
           }
         }
         declared.add(name);
@@ -335,15 +402,19 @@ function interpretBlockInternal(
         }
 
         declared.add(name);
+        // If RHS is an array instance, clone it to enforce copy-on-assignment
+        const valToStore = isArrayInstance(rhsOperand)
+          ? cloneArrayInstance(rhsOperand)
+          : rhsOperand;
         if (mutFlag) {
           // store as mutable wrapper so future assignments update .value
           envSet(localEnv, name, {
             mutable: true,
-            value: rhsOperand,
+            value: valToStore,
             annotation,
           });
         } else {
-          envSet(localEnv, name, rhsOperand);
+          envSet(localEnv, name, valToStore);
         }
 
         // If we split off a trailing expression, evaluate it now and use it as `last`
@@ -542,6 +613,140 @@ function interpretBlockInternal(
           const newVal = computeAssignmentValue(op, existing, rhsOperand);
 
           assignValueToVariable(name, existing, newVal, localEnv);
+
+          last = undefined;
+          continue;
+        }
+
+        // Index assignment support: name[index] = rhs or name[index] += rhs
+        if (assignParts.indexExpr !== undefined) {
+          const idxExpr = assignParts.indexExpr;
+          const idxVal = convertOperandToNumber(
+            evaluateReturningOperand(idxExpr, localEnv)
+          );
+
+          if (!envHas(localEnv, name))
+            throw new Error("assignment to undeclared variable");
+          let existing = envGet(localEnv, name);
+
+          // Support indexing into pointer-to-slice variables (p[0] = ...)
+          // Detect pointer stored either directly or inside a mutable wrapper
+          let maybePtr: unknown | undefined = undefined;
+          if (
+            isPlainObject(existing) &&
+            hasValue(existing) &&
+            existing.value !== undefined &&
+            isPointer(existing.value)
+          )
+            maybePtr = existing.value;
+          else if (isPlainObject(existing) && isPointer(existing))
+            maybePtr = existing;
+
+          if (maybePtr) {
+            if (!isPointer(maybePtr)) throw new Error("internal pointer error");
+            const ptrName = maybePtr.ptrName;
+            if (typeof ptrName !== "string")
+              throw new Error("invalid pointer target");
+            if (!envHas(localEnv, ptrName))
+              throw new Error(`unknown identifier ${ptrName}`);
+            const targetBinding = envGet(localEnv, ptrName);
+            if (
+              isPlainObject(targetBinding) &&
+              hasUninitialized(targetBinding) &&
+              targetBinding.uninitialized
+            )
+              throw new Error(`use of uninitialized variable ${ptrName}`);
+            const targetVal = unwrapBindingValue(targetBinding);
+
+            if (!isArrayInstance(targetVal))
+              throw new Error("assignment to non-array variable");
+
+            // require target be mutable to write via pointer
+            if (
+              !(
+                isPlainObject(targetBinding) &&
+                hasMutable(targetBinding) &&
+                targetBinding.mutable
+              )
+            )
+              throw new Error("assignment to immutable variable");
+
+            const arrInst = targetVal;
+            const rhsOperand2 = evaluateRhsLocal(rhs, localEnv);
+
+            doIndexAssignment(arrInst, idxVal, rhsOperand2, op);
+
+            // persist change back into target binding
+            if (
+              isPlainObject(targetBinding) &&
+              hasValue(targetBinding) &&
+              targetBinding.value !== undefined &&
+              hasMutable(targetBinding) &&
+              targetBinding.mutable
+            ) {
+              targetBinding.value = arrInst;
+              envSet(localEnv, ptrName, targetBinding);
+            } else {
+              envSet(localEnv, ptrName, arrInst);
+            }
+
+            last = undefined;
+            continue;
+          }
+
+          // If placeholder declared-only with array annotation, materialize into a mutable wrapper
+          if (
+            isPlainObject(existing) &&
+            hasUninitialized(existing) &&
+            existing.uninitialized
+          ) {
+            if (
+              !hasAnnotation(existing) ||
+              typeof existing.annotation !== "string"
+            )
+              throw new Error("assignment to undeclared variable");
+            const arrAnn = parseArrayAnnotation(String(existing.annotation));
+            if (!arrAnn) throw new Error("assignment to non-array variable");
+            if (!hasMutable(existing) || !existing.mutable)
+              throw new Error("assignment to immutable variable");
+            const arrInst = {
+              isArray: true,
+              elements: new Array(arrAnn.length),
+              length: arrAnn.length,
+              initializedCount: 0,
+              elemType: arrAnn.elemType,
+            };
+            // store as mutable wrapper
+            envSet(localEnv, name, {
+              mutable: true,
+              value: arrInst,
+              annotation: existing.annotation,
+            });
+            existing = envGet(localEnv, name);
+          }
+
+          // Determine mutable wrapper
+          if (
+            !(
+              isPlainObject(existing) &&
+              hasValue(existing) &&
+              existing.value !== undefined &&
+              hasMutable(existing) &&
+              existing.mutable
+            )
+          )
+            throw new Error("assignment to immutable or non-array variable");
+
+          const arrInst = existing.value;
+          if (!isArrayInstance(arrInst))
+            throw new Error("assignment target is not array");
+
+          const rhsOperand2 = evaluateRhsLocal(rhs, localEnv);
+
+          doIndexAssignment(arrInst, idxVal, rhsOperand2, op);
+
+          // persist
+          envSet(localEnv, name, existing);
 
           last = undefined;
           continue;
