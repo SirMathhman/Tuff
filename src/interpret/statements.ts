@@ -50,25 +50,41 @@ function interpretBlockInternal(
 
   const stmts = splitTopLevelStatements(s);
 
-  function handleOutFnStatement(stmt: string, localEnv: Env, declared: Set<string>, interpret: InterpretFn): { handled: boolean; last?: unknown } {
+  function handleOutFnStatement(
+    stmt: string,
+    localEnv: Env,
+    declared: Set<string>,
+    interpret: InterpretFn
+  ): { handled: boolean; last?: unknown } {
     const stripped = stmt.replace(/^out\s+/, "");
     const parsed = parseFnComponents(stripped);
     const tExpr = registerFunctionFromStmt(stripped, localEnv, declared);
     const __exports = envGet(localEnv, "__exports");
-    if (isPlainObject(__exports)) __exports[parsed.name] = envGet(localEnv, parsed.name);
+    if (isPlainObject(__exports))
+      __exports[parsed.name] = envGet(localEnv, parsed.name);
     if (tExpr) {
       return { handled: true, last: interpret(tExpr + ";", localEnv) };
     }
     return { handled: true, last: undefined };
   }
 
-  function handleFnDeclaration(stmt: string, localEnv: Env, declared: Set<string>, interpret: InterpretFn): { handled: boolean; last?: unknown } {
+  function handleFnDeclaration(
+    stmt: string,
+    localEnv: Env,
+    declared: Set<string>,
+    interpret: InterpretFn
+  ): { handled: boolean; last?: unknown } {
     const tExpr = registerFunctionFromStmt(stmt, localEnv, declared);
     if (tExpr) return { handled: true, last: interpret(tExpr + ";", localEnv) };
     return { handled: true, last: undefined };
   }
 
-  function handleStructDefinition(stmt: string, localEnv: Env, declared: Set<string>, interpret: InterpretFn): { handled: boolean; last?: unknown } {
+  function handleStructDefinition(
+    stmt: string,
+    localEnv: Env,
+    declared: Set<string>,
+    interpret: InterpretFn
+  ): { handled: boolean; last?: unknown } {
     const structDef = parseStructDef(stmt);
     if (declared.has(structDef.name)) throw new Error("duplicate declaration");
     declared.add(structDef.name);
@@ -78,11 +94,16 @@ function interpretBlockInternal(
       fields: structDef.fields,
     });
     const remaining = stmt.slice(structDef.endPos).trim();
-    if (remaining) return { handled: true, last: interpret(remaining + ";", localEnv) };
+    if (remaining)
+      return { handled: true, last: interpret(remaining + ";", localEnv) };
     return { handled: true, last: undefined };
   }
 
-  function handleYieldStatement(stmt: string, localEnv: Env, evaluateRhsLocal: (rhs: string, envLocal: Env) => unknown): { handled: boolean } {
+  function handleYieldStatement(
+    stmt: string,
+    localEnv: Env,
+    evaluateRhsLocal: (rhs: string, envLocal: Env) => unknown
+  ): { handled: boolean } {
     const m = stmt.match(/^yield\s+([\s\S]+)$/);
     if (!m) throw new Error("yield requires an expression");
     const rhs = m[1].trim();
@@ -93,7 +114,11 @@ function interpretBlockInternal(
     throw { __yield: convertOperandToNumber(rhsOperand) };
   }
 
-  function handleTypeAliasDeclaration(stmt: string, localEnv: Env, declared: Set<string>): { handled: boolean; last?: unknown } {
+  function handleTypeAliasDeclaration(
+    stmt: string,
+    localEnv: Env,
+    declared: Set<string>
+  ): { handled: boolean; last?: unknown } {
     const m = stmt.match(/^type\s+([a-zA-Z_]\w*)\s*=\s*([^;]+);?$/);
     if (!m) throw new Error("invalid type declaration");
     const name = m[1];
@@ -108,38 +133,43 @@ function interpretBlockInternal(
     const stmt = raw.trim();
     if (!stmt) continue;
 
-    // export function: `out fn name(...) => ...` — register like a normal fn
-    // and also export it on localEnv.__exports (if present)
-    if (/^out\s+fn\b/.test(stmt)) {
-      const res = handleOutFnStatement(stmt, localEnv, declared, interpret);
-      if (res.handled) last = res.last;
-      continue;
+    // Leading declarations and imports
+    function handleLeadingDeclarations(stmt: string) {
+      if (/^out\s+fn\b/.test(stmt)) {
+        const res = handleOutFnStatement(stmt, localEnv, declared, interpret);
+        if (res.handled) last = res.last;
+        return true;
+      }
+
+      if (/^extern\s+fn\b/.test(stmt)) {
+        handleExternFn(stmt, localEnv, declared);
+        last = undefined;
+        return true;
+      }
+
+      if (/^extern\s+let\b/.test(stmt)) {
+        handleExternLet(stmt, localEnv, declared);
+        last = undefined;
+        return true;
+      }
+
+      // import statement: optionally prefixed with `extern`: `extern from <ns> use { a, b }`
+      if (/^extern\b/.test(stmt) || /^from\b/.test(stmt)) {
+        handleImportStatement(stmt, env, localEnv, declared);
+        last = undefined;
+        return true;
+      }
+
+      if (/^fn\b/.test(stmt)) {
+        const res = handleFnDeclaration(stmt, localEnv, declared, interpret);
+        if (res.handled) last = res.last;
+        return true;
+      }
+
+      return false;
     }
 
-    if (/^extern\s+fn\b/.test(stmt)) {
-      handleExternFn(stmt, localEnv, declared);
-      last = undefined;
-      continue;
-    }
-
-    if (/^extern\s+let\b/.test(stmt)) {
-      handleExternLet(stmt, localEnv, declared);
-      last = undefined;
-      continue;
-    }
-
-    // import statement: optionally prefixed with `extern`: `extern from <ns> use { a, b }`
-    if (/^extern\b/.test(stmt) || /^from\b/.test(stmt)) {
-      handleImportStatement(stmt, env, localEnv, declared);
-      last = undefined;
-      continue;
-    }
-
-    if (/^fn\b/.test(stmt)) {
-      const res = handleFnDeclaration(stmt, localEnv, declared, interpret);
-      if (res.handled) last = res.last;
-      continue;
-    }
+    if (handleLeadingDeclarations(stmt)) continue;
 
     // yield statement: `yield <expr>` causes immediate block-level return with <expr>
     if (/^yield\b/.test(stmt)) {

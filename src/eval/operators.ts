@@ -103,7 +103,6 @@ function handleIsOperator(
   return { boolValue: checkTypeMatch(left, tnRaw) };
 }
 
-
 /**
  * Ensure suffix metadata and compatibility between typed integer operands
  */
@@ -131,7 +130,8 @@ function ensureSuffixCompatibility(
 
 function getBigValue(val: unknown, hasKind: boolean, side: "left" | "right") {
   if (typeof val === "number") {
-    if (hasKind === true) throw new Error(`invalid typed integer ${side} operand`);
+    if (hasKind === true)
+      throw new Error(`invalid typed integer ${side} operand`);
     return BigInt(val);
   }
   if (!isIntOperand(val)) throw new Error(`invalid ${side} integer operand`);
@@ -148,7 +148,12 @@ function handleTypedIntegerOp(
   leftHasKind: boolean,
   rightHasKind: boolean
 ): { valueBig: bigint; kind: string; bits: number } {
-  const { kind, bits } = ensureSuffixCompatibility(left, right, leftHasKind, rightHasKind);
+  const { kind, bits } = ensureSuffixCompatibility(
+    left,
+    right,
+    leftHasKind,
+    rightHasKind
+  );
 
   const lBig = getBigValue(left, leftHasKind, "left");
   const rBig = getBigValue(right, rightHasKind, "right");

@@ -27,65 +27,56 @@ export function tokenizeExpression(exprStr: string): ExprToken[] {
   pos += firstMatch.len;
   skip();
 
-  while (pos < L) {
+  function tryParseCallAt() {
+    if (exprStr[pos] !== "(") return false;
+    const endIdx = findMatchingClosingParen(exprStr, pos);
+    if (endIdx === -1) throw new Error("unbalanced parentheses in call");
+    const inner = exprStr.slice(pos + 1, endIdx);
+    const args = parseCommaSeparatedArgs(inner);
+    exprTokens.push({ op: "call", operand: { callApp: args } });
+    pos = endIdx + 1;
     skip();
-    // Check for function application (e.g., `func()(args)`)
-    if (exprStr[pos] === "(") {
-      const endIdx = findMatchingClosingParen(exprStr, pos);
-      if (endIdx === -1) throw new Error("unbalanced parentheses in call");
-      const inner = exprStr.slice(pos + 1, endIdx);
-      const args = parseCommaSeparatedArgs(inner);
-      exprTokens.push({ op: "call", operand: { callApp: args } });
-      // call does not change the lastPrimary (the function being applied)
-      pos = endIdx + 1;
-      skip();
-      continue;
-    }
-    // Check for field access (e.g., `expr.field`)
-    if (exprStr[pos] === ".") {
-      pos++;
-      // Parse field name
-      const fieldMatch = exprStr.slice(pos).match(/^([a-zA-Z_]\w*)/);
-      if (!fieldMatch)
-        throw new Error("invalid field access: expected field name after .");
-      const fieldName = fieldMatch[1];
-      // For field access, push the field operator.
-      // The operand will be resolved during evaluation (not by referencing the
-      // potentially-shared parse-time object) to avoid duplicated references.
-      exprTokens.push({ op: `.${fieldName}`, operand: undefined });
-      pos += fieldName.length;
-      skip();
-      continue;
-    }
+    return true;
+  }
 
-    // Check for indexing operator (e.g., `arr[index]`)
-    if (exprStr[pos] === "[") {
-      const endIdx = findMatchingParen(exprStr, pos, "[", "]");
-      if (endIdx === -1) throw new Error("unbalanced brackets in index");
-      const inner = exprStr.slice(pos + 1, endIdx);
-      exprTokens.push({ op: "index", operand: { indexExpr: inner } });
-      pos = endIdx + 1;
-      skip();
-      continue;
-    }
+  function tryParseFieldAt() {
+    if (exprStr[pos] !== ".") return false;
+    pos++;
+    const fieldMatch = exprStr.slice(pos).match(/^([a-zA-Z_]\w*)/);
+    if (!fieldMatch)
+      throw new Error("invalid field access: expected field name after .");
+    const fieldName = fieldMatch[1];
+    exprTokens.push({ op: `.${fieldName}`, operand: undefined });
+    pos += fieldName.length;
+    skip();
+    return true;
+  }
 
-    // Check for `is` operator (type test)
-    if (
-      exprStr.slice(pos).startsWith("is") &&
-      !/[a-zA-Z0-9_]/.test(exprStr[pos + 2] || "")
-    ) {
-      pos += 2;
-      skip();
-      // Parse the right-side operand (we'll treat bare identifiers that look like
-      // types specially during evaluation)
-      const next = parseOperandAt(exprStr, pos);
-      if (!next) throw new Error("invalid operand after operator");
-      exprTokens.push({ op: "is", operand: next.operand });
-      pos += next.len;
-      skip();
-      continue;
-    }
+  function tryParseIndexAt() {
+    if (exprStr[pos] !== "[") return false;
+    const endIdx = findMatchingParen(exprStr, pos, "[", "]");
+    if (endIdx === -1) throw new Error("unbalanced brackets in index");
+    const inner = exprStr.slice(pos + 1, endIdx);
+    exprTokens.push({ op: "index", operand: { indexExpr: inner } });
+    pos = endIdx + 1;
+    skip();
+    return true;
+  }
 
+  function tryParseIsOperator() {
+    if (!exprStr.slice(pos).startsWith("is")) return false;
+    if (/[a-zA-Z0-9_]/.test(exprStr[pos + 2] || "")) return false;
+    pos += 2;
+    skip();
+    const next = parseOperandAt(exprStr, pos);
+    if (!next) throw new Error("invalid operand after operator");
+    exprTokens.push({ op: "is", operand: next.operand });
+    pos += next.len;
+    skip();
+    return true;
+  }
+
+  function parseBinaryOperator() {
     // support multi-char operators: || && == != <= >=
     let op: string | undefined = undefined;
     if (exprStr.startsWith("||", pos)) {
@@ -116,9 +107,17 @@ export function tokenizeExpression(exprStr: string): ExprToken[] {
     const next = parseOperandAt(exprStr, pos);
     if (!next) throw new Error("invalid operand after operator");
     exprTokens.push({ op, operand: next.operand });
-
     pos += next.len;
     skip();
+  }
+
+  while (pos < L) {
+    skip();
+    if (tryParseCallAt()) continue;
+    if (tryParseFieldAt()) continue;
+    if (tryParseIndexAt()) continue;
+    if (tryParseIsOperator()) continue;
+    parseBinaryOperator();
   }
 
   return exprTokens;

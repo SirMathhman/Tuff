@@ -227,8 +227,8 @@ export function parseOperandAt(src: string, pos: number) {
     return { operand, len: i - pos + (endIdx - i + 1) };
   }
 
-  // string literal starting with quote
-  if (src[i] === '"' || src[i] === "'") {
+  function parseStringLiteralAt(i: number) {
+    if (src[i] !== '"' && src[i] !== "'") return undefined;
     const quote = src[i];
     let j = i + 1;
     let closed = false;
@@ -250,8 +250,8 @@ export function parseOperandAt(src: string, pos: number) {
     return { operand, len: i - pos + (j - i + 1) };
   }
 
-  // array literal starting with '['
-  if (src[i] === "[") {
+  function parseArrayLiteralAt(i: number) {
+    if (src[i] !== "[") return undefined;
     const endIdx = findMatchingDelimiter(src, i, "[", "]");
     if (endIdx === -1) throw new Error("unbalanced brackets in array literal");
     const inner = src.slice(i + 1, endIdx).trim();
@@ -259,6 +259,12 @@ export function parseOperandAt(src: string, pos: number) {
     const operand = applyPrefixes({ arrayLiteral: parts }, prefixes);
     return { operand, len: i - pos + (endIdx - i + 1) };
   }
+
+  const strLit = parseStringLiteralAt(i);
+  if (strLit) return strLit;
+
+  const arrLit = parseArrayLiteralAt(i);
+  if (arrLit) return arrLit;
 
   // Try numeric/suffixed literal or boolean literal first
   const m = src
@@ -334,7 +340,8 @@ export function parseOperandAt(src: string, pos: number) {
     } else if (src[j] === "{") {
       // struct instantiation: Name { field1: value1, field2: value2, ... }
       const endIdx = findMatchingDelimiter(src, j, "{", "}");
-      if (endIdx === -1) throw new Error("unbalanced braces in struct instantiation");
+      if (endIdx === -1)
+        throw new Error("unbalanced braces in struct instantiation");
       const inner = src.slice(j + 1, endIdx).trim();
       const fields = parseStructFields(inner);
       operand.structInstantiation = { name: id[1], fields };

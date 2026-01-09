@@ -141,17 +141,21 @@ export function handleIndexAssignment(
     return true;
   }
 
-  // If placeholder declared-only with array annotation, materialize into a mutable wrapper
-  if (
-    isPlainObject(existing) &&
-    hasUninitialized(existing) &&
-    existing.uninitialized
-  ) {
-    if (!hasAnnotation(existing) || typeof existing.annotation !== "string")
+  function materializePlaceholderArray(name: string, existingObj: unknown) {
+    if (
+      !isPlainObject(existingObj) ||
+      !hasUninitialized(existingObj) ||
+      !existingObj.uninitialized
+    )
+      return existingObj;
+    if (
+      !hasAnnotation(existingObj) ||
+      typeof existingObj.annotation !== "string"
+    )
       throw new Error("assignment to undeclared variable");
-    const arrAnn = parseArrayAnnotation(String(existing.annotation));
+    const arrAnn = parseArrayAnnotation(String(existingObj.annotation));
     if (!arrAnn) throw new Error("assignment to non-array variable");
-    if (!hasMutable(existing) || !existing.mutable)
+    if (!hasMutable(existingObj) || !existingObj.mutable)
       throw new Error("assignment to immutable variable");
     const arrInst = {
       isArray: true,
@@ -160,30 +164,34 @@ export function handleIndexAssignment(
       initializedCount: 0,
       elemType: arrAnn.elemType,
     };
-    // store as mutable wrapper
     envSet(localEnv, name, {
       mutable: true,
       value: arrInst,
-      annotation: existing.annotation,
+      annotation: existingObj.annotation,
     });
-    existing = envGet(localEnv, name);
+    return envGet(localEnv, name);
   }
 
-  // Determine mutable wrapper
-  if (
-    !(
-      isPlainObject(existing) &&
-      hasValue(existing) &&
-      existing.value !== undefined &&
-      hasMutable(existing) &&
-      existing.mutable
-    )
-  )
-    throw new Error("assignment to immutable or non-array variable");
+  existing = materializePlaceholderArray(name, existing);
 
-  const arrInst = existing.value;
-  if (!isArrayInstance(arrInst))
-    throw new Error("assignment target is not array");
+  function extractMutableArrayInstance(existingObj: unknown) {
+    if (
+      !(
+        isPlainObject(existingObj) &&
+        hasValue(existingObj) &&
+        existingObj.value !== undefined &&
+        hasMutable(existingObj) &&
+        existingObj.mutable
+      )
+    )
+      throw new Error("assignment to immutable or non-array variable");
+    const arr = existingObj.value;
+    if (!isArrayInstance(arr))
+      throw new Error("assignment target is not array");
+    return arr;
+  }
+
+  const arrInst = extractMutableArrayInstance(existing);
 
   const rhsOperand2 = evaluateRhsLocal(rhs, localEnv);
   doIndexAssignment(arrInst, idxVal, rhsOperand2, op);
