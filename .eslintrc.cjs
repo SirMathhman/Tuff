@@ -56,6 +56,11 @@ module.exports = {
           "Do not use anonymous object types; define a named interface instead.",
       },
       {
+        selector: "TSTypeReference[typeName.name='Record']",
+        message:
+          "Do not use the global `Record` type; prefer `Map` for map-like structures.",
+      },
+      {
         selector: "ThrowStatement",
         message:
           "Do not use throw. Return a Result<T, E> (e.g., { ok: false, error }) instead.",

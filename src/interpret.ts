@@ -39,18 +39,18 @@ function validateSizedInteger(
   suffix: string
 ): Err<string> | undefined {
   if (!suffix) return undefined;
-  const allowed: Record<string, SuffixInfo> = {
-    U8: { signed: false, bits: 8 },
-    U16: { signed: false, bits: 16 },
-    U32: { signed: false, bits: 32 },
-    U64: { signed: false, bits: 64 },
-    I8: { signed: true, bits: 8 },
-    I16: { signed: true, bits: 16 },
-    I32: { signed: true, bits: 32 },
-    I64: { signed: true, bits: 64 },
-  };
+  const allowed = new Map<string, SuffixInfo>([
+    ["U8", { signed: false, bits: 8 }],
+    ["U16", { signed: false, bits: 16 }],
+    ["U32", { signed: false, bits: 32 }],
+    ["U64", { signed: false, bits: 64 }],
+    ["I8", { signed: true, bits: 8 }],
+    ["I16", { signed: true, bits: 16 }],
+    ["I32", { signed: true, bits: 32 }],
+    ["I64", { signed: true, bits: 64 }],
+  ]);
 
-  const info = allowed[suffix];
+  const info = allowed.get(suffix);
   if (!info) return undefined;
 
   // require integer for sized types
