@@ -121,6 +121,7 @@ describe("interpret (suffix handling - addition)", () => {
   it("operator precedence and multiplication", () => {
     // multiplication before addition
     expect(interpret("10 * 5 + 3")).toEqual({ ok: true, value: 53 });
+    expect(interpret("3 + 10 * 5")).toEqual({ ok: true, value: 53 });
     expect(interpret("2 + 3 * 4")).toEqual({ ok: true, value: 14 });
 
     // multiplication overflow with suffix
