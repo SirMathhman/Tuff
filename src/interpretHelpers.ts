@@ -114,7 +114,11 @@ export function splitStatements(src: string): string[] {
   return out.filter((s) => s !== "");
 }
 
-export function findTopLevelChar(src: string, start: number, target: string): number {
+export function findTopLevelChar(
+  src: string,
+  start: number,
+  target: string
+): number {
   let depth = 0;
   for (let i = start; i < src.length; i++) {
     const ch = src[i];
@@ -125,14 +129,55 @@ export function findTopLevelChar(src: string, start: number, target: string): nu
   return -1;
 }
 
+function checkSizedAnnotationMatch(
+  annText: string,
+  rhs: string,
+  value: number | bigint,
+  initSuffix?: string
+): Err<string> | undefined {
+  const rhsParsed = parseLeadingNumber(rhs);
+  if (rhsParsed) {
+    const rhsSuffix = rhs.slice(rhsParsed.end);
+    if (rhsSuffix !== annText)
+      return {
+        ok: false,
+        error: "declaration initializer does not match annotation",
+      };
+    const rangeErr = validateSizedInteger(String(value), annText);
+    if (rangeErr) return rangeErr;
+    return undefined;
+  }
+
+  if (initSuffix) {
+    if (initSuffix !== annText)
+      return {
+        ok: false,
+        error: "declaration initializer does not match annotation",
+      };
+    const rangeErr = validateSizedInteger(String(value), annText);
+    if (rangeErr) return rangeErr;
+    return undefined;
+  }
+
+  return {
+    ok: false,
+    error: "declaration initializer does not match annotation",
+  };
+}
+
 export function checkAnnotationMatch(
   annText: string,
   rhs: string,
-  value: number | bigint
+  value: number | bigint,
+  initSuffix?: string
 ): Err<string> | undefined {
   const parsed = parseLeadingNumber(annText);
   if (parsed) {
-    if (value !== parsed.value) return { ok: false, error: "declaration initializer does not match annotation" };
+    if (value !== parsed.value)
+      return {
+        ok: false,
+        error: "declaration initializer does not match annotation",
+      };
     return undefined;
   }
 
@@ -146,13 +191,7 @@ export function checkAnnotationMatch(
     "I32",
     "I64",
   ]);
-  if (allowed.has(annText)) {
-    const rhsParsed = parseLeadingNumber(rhs);
-    if (!rhsParsed) return { ok: false, error: "declaration initializer does not match annotation" };
-    const rhsSuffix = rhs.slice(rhsParsed.end);
-    if (rhsSuffix !== annText) return { ok: false, error: "declaration initializer does not match annotation" };
-    const rangeErr = validateSizedInteger(String(value), annText);
-    if (rangeErr) return rangeErr;
-  }
+  if (allowed.has(annText))
+    return checkSizedAnnotationMatch(annText, rhs, value, initSuffix);
   return undefined;
 }

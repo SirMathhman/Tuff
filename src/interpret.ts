@@ -135,7 +135,10 @@ interface ScanIdentResult {
   nextPos: number;
 }
 
-function scanIdentifierFrom(stmt: string, start: number): ScanIdentResult | undefined {
+function scanIdentifierFrom(
+  stmt: string,
+  start: number
+): ScanIdentResult | undefined {
   let p = start;
   while (p < stmt.length) {
     const c = stmt.charCodeAt(p);
@@ -146,7 +149,10 @@ function scanIdentifierFrom(stmt: string, start: number): ScanIdentResult | unde
   return ident ? { ident, nextPos: p } : undefined;
 }
 
-function lookupBinding(name: string, env: Map<string, Binding>): Result<Binding, string> {
+function lookupBinding(
+  name: string,
+  env: Map<string, Binding>
+): Result<Binding, string> {
   const binding = env.get(name);
   if (!binding) return { ok: false, error: `unknown identifier ${name}` };
   return { ok: true, value: binding };
@@ -165,7 +171,9 @@ function resolveInitializer(
   if (!r.ok) return { ok: false, error: r.error };
   const parsedNum = parseLeadingNumber(rhs);
   const suffix =
-    parsedNum && parsedNum.end < rhs.length ? rhs.slice(parsedNum.end) : undefined;
+    parsedNum && parsedNum.end < rhs.length
+      ? rhs.slice(parsedNum.end)
+      : undefined;
   const binding: Binding = { value: r.value, suffix };
   return { ok: true, value: binding };
 }
@@ -195,9 +203,16 @@ function parseDeclaration(
   const colonPos = findTopLevelChar(stmt, p, ":");
   if (colonPos !== -1 && colonPos < eq) {
     const annText = stmt.slice(colonPos + 1, eq).trim();
-    const annErr = checkAnnotationMatch(annText, rhs, init.value.value);
+    const annErr = checkAnnotationMatch(
+      annText,
+      rhs,
+      init.value.value,
+      init.value.suffix
+    );
     if (annErr) return annErr;
   }
+
+  if (env.has(ident)) return { ok: false, error: "duplicate declaration" };
 
   env.set(ident, { value: init.value.value, suffix: init.value.suffix });
   return { ok: true, value: undefined };
@@ -210,7 +225,13 @@ function isIdentifierOnly(stmt: string): boolean {
 
   // first character must be a letter or underscore
   const first = t.charCodeAt(0);
-  if (!((first >= 65 && first <= 90) || (first >= 97 && first <= 122) || first === 95))
+  if (
+    !(
+      (first >= 65 && first <= 90) ||
+      (first >= 97 && first <= 122) ||
+      first === 95
+    )
+  )
     return false;
 
   // subsequent characters may be letters, digits, or underscore
