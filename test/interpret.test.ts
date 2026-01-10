@@ -125,6 +125,10 @@ describe("interpret (suffix handling - addition)", () => {
     expect(interpret("(3 + 10) * 5")).toEqual({ ok: true, value: 65 });
     expect(interpret("2 + 3 * 4")).toEqual({ ok: true, value: 14 });
 
+    // division with precedence
+    expect(interpret("10 / 2 + 1")).toEqual({ ok: true, value: 6 });
+    expect(interpret("12 / 5")).toEqual({ ok: true, value: 2.4 });
+
     // multiplication overflow with suffix
     expect(interpret("10U8 * 26U8")).toEqual({
       ok: false,
