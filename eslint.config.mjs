@@ -11,16 +11,16 @@ export default [
       "no-unused-vars": "off",
       "@typescript-eslint/no-unused-vars": [
         "error",
-        { argsIgnorePattern: "^_" }
-      ]
-    }
+        { argsIgnorePattern: "^_" },
+      ],
+    },
   },
   {
     plugins: {
-      "custom": { rules: { "no-throw": noThrow } }
+      custom: { rules: { "no-throw": noThrow } },
     },
     rules: {
-      "custom/no-throw": "error"
-    }
-  }
+      "custom/no-throw": "error",
+    },
+  },
 ];
