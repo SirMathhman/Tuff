@@ -1,9 +1,9 @@
 import { Result, Ok, Err } from "./result.js";
 
-type TypeRange = {
+interface TypeRange {
   min: number | bigint;
   max: number | bigint;
-};
+}
 
 const TYPE_RANGES: Record<string, TypeRange> = {
   U8: { min: 0, max: 255 },

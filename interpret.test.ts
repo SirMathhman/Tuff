@@ -30,7 +30,7 @@ describe("interpret", () => {
       expect(result.error).toContain("U8");
     }
   });
-  
+
   // U16 tests
   it('should interpret "1000U16" as 1000', () => {
     const result = interpret("1000U16");
