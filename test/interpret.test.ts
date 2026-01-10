@@ -88,6 +88,14 @@ describe("interpret (suffix handling - addition)", () => {
     });
   });
 
+  it("supports chained additions", () => {
+    expect(interpret("1U8 + 2U8 + 3U8")).toEqual({ ok: true, value: 6 });
+    expect(interpret("254U8 + 1U8 + 1U8")).toEqual({
+      ok: false,
+      error: "value out of range for U8",
+    });
+  });
+
   it("rejects mixed suffixes", () => {
     expect(interpret("1U8 + 2U16")).toEqual({
       ok: false,

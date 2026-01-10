@@ -48,9 +48,7 @@ function checkIntegerRange(
     const big = BigInt(raw);
     const bits = BigInt(info.bits);
     const min = info.signed ? -(1n << (bits - 1n)) : 0n;
-    const max = info.signed
-      ? (1n << (bits - 1n)) - 1n
-      : (1n << bits) - 1n;
+    const max = info.signed ? (1n << (bits - 1n)) - 1n : (1n << bits) - 1n;
     if (big < min || big > max) return outOfRange(suffix);
   } catch {
     return outOfRange(suffix);
@@ -146,18 +144,15 @@ function validateOperandSuffix(
   return validateSizedInteger(parsed.raw, suffix);
 }
 
-function handleBinaryAdd(s: string): Result<number, string> {
-  const plusIdx = s.indexOf("+");
-  if (plusIdx === -1) return { ok: false, error: "invalid expression" };
+function handleAdditionChain(s: string): Result<number, string> {
+  // split by '+' and handle unary leading '+'
+  const parts = s.split("+").map((p) => p.trim());
+  // if the input started with a leading '+' the first split part is empty
+  if (s[0] === "+" && parts[0] === "") parts.shift();
 
-  const leftStr = s.slice(0, plusIdx).trim();
-  const rightStr = s.slice(plusIdx + 1).trim();
-  if (!leftStr || !rightStr) return { ok: false, error: "invalid expression" };
-
-  const leftParsed = parseLeadingNumber(leftStr);
-  const rightParsed = parseLeadingNumber(rightStr);
-  if (!leftParsed || !rightParsed)
-    return { ok: false, error: "invalid operand" };
+  // any empty token in the middle is an invalid expression (e.g., '1 + + 2')
+  if (parts.length === 0 || parts.some((p) => p === ""))
+    return { ok: false, error: "invalid expression" };
 
   function validateParsedOperand(
     parsed: ParsedNumber,
@@ -168,24 +163,37 @@ function handleBinaryAdd(s: string): Result<number, string> {
     return validateOperandSuffix(parsed, operandStr);
   }
 
-  const leftErr = validateParsedOperand(leftParsed, leftStr);
-  if (leftErr) return leftErr;
-  const rightErr = validateParsedOperand(rightParsed, rightStr);
-  if (rightErr) return rightErr;
-
-  const leftSuffix = leftStr.slice(leftParsed.end);
-  const rightSuffix = rightStr.slice(rightParsed.end);
-  if (leftSuffix && rightSuffix && leftSuffix !== rightSuffix)
-    return { ok: false, error: "mixed suffixes not supported" };
-
-  const sum = leftParsed.value + rightParsed.value;
-  const commonSuffix = leftSuffix || rightSuffix;
-  if (commonSuffix) {
-    const sumErr = validateSizedInteger(String(sum), commonSuffix);
-    if (sumErr) return sumErr;
+  const parsedOperands: ParsedNumber[] = [];
+  for (const part of parts) {
+    const parsed = parseLeadingNumber(part);
+    if (!parsed) return { ok: false, error: "invalid operand" };
+    const err = validateParsedOperand(parsed, part);
+    if (err) return err;
+    parsedOperands.push(parsed);
   }
 
-  return { ok: true, value: sum };
+  // ensure suffixes are compatible
+  let commonSuffix = "";
+  for (let i = 0; i < parsedOperands.length; i++) {
+    const suf = parts[i].slice(parsedOperands[i].end);
+    if (suf) {
+      if (commonSuffix && suf !== commonSuffix)
+        return { ok: false, error: "mixed suffixes not supported" };
+      commonSuffix = suf;
+    }
+  }
+
+  // left-associative sum with validation at each step
+  let acc = 0;
+  for (const p of parsedOperands) {
+    acc = acc + p.value;
+    if (commonSuffix) {
+      const sumErr = validateSizedInteger(String(acc), commonSuffix);
+      if (sumErr) return sumErr;
+    }
+  }
+
+  return { ok: true, value: acc };
 }
 
 function handleSingle(s: string): Result<number, string> {
@@ -219,15 +227,9 @@ function handleSingle(s: string): Result<number, string> {
 export function interpret(input: string): Result<number, string> {
   const s = input.trim();
 
-  // find a binary + operator (skip leading unary + or +/-)
-  let idx = s.indexOf("+");
-  while (idx !== -1) {
-    const left = s.slice(0, idx).trim();
-    const right = s.slice(idx + 1).trim();
-    if (left !== "" && right !== "") {
-      return handleBinaryAdd(s);
-    }
-    idx = s.indexOf("+", idx + 1);
+  // binary + operator (supports chained additions)
+  if (s.indexOf("+") !== -1) {
+    return handleAdditionChain(s);
   }
 
   return handleSingle(s);
