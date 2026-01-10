@@ -175,14 +175,26 @@ describe("interpret (suffix handling - braced blocks) - grouping and top-level",
       ok: true,
       value: 6,
     });
+
+    // add two braced blocks
+    expect(interpret("{ let x = 1; x } + { let y = 2; y }")).toEqual({
+      ok: true,
+      value: 3,
+    });
   });
 
   it("top-level block statements", () => {
     // top-level block (no surrounding braces) should also work
-    expect(interpret("let x : 100U8 = 100U8; x")).toEqual({ ok: true, value: 100 });
+    expect(interpret("let x : 100U8 = 100U8; x")).toEqual({
+      ok: true,
+      value: 100,
+    });
 
     // top-level declaration with braced initializer
-    expect(interpret("let x = { let y = 100; y}; x")).toEqual({ ok: true, value: 100 });
+    expect(interpret("let x = { let y = 100; y}; x")).toEqual({
+      ok: true,
+      value: 100,
+    });
   });
 });
 
