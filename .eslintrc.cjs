@@ -21,6 +21,8 @@ module.exports = {
   rules: {
     // Keep minimal rules for now; we can tighten these later
     "@typescript-eslint/no-explicit-any": "off",
+    // Limit cyclomatic complexity
+    "complexity": ["error", { "max": 15 }],
     // Ban RegExp.test(), RegExp.exec(), and forbid use of null using no-restricted-syntax
     "no-restricted-syntax": [
       "error",
@@ -42,14 +44,17 @@ module.exports = {
       },
       {
         selector: "TSNullKeyword",
-        message: "Do not use null in type annotations; prefer undefined or optional types instead.",
+        message:
+          "Do not use null in type annotations; prefer undefined or optional types instead.",
       },
       {
-        selector: "CallExpression[callee.type='MemberExpression'][callee.property.name='test']",
+        selector:
+          "CallExpression[callee.type='MemberExpression'][callee.property.name='test']",
         message: "RegExp.test() is banned. Do not use regexes.",
       },
       {
-        selector: "CallExpression[callee.type='MemberExpression'][callee.property.name='exec']",
+        selector:
+          "CallExpression[callee.type='MemberExpression'][callee.property.name='exec']",
         message: "RegExp.exec() is banned. Do not use regexes.",
       },
     ],

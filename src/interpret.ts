@@ -10,27 +10,33 @@ export function interpret(input: string): number {
   const s = input.trim();
 
   // parse a leading numeric prefix without regex
+  function consumeDigits(str: string, idx: number): number {
+    const n = str.length;
+    let i = idx;
+    while (i < n && str.charCodeAt(i) >= 48 && str.charCodeAt(i) <= 57) {
+      i++;
+    }
+    return i;
+  }
+
   function parseLeadingNumber(str: string): number | undefined {
     if (str.length === 0) return undefined;
     let i = 0;
     const n = str.length;
+
     // optional sign
     if (str[i] === "+" || str[i] === "-") i++;
     if (i === n) return undefined; // only sign
 
     const startDigits = i;
-    while (i < n && str.charCodeAt(i) >= 48 && str.charCodeAt(i) <= 57) {
-      i++;
-    }
+    i = consumeDigits(str, i);
     if (i === startDigits) return undefined; // no digits before decimal
 
     // optional fractional part
     if (i < n && str[i] === ".") {
       i++; // skip '.'
       const startFrac = i;
-      while (i < n && str.charCodeAt(i) >= 48 && str.charCodeAt(i) <= 57) {
-        i++;
-      }
+      i = consumeDigits(str, i);
       if (i === startFrac) return undefined; // no digits after decimal
     }
 
