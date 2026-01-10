@@ -8,4 +8,7 @@ describe("interpret", () => {
   it('should interpret "100U8" as 100', () => {
     expect(interpret("100U8")).toBe(100);
   });
+  it('should throw error for "-100U8"', () => {
+    expect(() => interpret("-100U8")).toThrow();
+  });
 });
