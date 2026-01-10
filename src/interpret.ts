@@ -279,6 +279,18 @@ function parseDeclaration(
   const rhs = stmt.slice(eq + 1).trim();
   const valRes = interpret(rhs);
   if (!valRes.ok) return valRes;
+
+  // check annotation (optional) between identifier end and '=': e.g., ': 2U8'
+  const colonPos = findTopLevelChar(stmt, p, ":");
+  if (colonPos !== -1 && colonPos < eq) {
+    const annText = stmt.slice(colonPos + 1, eq).trim();
+    const annParsed = parseLeadingNumber(annText);
+    if (annParsed) {
+      if (valRes.value !== annParsed.value)
+        return { ok: false, error: "declaration initializer does not match annotation" };
+    }
+  }
+
   const parsedNum = parseLeadingNumber(rhs);
   const suffix =
     parsedNum && parsedNum.end < rhs.length

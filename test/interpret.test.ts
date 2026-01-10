@@ -161,6 +161,12 @@ describe("interpret (suffix handling - arithmetic)", () => {
       ok: true,
       value: 6,
     });
+
+    // declaration annotation mismatch should error
+    expect(interpret("10 / { let x : 2U8 = 1U8; x } + 1")).toEqual({
+      ok: false,
+      error: "declaration initializer does not match annotation",
+    });
   });
 
   it("rejects mixed suffixes", () => {
