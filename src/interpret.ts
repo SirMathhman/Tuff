@@ -1,10 +1,17 @@
 /**
  * interpret - parse and evaluate the given string input and return a number
  *
- * This is a stub implementation. The real implementation will be provided
- * once test cases are supplied.
+ * Current behavior (stub + incremental implementation):
+ *  - If the input is a numeric literal (integer or decimal, optional +/-) it
+ *    returns the numeric value.
+ *  - For any other input it returns 0 for now (keeps previous tests passing).
  */
 export function interpret(input: string): number {
-  // TODO: implement real interpreter based on user-provided test cases
+  const s = input.trim();
+  // match integer or decimal numbers, optionally signed
+  if (/^[+-]?\d+(?:\.\d+)?$/.test(s)) {
+    return Number(s);
+  }
+  // fallback until more cases are provided
   return 0;
 }

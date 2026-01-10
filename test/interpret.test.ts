@@ -7,4 +7,10 @@ describe("interpret (stub)", () => {
     expect(typeof interpret("hello")).toBe("number");
     expect(typeof interpret("1+1")).toBe("number");
   });
+
+  it("parses numeric literals correctly", () => {
+    expect(interpret("100")).toBe(100);
+    expect(interpret("+42")).toBe(42);
+    expect(interpret("-3.14")).toBe(-3.14);
+  });
 });
