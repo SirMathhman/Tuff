@@ -155,36 +155,26 @@ describe("interpret (suffix handling - arithmetic)", () => {
 
     // braced grouping should behave like parentheses
     expect(interpret("10 / { 2 } + 1")).toEqual({ ok: true, value: 6 });
+  });
 
+  it("braced grouping and blocks", () => {
     // braced grouping with declaration without annotation
-    expect(interpret("10 / { let x = 2U8; x } + 1")).toEqual({
-      ok: true,
-      value: 6,
-    });
+    expect(interpret("10 / { let x = 2U8; x } + 1")).toEqual({ ok: true, value: 6 });
 
     // braced grouping with declaration without annotation (unsuffixed initializer)
-    expect(interpret("10 / { let x = 2; x } + 1")).toEqual({
-      ok: true,
-      value: 6,
-    });
+    expect(interpret("10 / { let x = 2; x } + 1")).toEqual({ ok: true, value: 6 });
 
     // braced block with declarations
-    expect(interpret("10 / { let x : 2U8 = 2U8; x } + 1")).toEqual({
-      ok: true,
-      value: 6,
-    });
+    expect(interpret("10 / { let x : 2U8 = 2U8; x } + 1")).toEqual({ ok: true, value: 6 });
 
     // declaration annotation mismatch should error
-    expect(interpret("10 / { let x : 2U8 = 1U8; x } + 1")).toEqual({
-      ok: false,
-      error: "declaration initializer does not match annotation",
-    });
+    expect(interpret("10 / { let x : 2U8 = 1U8; x } + 1")).toEqual({ ok: false, error: "declaration initializer does not match annotation" });
+
+    // block with only declarations and no final expression should error
+    expect(interpret("10 / { let x = 2; } + 1")).toEqual({ ok: false, error: "block has no final expression" });
 
     // annotation can be a sized type (e.g., 'U8') which must match initializer suffix
-    expect(interpret("10 / { let x : U8 = 2U8; x } + 1")).toEqual({
-      ok: true,
-      value: 6,
-    });
+    expect(interpret("10 / { let x : U8 = 2U8; x } + 1")).toEqual({ ok: true, value: 6 });
   });
 
   it("rejects mixed suffixes", () => {

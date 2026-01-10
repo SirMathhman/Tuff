@@ -121,8 +121,6 @@ interface ReadOperandResult {
   nextPos: number;
 }
 
-
-
 function parseDeclaration(
   stmt: string,
   env: Map<string, Binding>
@@ -215,7 +213,7 @@ function evaluateBlock(inner: string): Result<number, string> {
     if (i === stmts.length - 1) return exprRes;
   }
 
-  return { ok: true, value: 0 };
+  return { ok: false, error: "block has no final expression" };
 }
 
 function readGroupedAt(
