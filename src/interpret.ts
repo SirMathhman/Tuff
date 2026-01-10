@@ -160,6 +160,16 @@ function lookupBinding(
   return { ok: false, error: `unknown identifier ${name}` };
 }
 
+function findBindingEnv(
+  name: string,
+  env: Map<string, Binding>,
+  fallbackEnv?: Map<string, Binding>
+): Map<string, Binding> | undefined {
+  if (env.has(name)) return env;
+  if (fallbackEnv && fallbackEnv.has(name)) return fallbackEnv;
+  return undefined;
+}
+
 function resolveInitializer(
   rhs: string,
   env: Map<string, Binding>
@@ -225,7 +235,21 @@ function parseDeclaration(
   p = scan.nextPos;
 
   const eq = findTopLevelChar(stmt, p, "=");
-  if (eq === -1) return { ok: false, error: "invalid declaration" };
+  // no initializer: allow annotation-only declarations like 'let x : I32'
+  if (eq === -1) {
+    const colonPos = findTopLevelChar(stmt, p, ":");
+    let suffix: string | undefined;
+    if (colonPos !== -1 && colonPos < stmt.length) {
+      const annText = stmt.slice(colonPos + 1).trim();
+      const allowed = new Set(["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"]);
+      if (allowed.has(annText)) suffix = annText;
+      else return { ok: false, error: "invalid declaration" };
+    }
+
+    if (env.has(ident)) return { ok: false, error: "duplicate declaration" };
+    env.set(ident, { value: 0, suffix });
+    return { ok: true, value: undefined };
+  }
 
   const rhs = stmt.slice(eq + 1).trim();
 
@@ -283,7 +307,10 @@ function isIdentifierOnly(stmt: string): boolean {
   return true;
 }
 
-function evaluateBlock(inner: string, parentEnv?: Map<string, Binding>): Result<number, string> {
+function evaluateBlock(
+  inner: string,
+  parentEnv?: Map<string, Binding>
+): Result<number, string> {
   const stmts = splitStatements(inner);
   const env = new Map<string, Binding>();
 
@@ -294,6 +321,14 @@ function evaluateBlock(inner: string, parentEnv?: Map<string, Binding>): Result<
     if (stmt.startsWith("let ")) {
       const r = parseDeclaration(stmt, env);
       if (!r.ok) return r as Err<string>;
+      continue;
+    }
+
+    // assignment handled by helper
+    const assignRes = handleAssignmentIfAny(stmt, env, parentEnv);
+    if (assignRes) {
+      if (!assignRes.ok) return assignRes;
+      if (i === stmts.length - 1) return assignRes;
       continue;
     }
 
@@ -311,6 +346,33 @@ function evaluateBlock(inner: string, parentEnv?: Map<string, Binding>): Result<
   }
 
   return { ok: false, error: "block has no final expression" };
+}
+
+function handleAssignmentIfAny(
+  stmt: string,
+  env: Map<string, Binding>,
+  parentEnv?: Map<string, Binding>
+): Result<number, string> | undefined {
+  const eqPos = findTopLevelChar(stmt, 0, "=");
+  if (eqPos === -1) return undefined;
+  const lhs = stmt.slice(0, eqPos).trim();
+  if (!isIdentifierOnly(lhs)) return { ok: false, error: "invalid assignment LHS" };
+  const name = lhs.split(" ")[0];
+  const rhs = stmt.slice(eqPos + 1).trim();
+  const init = resolveInitializer(rhs, env);
+  if (!init.ok) return init as Err<string>;
+  const targetEnv = findBindingEnv(name, env, parentEnv);
+  if (!targetEnv) return { ok: false, error: `unknown identifier ${name}` };
+  const existing = targetEnv.get(name)!;
+  // validate against existing suffix if present
+  if (existing.suffix) {
+    const err = validateSizedInteger(String(init.value.value), existing.suffix);
+    if (err) return err;
+  }
+  // propagate suffix if existing has none
+  if (!existing.suffix && init.value.suffix) existing.suffix = init.value.suffix;
+  existing.value = init.value.value;
+  return { ok: true, value: existing.value };
 }
 
 function readGroupedAt(
