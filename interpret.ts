@@ -6,7 +6,18 @@ export function interpret(input: string): Result<number, string> {
     return Err("Invalid literal: negative numbers cannot have type suffixes");
   }
 
+  // Extract type suffix if present
+  const typeMatch = input.match(/([A-Z]\d+)$/);
+  const typePrefix = typeMatch ? typeMatch[1] : null;
+
   // Remove type suffixes (e.g., U8, I32, etc.)
   const stripped = input.replace(/[A-Z]\d+$/, "");
-  return Ok(parseInt(stripped, 10));
+  const num = parseInt(stripped, 10);
+
+  // Validate against type constraints
+  if (typePrefix === "U8" && (num < 0 || num > 255)) {
+    return Err(`Invalid literal: value ${num} is out of range for U8 (0-255)`);
+  }
+
+  return Ok(num);
 }

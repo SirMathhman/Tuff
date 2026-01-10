@@ -23,4 +23,11 @@ describe("interpret", () => {
       expect(result.error).toContain("negative numbers");
     }
   });
+  it('should return error for "256U8"', () => {
+    const result = interpret("256U8");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("U8");
+    }
+  });
 });
