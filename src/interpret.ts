@@ -144,6 +144,56 @@ function validateOperandSuffix(
   return validateSizedInteger(parsed.raw, suffix);
 }
 
+function validateParsedOperand(
+  parsed: ParsedNumber,
+  operandStr: string
+): Err<string> | undefined {
+  const neg = checkNegativeSuffix(operandStr, parsed);
+  if (neg) return neg;
+  return validateOperandSuffix(parsed, operandStr);
+}
+
+function ensureCommonSuffix(
+  operandStrs: string[],
+  opnds: ParsedNumber[]
+): Result<string, string> {
+  let common = "";
+  for (let i = 0; i < opnds.length; i++) {
+    const suf = operandStrs[i].slice(opnds[i].end);
+    if (suf) {
+      if (common && suf !== common) return { ok: false, error: "mixed suffixes not supported" };
+      common = suf;
+    }
+  }
+  return { ok: true, value: common };
+}
+
+function processMulDiv(
+  opnds: ParsedNumber[],
+  opList: string[],
+  suffix: string
+): Err<string> | undefined {
+  let i = 0;
+  while (i < opList.length) {
+    const op = opList[i];
+    if (op === "*" || op === "/") {
+      const a = opnds[i].value;
+      const b = opnds[i + 1].value;
+      const res = op === "*" ? a * b : a / b;
+      opnds[i] = { value: res, raw: String(res), end: String(res).length };
+      opnds.splice(i + 1, 1);
+      opList.splice(i, 1);
+      if (suffix) {
+        const err = validateSizedInteger(String(res), suffix);
+        if (err) return err;
+      }
+      continue;
+    }
+    i++;
+  }
+  return undefined;
+}
+
 interface Tokenized {
   operands: ParsedNumber[];
   operandStrs: string[];
@@ -158,13 +208,8 @@ function tokenizeAddSub(s: string): Result<Tokenized, string> {
     while (pos < n && s[pos] === " ") pos++;
   }
 
-  function validateParsedOperand(
-    parsed: ParsedNumber,
-    operandStr: string
-  ): Err<string> | undefined {
-    const neg = checkNegativeSuffix(operandStr, parsed);
-    if (neg) return neg;
-    return validateOperandSuffix(parsed, operandStr);
+  function isOperator(ch: string): boolean {
+    return ch === "+" || ch === "-" || ch === "*" || ch === "/";
   }
 
   const operands: ParsedNumber[] = [];
@@ -179,7 +224,7 @@ function tokenizeAddSub(s: string): Result<Tokenized, string> {
 
     // find full operand including suffix (up to next operator)
     let j = pos + parsed.end;
-    while (j < n && s[j] !== "+" && s[j] !== "-") j++;
+    while (j < n && !isOperator(s[j])) j++;
     const operandFull = s.slice(pos, j).trim();
 
     const err = validateParsedOperand(parsed, operandFull);
@@ -194,7 +239,7 @@ function tokenizeAddSub(s: string): Result<Tokenized, string> {
     if (pos >= n) break;
 
     const ch = s[pos];
-    if (ch !== "+" && ch !== "-") return { ok: false, error: "invalid operator" };
+    if (!isOperator(ch)) return { ok: false, error: "invalid operator" };
     ops.push(ch);
     pos++;
     skipSpaces();
@@ -212,23 +257,19 @@ function handleAddSubChain(s: string): Result<number, string> {
   if (!tokens.ok) return tokens;
   const { operands, operandStrs, ops } = tokens.value;
 
-  // ensure suffixes are compatible (allow empty suffixes intermixed)
-  let commonSuffix = "";
-  for (let i = 0; i < operands.length; i++) {
-    const suf = operandStrs[i].slice(operands[i].end);
-    if (suf) {
-      if (commonSuffix && suf !== commonSuffix)
-        return { ok: false, error: "mixed suffixes not supported" };
-      commonSuffix = suf;
-    }
-  }
+  const commonResult = ensureCommonSuffix(operandStrs, operands);
+  if (!commonResult.ok) return commonResult;
+  const commonSuffix = commonResult.value;
 
-  // Left-associative evaluation with validation at each step
+  const mulDivErr = processMulDiv(operands, ops, commonSuffix);
+  if (mulDivErr) return mulDivErr;
+
+  // Left-associative evaluation for + and -
   let acc = operands[0].value;
-  for (let i = 0; i < ops.length; i++) {
-    const op = ops[i];
-    const next = operands[i + 1].value;
-    acc = op === "+" ? acc + next : acc - next;
+  for (let k = 0; k < ops.length; k++) {
+    const op2 = ops[k];
+    const next = operands[k + 1].value;
+    acc = op2 === "+" ? acc + next : acc - next;
     if (commonSuffix) {
       const err = validateSizedInteger(String(acc), commonSuffix);
       if (err) return err;
@@ -269,8 +310,13 @@ function handleSingle(s: string): Result<number, string> {
 export function interpret(input: string): Result<number, string> {
   const s = input.trim();
 
-  // binary + or - operator (supports chained additions/subtractions)
-  if (s.indexOf("+") !== -1 || s.indexOf("-") !== -1) {
+  // binary operators: + - * / (supports chained expressions)
+  if (
+    s.indexOf("+") !== -1 ||
+    s.indexOf("-") !== -1 ||
+    s.indexOf("*") !== -1 ||
+    s.indexOf("/") !== -1
+  ) {
     return handleAddSubChain(s);
   }
 

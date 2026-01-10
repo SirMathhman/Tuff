@@ -112,7 +112,22 @@ describe("interpret (suffix handling - addition)", () => {
     });
 
     // subtraction resulting in negative value for unsigned suffix should error
-    expect(interpret("1 - 2U8")).toEqual({ ok: false, error: "value out of range for U8" });
+    expect(interpret("1 - 2U8")).toEqual({
+      ok: false,
+      error: "value out of range for U8",
+    });
+  });
+
+  it("operator precedence and multiplication", () => {
+    // multiplication before addition
+    expect(interpret("10 * 5 + 3")).toEqual({ ok: true, value: 53 });
+    expect(interpret("2 + 3 * 4")).toEqual({ ok: true, value: 14 });
+
+    // multiplication overflow with suffix
+    expect(interpret("10U8 * 26U8")).toEqual({
+      ok: false,
+      error: "value out of range for U8",
+    });
   });
 
   it("rejects mixed suffixes", () => {
