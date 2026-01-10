@@ -27,15 +27,13 @@ module.exports = {
       {
         selector:
           "CallExpression[callee.type='MemberExpression'][callee.property.name='test']",
-        message:
-          "RegExp.test() is banned. Use RegExp.exec() or string.match() instead.",
+        message: "RegExp.test() is banned. Do not use regexes.",
       },
       {
         selector:
           "CallExpression[callee.type='MemberExpression'][callee.property.name='exec']",
-        message:
-          "RegExp.exec() is banned. Use String.prototype.match() or RegExp.prototype.exec safely with validation instead.",
-      }
+        message: "RegExp.exec() is banned. Do not use regexes.",
+      },
     ],
   },
 };
