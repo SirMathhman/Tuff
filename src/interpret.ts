@@ -33,6 +33,32 @@ interface SuffixInfo {
   bits: number;
 }
 
+function outOfRange(suffix: string): Err<string> {
+  return { ok: false, error: `value out of range for ${suffix}` };
+}
+
+function checkIntegerRange(
+  raw: string,
+  suffix: string,
+  info: SuffixInfo
+): Err<string> | undefined {
+  if (raw.indexOf(".") !== -1) return outOfRange(suffix);
+
+  try {
+    const big = BigInt(raw);
+    const bits = BigInt(info.bits);
+    const min = info.signed ? -(1n << (bits - 1n)) : 0n;
+    const max = info.signed
+      ? (1n << (bits - 1n)) - 1n
+      : (1n << bits) - 1n;
+    if (big < min || big > max) return outOfRange(suffix);
+  } catch {
+    return outOfRange(suffix);
+  }
+
+  return undefined;
+}
+
 function validateSizedInteger(
   raw: string,
   suffix: string
@@ -52,31 +78,7 @@ function validateSizedInteger(
   const info = allowed.get(suffix);
   if (!info) return undefined;
 
-  // require integer for sized types
-  if (raw.indexOf(".") !== -1) {
-    return { ok: false, error: `value out of range for ${suffix}` };
-  }
-
-  try {
-    const big = BigInt(raw);
-    const bits = BigInt(info.bits);
-    if (info.signed) {
-      const min = -(1n << (bits - 1n));
-      const max = (1n << (bits - 1n)) - 1n;
-      if (big < min || big > max)
-        return { ok: false, error: `value out of range for ${suffix}` };
-    } else {
-      const min = 0n;
-      const max = (1n << bits) - 1n;
-      if (big < min || big > max)
-        return { ok: false, error: `value out of range for ${suffix}` };
-    }
-  } catch (e) {
-    // BigInt parse failure (e.g., too large or fractional)
-    return { ok: false, error: `value out of range for ${suffix}` };
-  }
-
-  return undefined;
+  return checkIntegerRange(raw, suffix, info);
 }
 
 // returns ParsedNumber when a numeric prefix exists, otherwise undefined
