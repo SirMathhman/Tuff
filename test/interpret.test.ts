@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { interpret } from "../src/interpret";
 
-describe("interpret (stub)", () => {
+describe("interpret (result shape)", () => {
   it("returns Result objects", () => {
     const r1 = interpret("");
     expect(r1.ok).toBe(true);
@@ -15,12 +15,18 @@ describe("interpret (stub)", () => {
     expect(r3.ok).toBe(true);
     expect(typeof r3.value).toBe("number");
   });
+});
 
+describe("interpret (numeric parsing)", () => {
   it("parses numeric literals correctly", () => {
     expect(interpret("100")).toEqual({ ok: true, value: 100 });
     expect(interpret("+42")).toEqual({ ok: true, value: 42 });
     expect(interpret("-3.14")).toEqual({ ok: true, value: -3.14 });
   });
+});
+
+describe("interpret (suffix handling)", () => {
+
 
   it("parses leading numeric prefix (e.g., '100U8' => 100)", () => {
     expect(interpret("100U8")).toEqual({ ok: true, value: 100 });
@@ -35,6 +41,38 @@ describe("interpret (stub)", () => {
       error: "negative numeric prefix with suffix is not allowed",
     });
     expect(interpret("256U8")).toEqual({
+      ok: false,
+      error: "value out of range for U8",
+    });
+
+    // U16 / U32
+    expect(interpret("65535U16")).toEqual({ ok: true, value: 65535 });
+    expect(interpret("65536U16")).toEqual({
+      ok: false,
+      error: "value out of range for U16",
+    });
+    expect(interpret("4294967295U32")).toEqual({ ok: true, value: 4294967295 });
+    expect(interpret("4294967296U32")).toEqual({
+      ok: false,
+      error: "value out of range for U32",
+    });
+
+    // signed I8/I16
+    expect(interpret("127I8")).toEqual({ ok: true, value: 127 });
+    expect(interpret("-128I8")).toEqual({ ok: true, value: -128 });
+    expect(interpret("128I8")).toEqual({
+      ok: false,
+      error: "value out of range for I8",
+    });
+    expect(interpret("32767I16")).toEqual({ ok: true, value: 32767 });
+    expect(interpret("-32768I16")).toEqual({ ok: true, value: -32768 });
+    expect(interpret("32768I16")).toEqual({
+      ok: false,
+      error: "value out of range for I16",
+    });
+
+    // fractional with integer suffix invalid
+    expect(interpret("3.14U8")).toEqual({
       ok: false,
       error: "value out of range for U8",
     });
