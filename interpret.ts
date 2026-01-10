@@ -8,7 +8,7 @@ export function interpret(input: string): Result<number, string> {
 
   // Extract type suffix if present
   const typeMatch = input.match(/([A-Z]\d+)$/);
-  const typePrefix = typeMatch ? typeMatch[1] : null;
+  const typePrefix = typeMatch ? typeMatch[1] : undefined;
 
   // Remove type suffixes (e.g., U8, I32, etc.)
   const stripped = input.replace(/[A-Z]\d+$/, "");
