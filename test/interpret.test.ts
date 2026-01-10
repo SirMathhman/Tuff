@@ -17,6 +17,7 @@ describe("interpret (stub)", () => {
   it("parses leading numeric prefix (e.g., '100U8' => 100)", () => {
     expect(interpret("100U8")).toBe(100);
     expect(interpret("+42x")).toBe(42);
-    expect(interpret("-3.14y")).toBe(-3.14);
+    expect(() => interpret("-3.14y")).toThrow();
+    expect(() => interpret("-100U8")).toThrow();
   });
 });

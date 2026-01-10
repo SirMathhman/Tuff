@@ -19,7 +19,8 @@ export function interpret(input: string): number {
     return i;
   }
 
-  function parseLeadingNumber(str: string): number | undefined {
+  // returns { value, end } when a numeric prefix exists, otherwise undefined
+  function parseLeadingNumber(str: string): { value: number; end: number } | undefined {
     if (str.length === 0) return undefined;
     let i = 0;
     const n = str.length;
@@ -43,11 +44,17 @@ export function interpret(input: string): number {
     // parse the numeric prefix
     const numStr = str.slice(0, i);
     const value = Number(numStr);
-    return Number.isFinite(value) ? value : undefined;
+    return Number.isFinite(value) ? { value, end: i } : undefined;
   }
 
-  const leading = parseLeadingNumber(s);
-  if (leading !== undefined) return leading;
+  const parsed = parseLeadingNumber(s);
+  if (parsed !== undefined) {
+    // If there is a non-empty suffix and the number is negative, that's invalid by new rule
+    if (parsed.end < s.length && s[0] === "-") {
+      throw new Error("negative numeric prefix with suffix is not allowed");
+    }
+    return parsed.value;
+  }
 
   // fallback until more cases are provided
   return 0;
