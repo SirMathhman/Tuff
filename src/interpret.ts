@@ -213,10 +213,127 @@ function isAlphaNum(ch: string | undefined): boolean {
   );
 }
 
+interface Binding {
+  value: number;
+  suffix?: string;
+}
+
 interface ReadOperandResult {
   parsed: ParsedNumber;
   operandFull: string;
   nextPos: number;
+}
+
+function splitStatements(src: string): string[] {
+  const out: string[] = [];
+  let i = 0;
+  while (i < src.length) {
+    const pos = findTopLevelChar(src, i, ";");
+    if (pos === -1) {
+      out.push(src.slice(i).trim());
+      break;
+    }
+    out.push(src.slice(i, pos).trim());
+    i = pos + 1;
+  }
+  return out.filter((s) => s !== "");
+}
+
+function findTopLevelChar(src: string, start: number, target: string): number {
+  let depth = 0;
+  for (let i = start; i < src.length; i++) {
+    const ch = src[i];
+    if (ch === "(" || ch === "{" || ch === "[") depth++;
+    else if (ch === ")" || ch === "}" || ch === "]") depth--;
+    else if (ch === target && depth === 0) return i;
+  }
+  return -1;
+}
+
+function parseDeclaration(
+  stmt: string,
+  env: Map<string, Binding>
+): Result<void, string> {
+  let p = 4;
+  while (p < stmt.length && stmt[p] === " ") p++;
+  const start = p;
+  function isIdentCharCode(c: number): boolean {
+    return (
+      (c >= 65 && c <= 90) ||
+      (c >= 97 && c <= 122) ||
+      (c >= 48 && c <= 57) ||
+      c === 95
+    );
+  }
+  while (p < stmt.length) {
+    const c = stmt.charCodeAt(p);
+    if (isIdentCharCode(c)) p++;
+    else break;
+  }
+  const ident = stmt.slice(start, p);
+  if (!ident) return { ok: false, error: "invalid declaration" };
+
+  const eq = findTopLevelChar(stmt, p, "=");
+  if (eq === -1) return { ok: false, error: "invalid declaration" };
+
+  const rhs = stmt.slice(eq + 1).trim();
+  const valRes = interpret(rhs);
+  if (!valRes.ok) return valRes;
+  const parsedNum = parseLeadingNumber(rhs);
+  const suffix =
+    parsedNum && parsedNum.end < rhs.length
+      ? rhs.slice(parsedNum.end)
+      : undefined;
+  env.set(ident, { value: valRes.value, suffix });
+  return { ok: true, value: undefined };
+}
+
+function isIdentifierOnly(stmt: string): boolean {
+  if (stmt.length === 0) return false;
+  for (let k = 0; k < stmt.length; k++) {
+    const c = stmt.charCodeAt(k);
+    if (
+      !(
+        (c >= 65 && c <= 90) ||
+        (c >= 97 && c <= 122) ||
+        (c >= 48 && c <= 57) ||
+        c === 95 ||
+        stmt[k] === " "
+      )
+    )
+      return false;
+  }
+  return true;
+}
+
+function evaluateBlock(inner: string): Result<number, string> {
+  const stmts = splitStatements(inner);
+  const env = new Map<string, Binding>();
+
+  for (let i = 0; i < stmts.length; i++) {
+    const stmt = stmts[i];
+    if (stmt.length === 0) continue;
+
+    if (stmt.startsWith("let ")) {
+      const r = parseDeclaration(stmt, env);
+      if (!r.ok) return r as Err<string>;
+      continue;
+    }
+
+    if (isIdentifierOnly(stmt)) {
+      const name = stmt.split(" ")[0];
+      const binding = env.get(name);
+      if (!binding) return { ok: false, error: `unknown identifier ${name}` };
+      if (i === stmts.length - 1) return { ok: true, value: binding.value };
+      continue;
+    }
+
+    const exprRes = interpret(stmt);
+    if (!exprRes.ok) return exprRes;
+    if (i === stmts.length - 1) return exprRes;
+  }
+
+  return { ok: true, value: 0 };
 }
 
 function readGroupedAt(
@@ -241,7 +358,10 @@ function readGroupedAt(
   if (k >= substr.length || substr[k] !== closing)
     return { ok: false, error: "unmatched parenthesis" };
   const inner = substr.slice(1, k);
-  const innerRes = interpret(inner);
+  // support block statements separated by ';'
+  let innerRes: Result<number, string>;
+  if (inner.indexOf(";") !== -1) innerRes = evaluateBlock(inner);
+  else innerRes = interpret(inner);
   if (!innerRes.ok) return innerRes;
   const parsed = {
     value: innerRes.value,
