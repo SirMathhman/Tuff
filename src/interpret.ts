@@ -180,7 +180,8 @@ function processMulDiv(
     if (op === "*" || op === "/") {
       const a = opnds[i].value;
       const b = opnds[i + 1].value;
-      if (op === "/" && b === 0) return { ok: false, error: "division by zero" };
+      if (op === "/" && b === 0)
+        return { ok: false, error: "division by zero" };
       const res = op === "*" ? a * b : a / b;
       opnds[i] = { value: res, raw: String(res), end: String(res).length };
       opnds.splice(i + 1, 1);
@@ -218,6 +219,41 @@ interface ReadOperandResult {
   nextPos: number;
 }
 
+function readGroupedAt(
+  s: string,
+  pos: number
+): Result<ReadOperandResult, string> {
+  const n = s.length;
+  const substr = s.slice(pos);
+  const opening = substr[0];
+  const closing = opening === "(" ? ")" : "}";
+
+  let depth = 0;
+  let k = 0;
+  while (k < substr.length) {
+    if (substr[k] === opening) depth++;
+    else if (substr[k] === closing) {
+      depth--;
+      if (depth === 0) break;
+    }
+    k++;
+  }
+  if (k >= substr.length || substr[k] !== closing)
+    return { ok: false, error: "unmatched parenthesis" };
+  const inner = substr.slice(1, k);
+  const innerRes = interpret(inner);
+  if (!innerRes.ok) return innerRes;
+  const parsed = {
+    value: innerRes.value,
+    raw: String(innerRes.value),
+    end: k + 1,
+  } as ParsedNumber;
+  let j = pos + parsed.end;
+  while (j < n && isAlphaNum(s[j])) j++; // suffix chars
+  const operandFull = s.slice(pos, j).trim();
+  return { ok: true, value: { parsed, operandFull, nextPos: j } };
+}
+
 function readOperandAt(
   s: string,
   pos: number
@@ -225,32 +261,9 @@ function readOperandAt(
   const n = s.length;
   const substr = s.slice(pos);
 
-  // parenthesized expression
-  if (substr[0] === "(") {
-    let depth = 0;
-    let k = 0;
-    while (k < substr.length) {
-      if (substr[k] === "(") depth++;
-      else if (substr[k] === ")") {
-        depth--;
-        if (depth === 0) break;
-      }
-      k++;
-    }
-    if (k >= substr.length || substr[k] !== ")")
-      return { ok: false, error: "unmatched parenthesis" };
-    const inner = substr.slice(1, k);
-    const innerRes = interpret(inner);
-    if (!innerRes.ok) return innerRes;
-    const parsed = {
-      value: innerRes.value,
-      raw: String(innerRes.value),
-      end: k + 1,
-    } as ParsedNumber;
-    let j = pos + parsed.end;
-    while (j < n && isAlphaNum(s[j])) j++; // suffix chars
-    const operandFull = s.slice(pos, j).trim();
-    return { ok: true, value: { parsed, operandFull, nextPos: j } };
+  // grouped expression handled by helper
+  if (substr[0] === "(" || substr[0] === "{") {
+    return readGroupedAt(s, pos);
   }
 
   // direct numeric

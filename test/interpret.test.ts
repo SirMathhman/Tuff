@@ -26,10 +26,13 @@ describe("interpret (numeric parsing)", () => {
 });
 
 describe("interpret (suffix handling - parsing)", () => {
-  it("parses U8 and simple suffix behaviors", () => {
+  it("parses U8 basics", () => {
     expect(interpret("100U8")).toEqual({ ok: true, value: 100 });
     expect(interpret("255U8")).toEqual({ ok: true, value: 255 });
     expect(interpret("+42x")).toEqual({ ok: true, value: 42 });
+  });
+
+  it("handles negative and out of range U8", () => {
     expect(interpret("-3.14y")).toEqual({
       ok: false,
       error: "negative numeric prefix with suffix is not allowed",
@@ -43,7 +46,10 @@ describe("interpret (suffix handling - parsing)", () => {
       error: "value out of range for U8",
     });
   });
+});
 
+// split longer parsing tests to satisfy max-lines-per-function
+describe("interpret (suffix handling - integer ranges)", () => {
   it("validates larger unsigned ranges (U16/U32)", () => {
     expect(interpret("65536U16")).toEqual({
       ok: false,
@@ -79,7 +85,7 @@ describe("interpret (suffix handling - parsing)", () => {
   });
 });
 
-describe("interpret (suffix handling - addition)", () => {
+describe("interpret (suffix handling - addition: basic)", () => {
   it("addition with sized operands works and enforces range", () => {
     expect(interpret("1U8 + 2U8")).toEqual({ ok: true, value: 3 });
     expect(interpret("255U8 + 1U8")).toEqual({
@@ -87,24 +93,26 @@ describe("interpret (suffix handling - addition)", () => {
       error: "value out of range for U8",
     });
   });
+});
 
-  it("supports chained additions and subtractions", () => {
+describe("interpret (suffix handling - addition: chaining)", () => {
+  it("supports chained additions", () => {
     expect(interpret("1U8 + 2U8 + 3U8")).toEqual({ ok: true, value: 6 });
     expect(interpret("254U8 + 1U8 + 1U8")).toEqual({
       ok: false,
       error: "value out of range for U8",
     });
+  });
 
-    // mix suffixed and unsuffixed (allowed when suffixed ones match)
+  it("supports mixing suffixed and unsuffixed operands", () => {
     expect(interpret("1U8 + 2 + 3U8")).toEqual({ ok: true, value: 6 });
-
-    // mixing two different suffixes with an unsuffixed in the middle should still error
     expect(interpret("1U8 + 2 + 3U16")).toEqual({
       ok: false,
       error: "mixed suffixes not supported",
     });
+  });
 
-    // subtraction with suffixed operand
+  it("subtraction with suffixed operands", () => {
     expect(interpret("10 - 5U8 + 3")).toEqual({ ok: true, value: 8 });
     expect(interpret("0 - 1U8")).toEqual({
       ok: false,
@@ -117,7 +125,9 @@ describe("interpret (suffix handling - addition)", () => {
       error: "value out of range for U8",
     });
   });
+});
 
+describe("interpret (suffix handling - arithmetic)", () => {
   it("operator precedence and multiplication", () => {
     // multiplication before addition
     expect(interpret("10 * 5 + 3")).toEqual({ ok: true, value: 53 });
@@ -125,18 +135,26 @@ describe("interpret (suffix handling - addition)", () => {
     expect(interpret("(3 + 10) * 5")).toEqual({ ok: true, value: 65 });
     expect(interpret("2 + 3 * 4")).toEqual({ ok: true, value: 14 });
 
-    // division with precedence
-    expect(interpret("10 / 2 + 1")).toEqual({ ok: true, value: 6 });
-    expect(interpret("12 / 5")).toEqual({ ok: true, value: 2.4 });
-
-    // division edge cases
-    expect(interpret("10 / (2 - 2)")).toEqual({ ok: false, error: "division by zero" });
-
     // multiplication overflow with suffix
     expect(interpret("10U8 * 26U8")).toEqual({
       ok: false,
       error: "value out of range for U8",
     });
+  });
+
+  it("division and braced grouping", () => {
+    // division with precedence
+    expect(interpret("10 / 2 + 1")).toEqual({ ok: true, value: 6 });
+    expect(interpret("12 / 5")).toEqual({ ok: true, value: 2.4 });
+
+    // division edge cases
+    expect(interpret("10 / (2 - 2)")).toEqual({
+      ok: false,
+      error: "division by zero",
+    });
+
+    // braced grouping should behave like parentheses
+    expect(interpret("10 / { 2 } + 1")).toEqual({ ok: true, value: 6 });
   });
 
   it("rejects mixed suffixes", () => {
