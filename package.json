@@ -1,0 +1,26 @@
+{
+  "name": "tuff",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SirMathhman/Tuff.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/SirMathhman/Tuff/issues"
+  },
+  "homepage": "https://github.com/SirMathhman/Tuff#readme",
+  "devDependencies": {
+    "@types/node": "^25.0.4",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
