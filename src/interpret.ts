@@ -162,18 +162,45 @@ function resolveInitializer(
   rhs: string,
   env: Map<string, Binding>
 ): Result<Binding, string> {
-  if (isIdentifierOnly(rhs)) {
-    const name = rhs.split(" ")[0];
+  const t = rhs.trim();
+
+  // identifier initializer
+  if (isIdentifierOnly(t)) {
+    const name = t.split(" ")[0];
     return lookupBinding(name, env);
   }
 
+  // braced block initializer: { ... }
+  if (t.startsWith("{")) {
+    // find matching top-level closing brace
+    let depth = 0;
+    let i = 0;
+    while (i < t.length) {
+      if (t[i] === "{") depth++;
+      else if (t[i] === "}") {
+        depth--;
+        if (depth === 0) break;
+      }
+      i++;
+    }
+    if (i >= t.length || t[i] !== "}") return { ok: false, error: "unmatched brace in initializer" };
+    // only allow pure braced block (no trailing tokens)
+    const rest = t.slice(i + 1).trim();
+    if (rest.length !== 0) return { ok: false, error: "unexpected tokens after braced initializer" };
+
+    const inner = t.slice(1, i);
+    const innerRes = evaluateBlock(inner);
+    if (!innerRes.ok) return innerRes as Result<Binding, string>;
+    const binding: Binding = { value: innerRes.value };
+    return { ok: true, value: binding };
+  }
+
+  // otherwise interpret as an expression
   const r = interpret(rhs);
   if (!r.ok) return { ok: false, error: r.error };
   const parsedNum = parseLeadingNumber(rhs);
   const suffix =
-    parsedNum && parsedNum.end < rhs.length
-      ? rhs.slice(parsedNum.end)
-      : undefined;
+    parsedNum && parsedNum.end < rhs.length ? rhs.slice(parsedNum.end) : undefined;
   const binding: Binding = { value: r.value, suffix };
   return { ok: true, value: binding };
 }
