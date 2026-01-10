@@ -94,6 +94,15 @@ describe("interpret (suffix handling - addition)", () => {
       ok: false,
       error: "value out of range for U8",
     });
+
+    // mix suffixed and unsuffixed (allowed when suffixed ones match)
+    expect(interpret("1U8 + 2 + 3U8")).toEqual({ ok: true, value: 6 });
+
+    // mixing two different suffixes with an unsuffixed in the middle should still error
+    expect(interpret("1U8 + 2 + 3U16")).toEqual({
+      ok: false,
+      error: "mixed suffixes not supported",
+    });
   });
 
   it("rejects mixed suffixes", () => {
