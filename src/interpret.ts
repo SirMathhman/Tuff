@@ -10,7 +10,7 @@ export function interpret(input: string): number {
   const s = input.trim();
   // match integer or decimal numbers, optionally signed
   const numberRegex = /^[+-]?\d+(?:\.\d+)?$/;
-  if (numberRegex.exec(s)) {
+  if (s.match(numberRegex)) {
     return Number(s);
   }
   // fallback until more cases are provided
