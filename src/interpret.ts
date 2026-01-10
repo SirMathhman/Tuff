@@ -8,40 +8,40 @@
  */
 export function interpret(input: string): number {
   const s = input.trim();
-  // match integer or decimal numbers, optionally signed — implement without regex
-  function isNumericString(str: string): boolean {
-    if (str.length === 0) return false;
+
+  // parse a leading numeric prefix without regex
+  function parseLeadingNumber(str: string): number | null {
+    if (str.length === 0) return null;
     let i = 0;
     const n = str.length;
     // optional sign
-    if (str[i] === '+' || str[i] === '-') i++;
-    if (i === n) return false; // only sign
+    if (str[i] === "+" || str[i] === "-") i++;
+    if (i === n) return null; // only sign
 
-    // digits before decimal (at least one)
-    let seenDigitBefore = false;
+    const startDigits = i;
     while (i < n && str.charCodeAt(i) >= 48 && str.charCodeAt(i) <= 57) {
-      seenDigitBefore = true;
       i++;
     }
+    if (i === startDigits) return null; // no digits before decimal
 
     // optional fractional part
-    if (i < n && str[i] === '.') {
+    if (i < n && str[i] === ".") {
       i++; // skip '.'
-      let seenDigitAfter = false;
+      const startFrac = i;
       while (i < n && str.charCodeAt(i) >= 48 && str.charCodeAt(i) <= 57) {
-        seenDigitAfter = true;
         i++;
       }
-      // must have digits both before and after decimal
-      return seenDigitBefore && seenDigitAfter && i === n;
+      if (i === startFrac) return null; // no digits after decimal
     }
 
-    return seenDigitBefore && i === n;
+    // parse the numeric prefix
+    const numStr = str.slice(0, i);
+    const value = Number(numStr);
+    return Number.isFinite(value) ? value : null;
   }
 
-  if (isNumericString(s)) {
-    return Number(s);
-  }
+  const leading = parseLeadingNumber(s);
+  if (leading !== null) return leading;
 
   // fallback until more cases are provided
   return 0;
