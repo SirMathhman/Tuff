@@ -24,8 +24,19 @@ describe("interpret (stub)", () => {
 
   it("parses leading numeric prefix (e.g., '100U8' => 100)", () => {
     expect(interpret("100U8")).toEqual({ ok: true, value: 100 });
+    expect(interpret("255U8")).toEqual({ ok: true, value: 255 });
     expect(interpret("+42x")).toEqual({ ok: true, value: 42 });
-    expect(interpret("-3.14y")).toEqual({ ok: false, error: "negative numeric prefix with suffix is not allowed" });
-    expect(interpret("-100U8")).toEqual({ ok: false, error: "negative numeric prefix with suffix is not allowed" });
+    expect(interpret("-3.14y")).toEqual({
+      ok: false,
+      error: "negative numeric prefix with suffix is not allowed",
+    });
+    expect(interpret("-100U8")).toEqual({
+      ok: false,
+      error: "negative numeric prefix with suffix is not allowed",
+    });
+    expect(interpret("256U8")).toEqual({
+      ok: false,
+      error: "value out of range for U8",
+    });
   });
 });
