@@ -25,8 +25,8 @@ describe("interpret (numeric parsing)", () => {
   });
 });
 
-describe("interpret (suffix handling)", () => {
-  it("parses leading numeric prefix (e.g., '100U8' => 100)", () => {
+describe("interpret (suffix handling - parsing)", () => {
+  it("parses U8 and simple suffix behaviors", () => {
     expect(interpret("100U8")).toEqual({ ok: true, value: 100 });
     expect(interpret("255U8")).toEqual({ ok: true, value: 255 });
     expect(interpret("+42x")).toEqual({ ok: true, value: 42 });
@@ -42,9 +42,9 @@ describe("interpret (suffix handling)", () => {
       ok: false,
       error: "value out of range for U8",
     });
+  });
 
-    // U16 / U32
-
+  it("validates larger unsigned ranges (U16/U32)", () => {
     expect(interpret("65536U16")).toEqual({
       ok: false,
       error: "value out of range for U16",
@@ -54,8 +54,9 @@ describe("interpret (suffix handling)", () => {
       ok: false,
       error: "value out of range for U32",
     });
+  });
 
-    // signed I8/I16
+  it("validates signed ranges (I8/I16)", () => {
     expect(interpret("127I8")).toEqual({ ok: true, value: 127 });
     expect(interpret("-128I8")).toEqual({ ok: true, value: -128 });
     expect(interpret("128I8")).toEqual({
@@ -68,19 +69,29 @@ describe("interpret (suffix handling)", () => {
       ok: false,
       error: "value out of range for I16",
     });
+  });
 
-    // fractional with integer suffix invalid
+  it("fractional values with integer suffix are invalid", () => {
     expect(interpret("3.14U8")).toEqual({
       ok: false,
       error: "value out of range for U8",
     });
   });
+});
 
+describe("interpret (suffix handling - addition)", () => {
   it("addition with sized operands works and enforces range", () => {
     expect(interpret("1U8 + 2U8")).toEqual({ ok: true, value: 3 });
     expect(interpret("255U8 + 1U8")).toEqual({
       ok: false,
       error: "value out of range for U8",
+    });
+  });
+
+  it("rejects mixed suffixes", () => {
+    expect(interpret("1U8 + 2U16")).toEqual({
+      ok: false,
+      error: "mixed suffixes not supported",
     });
   });
 });
