@@ -2,7 +2,8 @@ export default {
   meta: {
     type: "suggestion",
     docs: {
-      description: "Disallow anonymous object types, use named interfaces instead",
+      description:
+        "Disallow anonymous object types, use named interfaces instead",
       category: "Best Practices",
     },
     messages: {

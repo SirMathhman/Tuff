@@ -5,16 +5,16 @@ interface TypeRange {
   max: number | bigint;
 }
 
-const TYPE_RANGES: Record<string, TypeRange> = {
-  U8: { min: 0, max: 255 },
-  U16: { min: 0, max: 65535 },
-  U32: { min: 0, max: 4294967295 },
-  U64: { min: 0n, max: 18446744073709551615n },
-  I8: { min: -128, max: 127 },
-  I16: { min: -32768, max: 32767 },
-  I32: { min: -2147483648, max: 2147483647 },
-  I64: { min: -9223372036854775808n, max: 9223372036854775807n },
-};
+const TYPE_RANGES = new Map<string, TypeRange>([
+  ["U8", { min: 0, max: 255 }],
+  ["U16", { min: 0, max: 65535 }],
+  ["U32", { min: 0, max: 4294967295 }],
+  ["U64", { min: 0n, max: 18446744073709551615n }],
+  ["I8", { min: -128, max: 127 }],
+  ["I16", { min: -32768, max: 32767 }],
+  ["I32", { min: -2147483648, max: 2147483647 }],
+  ["I64", { min: -9223372036854775808n, max: 9223372036854775807n }],
+]);
 
 export function interpret(input: string): Result<number, string> {
   // Extract type suffix if present
@@ -22,7 +22,7 @@ export function interpret(input: string): Result<number, string> {
   const typePrefix = typeMatch ? typeMatch[1] : undefined;
 
   // Check if type suffix is unknown
-  if (typePrefix && !TYPE_RANGES[typePrefix]) {
+  if (typePrefix && !TYPE_RANGES.has(typePrefix)) {
     return Err(`Unknown type: ${typePrefix}`);
   }
 
@@ -38,9 +38,9 @@ export function interpret(input: string): Result<number, string> {
   const num = parseInt(stripped, 10);
 
   // Validate against type constraints
-  if (typePrefix && TYPE_RANGES[typePrefix]) {
-    const range = TYPE_RANGES[typePrefix];
-    if (num < range.min || num > range.max) {
+  if (typePrefix && TYPE_RANGES.has(typePrefix)) {
+    const range = TYPE_RANGES.get(typePrefix);
+    if (range && (num < range.min || num > range.max)) {
       return Err(
         `Invalid literal: value ${num} is out of range for ${typePrefix} (${range.min}-${range.max})`
       );
