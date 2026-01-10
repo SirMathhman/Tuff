@@ -129,6 +129,9 @@ describe("interpret (suffix handling - addition)", () => {
     expect(interpret("10 / 2 + 1")).toEqual({ ok: true, value: 6 });
     expect(interpret("12 / 5")).toEqual({ ok: true, value: 2.4 });
 
+    // division edge cases
+    expect(interpret("10 / (2 - 2)")).toEqual({ ok: false, error: "division by zero" });
+
     // multiplication overflow with suffix
     expect(interpret("10U8 * 26U8")).toEqual({
       ok: false,
