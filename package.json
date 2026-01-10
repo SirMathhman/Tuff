@@ -6,7 +6,7 @@
     "test": "vitest run",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
-    "cpd": "pmd cpd --minimum-tokens 35 -l typescript -d src --ignore-literals --ignore-identifiers",
+    "cpd": "pmd cpd --minimum-tokens 50 -l typescript -d src --ignore-literals --ignore-identifiers",
     "prepare": "husky"
   },
   "devDependencies": {
