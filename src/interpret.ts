@@ -1,12 +1,19 @@
 /**
- * interpret - parse and evaluate the given string input and return a number
+ * Result<T, E> - conservative result type to avoid throwing
+ */
+export interface Ok<T> { ok: true; value: T }
+export interface Err<E> { ok: false; error: E }
+export type Result<T, E> = Ok<T> | Err<E>
+
+/**
+ * interpret - parse and evaluate the given string input and return a Result
  *
  * Current behavior (stub + incremental implementation):
  *  - If the input is a numeric literal (integer or decimal, optional +/-) it
  *    returns the numeric value.
  *  - For any other input it returns 0 for now (keeps previous tests passing).
  */
-export function interpret(input: string): number {
+export function interpret(input: string): Result<number, string> {
   const s = input.trim();
 
   // parse a leading numeric prefix without regex
@@ -56,11 +63,12 @@ export function interpret(input: string): number {
   if (parsed !== undefined) {
     // If there is a non-empty suffix and the number is negative, that's invalid by new rule
     if (parsed.end < s.length && s[0] === "-") {
-      throw new Error("negative numeric prefix with suffix is not allowed");
+      return { ok: false, error: "negative numeric prefix with suffix is not allowed" };
     }
-    return parsed.value;
+    return { ok: true, value: parsed.value };
   }
 
   // fallback until more cases are provided
-  return 0;
+  return { ok: true, value: 0 };
+
 }

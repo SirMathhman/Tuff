@@ -56,6 +56,12 @@ module.exports = {
           "Do not use anonymous object types; define a named interface instead.",
       },
       {
+        selector: "ThrowStatement",
+        message:
+          "Do not use throw. Return a Result<T, E> (e.g., { ok: false, error }) instead.",
+      },
+
+      {
         selector:
           "CallExpression[callee.type='MemberExpression'][callee.property.name='test']",
         message: "RegExp.test() is banned. Do not use regexes.",
