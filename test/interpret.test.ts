@@ -106,7 +106,13 @@ describe("interpret (suffix handling - addition)", () => {
 
     // subtraction with suffixed operand
     expect(interpret("10 - 5U8 + 3")).toEqual({ ok: true, value: 8 });
-    expect(interpret("0 - 1U8")).toEqual({ ok: false, error: "value out of range for U8" });
+    expect(interpret("0 - 1U8")).toEqual({
+      ok: false,
+      error: "value out of range for U8",
+    });
+
+    // subtraction resulting in negative value for unsigned suffix should error
+    expect(interpret("1 - 2U8")).toEqual({ ok: false, error: "value out of range for U8" });
   });
 
   it("rejects mixed suffixes", () => {
