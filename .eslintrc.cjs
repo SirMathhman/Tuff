@@ -5,14 +5,18 @@ module.exports = {
     ecmaVersion: 2020,
     sourceType: "module",
     project: "./tsconfig.json",
-    tsconfigRootDir: __dirname
+    tsconfigRootDir: __dirname,
   },
   env: {
     node: true,
-    es2020: true
+    es2020: true,
   },
   plugins: ["@typescript-eslint"],
-  extends: ["eslint:recommended", "plugin:@typescript-eslint/recommended", "prettier"],
+  extends: [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    "prettier",
+  ],
   rules: {
     // Keep minimal rules for now; we can tighten these later
     "@typescript-eslint/no-explicit-any": "off",
@@ -22,8 +26,9 @@ module.exports = {
       {
         selector:
           "CallExpression[callee.type='MemberExpression'][callee.property.name='test']",
-        message: "RegExp.test() is banned. Use RegExp.exec() or string.match() instead."
-      }
-    ]
-  }
+        message:
+          "RegExp.test() is banned. Use RegExp.exec() or string.match() instead.",
+      },
+    ],
+  },
 };
