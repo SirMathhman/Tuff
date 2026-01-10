@@ -151,11 +151,13 @@ function scanIdentifierFrom(
 
 function lookupBinding(
   name: string,
-  env: Map<string, Binding>
+  env: Map<string, Binding>,
+  fallbackEnv?: Map<string, Binding>
 ): Result<Binding, string> {
   const binding = env.get(name);
-  if (!binding) return { ok: false, error: `unknown identifier ${name}` };
-  return { ok: true, value: binding };
+  if (binding) return { ok: true, value: binding };
+  if (fallbackEnv) return lookupBinding(name, fallbackEnv);
+  return { ok: false, error: `unknown identifier ${name}` };
 }
 
 function resolveInitializer(
@@ -183,13 +185,15 @@ function resolveInitializer(
       }
       i++;
     }
-    if (i >= t.length || t[i] !== "}") return { ok: false, error: "unmatched brace in initializer" };
+    if (i >= t.length || t[i] !== "}")
+      return { ok: false, error: "unmatched brace in initializer" };
     // only allow pure braced block (no trailing tokens)
     const rest = t.slice(i + 1).trim();
-    if (rest.length !== 0) return { ok: false, error: "unexpected tokens after braced initializer" };
+    if (rest.length !== 0)
+      return { ok: false, error: "unexpected tokens after braced initializer" };
 
     const inner = t.slice(1, i);
-    const innerRes = evaluateBlock(inner);
+    const innerRes = evaluateBlock(inner, env);
     if (!innerRes.ok) return innerRes as Result<Binding, string>;
     const binding: Binding = { value: innerRes.value };
     return { ok: true, value: binding };
@@ -200,7 +204,9 @@ function resolveInitializer(
   if (!r.ok) return { ok: false, error: r.error };
   const parsedNum = parseLeadingNumber(rhs);
   const suffix =
-    parsedNum && parsedNum.end < rhs.length ? rhs.slice(parsedNum.end) : undefined;
+    parsedNum && parsedNum.end < rhs.length
+      ? rhs.slice(parsedNum.end)
+      : undefined;
   const binding: Binding = { value: r.value, suffix };
   return { ok: true, value: binding };
 }
@@ -277,7 +283,7 @@ function isIdentifierOnly(stmt: string): boolean {
   return true;
 }
 
-function evaluateBlock(inner: string): Result<number, string> {
+function evaluateBlock(inner: string, parentEnv?: Map<string, Binding>): Result<number, string> {
   const stmts = splitStatements(inner);
   const env = new Map<string, Binding>();
 
@@ -293,7 +299,7 @@ function evaluateBlock(inner: string): Result<number, string> {
 
     if (isIdentifierOnly(stmt)) {
       const name = stmt.split(" ")[0];
-      const b = lookupBinding(name, env);
+      const b = lookupBinding(name, env, parentEnv);
       if (!b.ok) return b as Err<string>;
       if (i === stmts.length - 1) return { ok: true, value: b.value.value };
       continue;
