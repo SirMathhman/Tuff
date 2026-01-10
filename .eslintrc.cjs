@@ -21,7 +21,7 @@ module.exports = {
   rules: {
     // Keep minimal rules for now; we can tighten these later
     "@typescript-eslint/no-explicit-any": "off",
-    // Ban RegExp.test() and RegExp.exec() using no-restricted-syntax
+    // Ban RegExp.test(), RegExp.exec(), and forbid use of null using no-restricted-syntax
     "no-restricted-syntax": [
       "error",
       {
@@ -29,25 +29,27 @@ module.exports = {
         message: "Regular expressions are banned. Do not use regexes.",
       },
       {
-        selector:
-          "NewExpression[callee.name='RegExp']",
-        message:
-          "RegExp constructor is banned. Do not use regexes.",
+        selector: "NewExpression[callee.name='RegExp']",
+        message: "RegExp constructor is banned. Do not use regexes.",
       },
       {
-        selector:
-          "CallExpression[callee.name='RegExp']",
-        message:
-          "RegExp constructor is banned. Do not use regexes.",
+        selector: "CallExpression[callee.name='RegExp']",
+        message: "RegExp constructor is banned. Do not use regexes.",
       },
       {
-        selector:
-          "CallExpression[callee.type='MemberExpression'][callee.property.name='test']",
+        selector: "Literal[value=null]",
+        message: "Do not use null; prefer undefined instead.",
+      },
+      {
+        selector: "TSNullKeyword",
+        message: "Do not use null in type annotations; prefer undefined or optional types instead.",
+      },
+      {
+        selector: "CallExpression[callee.type='MemberExpression'][callee.property.name='test']",
         message: "RegExp.test() is banned. Do not use regexes.",
       },
       {
-        selector:
-          "CallExpression[callee.type='MemberExpression'][callee.property.name='exec']",
+        selector: "CallExpression[callee.type='MemberExpression'][callee.property.name='exec']",
         message: "RegExp.exec() is banned. Do not use regexes.",
       },
     ],

@@ -10,19 +10,19 @@ export function interpret(input: string): number {
   const s = input.trim();
 
   // parse a leading numeric prefix without regex
-  function parseLeadingNumber(str: string): number | null {
-    if (str.length === 0) return null;
+  function parseLeadingNumber(str: string): number | undefined {
+    if (str.length === 0) return undefined;
     let i = 0;
     const n = str.length;
     // optional sign
     if (str[i] === "+" || str[i] === "-") i++;
-    if (i === n) return null; // only sign
+    if (i === n) return undefined; // only sign
 
     const startDigits = i;
     while (i < n && str.charCodeAt(i) >= 48 && str.charCodeAt(i) <= 57) {
       i++;
     }
-    if (i === startDigits) return null; // no digits before decimal
+    if (i === startDigits) return undefined; // no digits before decimal
 
     // optional fractional part
     if (i < n && str[i] === ".") {
@@ -31,17 +31,17 @@ export function interpret(input: string): number {
       while (i < n && str.charCodeAt(i) >= 48 && str.charCodeAt(i) <= 57) {
         i++;
       }
-      if (i === startFrac) return null; // no digits after decimal
+      if (i === startFrac) return undefined; // no digits after decimal
     }
 
     // parse the numeric prefix
     const numStr = str.slice(0, i);
     const value = Number(numStr);
-    return Number.isFinite(value) ? value : null;
+    return Number.isFinite(value) ? value : undefined;
   }
 
   const leading = parseLeadingNumber(s);
-  if (leading !== null) return leading;
+  if (leading !== undefined) return leading;
 
   // fallback until more cases are provided
   return 0;
