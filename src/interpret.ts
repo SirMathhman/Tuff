@@ -121,6 +121,55 @@ interface ReadOperandResult {
   nextPos: number;
 }
 
+function isIdentCharCode(c: number): boolean {
+  return (
+    (c >= 65 && c <= 90) ||
+    (c >= 97 && c <= 122) ||
+    (c >= 48 && c <= 57) ||
+    c === 95
+  );
+}
+
+interface ScanIdentResult {
+  ident: string;
+  nextPos: number;
+}
+
+function scanIdentifierFrom(stmt: string, start: number): ScanIdentResult | undefined {
+  let p = start;
+  while (p < stmt.length) {
+    const c = stmt.charCodeAt(p);
+    if (isIdentCharCode(c)) p++;
+    else break;
+  }
+  const ident = stmt.slice(start, p);
+  return ident ? { ident, nextPos: p } : undefined;
+}
+
+function lookupBinding(name: string, env: Map<string, Binding>): Result<Binding, string> {
+  const binding = env.get(name);
+  if (!binding) return { ok: false, error: `unknown identifier ${name}` };
+  return { ok: true, value: binding };
+}
+
+function resolveInitializer(
+  rhs: string,
+  env: Map<string, Binding>
+): Result<Binding, string> {
+  if (isIdentifierOnly(rhs)) {
+    const name = rhs.split(" ")[0];
+    return lookupBinding(name, env);
+  }
+
+  const r = interpret(rhs);
+  if (!r.ok) return { ok: false, error: r.error };
+  const parsedNum = parseLeadingNumber(rhs);
+  const suffix =
+    parsedNum && parsedNum.end < rhs.length ? rhs.slice(parsedNum.end) : undefined;
+  const binding: Binding = { value: r.value, suffix };
+  return { ok: true, value: binding };
+}
+
 function parseDeclaration(
   stmt: string,
   env: Map<string, Binding>
@@ -128,57 +177,51 @@ function parseDeclaration(
   let p = 4;
   while (p < stmt.length && stmt[p] === " ") p++;
   const start = p;
-  function isIdentCharCode(c: number): boolean {
-    return (
-      (c >= 65 && c <= 90) ||
-      (c >= 97 && c <= 122) ||
-      (c >= 48 && c <= 57) ||
-      c === 95
-    );
-  }
-  while (p < stmt.length) {
-    const c = stmt.charCodeAt(p);
-    if (isIdentCharCode(c)) p++;
-    else break;
-  }
-  const ident = stmt.slice(start, p);
-  if (!ident) return { ok: false, error: "invalid declaration" };
+
+  const scan = scanIdentifierFrom(stmt, start);
+  if (!scan) return { ok: false, error: "invalid declaration" };
+  const ident = scan.ident;
+  p = scan.nextPos;
 
   const eq = findTopLevelChar(stmt, p, "=");
   if (eq === -1) return { ok: false, error: "invalid declaration" };
 
   const rhs = stmt.slice(eq + 1).trim();
-  const valRes = interpret(rhs);
-  if (!valRes.ok) return valRes;
+
+  const init = resolveInitializer(rhs, env);
+  if (!init.ok) return init as Err<string>;
 
   // check annotation (optional) between identifier end and '=': e.g., ': 2U8' or ': U8'
   const colonPos = findTopLevelChar(stmt, p, ":");
   if (colonPos !== -1 && colonPos < eq) {
     const annText = stmt.slice(colonPos + 1, eq).trim();
-    const annErr = checkAnnotationMatch(annText, rhs, valRes.value);
+    const annErr = checkAnnotationMatch(annText, rhs, init.value.value);
     if (annErr) return annErr;
   }
 
-  const parsedNum = parseLeadingNumber(rhs);
-  const suffix =
-    parsedNum && parsedNum.end < rhs.length
-      ? rhs.slice(parsedNum.end)
-      : undefined;
-  env.set(ident, { value: valRes.value, suffix });
+  env.set(ident, { value: init.value.value, suffix: init.value.suffix });
   return { ok: true, value: undefined };
 }
 
 function isIdentifierOnly(stmt: string): boolean {
-  if (stmt.length === 0) return false;
-  for (let k = 0; k < stmt.length; k++) {
-    const c = stmt.charCodeAt(k);
+  // Trim leading/trailing space first
+  const t = stmt.trim();
+  if (t.length === 0) return false;
+
+  // first character must be a letter or underscore
+  const first = t.charCodeAt(0);
+  if (!((first >= 65 && first <= 90) || (first >= 97 && first <= 122) || first === 95))
+    return false;
+
+  // subsequent characters may be letters, digits, or underscore
+  for (let k = 1; k < t.length; k++) {
+    const c = t.charCodeAt(k);
     if (
       !(
         (c >= 65 && c <= 90) ||
         (c >= 97 && c <= 122) ||
         (c >= 48 && c <= 57) ||
-        c === 95 ||
-        stmt[k] === " "
+        c === 95
       )
     )
       return false;
@@ -202,9 +245,9 @@ function evaluateBlock(inner: string): Result<number, string> {
 
     if (isIdentifierOnly(stmt)) {
       const name = stmt.split(" ")[0];
-      const binding = env.get(name);
-      if (!binding) return { ok: false, error: `unknown identifier ${name}` };
-      if (i === stmts.length - 1) return { ok: true, value: binding.value };
+      const b = lookupBinding(name, env);
+      if (!b.ok) return b as Err<string>;
+      if (i === stmts.length - 1) return { ok: true, value: b.value.value };
       continue;
     }
 
