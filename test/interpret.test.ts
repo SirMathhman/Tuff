@@ -156,6 +156,9 @@ describe("interpret (suffix handling - arithmetic)", () => {
     // braced grouping should behave like parentheses
     expect(interpret("10 / { 2 } + 1")).toEqual({ ok: true, value: 6 });
 
+    // braced grouping with declaration without annotation
+    expect(interpret("10 / { let x = 2U8; x } + 1")).toEqual({ ok: true, value: 6 });
+
     // braced block with declarations
     expect(interpret("10 / { let x : 2U8 = 2U8; x } + 1")).toEqual({
       ok: true,
