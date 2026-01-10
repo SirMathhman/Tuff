@@ -9,7 +9,8 @@
 export function interpret(input: string): number {
   const s = input.trim();
   // match integer or decimal numbers, optionally signed
-  if (/^[+-]?\d+(?:\.\d+)?$/.test(s)) {
+  const numberRegex = /^[+-]?\d+(?:\.\d+)?$/;
+  if (numberRegex.exec(s)) {
     return Number(s);
   }
   // fallback until more cases are provided
