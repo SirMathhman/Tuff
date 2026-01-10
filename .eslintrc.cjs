@@ -25,6 +25,22 @@ module.exports = {
     "no-restricted-syntax": [
       "error",
       {
+        selector: "Literal[regex]",
+        message: "Regular expressions are banned. Do not use regexes.",
+      },
+      {
+        selector:
+          "NewExpression[callee.name='RegExp']",
+        message:
+          "RegExp constructor is banned. Do not use regexes.",
+      },
+      {
+        selector:
+          "CallExpression[callee.name='RegExp']",
+        message:
+          "RegExp constructor is banned. Do not use regexes.",
+      },
+      {
         selector:
           "CallExpression[callee.type='MemberExpression'][callee.property.name='test']",
         message: "RegExp.test() is banned. Do not use regexes.",
