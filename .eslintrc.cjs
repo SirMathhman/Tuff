@@ -32,8 +32,8 @@ module.exports = {
       "error",
       {
         vars: "all",
-        args: "all"
-      }
+        args: "all",
+      },
     ],
     // Ban RegExp.test(), RegExp.exec(), and forbid use of null using no-restricted-syntax
     "no-restricted-syntax": [

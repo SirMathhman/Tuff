@@ -167,6 +167,12 @@ describe("interpret (suffix handling - arithmetic)", () => {
       ok: false,
       error: "declaration initializer does not match annotation",
     });
+
+    // annotation can be a sized type (e.g., 'U8') which must match initializer suffix
+    expect(interpret("10 / { let x : U8 = 2U8; x } + 1")).toEqual({
+      ok: true,
+      value: 6,
+    });
   });
 
   it("rejects mixed suffixes", () => {

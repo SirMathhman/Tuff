@@ -250,6 +250,52 @@ function findTopLevelChar(src: string, start: number, target: string): number {
   return -1;
 }
 
+// Check that the declaration annotation matches the initializer.
+// Accepts a numeric literal annotation (e.g., '2U8') or a sized type like 'U8'.
+function checkAnnotationMatch(
+  annText: string,
+  rhs: string,
+  value: number | bigint
+): Err<string> | undefined {
+  const parsed = parseLeadingNumber(annText);
+  if (parsed) {
+    if (value !== parsed.value)
+      return {
+        ok: false,
+        error: "declaration initializer does not match annotation",
+      };
+    return undefined;
+  }
+
+  const allowed = new Set([
+    "U8",
+    "U16",
+    "U32",
+    "U64",
+    "I8",
+    "I16",
+    "I32",
+    "I64",
+  ]);
+  if (allowed.has(annText)) {
+    const rhsParsed = parseLeadingNumber(rhs);
+    if (!rhsParsed)
+      return {
+        ok: false,
+        error: "declaration initializer does not match annotation",
+      };
+    const rhsSuffix = rhs.slice(rhsParsed.end);
+    if (rhsSuffix !== annText)
+      return {
+        ok: false,
+        error: "declaration initializer does not match annotation",
+      };
+    const rangeErr = validateSizedInteger(String(value), annText);
+    if (rangeErr) return rangeErr;
+  }
+  return undefined;
+}
+
 function parseDeclaration(
   stmt: string,
   env: Map<string, Binding>
@@ -280,15 +326,12 @@ function parseDeclaration(
   const valRes = interpret(rhs);
   if (!valRes.ok) return valRes;
 
-  // check annotation (optional) between identifier end and '=': e.g., ': 2U8'
+  // check annotation (optional) between identifier end and '=': e.g., ': 2U8' or ': U8'
   const colonPos = findTopLevelChar(stmt, p, ":");
   if (colonPos !== -1 && colonPos < eq) {
     const annText = stmt.slice(colonPos + 1, eq).trim();
-    const annParsed = parseLeadingNumber(annText);
-    if (annParsed) {
-      if (valRes.value !== annParsed.value)
-        return { ok: false, error: "declaration initializer does not match annotation" };
-    }
+    const annErr = checkAnnotationMatch(annText, rhs, valRes.value);
+    if (annErr) return annErr;
   }
 
   const parsedNum = parseLeadingNumber(rhs);
