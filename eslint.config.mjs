@@ -1,5 +1,6 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
+import noThrow from "./eslint-rules/no-throw.mjs";
 
 export default [
   js.configs.recommended,
@@ -12,6 +13,14 @@ export default [
         "error",
         { argsIgnorePattern: "^_" }
       ]
+    }
+  },
+  {
+    plugins: {
+      "custom": { rules: { "no-throw": noThrow } }
+    },
+    rules: {
+      "custom/no-throw": "error"
     }
   }
 ];

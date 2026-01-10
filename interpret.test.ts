@@ -3,12 +3,24 @@ import { interpret } from "./interpret";
 
 describe("interpret", () => {
   it('should interpret "100" as 100', () => {
-    expect(interpret("100")).toBe(100);
+    const result = interpret("100");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(100);
+    }
   });
   it('should interpret "100U8" as 100', () => {
-    expect(interpret("100U8")).toBe(100);
+    const result = interpret("100U8");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(100);
+    }
   });
-  it('should throw error for "-100U8"', () => {
-    expect(() => interpret("-100U8")).toThrow();
+  it('should return error for "-100U8"', () => {
+    const result = interpret("-100U8");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("negative numbers");
+    }
   });
 });
