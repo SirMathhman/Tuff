@@ -444,6 +444,12 @@ function handleSingle(s: string): Result<number, string> {
 export function interpret(input: string): Result<number, string> {
   const s = input.trim();
 
+  // Top-level block statements (e.g., "let x = 2; x")
+  // Only treat as a block if a semicolon exists at top level or it starts with 'let '
+  if (findTopLevelChar(s, 0, ";") !== -1 || s.startsWith("let ")) {
+    return evaluateBlock(s);
+  }
+
   // binary operators: + - * / (supports chained expressions)
   if (
     s.indexOf("+") !== -1 ||

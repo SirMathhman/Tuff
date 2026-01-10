@@ -143,7 +143,6 @@ describe("interpret (suffix handling - arithmetic) - precedence", () => {
       error: "value out of range for U8",
     });
   });
-
 });
 
 describe("interpret (suffix handling - arithmetic) - division", () => {
@@ -161,10 +160,9 @@ describe("interpret (suffix handling - arithmetic) - division", () => {
     // braced grouping should behave like parentheses
     expect(interpret("10 / { 2 } + 1")).toEqual({ ok: true, value: 6 });
   });
-
 });
 
-describe("interpret (suffix handling - arithmetic) - braced blocks", () => {
+describe("interpret (suffix handling - braced blocks) - grouping and top-level", () => {
   it("braced grouping and blocks (grouping)", () => {
     // braced grouping with declaration without annotation
     expect(interpret("10 / { let x = 2U8; x } + 1")).toEqual({ ok: true, value: 6 });
@@ -173,64 +171,48 @@ describe("interpret (suffix handling - arithmetic) - braced blocks", () => {
     expect(interpret("10 / { let x = 2; x } + 1")).toEqual({ ok: true, value: 6 });
   });
 
-  it("braced grouping and blocks (chained)", () => {
+  it("top-level block statements", () => {
+    // top-level block (no surrounding braces) should also work
+    expect(interpret("let x : 100U8 = 100U8; x")).toEqual({ ok: true, value: 100 });
+  });
+});
+
+describe("interpret (suffix handling - braced blocks) - chained and errors", () => {
+  it("braced grouping and blocks (chained declarations)", () => {
     // chained declarations should allow initializers to reference earlier bindings
-    expect(interpret("10 / { let x = 2; let y = x; y } + 1")).toEqual({
-      ok: true,
-      value: 6,
-    });
-
-    // duplicate declaration should error
-    expect(interpret("10 / { let x = 2U8; let x = 4U8; x } + 1")).toEqual({
-      ok: false,
-      error: "duplicate declaration",
-    });
-
-    // block with only declarations and no final expression should error
-    expect(interpret("10 / { let x = 2; } + 1")).toEqual({
-      ok: false,
-      error: "block has no final expression",
-    });
+    expect(interpret("10 / { let x = 2; let y = x; y } + 1")).toEqual({ ok: true, value: 6 });
   });
 
+  it("braced grouping and blocks (errors)", () => {
+    // duplicate declaration should error
+    expect(interpret("10 / { let x = 2U8; let x = 4U8; x } + 1")).toEqual({ ok: false, error: "duplicate declaration" });
+
+    // block with only declarations and no final expression should error
+    expect(interpret("10 / { let x = 2; } + 1")).toEqual({ ok: false, error: "block has no final expression" });
+  });
+});
+
+describe("interpret (suffix handling - braced blocks) - annotations", () => {
   it("braced grouping and blocks (annotations: valid)", () => {
     // braced block with declarations
-    expect(interpret("10 / { let x : 2U8 = 2U8; x } + 1")).toEqual({
-      ok: true,
-      value: 6,
-    });
+    expect(interpret("10 / { let x : 2U8 = 2U8; x } + 1")).toEqual({ ok: true, value: 6 });
 
     // annotation can be a sized type (e.g., 'U8') which must match initializer suffix
-    expect(interpret("10 / { let x : U8 = 2U8; x } + 1")).toEqual({
-      ok: true,
-      value: 6,
-    });
+    expect(interpret("10 / { let x : U8 = 2U8; x } + 1")).toEqual({ ok: true, value: 6 });
 
     // annotated sized type should match identifier initializer suffix
-    expect(interpret("10 / { let x = 2U8; let y : U8 = x; y } + 1")).toEqual({
-      ok: true,
-      value: 6,
-    });
+    expect(interpret("10 / { let x = 2U8; let y : U8 = x; y } + 1")).toEqual({ ok: true, value: 6 });
   });
 
   it("braced grouping and blocks (annotations: mismatches)", () => {
     // declaration annotation mismatch should error
-    expect(interpret("10 / { let x : 2U8 = 1U8; x } + 1")).toEqual({
-      ok: false,
-      error: "declaration initializer does not match annotation",
-    });
+    expect(interpret("10 / { let x : 2U8 = 1U8; x } + 1")).toEqual({ ok: false, error: "declaration initializer does not match annotation" });
 
     // annotation with numeric literal should also mismatch when initializer is an identifier
-    expect(interpret("10 / { let x = 2U8; let y : 1U8 = x; y } + 1")).toEqual({
-      ok: false,
-      error: "declaration initializer does not match annotation",
-    });
+    expect(interpret("10 / { let x = 2U8; let y : 1U8 = x; y } + 1")).toEqual({ ok: false, error: "declaration initializer does not match annotation" });
   });
 
   it("rejects mixed suffixes", () => {
-    expect(interpret("1U8 + 2U16")).toEqual({
-      ok: false,
-      error: "mixed suffixes not supported",
-    });
+    expect(interpret("1U8 + 2U16")).toEqual({ ok: false, error: "mixed suffixes not supported" });
   });
 });
