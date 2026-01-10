@@ -33,7 +33,10 @@ interface SuffixInfo {
   bits: number;
 }
 
-function validateSizedInteger(raw: string, suffix: string): Err<string> | undefined {
+function validateSizedInteger(
+  raw: string,
+  suffix: string
+): Err<string> | undefined {
   if (!suffix) return undefined;
   const allowed = new Map<string, SuffixInfo>([
     ["U8", { signed: false, bits: 8 }],
@@ -112,39 +115,118 @@ function parseLeadingNumber(str: string): ParsedNumber | undefined {
  *    returns the numeric value.
  *  - For any other input it returns 0 for now (keeps previous tests passing).
  */
+function isSignedSuffix(suffix: string): boolean {
+  return (
+    suffix === "I8" || suffix === "I16" || suffix === "I32" || suffix === "I64"
+  );
+}
+
+function checkNegativeSuffix(
+  str: string,
+  parsed: ParsedNumber
+): Err<string> | undefined {
+  if (parsed.end < str.length && str[0] === "-") {
+    const suffix = str.slice(parsed.end);
+    if (!isSignedSuffix(suffix))
+      return {
+        ok: false,
+        error: "negative numeric prefix with suffix is not allowed",
+      };
+  }
+  return undefined;
+}
+
+function validateOperandSuffix(
+  parsed: ParsedNumber,
+  operandStr: string
+): Err<string> | undefined {
+  const suffix = operandStr.slice(parsed.end);
+  return validateSizedInteger(parsed.raw, suffix);
+}
+
+function handleBinaryAdd(s: string): Result<number, string> {
+  const plusIdx = s.indexOf("+");
+  if (plusIdx === -1) return { ok: false, error: "invalid expression" };
+
+  const leftStr = s.slice(0, plusIdx).trim();
+  const rightStr = s.slice(plusIdx + 1).trim();
+  if (!leftStr || !rightStr) return { ok: false, error: "invalid expression" };
+
+  const leftParsed = parseLeadingNumber(leftStr);
+  const rightParsed = parseLeadingNumber(rightStr);
+  if (!leftParsed || !rightParsed)
+    return { ok: false, error: "invalid operand" };
+
+  function validateParsedOperand(
+    parsed: ParsedNumber,
+    operandStr: string
+  ): Err<string> | undefined {
+    const neg = checkNegativeSuffix(operandStr, parsed);
+    if (neg) return neg;
+    return validateOperandSuffix(parsed, operandStr);
+  }
+
+  const leftErr = validateParsedOperand(leftParsed, leftStr);
+  if (leftErr) return leftErr;
+  const rightErr = validateParsedOperand(rightParsed, rightStr);
+  if (rightErr) return rightErr;
+
+  const leftSuffix = leftStr.slice(leftParsed.end);
+  const rightSuffix = rightStr.slice(rightParsed.end);
+  if (leftSuffix && rightSuffix && leftSuffix !== rightSuffix)
+    return { ok: false, error: "mixed suffixes not supported" };
+
+  const sum = leftParsed.value + rightParsed.value;
+  const commonSuffix = leftSuffix || rightSuffix;
+  if (commonSuffix) {
+    const sumErr = validateSizedInteger(String(sum), commonSuffix);
+    if (sumErr) return sumErr;
+  }
+
+  return { ok: true, value: sum };
+}
+
+function handleSingle(s: string): Result<number, string> {
+  const parsed = parseLeadingNumber(s);
+  if (parsed === undefined) return { ok: true, value: 0 };
+
+  if (parsed.end < s.length && s[0] === "-") {
+    const suffix = s.slice(parsed.end);
+    if (
+      !(
+        suffix === "I8" ||
+        suffix === "I16" ||
+        suffix === "I32" ||
+        suffix === "I64"
+      )
+    ) {
+      return {
+        ok: false,
+        error: "negative numeric prefix with suffix is not allowed",
+      };
+    }
+  }
+
+  const suffix = s.slice(parsed.end);
+  const err = validateSizedInteger(parsed.raw, suffix);
+  if (err) return err;
+
+  return { ok: true, value: parsed.value };
+}
+
 export function interpret(input: string): Result<number, string> {
   const s = input.trim();
 
-  const parsed = parseLeadingNumber(s);
-  if (parsed !== undefined) {
-    // If there is a non-empty suffix and the number is negative, that's invalid by new rule
-    if (parsed.end < s.length && s[0] === "-") {
-      // unsigned suffixes will be validated below; negative with arbitrary suffix still invalid
-      const suffix = s.slice(parsed.end);
-      // allow negative for signed suffixes (I8/I16/I32/I64)
-      if (
-        !(
-          suffix === "I8" ||
-          suffix === "I16" ||
-          suffix === "I32" ||
-          suffix === "I64"
-        )
-      ) {
-        return {
-          ok: false,
-          error: "negative numeric prefix with suffix is not allowed",
-        };
-      }
+  // find a binary + operator (skip leading unary + or +/-)
+  let idx = s.indexOf("+");
+  while (idx !== -1) {
+    const left = s.slice(0, idx).trim();
+    const right = s.slice(idx + 1).trim();
+    if (left !== "" && right !== "") {
+      return handleBinaryAdd(s);
     }
-
-    // validate known sized integer suffixes
-    const suffix = s.slice(parsed.end);
-    const err = validateSizedInteger(parsed.raw, suffix);
-    if (err) return err;
-
-    return { ok: true, value: parsed.value };
+    idx = s.indexOf("+", idx + 1);
   }
 
-  // fallback until more cases are provided
-  return { ok: true, value: 0 };
+  return handleSingle(s);
 }

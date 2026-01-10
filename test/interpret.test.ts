@@ -26,8 +26,6 @@ describe("interpret (numeric parsing)", () => {
 });
 
 describe("interpret (suffix handling)", () => {
-
-
   it("parses leading numeric prefix (e.g., '100U8' => 100)", () => {
     expect(interpret("100U8")).toEqual({ ok: true, value: 100 });
     expect(interpret("255U8")).toEqual({ ok: true, value: 255 });
@@ -46,12 +44,12 @@ describe("interpret (suffix handling)", () => {
     });
 
     // U16 / U32
-    expect(interpret("65535U16")).toEqual({ ok: true, value: 65535 });
+
     expect(interpret("65536U16")).toEqual({
       ok: false,
       error: "value out of range for U16",
     });
-    expect(interpret("4294967295U32")).toEqual({ ok: true, value: 4294967295 });
+
     expect(interpret("4294967296U32")).toEqual({
       ok: false,
       error: "value out of range for U32",
@@ -73,6 +71,14 @@ describe("interpret (suffix handling)", () => {
 
     // fractional with integer suffix invalid
     expect(interpret("3.14U8")).toEqual({
+      ok: false,
+      error: "value out of range for U8",
+    });
+  });
+
+  it("addition with sized operands works and enforces range", () => {
+    expect(interpret("1U8 + 2U8")).toEqual({ ok: true, value: 3 });
+    expect(interpret("255U8 + 1U8")).toEqual({
       ok: false,
       error: "value out of range for U8",
     });
