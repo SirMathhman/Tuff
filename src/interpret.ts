@@ -33,11 +33,7 @@ interface SuffixInfo {
   bits: number;
 }
 
-function validateSizedInteger(
-  raw: string,
-  _value: number,
-  suffix: string
-): Err<string> | undefined {
+function validateSizedInteger(raw: string, suffix: string): Err<string> | undefined {
   if (!suffix) return undefined;
   const allowed = new Map<string, SuffixInfo>([
     ["U8", { signed: false, bits: 8 }],
@@ -143,7 +139,7 @@ export function interpret(input: string): Result<number, string> {
 
     // validate known sized integer suffixes
     const suffix = s.slice(parsed.end);
-    const err = validateSizedInteger(parsed.raw, parsed.value, suffix);
+    const err = validateSizedInteger(parsed.raw, suffix);
     if (err) return err;
 
     return { ok: true, value: parsed.value };
