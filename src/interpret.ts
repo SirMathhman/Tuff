@@ -1,13 +1,22 @@
 import type { Result, Err } from "./result";
-import type { ParsedNumber } from "./interpretHelpers";
 import {
   parseLeadingNumber,
   validateSizedInteger,
-  isSignedSuffix,
   checkAnnotationMatch,
   splitStatements,
   findTopLevelChar,
 } from "./interpretHelpers";
+
+const SIZED_TYPES = new Set([
+  "U8",
+  "U16",
+  "U32",
+  "U64",
+  "I8",
+  "I16",
+  "I32",
+  "I64",
+]);
 
 /**
  * interpret - parse and evaluate the given string input and return a Result
@@ -18,107 +27,11 @@ import {
  *  - For any other input it returns 0 for now (keeps previous tests passing).
  */
 
-function checkNegativeSuffix(
-  str: string,
-  parsed: ParsedNumber
-): Err<string> | undefined {
-  if (parsed.end < str.length && str[0] === "-") {
-    const suffix = str.slice(parsed.end);
-    if (!isSignedSuffix(suffix))
-      return {
-        ok: false,
-        error: "negative numeric prefix with suffix is not allowed",
-      };
-  }
-  return undefined;
-}
-
-function validateOperandSuffix(
-  parsed: ParsedNumber,
-  operandStr: string
-): Err<string> | undefined {
-  const suffix = operandStr.slice(parsed.end);
-  return validateSizedInteger(parsed.raw, suffix);
-}
-
-function validateParsedOperand(
-  parsed: ParsedNumber,
-  operandStr: string
-): Err<string> | undefined {
-  const neg = checkNegativeSuffix(operandStr, parsed);
-  if (neg) return neg;
-  return validateOperandSuffix(parsed, operandStr);
-}
-
-function ensureCommonSuffix(
-  operandStrs: string[],
-  opnds: ParsedNumber[]
-): Result<string, string> {
-  let common = "";
-  for (let i = 0; i < opnds.length; i++) {
-    const suf = operandStrs[i].slice(opnds[i].end);
-    if (suf) {
-      if (common && suf !== common)
-        return { ok: false, error: "mixed suffixes not supported" };
-      common = suf;
-    }
-  }
-  return { ok: true, value: common };
-}
-
-function processMulDiv(
-  opnds: ParsedNumber[],
-  opList: string[],
-  suffix: string
-): Err<string> | undefined {
-  let i = 0;
-  while (i < opList.length) {
-    const op = opList[i];
-    if (op === "*" || op === "/") {
-      const a = opnds[i].value;
-      const b = opnds[i + 1].value;
-      if (op === "/" && b === 0)
-        return { ok: false, error: "division by zero" };
-      const res = op === "*" ? a * b : a / b;
-      opnds[i] = { value: res, raw: String(res), end: String(res).length };
-      opnds.splice(i + 1, 1);
-      opList.splice(i, 1);
-      if (suffix) {
-        const err = validateSizedInteger(String(res), suffix);
-        if (err) return err;
-      }
-      continue;
-    }
-    i++;
-  }
-  return undefined;
-}
-
-interface Tokenized {
-  operands: ParsedNumber[];
-  operandStrs: string[];
-  ops: string[];
-}
-
-function isAlphaNum(ch: string | undefined): boolean {
-  if (!ch) return false;
-  const code = ch.charCodeAt(0);
-  return (
-    (code >= 48 && code <= 57) || // 0-9
-    (code >= 65 && code <= 90) || // A-Z
-    (code >= 97 && code <= 122) // a-z
-  );
-}
+import { handleAddSubChain, handleSingle, setInterpreterFns } from "./arith";
 
 interface Binding {
   value: number;
   suffix?: string;
-}
-
-interface ReadOperandResult {
-  parsed: ParsedNumber;
-  operandFull: string;
-  nextPos: number;
 }
 
 function isIdentCharCode(c: number): boolean {
@@ -241,8 +154,7 @@ function parseDeclaration(
     let suffix: string | undefined;
     if (colonPos !== -1 && colonPos < stmt.length) {
       const annText = stmt.slice(colonPos + 1).trim();
-      const allowed = new Set(["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"]);
-      if (allowed.has(annText)) suffix = annText;
+      if (SIZED_TYPES.has(annText)) suffix = annText;
       else return { ok: false, error: "invalid declaration" };
     }
 
@@ -307,6 +219,97 @@ function isIdentifierOnly(stmt: string): boolean {
   return true;
 }
 
+interface BracedPrefixResult {
+  rest?: string;
+  value: number;
+}
+
+function handleBracedPrefix(
+  stmt: string,
+  env: Map<string, Binding>
+): Result<BracedPrefixResult, string> {
+  const t = stmt.trim();
+  let depth = 0;
+  let idx = -1;
+  for (let k = 0; k < t.length; k++) {
+    if (t[k] === "{") depth++;
+    else if (t[k] === "}") {
+      depth--;
+      if (depth === 0) {
+        idx = k;
+        break;
+      }
+    }
+  }
+  if (idx === -1) return { ok: false, error: "unmatched brace in block statement" };
+  const inner = t.slice(1, idx);
+  const rest = t.slice(idx + 1).trim();
+  const innerRes = evaluateBlock(inner, env);
+  if (!innerRes.ok) return innerRes as Err<string>;
+  return { ok: true, value: { rest: rest || undefined, value: innerRes.value } };
+}
+
+function handleIdentifierStmt(
+  stmt: string,
+  env: Map<string, Binding>,
+  parentEnv?: Map<string, Binding>,
+  isLast = false
+): Result<number, string> | true | undefined {
+  if (!isIdentifierOnly(stmt)) return undefined;
+  const name = stmt.split(" ")[0];
+  const b = lookupBinding(name, env, parentEnv);
+  if (!b.ok) return b as Err<string>;
+  if (isLast) return { ok: true, value: b.value.value };
+  return true;
+}
+
+function processStatement(
+  origStmt: string,
+  envLocal: Map<string, Binding>,
+  parentEnvLocal?: Map<string, Binding>,
+  isLast = false
+): Result<number, string> | "handled" | undefined {
+  let stmt = origStmt;
+
+  if (stmt.startsWith("let ")) {
+    const r = parseDeclaration(stmt, envLocal);
+    if (!r.ok) return r as Err<string>;
+    return "handled";
+  }
+
+  // assignment handled by helper
+  const assignRes = handleAssignmentIfAny(stmt, envLocal, parentEnvLocal);
+  if (assignRes) {
+    if (!assignRes.ok) return assignRes;
+    if (isLast) return assignRes;
+    return "handled";
+  }
+
+  // handle leading braced blocks (may have trailing tokens)
+  while (stmt.trim().startsWith("{")) {
+    const brRes = handleBracedPrefix(stmt, envLocal);
+    if (!brRes.ok) return brRes;
+    const { rest, value } = brRes.value;
+    if (!rest) {
+      if (isLast) return { ok: true, value };
+      return "handled";
+    }
+    stmt = rest;
+  }
+
+  const identHandled = handleIdentifierStmt(stmt, envLocal, parentEnvLocal, isLast);
+  if (identHandled) {
+    if (identHandled === true) return "handled";
+    return identHandled;
+  }
+
+  const exprRes = interpret(stmt);
+  if (!exprRes.ok) return exprRes;
+  if (isLast) return exprRes;
+
+  return "handled";
+}
+
 function evaluateBlock(
   inner: string,
   parentEnv?: Map<string, Binding>
@@ -314,35 +317,13 @@ function evaluateBlock(
   const stmts = splitStatements(inner);
   const env = new Map<string, Binding>();
 
-  for (let i = 0; i < stmts.length; i++) {
+for (let i = 0; i < stmts.length; i++) {
     const stmt = stmts[i];
     if (stmt.length === 0) continue;
 
-    if (stmt.startsWith("let ")) {
-      const r = parseDeclaration(stmt, env);
-      if (!r.ok) return r as Err<string>;
-      continue;
-    }
-
-    // assignment handled by helper
-    const assignRes = handleAssignmentIfAny(stmt, env, parentEnv);
-    if (assignRes) {
-      if (!assignRes.ok) return assignRes;
-      if (i === stmts.length - 1) return assignRes;
-      continue;
-    }
-
-    if (isIdentifierOnly(stmt)) {
-      const name = stmt.split(" ")[0];
-      const b = lookupBinding(name, env, parentEnv);
-      if (!b.ok) return b as Err<string>;
-      if (i === stmts.length - 1) return { ok: true, value: b.value.value };
-      continue;
-    }
-
-    const exprRes = interpret(stmt);
-    if (!exprRes.ok) return exprRes;
-    if (i === stmts.length - 1) return exprRes;
+    const res = processStatement(stmt, env, parentEnv, i === stmts.length - 1);
+    if (res === "handled") continue;
+    if (res) return res;
   }
 
   return { ok: false, error: "block has no final expression" };
@@ -356,7 +337,8 @@ function handleAssignmentIfAny(
   const eqPos = findTopLevelChar(stmt, 0, "=");
   if (eqPos === -1) return undefined;
   const lhs = stmt.slice(0, eqPos).trim();
-  if (!isIdentifierOnly(lhs)) return { ok: false, error: "invalid assignment LHS" };
+  if (!isIdentifierOnly(lhs))
+    return { ok: false, error: "invalid assignment LHS" };
   const name = lhs.split(" ")[0];
   const rhs = stmt.slice(eqPos + 1).trim();
   const init = resolveInitializer(rhs, env);
@@ -370,171 +352,13 @@ function handleAssignmentIfAny(
     if (err) return err;
   }
   // propagate suffix if existing has none
-  if (!existing.suffix && init.value.suffix) existing.suffix = init.value.suffix;
+  if (!existing.suffix && init.value.suffix)
+    existing.suffix = init.value.suffix;
   existing.value = init.value.value;
   return { ok: true, value: existing.value };
 }
 
-function readGroupedAt(
-  s: string,
-  pos: number
-): Result<ReadOperandResult, string> {
-  const n = s.length;
-  const substr = s.slice(pos);
-  const opening = substr[0];
-  const closing = opening === "(" ? ")" : "}";
 
-  let depth = 0;
-  let k = 0;
-  while (k < substr.length) {
-    if (substr[k] === opening) depth++;
-    else if (substr[k] === closing) {
-      depth--;
-      if (depth === 0) break;
-    }
-    k++;
-  }
-  if (k >= substr.length || substr[k] !== closing)
-    return { ok: false, error: "unmatched parenthesis" };
-  const inner = substr.slice(1, k);
-  // support block statements separated by ';'
-  let innerRes: Result<number, string>;
-  if (inner.indexOf(";") !== -1) innerRes = evaluateBlock(inner);
-  else innerRes = interpret(inner);
-  if (!innerRes.ok) return innerRes;
-  const parsed = {
-    value: innerRes.value,
-    raw: String(innerRes.value),
-    end: k + 1,
-  } as ParsedNumber;
-  let j = pos + parsed.end;
-  while (j < n && isAlphaNum(s[j])) j++; // suffix chars
-  const operandFull = s.slice(pos, j).trim();
-  return { ok: true, value: { parsed, operandFull, nextPos: j } };
-}
-
-function readOperandAt(
-  s: string,
-  pos: number
-): Result<ReadOperandResult, string> {
-  const n = s.length;
-  const substr = s.slice(pos);
-
-  // grouped expression handled by helper
-  if (substr[0] === "(" || substr[0] === "{") {
-    return readGroupedAt(s, pos);
-  }
-
-  // direct numeric
-  const direct = parseLeadingNumber(substr);
-  if (!direct) return { ok: false, error: "invalid operand" };
-  let j = pos + direct.end;
-  while (j < n && !["+", "-", "*", "/"].includes(s[j])) j++;
-  const operandFull = s.slice(pos, j).trim();
-  return { ok: true, value: { parsed: direct, operandFull, nextPos: j } };
-}
-
-function tokenizeAddSub(s: string): Result<Tokenized, string> {
-  const n = s.length;
-  let pos = 0;
-
-  function skipSpaces(): void {
-    while (pos < n && s[pos] === " ") pos++;
-  }
-
-  function isOperator(ch: string): boolean {
-    return ch === "+" || ch === "-" || ch === "*" || ch === "/";
-  }
-
-  const operands: ParsedNumber[] = [];
-  const operandStrs: string[] = [];
-  const ops: string[] = [];
-
-  skipSpaces();
-  while (pos < n) {
-    const opRes = readOperandAt(s, pos);
-    if (!opRes.ok) return opRes;
-    const { parsed, operandFull, nextPos } = opRes.value;
-
-    const err = validateParsedOperand(parsed, operandFull);
-    if (err) return err;
-
-    operands.push(parsed);
-    operandStrs.push(operandFull);
-
-    pos = nextPos;
-    skipSpaces();
-
-    if (pos >= n) break;
-
-    const ch = s[pos];
-    if (!isOperator(ch)) return { ok: false, error: "invalid operator" };
-    ops.push(ch);
-    pos++;
-    skipSpaces();
-  }
-
-  if (operands.length === 0) return { ok: false, error: "invalid expression" };
-  if (ops.length !== operands.length - 1)
-    return { ok: false, error: "invalid expression" };
-
-  return { ok: true, value: { operands, operandStrs, ops } };
-}
-
-function handleAddSubChain(s: string): Result<number, string> {
-  const tokens = tokenizeAddSub(s);
-  if (!tokens.ok) return tokens;
-  const { operands, operandStrs, ops } = tokens.value;
-
-  const commonResult = ensureCommonSuffix(operandStrs, operands);
-  if (!commonResult.ok) return commonResult;
-  const commonSuffix = commonResult.value;
-
-  const mulDivErr = processMulDiv(operands, ops, commonSuffix);
-  if (mulDivErr) return mulDivErr;
-
-  // Left-associative evaluation for + and -
-  let acc = operands[0].value;
-  for (let k = 0; k < ops.length; k++) {
-    const op2 = ops[k];
-    const next = operands[k + 1].value;
-    acc = op2 === "+" ? acc + next : acc - next;
-    if (commonSuffix) {
-      const err = validateSizedInteger(String(acc), commonSuffix);
-      if (err) return err;
-    }
-  }
-
-  return { ok: true, value: acc };
-}
-
-function handleSingle(s: string): Result<number, string> {
-  const parsed = parseLeadingNumber(s);
-  if (parsed === undefined) return { ok: true, value: 0 };
-
-  if (parsed.end < s.length && s[0] === "-") {
-    const suffix = s.slice(parsed.end);
-    if (
-      !(
-        suffix === "I8" ||
-        suffix === "I16" ||
-        suffix === "I32" ||
-        suffix === "I64"
-      )
-    ) {
-      return {
-        ok: false,
-        error: "negative numeric prefix with suffix is not allowed",
-      };
-    }
-  }
-
-  const suffix = s.slice(parsed.end);
-  const err = validateSizedInteger(parsed.raw, suffix);
-  if (err) return err;
-
-  return { ok: true, value: parsed.value };
-}
 
 export function interpret(input: string): Result<number, string> {
   const s = input.trim();
@@ -557,3 +381,6 @@ export function interpret(input: string): Result<number, string> {
 
   return handleSingle(s);
 }
+
+// register interpreter functions for arithmetic helpers
+setInterpreterFns(interpret, evaluateBlock);

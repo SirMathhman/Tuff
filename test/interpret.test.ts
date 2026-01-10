@@ -191,10 +191,22 @@ describe("interpret (suffix handling - braced blocks) - grouping and top-level",
     });
 
     // top-level declaration with braced initializer
-    expect(interpret("let x = { let y = 100; y}; x")).toEqual({ ok: true, value: 100 });
+    expect(interpret("let x = { let y = 100; y}; x")).toEqual({
+      ok: true,
+      value: 100,
+    });
 
     // declaration without initializer and subsequent assignment
-    expect(interpret("let x : I32; x = 100; x")).toEqual({ ok: true, value: 100 });
+    expect(interpret("let x : I32; x = 100; x")).toEqual({
+      ok: true,
+      value: 100,
+    });
+
+    // assignment within nested block should affect outer binding
+    expect(interpret("let x : I32; { x = 100; } x")).toEqual({
+      ok: true,
+      value: 100,
+    });
   });
 });
 
