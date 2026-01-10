@@ -221,7 +221,7 @@ function isIdentifierOnly(stmt: string): boolean {
 
 interface BracedPrefixResult {
   rest?: string;
-  value: number;
+  value?: number;
 }
 
 function handleBracedPrefix(
@@ -241,12 +241,22 @@ function handleBracedPrefix(
       }
     }
   }
-  if (idx === -1) return { ok: false, error: "unmatched brace in block statement" };
+  if (idx === -1)
+    return { ok: false, error: "unmatched brace in block statement" };
   const inner = t.slice(1, idx);
   const rest = t.slice(idx + 1).trim();
   const innerRes = evaluateBlock(inner, env);
-  if (!innerRes.ok) return innerRes as Err<string>;
-  return { ok: true, value: { rest: rest || undefined, value: innerRes.value } };
+  if (innerRes.ok) {
+    return { ok: true, value: { rest: rest || undefined, value: innerRes.value } };
+  }
+
+  // permit braced statement blocks that only contain declarations (no final expr)
+  // when used as a statement: treat as handled with no resulting value
+  if (innerRes.error === "block has no final expression") {
+    return { ok: true, value: { rest: rest || undefined } };
+  }
+
+  return innerRes as Err<string>;
 }
 
 function handleIdentifierStmt(
@@ -277,7 +287,22 @@ function processStatement(
     return "handled";
   }
 
-  // assignment handled by helper
+  // handle leading braced blocks (may have trailing tokens)
+  while (stmt.trim().startsWith("{")) {
+    const brRes = handleBracedPrefix(stmt, envLocal);
+    if (!brRes.ok) return brRes;
+    const { rest, value } = brRes.value;
+    if (!rest) {
+      if (isLast) {
+        if (value !== undefined) return { ok: true, value };
+        return undefined;
+      }
+      return "handled";
+    }
+    stmt = rest;
+  }
+
+  // assignment handled by helper (after stripping any leading braced prefixes)
   const assignRes = handleAssignmentIfAny(stmt, envLocal, parentEnvLocal);
   if (assignRes) {
     if (!assignRes.ok) return assignRes;
@@ -285,19 +310,12 @@ function processStatement(
     return "handled";
   }
 
-  // handle leading braced blocks (may have trailing tokens)
-  while (stmt.trim().startsWith("{")) {
-    const brRes = handleBracedPrefix(stmt, envLocal);
-    if (!brRes.ok) return brRes;
-    const { rest, value } = brRes.value;
-    if (!rest) {
-      if (isLast) return { ok: true, value };
-      return "handled";
-    }
-    stmt = rest;
-  }
-
-  const identHandled = handleIdentifierStmt(stmt, envLocal, parentEnvLocal, isLast);
+  const identHandled = handleIdentifierStmt(
+    stmt,
+    envLocal,
+    parentEnvLocal,
+    isLast
+  );
   if (identHandled) {
     if (identHandled === true) return "handled";
     return identHandled;
@@ -317,7 +335,7 @@ function evaluateBlock(
   const stmts = splitStatements(inner);
   const env = new Map<string, Binding>();
 
-for (let i = 0; i < stmts.length; i++) {
+  for (let i = 0; i < stmts.length; i++) {
     const stmt = stmts[i];
     if (stmt.length === 0) continue;
 
@@ -357,8 +375,6 @@ function handleAssignmentIfAny(
   existing.value = init.value.value;
   return { ok: true, value: existing.value };
 }
-
-
 
 export function interpret(input: string): Result<number, string> {
   const s = input.trim();

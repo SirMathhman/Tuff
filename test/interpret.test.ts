@@ -231,6 +231,12 @@ describe("interpret (suffix handling - braced blocks) - chained and errors", () 
       ok: false,
       error: "block has no final expression",
     });
+
+    // assignment to a block-local binding should error once the block ends
+    expect(interpret("{ let x : I32; } x = 100; x")).toEqual({
+      ok: false,
+      error: "unknown identifier x",
+    });
   });
 });
 
