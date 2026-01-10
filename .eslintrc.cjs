@@ -22,8 +22,11 @@ module.exports = {
     // Keep minimal rules for now; we can tighten these later
     "@typescript-eslint/no-explicit-any": "off",
     // Limit cyclomatic complexity
-    complexity: ["error", { max: 15 }],    // Limit function length
-    "max-lines-per-function": ["error", { "max": 50, "skipBlankLines": true, "skipComments": true }],    // Ban RegExp.test(), RegExp.exec(), and forbid use of null using no-restricted-syntax
+    complexity: ["error", { max: 15 }], // Limit function length
+    "max-lines-per-function": [
+      "error",
+      { max: 50, skipBlankLines: true, skipComments: true },
+    ], // Ban RegExp.test(), RegExp.exec(), and forbid use of null using no-restricted-syntax
     "no-restricted-syntax": [
       "error",
       {
@@ -46,6 +49,11 @@ module.exports = {
         selector: "TSNullKeyword",
         message:
           "Do not use null in type annotations; prefer undefined or optional types instead.",
+      },
+      {
+        selector: "TSTypeLiteral",
+        message:
+          "Do not use anonymous object types; define a named interface instead.",
       },
       {
         selector:

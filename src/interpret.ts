@@ -19,8 +19,13 @@ export function interpret(input: string): number {
     return i;
   }
 
-  // returns { value, end } when a numeric prefix exists, otherwise undefined
-  function parseLeadingNumber(str: string): { value: number; end: number } | undefined {
+  interface ParsedNumber {
+    value: number;
+    end: number;
+  }
+
+  // returns ParsedNumber when a numeric prefix exists, otherwise undefined
+  function parseLeadingNumber(str: string): ParsedNumber | undefined {
     if (str.length === 0) return undefined;
     let i = 0;
     const n = str.length;
