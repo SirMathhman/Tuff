@@ -88,7 +88,7 @@ describe("interpret (suffix handling - addition)", () => {
     });
   });
 
-  it("supports chained additions", () => {
+  it("supports chained additions and subtractions", () => {
     expect(interpret("1U8 + 2U8 + 3U8")).toEqual({ ok: true, value: 6 });
     expect(interpret("254U8 + 1U8 + 1U8")).toEqual({
       ok: false,
@@ -103,6 +103,10 @@ describe("interpret (suffix handling - addition)", () => {
       ok: false,
       error: "mixed suffixes not supported",
     });
+
+    // subtraction with suffixed operand
+    expect(interpret("10 - 5U8 + 3")).toEqual({ ok: true, value: 8 });
+    expect(interpret("0 - 1U8")).toEqual({ ok: false, error: "value out of range for U8" });
   });
 
   it("rejects mixed suffixes", () => {
