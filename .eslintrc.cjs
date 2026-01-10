@@ -26,7 +26,18 @@ module.exports = {
     "max-lines-per-function": [
       "error",
       { max: 50, skipBlankLines: true, skipComments: true },
-    ], // Ban RegExp.test(), RegExp.exec(), and forbid use of null using no-restricted-syntax
+    ],
+    // Ban unused parameters (but allow underscore-prefixed params)
+    "@typescript-eslint/no-unused-vars": [
+      "error",
+      {
+        vars: "all",
+        args: "all",
+        varsIgnorePattern: "^_",
+        argsIgnorePattern: "^_",
+      },
+    ],
+    // Ban RegExp.test(), RegExp.exec(), and forbid use of null using no-restricted-syntax
     "no-restricted-syntax": [
       "error",
       {

@@ -35,7 +35,7 @@ interface SuffixInfo {
 
 function validateSizedInteger(
   raw: string,
-  value: number,
+  _value: number,
   suffix: string
 ): Err<string> | undefined {
   if (!suffix) return undefined;
