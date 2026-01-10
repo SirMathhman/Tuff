@@ -161,7 +161,8 @@ function ensureCommonSuffix(
   for (let i = 0; i < opnds.length; i++) {
     const suf = operandStrs[i].slice(opnds[i].end);
     if (suf) {
-      if (common && suf !== common) return { ok: false, error: "mixed suffixes not supported" };
+      if (common && suf !== common)
+        return { ok: false, error: "mixed suffixes not supported" };
       common = suf;
     }
   }
@@ -200,6 +201,58 @@ interface Tokenized {
   ops: string[];
 }
 
+function isAlphaNum(ch: string | undefined): boolean {
+  if (!ch) return false;
+  const code = ch.charCodeAt(0);
+  return (
+    (code >= 48 && code <= 57) || // 0-9
+    (code >= 65 && code <= 90) || // A-Z
+    (code >= 97 && code <= 122) // a-z
+  );
+}
+
+interface ReadOperandResult {
+  parsed: ParsedNumber;
+  operandFull: string;
+  nextPos: number;
+}
+
+function readOperandAt(s: string, pos: number): Result<ReadOperandResult, string> {
+  const n = s.length;
+  const substr = s.slice(pos);
+
+  // parenthesized expression
+  if (substr[0] === "(") {
+    let depth = 0;
+    let k = 0;
+    while (k < substr.length) {
+      if (substr[k] === "(") depth++;
+      else if (substr[k] === ")") {
+        depth--;
+        if (depth === 0) break;
+      }
+      k++;
+    }
+    if (k >= substr.length || substr[k] !== ")") return { ok: false, error: "unmatched parenthesis" };
+    const inner = substr.slice(1, k);
+    const innerRes = interpret(inner);
+    if (!innerRes.ok) return innerRes;
+    const parsed = { value: innerRes.value, raw: String(innerRes.value), end: k + 1 } as ParsedNumber;
+    let j = pos + parsed.end;
+    while (j < n && isAlphaNum(s[j])) j++; // suffix chars
+    const operandFull = s.slice(pos, j).trim();
+    return { ok: true, value: { parsed, operandFull, nextPos: j } };
+  }
+
+  // direct numeric
+  const direct = parseLeadingNumber(substr);
+  if (!direct) return { ok: false, error: "invalid operand" };
+  let j = pos + direct.end;
+  while (j < n && !["+", "-", "*", "/"].includes(s[j])) j++;
+  const operandFull = s.slice(pos, j).trim();
+  return { ok: true, value: { parsed: direct, operandFull, nextPos: j } };
+}
+
 function tokenizeAddSub(s: string): Result<Tokenized, string> {
   const n = s.length;
   let pos = 0;
@@ -218,14 +271,9 @@ function tokenizeAddSub(s: string): Result<Tokenized, string> {
 
   skipSpaces();
   while (pos < n) {
-    const substr = s.slice(pos);
-    const parsed = parseLeadingNumber(substr);
-    if (!parsed) return { ok: false, error: "invalid operand" };
-
-    // find full operand including suffix (up to next operator)
-    let j = pos + parsed.end;
-    while (j < n && !isOperator(s[j])) j++;
-    const operandFull = s.slice(pos, j).trim();
+    const opRes = readOperandAt(s, pos);
+    if (!opRes.ok) return opRes;
+    const { parsed, operandFull, nextPos } = opRes.value;
 
     const err = validateParsedOperand(parsed, operandFull);
     if (err) return err;
@@ -233,7 +281,7 @@ function tokenizeAddSub(s: string): Result<Tokenized, string> {
     operands.push(parsed);
     operandStrs.push(operandFull);
 
-    pos = j;
+    pos = nextPos;
     skipSpaces();
 
     if (pos >= n) break;
