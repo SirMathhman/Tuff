@@ -21,7 +21,7 @@ module.exports = {
   rules: {
     // Keep minimal rules for now; we can tighten these later
     "@typescript-eslint/no-explicit-any": "off",
-    // Ban RegExp.test() using no-restricted-syntax
+    // Ban RegExp.test() and RegExp.exec() using no-restricted-syntax
     "no-restricted-syntax": [
       "error",
       {
@@ -30,6 +30,12 @@ module.exports = {
         message:
           "RegExp.test() is banned. Use RegExp.exec() or string.match() instead.",
       },
+      {
+        selector:
+          "CallExpression[callee.type='MemberExpression'][callee.property.name='exec']",
+        message:
+          "RegExp.exec() is banned. Use String.prototype.match() or RegExp.prototype.exec safely with validation instead.",
+      }
     ],
   },
 };
