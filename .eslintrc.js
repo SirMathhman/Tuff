@@ -27,6 +27,11 @@ module.exports = {
         message:
           "Calling RegExp is banned. Use alternative parsing methods instead.",
       },
+      {
+        selector: "TSTypeLiteral",
+        message:
+          "Do not use anonymous object types; declare an interface and use it instead.",
+      },
     ],
 
     // Limit cyclomatic complexity
