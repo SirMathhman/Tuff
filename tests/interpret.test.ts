@@ -136,14 +136,6 @@ describe("interpret - blocks", () => {
     expect(interpret("let mut x : Bool; x = true; x = false; x")).toBe(0);
   });
 
-  it("reflects assignments inside inner blocks for mutable variables", () => {
-    expect(interpret("let mut x = 10; { x = 20; } x")).toBe(20);
-  });
-
-  it("does not leak block-local declarations to outer scope", () => {
-    expect(() => interpret("{ let mut x = 10; } x = 20; x")).toThrow(Error);
-  });
-
   it("supports conditional assignments using if/else on annotated variable", () => {
     expect(interpret("let x : I32; if (true) x = 10; else x = 20; x")).toBe(10);
   });
@@ -152,6 +144,12 @@ describe("interpret - blocks", () => {
     expect(interpret("let value : I32 = if (true) 300 else 200; value")).toBe(
       300
     );
+
+    expect(
+      interpret(
+        "let value : I32 = if (true) 300 else if (true) 200 else 100; value"
+      )
+    ).toBe(300);
   });
 });
 
@@ -164,5 +162,15 @@ describe("interpret - block errors", () => {
     expect(() =>
       interpret("(3 + { let x : I32 = 1; let x : I32 = 100; x }) * 2")
     ).toThrow(Error);
+  });
+});
+
+describe("interpret - block scoping", () => {
+  it("reflects assignments inside inner blocks for mutable variables", () => {
+    expect(interpret("let mut x = 10; { x = 20; } x")).toBe(20);
+  });
+
+  it("does not leak block-local declarations to outer scope", () => {
+    expect(() => interpret("{ let mut x = 10; } x = 20; x")).toThrow(Error);
   });
 });
