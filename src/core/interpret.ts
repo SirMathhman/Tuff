@@ -61,7 +61,9 @@ function handleFnStatement(
 ): "handled" | undefined | Result<void, string> {
   const parsed = parseFnDeclStatement(stmt);
   if (!parsed) return undefined;
-  if (!parsed.ok) return parsed as Err<string>;
+  if (!parsed.ok) {
+    return parsed as Err<string>;
+  }
   const { name, params, body } = parsed.value;
 
   if (envLocal.has(name)) return { ok: false, error: "duplicate declaration" };
@@ -510,9 +512,11 @@ export function interpret(
   // Allow them when evaluating expressions inside another context (indicated by a provided parentEnv)
   if (!parentEnv && s.indexOf("=>") !== -1) {
     const parseFn = parseFnExpressionAt(s, 0);
-    if (parseFn !== undefined) return { ok: false, error: "invalid expression" };
+    if (parseFn !== undefined)
+      return { ok: false, error: "invalid expression" };
     const parseArrow = parseArrowFnExpressionAt(s, 0);
-    if (parseArrow !== undefined) return { ok: false, error: "invalid expression" };
+    if (parseArrow !== undefined)
+      return { ok: false, error: "invalid expression" };
   }
 
   if (needsArithmetic(s)) return handleAddSubChain(s, parentEnv);

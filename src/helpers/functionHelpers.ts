@@ -7,6 +7,7 @@ import {
   SIZED_TYPES,
   findMatchingParenIndex,
 } from "../parsers/interpretHelpers";
+import { parseFnExpressionAt, parseArrowFnExpressionAt } from "../parsers/fnDeclHelpers";
 import { lookupBinding } from "../control/ifValidators";
 
 interface BindingType {
@@ -299,14 +300,39 @@ function getCallableBinding(
   return { ok: true, value: binding };
 }
 
-function invokeCallableBinding(
+export function callFunctionRawFromString(
+  s: string,
+  parentEnv: Map<string, BindingType> | undefined,
+  evalExprCb: EvalExprCb,
+  evalBlockCb?: EvalBlockCb
+): Result<number | BindingWithFn, string> {
+  const parsed = parseIdentAndArgs(s, 0);
+  if (!parsed) return { ok: false, error: "invalid function invocation" };
+  const { name, args } = parsed;
+  return callFunctionRaw(name, args, parentEnv, evalExprCb, evalBlockCb);
+}
+
+export function callFunctionRaw(
+  name: string,
+  args: string[],
+  parentEnv: Map<string, BindingType> | undefined,
+  evalExprCb: EvalExprCb,
+  evalBlockCb?: EvalBlockCb
+): Result<number | BindingWithFn, string> {
+  const bindingRes = getCallableBinding(name, parentEnv);
+  if (!bindingRes.ok) return bindingRes as Err<string>;
+  const binding = bindingRes.value as BindingWithFn;
+
+  return executeBindingCall(binding, args, parentEnv, evalExprCb, evalBlockCb);
+}
+
+function executeBindingCall(
   binding: BindingWithFn,
   args: string[],
-  parentEnv: Map<string, BindingType>,
+  parentEnv: Map<string, BindingType> | undefined,
   evalExprCb: EvalExprCb,
   evalBlockCb?: EvalBlockCb
 ): Result<number, string> {
-  const fnBody = binding.fn?.body as string;
   const fnParams = binding.fn?.params as ParamDecl[] | undefined;
   if (!fnParams) return { ok: false, error: "invalid function" };
   if (fnParams.length !== args.length)
@@ -331,7 +357,7 @@ function invokeCallableBinding(
     | undefined;
 
   const bodyRes = evaluateFunctionBody(
-    fnBody,
+    binding.fn?.body as string,
     binding.fn?.closure as Map<string, BindingType>,
     callEnv,
     evalExprCb,
@@ -339,6 +365,16 @@ function invokeCallableBinding(
   );
   if (!bodyRes.ok) return bodyRes as Err<string>;
   return { ok: true, value: bodyRes.value };
+}
+
+function invokeCallableBinding(
+  binding: BindingWithFn,
+  args: string[],
+  parentEnv: Map<string, BindingType>,
+  evalExprCb: EvalExprCb,
+  evalBlockCb?: EvalBlockCb
+): Result<number, string> {
+  return executeBindingCall(binding, args, parentEnv, evalExprCb, evalBlockCb);
 }
 
 export function tryReadFunctionCallAt(
@@ -383,11 +419,11 @@ function evaluateFunctionBody(
   callEnv: Map<string, BindingType>,
   evalExprCb: EvalExprCb,
   evalBlockCb?: EvalBlockCb
-): Result<number, string> {
+): Result<number | BindingWithFn, string> {
   if (
     fnBody.indexOf(";") !== -1 ||
     fnBody.startsWith("let ") ||
-    fnBody.indexOf("=") !== -1
+    (fnBody.indexOf("=") !== -1 && fnBody.indexOf("=>") === -1)
   ) {
     if (!evalBlockCb) return { ok: false, error: "internal error" };
     const br = evalBlockCb(
@@ -398,6 +434,22 @@ function evaluateFunctionBody(
     if (!br.ok) return br as Err<string>;
     return { ok: true, value: br.value };
   }
+  return evaluateFunctionBodyExpr(fnBody, closure, callEnv, evalExprCb);
+}
+
+function evaluateFunctionBodyExpr(
+  fnBody: string,
+  closure: Map<string, BindingType> | undefined,
+  callEnv: Map<string, BindingType>,
+  evalExprCb: EvalExprCb
+): Result<number | BindingWithFn, string> {
+  const trimmed = fnBody.trim();
+  // detect immediate function expressions being returned (e.g., `fn (y) => x + y` or `(y) => x + y`)
+  const fnExpr = parseFnExpressionAt(trimmed, 0) ?? parseArrowFnExpressionAt(trimmed, 0);
+  if (fnExpr && fnExpr.ok) {
+    return { ok: true, value: buildReturnedFunctionBinding(fnExpr.value, callEnv, closure) };
+  }
+
   const sub = substituteAllIdents(
     fnBody,
     callEnv as unknown as Map<string, BindingType>
@@ -406,4 +458,21 @@ function evaluateFunctionBody(
   const v = evalExprCb(sub.value, callEnv as unknown as Map<string, unknown>);
   if (!v.ok) return v as Err<string>;
   return { ok: true, value: v.value };
+}
+
+function buildReturnedFunctionBinding(
+  fnExpr: FunctionDescriptor,
+  callEnv: Map<string, BindingType>,
+  closure: Map<string, BindingType> | undefined
+): BindingWithFn {
+  const newClosure = new Map<string, BindingType>();
+  for (const [k, v] of callEnv) newClosure.set(k, { value: v.value, suffix: v.suffix });
+  (newClosure as unknown as EnvWithParent).__parent = closure as
+    | Map<string, BindingType>
+    | undefined;
+  return {
+    value: 0,
+    assigned: true,
+    fn: { params: fnExpr.params, body: fnExpr.body, closure: newClosure },
+  };
 }

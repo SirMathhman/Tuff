@@ -567,11 +567,7 @@ it("functions: inner functions capture outer parameters", () => {
   ).toEqual({ ok: true, value: 5 });
 });
 
-// TODO: Support first-class functions (returning function values)
-it.todo("functions: functions returning function (closures) - support returning a function value and calling it later");
-
-// Skip until feature is implemented to avoid breaking CI
-it.skip("functions: functions returning function (closures)", () => {
+it("functions: functions returning function (closures)", () => {
   expect(
     interpret(
       "let make = fn make(x : I32) => fn (y : I32) => x + y; let adder = make(2); adder(3)"

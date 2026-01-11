@@ -15,6 +15,7 @@ import {
 import { finalizeInitializedDeclaration } from "../helpers/declarations";
 import { interpret } from "../core/interpret";
 import { parseFnExpressionAt, parseArrowFnExpressionAt } from "./fnDeclHelpers";
+import { callFunctionRawFromString } from "../helpers/functionHelpers";
 
 export function parseBracedInitializer(
   t: string,
@@ -66,6 +67,17 @@ function isIdentLikeToken(s: string): boolean {
       cc === 95;
     if (!ok) return false;
   }
+  return true;
+}
+
+function isSingleFunctionCallLike(s: string): boolean {
+  const str = s.trim();
+  const p = str.indexOf("(");
+  if (p === -1) return false;
+  const before = str.slice(0, p).trim();
+  if (!isIdentLikeToken(before)) return false;
+  const lastParen = str.lastIndexOf(")");
+  if (lastParen === -1 || lastParen !== str.length - 1) return false;
   return true;
 }
 
@@ -151,7 +163,11 @@ export function resolveInitializer(
   if (bool) return { ok: true, value: bool };
 
   const tryFn = tryParseFunctionInitializer(t, env);
-  if (tryFn) return tryFn;
+  if (tryFn) {
+    // debug
+    // console.log("resolveInitializer parsed fn initializer, body=", tryFn.value.fn?.body);
+    return tryFn;
+  }
 
   // identifier initializer
   if (isIdentifierName(t)) {
@@ -163,6 +179,26 @@ export function resolveInitializer(
     const brRes = parseBracedInitializer(t, env, evaluateBlockFn);
     if (!brRes.ok) return brRes as Result<Binding, string>;
     return brRes;
+  }
+
+  // Special-case: if the RHS is a single function call like `make(1)` (and nothing else)
+  // we can invoke it and if it returns a function value, return that binding directly (support closures)
+  if (isSingleFunctionCallLike(t)) {
+    const callRes = callFunctionRawFromString(
+      t,
+      env as unknown as Map<string, unknown>,
+      interpret,
+      evaluateBlockFn
+    );
+    if (callRes && callRes.ok) {
+      const v = callRes.value;
+      if (typeof v === "number") return { ok: true, value: { value: v } };
+      return { ok: true, value: v as Binding };
+    }
+    if (callRes && !callRes.ok) {
+      // if the invocation failed (e.g., unknown function), propagate the error
+      if (callRes.error !== "invalid function invocation") return callRes as Result<Binding, string>;
+    }
   }
 
   return resolveExpressionInitializer(rhs, env);
