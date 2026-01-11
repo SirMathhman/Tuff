@@ -38,6 +38,9 @@ export function interpret(input: string, env?: Env): number {
   const matchResult = tryHandleMatchExpression(s, env);
   if (matchResult !== undefined) return matchResult;
 
+  const fnExprResult = tryHandleFnExpression(s, env);
+  if (fnExprResult !== undefined) return fnExprResult;
+
   const callResult = tryHandleCall(s, env);
   if (callResult !== undefined) return callResult;
 
@@ -1256,6 +1259,12 @@ function ensureUniqueDeclaration(localDeclared: Set<string>, name: string) {
   localDeclared.add(name);
 }
 
+function extractAfterArrow(s: string, msg: string) {
+  const arrowIdx = s.indexOf("=>");
+  ensure(arrowIdx !== -1, msg);
+  return sliceTrim(s, arrowIdx + 2);
+}
+
 function tryHandleCall(s: string, env?: Env): number | undefined {
   const idRes = parseIdentifierAt(s, 0);
   if (!idRes) return undefined;
@@ -1288,4 +1297,34 @@ function tryHandleCall(s: string, env?: Env): number | undefined {
   // evaluate body
   const res = evalBlock(func.body, callEnv);
   return res;
+}
+
+function tryHandleFnExpression(s: string, env?: Env): number | undefined {
+  const ss = s.trim();
+  if (!startsWithKeyword(ss, "fn")) return undefined;
+
+  // find the param list and body boundaries without re-parsing params (reuse existing statement parser)
+  const rest = sliceTrim(ss, 3);
+  const paren = rest.indexOf("(");
+  ensure(paren !== -1, "Invalid fn declaration");
+  const close = findMatchingParen(rest, paren);
+  ensureCloseParen(close, "Unterminated fn params");
+
+  let restAfterParams = sliceTrim(rest, close + 1);
+  restAfterParams = extractAfterArrow(restAfterParams, "Invalid fn declaration");
+
+  // only support braced body for expression form (simple and safe)
+  if (!restAfterParams.startsWith("{")) return undefined;
+  const bc = findMatchingParen(restAfterParams, 0);
+  if (bc < 0) throw new Error("Unterminated fn body");
+  const body = restAfterParams.slice(0, bc + 1);
+  const trailing = restAfterParams.slice(bc + 1).trim();
+
+  const fnStmt = ss.slice(0, ss.indexOf(body) + body.length);
+  const actualEnv = env ?? new Map<string, EnvItem>();
+  // reuse the existing statement handler to register the function and avoid duplication
+  handleFnStatement(fnStmt, actualEnv, new Set<string>());
+
+  if (trailing === "") return NaN;
+  return interpret(trailing, actualEnv);
 }

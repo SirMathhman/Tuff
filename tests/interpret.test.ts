@@ -210,6 +210,12 @@ describe("interpret - blocks (expressions extras)", () => {
         "fn add(first : I32, second : I32) : I32 => first + second; add(1, 2)"
       )
     ).toBe(3);
+
+    expect(
+      interpret(
+        "fn add(first : I32, second : I32) => { first + second } add(1, 2)"
+      )
+    ).toBe(3);
   });
 });
 
