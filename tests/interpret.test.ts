@@ -92,6 +92,12 @@ describe("interpret - arithmetic", () => {
     expect(() => interpret("(3 + { let x : I32 = 1; }) * 2")).toThrow(Error);
   });
 
+  it("throws when a block contains duplicate declarations", () => {
+    expect(() =>
+      interpret("(3 + { let x : I32 = 1; let x : I32 = 100; x }) * 2")
+    ).toThrow(Error);
+  });
+
   it("throws on division by zero", () => {
     expect(() => interpret("10 / 0")).toThrow(Error);
   });

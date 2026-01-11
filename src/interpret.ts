@@ -409,12 +409,18 @@ function evalBlock(s: string, envIn?: Map<string, number>): number {
   }
 
   let last = NaN;
+  const localDeclared = new Set<string>();
   for (const stmt of stmts) {
     if (stmt.startsWith("let ")) {
       const rest = stmt.slice(4).trim();
       const nameRes = parseIdentifierAt(rest, 0);
       if (!nameRes) throw new Error("Invalid let declaration");
       const name = nameRes.name;
+
+      // duplicate declaration in the same block is an error
+      if (localDeclared.has(name)) throw new Error("Duplicate declaration");
+      localDeclared.add(name);
+
       const idx = nameRes.next;
       let rest2 = rest.slice(idx).trim();
       // optional type annotation
