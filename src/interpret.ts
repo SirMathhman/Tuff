@@ -27,8 +27,9 @@ import {
 interface Binding {
   value: number;
   suffix?: string;
-  // track whether this binding has been assigned/initialized; once true, binding is immutable
+  // track whether this binding has been assigned/initialized; once true, binding is immutable unless 'mutable' is set
   assigned?: boolean;
+  mutable?: boolean;
 }
 
 interface ScanIdentResult {
@@ -183,6 +184,18 @@ function parseDeclaration(
 ): Result<void, string> {
   let p = 4;
   while (p < stmt.length && stmt[p] === " ") p++;
+
+  // optional 'mut' keyword
+  let isMutable = false;
+  if (stmt.startsWith("mut", p)) {
+    const post = p + 3;
+    if (post >= stmt.length || stmt[post] === " ") {
+      isMutable = true;
+      p = post;
+      while (p < stmt.length && stmt[p] === " ") p++;
+    }
+  }
+
   const start = p;
 
   const scan = scanIdentifierFrom(stmt, start);
@@ -199,8 +212,8 @@ function parseDeclaration(
     const suffix = maybeSuffix.value;
 
     if (env.has(ident)) return { ok: false, error: "duplicate declaration" };
-    // uninitialized binding: assigned = false (first assignment allowed)
-    env.set(ident, { value: 0, suffix, assigned: false });
+    // uninitialized binding: assigned = false (first assignment allowed). store mutability
+    env.set(ident, { value: 0, suffix, assigned: false, mutable: isMutable });
     return { ok: true, value: undefined };
   }
 
@@ -209,6 +222,19 @@ function parseDeclaration(
   const init = resolveInitializer(rhs, env);
   if (!init.ok) return init as Err<string>;
 
+  return finalizeInitializedDeclaration(stmt, ident, p, eq, rhs, init.value, env, isMutable);
+}
+
+function finalizeInitializedDeclaration(
+  stmt: string,
+  ident: string,
+  p: number,
+  eq: number,
+  rhs: string,
+  init: Binding,
+  env: Map<string, Binding>,
+  isMutable: boolean
+): Result<void, string> {
   // check annotation (optional) between identifier end and '=': e.g., ': 2U8' or ': U8'
   const colonPos = findTopLevelChar(stmt, p, ":");
   const annRes = deriveAnnotationSuffixBetween(
@@ -216,7 +242,7 @@ function parseDeclaration(
     colonPos,
     eq,
     rhs,
-    init.value,
+    init,
     env
   );
   if (!annRes.ok) return annRes as Err<string>;
@@ -224,10 +250,16 @@ function parseDeclaration(
 
   if (env.has(ident)) return { ok: false, error: "duplicate declaration" };
 
-  const finalSuffix = init.value.suffix ?? annSuffix;
-  // initialized binding: assigned = true (immutable)
-  env.set(ident, { value: init.value.value, suffix: finalSuffix, assigned: true });
+  const finalSuffix = init.suffix ?? annSuffix;
+  // initialized binding: assigned = true; mutability preserved
+  env.set(ident, {
+    value: init.value,
+    suffix: finalSuffix,
+    assigned: true,
+    mutable: isMutable,
+  });
   return { ok: true, value: undefined };
+
 }
 
 interface BracedPrefixResult {
@@ -435,8 +467,9 @@ function handleAssignmentIfAny(
   const targetEnv = findBindingEnv(name, env, parentEnv);
   if (!targetEnv) return { ok: false, error: `unknown identifier ${name}` };
   const existing = targetEnv.get(name)!;
-  // if this binding was already assigned/initialized, it's immutable
-  if (existing.assigned) return { ok: false, error: "assignment to immutable binding" };
+  // if this binding was already assigned/initialized and is not mutable, it's immutable
+  if (existing.assigned && !existing.mutable)
+    return { ok: false, error: "assignment to immutable binding" };
 
   // validate against existing suffix if present
   if (existing.suffix) {

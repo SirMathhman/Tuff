@@ -6,6 +6,7 @@ interface Binding {
   suffix?: string;
   // matches Binding shape in interpret.ts: track initialization/assignment state
   assigned?: boolean;
+  mutable?: boolean;
 }
 
 export function lookupBinding(

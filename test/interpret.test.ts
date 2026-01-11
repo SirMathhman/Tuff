@@ -208,6 +208,12 @@ describe("interpret (suffix handling - braced blocks) - grouping and top-level",
       error: "assignment to immutable binding",
     });
 
+    // mutable bindings allow reassignment
+    expect(interpret("let mut x : I32; x = 0; x = 1; x")).toEqual({
+      ok: true,
+      value: 1,
+    });
+
     // assignment within nested block should affect outer binding
     expect(interpret("let x : I32; { x = 100; } x")).toEqual({
       ok: true,
