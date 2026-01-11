@@ -126,6 +126,10 @@ describe("interpret - blocks", () => {
     expect(interpret("let x : Bool; x = true; x")).toBe(1);
   });
 
+  it("throws when assigning twice to an uninitialized annotated variable", () => {
+    expect(() => interpret("let x : Bool; x = true; x = false; x")).toThrow(Error);
+  });
+
   it("throws when a block ends with declaration and no expression", () => {
     expect(() => interpret("(3 + { let x : I32 = 1; }) * 2")).toThrow(Error);
   });

@@ -513,7 +513,8 @@ function handleLetStatement(
   }
 
   // an uninitialized declaration (no initializer) is implicitly mutable
-  const item = { value: NaN, mutable: true, type: annotatedType } as EnvItem;
+  // uninitialized annotated declarations are write-once (not mutable)
+  const item = { value: NaN, mutable: annotatedType ? false : true, type: annotatedType } as EnvItem;
   env.set(name, item);
   return NaN;
 }
@@ -530,7 +531,8 @@ function tryHandleAssignmentStatement(
   if (restAssign === "") throw new Error("Invalid assignment");
   if (!env.has(idRes.name)) throw new Error("Unknown identifier");
   const cur = env.get(idRes.name)!;
-  if (!cur.mutable) throw new Error("Cannot assign to immutable variable");
+  // allow assignment if variable is mutable OR if it is uninitialized
+  if (!cur.mutable && !Number.isNaN(cur.value)) throw new Error("Cannot assign to immutable variable");
 
   const rhsType = inferTypeFromExpr(restAssign, env);
   if (cur.type) {
