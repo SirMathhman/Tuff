@@ -20,6 +20,7 @@ import {
   findBindingEnv,
   validateIfIdentifierConditions,
 } from "./ifValidators";
+import { findTopLevelElseInString } from "./ifHelpers";
 
 import {
   applyCompoundAssignment,
@@ -291,11 +292,13 @@ function processStatement(
   envLocal: Map<string, Binding>,
   parentEnvLocal?: Map<string, Binding>,
   isLast = false
-): Result<number, string> | "handled" | "break" | undefined {
+): Result<number, string> | "handled" | "break" | "continue" | undefined {
   let stmt = origStmt;
 
-  // support 'break' as a top-level statement
-  if (stmt.trim() === "break") return "break";
+  // support 'break' and 'continue' as top-level statements
+  const trimmed = stmt.trim();
+  if (trimmed === "break") return "break";
+  if (trimmed === "continue") return "continue";
 
   const letHandled = handleLetStatement(stmt, envLocal);
   if (letHandled === "handled") return "handled";
@@ -342,16 +345,78 @@ function processStatement(
   return handleExpressionOrSubstitution(stmt, envLocal, parentEnvLocal, isLast);
 }
 
+function handleStatementIf(
+  tStmt: string,
+  k: number,
+  envLocal: Map<string, Binding>,
+  parentEnvLocal: Map<string, Binding> | undefined
+): Result<number, string> | "handled" | "break" | "continue" | undefined {
+  const body = tStmt.slice(k + 1).trim();
+  if (body.length === 0) return undefined;
+
+  // evaluate condition
+  const condText = tStmt.slice(tStmt.indexOf("(") + 1, k).trim();
+  const condSub = substituteAllIdents(condText, envLocal, parentEnvLocal);
+  if (!condSub.ok) return condSub as Err<string>;
+  const condRes = interpret(condSub.value, envLocal);
+  if (!condRes.ok) return condRes as Err<string>;
+  if (condRes.value === 0) return "handled";
+
+  // condition true => execute then-branch as a statement
+  if (body.startsWith("{")) {
+    const braceEnd = findTopLevelChar(body, 0, "}");
+    if (braceEnd === -1)
+      return { ok: false, error: "unmatched brace in if body" };
+    const inner = body.slice(1, braceEnd);
+    const r = evaluateBlock(inner, undefined, envLocal);
+    if (!r.ok) {
+      if (r.error === "break") return "break";
+      if (r.error === "continue") return "continue";
+      return r as Err<string>;
+    }
+    return "handled";
+  }
+
+  // single-statement then-branch up to semicolon or end
+  const endPos = findTopLevelChar(tStmt, k + 1, ";");
+  const thenStmt =
+    endPos === -1
+      ? tStmt.slice(k + 1).trim()
+      : tStmt.slice(k + 1, endPos).trim();
+
+  const psRes = processStatement(thenStmt, envLocal, parentEnvLocal, false);
+  if (psRes === "handled") return "handled";
+  if (psRes === "break") return "break";
+  if (psRes === "continue") return "continue";
+  if (psRes) return psRes;
+
+  return "handled";
+}
+
 function handleTopLevelIfStmt(
   tStmt: string,
   envLocal: Map<string, Binding>,
+  parentEnvLocal: Map<string, Binding> | undefined,
   isLast: boolean
-): Result<number, string> | "handled" | undefined {
+): Result<number, string> | "handled" | "break" | "continue" | undefined {
   if (!tStmt.startsWith("if ") && !tStmt.startsWith("if(")) return undefined;
-  const exprRes = interpret(tStmt, envLocal);
-  if (!exprRes.ok) return exprRes as Err<string>;
-  if (isLast) return exprRes;
-  return "handled";
+
+  const i = tStmt.indexOf("(");
+  if (i === -1) return undefined;
+  const k = findMatchingParenIndex(tStmt, i);
+  if (k === -1) return undefined;
+
+  // check for top-level 'else' to decide between expression-if and statement-if
+  const elsePos = findTopLevelElseInString(tStmt, k + 1);
+  if (elsePos !== -1) {
+    // expression-like if (has else) - preserve existing behavior
+    const exprRes = interpret(tStmt, envLocal);
+    if (!exprRes.ok) return exprRes as Err<string>;
+    if (isLast) return exprRes;
+    return "handled";
+  }
+
+  return handleStatementIf(tStmt, k, envLocal, parentEnvLocal);
 }
 
 function handleTopLevelControl(
@@ -359,8 +424,13 @@ function handleTopLevelControl(
   envLocal: Map<string, Binding>,
   parentEnvLocal?: Map<string, Binding>,
   isLast = false
-): Result<number, string> | "handled" | undefined {
-  const ifHandled = handleTopLevelIfStmt(tStmt, envLocal, isLast);
+): Result<number, string> | "handled" | "break" | "continue" | undefined {
+  const ifHandled = handleTopLevelIfStmt(
+    tStmt,
+    envLocal,
+    parentEnvLocal,
+    isLast
+  );
   if (ifHandled) return ifHandled;
 
   const whileHandled = handleWhileExternal(tStmt, envLocal, parentEnvLocal, {
@@ -403,8 +473,10 @@ function evaluateBlock(
     const res = processStatement(stmt, env, parentEnv, i === stmts.length - 1);
     if (res === "handled") continue;
     if (res === "break") return { ok: false, error: "break" };
+    if (res === "continue") return { ok: false, error: "continue" };
     if (res) return res;
   }
+  // no final expression found
   return { ok: false, error: "block has no final expression" };
 }
 
@@ -470,6 +542,11 @@ export function interpret(
 
   if (s === "true") return { ok: true, value: 1 };
   if (s === "false") return { ok: true, value: 0 };
+
+  // allow 'break' and 'continue' to be used inside statement-like expressions (e.g., in an if-then),
+  // and propagate them to the surrounding block/loop as control flow via errors
+  if (s === "break") return { ok: false, error: "break" };
+  if (s === "continue") return { ok: false, error: "continue" };
 
   if (isIdentifierOnly(s)) {
     if (parentEnv) {

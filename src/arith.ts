@@ -207,43 +207,21 @@ function findOperandEnd(s: string, start: number): number {
 
 import { findMatchingParenIndex, findTopLevelChar } from "./interpretHelpers";
 import { parseComparisonOp, applyComparisonOp } from "./operators";
-
-function isStandaloneElseAt(s: string, idx: number): boolean {
-  const n = s.length;
-  const before = idx - 1 < 0 ? "" : s[idx - 1];
-  const after = idx + 4 >= n ? "" : s[idx + 4];
-  const validBefore =
-    before === "" || before === " " || before === ")" || before === "{";
-  const validAfter =
-    after === "" ||
-    after === " " ||
-    after === ";" ||
-    after === ")" ||
-    after === "{";
-  return validBefore && validAfter;
-}
-
-function findTopLevelElse(s: string, start: number): number {
-  let depth = 0;
-  for (let i = start; i < s.length; i++) {
-    const ch = s[i];
-    if (ch === "(" || ch === "{" || ch === "[") depth++;
-    else if (ch === ")" || ch === "}" || ch === "]") depth--;
-    else if (depth === 0 && s.startsWith("else", i) && isStandaloneElseAt(s, i))
-      return i;
-  }
-  return -1;
-}
+import { findTopLevelElseInString } from "./ifHelpers";
 
 function evalExpr<T extends BindingType>(
   src: string,
   parentEnv?: Map<string, T>
 ): Result<number, string> {
-  if (
-    src.indexOf(";") !== -1 ||
-    src.startsWith("let ") ||
-    findTopLevelChar(src, 0, "=") !== -1
-  ) {
+  const eqPos = findTopLevelChar(src, 0, "=");
+  const isAssignment =
+    eqPos !== -1 &&
+    !(
+      (eqPos - 1 >= 0 && src[eqPos - 1] === "=") ||
+      (eqPos + 1 < src.length && src[eqPos + 1] === "=")
+    );
+
+  if (src.indexOf(";") !== -1 || src.startsWith("let ") || isAssignment) {
     if (!_evaluateBlock) return { ok: false, error: "internal error" };
     return _evaluateBlock(src, parentEnv);
   }
@@ -256,7 +234,7 @@ function parseThenElse(
   parenEnd: number
 ): Result<ThenElseParse, string> {
   const n = s.length;
-  const elsePos = findTopLevelElse(s, parenEnd + 1);
+  const elsePos = findTopLevelElseInString(s, parenEnd + 1);
   if (elsePos === -1) return { ok: false, error: "invalid operand" };
 
   const thenText = s.slice(parenEnd + 1, elsePos).trim();
@@ -293,10 +271,16 @@ function readIfAt<T extends BindingType>(
   // Short-circuit: evaluate only the chosen branch so side-effects do not occur in the other
   let chosen: number;
   if (condRes.value !== 0) {
+    const thenTrim = thenText.trim();
+    if (thenTrim === "break") return { ok: false, error: "break" };
+    if (thenTrim === "continue") return { ok: false, error: "continue" };
     const thenRes = evalExpr(thenText, parentEnv);
     if (!thenRes.ok) return thenRes as Err<string>;
     chosen = thenRes.value;
   } else {
+    const elseTrim = elseText.trim();
+    if (elseTrim === "break") return { ok: false, error: "break" };
+    if (elseTrim === "continue") return { ok: false, error: "continue" };
     const elseRes = evalExpr(elseText, parentEnv);
     if (!elseRes.ok) return elseRes as Err<string>;
     chosen = elseRes.value;

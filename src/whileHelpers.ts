@@ -37,6 +37,7 @@ export function runBracedWhile<T>(
     if (!innerRes.ok) {
       if (innerRes.error === "block has no final expression") return "continue";
       if (innerRes.error === "break") return "break";
+      if (innerRes.error === "continue") return "continue";
       return innerRes as Result<void, string>;
     }
     return undefined;
@@ -60,6 +61,7 @@ export function runSingleStmtWhile<T>(
     const res = processStatement(stmtBody, envLocal, parentEnvLocal, false);
     if (res === "handled") return "continue";
     if (res === "break") return "break";
+    if (res === "continue") return "continue";
     if (res) return res as Result<void, string>;
     return undefined;
   });
@@ -86,7 +88,7 @@ export interface WhileHandlers<T> {
     envLocal: Map<string, T>,
     parentEnvLocal?: Map<string, T>,
     isLast?: boolean
-  ) => Result<number, string> | "handled" | "break" | undefined;
+  ) => Result<number, string> | "handled" | "break" | "continue" | undefined;
   evaluateBlockFn: (
     inner: string,
     parentEnv?: Map<string, T>,
