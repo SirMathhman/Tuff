@@ -618,7 +618,13 @@ function handleIfAt(idx: number, stmts: string[], env: Env): IfResult {
 }
 
 function evalBlock(s: string, envIn?: Env): number {
-  const env = envIn ?? new Map<string, EnvItem>();
+  const trimmed = s.trim();
+  // If this eval is for a brace-delimited block (e.g., "{ ... }"), create
+  // a shallow copy of the parent environment so that declarations in the
+  // inner block don't leak to the outer scope, but assignments to existing
+  // outer variables still update the same EnvItem objects by reference.
+  const isBraceBlock = trimmed.startsWith("{") && findMatchingParen(trimmed, 0) === trimmed.length - 1;
+  const env = isBraceBlock ? new Map<string, EnvItem>(envIn ?? new Map<string, EnvItem>()) : envIn ?? new Map<string, EnvItem>();
   const rawStmts = splitTopLevel(s, ";");
 
   // collect trimmed non-empty statements
