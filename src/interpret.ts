@@ -22,6 +22,9 @@ export function interpret(input: string, env?: Env): number {
   if (topParts.length > 1 || s.trim().startsWith("let "))
     return evalBlock(s, env);
 
+  const ifResult = tryHandleIfExpression(s, env);
+  if (ifResult !== undefined) return ifResult;
+
   const additionResult = tryHandleAddition(s);
   if (additionResult !== undefined) return additionResult;
 
@@ -458,7 +461,7 @@ function extractAnnotationAndInitializer(str: string): AnnotationResult {
 
 function isIntegerTypeName(typeName: string): boolean {
   const first = typeName[0];
-  return first === "I" || first === "i" || first === "U" || first === "u";
+  return "IiUu".includes(first);
 }
 
 function containsOperator(s: string): boolean {
@@ -485,8 +488,73 @@ function validateAnnotatedTypeCompatibility(
   }
 }
 
+function isWhitespace(ch: string | undefined): boolean {
+  return ch !== undefined && " \t\n\r".includes(ch);
+}
+
 function startsWithIf(s: string): boolean {
   return s.indexOf("if ") === 0 || s.indexOf("if(") === 0;
+}
+
+function ensureExists(idx: number, msg: string): void {
+  if (idx === -1) throw new Error(msg);
+}
+
+function sliceTrimRange(s: string, a: number, b: number): string {
+  return s.slice(a, b).trim();
+}
+function ensureCloseParen(close: number, msg: string): void {
+  if (close < 0) throw new Error(msg);
+}
+
+interface IfParts {
+  cond: string;
+  thenPart: string;
+  elsePart: string;
+}
+
+function parseIfParts(s: string): IfParts {
+  const paren = s.indexOf("(");
+  ensureExists(paren, "Invalid if expression");
+  const close = findMatchingParen(s, paren);
+  ensureCloseParen(close, "Unterminated if condition");
+  const cond = sliceTrimRange(s, paren + 1, close);
+
+  // find top-level 'else'
+  let depth = 0;
+  let elseIdx = -1;
+  for (let i = close + 1; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === "(" || ch === "{") depth++;
+    else if (ch === ")" || ch === "}") depth--;
+    else if (depth === 0 && s.startsWith("else", i)) {
+      const after = s[i + 4];
+      if (
+        after === undefined ||
+        isWhitespace(after) ||
+        after === "(" ||
+        after === "{"
+      ) {
+        elseIdx = i;
+        break;
+      }
+    }
+  }
+  ensureExists(elseIdx, "If expression missing else branch");
+  const thenPart = sliceTrimRange(s, close + 1, elseIdx);
+  const elsePart = s.slice(elseIdx + 4).trim();
+  return { cond, thenPart, elsePart };
+}
+
+function tryHandleIfExpression(s: string, env?: Env): number | undefined {
+  const ss = s.trim();
+  if (!startsWithIf(ss)) return undefined;
+  const { cond, thenPart, elsePart } = parseIfParts(ss);
+  if (thenPart === "" || elsePart === "")
+    throw new Error("Invalid if expression branches");
+  const condVal = interpret(cond, env);
+  if (condVal !== 0) return interpret(thenPart, env);
+  return interpret(elsePart, env);
 }
 function handleLetStatement(
   stmt: string,
@@ -571,6 +639,29 @@ function tryHandleAssignmentStatement(
   return val;
 }
 
+function processNonLetStatement(stmt: string, env: Env): number {
+  let lastLocal = NaN;
+  let rem = stmt;
+  while (rem !== "") {
+    rem = rem.trim();
+    if (rem === "") break;
+    if (startsWithGroup(rem)) {
+      const close = findMatchingParen(rem, 0);
+      if (close < 0) throw new Error("Unterminated grouping");
+      const part = rem.slice(0, close + 1);
+      lastLocal = interpret(part, env);
+      rem = rem.slice(close + 1).trim();
+      continue;
+    }
+
+    const assigned = tryHandleAssignmentStatement(rem, env);
+    if (assigned !== undefined) lastLocal = assigned;
+    else lastLocal = interpret(rem, env);
+    rem = "";
+  }
+  return lastLocal;
+}
+
 interface IfResult {
   consumed: number;
   last: number;
@@ -623,8 +714,12 @@ function evalBlock(s: string, envIn?: Env): number {
   // a shallow copy of the parent environment so that declarations in the
   // inner block don't leak to the outer scope, but assignments to existing
   // outer variables still update the same EnvItem objects by reference.
-  const isBraceBlock = trimmed.startsWith("{") && findMatchingParen(trimmed, 0) === trimmed.length - 1;
-  const env = isBraceBlock ? new Map<string, EnvItem>(envIn ?? new Map<string, EnvItem>()) : envIn ?? new Map<string, EnvItem>();
+  const isBraceBlock =
+    trimmed.startsWith("{") &&
+    findMatchingParen(trimmed, 0) === trimmed.length - 1;
+  const env = isBraceBlock
+    ? new Map<string, EnvItem>(envIn ?? new Map<string, EnvItem>())
+    : envIn ?? new Map<string, EnvItem>();
   const rawStmts = splitTopLevel(s, ";");
 
   // collect trimmed non-empty statements
@@ -654,30 +749,7 @@ function evalBlock(s: string, envIn?: Env): number {
     if (stmt.startsWith("let ")) {
       last = handleLetStatement(stmt, env, localDeclared);
     } else {
-      // handle leading grouped expressions (e.g., "{ x = 20; } x") so that
-      // a block followed by other expressions in the same stmt are processed
-      // left-to-right.
-      let rem = stmt;
-      while (rem !== "") {
-        rem = rem.trim();
-        if (rem === "") break;
-        if (startsWithGroup(rem)) {
-          const close = findMatchingParen(rem, 0);
-          if (close < 0) throw new Error("Unterminated grouping");
-          const part = rem.slice(0, close + 1);
-          last = interpret(part, env);
-          rem = rem.slice(close + 1).trim();
-          continue;
-        }
-
-        const assigned = tryHandleAssignmentStatement(rem, env);
-        if (assigned !== undefined) {
-          last = assigned;
-        } else {
-          last = interpret(rem, env);
-        }
-        rem = "";
-      }
+      last = processNonLetStatement(stmt, env);
     }
   }
   return last;

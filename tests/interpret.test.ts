@@ -148,6 +148,11 @@ describe("interpret - blocks", () => {
     expect(interpret("let x : I32; if (true) x = 10; else x = 20; x")).toBe(10);
   });
 
+  it("supports if expressions in initializers", () => {
+    expect(interpret("let value : I32 = if (true) 300 else 200; value")).toBe(
+      300
+    );
+  });
 });
 
 describe("interpret - block errors", () => {
