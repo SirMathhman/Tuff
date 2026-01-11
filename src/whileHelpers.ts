@@ -27,11 +27,12 @@ export function runBracedWhile<T>(
   evalCond: (condText: string) => Result<boolean, string>,
   evaluateBlock: (
     inner: string,
-    parentEnv?: Map<string, T>
+    parentEnv?: Map<string, T>,
+    localEnv?: Map<string, T>
   ) => Result<number, string>
 ): Result<void, string> {
   return evaluateConditionLoop(condText, evalCond, () => {
-    const innerRes = evaluateBlock(inner, envLocal);
+    const innerRes = evaluateBlock(inner, undefined, envLocal);
     if (!innerRes.ok) {
       if (innerRes.error === "block has no final expression") return "continue";
       return innerRes as Result<void, string>;
@@ -85,7 +86,8 @@ export interface WhileHandlers<T> {
   ) => Result<number, string> | "handled" | undefined;
   evaluateBlockFn: (
     inner: string,
-    parentEnv?: Map<string, T>
+    parentEnv?: Map<string, T>,
+    localEnv?: Map<string, T>
   ) => Result<number, string>;
   findMatchingParenIndexFn: (s: string, start: number) => number;
 }

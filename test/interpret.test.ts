@@ -391,3 +391,12 @@ describe("interpret (suffix handling - braced blocks) - annotations", () => {
     });
   });
 });
+
+describe("interpret (while loops)", () => {
+  it("while loop with mutable variable and environment persistence", () => {
+    expect(interpret("let mut x = 0; while (x < 4) { x += 1 }; x")).toEqual({
+      ok: true,
+      value: 4,
+    });
+  });
+});

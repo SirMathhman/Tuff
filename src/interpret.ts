@@ -389,10 +389,11 @@ function handleExpressionOrSubstitution(
 
 function evaluateBlock(
   inner: string,
-  parentEnv?: Map<string, Binding>
+  parentEnv?: Map<string, Binding>,
+  localEnv?: Map<string, Binding>
 ): Result<number, string> {
   const stmts = splitStatements(inner);
-  const env = new Map<string, Binding>();
+  const env = localEnv || new Map<string, Binding>();
   for (let i = 0; i < stmts.length; i++) {
     const stmt = stmts[i];
     if (stmt.length === 0) continue;
@@ -489,6 +490,10 @@ function needsArithmetic(s: string): boolean {
     s.indexOf("-") !== -1 ||
     s.indexOf("*") !== -1 ||
     s.indexOf("/") !== -1 ||
+    s.indexOf("<") !== -1 ||
+    s.indexOf(">") !== -1 ||
+    s.indexOf("==") !== -1 ||
+    s.indexOf("!=") !== -1 ||
     s.indexOf("&&") !== -1 ||
     s.indexOf("||") !== -1 ||
     s.startsWith("if ") ||
