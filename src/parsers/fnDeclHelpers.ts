@@ -12,6 +12,11 @@ export interface FnDeclParsed {
   body: string;
 }
 
+export interface FnExprParsed {
+  params: ParamDecl[];
+  body: string;
+}
+
 function skipSpaces(s: string, i: number): number {
   let p = i;
   while (p < s.length && s[p] === " ") p++;
@@ -88,5 +93,49 @@ export function parseFnDeclStatement(
   return {
     ok: true,
     value: { name, params: paramsRes.value, body },
+  };
+}
+
+export function parseFnExpressionAt(
+  s: string,
+  pos: number
+): Result<FnExprParsed, string> | undefined {
+  const t = s.slice(pos).trim();
+  if (!t.startsWith("fn ")) return undefined;
+
+  let i = skipSpaces(t, 2);
+
+  // Skip function name if present (it's optional for expressions, but we require parens next)
+  const firstChar = t[i];
+  const firstCode = firstChar ? firstChar.charCodeAt(0) : 0;
+  const isIdent =
+    (firstCode >= 65 && firstCode <= 90) ||
+    (firstCode >= 97 && firstCode <= 122) ||
+    firstCode === 95;
+
+  if (isIdent) {
+    i = scanIdentEnd(t, i);
+  }
+
+  i = skipSpaces(t, i);
+  if (i >= t.length || t[i] !== "(")
+    return { ok: false, error: "invalid function expression" };
+
+  const closeParen = findMatchingParenIndex(t, i);
+  if (closeParen === -1)
+    return { ok: false, error: "invalid function expression" };
+
+  const paramsText = t.slice(i + 1, closeParen).trim();
+  const arrowIdx = t.indexOf("=>", closeParen + 1);
+  if (arrowIdx === -1)
+    return { ok: false, error: "invalid function expression" };
+
+  const body = t.slice(arrowIdx + 2).trim();
+  const paramsRes = parseFunctionParams(paramsText);
+  if (!paramsRes.ok) return paramsRes;
+
+  return {
+    ok: true,
+    value: { params: paramsRes.value, body },
   };
 }

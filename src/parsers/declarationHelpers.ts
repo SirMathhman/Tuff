@@ -1,20 +1,18 @@
 import type { Result } from "../helpers/result";
+import type { Binding } from "../helpers/types";
 import {
   parseLeadingNumber,
   deriveAnnotationSuffixForNoInit,
   substituteAllIdents,
   isIdentifierName,
 } from "./interpretHelpers";
-import { validateIfIdentifierConditions, lookupBinding } from "../control/ifValidators";
+import {
+  validateIfIdentifierConditions,
+  lookupBinding,
+} from "../control/ifValidators";
 import { finalizeInitializedDeclaration } from "../helpers/declarations";
 import { interpret } from "../core/interpret";
-
-interface Binding {
-  value: number;
-  suffix?: string;
-  assigned?: boolean;
-  mutable?: boolean;
-}
+import { parseFnExpressionAt } from "./fnDeclHelpers";
 
 export function parseBracedInitializer(
   t: string,
@@ -107,6 +105,25 @@ export function resolveInitializer(
 
   const bool = tryResolveBoolLiteral(t);
   if (bool) return { ok: true, value: bool };
+
+  // function expression initializer (e.g., fn name() => body or fn () => body)
+  if (t.startsWith("fn ")) {
+    const fnRes = parseFnExpressionAt(t, 0);
+    if (fnRes && fnRes.ok) {
+      const fnExpr = fnRes.value;
+      const binding: Binding = {
+        value: 0,
+        assigned: true,
+        fn: {
+          params: fnExpr.params,
+          body: fnExpr.body,
+          closure: env,
+        },
+      };
+      return { ok: true, value: binding };
+    }
+    if (fnRes && !fnRes.ok) return fnRes;
+  }
 
   // identifier initializer
   if (isIdentifierName(t)) {

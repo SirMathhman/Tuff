@@ -1,5 +1,8 @@
 import type { Result, Err } from "../helpers/result";
-import { findMatchingParenIndex, isIdentifierOnly } from "../parsers/interpretHelpers";
+import {
+  findMatchingParenIndex,
+  isIdentifierOnly,
+} from "../parsers/interpretHelpers";
 
 interface Binding {
   value: number;

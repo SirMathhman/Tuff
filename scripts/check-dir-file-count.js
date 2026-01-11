@@ -4,7 +4,13 @@ const fs = require("fs");
 const path = require("path");
 
 const MAX_FILES_PER_DIR = 10;
-const EXCLUDE_DIRS = new Set(["node_modules", ".git", "dist", "build", ".husky"]);
+const EXCLUDE_DIRS = new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  ".husky",
+]);
 
 function countFilesInDir(dirPath) {
   try {

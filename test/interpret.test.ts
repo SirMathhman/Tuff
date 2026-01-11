@@ -520,3 +520,10 @@ it("functions: tail-recursive factorial (accumulator)", () => {
     )
   ).toEqual({ ok: true, value: 120 });
 });
+
+it("functions: function expression assignment", () => {
+  expect(interpret("let x = fn get() => 100; x()")).toEqual({
+    ok: true,
+    value: 100,
+  });
+});

@@ -1,7 +1,11 @@
 import type { Result, Err } from "../helpers/result";
 import { splitStatements, findTopLevelChar } from "../parsers/interpretHelpers";
 
-import { handleAddSubChain, handleSingle, setInterpreterFns } from "../arith/arith";
+import {
+  handleAddSubChain,
+  handleSingle,
+  setInterpreterFns,
+} from "../arith/arith";
 import {
   substituteAllIdents,
   substituteTopLevelIdents,
@@ -13,7 +17,10 @@ import { lookupBinding, findBindingEnv } from "../control/ifValidators";
 import { findTopLevelElseInString } from "../control/ifHelpers";
 import { handleStatementElseIfChainGeneric } from "../control/ifRunner";
 import { needsArithmetic } from "../helpers/exprNeeds";
-import { parseDeclaration, resolveInitializer } from "../parsers/declarationHelpers";
+import {
+  parseDeclaration,
+  resolveInitializer,
+} from "../parsers/declarationHelpers";
 
 import {
   applyCompoundAssignment,

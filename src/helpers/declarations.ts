@@ -1,4 +1,5 @@
 import type { Result } from "./result";
+import type { Binding } from "./types";
 import {
   parseLeadingNumber,
   validateSizedInteger,
@@ -11,13 +12,6 @@ import {
   substituteAllIdents,
 } from "../parsers/interpretHelpers";
 import { interpret } from "../core/interpret";
-
-interface Binding {
-  value: number;
-  suffix?: string;
-  assigned?: boolean;
-  mutable?: boolean;
-}
 
 export function evaluateAnnotationExpression(
   annText: string,
@@ -108,6 +102,7 @@ export function finalizeInitializedDeclaration(
     suffix: finalSuffix,
     assigned: true,
     mutable: isMutable,
+    fn: init.fn,
   });
   return { ok: true, value: undefined };
 }
