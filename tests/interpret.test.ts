@@ -172,6 +172,11 @@ describe("interpret - blocks (expressions)", () => {
   it("throws when using '+=' on an uninitialized annotated variable", () => {
     expect(() => interpret("let x : I32; x += 5; x")).toThrow(Error);
   });
+
+  it("supports while loops with compound-assignment bodies", () => {
+    expect(interpret("let mut x = 0; while (x < 4) x += 1; x")).toBe(4);
+    expect(interpret("let mut y = 0; while (y < 4) { y += 1; } y")).toBe(4);
+  });
 });
 
 describe("interpret - block errors", () => {

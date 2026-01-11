@@ -571,8 +571,16 @@ function isWhitespace(ch: string | undefined): boolean {
   return ch !== undefined && " \t\n\r".includes(ch);
 }
 
+function startsWithKeyword(s: string, kw: string): boolean {
+  return s.indexOf(kw + " ") === 0 || s.indexOf(kw + "(") === 0;
+}
+
 function startsWithIf(s: string): boolean {
-  return s.indexOf("if ") === 0 || s.indexOf("if(") === 0;
+  return startsWithKeyword(s, "if");
+}
+
+function startsWithWhile(s: string): boolean {
+  return startsWithKeyword(s, "while");
 }
 
 function ensureExists(idx: number, msg: string): void {
@@ -688,19 +696,30 @@ function ensureIdentifierExists(name: string, env: Env) {
   if (!env.has(name)) throw new Error("Unknown identifier");
 }
 
-function computeCompoundResult(op: string, left: number, right: number): number {
+function computeCompoundResult(
+  op: string,
+  left: number,
+  right: number
+): number {
   switch (op) {
-    case "+": return left + right;
-    case "-": return left - right;
-    case "*": return left * right;
+    case "+":
+      return left + right;
+    case "-":
+      return left - right;
+    case "*":
+      return left * right;
     case "/":
       if (right === 0) throw new Error("Division by zero");
       return Math.trunc(left / right);
-    default: throw new Error("Unsupported compound assignment");
+    default:
+      throw new Error("Unsupported compound assignment");
   }
 }
 
-function tryHandleCompoundAssignment(stmt: string, env: Env): number | undefined {
+function tryHandleCompoundAssignment(
+  stmt: string,
+  env: Env
+): number | undefined {
   const idRes = parseIdentifierAt(stmt, 0);
   if (!idRes) return undefined;
   let rest = sliceTrim(stmt, idRes.next);
@@ -714,7 +733,8 @@ function tryHandleCompoundAssignment(stmt: string, env: Env): number | undefined
   ensureIdentifierExists(idRes.name, env);
 
   const cur = env.get(idRes.name)!;
-  if (Number.isNaN(cur.value)) throw new Error("Cannot compound-assign uninitialized variable");
+  if (Number.isNaN(cur.value))
+    throw new Error("Cannot compound-assign uninitialized variable");
   if (!cur.mutable) throw new Error("Cannot assign to immutable variable");
 
   const rhsType = inferTypeFromExpr(rest, env);
@@ -793,25 +813,41 @@ interface IfResult {
   last: number;
 }
 
+interface AttachResult {
+  part: string;
+  consumed: number;
+}
+
+function attachNextIfEmptyAt(
+  part: string,
+  idx: number,
+  stmts: string[],
+  forbidElse: boolean
+): AttachResult {
+  let consumed = 0;
+  if (part === "" && idx + 1 < stmts.length) {
+    const next = stmts[idx + 1].trim();
+    if (!(forbidElse && next.startsWith("else"))) {
+      consumed = 1;
+      part = stmts[idx + 1];
+    }
+  }
+  return { part, consumed };
+}
+
 function handleIfAt(idx: number, stmts: string[], env: Env): IfResult {
   const stmt = stmts[idx];
-  const paren = stmt.indexOf("(");
-  if (paren === -1) throw new Error("Invalid if statement");
-  const close = findMatchingParen(stmt, paren);
-  if (close < 0) throw new Error("Unterminated if condition");
-  const condStr = stmt.slice(paren + 1, close);
+  const { content: condStr, close } = extractParenContent(stmt, "if");
   let thenPart = stmt.slice(close + 1).trim();
 
   let consumed = 0;
   // if thenPart is empty, maybe the next top-level stmt is the then-part
-  if (
-    thenPart === "" &&
-    idx + 1 < stmts.length &&
-    !stmts[idx + 1].trim().startsWith("else")
-  ) {
-    consumed = 1;
-    thenPart = stmts[idx + 1];
-  }
+  ({ part: thenPart, consumed } = attachNextIfEmptyAt(
+    thenPart,
+    idx,
+    stmts,
+    true
+  ));
 
   // check for else in the following stmt (either same stmt or next)
   let elsePart: string | undefined;
@@ -832,6 +868,47 @@ function handleIfAt(idx: number, stmts: string[], env: Env): IfResult {
   const part = condVal !== 0 ? thenPart : elsePart;
   if (part !== undefined && part !== "") lastLocal = evalBlock(part, env);
   return { consumed, last: lastLocal };
+}
+
+interface ControlFlowResult {
+  handled: boolean;
+  last: number;
+  consumed: number;
+}
+
+function extractParenContent(stmt: string, kind: string) {
+  const paren = stmt.indexOf("(");
+  if (paren === -1) throw new Error(`Invalid ${kind} statement`);
+  const close = findMatchingParen(stmt, paren);
+  if (close < 0) throw new Error(`Unterminated ${kind} condition`);
+  const content = stmt.slice(paren + 1, close);
+  return { content, paren, close };
+}
+
+function tryHandleControlFlow(
+  idx: number,
+  stmts: string[],
+  env: Env
+): ControlFlowResult {
+  const stmt = stmts[idx];
+  if (startsWithIf(stmt)) {
+    const res = handleIfAt(idx, stmts, env);
+    return { handled: true, last: res.last, consumed: res.consumed };
+  }
+  if (startsWithWhile(stmt)) {
+    const { content: condStr, close } = extractParenContent(stmt, "while");
+    let body = stmt.slice(close + 1).trim();
+
+    let consumed = 0;
+    ({ part: body, consumed } = attachNextIfEmptyAt(body, idx, stmts, false));
+
+    let lastLocal = NaN;
+    while (interpret(condStr, env) !== 0) {
+      lastLocal = evalBlock(body, env);
+    }
+    return { handled: true, last: lastLocal, consumed };
+  }
+  return { handled: false, last: NaN, consumed: 0 };
 }
 
 function evalBlock(s: string, envIn?: Env): number {
@@ -865,10 +942,10 @@ function evalBlock(s: string, envIn?: Env): number {
   for (let idx = 0; idx < stmts.length; idx++) {
     const stmt = stmts[idx];
 
-    if (startsWithIf(stmt)) {
-      const res = handleIfAt(idx, stmts, env);
-      last = res.last;
-      idx += res.consumed;
+    const ctrl = tryHandleControlFlow(idx, stmts, env);
+    if (ctrl.handled) {
+      last = ctrl.last;
+      idx += ctrl.consumed;
       continue;
     }
 
