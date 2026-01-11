@@ -21,6 +21,7 @@ import {
   validateIfIdentifierConditions,
 } from "./ifValidators";
 import { findTopLevelElseInString } from "./ifHelpers";
+import { needsArithmetic } from "./exprNeeds";
 
 import {
   applyCompoundAssignment,
@@ -36,6 +37,10 @@ interface Binding {
   // track whether this binding has been assigned/initialized; once true, binding is immutable unless 'mutable' is set
   assigned?: boolean;
   mutable?: boolean;
+}
+
+interface EnvWithParent {
+  __parent?: Map<string, Binding>;
 }
 
 interface ScanIdentResult {
@@ -467,6 +472,10 @@ function evaluateBlock(
 ): Result<number, string> {
   const stmts = splitStatements(inner);
   const env = localEnv || new Map<string, Binding>();
+  // attach parent pointer so nested blocks can traverse outer environments
+  (env as unknown as EnvWithParent).__parent = parentEnv;
+  // debug trace
+
   for (let i = 0; i < stmts.length; i++) {
     const stmt = stmts[i];
     if (stmt.length === 0) continue;
@@ -563,23 +572,6 @@ export function interpret(
   if (needsArithmetic(s)) return handleAddSubChain(s, parentEnv);
 
   return handleSingle(s);
-}
-
-function needsArithmetic(s: string): boolean {
-  return (
-    s.indexOf("+") !== -1 ||
-    s.indexOf("-") !== -1 ||
-    s.indexOf("*") !== -1 ||
-    s.indexOf("/") !== -1 ||
-    s.indexOf("<") !== -1 ||
-    s.indexOf(">") !== -1 ||
-    s.indexOf("==") !== -1 ||
-    s.indexOf("!=") !== -1 ||
-    s.indexOf("&&") !== -1 ||
-    s.indexOf("||") !== -1 ||
-    s.startsWith("if ") ||
-    s.startsWith("if(")
-  );
 }
 
 setInterpreterFns(interpret, evaluateBlock);

@@ -1,4 +1,5 @@
 import type { Err, Result } from "./result";
+import { lookupBinding } from "./ifValidators";
 
 export interface ParsedNumber {
   value: number;
@@ -452,9 +453,14 @@ function substituteIdentsGeneric(
   function lookupAndFormatGeneric(name: string): Result<string, string> {
     if (!isIdentifierName(name) || reserved.has(name))
       return { ok: true, value: name };
-    const b = envLocal.get(name) ?? parentEnvLocal?.get(name);
-    if (!b) return { ok: false, error: `unknown identifier ${name}` };
-    return { ok: true, value: String(b.value) + (b.suffix ? b.suffix : "") };
+    // use lookupBinding to traverse parent chains if necessary
+    // import is at top of file
+    const b = lookupBinding(name, envLocal, parentEnvLocal);
+    if (!b.ok) return { ok: false, error: b.error };
+    return {
+      ok: true,
+      value: String(b.value.value) + (b.value.suffix ? b.value.suffix : ""),
+    };
   }
 
   while (i < src.length) {

@@ -181,6 +181,11 @@ describe("interpret (suffix handling - braced blocks) - grouping and top-level",
       ok: true,
       value: 3,
     });
+
+    // nested braced blocks should capture outer bindings (lexical scoping)
+    expect(
+      interpret("let x = 1; { let y = 2; { let z = 3; x + y + z } }")
+    ).toEqual({ ok: true, value: 6 });
   });
 
   it("top-level block statements", () => {

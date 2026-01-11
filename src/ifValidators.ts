@@ -9,13 +9,24 @@ interface Binding {
   mutable?: boolean;
 }
 
+interface EnvWithParent {
+  __parent?: Map<string, Binding>;
+}
+
 export function lookupBinding(
   name: string,
   env: Map<string, Binding>,
   fallbackEnv?: Map<string, Binding>
 ): Result<Binding, string> {
-  const binding = env.get(name);
-  if (binding) return { ok: true, value: binding };
+  // Traverse the env and its parent chain (if attached) first
+  let cur: Map<string, Binding> | undefined = env;
+  while (cur) {
+    const binding = cur.get(name);
+    if (binding) return { ok: true, value: binding };
+    const parent = (cur as unknown as EnvWithParent).__parent;
+    cur = parent;
+  }
+  // If provided, also search the fallback env chain
   if (fallbackEnv) return lookupBinding(name, fallbackEnv);
   return { ok: false, error: `unknown identifier ${name}` };
 }
@@ -25,8 +36,13 @@ export function findBindingEnv(
   env: Map<string, Binding>,
   fallbackEnv?: Map<string, Binding>
 ): Map<string, Binding> | undefined {
-  if (env.has(name)) return env;
-  if (fallbackEnv && fallbackEnv.has(name)) return fallbackEnv;
+  let cur: Map<string, Binding> | undefined = env;
+  while (cur) {
+    if (cur.has(name)) return cur;
+    const parent = (cur as unknown as EnvWithParent).__parent;
+    cur = parent;
+  }
+  if (fallbackEnv) return findBindingEnv(name, fallbackEnv);
   return undefined;
 }
 
