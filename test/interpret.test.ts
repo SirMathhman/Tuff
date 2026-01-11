@@ -202,8 +202,6 @@ describe("interpret (suffix handling - braced blocks) - grouping and top-level",
       value: 100,
     });
 
-
-
     // assignment within nested block should affect outer binding
     expect(interpret("let x : I32; { x = 100; } x")).toEqual({
       ok: true,
@@ -233,6 +231,15 @@ it("assignments and mutability", () => {
 
   // mutable binding with initializer allows reassignment
   expect(interpret("let mut x = 0; x = 1; x")).toEqual({ ok: true, value: 1 });
+
+  // compound assignment (+=) on mutable binding
+  expect(interpret("let mut x = 0; x += 1; x")).toEqual({ ok: true, value: 1 });
+
+  // compound assignment (+=) on non-mutable binding errors
+  expect(interpret("let x = 0; x += 1; x")).toEqual({
+    ok: false,
+    error: "assignment to immutable binding",
+  });
 
   // initialized non-mutable binding should be immutable (assignment errors)
   expect(interpret("let x = 0; x = 1; x")).toEqual({

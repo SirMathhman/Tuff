@@ -24,6 +24,8 @@ import {
   validateIfIdentifierConditions,
 } from "./ifValidators";
 
+import { applyCompoundAssignment, applyPlainAssignment } from "./assignHelpers";
+
 interface Binding {
   value: number;
   suffix?: string;
@@ -465,7 +467,18 @@ function handleAssignmentIfAny(
 ): Result<number, string> | undefined {
   const eqPos = findTopLevelChar(stmt, 0, "=");
   if (eqPos === -1) return undefined;
-  const lhs = stmt.slice(0, eqPos).trim();
+
+  // detect compound assignment operator (e.g., '+=' , '-=', '*=', '/=')
+  let opChar: string | undefined;
+  let lhs = stmt.slice(0, eqPos).trim();
+  if (eqPos > 0) {
+    const maybeOp = stmt[eqPos - 1];
+    if (maybeOp === "+" || maybeOp === "-" || maybeOp === "*" || maybeOp === "/") {
+      opChar = maybeOp;
+      lhs = stmt.slice(0, eqPos - 1).trim();
+    }
+  }
+
   if (!isIdentifierOnly(lhs))
     return { ok: false, error: "invalid assignment LHS" };
   const name = lhs.split(" ")[0];
@@ -479,28 +492,14 @@ function handleAssignmentIfAny(
   if (existing.assigned && !existing.mutable)
     return { ok: false, error: "assignment to immutable binding" };
 
-  // validate against existing suffix if present
-  if (existing.suffix) {
-    if (existing.suffix === "Bool") {
-      if (!(init.value.value === 0 || init.value.value === 1))
-        return {
-          ok: false,
-          error: "declaration initializer does not match annotation",
-        };
-    } else {
-      const err = validateSizedInteger(
-        String(init.value.value),
-        existing.suffix
-      );
-      if (err) return err;
-    }
+  // delegate to helpers for clarity and to keep complexity low
+  if (opChar) {
+    const res = applyCompoundAssignment(existing as any, { value: init.value.value, suffix: init.value.suffix } as any, opChar);
+    return res;
   }
-  // propagate suffix if existing has none
-  if (!existing.suffix && init.value.suffix)
-    existing.suffix = init.value.suffix;
-  existing.value = init.value.value;
-  existing.assigned = true;
-  return { ok: true, value: existing.value };
+
+  const res = applyPlainAssignment(existing as any, { value: init.value.value, suffix: init.value.suffix } as any);
+  return res;
 }
 
 export function interpret(
