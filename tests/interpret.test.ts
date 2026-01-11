@@ -177,6 +177,22 @@ describe("interpret - blocks (expressions)", () => {
     expect(interpret("let mut x = 0; while (x < 4) x += 1; x")).toBe(4);
     expect(interpret("let mut y = 0; while (y < 4) { y += 1; } y")).toBe(4);
   });
+
+  it("supports for-loops with range header and inline body", () => {
+    expect(
+      interpret("let mut sum = 0; for (let mut i in 0..10) sum += i; sum")
+    ).toBe(45);
+    expect(interpret("let mut s = 0; for (let i in 0..5) { s += i; } s")).toBe(
+      10
+    );
+  });
+
+  it("does not leak for-loop variable to outer scope", () => {
+    expect(() => interpret("for (let i in 0..3) {} ; i")).toThrow(Error);
+
+    // if an outer binding exists it should be preserved
+    expect(interpret("let mut i = 100; for (let i in 0..2) {} ; i")).toBe(100);
+  });
 });
 
 describe("interpret - block errors", () => {

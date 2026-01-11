@@ -11,6 +11,10 @@ export interface EnvItem {
 }
 export type Env = Map<string, EnvItem>;
 
+// track transient shadowed names per-env so constructs like for-loops can
+// prevent loop-scoped names from being visible after the loop
+const blockShadow: WeakMap<Env, Set<string>> = new WeakMap();
+
 export function interpret(input: string, env?: Env): number {
   let s = input.trim();
   if (s === "") return NaN;
@@ -70,7 +74,16 @@ function tryParseNumberOrIdentifier(s: string, env?: Env): number | undefined {
       const bool = parseBooleanLiteral(id);
       if (bool !== undefined) return bool;
 
-      if (env && env.has(id)) return env.get(id)!.value;
+      if (env) {
+        const shadow = blockShadow.get(env);
+        if (shadow && shadow.has(id)) throw new Error("Unknown identifier");
+      }
+
+      if (env && env.has(id)) {
+        const item = env.get(id)!;
+        if (item.type === "__deleted__") throw new Error("Unknown identifier");
+        return item.value;
+      }
       throw new Error("Unknown identifier");
     }
     return undefined;
@@ -144,9 +157,11 @@ interface TopLevelComparison {
   idx: number;
 }
 
-function findTopLevelComparison(s: string): TopLevelComparison | undefined {
+function findTopLevel(
+  s: string,
+  predicate: (s: string, i: number, depth: number) => unknown | undefined
+): unknown | undefined {
   let depth = 0;
-  const twoCharOps = ["<=", ">=", "==", "!="];
   for (let i = 0; i < s.length; i++) {
     const ch = s[i];
     if (ch === "(" || ch === "{") {
@@ -158,12 +173,22 @@ function findTopLevelComparison(s: string): TopLevelComparison | undefined {
       continue;
     }
     if (depth !== 0) continue;
-
-    const two = s.slice(i, i + 2);
-    if (twoCharOps.includes(two)) return { op: two, idx: i };
-    if (ch === "<" || ch === ">") return { op: ch, idx: i };
+    const res = predicate(s, i, depth);
+    if (res !== undefined) return res;
   }
   return undefined;
+}
+
+function findTopLevelComparison(s: string): TopLevelComparison | undefined {
+  const twoCharOps = ["<=", ">=", "==", "!="];
+  const res = findTopLevel(s, (str, i) => {
+    const two = str.slice(i, i + 2);
+    if (twoCharOps.includes(two)) return { op: two, idx: i } as TopLevelComparison;
+    const ch = str[i];
+    if (ch === "<" || ch === ">") return { op: ch, idx: i } as TopLevelComparison;
+    return undefined;
+  });
+  return res as TopLevelComparison | undefined;
 }
 
 function tryHandleComparison(s: string, env?: Env): number | undefined {
@@ -583,6 +608,10 @@ function startsWithWhile(s: string): boolean {
   return startsWithKeyword(s, "while");
 }
 
+function startsWithFor(s: string): boolean {
+  return startsWithKeyword(s, "for");
+}
+
 function ensureExists(idx: number, msg: string): void {
   if (idx === -1) throw new Error(msg);
 }
@@ -637,8 +666,7 @@ function tryHandleIfExpression(s: string, env?: Env): number | undefined {
   const ss = s.trim();
   if (!startsWithIf(ss)) return undefined;
   const { cond, thenPart, elsePart } = parseIfParts(ss);
-  if (thenPart === "" || elsePart === "")
-    throw new Error("Invalid if expression branches");
+  ensureNonEmptyPair(thenPart, elsePart, "Invalid if expression branches");
   const condVal = interpret(cond, env);
   if (condVal !== 0) return interpret(thenPart, env);
   return interpret(elsePart, env);
@@ -650,11 +678,9 @@ function handleLetStatement(
 ): number {
   let rest = sliceTrim(stmt, 4);
   // optional `mut` modifier
-  let mutable = false;
-  if (rest.startsWith("mut ")) {
-    mutable = true;
-    rest = sliceTrim(rest, 4);
-  }
+  const mutRes = parseMutPrefix(rest);
+  const mutable = mutRes.mutable;
+  rest = mutRes.rest;
   const nameRes = parseIdentifierAt(rest, 0);
   if (!nameRes) throw new Error("Invalid let declaration");
   const name = nameRes.name;
@@ -853,14 +879,14 @@ function handleIfAt(idx: number, stmts: string[], env: Env): IfResult {
   let elsePart: string | undefined;
   if (thenPart.startsWith("else")) {
     // no then part was present, else is attached directly
-    elsePart = thenPart.slice(4).trim();
+    elsePart = sliceAfterKeyword(thenPart, 4);
     thenPart = "";
   } else if (
     idx + 1 + consumed < stmts.length &&
     stmts[idx + 1 + consumed].trim().startsWith("else")
   ) {
     consumed += 1;
-    elsePart = stmts[idx + consumed].trim().slice(4).trim();
+    elsePart = sliceAfterKeyword(stmts[idx + consumed].trim(), 4);
   }
 
   const condVal = interpret(condStr, env);
@@ -885,6 +911,117 @@ function extractParenContent(stmt: string, kind: string) {
   return { content, paren, close };
 }
 
+function findTopLevelRangeIndex(rest: string): number {
+  const res = findTopLevel(rest, (s, i) => (s[i] === '.' && s[i + 1] === '.') ? i : undefined);
+  return res === undefined ? -1 : (res as number);
+}
+
+function sliceAfterKeyword(s: string, n: number): string {
+  return s.slice(n).trim();
+}
+
+interface ForHeader { name: string; mutable: boolean; left: string; right: string }
+
+function ensureStartsWith(s: string, prefix: string, msg: string) {
+  if (!s.startsWith(prefix)) throw new Error(msg);
+}
+
+function ensureNonEmptyPair(a: string, b: string, msg: string) {
+  if (a === "" || b === "") throw new Error(msg);
+}
+
+function parseForHeader(h: string): ForHeader {
+  let s = h.trim();
+  ensureStartsWith(s, "let ", "Invalid for header");
+  s = sliceAfterKeyword(s, 4);
+  const mutRes = parseMutPrefix(s);
+  const mutable = mutRes.mutable;
+  s = mutRes.rest;
+  const idRes = parseIdentifierAt(s, 0);
+  if (!idRes) throw new Error("Invalid for header");
+  const name = idRes.name;
+  let rest = sliceTrim(s, idRes.next);
+  ensureStartsWith(rest, "in", "Invalid for header");
+  rest = sliceTrim(rest, 2);
+  const dotIdx = findTopLevelRangeIndex(rest);
+  if (dotIdx === -1) throw new Error("Invalid for range");
+  const left = rest.slice(0, dotIdx).trim();
+  const right = rest.slice(dotIdx + 2).trim();
+  ensureNonEmptyPair(left, right, "Invalid for range");
+  return { name, mutable, left, right };
+}
+
+interface MutPrefixResult { mutable: boolean; rest: string }
+
+function parseMutPrefix(s: string): MutPrefixResult {
+  if (s.startsWith("mut ")) return { mutable: true, rest: sliceAfterKeyword(s, 4) } as MutPrefixResult;
+  return { mutable: false, rest: s } as MutPrefixResult;
+}
+
+function resolveBodyAfterClose(stmt: string, close: number, idx: number, stmts: string[], forbidElse: boolean) {
+  let body = stmt.slice(close + 1).trim();
+  let consumed = 0;
+  ({ part: body, consumed } = attachNextIfEmptyAt(body, idx, stmts, forbidElse));
+  return { body, consumed };
+}
+
+function handleWhileAt(
+  idx: number,
+  stmts: string[],
+  env: Env
+): ControlFlowResult {
+  const { content: condStr, close } = extractParenContent(stmts[idx], "while");
+  const stmt = stmts[idx];
+  const { body, consumed } = resolveBodyAfterClose(stmt, close, idx, stmts, false);
+
+  let lastLocal = NaN;
+  while (interpret(condStr, env) !== 0) {
+    lastLocal = evalBlock(body, env);
+  }
+  return { handled: true, last: lastLocal, consumed };
+}
+
+function handleForAt(
+  idx: number,
+  stmts: string[],
+  env: Env
+): ControlFlowResult {
+  const { content: header, close } = extractParenContent(stmts[idx], "for");
+  const { body, consumed } = resolveBodyAfterClose(stmts[idx], close, idx, stmts, false);
+
+  const { name, mutable, left, right } = parseForHeader(header);
+  const startVal = interpret(left, env);
+  const endVal = interpret(right, env);
+  let lastLocal = NaN;
+
+  // preserve any outer binding of the same name; ensure loop variable does not leak
+  const outerHas = env.has(name);
+  const outerItem = outerHas ? env.get(name) : undefined;
+
+  for (let i = startVal; i < endVal; i++) {
+    // create shallow env and declare loop variable
+    const loopEnv = new Map<string, EnvItem>(env);
+    loopEnv.set(name, { value: i, mutable, type: undefined } as EnvItem);
+    lastLocal = evalBlock(body, loopEnv);
+  }
+
+  // ensure loop-declared name is not visible after the loop
+  if (!outerHas) {
+    // ensure not present and mark as deleted so identifier lookup throws
+    while (env.has(name)) env.delete(name);
+    env.set(name, makeDeletedEnvItem());
+  } else {
+    // restore outer binding if it existed
+    env.set(name, outerItem!);
+  }
+
+  return { handled: true, last: lastLocal, consumed };
+}
+
+function makeDeletedEnvItem(): EnvItem {
+  return { value: NaN, mutable: false, type: "__deleted__" } as EnvItem;
+}
+
 function tryHandleControlFlow(
   idx: number,
   stmts: string[],
@@ -895,19 +1032,15 @@ function tryHandleControlFlow(
     const res = handleIfAt(idx, stmts, env);
     return { handled: true, last: res.last, consumed: res.consumed };
   }
-  if (startsWithWhile(stmt)) {
-    const { content: condStr, close } = extractParenContent(stmt, "while");
-    let body = stmt.slice(close + 1).trim();
 
-    let consumed = 0;
-    ({ part: body, consumed } = attachNextIfEmptyAt(body, idx, stmts, false));
-
-    let lastLocal = NaN;
-    while (interpret(condStr, env) !== 0) {
-      lastLocal = evalBlock(body, env);
-    }
-    return { handled: true, last: lastLocal, consumed };
+  const flowHandlers: Array<[ (s: string) => boolean, (i: number, st: string[], e: Env) => ControlFlowResult ]> = [
+    [startsWithWhile, handleWhileAt],
+    [startsWithFor, handleForAt],
+  ];
+  for (const [check, fn] of flowHandlers) {
+    if (check(stmt)) return fn(idx, stmts, env);
   }
+
   return { handled: false, last: NaN, consumed: 0 };
 }
 
@@ -923,6 +1056,8 @@ function evalBlock(s: string, envIn?: Env): number {
   const env = isBraceBlock
     ? new Map<string, EnvItem>(envIn ?? new Map<string, EnvItem>())
     : envIn ?? new Map<string, EnvItem>();
+  // create a shadow set for this evaluation scope
+  blockShadow.set(env, new Set<string>());
   const rawStmts = splitTopLevel(s, ";");
 
   // collect trimmed non-empty statements
