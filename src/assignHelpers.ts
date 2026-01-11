@@ -54,7 +54,10 @@ export function applyPlainAssignment(
   if (existing.suffix) {
     if (existing.suffix === "Bool") {
       if (!(init.value === 0 || init.value === 1))
-        return { ok: false, error: "declaration initializer does not match annotation" };
+        return {
+          ok: false,
+          error: "declaration initializer does not match annotation",
+        };
     } else {
       const err = validateSizedInteger(String(init.value), existing.suffix);
       if (err) return err;

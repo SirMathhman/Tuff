@@ -1,10 +1,5 @@
 import type { Result, Err } from "./result";
-import {
-  parseLeadingNumber,
-  validateSizedInteger,
-  splitStatements,
-  findTopLevelChar,
-} from "./interpretHelpers";
+import { parseLeadingNumber, splitStatements, findTopLevelChar } from "./interpretHelpers";
 
 import { handleAddSubChain, handleSingle, setInterpreterFns } from "./arith";
 import {
@@ -12,10 +7,8 @@ import {
   substituteTopLevelIdents,
   isIdentCharCode,
   isIdentifierOnly,
-  scanExpressionSuffix,
   deriveAnnotationSuffixForNoInit,
-  handleNumericSuffixAnnotation,
-  checkSimpleAnnotation,
+  findMatchingParenIndex,
 } from "./interpretHelpers";
 
 import {
@@ -25,6 +18,8 @@ import {
 } from "./ifValidators";
 
 import { applyCompoundAssignment, applyPlainAssignment } from "./assignHelpers";
+import { handleTopLevelWhileStmt as handleWhileExternal } from "./whileHelpers";
+import { finalizeInitializedDeclaration } from "./declarations";
 
 interface Binding {
   value: number;
@@ -123,63 +118,6 @@ function parseBracedInitializer(
   return { ok: true, value: binding };
 }
 
-function evaluateAnnotationExpression(
-  annText: string,
-  expectedValue: number,
-  env: Map<string, Binding>
-): Result<string | undefined, string> {
-  // substitute identifiers in the annotation expression using current env
-  const subRes = substituteAllIdents(annText, env);
-  if (!subRes.ok) return subRes as Err<string>;
-  const valRes = interpret(subRes.value, env);
-  if (!valRes.ok) return { ok: false, error: valRes.error };
-  if (valRes.value !== expectedValue)
-    return {
-      ok: false,
-      error: "declaration initializer does not match annotation",
-    };
-  const scanRes = scanExpressionSuffix(subRes.value);
-  if (!scanRes.ok) return scanRes as Err<string>;
-  if (scanRes.value) {
-    const rangeErr = validateSizedInteger(String(expectedValue), scanRes.value);
-    if (rangeErr) return rangeErr;
-  }
-  return { ok: true, value: scanRes.value };
-}
-
-function deriveAnnotationSuffixBetween(
-  stmt: string,
-  colonPos: number,
-  eq: number,
-  rhs: string,
-  init: Binding,
-  env: Map<string, Binding>
-): Result<string | undefined, string> {
-  if (colonPos === -1 || colonPos >= eq) return { ok: true, value: undefined };
-  const annText = stmt.slice(colonPos + 1, eq).trim();
-  const parsedAnn = parseLeadingNumber(annText);
-
-  const simpleCheck = checkSimpleAnnotation(annText, parsedAnn, rhs, init);
-  if (simpleCheck !== undefined) return simpleCheck;
-
-  // annotation like '3I32' (numeric prefix + suffix) — handle specially
-  if (parsedAnn && parsedAnn.end < annText.length) {
-    const rest = annText.slice(parsedAnn.end).trim();
-    const numSuffixRes = handleNumericSuffixAnnotation(
-      parsedAnn.value,
-      rest,
-      init.value
-    );
-    if (numSuffixRes.ok) return numSuffixRes;
-    // not a simple numeric+suffix annotation — fallthrough to expression analysis
-  }
-
-  // otherwise treat as an expression and evaluate+scan
-  const exprRes = evaluateAnnotationExpression(annText, init.value, env);
-  if (!exprRes.ok) return exprRes as Err<string>;
-  return exprRes;
-}
-
 function parseDeclaration(
   stmt: string,
   env: Map<string, Binding>
@@ -234,42 +172,6 @@ function parseDeclaration(
     env,
     isMutable
   );
-}
-
-function finalizeInitializedDeclaration(
-  stmt: string,
-  ident: string,
-  p: number,
-  eq: number,
-  rhs: string,
-  init: Binding,
-  env: Map<string, Binding>,
-  isMutable: boolean
-): Result<void, string> {
-  // check annotation (optional) between identifier end and '=': e.g., ': 2U8' or ': U8'
-  const colonPos = findTopLevelChar(stmt, p, ":");
-  const annRes = deriveAnnotationSuffixBetween(
-    stmt,
-    colonPos,
-    eq,
-    rhs,
-    init,
-    env
-  );
-  if (!annRes.ok) return annRes as Err<string>;
-  const annSuffix = annRes.value;
-
-  if (env.has(ident)) return { ok: false, error: "duplicate declaration" };
-
-  const finalSuffix = init.suffix ?? annSuffix;
-  // initialized binding: assigned = true; mutability preserved
-  env.set(ident, {
-    value: init.value,
-    suffix: finalSuffix,
-    assigned: true,
-    mutable: isMutable,
-  });
-  return { ok: true, value: undefined };
 }
 
 interface BracedPrefixResult {
@@ -366,6 +268,29 @@ function stripLeadingBracedPrefixes(
   return { ok: true, value: { stmt: cur } };
 }
 
+function handleLetStatement(
+  stmt: string,
+  envLocal: Map<string, Binding>
+): "handled" | undefined | Result<void, string> {
+  if (!stmt.startsWith("let ")) return undefined;
+  const r = parseDeclaration(stmt, envLocal);
+  if (!r.ok) return r as Err<string>;
+  return "handled";
+}
+
+function handleLetInProcess(
+  stmt: string,
+  envLocal: Map<string, Binding>
+): "handled" | undefined | Result<void, string> {
+  const letHandled = handleLetStatement(stmt, envLocal);
+  if (letHandled) {
+    if (letHandled === "handled") return "handled";
+    if (!(letHandled as any).ok) return letHandled as Err<string>;
+    return undefined; // unreachable but satisfy types
+  }
+  return undefined;
+}
+
 function processStatement(
   origStmt: string,
   envLocal: Map<string, Binding>,
@@ -374,12 +299,8 @@ function processStatement(
 ): Result<number, string> | "handled" | undefined {
   let stmt = origStmt;
 
-  if (stmt.startsWith("let ")) {
-    const r = parseDeclaration(stmt, envLocal);
-    if (!r.ok) return r as Err<string>;
-    return "handled";
-  }
-
+  const letHandled = handleLetInProcess(stmt, envLocal);
+  if (letHandled) return letHandled === "handled" ? "handled" : (letHandled as Err<string>);
   // handle leading braced prefixes and normalize statement
   const prefixRes = stripLeadingBracedPrefixes(stmt, envLocal, isLast);
   if (!prefixRes.ok) return prefixRes;
@@ -388,13 +309,17 @@ function processStatement(
     return { ok: true, value: prefixRes.value.value };
   if (prefixRes.value.stmt) stmt = prefixRes.value.stmt;
 
-  // top-level if
   const tStmt = stmt.trim();
-  const ifHandled = handleTopLevelIfStmt(tStmt, envLocal, isLast);
-  if (ifHandled) return ifHandled;
 
+  const ctrlHandled = handleTopLevelControl(
+    tStmt,
+    envLocal,
+    parentEnvLocal,
+    isLast
+  );
+  if (ctrlHandled) return ctrlHandled;
   // assignment
-  const assignHandled = processAssignmentIfAnyStmt(
+  const assignHandled = handleAssignmentStmt(
     stmt,
     envLocal,
     parentEnvLocal,
@@ -402,6 +327,14 @@ function processStatement(
   );
   if (assignHandled) return assignHandled;
 
+  function handleAssignmentStmt(
+    stmt: string,
+    envLocal: Map<string, Binding>,
+    parentEnvLocal?: Map<string, Binding>,
+    isLast = false
+  ): Result<number, string> | "handled" | undefined {
+    return processAssignmentIfAnyStmt(stmt, envLocal, parentEnvLocal, isLast);
+  }
   // identifier statement
   const identHandled = handleIdentifierStmt(
     stmt,
@@ -428,6 +361,28 @@ function handleTopLevelIfStmt(
   if (!exprRes.ok) return exprRes as Err<string>;
   if (isLast) return exprRes;
   return "handled";
+}
+
+function handleTopLevelControl(
+  tStmt: string,
+  envLocal: Map<string, Binding>,
+  parentEnvLocal?: Map<string, Binding>,
+  isLast = false
+): Result<number, string> | "handled" | undefined {
+  const ifHandled = handleTopLevelIfStmt(tStmt, envLocal, isLast);
+  if (ifHandled) return ifHandled;
+
+  const whileHandled = handleWhileExternal(tStmt, envLocal, parentEnvLocal, {
+    interpretFn: interpret,
+    substituteAllIdentsFn: substituteAllIdents,
+    lookupBindingFn: lookupBinding,
+    isIdentifierOnlyFn: isIdentifierOnly,
+    processStatementFn: processStatement,
+    evaluateBlockFn: evaluateBlock,
+    findMatchingParenIndexFn: findMatchingParenIndex,
+  });
+  if (whileHandled) return whileHandled;
+  return undefined;
 }
 
 function handleExpressionOrSubstitution(
@@ -473,7 +428,12 @@ function handleAssignmentIfAny(
   let lhs = stmt.slice(0, eqPos).trim();
   if (eqPos > 0) {
     const maybeOp = stmt[eqPos - 1];
-    if (maybeOp === "+" || maybeOp === "-" || maybeOp === "*" || maybeOp === "/") {
+    if (
+      maybeOp === "+" ||
+      maybeOp === "-" ||
+      maybeOp === "*" ||
+      maybeOp === "/"
+    ) {
       opChar = maybeOp;
       lhs = stmt.slice(0, eqPos - 1).trim();
     }
@@ -494,11 +454,18 @@ function handleAssignmentIfAny(
 
   // delegate to helpers for clarity and to keep complexity low
   if (opChar) {
-    const res = applyCompoundAssignment(existing as any, { value: init.value.value, suffix: init.value.suffix } as any, opChar);
+    const res = applyCompoundAssignment(
+      existing as any,
+      { value: init.value.value, suffix: init.value.suffix } as any,
+      opChar
+    );
     return res;
   }
 
-  const res = applyPlainAssignment(existing as any, { value: init.value.value, suffix: init.value.suffix } as any);
+  const res = applyPlainAssignment(
+    existing as any,
+    { value: init.value.value, suffix: init.value.suffix } as any
+  );
   return res;
 }
 

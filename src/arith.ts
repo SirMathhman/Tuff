@@ -182,13 +182,17 @@ function findOperandEnd(s: string, start: number): number {
     const ch = s[j];
     if (ch === "&" && j + 1 < n && s[j + 1] === "&") break;
     if (ch === "|" && j + 1 < n && s[j + 1] === "|") break;
-    if (["+", "-", "*", "/"].includes(ch)) break;
+    if (["+", "-", "*", "/", "<", ">"].includes(ch)) break;
+    // break on '==' or '!=' sequences
+    if (ch === "=" && j + 1 < n && s[j + 1] === "=") break;
+    if (ch === "!" && j + 1 < n && s[j + 1] === "=") break;
     j++;
   }
   return j;
 }
 
 import { findMatchingParenIndex, findTopLevelChar } from "./interpretHelpers";
+import { parseComparisonOp, applyComparisonOp } from "./operators";
 
 function isStandaloneElseAt(s: string, idx: number): boolean {
   const n = s.length;
@@ -350,6 +354,12 @@ function parseNextOperator(
       return { ok: true, value: { op: "||", nextPos: pos + 2 } };
     return { ok: false, error: "invalid operator" };
   }
+  // comparisons: <, >, <=, >=, ==, !=
+  // comparison operator parsing delegated to operators.ts
+  // parseComparisonOp returns undefined if not a comparison
+  const cmp = parseComparisonOp(s, pos);
+  if (cmp) return { ok: true, value: cmp };
+
   if (!isOperator(ch)) return { ok: false, error: "invalid operator" };
   return { ok: true, value: { op: ch, nextPos: pos + 1 } };
 }
@@ -434,6 +444,15 @@ function foldAddSubToBoolSegments(
         const err = validateSizedInteger(String(cur), commonSuffix);
         if (err) return err;
       }
+    } else if (
+      op2 === "<" ||
+      op2 === ">" ||
+      op2 === "<=" ||
+      op2 === ">=" ||
+      op2 === "==" ||
+      op2 === "!="
+    ) {
+      cur = applyComparisonOp(op2, cur, next);
     } else if (op2 === "&&" || op2 === "||") {
       foldedOperands.push(cur);
       foldedOps.push(op2);
