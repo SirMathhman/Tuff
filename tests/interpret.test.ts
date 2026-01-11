@@ -57,4 +57,8 @@ describe("interpret", () => {
   it("throws when mixed widths are added", () => {
     expect(() => interpret("1U8 + 2U16 + 3U8")).toThrow(Error);
   });
+
+  it("handles mixed + and - operations", () => {
+    expect(interpret("10U8 - 5U8 + 3U8")).toBe(8);
+  });
 });

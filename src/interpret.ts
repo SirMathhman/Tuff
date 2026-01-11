@@ -9,7 +9,7 @@ export function interpret(input: string): number {
   if (s === "") return NaN;
 
   const additionResult = tryHandleAddition(s);
-  if (additionResult !== undefined) return additionResult; 
+  if (additionResult !== undefined) return additionResult;
 
   const { numStr, rest } = splitNumberAndSuffix(s);
   if (numStr === "") return NaN;
@@ -82,25 +82,111 @@ export function interpret(input: string): number {
 }
 
 function tryHandleAddition(s: string): number | undefined {
-  const plusParts = s
-    .split("+")
-    .map((p) => p.trim())
-    .filter((p) => p !== "");
-  if (plusParts.length <= 1) return undefined;
+  const tokens = tokenizeAddSub(s);
+  if (!tokens) return undefined;
+  ensureConsistentSuffix(tokens);
+  return evaluateTokens(tokens);
+}
 
+function isDigit(ch: string): boolean {
+  const c = ch.charCodeAt(0);
+  return c >= 48 && c <= 57;
+}
+
+function isPlusMinus(ch: string): boolean {
+  return ch === "+" || ch === "-";
+}
+
+function isSuffixChar(ch: string): boolean {
+  return ch === "U" || ch === "u" || ch === "I" || ch === "i";
+}
+
+function tokenizeAddSub(s: string): string[] | undefined {
+  let i = 0;
+  const n = s.length;
+  const tokens: string[] = [];
+  let expectNumber = true;
+
+  function skipSpaces() {
+    while (i < n && s[i] === " ") i++;
+  }
+
+  interface ParseResult {
+    token: string;
+    next: number;
+  }
+
+  function atCheck(pos: number, pred: (ch: string) => boolean): boolean {
+    return pos < n && pred(s[pos]);
+  }
+
+  function parseNumberToken(pos: number): ParseResult | undefined {
+    let j = pos;
+    const start = j;
+    if (atCheck(j, isPlusMinus)) j++;
+    const digitsStart = j;
+    j = consumeDigits(j);
+    if (j === digitsStart) return undefined;
+    if (atCheck(j, isSuffixChar)) {
+      j++;
+      const sufStart = j;
+      j = consumeDigits(j);
+      if (j === sufStart) return undefined;
+    }
+    return { token: s.slice(start, j).trim(), next: j };
+  }
+
+  function consumeDigits(pos: number): number {
+    let k = pos;
+    while (atCheck(k, isDigit)) k++;
+    return k;
+  }
+
+  skipSpaces();
+  while (i < n) {
+    skipSpaces();
+    if (expectNumber) {
+      const res = parseNumberToken(i);
+      if (!res) return undefined;
+      tokens.push(res.token);
+      i = res.next;
+      expectNumber = false;
+    } else {
+      if (s[i] !== "+" && s[i] !== "-") return undefined;
+      tokens.push(s[i]);
+      i++;
+      expectNumber = true;
+    }
+    skipSpaces();
+  }
+  if (expectNumber) return undefined; // dangling operator
+  if (tokens.length < 3) return undefined;
+  return tokens;
+}
+
+function ensureConsistentSuffix(tokens: string[]): void {
   let common: WidthSuffix | undefined;
-  for (const part of plusParts) {
+  for (let idx = 0; idx < tokens.length; idx += 2) {
+    const part = tokens[idx];
     const { rest } = splitNumberAndSuffix(part);
     const suffix = parseWidthSuffix(rest);
-    if (!suffix) {
-      throw new Error("Missing or mixed width in addition");
-    }
+    if (!suffix) throw new Error("Missing or mixed width in addition");
     if (!common) common = suffix;
-    else if (suffix.bits !== common.bits || suffix.signed !== common.signed) {
+    else if (suffix.bits !== common.bits || suffix.signed !== common.signed)
       throw new Error("Mixed widths in addition");
-    }
   }
-  return plusParts.reduce((acc, part) => acc + interpret(part), 0);
+}
+
+function evaluateTokens(tokens: string[]): number {
+  let result = interpret(tokens[0]);
+  for (let idx = 1; idx < tokens.length; idx += 2) {
+    const op = tokens[idx];
+    const operand = tokens[idx + 1];
+    const val = interpret(operand);
+    if (op === "+") result = result + val;
+    else result = result - val;
+  }
+  return result;
 }
 
 interface NumberAndSuffix {
@@ -116,7 +202,7 @@ interface WidthSuffix {
 function splitNumberAndSuffix(s: string): NumberAndSuffix {
   let i = 0;
   const n = s.length;
-  if (s[i] === "+" || s[i] === "-") i++;
+  if (isPlusMinus(s[i])) i++;
   while (i < n) {
     const c = s.charCodeAt(i);
     if (c < 48 || c > 57) break;
