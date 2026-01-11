@@ -208,7 +208,11 @@ function handleStructStatement(
   // evaluate the remainder as a statement immediately so combined-declaration forms work.
   const remRes = processStatement(rest, envLocal, undefined, false);
   if (remRes === "handled") return "handled";
-  if (remRes && typeof remRes !== "string" && !(remRes as Result<number, string>).ok)
+  if (
+    remRes &&
+    typeof remRes !== "string" &&
+    !(remRes as Result<number, string>).ok
+  )
     return remRes as Err<string>;
   // if it yielded a value, swallow it and return handled (we don't want the outer caller to treat
   // the original struct statement as yielding that value)

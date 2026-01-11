@@ -168,9 +168,16 @@ function handleStructAnnotation(
   if (!isIdentifierName(annText)) return undefined;
   const sres = lookupStruct(annText);
   if (!sres.ok) return undefined;
-  if (!init.struct) return { ok: false, error: "declaration initializer does not match annotation" };
+  if (!init.struct)
+    return {
+      ok: false,
+      error: "declaration initializer does not match annotation",
+    };
   if (init.struct.typeName !== annText)
-    return { ok: false, error: "declaration initializer does not match annotation" };
+    return {
+      ok: false,
+      error: "declaration initializer does not match annotation",
+    };
   return { ok: true, value: undefined };
 }
 

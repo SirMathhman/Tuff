@@ -463,8 +463,6 @@ export function checkSimpleAnnotation(
   return undefined;
 }
 
-
-
 function substituteIdentsGeneric(
   src: string,
   envLocal: Map<string, BindingLike>,
@@ -494,7 +492,13 @@ function substituteIdentsGeneric(
     if (!onlyTopLevel || depth === 0) {
       const scanned = scanIdentAt(src, i);
       if (scanned) {
-        const processed = handleScannedIdent(scanned, src, reserved, envLocal, parentEnvLocal);
+        const processed = handleScannedIdent(
+          scanned,
+          src,
+          reserved,
+          envLocal,
+          parentEnvLocal
+        );
         if (!processed.ok) return processed as Result<string, string>;
         out += processed.value.out;
         i = processed.value.nextPos;
@@ -508,7 +512,6 @@ function substituteIdentsGeneric(
 
   return { ok: true, value: out };
 }
-
 
 export function substituteAllIdents(
   src: string,
