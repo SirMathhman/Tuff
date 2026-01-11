@@ -285,6 +285,92 @@ function handleIdentifierStmt(
   return true;
 }
 
+function processAssignmentIfAnyStmt(
+  s: string,
+  envLocal: Map<string, Binding>,
+  parentEnvLocal?: Map<string, Binding>,
+  isLast = false
+): Result<number, string> | "handled" | undefined {
+  const assignRes = handleAssignmentIfAny(s, envLocal, parentEnvLocal);
+  if (assignRes) {
+    if (!assignRes.ok) return assignRes;
+    if (isLast) return assignRes;
+    return "handled";
+  }
+  return undefined;
+}
+
+interface StripPrefixResult {
+  stmt?: string;
+  handled?: true;
+  value?: number;
+}
+
+function stripLeadingBracedPrefixes(
+  stmt: string,
+  envLocal: Map<string, Binding>,
+  isLast = false
+): Result<StripPrefixResult, string> {
+  let cur = stmt;
+  while (cur.trim().startsWith("{")) {
+    const brRes = handleBracedPrefix(cur, envLocal);
+    if (!brRes.ok) return brRes;
+    const { rest, value } = brRes.value;
+    if (!rest) {
+      if (isLast) {
+        if (value !== undefined) return { ok: true, value: { value } };
+        return { ok: true, value: { handled: true } };
+      }
+      return { ok: true, value: { handled: true } };
+    }
+    cur = rest;
+  }
+  return { ok: true, value: { stmt: cur } };
+}
+
+function substituteTopLevelIdents(
+  src: string,
+  envLocal: Map<string, Binding>,
+  parentEnvLocal?: Map<string, Binding>
+): Result<string, string> {
+  let out = "";
+  let i = 0;
+  let depth = 0;
+  while (i < src.length) {
+    const ch = src[i];
+    if (ch === "(" || ch === "{" || ch === "[") {
+      depth++;
+      out += ch;
+      i++;
+      continue;
+    }
+    if (ch === ")" || ch === "}" || ch === "]") {
+      depth--;
+      out += ch;
+      i++;
+      continue;
+    }
+
+    if (depth === 0) {
+      const scan = scanIdentifierFrom(src, i);
+      if (scan) {
+        const name = scan.ident;
+        const b = lookupBinding(name, envLocal, parentEnvLocal);
+        if (!b.ok) return { ok: false, error: b.error };
+        const binding = b.value;
+        out += String(binding.value) + (binding.suffix ? binding.suffix : "");
+        i = scan.nextPos;
+        continue;
+      }
+    }
+
+    out += ch;
+    i++;
+  }
+
+  return { ok: true, value: out };
+}
+
 function processStatement(
   origStmt: string,
   envLocal: Map<string, Binding>,
@@ -299,27 +385,22 @@ function processStatement(
     return "handled";
   }
 
-  // handle leading braced blocks (may have trailing tokens)
-  while (stmt.trim().startsWith("{")) {
-    const brRes = handleBracedPrefix(stmt, envLocal);
-    if (!brRes.ok) return brRes;
-    const { rest, value } = brRes.value;
-    if (!rest) {
-      if (isLast) {
-        if (value !== undefined) return { ok: true, value };
-        return undefined;
-      }
-      return "handled";
-    }
-    stmt = rest;
-  }
+  const prefixRes = stripLeadingBracedPrefixes(stmt, envLocal, isLast);
+  if (!prefixRes.ok) return prefixRes;
+  if (prefixRes.value.handled) return "handled";
+  if (prefixRes.value.value !== undefined && isLast)
+    return { ok: true, value: prefixRes.value.value };
+  if (prefixRes.value.stmt) stmt = prefixRes.value.stmt;
 
-  // assignment handled by helper (after stripping any leading braced prefixes)
-  const assignRes = handleAssignmentIfAny(stmt, envLocal, parentEnvLocal);
-  if (assignRes) {
-    if (!assignRes.ok) return assignRes;
-    if (isLast) return assignRes;
-    return "handled";
+  const assignHandled = processAssignmentIfAnyStmt(
+    stmt,
+    envLocal,
+    parentEnvLocal,
+    isLast
+  );
+  if (assignHandled) {
+    if (assignHandled === "handled") return "handled";
+    return assignHandled;
   }
 
   const identHandled = handleIdentifierStmt(
@@ -333,7 +414,9 @@ function processStatement(
     return identHandled;
   }
 
-  const exprRes = interpret(stmt);
+  const subRes = substituteTopLevelIdents(stmt, envLocal, parentEnvLocal);
+  if (!subRes.ok) return subRes as Err<string>;
+  const exprRes = interpret(subRes.value);
   if (!exprRes.ok) return exprRes;
   if (isLast) return exprRes;
 
@@ -380,14 +463,21 @@ function handleAssignmentIfAny(
   if (existing.suffix) {
     if (existing.suffix === "Bool") {
       if (!(init.value.value === 0 || init.value.value === 1))
-        return { ok: false, error: "declaration initializer does not match annotation" };
+        return {
+          ok: false,
+          error: "declaration initializer does not match annotation",
+        };
     } else {
-      const err = validateSizedInteger(String(init.value.value), existing.suffix);
+      const err = validateSizedInteger(
+        String(init.value.value),
+        existing.suffix
+      );
       if (err) return err;
     }
   }
   // propagate suffix if existing has none
-  if (!existing.suffix && init.value.suffix) existing.suffix = init.value.suffix;
+  if (!existing.suffix && init.value.suffix)
+    existing.suffix = init.value.suffix;
   existing.value = init.value.value;
   return { ok: true, value: existing.value };
 }
@@ -406,7 +496,8 @@ export function interpret(input: string): Result<number, string> {
     s.indexOf("+") !== -1 ||
     s.indexOf("-") !== -1 ||
     s.indexOf("*") !== -1 ||
-    s.indexOf("/") !== -1
+    s.indexOf("/") !== -1 ||
+    s.indexOf("&&") !== -1
   ) {
     return handleAddSubChain(s);
   }

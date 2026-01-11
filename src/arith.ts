@@ -7,16 +7,17 @@ import {
 } from "./interpretHelpers";
 
 // These are set by interpret.ts after both modules initialize to avoid circular imports
-let _interpret:
-  | ((s: string) => Result<number, string>)
-  | undefined = undefined;
+let _interpret: ((s: string) => Result<number, string>) | undefined = undefined;
 let _evaluateBlock:
   | ((s: string, parentEnv?: Map<string, any>) => Result<number, string>)
   | undefined = undefined;
 
 export function setInterpreterFns(
   interpretFn: (s: string) => Result<number, string>,
-  evaluateBlockFn: (s: string, parentEnv?: Map<string, any>) => Result<number, string>
+  evaluateBlockFn: (
+    s: string,
+    parentEnv?: Map<string, any>
+  ) => Result<number, string>
 ): void {
   _interpret = interpretFn;
   _evaluateBlock = evaluateBlockFn;
@@ -62,7 +63,8 @@ function ensureCommonSuffix(
   for (let i = 0; i < opnds.length; i++) {
     const suf = operandStrs[i].slice(opnds[i].end);
     if (suf) {
-      if (common && suf !== common) return { ok: false, error: "mixed suffixes not supported" };
+      if (common && suf !== common)
+        return { ok: false, error: "mixed suffixes not supported" };
       common = suf;
     }
   }
@@ -80,9 +82,14 @@ function processMulDiv(
     if (op === "*" || op === "/") {
       const a = opnds[i].value;
       const b = opnds[i + 1].value;
-      if (op === "/" && b === 0) return { ok: false, error: "division by zero" };
+      if (op === "/" && b === 0)
+        return { ok: false, error: "division by zero" };
       const res = op === "*" ? a * b : a / b;
-      opnds[i] = { value: res, raw: String(res), end: String(res).length } as ParsedNumber;
+      opnds[i] = {
+        value: res,
+        raw: String(res),
+        end: String(res).length,
+      } as ParsedNumber;
       opnds.splice(i + 1, 1);
       opList.splice(i, 1);
       if (suffix) {
@@ -96,24 +103,25 @@ function processMulDiv(
   return undefined;
 }
 
-function isAlphaNum(ch: string | undefined): boolean {
-  if (!ch) return false;
-  const code = ch.charCodeAt(0);
-  return (
-    (code >= 48 && code <= 57) || // 0-9
-    (code >= 65 && code <= 90) || // A-Z
-    (code >= 97 && code <= 122) // a-z
-  );
-}
-
 interface ReadOperandResult {
   parsed: ParsedNumber;
   operandFull: string;
   nextPos: number;
 }
 
-function readGroupedAt(s: string, pos: number): Result<ReadOperandResult, string> {
-  const n = s.length;
+function evaluateInnerExpression(inner: string): Result<number, string> {
+  if (inner.indexOf(";") !== -1) {
+    if (!_evaluateBlock) return { ok: false, error: "internal error" };
+    return _evaluateBlock(inner);
+  }
+  if (!_interpret) return { ok: false, error: "internal error" };
+  return _interpret(inner);
+}
+
+function readGroupedAt(
+  s: string,
+  pos: number
+): Result<ReadOperandResult, string> {
   const substr = s.slice(pos);
   const opening = substr[0];
   const closing = opening === "(" ? ")" : "}";
@@ -131,29 +139,36 @@ function readGroupedAt(s: string, pos: number): Result<ReadOperandResult, string
   if (k >= substr.length || substr[k] !== closing)
     return { ok: false, error: "unmatched parenthesis" };
   const inner = substr.slice(1, k);
-  // support block statements separated by ';'
-  let innerRes: Result<number, string>;
-  if (inner.indexOf(";") !== -1) {
-    if (!_evaluateBlock) return { ok: false, error: "internal error" };
-    innerRes = _evaluateBlock(inner);
-  } else {
-    if (!_interpret) return { ok: false, error: "internal error" };
-    innerRes = _interpret(inner);
-  }
+
+  const innerRes = evaluateInnerExpression(inner);
   if (!innerRes.ok) return innerRes;
+
   const parsed: ParsedNumber = {
     value: innerRes.value,
     raw: String(innerRes.value),
     end: k + 1,
   };
-  let j = pos + parsed.end;
-  while (j < n && isAlphaNum(s[j])) j++; // suffix chars
-  const operandFull = s.slice(pos, j).trim();
-  return { ok: true, value: { parsed, operandFull, nextPos: j } };
+  const operandEnd = findOperandEnd(s, pos + parsed.end);
+  const operandFull = s.slice(pos, operandEnd).trim();
+  return { ok: true, value: { parsed, operandFull, nextPos: operandEnd } };
 }
 
-function readOperandAt(s: string, pos: number): Result<ReadOperandResult, string> {
+function findOperandEnd(s: string, start: number): number {
   const n = s.length;
+  let j = start;
+  while (j < n) {
+    const ch = s[j];
+    if (ch === "&" && j + 1 < n && s[j + 1] === "&") break;
+    if (["+", "-", "*", "/"].includes(ch)) break;
+    j++;
+  }
+  return j;
+}
+
+function readOperandAt(
+  s: string,
+  pos: number
+): Result<ReadOperandResult, string> {
   const substr = s.slice(pos);
 
   // grouped expression handled by helper
@@ -164,10 +179,12 @@ function readOperandAt(s: string, pos: number): Result<ReadOperandResult, string
   // direct numeric
   const direct = parseLeadingNumber(substr);
   if (!direct) return { ok: false, error: "invalid operand" };
-  let j = pos + direct.end;
-  while (j < n && !["+", "-", "*", "/"].includes(s[j])) j++;
-  const operandFull = s.slice(pos, j).trim();
-  return { ok: true, value: { parsed: direct, operandFull, nextPos: j } };
+  const operandEnd = findOperandEnd(s, pos + direct.end);
+  const operandFull = s.slice(pos, operandEnd).trim();
+  return {
+    ok: true,
+    value: { parsed: direct, operandFull, nextPos: operandEnd },
+  };
 }
 
 interface Tokenized {
@@ -210,6 +227,17 @@ export function tokenizeAddSub(s: string): Result<Tokenized, string> {
     if (pos >= n) break;
 
     const ch = s[pos];
+    // support multi-char '&&' operator
+    if (ch === "&") {
+      if (pos + 1 < n && s[pos + 1] === "&") {
+        ops.push("&&");
+        pos += 2;
+        skipSpaces();
+        continue;
+      }
+      return { ok: false, error: "invalid operator" };
+    }
+
     if (!isOperator(ch)) return { ok: false, error: "invalid operator" };
     ops.push(ch);
     pos++;
@@ -221,6 +249,41 @@ export function tokenizeAddSub(s: string): Result<Tokenized, string> {
     return { ok: false, error: "invalid expression" };
 
   return { ok: true, value: { operands, operandStrs, ops } };
+}
+
+interface FoldResult {
+  foldedOperands: number[];
+  foldedOps: string[];
+  numericResult: number;
+}
+
+function foldAddSubToBoolSegments(
+  operands: ParsedNumber[],
+  ops: string[],
+  commonSuffix: string
+): Result<FoldResult, string> {
+  const foldedOperands: number[] = [];
+  const foldedOps: string[] = [];
+  let cur = operands[0].value;
+  for (let k = 0; k < ops.length; k++) {
+    const op2 = ops[k];
+    const next = operands[k + 1].value;
+    if (op2 === "+" || op2 === "-") {
+      cur = op2 === "+" ? cur + next : cur - next;
+      if (commonSuffix) {
+        const err = validateSizedInteger(String(cur), commonSuffix);
+        if (err) return err;
+      }
+    } else if (op2 === "&&") {
+      foldedOperands.push(cur);
+      foldedOps.push(op2);
+      cur = next;
+    } else {
+      return { ok: false, error: "invalid operator" };
+    }
+  }
+  foldedOperands.push(cur);
+  return { ok: true, value: { foldedOperands, foldedOps, numericResult: cur } };
 }
 
 export function handleAddSubChain(s: string): Result<number, string> {
@@ -235,19 +298,24 @@ export function handleAddSubChain(s: string): Result<number, string> {
   const mulDivErr = processMulDiv(operands, ops, commonSuffix);
   if (mulDivErr) return mulDivErr;
 
-  // Left-associative evaluation for + and -
-  let acc = operands[0].value;
-  for (let k = 0; k < ops.length; k++) {
-    const op2 = ops[k];
-    const next = operands[k + 1].value;
-    acc = op2 === "+" ? acc + next : acc - next;
-    if (commonSuffix) {
-      const err = validateSizedInteger(String(acc), commonSuffix);
-      if (err) return err;
-    }
+  const foldRes = foldAddSubToBoolSegments(operands, ops, commonSuffix);
+  if (!foldRes.ok) return foldRes as Result<number, string>;
+  const { foldedOperands, foldedOps, numericResult } = foldRes.value;
+  if (foldedOps.length === 0) return { ok: true, value: numericResult };
+
+  // Evaluate boolean && left-associatively; treat non-zero as true
+  let boolRes = foldedOperands[0] !== 0;
+  for (let i = 0; i < foldedOps.length; i++) {
+    const nextBool = foldedOperands[i + 1] !== 0;
+    boolRes = boolRes && nextBool;
+  }
+  const final = boolRes ? 1 : 0;
+  if (commonSuffix) {
+    const err = validateSizedInteger(String(final), commonSuffix);
+    if (err) return err;
   }
 
-  return { ok: true, value: acc };
+  return { ok: true, value: final };
 }
 
 export function handleSingle(s: string): Result<number, string> {
@@ -256,13 +324,18 @@ export function handleSingle(s: string): Result<number, string> {
 
   if (parsed.end < s.length && s[0] === "-") {
     const suffix = s.slice(parsed.end);
-    if (!(
-      suffix === "I8" ||
-      suffix === "I16" ||
-      suffix === "I32" ||
-      suffix === "I64"
-    )) {
-      return { ok: false, error: "negative numeric prefix with suffix is not allowed" };
+    if (
+      !(
+        suffix === "I8" ||
+        suffix === "I16" ||
+        suffix === "I32" ||
+        suffix === "I64"
+      )
+    ) {
+      return {
+        ok: false,
+        error: "negative numeric prefix with suffix is not allowed",
+      };
     }
   }
 

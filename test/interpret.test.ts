@@ -217,6 +217,17 @@ describe("interpret (suffix handling - braced blocks) - chained and errors", () 
       ok: true,
       value: 6,
     });
+
+    // boolean && tests
+    expect(
+      interpret("let x = true; let y = false; x && y")
+    ).toEqual({ ok: true, value: 0 });
+    expect(
+      interpret("let x = true; let y = true; x && y")
+    ).toEqual({ ok: true, value: 1 });
+    // non-boolean numeric values: treat non-zero as true
+    expect(interpret("1 && 0")).toEqual({ ok: true, value: 0 });
+    expect(interpret("1 && 2")).toEqual({ ok: true, value: 1 });
   });
 
   it("braced grouping and blocks (errors)", () => {
@@ -262,7 +273,10 @@ describe("interpret (suffix handling - braced blocks) - annotations", () => {
 
     // Bool annotation with boolean literal initializer should work
     expect(interpret("let x : Bool = true; x")).toEqual({ ok: true, value: 1 });
-    expect(interpret("let x : Bool = false; x")).toEqual({ ok: true, value: 0 });
+    expect(interpret("let x : Bool = false; x")).toEqual({
+      ok: true,
+      value: 0,
+    });
   });
 
   it("braced grouping and blocks (annotations: mismatches)", () => {
