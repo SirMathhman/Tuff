@@ -62,12 +62,17 @@ function tryHandleAddition(s: string): number | undefined {
   return result;
 }
 
+const BRACKET_PAIRS: Record<string, string> = { "(": ")", "{": "}" };
+
 function findMatchingParen(s: string, start: number): number {
+  const open = s[start];
+  const close = BRACKET_PAIRS[open];
+  if (!close) return -1;
   let depth = 0;
   for (let i = start; i < s.length; i++) {
     const ch = s[i];
-    if (ch === "(") depth++;
-    else if (ch === ")") {
+    if (ch === open) depth++;
+    else if (ch === close) {
       depth--;
       if (depth === 0) return i;
     }
@@ -77,7 +82,7 @@ function findMatchingParen(s: string, start: number): number {
 
 function stripOuterParens(s: string): string {
   let out = s.trim();
-  while (out[0] === "(") {
+  while (BRACKET_PAIRS[out[0]]) {
     const close = findMatchingParen(out, 0);
     if (close === out.length - 1) out = out.slice(1, -1).trim();
     else break;
@@ -110,7 +115,7 @@ function tokenizeAddSub(s: string): string[] | undefined {
   while (i < n) {
     i = skipSpacesFrom(s, i);
     if (expectNumber) {
-      if (s[i] === "(") {
+      if (s[i] === "(" || s[i] === "{") {
         const close = findMatchingParen(s, i);
         if (close < 0) return undefined;
         tokens.push(s.slice(i, close + 1));
