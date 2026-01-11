@@ -84,12 +84,29 @@ describe("interpret - arithmetic", () => {
     expect(interpret("(3 + { 1 }) * 2")).toBe(8);
   });
 
+  it("throws on division by zero", () => {
+    expect(() => interpret("10 / 0")).toThrow(Error);
+  });
+
+  it("throws on division by zero with parenthesized denominator", () => {
+    expect(() => interpret("10 / (2 - 2)")).toThrow(Error);
+  });
+});
+describe("interpret - blocks", () => {
+  it("supports brace grouping as parentheses in expressions", () => {
+    expect(interpret("(3 + { 1 }) * 2")).toBe(8);
+  });
+
   it("supports blocks with declarations and returns last expression", () => {
     expect(interpret("(3 + { let x : I32 = 1; x }) * 2")).toBe(8);
   });
 
   it("evaluates a top-level block and returns the last expression", () => {
     expect(interpret("let x : I32 = 100; x")).toBe(100);
+  });
+
+  it("supports mutable declarations and assignment", () => {
+    expect(interpret("let mut x = 0; x = 100; x")).toBe(100);
   });
 
   it("throws when a block ends with declaration and no expression", () => {
@@ -100,13 +117,5 @@ describe("interpret - arithmetic", () => {
     expect(() =>
       interpret("(3 + { let x : I32 = 1; let x : I32 = 100; x }) * 2")
     ).toThrow(Error);
-  });
-
-  it("throws on division by zero", () => {
-    expect(() => interpret("10 / 0")).toThrow(Error);
-  });
-
-  it("throws on division by zero with parenthesized denominator", () => {
-    expect(() => interpret("10 / (2 - 2)")).toThrow(Error);
   });
 });

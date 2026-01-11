@@ -4,7 +4,10 @@
  * - accept leading integer and ignore trailing text for non-negative numbers
  * - throw if a negative integer has trailing text
  */
-export function interpret(input: string, env?: Map<string, number>): number {
+export interface EnvItem { value: number; mutable: boolean }
+export type Env = Map<string, EnvItem>;
+
+export function interpret(input: string, env?: Env): number {
   let s = input.trim();
   if (s === "") return NaN;
 
@@ -45,13 +48,13 @@ function isIdentifierName(s: string): boolean {
 
 function tryParseNumberOrIdentifier(
   s: string,
-  env?: Map<string, number>
+  env?: Env
 ): number | undefined {
   const { numStr, rest } = splitNumberAndSuffix(s);
   if (numStr === "") {
     const id = s.trim();
     if (isIdentifierName(id)) {
-      if (env && env.has(id)) return env.get(id)!;
+      if (env && env.has(id)) return env.get(id)!.value;
       throw new Error("Unknown identifier");
     }
     return undefined;
@@ -392,8 +395,61 @@ function parseIdentifierAt(
   return { name: s.slice(pos, i), next: i };
 }
 
-function evalBlock(s: string, envIn?: Map<string, number>): number {
-  const env = envIn ?? new Map<string, number>();
+function sliceTrim(s: string, n: number): string {
+  return s.slice(n).trim();
+}
+
+function handleLetStatement(stmt: string, env: Env, localDeclared: Set<string>): number {
+  let rest = sliceTrim(stmt, 4);
+  // optional `mut` modifier
+  let mutable = false;
+  if (rest.startsWith("mut ")) {
+    mutable = true;
+    rest = sliceTrim(rest, 4);
+  }
+  const nameRes = parseIdentifierAt(rest, 0);
+  if (!nameRes) throw new Error("Invalid let declaration");
+  const name = nameRes.name;
+  if (localDeclared.has(name)) throw new Error("Duplicate declaration");
+  localDeclared.add(name);
+
+  let rest2 = sliceTrim(rest, nameRes.next);
+  // optional type annotation
+  if (rest2.startsWith(":")) {
+    const eq = rest2.indexOf("=");
+    if (eq === -1) rest2 = "";
+    else rest2 = sliceTrim(rest2, eq + 1);
+  }
+  if (rest2.startsWith("=")) rest2 = sliceTrim(rest2, 1);
+  if (rest2 !== "") {
+    const val = interpret(rest2, env);
+    const item = { value: val, mutable } as EnvItem;
+    env.set(name, item);
+    return val;
+  }
+  const item = { value: NaN, mutable } as EnvItem;
+  env.set(name, item);
+  return NaN;
+}
+
+function tryHandleAssignmentStatement(stmt: string, env: Env): number | undefined {
+  const idRes = parseIdentifierAt(stmt, 0);
+  if (!idRes) return undefined;
+  let restAssign = sliceTrim(stmt, idRes.next);
+  if (!restAssign.startsWith("=")) return undefined;
+  restAssign = sliceTrim(restAssign, 1);
+  if (restAssign === "") throw new Error("Invalid assignment");
+  if (!env.has(idRes.name)) throw new Error("Unknown identifier");
+  const cur = env.get(idRes.name)!;
+  if (!cur.mutable) throw new Error("Cannot assign to immutable variable");
+  const val = interpret(restAssign, env);
+  cur.value = val;
+  env.set(idRes.name, cur);
+  return val;
+}
+
+function evalBlock(s: string, envIn?: Env): number {
+  const env = envIn ?? new Map<string, EnvItem>();
   const rawStmts = splitTopLevel(s, ";");
 
   // collect trimmed non-empty statements
@@ -412,36 +468,13 @@ function evalBlock(s: string, envIn?: Map<string, number>): number {
   const localDeclared = new Set<string>();
   for (const stmt of stmts) {
     if (stmt.startsWith("let ")) {
-      const rest = stmt.slice(4).trim();
-      const nameRes = parseIdentifierAt(rest, 0);
-      if (!nameRes) throw new Error("Invalid let declaration");
-      const name = nameRes.name;
-
-      // duplicate declaration in the same block is an error
-      if (localDeclared.has(name)) throw new Error("Duplicate declaration");
-      localDeclared.add(name);
-
-      const idx = nameRes.next;
-      let rest2 = rest.slice(idx).trim();
-      // optional type annotation
-      if (rest2.startsWith(":")) {
-        const eq = rest2.indexOf("=");
-        if (eq === -1) {
-          rest2 = "";
-        } else {
-          rest2 = rest2.slice(eq + 1).trim();
-        }
-      }
-      if (rest2.startsWith("=")) rest2 = rest2.slice(1).trim();
-      if (rest2 !== "") {
-        const val = interpret(rest2, env);
-        env.set(name, val);
-        last = val;
-      } else {
-        env.set(name, NaN);
-        last = NaN;
-      }
+      last = handleLetStatement(stmt, env, localDeclared);
     } else {
+      const assigned = tryHandleAssignmentStatement(stmt, env);
+      if (assigned !== undefined) {
+        last = assigned;
+        continue;
+      }
       last = interpret(stmt, env);
     }
   }
