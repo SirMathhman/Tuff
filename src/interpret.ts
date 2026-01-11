@@ -9,7 +9,10 @@ export function interpret(input: string): number {
   if (s === "") return NaN;
 
   // support simple addition like "1U8 + 2U8"
-  const plusParts = s.split("+").map((p) => p.trim()).filter((p) => p !== "");
+  const plusParts = s
+    .split("+")
+    .map((p) => p.trim())
+    .filter((p) => p !== "");
   if (plusParts.length > 1) {
     return plusParts.reduce((acc, part) => acc + interpret(part), 0);
   }

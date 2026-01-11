@@ -49,4 +49,8 @@ describe("interpret", () => {
   it("adds two typed integers", () => {
     expect(interpret("1U8 + 2U8")).toBe(3);
   });
+
+  it("adds multiple typed integers", () => {
+    expect(interpret("1U8 + 2U8 + 3U8")).toBe(6);
+  });
 });
