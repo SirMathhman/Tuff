@@ -62,13 +62,12 @@ function tryHandleAddition(s: string): number | undefined {
   return result;
 }
 
-// eslint-disable-next-line no-restricted-syntax -- existing Record usage allowed for now
-const BRACKET_PAIRS: Record<string, string> = { "(": ")", "{": "}" };
+const BRACKET_PAIRS = new Map<string, string>([["(", ")"], ["{", "}"]]);
 
 function findMatchingParen(s: string, start: number): number {
   const open = s[start];
-  const close = BRACKET_PAIRS[open];
-  if (!close) return -1;
+  const close = BRACKET_PAIRS.get(open);
+  if (close === undefined) return -1;
   let depth = 0;
   for (let i = start; i < s.length; i++) {
     const ch = s[i];
@@ -83,7 +82,7 @@ function findMatchingParen(s: string, start: number): number {
 
 function stripOuterParens(s: string): string {
   let out = s.trim();
-  while (BRACKET_PAIRS[out[0]]) {
+  while (BRACKET_PAIRS.has(out[0])) {
     const close = findMatchingParen(out, 0);
     if (close === out.length - 1) out = out.slice(1, -1).trim();
     else break;
