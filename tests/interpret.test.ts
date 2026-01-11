@@ -53,4 +53,8 @@ describe("interpret", () => {
   it("adds multiple typed integers", () => {
     expect(interpret("1U8 + 2U8 + 3U8")).toBe(6);
   });
+
+  it("throws when mixed widths are added", () => {
+    expect(() => interpret("1U8 + 2U16 + 3U8")).toThrow(Error);
+  });
 });

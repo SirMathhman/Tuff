@@ -8,14 +8,8 @@ export function interpret(input: string): number {
   const s = input.trim();
   if (s === "") return NaN;
 
-  // support simple addition like "1U8 + 2U8"
-  const plusParts = s
-    .split("+")
-    .map((p) => p.trim())
-    .filter((p) => p !== "");
-  if (plusParts.length > 1) {
-    return plusParts.reduce((acc, part) => acc + interpret(part), 0);
-  }
+  const additionResult = tryHandleAddition(s);
+  if (additionResult !== undefined) return additionResult; 
 
   const { numStr, rest } = splitNumberAndSuffix(s);
   if (numStr === "") return NaN;
@@ -85,6 +79,28 @@ export function interpret(input: string): number {
     }
   }
   return value;
+}
+
+function tryHandleAddition(s: string): number | undefined {
+  const plusParts = s
+    .split("+")
+    .map((p) => p.trim())
+    .filter((p) => p !== "");
+  if (plusParts.length <= 1) return undefined;
+
+  let common: WidthSuffix | undefined;
+  for (const part of plusParts) {
+    const { rest } = splitNumberAndSuffix(part);
+    const suffix = parseWidthSuffix(rest);
+    if (!suffix) {
+      throw new Error("Missing or mixed width in addition");
+    }
+    if (!common) common = suffix;
+    else if (suffix.bits !== common.bits || suffix.signed !== common.signed) {
+      throw new Error("Mixed widths in addition");
+    }
+  }
+  return plusParts.reduce((acc, part) => acc + interpret(part), 0);
 }
 
 interface NumberAndSuffix {
