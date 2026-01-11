@@ -1,6 +1,6 @@
 import { interpret } from "../src/interpret";
 
-describe("interpret", () => {
+describe("interpret - parsing & ranges", () => {
   it("parses integer string to number", () => {
     expect(interpret("100")).toBe(100);
   });
@@ -45,7 +45,9 @@ describe("interpret", () => {
   it("throws when negative number has trailing text (e.g., '-1U8')", () => {
     expect(() => interpret("-1U8")).toThrow(Error);
   });
+});
 
+describe("interpret - arithmetic", () => {
   it("adds two typed integers", () => {
     expect(interpret("1U8 + 2U8")).toBe(3);
   });
@@ -60,5 +62,9 @@ describe("interpret", () => {
 
   it("handles mixed + and - operations", () => {
     expect(interpret("10U8 - 5U8 + 3U8")).toBe(8);
+  });
+
+  it("throws when unsigned subtraction underflows", () => {
+    expect(() => interpret("1U8 - 2U8")).toThrow(Error);
   });
 });

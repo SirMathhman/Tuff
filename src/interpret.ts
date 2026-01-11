@@ -28,7 +28,7 @@ export function interpret(input: string): number {
       throw new Error("Invalid bit width");
     }
 
-    if (suffix.bits <= 53 && suffix.bits !== 64) {
+    if (widthUsesNumber(suffix.bits)) {
       validateWidthNumber(suffix.signed, suffix.bits, value);
     } else {
       validateWidthBig(suffix.signed, suffix.bits, numStr);
@@ -45,8 +45,17 @@ export function interpret(input: string): number {
 function tryHandleAddition(s: string): number | undefined {
   const tokens = tokenizeAddSub(s);
   if (!tokens) return undefined;
-  ensureConsistentSuffix(tokens);
-  return evaluateTokens(tokens);
+  const suffix = ensureConsistentSuffix(tokens);
+  const result = evaluateTokens(tokens);
+
+  // validate result fits the width
+  if (suffix.bits <= 53 && suffix.bits !== 64) {
+    validateWidthNumber(suffix.signed, suffix.bits, result);
+  } else {
+    validateWidthBig(suffix.signed, suffix.bits, String(result));
+  }
+
+  return result;
 }
 
 function isDigit(ch: string): boolean {
@@ -127,7 +136,7 @@ function parseNumberTokenAt(s: string, pos: number): ParseResult | undefined {
   return { token: s.slice(start, j).trim(), next: j };
 }
 
-function ensureConsistentSuffix(tokens: string[]): void {
+function ensureConsistentSuffix(tokens: string[]): WidthSuffix {
   let common: WidthSuffix | undefined;
   for (let idx = 0; idx < tokens.length; idx += 2) {
     const part = tokens[idx];
@@ -138,6 +147,7 @@ function ensureConsistentSuffix(tokens: string[]): void {
     else if (suffix.bits !== common.bits || suffix.signed !== common.signed)
       throw new Error("Mixed widths in addition");
   }
+  return common!;
 }
 
 function evaluateTokens(tokens: string[]): number {
@@ -220,4 +230,8 @@ function validateWidthBig(signed: boolean, bits: number, numStr: string): void {
     if (e instanceof Error && e.message === "Integer out of range") throw e;
     throw new Error("Invalid integer for specified width");
   }
+}
+
+function widthUsesNumber(bits: number): boolean {
+  return bits <= 53 && bits !== 64;
 }
