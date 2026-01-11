@@ -127,7 +127,13 @@ describe("interpret - blocks", () => {
   });
 
   it("throws when assigning twice to an uninitialized annotated variable", () => {
-    expect(() => interpret("let x : Bool; x = true; x = false; x")).toThrow(Error);
+    expect(() => interpret("let x : Bool; x = true; x = false; x")).toThrow(
+      Error
+    );
+  });
+
+  it("allows multiple assignments to a `mut` annotated variable", () => {
+    expect(interpret("let mut x : Bool; x = true; x = false; x")).toBe(0);
   });
 
   it("throws when a block ends with declaration and no expression", () => {
