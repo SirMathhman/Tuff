@@ -5,8 +5,10 @@
  * - throw if a negative integer has trailing text
  */
 export function interpret(input: string): number {
-  const s = input.trim();
+  let s = input.trim();
   if (s === "") return NaN;
+
+  s = stripOuterParens(s);
 
   const additionResult = tryHandleAddition(s);
   if (additionResult !== undefined) return additionResult;
@@ -60,6 +62,29 @@ function tryHandleAddition(s: string): number | undefined {
   return result;
 }
 
+function findMatchingParen(s: string, start: number): number {
+  let depth = 0;
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === "(") depth++;
+    else if (ch === ")") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+function stripOuterParens(s: string): string {
+  let out = s.trim();
+  while (out[0] === "(") {
+    const close = findMatchingParen(out, 0);
+    if (close === out.length - 1) out = out.slice(1, -1).trim();
+    else break;
+  }
+  return out;
+}
+
 function isDigit(ch: string): boolean {
   const c = ch.charCodeAt(0);
   return c >= 48 && c <= 57;
@@ -85,10 +110,17 @@ function tokenizeAddSub(s: string): string[] | undefined {
   while (i < n) {
     i = skipSpacesFrom(s, i);
     if (expectNumber) {
-      const res = parseNumberTokenAt(s, i);
-      if (!res) return undefined;
-      tokens.push(res.token);
-      i = res.next;
+      if (s[i] === "(") {
+        const close = findMatchingParen(s, i);
+        if (close < 0) return undefined;
+        tokens.push(s.slice(i, close + 1));
+        i = close + 1;
+      } else {
+        const res = parseNumberTokenAt(s, i);
+        if (!res) return undefined;
+        tokens.push(res.token);
+        i = res.next;
+      }
       expectNumber = false;
     } else {
       if (!isOperator(s[i])) return undefined;

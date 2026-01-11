@@ -75,4 +75,8 @@ describe("interpret - arithmetic", () => {
   it("respects precedence: addition after multiplication", () => {
     expect(interpret("3 + 10 * 5")).toBe(53);
   });
+
+  it("supports parentheses for grouping", () => {
+    expect(interpret("(3 + 1) * 2")).toBe(8);
+  });
 });
