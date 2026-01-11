@@ -156,6 +156,14 @@ describe("interpret - blocks (expressions)", () => {
     ).toBe(300);
   });
 
+  it("supports match expressions with case/_ arms returning a value", () => {
+    expect(
+      interpret("let result : I32 = match (100) { case 100 => 2; case _ => 3; }; result")
+    ).toBe(2);
+  });
+});
+
+describe("interpret - blocks (expressions extras)", () => {
   it("supports comparison operator < returning boolean as 1/0", () => {
     expect(interpret("let x = 100; let y = 200; x < y")).toBe(1);
     expect(interpret("let x = 100; let y = 50; x < y")).toBe(0);

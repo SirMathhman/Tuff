@@ -29,6 +29,9 @@ export function interpret(input: string, env?: Env): number {
   const ifResult = tryHandleIfExpression(s, env);
   if (ifResult !== undefined) return ifResult;
 
+  const matchResult = tryHandleMatchExpression(s, env);
+  if (matchResult !== undefined) return matchResult;
+
   const comparisonResult = tryHandleComparison(s, env);
   if (comparisonResult !== undefined) return comparisonResult;
 
@@ -183,12 +186,56 @@ function findTopLevelComparison(s: string): TopLevelComparison | undefined {
   const twoCharOps = ["<=", ">=", "==", "!="];
   const res = findTopLevel(s, (str, i) => {
     const two = str.slice(i, i + 2);
-    if (twoCharOps.includes(two)) return { op: two, idx: i } as TopLevelComparison;
+    if (twoCharOps.includes(two))
+      return { op: two, idx: i } as TopLevelComparison;
     const ch = str[i];
-    if (ch === "<" || ch === ">") return { op: ch, idx: i } as TopLevelComparison;
+    if (ch === "<" || ch === ">")
+      return { op: ch, idx: i } as TopLevelComparison;
     return undefined;
   });
   return res as TopLevelComparison | undefined;
+}
+
+function tryHandleMatchExpression(s: string, env?: Env): number | undefined {
+  const ss = s.trim();
+  if (!startsWithKeyword(ss, "match")) return undefined;
+
+  // parse 'match (scrutinee) { case p => expr; case _ => expr; }'
+  const paren = ss.indexOf("(");
+  ensure(paren !== -1, "Invalid match expression");
+  const close = findMatchingParen(ss, paren);
+  ensure(close >= 0, "Unterminated match condition");
+  const scrutineeStr = ss.slice(paren + 1, close).trim();
+
+  // find brace block after condition
+  const rest = ss.slice(close + 1).trim();
+  ensure(rest.startsWith("{"), "Invalid match expression body");
+  const braceClose = findMatchingParen(rest, 0);
+  ensure(braceClose >= 0, "Unterminated match body");
+  const body = rest.slice(1, braceClose).trim();
+
+  const armsRaw = splitTopLevel(body, ";").map((r) => r.trim()).filter((r) => r !== "");
+  ensure(armsRaw.length !== 0, "Match has no arms");
+
+  interface MatchArm { pattern: string; expr: string }
+  const arms: MatchArm[] = armsRaw.map((arm) => {
+    ensure(arm.startsWith("case "), "Invalid match arm");
+    const after = sliceTrim(arm, 4);
+    const arrowIdx = after.indexOf("=>");
+    ensure(arrowIdx !== -1, "Invalid match arm");
+    const pattern = after.slice(0, arrowIdx).trim();
+    const expr = after.slice(arrowIdx + 2).trim();
+    return { pattern, expr } as MatchArm;
+  });
+
+  const scrVal = interpret(scrutineeStr, env);
+  for (const a of arms) {
+    if (a.pattern === "_") return interpret(a.expr, env);
+    const patVal = interpret(a.pattern, env);
+    if (scrVal === patVal) return interpret(a.expr, env);
+  }
+
+  throw new Error("No match arm matched");
 }
 
 function tryHandleComparison(s: string, env?: Env): number | undefined {
@@ -241,6 +288,10 @@ function findMatchingParen(s: string, start: number): number {
     }
   }
   return -1;
+}
+
+function ensure(condition: boolean, msg: string): asserts condition {
+  if (!condition) throw new Error(msg);
 }
 
 function stripOuterParens(s: string): string {
@@ -912,7 +963,9 @@ function extractParenContent(stmt: string, kind: string) {
 }
 
 function findTopLevelRangeIndex(rest: string): number {
-  const res = findTopLevel(rest, (s, i) => (s[i] === '.' && s[i + 1] === '.') ? i : undefined);
+  const res = findTopLevel(rest, (s, i) =>
+    s[i] === "." && s[i + 1] === "." ? i : undefined
+  );
   return res === undefined ? -1 : (res as number);
 }
 
@@ -920,7 +973,12 @@ function sliceAfterKeyword(s: string, n: number): string {
   return s.slice(n).trim();
 }
 
-interface ForHeader { name: string; mutable: boolean; left: string; right: string }
+interface ForHeader {
+  name: string;
+  mutable: boolean;
+  left: string;
+  right: string;
+}
 
 function ensureStartsWith(s: string, prefix: string, msg: string) {
   if (!s.startsWith(prefix)) throw new Error(msg);
@@ -944,24 +1002,39 @@ function parseForHeader(h: string): ForHeader {
   ensureStartsWith(rest, "in", "Invalid for header");
   rest = sliceTrim(rest, 2);
   const dotIdx = findTopLevelRangeIndex(rest);
-  if (dotIdx === -1) throw new Error("Invalid for range");
+  ensure(dotIdx !== -1, "Invalid for range");
   const left = rest.slice(0, dotIdx).trim();
   const right = rest.slice(dotIdx + 2).trim();
   ensureNonEmptyPair(left, right, "Invalid for range");
   return { name, mutable, left, right };
 }
 
-interface MutPrefixResult { mutable: boolean; rest: string }
+interface MutPrefixResult {
+  mutable: boolean;
+  rest: string;
+}
 
 function parseMutPrefix(s: string): MutPrefixResult {
-  if (s.startsWith("mut ")) return { mutable: true, rest: sliceAfterKeyword(s, 4) } as MutPrefixResult;
+  if (s.startsWith("mut "))
+    return { mutable: true, rest: sliceAfterKeyword(s, 4) } as MutPrefixResult;
   return { mutable: false, rest: s } as MutPrefixResult;
 }
 
-function resolveBodyAfterClose(stmt: string, close: number, idx: number, stmts: string[], forbidElse: boolean) {
+function resolveBodyAfterClose(
+  stmt: string,
+  close: number,
+  idx: number,
+  stmts: string[],
+  forbidElse: boolean
+) {
   let body = stmt.slice(close + 1).trim();
   let consumed = 0;
-  ({ part: body, consumed } = attachNextIfEmptyAt(body, idx, stmts, forbidElse));
+  ({ part: body, consumed } = attachNextIfEmptyAt(
+    body,
+    idx,
+    stmts,
+    forbidElse
+  ));
   return { body, consumed };
 }
 
@@ -972,7 +1045,13 @@ function handleWhileAt(
 ): ControlFlowResult {
   const { content: condStr, close } = extractParenContent(stmts[idx], "while");
   const stmt = stmts[idx];
-  const { body, consumed } = resolveBodyAfterClose(stmt, close, idx, stmts, false);
+  const { body, consumed } = resolveBodyAfterClose(
+    stmt,
+    close,
+    idx,
+    stmts,
+    false
+  );
 
   let lastLocal = NaN;
   while (interpret(condStr, env) !== 0) {
@@ -987,7 +1066,13 @@ function handleForAt(
   env: Env
 ): ControlFlowResult {
   const { content: header, close } = extractParenContent(stmts[idx], "for");
-  const { body, consumed } = resolveBodyAfterClose(stmts[idx], close, idx, stmts, false);
+  const { body, consumed } = resolveBodyAfterClose(
+    stmts[idx],
+    close,
+    idx,
+    stmts,
+    false
+  );
 
   const { name, mutable, left, right } = parseForHeader(header);
   const startVal = interpret(left, env);
@@ -1033,7 +1118,12 @@ function tryHandleControlFlow(
     return { handled: true, last: res.last, consumed: res.consumed };
   }
 
-  const flowHandlers: Array<[ (s: string) => boolean, (i: number, st: string[], e: Env) => ControlFlowResult ]> = [
+  const flowHandlers: Array<
+    [
+      (s: string) => boolean,
+      (i: number, st: string[], e: Env) => ControlFlowResult
+    ]
+  > = [
     [startsWithWhile, handleWhileAt],
     [startsWithFor, handleForAt],
   ];
