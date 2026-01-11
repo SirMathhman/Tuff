@@ -394,11 +394,22 @@ function parseIdentifierAt(
 
 function evalBlock(s: string, envIn?: Map<string, number>): number {
   const env = envIn ?? new Map<string, number>();
-  const stmts = splitTopLevel(s, ";");
+  const rawStmts = splitTopLevel(s, ";");
+
+  // collect trimmed non-empty statements
+  const stmts = rawStmts.map((r) => r.trim()).filter((r) => r !== "");
+  if (stmts.length === 0) return NaN;
+
+  // If the final non-empty statement is a declaration, the block does not
+  // produce a value and should be treated as an error when used in an
+  // expression context.
+  const lastStmt = stmts[stmts.length - 1];
+  if (lastStmt.startsWith("let ")) {
+    throw new Error("Block does not produce a value");
+  }
+
   let last = NaN;
-  for (const raw of stmts) {
-    const stmt = raw.trim();
-    if (stmt === "") continue;
+  for (const stmt of stmts) {
     if (stmt.startsWith("let ")) {
       const rest = stmt.slice(4).trim();
       const nameRes = parseIdentifierAt(rest, 0);
