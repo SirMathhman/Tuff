@@ -14,27 +14,77 @@ export function interpret(input: string): number {
   const value = Number(numStr);
   if (!Number.isFinite(value)) return NaN;
 
-  const bits = parseUnsignedBits(rest);
-  if (bits !== undefined) {
-    if (!Number.isInteger(bits) || bits <= 0 || bits > 53) {
-      throw new Error("Invalid unsigned bit width");
+  const suffix = parseWidthSuffix(rest);
+  if (suffix !== undefined) {
+    if (
+      suffix.bits !== 8 &&
+      suffix.bits !== 16 &&
+      suffix.bits !== 32 &&
+      suffix.bits !== 64
+    ) {
+      throw new Error("Invalid bit width");
     }
-    const max = 2 ** bits - 1;
-    if (value < 0 || value > max) {
-      throw new Error("Unsigned integer out of range");
+
+    if (suffix.bits <= 53 && suffix.bits !== 64) {
+      validateWidthNumber(suffix.signed, suffix.bits, value);
+    } else {
+      validateWidthBig(suffix.signed, suffix.bits, numStr);
     }
   }
 
-  if (rest !== "" && value < 0) {
+  if (rest !== "" && value < 0 && suffix === undefined) {
     throw new Error("Invalid trailing characters after negative number");
   }
 
+  function validateWidthNumber(
+    signed: boolean,
+    bits: number,
+    value: number
+  ): void {
+    const max = signed ? 2 ** (bits - 1) - 1 : 2 ** bits - 1;
+    const min = signed ? -(2 ** (bits - 1)) : 0;
+    if (!Number.isInteger(value) || value < min || value > max) {
+      throw new Error("Integer out of range");
+    }
+  }
+
+  function validateWidthBig(
+    signed: boolean,
+    bits: number,
+    numStr: string
+  ): void {
+    // bits === 64
+    try {
+      const big = BigInt(numStr);
+      const bigMax = signed
+        ? (BigInt(1) << BigInt(bits - 1)) - BigInt(1)
+        : (BigInt(1) << BigInt(bits)) - BigInt(1);
+      const bigMin = signed ? -(BigInt(1) << BigInt(bits - 1)) : BigInt(0);
+      if (big < bigMin || big > bigMax) {
+        throw new Error("Integer out of range");
+      }
+      if (
+        big > BigInt(Number.MAX_SAFE_INTEGER) ||
+        big < BigInt(Number.MIN_SAFE_INTEGER)
+      ) {
+        throw new Error("Value out of safe integer range");
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message === "Integer out of range") throw e;
+      throw new Error("Invalid integer for specified width");
+    }
+  }
   return value;
 }
 
 interface NumberAndSuffix {
   numStr: string;
   rest: string;
+}
+
+interface WidthSuffix {
+  signed: boolean;
+  bits: number;
 }
 
 function splitNumberAndSuffix(s: string): NumberAndSuffix {
@@ -49,15 +99,18 @@ function splitNumberAndSuffix(s: string): NumberAndSuffix {
   return { numStr: s.slice(0, i), rest: s.slice(i) };
 }
 
-function parseUnsignedBits(s: string): number | undefined {
+function parseWidthSuffix(s: string): WidthSuffix | undefined {
   if (s.length < 2) return undefined;
   const first = s[0];
-  if (first !== "U" && first !== "u") return undefined;
+  const signed = first === "I" || first === "i";
+  if (!signed && first !== "U" && first !== "u") return undefined;
   const digits = s.slice(1);
   if (digits.length === 0) return undefined;
   for (let i = 0; i < digits.length; i++) {
     const c = digits.charCodeAt(i);
     if (c < 48 || c > 57) return undefined;
   }
-  return Number(digits);
+  const bits = Number(digits);
+  if (!Number.isInteger(bits)) return undefined;
+  return { signed, bits };
 }

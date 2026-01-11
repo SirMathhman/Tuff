@@ -13,6 +13,35 @@ describe("interpret", () => {
     expect(() => interpret("256U8")).toThrow(Error);
   });
 
+  it("supports U8 ranges", () => {
+    expect(interpret("0U8")).toBe(0);
+    expect(interpret("255U8")).toBe(255);
+    expect(() => interpret("256U8")).toThrow(Error);
+  });
+
+  it("supports I8 ranges", () => {
+    expect(interpret("127I8")).toBe(127);
+    expect(interpret("-128I8")).toBe(-128);
+    expect(() => interpret("128I8")).toThrow(Error);
+    expect(() => interpret("-129I8")).toThrow(Error);
+  });
+
+  it("supports U32 and I32 ranges", () => {
+    expect(interpret("4294967295U32")).toBe(4294967295);
+    expect(() => interpret("4294967296U32")).toThrow(Error);
+    expect(interpret("2147483647I32")).toBe(2147483647);
+    expect(() => interpret("2147483648I32")).toThrow(Error);
+  });
+
+  it("supports U64/I64 within JS safe integer and rejects unsafe values", () => {
+    // max safe integer
+    expect(interpret("9007199254740991U64")).toBe(9007199254740991);
+    expect(() => interpret("9007199254740992U64")).toThrow(Error);
+    expect(interpret("9007199254740991I64")).toBe(9007199254740991);
+    // a large I64 exceeding JS safe integer should be rejected
+    expect(() => interpret("9223372036854775807I64")).toThrow(Error);
+  });
+
   it("throws when negative number has trailing text (e.g., '-1U8')", () => {
     expect(() => interpret("-1U8")).toThrow(Error);
   });
