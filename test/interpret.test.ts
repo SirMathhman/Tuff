@@ -325,6 +325,11 @@ describe("interpret (suffix handling - braced blocks) - annotations", () => {
       ok: true,
       value: 3,
     });
+
+    // expression annotation with multiple suffixed literals (same suffix) should work
+    expect(
+      interpret("let x = 1; let y = 2; let z : 0I32 + 3I32 = x + y; z")
+    ).toEqual({ ok: true, value: 3 });
   });
 
   it("braced grouping and blocks (annotations: mismatches)", () => {

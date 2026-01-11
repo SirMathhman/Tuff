@@ -344,17 +344,32 @@ export function scanExpressionSuffix(
   while (i < annText.length) {
     const ch = annText[i];
     // skip whitespace/operators/parentheses
-    if (ch === " " || ch === "+" || ch === "-" || ch === "*" || ch === "/" || ch === "(" || ch === ")") {
+    if (
+      ch === " " ||
+      ch === "+" ||
+      ch === "-" ||
+      ch === "*" ||
+      ch === "/" ||
+      ch === "(" ||
+      ch === ")"
+    ) {
       i++;
       continue;
     }
 
     const parsedRes = parseOneLiteralSuffix(annText, i);
-    if (!parsedRes) return { ok: false, error: "declaration initializer does not match annotation" };
+    if (!parsedRes)
+      return {
+        ok: false,
+        error: "declaration initializer does not match annotation",
+      };
     const { next, suffix } = parsedRes;
     if (suffix) {
       if (!SIZED_TYPES.has(suffix))
-        return { ok: false, error: "declaration initializer does not match annotation" };
+        return {
+          ok: false,
+          error: "declaration initializer does not match annotation",
+        };
       if (!firstSuffix) firstSuffix = suffix;
       else if (firstSuffix !== suffix)
         return { ok: false, error: "mixed suffixes not supported" };

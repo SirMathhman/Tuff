@@ -207,7 +207,10 @@ function evaluateAnnotationExpression(
   const valRes = interpret(annText);
   if (!valRes.ok) return { ok: false, error: valRes.error };
   if (valRes.value !== expectedValue)
-    return { ok: false, error: "declaration initializer does not match annotation" };
+    return {
+      ok: false,
+      error: "declaration initializer does not match annotation",
+    };
   const scanRes = scanExpressionSuffix(annText);
   if (!scanRes.ok) return scanRes as Err<string>;
   if (scanRes.value) {
@@ -215,6 +218,21 @@ function evaluateAnnotationExpression(
     if (rangeErr) return rangeErr;
   }
   return { ok: true, value: scanRes.value };
+}
+
+function handleNumericSuffixAnnotation(
+  parsedNumValue: number,
+  rest: string,
+  initValue: number
+): Result<string | undefined, string> {
+  if (!isIdentifierName(rest)) return { ok: false, error: "declaration initializer does not match annotation" };
+  // annotation like '2U8' must also match numeric value
+  if (parsedNumValue !== initValue)
+    return { ok: false, error: "declaration initializer does not match annotation" };
+  const annSuffix = rest;
+  const rangeErr = validateSizedInteger(String(initValue), annSuffix);
+  if (rangeErr) return rangeErr;
+  return { ok: true, value: annSuffix };
 }
 
 function deriveAnnotationSuffixBetween(
@@ -226,42 +244,46 @@ function deriveAnnotationSuffixBetween(
 ): Result<string | undefined, string> {
   if (colonPos === -1 || colonPos >= eq) return { ok: true, value: undefined };
   const annText = stmt.slice(colonPos + 1, eq).trim();
-  const annErr = checkAnnotationMatch(annText, rhs, init.value, init.suffix);
-  if (annErr) return annErr;
-
   const parsedAnn = parseLeadingNumber(annText);
-  let annSuffix: string | undefined;
 
-  // If parsed number is the entire annotation, handle simple numeric literal case
-  if (parsedAnn && parsedAnn.end === annText.length) {
-    // pure numeric literal annotation like '3' or '+3'
-    annSuffix = undefined;
-  } else if (SIZED_TYPES.has(annText)) {
-    // sized type annotation like 'I32'
-    annSuffix = annText;
-    const rangeErr = validateSizedInteger(String(init.value), annSuffix);
-    if (rangeErr) return rangeErr;
-  } else {
-    // Complex case: may be '3I32', or an expression like '1I32 + 2I32'
-    if (parsedAnn && parsedAnn.end < annText.length) {
-      const rest = annText.slice(parsedAnn.end).trim();
-      if (isIdentifierName(rest)) {
-        annSuffix = rest;
-        const rangeErr = validateSizedInteger(String(init.value), annSuffix);
-        if (rangeErr) return rangeErr;
-        return { ok: true, value: annSuffix };
-      }
-    }
+  const simpleCheck = checkSimpleAnnotation(annText, parsedAnn, rhs, init);
+  if (simpleCheck !== undefined) return simpleCheck;
 
-    // otherwise treat as an expression and evaluate+scan
-    const exprRes = evaluateAnnotationExpression(annText, init.value);
-    if (!exprRes.ok) return exprRes as Err<string>;
-    return exprRes;
+  // annotation like '3I32' (numeric prefix + suffix) — handle specially
+  if (parsedAnn && parsedAnn.end < annText.length) {
+    const rest = annText.slice(parsedAnn.end).trim();
+    const numSuffixRes = handleNumericSuffixAnnotation(parsedAnn.value, rest, init.value);
+    if (numSuffixRes.ok) return numSuffixRes;
+    // not a simple numeric+suffix annotation — fallthrough to expression analysis
   }
 
-  return { ok: true, value: annSuffix };
+  // otherwise treat as an expression and evaluate+scan
+  const exprRes = evaluateAnnotationExpression(annText, init.value);
+  if (!exprRes.ok) return exprRes as Err<string>;
+  return exprRes;
 }
 
+function checkSimpleAnnotation(
+  annText: string,
+  parsedAnn: ReturnType<typeof parseLeadingNumber> | undefined,
+  rhs: string,
+  init: Binding
+): Result<string | undefined, string> | undefined {
+  // For simple annotations (pure numeric literal, sized type, or Bool), run the simple matcher first
+  if ((parsedAnn && parsedAnn.end === annText.length) || SIZED_TYPES.has(annText) || annText === "Bool") {
+    const annErr = checkAnnotationMatch(annText, rhs, init.value, init.suffix);
+    if (annErr) return annErr;
+
+    if (parsedAnn && parsedAnn.end === annText.length) return { ok: true, value: undefined };
+    if (SIZED_TYPES.has(annText)) {
+      const rangeErr = validateSizedInteger(String(init.value), annText);
+      if (rangeErr) return rangeErr;
+      return { ok: true, value: annText };
+    }
+    return { ok: true, value: undefined };
+  }
+  return undefined;
+}
 
 function parseDeclaration(
   stmt: string,
@@ -312,8 +334,6 @@ function parseDeclaration(
   env.set(ident, { value: init.value.value, suffix: finalSuffix });
   return { ok: true, value: undefined };
 }
-
-
 
 interface BracedPrefixResult {
   rest?: string;
