@@ -71,4 +71,8 @@ describe("interpret - arithmetic", () => {
   it("multiplies with precedence over addition", () => {
     expect(interpret("10 * 5 + 3")).toBe(53);
   });
+
+  it("respects precedence: addition after multiplication", () => {
+    expect(interpret("3 + 10 * 5")).toBe(53);
+  });
 });
