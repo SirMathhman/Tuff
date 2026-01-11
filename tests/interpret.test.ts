@@ -143,7 +143,9 @@ describe("interpret - blocks (expressions)", () => {
   });
 
   it("supports simple if expressions in initializers", () => {
-    expect(interpret("let value : I32 = if (true) 300 else 200; value")).toBe(300);
+    expect(interpret("let value : I32 = if (true) 300 else 200; value")).toBe(
+      300
+    );
   });
 
   it("supports nested else-if chains in if-expressions", () => {
@@ -157,6 +159,18 @@ describe("interpret - blocks (expressions)", () => {
   it("supports comparison operator < returning boolean as 1/0", () => {
     expect(interpret("let x = 100; let y = 200; x < y")).toBe(1);
     expect(interpret("let x = 100; let y = 50; x < y")).toBe(0);
+  });
+
+  it("supports compound assignment '+=' for mutable variables", () => {
+    expect(interpret("let mut x = 0; x += 100; x")).toBe(100);
+  });
+
+  it("throws when using '+=' on an immutable variable", () => {
+    expect(() => interpret("let x = 0; x += 100; x")).toThrow(Error);
+  });
+
+  it("throws when using '+=' on an uninitialized annotated variable", () => {
+    expect(() => interpret("let x : I32; x += 5; x")).toThrow(Error);
   });
 });
 

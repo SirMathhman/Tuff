@@ -171,7 +171,12 @@ function tryHandleComparison(s: string, env?: Env): number | undefined {
   if (!found) return undefined;
   const { op, idx } = found;
   const rightStart = idx + (op.length === 2 ? 2 : 1);
-  return evalComparisonOp(s.slice(0, idx).trim(), s.slice(rightStart).trim(), op, env);
+  return evalComparisonOp(
+    s.slice(0, idx).trim(),
+    s.slice(rightStart).trim(),
+    op,
+    env
+  );
 }
 
 function tryHandleAddition(s: string): number | undefined {
@@ -539,18 +544,27 @@ function startsWithGroup(s: string): boolean {
   return s[0] === "(" || s[0] === "{";
 }
 
+function validateTypeCompatibility(
+  annotatedType: string | undefined,
+  otherType: string | undefined
+) {
+  if (!annotatedType) return;
+  if (isIntegerTypeName(annotatedType)) {
+    if (otherType === "Bool")
+      throw new Error("Type mismatch: cannot assign Bool to integer type");
+    return;
+  }
+  if (annotatedType === "Bool") {
+    if (otherType !== "Bool")
+      throw new Error("Type mismatch: cannot assign non-Bool to Bool");
+  }
+}
+
 function validateAnnotatedTypeCompatibility(
   annotatedType: string,
   initType: string | undefined
 ) {
-  if (isIntegerTypeName(annotatedType)) {
-    if (initType === "Bool")
-      throw new Error("Type mismatch: cannot assign Bool to integer type");
-  }
-  if (annotatedType === "Bool") {
-    if (initType !== "Bool")
-      throw new Error("Type mismatch: cannot assign non-Bool to Bool");
-  }
+  validateTypeCompatibility(annotatedType, initType);
 }
 
 function isWhitespace(ch: string | undefined): boolean {
@@ -670,6 +684,49 @@ function handleLetStatement(
   return NaN;
 }
 
+function ensureIdentifierExists(name: string, env: Env) {
+  if (!env.has(name)) throw new Error("Unknown identifier");
+}
+
+function computeCompoundResult(op: string, left: number, right: number): number {
+  switch (op) {
+    case "+": return left + right;
+    case "-": return left - right;
+    case "*": return left * right;
+    case "/":
+      if (right === 0) throw new Error("Division by zero");
+      return Math.trunc(left / right);
+    default: throw new Error("Unsupported compound assignment");
+  }
+}
+
+function tryHandleCompoundAssignment(stmt: string, env: Env): number | undefined {
+  const idRes = parseIdentifierAt(stmt, 0);
+  if (!idRes) return undefined;
+  let rest = sliceTrim(stmt, idRes.next);
+  if (rest.length < 2) return undefined;
+  const op = rest[0];
+  const eq = rest[1];
+  if (eq !== "=") return undefined;
+  if (op !== "+" && op !== "-" && op !== "*" && op !== "/") return undefined;
+  rest = sliceTrim(rest, 2);
+  if (rest === "") throw new Error("Invalid assignment");
+  ensureIdentifierExists(idRes.name, env);
+
+  const cur = env.get(idRes.name)!;
+  if (Number.isNaN(cur.value)) throw new Error("Cannot compound-assign uninitialized variable");
+  if (!cur.mutable) throw new Error("Cannot assign to immutable variable");
+
+  const rhsType = inferTypeFromExpr(rest, env);
+  validateTypeCompatibility(cur.type, rhsType);
+
+  const rhsVal = interpret(rest, env);
+  const newVal = computeCompoundResult(op, cur.value, rhsVal);
+  cur.value = newVal;
+  env.set(idRes.name, cur);
+  return newVal;
+}
+
 function tryHandleAssignmentStatement(
   stmt: string,
   env: Env
@@ -680,7 +737,7 @@ function tryHandleAssignmentStatement(
   if (!restAssign.startsWith("=")) return undefined;
   restAssign = sliceTrim(restAssign, 1);
   if (restAssign === "") throw new Error("Invalid assignment");
-  if (!env.has(idRes.name)) throw new Error("Unknown identifier");
+  ensureIdentifierExists(idRes.name, env);
   const cur = env.get(idRes.name)!;
   // allow assignment if variable is mutable OR if it is uninitialized
   if (!cur.mutable && !Number.isNaN(cur.value))
@@ -719,9 +776,13 @@ function processNonLetStatement(stmt: string, env: Env): number {
       continue;
     }
 
-    const assigned = tryHandleAssignmentStatement(rem, env);
-    if (assigned !== undefined) lastLocal = assigned;
-    else lastLocal = interpret(rem, env);
+    const assignedCompound = tryHandleCompoundAssignment(rem, env);
+    if (assignedCompound !== undefined) lastLocal = assignedCompound;
+    else {
+      const assigned = tryHandleAssignmentStatement(rem, env);
+      if (assigned !== undefined) lastLocal = assigned;
+      else lastLocal = interpret(rem, env);
+    }
     rem = "";
   }
   return lastLocal;
