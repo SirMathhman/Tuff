@@ -99,7 +99,9 @@ function tryParseFunctionInitializer(
   t: string,
   env: Map<string, Binding>
 ): Result<Binding, string> | undefined {
-  const buildFromFnRes = (fnRes: ReturnType<typeof parseFnExpressionAt> | undefined): Result<Binding, string> | undefined => {
+  const buildFromFnRes = (
+    fnRes: ReturnType<typeof parseFnExpressionAt> | undefined
+  ): Result<Binding, string> | undefined => {
     if (!fnRes) return undefined;
     if (fnRes && fnRes.ok) {
       const fnExpr = fnRes.value;

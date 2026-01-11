@@ -558,3 +558,12 @@ it("functions: declaration with function type annotation", () => {
     )
   ).toEqual({ ok: true, value: 3 });
 });
+
+it("functions: inner functions capture outer parameters", () => {
+  expect(
+    interpret(
+      "let outer = fn outer(x : I32) => { fn inner(y : I32) => x + y; inner(2) }; outer(3)"
+    )
+  ).toEqual({ ok: true, value: 5 });
+});
+

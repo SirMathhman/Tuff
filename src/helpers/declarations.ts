@@ -113,7 +113,14 @@ function handleFinalizeAnnotation(
   env: Map<string, Binding>
 ): Result<string | undefined, string> {
   const doDerive = (): Result<string | undefined, string> => {
-    const annRes = deriveAnnotationSuffixBetween(stmt, colonPos, eq, rhs, init, env);
+    const annRes = deriveAnnotationSuffixBetween(
+      stmt,
+      colonPos,
+      eq,
+      rhs,
+      init,
+      env
+    );
     if (!annRes.ok) return { ok: false, error: annRes.error };
     return annRes;
   };
@@ -124,13 +131,24 @@ function handleFinalizeAnnotation(
   const fnAnn = parseFunctionTypeAnnotation(annText);
   if (!fnAnn) return doDerive();
 
-  if (!init.fn) return { ok: false, error: "declaration initializer does not match annotation" };
+  if (!init.fn)
+    return {
+      ok: false,
+      error: "declaration initializer does not match annotation",
+    };
   if (fnAnn.paramTypes.length !== init.fn.params.length)
-    return { ok: false, error: "declaration initializer does not match annotation" };
+    return {
+      ok: false,
+      error: "declaration initializer does not match annotation",
+    };
   for (let i = 0; i < fnAnn.paramTypes.length; i++) {
     const expected = fnAnn.paramTypes[i];
     const actual = init.fn.params[i].ann;
-    if (actual && actual !== expected) return { ok: false, error: "declaration initializer does not match annotation" };
+    if (actual && actual !== expected)
+      return {
+        ok: false,
+        error: "declaration initializer does not match annotation",
+      };
   }
   return { ok: true, value: undefined };
 }

@@ -507,13 +507,12 @@ export function interpret(
     return evaluateBlock(s, parentEnv);
 
   // Reject standalone function expressions like `fn () => {}` or `(x) => x` when used as top-level expression
-  if (s.indexOf("=>") !== -1) {
+  // Allow them when evaluating expressions inside another context (indicated by a provided parentEnv)
+  if (!parentEnv && s.indexOf("=>") !== -1) {
     const parseFn = parseFnExpressionAt(s, 0);
-    if (parseFn !== undefined)
-      return { ok: false, error: "invalid expression" };
+    if (parseFn !== undefined) return { ok: false, error: "invalid expression" };
     const parseArrow = parseArrowFnExpressionAt(s, 0);
-    if (parseArrow !== undefined)
-      return { ok: false, error: "invalid expression" };
+    if (parseArrow !== undefined) return { ok: false, error: "invalid expression" };
   }
 
   if (needsArithmetic(s)) return handleAddSubChain(s, parentEnv);
