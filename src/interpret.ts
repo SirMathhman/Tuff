@@ -291,8 +291,11 @@ function processStatement(
   envLocal: Map<string, Binding>,
   parentEnvLocal?: Map<string, Binding>,
   isLast = false
-): Result<number, string> | "handled" | undefined {
+): Result<number, string> | "handled" | "break" | undefined {
   let stmt = origStmt;
+
+  // support 'break' as a top-level statement
+  if (stmt.trim() === "break") return "break";
 
   const letHandled = handleLetStatement(stmt, envLocal);
   if (letHandled === "handled") return "handled";
@@ -399,6 +402,7 @@ function evaluateBlock(
     if (stmt.length === 0) continue;
     const res = processStatement(stmt, env, parentEnv, i === stmts.length - 1);
     if (res === "handled") continue;
+    if (res === "break") return { ok: false, error: "break" };
     if (res) return res;
   }
   return { ok: false, error: "block has no final expression" };

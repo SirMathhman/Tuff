@@ -23,6 +23,12 @@ describe("interpret (while loop smoke tests)", () => {
     });
   });
 
+  it("supports break inside while to exit early", () => {
+    expect(
+      interpret("let mut x = 0; while (x < 4) { x += 1; break; }; x")
+    ).toEqual({ ok: true, value: 1 });
+  });
+
   it("supports direct += on mutable binding", () => {
     expect(interpret("let mut x = 0; x += 1; x")).toEqual({
       ok: true,

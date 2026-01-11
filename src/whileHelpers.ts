@@ -7,7 +7,7 @@ interface BindingValue {
 function evaluateConditionLoop(
   condText: string,
   evalCond: (condText: string) => Result<boolean, string>,
-  bodyRunner: () => Result<void, string> | "continue" | undefined
+  bodyRunner: () => Result<void, string> | "continue" | "break" | undefined
 ): Result<void, string> {
   for (;;) {
     const c = evalCond(condText);
@@ -15,6 +15,7 @@ function evaluateConditionLoop(
     if (!c.value) break;
     const br = bodyRunner();
     if (br === "continue") continue;
+    if (br === "break") break;
     if (br !== undefined) return br as Result<void, string>;
   }
   return { ok: true, value: undefined };
@@ -35,6 +36,7 @@ export function runBracedWhile<T>(
     const innerRes = evaluateBlock(inner, undefined, envLocal);
     if (!innerRes.ok) {
       if (innerRes.error === "block has no final expression") return "continue";
+      if (innerRes.error === "break") return "break";
       return innerRes as Result<void, string>;
     }
     return undefined;
@@ -51,12 +53,13 @@ export function runSingleStmtWhile<T>(
     envLocal: Map<string, T>,
     parentEnvLocal?: Map<string, T>,
     isLast?: boolean
-  ) => Result<number, string> | "handled" | undefined,
+  ) => Result<number, string> | "handled" | "break" | undefined,
   parentEnvLocal?: Map<string, T>
 ): Result<void, string> {
   return evaluateConditionLoop(condText, evalCond, () => {
     const res = processStatement(stmtBody, envLocal, parentEnvLocal, false);
     if (res === "handled") return "continue";
+    if (res === "break") return "break";
     if (res) return res as Result<void, string>;
     return undefined;
   });
@@ -83,7 +86,7 @@ export interface WhileHandlers<T> {
     envLocal: Map<string, T>,
     parentEnvLocal?: Map<string, T>,
     isLast?: boolean
-  ) => Result<number, string> | "handled" | undefined;
+  ) => Result<number, string> | "handled" | "break" | undefined;
   evaluateBlockFn: (
     inner: string,
     parentEnv?: Map<string, T>,
