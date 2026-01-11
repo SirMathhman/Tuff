@@ -45,4 +45,8 @@ describe("interpret", () => {
   it("throws when negative number has trailing text (e.g., '-1U8')", () => {
     expect(() => interpret("-1U8")).toThrow(Error);
   });
+
+  it("adds two typed integers", () => {
+    expect(interpret("1U8 + 2U8")).toBe(3);
+  });
 });

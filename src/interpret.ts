@@ -8,6 +8,12 @@ export function interpret(input: string): number {
   const s = input.trim();
   if (s === "") return NaN;
 
+  // support simple addition like "1U8 + 2U8"
+  const plusParts = s.split("+").map((p) => p.trim()).filter((p) => p !== "");
+  if (plusParts.length > 1) {
+    return plusParts.reduce((acc, part) => acc + interpret(part), 0);
+  }
+
   const { numStr, rest } = splitNumberAndSuffix(s);
   if (numStr === "") return NaN;
 
@@ -56,10 +62,11 @@ export function interpret(input: string): number {
     // bits === 64
     try {
       const big = BigInt(numStr);
+      const base = BigInt(1) << BigInt(bits - 1);
       const bigMax = signed
-        ? (BigInt(1) << BigInt(bits - 1)) - BigInt(1)
-        : (BigInt(1) << BigInt(bits)) - BigInt(1);
-      const bigMin = signed ? -(BigInt(1) << BigInt(bits - 1)) : BigInt(0);
+        ? base - BigInt(1)
+        : (base << BigInt(1)) - BigInt(1);
+      const bigMin = signed ? -base : BigInt(0);
       if (big < bigMin || big > bigMax) {
         throw new Error("Integer out of range");
       }
