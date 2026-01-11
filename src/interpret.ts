@@ -62,6 +62,7 @@ function tryHandleAddition(s: string): number | undefined {
   return result;
 }
 
+// eslint-disable-next-line no-restricted-syntax -- existing Record usage allowed for now
 const BRACKET_PAIRS: Record<string, string> = { "(": ")", "{": "}" };
 
 function findMatchingParen(s: string, start: number): number {

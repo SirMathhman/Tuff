@@ -32,6 +32,10 @@ module.exports = {
         message:
           "Do not use anonymous object types; declare an interface and use it instead.",
       },
+      {
+        selector: "TSTypeReference[typeName.name='Record']",
+        message: "Do not use 'Record'; use 'Map' instead.",
+      },
     ],
 
     // Limit cyclomatic complexity
