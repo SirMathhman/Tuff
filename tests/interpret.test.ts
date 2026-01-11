@@ -118,6 +118,10 @@ describe("interpret - blocks", () => {
     expect(interpret("let y : Bool = false; y")).toBe(0);
   });
 
+  it("throws when assigning a Bool to an integer-typed declaration", () => {
+    expect(() => interpret("let x = true; let y : I32 = x;")).toThrow(Error);
+  });
+
   it("throws when a block ends with declaration and no expression", () => {
     expect(() => interpret("(3 + { let x : I32 = 1; }) * 2")).toThrow(Error);
   });

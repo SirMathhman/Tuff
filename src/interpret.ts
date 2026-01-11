@@ -7,6 +7,7 @@
 export interface EnvItem {
   value: number;
   mutable: boolean;
+  type?: string;
 }
 export type Env = Map<string, EnvItem>;
 
@@ -416,6 +417,55 @@ function sliceTrim(s: string, n: number): string {
   return s.slice(n).trim();
 }
 
+function inferTypeFromExpr(expr: string, env?: Env): "Bool" | "Number" | undefined {
+  const s = expr.trim();
+  if (s === "true" || s === "false") return "Bool";
+  // identifier
+  if (isIdentifierName(s)) {
+    if (env && env.has(s)) return env.get(s)!.type as "Bool" | "Number" | undefined;
+    return undefined;
+  }
+  // numeric literal start
+  const { numStr } = splitNumberAndSuffix(s);
+  if (numStr !== "") return "Number";
+  // parenthesized or binary expression assume Number
+  if (s[0] === "(" || s[0] === "{") return "Number";
+  if (s.includes("+") || s.includes("-") || s.includes("*") || s.includes("/")) return "Number";
+  return undefined;
+}
+
+interface AnnotationResult {
+  annotatedType?: string;
+  initializer: string;
+}
+
+function extractAnnotationAndInitializer(str: string): AnnotationResult {
+  let s = str.trim();
+  let annotatedType: string | undefined = undefined;
+  if (s.startsWith(":")) {
+    const eq = s.indexOf("=");
+    if (eq === -1) return { annotatedType: s.slice(1).trim(), initializer: "" };
+    annotatedType = s.slice(1, eq).trim();
+    s = sliceTrim(s, eq + 1);
+  }
+  if (s.startsWith("=")) s = sliceTrim(s, 1);
+  return { annotatedType, initializer: s };
+}
+
+function isIntegerTypeName(typeName: string): boolean {
+  const first = typeName[0];
+  return first === "I" || first === "i" || first === "U" || first === "u";
+}
+
+function validateAnnotatedTypeCompatibility(annotatedType: string, initType: string | undefined) {
+  if (isIntegerTypeName(annotatedType)) {
+    if (initType === "Bool") throw new Error("Type mismatch: cannot assign Bool to integer type");
+  }
+  if (annotatedType === "Bool") {
+    if (initType !== "Bool") throw new Error("Type mismatch: cannot assign non-Bool to Bool");
+  }
+}
+
 function handleLetStatement(
   stmt: string,
   env: Env,
@@ -434,21 +484,20 @@ function handleLetStatement(
   if (localDeclared.has(name)) throw new Error("Duplicate declaration");
   localDeclared.add(name);
 
-  let rest2 = sliceTrim(rest, nameRes.next);
-  // optional type annotation
-  if (rest2.startsWith(":")) {
-    const eq = rest2.indexOf("=");
-    if (eq === -1) rest2 = "";
-    else rest2 = sliceTrim(rest2, eq + 1);
-  }
-  if (rest2.startsWith("=")) rest2 = sliceTrim(rest2, 1);
-  if (rest2 !== "") {
-    const val = interpret(rest2, env);
-    const item = { value: val, mutable } as EnvItem;
+  const rest2 = sliceTrim(rest, nameRes.next);
+  const { annotatedType, initializer } = extractAnnotationAndInitializer(rest2);
+  if (initializer !== "") {
+    const initType = inferTypeFromExpr(initializer, env);
+    const val = interpret(initializer, env);
+
+    if (annotatedType) validateAnnotatedTypeCompatibility(annotatedType, initType);
+
+    const item = { value: val, mutable, type: annotatedType || initType } as EnvItem;
     env.set(name, item);
     return val;
   }
-  const item = { value: NaN, mutable } as EnvItem;
+
+  const item = { value: NaN, mutable, type: annotatedType } as EnvItem;
   env.set(name, item);
   return NaN;
 }
@@ -466,6 +515,17 @@ function tryHandleAssignmentStatement(
   if (!env.has(idRes.name)) throw new Error("Unknown identifier");
   const cur = env.get(idRes.name)!;
   if (!cur.mutable) throw new Error("Cannot assign to immutable variable");
+
+  const rhsType = inferTypeFromExpr(restAssign, env);
+  if (cur.type) {
+    if (isIntegerTypeName(cur.type)) {
+      if (rhsType === "Bool") throw new Error("Type mismatch: cannot assign Bool to integer type");
+    }
+    if (cur.type === "Bool") {
+      if (rhsType !== "Bool") throw new Error("Type mismatch: cannot assign non-Bool to Bool");
+    }
+  }
+
   const val = interpret(restAssign, env);
   cur.value = val;
   env.set(idRes.name, cur);
