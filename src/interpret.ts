@@ -16,6 +16,7 @@ const SIZED_TYPES = new Set([
   "I16",
   "I32",
   "I64",
+  "Bool",
 ]);
 
 /**
@@ -83,11 +84,19 @@ function findBindingEnv(
   return undefined;
 }
 
+function parseBooleanLiteral(t: string): Binding | undefined {
+  if (t === "true" || t === "false") return { value: t === "true" ? 1 : 0 };
+  return undefined;
+}
+
 function resolveInitializer(
   rhs: string,
   env: Map<string, Binding>
 ): Result<Binding, string> {
   const t = rhs.trim();
+
+  const boolLit = parseBooleanLiteral(t);
+  if (boolLit) return { ok: true, value: boolLit };
 
   // identifier initializer
   if (isIdentifierOnly(t)) {
@@ -247,7 +256,10 @@ function handleBracedPrefix(
   const rest = t.slice(idx + 1).trim();
   const innerRes = evaluateBlock(inner, env);
   if (innerRes.ok) {
-    return { ok: true, value: { rest: rest || undefined, value: innerRes.value } };
+    return {
+      ok: true,
+      value: { rest: rest || undefined, value: innerRes.value },
+    };
   }
 
   // permit braced statement blocks that only contain declarations (no final expr)
@@ -366,12 +378,16 @@ function handleAssignmentIfAny(
   const existing = targetEnv.get(name)!;
   // validate against existing suffix if present
   if (existing.suffix) {
-    const err = validateSizedInteger(String(init.value.value), existing.suffix);
-    if (err) return err;
+    if (existing.suffix === "Bool") {
+      if (!(init.value.value === 0 || init.value.value === 1))
+        return { ok: false, error: "declaration initializer does not match annotation" };
+    } else {
+      const err = validateSizedInteger(String(init.value.value), existing.suffix);
+      if (err) return err;
+    }
   }
   // propagate suffix if existing has none
-  if (!existing.suffix && init.value.suffix)
-    existing.suffix = init.value.suffix;
+  if (!existing.suffix && init.value.suffix) existing.suffix = init.value.suffix;
   existing.value = init.value.value;
   return { ok: true, value: existing.value };
 }

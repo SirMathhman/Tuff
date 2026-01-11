@@ -181,7 +181,7 @@ export function checkAnnotationMatch(
     return undefined;
   }
 
-  const allowed = new Set([
+  const sizedAllowed = new Set([
     "U8",
     "U16",
     "U32",
@@ -191,7 +191,18 @@ export function checkAnnotationMatch(
     "I32",
     "I64",
   ]);
-  if (allowed.has(annText))
+  if (sizedAllowed.has(annText))
     return checkSizedAnnotationMatch(annText, rhs, value, initSuffix);
+
+  // Bool annotation: accept true/false literals, numeric 0/1, or initializer with Bool suffix
+  if (annText === "Bool") {
+    const t = rhs.trim();
+    if (t === "true" || t === "false") return undefined;
+    const rhsParsed = parseLeadingNumber(rhs);
+    if (rhsParsed) return value === 0 || value === 1 ? undefined : { ok: false, error: "declaration initializer does not match annotation" };
+    if (initSuffix === "Bool") return undefined;
+    return { ok: false, error: "declaration initializer does not match annotation" };
+  }
+
   return undefined;
 }

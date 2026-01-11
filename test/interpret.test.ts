@@ -259,6 +259,10 @@ describe("interpret (suffix handling - braced blocks) - annotations", () => {
       ok: true,
       value: 6,
     });
+
+    // Bool annotation with boolean literal initializer should work
+    expect(interpret("let x : Bool = true; x")).toEqual({ ok: true, value: 1 });
+    expect(interpret("let x : Bool = false; x")).toEqual({ ok: true, value: 0 });
   });
 
   it("braced grouping and blocks (annotations: mismatches)", () => {
