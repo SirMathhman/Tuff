@@ -10,12 +10,55 @@ export function interpret(input: string): number {
   const trimmed = input.trim();
   if (trimmed === "") return NaN;
 
-  // Match a leading numeric token (including decimals and exponents) and capture any trailing characters
-  const m = trimmed.match(/^([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)(.*)$/);
-  if (!m) return NaN;
+  let i = 0;
+  const n = trimmed.length;
 
-  const numStr = m[1];
-  const rest = m[2] || "";
+  // optional sign
+  if (trimmed[i] === '+' || trimmed[i] === '-') {
+    i++;
+  }
+
+  const startDigits = i;
+  // digits before decimal
+  while (i < n && trimmed.charCodeAt(i) >= 48 && trimmed.charCodeAt(i) <= 57) {
+    i++;
+  }
+  const digitsBefore = i - startDigits;
+
+  // fractional part
+  if (i < n && trimmed[i] === '.') {
+    i++; // consume dot
+    const fracStart = i;
+    while (i < n && trimmed.charCodeAt(i) >= 48 && trimmed.charCodeAt(i) <= 57) {
+      i++;
+    }
+    const digitsAfter = i - fracStart;
+    if (digitsBefore === 0 && digitsAfter === 0) {
+      // something like "+." or "-." or just "." without digits
+      return NaN;
+    }
+  } else if (digitsBefore === 0) {
+    // no digits at all (and no fractional part)
+    return NaN;
+  }
+
+  // optional exponent part, but only consume it if it's valid (e.g., e[+-]?\d+)
+  if (i < n && (trimmed[i] === 'e' || trimmed[i] === 'E')) {
+    let j = i + 1;
+    if (j < n && (trimmed[j] === '+' || trimmed[j] === '-')) j++;
+    const expStart = j;
+    while (j < n && trimmed.charCodeAt(j) >= 48 && trimmed.charCodeAt(j) <= 57) j++;
+    const expDigits = j - expStart;
+    if (expDigits > 0) {
+      // valid exponent, consume it
+      i = j;
+    }
+    // otherwise leave the 'e' as trailing text
+  }
+
+  const numStr = trimmed.slice(0, i);
+  const rest = trimmed.slice(i);
+
   const value = Number(numStr);
   if (!Number.isFinite(value)) return NaN;
 
