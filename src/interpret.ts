@@ -15,7 +15,7 @@ export function interpret(input: string): number {
   if (!Number.isFinite(value)) return NaN;
 
   const bits = parseUnsignedBits(rest);
-  if (bits !== null) {
+  if (bits !== undefined) {
     if (!Number.isInteger(bits) || bits <= 0 || bits > 53) {
       throw new Error("Invalid unsigned bit width");
     }
@@ -44,15 +44,15 @@ function splitNumberAndSuffix(s: string): { numStr: string; rest: string } {
   return { numStr: s.slice(0, i), rest: s.slice(i) };
 }
 
-function parseUnsignedBits(s: string): number | null {
-  if (s.length < 2) return null;
+function parseUnsignedBits(s: string): number | undefined {
+  if (s.length < 2) return undefined;
   const first = s[0];
-  if (first !== "U" && first !== "u") return null;
+  if (first !== "U" && first !== "u") return undefined;
   const digits = s.slice(1);
-  if (digits.length === 0) return null;
+  if (digits.length === 0) return undefined;
   for (let i = 0; i < digits.length; i++) {
     const c = digits.charCodeAt(i);
-    if (c < 48 || c > 57) return null;
+    if (c < 48 || c > 57) return undefined;
   }
   return Number(digits);
 }
