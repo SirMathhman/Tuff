@@ -24,6 +24,9 @@ describe("interpret (while loop smoke tests)", () => {
   });
 
   it("supports direct += on mutable binding", () => {
-    expect(interpret("let mut x = 0; x += 1; x")).toEqual({ ok: true, value: 1 });
+    expect(interpret("let mut x = 0; x += 1; x")).toEqual({
+      ok: true,
+      value: 1,
+    });
   });
 });
