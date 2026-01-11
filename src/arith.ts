@@ -208,6 +208,7 @@ function findOperandEnd(s: string, start: number): number {
 import { findMatchingParenIndex, findTopLevelChar } from "./interpretHelpers";
 import { parseComparisonOp, applyComparisonOp } from "./operators";
 import { findTopLevelElseInString } from "./ifHelpers";
+import { parseMatchArms, evaluateMatchArms, findMatchingBraceIndex } from "./matchHelpers";
 
 function evalExpr<T extends BindingType>(
   src: string,
@@ -246,20 +247,30 @@ function parseThenElse(
   return { ok: true, value: { thenText, elseText, endPos } };
 }
 
+interface ParenInner {
+  inner: string;
+  end: number;
+}
+
+function parseParenInner(s: string, pos: number, kwLen: number): Result<ParenInner, string> {
+  let i = pos + kwLen;
+  while (i < s.length && s[i] === " ") i++;
+  if (i >= s.length || s[i] !== "(") return { ok: false, error: "invalid operand" };
+
+  const j = findMatchingParenIndex(s, i);
+  if (j === -1) return { ok: false, error: "unmatched parenthesis" };
+
+  return { ok: true, value: { inner: s.slice(i + 1, j).trim(), end: j } };
+}
+
 function readIfAt<T extends BindingType>(
   s: string,
   pos: number,
   parentEnv?: Map<string, T>
 ): Result<ReadOperandResult, string> {
-  const n = s.length;
-  let i = pos + 2; // skip 'if'
-  while (i < n && s[i] === " ") i++;
-  if (i >= n || s[i] !== "(") return { ok: false, error: "invalid operand" };
-
-  const j = findMatchingParenIndex(s, i);
-  if (j === -1) return { ok: false, error: "unmatched parenthesis" };
-
-  const condText = s.slice(i + 1, j).trim();
+  const parsedParen = parseParenInner(s, pos, 2);
+  if (!parsedParen.ok) return parsedParen as Err<string>;
+  const { inner: condText, end: j } = parsedParen.value;
 
   const condRes = evalExpr(condText);
   if (!condRes.ok) return condRes as Err<string>;
@@ -294,6 +305,52 @@ function readIfAt<T extends BindingType>(
   return { ok: true, value: { parsed, operandFull, nextPos: endPos } };
 }
 
+function readMatchAt<T extends BindingType>(
+  s: string,
+  pos: number,
+  parentEnv?: Map<string, T>
+): Result<ReadOperandResult, string> {
+  const n = s.length;
+
+  const parsedParenSubj = parseParenInner(s, pos, 5);
+  if (!parsedParenSubj.ok) return parsedParenSubj as Err<string>;
+  const { inner: subjText, end: j } = parsedParenSubj.value;
+
+  const subjRes = evalExpr(subjText, parentEnv);
+  if (!subjRes.ok) return subjRes as Err<string>;
+  const subjVal = subjRes.value;
+
+  // find the opening brace
+  let k = j + 1;
+  while (k < n && s[k] === " ") k++;
+  if (k >= n || s[k] !== "{") return { ok: false, error: "invalid operand" };
+
+  // find matching brace
+  const m = findMatchingBraceIndex(s, k);
+  if (m === -1) return { ok: false, error: "unmatched brace in match" };
+  const inner = s.slice(k + 1, m);
+
+  const armsRes = parseMatchArms(inner);
+  if (!armsRes.ok) return armsRes as Err<string>;
+  const evalRes = evaluateMatchArms(
+    armsRes.value,
+    subjVal,
+    parentEnv,
+    (expr: string) => evalExpr(expr, parentEnv)
+  );
+  if (!evalRes.ok) return evalRes as Err<string>;
+
+  const chosenVal = evalRes.value;
+
+  const parsed: ParsedNumber = {
+    value: chosenVal,
+    raw: String(chosenVal),
+    end: String(chosenVal).length,
+  };
+  const operandFull = s.slice(pos, m + 1).trim();
+  return { ok: true, value: { parsed, operandFull, nextPos: m + 1 } };
+}
+
 function readOperandAt<T extends BindingType>(
   s: string,
   pos: number,
@@ -304,6 +361,10 @@ function readOperandAt<T extends BindingType>(
   // 'if' expression
   if (substr.startsWith("if") && (substr[2] === " " || substr[2] === "("))
     return readIfAt(s, pos, parentEnv);
+
+  // 'match' expression
+  if (substr.startsWith("match") && (substr[5] === " " || substr[5] === "("))
+    return readMatchAt(s, pos, parentEnv);
 
   // grouped expression handled by helper
   if (substr[0] === "(" || substr[0] === "{") {
@@ -511,30 +572,4 @@ export function handleAddSubChain<T extends BindingType>(
   return { ok: true, value: final };
 }
 
-export function handleSingle(s: string): Result<number, string> {
-  const parsed = parseLeadingNumber(s);
-  if (parsed === undefined) return { ok: true, value: 0 };
-
-  if (parsed.end < s.length && s[0] === "-") {
-    const suffix = s.slice(parsed.end);
-    if (
-      !(
-        suffix === "I8" ||
-        suffix === "I16" ||
-        suffix === "I32" ||
-        suffix === "I64"
-      )
-    ) {
-      return {
-        ok: false,
-        error: "negative numeric prefix with suffix is not allowed",
-      };
-    }
-  }
-
-  const suffix = s.slice(parsed.end);
-  const err = validateSizedInteger(parsed.raw, suffix);
-  if (err) return err;
-
-  return { ok: true, value: parsed.value };
-}
+export { handleSingle } from "./simpleHandlers";

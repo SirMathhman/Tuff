@@ -445,7 +445,7 @@ function substituteIdentsGeneric(
   parentEnvLocal: Map<string, BindingLike> | undefined,
   onlyTopLevel: boolean
 ): Result<string, string> {
-  const reserved = new Set(["if", "else", "let", "true", "false"]);
+  const reserved = new Set(["if", "else", "let", "true", "false", "match", "case", "_", "break", "continue"]);
   let out = "";
   let i = 0;
   let depth = 0;
