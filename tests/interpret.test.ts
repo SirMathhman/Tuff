@@ -84,6 +84,10 @@ describe("interpret - arithmetic", () => {
     expect(interpret("(3 + { 1 }) * 2")).toBe(8);
   });
 
+  it("supports blocks with declarations and returns last expression", () => {
+    expect(interpret("(3 + { let x : I32 = 1; x }) * 2")).toBe(8);
+  });
+
   it("throws on division by zero", () => {
     expect(() => interpret("10 / 0")).toThrow(Error);
   });

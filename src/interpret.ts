@@ -4,20 +4,61 @@
  * - accept leading integer and ignore trailing text for non-negative numbers
  * - throw if a negative integer has trailing text
  */
-export function interpret(input: string): number {
+export function interpret(input: string, env?: Map<string, number>): number {
   let s = input.trim();
   if (s === "") return NaN;
 
   s = stripOuterParens(s);
 
+  // block with statements e.g., "let x : I32 = 1; x"
+  const topParts = splitTopLevel(s, ";");
+  if (topParts.length > 1 || s.trim().startsWith("let "))
+    return evalBlock(s, env);
+
   const additionResult = tryHandleAddition(s);
   if (additionResult !== undefined) return additionResult;
 
+  const numOrIdent = tryParseNumberOrIdentifier(s, env);
+  if (numOrIdent !== undefined) return numOrIdent;
+
+  return NaN;
+}
+
+function isIdentifierStartCode(c: number): boolean {
+  return (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95;
+}
+
+function isIdentifierPartCode(c: number): boolean {
+  return isIdentifierStartCode(c) || (c >= 48 && c <= 57);
+}
+
+function isIdentifierName(s: string): boolean {
+  if (s.length === 0) return false;
+  const c = s.charCodeAt(0);
+  if (!isIdentifierStartCode(c)) return false;
+  for (let i = 1; i < s.length; i++) {
+    const cc = s.charCodeAt(i);
+    if (!isIdentifierPartCode(cc)) return false;
+  }
+  return true;
+}
+
+function tryParseNumberOrIdentifier(
+  s: string,
+  env?: Map<string, number>
+): number | undefined {
   const { numStr, rest } = splitNumberAndSuffix(s);
-  if (numStr === "") return NaN;
+  if (numStr === "") {
+    const id = s.trim();
+    if (isIdentifierName(id)) {
+      if (env && env.has(id)) return env.get(id)!;
+      throw new Error("Unknown identifier");
+    }
+    return undefined;
+  }
 
   const value = Number(numStr);
-  if (!Number.isFinite(value)) return NaN;
+  if (!Number.isFinite(value)) return undefined;
 
   const suffix = parseWidthSuffix(rest);
   if (suffix !== undefined) {
@@ -62,7 +103,10 @@ function tryHandleAddition(s: string): number | undefined {
   return result;
 }
 
-const BRACKET_PAIRS = new Map<string, string>([["(", ")"], ["{", "}"]]);
+const BRACKET_PAIRS = new Map<string, string>([
+  ["(", ")"],
+  ["{", "}"],
+]);
 
 function findMatchingParen(s: string, start: number): number {
   const open = s[start];
@@ -306,4 +350,83 @@ function validateWidthBig(signed: boolean, bits: number, numStr: string): void {
 
 function widthUsesNumber(bits: number): boolean {
   return bits <= 53 && bits !== 64;
+}
+
+function splitTopLevel(s: string, sep: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === "(" || ch === "{") depth++;
+    else if (ch === ")" || ch === "}") depth--;
+    else if (ch === sep && depth === 0) {
+      parts.push(s.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(s.slice(start));
+  return parts;
+}
+
+interface IdentifierParseResult {
+  name: string;
+  next: number;
+}
+
+function parseIdentifierAt(
+  s: string,
+  pos: number
+): IdentifierParseResult | undefined {
+  let i = pos;
+  const n = s.length;
+  if (i >= n) return undefined;
+  const c = s.charCodeAt(i);
+  if (!isIdentifierStartCode(c)) return undefined;
+  i++;
+  while (i < n) {
+    const cc = s.charCodeAt(i);
+    if (!isIdentifierPartCode(cc)) break;
+    i++;
+  }
+  return { name: s.slice(pos, i), next: i };
+}
+
+function evalBlock(s: string, envIn?: Map<string, number>): number {
+  const env = envIn ?? new Map<string, number>();
+  const stmts = splitTopLevel(s, ";");
+  let last = NaN;
+  for (const raw of stmts) {
+    const stmt = raw.trim();
+    if (stmt === "") continue;
+    if (stmt.startsWith("let ")) {
+      const rest = stmt.slice(4).trim();
+      const nameRes = parseIdentifierAt(rest, 0);
+      if (!nameRes) throw new Error("Invalid let declaration");
+      const name = nameRes.name;
+      const idx = nameRes.next;
+      let rest2 = rest.slice(idx).trim();
+      // optional type annotation
+      if (rest2.startsWith(":")) {
+        const eq = rest2.indexOf("=");
+        if (eq === -1) {
+          rest2 = "";
+        } else {
+          rest2 = rest2.slice(eq + 1).trim();
+        }
+      }
+      if (rest2.startsWith("=")) rest2 = rest2.slice(1).trim();
+      if (rest2 !== "") {
+        const val = interpret(rest2, env);
+        env.set(name, val);
+        last = val;
+      } else {
+        env.set(name, NaN);
+        last = NaN;
+      }
+    } else {
+      last = interpret(stmt, env);
+    }
+  }
+  return last;
 }
