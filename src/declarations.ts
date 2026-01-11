@@ -26,7 +26,7 @@ export function evaluateAnnotationExpression(
 ): Result<string | undefined, string> {
   // substitute identifiers in the annotation expression using current env
   const subRes = substituteAllIdents(annText, env);
-  if (!subRes.ok) return subRes as any;
+  if (!subRes.ok) return { ok: false, error: subRes.error };
   const valRes = interpret(subRes.value, env);
   if (!valRes.ok) return { ok: false, error: valRes.error };
   if (valRes.value !== expectedValue)
@@ -35,7 +35,7 @@ export function evaluateAnnotationExpression(
       error: "declaration initializer does not match annotation",
     };
   const scanRes = scanExpressionSuffix(subRes.value);
-  if (!scanRes.ok) return scanRes as any;
+  if (!scanRes.ok) return { ok: false, error: scanRes.error };
   if (scanRes.value) {
     const rangeErr = validateSizedInteger(String(expectedValue), scanRes.value);
     if (rangeErr) return rangeErr;
@@ -72,7 +72,7 @@ export function deriveAnnotationSuffixBetween(
 
   // otherwise treat as an expression and evaluate+scan
   const exprRes = evaluateAnnotationExpression(annText, init.value, env);
-  if (!exprRes.ok) return exprRes as any;
+  if (!exprRes.ok) return { ok: false, error: exprRes.error };
   return exprRes;
 }
 
@@ -96,7 +96,7 @@ export function finalizeInitializedDeclaration(
     init,
     env
   );
-  if (!annRes.ok) return annRes as any;
+  if (!annRes.ok) return { ok: false, error: annRes.error };
   const annSuffix = annRes.value;
 
   if (env.has(ident)) return { ok: false, error: "duplicate declaration" };

@@ -1,5 +1,9 @@
 import type { Result } from "./result";
 
+interface BindingValue {
+  value: number;
+}
+
 function evaluateConditionLoop(
   condText: string,
   evalCond: (condText: string) => Result<boolean, string>,
@@ -11,19 +15,19 @@ function evaluateConditionLoop(
     if (!c.value) break;
     const br = bodyRunner();
     if (br === "continue") continue;
-    if (br && !(br as any).ok) return br as Result<void, string>;
+    if (br !== undefined && br !== "continue") return br as Result<void, string>;
   }
   return { ok: true, value: undefined };
 }
 
-export function runBracedWhile(
+export function runBracedWhile<T>(
   inner: string,
   condText: string,
-  envLocal: Map<string, any>,
+  envLocal: Map<string, T>,
   evalCond: (condText: string) => Result<boolean, string>,
   evaluateBlock: (
     inner: string,
-    parentEnv?: Map<string, any>
+    parentEnv?: Map<string, T>
   ) => Result<number, string>
 ): Result<void, string> {
   return evaluateConditionLoop(condText, evalCond, () => {
@@ -36,18 +40,18 @@ export function runBracedWhile(
   });
 }
 
-export function runSingleStmtWhile(
+export function runSingleStmtWhile<T>(
   stmtBody: string,
   condText: string,
-  envLocal: Map<string, any>,
+  envLocal: Map<string, T>,
   evalCond: (condText: string) => Result<boolean, string>,
   processStatement: (
     stmt: string,
-    envLocal: Map<string, any>,
-    parentEnvLocal?: Map<string, any>,
+    envLocal: Map<string, T>,
+    parentEnvLocal?: Map<string, T>,
     isLast?: boolean
   ) => Result<number, string> | "handled" | undefined,
-  parentEnvLocal?: Map<string, any>
+  parentEnvLocal?: Map<string, T>
 ): Result<void, string> {
   return evaluateConditionLoop(condText, evalCond, () => {
     const res = processStatement(stmtBody, envLocal, parentEnvLocal, false);
@@ -57,31 +61,31 @@ export function runSingleStmtWhile(
   });
 }
 
-export interface WhileHandlers {
+export interface WhileHandlers<T> {
   interpretFn: (
     s: string,
-    parentEnv?: Map<string, any>
+    parentEnv?: Map<string, T>
   ) => Result<number, string>;
   substituteAllIdentsFn: (
     src: string,
-    envLocal: Map<string, any>,
-    parentEnvLocal?: Map<string, any>
+    envLocal: Map<string, T>,
+    parentEnvLocal?: Map<string, T>
   ) => Result<string, string>;
   lookupBindingFn: (
     name: string,
-    env: Map<string, any>,
-    fallbackEnv?: Map<string, any>
-  ) => Result<any, string>;
+    env: Map<string, T>,
+    fallbackEnv?: Map<string, T>
+  ) => Result<T, string>;
   isIdentifierOnlyFn: (s: string) => boolean;
   processStatementFn: (
     stmt: string,
-    envLocal: Map<string, any>,
-    parentEnvLocal?: Map<string, any>,
+    envLocal: Map<string, T>,
+    parentEnvLocal?: Map<string, T>,
     isLast?: boolean
   ) => Result<number, string> | "handled" | undefined;
   evaluateBlockFn: (
     inner: string,
-    parentEnv?: Map<string, any>
+    parentEnv?: Map<string, T>
   ) => Result<number, string>;
   findMatchingParenIndexFn: (s: string, start: number) => number;
 }
@@ -91,25 +95,28 @@ interface WhileParts {
   body: string;
 }
 
-function evaluateCond(
+function evaluateCond<T extends BindingValue>(
   condText: string,
-  envLocal: Map<string, any>,
-  parentEnvLocal: Map<string, any> | undefined,
-  interpretFn: (s: string, parentEnv?: Map<string, any>) => Result<number, string>,
+  envLocal: Map<string, T>,
+  parentEnvLocal: Map<string, T> | undefined,
+  interpretFn: (
+    s: string,
+    parentEnv?: Map<string, T>
+  ) => Result<number, string>,
   substituteAllIdentsFn: (
     src: string,
-    envLocal: Map<string, any>,
-    parentEnvLocal?: Map<string, any>
+    envLocal: Map<string, T>,
+    parentEnvLocal?: Map<string, T>
   ) => Result<string, string>,
   lookupBindingFn: (
     name: string,
-    env: Map<string, any>,
-    fallbackEnv?: Map<string, any>
-  ) => Result<any, string>,
+    env: Map<string, T>,
+    fallbackEnv?: Map<string, T>
+  ) => Result<T, string>,
   isIdentifierOnlyFn: (s: string) => boolean
 ): Result<boolean, string> {
   const sub = substituteAllIdentsFn(condText, envLocal, parentEnvLocal);
-  if (!sub.ok) return sub as any;
+  if (!sub.ok) return { ok: false, error: sub.error };
   const s = sub.value.trim();
 
   if (isIdentifierOnlyFn(s) && s !== "true" && s !== "false") {
@@ -124,11 +131,11 @@ function evaluateCond(
   return { ok: true, value: r.value !== 0 };
 }
 
-export function handleTopLevelWhileStmt(
+export function handleTopLevelWhileStmt<T extends BindingValue>(
   tStmt: string,
-  envLocal: Map<string, any>,
-  parentEnvLocal: Map<string, any> | undefined,
-  handlers: WhileHandlers
+  envLocal: Map<string, T>,
+  parentEnvLocal: Map<string, T> | undefined,
+  handlers: WhileHandlers<T>
 ): Result<number, string> | "handled" | undefined {
   const parts = parseWhileParts(tStmt, handlers.findMatchingParenIndexFn);
   if (!parts) return undefined;

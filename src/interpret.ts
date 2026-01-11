@@ -1,5 +1,9 @@
 import type { Result, Err } from "./result";
-import { parseLeadingNumber, splitStatements, findTopLevelChar } from "./interpretHelpers";
+import {
+  parseLeadingNumber,
+  splitStatements,
+  findTopLevelChar,
+} from "./interpretHelpers";
 
 import { handleAddSubChain, handleSingle, setInterpreterFns } from "./arith";
 import {
@@ -17,7 +21,7 @@ import {
   validateIfIdentifierConditions,
 } from "./ifValidators";
 
-import { applyCompoundAssignment, applyPlainAssignment } from "./assignHelpers";
+import { applyCompoundAssignment, applyPlainAssignment, type BindingLike } from "./assignHelpers";
 import { handleTopLevelWhileStmt as handleWhileExternal } from "./whileHelpers";
 import { finalizeInitializedDeclaration } from "./declarations";
 
@@ -278,19 +282,6 @@ function handleLetStatement(
   return "handled";
 }
 
-function handleLetInProcess(
-  stmt: string,
-  envLocal: Map<string, Binding>
-): "handled" | undefined | Result<void, string> {
-  const letHandled = handleLetStatement(stmt, envLocal);
-  if (letHandled) {
-    if (letHandled === "handled") return "handled";
-    if (!(letHandled as any).ok) return letHandled as Err<string>;
-    return undefined; // unreachable but satisfy types
-  }
-  return undefined;
-}
-
 function processStatement(
   origStmt: string,
   envLocal: Map<string, Binding>,
@@ -299,8 +290,9 @@ function processStatement(
 ): Result<number, string> | "handled" | undefined {
   let stmt = origStmt;
 
-  const letHandled = handleLetInProcess(stmt, envLocal);
-  if (letHandled) return letHandled === "handled" ? "handled" : (letHandled as Err<string>);
+  const letHandled = handleLetStatement(stmt, envLocal);
+  if (letHandled === "handled") return "handled";
+  if (letHandled && !(letHandled as Err<string>).ok) return letHandled as Err<string>;
   // handle leading braced prefixes and normalize statement
   const prefixRes = stripLeadingBracedPrefixes(stmt, envLocal, isLast);
   if (!prefixRes.ok) return prefixRes;
@@ -319,22 +311,8 @@ function processStatement(
   );
   if (ctrlHandled) return ctrlHandled;
   // assignment
-  const assignHandled = handleAssignmentStmt(
-    stmt,
-    envLocal,
-    parentEnvLocal,
-    isLast
-  );
+  const assignHandled = processAssignmentIfAnyStmt(stmt, envLocal, parentEnvLocal, isLast);
   if (assignHandled) return assignHandled;
-
-  function handleAssignmentStmt(
-    stmt: string,
-    envLocal: Map<string, Binding>,
-    parentEnvLocal?: Map<string, Binding>,
-    isLast = false
-  ): Result<number, string> | "handled" | undefined {
-    return processAssignmentIfAnyStmt(stmt, envLocal, parentEnvLocal, isLast);
-  }
   // identifier statement
   const identHandled = handleIdentifierStmt(
     stmt,
@@ -455,16 +433,16 @@ function handleAssignmentIfAny(
   // delegate to helpers for clarity and to keep complexity low
   if (opChar) {
     const res = applyCompoundAssignment(
-      existing as any,
-      { value: init.value.value, suffix: init.value.suffix } as any,
+      existing as BindingLike,
+      { value: init.value.value, suffix: init.value.suffix } as BindingLike,
       opChar
     );
     return res;
   }
 
   const res = applyPlainAssignment(
-    existing as any,
-    { value: init.value.value, suffix: init.value.suffix } as any
+    existing as BindingLike,
+    { value: init.value.value, suffix: init.value.suffix } as BindingLike
   );
   return res;
 }

@@ -20,7 +20,7 @@ module.exports = {
   ],
   rules: {
     // Keep minimal rules for now; we can tighten these later
-    "@typescript-eslint/no-explicit-any": "off",
+    "@typescript-eslint/no-explicit-any": "error",
     // Limit cyclomatic complexity
     complexity: ["error", { max: 15 }], // Limit function length
     "max-lines-per-function": [

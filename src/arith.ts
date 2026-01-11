@@ -8,20 +8,20 @@ import {
 
 // These are set by interpret.ts after both modules initialize to avoid circular imports
 let _interpret:
-  | ((s: string, parentEnv?: Map<string, any>) => Result<number, string>)
+  | (<T>(s: string, parentEnv?: Map<string, T>) => Result<number, string>)
   | undefined = undefined;
 let _evaluateBlock:
-  | ((s: string, parentEnv?: Map<string, any>) => Result<number, string>)
+  | (<T>(s: string, parentEnv?: Map<string, T>) => Result<number, string>)
   | undefined = undefined;
 
-export function setInterpreterFns(
+export function setInterpreterFns<T>(
   interpretFn: (
     s: string,
-    parentEnv?: Map<string, any>
+    parentEnv?: Map<string, T>
   ) => Result<number, string>,
   evaluateBlockFn: (
     s: string,
-    parentEnv?: Map<string, any>
+    parentEnv?: Map<string, T>
   ) => Result<number, string>
 ): void {
   _interpret = interpretFn;
@@ -120,9 +120,9 @@ interface ThenElseParse {
   endPos: number;
 }
 
-function evaluateInnerExpression(
+function evaluateInnerExpression<T>(
   inner: string,
-  parentEnv?: Map<string, any>
+  parentEnv?: Map<string, T>
 ): Result<number, string> {
   if (inner.indexOf(";") !== -1) {
     if (!_evaluateBlock) return { ok: false, error: "internal error" };
@@ -139,10 +139,10 @@ function evaluateInnerExpression(
   return _interpret(inner, parentEnv);
 }
 
-function readGroupedAt(
+function readGroupedAt<T>(
   s: string,
   pos: number,
-  parentEnv?: Map<string, any>
+  parentEnv?: Map<string, T>
 ): Result<ReadOperandResult, string> {
   const substr = s.slice(pos);
   const opening = substr[0];
@@ -221,9 +221,9 @@ function findTopLevelElse(s: string, start: number): number {
   return -1;
 }
 
-function evalExpr(
+function evalExpr<T>(
   src: string,
-  parentEnv?: Map<string, any>
+  parentEnv?: Map<string, T>
 ): Result<number, string> {
   if (
     src.indexOf(";") !== -1 ||
@@ -254,10 +254,10 @@ function parseThenElse(
   return { ok: true, value: { thenText, elseText, endPos } };
 }
 
-function readIfAt(
+function readIfAt<T>(
   s: string,
   pos: number,
-  parentEnv?: Map<string, any>
+  parentEnv?: Map<string, T>
 ): Result<ReadOperandResult, string> {
   const n = s.length;
   let i = pos + 2; // skip 'if'
@@ -296,10 +296,10 @@ function readIfAt(
   return { ok: true, value: { parsed, operandFull, nextPos: endPos } };
 }
 
-function readOperandAt(
+function readOperandAt<T>(
   s: string,
   pos: number,
-  parentEnv?: Map<string, any>
+  parentEnv?: Map<string, T>
 ): Result<ReadOperandResult, string> {
   const substr = s.slice(pos);
 
@@ -364,9 +364,9 @@ function parseNextOperator(
   return { ok: true, value: { op: ch, nextPos: pos + 1 } };
 }
 
-function parseTokens(
+function parseTokens<T>(
   s2: string,
-  parentEnv?: Map<string, any>
+  parentEnv?: Map<string, T>
 ): Result<Tokenized, string> {
   const n2 = s2.length;
   let pos2 = 0;
@@ -414,9 +414,9 @@ function parseTokens(
   };
 }
 
-export function tokenizeAddSub(
+export function tokenizeAddSub<T>(
   s: string,
-  parentEnv?: Map<string, any>
+  parentEnv?: Map<string, T>
 ): Result<Tokenized, string> {
   return parseTokens(s, parentEnv);
 }
@@ -465,9 +465,9 @@ function foldAddSubToBoolSegments(
   return { ok: true, value: { foldedOperands, foldedOps, numericResult: cur } };
 }
 
-export function handleAddSubChain(
+export function handleAddSubChain<T>(
   s: string,
-  parentEnv?: Map<string, any>
+  parentEnv?: Map<string, T>
 ): Result<number, string> {
   const tokens = tokenizeAddSub(s, parentEnv);
   if (!tokens.ok) return tokens;
