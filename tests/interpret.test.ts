@@ -109,6 +109,10 @@ describe("interpret - blocks", () => {
     expect(interpret("let mut x = 0; x = 100; x")).toBe(100);
   });
 
+  it("throws when assigning to an immutable variable", () => {
+    expect(() => interpret("let x = 0; x = 100; x")).toThrow(Error);
+  });
+
   it("throws when a block ends with declaration and no expression", () => {
     expect(() => interpret("(3 + { let x : I32 = 1; }) * 2")).toThrow(Error);
   });

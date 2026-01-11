@@ -4,7 +4,10 @@
  * - accept leading integer and ignore trailing text for non-negative numbers
  * - throw if a negative integer has trailing text
  */
-export interface EnvItem { value: number; mutable: boolean }
+export interface EnvItem {
+  value: number;
+  mutable: boolean;
+}
 export type Env = Map<string, EnvItem>;
 
 export function interpret(input: string, env?: Env): number {
@@ -46,10 +49,7 @@ function isIdentifierName(s: string): boolean {
   return true;
 }
 
-function tryParseNumberOrIdentifier(
-  s: string,
-  env?: Env
-): number | undefined {
+function tryParseNumberOrIdentifier(s: string, env?: Env): number | undefined {
   const { numStr, rest } = splitNumberAndSuffix(s);
   if (numStr === "") {
     const id = s.trim();
@@ -399,7 +399,11 @@ function sliceTrim(s: string, n: number): string {
   return s.slice(n).trim();
 }
 
-function handleLetStatement(stmt: string, env: Env, localDeclared: Set<string>): number {
+function handleLetStatement(
+  stmt: string,
+  env: Env,
+  localDeclared: Set<string>
+): number {
   let rest = sliceTrim(stmt, 4);
   // optional `mut` modifier
   let mutable = false;
@@ -432,7 +436,10 @@ function handleLetStatement(stmt: string, env: Env, localDeclared: Set<string>):
   return NaN;
 }
 
-function tryHandleAssignmentStatement(stmt: string, env: Env): number | undefined {
+function tryHandleAssignmentStatement(
+  stmt: string,
+  env: Env
+): number | undefined {
   const idRes = parseIdentifierAt(stmt, 0);
   if (!idRes) return undefined;
   let restAssign = sliceTrim(stmt, idRes.next);
