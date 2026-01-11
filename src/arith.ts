@@ -5,6 +5,13 @@ import {
   validateSizedInteger,
   isSignedSuffix,
 } from "./interpretHelpers";
+import type { ReadOperandResult } from "./arithOperandReaders";
+import {
+  readGroupedAt,
+  readIfAt,
+  readMatchAt,
+  findOperandEnd,
+} from "./arithOperandReaders";
 
 // Local binding type to match what interpret.ts uses
 interface BindingType {
@@ -13,7 +20,6 @@ interface BindingType {
   assigned?: boolean;
   mutable?: boolean;
 }
-
 // These are set by interpret.ts after both modules initialize to avoid circular imports
 let _interpret:
   | ((
@@ -27,7 +33,6 @@ let _evaluateBlock:
       parentEnv?: Map<string, BindingType>
     ) => Result<number, string>)
   | undefined = undefined;
-
 export function setInterpreterFns(
   interpretFn: (
     s: string,
@@ -89,7 +94,6 @@ function ensureCommonSuffix(
   }
   return { ok: true, value: common };
 }
-
 function processMulDiv(
   opnds: ParsedNumber[],
   opList: string[],
@@ -121,98 +125,8 @@ function processMulDiv(
   }
   return undefined;
 }
-
-interface ReadOperandResult {
-  parsed: ParsedNumber;
-  operandFull: string;
-  nextPos: number;
-}
-
-interface ThenElseParse {
-  thenText: string;
-  elseText: string;
-  endPos: number;
-}
-
-function evaluateInnerExpression<T extends BindingType>(
-  inner: string,
-  parentEnv?: Map<string, T>
-): Result<number, string> {
-  if (inner.indexOf(";") !== -1) {
-    if (!_evaluateBlock) return { ok: false, error: "internal error" };
-    return _evaluateBlock(inner, parentEnv);
-  }
-  // If the expression is an assignment or declaration, evaluate it as a block so it can
-  // mutate the appropriate parent environment (if provided).
-  const eqPos = findTopLevelChar(inner, 0, "=");
-  if (inner.startsWith("let ") || eqPos !== -1) {
-    if (!_evaluateBlock) return { ok: false, error: "internal error" };
-    return _evaluateBlock(inner, parentEnv);
-  }
-  if (!_interpret) return { ok: false, error: "internal error" };
-  return _interpret(inner, parentEnv);
-}
-
-function readGroupedAt<T extends BindingType>(
-  s: string,
-  pos: number,
-  parentEnv?: Map<string, T>
-): Result<ReadOperandResult, string> {
-  const substr = s.slice(pos);
-  const opening = substr[0];
-  const closing = opening === "(" ? ")" : "}";
-
-  let depth = 0;
-  let k = 0;
-  while (k < substr.length) {
-    if (substr[k] === opening) depth++;
-    else if (substr[k] === closing) {
-      depth--;
-      if (depth === 0) break;
-    }
-    k++;
-  }
-  if (k >= substr.length || substr[k] !== closing)
-    return { ok: false, error: "unmatched parenthesis" };
-  const inner = substr.slice(1, k);
-
-  const innerRes = evaluateInnerExpression(inner, parentEnv);
-  if (!innerRes.ok) return innerRes;
-
-  const parsed: ParsedNumber = {
-    value: innerRes.value,
-    raw: String(innerRes.value),
-    end: k + 1,
-  };
-  const operandEnd = findOperandEnd(s, pos + parsed.end);
-  const operandFull = s.slice(pos, operandEnd).trim();
-  return { ok: true, value: { parsed, operandFull, nextPos: operandEnd } };
-}
-
-function findOperandEnd(s: string, start: number): number {
-  const n = s.length;
-  let j = start;
-  while (j < n) {
-    const ch = s[j];
-    if (ch === "&" && j + 1 < n && s[j + 1] === "&") break;
-    if (ch === "|" && j + 1 < n && s[j + 1] === "|") break;
-    if (["+", "-", "*", "/", "<", ">"].includes(ch)) break;
-    // break on '==' or '!=' sequences
-    if (ch === "=" && j + 1 < n && s[j + 1] === "=") break;
-    if (ch === "!" && j + 1 < n && s[j + 1] === "=") break;
-    j++;
-  }
-  return j;
-}
-
-import { findMatchingParenIndex, findTopLevelChar } from "./interpretHelpers";
+import { findTopLevelChar } from "./interpretHelpers";
 import { parseComparisonOp, applyComparisonOp } from "./operators";
-import { findTopLevelElseInString } from "./ifHelpers";
-import {
-  parseMatchArms,
-  evaluateMatchArms,
-  findMatchingBraceIndex,
-} from "./matchHelpers";
 
 function evalExpr<T extends BindingType>(
   src: string,
@@ -234,131 +148,7 @@ function evalExpr<T extends BindingType>(
   return _interpret(src, parentEnv);
 }
 
-function parseThenElse(
-  s: string,
-  parenEnd: number
-): Result<ThenElseParse, string> {
-  const n = s.length;
-  const elsePos = findTopLevelElseInString(s, parenEnd + 1);
-  if (elsePos === -1) return { ok: false, error: "invalid operand" };
-
-  const thenText = s.slice(parenEnd + 1, elsePos).trim();
-  const elseStart = elsePos + 4;
-  let q = elseStart;
-  while (q < n && s[q] === " ") q++;
-  const endPos = findOperandEnd(s, q);
-  const elseText = s.slice(q, endPos).trim();
-  return { ok: true, value: { thenText, elseText, endPos } };
-}
-
-interface ParenInner {
-  inner: string;
-  end: number;
-}
-
-function parseParenInner(
-  s: string,
-  pos: number,
-  kwLen: number
-): Result<ParenInner, string> {
-  let i = pos + kwLen;
-  while (i < s.length && s[i] === " ") i++;
-  if (i >= s.length || s[i] !== "(")
-    return { ok: false, error: "invalid operand" };
-
-  const j = findMatchingParenIndex(s, i);
-  if (j === -1) return { ok: false, error: "unmatched parenthesis" };
-
-  return { ok: true, value: { inner: s.slice(i + 1, j).trim(), end: j } };
-}
-
-function readIfAt<T extends BindingType>(
-  s: string,
-  pos: number,
-  parentEnv?: Map<string, T>
-): Result<ReadOperandResult, string> {
-  const parsedParen = parseParenInner(s, pos, 2);
-  if (!parsedParen.ok) return parsedParen as Err<string>;
-  const { inner: condText, end: j } = parsedParen.value;
-
-  const condRes = evalExpr(condText);
-  if (!condRes.ok) return condRes as Err<string>;
-
-  const parseRes = parseThenElse(s, j);
-  if (!parseRes.ok) return parseRes as Err<string>;
-  const { thenText, elseText, endPos } = parseRes.value;
-
-  // Short-circuit: evaluate only the chosen branch so side-effects do not occur in the other
-  let chosen: number;
-  if (condRes.value !== 0) {
-    const thenTrim = thenText.trim();
-    if (thenTrim === "break") return { ok: false, error: "break" };
-    if (thenTrim === "continue") return { ok: false, error: "continue" };
-    const thenRes = evalExpr(thenText, parentEnv);
-    if (!thenRes.ok) return thenRes as Err<string>;
-    chosen = thenRes.value;
-  } else {
-    const elseTrim = elseText.trim();
-    if (elseTrim === "break") return { ok: false, error: "break" };
-    if (elseTrim === "continue") return { ok: false, error: "continue" };
-    const elseRes = evalExpr(elseText, parentEnv);
-    if (!elseRes.ok) return elseRes as Err<string>;
-    chosen = elseRes.value;
-  }
-  const parsed: ParsedNumber = {
-    value: chosen,
-    raw: String(chosen),
-    end: String(chosen).length,
-  };
-  const operandFull = s.slice(pos, endPos).trim();
-  return { ok: true, value: { parsed, operandFull, nextPos: endPos } };
-}
-
-function readMatchAt<T extends BindingType>(
-  s: string,
-  pos: number,
-  parentEnv?: Map<string, T>
-): Result<ReadOperandResult, string> {
-  const n = s.length;
-
-  const parsedParenSubj = parseParenInner(s, pos, 5);
-  if (!parsedParenSubj.ok) return parsedParenSubj as Err<string>;
-  const { inner: subjText, end: j } = parsedParenSubj.value;
-
-  const subjRes = evalExpr(subjText, parentEnv);
-  if (!subjRes.ok) return subjRes as Err<string>;
-  const subjVal = subjRes.value;
-
-  // find the opening brace
-  let k = j + 1;
-  while (k < n && s[k] === " ") k++;
-  if (k >= n || s[k] !== "{") return { ok: false, error: "invalid operand" };
-
-  // find matching brace
-  const m = findMatchingBraceIndex(s, k);
-  if (m === -1) return { ok: false, error: "unmatched brace in match" };
-  const inner = s.slice(k + 1, m);
-
-  const armsRes = parseMatchArms(inner);
-  if (!armsRes.ok) return armsRes as Err<string>;
-  const evalRes = evaluateMatchArms(
-    armsRes.value,
-    subjVal,
-    parentEnv,
-    (expr: string) => evalExpr(expr, parentEnv)
-  );
-  if (!evalRes.ok) return evalRes as Err<string>;
-
-  const chosenVal = evalRes.value;
-
-  const parsed: ParsedNumber = {
-    value: chosenVal,
-    raw: String(chosenVal),
-    end: String(chosenVal).length,
-  };
-  const operandFull = s.slice(pos, m + 1).trim();
-  return { ok: true, value: { parsed, operandFull, nextPos: m + 1 } };
-}
+import { tryReadFunctionCallAt } from "./functionHelpers";
 
 function readOperandAt<T extends BindingType>(
   s: string,
@@ -369,15 +159,28 @@ function readOperandAt<T extends BindingType>(
 
   // 'if' expression
   if (substr.startsWith("if") && (substr[2] === " " || substr[2] === "("))
-    return readIfAt(s, pos, parentEnv);
+    return readIfAt(s, pos, parentEnv, evalExpr);
 
   // 'match' expression
   if (substr.startsWith("match") && (substr[5] === " " || substr[5] === "("))
-    return readMatchAt(s, pos, parentEnv);
+    return readMatchAt(s, pos, parentEnv, evalExpr);
 
   // grouped expression handled by helper
   if (substr[0] === "(" || substr[0] === "{") {
-    return readGroupedAt(s, pos, parentEnv);
+    return readGroupedAt(s, pos, parentEnv, evalExpr);
+  }
+
+  const fnRes = tryReadFunctionCallAt(
+    s,
+    pos,
+    parentEnv as unknown as Map<string, BindingType>,
+    (src: string, env?: Map<string, unknown>) =>
+      evalExpr(src, env as unknown as Map<string, BindingType>),
+    _evaluateBlock
+  );
+  if (fnRes !== undefined) {
+    if (!fnRes.ok) return fnRes as Err<string>;
+    return fnRes;
   }
 
   // direct numeric
@@ -580,5 +383,4 @@ export function handleAddSubChain<T extends BindingType>(
 
   return { ok: true, value: final };
 }
-
 export { handleSingle } from "./simpleHandlers";

@@ -21,6 +21,17 @@ import {
   type BindingLike,
 } from "./assignHelpers";
 import { handleTopLevelWhileStmt as handleWhileExternal } from "./whileHelpers";
+import { parseFnDeclStatement, type ParamDecl } from "./fnDeclHelpers";
+import {
+  interpretSpecialLiterals,
+  startsWithIdentCall,
+} from "./interpretEntryHelpers";
+
+interface FnDescriptor {
+  params: ParamDecl[];
+  body: string;
+  closure?: Map<string, Binding>;
+}
 
 interface Binding {
   value: number;
@@ -28,6 +39,29 @@ interface Binding {
   // track whether this binding has been assigned/initialized; once true, binding is immutable unless 'mutable' is set
   assigned?: boolean;
   mutable?: boolean;
+  // optional function descriptor for declared functions
+  fn?: FnDescriptor;
+}
+
+function handleFnStatement(
+  stmt: string,
+  envLocal: Map<string, Binding>
+): "handled" | undefined | Result<void, string> {
+  const parsed = parseFnDeclStatement(stmt);
+  if (!parsed) return undefined;
+  if (!parsed.ok) return parsed as Err<string>;
+  const { name, params, body } = parsed.value;
+
+  if (envLocal.has(name)) return { ok: false, error: "duplicate declaration" };
+
+  const binding: Binding = {
+    value: 0,
+    assigned: true,
+    fn: { params, body, closure: envLocal },
+  };
+
+  envLocal.set(name, binding);
+  return "handled";
 }
 
 interface EnvWithParent {
@@ -138,31 +172,29 @@ function handleLetStatement(
   return "handled";
 }
 
-function processStatement(
-  origStmt: string,
-  envLocal: Map<string, Binding>,
-  parentEnvLocal?: Map<string, Binding>,
-  isLast = false
-): Result<number, string> | "handled" | "break" | "continue" | undefined {
-  let stmt = origStmt;
-
-  // support 'break' and 'continue' as top-level statements
-  const trimmed = stmt.trim();
+function handleBreakContinueStatement(
+  trimmed: string
+): "break" | "continue" | undefined {
   if (trimmed === "break") return "break";
   if (trimmed === "continue") return "continue";
+  return undefined;
+}
 
+function handleDeclarations(
+  stmt: string,
+  envLocal: Map<string, Binding>
+): "handled" | undefined | Result<void, string> {
   const letHandled = handleLetStatement(stmt, envLocal);
-  if (letHandled === "handled") return "handled";
-  if (letHandled && !(letHandled as Err<string>).ok)
-    return letHandled as Err<string>;
-  // handle leading braced prefixes and normalize statement
-  const prefixRes = stripLeadingBracedPrefixes(stmt, envLocal, isLast);
-  if (!prefixRes.ok) return prefixRes;
-  if (prefixRes.value.handled) return "handled";
-  if (prefixRes.value.value !== undefined && isLast)
-    return { ok: true, value: prefixRes.value.value };
-  if (prefixRes.value.stmt) stmt = prefixRes.value.stmt;
+  if (letHandled) return letHandled;
+  return handleFnStatement(stmt, envLocal);
+}
 
+function processNormalizedStatement(
+  stmt: string,
+  envLocal: Map<string, Binding>,
+  parentEnvLocal: Map<string, Binding> | undefined,
+  isLast: boolean
+): Result<number, string> | "handled" | "break" | "continue" | undefined {
   const tStmt = stmt.trim();
 
   const ctrlHandled = handleTopLevelControl(
@@ -172,7 +204,7 @@ function processStatement(
     isLast
   );
   if (ctrlHandled) return ctrlHandled;
-  // assignment
+
   const assignHandled = processAssignmentIfAnyStmt(
     stmt,
     envLocal,
@@ -180,20 +212,42 @@ function processStatement(
     isLast
   );
   if (assignHandled) return assignHandled;
-  // identifier statement
+
   const identHandled = handleIdentifierStmt(
     stmt,
     envLocal,
     parentEnvLocal,
     isLast
   );
-  if (identHandled) {
-    if (identHandled === true) return "handled";
-    return identHandled;
-  }
+  if (identHandled) return identHandled === true ? "handled" : identHandled;
 
-  // expression statement (with top-level substitution)
   return handleExpressionOrSubstitution(stmt, envLocal, parentEnvLocal, isLast);
+}
+
+function processStatement(
+  origStmt: string,
+  envLocal: Map<string, Binding>,
+  parentEnvLocal?: Map<string, Binding>,
+  isLast = false
+): Result<number, string> | "handled" | "break" | "continue" | undefined {
+  let stmt = origStmt;
+  const flow = handleBreakContinueStatement(stmt.trim());
+  if (flow) return flow;
+
+  const declHandled = handleDeclarations(stmt, envLocal);
+  if (declHandled === "handled") return "handled";
+  if (declHandled && !(declHandled as Err<string>).ok)
+    return declHandled as Err<string>;
+
+  // handle leading braced prefixes and normalize statement
+  const prefixRes = stripLeadingBracedPrefixes(stmt, envLocal, isLast);
+  if (!prefixRes.ok) return prefixRes;
+  if (prefixRes.value.handled) return "handled";
+  if (prefixRes.value.value !== undefined && isLast)
+    return { ok: true, value: prefixRes.value.value };
+  if (prefixRes.value.stmt) stmt = prefixRes.value.stmt;
+
+  return processNormalizedStatement(stmt, envLocal, parentEnvLocal, isLast);
 }
 
 function handleStatementIf(
@@ -277,10 +331,6 @@ function handleTopLevelIfStmt(
   return handleStatementIf(tStmt, k, envLocal, parentEnvLocal);
 }
 
-
-
-
-
 function handleTopLevelControl(
   tStmt: string,
   envLocal: Map<string, Binding>,
@@ -330,7 +380,11 @@ function evaluateBlock(
   const stmts = splitStatements(inner);
   const env = localEnv || new Map<string, Binding>();
   // attach parent pointer so nested blocks can traverse outer environments
-  (env as unknown as EnvWithParent).__parent = parentEnv;
+  // If a local env was provided, it may already contain a parent pointer (closure);
+  // don't overwrite it. Only set when creating a new env or when parent is missing.
+  if (!(env as unknown as EnvWithParent).__parent) {
+    (env as unknown as EnvWithParent).__parent = parentEnv;
+  }
   // debug trace
 
   for (let i = 0; i < stmts.length; i++) {
@@ -423,13 +477,10 @@ export function interpret(
 ): Result<number, string> {
   const s = input.trim();
 
-  if (s === "true") return { ok: true, value: 1 };
-  if (s === "false") return { ok: true, value: 0 };
+  const lit = interpretSpecialLiterals(s);
+  if (lit) return lit;
 
-  // allow 'break' and 'continue' to be used inside statement-like expressions (e.g., in an if-then),
-  // and propagate them to the surrounding block/loop as control flow via errors
-  if (s === "break") return { ok: false, error: "break" };
-  if (s === "continue") return { ok: false, error: "continue" };
+  if (startsWithIdentCall(s)) return handleAddSubChain(s, parentEnv);
 
   if (isIdentifierOnly(s)) {
     if (parentEnv) {

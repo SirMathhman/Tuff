@@ -49,6 +49,52 @@ export function parseBracedInitializer(
   return { ok: true, value: binding };
 }
 
+function tryResolveBoolLiteral(t: string): Binding | undefined {
+  if (t === "true") return { value: 1 };
+  if (t === "false") return { value: 0 };
+  return undefined;
+}
+
+function isIdentLikeToken(s: string): boolean {
+  if (s.length === 0) return false;
+  for (let i = 0; i < s.length; i++) {
+    const cc = s.charCodeAt(i);
+    const ok =
+      (cc >= 65 && cc <= 90) ||
+      (cc >= 97 && cc <= 122) ||
+      (cc >= 48 && cc <= 57) ||
+      cc === 95;
+    if (!ok) return false;
+  }
+  return true;
+}
+
+function extractSuffixFromSubstituted(substituted: string): string | undefined {
+  const parsedNum = parseLeadingNumber(substituted);
+  if (!parsedNum || parsedNum.end >= substituted.length) return undefined;
+
+  const rest = substituted.slice(parsedNum.end).trim();
+  if (!isIdentLikeToken(rest)) return undefined;
+  return rest;
+}
+
+function resolveExpressionInitializer(
+  rhs: string,
+  env: Map<string, Binding>
+): Result<Binding, string> {
+  const err = validateIfIdentifierConditions(rhs, env);
+  if (err) return err;
+
+  const subAll = substituteAllIdents(rhs, env);
+  if (!subAll.ok) return { ok: false, error: subAll.error };
+
+  const r = interpret(subAll.value, env);
+  if (!r.ok) return { ok: false, error: r.error };
+
+  const suffix = extractSuffixFromSubstituted(subAll.value);
+  return { ok: true, value: { value: r.value, suffix } };
+}
+
 export function resolveInitializer(
   rhs: string,
   env: Map<string, Binding>,
@@ -59,9 +105,8 @@ export function resolveInitializer(
 ): Result<Binding, string> {
   const t = rhs.trim();
 
-  // boolean literal
-  if (t === "true" || t === "false")
-    return { ok: true, value: { value: t === "true" ? 1 : 0 } };
+  const bool = tryResolveBoolLiteral(t);
+  if (bool) return { ok: true, value: bool };
 
   // identifier initializer
   if (isIdentifierName(t)) {
@@ -75,19 +120,7 @@ export function resolveInitializer(
     return brRes;
   }
 
-  const err = validateIfIdentifierConditions(rhs, env);
-  if (err) return err;
-
-  const subAll = substituteAllIdents(rhs, env);
-  if (!subAll.ok) return { ok: false, error: subAll.error };
-  const r = interpret(subAll.value, env);
-  if (!r.ok) return { ok: false, error: r.error };
-  const parsedNum = parseLeadingNumber(subAll.value);
-  const suffix =
-    parsedNum && parsedNum.end < subAll.value.length
-      ? subAll.value.slice(parsedNum.end)
-      : undefined;
-  return { ok: true, value: { value: r.value, suffix } };
+  return resolveExpressionInitializer(rhs, env);
 }
 
 function scanIdentFrom(stmt: string, start: number) {

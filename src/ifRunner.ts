@@ -43,6 +43,8 @@ export function execBranchAsStatementGeneric<T extends ValueLike>(
       if (r.error === "continue") return "continue";
       return r as Result<number, string>;
     }
+    // If this branch is the final statement of an enclosing block, return its value as the expression result
+    if (isLast) return r as Result<number, string>;
     return "handled";
   }
 

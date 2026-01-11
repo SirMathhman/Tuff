@@ -123,9 +123,17 @@ export function findTopLevelChar(
   let depth = 0;
   for (let i = start; i < src.length; i++) {
     const ch = src[i];
-    if (ch === "(" || ch === "{" || ch === "[") depth++;
-    else if (ch === ")" || ch === "}" || ch === "]") depth--;
-    else if (ch === target && depth === 0) return i;
+    if (ch === "(" || ch === "{" || ch === "[") {
+      depth++;
+      continue;
+    }
+    if (ch === ")" || ch === "}" || ch === "]") {
+      depth--;
+      // if this closing bracket is the target and we've returned to top-level, it's a match
+      if (ch === target && depth === 0) return i;
+      continue;
+    }
+    if (ch === target && depth === 0) return i;
   }
   return -1;
 }
@@ -139,7 +147,8 @@ function checkSizedAnnotationMatch(
   const rhsParsed = parseLeadingNumber(rhs);
   if (rhsParsed) {
     const rhsSuffix = rhs.slice(rhsParsed.end);
-    if (rhsSuffix !== annText)
+    // accept unsuffixed numeric literals as long as they fit the annotation range; if a suffix is present it must match
+    if (rhsSuffix && rhsSuffix !== annText)
       return {
         ok: false,
         error: "declaration initializer does not match annotation",
@@ -464,19 +473,6 @@ function substituteIdentsGeneric(
   let i = 0;
   let depth = 0;
 
-  function lookupAndFormatGeneric(name: string): Result<string, string> {
-    if (!isIdentifierName(name) || reserved.has(name))
-      return { ok: true, value: name };
-    // use lookupBinding to traverse parent chains if necessary
-    // import is at top of file
-    const b = lookupBinding(name, envLocal, parentEnvLocal);
-    if (!b.ok) return { ok: false, error: b.error };
-    return {
-      ok: true,
-      value: String(b.value.value) + (b.value.suffix ? b.value.suffix : ""),
-    };
-  }
-
   while (i < src.length) {
     const ch = src[i];
     if (ch === "(" || ch === "{" || ch === "[") {
@@ -496,7 +492,17 @@ function substituteIdentsGeneric(
       const scanned = scanIdentAt(src, i);
       if (scanned) {
         const { name, next } = scanned;
-        const res = lookupAndFormatGeneric(name);
+        if (next < src.length && src[next] === "(") {
+          out += name;
+          i = next;
+          continue;
+        }
+        const res = lookupAndFormatSubstIdent(
+          name,
+          reserved,
+          envLocal,
+          parentEnvLocal
+        );
         if (!res.ok) return res;
         out += res.value;
         i = next;
@@ -509,6 +515,22 @@ function substituteIdentsGeneric(
   }
 
   return { ok: true, value: out };
+}
+
+function lookupAndFormatSubstIdent(
+  name: string,
+  reserved: Set<string>,
+  envLocal: Map<string, BindingLike>,
+  parentEnvLocal: Map<string, BindingLike> | undefined
+): Result<string, string> {
+  if (!isIdentifierName(name) || reserved.has(name))
+    return { ok: true, value: name };
+  const b = lookupBinding(name, envLocal, parentEnvLocal);
+  if (!b.ok) return { ok: false, error: b.error };
+  return {
+    ok: true,
+    value: String(b.value.value) + (b.value.suffix ? b.value.suffix : ""),
+  };
 }
 
 export function substituteAllIdents(

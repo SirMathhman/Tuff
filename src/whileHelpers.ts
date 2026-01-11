@@ -103,8 +103,6 @@ interface WhileParts {
   body: string;
 }
 
-
-
 export function handleTopLevelWhileStmt<T extends BindingValue>(
   tStmt: string,
   envLocal: Map<string, T>,

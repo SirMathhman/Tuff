@@ -1,0 +1,92 @@
+import type { Result } from "./result";
+import { findMatchingParenIndex, isIdentifierName } from "./interpretHelpers";
+
+export interface ParamDecl {
+  name: string;
+  ann?: string;
+}
+
+export interface FnDeclParsed {
+  name: string;
+  params: ParamDecl[];
+  body: string;
+}
+
+function skipSpaces(s: string, i: number): number {
+  let p = i;
+  while (p < s.length && s[p] === " ") p++;
+  return p;
+}
+
+function isIdentCharCode(cc: number): boolean {
+  return (
+    (cc >= 65 && cc <= 90) ||
+    (cc >= 97 && cc <= 122) ||
+    (cc >= 48 && cc <= 57) ||
+    cc === 95
+  );
+}
+
+function scanIdentEnd(s: string, start: number): number {
+  let i = start;
+  while (i < s.length && isIdentCharCode(s.charCodeAt(i))) i++;
+  return i;
+}
+
+function parseFunctionParams(paramsText: string): Result<ParamDecl[], string> {
+  const params: ParamDecl[] = [];
+  if (!paramsText.length) return { ok: true, value: params };
+
+  const parts = paramsText
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  for (const p of parts) {
+    const [nmPart, annPart] = p.split(":");
+    const nm = nmPart.trim();
+    const ann = annPart ? annPart.trim() : undefined;
+    if (!isIdentifierName(nm))
+      return { ok: false, error: "invalid function parameter" };
+    if (params.some((x) => x.name === nm))
+      return { ok: false, error: "duplicate parameter" };
+    params.push({ name: nm, ann });
+  }
+  return { ok: true, value: params };
+}
+
+export function parseFnDeclStatement(
+  stmt: string
+): Result<FnDeclParsed, string> | undefined {
+  const t = stmt.trim();
+  if (!t.startsWith("fn ")) return undefined;
+
+  let i = skipSpaces(t, 2);
+  const nameStart = i;
+  const nameEnd = scanIdentEnd(t, nameStart);
+  const name = t.slice(nameStart, nameEnd).trim();
+  if (!name || !isIdentifierName(name))
+    return { ok: false, error: "invalid function declaration" };
+
+  i = skipSpaces(t, nameEnd);
+  if (i >= t.length || t[i] !== "(")
+    return { ok: false, error: "invalid function declaration" };
+
+  const closeParen = findMatchingParenIndex(t, i);
+  if (closeParen === -1)
+    return { ok: false, error: "invalid function declaration" };
+
+  const paramsText = t.slice(i + 1, closeParen).trim();
+  const arrowIdx = t.indexOf("=>", closeParen + 1);
+  if (arrowIdx === -1)
+    return { ok: false, error: "invalid function declaration" };
+
+  const body = t.slice(arrowIdx + 2).trim();
+  const paramsRes = parseFunctionParams(paramsText);
+  if (!paramsRes.ok) return paramsRes;
+
+  return {
+    ok: true,
+    value: { name, params: paramsRes.value, body },
+  };
+}
