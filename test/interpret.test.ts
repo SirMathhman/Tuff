@@ -210,8 +210,8 @@ describe("interpret (suffix handling - braced blocks) - grouping and top-level",
   });
 });
 
-describe("interpret (suffix handling - braced blocks) - chained and errors", () => {
-  it("braced grouping and blocks (chained declarations)", () => {
+describe("interpret (suffix handling - braced blocks) - chained and booleans", () => {
+  it("braced grouping and blocks (chained declarations and &&)", () => {
     // chained declarations should allow initializers to reference earlier bindings
     expect(interpret("10 / { let x = 2; let y = x; y } + 1")).toEqual({
       ok: true,
@@ -230,7 +230,9 @@ describe("interpret (suffix handling - braced blocks) - chained and errors", () 
     // non-boolean numeric values: treat non-zero as true
     expect(interpret("1 && 0")).toEqual({ ok: true, value: 0 });
     expect(interpret("1 && 2")).toEqual({ ok: true, value: 1 });
+  });
 
+  it("braced grouping and blocks (|| and if-expression)", () => {
     // boolean || tests
     expect(interpret("let x = true; let y = false; x || y")).toEqual({
       ok: true,
@@ -244,11 +246,26 @@ describe("interpret (suffix handling - braced blocks) - chained and errors", () 
     expect(interpret("0 || 2")).toEqual({ ok: true, value: 1 });
 
     // if-expression tests
-    expect(interpret("let x = if (true) 3 else 5; x")).toEqual({ ok: true, value: 3 });
-    expect(interpret("let x = if (false) 3 else 5; x")).toEqual({ ok: true, value: 5 });
+    expect(interpret("let x = if (true) 3 else 5; x")).toEqual({
+      ok: true,
+      value: 3,
+    });
+    expect(interpret("let x = if (false) 3 else 5; x")).toEqual({
+      ok: true,
+      value: 5,
+    });
     expect(interpret("1 + if (true) 3 else 5")).toEqual({ ok: true, value: 4 });
   });
 
+  it('if-expression with identifier condition errors', () => {
+    expect(interpret("let y = 100; let x = if (y) 3 else 5; x")).toEqual({
+      ok: false,
+      error: "invalid conditional expression",
+    });
+  })
+});
+
+describe("interpret (suffix handling - braced blocks) - errors", () => {
   it("braced grouping and blocks (errors)", () => {
     // duplicate declaration should error
     expect(interpret("10 / { let x = 2U8; let x = 4U8; x } + 1")).toEqual({

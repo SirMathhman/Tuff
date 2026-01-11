@@ -109,6 +109,12 @@ interface ReadOperandResult {
   nextPos: number;
 }
 
+interface ThenElseParse {
+  thenText: string;
+  elseText: string;
+  endPos: number;
+}
+
 function evaluateInnerExpression(inner: string): Result<number, string> {
   if (inner.indexOf(";") !== -1) {
     if (!_evaluateBlock) return { ok: false, error: "internal error" };
@@ -182,9 +188,41 @@ function isStandaloneElseAt(s: string, idx: number): boolean {
   const n = s.length;
   const before = idx - 1 < 0 ? "" : s[idx - 1];
   const after = idx + 4 >= n ? "" : s[idx + 4];
-  const validBefore = before === "" || before === " " || before === ")" || before === "{";
-  const validAfter = after === "" || after === " " || after === ";" || after === ")" || after === "{";
+  const validBefore =
+    before === "" || before === " " || before === ")" || before === "{";
+  const validAfter =
+    after === "" ||
+    after === " " ||
+    after === ";" ||
+    after === ")" ||
+    after === "{";
   return validBefore && validAfter;
+}
+
+function isIdentifierOnly(t: string): boolean {
+  if (!t) return false;
+  const first = t.charCodeAt(0);
+  if (
+    !(
+      (first >= 65 && first <= 90) ||
+      (first >= 97 && first <= 122) ||
+      first === 95
+    )
+  )
+    return false;
+  for (let i = 1; i < t.length; i++) {
+    const c = t.charCodeAt(i);
+    if (
+      !(
+        (c >= 65 && c <= 90) ||
+        (c >= 97 && c <= 122) ||
+        (c >= 48 && c <= 57) ||
+        c === 95
+      )
+    )
+      return false;
+  }
+  return true;
 }
 
 function findTopLevelElse(s: string, start: number): number {
@@ -193,7 +231,8 @@ function findTopLevelElse(s: string, start: number): number {
     const ch = s[i];
     if (ch === "(" || ch === "{" || ch === "[") depth++;
     else if (ch === ")" || ch === "}" || ch === "]") depth--;
-    else if (depth === 0 && s.startsWith("else", i) && isStandaloneElseAt(s, i)) return i;
+    else if (depth === 0 && s.startsWith("else", i) && isStandaloneElseAt(s, i))
+      return i;
   }
   return -1;
 }
@@ -201,6 +240,20 @@ function findTopLevelElse(s: string, start: number): number {
 function evalExpr(src: string): Result<number, string> {
   if (!_interpret) return { ok: false, error: "internal error" };
   return _interpret(src);
+}
+
+function parseThenElse(s: string, parenEnd: number): Result<ThenElseParse, string> {
+  const n = s.length;
+  const elsePos = findTopLevelElse(s, parenEnd + 1);
+  if (elsePos === -1) return { ok: false, error: "invalid operand" };
+
+  const thenText = s.slice(parenEnd + 1, elsePos).trim();
+  const elseStart = elsePos + 4;
+  let q = elseStart;
+  while (q < n && s[q] === " ") q++;
+  const endPos = findOperandEnd(s, q);
+  const elseText = s.slice(q, endPos).trim();
+  return { ok: true, value: { thenText, elseText, endPos } };
 }
 
 function readIfAt(s: string, pos: number): Result<ReadOperandResult, string> {
@@ -213,18 +266,23 @@ function readIfAt(s: string, pos: number): Result<ReadOperandResult, string> {
   if (j === -1) return { ok: false, error: "unmatched parenthesis" };
 
   const condText = s.slice(i + 1, j).trim();
+  // reject identifier-only conditions (must be boolean literal or expression)
+  if (condText.length > 0) {
+    if (
+      isIdentifierOnly(condText) &&
+      condText !== "true" &&
+      condText !== "false"
+    ) {
+      return { ok: false, error: "invalid conditional expression" };
+    }
+  }
+
   const condRes = evalExpr(condText);
   if (!condRes.ok) return condRes as Err<string>;
 
-  const elsePos = findTopLevelElse(s, j + 1);
-  if (elsePos === -1) return { ok: false, error: "invalid operand" };
-
-  const thenText = s.slice(j + 1, elsePos).trim();
-  const elseStart = elsePos + 4;
-  let q = elseStart;
-  while (q < n && s[q] === " ") q++;
-  const endPos = findOperandEnd(s, q);
-  const elseText = s.slice(q, endPos).trim();
+  const parseRes = parseThenElse(s, j);
+  if (!parseRes.ok) return parseRes as Err<string>;
+  const { thenText, elseText, endPos } = parseRes.value;
 
   const thenRes = evalExpr(thenText);
   if (!thenRes.ok) return thenRes as Err<string>;
@@ -232,7 +290,11 @@ function readIfAt(s: string, pos: number): Result<ReadOperandResult, string> {
   if (!elseRes.ok) return elseRes as Err<string>;
 
   const chosen = condRes.value !== 0 ? thenRes.value : elseRes.value;
-  const parsed: ParsedNumber = { value: chosen, raw: String(chosen), end: String(chosen).length };
+  const parsed: ParsedNumber = {
+    value: chosen,
+    raw: String(chosen),
+    end: String(chosen).length,
+  };
   const operandFull = s.slice(pos, endPos).trim();
   return { ok: true, value: { parsed, operandFull, nextPos: endPos } };
 }
@@ -244,7 +306,8 @@ function readOperandAt(
   const substr = s.slice(pos);
 
   // 'if' expression
-  if (substr.startsWith("if") && (substr[2] === " " || substr[2] === "(")) return readIfAt(s, pos);
+  if (substr.startsWith("if") && (substr[2] === " " || substr[2] === "("))
+    return readIfAt(s, pos);
 
   // grouped expression handled by helper
   if (substr[0] === "(" || substr[0] === "{") {
