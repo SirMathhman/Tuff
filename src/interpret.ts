@@ -49,11 +49,20 @@ function isIdentifierName(s: string): boolean {
   return true;
 }
 
+function parseBooleanLiteral(id: string): number | undefined {
+  if (id === "true") return 1;
+  if (id === "false") return 0;
+  return undefined;
+}
+
 function tryParseNumberOrIdentifier(s: string, env?: Env): number | undefined {
   const { numStr, rest } = splitNumberAndSuffix(s);
   if (numStr === "") {
     const id = s.trim();
     if (isIdentifierName(id)) {
+      const bool = parseBooleanLiteral(id);
+      if (bool !== undefined) return bool;
+
       if (env && env.has(id)) return env.get(id)!.value;
       throw new Error("Unknown identifier");
     }
@@ -63,8 +72,13 @@ function tryParseNumberOrIdentifier(s: string, env?: Env): number | undefined {
   const value = Number(numStr);
   if (!Number.isFinite(value)) return undefined;
 
-  const suffix = parseWidthSuffix(rest);
-  if (suffix !== undefined) {
+  function handleSuffixValidation(
+    rest: string,
+    value: number,
+    numStr: string
+  ): boolean {
+    const suffix = parseWidthSuffix(rest);
+    if (!suffix) return false;
     if (
       suffix.bits !== 8 &&
       suffix.bits !== 16 &&
@@ -79,9 +93,12 @@ function tryParseNumberOrIdentifier(s: string, env?: Env): number | undefined {
     } else {
       validateWidthBig(suffix.signed, suffix.bits, numStr);
     }
+    return true;
   }
 
-  if (rest !== "" && value < 0 && suffix === undefined) {
+  const hasSuffix = handleSuffixValidation(rest, value, numStr);
+
+  if (rest !== "" && value < 0 && !hasSuffix) {
     throw new Error("Invalid trailing characters after negative number");
   }
 

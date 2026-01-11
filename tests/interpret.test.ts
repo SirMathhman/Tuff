@@ -113,6 +113,11 @@ describe("interpret - blocks", () => {
     expect(() => interpret("let x = 0; x = 100; x")).toThrow(Error);
   });
 
+  it("supports Bool declarations and boolean literals", () => {
+    expect(interpret("let x : Bool = true; x")).toBe(1);
+    expect(interpret("let y : Bool = false; y")).toBe(0);
+  });
+
   it("throws when a block ends with declaration and no expression", () => {
     expect(() => interpret("(3 + { let x : I32 = 1; }) * 2")).toThrow(Error);
   });
