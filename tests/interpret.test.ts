@@ -83,4 +83,8 @@ describe("interpret - arithmetic", () => {
   it("throws on division by zero", () => {
     expect(() => interpret("10 / 0")).toThrow(Error);
   });
+
+  it("throws on division by zero with parenthesized denominator", () => {
+    expect(() => interpret("10 / (2 - 2)")).toThrow(Error);
+  });
 });
