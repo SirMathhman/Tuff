@@ -1,11 +1,13 @@
 /**
  * Interpret a string and return a number.
- * Current minimal implementation parses numeric strings using Number().
+ * Current minimal implementation parses a leading numeric prefix using parseFloat.
  * TODO: extend to support expressions or other formats.
  */
 export function interpret(input: string): number {
-  // Trim whitespace and convert to number. If not a valid number, return NaN.
+  // Trim whitespace and parse a leading numeric value. If not a valid number, return NaN.
   const trimmed = input.trim();
-  const value = Number(trimmed);
-  return Number.isFinite(value) ? value : NaN;
+  if (trimmed === "") return NaN;
+
+  const parsed = parseFloat(trimmed);
+  return Number.isFinite(parsed) ? parsed : NaN;
 }
