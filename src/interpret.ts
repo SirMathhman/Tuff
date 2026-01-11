@@ -497,7 +497,8 @@ export function interpret(input: string): Result<number, string> {
     s.indexOf("-") !== -1 ||
     s.indexOf("*") !== -1 ||
     s.indexOf("/") !== -1 ||
-    s.indexOf("&&") !== -1
+    s.indexOf("&&") !== -1 ||
+    s.indexOf("||") !== -1
   ) {
     return handleAddSubChain(s);
   }

@@ -219,15 +219,29 @@ describe("interpret (suffix handling - braced blocks) - chained and errors", () 
     });
 
     // boolean && tests
-    expect(
-      interpret("let x = true; let y = false; x && y")
-    ).toEqual({ ok: true, value: 0 });
-    expect(
-      interpret("let x = true; let y = true; x && y")
-    ).toEqual({ ok: true, value: 1 });
+    expect(interpret("let x = true; let y = false; x && y")).toEqual({
+      ok: true,
+      value: 0,
+    });
+    expect(interpret("let x = true; let y = true; x && y")).toEqual({
+      ok: true,
+      value: 1,
+    });
     // non-boolean numeric values: treat non-zero as true
     expect(interpret("1 && 0")).toEqual({ ok: true, value: 0 });
     expect(interpret("1 && 2")).toEqual({ ok: true, value: 1 });
+
+    // boolean || tests
+    expect(interpret("let x = true; let y = false; x || y")).toEqual({
+      ok: true,
+      value: 1,
+    });
+    expect(interpret("let x = true; let y = true; x || y")).toEqual({
+      ok: true,
+      value: 1,
+    });
+    expect(interpret("0 || 0")).toEqual({ ok: true, value: 0 });
+    expect(interpret("0 || 2")).toEqual({ ok: true, value: 1 });
   });
 
   it("braced grouping and blocks (errors)", () => {

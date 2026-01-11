@@ -159,6 +159,7 @@ function findOperandEnd(s: string, start: number): number {
   while (j < n) {
     const ch = s[j];
     if (ch === "&" && j + 1 < n && s[j + 1] === "&") break;
+    if (ch === "|" && j + 1 < n && s[j + 1] === "|") break;
     if (["+", "-", "*", "/"].includes(ch)) break;
     j++;
   }
@@ -193,62 +194,76 @@ interface Tokenized {
   ops: string[];
 }
 
-export function tokenizeAddSub(s: string): Result<Tokenized, string> {
+interface OpParseResult {
+  op: string;
+  nextPos: number;
+}
+
+function isOperator(ch: string): boolean {
+  return ch === "+" || ch === "-" || ch === "*" || ch === "/";
+}
+
+function parseNextOperator(s: string, pos: number): Result<OpParseResult, string> {
   const n = s.length;
-  let pos = 0;
+  const ch = s[pos];
+  if (ch === "&") {
+    if (pos + 1 < n && s[pos + 1] === "&") return { ok: true, value: { op: "&&", nextPos: pos + 2 } };
+    return { ok: false, error: "invalid operator" };
+  }
+  if (ch === "|") {
+    if (pos + 1 < n && s[pos + 1] === "|") return { ok: true, value: { op: "||", nextPos: pos + 2 } };
+    return { ok: false, error: "invalid operator" };
+  }
+  if (!isOperator(ch)) return { ok: false, error: "invalid operator" };
+  return { ok: true, value: { op: ch, nextPos: pos + 1 } };
+}
 
-  function skipSpaces(): void {
-    while (pos < n && s[pos] === " ") pos++;
+function parseTokens(s2: string): Result<Tokenized, string> {
+  const n2 = s2.length;
+  let pos2 = 0;
+
+  function skipSpaces2(): void {
+    while (pos2 < n2 && s2[pos2] === " ") pos2++;
   }
 
-  function isOperator(ch: string): boolean {
-    return ch === "+" || ch === "-" || ch === "*" || ch === "/";
-  }
+  const operands2: ParsedNumber[] = [];
+  const operandStrs2: string[] = [];
+  const ops2: string[] = [];
 
-  const operands: ParsedNumber[] = [];
-  const operandStrs: string[] = [];
-  const ops: string[] = [];
-
-  skipSpaces();
-  while (pos < n) {
-    const opRes = readOperandAt(s, pos);
-    if (!opRes.ok) return opRes;
-    const { parsed, operandFull, nextPos } = opRes.value;
+  skipSpaces2();
+  while (pos2 < n2) {
+    const readRes = readOperandAt(s2, pos2);
+    if (!readRes.ok) return readRes;
+    const { parsed, operandFull, nextPos } = readRes.value;
 
     const err = validateParsedOperand(parsed, operandFull);
     if (err) return err;
 
-    operands.push(parsed);
-    operandStrs.push(operandFull);
+    operands2.push(parsed);
+    operandStrs2.push(operandFull);
 
-    pos = nextPos;
-    skipSpaces();
+    pos2 = nextPos;
+    skipSpaces2();
 
-    if (pos >= n) break;
+    if (pos2 >= n2) break;
 
-    const ch = s[pos];
-    // support multi-char '&&' operator
-    if (ch === "&") {
-      if (pos + 1 < n && s[pos + 1] === "&") {
-        ops.push("&&");
-        pos += 2;
-        skipSpaces();
-        continue;
-      }
-      return { ok: false, error: "invalid operator" };
-    }
-
-    if (!isOperator(ch)) return { ok: false, error: "invalid operator" };
-    ops.push(ch);
-    pos++;
-    skipSpaces();
+    const opParseRes = parseNextOperator(s2, pos2);
+    if (!opParseRes.ok) return opParseRes as Err<string>;
+    const opInfo = opParseRes.value;
+    ops2.push(opInfo.op);
+    pos2 = opInfo.nextPos;
+    skipSpaces2();
   }
 
-  if (operands.length === 0) return { ok: false, error: "invalid expression" };
-  if (ops.length !== operands.length - 1)
+  if (operands2.length === 0) return { ok: false, error: "invalid expression" };
+  if (ops2.length !== operands2.length - 1)
     return { ok: false, error: "invalid expression" };
 
-  return { ok: true, value: { operands, operandStrs, ops } };
+  return { ok: true, value: { operands: operands2, operandStrs: operandStrs2, ops: ops2 } };
+}
+
+export function tokenizeAddSub(s: string): Result<Tokenized, string> {
+  return parseTokens(s);
 }
 
 interface FoldResult {
@@ -274,7 +289,7 @@ function foldAddSubToBoolSegments(
         const err = validateSizedInteger(String(cur), commonSuffix);
         if (err) return err;
       }
-    } else if (op2 === "&&") {
+    } else if (op2 === "&&" || op2 === "||") {
       foldedOperands.push(cur);
       foldedOps.push(op2);
       cur = next;
@@ -303,13 +318,26 @@ export function handleAddSubChain(s: string): Result<number, string> {
   const { foldedOperands, foldedOps, numericResult } = foldRes.value;
   if (foldedOps.length === 0) return { ok: true, value: numericResult };
 
-  // Evaluate boolean && left-associatively; treat non-zero as true
-  let boolRes = foldedOperands[0] !== 0;
+  // Evaluate precedence: '&&' before '||'
+  // Build groups separated by '||', each group is an && chain
+  const groups: number[][] = [];
+  let curGroup: number[] = [foldedOperands[0]];
   for (let i = 0; i < foldedOps.length; i++) {
-    const nextBool = foldedOperands[i + 1] !== 0;
-    boolRes = boolRes && nextBool;
+    const op = foldedOps[i];
+    const nextVal = foldedOperands[i + 1];
+    if (op === "&&") {
+      curGroup.push(nextVal);
+    } else if (op === "||") {
+      groups.push(curGroup);
+      curGroup = [nextVal];
+    }
   }
-  const final = boolRes ? 1 : 0;
+  groups.push(curGroup);
+
+  // Evaluate each group (&&) to a boolean, then OR the group results
+  const groupTruths = groups.map((g) => g.every((v) => v !== 0));
+  const finalBool = groupTruths.some((b) => b);
+  const final = finalBool ? 1 : 0;
   if (commonSuffix) {
     const err = validateSizedInteger(String(final), commonSuffix);
     if (err) return err;
