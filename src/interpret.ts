@@ -19,13 +19,17 @@ const SIZED_TYPES = new Set([
   "Bool",
 ]);
 import { handleAddSubChain, handleSingle, setInterpreterFns } from "./arith";
-import { substituteAllIdents, substituteTopLevelIdents, findMatchingParenIndex, isIdentCharCode } from "./interpretHelpers";
+import {
+  substituteAllIdents,
+  substituteTopLevelIdents,
+  findMatchingParenIndex,
+  isIdentCharCode,
+} from "./interpretHelpers";
 
 interface Binding {
   value: number;
   suffix?: string;
 }
-
 
 interface ScanIdentResult {
   ident: string;
@@ -101,10 +105,12 @@ function resolveInitializer(
   const r = interpret(subAll.value);
   if (!r.ok) return { ok: false, error: r.error };
   const parsedNum = parseLeadingNumber(subAll.value);
-  const suffix = parsedNum && parsedNum.end < subAll.value.length ? subAll.value.slice(parsedNum.end) : undefined;
+  const suffix =
+    parsedNum && parsedNum.end < subAll.value.length
+      ? subAll.value.slice(parsedNum.end)
+      : undefined;
   return { ok: true, value: { value: r.value, suffix } };
 }
-
 
 function parseBracedInitializer(
   t: string,
@@ -200,6 +206,40 @@ function validateIfIdentifierConditions(
   return undefined;
 }
 
+function deriveAnnotationSuffixBetween(
+  stmt: string,
+  colonPos: number,
+  eq: number,
+  rhs: string,
+  init: Binding
+): Result<string | undefined, string> {
+  if (colonPos === -1 || colonPos >= eq) return { ok: true, value: undefined };
+  const annText = stmt.slice(colonPos + 1, eq).trim();
+  const annErr = checkAnnotationMatch(annText, rhs, init.value, init.suffix);
+  if (annErr) return annErr;
+
+  const parsedAnn = parseLeadingNumber(annText);
+  let annSuffix: string | undefined;
+  if (parsedAnn && parsedAnn.end < annText.length) annSuffix = annText.slice(parsedAnn.end);
+  else if (SIZED_TYPES.has(annText)) annSuffix = annText;
+
+  if (annSuffix) {
+    const rangeErr = validateSizedInteger(String(init.value), annSuffix);
+    if (rangeErr) return rangeErr;
+  }
+  return { ok: true, value: annSuffix };
+}
+
+function deriveAnnotationSuffixForNoInit(
+  stmt: string,
+  colonPos: number
+): Result<string | undefined, string> {
+  if (colonPos === -1) return { ok: true, value: undefined };
+  const annText = stmt.slice(colonPos + 1).trim();
+  if (SIZED_TYPES.has(annText)) return { ok: true, value: annText };
+  return { ok: false, error: "invalid declaration" };
+}
+
 function parseDeclaration(
   stmt: string,
   env: Map<string, Binding>
@@ -217,12 +257,9 @@ function parseDeclaration(
   // no initializer: allow annotation-only declarations like 'let x : I32'
   if (eq === -1) {
     const colonPos = findTopLevelChar(stmt, p, ":");
-    let suffix: string | undefined;
-    if (colonPos !== -1 && colonPos < stmt.length) {
-      const annText = stmt.slice(colonPos + 1).trim();
-      if (SIZED_TYPES.has(annText)) suffix = annText;
-      else return { ok: false, error: "invalid declaration" };
-    }
+    const maybeSuffix = deriveAnnotationSuffixForNoInit(stmt, colonPos);
+    if (!maybeSuffix.ok) return maybeSuffix as Err<string>;
+    const suffix = maybeSuffix.value;
 
     if (env.has(ident)) return { ok: false, error: "duplicate declaration" };
     env.set(ident, { value: 0, suffix });
@@ -236,20 +273,14 @@ function parseDeclaration(
 
   // check annotation (optional) between identifier end and '=': e.g., ': 2U8' or ': U8'
   const colonPos = findTopLevelChar(stmt, p, ":");
-  if (colonPos !== -1 && colonPos < eq) {
-    const annText = stmt.slice(colonPos + 1, eq).trim();
-    const annErr = checkAnnotationMatch(
-      annText,
-      rhs,
-      init.value.value,
-      init.value.suffix
-    );
-    if (annErr) return annErr;
-  }
+  const annRes = deriveAnnotationSuffixBetween(stmt, colonPos, eq, rhs, init.value);
+  if (!annRes.ok) return annRes as Err<string>;
+  const annSuffix = annRes.value;
 
   if (env.has(ident)) return { ok: false, error: "duplicate declaration" };
 
-  env.set(ident, { value: init.value.value, suffix: init.value.suffix });
+  const finalSuffix = init.value.suffix ?? annSuffix;
+  env.set(ident, { value: init.value.value, suffix: finalSuffix });
   return { ok: true, value: undefined };
 }
 
@@ -384,7 +415,6 @@ function stripLeadingBracedPrefixes(
   }
   return { ok: true, value: { stmt: cur } };
 }
-
 
 function processStatement(
   origStmt: string,

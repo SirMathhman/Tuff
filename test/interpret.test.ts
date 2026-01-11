@@ -319,6 +319,12 @@ describe("interpret (suffix handling - braced blocks) - annotations", () => {
       ok: true,
       value: 0,
     });
+
+    // numeric literal annotation with expression initializer should match when values equal
+    expect(interpret("let x = 1; let y = 2; let z : 3I32 = x + y; z")).toEqual({
+      ok: true,
+      value: 3,
+    });
   });
 
   it("braced grouping and blocks (annotations: mismatches)", () => {
