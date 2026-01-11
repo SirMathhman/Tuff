@@ -9,6 +9,10 @@ describe("interpret", () => {
     expect(interpret("100U8")).toBe(100);
   });
 
+  it("throws when unsigned type value is out of range (e.g., '256U8')", () => {
+    expect(() => interpret("256U8")).toThrow(Error);
+  });
+
   it("throws when negative number has trailing text (e.g., '-1U8')", () => {
     expect(() => interpret("-1U8")).toThrow(Error);
   });
