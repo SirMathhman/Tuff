@@ -32,7 +32,9 @@ export function interpret(input: string): number {
   return value;
 }
 
-function splitNumberAndSuffix(s: string): { numStr: string; rest: string } {
+interface NumberAndSuffix { numStr: string; rest: string }
+
+function splitNumberAndSuffix(s: string): NumberAndSuffix {
   let i = 0;
   const n = s.length;
   if (s[i] === "+" || s[i] === "-") i++;
