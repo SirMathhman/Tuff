@@ -36,5 +36,11 @@ module.exports = {
 
     // Limit cyclomatic complexity
     complexity: ["error", { max: 15 }],
+
+    // Cap function length to 50 lines
+    "max-lines-per-function": [
+      "error",
+      { max: 50, skipBlankLines: true, skipComments: true },
+    ],
   },
 };

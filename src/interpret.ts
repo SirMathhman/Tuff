@@ -39,45 +39,6 @@ export function interpret(input: string): number {
     throw new Error("Invalid trailing characters after negative number");
   }
 
-  function validateWidthNumber(
-    signed: boolean,
-    bits: number,
-    value: number
-  ): void {
-    const max = signed ? 2 ** (bits - 1) - 1 : 2 ** bits - 1;
-    const min = signed ? -(2 ** (bits - 1)) : 0;
-    if (!Number.isInteger(value) || value < min || value > max) {
-      throw new Error("Integer out of range");
-    }
-  }
-
-  function validateWidthBig(
-    signed: boolean,
-    bits: number,
-    numStr: string
-  ): void {
-    // bits === 64
-    try {
-      const big = BigInt(numStr);
-      const base = BigInt(1) << BigInt(bits - 1);
-      const bigMax = signed
-        ? base - BigInt(1)
-        : (base << BigInt(1)) - BigInt(1);
-      const bigMin = signed ? -base : BigInt(0);
-      if (big < bigMin || big > bigMax) {
-        throw new Error("Integer out of range");
-      }
-      if (
-        big > BigInt(Number.MAX_SAFE_INTEGER) ||
-        big < BigInt(Number.MIN_SAFE_INTEGER)
-      ) {
-        throw new Error("Value out of safe integer range");
-      }
-    } catch (e) {
-      if (e instanceof Error && e.message === "Integer out of range") throw e;
-      throw new Error("Invalid integer for specified width");
-    }
-  }
   return value;
 }
 
@@ -102,66 +63,68 @@ function isSuffixChar(ch: string): boolean {
 }
 
 function tokenizeAddSub(s: string): string[] | undefined {
-  let i = 0;
+  let i = skipSpacesFrom(s, 0);
   const n = s.length;
   const tokens: string[] = [];
   let expectNumber = true;
 
-  function skipSpaces() {
-    while (i < n && s[i] === " ") i++;
-  }
-
-  interface ParseResult {
-    token: string;
-    next: number;
-  }
-
-  function atCheck(pos: number, pred: (ch: string) => boolean): boolean {
-    return pos < n && pred(s[pos]);
-  }
-
-  function parseNumberToken(pos: number): ParseResult | undefined {
-    let j = pos;
-    const start = j;
-    if (atCheck(j, isPlusMinus)) j++;
-    const digitsStart = j;
-    j = consumeDigits(j);
-    if (j === digitsStart) return undefined;
-    if (atCheck(j, isSuffixChar)) {
-      j++;
-      const sufStart = j;
-      j = consumeDigits(j);
-      if (j === sufStart) return undefined;
-    }
-    return { token: s.slice(start, j).trim(), next: j };
-  }
-
-  function consumeDigits(pos: number): number {
-    let k = pos;
-    while (atCheck(k, isDigit)) k++;
-    return k;
-  }
-
-  skipSpaces();
   while (i < n) {
-    skipSpaces();
+    i = skipSpacesFrom(s, i);
     if (expectNumber) {
-      const res = parseNumberToken(i);
+      const res = parseNumberTokenAt(s, i);
       if (!res) return undefined;
       tokens.push(res.token);
       i = res.next;
       expectNumber = false;
     } else {
-      if (s[i] !== "+" && s[i] !== "-") return undefined;
+      if (!isPlusMinus(s[i])) return undefined;
       tokens.push(s[i]);
       i++;
       expectNumber = true;
     }
-    skipSpaces();
+    i = skipSpacesFrom(s, i);
   }
   if (expectNumber) return undefined; // dangling operator
   if (tokens.length < 3) return undefined;
   return tokens;
+}
+
+function skipSpacesFrom(s: string, pos: number): number {
+  let i = pos;
+  const n = s.length;
+  while (i < n && s[i] === " ") i++;
+  return i;
+}
+
+interface ParseResult {
+  token: string;
+  next: number;
+}
+
+function at(s: string, pos: number, pred: (ch: string) => boolean): boolean {
+  return pos < s.length && pred(s[pos]);
+}
+
+function consumeDigitsFrom(s: string, pos: number): number {
+  let j = pos;
+  while (at(s, j, isDigit)) j++;
+  return j;
+}
+
+function parseNumberTokenAt(s: string, pos: number): ParseResult | undefined {
+  let j = pos;
+  const start = j;
+  if (at(s, j, isPlusMinus)) j++;
+  const digitsStart = j;
+  j = consumeDigitsFrom(s, j);
+  if (j === digitsStart) return undefined;
+  if (at(s, j, isSuffixChar)) {
+    j++;
+    const sufStart = j;
+    j = consumeDigitsFrom(s, j);
+    if (j === sufStart) return undefined;
+  }
+  return { token: s.slice(start, j).trim(), next: j };
 }
 
 function ensureConsistentSuffix(tokens: string[]): void {
@@ -225,4 +188,36 @@ function parseWidthSuffix(s: string): WidthSuffix | undefined {
   const bits = Number(digits);
   if (!Number.isInteger(bits)) return undefined;
   return { signed, bits };
+}
+
+function validateWidthNumber(
+  signed: boolean,
+  bits: number,
+  value: number
+): void {
+  const max = signed ? 2 ** (bits - 1) - 1 : 2 ** bits - 1;
+  const min = signed ? -(2 ** (bits - 1)) : 0;
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw new Error("Integer out of range");
+  }
+}
+
+function validateWidthBig(signed: boolean, bits: number, numStr: string): void {
+  // bits === 64
+  try {
+    const big = BigInt(numStr);
+    const base = BigInt(1) << BigInt(bits - 1);
+    const bigMax = signed ? base - BigInt(1) : (base << BigInt(1)) - BigInt(1);
+    const bigMin = signed ? -base : BigInt(0);
+    if (big < bigMin || big > bigMax) throw new Error("Integer out of range");
+    if (
+      big > BigInt(Number.MAX_SAFE_INTEGER) ||
+      big < BigInt(Number.MIN_SAFE_INTEGER)
+    ) {
+      throw new Error("Value out of safe integer range");
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message === "Integer out of range") throw e;
+    throw new Error("Invalid integer for specified width");
+  }
 }
