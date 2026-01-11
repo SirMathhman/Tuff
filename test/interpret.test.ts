@@ -207,6 +207,12 @@ describe("interpret (suffix handling - braced blocks) - grouping and top-level",
       ok: true,
       value: 100,
     });
+
+    // assignment inside if-branches should affect outer binding
+    expect(interpret("let x : I32; if (true) x = 3 else x = 5; x")).toEqual({
+      ok: true,
+      value: 3,
+    });
   });
 });
 

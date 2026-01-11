@@ -10,7 +10,6 @@ import { handleAddSubChain, handleSingle, setInterpreterFns } from "./arith";
 import {
   substituteAllIdents,
   substituteTopLevelIdents,
-  findMatchingParenIndex,
   isIdentCharCode,
   isIdentifierOnly,
   scanExpressionSuffix,
@@ -18,6 +17,12 @@ import {
   handleNumericSuffixAnnotation,
   checkSimpleAnnotation,
 } from "./interpretHelpers";
+
+import {
+  lookupBinding,
+  findBindingEnv,
+  validateIfIdentifierConditions,
+} from "./ifValidators";
 
 interface Binding {
   value: number;
@@ -43,26 +48,6 @@ function scanIdentifierFrom(
   return ident ? { ident, nextPos: p } : undefined;
 }
 
-function lookupBinding(
-  name: string,
-  env: Map<string, Binding>,
-  fallbackEnv?: Map<string, Binding>
-): Result<Binding, string> {
-  const binding = env.get(name);
-  if (binding) return { ok: true, value: binding };
-  if (fallbackEnv) return lookupBinding(name, fallbackEnv);
-  return { ok: false, error: `unknown identifier ${name}` };
-}
-
-function findBindingEnv(
-  name: string,
-  env: Map<string, Binding>,
-  fallbackEnv?: Map<string, Binding>
-): Map<string, Binding> | undefined {
-  if (env.has(name)) return env;
-  if (fallbackEnv && fallbackEnv.has(name)) return fallbackEnv;
-  return undefined;
-}
 
 function parseBooleanLiteral(t: string): Binding | undefined {
   if (t === "true" || t === "false") return { value: t === "true" ? 1 : 0 };
@@ -95,7 +80,7 @@ function resolveInitializer(
 
   const subAll = substituteAllIdents(rhs, env);
   if (!subAll.ok) return { ok: false, error: subAll.error };
-  const r = interpret(subAll.value);
+  const r = interpret(subAll.value, env);
   if (!r.ok) return { ok: false, error: r.error };
   const parsedNum = parseLeadingNumber(subAll.value);
   const suffix =
@@ -134,70 +119,6 @@ function parseBracedInitializer(
   return { ok: true, value: binding };
 }
 
-interface SingleIfValidateResult {
-  err?: Err<string>;
-  nextPos?: number;
-}
-
-function validateSingleIfAtIndex(
-  rhs: string,
-  i: number,
-  env: Map<string, Binding>
-): SingleIfValidateResult {
-  let j = i + 2;
-  while (j < rhs.length && rhs[j] === " ") j++;
-  if (j >= rhs.length || rhs[j] !== "(")
-    return { err: { ok: false, error: "invalid conditional expression" } };
-  const k = findMatchingParenIndex(rhs, j);
-  if (k === -1) return { err: { ok: false, error: "unmatched parenthesis" } };
-  const condText = rhs.slice(j + 1, k).trim();
-  if (
-    isIdentifierOnly(condText) &&
-    condText !== "true" &&
-    condText !== "false"
-  ) {
-    const name = condText.split(" ")[0];
-    const b = lookupBinding(name, env);
-    if (!b.ok) return { err: { ok: false, error: b.error } };
-    if (!(b.value.value === 0 || b.value.value === 1))
-      return { err: { ok: false, error: "invalid conditional expression" } };
-  }
-  return { nextPos: k + 1 };
-}
-
-function validateIfIdentifierConditions(
-  rhs: string,
-  env: Map<string, Binding>
-): Err<string> | undefined {
-  if (rhs.indexOf("if(") === -1 && rhs.indexOf("if (") === -1) return undefined;
-  let i = 0;
-  let depth = 0;
-  while (i < rhs.length) {
-    const ch = rhs[i];
-    if (ch === "(" || ch === "{" || ch === "[") {
-      depth++;
-      i++;
-      continue;
-    }
-    if (ch === ")" || ch === "}" || ch === "]") {
-      depth--;
-      i++;
-      continue;
-    }
-    if (
-      depth === 0 &&
-      rhs.startsWith("if", i) &&
-      (rhs[i + 2] === " " || rhs[i + 2] === "(")
-    ) {
-      const res = validateSingleIfAtIndex(rhs, i, env);
-      if (res.err) return res.err;
-      i = res.nextPos!;
-      continue;
-    }
-    i++;
-  }
-  return undefined;
-}
 
 function evaluateAnnotationExpression(
   annText: string,
@@ -207,10 +128,13 @@ function evaluateAnnotationExpression(
   // substitute identifiers in the annotation expression using current env
   const subRes = substituteAllIdents(annText, env);
   if (!subRes.ok) return subRes as Err<string>;
-  const valRes = interpret(subRes.value);
+  const valRes = interpret(subRes.value, env);
   if (!valRes.ok) return { ok: false, error: valRes.error };
   if (valRes.value !== expectedValue)
-    return { ok: false, error: "declaration initializer does not match annotation" };
+    return {
+      ok: false,
+      error: "declaration initializer does not match annotation",
+    };
   const scanRes = scanExpressionSuffix(subRes.value);
   if (!scanRes.ok) return scanRes as Err<string>;
   if (scanRes.value) {
@@ -219,7 +143,6 @@ function evaluateAnnotationExpression(
   }
   return { ok: true, value: scanRes.value };
 }
-
 
 function deriveAnnotationSuffixBetween(
   stmt: string,
@@ -249,12 +172,10 @@ function deriveAnnotationSuffixBetween(
   }
 
   // otherwise treat as an expression and evaluate+scan
-const exprRes = evaluateAnnotationExpression(annText, init.value, env);
+  const exprRes = evaluateAnnotationExpression(annText, init.value, env);
   if (!exprRes.ok) return exprRes as Err<string>;
   return exprRes;
 }
-
-
 
 function parseDeclaration(
   stmt: string,
@@ -334,19 +255,13 @@ function handleBracedPrefix(
   const inner = t.slice(1, idx);
   const rest = t.slice(idx + 1).trim();
   const innerRes = evaluateBlock(inner, env);
-  if (innerRes.ok) {
+  if (innerRes.ok)
     return {
       ok: true,
       value: { rest: rest || undefined, value: innerRes.value },
     };
-  }
-
-  // permit braced statement blocks that only contain declarations (no final expr)
-  // when used as a statement: treat as handled with no resulting value
-  if (innerRes.error === "block has no final expression") {
+  if (innerRes.error === "block has no final expression")
     return { ok: true, value: { rest: rest || undefined } };
-  }
-
   return innerRes as Err<string>;
 }
 
@@ -407,6 +322,7 @@ function stripLeadingBracedPrefixes(
   return { ok: true, value: { stmt: cur } };
 }
 
+
 function processStatement(
   origStmt: string,
   envLocal: Map<string, Binding>,
@@ -421,6 +337,7 @@ function processStatement(
     return "handled";
   }
 
+  // handle leading braced prefixes and normalize statement
   const prefixRes = stripLeadingBracedPrefixes(stmt, envLocal, isLast);
   if (!prefixRes.ok) return prefixRes;
   if (prefixRes.value.handled) return "handled";
@@ -428,17 +345,21 @@ function processStatement(
     return { ok: true, value: prefixRes.value.value };
   if (prefixRes.value.stmt) stmt = prefixRes.value.stmt;
 
+  // top-level if
+  const tStmt = stmt.trim();
+  const ifHandled = handleTopLevelIfStmt(tStmt, envLocal, isLast);
+  if (ifHandled) return ifHandled;
+
+  // assignment
   const assignHandled = processAssignmentIfAnyStmt(
     stmt,
     envLocal,
     parentEnvLocal,
     isLast
   );
-  if (assignHandled) {
-    if (assignHandled === "handled") return "handled";
-    return assignHandled;
-  }
+  if (assignHandled) return assignHandled;
 
+  // identifier statement
   const identHandled = handleIdentifierStmt(
     stmt,
     envLocal,
@@ -450,12 +371,33 @@ function processStatement(
     return identHandled;
   }
 
+  // expression statement (with top-level substitution)
+  return handleExpressionOrSubstitution(stmt, envLocal, parentEnvLocal, isLast);
+}
+
+function handleTopLevelIfStmt(
+  tStmt: string,
+  envLocal: Map<string, Binding>,
+  isLast: boolean
+): Result<number, string> | "handled" | undefined {
+  if (!tStmt.startsWith("if ") && !tStmt.startsWith("if(")) return undefined;
+  const exprRes = interpret(tStmt, envLocal);
+  if (!exprRes.ok) return exprRes as Err<string>;
+  if (isLast) return exprRes;
+  return "handled";
+}
+
+function handleExpressionOrSubstitution(
+  stmt: string,
+  envLocal: Map<string, Binding>,
+  parentEnvLocal?: Map<string, Binding>,
+  isLast = false
+): Result<number, string> | "handled" | undefined {
   const subRes = substituteTopLevelIdents(stmt, envLocal, parentEnvLocal);
   if (!subRes.ok) return subRes as Err<string>;
-  const exprRes = interpret(subRes.value);
+  const exprRes = interpret(subRes.value, envLocal);
   if (!exprRes.ok) return exprRes;
   if (isLast) return exprRes;
-
   return "handled";
 }
 
@@ -515,21 +457,34 @@ function handleAssignmentIfAny(
   return { ok: true, value: existing.value };
 }
 
-export function interpret(input: string): Result<number, string> {
+export function interpret(
+  input: string,
+  parentEnv?: Map<string, Binding>
+): Result<number, string> {
   const s = input.trim();
 
-  // boolean literals
   if (s === "true") return { ok: true, value: 1 };
   if (s === "false") return { ok: true, value: 0 };
 
-  // Top-level block statements (e.g., "let x = 2; x")
-  // Only treat as a block if a semicolon exists at top level or it starts with 'let '
-  if (findTopLevelChar(s, 0, ";") !== -1 || s.startsWith("let ")) {
-    return evaluateBlock(s);
+  if (isIdentifierOnly(s)) {
+    if (parentEnv) {
+      const name = s.split(" ")[0];
+      const b = lookupBinding(name, parentEnv);
+      if (!b.ok) return b as Err<string>;
+      return { ok: true, value: b.value.value };
+    }
+    return { ok: true, value: 0 };
   }
+  if (findTopLevelChar(s, 0, ";") !== -1 || s.startsWith("let "))
+    return evaluateBlock(s);
 
-  // binary operators: + - * / (supports chained expressions) and 'if' expression
-  if (
+  if (needsArithmetic(s)) return handleAddSubChain(s, parentEnv);
+
+  return handleSingle(s);
+}
+
+function needsArithmetic(s: string): boolean {
+  return (
     s.indexOf("+") !== -1 ||
     s.indexOf("-") !== -1 ||
     s.indexOf("*") !== -1 ||
@@ -538,12 +493,7 @@ export function interpret(input: string): Result<number, string> {
     s.indexOf("||") !== -1 ||
     s.startsWith("if ") ||
     s.startsWith("if(")
-  ) {
-    return handleAddSubChain(s);
-  }
-
-  return handleSingle(s);
+  );
 }
 
-// register interpreter functions for arithmetic helpers
 setInterpreterFns(interpret, evaluateBlock);

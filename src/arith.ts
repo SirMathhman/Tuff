@@ -7,13 +7,18 @@ import {
 } from "./interpretHelpers";
 
 // These are set by interpret.ts after both modules initialize to avoid circular imports
-let _interpret: ((s: string) => Result<number, string>) | undefined = undefined;
+let _interpret:
+  | ((s: string, parentEnv?: Map<string, any>) => Result<number, string>)
+  | undefined = undefined;
 let _evaluateBlock:
   | ((s: string, parentEnv?: Map<string, any>) => Result<number, string>)
   | undefined = undefined;
 
 export function setInterpreterFns(
-  interpretFn: (s: string) => Result<number, string>,
+  interpretFn: (
+    s: string,
+    parentEnv?: Map<string, any>
+  ) => Result<number, string>,
   evaluateBlockFn: (
     s: string,
     parentEnv?: Map<string, any>
@@ -115,18 +120,29 @@ interface ThenElseParse {
   endPos: number;
 }
 
-function evaluateInnerExpression(inner: string): Result<number, string> {
+function evaluateInnerExpression(
+  inner: string,
+  parentEnv?: Map<string, any>
+): Result<number, string> {
   if (inner.indexOf(";") !== -1) {
     if (!_evaluateBlock) return { ok: false, error: "internal error" };
-    return _evaluateBlock(inner);
+    return _evaluateBlock(inner, parentEnv);
+  }
+  // If the expression is an assignment or declaration, evaluate it as a block so it can
+  // mutate the appropriate parent environment (if provided).
+  const eqPos = findTopLevelChar(inner, 0, "=");
+  if (inner.startsWith("let ") || eqPos !== -1) {
+    if (!_evaluateBlock) return { ok: false, error: "internal error" };
+    return _evaluateBlock(inner, parentEnv);
   }
   if (!_interpret) return { ok: false, error: "internal error" };
-  return _interpret(inner);
+  return _interpret(inner, parentEnv);
 }
 
 function readGroupedAt(
   s: string,
-  pos: number
+  pos: number,
+  parentEnv?: Map<string, any>
 ): Result<ReadOperandResult, string> {
   const substr = s.slice(pos);
   const opening = substr[0];
@@ -146,7 +162,7 @@ function readGroupedAt(
     return { ok: false, error: "unmatched parenthesis" };
   const inner = substr.slice(1, k);
 
-  const innerRes = evaluateInnerExpression(inner);
+  const innerRes = evaluateInnerExpression(inner, parentEnv);
   if (!innerRes.ok) return innerRes;
 
   const parsed: ParsedNumber = {
@@ -172,7 +188,7 @@ function findOperandEnd(s: string, start: number): number {
   return j;
 }
 
-import { findMatchingParenIndex } from "./interpretHelpers";
+import { findMatchingParenIndex, findTopLevelChar } from "./interpretHelpers";
 
 function isStandaloneElseAt(s: string, idx: number): boolean {
   const n = s.length;
@@ -201,9 +217,20 @@ function findTopLevelElse(s: string, start: number): number {
   return -1;
 }
 
-function evalExpr(src: string): Result<number, string> {
+function evalExpr(
+  src: string,
+  parentEnv?: Map<string, any>
+): Result<number, string> {
+  if (
+    src.indexOf(";") !== -1 ||
+    src.startsWith("let ") ||
+    findTopLevelChar(src, 0, "=") !== -1
+  ) {
+    if (!_evaluateBlock) return { ok: false, error: "internal error" };
+    return _evaluateBlock(src, parentEnv);
+  }
   if (!_interpret) return { ok: false, error: "internal error" };
-  return _interpret(src);
+  return _interpret(src, parentEnv);
 }
 
 function parseThenElse(
@@ -223,7 +250,11 @@ function parseThenElse(
   return { ok: true, value: { thenText, elseText, endPos } };
 }
 
-function readIfAt(s: string, pos: number): Result<ReadOperandResult, string> {
+function readIfAt(
+  s: string,
+  pos: number,
+  parentEnv?: Map<string, any>
+): Result<ReadOperandResult, string> {
   const n = s.length;
   let i = pos + 2; // skip 'if'
   while (i < n && s[i] === " ") i++;
@@ -241,12 +272,17 @@ function readIfAt(s: string, pos: number): Result<ReadOperandResult, string> {
   if (!parseRes.ok) return parseRes as Err<string>;
   const { thenText, elseText, endPos } = parseRes.value;
 
-  const thenRes = evalExpr(thenText);
-  if (!thenRes.ok) return thenRes as Err<string>;
-  const elseRes = evalExpr(elseText);
-  if (!elseRes.ok) return elseRes as Err<string>;
-
-  const chosen = condRes.value !== 0 ? thenRes.value : elseRes.value;
+  // Short-circuit: evaluate only the chosen branch so side-effects do not occur in the other
+  let chosen: number;
+  if (condRes.value !== 0) {
+    const thenRes = evalExpr(thenText, parentEnv);
+    if (!thenRes.ok) return thenRes as Err<string>;
+    chosen = thenRes.value;
+  } else {
+    const elseRes = evalExpr(elseText, parentEnv);
+    if (!elseRes.ok) return elseRes as Err<string>;
+    chosen = elseRes.value;
+  }
   const parsed: ParsedNumber = {
     value: chosen,
     raw: String(chosen),
@@ -258,17 +294,18 @@ function readIfAt(s: string, pos: number): Result<ReadOperandResult, string> {
 
 function readOperandAt(
   s: string,
-  pos: number
+  pos: number,
+  parentEnv?: Map<string, any>
 ): Result<ReadOperandResult, string> {
   const substr = s.slice(pos);
 
   // 'if' expression
   if (substr.startsWith("if") && (substr[2] === " " || substr[2] === "("))
-    return readIfAt(s, pos);
+    return readIfAt(s, pos, parentEnv);
 
   // grouped expression handled by helper
   if (substr[0] === "(" || substr[0] === "{") {
-    return readGroupedAt(s, pos);
+    return readGroupedAt(s, pos, parentEnv);
   }
 
   // direct numeric
@@ -317,7 +354,10 @@ function parseNextOperator(
   return { ok: true, value: { op: ch, nextPos: pos + 1 } };
 }
 
-function parseTokens(s2: string): Result<Tokenized, string> {
+function parseTokens(
+  s2: string,
+  parentEnv?: Map<string, any>
+): Result<Tokenized, string> {
   const n2 = s2.length;
   let pos2 = 0;
 
@@ -331,7 +371,7 @@ function parseTokens(s2: string): Result<Tokenized, string> {
 
   skipSpaces2();
   while (pos2 < n2) {
-    const readRes = readOperandAt(s2, pos2);
+    const readRes = readOperandAt(s2, pos2, parentEnv);
     if (!readRes.ok) return readRes;
     const { parsed, operandFull, nextPos } = readRes.value;
 
@@ -364,8 +404,11 @@ function parseTokens(s2: string): Result<Tokenized, string> {
   };
 }
 
-export function tokenizeAddSub(s: string): Result<Tokenized, string> {
-  return parseTokens(s);
+export function tokenizeAddSub(
+  s: string,
+  parentEnv?: Map<string, any>
+): Result<Tokenized, string> {
+  return parseTokens(s, parentEnv);
 }
 
 interface FoldResult {
@@ -403,8 +446,11 @@ function foldAddSubToBoolSegments(
   return { ok: true, value: { foldedOperands, foldedOps, numericResult: cur } };
 }
 
-export function handleAddSubChain(s: string): Result<number, string> {
-  const tokens = tokenizeAddSub(s);
+export function handleAddSubChain(
+  s: string,
+  parentEnv?: Map<string, any>
+): Result<number, string> {
+  const tokens = tokenizeAddSub(s, parentEnv);
   if (!tokens.ok) return tokens;
   const { operands, operandStrs, ops } = tokens.value;
 
