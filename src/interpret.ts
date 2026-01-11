@@ -2,7 +2,6 @@ import type { Result, Err } from "./result";
 import {
   parseLeadingNumber,
   validateSizedInteger,
-  checkAnnotationMatch,
   splitStatements,
   findTopLevelChar,
 } from "./interpretHelpers";
@@ -13,11 +12,11 @@ import {
   substituteTopLevelIdents,
   findMatchingParenIndex,
   isIdentCharCode,
-  SIZED_TYPES,
-  isIdentifierName,
   isIdentifierOnly,
   scanExpressionSuffix,
   deriveAnnotationSuffixForNoInit,
+  handleNumericSuffixAnnotation,
+  checkSimpleAnnotation,
 } from "./interpretHelpers";
 
 interface Binding {
@@ -202,16 +201,17 @@ function validateIfIdentifierConditions(
 
 function evaluateAnnotationExpression(
   annText: string,
-  expectedValue: number
+  expectedValue: number,
+  env: Map<string, Binding>
 ): Result<string | undefined, string> {
-  const valRes = interpret(annText);
+  // substitute identifiers in the annotation expression using current env
+  const subRes = substituteAllIdents(annText, env);
+  if (!subRes.ok) return subRes as Err<string>;
+  const valRes = interpret(subRes.value);
   if (!valRes.ok) return { ok: false, error: valRes.error };
   if (valRes.value !== expectedValue)
-    return {
-      ok: false,
-      error: "declaration initializer does not match annotation",
-    };
-  const scanRes = scanExpressionSuffix(annText);
+    return { ok: false, error: "declaration initializer does not match annotation" };
+  const scanRes = scanExpressionSuffix(subRes.value);
   if (!scanRes.ok) return scanRes as Err<string>;
   if (scanRes.value) {
     const rangeErr = validateSizedInteger(String(expectedValue), scanRes.value);
@@ -220,27 +220,14 @@ function evaluateAnnotationExpression(
   return { ok: true, value: scanRes.value };
 }
 
-function handleNumericSuffixAnnotation(
-  parsedNumValue: number,
-  rest: string,
-  initValue: number
-): Result<string | undefined, string> {
-  if (!isIdentifierName(rest)) return { ok: false, error: "declaration initializer does not match annotation" };
-  // annotation like '2U8' must also match numeric value
-  if (parsedNumValue !== initValue)
-    return { ok: false, error: "declaration initializer does not match annotation" };
-  const annSuffix = rest;
-  const rangeErr = validateSizedInteger(String(initValue), annSuffix);
-  if (rangeErr) return rangeErr;
-  return { ok: true, value: annSuffix };
-}
 
 function deriveAnnotationSuffixBetween(
   stmt: string,
   colonPos: number,
   eq: number,
   rhs: string,
-  init: Binding
+  init: Binding,
+  env: Map<string, Binding>
 ): Result<string | undefined, string> {
   if (colonPos === -1 || colonPos >= eq) return { ok: true, value: undefined };
   const annText = stmt.slice(colonPos + 1, eq).trim();
@@ -252,38 +239,22 @@ function deriveAnnotationSuffixBetween(
   // annotation like '3I32' (numeric prefix + suffix) — handle specially
   if (parsedAnn && parsedAnn.end < annText.length) {
     const rest = annText.slice(parsedAnn.end).trim();
-    const numSuffixRes = handleNumericSuffixAnnotation(parsedAnn.value, rest, init.value);
+    const numSuffixRes = handleNumericSuffixAnnotation(
+      parsedAnn.value,
+      rest,
+      init.value
+    );
     if (numSuffixRes.ok) return numSuffixRes;
     // not a simple numeric+suffix annotation — fallthrough to expression analysis
   }
 
   // otherwise treat as an expression and evaluate+scan
-  const exprRes = evaluateAnnotationExpression(annText, init.value);
+const exprRes = evaluateAnnotationExpression(annText, init.value, env);
   if (!exprRes.ok) return exprRes as Err<string>;
   return exprRes;
 }
 
-function checkSimpleAnnotation(
-  annText: string,
-  parsedAnn: ReturnType<typeof parseLeadingNumber> | undefined,
-  rhs: string,
-  init: Binding
-): Result<string | undefined, string> | undefined {
-  // For simple annotations (pure numeric literal, sized type, or Bool), run the simple matcher first
-  if ((parsedAnn && parsedAnn.end === annText.length) || SIZED_TYPES.has(annText) || annText === "Bool") {
-    const annErr = checkAnnotationMatch(annText, rhs, init.value, init.suffix);
-    if (annErr) return annErr;
 
-    if (parsedAnn && parsedAnn.end === annText.length) return { ok: true, value: undefined };
-    if (SIZED_TYPES.has(annText)) {
-      const rangeErr = validateSizedInteger(String(init.value), annText);
-      if (rangeErr) return rangeErr;
-      return { ok: true, value: annText };
-    }
-    return { ok: true, value: undefined };
-  }
-  return undefined;
-}
 
 function parseDeclaration(
   stmt: string,
@@ -323,7 +294,8 @@ function parseDeclaration(
     colonPos,
     eq,
     rhs,
-    init.value
+    init.value,
+    env
   );
   if (!annRes.ok) return annRes as Err<string>;
   const annSuffix = annRes.value;

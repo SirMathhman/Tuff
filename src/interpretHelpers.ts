@@ -389,6 +389,44 @@ export function deriveAnnotationSuffixForNoInit(
   return { ok: false, error: "invalid declaration" };
 }
 
+export function handleNumericSuffixAnnotation(
+  parsedNumValue: number,
+  rest: string,
+  initValue: number
+): Result<string | undefined, string> {
+  if (!isIdentifierName(rest))
+    return { ok: false, error: "declaration initializer does not match annotation" };
+  // annotation like '2U8' must also match numeric value
+  if (parsedNumValue !== initValue)
+    return { ok: false, error: "declaration initializer does not match annotation" };
+  const annSuffix = rest;
+  const rangeErr = validateSizedInteger(String(initValue), annSuffix);
+  if (rangeErr) return rangeErr;
+  return { ok: true, value: annSuffix };
+}
+
+export function checkSimpleAnnotation(
+  annText: string,
+  parsedAnn: ReturnType<typeof parseLeadingNumber> | undefined,
+  rhs: string,
+  init: BindingLike
+): Result<string | undefined, string> | undefined {
+  // For simple annotations (pure numeric literal, sized type, or Bool), run the simple matcher first
+  if ((parsedAnn && parsedAnn.end === annText.length) || SIZED_TYPES.has(annText) || annText === "Bool") {
+    const annErr = checkAnnotationMatch(annText, rhs, init.value, init.suffix);
+    if (annErr) return annErr;
+
+    if (parsedAnn && parsedAnn.end === annText.length) return { ok: true, value: undefined };
+    if (SIZED_TYPES.has(annText)) {
+      const rangeErr = validateSizedInteger(String(init.value), annText);
+      if (rangeErr) return rangeErr;
+      return { ok: true, value: annText };
+    }
+    return { ok: true, value: undefined };
+  }
+  return undefined;
+}
+
 function substituteIdentsGeneric(
   src: string,
   envLocal: Map<string, BindingLike>,
