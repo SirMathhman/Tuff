@@ -1,5 +1,5 @@
-import type { Result, Err } from "./result";
-import { parseLeadingNumber, BindingLike } from "./interpretHelpers";
+import type { Result, Err } from "../helpers/result";
+import { parseLeadingNumber, BindingLike } from "../parsers/interpretHelpers";
 
 interface MatchArm {
   isWildcard: boolean;

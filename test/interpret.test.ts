@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { interpret } from "../src/interpret";
+import { interpret } from "../src/core/interpret";
 
 describe("interpret (result shape)", () => {
   it("returns Result objects", () => {

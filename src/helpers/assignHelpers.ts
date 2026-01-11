@@ -1,5 +1,5 @@
 import type { Result } from "./result";
-import { validateSizedInteger } from "./interpretHelpers";
+import { validateSizedInteger } from "../parsers/interpretHelpers";
 
 export interface BindingLike {
   value: number;

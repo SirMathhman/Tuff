@@ -6,8 +6,8 @@ import {
   checkSimpleAnnotation,
   SIZED_TYPES,
   findMatchingParenIndex,
-} from "./interpretHelpers";
-import { lookupBinding } from "./ifValidators";
+} from "../parsers/interpretHelpers";
+import { lookupBinding } from "../control/ifValidators";
 
 interface BindingType {
   value: number;

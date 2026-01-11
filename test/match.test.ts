@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { interpret } from "../src/interpret";
+import { interpret } from "../src/core/interpret";
 
 test("simple match with literal and wildcard cases", () => {
   const res = interpret(

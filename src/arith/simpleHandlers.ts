@@ -1,5 +1,5 @@
-import { parseLeadingNumber } from "./interpretHelpers";
-import type { Result } from "./result";
+import { parseLeadingNumber } from "../parsers/interpretHelpers";
+import type { Result } from "../helpers/result";
 
 export function handleSingle(s: string): Result<number, string> {
   const parsed = parseLeadingNumber(s);
@@ -30,5 +30,5 @@ export function handleSingle(s: string): Result<number, string> {
 }
 
 // re-export validateSizedInteger to keep file-root dependencies small
-import { validateSizedInteger } from "./interpretHelpers";
+import { validateSizedInteger } from "../parsers/interpretHelpers";
 export { validateSizedInteger };

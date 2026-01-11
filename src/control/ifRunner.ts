@@ -1,5 +1,5 @@
-import type { Result } from "./result";
-import { findTopLevelChar } from "./interpretHelpers";
+import type { Result } from "../helpers/result";
+import { findTopLevelChar } from "../parsers/interpretHelpers";
 
 interface EvaluateBlockFn<T> {
   (

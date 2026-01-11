@@ -1,10 +1,10 @@
-import type { Result, Err } from "./result";
-import type { ParsedNumber } from "./interpretHelpers";
+import type { Result, Err } from "../helpers/result";
+import type { ParsedNumber } from "../parsers/interpretHelpers";
 import {
   parseLeadingNumber,
   validateSizedInteger,
   isSignedSuffix,
-} from "./interpretHelpers";
+} from "../parsers/interpretHelpers";
 import type { ReadOperandResult } from "./arithOperandReaders";
 import {
   readGroupedAt,
@@ -125,7 +125,7 @@ function processMulDiv(
   }
   return undefined;
 }
-import { findTopLevelChar } from "./interpretHelpers";
+import { findTopLevelChar } from "../parsers/interpretHelpers";
 import { parseComparisonOp, applyComparisonOp } from "./operators";
 
 function evalExpr<T extends BindingType>(
@@ -148,7 +148,7 @@ function evalExpr<T extends BindingType>(
   return _interpret(src, parentEnv);
 }
 
-import { tryReadFunctionCallAt } from "./functionHelpers";
+import { tryReadFunctionCallAt } from "../helpers/functionHelpers";
 
 function readOperandAt<T extends BindingType>(
   s: string,

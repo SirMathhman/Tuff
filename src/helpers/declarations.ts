@@ -3,14 +3,14 @@ import {
   parseLeadingNumber,
   validateSizedInteger,
   findTopLevelChar,
-} from "./interpretHelpers";
+} from "../parsers/interpretHelpers";
 import {
   checkSimpleAnnotation,
   handleNumericSuffixAnnotation,
   scanExpressionSuffix,
   substituteAllIdents,
-} from "./interpretHelpers";
-import { interpret } from "./interpret";
+} from "../parsers/interpretHelpers";
+import { interpret } from "../core/interpret";
 
 interface Binding {
   value: number;

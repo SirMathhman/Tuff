@@ -1,5 +1,5 @@
-import type { Err, Result } from "./result";
-import { lookupBinding } from "./ifValidators";
+import type { Err, Result } from "../helpers/result";
+import { lookupBinding } from "../control/ifValidators";
 
 export interface ParsedNumber {
   value: number;

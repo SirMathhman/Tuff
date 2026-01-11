@@ -1,12 +1,12 @@
-import type { Result, Err } from "./result";
-import type { ParsedNumber } from "./interpretHelpers";
-import { findMatchingParenIndex } from "./interpretHelpers";
-import { findTopLevelElseInString } from "./ifHelpers";
+import type { Result, Err } from "../helpers/result";
+import type { ParsedNumber } from "../parsers/interpretHelpers";
+import { findMatchingParenIndex } from "../parsers/interpretHelpers";
+import { findTopLevelElseInString } from "../control/ifHelpers";
 import {
   parseMatchArms,
   evaluateMatchArms,
   findMatchingBraceIndex,
-} from "./matchHelpers";
+} from "../control/matchHelpers";
 
 // Keep in sync with arith.ts' binding shape
 interface BindingType {

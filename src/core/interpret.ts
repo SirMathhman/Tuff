@@ -1,27 +1,27 @@
-import type { Result, Err } from "./result";
-import { splitStatements, findTopLevelChar } from "./interpretHelpers";
+import type { Result, Err } from "../helpers/result";
+import { splitStatements, findTopLevelChar } from "../parsers/interpretHelpers";
 
-import { handleAddSubChain, handleSingle, setInterpreterFns } from "./arith";
+import { handleAddSubChain, handleSingle, setInterpreterFns } from "../arith/arith";
 import {
   substituteAllIdents,
   substituteTopLevelIdents,
   isIdentifierOnly,
   findMatchingParenIndex,
-} from "./interpretHelpers";
+} from "../parsers/interpretHelpers";
 
-import { lookupBinding, findBindingEnv } from "./ifValidators";
-import { findTopLevelElseInString } from "./ifHelpers";
-import { handleStatementElseIfChainGeneric } from "./ifRunner";
-import { needsArithmetic } from "./exprNeeds";
-import { parseDeclaration, resolveInitializer } from "./declarationHelpers";
+import { lookupBinding, findBindingEnv } from "../control/ifValidators";
+import { findTopLevelElseInString } from "../control/ifHelpers";
+import { handleStatementElseIfChainGeneric } from "../control/ifRunner";
+import { needsArithmetic } from "../helpers/exprNeeds";
+import { parseDeclaration, resolveInitializer } from "../parsers/declarationHelpers";
 
 import {
   applyCompoundAssignment,
   applyPlainAssignment,
   type BindingLike,
-} from "./assignHelpers";
-import { handleTopLevelWhileStmt as handleWhileExternal } from "./whileHelpers";
-import { parseFnDeclStatement, type ParamDecl } from "./fnDeclHelpers";
+} from "../helpers/assignHelpers";
+import { handleTopLevelWhileStmt as handleWhileExternal } from "../control/whileHelpers";
+import { parseFnDeclStatement, type ParamDecl } from "../parsers/fnDeclHelpers";
 import {
   interpretSpecialLiterals,
   startsWithIdentCall,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { interpret } from "../src/interpret";
+import { interpret } from "../src/core/interpret";
 
 describe("interpret (while loop basic)", () => {
   it("supports braced block statements", () => {

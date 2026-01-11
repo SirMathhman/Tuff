@@ -1,4 +1,4 @@
-import type { Result } from "./result";
+import type { Result } from "../helpers/result";
 import { findMatchingParenIndex, isIdentifierName } from "./interpretHelpers";
 
 export interface ParamDecl {

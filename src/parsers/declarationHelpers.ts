@@ -1,13 +1,13 @@
-import type { Result } from "./result";
+import type { Result } from "../helpers/result";
 import {
   parseLeadingNumber,
   deriveAnnotationSuffixForNoInit,
   substituteAllIdents,
   isIdentifierName,
 } from "./interpretHelpers";
-import { validateIfIdentifierConditions, lookupBinding } from "./ifValidators";
-import { finalizeInitializedDeclaration } from "./declarations";
-import { interpret } from "./interpret";
+import { validateIfIdentifierConditions, lookupBinding } from "../control/ifValidators";
+import { finalizeInitializedDeclaration } from "../helpers/declarations";
+import { interpret } from "../core/interpret";
 
 interface Binding {
   value: number;
