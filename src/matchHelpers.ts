@@ -25,10 +25,11 @@ export function parseMatchArms(inner: string): Result<MatchArm[], string> {
   while (p < inner.length) {
     while (p < inner.length && inner[p] === " ") p++;
     if (p >= inner.length) break;
-    if (!inner.slice(p).startsWith("case")) return { ok: false, error: "invalid match arm" };
+    if (!inner.slice(p).startsWith("case"))
+      return { ok: false, error: "invalid match arm" };
 
     // delegate parsing of single arm to helper to reduce complexity
-      const armRes = parseOneArm(inner, p);
+    const armRes = parseOneArm(inner, p);
     if (!armRes.ok) return armRes as Result<MatchArm[], string>;
     const { arm, next } = armRes.value;
     arms.push(arm);
@@ -55,10 +56,14 @@ function findArmEnd(inner: string, start: number): number {
   return armEnd;
 }
 
-function parseOneArm(inner: string, start: number): Result<OneArmParsed, string> {
+function parseOneArm(
+  inner: string,
+  start: number
+): Result<OneArmParsed, string> {
   let p = start;
   // expects leading 'case'
-  if (!inner.slice(p).startsWith("case")) return { ok: false, error: "invalid match arm" };
+  if (!inner.slice(p).startsWith("case"))
+    return { ok: false, error: "invalid match arm" };
   p += 4;
   while (p < inner.length && inner[p] === " ") p++;
 
@@ -76,7 +81,8 @@ function parseOneArm(inner: string, start: number): Result<OneArmParsed, string>
   }
 
   while (p < inner.length && inner[p] === " ") p++;
-  if (!(inner[p] === "=" && inner[p + 1] === ">")) return { ok: false, error: "invalid match arm" };
+  if (!(inner[p] === "=" && inner[p + 1] === ">"))
+    return { ok: false, error: "invalid match arm" };
   p += 2;
   while (p < inner.length && inner[p] === " ") p++;
 
@@ -86,7 +92,8 @@ function parseOneArm(inner: string, start: number): Result<OneArmParsed, string>
   const arm: MatchArm = { isWildcard, pat: patVal, expr: exprText };
 
   // compute next position after semicolon if present
-  const next = armEnd < inner.length && inner[armEnd] === ";" ? armEnd + 1 : armEnd;
+  const next =
+    armEnd < inner.length && inner[armEnd] === ";" ? armEnd + 1 : armEnd;
   return { ok: true, value: { arm, next } };
 }
 
@@ -94,7 +101,10 @@ export function evaluateMatchArms(
   arms: MatchArm[],
   subjVal: number,
   parentEnv: Map<string, BindingLike> | undefined,
-  evalExprFn: (s: string, parentEnv?: Map<string, BindingLike>) => Result<number, string>
+  evalExprFn: (
+    s: string,
+    parentEnv?: Map<string, BindingLike>
+  ) => Result<number, string>
 ): Result<number, string> {
   for (let i = 0; i < arms.length; i++) {
     const arm = arms[i];

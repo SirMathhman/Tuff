@@ -1,27 +1,19 @@
 import type { Result, Err } from "./result";
-import {
-  parseLeadingNumber,
-  splitStatements,
-  findTopLevelChar,
-} from "./interpretHelpers";
+import { splitStatements, findTopLevelChar } from "./interpretHelpers";
 
 import { handleAddSubChain, handleSingle, setInterpreterFns } from "./arith";
 import {
   substituteAllIdents,
   substituteTopLevelIdents,
-  isIdentCharCode,
   isIdentifierOnly,
-  deriveAnnotationSuffixForNoInit,
   findMatchingParenIndex,
 } from "./interpretHelpers";
 
-import {
-  lookupBinding,
-  findBindingEnv,
-  validateIfIdentifierConditions,
-} from "./ifValidators";
+import { lookupBinding, findBindingEnv } from "./ifValidators";
 import { findTopLevelElseInString } from "./ifHelpers";
+import { handleStatementElseIfChainGeneric } from "./ifRunner";
 import { needsArithmetic } from "./exprNeeds";
+import { parseDeclaration, resolveInitializer } from "./declarationHelpers";
 
 import {
   applyCompoundAssignment,
@@ -29,7 +21,6 @@ import {
   type BindingLike,
 } from "./assignHelpers";
 import { handleTopLevelWhileStmt as handleWhileExternal } from "./whileHelpers";
-import { finalizeInitializedDeclaration } from "./declarations";
 
 interface Binding {
   value: number;
@@ -41,151 +32,6 @@ interface Binding {
 
 interface EnvWithParent {
   __parent?: Map<string, Binding>;
-}
-
-interface ScanIdentResult {
-  ident: string;
-  nextPos: number;
-}
-
-function scanIdentifierFrom(
-  stmt: string,
-  start: number
-): ScanIdentResult | undefined {
-  let p = start;
-  while (p < stmt.length) {
-    const c = stmt.charCodeAt(p);
-    if (isIdentCharCode(c)) p++;
-    else break;
-  }
-  const ident = stmt.slice(start, p);
-  return ident ? { ident, nextPos: p } : undefined;
-}
-
-function parseBooleanLiteral(t: string): Binding | undefined {
-  if (t === "true" || t === "false") return { value: t === "true" ? 1 : 0 };
-  return undefined;
-}
-
-function resolveInitializer(
-  rhs: string,
-  env: Map<string, Binding>
-): Result<Binding, string> {
-  const t = rhs.trim();
-
-  const boolLit = parseBooleanLiteral(t);
-  if (boolLit) return { ok: true, value: boolLit };
-
-  // identifier initializer
-  if (isIdentifierOnly(t)) {
-    const name = t.split(" ")[0];
-    return lookupBinding(name, env);
-  }
-
-  if (t.startsWith("{")) {
-    const brRes = parseBracedInitializer(t, env);
-    if (!brRes.ok) return brRes as Result<Binding, string>;
-    return brRes;
-  }
-
-  const err = validateIfIdentifierConditions(rhs, env);
-  if (err) return err;
-
-  const subAll = substituteAllIdents(rhs, env);
-  if (!subAll.ok) return { ok: false, error: subAll.error };
-  const r = interpret(subAll.value, env);
-  if (!r.ok) return { ok: false, error: r.error };
-  const parsedNum = parseLeadingNumber(subAll.value);
-  const suffix =
-    parsedNum && parsedNum.end < subAll.value.length
-      ? subAll.value.slice(parsedNum.end)
-      : undefined;
-  return { ok: true, value: { value: r.value, suffix } };
-}
-
-function parseBracedInitializer(
-  t: string,
-  env: Map<string, Binding>
-): Result<Binding, string> {
-  // find matching top-level closing brace
-  let depth = 0;
-  let i = 0;
-  while (i < t.length) {
-    if (t[i] === "{") depth++;
-    else if (t[i] === "}") {
-      depth--;
-      if (depth === 0) break;
-    }
-    i++;
-  }
-  if (i >= t.length || t[i] !== "}")
-    return { ok: false, error: "unmatched brace in initializer" };
-  // only allow pure braced block (no trailing tokens)
-  const rest = t.slice(i + 1).trim();
-  if (rest.length !== 0)
-    return { ok: false, error: "unexpected tokens after braced initializer" };
-
-  const inner = t.slice(1, i);
-  const innerRes = evaluateBlock(inner, env);
-  if (!innerRes.ok) return innerRes as Result<Binding, string>;
-  const binding: Binding = { value: innerRes.value };
-  return { ok: true, value: binding };
-}
-
-function parseDeclaration(
-  stmt: string,
-  env: Map<string, Binding>
-): Result<void, string> {
-  let p = 4;
-  while (p < stmt.length && stmt[p] === " ") p++;
-
-  // optional 'mut' keyword
-  let isMutable = false;
-  if (stmt.startsWith("mut", p)) {
-    const post = p + 3;
-    if (post >= stmt.length || stmt[post] === " ") {
-      isMutable = true;
-      p = post;
-      while (p < stmt.length && stmt[p] === " ") p++;
-    }
-  }
-
-  const start = p;
-
-  const scan = scanIdentifierFrom(stmt, start);
-  if (!scan) return { ok: false, error: "invalid declaration" };
-  const ident = scan.ident;
-  p = scan.nextPos;
-
-  const eq = findTopLevelChar(stmt, p, "=");
-  // no initializer: allow annotation-only declarations like 'let x : I32'
-  if (eq === -1) {
-    const colonPos = findTopLevelChar(stmt, p, ":");
-    const maybeSuffix = deriveAnnotationSuffixForNoInit(stmt, colonPos);
-    if (!maybeSuffix.ok) return maybeSuffix as Err<string>;
-    const suffix = maybeSuffix.value;
-
-    if (env.has(ident)) return { ok: false, error: "duplicate declaration" };
-    // uninitialized binding: assigned = false (first assignment allowed). store mutability
-    env.set(ident, { value: 0, suffix, assigned: false, mutable: isMutable });
-    return { ok: true, value: undefined };
-  }
-
-  const rhs = stmt.slice(eq + 1).trim();
-
-  const init = resolveInitializer(rhs, env);
-  if (!init.ok) return init as Err<string>;
-
-  return finalizeInitializedDeclaration(
-    stmt,
-    ident,
-    p,
-    eq,
-    rhs,
-    init.value,
-    env,
-    isMutable
-  );
 }
 
 interface BracedPrefixResult {
@@ -287,7 +133,7 @@ function handleLetStatement(
   envLocal: Map<string, Binding>
 ): "handled" | undefined | Result<void, string> {
   if (!stmt.startsWith("let ")) return undefined;
-  const r = parseDeclaration(stmt, envLocal);
+  const r = parseDeclaration(stmt, envLocal, evaluateBlock);
   if (!r.ok) return r as Err<string>;
   return "handled";
 }
@@ -414,15 +260,26 @@ function handleTopLevelIfStmt(
   // check for top-level 'else' to decide between expression-if and statement-if
   const elsePos = findTopLevelElseInString(tStmt, k + 1);
   if (elsePos !== -1) {
-    // expression-like if (has else) - preserve existing behavior
-    const exprRes = interpret(tStmt, envLocal);
-    if (!exprRes.ok) return exprRes as Err<string>;
-    if (isLast) return exprRes;
-    return "handled";
+    return handleStatementElseIfChainGeneric(
+      tStmt,
+      envLocal,
+      parentEnvLocal,
+      isLast,
+      interpret,
+      substituteAllIdents,
+      findMatchingParenIndex,
+      findTopLevelElseInString,
+      evaluateBlock,
+      processStatement
+    );
   }
 
   return handleStatementIf(tStmt, k, envLocal, parentEnvLocal);
 }
+
+
+
+
 
 function handleTopLevelControl(
   tStmt: string,
@@ -477,8 +334,25 @@ function evaluateBlock(
   // debug trace
 
   for (let i = 0; i < stmts.length; i++) {
-    const stmt = stmts[i];
+    let stmt = stmts[i];
     if (stmt.length === 0) continue;
+
+    // Merge following 'else' clauses into a preceding 'if' so that chains like
+    // "if (...) a = 1; else if (...) a = 2; else a = 3" are evaluated as one
+    // logical statement rather than multiple separate statements (which would
+    // otherwise cause spurious "invalid assignment LHS" errors when 'else'
+    // fragments are treated alone).
+    const tStmt = stmt.trim();
+    if (tStmt.startsWith("if ") || tStmt.startsWith("if(")) {
+      let j = i + 1;
+      while (j < stmts.length && stmts[j].trim().startsWith("else")) {
+        stmt = stmt + "; " + stmts[j];
+        j++;
+      }
+      // advance index to skip merged parts
+      i = j - 1;
+    }
+
     const res = processStatement(stmt, env, parentEnv, i === stmts.length - 1);
     if (res === "handled") continue;
     if (res === "break") return { ok: false, error: "break" };
@@ -517,7 +391,7 @@ function handleAssignmentIfAny(
     return { ok: false, error: "invalid assignment LHS" };
   const name = lhs.split(" ")[0];
   const rhs = stmt.slice(eqPos + 1).trim();
-  const init = resolveInitializer(rhs, env);
+  const init = resolveInitializer(rhs, env, evaluateBlock);
   if (!init.ok) return init as Err<string>;
   const targetEnv = findBindingEnv(name, env, parentEnv);
   if (!targetEnv) return { ok: false, error: `unknown identifier ${name}` };
@@ -567,7 +441,7 @@ export function interpret(
     return { ok: true, value: 0 };
   }
   if (findTopLevelChar(s, 0, ";") !== -1 || s.startsWith("let "))
-    return evaluateBlock(s);
+    return evaluateBlock(s, parentEnv);
 
   if (needsArithmetic(s)) return handleAddSubChain(s, parentEnv);
 

@@ -1,4 +1,5 @@
 import type { Result } from "./result";
+import { evaluateConditionGeneric } from "./ifRunner";
 
 interface BindingValue {
   value: number;
@@ -54,7 +55,7 @@ export function runSingleStmtWhile<T>(
     envLocal: Map<string, T>,
     parentEnvLocal?: Map<string, T>,
     isLast?: boolean
-  ) => Result<number, string> | "handled" | "break" | undefined,
+  ) => Result<number, string> | "handled" | "break" | "continue" | undefined,
   parentEnvLocal?: Map<string, T>
 ): Result<void, string> {
   return evaluateConditionLoop(condText, evalCond, () => {
@@ -102,41 +103,7 @@ interface WhileParts {
   body: string;
 }
 
-function evaluateCond<T extends BindingValue>(
-  condText: string,
-  envLocal: Map<string, T>,
-  parentEnvLocal: Map<string, T> | undefined,
-  interpretFn: (
-    s: string,
-    parentEnv?: Map<string, T>
-  ) => Result<number, string>,
-  substituteAllIdentsFn: (
-    src: string,
-    envLocal: Map<string, T>,
-    parentEnvLocal?: Map<string, T>
-  ) => Result<string, string>,
-  lookupBindingFn: (
-    name: string,
-    env: Map<string, T>,
-    fallbackEnv?: Map<string, T>
-  ) => Result<T, string>,
-  isIdentifierOnlyFn: (s: string) => boolean
-): Result<boolean, string> {
-  const sub = substituteAllIdentsFn(condText, envLocal, parentEnvLocal);
-  if (!sub.ok) return { ok: false, error: sub.error };
-  const s = sub.value.trim();
 
-  if (isIdentifierOnlyFn(s) && s !== "true" && s !== "false") {
-    const name = s.split(" ")[0];
-    const b = lookupBindingFn(name, envLocal, parentEnvLocal);
-    if (!b.ok) return { ok: false, error: b.error };
-    return { ok: true, value: b.value.value === 1 };
-  }
-
-  const r = interpretFn(s, envLocal);
-  if (!r.ok) return { ok: false, error: r.error };
-  return { ok: true, value: r.value !== 0 };
-}
 
 export function handleTopLevelWhileStmt<T extends BindingValue>(
   tStmt: string,
@@ -149,7 +116,7 @@ export function handleTopLevelWhileStmt<T extends BindingValue>(
   const { condText, body } = parts;
 
   const evalCondText = (ct: string): Result<boolean, string> => {
-    return evaluateCond(
+    return evaluateConditionGeneric(
       ct,
       envLocal,
       parentEnvLocal,

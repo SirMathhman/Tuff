@@ -208,7 +208,11 @@ function findOperandEnd(s: string, start: number): number {
 import { findMatchingParenIndex, findTopLevelChar } from "./interpretHelpers";
 import { parseComparisonOp, applyComparisonOp } from "./operators";
 import { findTopLevelElseInString } from "./ifHelpers";
-import { parseMatchArms, evaluateMatchArms, findMatchingBraceIndex } from "./matchHelpers";
+import {
+  parseMatchArms,
+  evaluateMatchArms,
+  findMatchingBraceIndex,
+} from "./matchHelpers";
 
 function evalExpr<T extends BindingType>(
   src: string,
@@ -252,10 +256,15 @@ interface ParenInner {
   end: number;
 }
 
-function parseParenInner(s: string, pos: number, kwLen: number): Result<ParenInner, string> {
+function parseParenInner(
+  s: string,
+  pos: number,
+  kwLen: number
+): Result<ParenInner, string> {
   let i = pos + kwLen;
   while (i < s.length && s[i] === " ") i++;
-  if (i >= s.length || s[i] !== "(") return { ok: false, error: "invalid operand" };
+  if (i >= s.length || s[i] !== "(")
+    return { ok: false, error: "invalid operand" };
 
   const j = findMatchingParenIndex(s, i);
   if (j === -1) return { ok: false, error: "unmatched parenthesis" };

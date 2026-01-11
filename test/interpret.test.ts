@@ -162,62 +162,45 @@ describe("interpret (suffix handling - arithmetic) - division", () => {
   });
 });
 
-describe("interpret (suffix handling - braced blocks) - grouping and top-level", () => {
+describe("interpret (suffix handling - braced blocks) - grouping", () => {
   it("braced grouping and blocks (grouping)", () => {
     // braced grouping with declaration without annotation
-    expect(interpret("10 / { let x = 2U8; x } + 1")).toEqual({
-      ok: true,
-      value: 6,
-    });
+    expect(interpret("10 / { let x = 2U8; x } + 1")).toEqual({ ok: true, value: 6 });
 
     // braced grouping with declaration without annotation (unsuffixed initializer)
-    expect(interpret("10 / { let x = 2; x } + 1")).toEqual({
-      ok: true,
-      value: 6,
-    });
+    expect(interpret("10 / { let x = 2; x } + 1")).toEqual({ ok: true, value: 6 });
 
     // add two braced blocks
-    expect(interpret("{ let x = 1; x } + { let y = 2; y }")).toEqual({
-      ok: true,
-      value: 3,
-    });
+    expect(interpret("{ let x = 1; x } + { let y = 2; y }")).toEqual({ ok: true, value: 3 });
 
     // nested braced blocks should capture outer bindings (lexical scoping)
-    expect(
-      interpret("let x = 1; { let y = 2; { let z = 3; x + y + z } }")
-    ).toEqual({ ok: true, value: 6 });
+    expect(interpret("let x = 1; { let y = 2; { let z = 3; x + y + z } }")).toEqual({ ok: true, value: 6 });
   });
+});
 
-  it("top-level block statements", () => {
+describe("interpret (suffix handling - braced blocks) - top-level", () => {
+  it("top-level block statements: declarations and nested blocks", () => {
     // top-level block (no surrounding braces) should also work
-    expect(interpret("let x : 100U8 = 100U8; x")).toEqual({
-      ok: true,
-      value: 100,
-    });
+    expect(interpret("let x : 100U8 = 100U8; x")).toEqual({ ok: true, value: 100 });
 
     // top-level declaration with braced initializer
-    expect(interpret("let x = { let y = 100; y}; x")).toEqual({
-      ok: true,
-      value: 100,
-    });
+    expect(interpret("let x = { let y = 100; y}; x")).toEqual({ ok: true, value: 100 });
 
     // declaration without initializer and subsequent assignment
-    expect(interpret("let x : I32; x = 100; x")).toEqual({
-      ok: true,
-      value: 100,
-    });
+    expect(interpret("let x : I32; x = 100; x")).toEqual({ ok: true, value: 100 });
 
     // assignment within nested block should affect outer binding
-    expect(interpret("let x : I32; { x = 100; } x")).toEqual({
-      ok: true,
-      value: 100,
-    });
+    expect(interpret("let x : I32; { x = 100; } x")).toEqual({ ok: true, value: 100 });
 
     // assignment inside if-branches should affect outer binding
-    expect(interpret("let x : I32; if (true) x = 3 else x = 5; x")).toEqual({
-      ok: true,
-      value: 3,
-    });
+    expect(interpret("let x : I32; if (true) x = 3 else x = 5; x")).toEqual({ ok: true, value: 3 });
+  });
+
+  it("top-level block statements: nested else-if assignments", () => {
+    // nested else-if statement-style assignments choose the correct branch
+    expect(interpret("let x : I32; if (true) x = 5; else if (true) x = 2; else x = 3; x")).toEqual({ ok: true, value: 5 });
+    expect(interpret("let x : I32; if (false) x = 5; else if (true) x = 2; else x = 3; x")).toEqual({ ok: true, value: 2 });
+    expect(interpret("let x : I32; if (false) x = 5; else if (false) x = 2; else x = 3; x")).toEqual({ ok: true, value: 3 });
   });
 });
 
@@ -253,38 +236,25 @@ it("assignments and mutability", () => {
   });
 });
 
-describe("interpret (suffix handling - braced blocks) - chained and booleans", () => {
+describe("interpret (suffix handling - braced blocks) - chained", () => {
   it("braced grouping and blocks (chained declarations and &&)", () => {
     // chained declarations should allow initializers to reference earlier bindings
-    expect(interpret("10 / { let x = 2; let y = x; y } + 1")).toEqual({
-      ok: true,
-      value: 6,
-    });
+    expect(interpret("10 / { let x = 2; let y = x; y } + 1")).toEqual({ ok: true, value: 6 });
 
     // boolean && tests
-    expect(interpret("let x = true; let y = false; x && y")).toEqual({
-      ok: true,
-      value: 0,
-    });
-    expect(interpret("let x = true; let y = true; x && y")).toEqual({
-      ok: true,
-      value: 1,
-    });
+    expect(interpret("let x = true; let y = false; x && y")).toEqual({ ok: true, value: 0 });
+    expect(interpret("let x = true; let y = true; x && y")).toEqual({ ok: true, value: 1 });
     // non-boolean numeric values: treat non-zero as true
     expect(interpret("1 && 0")).toEqual({ ok: true, value: 0 });
     expect(interpret("1 && 2")).toEqual({ ok: true, value: 1 });
   });
+});
 
+describe("interpret (suffix handling - braced blocks) - boolean or / if-expression", () => {
   it("braced grouping and blocks (|| and if-expression)", () => {
     // boolean || tests
-    expect(interpret("let x = true; let y = false; x || y")).toEqual({
-      ok: true,
-      value: 1,
-    });
-    expect(interpret("let x = true; let y = true; x || y")).toEqual({
-      ok: true,
-      value: 1,
-    });
+    expect(interpret("let x = true; let y = false; x || y")).toEqual({ ok: true, value: 1 });
+    expect(interpret("let x = true; let y = true; x || y")).toEqual({ ok: true, value: 1 });
     expect(interpret("0 || 0")).toEqual({ ok: true, value: 0 });
     expect(interpret("0 || 2")).toEqual({ ok: true, value: 1 });
 
@@ -292,18 +262,32 @@ describe("interpret (suffix handling - braced blocks) - chained and booleans", (
     // (see the dedicated 'if-expression tests' it() added following this block)
   });
 
-  it("if-expression tests", () => {
-    // basic if-expression behavior
-    expect(interpret("let x = if (true) 3 else 5; x")).toEqual({ ok: true, value: 3 });
-    expect(interpret("let x = if (false) 3 else 5; x")).toEqual({ ok: true, value: 5 });
+  it("if-expression basics", () => {
+    expect(interpret("let x = if (true) 3 else 5; x")).toEqual({
+      ok: true,
+      value: 3,
+    });
+    expect(interpret("let x = if (false) 3 else 5; x")).toEqual({
+      ok: true,
+      value: 5,
+    });
     expect(interpret("1 + if (true) 3 else 5")).toEqual({ ok: true, value: 4 });
+  });
 
-    // nested else-if expressions
-    expect(interpret("let x = if (true) 5 else if (true) 2 else 3; x")).toEqual({ ok: true, value: 5 });
-    expect(interpret("let x = if (false) 5 else if (true) 2 else 3; x")).toEqual({ ok: true, value: 2 });
+  it("if-expression nested else-if", () => {
+    expect(interpret("let x = if (true) 5 else if (true) 2 else 3; x")).toEqual(
+      { ok: true, value: 5 }
+    );
+    expect(
+      interpret("let x = if (false) 5 else if (true) 2 else 3; x")
+    ).toEqual({ ok: true, value: 2 });
+  });
 
-    // identifier condition that references a Bool-like binding should work
-    expect(interpret("let y = true; let x = if (y) 3 else 5; x")).toEqual({ ok: true, value: 3 });
+  it("if-expression identifier condition", () => {
+    expect(interpret("let y = true; let x = if (y) 3 else 5; x")).toEqual({
+      ok: true,
+      value: 3,
+    });
   });
 
   it("if-expression with identifier condition errors", () => {
