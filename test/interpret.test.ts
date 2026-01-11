@@ -202,17 +202,7 @@ describe("interpret (suffix handling - braced blocks) - grouping and top-level",
       value: 100,
     });
 
-    // second assignment should error (immutable after first assignment)
-    expect(interpret("let x : I32; x = 0; x = 1; x")).toEqual({
-      ok: false,
-      error: "assignment to immutable binding",
-    });
 
-    // mutable bindings allow reassignment
-    expect(interpret("let mut x : I32; x = 0; x = 1; x")).toEqual({
-      ok: true,
-      value: 1,
-    });
 
     // assignment within nested block should affect outer binding
     expect(interpret("let x : I32; { x = 100; } x")).toEqual({
@@ -225,6 +215,29 @@ describe("interpret (suffix handling - braced blocks) - grouping and top-level",
       ok: true,
       value: 3,
     });
+  });
+});
+
+it("assignments and mutability", () => {
+  // second assignment should error (immutable after first assignment)
+  expect(interpret("let x : I32; x = 0; x = 1; x")).toEqual({
+    ok: false,
+    error: "assignment to immutable binding",
+  });
+
+  // mutable bindings allow reassignment
+  expect(interpret("let mut x : I32; x = 0; x = 1; x")).toEqual({
+    ok: true,
+    value: 1,
+  });
+
+  // mutable binding with initializer allows reassignment
+  expect(interpret("let mut x = 0; x = 1; x")).toEqual({ ok: true, value: 1 });
+
+  // initialized non-mutable binding should be immutable (assignment errors)
+  expect(interpret("let x = 0; x = 1; x")).toEqual({
+    ok: false,
+    error: "assignment to immutable binding",
   });
 });
 

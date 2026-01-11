@@ -222,7 +222,16 @@ function parseDeclaration(
   const init = resolveInitializer(rhs, env);
   if (!init.ok) return init as Err<string>;
 
-  return finalizeInitializedDeclaration(stmt, ident, p, eq, rhs, init.value, env, isMutable);
+  return finalizeInitializedDeclaration(
+    stmt,
+    ident,
+    p,
+    eq,
+    rhs,
+    init.value,
+    env,
+    isMutable
+  );
 }
 
 function finalizeInitializedDeclaration(
@@ -259,7 +268,6 @@ function finalizeInitializedDeclaration(
     mutable: isMutable,
   });
   return { ok: true, value: undefined };
-
 }
 
 interface BracedPrefixResult {
