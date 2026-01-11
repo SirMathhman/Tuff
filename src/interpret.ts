@@ -21,7 +21,11 @@ import {
   validateIfIdentifierConditions,
 } from "./ifValidators";
 
-import { applyCompoundAssignment, applyPlainAssignment, type BindingLike } from "./assignHelpers";
+import {
+  applyCompoundAssignment,
+  applyPlainAssignment,
+  type BindingLike,
+} from "./assignHelpers";
 import { handleTopLevelWhileStmt as handleWhileExternal } from "./whileHelpers";
 import { finalizeInitializedDeclaration } from "./declarations";
 
@@ -292,7 +296,8 @@ function processStatement(
 
   const letHandled = handleLetStatement(stmt, envLocal);
   if (letHandled === "handled") return "handled";
-  if (letHandled && !(letHandled as Err<string>).ok) return letHandled as Err<string>;
+  if (letHandled && !(letHandled as Err<string>).ok)
+    return letHandled as Err<string>;
   // handle leading braced prefixes and normalize statement
   const prefixRes = stripLeadingBracedPrefixes(stmt, envLocal, isLast);
   if (!prefixRes.ok) return prefixRes;
@@ -311,7 +316,12 @@ function processStatement(
   );
   if (ctrlHandled) return ctrlHandled;
   // assignment
-  const assignHandled = processAssignmentIfAnyStmt(stmt, envLocal, parentEnvLocal, isLast);
+  const assignHandled = processAssignmentIfAnyStmt(
+    stmt,
+    envLocal,
+    parentEnvLocal,
+    isLast
+  );
   if (assignHandled) return assignHandled;
   // identifier statement
   const identHandled = handleIdentifierStmt(

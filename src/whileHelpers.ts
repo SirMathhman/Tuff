@@ -15,7 +15,7 @@ function evaluateConditionLoop(
     if (!c.value) break;
     const br = bodyRunner();
     if (br === "continue") continue;
-    if (br !== undefined && br !== "continue") return br as Result<void, string>;
+    if (br !== undefined) return br as Result<void, string>;
   }
   return { ok: true, value: undefined };
 }

@@ -6,22 +6,36 @@ import {
   isSignedSuffix,
 } from "./interpretHelpers";
 
+// Local binding type to match what interpret.ts uses
+interface BindingType {
+  value: number;
+  suffix?: string;
+  assigned?: boolean;
+  mutable?: boolean;
+}
+
 // These are set by interpret.ts after both modules initialize to avoid circular imports
 let _interpret:
-  | (<T>(s: string, parentEnv?: Map<string, T>) => Result<number, string>)
+  | ((
+      s: string,
+      parentEnv?: Map<string, BindingType>
+    ) => Result<number, string>)
   | undefined = undefined;
 let _evaluateBlock:
-  | (<T>(s: string, parentEnv?: Map<string, T>) => Result<number, string>)
+  | ((
+      s: string,
+      parentEnv?: Map<string, BindingType>
+    ) => Result<number, string>)
   | undefined = undefined;
 
-export function setInterpreterFns<T>(
+export function setInterpreterFns(
   interpretFn: (
     s: string,
-    parentEnv?: Map<string, T>
+    parentEnv?: Map<string, BindingType>
   ) => Result<number, string>,
   evaluateBlockFn: (
     s: string,
-    parentEnv?: Map<string, T>
+    parentEnv?: Map<string, BindingType>
   ) => Result<number, string>
 ): void {
   _interpret = interpretFn;
@@ -120,7 +134,7 @@ interface ThenElseParse {
   endPos: number;
 }
 
-function evaluateInnerExpression<T>(
+function evaluateInnerExpression<T extends BindingType>(
   inner: string,
   parentEnv?: Map<string, T>
 ): Result<number, string> {
@@ -139,7 +153,7 @@ function evaluateInnerExpression<T>(
   return _interpret(inner, parentEnv);
 }
 
-function readGroupedAt<T>(
+function readGroupedAt<T extends BindingType>(
   s: string,
   pos: number,
   parentEnv?: Map<string, T>
@@ -221,7 +235,7 @@ function findTopLevelElse(s: string, start: number): number {
   return -1;
 }
 
-function evalExpr<T>(
+function evalExpr<T extends BindingType>(
   src: string,
   parentEnv?: Map<string, T>
 ): Result<number, string> {
@@ -254,7 +268,7 @@ function parseThenElse(
   return { ok: true, value: { thenText, elseText, endPos } };
 }
 
-function readIfAt<T>(
+function readIfAt<T extends BindingType>(
   s: string,
   pos: number,
   parentEnv?: Map<string, T>
@@ -296,7 +310,7 @@ function readIfAt<T>(
   return { ok: true, value: { parsed, operandFull, nextPos: endPos } };
 }
 
-function readOperandAt<T>(
+function readOperandAt<T extends BindingType>(
   s: string,
   pos: number,
   parentEnv?: Map<string, T>
@@ -364,7 +378,7 @@ function parseNextOperator(
   return { ok: true, value: { op: ch, nextPos: pos + 1 } };
 }
 
-function parseTokens<T>(
+function parseTokens<T extends BindingType>(
   s2: string,
   parentEnv?: Map<string, T>
 ): Result<Tokenized, string> {
@@ -414,7 +428,7 @@ function parseTokens<T>(
   };
 }
 
-export function tokenizeAddSub<T>(
+export function tokenizeAddSub<T extends BindingType>(
   s: string,
   parentEnv?: Map<string, T>
 ): Result<Tokenized, string> {
@@ -465,7 +479,7 @@ function foldAddSubToBoolSegments(
   return { ok: true, value: { foldedOperands, foldedOps, numericResult: cur } };
 }
 
-export function handleAddSubChain<T>(
+export function handleAddSubChain<T extends BindingType>(
   s: string,
   parentEnv?: Map<string, T>
 ): Result<number, string> {
