@@ -7,7 +7,10 @@ import {
   SIZED_TYPES,
   findMatchingParenIndex,
 } from "../parsers/interpretHelpers";
-import { parseFnExpressionAt, parseArrowFnExpressionAt } from "../parsers/fnDeclHelpers";
+import {
+  parseFnExpressionAt,
+  parseArrowFnExpressionAt,
+} from "../parsers/fnDeclHelpers";
 import { lookupBinding } from "../control/ifValidators";
 
 interface BindingType {
@@ -52,7 +55,7 @@ type EvalBlockCb = (
   l?: Map<string, BindingType>
 ) => Result<number, string>;
 
-function parseArgsList(argsInner: string): string[] {
+export function parseArgsList(argsInner: string): string[] {
   const args: string[] = [];
   if (!argsInner.length) return args;
   let depth = 0;
@@ -445,9 +448,13 @@ function evaluateFunctionBodyExpr(
 ): Result<number | BindingWithFn, string> {
   const trimmed = fnBody.trim();
   // detect immediate function expressions being returned (e.g., `fn (y) => x + y` or `(y) => x + y`)
-  const fnExpr = parseFnExpressionAt(trimmed, 0) ?? parseArrowFnExpressionAt(trimmed, 0);
+  const fnExpr =
+    parseFnExpressionAt(trimmed, 0) ?? parseArrowFnExpressionAt(trimmed, 0);
   if (fnExpr && fnExpr.ok) {
-    return { ok: true, value: buildReturnedFunctionBinding(fnExpr.value, callEnv, closure) };
+    return {
+      ok: true,
+      value: buildReturnedFunctionBinding(fnExpr.value, callEnv, closure),
+    };
   }
 
   const sub = substituteAllIdents(
@@ -466,7 +473,8 @@ function buildReturnedFunctionBinding(
   closure: Map<string, BindingType> | undefined
 ): BindingWithFn {
   const newClosure = new Map<string, BindingType>();
-  for (const [k, v] of callEnv) newClosure.set(k, { value: v.value, suffix: v.suffix });
+  for (const [k, v] of callEnv)
+    newClosure.set(k, { value: v.value, suffix: v.suffix });
   (newClosure as unknown as EnvWithParent).__parent = closure as
     | Map<string, BindingType>
     | undefined;

@@ -574,3 +574,11 @@ it("functions: functions returning function (closures)", () => {
     )
   ).toEqual({ ok: true, value: 5 });
 });
+
+it("structs: constructor, field access", () => {
+  expect(
+    interpret(
+      "struct Point { x : I32, y : I32 } let myPoint : Point = Point { x : 3, y : 4 }; myPoint.x + myPoint.y"
+    )
+  ).toEqual({ ok: true, value: 7 });
+});

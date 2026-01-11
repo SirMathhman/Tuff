@@ -4,6 +4,7 @@ import {
   parseLeadingNumber,
   validateSizedInteger,
   findTopLevelChar,
+  isIdentifierName,
 } from "../parsers/interpretHelpers";
 import {
   checkSimpleAnnotation,
@@ -12,6 +13,7 @@ import {
   substituteAllIdents,
 } from "../parsers/interpretHelpers";
 import { interpret } from "../core/interpret";
+import { lookupStruct } from "../helpers/structHelpers";
 
 export function evaluateAnnotationExpression(
   annText: string,
@@ -129,27 +131,46 @@ function handleFinalizeAnnotation(
 
   const annText = stmt.slice(colonPos + 1, eq).trim();
   const fnAnn = parseFunctionTypeAnnotation(annText);
-  if (!fnAnn) return doDerive();
-
-  if (!init.fn)
-    return {
-      ok: false,
-      error: "declaration initializer does not match annotation",
-    };
-  if (fnAnn.paramTypes.length !== init.fn.params.length)
-    return {
-      ok: false,
-      error: "declaration initializer does not match annotation",
-    };
-  for (let i = 0; i < fnAnn.paramTypes.length; i++) {
-    const expected = fnAnn.paramTypes[i];
-    const actual = init.fn.params[i].ann;
-    if (actual && actual !== expected)
+  if (fnAnn) {
+    if (!init.fn)
       return {
         ok: false,
         error: "declaration initializer does not match annotation",
       };
+    if (fnAnn.paramTypes.length !== init.fn.params.length)
+      return {
+        ok: false,
+        error: "declaration initializer does not match annotation",
+      };
+    for (let i = 0; i < fnAnn.paramTypes.length; i++) {
+      const expected = fnAnn.paramTypes[i];
+      const actual = init.fn.params[i].ann;
+      if (actual && actual !== expected)
+        return {
+          ok: false,
+          error: "declaration initializer does not match annotation",
+        };
+    }
+    return { ok: true, value: undefined };
   }
+
+  // Struct type annotation like 'Point' — accept when initializer is a struct with the same type name
+  const structCheck = handleStructAnnotation(annText, init);
+  if (structCheck) return structCheck;
+
+  return doDerive();
+}
+
+function handleStructAnnotation(
+  annText: string,
+  init: Binding
+): Result<void, string> | undefined {
+  if (!isIdentifierName(annText)) return undefined;
+  const sres = lookupStruct(annText);
+  if (!sres.ok) return undefined;
+  if (!init.struct) return { ok: false, error: "declaration initializer does not match annotation" };
+  if (init.struct.typeName !== annText)
+    return { ok: false, error: "declaration initializer does not match annotation" };
   return { ok: true, value: undefined };
 }
 
@@ -175,12 +196,16 @@ export function finalizeInitializedDeclaration(
 
   const finalSuffix = init.suffix ?? annSuffix;
   // initialized binding: assigned = true; mutability preserved
-  env.set(ident, {
+  const bindingToSet: Binding = {
+    ...init,
     value: init.value,
     suffix: finalSuffix,
     assigned: true,
     mutable: isMutable,
     fn: init.fn,
-  });
+  };
+  // preserve any struct property present in init
+  if (init.struct) bindingToSet.struct = init.struct;
+  env.set(ident, bindingToSet);
   return { ok: true, value: undefined };
 }

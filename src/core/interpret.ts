@@ -21,6 +21,7 @@ import {
   parseDeclaration,
   resolveInitializer,
 } from "../parsers/declarationHelpers";
+import { registerStruct, parseStructDeclText } from "../helpers/structHelpers";
 
 import {
   applyCompoundAssignment,
@@ -186,6 +187,34 @@ function handleLetStatement(
   return "handled";
 }
 
+function handleStructStatement(
+  stmt: string,
+  envLocal: Map<string, Binding>
+): "handled" | undefined | Result<void, string> {
+  const t = stmt.trim();
+  if (!t.startsWith("struct ")) return undefined;
+
+  const parsedRes = parseStructDeclText(t);
+  if (!parsedRes.ok) return parsedRes as Err<string>;
+
+  const { name, fields, rest } = parsedRes.value;
+
+  // register the struct definition
+  const reg = registerStruct(name, fields);
+  if (!reg.ok) return { ok: false, error: reg.error };
+  if (rest.length === 0) return "handled";
+
+  // If trailing tokens follow the struct declaration (e.g., "struct S {..} let x = ..."),
+  // evaluate the remainder as a statement immediately so combined-declaration forms work.
+  const remRes = processStatement(rest, envLocal, undefined, false);
+  if (remRes === "handled") return "handled";
+  if (remRes && typeof remRes !== "string" && !(remRes as Result<number, string>).ok)
+    return remRes as Err<string>;
+  // if it yielded a value, swallow it and return handled (we don't want the outer caller to treat
+  // the original struct statement as yielding that value)
+  return "handled";
+}
+
 function handleBreakContinueStatement(
   trimmed: string
 ): "break" | "continue" | undefined {
@@ -198,6 +227,8 @@ function handleDeclarations(
   stmt: string,
   envLocal: Map<string, Binding>
 ): "handled" | undefined | Result<void, string> {
+  const structHandled = handleStructStatement(stmt, envLocal);
+  if (structHandled) return structHandled;
   const letHandled = handleLetStatement(stmt, envLocal);
   if (letHandled) return letHandled;
   return handleFnStatement(stmt, envLocal);

@@ -1,5 +1,6 @@
 import type { Err, Result } from "../helpers/result";
-import { lookupBinding } from "../control/ifValidators";
+
+import { handleScannedIdent } from "./identHelpers";
 
 export interface ParsedNumber {
   value: number;
@@ -462,6 +463,8 @@ export function checkSimpleAnnotation(
   return undefined;
 }
 
+
+
 function substituteIdentsGeneric(
   src: string,
   envLocal: Map<string, BindingLike>,
@@ -491,21 +494,10 @@ function substituteIdentsGeneric(
     if (!onlyTopLevel || depth === 0) {
       const scanned = scanIdentAt(src, i);
       if (scanned) {
-        const { name, next } = scanned;
-        if (next < src.length && src[next] === "(") {
-          out += name;
-          i = next;
-          continue;
-        }
-        const res = lookupAndFormatSubstIdent(
-          name,
-          reserved,
-          envLocal,
-          parentEnvLocal
-        );
-        if (!res.ok) return res;
-        out += res.value;
-        i = next;
+        const processed = handleScannedIdent(scanned, src, reserved, envLocal, parentEnvLocal);
+        if (!processed.ok) return processed as Result<string, string>;
+        out += processed.value.out;
+        i = processed.value.nextPos;
         continue;
       }
     }
@@ -517,23 +509,6 @@ function substituteIdentsGeneric(
   return { ok: true, value: out };
 }
 
-function lookupAndFormatSubstIdent(
-  name: string,
-  reserved: Set<string>,
-  envLocal: Map<string, BindingLike>,
-  parentEnvLocal: Map<string, BindingLike> | undefined
-): Result<string, string> {
-  if (!isIdentifierName(name) || reserved.has(name))
-    return { ok: true, value: name };
-  // treat sized types (e.g., I32) as reserved for substitution purposes
-  if (SIZED_TYPES.has(name)) return { ok: true, value: name };
-  const b = lookupBinding(name, envLocal, parentEnvLocal);
-  if (!b.ok) return { ok: false, error: b.error };
-  return {
-    ok: true,
-    value: String(b.value.value) + (b.value.suffix ? b.value.suffix : ""),
-  };
-}
 
 export function substituteAllIdents(
   src: string,

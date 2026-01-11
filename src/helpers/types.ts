@@ -9,10 +9,16 @@ export interface FunctionDescriptor {
   closure?: Map<string, Binding>;
 }
 
+export interface StructValue {
+  typeName: string;
+  fields: Map<string, Binding>;
+}
+
 export interface Binding {
   value: number;
   suffix?: string;
   assigned?: boolean;
   mutable?: boolean;
   fn?: FunctionDescriptor;
+  struct?: StructValue;
 }

@@ -16,6 +16,7 @@ import { finalizeInitializedDeclaration } from "../helpers/declarations";
 import { interpret } from "../core/interpret";
 import { parseFnExpressionAt, parseArrowFnExpressionAt } from "./fnDeclHelpers";
 import { callFunctionRawFromString } from "../helpers/functionHelpers";
+import { parseStructInitializer } from "../helpers/structHelpers";
 
 export function parseBracedInitializer(
   t: string,
@@ -181,6 +182,9 @@ export function resolveInitializer(
     return brRes;
   }
 
+  const tryStructInit = parseStructInitializer(t, env, evaluateBlockFn);
+  if (tryStructInit) return tryStructInit;
+
   // Special-case: if the RHS is a single function call like `make(1)` (and nothing else)
   // we can invoke it and if it returns a function value, return that binding directly (support closures)
   if (isSingleFunctionCallLike(t)) {
@@ -197,7 +201,8 @@ export function resolveInitializer(
     }
     if (callRes && !callRes.ok) {
       // if the invocation failed (e.g., unknown function), propagate the error
-      if (callRes.error !== "invalid function invocation") return callRes as Result<Binding, string>;
+      if (callRes.error !== "invalid function invocation")
+        return callRes as Result<Binding, string>;
     }
   }
 
