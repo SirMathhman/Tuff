@@ -417,12 +417,16 @@ function sliceTrim(s: string, n: number): string {
   return s.slice(n).trim();
 }
 
-function inferTypeFromExpr(expr: string, env?: Env): "Bool" | "Number" | undefined {
+function inferTypeFromExpr(
+  expr: string,
+  env?: Env
+): "Bool" | "Number" | undefined {
   const s = expr.trim();
   if (s === "true" || s === "false") return "Bool";
   // identifier
   if (isIdentifierName(s)) {
-    if (env && env.has(s)) return env.get(s)!.type as "Bool" | "Number" | undefined;
+    if (env && env.has(s))
+      return env.get(s)!.type as "Bool" | "Number" | undefined;
     return undefined;
   }
   // numeric literal start
@@ -430,7 +434,8 @@ function inferTypeFromExpr(expr: string, env?: Env): "Bool" | "Number" | undefin
   if (numStr !== "") return "Number";
   // parenthesized or binary expression assume Number
   if (s[0] === "(" || s[0] === "{") return "Number";
-  if (s.includes("+") || s.includes("-") || s.includes("*") || s.includes("/")) return "Number";
+  if (s.includes("+") || s.includes("-") || s.includes("*") || s.includes("/"))
+    return "Number";
   return undefined;
 }
 
@@ -457,12 +462,17 @@ function isIntegerTypeName(typeName: string): boolean {
   return first === "I" || first === "i" || first === "U" || first === "u";
 }
 
-function validateAnnotatedTypeCompatibility(annotatedType: string, initType: string | undefined) {
+function validateAnnotatedTypeCompatibility(
+  annotatedType: string,
+  initType: string | undefined
+) {
   if (isIntegerTypeName(annotatedType)) {
-    if (initType === "Bool") throw new Error("Type mismatch: cannot assign Bool to integer type");
+    if (initType === "Bool")
+      throw new Error("Type mismatch: cannot assign Bool to integer type");
   }
   if (annotatedType === "Bool") {
-    if (initType !== "Bool") throw new Error("Type mismatch: cannot assign non-Bool to Bool");
+    if (initType !== "Bool")
+      throw new Error("Type mismatch: cannot assign non-Bool to Bool");
   }
 }
 
@@ -490,14 +500,20 @@ function handleLetStatement(
     const initType = inferTypeFromExpr(initializer, env);
     const val = interpret(initializer, env);
 
-    if (annotatedType) validateAnnotatedTypeCompatibility(annotatedType, initType);
+    if (annotatedType)
+      validateAnnotatedTypeCompatibility(annotatedType, initType);
 
-    const item = { value: val, mutable, type: annotatedType || initType } as EnvItem;
+    const item = {
+      value: val,
+      mutable,
+      type: annotatedType || initType,
+    } as EnvItem;
     env.set(name, item);
     return val;
   }
 
-  const item = { value: NaN, mutable, type: annotatedType } as EnvItem;
+  // an uninitialized declaration (no initializer) is implicitly mutable
+  const item = { value: NaN, mutable: true, type: annotatedType } as EnvItem;
   env.set(name, item);
   return NaN;
 }
@@ -519,10 +535,12 @@ function tryHandleAssignmentStatement(
   const rhsType = inferTypeFromExpr(restAssign, env);
   if (cur.type) {
     if (isIntegerTypeName(cur.type)) {
-      if (rhsType === "Bool") throw new Error("Type mismatch: cannot assign Bool to integer type");
+      if (rhsType === "Bool")
+        throw new Error("Type mismatch: cannot assign Bool to integer type");
     }
     if (cur.type === "Bool") {
-      if (rhsType !== "Bool") throw new Error("Type mismatch: cannot assign non-Bool to Bool");
+      if (rhsType !== "Bool")
+        throw new Error("Type mismatch: cannot assign non-Bool to Bool");
     }
   }
 
