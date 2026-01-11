@@ -216,6 +216,11 @@ describe("interpret - blocks (expressions extras)", () => {
         "fn add(first : I32, second : I32) => { first + second } add(1, 2)"
       )
     ).toBe(3);
+
+    // functions should be able to mutate outer mutable variables (closures)
+    expect(
+      interpret("let mut x = 0; fn add() => x += 1; add(); x")
+    ).toBe(1);
   });
 });
 

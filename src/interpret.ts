@@ -1311,7 +1311,10 @@ function tryHandleFnExpression(s: string, env?: Env): number | undefined {
   ensureCloseParen(close, "Unterminated fn params");
 
   let restAfterParams = sliceTrim(rest, close + 1);
-  restAfterParams = extractAfterArrow(restAfterParams, "Invalid fn declaration");
+  restAfterParams = extractAfterArrow(
+    restAfterParams,
+    "Invalid fn declaration"
+  );
 
   // only support braced body for expression form (simple and safe)
   if (!restAfterParams.startsWith("{")) return undefined;
