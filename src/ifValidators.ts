@@ -4,6 +4,8 @@ import { findMatchingParenIndex, isIdentifierOnly } from "./interpretHelpers";
 interface Binding {
   value: number;
   suffix?: string;
+  // matches Binding shape in interpret.ts: track initialization/assignment state
+  assigned?: boolean;
 }
 
 export function lookupBinding(

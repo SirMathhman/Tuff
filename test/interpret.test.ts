@@ -202,6 +202,12 @@ describe("interpret (suffix handling - braced blocks) - grouping and top-level",
       value: 100,
     });
 
+    // second assignment should error (immutable after first assignment)
+    expect(interpret("let x : I32; x = 0; x = 1; x")).toEqual({
+      ok: false,
+      error: "assignment to immutable binding",
+    });
+
     // assignment within nested block should affect outer binding
     expect(interpret("let x : I32; { x = 100; } x")).toEqual({
       ok: true,

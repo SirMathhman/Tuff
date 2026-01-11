@@ -27,6 +27,8 @@ import {
 interface Binding {
   value: number;
   suffix?: string;
+  // track whether this binding has been assigned/initialized; once true, binding is immutable
+  assigned?: boolean;
 }
 
 interface ScanIdentResult {
@@ -47,7 +49,6 @@ function scanIdentifierFrom(
   const ident = stmt.slice(start, p);
   return ident ? { ident, nextPos: p } : undefined;
 }
-
 
 function parseBooleanLiteral(t: string): Binding | undefined {
   if (t === "true" || t === "false") return { value: t === "true" ? 1 : 0 };
@@ -118,7 +119,6 @@ function parseBracedInitializer(
   const binding: Binding = { value: innerRes.value };
   return { ok: true, value: binding };
 }
-
 
 function evaluateAnnotationExpression(
   annText: string,
@@ -199,7 +199,8 @@ function parseDeclaration(
     const suffix = maybeSuffix.value;
 
     if (env.has(ident)) return { ok: false, error: "duplicate declaration" };
-    env.set(ident, { value: 0, suffix });
+    // uninitialized binding: assigned = false (first assignment allowed)
+    env.set(ident, { value: 0, suffix, assigned: false });
     return { ok: true, value: undefined };
   }
 
@@ -224,7 +225,8 @@ function parseDeclaration(
   if (env.has(ident)) return { ok: false, error: "duplicate declaration" };
 
   const finalSuffix = init.value.suffix ?? annSuffix;
-  env.set(ident, { value: init.value.value, suffix: finalSuffix });
+  // initialized binding: assigned = true (immutable)
+  env.set(ident, { value: init.value.value, suffix: finalSuffix, assigned: true });
   return { ok: true, value: undefined };
 }
 
@@ -321,7 +323,6 @@ function stripLeadingBracedPrefixes(
   }
   return { ok: true, value: { stmt: cur } };
 }
-
 
 function processStatement(
   origStmt: string,
@@ -434,6 +435,9 @@ function handleAssignmentIfAny(
   const targetEnv = findBindingEnv(name, env, parentEnv);
   if (!targetEnv) return { ok: false, error: `unknown identifier ${name}` };
   const existing = targetEnv.get(name)!;
+  // if this binding was already assigned/initialized, it's immutable
+  if (existing.assigned) return { ok: false, error: "assignment to immutable binding" };
+
   // validate against existing suffix if present
   if (existing.suffix) {
     if (existing.suffix === "Bool") {
@@ -454,6 +458,7 @@ function handleAssignmentIfAny(
   if (!existing.suffix && init.value.suffix)
     existing.suffix = init.value.suffix;
   existing.value = init.value.value;
+  existing.assigned = true;
   return { ok: true, value: existing.value };
 }
 
