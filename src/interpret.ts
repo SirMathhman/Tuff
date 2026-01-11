@@ -4,8 +4,14 @@
  * - accept leading integer and ignore trailing text for non-negative numbers
  * - throw if a negative integer has trailing text
  */
+interface FunctionValue {
+  params: string[];
+  body: string;
+  env: Env; // closure capture
+}
+
 export interface EnvItem {
-  value: number;
+  value: number | FunctionValue;
   mutable: boolean;
   type?: string;
 }
@@ -32,10 +38,13 @@ export function interpret(input: string, env?: Env): number {
   const matchResult = tryHandleMatchExpression(s, env);
   if (matchResult !== undefined) return matchResult;
 
+  const callResult = tryHandleCall(s, env);
+  if (callResult !== undefined) return callResult;
+
   const comparisonResult = tryHandleComparison(s, env);
   if (comparisonResult !== undefined) return comparisonResult;
 
-  const additionResult = tryHandleAddition(s);
+  const additionResult = tryHandleAddition(s, env);
   if (additionResult !== undefined) return additionResult;
 
   const numOrIdent = tryParseNumberOrIdentifier(s, env);
@@ -85,7 +94,8 @@ function tryParseNumberOrIdentifier(s: string, env?: Env): number | undefined {
       if (env && env.has(id)) {
         const item = env.get(id)!;
         if (item.type === "__deleted__") throw new Error("Unknown identifier");
-        return item.value;
+        if (typeof item.value === "number") return item.value;
+        throw new Error("Unknown identifier");
       }
       throw new Error("Unknown identifier");
     }
@@ -95,37 +105,37 @@ function tryParseNumberOrIdentifier(s: string, env?: Env): number | undefined {
   const value = Number(numStr);
   if (!Number.isFinite(value)) return undefined;
 
-  function handleSuffixValidation(
-    rest: string,
-    value: number,
-    numStr: string
-  ): boolean {
-    const suffix = parseWidthSuffix(rest);
-    if (!suffix) return false;
-    if (
-      suffix.bits !== 8 &&
-      suffix.bits !== 16 &&
-      suffix.bits !== 32 &&
-      suffix.bits !== 64
-    ) {
-      throw new Error("Invalid bit width");
-    }
-
-    if (widthUsesNumber(suffix.bits)) {
-      validateWidthNumber(suffix.signed, suffix.bits, value);
-    } else {
-      validateWidthBig(suffix.signed, suffix.bits, numStr);
-    }
-    return true;
-  }
-
-  const hasSuffix = handleSuffixValidation(rest, value, numStr);
+  const hasSuffix = validateNumberSuffix(rest, value, numStr);
 
   if (rest !== "" && value < 0 && !hasSuffix) {
     throw new Error("Invalid trailing characters after negative number");
   }
 
   return value;
+}
+
+function validateNumberSuffix(
+  rest: string,
+  value: number,
+  numStr: string
+): boolean {
+  const suffix = parseWidthSuffix(rest);
+  if (!suffix) return false;
+  if (
+    suffix.bits !== 8 &&
+    suffix.bits !== 16 &&
+    suffix.bits !== 32 &&
+    suffix.bits !== 64
+  ) {
+    throw new Error("Invalid bit width");
+  }
+
+  if (widthUsesNumber(suffix.bits)) {
+    validateWidthNumber(suffix.signed, suffix.bits, value);
+  } else {
+    validateWidthBig(suffix.signed, suffix.bits, numStr);
+  }
+  return true;
 }
 
 function evalComparisonOp(
@@ -214,10 +224,13 @@ function tryHandleMatchExpression(s: string, env?: Env): number | undefined {
   ensure(braceClose >= 0, "Unterminated match body");
   const body = rest.slice(1, braceClose).trim();
 
-  const armsRaw = splitTopLevel(body, ";").map((r) => r.trim()).filter((r) => r !== "");
+  const armsRaw = topLevelSplitTrim(body, ";");
   ensure(armsRaw.length !== 0, "Match has no arms");
 
-  interface MatchArm { pattern: string; expr: string }
+  interface MatchArm {
+    pattern: string;
+    expr: string;
+  }
   const arms: MatchArm[] = armsRaw.map((arm) => {
     ensure(arm.startsWith("case "), "Invalid match arm");
     const after = sliceTrim(arm, 4);
@@ -251,11 +264,11 @@ function tryHandleComparison(s: string, env?: Env): number | undefined {
   );
 }
 
-function tryHandleAddition(s: string): number | undefined {
+function tryHandleAddition(s: string, env?: Env): number | undefined {
   const tokens = tokenizeAddSub(s);
   if (!tokens) return undefined;
   const suffix = ensureConsistentSuffix(tokens);
-  const result = evaluateTokens(tokens);
+  const result = evaluateTokens(tokens, env);
 
   // validate result fits the width if operands used typed width
   if (suffix) {
@@ -332,8 +345,14 @@ function tokenizeAddSub(s: string): string[] | undefined {
       if (s[i] === "(" || s[i] === "{") {
         const close = findMatchingParen(s, i);
         if (close < 0) return undefined;
-        tokens.push(s.slice(i, close + 1));
+        tokens.push(s.slice(i, close + 1).trim());
         i = close + 1;
+      } else if (isIdentifierStartCode(s.charCodeAt(i))) {
+        // parse identifier tokens as operands
+        let j = i + 1;
+        while (j < n && isIdentifierPartCode(s.charCodeAt(j))) j++;
+        tokens.push(s.slice(i, j).trim());
+        i = j;
       } else {
         const res = parseNumberTokenAt(s, i);
         if (!res) return undefined;
@@ -415,14 +434,14 @@ function ensureConsistentSuffix(tokens: string[]): WidthSuffix | undefined {
   return common;
 }
 
-function evaluateTokens(tokens: string[]): number {
+function evaluateTokens(tokens: string[], env?: Env): number {
   // first handle * and / (higher precedence)
   const reduced: string[] = [];
-  let acc = interpret(tokens[0]);
+  let acc = interpret(tokens[0], env);
   for (let idx = 1; idx < tokens.length; idx += 2) {
     const op = tokens[idx];
     const operand = tokens[idx + 1];
-    const val = interpret(operand);
+    const val = interpret(operand, env);
     if (op === "*") {
       acc = acc * val;
     } else if (op === "/") {
@@ -531,12 +550,18 @@ function splitTopLevel(s: string, sep: string): string[] {
     if (ch === "(" || ch === "{") depth++;
     else if (ch === ")" || ch === "}") depth--;
     else if (ch === sep && depth === 0) {
-      parts.push(s.slice(start, i));
+      parts.push(s.substring(start, i));
       start = i + 1;
     }
   }
   parts.push(s.slice(start));
   return parts;
+}
+
+function topLevelSplitTrim(s: string, sep: string): string[] {
+  return splitTopLevel(s, sep)
+    .map((r) => r.trim())
+    .filter((r) => r !== "");
 }
 
 interface IdentifierParseResult {
@@ -598,8 +623,8 @@ function extractAnnotationAndInitializer(str: string): AnnotationResult {
   if (s.startsWith(":")) {
     const eq = s.indexOf("=");
     if (eq === -1) return { annotatedType: s.slice(1).trim(), initializer: "" };
-    annotatedType = s.slice(1, eq).trim();
-    s = sliceTrim(s, eq + 1);
+    annotatedType = s.substring(1, eq).trim();
+    s = s.substring(eq + 1).trim();
   }
   if (s.startsWith("=")) s = sliceTrim(s, 1);
   return { annotatedType, initializer: s };
@@ -735,8 +760,7 @@ function handleLetStatement(
   const nameRes = parseIdentifierAt(rest, 0);
   if (!nameRes) throw new Error("Invalid let declaration");
   const name = nameRes.name;
-  if (localDeclared.has(name)) throw new Error("Duplicate declaration");
-  localDeclared.add(name);
+  ensureUniqueDeclaration(localDeclared, name);
 
   const rest2 = sliceTrim(rest, nameRes.next);
   const { annotatedType, initializer } = extractAnnotationAndInitializer(rest2);
@@ -810,8 +834,10 @@ function tryHandleCompoundAssignment(
   ensureIdentifierExists(idRes.name, env);
 
   const cur = env.get(idRes.name)!;
-  if (Number.isNaN(cur.value))
-    throw new Error("Cannot compound-assign uninitialized variable");
+  if (typeof cur.value !== "number" || Number.isNaN(cur.value))
+    throw new Error(
+      "Cannot compound-assign uninitialized or non-number variable"
+    );
   if (!cur.mutable) throw new Error("Cannot assign to immutable variable");
 
   const rhsType = inferTypeFromExpr(rest, env);
@@ -837,7 +863,7 @@ function tryHandleAssignmentStatement(
   ensureIdentifierExists(idRes.name, env);
   const cur = env.get(idRes.name)!;
   // allow assignment if variable is mutable OR if it is uninitialized
-  if (!cur.mutable && !Number.isNaN(cur.value))
+  if (!cur.mutable && typeof cur.value === "number" && !Number.isNaN(cur.value))
     throw new Error("Cannot assign to immutable variable");
 
   const rhsType = inferTypeFromExpr(restAssign, env);
@@ -869,7 +895,8 @@ function processNonLetStatement(stmt: string, env: Env): number {
       if (close < 0) throw new Error("Unterminated grouping");
       const part = rem.slice(0, close + 1);
       lastLocal = interpret(part, env);
-      rem = rem.slice(close + 1).trim();
+      rem = rem.substring(close + 1);
+      rem = rem.trim();
       continue;
     }
 
@@ -1176,9 +1203,89 @@ function evalBlock(s: string, envIn?: Env): number {
 
     if (stmt.startsWith("let ")) {
       last = handleLetStatement(stmt, env, localDeclared);
+    } else if (stmt.startsWith("fn ")) {
+      last = handleFnStatement(stmt, env, localDeclared);
     } else {
       last = processNonLetStatement(stmt, env);
     }
   }
   return last;
+}
+
+function handleFnStatement(stmt: string, env: Env, localDeclared: Set<string>) {
+  let rest = sliceTrim(stmt, 3);
+  const nameRes = parseIdentifierAt(rest, 0);
+  if (!nameRes) throw new Error("Invalid fn declaration");
+  const name = nameRes.name;
+  ensureUniqueDeclaration(localDeclared, name);
+
+  rest = sliceTrim(rest, nameRes.next);
+  const { content: paramsContent, close } = extractParenContent(rest, "fn");
+  const paramsRaw = paramsContent
+    .split(",")
+    .map((r) => r.trim())
+    .filter((r) => r !== "");
+  const params = paramsRaw.map((p) => {
+    const colonIdx = p.indexOf(":");
+    const pname = colonIdx === -1 ? p : p.slice(0, colonIdx).trim();
+    if (!isIdentifierName(pname)) throw new Error("Invalid fn parameter");
+    return pname;
+  });
+
+  let restAfterParams = rest.slice(close + 1).trim();
+  // accept optional return type annotation
+  const arrowIdx = restAfterParams.indexOf("=>");
+  if (arrowIdx === -1) throw new Error("Invalid fn declaration");
+  restAfterParams = sliceTrim(restAfterParams, arrowIdx + 2);
+
+  let body = restAfterParams;
+  if (body.startsWith("{")) {
+    const bc = findMatchingParen(body, 0);
+    if (bc < 0) throw new Error("Unterminated fn body");
+    body = body.slice(0, bc + 1);
+  }
+
+  const func: FunctionValue = { params, body, env: new Map(env) };
+  const item: EnvItem = { value: func, mutable: false, type: "Fn" };
+  env.set(name, item);
+  return NaN;
+}
+
+function ensureUniqueDeclaration(localDeclared: Set<string>, name: string) {
+  if (localDeclared.has(name)) throw new Error("Duplicate declaration");
+  localDeclared.add(name);
+}
+
+function tryHandleCall(s: string, env?: Env): number | undefined {
+  const idRes = parseIdentifierAt(s, 0);
+  if (!idRes) return undefined;
+  const rest = sliceTrim(s, idRes.next);
+  if (!rest.startsWith("(")) return undefined;
+  const close = findMatchingParen(rest, 0);
+  if (close < 0) throw new Error("Unterminated call");
+  const argsContent = rest.slice(1, close).trim();
+  const args = argsContent === "" ? [] : topLevelSplitTrim(argsContent, ",");
+  const trailing = rest.slice(close + 1).trim();
+  if (trailing !== "") return undefined; // not a pure call expression
+
+  if (!env || !env.has(idRes.name)) throw new Error("Unknown identifier");
+  const item = env.get(idRes.name)!;
+  if (typeof item.value === "number") throw new Error("Not a function");
+  const func = item.value as FunctionValue;
+  if (func.params.length !== args.length)
+    throw new Error("Argument count mismatch");
+
+  const argVals = args.map((a) => interpret(a, env));
+  const callEnv = new Map<string, EnvItem>(func.env);
+  // bind params
+  for (let i = 0; i < func.params.length; i++) {
+    callEnv.set(func.params[i], {
+      value: argVals[i],
+      mutable: false,
+    } as EnvItem);
+  }
+
+  // evaluate body
+  const res = evalBlock(func.body, callEnv);
+  return res;
 }

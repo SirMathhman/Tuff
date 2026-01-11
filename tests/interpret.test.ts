@@ -158,7 +158,9 @@ describe("interpret - blocks (expressions)", () => {
 
   it("supports match expressions with case/_ arms returning a value", () => {
     expect(
-      interpret("let result : I32 = match (100) { case 100 => 2; case _ => 3; }; result")
+      interpret(
+        "let result : I32 = match (100) { case 100 => 2; case _ => 3; }; result"
+      )
     ).toBe(2);
   });
 });
@@ -200,6 +202,14 @@ describe("interpret - blocks (expressions extras)", () => {
 
     // if an outer binding exists it should be preserved
     expect(interpret("let mut i = 100; for (let i in 0..2) {} ; i")).toBe(100);
+  });
+
+  it("supports function definitions and calls", () => {
+    expect(
+      interpret(
+        "fn add(first : I32, second : I32) : I32 => first + second; add(1, 2)"
+      )
+    ).toBe(3);
   });
 });
 
