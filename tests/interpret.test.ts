@@ -79,4 +79,8 @@ describe("interpret - arithmetic", () => {
   it("supports parentheses for grouping", () => {
     expect(interpret("(3 + 1) * 2")).toBe(8);
   });
+
+  it("throws on division by zero", () => {
+    expect(() => interpret("10 / 0")).toThrow(Error);
+  });
 });
