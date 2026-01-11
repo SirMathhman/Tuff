@@ -172,17 +172,7 @@ function findOperandEnd(s: string, start: number): number {
   return j;
 }
 
-function findMatchingParen(s: string, start: number): number {
-  let depth = 0;
-  for (let i = start; i < s.length; i++) {
-    if (s[i] === "(") depth++;
-    else if (s[i] === ")") {
-      depth--;
-      if (depth === 0) return i;
-    }
-  }
-  return -1;
-}
+import { findMatchingParenIndex } from "./interpretHelpers";
 
 function isStandaloneElseAt(s: string, idx: number): boolean {
   const n = s.length;
@@ -197,32 +187,6 @@ function isStandaloneElseAt(s: string, idx: number): boolean {
     after === ")" ||
     after === "{";
   return validBefore && validAfter;
-}
-
-function isIdentifierOnly(t: string): boolean {
-  if (!t) return false;
-  const first = t.charCodeAt(0);
-  if (
-    !(
-      (first >= 65 && first <= 90) ||
-      (first >= 97 && first <= 122) ||
-      first === 95
-    )
-  )
-    return false;
-  for (let i = 1; i < t.length; i++) {
-    const c = t.charCodeAt(i);
-    if (
-      !(
-        (c >= 65 && c <= 90) ||
-        (c >= 97 && c <= 122) ||
-        (c >= 48 && c <= 57) ||
-        c === 95
-      )
-    )
-      return false;
-  }
-  return true;
 }
 
 function findTopLevelElse(s: string, start: number): number {
@@ -242,7 +206,10 @@ function evalExpr(src: string): Result<number, string> {
   return _interpret(src);
 }
 
-function parseThenElse(s: string, parenEnd: number): Result<ThenElseParse, string> {
+function parseThenElse(
+  s: string,
+  parenEnd: number
+): Result<ThenElseParse, string> {
   const n = s.length;
   const elsePos = findTopLevelElse(s, parenEnd + 1);
   if (elsePos === -1) return { ok: false, error: "invalid operand" };
@@ -262,20 +229,10 @@ function readIfAt(s: string, pos: number): Result<ReadOperandResult, string> {
   while (i < n && s[i] === " ") i++;
   if (i >= n || s[i] !== "(") return { ok: false, error: "invalid operand" };
 
-  const j = findMatchingParen(s, i);
+  const j = findMatchingParenIndex(s, i);
   if (j === -1) return { ok: false, error: "unmatched parenthesis" };
 
   const condText = s.slice(i + 1, j).trim();
-  // reject identifier-only conditions (must be boolean literal or expression)
-  if (condText.length > 0) {
-    if (
-      isIdentifierOnly(condText) &&
-      condText !== "true" &&
-      condText !== "false"
-    ) {
-      return { ok: false, error: "invalid conditional expression" };
-    }
-  }
 
   const condRes = evalExpr(condText);
   if (!condRes.ok) return condRes as Err<string>;

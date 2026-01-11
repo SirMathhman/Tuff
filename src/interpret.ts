@@ -18,31 +18,14 @@ const SIZED_TYPES = new Set([
   "I64",
   "Bool",
 ]);
-
-/**
- * interpret - parse and evaluate the given string input and return a Result
- *
- * Current behavior (stub + incremental implementation):
- *  - If the input is a numeric literal (integer or decimal, optional +/-) it
- *    returns the numeric value.
- *  - For any other input it returns 0 for now (keeps previous tests passing).
- */
-
 import { handleAddSubChain, handleSingle, setInterpreterFns } from "./arith";
+import { substituteAllIdents, substituteTopLevelIdents, findMatchingParenIndex, isIdentCharCode } from "./interpretHelpers";
 
 interface Binding {
   value: number;
   suffix?: string;
 }
 
-function isIdentCharCode(c: number): boolean {
-  return (
-    (c >= 65 && c <= 90) ||
-    (c >= 97 && c <= 122) ||
-    (c >= 48 && c <= 57) ||
-    c === 95
-  );
-}
 
 interface ScanIdentResult {
   ident: string;
@@ -104,43 +87,117 @@ function resolveInitializer(
     return lookupBinding(name, env);
   }
 
-  // braced block initializer: { ... }
   if (t.startsWith("{")) {
-    // find matching top-level closing brace
-    let depth = 0;
-    let i = 0;
-    while (i < t.length) {
-      if (t[i] === "{") depth++;
-      else if (t[i] === "}") {
-        depth--;
-        if (depth === 0) break;
-      }
-      i++;
-    }
-    if (i >= t.length || t[i] !== "}")
-      return { ok: false, error: "unmatched brace in initializer" };
-    // only allow pure braced block (no trailing tokens)
-    const rest = t.slice(i + 1).trim();
-    if (rest.length !== 0)
-      return { ok: false, error: "unexpected tokens after braced initializer" };
-
-    const inner = t.slice(1, i);
-    const innerRes = evaluateBlock(inner, env);
-    if (!innerRes.ok) return innerRes as Result<Binding, string>;
-    const binding: Binding = { value: innerRes.value };
-    return { ok: true, value: binding };
+    const brRes = parseBracedInitializer(t, env);
+    if (!brRes.ok) return brRes as Result<Binding, string>;
+    return brRes;
   }
 
-  // otherwise interpret as an expression
-  const r = interpret(rhs);
+  const err = validateIfIdentifierConditions(rhs, env);
+  if (err) return err;
+
+  const subAll = substituteAllIdents(rhs, env);
+  if (!subAll.ok) return { ok: false, error: subAll.error };
+  const r = interpret(subAll.value);
   if (!r.ok) return { ok: false, error: r.error };
-  const parsedNum = parseLeadingNumber(rhs);
-  const suffix =
-    parsedNum && parsedNum.end < rhs.length
-      ? rhs.slice(parsedNum.end)
-      : undefined;
-  const binding: Binding = { value: r.value, suffix };
+  const parsedNum = parseLeadingNumber(subAll.value);
+  const suffix = parsedNum && parsedNum.end < subAll.value.length ? subAll.value.slice(parsedNum.end) : undefined;
+  return { ok: true, value: { value: r.value, suffix } };
+}
+
+
+function parseBracedInitializer(
+  t: string,
+  env: Map<string, Binding>
+): Result<Binding, string> {
+  // find matching top-level closing brace
+  let depth = 0;
+  let i = 0;
+  while (i < t.length) {
+    if (t[i] === "{") depth++;
+    else if (t[i] === "}") {
+      depth--;
+      if (depth === 0) break;
+    }
+    i++;
+  }
+  if (i >= t.length || t[i] !== "}")
+    return { ok: false, error: "unmatched brace in initializer" };
+  // only allow pure braced block (no trailing tokens)
+  const rest = t.slice(i + 1).trim();
+  if (rest.length !== 0)
+    return { ok: false, error: "unexpected tokens after braced initializer" };
+
+  const inner = t.slice(1, i);
+  const innerRes = evaluateBlock(inner, env);
+  if (!innerRes.ok) return innerRes as Result<Binding, string>;
+  const binding: Binding = { value: innerRes.value };
   return { ok: true, value: binding };
+}
+
+interface SingleIfValidateResult {
+  err?: Err<string>;
+  nextPos?: number;
+}
+
+function validateSingleIfAtIndex(
+  rhs: string,
+  i: number,
+  env: Map<string, Binding>
+): SingleIfValidateResult {
+  let j = i + 2;
+  while (j < rhs.length && rhs[j] === " ") j++;
+  if (j >= rhs.length || rhs[j] !== "(")
+    return { err: { ok: false, error: "invalid conditional expression" } };
+  const k = findMatchingParenIndex(rhs, j);
+  if (k === -1) return { err: { ok: false, error: "unmatched parenthesis" } };
+  const condText = rhs.slice(j + 1, k).trim();
+  if (
+    isIdentifierOnly(condText) &&
+    condText !== "true" &&
+    condText !== "false"
+  ) {
+    const name = condText.split(" ")[0];
+    const b = lookupBinding(name, env);
+    if (!b.ok) return { err: { ok: false, error: b.error } };
+    if (!(b.value.value === 0 || b.value.value === 1))
+      return { err: { ok: false, error: "invalid conditional expression" } };
+  }
+  return { nextPos: k + 1 };
+}
+
+function validateIfIdentifierConditions(
+  rhs: string,
+  env: Map<string, Binding>
+): Err<string> | undefined {
+  if (rhs.indexOf("if(") === -1 && rhs.indexOf("if (") === -1) return undefined;
+  let i = 0;
+  let depth = 0;
+  while (i < rhs.length) {
+    const ch = rhs[i];
+    if (ch === "(" || ch === "{" || ch === "[") {
+      depth++;
+      i++;
+      continue;
+    }
+    if (ch === ")" || ch === "}" || ch === "]") {
+      depth--;
+      i++;
+      continue;
+    }
+    if (
+      depth === 0 &&
+      rhs.startsWith("if", i) &&
+      (rhs[i + 2] === " " || rhs[i + 2] === "(")
+    ) {
+      const res = validateSingleIfAtIndex(rhs, i, env);
+      if (res.err) return res.err;
+      i = res.nextPos!;
+      continue;
+    }
+    i++;
+  }
+  return undefined;
 }
 
 function parseDeclaration(
@@ -328,48 +385,6 @@ function stripLeadingBracedPrefixes(
   return { ok: true, value: { stmt: cur } };
 }
 
-function substituteTopLevelIdents(
-  src: string,
-  envLocal: Map<string, Binding>,
-  parentEnvLocal?: Map<string, Binding>
-): Result<string, string> {
-  let out = "";
-  let i = 0;
-  let depth = 0;
-  while (i < src.length) {
-    const ch = src[i];
-    if (ch === "(" || ch === "{" || ch === "[") {
-      depth++;
-      out += ch;
-      i++;
-      continue;
-    }
-    if (ch === ")" || ch === "}" || ch === "]") {
-      depth--;
-      out += ch;
-      i++;
-      continue;
-    }
-
-    if (depth === 0) {
-      const scan = scanIdentifierFrom(src, i);
-      if (scan) {
-        const name = scan.ident;
-        const b = lookupBinding(name, envLocal, parentEnvLocal);
-        if (!b.ok) return { ok: false, error: b.error };
-        const binding = b.value;
-        out += String(binding.value) + (binding.suffix ? binding.suffix : "");
-        i = scan.nextPos;
-        continue;
-      }
-    }
-
-    out += ch;
-    i++;
-  }
-
-  return { ok: true, value: out };
-}
 
 function processStatement(
   origStmt: string,
@@ -429,16 +444,13 @@ function evaluateBlock(
 ): Result<number, string> {
   const stmts = splitStatements(inner);
   const env = new Map<string, Binding>();
-
   for (let i = 0; i < stmts.length; i++) {
     const stmt = stmts[i];
     if (stmt.length === 0) continue;
-
     const res = processStatement(stmt, env, parentEnv, i === stmts.length - 1);
     if (res === "handled") continue;
     if (res) return res;
   }
-
   return { ok: false, error: "block has no final expression" };
 }
 

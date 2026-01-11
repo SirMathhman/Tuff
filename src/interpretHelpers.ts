@@ -1,4 +1,4 @@
-import type { Err } from "./result";
+import type { Err, Result } from "./result";
 
 export interface ParsedNumber {
   value: number;
@@ -199,10 +199,138 @@ export function checkAnnotationMatch(
     const t = rhs.trim();
     if (t === "true" || t === "false") return undefined;
     const rhsParsed = parseLeadingNumber(rhs);
-    if (rhsParsed) return value === 0 || value === 1 ? undefined : { ok: false, error: "declaration initializer does not match annotation" };
+    if (rhsParsed)
+      return value === 0 || value === 1
+        ? undefined
+        : {
+            ok: false,
+            error: "declaration initializer does not match annotation",
+          };
     if (initSuffix === "Bool") return undefined;
-    return { ok: false, error: "declaration initializer does not match annotation" };
+    return {
+      ok: false,
+      error: "declaration initializer does not match annotation",
+    };
   }
 
   return undefined;
+}
+
+export function isIdentifierName(name: string): boolean {
+  if (name.length === 0) return false;
+  const first = name.charCodeAt(0);
+  if (
+    !(
+      (first >= 65 && first <= 90) ||
+      (first >= 97 && first <= 122) ||
+      first === 95
+    )
+  )
+    return false;
+  for (let i = 1; i < name.length; i++) {
+    const c = name.charCodeAt(i);
+    if (!((c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c >= 48 && c <= 57) || c === 95)) return false;
+  }
+  return true;
+}
+
+export function isIdentCharCode(c: number): boolean {
+  return (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c >= 48 && c <= 57) || c === 95;
+}
+
+interface IdentScanRes { name: string; next: number }
+function scanIdentAt(src: string, i: number): IdentScanRes | undefined {
+  let p = i;
+  while (p < src.length) {
+    const cc = src.charCodeAt(p);
+    if ((cc >= 65 && cc <= 90) || (cc >= 97 && cc <= 122) || (cc >= 48 && cc <= 57) || cc === 95) p++;
+    else break;
+  }
+  const name = src.slice(i, p);
+  return name ? { name, next: p } : undefined;
+}
+
+export function findMatchingParenIndex(s: string, start: number): number {
+  let depth = 0;
+  for (let i = start; i < s.length; i++) {
+    if (s[i] === "(") depth++;
+    else if (s[i] === ")") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+export interface BindingLike {
+  value: number;
+  suffix?: string;
+}
+
+function substituteIdentsGeneric(
+  src: string,
+  envLocal: Map<string, BindingLike>,
+  parentEnvLocal: Map<string, BindingLike> | undefined,
+  onlyTopLevel: boolean
+): Result<string, string> {
+  const reserved = new Set(["if", "else", "let", "true", "false"]);
+  let out = "";
+  let i = 0;
+  let depth = 0;
+
+  function lookupAndFormatGeneric(name: string): Result<string, string> {
+    if (!isIdentifierName(name) || reserved.has(name)) return { ok: true, value: name };
+    const b = envLocal.get(name) ?? parentEnvLocal?.get(name);
+    if (!b) return { ok: false, error: `unknown identifier ${name}` };
+    return { ok: true, value: String(b.value) + (b.suffix ? b.suffix : "") };
+  }
+
+  while (i < src.length) {
+    const ch = src[i];
+    if (ch === "(" || ch === "{" || ch === "[") {
+      depth++;
+      out += ch;
+      i++;
+      continue;
+    }
+    if (ch === ")" || ch === "}" || ch === "]") {
+      depth--;
+      out += ch;
+      i++;
+      continue;
+    }
+
+    if (!onlyTopLevel || depth === 0) {
+      const scanned = scanIdentAt(src, i);
+      if (scanned) {
+        const { name, next } = scanned;
+        const res = lookupAndFormatGeneric(name);
+        if (!res.ok) return res;
+        out += res.value;
+        i = next;
+        continue;
+      }
+    }
+
+    out += ch;
+    i++;
+  }
+
+  return { ok: true, value: out };
+}
+
+export function substituteAllIdents(
+  src: string,
+  envLocal: Map<string, BindingLike>,
+  parentEnvLocal?: Map<string, BindingLike>
+): Result<string, string> {
+  return substituteIdentsGeneric(src, envLocal, parentEnvLocal, false);
+}
+
+export function substituteTopLevelIdents(
+  src: string,
+  envLocal: Map<string, BindingLike>,
+  parentEnvLocal?: Map<string, BindingLike>
+): Result<string, string> {
+  return substituteIdentsGeneric(src, envLocal, parentEnvLocal, true);
 }

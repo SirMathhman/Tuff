@@ -255,14 +255,20 @@ describe("interpret (suffix handling - braced blocks) - chained and booleans", (
       value: 5,
     });
     expect(interpret("1 + if (true) 3 else 5")).toEqual({ ok: true, value: 4 });
+
+    // identifier condition that references a Bool-like binding should work
+    expect(interpret("let y = true; let x = if (y) 3 else 5; x")).toEqual({
+      ok: true,
+      value: 3,
+    });
   });
 
-  it('if-expression with identifier condition errors', () => {
+  it("if-expression with identifier condition errors", () => {
     expect(interpret("let y = 100; let x = if (y) 3 else 5; x")).toEqual({
       ok: false,
       error: "invalid conditional expression",
     });
-  })
+  });
 });
 
 describe("interpret (suffix handling - braced blocks) - errors", () => {
