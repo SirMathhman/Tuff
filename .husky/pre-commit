@@ -1,1 +1,0 @@
-npm test && npm run lint && npm run cpd && node scripts/check-dir-file-count.js
