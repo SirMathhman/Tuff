@@ -7,23 +7,17 @@ import {
   findTopLevelChar,
 } from "./interpretHelpers";
 
-const SIZED_TYPES = new Set([
-  "U8",
-  "U16",
-  "U32",
-  "U64",
-  "I8",
-  "I16",
-  "I32",
-  "I64",
-  "Bool",
-]);
 import { handleAddSubChain, handleSingle, setInterpreterFns } from "./arith";
 import {
   substituteAllIdents,
   substituteTopLevelIdents,
   findMatchingParenIndex,
   isIdentCharCode,
+  SIZED_TYPES,
+  isIdentifierName,
+  isIdentifierOnly,
+  scanExpressionSuffix,
+  deriveAnnotationSuffixForNoInit,
 } from "./interpretHelpers";
 
 interface Binding {
@@ -206,6 +200,23 @@ function validateIfIdentifierConditions(
   return undefined;
 }
 
+function evaluateAnnotationExpression(
+  annText: string,
+  expectedValue: number
+): Result<string | undefined, string> {
+  const valRes = interpret(annText);
+  if (!valRes.ok) return { ok: false, error: valRes.error };
+  if (valRes.value !== expectedValue)
+    return { ok: false, error: "declaration initializer does not match annotation" };
+  const scanRes = scanExpressionSuffix(annText);
+  if (!scanRes.ok) return scanRes as Err<string>;
+  if (scanRes.value) {
+    const rangeErr = validateSizedInteger(String(expectedValue), scanRes.value);
+    if (rangeErr) return rangeErr;
+  }
+  return { ok: true, value: scanRes.value };
+}
+
 function deriveAnnotationSuffixBetween(
   stmt: string,
   colonPos: number,
@@ -220,25 +231,37 @@ function deriveAnnotationSuffixBetween(
 
   const parsedAnn = parseLeadingNumber(annText);
   let annSuffix: string | undefined;
-  if (parsedAnn && parsedAnn.end < annText.length) annSuffix = annText.slice(parsedAnn.end);
-  else if (SIZED_TYPES.has(annText)) annSuffix = annText;
 
-  if (annSuffix) {
+  // If parsed number is the entire annotation, handle simple numeric literal case
+  if (parsedAnn && parsedAnn.end === annText.length) {
+    // pure numeric literal annotation like '3' or '+3'
+    annSuffix = undefined;
+  } else if (SIZED_TYPES.has(annText)) {
+    // sized type annotation like 'I32'
+    annSuffix = annText;
     const rangeErr = validateSizedInteger(String(init.value), annSuffix);
     if (rangeErr) return rangeErr;
+  } else {
+    // Complex case: may be '3I32', or an expression like '1I32 + 2I32'
+    if (parsedAnn && parsedAnn.end < annText.length) {
+      const rest = annText.slice(parsedAnn.end).trim();
+      if (isIdentifierName(rest)) {
+        annSuffix = rest;
+        const rangeErr = validateSizedInteger(String(init.value), annSuffix);
+        if (rangeErr) return rangeErr;
+        return { ok: true, value: annSuffix };
+      }
+    }
+
+    // otherwise treat as an expression and evaluate+scan
+    const exprRes = evaluateAnnotationExpression(annText, init.value);
+    if (!exprRes.ok) return exprRes as Err<string>;
+    return exprRes;
   }
+
   return { ok: true, value: annSuffix };
 }
 
-function deriveAnnotationSuffixForNoInit(
-  stmt: string,
-  colonPos: number
-): Result<string | undefined, string> {
-  if (colonPos === -1) return { ok: true, value: undefined };
-  const annText = stmt.slice(colonPos + 1).trim();
-  if (SIZED_TYPES.has(annText)) return { ok: true, value: annText };
-  return { ok: false, error: "invalid declaration" };
-}
 
 function parseDeclaration(
   stmt: string,
@@ -273,7 +296,13 @@ function parseDeclaration(
 
   // check annotation (optional) between identifier end and '=': e.g., ': 2U8' or ': U8'
   const colonPos = findTopLevelChar(stmt, p, ":");
-  const annRes = deriveAnnotationSuffixBetween(stmt, colonPos, eq, rhs, init.value);
+  const annRes = deriveAnnotationSuffixBetween(
+    stmt,
+    colonPos,
+    eq,
+    rhs,
+    init.value
+  );
   if (!annRes.ok) return annRes as Err<string>;
   const annSuffix = annRes.value;
 
@@ -284,37 +313,7 @@ function parseDeclaration(
   return { ok: true, value: undefined };
 }
 
-function isIdentifierOnly(stmt: string): boolean {
-  // Trim leading/trailing space first
-  const t = stmt.trim();
-  if (t.length === 0) return false;
 
-  // first character must be a letter or underscore
-  const first = t.charCodeAt(0);
-  if (
-    !(
-      (first >= 65 && first <= 90) ||
-      (first >= 97 && first <= 122) ||
-      first === 95
-    )
-  )
-    return false;
-
-  // subsequent characters may be letters, digits, or underscore
-  for (let k = 1; k < t.length; k++) {
-    const c = t.charCodeAt(k);
-    if (
-      !(
-        (c >= 65 && c <= 90) ||
-        (c >= 97 && c <= 122) ||
-        (c >= 48 && c <= 57) ||
-        c === 95
-      )
-    )
-      return false;
-  }
-  return true;
-}
 
 interface BracedPrefixResult {
   rest?: string;

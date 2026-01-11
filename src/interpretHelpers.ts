@@ -229,21 +229,43 @@ export function isIdentifierName(name: string): boolean {
     return false;
   for (let i = 1; i < name.length; i++) {
     const c = name.charCodeAt(i);
-    if (!((c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c >= 48 && c <= 57) || c === 95)) return false;
+    if (
+      !(
+        (c >= 65 && c <= 90) ||
+        (c >= 97 && c <= 122) ||
+        (c >= 48 && c <= 57) ||
+        c === 95
+      )
+    )
+      return false;
   }
   return true;
 }
 
 export function isIdentCharCode(c: number): boolean {
-  return (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c >= 48 && c <= 57) || c === 95;
+  return (
+    (c >= 65 && c <= 90) ||
+    (c >= 97 && c <= 122) ||
+    (c >= 48 && c <= 57) ||
+    c === 95
+  );
 }
 
-interface IdentScanRes { name: string; next: number }
+interface IdentScanRes {
+  name: string;
+  next: number;
+}
 function scanIdentAt(src: string, i: number): IdentScanRes | undefined {
   let p = i;
   while (p < src.length) {
     const cc = src.charCodeAt(p);
-    if ((cc >= 65 && cc <= 90) || (cc >= 97 && cc <= 122) || (cc >= 48 && cc <= 57) || cc === 95) p++;
+    if (
+      (cc >= 65 && cc <= 90) ||
+      (cc >= 97 && cc <= 122) ||
+      (cc >= 48 && cc <= 57) ||
+      cc === 95
+    )
+      p++;
     else break;
   }
   const name = src.slice(i, p);
@@ -267,6 +289,91 @@ export interface BindingLike {
   suffix?: string;
 }
 
+export const SIZED_TYPES = new Set([
+  "U8",
+  "U16",
+  "U32",
+  "U64",
+  "I8",
+  "I16",
+  "I32",
+  "I64",
+  "Bool",
+]);
+
+export function isIdentifierOnly(stmt: string): boolean {
+  const t = stmt.trim();
+  if (t.length === 0) return false;
+  return isIdentifierName(t);
+}
+
+interface ParseOneLiteralRes {
+  next: number;
+  suffix?: string;
+}
+
+function parseOneLiteralSuffix(
+  annText: string,
+  start: number
+): ParseOneLiteralRes | undefined {
+  const parsed = parseLeadingNumber(annText.slice(start));
+  if (!parsed) return undefined;
+  const i = start + parsed.end;
+  // read suffix characters (identifier-like)
+  let j = i;
+  while (j < annText.length) {
+    const cc = annText.charCodeAt(j);
+    if (
+      (cc >= 65 && cc <= 90) ||
+      (cc >= 97 && cc <= 122) ||
+      (cc >= 48 && cc <= 57) ||
+      cc === 95
+    )
+      j++;
+    else break;
+  }
+  const suffix = annText.slice(i, j);
+  return { next: j, suffix: suffix || undefined };
+}
+
+export function scanExpressionSuffix(
+  annText: string
+): Result<string | undefined, string> {
+  let i = 0;
+  let firstSuffix: string | undefined;
+  while (i < annText.length) {
+    const ch = annText[i];
+    // skip whitespace/operators/parentheses
+    if (ch === " " || ch === "+" || ch === "-" || ch === "*" || ch === "/" || ch === "(" || ch === ")") {
+      i++;
+      continue;
+    }
+
+    const parsedRes = parseOneLiteralSuffix(annText, i);
+    if (!parsedRes) return { ok: false, error: "declaration initializer does not match annotation" };
+    const { next, suffix } = parsedRes;
+    if (suffix) {
+      if (!SIZED_TYPES.has(suffix))
+        return { ok: false, error: "declaration initializer does not match annotation" };
+      if (!firstSuffix) firstSuffix = suffix;
+      else if (firstSuffix !== suffix)
+        return { ok: false, error: "mixed suffixes not supported" };
+    }
+    i = next;
+  }
+  return { ok: true, value: firstSuffix };
+}
+
+export function deriveAnnotationSuffixForNoInit(
+  stmt: string,
+  colonPos: number
+): Result<string | undefined, string> {
+  if (colonPos === -1) return { ok: true, value: undefined };
+  const annText = stmt.slice(colonPos + 1).trim();
+  if (SIZED_TYPES.has(annText)) return { ok: true, value: annText };
+  return { ok: false, error: "invalid declaration" };
+}
+
 function substituteIdentsGeneric(
   src: string,
   envLocal: Map<string, BindingLike>,
@@ -279,7 +386,8 @@ function substituteIdentsGeneric(
   let depth = 0;
 
   function lookupAndFormatGeneric(name: string): Result<string, string> {
-    if (!isIdentifierName(name) || reserved.has(name)) return { ok: true, value: name };
+    if (!isIdentifierName(name) || reserved.has(name))
+      return { ok: true, value: name };
     const b = envLocal.get(name) ?? parentEnvLocal?.get(name);
     if (!b) return { ok: false, error: `unknown identifier ${name}` };
     return { ok: true, value: String(b.value) + (b.suffix ? b.suffix : "") };
