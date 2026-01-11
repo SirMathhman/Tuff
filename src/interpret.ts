@@ -434,8 +434,7 @@ function inferTypeFromExpr(
   if (numStr !== "") return "Number";
   // parenthesized or binary expression assume Number
   if (s[0] === "(" || s[0] === "{") return "Number";
-  if (s.includes("+") || s.includes("-") || s.includes("*") || s.includes("/"))
-    return "Number";
+  if (containsOperator(s)) return "Number";
   return undefined;
 }
 
@@ -462,6 +461,10 @@ function isIntegerTypeName(typeName: string): boolean {
   return first === "I" || first === "i" || first === "U" || first === "u";
 }
 
+function containsOperator(s: string): boolean {
+  return s.includes("+") || s.includes("-") || s.includes("*") || s.includes("/");
+}
+
 function validateAnnotatedTypeCompatibility(
   annotatedType: string,
   initType: string | undefined
@@ -476,6 +479,9 @@ function validateAnnotatedTypeCompatibility(
   }
 }
 
+function startsWithIf(s: string): boolean {
+  return s.indexOf("if ") === 0 || s.indexOf("if(") === 0;
+}
 function handleLetStatement(
   stmt: string,
   env: Env,
@@ -559,6 +565,44 @@ function tryHandleAssignmentStatement(
   return val;
 }
 
+
+
+interface IfResult { consumed: number; last: number }
+
+function handleIfAt(idx: number, stmts: string[], env: Env): IfResult {
+  const stmt = stmts[idx];
+  const paren = stmt.indexOf("(");
+  if (paren === -1) throw new Error("Invalid if statement");
+  const close = findMatchingParen(stmt, paren);
+  if (close < 0) throw new Error("Unterminated if condition");
+  const condStr = stmt.slice(paren + 1, close);
+  let thenPart = stmt.slice(close + 1).trim();
+
+  let consumed = 0;
+  // if thenPart is empty, maybe the next top-level stmt is the then-part
+  if (thenPart === "" && idx + 1 < stmts.length && !stmts[idx + 1].trim().startsWith("else")) {
+    consumed = 1;
+    thenPart = stmts[idx + 1];
+  }
+
+  // check for else in the following stmt (either same stmt or next)
+  let elsePart: string | undefined;
+  if (thenPart.startsWith("else")) {
+    // no then part was present, else is attached directly
+    elsePart = thenPart.slice(4).trim();
+    thenPart = "";
+  } else if (idx + 1 + consumed < stmts.length && stmts[idx + 1 + consumed].trim().startsWith("else")) {
+    consumed += 1;
+    elsePart = stmts[idx + consumed].trim().slice(4).trim();
+  }
+
+  const condVal = interpret(condStr, env);
+  let lastLocal = NaN;
+  const part = condVal !== 0 ? thenPart : elsePart;
+  if (part !== undefined && part !== "") lastLocal = evalBlock(part, env);
+  return { consumed, last: lastLocal };
+}
+
 function evalBlock(s: string, envIn?: Env): number {
   const env = envIn ?? new Map<string, EnvItem>();
   const rawStmts = splitTopLevel(s, ";");
@@ -577,7 +621,16 @@ function evalBlock(s: string, envIn?: Env): number {
 
   let last = NaN;
   const localDeclared = new Set<string>();
-  for (const stmt of stmts) {
+  for (let idx = 0; idx < stmts.length; idx++) {
+    const stmt = stmts[idx];
+
+    if (startsWithIf(stmt)) {
+      const res = handleIfAt(idx, stmts, env);
+      last = res.last;
+      idx += res.consumed;
+      continue;
+    }
+
     if (stmt.startsWith("let ")) {
       last = handleLetStatement(stmt, env, localDeclared);
     } else {

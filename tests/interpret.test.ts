@@ -136,6 +136,12 @@ describe("interpret - blocks", () => {
     expect(interpret("let mut x : Bool; x = true; x = false; x")).toBe(0);
   });
 
+  it("supports conditional assignments using if/else on annotated variable", () => {
+    expect(
+      interpret("let x : I32; if (true) x = 10; else x = 20; x")
+    ).toBe(10);
+  });
+
   it("throws when a block ends with declaration and no expression", () => {
     expect(() => interpret("(3 + { let x : I32 = 1; }) * 2")).toThrow(Error);
   });
