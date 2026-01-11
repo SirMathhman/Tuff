@@ -485,20 +485,26 @@ function handleAssignmentIfAny(
 export function interpret(input: string): Result<number, string> {
   const s = input.trim();
 
+  // boolean literals
+  if (s === "true") return { ok: true, value: 1 };
+  if (s === "false") return { ok: true, value: 0 };
+
   // Top-level block statements (e.g., "let x = 2; x")
   // Only treat as a block if a semicolon exists at top level or it starts with 'let '
   if (findTopLevelChar(s, 0, ";") !== -1 || s.startsWith("let ")) {
     return evaluateBlock(s);
   }
 
-  // binary operators: + - * / (supports chained expressions)
+  // binary operators: + - * / (supports chained expressions) and 'if' expression
   if (
     s.indexOf("+") !== -1 ||
     s.indexOf("-") !== -1 ||
     s.indexOf("*") !== -1 ||
     s.indexOf("/") !== -1 ||
     s.indexOf("&&") !== -1 ||
-    s.indexOf("||") !== -1
+    s.indexOf("||") !== -1 ||
+    s.startsWith("if ") ||
+    s.startsWith("if(")
   ) {
     return handleAddSubChain(s);
   }

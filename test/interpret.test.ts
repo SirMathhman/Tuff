@@ -242,6 +242,11 @@ describe("interpret (suffix handling - braced blocks) - chained and errors", () 
     });
     expect(interpret("0 || 0")).toEqual({ ok: true, value: 0 });
     expect(interpret("0 || 2")).toEqual({ ok: true, value: 1 });
+
+    // if-expression tests
+    expect(interpret("let x = if (true) 3 else 5; x")).toEqual({ ok: true, value: 3 });
+    expect(interpret("let x = if (false) 3 else 5; x")).toEqual({ ok: true, value: 5 });
+    expect(interpret("1 + if (true) 3 else 5")).toEqual({ ok: true, value: 4 });
   });
 
   it("braced grouping and blocks (errors)", () => {

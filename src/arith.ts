@@ -166,11 +166,85 @@ function findOperandEnd(s: string, start: number): number {
   return j;
 }
 
+function findMatchingParen(s: string, start: number): number {
+  let depth = 0;
+  for (let i = start; i < s.length; i++) {
+    if (s[i] === "(") depth++;
+    else if (s[i] === ")") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+function isStandaloneElseAt(s: string, idx: number): boolean {
+  const n = s.length;
+  const before = idx - 1 < 0 ? "" : s[idx - 1];
+  const after = idx + 4 >= n ? "" : s[idx + 4];
+  const validBefore = before === "" || before === " " || before === ")" || before === "{";
+  const validAfter = after === "" || after === " " || after === ";" || after === ")" || after === "{";
+  return validBefore && validAfter;
+}
+
+function findTopLevelElse(s: string, start: number): number {
+  let depth = 0;
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === "(" || ch === "{" || ch === "[") depth++;
+    else if (ch === ")" || ch === "}" || ch === "]") depth--;
+    else if (depth === 0 && s.startsWith("else", i) && isStandaloneElseAt(s, i)) return i;
+  }
+  return -1;
+}
+
+function evalExpr(src: string): Result<number, string> {
+  if (!_interpret) return { ok: false, error: "internal error" };
+  return _interpret(src);
+}
+
+function readIfAt(s: string, pos: number): Result<ReadOperandResult, string> {
+  const n = s.length;
+  let i = pos + 2; // skip 'if'
+  while (i < n && s[i] === " ") i++;
+  if (i >= n || s[i] !== "(") return { ok: false, error: "invalid operand" };
+
+  const j = findMatchingParen(s, i);
+  if (j === -1) return { ok: false, error: "unmatched parenthesis" };
+
+  const condText = s.slice(i + 1, j).trim();
+  const condRes = evalExpr(condText);
+  if (!condRes.ok) return condRes as Err<string>;
+
+  const elsePos = findTopLevelElse(s, j + 1);
+  if (elsePos === -1) return { ok: false, error: "invalid operand" };
+
+  const thenText = s.slice(j + 1, elsePos).trim();
+  const elseStart = elsePos + 4;
+  let q = elseStart;
+  while (q < n && s[q] === " ") q++;
+  const endPos = findOperandEnd(s, q);
+  const elseText = s.slice(q, endPos).trim();
+
+  const thenRes = evalExpr(thenText);
+  if (!thenRes.ok) return thenRes as Err<string>;
+  const elseRes = evalExpr(elseText);
+  if (!elseRes.ok) return elseRes as Err<string>;
+
+  const chosen = condRes.value !== 0 ? thenRes.value : elseRes.value;
+  const parsed: ParsedNumber = { value: chosen, raw: String(chosen), end: String(chosen).length };
+  const operandFull = s.slice(pos, endPos).trim();
+  return { ok: true, value: { parsed, operandFull, nextPos: endPos } };
+}
+
 function readOperandAt(
   s: string,
   pos: number
 ): Result<ReadOperandResult, string> {
   const substr = s.slice(pos);
+
+  // 'if' expression
+  if (substr.startsWith("if") && (substr[2] === " " || substr[2] === "(")) return readIfAt(s, pos);
 
   // grouped expression handled by helper
   if (substr[0] === "(" || substr[0] === "{") {
@@ -203,15 +277,20 @@ function isOperator(ch: string): boolean {
   return ch === "+" || ch === "-" || ch === "*" || ch === "/";
 }
 
-function parseNextOperator(s: string, pos: number): Result<OpParseResult, string> {
+function parseNextOperator(
+  s: string,
+  pos: number
+): Result<OpParseResult, string> {
   const n = s.length;
   const ch = s[pos];
   if (ch === "&") {
-    if (pos + 1 < n && s[pos + 1] === "&") return { ok: true, value: { op: "&&", nextPos: pos + 2 } };
+    if (pos + 1 < n && s[pos + 1] === "&")
+      return { ok: true, value: { op: "&&", nextPos: pos + 2 } };
     return { ok: false, error: "invalid operator" };
   }
   if (ch === "|") {
-    if (pos + 1 < n && s[pos + 1] === "|") return { ok: true, value: { op: "||", nextPos: pos + 2 } };
+    if (pos + 1 < n && s[pos + 1] === "|")
+      return { ok: true, value: { op: "||", nextPos: pos + 2 } };
     return { ok: false, error: "invalid operator" };
   }
   if (!isOperator(ch)) return { ok: false, error: "invalid operator" };
@@ -259,7 +338,10 @@ function parseTokens(s2: string): Result<Tokenized, string> {
   if (ops2.length !== operands2.length - 1)
     return { ok: false, error: "invalid expression" };
 
-  return { ok: true, value: { operands: operands2, operandStrs: operandStrs2, ops: ops2 } };
+  return {
+    ok: true,
+    value: { operands: operands2, operandStrs: operandStrs2, ops: ops2 },
+  };
 }
 
 export function tokenizeAddSub(s: string): Result<Tokenized, string> {
