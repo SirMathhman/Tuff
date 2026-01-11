@@ -88,6 +88,10 @@ describe("interpret - arithmetic", () => {
     expect(interpret("(3 + { let x : I32 = 1; x }) * 2")).toBe(8);
   });
 
+  it("evaluates a top-level block and returns the last expression", () => {
+    expect(interpret("let x : I32 = 100; x")).toBe(100);
+  });
+
   it("throws when a block ends with declaration and no expression", () => {
     expect(() => interpret("(3 + { let x : I32 = 1; }) * 2")).toThrow(Error);
   });
