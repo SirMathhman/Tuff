@@ -527,3 +527,34 @@ it("functions: function expression assignment", () => {
     value: 100,
   });
 });
+
+it("functions: named function expression assigned to variable", () => {
+  expect(
+    interpret(
+      "let addFunc = fn add(first : I32, second : I32) : I32 => first + second; addFunc(1, 2)"
+    )
+  ).toEqual({ ok: true, value: 3 });
+});
+
+it("functions: arrow-style function expression assigned to variable", () => {
+  expect(
+    interpret(
+      "let addFunc = (first : I32, second : I32) : I32 => first + second; addFunc(1, 2)"
+    )
+  ).toEqual({ ok: true, value: 3 });
+});
+
+it("expressions: arrow function literal by itself errors", () => {
+  expect(interpret("() => {}")).toEqual({
+    ok: false,
+    error: "invalid expression",
+  });
+});
+
+it("functions: declaration with function type annotation", () => {
+  expect(
+    interpret(
+      "let addFunc  : (I32, I32) => I32 = (first : I32, second : I32) : I32 => first + second; addFunc(1, 2)"
+    )
+  ).toEqual({ ok: true, value: 3 });
+});

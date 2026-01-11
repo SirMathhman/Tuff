@@ -28,7 +28,12 @@ import {
   type BindingLike,
 } from "../helpers/assignHelpers";
 import { handleTopLevelWhileStmt as handleWhileExternal } from "../control/whileHelpers";
-import { parseFnDeclStatement, type ParamDecl } from "../parsers/fnDeclHelpers";
+import {
+  parseFnDeclStatement,
+  type ParamDecl,
+  parseFnExpressionAt,
+  parseArrowFnExpressionAt,
+} from "../parsers/fnDeclHelpers";
 import {
   interpretSpecialLiterals,
   startsWithIdentCall,
@@ -500,6 +505,16 @@ export function interpret(
   }
   if (findTopLevelChar(s, 0, ";") !== -1 || s.startsWith("let "))
     return evaluateBlock(s, parentEnv);
+
+  // Reject standalone function expressions like `fn () => {}` or `(x) => x` when used as top-level expression
+  if (s.indexOf("=>") !== -1) {
+    const parseFn = parseFnExpressionAt(s, 0);
+    if (parseFn !== undefined)
+      return { ok: false, error: "invalid expression" };
+    const parseArrow = parseArrowFnExpressionAt(s, 0);
+    if (parseArrow !== undefined)
+      return { ok: false, error: "invalid expression" };
+  }
 
   if (needsArithmetic(s)) return handleAddSubChain(s, parentEnv);
 

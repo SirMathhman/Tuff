@@ -525,6 +525,8 @@ function lookupAndFormatSubstIdent(
 ): Result<string, string> {
   if (!isIdentifierName(name) || reserved.has(name))
     return { ok: true, value: name };
+  // treat sized types (e.g., I32) as reserved for substitution purposes
+  if (SIZED_TYPES.has(name)) return { ok: true, value: name };
   const b = lookupBinding(name, envLocal, parentEnvLocal);
   if (!b.ok) return { ok: false, error: b.error };
   return {
@@ -547,4 +549,16 @@ export function substituteTopLevelIdents(
   parentEnvLocal?: Map<string, BindingLike>
 ): Result<string, string> {
   return substituteIdentsGeneric(src, envLocal, parentEnvLocal, true);
+}
+
+/* eslint-disable max-lines */
+export function findTopLevelArrowIndex(src: string, start = 0): number {
+  let pos = start;
+  while (pos < src.length) {
+    const idx = findTopLevelChar(src, pos, "=");
+    if (idx === -1) return -1;
+    if (idx + 1 < src.length && src[idx + 1] === ">") return idx;
+    pos = idx + 1;
+  }
+  return -1;
 }

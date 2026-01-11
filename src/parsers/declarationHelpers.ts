@@ -5,6 +5,8 @@ import {
   deriveAnnotationSuffixForNoInit,
   substituteAllIdents,
   isIdentifierName,
+  findTopLevelChar,
+  findTopLevelArrowIndex,
 } from "./interpretHelpers";
 import {
   validateIfIdentifierConditions,
@@ -12,7 +14,7 @@ import {
 } from "../control/ifValidators";
 import { finalizeInitializedDeclaration } from "../helpers/declarations";
 import { interpret } from "../core/interpret";
-import { parseFnExpressionAt } from "./fnDeclHelpers";
+import { parseFnExpressionAt, parseArrowFnExpressionAt } from "./fnDeclHelpers";
 
 export function parseBracedInitializer(
   t: string,
@@ -93,22 +95,12 @@ function resolveExpressionInitializer(
   return { ok: true, value: { value: r.value, suffix } };
 }
 
-export function resolveInitializer(
-  rhs: string,
-  env: Map<string, Binding>,
-  evaluateBlockFn: (
-    s: string,
-    parentEnv?: Map<string, Binding>
-  ) => Result<number, string>
-): Result<Binding, string> {
-  const t = rhs.trim();
-
-  const bool = tryResolveBoolLiteral(t);
-  if (bool) return { ok: true, value: bool };
-
-  // function expression initializer (e.g., fn name() => body or fn () => body)
-  if (t.startsWith("fn ")) {
-    const fnRes = parseFnExpressionAt(t, 0);
+function tryParseFunctionInitializer(
+  t: string,
+  env: Map<string, Binding>
+): Result<Binding, string> | undefined {
+  const buildFromFnRes = (fnRes: ReturnType<typeof parseFnExpressionAt> | undefined): Result<Binding, string> | undefined => {
+    if (!fnRes) return undefined;
     if (fnRes && fnRes.ok) {
       const fnExpr = fnRes.value;
       const binding: Binding = {
@@ -123,7 +115,41 @@ export function resolveInitializer(
       return { ok: true, value: binding };
     }
     if (fnRes && !fnRes.ok) return fnRes;
+    return undefined;
+  };
+
+  if (t.startsWith("fn ")) {
+    const fnRes = parseFnExpressionAt(t, 0);
+    const res = buildFromFnRes(fnRes);
+    if (res) return res;
   }
+
+  const topArrow = findTopLevelArrowIndex(t, 0);
+  if (topArrow !== -1) {
+    const fnRes = parseFnExpressionAt(t, 0) ?? parseArrowFnExpressionAt(t, 0);
+    const res = buildFromFnRes(fnRes);
+    if (res) return res;
+    return { ok: false, error: "invalid function expression" };
+  }
+
+  return undefined;
+}
+
+export function resolveInitializer(
+  rhs: string,
+  env: Map<string, Binding>,
+  evaluateBlockFn: (
+    s: string,
+    parentEnv?: Map<string, Binding>
+  ) => Result<number, string>
+): Result<Binding, string> {
+  const t = rhs.trim();
+
+  const bool = tryResolveBoolLiteral(t);
+  if (bool) return { ok: true, value: bool };
+
+  const tryFn = tryParseFunctionInitializer(t, env);
+  if (tryFn) return tryFn;
 
   // identifier initializer
   if (isIdentifierName(t)) {
@@ -157,14 +183,15 @@ function scanIdentFrom(stmt: string, start: number) {
   return ident ? { ident, nextPos: idx } : undefined;
 }
 
-export function parseDeclaration(
-  stmt: string,
-  env: Map<string, Binding>,
-  evaluateBlockFn: (
-    s: string,
-    parentEnv?: Map<string, Binding>
-  ) => Result<number, string>
-): Result<void, string> {
+interface DeclarationHeader {
+  ident: string;
+  p: number;
+  isMutable: boolean;
+}
+
+function parseDeclarationHeader(
+  stmt: string
+): Result<DeclarationHeader, string> {
   let p = 4;
   while (p < stmt.length && stmt[p] === " ") p++;
 
@@ -186,11 +213,32 @@ export function parseDeclaration(
   const ident = scan.ident;
   p = scan.nextPos;
 
-  const eq = stmt.indexOf("=", p);
+  return { ok: true, value: { ident, p, isMutable } };
+}
+
+export function parseDeclaration(
+  stmt: string,
+  env: Map<string, Binding>,
+  evaluateBlockFn: (
+    s: string,
+    parentEnv?: Map<string, Binding>
+  ) => Result<number, string>
+): Result<void, string> {
+  const header = parseDeclarationHeader(stmt);
+  if (!header.ok) return header as Result<void, string>;
+  const { ident, p, isMutable } = header.value;
+
+  // find top-level '=' that is not part of a '=>' arrow
+  let eq = findTopLevelChar(stmt, p, "=");
+  while (eq !== -1 && eq + 1 < stmt.length && stmt[eq + 1] === ">") {
+    // skip '=' that is part of '=>'
+    eq = findTopLevelChar(stmt, eq + 1, "=");
+  }
+
   // no initializer: allow annotation-only declarations like 'let x : I32'
-  if (eq === -1) {
+  const handleNoInit = ((): Result<void, string> | undefined => {
+    if (eq !== -1) return undefined;
     const colonPos = stmt.indexOf(":", p);
-    // deriveAnnotationSuffixForNoInit placed in interpretHelpers
     const maybeSuffix = deriveAnnotationSuffixForNoInit(stmt, colonPos);
     if (!maybeSuffix.ok) return maybeSuffix as Result<void, string>;
     const suffix = maybeSuffix.value;
@@ -199,7 +247,8 @@ export function parseDeclaration(
     // uninitialized binding: assigned = false (first assignment allowed). store mutability
     env.set(ident, { value: 0, suffix, assigned: false, mutable: isMutable });
     return { ok: true, value: undefined };
-  }
+  })();
+  if (handleNoInit) return handleNoInit;
 
   const rhs = stmt.slice(eq + 1).trim();
 

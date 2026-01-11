@@ -139,3 +139,42 @@ export function parseFnExpressionAt(
     value: { params: paramsRes.value, body },
   };
 }
+
+export function parseArrowFnExpressionAt(
+  s: string,
+  pos: number
+): Result<FnExprParsed, string> | undefined {
+  const substr = s.slice(pos);
+  if (!substr || substr.length === 0) return undefined;
+  let i = 0;
+  while (i < substr.length && substr[i] === " ") i++;
+  if (i >= substr.length || substr[i] !== "(") return undefined;
+
+  const globalPos = pos + i;
+  const closeParen = findMatchingParenIndex(s, globalPos);
+  if (closeParen === -1)
+    return { ok: false, error: "invalid arrow function expression" };
+
+  const paramsText = s.slice(globalPos + 1, closeParen).trim();
+  const rest = s.slice(closeParen + 1);
+  const restTrim = rest.trim();
+
+  let bodyStartIdx = -1;
+  if (restTrim.startsWith("=>")) {
+    bodyStartIdx = rest.indexOf("=>");
+  } else if (restTrim.startsWith(":")) {
+    // allow optional return annotation between params and =>
+    const arrowIdx = rest.indexOf("=>");
+    if (arrowIdx === -1) return undefined;
+    bodyStartIdx = arrowIdx;
+  } else {
+    return undefined;
+  }
+
+  const body = rest.slice(bodyStartIdx + 2).trim();
+
+  const paramsRes = parseFunctionParams(paramsText);
+  if (!paramsRes.ok) return paramsRes;
+
+  return { ok: true, value: { params: paramsRes.value, body } };
+}
