@@ -302,6 +302,20 @@ export const SIZED_TYPES = new Set([
   "Bool",
 ]);
 
+// Reserved identifiers that should not be substituted by numeric values
+export const RESERVED_IDENTS = new Set([
+  "if",
+  "else",
+  "let",
+  "true",
+  "false",
+  "match",
+  "case",
+  "_",
+  "break",
+  "continue",
+]);
+
 export function isIdentifierOnly(stmt: string): boolean {
   const t = stmt.trim();
   if (t.length === 0) return false;
@@ -445,7 +459,7 @@ function substituteIdentsGeneric(
   parentEnvLocal: Map<string, BindingLike> | undefined,
   onlyTopLevel: boolean
 ): Result<string, string> {
-  const reserved = new Set(["if", "else", "let", "true", "false", "match", "case", "_", "break", "continue"]);
+  const reserved = RESERVED_IDENTS;
   let out = "";
   let i = 0;
   let depth = 0;

@@ -288,22 +288,22 @@ describe("interpret (suffix handling - braced blocks) - chained and booleans", (
     expect(interpret("0 || 0")).toEqual({ ok: true, value: 0 });
     expect(interpret("0 || 2")).toEqual({ ok: true, value: 1 });
 
-    // if-expression tests
-    expect(interpret("let x = if (true) 3 else 5; x")).toEqual({
-      ok: true,
-      value: 3,
-    });
-    expect(interpret("let x = if (false) 3 else 5; x")).toEqual({
-      ok: true,
-      value: 5,
-    });
+    // if-expression tests moved to its own block below to satisfy linter
+    // (see the dedicated 'if-expression tests' it() added following this block)
+  });
+
+  it("if-expression tests", () => {
+    // basic if-expression behavior
+    expect(interpret("let x = if (true) 3 else 5; x")).toEqual({ ok: true, value: 3 });
+    expect(interpret("let x = if (false) 3 else 5; x")).toEqual({ ok: true, value: 5 });
     expect(interpret("1 + if (true) 3 else 5")).toEqual({ ok: true, value: 4 });
 
+    // nested else-if expressions
+    expect(interpret("let x = if (true) 5 else if (true) 2 else 3; x")).toEqual({ ok: true, value: 5 });
+    expect(interpret("let x = if (false) 5 else if (true) 2 else 3; x")).toEqual({ ok: true, value: 2 });
+
     // identifier condition that references a Bool-like binding should work
-    expect(interpret("let y = true; let x = if (y) 3 else 5; x")).toEqual({
-      ok: true,
-      value: 3,
-    });
+    expect(interpret("let y = true; let x = if (y) 3 else 5; x")).toEqual({ ok: true, value: 3 });
   });
 
   it("if-expression with identifier condition errors", () => {
