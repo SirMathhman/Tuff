@@ -67,4 +67,8 @@ describe("interpret - arithmetic", () => {
   it("throws when unsigned subtraction underflows", () => {
     expect(() => interpret("1U8 - 2U8")).toThrow(Error);
   });
+
+  it("multiplies with precedence over addition", () => {
+    expect(interpret("10 * 5 + 3")).toBe(53);
+  });
 });

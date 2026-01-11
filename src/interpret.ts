@@ -48,11 +48,13 @@ function tryHandleAddition(s: string): number | undefined {
   const suffix = ensureConsistentSuffix(tokens);
   const result = evaluateTokens(tokens);
 
-  // validate result fits the width
-  if (suffix.bits <= 53 && suffix.bits !== 64) {
-    validateWidthNumber(suffix.signed, suffix.bits, result);
-  } else {
-    validateWidthBig(suffix.signed, suffix.bits, String(result));
+  // validate result fits the width if operands used typed width
+  if (suffix) {
+    if (widthUsesNumber(suffix.bits)) {
+      validateWidthNumber(suffix.signed, suffix.bits, result);
+    } else {
+      validateWidthBig(suffix.signed, suffix.bits, String(result));
+    }
   }
 
   return result;
@@ -63,12 +65,15 @@ function isDigit(ch: string): boolean {
   return c >= 48 && c <= 57;
 }
 
+const SUFFIX_CHARS = new Set(["U", "u", "I", "i"]);
+const OPERATOR_CHARS = new Set(["+", "-", "*", "/"]);
+
 function isPlusMinus(ch: string): boolean {
   return ch === "+" || ch === "-";
 }
 
 function isSuffixChar(ch: string): boolean {
-  return ch === "U" || ch === "u" || ch === "I" || ch === "i";
+  return SUFFIX_CHARS.has(ch);
 }
 
 function tokenizeAddSub(s: string): string[] | undefined {
@@ -86,7 +91,7 @@ function tokenizeAddSub(s: string): string[] | undefined {
       i = res.next;
       expectNumber = false;
     } else {
-      if (!isPlusMinus(s[i])) return undefined;
+      if (!isOperator(s[i])) return undefined;
       tokens.push(s[i]);
       i++;
       expectNumber = true;
@@ -114,6 +119,10 @@ function at(s: string, pos: number, pred: (ch: string) => boolean): boolean {
   return pos < s.length && pred(s[pos]);
 }
 
+function isOperator(ch: string): boolean {
+  return OPERATOR_CHARS.has(ch);
+}
+
 function consumeDigitsFrom(s: string, pos: number): number {
   let j = pos;
   while (at(s, j, isDigit)) j++;
@@ -136,28 +145,54 @@ function parseNumberTokenAt(s: string, pos: number): ParseResult | undefined {
   return { token: s.slice(start, j).trim(), next: j };
 }
 
-function ensureConsistentSuffix(tokens: string[]): WidthSuffix {
+function ensureConsistentSuffix(tokens: string[]): WidthSuffix | undefined {
   let common: WidthSuffix | undefined;
+  let seenAnySuffix = false;
   for (let idx = 0; idx < tokens.length; idx += 2) {
     const part = tokens[idx];
     const { rest } = splitNumberAndSuffix(part);
     const suffix = parseWidthSuffix(rest);
-    if (!suffix) throw new Error("Missing or mixed width in addition");
-    if (!common) common = suffix;
-    else if (suffix.bits !== common.bits || suffix.signed !== common.signed)
-      throw new Error("Mixed widths in addition");
+    if (suffix) {
+      seenAnySuffix = true;
+      if (!common) common = suffix;
+      else if (suffix.bits !== common.bits || suffix.signed !== common.signed)
+        throw new Error("Mixed widths in addition");
+    } else {
+      if (seenAnySuffix) throw new Error("Missing or mixed width in addition");
+    }
   }
-  return common!;
+  return common;
 }
 
 function evaluateTokens(tokens: string[]): number {
-  let result = interpret(tokens[0]);
+  // first handle * and / (higher precedence)
+  const reduced: string[] = [];
+  let acc = interpret(tokens[0]);
   for (let idx = 1; idx < tokens.length; idx += 2) {
     const op = tokens[idx];
     const operand = tokens[idx + 1];
     const val = interpret(operand);
-    if (op === "+") result = result + val;
-    else result = result - val;
+    if (op === "*") {
+      acc = acc * val;
+    } else if (op === "/") {
+      // integer division truncate toward zero
+      if (val === 0) throw new Error("Division by zero");
+      acc = Math.trunc(acc / val);
+    } else {
+      reduced.push(String(acc));
+      reduced.push(op);
+      acc = val;
+    }
+  }
+  reduced.push(String(acc));
+
+  // now do left-to-right + and -
+  let result = Number(reduced[0]);
+  for (let idx = 1; idx < reduced.length; idx += 2) {
+    const op = reduced[idx];
+    const operand = Number(reduced[idx + 1]);
+    if (op === "+") result = result + operand;
+    else result = result - operand;
   }
   return result;
 }
