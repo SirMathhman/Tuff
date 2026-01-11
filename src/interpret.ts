@@ -433,7 +433,7 @@ function inferTypeFromExpr(
   const { numStr } = splitNumberAndSuffix(s);
   if (numStr !== "") return "Number";
   // parenthesized or binary expression assume Number
-  if (s[0] === "(" || s[0] === "{") return "Number";
+  if (startsWithGroup(s)) return "Number";
   if (containsOperator(s)) return "Number";
   return undefined;
 }
@@ -462,7 +462,13 @@ function isIntegerTypeName(typeName: string): boolean {
 }
 
 function containsOperator(s: string): boolean {
-  return s.includes("+") || s.includes("-") || s.includes("*") || s.includes("/");
+  return (
+    s.includes("+") || s.includes("-") || s.includes("*") || s.includes("/")
+  );
+}
+
+function startsWithGroup(s: string): boolean {
+  return s[0] === "(" || s[0] === "{";
 }
 
 function validateAnnotatedTypeCompatibility(
@@ -565,9 +571,10 @@ function tryHandleAssignmentStatement(
   return val;
 }
 
-
-
-interface IfResult { consumed: number; last: number }
+interface IfResult {
+  consumed: number;
+  last: number;
+}
 
 function handleIfAt(idx: number, stmts: string[], env: Env): IfResult {
   const stmt = stmts[idx];
@@ -580,7 +587,11 @@ function handleIfAt(idx: number, stmts: string[], env: Env): IfResult {
 
   let consumed = 0;
   // if thenPart is empty, maybe the next top-level stmt is the then-part
-  if (thenPart === "" && idx + 1 < stmts.length && !stmts[idx + 1].trim().startsWith("else")) {
+  if (
+    thenPart === "" &&
+    idx + 1 < stmts.length &&
+    !stmts[idx + 1].trim().startsWith("else")
+  ) {
     consumed = 1;
     thenPart = stmts[idx + 1];
   }
@@ -591,7 +602,10 @@ function handleIfAt(idx: number, stmts: string[], env: Env): IfResult {
     // no then part was present, else is attached directly
     elsePart = thenPart.slice(4).trim();
     thenPart = "";
-  } else if (idx + 1 + consumed < stmts.length && stmts[idx + 1 + consumed].trim().startsWith("else")) {
+  } else if (
+    idx + 1 + consumed < stmts.length &&
+    stmts[idx + 1 + consumed].trim().startsWith("else")
+  ) {
     consumed += 1;
     elsePart = stmts[idx + consumed].trim().slice(4).trim();
   }
@@ -634,12 +648,30 @@ function evalBlock(s: string, envIn?: Env): number {
     if (stmt.startsWith("let ")) {
       last = handleLetStatement(stmt, env, localDeclared);
     } else {
-      const assigned = tryHandleAssignmentStatement(stmt, env);
-      if (assigned !== undefined) {
-        last = assigned;
-        continue;
+      // handle leading grouped expressions (e.g., "{ x = 20; } x") so that
+      // a block followed by other expressions in the same stmt are processed
+      // left-to-right.
+      let rem = stmt;
+      while (rem !== "") {
+        rem = rem.trim();
+        if (rem === "") break;
+        if (startsWithGroup(rem)) {
+          const close = findMatchingParen(rem, 0);
+          if (close < 0) throw new Error("Unterminated grouping");
+          const part = rem.slice(0, close + 1);
+          last = interpret(part, env);
+          rem = rem.slice(close + 1).trim();
+          continue;
+        }
+
+        const assigned = tryHandleAssignmentStatement(rem, env);
+        if (assigned !== undefined) {
+          last = assigned;
+        } else {
+          last = interpret(rem, env);
+        }
+        rem = "";
       }
-      last = interpret(stmt, env);
     }
   }
   return last;
