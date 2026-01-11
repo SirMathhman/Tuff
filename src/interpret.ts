@@ -25,6 +25,9 @@ export function interpret(input: string, env?: Env): number {
   const ifResult = tryHandleIfExpression(s, env);
   if (ifResult !== undefined) return ifResult;
 
+  const comparisonResult = tryHandleComparison(s, env);
+  if (comparisonResult !== undefined) return comparisonResult;
+
   const additionResult = tryHandleAddition(s);
   if (additionResult !== undefined) return additionResult;
 
@@ -107,6 +110,68 @@ function tryParseNumberOrIdentifier(s: string, env?: Env): number | undefined {
   }
 
   return value;
+}
+
+function evalComparisonOp(
+  left: string,
+  right: string,
+  op: string,
+  env?: Env
+): number | undefined {
+  if (left === "" || right === "") return undefined;
+  const lv = interpret(left, env);
+  const rv = interpret(right, env);
+  switch (op) {
+    case "<=":
+      return lv <= rv ? 1 : 0;
+    case ">=":
+      return lv >= rv ? 1 : 0;
+    case "==":
+      return lv === rv ? 1 : 0;
+    case "!=":
+      return lv !== rv ? 1 : 0;
+    case "<":
+      return lv < rv ? 1 : 0;
+    case ">":
+      return lv > rv ? 1 : 0;
+    default:
+      return undefined;
+  }
+}
+
+interface TopLevelComparison {
+  op: string;
+  idx: number;
+}
+
+function findTopLevelComparison(s: string): TopLevelComparison | undefined {
+  let depth = 0;
+  const twoCharOps = ["<=", ">=", "==", "!="];
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === "(" || ch === "{") {
+      depth++;
+      continue;
+    }
+    if (ch === ")" || ch === "}") {
+      depth--;
+      continue;
+    }
+    if (depth !== 0) continue;
+
+    const two = s.slice(i, i + 2);
+    if (twoCharOps.includes(two)) return { op: two, idx: i };
+    if (ch === "<" || ch === ">") return { op: ch, idx: i };
+  }
+  return undefined;
+}
+
+function tryHandleComparison(s: string, env?: Env): number | undefined {
+  const found = findTopLevelComparison(s);
+  if (!found) return undefined;
+  const { op, idx } = found;
+  const rightStart = idx + (op.length === 2 ? 2 : 1);
+  return evalComparisonOp(s.slice(0, idx).trim(), s.slice(rightStart).trim(), op, env);
 }
 
 function tryHandleAddition(s: string): number | undefined {

@@ -92,7 +92,7 @@ describe("interpret - arithmetic", () => {
     expect(() => interpret("10 / (2 - 2)")).toThrow(Error);
   });
 });
-describe("interpret - blocks", () => {
+describe("interpret - blocks (core)", () => {
   it("supports brace grouping as parentheses in expressions", () => {
     expect(interpret("(3 + { 1 }) * 2")).toBe(8);
   });
@@ -119,7 +119,7 @@ describe("interpret - blocks", () => {
   });
 
   it("throws when assigning a Bool to an integer-typed declaration", () => {
-    expect(() => interpret("let x = true; let y : I32 = x;")).toThrow(Error);
+    expect(() => interpret("let x = true; let y : I32 = x; ")).toThrow(Error);
   });
 
   it("allows assignment to an uninitialized annotated variable and returns the value", () => {
@@ -131,7 +131,9 @@ describe("interpret - blocks", () => {
       Error
     );
   });
+});
 
+describe("interpret - blocks (expressions)", () => {
   it("allows multiple assignments to a `mut` annotated variable", () => {
     expect(interpret("let mut x : Bool; x = true; x = false; x")).toBe(0);
   });
@@ -140,16 +142,21 @@ describe("interpret - blocks", () => {
     expect(interpret("let x : I32; if (true) x = 10; else x = 20; x")).toBe(10);
   });
 
-  it("supports if expressions in initializers", () => {
-    expect(interpret("let value : I32 = if (true) 300 else 200; value")).toBe(
-      300
-    );
+  it("supports simple if expressions in initializers", () => {
+    expect(interpret("let value : I32 = if (true) 300 else 200; value")).toBe(300);
+  });
 
+  it("supports nested else-if chains in if-expressions", () => {
     expect(
       interpret(
         "let value : I32 = if (true) 300 else if (true) 200 else 100; value"
       )
     ).toBe(300);
+  });
+
+  it("supports comparison operator < returning boolean as 1/0", () => {
+    expect(interpret("let x = 100; let y = 200; x < y")).toBe(1);
+    expect(interpret("let x = 100; let y = 50; x < y")).toBe(0);
   });
 });
 
