@@ -9,6 +9,12 @@ module.exports = {
   plugins: ["@typescript-eslint"],
   extends: ["eslint:recommended", "plugin:@typescript-eslint/recommended"],
   rules: {
+    // Forbid very large files
+    "max-lines": [
+      "error",
+      { max: 500, skipBlankLines: false, skipComments: false },
+    ],
+
     // Ban regex literals and RegExp usage
     "no-restricted-syntax": [
       "error",
