@@ -143,9 +143,7 @@ export function cloneTypeAliasMap(fromEnv: Env | undefined, toEnv: Env): void {
   envTypeAliasMap.set(toEnv, dest);
 
   const lsrc = fromEnv ? envLinearDestructorMap.get(fromEnv) : undefined;
-  const ldest = new Map<string, string>(
-    lsrc ? Array.from(lsrc.entries()) : []
-  );
+  const ldest = new Map<string, string>(lsrc ? Array.from(lsrc.entries()) : []);
   envLinearDestructorMap.set(toEnv, ldest);
 }
 

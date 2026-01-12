@@ -40,3 +40,4 @@ Semantics:
 - **Move**: `let y = x;` moves ownership from `x` to `y` (using `x` afterwards throws `Use-after-move`).
 - **Auto-drop on scope exit**: if a live linear binding reaches the end of its scope, its destructor is called automatically.
 - **Drop on reassignment**: assigning a new value to a live linear binding drops the old value first.
+- **Pointers**: taking `&x`, dereferencing `*p`, or assigning through `*p = ...` will throw `Use-after-move` if the pointee linear binding has been moved/dropped.

@@ -588,7 +588,8 @@ function tryHandleAssignmentStatement(
   assertAssignable(cur, inferTypeFromExpr(restAssign, env));
 
   const movedRhs = tryMoveLinearIdentifier(restAssign, env);
-  const valRaw = movedRhs !== undefined ? movedRhs : interpretRef(restAssign, env);
+  const valRaw =
+    movedRhs !== undefined ? movedRhs : interpretRef(restAssign, env);
 
   // Drop the old value if this binding currently owns a live linear value.
   dropLinearBindingIfLive(idRes.name, env);

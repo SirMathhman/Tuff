@@ -187,7 +187,11 @@ function callFunctionValue(
   const callEnv = new Map<string, EnvItem>(func.env);
   bindParamsToEnv(callEnv, func.params, argVals);
 
-  const thisStruct = createThisStructAndBindToEnv(callEnv, func.params, argVals);
+  const thisStruct = createThisStructAndBindToEnv(
+    callEnv,
+    func.params,
+    argVals
+  );
   // If the function body is simply `this`, return the struct directly (with methods attached)
   const bodyTrim = func.body.trim();
   if (bodyTrim === "this" || bodyTrim === "this;") {

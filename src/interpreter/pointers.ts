@@ -32,6 +32,7 @@ export function tryHandleAddressOf(
   if (!isIdentifierName(rest)) return undefined;
   if (!env || !env.has(rest)) throw new Error("Unknown identifier");
   const item = env.get(rest)!;
+  if (item.moved) throw new Error("Use-after-move");
   // if requested mutw  , ensure the target is mutable
   if (pointeeMutable && !item.mutable)
     throw new Error("Cannot take mutable reference to immutable variable");
@@ -59,6 +60,7 @@ export function tryHandleDerefExpression(
     const ptr = tryHandleAddressOf(rest, env);
     if (!ptr) return undefined;
     const pointee = ptr.env.get(ptr.name)!;
+    if (pointee.moved) throw new Error("Use-after-move");
     if (typeof pointee.value !== "number")
       throw new Error("Cannot dereference non-number");
     return pointee.value as number;
@@ -71,6 +73,7 @@ export function tryHandleDerefExpression(
     if (!isPointerValue(item.value)) return undefined;
     const ptr = item.value as PointerValue;
     const pointee = ptr.env.get(ptr.name)!;
+    if (pointee.moved) throw new Error("Use-after-move");
     if (typeof pointee.value !== "number")
       throw new Error("Cannot dereference non-number");
     return pointee.value as number;
@@ -97,6 +100,7 @@ export function tryHandlePointerAssignment(
   if (!isPointerValue(item.value)) return undefined;
   const ptr = item.value as PointerValue;
   const pointeeItem = ptr.env.get(ptr.name)!;
+  if (pointeeItem.moved) throw new Error("Use-after-move");
   // require that the pointer itself is a mutable pointer (taken as &mut) or the pointee is mutable
   if (!ptr.pointeeMutable && !pointeeItem.mutable)
     throw new Error("Cannot assign through pointer to immutable variable");
