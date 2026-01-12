@@ -8,7 +8,6 @@ import {
   ensureUniqueDeclaration,
   extractParenContent,
   findMatchingParen,
-  interpretAll,
   parseFieldDef,
   parseIdentifierAt,
   sliceTrim,
@@ -16,6 +15,7 @@ import {
   startsWithKeyword,
   topLevelSplitTrim,
   isIdentifierName,
+  interpretAllAny,
 } from "./shared";
 import { evalBlock, handleYieldValue } from "./statements";
 
@@ -189,7 +189,7 @@ export function tryHandleCall(s: string, env?: Env): unknown | undefined {
   if (func.params.length !== args.length)
     throw new Error("Argument count mismatch");
 
-  const argVals = interpretAll(args, interpret, env);
+  const argVals = interpretAllAny(args, interpret, env);
   const callEnv = new Map<string, EnvItem>(func.env);
   bindParamsToEnv(callEnv, func.params, argVals);
 
@@ -378,7 +378,7 @@ export function tryHandleMethodCall(s: string, env?: Env): number | undefined {
   // 1) fn m(this, ...) => ...  -> params.length === args.length + 1
   // 2) fn m(...) => ...        -> params.length === args.length
   if (func.params.length === args.length + 1) {
-    const argVals = interpretAll(args, interpret, env);
+    const argVals = interpretAllAny(args, interpret, env);
     const bindings: Array<[string, unknown]> = [[func.params[0], receiverVal]];
     for (let i = 0; i < args.length; i++)
       bindings.push([func.params[i + 1], argVals[i]]);
@@ -386,7 +386,7 @@ export function tryHandleMethodCall(s: string, env?: Env): number | undefined {
   }
 
   if (func.params.length === args.length) {
-    const argVals = interpretAll(args, interpret, env);
+    const argVals = interpretAllAny(args, interpret, env);
     const bindings: Array<[string, unknown]> = [];
     for (let i = 0; i < args.length; i++)
       bindings.push([func.params[i], argVals[i]]);

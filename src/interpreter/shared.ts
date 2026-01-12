@@ -1,6 +1,10 @@
 import type { Env, EnvItem, ArrayValue, StructValue } from "./types";
 import { splitNumberAndSuffix } from "./numbers";
-import { parseAddressOfType, parseFnSignature, parseArrowSignature } from "./typeParsers";
+import {
+  parseAddressOfType,
+  parseFnSignature,
+  parseArrowSignature,
+} from "./typeParsers";
 
 export const BRACKET_PAIRS = new Map<string, string>([
   ["(", ")"],
@@ -392,6 +396,14 @@ export function interpretAll(
     if (typeof v !== "number") throw new Error("Expected numeric expression");
     return v as number;
   });
+}
+
+export function interpretAllAny(
+  items: string[],
+  interp: (s: string, env?: Env) => unknown,
+  env?: Env
+): unknown[] {
+  return items.map((item) => interp(item, env));
 }
 
 export function storeEnvItem(

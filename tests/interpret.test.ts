@@ -438,6 +438,19 @@ describe("interpret - pointers", () => {
     ).toBe(3);
   });
 
+  it("supports passing functions as arguments", () => {
+    expect(
+      interpret(
+        "let apply = fn apply(f : I32, x : I32) => { f(x) }; let inc = fn inc(a : I32) => { a + 1 }; apply(inc, 4)"
+      )
+    ).toBe(5);
+    expect(
+      interpret(
+        "let apply = fn apply(f : I32, x : I32) => { f(x) }; apply((a : I32) => a + 2, 3)"
+      )
+    ).toBe(5);
+  });
+
   it("supports annotated function types on let declarations", () => {
     expect(
       interpret(

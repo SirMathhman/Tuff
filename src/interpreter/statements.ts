@@ -83,8 +83,6 @@ export function handleYieldValue(yieldFn: () => number): number {
   }
 }
 
-
-
 function validateTypeCompatibility(
   annotatedType: string | undefined,
   otherType: string | undefined
