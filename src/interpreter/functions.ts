@@ -18,6 +18,7 @@ import {
   interpretAllAny,
 } from "./shared";
 import { evalBlock, handleYieldValue } from "./statements";
+import { isReturnValue, ReturnValue } from "./returns";
 import { parseFnSignature } from "./typeParsers";
 
 export function handleFnStatement(
@@ -219,8 +220,14 @@ export function tryHandleCall(s: string, env?: Env): unknown | undefined {
     return thisStruct;
   }
 
-  // evaluate body and handle yield
-  const bodyResult = handleYieldValue(() => evalBlock(func.body, callEnv, true));
+  // evaluate body and handle yield; catch function-level returns
+  let bodyResult: unknown;
+  try {
+    bodyResult = handleYieldValue(() => evalBlock(func.body, callEnv, true));
+  } catch (e: unknown) {
+    if (isReturnValue(e)) return (e as ReturnValue).value;
+    throw e;
+  }
 
   if (bodyResult === (thisStruct as unknown)) {
     attachMethodsToStructFromEnv(thisStruct, callEnv, func.env);
@@ -382,7 +389,9 @@ export function tryHandleMethodCall(s: string, env?: Env): number | undefined {
         value: v as EnvItem["value"],
         mutable: false,
       } as EnvItem);
-    return handleYieldValue(() => evalBlock(func!.body, callEnv, true)) as number;
+    return handleYieldValue(() =>
+      evalBlock(func!.body, callEnv, true)
+    ) as number;
   }
 
   // Two calling conventions for methods:

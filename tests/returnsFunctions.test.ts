@@ -53,4 +53,28 @@ describe("interpret - functions returning functions", () => {
     env.set("f", { value: f, mutable: false } as EnvItem);
     expect(interpret("f(3)", env)).toBe(5);
   });
+
+  it("return bubbles out of nested blocks", () => {
+    expect(
+      interpret(
+        "fn f() => { { if (true) return 10; } 20 }; f()"
+      )
+    ).toBe(10);
+  });
+
+  it("return can return function values", () => {
+    expect(
+      interpret(
+        "fn make(n : I32) => { fn add(x : I32) => { x + n }; return add }; let add2 = make(2); add2(3)"
+      )
+    ).toBe(5);
+  });
+
+  it("return outside function throws", () => {
+    expect(() => interpret("return 1")).toThrow("Return used outside function");
+  });
+
+  it("bare return returns NaN", () => {
+    expect(Number.isNaN(interpret("fn f() => { return; 5 }; f()"))).toBe(true);
+  });
 });

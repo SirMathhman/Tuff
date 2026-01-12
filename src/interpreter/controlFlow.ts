@@ -80,7 +80,8 @@ function handleIfAt(idx: number, stmts: string[], env: Env): IfResult {
   const condVal = interpret(condStr, env);
   let lastLocal = NaN;
   const part = condVal !== 0 ? thenPart : elsePart;
-  if (part !== undefined && part !== "") lastLocal = evalBlock(part, env, false) as number;
+  if (part !== undefined && part !== "")
+    lastLocal = evalBlock(part, env, false) as number;
   return { consumed, last: lastLocal } as IfResult;
 }
 

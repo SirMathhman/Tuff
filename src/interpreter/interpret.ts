@@ -10,6 +10,7 @@ import { tryHandleDerefExpression } from "./pointers";
 import { tryHandleIfExpression } from "./ifExpression";
 import { tryHandleMatchExpression } from "./matchExpression";
 import { evalBlock, handleYieldValue } from "./statements";
+import { isReturnValue } from "./returns";
 import {
   ensureIndexFound,
   isIdentifierName,
@@ -21,17 +22,31 @@ import { isStructValue } from "./structs";
 import { isArrayValue, tryHandleArrayIndexing } from "./arrays";
 import { isPointerValue } from "./pointers";
 
+function tryHandleTopLevel(s: string, env?: Env): unknown | undefined {
+  const topParts = splitTopLevel(s, ";");
+  if (topParts.length > 1 || s.trim().startsWith("let ")) {
+    try {
+      return handleYieldValue(() => evalBlock(s, env, false) as number);
+    } catch (e: unknown) {
+      if (isReturnValue(e)) throw new Error("Return used outside function");
+      throw e;
+    }
+  }
+
+  // `return` used at top-level is invalid
+  if (s.trim().startsWith("return")) throw new Error("Return used outside function");
+
+  return undefined;
+}
+
 export function interpret(input: string, env?: Env): unknown {
   let s = input.trim();
   if (s === "") return NaN;
 
   s = stripOuterParens(s);
 
-  // block with statements e.g., "let x : I32 = 1; x"
-  const topParts = splitTopLevel(s, ";");
-  if (topParts.length > 1 || s.trim().startsWith("let ")) {
-    return handleYieldValue(() => evalBlock(s, env, false) as number);
-  }
+  const topRes = tryHandleTopLevel(s, env);
+  if (topRes !== undefined) return topRes;
 
   const fieldAccessResult = tryHandleFieldAccess(s, env);
   if (fieldAccessResult !== undefined) return fieldAccessResult;

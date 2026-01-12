@@ -31,7 +31,7 @@ import {
   handlePointerInitializer,
 } from "./pointers";
 import { tryHandleThisAssignment, assertAssignable } from "./thisAssign";
-
+import { ReturnValue } from "./returns";
 export class YieldValue extends Error {
   public readonly __isYieldValue = true;
   constructor(public value: unknown) {
@@ -140,7 +140,11 @@ function extractAnnotationAndInitializer(str: string): AnnotationResult {
 }
 
 // eslint-disable-next-line complexity, max-lines-per-function
-export function evalBlock(s: string, envIn?: Env, allowNonNumericReturn = false): unknown {
+export function evalBlock(
+  s: string,
+  envIn?: Env,
+  allowNonNumericReturn = false
+): unknown {
   const trimmed = s.trim();
   // If evaluating a brace-delimited block, create a shallow copy of the parent
   // env so inner declarations don't leak but outer variables remain updatable.
@@ -194,12 +198,25 @@ export function evalBlock(s: string, envIn?: Env, allowNonNumericReturn = false)
           if (remaining.startsWith("let ")) {
             last = handleLetStatement(remaining, env, localDeclared);
           } else {
-            last = processNonLetStatement(remaining, env, allowNonNumericReturn);
+            last = processNonLetStatement(
+              remaining,
+              env,
+              allowNonNumericReturn
+            );
           }
         } else {
           last = NaN;
         }
       }
+    } else if (stmt.startsWith("return")) {
+      const expr = sliceTrim(stmt, 6);
+      if (expr === "") {
+        throw new ReturnValue(NaN);
+      }
+      const rv = interpret(expr, env);
+      if (typeof rv !== "number" && !allowNonNumericReturn)
+        throw new Error("Return must return a number");
+      throw new ReturnValue(rv);
     } else if (stmt.startsWith("yield ")) {
       const expr = sliceTrim(stmt, 6);
       const yv = interpret(expr, env);
@@ -453,7 +470,8 @@ function processNonLetStatement(
         ? handleYieldValue(() => evalBlock(part, env, allowNonNumericReturn))
         : interpret(part, env);
       if (typeof valPart !== "number") {
-        if (!allowNonNumericReturn) throw new Error("Expected numeric expression");
+        if (!allowNonNumericReturn)
+          throw new Error("Expected numeric expression");
         lastLocal = valPart;
       } else {
         lastLocal = valPart as number;
@@ -471,12 +489,12 @@ function processNonLetStatement(
       else {
         const val = interpret(rem, env);
         if (typeof val !== "number") {
-          if (!allowNonNumericReturn) throw new Error("Expected numeric expression");
+          if (!allowNonNumericReturn)
+            throw new Error("Expected numeric expression");
           lastLocal = val;
         } else lastLocal = val as number;
       }
     }
     rem = "";
   }
-  return lastLocal;
-}
+  return lastLocal; }

@@ -10,6 +10,7 @@ A small TypeScript interpreter for the Tuff language.
 ## Higher-order functions
 
 Tuff supports function values (functions can be:
+
 - assigned to variables,
 - passed as arguments,
 - returned from other functions).
