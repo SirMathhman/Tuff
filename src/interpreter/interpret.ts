@@ -13,6 +13,7 @@ import {
 } from "./shared";
 import { splitNumberAndSuffix, validateNumberSuffix } from "./numbers";
 import { isStructValue } from "./structs";
+import { isArrayValue, tryHandleArrayIndexing } from "./arrays";
 
 export function interpret(input: string, env?: Env): number {
   let s = input.trim();
@@ -34,6 +35,9 @@ export function interpret(input: string, env?: Env): number {
 
   const matchResult = tryHandleMatchExpression(s, env);
   if (matchResult !== undefined) return matchResult;
+
+  const arrayIndexResult = tryHandleArrayIndexing(s, env, interpret);
+  if (arrayIndexResult !== undefined) return arrayIndexResult;
 
   const fnExprResult = tryHandleFnExpression(s, env);
   if (fnExprResult !== undefined) return fnExprResult;
@@ -104,9 +108,10 @@ function tryParseNumberOrIdentifier(s: string, env?: Env): number | undefined {
         const item = env.get(id)!;
         if (item.type === "__deleted__") throw new Error("Unknown identifier");
         if (typeof item.value === "number") return item.value;
-        // If it's a struct value, we can't return it as a number, so return undefined
-        // and let other handlers (like field access) deal with it
-        if (isStructValue(item.value)) return undefined;
+        // If it's a struct or array value, we can't return it as a number, so return undefined
+        // and let other handlers (like field access or indexing) deal with it
+        if (isStructValue(item.value) || isArrayValue(item.value))
+          return undefined;
         throw new Error("Unknown identifier");
       }
       throw new Error("Unknown identifier");

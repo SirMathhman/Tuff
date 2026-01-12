@@ -2,6 +2,7 @@ import type { Env, StructDef, StructValue } from "./types";
 import {
   ensureIdentifier,
   ensureUnique,
+  extractPureBracketContent,
   findMatchingParen,
   interpretAll,
   parseFieldDef,
@@ -80,11 +81,9 @@ export function tryHandleStructLiteral(
   if (!def) return undefined;
 
   if (!s.startsWith("{")) return undefined;
-  const close = findMatchingParen(s, 0);
-  if (close < 0) throw new Error("Unterminated struct literal");
-  if (close !== s.length - 1) return undefined; // not a pure struct literal
+  const content = extractPureBracketContent(s, 0);
+  if (content === undefined) return undefined;
 
-  const content = s.slice(1, close).trim();
   const values = splitTopLevelOrEmpty(content, ",");
 
   if (values.length !== def.fieldNames.length) {

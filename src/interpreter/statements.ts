@@ -9,6 +9,7 @@ import {
   parseMutPrefix,
   sliceTrim,
   splitTopLevel,
+  storeEnvItem,
 } from "./shared";
 import { splitNumberAndSuffix } from "./numbers";
 import { handleFnStatement } from "./functions";
@@ -18,6 +19,7 @@ import {
   tryHandleStructLiteral,
   getStructDef,
 } from "./structs";
+import { tryHandleArrayLiteral } from "./arrays";
 
 // Exception thrown by yield statements to break out of blocks early
 export class YieldValue extends Error {
@@ -250,26 +252,18 @@ function handleLetStatement(
   const rest2 = sliceTrim(rest, nameRes.next);
   const { annotatedType, initializer } = extractAnnotationAndInitializer(rest2);
   if (initializer !== "") {
-    // Check if this is a struct initialization
-    if (annotatedType) {
-      const structDef = getStructDef(annotatedType);
-      if (structDef) {
-        const structVal = tryHandleStructLiteral(
-          initializer,
-          annotatedType,
-          env,
-          interpret
-        );
-        if (structVal) {
-          const item = {
-            value: structVal,
-            mutable,
-            type: annotatedType,
-          } as EnvItem;
-          env.set(name, item);
-          return NaN; // struct initialization returns NaN
-        }
-      }
+    // Check if this is a struct or array initialization
+    const compositeVal =
+      (annotatedType && getStructDef(annotatedType)
+        ? tryHandleStructLiteral(initializer, annotatedType, env, interpret)
+        : undefined) ||
+      (annotatedType && annotatedType.startsWith("[")
+        ? tryHandleArrayLiteral(initializer, env, annotatedType, interpret)
+        : undefined);
+
+    if (compositeVal) {
+      storeEnvItem(env, name, compositeVal, mutable, annotatedType);
+      return NaN;
     }
 
     const initType = inferTypeFromExpr(initializer, env);

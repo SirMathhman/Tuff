@@ -1,8 +1,9 @@
-import type { Env } from "./types";
+import type { Env, EnvItem } from "./types";
 
 export const BRACKET_PAIRS = new Map<string, string>([
   ["(", ")"],
   ["{", "}"],
+  ["[", "]"],
 ]);
 
 export function findMatchingParen(s: string, start: number): number {
@@ -55,14 +56,25 @@ export function skipSpacesFrom(s: string, pos: number): number {
   return skipChar(s, pos, " ");
 }
 
+const OPEN_BRACKETS = new Set(["(", "{", "["]);
+const CLOSE_BRACKETS = new Set([")", "}", "]"]);
+
+export function isOpeningBracket(ch: string): boolean {
+  return OPEN_BRACKETS.has(ch);
+}
+
+export function isClosingBracket(ch: string): boolean {
+  return CLOSE_BRACKETS.has(ch);
+}
+
 export function splitTopLevel(s: string, sep: string): string[] {
   const parts: string[] = [];
   let depth = 0;
   let start = 0;
   for (let i = 0; i < s.length; i++) {
     const ch = s[i];
-    if (ch === "(" || ch === "{") depth++;
-    else if (ch === ")" || ch === "}") depth--;
+    if (isOpeningBracket(ch)) depth++;
+    else if (isClosingBracket(ch)) depth--;
     else if (ch === sep && depth === 0) {
       parts.push(s.substring(start, i));
       start = i + 1;
@@ -85,11 +97,11 @@ export function findTopLevel(
   let depth = 0;
   for (let i = 0; i < s.length; i++) {
     const ch = s[i];
-    if (ch === "(" || ch === "{") {
+    if (isOpeningBracket(ch)) {
       depth++;
       continue;
     }
-    if (ch === ")" || ch === "}") {
+    if (isClosingBracket(ch)) {
       depth--;
       continue;
     }
@@ -266,6 +278,16 @@ export function interpretAll(
   return items.map((item) => interp(item, env));
 }
 
+export function storeEnvItem(
+  env: Env,
+  name: string,
+  value: EnvItem["value"],
+  mutable: boolean,
+  type?: string
+) {
+  env.set(name, { value, mutable, type });
+}
+
 export function parseIdentifierWithFieldAccess(
   s: string,
   start: number
@@ -278,12 +300,41 @@ export function parseIdentifierWithFieldAccess(
   }
 
   skipIdentifierPart();
-  // handle field access with dots (e.g., point.x)
-  while (j < n && s[j] === ".") {
-    j = skipChar(s, j, ".");
-    skipIdentifierPart();
+  // handle field access with dots (e.g. point.x) or array indexing (e.g. x[0])
+  while (j < n && (s[j] === "." || s[j] === "[")) {
+    if (s[j] === ".") {
+      j = skipChar(s, j, ".");
+      skipIdentifierPart();
+    } else if (s[j] === "[") {
+      const close = findMatchingParen(s, j);
+      if (close < 0) break;
+      j = close + 1;
+    }
   }
   return j;
+}
+
+export interface BracketResult {
+  content: string;
+  close: number;
+}
+
+export function extractBracketContent(
+  s: string,
+  openIdx: number
+): BracketResult | undefined {
+  const close = findMatchingParen(s, openIdx);
+  if (close < 0) return undefined;
+  return { content: s.slice(openIdx + 1, close).trim(), close };
+}
+
+export function extractPureBracketContent(
+  s: string,
+  openIdx: number
+): string | undefined {
+  const res = extractBracketContent(s, openIdx);
+  if (!res || res.close !== s.length - 1) return undefined;
+  return res.content;
 }
 
 export function parseFieldDef(fieldStr: string): FieldDefResult {

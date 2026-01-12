@@ -298,3 +298,23 @@ describe("interpret - structs", () => {
     ).toThrow(Error);
   });
 });
+
+describe("interpret - arrays", () => {
+  it("supports array definition and instantiation with indexing", () => {
+    expect(interpret("let x : [I32; 3; 3] = [1, 2, 3]; x[0] + x[1]")).toBe(3);
+  });
+
+  it("supports out-of-order array indexing", () => {
+    expect(interpret("let x : [I32; 3; 3] = [1, 2, 3]; x[2] + x[0]")).toBe(4);
+  });
+
+  it("supports default initialization of remaining elements", () => {
+    expect(interpret("let x : [I32; 1; 3] = [1]; x[0] + x[1] + x[2]")).toBe(1);
+  });
+
+  it("throws on array index out of bounds", () => {
+    expect(() => interpret("let x : [I32; 3; 3] = [1, 2, 3]; x[3]")).toThrow(
+      Error
+    );
+  });
+});

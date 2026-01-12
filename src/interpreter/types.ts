@@ -4,6 +4,13 @@ export interface FunctionValue {
   env: Env; // closure capture
 }
 
+export interface ArrayValue {
+  type: "Array";
+  elementType: string;
+  elements: number[];
+  length: number;
+}
+
 export interface StructValue {
   fields: string[]; // field names in order
   values: number[]; // field values in order
@@ -16,7 +23,7 @@ export interface StructDef {
 }
 
 export interface EnvItem {
-  value: number | FunctionValue | StructValue;
+  value: number | FunctionValue | StructValue | ArrayValue;
   mutable: boolean;
   type?: string;
 }

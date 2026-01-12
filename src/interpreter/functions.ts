@@ -14,6 +14,7 @@ import {
   sliceTrim,
   splitTopLevelOrEmpty,
   startsWithKeyword,
+  topLevelSplitTrim,
 } from "./shared";
 import { evalBlock, handleYieldValue } from "./statements";
 
@@ -30,10 +31,7 @@ export function handleFnStatement(
 
   rest = sliceTrim(rest, nameRes.next);
   const { content: paramsContent, close } = extractParenContent(rest, "fn");
-  const paramsRaw = paramsContent
-    .split(",")
-    .map((r) => r.trim())
-    .filter((r) => r !== "");
+  const paramsRaw = topLevelSplitTrim(paramsContent, ",");
   const params = paramsRaw.map((p) => {
     const { name } = parseFieldDef(p);
     return ensureIdentifier(name, "Invalid fn parameter");

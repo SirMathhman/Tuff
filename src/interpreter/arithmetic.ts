@@ -5,6 +5,7 @@ import {
   findTopLevel,
   isDigit,
   isIdentifierStartCode,
+  isOpeningBracket,
   isPlusMinus,
   parseIdentifierWithFieldAccess,
   skipSpacesFrom,
@@ -147,7 +148,7 @@ function tokenizeAddSub(s: string): string[] | undefined {
   while (i < n) {
     i = skipSpacesFrom(s, i);
     if (expectNumber) {
-      if (s[i] === "(" || s[i] === "{") {
+      if (isOpeningBracket(s[i])) {
         const close = findMatchingParen(s, i);
         if (close < 0) return undefined;
         tokens.push(s.slice(i, close + 1).trim());

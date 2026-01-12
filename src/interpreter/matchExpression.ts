@@ -2,6 +2,7 @@ import type { Env } from "./types";
 import { interpret } from "./interpret";
 import {
   ensure,
+  extractBracketContent,
   findMatchingParen,
   sliceTrim,
   startsWithKeyword,
@@ -23,11 +24,12 @@ export function tryHandleMatchExpression(
   // parse 'match (scrutinee) { case p => expr; case _ => expr; }'
   const paren = ss.indexOf("(");
   ensure(paren !== -1, "Invalid match expression");
-  const close = findMatchingParen(ss, paren);
-  ensure(close >= 0, "Unterminated match condition");
-  const scrutineeStr = ss.slice(paren + 1, close).trim();
+  const res = extractBracketContent(ss, paren);
+  ensure(res !== undefined, "Unterminated match condition");
+  const scrutineeStr = res!.content;
 
   // find brace block after condition
+  const close = res!.close;
   const rest = ss.slice(close + 1).trim();
   ensure(rest.startsWith("{"), "Invalid match expression body");
   const braceClose = findMatchingParen(rest, 0);
