@@ -18,6 +18,7 @@ import {
   interpretAllAny,
 } from "./shared";
 import { evalBlock, handleYieldValue } from "./statements";
+import { parseFnSignature } from "./typeParsers";
 
 export function handleFnStatement(
   stmt: string,
@@ -50,7 +51,8 @@ export function handleFnStatement(
   }
 
   const func: FunctionValue = { params, body, env: new Map(env) };
-  const item: EnvItem = { value: func, mutable: false, type: "Fn" };
+  const sig = parseFnSignature(stmt);
+  const item: EnvItem = { value: func, mutable: false, type: sig || "Fn" };
   env.set(name, item);
   return NaN;
 }
@@ -81,13 +83,21 @@ function createThisStructAndBindToEnv(
   return sv;
 }
 
+function isObjectWithKey(o: unknown, key: string): boolean {
+  return typeof o === "object" && o !== null && key in (o as object);
+}
+
+function isFunctionValue(v: unknown): v is FunctionValue {
+  return isObjectWithKey(v, "params");
+}
+
 function attachMethodsToStructFromEnv(
   sv: StructValue,
   callEnv: Map<string, EnvItem>,
   funcEnv: Map<string, EnvItem>
 ) {
   for (const [k, v] of callEnv.entries()) {
-    if (!funcEnv.has(k) && v.type === "Fn") {
+    if (!funcEnv.has(k) && isFunctionValue(v.value)) {
       if (!sv.methods) sv.methods = new Map<string, FunctionValue>();
       sv.methods.set(k, v.value as FunctionValue);
     }
@@ -106,11 +116,7 @@ function resolveMethodFromEnv(
     return item.value as FunctionValue;
   }
   // If receiver is a struct, check instance methods
-  if (
-    typeof receiverVal === "object" &&
-    receiverVal !== null &&
-    "methods" in (receiverVal as StructValue)
-  ) {
+  if (isObjectWithKey(receiverVal, "methods")) {
     const methods: Map<string, FunctionValue> | undefined = (
       receiverVal as StructValue
     ).methods;
@@ -266,7 +272,12 @@ export function tryHandleFnExpression(
 
   if (name) {
     // bind the function to its name in the created env to support recursion
-    funcEnv.set(name, { value: func, mutable: false, type: "Fn" } as EnvItem);
+    const sig = parseFnSignature(ss);
+    funcEnv.set(name, {
+      value: func,
+      mutable: false,
+      type: sig || "Fn",
+    } as EnvItem);
   }
 
   // If this is a bare fn expression (no trailing), return the function value

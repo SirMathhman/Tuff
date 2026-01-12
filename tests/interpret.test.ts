@@ -441,12 +441,12 @@ describe("interpret - pointers", () => {
   it("supports passing functions as arguments", () => {
     expect(
       interpret(
-        "let apply = fn apply(f : I32, x : I32) => { f(x) }; let inc = fn inc(a : I32) => { a + 1 }; apply(inc, 4)"
+        "let apply = fn apply(f : (I32) => I32, x : I32) => { f(x) }; let inc = fn inc(a : I32) => { a + 1 }; apply(inc, 4)"
       )
     ).toBe(5);
     expect(
       interpret(
-        "let apply = fn apply(f : I32, x : I32) => { f(x) }; apply((a : I32) => a + 2, 3)"
+        "let apply = fn apply(f : (I32) => I32, x : I32) => { f(x) }; apply((a : I32) => a + 2, 3)"
       )
     ).toBe(5);
   });
