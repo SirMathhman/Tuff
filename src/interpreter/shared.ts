@@ -1,4 +1,5 @@
 import type { Env, EnvItem, ArrayValue, StructValue } from "./types";
+import { splitNumberAndSuffix } from "./numbers";
 
 export const BRACKET_PAIRS = new Map<string, string>([
   ["(", ")"],
@@ -112,6 +113,43 @@ export function splitTopLevel(s: string, sep: string): string[] {
   }
   parts.push(s.slice(start));
   return parts;
+}
+
+export function startsWithGroup(s: string): boolean {
+  return s[0] === "(" || s[0] === "{";
+}
+
+export function containsOperator(s: string): boolean {
+  return s.includes("+") || s.includes("-") || s.includes("*") || s.includes("/");
+}
+
+export function inferTypeFromExpr(
+  expr: string,
+  env?: Env
+): "Bool" | "Number" | undefined {
+  const s = expr.trim();
+  if (s === "true" || s === "false") return "Bool";
+  // address-of pointer literal: &id
+  if (s.startsWith("&")) {
+    const id = s.slice(1).trim();
+    if (!isIdentifierName(id)) return undefined;
+    if (!env || !env.has(id)) throw new Error("Unknown identifier");
+    const item = env.get(id)!;
+    return (`*${item.type}` as "Bool" | "Number" | undefined);
+  }
+
+  // identifier
+  if (isIdentifierName(s)) {
+    if (env && env.has(s)) return env.get(s)!.type as "Bool" | "Number" | undefined;
+    return undefined;
+  }
+  // numeric literal start
+  const { numStr } = splitNumberAndSuffix(s);
+  if (numStr !== "") return "Number";
+  // parenthesized or binary expression assume Number
+  if (startsWithGroup(s)) return "Number";
+  if (containsOperator(s)) return "Number";
+  return undefined;
 }
 
 export function topLevelSplitTrim(s: string, sep: string): string[] {

@@ -394,6 +394,12 @@ describe("interpret - pointers", () => {
     expect(() => interpret("let x = 0; this.x = 100; x")).toThrow(Error);
   });
 
+  it("captures current env as This struct", () => {
+    expect(
+      interpret("let x = 3; let y = 4; let temp : This = this; temp.x + temp.y")
+    ).toBe(7);
+  });
+
   it("supports assignment through pointer to mutable variable", () => {
     expect(interpret("let mut x = 0; let y : *I32 = &x; *y = 5; x")).toBe(5);
   });

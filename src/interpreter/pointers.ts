@@ -8,7 +8,10 @@ export function isPointerValue(v: unknown): v is PointerValue {
   return hasTypeTag(v, "Pointer");
 }
 
-interface MutParseResult { mut: boolean; rest: string }
+interface MutParseResult {
+  mut: boolean;
+  rest: string;
+}
 
 function parseMutPrefix(s: string): MutParseResult {
   if (s.startsWith("mut ")) return { mut: true, rest: s.slice(4).trim() };
