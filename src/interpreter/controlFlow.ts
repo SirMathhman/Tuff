@@ -80,7 +80,7 @@ function handleIfAt(idx: number, stmts: string[], env: Env): IfResult {
   const condVal = interpret(condStr, env);
   let lastLocal = NaN;
   const part = condVal !== 0 ? thenPart : elsePart;
-  if (part !== undefined && part !== "") lastLocal = evalBlock(part, env);
+  if (part !== undefined && part !== "") lastLocal = evalBlock(part, env, false) as number;
   return { consumed, last: lastLocal } as IfResult;
 }
 
@@ -146,7 +146,7 @@ function resolveBodyAfterClose(
 function executeLoopBodyWithContinue(body: string, env: Env): number {
   let lastLocal = NaN;
   try {
-    lastLocal = evalBlock(body, env);
+    lastLocal = evalBlock(body, env, false) as number;
   } catch (e: unknown) {
     if (isContinueException(e)) {
       // continue skips to next iteration, return last value before continue

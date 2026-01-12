@@ -172,7 +172,7 @@ function evalAllButLastStatements(body: string, callEnv: Map<string, EnvItem>) {
   const parts = topLevelStatements(body);
   // evaluate all but the last
   for (let i = 0; i < parts.length - 1; i++) {
-    handleYieldValue(() => evalBlock(parts[i], callEnv));
+    handleYieldValue(() => evalBlock(parts[i], callEnv, true));
   }
 }
 
@@ -220,7 +220,7 @@ export function tryHandleCall(s: string, env?: Env): unknown | undefined {
   }
 
   // evaluate body and handle yield
-  const bodyResult = handleYieldValue(() => evalBlock(func.body, callEnv));
+  const bodyResult = handleYieldValue(() => evalBlock(func.body, callEnv, true));
 
   if (bodyResult === (thisStruct as unknown)) {
     attachMethodsToStructFromEnv(thisStruct, callEnv, func.env);
@@ -382,7 +382,7 @@ export function tryHandleMethodCall(s: string, env?: Env): number | undefined {
         value: v as EnvItem["value"],
         mutable: false,
       } as EnvItem);
-    return handleYieldValue(() => evalBlock(func!.body, callEnv));
+    return handleYieldValue(() => evalBlock(func!.body, callEnv, true)) as number;
   }
 
   // Two calling conventions for methods:

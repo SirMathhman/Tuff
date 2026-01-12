@@ -34,7 +34,7 @@ import { tryHandleThisAssignment, assertAssignable } from "./thisAssign";
 
 export class YieldValue extends Error {
   public readonly __isYieldValue = true;
-  constructor(public value: number) {
+  constructor(public value: unknown) {
     super();
     Object.setPrototypeOf(this, YieldValue.prototype);
   }
@@ -74,7 +74,7 @@ function isContinueException(e: unknown): boolean {
 }
 export { isYieldValue, isBreakException, isContinueException };
 
-export function handleYieldValue(yieldFn: () => number): number {
+export function handleYieldValue(yieldFn: () => unknown): unknown {
   try {
     return yieldFn();
   } catch (e: unknown) {
@@ -112,12 +112,6 @@ function validateAnnotatedTypeCompatibility(
   // function types e.g., (I32, I32) => I32 - require exact match with inferred type
   if (annotatedType.startsWith("(") && annotatedType.includes("=>")) {
     if (annotatedType !== initType) {
-      console.log(
-        "[debug] annotatedType=",
-        annotatedType,
-        "initType=",
-        initType
-      );
       throw new Error("Function type mismatch");
     }
     return;
@@ -146,7 +140,7 @@ function extractAnnotationAndInitializer(str: string): AnnotationResult {
 }
 
 // eslint-disable-next-line complexity, max-lines-per-function
-export function evalBlock(s: string, envIn?: Env): number {
+export function evalBlock(s: string, envIn?: Env, allowNonNumericReturn = false): unknown {
   const trimmed = s.trim();
   // If evaluating a brace-delimited block, create a shallow copy of the parent
   // env so inner declarations don't leak but outer variables remain updatable.
@@ -158,7 +152,9 @@ export function evalBlock(s: string, envIn?: Env): number {
     : envIn ?? new Map<string, EnvItem>();
   // create a shadow set for this evaluation scope
   blockShadow.set(env, new Set<string>());
-  const rawStmts = splitTopLevel(s, ";");
+
+  const stmtSource = isBraceBlock ? trimmed.slice(1, trimmed.length - 1) : s;
+  const rawStmts = splitTopLevel(stmtSource, ";");
 
   // collect trimmed non-empty statements
   const stmts = rawStmts.map((r) => r.trim()).filter((r) => r !== "");
@@ -172,7 +168,7 @@ export function evalBlock(s: string, envIn?: Env): number {
     throw new Error("Block does not produce a value");
   }
 
-  let last = NaN;
+  let last: unknown = NaN;
   const localDeclared = new Set<string>();
   for (let idx = 0; idx < stmts.length; idx++) {
     const stmt = stmts[idx];
@@ -198,7 +194,7 @@ export function evalBlock(s: string, envIn?: Env): number {
           if (remaining.startsWith("let ")) {
             last = handleLetStatement(remaining, env, localDeclared);
           } else {
-            last = processNonLetStatement(remaining, env);
+            last = processNonLetStatement(remaining, env, allowNonNumericReturn);
           }
         } else {
           last = NaN;
@@ -207,14 +203,15 @@ export function evalBlock(s: string, envIn?: Env): number {
     } else if (stmt.startsWith("yield ")) {
       const expr = sliceTrim(stmt, 6);
       const yv = interpret(expr, env);
-      if (typeof yv !== "number") throw new Error("Yield must return a number");
-      throw new YieldValue(yv as number);
+      if (typeof yv !== "number" && !allowNonNumericReturn)
+        throw new Error("Yield must return a number");
+      throw new YieldValue(yv);
     } else if (stmt === "break") {
       throw new BreakException();
     } else if (stmt === "continue") {
       throw new ContinueException();
     } else {
-      last = processNonLetStatement(stmt, env);
+      last = processNonLetStatement(stmt, env, allowNonNumericReturn);
     }
   }
   return last;
@@ -438,8 +435,12 @@ function tryHandleAssignmentStatement(
   return val;
 }
 
-function processNonLetStatement(stmt: string, env: Env): number {
-  let lastLocal = NaN;
+function processNonLetStatement(
+  stmt: string,
+  env: Env,
+  allowNonNumericReturn = false
+): unknown {
+  let lastLocal: unknown = NaN;
   let rem = stmt;
   while (rem !== "") {
     rem = rem.trim();
@@ -448,10 +449,15 @@ function processNonLetStatement(stmt: string, env: Env): number {
       const close = findMatchingParen(rem, 0);
       if (close < 0) throw new Error("Unterminated grouping");
       const part = rem.slice(0, close + 1);
-      const valPart = interpret(part, env);
-      if (typeof valPart !== "number")
-        throw new Error("Expected numeric expression");
-      lastLocal = valPart as number;
+      const valPart = part.trim().startsWith("{")
+        ? handleYieldValue(() => evalBlock(part, env, allowNonNumericReturn))
+        : interpret(part, env);
+      if (typeof valPart !== "number") {
+        if (!allowNonNumericReturn) throw new Error("Expected numeric expression");
+        lastLocal = valPart;
+      } else {
+        lastLocal = valPart as number;
+      }
       rem = rem.substring(close + 1);
       rem = rem.trim();
       continue;
@@ -464,9 +470,10 @@ function processNonLetStatement(stmt: string, env: Env): number {
       if (assigned !== undefined) lastLocal = assigned;
       else {
         const val = interpret(rem, env);
-        if (typeof val !== "number")
-          throw new Error("Expected numeric expression");
-        lastLocal = val as number;
+        if (typeof val !== "number") {
+          if (!allowNonNumericReturn) throw new Error("Expected numeric expression");
+          lastLocal = val;
+        } else lastLocal = val as number;
       }
     }
     rem = "";

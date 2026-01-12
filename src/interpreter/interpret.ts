@@ -30,7 +30,7 @@ export function interpret(input: string, env?: Env): unknown {
   // block with statements e.g., "let x : I32 = 1; x"
   const topParts = splitTopLevel(s, ";");
   if (topParts.length > 1 || s.trim().startsWith("let ")) {
-    return handleYieldValue(() => evalBlock(s, env));
+    return handleYieldValue(() => evalBlock(s, env, false) as number);
   }
 
   const fieldAccessResult = tryHandleFieldAccess(s, env);
