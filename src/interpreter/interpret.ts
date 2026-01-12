@@ -1,6 +1,10 @@
 import type { Env } from "./types";
 import { blockShadow } from "./env";
-import { tryHandleAddition, tryHandleBinaryOps, tryHandleUnaryNot } from "./arithmetic";
+import {
+  tryHandleAddition,
+  tryHandleBinaryOps,
+  tryHandleUnaryNot,
+} from "./arithmetic";
 import {
   tryHandleFunctionLikeExpression,
   tryHandleCall,

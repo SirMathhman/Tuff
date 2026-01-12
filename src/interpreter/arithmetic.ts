@@ -133,7 +133,7 @@ export function tryHandleUnaryNot(s: string, env?: Env): number | undefined {
   const ss = s.trim();
   if (!ss.startsWith("!")) return undefined;
   const rest = ss.slice(1).trim();
-  if (rest === "") throw new Error("Missing operand for '!'" );
+  if (rest === "") throw new Error("Missing operand for '!'");
 
   // grouped operand: require the group to cover the entire rest
   if (rest.startsWith("(") || rest.startsWith("{")) {

@@ -49,7 +49,6 @@ describe("interpret - logical operators && and || (short-circuit)", () => {
       "Logical operands must be numbers"
     );
   });
-
 });
 
 // Unary NOT tests in separate describe to satisfy lint limits
