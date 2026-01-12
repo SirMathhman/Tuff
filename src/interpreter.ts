@@ -28,7 +28,11 @@ export function compile(source: string): string {
           break;
         }
       }
-      if (allDigits) return numPart;
+      if (allDigits) {
+        const val = Number(numPart);
+        if (val > 255) return source; // Fall back to source so Number() in interpret handles NaN/Err if invalid
+        return numPart;
+      }
     }
   }
 
