@@ -2,6 +2,7 @@ import type { Env, ArrayValue, SliceValue } from "./types";
 import {
   extractPureBracketContent,
   findMatchingParen,
+  findTopLevel,
   interpretAll,
   splitTopLevelOrEmpty,
   topLevelSplitTrim,
@@ -119,6 +120,7 @@ export function tryHandleArrayLiteral(
   return arrVal as unknown as ArrayValue;
 }
 
+// eslint-disable-next-line complexity
 export function tryHandleArrayIndexing(
   s: string,
   env: Env | undefined,
@@ -135,6 +137,18 @@ export function tryHandleArrayIndexing(
 
   const before = s.slice(0, openBracket).trim();
 
+  // Only handle *pure* indexing expressions like `target[idx]`.
+  // If there is any top-level operator to the left of the final `[`, then
+  // `s` is part of a larger expression (e.g., `a[0] + b[1]`) and arithmetic
+  // should handle splitting into operands.
+  const hasTopLevelArithmeticOp =
+    findTopLevel(before, (str, i) => {
+      const ch = str[i];
+      if (ch === "+" || ch === "-" || ch === "*" || ch === "/") return true;
+      return undefined;
+    }) !== undefined;
+  if (hasTopLevelArithmeticOp) return undefined;
+
   // Evaluate the target. If it's an identifier, look it up.
   let arrayVal: ArrayValue | undefined;
   let sliceVal: SliceValue | undefined;
@@ -145,6 +159,13 @@ export function tryHandleArrayIndexing(
     } else if (isSliceValue(item.value)) {
       sliceVal = item.value as SliceValue;
     }
+  }
+
+  // If not a direct identifier binding, try to evaluate the expression
+  if (!arrayVal && !sliceVal) {
+    const evaluated = interpret(before, env);
+    if (isArrayValue(evaluated)) arrayVal = evaluated as ArrayValue;
+    else if (isSliceValue(evaluated)) sliceVal = evaluated as SliceValue;
   }
 
   if (!arrayVal && !sliceVal) return undefined;

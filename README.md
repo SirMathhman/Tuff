@@ -28,6 +28,18 @@ You can create block-scoped type aliases:
 - `type MyInt = I32;`
 - `let x : MyInt = 5;`
 
+## Arrays and slices
+
+Tuff supports fixed-size arrays and borrowing them as slices.
+
+- Arrays use a type like `[I32; init; length]`.
+  - `init` must be `0` (uninitialized, sequential writes required) or equal to `length` (fully initialized).
+- Slice borrows are written using pointer-like syntax:
+  - `let s : *[I32] = &arr;` (immutable slice)
+  - `let s : *mut [I32] = &mut arr;` (mutable slice)
+
+Indexing expressions like `arr[0]` and `s[0]` can be freely combined with arithmetic, e.g. `s[0] + s[2]`.
+
 ## Linear types (move + destructor)
 
 You can define a linear type from a base type and a destructor function:

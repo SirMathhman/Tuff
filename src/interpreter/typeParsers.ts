@@ -61,7 +61,6 @@ export function parseFnSignature(s: string): string | undefined {
 
   const sig = `${generics}(${paramTypes.join(", ")}) => ${retType}`.trim();
   return sig;
-
 }
 
 export function parseArrowSignature(s: string): string | undefined {

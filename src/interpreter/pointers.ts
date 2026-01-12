@@ -1,6 +1,7 @@
 import type { Env, PointerValue, ArrayValue, SliceValue } from "./types";
 import { isIdentifierName } from "./shared";
 import type { EnvItem } from "./types";
+import { interpret } from "./interpret";
 
 import {
   hasTypeTag,
@@ -53,6 +54,7 @@ export function tryHandleAddressOf(
   } as PointerValue;
 }
 
+// eslint-disable-next-line complexity
 export function tryHandleDerefExpression(
   s: string,
   env?: Env
@@ -82,6 +84,19 @@ export function tryHandleDerefExpression(
     if (typeof pointee.value !== "number")
       throw new Error("Cannot dereference non-number");
     return pointee.value as number;
+  }
+
+  // Allow dereferencing arbitrary expressions that evaluate to a pointer
+  if (env) {
+    const maybePtr = interpret(rest, env);
+    if (isPointerValue(maybePtr)) {
+      const ptr = maybePtr as PointerValue;
+      const pointee = ptr.env.get(ptr.name)!;
+      if (pointee.moved) throw new Error("Use-after-move");
+      if (typeof pointee.value !== "number")
+        throw new Error("Cannot dereference non-number");
+      return pointee.value as number;
+    }
   }
 
   return undefined;

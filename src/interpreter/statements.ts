@@ -115,13 +115,27 @@ function validateTypeCompatibility(
   }
 }
 
-function isUnknownNonConcreteType(t?: string): boolean {
+function isUnknownNonConcreteType(t?: string, env?: Env): boolean {
   if (!t) return false;
   if (isIntegerTypeName(t)) return false;
   if (t === "Bool") return false;
   if (t.startsWith("[")) return false;
   if (t.startsWith("*")) return false;
   if (t.startsWith("(")) return false;
+
+  // handle generic instantiation like 'Tuple<I32, Bool>' by inspecting inner args
+  const lt = t.indexOf("<");
+  if (lt !== -1 && t.endsWith(">")) {
+    const inner = t.slice(lt + 1, -1).trim();
+    if (inner === "") return true;
+    const parts = splitTopLevel(inner, ",");
+    for (const p of parts) {
+      const resolved = resolveTypeAlias(p.trim(), env);
+      if (isUnknownNonConcreteType(resolved, env)) return true;
+    }
+    return false;
+  }
+
   return true;
 }
 
@@ -145,7 +159,7 @@ function validateAnnotatedTypeCompatibility(
 
   // If annotated resolves to an unknown non-concrete type, error
   const resolvedAnnotatedFinal = resolveTypeAlias(annotatedType, env);
-  if (isUnknownNonConcreteType(resolvedAnnotatedFinal)) {
+  if (isUnknownNonConcreteType(resolvedAnnotatedFinal, env)) {
     throw new Error(`Unknown type: ${annotatedType}`);
   }
 }
@@ -332,7 +346,7 @@ export function evalBlock(
   }
 }
 
-// eslint-disable-next-line max-lines-per-function
+// eslint-disable-next-line max-lines-per-function, complexity
 function handleLetStatement(
   stmt: string,
   env: Env,
@@ -354,8 +368,12 @@ function handleLetStatement(
   const { annotatedType, initializer } = extractAnnotationAndInitializer(rest2);
   if (initializer !== "") {
     // Check if this is a struct or array initialization
+    const structBase =
+      annotatedType && annotatedType.includes("<")
+        ? annotatedType.slice(0, annotatedType.indexOf("<")).trim()
+        : annotatedType;
     const compositeVal =
-      (annotatedType && getStructDef(annotatedType)
+      (annotatedType && (getStructDef(annotatedType) || (structBase && getStructDef(structBase)))
         ? tryHandleStructLiteral(initializer, annotatedType, env, interpret)
         : undefined) ||
       (annotatedType && annotatedType.startsWith("[")

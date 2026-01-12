@@ -109,11 +109,22 @@ export function substituteGenericTypes(
 // Infer generic bindings from a single parameter type and the corresponding
 // argument type string (which may be undefined). Updates the `out` map or
 // throws on conflicting/invalid inferences.
-function inferPair(p: string, a: string, generics: string[], out: Map<string, string>) {
+function inferPair(
+  p: string,
+  a: string,
+  generics: string[],
+  out: Map<string, string>
+) {
   inferBindingsFromPair(p, a, generics, out);
 }
 
-function inferTrimmedPair(prefix: number, p: string, a: string, generics: string[], out: Map<string, string>) {
+function inferTrimmedPair(
+  prefix: number,
+  p: string,
+  a: string,
+  generics: string[],
+  out: Map<string, string>
+) {
   inferPair(p.slice(prefix).trim(), a.slice(prefix).trim(), generics, out);
 }
 
@@ -131,7 +142,8 @@ function handleFunctionBindings(
   const pParts = pParams === "" ? [] : topLevelSplitTrim(pParams, ",");
   const aParts = aParams === "" ? [] : topLevelSplitTrim(aParams, ",");
   if (pParts.length !== aParts.length) return;
-  for (let i = 0; i < pParts.length; i++) inferPair(pParts[i], aParts[i], generics, out);
+  for (let i = 0; i < pParts.length; i++)
+    inferPair(pParts[i], aParts[i], generics, out);
   const pRet = p.slice(pClose + 1).trim();
   const aRet = a.slice(aClose + 1).trim();
   if (pRet.startsWith("=>") && aRet.startsWith("=>"))
@@ -196,7 +208,12 @@ function handleArrayBindings(
   const pParts = topLevelSplitTrim(pInner, ";");
   const aParts = topLevelSplitTrim(aInner, ";");
   if (pParts.length === 3 && aParts.length === 3)
-    return inferBindingsFromPair(pParts[0].trim(), aParts[0].trim(), generics, out);
+    return inferBindingsFromPair(
+      pParts[0].trim(),
+      aParts[0].trim(),
+      generics,
+      out
+    );
 }
 
 export function inferGenericBindingsForCall(
@@ -230,7 +247,9 @@ export function computeConcreteParamTypes(
       genericParamsLocal,
       env
     );
-    return paramTypesLocal.map((pt) => substituteGenericTypes(pt, bindingsMapLocal));
+    return paramTypesLocal.map((pt) =>
+      substituteGenericTypes(pt, bindingsMapLocal)
+    );
   }
   return paramTypesLocal;
 }

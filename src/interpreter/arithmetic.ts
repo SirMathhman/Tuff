@@ -254,18 +254,32 @@ interface TokenParseResult {
   next: number;
 }
 
-function makeTokenFromRange(s: string, start: number, endInclusive: number): TokenParseResult {
-  return { token: s.slice(start, endInclusive + 1).trim(), next: endInclusive + 1 };
+function makeTokenFromRange(
+  s: string,
+  start: number,
+  endInclusive: number
+): TokenParseResult {
+  return {
+    token: s.slice(start, endInclusive + 1).trim(),
+    next: endInclusive + 1,
+  };
 }
 
-function tryParseBracketAt(s: string, idx: number): TokenParseResult | undefined {
+function tryParseBracketAt(
+  s: string,
+  idx: number
+): TokenParseResult | undefined {
   if (!isOpeningBracket(s[idx])) return undefined;
   const close = findMatchingParen(s, idx);
   if (close < 0) return undefined;
   return makeTokenFromRange(s, idx, close);
 }
 
-function parseUnaryDerefAt(s: string, i: number, n: number): TokenParseResult | undefined {
+function parseUnaryDerefAt(
+  s: string,
+  i: number,
+  n: number
+): TokenParseResult | undefined {
   let k = i + 1;
   while (k < n && s[k] === " ") k++;
   if (k >= n) return undefined;
@@ -278,7 +292,11 @@ function parseUnaryDerefAt(s: string, i: number, n: number): TokenParseResult | 
   return undefined;
 }
 
-function parseIdentifierOrCallAt(s: string, i: number, n: number): TokenParseResult | undefined {
+function parseIdentifierOrCallAt(
+  s: string,
+  i: number,
+  n: number
+): TokenParseResult | undefined {
   const j = parseIdentifierWithFieldAccess(s, i);
   let k = j;
   while (k < n && s[k] === " ") k++;
@@ -290,11 +308,16 @@ function parseIdentifierOrCallAt(s: string, i: number, n: number): TokenParseRes
   return { token: s.slice(i, j).trim(), next: j };
 }
 
-function parseOperandAt(s: string, i: number, n: number): TokenParseResult | undefined {
-    const bracket = tryParseBracketAt(s, i);
-    if (bracket) return bracket;
+function parseOperandAt(
+  s: string,
+  i: number,
+  n: number
+): TokenParseResult | undefined {
+  const bracket = tryParseBracketAt(s, i);
+  if (bracket) return bracket;
   if (s[i] === "*") return parseUnaryDerefAt(s, i, n);
-  if (isIdentifierStartCode(s.charCodeAt(i))) return parseIdentifierOrCallAt(s, i, n);
+  if (isIdentifierStartCode(s.charCodeAt(i)))
+    return parseIdentifierOrCallAt(s, i, n);
 
   const res = parseNumberTokenAt(s, i);
   if (!res) return undefined;

@@ -25,8 +25,6 @@ import {
 import {
   parseParamTypesFromSignature,
   parseGenericParamsFromSignature,
-  computeArgTypeFromExpr,
-  isTypeCompatible,
   isValueCompatibleWithParam,
   substituteGenericTypes,
   inferGenericBindingsForCall,
@@ -35,6 +33,7 @@ import {
 import { evalBlock, handleYieldValue } from "./statements";
 import { isReturnValue, ReturnValue } from "./returns";
 import { parseFnSignature } from "./typeParsers";
+import { runFunctionWithBindings, checkMethodArgumentTypes, validateConcreteParamTypes } from "./functionHelpers";
 
 export function handleFnStatement(
   stmt: string,
@@ -150,6 +149,7 @@ function parseFnParams(paramsContent: string): string[] {
     return ensureIdentifier(name, "Invalid fn parameter");
   });
 }
+
 
 function topLevelStatements(body: string): string[] {
   const b = body.trim();
@@ -268,15 +268,13 @@ export function tryHandleCall(s: string, env?: Env): unknown | undefined {
     throw new Error("Argument count mismatch");
 
   const paramTypes = parseParamTypesFromSignature(item.type);
-  const concreteParamTypes = computeConcreteParamTypes(item.type, paramTypes, args, env);
-  if (concreteParamTypes !== undefined) {
-    for (let i = 0; i < concreteParamTypes.length; i++) {
-      const expected = concreteParamTypes[i];
-      const argExpr = args[i];
-      const argType = computeArgTypeFromExpr(argExpr, env);
-      if (!isTypeCompatible(expected, argType, env)) throw new Error("Argument type mismatch");
-    }
-  }
+  const concreteParamTypes = computeConcreteParamTypes(
+    item.type,
+    paramTypes,
+    args,
+    env
+  );
+  validateConcreteParamTypes(concreteParamTypes, args, env);
 
   const argVals = args.map((a) => {
     const at = a.trim();
@@ -405,33 +403,6 @@ export function tryHandleFunctionLikeExpression(
   return tryHandleArrowFunctionExpression(s, env);
 }
 
-function runFunctionWithBindings(
-  func: FunctionValue,
-  bindings: Array<[string, unknown]>
-): number {
-  const callEnv = new Map<string, EnvItem>(func.env);
-  for (const [k, v] of bindings)
-    callEnv.set(k, {
-      value: v as EnvItem["value"],
-      mutable: false,
-    } as EnvItem);
-  return handleYieldValue(() => evalBlock(func.body, callEnv, true)) as number;
-}
-
-function checkMethodArgumentTypes(
-  paramTypes: string[] | undefined,
-  args: string[],
-  env?: Env,
-  offset = 0
-) {
-  if (paramTypes === undefined) return;
-  for (let i = 0; i < args.length; i++) {
-    const expected = paramTypes[i + offset];
-    const argType = computeArgTypeFromExpr(args[i], env);
-    if (!isTypeCompatible(expected, argType, env))
-      throw new Error("Argument type mismatch");
-  }
-}
 
 // eslint-disable-next-line max-lines-per-function, complexity
 export function tryHandleMethodCall(s: string, env?: Env): number | undefined {
@@ -465,7 +436,9 @@ export function tryHandleMethodCall(s: string, env?: Env): number | undefined {
       genericParams,
       env
     );
-    concreteParamTypes = paramTypes.map((pt) => substituteGenericTypes(pt, bindingsMap));
+    concreteParamTypes = paramTypes.map((pt) =>
+      substituteGenericTypes(pt, bindingsMap)
+    );
   }
 
   const argVals = interpretAllAny(args, interpret, env);
@@ -478,15 +451,19 @@ export function tryHandleMethodCall(s: string, env?: Env): number | undefined {
     )
       throw new Error("Argument type mismatch");
     // check remaining args
-    if (concreteParamTypes) checkMethodArgumentTypes(concreteParamTypes, args, env, 1);
+    if (concreteParamTypes)
+      checkMethodArgumentTypes(concreteParamTypes, args, env, 1);
     bindings.push([func.params[0], receiverVal]);
-    for (let i = 0; i < args.length; i++) bindings.push([func.params[i + 1], argVals[i]]);
+    for (let i = 0; i < args.length; i++)
+      bindings.push([func.params[i + 1], argVals[i]]);
     return runFunctionWithBindings(func, bindings);
   }
 
   if (func.params.length === args.length) {
-    if (concreteParamTypes) checkMethodArgumentTypes(concreteParamTypes, args, env, 0);
-    for (let i = 0; i < args.length; i++) bindings.push([func.params[i], argVals[i]]);
+    if (concreteParamTypes)
+      checkMethodArgumentTypes(concreteParamTypes, args, env, 0);
+    for (let i = 0; i < args.length; i++)
+      bindings.push([func.params[i], argVals[i]]);
     return runFunctionWithBindings(func, bindings);
   }
 

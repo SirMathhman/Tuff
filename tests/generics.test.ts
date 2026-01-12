@@ -10,9 +10,9 @@ describe("interpret - generics (basic inference)", () => {
   });
 
   it("multiple type parameters", () => {
-    expect(
-      interpret("fn pair<T, U>(a : T, b : U) => a; pair(1, true)")
-    ).toBe(1);
+    expect(interpret("fn pair<T, U>(a : T, b : U) => a; pair(1, true)")).toBe(
+      1
+    );
   });
 
   it("same generic used twice - consistent inference", () => {
@@ -47,7 +47,9 @@ describe("interpret - generics with function types", () => {
 describe("interpret - generics with pointers and linear types", () => {
   it("deref generic pointer returns pointee", () => {
     expect(
-      interpret("fn deref<T>(q : *T) => *q; let x : I32 = 10; let p : *I32 = &x; deref(p)")
+      interpret(
+        "fn deref<T>(q : *T) => *q; let x : I32 = 10; let p : *I32 = &x; deref(p)"
+      )
     ).toBe(10);
   });
 
@@ -61,7 +63,9 @@ describe("interpret - generics with pointers and linear types", () => {
 
   it("passing linear generic moves the value (use-after-move)", () => {
     expect(() =>
-      interpret("fn drop(v: I32) => { 0 }; type L = I32 then drop; fn accept<T>(x : T) => 0; let x : L = 10; accept(x); x")
+      interpret(
+        "fn drop(v: I32) => { 0 }; type L = I32 then drop; fn accept<T>(x : T) => 0; let x : L = 10; accept(x); x"
+      )
     ).toThrow("Use-after-move");
   });
 });
@@ -69,19 +73,25 @@ describe("interpret - generics with pointers and linear types", () => {
 describe("interpret - generics (multiple type parameters) - basics", () => {
   it("supports distinct multiple generic params", () => {
     expect(
-      interpret("fn triple<A,B,C>(a : A, b : B, c : C) => a; triple(1, true, 3)")
+      interpret(
+        "fn triple<A,B,C>(a : A, b : B, c : C) => a; triple(1, true, 3)"
+      )
     ).toBe(1);
   });
 
   it("picks second generic type correctly", () => {
     expect(
-      interpret("fn pickSecond<A,B,C>(a : A, b : B, c : C) => b; pickSecond(1, 2, 3)")
+      interpret(
+        "fn pickSecond<A,B,C>(a : A, b : B, c : C) => b; pickSecond(1, 2, 3)"
+      )
     ).toBe(2);
   });
 
   it("conflicting generic inference across repeated param throws", () => {
     expect(() =>
-      interpret("fn conflict<T,U>(a : T, b : U, c : T) => a; conflict(1, 2, true)")
+      interpret(
+        "fn conflict<T,U>(a : T, b : U, c : T) => a; conflict(1, 2, true)"
+      )
     ).toThrow("Argument type mismatch");
   });
 
@@ -130,8 +140,6 @@ describe("interpret - generics (multiple type parameters) - combos", () => {
 
 describe("interpret - generics and annotated return", () => {
   it("identity with annotated return", () => {
-    expect(
-      interpret("fn identity<T>(x : T) : T => x; identity(1)")
-    ).toBe(1);
+    expect(interpret("fn identity<T>(x : T) : T => x; identity(1)")).toBe(1);
   });
 });

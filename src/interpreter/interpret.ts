@@ -102,7 +102,7 @@ function parseBooleanLiteral(id: string): number | undefined {
   return undefined;
 }
 
-function tryHandleFieldAccess(s: string, env?: Env): number | undefined {
+function tryHandleFieldAccess(s: string, env?: Env): unknown | undefined {
   // Look for pattern: identifier.field or expression.field
   const dotIdx = s.lastIndexOf(".");
   if (dotIdx <= 0) return undefined;
@@ -125,7 +125,9 @@ function tryHandleFieldAccess(s: string, env?: Env): number | undefined {
         struct.fields.indexOf(after),
         `Field ${after} not found in struct`
       );
-      return struct.values[idx];
+      const val = struct.values[idx];
+      if (typeof val === "number") return val;
+      return undefined;
     }
     return undefined;
   }
@@ -149,14 +151,15 @@ function tryHandleFieldAccess(s: string, env?: Env): number | undefined {
 function tryHandleStructFieldAccess(
   val: unknown,
   field: string
-): number | undefined {
+): unknown | undefined {
   if (!isStructValue(val)) return undefined;
   const struct = val;
   const idx = ensureIndexFound(
     struct.fields.indexOf(field),
     `Field ${field} not found in struct`
   );
-  return struct.values[idx];
+  const v = struct.values[idx];
+  return v;
 }
 
 function tryHandleArrayOrSliceFieldAccess(
@@ -214,7 +217,8 @@ function tryParseNumberOrIdentifier(s: string, env?: Env): unknown | undefined {
         if (item.type === "__deleted__") throw new Error("Unknown identifier");
         if (item.moved) throw new Error("Use-after-move");
         if (typeof item.value === "number") return item.value;
-        // If it's a struct/array/pointer, return undefined so other handlers can try
+        // If it's a struct/array/pointer, return undefined so other handlers can try.
+        // If nothing matches, the interpreter will fall back to NaN.
         if (
           isStructValue(item.value) ||
           isArrayValue(item.value) ||

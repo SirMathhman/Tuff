@@ -4,14 +4,18 @@ import {
   ensureUnique,
   extractPureBracketContent,
   findMatchingParen,
-  interpretAll,
   parseFieldDef,
   parseIdentifierAt,
   sliceTrim,
   splitTopLevelOrEmpty,
   startsWithKeyword,
   topLevelSplitTrim,
+  isIntegerTypeName,
+  isIdentifierName,
 } from "./shared";
+import { substituteGenericTypes } from "./signatures";
+import { isArrayValue } from "./arrays";
+import { isPointerValue } from "./pointers";
 
 // Global registry of struct definitions (name -> StructDef)
 const structRegistry = new Map<string, StructDef>();
@@ -40,6 +44,17 @@ export function handleStructStatement(
   const structName = nameRes.name;
 
   rest = sliceTrim(rest, nameRes.next);
+
+  // optional generics e.g., <A, B>
+  let genericParams: string[] | undefined = undefined;
+  if (rest.startsWith("<")) {
+    const closeGen = rest.indexOf(">");
+    if (closeGen === -1) throw new Error("Invalid struct generic list");
+    const genContent = rest.slice(1, closeGen).trim();
+    genericParams = genContent === "" ? [] : topLevelSplitTrim(genContent, ",");
+    rest = sliceTrim(rest, closeGen + 1);
+  }
+
   if (!rest.startsWith("{")) throw new Error("Expected { after struct name");
 
   const close = findMatchingParen(rest, 0);
@@ -60,13 +75,13 @@ export function handleStructStatement(
     fieldTypes.push(type);
   }
 
-  const def: StructDef = { name: structName, fieldNames, fieldTypes };
+  const def: StructDef = { name: structName, fieldNames, fieldTypes, genericParams };
   registerStruct(def);
 
   // Calculate how much of the original statement was consumed
-  // We've consumed: "struct" (6 chars) + name + "{ ... }"
-  // But we need to account for trimming, so let's find where the closing } is in the original
-  const closeBracePos = stmt.indexOf("{") + close + 1;
+  // We've consumed: "struct" (6 chars) + name + optional generics + "{ ... }"
+  const openIdx = stmt.indexOf("{");
+  const closeBracePos = openIdx + close + 1;
 
   return { def, nextPos: closeBracePos };
 }
@@ -77,7 +92,19 @@ export function tryHandleStructLiteral(
   env: Env | undefined,
   interpret: (input: string, env?: Env) => unknown
 ): StructValue | undefined {
-  const def = getStructDef(structType);
+  // support annotated types like 'Tuple<I32, Bool>' or bare 'Tuple'
+  let base = structType;
+  let typeArgs: string[] | undefined = undefined;
+  const lt = structType.indexOf("<");
+  if (lt !== -1) {
+    const gt = structType.indexOf(">", lt + 1);
+    if (gt === -1) return undefined;
+    base = structType.slice(0, lt).trim();
+    const inner = structType.slice(lt + 1, gt).trim();
+    typeArgs = inner === "" ? [] : topLevelSplitTrim(inner, ",");
+  }
+
+  const def = getStructDef(base);
   if (!def) return undefined;
 
   if (!s.startsWith("{")) return undefined;
@@ -92,7 +119,16 @@ export function tryHandleStructLiteral(
     );
   }
 
-  const fieldValues = interpretAll(values, interpret, env);
+  // Resolve & substitute generic params
+  const resolvedFieldTypes = resolveStructFieldTypes(def, typeArgs);
+  const fieldValues: unknown[] = values.map((v) =>
+    evalStructFieldInitializer(v, env, interpret)
+  );
+
+  // Validate each field value against resolved type
+  for (let i = 0; i < fieldValues.length; i++) {
+    validateFieldValue(resolvedFieldTypes[i], fieldValues[i]);
+  }
 
   return {
     fields: def.fieldNames,
@@ -100,10 +136,29 @@ export function tryHandleStructLiteral(
   } as StructValue;
 }
 
+function evalStructFieldInitializer(
+  expr: string,
+  env: Env | undefined,
+  interpret: (input: string, env?: Env) => unknown
+): unknown {
+  const t = expr.trim();
+  if (env && isIdentifierName(t) && env.has(t)) {
+    const item = env.get(t)!;
+    if (item.type === "__deleted__") throw new Error("Unknown identifier");
+    if (item.moved) throw new Error("Use-after-move");
+
+    // Important: do NOT perform linear move semantics here.
+    // Struct field initialization behaves like a read for linear numbers.
+    if (typeof item.value === "number") return item.value;
+    return item.value;
+  }
+  return interpret(expr, env);
+}
+
 export function getStructFieldValue(
   structValue: StructValue,
   fieldName: string
-): number | undefined {
+): unknown | undefined {
   const idx = structValue.fields.indexOf(fieldName);
   if (idx === -1) return undefined;
   return structValue.values[idx];
@@ -118,4 +173,37 @@ export function isStructValue(v: unknown): v is StructValue {
     Array.isArray((v as StructValue).fields) &&
     Array.isArray((v as StructValue).values)
   );
+}
+
+function resolveStructFieldTypes(def: StructDef, typeArgs: string[] | undefined): string[] {
+  const fieldTypes = def.fieldTypes.slice();
+  if (def.genericParams && def.genericParams.length > 0) {
+    if (!typeArgs || typeArgs.length !== def.genericParams.length)
+      throw new Error("Invalid type parameters for struct");
+    const map = new Map<string, string>();
+    for (let i = 0; i < def.genericParams.length; i++) map.set(def.genericParams[i], typeArgs![i]);
+    return fieldTypes.map((ft) => substituteGenericTypes(ft, map));
+  }
+  return fieldTypes;
+}
+
+function validateFieldValue(expectedType: string, value: unknown) {
+  const t = expectedType.trim();
+  if (t.startsWith("*") || t.startsWith("[")) {
+    const ok = t.startsWith("*") ? isPointerValue(value) : isArrayValue(value);
+    if (!ok)
+      throw new Error(t.startsWith("*") ? "Pointer type mismatch" : "Type mismatch");
+    return;
+  }
+  if (t === "Bool" || isIntegerTypeName(t) || t === "Number") {
+    if (typeof value !== "number") throw new Error("Type mismatch");
+    if (!Number.isFinite(value)) throw new Error("Type mismatch");
+    return;
+  }
+  const nested = getStructDef(t);
+  if (nested) {
+    if (!isStructValue(value)) throw new Error("Type mismatch");
+    return;
+  }
+  // otherwise accept
 }

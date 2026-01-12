@@ -31,7 +31,7 @@ export interface PointerValue {
 
 export interface StructValue {
   fields: string[]; // field names in order
-  values: number[]; // field values in order
+  values: unknown[]; // field values in order (numbers or pointers/arrays/structs)
   // Optional instance methods defined on this struct (name -> FunctionValue)
   methods?: Map<string, FunctionValue>;
 }
@@ -40,6 +40,7 @@ export interface StructDef {
   name: string;
   fieldNames: string[];
   fieldTypes: string[];
+  genericParams?: string[];
 }
 
 export interface EnvItem {
