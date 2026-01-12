@@ -436,6 +436,13 @@ describe("interpret - pointers", () => {
         "let func2 : (I32, I32) => I32 = fn add(x : I32, y : I32) => { x + y }; func2(4, 5)"
       )
     ).toBe(9);
+
+    // arrow function expression assigned to annotated type
+    expect(
+      interpret(
+        "let func3 : (I32, I32) => I32 = (first : I32, second : I32) => first + second; func3(1, 2)"
+      )
+    ).toBe(3);
   });
 });
 /* eslint-enable max-lines-per-function */

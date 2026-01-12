@@ -1,5 +1,6 @@
 import type { Env, EnvItem, ArrayValue, StructValue } from "./types";
 import { splitNumberAndSuffix } from "./numbers";
+import { parseAddressOfType, parseFnSignature, parseArrowSignature } from "./typeParsers";
 
 export const BRACKET_PAIRS = new Map<string, string>([
   ["(", ")"],
@@ -125,49 +126,44 @@ export function containsOperator(s: string): boolean {
   );
 }
 
-export function inferTypeFromExpr(
-  expr: string,
-  env?: Env
-): string | undefined {
+export function inferTypeFromExpr(expr: string, env?: Env): string | undefined {
   const s = expr.trim();
   if (s === "true" || s === "false") return "Bool";
-  // address-of pointer literal: &id
-  if (s.startsWith("&")) {
-    const id = s.slice(1).trim();
-    if (!isIdentifierName(id)) return undefined;
-    if (!env || !env.has(id)) throw new Error("Unknown identifier");
-    const item = env.get(id)!;
-    return `*${item.type}`;
-  }
+  const addrType = parseAddressOfType(s, env);
+  if (addrType) return addrType;
 
   // function expression -> produce a signature string like '(I32, I32) => I32'
   if (s.startsWith("fn")) return parseFnSignature(s);
 
-function parseFnSignature(s: string): string | undefined {
-  const restInit = sliceTrim(s, 2);
-  const nameRes = restInit.startsWith("(") ? undefined : parseIdentifierAt(restInit, 0);
-  const rest = nameRes ? sliceTrim(restInit, nameRes.next) : restInit;
-  const parenRes = extractParenContent(rest, "fn");
-  if (!parenRes) return undefined;
-  const paramsRaw = topLevelSplitTrim(parenRes.content, ",");
-  const paramTypes: string[] = paramsRaw.map((p) => {
-    const { type } = parseFieldDef(p);
-    return type;
-  });
-  const retType = "I32"; // conservative default
-  return `(${paramTypes.join(", ")}) => ${retType}`;
-}
+  // arrow-function expression types e.g., (I32, I32) => I32
+  if (s.startsWith("(")) {
+    const sig = parseArrowSignature(s);
+    if (sig) return sig;
+  }
+
   // identifier
   if (isIdentifierName(s)) {
     if (env && env.has(s)) return env.get(s)!.type;
     return undefined;
   }
-  // numeric literal start
+  // numeric literal start or grouping/operators
+  const numOrGroup = parseNumericOrGroupType(s);
+  if (numOrGroup) return numOrGroup;
+  return undefined;
+}
+
+function parseNumericOrGroupType(s: string): string | undefined {
   const { numStr } = splitNumberAndSuffix(s);
   if (numStr !== "") return "Number";
   // parenthesized or binary expression assume Number
   if (startsWithGroup(s)) return "Number";
   if (containsOperator(s)) return "Number";
+  return undefined;
+}
+
+export function parseBoolType(s: string): string | undefined {
+  const str = s.trim();
+  if (str === "true" || str === "false") return "Bool";
   return undefined;
 }
 
@@ -201,6 +197,11 @@ export function findTopLevel(
 
 export function isIdentifierStartCode(c: number): boolean {
   return (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95;
+}
+
+export function isIntegerTypeName(typeName: string): boolean {
+  const first = typeName[0];
+  return "IiUu".includes(first);
 }
 
 export function isIdentifierPartCode(c: number): boolean {
@@ -347,6 +348,30 @@ export function extractParenContent(stmt: string, kind: string) {
   ensureCloseParen(close, `Unterminated ${kind} condition`);
   const content = stmt.slice(paren + 1, close);
   return { content, paren, close };
+}
+
+export function findTopLevelAssignmentIndex(s: string): number {
+  let depth = 0;
+  let lastEq = -1;
+  for (let i = 1; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === "(" || ch === "{" || ch === "[") {
+      depth++;
+      continue;
+    }
+    if (ch === ")" || ch === "}" || ch === "]") {
+      depth--;
+      continue;
+    }
+    if (depth === 0 && ch === "=") {
+      // skip '=' that are part of '=>' arrows (next non-space char is '>')
+      let j = i + 1;
+      while (j < s.length && " \t\n\r".includes(s[j])) j++;
+      if (j < s.length && s[j] === ">") continue;
+      lastEq = i;
+    }
+  }
+  return lastEq;
 }
 
 export function getEnvOrNew(env?: Env): Env {

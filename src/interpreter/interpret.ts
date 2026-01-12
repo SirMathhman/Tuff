@@ -2,7 +2,7 @@ import type { Env } from "./types";
 import { blockShadow } from "./env";
 import { tryHandleAddition, tryHandleComparison } from "./arithmetic";
 import {
-  tryHandleFnExpression,
+  tryHandleFunctionLikeExpression,
   tryHandleCall,
   tryHandleMethodCall,
 } from "./functions";
@@ -48,8 +48,8 @@ export function interpret(input: string, env?: Env): unknown {
   const arrayIndexResult = tryHandleArrayIndexing(s, env, interpret);
   if (arrayIndexResult !== undefined) return arrayIndexResult;
 
-  const fnExprResult = tryHandleFnExpression(s, env);
-  if (fnExprResult !== undefined) return fnExprResult;
+  const fnLikeResult = tryHandleFunctionLikeExpression(s, env);
+  if (fnLikeResult !== undefined) return fnLikeResult;
 
   const methodCallResult = tryHandleMethodCall(s, env);
   if (methodCallResult !== undefined) return methodCallResult;

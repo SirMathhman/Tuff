@@ -278,6 +278,43 @@ export function tryHandleFnExpression(
   return res as number;
 }
 
+export function tryHandleArrowFunctionExpression(
+  s: string,
+  env?: Env
+): unknown | undefined {
+  const ss = s.trim();
+  if (!ss.startsWith("(")) return undefined;
+  const parenOpen = ss.indexOf("(");
+  const close = findMatchingParen(ss, parenOpen);
+  if (close < 0) return undefined;
+  // ensure '=>' follows at top-level
+  let idx = close + 1;
+  while (idx < ss.length && ss[idx] === " ") idx++;
+  if (ss.slice(idx, idx + 2) !== "=>") return undefined;
+
+  const paramsContent = ss.slice(parenOpen + 1, close);
+  const params = parseFnParams(paramsContent);
+
+  // extract body after '=>'
+  let body = ss.slice(idx + 2).trim();
+  if (body === "") return undefined;
+  // if body is expression (not braced) wrap in braces
+  if (!body.startsWith("{")) body = `{ ${body} }`;
+
+  const funcEnv = new Map<string, EnvItem>(env ?? new Map<string, EnvItem>());
+  const func: FunctionValue = { params, body, env: funcEnv };
+  return func;
+}
+
+export function tryHandleFunctionLikeExpression(
+  s: string,
+  env?: Env
+): unknown | undefined {
+  const fnExpr = tryHandleFnExpression(s, env);
+  if (fnExpr !== undefined) return fnExpr;
+  return tryHandleArrowFunctionExpression(s, env);
+}
+
 function parseMethodCall(s: string): MethodCallParse | undefined {
   let depth = 0;
   let lastDot = -1;
