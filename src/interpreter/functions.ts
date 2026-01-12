@@ -12,7 +12,7 @@ import {
   startsWithKeyword,
   topLevelSplitTrim,
 } from "./shared";
-import { evalBlock } from "./statements";
+import { evalBlock, handleYieldValue } from "./statements";
 
 export function handleFnStatement(
   stmt: string,
@@ -92,9 +92,8 @@ export function tryHandleCall(s: string, env?: Env): number | undefined {
     } as EnvItem);
   }
 
-  // evaluate body
-  const res = evalBlock(func.body, callEnv);
-  return res;
+  // evaluate body and handle yield
+  return handleYieldValue(() => evalBlock(func.body, callEnv));
 }
 
 export function tryHandleFnExpression(

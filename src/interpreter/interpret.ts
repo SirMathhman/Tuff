@@ -4,7 +4,7 @@ import { tryHandleAddition, tryHandleComparison } from "./arithmetic";
 import { tryHandleFnExpression, tryHandleCall } from "./functions";
 import { tryHandleIfExpression } from "./ifExpression";
 import { tryHandleMatchExpression } from "./matchExpression";
-import { evalBlock, YieldValue, isYieldValue } from "./statements";
+import { evalBlock, handleYieldValue } from "./statements";
 import { isIdentifierName, splitTopLevel, stripOuterParens } from "./shared";
 import { splitNumberAndSuffix, validateNumberSuffix } from "./numbers";
 
@@ -17,14 +17,7 @@ export function interpret(input: string, env?: Env): number {
   // block with statements e.g., "let x : I32 = 1; x"
   const topParts = splitTopLevel(s, ";");
   if (topParts.length > 1 || s.trim().startsWith("let ")) {
-    try {
-      return evalBlock(s, env);
-    } catch (e: unknown) {
-      if (isYieldValue(e)) {
-        return (e as YieldValue).value;
-      }
-      throw e;
-    }
+    return handleYieldValue(() => evalBlock(s, env));
   }
 
   const ifResult = tryHandleIfExpression(s, env);

@@ -198,9 +198,7 @@ describe("interpret - blocks (expressions extras)", () => {
 
   it("supports continue statement in while loops", () => {
     expect(
-      interpret(
-        "let mut x = 0; while (x < 4) { x += 1; continue; }; x"
-      )
+      interpret("let mut x = 0; while (x < 4) { x += 1; continue; }; x")
     ).toBe(4);
   });
 });
@@ -237,6 +235,14 @@ describe("interpret - loop control flow", () => {
 
     // functions should be able to mutate outer mutable variables (closures)
     expect(interpret("let mut x = 0; fn add() => x += 1; add(); x")).toBe(1);
+  });
+
+  it("supports yield to return early from function", () => {
+    expect(
+      interpret(
+        "fn earlyYield(state : Bool) : I32 => { if (state) yield 100; 200 } earlyYield(true)"
+      )
+    ).toBe(100);
   });
 });
 

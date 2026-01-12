@@ -62,6 +62,17 @@ function isContinueException(e: unknown): boolean {
 
 export { isYieldValue, isBreakException, isContinueException };
 
+export function handleYieldValue(yieldFn: () => number): number {
+  try {
+    return yieldFn();
+  } catch (e: unknown) {
+    if (isYieldValue(e)) {
+      return (e as YieldValue).value;
+    }
+    throw e;
+  }
+}
+
 function startsWithGroup(s: string): boolean {
   return s[0] === "(" || s[0] === "{";
 }
