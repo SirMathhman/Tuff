@@ -373,7 +373,8 @@ function handleLetStatement(
         ? annotatedType.slice(0, annotatedType.indexOf("<")).trim()
         : annotatedType;
     const compositeVal =
-      (annotatedType && (getStructDef(annotatedType) || (structBase && getStructDef(structBase)))
+      (annotatedType &&
+      (getStructDef(annotatedType) || (structBase && getStructDef(structBase)))
         ? tryHandleStructLiteral(initializer, annotatedType, env, interpret)
         : undefined) ||
       (annotatedType && annotatedType.startsWith("[")

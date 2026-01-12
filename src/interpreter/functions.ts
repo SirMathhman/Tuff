@@ -33,7 +33,11 @@ import {
 import { evalBlock, handleYieldValue } from "./statements";
 import { isReturnValue, ReturnValue } from "./returns";
 import { parseFnSignature } from "./typeParsers";
-import { runFunctionWithBindings, checkMethodArgumentTypes, validateConcreteParamTypes } from "./functionHelpers";
+import {
+  runFunctionWithBindings,
+  checkMethodArgumentTypes,
+  validateConcreteParamTypes,
+} from "./functionHelpers";
 
 export function handleFnStatement(
   stmt: string,
@@ -149,7 +153,6 @@ function parseFnParams(paramsContent: string): string[] {
     return ensureIdentifier(name, "Invalid fn parameter");
   });
 }
-
 
 function topLevelStatements(body: string): string[] {
   const b = body.trim();
@@ -402,7 +405,6 @@ export function tryHandleFunctionLikeExpression(
   if (fnExpr !== undefined) return fnExpr;
   return tryHandleArrowFunctionExpression(s, env);
 }
-
 
 // eslint-disable-next-line max-lines-per-function, complexity
 export function tryHandleMethodCall(s: string, env?: Env): number | undefined {

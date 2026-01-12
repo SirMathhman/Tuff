@@ -75,7 +75,12 @@ export function handleStructStatement(
     fieldTypes.push(type);
   }
 
-  const def: StructDef = { name: structName, fieldNames, fieldTypes, genericParams };
+  const def: StructDef = {
+    name: structName,
+    fieldNames,
+    fieldTypes,
+    genericParams,
+  };
   registerStruct(def);
 
   // Calculate how much of the original statement was consumed
@@ -175,13 +180,17 @@ export function isStructValue(v: unknown): v is StructValue {
   );
 }
 
-function resolveStructFieldTypes(def: StructDef, typeArgs: string[] | undefined): string[] {
+function resolveStructFieldTypes(
+  def: StructDef,
+  typeArgs: string[] | undefined
+): string[] {
   const fieldTypes = def.fieldTypes.slice();
   if (def.genericParams && def.genericParams.length > 0) {
     if (!typeArgs || typeArgs.length !== def.genericParams.length)
       throw new Error("Invalid type parameters for struct");
     const map = new Map<string, string>();
-    for (let i = 0; i < def.genericParams.length; i++) map.set(def.genericParams[i], typeArgs![i]);
+    for (let i = 0; i < def.genericParams.length; i++)
+      map.set(def.genericParams[i], typeArgs![i]);
     return fieldTypes.map((ft) => substituteGenericTypes(ft, map));
   }
   return fieldTypes;
@@ -192,7 +201,9 @@ function validateFieldValue(expectedType: string, value: unknown) {
   if (t.startsWith("*") || t.startsWith("[")) {
     const ok = t.startsWith("*") ? isPointerValue(value) : isArrayValue(value);
     if (!ok)
-      throw new Error(t.startsWith("*") ? "Pointer type mismatch" : "Type mismatch");
+      throw new Error(
+        t.startsWith("*") ? "Pointer type mismatch" : "Type mismatch"
+      );
     return;
   }
   if (t === "Bool" || isIntegerTypeName(t) || t === "Number") {

@@ -13,9 +13,7 @@ export function runFunctionWithBindings(
       value: v as EnvItem["value"],
       mutable: false,
     } as EnvItem);
-  return (
-    handleYieldValue(() => evalBlock(func.body, callEnv, true)) as number
-  );
+  return handleYieldValue(() => evalBlock(func.body, callEnv, true)) as number;
 }
 
 export function checkMethodArgumentTypes(

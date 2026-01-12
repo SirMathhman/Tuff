@@ -1,3 +1,4 @@
+/* eslint-disable max-lines-per-function */
 import { interpret } from "../src/interpret";
 
 describe("interpret - generic structs (basic)", () => {
@@ -19,7 +20,9 @@ describe("interpret - generic structs (basic)", () => {
 
   it("conflicting field initializer types throws", () => {
     expect(() =>
-      interpret("struct Same<T> { a : T, b : T } let s : Same<I32> = { 1, true }")
+      interpret(
+        "struct Same<T> { a : T, b : T } let s : Same<I32> = { 1, true }"
+      )
     ).toThrow();
   });
 
