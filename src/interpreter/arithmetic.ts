@@ -7,6 +7,7 @@ import {
   isDigit,
   isIdentifierStartCode,
   isOpeningBracket,
+  isClosingBracket,
   isPlusMinus,
   parseIdentifierWithFieldAccess,
   skipSpacesFrom,
@@ -96,6 +97,11 @@ function findTopLevelLogical(s: string): TopLevelLogical | undefined {
   return undefined;
 }
 
+function assertNumericValue(v: unknown): void {
+  if (typeof v !== "number" || Number.isNaN(v as number))
+    throw new Error("Logical operands must be numbers");
+}
+
 function evalLogicalOp(
   left: string,
   right: string,
@@ -104,28 +110,52 @@ function evalLogicalOp(
 ): number | undefined {
   if (left === "" || right === "") return undefined;
 
-  function assertNumeric(v: unknown): void {
-    if (typeof v !== "number" || Number.isNaN(v as number))
-      throw new Error("Logical operands must be numbers");
-  }
-
   const lvRaw = interpret(left, env);
-  assertNumeric(lvRaw);
+  assertNumericValue(lvRaw);
   const lv = lvRaw as number;
 
   if (op === "&&") {
     // short-circuit: if left is falsey (0), don't evaluate rhs
     if (lv === 0) return 0;
     const rvRaw = interpret(right, env);
-    assertNumeric(rvRaw);
+    assertNumericValue(rvRaw);
     return (rvRaw as number) !== 0 ? 1 : 0;
   }
 
   // op === '||'
   if (lv !== 0) return 1;
   const rvRaw = interpret(right, env);
-  assertNumeric(rvRaw);
+  assertNumericValue(rvRaw);
   return (rvRaw as number) !== 0 ? 1 : 0;
+}
+
+export function tryHandleUnaryNot(s: string, env?: Env): number | undefined {
+  const ss = s.trim();
+  if (!ss.startsWith("!")) return undefined;
+  const rest = ss.slice(1).trim();
+  if (rest === "") throw new Error("Missing operand for '!'" );
+
+  // grouped operand: require the group to cover the entire rest
+  if (rest.startsWith("(") || rest.startsWith("{")) {
+    const close = findMatchingParen(rest, 0);
+    if (close !== rest.length - 1) return undefined; // not a pure unary expression
+    const val = interpret(rest, env);
+    assertNumericValue(val);
+    return (val as number) === 0 ? 1 : 0;
+  }
+
+  // If non-group operand contains any top-level operators, decline (let binary handlers split)
+  const hasTop = findTopLevel(rest, (str, i) => {
+    const ch = str[i];
+    if (isOpeningBracket(ch) || isClosingBracket(ch)) return undefined;
+    if ("+-*/<>".includes(ch)) return true;
+    return undefined;
+  });
+  if (hasTop !== undefined) return undefined;
+
+  const val = interpret(rest, env);
+  assertNumericValue(val);
+  return (val as number) === 0 ? 1 : 0;
 }
 
 export function tryHandleBinaryOps(s: string, env?: Env): number | undefined {
@@ -134,16 +164,27 @@ export function tryHandleBinaryOps(s: string, env?: Env): number | undefined {
 
   // Choose logical if present (lower precedence); otherwise use comparison
   const chosen = logicalFound
-    ? { kind: "logical", op: logicalFound.op, idx: logicalFound.idx, rightStart: logicalFound.idx + 2 }
+    ? {
+        kind: "logical",
+        op: logicalFound.op,
+        idx: logicalFound.idx,
+        rightStart: logicalFound.idx + 2,
+      }
     : compFound
-    ? { kind: "comparison", op: compFound.op, idx: compFound.idx, rightStart: compFound.idx + (compFound.op.length === 2 ? 2 : 1) }
+    ? {
+        kind: "comparison",
+        op: compFound.op,
+        idx: compFound.idx,
+        rightStart: compFound.idx + (compFound.op.length === 2 ? 2 : 1),
+      }
     : undefined;
 
   if (!chosen) return undefined;
 
   const left = s.slice(0, chosen.idx).trim();
   const right = s.slice(chosen.rightStart).trim();
-  if (chosen.kind === "logical") return evalLogicalOp(left, right, chosen.op, env);
+  if (chosen.kind === "logical")
+    return evalLogicalOp(left, right, chosen.op, env);
   return evalComparisonOp(left, right, chosen.op, env);
 }
 

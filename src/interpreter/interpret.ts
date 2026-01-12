@@ -1,6 +1,6 @@
 import type { Env } from "./types";
 import { blockShadow } from "./env";
-import { tryHandleAddition, tryHandleBinaryOps } from "./arithmetic";
+import { tryHandleAddition, tryHandleBinaryOps, tryHandleUnaryNot } from "./arithmetic";
 import {
   tryHandleFunctionLikeExpression,
   tryHandleCall,
@@ -179,6 +179,10 @@ function tryHandleArrayOrSliceFieldAccess(
 }
 
 function tryHandleNumericOp(s: string, env?: Env): number | undefined {
+  // unary not has higher precedence than binary ops
+  const unary = tryHandleUnaryNot(s, env);
+  if (unary !== undefined) return unary;
+
   const binaryOpResult = tryHandleBinaryOps(s, env);
   if (binaryOpResult !== undefined) return binaryOpResult;
 
