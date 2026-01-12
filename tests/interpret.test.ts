@@ -109,9 +109,7 @@ describe("interpret - blocks (core)", () => {
     expect(interpret("let mut x = 0; x = 100; x")).toBe(100);
   });
   it("allows assignment inside if statements to outer mutable variables", () => {
-    expect(
-      interpret("let mut x = 0; if (true) x = 100; x")
-    ).toBe(100);
+    expect(interpret("let mut x = 0; if (true) x = 100; x")).toBe(100);
   });
   it("throws when assigning to an immutable variable", () => {
     expect(() => interpret("let x = 0; x = 100; x")).toThrow(Error);
@@ -245,5 +243,12 @@ describe("interpret - block scoping", () => {
 
   it("does not leak block-local declarations to outer scope", () => {
     expect(() => interpret("{ let mut x = 10; } x = 20; x")).toThrow(Error);
+  });
+
+  it("supports yield to return early from a block", () => {
+    // simple yield
+    expect(interpret("let x = { yield 100; 10 }; x")).toBe(100);
+    // yield inside if
+    expect(interpret("let x = { if (true) yield 100; 10 }; x")).toBe(100);
   });
 });

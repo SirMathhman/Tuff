@@ -1,7 +1,7 @@
 import type { Env, EnvItem } from "./types";
 import { interpret } from "./interpret";
 import { makeDeletedEnvItem } from "./env";
-import { evalBlock } from "./statements";
+import { evalBlock, isYieldValue } from "./statements";
 import {
   ensure,
   ensureNonEmptyPair,
@@ -138,7 +138,11 @@ function resolveBodyAfterClose(
   return { body, consumed };
 }
 
-function handleWhileAt(idx: number, stmts: string[], env: Env): ControlFlowResult {
+function handleWhileAt(
+  idx: number,
+  stmts: string[],
+  env: Env
+): ControlFlowResult {
   const { content: condStr, close } = extractParenContent(stmts[idx], "while");
   const stmt = stmts[idx];
   const { body, consumed } = resolveBodyAfterClose(
@@ -150,13 +154,24 @@ function handleWhileAt(idx: number, stmts: string[], env: Env): ControlFlowResul
   );
 
   let lastLocal = NaN;
-  while (interpret(condStr, env) !== 0) {
-    lastLocal = evalBlock(body, env);
+  try {
+    while (interpret(condStr, env) !== 0) {
+      lastLocal = evalBlock(body, env);
+    }
+  } catch (e: unknown) {
+    if (isYieldValue(e)) {
+      throw e; // propagate yield out of while
+    }
+    throw e;
   }
   return { handled: true, last: lastLocal, consumed } as ControlFlowResult;
 }
 
-function handleForAt(idx: number, stmts: string[], env: Env): ControlFlowResult {
+function handleForAt(
+  idx: number,
+  stmts: string[],
+  env: Env
+): ControlFlowResult {
   const { content: header, close } = extractParenContent(stmts[idx], "for");
   const { body, consumed } = resolveBodyAfterClose(
     stmts[idx],
@@ -175,11 +190,18 @@ function handleForAt(idx: number, stmts: string[], env: Env): ControlFlowResult 
   const outerHas = env.has(name);
   const outerItem = outerHas ? env.get(name) : undefined;
 
-  for (let i = startVal; i < endVal; i++) {
-    // create shallow env and declare loop variable
-    const loopEnv = new Map<string, EnvItem>(env);
-    loopEnv.set(name, { value: i, mutable, type: undefined } as EnvItem);
-    lastLocal = evalBlock(body, loopEnv);
+  try {
+    for (let i = startVal; i < endVal; i++) {
+      // create shallow env and declare loop variable
+      const loopEnv = new Map<string, EnvItem>(env);
+      loopEnv.set(name, { value: i, mutable, type: undefined } as EnvItem);
+      lastLocal = evalBlock(body, loopEnv);
+    }
+  } catch (e: unknown) {
+    if (isYieldValue(e)) {
+      throw e; // propagate yield out of for
+    }
+    throw e;
   }
 
   // ensure loop-declared name is not visible after the loop
@@ -202,8 +224,15 @@ export function tryHandleControlFlow(
 ): ControlFlowResult {
   const stmt = stmts[idx];
   if (startsWithIf(stmt)) {
-    const res = handleIfAt(idx, stmts, env);
-    return { handled: true, last: res.last, consumed: res.consumed };
+    try {
+      const res = handleIfAt(idx, stmts, env);
+      return { handled: true, last: res.last, consumed: res.consumed };
+    } catch (e: unknown) {
+      if (isYieldValue(e)) {
+        throw e; // propagate yield out of if
+      }
+      throw e;
+    }
   }
 
   const flowHandlers: Array<

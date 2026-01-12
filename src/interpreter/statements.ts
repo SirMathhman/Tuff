@@ -14,6 +14,21 @@ import { splitNumberAndSuffix } from "./numbers";
 import { handleFnStatement } from "./functions";
 import { tryHandleControlFlow } from "./controlFlow";
 
+// Exception thrown by yield statements to break out of blocks early
+export class YieldValue extends Error {
+  public readonly __isYieldValue = true;
+  constructor(public value: number) {
+    super();
+    Object.setPrototypeOf(this, YieldValue.prototype);
+  }
+}
+
+function isYieldValue(e: unknown): boolean {
+  return typeof e === "object" && e !== null && "__isYieldValue" in e;
+}
+
+export { isYieldValue };
+
 function startsWithGroup(s: string): boolean {
   return s[0] === "(" || s[0] === "{";
 }
@@ -135,6 +150,10 @@ export function evalBlock(s: string, envIn?: Env): number {
       last = handleLetStatement(stmt, env, localDeclared);
     } else if (stmt.startsWith("fn ")) {
       last = handleFnStatement(stmt, env, localDeclared);
+    } else if (stmt.startsWith("yield ")) {
+      const expr = sliceTrim(stmt, 6);
+      last = interpret(expr, env);
+      throw new YieldValue(last);
     } else {
       last = processNonLetStatement(stmt, env);
     }
