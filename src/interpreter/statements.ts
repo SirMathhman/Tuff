@@ -29,7 +29,6 @@ import {
   handlePointerInitializer,
 } from "./pointers";
 
-// Exception thrown by yield statements to break out of blocks early
 export class YieldValue extends Error {
   public readonly __isYieldValue = true;
   constructor(public value: number) {
@@ -38,7 +37,6 @@ export class YieldValue extends Error {
   }
 }
 
-// Exception thrown by break statements to exit loops
 export class BreakException extends Error {
   public readonly __isBreakException = true;
   constructor() {
@@ -47,7 +45,6 @@ export class BreakException extends Error {
   }
 }
 
-// Exception thrown by continue statements to skip to next loop iteration
 export class ContinueException extends Error {
   public readonly __isContinueException = true;
   constructor() {
@@ -63,27 +60,16 @@ function isControlFlowException(
   return typeof e === "object" && e !== null && flag in e;
 }
 
-function isYieldValue(e: unknown): boolean {
-  return isControlFlowException(e, "__isYieldValue");
-}
-
-function isBreakException(e: unknown): boolean {
-  return isControlFlowException(e, "__isBreakException");
-}
-
-function isContinueException(e: unknown): boolean {
-  return isControlFlowException(e, "__isContinueException");
-}
-
+function isYieldValue(e: unknown): boolean { return isControlFlowException(e, "__isYieldValue"); }
+function isBreakException(e: unknown): boolean { return isControlFlowException(e, "__isBreakException"); }
+function isContinueException(e: unknown): boolean { return isControlFlowException(e, "__isContinueException"); }
 export { isYieldValue, isBreakException, isContinueException };
 
 export function handleYieldValue(yieldFn: () => number): number {
   try {
     return yieldFn();
   } catch (e: unknown) {
-    if (isYieldValue(e)) {
-      return (e as YieldValue).value;
-    }
+    if (isYieldValue(e)) return (e as YieldValue).value;
     throw e;
   }
 }
@@ -181,16 +167,10 @@ function extractAnnotationAndInitializer(str: string): AnnotationResult {
 // eslint-disable-next-line complexity, max-lines-per-function
 export function evalBlock(s: string, envIn?: Env): number {
   const trimmed = s.trim();
-  // If this eval is for a brace-delimited block (e.g., "{ ... }"), create
-  // a shallow copy of the parent environment so that declarations in the
-  // inner block don't leak to the outer scope, but assignments to existing
-  // outer variables still update the same EnvItem objects by reference.
-  const isBraceBlock =
-    trimmed.startsWith("{") &&
-    findMatchingParen(trimmed, 0) === trimmed.length - 1;
-  const env = isBraceBlock
-    ? new Map<string, EnvItem>(envIn ?? new Map<string, EnvItem>())
-    : envIn ?? new Map<string, EnvItem>();
+  // If evaluating a brace-delimited block, create a shallow copy of the parent
+  // env so inner declarations don't leak but outer variables remain updatable.
+  const isBraceBlock = trimmed.startsWith("{") && findMatchingParen(trimmed, 0) === trimmed.length - 1;
+  const env = isBraceBlock ? new Map<string, EnvItem>(envIn ?? new Map<string, EnvItem>()) : envIn ?? new Map<string, EnvItem>();
   // create a shadow set for this evaluation scope
   blockShadow.set(env, new Set<string>());
   const rawStmts = splitTopLevel(s, ";");
@@ -377,10 +357,7 @@ function computeCompoundResult(
   }
 }
 
-function tryHandleCompoundAssignment(
-  stmt: string,
-  env: Env
-): number | undefined {
+function tryHandleCompoundAssignment(stmt: string, env: Env): number | undefined {
   const idRes = parseIdentifierAt(stmt, 0);
   if (!idRes) return undefined;
   let rest = sliceTrim(stmt, idRes.next);
@@ -394,10 +371,7 @@ function tryHandleCompoundAssignment(
   ensureIdentifierExists(idRes.name, env);
 
   const cur = env.get(idRes.name)!;
-  if (typeof cur.value !== "number" || Number.isNaN(cur.value))
-    throw new Error(
-      "Cannot compound-assign uninitialized or non-number variable"
-    );
+  if (typeof cur.value !== "number" || Number.isNaN(cur.value)) throw new Error("Cannot compound-assign uninitialized or non-number variable");
   if (!cur.mutable) throw new Error("Cannot assign to immutable variable");
 
   const rhsType = inferTypeFromExpr(rest, env);
@@ -408,6 +382,38 @@ function tryHandleCompoundAssignment(
   cur.value = newVal;
   env.set(idRes.name, cur);
   return newVal;
+}
+
+function assertAssignable(cur: EnvItem, rhsType: string | undefined) {
+  if (!cur.mutable && typeof cur.value === "number" && !Number.isNaN(cur.value))
+    throw new Error("Cannot assign to immutable variable");
+  if (cur.type) {
+    if (isIntegerTypeName(cur.type)) {
+      if (rhsType === "Bool") throw new Error("Type mismatch: cannot assign Bool to integer type");
+    }
+    if (cur.type === "Bool") {
+      if (rhsType !== "Bool") throw new Error("Type mismatch: cannot assign non-Bool to Bool");
+    }
+  }
+}
+
+function tryHandleThisAssignment(stmt: string, env: Env): number | undefined {
+  const trimmed = stmt.trim();
+  if (!trimmed.startsWith("this.")) return undefined;
+  const rest = trimmed.slice(5);
+  const eqIdx = rest.indexOf("=");
+  if (eqIdx === -1) return undefined;
+  const name = rest.slice(0, eqIdx).trim();
+  if (!isIdentifierName(name)) return undefined;
+  const rhs = rest.slice(eqIdx + 1).trim();
+  if (rhs === "") throw new Error("Invalid assignment");
+  ensureIdentifierExists(name, env);
+  const cur = env.get(name)!;
+  assertAssignable(cur, inferTypeFromExpr(rhs, env));
+  const val = interpret(rhs, env);
+  cur.value = val;
+  env.set(name, cur);
+  return val;
 }
 
 function tryHandleAssignmentStatement(
@@ -422,6 +428,9 @@ function tryHandleAssignmentStatement(
   const arrayAssignResult = tryHandleArrayAssignment(stmt, env, interpret);
   if (arrayAssignResult !== undefined) return arrayAssignResult;
 
+  const thisAssign = tryHandleThisAssignment(stmt, env);
+  if (thisAssign !== undefined) return thisAssign;
+
   const idRes = parseIdentifierAt(stmt, 0);
   if (!idRes) return undefined;
   let restAssign = sliceTrim(stmt, idRes.next);
@@ -430,21 +439,7 @@ function tryHandleAssignmentStatement(
   if (restAssign === "") throw new Error("Invalid assignment");
   ensureIdentifierExists(idRes.name, env);
   const cur = env.get(idRes.name)!;
-  // allow assignment if variable is mutable OR if it is uninitialized
-  if (!cur.mutable && typeof cur.value === "number" && !Number.isNaN(cur.value))
-    throw new Error("Cannot assign to immutable variable");
-
-  const rhsType = inferTypeFromExpr(restAssign, env);
-  if (cur.type) {
-    if (isIntegerTypeName(cur.type)) {
-      if (rhsType === "Bool")
-        throw new Error("Type mismatch: cannot assign Bool to integer type");
-    }
-    if (cur.type === "Bool") {
-      if (rhsType !== "Bool")
-        throw new Error("Type mismatch: cannot assign non-Bool to Bool");
-    }
-  }
+  assertAssignable(cur, inferTypeFromExpr(restAssign, env));
 
   const val = interpret(restAssign, env);
   cur.value = val;

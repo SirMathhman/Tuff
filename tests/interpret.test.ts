@@ -389,6 +389,11 @@ describe("interpret - pointers", () => {
     expect(interpret("let x = 100; this.x")).toBe(100);
   });
 
+  it("supports assigning to local variables via this.x", () => {
+    expect(interpret("let mut x = 0; this.x = 100; x")).toBe(100);
+    expect(() => interpret("let x = 0; this.x = 100; x")).toThrow(Error);
+  });
+
   it("supports assignment through pointer to mutable variable", () => {
     expect(interpret("let mut x = 0; let y : *I32 = &x; *y = 5; x")).toBe(5);
   });
