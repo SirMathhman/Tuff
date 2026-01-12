@@ -62,20 +62,33 @@ export function compile(source: string): string {
 }
 
 /**
+ * Simple Result type for error handling
+ */
+export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+
+export const ok = <T>(value: T): Result<T, never> => ({ ok: true, value });
+export const err = <E>(error: E): Result<never, E> => ({ ok: false, error });
+
+/**
  * Interpret a source string by compiling and evaluating it with provided stdin.
  * @param source - source string to interpret
  * @param stdIn - standard input string made available to the evaluated code (optional)
- * @returns numeric result of evaluating the compiled source
+ * @returns numeric result of evaluating the compiled source wrapped in a Result
  */
-export function interpret(source: string, _stdIn: string = ""): number {
+export function interpret(
+  source: string,
+  _stdIn: string = ""
+): Result<number, Error> {
   // Avoid using `eval` or Function constructors (disallowed by lint). Rely on the
   // compiler to turn known patterns into numeric strings and just coerce here.
   const compiled = compile(source);
   const value = Number(compiled);
   if (Number.isNaN(value)) {
-    throw new Error(
-      "Compiled output is not numeric and dynamic evaluation is disabled"
+    return err(
+      new Error(
+        "Compiled output is not numeric and dynamic evaluation is disabled"
+      )
     );
   }
-  return value;
+  return ok(value);
 }

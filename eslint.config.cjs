@@ -36,6 +36,11 @@ module.exports = [
           message:
             "RegExp call is banned. Use string APIs or parsing utilities instead.",
         },
+        {
+          selector: "ThrowStatement",
+          message:
+            "Usage of 'throw' is banned. Use Result<T, X> for error handling instead.",
+        },
       ],
       "no-eval": "error",
     },
