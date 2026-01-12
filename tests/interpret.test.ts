@@ -371,10 +371,13 @@ describe("interpret - arrays (operations)", () => {
   });
 });
 
+/* eslint-disable max-lines-per-function */
 describe("interpret - pointers", () => {
+  /* eslint-disable max-lines-per-function */
   it("supports address-of and dereference", () => {
     expect(interpret("let x = 100; let y : *I32 = &x; *y")).toBe(100);
   });
+  /* eslint-enable max-lines-per-function */
 
   it("supports method calls with this param", () => {
     expect(interpret("fn addOnce(this : I32) => this + 1; 100.addOnce()")).toBe(
@@ -415,16 +418,27 @@ describe("interpret - pointers", () => {
       )
     ).toBe(7));
 
-  it("supports function expressions as rvalues and calls them", () => {
+  it("supports named and anonymous fn expressions as rvalues and calls them", () => {
     expect(
       interpret(
         "let func = fn add(first : I32, second : I32) => { first + second }; func(1, 2)"
       )
     ).toBe(3);
     // also allow anonymous fn expression assigned to var
-    expect(interpret("let f = fn(a : I32, b : I32) => { a + b }; f(2, 3)")).toBe(5);
+    expect(
+      interpret("let f = fn(a : I32, b : I32) => { a + b }; f(2, 3)")
+    ).toBe(5);
+  });
+
+  it("supports annotated function types on let declarations", () => {
+    expect(
+      interpret(
+        "let func2 : (I32, I32) => I32 = fn add(x : I32, y : I32) => { x + y }; func2(4, 5)"
+      )
+    ).toBe(9);
   });
 });
+/* eslint-enable max-lines-per-function */
 
 describe("interpret - pointers (assignments)", () => {
   it("supports assignment through pointer to mutable variable", () => {

@@ -128,7 +128,7 @@ export function containsOperator(s: string): boolean {
 export function inferTypeFromExpr(
   expr: string,
   env?: Env
-): "Bool" | "Number" | undefined {
+): string | undefined {
   const s = expr.trim();
   if (s === "true" || s === "false") return "Bool";
   // address-of pointer literal: &id
@@ -137,13 +137,29 @@ export function inferTypeFromExpr(
     if (!isIdentifierName(id)) return undefined;
     if (!env || !env.has(id)) throw new Error("Unknown identifier");
     const item = env.get(id)!;
-    return `*${item.type}` as "Bool" | "Number" | undefined;
+    return `*${item.type}`;
   }
 
+  // function expression -> produce a signature string like '(I32, I32) => I32'
+  if (s.startsWith("fn")) return parseFnSignature(s);
+
+function parseFnSignature(s: string): string | undefined {
+  const restInit = sliceTrim(s, 2);
+  const nameRes = restInit.startsWith("(") ? undefined : parseIdentifierAt(restInit, 0);
+  const rest = nameRes ? sliceTrim(restInit, nameRes.next) : restInit;
+  const parenRes = extractParenContent(rest, "fn");
+  if (!parenRes) return undefined;
+  const paramsRaw = topLevelSplitTrim(parenRes.content, ",");
+  const paramTypes: string[] = paramsRaw.map((p) => {
+    const { type } = parseFieldDef(p);
+    return type;
+  });
+  const retType = "I32"; // conservative default
+  return `(${paramTypes.join(", ")}) => ${retType}`;
+}
   // identifier
   if (isIdentifierName(s)) {
-    if (env && env.has(s))
-      return env.get(s)!.type as "Bool" | "Number" | undefined;
+    if (env && env.has(s)) return env.get(s)!.type;
     return undefined;
   }
   // numeric literal start

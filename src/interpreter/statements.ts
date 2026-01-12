@@ -106,10 +106,21 @@ function validateAnnotatedTypeCompatibility(
   annotatedType: string,
   initType: string | undefined
 ) {
+  // pointer types: exact match
   if (annotatedType.startsWith("*")) {
     if (annotatedType !== initType) throw new Error("Pointer type mismatch");
     return;
   }
+
+  // function types e.g., (I32, I32) => I32 - require exact match with inferred type
+  if (annotatedType.startsWith("(") && annotatedType.includes("=>")) {
+    if (annotatedType !== initType) {
+      console.log("[debug] annotatedType=", annotatedType, "initType=", initType);
+      throw new Error("Function type mismatch");
+    }
+    return;
+  }
+
   validateTypeCompatibility(annotatedType, initType);
 }
 
@@ -122,11 +133,35 @@ function extractAnnotationAndInitializer(str: string): AnnotationResult {
   let s = str.trim();
   let annotatedType: string | undefined = undefined;
   if (s.startsWith(":")) {
-    const eq = s.indexOf("=");
-    if (eq === -1) return { annotatedType: s.slice(1).trim(), initializer: "" };
-    annotatedType = s.substring(1, eq).trim();
-    s = s.substring(eq + 1).trim();
+    const lastEq = findTopLevelAssignmentIndex(s);
+    if (lastEq === -1) return { annotatedType: s.slice(1).trim(), initializer: "" };
+    annotatedType = s.substring(1, lastEq).trim();
+    s = s.substring(lastEq + 1).trim();
   }
+
+function findTopLevelAssignmentIndex(s: string): number {
+  let depth = 0;
+  let lastEq = -1;
+  for (let i = 1; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === "(" || ch === "{" || ch === "[") {
+      depth++;
+      continue;
+    }
+    if (ch === ")" || ch === "}" || ch === "]") {
+      depth--;
+      continue;
+    }
+    if (depth === 0 && ch === "=") {
+      // skip '=' that are part of '=>' arrows (next non-space char is '>')
+      let j = i + 1;
+      while (j < s.length && " \t\n\r".includes(s[j])) j++;
+      if (j < s.length && s[j] === ">") continue;
+      lastEq = i;
+    }
+  }
+  return lastEq;
+}
   if (s.startsWith("=")) s = sliceTrim(s, 1);
   return { annotatedType, initializer: s } as AnnotationResult;
 }
