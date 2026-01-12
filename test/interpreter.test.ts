@@ -16,3 +16,8 @@ it("interprets a numeric literal with U8 suffix", () => {
     expect(result.value).toBe(100);
   }
 });
+
+it("returns an error for negative numeric literal with U8 suffix", () => {
+  const result = interpret("-100U8");
+  expect(result.ok).toBe(false);
+});
