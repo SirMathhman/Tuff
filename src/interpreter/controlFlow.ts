@@ -175,12 +175,14 @@ function handleWhileAt(
   let lastLocal = NaN;
   try {
     let condRaw = interpret(condStr, env);
-    if (typeof condRaw !== "number") throw new Error("While condition must be numeric");
+    if (typeof condRaw !== "number")
+      throw new Error("While condition must be numeric");
     let cond = condRaw as number;
     while (cond !== 0) {
       lastLocal = executeLoopBodyWithContinue(body, env);
       condRaw = interpret(condStr, env);
-      if (typeof condRaw !== "number") throw new Error("While condition must be numeric");
+      if (typeof condRaw !== "number")
+        throw new Error("While condition must be numeric");
       cond = condRaw as number;
     }
   } catch (e: unknown) {
@@ -211,10 +213,12 @@ function handleForAt(
 
   const { name, mutable, left, right } = parseForHeader(header);
   const startValRaw = interpret(left, env);
-  if (typeof startValRaw !== "number") throw new Error("For-range start must be a number");
+  if (typeof startValRaw !== "number")
+    throw new Error("For-range start must be a number");
   const startVal = startValRaw as number;
   const endValRaw = interpret(right, env);
-  if (typeof endValRaw !== "number") throw new Error("For-range end must be a number");
+  if (typeof endValRaw !== "number")
+    throw new Error("For-range end must be a number");
   const endVal = endValRaw as number;
   let lastLocal = NaN;
 

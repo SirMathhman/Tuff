@@ -1,4 +1,4 @@
-import type { Env, EnvItem, FunctionValue } from "./types";
+import type { Env, EnvItem, FunctionValue, StructValue } from "./types";
 import { interpret } from "./interpret";
 import {
   ensure,
@@ -15,6 +15,7 @@ import {
   splitTopLevelOrEmpty,
   startsWithKeyword,
   topLevelSplitTrim,
+  isIdentifierName,
 } from "./shared";
 import { evalBlock, handleYieldValue } from "./statements";
 
@@ -58,9 +59,80 @@ export function handleFnStatement(
   return NaN;
 }
 
+function bindParamsToEnv(targetEnv: Map<string, EnvItem>, params: string[], values: unknown[]) {
+  for (let i = 0; i < params.length; i++) {
+    targetEnv.set(params[i], { value: values[i] as EnvItem["value"], mutable: false } as EnvItem);
+  }
+}
+
+function createThisStructAndBindToEnv(callEnv: Map<string, EnvItem>, params: string[], argVals: unknown[]): StructValue {
+  const sv: StructValue = { fields: params.slice(), values: argVals.slice() as number[] };
+  callEnv.set("this", { value: sv, mutable: false, type: "This" } as EnvItem);
+  return sv;
+}
+
+function attachMethodsToStructFromEnv(sv: StructValue, callEnv: Map<string, EnvItem>, funcEnv: Map<string, EnvItem>) {
+  for (const [k, v] of callEnv.entries()) {
+    if (!funcEnv.has(k) && v.type === "Fn") {
+      if (!sv.methods) sv.methods = new Map<string, FunctionValue>();
+      sv.methods.set(k, v.value as FunctionValue);
+    }
+  }
+}
+
+function resolveMethodFromEnv(methodName: string, receiverVal: unknown, env?: Env): FunctionValue | undefined {
+  // Check global env first
+  if (env && env.has(methodName)) {
+    const item = env.get(methodName)!;
+    if (typeof item.value === "number") throw new Error("Not a function");
+    return item.value as FunctionValue;
+  }
+  // If receiver is a struct, check instance methods
+  if (typeof receiverVal === "object" && receiverVal !== null && "methods" in (receiverVal as StructValue)) {
+    const methods: Map<string, FunctionValue> | undefined = (receiverVal as StructValue).methods;
+    if (methods && methods.has(methodName)) return methods.get(methodName) as FunctionValue;
+  }
+  return undefined;
+}
+
 function extractAfterArrow(s: string, msg: string) {
   const arrowIdx = ensureIndexFound(s.indexOf("=>"), msg);
   return sliceTrim(s, arrowIdx + 2);
+}
+
+function topLevelStatements(body: string): string[] {
+  const b = body.trim();
+  let inner = b;
+  if (b.startsWith("{") && b.endsWith("}")) inner = b.slice(1, b.length - 1);
+  return topLevelSplitTrim(inner, ";").map((p) => p.trim()).filter((p) => p !== "");
+}
+
+function registerTopLevelFns(body: string, callEnv: Map<string, EnvItem>) {
+  const parts = topLevelStatements(body);
+  for (const p of parts) {
+    if (p.startsWith("fn ")) {
+      // register into callEnv so it will be present for attachment
+      handleFnStatement(p, callEnv, new Set<string>());
+    }
+  }
+}
+
+function bodyEndsWithThis(body: string): boolean {
+  const b = body.trim();
+  if (b === "this" || b === "this;") return true;
+  const parts = topLevelStatements(b);
+  if (parts.length === 0) return false;
+  const last = parts[parts.length - 1];
+  if (last === "this" || last === "this;") return true;
+  return false;
+}
+
+function evalAllButLastStatements(body: string, callEnv: Map<string, EnvItem>) {
+  const parts = topLevelStatements(body);
+  // evaluate all but the last
+  for (let i = 0; i < parts.length - 1; i++) {
+    handleYieldValue(() => evalBlock(parts[i], callEnv));
+  }
 }
 
 export function tryHandleCall(s: string, env?: Env): unknown | undefined {
@@ -84,27 +156,32 @@ export function tryHandleCall(s: string, env?: Env): unknown | undefined {
 
   const argVals = interpretAll(args, interpret, env);
   const callEnv = new Map<string, EnvItem>(func.env);
-  // bind params
-  for (let i = 0; i < func.params.length; i++) {
-    callEnv.set(func.params[i], {
-      value: argVals[i],
-      mutable: false,
-    } as EnvItem);
-  }
+  bindParamsToEnv(callEnv, func.params, argVals);
 
-  // Always provide a `this` binding as a struct composed of parameters so
-  // `this` or `this.x` can be used in simple constructor-like functions.
-  const thisStruct = { fields: func.params.slice(), values: argVals.slice() } as const;
-  callEnv.set("this", { value: thisStruct, mutable: false, type: "This" } as EnvItem);
-
-  // If the function body is simply `this`, return the struct directly
+  const thisStruct = createThisStructAndBindToEnv(callEnv, func.params, argVals);
+  // If the function body is simply `this`, return the struct directly (with methods attached)
   const bodyTrim = func.body.trim();
   if (bodyTrim === "this" || bodyTrim === "this;") {
+    attachMethodsToStructFromEnv(thisStruct, callEnv, func.env);
+    return thisStruct;
+  }
+
+  registerTopLevelFns(func.body, callEnv);
+
+  if (bodyEndsWithThis(func.body)) {
+    evalAllButLastStatements(func.body, callEnv);
+    attachMethodsToStructFromEnv(thisStruct, callEnv, func.env);
     return thisStruct;
   }
 
   // evaluate body and handle yield
-  return handleYieldValue(() => evalBlock(func.body, callEnv));
+  const bodyResult = handleYieldValue(() => evalBlock(func.body, callEnv));
+
+  if (bodyResult === (thisStruct as unknown)) {
+    attachMethodsToStructFromEnv(thisStruct, callEnv, func.env);
+  }
+
+  return bodyResult;
 }
 
 export function tryHandleFnExpression(
@@ -185,27 +262,37 @@ export function tryHandleMethodCall(s: string, env?: Env): number | undefined {
   if (!parsed) return undefined;
   const { left, method, args } = parsed;
 
-  if (!env || !env.has(method)) throw new Error("Unknown identifier");
-  const item = env.get(method)!;
-  if (typeof item.value === "number") throw new Error("Not a function");
-  const func = item.value as FunctionValue;
-
-  const receiverVal = interpret(left, env);
-
-  if (func.params.length !== args.length + 1)
-    throw new Error("Argument count mismatch");
-
-  const argVals = interpretAll(args, interpret, env);
-  const callEnv = new Map<string, EnvItem>(func.env);
-  callEnv.set(func.params[0], {
-    value: receiverVal,
-    mutable: false,
-  } as EnvItem);
-  for (let i = 0; i < args.length; i++) {
-    callEnv.set(func.params[i + 1], {
-      value: argVals[i],
-      mutable: false,
-    } as EnvItem);
+  let receiverVal: unknown;
+  if (isIdentifierName(left) && env && env.has(left)) {
+    receiverVal = env.get(left)!.value;
+  } else {
+    receiverVal = interpret(left, env);
   }
-  return handleYieldValue(() => evalBlock(func.body, callEnv));
+  const func = resolveMethodFromEnv(method, receiverVal, env);
+  if (!func) throw new Error("Unknown identifier");
+
+  function runFunctionWithBindings(bindings: Array<[string, unknown]>): number {
+    const callEnv = new Map<string, EnvItem>(func!.env);
+    for (const [k, v] of bindings) callEnv.set(k, { value: v as EnvItem["value"], mutable: false } as EnvItem);
+    return handleYieldValue(() => evalBlock(func!.body, callEnv));
+  }
+
+  // Two calling conventions for methods:
+  // 1) fn m(this, ...) => ...  -> params.length === args.length + 1
+  // 2) fn m(...) => ...        -> params.length === args.length
+  if (func.params.length === args.length + 1) {
+    const argVals = interpretAll(args, interpret, env);
+    const bindings: Array<[string, unknown]> = [[func.params[0], receiverVal]];
+    for (let i = 0; i < args.length; i++) bindings.push([func.params[i + 1], argVals[i]]);
+    return runFunctionWithBindings(bindings);
+  }
+
+  if (func.params.length === args.length) {
+    const argVals = interpretAll(args, interpret, env);
+    const bindings: Array<[string, unknown]> = [];
+    for (let i = 0; i < args.length; i++) bindings.push([func.params[i], argVals[i]]);
+    return runFunctionWithBindings(bindings);
+  }
+
+  throw new Error("Argument count mismatch");
 }

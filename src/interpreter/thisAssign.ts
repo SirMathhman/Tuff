@@ -35,7 +35,8 @@ export function tryHandleThisAssignment(
   const cur = env.get(name)!;
   assertAssignable(cur, inferTypeFromExpr(rhs, env));
   const val = interpret(rhs, env);
-  if (typeof val !== "number") throw new Error("Assigned value must be a number");
+  if (typeof val !== "number")
+    throw new Error("Assigned value must be a number");
   cur.value = val as number;
   env.set(name, cur);
   return val as number;

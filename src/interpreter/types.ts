@@ -23,6 +23,8 @@ export interface PointerValue {
 export interface StructValue {
   fields: string[]; // field names in order
   values: number[]; // field values in order
+  // Optional instance methods defined on this struct (name -> FunctionValue)
+  methods?: Map<string, FunctionValue>;
 }
 
 export interface StructDef {

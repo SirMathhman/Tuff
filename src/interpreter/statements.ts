@@ -381,7 +381,8 @@ function tryHandleCompoundAssignment(
   validateTypeCompatibility(cur.type, rhsType);
 
   const rhsValRaw = interpret(rest, env);
-  if (typeof rhsValRaw !== "number") throw new Error("Compound assignment requires numeric rhs");
+  if (typeof rhsValRaw !== "number")
+    throw new Error("Compound assignment requires numeric rhs");
   const rhsVal = rhsValRaw as number;
   const newVal = computeCompoundResult(op, cur.value, rhsVal);
   cur.value = newVal;
@@ -415,7 +416,8 @@ function tryHandleAssignmentStatement(
   assertAssignable(cur, inferTypeFromExpr(restAssign, env));
 
   const valRaw = interpret(restAssign, env);
-  if (typeof valRaw !== "number") throw new Error("Cannot assign non-number to variable");
+  if (typeof valRaw !== "number")
+    throw new Error("Cannot assign non-number to variable");
   const val = valRaw as number;
   cur.value = val;
   env.set(idRes.name, cur);
@@ -433,7 +435,8 @@ function processNonLetStatement(stmt: string, env: Env): number {
       if (close < 0) throw new Error("Unterminated grouping");
       const part = rem.slice(0, close + 1);
       const valPart = interpret(part, env);
-      if (typeof valPart !== "number") throw new Error("Expected numeric expression");
+      if (typeof valPart !== "number")
+        throw new Error("Expected numeric expression");
       lastLocal = valPart as number;
       rem = rem.substring(close + 1);
       rem = rem.trim();
@@ -447,7 +450,8 @@ function processNonLetStatement(stmt: string, env: Env): number {
       if (assigned !== undefined) lastLocal = assigned;
       else {
         const val = interpret(rem, env);
-        if (typeof val !== "number") throw new Error("Expected numeric expression");
+        if (typeof val !== "number")
+          throw new Error("Expected numeric expression");
         lastLocal = val as number;
       }
     }

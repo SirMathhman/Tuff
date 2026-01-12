@@ -101,7 +101,8 @@ export function tryHandlePointerAssignment(
     throw new Error("Cannot assign through pointer to immutable variable");
 
   const value = interpret(rhs, env);
-  if (typeof value !== "number") throw new Error("Cannot assign non-number through pointer");
+  if (typeof value !== "number")
+    throw new Error("Cannot assign non-number through pointer");
   pointeeItem.value = value as number;
   ptr.env.set(ptr.name, pointeeItem);
   return value as number;

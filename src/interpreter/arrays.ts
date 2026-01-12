@@ -138,7 +138,8 @@ export function tryHandleArrayIndexing(
   if (!arrayVal) return undefined;
 
   const indexVal = interpret(indexExpr, env);
-  if (typeof indexVal !== "number") throw new Error("Index expression must be a number");
+  if (typeof indexVal !== "number")
+    throw new Error("Index expression must be a number");
   const index = indexVal as number;
 
   // RHS read: must be < initializedCount
@@ -193,7 +194,8 @@ export function tryHandleArrayAssignment(
 
   const arrayVal = item.value;
   const indexVal = interpret(indexExpr, env);
-  if (typeof indexVal !== "number") throw new Error("Index expression must be a number");
+  if (typeof indexVal !== "number")
+    throw new Error("Index expression must be a number");
   const index = indexVal as number;
 
   // LHS write: must be <= initializedCount and < length
@@ -211,7 +213,8 @@ export function tryHandleArrayAssignment(
   }
 
   const value = interpret(rhs, env);
-  if (typeof value !== "number") throw new Error("Assigned value must be a number");
+  if (typeof value !== "number")
+    throw new Error("Assigned value must be a number");
   arrayVal.elements[index] = value;
   // If this is sequential initialization (index === initializedCount), increment
   if (index === arrayVal.initializedCount) {

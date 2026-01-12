@@ -58,11 +58,13 @@ export function tryHandleIfExpression(
   const { cond, thenPart, elsePart } = parseIfParts(ss);
   ensureNonEmptyPair(thenPart, elsePart, "Invalid if expression branches");
   const condValRaw = interpret(cond, env);
-  if (typeof condValRaw !== "number") throw new Error("If condition must be numeric");
+  if (typeof condValRaw !== "number")
+    throw new Error("If condition must be numeric");
   const condVal = condValRaw as number;
   if (condVal !== 0) {
     const res = interpret(thenPart, env);
-    if (typeof res !== "number") throw new Error("If branch must return number");
+    if (typeof res !== "number")
+      throw new Error("If branch must return number");
     return res as number;
   }
   const res = interpret(elsePart, env);
