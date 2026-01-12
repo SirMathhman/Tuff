@@ -8,17 +8,29 @@ export function isPointerValue(v: unknown): v is PointerValue {
   return hasTypeTag(v, "Pointer");
 }
 
+interface MutParseResult { mut: boolean; rest: string }
+
+function parseMutPrefix(s: string): MutParseResult {
+  if (s.startsWith("mut ")) return { mut: true, rest: s.slice(4).trim() };
+  return { mut: false, rest: s };
+}
 export function tryHandleAddressOf(
   s: string,
   env?: Env
 ): PointerValue | undefined {
   const ss = s.trim();
   if (!ss.startsWith("&")) return undefined;
-  const rest = ss.slice(1).trim();
+  let rest = ss.slice(1).trim();
+  const parsed = parseMutPrefix(rest);
+  const pointeeMutable = parsed.mut;
+  rest = parsed.rest;
   // only support simple identifier address-of for now
   if (!isIdentifierName(rest)) return undefined;
   if (!env || !env.has(rest)) throw new Error("Unknown identifier");
   const item = env.get(rest)!;
+  // if requested mut, ensure the target is mutable
+  if (pointeeMutable && !item.mutable)
+    throw new Error("Cannot take mutable reference to immutable variable");
   // return a pointer value referencing the env and name
   const rawType = item.type;
   const pointeeType = rawType === "Number" || !rawType ? "I32" : rawType;
@@ -27,6 +39,7 @@ export function tryHandleAddressOf(
     env: env,
     name: rest,
     pointeeType,
+    pointeeMutable,
   } as PointerValue;
 }
 
@@ -80,7 +93,8 @@ export function tryHandlePointerAssignment(
   if (!isPointerValue(item.value)) return undefined;
   const ptr = item.value as PointerValue;
   const pointeeItem = ptr.env.get(ptr.name)!;
-  if (!pointeeItem.mutable)
+  // require that the pointer itself is a mutable pointer (taken as &mut) or the pointee is mutable
+  if (!ptr.pointeeMutable && !pointeeItem.mutable)
     throw new Error("Cannot assign through pointer to immutable variable");
 
   const value = interpret(rhs, env);
@@ -102,12 +116,21 @@ export function handlePointerInitializer(
   if (annotatedType) {
     if (!annotatedType.startsWith("*"))
       throw new Error("Type mismatch: expected pointer type");
-    // ensure pointee type matches
-    const annotatedPointee = annotatedType.slice(1);
+    // parse annotated pointer mutability
+    let annotatedPointee = annotatedType.slice(1).trim();
+    const parsed = parseMutPrefix(annotatedPointee);
+    const annotatedMut = parsed.mut;
+    annotatedPointee = parsed.rest;
     if (annotatedPointee !== ptr.pointeeType)
       throw new Error("Pointer type mismatch");
+    if (annotatedMut !== !!ptr.pointeeMutable)
+      throw new Error("Pointer mutability mismatch");
   }
-  const item: EnvItem = { value: ptr, mutable, type: annotatedType || `*${ptr.pointeeType}` } as EnvItem;
+  const item: EnvItem = {
+    value: ptr,
+    mutable,
+    type: annotatedType || `*${ptr.pointeeType}`,
+  } as EnvItem;
   env.set(name, item);
   return true;
 }

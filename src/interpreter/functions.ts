@@ -131,3 +131,68 @@ export function tryHandleFnExpression(
   if (trailing === "") return NaN;
   return interpret(trailing, actualEnv);
 }
+
+function parseMethodCall(s: string): MethodCallParse | undefined {
+  let depth = 0;
+  let lastDot = -1;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === "(" || ch === "{" || ch === "[") depth++;
+    else if (ch === ")" || ch === "}" || ch === "]") depth--;
+    else if (ch === "." && depth === 0) lastDot = i;
+  }
+  if (lastDot === -1) return undefined;
+
+  const left = s.slice(0, lastDot).trim();
+  const right = s.slice(lastDot + 1).trim();
+
+  const idRes = parseIdentifierAt(right, 0);
+  if (!idRes) return undefined;
+  const methodName = idRes.name;
+
+  const rest = sliceTrim(right, idRes.next);
+  if (!rest.startsWith("(")) return undefined;
+  const close = findMatchingParen(rest, 0);
+  if (close < 0) return undefined;
+  const argsContent = rest.slice(1, close).trim();
+  const args = splitTopLevelOrEmpty(argsContent, ",");
+  const trailing = rest.slice(close + 1).trim();
+  if (trailing !== "") return undefined;
+  return { left, method: methodName, args };
+}
+
+interface MethodCallParse {
+  left: string;
+  method: string;
+  args: string[];
+}
+
+export function tryHandleMethodCall(s: string, env?: Env): number | undefined {
+  const parsed = parseMethodCall(s);
+  if (!parsed) return undefined;
+  const { left, method, args } = parsed;
+
+  if (!env || !env.has(method)) throw new Error("Unknown identifier");
+  const item = env.get(method)!;
+  if (typeof item.value === "number") throw new Error("Not a function");
+  const func = item.value as FunctionValue;
+
+  const receiverVal = interpret(left, env);
+
+  if (func.params.length !== args.length + 1)
+    throw new Error("Argument count mismatch");
+
+  const argVals = interpretAll(args, interpret, env);
+  const callEnv = new Map<string, EnvItem>(func.env);
+  callEnv.set(func.params[0], {
+    value: receiverVal,
+    mutable: false,
+  } as EnvItem);
+  for (let i = 0; i < args.length; i++) {
+    callEnv.set(func.params[i + 1], {
+      value: argVals[i],
+      mutable: false,
+    } as EnvItem);
+  }
+  return handleYieldValue(() => evalBlock(func.body, callEnv));
+}

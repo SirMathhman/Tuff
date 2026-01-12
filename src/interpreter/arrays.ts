@@ -10,7 +10,9 @@ import {
 import { hasTypeTag } from "./shared";
 
 export function isArrayValue(v: unknown): v is ArrayValue {
-  return hasTypeTag(v, "Array") && Array.isArray((v as Partial<ArrayValue>).elements);
+  return (
+    hasTypeTag(v, "Array") && Array.isArray((v as Partial<ArrayValue>).elements)
+  );
 }
 
 export interface ArrayTypeInfo {
@@ -222,7 +224,8 @@ export function createUninitializedArrayFromType(
   env: Env
 ): boolean {
   if (!annotatedType.startsWith("[")) return false;
-  const { elementType, initializedCount, length } = parseArrayType(annotatedType);
+  const { elementType, initializedCount, length } =
+    parseArrayType(annotatedType);
   if (initializedCount !== 0) {
     throw new Error(
       `Array declaration without initializer must have init=0, got ${annotatedType}`

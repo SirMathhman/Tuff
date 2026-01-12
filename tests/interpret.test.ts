@@ -376,8 +376,27 @@ describe("interpret - pointers", () => {
     expect(interpret("let x = 100; let y : *I32 = &x; *y")).toBe(100);
   });
 
+  it("supports method calls with this param", () => {
+    expect(interpret("fn addOnce(this : I32) => this + 1; 100.addOnce()")).toBe(
+      101
+    );
+    expect(
+      interpret("let x = 100; fn addThis(this : I32) => this + 2; x.addThis()")
+    ).toBe(102);
+  });
+
+  it("supports this.x to access local variables", () => {
+    expect(interpret("let x = 100; this.x")).toBe(100);
+  });
+
   it("supports assignment through pointer to mutable variable", () => {
     expect(interpret("let mut x = 0; let y : *I32 = &x; *y = 5; x")).toBe(5);
+  });
+
+  it("supports mutable pointer &mut and *mut annotations", () => {
+    expect(
+      interpret("let mut x = 0; let y : *mut I32 = &mut x; *y = 100; x")
+    ).toBe(100);
   });
 
   it("throws when assigning through pointer to immutable variable", () => {

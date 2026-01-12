@@ -1,7 +1,11 @@
 import type { Env } from "./types";
 import { blockShadow } from "./env";
 import { tryHandleAddition, tryHandleComparison } from "./arithmetic";
-import { tryHandleFnExpression, tryHandleCall } from "./functions";
+import {
+  tryHandleFnExpression,
+  tryHandleCall,
+  tryHandleMethodCall,
+} from "./functions";
 import { tryHandleDerefExpression } from "./pointers";
 import { tryHandleIfExpression } from "./ifExpression";
 import { tryHandleMatchExpression } from "./matchExpression";
@@ -47,6 +51,9 @@ export function interpret(input: string, env?: Env): number {
   const fnExprResult = tryHandleFnExpression(s, env);
   if (fnExprResult !== undefined) return fnExprResult;
 
+  const methodCallResult = tryHandleMethodCall(s, env);
+  if (methodCallResult !== undefined) return methodCallResult;
+
   const callResult = tryHandleCall(s, env);
   if (callResult !== undefined) return callResult;
 
@@ -77,6 +84,24 @@ function tryHandleFieldAccess(s: string, env?: Env): number | undefined {
   const after = s.slice(dotIdx + 1).trim();
 
   if (!isIdentifierName(after)) return undefined;
+
+  // Special case: this.field -> lookup variable in current env
+  if (before === "this") {
+    if (!env) throw new Error("Unknown identifier");
+    if (!env.has(after)) throw new Error("Unknown identifier");
+    const item = env.get(after)!;
+    if (typeof item.value === "number") return item.value;
+    // if it's a struct, support field access too
+    if (isStructValue(item.value)) {
+      const struct = item.value;
+      const idx = ensureIndexFound(
+        struct.fields.indexOf(after),
+        `Field ${after} not found in struct`
+      );
+      return struct.values[idx];
+    }
+    return undefined;
+  }
 
   // Check if before is a simple identifier
   if (!isIdentifierName(before)) return undefined;

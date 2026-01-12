@@ -17,6 +17,7 @@ export interface PointerValue {
   env: Env;
   name: string;
   pointeeType?: string;
+  pointeeMutable?: boolean;
 }
 
 export interface StructValue {

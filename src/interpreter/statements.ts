@@ -24,7 +24,10 @@ import {
   tryHandleArrayAssignment,
   createUninitializedArrayFromType,
 } from "./arrays";
-import { tryHandlePointerAssignment, handlePointerInitializer } from "./pointers";
+import {
+  tryHandlePointerAssignment,
+  handlePointerInitializer,
+} from "./pointers";
 
 // Exception thrown by yield statements to break out of blocks early
 export class YieldValue extends Error {
@@ -251,9 +254,6 @@ export function evalBlock(s: string, envIn?: Env): number {
   return last;
 }
 
-
-
-
 // eslint-disable-next-line max-lines-per-function
 function handleLetStatement(
   stmt: string,
@@ -289,12 +289,24 @@ function handleLetStatement(
 
     // Pointer initializer e.g., let y : *I32 = &x;
     if (
-      handlePointerInitializer(initializer, annotatedType || undefined, name, mutable, env)
+      handlePointerInitializer(
+        initializer,
+        annotatedType || undefined,
+        name,
+        mutable,
+        env
+      )
     ) {
       return NaN;
     }
 
-    return handleSimpleInitializer(initializer, annotatedType, name, mutable, env);
+    return handleSimpleInitializer(
+      initializer,
+      annotatedType,
+      name,
+      mutable,
+      env
+    );
   }
 
   // an uninitialized declaration (no initializer):
@@ -329,7 +341,8 @@ function handleSimpleInitializer(
   const initType = inferTypeFromExpr(initializer, env);
   const val = interpret(initializer, env);
 
-  if (annotatedType) validateAnnotatedTypeCompatibility(annotatedType, initType);
+  if (annotatedType)
+    validateAnnotatedTypeCompatibility(annotatedType, initType);
 
   const item = {
     value: val,
