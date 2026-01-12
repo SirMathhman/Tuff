@@ -19,8 +19,9 @@ import {
 } from "./shared";
 import { splitNumberAndSuffix, validateNumberSuffix } from "./numbers";
 import { isStructValue } from "./structs";
-import { isArrayValue, tryHandleArrayIndexing } from "./arrays";
+import { isArrayValue, tryHandleArrayIndexing, isSliceValue } from "./arrays";
 import { isPointerValue } from "./pointers";
+import type { ArrayValue, SliceValue } from "./types";
 
 function tryHandleTopLevel(s: string, env?: Env): unknown | undefined {
   const topParts = splitTopLevel(s, ";");
@@ -34,7 +35,8 @@ function tryHandleTopLevel(s: string, env?: Env): unknown | undefined {
   }
 
   // `return` used at top-level is invalid
-  if (s.trim().startsWith("return")) throw new Error("Return used outside function");
+  if (s.trim().startsWith("return"))
+    throw new Error("Return used outside function");
 
   return undefined;
 }
@@ -124,15 +126,50 @@ function tryHandleFieldAccess(s: string, env?: Env): number | undefined {
   if (!env || !env.has(before)) return undefined;
   const item = env.get(before)!;
 
-  if (!isStructValue(item.value)) return undefined;
+  // Support struct fields and slice/array fields (.length, .init)
+  const structField = tryHandleStructFieldAccess(item.value, after);
+  if (structField !== undefined) return structField;
 
-  const struct = item.value;
+  const arrayOrSliceField = tryHandleArrayOrSliceFieldAccess(item.value, after);
+  if (arrayOrSliceField !== undefined) return arrayOrSliceField;
+
+  return undefined;
+}
+
+function tryHandleStructFieldAccess(
+  val: unknown,
+  field: string
+): number | undefined {
+  if (!isStructValue(val)) return undefined;
+  const struct = val;
   const idx = ensureIndexFound(
-    struct.fields.indexOf(after),
-    `Field ${after} not found in struct`
+    struct.fields.indexOf(field),
+    `Field ${field} not found in struct`
   );
-
   return struct.values[idx];
+}
+
+function tryHandleArrayOrSliceFieldAccess(
+  val: unknown,
+  field: string
+): number | undefined {
+  // arrays: .length and .init
+  if (isArrayValue(val)) {
+    const arr = val as ArrayValue;
+    if (field === "length") return arr.length;
+    if (field === "init") return arr.initializedCount;
+    return undefined;
+  }
+
+  // slices
+  if (isSliceValue(val)) {
+    const sv = val as SliceValue;
+    if (field === "length") return sv.length;
+    if (field === "init") return sv.backing.initializedCount;
+    return undefined;
+  }
+
+  return undefined;
 }
 
 // eslint-disable-next-line complexity

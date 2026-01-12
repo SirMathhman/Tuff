@@ -12,6 +12,14 @@ export interface ArrayValue {
   initializedCount: number;
 }
 
+export interface SliceValue {
+  type: "Slice";
+  elementType: string;
+  backing: ArrayValue;
+  start: number;
+  length: number;
+}
+
 export interface PointerValue {
   type: "Pointer";
   env: Env;
@@ -34,7 +42,13 @@ export interface StructDef {
 }
 
 export interface EnvItem {
-  value: number | FunctionValue | StructValue | ArrayValue | PointerValue;
+  value:
+    | number
+    | FunctionValue
+    | StructValue
+    | ArrayValue
+    | PointerValue
+    | SliceValue;
   mutable: boolean;
   type?: string;
 }

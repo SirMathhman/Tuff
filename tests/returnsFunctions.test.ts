@@ -55,11 +55,9 @@ describe("interpret - functions returning functions", () => {
   });
 
   it("return bubbles out of nested blocks", () => {
-    expect(
-      interpret(
-        "fn f() => { { if (true) return 10; } 20 }; f()"
-      )
-    ).toBe(10);
+    expect(interpret("fn f() => { { if (true) return 10; } 20 }; f()")).toBe(
+      10
+    );
   });
 
   it("return can return function values", () => {

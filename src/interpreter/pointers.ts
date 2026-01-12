@@ -1,8 +1,9 @@
-import type { Env, PointerValue } from "./types";
+import type { Env, PointerValue, ArrayValue } from "./types";
 import { isIdentifierName } from "./shared";
 import type { EnvItem } from "./types";
 
-import { hasTypeTag } from "./shared";
+import { hasTypeTag, ensureExistsInEnv } from "./shared";
+import { isArrayValue } from "./arrays";
 
 export function isPointerValue(v: unknown): v is PointerValue {
   return hasTypeTag(v, "Pointer");
@@ -118,6 +119,18 @@ export function handlePointerInitializer(
   if (!initializer.startsWith("&")) return false;
   const ptr = tryHandleAddressOf(initializer, env);
   if (!ptr) throw new Error("Invalid address-of expression");
+
+  // Support immutable slice creation when annotated type is *[T]
+  if (annotatedType && annotatedType.startsWith("*[")) {
+    // parse element type from annotation e.g., *[I32]
+    const inner = annotatedType.slice(2).trim();
+    if (!inner.endsWith("]")) throw new Error("Invalid slice type annotation");
+    const elemType = inner.slice(0, -1).trim();
+
+    createSliceFromArray(ptr, elemType, name, annotatedType, env);
+    return true;
+  }
+
   if (annotatedType) {
     if (!annotatedType.startsWith("*"))
       throw new Error("Type mismatch: expected pointer type");
@@ -131,11 +144,41 @@ export function handlePointerInitializer(
     if (annotatedMut !== !!ptr.pointeeMutable)
       throw new Error("Pointer mutability mismatch");
   }
-  const item: EnvItem = {
+  const itemOut: EnvItem = {
     value: ptr,
     mutable,
     type: annotatedType || `*${ptr.pointeeType}`,
   } as EnvItem;
-  env.set(name, item);
+  env.set(name, itemOut);
   return true;
 }
+
+function createSliceFromArray(
+  ptr: PointerValue,
+  elemType: string,
+  name: string,
+  annotatedType: string,
+  env: Env
+) {
+  ensureExistsInEnv(ptr.name, env);
+  const item = env.get(ptr.name)!;
+  if (!isArrayValue(item.value)) throw new Error("Slice initializer must reference an array");
+  const arr = item.value as ArrayValue;
+  if (arr.elementType !== elemType) throw new Error("Slice type mismatch");
+
+  const slice = {
+    type: "Slice",
+    elementType: elemType,
+    backing: arr,
+    start: 0,
+    length: arr.length,
+  } as const;
+
+  const out: EnvItem = {
+    value: slice as unknown as EnvItem["value"],
+    mutable: false,
+    type: annotatedType,
+  } as EnvItem;
+  env.set(name, out);
+}
+

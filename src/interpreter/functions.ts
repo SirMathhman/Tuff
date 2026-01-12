@@ -16,6 +16,7 @@ import {
   topLevelSplitTrim,
   isIdentifierName,
   interpretAllAny,
+  ensureExistsInEnv,
 } from "./shared";
 import { evalBlock, handleYieldValue } from "./statements";
 import { isReturnValue, ReturnValue } from "./returns";
@@ -189,8 +190,8 @@ export function tryHandleCall(s: string, env?: Env): unknown | undefined {
   const trailing = rest.slice(close + 1).trim();
   if (trailing !== "") return undefined; // not a pure call expression
 
-  if (!env || !env.has(idRes.name)) throw new Error("Unknown identifier");
-  const item = env.get(idRes.name)!;
+  ensureExistsInEnv(idRes.name, env);
+  const item = env!.get(idRes.name)!;
   if (typeof item.value === "number") throw new Error("Not a function");
   const func = item.value as FunctionValue;
   if (func.params.length !== args.length)

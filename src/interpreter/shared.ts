@@ -1,4 +1,4 @@
-import type { Env, EnvItem, ArrayValue, StructValue } from "./types";
+import type { Env, EnvItem, ArrayValue, StructValue, SliceValue } from "./types";
 import { splitNumberAndSuffix } from "./numbers";
 import {
   parseAddressOfType,
@@ -32,6 +32,18 @@ export function deepCopyValue(value: EnvItem["value"]): EnvItem["value"] {
       return {
         fields: [...struct.fields],
         values: [...struct.values],
+      };
+    }
+
+    // SliceValue references a backing ArrayValue; shallow copy the slice object
+    if (hasTypeTag(value, "Slice")) {
+      const sv = value as SliceValue;
+      return {
+        type: "Slice",
+        elementType: sv.elementType,
+        backing: sv.backing,
+        start: sv.start,
+        length: sv.length,
       };
     }
 
@@ -199,6 +211,9 @@ export function findTopLevel(
   return undefined;
 }
 
+export function ensureExistsInEnv(name: string, env?: Env) {
+  if (!env || !env.has(name)) throw new Error("Unknown identifier");
+}
 export function isIdentifierStartCode(c: number): boolean {
   return (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95;
 }

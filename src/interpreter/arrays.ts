@@ -1,4 +1,4 @@
-import type { Env, ArrayValue } from "./types";
+import type { Env, ArrayValue, SliceValue } from "./types";
 import {
   extractPureBracketContent,
   findMatchingParen,
@@ -12,6 +12,12 @@ import { hasTypeTag } from "./shared";
 export function isArrayValue(v: unknown): v is ArrayValue {
   return (
     hasTypeTag(v, "Array") && Array.isArray((v as Partial<ArrayValue>).elements)
+  );
+}
+
+export function isSliceValue(v: unknown): v is SliceValue {
+  return (
+    hasTypeTag(v, "Slice") && typeof (v as Partial<SliceValue>).backing === "object"
   );
 }
 
@@ -128,29 +134,44 @@ export function tryHandleArrayIndexing(
 
   // Evaluate the target. If it's an identifier, look it up.
   let arrayVal: ArrayValue | undefined;
+  let sliceVal: SliceValue | undefined;
   if (env && env.has(before)) {
     const item = env.get(before)!;
     if (isArrayValue(item.value)) {
       arrayVal = item.value;
+    } else if (isSliceValue(item.value)) {
+      sliceVal = item.value as SliceValue;
     }
   }
 
-  if (!arrayVal) return undefined;
+  if (!arrayVal && !sliceVal) return undefined;
 
   const indexVal = interpret(indexExpr, env);
   if (typeof indexVal !== "number")
     throw new Error("Index expression must be a number");
   const index = indexVal as number;
 
+  if (sliceVal) return handleSliceIndexRead(sliceVal, index);
   // RHS read: must be < initializedCount
   validateIndexBounds(
     index,
     0,
-    arrayVal.initializedCount,
-    `Index out of bounds or uninitialized: ${index} (initializedCount: ${arrayVal.initializedCount})`
+    arrayVal!.initializedCount,
+    `Index out of bounds or uninitialized: ${index} (initializedCount: ${arrayVal!.initializedCount})`
   );
 
-  return arrayVal.elements[index];
+  return arrayVal!.elements[index];
+}
+
+function handleSliceIndexRead(sliceVal: SliceValue, index: number): number {
+  validateIndexBounds(index, 0, sliceVal.length, `Index out of bounds: ${index} (length: ${sliceVal.length})`);
+  validateIndexBounds(
+    index + sliceVal.start,
+    0,
+    sliceVal.backing.initializedCount,
+    `Index out of bounds or uninitialized: ${index} (initializedCount: ${sliceVal.backing.initializedCount})`
+  );
+  return sliceVal.backing.elements[index + sliceVal.start];
 }
 
 function validateIndexBounds(
@@ -186,6 +207,11 @@ export function tryHandleArrayAssignment(
 
   if (!env.has(arrayName)) return undefined;
   const item = env.get(arrayName)!;
+
+  if (isSliceValue(item.value)) {
+    // slices are immutable for now
+    throw new Error("Cannot assign to slice");
+  }
 
   if (!isArrayValue(item.value)) return undefined;
   if (!item.mutable) {
