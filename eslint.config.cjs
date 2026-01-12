@@ -43,6 +43,7 @@ module.exports = [
         },
       ],
       "no-eval": "error",
+      "max-depth": ["error", 4],
     },
   },
 ];
