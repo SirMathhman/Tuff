@@ -4,9 +4,9 @@ import {
   findMatchingParen,
   findTopLevel,
   isDigit,
-  isIdentifierPartCode,
   isIdentifierStartCode,
   isPlusMinus,
+  parseIdentifierWithFieldAccess,
   skipSpacesFrom,
 } from "./shared";
 import {
@@ -137,6 +137,7 @@ function parseNumberTokenAt(s: string, pos: number): ParseResult | undefined {
   return { token: s.slice(start, j).trim(), next: j } as ParseResult;
 }
 
+// eslint-disable-next-line complexity
 function tokenizeAddSub(s: string): string[] | undefined {
   let i = skipSpacesFrom(s, 0);
   const n = s.length;
@@ -152,9 +153,8 @@ function tokenizeAddSub(s: string): string[] | undefined {
         tokens.push(s.slice(i, close + 1).trim());
         i = close + 1;
       } else if (isIdentifierStartCode(s.charCodeAt(i))) {
-        // parse identifier tokens as operands
-        let j = i + 1;
-        while (j < n && isIdentifierPartCode(s.charCodeAt(j))) j++;
+        // parse identifier tokens as operands, including field access (dots)
+        const j = parseIdentifierWithFieldAccess(s, i);
         tokens.push(s.slice(i, j).trim());
         i = j;
       } else {

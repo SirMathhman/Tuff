@@ -5,8 +5,14 @@ import { tryHandleFnExpression, tryHandleCall } from "./functions";
 import { tryHandleIfExpression } from "./ifExpression";
 import { tryHandleMatchExpression } from "./matchExpression";
 import { evalBlock, handleYieldValue } from "./statements";
-import { isIdentifierName, splitTopLevel, stripOuterParens } from "./shared";
+import {
+  ensureIndexFound,
+  isIdentifierName,
+  splitTopLevel,
+  stripOuterParens,
+} from "./shared";
 import { splitNumberAndSuffix, validateNumberSuffix } from "./numbers";
+import { isStructValue } from "./structs";
 
 export function interpret(input: string, env?: Env): number {
   let s = input.trim();
@@ -19,6 +25,9 @@ export function interpret(input: string, env?: Env): number {
   if (topParts.length > 1 || s.trim().startsWith("let ")) {
     return handleYieldValue(() => evalBlock(s, env));
   }
+
+  const fieldAccessResult = tryHandleFieldAccess(s, env);
+  if (fieldAccessResult !== undefined) return fieldAccessResult;
 
   const ifResult = tryHandleIfExpression(s, env);
   if (ifResult !== undefined) return ifResult;
@@ -50,6 +59,34 @@ function parseBooleanLiteral(id: string): number | undefined {
   return undefined;
 }
 
+function tryHandleFieldAccess(s: string, env?: Env): number | undefined {
+  // Look for pattern: identifier.field or expression.field
+  const dotIdx = s.lastIndexOf(".");
+  if (dotIdx <= 0) return undefined;
+
+  const before = s.slice(0, dotIdx).trim();
+  const after = s.slice(dotIdx + 1).trim();
+
+  if (!isIdentifierName(after)) return undefined;
+
+  // Check if before is a simple identifier
+  if (!isIdentifierName(before)) return undefined;
+
+  if (!env || !env.has(before)) return undefined;
+  const item = env.get(before)!;
+
+  if (!isStructValue(item.value)) return undefined;
+
+  const struct = item.value;
+  const idx = ensureIndexFound(
+    struct.fields.indexOf(after),
+    `Field ${after} not found in struct`
+  );
+
+  return struct.values[idx];
+}
+
+// eslint-disable-next-line complexity
 function tryParseNumberOrIdentifier(s: string, env?: Env): number | undefined {
   const { numStr, rest } = splitNumberAndSuffix(s);
   if (numStr === "") {
@@ -67,6 +104,9 @@ function tryParseNumberOrIdentifier(s: string, env?: Env): number | undefined {
         const item = env.get(id)!;
         if (item.type === "__deleted__") throw new Error("Unknown identifier");
         if (typeof item.value === "number") return item.value;
+        // If it's a struct value, we can't return it as a number, so return undefined
+        // and let other handlers (like field access) deal with it
+        if (isStructValue(item.value)) return undefined;
         throw new Error("Unknown identifier");
       }
       throw new Error("Unknown identifier");

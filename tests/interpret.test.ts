@@ -274,3 +274,27 @@ describe("interpret - block scoping", () => {
     expect(interpret("let x = { if (true) yield 100; 10 }; x")).toBe(100);
   });
 });
+
+describe("interpret - structs", () => {
+  it("supports struct definition and instantiation with field access", () => {
+    expect(
+      interpret(
+        "struct Point { x : I32, y : I32 } let point : Point = { 3, 4 }; point.x + point.y"
+      )
+    ).toBe(7);
+  });
+
+  it("supports accessing individual struct fields", () => {
+    expect(
+      interpret(
+        "struct Point { x : I32, y : I32 } let p : Point = { 10, 20 }; p.x"
+      )
+    ).toBe(10);
+  });
+
+  it("throws when struct field count mismatch", () => {
+    expect(() =>
+      interpret("struct Point { x : I32, y : I32 } let p : Point = { 10 }; p.x")
+    ).toThrow(Error);
+  });
+});

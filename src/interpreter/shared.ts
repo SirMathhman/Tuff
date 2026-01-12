@@ -44,11 +44,15 @@ export function isPlusMinus(ch: string): boolean {
   return ch === "+" || ch === "-";
 }
 
-export function skipSpacesFrom(s: string, pos: number): number {
+export function skipChar(s: string, pos: number, char: string): number {
   let i = pos;
   const n = s.length;
-  while (i < n && s[i] === " ") i++;
+  while (i < n && s[i] === char) i++;
   return i;
+}
+
+export function skipSpacesFrom(s: string, pos: number): number {
+  return skipChar(s, pos, " ");
 }
 
 export function splitTopLevel(s: string, sep: string): string[] {
@@ -162,16 +166,21 @@ export function startsWithFor(s: string): boolean {
   return startsWithKeyword(s, "for");
 }
 
-export function ensureExists(idx: number, msg: string): void {
+export function ensureIndexFound(idx: number, msg: string): number {
   if (idx === -1) throw new Error(msg);
+  return idx;
 }
 
-export function sliceTrimRange(s: string, a: number, b: number): string {
-  return s.slice(a, b).trim();
+export function ensureExists(idx: number, msg: string): void {
+  ensureIndexFound(idx, msg);
 }
 
 export function ensureCloseParen(close: number, msg: string): void {
   if (close < 0) throw new Error(msg);
+}
+
+export function sliceTrimRange(s: string, a: number, b: number): string {
+  return s.slice(a, b).trim();
 }
 
 export function ensureStartsWith(s: string, prefix: string, msg: string) {
@@ -190,7 +199,7 @@ export function ensureUniqueDeclaration(
   localDeclared: Set<string>,
   name: string
 ) {
-  if (localDeclared.has(name)) throw new Error("Duplicate declaration");
+  ensureUnique(name, localDeclared, "Duplicate declaration");
   localDeclared.add(name);
 }
 
@@ -199,21 +208,90 @@ export interface MutPrefixResult {
   rest: string;
 }
 
+export interface FieldDefResult {
+  name: string;
+  type: string;
+}
+
 export function parseMutPrefix(s: string): MutPrefixResult {
   if (s.startsWith("mut "))
     return { mutable: true, rest: sliceAfterKeyword(s, 4) } as MutPrefixResult;
   return { mutable: false, rest: s } as MutPrefixResult;
 }
 
+export function ensureIdentifier(name: string, msg: string): string {
+  if (!isIdentifierName(name)) throw new Error(msg);
+  return name;
+}
+
+export interface Collection {
+  has(item: string): boolean;
+}
+
+export function ensureUnique(
+  item: string,
+  collection: Collection | string[],
+  msg: string
+): void {
+  const exists = Array.isArray(collection)
+    ? collection.includes(item)
+    : collection.has(item);
+  if (exists) throw new Error(msg);
+}
+
 export function extractParenContent(stmt: string, kind: string) {
-  const paren = stmt.indexOf("(");
-  if (paren === -1) throw new Error(`Invalid ${kind} statement`);
+  const paren = ensureIndexFound(
+    stmt.indexOf("("),
+    `Invalid ${kind} statement`
+  );
   const close = findMatchingParen(stmt, paren);
-  if (close < 0) throw new Error(`Unterminated ${kind} condition`);
+  ensureCloseParen(close, `Unterminated ${kind} condition`);
   const content = stmt.slice(paren + 1, close);
   return { content, paren, close };
 }
 
 export function getEnvOrNew(env?: Env): Env {
   return env ?? new Map();
+}
+
+export function splitTopLevelOrEmpty(s: string, delimiter: string): string[] {
+  return s === "" ? [] : topLevelSplitTrim(s, delimiter);
+}
+
+export function interpretAll(
+  items: string[],
+  interp: (s: string, env?: Env) => number,
+  env?: Env
+): number[] {
+  return items.map((item) => interp(item, env));
+}
+
+export function parseIdentifierWithFieldAccess(
+  s: string,
+  start: number
+): number {
+  const n = s.length;
+  let j = start + 1;
+
+  function skipIdentifierPart() {
+    while (j < n && isIdentifierPartCode(s.charCodeAt(j))) j++;
+  }
+
+  skipIdentifierPart();
+  // handle field access with dots (e.g., point.x)
+  while (j < n && s[j] === ".") {
+    j = skipChar(s, j, ".");
+    skipIdentifierPart();
+  }
+  return j;
+}
+
+export function parseFieldDef(fieldStr: string): FieldDefResult {
+  const colonIdx = ensureIndexFound(
+    fieldStr.indexOf(":"),
+    "Invalid field definition"
+  );
+  const name = fieldStr.slice(0, colonIdx).trim();
+  const type = fieldStr.slice(colonIdx + 1).trim();
+  return { name, type };
 }

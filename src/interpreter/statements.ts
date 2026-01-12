@@ -13,6 +13,11 @@ import {
 import { splitNumberAndSuffix } from "./numbers";
 import { handleFnStatement } from "./functions";
 import { tryHandleControlFlow } from "./controlFlow";
+import {
+  handleStructStatement,
+  tryHandleStructLiteral,
+  getStructDef,
+} from "./structs";
 
 // Exception thrown by yield statements to break out of blocks early
 export class YieldValue extends Error {
@@ -150,6 +155,7 @@ function extractAnnotationAndInitializer(str: string): AnnotationResult {
   return { annotatedType, initializer: s } as AnnotationResult;
 }
 
+// eslint-disable-next-line complexity, max-lines-per-function
 export function evalBlock(s: string, envIn?: Env): number {
   const trimmed = s.trim();
   // If this eval is for a brace-delimited block (e.g., "{ ... }"), create
@@ -194,6 +200,22 @@ export function evalBlock(s: string, envIn?: Env): number {
       last = handleLetStatement(stmt, env, localDeclared);
     } else if (stmt.startsWith("fn ")) {
       last = handleFnStatement(stmt, env, localDeclared);
+    } else if (stmt.startsWith("struct ")) {
+      const result = handleStructStatement(stmt);
+      if (result) {
+        // If there's more content after the struct definition, process it
+        const remaining = stmt.slice(result.nextPos).trim();
+        if (remaining !== "") {
+          // Re-process the remaining part as a statement
+          if (remaining.startsWith("let ")) {
+            last = handleLetStatement(remaining, env, localDeclared);
+          } else {
+            last = processNonLetStatement(remaining, env);
+          }
+        } else {
+          last = NaN;
+        }
+      }
     } else if (stmt.startsWith("yield ")) {
       const expr = sliceTrim(stmt, 6);
       last = interpret(expr, env);
@@ -209,6 +231,7 @@ export function evalBlock(s: string, envIn?: Env): number {
   return last;
 }
 
+// eslint-disable-next-line max-lines-per-function
 function handleLetStatement(
   stmt: string,
   env: Env,
@@ -227,6 +250,28 @@ function handleLetStatement(
   const rest2 = sliceTrim(rest, nameRes.next);
   const { annotatedType, initializer } = extractAnnotationAndInitializer(rest2);
   if (initializer !== "") {
+    // Check if this is a struct initialization
+    if (annotatedType) {
+      const structDef = getStructDef(annotatedType);
+      if (structDef) {
+        const structVal = tryHandleStructLiteral(
+          initializer,
+          annotatedType,
+          env,
+          interpret
+        );
+        if (structVal) {
+          const item = {
+            value: structVal,
+            mutable,
+            type: annotatedType,
+          } as EnvItem;
+          env.set(name, item);
+          return NaN; // struct initialization returns NaN
+        }
+      }
+    }
+
     const initType = inferTypeFromExpr(initializer, env);
     const val = interpret(initializer, env);
 

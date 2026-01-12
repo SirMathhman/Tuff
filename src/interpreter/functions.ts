@@ -3,14 +3,17 @@ import { interpret } from "./interpret";
 import {
   ensure,
   ensureCloseParen,
+  ensureIdentifier,
+  ensureIndexFound,
   ensureUniqueDeclaration,
   extractParenContent,
   findMatchingParen,
-  isIdentifierName,
+  interpretAll,
+  parseFieldDef,
   parseIdentifierAt,
   sliceTrim,
+  splitTopLevelOrEmpty,
   startsWithKeyword,
-  topLevelSplitTrim,
 } from "./shared";
 import { evalBlock, handleYieldValue } from "./statements";
 
@@ -32,16 +35,16 @@ export function handleFnStatement(
     .map((r) => r.trim())
     .filter((r) => r !== "");
   const params = paramsRaw.map((p) => {
-    const colonIdx = p.indexOf(":");
-    const pname = colonIdx === -1 ? p : p.slice(0, colonIdx).trim();
-    if (!isIdentifierName(pname)) throw new Error("Invalid fn parameter");
-    return pname;
+    const { name } = parseFieldDef(p);
+    return ensureIdentifier(name, "Invalid fn parameter");
   });
 
   let restAfterParams = rest.slice(close + 1).trim();
   // accept optional return type annotation
-  const arrowIdx = restAfterParams.indexOf("=>");
-  if (arrowIdx === -1) throw new Error("Invalid fn declaration");
+  const arrowIdx = ensureIndexFound(
+    restAfterParams.indexOf("=>"),
+    "Invalid fn declaration"
+  );
   restAfterParams = sliceTrim(restAfterParams, arrowIdx + 2);
 
   let body = restAfterParams;
@@ -58,8 +61,7 @@ export function handleFnStatement(
 }
 
 function extractAfterArrow(s: string, msg: string) {
-  const arrowIdx = s.indexOf("=>");
-  ensure(arrowIdx !== -1, msg);
+  const arrowIdx = ensureIndexFound(s.indexOf("=>"), msg);
   return sliceTrim(s, arrowIdx + 2);
 }
 
@@ -71,7 +73,7 @@ export function tryHandleCall(s: string, env?: Env): number | undefined {
   const close = findMatchingParen(rest, 0);
   if (close < 0) throw new Error("Unterminated call");
   const argsContent = rest.slice(1, close).trim();
-  const args = argsContent === "" ? [] : topLevelSplitTrim(argsContent, ",");
+  const args = splitTopLevelOrEmpty(argsContent, ",");
   const trailing = rest.slice(close + 1).trim();
   if (trailing !== "") return undefined; // not a pure call expression
 
@@ -82,7 +84,7 @@ export function tryHandleCall(s: string, env?: Env): number | undefined {
   if (func.params.length !== args.length)
     throw new Error("Argument count mismatch");
 
-  const argVals = args.map((a) => interpret(a, env));
+  const argVals = interpretAll(args, interpret, env);
   const callEnv = new Map<string, EnvItem>(func.env);
   // bind params
   for (let i = 0; i < func.params.length; i++) {
