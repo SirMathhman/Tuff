@@ -304,17 +304,51 @@ describe("interpret - arrays", () => {
     expect(interpret("let x : [I32; 3; 3] = [1, 2, 3]; x[0] + x[1]")).toBe(3);
   });
 
-  it("supports out-of-order array indexing", () => {
-    expect(interpret("let x : [I32; 3; 3] = [1, 2, 3]; x[2] + x[0]")).toBe(4);
+  it("throws on invalid partial initialization declaration", () => {
+    expect(() => interpret("let x : [I32; 2; 4] = [1, 2]; x[0]")).toThrow(Error);
   });
 
-  it("supports default initialization of remaining elements", () => {
-    expect(interpret("let x : [I32; 1; 3] = [1]; x[0] + x[1] + x[2]")).toBe(1);
+  it("throws on incomplete array literal", () => {
+    expect(() => interpret("let x : [I32; 2; 2] = [1]; x[0]")).toThrow(Error);
   });
 
-  it("throws on array index out of bounds", () => {
-    expect(() => interpret("let x : [I32; 3; 3] = [1, 2, 3]; x[3]")).toThrow(
-      Error
-    );
+  it("throws on too many elements in literal", () => {
+    expect(() => interpret("let x : [I32; 3; 3] = [1,2,3,4]; x[0]")).toThrow(Error);
+  });
+
+  it("throws when reading uninitialized element", () => {
+    expect(() => interpret("let mut a : [I32; 0; 3]; a[0]")).toThrow(Error);
+  });
+
+  it("throws on out of bounds read", () => {
+    expect(() => interpret("let x : [I32; 3; 3] = [1, 2, 3]; x[3]")).toThrow(Error);
+  });
+
+  it("throws when assigning to non-mutable array", () => {
+    expect(() => interpret("let a : [I32; 0; 2]; a[0] = 10; a[0]")).toThrow(Error);
+  });
+
+  it("supports sequential initialization", () => {
+    expect(interpret("let mut a : [I32; 0; 2]; a[0] = 10; a[1] = 20; a[0] + a[1]")).toBe(30);
+  });
+
+  it("throws on out-of-order initialization", () => {
+    expect(() => interpret("let mut a : [I32; 0; 3]; a[2] = 5; a[2]")).toThrow(Error);
+  });
+
+  it("supports overwriting initialized slots", () => {
+    expect(interpret("let mut a : [I32; 2; 2] = [1, 2]; a[1] = 10; a[0] + a[1]")).toBe(11);
+  });
+
+  it("supports arbitrary index expressions", () => {
+    expect(interpret("let mut a : [I32; 0; 3]; a[0] = 7; let i = 0; a[i + 0]")).toBe(7);
+  });
+
+  it("throws when declaring array with init>0 but no initializer", () => {
+    expect(() => interpret("let a : [I32; 2; 4]; a[0]")).toThrow(Error);
+  });
+
+  it("throws when declaring non-mutable array with init=0", () => {
+    expect(() => interpret("let a : [I32; 0; 2]; a[0]")).toThrow(Error);
   });
 });

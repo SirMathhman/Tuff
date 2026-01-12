@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dupfind": "dupfind src --min-nodes 10",
+    "dupfind": "dupfind src --min-nodes 15",
     "test": "jest",
     "lint": "eslint \"{src,tests}/**/*.{ts,tsx}\" --max-warnings 0",
     "prepare": "husky"

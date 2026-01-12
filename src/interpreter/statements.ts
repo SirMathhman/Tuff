@@ -19,7 +19,7 @@ import {
   tryHandleStructLiteral,
   getStructDef,
 } from "./structs";
-import { tryHandleArrayLiteral } from "./arrays";
+import { tryHandleArrayLiteral, tryHandleArrayAssignment, parseArrayType } from "./arrays";
 
 // Exception thrown by yield statements to break out of blocks early
 export class YieldValue extends Error {
@@ -233,6 +233,36 @@ export function evalBlock(s: string, envIn?: Env): number {
   return last;
 }
 
+function handleUninitializedArrayDeclaration(
+  annotatedType: string,
+  name: string,
+  mutable: boolean,
+  env: Env
+): boolean {
+  if (!annotatedType.startsWith("[")) return false;
+  
+  const { elementType, initializedCount, length } = parseArrayType(annotatedType);
+  if (initializedCount !== 0) {
+    throw new Error(
+      `Array declaration without initializer must have init=0, got ${annotatedType}`
+    );
+  }
+  if (!mutable) {
+    throw new Error(
+      `Array with init=0 must be mutable (use 'let mut')`
+    );
+  }
+  const arrayVal: EnvItem["value"] = {
+    type: "Array",
+    elementType,
+    elements: new Array(length).fill(0),
+    length,
+    initializedCount: 0,
+  };
+  env.set(name, { value: arrayVal, mutable, type: annotatedType });
+  return true;
+}
+
 // eslint-disable-next-line max-lines-per-function
 function handleLetStatement(
   stmt: string,
@@ -285,6 +315,12 @@ function handleLetStatement(
   // - if it has a type annotation and no `mut`, it is write-once (not mutable)
   // - if it has `mut`, it is mutable
   // - if it has no annotation, it is mutable
+  
+  // Special case: array with init=0 must be mutable
+  if (annotatedType && handleUninitializedArrayDeclaration(annotatedType, name, mutable, env)) {
+    return NaN;
+  }
+  
   const item = {
     value: NaN,
     mutable: annotatedType ? mutable : true,
@@ -355,6 +391,10 @@ function tryHandleAssignmentStatement(
   stmt: string,
   env: Env
 ): number | undefined {
+  // Try array element assignment first
+  const arrayAssignResult = tryHandleArrayAssignment(stmt, env, interpret);
+  if (arrayAssignResult !== undefined) return arrayAssignResult;
+  
   const idRes = parseIdentifierAt(stmt, 0);
   if (!idRes) return undefined;
   let restAssign = sliceTrim(stmt, idRes.next);

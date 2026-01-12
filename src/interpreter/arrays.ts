@@ -41,6 +41,12 @@ export function parseArrayType(typeStr: string): ArrayTypeInfo {
     throw new Error(`Invalid array dimensions in ${typeStr}`);
   }
 
+  if (initializedCount !== 0 && initializedCount !== length) {
+    throw new Error(
+      `Invalid array type: init must be 0 or equal to length. Got [${elementType}; ${initializedCount}; ${length}]`
+    );
+  }
+
   return { elementType, initializedCount, length };
 }
 
@@ -63,27 +69,44 @@ export function tryHandleArrayLiteral(
   const elements = interpretAll(elementsRaw, interpret, env);
 
   if (annotatedType && annotatedType.startsWith("[")) {
-    const { elementType, length } = parseArrayType(annotatedType);
-    if (elements.length > length) {
-      throw new Error(`Array literal too large for type ${annotatedType}`);
+    const { elementType, initializedCount, length } = parseArrayType(annotatedType);
+    
+    // Enforce: can only create arrays with init === 0 or init === length
+    if (initializedCount !== 0 && initializedCount !== length) {
+      throw new Error(
+        `Cannot create array with partial initialization: ${annotatedType}`
+      );
     }
-    const padded = [...elements];
-    while (padded.length < length) {
-      padded.push(0);
+    
+    // If init === length, require exact element count
+    if (initializedCount === length) {
+      if (elements.length !== length) {
+        throw new Error(
+          `Array literal must have exactly ${length} elements for type ${annotatedType}, got ${elements.length}`
+        );
+      }
+      return {
+        type: "Array",
+        elementType,
+        elements,
+        length,
+        initializedCount,
+      };
     }
-    return {
-      type: "Array",
-      elementType,
-      elements: padded,
-      length,
-    };
+    
+    // init === 0: no initializer allowed
+    throw new Error(
+      `Array with init=0 cannot have an initializer: ${annotatedType}`
+    );
   }
 
+  // No type annotation: infer from literal
   return {
     type: "Array",
     elementType: "I32", // fallback
     elements,
     length: elements.length,
+    initializedCount: elements.length,
   };
 }
 
@@ -115,11 +138,76 @@ export function tryHandleArrayIndexing(
   if (!arrayVal) return undefined;
 
   const index = interpret(indexExpr, env);
-  if (index < 0 || index >= arrayVal.length) {
-    throw new Error(
-      `Index out of bounds: ${index} (length ${arrayVal.length})`
-    );
-  }
+  
+  // RHS read: must be < initializedCount
+  validateIndexBounds(
+    index,
+    0,
+    arrayVal.initializedCount,
+    `Index out of bounds or uninitialized: ${index} (initializedCount: ${arrayVal.initializedCount})`
+  );
 
   return arrayVal.elements[index];
+}
+
+function validateIndexBounds(index: number, min: number, max: number, context: string): void {
+  if (index < min || index >= max) {
+    throw new Error(context);
+  }
+}
+
+export function tryHandleArrayAssignment(
+  stmt: string,
+  env: Env,
+  interpret: (input: string, env?: Env) => number
+): number | undefined {
+  // Pattern: identifier[index] = value
+  const eqIdx = stmt.indexOf("=");
+  if (eqIdx === -1) return undefined;
+  
+  const lhs = stmt.slice(0, eqIdx).trim();
+  const rhs = stmt.slice(eqIdx + 1).trim();
+  
+  const openBracket = lhs.lastIndexOf("[");
+  if (openBracket <= 0) return undefined;
+  
+  const indexExpr = extractPureBracketContent(lhs, openBracket);
+  if (indexExpr === undefined) return undefined;
+  
+  const arrayName = lhs.slice(0, openBracket).trim();
+  
+  if (!env.has(arrayName)) return undefined;
+  const item = env.get(arrayName)!;
+  
+  if (!isArrayValue(item.value)) return undefined;
+  if (!item.mutable) {
+    throw new Error("Cannot assign to immutable array");
+  }
+  
+  const arrayVal = item.value;
+  const index = interpret(indexExpr, env);
+  
+  // LHS write: must be <= initializedCount and < length
+  validateIndexBounds(
+    index,
+    0,
+    arrayVal.length,
+    `Index out of bounds: ${index} (length: ${arrayVal.length})`
+  );
+  
+  if (index > arrayVal.initializedCount) {
+    throw new Error(
+      `Out-of-order initialization: index ${index} but only ${arrayVal.initializedCount} elements initialized (sequential init required)`
+    );
+  }
+  
+  const value = interpret(rhs, env);
+  arrayVal.elements[index] = value;
+  
+  // If this is sequential initialization (index === initializedCount), increment
+  if (index === arrayVal.initializedCount) {
+    arrayVal.initializedCount++;
+  }
+  
+  return value;
 }

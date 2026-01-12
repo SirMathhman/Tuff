@@ -1,10 +1,42 @@
-import type { Env, EnvItem } from "./types";
+import type { Env, EnvItem, ArrayValue, StructValue } from "./types";
 
 export const BRACKET_PAIRS = new Map<string, string>([
   ["(", ")"],
   ["{", "}"],
   ["[", "]"],
 ]);
+
+export function deepCopyValue(
+  value: EnvItem["value"]
+): EnvItem["value"] {
+  if (typeof value === "number") return value;
+  
+  if (typeof value === "object" && value !== null) {
+    if ("type" in value && value.type === "Array") {
+      const arr = value as ArrayValue;
+      return {
+        type: "Array",
+        elementType: arr.elementType,
+        elements: [...arr.elements],
+        length: arr.length,
+        initializedCount: arr.initializedCount,
+      };
+    }
+    
+    if ("fields" in value && "values" in value) {
+      const struct = value as StructValue;
+      return {
+        fields: [...struct.fields],
+        values: [...struct.values],
+      };
+    }
+    
+    // FunctionValue has env which is a Map; shallow copy is fine
+    return value;
+  }
+  
+  return value;
+}
 
 export function findMatchingParen(s: string, start: number): number {
   const open = s[start];

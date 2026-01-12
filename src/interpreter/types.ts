@@ -9,6 +9,7 @@ export interface ArrayValue {
   elementType: string;
   elements: number[];
   length: number;
+  initializedCount: number;
 }
 
 export interface StructValue {
