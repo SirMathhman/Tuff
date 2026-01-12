@@ -154,7 +154,10 @@ export function handlePointerInitializer(
       const parsed2 = parseMutPrefix(annotatedPointee2);
       const annotatedMut2 = parsed2.mut;
       annotatedPointee2 = parsed2.rest;
-      if (resolveTypeAlias(annotatedPointee2, env) !== resolveTypeAlias(ptr.pointeeType as string, env))
+      if (
+        resolveTypeAlias(annotatedPointee2, env) !==
+        resolveTypeAlias(ptr.pointeeType as string, env)
+      )
         throw new Error("Pointer type mismatch");
       if (annotatedMut2 !== !!ptr.pointeeMutable)
         throw new Error("Pointer mutability mismatch");
@@ -185,7 +188,9 @@ function createSliceFromArray(
   if (!isArrayValue(item.value))
     throw new Error("Slice initializer must reference an array");
   const arr = item.value as ArrayValue;
-  if (resolveTypeAlias(arr.elementType, env) !== resolveTypeAlias(elemType, env))
+  if (
+    resolveTypeAlias(arr.elementType, env) !== resolveTypeAlias(elemType, env)
+  )
     throw new Error("Slice type mismatch");
 
   // If annotation requests mutable slice, require the initializer to be &mut

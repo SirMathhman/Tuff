@@ -198,6 +198,7 @@ function tryParseNumberOrIdentifier(s: string, env?: Env): unknown | undefined {
       if (env && env.has(id)) {
         const item = env.get(id)!;
         if (item.type === "__deleted__") throw new Error("Unknown identifier");
+        if (item.moved) throw new Error("Use-after-move");
         if (typeof item.value === "number") return item.value;
         // If it's a struct/array/pointer, return undefined so other handlers can try
         if (

@@ -18,11 +18,14 @@ import {
   setTypeAlias,
   resolveTypeAlias,
   cloneTypeAliasMap,
+  getLinearDestructor,
+  setLinearDestructor,
+  isIdentifierName,
 } from "./shared";
 import { isArrayValue } from "./arrays";
 import { findSlicesReferencing } from "./pointers";
 import type { ArrayValue } from "./types";
-import { handleFnStatement } from "./functions";
+import { handleFnStatement, callNamedFunction } from "./functions";
 import { tryHandleControlFlow } from "./controlFlow";
 import {
   handleStructStatement,
@@ -123,17 +126,24 @@ function validateAnnotatedTypeCompatibility(
   env?: Env
 ) {
   // resolve aliases before comparisons
-  const resolvedAnnotated = annotatedType ? resolveTypeAlias(annotatedType, env) : annotatedType;
+  const resolvedAnnotated = annotatedType
+    ? resolveTypeAlias(annotatedType, env)
+    : annotatedType;
   const resolvedInit = initType ? resolveTypeAlias(initType, env) : initType;
 
   // pointer types: exact match on resolved inner type
   if (resolvedAnnotated && resolvedAnnotated.startsWith("*")) {
-    if (resolvedAnnotated !== resolvedInit) throw new Error("Pointer type mismatch");
+    if (resolvedAnnotated !== resolvedInit)
+      throw new Error("Pointer type mismatch");
     return;
   }
 
   // function types e.g., (I32, I32) => I32 - require exact match with inferred type
-  if (resolvedAnnotated && resolvedAnnotated.startsWith("(") && resolvedAnnotated.includes("=>")) {
+  if (
+    resolvedAnnotated &&
+    resolvedAnnotated.startsWith("(") &&
+    resolvedAnnotated.includes("=>")
+  ) {
     if (resolvedAnnotated !== resolvedInit) {
       throw new Error("Function type mismatch");
     }
@@ -165,6 +175,44 @@ function extractAnnotationAndInitializer(str: string): AnnotationResult {
   }
   if (s.startsWith("=")) s = sliceTrim(s, 1);
   return { annotatedType, initializer: s } as AnnotationResult;
+}
+
+function isUninitializedEnvItemValue(v: EnvItem["value"]): boolean {
+  return typeof v === "number" && Number.isNaN(v);
+}
+
+function tryMoveLinearIdentifier(
+  expr: string,
+  env: Env
+): EnvItem["value"] | undefined {
+  const t = expr.trim();
+  if (!isIdentifierName(t)) return undefined;
+  if (!env.has(t)) return undefined;
+  const item = env.get(t)!;
+  if (item.type === "__deleted__") return undefined;
+  if (item.moved) throw new Error("Use-after-move");
+
+  const destructor = getLinearDestructor(item.type, env);
+  if (!destructor) return undefined;
+
+  item.moved = true;
+  env.set(t, item);
+  return item.value;
+}
+
+function dropLinearBindingIfLive(name: string, env: Env): void {
+  if (!env.has(name)) return;
+  const item = env.get(name)!;
+  if (item.type === "__deleted__") return;
+  if (item.moved) return;
+  if (isUninitializedEnvItemValue(item.value)) return;
+
+  const destructorName = getLinearDestructor(item.type, env);
+  if (!destructorName) return;
+
+  callNamedFunction(destructorName, [item.value], env);
+  item.moved = true;
+  env.set(name, item);
 }
 
 // eslint-disable-next-line complexity, max-lines-per-function
@@ -202,75 +250,87 @@ export function evalBlock(
     throw new Error("Block does not produce a value");
   }
 
-  let last: unknown = NaN;
   const localDeclared = new Set<string>();
-  for (let idx = 0; idx < stmts.length; idx++) {
-    const stmt = stmts[idx];
+  const localLetDeclared = new Set<string>();
+  let last: unknown = NaN;
 
-    const ctrl = tryHandleControlFlow(idx, stmts, env);
-    if (ctrl.handled) {
-      last = ctrl.last;
-      idx += ctrl.consumed;
-      continue;
-    }
+  try {
+    for (let idx = 0; idx < stmts.length; idx++) {
+      const stmt = stmts[idx];
 
-    if (stmt.startsWith("let ")) {
-      last = handleLetStatement(stmt, env, localDeclared);
-    } else if (stmt.startsWith("type ")) {
-      last = handleTypeStatement(stmt, env, localDeclared);
-    } else if (stmt.startsWith("fn ")) {
-      last = handleFnStatement(stmt, env, localDeclared);
-    } else if (stmt.startsWith("struct ")) {
-      const result = handleStructStatement(stmt);
-      if (result) {
-        // If there's more content after the struct definition, process it
-        const remaining = stmt.slice(result.nextPos).trim();
-        if (remaining !== "") {
-          // Re-process the remaining part as a statement
-          if (remaining.startsWith("let ")) {
-            last = handleLetStatement(remaining, env, localDeclared);
+      const ctrl = tryHandleControlFlow(idx, stmts, env);
+      if (ctrl.handled) {
+        last = ctrl.last;
+        idx += ctrl.consumed;
+        continue;
+      }
+
+      if (stmt.startsWith("let ")) {
+        last = handleLetStatement(stmt, env, localDeclared, localLetDeclared);
+      } else if (stmt.startsWith("type ")) {
+        last = handleTypeStatement(stmt, env, localDeclared);
+      } else if (stmt.startsWith("fn ")) {
+        last = handleFnStatement(stmt, env, localDeclared);
+      } else if (stmt.startsWith("struct ")) {
+        const result = handleStructStatement(stmt);
+        if (result) {
+          // If there's more content after the struct definition, process it
+          const remaining = stmt.slice(result.nextPos).trim();
+          if (remaining !== "") {
+            // Re-process the remaining part as a statement
+            if (remaining.startsWith("let ")) {
+              last = handleLetStatement(
+                remaining,
+                env,
+                localDeclared,
+                localLetDeclared
+              );
+            } else {
+              last = processNonLetStatement(
+                remaining,
+                env,
+                allowNonNumericReturn
+              );
+            }
           } else {
-            last = processNonLetStatement(
-              remaining,
-              env,
-              allowNonNumericReturn
-            );
+            last = NaN;
           }
-        } else {
-          last = NaN;
         }
+      } else if (stmt.startsWith("return")) {
+        const expr = sliceTrim(stmt, 6);
+        if (expr === "") {
+          throw new ReturnValue(NaN);
+        }
+        const rv = interpret(expr, env);
+        if (typeof rv !== "number" && !allowNonNumericReturn)
+          throw new Error("Return must return a number");
+        throw new ReturnValue(rv);
+      } else if (stmt.startsWith("yield ")) {
+        const expr = sliceTrim(stmt, 6);
+        const yv = interpret(expr, env);
+        if (typeof yv !== "number" && !allowNonNumericReturn)
+          throw new Error("Yield must return a number");
+        throw new YieldValue(yv);
+      } else if (stmt === "break") {
+        throw new BreakException();
+      } else if (stmt === "continue") {
+        throw new ContinueException();
+      } else {
+        last = processNonLetStatement(stmt, env, allowNonNumericReturn);
       }
-    } else if (stmt.startsWith("return")) {
-      const expr = sliceTrim(stmt, 6);
-      if (expr === "") {
-        throw new ReturnValue(NaN);
-      }
-      const rv = interpret(expr, env);
-      if (typeof rv !== "number" && !allowNonNumericReturn)
-        throw new Error("Return must return a number");
-      throw new ReturnValue(rv);
-    } else if (stmt.startsWith("yield ")) {
-      const expr = sliceTrim(stmt, 6);
-      const yv = interpret(expr, env);
-      if (typeof yv !== "number" && !allowNonNumericReturn)
-        throw new Error("Yield must return a number");
-      throw new YieldValue(yv);
-    } else if (stmt === "break") {
-      throw new BreakException();
-    } else if (stmt === "continue") {
-      throw new ContinueException();
-    } else {
-      last = processNonLetStatement(stmt, env, allowNonNumericReturn);
     }
+    return last;
+  } finally {
+    for (const name of localLetDeclared) dropLinearBindingIfLive(name, env);
   }
-  return last;
 }
 
 // eslint-disable-next-line max-lines-per-function
 function handleLetStatement(
   stmt: string,
   env: Env,
-  localDeclared: Set<string>
+  localDeclared: Set<string>,
+  localLetDeclared: Set<string>
 ): number {
   let rest = sliceTrim(stmt, 4);
   // optional `mut` modifier
@@ -281,6 +341,7 @@ function handleLetStatement(
   if (!nameRes) throw new Error("Invalid let declaration");
   const name = nameRes.name;
   ensureUniqueDeclaration(localDeclared, name);
+  localLetDeclared.add(name);
 
   const rest2 = sliceTrim(rest, nameRes.next);
   const { annotatedType, initializer } = extractAnnotationAndInitializer(rest2);
@@ -348,7 +409,9 @@ function handleTypeStatement(
   env: Env,
   localDeclared: Set<string>
 ): number {
-  // Syntax: type Name = SomeType
+  // Syntax:
+  // - type Name = SomeType
+  // - type Name = BaseType then DestructorFn
   let rest = sliceTrim(stmt, 4);
   const nameRes = parseIdentifierAt(rest, 0);
   if (!nameRes) throw new Error("Invalid type declaration");
@@ -356,10 +419,23 @@ function handleTypeStatement(
   ensureUniqueDeclaration(localDeclared, name);
   rest = sliceTrim(rest, nameRes.next);
   if (!rest.startsWith("=")) throw new Error("Invalid type declaration");
-  const aliasOf = sliceTrim(rest, 1);
+  rest = sliceTrim(rest, 1);
+
+  // Split on `then` at top-level (this syntax does not allow nested groups yet)
+  const thenIdx = rest.indexOf(" then ");
+  const aliasOf = thenIdx === -1 ? rest : rest.slice(0, thenIdx).trim();
+  const destructorName = thenIdx === -1 ? "" : rest.slice(thenIdx + 6).trim();
+
   if (!aliasOf) throw new Error("Invalid type declaration");
+
   // store alias in per-env alias map
   setTypeAlias(env, name, aliasOf);
+
+  if (destructorName !== "") {
+    if (!isIdentifierName(destructorName))
+      throw new Error("Invalid type declaration");
+    setLinearDestructor(env, name, destructorName);
+  }
   return NaN;
 }
 
@@ -396,15 +472,17 @@ function handleSimpleInitializer(
     return NaN;
   }
 
-  const val = interpret(initializer, env);
-
   if (annotatedType)
     validateAnnotatedTypeCompatibility(annotatedType, initType, env);
+
+  const movedVal = tryMoveLinearIdentifier(initializer, env);
+  const val = movedVal !== undefined ? movedVal : interpret(initializer, env);
 
   const item = {
     value: val as EnvItem["value"],
     mutable,
     type: annotatedType || initType,
+    moved: false,
   } as EnvItem;
   env.set(name, item);
   return NaN;
@@ -509,10 +587,15 @@ function tryHandleAssignmentStatement(
 
   assertAssignable(cur, inferTypeFromExpr(restAssign, env));
 
-  const valRaw = interpretRef(restAssign, env);
+  const movedRhs = tryMoveLinearIdentifier(restAssign, env);
+  const valRaw = movedRhs !== undefined ? movedRhs : interpretRef(restAssign, env);
+
+  // Drop the old value if this binding currently owns a live linear value.
+  dropLinearBindingIfLive(idRes.name, env);
   if (typeof valRaw === "number") {
     const val = valRaw as number;
     cur.value = val;
+    cur.moved = false;
     env.set(idRes.name, cur);
     return val;
   }
@@ -521,6 +604,7 @@ function tryHandleAssignmentStatement(
   if (isArrayValue(valRaw)) {
     if (!cur.mutable) throw new Error("Cannot assign to immutable variable");
     cur.value = valRaw;
+    cur.moved = false;
     env.set(idRes.name, cur);
     return NaN;
   }

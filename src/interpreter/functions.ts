@@ -17,6 +17,7 @@ import {
   isIdentifierName,
   interpretAllAny,
   ensureExistsInEnv,
+  getLinearDestructor,
 } from "./shared";
 import { evalBlock, handleYieldValue } from "./statements";
 import { isReturnValue, ReturnValue } from "./returns";
@@ -178,34 +179,15 @@ function evalAllButLastStatements(body: string, callEnv: Map<string, EnvItem>) {
   }
 }
 
-export function tryHandleCall(s: string, env?: Env): unknown | undefined {
-  const idRes = parseIdentifierAt(s, 0);
-  if (!idRes) return undefined;
-  const rest = sliceTrim(s, idRes.next);
-  if (!rest.startsWith("(")) return undefined;
-  const close = findMatchingParen(rest, 0);
-  if (close < 0) throw new Error("Unterminated call");
-  const argsContent = rest.slice(1, close).trim();
-  const args = splitTopLevelOrEmpty(argsContent, ",");
-  const trailing = rest.slice(close + 1).trim();
-  if (trailing !== "") return undefined; // not a pure call expression
-
-  ensureExistsInEnv(idRes.name, env);
-  const item = env!.get(idRes.name)!;
-  if (typeof item.value === "number") throw new Error("Not a function");
-  const func = item.value as FunctionValue;
-  if (func.params.length !== args.length)
-    throw new Error("Argument count mismatch");
-
-  const argVals = interpretAllAny(args, interpret, env);
+function callFunctionValue(
+  func: FunctionValue,
+  argVals: unknown[],
+  envForMethodAttachment?: Env
+): unknown {
   const callEnv = new Map<string, EnvItem>(func.env);
   bindParamsToEnv(callEnv, func.params, argVals);
 
-  const thisStruct = createThisStructAndBindToEnv(
-    callEnv,
-    func.params,
-    argVals
-  );
+  const thisStruct = createThisStructAndBindToEnv(callEnv, func.params, argVals);
   // If the function body is simply `this`, return the struct directly (with methods attached)
   const bodyTrim = func.body.trim();
   if (bodyTrim === "this" || bodyTrim === "this;") {
@@ -234,7 +216,62 @@ export function tryHandleCall(s: string, env?: Env): unknown | undefined {
     attachMethodsToStructFromEnv(thisStruct, callEnv, func.env);
   }
 
+  // keep envForMethodAttachment for future; currently methods are attached from captured env
+  void envForMethodAttachment;
   return bodyResult;
+}
+
+export function callNamedFunction(
+  fnName: string,
+  argVals: unknown[],
+  env: Env
+): unknown {
+  ensureExistsInEnv(fnName, env);
+  const item = env.get(fnName)!;
+  if (typeof item.value === "number") throw new Error("Not a function");
+  const func = item.value as FunctionValue;
+  if (func.params.length !== argVals.length)
+    throw new Error("Argument count mismatch");
+  return callFunctionValue(func, argVals, env);
+}
+
+export function tryHandleCall(s: string, env?: Env): unknown | undefined {
+  const idRes = parseIdentifierAt(s, 0);
+  if (!idRes) return undefined;
+  const rest = sliceTrim(s, idRes.next);
+  if (!rest.startsWith("(")) return undefined;
+  const close = findMatchingParen(rest, 0);
+  if (close < 0) throw new Error("Unterminated call");
+  const argsContent = rest.slice(1, close).trim();
+  const args = splitTopLevelOrEmpty(argsContent, ",");
+  const trailing = rest.slice(close + 1).trim();
+  if (trailing !== "") return undefined; // not a pure call expression
+
+  ensureExistsInEnv(idRes.name, env);
+  const item = env!.get(idRes.name)!;
+  if (typeof item.value === "number") throw new Error("Not a function");
+  const func = item.value as FunctionValue;
+  if (func.params.length !== args.length)
+    throw new Error("Argument count mismatch");
+
+  const argVals = args.map((a) => {
+    const at = a.trim();
+    // Move linear identifiers when passed as call arguments.
+    if (env && isIdentifierName(at) && env.has(at)) {
+      const argItem = env.get(at)!;
+      if (argItem.type === "__deleted__") throw new Error("Unknown identifier");
+      if (argItem.moved) throw new Error("Use-after-move");
+      const destructor = getLinearDestructor(argItem.type, env);
+      if (destructor) {
+        argItem.moved = true;
+        env.set(at, argItem);
+        return argItem.value;
+      }
+    }
+    return interpret(a, env);
+  });
+
+  return callFunctionValue(func, argVals, env);
 }
 
 export function tryHandleFnExpression(

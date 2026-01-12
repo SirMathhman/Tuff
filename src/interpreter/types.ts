@@ -52,6 +52,9 @@ export interface EnvItem {
     | SliceValue;
   mutable: boolean;
   type?: string;
+  // Linear type support: when true, this binding has been moved out and can no
+  // longer be referenced until it is assigned a new value.
+  moved?: boolean;
 }
 
 export type Env = Map<string, EnvItem>;

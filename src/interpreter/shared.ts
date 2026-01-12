@@ -98,6 +98,10 @@ export function stripOuterParens(s: string): string {
 // be scoped to blocks. Use a WeakMap keyed by Env so we don't leak memory.
 const envTypeAliasMap: WeakMap<Env, Map<string, string>> = new WeakMap();
 
+// Linear type support: map linear type name -> destructor function name.
+// This is also block-scoped, so it is keyed by Env.
+const envLinearDestructorMap: WeakMap<Env, Map<string, string>> = new WeakMap();
+
 export function getTypeAliasMap(env: Env): Map<string, string> {
   if (!envTypeAliasMap.has(env)) envTypeAliasMap.set(env, new Map());
   return envTypeAliasMap.get(env)!;
@@ -107,10 +111,42 @@ export function setTypeAlias(env: Env, name: string, target: string): void {
   getTypeAliasMap(env).set(name, target);
 }
 
+export function setLinearDestructor(
+  env: Env,
+  typeName: string,
+  destructorName: string
+): void {
+  if (!envLinearDestructorMap.has(env))
+    envLinearDestructorMap.set(env, new Map());
+  envLinearDestructorMap.get(env)!.set(typeName, destructorName);
+}
+
+export function getLinearDestructor(
+  typeName: string | undefined,
+  env?: Env
+): string | undefined {
+  if (!typeName || !env) return undefined;
+  const map = envLinearDestructorMap.get(env);
+  if (map && map.has(typeName)) return map.get(typeName);
+
+  // allow aliases to point to linear types and vice-versa
+  const aliasMap = envTypeAliasMap.get(env);
+  const next = aliasMap?.get(typeName);
+  if (!next) return undefined;
+  if (next === typeName) return undefined;
+  return getLinearDestructor(next, env);
+}
+
 export function cloneTypeAliasMap(fromEnv: Env | undefined, toEnv: Env): void {
   const src = fromEnv ? envTypeAliasMap.get(fromEnv) : undefined;
   const dest = new Map<string, string>(src ? Array.from(src.entries()) : []);
   envTypeAliasMap.set(toEnv, dest);
+
+  const lsrc = fromEnv ? envLinearDestructorMap.get(fromEnv) : undefined;
+  const ldest = new Map<string, string>(
+    lsrc ? Array.from(lsrc.entries()) : []
+  );
+  envLinearDestructorMap.set(toEnv, ldest);
 }
 
 function isConcreteTypeName(t: string): boolean {
@@ -129,7 +165,8 @@ export function resolveTypeAlias(typeStr: string, env?: Env): string {
   function resolveRecursive(t: string, depth = 0): string {
     if (depth > 20) return t; // prevent cycles
     t = t.trim();
-    if (t.startsWith("*")) return `*${resolveRecursive(t.slice(1).trim(), depth + 1)}`;
+    if (t.startsWith("*"))
+      return `*${resolveRecursive(t.slice(1).trim(), depth + 1)}`;
     if (t.startsWith("[")) {
       // array type: [Elem; Init; Len]
       const inner = t.slice(1, -1);
@@ -145,8 +182,11 @@ export function resolveTypeAlias(typeStr: string, env?: Env): string {
       const arrowIdx = t.indexOf(") =>");
       if (arrowIdx === -1) return t;
       const paramsContent = t.slice(1, arrowIdx).trim();
-      const params = paramsContent === "" ? [] : topLevelSplitTrim(paramsContent, ",");
-      const resolvedParams = params.map((p) => resolveRecursive(p.trim(), depth + 1));
+      const params =
+        paramsContent === "" ? [] : topLevelSplitTrim(paramsContent, ",");
+      const resolvedParams = params.map((p) =>
+        resolveRecursive(p.trim(), depth + 1)
+      );
       const ret = t.slice(arrowIdx + 4).trim();
       const resolvedRet = resolveRecursive(ret, depth + 1);
       return `(${resolvedParams.join(", ")}) => ${resolvedRet}`;
@@ -166,7 +206,6 @@ export function resolveTypeAlias(typeStr: string, env?: Env): string {
 
   return resolveRecursive(typeStr);
 }
-
 
 export function isDigit(ch: string): boolean {
   const c = ch.charCodeAt(0);

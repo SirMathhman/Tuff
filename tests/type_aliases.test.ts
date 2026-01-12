@@ -6,9 +6,7 @@ describe("interpret - type aliases", () => {
   });
 
   it("supports alias-of-alias", () => {
-    expect(
-      interpret("type T1 = I32; type T2 = T1; let x : T2 = 4; x")
-    ).toBe(4);
+    expect(interpret("type T1 = I32; type T2 = T1; let x : T2 = 4; x")).toBe(4);
   });
 
   it("supports alias for arrays", () => {
@@ -25,7 +23,9 @@ describe("interpret - type aliases", () => {
 
   it("type aliases are block-scoped", () => {
     expect(() =>
-      interpret("{ type Inner = I32; let x : Inner = 1; 0 }; let y : Inner = 2; 0")
+      interpret(
+        "{ type Inner = I32; let x : Inner = 1; 0 }; let y : Inner = 2; 0"
+      )
     ).toThrow("Unknown type: Inner");
   });
 });
