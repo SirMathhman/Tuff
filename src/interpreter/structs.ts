@@ -75,7 +75,7 @@ export function tryHandleStructLiteral(
   s: string,
   structType: string,
   env: Env | undefined,
-  interpret: (input: string, env?: Env) => number
+  interpret: (input: string, env?: Env) => unknown
 ): StructValue | undefined {
   const def = getStructDef(structType);
   if (!def) return undefined;

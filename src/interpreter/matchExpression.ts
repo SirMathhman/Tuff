@@ -49,11 +49,23 @@ export function tryHandleMatchExpression(
     return { pattern, expr } as MatchArm;
   });
 
-  const scrVal = interpret(scrutineeStr, env);
+  const scrValRaw = interpret(scrutineeStr, env);
+  if (typeof scrValRaw !== "number") throw new Error("Match scrutinee must be numeric");
+  const scrVal = scrValRaw as number;
   for (const a of arms) {
-    if (a.pattern === "_") return interpret(a.expr, env);
-    const patVal = interpret(a.pattern, env);
-    if (scrVal === patVal) return interpret(a.expr, env);
+    if (a.pattern === "_") {
+      const res = interpret(a.expr, env);
+      if (typeof res !== "number") throw new Error("Match arm must return number");
+      return res as number;
+    }
+    const patValRaw = interpret(a.pattern, env);
+    if (typeof patValRaw !== "number") throw new Error("Match pattern must be numeric");
+    const patVal = patValRaw as number;
+    if (scrVal === patVal) {
+      const res = interpret(a.expr, env);
+      if (typeof res !== "number") throw new Error("Match arm must return number");
+      return res as number;
+    }
   }
 
   throw new Error("No match arm matched");

@@ -21,7 +21,7 @@ import { isStructValue } from "./structs";
 import { isArrayValue, tryHandleArrayIndexing } from "./arrays";
 import { isPointerValue } from "./pointers";
 
-export function interpret(input: string, env?: Env): number {
+export function interpret(input: string, env?: Env): unknown {
   let s = input.trim();
   if (s === "") return NaN;
 

@@ -63,7 +63,7 @@ function extractAfterArrow(s: string, msg: string) {
   return sliceTrim(s, arrowIdx + 2);
 }
 
-export function tryHandleCall(s: string, env?: Env): number | undefined {
+export function tryHandleCall(s: string, env?: Env): unknown | undefined {
   const idRes = parseIdentifierAt(s, 0);
   if (!idRes) return undefined;
   const rest = sliceTrim(s, idRes.next);
@@ -90,6 +90,17 @@ export function tryHandleCall(s: string, env?: Env): number | undefined {
       value: argVals[i],
       mutable: false,
     } as EnvItem);
+  }
+
+  // Always provide a `this` binding as a struct composed of parameters so
+  // `this` or `this.x` can be used in simple constructor-like functions.
+  const thisStruct = { fields: func.params.slice(), values: argVals.slice() } as const;
+  callEnv.set("this", { value: thisStruct, mutable: false, type: "This" } as EnvItem);
+
+  // If the function body is simply `this`, return the struct directly
+  const bodyTrim = func.body.trim();
+  if (bodyTrim === "this" || bodyTrim === "this;") {
+    return thisStruct;
   }
 
   // evaluate body and handle yield
@@ -129,7 +140,9 @@ export function tryHandleFnExpression(
   handleFnStatement(fnStmt, actualEnv, new Set<string>());
 
   if (trailing === "") return NaN;
-  return interpret(trailing, actualEnv);
+  const res = interpret(trailing, actualEnv);
+  if (typeof res !== "number") throw new Error("Expected numeric result");
+  return res as number;
 }
 
 function parseMethodCall(s: string): MethodCallParse | undefined {

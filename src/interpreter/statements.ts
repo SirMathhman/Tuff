@@ -81,8 +81,6 @@ export function handleYieldValue(yieldFn: () => number): number {
   }
 }
 
-
-
 function isIntegerTypeName(typeName: string): boolean {
   const first = typeName[0];
   return "IiUu".includes(first);
@@ -114,8 +112,6 @@ function validateAnnotatedTypeCompatibility(
   }
   validateTypeCompatibility(annotatedType, initType);
 }
-
-
 
 interface AnnotationResult {
   annotatedType?: string;
@@ -196,8 +192,9 @@ export function evalBlock(s: string, envIn?: Env): number {
       }
     } else if (stmt.startsWith("yield ")) {
       const expr = sliceTrim(stmt, 6);
-      last = interpret(expr, env);
-      throw new YieldValue(last);
+      const yv = interpret(expr, env);
+      if (typeof yv !== "number") throw new Error("Yield must return a number");
+      throw new YieldValue(yv as number);
     } else if (stmt === "break") {
       throw new BreakException();
     } else if (stmt === "continue") {
@@ -325,12 +322,12 @@ function handleSimpleInitializer(
     validateAnnotatedTypeCompatibility(annotatedType, initType);
 
   const item = {
-    value: val,
+    value: val as EnvItem["value"],
     mutable,
     type: annotatedType || initType,
   } as EnvItem;
   env.set(name, item);
-  return val;
+  return NaN;
 }
 
 function ensureIdentifierExists(name: string, env: Env) {
@@ -383,14 +380,14 @@ function tryHandleCompoundAssignment(
   const rhsType = inferTypeFromExpr(rest, env);
   validateTypeCompatibility(cur.type, rhsType);
 
-  const rhsVal = interpret(rest, env);
+  const rhsValRaw = interpret(rest, env);
+  if (typeof rhsValRaw !== "number") throw new Error("Compound assignment requires numeric rhs");
+  const rhsVal = rhsValRaw as number;
   const newVal = computeCompoundResult(op, cur.value, rhsVal);
   cur.value = newVal;
   env.set(idRes.name, cur);
   return newVal;
 }
-
-
 
 function tryHandleAssignmentStatement(
   stmt: string,
@@ -417,7 +414,9 @@ function tryHandleAssignmentStatement(
   const cur = env.get(idRes.name)!;
   assertAssignable(cur, inferTypeFromExpr(restAssign, env));
 
-  const val = interpret(restAssign, env);
+  const valRaw = interpret(restAssign, env);
+  if (typeof valRaw !== "number") throw new Error("Cannot assign non-number to variable");
+  const val = valRaw as number;
   cur.value = val;
   env.set(idRes.name, cur);
   return val;
@@ -433,7 +432,9 @@ function processNonLetStatement(stmt: string, env: Env): number {
       const close = findMatchingParen(rem, 0);
       if (close < 0) throw new Error("Unterminated grouping");
       const part = rem.slice(0, close + 1);
-      lastLocal = interpret(part, env);
+      const valPart = interpret(part, env);
+      if (typeof valPart !== "number") throw new Error("Expected numeric expression");
+      lastLocal = valPart as number;
       rem = rem.substring(close + 1);
       rem = rem.trim();
       continue;
@@ -444,7 +445,11 @@ function processNonLetStatement(stmt: string, env: Env): number {
     else {
       const assigned = tryHandleAssignmentStatement(rem, env);
       if (assigned !== undefined) lastLocal = assigned;
-      else lastLocal = interpret(rem, env);
+      else {
+        const val = interpret(rem, env);
+        if (typeof val !== "number") throw new Error("Expected numeric expression");
+        lastLocal = val as number;
+      }
     }
     rem = "";
   }

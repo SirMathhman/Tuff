@@ -31,7 +31,7 @@ export function tryHandleAddressOf(
   if (!isIdentifierName(rest)) return undefined;
   if (!env || !env.has(rest)) throw new Error("Unknown identifier");
   const item = env.get(rest)!;
-  // if requested mut, ensure the target is mutable
+  // if requested mutw  , ensure the target is mutable
   if (pointeeMutable && !item.mutable)
     throw new Error("Cannot take mutable reference to immutable variable");
   // return a pointer value referencing the env and name
@@ -81,7 +81,7 @@ export function tryHandleDerefExpression(
 export function tryHandlePointerAssignment(
   stmt: string,
   env: Env,
-  interpret: (input: string, env?: Env) => number
+  interpret: (input: string, env?: Env) => unknown
 ): number | undefined {
   // Pattern: *ident = expr
   const eqIdx = stmt.indexOf("=");
@@ -101,9 +101,10 @@ export function tryHandlePointerAssignment(
     throw new Error("Cannot assign through pointer to immutable variable");
 
   const value = interpret(rhs, env);
-  pointeeItem.value = value;
+  if (typeof value !== "number") throw new Error("Cannot assign non-number through pointer");
+  pointeeItem.value = value as number;
   ptr.env.set(ptr.name, pointeeItem);
-  return value;
+  return value as number;
 }
 
 export function handlePointerInitializer(

@@ -53,7 +53,7 @@ export function tryHandleArrayLiteral(
   s: string,
   env: Env | undefined,
   annotatedType: string | undefined,
-  interpret: (input: string, env?: Env) => number
+  interpret: (input: string, env?: Env) => unknown
 ): ArrayValue | undefined {
   if (!s.startsWith("[")) return undefined;
 
@@ -113,7 +113,7 @@ export function tryHandleArrayLiteral(
 export function tryHandleArrayIndexing(
   s: string,
   env: Env | undefined,
-  interpret: (input: string, env?: Env) => number
+  interpret: (input: string, env?: Env) => unknown
 ): number | undefined {
   const openBracket = s.lastIndexOf("[");
   if (openBracket <= 0) return undefined;
@@ -137,7 +137,9 @@ export function tryHandleArrayIndexing(
 
   if (!arrayVal) return undefined;
 
-  const index = interpret(indexExpr, env);
+  const indexVal = interpret(indexExpr, env);
+  if (typeof indexVal !== "number") throw new Error("Index expression must be a number");
+  const index = indexVal as number;
 
   // RHS read: must be < initializedCount
   validateIndexBounds(
@@ -164,7 +166,7 @@ function validateIndexBounds(
 export function tryHandleArrayAssignment(
   stmt: string,
   env: Env,
-  interpret: (input: string, env?: Env) => number
+  interpret: (input: string, env?: Env) => unknown
 ): number | undefined {
   // Pattern: identifier[index] = value
   const eqIdx = stmt.indexOf("=");
@@ -190,7 +192,9 @@ export function tryHandleArrayAssignment(
   }
 
   const arrayVal = item.value;
-  const index = interpret(indexExpr, env);
+  const indexVal = interpret(indexExpr, env);
+  if (typeof indexVal !== "number") throw new Error("Index expression must be a number");
+  const index = indexVal as number;
 
   // LHS write: must be <= initializedCount and < length
   validateIndexBounds(
@@ -207,8 +211,8 @@ export function tryHandleArrayAssignment(
   }
 
   const value = interpret(rhs, env);
+  if (typeof value !== "number") throw new Error("Assigned value must be a number");
   arrayVal.elements[index] = value;
-
   // If this is sequential initialization (index === initializedCount), increment
   if (index === arrayVal.initializedCount) {
     arrayVal.initializedCount++;

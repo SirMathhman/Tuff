@@ -7,19 +7,20 @@ export function assertAssignable(cur: EnvItem, rhsType: string | undefined) {
   if (cur.type) {
     const first = cur.type[0];
     if (first && "IiUu".includes(first)) {
-      if (rhsType === "Bool") throw new Error("Type mismatch: cannot assign Bool to integer type");
+      if (rhsType === "Bool")
+        throw new Error("Type mismatch: cannot assign Bool to integer type");
     }
     if (cur.type === "Bool") {
-      if (rhsType !== "Bool") throw new Error("Type mismatch: cannot assign non-Bool to Bool");
+      if (rhsType !== "Bool")
+        throw new Error("Type mismatch: cannot assign non-Bool to Bool");
     }
   }
 }
 
-
 export function tryHandleThisAssignment(
   stmt: string,
   env: Env,
-  interpret: (input: string, env?: Env) => number
+  interpret: (input: string, env?: Env) => unknown
 ): number | undefined {
   const trimmed = stmt.trim();
   if (!trimmed.startsWith("this.")) return undefined;
@@ -34,7 +35,8 @@ export function tryHandleThisAssignment(
   const cur = env.get(name)!;
   assertAssignable(cur, inferTypeFromExpr(rhs, env));
   const val = interpret(rhs, env);
-  cur.value = val;
+  if (typeof val !== "number") throw new Error("Assigned value must be a number");
+  cur.value = val as number;
   env.set(name, cur);
-  return val;
+  return val as number;
 }

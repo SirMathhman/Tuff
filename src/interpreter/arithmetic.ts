@@ -45,24 +45,34 @@ function evalComparisonOp(
   env?: Env
 ): number | undefined {
   if (left === "" || right === "") return undefined;
-  const lv = interpret(left, env);
-  const rv = interpret(right, env);
-  switch (op) {
-    case "<=":
-      return lv <= rv ? 1 : 0;
-    case ">=":
-      return lv >= rv ? 1 : 0;
-    case "==":
-      return lv === rv ? 1 : 0;
-    case "!=":
-      return lv !== rv ? 1 : 0;
-    case "<":
-      return lv < rv ? 1 : 0;
-    case ">":
-      return lv > rv ? 1 : 0;
-    default:
-      return undefined;
+  const lvRaw = interpret(left, env);
+  const rvRaw = interpret(right, env);
+  if (typeof lvRaw !== "number" || typeof rvRaw !== "number")
+    throw new Error("Comparison operands must be numbers");
+  const lv = lvRaw as number;
+  const rv = rvRaw as number;
+
+  function cmp(a: number, b: number, opStr: string): number {
+    switch (opStr) {
+      case "<=":
+        return a <= b ? 1 : 0;
+      case ">=":
+        return a >= b ? 1 : 0;
+      case "==":
+        return a === b ? 1 : 0;
+      case "!=":
+        return a !== b ? 1 : 0;
+      case "<":
+        return a < b ? 1 : 0;
+      case ">":
+        return a > b ? 1 : 0;
+    }
+    return NaN;
   }
+
+  const res = cmp(lv, rv, op);
+  if (Number.isNaN(res)) return undefined;
+  return res;
 }
 
 export function tryHandleComparison(s: string, env?: Env): number | undefined {
@@ -200,11 +210,15 @@ function ensureConsistentSuffix(tokens: string[]): WidthSuffix | undefined {
 function evaluateTokens(tokens: string[], env?: Env): number {
   // first handle * and / (higher precedence)
   const reduced: string[] = [];
-  let acc = interpret(tokens[0], env);
+  const accRaw = interpret(tokens[0], env);
+  if (typeof accRaw !== "number") throw new Error("Operands must be numbers");
+  let acc = accRaw as number;
   for (let idx = 1; idx < tokens.length; idx += 2) {
     const op = tokens[idx];
     const operand = tokens[idx + 1];
-    const val = interpret(operand, env);
+    const valRaw = interpret(operand, env);
+    if (typeof valRaw !== "number") throw new Error("Operands must be numbers");
+    const val = valRaw as number;
     if (op === "*") {
       acc = acc * val;
     } else if (op === "/") {

@@ -174,8 +174,14 @@ function handleWhileAt(
 
   let lastLocal = NaN;
   try {
-    while (interpret(condStr, env) !== 0) {
+    let condRaw = interpret(condStr, env);
+    if (typeof condRaw !== "number") throw new Error("While condition must be numeric");
+    let cond = condRaw as number;
+    while (cond !== 0) {
       lastLocal = executeLoopBodyWithContinue(body, env);
+      condRaw = interpret(condStr, env);
+      if (typeof condRaw !== "number") throw new Error("While condition must be numeric");
+      cond = condRaw as number;
     }
   } catch (e: unknown) {
     if (isBreakException(e)) {
@@ -204,8 +210,12 @@ function handleForAt(
   );
 
   const { name, mutable, left, right } = parseForHeader(header);
-  const startVal = interpret(left, env);
-  const endVal = interpret(right, env);
+  const startValRaw = interpret(left, env);
+  if (typeof startValRaw !== "number") throw new Error("For-range start must be a number");
+  const startVal = startValRaw as number;
+  const endValRaw = interpret(right, env);
+  if (typeof endValRaw !== "number") throw new Error("For-range end must be a number");
+  const endVal = endValRaw as number;
   let lastLocal = NaN;
 
   // preserve any outer binding of the same name; ensure loop variable does not leak

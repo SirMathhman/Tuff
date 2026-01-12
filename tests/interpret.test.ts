@@ -400,6 +400,12 @@ describe("interpret - pointers", () => {
     ).toBe(7);
   });
 
+  it("supports constructor-like function returning this", () => {
+    expect(
+      interpret("fn Point(x : I32, y : I32) => this; let temp = Point(3, 4); temp.x + temp.y")
+    ).toBe(7);
+  });
+
   it("supports assignment through pointer to mutable variable", () => {
     expect(interpret("let mut x = 0; let y : *I32 = &x; *y = 5; x")).toBe(5);
   });

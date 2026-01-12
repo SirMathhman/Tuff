@@ -120,7 +120,9 @@ export function startsWithGroup(s: string): boolean {
 }
 
 export function containsOperator(s: string): boolean {
-  return s.includes("+") || s.includes("-") || s.includes("*") || s.includes("/");
+  return (
+    s.includes("+") || s.includes("-") || s.includes("*") || s.includes("/")
+  );
 }
 
 export function inferTypeFromExpr(
@@ -135,12 +137,13 @@ export function inferTypeFromExpr(
     if (!isIdentifierName(id)) return undefined;
     if (!env || !env.has(id)) throw new Error("Unknown identifier");
     const item = env.get(id)!;
-    return (`*${item.type}` as "Bool" | "Number" | undefined);
+    return `*${item.type}` as "Bool" | "Number" | undefined;
   }
 
   // identifier
   if (isIdentifierName(s)) {
-    if (env && env.has(s)) return env.get(s)!.type as "Bool" | "Number" | undefined;
+    if (env && env.has(s))
+      return env.get(s)!.type as "Bool" | "Number" | undefined;
     return undefined;
   }
   // numeric literal start
@@ -340,10 +343,14 @@ export function splitTopLevelOrEmpty(s: string, delimiter: string): string[] {
 
 export function interpretAll(
   items: string[],
-  interp: (s: string, env?: Env) => number,
+  interp: (s: string, env?: Env) => unknown,
   env?: Env
 ): number[] {
-  return items.map((item) => interp(item, env));
+  return items.map((item) => {
+    const v = interp(item, env);
+    if (typeof v !== "number") throw new Error("Expected numeric expression");
+    return v as number;
+  });
 }
 
 export function storeEnvItem(
