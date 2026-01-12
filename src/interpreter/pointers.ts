@@ -1,4 +1,4 @@
-import type { Env, PointerValue, ArrayValue } from "./types";
+import type { Env, PointerValue, ArrayValue, SliceValue } from "./types";
 import { isIdentifierName } from "./shared";
 import type { EnvItem } from "./types";
 
@@ -109,6 +109,7 @@ export function tryHandlePointerAssignment(
   return value as number;
 }
 
+// eslint-disable-next-line max-lines-per-function
 export function handlePointerInitializer(
   initializer: string,
   annotatedType: string | undefined,
@@ -120,15 +121,31 @@ export function handlePointerInitializer(
   const ptr = tryHandleAddressOf(initializer, env);
   if (!ptr) throw new Error("Invalid address-of expression");
 
-  // Support immutable slice creation when annotated type is *[T]
-  if (annotatedType && annotatedType.startsWith("*[")) {
-    // parse element type from annotation e.g., *[I32]
-    const inner = annotatedType.slice(2).trim();
-    if (!inner.endsWith("]")) throw new Error("Invalid slice type annotation");
-    const elemType = inner.slice(0, -1).trim();
+  // Support slice creation when annotated type is *[T] or *mut [T]
+  if (annotatedType && annotatedType.startsWith("*")) {
+    // parse annotated mutability and slice element type
+    let annotatedPointee = annotatedType.slice(1).trim();
+    const parsed = parseMutPrefix(annotatedPointee);
+    const annotatedMut = parsed.mut;
+    annotatedPointee = parsed.rest;
+    if (!annotatedPointee.startsWith("[")) {
+      // not a slice, fall back to pointer handling below
+    } else {
+      const inner = annotatedPointee.slice(1).trim();
+      if (!inner.endsWith("]"))
+        throw new Error("Invalid slice type annotation");
+      const elemType = inner.slice(0, -1).trim();
 
-    createSliceFromArray(ptr, elemType, name, annotatedType, env);
-    return true;
+      createSliceFromArray(
+        ptr,
+        elemType,
+        name,
+        annotatedType,
+        env,
+        annotatedMut
+      );
+      return true;
+    }
   }
 
   if (annotatedType) {
@@ -158,13 +175,38 @@ function createSliceFromArray(
   elemType: string,
   name: string,
   annotatedType: string,
-  env: Env
+  env: Env,
+  annotatedMut = false
 ) {
   ensureExistsInEnv(ptr.name, env);
   const item = env.get(ptr.name)!;
-  if (!isArrayValue(item.value)) throw new Error("Slice initializer must reference an array");
+  if (!isArrayValue(item.value))
+    throw new Error("Slice initializer must reference an array");
   const arr = item.value as ArrayValue;
   if (arr.elementType !== elemType) throw new Error("Slice type mismatch");
+
+  // If annotation requests mutable slice, require the initializer to be &mut
+  if (annotatedMut && !ptr.pointeeMutable)
+    throw new Error("Pointer mutability mismatch");
+
+  // allow &mut initializer to create an immutable slice (coercion)
+  const finalMutable = !!annotatedMut;
+
+  if (finalMutable) {
+    if (!item.mutable)
+      throw new Error("Cannot take mutable reference to immutable variable");
+    // ensure no existing borrows
+    const existing = findSlicesReferencing(arr, env);
+    if (existing.length > 0)
+      throw new Error("Cannot take mutable reference while borrow(s) exist");
+  } else {
+    // ensure no mutable borrow exists
+    const existing = findSlicesReferencing(arr, env);
+    if (existing.some((b) => b.mutable))
+      throw new Error(
+        "Cannot take immutable slice while mutable borrow exists"
+      );
+  }
 
   const slice = {
     type: "Slice",
@@ -172,6 +214,7 @@ function createSliceFromArray(
     backing: arr,
     start: 0,
     length: arr.length,
+    mutable: finalMutable,
   } as const;
 
   const out: EnvItem = {
@@ -182,3 +225,18 @@ function createSliceFromArray(
   env.set(name, out);
 }
 
+interface NamedSlice extends SliceValue {
+  name: string;
+}
+
+export function findSlicesReferencing(arr: ArrayValue, env: Env): NamedSlice[] {
+  const out: NamedSlice[] = [];
+  for (const [k, v] of env.entries()) {
+    if (hasTypeTag(v.value, "Slice")) {
+      const sv = v.value as SliceValue;
+      if (sv.backing === arr)
+        out.push({ ...(sv as SliceValue), name: k } as NamedSlice);
+    }
+  }
+  return out;
+}

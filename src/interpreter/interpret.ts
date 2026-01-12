@@ -19,7 +19,12 @@ import {
 } from "./shared";
 import { splitNumberAndSuffix, validateNumberSuffix } from "./numbers";
 import { isStructValue } from "./structs";
-import { isArrayValue, tryHandleArrayIndexing, isSliceValue } from "./arrays";
+import {
+  isArrayValue,
+  tryHandleArrayIndexing,
+  tryHandleArrayLiteral,
+  isSliceValue,
+} from "./arrays";
 import { isPointerValue } from "./pointers";
 import type { ArrayValue, SliceValue } from "./types";
 
@@ -61,6 +66,10 @@ export function interpret(input: string, env?: Env): unknown {
 
   const derefResult = tryHandleDerefExpression(s, env);
   if (derefResult !== undefined) return derefResult;
+
+  // array literal expression (e.g., [1,2,3])
+  const arrLiteral = tryHandleArrayLiteral(s, env, undefined, interpret);
+  if (arrLiteral !== undefined) return arrLiteral;
 
   const arrayIndexResult = tryHandleArrayIndexing(s, env, interpret);
   if (arrayIndexResult !== undefined) return arrayIndexResult;

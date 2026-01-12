@@ -1,4 +1,12 @@
-import type { Env, EnvItem, ArrayValue, StructValue, SliceValue } from "./types";
+/* eslint-disable max-lines */
+
+import type {
+  Env,
+  EnvItem,
+  ArrayValue,
+  StructValue,
+  SliceValue,
+} from "./types";
 import { splitNumberAndSuffix } from "./numbers";
 import {
   parseAddressOfType,
@@ -76,7 +84,9 @@ export function ensure(condition: boolean, msg: string): asserts condition {
 
 export function stripOuterParens(s: string): string {
   let out = s.trim();
-  while (BRACKET_PAIRS.has(out[0])) {
+  // Only strip outer parentheses '()' or braces '{}' here. Do NOT strip
+  // square brackets '[]' since they denote array literals.
+  while (out[0] === "(" || out[0] === "{") {
     const close = findMatchingParen(out, 0);
     if (close === out.length - 1) out = out.slice(1, -1).trim();
     else break;

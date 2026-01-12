@@ -17,7 +17,8 @@ export function isArrayValue(v: unknown): v is ArrayValue {
 
 export function isSliceValue(v: unknown): v is SliceValue {
   return (
-    hasTypeTag(v, "Slice") && typeof (v as Partial<SliceValue>).backing === "object"
+    hasTypeTag(v, "Slice") &&
+    typeof (v as Partial<SliceValue>).backing === "object"
   );
 }
 
@@ -91,13 +92,14 @@ export function tryHandleArrayLiteral(
           `Array literal must have exactly ${length} elements for type ${annotatedType}, got ${elements.length}`
         );
       }
-      return {
-        type: "Array",
+      const arrVal = {
+        type: "Array" as const,
         elementType,
         elements,
         length,
         initializedCount,
-      };
+      } as const;
+      return arrVal as unknown as ArrayValue;
     }
 
     // init === 0: no initializer allowed
@@ -107,13 +109,14 @@ export function tryHandleArrayLiteral(
   }
 
   // No type annotation: infer from literal
-  return {
-    type: "Array",
+  const arrVal = {
+    type: "Array" as const,
     elementType: "I32", // fallback
     elements,
     length: elements.length,
     initializedCount: elements.length,
-  };
+  } as const;
+  return arrVal as unknown as ArrayValue;
 }
 
 export function tryHandleArrayIndexing(
@@ -157,14 +160,21 @@ export function tryHandleArrayIndexing(
     index,
     0,
     arrayVal!.initializedCount,
-    `Index out of bounds or uninitialized: ${index} (initializedCount: ${arrayVal!.initializedCount})`
+    `Index out of bounds or uninitialized: ${index} (initializedCount: ${
+      arrayVal!.initializedCount
+    })`
   );
 
   return arrayVal!.elements[index];
 }
 
 function handleSliceIndexRead(sliceVal: SliceValue, index: number): number {
-  validateIndexBounds(index, 0, sliceVal.length, `Index out of bounds: ${index} (length: ${sliceVal.length})`);
+  validateIndexBounds(
+    index,
+    0,
+    sliceVal.length,
+    `Index out of bounds: ${index} (length: ${sliceVal.length})`
+  );
   validateIndexBounds(
     index + sliceVal.start,
     0,
@@ -185,6 +195,7 @@ function validateIndexBounds(
   }
 }
 
+// eslint-disable-next-line max-lines-per-function, complexity
 export function tryHandleArrayAssignment(
   stmt: string,
   env: Env,
@@ -209,8 +220,34 @@ export function tryHandleArrayAssignment(
   const item = env.get(arrayName)!;
 
   if (isSliceValue(item.value)) {
-    // slices are immutable for now
-    throw new Error("Cannot assign to slice");
+    const sv = item.value as SliceValue;
+    if (!sv.mutable) throw new Error("Cannot assign to slice");
+    // perform write through slice (validate bounds with slice length)
+    const indexVal2 = interpret(indexExpr, env);
+    if (typeof indexVal2 !== "number")
+      throw new Error("Index expression must be a number");
+    const index2 = indexVal2 as number;
+    validateIndexBounds(
+      index2,
+      0,
+      sv.length,
+      `Index out of bounds: ${index2} (length: ${sv.length})`
+    );
+
+    // Out-of-order initialization logic relative to backing
+    if (index2 + sv.start > sv.backing.initializedCount) {
+      throw new Error(
+        `Out-of-order initialization: index ${index2} but only ${sv.backing.initializedCount} elements initialized (sequential init required)`
+      );
+    }
+
+    const value2 = interpret(rhs, env);
+    if (typeof value2 !== "number")
+      throw new Error("Assigned value must be a number");
+    sv.backing.elements[index2 + sv.start] = value2 as number;
+    if (index2 + sv.start === sv.backing.initializedCount)
+      sv.backing.initializedCount++;
+    return value2 as number;
   }
 
   if (!isArrayValue(item.value)) return undefined;

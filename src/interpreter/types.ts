@@ -18,6 +18,7 @@ export interface SliceValue {
   backing: ArrayValue;
   start: number;
   length: number;
+  mutable?: boolean;
 }
 
 export interface PointerValue {

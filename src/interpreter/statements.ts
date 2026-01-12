@@ -1,3 +1,5 @@
+/* eslint-disable max-lines */
+
 import type { Env, EnvItem } from "./types";
 import { interpret } from "./interpret";
 import { blockShadow } from "./env";
@@ -14,6 +16,9 @@ import {
   isIntegerTypeName,
   findTopLevelAssignmentIndex,
 } from "./shared";
+import { isArrayValue } from "./arrays";
+import { findSlicesReferencing } from "./pointers";
+import type { ArrayValue } from "./types";
 import { handleFnStatement } from "./functions";
 import { tryHandleControlFlow } from "./controlFlow";
 import {
@@ -420,17 +425,22 @@ function tryHandleCompoundAssignment(
 
 function tryHandleAssignmentStatement(
   stmt: string,
-  env: Env
+  env: Env,
+  interpretRef: (input: string, env?: Env) => unknown = interpret
 ): number | undefined {
   // Try pointer assignment first
-  const pointerAssignResult = tryHandlePointerAssignment(stmt, env, interpret);
+  const pointerAssignResult = tryHandlePointerAssignment(
+    stmt,
+    env,
+    interpretRef
+  );
   if (pointerAssignResult !== undefined) return pointerAssignResult;
 
   // Try array element assignment
-  const arrayAssignResult = tryHandleArrayAssignment(stmt, env, interpret);
+  const arrayAssignResult = tryHandleArrayAssignment(stmt, env, interpretRef);
   if (arrayAssignResult !== undefined) return arrayAssignResult;
 
-  const thisAssign = tryHandleThisAssignment(stmt, env, interpret);
+  const thisAssign = tryHandleThisAssignment(stmt, env, interpretRef);
   if (thisAssign !== undefined) return thisAssign;
 
   const idRes = parseIdentifierAt(stmt, 0);
@@ -440,16 +450,35 @@ function tryHandleAssignmentStatement(
   restAssign = sliceTrim(restAssign, 1);
   if (restAssign === "") throw new Error("Invalid assignment");
   ensureIdentifierExists(idRes.name, env);
+
   const cur = env.get(idRes.name)!;
+
+  // Prevent reassigning an array while slices exist
+  if (isArrayValue(cur.value)) {
+    const existing = findSlicesReferencing(cur.value as ArrayValue, env);
+    if (existing.length > 0)
+      throw new Error("Cannot reassign array while slices exist");
+  }
+
   assertAssignable(cur, inferTypeFromExpr(restAssign, env));
 
-  const valRaw = interpret(restAssign, env);
-  if (typeof valRaw !== "number")
-    throw new Error("Cannot assign non-number to variable");
-  const val = valRaw as number;
-  cur.value = val;
-  env.set(idRes.name, cur);
-  return val;
+  const valRaw = interpretRef(restAssign, env);
+  if (typeof valRaw === "number") {
+    const val = valRaw as number;
+    cur.value = val;
+    env.set(idRes.name, cur);
+    return val;
+  }
+
+  // Allow assigning an array value to a variable
+  if (isArrayValue(valRaw)) {
+    if (!cur.mutable) throw new Error("Cannot assign to immutable variable");
+    cur.value = valRaw;
+    env.set(idRes.name, cur);
+    return NaN;
+  }
+
+  throw new Error("Cannot assign non-number to variable");
 }
 
 function processNonLetStatement(
@@ -497,4 +526,5 @@ function processNonLetStatement(
     }
     rem = "";
   }
-  return lastLocal; }
+  return lastLocal;
+}
