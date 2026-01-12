@@ -62,6 +62,10 @@ export function deepCopyValue(value: EnvItem["value"]): EnvItem["value"] {
   return value;
 }
 
+export function isObjectWithKey(o: unknown, key: string): boolean {
+  return typeof o === "object" && o !== null && key in (o as object);
+}
+
 export function findMatchingParen(s: string, start: number): number {
   const open = s[start];
   const close = BRACKET_PAIRS.get(open);
@@ -90,6 +94,15 @@ export function stripOuterParens(s: string): string {
     const close = findMatchingParen(out, 0);
     if (close === out.length - 1) out = out.slice(1, -1).trim();
     else break;
+  }
+  return out;
+}
+
+export function removeWhitespace(s: string): string {
+  let out = "";
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (!isWhitespace(ch)) out += ch;
   }
   return out;
 }
@@ -252,16 +265,19 @@ export function resolveTypeAlias(typeStr: string, env?: Env): string {
       return t;
     }
     if (t.startsWith("(")) {
-      // function signature: (T, T) => R
-      const arrowIdx = t.indexOf(") =>");
-      if (arrowIdx === -1) return t;
-      const paramsContent = t.slice(1, arrowIdx).trim();
+      // function signature: (T, T) => R  (allow variants like '() => R' or ')=>R')
+      const closeIdx = t.indexOf(")");
+      if (closeIdx === -1) return t;
+      const after = t.slice(closeIdx + 1);
+      const arrowPos = after.indexOf("=>");
+      if (arrowPos === -1) return t;
+      const paramsContent = t.slice(1, closeIdx).trim();
       const params =
         paramsContent === "" ? [] : topLevelSplitTrim(paramsContent, ",");
       const resolvedParams = params.map((p) =>
         resolveRecursive(p.trim(), depth + 1)
       );
-      const ret = t.slice(arrowIdx + 4).trim();
+      const ret = after.slice(arrowPos + 2).trim();
       const resolvedRet = resolveRecursive(ret, depth + 1);
       return `(${resolvedParams.join(", ")}) => ${resolvedRet}`;
     }
@@ -687,6 +703,41 @@ export function parseIdentifierWithFieldAccess(
     }
   }
   return j;
+}
+
+export interface MethodCallParse {
+  left: string;
+  method: string;
+  args: string[];
+}
+
+export function parseMethodCall(s: string): MethodCallParse | undefined {
+  let depth = 0;
+  let lastDot = -1;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === "(" || ch === "{" || ch === "[") depth++;
+    else if (ch === ")" || ch === "}" || ch === "]") depth--;
+    else if (ch === "." && depth === 0) lastDot = i;
+  }
+  if (lastDot === -1) return undefined;
+
+  const left = s.slice(0, lastDot).trim();
+  const right = s.slice(lastDot + 1).trim();
+
+  const idRes = parseIdentifierAt(right, 0);
+  if (!idRes) return undefined;
+  const methodName = idRes.name;
+
+  const rest = sliceTrim(right, idRes.next);
+  if (!rest.startsWith("(")) return undefined;
+  const close = findMatchingParen(rest, 0);
+  if (close < 0) return undefined;
+  const argsContent = rest.slice(1, close).trim();
+  const args = splitTopLevelOrEmpty(argsContent, ",");
+  const trailing = rest.slice(close + 1).trim();
+  if (trailing !== "") return undefined;
+  return { left, method: methodName, args };
 }
 
 export interface BracketResult {

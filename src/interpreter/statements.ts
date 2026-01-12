@@ -27,6 +27,7 @@ import {
 } from "./shared";
 import { isArrayValue } from "./arrays";
 import { findSlicesReferencing } from "./pointers";
+import { isTypeCompatible } from "./signatures";
 import type { ArrayValue } from "./types";
 import { handleFnStatement, callNamedFunction } from "./functions";
 import { tryHandleControlFlow } from "./controlFlow";
@@ -129,37 +130,24 @@ function validateAnnotatedTypeCompatibility(
   initType: string | undefined,
   env?: Env
 ) {
-  // resolve aliases before comparisons
-  const resolvedAnnotated = annotatedType
-    ? resolveTypeAlias(annotatedType, env)
-    : annotatedType;
-  const resolvedInit = initType ? resolveTypeAlias(initType, env) : initType;
-
-  // pointer types: exact match on resolved inner type
-  if (resolvedAnnotated && resolvedAnnotated.startsWith("*")) {
-    if (resolvedAnnotated !== resolvedInit)
+  // Use shared helper for basic compatibility (including functions/pointers)
+  if (!isTypeCompatible(annotatedType, initType, env)) {
+    // specialized error messages for pointers and functions to maintain compatibility with existing tests/errors
+    const resolvedAnnotated = resolveTypeAlias(annotatedType, env);
+    if (resolvedAnnotated.startsWith("*"))
       throw new Error("Pointer type mismatch");
-    return;
-  }
-
-  // function types e.g., (I32, I32) => I32 - require exact match with inferred type
-  if (
-    resolvedAnnotated &&
-    resolvedAnnotated.startsWith("(") &&
-    resolvedAnnotated.includes("=>")
-  ) {
-    if (resolvedAnnotated !== resolvedInit) {
+    if (resolvedAnnotated.startsWith("("))
       throw new Error("Function type mismatch");
-    }
-    return;
+
+    // Fall back to integer/bool specific validation for detailed error messages
+    validateTypeCompatibility(annotatedType, initType);
   }
 
   // If annotated resolves to an unknown non-concrete type, error
-  if (isUnknownNonConcreteType(resolvedAnnotated)) {
+  const resolvedAnnotatedFinal = resolveTypeAlias(annotatedType, env);
+  if (isUnknownNonConcreteType(resolvedAnnotatedFinal)) {
     throw new Error(`Unknown type: ${annotatedType}`);
   }
-
-  validateTypeCompatibility(annotatedType, initType);
 }
 
 interface AnnotationResult {

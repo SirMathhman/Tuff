@@ -19,7 +19,15 @@ import {
   ensureExistsInEnv,
   getLinearDestructor,
   assertCanMoveBinding,
+  parseMethodCall,
+  isObjectWithKey,
 } from "./shared";
+import {
+  parseParamTypesFromSignature,
+  computeArgTypeFromExpr,
+  isTypeCompatible,
+  isValueCompatibleWithParam,
+} from "./signatures";
 import { evalBlock, handleYieldValue } from "./statements";
 import { isReturnValue, ReturnValue } from "./returns";
 import { parseFnSignature } from "./typeParsers";
@@ -85,10 +93,6 @@ function createThisStructAndBindToEnv(
   };
   callEnv.set("this", { value: sv, mutable: false, type: "This" } as EnvItem);
   return sv;
-}
-
-function isObjectWithKey(o: unknown, key: string): boolean {
-  return typeof o === "object" && o !== null && key in (o as object);
 }
 
 function isFunctionValue(v: unknown): v is FunctionValue {
@@ -259,20 +263,34 @@ export function tryHandleCall(s: string, env?: Env): unknown | undefined {
   if (func.params.length !== args.length)
     throw new Error("Argument count mismatch");
 
+  // Runtime argument-type checking when function has a signature
+  const paramTypes = parseParamTypesFromSignature(item.type);
+  if (paramTypes !== undefined) {
+    for (let i = 0; i < paramTypes.length; i++) {
+      const expected = paramTypes[i];
+      const argExpr = args[i];
+      const argType = computeArgTypeFromExpr(argExpr, env);
+      if (!isTypeCompatible(expected, argType, env))
+        throw new Error("Argument type mismatch");
+    }
+  }
+
   const argVals = args.map((a) => {
     const at = a.trim();
-    // Move linear identifiers when passed as call arguments.
     if (env && isIdentifierName(at) && env.has(at)) {
       const argItem = env.get(at)!;
       if (argItem.type === "__deleted__") throw new Error("Unknown identifier");
       if (argItem.moved) throw new Error("Use-after-move");
       const destructor = getLinearDestructor(argItem.type, env);
       if (destructor) {
+        // move linear binding when passed to call
         assertCanMoveBinding(env, at);
         argItem.moved = true;
         env.set(at, argItem);
         return argItem.value;
       }
+      // otherwise pass the underlying value (pointer, function, number, etc.)
+      return argItem.value;
     }
     return interpret(a, env);
   });
@@ -310,12 +328,19 @@ export function tryHandleFnExpression(
   rest = sliceTrim(rest, close + 1);
   rest = extractAfterArrow(rest, "Invalid fn declaration");
 
-  // only support braced bodies for expression form
-  if (!rest.startsWith("{")) return undefined;
-  const bc = findMatchingParen(rest, 0);
-  if (bc < 0) throw new Error("Unterminated fn body");
-  const body = rest.slice(0, bc + 1);
-  const trailing = rest.slice(bc + 1).trim();
+  // support both braced and expression bodies for expression-form functions
+  let body: string;
+  let trailing: string;
+  if (rest.startsWith("{")) {
+    const bc = findMatchingParen(rest, 0);
+    if (bc < 0) throw new Error("Unterminated fn body");
+    body = rest.slice(0, bc + 1);
+    trailing = rest.slice(bc + 1).trim();
+  } else {
+    // treat the remainder as a single-expression body
+    body = `{ ${rest} }`;
+    trailing = "";
+  }
 
   // create a function value that can be returned or registered in a local env
   const funcEnv = new Map<string, EnvItem>(env ?? new Map<string, EnvItem>());
@@ -377,41 +402,35 @@ export function tryHandleFunctionLikeExpression(
   return tryHandleArrowFunctionExpression(s, env);
 }
 
-function parseMethodCall(s: string): MethodCallParse | undefined {
-  let depth = 0;
-  let lastDot = -1;
-  for (let i = 0; i < s.length; i++) {
-    const ch = s[i];
-    if (ch === "(" || ch === "{" || ch === "[") depth++;
-    else if (ch === ")" || ch === "}" || ch === "]") depth--;
-    else if (ch === "." && depth === 0) lastDot = i;
+function runFunctionWithBindings(
+  func: FunctionValue,
+  bindings: Array<[string, unknown]>
+): number {
+  const callEnv = new Map<string, EnvItem>(func.env);
+  for (const [k, v] of bindings)
+    callEnv.set(k, {
+      value: v as EnvItem["value"],
+      mutable: false,
+    } as EnvItem);
+  return handleYieldValue(() => evalBlock(func.body, callEnv, true)) as number;
+}
+
+function checkMethodArgumentTypes(
+  paramTypes: string[] | undefined,
+  args: string[],
+  env?: Env,
+  offset = 0
+) {
+  if (paramTypes === undefined) return;
+  for (let i = 0; i < args.length; i++) {
+    const expected = paramTypes[i + offset];
+    const argType = computeArgTypeFromExpr(args[i], env);
+    if (!isTypeCompatible(expected, argType, env))
+      throw new Error("Argument type mismatch");
   }
-  if (lastDot === -1) return undefined;
-
-  const left = s.slice(0, lastDot).trim();
-  const right = s.slice(lastDot + 1).trim();
-
-  const idRes = parseIdentifierAt(right, 0);
-  if (!idRes) return undefined;
-  const methodName = idRes.name;
-
-  const rest = sliceTrim(right, idRes.next);
-  if (!rest.startsWith("(")) return undefined;
-  const close = findMatchingParen(rest, 0);
-  if (close < 0) return undefined;
-  const argsContent = rest.slice(1, close).trim();
-  const args = splitTopLevelOrEmpty(argsContent, ",");
-  const trailing = rest.slice(close + 1).trim();
-  if (trailing !== "") return undefined;
-  return { left, method: methodName, args };
 }
 
-interface MethodCallParse {
-  left: string;
-  method: string;
-  args: string[];
-}
-
+// eslint-disable-next-line max-lines-per-function, complexity
 export function tryHandleMethodCall(s: string, env?: Env): number | undefined {
   const parsed = parseMethodCall(s);
   if (!parsed) return undefined;
@@ -426,35 +445,32 @@ export function tryHandleMethodCall(s: string, env?: Env): number | undefined {
   const func = resolveMethodFromEnv(method, receiverVal, env);
   if (!func) throw new Error("Unknown identifier");
 
-  function runFunctionWithBindings(bindings: Array<[string, unknown]>): number {
-    const callEnv = new Map<string, EnvItem>(func!.env);
-    for (const [k, v] of bindings)
-      callEnv.set(k, {
-        value: v as EnvItem["value"],
-        mutable: false,
-      } as EnvItem);
-    return handleYieldValue(() =>
-      evalBlock(func!.body, callEnv, true)
-    ) as number;
-  }
+  // Perform runtime type-checking when a signature is available in the env
+  let sig: string | undefined = undefined;
+  if (env && env.has(method)) sig = env.get(method)!.type;
+  const paramTypes = parseParamTypesFromSignature(sig);
 
-  // Two calling conventions for methods:
-  // 1) fn m(this, ...) => ...  -> params.length === args.length + 1
-  // 2) fn m(...) => ...        -> params.length === args.length
+  const argVals = interpretAllAny(args, interpret, env);
+  const bindings: Array<[string, unknown]> = [];
+
   if (func.params.length === args.length + 1) {
-    const argVals = interpretAllAny(args, interpret, env);
-    const bindings: Array<[string, unknown]> = [[func.params[0], receiverVal]];
+    if (
+      paramTypes &&
+      !isValueCompatibleWithParam(receiverVal, paramTypes[0], env)
+    )
+      throw new Error("Argument type mismatch");
+    checkMethodArgumentTypes(paramTypes, args, env, 1);
+    bindings.push([func.params[0], receiverVal]);
     for (let i = 0; i < args.length; i++)
       bindings.push([func.params[i + 1], argVals[i]]);
-    return runFunctionWithBindings(bindings);
+    return runFunctionWithBindings(func, bindings);
   }
 
   if (func.params.length === args.length) {
-    const argVals = interpretAllAny(args, interpret, env);
-    const bindings: Array<[string, unknown]> = [];
+    checkMethodArgumentTypes(paramTypes, args, env, 0);
     for (let i = 0; i < args.length; i++)
       bindings.push([func.params[i], argVals[i]]);
-    return runFunctionWithBindings(bindings);
+    return runFunctionWithBindings(func, bindings);
   }
 
   throw new Error("Argument count mismatch");
