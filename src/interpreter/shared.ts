@@ -143,7 +143,9 @@ export function registerBorrow(env: Env, name: string, mutable: boolean): void {
     counts.mut = 1;
   } else {
     if (counts.mut > 0)
-      throw new Error("Cannot take immutable reference while mutable borrow exists");
+      throw new Error(
+        "Cannot take immutable reference while mutable borrow exists"
+      );
     counts.immut += 1;
   }
 }

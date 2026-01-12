@@ -47,7 +47,13 @@ function evalComparisonOp(
   if (left === "" || right === "") return undefined;
   const lvRaw = interpret(left, env);
   const rvRaw = interpret(right, env);
-  if (typeof lvRaw !== "number" || typeof rvRaw !== "number")
+
+  if (
+    typeof lvRaw !== "number" ||
+    typeof rvRaw !== "number" ||
+    Number.isNaN(lvRaw as number) ||
+    Number.isNaN(rvRaw as number)
+  )
     throw new Error("Comparison operands must be numbers");
   const lv = lvRaw as number;
   const rv = rvRaw as number;
