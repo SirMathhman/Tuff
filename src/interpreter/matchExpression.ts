@@ -9,19 +9,26 @@ import {
   topLevelSplitTrim,
 } from "./shared";
 
-function evaluateMatchArms(arms: MatchArm[], scrVal: number, env?: Env): number | undefined {
+function evaluateMatchArms(
+  arms: MatchArm[],
+  scrVal: number,
+  env?: Env
+): number | undefined {
   for (const a of arms) {
     if (a.pattern === "_") {
       const res = interpret(a.expr, env);
-      if (typeof res !== "number") throw new Error("Match arm must return number");
+      if (typeof res !== "number")
+        throw new Error("Match arm must return number");
       return res as number;
     }
     const patValRaw = interpret(a.pattern, env);
-    if (typeof patValRaw !== "number") throw new Error("Match pattern must be numeric");
+    if (typeof patValRaw !== "number")
+      throw new Error("Match pattern must be numeric");
     const patVal = patValRaw as number;
     if (scrVal === patVal) {
       const res = interpret(a.expr, env);
-      if (typeof res !== "number") throw new Error("Match arm must return number");
+      if (typeof res !== "number")
+        throw new Error("Match arm must return number");
       return res as number;
     }
   }
@@ -70,7 +77,8 @@ export function tryHandleMatchExpression(
   const arms: MatchArm[] = armsRaw.map((arm) => parseArm(arm));
 
   const scrValRaw = interpret(scrutineeStr, env);
-  if (typeof scrValRaw !== "number") throw new Error("Match scrutinee must be numeric");
+  if (typeof scrValRaw !== "number")
+    throw new Error("Match scrutinee must be numeric");
   const scrVal = scrValRaw as number;
   const matched = evaluateMatchArms(arms, scrVal, env);
   if (matched !== undefined) return matched;

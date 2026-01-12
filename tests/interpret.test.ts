@@ -408,7 +408,22 @@ describe("interpret - pointers", () => {
     ).toBe(7);
   });
 
-  it("supports constructor with instance method", () => expect(interpret("fn Point(x : I32, y : I32) => { fn manhattan() => x + y; this }; let temp = Point(3, 4); temp.manhattan()")).toBe(7));
+  it("supports constructor with instance method", () =>
+    expect(
+      interpret(
+        "fn Point(x : I32, y : I32) => { fn manhattan() => x + y; this }; let temp = Point(3, 4); temp.manhattan()"
+      )
+    ).toBe(7));
+
+  it("supports function expressions as rvalues and calls them", () => {
+    expect(
+      interpret(
+        "let func = fn add(first : I32, second : I32) => { first + second }; func(1, 2)"
+      )
+    ).toBe(3);
+    // also allow anonymous fn expression assigned to var
+    expect(interpret("let f = fn(a : I32, b : I32) => { a + b }; f(2, 3)")).toBe(5);
+  });
 });
 
 describe("interpret - pointers (assignments)", () => {

@@ -32,11 +32,7 @@ export function handleFnStatement(
 
   rest = sliceTrim(rest, nameRes.next);
   const { content: paramsContent, close } = extractParenContent(rest, "fn");
-  const paramsRaw = topLevelSplitTrim(paramsContent, ",");
-  const params = paramsRaw.map((p) => {
-    const { name } = parseFieldDef(p);
-    return ensureIdentifier(name, "Invalid fn parameter");
-  });
+  const params = parseFnParams(paramsContent);
 
   let restAfterParams = rest.slice(close + 1).trim();
   // accept optional return type annotation
@@ -59,19 +55,37 @@ export function handleFnStatement(
   return NaN;
 }
 
-function bindParamsToEnv(targetEnv: Map<string, EnvItem>, params: string[], values: unknown[]) {
+function bindParamsToEnv(
+  targetEnv: Map<string, EnvItem>,
+  params: string[],
+  values: unknown[]
+) {
   for (let i = 0; i < params.length; i++) {
-    targetEnv.set(params[i], { value: values[i] as EnvItem["value"], mutable: false } as EnvItem);
+    targetEnv.set(params[i], {
+      value: values[i] as EnvItem["value"],
+      mutable: false,
+    } as EnvItem);
   }
 }
 
-function createThisStructAndBindToEnv(callEnv: Map<string, EnvItem>, params: string[], argVals: unknown[]): StructValue {
-  const sv: StructValue = { fields: params.slice(), values: argVals.slice() as number[] };
+function createThisStructAndBindToEnv(
+  callEnv: Map<string, EnvItem>,
+  params: string[],
+  argVals: unknown[]
+): StructValue {
+  const sv: StructValue = {
+    fields: params.slice(),
+    values: argVals.slice() as number[],
+  };
   callEnv.set("this", { value: sv, mutable: false, type: "This" } as EnvItem);
   return sv;
 }
 
-function attachMethodsToStructFromEnv(sv: StructValue, callEnv: Map<string, EnvItem>, funcEnv: Map<string, EnvItem>) {
+function attachMethodsToStructFromEnv(
+  sv: StructValue,
+  callEnv: Map<string, EnvItem>,
+  funcEnv: Map<string, EnvItem>
+) {
   for (const [k, v] of callEnv.entries()) {
     if (!funcEnv.has(k) && v.type === "Fn") {
       if (!sv.methods) sv.methods = new Map<string, FunctionValue>();
@@ -80,7 +94,11 @@ function attachMethodsToStructFromEnv(sv: StructValue, callEnv: Map<string, EnvI
   }
 }
 
-function resolveMethodFromEnv(methodName: string, receiverVal: unknown, env?: Env): FunctionValue | undefined {
+function resolveMethodFromEnv(
+  methodName: string,
+  receiverVal: unknown,
+  env?: Env
+): FunctionValue | undefined {
   // Check global env first
   if (env && env.has(methodName)) {
     const item = env.get(methodName)!;
@@ -88,9 +106,16 @@ function resolveMethodFromEnv(methodName: string, receiverVal: unknown, env?: En
     return item.value as FunctionValue;
   }
   // If receiver is a struct, check instance methods
-  if (typeof receiverVal === "object" && receiverVal !== null && "methods" in (receiverVal as StructValue)) {
-    const methods: Map<string, FunctionValue> | undefined = (receiverVal as StructValue).methods;
-    if (methods && methods.has(methodName)) return methods.get(methodName) as FunctionValue;
+  if (
+    typeof receiverVal === "object" &&
+    receiverVal !== null &&
+    "methods" in (receiverVal as StructValue)
+  ) {
+    const methods: Map<string, FunctionValue> | undefined = (
+      receiverVal as StructValue
+    ).methods;
+    if (methods && methods.has(methodName))
+      return methods.get(methodName) as FunctionValue;
   }
   return undefined;
 }
@@ -100,11 +125,21 @@ function extractAfterArrow(s: string, msg: string) {
   return sliceTrim(s, arrowIdx + 2);
 }
 
+function parseFnParams(paramsContent: string): string[] {
+  const paramsRaw = topLevelSplitTrim(paramsContent, ",");
+  return paramsRaw.map((p) => {
+    const { name } = parseFieldDef(p);
+    return ensureIdentifier(name, "Invalid fn parameter");
+  });
+}
+
 function topLevelStatements(body: string): string[] {
   const b = body.trim();
   let inner = b;
   if (b.startsWith("{") && b.endsWith("}")) inner = b.slice(1, b.length - 1);
-  return topLevelSplitTrim(inner, ";").map((p) => p.trim()).filter((p) => p !== "");
+  return topLevelSplitTrim(inner, ";")
+    .map((p) => p.trim())
+    .filter((p) => p !== "");
 }
 
 function registerTopLevelFns(body: string, callEnv: Map<string, EnvItem>) {
@@ -158,7 +193,11 @@ export function tryHandleCall(s: string, env?: Env): unknown | undefined {
   const callEnv = new Map<string, EnvItem>(func.env);
   bindParamsToEnv(callEnv, func.params, argVals);
 
-  const thisStruct = createThisStructAndBindToEnv(callEnv, func.params, argVals);
+  const thisStruct = createThisStructAndBindToEnv(
+    callEnv,
+    func.params,
+    argVals
+  );
   // If the function body is simply `this`, return the struct directly (with methods attached)
   const bodyTrim = func.body.trim();
   if (bodyTrim === "this" || bodyTrim === "this;") {
@@ -187,37 +226,54 @@ export function tryHandleCall(s: string, env?: Env): unknown | undefined {
 export function tryHandleFnExpression(
   s: string,
   env?: Env
-): number | undefined {
+): unknown | undefined {
   const ss = s.trim();
   if (!startsWithKeyword(ss, "fn")) return undefined;
 
-  // find the param list and body boundaries without re-parsing params
-  const rest = sliceTrim(ss, 3);
+  // allow optional name for expression form: fn name?(...) => { ... }
+  let rest = sliceTrim(ss, 2);
+  // If the fn keyword is immediately followed by '(', treat as anonymous; otherwise
+  // attempt to parse an optional name token.
+  const nameRes = rest.startsWith("(") ? undefined : parseIdentifierAt(rest, 0);
+  let name: string | undefined = undefined;
+  if (nameRes) {
+    name = nameRes.name;
+    rest = sliceTrim(rest, nameRes.next);
+  }
+
+  // find params
   const paren = rest.indexOf("(");
   ensure(paren !== -1, "Invalid fn declaration");
   const close = findMatchingParen(rest, paren);
   ensureCloseParen(close, "Unterminated fn params");
 
-  let restAfterParams = sliceTrim(rest, close + 1);
-  restAfterParams = extractAfterArrow(
-    restAfterParams,
-    "Invalid fn declaration"
-  );
+  const paramsContent = rest.slice(paren + 1, close);
+  const params = parseFnParams(paramsContent);
 
-  // only support braced body for expression form (simple and safe)
-  if (!restAfterParams.startsWith("{")) return undefined;
-  const bc = findMatchingParen(restAfterParams, 0);
+  rest = sliceTrim(rest, close + 1);
+  rest = extractAfterArrow(rest, "Invalid fn declaration");
+
+  // only support braced bodies for expression form
+  if (!rest.startsWith("{")) return undefined;
+  const bc = findMatchingParen(rest, 0);
   if (bc < 0) throw new Error("Unterminated fn body");
-  const body = restAfterParams.slice(0, bc + 1);
-  const trailing = restAfterParams.slice(bc + 1).trim();
+  const body = rest.slice(0, bc + 1);
+  const trailing = rest.slice(bc + 1).trim();
 
-  const fnStmt = ss.slice(0, ss.indexOf(body) + body.length);
-  const actualEnv = env ?? new Map<string, EnvItem>();
-  // reuse the existing statement handler to register the function
-  handleFnStatement(fnStmt, actualEnv, new Set<string>());
+  // create a function value that can be returned or registered in a local env
+  const funcEnv = new Map<string, EnvItem>(env ?? new Map<string, EnvItem>());
+  const func: FunctionValue = { params, body, env: funcEnv };
 
-  if (trailing === "") return NaN;
-  const res = interpret(trailing, actualEnv);
+  if (name) {
+    // bind the function to its name in the created env to support recursion
+    funcEnv.set(name, { value: func, mutable: false, type: "Fn" } as EnvItem);
+  }
+
+  // If this is a bare fn expression (no trailing), return the function value
+  if (trailing === "") return func;
+
+  // Otherwise, evaluate the trailing expression in an env that contains the function
+  const res = interpret(trailing, funcEnv);
   if (typeof res !== "number") throw new Error("Expected numeric result");
   return res as number;
 }
@@ -273,7 +329,11 @@ export function tryHandleMethodCall(s: string, env?: Env): number | undefined {
 
   function runFunctionWithBindings(bindings: Array<[string, unknown]>): number {
     const callEnv = new Map<string, EnvItem>(func!.env);
-    for (const [k, v] of bindings) callEnv.set(k, { value: v as EnvItem["value"], mutable: false } as EnvItem);
+    for (const [k, v] of bindings)
+      callEnv.set(k, {
+        value: v as EnvItem["value"],
+        mutable: false,
+      } as EnvItem);
     return handleYieldValue(() => evalBlock(func!.body, callEnv));
   }
 
@@ -283,14 +343,16 @@ export function tryHandleMethodCall(s: string, env?: Env): number | undefined {
   if (func.params.length === args.length + 1) {
     const argVals = interpretAll(args, interpret, env);
     const bindings: Array<[string, unknown]> = [[func.params[0], receiverVal]];
-    for (let i = 0; i < args.length; i++) bindings.push([func.params[i + 1], argVals[i]]);
+    for (let i = 0; i < args.length; i++)
+      bindings.push([func.params[i + 1], argVals[i]]);
     return runFunctionWithBindings(bindings);
   }
 
   if (func.params.length === args.length) {
     const argVals = interpretAll(args, interpret, env);
     const bindings: Array<[string, unknown]> = [];
-    for (let i = 0; i < args.length; i++) bindings.push([func.params[i], argVals[i]]);
+    for (let i = 0; i < args.length; i++)
+      bindings.push([func.params[i], argVals[i]]);
     return runFunctionWithBindings(bindings);
   }
 

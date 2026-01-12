@@ -121,7 +121,7 @@ function tryHandleFieldAccess(s: string, env?: Env): number | undefined {
 }
 
 // eslint-disable-next-line complexity
-function tryParseNumberOrIdentifier(s: string, env?: Env): number | undefined {
+function tryParseNumberOrIdentifier(s: string, env?: Env): unknown | undefined {
   const { numStr, rest } = splitNumberAndSuffix(s);
   if (numStr === "") {
     const id = s.trim();
@@ -138,15 +138,15 @@ function tryParseNumberOrIdentifier(s: string, env?: Env): number | undefined {
         const item = env.get(id)!;
         if (item.type === "__deleted__") throw new Error("Unknown identifier");
         if (typeof item.value === "number") return item.value;
-        // If it's a struct or array value, we can't return it as a number, so return undefined
-        // and let other handlers (like field access or indexing) deal with it
+        // If it's a struct/array/pointer, return undefined so other handlers can try
         if (
           isStructValue(item.value) ||
           isArrayValue(item.value) ||
           isPointerValue(item.value)
         )
           return undefined;
-        throw new Error("Unknown identifier");
+        // Otherwise (e.g., FunctionValue), return it as an rvalue
+        return item.value;
       }
       throw new Error("Unknown identifier");
     }
