@@ -1,7 +1,7 @@
 import type { Env, EnvItem } from "./types";
 import { interpret } from "./interpret";
 import { makeDeletedEnvItem } from "./env";
-import { evalBlock, isYieldValue } from "./statements";
+import { evalBlock, isYieldValue, isBreakException } from "./statements";
 import {
   ensure,
   ensureNonEmptyPair,
@@ -159,6 +159,9 @@ function handleWhileAt(
       lastLocal = evalBlock(body, env);
     }
   } catch (e: unknown) {
+    if (isBreakException(e)) {
+      return { handled: true, last: lastLocal, consumed } as ControlFlowResult;
+    }
     if (isYieldValue(e)) {
       throw e; // propagate yield out of while
     }
@@ -198,10 +201,13 @@ function handleForAt(
       lastLocal = evalBlock(body, loopEnv);
     }
   } catch (e: unknown) {
-    if (isYieldValue(e)) {
+    if (isBreakException(e)) {
+      // break caught, exit the loop
+    } else if (isYieldValue(e)) {
       throw e; // propagate yield out of for
+    } else {
+      throw e;
     }
-    throw e;
   }
 
   // ensure loop-declared name is not visible after the loop

@@ -23,11 +23,31 @@ export class YieldValue extends Error {
   }
 }
 
-function isYieldValue(e: unknown): boolean {
-  return typeof e === "object" && e !== null && "__isYieldValue" in e;
+// Exception thrown by break statements to exit loops
+export class BreakException extends Error {
+  public readonly __isBreakException = true;
+  constructor() {
+    super();
+    Object.setPrototypeOf(this, BreakException.prototype);
+  }
 }
 
-export { isYieldValue };
+function isControlFlowException(
+  e: unknown,
+  flag: "__isYieldValue" | "__isBreakException"
+): boolean {
+  return typeof e === "object" && e !== null && flag in e;
+}
+
+function isYieldValue(e: unknown): boolean {
+  return isControlFlowException(e, "__isYieldValue");
+}
+
+function isBreakException(e: unknown): boolean {
+  return isControlFlowException(e, "__isBreakException");
+}
+
+export { isYieldValue, isBreakException };
 
 function startsWithGroup(s: string): boolean {
   return s[0] === "(" || s[0] === "{";
@@ -154,6 +174,8 @@ export function evalBlock(s: string, envIn?: Env): number {
       const expr = sliceTrim(stmt, 6);
       last = interpret(expr, env);
       throw new YieldValue(last);
+    } else if (stmt === "break") {
+      throw new BreakException();
     } else {
       last = processNonLetStatement(stmt, env);
     }

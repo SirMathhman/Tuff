@@ -190,6 +190,10 @@ describe("interpret - blocks (expressions extras)", () => {
     expect(interpret("let mut y = 0; while (y < 4) { y += 1; } y")).toBe(4);
   });
 
+  it("supports break statement in while loops", () => {
+    expect(interpret("let mut x = 0; while (x < 4) { x += 1; break; }; x")).toBe(1);
+  });
+
   it("supports for-loops with range header and inline body", () => {
     expect(
       interpret("let mut sum = 0; for (let mut i in 0..10) sum += i; sum")
