@@ -1,7 +1,7 @@
 import type { Env, EnvItem } from "./types";
 import { interpret } from "./interpret";
 import { makeDeletedEnvItem } from "./env";
-import { evalBlock, isYieldValue, isBreakException } from "./statements";
+import { evalBlock, isYieldValue, isBreakException, isContinueException } from "./statements";
 import {
   ensure,
   ensureNonEmptyPair,
@@ -138,6 +138,20 @@ function resolveBodyAfterClose(
   return { body, consumed };
 }
 
+function executeLoopBodyWithContinue(body: string, env: Env): number {
+  let lastLocal = NaN;
+  try {
+    lastLocal = evalBlock(body, env);
+  } catch (e: unknown) {
+    if (isContinueException(e)) {
+      // continue skips to next iteration, return last value before continue
+      return lastLocal;
+    }
+    throw e;
+  }
+  return lastLocal;
+}
+
 function handleWhileAt(
   idx: number,
   stmts: string[],
@@ -156,7 +170,7 @@ function handleWhileAt(
   let lastLocal = NaN;
   try {
     while (interpret(condStr, env) !== 0) {
-      lastLocal = evalBlock(body, env);
+      lastLocal = executeLoopBodyWithContinue(body, env);
     }
   } catch (e: unknown) {
     if (isBreakException(e)) {
@@ -198,7 +212,7 @@ function handleForAt(
       // create shallow env and declare loop variable
       const loopEnv = new Map<string, EnvItem>(env);
       loopEnv.set(name, { value: i, mutable, type: undefined } as EnvItem);
-      lastLocal = evalBlock(body, loopEnv);
+      lastLocal = executeLoopBodyWithContinue(body, loopEnv);
     }
   } catch (e: unknown) {
     if (isBreakException(e)) {
@@ -236,6 +250,12 @@ export function tryHandleControlFlow(
     } catch (e: unknown) {
       if (isYieldValue(e)) {
         throw e; // propagate yield out of if
+      }
+      if (isBreakException(e)) {
+        throw e; // propagate break out of if
+      }
+      if (isContinueException(e)) {
+        throw e; // propagate continue out of if
       }
       throw e;
     }

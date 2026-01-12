@@ -32,9 +32,18 @@ export class BreakException extends Error {
   }
 }
 
+// Exception thrown by continue statements to skip to next loop iteration
+export class ContinueException extends Error {
+  public readonly __isContinueException = true;
+  constructor() {
+    super();
+    Object.setPrototypeOf(this, ContinueException.prototype);
+  }
+}
+
 function isControlFlowException(
   e: unknown,
-  flag: "__isYieldValue" | "__isBreakException"
+  flag: "__isYieldValue" | "__isBreakException" | "__isContinueException"
 ): boolean {
   return typeof e === "object" && e !== null && flag in e;
 }
@@ -47,7 +56,11 @@ function isBreakException(e: unknown): boolean {
   return isControlFlowException(e, "__isBreakException");
 }
 
-export { isYieldValue, isBreakException };
+function isContinueException(e: unknown): boolean {
+  return isControlFlowException(e, "__isContinueException");
+}
+
+export { isYieldValue, isBreakException, isContinueException };
 
 function startsWithGroup(s: string): boolean {
   return s[0] === "(" || s[0] === "{";
@@ -176,6 +189,8 @@ export function evalBlock(s: string, envIn?: Env): number {
       throw new YieldValue(last);
     } else if (stmt === "break") {
       throw new BreakException();
+    } else if (stmt === "continue") {
+      throw new ContinueException();
     } else {
       last = processNonLetStatement(stmt, env);
     }
