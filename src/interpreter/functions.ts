@@ -18,6 +18,7 @@ import {
   interpretAllAny,
   ensureExistsInEnv,
   getLinearDestructor,
+  assertCanMoveBinding,
 } from "./shared";
 import { evalBlock, handleYieldValue } from "./statements";
 import { isReturnValue, ReturnValue } from "./returns";
@@ -267,6 +268,7 @@ export function tryHandleCall(s: string, env?: Env): unknown | undefined {
       if (argItem.moved) throw new Error("Use-after-move");
       const destructor = getLinearDestructor(argItem.type, env);
       if (destructor) {
+        assertCanMoveBinding(env, at);
         argItem.moved = true;
         env.set(at, argItem);
         return argItem.value;

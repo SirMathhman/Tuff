@@ -25,7 +25,7 @@ describe("interpret - linear types with pointers", () => {
       *p
     `;
 
-    expect(() => interpret(program)).toThrow("Use-after-move");
+    expect(() => interpret(program)).toThrow("Cannot move while borrowed");
   });
 
   it("cannot take address-of a moved linear binding", () => {
@@ -54,6 +54,6 @@ describe("interpret - linear types with pointers", () => {
       0
     `;
 
-    expect(() => interpret(program)).toThrow("Use-after-move");
+    expect(() => interpret(program)).toThrow("Cannot move while borrowed");
   });
 });

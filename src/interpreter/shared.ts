@@ -102,6 +102,80 @@ const envTypeAliasMap: WeakMap<Env, Map<string, string>> = new WeakMap();
 // This is also block-scoped, so it is keyed by Env.
 const envLinearDestructorMap: WeakMap<Env, Map<string, string>> = new WeakMap();
 
+// Borrow tracking (minimal borrow checker): track borrows per binding (EnvItem)
+// so that borrowing works even when block scopes clone the Env Map but share
+// EnvItem objects for existing bindings.
+interface BorrowCounts {
+  immut: number;
+  mut: number;
+}
+
+const envItemBorrowCounts: WeakMap<EnvItem, BorrowCounts> = new WeakMap();
+
+function getBorrowCounts(item: EnvItem): BorrowCounts {
+  const existing = envItemBorrowCounts.get(item);
+  if (existing) return existing;
+  const fresh: BorrowCounts = { immut: 0, mut: 0 };
+  envItemBorrowCounts.set(item, fresh);
+  return fresh;
+}
+
+function hasAnyActiveBorrow(counts: BorrowCounts): boolean {
+  return counts.immut > 0 || counts.mut > 0;
+}
+
+function assertNoActiveBorrows(counts: BorrowCounts, msg: string): void {
+  if (hasAnyActiveBorrow(counts)) throw new Error(msg);
+}
+
+export function registerBorrow(env: Env, name: string, mutable: boolean): void {
+  ensureExistsInEnv(name, env);
+  const item = env.get(name)!;
+  if (item.type === "__deleted__") throw new Error("Unknown identifier");
+  if (item.moved) throw new Error("Use-after-move");
+
+  const counts = getBorrowCounts(item);
+  if (mutable) {
+    assertNoActiveBorrows(
+      counts,
+      "Cannot take mutable reference while borrow(s) exist"
+    );
+    counts.mut = 1;
+  } else {
+    if (counts.mut > 0)
+      throw new Error("Cannot take immutable reference while mutable borrow exists");
+    counts.immut += 1;
+  }
+}
+
+export function releaseBorrow(env: Env, name: string, mutable: boolean): void {
+  // Best-effort: if the binding is gone, there's nothing to release.
+  if (!env.has(name)) return;
+  const item = env.get(name)!;
+  if (item.type === "__deleted__") return;
+
+  const counts = getBorrowCounts(item);
+  if (mutable) {
+    counts.mut = 0;
+  } else {
+    counts.immut = Math.max(0, counts.immut - 1);
+  }
+}
+
+export function assertCanMoveBinding(env: Env, name: string): void {
+  ensureExistsInEnv(name, env);
+  const item = env.get(name)!;
+  const counts = getBorrowCounts(item);
+  assertNoActiveBorrows(counts, "Cannot move while borrowed");
+}
+
+export function assertCanAssignBinding(env: Env, name: string): void {
+  ensureExistsInEnv(name, env);
+  const item = env.get(name)!;
+  const counts = getBorrowCounts(item);
+  assertNoActiveBorrows(counts, "Cannot assign while borrowed");
+}
+
 export function getTypeAliasMap(env: Env): Map<string, string> {
   if (!envTypeAliasMap.has(env)) envTypeAliasMap.set(env, new Map());
   return envTypeAliasMap.get(env)!;

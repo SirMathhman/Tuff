@@ -21,6 +21,9 @@ import {
   getLinearDestructor,
   setLinearDestructor,
   isIdentifierName,
+  assertCanMoveBinding,
+  assertCanAssignBinding,
+  releaseBorrow,
 } from "./shared";
 import { isArrayValue } from "./arrays";
 import { findSlicesReferencing } from "./pointers";
@@ -40,6 +43,7 @@ import {
 import {
   tryHandlePointerAssignment,
   handlePointerInitializer,
+  isPointerValue,
 } from "./pointers";
 import { tryHandleThisAssignment, assertAssignable } from "./thisAssign";
 import { ReturnValue } from "./returns";
@@ -195,6 +199,8 @@ function tryMoveLinearIdentifier(
   const destructor = getLinearDestructor(item.type, env);
   if (!destructor) return undefined;
 
+  assertCanMoveBinding(env, t);
+
   item.moved = true;
   env.set(t, item);
   return item.value;
@@ -209,6 +215,8 @@ function dropLinearBindingIfLive(name: string, env: Env): void {
 
   const destructorName = getLinearDestructor(item.type, env);
   if (!destructorName) return;
+
+  assertCanMoveBinding(env, name);
 
   callNamedFunction(destructorName, [item.value], env);
   item.moved = true;
@@ -321,6 +329,17 @@ export function evalBlock(
     }
     return last;
   } finally {
+    // End-of-scope cleanup order:
+    // 1) release borrows held by pointer bindings declared in this scope
+    // 2) drop live linear bindings declared in this scope
+    for (const name of localLetDeclared) {
+      if (!env.has(name)) continue;
+      const item = env.get(name)!;
+      if (isPointerValue(item.value)) {
+        const ptr = item.value;
+        releaseBorrow(ptr.env, ptr.name, !!ptr.pointeeMutable);
+      }
+    }
     for (const name of localLetDeclared) dropLinearBindingIfLive(name, env);
   }
 }
@@ -577,6 +596,9 @@ function tryHandleAssignmentStatement(
   ensureIdentifierExists(idRes.name, env);
 
   const cur = env.get(idRes.name)!;
+
+  // Prevent assigning to a borrowed binding.
+  assertCanAssignBinding(env, idRes.name);
 
   // Prevent reassigning an array while slices exist
   if (isArrayValue(cur.value)) {

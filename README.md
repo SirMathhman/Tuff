@@ -41,3 +41,6 @@ Semantics:
 - **Auto-drop on scope exit**: if a live linear binding reaches the end of its scope, its destructor is called automatically.
 - **Drop on reassignment**: assigning a new value to a live linear binding drops the old value first.
 - **Pointers**: taking `&x`, dereferencing `*p`, or assigning through `*p = ...` will throw `Use-after-move` if the pointee linear binding has been moved/dropped.
+- **Borrowing (minimal)**: creating a pointer with `&x` or `&mut x` borrows the binding.
+	- `&mut x` is exclusive (no other borrows allowed).
+	- You cannot move or assign a borrowed binding (throws `Cannot move while borrowed` / `Cannot assign while borrowed`).

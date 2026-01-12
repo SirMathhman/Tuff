@@ -2,7 +2,12 @@ import type { Env, PointerValue, ArrayValue, SliceValue } from "./types";
 import { isIdentifierName } from "./shared";
 import type { EnvItem } from "./types";
 
-import { hasTypeTag, ensureExistsInEnv, resolveTypeAlias } from "./shared";
+import {
+  hasTypeTag,
+  ensureExistsInEnv,
+  resolveTypeAlias,
+  registerBorrow,
+} from "./shared";
 import { isArrayValue } from "./arrays";
 
 export function isPointerValue(v: unknown): v is PointerValue {
@@ -175,6 +180,10 @@ export function handlePointerInitializer(
     mutable,
     type: annotatedType || `*${ptr.pointeeType}`,
   } as EnvItem;
+
+  // Register the borrow for the lifetime of this pointer binding.
+  registerBorrow(ptr.env, ptr.name, !!ptr.pointeeMutable);
+
   env.set(name, itemOut);
   return true;
 }
