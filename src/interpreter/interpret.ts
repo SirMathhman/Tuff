@@ -1,6 +1,6 @@
 import type { Env } from "./types";
 import { blockShadow } from "./env";
-import { tryHandleAddition, tryHandleComparison } from "./arithmetic";
+import { tryHandleAddition, tryHandleBinaryOps } from "./arithmetic";
 import {
   tryHandleFunctionLikeExpression,
   tryHandleCall,
@@ -83,11 +83,8 @@ export function interpret(input: string, env?: Env): unknown {
   const callResult = tryHandleCall(s, env);
   if (callResult !== undefined) return callResult;
 
-  const comparisonResult = tryHandleComparison(s, env);
-  if (comparisonResult !== undefined) return comparisonResult;
-
-  const additionResult = tryHandleAddition(s, env);
-  if (additionResult !== undefined) return additionResult;
+  const numericOpResult = tryHandleNumericOp(s, env);
+  if (numericOpResult !== undefined) return numericOpResult;
 
   const numOrIdent = tryParseNumberOrIdentifier(s, env);
   if (numOrIdent !== undefined) return numOrIdent;
@@ -178,6 +175,15 @@ function tryHandleArrayOrSliceFieldAccess(
     return undefined;
   }
 
+  return undefined;
+}
+
+function tryHandleNumericOp(s: string, env?: Env): number | undefined {
+  const binaryOpResult = tryHandleBinaryOps(s, env);
+  if (binaryOpResult !== undefined) return binaryOpResult;
+
+  const additionResult = tryHandleAddition(s, env);
+  if (additionResult !== undefined) return additionResult;
   return undefined;
 }
 

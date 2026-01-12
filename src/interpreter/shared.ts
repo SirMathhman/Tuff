@@ -339,6 +339,33 @@ export function containsOperator(s: string): boolean {
   );
 }
 
+export interface TwoCharOp {
+  op: string;
+  idx: number;
+}
+
+export function findTopLevelTwoCharOp(
+  s: string,
+  tokens: string[]
+): TwoCharOp | undefined {
+  let depth = 0;
+  for (let i = 0; i < s.length - 1; i++) {
+    const ch = s[i];
+    if (isOpeningBracket(ch)) {
+      depth++;
+      continue;
+    }
+    if (isClosingBracket(ch)) {
+      depth--;
+      continue;
+    }
+    if (depth !== 0) continue;
+    const two = s.slice(i, i + 2);
+    if (tokens.includes(two)) return { op: two, idx: i } as TwoCharOp;
+  }
+  return undefined;
+}
+
 export function inferTypeFromExpr(expr: string, env?: Env): string | undefined {
   const s = expr.trim();
   if (s === "true" || s === "false") return "Bool";
