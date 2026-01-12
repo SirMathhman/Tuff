@@ -372,7 +372,10 @@ function parsePostfixField(
   while (i < remaining.length && isWhitespace(remaining[i])) i++;
 
   const nameStart = i;
-  while (i < remaining.length && isIdentifierPartCode(remaining.charCodeAt(i))) {
+  while (
+    i < remaining.length &&
+    isIdentifierPartCode(remaining.charCodeAt(i))
+  ) {
     i++;
   }
 
@@ -587,7 +590,10 @@ interface TwoCharOp {
   idx: number;
 }
 
-function findTopLevelTwoCharOp(s: string, tokens: string[]): TwoCharOp | undefined {
+function findTopLevelTwoCharOp(
+  s: string,
+  tokens: string[]
+): TwoCharOp | undefined {
   let depth = 0;
   for (let i = 0; i < s.length - 1; i++) {
     const ch = s[i];

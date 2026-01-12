@@ -5,7 +5,14 @@
  */
 
 import type { Env } from "./types";
-import type { ASTNode, ASTNumber, ASTIdentifier, ASTBinaryOp, ASTFieldAccess, ASTIndex } from "./ast";
+import type {
+  ASTNode,
+  ASTNumber,
+  ASTIdentifier,
+  ASTBinaryOp,
+  ASTFieldAccess,
+  ASTIndex,
+} from "./ast";
 
 interface ObjectRecord {
   [key: string]: unknown;
@@ -36,7 +43,8 @@ export function evaluateAST(node: ASTNode, env?: Env): unknown {
     case "array-literal": {
       const elements = node.elements.map((e) => {
         const val = evaluateAST(e, env);
-        if (typeof val !== "number") throw new Error("Array elements must be numbers");
+        if (typeof val !== "number")
+          throw new Error("Array elements must be numbers");
         return val as number;
       });
       return {
@@ -49,7 +57,8 @@ export function evaluateAST(node: ASTNode, env?: Env): unknown {
     }
     case "if-expr": {
       const cond = evaluateAST(node.condition, env);
-      if (typeof cond !== "number") throw new Error("If condition must be numeric");
+      if (typeof cond !== "number")
+        throw new Error("If condition must be numeric");
       return cond !== 0
         ? evaluateAST(node.then, env)
         : evaluateAST(node.else, env);
@@ -77,7 +86,8 @@ function evaluateIdentifier(node: ASTIdentifier, env?: Env): unknown {
 function evaluateUnaryNot(node: ASTNode, env?: Env): number {
   if (node.kind !== "unary-not") throw new Error("Invalid node kind");
   const val = evaluateAST(node.operand, env);
-  if (typeof val !== "number") throw new Error("Logical operands must be numbers");
+  if (typeof val !== "number")
+    throw new Error("Logical operands must be numbers");
   return val === 0 ? 1 : 0;
 }
 
@@ -91,7 +101,8 @@ function evaluateDeref(node: ASTNode, env?: Env): number {
   const ptrObj = ptr as unknown as PointerObj;
   const pointee = ptrObj.env.get(ptrObj.name);
   if (!pointee || pointee.moved) throw new Error("Use-after-move");
-  if (typeof pointee.value !== "number") throw new Error("Cannot dereference non-number");
+  if (typeof pointee.value !== "number")
+    throw new Error("Cannot dereference non-number");
   return pointee.value;
 }
 
@@ -147,11 +158,19 @@ interface SliceObj {
 }
 
 function isArrayValue(val: unknown): boolean {
-  return typeof val === "object" && val !== null && (val as ObjectRecord).type === "Array";
+  return (
+    typeof val === "object" &&
+    val !== null &&
+    (val as ObjectRecord).type === "Array"
+  );
 }
 
 function isSliceValue(val: unknown): boolean {
-  return typeof val === "object" && val !== null && (val as ObjectRecord).type === "Slice";
+  return (
+    typeof val === "object" &&
+    val !== null &&
+    (val as ObjectRecord).type === "Slice"
+  );
 }
 
 function evaluateCall(node: ASTNode, env?: Env): unknown {
@@ -174,19 +193,23 @@ function evaluateBinaryOp(node: ASTBinaryOp, env?: Env): unknown {
   // Logical operators (short-circuit)
   if (op === "&&") {
     const lv = evaluateAST(node.left, env);
-    if (typeof lv !== "number") throw new Error("Logical operands must be numbers");
+    if (typeof lv !== "number")
+      throw new Error("Logical operands must be numbers");
     if (lv === 0) return 0;
     const rv = evaluateAST(node.right, env);
-    if (typeof rv !== "number") throw new Error("Logical operands must be numbers");
+    if (typeof rv !== "number")
+      throw new Error("Logical operands must be numbers");
     return rv !== 0 ? 1 : 0;
   }
 
   if (op === "||") {
     const lv = evaluateAST(node.left, env);
-    if (typeof lv !== "number") throw new Error("Logical operands must be numbers");
+    if (typeof lv !== "number")
+      throw new Error("Logical operands must be numbers");
     if (lv !== 0) return 1;
     const rv = evaluateAST(node.right, env);
-    if (typeof rv !== "number") throw new Error("Logical operands must be numbers");
+    if (typeof rv !== "number")
+      throw new Error("Logical operands must be numbers");
     return rv !== 0 ? 1 : 0;
   }
 

@@ -81,11 +81,29 @@ describe("AST parser - arithmetic expressions", () => {
 
 describe("AST evaluator - comparison with current interpreter", () => {
   const testCases = [
-    "1 + 2", "10 - 3", "4 * 5", "20 / 4", "1 + 2 + 3", "10 - 5 - 2", "2 * 3 * 4",
-    "1 + 2 * 3", "10 - 2 * 3", "(1 + 2) * 3", "2 * (3 + 4)",
-    "1 < 2", "5 > 3", "2 <= 2", "3 >= 4", "1 == 1", "1 != 2",
-    "1 && 1", "0 || 1", "1 && 0",
-    "1 + 2 * 3 - 4", "(1 + 2) * (3 + 4)", "10 / 2 + 3 * 4",
+    "1 + 2",
+    "10 - 3",
+    "4 * 5",
+    "20 / 4",
+    "1 + 2 + 3",
+    "10 - 5 - 2",
+    "2 * 3 * 4",
+    "1 + 2 * 3",
+    "10 - 2 * 3",
+    "(1 + 2) * 3",
+    "2 * (3 + 4)",
+    "1 < 2",
+    "5 > 3",
+    "2 <= 2",
+    "3 >= 4",
+    "1 == 1",
+    "1 != 2",
+    "1 && 1",
+    "0 || 1",
+    "1 && 0",
+    "1 + 2 * 3 - 4",
+    "(1 + 2) * (3 + 4)",
+    "10 / 2 + 3 * 4",
   ];
 
   testCases.forEach((expr) => {
@@ -138,7 +156,9 @@ describe("AST performance characteristics", () => {
     const interpretTime = performance.now() - start2;
 
     // AST should be faster or comparable
-    console.log(`AST evaluation: ${astTime}ms, Direct interpret: ${interpretTime}ms`);
+    console.log(
+      `AST evaluation: ${astTime}ms, Direct interpret: ${interpretTime}ms`
+    );
     expect(astTime).toBeLessThanOrEqual(interpretTime * 1.5); // Allow 50% margin
   });
 
