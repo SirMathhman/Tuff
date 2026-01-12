@@ -7,7 +7,10 @@
     "test": "test"
   },
   "scripts": {
-    "test": "vitest run"
+    "dupfind": "dupfind src --min-nodes 6",
+    "test": "vitest run",
+    "lint": "eslint . --ext .ts",
+    "prepare": "husky"
   },
   "repository": {
     "type": "git",
@@ -23,6 +26,10 @@
   "homepage": "https://github.com/SirMathhman/Tuff#readme",
   "devDependencies": {
     "@types/node": "^25.0.6",
+    "@typescript-eslint/eslint-plugin": "^8.53.0",
+    "@typescript-eslint/parser": "^8.53.0",
+    "eslint": "^9.39.2",
+    "husky": "^9.1.7",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   }

@@ -10,7 +10,14 @@
  * @returns compiled JavaScript as a string
  */
 export function compile(source: string): string {
-  // TODO: implement actual compilation logic
+  // Very small stub compiler: support numeric literals with unsigned suffixes like `U8`.
+  // Example: `100U8` -> `100`
+  const s = source.trim();
+  // eslint-disable-next-line no-restricted-syntax -- regex used intentionally for small literal parsing
+  const u8 = s.match(/^([0-9]+)U8$/i);
+  if (u8) return u8[1];
+
+  // Default: return the source unchanged (assume valid JS/expr)
   return source;
 }
 
