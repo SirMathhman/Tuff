@@ -108,7 +108,11 @@ describe("interpret - blocks (core)", () => {
   it("supports mutable declarations and assignment", () => {
     expect(interpret("let mut x = 0; x = 100; x")).toBe(100);
   });
-
+  it("allows assignment inside if statements to outer mutable variables", () => {
+    expect(
+      interpret("let mut x = 0; if (true) x = 100; x")
+    ).toBe(100);
+  });
   it("throws when assigning to an immutable variable", () => {
     expect(() => interpret("let x = 0; x = 100; x")).toThrow(Error);
   });
@@ -218,9 +222,7 @@ describe("interpret - blocks (expressions extras)", () => {
     ).toBe(3);
 
     // functions should be able to mutate outer mutable variables (closures)
-    expect(
-      interpret("let mut x = 0; fn add() => x += 1; add(); x")
-    ).toBe(1);
+    expect(interpret("let mut x = 0; fn add() => x += 1; add(); x")).toBe(1);
   });
 });
 
