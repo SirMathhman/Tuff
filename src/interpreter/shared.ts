@@ -94,6 +94,80 @@ export function stripOuterParens(s: string): string {
   return out;
 }
 
+// Type alias support: maintain a per-env map of type aliases so aliases can
+// be scoped to blocks. Use a WeakMap keyed by Env so we don't leak memory.
+const envTypeAliasMap: WeakMap<Env, Map<string, string>> = new WeakMap();
+
+export function getTypeAliasMap(env: Env): Map<string, string> {
+  if (!envTypeAliasMap.has(env)) envTypeAliasMap.set(env, new Map());
+  return envTypeAliasMap.get(env)!;
+}
+
+export function setTypeAlias(env: Env, name: string, target: string): void {
+  getTypeAliasMap(env).set(name, target);
+}
+
+export function cloneTypeAliasMap(fromEnv: Env | undefined, toEnv: Env): void {
+  const src = fromEnv ? envTypeAliasMap.get(fromEnv) : undefined;
+  const dest = new Map<string, string>(src ? Array.from(src.entries()) : []);
+  envTypeAliasMap.set(toEnv, dest);
+}
+
+function isConcreteTypeName(t: string): boolean {
+  if (t === "Bool") return true;
+  if (t.startsWith("[")) return true;
+  if (t.startsWith("*")) return true;
+  if (t.startsWith("(")) return true;
+  return isIntegerTypeName(t);
+}
+
+export function resolveTypeAlias(typeStr: string, env?: Env): string {
+  if (!env) return typeStr;
+  const map = envTypeAliasMap.get(env);
+  if (!map) return typeStr;
+
+  function resolveRecursive(t: string, depth = 0): string {
+    if (depth > 20) return t; // prevent cycles
+    t = t.trim();
+    if (t.startsWith("*")) return `*${resolveRecursive(t.slice(1).trim(), depth + 1)}`;
+    if (t.startsWith("[")) {
+      // array type: [Elem; Init; Len]
+      const inner = t.slice(1, -1);
+      const parts = topLevelSplitTrim(inner, ";");
+      if (parts.length === 3) {
+        const elem = resolveRecursive(parts[0].trim(), depth + 1);
+        return `[${elem}; ${parts[1]}; ${parts[2]}]`;
+      }
+      return t;
+    }
+    if (t.startsWith("(")) {
+      // function signature: (T, T) => R
+      const arrowIdx = t.indexOf(") =>");
+      if (arrowIdx === -1) return t;
+      const paramsContent = t.slice(1, arrowIdx).trim();
+      const params = paramsContent === "" ? [] : topLevelSplitTrim(paramsContent, ",");
+      const resolvedParams = params.map((p) => resolveRecursive(p.trim(), depth + 1));
+      const ret = t.slice(arrowIdx + 4).trim();
+      const resolvedRet = resolveRecursive(ret, depth + 1);
+      return `(${resolvedParams.join(", ")}) => ${resolvedRet}`;
+    }
+
+    // plain identifier: try to resolve alias chain
+    let cur = t;
+    if (!map) return cur;
+    while (map.has(cur)) {
+      const mapped = map.get(cur);
+      if (!mapped) break;
+      cur = mapped;
+      if (isConcreteTypeName(cur)) break;
+    }
+    return cur;
+  }
+
+  return resolveRecursive(typeStr);
+}
+
+
 export function isDigit(ch: string): boolean {
   const c = ch.charCodeAt(0);
   return c >= 48 && c <= 57;
@@ -229,8 +303,16 @@ export function isIdentifierStartCode(c: number): boolean {
 }
 
 export function isIntegerTypeName(typeName: string): boolean {
+  if (!typeName || typeName.length < 2) return false;
   const first = typeName[0];
-  return "IiUu".includes(first);
+  if (!"IiUu".includes(first)) return false;
+  const rest = typeName.slice(1);
+  // require remaining characters to be digits (e.g., I32, U16)
+  for (let i = 0; i < rest.length; i++) {
+    const cc = rest.charCodeAt(i);
+    if (cc < 48 || cc > 57) return false;
+  }
+  return true;
 }
 
 export function isIdentifierPartCode(c: number): boolean {

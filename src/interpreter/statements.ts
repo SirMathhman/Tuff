@@ -15,6 +15,9 @@ import {
   inferTypeFromExpr,
   isIntegerTypeName,
   findTopLevelAssignmentIndex,
+  setTypeAlias,
+  resolveTypeAlias,
+  cloneTypeAliasMap,
 } from "./shared";
 import { isArrayValue } from "./arrays";
 import { findSlicesReferencing } from "./pointers";
@@ -104,22 +107,42 @@ function validateTypeCompatibility(
   }
 }
 
+function isUnknownNonConcreteType(t?: string): boolean {
+  if (!t) return false;
+  if (isIntegerTypeName(t)) return false;
+  if (t === "Bool") return false;
+  if (t.startsWith("[")) return false;
+  if (t.startsWith("*")) return false;
+  if (t.startsWith("(")) return false;
+  return true;
+}
+
 function validateAnnotatedTypeCompatibility(
   annotatedType: string,
-  initType: string | undefined
+  initType: string | undefined,
+  env?: Env
 ) {
-  // pointer types: exact match
-  if (annotatedType.startsWith("*")) {
-    if (annotatedType !== initType) throw new Error("Pointer type mismatch");
+  // resolve aliases before comparisons
+  const resolvedAnnotated = annotatedType ? resolveTypeAlias(annotatedType, env) : annotatedType;
+  const resolvedInit = initType ? resolveTypeAlias(initType, env) : initType;
+
+  // pointer types: exact match on resolved inner type
+  if (resolvedAnnotated && resolvedAnnotated.startsWith("*")) {
+    if (resolvedAnnotated !== resolvedInit) throw new Error("Pointer type mismatch");
     return;
   }
 
   // function types e.g., (I32, I32) => I32 - require exact match with inferred type
-  if (annotatedType.startsWith("(") && annotatedType.includes("=>")) {
-    if (annotatedType !== initType) {
+  if (resolvedAnnotated && resolvedAnnotated.startsWith("(") && resolvedAnnotated.includes("=>")) {
+    if (resolvedAnnotated !== resolvedInit) {
       throw new Error("Function type mismatch");
     }
     return;
+  }
+
+  // If annotated resolves to an unknown non-concrete type, error
+  if (isUnknownNonConcreteType(resolvedAnnotated)) {
+    throw new Error(`Unknown type: ${annotatedType}`);
   }
 
   validateTypeCompatibility(annotatedType, initType);
@@ -159,6 +182,8 @@ export function evalBlock(
   const env = isBraceBlock
     ? new Map<string, EnvItem>(envIn ?? new Map<string, EnvItem>())
     : envIn ?? new Map<string, EnvItem>();
+  // copy type alias map for block scoping
+  if (isBraceBlock) cloneTypeAliasMap(envIn, env);
   // create a shadow set for this evaluation scope
   blockShadow.set(env, new Set<string>());
 
@@ -173,7 +198,7 @@ export function evalBlock(
   // produce a value and should be treated as an error when used in an
   // expression context.
   const lastStmt = stmts[stmts.length - 1];
-  if (lastStmt.startsWith("let ")) {
+  if (lastStmt.startsWith("let ") || lastStmt.startsWith("type ")) {
     throw new Error("Block does not produce a value");
   }
 
@@ -191,6 +216,8 @@ export function evalBlock(
 
     if (stmt.startsWith("let ")) {
       last = handleLetStatement(stmt, env, localDeclared);
+    } else if (stmt.startsWith("type ")) {
+      last = handleTypeStatement(stmt, env, localDeclared);
     } else if (stmt.startsWith("fn ")) {
       last = handleFnStatement(stmt, env, localDeclared);
     } else if (stmt.startsWith("struct ")) {
@@ -316,6 +343,26 @@ function handleLetStatement(
   return NaN;
 }
 
+function handleTypeStatement(
+  stmt: string,
+  env: Env,
+  localDeclared: Set<string>
+): number {
+  // Syntax: type Name = SomeType
+  let rest = sliceTrim(stmt, 4);
+  const nameRes = parseIdentifierAt(rest, 0);
+  if (!nameRes) throw new Error("Invalid type declaration");
+  const name = nameRes.name;
+  ensureUniqueDeclaration(localDeclared, name);
+  rest = sliceTrim(rest, nameRes.next);
+  if (!rest.startsWith("=")) throw new Error("Invalid type declaration");
+  const aliasOf = sliceTrim(rest, 1);
+  if (!aliasOf) throw new Error("Invalid type declaration");
+  // store alias in per-env alias map
+  setTypeAlias(env, name, aliasOf);
+  return NaN;
+}
+
 function handleSimpleInitializer(
   initializer: string,
   annotatedType: string | undefined,
@@ -352,7 +399,7 @@ function handleSimpleInitializer(
   const val = interpret(initializer, env);
 
   if (annotatedType)
-    validateAnnotatedTypeCompatibility(annotatedType, initType);
+    validateAnnotatedTypeCompatibility(annotatedType, initType, env);
 
   const item = {
     value: val as EnvItem["value"],

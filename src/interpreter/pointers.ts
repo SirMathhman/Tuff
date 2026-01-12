@@ -2,7 +2,7 @@ import type { Env, PointerValue, ArrayValue, SliceValue } from "./types";
 import { isIdentifierName } from "./shared";
 import type { EnvItem } from "./types";
 
-import { hasTypeTag, ensureExistsInEnv } from "./shared";
+import { hasTypeTag, ensureExistsInEnv, resolveTypeAlias } from "./shared";
 import { isArrayValue } from "./arrays";
 
 export function isPointerValue(v: unknown): v is PointerValue {
@@ -122,44 +122,46 @@ export function handlePointerInitializer(
   if (!ptr) throw new Error("Invalid address-of expression");
 
   // Support slice creation when annotated type is *[T] or *mut [T]
-  if (annotatedType && annotatedType.startsWith("*")) {
-    // parse annotated mutability and slice element type
-    let annotatedPointee = annotatedType.slice(1).trim();
-    const parsed = parseMutPrefix(annotatedPointee);
-    const annotatedMut = parsed.mut;
-    annotatedPointee = parsed.rest;
-    if (!annotatedPointee.startsWith("[")) {
-      // not a slice, fall back to pointer handling below
-    } else {
-      const inner = annotatedPointee.slice(1).trim();
-      if (!inner.endsWith("]"))
-        throw new Error("Invalid slice type annotation");
-      const elemType = inner.slice(0, -1).trim();
-
-      createSliceFromArray(
-        ptr,
-        elemType,
-        name,
-        annotatedType,
-        env,
-        annotatedMut
-      );
-      return true;
-    }
-  }
-
   if (annotatedType) {
-    if (!annotatedType.startsWith("*"))
+    const resolvedAnnotatedType = resolveTypeAlias(annotatedType, env);
+    if (resolvedAnnotatedType.startsWith("*")) {
+      // parse annotated mutability and slice element type
+      let annotatedPointee = resolvedAnnotatedType.slice(1).trim();
+      const parsed = parseMutPrefix(annotatedPointee);
+      const annotatedMut = parsed.mut;
+      annotatedPointee = parsed.rest;
+      if (!annotatedPointee.startsWith("[")) {
+        // not a slice, fall back to pointer handling below
+      } else {
+        const inner = annotatedPointee.slice(1).trim();
+        if (!inner.endsWith("]"))
+          throw new Error("Invalid slice type annotation");
+        const elemType = inner.slice(0, -1).trim();
+
+        createSliceFromArray(
+          ptr,
+          elemType,
+          name,
+          resolvedAnnotatedType,
+          env,
+          annotatedMut
+        );
+        return true;
+      }
+
+      // pointer type: check inner match
+      let annotatedPointee2 = resolvedAnnotatedType.slice(1).trim();
+      const parsed2 = parseMutPrefix(annotatedPointee2);
+      const annotatedMut2 = parsed2.mut;
+      annotatedPointee2 = parsed2.rest;
+      if (resolveTypeAlias(annotatedPointee2, env) !== resolveTypeAlias(ptr.pointeeType as string, env))
+        throw new Error("Pointer type mismatch");
+      if (annotatedMut2 !== !!ptr.pointeeMutable)
+        throw new Error("Pointer mutability mismatch");
+    } else {
+      // annotated type is an alias that doesn't resolve to a pointer type
       throw new Error("Type mismatch: expected pointer type");
-    // parse annotated pointer mutability
-    let annotatedPointee = annotatedType.slice(1).trim();
-    const parsed = parseMutPrefix(annotatedPointee);
-    const annotatedMut = parsed.mut;
-    annotatedPointee = parsed.rest;
-    if (annotatedPointee !== ptr.pointeeType)
-      throw new Error("Pointer type mismatch");
-    if (annotatedMut !== !!ptr.pointeeMutable)
-      throw new Error("Pointer mutability mismatch");
+    }
   }
   const itemOut: EnvItem = {
     value: ptr,
@@ -183,7 +185,8 @@ function createSliceFromArray(
   if (!isArrayValue(item.value))
     throw new Error("Slice initializer must reference an array");
   const arr = item.value as ArrayValue;
-  if (arr.elementType !== elemType) throw new Error("Slice type mismatch");
+  if (resolveTypeAlias(arr.elementType, env) !== resolveTypeAlias(elemType, env))
+    throw new Error("Slice type mismatch");
 
   // If annotation requests mutable slice, require the initializer to be &mut
   if (annotatedMut && !ptr.pointeeMutable)
