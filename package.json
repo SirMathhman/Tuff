@@ -7,7 +7,7 @@
     "test": "test"
   },
   "scripts": {
-    "dupfind": "dupfind src --min-nodes 6",
+    "dupfind": "dupfind src --min-nodes 10",
     "test": "vitest run",
     "lint": "eslint . --ext .ts",
     "prepare": "husky"

@@ -73,7 +73,9 @@ export function interpret(source: string, _stdIn: string = ""): number {
   const compiled = compile(source);
   const value = Number(compiled);
   if (Number.isNaN(value)) {
-    throw new Error("Compiled output is not numeric and dynamic evaluation is disabled");
+    throw new Error(
+      "Compiled output is not numeric and dynamic evaluation is disabled"
+    );
   }
   return value;
 }
