@@ -33,13 +33,35 @@ export function parseFnSignature(s: string): string | undefined {
   const nameRes = restInit.startsWith("(")
     ? undefined
     : parseIdentifierAt(restInit, 0);
-  const rest = nameRes ? sliceTrim(restInit, nameRes.next) : restInit;
+  let rest = nameRes ? sliceTrim(restInit, nameRes.next) : restInit;
+
+  // optional generics: <T, U>
+  let generics = "";
+  if (rest.startsWith("<")) {
+    const closeGenerics = rest.indexOf(">");
+    if (closeGenerics === -1) return undefined;
+    generics = rest.slice(0, closeGenerics + 1).trim();
+    rest = sliceTrim(rest, closeGenerics + 1);
+  }
+
   const parenRes = extractParenContent(rest, "fn");
   if (!parenRes) return undefined;
   const paramsRaw = topLevelSplitTrim(parenRes.content, ",");
   const paramTypes: string[] = paramTypesFromParams(paramsRaw);
-  const retType = "I32"; // conservative default
-  return `(${paramTypes.join(", ")}) => ${retType}`;
+
+  // optional return annotation before => e.g., ': T =>'
+  const afterParams = rest.slice(parenRes.close + 1).trim();
+  let retType = "I32"; // conservative default
+  if (afterParams.startsWith(":")) {
+    const s2 = sliceTrim(afterParams, 1);
+    const arrowPos = s2.indexOf("=>");
+    if (arrowPos !== -1) retType = s2.slice(0, arrowPos).trim() || retType;
+    else retType = s2.trim() || retType;
+  }
+
+  const sig = `${generics}(${paramTypes.join(", ")}) => ${retType}`.trim();
+  return sig;
+
 }
 
 export function parseArrowSignature(s: string): string | undefined {

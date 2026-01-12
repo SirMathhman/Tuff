@@ -249,6 +249,58 @@ function parseNumberTokenAt(s: string, pos: number): ParseResult | undefined {
 }
 
 // eslint-disable-next-line complexity
+interface TokenParseResult {
+  token: string;
+  next: number;
+}
+
+function makeTokenFromRange(s: string, start: number, endInclusive: number): TokenParseResult {
+  return { token: s.slice(start, endInclusive + 1).trim(), next: endInclusive + 1 };
+}
+
+function tryParseBracketAt(s: string, idx: number): TokenParseResult | undefined {
+  if (!isOpeningBracket(s[idx])) return undefined;
+  const close = findMatchingParen(s, idx);
+  if (close < 0) return undefined;
+  return makeTokenFromRange(s, idx, close);
+}
+
+function parseUnaryDerefAt(s: string, i: number, n: number): TokenParseResult | undefined {
+  let k = i + 1;
+  while (k < n && s[k] === " ") k++;
+  if (k >= n) return undefined;
+  const bracket = tryParseBracketAt(s, k);
+  if (bracket) return makeTokenFromRange(s, i, bracket.next - 1);
+  if (isIdentifierStartCode(s.charCodeAt(k))) {
+    const j = parseIdentifierWithFieldAccess(s, k);
+    return { token: s.slice(i, j).trim(), next: j };
+  }
+  return undefined;
+}
+
+function parseIdentifierOrCallAt(s: string, i: number, n: number): TokenParseResult | undefined {
+  const j = parseIdentifierWithFieldAccess(s, i);
+  let k = j;
+  while (k < n && s[k] === " ") k++;
+  if (k < n && s[k] === "(") {
+    const close = findMatchingParen(s, k);
+    if (close < 0) return undefined;
+    return makeTokenFromRange(s, i, close);
+  }
+  return { token: s.slice(i, j).trim(), next: j };
+}
+
+function parseOperandAt(s: string, i: number, n: number): TokenParseResult | undefined {
+    const bracket = tryParseBracketAt(s, i);
+    if (bracket) return bracket;
+  if (s[i] === "*") return parseUnaryDerefAt(s, i, n);
+  if (isIdentifierStartCode(s.charCodeAt(i))) return parseIdentifierOrCallAt(s, i, n);
+
+  const res = parseNumberTokenAt(s, i);
+  if (!res) return undefined;
+  return { token: res.token, next: res.next };
+}
+
 function tokenizeAddSub(s: string): string[] | undefined {
   let i = skipSpacesFrom(s, 0);
   const n = s.length;
@@ -258,22 +310,10 @@ function tokenizeAddSub(s: string): string[] | undefined {
   while (i < n) {
     i = skipSpacesFrom(s, i);
     if (expectNumber) {
-      if (isOpeningBracket(s[i])) {
-        const close = findMatchingParen(s, i);
-        if (close < 0) return undefined;
-        tokens.push(s.slice(i, close + 1).trim());
-        i = close + 1;
-      } else if (isIdentifierStartCode(s.charCodeAt(i))) {
-        // parse identifier tokens as operands, including field access (dots)
-        const j = parseIdentifierWithFieldAccess(s, i);
-        tokens.push(s.slice(i, j).trim());
-        i = j;
-      } else {
-        const res = parseNumberTokenAt(s, i);
-        if (!res) return undefined;
-        tokens.push(res.token);
-        i = res.next;
-      }
+      const op = parseOperandAt(s, i, n);
+      if (!op) return undefined;
+      tokens.push(op.token);
+      i = op.next;
       expectNumber = false;
     } else {
       if (!isOperator(s[i])) return undefined;

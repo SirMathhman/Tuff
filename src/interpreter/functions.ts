@@ -24,9 +24,13 @@ import {
 } from "./shared";
 import {
   parseParamTypesFromSignature,
+  parseGenericParamsFromSignature,
   computeArgTypeFromExpr,
   isTypeCompatible,
   isValueCompatibleWithParam,
+  substituteGenericTypes,
+  inferGenericBindingsForCall,
+  computeConcreteParamTypes,
 } from "./signatures";
 import { evalBlock, handleYieldValue } from "./statements";
 import { isReturnValue, ReturnValue } from "./returns";
@@ -263,15 +267,14 @@ export function tryHandleCall(s: string, env?: Env): unknown | undefined {
   if (func.params.length !== args.length)
     throw new Error("Argument count mismatch");
 
-  // Runtime argument-type checking when function has a signature
   const paramTypes = parseParamTypesFromSignature(item.type);
-  if (paramTypes !== undefined) {
-    for (let i = 0; i < paramTypes.length; i++) {
-      const expected = paramTypes[i];
+  const concreteParamTypes = computeConcreteParamTypes(item.type, paramTypes, args, env);
+  if (concreteParamTypes !== undefined) {
+    for (let i = 0; i < concreteParamTypes.length; i++) {
+      const expected = concreteParamTypes[i];
       const argExpr = args[i];
       const argType = computeArgTypeFromExpr(argExpr, env);
-      if (!isTypeCompatible(expected, argType, env))
-        throw new Error("Argument type mismatch");
+      if (!isTypeCompatible(expected, argType, env)) throw new Error("Argument type mismatch");
     }
   }
 
@@ -449,27 +452,41 @@ export function tryHandleMethodCall(s: string, env?: Env): number | undefined {
   let sig: string | undefined = undefined;
   if (env && env.has(method)) sig = env.get(method)!.type;
   const paramTypes = parseParamTypesFromSignature(sig);
+  const genericParams = parseGenericParamsFromSignature(sig);
+
+  // If generics present, attempt to infer bindings and substitute
+  let concreteParamTypes = paramTypes;
+  if (paramTypes && genericParams && genericParams.length > 0) {
+    const argExprsForInference =
+      func.params.length === args.length + 1 ? [left, ...args] : args;
+    const bindingsMap = inferGenericBindingsForCall(
+      paramTypes,
+      argExprsForInference,
+      genericParams,
+      env
+    );
+    concreteParamTypes = paramTypes.map((pt) => substituteGenericTypes(pt, bindingsMap));
+  }
 
   const argVals = interpretAllAny(args, interpret, env);
   const bindings: Array<[string, unknown]> = [];
 
   if (func.params.length === args.length + 1) {
     if (
-      paramTypes &&
-      !isValueCompatibleWithParam(receiverVal, paramTypes[0], env)
+      concreteParamTypes &&
+      !isValueCompatibleWithParam(receiverVal, concreteParamTypes[0], env)
     )
       throw new Error("Argument type mismatch");
-    checkMethodArgumentTypes(paramTypes, args, env, 1);
+    // check remaining args
+    if (concreteParamTypes) checkMethodArgumentTypes(concreteParamTypes, args, env, 1);
     bindings.push([func.params[0], receiverVal]);
-    for (let i = 0; i < args.length; i++)
-      bindings.push([func.params[i + 1], argVals[i]]);
+    for (let i = 0; i < args.length; i++) bindings.push([func.params[i + 1], argVals[i]]);
     return runFunctionWithBindings(func, bindings);
   }
 
   if (func.params.length === args.length) {
-    checkMethodArgumentTypes(paramTypes, args, env, 0);
-    for (let i = 0; i < args.length; i++)
-      bindings.push([func.params[i], argVals[i]]);
+    if (concreteParamTypes) checkMethodArgumentTypes(concreteParamTypes, args, env, 0);
+    for (let i = 0; i < args.length; i++) bindings.push([func.params[i], argVals[i]]);
     return runFunctionWithBindings(func, bindings);
   }
 
