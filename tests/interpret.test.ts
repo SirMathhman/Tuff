@@ -430,6 +430,14 @@ describe("interpret - pointers", () => {
     ).toBe(5);
   });
 
+  it("supports arrow function expressions as rvalues", () => {
+    expect(
+      interpret(
+        "let func = (first : I32, second : I32) => first + second; func(1, 2)"
+      )
+    ).toBe(3);
+  });
+
   it("supports annotated function types on let declarations", () => {
     expect(
       interpret(
