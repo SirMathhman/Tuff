@@ -6,11 +6,9 @@ export const BRACKET_PAIRS = new Map<string, string>([
   ["[", "]"],
 ]);
 
-export function deepCopyValue(
-  value: EnvItem["value"]
-): EnvItem["value"] {
+export function deepCopyValue(value: EnvItem["value"]): EnvItem["value"] {
   if (typeof value === "number") return value;
-  
+
   if (typeof value === "object" && value !== null) {
     if ("type" in value && value.type === "Array") {
       const arr = value as ArrayValue;
@@ -22,7 +20,7 @@ export function deepCopyValue(
         initializedCount: arr.initializedCount,
       };
     }
-    
+
     if ("fields" in value && "values" in value) {
       const struct = value as StructValue;
       return {
@@ -30,11 +28,11 @@ export function deepCopyValue(
         values: [...struct.values],
       };
     }
-    
+
     // FunctionValue has env which is a Map; shallow copy is fine
     return value;
   }
-  
+
   return value;
 }
 
@@ -377,4 +375,12 @@ export function parseFieldDef(fieldStr: string): FieldDefResult {
   const name = fieldStr.slice(0, colonIdx).trim();
   const type = fieldStr.slice(colonIdx + 1).trim();
   return { name, type };
+}
+
+interface HasType {
+  type?: string;
+}
+
+export function hasTypeTag(v: unknown, tag: string): boolean {
+  return typeof v === "object" && v !== null && (v as HasType).type === tag;
 }

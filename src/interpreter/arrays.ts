@@ -7,13 +7,10 @@ import {
   topLevelSplitTrim,
 } from "./shared";
 
+import { hasTypeTag } from "./shared";
+
 export function isArrayValue(v: unknown): v is ArrayValue {
-  return (
-    typeof v === "object" &&
-    v !== null &&
-    (v as Partial<ArrayValue>).type === "Array" &&
-    Array.isArray((v as Partial<ArrayValue>).elements)
-  );
+  return hasTypeTag(v, "Array") && Array.isArray((v as Partial<ArrayValue>).elements);
 }
 
 export interface ArrayTypeInfo {
@@ -69,15 +66,16 @@ export function tryHandleArrayLiteral(
   const elements = interpretAll(elementsRaw, interpret, env);
 
   if (annotatedType && annotatedType.startsWith("[")) {
-    const { elementType, initializedCount, length } = parseArrayType(annotatedType);
-    
+    const { elementType, initializedCount, length } =
+      parseArrayType(annotatedType);
+
     // Enforce: can only create arrays with init === 0 or init === length
     if (initializedCount !== 0 && initializedCount !== length) {
       throw new Error(
         `Cannot create array with partial initialization: ${annotatedType}`
       );
     }
-    
+
     // If init === length, require exact element count
     if (initializedCount === length) {
       if (elements.length !== length) {
@@ -93,7 +91,7 @@ export function tryHandleArrayLiteral(
         initializedCount,
       };
     }
-    
+
     // init === 0: no initializer allowed
     throw new Error(
       `Array with init=0 cannot have an initializer: ${annotatedType}`
@@ -138,7 +136,7 @@ export function tryHandleArrayIndexing(
   if (!arrayVal) return undefined;
 
   const index = interpret(indexExpr, env);
-  
+
   // RHS read: must be < initializedCount
   validateIndexBounds(
     index,
@@ -150,7 +148,12 @@ export function tryHandleArrayIndexing(
   return arrayVal.elements[index];
 }
 
-function validateIndexBounds(index: number, min: number, max: number, context: string): void {
+function validateIndexBounds(
+  index: number,
+  min: number,
+  max: number,
+  context: string
+): void {
   if (index < min || index >= max) {
     throw new Error(context);
   }
@@ -164,29 +167,29 @@ export function tryHandleArrayAssignment(
   // Pattern: identifier[index] = value
   const eqIdx = stmt.indexOf("=");
   if (eqIdx === -1) return undefined;
-  
+
   const lhs = stmt.slice(0, eqIdx).trim();
   const rhs = stmt.slice(eqIdx + 1).trim();
-  
+
   const openBracket = lhs.lastIndexOf("[");
   if (openBracket <= 0) return undefined;
-  
+
   const indexExpr = extractPureBracketContent(lhs, openBracket);
   if (indexExpr === undefined) return undefined;
-  
+
   const arrayName = lhs.slice(0, openBracket).trim();
-  
+
   if (!env.has(arrayName)) return undefined;
   const item = env.get(arrayName)!;
-  
+
   if (!isArrayValue(item.value)) return undefined;
   if (!item.mutable) {
     throw new Error("Cannot assign to immutable array");
   }
-  
+
   const arrayVal = item.value;
   const index = interpret(indexExpr, env);
-  
+
   // LHS write: must be <= initializedCount and < length
   validateIndexBounds(
     index,
@@ -194,20 +197,47 @@ export function tryHandleArrayAssignment(
     arrayVal.length,
     `Index out of bounds: ${index} (length: ${arrayVal.length})`
   );
-  
+
   if (index > arrayVal.initializedCount) {
     throw new Error(
       `Out-of-order initialization: index ${index} but only ${arrayVal.initializedCount} elements initialized (sequential init required)`
     );
   }
-  
+
   const value = interpret(rhs, env);
   arrayVal.elements[index] = value;
-  
+
   // If this is sequential initialization (index === initializedCount), increment
   if (index === arrayVal.initializedCount) {
     arrayVal.initializedCount++;
   }
-  
+
   return value;
+}
+
+export function createUninitializedArrayFromType(
+  annotatedType: string,
+  name: string,
+  mutable: boolean,
+  env: Env
+): boolean {
+  if (!annotatedType.startsWith("[")) return false;
+  const { elementType, initializedCount, length } = parseArrayType(annotatedType);
+  if (initializedCount !== 0) {
+    throw new Error(
+      `Array declaration without initializer must have init=0, got ${annotatedType}`
+    );
+  }
+  if (!mutable) {
+    throw new Error(`Array with init=0 must be mutable (use 'let mut')`);
+  }
+  const arrayVal: ArrayValue = {
+    type: "Array",
+    elementType,
+    elements: new Array(length).fill(0),
+    length,
+    initializedCount: 0,
+  };
+  env.set(name, { value: arrayVal, mutable, type: annotatedType });
+  return true;
 }

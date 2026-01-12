@@ -2,6 +2,7 @@ import type { Env } from "./types";
 import { blockShadow } from "./env";
 import { tryHandleAddition, tryHandleComparison } from "./arithmetic";
 import { tryHandleFnExpression, tryHandleCall } from "./functions";
+import { tryHandleDerefExpression } from "./pointers";
 import { tryHandleIfExpression } from "./ifExpression";
 import { tryHandleMatchExpression } from "./matchExpression";
 import { evalBlock, handleYieldValue } from "./statements";
@@ -14,6 +15,7 @@ import {
 import { splitNumberAndSuffix, validateNumberSuffix } from "./numbers";
 import { isStructValue } from "./structs";
 import { isArrayValue, tryHandleArrayIndexing } from "./arrays";
+import { isPointerValue } from "./pointers";
 
 export function interpret(input: string, env?: Env): number {
   let s = input.trim();
@@ -35,6 +37,9 @@ export function interpret(input: string, env?: Env): number {
 
   const matchResult = tryHandleMatchExpression(s, env);
   if (matchResult !== undefined) return matchResult;
+
+  const derefResult = tryHandleDerefExpression(s, env);
+  if (derefResult !== undefined) return derefResult;
 
   const arrayIndexResult = tryHandleArrayIndexing(s, env, interpret);
   if (arrayIndexResult !== undefined) return arrayIndexResult;
@@ -110,7 +115,11 @@ function tryParseNumberOrIdentifier(s: string, env?: Env): number | undefined {
         if (typeof item.value === "number") return item.value;
         // If it's a struct or array value, we can't return it as a number, so return undefined
         // and let other handlers (like field access or indexing) deal with it
-        if (isStructValue(item.value) || isArrayValue(item.value))
+        if (
+          isStructValue(item.value) ||
+          isArrayValue(item.value) ||
+          isPointerValue(item.value)
+        )
           return undefined;
         throw new Error("Unknown identifier");
       }

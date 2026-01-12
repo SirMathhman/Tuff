@@ -299,13 +299,15 @@ describe("interpret - structs", () => {
   });
 });
 
-describe("interpret - arrays", () => {
+describe("interpret - arrays (creation)", () => {
   it("supports array definition and instantiation with indexing", () => {
     expect(interpret("let x : [I32; 3; 3] = [1, 2, 3]; x[0] + x[1]")).toBe(3);
   });
 
   it("throws on invalid partial initialization declaration", () => {
-    expect(() => interpret("let x : [I32; 2; 4] = [1, 2]; x[0]")).toThrow(Error);
+    expect(() => interpret("let x : [I32; 2; 4] = [1, 2]; x[0]")).toThrow(
+      Error
+    );
   });
 
   it("throws on incomplete array literal", () => {
@@ -313,35 +315,9 @@ describe("interpret - arrays", () => {
   });
 
   it("throws on too many elements in literal", () => {
-    expect(() => interpret("let x : [I32; 3; 3] = [1,2,3,4]; x[0]")).toThrow(Error);
-  });
-
-  it("throws when reading uninitialized element", () => {
-    expect(() => interpret("let mut a : [I32; 0; 3]; a[0]")).toThrow(Error);
-  });
-
-  it("throws on out of bounds read", () => {
-    expect(() => interpret("let x : [I32; 3; 3] = [1, 2, 3]; x[3]")).toThrow(Error);
-  });
-
-  it("throws when assigning to non-mutable array", () => {
-    expect(() => interpret("let a : [I32; 0; 2]; a[0] = 10; a[0]")).toThrow(Error);
-  });
-
-  it("supports sequential initialization", () => {
-    expect(interpret("let mut a : [I32; 0; 2]; a[0] = 10; a[1] = 20; a[0] + a[1]")).toBe(30);
-  });
-
-  it("throws on out-of-order initialization", () => {
-    expect(() => interpret("let mut a : [I32; 0; 3]; a[2] = 5; a[2]")).toThrow(Error);
-  });
-
-  it("supports overwriting initialized slots", () => {
-    expect(interpret("let mut a : [I32; 2; 2] = [1, 2]; a[1] = 10; a[0] + a[1]")).toBe(11);
-  });
-
-  it("supports arbitrary index expressions", () => {
-    expect(interpret("let mut a : [I32; 0; 3]; a[0] = 7; let i = 0; a[i + 0]")).toBe(7);
+    expect(() => interpret("let x : [I32; 3; 3] = [1,2,3,4]; x[0]")).toThrow(
+      Error
+    );
   });
 
   it("throws when declaring array with init>0 but no initializer", () => {
@@ -350,5 +326,69 @@ describe("interpret - arrays", () => {
 
   it("throws when declaring non-mutable array with init=0", () => {
     expect(() => interpret("let a : [I32; 0; 2]; a[0]")).toThrow(Error);
+  });
+});
+
+describe("interpret - arrays (operations)", () => {
+  it("throws when reading uninitialized element", () => {
+    expect(() => interpret("let mut a : [I32; 0; 3]; a[0]")).toThrow(Error);
+  });
+
+  it("throws on out of bounds read", () => {
+    expect(() => interpret("let x : [I32; 3; 3] = [1, 2, 3]; x[3]")).toThrow(
+      Error
+    );
+  });
+
+  it("throws when assigning to non-mutable array", () => {
+    expect(() => interpret("let a : [I32; 0; 2]; a[0] = 10; a[0]")).toThrow(
+      Error
+    );
+  });
+
+  it("supports sequential initialization", () => {
+    expect(
+      interpret("let mut a : [I32; 0; 2]; a[0] = 10; a[1] = 20; a[0] + a[1]")
+    ).toBe(30);
+  });
+
+  it("throws on out-of-order initialization", () => {
+    expect(() => interpret("let mut a : [I32; 0; 3]; a[2] = 5; a[2]")).toThrow(
+      Error
+    );
+  });
+
+  it("supports overwriting initialized slots", () => {
+    expect(
+      interpret("let mut a : [I32; 2; 2] = [1, 2]; a[1] = 10; a[0] + a[1]")
+    ).toBe(11);
+  });
+
+  it("supports arbitrary index expressions", () => {
+    expect(
+      interpret("let mut a : [I32; 0; 3]; a[0] = 7; let i = 0; a[i + 0]")
+    ).toBe(7);
+  });
+});
+
+describe("interpret - pointers", () => {
+  it("supports address-of and dereference", () => {
+    expect(interpret("let x = 100; let y : *I32 = &x; *y")).toBe(100);
+  });
+
+  it("supports assignment through pointer to mutable variable", () => {
+    expect(interpret("let mut x = 0; let y : *I32 = &x; *y = 5; x")).toBe(5);
+  });
+
+  it("throws when assigning through pointer to immutable variable", () => {
+    expect(() => interpret("let x = 0; let y : *I32 = &x; *y = 5; x")).toThrow(
+      Error
+    );
+  });
+
+  it("throws on pointer type mismatch", () => {
+    expect(() => interpret("let x : I32 = 1; let y : *Bool = &x; *y")).toThrow(
+      Error
+    );
   });
 });
