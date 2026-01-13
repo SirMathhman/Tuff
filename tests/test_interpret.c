@@ -40,6 +40,7 @@ int main(void)
 	assert(interpret("2 + 3 * 4") == 14);
 	assert(interpret("4 + 2 * 3") == 10);
 	assert(interpret("10 / 2 + 1") == 6);
+	assert(interpret("12 / 0") == INT_MIN);
 	assert(interpret("100 + 200") == 300);
 
 	return 0;
