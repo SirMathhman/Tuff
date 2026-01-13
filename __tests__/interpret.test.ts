@@ -5,8 +5,8 @@ describe("interpret", () => {
     expect(interpret("100")).toBe(100);
   });
 
-  test("returns NaN for invalid numeric string", () => {
-    expect(Number.isNaN(interpret("abc"))).toBe(true);
+  test('throws for invalid numeric string', () => {
+    expect(() => interpret('abc')).toThrow('Invalid numeric string');
   });
 
   test("parses negative numbers", () => {
