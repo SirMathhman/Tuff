@@ -14,4 +14,9 @@ public class AppTest {
 	void interpretParsesIntegerString() {
 		assertEquals(100, App.interpret("100"));
 	}
+
+	@Test
+	void interpretParsesIntegerWithSuffix() {
+		assertEquals(100, App.interpret("100U8"));
+	}
 }
