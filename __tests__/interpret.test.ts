@@ -62,6 +62,7 @@ describe("interpret", () => {
     expect(interpret("1U8 + 2U8")).toBe(3);
     expect(interpret("100 + 200")).toBe(300);
     expect(interpret("10I8 + -20I8")).toBe(-10);
+    expect(interpret("1U8 + 2 + 3")).toBe(6);
     expect(() => interpret("1U8 + 2I8")).toThrow();
     expect(() => interpret("1U8 + 2 + 3U16")).toThrow("Mismatched types in expression");
   });
