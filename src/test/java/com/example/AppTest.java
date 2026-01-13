@@ -11,7 +11,7 @@ public class AppTest {
 	}
 
 	@Test
-	void interpretReturnsStub() {
-		assertEquals(0, App.interpret("any input"));
+	void interpretParsesIntegerString() {
+		assertEquals(100, App.interpret("100"));
 	}
 }

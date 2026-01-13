@@ -8,9 +8,9 @@ public class App {
 
 	/**
 	 * Interpret the given string and return an int.
-	 * Stubbed implementation returning 0.
+	 * Current implementation parses decimal integers.
 	 */
 	public static int interpret(String input) {
-		return 0;
+		return Integer.parseInt(input);
 	}
 }
