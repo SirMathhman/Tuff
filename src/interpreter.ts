@@ -14,11 +14,23 @@ const INT_BOUNDS = (() => {
 
 const outOfRange = (v: bigint, a: bigint, b: bigint) => v < a || v > b;
 
+function extractSuffix(input: string): string | undefined {
+  const parsed = extractLeadingNumeric(input);
+  if (!parsed) return undefined;
+  const s = parsed.rest.trim();
+  return s.length === 0 ? "none" : s;
+}
+
 function interpretAdditive(input: string): number {
   const parts = input.split("+");
   let sum = 0;
+  let firstSuffix: string | undefined = undefined;
   for (const part of parts) {
-    const val = interpret(part.trim());
+    const trimmed = part.trim();
+    const currentSuffix = extractSuffix(trimmed);
+    if (firstSuffix === undefined) firstSuffix = currentSuffix;
+    if (currentSuffix !== firstSuffix) return NaN;
+    const val = interpret(trimmed);
     if (Number.isNaN(val)) return NaN;
     sum += val;
   }
