@@ -94,11 +94,12 @@ static void parse_let_statement(const char **input, Context *ctx)
 		while (isspace((unsigned char)*ptr))
 			ptr++;
 	}
+	long long val = 0;
 	if (*ptr == '=')
 	{
 		ptr++;
 		ctx->last_type[0] = '\0';
-		long long val = parse_expression(&ptr, ctx);
+		val = parse_expression(&ptr, ctx);
 		if (errno != 0)
 		{
 			*input = ptr;
@@ -119,25 +120,31 @@ static void parse_let_statement(const char **input, Context *ctx)
 				return;
 			}
 		}
-		for (int i = 0; i < ctx->count; i++)
+	}
+	else
+	{
+		// Declaration without initialization.
+		val = 0;
+	}
+
+	for (int i = 0; i < ctx->count; i++)
+	{
+		if (strcmp(ctx->vars[i].name, v_name) == 0)
 		{
-			if (strcmp(ctx->vars[i].name, v_name) == 0)
-			{
-				errno = ERANGE;
-				*input = ptr;
-				return;
-			}
+			errno = ERANGE;
+			*input = ptr;
+			return;
 		}
-		if (ctx->count < MAX_VARS)
-		{
-			strncpy(ctx->vars[ctx->count].name, v_name, 31);
-			ctx->vars[ctx->count].value = val;
-			if (v_type[0] != '\0')
-				strncpy(ctx->vars[ctx->count].type, v_type, 15);
-			else
-				strncpy(ctx->vars[ctx->count].type, ctx->last_type, 15);
-			ctx->count++;
-		}
+	}
+	if (ctx->count < MAX_VARS)
+	{
+		strncpy(ctx->vars[ctx->count].name, v_name, 31);
+		ctx->vars[ctx->count].value = val;
+		if (v_type[0] != '\0')
+			strncpy(ctx->vars[ctx->count].type, v_type, 15);
+		else
+			strncpy(ctx->vars[ctx->count].type, ctx->last_type, 15);
+		ctx->count++;
 	}
 	while (isspace((unsigned char)*ptr))
 		ptr++;
@@ -331,7 +338,7 @@ static long long parse_term(const char **input, Context *ctx)
 	return val;
 }
 
-static long long parse_expression(const char **input, Context *ctx)
+static long long parse_sum(const char **input, Context *ctx)
 {
 	long long total = parse_term(input, ctx);
 	if (errno != 0)
@@ -357,6 +364,68 @@ static long long parse_expression(const char **input, Context *ctx)
 	}
 	*input = ptr;
 	return total;
+}
+
+static long long parse_expression(const char **input, Context *ctx)
+{
+	const char *ptr = *input;
+	while (isspace((unsigned char)*ptr))
+		ptr++;
+
+	const char *ident_start = ptr;
+	if (isalpha((unsigned char)*ptr) || *ptr == '_')
+	{
+		while (isalnum((unsigned char)*ptr) || *ptr == '_')
+			ptr++;
+		const char *ident_end = ptr;
+		const char *lookahead = ptr;
+		while (isspace((unsigned char)*lookahead))
+			lookahead++;
+
+		if (*lookahead == '=' && *(lookahead + 1) != '=')
+		{
+			// Assignment
+			char name[32] = {0};
+			size_t len = ident_end - ident_start;
+			if (len < sizeof(name))
+				strncpy(name, ident_start, len);
+
+			ptr = lookahead + 1;
+			long long val = parse_expression(&ptr, ctx);
+			if (errno != 0)
+			{
+				*input = ptr;
+				return INT_MIN;
+			}
+
+			for (int i = 0; i < ctx->count; i++)
+			{
+				if (strcmp(ctx->vars[i].name, name) == 0)
+				{
+					if (ctx->vars[i].type[0] != '\0')
+					{
+						if (check_suffix(ctx->vars[i].type, val))
+						{
+							errno = ERANGE;
+							*input = ptr;
+							return INT_MIN;
+						}
+					}
+					ctx->vars[i].value = val;
+					strncpy(ctx->last_type, ctx->vars[i].type, 15);
+					*input = ptr;
+					return val;
+				}
+			}
+			// Variable not found
+			errno = ERANGE;
+			*input = ptr;
+			return INT_MIN;
+		}
+	}
+
+	// Not an assignment, parse sum
+	return parse_sum(input, ctx);
 }
 
 int interpret(const char *input)

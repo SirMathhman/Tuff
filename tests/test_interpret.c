@@ -99,6 +99,8 @@ static void test_blocks_and_lets(void)
 	EXPECT_INTERPRET_EQ("let x : U8 = 100I32; x", INT_MIN);
 	EXPECT_INTERPRET_EQ("let x : U8 = 1000; x", INT_MIN);
 	EXPECT_INTERPRET_EQ("let x = 100I32; let y : U8 = x; y", INT_MIN);
+	EXPECT_INTERPRET_EQ("let x : I32; x = 100; x", 100);
+	EXPECT_INTERPRET_EQ("let x: I32; let y: I32; x = y = 42; x + y", 84);
 	EXPECT_INTERPRET_EQ("let y : I32 = 12 / ({ let x : I32 = 4; x } - 1); y", 4);
 }
 
