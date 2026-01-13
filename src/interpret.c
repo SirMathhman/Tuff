@@ -62,7 +62,8 @@ static long long parse_single(const char *input, char **endptr)
 		return 0;
 
 	char *suffix_end = *endptr;
-	while (*suffix_end && !isspace((unsigned char)*suffix_end) && *suffix_end != '+')
+	while (*suffix_end && !isspace((unsigned char)*suffix_end) && 
+	       *suffix_end != '+' && *suffix_end != '-' && *suffix_end != '*')
 		suffix_end++;
 
 	char suffix[16] = {0};
@@ -80,13 +81,47 @@ static long long parse_single(const char *input, char **endptr)
 	return val;
 }
 
+static long long parse_term(const char **input)
+{
+	char *next = (char *)*input;
+	long long val = parse_single(next, &next);
+	if (errno == ERANGE && val == INT_MIN)
+	{
+		*input = next;
+		return INT_MIN;
+	}
+
+	while (1)
+	{
+		while (isspace((unsigned char)*next))
+			next++;
+		if (*next == '*')
+		{
+			next++;
+			long long next_val = parse_single(next, &next);
+			if (errno == ERANGE && next_val == INT_MIN)
+			{
+				*input = next;
+				return INT_MIN;
+			}
+			val *= next_val;
+		}
+		else
+		{
+			break;
+		}
+	}
+	*input = next;
+	return val;
+}
+
 int interpret(const char *input)
 {
 	if (!input)
 		return 0;
 
-	char *next = (char *)input;
-	long long total = parse_single(next, &next);
+	const char *next = input;
+	long long total = parse_term(&next);
 	if (errno == ERANGE && total == INT_MIN)
 		return INT_MIN;
 
@@ -98,7 +133,7 @@ int interpret(const char *input)
 		{
 			char op = *next;
 			next++;
-			long long val = parse_single(next, &next);
+			long long val = parse_term(&next);
 			if (errno == ERANGE && val == INT_MIN)
 				return INT_MIN;
 			if (op == '+')
