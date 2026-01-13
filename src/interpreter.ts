@@ -12,15 +12,15 @@ function isAllDigits(s: string): boolean {
   return s.length > 0;
 }
 
-function handleU8(s: string): string | null {
+function handleU8(s: string): string | undefined {
   const lower = s.toLowerCase();
-  if (!lower.endsWith("u8")) return null;
+  if (!lower.endsWith("u8")) return undefined;
 
   const numPart = s.slice(0, s.length - 2).trim();
-  if (!isAllDigits(numPart)) return null;
+  if (!isAllDigits(numPart)) return undefined;
 
   const val = Number(numPart);
-  if (val > 255) return null;
+  if (val > 255) return undefined;
 
   return numPart;
 }
@@ -53,7 +53,7 @@ export function compile(source: string): string {
   const s = source.trim();
 
   const u8Result = handleU8(s);
-  if (u8Result !== null) return u8Result;
+  if (u8Result !== undefined) return u8Result;
 
   if (isNumericString(s)) return s;
 

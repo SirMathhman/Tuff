@@ -41,9 +41,13 @@ module.exports = [
           message:
             "Usage of 'throw' is banned. Use Result<T, X> for error handling instead.",
         },
+        {
+          selector: "Literal[value=null]",
+          message: "Usage of 'null' is banned. Use 'undefined' instead.",
+        },
       ],
       "no-eval": "error",
-      "max-depth": ["error", 4],
+      "max-depth": ["error", 2],
     },
   },
 ];
