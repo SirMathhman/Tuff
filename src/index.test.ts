@@ -49,6 +49,8 @@ describe("interpret", () => {
     ["10 / { let x : I32 = 5; let y = x; y } + 1", 3],
     ["{ let x = 1; { let x = 2; x } + x }", 3],
     ["let z : I32 = 10 / { let x = 5; x } + 1; z", 3],
+    ["let z = true; z", 1],
+    ["let z = false; z", 0],
   ])('should interpret "%s" as %i', expectSuccess);
 
   it.each([

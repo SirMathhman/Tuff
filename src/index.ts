@@ -341,6 +341,13 @@ function interpretOperand(
   if (trimmed === "") {
     return { ok: false, error: "Invalid operand" };
   }
+  if (trimmed === "true" || trimmed === "false") {
+    return {
+      ok: true,
+      value: trimmed === "true" ? 1 : 0,
+      hasSuffix: false,
+    };
+  }
   const variable = env.get(trimmed);
   if (variable) {
     return { ok: true, ...variable };
