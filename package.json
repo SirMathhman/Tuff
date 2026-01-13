@@ -19,6 +19,10 @@
   },
   "homepage": "https://github.com/SirMathhman/Tuff#readme",
   "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.53.0",
+    "@typescript-eslint/parser": "^8.53.0",
+    "eslint": "^9.39.2",
+    "eslint-plugin-no-restricted-syntax": "^1.0.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
