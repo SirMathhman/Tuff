@@ -55,5 +55,7 @@ describe("interpret", () => {
     ["1U8 + 216", "Operand must have a suffix"],
     ["1U8 + 255", "Operand must have a suffix"],
     ["1U8 + 255U8", "Value 256 is out of range for U8"],
+    ["1U8 + 2 + 3U16", "Operand must have a suffix"],
+    ["1U8 + 3U16", "Suffix mismatch"],
   ])('should return error for "%s"', expectError);
 });

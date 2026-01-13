@@ -14,7 +14,7 @@ export interface Failure<E> {
 export type Result<T, E> = Success<T> | Failure<E>;
 
 export function interpret(input: string): Result<number, string> {
-  const plusIndex = input.indexOf(" + ");
+  const plusIndex = input.lastIndexOf(" + ");
   if (plusIndex !== -1) {
     return handleAddition(input, plusIndex);
   }
@@ -33,6 +33,15 @@ function handleAddition(input: string, index: number): Result<number, string> {
 
   if (left.hasSuffix && !right.hasSuffix) {
     return { ok: false, error: "Operand must have a suffix" };
+  }
+
+  if (left.hasSuffix && right.hasSuffix) {
+    if (
+      left.suffixType !== right.suffixType ||
+      left.bitDepth !== right.bitDepth
+    ) {
+      return { ok: false, error: "Suffix mismatch" };
+    }
   }
 
   const value = left.value + right.value;
