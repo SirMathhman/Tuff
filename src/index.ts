@@ -33,7 +33,11 @@ function handleAddition(input: string, index: number): Result<number, string> {
     return { ok: false, error: "Operand must have a suffix" };
   }
 
-  return { ok: true, value: left.value + right.value, hasSuffix: left.hasSuffix || right.hasSuffix };
+  return {
+    ok: true,
+    value: left.value + right.value,
+    hasSuffix: left.hasSuffix || right.hasSuffix,
+  };
 }
 
 function interpretOperand(input: string): Result<number, string> {
