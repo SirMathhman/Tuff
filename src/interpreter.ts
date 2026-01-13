@@ -40,18 +40,23 @@ export function interpret(input: string): number {
   if (suffix.length === 0) return parseFloat(numPart);
 
   // Bounds for integer suffixes (use BigInt for accuracy)
-  const bounds: Record<string, [bigint, bigint]> = {
-    U8: [BigInt(0), BigInt(255)],
-    U16: [BigInt(0), BigInt(65535)],
-    U32: [BigInt(0), BigInt(4294967295)],
-    U64: [BigInt(0), BigInt("18446744073709551615")],
-    I8: [BigInt(-128), BigInt(127)],
-    I16: [BigInt(-32768), BigInt(32767)],
-    I32: [BigInt(-2147483648), BigInt(2147483647)],
-    I64: [BigInt("-9223372036854775808"), BigInt("9223372036854775807")],
-  };
+  const bounds = new Map<string, [bigint, bigint]>();
 
-  const range = bounds[suffix];
+  // generate unsigned ranges
+  for (const bits of [8, 16, 32, 64]) {
+    const max = (BigInt(1) << BigInt(bits)) - BigInt(1);
+    bounds.set(`U${bits}`, [BigInt(0), max]);
+  }
+
+  // generate signed ranges
+  for (const bits of [8, 16, 32, 64]) {
+    const shift = BigInt(1) << BigInt(bits - 1);
+    const min = -shift;
+    const max = shift - BigInt(1);
+    bounds.set(`I${bits}`, [min, max]);
+  }
+
+  const range = bounds.get(suffix);
   if (range === undefined) return NaN;
 
   // Ensure numPart is an integer string (no decimals, no exponents)

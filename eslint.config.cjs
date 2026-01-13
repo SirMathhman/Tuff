@@ -49,6 +49,10 @@ module.exports = [
           selector: "Identifier[name='todo']",
           message: "The identifier 'todo' is banned.",
         },
+        {
+          selector: "TSTypeReference[typeName.name='Record']",
+          message: "Usage of the 'Record' type is banned. Use 'Map' instead.",
+        },
       ],
       "no-eval": "error",
       "max-depth": ["error", 2],
