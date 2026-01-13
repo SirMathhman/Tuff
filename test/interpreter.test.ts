@@ -9,4 +9,8 @@ describe("interpret", () => {
   it("parses integer with unsigned suffix to number", () => {
     expect(interpret("100U8")).toBe(100);
   });
+
+  it("returns NaN for negative numbers with suffix", () => {
+    expect(Number.isNaN(interpret("-100U8"))).toBe(true);
+  });
 });
