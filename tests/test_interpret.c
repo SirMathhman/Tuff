@@ -14,5 +14,7 @@ int main(void)
 	assert(interpret("100U8") == 100);
 	/* negative numbers indicate lower-bound error */
 	assert(interpret("-100U8") == INT_MIN);
+	/* U8 suffix limits range to 0-255 */
+	assert(interpret("256U8") == INT_MIN);
 	return 0;
 }
