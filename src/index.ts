@@ -171,7 +171,8 @@ function handleBlockInternal(
 
   // Track if the last statement is empty (trailing semicolon)
   const lastStatement = statements[statements.length - 1];
-  const hasTrailingSemicolon = lastStatement !== undefined && lastStatement.trim() === "";
+  const hasTrailingSemicolon =
+    lastStatement !== undefined && lastStatement.trim() === "";
 
   for (let i = 0; i < statements.length; i++) {
     const res = processStatement(
@@ -197,6 +198,14 @@ function handleBlockInternal(
 
   // If there's a trailing semicolon in a nested block, it's an error
   if (hasTrailingSemicolon && !isTopLevel) {
+    return {
+      ok: false,
+      error: "Invalid operand",
+    };
+  }
+
+  // If the last statement is a bare 'let' declaration (no semicolon, no following expressions)
+  if (lastStatement !== undefined && lastStatement.trim().startsWith("let ") && !hasTrailingSemicolon) {
     return {
       ok: false,
       error: "Invalid operand",

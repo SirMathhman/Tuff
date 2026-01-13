@@ -57,14 +57,15 @@ describe("interpret", () => {
     ["let mut x = 0; x = 1; x", 1],
     ["let mut x : I32 = 0; x = 1; x = 2; x", 2],
     ["let mut x : I32; { x = 100; } x", 100],
-    ["let x = 5", 5],
     ["let x = 5;", 0],
+    ["let x = 5; x", 5],
     ["{ let mut x = 0; x = 10 }", 10],
   ])('should interpret "%s" as %i', expectSuccess);
 
   it.each([
     ["let x = 0; x = 1; x", "Variable is immutable: x"],
     ["let x = 0; x = 1", "Variable is immutable: x"],
+    ["let x = 5", "Invalid operand"],
     ["-100U8", "Unsigned integer cannot be negative"],
     ["256U8", "Value 256 is out of range for U8"],
     ["128I8", "Value 128 is out of range for I8"],
