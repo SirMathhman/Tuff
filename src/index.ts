@@ -1,7 +1,4 @@
-export function interpret(input: string): number {
-  // Input must start with the numeric characters (no trimming of leading whitespace).
-  // Allow integer prefixes with suffixes (e.g., "100U8" -> 100) but disallow
-  // suffixes when the numeric part is a float (e.g., "3.99kg" should be invalid).
+function parseAtomic(input: string): number {
   const match = input.match(/^([+-]?\d+(?:\.\d+)?)(.*)$/);
   if (!match) {
     throw new Error(`Invalid numeric string: ${input}`);
@@ -63,4 +60,12 @@ export function interpret(input: string): number {
 
   // Truncate fractional part toward zero
   return Math.trunc(result);
+}
+
+export function interpret(input: string): number {
+  if (input.includes("+")) {
+    const parts = input.split("+");
+    return parts.reduce((acc, part) => acc + parseAtomic(part.trim()), 0);
+  }
+  return parseAtomic(input);
 }

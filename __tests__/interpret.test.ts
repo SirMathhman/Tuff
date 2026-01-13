@@ -39,8 +39,12 @@ describe("interpret", () => {
     expect(() => interpret("-129I8")).toThrow("Invalid numeric string");
 
     // U64: allow values up to JS safe integer only
-    expect(interpret(String(Number.MAX_SAFE_INTEGER) + "U64")).toBe(Number.MAX_SAFE_INTEGER);
-    expect(() => interpret(String(Number.MAX_SAFE_INTEGER + 1) + "U64")).toThrow("Invalid numeric string");
+    expect(interpret(String(Number.MAX_SAFE_INTEGER) + "U64")).toBe(
+      Number.MAX_SAFE_INTEGER
+    );
+    expect(() =>
+      interpret(String(Number.MAX_SAFE_INTEGER + 1) + "U64")
+    ).toThrow("Invalid numeric string");
 
     // Misc rejects
     expect(() => interpret("100u8")).toThrow("Invalid numeric string");
@@ -52,5 +56,11 @@ describe("interpret", () => {
     // negative with U8 disallowed (lower bound)
     expect(() => interpret("-7U8")).toThrow("Invalid numeric string");
     expect(() => interpret("-100U8")).toThrow("Invalid numeric string");
+  });
+
+  test("evaluates addition expressions", () => {
+    expect(interpret("1U8 + 2U8")).toBe(3);
+    expect(interpret("100 + 200")).toBe(300);
+    expect(interpret("10I8 + -20I8")).toBe(-10);
   });
 });
