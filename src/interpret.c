@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <errno.h>
+#include <ctype.h>
 
 static int check_suffix(const char *end, long long val)
 {
@@ -48,23 +49,73 @@ static int check_suffix(const char *end, long long val)
 	return 0;
 }
 
+static long long parse_single(const char *input, char **endptr)
+{
+	while (isspace((unsigned char)*input))
+		input++;
+	if (*input == '\0')
+		return 0;
+
+	errno = 0;
+	long long val = strtoll(input, endptr, 10);
+	if (*endptr == input)
+		return 0;
+
+	char *suffix_end = *endptr;
+	while (*suffix_end && !isspace((unsigned char)*suffix_end) && *suffix_end != '+')
+		suffix_end++;
+
+	char suffix[16] = {0};
+	size_t len = suffix_end - *endptr;
+	if (len > 0 && len < sizeof(suffix))
+	{
+		strncpy(suffix, *endptr, len);
+		if (check_suffix(suffix, val))
+		{
+			errno = ERANGE;
+			return INT_MIN;
+		}
+	}
+	*endptr = suffix_end;
+	return val;
+}
+
 int interpret(const char *input)
 {
 	if (!input)
 		return 0;
-	char *end = NULL;
-	errno = 0;
-	long long val = strtoll(input, &end, 10);
-	if (end == input)
-		return 0;
 
-	if (check_suffix(end, val))
+	char *next = (char *)input;
+	long long total = parse_single(next, &next);
+	if (errno == ERANGE && total == INT_MIN)
 		return INT_MIN;
 
-	if (errno == ERANGE || val > INT_MAX)
+	while (*next)
+	{
+		while (isspace((unsigned char)*next))
+			next++;
+		if (*next == '+')
+		{
+			next++;
+			long long val = parse_single(next, &next);
+			if (errno == ERANGE && val == INT_MIN)
+				return INT_MIN;
+			total += val;
+		}
+		else if (*next == '\0')
+		{
+			break;
+		}
+		else
+		{
+			next++;
+		}
+	}
+
+	if (total > INT_MAX)
 		return INT_MAX;
-	if (val < INT_MIN)
+	if (total < INT_MIN)
 		return INT_MIN;
 
-	return (int)val;
+	return (int)total;
 }
