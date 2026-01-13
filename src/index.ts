@@ -114,14 +114,16 @@ export function interpret(input: string): number {
       const sign = s[pos];
       pos++;
       skipWhitespace();
-      if (pos < len && s[pos] === "(") {
-        pos++; // consume '('
+      if (pos < len && (s[pos] === "(" || s[pos] === "{")) {
+        const open = s[pos];
+        const close = open === "(" ? ")" : "}";
+        pos++; // consume opening bracket
         const val = parseExpression();
         skipWhitespace();
-        if (pos >= len || s[pos] !== ")") {
+        if (pos >= len || s[pos] !== close) {
           throw new Error(`Invalid expression: ${input}`);
         }
-        pos++; // consume ')'
+        pos++; // consume closing bracket
         return sign === "-" ? -val : val;
       }
       // If next token is a number, include the sign in the numeric token passed to parseAtomic
@@ -135,15 +137,17 @@ export function interpret(input: string): number {
       return p.value;
     }
 
-    // Parenthesized expression
-    if (s[pos] === "(") {
-      pos++; // consume '('
+    // Parenthesized or braced expression
+    if (s[pos] === "(" || s[pos] === "{") {
+      const open = s[pos];
+      const close = open === "(" ? ")" : "}";
+      pos++; // consume opening bracket
       const val = parseExpression();
       skipWhitespace();
-      if (pos >= len || s[pos] !== ")") {
+      if (pos >= len || s[pos] !== close) {
         throw new Error(`Invalid expression: ${input}`);
       }
-      pos++; // consume ')'
+      pos++; // consume closing bracket
       return val;
     }
 
