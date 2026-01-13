@@ -15,13 +15,21 @@ export type Result<T, E> = Success<T> | Failure<E>;
 
 export function interpret(input: string): Result<number, string> {
   const plusIndex = input.lastIndexOf(" + ");
-  if (plusIndex !== -1) {
-    return handleAddition(input, plusIndex);
+  const minusIndex = input.lastIndexOf(" - ");
+  const index = Math.max(plusIndex, minusIndex);
+
+  if (index !== -1) {
+    const operator = input.substring(index + 1, index + 2);
+    return handleBinaryExpression(input, index, operator);
   }
   return interpretOperand(input);
 }
 
-function handleAddition(input: string, index: number): Result<number, string> {
+function handleBinaryExpression(
+  input: string,
+  index: number,
+  operator: string
+): Result<number, string> {
   const left = interpret(input.substring(0, index));
   if (!left.ok) {
     return left;
@@ -44,7 +52,8 @@ function handleAddition(input: string, index: number): Result<number, string> {
     }
   }
 
-  const value = left.value + right.value;
+  const value =
+    operator === "+" ? left.value + right.value : left.value - right.value;
   const hasSuffix = left.hasSuffix || right.hasSuffix;
 
   if (hasSuffix) {

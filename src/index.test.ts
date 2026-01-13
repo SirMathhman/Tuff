@@ -39,6 +39,7 @@ describe("interpret", () => {
     ["1 + 2U8", 3],
     ["1 + 2 + 3", 6],
     ["1 + 2 + 3U8", 6],
+    ["2 + 3 - 4", 1],
   ])('should interpret "%s" as %i', expectSuccess);
 
   it.each([
