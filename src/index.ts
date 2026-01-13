@@ -294,6 +294,9 @@ function interpretOperand(
   env: Environment
 ): Result<number, string> {
   const trimmed = input.trim();
+  if (trimmed === "") {
+    return { ok: false, error: "Invalid operand" };
+  }
   const variable = env.get(trimmed);
   if (variable) {
     return { ok: true, ...variable };
@@ -306,7 +309,7 @@ function interpretOperand(
     : "";
 
   if (!suffixInfo.found || !isValidInteger(numericPart)) {
-    return { ok: true, value: parseFloat(trimmed), hasSuffix: false };
+    return handleNonSuffixedLiteral(trimmed);
   }
 
   const { type, bitDepth } = suffixInfo;
@@ -326,6 +329,29 @@ function interpretOperand(
     suffixType: type,
     bitDepth,
   };
+}
+
+function handleNonSuffixedLiteral(trimmed: string): Result<number, string> {
+  const val = parseFloat(trimmed);
+  if (isNaN(val)) {
+    return { ok: false, error: "Invalid operand" };
+  }
+  for (let i = 0; i < trimmed.length; i++) {
+    const c = trimmed.charAt(i);
+    if (
+      !(
+        (c >= "0" && c <= "9") ||
+        c === "." ||
+        (i === 0 && (c === "-" || c === "+"))
+      )
+    ) {
+      return { ok: false, error: "Invalid operand" };
+    }
+  }
+  if (trimmed.split(".").length > 2) {
+    return { ok: false, error: "Invalid operand" };
+  }
+  return { ok: true, value: val, hasSuffix: false };
 }
 
 function isValidInteger(str: string): boolean {
