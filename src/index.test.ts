@@ -56,8 +56,9 @@ describe("interpret", () => {
     ["let mut x : I32; x = 100I8; x", 100],
     ["let mut x = 0; x = 1; x", 1],
     ["let mut x : I32 = 0; x = 1; x = 2; x", 2],
-    ["let mut x : I32 { x = 100; } x", 100],
+    ["let mut x : I32; { x = 100; } x", 100],
     ["let x = 5", 5],
+    ["let x = 5;", 0],
     ["{ let mut x = 0; x = 10 }", 10],
   ])('should interpret "%s" as %i', expectSuccess);
 

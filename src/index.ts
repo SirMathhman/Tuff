@@ -35,7 +35,7 @@ export function interpret(
   const trimmed = input.trim();
   // console.log(`Interpreting: "${trimmed}"`);
   const statements = splitStatements(trimmed);
-  return handleBlockInternal(statements, env, false);
+  return handleBlockInternal(statements, env, false, true);
 }
 
 function interpretLeaf(
@@ -110,10 +110,18 @@ function splitStatements(contents: string): string[] {
     if (char === ";" && depth === 0) {
       statements.push(current);
       current = "";
-    } else if (char === "{" && oldDepth === 0 && shouldSplitBeforeBlock(current)) {
+    } else if (
+      char === "{" &&
+      oldDepth === 0 &&
+      shouldSplitBeforeBlock(current)
+    ) {
       statements.push(current);
       current = "{";
-    } else if (char === "}" && depth === 0 && shouldSplitAfterBlock(contents, i)) {
+    } else if (
+      char === "}" &&
+      depth === 0 &&
+      shouldSplitAfterBlock(contents, i)
+    ) {
       current += "}";
       statements.push(current);
       current = "";
@@ -135,7 +143,13 @@ function shouldSplitBeforeBlock(current: string): boolean {
 function shouldSplitAfterBlock(contents: string, index: number): boolean {
   for (let j = index + 1; j < contents.length; j++) {
     const nextChar = contents.charAt(j);
-    if (nextChar === " " || nextChar === "\n" || nextChar === "\r" || nextChar === "\t") continue;
+    if (
+      nextChar === " " ||
+      nextChar === "\n" ||
+      nextChar === "\r" ||
+      nextChar === "\t"
+    )
+      continue;
     return !"+-*/=".includes(nextChar);
   }
   return false;
@@ -144,7 +158,8 @@ function shouldSplitAfterBlock(contents: string, index: number): boolean {
 function handleBlockInternal(
   statements: string[],
   env: Environment,
-  shouldClone: boolean
+  shouldClone: boolean,
+  isTopLevel: boolean = false
 ): Result<number, string> {
   const blockEnv = shouldClone ? new Map(env) : env;
   const localDecls = new Set<string>();
@@ -154,11 +169,38 @@ function handleBlockInternal(
     hasSuffix: false,
   };
 
+  // Track if the last statement is empty (trailing semicolon)
+  const lastStatement = statements[statements.length - 1];
+  const hasTrailingSemicolon = lastStatement !== undefined && lastStatement.trim() === "";
+
   for (let i = 0; i < statements.length; i++) {
-    const res = processStatement(statements[i], i, statements.length, blockEnv, localDecls);
+    const res = processStatement(
+      statements[i],
+      i,
+      statements.length,
+      blockEnv,
+      localDecls
+    );
     if (!res) continue;
     if (!res.ok) return res;
     lastRes = res;
+  }
+
+  // If there's a trailing semicolon at top level, return void (0)
+  if (hasTrailingSemicolon && isTopLevel) {
+    return {
+      ok: true,
+      value: 0,
+      hasSuffix: false,
+    };
+  }
+
+  // If there's a trailing semicolon in a nested block, it's an error
+  if (hasTrailingSemicolon && !isTopLevel) {
+    return {
+      ok: false,
+      error: "Invalid operand",
+    };
   }
 
   return lastRes;
@@ -175,7 +217,8 @@ function processStatement(
   const trimmed = stmt.trim();
   const isLast = index === count - 1;
 
-  if (trimmed === "" && !isLast) return undefined;
+  // Skip empty statements (from trailing semicolons)
+  if (trimmed === "") return undefined;
 
   const res = handleStatement(trimmed, env, localDecls);
   if (!res.ok && res.error === "Invalid operand" && !isLast) {
