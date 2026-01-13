@@ -12,11 +12,22 @@ public class AppTest {
 
 	@Test
 	void interpretParsesIntegerString() {
-		assertEquals(100, App.interpret("100"));
+		Result<Integer, String> result = App.interpret("100");
+		assertTrue(result.isOk());
+		assertEquals(100, result.get());
 	}
 
 	@Test
 	void interpretParsesIntegerWithSuffix() {
-		assertEquals(100, App.interpret("100U8"));
+		Result<Integer, String> result = App.interpret("100U8");
+		assertTrue(result.isOk());
+		assertEquals(100, result.get());
+	}
+
+	@Test
+	void interpretReturnsErrorForNull() {
+		Result<Integer, String> result = App.interpret(null);
+		assertTrue(result.isErr());
+		assertEquals("null", result.getError());
 	}
 }

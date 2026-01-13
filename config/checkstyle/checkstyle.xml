@@ -19,5 +19,10 @@
 		<module name="IllegalToken">
 			<property name="tokens" value="LITERAL_NULL" />
 		</module>
+
+		<!-- Ban the use of 'throw' word -->
+		<module name="IllegalToken">
+			<property name="tokens" value="LITERAL_THROW" />
+		</module>
 	</module>
 </module>

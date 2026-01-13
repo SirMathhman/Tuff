@@ -9,15 +9,20 @@ public class App {
 	}
 
 	/**
-	 * Interpret the given string and return an int.
+	 * Interpret the given string and return a Result containing the int or an error message.
 	 * Current implementation parses decimal integers and tolerates
 	 * trailing non-digit characters (e.g., "100U8" -> 100).
 	 */
-	public static int interpret(String input) {
-		String s = Optional.ofNullable(input)
-				.orElseThrow(() -> new NumberFormatException("null"))
-				.trim();
+	public static Result<Integer, String> interpret(String input) {
+		Optional<String> maybeInput = Optional.ofNullable(input);
+		if (maybeInput.isEmpty()) {
+			return Result.err("null");
+		}
+		String s = maybeInput.get().trim();
 		int len = s.length();
+		if (len == 0) {
+			return Result.err("empty string");
+		}
 		int i = 0;
 		// handle optional sign
 		if (i < len && (s.charAt(i) == '+' || s.charAt(i) == '-')) {
@@ -29,9 +34,9 @@ public class App {
 		}
 		if (i == startDigits) {
 			// no digits found at start
-			throw new NumberFormatException("For input string: \"" + s + "\"");
+			return Result.err("For input string: \"" + s + "\"");
 		}
 		String numStr = s.substring(0, i);
-		return Integer.parseInt(numStr);
+		return Result.ok(Integer.parseInt(numStr));
 	}
 }
