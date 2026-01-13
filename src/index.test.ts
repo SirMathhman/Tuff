@@ -46,6 +46,7 @@ describe("interpret", () => {
     ["1 + (2 * 3)", 7],
     ["10 / { 5 } + 1", 3],
     ["10 / { let x : I32 = 5; x } + 1", 3],
+    ["10 / { let x : I32 = 5; let y = x; y } + 1", 3],
   ])('should interpret "%s" as %i', expectSuccess);
 
   it.each([

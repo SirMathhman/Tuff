@@ -2,8 +2,8 @@ export interface Success<T> {
   ok: true;
   value: T;
   hasSuffix: boolean;
-  suffixType?: string;
-  bitDepth?: number;
+  suffixType?: string | undefined;
+  bitDepth?: number | undefined;
 }
 
 export interface Failure<E> {
@@ -16,8 +16,8 @@ export type Result<T, E> = Success<T> | Failure<E>;
 export interface Variable {
   value: number;
   hasSuffix: boolean;
-  suffixType?: string;
-  bitDepth?: number;
+  suffixType?: string | undefined;
+  bitDepth?: number | undefined;
 }
 
 export type Environment = Map<string, Variable>;
@@ -123,16 +123,25 @@ function handleLet(stmt: string, env: Environment): Result<number, string> {
   const left = cut(stmt, 4, eqIndex);
   const right = part(stmt, eqIndex + 1);
 
-  const colonIndex = left.indexOf(":");
-  const errCol = failIf(colonIndex === -1, "Missing : in let");
-  if (errCol) return errCol;
-
-  const name = cut(left, 0, colonIndex);
-  const typeStr = part(left, colonIndex + 1);
-
   const res = interpret(right, env);
   if (!res.ok) return res;
 
+  const colonIndex = left.indexOf(":");
+  if (colonIndex === -1) {
+    return registerVar(left.trim(), res, env);
+  }
+
+  return handleTypedLet(left, colonIndex, res, env);
+}
+
+function handleTypedLet(
+  left: string,
+  colonIndex: number,
+  res: Success<number>,
+  env: Environment
+): Result<number, string> {
+  const name = cut(left, 0, colonIndex);
+  const typeStr = part(left, colonIndex + 1);
   const type = typeStr.charAt(0).toUpperCase();
   const bitDepth = parseInt(part(typeStr, 1), 10);
 
@@ -140,20 +149,31 @@ function handleLet(stmt: string, env: Environment): Result<number, string> {
     return rangeError(res.value, type, bitDepth);
   }
 
+  return registerVar(
+    name,
+    {
+      ok: true,
+      value: res.value,
+      hasSuffix: true,
+      suffixType: type,
+      bitDepth,
+    },
+    env
+  );
+}
+
+function registerVar(
+  name: string,
+  res: Success<number>,
+  env: Environment
+): Result<number, string> {
   env.set(name, {
     value: res.value,
-    hasSuffix: true,
-    suffixType: type,
-    bitDepth,
+    hasSuffix: res.hasSuffix,
+    suffixType: res.suffixType,
+    bitDepth: res.bitDepth,
   });
-
-  return {
-    ok: true,
-    value: res.value,
-    hasSuffix: true,
-    suffixType: type,
-    bitDepth,
-  };
+  return res;
 }
 
 function cut(str: string, start: number, end: number): string {
