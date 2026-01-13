@@ -234,14 +234,17 @@ export function interpret(input: string): number {
     return lhs;
   };
 
-  const parseBlock = (): { value: number; type: string } => {
+  const parseScope = (closeChar?: string): { value: number; type: string } => {
     // create new scope
     env.push(new Map());
     let last: { value: number; type: string } = { value: 0, type: "none" };
     while (true) {
       skipWhitespace();
-      if (pos >= len) throw new Error(`Invalid expression: ${input}`);
-      if (s[pos] === "}") break;
+      if (pos >= len) {
+        if (closeChar) throw new Error(`Invalid expression: ${input}`);
+        break;
+      }
+      if (closeChar && s[pos] === closeChar) break;
       // check for let
       const startPos = pos;
       const kw = parseIdentifier();
@@ -250,15 +253,13 @@ export function interpret(input: string): number {
         const name = parseIdentifier();
         if (!name) throw new Error(`Invalid expression: expected identifier`);
         skipWhitespace();
-        if (s[pos] !== ":") throw new Error(`Invalid expression: expected ':'`);
-        pos++;
+        expectChar(":");
         skipWhitespace();
         const typeName = parseIdentifier();
         if (!typeName)
           throw new Error(`Invalid expression: expected type annotation`);
         skipWhitespace();
-        if (s[pos] !== "=") throw new Error(`Invalid expression: expected '='`);
-        pos++;
+        expectChar("=");
         const rhs = parseExpression();
         skipWhitespace();
         if (s[pos] !== ";") throw new Error(`Invalid expression: expected ';'`);
@@ -266,11 +267,9 @@ export function interpret(input: string): number {
         // validate assignment
         if (!(typeName in RANGES))
           throw new Error(`Invalid expression: unknown type ${typeName}`);
-        // if rhs has explicit type and differs from annotation -> error
         if (rhs.type !== "none" && rhs.type !== typeName) {
           throw new Error(`Mismatched types in declaration: ${name}`);
         }
-        // if rhs is none, ensure value in range
         if (rhs.type === "none") {
           let big: bigint;
           try {
@@ -300,7 +299,11 @@ export function interpret(input: string): number {
     env.pop();
     return last;
   };
-  const result = parseExpression();
+
+  const parseBlock = (): { value: number; type: string } => parseScope("}");
+  const parseProgram = (): { value: number; type: string } => parseScope();
+
+  const result = parseProgram();
   skipWhitespace();
   if (pos !== len) {
     throw new Error(`Invalid expression: ${input}`);
