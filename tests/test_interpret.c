@@ -35,10 +35,11 @@ int main(void)
 	/* Addition and Subtraction */
 	assert(interpret("1 + 2 + 3") == 6);
 	assert(interpret("2 + 3 - 4") == 1);
-	/* Multiplication and Precedence */
+	/* Multiplication, Division and Precedence */
 	assert(interpret("2 * 3 - 4") == 2);
 	assert(interpret("2 + 3 * 4") == 14);
 	assert(interpret("4 + 2 * 3") == 10);
+	assert(interpret("10 / 2 + 1") == 6);
 	assert(interpret("100 + 200") == 300);
 
 	return 0;

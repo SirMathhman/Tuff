@@ -63,7 +63,7 @@ static long long parse_single(const char *input, char **endptr)
 
 	char *suffix_end = *endptr;
 	while (*suffix_end && !isspace((unsigned char)*suffix_end) &&
-				 *suffix_end != '+' && *suffix_end != '-' && *suffix_end != '*')
+				 *suffix_end != '+' && *suffix_end != '-' && *suffix_end != '*' && *suffix_end != '/')
 		suffix_end++;
 
 	char suffix[16] = {0};
@@ -95,8 +95,9 @@ static long long parse_term(const char **input)
 	{
 		while (isspace((unsigned char)*next))
 			next++;
-		if (*next == '*')
+		if (*next == '*' || *next == '/')
 		{
+			char op = *next;
 			next++;
 			long long next_val = parse_single(next, &next);
 			if (errno == ERANGE && next_val == INT_MIN)
@@ -104,7 +105,20 @@ static long long parse_term(const char **input)
 				*input = next;
 				return INT_MIN;
 			}
-			val *= next_val;
+			if (op == '*')
+			{
+				val *= next_val;
+			}
+			else
+			{
+				if (next_val == 0)
+				{
+					/* Division by zero - treat as error/lower bound for now */
+					errno = ERANGE;
+					return INT_MIN;
+				}
+				val /= next_val;
+			}
 		}
 		else
 		{
