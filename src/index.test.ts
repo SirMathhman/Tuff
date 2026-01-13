@@ -44,6 +44,7 @@ describe("interpret", () => {
     ["4 + 2 * 3", 10],
     ["(4 + 2) * 3", 18],
     ["1 + (2 * 3)", 7],
+    ["10 / { 5 } + 1", 3],
   ])('should interpret "%s" as %i', expectSuccess);
 
   it.each([

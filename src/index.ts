@@ -26,11 +26,15 @@ export function interpret(input: string): Result<number, string> {
   const resSet2 = tryHandleOps(trimmed, ["*", "/"]);
   if (resSet2.ok) return resSet2.result;
 
-  if (trimmed.startsWith("(") && trimmed.endsWith(")")) {
+  if (isWrapped(trimmed, "(", ")") || isWrapped(trimmed, "{", "}")) {
     return interpret(trimmed.substring(1, trimmed.length - 1));
   }
 
   return interpretOperand(trimmed);
+}
+
+function isWrapped(str: string, open: string, close: string): boolean {
+  return str.startsWith(open) && str.endsWith(close);
 }
 
 function findOperator(input: string, ops: string[]): number {
@@ -45,8 +49,8 @@ function findOperator(input: string, ops: string[]): number {
 }
 
 function getDepthChange(char: string): number {
-  if (char === ")") return 1;
-  if (char === "(") return -1;
+  if (char === ")" || char === "}") return 1;
+  if (char === "(" || char === "{") return -1;
   return 0;
 }
 
@@ -56,10 +60,7 @@ function isOperatorMatch(input: string, i: number, ops: string[]): boolean {
   return ops.includes(input.charAt(i));
 }
 
-function tryHandleOps(
-  trimmed: string,
-  ops: string[]
-): OpResult {
+function tryHandleOps(trimmed: string, ops: string[]): OpResult {
   const index = findOperator(trimmed, ops);
   if (index !== -1) {
     return { ok: true, result: handleBinaryAtIndex(trimmed, index) };
