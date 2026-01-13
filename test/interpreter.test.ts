@@ -52,9 +52,15 @@ it("interprets arithmetic with suffixes", () => {
 });
 
 it("interprets mixed arithmetic with and without suffixes", () => {
-  const result = interpret("1U8 + 2");
-  expect(result.ok).toBe(true);
-  if (result.ok) {
-    expect(result.value).toBe(3);
+  const result1 = interpret("1U8 + 2");
+  expect(result1.ok).toBe(true);
+  if (result1.ok) {
+    expect(result1.value).toBe(3);
+  }
+
+  const result2 = interpret("1 + 2U8");
+  expect(result2.ok).toBe(true);
+  if (result2.ok) {
+    expect(result2.value).toBe(3);
   }
 });

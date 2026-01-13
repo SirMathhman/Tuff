@@ -54,7 +54,7 @@ module.exports = [
       "max-depth": ["error", 2],
       "@typescript-eslint/no-unused-vars": [
         "error",
-        { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
     },
   },
