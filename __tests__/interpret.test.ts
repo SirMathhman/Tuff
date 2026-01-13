@@ -20,7 +20,9 @@ describe("interpret", () => {
 
   test("parses leading numeric prefix with suffix", () => {
     expect(interpret("100U8")).toBe(100);
-    expect(interpret("  42xyz")).toBe(42);
-    expect(interpret("3.99kg")).toBe(3);
+    expect(() => interpret("  42xyz")).toThrow("Invalid numeric string");
+    expect(() => interpret("3.99kg")).toThrow("Invalid numeric string");
+    // Without leading whitespace, integer prefix with suffix is allowed
+    expect(interpret("42xyz")).toBe(42);
   });
 });
