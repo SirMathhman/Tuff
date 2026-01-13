@@ -36,4 +36,10 @@ public class AppTest {
 		Result<Integer, String> result = App.interpret("-100U8");
 		assertTrue(result.isErr());
 	}
+
+	@Test
+	void interpretRejectsU8Overflow() {
+		Result<Integer, String> result = App.interpret("256U8");
+		assertTrue(result.isErr());
+	}
 }

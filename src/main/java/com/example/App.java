@@ -44,6 +44,22 @@ public class App {
 			return Result.err("Negative numbers with suffix not supported");
 		}
 		String numStr = s.substring(0, i);
-		return Result.ok(Integer.parseInt(numStr));
+		int value = Integer.parseInt(numStr);
+
+		String suffix = s.substring(i);
+		if (suffix.isEmpty()) {
+			return Result.ok(value);
+		}
+
+		// Handle unsigned 8-bit suffix: value must be in [0,255]
+		if ("U8".equals(suffix)) {
+			if (value < 0 || value > 255) {
+				return Result.err("value out of range for U8");
+			}
+			return Result.ok(value);
+		}
+
+		// Unknown suffixes are accepted by ignoring them (legacy behavior)
+		return Result.ok(value);
 	}
 }
