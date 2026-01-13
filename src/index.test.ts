@@ -33,4 +33,12 @@ describe("interpret", () => {
       expect(result.error).toBe("Unsigned integer cannot be negative");
     }
   });
+
+  it('should return error for "256U8"', () => {
+    const result = interpret("256U8");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("Value 256 is out of range for U8");
+    }
+  });
 });

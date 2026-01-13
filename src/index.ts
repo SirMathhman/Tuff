@@ -3,22 +3,31 @@ export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
 export function interpret(input: string): Result<number, string> {
   const trimmed = input.trim();
   const upper = trimmed.toUpperCase();
-
-  if (!trimmed.startsWith("-")) {
-    return { ok: true, value: parseFloat(trimmed) };
-  }
+  const value = parseFloat(trimmed);
 
   const uIndex = upper.lastIndexOf("U");
   if (uIndex === -1) {
-    return { ok: true, value: parseFloat(trimmed) };
+    return { ok: true, value };
   }
 
   const suffix = upper.substring(uIndex + 1);
-  if (isNumeric(suffix)) {
+  if (!isNumeric(suffix)) {
+    return { ok: true, value };
+  }
+
+  if (trimmed.startsWith("-")) {
     return { ok: false, error: "Unsigned integer cannot be negative" };
   }
 
-  return { ok: true, value: parseFloat(trimmed) };
+  const bitDepth = parseInt(suffix || "0", 10);
+  if (bitDepth > 0 && value >= Math.pow(2, bitDepth)) {
+    return {
+      ok: false,
+      error: `Value ${value} is out of range for U${bitDepth}`,
+    };
+  }
+
+  return { ok: true, value };
 }
 
 function isNumeric(str: string): boolean {
