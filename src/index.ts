@@ -4,5 +4,6 @@ export function interpret(input: string): number {
   if (Number.isNaN(result)) {
     throw new Error(`Invalid numeric string: ${input}`);
   }
-  return result;
+  // Truncate fractional part toward zero
+  return Math.trunc(result);
 }
