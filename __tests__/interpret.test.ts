@@ -17,4 +17,10 @@ describe("interpret", () => {
     expect(interpret("3.14")).toBe(3);
     expect(interpret("-3.14")).toBe(-3);
   });
+
+  test("parses leading numeric prefix with suffix", () => {
+    expect(interpret("100U8")).toBe(100);
+    expect(interpret("  42xyz")).toBe(42);
+    expect(interpret("3.99kg")).toBe(3);
+  });
 });
