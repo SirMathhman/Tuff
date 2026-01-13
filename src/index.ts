@@ -1,4 +1,4 @@
-function parseAtomic(input: string): number {
+function parseAtomic(input: string): { value: number; type: string } {
   const match = input.match(/^([+-]?\d+(?:\.\d+)?)(.*)$/);
   if (!match) {
     throw new Error(`Invalid numeric string: ${input}`);
@@ -50,7 +50,7 @@ function parseAtomic(input: string): number {
       throw new Error(`Invalid numeric string: ${input}`);
     }
 
-    return Number(big);
+    return { value: Number(big), type: rest };
   }
 
   const result = Number(input);
@@ -59,13 +59,20 @@ function parseAtomic(input: string): number {
   }
 
   // Truncate fractional part toward zero
-  return Math.trunc(result);
+  return { value: Math.trunc(result), type: "none" };
 }
 
 export function interpret(input: string): number {
   if (input.includes("+")) {
     const parts = input.split("+");
-    return parts.reduce((acc, part) => acc + parseAtomic(part.trim()), 0);
+    const parsedParts = parts.map((part) => parseAtomic(part.trim()));
+    const firstType = parsedParts[0].type;
+
+    if (!parsedParts.every((part) => part.type === firstType)) {
+      throw new Error(`Mismatched types in expression: ${input}`);
+    }
+
+    return parsedParts.reduce((acc, part) => acc + part.value, 0);
   }
-  return parseAtomic(input);
+  return parseAtomic(input).value;
 }
