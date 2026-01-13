@@ -63,4 +63,10 @@ it("interprets mixed arithmetic with and without suffixes", () => {
   if (result2.ok) {
     expect(result2.value).toBe(3);
   }
+
+  const result3 = interpret("1 + 2U8 + 3");
+  expect(result3.ok).toBe(true);
+  if (result3.ok) {
+    expect(result3.value).toBe(6);
+  }
 });
