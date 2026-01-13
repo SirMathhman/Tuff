@@ -14,15 +14,7 @@ lint:
 
 test: $(SRC) $(TEST)
 	$(CC) $(CFLAGS) $(SRC) $(TEST) -o test_interpret
-	@$(MAKE) --no-print-directory run_test_with_timeout
-
-.PHONY: run_test_with_timeout
-run_test_with_timeout:
-ifeq ($(OS),Windows_NT)
-	@powershell -NoProfile -Command "$$p=Start-Process -FilePath '.\\test_interpret' -NoNewWindow -PassThru; try { Wait-Process -Id $$p.Id -Timeout $(TEST_TIMEOUT_SECS) -ErrorAction Stop } catch [System.TimeoutException] { try { Stop-Process -Id $$p.Id -Force -ErrorAction SilentlyContinue } catch {} ; exit 124 }; exit $$p.ExitCode"
-else
-	@timeout $(TEST_TIMEOUT_SECS)s ./test_interpret
-endif
+	@powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run_tests.ps1 -TimeoutSeconds $(TEST_TIMEOUT_SECS)
 
 clean:
 	rm -f test_interpret
