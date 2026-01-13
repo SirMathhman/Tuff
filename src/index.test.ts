@@ -35,6 +35,7 @@ describe("interpret", () => {
     ["-32768I16", -32768],
     ["4294967295U32", 4294967295],
     ["18446744073709551615U64", Number(18446744073709551615n)],
+    ["1U8 + 2U8", 3],
   ])('should interpret "%s" as %i', expectSuccess);
 
   it.each([
@@ -44,6 +45,9 @@ describe("interpret", () => {
     ["-129I8", "Value -129 is out of range for I8"],
     ["32768I16", "Value 32768 is out of range for I16"],
     ["65536U16", "Value 65536 is out of range for U16"],
-    ["9223372036854775808I64", "Value 9223372036854775808 is out of range for I64"],
+    [
+      "9223372036854775808I64",
+      "Value 9223372036854775808 is out of range for I64",
+    ],
   ])('should return error for "%s"', expectError);
 });

@@ -11,6 +11,26 @@ export interface Failure<E> {
 export type Result<T, E> = Success<T> | Failure<E>;
 
 export function interpret(input: string): Result<number, string> {
+  const plusIndex = input.indexOf(" + ");
+  if (plusIndex !== -1) {
+    return handleAddition(input, plusIndex);
+  }
+  return interpretOperand(input);
+}
+
+function handleAddition(input: string, index: number): Result<number, string> {
+  const left = interpret(input.substring(0, index));
+  if (!left.ok) {
+    return left;
+  }
+  const right = interpret(input.substring(index + 3));
+  if (!right.ok) {
+    return right;
+  }
+  return { ok: true, value: left.value + right.value };
+}
+
+function interpretOperand(input: string): Result<number, string> {
   const trimmed = input.trim();
   const upper = trimmed.toUpperCase();
 
@@ -63,7 +83,12 @@ function getSuffixInfo(upper: string): SuffixInfo {
   const uIndex = upper.lastIndexOf("U");
   const iIndex = upper.lastIndexOf("I");
   const index = Math.max(uIndex, iIndex);
-  const failure: SuffixInfo = { found: false, type: "", bitDepth: 0, index: -1 };
+  const failure: SuffixInfo = {
+    found: false,
+    type: "",
+    bitDepth: 0,
+    index: -1,
+  };
 
   if (index === -1) {
     return failure;
@@ -82,7 +107,6 @@ function getSuffixInfo(upper: string): SuffixInfo {
   };
 }
 
-
 function isInRange(value: bigint, type: string, bitDepth: number): boolean {
   if (type === "U") {
     const max = BigInt(2) ** BigInt(bitDepth);
@@ -91,7 +115,6 @@ function isInRange(value: bigint, type: string, bitDepth: number): boolean {
   const limit = BigInt(2) ** BigInt(bitDepth - 1);
   return value >= -limit && value < limit;
 }
-
 
 function isNumeric(str: string): boolean {
   for (let i = 0; i < str.length; i++) {
