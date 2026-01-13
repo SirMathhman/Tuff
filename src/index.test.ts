@@ -1,16 +1,20 @@
-import { describe, it, expect } from 'vitest';
-import { interpret } from './index';
+import { describe, it, expect } from "vitest";
+import { interpret } from "./index";
 
-describe('interpret', () => {
-  it('should return a number', () => {
-    expect(typeof interpret('123')).toBe('number');
+describe("interpret", () => {
+  it("should return a number", () => {
+    expect(typeof interpret("123")).toBe("number");
   });
 
   it('should interpret "100" as 100', () => {
-    expect(interpret('100')).toBe(100);
+    expect(interpret("100")).toBe(100);
   });
 
   it('should interpret "100U8" as 100', () => {
-    expect(interpret('100U8')).toBe(100);
+    expect(interpret("100U8")).toBe(100);
+  });
+
+  it('should throw an error for "-100U8"', () => {
+    expect(() => interpret("-100U8")).toThrow();
   });
 });
