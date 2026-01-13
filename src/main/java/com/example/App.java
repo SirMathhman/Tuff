@@ -9,7 +9,8 @@ public class App {
 	}
 
 	/**
-	 * Interpret the given string and return a Result containing the int or an error message.
+	 * Interpret the given string and return a Result containing the int or an error
+	 * message.
 	 * Current implementation parses decimal integers and tolerates
 	 * trailing non-digit characters (e.g., "100U8" -> 100).
 	 */
@@ -25,7 +26,9 @@ public class App {
 		}
 		int i = 0;
 		// handle optional sign
+		boolean negative = false;
 		if (i < len && (s.charAt(i) == '+' || s.charAt(i) == '-')) {
+			negative = (s.charAt(i) == '-');
 			i++;
 		}
 		int startDigits = i;
@@ -35,6 +38,10 @@ public class App {
 		if (i == startDigits) {
 			// no digits found at start
 			return Result.err("For input string: \"" + s + "\"");
+		}
+		// If negative and there is trailing non-digit content, reject
+		if (negative && i < len) {
+			return Result.err("Negative numbers with suffix not supported");
 		}
 		String numStr = s.substring(0, i);
 		return Result.ok(Integer.parseInt(numStr));

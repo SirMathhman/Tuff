@@ -30,4 +30,10 @@ public class AppTest {
 		assertTrue(result.isErr());
 		assertEquals("null", result.getError());
 	}
+
+	@Test
+	void interpretRejectsNegativeWithSuffix() {
+		Result<Integer, String> result = App.interpret("-100U8");
+		assertTrue(result.isErr());
+	}
 }

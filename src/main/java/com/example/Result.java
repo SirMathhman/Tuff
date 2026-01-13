@@ -4,7 +4,8 @@ import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * A simple Result type that represents either a success (Ok) or a failure (Err).
+ * A simple Result type that represents either a success (Ok) or a failure
+ * (Err).
  *
  * @param <T> The type of the success value.
  * @param <X> The type of the failure value.
