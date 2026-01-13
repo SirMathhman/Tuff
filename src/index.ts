@@ -14,21 +14,49 @@ export interface Failure<E> {
 export type Result<T, E> = Success<T> | Failure<E>;
 
 export function interpret(input: string): Result<number, string> {
-  const lastAdd = input.lastIndexOf(" + ");
-  const lastSub = input.lastIndexOf(" - ");
-  const addSubIndex = Math.max(lastAdd, lastSub);
-
+  const trimmed = input.trim();
+  const addSubIndex = findOperator(trimmed, ["+", "-"]);
   if (addSubIndex !== -1) {
-    const operator = input.substring(addSubIndex + 1, addSubIndex + 2);
-    return handleBinaryExpression(input, addSubIndex, operator);
+    return handleBinaryExpression(
+      trimmed,
+      addSubIndex,
+      trimmed.charAt(addSubIndex + 1)
+    );
   }
 
-  const lastMul = input.lastIndexOf(" * ");
-  if (lastMul !== -1) {
-    return handleBinaryExpression(input, lastMul, "*");
+  const mulIndex = findOperator(trimmed, ["*"]);
+  if (mulIndex !== -1) {
+    return handleBinaryExpression(trimmed, mulIndex, "*");
   }
 
-  return interpretOperand(input);
+  if (trimmed.startsWith("(") && trimmed.endsWith(")")) {
+    return interpret(trimmed.substring(1, trimmed.length - 1));
+  }
+
+  return interpretOperand(trimmed);
+}
+
+function findOperator(input: string, ops: string[]): number {
+  let depth = 0;
+  for (let i = input.length - 1; i >= 0; i--) {
+    depth += getDepthChange(input.charAt(i));
+    if (depth === 0 && isOperatorMatch(input, i, ops)) {
+      return i - 1;
+    }
+  }
+  return -1;
+}
+
+function getDepthChange(char: string): number {
+  if (char === ")") return 1;
+  if (char === "(") return -1;
+  return 0;
+}
+
+function isOperatorMatch(input: string, i: number, ops: string[]): boolean {
+  if (i < 1 || i > input.length - 2) return false;
+  if (input.charAt(i - 1) !== " " || input.charAt(i + 1) !== " ") return false;
+  return ops.includes(input.charAt(i));
 }
 
 function handleBinaryExpression(
