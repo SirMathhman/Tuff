@@ -93,6 +93,8 @@ static void test_blocks_and_lets(void)
 	EXPECT_INTERPRET_EQ("{ let a = 10; let b = 20; a + b }", 30);
 	EXPECT_INTERPRET_EQ("(2 + 3) * 4", 20);
 	EXPECT_INTERPRET_EQ("100 + 200", 300);
+	EXPECT_INTERPRET_EQ("let x = 100; x", 100);
+	EXPECT_INTERPRET_EQ("let x = 1; let y = 2; x + y", 3);
 	EXPECT_INTERPRET_EQ("let y : I32 = 12 / ({ let x : I32 = 4; x } - 1); y", 4);
 }
 
