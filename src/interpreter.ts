@@ -13,9 +13,8 @@ function isAllDigits(s: string): boolean {
 }
 
 function handleIntSuffix(s: string): string | undefined {
-  const lower = s.toLowerCase();
-  const suffixes = ["u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64"];
-  const suffix = suffixes.find((suf) => lower.endsWith(suf));
+  const suffixes = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
+  const suffix = suffixes.find((suf) => s.endsWith(suf));
   if (suffix === undefined) return undefined;
 
   const numPartStr = s.slice(0, s.length - suffix.length).trim();
@@ -23,8 +22,8 @@ function handleIntSuffix(s: string): string | undefined {
   const digits = hasSign ? numPartStr.slice(1) : numPartStr;
 
   if (!isAllDigits(digits)) return undefined;
-  
-  const isUnsigned = suffix.startsWith("u");
+
+  const isUnsigned = suffix.startsWith("U");
   if (isUnsigned && numPartStr.startsWith("-")) return undefined;
 
   const val = Number(numPartStr);

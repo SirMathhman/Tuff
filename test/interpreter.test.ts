@@ -32,10 +32,13 @@ it("interprets signed and unsigned suffixes correctly", () => {
   expect(interpret("-128I8").ok).toBe(true);
   expect(interpret("128I8").ok).toBe(false);
   expect(interpret("-129I8").ok).toBe(false);
-  
+
   expect(interpret("65535U16").ok).toBe(true);
   expect(interpret("65536U16").ok).toBe(false);
-  
+
   expect(interpret("2147483647I32").ok).toBe(true);
   expect(interpret("-2147483648I32").ok).toBe(true);
+});
+it("returns an error for lowercase suffixes", () => {
+  expect(interpret("100u8").ok).toBe(false);
 });
