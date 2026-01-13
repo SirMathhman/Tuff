@@ -63,77 +63,147 @@ function parseAtomic(input: string): { value: number; type: string } {
 }
 
 export function interpret(input: string): number {
-  const parts = input.split(/([+-])/).filter((p) => p.trim().length > 0);
+  const s = input;
+  let pos = 0;
+  const len = s.length;
 
-  // If the first part is an operator, it's just a signed atomic number.
-  // Otherwise, if we have multiple parts or any multiplication/division, it's an expression.
-  const isExpression =
-    input.includes("*") ||
-    input.includes("/") ||
-    parts.length > 2 ||
-    (parts.length === 2 && parts[0] !== "+" && parts[0] !== "-");
+  const allTerms: { value: number; type: string }[] = [];
 
-  if (isExpression) {
-    const allTerms: { value: number; type: string }[] = [];
-
-    // Helper to evaluate a multiplicative term (e.g. "2 * 4I8 / 2")
-    const evaluateMultiplicative = (term: string) => {
-      // Split by * or / while keeping the operators
-      const factors = term.split(/([*/])/);
-      let result = 0;
-      let op = "*";
-
-      for (let i = 0; i < factors.length; i++) {
-        const factorPart = factors[i].trim();
-        if (factorPart === "*" || factorPart === "/") {
-          op = factorPart;
-        } else {
-          const p = parseAtomic(factorPart);
-          allTerms.push(p);
-          if (op === "*") {
-            if (i === 0) {
-              result = p.value;
-            } else {
-              result *= p.value;
-            }
-          } else {
-            if (p.value === 0) {
-              throw new Error("Division by zero");
-            }
-            result = Math.trunc(result / p.value);
-          }
-        }
-      }
-      return result;
-    };
-
-    let total = 0;
-    let operator = "+";
-
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i].trim();
-      if (part === "+" || part === "-") {
-        operator = part;
-      } else {
-        const val = evaluateMultiplicative(part);
-        if (operator === "+") {
-          total += val;
-        } else {
-          total -= val;
-        }
-      }
-    }
-
-    const explicitTypes = allTerms
-      .map((p) => p.type)
-      .filter((t) => t !== "none");
-    const uniqueExplicitTypes = Array.from(new Set(explicitTypes));
-
-    if (uniqueExplicitTypes.length > 1) {
-      throw new Error(`Mismatched types in expression: ${input}`);
-    }
-
-    return total;
+  // Fast-path: if the input doesn't contain operators or parentheses, delegate to parseAtomic
+  const trimmedInput = input.trim();
+  if (!/[+\-*/()]/.test(trimmedInput)) {
+    // Keep original error messages for single-token inputs (e.g., "abc")
+    return parseAtomic(trimmedInput).value;
   }
-  return parseAtomic(input).value;
+
+  const isDigit = (ch: string) => /[0-9]/.test(ch);
+  const isAlpha = (ch: string) => /[A-Za-z]/.test(ch);
+  const isAlphaNum = (ch: string) => /[A-Za-z0-9]/.test(ch);
+
+  const skipWhitespace = () => {
+    while (pos < len && /\s/.test(s[pos])) pos++;
+  };
+
+  const parseNumberToken = (): string => {
+    skipWhitespace();
+    const start = pos;
+    if (pos < len && isDigit(s[pos])) {
+      while (pos < len && isDigit(s[pos])) pos++;
+      if (pos < len && s[pos] === ".") {
+        pos++;
+        while (pos < len && isDigit(s[pos])) pos++;
+      }
+      // suffix: letter followed by letters/digits (e.g., U8, I64)
+      if (pos < len && isAlpha(s[pos])) {
+        pos++;
+        while (pos < len && isAlphaNum(s[pos])) pos++;
+      }
+      return s.slice(start, pos);
+    }
+    return "";
+  };
+
+  const parseFactor = (): number => {
+    skipWhitespace();
+    if (pos >= len) {
+      throw new Error(`Invalid expression: ${input}`);
+    }
+
+    // Unary + or -
+    if (s[pos] === "+" || s[pos] === "-") {
+      const sign = s[pos];
+      pos++;
+      skipWhitespace();
+      if (pos < len && s[pos] === "(") {
+        pos++; // consume '('
+        const val = parseExpression();
+        skipWhitespace();
+        if (pos >= len || s[pos] !== ")") {
+          throw new Error(`Invalid expression: ${input}`);
+        }
+        pos++; // consume ')'
+        return sign === "-" ? -val : val;
+      }
+      // If next token is a number, include the sign in the numeric token passed to parseAtomic
+      const numToken = parseNumberToken();
+      if (!numToken) {
+        throw new Error(`Invalid expression: ${input}`);
+      }
+      const signedToken = sign + numToken;
+      const p = parseAtomic(signedToken);
+      allTerms.push(p);
+      return p.value;
+    }
+
+    // Parenthesized expression
+    if (s[pos] === "(") {
+      pos++; // consume '('
+      const val = parseExpression();
+      skipWhitespace();
+      if (pos >= len || s[pos] !== ")") {
+        throw new Error(`Invalid expression: ${input}`);
+      }
+      pos++; // consume ')'
+      return val;
+    }
+
+    // Numeric literal
+    const token = parseNumberToken();
+    if (!token) {
+      throw new Error(`Invalid expression: ${input}`);
+    }
+    const p = parseAtomic(token);
+    allTerms.push(p);
+    return p.value;
+  };
+
+  const parseTerm = (): number => {
+    let val = parseFactor();
+    while (true) {
+      skipWhitespace();
+      if (pos < len && (s[pos] === "*" || s[pos] === "/")) {
+        const op = s[pos];
+        pos++;
+        const rhs = parseFactor();
+        if (op === "*") {
+          val = val * rhs;
+        } else {
+          if (rhs === 0) {
+            throw new Error("Division by zero");
+          }
+          val = Math.trunc(val / rhs);
+        }
+      } else break;
+    }
+    return val;
+  };
+
+  const parseExpression = (): number => {
+    let val = parseTerm();
+    while (true) {
+      skipWhitespace();
+      if (pos < len && (s[pos] === "+" || s[pos] === "-")) {
+        const op = s[pos];
+        pos++;
+        const rhs = parseTerm();
+        if (op === "+") val = val + rhs;
+        else val = val - rhs;
+      } else break;
+    }
+    return val;
+  };
+
+  const result = parseExpression();
+  skipWhitespace();
+  if (pos !== len) {
+    throw new Error(`Invalid expression: ${input}`);
+  }
+
+  const explicitTypes = allTerms.map((p) => p.type).filter((t) => t !== "none");
+  const uniqueExplicitTypes = Array.from(new Set(explicitTypes));
+  if (uniqueExplicitTypes.length > 1) {
+    throw new Error(`Mismatched types in expression: ${input}`);
+  }
+
+  return result;
 }
