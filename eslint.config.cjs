@@ -56,7 +56,10 @@ module.exports = [
       ],
       "no-eval": "error",
       "max-depth": ["error", 2],
-      "max-lines-per-function": ["error", { "max": 50, "skipBlankLines": true, "skipComments": true }],
+      "max-lines-per-function": [
+        "error",
+        { max: 50, skipBlankLines: true, skipComments: true },
+      ],
       "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },

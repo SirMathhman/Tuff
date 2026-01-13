@@ -41,4 +41,8 @@ describe("interpret", () => {
     expect(Number.isNaN(interpret("2147483648I32"))).toBe(true);
     expect(interpret("100I64")).toBe(100);
   });
+
+  it("handles basic addition with suffixes", () => {
+    expect(interpret("1U8 + 2U8")).toBe(3);
+  });
 });

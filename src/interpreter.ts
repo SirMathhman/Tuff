@@ -7,24 +7,45 @@ const INT_BOUNDS = (() => {
   }
   for (const bits of [8, 16, 32, 64]) {
     const shift = BigInt(1) << BigInt(bits - 1);
-    m.set(`I${bits}`, [ -shift, shift - BigInt(1) ]);
+    m.set(`I${bits}`, [-shift, shift - BigInt(1)]);
   }
   return m;
 })();
 
 const outOfRange = (v: bigint, a: bigint, b: bigint) => v < a || v > b;
 
-function extractLeadingNumeric(input: string): { numPart: string; rest: string } | undefined {
+function interpretAdditive(input: string): number {
+  const parts = input.split("+");
+  let sum = 0;
+  for (const part of parts) {
+    const val = interpret(part.trim());
+    if (Number.isNaN(val)) return NaN;
+    sum += val;
+  }
+  return sum;
+}
+
+function extractLeadingNumeric(
+  input: string
+): { numPart: string; rest: string } | undefined {
   let i = 0;
   const len = input.length;
-  const isSign = (c?: string) => c === '+' || c === '-';
+  const isSign = (c?: string) => c === "+" || c === "-";
   if (isSign(input[i])) i++;
   let seenDigit = false;
   let seenDot = false;
   while (i < len) {
     const ch = input[i];
-    if (ch >= '0' && ch <= '9') { seenDigit = true; i++; continue; }
-    if (ch === '.' && !seenDot) { seenDot = true; i++; continue; }
+    if (ch >= "0" && ch <= "9") {
+      seenDigit = true;
+      i++;
+      continue;
+    }
+    if (ch === "." && !seenDot) {
+      seenDot = true;
+      i++;
+      continue;
+    }
     break;
   }
   if (!seenDigit) return undefined;
@@ -37,11 +58,11 @@ function validateIntegerSuffix(numPart: string, suffix: string): number {
 
   // ensure integer-only string
   let j = 0;
-  if (numPart[j] === '+' || numPart[j] === '-') j++;
+  if (numPart[j] === "+" || numPart[j] === "-") j++;
   if (j === numPart.length) return NaN;
   for (; j < numPart.length; j++) {
     const ch = numPart[j];
-    if (ch < '0' || ch > '9') return NaN;
+    if (ch < "0" || ch > "9") return NaN;
   }
 
   try {
@@ -58,6 +79,8 @@ function validateIntegerSuffix(numPart: string, suffix: string): number {
 }
 
 export function interpret(input: string): number {
+  if (input.includes("+")) return interpretAdditive(input);
+
   const n = Number(input);
   if (!Number.isNaN(n)) return n;
 
