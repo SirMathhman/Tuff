@@ -45,6 +45,7 @@ int main(void)
 	assert(interpret("12 / (4 - 1)") == 4);
 	assert(interpret("12 / ({ 4 } - 1)") == 4);
 	assert(interpret("12 / ({ let x : I32 = 4; x } - 1)") == 4);
+	assert(interpret("12 / ({ let x : I32 = 4; } - 1)") == INT_MIN);
 	assert(interpret("{ let a = 10; let b = 20; a + b }") == 30);
 	assert(interpret("(2 + 3) * 4") == 20);
 	assert(interpret("100 + 200") == 300);
