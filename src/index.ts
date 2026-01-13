@@ -13,21 +13,18 @@ export interface Failure<E> {
 
 export type Result<T, E> = Success<T> | Failure<E>;
 
+export interface OpResult {
+  ok: boolean;
+  result: Result<number, string>;
+}
+
 export function interpret(input: string): Result<number, string> {
   const trimmed = input.trim();
-  const addSubIndex = findOperator(trimmed, ["+", "-"]);
-  if (addSubIndex !== -1) {
-    return handleBinaryExpression(
-      trimmed,
-      addSubIndex,
-      trimmed.charAt(addSubIndex + 1)
-    );
-  }
+  const resSet1 = tryHandleOps(trimmed, ["+", "-"]);
+  if (resSet1.ok) return resSet1.result;
 
-  const mulIndex = findOperator(trimmed, ["*"]);
-  if (mulIndex !== -1) {
-    return handleBinaryExpression(trimmed, mulIndex, "*");
-  }
+  const resSet2 = tryHandleOps(trimmed, ["*", "/"]);
+  if (resSet2.ok) return resSet2.result;
 
   if (trimmed.startsWith("(") && trimmed.endsWith(")")) {
     return interpret(trimmed.substring(1, trimmed.length - 1));
@@ -59,6 +56,25 @@ function isOperatorMatch(input: string, i: number, ops: string[]): boolean {
   return ops.includes(input.charAt(i));
 }
 
+function tryHandleOps(
+  trimmed: string,
+  ops: string[]
+): OpResult {
+  const index = findOperator(trimmed, ops);
+  if (index !== -1) {
+    return { ok: true, result: handleBinaryAtIndex(trimmed, index) };
+  }
+  return { ok: false, result: { ok: false, error: "" } };
+}
+
+function handleBinaryAtIndex(
+  input: string,
+  index: number
+): Result<number, string> {
+  const operator = input.charAt(index + 1);
+  return handleBinaryExpression(input, index, operator);
+}
+
 function handleBinaryExpression(
   input: string,
   index: number,
@@ -86,6 +102,10 @@ function handleBinaryExpression(
     }
   }
 
+  if (operator === "/" && right.value === 0) {
+    return { ok: false, error: "Division by zero" };
+  }
+
   const value = applyOperator(left.value, right.value, operator);
   const hasSuffix = left.hasSuffix || right.hasSuffix;
 
@@ -107,6 +127,9 @@ function applyOperator(left: number, right: number, operator: string): number {
   }
   if (operator === "-") {
     return left - right;
+  }
+  if (operator === "/") {
+    return left / right;
   }
   return left * right;
 }
