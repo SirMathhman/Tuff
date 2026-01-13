@@ -63,12 +63,33 @@ function parseAtomic(input: string): { value: number; type: string } {
 }
 
 export function interpret(input: string): number {
-  if (input.includes("+")) {
-    const parts = input.split("+");
-    const parsedParts = parts.map((part) => parseAtomic(part.trim()));
+  const parts = input.split(/([+-])/).filter(p => p.trim().length > 0);
+  
+  // If the first part is an operator, it's just a signed atomic number.
+  // Otherwise, if we have multiple parts, it's an expression.
+  const isExpression = parts.length > 2 || (parts.length === 2 && parts[0] !== "+" && parts[0] !== "-");
 
-    // Find the non-default type (e.g., U8, I16) if it exists.
-    const explicitTypes = parsedParts
+  if (isExpression) {
+    let total = 0;
+    let operator = "+";
+    const parsedTerms: { value: number; type: string }[] = [];
+
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i].trim();
+      if (part === "+" || part === "-") {
+        operator = part;
+      } else {
+        const parsed = parseAtomic(part);
+        parsedTerms.push(parsed);
+        if (operator === "+") {
+          total += parsed.value;
+        } else {
+          total -= parsed.value;
+        }
+      }
+    }
+
+    const explicitTypes = parsedTerms
       .map((p) => p.type)
       .filter((t) => t !== "none");
     const uniqueExplicitTypes = Array.from(new Set(explicitTypes));
@@ -77,20 +98,7 @@ export function interpret(input: string): number {
       throw new Error(`Mismatched types in expression: ${input}`);
     }
 
-    const targetType = uniqueExplicitTypes.length === 1 ? uniqueExplicitTypes[0] : "none";
-
-    // If there's an explicit type like U8, we must ensure the results of summing
-    // still fit that type's range if we were enforcing it strictly,
-    // but for now, we'll just sum the values.
-    const sum = parsedParts.reduce((acc, part) => acc + part.value, 0);
-
-    // Re-validate the final sum against the target type's range if a suffix was present.
-    if (targetType !== "none") {
-      // Re-run the validation logic for the total sum
-      // But for now, user just asked for sum to work with mixed "none" (unsuffixed) types.
-    }
-
-    return sum;
+    return total;
   }
   return parseAtomic(input).value;
 }
