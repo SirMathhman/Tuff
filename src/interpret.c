@@ -6,6 +6,10 @@
 #include <errno.h>
 #include <ctype.h>
 
+static long long parse_single(const char *input, char **endptr);
+static long long parse_term(const char **input);
+static long long parse_expression(const char **input);
+
 static int check_suffix(const char *end, long long val)
 {
 	if (!end || *end == '\0')
@@ -53,6 +57,19 @@ static long long parse_single(const char *input, char **endptr)
 {
 	while (isspace((unsigned char)*input))
 		input++;
+	
+	if (*input == '(')
+	{
+		const char *next = input + 1;
+		long long val = parse_expression(&next);
+		while (isspace((unsigned char)*next))
+			next++;
+		if (*next == ')')
+			next++;
+		*endptr = (char *)next;
+		return val;
+	}
+
 	if (*input == '\0')
 		return 0;
 
@@ -63,7 +80,9 @@ static long long parse_single(const char *input, char **endptr)
 
 	char *suffix_end = *endptr;
 	while (*suffix_end && !isspace((unsigned char)*suffix_end) &&
-				 *suffix_end != '+' && *suffix_end != '-' && *suffix_end != '*' && *suffix_end != '/')
+				 *suffix_end != '+' && *suffix_end != '-' && 
+				 *suffix_end != '*' && *suffix_end != '/' &&
+				 *suffix_end != ')')
 		suffix_end++;
 
 	char suffix[16] = {0};
@@ -113,7 +132,6 @@ static long long parse_term(const char **input)
 			{
 				if (next_val == 0)
 				{
-					/* Division by zero - treat as error/lower bound for now */
 					errno = ERANGE;
 					return INT_MIN;
 				}
@@ -129,17 +147,17 @@ static long long parse_term(const char **input)
 	return val;
 }
 
-int interpret(const char *input)
+static long long parse_expression(const char **input)
 {
-	if (!input)
-		return 0;
-
-	const char *next = input;
+	const char *next = *input;
 	long long total = parse_term(&next);
 	if (errno == ERANGE && total == INT_MIN)
+	{
+		*input = next;
 		return INT_MIN;
+	}
 
-	while (*next)
+	while (1)
 	{
 		while (isspace((unsigned char)*next))
 			next++;
@@ -149,21 +167,31 @@ int interpret(const char *input)
 			next++;
 			long long val = parse_term(&next);
 			if (errno == ERANGE && val == INT_MIN)
+			{
+				*input = next;
 				return INT_MIN;
+			}
 			if (op == '+')
 				total += val;
 			else
 				total -= val;
 		}
-		else if (*next == '\0')
+		else
 		{
 			break;
 		}
-		else
-		{
-			next++;
-		}
 	}
+	*input = next;
+	return total;
+}
+
+int interpret(const char *input)
+{
+	if (!input)
+		return 0;
+
+	const char *next = input;
+	long long total = parse_expression(&next);
 
 	if (total > INT_MAX)
 		return INT_MAX;
