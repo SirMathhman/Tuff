@@ -1,6 +1,0 @@
----
-# .clang-tidy configuration for Tuff
-Checks: "-*,readability-function-size"
-CheckOptions:
-  - key: readability-function-size.LineThreshold
-    value: 50
