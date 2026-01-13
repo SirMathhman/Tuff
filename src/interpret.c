@@ -18,6 +18,7 @@ typedef struct
 {
 	Variable vars[MAX_VARS];
 	int count;
+	char last_type[16];
 } Context;
 
 static long long parse_expression(const char **input, Context *ctx);
@@ -78,20 +79,44 @@ static void parse_let_statement(const char **input, Context *ctx)
 		strncpy(v_name, v_start, ptr - v_start);
 	while (isspace((unsigned char)*ptr))
 		ptr++;
+	char v_type[16] = {0};
 	if (*ptr == ':')
 	{
 		ptr++;
-		while (*ptr != '=' && *ptr != '\0')
+		while (isspace((unsigned char)*ptr))
+			ptr++;
+		const char *t_start = ptr;
+		while (isalnum((unsigned char)*ptr) || *ptr == '_')
+			ptr++;
+		if ((size_t)(ptr - t_start) < sizeof(v_type))
+			strncpy(v_type, t_start, ptr - t_start);
+		while (isspace((unsigned char)*ptr))
 			ptr++;
 	}
 	if (*ptr == '=')
 	{
 		ptr++;
+		ctx->last_type[0] = '\0';
 		long long val = parse_expression(&ptr, ctx);
 		if (errno != 0)
 		{
 			*input = ptr;
 			return;
+		}
+		if (v_type[0] != '\0')
+		{
+			if (ctx->last_type[0] != '\0' && strcmp(v_type, ctx->last_type) != 0)
+			{
+				errno = ERANGE;
+				*input = ptr;
+				return;
+			}
+			if (check_suffix(v_type, val))
+			{
+				errno = ERANGE;
+				*input = ptr;
+				return;
+			}
 		}
 		for (int i = 0; i < ctx->count; i++)
 		{
@@ -188,13 +213,14 @@ static long long lookup_variable(const char **input, Context *ctx)
 	return 0;
 }
 
-static long long parse_literal(const char **input)
+static long long parse_literal(const char **input, Context *ctx)
 {
 	char *endptr = NULL;
 	errno = 0;
 	long long val = strtoll(*input, &endptr, 10);
 	if (endptr == *input)
 		return 0;
+	ctx->last_type[0] = '\0';
 	const char *s_ptr = endptr;
 	while (*s_ptr && !isspace((unsigned char)*s_ptr) && strchr("+-*/){};", *s_ptr) == NULL)
 		s_ptr++;
@@ -202,6 +228,7 @@ static long long parse_literal(const char **input)
 	if (s_ptr - endptr > 0 && s_ptr - endptr < 16)
 	{
 		strncpy(suffix, endptr, s_ptr - endptr);
+		strncpy(ctx->last_type, suffix, 15);
 		if (check_suffix(suffix, val))
 		{
 			errno = ERANGE;
@@ -247,7 +274,7 @@ static long long parse_single(const char **input, Context *ctx)
 	*input = ptr;
 	if (isalpha((unsigned char)*ptr) || *ptr == '_')
 		return lookup_variable(input, ctx);
-	return parse_literal(input);
+	return parse_literal(input, ctx);
 }
 
 static long long parse_term(const char **input, Context *ctx)
