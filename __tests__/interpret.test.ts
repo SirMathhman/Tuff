@@ -29,5 +29,8 @@ describe("interpret", () => {
     // negative with U8 disallowed (lower bound)
     expect(() => interpret("-7U8")).toThrow("Invalid numeric string");
     expect(() => interpret("-100U8")).toThrow("Invalid numeric string");
+    // upper bound for U8
+    expect(interpret("255U8")).toBe(255);
+    expect(() => interpret("256U8")).toThrow("Invalid numeric string");
   });
 });

@@ -24,9 +24,11 @@ export function interpret(input: string): number {
     throw new Error(`Invalid numeric string: ${input}`);
   }
 
-  // If suffix is 'U8', only allow non-negative integers (lower bound 0)
-  if (rest === 'U8' && num < 0) {
-    throw new Error(`Invalid numeric string: ${input}`);
+  // If suffix is 'U8', only allow integer values in the range [0, 255]
+  if (rest === 'U8') {
+    if (!Number.isInteger(num) || num < 0 || num > 255) {
+      throw new Error(`Invalid numeric string: ${input}`);
+    }
   }
 
   // Truncate fractional part toward zero
