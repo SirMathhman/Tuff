@@ -12,67 +12,58 @@ public class App {
 	static {
 		SUFFIX_RANGES = new java.util.HashMap<>();
 		SUFFIX_RANGES.put(
-			"U8",
-			new java.math.BigInteger[] {
-				java.math.BigInteger.ZERO,
-				java.math.BigInteger.valueOf(255)
-			}
-		);
+				"U8",
+				new java.math.BigInteger[] {
+						java.math.BigInteger.ZERO,
+						java.math.BigInteger.valueOf(255)
+				});
 		SUFFIX_RANGES.put(
-			"U16",
-			new java.math.BigInteger[] {
-				java.math.BigInteger.ZERO,
-				java.math.BigInteger.valueOf(65535)
-			}
-		);
+				"U16",
+				new java.math.BigInteger[] {
+						java.math.BigInteger.ZERO,
+						java.math.BigInteger.valueOf(65535)
+				});
 		java.math.BigInteger u32Max = java.math.BigInteger.ONE
-			.shiftLeft(32)
-			.subtract(java.math.BigInteger.ONE);
+				.shiftLeft(32)
+				.subtract(java.math.BigInteger.ONE);
 		SUFFIX_RANGES.put(
-			"U32",
-			new java.math.BigInteger[] { java.math.BigInteger.ZERO, u32Max }
-		);
+				"U32",
+				new java.math.BigInteger[] { java.math.BigInteger.ZERO, u32Max });
 
 		java.math.BigInteger u64Max = java.math.BigInteger.ONE
-			.shiftLeft(64)
-			.subtract(
-				java.math.BigInteger.ONE
-			);
+				.shiftLeft(64)
+				.subtract(
+						java.math.BigInteger.ONE);
 		SUFFIX_RANGES.put(
-			"U64",
-			new java.math.BigInteger[] {
-				java.math.BigInteger.ZERO,
-				u64Max
-			}
-		);
+				"U64",
+				new java.math.BigInteger[] {
+						java.math.BigInteger.ZERO,
+						u64Max
+				});
 		SUFFIX_RANGES.put(
-			"I8",
-			new java.math.BigInteger[] {
-				java.math.BigInteger.valueOf(-128),
-				java.math.BigInteger.valueOf(127)
-			}
-		);
+				"I8",
+				new java.math.BigInteger[] {
+						java.math.BigInteger.valueOf(-128),
+						java.math.BigInteger.valueOf(127)
+				});
 		SUFFIX_RANGES.put(
-			"I16",
-			new java.math.BigInteger[] {
-				java.math.BigInteger.valueOf(-32768),
-				java.math.BigInteger.valueOf(32767)
-			}
-		);
+				"I16",
+				new java.math.BigInteger[] {
+						java.math.BigInteger.valueOf(-32768),
+						java.math.BigInteger.valueOf(32767)
+				});
 		java.math.BigInteger i32Min = java.math.BigInteger.valueOf(-1).shiftLeft(31);
 		java.math.BigInteger i32Max = java.math.BigInteger.valueOf(1).shiftLeft(31)
-			.subtract(java.math.BigInteger.ONE);
+				.subtract(java.math.BigInteger.ONE);
 		SUFFIX_RANGES.put(
-			"I32",
-			new java.math.BigInteger[] { i32Min, i32Max }
-		);
+				"I32",
+				new java.math.BigInteger[] { i32Min, i32Max });
 		java.math.BigInteger i64Min = java.math.BigInteger.valueOf(-1).shiftLeft(63);
 		java.math.BigInteger i64Max = java.math.BigInteger.valueOf(1).shiftLeft(63)
-			.subtract(java.math.BigInteger.ONE);
+				.subtract(java.math.BigInteger.ONE);
 		SUFFIX_RANGES.put(
-			"I64",
-			new java.math.BigInteger[] { i64Min, i64Max }
-		);
+				"I64",
+				new java.math.BigInteger[] { i64Min, i64Max });
 	}
 
 	/**
@@ -87,47 +78,90 @@ public class App {
 			return Result.err("input missing");
 		}
 		String s = maybeInput.get().trim();
-		int len = s.length();
-		if (len == 0) {
+		if (s.contains("+")) {
+			// simple binary addition: left + right
+			String[] parts = s.split("\\+", 2);
+			if (parts.length != 2) {
+				return Result.err("invalid expression");
+			}
+			Result<Operand, String> left = parseOperand(parts[0].trim());
+			if (left.isErr()) {
+				return Result.err(left.getError());
+			}
+			Result<Operand, String> right = parseOperand(parts[1].trim());
+			if (right.isErr()) {
+				return Result.err(right.getError());
+			}
+			Operand L = left.get();
+			Operand R = right.get();
+			// require matching suffix or both empty
+			if (!L.suffix.equals(R.suffix)) {
+				return Result.err("mismatched suffixes");
+			}
+			java.math.BigInteger sum = L.value.add(R.value);
+			if (L.suffix.isEmpty()) {
+				return Result.ok(sum);
+			}
+			// validate result against suffix range
+			java.math.BigInteger[] range = SUFFIX_RANGES.get(L.suffix);
+			if (range != null) {
+				if (sum.compareTo(range[0]) < 0 || sum.compareTo(range[1]) > 0) {
+					return Result.err("value out of range for " + L.suffix);
+				}
+			}
+			return Result.ok(sum);
+		}
+		// single value
+		return parseOperand(s).map(o -> o.value).isOk() ? Result.ok(parseOperand(s).get().value)
+			: Result.err(parseOperand(s).getError());
+	}
+
+	private static final class Operand {
+		final java.math.BigInteger value;
+		final String suffix;
+		Operand(java.math.BigInteger v, String s) {
+			this.value = v;
+			this.suffix = s;
+		}
+	}
+
+	private static Result<Operand, String> parseOperand(String s) {
+		if (s == null) {
+			return Result.err("input missing");
+		}
+		String str = s.trim();
+		if (str.length() == 0) {
 			return Result.err("empty string");
 		}
 		int i = 0;
-		// handle optional sign
-		if (i < len && (s.charAt(i) == '+' || s.charAt(i) == '-')) {
+		boolean negative = false;
+		if (i < str.length() && (str.charAt(i) == '+' || str.charAt(i) == '-')) {
+			negative = (str.charAt(i) == '-');
 			i++;
 		}
 		int startDigits = i;
-		while (i < len && Character.isDigit(s.charAt(i))) {
+		while (i < str.length() && Character.isDigit(str.charAt(i))) {
 			i++;
 		}
 		if (i == startDigits) {
-			// no digits found at start
-			return Result.err("For input string: \"" + s + "\"");
+			return Result.err("For input string: \"" + str + "\"");
 		}
-		String numStr = s.substring(0, i);
-		java.math.BigInteger value = new java.math.BigInteger(numStr);
-
-		String suffix = s.substring(i);
-		if (suffix.isEmpty()) {
-			return Result.ok(value);
-		}
-
-		// Lookup suffix ranges in a map to reduce cyclomatic complexity
-		if (SUFFIX_RANGES.containsKey(suffix)) {
-			java.math.BigInteger[] range = SUFFIX_RANGES.get(suffix);
-			java.math.BigInteger min = range[0];
-			java.math.BigInteger max = range[1];
-			if (value.compareTo(min) < 0 || value.compareTo(max) > 0) {
-				return Result.err("value out of range for " + suffix);
+		String numStr = str.substring(startDigits, i);
+		java.math.BigInteger value = new java.math.BigInteger((negative ? "-" : "") + numStr);
+		String suffix = str.substring(i);
+		if (!suffix.isEmpty()) {
+			// allow negative only for signed suffixes (I8,I16,I32,I64)
+			if (negative && suffix.startsWith("U")) {
+				return Result.err("Negative numbers with suffix not supported");
 			}
-			return Result.ok(value);
+			if (SUFFIX_RANGES.containsKey(suffix)) {
+				java.math.BigInteger[] range = SUFFIX_RANGES.get(suffix);
+				if (value.compareTo(range[0]) < 0 || value.compareTo(range[1]) > 0) {
+					return Result.err("value out of range for " + suffix);
+				}
+			}
 		}
-
-		// Unknown suffix: reject negative numbers with suffix, otherwise accept
-		if (s.charAt(0) == '-' && !suffix.isEmpty()) {
-			return Result.err("Negative numbers with suffix not supported");
-		}
-		return Result.ok(value);
+		return Result.ok(new Operand(value, suffix));
 	}
 
 }

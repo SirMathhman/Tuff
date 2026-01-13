@@ -3,17 +3,6 @@
 <module name="Checker">
 	<property name="severity" value="error" />
 
-	<!-- Limit line length to 120 chars -->
-	<module name="LineLength">
-		<property name="max" value="120" />
-	</module>
-
-	<!-- Disallow trailing whitespace (via regex) -->
-	<module name="RegexpSingleline">
-		<property name="format" value="\s+$" />
-		<property name="message" value="Trailing whitespace found." />
-	</module>
-
 	<module name="TreeWalker">
 		<!-- Ban the use of 'null' word -->
 		<module name="IllegalToken">

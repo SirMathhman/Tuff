@@ -53,6 +53,18 @@ public class AppTest {
 	}
 
 	@Test
+	void interpretAddsU8() {
+		Result<java.math.BigInteger, String> result = App.interpret("1U8 + 2U8");
+		assertTrue(result.isOk());
+		assertEquals(java.math.BigInteger.valueOf(3), result.get());
+	}
+
+	@Test
+	void interpretAddsU8Overflow() {
+		Result<java.math.BigInteger, String> result = App.interpret("200U8 + 100U8");
+		assertTrue(result.isErr());
+	}
+	@Test
 	void interpretI8Boundaries() {
 		Result<java.math.BigInteger, String> ok = App.interpret("-128I8");
 		Result<java.math.BigInteger, String> err = App.interpret("-129I8");
