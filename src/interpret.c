@@ -57,14 +57,15 @@ static long long parse_single(const char *input, char **endptr)
 {
 	while (isspace((unsigned char)*input))
 		input++;
-	
-	if (*input == '(')
+
+	if (*input == '(' || *input == '{')
 	{
+		char close_bracket = (*input == '(') ? ')' : '}';
 		const char *next = input + 1;
 		long long val = parse_expression(&next);
 		while (isspace((unsigned char)*next))
 			next++;
-		if (*next == ')')
+		if (*next == close_bracket)
 			next++;
 		*endptr = (char *)next;
 		return val;
@@ -82,7 +83,7 @@ static long long parse_single(const char *input, char **endptr)
 	while (*suffix_end && !isspace((unsigned char)*suffix_end) &&
 				 *suffix_end != '+' && *suffix_end != '-' && 
 				 *suffix_end != '*' && *suffix_end != '/' &&
-				 *suffix_end != ')')
+				 *suffix_end != ')' && *suffix_end != '}')
 		suffix_end++;
 
 	char suffix[16] = {0};

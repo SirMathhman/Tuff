@@ -41,8 +41,9 @@ int main(void)
 	assert(interpret("4 + 2 * 3") == 10);
 	assert(interpret("10 / 2 + 1") == 6);
 	assert(interpret("12 / 0") == INT_MIN);
-	/* Parentheses */
+	/* Parentheses and Braces */
 	assert(interpret("12 / (4 - 1)") == 4);
+	assert(interpret("12 / ({ 4 } - 1)") == 4);
 	assert(interpret("(2 + 3) * 4") == 20);
 	assert(interpret("100 + 200") == 300);
 
