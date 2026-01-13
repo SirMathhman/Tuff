@@ -102,18 +102,16 @@ static void parse_let_statement(const char **input, Context *ctx)
 	*input = ptr;
 }
 
-static long long parse_block(const char **input, Context *ctx)
+static long long parse_statements(const char **input, Context *ctx, char terminator)
 {
 	const char *ptr = *input;
-	if (*ptr == '{')
-		ptr++;
 	long long last_val = 0;
 	int has_result = 0;
 	while (1)
 	{
 		while (isspace((unsigned char)*ptr))
 			ptr++;
-		if (*ptr == '}' || *ptr == '\0')
+		if (*ptr == terminator || *ptr == '\0')
 			break;
 		if (strncmp(ptr, "let ", 4) == 0)
 		{
@@ -133,15 +131,27 @@ static long long parse_block(const char **input, Context *ctx)
 			}
 		}
 	}
+	*input = ptr;
 	if (!has_result)
 	{
 		errno = ERANGE;
-		last_val = INT_MIN;
+		return INT_MIN;
 	}
+	return last_val;
+}
+
+static long long parse_block(const char **input, Context *ctx)
+{
+	const char *ptr = *input;
+	if (*ptr == '{')
+		ptr++;
+	*input = ptr;
+	long long val = parse_statements(input, ctx, '}');
+	ptr = *input;
 	if (*ptr == '}')
 		ptr++;
 	*input = ptr;
-	return last_val;
+	return val;
 }
 
 static long long lookup_variable(const char **input, Context *ctx)
@@ -284,7 +294,7 @@ int interpret(const char *input)
 	Context ctx = {0};
 	const char *ptr = input;
 	errno = 0;
-	long long res = parse_expression(&ptr, &ctx);
+	long long res = parse_statements(&ptr, &ctx, '\0');
 	if (errno != 0)
 		return INT_MIN;
 	if (res > INT_MAX)
