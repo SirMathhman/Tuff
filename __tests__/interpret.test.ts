@@ -18,11 +18,15 @@ describe("interpret", () => {
     expect(interpret("-3.14")).toBe(-3);
   });
 
-  test("parses leading numeric prefix with suffix", () => {
+  test("parses leading numeric prefix with suffix (only U8 allowed)", () => {
     expect(interpret("100U8")).toBe(100);
+    expect(() => interpret("100u8")).toThrow("Invalid numeric string");
+    expect(() => interpret("42xyz")).toThrow("Invalid numeric string");
     expect(() => interpret("  42xyz")).toThrow("Invalid numeric string");
     expect(() => interpret("3.99kg")).toThrow("Invalid numeric string");
-    // Without leading whitespace, integer prefix with suffix is allowed
-    expect(interpret("42xyz")).toBe(42);
+    // integer without suffix allowed
+    expect(interpret("42")).toBe(42);
+    // negative with U8 allowed
+    expect(interpret("-7U8")).toBe(-7);
   });
 });

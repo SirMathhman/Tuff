@@ -9,9 +9,14 @@ export function interpret(input: string): number {
   const numericPart = match[1];
   const rest = match[2];
 
-  // If there is a suffix and the numeric part is a float, that's invalid.
-  if (rest.length > 0 && numericPart.includes('.')) {
-    throw new Error(`Invalid numeric string: ${input}`);
+  if (rest.length > 0) {
+    // Only allow exact 'U8' suffix (case-sensitive) and only when numericPart is integer
+    if (rest !== 'U8') {
+      throw new Error(`Invalid numeric string: ${input}`);
+    }
+    if (numericPart.includes('.')) {
+      throw new Error(`Invalid numeric string: ${input}`);
+    }
   }
 
   const num = Number(numericPart);
