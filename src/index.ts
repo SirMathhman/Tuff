@@ -66,24 +66,45 @@ export function interpret(input: string): number {
   const parts = input.split(/([+-])/).filter((p) => p.trim().length > 0);
 
   // If the first part is an operator, it's just a signed atomic number.
-  // Otherwise, if we have multiple parts or any multiplication, it's an expression.
+  // Otherwise, if we have multiple parts or any multiplication/division, it's an expression.
   const isExpression =
     input.includes("*") ||
+    input.includes("/") ||
     parts.length > 2 ||
     (parts.length === 2 && parts[0] !== "+" && parts[0] !== "-");
 
   if (isExpression) {
     const allTerms: { value: number; type: string }[] = [];
 
-    // Helper to evaluate a multiplicative term (e.g. "2 * 4I8")
+    // Helper to evaluate a multiplicative term (e.g. "2 * 4I8 / 2")
     const evaluateMultiplicative = (term: string) => {
-      const factors = term.split("*");
-      const parsedFactors = factors.map((f) => {
-        const p = parseAtomic(f.trim());
-        allTerms.push(p);
-        return p;
-      });
-      return parsedFactors.reduce((acc, f) => acc * f.value, 1);
+      // Split by * or / while keeping the operators
+      const factors = term.split(/([*/])/);
+      let result = 0;
+      let op = "*";
+
+      for (let i = 0; i < factors.length; i++) {
+        const factorPart = factors[i].trim();
+        if (factorPart === "*" || factorPart === "/") {
+          op = factorPart;
+        } else {
+          const p = parseAtomic(factorPart);
+          allTerms.push(p);
+          if (op === "*") {
+            if (i === 0) {
+              result = p.value;
+            } else {
+              result *= p.value;
+            }
+          } else {
+            if (p.value === 0) {
+              throw new Error("Division by zero");
+            }
+            result = Math.trunc(result / p.value);
+          }
+        }
+      }
+      return result;
     };
 
     let total = 0;

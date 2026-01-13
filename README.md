@@ -26,4 +26,5 @@ Rules:
 - Truncates floating point numbers to integers.
 - Throws error if value is out of bounds for the specified type.
 - Expressions must use consistent types (only one explicit suffix type allowed per expression, mixed with unsuffixed "none" types).
-- Supports addition (`+`), subtraction (`-`), and multiplication (`*`) with standard precedence.
+- Supports addition (`+`), subtraction (`-`), multiplication (`*`), and division (`/`) with standard precedence.
+- Division results are truncated toward zero (integer division).

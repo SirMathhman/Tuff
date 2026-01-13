@@ -67,6 +67,10 @@ describe("interpret", () => {
     expect(interpret("2 * 4I8 + 3")).toBe(11);
     expect(interpret("3 + 2 * 4")).toBe(11);
     expect(interpret("10 + 2 * 3")).toBe(16);
+    expect(interpret("3 + 4 / 2")).toBe(5);
+    expect(interpret("10 / 3")).toBe(3);
+    expect(interpret("2 * 4I8 / 2 + 3")).toBe(7);
+    expect(() => interpret("10 / 0")).toThrow("Division by zero");
     expect(() => interpret("1U8 + 2I8")).toThrow();
     expect(() => interpret("1U8 + 2 + 3U16")).toThrow(
       "Mismatched types in expression"
