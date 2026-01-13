@@ -10,6 +10,10 @@ describe("interpret", () => {
     expect(interpret("100U8")).toBe(100);
   });
 
+  it("returns NaN for value exceeding U8 range", () => {
+    expect(Number.isNaN(interpret("256U8"))).toBe(true);
+  });
+
   it("returns NaN for negative numbers with suffix", () => {
     expect(Number.isNaN(interpret("-100U8"))).toBe(true);
   });
