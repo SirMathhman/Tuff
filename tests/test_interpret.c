@@ -22,16 +22,16 @@ static void fail_eq_int(const char *expr, int actual, int expected, const char *
 }
 
 // IMPORTANT: prints the case BEFORE calling interpret(), so timeouts show the last input attempted.
-#define EXPECT_INTERPRET_EQ(INPUT_STR, EXPECTED_INT)                                                      \
-	do                                                                                                     \
-	{                                                                                                      \
-		const char *_case = (INPUT_STR);                                                                     \
-		int _expected = (EXPECTED_INT);                                                                      \
-		fprintf(stderr, "  case: interpret(\"%s\")\n", _case);                                           \
-		fflush(stderr);                                                                                      \
-		int _actual = interpret(_case);                                                                      \
-		if (_actual != _expected)                                                                            \
-			fail_eq_int("interpret(\"...\")", _actual, _expected, __FILE__, __LINE__);                    \
+#define EXPECT_INTERPRET_EQ(INPUT_STR, EXPECTED_INT)                             \
+	do                                                                             \
+	{                                                                              \
+		const char *_case = (INPUT_STR);                                             \
+		int _expected = (EXPECTED_INT);                                              \
+		fprintf(stderr, "  case: interpret(\"%s\")\n", _case);                       \
+		fflush(stderr);                                                              \
+		int _actual = interpret(_case);                                              \
+		if (_actual != _expected)                                                    \
+			fail_eq_int("interpret(\"...\")", _actual, _expected, __FILE__, __LINE__); \
 	} while (0)
 
 static void test_literals_and_suffixes(void)
@@ -95,6 +95,7 @@ static void test_blocks_and_lets(void)
 	EXPECT_INTERPRET_EQ("100 + 200", 300);
 	EXPECT_INTERPRET_EQ("let x = 100; x", 100);
 	EXPECT_INTERPRET_EQ("let x = 1; let y = 2; x + y", 3);
+	EXPECT_INTERPRET_EQ("let x = 0; let x = 1; x", INT_MIN);
 	EXPECT_INTERPRET_EQ("let y : I32 = 12 / ({ let x : I32 = 4; x } - 1); y", 4);
 }
 

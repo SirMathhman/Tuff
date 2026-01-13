@@ -88,6 +88,20 @@ static void parse_let_statement(const char **input, Context *ctx)
 	{
 		ptr++;
 		long long val = parse_expression(&ptr, ctx);
+		if (errno != 0)
+		{
+			*input = ptr;
+			return;
+		}
+		for (int i = 0; i < ctx->count; i++)
+		{
+			if (strcmp(ctx->vars[i].name, v_name) == 0)
+			{
+				errno = ERANGE;
+				*input = ptr;
+				return;
+			}
+		}
 		if (ctx->count < MAX_VARS)
 		{
 			strncpy(ctx->vars[ctx->count].name, v_name, 31);
@@ -116,11 +130,15 @@ static long long parse_statements(const char **input, Context *ctx, char termina
 		if (strncmp(ptr, "let ", 4) == 0)
 		{
 			parse_let_statement(&ptr, ctx);
+			if (errno != 0)
+				break;
 			has_result = 0;
 		}
 		else
 		{
 			last_val = parse_expression(&ptr, ctx);
+			if (errno != 0)
+				break;
 			has_result = 1;
 			while (isspace((unsigned char)*ptr))
 				ptr++;
