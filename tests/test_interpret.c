@@ -34,6 +34,7 @@ int main(void)
 
 	/* Addition with suffixes */
 	assert(interpret("1U8 + 2U8") == 3);
+	assert(interpret("1U8 + 2U16") == 3);
 	assert(interpret("1U8 + 2") == 3);
 	assert(interpret("100 + 200") == 300);
 
