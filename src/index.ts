@@ -63,33 +63,47 @@ function parseAtomic(input: string): { value: number; type: string } {
 }
 
 export function interpret(input: string): number {
-  const parts = input.split(/([+-])/).filter(p => p.trim().length > 0);
-  
+  const parts = input.split(/([+-])/).filter((p) => p.trim().length > 0);
+
   // If the first part is an operator, it's just a signed atomic number.
-  // Otherwise, if we have multiple parts, it's an expression.
-  const isExpression = parts.length > 2 || (parts.length === 2 && parts[0] !== "+" && parts[0] !== "-");
+  // Otherwise, if we have multiple parts or any multiplication, it's an expression.
+  const isExpression =
+    input.includes("*") ||
+    parts.length > 2 ||
+    (parts.length === 2 && parts[0] !== "+" && parts[0] !== "-");
 
   if (isExpression) {
+    const allTerms: { value: number; type: string }[] = [];
+
+    // Helper to evaluate a multiplicative term (e.g. "2 * 4I8")
+    const evaluateMultiplicative = (term: string) => {
+      const factors = term.split("*");
+      const parsedFactors = factors.map((f) => {
+        const p = parseAtomic(f.trim());
+        allTerms.push(p);
+        return p;
+      });
+      return parsedFactors.reduce((acc, f) => acc * f.value, 1);
+    };
+
     let total = 0;
     let operator = "+";
-    const parsedTerms: { value: number; type: string }[] = [];
 
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i].trim();
       if (part === "+" || part === "-") {
         operator = part;
       } else {
-        const parsed = parseAtomic(part);
-        parsedTerms.push(parsed);
+        const val = evaluateMultiplicative(part);
         if (operator === "+") {
-          total += parsed.value;
+          total += val;
         } else {
-          total -= parsed.value;
+          total -= val;
         }
       }
     }
 
-    const explicitTypes = parsedTerms
+    const explicitTypes = allTerms
       .map((p) => p.type)
       .filter((t) => t !== "none");
     const uniqueExplicitTypes = Array.from(new Set(explicitTypes));
