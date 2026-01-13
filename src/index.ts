@@ -2,6 +2,8 @@ export interface Success<T> {
   ok: true;
   value: T;
   hasSuffix: boolean;
+  suffixType?: string;
+  bitDepth?: number;
 }
 
 export interface Failure<E> {
@@ -33,11 +35,19 @@ function handleAddition(input: string, index: number): Result<number, string> {
     return { ok: false, error: "Operand must have a suffix" };
   }
 
-  return {
-    ok: true,
-    value: left.value + right.value,
-    hasSuffix: left.hasSuffix || right.hasSuffix,
-  };
+  const value = left.value + right.value;
+  const hasSuffix = left.hasSuffix || right.hasSuffix;
+
+  if (hasSuffix) {
+    const type = left.suffixType || right.suffixType!;
+    const bitDepth = left.bitDepth || right.bitDepth!;
+    if (!isInRange(BigInt(Math.floor(value)), type, bitDepth)) {
+      return rangeError(value, type, bitDepth);
+    }
+    return { ok: true, value, hasSuffix, suffixType: type, bitDepth };
+  }
+
+  return { ok: true, value, hasSuffix: false };
 }
 
 function interpretOperand(input: string): Result<number, string> {
@@ -59,13 +69,16 @@ function interpretOperand(input: string): Result<number, string> {
 
   const bigValue = BigInt(numericPart);
   if (!isInRange(bigValue, type, bitDepth)) {
-    return {
-      ok: false,
-      error: `Value ${bigValue} is out of range for ${type}${bitDepth}`,
-    };
+    return rangeError(bigValue, type, bitDepth);
   }
 
-  return { ok: true, value: Number(bigValue), hasSuffix: true };
+  return {
+    ok: true,
+    value: Number(bigValue),
+    hasSuffix: true,
+    suffixType: type,
+    bitDepth,
+  };
 }
 
 function isValidInteger(str: string): boolean {
@@ -131,4 +144,15 @@ function isNumeric(str: string): boolean {
     }
   }
   return true;
+}
+
+function rangeError(
+  value: number | bigint,
+  type: string,
+  bitDepth: number,
+): Failure<string> {
+  return {
+    ok: false,
+    error: `Value ${value} is out of range for ${type}${bitDepth}`,
+  };
 }
