@@ -12,6 +12,7 @@ typedef struct
 {
 	char name[32];
 	long long value;
+	char type[16];
 } Variable;
 
 typedef struct
@@ -131,6 +132,10 @@ static void parse_let_statement(const char **input, Context *ctx)
 		{
 			strncpy(ctx->vars[ctx->count].name, v_name, 31);
 			ctx->vars[ctx->count].value = val;
+			if (v_type[0] != '\0')
+				strncpy(ctx->vars[ctx->count].type, v_type, 15);
+			else
+				strncpy(ctx->vars[ctx->count].type, ctx->last_type, 15);
 			ctx->count++;
 		}
 	}
@@ -208,8 +213,13 @@ static long long lookup_variable(const char **input, Context *ctx)
 		strncpy(name, start, ptr - start);
 	*input = ptr;
 	for (int i = 0; i < ctx->count; i++)
+	{
 		if (strcmp(ctx->vars[i].name, name) == 0)
+		{
+			strncpy(ctx->last_type, ctx->vars[i].type, 15);
 			return ctx->vars[i].value;
+		}
+	}
 	return 0;
 }
 
