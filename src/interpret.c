@@ -6,198 +6,145 @@
 #include <errno.h>
 #include <ctype.h>
 
-static long long parse_single(const char *input, char **endptr);
-static long long parse_term(const char **input);
-static long long parse_expression(const char **input);
+#define MAX_VARS 64
+typedef struct {
+    char name[32];
+    long long value;
+} Variable;
+
+typedef struct {
+    Variable vars[MAX_VARS];
+    int count;
+} Context;
+
+static long long parse_expression(const char **input, Context *ctx);
 
 static int check_suffix(const char *end, long long val)
 {
-	if (!end || *end == '\0')
-		return 0;
-
-	if (strcmp(end, "U8") == 0)
-	{
-		if (val < 0 || val > 255)
-			return 1;
-	}
-	else if (strcmp(end, "U16") == 0)
-	{
-		if (val < 0 || val > 65535)
-			return 1;
-	}
-	else if (strcmp(end, "U32") == 0)
-	{
-		if (val < 0 || val > 4294967295LL)
-			return 1;
-	}
-	else if (strcmp(end, "U64") == 0)
-	{
-		if (val < 0)
-			return 1;
-	}
-	else if (strcmp(end, "I8") == 0)
-	{
-		if (val < -128 || val > 127)
-			return 1;
-	}
-	else if (strcmp(end, "I16") == 0)
-	{
-		if (val < -32768 || val > 32767)
-			return 1;
-	}
-	else if (strcmp(end, "I32") == 0)
-	{
-		if (val < -2147483648LL || val > 2147483647LL)
-			return 1;
-	}
-	return 0;
+    if (!end || *end == '\0') return 0;
+    if (strcmp(end, "U8") == 0) { if (val < 0 || val > 255) return 1; }
+    else if (strcmp(end, "U16") == 0) { if (val < 0 || val > 65535) return 1; }
+    else if (strcmp(end, "U32") == 0) { if (val < 0 || val > 4294967295LL) return 1; }
+    else if (strcmp(end, "U64") == 0) { if (val < 0) return 1; }
+    else if (strcmp(end, "I8") == 0) { if (val < -128 || val > 127) return 1; }
+    else if (strcmp(end, "I16") == 0) { if (val < -32768 || val > 32767) return 1; }
+    else if (strcmp(end, "I32") == 0) { if (val < -2147483648LL || val > 2147483647LL) return 1; }
+    return 0;
 }
 
-static long long parse_single(const char *input, char **endptr)
+static long long parse_block(const char **input, Context *ctx)
 {
-	while (isspace((unsigned char)*input))
-		input++;
-
-	if (*input == '(' || *input == '{')
-	{
-		char close_bracket = (*input == '(') ? ')' : '}';
-		const char *next = input + 1;
-		long long val = parse_expression(&next);
-		while (isspace((unsigned char)*next))
-			next++;
-		if (*next == close_bracket)
-			next++;
-		*endptr = (char *)next;
-		return val;
-	}
-
-	if (*input == '\0')
-		return 0;
-
-	errno = 0;
-	long long val = strtoll(input, endptr, 10);
-	if (*endptr == input)
-		return 0;
-
-	char *suffix_end = *endptr;
-	while (*suffix_end && !isspace((unsigned char)*suffix_end) &&
-				 *suffix_end != '+' && *suffix_end != '-' && 
-				 *suffix_end != '*' && *suffix_end != '/' &&
-				 *suffix_end != ')' && *suffix_end != '}')
-		suffix_end++;
-
-	char suffix[16] = {0};
-	size_t len = suffix_end - *endptr;
-	if (len > 0 && len < sizeof(suffix))
-	{
-		strncpy(suffix, *endptr, len);
-		if (check_suffix(suffix, val))
-		{
-			errno = ERANGE;
-			return INT_MIN;
-		}
-	}
-	*endptr = suffix_end;
-	return val;
+    const char *ptr = *input;
+    if (*ptr == '{') ptr++;
+    long long last_val = 0;
+    while (1) {
+        while (isspace((unsigned char)*ptr)) ptr++;
+        if (*ptr == '}' || *ptr == '\0') break;
+        if (strncmp(ptr, "let ", 4) == 0) {
+            ptr += 4;
+            while (isspace((unsigned char)*ptr)) ptr++;
+            const char *v_start = ptr;
+            while (isalnum((unsigned char)*ptr) || *ptr == '_') ptr++;
+            char v_name[32] = {0};
+            if ((size_t)(ptr - v_start) < sizeof(v_name)) strncpy(v_name, v_start, ptr - v_start);
+            while (isspace((unsigned char)*ptr)) ptr++;
+            if (*ptr == ':') { ptr++; while (*ptr != '=' && *ptr != '\0') ptr++; }
+            if (*ptr == '=') {
+                ptr++;
+                long long val = parse_expression(&ptr, ctx);
+                if (ctx->count < MAX_VARS) {
+                    strncpy(ctx->vars[ctx->count].name, v_name, 31);
+                    ctx->vars[ctx->count].value = val;
+                    ctx->count++;
+                }
+            }
+            while (isspace((unsigned char)*ptr)) ptr++;
+            if (*ptr == ';') ptr++;
+        } else {
+            last_val = parse_expression(&ptr, ctx);
+            while (isspace((unsigned char)*ptr)) ptr++;
+            if (*ptr == ';') ptr++;
+        }
+    }
+    if (*ptr == '}') ptr++;
+    *input = ptr;
+    return last_val;
 }
 
-static long long parse_term(const char **input)
+static long long parse_single(const char **input, Context *ctx)
 {
-	char *next = (char *)*input;
-	long long val = parse_single(next, &next);
-	if (errno == ERANGE && val == INT_MIN)
-	{
-		*input = next;
-		return INT_MIN;
-	}
-
-	while (1)
-	{
-		while (isspace((unsigned char)*next))
-			next++;
-		if (*next == '*' || *next == '/')
-		{
-			char op = *next;
-			next++;
-			long long next_val = parse_single(next, &next);
-			if (errno == ERANGE && next_val == INT_MIN)
-			{
-				*input = next;
-				return INT_MIN;
-			}
-			if (op == '*')
-			{
-				val *= next_val;
-			}
-			else
-			{
-				if (next_val == 0)
-				{
-					errno = ERANGE;
-					return INT_MIN;
-				}
-				val /= next_val;
-			}
-		}
-		else
-		{
-			break;
-		}
-	}
-	*input = next;
-	return val;
+    const char *ptr = *input;
+    while (isspace((unsigned char)*ptr)) ptr++;
+    if (*ptr == '(') {
+        ptr++;
+        long long val = parse_expression(&ptr, ctx);
+        while (isspace((unsigned char)*ptr)) ptr++;
+        if (*ptr == ')') ptr++;
+        *input = ptr;
+        return val;
+    }
+    if (*ptr == '{') return parse_block(input, ctx);
+    if (isalpha((unsigned char)*ptr) || *ptr == '_') {
+        const char *start = ptr;
+        while (isalnum((unsigned char)*ptr) || *ptr == '_') ptr++;
+        char name[32] = {0};
+        if ((size_t)(ptr - start) < sizeof(name)) strncpy(name, start, ptr - start);
+        for (int i = 0; i < ctx->count; i++)
+            if (strcmp(ctx->vars[i].name, name) == 0) { *input = ptr; return ctx->vars[i].value; }
+        *input = ptr; return 0;
+    }
+    char *endptr = NULL;
+    errno = 0;
+    long long val = strtoll(ptr, &endptr, 10);
+    if (endptr == ptr) { *input = ptr; return 0; }
+    const char *s_ptr = endptr;
+    while (*s_ptr && !isspace((unsigned char)*s_ptr) && strchr("+-*/){};", *s_ptr) == NULL) s_ptr++;
+    char suffix[16] = {0};
+    if (s_ptr - endptr > 0 && s_ptr - endptr < 16) {
+        strncpy(suffix, endptr, s_ptr - endptr);
+        if (check_suffix(suffix, val)) { errno = ERANGE; *input = s_ptr; return INT_MIN; }
+    }
+    *input = s_ptr; return val;
 }
 
-static long long parse_expression(const char **input)
+static long long parse_term(const char **input, Context *ctx)
 {
-	const char *next = *input;
-	long long total = parse_term(&next);
-	if (errno == ERANGE && total == INT_MIN)
-	{
-		*input = next;
-		return INT_MIN;
-	}
+    long long val = parse_single(input, ctx);
+    const char *ptr = *input;
+    while (1) {
+        while (isspace((unsigned char)*ptr)) ptr++;
+        if (*ptr == '*' || *ptr == '/') {
+            char op = *ptr++;
+            long long next = parse_single(&ptr, ctx);
+            if (op == '*') val *= next;
+            else { if (next == 0) { errno = ERANGE; *input = ptr; return INT_MIN; } val /= next; }
+        } else break;
+    }
+    *input = ptr; return val;
+}
 
-	while (1)
-	{
-		while (isspace((unsigned char)*next))
-			next++;
-		if (*next == '+' || *next == '-')
-		{
-			char op = *next;
-			next++;
-			long long val = parse_term(&next);
-			if (errno == ERANGE && val == INT_MIN)
-			{
-				*input = next;
-				return INT_MIN;
-			}
-			if (op == '+')
-				total += val;
-			else
-				total -= val;
-		}
-		else
-		{
-			break;
-		}
-	}
-	*input = next;
-	return total;
+static long long parse_expression(const char **input, Context *ctx)
+{
+    long long total = parse_term(input, ctx);
+    const char *ptr = *input;
+    while (1) {
+        while (isspace((unsigned char)*ptr)) ptr++;
+        if (*ptr == '+' || *ptr == '-') {
+            char op = *ptr++;
+            long long val = parse_term(&ptr, ctx);
+            if (op == '+') total += val; else total -= val;
+        } else break;
+    }
+    *input = ptr; return total;
 }
 
 int interpret(const char *input)
 {
-	if (!input)
-		return 0;
-
-	const char *next = input;
-	long long total = parse_expression(&next);
-
-	if (total > INT_MAX)
-		return INT_MAX;
-	if (total < INT_MIN)
-		return INT_MIN;
-
-	return (int)total;
+    if (!input) return 0;
+    Context ctx = {0};
+    const char *ptr = input;
+    long long res = parse_expression(&ptr, &ctx);
+    if (res > INT_MAX) return INT_MAX;
+    if (res < INT_MIN) return INT_MIN;
+    return (int)res;
 }
