@@ -83,25 +83,6 @@ function handleOperatorInTokenizer(
   return "";
 }
 
-// If the source is a plain numeric literal (integer or float) return as-is
-function isNumericString(x: string): boolean {
-  if (x.length === 0) return false;
-  let i = x[0] === "+" || x[0] === "-" ? 1 : 0;
-  let hasDigits = false;
-  let hasDot = false;
-  for (; i < x.length; i++) {
-    const ch = x[i];
-    const isDot = ch === ".";
-    const isDigit = ch >= "0" && ch <= "9";
-
-    if (isDot && hasDot) return false;
-    if (isDot) hasDot = true;
-    if (isDigit) hasDigits = true;
-    if (!isDot && !isDigit) return false;
-  }
-  return hasDigits;
-}
-
 /**
  * Compile a source string to JavaScript. (Stubbed)
  * @param source - source string to compile

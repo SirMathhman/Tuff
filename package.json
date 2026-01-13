@@ -10,7 +10,7 @@
     "dupfind": "dupfind src --min-nodes 10",
     "test": "vitest run",
     "lint": "eslint . --ext .ts",
-    "cpd": "pmd cpd --minimum-tokens 50 --language typescript --dir src",
+    "cpd": "pmd cpd --minimum-tokens 50 --language typescript --dir src --ignore-literals --ignore-identifiers",
     "prepare": "husky"
   },
   "repository": {
