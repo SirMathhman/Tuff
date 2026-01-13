@@ -9,4 +9,9 @@ public class AppTest {
 	void simpleTest() {
 		assertTrue(true, "Sanity check");
 	}
+
+	@Test
+	void interpretReturnsStub() {
+		assertEquals(0, App.interpret("any input"));
+	}
 }
