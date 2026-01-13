@@ -4,64 +4,59 @@
  * Note: `interpret` uses `eval`. Only pass trusted input.
  */
 
+function isAllDigits(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch < "0" || ch > "9") return false;
+  }
+  return s.length > 0;
+}
+
+function handleU8(s: string): string | null {
+  const lower = s.toLowerCase();
+  if (!lower.endsWith("u8")) return null;
+
+  const numPart = s.slice(0, s.length - 2).trim();
+  if (!isAllDigits(numPart)) return null;
+
+  const val = Number(numPart);
+  if (val > 255) return null;
+
+  return numPart;
+}
+
+// If the source is a plain numeric literal (integer or float) return as-is
+function isNumericString(x: string): boolean {
+  if (x.length === 0) return false;
+  let i = x[0] === "+" || x[0] === "-" ? 1 : 0;
+  let hasDigits = false;
+  let hasDot = false;
+  for (; i < x.length; i++) {
+    const ch = x[i];
+    const isDot = ch === ".";
+    const isDigit = ch >= "0" && ch <= "9";
+
+    if (isDot && hasDot) return false;
+    if (isDot) hasDot = true;
+    if (isDigit) hasDigits = true;
+    if (!isDot && !isDigit) return false;
+  }
+  return hasDigits;
+}
+
 /**
  * Compile a source string to JavaScript. (Stubbed)
  * @param source - source string to compile
  * @returns compiled JavaScript as a string
  */
 export function compile(source: string): string {
-  // Small compiler: support numeric literals with unsigned suffixes like `U8`.
-  // Example: `100U8` -> `100`
   const s = source.trim();
-  const lower = s.toLowerCase();
 
-  // Handle `U8` suffix without using regex
-  if (lower.endsWith("u8")) {
-    const numPart = s.slice(0, s.length - 2).trim();
-    if (numPart.length > 0) {
-      // ensure all characters are digits
-      let allDigits = true;
-      for (let i = 0; i < numPart.length; i++) {
-        const ch = numPart[i];
-        if (ch < "0" || ch > "9") {
-          allDigits = false;
-          break;
-        }
-      }
-      if (allDigits) {
-        const val = Number(numPart);
-        if (val > 255) return source; // Fall back to source so Number() in interpret handles NaN/Err if invalid
-        return numPart;
-      }
-    }
-  }
-
-  // If the source is a plain numeric literal (integer or float) return as-is
-  function isNumericString(x: string): boolean {
-    if (x.length === 0) return false;
-    let i = 0;
-    if (x[0] === "+" || x[0] === "-") i = 1;
-    let hasDigits = false;
-    let hasDot = false;
-    for (; i < x.length; i++) {
-      const ch = x[i];
-      if (ch === ".") {
-        if (hasDot) return false;
-        hasDot = true;
-        continue;
-      }
-      if (ch >= "0" && ch <= "9") {
-        hasDigits = true;
-        continue;
-      }
-      return false;
-    }
-    return hasDigits;
-  }
+  const u8Result = handleU8(s);
+  if (u8Result !== null) return u8Result;
 
   if (isNumericString(s)) return s;
 
-  // Default: return the source unchanged
   return source;
 }
 
