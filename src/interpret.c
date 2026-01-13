@@ -209,8 +209,17 @@ static long long parse_single(const char **input, Context *ctx)
 		ptr = *input;
 		while (isspace((unsigned char)*ptr))
 			ptr++;
-		if (*ptr == ')')
+		// On error, the inner parse may stop mid-expression (e.g. at '-' in "(... - 1)").
+		// Always advance to the matching ')' so callers make forward progress and don't loop forever.
+		int depth = 1;
+		while (*ptr && depth > 0)
+		{
+			if (*ptr == '(')
+				depth++;
+			else if (*ptr == ')')
+				depth--;
 			ptr++;
+		}
 		*input = ptr;
 		return val;
 	}
@@ -226,9 +235,14 @@ static long long parse_single(const char **input, Context *ctx)
 static long long parse_term(const char **input, Context *ctx)
 {
 	long long val = parse_single(input, ctx);
-	if (errno != 0)
-		return INT_MIN;
 	const char *ptr = *input;
+	if (errno != 0)
+	{
+		// Even on error, make forward progress so callers don't get stuck
+		// re-parsing the same token forever.
+		*input = ptr;
+		return INT_MIN;
+	}
 	while (1)
 	{
 		while (isspace((unsigned char)*ptr))
@@ -238,7 +252,10 @@ static long long parse_term(const char **input, Context *ctx)
 			char op = *ptr++;
 			long long next = parse_single(&ptr, ctx);
 			if (errno != 0)
+			{
+				*input = ptr;
 				return INT_MIN;
+			}
 			if (op == '*')
 				val *= next;
 			else
