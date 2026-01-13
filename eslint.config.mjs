@@ -21,6 +21,10 @@ export default [
           selector: "NewExpression[callee.name='RegExp']",
           message: "Do not use regular expressions.",
         },
+        {
+          selector: "ThrowStatement",
+          message: "Do not use the 'throw' keyword. Use a Result instead.",
+        },
       ],
       "max-depth": ["error", 2],
     },

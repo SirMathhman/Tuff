@@ -3,18 +3,34 @@ import { interpret } from "./index";
 
 describe("interpret", () => {
   it("should return a number", () => {
-    expect(typeof interpret("123")).toBe("number");
+    const result = interpret("123");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(typeof result.value).toBe("number");
+    }
   });
 
   it('should interpret "100" as 100', () => {
-    expect(interpret("100")).toBe(100);
+    const result = interpret("100");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(100);
+    }
   });
 
   it('should interpret "100U8" as 100', () => {
-    expect(interpret("100U8")).toBe(100);
+    const result = interpret("100U8");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(100);
+    }
   });
 
-  it('should throw an error for "-100U8"', () => {
-    expect(() => interpret("-100U8")).toThrow();
+  it('should return error for "-100U8"', () => {
+    const result = interpret("-100U8");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("Unsigned integer cannot be negative");
+    }
   });
 });

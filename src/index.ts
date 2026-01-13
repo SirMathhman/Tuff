@@ -1,22 +1,24 @@
-export function interpret(input: string): number {
+export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+
+export function interpret(input: string): Result<number, string> {
   const trimmed = input.trim();
   const upper = trimmed.toUpperCase();
 
   if (!trimmed.startsWith("-")) {
-    return parseFloat(trimmed);
+    return { ok: true, value: parseFloat(trimmed) };
   }
 
   const uIndex = upper.lastIndexOf("U");
   if (uIndex === -1) {
-    return parseFloat(trimmed);
+    return { ok: true, value: parseFloat(trimmed) };
   }
 
   const suffix = upper.substring(uIndex + 1);
   if (isNumeric(suffix)) {
-    throw new Error("Unsigned integer cannot be negative");
+    return { ok: false, error: "Unsigned integer cannot be negative" };
   }
 
-  return parseFloat(trimmed);
+  return { ok: true, value: parseFloat(trimmed) };
 }
 
 function isNumeric(str: string): boolean {
@@ -28,4 +30,3 @@ function isNumeric(str: string): boolean {
   }
   return true;
 }
-
