@@ -53,7 +53,6 @@ describe("interpret", () => {
     ["let z = false; z", 0],
     ["let z : Bool = true; z", 1],
     ["let mut x : I32; x = 100; x", 100],
-    ["let mut x : I32; x = 100I8; x", 100],
     ["let mut x = 0; x = 1; x", 1],
     ["let mut x : I32 = 0; x = 1; x = 2; x", 2],
     ["let mut x : I32; { x = 100; } x", 100],
@@ -65,6 +64,7 @@ describe("interpret", () => {
   it.each([
     ["let x = 0; x = 1; x", "Variable is immutable: x"],
     ["let x = 0; x = 1", "Variable is immutable: x"],
+    ["let mut x : I32; x = 100I8; x", "Type mismatch: cannot assign I8 to I32"],
     ["let x = 5", "Invalid operand"],
     ["-100U8", "Unsigned integer cannot be negative"],
     ["256U8", "Value 256 is out of range for U8"],
@@ -90,7 +90,7 @@ describe("interpret", () => {
     ],
     [
       "let mut x : I32; x = true; x",
-      "Type mismatch: cannot assign Bool to I32",
+      "Type mismatch: cannot assign Bool1 to I32",
     ],
     [
       "let mut x : I32; x = 3000000000I32; x",

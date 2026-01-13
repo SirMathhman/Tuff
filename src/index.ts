@@ -23,6 +23,11 @@ export interface Variable {
 
 export type Environment = Map<string, Variable>;
 
+export interface TypeInfo {
+  suffixType?: string | undefined;
+  bitDepth?: number | undefined;
+}
+
 export interface OpResult {
   ok: boolean;
   result: Result<number, string>;
@@ -205,7 +210,11 @@ function handleBlockInternal(
   }
 
   // If the last statement is a bare 'let' declaration (no semicolon, no following expressions)
-  if (lastStatement !== undefined && lastStatement.trim().startsWith("let ") && !hasTrailingSemicolon) {
+  if (
+    lastStatement !== undefined &&
+    lastStatement.trim().startsWith("let ") &&
+    !hasTrailingSemicolon
+  ) {
     return {
       ok: false,
       error: "Invalid operand",
@@ -287,10 +296,10 @@ function handleAssignment(
   if (!res.ok) return res;
 
   if (existing.hasSuffix) {
-    if (res.hasSuffix && res.suffixType !== existing.suffixType) {
+    if (res.hasSuffix && !typesMatch(res, existing)) {
       return {
         ok: false,
-        error: `Type mismatch: cannot assign ${res.suffixType} to ${existing.suffixType}${existing.bitDepth}`,
+        error: `Type mismatch: cannot assign ${res.suffixType}${res.bitDepth} to ${existing.suffixType}${existing.bitDepth}`,
       };
     }
     if (
@@ -472,6 +481,12 @@ function part(str: string, start: number): string {
 function failIf(cond: boolean, error: string): Failure<string> | undefined {
   if (cond) return { ok: false, error };
   return undefined;
+}
+
+function typesMatch(left: TypeInfo, right: TypeInfo): boolean {
+  return (
+    left.suffixType === right.suffixType && left.bitDepth === right.bitDepth
+  );
 }
 
 function findOperator(input: string, ops: string[]): number {
