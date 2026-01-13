@@ -25,8 +25,14 @@ export default [
           selector: "ThrowStatement",
           message: "Do not use the 'throw' keyword. Use a Result instead.",
         },
+        {
+          selector: "TSTypeLiteral",
+          message:
+            "Do not use anonymous object types. Prefer named interfaces.",
+        },
       ],
       "max-depth": ["error", 2],
+      "@typescript-eslint/consistent-type-definitions": ["error", "interface"],
     },
   },
 ];

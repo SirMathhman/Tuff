@@ -1,4 +1,14 @@
-export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+export interface Success<T> {
+  ok: true;
+  value: T;
+}
+
+export interface Failure<E> {
+  ok: false;
+  error: E;
+}
+
+export type Result<T, E> = Success<T> | Failure<E>;
 
 export function interpret(input: string): Result<number, string> {
   const trimmed = input.trim();
