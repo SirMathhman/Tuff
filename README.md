@@ -17,10 +17,12 @@ console.log(interpret("2 * 4I8 + 3")); // 11
 ```
 
 Supported Suffixes:
+
 - `U8`, `U16`, `U32`, `U64` (Unsigned)
 - `I8`, `I16`, `I32`, `I64` (Signed)
 
 Rules:
+
 - Truncates floating point numbers to integers.
 - Throws error if value is out of bounds for the specified type.
 - Expressions must use consistent types (only one explicit suffix type allowed per expression, mixed with unsuffixed "none" types).

@@ -65,6 +65,7 @@ describe("interpret", () => {
     expect(interpret("1U8 + 2 + 3")).toBe(6);
     expect(interpret("2 - 4I8 + 3")).toBe(1);
     expect(interpret("2 * 4I8 + 3")).toBe(11);
+    expect(interpret("3 + 2 * 4")).toBe(11);
     expect(interpret("10 + 2 * 3")).toBe(16);
     expect(() => interpret("1U8 + 2I8")).toThrow();
     expect(() => interpret("1U8 + 2 + 3U16")).toThrow(
