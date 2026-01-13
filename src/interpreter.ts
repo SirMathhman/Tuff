@@ -12,17 +12,35 @@ function isAllDigits(s: string): boolean {
   return s.length > 0;
 }
 
-function handleU8(s: string): string | undefined {
+function handleIntSuffix(s: string): string | undefined {
   const lower = s.toLowerCase();
-  if (!lower.endsWith("u8")) return undefined;
+  const suffixes = ["u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64"];
+  const suffix = suffixes.find((suf) => lower.endsWith(suf));
+  if (suffix === undefined) return undefined;
 
-  const numPart = s.slice(0, s.length - 2).trim();
-  if (!isAllDigits(numPart)) return undefined;
+  const numPartStr = s.slice(0, s.length - suffix.length).trim();
+  const hasSign = numPartStr.startsWith("-") || numPartStr.startsWith("+");
+  const digits = hasSign ? numPartStr.slice(1) : numPartStr;
 
-  const val = Number(numPart);
-  if (val > 255) return undefined;
+  if (!isAllDigits(digits)) return undefined;
+  
+  const isUnsigned = suffix.startsWith("u");
+  if (isUnsigned && numPartStr.startsWith("-")) return undefined;
 
-  return numPart;
+  const val = Number(numPartStr);
+  const bitsText = suffix.slice(1);
+  const bits = parseInt(bitsText, 10);
+
+  if (isUnsigned) {
+    const max = Math.pow(2, bits) - 1;
+    if (val < 0 || val > max) return undefined;
+  } else {
+    const max = Math.pow(2, bits - 1) - 1;
+    const min = -Math.pow(2, bits - 1);
+    if (val < min || val > max) return undefined;
+  }
+
+  return numPartStr;
 }
 
 // If the source is a plain numeric literal (integer or float) return as-is
@@ -52,8 +70,8 @@ function isNumericString(x: string): boolean {
 export function compile(source: string): string {
   const s = source.trim();
 
-  const u8Result = handleU8(s);
-  if (u8Result !== undefined) return u8Result;
+  const intResult = handleIntSuffix(s);
+  if (intResult !== undefined) return intResult;
 
   if (isNumericString(s)) return s;
 
