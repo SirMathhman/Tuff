@@ -1,6 +1,7 @@
 export interface Success<T> {
   ok: true;
   value: T;
+  hasSuffix: boolean;
 }
 
 export interface Failure<E> {
@@ -27,25 +28,27 @@ function handleAddition(input: string, index: number): Result<number, string> {
   if (!right.ok) {
     return right;
   }
-  return { ok: true, value: left.value + right.value };
+
+  if (left.hasSuffix && !right.hasSuffix) {
+    return { ok: false, error: "Operand must have a suffix" };
+  }
+
+  return { ok: true, value: left.value + right.value, hasSuffix: left.hasSuffix || right.hasSuffix };
 }
 
 function interpretOperand(input: string): Result<number, string> {
   const trimmed = input.trim();
   const upper = trimmed.toUpperCase();
-
   const suffixInfo = getSuffixInfo(upper);
-  if (!suffixInfo.found) {
-    return { ok: true, value: parseFloat(trimmed) };
+  const numericPart = suffixInfo.found
+    ? trimmed.substring(0, suffixInfo.index)
+    : "";
+
+  if (!suffixInfo.found || !isValidInteger(numericPart)) {
+    return { ok: true, value: parseFloat(trimmed), hasSuffix: false };
   }
 
-  const { type, bitDepth, index } = suffixInfo;
-  const numericPart = trimmed.substring(0, index);
-
-  if (!isValidInteger(numericPart)) {
-    return { ok: true, value: parseFloat(trimmed) };
-  }
-
+  const { type, bitDepth } = suffixInfo;
   if (type === "U" && numericPart.includes("-")) {
     return { ok: false, error: "Unsigned integer cannot be negative" };
   }
@@ -58,7 +61,7 @@ function interpretOperand(input: string): Result<number, string> {
     };
   }
 
-  return { ok: true, value: Number(bigValue) };
+  return { ok: true, value: Number(bigValue), hasSuffix: true };
 }
 
 function isValidInteger(str: string): boolean {

@@ -50,5 +50,6 @@ describe("interpret", () => {
       "9223372036854775808I64",
       "Value 9223372036854775808 is out of range for I64",
     ],
+    ["1U8 + 216", "Operand must have a suffix"],
   ])('should return error for "%s"', expectError);
 });
