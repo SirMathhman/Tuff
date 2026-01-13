@@ -186,6 +186,24 @@ function handleTypedLet(
 ): Result<number, string> {
   const name = cut(left, 0, colonIndex);
   const typeStr = part(left, colonIndex + 1);
+
+  if (typeStr === "Bool") {
+    if (res.value !== 0 && res.value !== 1) {
+      return { ok: false, error: `Value ${res.value} is not a boolean` };
+    }
+    return registerVar(
+      name,
+      {
+        ok: true,
+        value: res.value,
+        hasSuffix: true,
+        suffixType: "Bool",
+        bitDepth: 1,
+      },
+      env
+    );
+  }
+
   const type = typeStr.charAt(0).toUpperCase();
   const bitDepth = parseInt(part(typeStr, 1), 10);
 

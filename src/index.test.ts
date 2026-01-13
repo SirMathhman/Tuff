@@ -51,6 +51,7 @@ describe("interpret", () => {
     ["let z : I32 = 10 / { let x = 5; x } + 1; z", 3],
     ["let z = true; z", 1],
     ["let z = false; z", 0],
+    ["let z : Bool = true; z", 1],
   ])('should interpret "%s" as %i', expectSuccess);
 
   it.each([
@@ -70,5 +71,6 @@ describe("interpret", () => {
     ["abc", "Invalid operand"],
     ["10 / { let x : I32 = 5; let y = x; } + 1", "Invalid operand"],
     ["10 / { let x = 5; let x = 100; x } + 1", "Variable already defined: x"],
+    ["let z : Bool = 5; z", "Value 5 is not a boolean"],
   ])('should return error for "%s"', expectError);
 });
