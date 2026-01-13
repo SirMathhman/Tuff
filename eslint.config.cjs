@@ -45,6 +45,10 @@ module.exports = [
           selector: "Literal[value=null]",
           message: "Usage of 'null' is banned. Use 'undefined' instead.",
         },
+        {
+          selector: "Identifier[name='todo']",
+          message: "The identifier 'todo' is banned.",
+        },
       ],
       "no-eval": "error",
       "max-depth": ["error", 2],
