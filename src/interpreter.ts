@@ -54,24 +54,33 @@ function tokenize(source: string): string[] {
       tokens.push(currentToken);
       currentToken = "";
     } else if (isOperator) {
-      // If minus and current is empty, it might be a negative number start or standalone operator
-      // To satisfy simplicity for "1U8 + 2U8" and "-128I8", we treat operators as separators
-      // but negative numbers need the minus attached to the token.
-      if (char === "-" && currentToken === "") {
-        currentToken = "-";
-      } else {
-        if (currentToken !== "" && currentToken !== "-")
-          tokens.push(currentToken);
-        else if (currentToken === "-") tokens.push("-");
-        tokens.push(char);
-        currentToken = "";
-      }
+      currentToken = handleOperatorInTokenizer(char, currentToken, tokens);
     } else if (!isSpace) {
       currentToken += char;
     }
   }
   if (currentToken !== "") tokens.push(currentToken);
   return tokens;
+}
+
+function handleOperatorInTokenizer(
+  char: string,
+  currentToken: string,
+  tokens: string[]
+): string {
+  // If minus and current is empty, it might be a negative number start
+  if (char === "-" && currentToken === "") {
+    return "-";
+  }
+
+  if (currentToken !== "" && currentToken !== "-") {
+    tokens.push(currentToken);
+  } else if (currentToken === "-") {
+    tokens.push("-");
+  }
+
+  tokens.push(char);
+  return "";
 }
 
 /**
