@@ -1,3 +1,17 @@
+const RANGES: Record<string, { min: bigint; max: bigint }> = {
+  U8: { min: BigInt(0), max: BigInt(255) },
+  U16: { min: BigInt(0), max: BigInt(65535) },
+  U32: { min: BigInt(0), max: BigInt(4294967295) },
+  U64: { min: BigInt(0), max: BigInt("18446744073709551615") },
+  I8: { min: BigInt(-128), max: BigInt(127) },
+  I16: { min: BigInt(-32768), max: BigInt(32767) },
+  I32: { min: BigInt(-2147483648), max: BigInt(2147483647) },
+  I64: {
+    min: BigInt("-9223372036854775808"),
+    max: BigInt("9223372036854775807"),
+  },
+};
+
 function parseAtomic(input: string): { value: number; type: string } {
   const match = input.match(/^([+-]?\d+(?:\.\d+)?)(.*)$/);
   if (!match) {
@@ -7,22 +21,7 @@ function parseAtomic(input: string): { value: number; type: string } {
   const rest = match[2];
 
   if (rest.length > 0) {
-    // Only allow a fixed set of exact suffixes and check ranges with BigInt
-    const ranges: Record<string, { min: bigint; max: bigint }> = {
-      U8: { min: BigInt(0), max: BigInt(255) },
-      U16: { min: BigInt(0), max: BigInt(65535) },
-      U32: { min: BigInt(0), max: BigInt(4294967295) },
-      U64: { min: BigInt(0), max: BigInt("18446744073709551615") },
-      I8: { min: BigInt(-128), max: BigInt(127) },
-      I16: { min: BigInt(-32768), max: BigInt(32767) },
-      I32: { min: BigInt(-2147483648), max: BigInt(2147483647) },
-      I64: {
-        min: BigInt("-9223372036854775808"),
-        max: BigInt("9223372036854775807"),
-      },
-    };
-
-    if (!(rest in ranges)) {
+    if (!(rest in RANGES)) {
       throw new Error(`Invalid numeric string: ${input}`);
     }
 
@@ -38,7 +37,7 @@ function parseAtomic(input: string): { value: number; type: string } {
       throw new Error(`Invalid numeric string: ${input}`);
     }
 
-    const { min, max } = ranges[rest];
+    const { min, max } = RANGES[rest];
     if (big < min || big > max) {
       throw new Error(`Invalid numeric string: ${input}`);
     }
@@ -83,6 +82,22 @@ export function interpret(input: string): number {
 
   const skipWhitespace = () => {
     while (pos < len && /\s/.test(s[pos])) pos++;
+  };
+
+  const expectChar = (ch: string) => {
+    skipWhitespace();
+    if (pos >= len || s[pos] !== ch) {
+      throw new Error(`Invalid expression: ${input}`);
+    }
+    pos++; // consume
+  };
+
+  const mergeTypes = (a: string, b: string) => {
+    const types = [a, b].filter((t) => t !== "none");
+    const unique = Array.from(new Set(types));
+    if (unique.length > 1)
+      throw new Error(`Mismatched types in expression: ${input}`);
+    return unique.length === 1 ? unique[0] : "none";
   };
 
   const parseNumberToken = (): string => {
@@ -131,11 +146,7 @@ export function interpret(input: string): number {
         const close = open === "(" ? ")" : "}";
         pos++; // consume opening bracket
         const val = s[pos - 1] === "(" ? parseExpression() : parseBlock();
-        skipWhitespace();
-        if (pos >= len || s[pos] !== close) {
-          throw new Error(`Invalid expression: ${input}`);
-        }
-        pos++; // consume closing bracket
+        expectChar(close);
         return sign === "-" ? { value: -val.value, type: val.type } : val;
       }
       // If next token is a number, include the sign in the numeric token passed to parseAtomic
@@ -155,11 +166,7 @@ export function interpret(input: string): number {
       const close = open === "(" ? ")" : "}";
       pos++; // consume opening bracket
       const val = open === "(" ? parseExpression() : parseBlock();
-      skipWhitespace();
-      if (pos >= len || s[pos] !== close) {
-        throw new Error(`Invalid expression: ${input}`);
-      }
-      pos++; // consume closing bracket
+      expectChar(close);
       return val;
     }
 
@@ -196,12 +203,7 @@ export function interpret(input: string): number {
         pos++;
         const rhs = parseFactor();
         // type checking: ensure explicit types don't conflict
-        const types = [lhs.type, rhs.type].filter((t) => t !== "none");
-        const unique = Array.from(new Set(types));
-        if (unique.length > 1) {
-          throw new Error(`Mismatched types in expression: ${input}`);
-        }
-        const resType = unique.length === 1 ? unique[0] : "none";
+        const resType = mergeTypes(lhs.type, rhs.type);
         let resVal: number;
         if (op === "*") resVal = lhs.value * rhs.value;
         else {
@@ -223,12 +225,7 @@ export function interpret(input: string): number {
         pos++;
         const rhs = parseTerm();
         // type checking
-        const types = [lhs.type, rhs.type].filter((t) => t !== "none");
-        const unique = Array.from(new Set(types));
-        if (unique.length > 1) {
-          throw new Error(`Mismatched types in expression: ${input}`);
-        }
-        const resType = unique.length === 1 ? unique[0] : "none";
+        const resType = mergeTypes(lhs.type, rhs.type);
         const resVal =
           op === "+" ? lhs.value + rhs.value : lhs.value - rhs.value;
         lhs = { value: resVal, type: resType };
@@ -267,20 +264,7 @@ export function interpret(input: string): number {
         if (s[pos] !== ";") throw new Error(`Invalid expression: expected ';'`);
         pos++;
         // validate assignment
-        const ranges: Record<string, { min: bigint; max: bigint }> = {
-          U8: { min: BigInt(0), max: BigInt(255) },
-          U16: { min: BigInt(0), max: BigInt(65535) },
-          U32: { min: BigInt(0), max: BigInt(4294967295) },
-          U64: { min: BigInt(0), max: BigInt("18446744073709551615") },
-          I8: { min: BigInt(-128), max: BigInt(127) },
-          I16: { min: BigInt(-32768), max: BigInt(32767) },
-          I32: { min: BigInt(-2147483648), max: BigInt(2147483647) },
-          I64: {
-            min: BigInt("-9223372036854775808"),
-            max: BigInt("9223372036854775807"),
-          },
-        };
-        if (!(typeName in ranges))
+        if (!(typeName in RANGES))
           throw new Error(`Invalid expression: unknown type ${typeName}`);
         // if rhs has explicit type and differs from annotation -> error
         if (rhs.type !== "none" && rhs.type !== typeName) {
@@ -294,7 +278,7 @@ export function interpret(input: string): number {
           } catch (e) {
             throw new Error(`Invalid numeric string: ${rhs.value}`);
           }
-          const { min, max } = ranges[typeName];
+          const { min, max } = RANGES[typeName];
           if (big < min || big > max)
             throw new Error(`Invalid numeric string: ${rhs.value}`);
         }
