@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <limits.h>
 #include "interpret.h"
 
 int main(void)
@@ -11,5 +12,7 @@ int main(void)
 	assert(interpret("100") == 100);
 	/* accept numeric suffixes like U8 */
 	assert(interpret("100U8") == 100);
+	/* negative numbers indicate lower-bound error */
+	assert(interpret("-100U8") == INT_MIN);
 	return 0;
 }
