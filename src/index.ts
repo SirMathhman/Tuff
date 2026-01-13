@@ -32,6 +32,11 @@ export function interpret(
   env: Environment = new Map()
 ): Result<number, string> {
   const trimmed = input.trim();
+  const statements = splitStatements(trimmed);
+  if (statements.length > 1) {
+    return handleBlockInternal(statements, env, false);
+  }
+
   const resOp = tryOps(trimmed, env);
   if (resOp) return resOp;
 
@@ -84,8 +89,16 @@ function handleBlock(
   contents: string,
   env: Environment
 ): Result<number, string> {
-  const blockEnv = new Map(env);
   const statements = splitStatements(contents);
+  return handleBlockInternal(statements, env, true);
+}
+
+function handleBlockInternal(
+  statements: string[],
+  env: Environment,
+  shouldClone: boolean
+): Result<number, string> {
+  const blockEnv = shouldClone ? new Map(env) : env;
   const loopRes = runBlockLoop(statements, blockEnv);
   if (!loopRes.ok) return loopRes;
 
