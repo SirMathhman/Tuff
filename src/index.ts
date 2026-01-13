@@ -18,6 +18,7 @@ export interface Variable {
   hasSuffix: boolean;
   suffixType?: string | undefined;
   bitDepth?: number | undefined;
+  mutable: boolean;
 }
 
 export type Environment = Map<string, Variable>;
@@ -121,16 +122,24 @@ function handleBlockInternal(
 ): Result<number, string> {
   const blockEnv = shouldClone ? new Map(env) : env;
   const localDecls = new Set<string>();
-  let lastRes: Result<number, string> = { ok: true, value: 0, hasSuffix: false };
+  let lastRes: Result<number, string> = {
+    ok: true,
+    value: 0,
+    hasSuffix: false,
+  };
 
   for (const stmt of statements) {
     const trimmed = stmt.trim();
-    if (trimmed === "" && statements.indexOf(stmt) === statements.length - 1 && statements.length > 1) {
-       // Trailing empty statement (from trailing semicolon)
-       // We keep the lastRes from the previous statement if there was one,
-       // BUT the current logic says trailing semicolon is an error if it results in empty operand.
-       // Actually, interpret("") returns error "Invalid operand".
-       // So let's just let it fall through to handleStatement.
+    if (
+      trimmed === "" &&
+      statements.indexOf(stmt) === statements.length - 1 &&
+      statements.length > 1
+    ) {
+      // Trailing empty statement (from trailing semicolon)
+      // We keep the lastRes from the previous statement if there was one,
+      // BUT the current logic says trailing semicolon is an error if it results in empty operand.
+      // Actually, interpret("") returns error "Invalid operand".
+      // So let's just let it fall through to handleStatement.
     }
     lastRes = handleStatement(trimmed, blockEnv, localDecls);
     if (!lastRes.ok) return lastRes;
@@ -181,6 +190,9 @@ function handleAssignment(
   if (!existing) {
     return { ok: false, error: `Variable not defined: ${name}` };
   }
+  if (!existing.mutable) {
+    return { ok: false, error: `Variable is immutable: ${name}` };
+  }
 
   const right = part(stmt, eqIndex + 1);
   const res = interpret(right, env);
@@ -193,12 +205,28 @@ function handleAssignment(
         error: `Type mismatch: cannot assign ${res.suffixType} to ${existing.suffixType}${existing.bitDepth}`,
       };
     }
-    if (!isInRange(BigInt(Math.floor(res.value)), existing.suffixType!, existing.bitDepth!)) {
+    if (
+      !isInRange(
+        BigInt(Math.floor(res.value)),
+        existing.suffixType!,
+        existing.bitDepth!
+      )
+    ) {
       return rangeError(res.value, existing.suffixType!, existing.bitDepth!);
     }
   }
 
-  return registerVar(name, { ...res, hasSuffix: existing.hasSuffix, suffixType: existing.suffixType, bitDepth: existing.bitDepth }, env);
+  return registerVar(
+    name,
+    {
+      ...res,
+      hasSuffix: existing.hasSuffix,
+      suffixType: existing.suffixType,
+      bitDepth: existing.bitDepth,
+    },
+    existing.mutable,
+    env
+  );
 }
 
 function handleLet(
@@ -207,7 +235,9 @@ function handleLet(
   localDecls: Set<string>
 ): Result<number, string> {
   const eqIndex = stmt.indexOf("=");
-  const left = eqIndex === -1 ? part(stmt, 4) : cut(stmt, 4, eqIndex);
+  const rawLeft = eqIndex === -1 ? part(stmt, 4) : cut(stmt, 4, eqIndex);
+  const isMut = rawLeft.startsWith("mut ");
+  const left = isMut ? part(rawLeft, 4) : rawLeft;
   const colonIndex = left.indexOf(":");
 
   if (eqIndex === -1 && colonIndex === -1) {
@@ -222,7 +252,7 @@ function handleLet(
 
   if (eqIndex === -1) {
     const typeStr = part(left, colonIndex + 1);
-    return registerUninitializedVar(name, typeStr, env);
+    return registerUninitializedVar(name, typeStr, isMut, env);
   }
 
   const right = part(stmt, eqIndex + 1);
@@ -230,15 +260,16 @@ function handleLet(
   if (!res.ok) return res;
 
   if (colonIndex === -1) {
-    return registerVar(name, res, env);
+    return registerVar(name, res, isMut, env);
   }
 
-  return handleTypedLet(left, colonIndex, res, env);
+  return handleTypedLet(name, left, colonIndex, res, isMut, env);
 }
 
 function registerUninitializedVar(
   name: string,
   typeStr: string,
+  mutable: boolean,
   env: Environment
 ): Result<number, string> {
   if (typeStr === "Bool") {
@@ -251,6 +282,7 @@ function registerUninitializedVar(
         suffixType: "Bool",
         bitDepth: 1,
       },
+      mutable,
       env
     );
   }
@@ -267,17 +299,19 @@ function registerUninitializedVar(
       suffixType: type,
       bitDepth,
     },
+    mutable,
     env
   );
 }
 
 function handleTypedLet(
+  name: string,
   left: string,
   colonIndex: number,
   res: Success<number>,
+  mutable: boolean,
   env: Environment
 ): Result<number, string> {
-  const name = cut(left, 0, colonIndex);
   const typeStr = part(left, colonIndex + 1);
 
   if (typeStr === "Bool") {
@@ -293,6 +327,7 @@ function handleTypedLet(
         suffixType: "Bool",
         bitDepth: 1,
       },
+      mutable,
       env
     );
   }
@@ -320,6 +355,7 @@ function handleTypedLet(
       suffixType: type,
       bitDepth,
     },
+    mutable,
     env
   );
 }
@@ -327,6 +363,7 @@ function handleTypedLet(
 function registerVar(
   name: string,
   res: Success<number>,
+  mutable: boolean,
   env: Environment
 ): Result<number, string> {
   env.set(name, {
@@ -334,6 +371,7 @@ function registerVar(
     hasSuffix: res.hasSuffix,
     suffixType: res.suffixType,
     bitDepth: res.bitDepth,
+    mutable,
   });
   return res;
 }

@@ -52,13 +52,15 @@ describe("interpret", () => {
     ["let z = true; z", 1],
     ["let z = false; z", 0],
     ["let z : Bool = true; z", 1],
-    ["let x : I32; x = 100; x", 100],
-    ["let x : I32; x = 100I8; x", 100],
+    ["let mut x : I32; x = 100; x", 100],
+    ["let mut x : I32; x = 100I8; x", 100],
+    ["let mut x = 0; x = 1; x", 1],
     ["let x = 5", 5],
-    ["{ let x = 0; x = 10 }", 10],
+    ["{ let mut x = 0; x = 10 }", 10],
   ])('should interpret "%s" as %i', expectSuccess);
 
   it.each([
+    ["let x = 0; x = 1", "Variable is immutable: x"],
     ["-100U8", "Unsigned integer cannot be negative"],
     ["256U8", "Value 256 is out of range for U8"],
     ["128I8", "Value 128 is out of range for I8"],
@@ -81,7 +83,10 @@ describe("interpret", () => {
       "let z = true; let x : I32 = z; x",
       "Type mismatch: cannot assign Bool to I32",
     ],
-    ["let x : I32; x = true; x", "Type mismatch: cannot assign Bool to I32"],
-    ["let x : I32; x = 3000000000I32; x", "Value 3000000000 is out of range for I32"],
+    ["let mut x : I32; x = true; x", "Type mismatch: cannot assign Bool to I32"],
+    [
+      "let mut x : I32; x = 3000000000I32; x",
+      "Value 3000000000 is out of range for I32",
+    ],
   ])('should return error for "%s"', expectError);
 });
