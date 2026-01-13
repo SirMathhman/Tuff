@@ -1,5 +1,7 @@
 package com.example;
 
+import java.util.Optional;
+
 public class App {
 	public static void main(String[] args) {
 		System.out.println("Hello from Tuff!");
@@ -12,10 +14,9 @@ public class App {
 	 * trailing non-digit characters (e.g., "100U8" -> 100).
 	 */
 	public static int interpret(String input) {
-		if (input == null) {
-			throw new NumberFormatException("null");
-		}
-		String s = input.trim();
+		String s = Optional.ofNullable(input)
+				.orElseThrow(() -> new NumberFormatException("null"))
+				.trim();
 		int len = s.length();
 		int i = 0;
 		// handle optional sign
@@ -28,7 +29,7 @@ public class App {
 		}
 		if (i == startDigits) {
 			// no digits found at start
-			throw new NumberFormatException("For input string: \"" + input + "\"");
+			throw new NumberFormatException("For input string: \"" + s + "\"");
 		}
 		String numStr = s.substring(0, i);
 		return Integer.parseInt(numStr);

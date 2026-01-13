@@ -8,10 +8,16 @@
 		<property name="max" value="120" />
 	</module>
 
-
 	<!-- Disallow trailing whitespace (via regex) -->
 	<module name="RegexpSingleline">
 		<property name="format" value="\s+$" />
 		<property name="message" value="Trailing whitespace found." />
+	</module>
+
+	<module name="TreeWalker">
+		<!-- Ban the use of 'null' word -->
+		<module name="IllegalToken">
+			<property name="tokens" value="LITERAL_NULL" />
+		</module>
 	</module>
 </module>
