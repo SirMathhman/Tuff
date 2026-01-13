@@ -26,7 +26,8 @@ describe("interpret", () => {
     expect(() => interpret("3.99kg")).toThrow("Invalid numeric string");
     // integer without suffix allowed
     expect(interpret("42")).toBe(42);
-    // negative with U8 allowed
-    expect(interpret("-7U8")).toBe(-7);
+    // negative with U8 disallowed (lower bound)
+    expect(() => interpret("-7U8")).toThrow("Invalid numeric string");
+    expect(() => interpret("-100U8")).toThrow("Invalid numeric string");
   });
 });

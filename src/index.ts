@@ -11,16 +11,21 @@ export function interpret(input: string): number {
 
   if (rest.length > 0) {
     // Only allow exact 'U8' suffix (case-sensitive) and only when numericPart is integer
-    if (rest !== 'U8') {
+    if (rest !== "U8") {
       throw new Error(`Invalid numeric string: ${input}`);
     }
-    if (numericPart.includes('.')) {
+    if (numericPart.includes(".")) {
       throw new Error(`Invalid numeric string: ${input}`);
     }
   }
 
   const num = Number(numericPart);
   if (Number.isNaN(num)) {
+    throw new Error(`Invalid numeric string: ${input}`);
+  }
+
+  // If suffix is 'U8', only allow non-negative integers (lower bound 0)
+  if (rest === 'U8' && num < 0) {
     throw new Error(`Invalid numeric string: ${input}`);
   }
 
