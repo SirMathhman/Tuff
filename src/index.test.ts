@@ -73,5 +73,6 @@ describe("interpret", () => {
     ["10 / { let x = 5; let x = 100; x } + 1", "Variable already defined: x"],
     ["let z : Bool = 5; z", "Value 5 is not a boolean"],
     ["let z : I32 = true; z", "Type mismatch: cannot assign Bool to I32"],
+    ["let z = true; let x : I32 = z; x", "Type mismatch: cannot assign Bool to I32"],
   ])('should return error for "%s"', expectError);
 });
