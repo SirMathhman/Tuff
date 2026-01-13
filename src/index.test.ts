@@ -52,6 +52,10 @@ describe("interpret", () => {
     ["let z = true; z", 1],
     ["let z = false; z", 0],
     ["let z : Bool = true; z", 1],
+    ["let x : I32; x = 100; x", 100],
+    ["let x : I32; x = 100I8; x", 100],
+    ["let x = 5", 5],
+    ["{ let x = 0; x = 10 }", 10],
   ])('should interpret "%s" as %i', expectSuccess);
 
   it.each([
@@ -73,6 +77,11 @@ describe("interpret", () => {
     ["10 / { let x = 5; let x = 100; x } + 1", "Variable already defined: x"],
     ["let z : Bool = 5; z", "Value 5 is not a boolean"],
     ["let z : I32 = true; z", "Type mismatch: cannot assign Bool to I32"],
-    ["let z = true; let x : I32 = z; x", "Type mismatch: cannot assign Bool to I32"],
+    [
+      "let z = true; let x : I32 = z; x",
+      "Type mismatch: cannot assign Bool to I32",
+    ],
+    ["let x : I32; x = true; x", "Type mismatch: cannot assign Bool to I32"],
+    ["let x : I32; x = 3000000000I32; x", "Value 3000000000 is out of range for I32"],
   ])('should return error for "%s"', expectError);
 });

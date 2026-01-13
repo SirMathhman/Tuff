@@ -33,10 +33,13 @@ export function interpret(
 ): Result<number, string> {
   const trimmed = input.trim();
   const statements = splitStatements(trimmed);
-  if (statements.length > 1) {
-    return handleBlockInternal(statements, env, false);
-  }
+  return handleBlockInternal(statements, env, false);
+}
 
+function interpretLeaf(
+  trimmed: string,
+  env: Environment
+): Result<number, string> {
   const resOp = tryOps(trimmed, env);
   if (resOp) return resOp;
 
@@ -93,19 +96,6 @@ function handleBlock(
   return handleBlockInternal(statements, env, true);
 }
 
-function handleBlockInternal(
-  statements: string[],
-  env: Environment,
-  shouldClone: boolean
-): Result<number, string> {
-  const blockEnv = shouldClone ? new Map(env) : env;
-  const loopRes = runBlockLoop(statements, blockEnv);
-  if (!loopRes.ok) return loopRes;
-
-  const lastStmt = (statements[statements.length - 1] || "").trim();
-  return interpret(lastStmt, blockEnv);
-}
-
 function splitStatements(contents: string): string[] {
   const statements: string[] = [];
   let current = "";
@@ -124,17 +114,29 @@ function splitStatements(contents: string): string[] {
   return statements;
 }
 
-function runBlockLoop(
+function handleBlockInternal(
   statements: string[],
-  env: Environment
+  env: Environment,
+  shouldClone: boolean
 ): Result<number, string> {
+  const blockEnv = shouldClone ? new Map(env) : env;
   const localDecls = new Set<string>();
-  for (let i = 0; i < statements.length - 1; i++) {
-    const stmt = (statements[i] || "").trim();
-    const res = handleStatement(stmt, env, localDecls);
-    if (!res.ok) return res;
+  let lastRes: Result<number, string> = { ok: true, value: 0, hasSuffix: false };
+
+  for (const stmt of statements) {
+    const trimmed = stmt.trim();
+    if (trimmed === "" && statements.indexOf(stmt) === statements.length - 1 && statements.length > 1) {
+       // Trailing empty statement (from trailing semicolon)
+       // We keep the lastRes from the previous statement if there was one,
+       // BUT the current logic says trailing semicolon is an error if it results in empty operand.
+       // Actually, interpret("") returns error "Invalid operand".
+       // So let's just let it fall through to handleStatement.
+    }
+    lastRes = handleStatement(trimmed, blockEnv, localDecls);
+    if (!lastRes.ok) return lastRes;
   }
-  return { ok: true, value: 0, hasSuffix: false };
+
+  return lastRes;
 }
 
 function handleStatement(
@@ -145,7 +147,58 @@ function handleStatement(
   if (stmt.startsWith("let ")) {
     return handleLet(stmt, env, localDecls);
   }
-  return interpret(stmt, env);
+  const eqIndex = findAssignment(stmt);
+  if (eqIndex !== -1) {
+    return handleAssignment(stmt, eqIndex, env);
+  }
+  return interpretLeaf(stmt, env);
+}
+
+function findAssignment(stmt: string): number {
+  let depth = 0;
+  for (let i = 0; i < stmt.length; i++) {
+    const char = stmt.charAt(i);
+    if (char === "(" || char === "{") depth++;
+    if (char === ")" || char === "}") depth--;
+    if (depth === 0 && char === "=" && !isEqualsOperator(stmt, i)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function isEqualsOperator(stmt: string, i: number): boolean {
+  return i + 1 < stmt.length && stmt.charAt(i + 1) === "=";
+}
+
+function handleAssignment(
+  stmt: string,
+  eqIndex: number,
+  env: Environment
+): Result<number, string> {
+  const name = cut(stmt, 0, eqIndex);
+  const existing = env.get(name);
+  if (!existing) {
+    return { ok: false, error: `Variable not defined: ${name}` };
+  }
+
+  const right = part(stmt, eqIndex + 1);
+  const res = interpret(right, env);
+  if (!res.ok) return res;
+
+  if (existing.hasSuffix) {
+    if (res.hasSuffix && res.suffixType !== existing.suffixType) {
+      return {
+        ok: false,
+        error: `Type mismatch: cannot assign ${res.suffixType} to ${existing.suffixType}${existing.bitDepth}`,
+      };
+    }
+    if (!isInRange(BigInt(Math.floor(res.value)), existing.suffixType!, existing.bitDepth!)) {
+      return rangeError(res.value, existing.suffixType!, existing.bitDepth!);
+    }
+  }
+
+  return registerVar(name, { ...res, hasSuffix: existing.hasSuffix, suffixType: existing.suffixType, bitDepth: existing.bitDepth }, env);
 }
 
 function handleLet(
@@ -154,20 +207,25 @@ function handleLet(
   localDecls: Set<string>
 ): Result<number, string> {
   const eqIndex = stmt.indexOf("=");
-  const errEq = failIf(eqIndex === -1, "Missing = in let");
-  if (errEq) return errEq;
-
-  const left = cut(stmt, 4, eqIndex);
-  const right = part(stmt, eqIndex + 1);
-
+  const left = eqIndex === -1 ? part(stmt, 4) : cut(stmt, 4, eqIndex);
   const colonIndex = left.indexOf(":");
-  const name = (colonIndex === -1 ? left : cut(left, 0, colonIndex)).trim();
 
+  if (eqIndex === -1 && colonIndex === -1) {
+    return { ok: false, error: "Missing type or initializer in let" };
+  }
+
+  const name = (colonIndex === -1 ? left : cut(left, 0, colonIndex)).trim();
   if (localDecls.has(name)) {
     return { ok: false, error: `Variable already defined: ${name}` };
   }
   localDecls.add(name);
 
+  if (eqIndex === -1) {
+    const typeStr = part(left, colonIndex + 1);
+    return registerUninitializedVar(name, typeStr, env);
+  }
+
+  const right = part(stmt, eqIndex + 1);
   const res = interpret(right, env);
   if (!res.ok) return res;
 
@@ -176,6 +234,41 @@ function handleLet(
   }
 
   return handleTypedLet(left, colonIndex, res, env);
+}
+
+function registerUninitializedVar(
+  name: string,
+  typeStr: string,
+  env: Environment
+): Result<number, string> {
+  if (typeStr === "Bool") {
+    return registerVar(
+      name,
+      {
+        ok: true,
+        value: 0,
+        hasSuffix: true,
+        suffixType: "Bool",
+        bitDepth: 1,
+      },
+      env
+    );
+  }
+
+  const type = typeStr.charAt(0).toUpperCase();
+  const bitDepth = parseInt(part(typeStr, 1), 10);
+
+  return registerVar(
+    name,
+    {
+      ok: true,
+      value: 0,
+      hasSuffix: true,
+      suffixType: type,
+      bitDepth,
+    },
+    env
+  );
 }
 
 function handleTypedLet(
@@ -416,13 +509,7 @@ function handleNonSuffixedLiteral(trimmed: string): Result<number, string> {
   }
   for (let i = 0; i < trimmed.length; i++) {
     const c = trimmed.charAt(i);
-    if (
-      !(
-        (c >= "0" && c <= "9") ||
-        c === "." ||
-        (i === 0 && (c === "-" || c === "+"))
-      )
-    ) {
+    if (isInvalidCharacter(c, i)) {
       return { ok: false, error: "Invalid operand" };
     }
   }
@@ -430,6 +517,14 @@ function handleNonSuffixedLiteral(trimmed: string): Result<number, string> {
     return { ok: false, error: "Invalid operand" };
   }
   return { ok: true, value: val, hasSuffix: false };
+}
+
+function isInvalidCharacter(c: string, i: number): boolean {
+  return !(
+    (c >= "0" && c <= "9") ||
+    c === "." ||
+    (i === 0 && (c === "-" || c === "+"))
+  );
 }
 
 function isValidInteger(str: string): boolean {
