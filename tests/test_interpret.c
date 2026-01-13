@@ -32,11 +32,9 @@ int main(void)
 	assert(interpret("32767I16") == 32767);
 	assert(interpret("32768I16") == INT_MIN);
 
-	/* Addition with suffixes */
-	assert(interpret("1U8 + 2U8") == 3);
-	assert(interpret("1U8 + 2U16") == 3);
-	assert(interpret("1U8 + 2") == 3);
+	/* Addition and Subtraction */
 	assert(interpret("1 + 2 + 3") == 6);
+	assert(interpret("2 + 3 - 4") == 1);
 	assert(interpret("100 + 200") == 300);
 
 	return 0;

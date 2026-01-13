@@ -94,13 +94,17 @@ int interpret(const char *input)
 	{
 		while (isspace((unsigned char)*next))
 			next++;
-		if (*next == '+')
+		if (*next == '+' || *next == '-')
 		{
+			char op = *next;
 			next++;
 			long long val = parse_single(next, &next);
 			if (errno == ERANGE && val == INT_MIN)
 				return INT_MIN;
-			total += val;
+			if (op == '+')
+				total += val;
+			else
+				total -= val;
 		}
 		else if (*next == '\0')
 		{
