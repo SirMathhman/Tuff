@@ -38,6 +38,7 @@ int main(void)
 	/* Multiplication and Precedence */
 	assert(interpret("2 * 3 - 4") == 2);
 	assert(interpret("2 + 3 * 4") == 14);
+	assert(interpret("4 + 2 * 3") == 10);
 	assert(interpret("100 + 200") == 300);
 
 	return 0;

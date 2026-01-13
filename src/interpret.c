@@ -62,8 +62,8 @@ static long long parse_single(const char *input, char **endptr)
 		return 0;
 
 	char *suffix_end = *endptr;
-	while (*suffix_end && !isspace((unsigned char)*suffix_end) && 
-	       *suffix_end != '+' && *suffix_end != '-' && *suffix_end != '*')
+	while (*suffix_end && !isspace((unsigned char)*suffix_end) &&
+				 *suffix_end != '+' && *suffix_end != '-' && *suffix_end != '*')
 		suffix_end++;
 
 	char suffix[16] = {0};
