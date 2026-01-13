@@ -1,4 +1,4 @@
-CC = gcc
+CC = clang
 CFLAGS = -Wall -Wextra -std=c11 -I./src
 SRC = src/interpret.c
 TEST = tests/test_interpret.c
