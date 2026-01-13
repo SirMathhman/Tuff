@@ -28,7 +28,7 @@ public class AppTest {
 	void interpretReturnsErrorForNull() {
 		Result<java.math.BigInteger, String> result = App.interpret(null);
 		assertTrue(result.isErr());
-		assertEquals("null", result.getError());
+		assertEquals("input missing", result.getError());
 	}
 
 	@Test
