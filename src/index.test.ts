@@ -36,6 +36,7 @@ describe("interpret", () => {
     ["4294967295U32", 4294967295],
     ["18446744073709551615U64", Number(18446744073709551615n)],
     ["1U8 + 2U8", 3],
+    ["1 + 2U8", 3],
   ])('should interpret "%s" as %i', expectSuccess);
 
   it.each([
