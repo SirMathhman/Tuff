@@ -49,4 +49,9 @@ describe("interpret", () => {
   it("returns NaN for addition with mismatched suffixes", () => {
     expect(Number.isNaN(interpret("1U8 + 2U16"))).toBe(true);
   });
+
+  it("handles addition with mixed suffix and no suffix", () => {
+    expect(interpret("1U8 + 2")).toBe(3);
+    expect(interpret("2 + 1U8")).toBe(3);
+  });
 });

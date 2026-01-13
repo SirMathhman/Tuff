@@ -24,12 +24,15 @@ function extractSuffix(input: string): string | undefined {
 function interpretAdditive(input: string): number {
   const parts = input.split("+");
   let sum = 0;
-  let firstSuffix: string | undefined = undefined;
+  let firstSuffixBase: string | undefined = undefined;
   for (const part of parts) {
     const trimmed = part.trim();
     const currentSuffix = extractSuffix(trimmed);
-    if (firstSuffix === undefined) firstSuffix = currentSuffix;
-    if (currentSuffix !== firstSuffix) return NaN;
+    
+    const isMismatched = firstSuffixBase !== undefined && currentSuffix !== "none" && currentSuffix !== firstSuffixBase;
+    if (isMismatched) return NaN;
+    if (currentSuffix !== "none") firstSuffixBase = currentSuffix;
+
     const val = interpret(trimmed);
     if (Number.isNaN(val)) return NaN;
     sum += val;
