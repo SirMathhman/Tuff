@@ -47,6 +47,7 @@ describe("interpret", () => {
     ["10 / { 5 } + 1", 3],
     ["10 / { let x : I32 = 5; x } + 1", 3],
     ["10 / { let x : I32 = 5; let y = x; y } + 1", 3],
+    ["{ let x = 1; { let x = 2; x } + x }", 3],
   ])('should interpret "%s" as %i', expectSuccess);
 
   it.each([
@@ -65,5 +66,6 @@ describe("interpret", () => {
     ["10 / (2 - 2)", "Division by zero"],
     ["abc", "Invalid operand"],
     ["10 / { let x : I32 = 5; let y = x; } + 1", "Invalid operand"],
+    ["10 / { let x = 5; let x = 100; x } + 1", "Variable already defined: x"],
   ])('should return error for "%s"', expectError);
 });

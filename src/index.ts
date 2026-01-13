@@ -85,7 +85,7 @@ function handleBlock(
   env: Environment
 ): Result<number, string> {
   const blockEnv = new Map(env);
-  const statements = contents.split(";");
+  const statements = splitStatements(contents);
   const loopRes = runBlockLoop(statements, blockEnv);
   if (!loopRes.ok) return loopRes;
 
@@ -93,13 +93,32 @@ function handleBlock(
   return interpret(lastStmt, blockEnv);
 }
 
+function splitStatements(contents: string): string[] {
+  const statements: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (let i = 0; i < contents.length; i++) {
+    const char = contents.charAt(i);
+    depth += getDepthChange(char);
+    if (char === ";" && depth === 0) {
+      statements.push(current);
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  statements.push(current);
+  return statements;
+}
+
 function runBlockLoop(
   statements: string[],
   env: Environment
 ): Result<number, string> {
+  const localDecls = new Set<string>();
   for (let i = 0; i < statements.length - 1; i++) {
     const stmt = (statements[i] || "").trim();
-    const res = handleStatement(stmt, env);
+    const res = handleStatement(stmt, env, localDecls);
     if (!res.ok) return res;
   }
   return { ok: true, value: 0, hasSuffix: false };
@@ -107,15 +126,20 @@ function runBlockLoop(
 
 function handleStatement(
   stmt: string,
-  env: Environment
+  env: Environment,
+  localDecls: Set<string>
 ): Result<number, string> {
   if (stmt.startsWith("let ")) {
-    return handleLet(stmt, env);
+    return handleLet(stmt, env, localDecls);
   }
   return interpret(stmt, env);
 }
 
-function handleLet(stmt: string, env: Environment): Result<number, string> {
+function handleLet(
+  stmt: string,
+  env: Environment,
+  localDecls: Set<string>
+): Result<number, string> {
   const eqIndex = stmt.indexOf("=");
   const errEq = failIf(eqIndex === -1, "Missing = in let");
   if (errEq) return errEq;
@@ -123,12 +147,19 @@ function handleLet(stmt: string, env: Environment): Result<number, string> {
   const left = cut(stmt, 4, eqIndex);
   const right = part(stmt, eqIndex + 1);
 
+  const colonIndex = left.indexOf(":");
+  const name = (colonIndex === -1 ? left : cut(left, 0, colonIndex)).trim();
+
+  if (localDecls.has(name)) {
+    return { ok: false, error: `Variable already defined: ${name}` };
+  }
+  localDecls.add(name);
+
   const res = interpret(right, env);
   if (!res.ok) return res;
 
-  const colonIndex = left.indexOf(":");
   if (colonIndex === -1) {
-    return registerVar(left.trim(), res, env);
+    return registerVar(name, res, env);
   }
 
   return handleTypedLet(left, colonIndex, res, env);
