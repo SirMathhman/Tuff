@@ -14,6 +14,18 @@ function isAllDigits(s: string): boolean {
   return s.length > 0;
 }
 
+function getRange(suffix: string): { min: number; max: number } {
+  const isUnsigned = suffix.startsWith("U");
+  const bits = parseInt(suffix.slice(1), 10);
+  if (isUnsigned) {
+    return { min: 0, max: Math.pow(2, bits) - 1 };
+  }
+  return {
+    min: -Math.pow(2, bits - 1),
+    max: Math.pow(2, bits - 1) - 1,
+  };
+}
+
 function handleIntSuffix(s: string): string | undefined {
   const suffix = findSuffix(s);
   if (suffix === undefined) return undefined;
@@ -28,16 +40,8 @@ function handleIntSuffix(s: string): string | undefined {
   if (isUnsigned && numPartStr.startsWith("-")) return undefined;
 
   const val = Number(numPartStr);
-  const bits = parseInt(suffix.slice(1), 10);
-
-  if (isUnsigned) {
-    const max = Math.pow(2, bits) - 1;
-    if (val < 0 || val > max) return undefined;
-  } else {
-    const max = Math.pow(2, bits - 1) - 1;
-    const min = -Math.pow(2, bits - 1);
-    if (val < min || val > max) return undefined;
-  }
+  const { min, max } = getRange(suffix);
+  if (val < min || val > max) return undefined;
 
   return numPartStr;
 }
@@ -88,12 +92,26 @@ function findSuffix(s: string): string | undefined {
   return ALLOWED_SUFFIXES.find((suf) => s.endsWith(suf));
 }
 
+function validateRange(
+  val: number,
+  suffix: string | undefined
+): Result<number, Error> {
+  if (suffix === undefined) return ok(val);
+  const { min, max } = getRange(suffix);
+  if (val < min || val > max) {
+    return err(new Error(`Result ${val} out of range for ${suffix}`));
+  }
+  return ok(val);
+}
+
 /**
  * Compile a source string to JavaScript. (Stubbed)
  * @param source - source string to compile
- * @returns compiled JavaScript as a string wrapped in a Result
+ * @returns compiled JavaScript as a string and suffix wrapped in a Result
  */
-export function compile(source: string): Result<string, Error> {
+export function compile(
+  source: string
+): Result<{ code: string; suffix?: string }, Error> {
   const tokens = tokenize(source.trim());
   let commonSuffix: string | undefined = undefined;
 
@@ -101,20 +119,22 @@ export function compile(source: string): Result<string, Error> {
     const token = tokens[i];
     const suffix = findSuffix(token);
     const isMismatch =
-      suffix !== undefined && commonSuffix !== undefined && commonSuffix !== suffix;
+      suffix !== undefined &&
+      commonSuffix !== undefined &&
+      commonSuffix !== suffix;
 
     if (isMismatch) return err(new Error("Mixed suffixes are not allowed"));
     if (suffix !== undefined) commonSuffix = suffix;
   }
 
-  const compiled = tokens
+  const code = tokens
     .map((t) => {
       const res = handleIntSuffix(t);
       return res !== undefined ? res : t;
     })
     .join(" ");
 
-  return ok(compiled);
+  return ok({ code, suffix: commonSuffix });
 }
 
 /**
@@ -138,18 +158,19 @@ export function interpret(
   const compileResult = compile(source);
   if (!compileResult.ok) return compileResult;
 
-  const compiled = compileResult.value;
-
+  const { code, suffix } = compileResult.value;
+  let evalVal: unknown;
   try {
     // eslint-disable-next-line no-eval
-    const val = eval(compiled);
-    const value = Number(val);
-
-    if (Number.isNaN(value)) {
-      return err(new Error("Compiled output resulting in NaN"));
-    }
-    return ok(value);
+    evalVal = eval(code);
   } catch (e) {
     return err(e instanceof Error ? e : new Error(String(e)));
   }
+
+  const value = Number(evalVal);
+  if (Number.isNaN(value)) {
+    return err(new Error("Compiled output resulting in NaN"));
+  }
+
+  return validateRange(value, suffix);
 }

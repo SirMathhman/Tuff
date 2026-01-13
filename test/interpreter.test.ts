@@ -75,3 +75,8 @@ it("returns an error for mixed suffixes in arithmetic", () => {
   const result = interpret("1U8 + 2 + 3I8");
   expect(result.ok).toBe(false);
 });
+
+it("returns an error if the result overflows the suffix range", () => {
+  const result = interpret("1U8 + 255");
+  expect(result.ok).toBe(false);
+});
