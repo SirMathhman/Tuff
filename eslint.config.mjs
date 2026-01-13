@@ -14,14 +14,15 @@ export default [
       "no-restricted-syntax": [
         "error",
         {
-          "selector": "Literal[regex]",
-          "message": "Do not use regular expressions."
+          selector: "Literal[regex]",
+          message: "Do not use regular expressions.",
         },
         {
-          "selector": "NewExpression[callee.name='RegExp']",
-          "message": "Do not use regular expressions."
-        }
-      ]
-    }
-  }
+          selector: "NewExpression[callee.name='RegExp']",
+          message: "Do not use regular expressions.",
+        },
+      ],
+      "max-depth": ["error", 2],
+    },
+  },
 ];
