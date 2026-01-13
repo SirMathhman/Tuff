@@ -149,7 +149,7 @@ function isNumeric(str: string): boolean {
 function rangeError(
   value: number | bigint,
   type: string,
-  bitDepth: number,
+  bitDepth: number
 ): Failure<string> {
   return {
     ok: false,
