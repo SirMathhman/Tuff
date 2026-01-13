@@ -207,6 +207,13 @@ function handleTypedLet(
   const type = typeStr.charAt(0).toUpperCase();
   const bitDepth = parseInt(part(typeStr, 1), 10);
 
+  if (res.hasSuffix && res.suffixType !== type) {
+    return {
+      ok: false,
+      error: `Type mismatch: cannot assign ${res.suffixType} to ${typeStr}`,
+    };
+  }
+
   if (!isInRange(BigInt(Math.floor(res.value)), type, bitDepth)) {
     return rangeError(res.value, type, bitDepth);
   }
@@ -363,7 +370,9 @@ function interpretOperand(
     return {
       ok: true,
       value: trimmed === "true" ? 1 : 0,
-      hasSuffix: false,
+      hasSuffix: true,
+      suffixType: "Bool",
+      bitDepth: 1,
     };
   }
   const variable = env.get(trimmed);
