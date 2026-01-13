@@ -2,10 +2,11 @@
 #define INTERPRET_H
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-int interpret(const char *input);
+	int interpret(const char *input);
 
 #ifdef __cplusplus
 }
