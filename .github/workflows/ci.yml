@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build essentials
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+      - name: Build and run tests
+        run: |
+          gcc -Wall -Wextra -std=c11 -Isrc src/interpret.c tests/test_interpret.c -o test_interpret
+          ./test_interpret
