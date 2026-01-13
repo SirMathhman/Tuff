@@ -9,5 +9,7 @@ int main(void)
 
 	/* new behavior: numeric input should be parsed */
 	assert(interpret("100") == 100);
+	/* accept numeric suffixes like U8 */
+	assert(interpret("100U8") == 100);
 	return 0;
 }
