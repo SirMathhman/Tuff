@@ -33,6 +33,7 @@ export function interpret(
   env: Environment = new Map()
 ): Result<number, string> {
   const trimmed = input.trim();
+  // console.log(`Interpreting: "${trimmed}"`);
   const statements = splitStatements(trimmed);
   return handleBlockInternal(statements, env, false);
 }
@@ -41,6 +42,7 @@ function interpretLeaf(
   trimmed: string,
   env: Environment
 ): Result<number, string> {
+  if (trimmed === "") return { ok: false, error: "Invalid operand" };
   const resOp = tryOps(trimmed, env);
   if (resOp) return resOp;
 
@@ -103,8 +105,16 @@ function splitStatements(contents: string): string[] {
   let depth = 0;
   for (let i = 0; i < contents.length; i++) {
     const char = contents.charAt(i);
+    const oldDepth = depth;
     depth += getDepthChange(char);
     if (char === ";" && depth === 0) {
+      statements.push(current);
+      current = "";
+    } else if (char === "{" && oldDepth === 0 && shouldSplitBeforeBlock(current)) {
+      statements.push(current);
+      current = "{";
+    } else if (char === "}" && depth === 0 && shouldSplitAfterBlock(contents, i)) {
+      current += "}";
       statements.push(current);
       current = "";
     } else {
@@ -113,6 +123,22 @@ function splitStatements(contents: string): string[] {
   }
   statements.push(current);
   return statements;
+}
+
+function shouldSplitBeforeBlock(current: string): boolean {
+  const trimmed = current.trim();
+  if (trimmed === "") return false;
+  const lastChar = trimmed.charAt(trimmed.length - 1);
+  return !"+-*/=".includes(lastChar);
+}
+
+function shouldSplitAfterBlock(contents: string, index: number): boolean {
+  for (let j = index + 1; j < contents.length; j++) {
+    const nextChar = contents.charAt(j);
+    if (nextChar === " " || nextChar === "\n" || nextChar === "\r" || nextChar === "\t") continue;
+    return !"+-*/=".includes(nextChar);
+  }
+  return false;
 }
 
 function handleBlockInternal(
@@ -128,24 +154,34 @@ function handleBlockInternal(
     hasSuffix: false,
   };
 
-  for (const stmt of statements) {
-    const trimmed = stmt.trim();
-    if (
-      trimmed === "" &&
-      statements.indexOf(stmt) === statements.length - 1 &&
-      statements.length > 1
-    ) {
-      // Trailing empty statement (from trailing semicolon)
-      // We keep the lastRes from the previous statement if there was one,
-      // BUT the current logic says trailing semicolon is an error if it results in empty operand.
-      // Actually, interpret("") returns error "Invalid operand".
-      // So let's just let it fall through to handleStatement.
-    }
-    lastRes = handleStatement(trimmed, blockEnv, localDecls);
-    if (!lastRes.ok) return lastRes;
+  for (let i = 0; i < statements.length; i++) {
+    const res = processStatement(statements[i], i, statements.length, blockEnv, localDecls);
+    if (!res) continue;
+    if (!res.ok) return res;
+    lastRes = res;
   }
 
   return lastRes;
+}
+
+function processStatement(
+  stmt: string | undefined,
+  index: number,
+  count: number,
+  env: Environment,
+  localDecls: Set<string>
+): Result<number, string> | undefined {
+  if (stmt === undefined) return undefined;
+  const trimmed = stmt.trim();
+  const isLast = index === count - 1;
+
+  if (trimmed === "" && !isLast) return undefined;
+
+  const res = handleStatement(trimmed, env, localDecls);
+  if (!res.ok && res.error === "Invalid operand" && !isLast) {
+    return undefined;
+  }
+  return res;
 }
 
 function handleStatement(
@@ -216,17 +252,14 @@ function handleAssignment(
     }
   }
 
-  return registerVar(
-    name,
-    {
-      ...res,
-      hasSuffix: existing.hasSuffix,
-      suffixType: existing.suffixType,
-      bitDepth: existing.bitDepth,
-    },
-    existing.mutable,
-    env
-  );
+  existing.value = res.value;
+  return {
+    ok: true,
+    value: existing.value,
+    hasSuffix: existing.hasSuffix,
+    suffixType: existing.suffixType,
+    bitDepth: existing.bitDepth,
+  };
 }
 
 function handleLet(
