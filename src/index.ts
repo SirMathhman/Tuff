@@ -14,14 +14,20 @@ export interface Failure<E> {
 export type Result<T, E> = Success<T> | Failure<E>;
 
 export function interpret(input: string): Result<number, string> {
-  const plusIndex = input.lastIndexOf(" + ");
-  const minusIndex = input.lastIndexOf(" - ");
-  const index = Math.max(plusIndex, minusIndex);
+  const lastAdd = input.lastIndexOf(" + ");
+  const lastSub = input.lastIndexOf(" - ");
+  const addSubIndex = Math.max(lastAdd, lastSub);
 
-  if (index !== -1) {
-    const operator = input.substring(index + 1, index + 2);
-    return handleBinaryExpression(input, index, operator);
+  if (addSubIndex !== -1) {
+    const operator = input.substring(addSubIndex + 1, addSubIndex + 2);
+    return handleBinaryExpression(input, addSubIndex, operator);
   }
+
+  const lastMul = input.lastIndexOf(" * ");
+  if (lastMul !== -1) {
+    return handleBinaryExpression(input, lastMul, "*");
+  }
+
   return interpretOperand(input);
 }
 
@@ -52,8 +58,7 @@ function handleBinaryExpression(
     }
   }
 
-  const value =
-    operator === "+" ? left.value + right.value : left.value - right.value;
+  const value = applyOperator(left.value, right.value, operator);
   const hasSuffix = left.hasSuffix || right.hasSuffix;
 
   if (hasSuffix) {
@@ -66,6 +71,16 @@ function handleBinaryExpression(
   }
 
   return { ok: true, value, hasSuffix: false };
+}
+
+function applyOperator(left: number, right: number, operator: string): number {
+  if (operator === "+") {
+    return left + right;
+  }
+  if (operator === "-") {
+    return left - right;
+  }
+  return left * right;
 }
 
 function interpretOperand(input: string): Result<number, string> {
