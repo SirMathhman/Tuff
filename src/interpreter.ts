@@ -41,11 +41,11 @@ export function interpret(input: string): number {
   // Handle specific suffixes like U8 (unsigned 8-bit)
   const suffix = rest.trim();
   if (suffix.length === 0) return parseFloat(numPart);
-  const lower = suffix.toLowerCase();
-  if (lower === 'u8') {
+  if (suffix === 'U8') {
     const parsed = Number(numPart);
     if (!Number.isInteger(parsed) || parsed < 0 || parsed > 255) return NaN;
     return parsed;
   }
-  return parseFloat(numPart);
+  // Unknown suffixes are invalid
+  return NaN;
 }
