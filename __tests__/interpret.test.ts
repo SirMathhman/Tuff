@@ -74,6 +74,7 @@ describe("interpret", () => {
     expect(() => interpret("10 / 0")).toThrow("Division by zero");
     expect(interpret("(3 + 5) / 2")).toBe(4);
     expect(interpret("(3 + { 5 }) / 2")).toBe(4);
+    expect(interpret("(3 + { let x : I32 = 5; x }) / 2")).toBe(4);
     expect(() => interpret("1U8 + 2I8")).toThrow();
     expect(() => interpret("1U8 + 2 + 3U16")).toThrow(
       "Mismatched types in expression"

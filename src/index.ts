@@ -68,6 +68,7 @@ export function interpret(input: string): number {
   const len = s.length;
 
   const allTerms: { value: number; type: string }[] = [];
+  const env: Array<Map<string, { value: number; type: string }>> = [];
 
   // Fast-path: if the input doesn't contain operators or parentheses, delegate to parseAtomic
   const trimmedInput = input.trim();
@@ -78,7 +79,7 @@ export function interpret(input: string): number {
 
   const isDigit = (ch: string) => /[0-9]/.test(ch);
   const isAlpha = (ch: string) => /[A-Za-z]/.test(ch);
-  const isAlphaNum = (ch: string) => /[A-Za-z0-9]/.test(ch);
+  const isAlphaNum = (ch: string) => /[A-Za-z0-9_]/.test(ch);
 
   const skipWhitespace = () => {
     while (pos < len && /\s/.test(s[pos])) pos++;
@@ -103,7 +104,18 @@ export function interpret(input: string): number {
     return "";
   };
 
-  const parseFactor = (): number => {
+  const parseIdentifier = (): string => {
+    skipWhitespace();
+    const start = pos;
+    if (pos < len && (isAlpha(s[pos]) || s[pos] === "_")) {
+      pos++;
+      while (pos < len && isAlphaNum(s[pos])) pos++;
+      return s.slice(start, pos);
+    }
+    return "";
+  };
+
+  const parseFactor = (): { value: number; type: string } => {
     skipWhitespace();
     if (pos >= len) {
       throw new Error(`Invalid expression: ${input}`);
@@ -118,13 +130,13 @@ export function interpret(input: string): number {
         const open = s[pos];
         const close = open === "(" ? ")" : "}";
         pos++; // consume opening bracket
-        const val = parseExpression();
+        const val = s[pos - 1] === "(" ? parseExpression() : parseBlock();
         skipWhitespace();
         if (pos >= len || s[pos] !== close) {
           throw new Error(`Invalid expression: ${input}`);
         }
         pos++; // consume closing bracket
-        return sign === "-" ? -val : val;
+        return sign === "-" ? { value: -val.value, type: val.type } : val;
       }
       // If next token is a number, include the sign in the numeric token passed to parseAtomic
       const numToken = parseNumberToken();
@@ -134,7 +146,7 @@ export function interpret(input: string): number {
       const signedToken = sign + numToken;
       const p = parseAtomic(signedToken);
       allTerms.push(p);
-      return p.value;
+      return p;
     }
 
     // Parenthesized or braced expression
@@ -142,13 +154,27 @@ export function interpret(input: string): number {
       const open = s[pos];
       const close = open === "(" ? ")" : "}";
       pos++; // consume opening bracket
-      const val = parseExpression();
+      const val = open === "(" ? parseExpression() : parseBlock();
       skipWhitespace();
       if (pos >= len || s[pos] !== close) {
         throw new Error(`Invalid expression: ${input}`);
       }
       pos++; // consume closing bracket
       return val;
+    }
+
+    // Identifier (variable)
+    const id = parseIdentifier();
+    if (id) {
+      // lookup in env stack
+      for (let i = env.length - 1; i >= 0; i--) {
+        if (env[i].has(id)) {
+          const v = env[i].get(id)!;
+          allTerms.push({ value: v.value, type: v.type });
+          return { value: v.value, type: v.type };
+        }
+      }
+      throw new Error(`Invalid expression: unknown identifier: ${id}`);
     }
 
     // Numeric literal
@@ -158,45 +184,138 @@ export function interpret(input: string): number {
     }
     const p = parseAtomic(token);
     allTerms.push(p);
-    return p.value;
+    return p;
   };
 
-  const parseTerm = (): number => {
-    let val = parseFactor();
+  const parseTerm = (): { value: number; type: string } => {
+    let lhs = parseFactor();
     while (true) {
       skipWhitespace();
       if (pos < len && (s[pos] === "*" || s[pos] === "/")) {
         const op = s[pos];
         pos++;
         const rhs = parseFactor();
-        if (op === "*") {
-          val = val * rhs;
-        } else {
-          if (rhs === 0) {
-            throw new Error("Division by zero");
-          }
-          val = Math.trunc(val / rhs);
+        // type checking: ensure explicit types don't conflict
+        const types = [lhs.type, rhs.type].filter((t) => t !== "none");
+        const unique = Array.from(new Set(types));
+        if (unique.length > 1) {
+          throw new Error(`Mismatched types in expression: ${input}`);
         }
+        const resType = unique.length === 1 ? unique[0] : "none";
+        let resVal: number;
+        if (op === "*") resVal = lhs.value * rhs.value;
+        else {
+          if (rhs.value === 0) throw new Error("Division by zero");
+          resVal = Math.trunc(lhs.value / rhs.value);
+        }
+        lhs = { value: resVal, type: resType };
       } else break;
     }
-    return val;
+    return lhs;
   };
 
-  const parseExpression = (): number => {
-    let val = parseTerm();
+  const parseExpression = (): { value: number; type: string } => {
+    let lhs = parseTerm();
     while (true) {
       skipWhitespace();
       if (pos < len && (s[pos] === "+" || s[pos] === "-")) {
         const op = s[pos];
         pos++;
         const rhs = parseTerm();
-        if (op === "+") val = val + rhs;
-        else val = val - rhs;
+        // type checking
+        const types = [lhs.type, rhs.type].filter((t) => t !== "none");
+        const unique = Array.from(new Set(types));
+        if (unique.length > 1) {
+          throw new Error(`Mismatched types in expression: ${input}`);
+        }
+        const resType = unique.length === 1 ? unique[0] : "none";
+        const resVal =
+          op === "+" ? lhs.value + rhs.value : lhs.value - rhs.value;
+        lhs = { value: resVal, type: resType };
       } else break;
     }
-    return val;
+    return lhs;
   };
 
+  const parseBlock = (): { value: number; type: string } => {
+    // create new scope
+    env.push(new Map());
+    let last: { value: number; type: string } = { value: 0, type: "none" };
+    while (true) {
+      skipWhitespace();
+      if (pos >= len) throw new Error(`Invalid expression: ${input}`);
+      if (s[pos] === "}") break;
+      // check for let
+      const startPos = pos;
+      const kw = parseIdentifier();
+      if (kw === "let") {
+        skipWhitespace();
+        const name = parseIdentifier();
+        if (!name) throw new Error(`Invalid expression: expected identifier`);
+        skipWhitespace();
+        if (s[pos] !== ":") throw new Error(`Invalid expression: expected ':'`);
+        pos++;
+        skipWhitespace();
+        const typeName = parseIdentifier();
+        if (!typeName)
+          throw new Error(`Invalid expression: expected type annotation`);
+        skipWhitespace();
+        if (s[pos] !== "=") throw new Error(`Invalid expression: expected '='`);
+        pos++;
+        const rhs = parseExpression();
+        skipWhitespace();
+        if (s[pos] !== ";") throw new Error(`Invalid expression: expected ';'`);
+        pos++;
+        // validate assignment
+        const ranges: Record<string, { min: bigint; max: bigint }> = {
+          U8: { min: BigInt(0), max: BigInt(255) },
+          U16: { min: BigInt(0), max: BigInt(65535) },
+          U32: { min: BigInt(0), max: BigInt(4294967295) },
+          U64: { min: BigInt(0), max: BigInt("18446744073709551615") },
+          I8: { min: BigInt(-128), max: BigInt(127) },
+          I16: { min: BigInt(-32768), max: BigInt(32767) },
+          I32: { min: BigInt(-2147483648), max: BigInt(2147483647) },
+          I64: {
+            min: BigInt("-9223372036854775808"),
+            max: BigInt("9223372036854775807"),
+          },
+        };
+        if (!(typeName in ranges))
+          throw new Error(`Invalid expression: unknown type ${typeName}`);
+        // if rhs has explicit type and differs from annotation -> error
+        if (rhs.type !== "none" && rhs.type !== typeName) {
+          throw new Error(`Mismatched types in declaration: ${name}`);
+        }
+        // if rhs is none, ensure value in range
+        if (rhs.type === "none") {
+          let big: bigint;
+          try {
+            big = BigInt(rhs.value);
+          } catch (e) {
+            throw new Error(`Invalid numeric string: ${rhs.value}`);
+          }
+          const { min, max } = ranges[typeName];
+          if (big < min || big > max)
+            throw new Error(`Invalid numeric string: ${rhs.value}`);
+        }
+        env[env.length - 1].set(name, { value: rhs.value, type: typeName });
+        last = { value: rhs.value, type: typeName };
+        continue;
+      } else {
+        // reset pos if not 'let'
+        pos = startPos;
+        const expr = parseExpression();
+        skipWhitespace();
+        // optional semicolon
+        if (s[pos] === ";") pos++;
+        last = expr;
+        continue;
+      }
+    }
+    // pop scope
+    env.pop();
+    return last;
+  };
   const result = parseExpression();
   skipWhitespace();
   if (pos !== len) {
@@ -209,5 +328,5 @@ export function interpret(input: string): number {
     throw new Error(`Mismatched types in expression: ${input}`);
   }
 
-  return result;
+  return result.value;
 }
