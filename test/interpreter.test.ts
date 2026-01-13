@@ -70,3 +70,8 @@ it("interprets mixed arithmetic with and without suffixes", () => {
     expect(result3.value).toBe(6);
   }
 });
+
+it("returns an error for mixed suffixes in arithmetic", () => {
+  const result = interpret("1U8 + 2 + 3I8");
+  expect(result.ok).toBe(false);
+});

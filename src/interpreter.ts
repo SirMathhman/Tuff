@@ -4,6 +4,8 @@
  * Note: `interpret` uses `eval`. Only pass trusted input.
  */
 
+const ALLOWED_SUFFIXES = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
+
 function isAllDigits(s: string): boolean {
   for (let i = 0; i < s.length; i++) {
     const ch = s[i];
@@ -13,8 +15,7 @@ function isAllDigits(s: string): boolean {
 }
 
 function handleIntSuffix(s: string): string | undefined {
-  const suffixes = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
-  const suffix = suffixes.find((suf) => s.endsWith(suf));
+  const suffix = findSuffix(s);
   if (suffix === undefined) return undefined;
 
   const numPartStr = s.slice(0, s.length - suffix.length).trim();
@@ -83,20 +84,37 @@ function handleOperatorInTokenizer(
   return "";
 }
 
+function findSuffix(s: string): string | undefined {
+  return ALLOWED_SUFFIXES.find((suf) => s.endsWith(suf));
+}
+
 /**
  * Compile a source string to JavaScript. (Stubbed)
  * @param source - source string to compile
- * @returns compiled JavaScript as a string
+ * @returns compiled JavaScript as a string wrapped in a Result
  */
-export function compile(source: string): string {
+export function compile(source: string): Result<string, Error> {
   const tokens = tokenize(source.trim());
-  const compiledTokens = tokens.map((token) => {
-    const intResult = handleIntSuffix(token);
-    if (intResult !== undefined) return intResult;
-    return token;
-  });
+  let commonSuffix: string | undefined = undefined;
 
-  return compiledTokens.join(" ");
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    const suffix = findSuffix(token);
+    const isMismatch =
+      suffix !== undefined && commonSuffix !== undefined && commonSuffix !== suffix;
+
+    if (isMismatch) return err(new Error("Mixed suffixes are not allowed"));
+    if (suffix !== undefined) commonSuffix = suffix;
+  }
+
+  const compiled = tokens
+    .map((t) => {
+      const res = handleIntSuffix(t);
+      return res !== undefined ? res : t;
+    })
+    .join(" ");
+
+  return ok(compiled);
 }
 
 /**
@@ -117,8 +135,10 @@ export function interpret(
   source: string,
   _stdIn: string = ""
 ): Result<number, Error> {
-  // Avoid using Function constructors (disallowed by lint).
-  const compiled = compile(source);
+  const compileResult = compile(source);
+  if (!compileResult.ok) return compileResult;
+
+  const compiled = compileResult.value;
 
   try {
     // eslint-disable-next-line no-eval
