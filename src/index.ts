@@ -13,28 +13,160 @@ export interface Failure<E> {
 
 export type Result<T, E> = Success<T> | Failure<E>;
 
+export interface Variable {
+  value: number;
+  hasSuffix: boolean;
+  suffixType?: string;
+  bitDepth?: number;
+}
+
+export type Environment = Map<string, Variable>;
+
 export interface OpResult {
   ok: boolean;
   result: Result<number, string>;
 }
 
-export function interpret(input: string): Result<number, string> {
+export function interpret(
+  input: string,
+  env: Environment = new Map()
+): Result<number, string> {
   const trimmed = input.trim();
-  const resSet1 = tryHandleOps(trimmed, ["+", "-"]);
-  if (resSet1.ok) return resSet1.result;
+  const resOp = tryOps(trimmed, env);
+  if (resOp) return resOp;
 
-  const resSet2 = tryHandleOps(trimmed, ["*", "/"]);
-  if (resSet2.ok) return resSet2.result;
+  const resWrap = tryWrap(trimmed, env);
+  if (resWrap) return resWrap;
 
-  if (isWrapped(trimmed, "(", ")") || isWrapped(trimmed, "{", "}")) {
-    return interpret(trimmed.substring(1, trimmed.length - 1));
-  }
+  return interpretOperand(trimmed, env);
+}
 
-  return interpretOperand(trimmed);
+function tryWrap(
+  trimmed: string,
+  env: Environment
+): Result<number, string> | undefined {
+  const res1 = runWrap(trimmed, "(", ")", interpret, env);
+  if (res1) return res1;
+  return runWrap(trimmed, "{", "}", handleBlock, env);
+}
+
+function runWrap(
+  str: string,
+  open: string,
+  close: string,
+  fn: (s: string, e: Environment) => Result<number, string>,
+  env: Environment
+): Result<number, string> | undefined {
+  if (isWrapped(str, open, close)) return fn(strip(str), env);
+  return undefined;
+}
+
+function tryOps(
+  trimmed: string,
+  env: Environment
+): Result<number, string> | undefined {
+  const res1 = tryHandleOps(trimmed, ["+", "-"], env);
+  if (res1.ok) return res1.result;
+  const res2 = tryHandleOps(trimmed, ["*", "/"], env);
+  if (res2.ok) return res2.result;
+  return undefined;
+}
+
+function strip(str: string): string {
+  return str.substring(1, str.length - 1);
 }
 
 function isWrapped(str: string, open: string, close: string): boolean {
   return str.startsWith(open) && str.endsWith(close);
+}
+
+function handleBlock(
+  contents: string,
+  env: Environment
+): Result<number, string> {
+  const blockEnv = new Map(env);
+  const statements = contents.split(";");
+  const loopRes = runBlockLoop(statements, blockEnv);
+  if (!loopRes.ok) return loopRes;
+
+  const lastStmt = (statements[statements.length - 1] || "").trim();
+  return interpret(lastStmt, blockEnv);
+}
+
+function runBlockLoop(
+  statements: string[],
+  env: Environment
+): Result<number, string> {
+  for (let i = 0; i < statements.length - 1; i++) {
+    const stmt = (statements[i] || "").trim();
+    const res = handleStatement(stmt, env);
+    if (!res.ok) return res;
+  }
+  return { ok: true, value: 0, hasSuffix: false };
+}
+
+function handleStatement(
+  stmt: string,
+  env: Environment
+): Result<number, string> {
+  if (stmt.startsWith("let ")) {
+    return handleLet(stmt, env);
+  }
+  return interpret(stmt, env);
+}
+
+function handleLet(stmt: string, env: Environment): Result<number, string> {
+  const eqIndex = stmt.indexOf("=");
+  const errEq = failIf(eqIndex === -1, "Missing = in let");
+  if (errEq) return errEq;
+
+  const left = cut(stmt, 4, eqIndex);
+  const right = part(stmt, eqIndex + 1);
+
+  const colonIndex = left.indexOf(":");
+  const errCol = failIf(colonIndex === -1, "Missing : in let");
+  if (errCol) return errCol;
+
+  const name = cut(left, 0, colonIndex);
+  const typeStr = part(left, colonIndex + 1);
+
+  const res = interpret(right, env);
+  if (!res.ok) return res;
+
+  const type = typeStr.charAt(0).toUpperCase();
+  const bitDepth = parseInt(part(typeStr, 1), 10);
+
+  if (!isInRange(BigInt(Math.floor(res.value)), type, bitDepth)) {
+    return rangeError(res.value, type, bitDepth);
+  }
+
+  env.set(name, {
+    value: res.value,
+    hasSuffix: true,
+    suffixType: type,
+    bitDepth,
+  });
+
+  return {
+    ok: true,
+    value: res.value,
+    hasSuffix: true,
+    suffixType: type,
+    bitDepth,
+  };
+}
+
+function cut(str: string, start: number, end: number): string {
+  return str.substring(start, end).trim();
+}
+
+function part(str: string, start: number): string {
+  return str.substring(start).trim();
+}
+
+function failIf(cond: boolean, error: string): Failure<string> | undefined {
+  if (cond) return { ok: false, error };
+  return undefined;
 }
 
 function findOperator(input: string, ops: string[]): number {
@@ -60,38 +192,40 @@ function isOperatorMatch(input: string, i: number, ops: string[]): boolean {
   return ops.includes(input.charAt(i));
 }
 
-function tryHandleOps(trimmed: string, ops: string[]): OpResult {
+function tryHandleOps(
+  trimmed: string,
+  ops: string[],
+  env: Environment
+): OpResult {
   const index = findOperator(trimmed, ops);
   if (index !== -1) {
-    return { ok: true, result: handleBinaryAtIndex(trimmed, index) };
+    return { ok: true, result: handleBinaryAtIndex(trimmed, index, env) };
   }
   return { ok: false, result: { ok: false, error: "" } };
 }
 
 function handleBinaryAtIndex(
   input: string,
-  index: number
+  index: number,
+  env: Environment
 ): Result<number, string> {
   const operator = input.charAt(index + 1);
-  return handleBinaryExpression(input, index, operator);
+  return handleBinaryExpression(input, index, operator, env);
 }
 
 function handleBinaryExpression(
   input: string,
   index: number,
-  operator: string
+  operator: string,
+  env: Environment
 ): Result<number, string> {
-  const left = interpret(input.substring(0, index));
+  const left = interpret(input.substring(0, index), env);
   if (!left.ok) {
     return left;
   }
-  const right = interpret(input.substring(index + 3));
+  const right = interpret(input.substring(index + 3), env);
   if (!right.ok) {
     return right;
-  }
-
-  if (left.hasSuffix && !right.hasSuffix) {
-    return { ok: false, error: "Operand must have a suffix" };
   }
 
   if (left.hasSuffix && right.hasSuffix) {
@@ -135,8 +269,16 @@ function applyOperator(left: number, right: number, operator: string): number {
   return left * right;
 }
 
-function interpretOperand(input: string): Result<number, string> {
+function interpretOperand(
+  input: string,
+  env: Environment
+): Result<number, string> {
   const trimmed = input.trim();
+  const variable = env.get(trimmed);
+  if (variable) {
+    return { ok: true, ...variable };
+  }
+
   const upper = trimmed.toUpperCase();
   const suffixInfo = getSuffixInfo(upper);
   const numericPart = suffixInfo.found

@@ -45,6 +45,7 @@ describe("interpret", () => {
     ["(4 + 2) * 3", 18],
     ["1 + (2 * 3)", 7],
     ["10 / { 5 } + 1", 3],
+    ["10 / { let x : I32 = 5; x } + 1", 3],
   ])('should interpret "%s" as %i', expectSuccess);
 
   it.each([
@@ -58,10 +59,7 @@ describe("interpret", () => {
       "9223372036854775808I64",
       "Value 9223372036854775808 is out of range for I64",
     ],
-    ["1U8 + 216", "Operand must have a suffix"],
-    ["1U8 + 255", "Operand must have a suffix"],
     ["1U8 + 255U8", "Value 256 is out of range for U8"],
-    ["1U8 + 2 + 3U16", "Operand must have a suffix"],
     ["1U8 + 3U16", "Suffix mismatch"],
     ["10 / (2 - 2)", "Division by zero"],
   ])('should return error for "%s"', expectError);
