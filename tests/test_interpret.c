@@ -18,7 +18,7 @@ int main(void)
 	assert(interpret("256U8") == INT_MIN);
 
 	/* Unsigned suffixes */
-	assert(interpret("65535U16") == 65535 || 65535U16 > INT_MAX ? interpret("65535U16") == INT_MAX : 1);
+	assert(interpret("65535U16") == (65535 > INT_MAX ? INT_MAX : 65535));
 	assert(interpret("65536U16") == INT_MIN);
 	assert(interpret("4294967295U32") == INT_MAX); /* Clamped to INT_MAX since return is int */
 	assert(interpret("-1U32") == INT_MIN);
