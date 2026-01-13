@@ -42,3 +42,11 @@ it("interprets signed and unsigned suffixes correctly", () => {
 it("returns an error for lowercase suffixes", () => {
   expect(interpret("100u8").ok).toBe(false);
 });
+
+it("interprets arithmetic with suffixes", () => {
+  const result = interpret("1U8 + 2U8");
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.value).toBe(3);
+  }
+});

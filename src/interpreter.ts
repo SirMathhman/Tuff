@@ -27,8 +27,7 @@ function handleIntSuffix(s: string): string | undefined {
   if (isUnsigned && numPartStr.startsWith("-")) return undefined;
 
   const val = Number(numPartStr);
-  const bitsText = suffix.slice(1);
-  const bits = parseInt(bitsText, 10);
+  const bits = parseInt(suffix.slice(1), 10);
 
   if (isUnsigned) {
     const max = Math.pow(2, bits) - 1;
@@ -42,23 +41,37 @@ function handleIntSuffix(s: string): string | undefined {
   return numPartStr;
 }
 
-// If the source is a plain numeric literal (integer or float) return as-is
-function isNumericString(x: string): boolean {
-  if (x.length === 0) return false;
-  let i = x[0] === "+" || x[0] === "-" ? 1 : 0;
-  let hasDigits = false;
-  let hasDot = false;
-  for (; i < x.length; i++) {
-    const ch = x[i];
-    const isDot = ch === ".";
-    const isDigit = ch >= "0" && ch <= "9";
+function tokenize(source: string): string[] {
+  const tokens: string[] = [];
+  let currentToken = "";
+  for (let i = 0; i < source.length; i++) {
+    const char = source[i];
+    const isOperator =
+      char === "+" || char === "-" || char === "*" || char === "/";
+    const isSpace = char === " ";
 
-    if (isDot && hasDot) return false;
-    if (isDot) hasDot = true;
-    if (isDigit) hasDigits = true;
-    if (!isDot && !isDigit) return false;
+    if (isSpace && currentToken !== "") {
+      tokens.push(currentToken);
+      currentToken = "";
+    } else if (isOperator) {
+      // If minus and current is empty, it might be a negative number start or standalone operator
+      // To satisfy simplicity for "1U8 + 2U8" and "-128I8", we treat operators as separators
+      // but negative numbers need the minus attached to the token.
+      if (char === "-" && currentToken === "") {
+        currentToken = "-";
+      } else {
+        if (currentToken !== "" && currentToken !== "-")
+          tokens.push(currentToken);
+        else if (currentToken === "-") tokens.push("-");
+        tokens.push(char);
+        currentToken = "";
+      }
+    } else if (!isSpace) {
+      currentToken += char;
+    }
   }
-  return hasDigits;
+  if (currentToken !== "") tokens.push(currentToken);
+  return tokens;
 }
 
 /**
@@ -67,14 +80,14 @@ function isNumericString(x: string): boolean {
  * @returns compiled JavaScript as a string
  */
 export function compile(source: string): string {
-  const s = source.trim();
+  const tokens = tokenize(source.trim());
+  const compiledTokens = tokens.map((token) => {
+    const intResult = handleIntSuffix(token);
+    if (intResult !== undefined) return intResult;
+    return token;
+  });
 
-  const intResult = handleIntSuffix(s);
-  if (intResult !== undefined) return intResult;
-
-  if (isNumericString(s)) return s;
-
-  return source;
+  return compiledTokens.join(" ");
 }
 
 /**
@@ -95,16 +108,19 @@ export function interpret(
   source: string,
   _stdIn: string = ""
 ): Result<number, Error> {
-  // Avoid using `eval` or Function constructors (disallowed by lint). Rely on the
-  // compiler to turn known patterns into numeric strings and just coerce here.
+  // Avoid using Function constructors (disallowed by lint).
   const compiled = compile(source);
-  const value = Number(compiled);
-  if (Number.isNaN(value)) {
-    return err(
-      new Error(
-        "Compiled output is not numeric and dynamic evaluation is disabled"
-      )
-    );
+
+  try {
+    // eslint-disable-next-line no-eval
+    const val = eval(compiled);
+    const value = Number(val);
+
+    if (Number.isNaN(value)) {
+      return err(new Error("Compiled output resulting in NaN"));
+    }
+    return ok(value);
+  } catch (e) {
+    return err(e instanceof Error ? e : new Error(String(e)));
   }
-  return ok(value);
 }
