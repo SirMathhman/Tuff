@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { interpret } from "../src/interpret";
 
-describe("interpret", () => {
+describe("interpret basics", () => {
   it("parses integer string", () => {
     expect(interpret("100")).toBe(100);
   });
@@ -25,7 +25,9 @@ describe("interpret", () => {
   it("parses negative integer when input is exactly negative", () => {
     expect(interpret("-100")).toBe(-100);
   });
+});
 
+describe("interpret suffixes", () => {
   // Unsigned integer suffixes
   it("parses U8 within range", () => {
     expect(interpret("255U8")).toBe(255);
@@ -60,7 +62,9 @@ describe("interpret", () => {
   it("throws on non-integer with suffix", () => {
     expect(() => interpret("1.5U8")).toThrow();
   });
+});
 
+describe("interpret addition", () => {
   it("adds two U8 values", () => {
     expect(interpret("1U8 + 2U8")).toBe(3);
   });
@@ -88,12 +92,18 @@ describe("interpret", () => {
   it("adds U8 and plain number", () => {
     expect(interpret("1U8 + 2")).toBe(3);
   });
+});
 
+describe("interpret complex expressions", () => {
   it("adds mixed sequence with promotion (1U8 + 2 + 3U16 => 6)", () => {
     expect(interpret("1U8 + 2 + 3U16")).toBe(6);
   });
 
   it("evaluates mixed addition and subtraction (4 + 3 - 2 => 5)", () => {
     expect(interpret("4 + 3 - 2")).toBe(5);
+  });
+
+  it("handles multiplication with precedence (4 * 3 - 2 => 10)", () => {
+    expect(interpret("4 * 3 - 2")).toBe(10);
   });
 });

@@ -50,6 +50,22 @@ function parseToken(token: string): { value: number; type?: string } {
   return { value: Number(intVal), type: key };
 }
 
+function promoteTypes(type1?: string, type2?: string): string | undefined {
+  if (!type1) return type2;
+  if (!type2) return type1;
+  const r1 = RANGES[type1];
+  const r2 = RANGES[type2];
+  return r1.max >= r2.max ? type1 : type2;
+}
+
+function checkOverflow(value: number, type?: string): void {
+  if (type) {
+    const r = RANGES[type];
+    const big = BigInt(Math.floor(value));
+    if (big < r.min || big > r.max) throw new Error(`${type} overflow`);
+  }
+}
+
 function evaluateExpression(
   s: string,
   tokens: Array<{ text: string; index: number }>
@@ -59,57 +75,48 @@ function evaluateExpression(
     text: t.text,
     index: t.index,
   }));
-  if (parsed.length === 1) return parsed[0].value;
 
-  let total = parsed[0].value;
-  let totalType = parsed[0].type;
-
+  const ops: string[] = [];
   for (let i = 1; i < parsed.length; i++) {
-    const prev = parsed[i - 1];
-    const cur = parsed[i];
-    const between = s.slice(prev.index + prev.text.length, cur.index);
-    const opMatch = between.match(/[+-]/);
+    const between = s.slice(
+      parsed[i - 1].index + parsed[i - 1].text.length,
+      parsed[i].index
+    );
+    const opMatch = between.match(/[+\-*/]/);
     if (!opMatch) throw new Error("Invalid operator between operands");
-    const op = opMatch[0];
-
-    const val = cur.value;
-    const nextType = cur.type;
-
-    const result = op === "+" ? total + val : total - val;
-
-    // If either operand has an integer type suffix, promote to the widest type and enforce its range
-    const typesToCheck = new Set<string | undefined>();
-    if (totalType) typesToCheck.add(totalType);
-    if (nextType) typesToCheck.add(nextType);
-
-    if (typesToCheck.size > 0) {
-      // Pick the type with the largest maximum to promote to
-      let promoted: string | undefined;
-      let maxVal: bigint | undefined;
-      for (const t of typesToCheck) {
-        if (!t) continue;
-        const range = RANGES[t];
-        if (!range) continue;
-        if (maxVal === undefined || range.max > maxVal) {
-          maxVal = range.max;
-          promoted = t;
-        }
-      }
-
-      if (promoted) {
-        const range = RANGES[promoted];
-        const bigRes = BigInt(result);
-        if (bigRes < range.min || bigRes > range.max) {
-          throw new Error(`${promoted} overflow`);
-        }
-      }
-    }
-
-    total = result;
-    totalType =
-      totalType && nextType && totalType === nextType ? totalType : undefined;
+    ops.push(opMatch[0]);
   }
 
+  const values = parsed.map((p) => ({ value: p.value, type: p.type }));
+  const currentOps = [...ops];
+
+  for (let i = 0; i < currentOps.length; i++) {
+    if (currentOps[i] === "*" || currentOps[i] === "/") {
+      const left = values[i];
+      const right = values[i + 1];
+      const result =
+        currentOps[i] === "*"
+          ? left.value * right.value
+          : left.value / right.value;
+      const type = promoteTypes(left.type, right.type);
+      checkOverflow(result, type);
+      values.splice(i, 2, { value: result, type });
+      currentOps.splice(i, 1);
+      i--;
+    }
+  }
+
+  let total = values[0].value;
+  let totalType = values[0].type;
+  for (let i = 0; i < currentOps.length; i++) {
+    const next = values[i + 1];
+    const result =
+      currentOps[i] === "+" ? total + next.value : total - next.value;
+    const type = promoteTypes(totalType, next.type);
+    checkOverflow(result, type);
+    total = result;
+    totalType = type;
+  }
   return total;
 }
 

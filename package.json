@@ -6,6 +6,7 @@
   "scripts": {
     "cpd": "pmd cpd --dir src --language typescript --minimum-tokens 50 --format text --ignore-literals --ignore-identifiers",
     "test": "vitest run",
+		"lint": "eslint . --ext .ts",
     "prepare": "husky"
   },
   "devDependencies": {
