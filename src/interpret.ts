@@ -80,11 +80,12 @@ function parseToken(token: string, scope: InternalScope): TypedVal {
 }
 
 function promoteTypes(type1?: string, type2?: string): string | undefined {
-  if (!type1) return type2;
-  if (!type2) return type1;
-  if (type1 === "bool" || type2 === "bool") return "bool";
+  if (!type1 || type1 === "bool") return type2;
+  if (!type2 || type2 === "bool") return type1;
   const r1 = RANGES[type1];
   const r2 = RANGES[type2];
+  if (!r1) return type2;
+  if (!r2) return type1;
   return r1.max >= r2.max ? type1 : type2;
 }
 
@@ -149,7 +150,7 @@ function evaluateExpression(
       parsed[i - 1].index + parsed[i - 1].text.length,
       parsed[i].index
     );
-    const opMatch = between.match(/&&|\|\||==|!=|<=|>=|[+\-*/<>]/);
+    const opMatch = between.match(/==|!=|<=|>=|&&|\|\||[+\-*/<>]/);
     if (!opMatch) throw new Error("Invalid operator between operands");
     ops.push(opMatch[0]);
   }
