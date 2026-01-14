@@ -73,6 +73,10 @@ describe("interpret", () => {
     expect(() => interpret("1U8 + 65535U16")).toThrow();
   });
 
+  it("promotes U8 to U16 when adding (1U8 + 255U16 => 256)", () => {
+    expect(interpret("1U8 + 255U16")).toBe(256);
+  });
+
   it("throws when adding plain number to overflowing U8", () => {
     expect(() => interpret("1 + 255U8")).toThrow();
   });

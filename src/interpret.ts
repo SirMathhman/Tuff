@@ -77,19 +77,30 @@ function evaluateExpression(
 
     const result = op === "+" ? total + val : total - val;
 
-    // If either operand has an integer type suffix, enforce range checks against those suffixes
+    // If either operand has an integer type suffix, promote to the widest type and enforce its range
     const typesToCheck = new Set<string | undefined>();
     if (totalType) typesToCheck.add(totalType);
     if (nextType) typesToCheck.add(nextType);
 
     if (typesToCheck.size > 0) {
-      const bigRes = BigInt(result);
+      // Pick the type with the largest maximum to promote to
+      let promoted: string | undefined;
+      let maxVal: bigint | undefined;
       for (const t of typesToCheck) {
         if (!t) continue;
         const range = RANGES[t];
         if (!range) continue;
+        if (maxVal === undefined || range.max > maxVal) {
+          maxVal = range.max;
+          promoted = t;
+        }
+      }
+
+      if (promoted) {
+        const range = RANGES[promoted];
+        const bigRes = BigInt(result);
         if (bigRes < range.min || bigRes > range.max) {
-          throw new Error(`${t} overflow`);
+          throw new Error(`${promoted} overflow`);
         }
       }
     }
