@@ -165,6 +165,10 @@ describe("interpret blocks and variables", () => {
     expect(interpret("let z = (2 + { let x = 4; x }) * 3; z")).toBe(18);
   });
 
+  it("throws on implicit narrowing assignment (let x = 100U16; let y : U8 = x;)", () => {
+    expect(() => interpret("let x = 100U16; let y : U8 = x; y")).toThrow();
+  });
+
   it("throws on U8 multiplication overflow (100 * 3U8)", () => {
     expect(() => interpret("100 * 3U8")).toThrow();
   });

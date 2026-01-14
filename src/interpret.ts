@@ -143,6 +143,15 @@ function evaluateStatements(s: string, scope: Scope): TypedVal {
         throw new Error(`Variable already declared in this scope: ${name}`);
       }
       const res = interpretRaw(expr, scope);
+      if (type && res.type) {
+        const target = RANGES[type];
+        const source = RANGES[res.type];
+        if (target.max < source.max || target.min > source.min) {
+          throw new Error(
+            `Incompatible types: cannot implicitly narrow ${res.type} to ${type}`
+          );
+        }
+      }
       const finalType = type || res.type;
       if (finalType) checkOverflow(res.value, finalType);
       scope[name] = { value: res.value, type: finalType };
