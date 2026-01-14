@@ -9,9 +9,13 @@ const RANGES: Record<string, { min: bigint; max: bigint }> = {
   I64: { min: -9223372036854775808n, max: 9223372036854775807n },
 };
 
-function parseToken(token: string): { value: number; type?: string } {
+type TypedVal = { value: number; type?: string };
+type Scope = Record<string, TypedVal>;
+
+function parseToken(token: string, scope: Scope = {}): TypedVal {
+  if (scope[token]) return scope[token];
   const m = token.match(/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/);
-  if (!m) throw new Error("Invalid number");
+  if (!m) throw new Error(`Invalid token: ${token}`);
   const numStr = m[0];
   const n = parseFloat(numStr);
   if (Number.isNaN(n)) throw new Error("Invalid number");
@@ -68,10 +72,11 @@ function checkOverflow(value: number, type?: string): void {
 
 function evaluateExpression(
   s: string,
-  tokens: Array<{ text: string; index: number }>
+  tokens: Array<{ text: string; index: number }>,
+  scope: Scope = {}
 ): number {
   const parsed = tokens.map((t) => ({
-    ...parseToken(t.text),
+    ...parseToken(t.text, scope),
     text: t.text,
     index: t.index,
   }));
@@ -120,7 +125,7 @@ function evaluateExpression(
   return total;
 }
 
-export function interpret(input: string): number {
+export function interpret(input: string, scope: Scope = {}): number {
   let s = input.trim();
   while (s.includes("(") || s.includes("{")) {
     const lastOpenParen = s.lastIndexOf("(");
@@ -130,19 +135,41 @@ export function interpret(input: string): number {
     const closeChar = isCurly ? "}" : ")";
     const nextClose = s.indexOf(closeChar, lastOpen);
     if (nextClose === -1)
-      throw new Error(`Missing closing ${isCurly ? "curly brace" : "parenthesis"}`);
+      throw new Error(
+        `Missing closing ${isCurly ? "curly brace" : "parenthesis"}`
+      );
     const internal = s.slice(lastOpen + 1, nextClose);
-    const result = interpret(internal);
+    const result = interpret(internal, isCurly ? { ...scope } : scope);
     s = s.slice(0, lastOpen) + result + s.slice(nextClose + 1);
   }
 
-  const tokenRegex =
-    /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?(?:[uUiI](?:8|16|32|64))?/g;
-  const tokens: Array<{ text: string; index: number }> = [];
-  let m: RegExpExecArray | null;
-  while ((m = tokenRegex.exec(s))) tokens.push({ text: m[0], index: m.index });
-
-  if (tokens.length === 0) throw new Error("Invalid number");
-  if (tokens.length === 1) return parseToken(tokens[0].text).value;
-  return evaluateExpression(s, tokens);
+  const statements = s
+    .split(";")
+    .map((st) => st.trim())
+    .filter((st) => st.length > 0);
+  let lastVal = 0;
+  for (const st of statements) {
+    const letMatch = st.match(
+      /^let\s+([a-zA-Z_]\w*)\s*:\s*([uUiI](?:8|16|32|64))\s*=\s*(.+)$/
+    );
+    if (letMatch) {
+      const [, name, type, expr] = letMatch;
+      const val = interpret(expr, scope);
+      checkOverflow(val, type);
+      scope[name] = { value: val, type };
+      lastVal = val;
+    } else {
+      const tokenRegex =
+        /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?(?:[uUiI](?:8|16|32|64))?|[a-zA-Z_]\w*/g;
+      const tokens: Array<{ text: string; index: number }> = [];
+      let m: RegExpExecArray | null;
+      while ((m = tokenRegex.exec(st)))
+        tokens.push({ text: m[0], index: m.index });
+      if (tokens.length === 0) throw new Error("Invalid statement");
+      if (tokens.length === 1)
+        lastVal = parseToken(tokens[0].text, scope).value;
+      else lastVal = evaluateExpression(st, tokens, scope);
+    }
+  }
+  return lastVal;
 }

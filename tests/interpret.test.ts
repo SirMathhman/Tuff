@@ -135,6 +135,10 @@ describe("interpret complex expressions", () => {
     expect(interpret("(2 + { 4 }) * 3")).toBe(18);
   });
 
+  it("handles variable declarations and blocks ((2 + { let x : I32 = 4; x }) * 3 => 18)", () => {
+    expect(interpret("(2 + { let x : I32 = 4; x }) * 3")).toBe(18);
+  });
+
   it("throws on U8 multiplication overflow (100 * 3U8)", () => {
     expect(() => interpret("100 * 3U8")).toThrow();
   });
