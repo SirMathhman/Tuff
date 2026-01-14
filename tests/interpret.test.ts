@@ -69,6 +69,10 @@ describe("interpret", () => {
     expect(() => interpret("1U8 + 255U8")).toThrow();
   });
 
+  it("throws on U8 + U16 overflow", () => {
+    expect(() => interpret("1U8 + 65535U16")).toThrow();
+  });
+
   it("throws when adding plain number to overflowing U8", () => {
     expect(() => interpret("1 + 255U8")).toThrow();
   });
