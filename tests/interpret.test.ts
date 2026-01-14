@@ -88,4 +88,8 @@ describe("interpret", () => {
   it("adds U8 and plain number", () => {
     expect(interpret("1U8 + 2")).toBe(3);
   });
+
+  it("adds mixed sequence with promotion (1U8 + 2 + 3U16 => 6)", () => {
+    expect(interpret("1U8 + 2 + 3U16")).toBe(6);
+  });
 });
