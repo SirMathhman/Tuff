@@ -6,7 +6,11 @@ describe("interpret", () => {
     expect(interpret("100")).toBe(100);
   });
 
-	it("parses numeric prefix when trailing chars present", () => {
-		expect(interpret("100U8")).toBe(100);
+  it("parses numeric prefix when trailing chars present", () => {
+    expect(interpret("100U8")).toBe(100);
+  });
+
+	it("throws on negative numeric prefix", () => {
+		expect(() => interpret("-100U8")).toThrow();
 	});
 });
