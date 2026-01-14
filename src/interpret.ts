@@ -266,38 +266,31 @@ function checkOverflow(value: number, type?: string): void {
 }
 
 function applyOp(left: TypedVal, right: TypedVal, op: string): TypedVal {
-  let res: number;
+  const opMap: Record<string, (a: number, b: number) => number> = {
+    "*": (a, b) => a * b,
+    "/": (a, b) => a / b,
+    "%": (a, b) => a % b,
+    "+": (a, b) => a + b,
+    "-": (a, b) => a - b,
+    "<": (a, b) => (a < b ? 1 : 0),
+    ">": (a, b) => (a > b ? 1 : 0),
+    "<=": (a, b) => (a <= b ? 1 : 0),
+    ">=": (a, b) => (a >= b ? 1 : 0),
+    "==": (a, b) => (a === b ? 1 : 0),
+    "!=": (a, b) => (a !== b ? 1 : 0),
+    "&&": (a, b) => (a && b ? 1 : 0),
+    "||": (a, b) => (a || b ? 1 : 0),
+  };
+
+  if (!opMap[op]) throw new Error(`Unknown operator: ${op}`);
+
   let type = promoteTypes(left.type, right.type);
-  if (op === "*") res = left.value * right.value;
-  else if (op === "/") res = left.value / right.value;
-  else if (op === "%") res = left.value % right.value;
-  else if (op === "+") res = left.value + right.value;
-  else if (op === "-") res = left.value - right.value;
-  else if (op === "<") {
-    res = left.value < right.value ? 1 : 0;
+  const res = opMap[op](left.value, right.value);
+
+  if (["<", ">", "<=", ">=", "==", "!=", "&&", "||"].includes(op)) {
     type = "Bool";
-  } else if (op === ">") {
-    res = left.value > right.value ? 1 : 0;
-    type = "Bool";
-  } else if (op === "<=") {
-    res = left.value <= right.value ? 1 : 0;
-    type = "Bool";
-  } else if (op === ">=") {
-    res = left.value >= right.value ? 1 : 0;
-    type = "Bool";
-  } else if (op === "==") {
-    res = left.value === right.value ? 1 : 0;
-    type = "Bool";
-  } else if (op === "!=") {
-    res = left.value !== right.value ? 1 : 0;
-    type = "Bool";
-  } else if (op === "&&") {
-    res = left.value && right.value ? 1 : 0;
-    type = "Bool";
-  } else if (op === "||") {
-    res = left.value || right.value ? 1 : 0;
-    type = "Bool";
-  } else throw new Error(`Unknown operator: ${op}`);
+  }
+
   if (type !== "Bool") checkOverflow(res, type);
   return { value: res, type };
 }
@@ -320,7 +313,7 @@ function evaluateExpression(
       parsed[i].index
     );
     const opMatch = between.match(/==|!=|<=|>=|&&|\|\||[+\-*/%<>]/);
-    if (!opMatch) throw new Error("Invalid operator between operands");
+    if (!opMatch) throw new Error(`Invalid operator between operands. Expression: "${s}", between: "${between}", tokens: ${tokens.map(t => `"${t.text}"`).join(", ")}`);
     ops.push(opMatch[0]);
   }
 
@@ -552,9 +545,9 @@ function extractTypeAndExpr(st: string): {
   let depth = 0;
   for (let i = st.length - 1; i >= 0; i--) {
     const char = st[i];
-    // When going backward, we encounter closing parens/braces first
-    if (char === ")" || char === "}") depth++;
-    if (char === "(" || char === "{") depth--;
+    // When going backward, we encounter closing brackets/braces/parens first
+    if (char === ")" || char === "}" || char === "]") depth++;
+    if (char === "(" || char === "{" || char === "[") depth--;
     // Look for = at depth 0, but not part of =>, ==, !=, +=, etc.
     if (char === "=" && depth === 0) {
       const nextChar = i + 1 < st.length ? st[i + 1] : "";
@@ -607,6 +600,64 @@ function parseParameters(
       if (!pMatch) throw new Error(`Invalid parameter: ${p}`);
       return { name: pMatch[1], type: pMatch[2].trim() };
     });
+}
+
+function isArrayType(type: string | null): boolean {
+  // Check if type matches [ElementType; InitCount; TotalCount]
+  return type ? /^\[.+;\s*\d+;\s*\d+\]$/.test(type) : false;
+}
+
+function parseArrayType(
+  type: string
+): {
+  elementType: string;
+  initCount: number;
+  totalCount: number;
+} | null {
+  const match = type.match(/^\[(.+);\s*(\d+);\s*(\d+)\]$/);
+  if (!match) return null;
+  return {
+    elementType: match[1].trim(),
+    initCount: parseInt(match[2], 10),
+    totalCount: parseInt(match[3], 10),
+  };
+}
+
+function parseArrayLiteral(expr: string, scope: InternalScope): TypedVal[] {
+  // Parse [1, 2, 3] or similar
+  if (!expr.trim().startsWith("[") || !expr.trim().endsWith("]")) {
+    throw new Error(`Invalid array literal: ${expr}`);
+  }
+  const inner = expr.trim().slice(1, -1);
+  if (!inner.trim()) return [];
+
+  const elements: TypedVal[] = [];
+  let current = "";
+  let depth = 0;
+  
+  for (let i = 0; i < inner.length; i++) {
+    const char = inner[i];
+    if (char === "(" || char === "[" || char === "{") {
+      depth++;
+    } else if (char === ")" || char === "]" || char === "}") {
+      depth--;
+    } else if (char === "," && depth === 0) {
+      const trimmed = current.trim();
+      if (trimmed) {
+        elements.push(interpretRaw(trimmed, scope));
+      }
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  
+  const trimmed = current.trim();
+  if (trimmed) {
+    elements.push(interpretRaw(trimmed, scope));
+  }
+  
+  return elements;
 }
 
 function parseFunctionExpression(
@@ -710,6 +761,33 @@ function parseArrowFunctionExpression(
   return { value: varName as unknown as number, type: type ?? undefined };
 }
 
+function initializeArray(
+  type: string,
+  expr: string,
+  scope: InternalScope
+): TypedVal {
+  const arrayType = parseArrayType(type);
+  if (!arrayType) throw new Error(`Invalid array type: ${type}`);
+  
+  const elements = parseArrayLiteral(expr, scope);
+  if (elements.length > arrayType.initCount) {
+    throw new Error(
+      `Too many elements: expected ${arrayType.initCount}, got ${elements.length}`
+    );
+  }
+  
+  // Store array as object with elements and metadata
+  return {
+    value: {
+      elements,
+      elementType: arrayType.elementType,
+      initCount: arrayType.initCount,
+      totalCount: arrayType.totalCount,
+    },
+    type: `[${arrayType.elementType}; ${arrayType.initCount}; ${arrayType.totalCount}]`,
+  };
+}
+
 function handleLet(
   st: string,
   scope: InternalScope,
@@ -743,8 +821,11 @@ function handleLet(
   }
   let res: TypedVal = { value: 0, type: type ?? undefined };
   if (expr) {
-    // Special handling for function expressions
-    if (expr.startsWith("fn ")) {
+    // Special handling for arrays
+    if (isArrayType(type)) {
+      res = initializeArray(type!, expr, scope);
+    } else if (expr.startsWith("fn ")) {
+      // Special handling for function expressions
       res = parseFunctionExpression(expr, scope, type);
     } else if (isArrowFunctionExpression(expr)) {
       // Arrow function syntax: (params) : returnType => body
@@ -757,7 +838,7 @@ function handleLet(
   }
   const resolvedType = type ? resolveTypeAlias(type, scope) : type;
   const finalType = resolvedType || res.type;
-  if (finalType) checkOverflow(res.value as number, finalType);
+  if (finalType && !isArrayType(finalType)) checkOverflow(res.value as number, finalType);
   scope.values[name] = { value: res.value, type: finalType, mutable };
   localDecls.add(name);
   return res;
@@ -1051,8 +1132,8 @@ function splitStatements(s: string): string[] {
   let depth = 0;
   for (let i = 0; i < s.length; i++) {
     const char = s[i];
-    if (char === "{" || char === "(") depth++;
-    if (char === "}" || char === ")") depth--;
+    if (char === "{" || char === "(" || char === "[") depth++;
+    if (char === "}" || char === ")" || char === "]") depth--;
     if (char === ";" && depth === 0) {
       result.push(current.trim());
       current = "";
@@ -1081,21 +1162,24 @@ function splitStatements(s: string): string[] {
   return result;
 }
 
-function resolveBrackets(s: string, scope: InternalScope): string {
+function shouldSkipBracketResolution(s: string): boolean {
   // Skip bracket resolution for struct definitions, struct initialization, struct literals, function declarations, and arrow functions
-  // Check for struct literals with member access (e.g., Point { x : 3 }.x)
+  // Also skip array declarations and initializations
   const isStructLiteral = /[a-zA-Z_]\w*\s*\{[^}]+\}\s*\./.test(s);
   const isArrowFunction = /\([^)]*\)\s*:\s*[a-zA-Z_]\w+\s*=>/.test(s);
-  if (
+  // Match array types - any let statement with : [ in it
+  const isArrayType = /^let\s+(mut\s+)?[a-zA-Z_]\w*\s*:\s*\[/.test(s);
+  return !!(
     s.match(/^struct\s+[a-zA-Z_]\w*\s*\{[^}]+\}/) ||
     s.match(/^let\s+(mut\s+)?[a-zA-Z_]\w*\s*=\s*[a-zA-Z_]\w+\s*\{[^}]+\}/) ||
     s.match(/^fn\s+[a-zA-Z_]\w+\s*\([^)]*\)\s*:\s*[a-zA-Z_]\w+\s*=>/) ||
     isStructLiteral ||
-    isArrowFunction
-  ) {
-    return s.trim();
-  }
+    isArrowFunction ||
+    isArrayType
+  );
+}
 
+function resolveBracketsInString(s: string, scope: InternalScope): string {
   let res = s.trim();
   while (res.includes("(") || res.includes("{")) {
     const lastOpenParen = res.lastIndexOf("(");
@@ -1137,6 +1221,13 @@ function resolveBrackets(s: string, scope: InternalScope): string {
       res.slice(nextClose + 1);
   }
   return res;
+}
+
+function resolveBrackets(s: string, scope: InternalScope): string {
+  if (shouldSkipBracketResolution(s)) {
+    return s.trim();
+  }
+  return resolveBracketsInString(s, scope);
 }
 
 function parseTypeAlias(st: string, scope: InternalScope): void {
@@ -1347,6 +1438,38 @@ function tryHandleDirectFunctionCall(
   return null;
 }
 
+function tryHandleArrayAccess(
+  st: string,
+  scope: InternalScope
+): TypedVal | null {
+  // Match array[index] pattern
+  const arrayAccessMatch = st.match(/^([a-zA-Z_]\w*)\s*\[([^\]]+)\]\s*$/);
+  if (!arrayAccessMatch) return null;
+
+  const [, arrayName, indexExpr] = arrayAccessMatch;
+  const arrayVar = getFromScope(scope, arrayName);
+  
+  // If we matched the pattern but the variable doesn't exist or isn't an array,
+  // still try to handle it as array access (and error appropriately)
+  if (!arrayVar) {
+    throw new Error(`Variable not found: ${arrayName}`);
+  }
+  
+  const val = arrayVar.value;
+  if (typeof val !== "object" || !Object.prototype.hasOwnProperty.call(val, "elements")) {
+    throw new Error(`${arrayName} is not an array`);
+  }
+
+  const indexVal = interpretRaw(indexExpr, scope);
+  const index = indexVal.value;
+
+  if (!Number.isInteger(index) || index < 0 || index >= val.elements.length) {
+    throw new Error(`Array index out of bounds: ${index}`);
+  }
+
+  return val.elements[index];
+}
+
 function tryHandleTypeCheckingOperator(
   st: string,
   scope: InternalScope
@@ -1366,12 +1489,37 @@ function tryHandleTypeCheckingOperator(
   return { value: matches ? 1 : 0, type: "Bool" };
 }
 
+function resolveArrayAccesses(expr: string, scope: InternalScope): string {
+  let result = expr;
+  let changed = true;
+  while (changed) {
+    changed = false;
+    // Match array accesses: identifier[index]
+    const arrayAccessMatch = result.match(/([a-zA-Z_]\w*)\s*\[([^\]]+)\]/);
+    if (arrayAccessMatch) {
+      const [fullMatch] = arrayAccessMatch;
+      const arrayAccess = tryHandleArrayAccess(fullMatch, scope);
+      if (arrayAccess !== null) {
+        result = result.replace(fullMatch, String(arrayAccess.value));
+        changed = true;
+        continue;
+      }
+      break;
+    }
+  }
+  return result;
+}
+
 function evaluateExpressionStatement(
   st: string,
   scope: InternalScope
 ): TypedVal {
   // Try to handle function calls (name(...))
   let result = tryHandleDirectFunctionCall(st, scope);
+  if (result !== null) return result;
+
+  // Try to handle array access (name[index])
+  result = tryHandleArrayAccess(st, scope);
   if (result !== null) return result;
 
   // Try to handle struct literal expressions directly
@@ -1385,7 +1533,10 @@ function evaluateExpressionStatement(
   const resolvedSt = resolveStructLiterals(st, scope);
 
   // Resolve any function calls in the expression
-  const expr = resolveFunctionCallsInExpression(resolvedSt, scope);
+  let expr = resolveFunctionCallsInExpression(resolvedSt, scope);
+  
+  // Resolve any array accesses in the expression
+  expr = resolveArrayAccesses(expr, scope);
 
   const tokenRegex =
     /!*[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?(?:[uUiI](?:8|16|32|64)|bool)?|!*[a-zA-Z_]\w*(?:\.\w+)*/g;
