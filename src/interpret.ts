@@ -26,6 +26,11 @@ type InternalScope = {
   functions?: Record<string, FunctionDef>;
 };
 
+class YieldSignal {
+  constructor(public value: TypedVal) {}
+}
+
+
 function getFromScope(
   scope: InternalScope,
   name: string
@@ -612,6 +617,26 @@ function parseBranch(s: string, pos: number): { content: string; end: number } {
     if (end === -1) throw new Error("Missing closing brace for branch");
     return { content: s.slice(pos + 1, end), end: end + 1 };
   }
+  // No braces - look for end of statement
+  let depth = 0;
+  let stmtEnd = pos;
+  for (let i = pos; i < s.length; i++) {
+    if (s[i] === "{" || s[i] === "(") depth++;
+    else if (s[i] === "}" || s[i] === ")") depth--;
+    else if (s[i] === ";" && depth === 0) {
+      stmtEnd = i;
+      break;
+    }
+  }
+  // Check for else/while after the statement
+  let checkPos = stmtEnd;
+  while (checkPos < s.length && /[\s;]/.test(s[checkPos])) checkPos++;
+  if (checkPos < s.length) {
+    const nextPart = s.slice(checkPos);
+    if (nextPart.startsWith("else") || nextPart.startsWith("while")) {
+      return { content: s.slice(pos, stmtEnd).trim(), end: stmtEnd };
+    }
+  }
   const elseMatch = s.slice(pos).match(/\belse\b/);
   if (elseMatch) {
     const content = s.slice(pos, pos + elseMatch.index!).trim();
@@ -660,12 +685,19 @@ function handleIf(
     finalPos = elseRes.end;
   }
 
-  const res = condition.value
-    ? interpretRaw(thenRes.content, { values: {}, parent: scope, structs: {} })
-    : elsePart !== undefined
-    ? interpretRaw(elsePart, { values: {}, parent: scope, structs: {} })
-    : { value: 0 };
-  return { val: res, end: finalPos };
+  try {
+    const res = condition.value
+      ? interpretRaw(thenRes.content, { values: {}, parent: scope, structs: {} })
+      : elsePart !== undefined
+      ? interpretRaw(elsePart, { values: {}, parent: scope, structs: {} })
+      : { value: 0 };
+    return { val: res, end: finalPos };
+  } catch (e) {
+    if (e instanceof YieldSignal) {
+      throw e;
+    }
+    throw e;
+  }
 }
 
 function handleWhile(
@@ -678,8 +710,15 @@ function handleWhile(
   const finalPos = bodyRes.end;
 
   let lastVal: TypedVal = { value: 0 };
-  while (interpretRaw(condStr, scope).value) {
-    lastVal = interpretRaw(bodyStr, { values: {}, parent: scope, structs: {} });
+  try {
+    while (interpretRaw(condStr, scope).value) {
+      lastVal = interpretRaw(bodyStr, { values: {}, parent: scope, structs: {} });
+    }
+  } catch (e) {
+    if (e instanceof YieldSignal) {
+      throw e;
+    }
+    throw e;
   }
   return { val: lastVal, end: finalPos };
 }
@@ -704,9 +743,16 @@ function handleDoWhile(
   const finalPos = pos + condEnd + 1;
 
   let lastVal: TypedVal = { value: 0 };
-  do {
-    lastVal = interpretRaw(bodyStr, { values: {}, parent: scope, structs: {} });
-  } while (interpretRaw(condStr, scope).value);
+  try {
+    do {
+      lastVal = interpretRaw(bodyStr, { values: {}, parent: scope, structs: {} });
+    } while (interpretRaw(condStr, scope).value);
+  } catch (e) {
+    if (e instanceof YieldSignal) {
+      throw e;
+    }
+    throw e;
+  }
 
   return { val: lastVal, end: finalPos };
 }
@@ -722,23 +768,30 @@ function handleMatch(
   const finalPos = bodyRes.end;
 
   const cases = splitStatements(bodyStr);
-  for (const c of cases) {
-    const m = c.match(/^case\s+(.+)\s*=>\s*(.+)$/);
-    if (!m) continue;
-    const [, patternStr, consequenceStr] = m;
-    const pattern = patternStr.trim();
-    let isMatch = false;
-    if (pattern === "_") {
-      isMatch = true;
-    } else {
-      const pVal = interpretRaw(pattern, scope);
-      if (pVal.value === target.value) isMatch = true;
-    }
+  try {
+    for (const c of cases) {
+      const m = c.match(/^case\s+(.+)\s*=>\s*(.+)$/);
+      if (!m) continue;
+      const [, patternStr, consequenceStr] = m;
+      const pattern = patternStr.trim();
+      let isMatch = false;
+      if (pattern === "_") {
+        isMatch = true;
+      } else {
+        const pVal = interpretRaw(pattern, scope);
+        if (pVal.value === target.value) isMatch = true;
+      }
 
-    if (isMatch) {
-      const res = interpretRaw(consequenceStr, scope);
-      return { val: res, end: finalPos };
+      if (isMatch) {
+        const res = interpretRaw(consequenceStr, scope);
+        return { val: res, end: finalPos };
+      }
     }
+  } catch (e) {
+    if (e instanceof YieldSignal) {
+      throw e;
+    }
+    throw e;
   }
   return { val: { value: 0 }, end: finalPos };
 }
@@ -767,7 +820,18 @@ function resolveExpressions(
       searchPos = found - 1;
     }
     if (kwIdx === -1) break;
-    const { val, end } = handler(res.slice(kwIdx), scope);
+    let val: TypedVal;
+    let end: number;
+    try {
+      const result = handler(res.slice(kwIdx), scope);
+      val = result.val;
+      end = result.end;
+    } catch (e) {
+      if (e instanceof YieldSignal) {
+        throw e;
+      }
+      throw e;
+    }
     // Don't append type suffix for Bool (boolean values are just 0 or 1)
     const typeSuffix = val.type && val.type !== "Bool" ? val.type : "";
     res = res.slice(0, kwIdx) + val.value + typeSuffix + res.slice(kwIdx + end);
@@ -1061,14 +1125,14 @@ function processSingleStatement(
   rawSt: string,
   scope: InternalScope,
   localDecls: Set<string>
-): { lastVal: TypedVal; shouldReturn: boolean } {
+): TypedVal {
   if (rawSt.startsWith("yield ")) {
     let expr = rawSt.slice(6).trim();
     if (expr.endsWith(";")) {
       expr = expr.slice(0, -1).trim();
     }
-    const lastVal = interpretRaw(expr, scope);
-    return { lastVal, shouldReturn: true };
+    const yieldValue = interpretRaw(expr, scope);
+    throw new YieldSignal(yieldValue);
   }
 
   let st = resolveExpressions(rawSt, "do", handleDoWhile, scope);
@@ -1079,23 +1143,23 @@ function processSingleStatement(
 
   if (st.startsWith("type ")) {
     parseTypeAlias(st, scope);
-    return { lastVal: { value: 0 }, shouldReturn: false };
+    return { value: 0 };
   }
 
   if (st.startsWith("struct ")) {
     parseStructDef(st, scope);
-    return { lastVal: { value: 0 }, shouldReturn: false };
+    return { value: 0 };
   }
 
   if (st.startsWith("fn ")) {
     parseFunctionDef(st, scope);
-    return { lastVal: { value: 0 }, shouldReturn: false };
+    return { value: 0 };
   }
 
-  if (!st) return { lastVal: { value: 0 }, shouldReturn: false };
+  if (!st) return { value: 0 };
 
   if (st.includes(";") && splitStatements(st).length > 1) {
-    return { lastVal: evaluateStatements(st, scope), shouldReturn: false };
+    return evaluateStatements(st, scope);
   }
 
   let lastVal: TypedVal = { value: 0 };
@@ -1110,7 +1174,7 @@ function processSingleStatement(
     lastVal = evaluateExpressionStatement(st, scope);
   }
 
-  return { lastVal, shouldReturn: false };
+  return lastVal;
 }
 
 function evaluateStatements(s: string, scope: InternalScope): TypedVal {
@@ -1118,15 +1182,17 @@ function evaluateStatements(s: string, scope: InternalScope): TypedVal {
   let lastVal: TypedVal = { value: 0 };
   const localDecls = new Set<string>();
 
-  for (const rawSt of statements) {
-    const { lastVal: newVal, shouldReturn } = processSingleStatement(
-      rawSt,
-      scope,
-      localDecls
-    );
-    lastVal = newVal;
-    if (shouldReturn) return lastVal;
+  try {
+    for (const rawSt of statements) {
+      lastVal = processSingleStatement(rawSt, scope, localDecls);
+    }
+  } catch (e) {
+    if (e instanceof YieldSignal) {
+      return e.value;
+    }
+    throw e;
   }
+
   return lastVal;
 }
 

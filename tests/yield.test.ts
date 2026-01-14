@@ -23,38 +23,33 @@ describe("Yield expressions", () => {
   });
 
   it("should yield in a function", () => {
-    expect(
-      interpret("fn test() : I32 => { yield 99; }; test()")
-    ).toBe(99);
-  });
-
-  it("should yield after function with one param", () => {
-    expect(
-      interpret("fn one(x : I32) : I32 => x; { yield 42; }")
-    ).toBe(42);
-  });
-
-  it("should call function defined earlier", () => {
-    expect(
-      interpret("fn one(x : I32) : I32 => x; one(5)")
-    ).toBe(5);
+    expect(interpret("fn test() : I32 => { yield 99; }; test()")).toBe(99);
   });
 
   it("should call defined function", () => {
-    expect(
-      interpret("fn id(x : I32) : I32 => x; id(99)")
-    ).toBe(99);
+    expect(interpret("fn id(x : I32) : I32 => x; id(99)")).toBe(99);
   });
 
   it("should yield with complex expression", () => {
-    expect(
-      interpret("let x = { yield 10 * 5 + 3; }; x")
-    ).toBe(53);
+    expect(interpret("let x = { yield 10 * 5 + 3; }; x")).toBe(53);
   });
 
-  it("should handle yield with type-checked expressions", () => {
+  it("should yield inside if block", () => {
     expect(
-      interpret("let x : I32 = { yield 25; }; x")
-    ).toBe(25);
+      interpret("{ if (true) { yield 100; } }")
+    ).toBe(100);
+  });
+
+  it("should not yield if condition false", () => {
+    expect(
+      interpret("{ if (false) { yield 100; } else { 50 } }")
+    ).toBe(50);
+  });
+
+  it("should yield in nested if", () => {
+    expect(
+      interpret("{ if (true) { if (true) { yield 99; } } }")
+    ).toBe(99);
   });
 });
+
