@@ -540,6 +540,95 @@ function handleFunctionCall(
   return { value: result.value, type: func.returnType };
 }
 
+function extractTypeAndExpr(st: string): {
+  type: string | null;
+  expr: string | null;
+  name: string;
+  mutable: boolean;
+} | null {
+  // Find the = sign that separates type/name from expression
+  let eqPos = -1;
+  let depth = 0;
+  for (let i = st.length - 1; i >= 0; i--) {
+    const char = st[i];
+    if (char === ")" || char === "}") depth++;
+    if (char === "(" || char === "{") depth--;
+    // Look for = at depth 0, but not part of =>, ==, !=, +=, etc.
+    if (char === "=" && depth === 0) {
+      const nextChar = i + 1 < st.length ? st[i + 1] : "";
+      const prevChar = i > 0 ? st[i - 1] : "";
+      // Skip if it's part of =>, ==, !=, +=, -=, *=, /=, %=, >=, >
+      if (
+        nextChar !== "=" &&
+        nextChar !== ">" &&
+        prevChar !== "=" &&
+        prevChar !== "!" &&
+        prevChar !== "+" &&
+        prevChar !== "-" &&
+        prevChar !== "*" &&
+        prevChar !== "/" &&
+        prevChar !== "%" &&
+        prevChar !== ">"
+      ) {
+        eqPos = i;
+        break;
+      }
+    }
+  }
+
+  let typeAndName = st;
+  let expr = null;
+  if (eqPos !== -1) {
+    typeAndName = st.slice(0, eqPos).trim();
+    expr = st.slice(eqPos + 1).trim();
+  }
+
+  // Parse "let [mut] name [: type]"
+  const m = typeAndName.match(
+    /^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*(.+))?$/
+  );
+  if (!m) return null;
+
+  const [, mutS, name, type] = m;
+  return { type: type || null, expr, name, mutable: !!mutS };
+}
+
+function parseFunctionExpression(
+  expr: string,
+  scope: InternalScope,
+  type: string | null
+): TypedVal {
+  // Parse the function definition - simpler regex
+  const fnMatch = expr.match(
+    /^fn\s+([a-zA-Z_]\w+)\s*\(([^)]*)\)\s*:\s*([^=]+)\s*=>\s*(.+)$/
+  );
+  if (!fnMatch) {
+    throw new Error(`Invalid function expression: "${expr}"`);
+  }
+  const [, fnName, paramsStr, returnType, body] = fnMatch;
+  const params = paramsStr
+    .split(",")
+    .filter((p) => p.trim())
+    .map((p) => {
+      const pMatch = p.trim().match(/^([a-zA-Z_]\w*)\s*:\s*(.+)$/);
+      if (!pMatch) throw new Error(`Invalid parameter: ${p}`);
+      return { name: pMatch[1], type: pMatch[2].trim() };
+    });
+
+  const func: FunctionDef = {
+    params,
+    returnType: returnType.trim(),
+    body,
+  };
+
+  // Store the function in scope
+  if (!scope.functions) scope.functions = {};
+  scope.functions[fnName] = func;
+
+  // Create a function reference value - we'll store the function name as the value
+  return { value: fnName as unknown as number, type: type ?? undefined };
+}
+
 function handleLet(
   st: string,
   scope: InternalScope,
@@ -561,29 +650,31 @@ function handleLet(
     );
   }
 
-  // Regular let statement
-  const m = st.match(
-    /^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*([a-zA-Z_]\w*))?(?:\s*=\s*(.+))?$/
-  );
-
-  if (!m) {
+  // Parse using new function that handles complex types
+  const parsed = extractTypeAndExpr(st);
+  if (!parsed) {
     throw new Error("Invalid let declaration");
   }
 
-  const [, mutS, name, type, expr] = m;
+  const { type, expr, name, mutable } = parsed;
   if (localDecls.has(name)) {
     throw new Error(`Variable already declared in this scope: ${name}`);
   }
-  let res: TypedVal = { value: 0, type };
+  let res: TypedVal = { value: 0, type: type ?? undefined };
   if (expr) {
-    res = interpretRaw(expr, scope);
-    const resolvedType = type ? resolveTypeAlias(type, scope) : type;
-    if (resolvedType && res.type) checkNarrowing(resolvedType, res.type);
+    // Special handling for function expressions
+    if (expr.startsWith("fn ")) {
+      res = parseFunctionExpression(expr, scope, type);
+    } else {
+      res = interpretRaw(expr, scope);
+      const resolvedType = type ? resolveTypeAlias(type, scope) : type;
+      if (resolvedType && res.type) checkNarrowing(resolvedType, res.type);
+    }
   }
   const resolvedType = type ? resolveTypeAlias(type, scope) : type;
   const finalType = resolvedType || res.type;
   if (finalType) checkOverflow(res.value as number, finalType);
-  scope.values[name] = { value: res.value, type: finalType, mutable: !!mutS };
+  scope.values[name] = { value: res.value, type: finalType, mutable };
   localDecls.add(name);
   return res;
 }
@@ -1102,60 +1193,127 @@ function evaluateStructLiteralExpression(
   return { value: fields, type: structName };
 }
 
+function getFunctionByNameOrVariable(
+  funcName: string,
+  scope: InternalScope
+): FunctionDef | null {
+  // Check if it's a named function
+  let func = getFunctionFromScope(scope, funcName);
+  if (func) return func;
+
+  // Check if it's a variable holding a function
+  const funcVar = getFromScope(scope, funcName);
+  if (
+    funcVar &&
+    funcVar.type &&
+    (funcVar.type.includes("=>") ||
+      funcVar.type.includes("I32") ||
+      funcVar.type.includes("Bool"))
+  ) {
+    // funcVar.value should be a function name
+    const actualFuncName = funcVar.value as unknown as string;
+    func = getFunctionFromScope(scope, actualFuncName);
+    if (func) return func;
+  }
+  return null;
+}
+
+function resolveFunctionCallsInExpression(
+  expr: string,
+  scope: InternalScope
+): string {
+  let result = expr;
+  let changed = true;
+  while (changed) {
+    changed = false;
+    // Match function calls: identifier(args) - greedy match for nested parentheses
+    const funcCallMatch = result.match(
+      /([a-zA-Z_]\w*)\s*\(([^()]*(?:\([^()]*\))*[^()]*)\)/
+    );
+    if (funcCallMatch) {
+      const [fullMatch, funcName, argsStr] = funcCallMatch;
+      const func = getFunctionByNameOrVariable(funcName, scope);
+      if (func) {
+        const callResult = handleFunctionCall(funcName, func, argsStr, scope);
+        result = result.replace(fullMatch, String(callResult.value));
+        changed = true;
+        continue;
+      }
+      break;
+    }
+  }
+  return result;
+}
+
+function tryHandleDirectFunctionCall(
+  st: string,
+  scope: InternalScope
+): TypedVal | null {
+  const funcCallMatch = st.match(/^([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*$/);
+  if (!funcCallMatch) return null;
+
+  const [, funcName, argsStr] = funcCallMatch;
+  const func = getFunctionByNameOrVariable(funcName, scope);
+  if (func) {
+    return handleFunctionCall(funcName, func, argsStr, scope);
+  }
+  return null;
+}
+
+function tryHandleTypeCheckingOperator(
+  st: string,
+  scope: InternalScope
+): TypedVal | null {
+  const isOpMatch = st.match(/^(.+?)\s+is\s+([a-zA-Z_]\w+)\s*$/);
+  if (!isOpMatch) return null;
+
+  const [, exprPart, typePart] = isOpMatch;
+  const exprResult = interpretRaw(exprPart, scope);
+  const resolvedType = resolveTypeAlias(typePart, scope);
+  const matches = valueMatchesType(
+    exprResult.value,
+    exprResult.type,
+    resolvedType,
+    scope
+  );
+  return { value: matches ? 1 : 0, type: "Bool" };
+}
+
 function evaluateExpressionStatement(
   st: string,
   scope: InternalScope
 ): TypedVal {
-  // First, try to handle function calls (name(...))
-  const funcCallMatch = st.match(/^([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*$/);
-  if (funcCallMatch) {
-    const [, funcName, argsStr] = funcCallMatch;
-    const func = getFunctionFromScope(scope, funcName);
-    if (func) {
-      return handleFunctionCall(funcName, func, argsStr, scope);
-    }
-  }
+  // Try to handle function calls (name(...))
+  let result = tryHandleDirectFunctionCall(st, scope);
+  if (result !== null) return result;
 
-  // First, try to handle struct literal expressions directly
-  const structLiteralResult = evaluateStructLiteralExpression(st, scope);
-  if (structLiteralResult !== null) {
-    return structLiteralResult;
-  }
+  // Try to handle struct literal expressions directly
+  result = evaluateStructLiteralExpression(st, scope);
+  if (result !== null) return result;
 
-  // Handle 'is' type checking operator (e.g., value is Type)
-  const isOpMatch = st.match(/^(.+?)\s+is\s+([a-zA-Z_]\w+)\s*$/);
-  if (isOpMatch) {
-    const [, exprPart, typePart] = isOpMatch;
-    const exprResult = interpretRaw(exprPart, scope);
-    const resolvedType = resolveTypeAlias(typePart, scope);
-    const matches = valueMatchesType(
-      exprResult.value,
-      exprResult.type,
-      resolvedType,
-      scope
-    );
-    return { value: matches ? 1 : 0, type: "Bool" };
-  }
+  // Try to handle 'is' type checking operator
+  result = tryHandleTypeCheckingOperator(st, scope);
+  if (result !== null) return result;
 
   const resolvedSt = resolveStructLiterals(st, scope);
+
+  // Resolve any function calls in the expression
+  const expr = resolveFunctionCallsInExpression(resolvedSt, scope);
 
   const tokenRegex =
     /!*[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?(?:[uUiI](?:8|16|32|64)|bool)?|!*[a-zA-Z_]\w*(?:\.\w+)*/g;
   const tokens: Array<{ text: string; index: number }> = [];
   let m: RegExpExecArray | null;
-  while ((m = tokenRegex.exec(resolvedSt))) {
+  while ((m = tokenRegex.exec(expr))) {
     tokens.push({ text: m[0], index: m.index });
   }
   if (tokens.length === 0) throw new Error("Invalid statement");
   return tokens.length === 1
     ? parseToken(tokens[0].text, scope)
-    : evaluateExpression(resolvedSt, tokens, scope);
+    : evaluateExpression(expr, tokens, scope);
 }
 
-function processDefinitions(
-  st: string,
-  scope: InternalScope
-): TypedVal | null {
+function processDefinitions(st: string, scope: InternalScope): TypedVal | null {
   if (st.startsWith("type ")) {
     parseTypeAlias(st, scope);
     return { value: 0 };
