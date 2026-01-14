@@ -1,0 +1,250 @@
+
+> tuff@0.0.0 test
+> vitest run
+
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mC:/Users/mathm/IdeaProjects/Tuff[39m
+
+ [32mΓ£ô[39m tests/struct_literals.test.ts [2m ([22m[2m3 tests[22m[2m)[22m[90m 3[2mms[22m[39m
+ [32mΓ£ô[39m tests/struct_basic.test.ts [2m ([22m[2m4 tests[22m[2m)[22m[90m 4[2mms[22m[39m
+ [32mΓ£ô[39m tests/type_aliases.test.ts [2m ([22m[2m5 tests[22m[2m)[22m[90m 5[2mms[22m[39m
+ [32mΓ£ô[39m tests/type_checking.test.ts [2m ([22m[2m7 tests[22m[2m)[22m[90m 5[2mms[22m[39m
+[90mstdout[2m | tests/type_checking.test.ts[2m > [22m[2mtype checking with 'is' operator[2m > [22m[2mchecks if value matches type alias (type Temp = I32; let temp : Temp = 100; temp is Temp => 1)[22m[39m
+Let: name=temp, type=Temp, resolvedType=I32, res.type=undefined
+Condition FALSE: resolvedType="I32", res.type="undefined"
+
+[90mstdout[2m | tests/type_checking.test.ts[2m > [22m[2mtype checking with 'is' operator[2m > [22m[2mworks with boolean type (let x = true; x is Bool => 1)[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=Bool
+Condition FALSE: resolvedType="undefined", res.type="Bool"
+
+[90mstdout[2m | tests/type_checking.test.ts[2m > [22m[2mtype checking with 'is' operator[2m > [22m[2mworks in expressions (let x = 100I32; if (x is I32) { 42 } => 42)[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=I32
+Condition FALSE: resolvedType="undefined", res.type="I32"
+
+[90mstdout[2m | tests/type_aliases.test.ts[2m > [22m[2mtype aliases[2m > [22m[2mdefines and uses simple type alias (type Temp = I32; let temp : Temp = 100; temp)[22m[39m
+Let: name=temp, type=Temp, resolvedType=I32, res.type=undefined
+Condition FALSE: resolvedType="I32", res.type="undefined"
+
+[90mstdout[2m | tests/type_aliases.test.ts[2m > [22m[2mtype aliases[2m > [22m[2muses type alias in multiple variable declarations[22m[39m
+Let: name=x, type=Score, resolvedType=U8, res.type=undefined
+Condition FALSE: resolvedType="U8", res.type="undefined"
+Let: name=y, type=Score, resolvedType=U8, res.type=undefined
+Condition FALSE: resolvedType="U8", res.type="undefined"
+
+[90mstdout[2m | tests/type_aliases.test.ts[2m > [22m[2mtype aliases[2m > [22m[2mthrows on invalid assignment (type Temp = I32; let temp : Temp = 100; let value : Bool = temp)[22m[39m
+Let: name=temp, type=Temp, resolvedType=I32, res.type=undefined
+Condition FALSE: resolvedType="I32", res.type="undefined"
+Let: name=value, type=Bool, resolvedType=Bool, res.type=I32
+Condition TRUE: resolvedType="Bool", res.type="I32"
+Calling checkNarrowing("Bool", "I32")
+
+[90mstdout[2m | tests/type_aliases.test.ts[2m > [22m[2mtype aliases[2m > [22m[2mthrows on incompatible type alias assignment[22m[39m
+Let: name=x, type=MyU8, resolvedType=U8, res.type=U16
+Condition TRUE: resolvedType="U8", res.type="U16"
+Calling checkNarrowing("U8", "U16")
+
+[90mstdout[2m | tests/type_aliases.test.ts[2m > [22m[2mtype aliases[2m > [22m[2msupports type alias with assignment to compatible value[22m[39m
+Let: name=x, type=Count, resolvedType=I32, res.type=undefined
+Condition FALSE: resolvedType="I32", res.type="undefined"
+Let: name=y, type=I32, resolvedType=I32, res.type=I32
+Condition TRUE: resolvedType="I32", res.type="I32"
+Calling checkNarrowing("I32", "I32")
+checkNarrowing returned without throwing
+
+[90mstdout[2m | tests/union_types.test.ts[2m > [22m[2munion types[2m > [22m[2mdefines and uses union type (type MyUnion = I32 | Bool; let temp : MyUnion = 100; temp is MyUnion => 1)[22m[39m
+Let: name=temp, type=MyUnion, resolvedType=I32|Bool, res.type=undefined
+Condition FALSE: resolvedType="I32|Bool", res.type="undefined"
+
+[90mstdout[2m | tests/union_types.test.ts[2m > [22m[2munion types[2m > [22m[2mchecks value against union with first type matching[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=I32
+Condition FALSE: resolvedType="undefined", res.type="I32"
+
+[90mstdout[2m | tests/union_types.test.ts[2m > [22m[2munion types[2m > [22m[2mchecks value against union with second type matching[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=Bool
+Condition FALSE: resolvedType="undefined", res.type="Bool"
+
+[90mstdout[2m | tests/union_types.test.ts[2m > [22m[2munion types[2m > [22m[2mrejects value not matching any union type[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=U8
+Condition FALSE: resolvedType="undefined", res.type="U8"
+
+[90mstdout[2m | tests/union_types.test.ts[2m > [22m[2munion types[2m > [22m[2mstores union type in variable declaration[22m[39m
+Let: name=value, type=Result, resolvedType=I32|Bool, res.type=undefined
+Condition FALSE: resolvedType="I32|Bool", res.type="undefined"
+
+[90mstdout[2m | tests/union_types.test.ts[2m > [22m[2munion types[2m > [22m[2msupports three-way union[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=U8
+Condition FALSE: resolvedType="undefined", res.type="U8"
+
+[90mstdout[2m | tests/union_types.test.ts[2m > [22m[2munion types[2m > [22m[2mtype checks union assignment compatibility[22m[39m
+Let: name=x, type=MyUnion, resolvedType=I32|Bool, res.type=U16
+Condition TRUE: resolvedType="I32|Bool", res.type="U16"
+Calling checkNarrowing("I32|Bool", "U16")
+checkNarrowing returned without throwing
+
+[90mstdout[2m | tests/union_types.test.ts[2m > [22m[2munion types[2m > [22m[2munion type with type alias member[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=I32
+Condition FALSE: resolvedType="undefined", res.type="I32"
+
+ [33mΓ¥»[39m tests/union_types.test.ts [2m ([22m[2m8 tests[22m [2m|[22m [31m1 failed[39m[2m)[22m[90m 10[2mms[22m[39m
+[31m   [33mΓ¥»[31m tests/union_types.test.ts[2m > [22munion types[2m > [22mtype checks union assignment compatibility[39m
+[31m     ΓåÆ expected [Function] to throw an error[39m
+ [32mΓ£ô[39m tests/interpret.test.ts [2m ([22m[2m61 tests[22m[2m)[22m[90m 17[2mms[22m[39m
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret blocks and variables[2m > [22m[2mhandles variable declarations and blocks ((2 + { let x : I32 = 4; x }) * 3 => 18)[22m[39m
+Let: name=x, type=I32, resolvedType=I32, res.type=undefined
+Condition FALSE: resolvedType="I32", res.type="undefined"
+
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret blocks and variables[2m > [22m[2mhandles implicit type inference (let x = 4; x => 4)[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret blocks and variables[2m > [22m[2mhandles complex inference ((2 + { let x = 4; x }) * 3 => 18)[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret blocks and variables[2m > [22m[2mthrows on variable re-declaration in same scope[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret blocks and variables[2m > [22m[2mallows shadowing in child scope[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret blocks and variables[2m > [22m[2mhandles assignment and usage in complex expression (let z = (2 + { let x = 4; x }) * 3; z => 18)[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=z, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret control flow and comparisons[2m > [22m[2mhandles if expressions (let x = if (true) { let y = 200; y } else 400; x => 200)[22m[39m
+Let: name=y, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret control flow and comparisons[2m > [22m[2mhandles nested if expressions[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret control flow and comparisons[2m > [22m[2mhandles else if[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret control flow and comparisons[2m > [22m[2mhandles complex conditional with comparison[22m[39m
+Let: name=a, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=z, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=y, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret control flow and comparisons[2m > [22m[2mhandles unary NOT operator (!(let x = true; x) => 0)[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=Bool
+Condition FALSE: resolvedType="undefined", res.type="Bool"
+
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret assignment and mutability[2m > [22m[2mthrows on implicit narrowing assignment (let x = 100U16; let y : U8 = x;)[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=U16
+Condition FALSE: resolvedType="undefined", res.type="U16"
+Let: name=y, type=U8, resolvedType=U8, res.type=U16
+Condition TRUE: resolvedType="U8", res.type="U16"
+Calling checkNarrowing("U8", "U16")
+
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret assignment and mutability[2m > [22m[2mhandles mut keyword for mutable variables[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret assignment and mutability[2m > [22m[2mthrows on assignment to immutable variable[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret assignment and mutability[2m > [22m[2mhandles block assignment to variables[22m[39m
+Let: name=y, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret compound assignment and loops[2m > [22m[2mhandles compound assignment (let mut x = 0; x += 1; x => 1)[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret compound assignment and loops[2m > [22m[2menforces mutability for assignments[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret compound assignment and loops[2m > [22m[2mhandles equality as a statement without misidentifying as assignment[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret loops[2m > [22m[2mhandles while loops[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=total, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=y, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret loops[2m > [22m[2mhandles do-while loops[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=y, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret loops[2m > [22m[2mhandles match expressions[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+Let: name=y, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+
+[90mstdout[2m | tests/interpret.test.ts[2m > [22m[2minterpret misc[2m > [22m[2mhandles block statements without trailing semicolon[22m[39m
+Let: name=x, type=undefined, resolvedType=undefined, res.type=undefined
+Condition FALSE: resolvedType="undefined", res.type="undefined"
+
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ» Failed Tests 1 ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+
+ FAIL  tests/union_types.test.ts > union types > type checks union assignment compatibility
+AssertionError: expected [Function] to throw an error
+ Γ¥» tests/union_types.test.ts:48:7
+     46|     expect(() =>
+     47|       interpret("type MyUnion = I32 | Bool; let x : MyUnion = 100U16;")
+     48|     ).toThrow();
+       |       ^
+     49|   });
+     50| 
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[1/1]ΓÄ»
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m5 passed[39m[22m[90m (6)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m87 passed[39m[22m[90m (88)[39m
+[2m   Start at [22m 13:03:44
+[2m   Duration [22m 312ms[2m (transform 168ms, setup 0ms, collect 342ms, tests 44ms, environment 1ms, prepare 577ms)[22m
+

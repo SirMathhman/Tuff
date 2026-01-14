@@ -62,12 +62,100 @@ function getTypeAliasFromScope(
 
 function resolveTypeAlias(type: string, scope: InternalScope): string {
   const resolved = getTypeAliasFromScope(scope, type);
-  if (resolved) return resolveTypeAlias(resolved, scope);
+  if (resolved) {
+    // For union types, recursively resolve each component
+    if (resolved.includes("|")) {
+      const components = resolved.split("|").map((t) => {
+        const trimmed = t.trim();
+        return resolveTypeAlias(trimmed, scope);
+      });
+      return components.join("|");
+    }
+    return resolveTypeAlias(resolved, scope);
+  }
   return type;
 }
+
+function checkValueAgainstUnion(
+  value: number,
+  valueType: string | undefined,
+  components: string[]
+): boolean {
+  for (const component of components) {
+    if (valueType && valueType === component) return true;
+    // For untyped values, check if it fits in component's range
+    if (!valueType) {
+      const range = RANGES[component];
+      if (range) {
+        const bigVal = BigInt(Math.floor(value));
+        if (bigVal >= range.min && bigVal <= range.max) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function valueMatchesType(
+  value: number,
+  valueType: string | undefined,
+  targetType: string,
+  scope: InternalScope
+): boolean {
+  // Resolve the valueType if it's an alias
+  const resolvedValueType = valueType
+    ? resolveTypeAlias(valueType, scope)
+    : undefined;
+  const resolvedTargetType = resolveTypeAlias(targetType, scope);
+
+  // If valueType is a union and targetType is not, check if targetType is one of the union members
+  if (
+    resolvedValueType &&
+    resolvedValueType.includes("|") &&
+    !resolvedTargetType.includes("|")
+  ) {
+    const components = resolvedValueType.split("|").map((t) => t.trim());
+    return components.includes(resolvedTargetType);
+  }
+
+  // If targetType is a union, check against all components
+  if (resolvedTargetType.includes("|")) {
+    const components = resolvedTargetType.split("|").map((t) => t.trim());
+
+    // If valueType is also a union, check if they're equivalent
+    if (resolvedValueType && resolvedValueType.includes("|")) {
+      const valueComponents = resolvedValueType.split("|").map((t) => t.trim());
+      // Check if all components match
+      if (valueComponents.length === components.length) {
+        let allMatch = true;
+        for (const vc of valueComponents) {
+          if (!components.includes(vc)) {
+            allMatch = false;
+            break;
+          }
+        }
+        if (allMatch) return true;
+      }
+    }
+
+    return checkValueAgainstUnion(value, resolvedValueType, components);
+  }
+
+  // Single type check
+  if (resolvedValueType === resolvedTargetType) return true;
+  // For untyped values, check range
+  if (!resolvedValueType) {
+    const range = RANGES[resolvedTargetType];
+    if (range) {
+      const bigVal = BigInt(Math.floor(value));
+      return bigVal >= range.min && bigVal <= range.max;
+    }
+  }
+  return false;
+}
+
 function parseTypeSuffix(numStr: string, rest: string, n: number): TypedVal {
   if (rest.length === 0) return { value: n };
-  if (rest === "bool") return { value: n, type: "bool" };
+  if (rest === "bool") return { value: n, type: "Bool" };
 
   const sufMatch = rest.match(/^([uUiI])(8|16|32|64)(.*)$/);
   if (!sufMatch) return { value: n };
@@ -102,10 +190,10 @@ function parseTypeSuffix(numStr: string, rest: string, n: number): TypedVal {
 function parseToken(token: string, scope: InternalScope): TypedVal {
   if (token.startsWith("!")) {
     const res = parseToken(token.slice(1), scope);
-    return { value: res.value ? 0 : 1, type: "bool" };
+    return { value: res.value ? 0 : 1, type: "Bool" };
   }
-  if (token === "true") return { value: 1, type: "bool" };
-  if (token === "false") return { value: 0, type: "bool" };
+  if (token === "true") return { value: 1, type: "Bool" };
+  if (token === "false") return { value: 0, type: "Bool" };
 
   if (token.includes(".") && !/^[+-]?\d+\.\d+/.test(token)) {
     const parts = token.split(".");
@@ -136,8 +224,8 @@ function parseToken(token: string, scope: InternalScope): TypedVal {
 }
 
 function promoteTypes(type1?: string, type2?: string): string | undefined {
-  if (!type1 || type1 === "bool") return type2;
-  if (!type2 || type2 === "bool") return type1;
+  if (!type1 || type1 === "Bool") return type2;
+  if (!type2 || type2 === "Bool") return type1;
   const r1 = RANGES[type1];
   const r2 = RANGES[type2];
   if (!r1) return type2;
@@ -146,7 +234,7 @@ function promoteTypes(type1?: string, type2?: string): string | undefined {
 }
 
 function checkOverflow(value: number, type?: string): void {
-  if (type && type !== "bool") {
+  if (type && type !== "Bool") {
     const r = RANGES[type];
     if (!r) return;
     const big = BigInt(Math.floor(value));
@@ -164,30 +252,30 @@ function applyOp(left: TypedVal, right: TypedVal, op: string): TypedVal {
   else if (op === "-") res = left.value - right.value;
   else if (op === "<") {
     res = left.value < right.value ? 1 : 0;
-    type = "bool";
+    type = "Bool";
   } else if (op === ">") {
     res = left.value > right.value ? 1 : 0;
-    type = "bool";
+    type = "Bool";
   } else if (op === "<=") {
     res = left.value <= right.value ? 1 : 0;
-    type = "bool";
+    type = "Bool";
   } else if (op === ">=") {
     res = left.value >= right.value ? 1 : 0;
-    type = "bool";
+    type = "Bool";
   } else if (op === "==") {
     res = left.value === right.value ? 1 : 0;
-    type = "bool";
+    type = "Bool";
   } else if (op === "!=") {
     res = left.value !== right.value ? 1 : 0;
-    type = "bool";
+    type = "Bool";
   } else if (op === "&&") {
     res = left.value && right.value ? 1 : 0;
-    type = "bool";
+    type = "Bool";
   } else if (op === "||") {
     res = left.value || right.value ? 1 : 0;
-    type = "bool";
+    type = "Bool";
   } else throw new Error(`Unknown operator: ${op}`);
-  if (type !== "bool") checkOverflow(res, type);
+  if (type !== "Bool") checkOverflow(res, type);
   return { value: res, type };
 }
 
@@ -241,8 +329,32 @@ function evaluateExpression(
 }
 
 function checkNarrowing(targetType: string, sourceType: string): void {
+  // If target is a union type, check if source type is one of the union members
+  if (targetType.includes("|")) {
+    const components = targetType.split("|").map((t) => t.trim());
+    // For union types, require exact type match (no implicit conversion)
+    for (const component of components) {
+      if (component === sourceType) {
+        return; // Found an exact match
+      }
+    }
+    throw new Error(
+      `Incompatible types: ${sourceType} is not compatible with union ${targetType}`
+    );
+  }
+
+  // Single type narrowing check
   const target = RANGES[targetType];
   const source = RANGES[sourceType];
+  if (!target || !source) {
+    // For non-numeric types, require exact match
+    if (targetType !== sourceType) {
+      throw new Error(
+        `Incompatible types: cannot implicitly convert ${sourceType} to ${targetType}`
+      );
+    }
+    return;
+  }
   if (target.max < source.max || target.min > source.min) {
     throw new Error(
       `Incompatible types: cannot implicitly narrow ${sourceType} to ${targetType}`
@@ -541,10 +653,12 @@ function resolveExpressions(
     }
     if (kwIdx === -1) break;
     const { val, end } = handler(res.slice(kwIdx), scope);
+    // Don't append type suffix for Bool (boolean values are just 0 or 1)
+    const typeSuffix = val.type && val.type !== "Bool" ? val.type : "";
     res =
       res.slice(0, kwIdx) +
       val.value +
-      (val.type ?? "") +
+      typeSuffix +
       res.slice(kwIdx + end);
   }
   return res;
@@ -619,10 +733,12 @@ function resolveBrackets(s: string, scope: InternalScope): string {
     const following = res.slice(nextClose + 1).trim();
     const needsSemicolon =
       isCurly && following.length > 0 && !/^[+\-*/%|&^=]/.test(following);
+    // Don't append type suffix for Bool (boolean values are just 0 or 1)
+    const typeSuffix = result.type && result.type !== "Bool" ? result.type : "";
     res =
       res.slice(0, lastOpen) +
       result.value +
-      (result.type ?? "") +
+      typeSuffix +
       (needsSemicolon ? ";" : "") +
       res.slice(nextClose + 1);
   }
@@ -631,11 +747,26 @@ function resolveBrackets(s: string, scope: InternalScope): string {
 
 function parseTypeAlias(st: string, scope: InternalScope): void {
   const cleaned = st.trim().replace(/;+$/, ""); // Remove trailing semicolons
-  const m = cleaned.match(/^type\s+([a-zA-Z_]\w*)\s*=\s*([a-zA-Z_]\w*)$/);
+  const m = cleaned.match(/^type\s+([a-zA-Z_]\w*)\s*=\s*(.+)$/);
   if (!m) throw new Error(`Invalid type alias declaration: ${st.trim()}`);
-  const [, aliasName, targetType] = m;
+  const [, aliasName, typeDefStr] = m;
+  // Parse union types: Type1 | Type2 | Type3
+  const componentTypes = typeDefStr
+    .split("|")
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0);
+  if (componentTypes.length === 0) {
+    throw new Error(`Invalid type alias declaration: ${st.trim()}`);
+  }
+  // Validate that all components are valid type names (identifiers)
+  for (const type of componentTypes) {
+    if (!/^[a-zA-Z_]\w*$/.test(type)) {
+      throw new Error(`Invalid type name in union: ${type}`);
+    }
+  }
   if (!scope.typeAliases) scope.typeAliases = {};
-  scope.typeAliases[aliasName] = targetType;
+  // Store union as pipe-separated string
+  scope.typeAliases[aliasName] = componentTypes.join("|");
 }
 
 function parseStructDef(st: string, scope: InternalScope): void {
@@ -747,19 +878,13 @@ function evaluateExpressionStatement(
     const [, exprPart, typePart] = isOpMatch;
     const exprResult = interpretRaw(exprPart, scope);
     const resolvedType = resolveTypeAlias(typePart, scope);
-    // For values without explicit type, check if the value could match the requested type
-    let matches = false;
-    if (exprResult.type) {
-      matches = exprResult.type === resolvedType;
-    } else {
-      // Untyped value (bare number): check if it fits the requested type's range
-      const range = RANGES[resolvedType];
-      if (range) {
-        const bigVal = BigInt(Math.floor(exprResult.value));
-        matches = bigVal >= range.min && bigVal <= range.max;
-      }
-    }
-    return { value: matches ? 1 : 0, type: "bool" };
+    const matches = valueMatchesType(
+      exprResult.value,
+      exprResult.type,
+      resolvedType,
+      scope
+    );
+    return { value: matches ? 1 : 0, type: "Bool" };
   }
 
   const resolvedSt = resolveStructLiterals(st, scope);
