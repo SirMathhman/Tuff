@@ -328,6 +328,38 @@ function evaluateExpression(
   return { value: values[0].value, type: values[0].type };
 }
 
+function validateTypeRange(
+  targetRange: { min: bigint; max: bigint } | undefined,
+  sourceRange: { min: bigint; max: bigint } | undefined,
+  target: string,
+  source: string,
+  sourceType: string
+): void {
+  const noRanges = !targetRange || !sourceRange;
+  const typeMismatch = noRanges ? target !== source : false;
+  const outOfRange =
+    targetRange && sourceRange
+      ? targetRange.max < sourceRange.max || targetRange.min > sourceRange.min
+      : false;
+
+  if (typeMismatch || outOfRange) {
+    throw new Error(
+      `Incompatible types: cannot implicitly convert ${sourceType} to ${target}`
+    );
+  }
+}
+
+
+function checkTypeCompatibility(
+  target: string,
+  source: string,
+  sourceType: string
+): void {
+  const targetRange = RANGES[target];
+  const sourceRange = RANGES[source];
+  validateTypeRange(targetRange, sourceRange, target, source, sourceType);
+}
+
 function checkNarrowing(targetType: string, sourceType: string): void {
   // If target is a union type, check if source type is one of the union members
   if (targetType.includes("|")) {
@@ -343,24 +375,33 @@ function checkNarrowing(targetType: string, sourceType: string): void {
     );
   }
 
+  // If source is a union type (but target is not), check if all union members are compatible
+  if (sourceType.includes("|")) {
+    const components = sourceType.split("|").map((t) => t.trim());
+    // All union members must be compatible with the target type
+    for (const component of components) {
+      checkTypeCompatibility(targetType, component, sourceType);
+    }
+    return; // All union members are compatible
+  }
+
   // Single type narrowing check
   const target = RANGES[targetType];
   const source = RANGES[sourceType];
-  if (!target || !source) {
-    // For non-numeric types, require exact match
-    if (targetType !== sourceType) {
-      throw new Error(
-        `Incompatible types: cannot implicitly convert ${sourceType} to ${targetType}`
-      );
-    }
-    return;
-  }
-  if (target.max < source.max || target.min > source.min) {
+  validateTypeRange(target, source, targetType, sourceType, sourceType);
+  // Check for narrowing specifically
+  if (
+    target &&
+    source &&
+    (target.max < source.max || target.min > source.min)
+  ) {
     throw new Error(
       `Incompatible types: cannot implicitly narrow ${sourceType} to ${targetType}`
     );
   }
 }
+
+
 
 function parseStructFields(
   fieldStr: string,
@@ -655,11 +696,7 @@ function resolveExpressions(
     const { val, end } = handler(res.slice(kwIdx), scope);
     // Don't append type suffix for Bool (boolean values are just 0 or 1)
     const typeSuffix = val.type && val.type !== "Bool" ? val.type : "";
-    res =
-      res.slice(0, kwIdx) +
-      val.value +
-      typeSuffix +
-      res.slice(kwIdx + end);
+    res = res.slice(0, kwIdx) + val.value + typeSuffix + res.slice(kwIdx + end);
   }
   return res;
 }
