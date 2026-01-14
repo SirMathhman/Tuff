@@ -1,37 +1,7 @@
 export function interpret(input: string): number {
   const s = input.trim();
-  const match = s.match(/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/);
-  if (!match) {
-    throw new Error("Invalid number");
-  }
-  const numStr = match[0];
-  const n = parseFloat(numStr);
-  if (Number.isNaN(n)) {
-    throw new Error("Invalid number");
-  }
 
-  const rest = s.slice(numStr.length);
-  if (rest.length === 0) {
-    return n;
-  }
-
-  // Match suffix like U8, U16, U32, U64, I8, I16, I32, I64 (case-insensitive)
-  const sufMatch = rest.match(/^([uUiI])(8|16|32|64)(.*)$/);
-  if (!sufMatch) {
-    // If there's a suffix but it's not one we recognize, just return the numeric prefix
-    return n;
-  }
-
-  const sign = sufMatch[1].toUpperCase();
-  const bits = parseInt(sufMatch[2], 10);
-  // For simplicity require integer for integer suffixes
-  if (!/^[-+]?\d+$/.test(numStr)) {
-    throw new Error("Integer required for integer type suffix");
-  }
-
-  const intVal = Number(numStr);
-  // Define ranges
-  const ranges: Record<string, { min: bigint; max: bigint }> = {
+  const RANGES: Record<string, { min: bigint; max: bigint }> = {
     U8: { min: 0n, max: 255n },
     U16: { min: 0n, max: 65535n },
     U32: { min: 0n, max: 4294967295n },
@@ -42,27 +12,100 @@ export function interpret(input: string): number {
     I64: { min: -9223372036854775808n, max: 9223372036854775807n },
   };
 
-  const key = `${sign}${bits}`;
-  const range = ranges[key];
-  if (!range) {
-    // Unknown suffix, return numeric prefix
-    return n;
+  // Helper to parse a single token like "123", "123I8", "-10U16"
+  function parseToken(token: string): { value: number; type?: string } {
+    const m = token.match(/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/);
+    if (!m) throw new Error("Invalid number");
+    const numStr = m[0];
+    const n = parseFloat(numStr);
+    if (Number.isNaN(n)) throw new Error("Invalid number");
+
+    const rest = token.slice(numStr.length);
+    if (rest.length === 0) return { value: n };
+
+    const sufMatch = rest.match(/^([uUiI])(8|16|32|64)(.*)$/);
+    if (!sufMatch) {
+      // unknown suffix -> return numeric prefix
+      return { value: n };
+    }
+
+    const sign = sufMatch[1].toUpperCase();
+    const bits = parseInt(sufMatch[2], 10);
+
+    if (!/^[-+]?\d+$/.test(numStr)) {
+      throw new Error("Integer required for integer type suffix");
+    }
+
+    const intVal = Number(numStr);
+
+    const key = `${sign}${bits}`;
+    const range = RANGES[key];
+    if (!range) return { value: n };
+
+    const big = BigInt(intVal);
+    if (big < range.min || big > range.max) throw new Error(`${key} out of range`);
+
+    if (
+      bits === 64 &&
+      (big > BigInt(Number.MAX_SAFE_INTEGER) || big < BigInt(Number.MIN_SAFE_INTEGER))
+    ) {
+      throw new Error(`${key} value not representable as a JavaScript number`);
+    }
+
+    return { value: Number(intVal), type: key };
   }
 
-  // Use BigInt for range checks to avoid precision issues
-  const big = BigInt(intVal);
-  if (big < range.min || big > range.max) {
-    throw new Error(`${key} out of range`);
+  // Tokenize numbers with optional suffixes
+  const tokenRegex = /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?(?:[uUiI](?:8|16|32|64))?/g;
+  const tokens: Array<{ text: string; index: number }> = [];
+  let m: RegExpExecArray | null;
+  while ((m = tokenRegex.exec(s))) {
+    tokens.push({ text: m[0], index: m.index });
   }
 
-  // For 64-bit values that might be outside JS safe integers, disallow values that exceed Number.MAX_SAFE_INTEGER
-  if (
-    bits === 64 &&
-    (big > BigInt(Number.MAX_SAFE_INTEGER) ||
-      big < BigInt(Number.MIN_SAFE_INTEGER))
-  ) {
-    throw new Error(`${key} value not representable as a JavaScript number`);
+  if (tokens.length === 0) throw new Error("Invalid number");
+
+  // Parse tokens to structured operands
+  const parsed = tokens.map((t) => {
+    const p = parseToken(t.text);
+    return { ...p, text: t.text, index: t.index };
+  });
+
+  if (parsed.length === 1) return parsed[0].value;
+
+  // Evaluate left-to-right, checking for overflow when both operands share the same integer suffix
+  let total = parsed[0].value;
+  let totalType = parsed[0].type; // e.g., 'U8' or 'I16' or undefined
+
+  for (let i = 1; i < parsed.length; i++) {
+    const prev = parsed[i - 1];
+    const cur = parsed[i];
+    const between = s.slice(prev.index + prev.text.length, cur.index);
+    const opMatch = between.match(/[+-]/);
+    if (!opMatch) throw new Error("Invalid operator between operands");
+    const op = opMatch[0];
+
+    const val = cur.value;
+    const nextType = cur.type;
+
+    const result = op === "+" ? total + val : total - val;
+
+    // If both operands share the same integer type (e.g., both 'U8'), enforce range on the result
+    if (totalType && nextType && totalType === nextType) {
+      const range = RANGES[totalType!];
+
+      if (range) {
+        const bigRes = BigInt(result);
+        if (bigRes < range.min || bigRes > range.max) {
+          throw new Error(`${totalType} overflow`);
+        }
+      }
+    }
+
+    total = result;
+    // If both had same type keep it, otherwise clear typing for the accumulated total
+    totalType = totalType && nextType && totalType === nextType ? totalType : undefined;
   }
 
-  return Number(intVal);
+  return total;
 }

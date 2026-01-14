@@ -4,9 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run"
+    "cpd": "pmd cpd --dir src --language typescript --minimum-tokens 50 --format text --ignore-literals --ignore-identifiers",
+    "test": "vitest run",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "eslint": "^9.39.2",
+    "husky": "^9.1.7",
     "typescript": "^5.1.6",
     "vitest": "^1.4.1"
   }
