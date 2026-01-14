@@ -11,4 +11,9 @@ describe("interpret", () => {
     expect(interpret("hello")).toBe(5);
     expect(interpret("")).toBe(0);
   });
+  it("parses numeric strings to numbers", () => {
+    expect(interpret("100")).toBe(100);
+    expect(interpret("  3.14  ")).toBe(3.14);
+    expect(interpret("-2")).toBe(-2);
+  });
 });
