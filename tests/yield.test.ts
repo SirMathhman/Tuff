@@ -35,21 +35,22 @@ describe("Yield expressions", () => {
   });
 
   it("should yield inside if block", () => {
-    expect(
-      interpret("{ if (true) { yield 100; } }")
-    ).toBe(100);
+    expect(interpret("{ if (true) { yield 100; } }")).toBe(100);
   });
 
   it("should not yield if condition false", () => {
-    expect(
-      interpret("{ if (false) { yield 100; } else { 50 } }")
-    ).toBe(50);
+    expect(interpret("{ if (false) { yield 100; } else { 50 } }")).toBe(50);
   });
 
   it("should yield in nested if", () => {
+    expect(interpret("{ if (true) { if (true) { yield 99; } } }")).toBe(99);
+  });
+
+  it("should use yield result in expression", () => {
     expect(
-      interpret("{ if (true) { if (true) { yield 99; } } }")
-    ).toBe(99);
+      interpret(
+        "fn get() : I32 => { let x = { yield 100; } x + 50 } get()"
+      )
+    ).toBe(150);
   });
 });
-

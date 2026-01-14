@@ -30,7 +30,6 @@ class YieldSignal {
   constructor(public value: TypedVal) {}
 }
 
-
 function getFromScope(
   scope: InternalScope,
   name: string
@@ -687,7 +686,11 @@ function handleIf(
 
   try {
     const res = condition.value
-      ? interpretRaw(thenRes.content, { values: {}, parent: scope, structs: {} })
+      ? interpretRaw(thenRes.content, {
+          values: {},
+          parent: scope,
+          structs: {},
+        })
       : elsePart !== undefined
       ? interpretRaw(elsePart, { values: {}, parent: scope, structs: {} })
       : { value: 0 };
@@ -712,7 +715,11 @@ function handleWhile(
   let lastVal: TypedVal = { value: 0 };
   try {
     while (interpretRaw(condStr, scope).value) {
-      lastVal = interpretRaw(bodyStr, { values: {}, parent: scope, structs: {} });
+      lastVal = interpretRaw(bodyStr, {
+        values: {},
+        parent: scope,
+        structs: {},
+      });
     }
   } catch (e) {
     if (e instanceof YieldSignal) {
@@ -745,7 +752,11 @@ function handleDoWhile(
   let lastVal: TypedVal = { value: 0 };
   try {
     do {
-      lastVal = interpretRaw(bodyStr, { values: {}, parent: scope, structs: {} });
+      lastVal = interpretRaw(bodyStr, {
+        values: {},
+        parent: scope,
+        structs: {},
+      });
     } while (interpretRaw(condStr, scope).value);
   } catch (e) {
     if (e instanceof YieldSignal) {
