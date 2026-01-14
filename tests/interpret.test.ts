@@ -194,6 +194,18 @@ describe("interpret control flow and comparisons", () => {
       )
     ).toBe(200);
   });
+
+  it("handles logical OR (true || false => 1)", () => {
+    expect(interpret("true || false")).toBe(1);
+  });
+
+  it("handles logical AND (true && false => 0)", () => {
+    expect(interpret("true && false")).toBe(0);
+  });
+
+  it("handles mixed logic and precedence (false || true && false => 0)", () => {
+    expect(interpret("false || true && false")).toBe(0);
+  });
 });
 
 describe("interpret assignment and mutability", () => {

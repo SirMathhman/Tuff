@@ -82,6 +82,7 @@ function parseToken(token: string, scope: InternalScope): TypedVal {
 function promoteTypes(type1?: string, type2?: string): string | undefined {
   if (!type1) return type2;
   if (!type2) return type1;
+  if (type1 === "bool" || type2 === "bool") return "bool";
   const r1 = RANGES[type1];
   const r2 = RANGES[type2];
   return r1.max >= r2.max ? type1 : type2;
@@ -120,6 +121,12 @@ function applyOp(left: TypedVal, right: TypedVal, op: string): TypedVal {
   } else if (op === "!=") {
     res = left.value !== right.value ? 1 : 0;
     type = "bool";
+  } else if (op === "&&") {
+    res = left.value && right.value ? 1 : 0;
+    type = "bool";
+  } else if (op === "||") {
+    res = left.value || right.value ? 1 : 0;
+    type = "bool";
   } else throw new Error(`Unknown operator: ${op}`);
   if (type !== "bool") checkOverflow(res, type);
   return { value: res, type };
@@ -142,12 +149,15 @@ function evaluateExpression(
       parsed[i - 1].index + parsed[i - 1].text.length,
       parsed[i].index
     );
-    const opMatch = between.match(/==|!=|<=|>=|[+\-*/<>]/);
+    const opMatch = between.match(/&&|\|\||==|!=|<=|>=|[+\-*/<>]/);
     if (!opMatch) throw new Error("Invalid operator between operands");
     ops.push(opMatch[0]);
   }
 
-  const values: TypedVal[] = parsed.map((p) => ({ value: p.value, type: p.type }));
+  const values: TypedVal[] = parsed.map((p) => ({
+    value: p.value,
+    type: p.type,
+  }));
   const currentOps = [...ops];
 
   const processPass = (targetOps: string[]) => {
@@ -165,6 +175,8 @@ function evaluateExpression(
   processPass(["+", "-"]);
   processPass(["<", ">", "<=", ">="]);
   processPass(["==", "!="]);
+  processPass(["&&"]);
+  processPass(["||"]);
 
   return { value: values[0].value, type: values[0].type };
 }
