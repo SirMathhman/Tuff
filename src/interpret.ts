@@ -125,39 +125,28 @@ function evaluateExpression(
   return { value: total, type: totalType };
 }
 
-function interpretRaw(input: string, scope: Scope = {}): TypedVal {
-  let s = input.trim();
-  while (s.includes("(") || s.includes("{")) {
-    const lastOpenParen = s.lastIndexOf("(");
-    const lastOpenCurly = s.lastIndexOf("{");
-    const isCurly = lastOpenCurly > lastOpenParen;
-    const lastOpen = isCurly ? lastOpenCurly : lastOpenParen;
-    const closeChar = isCurly ? "}" : ")";
-    const nextClose = s.indexOf(closeChar, lastOpen);
-    if (nextClose === -1)
-      throw new Error(
-        `Missing closing ${isCurly ? "curly brace" : "parenthesis"}`
-      );
-    const internal = s.slice(lastOpen + 1, nextClose);
-    const result = interpretRaw(internal, isCurly ? { ...scope } : scope);
-    s = s.slice(0, lastOpen) + result.value + (result.type ?? "") + s.slice(nextClose + 1);
-  }
-
+function evaluateStatements(s: string, scope: Scope): TypedVal {
   const statements = s
     .split(";")
     .map((st) => st.trim())
     .filter((st) => st.length > 0);
   let lastVal: TypedVal = { value: 0 };
+  const localDecls = new Set<string>();
+
   for (const st of statements) {
     const letMatch = st.match(
       /^let\s+([a-zA-Z_]\w*)\s*(?::\s*([uUiI](?:8|16|32|64)))?\s*=\s*(.+)$/
     );
     if (letMatch) {
       const [, name, type, expr] = letMatch;
+      if (localDecls.has(name)) {
+        throw new Error(`Variable already declared in this scope: ${name}`);
+      }
       const res = interpretRaw(expr, scope);
       const finalType = type || res.type;
       if (finalType) checkOverflow(res.value, finalType);
       scope[name] = { value: res.value, type: finalType };
+      localDecls.add(name);
       lastVal = res;
     } else {
       const tokenRegex =
@@ -174,6 +163,31 @@ function interpretRaw(input: string, scope: Scope = {}): TypedVal {
     }
   }
   return lastVal;
+}
+
+function interpretRaw(input: string, scope: Scope = {}): TypedVal {
+  let s = input.trim();
+  while (s.includes("(") || s.includes("{")) {
+    const lastOpenParen = s.lastIndexOf("(");
+    const lastOpenCurly = s.lastIndexOf("{");
+    const isCurly = lastOpenCurly > lastOpenParen;
+    const lastOpen = isCurly ? lastOpenCurly : lastOpenParen;
+    const closeChar = isCurly ? "}" : ")";
+    const nextClose = s.indexOf(closeChar, lastOpen);
+    if (nextClose === -1)
+      throw new Error(
+        `Missing closing ${isCurly ? "curly brace" : "parenthesis"}`
+      );
+    const internal = s.slice(lastOpen + 1, nextClose);
+    const result = interpretRaw(internal, isCurly ? { ...scope } : scope);
+    s =
+      s.slice(0, lastOpen) +
+      result.value +
+      (result.type ?? "") +
+      s.slice(nextClose + 1);
+  }
+
+  return evaluateStatements(s, scope);
 }
 
 export function interpret(input: string, scope: Scope = {}): number {

@@ -130,7 +130,9 @@ describe("interpret complex expressions", () => {
   it("handles negative results from parentheses (5 - (2 - 5) => 8)", () => {
     expect(interpret("5 - (2 - 5)")).toBe(8);
   });
+});
 
+describe("interpret blocks and variables", () => {
   it("handles curly braces ((2 + { 4 }) * 3 => 18)", () => {
     expect(interpret("(2 + { 4 }) * 3")).toBe(18);
   });
@@ -149,6 +151,14 @@ describe("interpret complex expressions", () => {
 
   it("handles complex inference ((2 + { let x = 4; x }) * 3 => 18)", () => {
     expect(interpret("(2 + { let x = 4; x }) * 3")).toBe(18);
+  });
+
+  it("throws on variable re-declaration in same scope", () => {
+    expect(() => interpret("(2 + { let x = 4; let x = 7; x }) * 3")).toThrow();
+  });
+
+  it("allows shadowing in child scope", () => {
+    expect(interpret("let x = 10; { let x = 5; x } + x")).toBe(15);
   });
 
   it("throws on U8 multiplication overflow (100 * 3U8)", () => {
