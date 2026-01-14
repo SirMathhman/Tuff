@@ -161,6 +161,10 @@ describe("interpret blocks and variables", () => {
     expect(interpret("let x = 10; { let x = 5; x } + x")).toBe(15);
   });
 
+  it("handles assignment and usage in complex expression (let z = (2 + { let x = 4; x }) * 3; z => 18)", () => {
+    expect(interpret("let z = (2 + { let x = 4; x }) * 3; z")).toBe(18);
+  });
+
   it("throws on U8 multiplication overflow (100 * 3U8)", () => {
     expect(() => interpret("100 * 3U8")).toThrow();
   });
