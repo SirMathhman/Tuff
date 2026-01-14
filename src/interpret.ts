@@ -122,10 +122,15 @@ function evaluateExpression(
 
 export function interpret(input: string): number {
   let s = input.trim();
-  while (s.includes("(")) {
-    const lastOpen = s.lastIndexOf("(");
-    const nextClose = s.indexOf(")", lastOpen);
-    if (nextClose === -1) throw new Error("Missing closing parenthesis");
+  while (s.includes("(") || s.includes("{")) {
+    const lastOpenParen = s.lastIndexOf("(");
+    const lastOpenCurly = s.lastIndexOf("{");
+    const isCurly = lastOpenCurly > lastOpenParen;
+    const lastOpen = isCurly ? lastOpenCurly : lastOpenParen;
+    const closeChar = isCurly ? "}" : ")";
+    const nextClose = s.indexOf(closeChar, lastOpen);
+    if (nextClose === -1)
+      throw new Error(`Missing closing ${isCurly ? "curly brace" : "parenthesis"}`);
     const internal = s.slice(lastOpen + 1, nextClose);
     const result = interpret(internal);
     s = s.slice(0, lastOpen) + result + s.slice(nextClose + 1);
