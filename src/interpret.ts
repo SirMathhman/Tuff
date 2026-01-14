@@ -11,9 +11,25 @@ const RANGES: Record<string, { min: bigint; max: bigint }> = {
 
 type TypedVal = { value: number; type?: string };
 type Scope = Record<string, TypedVal>;
+type InternalScope = { values: Scope; parent?: InternalScope };
 
-function parseToken(token: string, scope: Scope = {}): TypedVal {
-  if (scope[token]) return scope[token];
+function getFromScope(scope: InternalScope, name: string): TypedVal | undefined {
+  if (name in scope.values) return scope.values[name];
+  if (scope.parent) return getFromScope(scope.parent, name);
+  return undefined;
+}
+
+function updateInScope(scope: InternalScope, name: string, val: TypedVal): void {
+  if (name in scope.values || !scope.parent) {
+    scope.values[name] = val;
+  } else {
+    updateInScope(scope.parent, name, val);
+  }
+}
+
+function parseToken(token: string, scope: InternalScope): TypedVal {
+  const inScope = getFromScope(scope, token);
+  if (inScope) return inScope;
   const m = token.match(/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/);
   if (!m) throw new Error(`Invalid token: ${token}`);
   const numStr = m[0];
@@ -73,7 +89,7 @@ function checkOverflow(value: number, type?: string): void {
 function evaluateExpression(
   s: string,
   tokens: Array<{ text: string; index: number }>,
-  scope: Scope = {}
+  scope: InternalScope
 ): TypedVal {
   const parsed = tokens.map((t) => ({
     ...parseToken(t.text, scope),
@@ -135,7 +151,11 @@ function checkNarrowing(targetType: string, sourceType: string): void {
   }
 }
 
-function handleLet(st: string, scope: Scope, localDecls: Set<string>): TypedVal {
+function handleLet(
+  st: string,
+  scope: InternalScope,
+  localDecls: Set<string>
+): TypedVal {
   const m = st.match(
     /^let\s+([a-zA-Z_]\w*)\s*(?::\s*([uUiI](?:8|16|32|64)))?(?:\s*=\s*(.+))?$/
   );
@@ -151,33 +171,88 @@ function handleLet(st: string, scope: Scope, localDecls: Set<string>): TypedVal 
   }
   const finalType = type || res.type;
   if (finalType) checkOverflow(res.value, finalType);
-  scope[name] = { value: res.value, type: finalType };
+  scope.values[name] = { value: res.value, type: finalType };
   localDecls.add(name);
   return res;
 }
 
-function handleAssign(st: string, scope: Scope): TypedVal {
+function handleAssign(st: string, scope: InternalScope): TypedVal {
   const m = st.match(/^([a-zA-Z_]\w*)\s*=\s*(.+)$/);
   if (!m) throw new Error("Invalid assignment");
   const [, name, expr] = m;
-  if (!(name in scope)) throw new Error(`Variable not declared: ${name}`);
+  const existing = getFromScope(scope, name);
+  if (!existing) throw new Error(`Variable not declared: ${name}`);
   const res = interpretRaw(expr, scope);
-  const targetType = scope[name].type;
+  const targetType = existing.type;
   if (targetType && res.type) checkNarrowing(targetType, res.type);
   if (targetType) checkOverflow(res.value, targetType);
-  scope[name] = { value: res.value, type: targetType || res.type };
+  updateInScope(scope, name, { value: res.value, type: targetType || res.type });
   return res;
 }
 
-function evaluateStatements(s: string, scope: Scope): TypedVal {
-  const statements = s
-    .split(";")
-    .map((st) => st.trim())
-    .filter((st) => st.length > 0);
+function splitStatements(s: string): string[] {
+  const result: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    const char = s[i];
+    if (char === "{" || char === "(") depth++;
+    if (char === "}" || char === ")") depth--;
+    if (char === ";" && depth === 0) {
+      result.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  if (current.trim()) result.push(current.trim());
+  return result;
+}
+
+function resolveBrackets(s: string, scope: InternalScope): string {
+  let res = s.trim();
+  while (res.includes("(") || res.includes("{")) {
+    const lastOpenParen = res.lastIndexOf("(");
+    const lastOpenCurly = res.lastIndexOf("{");
+    const isCurly = lastOpenCurly > lastOpenParen;
+    const lastOpen = isCurly ? lastOpenCurly : lastOpenParen;
+    const closeChar = isCurly ? "}" : ")";
+    const nextClose = res.indexOf(closeChar, lastOpen);
+    if (nextClose === -1) {
+      throw new Error(
+        `Missing closing ${isCurly ? "curly brace" : "parenthesis"}`
+      );
+    }
+    const internal = res.slice(lastOpen + 1, nextClose);
+    const result = interpretRaw(
+      internal,
+      isCurly ? { values: {}, parent: scope } : scope
+    );
+    const following = res.slice(nextClose + 1).trim();
+    const needsSemicolon =
+      isCurly && following.length > 0 && !/^[+\-*/%|&^=]/.test(following);
+    res =
+      res.slice(0, lastOpen) +
+      result.value +
+      (result.type ?? "") +
+      (needsSemicolon ? ";" : "") +
+      res.slice(nextClose + 1);
+  }
+  return res;
+}
+
+function evaluateStatements(s: string, scope: InternalScope): TypedVal {
+  const statements = splitStatements(s);
   let lastVal: TypedVal = { value: 0 };
   const localDecls = new Set<string>();
 
-  for (const st of statements) {
+  for (const rawSt of statements) {
+    const st = resolveBrackets(rawSt, scope);
+    if (!st) continue;
+    if (st.includes(";") && splitStatements(st).length > 1) {
+      lastVal = evaluateStatements(st, scope);
+      continue;
+    }
     if (st.startsWith("let ")) {
       lastVal = handleLet(st, scope, localDecls);
     } else if (st.includes("=") && st.match(/^[a-zA-Z_]\w*\s*=/)) {
@@ -200,31 +275,10 @@ function evaluateStatements(s: string, scope: Scope): TypedVal {
   return lastVal;
 }
 
-function interpretRaw(input: string, scope: Scope = {}): TypedVal {
-  let s = input.trim();
-  while (s.includes("(") || s.includes("{")) {
-    const lastOpenParen = s.lastIndexOf("(");
-    const lastOpenCurly = s.lastIndexOf("{");
-    const isCurly = lastOpenCurly > lastOpenParen;
-    const lastOpen = isCurly ? lastOpenCurly : lastOpenParen;
-    const closeChar = isCurly ? "}" : ")";
-    const nextClose = s.indexOf(closeChar, lastOpen);
-    if (nextClose === -1)
-      throw new Error(
-        `Missing closing ${isCurly ? "curly brace" : "parenthesis"}`
-      );
-    const internal = s.slice(lastOpen + 1, nextClose);
-    const result = interpretRaw(internal, isCurly ? { ...scope } : scope);
-    s =
-      s.slice(0, lastOpen) +
-      result.value +
-      (result.type ?? "") +
-      s.slice(nextClose + 1);
-  }
-
-  return evaluateStatements(s, scope);
+function interpretRaw(input: string, scope: InternalScope): TypedVal {
+  return evaluateStatements(input, scope);
 }
 
 export function interpret(input: string, scope: Scope = {}): number {
-  return interpretRaw(input, scope).value;
+  return interpretRaw(input, { values: scope }).value;
 }

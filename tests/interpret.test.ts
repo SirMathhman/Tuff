@@ -177,6 +177,10 @@ describe("interpret blocks and variables", () => {
     expect(() => interpret("let x : U8; x = 100U16")).toThrow();
   });
 
+  it("handles assignment to outer scope from inner block", () => {
+    expect(interpret("let x : I32; { x = 100; } x")).toBe(100);
+  });
+
   it("throws on U8 multiplication overflow (100 * 3U8)", () => {
     expect(() => interpret("100 * 3U8")).toThrow();
   });
