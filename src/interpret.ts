@@ -10,9 +10,9 @@ export function interpret(input: string): number {
     throw new Error("Invalid number");
   }
   const rest = s.slice(numStr.length);
-  // Disallow negative numbers with unsigned suffix 'U' (e.g., "-100U8")
-  if (rest.length > 0 && /^[uU]/.test(rest) && n < 0) {
-    throw new Error("Negative number with unsigned suffix is invalid");
+  // Disallow unsigned suffix 'U' for any numbers (e.g., "256U8" or "-100U8")
+  if (rest.length > 0 && /^[uU]/.test(rest)) {
+    throw new Error("Unsigned suffix 'U' is invalid");
   }
   return n;
 }

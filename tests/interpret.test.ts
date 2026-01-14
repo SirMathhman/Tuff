@@ -7,7 +7,11 @@ describe("interpret", () => {
   });
 
   it("parses numeric prefix when trailing chars present", () => {
-    expect(interpret("100U8")).toBe(100);
+    expect(interpret("100I8")).toBe(100);
+  });
+
+  it("throws when unsigned suffix 'U' is present on positive numbers", () => {
+    expect(() => interpret("256U8")).toThrow();
   });
 
   it("parses negative numeric prefix when trailing chars present", () => {
