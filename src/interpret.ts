@@ -35,6 +35,8 @@ function updateInScope(
 }
 
 function parseToken(token: string, scope: InternalScope): TypedVal {
+  if (token === "true") return { value: 1, type: "bool" };
+  if (token === "false") return { value: 0, type: "bool" };
   const inScope = getFromScope(scope, token);
   if (inScope) return inScope;
   const m = token.match(/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/);
@@ -204,6 +206,103 @@ function handleAssign(st: string, scope: InternalScope): TypedVal {
   return res;
 }
 
+function findClosingBrace(s: string, startPos: number): number {
+  let d = 0;
+  for (let i = startPos; i < s.length; i++) {
+    if (s[i] === "{") d++;
+    else if (s[i] === "}") {
+      if (--d === 0) return i;
+    }
+  }
+  return -1;
+}
+
+function parseBranch(
+  s: string,
+  pos: number
+): { content: string; end: number } {
+  while (pos < s.length && /\s/.test(s[pos])) pos++;
+  if (s[pos] === "{") {
+    const end = findClosingBrace(s, pos);
+    if (end === -1) throw new Error("Missing closing brace for branch");
+    return { content: s.slice(pos + 1, end), end: end + 1 };
+  }
+  const elseMatch = s.slice(pos).match(/\belse\b/);
+  if (elseMatch) {
+    const content = s.slice(pos, pos + elseMatch.index!).trim();
+    return { content, end: pos + elseMatch.index! };
+  }
+  return { content: s.slice(pos).trim(), end: s.length };
+}
+
+function handleIf(
+  s: string,
+  scope: InternalScope
+): { val: TypedVal; end: number } {
+  const condStart = s.indexOf("(");
+  if (condStart === -1) throw new Error("Missing condition in if");
+  let d = 0,
+    condEnd = -1;
+  for (let i = condStart; i < s.length; i++) {
+    if (s[i] === "(") d++;
+    else if (s[i] === ")") {
+      if (--d === 0) {
+        condEnd = i;
+        break;
+      }
+    }
+  }
+  if (condEnd === -1) throw new Error("Missing closing paren for if condition");
+  const condition = interpretRaw(s.slice(condStart + 1, condEnd), scope);
+  const thenRes = parseBranch(s, condEnd + 1);
+  let finalPos = thenRes.end;
+  let elsePart: string | undefined;
+
+  let checkElse = finalPos;
+  while (checkElse < s.length && /\s/.test(s[checkElse])) checkElse++;
+  if (s.slice(checkElse).startsWith("else")) {
+    const elseRes = parseBranch(s, checkElse + 4);
+    elsePart = elseRes.content;
+    finalPos = elseRes.end;
+  }
+
+  const res = condition.value
+    ? interpretRaw(thenRes.content, { values: {}, parent: scope })
+    : elsePart !== undefined
+    ? interpretRaw(elsePart, { values: {}, parent: scope })
+    : { value: 0 };
+  return { val: res, end: finalPos };
+}
+
+function resolveIfExpressions(s: string, scope: InternalScope): string {
+  let res = s;
+  while (true) {
+    let ifIdx = -1;
+    let searchPos = res.length;
+    while (searchPos >= 0) {
+      const found = res.lastIndexOf("if", searchPos);
+      if (found === -1) break;
+      if (
+        (found === 0 || !/[a-zA-Z0-9_]/.test(res[found - 1])) &&
+        (found + 2 === res.length || !/[a-zA-Z0-9_]/.test(res[found + 2]))
+      ) {
+        ifIdx = found;
+        break;
+      }
+      searchPos = found - 1;
+    }
+
+    if (ifIdx === -1) break;
+    const { val, end } = handleIf(res.slice(ifIdx), scope);
+    res =
+      res.slice(0, ifIdx) +
+      val.value +
+      (val.type ?? "") +
+      res.slice(ifIdx + end);
+  }
+  return res;
+}
+
 function splitStatements(s: string): string[] {
   const result: string[] = [];
   let current = "";
@@ -261,7 +360,8 @@ function evaluateStatements(s: string, scope: InternalScope): TypedVal {
   const localDecls = new Set<string>();
 
   for (const rawSt of statements) {
-    const st = resolveBrackets(rawSt, scope);
+    let st = resolveIfExpressions(rawSt, scope);
+    st = resolveBrackets(st, scope);
     if (!st) continue;
     if (st.includes(";") && splitStatements(st).length > 1) {
       lastVal = evaluateStatements(st, scope);
