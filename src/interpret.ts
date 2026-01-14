@@ -13,11 +13,17 @@ const RANGES: Record<string, { min: bigint; max: bigint }> = {
 type TypedVal = { value: any; type?: string; mutable?: boolean };
 type Scope = Record<string, TypedVal>;
 type StructDef = { fields: Record<string, string> };
+type FunctionDef = {
+  params: Array<{ name: string; type: string }>;
+  returnType: string;
+  body: string;
+};
 type InternalScope = {
   values: Scope;
   parent?: InternalScope;
   structs?: Record<string, StructDef>;
   typeAliases?: Record<string, string>;
+  functions?: Record<string, FunctionDef>;
 };
 
 function getFromScope(
@@ -57,6 +63,15 @@ function getTypeAliasFromScope(
   if (scope.typeAliases && name in scope.typeAliases)
     return scope.typeAliases[name];
   if (scope.parent) return getTypeAliasFromScope(scope.parent, name);
+  return undefined;
+}
+
+function getFunctionFromScope(
+  scope: InternalScope,
+  name: string
+): FunctionDef | undefined {
+  if (scope.functions && name in scope.functions) return scope.functions[name];
+  if (scope.parent) return getFunctionFromScope(scope.parent, name);
   return undefined;
 }
 
@@ -349,7 +364,6 @@ function validateTypeRange(
   }
 }
 
-
 function checkTypeCompatibility(
   target: string,
   source: string,
@@ -401,8 +415,6 @@ function checkNarrowing(targetType: string, sourceType: string): void {
   }
 }
 
-
-
 function parseStructFields(
   fieldStr: string,
   scope: InternalScope
@@ -440,6 +452,68 @@ function initializeStruct(
   };
   localDecls.add(name);
   return { value: fields };
+}
+
+function handleFunctionCall(
+  funcName: string,
+  func: FunctionDef,
+  argsStr: string,
+  scope: InternalScope
+): TypedVal {
+  // Parse arguments
+  const args: TypedVal[] = [];
+  if (argsStr.trim()) {
+    const argExprs = argsStr.split(",").map((a) => a.trim());
+    for (const argExpr of argExprs) {
+      args.push(interpretRaw(argExpr, scope));
+    }
+  }
+
+  // Validate argument count
+  if (args.length !== func.params.length) {
+    throw new Error(
+      `Function ${funcName} expects ${func.params.length} arguments, got ${args.length}`
+    );
+  }
+
+  // Create function scope with parameters
+  const funcScope: InternalScope = {
+    values: {},
+    parent: scope,
+  };
+
+  // Bind parameters to arguments
+  for (let i = 0; i < func.params.length; i++) {
+    const param = func.params[i];
+    const arg = args[i];
+    // Type check the argument against the parameter type
+    // Allow untyped numeric values to be coerced to the parameter type
+    if (arg.type) {
+      checkNarrowing(param.type, arg.type);
+    } else {
+      // For untyped values, check if they fit in the target type's range
+      checkOverflow(arg.value as number, param.type);
+    }
+    funcScope.values[param.name] = {
+      value: arg.value,
+      type: param.type,
+      mutable: false,
+    };
+  }
+
+  // Execute function body
+  const result = interpretRaw(func.body, funcScope);
+
+  // Type check the return value
+  // Allow untyped numeric values to be coerced to the return type
+  if (result.type) {
+    checkNarrowing(func.returnType, result.type);
+  } else {
+    // For untyped values, check if they fit in the return type's range
+    checkOverflow(result.value as number, func.returnType);
+  }
+
+  return { value: result.value, type: func.returnType };
 }
 
 function handleLet(
@@ -738,12 +812,13 @@ function splitStatements(s: string): string[] {
 }
 
 function resolveBrackets(s: string, scope: InternalScope): string {
-  // Skip bracket resolution for struct definitions, struct initialization, and struct literals
+  // Skip bracket resolution for struct definitions, struct initialization, struct literals, and function declarations
   // Check for struct literals with member access (e.g., Point { x : 3 }.x)
   const isStructLiteral = /[a-zA-Z_]\w*\s*\{[^}]+\}\s*\./.test(s);
   if (
     s.match(/^struct\s+[a-zA-Z_]\w*\s*\{[^}]+\}/) ||
     s.match(/^let\s+(mut\s+)?[a-zA-Z_]\w*\s*=\s*[a-zA-Z_]\w+\s*\{[^}]+\}/) ||
+    s.match(/^fn\s+[a-zA-Z_]\w+\s*\([^)]*\)\s*:\s*[a-zA-Z_]\w+\s*=>/) ||
     isStructLiteral
   ) {
     return s.trim();
@@ -755,6 +830,16 @@ function resolveBrackets(s: string, scope: InternalScope): string {
     const lastOpenCurly = res.lastIndexOf("{");
     const isCurly = lastOpenCurly > lastOpenParen;
     const lastOpen = isCurly ? lastOpenCurly : lastOpenParen;
+    
+    // Don't resolve if this is a function call (identifier immediately before the paren)
+    if (!isCurly && lastOpen > 0) {
+      const beforeParen = res[lastOpen - 1];
+      if (/[a-zA-Z_0-9)]/.test(beforeParen)) {
+        // This looks like a function call or index, don't resolve it
+        break;
+      }
+    }
+    
     const closeChar = isCurly ? "}" : ")";
     const nextClose = res.indexOf(closeChar, lastOpen);
     if (nextClose === -1) {
@@ -818,6 +903,29 @@ function parseStructDef(st: string, scope: InternalScope): void {
   }
   if (!scope.structs) scope.structs = {};
   scope.structs[structName] = { fields };
+}
+
+function parseFunctionDef(st: string, scope: InternalScope): void {
+  // Match: fn name(param1 : type1, param2 : type2) : returnType => body
+  const m = st.match(
+    /^fn\s+([a-zA-Z_]\w+)\s*\(([^)]*)\)\s*:\s*([a-zA-Z_]\w+)\s*=>\s*(.+)$/
+  );
+  if (!m) throw new Error(`Invalid function declaration: ${st}`);
+  const [, funcName, paramStr, returnType, body] = m;
+
+  const params: Array<{ name: string; type: string }> = [];
+  if (paramStr.trim()) {
+    const paramDecls = paramStr.split(",").map((s) => s.trim());
+    for (const decl of paramDecls) {
+      const parts = decl.split(":").map((s) => s.trim());
+      if (parts.length !== 2) throw new Error(`Invalid parameter: ${decl}`);
+      const [pname, ptype] = parts;
+      params.push({ name: pname, type: ptype });
+    }
+  }
+
+  if (!scope.functions) scope.functions = {};
+  scope.functions[funcName] = { params, returnType, body };
 }
 
 function resolveStructLiterals(st: string, scope: InternalScope): string {
@@ -903,6 +1011,18 @@ function evaluateExpressionStatement(
   st: string,
   scope: InternalScope
 ): TypedVal {
+  // First, try to handle function calls (name(...))
+  const funcCallMatch = st.match(
+    /^([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*$/
+  );
+  if (funcCallMatch) {
+    const [, funcName, argsStr] = funcCallMatch;
+    const func = getFunctionFromScope(scope, funcName);
+    if (func) {
+      return handleFunctionCall(funcName, func, argsStr, scope);
+    }
+  }
+
   // First, try to handle struct literal expressions directly
   const structLiteralResult = evaluateStructLiteralExpression(st, scope);
   if (structLiteralResult !== null) {
@@ -963,6 +1083,12 @@ function evaluateStatements(s: string, scope: InternalScope): TypedVal {
       continue;
     }
 
+    if (st.startsWith("fn ")) {
+      parseFunctionDef(st, scope);
+      lastVal = { value: 0 };
+      continue;
+    }
+
     if (!st) continue;
     if (st.includes(";") && splitStatements(st).length > 1) {
       lastVal = evaluateStatements(st, scope);
@@ -987,6 +1113,10 @@ function interpretRaw(input: string, scope: InternalScope): TypedVal {
 }
 
 export function interpret(input: string, scope: Scope = {}): number {
-  return interpretRaw(input, { values: scope, structs: {}, typeAliases: {} })
-    .value;
+  return interpretRaw(input, {
+    values: scope,
+    structs: {},
+    typeAliases: {},
+    functions: {},
+  }).value;
 }
