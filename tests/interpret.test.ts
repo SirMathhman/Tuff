@@ -68,4 +68,8 @@ describe("interpret", () => {
   it("adds plain number and U8", () => {
     expect(interpret("1 + 2U8")).toBe(3);
   });
+
+  it("adds U8 and plain number", () => {
+    expect(interpret("1U8 + 2")).toBe(3);
+  });
 });
