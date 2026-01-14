@@ -411,8 +411,24 @@ function splitStatements(s: string): string[] {
     if (char === ";" && depth === 0) {
       result.push(current.trim());
       current = "";
-    } else {
-      current += char;
+      continue;
+    }
+    current += char;
+    if (char === "}" && depth === 0) {
+      let j = i + 1;
+      while (j < s.length && /\s/.test(s[j])) j++;
+      if (j < s.length) {
+        const nextPart = s.slice(j);
+        if (
+          !nextPart.startsWith("else") &&
+          !nextPart.startsWith(";") &&
+          !/^[+\-*/%|&^=<>]/.test(nextPart)
+        ) {
+          result.push(current.trim());
+          current = "";
+          i = j - 1;
+        }
+      }
     }
   }
   if (current.trim()) result.push(current.trim());

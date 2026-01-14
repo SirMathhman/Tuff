@@ -281,6 +281,7 @@ describe("interpret compound assignment and loops", () => {
 
   it("handles while loops", () => {
     expect(interpret("let mut x = 0; while (x < 4) x += 1; x")).toBe(4);
+    expect(interpret("let mut x = 0; while (x < 4) { x += 1; } x")).toBe(4);
     expect(
       interpret(`
       let mut x = 0;
@@ -295,6 +296,10 @@ describe("interpret compound assignment and loops", () => {
     expect(
       interpret("let mut x = 0; let y = while (x < 3) { x += 1; x }; y")
     ).toBe(3);
+  });
+
+  it("handles block statements without trailing semicolon", () => {
+    expect(interpret("let x = if (true) { 10 } 20 + x")).toBe(30);
   });
 
   it("throws on U8 multiplication overflow (100 * 3U8)", () => {
