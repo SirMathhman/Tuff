@@ -189,6 +189,10 @@ describe("interpret blocks and variables", () => {
     expect(() => interpret("let x = 0; x = 100; x")).toThrow("Cannot assign to immutable variable: x");
   });
 
+  it("throws when accessing variable outside its block scope", () => {
+    expect(() => interpret("{ let x : I32; } x = 100; x")).toThrow("Variable not declared: x");
+  });
+
   it("throws on U8 multiplication overflow (100 * 3U8)", () => {
     expect(() => interpret("100 * 3U8")).toThrow();
   });
