@@ -130,4 +130,8 @@ describe("interpret complex expressions", () => {
   it("handles negative results from parentheses (5 - (2 - 5) => 8)", () => {
     expect(interpret("5 - (2 - 5)")).toBe(8);
   });
+
+  it("throws on U8 multiplication overflow (100 * 3U8)", () => {
+    expect(() => interpret("100 * 3U8")).toThrow();
+  });
 });
