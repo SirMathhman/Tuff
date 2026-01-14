@@ -95,6 +95,36 @@ function checkOverflow(value: number, type?: string): void {
   }
 }
 
+function applyOp(left: TypedVal, right: TypedVal, op: string): TypedVal {
+  let res: number;
+  let type = promoteTypes(left.type, right.type);
+  if (op === "*") res = left.value * right.value;
+  else if (op === "/") res = left.value / right.value;
+  else if (op === "+") res = left.value + right.value;
+  else if (op === "-") res = left.value - right.value;
+  else if (op === "<") {
+    res = left.value < right.value ? 1 : 0;
+    type = "bool";
+  } else if (op === ">") {
+    res = left.value > right.value ? 1 : 0;
+    type = "bool";
+  } else if (op === "<=") {
+    res = left.value <= right.value ? 1 : 0;
+    type = "bool";
+  } else if (op === ">=") {
+    res = left.value >= right.value ? 1 : 0;
+    type = "bool";
+  } else if (op === "==") {
+    res = left.value === right.value ? 1 : 0;
+    type = "bool";
+  } else if (op === "!=") {
+    res = left.value !== right.value ? 1 : 0;
+    type = "bool";
+  } else throw new Error(`Unknown operator: ${op}`);
+  if (type !== "bool") checkOverflow(res, type);
+  return { value: res, type };
+}
+
 function evaluateExpression(
   s: string,
   tokens: Array<{ text: string; index: number }>,
@@ -112,42 +142,31 @@ function evaluateExpression(
       parsed[i - 1].index + parsed[i - 1].text.length,
       parsed[i].index
     );
-    const opMatch = between.match(/[+\-*/]/);
+    const opMatch = between.match(/==|!=|<=|>=|[+\-*/<>]/);
     if (!opMatch) throw new Error("Invalid operator between operands");
     ops.push(opMatch[0]);
   }
 
-  const values = parsed.map((p) => ({ value: p.value, type: p.type }));
+  const values: TypedVal[] = parsed.map((p) => ({ value: p.value, type: p.type }));
   const currentOps = [...ops];
 
-  for (let i = 0; i < currentOps.length; i++) {
-    if (currentOps[i] === "*" || currentOps[i] === "/") {
-      const left = values[i];
-      const right = values[i + 1];
-      const result =
-        currentOps[i] === "*"
-          ? left.value * right.value
-          : left.value / right.value;
-      const type = promoteTypes(left.type, right.type);
-      checkOverflow(result, type);
-      values.splice(i, 2, { value: result, type });
-      currentOps.splice(i, 1);
-      i--;
+  const processPass = (targetOps: string[]) => {
+    for (let i = 0; i < currentOps.length; i++) {
+      if (targetOps.includes(currentOps[i])) {
+        const res = applyOp(values[i], values[i + 1], currentOps[i]);
+        values.splice(i, 2, res);
+        currentOps.splice(i, 1);
+        i--;
+      }
     }
-  }
+  };
 
-  let total = values[0].value;
-  let totalType = values[0].type;
-  for (let i = 0; i < currentOps.length; i++) {
-    const next = values[i + 1];
-    const result =
-      currentOps[i] === "+" ? total + next.value : total - next.value;
-    const type = promoteTypes(totalType, next.type);
-    checkOverflow(result, type);
-    total = result;
-    totalType = type;
-  }
-  return { value: total, type: totalType };
+  processPass(["*", "/"]);
+  processPass(["+", "-"]);
+  processPass(["<", ">", "<=", ">="]);
+  processPass(["==", "!="]);
+
+  return { value: values[0].value, type: values[0].type };
 }
 
 function checkNarrowing(targetType: string, sourceType: string): void {
@@ -217,10 +236,7 @@ function findClosingBrace(s: string, startPos: number): number {
   return -1;
 }
 
-function parseBranch(
-  s: string,
-  pos: number
-): { content: string; end: number } {
+function parseBranch(s: string, pos: number): { content: string; end: number } {
   while (pos < s.length && /\s/.test(s[pos])) pos++;
   if (s[pos] === "{") {
     const end = findClosingBrace(s, pos);

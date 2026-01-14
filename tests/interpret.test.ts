@@ -166,14 +166,18 @@ describe("interpret blocks and variables", () => {
   });
 });
 
-describe("interpret assignment and mutability", () => {
+describe("interpret control flow and comparisons", () => {
   it("handles if expressions (let x = if (true) { let y = 200; y } else 400; x => 200)", () => {
-    expect(interpret("let x = if (true) { let y = 200; y } else 400; x")).toBe(200);
+    expect(interpret("let x = if (true) { let y = 200; y } else 400; x")).toBe(
+      200
+    );
   });
 
   it("handles nested if expressions", () => {
     expect(
-      interpret("let x = if (true) { if (false) { 1 } else { 2 } } else { 3 }; x")
+      interpret(
+        "let x = if (true) { if (false) { 1 } else { 2 } } else { 3 }; x"
+      )
     ).toBe(2);
   });
 
@@ -183,6 +187,16 @@ describe("interpret assignment and mutability", () => {
     ).toBe(2);
   });
 
+  it("handles complex conditional with comparison", () => {
+    expect(
+      interpret(
+        "let x = if ({let z = 10; z} < {let a = 140; a}) { let y = 200; y } else 400; x"
+      )
+    ).toBe(200);
+  });
+});
+
+describe("interpret assignment and mutability", () => {
   it("throws on implicit narrowing assignment (let x = 100U16; let y : U8 = x;)", () => {
     expect(() => interpret("let x = 100U16; let y : U8 = x; y")).toThrow();
   });
