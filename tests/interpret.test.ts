@@ -278,7 +278,9 @@ describe("interpret compound assignment and loops", () => {
   it("handles equality as a statement without misidentifying as assignment", () => {
     expect(interpret("let x = 1; x == 1; x")).toBe(1);
   });
+});
 
+describe("interpret loops", () => {
   it("handles while loops", () => {
     expect(interpret("let mut x = 0; while (x < 4) x += 1; x")).toBe(4);
     expect(interpret("let mut x = 0; while (x < 4) { x += 1; } x")).toBe(4);
@@ -298,6 +300,17 @@ describe("interpret compound assignment and loops", () => {
     ).toBe(3);
   });
 
+  it("handles do-while loops", () => {
+    expect(interpret("let mut x = 0; do { x += 1; } while (x < 1); x")).toBe(1);
+    expect(interpret("let mut x = 0; do { x += 1; } while (x < 0); x")).toBe(1);
+    expect(interpret("let mut x = 0; do { x += 1; } while (x < 4); x")).toBe(4);
+    expect(
+      interpret("let mut x = 0; let y = do { x += 1; x } while (x < 3); y")
+    ).toBe(3);
+  });
+});
+
+describe("interpret misc", () => {
   it("handles block statements without trailing semicolon", () => {
     expect(interpret("let x = if (true) { 10 } 20 + x")).toBe(30);
   });

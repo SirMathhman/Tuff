@@ -342,60 +342,63 @@ function handleWhile(
   return { val: lastVal, end: finalPos };
 }
 
-function resolveIfExpressions(s: string, scope: InternalScope): string {
-  let res = s;
-  while (true) {
-    let ifIdx = -1;
-    let searchPos = res.length;
-    while (searchPos >= 0) {
-      const found = res.lastIndexOf("if", searchPos);
-      if (found === -1) break;
-      if (
-        (found === 0 || !/[a-zA-Z0-9_]/.test(res[found - 1])) &&
-        (found + 2 === res.length || !/[a-zA-Z0-9_]/.test(res[found + 2]))
-      ) {
-        ifIdx = found;
-        break;
-      }
-      searchPos = found - 1;
-    }
-
-    if (ifIdx === -1) break;
-    const { val, end } = handleIf(res.slice(ifIdx), scope);
-    res =
-      res.slice(0, ifIdx) +
-      val.value +
-      (val.type ?? "") +
-      res.slice(ifIdx + end);
+function handleDoWhile(
+  s: string,
+  scope: InternalScope
+): { val: TypedVal; end: number } {
+  const bodyRes = parseBranch(s, 2);
+  const bodyStr = bodyRes.content;
+  let pos = bodyRes.end;
+  while (pos < s.length && (/\s/.test(s[pos]) || s[pos] === ";")) pos++;
+  if (!s.slice(pos).startsWith("while")) {
+    throw new Error(
+      `Missing while keyword for do-while loop at pos ${pos}. s: "${s.slice(
+        0,
+        50
+      )}..."`
+    );
   }
-  return res;
+  const { condStr, condEnd } = extractCondition(s.slice(pos), "while");
+  const finalPos = pos + condEnd + 1;
+
+  let lastVal: TypedVal = { value: 0 };
+  do {
+    lastVal = interpretRaw(bodyStr, { values: {}, parent: scope });
+  } while (interpretRaw(condStr, scope).value);
+
+  return { val: lastVal, end: finalPos };
 }
 
-function resolveWhileExpressions(s: string, scope: InternalScope): string {
+function resolveExpressions(
+  s: string,
+  keyword: string,
+  handler: (s: string, scope: InternalScope) => { val: TypedVal; end: number },
+  scope: InternalScope
+): string {
   let res = s;
   while (true) {
-    let whileIdx = -1;
+    let kwIdx = -1;
     let searchPos = res.length;
     while (searchPos >= 0) {
-      const found = res.lastIndexOf("while", searchPos);
+      const found = res.lastIndexOf(keyword, searchPos);
       if (found === -1) break;
       if (
         (found === 0 || !/[a-zA-Z0-9_]/.test(res[found - 1])) &&
-        (found + 5 === res.length || !/[a-zA-Z0-9_]/.test(res[found + 5]))
+        (found + keyword.length === res.length ||
+          !/[a-zA-Z0-9_]/.test(res[found + keyword.length]))
       ) {
-        whileIdx = found;
+        kwIdx = found;
         break;
       }
       searchPos = found - 1;
     }
-
-    if (whileIdx === -1) break;
-    const { val, end } = handleWhile(res.slice(whileIdx), scope);
+    if (kwIdx === -1) break;
+    const { val, end } = handler(res.slice(kwIdx), scope);
     res =
-      res.slice(0, whileIdx) +
+      res.slice(0, kwIdx) +
       val.value +
       (val.type ?? "") +
-      res.slice(whileIdx + end);
+      res.slice(kwIdx + end);
   }
   return res;
 }
@@ -421,6 +424,7 @@ function splitStatements(s: string): string[] {
         const nextPart = s.slice(j);
         if (
           !nextPart.startsWith("else") &&
+          !nextPart.startsWith("while") &&
           !nextPart.startsWith(";") &&
           !/^[+\-*/%|&^=<>]/.test(nextPart)
         ) {
@@ -473,8 +477,9 @@ function evaluateStatements(s: string, scope: InternalScope): TypedVal {
   const localDecls = new Set<string>();
 
   for (const rawSt of statements) {
-    let st = resolveWhileExpressions(rawSt, scope);
-    st = resolveIfExpressions(st, scope);
+    let st = resolveExpressions(rawSt, "do", handleDoWhile, scope);
+    st = resolveExpressions(st, "while", handleWhile, scope);
+    st = resolveExpressions(st, "if", handleIf, scope);
     st = resolveBrackets(st, scope);
     if (!st) continue;
     if (st.includes(";") && splitStatements(st).length > 1) {
