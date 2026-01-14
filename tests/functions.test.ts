@@ -11,21 +11,15 @@ describe("function declarations and calls", () => {
   });
 
   it("function with single parameter", () => {
-    expect(
-      interpret("fn double(x : I32) : I32 => x * 2; double(5)")
-    ).toBe(10);
+    expect(interpret("fn double(x : I32) : I32 => x * 2; double(5)")).toBe(10);
   });
 
   it("function returning boolean", () => {
-    expect(
-      interpret("fn isTrue() : Bool => true; isTrue()")
-    ).toBe(1);
+    expect(interpret("fn isTrue() : Bool => true; isTrue()")).toBe(1);
   });
 
   it("function call with no parameters", () => {
-    expect(
-      interpret("fn getAnswer() : I32 => 42; getAnswer()")
-    ).toBe(42);
+    expect(interpret("fn getAnswer() : I32 => 42; getAnswer()")).toBe(42);
   });
 
   it("throws on wrong number of arguments", () => {

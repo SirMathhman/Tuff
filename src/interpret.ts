@@ -830,7 +830,7 @@ function resolveBrackets(s: string, scope: InternalScope): string {
     const lastOpenCurly = res.lastIndexOf("{");
     const isCurly = lastOpenCurly > lastOpenParen;
     const lastOpen = isCurly ? lastOpenCurly : lastOpenParen;
-    
+
     // Don't resolve if this is a function call (identifier immediately before the paren)
     if (!isCurly && lastOpen > 0) {
       const beforeParen = res[lastOpen - 1];
@@ -839,7 +839,7 @@ function resolveBrackets(s: string, scope: InternalScope): string {
         break;
       }
     }
-    
+
     const closeChar = isCurly ? "}" : ")";
     const nextClose = res.indexOf(closeChar, lastOpen);
     if (nextClose === -1) {
@@ -1012,9 +1012,7 @@ function evaluateExpressionStatement(
   scope: InternalScope
 ): TypedVal {
   // First, try to handle function calls (name(...))
-  const funcCallMatch = st.match(
-    /^([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*$/
-  );
+  const funcCallMatch = st.match(/^([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*$/);
   if (funcCallMatch) {
     const [, funcName, argsStr] = funcCallMatch;
     const func = getFunctionFromScope(scope, funcName);
@@ -1059,51 +1057,75 @@ function evaluateExpressionStatement(
     : evaluateExpression(resolvedSt, tokens, scope);
 }
 
+function processSingleStatement(
+  rawSt: string,
+  scope: InternalScope,
+  localDecls: Set<string>
+): { lastVal: TypedVal; shouldReturn: boolean } {
+  if (rawSt.startsWith("yield ")) {
+    let expr = rawSt.slice(6).trim();
+    if (expr.endsWith(";")) {
+      expr = expr.slice(0, -1).trim();
+    }
+    const lastVal = interpretRaw(expr, scope);
+    return { lastVal, shouldReturn: true };
+  }
+
+  let st = resolveExpressions(rawSt, "do", handleDoWhile, scope);
+  st = resolveExpressions(st, "while", handleWhile, scope);
+  st = resolveExpressions(st, "if", handleIf, scope);
+  st = resolveExpressions(st, "match", handleMatch, scope);
+  st = resolveBrackets(st, scope);
+
+  if (st.startsWith("type ")) {
+    parseTypeAlias(st, scope);
+    return { lastVal: { value: 0 }, shouldReturn: false };
+  }
+
+  if (st.startsWith("struct ")) {
+    parseStructDef(st, scope);
+    return { lastVal: { value: 0 }, shouldReturn: false };
+  }
+
+  if (st.startsWith("fn ")) {
+    parseFunctionDef(st, scope);
+    return { lastVal: { value: 0 }, shouldReturn: false };
+  }
+
+  if (!st) return { lastVal: { value: 0 }, shouldReturn: false };
+
+  if (st.includes(";") && splitStatements(st).length > 1) {
+    return { lastVal: evaluateStatements(st, scope), shouldReturn: false };
+  }
+
+  let lastVal: TypedVal = { value: 0 };
+  if (st.startsWith("let ")) {
+    lastVal = handleLet(st, scope, localDecls);
+  } else if (
+    st.includes("=") &&
+    st.match(/^[a-zA-Z_]\w*\s*([+\-*/%]?=)(?!=)/)
+  ) {
+    lastVal = handleAssign(st, scope);
+  } else {
+    lastVal = evaluateExpressionStatement(st, scope);
+  }
+
+  return { lastVal, shouldReturn: false };
+}
+
 function evaluateStatements(s: string, scope: InternalScope): TypedVal {
   const statements = splitStatements(s);
   let lastVal: TypedVal = { value: 0 };
   const localDecls = new Set<string>();
 
   for (const rawSt of statements) {
-    let st = resolveExpressions(rawSt, "do", handleDoWhile, scope);
-    st = resolveExpressions(st, "while", handleWhile, scope);
-    st = resolveExpressions(st, "if", handleIf, scope);
-    st = resolveExpressions(st, "match", handleMatch, scope);
-    st = resolveBrackets(st, scope);
-
-    if (st.startsWith("type ")) {
-      parseTypeAlias(st, scope);
-      lastVal = { value: 0 };
-      continue;
-    }
-
-    if (st.startsWith("struct ")) {
-      parseStructDef(st, scope);
-      lastVal = { value: 0 };
-      continue;
-    }
-
-    if (st.startsWith("fn ")) {
-      parseFunctionDef(st, scope);
-      lastVal = { value: 0 };
-      continue;
-    }
-
-    if (!st) continue;
-    if (st.includes(";") && splitStatements(st).length > 1) {
-      lastVal = evaluateStatements(st, scope);
-      continue;
-    }
-    if (st.startsWith("let ")) {
-      lastVal = handleLet(st, scope, localDecls);
-    } else if (
-      st.includes("=") &&
-      st.match(/^[a-zA-Z_]\w*\s*([+\-*/%]?=)(?!=)/)
-    ) {
-      lastVal = handleAssign(st, scope);
-    } else {
-      lastVal = evaluateExpressionStatement(st, scope);
-    }
+    const { lastVal: newVal, shouldReturn } = processSingleStatement(
+      rawSt,
+      scope,
+      localDecls
+    );
+    lastVal = newVal;
+    if (shouldReturn) return lastVal;
   }
   return lastVal;
 }
