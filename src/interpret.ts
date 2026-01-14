@@ -121,7 +121,16 @@ function evaluateExpression(
 }
 
 export function interpret(input: string): number {
-  const s = input.trim();
+  let s = input.trim();
+  while (s.includes("(")) {
+    const lastOpen = s.lastIndexOf("(");
+    const nextClose = s.indexOf(")", lastOpen);
+    if (nextClose === -1) throw new Error("Missing closing parenthesis");
+    const internal = s.slice(lastOpen + 1, nextClose);
+    const result = interpret(internal);
+    s = s.slice(0, lastOpen) + result + s.slice(nextClose + 1);
+  }
+
   const tokenRegex =
     /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?(?:[uUiI](?:8|16|32|64))?/g;
   const tokens: Array<{ text: string; index: number }> = [];

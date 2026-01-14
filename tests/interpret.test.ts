@@ -110,4 +110,24 @@ describe("interpret complex expressions", () => {
   it("handles multiplication with precedence (2 + 4 * 3 => 14)", () => {
     expect(interpret("2 + 4 * 3")).toBe(14);
   });
+
+  it("handles parentheses ((2 + 4) * 3 => 18)", () => {
+    expect(interpret("(2 + 4) * 3")).toBe(18);
+  });
+
+  it("handles nested parentheses (1 + (2 * 3) => 7)", () => {
+    expect(interpret("1 + (2 * 3)")).toBe(7);
+  });
+
+  it("handles suffixes on parentheses ((2 + 4)U8 => 6)", () => {
+    expect(interpret("(2 + 4)U8")).toBe(6);
+  });
+
+  it("throws on overflow with parentheses ((200 + 100)U8)", () => {
+    expect(() => interpret("(200 + 100)U8")).toThrow();
+  });
+
+  it("handles negative results from parentheses (5 - (2 - 5) => 8)", () => {
+    expect(interpret("5 - (2 - 5)")).toBe(8);
+  });
 });
