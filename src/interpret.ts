@@ -17,6 +17,7 @@ type InternalScope = {
   values: Scope;
   parent?: InternalScope;
   structs?: Record<string, StructDef>;
+  typeAliases?: Record<string, string>;
 };
 
 function getFromScope(
@@ -47,6 +48,22 @@ function getStructFromScope(
   if (scope.structs && name in scope.structs) return scope.structs[name];
   if (scope.parent) return getStructFromScope(scope.parent, name);
   return undefined;
+}
+
+function getTypeAliasFromScope(
+  scope: InternalScope,
+  name: string
+): string | undefined {
+  if (scope.typeAliases && name in scope.typeAliases)
+    return scope.typeAliases[name];
+  if (scope.parent) return getTypeAliasFromScope(scope.parent, name);
+  return undefined;
+}
+
+function resolveTypeAlias(type: string, scope: InternalScope): string {
+  const resolved = getTypeAliasFromScope(scope, type);
+  if (resolved) return resolveTypeAlias(resolved, scope);
+  return type;
 }
 function parseTypeSuffix(numStr: string, rest: string, n: number): TypedVal {
   if (rest.length === 0) return { value: n };
@@ -243,7 +260,8 @@ function parseStructFields(
   const fieldDecls = fieldStr.split(",").map((s) => s.trim());
   for (const decl of fieldDecls) {
     const parts = decl.split(":").map((s) => s.trim());
-    if (parts.length !== 2) throw new Error(`Invalid field declaration: ${decl}`);
+    if (parts.length !== 2)
+      throw new Error(`Invalid field declaration: ${decl}`);
     const [fname, fvalStr] = parts;
     const fval = interpretRaw(fvalStr, scope);
     fields[fname] = fval.value;
@@ -294,7 +312,7 @@ function handleLet(
 
   // Regular let statement
   const m = st.match(
-    /^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*([uUiI](?:8|16|32|64)))?(?:\s*=\s*(.+))?$/
+    /^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*([a-zA-Z_]\w*))?(?:\s*=\s*(.+))?$/
   );
 
   if (!m) {
@@ -308,9 +326,11 @@ function handleLet(
   let res: TypedVal = { value: 0, type };
   if (expr) {
     res = interpretRaw(expr, scope);
-    if (type && res.type) checkNarrowing(type, res.type);
+    const resolvedType = type ? resolveTypeAlias(type, scope) : type;
+    if (resolvedType && res.type) checkNarrowing(resolvedType, res.type);
   }
-  const finalType = type || res.type;
+  const resolvedType = type ? resolveTypeAlias(type, scope) : type;
+  const finalType = resolvedType || res.type;
   if (finalType) checkOverflow(res.value as number, finalType);
   scope.values[name] = { value: res.value, type: finalType, mutable: !!mutS };
   localDecls.add(name);
@@ -330,7 +350,7 @@ function handleAssign(st: string, scope: InternalScope): TypedVal {
   let res: TypedVal;
   if (op === "=") {
     res = rhs;
-    const targetType = existing.type;
+    const targetType = existing.type ? resolveTypeAlias(existing.type, scope) : existing.type;
     if (targetType && res.type) checkNarrowing(targetType, res.type);
     if (targetType) checkOverflow(res.value, targetType);
   } else {
@@ -607,6 +627,14 @@ function resolveBrackets(s: string, scope: InternalScope): string {
   return res;
 }
 
+function parseTypeAlias(st: string, scope: InternalScope): void {
+  const m = st.match(/^type\s+([a-zA-Z_]\w+)\s*=\s*([a-zA-Z_]\w+)\s*;?\s*$/);
+  if (!m) throw new Error(`Invalid type alias declaration: ${st}`);
+  const [, aliasName, targetType] = m;
+  if (!scope.typeAliases) scope.typeAliases = {};
+  scope.typeAliases[aliasName] = targetType;
+}
+
 function parseStructDef(st: string, scope: InternalScope): void {
   const m = st.match(/^struct\s+([a-zA-Z_]\w+)\s*\{([^}]+)\}$/);
   if (!m) throw new Error(`Invalid struct declaration: ${st}`);
@@ -635,15 +663,22 @@ function resolveStructLiterals(st: string, scope: InternalScope): string {
 
     const [fullMatch, structName, fieldStr] = m;
     const struct = getStructFromScope(scope, structName);
-    
+
     // Only process if it's a known struct
     if (struct) {
       const fields = parseStructFields(fieldStr, scope);
-      
+
       // Replace struct literal with a temporary variable reference
       const tempName = `__struct_lit_${Math.random().toString(36).slice(2)}`;
-      scope.values[tempName] = { value: fields, type: structName, mutable: false };
-      result = result.slice(0, m.index) + tempName + result.slice(m.index + fullMatch.length);
+      scope.values[tempName] = {
+        value: fields,
+        type: structName,
+        mutable: false,
+      };
+      result =
+        result.slice(0, m.index) +
+        tempName +
+        result.slice(m.index + fullMatch.length);
       changed = true;
     } else {
       break;
@@ -662,7 +697,7 @@ function evaluateStructLiteralExpression(
 
   const [, structName, fieldStr, rest] = m;
   const struct = getStructFromScope(scope, structName);
-  if (!struct) return null;  // Not a struct literal, continue with normal parsing
+  if (!struct) return null; // Not a struct literal, continue with normal parsing
 
   // Parse the struct literal
   const fields = parseStructFields(fieldStr, scope);
@@ -704,7 +739,7 @@ function evaluateExpressionStatement(
   }
 
   const resolvedSt = resolveStructLiterals(st, scope);
-  
+
   const tokenRegex =
     /!*[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?(?:[uUiI](?:8|16|32|64)|bool)?|!*[a-zA-Z_]\w*(?:\.\w+)*/g;
   const tokens: Array<{ text: string; index: number }> = [];
@@ -729,6 +764,12 @@ function evaluateStatements(s: string, scope: InternalScope): TypedVal {
     st = resolveExpressions(st, "if", handleIf, scope);
     st = resolveExpressions(st, "match", handleMatch, scope);
     st = resolveBrackets(st, scope);
+
+    if (st.startsWith("type ")) {
+      parseTypeAlias(st, scope);
+      lastVal = { value: 0 };
+      continue;
+    }
 
     if (st.startsWith("struct ")) {
       parseStructDef(st, scope);
@@ -760,5 +801,5 @@ function interpretRaw(input: string, scope: InternalScope): TypedVal {
 }
 
 export function interpret(input: string, scope: Scope = {}): number {
-  return interpretRaw(input, { values: scope, structs: {} }).value;
+  return interpretRaw(input, { values: scope, structs: {}, typeAliases: {} }).value;
 }
