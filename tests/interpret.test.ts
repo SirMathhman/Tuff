@@ -139,6 +139,18 @@ describe("interpret complex expressions", () => {
     expect(interpret("(2 + { let x : I32 = 4; x }) * 3")).toBe(18);
   });
 
+  it("handles implicit type inference (let x = 4; x => 4)", () => {
+    expect(interpret("let x = 4; x")).toBe(4);
+  });
+
+  it("infers type from suffix (let x = 4U8; x) and checks overflow", () => {
+    expect(() => interpret("let x = 256U8; x")).toThrow();
+  });
+
+  it("handles complex inference ((2 + { let x = 4; x }) * 3 => 18)", () => {
+    expect(interpret("(2 + { let x = 4; x }) * 3")).toBe(18);
+  });
+
   it("throws on U8 multiplication overflow (100 * 3U8)", () => {
     expect(() => interpret("100 * 3U8")).toThrow();
   });

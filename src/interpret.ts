@@ -74,7 +74,7 @@ function evaluateExpression(
   s: string,
   tokens: Array<{ text: string; index: number }>,
   scope: Scope = {}
-): number {
+): TypedVal {
   const parsed = tokens.map((t) => ({
     ...parseToken(t.text, scope),
     text: t.text,
@@ -122,10 +122,10 @@ function evaluateExpression(
     total = result;
     totalType = type;
   }
-  return total;
+  return { value: total, type: totalType };
 }
 
-export function interpret(input: string, scope: Scope = {}): number {
+function interpretRaw(input: string, scope: Scope = {}): TypedVal {
   let s = input.trim();
   while (s.includes("(") || s.includes("{")) {
     const lastOpenParen = s.lastIndexOf("(");
@@ -139,25 +139,26 @@ export function interpret(input: string, scope: Scope = {}): number {
         `Missing closing ${isCurly ? "curly brace" : "parenthesis"}`
       );
     const internal = s.slice(lastOpen + 1, nextClose);
-    const result = interpret(internal, isCurly ? { ...scope } : scope);
-    s = s.slice(0, lastOpen) + result + s.slice(nextClose + 1);
+    const result = interpretRaw(internal, isCurly ? { ...scope } : scope);
+    s = s.slice(0, lastOpen) + result.value + (result.type ?? "") + s.slice(nextClose + 1);
   }
 
   const statements = s
     .split(";")
     .map((st) => st.trim())
     .filter((st) => st.length > 0);
-  let lastVal = 0;
+  let lastVal: TypedVal = { value: 0 };
   for (const st of statements) {
     const letMatch = st.match(
-      /^let\s+([a-zA-Z_]\w*)\s*:\s*([uUiI](?:8|16|32|64))\s*=\s*(.+)$/
+      /^let\s+([a-zA-Z_]\w*)\s*(?::\s*([uUiI](?:8|16|32|64)))?\s*=\s*(.+)$/
     );
     if (letMatch) {
       const [, name, type, expr] = letMatch;
-      const val = interpret(expr, scope);
-      checkOverflow(val, type);
-      scope[name] = { value: val, type };
-      lastVal = val;
+      const res = interpretRaw(expr, scope);
+      const finalType = type || res.type;
+      if (finalType) checkOverflow(res.value, finalType);
+      scope[name] = { value: res.value, type: finalType };
+      lastVal = res;
     } else {
       const tokenRegex =
         /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?(?:[uUiI](?:8|16|32|64))?|[a-zA-Z_]\w*/g;
@@ -166,10 +167,15 @@ export function interpret(input: string, scope: Scope = {}): number {
       while ((m = tokenRegex.exec(st)))
         tokens.push({ text: m[0], index: m.index });
       if (tokens.length === 0) throw new Error("Invalid statement");
-      if (tokens.length === 1)
-        lastVal = parseToken(tokens[0].text, scope).value;
-      else lastVal = evaluateExpression(st, tokens, scope);
+      lastVal =
+        tokens.length === 1
+          ? parseToken(tokens[0].text, scope)
+          : evaluateExpression(st, tokens, scope);
     }
   }
   return lastVal;
+}
+
+export function interpret(input: string, scope: Scope = {}): number {
+  return interpretRaw(input, scope).value;
 }
