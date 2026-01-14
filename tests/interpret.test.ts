@@ -92,4 +92,8 @@ describe("interpret", () => {
   it("adds mixed sequence with promotion (1U8 + 2 + 3U16 => 6)", () => {
     expect(interpret("1U8 + 2 + 3U16")).toBe(6);
   });
+
+  it("evaluates mixed addition and subtraction (4 + 3 - 2 => 5)", () => {
+    expect(interpret("4 + 3 - 2")).toBe(5);
+  });
 });
