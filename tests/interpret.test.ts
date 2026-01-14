@@ -261,6 +261,16 @@ describe("interpret assignment and mutability", () => {
     expect(interpret("let mut x = 10; x %= 3; x")).toBe(1);
   });
 
+  it("enforces mutability for assignments", () => {
+    expect(() => interpret("let x = 0; x += 1; x")).toThrow("Cannot assign to immutable variable: x");
+    expect(() => interpret("let x = 10; x -= 1; x")).toThrow("Cannot assign to immutable variable: x");
+    expect(() => interpret("let x = 5; x = 1;")).toThrow("Cannot assign to immutable variable: x");
+  });
+
+  it("handles equality as a statement without misidentifying as assignment", () => {
+    expect(interpret("let x = 1; x == 1; x")).toBe(1);
+  });
+
   it("throws on U8 multiplication overflow (100 * 3U8)", () => {
     expect(() => interpret("100 * 3U8")).toThrow();
   });

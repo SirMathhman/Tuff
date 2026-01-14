@@ -225,7 +225,7 @@ function handleLet(
 }
 
 function handleAssign(st: string, scope: InternalScope): TypedVal {
-  const m = st.match(/^([a-zA-Z_]\w*)\s*([+\-*/%]?=)\s*(.+)$/);
+  const m = st.match(/^([a-zA-Z_]\w*)\s*([+\-*/%]?=)(?!=)\s*(.+)$/);
   if (!m) throw new Error("Invalid assignment");
   const [, name, op, expr] = m;
   const existing = getFromScope(scope, name);
@@ -247,7 +247,7 @@ function handleAssign(st: string, scope: InternalScope): TypedVal {
   updateInScope(scope, name, {
     value: res.value,
     type: existing.type || res.type,
-    mutable: true,
+    mutable: existing.mutable,
   });
   return res;
 }
@@ -412,7 +412,7 @@ function evaluateStatements(s: string, scope: InternalScope): TypedVal {
     }
     if (st.startsWith("let ")) {
       lastVal = handleLet(st, scope, localDecls);
-    } else if (st.includes("=") && st.match(/^[a-zA-Z_]\w*\s*[+\-*/%]?=/)) {
+    } else if (st.includes("=") && st.match(/^[a-zA-Z_]\w*\s*([+\-*/%]?=)(?!=)/)) {
       lastVal = handleAssign(st, scope);
     } else {
       const tokenRegex =
