@@ -8,20 +8,22 @@ describe("type aliases", () => {
 
   it("uses type alias in multiple variable declarations", () => {
     expect(
-      interpret("type Score = U8; let x : Score = 10; let y : Score = 20; x + y")
+      interpret(
+        "type Score = U8; let x : Score = 10; let y : Score = 20; x + y"
+      )
     ).toBe(30);
   });
 
   it("throws on invalid assignment (type Temp = I32; let temp : Temp = 100; let value : Bool = temp)", () => {
     expect(() =>
-      interpret("type Temp = I32; let temp : Temp = 100; let value : Bool = temp;")
+      interpret(
+        "type Temp = I32; let temp : Temp = 100; let value : Bool = temp;"
+      )
     ).toThrow();
   });
 
   it("throws on incompatible type alias assignment", () => {
-    expect(() =>
-      interpret("type MyU8 = U8; let x : MyU8 = 100U16;")
-    ).toThrow();
+    expect(() => interpret("type MyU8 = U8; let x : MyU8 = 100U16;")).toThrow();
   });
 
   it("supports type alias with assignment to compatible value", () => {

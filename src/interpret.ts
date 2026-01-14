@@ -350,7 +350,9 @@ function handleAssign(st: string, scope: InternalScope): TypedVal {
   let res: TypedVal;
   if (op === "=") {
     res = rhs;
-    const targetType = existing.type ? resolveTypeAlias(existing.type, scope) : existing.type;
+    const targetType = existing.type
+      ? resolveTypeAlias(existing.type, scope)
+      : existing.type;
     if (targetType && res.type) checkNarrowing(targetType, res.type);
     if (targetType) checkOverflow(res.value, targetType);
   } else {
@@ -628,8 +630,9 @@ function resolveBrackets(s: string, scope: InternalScope): string {
 }
 
 function parseTypeAlias(st: string, scope: InternalScope): void {
-  const m = st.match(/^type\s+([a-zA-Z_]\w+)\s*=\s*([a-zA-Z_]\w+)\s*;?\s*$/);
-  if (!m) throw new Error(`Invalid type alias declaration: ${st}`);
+  const cleaned = st.trim().replace(/;+$/, ""); // Remove trailing semicolons
+  const m = cleaned.match(/^type\s+([a-zA-Z_]\w*)\s*=\s*([a-zA-Z_]\w*)$/);
+  if (!m) throw new Error(`Invalid type alias declaration: ${st.trim()}`);
   const [, aliasName, targetType] = m;
   if (!scope.typeAliases) scope.typeAliases = {};
   scope.typeAliases[aliasName] = targetType;
@@ -738,6 +741,27 @@ function evaluateExpressionStatement(
     return structLiteralResult;
   }
 
+  // Handle 'is' type checking operator (e.g., value is Type)
+  const isOpMatch = st.match(/^(.+?)\s+is\s+([a-zA-Z_]\w+)\s*$/);
+  if (isOpMatch) {
+    const [, exprPart, typePart] = isOpMatch;
+    const exprResult = interpretRaw(exprPart, scope);
+    const resolvedType = resolveTypeAlias(typePart, scope);
+    // For values without explicit type, check if the value could match the requested type
+    let matches = false;
+    if (exprResult.type) {
+      matches = exprResult.type === resolvedType;
+    } else {
+      // Untyped value (bare number): check if it fits the requested type's range
+      const range = RANGES[resolvedType];
+      if (range) {
+        const bigVal = BigInt(Math.floor(exprResult.value));
+        matches = bigVal >= range.min && bigVal <= range.max;
+      }
+    }
+    return { value: matches ? 1 : 0, type: "bool" };
+  }
+
   const resolvedSt = resolveStructLiterals(st, scope);
 
   const tokenRegex =
@@ -801,5 +825,6 @@ function interpretRaw(input: string, scope: InternalScope): TypedVal {
 }
 
 export function interpret(input: string, scope: Scope = {}): number {
-  return interpretRaw(input, { values: scope, structs: {}, typeAliases: {} }).value;
+  return interpretRaw(input, { values: scope, structs: {}, typeAliases: {} })
+    .value;
 }
