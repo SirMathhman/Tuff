@@ -253,6 +253,14 @@ describe("interpret assignment and mutability", () => {
     expect(interpret("let x = { let y = 200; y }; x")).toBe(200);
   });
 
+  it("handles compound assignment (let mut x = 0; x += 1; x => 1)", () => {
+    expect(interpret("let mut x = 0; x += 1; x")).toBe(1);
+    expect(interpret("let mut x = 10; x -= 3; x")).toBe(7);
+    expect(interpret("let mut x = 5; x *= 2; x")).toBe(10);
+    expect(interpret("let mut x = 10; x /= 2; x")).toBe(5);
+    expect(interpret("let mut x = 10; x %= 3; x")).toBe(1);
+  });
+
   it("throws on U8 multiplication overflow (100 * 3U8)", () => {
     expect(() => interpret("100 * 3U8")).toThrow();
   });

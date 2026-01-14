@@ -225,21 +225,28 @@ function handleLet(
 }
 
 function handleAssign(st: string, scope: InternalScope): TypedVal {
-  const m = st.match(/^([a-zA-Z_]\w*)\s*=\s*(.+)$/);
+  const m = st.match(/^([a-zA-Z_]\w*)\s*([+\-*/%]?=)\s*(.+)$/);
   if (!m) throw new Error("Invalid assignment");
-  const [, name, expr] = m;
+  const [, name, op, expr] = m;
   const existing = getFromScope(scope, name);
   if (!existing) throw new Error(`Variable not declared: ${name}`);
   if (!existing.mutable) {
     throw new Error(`Cannot assign to immutable variable: ${name}`);
   }
-  const res = interpretRaw(expr, scope);
-  const targetType = existing.type;
-  if (targetType && res.type) checkNarrowing(targetType, res.type);
-  if (targetType) checkOverflow(res.value, targetType);
+  const rhs = interpretRaw(expr, scope);
+  let res: TypedVal;
+  if (op === "=") {
+    res = rhs;
+    const targetType = existing.type;
+    if (targetType && res.type) checkNarrowing(targetType, res.type);
+    if (targetType) checkOverflow(res.value, targetType);
+  } else {
+    res = applyOp(existing, rhs, op[0]);
+    if (existing.type) checkOverflow(res.value, existing.type);
+  }
   updateInScope(scope, name, {
     value: res.value,
-    type: targetType || res.type,
+    type: existing.type || res.type,
     mutable: true,
   });
   return res;
@@ -405,7 +412,7 @@ function evaluateStatements(s: string, scope: InternalScope): TypedVal {
     }
     if (st.startsWith("let ")) {
       lastVal = handleLet(st, scope, localDecls);
-    } else if (st.includes("=") && st.match(/^[a-zA-Z_]\w*\s*=/)) {
+    } else if (st.includes("=") && st.match(/^[a-zA-Z_]\w*\s*[+\-*/%]?=/)) {
       lastVal = handleAssign(st, scope);
     } else {
       const tokenRegex =
