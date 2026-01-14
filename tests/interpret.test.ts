@@ -130,6 +130,12 @@ describe("interpret complex expressions", () => {
   it("handles negative results from parentheses (5 - (2 - 5) => 8)", () => {
     expect(interpret("5 - (2 - 5)")).toBe(8);
   });
+
+  it("handles modulo operator ((1 + 9) % 6 => 4)", () => {
+    expect(interpret("(1 + 9) % 6")).toBe(4);
+    expect(interpret("10 % 3")).toBe(1);
+    expect(interpret("10 % 5")).toBe(0);
+  });
 });
 
 describe("interpret blocks and variables", () => {

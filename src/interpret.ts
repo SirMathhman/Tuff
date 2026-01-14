@@ -108,6 +108,7 @@ function applyOp(left: TypedVal, right: TypedVal, op: string): TypedVal {
   let type = promoteTypes(left.type, right.type);
   if (op === "*") res = left.value * right.value;
   else if (op === "/") res = left.value / right.value;
+  else if (op === "%") res = left.value % right.value;
   else if (op === "+") res = left.value + right.value;
   else if (op === "-") res = left.value - right.value;
   else if (op === "<") {
@@ -156,7 +157,7 @@ function evaluateExpression(
       parsed[i - 1].index + parsed[i - 1].text.length,
       parsed[i].index
     );
-    const opMatch = between.match(/==|!=|<=|>=|&&|\|\||[+\-*/<>]/);
+    const opMatch = between.match(/==|!=|<=|>=|&&|\|\||[+\-*/%<>]/);
     if (!opMatch) throw new Error("Invalid operator between operands");
     ops.push(opMatch[0]);
   }
@@ -178,7 +179,7 @@ function evaluateExpression(
     }
   };
 
-  processPass(["*", "/"]);
+  processPass(["*", "/", "%"]);
   processPass(["+", "-"]);
   processPass(["<", ">", "<=", ">="]);
   processPass(["==", "!="]);
