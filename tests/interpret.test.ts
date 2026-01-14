@@ -170,15 +170,23 @@ describe("interpret blocks and variables", () => {
   });
 
   it("handles variable declaration and later assignment", () => {
-    expect(interpret("let x : I32; x = 100; x")).toBe(100);
+    expect(interpret("let mut x : I32; x = 100; x")).toBe(100);
   });
 
   it("throws on narrowing assignment", () => {
-    expect(() => interpret("let x : U8; x = 100U16")).toThrow();
+    expect(() => interpret("let mut x : U8; x = 100U16")).toThrow();
   });
 
   it("handles assignment to outer scope from inner block", () => {
-    expect(interpret("let x : I32; { x = 100; } x")).toBe(100);
+    expect(interpret("let mut x : I32; { x = 100; } x")).toBe(100);
+  });
+
+  it("handles mut keyword for mutable variables", () => {
+    expect(interpret("let mut x = 0; x = 100; x")).toBe(100);
+  });
+
+  it("throws on assignment to immutable variable", () => {
+    expect(() => interpret("let x = 0; x = 100")).toThrow();
   });
 
   it("throws on U8 multiplication overflow (100 * 3U8)", () => {

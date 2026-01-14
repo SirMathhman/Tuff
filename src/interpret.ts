@@ -9,17 +9,24 @@ const RANGES: Record<string, { min: bigint; max: bigint }> = {
   I64: { min: -9223372036854775808n, max: 9223372036854775807n },
 };
 
-type TypedVal = { value: number; type?: string };
+type TypedVal = { value: number; type?: string; mutable?: boolean };
 type Scope = Record<string, TypedVal>;
 type InternalScope = { values: Scope; parent?: InternalScope };
 
-function getFromScope(scope: InternalScope, name: string): TypedVal | undefined {
+function getFromScope(
+  scope: InternalScope,
+  name: string
+): TypedVal | undefined {
   if (name in scope.values) return scope.values[name];
   if (scope.parent) return getFromScope(scope.parent, name);
   return undefined;
 }
 
-function updateInScope(scope: InternalScope, name: string, val: TypedVal): void {
+function updateInScope(
+  scope: InternalScope,
+  name: string,
+  val: TypedVal
+): void {
   if (name in scope.values || !scope.parent) {
     scope.values[name] = val;
   } else {
@@ -157,10 +164,10 @@ function handleLet(
   localDecls: Set<string>
 ): TypedVal {
   const m = st.match(
-    /^let\s+([a-zA-Z_]\w*)\s*(?::\s*([uUiI](?:8|16|32|64)))?(?:\s*=\s*(.+))?$/
+    /^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*([uUiI](?:8|16|32|64)))?(?:\s*=\s*(.+))?$/
   );
   if (!m) throw new Error("Invalid let declaration");
-  const [, name, type, expr] = m;
+  const [, mutS, name, type, expr] = m;
   if (localDecls.has(name)) {
     throw new Error(`Variable already declared in this scope: ${name}`);
   }
@@ -171,7 +178,7 @@ function handleLet(
   }
   const finalType = type || res.type;
   if (finalType) checkOverflow(res.value, finalType);
-  scope.values[name] = { value: res.value, type: finalType };
+  scope.values[name] = { value: res.value, type: finalType, mutable: !!mutS };
   localDecls.add(name);
   return res;
 }
@@ -182,11 +189,18 @@ function handleAssign(st: string, scope: InternalScope): TypedVal {
   const [, name, expr] = m;
   const existing = getFromScope(scope, name);
   if (!existing) throw new Error(`Variable not declared: ${name}`);
+  if (!existing.mutable) {
+    throw new Error(`Cannot assign to immutable variable: ${name}`);
+  }
   const res = interpretRaw(expr, scope);
   const targetType = existing.type;
   if (targetType && res.type) checkNarrowing(targetType, res.type);
   if (targetType) checkOverflow(res.value, targetType);
-  updateInScope(scope, name, { value: res.value, type: targetType || res.type });
+  updateInScope(scope, name, {
+    value: res.value,
+    type: targetType || res.type,
+    mutable: true,
+  });
   return res;
 }
 
