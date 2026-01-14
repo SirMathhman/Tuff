@@ -48,9 +48,17 @@ describe("Yield expressions", () => {
 
   it("should use yield result in expression", () => {
     expect(
-      interpret(
-        "fn get() : I32 => { let x = { yield 100; } x + 50 } get()"
-      )
+      interpret("fn get() : I32 => { let x = { yield 100; } x + 50 } get()")
     ).toBe(150);
+  });
+
+  it("should return from function early", () => {
+    expect(
+      interpret("fn get() : I32 => { let x = { return 100; } x + 50 } get()")
+    ).toBe(100);
+  });
+
+  it("should skip execution after return", () => {
+    expect(interpret("fn get() : I32 => { return 42; 100; } get()")).toBe(42);
   });
 });

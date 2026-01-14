@@ -30,6 +30,10 @@ class YieldSignal {
   constructor(public value: TypedVal) {}
 }
 
+class ReturnSignal {
+  constructor(public value: TypedVal) {}
+}
+
 function getFromScope(
   scope: InternalScope,
   name: string
@@ -458,6 +462,30 @@ function initializeStruct(
   return { value: fields };
 }
 
+function bindFunctionParameters(
+  func: FunctionDef,
+  args: TypedVal[],
+  funcScope: InternalScope
+): void {
+  for (let i = 0; i < func.params.length; i++) {
+    const param = func.params[i];
+    const arg = args[i];
+    // Type check the argument against the parameter type
+    // Allow untyped numeric values to be coerced to the parameter type
+    if (arg.type) {
+      checkNarrowing(param.type, arg.type);
+    } else {
+      // For untyped values, check if they fit in the target type's range
+      checkOverflow(arg.value as number, param.type);
+    }
+    funcScope.values[param.name] = {
+      value: arg.value,
+      type: param.type,
+      mutable: false,
+    };
+  }
+}
+
 function handleFunctionCall(
   funcName: string,
   func: FunctionDef,
@@ -486,27 +514,19 @@ function handleFunctionCall(
     parent: scope,
   };
 
-  // Bind parameters to arguments
-  for (let i = 0; i < func.params.length; i++) {
-    const param = func.params[i];
-    const arg = args[i];
-    // Type check the argument against the parameter type
-    // Allow untyped numeric values to be coerced to the parameter type
-    if (arg.type) {
-      checkNarrowing(param.type, arg.type);
-    } else {
-      // For untyped values, check if they fit in the target type's range
-      checkOverflow(arg.value as number, param.type);
-    }
-    funcScope.values[param.name] = {
-      value: arg.value,
-      type: param.type,
-      mutable: false,
-    };
-  }
+  bindFunctionParameters(func, args, funcScope);
 
   // Execute function body
-  const result = interpretRaw(func.body, funcScope);
+  let result: TypedVal;
+  try {
+    result = interpretRaw(func.body, funcScope);
+  } catch (e) {
+    if (e instanceof ReturnSignal) {
+      result = e.value;
+    } else {
+      throw e;
+    }
+  }
 
   // Type check the return value
   // Allow untyped numeric values to be coerced to the return type
@@ -1132,26 +1152,10 @@ function evaluateExpressionStatement(
     : evaluateExpression(resolvedSt, tokens, scope);
 }
 
-function processSingleStatement(
-  rawSt: string,
-  scope: InternalScope,
-  localDecls: Set<string>
-): TypedVal {
-  if (rawSt.startsWith("yield ")) {
-    let expr = rawSt.slice(6).trim();
-    if (expr.endsWith(";")) {
-      expr = expr.slice(0, -1).trim();
-    }
-    const yieldValue = interpretRaw(expr, scope);
-    throw new YieldSignal(yieldValue);
-  }
-
-  let st = resolveExpressions(rawSt, "do", handleDoWhile, scope);
-  st = resolveExpressions(st, "while", handleWhile, scope);
-  st = resolveExpressions(st, "if", handleIf, scope);
-  st = resolveExpressions(st, "match", handleMatch, scope);
-  st = resolveBrackets(st, scope);
-
+function processDefinitions(
+  st: string,
+  scope: InternalScope
+): TypedVal | null {
   if (st.startsWith("type ")) {
     parseTypeAlias(st, scope);
     return { value: 0 };
@@ -1167,12 +1171,14 @@ function processSingleStatement(
     return { value: 0 };
   }
 
-  if (!st) return { value: 0 };
+  return null;
+}
 
-  if (st.includes(";") && splitStatements(st).length > 1) {
-    return evaluateStatements(st, scope);
-  }
-
+function processStatement(
+  st: string,
+  scope: InternalScope,
+  localDecls: Set<string>
+): TypedVal {
   let lastVal: TypedVal = { value: 0 };
   if (st.startsWith("let ")) {
     lastVal = handleLet(st, scope, localDecls);
@@ -1188,6 +1194,57 @@ function processSingleStatement(
   return lastVal;
 }
 
+function processSingleStatement(
+  rawSt: string,
+  scope: InternalScope,
+  localDecls: Set<string>
+): TypedVal {
+  if (rawSt.startsWith("yield ")) {
+    let expr = rawSt.slice(6).trim();
+    if (expr.endsWith(";")) {
+      expr = expr.slice(0, -1).trim();
+    }
+    const yieldValue = interpretRaw(expr, scope);
+    throw new YieldSignal(yieldValue);
+  }
+
+  if (rawSt.startsWith("return ")) {
+    let expr = rawSt.slice(7).trim();
+    if (expr.endsWith(";")) {
+      expr = expr.slice(0, -1).trim();
+    }
+    const returnValue = interpretRaw(expr, scope);
+    throw new ReturnSignal(returnValue);
+  }
+
+  let st: string;
+  try {
+    st = resolveExpressions(rawSt, "do", handleDoWhile, scope);
+    st = resolveExpressions(st, "while", handleWhile, scope);
+    st = resolveExpressions(st, "if", handleIf, scope);
+    st = resolveExpressions(st, "match", handleMatch, scope);
+    st = resolveBrackets(st, scope);
+  } catch (e) {
+    if (e instanceof ReturnSignal) {
+      throw e;
+    }
+    throw e;
+  }
+
+  const defResult = processDefinitions(st, scope);
+  if (defResult !== null) {
+    return defResult;
+  }
+
+  if (!st) return { value: 0 };
+
+  if (st.includes(";") && splitStatements(st).length > 1) {
+    return evaluateStatements(st, scope);
+  }
+
+  return processStatement(st, scope, localDecls);
+}
+
 function evaluateStatements(s: string, scope: InternalScope): TypedVal {
   const statements = splitStatements(s);
   let lastVal: TypedVal = { value: 0 };
@@ -1201,6 +1258,7 @@ function evaluateStatements(s: string, scope: InternalScope): TypedVal {
     if (e instanceof YieldSignal) {
       return e.value;
     }
+    // ReturnSignal should propagate up to function call handler
     throw e;
   }
 
