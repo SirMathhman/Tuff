@@ -186,7 +186,7 @@ describe("interpret blocks and variables", () => {
   });
 
   it("throws on assignment to immutable variable", () => {
-    expect(() => interpret("let x = 0; x = 100")).toThrow();
+    expect(() => interpret("let x = 0; x = 100; x")).toThrow("Cannot assign to immutable variable: x");
   });
 
   it("throws on U8 multiplication overflow (100 * 3U8)", () => {
