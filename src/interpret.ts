@@ -1,10 +1,13 @@
 export function interpret(input: string): number {
-  const n = parseFloat(input);
+  const s = input.trim();
+  const match = s.match(/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/);
+  if (!match) {
+    throw new Error("Invalid number");
+  }
+  const numStr = match[0];
+  const n = parseFloat(numStr);
   if (Number.isNaN(n)) {
     throw new Error("Invalid number");
   }
-	if (n < 0) {
-		throw new Error("Negative numbers are not supported");
-	}
-	return n;
+  return n;
 }
