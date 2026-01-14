@@ -106,4 +106,8 @@ describe("interpret complex expressions", () => {
   it("handles multiplication with precedence (4 * 3 - 2 => 10)", () => {
     expect(interpret("4 * 3 - 2")).toBe(10);
   });
+
+  it("handles multiplication with precedence (2 + 4 * 3 => 14)", () => {
+    expect(interpret("2 + 4 * 3")).toBe(14);
+  });
 });
