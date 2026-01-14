@@ -278,12 +278,12 @@ function parseBranch(s: string, pos: number): { content: string; end: number } {
   return { content: s.slice(pos).trim(), end: s.length };
 }
 
-function handleIf(
+function extractCondition(
   s: string,
-  scope: InternalScope
-): { val: TypedVal; end: number } {
+  keyword: string
+): { condStr: string; condEnd: number } {
   const condStart = s.indexOf("(");
-  if (condStart === -1) throw new Error("Missing condition in if");
+  if (condStart === -1) throw new Error(`Missing condition in ${keyword}`);
   let d = 0,
     condEnd = -1;
   for (let i = condStart; i < s.length; i++) {
@@ -295,8 +295,17 @@ function handleIf(
       }
     }
   }
-  if (condEnd === -1) throw new Error("Missing closing paren for if condition");
-  const condition = interpretRaw(s.slice(condStart + 1, condEnd), scope);
+  if (condEnd === -1)
+    throw new Error(`Missing closing paren for ${keyword} condition`);
+  return { condStr: s.slice(condStart + 1, condEnd), condEnd };
+}
+
+function handleIf(
+  s: string,
+  scope: InternalScope
+): { val: TypedVal; end: number } {
+  const { condStr, condEnd } = extractCondition(s, "if");
+  const condition = interpretRaw(condStr, scope);
   const thenRes = parseBranch(s, condEnd + 1);
   let finalPos = thenRes.end;
   let elsePart: string | undefined;
@@ -315,6 +324,22 @@ function handleIf(
     ? interpretRaw(elsePart, { values: {}, parent: scope })
     : { value: 0 };
   return { val: res, end: finalPos };
+}
+
+function handleWhile(
+  s: string,
+  scope: InternalScope
+): { val: TypedVal; end: number } {
+  const { condStr, condEnd } = extractCondition(s, "while");
+  const bodyRes = parseBranch(s, condEnd + 1);
+  const bodyStr = bodyRes.content;
+  const finalPos = bodyRes.end;
+
+  let lastVal: TypedVal = { value: 0 };
+  while (interpretRaw(condStr, scope).value) {
+    lastVal = interpretRaw(bodyStr, { values: {}, parent: scope });
+  }
+  return { val: lastVal, end: finalPos };
 }
 
 function resolveIfExpressions(s: string, scope: InternalScope): string {
@@ -342,6 +367,35 @@ function resolveIfExpressions(s: string, scope: InternalScope): string {
       val.value +
       (val.type ?? "") +
       res.slice(ifIdx + end);
+  }
+  return res;
+}
+
+function resolveWhileExpressions(s: string, scope: InternalScope): string {
+  let res = s;
+  while (true) {
+    let whileIdx = -1;
+    let searchPos = res.length;
+    while (searchPos >= 0) {
+      const found = res.lastIndexOf("while", searchPos);
+      if (found === -1) break;
+      if (
+        (found === 0 || !/[a-zA-Z0-9_]/.test(res[found - 1])) &&
+        (found + 5 === res.length || !/[a-zA-Z0-9_]/.test(res[found + 5]))
+      ) {
+        whileIdx = found;
+        break;
+      }
+      searchPos = found - 1;
+    }
+
+    if (whileIdx === -1) break;
+    const { val, end } = handleWhile(res.slice(whileIdx), scope);
+    res =
+      res.slice(0, whileIdx) +
+      val.value +
+      (val.type ?? "") +
+      res.slice(whileIdx + end);
   }
   return res;
 }
@@ -403,7 +457,8 @@ function evaluateStatements(s: string, scope: InternalScope): TypedVal {
   const localDecls = new Set<string>();
 
   for (const rawSt of statements) {
-    let st = resolveIfExpressions(rawSt, scope);
+    let st = resolveWhileExpressions(rawSt, scope);
+    st = resolveIfExpressions(st, scope);
     st = resolveBrackets(st, scope);
     if (!st) continue;
     if (st.includes(";") && splitStatements(st).length > 1) {
@@ -412,7 +467,10 @@ function evaluateStatements(s: string, scope: InternalScope): TypedVal {
     }
     if (st.startsWith("let ")) {
       lastVal = handleLet(st, scope, localDecls);
-    } else if (st.includes("=") && st.match(/^[a-zA-Z_]\w*\s*([+\-*/%]?=)(?!=)/)) {
+    } else if (
+      st.includes("=") &&
+      st.match(/^[a-zA-Z_]\w*\s*([+\-*/%]?=)(?!=)/)
+    ) {
       lastVal = handleAssign(st, scope);
     } else {
       const tokenRegex =

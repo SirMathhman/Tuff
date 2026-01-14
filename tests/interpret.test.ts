@@ -252,7 +252,9 @@ describe("interpret assignment and mutability", () => {
   it("handles block assignment to variables", () => {
     expect(interpret("let x = { let y = 200; y }; x")).toBe(200);
   });
+});
 
+describe("interpret compound assignment and loops", () => {
   it("handles compound assignment (let mut x = 0; x += 1; x => 1)", () => {
     expect(interpret("let mut x = 0; x += 1; x")).toBe(1);
     expect(interpret("let mut x = 10; x -= 3; x")).toBe(7);
@@ -262,13 +264,37 @@ describe("interpret assignment and mutability", () => {
   });
 
   it("enforces mutability for assignments", () => {
-    expect(() => interpret("let x = 0; x += 1; x")).toThrow("Cannot assign to immutable variable: x");
-    expect(() => interpret("let x = 10; x -= 1; x")).toThrow("Cannot assign to immutable variable: x");
-    expect(() => interpret("let x = 5; x = 1;")).toThrow("Cannot assign to immutable variable: x");
+    expect(() => interpret("let x = 0; x += 1; x")).toThrow(
+      "Cannot assign to immutable variable: x"
+    );
+    expect(() => interpret("let x = 10; x -= 1; x")).toThrow(
+      "Cannot assign to immutable variable: x"
+    );
+    expect(() => interpret("let x = 5; x = 1;")).toThrow(
+      "Cannot assign to immutable variable: x"
+    );
   });
 
   it("handles equality as a statement without misidentifying as assignment", () => {
     expect(interpret("let x = 1; x == 1; x")).toBe(1);
+  });
+
+  it("handles while loops", () => {
+    expect(interpret("let mut x = 0; while (x < 4) x += 1; x")).toBe(4);
+    expect(
+      interpret(`
+      let mut x = 0;
+      let mut total = 0;
+      while (x < 5) {
+        total += x;
+        x += 1;
+      };
+      total
+    `)
+    ).toBe(10);
+    expect(
+      interpret("let mut x = 0; let y = while (x < 3) { x += 1; x }; y")
+    ).toBe(3);
   });
 
   it("throws on U8 multiplication overflow (100 * 3U8)", () => {
