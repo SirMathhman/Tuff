@@ -35,6 +35,10 @@ function updateInScope(
 }
 
 function parseToken(token: string, scope: InternalScope): TypedVal {
+  if (token.startsWith("!")) {
+    const res = parseToken(token.slice(1), scope);
+    return { value: res.value ? 0 : 1, type: "bool" };
+  }
   if (token === "true") return { value: 1, type: "bool" };
   if (token === "false") return { value: 0, type: "bool" };
   const inScope = getFromScope(scope, token);
@@ -47,6 +51,7 @@ function parseToken(token: string, scope: InternalScope): TypedVal {
 
   const rest = token.slice(numStr.length);
   if (rest.length === 0) return { value: n };
+  if (rest === "bool") return { value: n, type: "bool" };
 
   const sufMatch = rest.match(/^([uUiI])(8|16|32|64)(.*)$/);
   if (!sufMatch) return { value: n };
@@ -90,8 +95,9 @@ function promoteTypes(type1?: string, type2?: string): string | undefined {
 }
 
 function checkOverflow(value: number, type?: string): void {
-  if (type) {
+  if (type && type !== "bool") {
     const r = RANGES[type];
+    if (!r) return;
     const big = BigInt(Math.floor(value));
     if (big < r.min || big > r.max) throw new Error(`${type} overflow`);
   }
@@ -402,7 +408,7 @@ function evaluateStatements(s: string, scope: InternalScope): TypedVal {
       lastVal = handleAssign(st, scope);
     } else {
       const tokenRegex =
-        /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?(?:[uUiI](?:8|16|32|64))?|[a-zA-Z_]\w*/g;
+        /!*[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?(?:[uUiI](?:8|16|32|64)|bool)?|!*[a-zA-Z_]\w*/g;
       const tokens: Array<{ text: string; index: number }> = [];
       let m: RegExpExecArray | null;
       while ((m = tokenRegex.exec(st))) {

@@ -201,6 +201,13 @@ describe("interpret control flow and comparisons", () => {
     expect(interpret("true && true")).toBe(1);
     expect(interpret("false || false")).toBe(0);
   });
+
+  it("handles unary NOT operator (!(let x = true; x) => 0)", () => {
+    expect(interpret("!(let x = true; x)")).toBe(0);
+    expect(interpret("!false")).toBe(1);
+    expect(interpret("!!true")).toBe(1);
+    expect(interpret("!100")).toBe(0);
+  });
 });
 
 describe("interpret assignment and mutability", () => {
