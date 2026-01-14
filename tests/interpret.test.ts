@@ -25,4 +25,39 @@ describe("interpret", () => {
   it("parses negative integer when input is exactly negative", () => {
     expect(interpret("-100")).toBe(-100);
   });
+
+  // Unsigned integer suffixes
+  it("parses U8 within range", () => {
+    expect(interpret("255U8")).toBe(255);
+  });
+
+  it("throws on U8 out of range", () => {
+    expect(() => interpret("256U8")).toThrow();
+  });
+
+  it("parses U16 within range", () => {
+    expect(interpret("65535U16")).toBe(65535);
+  });
+
+  it("parses U32 within range", () => {
+    expect(interpret("4294967295U32")).toBe(4294967295);
+  });
+
+  // Signed integer suffixes
+  it("parses I8 within range", () => {
+    expect(interpret("127I8")).toBe(127);
+  });
+
+  it("throws on I8 out of range", () => {
+    expect(() => interpret("128I8")).toThrow();
+  });
+
+  it("parses I16 within range", () => {
+    expect(interpret("32767I16")).toBe(32767);
+  });
+
+  // Non-integer with suffix should throw
+  it("throws on non-integer with suffix", () => {
+    expect(() => interpret("1.5U8")).toThrow();
+  });
 });
