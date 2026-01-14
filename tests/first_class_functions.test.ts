@@ -29,4 +29,8 @@ describe("First-class functions", () => {
       )
     ).toBe(7);
   });
+
+  it("should support closure - functions capturing outer scope variables", () => {
+    expect(interpret("let mut x = 0; fn add() => x += 1; add(); x")).toBe(1);
+  });
 });

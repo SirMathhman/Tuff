@@ -15,7 +15,7 @@ type Scope = Record<string, TypedVal>;
 type StructDef = { fields: Record<string, string> };
 type FunctionDef = {
   params: Array<{ name: string; type: string }>;
-  returnType: string;
+  returnType: string | null;
   body: string;
 };
 type InternalScope = {
@@ -528,16 +528,17 @@ function handleFunctionCall(
     }
   }
 
-  // Type check the return value
-  // Allow untyped numeric values to be coerced to the return type
-  if (result.type) {
-    checkNarrowing(func.returnType, result.type);
-  } else {
-    // For untyped values, check if they fit in the return type's range
-    checkOverflow(result.value as number, func.returnType);
+  // Type check the return value if a return type was specified
+  if (func.returnType) {
+    if (result.type) {
+      checkNarrowing(func.returnType, result.type);
+    } else {
+      // For untyped values, check if they fit in the return type's range
+      checkOverflow(result.value as number, func.returnType);
+    }
   }
 
-  return { value: result.value, type: func.returnType };
+  return { value: result.value, type: func.returnType ?? result.type };
 }
 
 function extractTypeAndExpr(st: string): {
@@ -595,7 +596,9 @@ function extractTypeAndExpr(st: string): {
   return { type: type || null, expr, name, mutable: !!mutS };
 }
 
-function parseParameters(paramsStr: string): Array<{ name: string; type: string }> {
+function parseParameters(
+  paramsStr: string
+): Array<{ name: string; type: string }> {
   return paramsStr
     .split(",")
     .filter((p) => p.trim())
@@ -611,9 +614,9 @@ function parseFunctionExpression(
   scope: InternalScope,
   type: string | null
 ): TypedVal {
-  // Parse the function definition - simpler regex
+  // Parse the function definition - return type is optional
   const fnMatch = expr.match(
-    /^fn\s+([a-zA-Z_]\w+)\s*\(([^)]*)\)\s*:\s*([^=]+)\s*=>\s*(.+)$/
+    /^fn\s+([a-zA-Z_]\w+)\s*\(([^)]*)\)(?:\s*:\s*([^=]+?))?\s*=>\s*(.+)$/
   );
   if (!fnMatch) {
     throw new Error(`Invalid function expression: "${expr}"`);
@@ -623,7 +626,7 @@ function parseFunctionExpression(
 
   const func: FunctionDef = {
     params,
-    returnType: returnType.trim(),
+    returnType: returnType ? returnType.trim() : null,
     body,
   };
 
@@ -661,9 +664,11 @@ function isArrowFunctionExpression(expr: string): boolean {
   return rest.includes("=>");
 }
 
-function extractArrowFunctionParts(
-  expr: string
-): { paramsStr: string; returnType: string; body: string } {
+function extractArrowFunctionParts(expr: string): {
+  paramsStr: string;
+  returnType: string;
+  body: string;
+} {
   const closeParenIdx = findMatchingCloseParen(expr);
   if (closeParenIdx === -1 || !expr.startsWith("(")) {
     throw new Error(`Invalid arrow function: "${expr}"`);
@@ -672,7 +677,7 @@ function extractArrowFunctionParts(
   const paramsStr = expr.slice(1, closeParenIdx);
   const rest = expr.slice(closeParenIdx + 1).trim();
   const arrowMatch = rest.match(/^\s*:\s*([^=]+)\s*=>\s*(.+)$/);
-  
+
   if (!arrowMatch) {
     throw new Error(`Invalid arrow function: "${expr}"`);
   }
@@ -1173,9 +1178,10 @@ function parseStructDef(st: string, scope: InternalScope): void {
 }
 
 function parseFunctionDef(st: string, scope: InternalScope): void {
-  // Match: fn name(param1 : type1, param2 : type2) : returnType => body
+  // Match: fn name(param1 : type1, ...) [: returnType] => body
+  // Return type is optional now
   const m = st.match(
-    /^fn\s+([a-zA-Z_]\w+)\s*\(([^)]*)\)\s*:\s*([a-zA-Z_]\w+)\s*=>\s*(.+)$/
+    /^fn\s+([a-zA-Z_]\w+)\s*\(([^)]*)\)(?:\s*:\s*([a-zA-Z_]\w+))?\s*=>\s*(.+)$/
   );
   if (!m) throw new Error(`Invalid function declaration: ${st}`);
   const [, funcName, paramStr, returnType, body] = m;
@@ -1192,7 +1198,7 @@ function parseFunctionDef(st: string, scope: InternalScope): void {
   }
 
   if (!scope.functions) scope.functions = {};
-  scope.functions[funcName] = { params, returnType, body };
+  scope.functions[funcName] = { params, returnType: returnType ?? null, body };
 }
 
 function resolveStructLiterals(st: string, scope: InternalScope): string {
