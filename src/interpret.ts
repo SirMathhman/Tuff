@@ -232,16 +232,12 @@ function checkNarrowing(targetType: string, sourceType: string): void {
     );
   }
 }
-function initializeStruct(
-  name: string,
-  structName: string,
+
+function parseStructFields(
   fieldStr: string,
-  scope: InternalScope,
-  mutable: boolean,
-  localDecls: Set<string>
-): TypedVal {
-  const struct = getStructFromScope(scope, structName);
-  if (!struct) throw new Error(`Struct ${structName} not defined`);
+  scope: InternalScope
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Record<string, any> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fields: Record<string, any> = {};
   const fieldDecls = fieldStr.split(",").map((s) => s.trim());
@@ -252,6 +248,20 @@ function initializeStruct(
     const fval = interpretRaw(fvalStr, scope);
     fields[fname] = fval.value;
   }
+  return fields;
+}
+
+function initializeStruct(
+  name: string,
+  structName: string,
+  fieldStr: string,
+  scope: InternalScope,
+  mutable: boolean,
+  localDecls: Set<string>
+): TypedVal {
+  const struct = getStructFromScope(scope, structName);
+  if (!struct) throw new Error(`Struct ${structName} not defined`);
+  const fields = parseStructFields(fieldStr, scope);
   scope.values[name] = {
     value: fields,
     type: structName,
@@ -272,7 +282,14 @@ function handleLet(
   );
   if (structInit) {
     const [, mutS, name, structName, fieldStr] = structInit;
-    return initializeStruct(name, structName, fieldStr, scope, !!mutS, localDecls);
+    return initializeStruct(
+      name,
+      structName,
+      fieldStr,
+      scope,
+      !!mutS,
+      localDecls
+    );
   }
 
   // Regular let statement
@@ -534,7 +551,7 @@ function splitStatements(s: string): string[] {
           !nextPart.startsWith("else") &&
           !nextPart.startsWith("while") &&
           !nextPart.startsWith(";") &&
-          !/^[+\-*/%|&^=<>]/.test(nextPart)
+          !/^[+\-*/%|&^=<>.!]/.test(nextPart)
         ) {
           result.push(current.trim());
           current = "";
@@ -548,10 +565,13 @@ function splitStatements(s: string): string[] {
 }
 
 function resolveBrackets(s: string, scope: InternalScope): string {
-  // Skip bracket resolution for struct definitions and struct initialization
+  // Skip bracket resolution for struct definitions, struct initialization, and struct literals
+  // Check for struct literals with member access (e.g., Point { x : 3 }.x)
+  const isStructLiteral = /[a-zA-Z_]\w*\s*\{[^}]+\}\s*\./.test(s);
   if (
     s.match(/^struct\s+[a-zA-Z_]\w*\s*\{[^}]+\}/) ||
-    s.match(/^let\s+(mut\s+)?[a-zA-Z_]\w*\s*=\s*[a-zA-Z_]\w+\s*\{[^}]+\}/)
+    s.match(/^let\s+(mut\s+)?[a-zA-Z_]\w*\s*=\s*[a-zA-Z_]\w+\s*\{[^}]+\}/) ||
+    isStructLiteral
   ) {
     return s.trim();
   }
@@ -601,21 +621,101 @@ function parseStructDef(st: string, scope: InternalScope): void {
   scope.structs[structName] = { fields };
 }
 
+function resolveStructLiterals(st: string, scope: InternalScope): string {
+  // Match struct literal patterns: StructName { field : value, ... }
+  let result = st;
+  let changed = true;
+  let iterations = 0;
+  while (changed && iterations < 100) {
+    iterations++;
+    changed = false;
+    const structLiteralRegex = /([a-zA-Z_]\w+)\s*\{([^}]+)\}/;
+    const m = structLiteralRegex.exec(result);
+    if (!m) break;
+
+    const [fullMatch, structName, fieldStr] = m;
+    const struct = getStructFromScope(scope, structName);
+    
+    // Only process if it's a known struct
+    if (struct) {
+      const fields = parseStructFields(fieldStr, scope);
+      
+      // Replace struct literal with a temporary variable reference
+      const tempName = `__struct_lit_${Math.random().toString(36).slice(2)}`;
+      scope.values[tempName] = { value: fields, type: structName, mutable: false };
+      result = result.slice(0, m.index) + tempName + result.slice(m.index + fullMatch.length);
+      changed = true;
+    } else {
+      break;
+    }
+  }
+  return result;
+}
+
+function evaluateStructLiteralExpression(
+  st: string,
+  scope: InternalScope
+): TypedVal | null {
+  // Check if this is a struct literal with member access like: Point { x : 3 }.x
+  const m = st.match(/^([a-zA-Z_]\w+)\s*\{([^}]+)\}(.*)$/);
+  if (!m) return null;
+
+  const [, structName, fieldStr, rest] = m;
+  const struct = getStructFromScope(scope, structName);
+  if (!struct) return null;  // Not a struct literal, continue with normal parsing
+
+  // Parse the struct literal
+  const fields = parseStructFields(fieldStr, scope);
+
+  if (!rest || rest.trim().length === 0) {
+    // Just a struct literal, no member access
+    return { value: fields, type: structName };
+  }
+
+  // Handle member access (.x, .y, etc.)
+  const accessMatch = rest.trim().match(/^\.([a-zA-Z_]\w*)(.*)/);
+  if (accessMatch) {
+    const [, member, remaining] = accessMatch;
+    const memberValue = fields[member];
+    if (memberValue === undefined) {
+      throw new Error(`Field ${member} not found in struct ${structName}`);
+    }
+
+    if (!remaining || remaining.trim().length === 0) {
+      return { value: memberValue };
+    }
+
+    // Handle chained access or operations on the member
+    // For now, treat the member value as a new expression to evaluate
+    return interpretRaw(`${memberValue}${remaining}`, scope);
+  }
+
+  return { value: fields, type: structName };
+}
+
 function evaluateExpressionStatement(
   st: string,
   scope: InternalScope
 ): TypedVal {
+  // First, try to handle struct literal expressions directly
+  const structLiteralResult = evaluateStructLiteralExpression(st, scope);
+  if (structLiteralResult !== null) {
+    return structLiteralResult;
+  }
+
+  const resolvedSt = resolveStructLiterals(st, scope);
+  
   const tokenRegex =
     /!*[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?(?:[uUiI](?:8|16|32|64)|bool)?|!*[a-zA-Z_]\w*(?:\.\w+)*/g;
   const tokens: Array<{ text: string; index: number }> = [];
   let m: RegExpExecArray | null;
-  while ((m = tokenRegex.exec(st))) {
+  while ((m = tokenRegex.exec(resolvedSt))) {
     tokens.push({ text: m[0], index: m.index });
   }
   if (tokens.length === 0) throw new Error("Invalid statement");
   return tokens.length === 1
     ? parseToken(tokens[0].text, scope)
-    : evaluateExpression(st, tokens, scope);
+    : evaluateExpression(resolvedSt, tokens, scope);
 }
 
 function evaluateStatements(s: string, scope: InternalScope): TypedVal {
