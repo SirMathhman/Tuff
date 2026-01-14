@@ -12,6 +12,7 @@ const RANGES: Record<string, { min: bigint; max: bigint }> = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TypedVal = { value: any; type?: string; mutable?: boolean };
 type Scope = Record<string, TypedVal>;
+type ArrayValue = { elements: TypedVal[]; length: number };
 type StructDef = { fields: Record<string, string> };
 type FunctionDef = {
   params: Array<{ name: string; type: string }>;
@@ -313,7 +314,12 @@ function evaluateExpression(
       parsed[i].index
     );
     const opMatch = between.match(/==|!=|<=|>=|&&|\|\||[+\-*/%<>]/);
-    if (!opMatch) throw new Error(`Invalid operator between operands. Expression: "${s}", between: "${between}", tokens: ${tokens.map(t => `"${t.text}"`).join(", ")}`);
+    if (!opMatch)
+      throw new Error(
+        `Invalid operator between operands. Expression: "${s}", between: "${between}", tokens: ${tokens
+          .map((t) => `"${t.text}"`)
+          .join(", ")}`
+      );
     ops.push(opMatch[0]);
   }
 
@@ -607,9 +613,7 @@ function isArrayType(type: string | null): boolean {
   return type ? /^\[.+;\s*\d+;\s*\d+\]$/.test(type) : false;
 }
 
-function parseArrayType(
-  type: string
-): {
+function parseArrayType(type: string): {
   elementType: string;
   initCount: number;
   totalCount: number;
@@ -634,7 +638,7 @@ function parseArrayLiteral(expr: string, scope: InternalScope): TypedVal[] {
   const elements: TypedVal[] = [];
   let current = "";
   let depth = 0;
-  
+
   for (let i = 0; i < inner.length; i++) {
     const char = inner[i];
     if (char === "(" || char === "[" || char === "{") {
@@ -651,13 +655,34 @@ function parseArrayLiteral(expr: string, scope: InternalScope): TypedVal[] {
     }
     current += char;
   }
-  
+
   const trimmed = current.trim();
   if (trimmed) {
     elements.push(interpretRaw(trimmed, scope));
   }
-  
+
   return elements;
+}
+
+function isArrayLiteral(expr: string): boolean {
+  const trimmed = expr.trim();
+  return trimmed.startsWith("[") && trimmed.endsWith("]");
+}
+
+function inferArrayTypeFromLiteral(
+  expr: string,
+  scope: InternalScope
+): { elementType: string; count: number } | null {
+  if (!isArrayLiteral(expr)) return null;
+
+  const elements = parseArrayLiteral(expr, scope);
+  if (elements.length === 0) return null;
+
+  // Use the type of the first element as the element type
+  const elementType = elements[0].type || "I32";
+  const count = elements.length;
+
+  return { elementType, count };
 }
 
 function parseFunctionExpression(
@@ -768,14 +793,14 @@ function initializeArray(
 ): TypedVal {
   const arrayType = parseArrayType(type);
   if (!arrayType) throw new Error(`Invalid array type: ${type}`);
-  
+
   const elements = parseArrayLiteral(expr, scope);
   if (elements.length > arrayType.initCount) {
     throw new Error(
       `Too many elements: expected ${arrayType.initCount}, got ${elements.length}`
     );
   }
-  
+
   // Store array as object with elements and metadata
   return {
     value: {
@@ -786,6 +811,40 @@ function initializeArray(
     },
     type: `[${arrayType.elementType}; ${arrayType.initCount}; ${arrayType.totalCount}]`,
   };
+}
+
+function evaluateLetExpr(
+  type: string | null,
+  expr: string,
+  name: string,
+  scope: InternalScope
+): TypedVal {
+  // Special handling for arrays with explicit type
+  if (isArrayType(type)) {
+    return initializeArray(type!, expr, scope);
+  }
+  // Special handling for implicit array literals (no type annotation)
+  if (!type && isArrayLiteral(expr)) {
+    const inferred = inferArrayTypeFromLiteral(expr, scope);
+    return inferred
+      ? initializeArray(
+          `[${inferred.elementType}; ${inferred.count}; ${inferred.count}]`,
+          expr,
+          scope
+        )
+      : interpretRaw(expr, scope);
+  }
+  if (expr.startsWith("fn ")) {
+    return parseFunctionExpression(expr, scope, type);
+  }
+  if (isArrowFunctionExpression(expr)) {
+    return parseArrowFunctionExpression(expr, scope, type, name);
+  }
+  // Default: interpret as expression
+  const res = interpretRaw(expr, scope);
+  const resolvedType = type ? resolveTypeAlias(type, scope) : type;
+  if (resolvedType && res.type) checkNarrowing(resolvedType, res.type);
+  return res;
 }
 
 function handleLet(
@@ -819,32 +878,82 @@ function handleLet(
   if (localDecls.has(name)) {
     throw new Error(`Variable already declared in this scope: ${name}`);
   }
-  let res: TypedVal = { value: 0, type: type ?? undefined };
-  if (expr) {
-    // Special handling for arrays
-    if (isArrayType(type)) {
-      res = initializeArray(type!, expr, scope);
-    } else if (expr.startsWith("fn ")) {
-      // Special handling for function expressions
-      res = parseFunctionExpression(expr, scope, type);
-    } else if (isArrowFunctionExpression(expr)) {
-      // Arrow function syntax: (params) : returnType => body
-      res = parseArrowFunctionExpression(expr, scope, type, name);
-    } else {
-      res = interpretRaw(expr, scope);
-      const resolvedType = type ? resolveTypeAlias(type, scope) : type;
-      if (resolvedType && res.type) checkNarrowing(resolvedType, res.type);
-    }
-  }
+  const res = expr
+    ? evaluateLetExpr(type, expr, name, scope)
+    : { value: 0, type: type ?? undefined };
   const resolvedType = type ? resolveTypeAlias(type, scope) : type;
   const finalType = resolvedType || res.type;
-  if (finalType && !isArrayType(finalType)) checkOverflow(res.value as number, finalType);
+  if (finalType && !isArrayType(finalType))
+    checkOverflow(res.value as number, finalType);
   scope.values[name] = { value: res.value, type: finalType, mutable };
   localDecls.add(name);
   return res;
 }
 
+function validateArrayAccess(
+  arrayName: string,
+  scope: InternalScope,
+  checkMutable: boolean = false
+): { arrayVar: TypedVal; val: ArrayValue } {
+  const arrayVar = getFromScope(scope, arrayName);
+  if (!arrayVar) {
+    throw new Error(`Variable not found: ${arrayName}`);
+  }
+
+  if (checkMutable && !arrayVar.mutable) {
+    throw new Error(`Cannot assign to immutable array: ${arrayName}`);
+  }
+
+  const val = arrayVar.value as ArrayValue;
+  if (
+    typeof val !== "object" ||
+    !Object.prototype.hasOwnProperty.call(val, "elements")
+  ) {
+    throw new Error(`${arrayName} is not an array`);
+  }
+
+  return { arrayVar, val };
+}
+
+function validateArrayIndex(
+  indexStr: string,
+  arrayLength: number,
+  scope: InternalScope
+): number {
+  const indexVal = interpretRaw(indexStr, scope);
+  const index = indexVal.value;
+
+  if (!Number.isInteger(index) || index < 0 || index >= arrayLength) {
+    throw new Error(`Array index out of bounds: ${index}`);
+  }
+
+  return index;
+}
+
+function handleArrayElementAssign(
+  arrayName: string,
+  indexStr: string,
+  valueExpr: string,
+  scope: InternalScope
+): TypedVal {
+  const { val } = validateArrayAccess(arrayName, scope, true);
+  const index = validateArrayIndex(indexStr, val.elements.length, scope);
+  const newValue = interpretRaw(valueExpr, scope);
+  val.elements[index] = newValue;
+  return newValue;
+}
+
 function handleAssign(st: string, scope: InternalScope): TypedVal {
+  // Check for array element assignment (e.g., array[index] = value)
+  const arrayAssignMatch = st.match(
+    /^([a-zA-Z_]\w*)\s*\[([^\]]+)\]\s*=\s*(.+)$/
+  );
+  if (arrayAssignMatch) {
+    const [, arrayName, indexStr, valueExpr] = arrayAssignMatch;
+    return handleArrayElementAssign(arrayName, indexStr, valueExpr, scope);
+  }
+
+  // Regular variable assignment
   const m = st.match(/^([a-zA-Z_]\w*)\s*([+\-*/%]?=)(?!=)\s*(.+)$/);
   if (!m) throw new Error("Invalid assignment");
   const [, name, op, expr] = m;
@@ -1447,26 +1556,8 @@ function tryHandleArrayAccess(
   if (!arrayAccessMatch) return null;
 
   const [, arrayName, indexExpr] = arrayAccessMatch;
-  const arrayVar = getFromScope(scope, arrayName);
-  
-  // If we matched the pattern but the variable doesn't exist or isn't an array,
-  // still try to handle it as array access (and error appropriately)
-  if (!arrayVar) {
-    throw new Error(`Variable not found: ${arrayName}`);
-  }
-  
-  const val = arrayVar.value;
-  if (typeof val !== "object" || !Object.prototype.hasOwnProperty.call(val, "elements")) {
-    throw new Error(`${arrayName} is not an array`);
-  }
-
-  const indexVal = interpretRaw(indexExpr, scope);
-  const index = indexVal.value;
-
-  if (!Number.isInteger(index) || index < 0 || index >= val.elements.length) {
-    throw new Error(`Array index out of bounds: ${index}`);
-  }
-
+  const { val } = validateArrayAccess(arrayName, scope, false);
+  const index = validateArrayIndex(indexExpr, val.elements.length, scope);
   return val.elements[index];
 }
 
@@ -1534,7 +1625,7 @@ function evaluateExpressionStatement(
 
   // Resolve any function calls in the expression
   let expr = resolveFunctionCallsInExpression(resolvedSt, scope);
-  
+
   // Resolve any array accesses in the expression
   expr = resolveArrayAccesses(expr, scope);
 
@@ -1580,7 +1671,8 @@ function processStatement(
     lastVal = handleLet(st, scope, localDecls);
   } else if (
     st.includes("=") &&
-    st.match(/^[a-zA-Z_]\w*\s*([+\-*/%]?=)(?!=)/)
+    (st.match(/^[a-zA-Z_]\w*\s*([+\-*/%]?=)(?!=)/) ||
+      st.match(/^[a-zA-Z_]\w*\s*\[[^\]]+\]\s*=(?!=)/))
   ) {
     lastVal = handleAssign(st, scope);
   } else {

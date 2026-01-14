@@ -259,7 +259,9 @@ function evaluateExpression(s, tokens, scope) {
         const between = s.slice(parsed[i - 1].index + parsed[i - 1].text.length, parsed[i].index);
         const opMatch = between.match(/==|!=|<=|>=|&&|\|\||[+\-*/%<>]/);
         if (!opMatch)
-            throw new Error(`Invalid operator between operands. Expression: "${s}", between: "${between}", tokens: ${tokens.map(t => `"${t.text}"`).join(", ")}`);
+            throw new Error(`Invalid operator between operands. Expression: "${s}", between: "${between}", tokens: ${tokens
+                .map((t) => `"${t.text}"`)
+                .join(", ")}`);
         ops.push(opMatch[0]);
     }
     const values = parsed.map((p) => ({
@@ -530,6 +532,21 @@ function parseArrayLiteral(expr, scope) {
     }
     return elements;
 }
+function isArrayLiteral(expr) {
+    const trimmed = expr.trim();
+    return trimmed.startsWith("[") && trimmed.endsWith("]");
+}
+function inferArrayTypeFromLiteral(expr, scope) {
+    if (!isArrayLiteral(expr))
+        return null;
+    const elements = parseArrayLiteral(expr, scope);
+    if (elements.length === 0)
+        return null;
+    // Use the type of the first element as the element type
+    const elementType = elements[0].type || "I32";
+    const count = elements.length;
+    return { elementType, count };
+}
 function parseFunctionExpression(expr, scope, type) {
     // Parse the function definition - return type is optional
     const fnMatch = expr.match(/^fn\s+([a-zA-Z_]\w+)\s*\(([^)]*)\)(?:\s*:\s*([^=]+?))?\s*=>\s*(.+)$/);
@@ -643,9 +660,16 @@ function handleLet(st, scope, localDecls) {
     }
     let res = { value: 0, type: type ?? undefined };
     if (expr) {
-        // Special handling for arrays
+        // Special handling for arrays with explicit type
         if (isArrayType(type)) {
             res = initializeArray(type, expr, scope);
+        }
+        // Special handling for implicit array literals (no type annotation)
+        else if (!type && isArrayLiteral(expr)) {
+            const inferred = inferArrayTypeFromLiteral(expr, scope);
+            res = inferred
+                ? initializeArray(`[${inferred.elementType}; ${inferred.count}; ${inferred.count}]`, expr, scope)
+                : interpretRaw(expr, scope);
         }
         else if (expr.startsWith("fn ")) {
             // Special handling for function expressions
@@ -670,7 +694,35 @@ function handleLet(st, scope, localDecls) {
     localDecls.add(name);
     return res;
 }
+function handleArrayElementAssign(arrayName, indexStr, valueExpr, scope) {
+    const arrayVar = getFromScope(scope, arrayName);
+    if (!arrayVar) {
+        throw new Error(`Variable not found: ${arrayName}`);
+    }
+    if (!arrayVar.mutable) {
+        throw new Error(`Cannot assign to immutable array: ${arrayName}`);
+    }
+    const val = arrayVar.value;
+    if (typeof val !== "object" || !Object.prototype.hasOwnProperty.call(val, "elements")) {
+        throw new Error(`${arrayName} is not an array`);
+    }
+    const indexVal = interpretRaw(indexStr, scope);
+    const index = indexVal.value;
+    if (!Number.isInteger(index) || index < 0 || index >= val.elements.length) {
+        throw new Error(`Array index out of bounds: ${index}`);
+    }
+    const newValue = interpretRaw(valueExpr, scope);
+    val.elements[index] = newValue;
+    return newValue;
+}
 function handleAssign(st, scope) {
+    // Check for array element assignment (e.g., array[index] = value)
+    const arrayAssignMatch = st.match(/^([a-zA-Z_]\w*)\s*\[([^\]]+)\]\s*=\s*(.+)$/);
+    if (arrayAssignMatch) {
+        const [, arrayName, indexStr, valueExpr] = arrayAssignMatch;
+        return handleArrayElementAssign(arrayName, indexStr, valueExpr, scope);
+    }
+    // Regular variable assignment
     const m = st.match(/^([a-zA-Z_]\w*)\s*([+\-*/%]?=)(?!=)\s*(.+)$/);
     if (!m)
         throw new Error("Invalid assignment");
@@ -1223,7 +1275,8 @@ function tryHandleArrayAccess(st, scope) {
         throw new Error(`Variable not found: ${arrayName}`);
     }
     const val = arrayVar.value;
-    if (typeof val !== "object" || !Object.prototype.hasOwnProperty.call(val, "elements")) {
+    if (typeof val !== "object" ||
+        !Object.prototype.hasOwnProperty.call(val, "elements")) {
         throw new Error(`${arrayName} is not an array`);
     }
     const indexVal = interpretRaw(indexExpr, scope);
@@ -1318,7 +1371,8 @@ function processStatement(st, scope, localDecls) {
         lastVal = handleLet(st, scope, localDecls);
     }
     else if (st.includes("=") &&
-        st.match(/^[a-zA-Z_]\w*\s*([+\-*/%]?=)(?!=)/)) {
+        (st.match(/^[a-zA-Z_]\w*\s*([+\-*/%]?=)(?!=)/) ||
+            st.match(/^[a-zA-Z_]\w*\s*\[[^\]]+\]\s*=(?!=)/))) {
         lastVal = handleAssign(st, scope);
     }
     else {
