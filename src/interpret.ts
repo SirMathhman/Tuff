@@ -369,6 +369,38 @@ function handleDoWhile(
   return { val: lastVal, end: finalPos };
 }
 
+function handleMatch(
+  s: string,
+  scope: InternalScope
+): { val: TypedVal; end: number } {
+  const { condStr, condEnd } = extractCondition(s, "match");
+  const target = interpretRaw(condStr, scope);
+  const bodyRes = parseBranch(s, condEnd + 1);
+  const bodyStr = bodyRes.content;
+  const finalPos = bodyRes.end;
+
+  const cases = splitStatements(bodyStr);
+  for (const c of cases) {
+    const m = c.match(/^case\s+(.+)\s*=>\s*(.+)$/);
+    if (!m) continue;
+    const [, patternStr, consequenceStr] = m;
+    const pattern = patternStr.trim();
+    let isMatch = false;
+    if (pattern === "_") {
+      isMatch = true;
+    } else {
+      const pVal = interpretRaw(pattern, scope);
+      if (pVal.value === target.value) isMatch = true;
+    }
+
+    if (isMatch) {
+      const res = interpretRaw(consequenceStr, scope);
+      return { val: res, end: finalPos };
+    }
+  }
+  return { val: { value: 0 }, end: finalPos };
+}
+
 function resolveExpressions(
   s: string,
   keyword: string,
@@ -480,6 +512,7 @@ function evaluateStatements(s: string, scope: InternalScope): TypedVal {
     let st = resolveExpressions(rawSt, "do", handleDoWhile, scope);
     st = resolveExpressions(st, "while", handleWhile, scope);
     st = resolveExpressions(st, "if", handleIf, scope);
+    st = resolveExpressions(st, "match", handleMatch, scope);
     st = resolveBrackets(st, scope);
     if (!st) continue;
     if (st.includes(";") && splitStatements(st).length > 1) {

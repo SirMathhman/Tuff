@@ -308,6 +308,29 @@ describe("interpret loops", () => {
       interpret("let mut x = 0; let y = do { x += 1; x } while (x < 3); y")
     ).toBe(3);
   });
+
+  it("handles match expressions", () => {
+    expect(
+      interpret("let x = match (100) { case 100 => 2; case _ => 1; }; x")
+    ).toBe(2);
+    expect(
+      interpret("let x = match (50) { case 100 => 2; case _ => 1; }; x")
+    ).toBe(1);
+    expect(
+      interpret(`
+      let y = match (1) {
+        case 0 => 10;
+        case 1 => 20;
+        case 2 => 30;
+        case _ => 40;
+      };
+      y
+    `)
+    ).toBe(20);
+    expect(
+      interpret("match (10 + 10) { case 20 => { 1 + 1 }; case _ => 0; }")
+    ).toBe(2);
+  });
 });
 
 describe("interpret misc", () => {
