@@ -551,13 +551,14 @@ function extractTypeAndExpr(st: string): {
   let depth = 0;
   for (let i = st.length - 1; i >= 0; i--) {
     const char = st[i];
+    // When going backward, we encounter closing parens/braces first
     if (char === ")" || char === "}") depth++;
     if (char === "(" || char === "{") depth--;
     // Look for = at depth 0, but not part of =>, ==, !=, +=, etc.
     if (char === "=" && depth === 0) {
       const nextChar = i + 1 < st.length ? st[i + 1] : "";
       const prevChar = i > 0 ? st[i - 1] : "";
-      // Skip if it's part of =>, ==, !=, +=, -=, *=, /=, %=, >=, >
+      // Skip if it's part of =>, ==, !=, +=, -=, *=, /=, %=, >=, <=
       if (
         nextChar !== "=" &&
         nextChar !== ">" &&
@@ -568,7 +569,8 @@ function extractTypeAndExpr(st: string): {
         prevChar !== "*" &&
         prevChar !== "/" &&
         prevChar !== "%" &&
-        prevChar !== ">"
+        prevChar !== ">" &&
+        prevChar !== "<"
       ) {
         eqPos = i;
         break;
@@ -593,6 +595,17 @@ function extractTypeAndExpr(st: string): {
   return { type: type || null, expr, name, mutable: !!mutS };
 }
 
+function parseParameters(paramsStr: string): Array<{ name: string; type: string }> {
+  return paramsStr
+    .split(",")
+    .filter((p) => p.trim())
+    .map((p) => {
+      const pMatch = p.trim().match(/^([a-zA-Z_]\w*)\s*:\s*(.+)$/);
+      if (!pMatch) throw new Error(`Invalid parameter: ${p}`);
+      return { name: pMatch[1], type: pMatch[2].trim() };
+    });
+}
+
 function parseFunctionExpression(
   expr: string,
   scope: InternalScope,
@@ -606,14 +619,7 @@ function parseFunctionExpression(
     throw new Error(`Invalid function expression: "${expr}"`);
   }
   const [, fnName, paramsStr, returnType, body] = fnMatch;
-  const params = paramsStr
-    .split(",")
-    .filter((p) => p.trim())
-    .map((p) => {
-      const pMatch = p.trim().match(/^([a-zA-Z_]\w*)\s*:\s*(.+)$/);
-      if (!pMatch) throw new Error(`Invalid parameter: ${p}`);
-      return { name: pMatch[1], type: pMatch[2].trim() };
-    });
+  const params = parseParameters(paramsStr);
 
   const func: FunctionDef = {
     params,
@@ -627,6 +633,76 @@ function parseFunctionExpression(
 
   // Create a function reference value - we'll store the function name as the value
   return { value: fnName as unknown as number, type: type ?? undefined };
+}
+
+function findMatchingCloseParen(expr: string, startIdx: number = 0): number {
+  let parenDepth = 0;
+  for (let i = startIdx; i < expr.length; i++) {
+    if (expr[i] === "(") parenDepth++;
+    if (expr[i] === ")") {
+      parenDepth--;
+      if (parenDepth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+function isArrowFunctionExpression(expr: string): boolean {
+  // Arrow function: (params) : returnType => body
+  // Has opening paren, closing paren, and arrow
+  if (!expr.trim().startsWith("(")) return false;
+
+  // Find matching closing paren
+  const closeParenIdx = findMatchingCloseParen(expr);
+  if (closeParenIdx === -1) return false;
+
+  // Check what comes after: should have =>
+  const rest = expr.slice(closeParenIdx + 1).trim();
+  return rest.includes("=>");
+}
+
+function extractArrowFunctionParts(
+  expr: string
+): { paramsStr: string; returnType: string; body: string } {
+  const closeParenIdx = findMatchingCloseParen(expr);
+  if (closeParenIdx === -1 || !expr.startsWith("(")) {
+    throw new Error(`Invalid arrow function: "${expr}"`);
+  }
+
+  const paramsStr = expr.slice(1, closeParenIdx);
+  const rest = expr.slice(closeParenIdx + 1).trim();
+  const arrowMatch = rest.match(/^\s*:\s*([^=]+)\s*=>\s*(.+)$/);
+  
+  if (!arrowMatch) {
+    throw new Error(`Invalid arrow function: "${expr}"`);
+  }
+
+  const [, returnType, body] = arrowMatch;
+  return { paramsStr, returnType: returnType.trim(), body };
+}
+
+function parseArrowFunctionExpression(
+  expr: string,
+  scope: InternalScope,
+  type: string | null,
+  varName: string
+): TypedVal {
+  // Parse arrow function: (params) : returnType => body
+  const { paramsStr, returnType, body } = extractArrowFunctionParts(expr);
+  const params = parseParameters(paramsStr);
+
+  const func: FunctionDef = {
+    params,
+    returnType,
+    body,
+  };
+
+  // Store the function in scope with variable name as key
+  if (!scope.functions) scope.functions = {};
+  scope.functions[varName] = func;
+
+  // Create a function reference value - we'll store the function name as the value
+  return { value: varName as unknown as number, type: type ?? undefined };
 }
 
 function handleLet(
@@ -665,6 +741,9 @@ function handleLet(
     // Special handling for function expressions
     if (expr.startsWith("fn ")) {
       res = parseFunctionExpression(expr, scope, type);
+    } else if (isArrowFunctionExpression(expr)) {
+      // Arrow function syntax: (params) : returnType => body
+      res = parseArrowFunctionExpression(expr, scope, type, name);
     } else {
       res = interpretRaw(expr, scope);
       const resolvedType = type ? resolveTypeAlias(type, scope) : type;
@@ -998,14 +1077,16 @@ function splitStatements(s: string): string[] {
 }
 
 function resolveBrackets(s: string, scope: InternalScope): string {
-  // Skip bracket resolution for struct definitions, struct initialization, struct literals, and function declarations
+  // Skip bracket resolution for struct definitions, struct initialization, struct literals, function declarations, and arrow functions
   // Check for struct literals with member access (e.g., Point { x : 3 }.x)
   const isStructLiteral = /[a-zA-Z_]\w*\s*\{[^}]+\}\s*\./.test(s);
+  const isArrowFunction = /\([^)]*\)\s*:\s*[a-zA-Z_]\w+\s*=>/.test(s);
   if (
     s.match(/^struct\s+[a-zA-Z_]\w*\s*\{[^}]+\}/) ||
     s.match(/^let\s+(mut\s+)?[a-zA-Z_]\w*\s*=\s*[a-zA-Z_]\w+\s*\{[^}]+\}/) ||
     s.match(/^fn\s+[a-zA-Z_]\w+\s*\([^)]*\)\s*:\s*[a-zA-Z_]\w+\s*=>/) ||
-    isStructLiteral
+    isStructLiteral ||
+    isArrowFunction
   ) {
     return s.trim();
   }

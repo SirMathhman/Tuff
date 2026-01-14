@@ -21,4 +21,12 @@ describe("First-class functions", () => {
       )
     ).toBe(16);
   });
+
+  it("should support arrow function syntax", () => {
+    expect(
+      interpret(
+        "let temp : (I32, I32) => I32 = (first : I32, second : I32) : I32 => first + second; temp(3, 4)"
+      )
+    ).toBe(7);
+  });
 });
