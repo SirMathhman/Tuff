@@ -9,9 +9,15 @@ const RANGES: Record<string, { min: bigint; max: bigint }> = {
   I64: { min: -9223372036854775808n, max: 9223372036854775807n },
 };
 
-type TypedVal = { value: number; type?: string; mutable?: boolean };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TypedVal = { value: any; type?: string; mutable?: boolean };
 type Scope = Record<string, TypedVal>;
-type InternalScope = { values: Scope; parent?: InternalScope };
+type StructDef = { fields: Record<string, string> };
+type InternalScope = {
+  values: Scope;
+  parent?: InternalScope;
+  structs?: Record<string, StructDef>;
+};
 
 function getFromScope(
   scope: InternalScope,
@@ -34,22 +40,15 @@ function updateInScope(
   }
 }
 
-function parseToken(token: string, scope: InternalScope): TypedVal {
-  if (token.startsWith("!")) {
-    const res = parseToken(token.slice(1), scope);
-    return { value: res.value ? 0 : 1, type: "bool" };
-  }
-  if (token === "true") return { value: 1, type: "bool" };
-  if (token === "false") return { value: 0, type: "bool" };
-  const inScope = getFromScope(scope, token);
-  if (inScope) return inScope;
-  const m = token.match(/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/);
-  if (!m) throw new Error(`Invalid token: ${token}`);
-  const numStr = m[0];
-  const n = parseFloat(numStr);
-  if (Number.isNaN(n)) throw new Error("Invalid number");
-
-  const rest = token.slice(numStr.length);
+function getStructFromScope(
+  scope: InternalScope,
+  name: string
+): StructDef | undefined {
+  if (scope.structs && name in scope.structs) return scope.structs[name];
+  if (scope.parent) return getStructFromScope(scope.parent, name);
+  return undefined;
+}
+function parseTypeSuffix(numStr: string, rest: string, n: number): TypedVal {
   if (rest.length === 0) return { value: n };
   if (rest === "bool") return { value: n, type: "bool" };
 
@@ -64,7 +63,6 @@ function parseToken(token: string, scope: InternalScope): TypedVal {
   }
 
   const intVal = Number(numStr);
-
   const key = `${sign}${bits}`;
   const range = RANGES[key];
   if (!range) return { value: n };
@@ -82,6 +80,42 @@ function parseToken(token: string, scope: InternalScope): TypedVal {
   }
 
   return { value: Number(intVal), type: key };
+}
+
+function parseToken(token: string, scope: InternalScope): TypedVal {
+  if (token.startsWith("!")) {
+    const res = parseToken(token.slice(1), scope);
+    return { value: res.value ? 0 : 1, type: "bool" };
+  }
+  if (token === "true") return { value: 1, type: "bool" };
+  if (token === "false") return { value: 0, type: "bool" };
+
+  if (token.includes(".") && !/^[+-]?\d+\.\d+/.test(token)) {
+    const parts = token.split(".");
+    const obj = getFromScope(scope, parts[0]);
+    if (!obj) throw new Error(`Variable ${parts[0]} not found`);
+    if (typeof obj.value === "object" && obj.value !== null) {
+      let current = obj.value;
+      for (let i = 1; i < parts.length; i++) {
+        if (typeof current !== "object" || current === null) {
+          throw new Error(`Cannot access property ${parts[i]} of non-object`);
+        }
+        current = current[parts[i]];
+      }
+      return { value: current };
+    }
+  }
+
+  const inScope = getFromScope(scope, token);
+  if (inScope) return inScope;
+  const m = token.match(/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/);
+  if (!m) throw new Error(`Invalid token: ${token}`);
+  const numStr = m[0];
+  const n = parseFloat(numStr);
+  if (Number.isNaN(n)) throw new Error("Invalid number");
+
+  const rest = token.slice(numStr.length);
+  return parseTypeSuffix(numStr, rest, n);
 }
 
 function promoteTypes(type1?: string, type2?: string): string | undefined {
@@ -198,16 +232,58 @@ function checkNarrowing(targetType: string, sourceType: string): void {
     );
   }
 }
+function initializeStruct(
+  name: string,
+  structName: string,
+  fieldStr: string,
+  scope: InternalScope,
+  mutable: boolean,
+  localDecls: Set<string>
+): TypedVal {
+  const struct = getStructFromScope(scope, structName);
+  if (!struct) throw new Error(`Struct ${structName} not defined`);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fields: Record<string, any> = {};
+  const fieldDecls = fieldStr.split(",").map((s) => s.trim());
+  for (const decl of fieldDecls) {
+    const parts = decl.split(":").map((s) => s.trim());
+    if (parts.length !== 2) throw new Error(`Invalid field declaration: ${decl}`);
+    const [fname, fvalStr] = parts;
+    const fval = interpretRaw(fvalStr, scope);
+    fields[fname] = fval.value;
+  }
+  scope.values[name] = {
+    value: fields,
+    type: structName,
+    mutable,
+  };
+  localDecls.add(name);
+  return { value: fields };
+}
 
 function handleLet(
   st: string,
   scope: InternalScope,
   localDecls: Set<string>
 ): TypedVal {
+  // Check for struct initialization first
+  const structInit = st.match(
+    /^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*=\s*([a-zA-Z_]\w+)\s*\{(.+)\}$/
+  );
+  if (structInit) {
+    const [, mutS, name, structName, fieldStr] = structInit;
+    return initializeStruct(name, structName, fieldStr, scope, !!mutS, localDecls);
+  }
+
+  // Regular let statement
   const m = st.match(
     /^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*([uUiI](?:8|16|32|64)))?(?:\s*=\s*(.+))?$/
   );
-  if (!m) throw new Error("Invalid let declaration");
+
+  if (!m) {
+    throw new Error("Invalid let declaration");
+  }
+
   const [, mutS, name, type, expr] = m;
   if (localDecls.has(name)) {
     throw new Error(`Variable already declared in this scope: ${name}`);
@@ -218,7 +294,7 @@ function handleLet(
     if (type && res.type) checkNarrowing(type, res.type);
   }
   const finalType = type || res.type;
-  if (finalType) checkOverflow(res.value, finalType);
+  if (finalType) checkOverflow(res.value as number, finalType);
   scope.values[name] = { value: res.value, type: finalType, mutable: !!mutS };
   localDecls.add(name);
   return res;
@@ -319,9 +395,9 @@ function handleIf(
   }
 
   const res = condition.value
-    ? interpretRaw(thenRes.content, { values: {}, parent: scope })
+    ? interpretRaw(thenRes.content, { values: {}, parent: scope, structs: {} })
     : elsePart !== undefined
-    ? interpretRaw(elsePart, { values: {}, parent: scope })
+    ? interpretRaw(elsePart, { values: {}, parent: scope, structs: {} })
     : { value: 0 };
   return { val: res, end: finalPos };
 }
@@ -337,7 +413,7 @@ function handleWhile(
 
   let lastVal: TypedVal = { value: 0 };
   while (interpretRaw(condStr, scope).value) {
-    lastVal = interpretRaw(bodyStr, { values: {}, parent: scope });
+    lastVal = interpretRaw(bodyStr, { values: {}, parent: scope, structs: {} });
   }
   return { val: lastVal, end: finalPos };
 }
@@ -363,7 +439,7 @@ function handleDoWhile(
 
   let lastVal: TypedVal = { value: 0 };
   do {
-    lastVal = interpretRaw(bodyStr, { values: {}, parent: scope });
+    lastVal = interpretRaw(bodyStr, { values: {}, parent: scope, structs: {} });
   } while (interpretRaw(condStr, scope).value);
 
   return { val: lastVal, end: finalPos };
@@ -472,6 +548,14 @@ function splitStatements(s: string): string[] {
 }
 
 function resolveBrackets(s: string, scope: InternalScope): string {
+  // Skip bracket resolution for struct definitions and struct initialization
+  if (
+    s.match(/^struct\s+[a-zA-Z_]\w*\s*\{[^}]+\}/) ||
+    s.match(/^let\s+(mut\s+)?[a-zA-Z_]\w*\s*=\s*[a-zA-Z_]\w+\s*\{[^}]+\}/)
+  ) {
+    return s.trim();
+  }
+
   let res = s.trim();
   while (res.includes("(") || res.includes("{")) {
     const lastOpenParen = res.lastIndexOf("(");
@@ -488,7 +572,7 @@ function resolveBrackets(s: string, scope: InternalScope): string {
     const internal = res.slice(lastOpen + 1, nextClose);
     const result = interpretRaw(
       internal,
-      isCurly ? { values: {}, parent: scope } : scope
+      isCurly ? { values: {}, parent: scope, structs: {} } : scope
     );
     const following = res.slice(nextClose + 1).trim();
     const needsSemicolon =
@@ -503,6 +587,37 @@ function resolveBrackets(s: string, scope: InternalScope): string {
   return res;
 }
 
+function parseStructDef(st: string, scope: InternalScope): void {
+  const m = st.match(/^struct\s+([a-zA-Z_]\w+)\s*\{([^}]+)\}$/);
+  if (!m) throw new Error(`Invalid struct declaration: ${st}`);
+  const [, structName, fieldStr] = m;
+  const fields: Record<string, string> = {};
+  const fieldDecls = fieldStr.split(",").map((s) => s.trim());
+  for (const decl of fieldDecls) {
+    const [fname, ftype] = decl.split(":").map((s) => s.trim());
+    if (fname && ftype) fields[fname] = ftype;
+  }
+  if (!scope.structs) scope.structs = {};
+  scope.structs[structName] = { fields };
+}
+
+function evaluateExpressionStatement(
+  st: string,
+  scope: InternalScope
+): TypedVal {
+  const tokenRegex =
+    /!*[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?(?:[uUiI](?:8|16|32|64)|bool)?|!*[a-zA-Z_]\w*(?:\.\w+)*/g;
+  const tokens: Array<{ text: string; index: number }> = [];
+  let m: RegExpExecArray | null;
+  while ((m = tokenRegex.exec(st))) {
+    tokens.push({ text: m[0], index: m.index });
+  }
+  if (tokens.length === 0) throw new Error("Invalid statement");
+  return tokens.length === 1
+    ? parseToken(tokens[0].text, scope)
+    : evaluateExpression(st, tokens, scope);
+}
+
 function evaluateStatements(s: string, scope: InternalScope): TypedVal {
   const statements = splitStatements(s);
   let lastVal: TypedVal = { value: 0 };
@@ -514,6 +629,13 @@ function evaluateStatements(s: string, scope: InternalScope): TypedVal {
     st = resolveExpressions(st, "if", handleIf, scope);
     st = resolveExpressions(st, "match", handleMatch, scope);
     st = resolveBrackets(st, scope);
+
+    if (st.startsWith("struct ")) {
+      parseStructDef(st, scope);
+      lastVal = { value: 0 };
+      continue;
+    }
+
     if (!st) continue;
     if (st.includes(";") && splitStatements(st).length > 1) {
       lastVal = evaluateStatements(st, scope);
@@ -527,18 +649,7 @@ function evaluateStatements(s: string, scope: InternalScope): TypedVal {
     ) {
       lastVal = handleAssign(st, scope);
     } else {
-      const tokenRegex =
-        /!*[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?(?:[uUiI](?:8|16|32|64)|bool)?|!*[a-zA-Z_]\w*/g;
-      const tokens: Array<{ text: string; index: number }> = [];
-      let m: RegExpExecArray | null;
-      while ((m = tokenRegex.exec(st))) {
-        tokens.push({ text: m[0], index: m.index });
-      }
-      if (tokens.length === 0) throw new Error("Invalid statement");
-      lastVal =
-        tokens.length === 1
-          ? parseToken(tokens[0].text, scope)
-          : evaluateExpression(st, tokens, scope);
+      lastVal = evaluateExpressionStatement(st, scope);
     }
   }
   return lastVal;
@@ -549,5 +660,5 @@ function interpretRaw(input: string, scope: InternalScope): TypedVal {
 }
 
 export function interpret(input: string, scope: Scope = {}): number {
-  return interpretRaw(input, { values: scope }).value;
+  return interpretRaw(input, { values: scope, structs: {} }).value;
 }
