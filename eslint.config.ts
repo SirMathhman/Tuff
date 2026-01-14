@@ -10,7 +10,10 @@ export default defineConfig([
     extends: ["js/recommended"],
     languageOptions: { globals: globals.node },
     rules: {
-      "max-lines-per-function": ["error", { max: 50, skipBlankLines: true, skipComments: true }]
+      "max-lines-per-function": [
+        "error",
+        { max: 50, skipBlankLines: true, skipComments: true },
+      ],
     },
   },
   tseslint.configs.recommended,
