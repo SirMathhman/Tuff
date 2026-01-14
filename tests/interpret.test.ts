@@ -164,7 +164,9 @@ describe("interpret blocks and variables", () => {
   it("handles assignment and usage in complex expression (let z = (2 + { let x = 4; x }) * 3; z => 18)", () => {
     expect(interpret("let z = (2 + { let x = 4; x }) * 3; z")).toBe(18);
   });
+});
 
+describe("interpret assignment and mutability", () => {
   it("throws on implicit narrowing assignment (let x = 100U16; let y : U8 = x;)", () => {
     expect(() => interpret("let x = 100U16; let y : U8 = x; y")).toThrow();
   });
@@ -186,11 +188,19 @@ describe("interpret blocks and variables", () => {
   });
 
   it("throws on assignment to immutable variable", () => {
-    expect(() => interpret("let x = 0; x = 100; x")).toThrow("Cannot assign to immutable variable: x");
+    expect(() => interpret("let x = 0; x = 100; x")).toThrow(
+      "Cannot assign to immutable variable: x"
+    );
   });
 
   it("throws when accessing variable outside its block scope", () => {
-    expect(() => interpret("{ let x : I32; } x = 100; x")).toThrow("Variable not declared: x");
+    expect(() => interpret("{ let x : I32; } x = 100; x")).toThrow(
+      "Variable not declared: x"
+    );
+  });
+
+  it("handles block assignment to variables", () => {
+    expect(interpret("let x = { let y = 200; y }; x")).toBe(200);
   });
 
   it("throws on U8 multiplication overflow (100 * 3U8)", () => {
