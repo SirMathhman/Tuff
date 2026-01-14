@@ -125,6 +125,50 @@ function evaluateExpression(
   return { value: total, type: totalType };
 }
 
+function checkNarrowing(targetType: string, sourceType: string): void {
+  const target = RANGES[targetType];
+  const source = RANGES[sourceType];
+  if (target.max < source.max || target.min > source.min) {
+    throw new Error(
+      `Incompatible types: cannot implicitly narrow ${sourceType} to ${targetType}`
+    );
+  }
+}
+
+function handleLet(st: string, scope: Scope, localDecls: Set<string>): TypedVal {
+  const m = st.match(
+    /^let\s+([a-zA-Z_]\w*)\s*(?::\s*([uUiI](?:8|16|32|64)))?(?:\s*=\s*(.+))?$/
+  );
+  if (!m) throw new Error("Invalid let declaration");
+  const [, name, type, expr] = m;
+  if (localDecls.has(name)) {
+    throw new Error(`Variable already declared in this scope: ${name}`);
+  }
+  let res: TypedVal = { value: 0, type };
+  if (expr) {
+    res = interpretRaw(expr, scope);
+    if (type && res.type) checkNarrowing(type, res.type);
+  }
+  const finalType = type || res.type;
+  if (finalType) checkOverflow(res.value, finalType);
+  scope[name] = { value: res.value, type: finalType };
+  localDecls.add(name);
+  return res;
+}
+
+function handleAssign(st: string, scope: Scope): TypedVal {
+  const m = st.match(/^([a-zA-Z_]\w*)\s*=\s*(.+)$/);
+  if (!m) throw new Error("Invalid assignment");
+  const [, name, expr] = m;
+  if (!(name in scope)) throw new Error(`Variable not declared: ${name}`);
+  const res = interpretRaw(expr, scope);
+  const targetType = scope[name].type;
+  if (targetType && res.type) checkNarrowing(targetType, res.type);
+  if (targetType) checkOverflow(res.value, targetType);
+  scope[name] = { value: res.value, type: targetType || res.type };
+  return res;
+}
+
 function evaluateStatements(s: string, scope: Scope): TypedVal {
   const statements = s
     .split(";")
@@ -134,36 +178,18 @@ function evaluateStatements(s: string, scope: Scope): TypedVal {
   const localDecls = new Set<string>();
 
   for (const st of statements) {
-    const letMatch = st.match(
-      /^let\s+([a-zA-Z_]\w*)\s*(?::\s*([uUiI](?:8|16|32|64)))?\s*=\s*(.+)$/
-    );
-    if (letMatch) {
-      const [, name, type, expr] = letMatch;
-      if (localDecls.has(name)) {
-        throw new Error(`Variable already declared in this scope: ${name}`);
-      }
-      const res = interpretRaw(expr, scope);
-      if (type && res.type) {
-        const target = RANGES[type];
-        const source = RANGES[res.type];
-        if (target.max < source.max || target.min > source.min) {
-          throw new Error(
-            `Incompatible types: cannot implicitly narrow ${res.type} to ${type}`
-          );
-        }
-      }
-      const finalType = type || res.type;
-      if (finalType) checkOverflow(res.value, finalType);
-      scope[name] = { value: res.value, type: finalType };
-      localDecls.add(name);
-      lastVal = res;
+    if (st.startsWith("let ")) {
+      lastVal = handleLet(st, scope, localDecls);
+    } else if (st.includes("=") && st.match(/^[a-zA-Z_]\w*\s*=/)) {
+      lastVal = handleAssign(st, scope);
     } else {
       const tokenRegex =
         /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?(?:[uUiI](?:8|16|32|64))?|[a-zA-Z_]\w*/g;
       const tokens: Array<{ text: string; index: number }> = [];
       let m: RegExpExecArray | null;
-      while ((m = tokenRegex.exec(st)))
+      while ((m = tokenRegex.exec(st))) {
         tokens.push({ text: m[0], index: m.index });
+      }
       if (tokens.length === 0) throw new Error("Invalid statement");
       lastVal =
         tokens.length === 1

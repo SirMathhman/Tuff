@@ -16,7 +16,7 @@ A sophisticated numeric expression interpreter with fixed-width integer types, s
 ## Usage
 
 ```typescript
-import { interpret } from './src/interpret';
+import { interpret } from "./src/interpret";
 
 interpret("(2 + { let x = 4; x }) * 3"); // Returns 18
 interpret("let x = 255U8; x + 1"); // Throws Overflow error

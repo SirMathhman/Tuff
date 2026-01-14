@@ -169,6 +169,14 @@ describe("interpret blocks and variables", () => {
     expect(() => interpret("let x = 100U16; let y : U8 = x; y")).toThrow();
   });
 
+  it("handles variable declaration and later assignment", () => {
+    expect(interpret("let x : I32; x = 100; x")).toBe(100);
+  });
+
+  it("throws on narrowing assignment", () => {
+    expect(() => interpret("let x : U8; x = 100U16")).toThrow();
+  });
+
   it("throws on U8 multiplication overflow (100 * 3U8)", () => {
     expect(() => interpret("100 * 3U8")).toThrow();
   });
