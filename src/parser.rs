@@ -216,17 +216,33 @@ pub fn interpret(input: &str) -> Result<i32, String> {
         }
     }
 
-    // Skip whitespace after let statements
-    let rest = &input[pos..];
-    let trimmed = rest.trim_start();
-    pos += rest.len() - trimmed.len();
+    let mut result = 0;
 
-    // If there's no expression, return 0
-    if pos >= input.len() || trimmed.is_empty() {
-        return Ok(0);
+    // Parse remaining expressions and blocks
+    loop {
+        // Skip whitespace
+        let rest = &input[pos..];
+        let trimmed = rest.trim_start();
+        pos += rest.len() - trimmed.len();
+
+        // If we've reached the end, return the last result
+        if pos >= input.len() || trimmed.is_empty() {
+            break;
+        }
+
+        // Check if it's a block statement
+        if trimmed.starts_with('{') {
+            pos += 1;
+            result = parse_block(input, &mut pos, &mut env)?;
+            expect_closing(input, &mut pos, '}', "Missing closing curly brace")?;
+            // Continue parsing to see if there are more statements
+            continue;
+        }
+
+        // Otherwise parse as expression and we're done
+        result = interpret_at(input, &mut pos, &mut env)?;
+        break;
     }
-
-    let result = interpret_at(input, &mut pos, &mut env)?;
 
     if pos < input.len() {
         let rest = &input[pos..].trim_start();

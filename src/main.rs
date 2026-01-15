@@ -295,4 +295,9 @@ mod tests {
             Ok(50)
         );
     }
+
+    #[test]
+    fn test_assignment_in_block() {
+        assert_eq!(interpret("let x : I32; { x = 100; } x"), Ok(100));
+    }
 }
