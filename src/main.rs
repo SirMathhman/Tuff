@@ -243,4 +243,9 @@ mod tests {
     fn test_addition_mixed_suffix() {
         assert_eq!(interpret("1 + 2U8"), Ok(3));
     }
+
+    #[test]
+    fn test_addition_different_types() {
+        assert_eq!(interpret("1U8 + 2U16"), Ok(3));
+    }
 }
