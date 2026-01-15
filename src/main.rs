@@ -196,4 +196,9 @@ mod tests {
     fn test_let_statement_without_expression() {
         assert_eq!(interpret("let x = 100;"), Ok(0));
     }
+
+    #[test]
+    fn test_let_statement_type_mismatch() {
+        assert!(interpret("let x : U8 = 100U16;").is_err());
+    }
 }
