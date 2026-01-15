@@ -1,6 +1,7 @@
 mod parser;
 mod repl;
 mod validators;
+mod variables;
 use parser::interpret;
 
 fn main() {
@@ -225,5 +226,20 @@ mod tests {
     #[test]
     fn test_let_immutable_reassignment_error() {
         assert!(interpret("let x = 0; x = 1; x").is_err());
+    }
+
+    #[test]
+    fn test_let_uninitialized_with_type() {
+        assert_eq!(interpret("let x : I32; x = 100; x"), Ok(100));
+    }
+
+    #[test]
+    fn test_let_uninitialized_without_type_error() {
+        assert!(interpret("let x; x = 100; x").is_err());
+    }
+
+    #[test]
+    fn test_let_uninitialized_use_before_assign_error() {
+        assert!(interpret("let x : I32; x").is_err());
     }
 }

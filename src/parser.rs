@@ -1,14 +1,6 @@
 use crate::validators::validate_type_range;
-use std::collections::HashMap;
-
-#[derive(Clone)]
-pub struct VariableInfo {
-    pub value: i32,
-    pub type_name: String,
-    pub is_mutable: bool,
-}
-
-pub type Environment = HashMap<String, VariableInfo>;
+use crate::variables::{Environment, VariableInfo};
+use crate::variables::is_type_compatible;
 
 fn parse_number_inner(input: &str) -> Result<(i64, String, usize), String> {
     let trimmed = input.trim_start();
@@ -103,55 +95,30 @@ fn expect_closing(
     Ok(())
 }
 
-fn is_type_compatible(declared: &str, actual: &str) -> bool {
-    // Empty type (no suffix) is compatible with any declared type
-    if actual.is_empty() {
-        return true;
-    }
-
-    // Same type is always compatible
-    if declared == actual {
-        return true;
-    }
-
-    // Type widening: smaller types can be assigned to larger types
-    let widening_rules = [
-        ("U16", &["U8"][..]),
-        ("U32", &["U8", "U16"][..]),
-        ("U64", &["U8", "U16", "U32"][..]),
-        ("I16", &["I8"][..]),
-        ("I32", &["I8", "I16"][..]),
-        ("I64", &["I8", "I16", "I32"][..]),
-    ];
-
-    for (larger_type, smaller_types) in &widening_rules {
-        if declared == *larger_type && smaller_types.contains(&actual) {
-            return true;
-        }
-    }
-
-    false
-}
-
 fn store_variable(
     env: &mut Environment,
     var_name: String,
-    val: i32,
+    val: Option<i32>,
     declared_type: Option<String>,
-    actual_type: String,
+    actual_type: Option<String>,
     is_mutable: bool,
 ) -> Result<(), String> {
-    // If a type was declared, check that the actual type is compatible
-    if let Some(ref decl_type) = declared_type {
-        if !is_type_compatible(decl_type, &actual_type) {
-            return Err(format!(
-                "Type mismatch: declared type '{}' but got '{}'",
-                decl_type, actual_type
-            ));
+    let stored_type = if let Some(declared) = declared_type {
+        if let Some(actual) = actual_type {
+            if !is_type_compatible(&declared, &actual) {
+                return Err(format!(
+                    "Type mismatch: declared type '{}' but got '{}'",
+                    declared, actual
+                ));
+            }
         }
-    }
+        declared
+    } else if val.is_none() {
+        return Err("Type annotation required for uninitialized variable".to_string());
+    } else {
+        actual_type.unwrap_or_default()
+    };
 
-    let stored_type = declared_type.unwrap_or(actual_type);
     env.insert(
         var_name,
         VariableInfo {
@@ -180,11 +147,20 @@ fn update_mutable_var(
     env.insert(
         var_name,
         VariableInfo {
-            value: new_val,
+            value: Some(new_val),
             type_name: var_info.type_name,
             is_mutable: true,
         },
     );
+    Ok(())
+}
+
+fn expect_semicolon(input: &str, pos: &mut usize) -> Result<(), String> {
+    skip_whitespace(input, pos);
+    if !input[*pos..].trim_start().starts_with(';') {
+        return Err("Expected ';'".to_string());
+    }
+    *pos += 1;
     Ok(())
 }
 
@@ -195,7 +171,6 @@ fn parse_let_statement(input: &str, pos: &mut usize, env: &mut Environment) -> R
 
     skip_whitespace(input, pos);
     *pos += 4;
-
     skip_whitespace(input, pos);
 
     // Check for 'mut' keyword
@@ -216,28 +191,33 @@ fn parse_let_statement(input: &str, pos: &mut usize, env: &mut Environment) -> R
     }
 
     let declared_type = parse_type_annotation_optional(input, pos)?;
-
     skip_whitespace(input, pos);
 
+    // Check if there's an '=' for initialization
     if !input[*pos..].trim_start().starts_with('=') {
-        return Err("Expected '=' in let statement".to_string());
+        if !input[*pos..].trim_start().starts_with(';') {
+            return Err("Expected ';' or '=' in let statement".to_string());
+        }
+        store_variable(env, var_name, None, declared_type, None, true)?;
+        skip_whitespace(input, pos);
+        *pos += 1;
+        return Ok(());
     }
-    *pos += 1;
 
+    *pos += 1;
     skip_whitespace(input, pos);
 
-    let value = parse_term_with_type(input, pos, env)?;
-    let (val, actual_type) = value;
+    let (val, actual_type) = parse_term_with_type(input, pos, env)?;
+    store_variable(
+        env,
+        var_name,
+        Some(val),
+        declared_type,
+        Some(actual_type),
+        is_mutable,
+    )?;
 
-    store_variable(env, var_name, val, declared_type, actual_type, is_mutable)?;
-
-    skip_whitespace(input, pos);
-
-    if !input[*pos..].trim_start().starts_with(';') {
-        return Err("Expected ';' after let statement".to_string());
-    }
-    *pos += 1;
-
+    expect_semicolon(input, pos)?;
     Ok(())
 }
 
@@ -297,13 +277,7 @@ fn parse_assignment_statement(
     let (new_val, new_type) = parse_term_with_type(input, pos, env)?;
     update_mutable_var(env, var_name, var_info, new_val, new_type)?;
 
-    skip_whitespace(input, pos);
-
-    if !input[*pos..].trim_start().starts_with(';') {
-        return Err("Expected ';' after assignment".to_string());
-    }
-    *pos += 1;
-
+    expect_semicolon(input, pos)?;
     Ok(true)
 }
 
@@ -398,7 +372,10 @@ fn parse_factor_with_type(
             .get(&var_name)
             .ok_or_else(|| format!("Undefined variable: {}", var_name))?
             .clone();
-        Ok((var_info.value, var_info.type_name))
+        let val = var_info
+            .value
+            .ok_or_else(|| format!("Variable '{}' is not initialized", var_name))?;
+        Ok((val, var_info.type_name))
     } else {
         let (value, ty, len) = parse_number_with_type(&input[*pos..])?;
         *pos += len;
