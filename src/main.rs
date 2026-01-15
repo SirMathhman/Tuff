@@ -298,6 +298,19 @@ mod tests {
 
     #[test]
     fn test_assignment_in_block() {
-        assert_eq!(interpret("let x : I32; { x = 100; } x"), Ok(100));
+        assert!(interpret("let x : I32; { x = 100; } x").is_err());
+    }
+
+    #[test]
+    fn test_block_assignment_no_persist() {
+        assert!(interpret("let x : I32; { x = 100; x } x").is_err());
+    }
+
+    #[test]
+    fn test_pointer_assignment_in_block_persists() {
+        assert_eq!(
+            interpret("let mut x = 0; let y = &x; { *y = 50; } x"),
+            Ok(50)
+        );
     }
 }

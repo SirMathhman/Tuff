@@ -294,6 +294,8 @@ pub fn parse_assignment_statement(
 }
 
 pub fn parse_block(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i32, String> {
+    // Create a local scope - clone the environment for the block
+    let mut local_env = env.clone();
     let mut result = 0i32;
 
     while *pos < input.len() {
@@ -306,12 +308,28 @@ pub fn parse_block(input: &str, pos: &mut usize, env: &mut Environment) -> Resul
         }
 
         if trimmed.starts_with("let ") {
-            parse_let_statement(input, pos, env)?;
-        } else if parse_assignment_statement(input, pos, env)? {
+            parse_let_statement(input, pos, &mut local_env)?;
+        } else if parse_assignment_statement(input, pos, &mut local_env)? {
             // Assignment was parsed
         } else {
-            result = crate::parser::interpret_at(input, pos, env)?;
+            result = crate::parser::interpret_at(input, pos, &mut local_env)?;
             break;
+        }
+    }
+
+    // Merge back dereference assignments (pointer mutations) to the parent scope
+    // by updating the pointed-to variables in the original environment
+    for (_var_name, var_info) in local_env.iter() {
+        if var_info.type_name.starts_with('*') {
+            if let Some(pointed_var) = &var_info.points_to {
+                // This pointer may have been used to modify a variable
+                // Update the pointed variable in the parent environment
+                if let Some(local_pointed) = local_env.get(pointed_var) {
+                    if let Some(parent_pointed) = env.get_mut(pointed_var) {
+                        parent_pointed.value = local_pointed.value;
+                    }
+                }
+            }
         }
     }
 
