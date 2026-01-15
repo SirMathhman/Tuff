@@ -1,5 +1,7 @@
 mod parser;
+mod pointers;
 mod repl;
+mod statements;
 mod validators;
 mod variables;
 use parser::interpret;
@@ -246,5 +248,25 @@ mod tests {
     #[test]
     fn test_let_uninitialized_becomes_immutable_after_init() {
         assert!(interpret("let x : I32; x = 100; x = 10; x").is_err());
+    }
+
+    #[test]
+    fn test_pointer_reference_and_dereference() {
+        assert_eq!(interpret("let x = 100; let mut y : *I32 = &x; *y"), Ok(100));
+    }
+
+    #[test]
+    fn test_pointer_reference_uninitialized_error() {
+        assert!(interpret("let x : I32; let mut y : *I32 = &x; *y").is_err());
+    }
+
+    #[test]
+    fn test_pointer_dereference_non_pointer_error() {
+        assert!(interpret("let x = 100; *x").is_err());
+    }
+
+    #[test]
+    fn test_pointer_type_annotation() {
+        assert_eq!(interpret("let x = 50; let mut y : *I32 = &x; *y"), Ok(50));
     }
 }
