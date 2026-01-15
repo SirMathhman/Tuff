@@ -253,4 +253,9 @@ mod tests {
     fn test_addition_overflow() {
         assert!(interpret("1U8 + 65565U16").is_err());
     }
+
+    #[test]
+    fn test_chained_addition() {
+        assert_eq!(interpret("1 + 2 + 3"), Ok(6));
+    }
 }
