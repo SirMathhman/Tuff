@@ -13,3 +13,9 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-commit]
+      - id: pmd-cpd
+        name: pmd cpd
+        entry: pmd cpd --dir src --language rust --minimum-tokens 50
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
