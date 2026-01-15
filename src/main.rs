@@ -127,6 +127,11 @@ fn parse_block(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i3
             let (var_name, len) = parse_identifier(&input[*pos..])?;
             *pos += len;
 
+            // Check if variable is already declared in this scope
+            if env.contains_key(&var_name) {
+                return Err(format!("Variable '{}' is already declared", var_name));
+            }
+
             parse_type_annotation(input, pos)?;
 
             let rest = &input[*pos..];
@@ -453,5 +458,10 @@ mod tests {
             interpret("(4 + { let x : I32 = 2; let y : I32 = x; y }) * 3"),
             Ok(18)
         );
+    }
+
+    #[test]
+    fn test_variable_redeclaration_error() {
+        assert!(interpret("(4 + { let x : I32 = 2; let x : I32 = 1; x }) * 3").is_err());
     }
 }
