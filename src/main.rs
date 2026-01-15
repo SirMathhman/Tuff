@@ -263,4 +263,9 @@ mod tests {
     fn test_chained_with_out_of_range() {
         assert!(interpret("1U8 + 1 + 65564U16").is_err());
     }
+
+    #[test]
+    fn test_addition_and_subtraction() {
+        assert_eq!(interpret("2 + 3 - 4"), Ok(1));
+    }
 }
