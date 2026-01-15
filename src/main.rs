@@ -51,23 +51,50 @@ fn parse_identifier(input: &str) -> Result<(String, usize), String> {
 }
 
 #[allow(dead_code)]
-fn parse_type_annotation(input: &str, pos: &mut usize) -> Result<String, String> {
+fn skip_whitespace(input: &str, pos: &mut usize) {
     let rest = &input[*pos..];
     let trimmed = rest.trim_start();
     *pos += rest.len() - trimmed.len();
+}
 
-    if !trimmed.starts_with(':') {
-        return Err("Expected ':' in type annotation".to_string());
-    }
-    *pos += 1;
-
-    let rest = &input[*pos..];
-    let trimmed = rest.trim_start();
-    *pos += rest.len() - trimmed.len();
+#[allow(dead_code)]
+fn read_type_name_after_colon(input: &str, pos: &mut usize) -> Result<String, String> {
+    skip_whitespace(input, pos);
 
     let (type_name, len) = parse_identifier(&input[*pos..])?;
     *pos += len;
     Ok(type_name)
+}
+
+#[allow(dead_code)]
+fn parse_type_annotation_optional(input: &str, pos: &mut usize) -> Result<Option<String>, String> {
+    let rest = &input[*pos..];
+    let trimmed = rest.trim_start();
+
+    // If no colon, type annotation is absent
+    if !trimmed.starts_with(':') {
+        return Ok(None);
+    }
+
+    // Skip the colon
+    let ws_offset = rest.len() - trimmed.len();
+    *pos += ws_offset + 1;
+
+    let type_name = read_type_name_after_colon(input, pos)?;
+    Ok(Some(type_name))
+}
+
+#[allow(dead_code)]
+fn parse_type_annotation(input: &str, pos: &mut usize) -> Result<String, String> {
+    skip_whitespace(input, pos);
+    let rest = &input[*pos..];
+
+    if !rest.trim_start().starts_with(':') {
+        return Err("Expected ':' in type annotation".to_string());
+    }
+    *pos += rest.len() - rest.trim_start().len() + 1;
+
+    read_type_name_after_colon(input, pos)
 }
 
 #[allow(dead_code)]
@@ -132,7 +159,8 @@ fn parse_block(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i3
                 return Err(format!("Variable '{}' is already declared", var_name));
             }
 
-            parse_type_annotation(input, pos)?;
+            // Type annotation is optional
+            parse_type_annotation_optional(input, pos)?;
 
             let rest = &input[*pos..];
             let trimmed = rest.trim_start();
@@ -463,5 +491,10 @@ mod tests {
     #[test]
     fn test_variable_redeclaration_error() {
         assert!(interpret("(4 + { let x : I32 = 2; let x : I32 = 1; x }) * 3").is_err());
+    }
+
+    #[test]
+    fn test_variable_declaration_without_type() {
+        assert_eq!(interpret("(4 + { let x = 2; x }) * 3"), Ok(18));
     }
 }
