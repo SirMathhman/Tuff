@@ -106,31 +106,65 @@ fn parse_number(input: &str) -> Result<(i32, usize), String> {
 }
 
 #[allow(dead_code)]
+fn parse_term(input: &str, pos: &mut usize) -> Result<i32, String> {
+    let (mut result, len) = parse_number(&input[*pos..])?;
+    *pos += len;
+
+    while *pos < input.len() {
+        let rest = &input[*pos..];
+        let trimmed_rest = rest.trim_start();
+        let ws_len = rest.len() - trimmed_rest.len();
+
+        if trimmed_rest.is_empty() {
+            break;
+        }
+
+        let op = trimmed_rest.chars().next().ok_or("Unexpected end")?;
+        if op != '*' && op != '/' {
+            break;
+        }
+
+        *pos += ws_len + 1;
+        let rest = &input[*pos..];
+        let (num, len) = parse_number(rest)?;
+        *pos += len;
+
+        result = match op {
+            '*' => result * num,
+            '/' => result / num,
+            _ => return Err(format!("Unknown operator: {}", op)),
+        };
+    }
+
+    Ok(result)
+}
+
+#[allow(dead_code)]
 fn interpret(input: &str) -> Result<i32, String> {
     let input = input.trim();
-    let (mut result, mut pos) = parse_number(input)?;
+    let mut pos = 0;
+    let mut result = parse_term(input, &mut pos)?;
 
     while pos < input.len() {
         let rest = &input[pos..];
         let trimmed_rest = rest.trim_start();
         pos += rest.len() - trimmed_rest.len();
 
-        if pos >= input.len() {
+        if trimmed_rest.is_empty() {
             break;
         }
 
         let op = trimmed_rest.chars().next().ok_or("Unexpected end")?;
-        pos += 1;
+        if op != '+' && op != '-' {
+            return Err(format!("Unknown operator: {}", op));
+        }
 
-        let rest = &input[pos..];
-        let (num, len) = parse_number(rest)?;
-        pos += len;
+        pos += 1;
+        let term = parse_term(input, &mut pos)?;
 
         result = match op {
-            '+' => result + num,
-            '-' => result - num,
-            '*' => result * num,
-            '/' => result / num,
+            '+' => result + term,
+            '-' => result - term,
             _ => return Err(format!("Unknown operator: {}", op)),
         };
     }
@@ -272,5 +306,10 @@ mod tests {
     #[test]
     fn test_multiplication_and_subtraction() {
         assert_eq!(interpret("2 * 3 - 4"), Ok(2));
+    }
+
+    #[test]
+    fn test_operator_precedence() {
+        assert_eq!(interpret("4 + 2 * 3"), Ok(10));
     }
 }
