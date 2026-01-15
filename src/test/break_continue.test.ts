@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { interpret } from "../src/interpret";
+import { interpret } from "../main/ts/interpret";
 
 describe("break statement", () => {
   it("should exit loop when break is encountered", () => {

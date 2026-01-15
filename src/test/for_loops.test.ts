@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { interpret } from "../src/interpret";
+import { interpret } from "../main/ts/interpret";
 
 describe("for loops - basic", () => {
   it("should iterate from 0 to 9 and sum values", () => {

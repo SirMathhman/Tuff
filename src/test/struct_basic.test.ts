@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { interpret } from "../src/interpret";
+import { interpret } from "../main/ts/interpret";
 
 describe("Tuff Interpreter Structs", () => {
   it("defines and initializes a simple struct", () => {

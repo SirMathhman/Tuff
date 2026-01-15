@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { interpret } from "../src/interpret";
-
+import { interpret } from "../main/ts/interpret";
 describe("First-class functions", () => {
   it("should assign function to variable and call it", () => {
     expect(
@@ -9,11 +8,9 @@ describe("First-class functions", () => {
       )
     ).toBe(7);
   });
-
   it("should assign zero-argument function to variable", () => {
     expect(interpret("let f : () => I32 = fn get() : I32 => 42; f()")).toBe(42);
   });
-
   it("should call assigned function multiple times", () => {
     expect(
       interpret(
@@ -21,7 +18,6 @@ describe("First-class functions", () => {
       )
     ).toBe(16);
   });
-
   it("should support arrow function syntax", () => {
     expect(
       interpret(
@@ -29,7 +25,6 @@ describe("First-class functions", () => {
       )
     ).toBe(7);
   });
-
   it("should support closure - functions capturing outer scope variables", () => {
     expect(interpret("let mut x = 0; fn add() => x += 1; add(); x")).toBe(1);
   });

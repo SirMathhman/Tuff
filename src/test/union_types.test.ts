@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { interpret } from "../src/interpret";
+import { interpret } from "../main/ts/interpret";
 
 describe("union types", () => {
   it("defines and uses union type (type MyUnion = I32 | Bool; let temp : MyUnion = 100; temp is MyUnion => 1)", () => {

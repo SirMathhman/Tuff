@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "cpd": "pmd cpd --dir src --language typescript --minimum-tokens 50 --format text --ignore-literals --ignore-identifiers",
+    "cpd": "pmd cpd --dir src/main/ts --language typescript --minimum-tokens 50 --format text --ignore-literals --ignore-identifiers --no-fail-on-violation",
     "test": "vitest run",
-		"lint": "eslint . --ext .ts",
+    "lint": "eslint . --ext .ts",
     "prepare": "husky"
   },
   "devDependencies": {

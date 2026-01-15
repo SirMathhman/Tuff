@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { interpret } from "../src/interpret";
+import { interpret } from "../main/ts/interpret";
 
 describe("type checking with 'is' operator", () => {
   it("checks if value matches type alias (type Temp = I32; let temp : Temp = 100; temp is Temp => 1)", () => {
