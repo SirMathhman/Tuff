@@ -1,5 +1,5 @@
-use std::io::Write;
 use crate::interpret;
+use std::io::Write;
 
 pub fn run() {
     println!("Tuff - Arithmetic Expression Interpreter");
