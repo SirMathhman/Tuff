@@ -92,9 +92,7 @@ fn parse_number(input: &str) -> Result<(i32, usize), String> {
     }
 
     let digit_str = &trimmed[..digit_end];
-    let value = digit_str
-        .parse::<i64>()
-        .map_err(|e| e.to_string())?;
+    let value = digit_str.parse::<i64>().map_err(|e| e.to_string())?;
 
     // Find suffix part (letters followed by digits, like U8, I16)
     let remainder = &trimmed[digit_end..];
@@ -239,5 +237,10 @@ mod tests {
     #[test]
     fn test_addition() {
         assert_eq!(interpret("1U8 + 2U8"), Ok(3));
+    }
+
+    #[test]
+    fn test_addition_mixed_suffix() {
+        assert_eq!(interpret("1 + 2U8"), Ok(3));
     }
 }
