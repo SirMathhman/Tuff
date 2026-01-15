@@ -201,4 +201,9 @@ mod tests {
     fn test_let_statement_type_mismatch() {
         assert!(interpret("let x : U8 = 100U16;").is_err());
     }
+
+    #[test]
+    fn test_let_statement_type_widening() {
+        assert_eq!(interpret("let x : U16 = 100U8; x"), Ok(100));
+    }
 }

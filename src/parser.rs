@@ -96,6 +96,36 @@ fn expect_closing(
     Ok(())
 }
 
+fn is_type_compatible(declared: &str, actual: &str) -> bool {
+    // Empty type (no suffix) is compatible with any declared type
+    if actual.is_empty() {
+        return true;
+    }
+
+    // Same type is always compatible
+    if declared == actual {
+        return true;
+    }
+
+    // Type widening: smaller types can be assigned to larger types
+    let widening_rules = [
+        ("U16", &["U8"][..]),
+        ("U32", &["U8", "U16"][..]),
+        ("U64", &["U8", "U16", "U32"][..]),
+        ("I16", &["I8"][..]),
+        ("I32", &["I8", "I16"][..]),
+        ("I64", &["I8", "I16", "I32"][..]),
+    ];
+
+    for (larger_type, smaller_types) in &widening_rules {
+        if declared == *larger_type && smaller_types.contains(&actual) {
+            return true;
+        }
+    }
+
+    false
+}
+
 fn parse_let_statement(input: &str, pos: &mut usize, env: &mut Environment) -> Result<(), String> {
     if !&input[*pos..].trim_start().starts_with("let ") {
         return Ok(());
@@ -134,18 +164,17 @@ fn parse_let_statement(input: &str, pos: &mut usize, env: &mut Environment) -> R
 
     let value = parse_term_with_type(input, pos, env)?;
     let (val, actual_type) = value;
-    
-    // If a type was declared, check that the actual type matches
-    // Empty type (no suffix) is compatible with any declared type
+
+    // If a type was declared, check that the actual type is compatible
     if let Some(ref decl_type) = declared_type {
-        if !actual_type.is_empty() && decl_type != &actual_type {
+        if !is_type_compatible(decl_type, &actual_type) {
             return Err(format!(
                 "Type mismatch: declared type '{}' but got '{}'",
                 decl_type, actual_type
             ));
         }
     }
-    
+
     env.insert(var_name, val);
 
     let rest = &input[*pos..];
