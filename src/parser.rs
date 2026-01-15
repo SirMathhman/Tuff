@@ -1,6 +1,4 @@
-use crate::statements::{
-    parse_block, parse_top_level_assignment, parse_top_level_let,
-};
+use crate::statements::{parse_block, parse_top_level_assignment, parse_top_level_let};
 use crate::validators::validate_type_range;
 use crate::variables::Environment;
 

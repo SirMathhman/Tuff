@@ -269,4 +269,9 @@ mod tests {
     fn test_pointer_type_annotation() {
         assert_eq!(interpret("let x = 50; let mut y : *I32 = &x; *y"), Ok(50));
     }
+
+    #[test]
+    fn test_uninitialized_reference_error() {
+        assert!(interpret("let x : I32; &x").is_err());
+    }
 }

@@ -128,7 +128,11 @@ pub fn parse_value_or_reference(
 }
 
 #[allow(clippy::too_many_lines)]
-pub fn parse_let_statement(input: &str, pos: &mut usize, env: &mut Environment) -> Result<(), String> {
+pub fn parse_let_statement(
+    input: &str,
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<(), String> {
     if !&input[*pos..].trim_start().starts_with("let ") {
         return Ok(());
     }
