@@ -131,7 +131,12 @@ fn parse_term(input: &str, pos: &mut usize) -> Result<i32, String> {
 
         result = match op {
             '*' => result * num,
-            '/' => result / num,
+            '/' => {
+                if num == 0 {
+                    return Err("Division by zero".to_string());
+                }
+                result / num
+            }
             _ => return Err(format!("Unknown operator: {}", op)),
         };
     }
@@ -316,5 +321,10 @@ mod tests {
     #[test]
     fn test_division() {
         assert_eq!(interpret("10 / 2"), Ok(5));
+    }
+
+    #[test]
+    fn test_division_by_zero() {
+        assert!(interpret("10 / 0").is_err());
     }
 }
