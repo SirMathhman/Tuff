@@ -106,23 +106,30 @@ fn parse_number(input: &str) -> Result<(i32, usize), String> {
 }
 
 #[allow(dead_code)]
+fn parse_grouped(input: &str, pos: &mut usize, _open: char, close: char, close_err: &str) -> Result<i32, String> {
+    *pos += 1;
+    let result = interpret_at(input, pos)?;
+    let rest = &input[*pos..];
+    let trimmed = rest.trim_start();
+    *pos += rest.len() - trimmed.len();
+
+    if !trimmed.starts_with(close) {
+        return Err(close_err.to_string());
+    }
+    *pos += 1;
+    Ok(result)
+}
+
+#[allow(dead_code)]
 fn parse_factor(input: &str, pos: &mut usize) -> Result<i32, String> {
     let rest = &input[*pos..];
     let trimmed = rest.trim_start();
     *pos += rest.len() - trimmed.len();
 
     if trimmed.starts_with('(') {
-        *pos += 1;
-        let result = interpret_at(input, pos)?;
-        let rest = &input[*pos..];
-        let trimmed = rest.trim_start();
-        *pos += rest.len() - trimmed.len();
-
-        if !trimmed.starts_with(')') {
-            return Err("Missing closing parenthesis".to_string());
-        }
-        *pos += 1;
-        Ok(result)
+        parse_grouped(input, pos, '(', ')', "Missing closing parenthesis")
+    } else if trimmed.starts_with('{') {
+        parse_grouped(input, pos, '{', '}', "Missing closing curly brace")
     } else {
         let (value, len) = parse_number(&input[*pos..])?;
         *pos += len;
@@ -180,11 +187,11 @@ fn interpret_at(input: &str, pos: &mut usize) -> Result<i32, String> {
         }
 
         let op = trimmed_rest.chars().next().ok_or("Unexpected end")?;
-        if op != '+' && op != '-' && op != ')' {
+        if op != '+' && op != '-' && op != ')' && op != '}' {
             return Err(format!("Unknown operator: {}", op));
         }
 
-        if op == ')' {
+        if op == ')' || op == '}' {
             break;
         }
 
@@ -371,5 +378,10 @@ mod tests {
     #[test]
     fn test_parentheses() {
         assert_eq!(interpret("(4 + 2) * 3"), Ok(18));
+    }
+
+    #[test]
+    fn test_curly_braces() {
+        assert_eq!(interpret("(4 + { 2 }) * 3"), Ok(18));
     }
 }
