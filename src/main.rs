@@ -318,4 +318,9 @@ mod tests {
     fn test_block_with_literal_no_persist() {
         assert!(interpret("let x : I32; { x = 100; 7893 } x").is_err());
     }
+
+    #[test]
+    fn test_outer_variable_accessible_in_block() {
+        assert_eq!(interpret("let x = 100; { 7893 } x"), Ok(100));
+    }
 }
