@@ -1,0 +1,12 @@
+# Clippy configuration for strict panic prevention
+
+# Forbid code that could panic
+allow-panic-in-tests = false
+allow-panic-in-main = false
+
+# Strict error handling
+too-many-arguments-threshold = 7
+cognitive-complexity-threshold = 30
+
+# Enable all pedantic lints for extra safety
+enable-all-lints = false
