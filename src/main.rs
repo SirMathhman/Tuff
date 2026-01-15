@@ -313,4 +313,9 @@ mod tests {
             Ok(50)
         );
     }
+
+    #[test]
+    fn test_block_with_literal_no_persist() {
+        assert!(interpret("let x : I32; { x = 100; 7893 } x").is_err());
+    }
 }
