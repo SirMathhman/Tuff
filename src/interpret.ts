@@ -35,6 +35,10 @@ class ReturnSignal {
   constructor(public value: TypedVal) {}
 }
 
+class BreakSignal {}
+
+class ContinueSignal {}
+
 function getFromScope(
   scope: InternalScope,
   name: string
@@ -1003,11 +1007,18 @@ function parseBranch(s: string, pos: number): { content: string; end: number } {
   }
   // No braces - look for end of statement
   let depth = 0;
-  let stmtEnd = pos;
+  let stmtEnd = s.length; // Default to end of string
   for (let i = pos; i < s.length; i++) {
     if (s[i] === "{" || s[i] === "(") depth++;
-    else if (s[i] === "}" || s[i] === ")") depth--;
-    else if (s[i] === ";" && depth === 0) {
+    else if (s[i] === "}" || s[i] === ")") {
+      depth--;
+      // If we encounter a closing brace/paren at depth -1 and we haven't found a statement end yet,
+      // this closing brace/paren belongs to an outer structure, so stop here
+      if (depth < 0) {
+        stmtEnd = i;
+        break;
+      }
+    } else if (s[i] === ";" && depth === 0) {
       stmtEnd = i;
       break;
     }
@@ -1026,7 +1037,7 @@ function parseBranch(s: string, pos: number): { content: string; end: number } {
     const content = s.slice(pos, pos + elseMatch.index!).trim();
     return { content, end: pos + elseMatch.index! };
   }
-  return { content: s.slice(pos).trim(), end: s.length };
+  return { content: s.slice(pos, stmtEnd).trim(), end: stmtEnd };
 }
 
 function extractCondition(
@@ -1100,11 +1111,21 @@ function handleWhile(
   let lastVal: TypedVal = { value: 0 };
   try {
     while (interpretRaw(condStr, scope).value) {
-      lastVal = interpretRaw(bodyStr, {
-        values: {},
-        parent: scope,
-        structs: {},
-      });
+      try {
+        lastVal = interpretRaw(bodyStr, {
+          values: {},
+          parent: scope,
+          structs: {},
+        });
+      } catch (e) {
+        if (e instanceof BreakSignal) {
+          break;
+        }
+        if (e instanceof ContinueSignal) {
+          continue;
+        }
+        throw e;
+      }
     }
   } catch (e) {
     if (e instanceof YieldSignal) {
@@ -1137,12 +1158,141 @@ function handleDoWhile(
   let lastVal: TypedVal = { value: 0 };
   try {
     do {
-      lastVal = interpretRaw(bodyStr, {
-        values: {},
-        parent: scope,
-        structs: {},
-      });
+      try {
+        lastVal = interpretRaw(bodyStr, {
+          values: {},
+          parent: scope,
+          structs: {},
+        });
+      } catch (e) {
+        if (e instanceof BreakSignal) {
+          break;
+        }
+        if (e instanceof ContinueSignal) {
+          continue;
+        }
+        throw e;
+      }
     } while (interpretRaw(condStr, scope).value);
+  } catch (e) {
+    if (e instanceof YieldSignal) {
+      throw e;
+    }
+    throw e;
+  }
+
+  return { val: lastVal, end: finalPos };
+}
+
+function parseRange(
+  rangeStr: string,
+  scope: InternalScope
+): { start: number; end: number } {
+  // Parse range: number..number
+  const rangeMatch = rangeStr.trim().match(/^(.+?)\.\.(.+)$/);
+  if (!rangeMatch) {
+    throw new Error(`Invalid range syntax: ${rangeStr}`);
+  }
+
+  const startExpr = rangeMatch[1].trim();
+  const endExpr = rangeMatch[2].trim();
+
+  const startVal = interpretRaw(startExpr, scope);
+  const endVal = interpretRaw(endExpr, scope);
+
+  const start = Math.floor(startVal.value as number);
+  const end = Math.floor(endVal.value as number);
+
+  return { start, end };
+}
+
+function parseForHeader(s: string): {
+  varName: string;
+  mutable: boolean;
+  rangeStr: string;
+  headerEnd: number;
+} {
+  if (!s.startsWith("for(")) {
+    throw new Error("Invalid for loop: must start with 'for('");
+  }
+
+  // Find matching closing paren
+  let parenDepth = 0;
+  let forParenEnd = -1;
+  for (let i = 3; i < s.length; i++) {
+    if (s[i] === "(") parenDepth++;
+    else if (s[i] === ")") {
+      parenDepth--;
+      if (parenDepth === 0) {
+        forParenEnd = i;
+        break;
+      }
+    }
+  }
+
+  if (forParenEnd === -1) {
+    throw new Error("Missing closing paren in for loop");
+  }
+
+  const forHeader = s.slice(4, forParenEnd);
+
+  // Parse: let mut varName in range
+  const headerMatch = forHeader.match(
+    /^let\s+(mut\s+)?([a-zA-Z_]\w*)\s+in\s+(.+)$/
+  );
+  if (!headerMatch) {
+    throw new Error(`Invalid for loop header: for(${forHeader})`);
+  }
+
+  const [, mutS, varName, rangeStr] = headerMatch;
+  return {
+    varName,
+    mutable: !!mutS,
+    rangeStr,
+    headerEnd: forParenEnd,
+  };
+}
+
+function handleFor(
+  s: string,
+  scope: InternalScope
+): { val: TypedVal; end: number } {
+  const { varName, mutable, rangeStr, headerEnd } = parseForHeader(s);
+  const { start, end } = parseRange(rangeStr, scope);
+
+  const bodyRes = parseBranch(s, headerEnd + 1);
+  const bodyStr = bodyRes.content;
+  const finalPos = bodyRes.end;
+
+  let lastVal: TypedVal = { value: 0 };
+  try {
+    for (let i = start; i < end; i++) {
+      const loopScope: InternalScope = {
+        values: {
+          [varName]: {
+            value: i,
+            type: undefined,
+            mutable,
+          },
+        },
+        parent: scope,
+        structs: scope.structs,
+        typeAliases: scope.typeAliases,
+        functions: scope.functions,
+      };
+
+      try {
+        lastVal = interpretRaw(bodyStr, loopScope);
+      } catch (e) {
+        if (e instanceof BreakSignal) {
+          break;
+        }
+        if (e instanceof ContinueSignal) {
+          continue;
+        }
+        throw e;
+      }
+    }
   } catch (e) {
     if (e instanceof YieldSignal) {
       throw e;
@@ -1682,11 +1832,39 @@ function processStatement(
   return lastVal;
 }
 
-function processSingleStatement(
+function tryHandleTopLevelControlStructure(
   rawSt: string,
-  scope: InternalScope,
-  localDecls: Set<string>
-): TypedVal {
+  scope: InternalScope
+): TypedVal | null {
+  const trimmed = rawSt.trim();
+  const firstToken = trimmed.split(/[\s()/{};[\]]/)[0];
+
+  if (firstToken === "for") {
+    return handleFor(rawSt, scope).val;
+  }
+  if (firstToken === "while") {
+    return handleWhile(rawSt, scope).val;
+  }
+  if (firstToken === "do") {
+    return handleDoWhile(rawSt, scope).val;
+  }
+  if (firstToken === "if") {
+    const beforeIf = trimmed.substring(0, trimmed.indexOf("if")).trim();
+    if (!beforeIf) {
+      return handleIf(rawSt, scope).val;
+    }
+  }
+  if (firstToken === "match") {
+    const beforeMatch = trimmed.substring(0, trimmed.indexOf("match")).trim();
+    if (!beforeMatch) {
+      return handleMatch(rawSt, scope).val;
+    }
+  }
+
+  return null;
+}
+
+function extractSignalOrNull(rawSt: string, scope: InternalScope): void {
   if (rawSt.startsWith("yield ")) {
     let expr = rawSt.slice(6).trim();
     if (expr.endsWith(";")) {
@@ -1705,19 +1883,46 @@ function processSingleStatement(
     throw new ReturnSignal(returnValue);
   }
 
-  let st: string;
-  try {
-    st = resolveExpressions(rawSt, "do", handleDoWhile, scope);
-    st = resolveExpressions(st, "while", handleWhile, scope);
-    st = resolveExpressions(st, "if", handleIf, scope);
-    st = resolveExpressions(st, "match", handleMatch, scope);
-    st = resolveBrackets(st, scope);
-  } catch (e) {
-    if (e instanceof ReturnSignal) {
-      throw e;
-    }
-    throw e;
+  if (rawSt.trim() === "break" || rawSt.trim().startsWith("break;")) {
+    throw new BreakSignal();
   }
+
+  if (rawSt.trim() === "continue" || rawSt.trim().startsWith("continue;")) {
+    throw new ContinueSignal();
+  }
+}
+
+function resolveNestedExpressions(
+  st: string,
+  scope: InternalScope
+): string {
+  let result = st;
+  result = resolveExpressions(result, "do", handleDoWhile, scope);
+  result = resolveExpressions(result, "for", handleFor, scope);
+  result = resolveExpressions(result, "while", handleWhile, scope);
+  result = resolveExpressions(result, "if", handleIf, scope);
+  result = resolveExpressions(result, "match", handleMatch, scope);
+  result = resolveBrackets(result, scope);
+  return result;
+}
+
+function processSingleStatement(
+  rawSt: string,
+  scope: InternalScope,
+  localDecls: Set<string>
+): TypedVal {
+  extractSignalOrNull(rawSt, scope);
+
+  if (rawSt.includes(";") && splitStatements(rawSt).length > 1) {
+    return evaluateStatements(rawSt, scope);
+  }
+
+  const controlResult = tryHandleTopLevelControlStructure(rawSt, scope);
+  if (controlResult !== null) {
+    return controlResult;
+  }
+
+  const st = resolveNestedExpressions(rawSt, scope);
 
   const defResult = processDefinitions(st, scope);
   if (defResult !== null) {
@@ -1725,10 +1930,6 @@ function processSingleStatement(
   }
 
   if (!st) return { value: 0 };
-
-  if (st.includes(";") && splitStatements(st).length > 1) {
-    return evaluateStatements(st, scope);
-  }
 
   return processStatement(st, scope, localDecls);
 }

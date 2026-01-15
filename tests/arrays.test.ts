@@ -23,8 +23,6 @@ describe("Arrays", () => {
   });
 
   it("should allow mutable array element assignment", () => {
-    expect(
-      interpret("let mut x = [1, 2, 3]; x[1] = 4; x[1]")
-    ).toBe(4);
+    expect(interpret("let mut x = [1, 2, 3]; x[1] = 4; x[1]")).toBe(4);
   });
 });
