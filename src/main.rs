@@ -206,4 +206,9 @@ mod tests {
     fn test_let_statement_type_widening() {
         assert_eq!(interpret("let x : U16 = 100U8; x"), Ok(100));
     }
+
+    #[test]
+    fn test_let_statement_variable_widening() {
+        assert_eq!(interpret("let x = 100U8; let y : U16 = x; y"), Ok(100));
+    }
 }
