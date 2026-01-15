@@ -106,9 +106,33 @@ fn parse_number(input: &str) -> Result<(i32, usize), String> {
 }
 
 #[allow(dead_code)]
+fn parse_factor(input: &str, pos: &mut usize) -> Result<i32, String> {
+    let rest = &input[*pos..];
+    let trimmed = rest.trim_start();
+    *pos += rest.len() - trimmed.len();
+
+    if trimmed.starts_with('(') {
+        *pos += 1;
+        let result = interpret_at(input, pos)?;
+        let rest = &input[*pos..];
+        let trimmed = rest.trim_start();
+        *pos += rest.len() - trimmed.len();
+
+        if !trimmed.starts_with(')') {
+            return Err("Missing closing parenthesis".to_string());
+        }
+        *pos += 1;
+        Ok(result)
+    } else {
+        let (value, len) = parse_number(&input[*pos..])?;
+        *pos += len;
+        Ok(value)
+    }
+}
+
+#[allow(dead_code)]
 fn parse_term(input: &str, pos: &mut usize) -> Result<i32, String> {
-    let (mut result, len) = parse_number(&input[*pos..])?;
-    *pos += len;
+    let mut result = parse_factor(input, pos)?;
 
     while *pos < input.len() {
         let rest = &input[*pos..];
@@ -125,18 +149,51 @@ fn parse_term(input: &str, pos: &mut usize) -> Result<i32, String> {
         }
 
         *pos += ws_len + 1;
-        let rest = &input[*pos..];
-        let (num, len) = parse_number(rest)?;
-        *pos += len;
+        let factor = parse_factor(input, pos)?;
 
         result = match op {
-            '*' => result * num,
+            '*' => result * factor,
             '/' => {
-                if num == 0 {
+                if factor == 0 {
                     return Err("Division by zero".to_string());
                 }
-                result / num
+                result / factor
             }
+            _ => return Err(format!("Unknown operator: {}", op)),
+        };
+    }
+
+    Ok(result)
+}
+
+#[allow(dead_code)]
+fn interpret_at(input: &str, pos: &mut usize) -> Result<i32, String> {
+    let mut result = parse_term(input, pos)?;
+
+    while *pos < input.len() {
+        let rest = &input[*pos..];
+        let trimmed_rest = rest.trim_start();
+        *pos += rest.len() - trimmed_rest.len();
+
+        if trimmed_rest.is_empty() {
+            break;
+        }
+
+        let op = trimmed_rest.chars().next().ok_or("Unexpected end")?;
+        if op != '+' && op != '-' && op != ')' {
+            return Err(format!("Unknown operator: {}", op));
+        }
+
+        if op == ')' {
+            break;
+        }
+
+        *pos += 1;
+        let term = parse_term(input, pos)?;
+
+        result = match op {
+            '+' => result + term,
+            '-' => result - term,
             _ => return Err(format!("Unknown operator: {}", op)),
         };
     }
@@ -148,30 +205,13 @@ fn parse_term(input: &str, pos: &mut usize) -> Result<i32, String> {
 fn interpret(input: &str) -> Result<i32, String> {
     let input = input.trim();
     let mut pos = 0;
-    let mut result = parse_term(input, &mut pos)?;
+    let result = interpret_at(input, &mut pos)?;
 
-    while pos < input.len() {
-        let rest = &input[pos..];
-        let trimmed_rest = rest.trim_start();
-        pos += rest.len() - trimmed_rest.len();
-
-        if trimmed_rest.is_empty() {
-            break;
+    if pos < input.len() {
+        let rest = &input[pos..].trim_start();
+        if !rest.is_empty() {
+            return Err(format!("Unexpected input: {}", rest));
         }
-
-        let op = trimmed_rest.chars().next().ok_or("Unexpected end")?;
-        if op != '+' && op != '-' {
-            return Err(format!("Unknown operator: {}", op));
-        }
-
-        pos += 1;
-        let term = parse_term(input, &mut pos)?;
-
-        result = match op {
-            '+' => result + term,
-            '-' => result - term,
-            _ => return Err(format!("Unknown operator: {}", op)),
-        };
     }
 
     Ok(result)
@@ -326,5 +366,10 @@ mod tests {
     #[test]
     fn test_division_by_zero() {
         assert!(interpret("10 / 0").is_err());
+    }
+
+    #[test]
+    fn test_parentheses() {
+        assert_eq!(interpret("(4 + 2) * 3"), Ok(18));
     }
 }
