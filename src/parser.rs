@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use crate::validators::validate_type_range;
+use std::collections::HashMap;
 
 pub type Environment = HashMap<String, i32>;
 
@@ -57,10 +57,7 @@ fn read_type_name_after_colon(input: &str, pos: &mut usize) -> Result<String, St
     Ok(type_name)
 }
 
-fn parse_type_annotation_optional(
-    input: &str,
-    pos: &mut usize,
-) -> Result<Option<String>, String> {
+fn parse_type_annotation_optional(input: &str, pos: &mut usize) -> Result<Option<String>, String> {
     let rest = &input[*pos..];
     let trimmed = rest.trim_start();
 
@@ -92,11 +89,7 @@ fn expect_closing(
     Ok(())
 }
 
-fn parse_let_statement(
-    input: &str,
-    pos: &mut usize,
-    env: &mut Environment,
-) -> Result<(), String> {
+fn parse_let_statement(input: &str, pos: &mut usize, env: &mut Environment) -> Result<(), String> {
     if !&input[*pos..].trim_start().starts_with("let ") {
         return Ok(());
     }
@@ -248,11 +241,7 @@ fn parse_term(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i32
     Ok(result)
 }
 
-pub fn interpret_at(
-    input: &str,
-    pos: &mut usize,
-    env: &mut Environment,
-) -> Result<i32, String> {
+pub fn interpret_at(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i32, String> {
     let mut result = parse_term(input, pos, env)?;
 
     while *pos < input.len() {
@@ -309,6 +298,16 @@ pub fn interpret(input: &str) -> Result<i32, String> {
         if !parsed {
             break;
         }
+    }
+
+    // Skip whitespace after let statements
+    let rest = &input[pos..];
+    let trimmed = rest.trim_start();
+    pos += rest.len() - trimmed.len();
+
+    // If there's no expression, return 0
+    if pos >= input.len() || trimmed.is_empty() {
+        return Ok(0);
     }
 
     let result = interpret_at(input, &mut pos, &mut env)?;

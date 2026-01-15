@@ -191,4 +191,9 @@ mod tests {
     fn test_nested_block_with_variable_in_expression() {
         assert_eq!(interpret("let y = (4 + { let x = 2; x }) * 3; y"), Ok(18));
     }
+
+    #[test]
+    fn test_let_statement_without_expression() {
+        assert_eq!(interpret("let x = 100;"), Ok(0));
+    }
 }
