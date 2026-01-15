@@ -274,4 +274,25 @@ mod tests {
     fn test_uninitialized_reference_error() {
         assert!(interpret("let x : I32; &x").is_err());
     }
+
+    #[test]
+    fn test_mutable_pointer_assignment() {
+        assert_eq!(interpret("let mut x = 0; let y = &x; *y = 100; x"), Ok(100));
+    }
+
+    #[test]
+    fn test_mutable_pointer_multiple_assignments() {
+        assert_eq!(
+            interpret("let mut x = 5; let y = &x; *y = 10; *y = 20; x"),
+            Ok(20)
+        );
+    }
+
+    #[test]
+    fn test_pointer_to_typed_variable() {
+        assert_eq!(
+            interpret("let mut x : I32 = 0; let y = &x; *y = 50; x"),
+            Ok(50)
+        );
+    }
 }

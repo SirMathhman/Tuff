@@ -1,5 +1,4 @@
 use crate::parser::{parse_identifier, skip_whitespace};
-use crate::pointers::resolve_reference;
 use crate::variables::{is_type_compatible, Environment, VariableInfo};
 
 fn read_type_name_after_colon(input: &str, pos: &mut usize) -> Result<String, String> {
@@ -117,9 +116,20 @@ pub fn parse_value_or_reference(
         let ws_offset = input[*pos..].len() - trimmed.len();
         *pos += ws_offset + 1;
         skip_whitespace(input, pos);
+
+        // Check for &mut
+        let is_mutable_ref = if input[*pos..].trim_start().starts_with("mut ") {
+            skip_whitespace(input, pos);
+            *pos += 4;
+            skip_whitespace(input, pos);
+            true
+        } else {
+            false
+        };
+
         let (ref_var_name, len) = parse_identifier(&input[*pos..])?;
         *pos += len;
-        let ref_type = resolve_reference(&ref_var_name, env)?;
+        let ref_type = crate::pointers::resolve_reference(&ref_var_name, env, is_mutable_ref)?;
         Ok((0, ref_type, Some(ref_var_name)))
     } else {
         let (val, ty) = crate::parser::parse_term_with_type(input, pos, env)?;
@@ -179,6 +189,54 @@ pub fn parse_let_statement(
     Ok(())
 }
 
+fn try_parse_dereference_assignment(
+    input: &str,
+    pos: &mut usize,
+    trimmed: &str,
+    ws_offset: usize,
+    env: &mut Environment,
+) -> Result<bool, String> {
+    if let Some(after_star) = trimmed.strip_prefix('*') {
+        let after_star_trimmed = after_star.trim_start();
+
+        // Only proceed if it looks like it could be a dereference assignment
+        if after_star_trimmed
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_alphabetic() || c == '_')
+        {
+            // Look ahead to see if there's an = after the identifier
+            let (potential_var, var_len) = parse_identifier(after_star_trimmed)?;
+            let after_var = &after_star_trimmed[var_len..];
+            let after_var_trimmed = after_var.trim_start();
+
+            if after_var_trimmed.starts_with('=') {
+                // This is a dereference assignment
+                *pos += ws_offset + 1; // skip *
+                skip_whitespace(input, pos);
+                *pos += after_star_trimmed.len() - after_var_trimmed.len(); // skip var
+                skip_whitespace(input, pos);
+
+                skip_whitespace(input, pos);
+                if !input[*pos..].trim_start().starts_with('=') {
+                    return Err("Expected '=' in dereference assignment".to_string());
+                }
+                *pos += 1;
+                skip_whitespace(input, pos);
+
+                let (val, _actual_type, _) = parse_value_or_reference(input, pos, env)?;
+
+                // Update the pointed variable through the pointer
+                crate::pointers::assign_through_pointer(&potential_var, val, env)?;
+
+                expect_semicolon(input, pos)?;
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
 pub fn parse_assignment_statement(
     input: &str,
     pos: &mut usize,
@@ -187,6 +245,13 @@ pub fn parse_assignment_statement(
     let rest = &input[*pos..];
     let trimmed = rest.trim_start();
     let ws_offset = rest.len() - trimmed.len();
+
+    // Check for dereference assignment (*var = value)
+    if try_parse_dereference_assignment(input, pos, trimmed, ws_offset, env)? {
+        return Ok(true);
+    }
+
+    // Regular variable assignment (var = value)
     if !trimmed
         .chars()
         .next()
