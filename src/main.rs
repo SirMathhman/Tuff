@@ -211,4 +211,9 @@ mod tests {
     fn test_let_statement_variable_widening() {
         assert_eq!(interpret("let x = 100U8; let y : U16 = x; y"), Ok(100));
     }
+
+    #[test]
+    fn test_let_statement_type_narrowing_error() {
+        assert!(interpret("let x = 100U16; let y : U8 = x; y").is_err());
+    }
 }

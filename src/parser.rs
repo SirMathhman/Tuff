@@ -1,7 +1,13 @@
 use crate::validators::validate_type_range;
 use std::collections::HashMap;
 
-pub type Environment = HashMap<String, i32>;
+#[derive(Clone)]
+pub struct VariableInfo {
+    pub value: i32,
+    pub type_name: String,
+}
+
+pub type Environment = HashMap<String, VariableInfo>;
 
 fn parse_number_inner(input: &str) -> Result<(i64, String, usize), String> {
     let trimmed = input.trim_start();
@@ -126,6 +132,34 @@ fn is_type_compatible(declared: &str, actual: &str) -> bool {
     false
 }
 
+fn store_variable(
+    env: &mut Environment,
+    var_name: String,
+    val: i32,
+    declared_type: Option<String>,
+    actual_type: String,
+) -> Result<(), String> {
+    // If a type was declared, check that the actual type is compatible
+    if let Some(ref decl_type) = declared_type {
+        if !is_type_compatible(decl_type, &actual_type) {
+            return Err(format!(
+                "Type mismatch: declared type '{}' but got '{}'",
+                decl_type, actual_type
+            ));
+        }
+    }
+
+    let stored_type = declared_type.unwrap_or(actual_type);
+    env.insert(
+        var_name,
+        VariableInfo {
+            value: val,
+            type_name: stored_type,
+        },
+    );
+    Ok(())
+}
+
 fn parse_let_statement(input: &str, pos: &mut usize, env: &mut Environment) -> Result<(), String> {
     if !&input[*pos..].trim_start().starts_with("let ") {
         return Ok(());
@@ -165,17 +199,7 @@ fn parse_let_statement(input: &str, pos: &mut usize, env: &mut Environment) -> R
     let value = parse_term_with_type(input, pos, env)?;
     let (val, actual_type) = value;
 
-    // If a type was declared, check that the actual type is compatible
-    if let Some(ref decl_type) = declared_type {
-        if !is_type_compatible(decl_type, &actual_type) {
-            return Err(format!(
-                "Type mismatch: declared type '{}' but got '{}'",
-                decl_type, actual_type
-            ));
-        }
-    }
-
-    env.insert(var_name, val);
+    store_variable(env, var_name, val, declared_type, actual_type)?;
 
     let rest = &input[*pos..];
     let trimmed = rest.trim_start();
@@ -287,14 +311,14 @@ fn parse_factor_with_type(
         .next()
         .is_some_and(|c| c.is_alphabetic() || c == '_')
     {
-        // Variables lose type info
+        // Variables retain type info
         let (var_name, len) = parse_identifier(&input[*pos..])?;
         *pos += len;
-        let val = env
+        let var_info = env
             .get(&var_name)
-            .copied()
-            .ok_or_else(|| format!("Undefined variable: {}", var_name))?;
-        Ok((val, "".to_string()))
+            .ok_or_else(|| format!("Undefined variable: {}", var_name))?
+            .clone();
+        Ok((var_info.value, var_info.type_name))
     } else {
         let (value, ty, len) = parse_number_with_type(&input[*pos..])?;
         *pos += len;
