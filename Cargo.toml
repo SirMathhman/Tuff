@@ -12,3 +12,5 @@ panic = "forbid"
 unwrap_in_result = "deny"
 unwrap_used = "deny"
 expect_used = "deny"
+# Function length
+too_many_lines = "warn"

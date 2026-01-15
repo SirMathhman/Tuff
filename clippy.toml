@@ -2,3 +2,4 @@
 allow-panic-in-tests = false
 too-many-arguments-threshold = 7
 cognitive-complexity-threshold = 30
+too-many-lines-threshold = 50

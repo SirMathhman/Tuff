@@ -1,4 +1,83 @@
 #[allow(dead_code)]
+fn validate_u8(value: i64) -> Result<i32, String> {
+    if (0..=255).contains(&value) {
+        Ok(value as i32)
+    } else {
+        Err("Value out of range for U8".to_string())
+    }
+}
+
+#[allow(dead_code)]
+fn validate_u16(value: i64) -> Result<i32, String> {
+    if (0..=65535).contains(&value) {
+        Ok(value as i32)
+    } else {
+        Err("Value out of range for U16".to_string())
+    }
+}
+
+#[allow(dead_code)]
+fn validate_u32(value: i64) -> Result<i32, String> {
+    if (0..=4294967295).contains(&value) {
+        Ok(value as i32)
+    } else {
+        Err("Value out of range for U32".to_string())
+    }
+}
+
+#[allow(dead_code)]
+fn validate_u64(value: i64) -> Result<i32, String> {
+    if value >= 0 {
+        Ok(value as i32)
+    } else {
+        Err("Value out of range for U64".to_string())
+    }
+}
+
+#[allow(dead_code)]
+fn validate_i8(value: i64) -> Result<i32, String> {
+    if (-128..=127).contains(&value) {
+        Ok(value as i32)
+    } else {
+        Err("Value out of range for I8".to_string())
+    }
+}
+
+#[allow(dead_code)]
+fn validate_i16(value: i64) -> Result<i32, String> {
+    if (-32768..=32767).contains(&value) {
+        Ok(value as i32)
+    } else {
+        Err("Value out of range for I16".to_string())
+    }
+}
+
+#[allow(dead_code)]
+fn validate_i32(value: i64) -> Result<i32, String> {
+    if (-2147483648..=2147483647).contains(&value) {
+        Ok(value as i32)
+    } else {
+        Err("Value out of range for I32".to_string())
+    }
+}
+
+#[allow(dead_code)]
+fn validate_type_range(suffix: &str, value: i64) -> Result<i32, String> {
+    match suffix {
+        "U8" => validate_u8(value),
+        "U16" => validate_u16(value),
+        "U32" => validate_u32(value),
+        "U64" => validate_u64(value),
+        "I8" => validate_i8(value),
+        "I16" => validate_i16(value),
+        "I32" => validate_i32(value),
+        "I64" => Ok(value as i32),
+        "" => Ok(value as i32),
+        _ => Err(format!("Unknown type suffix: {}", suffix)),
+    }
+}
+
+#[allow(dead_code)]
 fn interpret(input: &str) -> Result<i32, String> {
     let trimmed = input
         .chars()
@@ -9,64 +88,12 @@ fn interpret(input: &str) -> Result<i32, String> {
         Err("No digits found".to_string())
     } else {
         let value = trimmed.parse::<i64>().map_err(|e| e.to_string())?;
-        
-        // Check type suffix and validate range
-        let suffix = input.chars().skip_while(|c| c.is_ascii_digit()).collect::<String>().to_uppercase();
-        
-        match suffix.as_str() {
-            "U8" => {
-                if (0..=255).contains(&value) {
-                    Ok(value as i32)
-                } else {
-                    Err("Value out of range for U8".to_string())
-                }
-            }
-            "U16" => {
-                if (0..=65535).contains(&value) {
-                    Ok(value as i32)
-                } else {
-                    Err("Value out of range for U16".to_string())
-                }
-            }
-            "U32" => {
-                if (0..=4294967295).contains(&value) {
-                    Ok(value as i32)
-                } else {
-                    Err("Value out of range for U32".to_string())
-                }
-            }
-            "U64" => {
-                if value >= 0 {
-                    Ok(value as i32)
-                } else {
-                    Err("Value out of range for U64".to_string())
-                }
-            }
-            "I8" => {
-                if (-128..=127).contains(&value) {
-                    Ok(value as i32)
-                } else {
-                    Err("Value out of range for I8".to_string())
-                }
-            }
-            "I16" => {
-                if (-32768..=32767).contains(&value) {
-                    Ok(value as i32)
-                } else {
-                    Err("Value out of range for I16".to_string())
-                }
-            }
-            "I32" => {
-                if (-2147483648..=2147483647).contains(&value) {
-                    Ok(value as i32)
-                } else {
-                    Err("Value out of range for I32".to_string())
-                }
-            }
-            "I64" => Ok(value as i32),
-            "" => Ok(value as i32), // No suffix, accept any i64
-            _ => Err(format!("Unknown type suffix: {}", suffix)),
-        }
+        let suffix = input
+            .chars()
+            .skip_while(|c| c.is_ascii_digit())
+            .collect::<String>()
+            .to_uppercase();
+        validate_type_range(&suffix, value)
     }
 }
 
