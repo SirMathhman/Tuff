@@ -147,7 +147,12 @@ fn parse_type_annotation(input: &str, pos: &mut usize) -> Result<String, String>
 }
 
 #[allow(dead_code)]
-fn expect_closing(input: &str, pos: &mut usize, close: char, close_err: &str) -> Result<(), String> {
+fn expect_closing(
+    input: &str,
+    pos: &mut usize,
+    close: char,
+    close_err: &str,
+) -> Result<(), String> {
     let rest = &input[*pos..];
     let trimmed = rest.trim_start();
     *pos += rest.len() - trimmed.len();
@@ -177,7 +182,7 @@ fn parse_grouped(
 #[allow(dead_code)]
 fn parse_block(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i32, String> {
     let mut result = 0i32;
-    
+
     while *pos < input.len() {
         let rest = &input[*pos..];
         let trimmed = rest.trim_start();
@@ -190,7 +195,7 @@ fn parse_block(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i3
         // Check for let statement
         if trimmed.starts_with("let ") {
             *pos += 4;
-            
+
             let rest = &input[*pos..];
             let trimmed = rest.trim_start();
             *pos += rest.len() - trimmed.len();
@@ -247,7 +252,11 @@ fn parse_factor(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i
         let result = parse_block(input, pos, env)?;
         expect_closing(input, pos, '}', "Missing closing curly brace")?;
         Ok(result)
-    } else if trimmed.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_') {
+    } else if trimmed
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_alphabetic() || c == '_')
+    {
         let (var_name, len) = parse_identifier(&input[*pos..])?;
         *pos += len;
         env.get(&var_name)
@@ -512,5 +521,10 @@ mod tests {
     #[test]
     fn test_variable_declaration() {
         assert_eq!(interpret("(4 + { let x : I32 = 2; x }) * 3"), Ok(18));
+    }
+
+    #[test]
+    fn test_multiple_variable_declarations() {
+        assert_eq!(interpret("(4 + { let x : I32 = 2; let y : I32 = x; y }) * 3"), Ok(18));
     }
 }
