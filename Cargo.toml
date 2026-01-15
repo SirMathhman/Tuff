@@ -7,8 +7,6 @@ edition = "2021"
 
 [lints.clippy]
 panic = "forbid"
-paranoia = "warn"
-unwrap_or_else_default = "deny"
 unwrap_in_result = "deny"
 unwrap_used = "deny"
 expect_used = "deny"
