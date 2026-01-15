@@ -5,6 +5,7 @@ use std::collections::HashMap;
 pub struct VariableInfo {
     pub value: i32,
     pub type_name: String,
+    pub is_mutable: bool,
 }
 
 pub type Environment = HashMap<String, VariableInfo>;
@@ -138,6 +139,7 @@ fn store_variable(
     val: i32,
     declared_type: Option<String>,
     actual_type: String,
+    is_mutable: bool,
 ) -> Result<(), String> {
     // If a type was declared, check that the actual type is compatible
     if let Some(ref decl_type) = declared_type {
@@ -155,6 +157,32 @@ fn store_variable(
         VariableInfo {
             value: val,
             type_name: stored_type,
+            is_mutable,
+        },
+    );
+    Ok(())
+}
+
+fn update_mutable_var(
+    env: &mut Environment,
+    var_name: String,
+    var_info: VariableInfo,
+    new_val: i32,
+    new_type: String,
+) -> Result<(), String> {
+    if !is_type_compatible(&var_info.type_name, &new_type) {
+        return Err(format!(
+            "Type mismatch in assignment to '{}': declared type '{}' but got '{}'",
+            var_name, var_info.type_name, new_type
+        ));
+    }
+
+    env.insert(
+        var_name,
+        VariableInfo {
+            value: new_val,
+            type_name: var_info.type_name,
+            is_mutable: true,
         },
     );
     Ok(())
@@ -165,14 +193,20 @@ fn parse_let_statement(input: &str, pos: &mut usize, env: &mut Environment) -> R
         return Ok(());
     }
 
-    let rest = &input[*pos..];
-    let trimmed = rest.trim_start();
-    *pos += rest.len() - trimmed.len();
+    skip_whitespace(input, pos);
     *pos += 4;
 
-    let rest = &input[*pos..];
-    let trimmed = rest.trim_start();
-    *pos += rest.len() - trimmed.len();
+    skip_whitespace(input, pos);
+
+    // Check for 'mut' keyword
+    let is_mutable = if input[*pos..].trim_start().starts_with("mut ") {
+        skip_whitespace(input, pos);
+        *pos += 4;
+        skip_whitespace(input, pos);
+        true
+    } else {
+        false
+    };
 
     let (var_name, len) = parse_identifier(&input[*pos..])?;
     *pos += len;
@@ -183,34 +217,94 @@ fn parse_let_statement(input: &str, pos: &mut usize, env: &mut Environment) -> R
 
     let declared_type = parse_type_annotation_optional(input, pos)?;
 
-    let rest = &input[*pos..];
-    let trimmed = rest.trim_start();
-    *pos += rest.len() - trimmed.len();
+    skip_whitespace(input, pos);
 
-    if !trimmed.starts_with('=') {
+    if !input[*pos..].trim_start().starts_with('=') {
         return Err("Expected '=' in let statement".to_string());
     }
     *pos += 1;
 
-    let rest = &input[*pos..];
-    let trimmed = rest.trim_start();
-    *pos += rest.len() - trimmed.len();
+    skip_whitespace(input, pos);
 
     let value = parse_term_with_type(input, pos, env)?;
     let (val, actual_type) = value;
 
-    store_variable(env, var_name, val, declared_type, actual_type)?;
+    store_variable(env, var_name, val, declared_type, actual_type, is_mutable)?;
 
-    let rest = &input[*pos..];
-    let trimmed = rest.trim_start();
-    *pos += rest.len() - trimmed.len();
+    skip_whitespace(input, pos);
 
-    if !trimmed.starts_with(';') {
+    if !input[*pos..].trim_start().starts_with(';') {
         return Err("Expected ';' after let statement".to_string());
     }
     *pos += 1;
 
     Ok(())
+}
+
+fn parse_assignment_statement(
+    input: &str,
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<bool, String> {
+    let rest = &input[*pos..];
+    let trimmed = rest.trim_start();
+    let ws_offset = rest.len() - trimmed.len();
+
+    // Try to parse an identifier
+    if !trimmed
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_alphabetic() || c == '_')
+    {
+        return Ok(false);
+    }
+
+    // Look ahead to see if there's an '=' sign
+    let (potential_var, var_len) = parse_identifier(trimmed)?;
+    let after_var = &trimmed[var_len..];
+    let after_var_trimmed = after_var.trim_start();
+
+    if !after_var_trimmed.starts_with('=') {
+        return Ok(false);
+    }
+
+    // This is an assignment
+    *pos += ws_offset + var_len;
+    let var_name = potential_var;
+
+    // Check if variable exists and is mutable
+    let var_info = env
+        .get(&var_name)
+        .ok_or_else(|| format!("Undefined variable: {}", var_name))?
+        .clone();
+
+    if !var_info.is_mutable {
+        return Err(format!(
+            "Cannot assign to immutable variable '{}'",
+            var_name
+        ));
+    }
+
+    skip_whitespace(input, pos);
+
+    if !input[*pos..].trim_start().starts_with('=') {
+        return Err("Expected '=' in assignment".to_string());
+    }
+    *pos += 1;
+
+    skip_whitespace(input, pos);
+
+    let (new_val, new_type) = parse_term_with_type(input, pos, env)?;
+    update_mutable_var(env, var_name, var_info, new_val, new_type)?;
+
+    skip_whitespace(input, pos);
+
+    if !input[*pos..].trim_start().starts_with(';') {
+        return Err("Expected ';' after assignment".to_string());
+    }
+    *pos += 1;
+
+    Ok(true)
 }
 
 fn parse_block(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i32, String> {
@@ -227,6 +321,8 @@ fn parse_block(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i3
 
         if trimmed.starts_with("let ") {
             parse_let_statement(input, pos, env)?;
+        } else if parse_assignment_statement(input, pos, env)? {
+            // Assignment was parsed
         } else {
             result = interpret_at(input, pos, env)?;
             break;
@@ -258,28 +354,16 @@ pub fn interpret_at(input: &str, pos: &mut usize, env: &mut Environment) -> Resu
     let mut result = parse_term(input, pos, env)?;
 
     while *pos < input.len() {
-        let rest = &input[*pos..];
-        let trimmed_rest = rest.trim_start();
-        *pos += rest.len() - trimmed_rest.len();
-
-        if trimmed_rest.is_empty() {
+        if let Some(op) = check_and_consume_op(input, pos, "+-") {
+            let term = parse_term(input, pos, env)?;
+            result = match op {
+                '+' => result + term,
+                '-' => result - term,
+                _ => return Err(format!("Unknown operator: {}", op)),
+            };
+        } else {
             break;
         }
-
-        let op = trimmed_rest.chars().next().ok_or("Unexpected end")?;
-        if op != '+' && op != '-' {
-            break;
-        }
-
-        *pos += 1;
-
-        let term = parse_term(input, pos, env)?;
-
-        result = match op {
-            '+' => result + term,
-            '-' => result - term,
-            _ => return Err(format!("Unknown operator: {}", op)),
-        };
     }
 
     Ok(result)
@@ -290,28 +374,24 @@ fn parse_factor_with_type(
     pos: &mut usize,
     env: &mut Environment,
 ) -> Result<(i32, String), String> {
-    let rest = &input[*pos..];
-    let trimmed = rest.trim_start();
-    *pos += rest.len() - trimmed.len();
+    skip_whitespace(input, pos);
 
-    if trimmed.starts_with('(') {
-        // Parentheses lose type info
+    if input[*pos..].trim_start().starts_with('(') {
         *pos += 1;
         let result = interpret_at(input, pos, env)?;
         expect_closing(input, pos, ')', "Missing closing parenthesis")?;
         Ok((result, "".to_string()))
-    } else if trimmed.starts_with('{') {
-        // Curly braces lose type info
+    } else if input[*pos..].trim_start().starts_with('{') {
         *pos += 1;
         let result = parse_block(input, pos, env)?;
         expect_closing(input, pos, '}', "Missing closing curly brace")?;
         Ok((result, "".to_string()))
-    } else if trimmed
+    } else if input[*pos..]
+        .trim_start()
         .chars()
         .next()
         .is_some_and(|c| c.is_alphabetic() || c == '_')
     {
-        // Variables retain type info
         let (var_name, len) = parse_identifier(&input[*pos..])?;
         *pos += len;
         let var_info = env
@@ -326,6 +406,19 @@ fn parse_factor_with_type(
     }
 }
 
+fn check_and_consume_op(input: &str, pos: &mut usize, ops: &str) -> Option<char> {
+    let trimmed = input[*pos..].trim_start();
+    let ws_len = input[*pos..].len() - trimmed.len();
+
+    if let Some(op) = trimmed.chars().next() {
+        if ops.contains(op) {
+            *pos += ws_len + 1;
+            return Some(op);
+        }
+    }
+    None
+}
+
 fn parse_term_with_type(
     input: &str,
     pos: &mut usize,
@@ -334,25 +427,13 @@ fn parse_term_with_type(
     let (mut result, mut result_type) = parse_factor_with_type(input, pos, env)?;
 
     while *pos < input.len() {
-        let rest = &input[*pos..];
-        let trimmed_rest = rest.trim_start();
-        let ws_len = rest.len() - trimmed_rest.len();
-
-        if trimmed_rest.is_empty() {
+        if let Some(op) = check_and_consume_op(input, pos, "*/") {
+            let (factor, _) = parse_factor_with_type(input, pos, env)?;
+            result = apply_multiplication_division(result, op, factor)?;
+            result_type = "".to_string();
+        } else {
             break;
         }
-
-        let op = trimmed_rest.chars().next().ok_or("Unexpected end")?;
-        if op != '*' && op != '/' {
-            break;
-        }
-
-        *pos += ws_len + 1;
-        let (factor, _) = parse_factor_with_type(input, pos, env)?;
-
-        result = apply_multiplication_division(result, op, factor)?;
-        // Type is lost when doing operations
-        result_type = "".to_string();
     }
 
     Ok((result, result_type))
@@ -374,14 +455,24 @@ fn parse_top_level_let(
     Ok(true)
 }
 
+fn parse_top_level_assignment(
+    input: &str,
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<bool, String> {
+    parse_assignment_statement(input, pos, env)
+}
+
 pub fn interpret(input: &str) -> Result<i32, String> {
     let input = input.trim();
     let mut pos = 0;
     let mut env = Environment::new();
 
     loop {
-        let parsed = parse_top_level_let(input, &mut pos, &mut env)?;
-        if !parsed {
+        let parsed_let = parse_top_level_let(input, &mut pos, &mut env)?;
+        let parsed_assign = parse_top_level_assignment(input, &mut pos, &mut env)?;
+
+        if !parsed_let && !parsed_assign {
             break;
         }
     }

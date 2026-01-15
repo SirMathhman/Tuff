@@ -216,4 +216,14 @@ mod tests {
     fn test_let_statement_type_narrowing_error() {
         assert!(interpret("let x = 100U16; let y : U8 = x; y").is_err());
     }
+
+    #[test]
+    fn test_let_mut_reassignment() {
+        assert_eq!(interpret("let mut x = 0; x = 1; x"), Ok(1));
+    }
+
+    #[test]
+    fn test_let_immutable_reassignment_error() {
+        assert!(interpret("let x = 0; x = 1; x").is_err());
+    }
 }
