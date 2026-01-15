@@ -1,4 +1,3 @@
-#[allow(dead_code)]
 pub fn validate_u8(value: i64) -> Result<i32, String> {
     if (0..=255).contains(&value) {
         Ok(value as i32)
@@ -7,7 +6,6 @@ pub fn validate_u8(value: i64) -> Result<i32, String> {
     }
 }
 
-#[allow(dead_code)]
 pub fn validate_u16(value: i64) -> Result<i32, String> {
     if (0..=65535).contains(&value) {
         Ok(value as i32)
@@ -16,7 +14,6 @@ pub fn validate_u16(value: i64) -> Result<i32, String> {
     }
 }
 
-#[allow(dead_code)]
 pub fn validate_u32(value: i64) -> Result<i32, String> {
     if (0..=4294967295).contains(&value) {
         Ok(value as i32)
@@ -25,7 +22,6 @@ pub fn validate_u32(value: i64) -> Result<i32, String> {
     }
 }
 
-#[allow(dead_code)]
 pub fn validate_u64(value: i64) -> Result<i32, String> {
     if value >= 0 {
         Ok(value as i32)
@@ -34,7 +30,6 @@ pub fn validate_u64(value: i64) -> Result<i32, String> {
     }
 }
 
-#[allow(dead_code)]
 pub fn validate_i8(value: i64) -> Result<i32, String> {
     if (-128..=127).contains(&value) {
         Ok(value as i32)
@@ -43,7 +38,6 @@ pub fn validate_i8(value: i64) -> Result<i32, String> {
     }
 }
 
-#[allow(dead_code)]
 pub fn validate_i16(value: i64) -> Result<i32, String> {
     if (-32768..=32767).contains(&value) {
         Ok(value as i32)
@@ -52,7 +46,6 @@ pub fn validate_i16(value: i64) -> Result<i32, String> {
     }
 }
 
-#[allow(dead_code)]
 pub fn validate_i32(value: i64) -> Result<i32, String> {
     if (-2147483648..=2147483647).contains(&value) {
         Ok(value as i32)
@@ -61,7 +54,6 @@ pub fn validate_i32(value: i64) -> Result<i32, String> {
     }
 }
 
-#[allow(dead_code)]
 pub fn validate_type_range(suffix: &str, value: i64) -> Result<i32, String> {
     match suffix {
         "U8" => validate_u8(value),

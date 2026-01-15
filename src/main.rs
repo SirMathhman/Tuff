@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
 mod validators;
+mod repl;
 use validators::validate_type_range;
 
 type Environment = HashMap<String, i32>;
 
-#[allow(dead_code)]
 fn parse_number(input: &str) -> Result<(i32, usize), String> {
     let trimmed = input.trim_start();
     let ws_offset = input.len() - trimmed.len();
@@ -33,7 +33,6 @@ fn parse_number(input: &str) -> Result<(i32, usize), String> {
     Ok((result, ws_offset + digit_end + suffix_end))
 }
 
-#[allow(dead_code)]
 fn parse_identifier(input: &str) -> Result<(String, usize), String> {
     let trimmed = input.trim_start();
     let ws_offset = input.len() - trimmed.len();
@@ -50,14 +49,12 @@ fn parse_identifier(input: &str) -> Result<(String, usize), String> {
     Ok((ident, ws_offset + end))
 }
 
-#[allow(dead_code)]
 fn skip_whitespace(input: &str, pos: &mut usize) {
     let rest = &input[*pos..];
     let trimmed = rest.trim_start();
     *pos += rest.len() - trimmed.len();
 }
 
-#[allow(dead_code)]
 fn read_type_name_after_colon(input: &str, pos: &mut usize) -> Result<String, String> {
     skip_whitespace(input, pos);
 
@@ -66,7 +63,6 @@ fn read_type_name_after_colon(input: &str, pos: &mut usize) -> Result<String, St
     Ok(type_name)
 }
 
-#[allow(dead_code)]
 fn parse_type_annotation_optional(input: &str, pos: &mut usize) -> Result<Option<String>, String> {
     let rest = &input[*pos..];
     let trimmed = rest.trim_start();
@@ -84,20 +80,6 @@ fn parse_type_annotation_optional(input: &str, pos: &mut usize) -> Result<Option
     Ok(Some(type_name))
 }
 
-#[allow(dead_code)]
-fn parse_type_annotation(input: &str, pos: &mut usize) -> Result<String, String> {
-    skip_whitespace(input, pos);
-    let rest = &input[*pos..];
-
-    if !rest.trim_start().starts_with(':') {
-        return Err("Expected ':' in type annotation".to_string());
-    }
-    *pos += rest.len() - rest.trim_start().len() + 1;
-
-    read_type_name_after_colon(input, pos)
-}
-
-#[allow(dead_code)]
 fn expect_closing(
     input: &str,
     pos: &mut usize,
@@ -115,7 +97,6 @@ fn expect_closing(
     Ok(())
 }
 
-#[allow(dead_code)]
 fn parse_grouped(
     input: &str,
     pos: &mut usize,
@@ -130,7 +111,6 @@ fn parse_grouped(
     Ok(result)
 }
 
-#[allow(dead_code)]
 fn parse_block(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i32, String> {
     let mut result = 0i32;
 
@@ -196,7 +176,6 @@ fn parse_block(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i3
     Ok(result)
 }
 
-#[allow(dead_code)]
 fn parse_factor(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i32, String> {
     let rest = &input[*pos..];
     let trimmed = rest.trim_start();
@@ -226,7 +205,6 @@ fn parse_factor(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i
     }
 }
 
-#[allow(dead_code)]
 fn parse_term(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i32, String> {
     let mut result = parse_factor(input, pos, env)?;
 
@@ -262,7 +240,6 @@ fn parse_term(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i32
     Ok(result)
 }
 
-#[allow(dead_code)]
 fn interpret_at(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i32, String> {
     let mut result = parse_term(input, pos, env)?;
 
@@ -297,7 +274,6 @@ fn interpret_at(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i
     Ok(result)
 }
 
-#[allow(dead_code)]
 fn interpret(input: &str) -> Result<i32, String> {
     let input = input.trim();
     let mut pos = 0;
@@ -315,7 +291,7 @@ fn interpret(input: &str) -> Result<i32, String> {
 }
 
 fn main() {
-    println!("Hello, world!");
+    repl::run();
 }
 
 #[cfg(test)]
