@@ -6,7 +6,9 @@ edition = "2021"
 [dependencies]
 
 [lints.clippy]
+# Panic prevention
 panic = "forbid"
+# Error handling
 unwrap_in_result = "deny"
 unwrap_used = "deny"
 expect_used = "deny"

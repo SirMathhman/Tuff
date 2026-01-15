@@ -1,9 +1,4 @@
-# Clippy configuration for strict panic prevention
-
-# Allow panics only in tests
+# Clippy configuration for strict panic prevention and code quality
 allow-panic-in-tests = false
-
-# Strict error handling
 too-many-arguments-threshold = 7
 cognitive-complexity-threshold = 30
-
