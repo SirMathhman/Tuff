@@ -248,4 +248,9 @@ mod tests {
     fn test_addition_different_types() {
         assert_eq!(interpret("1U8 + 2U16"), Ok(3));
     }
+
+    #[test]
+    fn test_addition_overflow() {
+        assert!(interpret("1U8 + 65565U16").is_err());
+    }
 }
