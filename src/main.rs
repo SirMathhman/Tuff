@@ -242,4 +242,9 @@ mod tests {
     fn test_let_uninitialized_use_before_assign_error() {
         assert!(interpret("let x : I32; x").is_err());
     }
+
+    #[test]
+    fn test_let_uninitialized_becomes_immutable_after_init() {
+        assert!(interpret("let x : I32; x = 100; x = 10; x").is_err());
+    }
 }

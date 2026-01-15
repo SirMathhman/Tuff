@@ -1,6 +1,6 @@
 use crate::validators::validate_type_range;
-use crate::variables::{Environment, VariableInfo};
 use crate::variables::is_type_compatible;
+use crate::variables::{Environment, VariableInfo};
 
 fn parse_number_inner(input: &str) -> Result<(i64, String, usize), String> {
     let trimmed = input.trim_start();
@@ -144,12 +144,15 @@ fn update_mutable_var(
         ));
     }
 
+    // If variable was uninitialized (None), make it immutable after first assignment
+    let new_mutability = var_info.value.is_some();
+
     env.insert(
         var_name,
         VariableInfo {
             value: Some(new_val),
             type_name: var_info.type_name,
-            is_mutable: true,
+            is_mutable: new_mutability,
         },
     );
     Ok(())
