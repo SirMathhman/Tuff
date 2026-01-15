@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+
+type Environment = HashMap<String, i32>;
+
 #[allow(dead_code)]
 fn validate_u8(value: i64) -> Result<i32, String> {
     if (0..=255).contains(&value) {
@@ -106,9 +110,44 @@ fn parse_number(input: &str) -> Result<(i32, usize), String> {
 }
 
 #[allow(dead_code)]
-fn parse_grouped(input: &str, pos: &mut usize, _open: char, close: char, close_err: &str) -> Result<i32, String> {
+fn parse_identifier(input: &str) -> Result<(String, usize), String> {
+    let trimmed = input.trim_start();
+    let ws_offset = input.len() - trimmed.len();
+
+    let end = trimmed
+        .find(|c: char| !c.is_alphanumeric() && c != '_')
+        .unwrap_or(trimmed.len());
+
+    if end == 0 {
+        return Err("No identifier found".to_string());
+    }
+
+    let ident = trimmed[..end].to_string();
+    Ok((ident, ws_offset + end))
+}
+
+#[allow(dead_code)]
+fn parse_type_annotation(input: &str, pos: &mut usize) -> Result<String, String> {
+    let rest = &input[*pos..];
+    let trimmed = rest.trim_start();
+    *pos += rest.len() - trimmed.len();
+
+    if !trimmed.starts_with(':') {
+        return Err("Expected ':' in type annotation".to_string());
+    }
     *pos += 1;
-    let result = interpret_at(input, pos)?;
+
+    let rest = &input[*pos..];
+    let trimmed = rest.trim_start();
+    *pos += rest.len() - trimmed.len();
+
+    let (type_name, len) = parse_identifier(&input[*pos..])?;
+    *pos += len;
+    Ok(type_name)
+}
+
+#[allow(dead_code)]
+fn expect_closing(input: &str, pos: &mut usize, close: char, close_err: &str) -> Result<(), String> {
     let rest = &input[*pos..];
     let trimmed = rest.trim_start();
     *pos += rest.len() - trimmed.len();
@@ -117,19 +156,103 @@ fn parse_grouped(input: &str, pos: &mut usize, _open: char, close: char, close_e
         return Err(close_err.to_string());
     }
     *pos += 1;
+    Ok(())
+}
+
+#[allow(dead_code)]
+fn parse_grouped(
+    input: &str,
+    pos: &mut usize,
+    _open: char,
+    close: char,
+    close_err: &str,
+    env: &mut Environment,
+) -> Result<i32, String> {
+    *pos += 1;
+    let result = interpret_at(input, pos, env)?;
+    expect_closing(input, pos, close, close_err)?;
     Ok(result)
 }
 
 #[allow(dead_code)]
-fn parse_factor(input: &str, pos: &mut usize) -> Result<i32, String> {
+fn parse_block(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i32, String> {
+    let mut result = 0i32;
+    
+    while *pos < input.len() {
+        let rest = &input[*pos..];
+        let trimmed = rest.trim_start();
+        *pos += rest.len() - trimmed.len();
+
+        if trimmed.is_empty() || trimmed.starts_with('}') {
+            break;
+        }
+
+        // Check for let statement
+        if trimmed.starts_with("let ") {
+            *pos += 4;
+            
+            let rest = &input[*pos..];
+            let trimmed = rest.trim_start();
+            *pos += rest.len() - trimmed.len();
+
+            let (var_name, len) = parse_identifier(&input[*pos..])?;
+            *pos += len;
+
+            parse_type_annotation(input, pos)?;
+
+            let rest = &input[*pos..];
+            let trimmed = rest.trim_start();
+            *pos += rest.len() - trimmed.len();
+
+            if !trimmed.starts_with('=') {
+                return Err("Expected '=' in let statement".to_string());
+            }
+            *pos += 1;
+
+            let rest = &input[*pos..];
+            let trimmed = rest.trim_start();
+            *pos += rest.len() - trimmed.len();
+
+            let value = parse_term(input, pos, env)?;
+            env.insert(var_name, value);
+
+            let rest = &input[*pos..];
+            let trimmed = rest.trim_start();
+            *pos += rest.len() - trimmed.len();
+
+            if !trimmed.starts_with(';') {
+                return Err("Expected ';' after let statement".to_string());
+            }
+            *pos += 1;
+        } else {
+            // Otherwise parse as an expression that becomes the result
+            result = interpret_at(input, pos, env)?;
+            break;
+        }
+    }
+
+    Ok(result)
+}
+
+#[allow(dead_code)]
+fn parse_factor(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i32, String> {
     let rest = &input[*pos..];
     let trimmed = rest.trim_start();
     *pos += rest.len() - trimmed.len();
 
     if trimmed.starts_with('(') {
-        parse_grouped(input, pos, '(', ')', "Missing closing parenthesis")
+        parse_grouped(input, pos, '(', ')', "Missing closing parenthesis", env)
     } else if trimmed.starts_with('{') {
-        parse_grouped(input, pos, '{', '}', "Missing closing curly brace")
+        *pos += 1;
+        let result = parse_block(input, pos, env)?;
+        expect_closing(input, pos, '}', "Missing closing curly brace")?;
+        Ok(result)
+    } else if trimmed.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_') {
+        let (var_name, len) = parse_identifier(&input[*pos..])?;
+        *pos += len;
+        env.get(&var_name)
+            .copied()
+            .ok_or_else(|| format!("Undefined variable: {}", var_name))
     } else {
         let (value, len) = parse_number(&input[*pos..])?;
         *pos += len;
@@ -138,8 +261,8 @@ fn parse_factor(input: &str, pos: &mut usize) -> Result<i32, String> {
 }
 
 #[allow(dead_code)]
-fn parse_term(input: &str, pos: &mut usize) -> Result<i32, String> {
-    let mut result = parse_factor(input, pos)?;
+fn parse_term(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i32, String> {
+    let mut result = parse_factor(input, pos, env)?;
 
     while *pos < input.len() {
         let rest = &input[*pos..];
@@ -156,7 +279,7 @@ fn parse_term(input: &str, pos: &mut usize) -> Result<i32, String> {
         }
 
         *pos += ws_len + 1;
-        let factor = parse_factor(input, pos)?;
+        let factor = parse_factor(input, pos, env)?;
 
         result = match op {
             '*' => result * factor,
@@ -174,8 +297,8 @@ fn parse_term(input: &str, pos: &mut usize) -> Result<i32, String> {
 }
 
 #[allow(dead_code)]
-fn interpret_at(input: &str, pos: &mut usize) -> Result<i32, String> {
-    let mut result = parse_term(input, pos)?;
+fn interpret_at(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i32, String> {
+    let mut result = parse_term(input, pos, env)?;
 
     while *pos < input.len() {
         let rest = &input[*pos..];
@@ -196,7 +319,7 @@ fn interpret_at(input: &str, pos: &mut usize) -> Result<i32, String> {
         }
 
         *pos += 1;
-        let term = parse_term(input, pos)?;
+        let term = parse_term(input, pos, env)?;
 
         result = match op {
             '+' => result + term,
@@ -212,7 +335,8 @@ fn interpret_at(input: &str, pos: &mut usize) -> Result<i32, String> {
 fn interpret(input: &str) -> Result<i32, String> {
     let input = input.trim();
     let mut pos = 0;
-    let result = interpret_at(input, &mut pos)?;
+    let mut env = Environment::new();
+    let result = interpret_at(input, &mut pos, &mut env)?;
 
     if pos < input.len() {
         let rest = &input[pos..].trim_start();
@@ -383,5 +507,10 @@ mod tests {
     #[test]
     fn test_curly_braces() {
         assert_eq!(interpret("(4 + { 2 }) * 3"), Ok(18));
+    }
+
+    #[test]
+    fn test_variable_declaration() {
+        assert_eq!(interpret("(4 + { let x : I32 = 2; x }) * 3"), Ok(18));
     }
 }
