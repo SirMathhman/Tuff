@@ -312,4 +312,9 @@ mod tests {
     fn test_operator_precedence() {
         assert_eq!(interpret("4 + 2 * 3"), Ok(10));
     }
+
+    #[test]
+    fn test_division() {
+        assert_eq!(interpret("10 / 2"), Ok(5));
+    }
 }
