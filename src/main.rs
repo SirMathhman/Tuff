@@ -268,4 +268,9 @@ mod tests {
     fn test_addition_and_subtraction() {
         assert_eq!(interpret("2 + 3 - 4"), Ok(1));
     }
+
+    #[test]
+    fn test_multiplication_and_subtraction() {
+        assert_eq!(interpret("2 * 3 - 4"), Ok(2));
+    }
 }
