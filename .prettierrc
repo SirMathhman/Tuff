@@ -3,8 +3,8 @@
   "singleQuote": true,
   "trailingComma": "all",
   "printWidth": 100,
-  "tabWidth": 2,
-  "useTabs": false,
+  "tabWidth": 1,
+  "useTabs": true,
   "arrowParens": "always",
   "endOfLine": "lf"
 }
