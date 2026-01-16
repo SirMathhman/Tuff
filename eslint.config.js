@@ -5,7 +5,7 @@ const prettierPlugin = require('eslint-plugin-prettier');
 
 module.exports = [
   {
-    files: ['src/**/*.ts', 'tests/**/*.ts'],
+    files: ['src/**/*.ts'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
@@ -64,6 +64,7 @@ module.exports = [
       'object-shorthand': 'error',
       'no-param-reassign': 'error',
       'no-regex-literals': 'off', // We use no-restricted-syntax instead for more control
+      'max-depth': ['error', 2],
 
       // Ban regex literals
       'no-restricted-syntax': [
@@ -124,10 +125,9 @@ module.exports = [
     },
   },
   {
-    files: ['src/**/*.test.ts', 'src/**/*.spec.ts', 'tests/**/*.test.ts', 'tests/**/*.spec.ts'],
+    files: ['**/*.test.ts', '**/*.spec.ts'],
     rules: {
       // Relax some rules for test files
-      '@typescript-eslint/explicit-function-return-types': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
     },
   },

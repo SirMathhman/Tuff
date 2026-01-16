@@ -1,25 +1,27 @@
-export function interpret(input: string): number {
-  // Remove type suffix (e.g., "U8", "I32", etc.)
-  let numberPart = input;
-
-  // Check if string ends with U or I followed by digits
+function findTypeSuffixStart(input: string): number {
   for (let i = input.length - 1; i >= 0; i--) {
     const char = input.charAt(i);
-    if (!Number.isNaN(Number.parseInt(char, 10))) {
-      // Current character is a digit
-      if (i > 0) {
-        const prevChar = input.charAt(i - 1);
-        if (prevChar === 'U' || prevChar === 'I') {
-          // Found the type suffix start
-          numberPart = input.substring(0, i - 1);
-          break;
-        }
-      }
-    } else {
-      // Not a digit, so stop checking
-      break;
+    const isDigit = !Number.isNaN(Number.parseInt(char, 10));
+
+    if (!isDigit) {
+      return -1;
+    }
+
+    if (i === 0) {
+      return -1;
+    }
+
+    const prevChar = input.charAt(i - 1);
+    if (prevChar === 'U' || prevChar === 'I') {
+      return i - 1;
     }
   }
 
+  return -1;
+}
+
+export function interpret(input: string): number {
+  const suffixStart = findTypeSuffixStart(input);
+  const numberPart = suffixStart >= 0 ? input.substring(0, suffixStart) : input;
   return Number.parseInt(numberPart, 10);
 }
