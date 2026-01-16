@@ -72,4 +72,12 @@ describe('interpret', () => {
       expect(result.value).toBe(3);
     }
   });
+
+  it('should return Err for "1U8 + 65535U16"', () => {
+    const result = interpret('1U8 + 65535U16');
+    expect(result.type).toBe('err');
+    if (result.type === 'err') {
+      expect(result.error).toContain('out of range');
+    }
+  });
 });
