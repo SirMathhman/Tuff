@@ -32,4 +32,12 @@ describe('interpret', () => {
       expect(result.error).toContain('out of range');
     }
   });
+
+  it('should interpret "1U8 + 2U8" as 3', () => {
+    const result = interpret('1U8 + 2U8');
+    expect(result.type).toBe('ok');
+    if (result.type === 'ok') {
+      expect(result.value).toBe(3);
+    }
+  });
 });

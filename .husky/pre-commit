@@ -1,1 +1,1 @@
-pnpm test && pnpm run lint:fix
+pnpm test && pnpm run lint:fix && pnpm run cpd
