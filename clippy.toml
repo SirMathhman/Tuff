@@ -1,8 +1,0 @@
-# Clippy configuration for strict panic prevention and code quality
-allow-panic-in-tests = false
-too-many-arguments-threshold = 3
-cognitive-complexity-threshold = 30
-too-many-lines-threshold = 50
-
-# Additional structural rules (nesting depth, struct field count) are enforced
-# via the custom lints tool: `cargo run --bin tuff_lints -- --help`.
