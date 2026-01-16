@@ -70,6 +70,18 @@ function parseLiteral(literal: string): Result<number> {
   return ok(value);
 }
 
+function getTypeRangeMax(typeSuffix: string): number {
+  if (typeSuffix === 'U8') {
+    return 255;
+  }
+
+  if (typeSuffix === 'U16') {
+    return 65535;
+  }
+
+  return 0;
+}
+
 function getTypeSuffix(literal: string): string | undefined {
   const trimmed = literal.trim();
   const suffixStart = findTypeSuffixStart(trimmed);
@@ -167,11 +179,20 @@ export function interpret(input: string): Result<number> {
   }
 
   const rightTypeSuffix = getTypeSuffix(rightStr);
+  const leftTypeSuffix = getTypeSuffix(leftStr);
+
+  if (rightTypeSuffix !== undefined && leftTypeSuffix !== undefined) {
+    const typeToValidate =
+      getTypeRangeMax(rightTypeSuffix) >= getTypeRangeMax(leftTypeSuffix)
+        ? rightTypeSuffix
+        : leftTypeSuffix;
+    return validateValueForType(opResult.value, typeToValidate);
+  }
+
   if (rightTypeSuffix !== undefined) {
     return validateValueForType(opResult.value, rightTypeSuffix);
   }
 
-  const leftTypeSuffix = getTypeSuffix(leftStr);
   if (leftTypeSuffix !== undefined) {
     return validateValueForType(opResult.value, leftTypeSuffix);
   }

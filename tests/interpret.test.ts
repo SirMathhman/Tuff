@@ -88,4 +88,12 @@ describe('interpret', () => {
       expect(result.value).toBe(256);
     }
   });
+
+  it('should interpret "255U16 + 1U8" as 256', () => {
+    const result = interpret('255U16 + 1U8');
+    expect(result.type).toBe('ok');
+    if (result.type === 'ok') {
+      expect(result.value).toBe(256);
+    }
+  });
 });
