@@ -1,5 +1,5 @@
 use crate::functions::parse_and_verify_arguments;
-use crate::parse_utils::{parse_dot_and_identifier, skip_whitespace};
+use crate::parse_utils::{parse_dot_and_identifier, parse_identifier, skip_whitespace};
 use crate::variables::{Environment, VariableInfo};
 
 fn format_function_type(params: &[(String, String)], return_type: &str) -> String {
@@ -45,6 +45,26 @@ fn lookup_method(
     }
 
     Ok(None)
+}
+
+fn store_returned_method(
+    env: &mut Environment,
+    method: &crate::variables::LocalFunction,
+    points_to: Option<String>,
+) -> String {
+    let func_type = format_function_type(&method.params, &method.return_type);
+    let returned = VariableInfo {
+        value: None,
+        type_name: "fn".to_string(),
+        is_mutable: false,
+        points_to,
+        struct_fields: None,
+        function_name: None,
+        local_function: Some(Box::new(method.clone())),
+        methods: None,
+    };
+    env.insert("_returned_function".to_string(), returned);
+    func_type
 }
 
 pub enum MethodMode {
@@ -102,21 +122,41 @@ pub fn try_parse_method(
             }
 
             if let Some(method) = lookup_method(var_name, &method_name, env)? {
-                let func_type = format_function_type(&method.params, &method.return_type);
-                let returned = VariableInfo {
-                    value: None,
-                    type_name: "fn".to_string(),
-                    is_mutable: false,
-                    points_to: None,
-                    struct_fields: None,
-                    function_name: None,
-                    local_function: Some(method.clone()),
-                    methods: None,
-                };
-                env.insert("_returned_function".to_string(), returned);
+                let func_type = store_returned_method(env, &method, None);
                 return Ok(Some((0, func_type)));
             }
         }
+    }
+
+    *pos = saved_pos;
+    Ok(None)
+}
+
+/// Try to parse a method pointer access using `::` (e.g., point::get)
+pub fn try_parse_method_pointer_access(
+    var_name: &str,
+    input: &str,
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<Option<(i32, String)>, String> {
+    skip_whitespace(input, pos);
+    let rest = &input[*pos..];
+    let trimmed = rest.trim_start();
+
+    if !trimmed.starts_with("::") {
+        return Ok(None);
+    }
+
+    let saved_pos = *pos;
+    *pos += rest.len() - trimmed.len() + 2;
+
+    let (method_name, name_len) = parse_identifier(&input[*pos..])?;
+    *pos += name_len;
+
+    if let Some(method) = lookup_method(var_name, &method_name, env)? {
+        let func_type =
+            store_returned_method(env, &method, Some("__method_ptr__".to_string()));
+        return Ok(Some((0, format!("*{}", func_type))));
     }
 
     *pos = saved_pos;

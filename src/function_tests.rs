@@ -82,4 +82,12 @@ mod tests {
             Ok(7)
         );
     }
+
+    #[test]
+    fn test_method_pointer_access() {
+        assert_eq!(
+            interpret("struct Point { x : I32, y : I32 } fn Point(x : I32, y : I32) : Point => { fn get() : I32 => x + y; this } let point = Point(3, 4); let getPtr : *() => I32 = point::get; getPtr(&point)"),
+            Ok(7)
+        );
+    }
 }

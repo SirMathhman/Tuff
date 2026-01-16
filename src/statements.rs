@@ -199,7 +199,7 @@ pub fn parse_let_statement(
     let (val, actual_type, points_to) = parse_value_or_reference(input, pos, env)?;
 
     // If we have a declared struct type, extract struct_fields and methods from temp variable
-    let (struct_fields, methods) = if let Some(ref decl_type) = declared_type {
+    let (mut struct_fields, mut methods) = if let Some(ref decl_type) = declared_type {
         let temp_var_name = format!("_struct_inst_{}", decl_type);
         if let Some(info) = env.get(&temp_var_name) {
             (info.struct_fields.clone(), info.methods.clone())
@@ -209,6 +209,18 @@ pub fn parse_let_statement(
     } else {
         (None, None)
     };
+
+    if struct_fields.is_none()
+        && methods.is_none()
+        && !actual_type.is_empty()
+        && actual_type.chars().next().is_some_and(|c| c.is_uppercase())
+    {
+        let temp_var_name = format!("_struct_inst_{}", actual_type);
+        if let Some(info) = env.get(&temp_var_name) {
+            struct_fields = info.struct_fields.clone();
+            methods = info.methods.clone();
+        }
+    }
 
     let var_name_for_func = var_name.clone();
     store_variable(
@@ -231,6 +243,7 @@ pub fn parse_let_statement(
                     var_name_for_func.clone(),
                     VariableInfo {
                         local_function: Some(local_func),
+                        points_to: returned_func.points_to.clone(),
                         ..existing
                     },
                 );

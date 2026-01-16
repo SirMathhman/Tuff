@@ -35,3 +35,6 @@ Example:
 
 - Define a struct and constructor with a method, then reference the method:
   - `struct Point { x : I32, y : I32 } fn Point(x : I32, y : I32) : Point => { fn get() : I32 => x + y; this } let myGet : () => I32 = Point(3, 4).get; myGet()`
+
+- Method pointer access with `::`:
+  - `struct Point { x : I32, y : I32 } fn Point(x : I32, y : I32) : Point => { fn get() : I32 => x + y; this } let point = Point(3, 4); let getPtr : *() => I32 = point::get; getPtr(&point)`

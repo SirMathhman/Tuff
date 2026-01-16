@@ -12,7 +12,7 @@ mod comparison;
 mod match_expr;
 mod methods;
 
-use methods::{try_parse_method, MethodMode};
+use methods::{try_parse_method, try_parse_method_pointer_access, MethodMode};
 
 #[allow(dead_code)]
 fn try_parse_field_access(
@@ -40,7 +40,6 @@ fn try_parse_temp_struct_field_access(
     }
     Ok(None)
 }
-
 
 fn apply_multiplication_division(lhs: i32, op: char, rhs: i32) -> Result<i32, String> {
     match op {
@@ -208,6 +207,13 @@ fn parse_factor_with_type(
                     return Ok((val, type_name));
                 }
             }
+        }
+
+        // Try to parse method pointer access (point::get)
+        if let Ok(Some((val, type_name))) =
+            try_parse_method_pointer_access(&identifier, input, pos, env)
+        {
+            return Ok((val, type_name));
         }
 
         // Try to parse struct instantiation

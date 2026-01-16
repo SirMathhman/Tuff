@@ -392,7 +392,23 @@ pub fn try_parse_function_call(
     let local_func_opt = env.get(func_name).and_then(|v| v.local_function.clone());
 
     if let Some(local_func) = local_func_opt {
-        let args = parse_and_verify_arguments(input, pos, env, func_name, local_func.params.len())?;
+        let is_method_ptr = env
+            .get(func_name)
+            .and_then(|v| v.points_to.as_deref())
+            .is_some_and(|v| v == "__method_ptr__");
+
+        let args = if is_method_ptr && local_func.params.is_empty() {
+            let trimmed_call = input[*pos..].trim_start();
+            let is_empty_args = if let Some(after_paren) = trimmed_call.strip_prefix('(') {
+                after_paren.trim_start().starts_with(')')
+            } else {
+                false
+            };
+            let expected = if is_empty_args { 0 } else { 1 };
+            parse_and_verify_arguments(input, pos, env, func_name, expected)?
+        } else {
+            parse_and_verify_arguments(input, pos, env, func_name, local_func.params.len())?
+        };
 
         // Create a new scope starting from the captured environment and bind parameters
         let mut func_env = bind_parameters(&local_func.params, &args, &local_func.captured_env);
