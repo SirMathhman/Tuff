@@ -40,6 +40,7 @@ if (result.type === 'err') { return result; } // Bubble errors immediately
 - **Fix**: `pnpm lint:fix` (includes Prettier formatting)
 - **Duplicate detection**: `pnpm cpd` (PMD Copy-Paste Detector with 50-token minimum)
 - **Pre-commit**: Husky hook runs `test && lint:fix && cpd` automatically
+- **Committing**: **REQUIRED** — Always make a commit at the end of any task using `git commit -m "..."`. Never leave changes uncommitted.
 
 ## Language Features & Evaluation Order
 
@@ -60,25 +61,30 @@ if (result.type === 'err') { return result; } // Bubble errors immediately
 ### Critical Parsing Patterns
 
 **1. Boolean Literal Detection (before variable lookup)**
+
 - In `parseLiteral()`, check `trimmed === 'true'` and `trimmed === 'false'` **before** calling `isVariableName()`
 - This prevents shadowing `true`/`false` with variable names
 
 **2. Type Suffix Parsing (U8, I8, etc.)**
+
 - Suffixes appear immediately after digits: `100U8`, `42I8`
 - `findTypeSuffixStart()` scans backward from string end, stops at first non-digit
 - Validation in `validateValueForType()` enforces ranges (e.g., U8: [0, 255])
 
 **3. Operator Precedence Resolution in `findOperator()`**
+
 - Scans expression for lowest-precedence operator (stops at bracket depth 0)
 - Two-character operators (`||`, `&&`) checked before single-char via `checkTwoCharOperator()`
 - Returns `OperatorMatch` with operator, index, and precedence level
 
 **4. Block Scoping in `processBracedBlock()`**
+
 - Uses `.map()` to propagate only mutations of existing outer-scope variables
 - New variables declared in blocks don't leak: `{ let x = 7; } x => Error`
 - But mutations of mutable variables propagate: `let mut x = 0; { x = 100; } x => 100`
 
 **5. Statement vs Expression Blocks**
+
 - `containsStatements()` detects blocks with `let` or assignment statements
 - `shouldProcessAsStatementBlock()` ensures block has content after closing brace
 - Expression blocks: `{ let x = 7; x }` → value is inner expression result
@@ -113,6 +119,7 @@ Flat config in [eslint.config.js](../eslint.config.js) with separate rules for t
 ### Recent Refactoring: Module Split
 
 The interpreter was refactored to separate concerns:
+
 - **Before**: Single `interpret.ts` file (717+ lines) - violated max-lines rule
 - **After**: Split into 3 modules:
   - `types.ts` (447 lines): Type definitions, validation, operator helpers
@@ -124,6 +131,7 @@ The interpreter was refactored to separate concerns:
 ### Code Deduplication Strategy
 
 The `processStatements()` function eliminated duplicate code between:
+
 - `interpret()` - top-level statement processing with block support
 - `processVariableBindings()` - nested binding processing without blocks
 
