@@ -1,6 +1,10 @@
-use crate::statements::{parse_block, parse_top_level_assignment, parse_top_level_let};
+use crate::statements::{
+    parse_block, parse_top_level_assignment, parse_top_level_let, parse_while_statement,
+};
 use crate::validators::validate_type_range;
 use crate::variables::Environment;
+
+mod comparison;
 
 fn parse_number_inner(input: &str) -> Result<(i64, String, usize), String> {
     let trimmed = input.trim_start();
@@ -94,13 +98,13 @@ fn parse_and_expression(
     pos: &mut usize,
     env: &mut Environment,
 ) -> Result<i32, String> {
-    let mut result = parse_addition_expression(input, pos, env)?;
+    let mut result = comparison::parse_comparison_expression(input, pos, env)?;
 
     while *pos < input.len() {
         let trimmed = input[*pos..].trim_start();
         if trimmed.starts_with("&&") {
             *pos += input[*pos..].len() - trimmed.len() + 2;
-            let rhs = parse_addition_expression(input, pos, env)?;
+            let rhs = comparison::parse_comparison_expression(input, pos, env)?;
             result = if result != 0 && rhs != 0 { 1 } else { 0 };
         } else {
             break;
@@ -408,8 +412,9 @@ pub fn interpret(input: &str) -> Result<i32, String> {
         let parsed_let = parse_top_level_let(input, &mut pos, &mut env)?;
         let parsed_assign = parse_top_level_assignment(input, &mut pos, &mut env)?;
         let parsed_if = crate::statements::parse_if_statement(input, &mut pos, &mut env)?;
+        let parsed_while = parse_while_statement(input, &mut pos, &mut env)?;
 
-        if !parsed_let && !parsed_assign && !parsed_if {
+        if !parsed_let && !parsed_assign && !parsed_if && !parsed_while {
             break;
         }
     }
