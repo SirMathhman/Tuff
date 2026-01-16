@@ -2,9 +2,79 @@ use crate::parse_utils::{parse_identifier, skip_whitespace};
 use crate::variables::{register_function, get_function, FunctionDef, Environment, LocalFunction};
 use crate::parser::parse_term_with_type;
 
+// Re-export for public API
+pub use crate::currying::execute_function_body_with_definitions;
+
 // Type alias to reduce complexity
 pub type FunctionHeader = (String, Vec<(String, String)>, String);
 pub type CompleteFunction = (String, Vec<(String, String)>, String, String);
+
+/// Parse a function type like (I32) => I32 or (I32, I32) => I32
+/// Returns the full type string
+#[allow(dead_code)]
+fn parse_function_type(input: &str, pos: &mut usize) -> Result<String, String> {
+    skip_whitespace(input, pos);
+    let rest = &input[*pos..];
+    let trimmed = rest.trim_start();
+    
+    if !trimmed.starts_with('(') {
+        return Err("Expected '(' for function type".to_string());
+    }
+    
+    let type_start = *pos + rest.len() - trimmed.len();
+    let mut paren_depth = 0;
+    let mut found_end = false;
+    let mut end_pos = type_start;
+    
+    for (i, c) in trimmed.chars().enumerate() {
+        if c == '(' {
+            paren_depth += 1;
+        } else if c == ')' {
+            paren_depth -= 1;
+            if paren_depth == 0 {
+                end_pos = type_start + rest.len() - trimmed.len() + i + 1;
+                found_end = true;
+                break;
+            }
+        }
+    }
+    
+    if !found_end {
+        return Err("Unclosed parentheses in function type".to_string());
+    }
+    
+    *pos = end_pos;
+    skip_whitespace(input, pos);
+    
+    if !input[*pos..].trim_start().starts_with("=>") {
+        return Err("Expected '=>' in function type".to_string());
+    }
+    
+    consume_token(input, pos, "=>")?;
+    skip_whitespace(input, pos);
+    
+    // Parse the return type (could be another function type or simple type)
+    let rest = &input[*pos..];
+    let trimmed = rest.trim_start();
+    
+    let return_type = if trimmed.starts_with('(') {
+        // Nested function type - parse recursively
+        parse_function_type(input, pos)?
+    } else {
+        // Simple type - parse identifier
+        let (type_name, type_len) = parse_identifier(trimmed)?;
+        *pos += rest.len() - trimmed.len() + type_len;
+        type_name
+    };
+    
+    let full_type = format!(
+        "{}=>{}",
+        &input[type_start..end_pos].trim(),
+        return_type
+    );
+    
+    Ok(full_type)
+}
 
 pub fn consume_token(input: &str, pos: &mut usize, token: &str) -> Result<(), String> {
     skip_whitespace(input, pos);
@@ -123,10 +193,19 @@ pub fn parse_function_header(
     // Check if there's a colon (return type is optional)
     let return_type = if input[*pos..].trim_start().starts_with(':') {
         consume_token(input, pos, ":")?;
-        // Parse return type
-        let (return_type, type_len) = parse_identifier(&input[*pos..])?;
-        *pos += type_len;
-        return_type
+        
+        let rest = &input[*pos..];
+        let trimmed = rest.trim_start();
+        
+        // Check if it's a function type or a simple type
+        if trimmed.starts_with('(') {
+            parse_function_type(input, pos)?
+        } else {
+            // Parse simple return type
+            let (return_type, type_len) = parse_identifier(trimmed)?;
+            *pos += rest.len() - trimmed.len() + type_len;
+            return_type
+        }
     } else {
         // No return type specified, default to I32
         "I32".to_string()
@@ -272,8 +351,10 @@ pub fn parse_function_body(input: &str, pos: &mut usize) -> Result<String, Strin
             }
         }
         
+        // If we didn't find an end but we reached EOF, that's OK - the body goes to the end
         if !found_end {
-            return Err("Function body must end with ';' or a new statement".to_string());
+            body_end = input.len();
+            *pos = body_end;
         }
         
         input[body_start..body_end].trim().to_string()
@@ -337,9 +418,13 @@ pub fn try_parse_function_call(
         // Create a new scope starting from the captured environment and bind parameters
         let mut func_env = bind_parameters(&local_func.params, &args, &local_func.captured_env);
 
-        // Evaluate the function body
-        let mut body_pos = 0;
-        let result = crate::parser::interpret_at(&local_func.body, &mut body_pos, &mut func_env)?;
+        // Evaluate the function body with support for nested definitions
+        let result = execute_function_body_with_definitions(&local_func.body, &mut func_env)?;
+        
+        // Copy the returned function to the caller's environment if present
+        if let Some(returned_func_var) = func_env.get("_returned_function").cloned() {
+            env.insert("_returned_function".to_string(), returned_func_var);
+        }
 
         return Ok(Some((result, local_func.return_type.clone())));
     }
@@ -376,9 +461,13 @@ pub fn try_parse_function_call(
         },
     );
 
-    // Evaluate the function body
-    let mut body_pos = 0;
-    let result = crate::parser::interpret_at(&func.body, &mut body_pos, &mut func_env)?;
+    // Evaluate the function body with support for nested definitions
+    let result = execute_function_body_with_definitions(&func.body, &mut func_env)?;
+
+    // Copy the returned function to the caller's environment if present
+    if let Some(returned_func_var) = func_env.get("_returned_function").cloned() {
+        env.insert("_returned_function".to_string(), returned_func_var);
+    }
 
     // If the return type is a struct, copy the temporary struct variable back to the caller's environment
     if !func.return_type.is_empty() && func.return_type.chars().next().is_some_and(|c| c.is_uppercase()) {

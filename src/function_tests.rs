@@ -43,4 +43,24 @@ mod tests {
     fn test_this_scope_assignment() {
         assert_eq!(interpret("let mut x = 0; this.x = 100; x"), Ok(100));
     }
+
+    #[test]
+    fn test_simple_nested_function() {
+        // Test that function definition inside a function works
+        let result1 = interpret("fn a(first : I32) : I32 => fn second(second : I32) => 0; a(3)");
+        eprintln!("Result1 (simple nested): {:?}", result1);
+        assert_eq!(result1, Ok(0));
+        
+        let result2 = interpret("fn a(first : I32) : (I32) => I32 => fn second(second : I32) => first + second; a(3)(4)");
+        eprintln!("Result2 (with capture and chaining): {:?}", result2);
+        assert_eq!(result2, Ok(7), "Expected Ok(7), got {:?}", result2);
+    }
+
+    #[test]
+    fn test_curried_function() {
+        assert_eq!(
+            interpret("fn a(first : I32) : (I32) => I32 => fn second(second : I32) => first + second; a(3)(4)"),
+            Ok(7)
+        );
+    }
 }

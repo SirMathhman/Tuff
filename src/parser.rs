@@ -278,7 +278,8 @@ fn parse_factor_with_type(
         if let Ok(Some((val, type_name))) =
             crate::functions::try_parse_function_call(&identifier, input, pos, env)
         {
-            return Ok((val, type_name));
+            // Check if the result is a function type (contains =>) and try to call it again
+            return crate::currying::handle_chained_function_calls(input, pos, env, val, type_name);
         }
 
         // Otherwise it's a variable

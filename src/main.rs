@@ -1,3 +1,4 @@
+mod currying;
 mod functions;
 mod parse_utils;
 mod parser;
@@ -7,6 +8,9 @@ mod statements;
 mod structs;
 mod validators;
 mod variables;
+
+#[cfg(test)]
+mod test_debug_currying;
 use parser::interpret;
 
 #[cfg(test)]
