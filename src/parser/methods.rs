@@ -1,4 +1,5 @@
 use crate::functions::parse_and_verify_arguments;
+use crate::parse_context::ParseEnvContextMut;
 use crate::parse_utils::{parse_dot_and_identifier, parse_identifier, skip_whitespace};
 use crate::variables::{Environment, VariableInfo};
 
@@ -13,15 +14,14 @@ fn format_function_type(params: &[(String, String)], return_type: &str) -> Strin
 }
 
 fn parse_method_selector(
-    input: &str,
-    pos: &mut usize,
+    ctx: &mut ParseEnvContextMut,
 ) -> Result<Option<(String, bool, usize)>, String> {
-    skip_whitespace(input, pos);
-    let saved_pos = *pos;
+    skip_whitespace(ctx.input, ctx.pos);
+    let saved_pos = *ctx.pos;
 
-    if let Ok(Some(method_name)) = parse_dot_and_identifier(input, pos) {
-        skip_whitespace(input, pos);
-        let is_call = input[*pos..].trim_start().starts_with('(');
+    if let Ok(Some(method_name)) = parse_dot_and_identifier(ctx.input, ctx.pos) {
+        skip_whitespace(ctx.input, ctx.pos);
+        let is_call = ctx.input[*ctx.pos..].trim_start().starts_with('(');
         return Ok(Some((method_name, is_call, saved_pos)));
     }
 
@@ -74,13 +74,11 @@ pub enum MethodMode {
 
 #[allow(clippy::too_many_lines)]
 pub fn try_parse_method(
+    ctx: &mut ParseEnvContextMut,
     var_name: &str,
-    input: &str,
-    pos: &mut usize,
-    env: &mut Environment,
     mode: MethodMode,
 ) -> Result<Option<(i32, String)>, String> {
-    let selector = parse_method_selector(input, pos)?;
+    let selector = parse_method_selector(ctx)?;
     let (method_name, is_call, saved_pos) = match selector {
         Some(value) => value,
         None => return Ok(None),
@@ -89,24 +87,16 @@ pub fn try_parse_method(
     match mode {
         MethodMode::Call => {
             if !is_call {
-                *pos = saved_pos;
+                *ctx.pos = saved_pos;
                 return Ok(None);
             }
 
-            if let Some(method) = lookup_method(var_name, &method_name, env)? {
-                let args = parse_and_verify_arguments(
-                    input,
-                    pos,
-                    env,
-                    &method_name,
-                    method.params.len(),
-                )?;
+            if let Some(method) = lookup_method(var_name, &method_name, ctx.env)? {
+                let args =
+                    parse_and_verify_arguments(ctx, &method_name, method.params.len())?;
 
-                let mut method_env = crate::functions::bind_parameters(
-                    &method.params,
-                    &args,
-                    &method.captured_env,
-                );
+                let mut method_env =
+                    crate::functions::bind_parameters(&method.params, &args, &method.captured_env);
 
                 let mut body_pos = 0;
                 let result =
@@ -117,48 +107,49 @@ pub fn try_parse_method(
         }
         MethodMode::Access => {
             if is_call {
-                *pos = saved_pos;
+                *ctx.pos = saved_pos;
                 return Ok(None);
             }
 
-            if let Some(method) = lookup_method(var_name, &method_name, env)? {
-                let func_type = store_returned_method(env, &method, None);
+            if let Some(method) = lookup_method(var_name, &method_name, ctx.env)? {
+                let func_type = store_returned_method(ctx.env, &method, None);
                 return Ok(Some((0, func_type)));
             }
         }
     }
 
-    *pos = saved_pos;
+    *ctx.pos = saved_pos;
     Ok(None)
 }
 
 /// Try to parse a method pointer access using `::` (e.g., point::get)
 pub fn try_parse_method_pointer_access(
+    ctx: &mut ParseEnvContextMut,
     var_name: &str,
-    input: &str,
-    pos: &mut usize,
-    env: &mut Environment,
 ) -> Result<Option<(i32, String)>, String> {
-    skip_whitespace(input, pos);
-    let rest = &input[*pos..];
+    skip_whitespace(ctx.input, ctx.pos);
+    let rest = &ctx.input[*ctx.pos..];
     let trimmed = rest.trim_start();
 
     if !trimmed.starts_with("::") {
         return Ok(None);
     }
 
-    let saved_pos = *pos;
-    *pos += rest.len() - trimmed.len() + 2;
+    let saved_pos = *ctx.pos;
+    *ctx.pos += rest.len() - trimmed.len() + 2;
 
-    let (method_name, name_len) = parse_identifier(&input[*pos..])?;
-    *pos += name_len;
+    let (method_name, name_len) = parse_identifier(&ctx.input[*ctx.pos..])?;
+    *ctx.pos += name_len;
 
-    if let Some(method) = lookup_method(var_name, &method_name, env)? {
-        let func_type =
-            store_returned_method(env, &method, Some("__method_ptr__".to_string()));
+    if let Some(method) = lookup_method(var_name, &method_name, ctx.env)? {
+        let func_type = store_returned_method(
+            ctx.env,
+            &method,
+            Some("__method_ptr__".to_string()),
+        );
         return Ok(Some((0, format!("*{}", func_type))));
     }
 
-    *pos = saved_pos;
+    *ctx.pos = saved_pos;
     Ok(None)
 }

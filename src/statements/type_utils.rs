@@ -53,8 +53,7 @@ pub fn read_type_name_after_colon(input: &str, pos: &mut usize) -> Result<String
             type_str.push_str(" => ");
             temp_pos += rest_after_ptrs[temp_pos..].len() - remaining.len() + 2;
 
-            let (return_type, return_len) =
-                parse_identifier(&rest_after_ptrs[temp_pos..])?;
+            let (return_type, return_len) = parse_identifier(&rest_after_ptrs[temp_pos..])?;
             type_str.push_str(&return_type);
             temp_pos += return_len;
 
@@ -71,7 +70,10 @@ pub fn read_type_name_after_colon(input: &str, pos: &mut usize) -> Result<String
     }
 }
 
-pub fn parse_type_annotation_optional(input: &str, pos: &mut usize) -> Result<Option<String>, String> {
+pub fn parse_type_annotation_optional(
+    input: &str,
+    pos: &mut usize,
+) -> Result<Option<String>, String> {
     let rest = &input[*pos..];
     let trimmed = rest.trim_start();
 

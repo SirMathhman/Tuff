@@ -1,3 +1,4 @@
+use crate::parse_context::ParseContext;
 use crate::parse_utils::skip_whitespace;
 use crate::variables::Environment;
 
@@ -29,13 +30,13 @@ pub fn clear_loop_control() {
     LOOP_CONTROL.with(|lc| *lc.borrow_mut() = LoopControl::None);
 }
 
-fn consume_required_char(input: &str, pos: &mut usize, ch: char, err: &str) -> Result<(), String> {
-    skip_whitespace(input, pos);
-    let trimmed = input[*pos..].trim_start();
+fn consume_required_char(ctx: &mut ParseContext, ch: char, err: &str) -> Result<(), String> {
+    skip_whitespace(ctx.input, ctx.pos);
+    let trimmed = ctx.input[*ctx.pos..].trim_start();
     if !trimmed.starts_with(ch) {
         return Err(err.to_string());
     }
-    *pos += input[*pos..].len() - trimmed.len() + 1;
+    *ctx.pos += ctx.input[*ctx.pos..].len() - trimmed.len() + 1;
     Ok(())
 }
 
@@ -61,9 +62,17 @@ fn parse_statement_inner(
         *pos += rest.len() - trimmed.len() + 4;
         super::parse_let_statement(input, pos, env)?;
     } else if trimmed.starts_with("break") {
-        consume_break_or_continue_keyword("break", input, pos, LoopControl::Break)?;
+        consume_break_or_continue_keyword(
+            &mut ParseContext { input, pos },
+            "break",
+            LoopControl::Break,
+        )?;
     } else if trimmed.starts_with("continue") {
-        consume_break_or_continue_keyword("continue", input, pos, LoopControl::Continue)?;
+        consume_break_or_continue_keyword(
+            &mut ParseContext { input, pos },
+            "continue",
+            LoopControl::Continue,
+        )?;
     } else {
         super::parse_assignment_statement(input, pos, env)?;
     }
@@ -77,7 +86,7 @@ fn parse_statement_or_block(
 ) -> Result<(), String> {
     if try_consume_open_brace(input, pos) {
         parse_block(input, pos, env)?;
-        consume_required_char(input, pos, '}', "Expected '}' to close block")?;
+        consume_required_char(&mut ParseContext { input, pos }, '}', "Expected '}' to close block")?;
         Ok(())
     } else {
         // Try to parse as a statement
@@ -134,11 +143,11 @@ fn parse_if_condition_and_statements(
     pos: &mut usize,
     env: &mut Environment,
 ) -> Result<(), String> {
-    consume_required_char(input, pos, '(', "Expected '(' after 'if'")?;
+    consume_required_char(&mut ParseContext { input, pos }, '(', "Expected '(' after 'if'")?;
 
     let condition = crate::parser::interpret_at(input, pos, env)?;
 
-    consume_required_char(input, pos, ')', "Expected ')' after condition")?;
+    consume_required_char(&mut ParseContext { input, pos }, ')', "Expected ')' after condition")?;
 
     if condition != 0 {
         parse_statement_or_block(input, pos, env)?;
@@ -301,7 +310,7 @@ fn parse_while_condition_and_statement(
     pos: &mut usize,
     env: &mut Environment,
 ) -> Result<(), String> {
-    consume_required_char(input, pos, '(', "Expected '(' after 'while'")?;
+    consume_required_char(&mut ParseContext { input, pos }, '(', "Expected '(' after 'while'")?;
 
     let cond_start = *pos;
 
@@ -367,17 +376,16 @@ fn skip_to_closing_brace(input: &str, pos: &mut usize) {
 }
 
 pub fn consume_break_or_continue_keyword(
+    ctx: &mut ParseContext,
     keyword: &str,
-    input: &str,
-    pos: &mut usize,
     control: LoopControl,
 ) -> Result<(), String> {
-    let rest = &input[*pos..];
+    let rest = &ctx.input[*ctx.pos..];
     let len = keyword.len();
-    *pos += rest.len() - rest.trim_start().len() + len;
-    skip_whitespace(input, pos);
-    if input[*pos..].trim_start().starts_with(';') {
-        *pos += 1;
+    *ctx.pos += rest.len() - rest.trim_start().len() + len;
+    skip_whitespace(ctx.input, ctx.pos);
+    if ctx.input[*ctx.pos..].trim_start().starts_with(';') {
+        *ctx.pos += 1;
     }
     set_loop_control(control);
     Ok(())
@@ -516,10 +524,18 @@ pub fn parse_block(
                 break;
             }
         } else if trimmed.starts_with("break") {
-            consume_break_or_continue_keyword("break", input, pos, LoopControl::Break)?;
+            consume_break_or_continue_keyword(
+                &mut ParseContext { input, pos },
+                "break",
+                LoopControl::Break,
+            )?;
             break;
         } else if trimmed.starts_with("continue") {
-            consume_break_or_continue_keyword("continue", input, pos, LoopControl::Continue)?;
+            consume_break_or_continue_keyword(
+                &mut ParseContext { input, pos },
+                "continue",
+                LoopControl::Continue,
+            )?;
             break;
         } else if super::parse_assignment_statement(input, pos, &mut local_env)? {
             if get_loop_control() != LoopControl::None {
@@ -563,7 +579,7 @@ fn parse_for_condition_and_statement(
     pos: &mut usize,
     env: &mut Environment,
 ) -> Result<(), String> {
-    consume_required_char(input, pos, '(', "Expected '(' after 'for'")?;
+    consume_required_char(&mut ParseContext { input, pos }, '(', "Expected '(' after 'for'")?;
 
     // Parse: let i in START..END
     let rest = &input[*pos..];
@@ -598,7 +614,7 @@ fn parse_for_condition_and_statement(
 
     let (end, _) = crate::parser::parse_term_with_type(input, pos, env)?;
 
-    consume_required_char(input, pos, ')', "Expected ')' after range")?;
+    consume_required_char(&mut ParseContext { input, pos }, ')', "Expected ')' after range")?;
 
     // Remember where the body starts
     let body_start = *pos;

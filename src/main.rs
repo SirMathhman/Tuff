@@ -1,5 +1,6 @@
 mod currying;
 mod functions;
+mod parse_context;
 mod parse_utils;
 mod parser;
 mod pointers;

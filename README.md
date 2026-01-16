@@ -34,6 +34,7 @@ Tuff supports constructor functions that return a struct instance via `this`, an
 Example:
 
 - Define a struct and constructor with a method, then reference the method:
+
   - `struct Point { x : I32, y : I32 } fn Point(x : I32, y : I32) : Point => { fn get() : I32 => x + y; this } let myGet : () => I32 = Point(3, 4).get; myGet()`
 
 - Method pointer access with `::`:

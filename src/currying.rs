@@ -1,4 +1,5 @@
 use crate::functions::parse_complete_function;
+use crate::parse_context::ParseEnvContextMut;
 use crate::parse_utils::skip_whitespace;
 use crate::variables::{Environment, LocalFunction, VariableInfo};
 
@@ -112,9 +113,7 @@ pub fn execute_function_body_with_definitions(
 /// Handle chained function calls where a function returns another function
 /// This processes calls like: a(3)(4) where a(3) returns a function
 pub fn handle_chained_function_calls(
-    input: &str,
-    pos: &mut usize,
-    env: &mut Environment,
+    ctx: &mut ParseEnvContextMut,
     initial_val: i32,
     return_type: String,
 ) -> Result<(i32, String), String> {
@@ -127,20 +126,18 @@ pub fn handle_chained_function_calls(
             return Ok((current_val, current_type));
         }
 
-        crate::parse_utils::skip_whitespace(input, pos);
-        if !input[*pos..].trim_start().starts_with('(') {
+        crate::parse_utils::skip_whitespace(ctx.input, ctx.pos);
+        if !ctx.input[*ctx.pos..].trim_start().starts_with('(') {
             // No more function calls, return what we have
             return Ok((current_val, current_type));
         }
 
         // Try to call the returned function
-        if let Some(returned_func_var) = env.get("_returned_function").cloned() {
+        if let Some(returned_func_var) = ctx.env.get("_returned_function").cloned() {
             if let Some(local_func) = returned_func_var.local_function {
                 // Parse arguments - use a generic name since this is a returned function
                 let args = crate::functions::parse_and_verify_arguments(
-                    input,
-                    pos,
-                    env,
+                    ctx,
                     "<returned_function>",
                     local_func.params.len(),
                 )?;
@@ -158,9 +155,9 @@ pub fn handle_chained_function_calls(
 
                 // Check if we need to copy the _returned_function marker again
                 if let Some(next_func_var) = func_env.get("_returned_function").cloned() {
-                    env.insert("_returned_function".to_string(), next_func_var);
+                    ctx.env.insert("_returned_function".to_string(), next_func_var);
                 } else {
-                    env.remove("_returned_function");
+                    ctx.env.remove("_returned_function");
                 }
 
                 current_val = result;

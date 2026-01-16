@@ -1,3 +1,4 @@
+use crate::parse_context::{ParseContext, ParseEnvContextMut};
 use crate::parse_utils::{
     check_and_consume_op, parse_dot_and_identifier, parse_identifier, parse_number_with_type,
     skip_whitespace, try_construct_struct_from_this, try_parse_this_keyword,
@@ -16,13 +17,11 @@ use methods::{try_parse_method, try_parse_method_pointer_access, MethodMode};
 
 #[allow(dead_code)]
 fn try_parse_field_access(
+    ctx: &mut ParseEnvContextMut,
     var_name: &str,
-    input: &str,
-    pos: &mut usize,
-    env: &Environment,
 ) -> Result<Option<(i32, String)>, String> {
-    if let Ok(Some(field_name)) = parse_dot_and_identifier(input, pos) {
-        let field_value = crate::structs::get_field_value(var_name, &field_name, env)?;
+    if let Ok(Some(field_name)) = parse_dot_and_identifier(ctx.input, ctx.pos) {
+        let field_value = crate::structs::get_field_value(var_name, &field_name, ctx.env)?;
         Ok(Some((field_value, "".to_string())))
     } else {
         Ok(None)
@@ -30,17 +29,31 @@ fn try_parse_field_access(
 }
 
 fn try_parse_temp_struct_field_access(
+    ctx: &mut ParseEnvContextMut,
     temp_var_name: &str,
-    input: &str,
-    pos: &mut usize,
-    env: &Environment,
 ) -> Result<Option<(i32, String)>, String> {
-    if let Ok(Some((field_value, _))) = try_parse_field_access(temp_var_name, input, pos, env) {
+    if let Ok(Some((field_value, _))) = try_parse_field_access(ctx, temp_var_name) {
         return Ok(Some((field_value, "".to_string())));
     }
     Ok(None)
 }
+struct ParsedValue {
+    val: i32,
+    type_name: String,
+}
 
+fn resolve_temp_struct_access(
+    ctx: &mut ParseEnvContextMut,
+    temp_var_name: &str,
+    result: ParsedValue,
+) -> Result<(i32, String), String> {
+    if let Ok(Some((field_value, field_type))) =
+        try_parse_temp_struct_field_access(ctx, temp_var_name)
+    {
+        return Ok((field_value, field_type));
+    }
+    Ok((result.val, result.type_name))
+}
 fn apply_multiplication_division(lhs: i32, op: char, rhs: i32) -> Result<i32, String> {
     match op {
         '*' => Ok(lhs * rhs),
@@ -58,7 +71,6 @@ fn parse_term(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i32
     let (value, _) = parse_term_with_type(input, pos, env)?;
     Ok(value)
 }
-
 pub fn interpret_at(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i32, String> {
     parse_or_expression(input, pos, env)
 }
@@ -160,12 +172,14 @@ fn parse_factor_with_type(
     } else if input[*pos..].trim_start().starts_with('(') {
         *pos += 1;
         let result = interpret_at(input, pos, env)?;
-        expect_closing(input, pos, ')', "Missing closing parenthesis")?;
+        let mut close_ctx = ParseContext { input, pos };
+        expect_closing(&mut close_ctx, ')', "Missing closing parenthesis")?;
         Ok((result, "".to_string()))
     } else if input[*pos..].trim_start().starts_with('{') {
         *pos += 1;
         let (result, _) = parse_block(input, pos, env)?;
-        expect_closing(input, pos, '}', "Missing closing curly brace")?;
+        let mut close_ctx = ParseContext { input, pos };
+        expect_closing(&mut close_ctx, '}', "Missing closing curly brace")?;
         Ok((result, "".to_string()))
     } else if input[*pos..]
         .trim_start()
@@ -210,53 +224,62 @@ fn parse_factor_with_type(
         }
 
         // Try to parse method pointer access (point::get)
-        if let Ok(Some((val, type_name))) =
-            try_parse_method_pointer_access(&identifier, input, pos, env)
-        {
+        if let Ok(Some((val, type_name))) = try_parse_method_pointer_access(
+            &mut ParseEnvContextMut { input, pos, env },
+            &identifier,
+        ) {
             return Ok((val, type_name));
         }
 
         // Try to parse struct instantiation
-        if let Ok(Some((val, type_name))) =
-            crate::structs::try_parse_struct_instantiation(&identifier, input, pos, env)
-        {
+        if let Ok(Some((val, type_name))) = crate::structs::try_parse_struct_instantiation(
+            &mut ParseEnvContextMut { input, pos, env },
+            &identifier,
+        ) {
             // Check for field access on struct instantiation
             let temp_var_name = format!("_struct_inst_{}", identifier);
-            if let Ok(Some((field_value, field_type))) =
-                try_parse_temp_struct_field_access(&temp_var_name, input, pos, env)
-            {
-                return Ok((field_value, field_type));
-            }
-            return Ok((val, type_name));
+            return resolve_temp_struct_access(
+                &mut ParseEnvContextMut { input, pos, env },
+                &temp_var_name,
+                ParsedValue { val, type_name },
+            );
         }
 
         // Try to parse function call
-        if let Ok(Some((val, type_name))) =
-            crate::functions::try_parse_function_call(&identifier, input, pos, env)
-        {
+        if let Ok(Some((val, type_name))) = crate::functions::try_parse_function_call(
+            &identifier,
+            &mut ParseEnvContextMut { input, pos, env },
+        ) {
             // If the function returned a struct, allow immediate field/method access
             if type_name.chars().next().is_some_and(|c| c.is_uppercase()) {
                 let temp_var_name = format!("_struct_inst_{}", type_name);
-                if let Ok(Some((result, method_type))) =
-                    try_parse_method(&temp_var_name, input, pos, env, MethodMode::Call)
-                {
+                if let Ok(Some((result, method_type))) = try_parse_method(
+                    &mut ParseEnvContextMut { input, pos, env },
+                    &temp_var_name,
+                    MethodMode::Call,
+                ) {
                     return Ok((result, method_type));
                 }
-                if let Ok(Some((result, method_type))) =
-                    try_parse_method(&temp_var_name, input, pos, env, MethodMode::Access)
-                {
+                if let Ok(Some((result, method_type))) = try_parse_method(
+                    &mut ParseEnvContextMut { input, pos, env },
+                    &temp_var_name,
+                    MethodMode::Access,
+                ) {
                     return Ok((result, method_type));
                 }
-                if let Ok(Some((field_value, field_type))) =
-                    try_parse_temp_struct_field_access(&temp_var_name, input, pos, env)
-                {
-                    return Ok((field_value, field_type));
-                }
-                return Ok((val, type_name));
+                return resolve_temp_struct_access(
+                    &mut ParseEnvContextMut { input, pos, env },
+                    &temp_var_name,
+                    ParsedValue { val, type_name },
+                );
             }
 
             // Check if the result is a function type (contains =>) and try to call it again
-            return crate::currying::handle_chained_function_calls(input, pos, env, val, type_name);
+            return crate::currying::handle_chained_function_calls(
+                &mut ParseEnvContextMut { input, pos, env },
+                val,
+                type_name,
+            );
         }
 
         // Otherwise it's a variable
@@ -266,29 +289,36 @@ fn parse_factor_with_type(
             .clone();
 
         // Check for method call first (has higher precedence than field access)
-        if let Ok(Some((result, type_name))) =
-            try_parse_method(&identifier, input, pos, env, MethodMode::Call)
-        {
+        if let Ok(Some((result, type_name))) = try_parse_method(
+            &mut ParseEnvContextMut { input, pos, env },
+            &identifier,
+            MethodMode::Call,
+        ) {
             return Ok((result, type_name));
         }
 
         // Check for method access without invocation (returns a function)
-        if let Ok(Some((result, type_name))) =
-            try_parse_method(&identifier, input, pos, env, MethodMode::Access)
-        {
+        if let Ok(Some((result, type_name))) = try_parse_method(
+            &mut ParseEnvContextMut { input, pos, env },
+            &identifier,
+            MethodMode::Access,
+        ) {
             return Ok((result, type_name));
         }
 
         // Check for field access
-        if let Ok(Some((field_value, _))) = try_parse_field_access(&identifier, input, pos, env) {
+        if let Ok(Some((field_value, _))) =
+            try_parse_field_access(&mut ParseEnvContextMut { input, pos, env }, &identifier)
+        {
             return Ok((field_value, "".to_string()));
         }
 
         // Check for function pointer call
         if let Some(func_name) = &var_info.function_name {
-            if let Ok(Some((val, type_name))) =
-                crate::functions::try_parse_function_call(func_name, input, pos, env)
-            {
+            if let Ok(Some((val, type_name))) = crate::functions::try_parse_function_call(
+                func_name,
+                &mut ParseEnvContextMut { input, pos, env },
+            ) {
                 return Ok((val, type_name));
             }
         }
@@ -372,19 +402,14 @@ pub fn parse_term_with_type(
     Ok((result, result_type))
 }
 
-fn expect_closing(
-    input: &str,
-    pos: &mut usize,
-    close: char,
-    close_err: &str,
-) -> Result<(), String> {
-    let rest = &input[*pos..];
+fn expect_closing(ctx: &mut ParseContext, close: char, close_err: &str) -> Result<(), String> {
+    let rest = &ctx.input[*ctx.pos..];
     let trimmed = rest.trim_start();
-    *pos += rest.len() - trimmed.len();
+    *ctx.pos += rest.len() - trimmed.len();
     if !trimmed.starts_with(close) {
         return Err(close_err.to_string());
     }
-    *pos += 1;
+    *ctx.pos += 1;
     Ok(())
 }
 
@@ -433,7 +458,11 @@ pub fn interpret(input: &str) -> Result<i32, String> {
         if trimmed.starts_with('{') {
             pos += 1;
             let (block_result, is_expression) = parse_block(input, &mut pos, &mut env)?;
-            expect_closing(input, &mut pos, '}', "Missing closing curly brace")?;
+            let mut close_ctx = ParseContext {
+                input,
+                pos: &mut pos,
+            };
+            expect_closing(&mut close_ctx, '}', "Missing closing curly brace")?;
             result = block_result;
 
             // If it's a block expression, check if it's the final thing

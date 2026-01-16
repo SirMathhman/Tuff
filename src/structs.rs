@@ -1,3 +1,4 @@
+use crate::parse_context::ParseEnvContextMut;
 use crate::parse_utils::{parse_identifier, parse_number_with_type, skip_whitespace};
 use crate::variables::{
     get_struct_registry, register_struct, Environment, StructDef, VariableInfo,
@@ -101,10 +102,8 @@ pub fn parse_struct_definition(input: &str, pos: &mut usize) -> Result<bool, Str
 
 #[allow(clippy::too_many_lines)]
 pub fn try_parse_struct_instantiation(
+    ctx: &mut ParseEnvContextMut,
     struct_name: &str,
-    input: &str,
-    pos: &mut usize,
-    env: &mut Environment,
 ) -> Result<Option<(i32, String)>, String> {
     let registry = get_struct_registry();
 
@@ -112,36 +111,37 @@ pub fn try_parse_struct_instantiation(
         return Ok(None);
     }
 
-    skip_whitespace(input, pos);
+    skip_whitespace(ctx.input, ctx.pos);
 
     // Expect '{'
-    if !input[*pos..].trim_start().starts_with('{') {
+    if !ctx.input[*ctx.pos..].trim_start().starts_with('{') {
         return Ok(None);
     }
 
-    let trimmed = input[*pos..].trim_start();
-    *pos += input[*pos..].len() - trimmed.len() + 1;
+    let trimmed = ctx.input[*ctx.pos..].trim_start();
+    *ctx.pos += ctx.input[*ctx.pos..].len() - trimmed.len() + 1;
 
     let mut field_values = HashMap::new();
 
     loop {
-        if try_consume_closing_brace(input, pos) {
+        if try_consume_closing_brace(ctx.input, ctx.pos) {
             break;
         }
 
-        let field_name = parse_field_header(input, pos)?;
+        let field_name = parse_field_header(ctx.input, ctx.pos)?;
 
         // Parse field value - can be number or variable
-        let value = if input[*pos..]
+        let value = if ctx.input[*ctx.pos..]
             .trim_start()
             .chars()
             .next()
             .is_some_and(|c| c.is_alphabetic() || c == '_')
         {
             // Parse as variable
-            let (var_name, var_len) = parse_identifier(&input[*pos..])?;
-            *pos += var_len;
-            let var_info = env
+            let (var_name, var_len) = parse_identifier(&ctx.input[*ctx.pos..])?;
+            *ctx.pos += var_len;
+            let var_info = ctx
+                .env
                 .get(&var_name)
                 .ok_or_else(|| format!("Undefined variable: {}", var_name))?;
             var_info
@@ -149,16 +149,16 @@ pub fn try_parse_struct_instantiation(
                 .ok_or_else(|| format!("Variable '{}' is not initialized", var_name))?
         } else {
             // Parse as number
-            let (value, _, val_len) = parse_number_with_type(&input[*pos..])?;
-            *pos += val_len;
+            let (value, _, val_len) = parse_number_with_type(&ctx.input[*ctx.pos..])?;
+            *ctx.pos += val_len;
             value
         };
 
         field_values.insert(field_name, value);
 
-        if try_consume_closing_brace(input, pos) {
+        if try_consume_closing_brace(ctx.input, ctx.pos) {
             break;
-        } else if !try_consume_comma(input, pos) {
+        } else if !try_consume_comma(ctx.input, ctx.pos) {
             return Err("Expected ',' or '}' in struct instantiation".to_string());
         }
     }
@@ -175,7 +175,7 @@ pub fn try_parse_struct_instantiation(
         local_function: None,
         methods: None,
     };
-    env.insert(var_name.clone(), var_info);
+    ctx.env.insert(var_name.clone(), var_info);
 
     Ok(Some((0, struct_name.to_string())))
 }

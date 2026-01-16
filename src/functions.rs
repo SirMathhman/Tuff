@@ -1,3 +1,4 @@
+use crate::parse_context::ParseEnvContextMut;
 use crate::parse_utils::{parse_identifier, skip_whitespace};
 use crate::parser::parse_term_with_type;
 use crate::variables::{get_function, register_function, Environment, FunctionDef, LocalFunction};
@@ -209,17 +210,15 @@ fn parse_argument(input: &str, pos: &mut usize, env: &mut Environment) -> Result
 
 /// Parse function arguments and verify count
 pub fn parse_and_verify_arguments(
-    input: &str,
-    pos: &mut usize,
-    env: &mut Environment,
+    ctx: &mut ParseEnvContextMut,
     func_name: &str,
     expected_count: usize,
 ) -> Result<Vec<i32>, String> {
-    let trimmed = input[*pos..].trim_start();
-    *pos += input[*pos..].len() - trimmed.len() + 1;
+    let trimmed = ctx.input[*ctx.pos..].trim_start();
+    *ctx.pos += ctx.input[*ctx.pos..].len() - trimmed.len() + 1;
 
     // Parse arguments
-    let args = parse_list(input, pos, |inp, p| parse_argument(inp, p, env))?;
+    let args = parse_list(ctx.input, ctx.pos, |inp, p| parse_argument(inp, p, ctx.env))?;
 
     // Verify argument count matches parameter count
     if args.len() != expected_count {
@@ -375,39 +374,41 @@ pub fn parse_function_definition(input: &str, pos: &mut usize) -> Result<bool, S
 #[allow(clippy::too_many_lines)]
 pub fn try_parse_function_call(
     func_name: &str,
-    input: &str,
-    pos: &mut usize,
-    env: &mut Environment,
+    ctx: &mut ParseEnvContextMut,
 ) -> Result<Option<(i32, String)>, String> {
-    skip_whitespace(input, pos);
+    skip_whitespace(ctx.input, ctx.pos);
 
-    skip_whitespace(input, pos);
+    skip_whitespace(ctx.input, ctx.pos);
 
     // Expect '('
-    if !input[*pos..].trim_start().starts_with('(') {
+    if !ctx.input[*ctx.pos..].trim_start().starts_with('(') {
         return Ok(None);
     }
 
     // Check if this is a local function first
-    let local_func_opt = env.get(func_name).and_then(|v| v.local_function.clone());
+    let local_func_opt = ctx
+        .env
+        .get(func_name)
+        .and_then(|v| v.local_function.clone());
 
     if let Some(local_func) = local_func_opt {
-        let is_method_ptr = env
+        let is_method_ptr = ctx
+            .env
             .get(func_name)
             .and_then(|v| v.points_to.as_deref())
             .is_some_and(|v| v == "__method_ptr__");
 
         let args = if is_method_ptr && local_func.params.is_empty() {
-            let trimmed_call = input[*pos..].trim_start();
+            let trimmed_call = ctx.input[*ctx.pos..].trim_start();
             let is_empty_args = if let Some(after_paren) = trimmed_call.strip_prefix('(') {
                 after_paren.trim_start().starts_with(')')
             } else {
                 false
             };
             let expected = if is_empty_args { 0 } else { 1 };
-            parse_and_verify_arguments(input, pos, env, func_name, expected)?
+            parse_and_verify_arguments(ctx, func_name, expected)?
         } else {
-            parse_and_verify_arguments(input, pos, env, func_name, local_func.params.len())?
+            parse_and_verify_arguments(ctx, func_name, local_func.params.len())?
         };
 
         // Create a new scope starting from the captured environment and bind parameters
@@ -418,7 +419,8 @@ pub fn try_parse_function_call(
 
         // Copy the returned function to the caller's environment if present
         if let Some(returned_func_var) = func_env.get("_returned_function").cloned() {
-            env.insert("_returned_function".to_string(), returned_func_var);
+            ctx.env
+                .insert("_returned_function".to_string(), returned_func_var);
         }
 
         return Ok(Some((result, local_func.return_type.clone())));
@@ -430,10 +432,10 @@ pub fn try_parse_function_call(
         None => return Ok(None),
     };
 
-    let args = parse_and_verify_arguments(input, pos, env, func_name, func.params.len())?;
+    let args = parse_and_verify_arguments(ctx, func_name, func.params.len())?;
 
     // Create a new scope with parameters bound to arguments
-    let mut func_env = bind_parameters(&func.params, &args, env);
+    let mut func_env = bind_parameters(&func.params, &args, ctx.env);
 
     // Add the function itself to the environment so it can call itself recursively
     let func_as_local = LocalFunction {
@@ -461,7 +463,8 @@ pub fn try_parse_function_call(
 
     // Copy the returned function to the caller's environment if present
     if let Some(returned_func_var) = func_env.get("_returned_function").cloned() {
-        env.insert("_returned_function".to_string(), returned_func_var);
+        ctx.env
+            .insert("_returned_function".to_string(), returned_func_var);
     }
 
     // If the return type is a struct, copy the temporary struct variable back to the caller's environment
@@ -474,7 +477,7 @@ pub fn try_parse_function_call(
     {
         let temp_var_name = format!("_struct_inst_{}", func.return_type);
         if let Some(struct_var) = func_env.get(&temp_var_name) {
-            env.insert(temp_var_name, struct_var.clone());
+            ctx.env.insert(temp_var_name, struct_var.clone());
         }
     }
 
