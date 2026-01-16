@@ -340,6 +340,9 @@ describe('interpret - while loops', (): void => {
 	it('should interpret "let mut sum = 0; let mut i = 1; while (i <= 5) { sum += i; i += 1; } sum" as 15', (): void => {
 		expectInterpretOk('let mut sum = 0; let mut i = 1; while (i <= 5) { sum += i; i += 1; } sum', 15);
 	});
+	it('should interpret "let mut x = 0; while (x < 4) { x += 1; } x" as 4', (): void => {
+		expectInterpretOk('let mut x = 0; while (x < 4) { x += 1; } x', 4);
+	});
 	it('should return Err for "let x = 0; while (true) x += 1; x" (immutable)', (): void => {
 		expectErrContains(interpret('let x = 0; while (true) x += 1; x'), 'not mutable');
 	});
