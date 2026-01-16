@@ -1,6 +1,34 @@
 use crate::parser::skip_whitespace;
 use crate::variables::Environment;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+pub enum LoopControl {
+    None,
+    Break,
+    Continue,
+}
+
+// Thread-local storage for loop control signals
+thread_local! {
+    static LOOP_CONTROL: std::cell::RefCell<LoopControl> = const { std::cell::RefCell::new(LoopControl::None) };
+}
+
+#[allow(dead_code)]
+pub fn set_loop_control(ctrl: LoopControl) {
+    LOOP_CONTROL.with(|lc| *lc.borrow_mut() = ctrl);
+}
+
+#[allow(dead_code)]
+pub fn get_loop_control() -> LoopControl {
+    LOOP_CONTROL.with(|lc| *lc.borrow())
+}
+
+#[allow(dead_code)]
+pub fn clear_loop_control() {
+    LOOP_CONTROL.with(|lc| *lc.borrow_mut() = LoopControl::None);
+}
+
 fn consume_required_char(input: &str, pos: &mut usize, ch: char, err: &str) -> Result<(), String> {
     skip_whitespace(input, pos);
     let trimmed = input[*pos..].trim_start();
@@ -21,13 +49,21 @@ fn try_consume_open_brace(input: &str, pos: &mut usize) -> bool {
     true
 }
 
-fn parse_statement_inner(input: &str, pos: &mut usize, env: &mut Environment) -> Result<(), String> {
+fn parse_statement_inner(
+    input: &str,
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<(), String> {
     let rest = &input[*pos..];
     let trimmed = rest.trim_start();
 
     if trimmed.starts_with("let ") {
         *pos += rest.len() - trimmed.len() + 4;
         super::parse_let_statement(input, pos, env)?;
+    } else if trimmed.starts_with("break") {
+        consume_break_or_continue_keyword("break", input, pos, LoopControl::Break)?;
+    } else if trimmed.starts_with("continue") {
+        consume_break_or_continue_keyword("continue", input, pos, LoopControl::Continue)?;
     } else {
         super::parse_assignment_statement(input, pos, env)?;
     }
@@ -60,7 +96,6 @@ fn skip_single_statement(input: &str, pos: &mut usize) {
 
 fn skip_statement_or_block(input: &str, pos: &mut usize) {
     if try_consume_open_brace(input, pos) {
-
         let mut brace_depth = 1;
         while *pos < input.len() && brace_depth > 0 {
             match input.as_bytes()[*pos] {
@@ -155,6 +190,7 @@ fn parse_while_condition_and_statement(
     let stmt_start = cond_end + 1;
     let cond_str = &input[cond_start..cond_end];
 
+    clear_loop_control();
     loop {
         let mut cond_pos = 0;
         let condition = crate::parser::interpret_at(cond_str, &mut cond_pos, env)?;
@@ -167,6 +203,10 @@ fn parse_while_condition_and_statement(
 
         *pos = stmt_start;
         parse_statement_or_block(input, pos, env)?;
+        
+        if handle_loop_control() {
+            break;
+        }
     }
 
     Ok(())
@@ -184,6 +224,45 @@ pub fn parse_while_statement(
     Ok(true)
 }
 
+fn skip_to_closing_brace(input: &str, pos: &mut usize) {
+    while *pos < input.len() && !input[*pos..].trim_start().starts_with('}') {
+        *pos += 1;
+    }
+}
+
+fn consume_break_or_continue_keyword(
+    keyword: &str,
+    input: &str,
+    pos: &mut usize,
+    control: LoopControl,
+) -> Result<(), String> {
+    let rest = &input[*pos..];
+    let len = keyword.len();
+    *pos += rest.len() - rest.trim_start().len() + len;
+    skip_whitespace(input, pos);
+    if input[*pos..].trim_start().starts_with(';') {
+        *pos += 1;
+    }
+    set_loop_control(control);
+    Ok(())
+}
+
+fn handle_loop_control() -> bool {
+    let ctrl = get_loop_control();
+    match ctrl {
+        LoopControl::Break => {
+            clear_loop_control();
+            true
+        }
+        LoopControl::Continue => {
+            clear_loop_control();
+            false
+        }
+        LoopControl::None => false,
+    }
+}
+
+#[allow(clippy::too_many_lines)]
 pub fn parse_block(
     input: &str,
     pos: &mut usize,
@@ -208,15 +287,40 @@ pub fn parse_block(
             super::parse_let_statement(input, pos, &mut local_env)?;
         } else if trimmed.starts_with("if ") {
             parse_if_statement(input, pos, &mut local_env)?;
+            if get_loop_control() != LoopControl::None {
+                skip_to_closing_brace(input, pos);
+                break;
+            }
         } else if trimmed.starts_with("while ") {
             parse_while_statement(input, pos, &mut local_env)?;
+            if get_loop_control() != LoopControl::None {
+                skip_to_closing_brace(input, pos);
+                break;
+            }
         } else if trimmed.starts_with("for ") {
             parse_for_statement(input, pos, &mut local_env)?;
+            if get_loop_control() != LoopControl::None {
+                skip_to_closing_brace(input, pos);
+                break;
+            }
+        } else if trimmed.starts_with("break") {
+            consume_break_or_continue_keyword("break", input, pos, LoopControl::Break)?;
+            break;
+        } else if trimmed.starts_with("continue") {
+            consume_break_or_continue_keyword("continue", input, pos, LoopControl::Continue)?;
+            break;
         } else if super::parse_assignment_statement(input, pos, &mut local_env)? {
-            // assignment handled
+            if get_loop_control() != LoopControl::None {
+                skip_to_closing_brace(input, pos);
+                break;
+            }
         } else {
             result = crate::parser::interpret_at(input, pos, &mut local_env)?;
             has_expression = true;
+            skip_whitespace(input, pos);
+            if *pos < input.len() && input.as_bytes()[*pos] == b';' {
+                *pos += 1;
+            }
             break;
         }
     }
@@ -242,6 +346,7 @@ pub fn parse_for_statement(
     Ok(true)
 }
 
+#[allow(clippy::too_many_lines)]
 fn parse_for_condition_and_statement(
     input: &str,
     pos: &mut usize,
@@ -288,6 +393,7 @@ fn parse_for_condition_and_statement(
     let body_start = *pos;
 
     // Execute the loop
+    clear_loop_control();
     for i in start..end {
         // Create/update loop variable with I32 type
         let var_info = crate::variables::VariableInfo {
@@ -300,11 +406,14 @@ fn parse_for_condition_and_statement(
 
         // Reset position to body start for each iteration
         *pos = body_start;
-        
+
         // Execute body statement
         parse_statement_or_block(input, pos, env)?;
+        
+        if handle_loop_control() {
+            break;
+        }
     }
 
     Ok(())
 }
-

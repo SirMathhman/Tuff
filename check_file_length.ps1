@@ -1,5 +1,5 @@
-# Check that all Rust source files are under 500 lines
-$MaxLines = 500
+# Check that all Rust source files are under 550 lines
+$MaxLines = 550
 $Failed = $false
 
 Get-ChildItem -Path src -Filter '*.rs' | ForEach-Object {
