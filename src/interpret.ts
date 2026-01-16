@@ -1,111 +1,25 @@
-import { type Result, err, ok } from './result';
-
-interface OperatorMatch {
-	operator: string;
-	index: number;
-	precedence: number;
-}
-
-interface VariableBinding {
-	name: string;
-	value: number | undefined;
-}
-
-interface ExecutionContext {
-	bindings: VariableBinding[];
-}
-
-interface ParsedBinding {
-	name: string;
-	value: number | undefined;
-	remaining: string;
-}
-
-interface ProcessedBindings {
-	context: ExecutionContext;
-	remaining: string;
-}
-
-interface ContextAndRemaining {
-	context: ExecutionContext;
-	remaining: string;
-}
-
-function findTypeSuffixStart(input: string): number {
-	for (let i = input.length - 1; i >= 0; i--) {
-		const char = input.charAt(i);
-		const isDigit = !Number.isNaN(Number.parseInt(char, 10));
-
-		if (!isDigit) {
-			return -1;
-		}
-
-		if (i === 0) {
-			return -1;
-		}
-
-		const prevChar = input.charAt(i - 1);
-		if (prevChar === 'U' || prevChar === 'I') {
-			return i - 1;
-		}
-	}
-
-	return -1;
-}
-
-function extractTypeSuffix(input: string, suffixStart: number): string {
-	return input.substring(suffixStart);
-}
-
-function validateValueForType(value: number, typeSuffix: string): Result<number> {
-	if (typeSuffix === 'U8') {
-		if (value < 0 || value > 255) {
-			return err(`Value ${value} is out of range for U8 (0-255)`);
-		}
-	}
-
-	if (typeSuffix === 'U16') {
-		if (value < 0 || value > 65535) {
-			return err(`Value ${value} is out of range for U16 (0-65535)`);
-		}
-	}
-
-	if (typeSuffix === 'I8') {
-		if (value < -128 || value > 127) {
-			return err(`Value ${value} is out of range for I8 (-128-127)`);
-		}
-	}
-
-	if (typeSuffix === 'I32') {
-		if (value < -2147483648 || value > 2147483647) {
-			return err(`Value ${value} is out of range for I32 (-2147483648-2147483647)`);
-		}
-	}
-
-	if (typeSuffix === 'U32') {
-		if (value < 0 || value > 4294967295) {
-			return err(`Value ${value} is out of range for U32 (0-4294967295)`);
-		}
-	}
-
-	if (typeSuffix === 'I16') {
-		if (value < -32768 || value > 32767) {
-			return err(`Value ${value} is out of range for I16 (-32768-32767)`);
-		}
-	}
-
-	return ok(value);
-}
-
-function hasNegativeSign(input: string): boolean {
-	return input.length > 0 && input.charAt(0) === '-';
-}
-
-interface VariableDeclarationParts {
-	varName: string;
-	typeAnnotation: string | undefined;
-	afterTypeOrName: string;
-}
+import { err, ok, type Result } from './result';
+import {
+	collectTypeSuffixes,
+	type ContextAndRemaining,
+	type ExecutionContext,
+	extractTypeSuffix,
+	findSemicolonOutsideBrackets,
+	findTypeSuffixStart,
+	getOperatorPrecedence,
+	getTypeRangeMax,
+	hasNegativeSign,
+	isAlphanumeric,
+	isBalancedBrackets,
+	isVariableName,
+	type OperatorMatch,
+	type ParsedBinding,
+	type ProcessedBindings,
+	skipBackwardWhitespace,
+	validateValueForType,
+	type VariableBinding,
+	type VariableDeclarationParts,
+} from './types';
 
 function parseVariableDeclarationHeader(withoutLet: string): Result<VariableDeclarationParts> {
 	const colonIndex = withoutLet.indexOf(':');
@@ -121,7 +35,6 @@ function parseVariableDeclarationHeader(withoutLet: string): Result<VariableDecl
 			typeAnnotation = afterColon.substring(0, equalIndexAfterColon).trim();
 			afterTypeOrName = afterColon.substring(equalIndexAfterColon);
 		} else {
-			// No assignment operator - just type annotation
 			typeAnnotation = afterColon;
 			afterTypeOrName = '';
 		}
@@ -131,7 +44,6 @@ function parseVariableDeclarationHeader(withoutLet: string): Result<VariableDecl
 			varName = withoutLet.substring(0, equalIndex).trim();
 			afterTypeOrName = withoutLet.substring(equalIndex);
 		} else {
-			// No assignment operator - just variable name
 			varName = withoutLet;
 			afterTypeOrName = '';
 		}
@@ -142,21 +54,6 @@ function parseVariableDeclarationHeader(withoutLet: string): Result<VariableDecl
 	}
 
 	return ok({ varName, typeAnnotation, afterTypeOrName });
-}
-
-function findSemicolonOutsideBrackets(input: string): number {
-	let bracketDepth = 0;
-	for (let i = 0; i < input.length; i++) {
-		const char = input[i];
-		if (char === '(' || char === '{') {
-			bracketDepth++;
-		} else if (char === ')' || char === '}') {
-			bracketDepth--;
-		} else if (char === ';' && bracketDepth === 0) {
-			return i;
-		}
-	}
-	return -1;
 }
 
 function parseVariableBinding(input: string, context: ExecutionContext): Result<ParsedBinding> {
@@ -173,7 +70,6 @@ function parseVariableBinding(input: string, context: ExecutionContext): Result<
 
 	const { varName, typeAnnotation, afterTypeOrName } = headerResult.value;
 
-	// If no assignment operator, this is an uninitialized declaration
 	if (afterTypeOrName.length === 0) {
 		const semiIndex = findSemicolonOutsideBrackets(withoutLet);
 		if (semiIndex < 0) {
@@ -230,65 +126,6 @@ function lookupVariable(name: string, context: ExecutionContext): Result<number>
 	return ok(binding.value);
 }
 
-function isVariableName(input: string): boolean {
-	const trimmed = input.trim();
-	if (trimmed.length === 0) {
-		return false;
-	}
-
-	const firstChar = trimmed.charAt(0);
-	const isFirstCharValid =
-		(firstChar >= 'a' && firstChar <= 'z') ||
-		(firstChar >= 'A' && firstChar <= 'Z') ||
-		firstChar === '_';
-	if (!isFirstCharValid) {
-		return false;
-	}
-
-	for (let i = 1; i < trimmed.length; i++) {
-		const char = trimmed.charAt(i);
-		const isCharValid =
-			(char >= 'a' && char <= 'z') ||
-			(char >= 'A' && char <= 'Z') ||
-			(char >= '0' && char <= '9') ||
-			char === '_';
-		if (!isCharValid) {
-			return false;
-		}
-	}
-
-	return true;
-}
-
-function isBalancedBrackets(input: string): boolean {
-	const trimmed = input.trim();
-	const isParens = trimmed.startsWith('(') && trimmed.endsWith(')');
-	const isBraces = trimmed.startsWith('{') && trimmed.endsWith('}');
-	if (!isParens && !isBraces) {
-		return false;
-	}
-
-	let depth = 0;
-	for (let i = 0; i < trimmed.length; i++) {
-		const char = trimmed[i];
-		if (char === '(' || char === '{') {
-			depth++;
-		} else if (char === ')' || char === '}') {
-			depth--;
-		}
-
-		if (depth === 0 && i < trimmed.length - 1) {
-			return false;
-		}
-
-		if (depth < 0) {
-			return false;
-		}
-	}
-
-	return depth === 0;
-}
-
 function isDuplicateVariable(name: string, context: ExecutionContext): boolean {
 	for (const binding of context.bindings) {
 		if (binding.name === name) {
@@ -318,7 +155,6 @@ function parseAssignment(input: string, context: ExecutionContext): Result<Parse
 		return err(`Invalid variable name: ${varName}`);
 	}
 
-	// Check if variable exists
 	let varExists = false;
 	for (const binding of context.bindings) {
 		if (binding.name === varName) {
@@ -445,12 +281,10 @@ function parseBracedExpression(trimmed: string, context: ExecutionContext): Resu
 function parseLiteral(literal: string, context: ExecutionContext): Result<number> {
 	const trimmed = literal.trim();
 
-	// Check if variable name
 	if (isVariableName(trimmed)) {
 		return lookupVariable(trimmed, context);
 	}
 
-	// Check if this is a parenthesized expression
 	if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
 		if (isBalancedBrackets(trimmed)) {
 			const inner = trimmed.substring(1, trimmed.length - 1);
@@ -458,7 +292,6 @@ function parseLiteral(literal: string, context: ExecutionContext): Result<number
 		}
 	}
 
-	// Check if this is a braced expression (may contain variable bindings)
 	if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
 		return parseBracedExpression(trimmed, context);
 	}
@@ -482,97 +315,6 @@ function parseLiteral(literal: string, context: ExecutionContext): Result<number
 	}
 
 	return ok(value);
-}
-
-function getTypeRangeMax(typeSuffix: string): number {
-	if (typeSuffix === 'U8') {
-		return 255;
-	}
-
-	if (typeSuffix === 'U16') {
-		return 65535;
-	}
-
-	if (typeSuffix === 'I8') {
-		return 127;
-	}
-
-	if (typeSuffix === 'I16') {
-		return 32767;
-	}
-
-	if (typeSuffix === 'U32') {
-		return 4294967295;
-	}
-
-	if (typeSuffix === 'I32') {
-		return 2147483647;
-	}
-
-	return 0;
-}
-
-function getTypeSuffix(literal: string): string | undefined {
-	const trimmed = literal.trim();
-	const suffixStart = findTypeSuffixStart(trimmed);
-
-	if (suffixStart >= 0) {
-		return extractTypeSuffix(trimmed, suffixStart);
-	}
-
-	return undefined;
-}
-
-function collectTypeSuffixes(input: string): string[] {
-	const suffixes: string[] = [];
-	let current = '';
-
-	for (const char of input) {
-		if (char !== '+' && char !== '-' && char !== '*' && char !== '/') {
-			current += char;
-			continue;
-		}
-
-		const suffix = getTypeSuffix(current);
-		if (suffix !== undefined) {
-			suffixes.push(suffix);
-		}
-
-		current = '';
-	}
-
-	const suffix = getTypeSuffix(current);
-	if (suffix !== undefined) {
-		suffixes.push(suffix);
-	}
-
-	return suffixes;
-}
-
-function skipBackwardWhitespace(input: string, startIndex: number): number {
-	let j = startIndex;
-	while (j >= 0 && input[j] === ' ') {
-		j--;
-	}
-
-	return j;
-}
-
-function isAlphanumeric(char: string): boolean {
-	const code = char.charCodeAt(0);
-	return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
-}
-
-function getOperatorPrecedence(operator: string): number {
-	if (operator === '+' || operator === '-') {
-		return 1;
-	}
-
-	if (operator === '*' || operator === '/') {
-		return 2;
-	}
-
-	return 0;
 }
 
 function isPrevCharValidForOperator(input: string, charIndex: number): boolean {
