@@ -1,0 +1,177 @@
+#[cfg(test)]
+mod tests {
+    use crate::parser::interpret;
+
+    #[test]
+    fn test_variable_declaration() {
+        assert_eq!(interpret("(4 + { let x : I32 = 2; x }) * 3"), Ok(18));
+    }
+
+    #[test]
+    fn test_multiple_variable_declarations() {
+        assert_eq!(
+            interpret("(4 + { let x : I32 = 2; let y : I32 = x; y }) * 3"),
+            Ok(18)
+        );
+    }
+
+    #[test]
+    fn test_variable_redeclaration_error() {
+        assert!(interpret("(4 + { let x : I32 = 2; let x : I32 = 1; x }) * 3").is_err());
+    }
+
+    #[test]
+    fn test_variable_declaration_without_type() {
+        assert_eq!(interpret("(4 + { let x = 2; x }) * 3"), Ok(18));
+    }
+
+    #[test]
+    fn test_nested_block_with_variable_in_expression() {
+        assert_eq!(interpret("let y = (4 + { let x = 2; x }) * 3; y"), Ok(18));
+    }
+
+    #[test]
+    fn test_let_statement_without_expression() {
+        assert_eq!(interpret("let x = 100;"), Ok(0));
+    }
+
+    #[test]
+    fn test_let_statement_type_mismatch() {
+        assert!(interpret("let x : U8 = 100U16;").is_err());
+    }
+
+    #[test]
+    fn test_let_statement_type_widening() {
+        assert_eq!(interpret("let x : U16 = 100U8; x"), Ok(100));
+    }
+
+    #[test]
+    fn test_let_statement_variable_widening() {
+        assert_eq!(interpret("let x = 100U8; let y : U16 = x; y"), Ok(100));
+    }
+
+    #[test]
+    fn test_let_statement_type_narrowing_error() {
+        assert!(interpret("let x = 100U16; let y : U8 = x; y").is_err());
+    }
+
+    #[test]
+    fn test_let_mut_reassignment() {
+        assert_eq!(interpret("let mut x = 0; x = 1; x"), Ok(1));
+    }
+
+    #[test]
+    fn test_let_immutable_reassignment_error() {
+        assert!(interpret("let x = 0; x = 1; x").is_err());
+    }
+
+    #[test]
+    fn test_let_uninitialized_with_type() {
+        assert_eq!(interpret("let x : I32; x = 100; x"), Ok(100));
+    }
+
+    #[test]
+    fn test_let_uninitialized_without_type_error() {
+        assert!(interpret("let x; x = 100; x").is_err());
+    }
+
+    #[test]
+    fn test_let_uninitialized_use_before_assign_error() {
+        assert!(interpret("let x : I32; x").is_err());
+    }
+
+    #[test]
+    fn test_let_uninitialized_becomes_immutable_after_init() {
+        assert!(interpret("let x : I32; x = 100; x = 10; x").is_err());
+    }
+
+    #[test]
+    fn test_pointer_reference_and_dereference() {
+        assert_eq!(interpret("let x = 100; let mut y : *I32 = &x; *y"), Ok(100));
+    }
+
+    #[test]
+    fn test_pointer_reference_uninitialized_error() {
+        assert!(interpret("let x : I32; let mut y : *I32 = &x; *y").is_err());
+    }
+
+    #[test]
+    fn test_pointer_dereference_non_pointer_error() {
+        assert!(interpret("let x = 100; *x").is_err());
+    }
+
+    #[test]
+    fn test_pointer_type_annotation() {
+        assert_eq!(interpret("let x = 50; let mut y : *I32 = &x; *y"), Ok(50));
+    }
+
+    #[test]
+    fn test_uninitialized_reference_error() {
+        assert!(interpret("let x : I32; &x").is_err());
+    }
+
+    #[test]
+    fn test_mutable_pointer_assignment() {
+        assert_eq!(interpret("let mut x = 0; let y = &x; *y = 100; x"), Ok(100));
+    }
+
+    #[test]
+    fn test_mutable_pointer_multiple_assignments() {
+        assert_eq!(
+            interpret("let mut x = 5; let y = &x; *y = 10; *y = 20; x"),
+            Ok(20)
+        );
+    }
+
+    #[test]
+    fn test_pointer_to_typed_variable() {
+        assert_eq!(
+            interpret("let mut x : I32 = 0; let y = &x; *y = 50; x"),
+            Ok(50)
+        );
+    }
+
+    #[test]
+    fn test_assignment_in_block_persists() {
+        assert_eq!(interpret("let x : I32; { x = 100; } x"), Ok(100));
+    }
+
+    #[test]
+    fn test_block_expression_as_initializer() {
+        assert_eq!(interpret("let x : I32 = { 100 }; x"), Ok(100));
+    }
+
+    #[test]
+    fn test_standalone_block_expression_error() {
+        assert!(interpret("let x = 100; { 7893 } x").is_err());
+    }
+
+    #[test]
+    fn test_block_scoped_variable_inaccessible() {
+        assert!(interpret("{ let x = 100; } x").is_err());
+    }
+
+    #[test]
+    fn test_nested_blocks_access_outer_variables() {
+        assert_eq!(
+            interpret("let x = 100; { let y = 200; { let z = 300; x + y + z }}"),
+            Ok(600)
+        );
+    }
+
+    #[test]
+    fn test_block_expression_as_initializer_no_scope_leak() {
+        assert_eq!(
+            interpret("let x = 100; let a = { let y = 200; { let z = 300; x + y + z }}; a"),
+            Ok(600)
+        );
+    }
+
+    #[test]
+    fn test_block_initializer_without_final_access() {
+        assert_eq!(
+            interpret("let x = 100; let a = { let y = 200; { let z = 300; x + y + z }};"),
+            Ok(0)
+        );
+    }
+}

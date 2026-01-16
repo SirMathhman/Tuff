@@ -7,7 +7,13 @@ mod variables;
 use parser::interpret;
 
 #[cfg(test)]
-mod main_tests;
+mod arithmetic_tests;
+#[cfg(test)]
+mod variable_tests;
+#[cfg(test)]
+mod control_flow_tests;
+#[cfg(test)]
+mod loop_tests;
 
 fn main() {
     repl::run();

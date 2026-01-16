@@ -203,7 +203,7 @@ fn parse_while_condition_and_statement(
 
         *pos = stmt_start;
         parse_statement_or_block(input, pos, env)?;
-        
+
         if handle_loop_control() {
             break;
         }
@@ -409,7 +409,7 @@ fn parse_for_condition_and_statement(
 
         // Execute body statement
         parse_statement_or_block(input, pos, env)?;
-        
+
         if handle_loop_control() {
             break;
         }
