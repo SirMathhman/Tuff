@@ -112,4 +112,12 @@ describe('interpret', () => {
       expect(result.error).toContain('out of range');
     }
   });
+
+  it('should return Err for "1U8 - 2"', () => {
+    const result = interpret('1U8 - 2');
+    expect(result.type).toBe('err');
+    if (result.type === 'err') {
+      expect(result.error).toContain('out of range');
+    }
+  });
 });
