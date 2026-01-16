@@ -624,4 +624,28 @@ describe('interpret', () => {
 			expect(result.value).toBe(200);
 		}
 	});
+
+	it('should interpret "let x = if (false) 100 else if (true) 200 else 300; x" as 200', () => {
+		const result = interpret('let x = if (false) 100 else if (true) 200 else 300; x');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(200);
+		}
+	});
+
+	it('should interpret "if (false) 100 else if (false) 200 else 300" as 300', () => {
+		const result = interpret('if (false) 100 else if (false) 200 else 300');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(300);
+		}
+	});
+
+	it('should interpret "if (true) 100 else if (true) 200 else 300" as 100', () => {
+		const result = interpret('if (true) 100 else if (true) 200 else 300');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(100);
+		}
+	});
 });
