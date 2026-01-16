@@ -168,4 +168,12 @@ describe('interpret', () => {
 			expect(result.value).toBe(18);
 		}
 	});
+
+	it('should interpret "1 + (4 + 2) * 3" as 19', () => {
+		const result = interpret('1 + (4 + 2) * 3');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(19);
+		}
+	});
 });
