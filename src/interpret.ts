@@ -71,11 +71,66 @@ function validateValueForType(value: number, typeSuffix: string): Result<number>
 		}
 	}
 
+	if (typeSuffix === 'I32') {
+		if (value < -2147483648 || value > 2147483647) {
+			return err(`Value ${value} is out of range for I32 (-2147483648-2147483647)`);
+		}
+	}
+
+	if (typeSuffix === 'U32') {
+		if (value < 0 || value > 4294967295) {
+			return err(`Value ${value} is out of range for U32 (0-4294967295)`);
+		}
+	}
+
+	if (typeSuffix === 'I16') {
+		if (value < -32768 || value > 32767) {
+			return err(`Value ${value} is out of range for I16 (-32768-32767)`);
+		}
+	}
+
 	return ok(value);
 }
 
 function hasNegativeSign(input: string): boolean {
 	return input.length > 0 && input.charAt(0) === '-';
+}
+
+interface VariableDeclarationParts {
+	varName: string;
+	typeAnnotation: string | undefined;
+	afterTypeOrName: string;
+}
+
+function parseVariableDeclarationHeader(withoutLet: string): Result<VariableDeclarationParts> {
+	const colonIndex = withoutLet.indexOf(':');
+	let varName: string;
+	let typeAnnotation: string | undefined;
+	let afterTypeOrName: string;
+
+	if (colonIndex >= 0) {
+		varName = withoutLet.substring(0, colonIndex).trim();
+		const afterColon = withoutLet.substring(colonIndex + 1).trim();
+		const equalIndexAfterColon = afterColon.indexOf('=');
+		if (equalIndexAfterColon < 0) {
+			return err('Variable declaration missing assignment operator');
+		}
+		typeAnnotation = afterColon.substring(0, equalIndexAfterColon).trim();
+		afterTypeOrName = afterColon.substring(equalIndexAfterColon);
+	} else {
+		const equalIndex = withoutLet.indexOf('=');
+		if (equalIndex < 0) {
+			return err('Variable declaration missing assignment operator');
+		}
+		varName = withoutLet.substring(0, equalIndex).trim();
+		afterTypeOrName = withoutLet.substring(equalIndex);
+	}
+
+	if (!isVariableName(varName)) {
+		return err(`Invalid variable name: ${varName}`);
+	}
+
+	return ok({ varName, typeAnnotation, afterTypeOrName });
 }
 
 function parseVariableBinding(input: string): Result<ParsedBinding> {
@@ -85,28 +140,31 @@ function parseVariableBinding(input: string): Result<ParsedBinding> {
 	}
 
 	const withoutLet = trimmed.substring(4).trim();
-	const equalIndex = withoutLet.indexOf('=');
-	if (equalIndex < 0) {
-		return err('Variable declaration missing assignment operator');
+	const headerResult = parseVariableDeclarationHeader(withoutLet);
+	if (headerResult.type === 'err') {
+		return headerResult;
 	}
 
-	const varName = withoutLet.substring(0, equalIndex).trim();
-	if (!isVariableName(varName)) {
-		return err(`Invalid variable name: ${varName}`);
-	}
-
-	const afterEqual = withoutLet.substring(equalIndex + 1).trim();
-	const semiIndex = afterEqual.indexOf(';');
+	const { varName, typeAnnotation, afterTypeOrName } = headerResult.value;
+	const withoutEqual = afterTypeOrName.substring(1).trim();
+	const semiIndex = withoutEqual.indexOf(';');
 	if (semiIndex < 0) {
 		return err('Variable declaration missing semicolon');
 	}
 
-	const valueStr = afterEqual.substring(0, semiIndex).trim();
-	const remaining = afterEqual.substring(semiIndex + 1).trim();
+	const valueStr = withoutEqual.substring(0, semiIndex).trim();
+	const remaining = withoutEqual.substring(semiIndex + 1).trim();
 
 	const valueResult = interpretInternal(valueStr, { bindings: [] });
 	if (valueResult.type === 'err') {
 		return valueResult;
+	}
+
+	if (typeAnnotation !== undefined) {
+		const typeValidation = validateValueForType(valueResult.value, typeAnnotation);
+		if (typeValidation.type === 'err') {
+			return typeValidation;
+		}
 	}
 
 	return ok({ name: varName, value: valueResult.value, remaining });
@@ -240,17 +298,17 @@ function parseLiteral(literal: string, context: ExecutionContext): Result<number
 		return parseBracedExpression(trimmed, context);
 	}
 
-	if (hasNegativeSign(trimmed)) {
-		return err('Negative numbers are not supported for unsigned types');
-	}
-
 	const suffixStart = findTypeSuffixStart(trimmed);
 	let numberPart: string;
 	if (suffixStart >= 0) {
 		numberPart = trimmed.substring(0, suffixStart);
+		if (hasNegativeSign(numberPart)) {
+			return err('Negative numbers are not supported for unsigned types');
+		}
 	} else {
 		numberPart = trimmed;
 	}
+
 	const value = Number.parseInt(numberPart, 10);
 
 	if (suffixStart >= 0) {
@@ -272,6 +330,18 @@ function getTypeRangeMax(typeSuffix: string): number {
 
 	if (typeSuffix === 'I8') {
 		return 127;
+	}
+
+	if (typeSuffix === 'I16') {
+		return 32767;
+	}
+
+	if (typeSuffix === 'U32') {
+		return 4294967295;
+	}
+
+	if (typeSuffix === 'I32') {
+		return 2147483647;
 	}
 
 	return 0;

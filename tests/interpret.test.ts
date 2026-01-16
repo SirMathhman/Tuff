@@ -256,4 +256,44 @@ describe('interpret', () => {
 			expect(result.error).toContain('Undefined');
 		}
 	});
+
+	it('should interpret "{ let x : I32 = 7; x }" as 7', () => {
+		const result = interpret('{ let x : I32 = 7; x }');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(7);
+		}
+	});
+
+	it('should interpret "10 / ({ let x : I32 = 7; x } - 2)" as 2', () => {
+		const result = interpret('10 / ({ let x : I32 = 7; x } - 2)');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(2);
+		}
+	});
+
+	it('should return Err for out of range typed variable', () => {
+		const result = interpret('{ let x : U8 = 256; x }');
+		expect(result.type).toBe('err');
+		if (result.type === 'err') {
+			expect(result.error).toContain('out of range');
+		}
+	});
+
+	it('should interpret "{ let x : I16 = -100; x }" as -100', () => {
+		const result = interpret('{ let x : I16 = -100; x }');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(-100);
+		}
+	});
+
+	it('should interpret "{ let x : U32 = 1000000; x + 1 }" as 1000001', () => {
+		const result = interpret('{ let x : U32 = 1000000; x + 1 }');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(1000001);
+		}
+	});
 });
