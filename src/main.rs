@@ -333,16 +333,11 @@ mod tests {
 
     #[test]
     fn test_block_scoped_variable_inaccessible() {
-        // Variables declared inside a block are local to that block
-        // Accessing them outside the block should error
         assert!(interpret("{ let x = 100; } x").is_err());
     }
 
     #[test]
     fn test_nested_blocks_access_outer_variables() {
-        // Nested blocks can read outer variables
-        // Inner blocks shadow outer declarations but can still access them
-        // This is a block expression that returns the sum
         assert_eq!(
             interpret("let x = 100; { let y = 200; { let z = 300; x + y + z }}"),
             Ok(600)
@@ -351,9 +346,6 @@ mod tests {
 
     #[test]
     fn test_block_expression_as_initializer_no_scope_leak() {
-        // When a block expression is used as an initializer, the block's local variables
-        // don't leak into the outer scope. The initializer value is assigned to the variable.
-        // Expected: a gets 600, but y and z don't exist in outer scope
         assert_eq!(
             interpret("let x = 100; let a = { let y = 200; { let z = 300; x + y + z }}; a"),
             Ok(600)
@@ -362,8 +354,6 @@ mod tests {
 
     #[test]
     fn test_block_initializer_without_final_access() {
-        // When a let statement is the final thing (not accessed), what should it return?
-        // The requirement suggests it should return 0 (or uninitialized default)
         assert_eq!(
             interpret("let x = 100; let a = { let y = 200; { let z = 300; x + y + z }};"),
             Ok(0)
@@ -372,19 +362,16 @@ mod tests {
 
     #[test]
     fn test_bool_true() {
-        // Bool type with true literal converts to 1
         assert_eq!(interpret("let x : Bool = true; x"), Ok(1));
     }
 
     #[test]
     fn test_bool_false() {
-        // Bool type with false literal converts to 0
         assert_eq!(interpret("let x : Bool = false; x"), Ok(0));
     }
 
     #[test]
     fn test_logical_or_true_false() {
-        // Logical OR: true || false => 1
         assert_eq!(
             interpret("let x : Bool = true; let y : Bool = false; x || y"),
             Ok(1)
@@ -393,7 +380,6 @@ mod tests {
 
     #[test]
     fn test_logical_or_false_false() {
-        // Logical OR: false || false => 0
         assert_eq!(
             interpret("let x : Bool = false; let y : Bool = false; x || y"),
             Ok(0)
@@ -402,7 +388,6 @@ mod tests {
 
     #[test]
     fn test_logical_and_true_false() {
-        // Logical AND: true && false => 0
         assert_eq!(
             interpret("let x : Bool = true; let y : Bool = false; x && y"),
             Ok(0)
@@ -411,7 +396,6 @@ mod tests {
 
     #[test]
     fn test_logical_and_true_true() {
-        // Logical AND: true && true => 1
         assert_eq!(
             interpret("let x : Bool = true; let y : Bool = true; x && y"),
             Ok(1)
@@ -420,31 +404,26 @@ mod tests {
 
     #[test]
     fn test_if_true_condition() {
-        // if-else expression: true condition takes then branch
         assert_eq!(interpret("let x = if (true) 3 else 5; x"), Ok(3));
     }
 
     #[test]
     fn test_if_false_condition() {
-        // if-else expression: false condition takes else branch
         assert_eq!(interpret("let x = if (false) 3 else 5; x"), Ok(5));
     }
 
     #[test]
     fn test_if_with_logical_or() {
-        // if-else with logical OR in condition
         assert_eq!(interpret("let x = if (true || false) 3 else 5; x"), Ok(3));
     }
 
     #[test]
     fn test_if_with_logical_and() {
-        // if-else with logical AND in condition
         assert_eq!(interpret("let x = if (false && true) 3 else 5; x"), Ok(5));
     }
 
     #[test]
     fn test_nested_if_else() {
-        // Nested if-else: if-else-if chain
         assert_eq!(
             interpret("let x = if (true && false) 3 else if (false) 100 else 5; x"),
             Ok(5)
@@ -453,7 +432,6 @@ mod tests {
 
     #[test]
     fn test_nested_if_else_middle_branch() {
-        // Nested if-else: middle branch taken
         assert_eq!(
             interpret("let x = if (false) 3 else if (true) 100 else 5; x"),
             Ok(100)
@@ -462,10 +440,41 @@ mod tests {
 
     #[test]
     fn test_nested_if_else_first_branch() {
-        // Nested if-else: first branch taken
         assert_eq!(
             interpret("let x = if (true) 3 else if (true) 100 else 5; x"),
             Ok(3)
+        );
+    }
+
+    #[test]
+    fn test_match_basic() {
+        assert_eq!(
+            interpret("let x = match (100) { case 100 => 5; case _ => 3; }; x"),
+            Ok(5)
+        );
+    }
+
+    #[test]
+    fn test_match_wildcard() {
+        assert_eq!(
+            interpret("let x = match (50) { case 100 => 5; case _ => 3; }; x"),
+            Ok(3)
+        );
+    }
+
+    #[test]
+    fn test_match_multiple_cases() {
+        assert_eq!(
+            interpret("let x = match (200) { case 100 => 5; case 200 => 10; case _ => 3; }; x"),
+            Ok(10)
+        );
+    }
+
+    #[test]
+    fn test_match_first_match_wins() {
+        assert_eq!(
+            interpret("let x = match (100) { case 100 => 5; case 100 => 99; case _ => 3; }; x"),
+            Ok(5)
         );
     }
 }

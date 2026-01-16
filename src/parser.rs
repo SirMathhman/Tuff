@@ -190,6 +190,11 @@ fn parse_factor_with_type(
             return parse_if_expression(input, pos, env);
         }
 
+        // Check for match expression
+        if identifier == "match" {
+            return parse_match_expression(input, pos, env);
+        }
+
         // Check for Bool literals
         if identifier == "true" {
             return Ok((1, "Bool".to_string()));
@@ -226,51 +231,131 @@ fn check_and_consume_op(input: &str, pos: &mut usize, ops: &str) -> Option<char>
     None
 }
 
+fn parse_paren_expression(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i32, String> {
+    skip_whitespace(input, pos);
+    if !input[*pos..].trim_start().starts_with('(') {
+        return Err("Expected '(' to open expression".to_string());
+    }
+    *pos += input[*pos..].len() - input[*pos..].trim_start().len() + 1;
+    let result = interpret_at(input, pos, env)?;
+    skip_whitespace(input, pos);
+    if !input[*pos..].trim_start().starts_with(')') {
+        return Err("Expected ')' to close expression".to_string());
+    }
+    *pos += input[*pos..].len() - input[*pos..].trim_start().len() + 1;
+    Ok(result)
+}
+
 fn parse_if_expression(
     input: &str,
     pos: &mut usize,
     env: &mut Environment,
 ) -> Result<(i32, String), String> {
-    skip_whitespace(input, pos);
+    let condition = parse_paren_expression(input, pos, env)
+        .map_err(|_| "Expected '(' after 'if'".to_string())?;
 
-    // Expect opening parenthesis for condition
-    if !input[*pos..].trim_start().starts_with('(') {
-        return Err("Expected '(' after 'if'".to_string());
-    }
-    *pos += input[*pos..].len() - input[*pos..].trim_start().len() + 1;
-
-    // Parse the condition
-    let condition = interpret_at(input, pos, env)?;
-
-    // Expect closing parenthesis
-    skip_whitespace(input, pos);
-    if !input[*pos..].trim_start().starts_with(')') {
-        return Err("Expected ')' after condition".to_string());
-    }
-    *pos += input[*pos..].len() - input[*pos..].trim_start().len() + 1;
-
-    // Parse the then branch
     skip_whitespace(input, pos);
     let then_value = interpret_at(input, pos, env)?;
 
-    // Expect 'else' keyword
     skip_whitespace(input, pos);
     let trimmed = input[*pos..].trim_start();
     if !trimmed.starts_with("else") {
         return Err("Expected 'else' after then branch".to_string());
     }
-    *pos += input[*pos..].len() - trimmed.len() + 4; // 4 = len("else")
+    *pos += input[*pos..].len() - trimmed.len() + 4;
 
-    // Parse the else branch
     skip_whitespace(input, pos);
     let else_value = interpret_at(input, pos, env)?;
 
-    // Return the appropriate branch
     let result = if condition != 0 {
         then_value
     } else {
         else_value
     };
+    Ok((result, "".to_string()))
+}
+
+fn parse_match_case(input: &str, pos: &mut usize) -> Result<(i32, bool), String> {
+    skip_whitespace(input, pos);
+
+    // Parse pattern
+    let trimmed = input[*pos..].trim_start();
+    let is_wildcard = trimmed.starts_with('_');
+
+    let pattern_value = if is_wildcard {
+        *pos += input[*pos..].len() - trimmed.len() + 1;
+        -1 // Wildcard marker
+    } else {
+        let (value, _, len) = parse_number_with_type(&input[*pos..])?;
+        *pos += len;
+        value
+    };
+
+    skip_whitespace(input, pos);
+
+    // Expect arrow
+    let trimmed = input[*pos..].trim_start();
+    if !trimmed.starts_with("=>") {
+        return Err("Expected '=>' after pattern in match case".to_string());
+    }
+    *pos += input[*pos..].len() - trimmed.len() + 2;
+
+    Ok((pattern_value, is_wildcard))
+}
+
+fn parse_match_expression(
+    input: &str,
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<(i32, String), String> {
+    let scrutinee = parse_paren_expression(input, pos, env)
+        .map_err(|_| "Expected '(' after 'match'".to_string())?;
+
+    skip_whitespace(input, pos);
+    if !input[*pos..].trim_start().starts_with('{') {
+        return Err("Expected '{' after match scrutinee".to_string());
+    }
+    *pos += input[*pos..].len() - input[*pos..].trim_start().len() + 1;
+
+    let mut matched = false;
+    let mut result = 0;
+
+    loop {
+        skip_whitespace(input, pos);
+
+        if input[*pos..].trim_start().starts_with('}') {
+            *pos += input[*pos..].len() - input[*pos..].trim_start().len() + 1;
+            break;
+        }
+
+        let trimmed = input[*pos..].trim_start();
+        if !trimmed.starts_with("case") {
+            return Err("Expected 'case' in match expression".to_string());
+        }
+        *pos += input[*pos..].len() - trimmed.len() + 4;
+
+        let (pattern_value, is_wildcard) = parse_match_case(input, pos)?;
+
+        skip_whitespace(input, pos);
+        let case_value = interpret_at(input, pos, env)?;
+
+        if !matched && (is_wildcard || pattern_value == scrutinee) {
+            result = case_value;
+            matched = true;
+        }
+
+        skip_whitespace(input, pos);
+        let trimmed = input[*pos..].trim_start();
+        if !trimmed.starts_with(';') {
+            return Err("Expected ';' after match case value".to_string());
+        }
+        *pos += input[*pos..].len() - trimmed.len() + 1;
+    }
+
+    if !matched {
+        return Err("No matching case in match expression".to_string());
+    }
+
     Ok((result, "".to_string()))
 }
 
