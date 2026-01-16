@@ -128,4 +128,12 @@ describe('interpret', () => {
       expect(result.value).toBe(-1);
     }
   });
+
+  it('should interpret "2 + 3 - 4" as 1', () => {
+    const result = interpret('2 + 3 - 4');
+    expect(result.type).toBe('ok');
+    if (result.type === 'ok') {
+      expect(result.value).toBe(1);
+    }
+  });
 });
