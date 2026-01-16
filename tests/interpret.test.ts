@@ -48,4 +48,20 @@ describe('interpret', () => {
       expect(result.value).toBe(3);
     }
   });
+
+  it('should interpret "1U8 + 2" as 3', () => {
+    const result = interpret('1U8 + 2');
+    expect(result.type).toBe('ok');
+    if (result.type === 'ok') {
+      expect(result.value).toBe(3);
+    }
+  });
+
+  it('should return Err for "1U8 + 255"', () => {
+    const result = interpret('1U8 + 255');
+    expect(result.type).toBe('err');
+    if (result.type === 'err') {
+      expect(result.error).toContain('out of range');
+    }
+  });
 });

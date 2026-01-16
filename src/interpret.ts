@@ -59,16 +59,50 @@ function parseLiteral(literal: string): Result<number> {
   return ok(value);
 }
 
-function findOperator(input: string): string {
+function getTypeSuffix(literal: string): string | null {
+  const trimmed = literal.trim();
+  const suffixStart = findTypeSuffixStart(trimmed);
+
+  if (suffixStart >= 0) {
+    return extractTypeSuffix(trimmed, suffixStart);
+  }
+
+  return null;
+}
+
+function skipBackwardWhitespace(input: string, startIndex: number): number {
+  let j = startIndex;
+  while (j >= 0 && input[j] === ' ') {
+    j--;
+  }
+
+  return j;
+}
+
+function isAlphanumeric(char: string): boolean {
+  const code = char.charCodeAt(0);
+  return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+}
+
+function findOperator(input: string): { operator: string; index: number } | null {
   const operators = ['+', '-', '*', '/'];
-  for (const op of operators) {
-    const index = input.indexOf(op, 1);
-    if (index >= 0) {
-      return op;
+  let minIndex = input.length;
+  let foundOperator = '';
+
+  for (let i = 1; i < input.length; i++) {
+    const char = input[i];
+    if (!operators.includes(char)) {
+      continue;
+    }
+
+    const prevCharIndex = skipBackwardWhitespace(input, i - 1);
+    if (prevCharIndex >= 0 && isAlphanumeric(input[prevCharIndex]) && i < minIndex) {
+      minIndex = i;
+      foundOperator = char;
     }
   }
 
-  return '';
+  return foundOperator ? { operator: foundOperator, index: minIndex } : null;
 }
 
 function evaluateBinaryOp(left: number, operator: string, right: number): Result<number> {
@@ -96,13 +130,13 @@ function evaluateBinaryOp(left: number, operator: string, right: number): Result
 }
 
 export function interpret(input: string): Result<number> {
-  const operator = findOperator(input);
+  const operatorMatch = findOperator(input);
 
-  if (operator === '') {
+  if (operatorMatch === null) {
     return parseLiteral(input);
   }
 
-  const operatorIndex = input.indexOf(operator);
+  const { operator, index: operatorIndex } = operatorMatch;
   const leftStr = input.substring(0, operatorIndex);
   const rightStr = input.substring(operatorIndex + 1);
 
@@ -116,5 +150,15 @@ export function interpret(input: string): Result<number> {
     return rightResult;
   }
 
-  return evaluateBinaryOp(leftResult.value, operator, rightResult.value);
+  const opResult = evaluateBinaryOp(leftResult.value, operator, rightResult.value);
+  if (opResult.type === 'err') {
+    return opResult;
+  }
+
+  const leftTypeSuffix = getTypeSuffix(leftStr);
+  if (leftTypeSuffix !== null) {
+    return validateValueForType(opResult.value, leftTypeSuffix);
+  }
+
+  return opResult;
 }
