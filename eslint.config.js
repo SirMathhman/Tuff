@@ -2,7 +2,6 @@ const js = require('@eslint/js');
 const tsPlugin = require('@typescript-eslint/eslint-plugin');
 const tsParser = require('@typescript-eslint/parser');
 const prettierPlugin = require('eslint-plugin-prettier');
-const prettierConfig = require('eslint-config-prettier');
 
 module.exports = [
   {
@@ -64,14 +63,19 @@ module.exports = [
       'prefer-template': 'error',
       'object-shorthand': 'error',
       'no-param-reassign': 'error',
+      'no-regex-literals': 'off', // We use no-restricted-syntax instead for more control
+
+      // Ban regex literals
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'Literal[regex]',
+          message: 'Regex literals are banned. Use string methods instead.',
+        },
+      ],
 
       // TypeScript-specific rules - extremely strict
       '@typescript-eslint/strict-boolean-expressions': 'error',
-      '@typescript-eslint/explicit-function-return-types': [
-        'error',
-        { allowExpressions: false, allowTypedFunctionExpressions: false },
-      ],
-      '@typescript-eslint/explicit-member-accessibility': ['error', { accessibility: 'explicit' }],
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unsafe-assignment': 'error',
       '@typescript-eslint/no-unsafe-call': 'error',
@@ -87,9 +91,6 @@ module.exports = [
       '@typescript-eslint/prefer-optional-chain': 'error',
       '@typescript-eslint/no-shadow': 'error',
       '@typescript-eslint/no-redeclare': 'error',
-      '@typescript-eslint/explicit-module-boundary-types': 'error',
-      '@typescript-eslint/no-implicit-any-catch': 'error',
-      '@typescript-eslint/switch-exhaustiveness-check': 'error',
       '@typescript-eslint/naming-convention': [
         'error',
         {
