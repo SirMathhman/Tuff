@@ -10,6 +10,9 @@ use crate::variables::Environment;
 
 mod comparison;
 mod match_expr;
+mod methods;
+
+use methods::{try_parse_method, MethodMode};
 
 #[allow(dead_code)]
 fn try_parse_field_access(
@@ -26,71 +29,18 @@ fn try_parse_field_access(
     }
 }
 
-/// Try to parse a method call on a struct instance or method call on a variable
-fn try_parse_method_call(
-    var_name: &str,
+fn try_parse_temp_struct_field_access(
+    temp_var_name: &str,
     input: &str,
     pos: &mut usize,
-    env: &mut Environment,
+    env: &Environment,
 ) -> Result<Option<(i32, String)>, String> {
-    use crate::functions::parse_and_verify_arguments;
-    use crate::parse_utils::parse_dot_and_identifier;
-
-    skip_whitespace(input, pos);
-
-    // Save position in case this isn't a method call
-    let saved_pos = *pos;
-
-    if let Ok(Some(method_name)) = parse_dot_and_identifier(input, pos) {
-        // Check if this is followed by parentheses (method call) or just a field
-        skip_whitespace(input, pos);
-        if input[*pos..].trim_start().starts_with('(') {
-            // This is a method call
-            let var_info = env
-                .get(var_name)
-                .ok_or_else(|| format!("Undefined variable: {}", var_name))?
-                .clone();
-
-            // Check if the variable has methods
-            if let Some(methods) = &var_info.methods {
-                if let Some(method) = methods.get(&method_name) {
-                    // Parse arguments
-                    let args = parse_and_verify_arguments(
-                        input,
-                        pos,
-                        env,
-                        &method_name,
-                        method.params.len(),
-                    )?;
-
-                    // Create a new scope starting from the captured environment
-                    let mut method_env = crate::functions::bind_parameters(
-                        &method.params,
-                        &args,
-                        &method.captured_env,
-                    );
-
-                    // Evaluate the method body
-                    let mut body_pos = 0;
-                    let result =
-                        crate::parser::interpret_at(&method.body, &mut body_pos, &mut method_env)?;
-
-                    return Ok(Some((result, method.return_type.clone())));
-                }
-            }
-
-            // Method not found, restore position
-            *pos = saved_pos;
-            return Ok(None);
-        } else {
-            // Not a method call, restore position
-            *pos = saved_pos;
-            return Ok(None);
-        }
+    if let Ok(Some((field_value, _))) = try_parse_field_access(temp_var_name, input, pos, env) {
+        return Ok(Some((field_value, "".to_string())));
     }
-
     Ok(None)
 }
+
 
 fn apply_multiplication_division(lhs: i32, op: char, rhs: i32) -> Result<i32, String> {
     match op {
@@ -266,10 +216,10 @@ fn parse_factor_with_type(
         {
             // Check for field access on struct instantiation
             let temp_var_name = format!("_struct_inst_{}", identifier);
-            if let Ok(Some((field_value, _))) =
-                try_parse_field_access(&temp_var_name, input, pos, env)
+            if let Ok(Some((field_value, field_type))) =
+                try_parse_temp_struct_field_access(&temp_var_name, input, pos, env)
             {
-                return Ok((field_value, "".to_string()));
+                return Ok((field_value, field_type));
             }
             return Ok((val, type_name));
         }
@@ -278,6 +228,27 @@ fn parse_factor_with_type(
         if let Ok(Some((val, type_name))) =
             crate::functions::try_parse_function_call(&identifier, input, pos, env)
         {
+            // If the function returned a struct, allow immediate field/method access
+            if type_name.chars().next().is_some_and(|c| c.is_uppercase()) {
+                let temp_var_name = format!("_struct_inst_{}", type_name);
+                if let Ok(Some((result, method_type))) =
+                    try_parse_method(&temp_var_name, input, pos, env, MethodMode::Call)
+                {
+                    return Ok((result, method_type));
+                }
+                if let Ok(Some((result, method_type))) =
+                    try_parse_method(&temp_var_name, input, pos, env, MethodMode::Access)
+                {
+                    return Ok((result, method_type));
+                }
+                if let Ok(Some((field_value, field_type))) =
+                    try_parse_temp_struct_field_access(&temp_var_name, input, pos, env)
+                {
+                    return Ok((field_value, field_type));
+                }
+                return Ok((val, type_name));
+            }
+
             // Check if the result is a function type (contains =>) and try to call it again
             return crate::currying::handle_chained_function_calls(input, pos, env, val, type_name);
         }
@@ -289,7 +260,16 @@ fn parse_factor_with_type(
             .clone();
 
         // Check for method call first (has higher precedence than field access)
-        if let Ok(Some((result, type_name))) = try_parse_method_call(&identifier, input, pos, env) {
+        if let Ok(Some((result, type_name))) =
+            try_parse_method(&identifier, input, pos, env, MethodMode::Call)
+        {
+            return Ok((result, type_name));
+        }
+
+        // Check for method access without invocation (returns a function)
+        if let Ok(Some((result, type_name))) =
+            try_parse_method(&identifier, input, pos, env, MethodMode::Access)
+        {
             return Ok((result, type_name));
         }
 

@@ -2,88 +2,11 @@ use crate::parse_utils::{parse_identifier, skip_whitespace};
 use crate::variables::{is_type_compatible, Environment, VariableInfo};
 
 mod control_flow;
+mod type_utils;
 pub use control_flow::{
     parse_block, parse_for_statement, parse_if_statement, parse_while_statement,
 };
-#[allow(clippy::too_many_lines)]
-fn read_type_name_after_colon(input: &str, pos: &mut usize) -> Result<String, String> {
-    skip_whitespace(input, pos);
-    let rest = &input[*pos..];
-
-    // Check for function pointer type: (Type, Type) => ReturnType
-    if rest.starts_with('(') {
-        let mut type_str = String::new();
-        let mut depth = 0;
-        let mut temp_pos = 0;
-
-        while temp_pos < rest.len() {
-            let c = rest
-                .chars()
-                .nth(temp_pos)
-                .ok_or("Invalid character in type")?;
-
-            if c == '(' {
-                depth += 1;
-                type_str.push(c);
-            } else if c == ')' {
-                depth -= 1;
-                type_str.push(c);
-                temp_pos += 1;
-                break;
-            } else {
-                type_str.push(c);
-            }
-            temp_pos += 1;
-        }
-
-        if depth != 0 {
-            return Err("Unmatched parentheses in function type".to_string());
-        }
-
-        skip_whitespace(&rest[temp_pos..], &mut 0);
-        let remaining = &rest[temp_pos..].trim_start();
-
-        if remaining.starts_with("=>") {
-            type_str.push_str(" => ");
-            temp_pos += rest[temp_pos..].len() - remaining.len() + 2;
-
-            let (return_type, return_len) = parse_identifier(&rest[temp_pos..])?;
-            type_str.push_str(&return_type);
-            temp_pos += return_len;
-
-            *pos += temp_pos;
-            return Ok(type_str);
-        }
-
-        Err("Expected '=>' in function type".to_string())
-    } else {
-        // Regular type with optional pointers
-        let mut type_str = String::new();
-        let mut temp_pos = 0;
-        while temp_pos < rest.len() && rest.chars().nth(temp_pos).is_some_and(|c| c == '*') {
-            type_str.push('*');
-            temp_pos += 1;
-        }
-        let (type_name, len) = parse_identifier(&rest[temp_pos..])?;
-        type_str.push_str(&type_name);
-        *pos += temp_pos + len;
-        Ok(type_str)
-    }
-}
-fn parse_type_annotation_optional(input: &str, pos: &mut usize) -> Result<Option<String>, String> {
-    let rest = &input[*pos..];
-    let trimmed = rest.trim_start();
-
-    if !trimmed.starts_with(':') {
-        return Ok(None);
-    }
-
-    let ws_offset = rest.len() - trimmed.len();
-    *pos += ws_offset + 1;
-
-    let type_name = read_type_name_after_colon(input, pos)?;
-    Ok(Some(type_name))
-}
+use type_utils::parse_type_annotation_optional;
 #[allow(clippy::too_many_arguments)]
 fn store_variable(
     env: &mut Environment,
@@ -287,6 +210,7 @@ pub fn parse_let_statement(
         (None, None)
     };
 
+    let var_name_for_func = var_name.clone();
     store_variable(
         env,
         var_name,
@@ -299,6 +223,20 @@ pub fn parse_let_statement(
         None,
         methods,
     )?;
+
+    if let Some(returned_func) = env.remove("_returned_function") {
+        if let Some(local_func) = returned_func.local_function {
+            if let Some(existing) = env.get(&var_name_for_func).cloned() {
+                env.insert(
+                    var_name_for_func.clone(),
+                    VariableInfo {
+                        local_function: Some(local_func),
+                        ..existing
+                    },
+                );
+            }
+        }
+    }
     expect_semicolon(input, pos)?;
     Ok(())
 }
@@ -397,7 +335,9 @@ pub fn parse_assignment_statement(
     let trimmed = rest.trim_start();
     let ws_offset = rest.len() - trimmed.len();
 
-    if try_parse_dereference_assignment(input, pos, trimmed, ws_offset, env)? { return Ok(true); }
+    if try_parse_dereference_assignment(input, pos, trimmed, ws_offset, env)? {
+        return Ok(true);
+    }
     if let Some(after_this) = trimmed.strip_prefix("this.") {
         if let Ok((var_name, var_len)) = parse_identifier(after_this) {
             if after_this[var_len..].trim_start().starts_with('=') {
@@ -405,19 +345,32 @@ pub fn parse_assignment_statement(
                 skip_whitespace(input, pos);
                 *pos += 1;
                 skip_whitespace(input, pos);
-                let vi = env.get(&var_name).ok_or(format!("Undefined: {}", var_name))?.clone();
-                if !vi.is_mutable { return Err(format!("Cannot assign to immutable '{}'", var_name)); }
+                let vi = env
+                    .get(&var_name)
+                    .ok_or(format!("Undefined: {}", var_name))?
+                    .clone();
+                if !vi.is_mutable {
+                    return Err(format!("Cannot assign to immutable '{}'", var_name));
+                }
                 let (val, ty, pts) = parse_value_or_reference(input, pos, env)?;
                 update_mutable_var(env, var_name, vi, val, ty, pts)?;
                 skip_whitespace(input, pos);
-                if !input[*pos..].trim_start().starts_with(';') { return Err("Expected ';'".to_string()); }
+                if !input[*pos..].trim_start().starts_with(';') {
+                    return Err("Expected ';'".to_string());
+                }
                 *pos += input[*pos..].len() - input[*pos..].trim_start().len() + 1;
                 return Ok(true);
             }
         }
     }
 
-    if !trimmed.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_') { return Ok(false); }
+    if !trimmed
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_alphabetic() || c == '_')
+    {
+        return Ok(false);
+    }
     let (potential_var, var_len) = parse_identifier(trimmed)?;
     let after_var = &trimmed[var_len..];
     let after_var_trimmed = after_var.trim_start();
@@ -438,9 +391,15 @@ pub fn parse_assignment_statement(
 
     *pos += ws_offset + var_len;
     let var_name = potential_var;
-    let var_info = env.get(&var_name).ok_or_else(|| format!("Undefined variable: {}", var_name))?.clone();
+    let var_info = env
+        .get(&var_name)
+        .ok_or_else(|| format!("Undefined variable: {}", var_name))?
+        .clone();
     if !var_info.is_mutable {
-        return Err(format!("Cannot assign to immutable variable '{}'", var_name));
+        return Err(format!(
+            "Cannot assign to immutable variable '{}'",
+            var_name
+        ));
     }
     skip_whitespace(input, pos);
     if let Some(op) = compound_op {
