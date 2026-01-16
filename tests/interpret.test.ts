@@ -176,4 +176,12 @@ describe('interpret', () => {
 			expect(result.value).toBe(19);
 		}
 	});
+
+	it('should return Err for "10 / (2 - 2)"', () => {
+		const result = interpret('10 / (2 - 2)');
+		expect(result.type).toBe('err');
+		if (result.type === 'err') {
+			expect(result.error).toContain('Division by zero');
+		}
+	});
 });
