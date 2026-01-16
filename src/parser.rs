@@ -33,14 +33,14 @@ fn try_parse_method_call(
     pos: &mut usize,
     env: &mut Environment,
 ) -> Result<Option<(i32, String)>, String> {
-    use crate::parse_utils::parse_dot_and_identifier;
     use crate::functions::parse_and_verify_arguments;
+    use crate::parse_utils::parse_dot_and_identifier;
 
     skip_whitespace(input, pos);
-    
+
     // Save position in case this isn't a method call
     let saved_pos = *pos;
-    
+
     if let Ok(Some(method_name)) = parse_dot_and_identifier(input, pos) {
         // Check if this is followed by parentheses (method call) or just a field
         skip_whitespace(input, pos);
@@ -50,28 +50,35 @@ fn try_parse_method_call(
                 .get(var_name)
                 .ok_or_else(|| format!("Undefined variable: {}", var_name))?
                 .clone();
-            
+
             // Check if the variable has methods
             if let Some(methods) = &var_info.methods {
                 if let Some(method) = methods.get(&method_name) {
                     // Parse arguments
-                    let args = parse_and_verify_arguments(input, pos, env, &method_name, method.params.len())?;
-                    
+                    let args = parse_and_verify_arguments(
+                        input,
+                        pos,
+                        env,
+                        &method_name,
+                        method.params.len(),
+                    )?;
+
                     // Create a new scope starting from the captured environment
                     let mut method_env = crate::functions::bind_parameters(
                         &method.params,
                         &args,
                         &method.captured_env,
                     );
-                    
+
                     // Evaluate the method body
                     let mut body_pos = 0;
-                    let result = crate::parser::interpret_at(&method.body, &mut body_pos, &mut method_env)?;
-                    
+                    let result =
+                        crate::parser::interpret_at(&method.body, &mut body_pos, &mut method_env)?;
+
                     return Ok(Some((result, method.return_type.clone())));
                 }
             }
-            
+
             // Method not found, restore position
             *pos = saved_pos;
             return Ok(None);
@@ -81,7 +88,7 @@ fn try_parse_method_call(
             return Ok(None);
         }
     }
-    
+
     Ok(None)
 }
 
@@ -357,7 +364,6 @@ fn parse_if_expression(
     };
     Ok((result, "".to_string()))
 }
-
 
 pub fn parse_term_with_type(
     input: &str,
