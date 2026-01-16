@@ -1,0 +1,163 @@
+
+> tuff@1.0.0 test C:\Users\mathm\IdeaProjects\Tuff
+> jest
+
+FAIL tests/interpret.test.ts
+  interpret - literals and arithmetic
+    ΓêÜ should interpret "100" as 100 (3 ms)
+    ΓêÜ should interpret "100U8" as 100
+    ΓêÜ should return Err for "-100U8"
+    ΓêÜ should return Err for "256U8" (1 ms)
+    ΓêÜ should interpret "1U8 + 2U8" as 3 (1 ms)
+    ΓêÜ should interpret "1 + 2U8" as 3
+    ΓêÜ should interpret "1U8 + 2" as 3 (1 ms)
+    ΓêÜ should return Err for "1U8 + 255"
+    ΓêÜ should interpret "1U8 + 2U16" as 3
+    ΓêÜ should return Err for "1U8 + 65535U16" (1 ms)
+    ΓêÜ should interpret "1U8 + 255U16" as 256
+    ΓêÜ should interpret "255U16 + 1U8" as 256
+    ΓêÜ should interpret "1 + 2 + 3" as 6 (1 ms)
+  interpret - arithmetic (continued)
+    ΓêÜ should return Err for "254 + 1U8 + 1"
+    ΓêÜ should return Err for "1U8 - 2"
+    ΓêÜ should interpret "1I8 - 2" as -1 (1 ms)
+    ΓêÜ should interpret "2 + 3 - 4" as 1
+    ΓêÜ should interpret "2 * 3 - 4" as 2
+    ΓêÜ should interpret "4 + 2 * 3" as 10
+  interpret - parentheses and division
+    ΓêÜ should interpret "(4)" as 4
+    ΓêÜ should interpret "(4 + 2) * 3" as 18 (1 ms)
+    ΓêÜ should interpret "1 + (4 + 2) * 3" as 19
+    ΓêÜ should return Err for "10 / (2 - 2)"
+  interpret - blocks
+    ΓêÜ should interpret "{ 7 }" as 7 (3 ms)
+    ΓêÜ should interpret "10 / ({ 7 } - 2)" as 2
+    ΓêÜ should interpret "{ 2 } * 3 + 1" as 7 (1 ms)
+    ΓêÜ should interpret "1 + { 4 + 2 } * 3" as 19
+  interpret - let bindings and scoping
+    ΓêÜ should interpret "{ let x = 7; x }" as 7
+    ΓêÜ should interpret "10 / ({ let x = 7; x } - 2)" as 2 (1 ms)
+    ΓêÜ should interpret "{ let x = 5; x + 3 }" as 8
+    ΓêÜ should interpret "{ let x = 10; let y = 3; x / y }" as 3
+    ΓêÜ should return Err for undefined variable
+  interpret - type annotations and validation
+    ΓêÜ should interpret "{ let x : I32 = 7; x }" as 7
+    ΓêÜ should interpret "10 / ({ let x : I32 = 7; x } - 2)" as 2
+    ΓêÜ should return Err for out of range typed variable
+    ΓêÜ should interpret "{ let x : I16 = -100; x }" as -100 (1 ms)
+    ΓêÜ should interpret "{ let x : U32 = 1000000; x + 1 }" as 1000001
+    ΓêÜ should return Err for "{ let x : I32 = 7; }" (no expression)
+    ΓêÜ should return Err for "10 / ({ let x : I32 = 7; } - 2)"
+    ΓêÜ should return Err for duplicate variable names (1 ms)
+    ΓêÜ should return Err for "10 / ({ let x = 7; let x = 20; x } - 2)"
+    ΓêÜ should interpret "10 / ({ let x = 7; let y = x; y } - 2)" as 2
+  interpret - top-level statements
+    ΓêÜ should interpret "let z = 7; z" as 7
+    ΓêÜ should interpret "let z = 1 + 1; z" as 2
+    ΓêÜ should interpret "let z = 10 / ({ let x = 7; let y = x; y } - 2); z" as 2
+    ΓêÜ should interpret "let x : I32; x = 2; x" as 2 (1 ms)
+    ΓêÜ should return Err for uninitialized variable usage
+    ΓêÜ should interpret "let x : I32; x = 5; x + 3" as 8
+  interpret - mutability
+    ΓêÜ should interpret "let mut x = 0; x = 100; x" as 100 (1 ms)
+    ΓêÜ should interpret "let mut x = 5; x += 1; x" as 6
+    ΓêÜ should interpret "let mut x = 5; x+=1; x" as 6 (no spaces)
+    ΓêÜ should interpret "let mut x = 5; x = x + 1; x" as 6 (1 ms)
+    ΓêÜ should interpret "let mut x = 0; x += 1; x" as 1
+    ΓêÜ should return Err for "let x = 0; x = 100; x" (immutable)
+    ΓêÜ should return Err for "let x : I32 = 0; x = 100; x = 2; x" (immutable with type) (1 ms)
+    ΓêÜ should interpret "let mut x : I32 = 0; x = 100; x = 2; x" as 2
+    ΓêÜ should interpret "let mut x = 0; { x = 100; } x" as 100
+    ΓêÜ should return Err for "{ let mut x = 0; } x = 100; x" (x only mutable in block scope) (1 ms)
+    ΓêÜ should interpret "let x = { let y = 100; y }; x" as 100
+  interpret - booleans and if expressions
+    ΓêÜ should interpret "let x : Bool = true; x" as 1
+    ΓêÜ should interpret "let x : Bool = true; let y : Bool = false; x || y" as 1
+    ΓêÜ should interpret "let x : Bool = true; let y : Bool = false; x && y" as 0
+    ΓêÜ should interpret "if (true) 100 else 200" as 100
+    ΓêÜ should interpret "if (false) 100 else 200" as 200 (1 ms)
+    ΓêÜ should interpret "let x = if (true) 100 else 200; x" as 100
+    ΓêÜ should interpret "let x = if (false) 100 else 200; x" as 200
+    ΓêÜ should interpret "if (1) 42 else 0" as 42 (1 ms)
+    ΓêÜ should interpret "if (0) 42 else 0" as 0
+    ΓêÜ should interpret "if (1 + 2) 100 else 50" as 100
+    ΓêÜ should interpret nested if-else: "if (true) if (false) 1 else 2 else 3" as 2 (1 ms)
+  interpret - if statements and yield
+    ΓêÜ should interpret "let x : I32; if (true) x = 100; else x = 200; x" as 100
+    ΓêÜ should interpret "let x : I32; if (false) x = 100; else x = 200; x" as 200 (1 ms)
+    ΓêÜ should interpret "let x : I32; if (true) { x = 100; } else { x = 200; } x" as 100
+    ΓêÜ should interpret "let x : I32; if (false) { x = 100; } else { x = 200; } x" as 200
+    ΓêÜ should interpret "let mut x = 0; if (true) x = 100; x" as 100 (1 ms)
+    ΓêÜ should interpret "let mut x = 0; if (false) x = 100; x" as 0
+    ΓêÜ should interpret "{ yield 100; 200 }" as 100
+    ΓêÜ should interpret "let x = { yield 100; 200 }; x" as 100 (1 ms)
+    ΓêÜ should interpret "let x = { if (true) yield 100; 200 }; x" as 100
+    ΓêÜ should interpret "let x = { if (false) yield 100; 200 }; x" as 200
+    ΓêÜ should interpret "{ if (true) yield 100; else yield 200; }" as 100 (1 ms)
+    ΓêÜ should interpret "{ if (false) yield 100; else yield 200; }" as 200
+  interpret - chained if-else and match
+    ΓêÜ should interpret "let x = if (false) 100 else if (true) 200 else 300; x" as 200
+    ΓêÜ should interpret "if (false) 100 else if (false) 200 else 300" as 300 (1 ms)
+    ΓêÜ should interpret "if (true) 100 else if (true) 200 else 300" as 100
+    ΓêÜ should interpret "let x : I32; if (false) x = 100; else x = 200; x" as 200
+    ΓêÜ should interpret "let x : I32 = match (100) { case 100 => 2; case _ => 3; }; x" as 2 (1 ms)
+  interpret - while loops
+    ΓêÜ should interpret "let mut x = 0; while (x < 4) x += 1; x" as 4
+    ΓêÜ should interpret "let mut x = 10; while (x > 5) x -= 1; x" as 5 (2 ms)
+    ΓêÜ should interpret "let mut x = 1; while (x < 100) x = x * 2; x" as 128 (1 ms)
+    ΓêÜ should interpret "let mut x = 0; while (false) x = 100; x" as 0
+    ΓêÜ should interpret "let mut sum = 0; let mut i = 1; while (i <= 5) { sum += i; i += 1; } sum" as 15
+    ΓêÜ should interpret "let mut x = 0; while (x < 4) { x += 1; } x" as 4 (1 ms)
+    ΓêÜ should return Err for "let x = 0; while (true) x += 1; x" (immutable)
+  interpret - for loops
+    ΓêÜ should interpret "let mut sum = 0; for (let mut i in 0..10) sum += i; sum" as 45 (1 ms)
+    ΓêÜ should interpret "let mut sum = 0; for (let mut i in 0..5) sum += i; sum" as 10
+    ΓêÜ should interpret "let mut product = 1; for (let mut i in 1..5) product *= i; product" as 24
+    ├ù should interpret "for (let mut i in 0..3) i" (last iteration value) (1 ms)
+    ├ù should interpret "let mut sum = 0; for (let mut i in 2..7) { sum += i; } sum" as 21 (1 ms)
+    ΓêÜ should return Err for "let sum = 0; for (let mut i in 0..5) sum += i; sum" (immutable outer)
+
+  ΓùÅ interpret - for loops ΓÇ║ should interpret "for (let mut i in 0..3) i" (last iteration value)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "ok"
+    Received: "err"
+
+      3 |
+      4 | function expectOkValue(result: Result<number>, expected: number): void {
+    > 5 | 	expect(result.type).toBe('ok');
+        | 	                    ^
+      6 | 	if (result.type === 'ok') {
+      7 | 		expect(result.value).toBe(expected);
+      8 | 	}
+
+      at expectOkValue (tests/interpret.test.ts:5:22)
+      at expectInterpretOk (tests/interpret.test.ts:20:2)
+      at Object.<anonymous> (tests/interpret.test.ts:362:3)
+
+  ΓùÅ interpret - for loops ΓÇ║ should interpret "let mut sum = 0; for (let mut i in 2..7) { sum += i; } sum" as 21
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 21
+    Received: 20
+
+       5 | 	expect(result.type).toBe('ok');
+       6 | 	if (result.type === 'ok') {
+    >  7 | 		expect(result.value).toBe(expected);
+         | 		                     ^
+       8 | 	}
+       9 | }
+      10 |
+
+      at expectOkValue (tests/interpret.test.ts:7:24)
+      at expectInterpretOk (tests/interpret.test.ts:20:2)
+      at Object.<anonymous> (tests/interpret.test.ts:365:3)
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 98 passed, 100 total
+Snapshots:   0 total
+Time:        1.167 s
+Ran all test suites.
+ΓÇëELIFECYCLEΓÇë Test failed. See above for more details.

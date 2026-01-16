@@ -24,7 +24,7 @@ import {
 } from './types';
 import { interpretInternal } from './evaluator';
 import { parseAssignment } from './assignments';
-import { processWhileStatement } from './loops';
+import { processWhileStatement, processForStatement, isForStatement } from './loops';
 
 /**
  * Parses the type annotation and assignment part after a colon.
@@ -328,6 +328,8 @@ export function processStatements(
 			result = processYieldStatement(remaining, currentContext);
 		} else if (isIfStatement(trimmed)) {
 			result = processIfStatement(remaining, currentContext);
+		} else if (isForStatement(trimmed)) {
+			result = processForStatement(remaining, currentContext, processStatements);
 		} else if (isWhileStatement(trimmed)) {
 			result = processWhileStatement(remaining, currentContext, processStatements);
 		} else if (isAssignmentStatement(trimmed)) {

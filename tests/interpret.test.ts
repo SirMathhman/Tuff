@@ -347,3 +347,25 @@ describe('interpret - while loops', (): void => {
 		expectErrContains(interpret('let x = 0; while (true) x += 1; x'), 'not mutable');
 	});
 });
+describe('interpret - for loops', (): void => {
+	it('should interpret "let mut sum = 0; for (let mut i in 0..10) sum += i; sum" as 45', (): void => {
+		expectInterpretOk('let mut sum = 0; for (let mut i in 0..10) sum += i; sum', 45);
+	});
+	it('should interpret "let mut sum = 0; for (let mut i in 0..5) sum += i; sum" as 10', (): void => {
+		expectInterpretOk('let mut sum = 0; for (let mut i in 0..5) sum += i; sum', 10);
+	});
+	it('should interpret "let mut product = 1; for (let mut i in 1..5) product *= i; product" as 24', (): void => {
+		expectInterpretOk('let mut product = 1; for (let mut i in 1..5) product *= i; product', 24);
+	});
+	it('should interpret "let mut x = 0; for (let mut i in 0..3) x = i; x" (last iteration)', (): void => {
+		// for loop updates x to the last iteration value (2)
+		expectInterpretOk('let mut x = 0; for (let mut i in 0..3) x = i; x', 2);
+	});
+	it('should interpret "let mut sum = 0; for (let mut i in 2..7) { sum += i; } sum" as 20', (): void => {
+		// 2+3+4+5+6 = 20 (range is exclusive on end)
+		expectInterpretOk('let mut sum = 0; for (let mut i in 2..7) { sum += i; } sum', 20);
+	});
+	it('should return Err for "let sum = 0; for (let mut i in 0..5) sum += i; sum" (immutable outer)', (): void => {
+		expectErrContains(interpret('let sum = 0; for (let mut i in 0..5) sum += i; sum'), 'not mutable');
+	});
+});
