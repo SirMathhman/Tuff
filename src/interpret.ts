@@ -59,7 +59,7 @@ function parseLiteral(literal: string): Result<number> {
   return ok(value);
 }
 
-function getTypeSuffix(literal: string): string | null {
+function getTypeSuffix(literal: string): string | undefined {
   const trimmed = literal.trim();
   const suffixStart = findTypeSuffixStart(trimmed);
 
@@ -67,7 +67,7 @@ function getTypeSuffix(literal: string): string | null {
     return extractTypeSuffix(trimmed, suffixStart);
   }
 
-  return null;
+  return undefined;
 }
 
 function skipBackwardWhitespace(input: string, startIndex: number): number {
@@ -84,7 +84,7 @@ function isAlphanumeric(char: string): boolean {
   return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
 }
 
-function findOperator(input: string): { operator: string; index: number } | null {
+function findOperator(input: string): { operator: string; index: number } | undefined {
   const operators = ['+', '-', '*', '/'];
   let minIndex = input.length;
   let foundOperator = '';
@@ -102,7 +102,7 @@ function findOperator(input: string): { operator: string; index: number } | null
     }
   }
 
-  return foundOperator ? { operator: foundOperator, index: minIndex } : null;
+  return foundOperator ? { operator: foundOperator, index: minIndex } : undefined;
 }
 
 function evaluateBinaryOp(left: number, operator: string, right: number): Result<number> {
@@ -132,7 +132,7 @@ function evaluateBinaryOp(left: number, operator: string, right: number): Result
 export function interpret(input: string): Result<number> {
   const operatorMatch = findOperator(input);
 
-  if (operatorMatch === null) {
+  if (operatorMatch === undefined) {
     return parseLiteral(input);
   }
 
@@ -156,7 +156,7 @@ export function interpret(input: string): Result<number> {
   }
 
   const leftTypeSuffix = getTypeSuffix(leftStr);
-  if (leftTypeSuffix !== null) {
+  if (leftTypeSuffix !== undefined) {
     return validateValueForType(opResult.value, leftTypeSuffix);
   }
 

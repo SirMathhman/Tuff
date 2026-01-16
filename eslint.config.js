@@ -66,12 +66,16 @@ module.exports = [
       'no-regex-literals': 'off', // We use no-restricted-syntax instead for more control
       'max-depth': ['error', 2],
 
-      // Ban regex literals
+      // Ban regex literals and null usage
       'no-restricted-syntax': [
         'error',
         {
           selector: 'Literal[regex]',
           message: 'Regex literals are banned. Use string methods instead.',
+        },
+        {
+          selector: 'Literal[value=null]',
+          message: 'null is banned. Use undefined instead.',
         },
       ],
 
