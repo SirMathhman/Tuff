@@ -136,15 +136,24 @@ fn parse_factor_with_type(
         .next()
         .is_some_and(|c| c.is_alphabetic() || c == '_')
     {
-        let (var_name, len) = parse_identifier(&input[*pos..])?;
+        let (identifier, len) = parse_identifier(&input[*pos..])?;
         *pos += len;
+
+        // Check for Bool literals
+        if identifier == "true" {
+            return Ok((1, "Bool".to_string()));
+        } else if identifier == "false" {
+            return Ok((0, "Bool".to_string()));
+        }
+
+        // Otherwise it's a variable
         let var_info = env
-            .get(&var_name)
-            .ok_or_else(|| format!("Undefined variable: {}", var_name))?
+            .get(&identifier)
+            .ok_or_else(|| format!("Undefined variable: {}", identifier))?
             .clone();
         let val = var_info
             .value
-            .ok_or_else(|| format!("Variable '{}' is not initialized", var_name))?;
+            .ok_or_else(|| format!("Variable '{}' is not initialized", identifier))?;
         Ok((val, var_info.type_name))
     } else {
         let (value, ty, len) = parse_number_with_type(&input[*pos..])?;

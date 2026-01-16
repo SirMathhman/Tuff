@@ -369,4 +369,16 @@ mod tests {
             Ok(0)
         );
     }
+
+    #[test]
+    fn test_bool_true() {
+        // Bool type with true literal converts to 1
+        assert_eq!(interpret("let x : Bool = true; x"), Ok(1));
+    }
+
+    #[test]
+    fn test_bool_false() {
+        // Bool type with false literal converts to 0
+        assert_eq!(interpret("let x : Bool = false; x"), Ok(0));
+    }
 }
