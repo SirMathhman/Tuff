@@ -293,4 +293,7 @@ describe('interpret - if statements and yield', (): void => {
 	it('should interpret "if (true) 100 else if (true) 200 else 300" as 100', (): void => {
 		expectInterpretOk('if (true) 100 else if (true) 200 else 300', 100);
 	});
+	it('should interpret "let x : I32; if (false) x = 100; else x = 200; x" as 200', (): void => {
+		expectInterpretOk('let x : I32; if (false) x = 100; else x = 200; x', 200);
+	});
 });
