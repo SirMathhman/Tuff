@@ -330,4 +330,11 @@ mod tests {
         // Standalone block expressions are invalid - they must be used in a context
         assert!(interpret("let x = 100; { 7893 } x").is_err());
     }
+
+    #[test]
+    fn test_block_scoped_variable_inaccessible() {
+        // Variables declared inside a block are local to that block
+        // Accessing them outside the block should error
+        assert!(interpret("{ let x = 100; } x").is_err());
+    }
 }
