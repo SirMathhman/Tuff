@@ -296,10 +296,11 @@ pub fn parse_assignment_statement(
 pub fn parse_block(
     input: &str,
     pos: &mut usize,
-    _env: &mut Environment,
+    env: &mut Environment,
 ) -> Result<(i32, bool), String> {
-    // Create a completely isolated local scope - empty environment
-    let mut local_env = Environment::new();
+    // Create a local scope by cloning the outer environment
+    // This allows reading outer variables, but new declarations don't leak out
+    let mut local_env = env.clone();
     let mut result = 0i32;
     let mut has_expression = false;
 

@@ -235,14 +235,24 @@ pub fn interpret(input: &str) -> Result<i32, String> {
             pos += 1;
             let (block_result, is_expression) = parse_block(input, &mut pos, &mut env)?;
             expect_closing(input, &mut pos, '}', "Missing closing curly brace")?;
-            if is_expression {
-                return Err(
-                    "Block expressions must be used in a context (e.g., as an initializer)"
-                        .to_string(),
-                );
-            }
             result = block_result;
-            // Continue parsing to see if there are more statements
+
+            // If it's a block expression, check if it's the final thing
+            if is_expression {
+                let rest = &input[pos..];
+                let remaining = rest.trim_start();
+                if !remaining.is_empty() {
+                    // Block expression followed by more code - invalid
+                    return Err(
+                        "Block expressions must be used in a context (e.g., as an initializer)"
+                            .to_string(),
+                    );
+                }
+                // Block expression is the final thing - valid as return value
+                break;
+            }
+
+            // Continue parsing for statement blocks
             continue;
         }
 

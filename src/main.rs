@@ -337,4 +337,15 @@ mod tests {
         // Accessing them outside the block should error
         assert!(interpret("{ let x = 100; } x").is_err());
     }
+
+    #[test]
+    fn test_nested_blocks_access_outer_variables() {
+        // Nested blocks can read outer variables
+        // Inner blocks shadow outer declarations but can still access them
+        // This is a block expression that returns the sum
+        assert_eq!(
+            interpret("let x = 100; { let y = 200; { let z = 300; x + y + z }}"),
+            Ok(600)
+        );
+    }
 }
