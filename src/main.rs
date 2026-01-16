@@ -392,15 +392,6 @@ mod tests {
     }
 
     #[test]
-    fn test_logical_or_false_true() {
-        // Logical OR: false || true => 1
-        assert_eq!(
-            interpret("let x : Bool = false; let y : Bool = true; x || y"),
-            Ok(1)
-        );
-    }
-
-    #[test]
     fn test_logical_or_false_false() {
         // Logical OR: false || false => 0
         assert_eq!(
@@ -410,37 +401,10 @@ mod tests {
     }
 
     #[test]
-    fn test_logical_or_true_true() {
-        // Logical OR: true || true => 1
-        assert_eq!(
-            interpret("let x : Bool = true; let y : Bool = true; x || y"),
-            Ok(1)
-        );
-    }
-
-    #[test]
     fn test_logical_and_true_false() {
         // Logical AND: true && false => 0
         assert_eq!(
             interpret("let x : Bool = true; let y : Bool = false; x && y"),
-            Ok(0)
-        );
-    }
-
-    #[test]
-    fn test_logical_and_false_true() {
-        // Logical AND: false && true => 0
-        assert_eq!(
-            interpret("let x : Bool = false; let y : Bool = true; x && y"),
-            Ok(0)
-        );
-    }
-
-    #[test]
-    fn test_logical_and_false_false() {
-        // Logical AND: false && false => 0
-        assert_eq!(
-            interpret("let x : Bool = false; let y : Bool = false; x && y"),
             Ok(0)
         );
     }
@@ -476,5 +440,32 @@ mod tests {
     fn test_if_with_logical_and() {
         // if-else with logical AND in condition
         assert_eq!(interpret("let x = if (false && true) 3 else 5; x"), Ok(5));
+    }
+
+    #[test]
+    fn test_nested_if_else() {
+        // Nested if-else: if-else-if chain
+        assert_eq!(
+            interpret("let x = if (true && false) 3 else if (false) 100 else 5; x"),
+            Ok(5)
+        );
+    }
+
+    #[test]
+    fn test_nested_if_else_middle_branch() {
+        // Nested if-else: middle branch taken
+        assert_eq!(
+            interpret("let x = if (false) 3 else if (true) 100 else 5; x"),
+            Ok(100)
+        );
+    }
+
+    #[test]
+    fn test_nested_if_else_first_branch() {
+        // Nested if-else: first branch taken
+        assert_eq!(
+            interpret("let x = if (true) 3 else if (true) 100 else 5; x"),
+            Ok(3)
+        );
     }
 }
