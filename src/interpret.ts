@@ -6,6 +6,26 @@ interface OperatorMatch {
 	precedence: number;
 }
 
+interface VariableBinding {
+	name: string;
+	value: number;
+}
+
+interface ExecutionContext {
+	bindings: VariableBinding[];
+}
+
+interface ParsedBinding {
+	name: string;
+	value: number;
+	remaining: string;
+}
+
+interface ProcessedBindings {
+	context: ExecutionContext;
+	remaining: string;
+}
+
 function findTypeSuffixStart(input: string): number {
 	for (let i = input.length - 1; i >= 0; i--) {
 		const char = input.charAt(i);
@@ -58,6 +78,80 @@ function hasNegativeSign(input: string): boolean {
 	return input.length > 0 && input.charAt(0) === '-';
 }
 
+function parseVariableBinding(input: string): Result<ParsedBinding> {
+	const trimmed = input.trim();
+	if (!trimmed.startsWith('let ')) {
+		return err('Expected variable declaration');
+	}
+
+	const withoutLet = trimmed.substring(4).trim();
+	const equalIndex = withoutLet.indexOf('=');
+	if (equalIndex < 0) {
+		return err('Variable declaration missing assignment operator');
+	}
+
+	const varName = withoutLet.substring(0, equalIndex).trim();
+	if (!isVariableName(varName)) {
+		return err(`Invalid variable name: ${varName}`);
+	}
+
+	const afterEqual = withoutLet.substring(equalIndex + 1).trim();
+	const semiIndex = afterEqual.indexOf(';');
+	if (semiIndex < 0) {
+		return err('Variable declaration missing semicolon');
+	}
+
+	const valueStr = afterEqual.substring(0, semiIndex).trim();
+	const remaining = afterEqual.substring(semiIndex + 1).trim();
+
+	const valueResult = interpretInternal(valueStr, { bindings: [] });
+	if (valueResult.type === 'err') {
+		return valueResult;
+	}
+
+	return ok({ name: varName, value: valueResult.value, remaining });
+}
+
+function lookupVariable(name: string, context: ExecutionContext): Result<number> {
+	for (const binding of context.bindings) {
+		if (binding.name === name) {
+			return ok(binding.value);
+		}
+	}
+
+	return err(`Undefined variable: ${name}`);
+}
+
+function isVariableName(input: string): boolean {
+	const trimmed = input.trim();
+	if (trimmed.length === 0) {
+		return false;
+	}
+
+	const firstChar = trimmed.charAt(0);
+	const isFirstCharValid =
+		(firstChar >= 'a' && firstChar <= 'z') ||
+		(firstChar >= 'A' && firstChar <= 'Z') ||
+		firstChar === '_';
+	if (!isFirstCharValid) {
+		return false;
+	}
+
+	for (let i = 1; i < trimmed.length; i++) {
+		const char = trimmed.charAt(i);
+		const isCharValid =
+			(char >= 'a' && char <= 'z') ||
+			(char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') ||
+			char === '_';
+		if (!isCharValid) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
 function isBalancedBrackets(input: string): boolean {
 	const trimmed = input.trim();
 	const isParens = trimmed.startsWith('(') && trimmed.endsWith(')');
@@ -87,13 +181,63 @@ function isBalancedBrackets(input: string): boolean {
 	return depth === 0;
 }
 
-function parseLiteral(literal: string): Result<number> {
+function processVariableBindings(
+	input: string,
+	context: ExecutionContext,
+): Result<ProcessedBindings> {
+	let currentContext = context;
+	let remaining = input;
+
+	while (remaining.trim().startsWith('let ')) {
+		const bindResult = parseVariableBinding(remaining);
+		if (bindResult.type === 'err') {
+			return bindResult;
+		}
+
+		const { name, value } = bindResult.value;
+		currentContext = {
+			bindings: [...currentContext.bindings, { name, value }],
+		};
+		remaining = bindResult.value.remaining;
+	}
+
+	return ok({ context: currentContext, remaining });
+}
+
+function parseBracedExpression(trimmed: string, context: ExecutionContext): Result<number> {
+	if (!isBalancedBrackets(trimmed)) {
+		return err('Unbalanced brackets');
+	}
+
+	const inner = trimmed.substring(1, trimmed.length - 1);
+	const bindingsResult = processVariableBindings(inner, context);
+	if (bindingsResult.type === 'err') {
+		return bindingsResult;
+	}
+
+	const { context: newContext, remaining } = bindingsResult.value;
+	return interpretInternal(remaining, newContext);
+}
+
+function parseLiteral(literal: string, context: ExecutionContext): Result<number> {
 	const trimmed = literal.trim();
 
-	// Check if this is a parenthesized or braced expression
-	if (isBalancedBrackets(trimmed)) {
-		const inner = trimmed.substring(1, trimmed.length - 1);
-		return interpret(inner);
+	// Check if variable name
+	if (isVariableName(trimmed)) {
+		return lookupVariable(trimmed, context);
+	}
+
+	// Check if this is a parenthesized expression
+	if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
+		if (isBalancedBrackets(trimmed)) {
+			const inner = trimmed.substring(1, trimmed.length - 1);
+			return interpretInternal(inner, context);
+		}
+	}
+
+	// Check if this is a braced expression (may contain variable bindings)
+	if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+		return parseBracedExpression(trimmed, context);
 	}
 
 	if (hasNegativeSign(trimmed)) {
@@ -237,7 +381,7 @@ function findOperator(input: string): OperatorMatch | undefined {
 		}
 
 		const precedence = getOperatorPrecedence(char);
-		if (precedence < lowestPrecedence) {
+		if (precedence <= lowestPrecedence) {
 			lowestPrecedence = precedence;
 			lowestPrecedenceIndex = i;
 			lowestPrecedenceOperator = char;
@@ -280,22 +424,26 @@ function evaluateBinaryOp(left: number, operator: string, right: number): Result
 }
 
 export function interpret(input: string): Result<number> {
+	return interpretInternal(input, { bindings: [] });
+}
+
+function interpretInternal(input: string, context: ExecutionContext): Result<number> {
 	const operatorMatch = findOperator(input);
 
 	if (operatorMatch === undefined) {
-		return parseLiteral(input);
+		return parseLiteral(input, context);
 	}
 
 	const { operator, index: operatorIndex } = operatorMatch;
 	const leftStr = input.substring(0, operatorIndex);
 	const rightStr = input.substring(operatorIndex + 1);
 
-	const leftInterpret = interpret(leftStr);
+	const leftInterpret = interpretInternal(leftStr, context);
 	if (leftInterpret.type === 'err') {
 		return leftInterpret;
 	}
 
-	const rightInterpret = interpret(rightStr);
+	const rightInterpret = interpretInternal(rightStr, context);
 	if (rightInterpret.type === 'err') {
 		return rightInterpret;
 	}

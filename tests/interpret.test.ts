@@ -216,4 +216,44 @@ describe('interpret', () => {
 			expect(result.value).toBe(19);
 		}
 	});
+
+	it('should interpret "{ let x = 7; x }" as 7', () => {
+		const result = interpret('{ let x = 7; x }');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(7);
+		}
+	});
+
+	it('should interpret "10 / ({ let x = 7; x } - 2)" as 2', () => {
+		const result = interpret('10 / ({ let x = 7; x } - 2)');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(2);
+		}
+	});
+
+	it('should interpret "{ let x = 5; x + 3 }" as 8', () => {
+		const result = interpret('{ let x = 5; x + 3 }');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(8);
+		}
+	});
+
+	it('should interpret "{ let x = 10; let y = 3; x / y }" as 3', () => {
+		const result = interpret('{ let x = 10; let y = 3; x / y }');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(3);
+		}
+	});
+
+	it('should return Err for undefined variable', () => {
+		const result = interpret('{ x }');
+		expect(result.type).toBe('err');
+		if (result.type === 'err') {
+			expect(result.error).toContain('Undefined');
+		}
+	});
 });
