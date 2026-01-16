@@ -336,4 +336,28 @@ describe('interpret', () => {
 			expect(result.value).toBe(2);
 		}
 	});
+
+	it('should interpret "let z = 7; z" as 7', () => {
+		const result = interpret('let z = 7; z');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(7);
+		}
+	});
+
+	it('should interpret "let z = 1 + 1; z" as 2', () => {
+		const result = interpret('let z = 1 + 1; z');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(2);
+		}
+	});
+
+	it('should interpret "let z = 10 / ({ let x = 7; let y = x; y } - 2); z" as 2', () => {
+		const result = interpret('let z = 10 / ({ let x = 7; let y = x; y } - 2); z');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(2);
+		}
+	});
 });

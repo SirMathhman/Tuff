@@ -133,6 +133,21 @@ function parseVariableDeclarationHeader(withoutLet: string): Result<VariableDecl
 	return ok({ varName, typeAnnotation, afterTypeOrName });
 }
 
+function findSemicolonOutsideBrackets(input: string): number {
+	let bracketDepth = 0;
+	for (let i = 0; i < input.length; i++) {
+		const char = input[i];
+		if (char === '(' || char === '{') {
+			bracketDepth++;
+		} else if (char === ')' || char === '}') {
+			bracketDepth--;
+		} else if (char === ';' && bracketDepth === 0) {
+			return i;
+		}
+	}
+	return -1;
+}
+
 function parseVariableBinding(input: string, context: ExecutionContext): Result<ParsedBinding> {
 	const trimmed = input.trim();
 	if (!trimmed.startsWith('let ')) {
@@ -147,7 +162,7 @@ function parseVariableBinding(input: string, context: ExecutionContext): Result<
 
 	const { varName, typeAnnotation, afterTypeOrName } = headerResult.value;
 	const withoutEqual = afterTypeOrName.substring(1).trim();
-	const semiIndex = withoutEqual.indexOf(';');
+	const semiIndex = findSemicolonOutsideBrackets(withoutEqual);
 	if (semiIndex < 0) {
 		return err('Variable declaration missing semicolon');
 	}
@@ -513,7 +528,18 @@ function evaluateBinaryOp(left: number, operator: string, right: number): Result
 }
 
 export function interpret(input: string): Result<number> {
-	return interpretInternal(input, { bindings: [] });
+	const bindingsResult = processVariableBindings(input, { bindings: [] });
+	if (bindingsResult.type === 'err') {
+		return bindingsResult;
+	}
+
+	const { context, remaining } = bindingsResult.value;
+	const trimmedRemaining = remaining.trim();
+	if (trimmedRemaining.length === 0) {
+		return err('Expression required after variable declarations');
+	}
+
+	return interpretInternal(trimmedRemaining, context);
 }
 
 function interpretInternal(input: string, context: ExecutionContext): Result<number> {
