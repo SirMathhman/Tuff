@@ -121,7 +121,7 @@ function checkOperatorAtPosition(
  * Finds the lowest-precedence operator in an expression.
  */
 export function findOperator(input: string): OperatorMatch | undefined {
-	const operators = ['+', '-', '*', '/', '||', '&&'];
+	const operators = ['+', '-', '*', '/', '||', '&&', '<', '>', '<=', '>=', '==', '!='];
 	const state: OperatorPrecedenceState = {
 		lowestPrecedence: Infinity,
 		lowestPrecedenceIndex: -1,

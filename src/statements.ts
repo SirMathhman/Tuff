@@ -20,9 +20,11 @@ import {
 	type VariableBinding,
 	type VariableDeclarationParts,
 	extractIfConditionAndAfter,
+	isWhileStatement,
 } from './types';
 import { interpretInternal } from './evaluator';
 import { parseAssignment } from './assignments';
+import { processWhileStatement } from './loops';
 
 /**
  * Parses the type annotation and assignment part after a colon.
@@ -308,7 +310,7 @@ function processYieldStatement(
 /**
  * Processes statements (declarations, assignments, if-else, blocks) in input.
  */
-function processStatements(
+export function processStatements(
 	input: string,
 	context: ExecutionContext,
 	allowBlocks: boolean,
@@ -326,6 +328,8 @@ function processStatements(
 			result = processYieldStatement(remaining, currentContext);
 		} else if (isIfStatement(trimmed)) {
 			result = processIfStatement(remaining, currentContext);
+		} else if (isWhileStatement(trimmed)) {
+			result = processWhileStatement(remaining, currentContext, processStatements);
 		} else if (isAssignmentStatement(trimmed)) {
 			result = processAssignmentStatement(remaining, currentContext);
 		} else {

@@ -9,6 +9,37 @@ import {
 import { parseLiteral, findOperator } from './parser';
 
 /**
+ * Evaluates a comparison operation.
+ */
+function evaluateComparison(left: number, operator: string, right: number): Result<number> {
+	if (operator === '<') {
+		return ok(Number(left < right));
+	}
+
+	if (operator === '>') {
+		return ok(Number(left > right));
+	}
+
+	if (operator === '<=') {
+		return ok(Number(left <= right));
+	}
+
+	if (operator === '>=') {
+		return ok(Number(left >= right));
+	}
+
+	if (operator === '==') {
+		return ok(Number(left === right));
+	}
+
+	if (operator === '!=') {
+		return ok(Number(left !== right));
+	}
+
+	return err(`Unknown comparison operator: ${operator}`);
+}
+
+/**
  * Evaluates a binary operation with the given operator and operands.
  */
 export function evaluateBinaryOp(left: number, operator: string, right: number): Result<number> {
@@ -40,6 +71,11 @@ export function evaluateBinaryOp(left: number, operator: string, right: number):
 	if (operator === '&&') {
 		const result = left !== 0 && right !== 0;
 		return ok(Number(result));
+	}
+
+	const comparisonResult = evaluateComparison(left, operator, right);
+	if (comparisonResult.type === 'ok') {
+		return comparisonResult;
 	}
 
 	return err(`Unknown operator: ${operator}`);

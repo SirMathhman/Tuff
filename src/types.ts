@@ -134,6 +134,21 @@ export function isYieldStatement(input: string): boolean {
 }
 
 /**
+ * Checks if a string is a while loop statement (while <condition> <statement>).
+ * @param input - The input string
+ * @returns True if the string starts with 'while', false otherwise
+ */
+export function isWhileStatement(input: string): boolean {
+	const trimmed = input.trim();
+	if (!trimmed.startsWith('while ')) {
+		return false;
+	}
+
+	const afterWhile = trimmed.substring(6).trim();
+	return afterWhile.startsWith('(');
+}
+
+/**
  * Finds the starting index of a type suffix in a literal string.
  * @param input - The input string to search
  * @returns The index where the type suffix starts, or -1 if not found
@@ -443,12 +458,23 @@ export function getOperatorPrecedence(operator: string): number {
 		return 1;
 	}
 
-	if (operator === '+' || operator === '-') {
+	if (
+		operator === '<' ||
+		operator === '>' ||
+		operator === '<=' ||
+		operator === '>=' ||
+		operator === '==' ||
+		operator === '!='
+	) {
 		return 2;
 	}
 
-	if (operator === '*' || operator === '/') {
+	if (operator === '+' || operator === '-') {
 		return 3;
+	}
+
+	if (operator === '*' || operator === '/') {
+		return 4;
 	}
 
 	return 0;

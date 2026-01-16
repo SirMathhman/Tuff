@@ -318,3 +318,29 @@ describe('interpret - chained if-else and match', (): void => {
 		expectInterpretOk('let x : I32 = match (100) { case 100 => 2; case _ => 3; }; x', 2);
 	});
 });
+
+describe('interpret - while loops', (): void => {
+	it('should interpret "let mut x = 0; while (x < 4) x += 1; x" as 4', (): void => {
+		const result = interpret('let mut x = 0; while (x < 4) x += 1; x');
+		if (result.type === 'err') {
+			expect(result.error).toBe('SUCCESS');
+		} else {
+			expectOkValue(result, 4);
+		}
+	});
+	it('should interpret "let mut x = 10; while (x > 5) x -= 1; x" as 5', (): void => {
+		expectInterpretOk('let mut x = 10; while (x > 5) x -= 1; x', 5);
+	});
+	it('should interpret "let mut x = 1; while (x < 100) x = x * 2; x" as 128', (): void => {
+		expectInterpretOk('let mut x = 1; while (x < 100) x = x * 2; x', 128);
+	});
+	it('should interpret "let mut x = 0; while (false) x = 100; x" as 0', (): void => {
+		expectInterpretOk('let mut x = 0; while (false) x = 100; x', 0);
+	});
+	it('should interpret "let mut sum = 0; let mut i = 1; while (i <= 5) { sum += i; i += 1; } sum" as 15', (): void => {
+		expectInterpretOk('let mut sum = 0; let mut i = 1; while (i <= 5) { sum += i; i += 1; } sum', 15);
+	});
+	it('should return Err for "let x = 0; while (true) x += 1; x" (immutable)', (): void => {
+		expectErrContains(interpret('let x = 0; while (true) x += 1; x'), 'not mutable');
+	});
+});
