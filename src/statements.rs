@@ -394,24 +394,30 @@ pub fn parse_assignment_statement(
     let trimmed = rest.trim_start();
     let ws_offset = rest.len() - trimmed.len();
 
-    // Check for dereference assignment (*var = value)
-    if try_parse_dereference_assignment(input, pos, trimmed, ws_offset, env)? {
-        return Ok(true);
+    if try_parse_dereference_assignment(input, pos, trimmed, ws_offset, env)? { return Ok(true); }
+    if let Some(after_this) = trimmed.strip_prefix("this.") {
+        if let Ok((var_name, var_len)) = parse_identifier(after_this) {
+            if after_this[var_len..].trim_start().starts_with('=') {
+                *pos += ws_offset + 5 + var_len;
+                skip_whitespace(input, pos);
+                *pos += 1;
+                skip_whitespace(input, pos);
+                let vi = env.get(&var_name).ok_or(format!("Undefined: {}", var_name))?.clone();
+                if !vi.is_mutable { return Err(format!("Cannot assign to immutable '{}'", var_name)); }
+                let (val, ty, pts) = parse_value_or_reference(input, pos, env)?;
+                update_mutable_var(env, var_name, vi, val, ty, pts)?;
+                skip_whitespace(input, pos);
+                if !input[*pos..].trim_start().starts_with(';') { return Err("Expected ';'".to_string()); }
+                *pos += input[*pos..].len() - input[*pos..].trim_start().len() + 1;
+                return Ok(true);
+            }
+        }
     }
 
-    // Regular variable assignment (var = value) or compound assignment (var += value, etc.)
-    if !trimmed
-        .chars()
-        .next()
-        .is_some_and(|c| c.is_alphabetic() || c == '_')
-    {
-        return Ok(false);
-    }
+    if !trimmed.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_') { return Ok(false); }
     let (potential_var, var_len) = parse_identifier(trimmed)?;
     let after_var = &trimmed[var_len..];
     let after_var_trimmed = after_var.trim_start();
-
-    // Check for compound assignment operators (+=, -=, *=, /=)
     let compound_op = if after_var_trimmed.starts_with("+=") {
         Some('+')
     } else if after_var_trimmed.starts_with("-=") {
@@ -423,23 +429,15 @@ pub fn parse_assignment_statement(
     } else {
         None
     };
-
-    // Check for regular assignment
     if compound_op.is_none() && !after_var_trimmed.starts_with('=') {
         return Ok(false);
     }
 
     *pos += ws_offset + var_len;
     let var_name = potential_var;
-    let var_info = env
-        .get(&var_name)
-        .ok_or_else(|| format!("Undefined variable: {}", var_name))?
-        .clone();
+    let var_info = env.get(&var_name).ok_or_else(|| format!("Undefined variable: {}", var_name))?.clone();
     if !var_info.is_mutable {
-        return Err(format!(
-            "Cannot assign to immutable variable '{}'",
-            var_name
-        ));
+        return Err(format!("Cannot assign to immutable variable '{}'", var_name));
     }
     skip_whitespace(input, pos);
     if let Some(op) = compound_op {
