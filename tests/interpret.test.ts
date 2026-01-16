@@ -384,4 +384,76 @@ describe('interpret', () => {
 			expect(result.value).toBe(8);
 		}
 	});
+
+	it('should interpret "let mut x = 0; x = 100; x" as 100', () => {
+		const result = interpret('let mut x = 0; x = 100; x');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(100);
+		}
+	});
+
+	it('should return Err for "let x = 0; x = 100; x" (immutable)', () => {
+		const result = interpret('let x = 0; x = 100; x');
+		expect(result.type).toBe('err');
+		if (result.type === 'err') {
+			expect(result.error).toContain('not mutable');
+		}
+	});
+
+	it('should return Err for "let x : I32 = 0; x = 100; x = 2; x" (immutable with type)', () => {
+		const result = interpret('let x : I32 = 0; x = 100; x = 2; x');
+		expect(result.type).toBe('err');
+		if (result.type === 'err') {
+			expect(result.error).toContain('not mutable');
+		}
+	});
+
+	it('should interpret "let mut x : I32 = 0; x = 100; x = 2; x" as 2', () => {
+		const result = interpret('let mut x : I32 = 0; x = 100; x = 2; x');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(2);
+		}
+	});
+
+	it('should interpret "let mut x = 0; { x = 100; } x" as 100', () => {
+		const result = interpret('let mut x = 0; { x = 100; } x');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(100);
+		}
+	});
+
+	it('should return Err for "{ let mut x = 0; } x = 100; x" (x only mutable in block scope)', () => {
+		const result = interpret('{ let mut x = 0; } x = 100; x');
+		expect(result.type).toBe('err');
+		if (result.type === 'err') {
+			expect(result.error).toContain('Undefined');
+		}
+	});
+
+	it('should interpret "let x = { let y = 100; y }; x" as 100', () => {
+		const result = interpret('let x = { let y = 100; y }; x');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(100);
+		}
+	});
+
+	it('should interpret "let x : Bool = true; x" as 1', () => {
+		const result = interpret('let x : Bool = true; x');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(1);
+		}
+	});
+
+	it('should interpret "let x : Bool = true; let y : Bool = false; x || y" as 1', () => {
+		const result = interpret('let x : Bool = true; let y : Bool = false; x || y');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(1);
+		}
+	});
 });

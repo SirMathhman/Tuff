@@ -10,11 +10,21 @@ export interface OperatorMatch {
 }
 
 /**
+ * Tracks the lowest precedence operator found so far during scanning.
+ */
+export interface OperatorPrecedenceState {
+	lowestPrecedence: number;
+	lowestPrecedenceIndex: number;
+	lowestPrecedenceOperator: string;
+}
+
+/**
  * Represents a variable binding with an optional value.
  */
 export interface VariableBinding {
 	name: string;
 	value: number | undefined;
+	isMutable: boolean;
 }
 
 /**
@@ -30,6 +40,7 @@ export interface ExecutionContext {
 export interface ParsedBinding {
 	name: string;
 	value: number | undefined;
+	isMutable: boolean;
 	remaining: string;
 }
 
@@ -54,6 +65,7 @@ export interface ContextAndRemaining {
  */
 export interface VariableDeclarationParts {
 	varName: string;
+	isMutable: boolean;
 	typeAnnotation: string | undefined;
 	afterTypeOrName: string;
 }
@@ -102,6 +114,12 @@ export function extractTypeSuffix(input: string, suffixStart: number): string {
  * @returns Result containing the value or an error message
  */
 export function validateValueForType(value: number, typeSuffix: string): Result<number> {
+	if (typeSuffix === 'Bool') {
+		if (value !== 0 && value !== 1) {
+			return err(`Value ${value} is out of range for Bool (0-1)`);
+		}
+	}
+
 	if (typeSuffix === 'U8') {
 		if (value < 0 || value > 255) {
 			return err(`Value ${value} is out of range for U8 (0-255)`);
@@ -245,6 +263,10 @@ export function findSemicolonOutsideBrackets(input: string): number {
  * @returns The maximum value for the type, or 0 if type is unknown
  */
 export function getTypeRangeMax(typeSuffix: string): number {
+	if (typeSuffix === 'Bool') {
+		return 1;
+	}
+
 	if (typeSuffix === 'U8') {
 		return 255;
 	}
@@ -350,13 +372,75 @@ export function isAlphanumeric(char: string): boolean {
  * @returns The precedence level: 1 for addition and subtraction, 2 for multiplication and division, 0 for unknown
  */
 export function getOperatorPrecedence(operator: string): number {
-	if (operator === '+' || operator === '-') {
+	if (operator === '||') {
+		return 0;
+	}
+
+	if (operator === '&&') {
 		return 1;
 	}
 
-	if (operator === '*' || operator === '/') {
+	if (operator === '+' || operator === '-') {
 		return 2;
 	}
 
+	if (operator === '*' || operator === '/') {
+		return 3;
+	}
+
 	return 0;
+}
+
+/**
+ * Checks if the character before an operator is valid.
+ * @param input - The input string
+ * @param charIndex - The index of the character to check after
+ * @returns True if the previous character is alphanumeric or a closing bracket
+ */
+export function isPrevCharValidForOperator(input: string, charIndex: number): boolean {
+	const prevCharIndex = skipBackwardWhitespace(input, charIndex - 1);
+	if (prevCharIndex < 0) {
+		return false;
+	}
+
+	const prevChar = input[prevCharIndex];
+	return isAlphanumeric(prevChar) || prevChar === ')' || prevChar === '}';
+}
+
+/**
+ * Checks for a two-character operator at the given position.
+ * @param input - The input string
+ * @param i - The position to check
+ * @param operators - The list of valid operators
+ * @returns The precedence of the operator, or -1 if not found
+ */
+export function checkTwoCharOperator(input: string, i: number, operators: string[]): number {
+	const twoCharOp = `${input[i]}${input[i + 1]}`;
+	if (!operators.includes(twoCharOp) || !isPrevCharValidForOperator(input, i)) {
+		return -1;
+	}
+	return getOperatorPrecedence(twoCharOp);
+}
+
+/**
+ * Checks for a single-character operator at the given position.
+ * @param input - The input string
+ * @param char - The character to check
+ * @param i - The position to check
+ * @param operators - The list of valid operators
+ * @returns The precedence of the operator, or -1 if not found
+ */
+export function checkSingleCharOperator(
+	input: string,
+	char: string,
+	i: number,
+	operators: string[],
+): number {
+	const isSingleOp = ['|', '&'].includes(char) === false;
+	const isValidOp = operators.includes(char);
+	const isPrevValid = isPrevCharValidForOperator(input, i);
+	if (!isSingleOp || !isValidOp || !isPrevValid) {
+		return -1;
+	}
+	return getOperatorPrecedence(char);
 }

@@ -1,35 +1,43 @@
 import { err, ok, type Result } from './result';
 import {
+	checkSingleCharOperator,
+	checkTwoCharOperator,
 	collectTypeSuffixes,
 	type ContextAndRemaining,
 	type ExecutionContext,
 	extractTypeSuffix,
 	findSemicolonOutsideBrackets,
 	findTypeSuffixStart,
-	getOperatorPrecedence,
 	getTypeRangeMax,
 	hasNegativeSign,
-	isAlphanumeric,
 	isBalancedBrackets,
 	isVariableName,
 	type OperatorMatch,
+	type OperatorPrecedenceState,
 	type ParsedBinding,
 	type ProcessedBindings,
-	skipBackwardWhitespace,
 	validateValueForType,
 	type VariableBinding,
 	type VariableDeclarationParts,
 } from './types';
 
 function parseVariableDeclarationHeader(withoutLet: string): Result<VariableDeclarationParts> {
-	const colonIndex = withoutLet.indexOf(':');
+	let isMutable = false;
+	let remaining = withoutLet;
+
+	if (withoutLet.startsWith('mut ')) {
+		isMutable = true;
+		remaining = withoutLet.substring(4).trim();
+	}
+
+	const colonIndex = remaining.indexOf(':');
 	let varName: string;
 	let typeAnnotation: string | undefined;
 	let afterTypeOrName: string;
 
 	if (colonIndex >= 0) {
-		varName = withoutLet.substring(0, colonIndex).trim();
-		const afterColon = withoutLet.substring(colonIndex + 1).trim();
+		varName = remaining.substring(0, colonIndex).trim();
+		const afterColon = remaining.substring(colonIndex + 1).trim();
 		const equalIndexAfterColon = afterColon.indexOf('=');
 		if (equalIndexAfterColon >= 0) {
 			typeAnnotation = afterColon.substring(0, equalIndexAfterColon).trim();
@@ -39,12 +47,12 @@ function parseVariableDeclarationHeader(withoutLet: string): Result<VariableDecl
 			afterTypeOrName = '';
 		}
 	} else {
-		const equalIndex = withoutLet.indexOf('=');
+		const equalIndex = remaining.indexOf('=');
 		if (equalIndex >= 0) {
-			varName = withoutLet.substring(0, equalIndex).trim();
-			afterTypeOrName = withoutLet.substring(equalIndex);
+			varName = remaining.substring(0, equalIndex).trim();
+			afterTypeOrName = remaining.substring(equalIndex);
 		} else {
-			varName = withoutLet;
+			varName = remaining;
 			afterTypeOrName = '';
 		}
 	}
@@ -53,7 +61,7 @@ function parseVariableDeclarationHeader(withoutLet: string): Result<VariableDecl
 		return err(`Invalid variable name: ${varName}`);
 	}
 
-	return ok({ varName, typeAnnotation, afterTypeOrName });
+	return ok({ varName, isMutable, typeAnnotation, afterTypeOrName });
 }
 
 function parseVariableBinding(input: string, context: ExecutionContext): Result<ParsedBinding> {
@@ -68,7 +76,7 @@ function parseVariableBinding(input: string, context: ExecutionContext): Result<
 		return headerResult;
 	}
 
-	const { varName, typeAnnotation, afterTypeOrName } = headerResult.value;
+	const { varName, isMutable, typeAnnotation, afterTypeOrName } = headerResult.value;
 
 	if (afterTypeOrName.length === 0) {
 		const semiIndex = findSemicolonOutsideBrackets(withoutLet);
@@ -76,7 +84,7 @@ function parseVariableBinding(input: string, context: ExecutionContext): Result<
 			return err('Variable declaration missing semicolon');
 		}
 		const remaining = withoutLet.substring(semiIndex + 1).trim();
-		return ok({ name: varName, value: undefined, remaining });
+		return ok({ name: varName, value: undefined, isMutable, remaining });
 	}
 
 	const withoutEqual = afterTypeOrName.substring(1).trim();
@@ -100,42 +108,21 @@ function parseVariableBinding(input: string, context: ExecutionContext): Result<
 		}
 	}
 
-	return ok({ name: varName, value: valueResult.value, remaining });
-}
-
-function findBindingByName(name: string, context: ExecutionContext): VariableBinding | undefined {
-	for (const binding of context.bindings) {
-		if (binding.name === name) {
-			return binding;
-		}
-	}
-
-	return undefined;
+	return ok({ name: varName, value: valueResult.value, isMutable, remaining });
 }
 
 function lookupVariable(name: string, context: ExecutionContext): Result<number> {
-	const binding = findBindingByName(name, context);
-	if (binding === undefined) {
-		return err(`Undefined variable: ${name}`);
-	}
-
-	if (binding.value === undefined) {
-		return err(`Variable '${name}' is not initialized`);
-	}
-
-	return ok(binding.value);
-}
-
-function isDuplicateVariable(name: string, context: ExecutionContext): boolean {
 	for (const binding of context.bindings) {
-		if (binding.name === name) {
-			return true;
+		if (binding.name !== name) {
+			continue;
 		}
+		if (binding.value === undefined) {
+			return err(`Variable '${name}' is not initialized`);
+		}
+		return ok(binding.value);
 	}
-
-	return false;
+	return err(`Undefined variable: ${name}`);
 }
-
 function parseAssignment(input: string, context: ExecutionContext): Result<ParsedBinding> {
 	const trimmed = input.trim();
 	const semiIndex = findSemicolonOutsideBrackets(trimmed);
@@ -155,16 +142,20 @@ function parseAssignment(input: string, context: ExecutionContext): Result<Parse
 		return err(`Invalid variable name: ${varName}`);
 	}
 
-	let varExists = false;
+	let varBinding: VariableBinding | undefined;
 	for (const binding of context.bindings) {
 		if (binding.name === varName) {
-			varExists = true;
+			varBinding = binding;
 			break;
 		}
 	}
 
-	if (!varExists) {
+	if (varBinding === undefined) {
 		return err(`Undefined variable: ${varName}`);
+	}
+
+	if (!varBinding.isMutable) {
+		return err(`Variable '${varName}' is not mutable`);
 	}
 
 	const valueStr = statementStr.substring(equalIndex + 1).trim();
@@ -173,7 +164,7 @@ function parseAssignment(input: string, context: ExecutionContext): Result<Parse
 		return valueResult;
 	}
 
-	return ok({ name: varName, value: valueResult.value, remaining });
+	return ok({ name: varName, value: valueResult.value, isMutable: true, remaining });
 }
 
 function processLetDeclaration(
@@ -185,13 +176,13 @@ function processLetDeclaration(
 		return bindResult;
 	}
 
-	const { name, value } = bindResult.value;
-	if (isDuplicateVariable(name, context)) {
+	const { name, value, isMutable } = bindResult.value;
+	if (context.bindings.some((binding): boolean => binding.name === name)) {
 		return err(`Variable '${name}' is already defined`);
 	}
 
 	const newContext = {
-		bindings: [...context.bindings, { name, value }],
+		bindings: [...context.bindings, { name, value, isMutable }],
 	};
 	return ok({ context: newContext, remaining: bindResult.value.remaining });
 }
@@ -208,7 +199,7 @@ function processAssignmentStatement(
 	const { name, value } = assignResult.value;
 	const updatedBindings = context.bindings.map((binding): VariableBinding => {
 		if (binding.name === name) {
-			return { name, value };
+			return { name, value, isMutable: binding.isMutable };
 		}
 		return binding;
 	});
@@ -216,22 +207,98 @@ function processAssignmentStatement(
 	const newContext = { bindings: updatedBindings };
 	return ok({ context: newContext, remaining: assignResult.value.remaining });
 }
+function isAssignmentStatement(s: string): boolean {
+	const eq = s.indexOf('=');
+	return eq > 0 && isVariableName(s.substring(0, eq).trim()) && s.charAt(eq + 1) !== '=';
+}
 
-function isAssignmentStatement(trimmed: string): boolean {
-	const equalsIndex = trimmed.indexOf('=');
-	if (equalsIndex <= 0) {
+function findClosingBrace(s: string): number {
+	let depth = 0;
+	for (let i = 0; i < s.length; i++) {
+		if (s[i] === '{') {
+			depth++;
+		}
+		if (s[i] === '}') {
+			depth--;
+		}
+		if (depth === 0 && s[i] === '}') {
+			return i;
+		}
+	}
+	return -1;
+}
+function containsStatements(braced: string): boolean {
+	const trimmed = braced.trim();
+	if (!trimmed.startsWith('{')) {
 		return false;
 	}
 
-	const potentialVarName = trimmed.substring(0, equalsIndex).trim();
-	const charAfter = trimmed.charAt(equalsIndex + 1);
-	return isVariableName(potentialVarName) && charAfter !== '=';
+	const closingBraceIndex = findClosingBrace(trimmed);
+	if (closingBraceIndex === -1) {
+		return false;
+	}
+
+	const inner = trimmed.substring(1, closingBraceIndex).trim();
+	if (inner.length === 0 || !inner.startsWith('let ')) {
+		const firstSemiIndex = findSemicolonOutsideBrackets(inner);
+		return firstSemiIndex >= 0 && isAssignmentStatement(inner.substring(0, firstSemiIndex).trim());
+	}
+	return true;
+}
+function processBracedBlock(input: string, context: ExecutionContext): Result<ContextAndRemaining> {
+	const trimmed = input.trim();
+	if (!trimmed.startsWith('{')) {
+		return err('Not a braced block');
+	}
+
+	const closingBraceIndex = findClosingBrace(trimmed);
+	if (closingBraceIndex === -1) {
+		return err('Unbalanced braces');
+	}
+
+	const blockContent = trimmed.substring(0, closingBraceIndex + 1);
+	if (!isBalancedBrackets(blockContent)) {
+		return err('Unbalanced brackets');
+	}
+	let afterBlock = trimmed.substring(closingBraceIndex + 1).trim();
+
+	if (afterBlock.startsWith(';')) {
+		afterBlock = afterBlock.substring(1).trim();
+	}
+
+	const inner = blockContent.substring(1, blockContent.length - 1);
+	const bindingsResult = processVariableBindings(inner, context);
+	if (bindingsResult.type === 'err') {
+		return bindingsResult;
+	}
+
+	const { context: newContext, remaining: innerRemaining } = bindingsResult.value;
+
+	// Only propagate changes to existing outer-scope variables, not new declarations
+	const scopedContext = {
+		bindings: context.bindings.map((outerBinding): VariableBinding => {
+			const updated = newContext.bindings.find(
+				(binding): boolean => binding.name === outerBinding.name,
+			);
+			return updated ?? outerBinding;
+		}),
+	};
+
+	let remaining: string;
+	if (innerRemaining.trim().length > 0) {
+		remaining = `${innerRemaining.trim()} ${afterBlock}`.trim();
+	} else {
+		remaining = afterBlock;
+	}
+
+	return ok({ context: scopedContext, remaining });
 }
 
-function processVariableBindings(
+function processStatements(
 	input: string,
 	context: ExecutionContext,
-): Result<ProcessedBindings> {
+	allowBlocks: boolean,
+): Result<ContextAndRemaining> {
 	let currentContext = context;
 	let remaining = input;
 
@@ -241,6 +308,8 @@ function processVariableBindings(
 
 		if (trimmed.startsWith('let ')) {
 			result = processLetDeclaration(remaining, currentContext);
+		} else if (allowBlocks && shouldProcessAsStatementBlock(trimmed)) {
+			result = processBracedBlock(remaining, currentContext);
 		} else if (isAssignmentStatement(trimmed)) {
 			result = processAssignmentStatement(remaining, currentContext);
 		} else {
@@ -256,6 +325,17 @@ function processVariableBindings(
 	}
 
 	return ok({ context: currentContext, remaining });
+}
+
+function processVariableBindings(
+	input: string,
+	context: ExecutionContext,
+): Result<ProcessedBindings> {
+	const result = processStatements(input, context, false);
+	if (result.type === 'err') {
+		return result;
+	}
+	return ok({ context: result.value.context, remaining: result.value.remaining });
 }
 
 function parseBracedExpression(trimmed: string, context: ExecutionContext): Result<number> {
@@ -280,6 +360,14 @@ function parseBracedExpression(trimmed: string, context: ExecutionContext): Resu
 
 function parseLiteral(literal: string, context: ExecutionContext): Result<number> {
 	const trimmed = literal.trim();
+
+	if (trimmed === 'true') {
+		return ok(1);
+	}
+
+	if (trimmed === 'false') {
+		return ok(0);
+	}
 
 	if (isVariableName(trimmed)) {
 		return lookupVariable(trimmed, context);
@@ -317,29 +405,53 @@ function parseLiteral(literal: string, context: ExecutionContext): Result<number
 	return ok(value);
 }
 
-function isPrevCharValidForOperator(input: string, charIndex: number): boolean {
-	const prevCharIndex = skipBackwardWhitespace(input, charIndex - 1);
-	if (prevCharIndex < 0) {
-		return false;
+function updateLowestPrecedence(
+	precedence: number,
+	index: number,
+	operator: string,
+	state: OperatorPrecedenceState,
+): void {
+	if (precedence <= state.lowestPrecedence) {
+		state.lowestPrecedence = precedence;
+		state.lowestPrecedenceIndex = index;
+		state.lowestPrecedenceOperator = operator;
 	}
+}
 
-	const prevChar = input[prevCharIndex];
-	return isAlphanumeric(prevChar) || prevChar === ')' || prevChar === '}';
+function checkOperatorAtPosition(
+	input: string,
+	i: number,
+	char: string,
+	operators: string[],
+	state: OperatorPrecedenceState,
+): number {
+	if (i < input.length - 1) {
+		const twoCharPrec = checkTwoCharOperator(input, i, operators);
+		if (twoCharPrec >= 0) {
+			updateLowestPrecedence(twoCharPrec, i, input.substring(i, i + 2), state);
+			return 1; // Signal to skip next char
+		}
+	}
+	const singleCharPrec = checkSingleCharOperator(input, char, i, operators);
+	if (singleCharPrec >= 0) {
+		updateLowestPrecedence(singleCharPrec, i, char, state);
+	}
+	return 0;
 }
 
 function findOperator(input: string): OperatorMatch | undefined {
-	const operators = ['+', '-', '*', '/'];
-	let lowestPrecedence = Infinity;
-	let lowestPrecedenceIndex = -1;
-	let lowestPrecedenceOperator = '';
+	const operators = ['+', '-', '*', '/', '||', '&&'];
+	const state: OperatorPrecedenceState = {
+		lowestPrecedence: Infinity,
+		lowestPrecedenceIndex: -1,
+		lowestPrecedenceOperator: '',
+	};
 	let bracketDepth = 0;
 	if (input.startsWith('(') || input.startsWith('{')) {
 		bracketDepth = 1;
 	}
-
 	for (let i = 1; i < input.length; i++) {
 		const char = input[i];
-
 		if (char === '(' || char === '{') {
 			bracketDepth++;
 			continue;
@@ -348,31 +460,21 @@ function findOperator(input: string): OperatorMatch | undefined {
 			bracketDepth--;
 			continue;
 		}
-
-		if (bracketDepth > 0 || !operators.includes(char)) {
+		if (bracketDepth > 0) {
 			continue;
 		}
-
-		if (!isPrevCharValidForOperator(input, i)) {
-			continue;
-		}
-
-		const precedence = getOperatorPrecedence(char);
-		if (precedence <= lowestPrecedence) {
-			lowestPrecedence = precedence;
-			lowestPrecedenceIndex = i;
-			lowestPrecedenceOperator = char;
+		const skip = checkOperatorAtPosition(input, i, char, operators, state);
+		if (skip) {
+			i++;
 		}
 	}
-
-	if (lowestPrecedenceIndex < 0) {
+	if (state.lowestPrecedenceIndex < 0) {
 		return undefined;
 	}
-
 	return {
-		operator: lowestPrecedenceOperator,
-		index: lowestPrecedenceIndex,
-		precedence: lowestPrecedence,
+		operator: state.lowestPrecedenceOperator,
+		index: state.lowestPrecedenceIndex,
+		precedence: state.lowestPrecedence,
 	};
 }
 
@@ -397,7 +499,25 @@ function evaluateBinaryOp(left: number, operator: string, right: number): Result
 		return ok(Math.floor(left / right));
 	}
 
+	if (operator === '||') {
+		const result = left !== 0 || right !== 0;
+		return ok(Number(result));
+	}
+
+	if (operator === '&&') {
+		const result = left !== 0 && right !== 0;
+		return ok(Number(result));
+	}
+
 	return err(`Unknown operator: ${operator}`);
+}
+
+function shouldProcessAsStatementBlock(t: string): boolean {
+	if (!t.startsWith('{') || !containsStatements(t)) {
+		return false;
+	}
+	const ci = findClosingBrace(t);
+	return ci >= 0 && ci < t.length - 1;
 }
 
 /**
@@ -407,18 +527,17 @@ function evaluateBinaryOp(left: number, operator: string, right: number): Result
  * @returns Result containing the evaluated number or an error message
  */
 export function interpret(input: string): Result<number> {
-	const bindingsResult = processVariableBindings(input, { bindings: [] });
-	if (bindingsResult.type === 'err') {
-		return bindingsResult;
+	const result = processStatements(input, { bindings: [] }, true);
+	if (result.type === 'err') {
+		return result;
 	}
 
-	const { context, remaining } = bindingsResult.value;
-	const trimmedRemaining = remaining.trim();
+	const trimmedRemaining = result.value.remaining.trim();
 	if (trimmedRemaining.length === 0) {
-		return err('Expression required after variable declarations');
+		return err('expression required after variable declarations');
 	}
 
-	return interpretInternal(trimmedRemaining, context);
+	return interpretInternal(trimmedRemaining, result.value.context);
 }
 
 function interpretInternal(input: string, context: ExecutionContext): Result<number> {
