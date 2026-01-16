@@ -95,12 +95,11 @@ export interface TypeAnnotationParts {
 }
 
 /**
- * Represents the parsed if-else statement branches.
+ * Represents the parsed if statement branches (with optional else clause).
  */
-export interface IfElseBranchesResult {
+export interface IfStatementBranches {
 	trueStatementStr: string;
-	falseStatementStr: string;
-	error?: string;
+	falseStatementStr: string | undefined;
 }
 
 /**

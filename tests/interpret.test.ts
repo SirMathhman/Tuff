@@ -560,4 +560,20 @@ describe('interpret', () => {
 			expect(result.value).toBe(200);
 		}
 	});
+
+	it('should interpret "let mut x = 0; if (true) x = 100; x" as 100', () => {
+		const result = interpret('let mut x = 0; if (true) x = 100; x');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(100);
+		}
+	});
+
+	it('should interpret "let mut x = 0; if (false) x = 100; x" as 0', () => {
+		const result = interpret('let mut x = 0; if (false) x = 100; x');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(0);
+		}
+	});
 });

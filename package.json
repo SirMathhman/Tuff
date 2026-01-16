@@ -4,7 +4,7 @@
 	"description": "",
 	"main": "index.js",
 	"scripts": {
-		"cpd": "pmd cpd --dir src tests --language typescript --minimum-tokens 50 --ignore-literals --ignore-identifiers",
+		"cpd": "pmd cpd --dir src tests --language typescript --minimum-tokens 50 --ignore-literals --ignore-identifiers --format markdown",
 		"test": "jest",
 		"test:watch": "jest --watch",
 		"test:coverage": "jest --coverage",

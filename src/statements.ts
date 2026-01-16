@@ -2,7 +2,7 @@ import { err, ok, type Result } from './result';
 import {
 	type ContextAndRemaining,
 	type ExecutionContext,
-	type IfElseBranchesResult,
+	type IfStatementBranches,
 	type TypeAnnotationParts,
 	findClosingParen,
 	findElseKeywordIndex,
@@ -283,13 +283,12 @@ function processBracedBlock(input: string, context: ExecutionContext): Result<Co
 /**
  * Detects if a statement is an if-else statement (with semicolons).
  */
-function isIfElseStatement(trimmed: string): boolean {
+function isIfStatement(trimmed: string): boolean {
 	if (!trimmed.startsWith('if ')) {
 		return false;
 	}
 
-	// Check if this looks like an if-else statement by finding the pattern
-	// if (...) <statement>; else <statement>; or if (...) { ... } else { ... }
+	// Check if this looks like an if statement: if (...) <statement>; [else <statement>;]
 	const afterIf = trimmed.substring(3).trim();
 	if (!afterIf.startsWith('(')) {
 		return false;
@@ -301,54 +300,59 @@ function isIfElseStatement(trimmed: string): boolean {
 	}
 
 	const afterCondition = afterIf.substring(conditionEnd + 1).trim();
-	const elseIndex = findElseKeywordIndex(afterCondition);
-
-	if (elseIndex < 0) {
+	if (afterCondition.length === 0) {
 		return false;
 	}
 
-	const trueStatementStr = afterCondition.substring(0, elseIndex).trim();
-	const falseStatementStr = afterCondition.substring(elseIndex + 4).trim();
+	// Check if there's an else clause
+	const elseIndex = findElseKeywordIndex(afterCondition);
+	if (elseIndex >= 0) {
+		// If-else statement: both branches should have proper syntax
+		const trueStatementStr = afterCondition.substring(0, elseIndex).trim();
+		const falseStatementStr = afterCondition.substring(elseIndex + 4).trim();
 
-	// Check for either semicolon-terminated statements or braced blocks
-	const isTrueBraced = trueStatementStr.startsWith('{');
-	const isFalseBraced = falseStatementStr.startsWith('{');
-	const trueSemiIndex = findSemicolonOutsideBrackets(trueStatementStr);
-	const falseSemiIndex = findSemicolonOutsideBrackets(falseStatementStr);
+		const isTrueBraced = trueStatementStr.startsWith('{');
+		const isFalseBraced = falseStatementStr.startsWith('{');
+		const trueSemiIndex = findSemicolonOutsideBrackets(trueStatementStr);
+		const falseSemiIndex = findSemicolonOutsideBrackets(falseStatementStr);
 
-	// Valid if: both have semicolons, or both have braces
-	const bothSemicolons = trueSemiIndex >= 0 && falseSemiIndex >= 0;
-	const bothBraced = isTrueBraced && isFalseBraced;
+		const bothSemicolons = trueSemiIndex >= 0 && falseSemiIndex >= 0;
+		const bothBraced = isTrueBraced && isFalseBraced;
 
-	return bothSemicolons || bothBraced;
+		return bothSemicolons || bothBraced;
+	}
+
+	// If-only statement (no else): should have a semicolon or braced block
+	const isBraced = afterCondition.startsWith('{');
+	const semiIndex = findSemicolonOutsideBrackets(afterCondition);
+
+	return isBraced || semiIndex >= 0;
 }
 
 /**
- * Processes an if-else statement with assignment statements.
+ * Processes an if or if-else statement with assignment statements.
  */
 /**
- * Extracts the if-else statement branches.
+ * Extracts the if-statement branches (returns undefined for false branch if no else).
  */
-function extractIfElseBranches(afterCondition: string): IfElseBranchesResult {
+function extractIfStatementBranches(afterCondition: string): IfStatementBranches | undefined {
 	const elseIndex = findElseKeywordIndex(afterCondition);
 
 	if (elseIndex < 0) {
-		return {
-			trueStatementStr: '',
-			falseStatementStr: '',
-			error: 'Expected else in if-else statement',
-		};
+		// If-only statement (no else)
+		const trueStatementStr = afterCondition.trim();
+		if (trueStatementStr.length === 0) {
+			return undefined;
+		}
+		return { trueStatementStr, falseStatementStr: undefined };
 	}
 
+	// If-else statement
 	const trueStatementStr = afterCondition.substring(0, elseIndex).trim();
 	const falseStatementStr = afterCondition.substring(elseIndex + 4).trim();
 
 	if (trueStatementStr.length === 0 || falseStatementStr.length === 0) {
-		return {
-			trueStatementStr: '',
-			falseStatementStr: '',
-			error: 'Empty if-else statement branches',
-		};
+		return undefined;
 	}
 
 	return { trueStatementStr, falseStatementStr };
@@ -370,9 +374,25 @@ function extractRemainingFromBracedBlock(falseStatementStr: string): string {
 }
 
 /**
- * Extracts the remaining string after the false statement or block.
+ * Extracts remaining string after an if statement (without else).
  */
-function extractRemaining(falseStatementStr: string): string {
+function extractRemainingFromIfStatement(trueStatementStr: string): string {
+	const isBraced = trueStatementStr.startsWith('{');
+	if (isBraced) {
+		return extractRemainingFromBracedBlock(trueStatementStr);
+	}
+
+	const semiIndex = findSemicolonOutsideBrackets(trueStatementStr);
+	if (semiIndex >= 0) {
+		return trueStatementStr.substring(semiIndex + 1).trim();
+	}
+	return '';
+}
+
+/**
+ * Extracts remaining string after an else statement.
+ */
+function extractRemainingFromElseStatement(falseStatementStr: string): string {
 	const isBraced = falseStatementStr.startsWith('{');
 	if (isBraced) {
 		return extractRemainingFromBracedBlock(falseStatementStr);
@@ -386,7 +406,7 @@ function extractRemaining(falseStatementStr: string): string {
 }
 
 /**
- * Processes the selected branch of an if-else statement.
+ * Processes the selected branch of an if or if-else statement.
  */
 function processBranch(
 	statementStr: string,
@@ -399,13 +419,33 @@ function processBranch(
 	return processStatements(statementStr, context, true);
 }
 
-function processIfElseStatement(
-	input: string,
-	context: ExecutionContext,
-): Result<ContextAndRemaining> {
+/**
+ * Determines remaining input after if branch.
+ */
+function getRemainingAfterIf(
+	isTruthy: boolean,
+	hasElse: boolean,
+	branches: IfStatementBranches,
+): string {
+	if (isTruthy && hasElse) {
+		return extractRemainingFromElseStatement(branches.falseStatementStr as string);
+	}
+
+	if (isTruthy) {
+		return extractRemainingFromIfStatement(branches.trueStatementStr);
+	}
+
+	if (hasElse) {
+		return extractRemainingFromElseStatement(branches.falseStatementStr as string);
+	}
+
+	return extractRemainingFromIfStatement(branches.trueStatementStr);
+}
+
+function processIfStatement(input: string, context: ExecutionContext): Result<ContextAndRemaining> {
 	const trimmed = input.trim();
 	if (!trimmed.startsWith('if ')) {
-		return err('Not an if-else statement');
+		return err('Not an if statement');
 	}
 
 	const afterIf = trimmed.substring(3).trim();
@@ -421,9 +461,9 @@ function processIfElseStatement(
 	const conditionStr = afterIf.substring(1, conditionEnd);
 	const afterCondition = afterIf.substring(conditionEnd + 1).trim();
 
-	const branchesResult = extractIfElseBranches(afterCondition);
-	if (branchesResult.error !== undefined) {
-		return err(branchesResult.error);
+	const branchesResult = extractIfStatementBranches(afterCondition);
+	if (branchesResult === undefined) {
+		return err('Invalid if statement');
 	}
 
 	const conditionResult = interpretInternal(conditionStr, context);
@@ -432,19 +472,24 @@ function processIfElseStatement(
 	}
 
 	const isTruthy = conditionResult.value !== 0;
-	let statementStr: string;
+	const hasElse = branchesResult.falseStatementStr !== undefined;
+	let statementToExecute: string;
+
 	if (isTruthy) {
-		statementStr = branchesResult.trueStatementStr;
+		statementToExecute = branchesResult.trueStatementStr;
+	} else if (hasElse) {
+		statementToExecute = branchesResult.falseStatementStr as string;
 	} else {
-		statementStr = branchesResult.falseStatementStr;
+		const remaining = extractRemainingFromIfStatement(branchesResult.trueStatementStr);
+		return ok({ context, remaining });
 	}
 
-	const statementsResult = processBranch(statementStr, context);
+	const statementsResult = processBranch(statementToExecute, context);
 	if (statementsResult.type === 'err') {
 		return statementsResult;
 	}
 
-	const remaining = extractRemaining(branchesResult.falseStatementStr);
+	const remaining = getRemainingAfterIf(isTruthy, hasElse, branchesResult);
 	return ok({ context: statementsResult.value.context, remaining });
 }
 
@@ -465,8 +510,8 @@ function processStatements(
 			result = processLetDeclaration(remaining, currentContext);
 		} else if (allowBlocks && shouldProcessAsStatementBlock(trimmed)) {
 			result = processBracedBlock(remaining, currentContext);
-		} else if (isIfElseStatement(trimmed)) {
-			result = processIfElseStatement(remaining, currentContext);
+		} else if (isIfStatement(trimmed)) {
+			result = processIfStatement(remaining, currentContext);
 		} else if (isAssignmentStatement(trimmed)) {
 			result = processAssignmentStatement(remaining, currentContext);
 		} else {
