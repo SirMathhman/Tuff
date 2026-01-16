@@ -127,7 +127,7 @@ fn parse_factor_with_type(
         Ok((result, "".to_string()))
     } else if input[*pos..].trim_start().starts_with('{') {
         *pos += 1;
-        let result = parse_block(input, pos, env)?;
+        let (result, _) = parse_block(input, pos, env)?;
         expect_closing(input, pos, '}', "Missing closing curly brace")?;
         Ok((result, "".to_string()))
     } else if input[*pos..]
@@ -233,8 +233,15 @@ pub fn interpret(input: &str) -> Result<i32, String> {
         // Check if it's a block statement
         if trimmed.starts_with('{') {
             pos += 1;
-            result = parse_block(input, &mut pos, &mut env)?;
+            let (block_result, is_expression) = parse_block(input, &mut pos, &mut env)?;
             expect_closing(input, &mut pos, '}', "Missing closing curly brace")?;
+            if is_expression {
+                return Err(
+                    "Block expressions must be used in a context (e.g., as an initializer)"
+                        .to_string(),
+                );
+            }
+            result = block_result;
             // Continue parsing to see if there are more statements
             continue;
         }

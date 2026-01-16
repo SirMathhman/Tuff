@@ -307,20 +307,27 @@ mod tests {
     }
 
     #[test]
-    fn test_pointer_assignment_in_block_persists() {
-        assert_eq!(
-            interpret("let mut x = 0; let y = &x; { *y = 50; } x"),
-            Ok(50)
-        );
-    }
-
-    #[test]
     fn test_block_with_literal_no_persist() {
         assert!(interpret("let x : I32; { x = 100; 7893 } x").is_err());
     }
 
     #[test]
-    fn test_outer_variable_accessible_in_block() {
-        assert_eq!(interpret("let x = 100; { 7893 } x"), Ok(100));
+    fn test_block_statement_assignment() {
+        // Statement block: x remains uninitialized after the block
+        // Block modifies local x, but assignment doesn't persist
+        assert!(interpret("let x : I32; { x = 100; } x").is_err());
+    }
+
+    #[test]
+    fn test_block_expression_as_initializer() {
+        // Block expression: the block's value initializes x
+        // x gets initialized to 100 (the block's return value)
+        assert_eq!(interpret("let x : I32 = { 100 }; x"), Ok(100));
+    }
+
+    #[test]
+    fn test_standalone_block_expression_error() {
+        // Standalone block expressions are invalid - they must be used in a context
+        assert!(interpret("let x = 100; { 7893 } x").is_err());
     }
 }
