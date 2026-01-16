@@ -39,3 +39,12 @@ Example:
 
 - Method pointer access with `::`:
   - `struct Point { x : I32, y : I32 } fn Point(x : I32, y : I32) : Point => { fn get() : I32 => x + y; this } let point = Point(3, 4); let getPtr : *() => I32 = point::get; getPtr(&point)`
+
+## Custom lints
+
+This repo uses a small custom lints tool (`tuff_lints`) to enforce a couple of rules that Clippy can't be configured for precisely.
+
+- Maximum nested block depth inside functions: `--max-fn-nesting` (default: 2)
+- Maximum number of fields per struct: `--max-struct-fields` (default: 5)
+
+The pre-commit hook runs the lints against `.tuff_lints_baseline.json`, which allows existing violations to remain while preventing new violations (or worsening existing ones).

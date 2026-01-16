@@ -13,6 +13,12 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-commit]
+      - id: tuff-lints
+        name: tuff lints (custom)
+        entry: cargo run --quiet --bin tuff_lints -- --baseline .tuff_lints_baseline.json --max-fn-nesting 2 --max-struct-fields 5
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
       - id: pmd-cpd
         name: pmd cpd
         entry: pmd cpd --dir src --language rust --minimum-tokens 50 --ignore-identifiers --ignore-literals
