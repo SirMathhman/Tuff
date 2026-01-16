@@ -1,6 +1,6 @@
 use crate::parse_utils::{
     check_and_consume_op, parse_dot_and_identifier, parse_identifier, parse_number_with_type,
-    skip_whitespace, try_parse_this_keyword,
+    skip_whitespace, try_parse_this_keyword, try_construct_struct_from_this,
 };
 use crate::statements::{
     parse_block, parse_top_level_assignment, parse_top_level_let, parse_top_level_struct,
@@ -177,10 +177,19 @@ fn parse_factor_with_type(
             return Ok((0, "Bool".to_string()));
         }
 
-        // Check for 'this' keyword for scope variable access
+        // Check for 'this' keyword for scope variable access or struct construction
         if identifier == "this" {
-            if let Ok(Some((val, type_name))) = try_parse_this_keyword(input, pos, env) {
-                return Ok((val, type_name));
+            skip_whitespace(input, pos);
+            if input[*pos..].trim_start().starts_with('.') {
+                // this.field - field access
+                if let Ok(Some((val, type_name))) = try_parse_this_keyword(input, pos, env) {
+                    return Ok((val, type_name));
+                }
+            } else {
+                // bare 'this' - try to construct a struct from parameters
+                if let Some((val, type_name)) = try_construct_struct_from_this(env)? {
+                    return Ok((val, type_name));
+                }
             }
         }
 

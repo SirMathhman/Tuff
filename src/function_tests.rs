@@ -36,17 +36,11 @@ mod tests {
 
     #[test]
     fn test_this_scope_access() {
-        assert_eq!(
-            interpret("let x = 100; this.x"),
-            Ok(100)
-        );
+        assert_eq!(interpret("let x = 100; this.x"), Ok(100));
     }
 
     #[test]
     fn test_this_scope_assignment() {
-        assert_eq!(
-            interpret("let mut x = 0; this.x = 100; x"),
-            Ok(100)
-        );
+        assert_eq!(interpret("let mut x = 0; this.x = 100; x"), Ok(100));
     }
 }

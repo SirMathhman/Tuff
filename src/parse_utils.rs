@@ -82,6 +82,45 @@ pub fn try_parse_this_keyword(
     }
 }
 
+pub fn try_construct_struct_from_this(env: &mut crate::variables::Environment) -> Result<Option<(i32, String)>, String> {
+    // Get struct registry and find a struct whose fields match parameters in env
+    for (struct_name, struct_def) in crate::variables::get_struct_registry() {
+        let mut struct_fields = std::collections::HashMap::new();
+        let mut all_fields_found = true;
+        
+        for (field_name, _field_type) in struct_def.fields.iter() {
+            if let Some(var_info) = env.get(field_name) {
+                if let Some(value) = var_info.value {
+                    struct_fields.insert(field_name.clone(), value);
+                } else {
+                    all_fields_found = false;
+                    break;
+                }
+            } else {
+                all_fields_found = false;
+                break;
+            }
+        }
+        
+        if all_fields_found && !struct_def.fields.is_empty() {
+            // Found a matching struct - store it like struct instantiation does
+            let temp_var_name = format!("_struct_inst_{}", struct_name);
+            let var_info = crate::variables::VariableInfo {
+                value: Some(0),
+                type_name: struct_name.clone(),
+                is_mutable: false,
+                points_to: None,
+                struct_fields: Some(struct_fields),
+                function_name: None,
+            };
+            env.insert(temp_var_name, var_info);
+            
+            return Ok(Some((0, struct_name.clone())));
+        }
+    }
+    Ok(None)
+}
+
 pub fn parse_dot_and_identifier(input: &str, pos: &mut usize) -> Result<Option<String>, String> {
     skip_whitespace(input, pos);
     if !input[*pos..].trim_start().starts_with('.') {

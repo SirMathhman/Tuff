@@ -57,4 +57,12 @@ mod tests {
             Ok(100)
         );
     }
+
+    #[test]
+    fn test_struct_constructor_function() {
+        assert_eq!(
+            interpret("struct Point { x : I32, y : I32 } fn Point(x : I32, y : I32) : Point => { this } let point : Point = Point(3, 4); point.x + point.y"),
+            Ok(7)
+        );
+    }
 }

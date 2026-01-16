@@ -328,6 +328,9 @@ pub fn parse_block(
     for (var_name, var_info) in local_env.iter() {
         if env.contains_key(var_name) {
             env.insert(var_name.clone(), var_info.clone());
+        } else if var_name.starts_with("_struct_inst_") {
+            // Temporary struct variables created by `this` keyword should be propagated
+            env.insert(var_name.clone(), var_info.clone());
         }
     }
 

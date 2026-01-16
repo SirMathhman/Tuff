@@ -107,28 +107,66 @@ pub fn parse_function_definition(
 
     consume_token(input, pos, "=>")?;
 
-
     skip_whitespace(input, pos);
 
-    // Find the function body - it ends at ';'
+    // Find the function body - it can end with ';' or a statement keyword
     let body_start = *pos;
-    let mut body_end = *pos;
     let rest = &input[body_start..];
+    let trimmed = rest.trim_start();
     
-    // Find the semicolon that ends the function definition
-    for (i, c) in rest.chars().enumerate() {
-        if c == ';' {
-            body_end = body_start + i;
-            *pos = body_start + i + 1;
-            break;
+    let body = if trimmed.starts_with('{') {
+        // If the body starts with '{', find the matching closing brace
+        let ws_offset = rest.len() - trimmed.len();
+        let mut brace_count = 0;
+        let mut found_end = false;
+        let mut end_pos = body_start + ws_offset;
+        
+        for (i, c) in trimmed.chars().enumerate() {
+            if c == '{' {
+                brace_count += 1;
+            } else if c == '}' {
+                brace_count -= 1;
+                if brace_count == 0 {
+                    end_pos = body_start + ws_offset + i + 1;
+                    found_end = true;
+                    break;
+                }
+            }
         }
-    }
-
-    if body_end == body_start {
-        return Err("Function body must end with ';'".to_string());
-    }
-
-    let body = input[body_start..body_end].trim().to_string();
+        
+        if !found_end {
+            return Err("Unclosed brace in function body".to_string());
+        }
+        
+        let body_str = input[body_start..end_pos].trim().to_string();
+        
+        // After the closing brace, check for a semicolon
+        *pos = end_pos;
+        skip_whitespace(input, pos);
+        if *pos < input.len() && input[*pos..].starts_with(';') {
+            *pos += 1;
+        }
+        // If no semicolon, that's OK - the next statement will parse
+        body_str
+    } else {
+        // For non-block bodies, find the semicolon
+        let mut found_end = false;
+        let mut body_end = body_start;
+        for (i, c) in rest.chars().enumerate() {
+            if c == ';' {
+                body_end = body_start + i;
+                *pos = body_start + i + 1;
+                found_end = true;
+                break;
+            }
+        }
+        
+        if !found_end {
+            return Err("Function body must end with ';'".to_string());
+        }
+        
+        input[body_start..body_end].trim().to_string()
+    };
 
     let func_def = FunctionDef {
         name: func_name,
@@ -196,6 +234,14 @@ pub fn try_parse_function_call(
     // Evaluate the function body
     let mut body_pos = 0;
     let result = crate::parser::interpret_at(&func.body, &mut body_pos, &mut func_env)?;
+
+    // If the return type is a struct, copy the temporary struct variable back to the caller's environment
+    if !func.return_type.is_empty() && func.return_type.chars().next().is_some_and(|c| c.is_uppercase()) {
+        let temp_var_name = format!("_struct_inst_{}", func.return_type);
+        if let Some(struct_var) = func_env.get(&temp_var_name) {
+            env.insert(temp_var_name, struct_var.clone());
+        }
+    }
 
     Ok(Some((result, func.return_type)))
 }
