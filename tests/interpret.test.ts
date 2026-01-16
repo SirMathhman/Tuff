@@ -144,4 +144,12 @@ describe('interpret', () => {
 			expect(result.value).toBe(2);
 		}
 	});
+
+	it('should interpret "4 + 2 * 3" as 10', () => {
+		const result = interpret('4 + 2 * 3');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(10);
+		}
+	});
 });
