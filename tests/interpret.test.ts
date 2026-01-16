@@ -328,4 +328,12 @@ describe('interpret', () => {
 			expect(result.error).toContain('already defined');
 		}
 	});
+
+	it('should interpret "10 / ({ let x = 7; let y = x; y } - 2)" as 2', () => {
+		const result = interpret('10 / ({ let x = 7; let y = x; y } - 2)');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(2);
+		}
+	});
 });

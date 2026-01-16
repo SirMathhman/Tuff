@@ -133,7 +133,7 @@ function parseVariableDeclarationHeader(withoutLet: string): Result<VariableDecl
 	return ok({ varName, typeAnnotation, afterTypeOrName });
 }
 
-function parseVariableBinding(input: string): Result<ParsedBinding> {
+function parseVariableBinding(input: string, context: ExecutionContext): Result<ParsedBinding> {
 	const trimmed = input.trim();
 	if (!trimmed.startsWith('let ')) {
 		return err('Expected variable declaration');
@@ -155,7 +155,7 @@ function parseVariableBinding(input: string): Result<ParsedBinding> {
 	const valueStr = withoutEqual.substring(0, semiIndex).trim();
 	const remaining = withoutEqual.substring(semiIndex + 1).trim();
 
-	const valueResult = interpretInternal(valueStr, { bindings: [] });
+	const valueResult = interpretInternal(valueStr, context);
 	if (valueResult.type === 'err') {
 		return valueResult;
 	}
@@ -257,7 +257,7 @@ function processVariableBindings(
 	let remaining = input;
 
 	while (remaining.trim().startsWith('let ')) {
-		const bindResult = parseVariableBinding(remaining);
+		const bindResult = parseVariableBinding(remaining, currentContext);
 		if (bindResult.type === 'err') {
 			return bindResult;
 		}
