@@ -1,4 +1,5 @@
 use crate::validators::validate_type_range;
+use crate::variables::Environment;
 
 pub fn parse_number_inner(input: &str) -> Result<(i64, String, usize), String> {
     let trimmed = input.trim_start();
@@ -59,4 +60,39 @@ pub fn check_and_consume_op(input: &str, pos: &mut usize, ops: &str) -> Option<c
         }
     }
     None
+}
+
+pub fn try_parse_this_keyword(
+    input: &str,
+    pos: &mut usize,
+    env: &Environment,
+) -> Result<Option<(i32, String)>, String> {
+    if let Ok(Some(var_name)) = parse_dot_and_identifier(input, pos) {
+        let var_info = env
+            .get(&var_name)
+            .ok_or_else(|| format!("Undefined variable: {}", var_name))?
+            .clone();
+
+        Ok(Some((
+            var_info.value.ok_or("Variable has no value")?,
+            var_info.type_name,
+        )))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn parse_dot_and_identifier(input: &str, pos: &mut usize) -> Result<Option<String>, String> {
+    skip_whitespace(input, pos);
+    if !input[*pos..].trim_start().starts_with('.') {
+        return Ok(None);
+    }
+
+    let trimmed = input[*pos..].trim_start();
+    *pos += input[*pos..].len() - trimmed.len() + 1;
+
+    let (field_name, field_len) = parse_identifier(&input[*pos..])?;
+    *pos += field_len;
+
+    Ok(Some(field_name))
 }

@@ -33,4 +33,12 @@ mod tests {
             Ok(7)
         );
     }
+
+    #[test]
+    fn test_this_scope_access() {
+        assert_eq!(
+            interpret("let x = 100; this.x"),
+            Ok(100)
+        );
+    }
 }

@@ -6,19 +6,23 @@ pub use control_flow::{
     parse_block, parse_for_statement, parse_if_statement, parse_while_statement,
 };
 
+#[allow(clippy::too_many_lines)]
 fn read_type_name_after_colon(input: &str, pos: &mut usize) -> Result<String, String> {
     skip_whitespace(input, pos);
     let rest = &input[*pos..];
-    
+
     // Check for function pointer type: (Type, Type) => ReturnType
     if rest.starts_with('(') {
         let mut type_str = String::new();
         let mut depth = 0;
         let mut temp_pos = 0;
-        
+
         while temp_pos < rest.len() {
-            let c = rest.chars().nth(temp_pos).ok_or("Invalid character in type")?;
-            
+            let c = rest
+                .chars()
+                .nth(temp_pos)
+                .ok_or("Invalid character in type")?;
+
             if c == '(' {
                 depth += 1;
                 type_str.push(c);
@@ -32,26 +36,26 @@ fn read_type_name_after_colon(input: &str, pos: &mut usize) -> Result<String, St
             }
             temp_pos += 1;
         }
-        
+
         if depth != 0 {
             return Err("Unmatched parentheses in function type".to_string());
         }
-        
+
         skip_whitespace(&rest[temp_pos..], &mut 0);
         let remaining = &rest[temp_pos..].trim_start();
-        
+
         if remaining.starts_with("=>") {
             type_str.push_str(" => ");
             temp_pos += rest[temp_pos..].len() - remaining.len() + 2;
-            
+
             let (return_type, return_len) = parse_identifier(&rest[temp_pos..])?;
             type_str.push_str(&return_type);
             temp_pos += return_len;
-            
+
             *pos += temp_pos;
             return Ok(type_str);
         }
-        
+
         Err("Expected '=>' in function type".to_string())
     } else {
         // Regular type with optional pointers
@@ -223,20 +227,30 @@ pub fn parse_let_statement(
         if !input[*pos..].trim_start().starts_with(';') {
             return Err("Expected ';' or '=' in let statement".to_string());
         }
-        store_variable(env, var_name, None, declared_type, None, true, None, None, None)?;
+        store_variable(
+            env,
+            var_name,
+            None,
+            declared_type,
+            None,
+            true,
+            None,
+            None,
+            None,
+        )?;
         skip_whitespace(input, pos);
         *pos += 1;
         return Ok(());
     }
     *pos += 1;
     skip_whitespace(input, pos);
-    
+
     // Check if this is a function pointer assignment (RHS is an identifier that refers to a function)
     let saved_pos = *pos;
     if let Ok((func_name, name_len)) = parse_identifier(&input[*pos..]) {
         let after_name_pos = saved_pos + name_len;
         let after_name = &input[after_name_pos..].trim_start();
-        
+
         // If RHS is just an identifier followed by semicolon, check if it's a function
         if after_name.starts_with(';') && crate::variables::get_function(&func_name).is_some() {
             *pos = after_name_pos;
@@ -256,7 +270,7 @@ pub fn parse_let_statement(
             return Ok(());
         }
     }
-    
+
     // Otherwise parse as normal expression
     *pos = saved_pos;
     let (val, actual_type, points_to) = parse_value_or_reference(input, pos, env)?;

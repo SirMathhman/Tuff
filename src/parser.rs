@@ -1,5 +1,6 @@
 use crate::parse_utils::{
-    check_and_consume_op, parse_identifier, parse_number_with_type, skip_whitespace,
+    check_and_consume_op, parse_dot_and_identifier, parse_identifier, parse_number_with_type,
+    skip_whitespace, try_parse_this_keyword,
 };
 use crate::statements::{
     parse_block, parse_top_level_assignment, parse_top_level_let, parse_top_level_struct,
@@ -16,19 +17,12 @@ fn try_parse_field_access(
     pos: &mut usize,
     env: &Environment,
 ) -> Result<Option<(i32, String)>, String> {
-    skip_whitespace(input, pos);
-    if !input[*pos..].trim_start().starts_with('.') {
-        return Ok(None);
+    if let Ok(Some(field_name)) = parse_dot_and_identifier(input, pos) {
+        let field_value = crate::structs::get_field_value(var_name, &field_name, env)?;
+        Ok(Some((field_value, "".to_string())))
+    } else {
+        Ok(None)
     }
-
-    let trimmed = input[*pos..].trim_start();
-    *pos += input[*pos..].len() - trimmed.len() + 1;
-
-    let (field_name, field_len) = parse_identifier(&input[*pos..])?;
-    *pos += field_len;
-
-    let field_value = crate::structs::get_field_value(var_name, &field_name, env)?;
-    Ok(Some((field_value, "".to_string())))
 }
 
 fn apply_multiplication_division(lhs: i32, op: char, rhs: i32) -> Result<i32, String> {
@@ -181,6 +175,13 @@ fn parse_factor_with_type(
             return Ok((1, "Bool".to_string()));
         } else if identifier == "false" {
             return Ok((0, "Bool".to_string()));
+        }
+
+        // Check for 'this' keyword for scope variable access
+        if identifier == "this" {
+            if let Ok(Some((val, type_name))) = try_parse_this_keyword(input, pos, env) {
+                return Ok((val, type_name));
+            }
         }
 
         // Try to parse struct instantiation
