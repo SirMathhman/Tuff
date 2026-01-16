@@ -25,4 +25,12 @@ mod tests {
             Ok(10)
         );
     }
+
+    #[test]
+    fn test_function_pointer_assignment() {
+        assert_eq!(
+            interpret("fn add(first : I32, second : I32) : I32 => first + second; let accept : (I32, I32) => I32 = add; accept(3, 4)"),
+            Ok(7)
+        );
+    }
 }

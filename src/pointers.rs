@@ -75,7 +75,6 @@ pub fn assign_through_pointer(
             .get(&pointed_var_name)
             .ok_or_else(|| format!("Referenced variable '{}' not found", pointed_var_name))?
             .clone();
-
         // Update the pointed variable with the new value
         env.insert(
             pointed_var_name,
@@ -85,6 +84,7 @@ pub fn assign_through_pointer(
                 is_mutable: pointed_var.is_mutable,
                 points_to: pointed_var.points_to,
                 struct_fields: pointed_var.struct_fields,
+                function_name: pointed_var.function_name,
             },
         );
         Ok(())

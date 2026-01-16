@@ -188,6 +188,7 @@ pub fn try_parse_function_call(
                 is_mutable: false,
                 points_to: None,
                 struct_fields: None,
+                function_name: None,
             },
         );
     }

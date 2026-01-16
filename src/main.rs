@@ -1,10 +1,10 @@
+mod functions;
 mod parse_utils;
 mod parser;
 mod pointers;
 mod repl;
 mod statements;
 mod structs;
-mod functions;
 mod validators;
 mod variables;
 use parser::interpret;

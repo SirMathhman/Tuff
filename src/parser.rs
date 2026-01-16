@@ -215,6 +215,15 @@ fn parse_factor_with_type(
             return Ok((field_value, "".to_string()));
         }
 
+        // Check for function pointer call
+        if let Some(func_name) = &var_info.function_name {
+            if let Ok(Some((val, type_name))) =
+                crate::functions::try_parse_function_call(func_name, input, pos, env)
+            {
+                return Ok((val, type_name));
+            }
+        }
+
         let val = var_info
             .value
             .ok_or_else(|| format!("Variable '{}' is not initialized", identifier))?;

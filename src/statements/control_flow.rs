@@ -402,6 +402,7 @@ fn parse_for_condition_and_statement(
             is_mutable: false,
             points_to: None,
             struct_fields: None,
+            function_name: None,
         };
         env.insert(loop_var.clone(), var_info);
 

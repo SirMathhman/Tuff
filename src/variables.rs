@@ -7,6 +7,7 @@ pub struct VariableInfo {
     pub is_mutable: bool,
     pub points_to: Option<String>, // If this is a reference, which variable does it point to?
     pub struct_fields: Option<HashMap<String, i32>>, // For struct instances
+    pub function_name: Option<String>, // For function pointers, which function does it reference?
 }
 
 #[derive(Clone)]
