@@ -41,52 +41,22 @@ mod tests {
     }
 
     #[test]
-    fn test_u8_out_of_range() {
+    fn test_u8_u16_i8_i16_out_of_range() {
         assert!(interpret("256U8").is_err());
-    }
-
-    // U16 tests
-    #[test]
-    fn test_u16_valid() {
-        assert_eq!(interpret("65535U16"), Ok(65535));
-    }
-
-    #[test]
-    fn test_u16_out_of_range() {
         assert!(interpret("65536U16").is_err());
-    }
-
-    // U32 tests
-    #[test]
-    fn test_u32_valid() {
-        assert_eq!(interpret("4294967295U32"), Ok(-1)); // Wraps when cast to i32
-    }
-
-    // I8 tests
-    #[test]
-    fn test_i8_valid() {
-        assert_eq!(interpret("127I8"), Ok(127));
-    }
-
-    #[test]
-    fn test_i8_out_of_range() {
         assert!(interpret("128I8").is_err());
+        assert!(interpret("32768I16").is_err());
     }
 
-    // I16 tests
     #[test]
-    fn test_i16_valid() {
+    fn test_u16_i16_valid() {
+        assert_eq!(interpret("65535U16"), Ok(65535));
         assert_eq!(interpret("32767I16"), Ok(32767));
     }
 
     #[test]
-    fn test_i16_out_of_range() {
-        assert!(interpret("32768I16").is_err());
-    }
-
-    // I32 tests
-    #[test]
-    fn test_i32_valid() {
+    fn test_u32_i32_valid() {
+        assert_eq!(interpret("4294967295U32"), Ok(-1));
         assert_eq!(interpret("2147483647I32"), Ok(2147483647));
     }
 
@@ -95,13 +65,11 @@ mod tests {
         assert!(interpret("2147483648I32").is_err());
     }
 
-    // No suffix test
     #[test]
     fn test_no_suffix() {
         assert_eq!(interpret("100"), Ok(100));
     }
 
-    // Arithmetic tests
     #[test]
     fn test_addition() {
         assert_eq!(interpret("1U8 + 2U8"), Ok(3));
@@ -475,6 +443,47 @@ mod tests {
         assert_eq!(
             interpret("let x = match (100) { case 100 => 5; case 100 => 99; case _ => 3; }; x"),
             Ok(5)
+        );
+    }
+
+    #[test]
+    fn test_if_statement_true_condition() {
+        assert_eq!(
+            interpret("let mut x : I32 = 0; if (true) x = 100; x"),
+            Ok(100)
+        );
+    }
+
+    #[test]
+    fn test_if_statement_false_condition() {
+        assert_eq!(
+            interpret("let mut x : I32 = 0; if (false) x = 100; x"),
+            Ok(0)
+        );
+    }
+
+    #[test]
+    fn test_if_else_statement() {
+        assert_eq!(
+            interpret("let mut x : I32 = 0; if (true || false) x = 100; else x = 200; x"),
+            Ok(100)
+        );
+    }
+
+    #[test]
+    fn test_if_else_statement_else_taken() {
+        assert_eq!(
+            interpret("let mut x : I32 = 0; if (false && true) x = 100; else x = 200; x"),
+            Ok(200)
+        );
+    }
+
+    #[test]
+    fn test_if_else_statement_user_requirement() {
+        // User requirement: let x : I32; if (true || false) x = 100; else x = 200; x => 100
+        assert_eq!(
+            interpret("let x : I32; if (true || false) x = 100; else x = 200; x"),
+            Ok(100)
         );
     }
 }

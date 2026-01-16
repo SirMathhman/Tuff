@@ -231,7 +231,11 @@ fn check_and_consume_op(input: &str, pos: &mut usize, ops: &str) -> Option<char>
     None
 }
 
-fn parse_paren_expression(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i32, String> {
+fn parse_paren_expression(
+    input: &str,
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<i32, String> {
     skip_whitespace(input, pos);
     if !input[*pos..].trim_start().starts_with('(') {
         return Err("Expected '(' to open expression".to_string());
@@ -403,8 +407,9 @@ pub fn interpret(input: &str) -> Result<i32, String> {
     loop {
         let parsed_let = parse_top_level_let(input, &mut pos, &mut env)?;
         let parsed_assign = parse_top_level_assignment(input, &mut pos, &mut env)?;
+        let parsed_if = crate::statements::parse_if_statement(input, &mut pos, &mut env)?;
 
-        if !parsed_let && !parsed_assign {
+        if !parsed_let && !parsed_assign && !parsed_if {
             break;
         }
     }

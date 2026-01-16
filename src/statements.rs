@@ -143,11 +143,7 @@ pub fn parse_let_statement(
     pos: &mut usize,
     env: &mut Environment,
 ) -> Result<(), String> {
-    if !&input[*pos..].trim_start().starts_with("let ") {
-        return Ok(());
-    }
     skip_whitespace(input, pos);
-    *pos += 4;
     skip_whitespace(input, pos);
     let is_mutable = if input[*pos..].trim_start().starts_with("mut ") {
         skip_whitespace(input, pos);
@@ -293,6 +289,105 @@ pub fn parse_assignment_statement(
     Ok(true)
 }
 
+fn parse_if_condition_and_statements(
+    input: &str,
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<(), String> {
+    skip_whitespace(input, pos);
+
+    // Parse condition in parentheses
+    if !input[*pos..].trim_start().starts_with('(') {
+        return Err("Expected '(' after 'if'".to_string());
+    }
+    *pos += input[*pos..].len() - input[*pos..].trim_start().len() + 1;
+
+    let condition = crate::parser::interpret_at(input, pos, env)?;
+
+    skip_whitespace(input, pos);
+    if !input[*pos..].trim_start().starts_with(')') {
+        return Err("Expected ')' after condition".to_string());
+    }
+    *pos += input[*pos..].len() - input[*pos..].trim_start().len() + 1;
+
+    skip_whitespace(input, pos);
+
+    if condition != 0 {
+        parse_statement_inner(input, pos, env)?;
+    } else {
+        skip_single_statement(input, pos);
+    }
+
+    skip_whitespace(input, pos);
+    let trimmed = input[*pos..].trim_start();
+
+    if trimmed.starts_with("else") {
+        *pos += input[*pos..].len() - trimmed.len() + 4;
+        skip_whitespace(input, pos);
+
+        if condition == 0 {
+            parse_statement_inner(input, pos, env)?;
+        } else {
+            skip_single_statement(input, pos);
+        }
+    }
+
+    Ok(())
+}
+
+fn check_keyword_match(input: &str, pos: &mut usize, keyword: &str) -> bool {
+    let rest = &input[*pos..];
+    let trimmed = rest.trim_start();
+
+    if !trimmed.starts_with(keyword) {
+        return false;
+    }
+
+    // Only update pos if it matches
+    *pos += rest.len() - trimmed.len() + keyword.len();
+    true
+}
+
+pub fn parse_if_statement(
+    input: &str,
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<bool, String> {
+    if !check_keyword_match(input, pos, "if ") {
+        return Ok(false);
+    }
+    parse_if_condition_and_statements(input, pos, env)?;
+    Ok(true)
+}
+
+fn parse_statement_inner(
+    input: &str,
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<(), String> {
+    let rest = &input[*pos..];
+    let trimmed = rest.trim_start();
+
+    if trimmed.starts_with("let ") {
+        *pos += rest.len() - trimmed.len() + 4;
+        parse_let_statement(input, pos, env)?;
+    } else {
+        parse_assignment_statement(input, pos, env)?;
+    }
+    Ok(())
+}
+
+fn skip_single_statement(input: &str, pos: &mut usize) {
+    skip_whitespace(input, pos);
+    // Skip until semicolon
+    while *pos < input.len() && input.as_bytes()[*pos] != b';' {
+        *pos += 1;
+    }
+    if *pos < input.len() {
+        *pos += 1;
+    }
+}
+
 pub fn parse_block(
     input: &str,
     pos: &mut usize,
@@ -314,7 +409,10 @@ pub fn parse_block(
         }
 
         if trimmed.starts_with("let ") {
+            *pos += 4; // Skip "let "
             parse_let_statement(input, pos, &mut local_env)?;
+        } else if trimmed.starts_with("if ") {
+            parse_if_statement(input, pos, &mut local_env)?;
         } else if parse_assignment_statement(input, pos, &mut local_env)? {
             // Assignment was parsed
         } else {
@@ -332,13 +430,9 @@ pub fn parse_top_level_let(
     pos: &mut usize,
     env: &mut Environment,
 ) -> Result<bool, String> {
-    let rest = &input[*pos..];
-    let trimmed = rest.trim_start();
-
-    if !trimmed.starts_with("let ") {
+    if !check_keyword_match(input, pos, "let ") {
         return Ok(false);
     }
-
     parse_let_statement(input, pos, env)?;
     Ok(true)
 }
