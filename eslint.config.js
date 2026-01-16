@@ -65,6 +65,7 @@ module.exports = [
       'no-param-reassign': 'error',
       'no-regex-literals': 'off', // We use no-restricted-syntax instead for more control
       'max-depth': ['error', 2],
+      'max-lines-per-function': ['error', { max: 50 }],
 
       // Ban regex literals and null usage
       'no-restricted-syntax': [
