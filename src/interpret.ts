@@ -168,17 +168,32 @@ export function interpret(input: string): Result<number> {
     return leftResult;
   }
 
-  const rightResult = parseLiteral(rightStr);
-  if (rightResult.type === 'err') {
-    return rightResult;
+  const rightMatch = findOperator(rightStr);
+  let rightValue: number;
+  let rightTypeSuffix: string | undefined;
+
+  if (rightMatch === undefined) {
+    const rightResult = parseLiteral(rightStr);
+    if (rightResult.type === 'err') {
+      return rightResult;
+    }
+
+    rightValue = rightResult.value;
+    rightTypeSuffix = getTypeSuffix(rightStr);
+  } else {
+    const rightInterpret = interpret(rightStr);
+    if (rightInterpret.type === 'err') {
+      return rightInterpret;
+    }
+
+    rightValue = rightInterpret.value;
   }
 
-  const opResult = evaluateBinaryOp(leftResult.value, operator, rightResult.value);
+  const opResult = evaluateBinaryOp(leftResult.value, operator, rightValue);
   if (opResult.type === 'err') {
     return opResult;
   }
 
-  const rightTypeSuffix = getTypeSuffix(rightStr);
   const leftTypeSuffix = getTypeSuffix(leftStr);
 
   if (rightTypeSuffix !== undefined && leftTypeSuffix !== undefined) {

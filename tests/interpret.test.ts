@@ -96,4 +96,12 @@ describe('interpret', () => {
       expect(result.value).toBe(256);
     }
   });
+
+  it('should interpret "1 + 2 + 3" as 6', () => {
+    const result = interpret('1 + 2 + 3');
+    expect(result.type).toBe('ok');
+    if (result.type === 'ok') {
+      expect(result.value).toBe(6);
+    }
+  });
 });
