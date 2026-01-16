@@ -80,16 +80,29 @@ fn parse_statement_or_block(
         consume_required_char(input, pos, '}', "Expected '}' to close block")?;
         Ok(())
     } else {
-        parse_statement_inner(input, pos, env)
+        // Try to parse as a statement
+        let rest = &input[*pos..];
+        let trimmed = rest.trim_start();
+        
+        if trimmed.starts_with("let ") || trimmed.starts_with("break") || trimmed.starts_with("continue") {
+            parse_statement_inner(input, pos, env)?;
+            Ok(())
+        } else if super::parse_assignment_statement(input, pos, env)? {
+            Ok(())
+        } else {
+            // If it's not a statement, try to parse as an expression
+            let _ = parse_expression_in_block(input, pos, env)?;
+            Ok(())
+        }
     }
 }
 
 fn skip_single_statement(input: &str, pos: &mut usize) {
     skip_whitespace(input, pos);
-    while *pos < input.len() && input.as_bytes()[*pos] != b';' {
+    while *pos < input.len() && input.as_bytes()[*pos] != b';' && input.as_bytes()[*pos] != b'}' {
         *pos += 1;
     }
-    if *pos < input.len() {
+    if *pos < input.len() && input.as_bytes()[*pos] == b';' {
         *pos += 1;
     }
 }
@@ -146,6 +159,129 @@ fn parse_if_condition_and_statements(
     }
 
     Ok(())
+}
+
+fn is_else_boundary(trimmed: &str) -> bool {
+    if !trimmed.starts_with("else") {
+        return false;
+    }
+    let after = trimmed.get(4..).and_then(|s| s.chars().next());
+    match after {
+        None => true,
+        Some(ch) => !ch.is_alphanumeric() && ch != '_',
+    }
+}
+
+fn parse_expression_in_block(
+    input: &str,
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<i32, String> {
+    let result = crate::parser::interpret_at(input, pos, env)?;
+    skip_whitespace(input, pos);
+    if *pos < input.len() && input.as_bytes()[*pos] == b';' {
+        *pos += 1;
+    }
+    Ok(result)
+}
+
+#[allow(clippy::too_many_lines)]
+fn if_has_else(input: &str, pos: usize) -> Result<bool, String> {
+    let mut scan_pos = pos;
+    let rest = &input[scan_pos..];
+    let trimmed = rest.trim_start();
+    scan_pos += rest.len() - trimmed.len();
+
+    if !trimmed.starts_with("if") {
+        return Ok(false);
+    }
+
+    scan_pos += 2;
+    skip_whitespace(input, &mut scan_pos);
+
+    let trimmed = input[scan_pos..].trim_start();
+    if !trimmed.starts_with('(') {
+        return Err("Expected '(' after 'if'".to_string());
+    }
+    scan_pos += input[scan_pos..].len() - trimmed.len() + 1;
+
+    let mut paren_depth = 1;
+    while scan_pos < input.len() && paren_depth > 0 {
+        match input.as_bytes()[scan_pos] {
+            b'(' => paren_depth += 1,
+            b')' => paren_depth -= 1,
+            _ => {}
+        }
+        scan_pos += 1;
+    }
+
+    if paren_depth != 0 {
+        return Err("Mismatched parentheses in if condition".to_string());
+    }
+
+    skip_whitespace(input, &mut scan_pos);
+    let trimmed = input[scan_pos..].trim_start();
+    scan_pos += input[scan_pos..].len() - trimmed.len();
+
+    if trimmed.starts_with('{') {
+        let mut brace_depth = 1;
+        scan_pos += 1;
+        while scan_pos < input.len() && brace_depth > 0 {
+            match input.as_bytes()[scan_pos] {
+                b'{' => brace_depth += 1,
+                b'}' => brace_depth -= 1,
+                _ => {}
+            }
+            scan_pos += 1;
+        }
+        if brace_depth != 0 {
+            return Err("Missing closing '}' in if branch".to_string());
+        }
+
+        skip_whitespace(input, &mut scan_pos);
+        let trimmed = input[scan_pos..].trim_start();
+        if is_else_boundary(trimmed) {
+            return Ok(true);
+        }
+        return Ok(false);
+    }
+
+    let mut paren_depth = 0usize;
+    let mut brace_depth = 0usize;
+    while scan_pos < input.len() {
+        let b = input.as_bytes()[scan_pos];
+        match b {
+            b'(' => paren_depth += 1,
+            b')' => {
+                paren_depth = paren_depth.saturating_sub(1);
+            }
+            b'{' => brace_depth += 1,
+            b'}' => {
+                if brace_depth == 0 && paren_depth == 0 {
+                    return Ok(false);
+                }
+                brace_depth = brace_depth.saturating_sub(1);
+            }
+            b';' => {
+                if brace_depth == 0 && paren_depth == 0 {
+                    return Ok(false);
+                }
+            }
+            _ => {}
+        }
+
+        if brace_depth == 0 && paren_depth == 0 {
+            let remaining = &input[scan_pos..];
+            let trimmed = remaining.trim_start();
+            if is_else_boundary(trimmed) {
+                return Ok(true);
+            }
+        }
+
+        scan_pos += 1;
+    }
+
+    Ok(false)
 }
 
 pub fn parse_if_statement(
@@ -230,7 +366,7 @@ fn skip_to_closing_brace(input: &str, pos: &mut usize) {
     }
 }
 
-fn consume_break_or_continue_keyword(
+pub fn consume_break_or_continue_keyword(
     keyword: &str,
     input: &str,
     pos: &mut usize,
@@ -285,16 +421,32 @@ fn parse_local_function_definition(
     // Parse complete function
     let (func_name, params, return_type, body) = parse_complete_function(input, pos)?;
 
-    // Store the local function in the environment
+    // Create the VariableInfo for the function
+    let var_info = crate::variables::VariableInfo {
+        value: None,
+        type_name: "fn".to_string(),
+        is_mutable: false,
+        points_to: None,
+        struct_fields: None,
+        function_name: None,
+        local_function: None, // Will be set after insertion
+        methods: None,
+    };
+
+    // Insert placeholder first
+    env.insert(func_name.clone(), var_info);
+
+    // Now create the local function with environment that includes itself
     let local_func = LocalFunction {
         params,
         return_type,
         body,
-        captured_env: env.clone(), // Capture the current environment for closures
+        captured_env: env.clone(), // Now this includes the function itself!
     };
 
+    // Update with the actual function
     env.insert(
-        func_name,
+        func_name.clone(),
         crate::variables::VariableInfo {
             value: None,
             type_name: "fn".to_string(),
@@ -303,9 +455,10 @@ fn parse_local_function_definition(
             struct_fields: None,
             function_name: None,
             local_function: Some(Box::new(local_func)),
+            methods: None,
         },
     );
-
+    
     Ok(())
 }
 
@@ -336,10 +489,19 @@ pub fn parse_block(
         } else if trimmed.starts_with("fn ") {
             parse_local_function_definition(input, pos, &mut local_env)?;
         } else if trimmed.starts_with("if ") {
-            parse_if_statement(input, pos, &mut local_env)?;
-            if get_loop_control() != LoopControl::None {
-                skip_to_closing_brace(input, pos);
+            if if_has_else(input, *pos)? {
+                result = parse_expression_in_block(input, pos, &mut local_env)?;
+                has_expression = true;
                 break;
+            } else {
+                let parsed = parse_if_statement(input, pos, &mut local_env)?;
+                if !parsed {
+                    return Err("Expected 'if' statement".to_string());
+                }
+                if get_loop_control() != LoopControl::None {
+                    skip_to_closing_brace(input, pos);
+                    break;
+                }
             }
         } else if trimmed.starts_with("while ") {
             parse_while_statement(input, pos, &mut local_env)?;
@@ -365,12 +527,8 @@ pub fn parse_block(
                 break;
             }
         } else {
-            result = crate::parser::interpret_at(input, pos, &mut local_env)?;
+            result = parse_expression_in_block(input, pos, &mut local_env)?;
             has_expression = true;
-            skip_whitespace(input, pos);
-            if *pos < input.len() && input.as_bytes()[*pos] == b';' {
-                *pos += 1;
-            }
             break;
         }
     }
@@ -455,7 +613,10 @@ fn parse_for_condition_and_statement(
             is_mutable: false,
             points_to: None,
             struct_fields: None,
-            function_name: None,            local_function: None,        };
+            function_name: None,
+            local_function: None,
+            methods: None,
+        };
         env.insert(loop_var.clone(), var_info);
 
         // Reset position to body start for each iteration

@@ -5,7 +5,6 @@ mod control_flow;
 pub use control_flow::{
     parse_block, parse_for_statement, parse_if_statement, parse_while_statement,
 };
-
 #[allow(clippy::too_many_lines)]
 fn read_type_name_after_colon(input: &str, pos: &mut usize) -> Result<String, String> {
     skip_whitespace(input, pos);
@@ -71,7 +70,6 @@ fn read_type_name_after_colon(input: &str, pos: &mut usize) -> Result<String, St
         Ok(type_str)
     }
 }
-
 fn parse_type_annotation_optional(input: &str, pos: &mut usize) -> Result<Option<String>, String> {
     let rest = &input[*pos..];
     let trimmed = rest.trim_start();
@@ -86,7 +84,6 @@ fn parse_type_annotation_optional(input: &str, pos: &mut usize) -> Result<Option
     let type_name = read_type_name_after_colon(input, pos)?;
     Ok(Some(type_name))
 }
-
 #[allow(clippy::too_many_arguments)]
 fn store_variable(
     env: &mut Environment,
@@ -98,6 +95,7 @@ fn store_variable(
     points_to: Option<String>,
     struct_fields: Option<std::collections::HashMap<String, i32>>,
     function_name: Option<String>,
+    methods: Option<std::collections::HashMap<String, Box<crate::variables::LocalFunction>>>,
 ) -> Result<(), String> {
     let stored_type = if let Some(declared) = declared_type {
         if let Some(actual) = actual_type {
@@ -124,11 +122,11 @@ fn store_variable(
             struct_fields,
             function_name,
             local_function: None,
+            methods,
         },
     );
     Ok(())
 }
-
 fn update_mutable_var(
     env: &mut Environment,
     var_name: String,
@@ -157,11 +155,11 @@ fn update_mutable_var(
             struct_fields: var_info.struct_fields,
             function_name: None,
             local_function: None,
+            methods: None,
         },
     );
     Ok(())
 }
-
 fn expect_semicolon(input: &str, pos: &mut usize) -> Result<(), String> {
     skip_whitespace(input, pos);
     if !input[*pos..].trim_start().starts_with(';') {
@@ -170,7 +168,6 @@ fn expect_semicolon(input: &str, pos: &mut usize) -> Result<(), String> {
     *pos += 1;
     Ok(())
 }
-
 pub fn parse_value_or_reference(
     input: &str,
     pos: &mut usize,
@@ -201,7 +198,6 @@ pub fn parse_value_or_reference(
         Ok((val, ty, None))
     }
 }
-
 #[allow(clippy::too_many_lines)]
 pub fn parse_let_statement(
     input: &str,
@@ -239,6 +235,7 @@ pub fn parse_let_statement(
             None,
             None,
             None,
+            None,
         )?;
         skip_whitespace(input, pos);
         *pos += 1;
@@ -266,6 +263,7 @@ pub fn parse_let_statement(
                 None,
                 None,
                 Some(func_name),
+                None,
             )?;
             skip_whitespace(input, pos);
             *pos += 1;
@@ -277,13 +275,16 @@ pub fn parse_let_statement(
     *pos = saved_pos;
     let (val, actual_type, points_to) = parse_value_or_reference(input, pos, env)?;
 
-    // If we have a declared struct type, extract struct_fields from temp variable
-    let struct_fields = if let Some(ref decl_type) = declared_type {
+    // If we have a declared struct type, extract struct_fields and methods from temp variable
+    let (struct_fields, methods) = if let Some(ref decl_type) = declared_type {
         let temp_var_name = format!("_struct_inst_{}", decl_type);
-        env.get(&temp_var_name)
-            .and_then(|info| info.struct_fields.clone())
+        if let Some(info) = env.get(&temp_var_name) {
+            (info.struct_fields.clone(), info.methods.clone())
+        } else {
+            (None, None)
+        }
     } else {
-        None
+        (None, None)
     };
 
     store_variable(
@@ -296,11 +297,11 @@ pub fn parse_let_statement(
         points_to,
         struct_fields,
         None,
+        methods,
     )?;
     expect_semicolon(input, pos)?;
     Ok(())
 }
-
 fn try_parse_dereference_assignment(
     input: &str,
     pos: &mut usize,
@@ -457,7 +458,6 @@ pub fn parse_assignment_statement(
     expect_semicolon(input, pos)?;
     Ok(true)
 }
-
 fn check_keyword_match(input: &str, pos: &mut usize, keyword: &str) -> bool {
     let rest = &input[*pos..];
     let trimmed = rest.trim_start();

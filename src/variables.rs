@@ -10,6 +10,8 @@ pub struct VariableInfo {
     pub function_name: Option<String>, // For function pointers, which function does it reference?
     #[allow(dead_code)]
     pub local_function: Option<Box<LocalFunction>>, // For local function definitions with closures
+    #[allow(dead_code)]
+    pub methods: Option<HashMap<String, Box<LocalFunction>>>, // For struct instance methods
 }
 
 #[derive(Clone)]

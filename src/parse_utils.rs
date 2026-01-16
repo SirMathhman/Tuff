@@ -103,7 +103,15 @@ pub fn try_construct_struct_from_this(env: &mut crate::variables::Environment) -
         }
         
         if all_fields_found && !struct_def.fields.is_empty() {
-            // Found a matching struct - store it like struct instantiation does
+            // Found a matching struct - collect methods from environment
+            let mut methods = std::collections::HashMap::new();
+            for (var_name, var_info) in env.iter() {
+                if let Some(local_func) = &var_info.local_function {
+                    methods.insert(var_name.clone(), local_func.clone());
+                }
+            }
+            
+            // Store the struct instance like struct instantiation does
             let temp_var_name = format!("_struct_inst_{}", struct_name);
             let var_info = crate::variables::VariableInfo {
                 value: Some(0),
@@ -113,6 +121,7 @@ pub fn try_construct_struct_from_this(env: &mut crate::variables::Environment) -
                 struct_fields: Some(struct_fields),
                 function_name: None,
                 local_function: None,
+                methods: if methods.is_empty() { None } else { Some(methods) },
             };
             env.insert(temp_var_name, var_info);
             

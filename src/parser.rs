@@ -9,6 +9,7 @@ use crate::statements::{
 use crate::variables::Environment;
 
 mod comparison;
+mod match_expr;
 
 #[allow(dead_code)]
 fn try_parse_field_access(
@@ -23,6 +24,65 @@ fn try_parse_field_access(
     } else {
         Ok(None)
     }
+}
+
+/// Try to parse a method call on a struct instance or method call on a variable
+fn try_parse_method_call(
+    var_name: &str,
+    input: &str,
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<Option<(i32, String)>, String> {
+    use crate::parse_utils::parse_dot_and_identifier;
+    use crate::functions::parse_and_verify_arguments;
+
+    skip_whitespace(input, pos);
+    
+    // Save position in case this isn't a method call
+    let saved_pos = *pos;
+    
+    if let Ok(Some(method_name)) = parse_dot_and_identifier(input, pos) {
+        // Check if this is followed by parentheses (method call) or just a field
+        skip_whitespace(input, pos);
+        if input[*pos..].trim_start().starts_with('(') {
+            // This is a method call
+            let var_info = env
+                .get(var_name)
+                .ok_or_else(|| format!("Undefined variable: {}", var_name))?
+                .clone();
+            
+            // Check if the variable has methods
+            if let Some(methods) = &var_info.methods {
+                if let Some(method) = methods.get(&method_name) {
+                    // Parse arguments
+                    let args = parse_and_verify_arguments(input, pos, env, &method_name, method.params.len())?;
+                    
+                    // Create a new scope starting from the captured environment
+                    let mut method_env = crate::functions::bind_parameters(
+                        &method.params,
+                        &args,
+                        &method.captured_env,
+                    );
+                    
+                    // Evaluate the method body
+                    let mut body_pos = 0;
+                    let result = crate::parser::interpret_at(&method.body, &mut body_pos, &mut method_env)?;
+                    
+                    return Ok(Some((result, method.return_type.clone())));
+                }
+            }
+            
+            // Method not found, restore position
+            *pos = saved_pos;
+            return Ok(None);
+        } else {
+            // Not a method call, restore position
+            *pos = saved_pos;
+            return Ok(None);
+        }
+    }
+    
+    Ok(None)
 }
 
 fn apply_multiplication_division(lhs: i32, op: char, rhs: i32) -> Result<i32, String> {
@@ -167,7 +227,7 @@ fn parse_factor_with_type(
 
         // Check for match expression
         if identifier == "match" {
-            return parse_match_expression(input, pos, env);
+            return match_expr::parse_match_expression(input, pos, env);
         }
 
         // Check for Bool literals
@@ -219,6 +279,11 @@ fn parse_factor_with_type(
             .get(&identifier)
             .ok_or_else(|| format!("Undefined variable: {}", identifier))?
             .clone();
+
+        // Check for method call first (has higher precedence than field access)
+        if let Ok(Some((result, type_name))) = try_parse_method_call(&identifier, input, pos, env) {
+            return Ok((result, type_name));
+        }
 
         // Check for field access
         if let Ok(Some((field_value, _))) = try_parse_field_access(&identifier, input, pos, env) {
@@ -293,89 +358,6 @@ fn parse_if_expression(
     Ok((result, "".to_string()))
 }
 
-fn parse_match_case(input: &str, pos: &mut usize) -> Result<(i32, bool), String> {
-    skip_whitespace(input, pos);
-
-    // Parse pattern
-    let trimmed = input[*pos..].trim_start();
-    let is_wildcard = trimmed.starts_with('_');
-
-    let pattern_value = if is_wildcard {
-        *pos += input[*pos..].len() - trimmed.len() + 1;
-        -1 // Wildcard marker
-    } else {
-        let (value, _, len) = parse_number_with_type(&input[*pos..])?;
-        *pos += len;
-        value
-    };
-
-    skip_whitespace(input, pos);
-
-    // Expect arrow
-    let trimmed = input[*pos..].trim_start();
-    if !trimmed.starts_with("=>") {
-        return Err("Expected '=>' after pattern in match case".to_string());
-    }
-    *pos += input[*pos..].len() - trimmed.len() + 2;
-
-    Ok((pattern_value, is_wildcard))
-}
-
-fn parse_match_expression(
-    input: &str,
-    pos: &mut usize,
-    env: &mut Environment,
-) -> Result<(i32, String), String> {
-    let scrutinee = parse_paren_expression(input, pos, env)
-        .map_err(|_| "Expected '(' after 'match'".to_string())?;
-
-    skip_whitespace(input, pos);
-    if !input[*pos..].trim_start().starts_with('{') {
-        return Err("Expected '{' after match scrutinee".to_string());
-    }
-    *pos += input[*pos..].len() - input[*pos..].trim_start().len() + 1;
-
-    let mut matched = false;
-    let mut result = 0;
-
-    loop {
-        skip_whitespace(input, pos);
-
-        if input[*pos..].trim_start().starts_with('}') {
-            *pos += input[*pos..].len() - input[*pos..].trim_start().len() + 1;
-            break;
-        }
-
-        let trimmed = input[*pos..].trim_start();
-        if !trimmed.starts_with("case") {
-            return Err("Expected 'case' in match expression".to_string());
-        }
-        *pos += input[*pos..].len() - trimmed.len() + 4;
-
-        let (pattern_value, is_wildcard) = parse_match_case(input, pos)?;
-
-        skip_whitespace(input, pos);
-        let case_value = interpret_at(input, pos, env)?;
-
-        if !matched && (is_wildcard || pattern_value == scrutinee) {
-            result = case_value;
-            matched = true;
-        }
-
-        skip_whitespace(input, pos);
-        let trimmed = input[*pos..].trim_start();
-        if !trimmed.starts_with(';') {
-            return Err("Expected ';' after match case value".to_string());
-        }
-        *pos += input[*pos..].len() - trimmed.len() + 1;
-    }
-
-    if !matched {
-        return Err("No matching case in match expression".to_string());
-    }
-
-    Ok((result, "".to_string()))
-}
 
 pub fn parse_term_with_type(
     input: &str,

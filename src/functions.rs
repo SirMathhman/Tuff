@@ -1,5 +1,5 @@
 use crate::parse_utils::{parse_identifier, skip_whitespace};
-use crate::variables::{register_function, get_function, FunctionDef, Environment};
+use crate::variables::{register_function, get_function, FunctionDef, Environment, LocalFunction};
 use crate::parser::parse_term_with_type;
 
 // Type alias to reduce complexity
@@ -120,11 +120,17 @@ pub fn parse_function_header(
     // Parse parameters
     let params = parse_parameter_list(input, pos)?;
 
-    consume_token(input, pos, ":")?;
-
-    // Parse return type
-    let (return_type, type_len) = parse_identifier(&input[*pos..])?;
-    *pos += type_len;
+    // Check if there's a colon (return type is optional)
+    let return_type = if input[*pos..].trim_start().starts_with(':') {
+        consume_token(input, pos, ":")?;
+        // Parse return type
+        let (return_type, type_len) = parse_identifier(&input[*pos..])?;
+        *pos += type_len;
+        return_type
+    } else {
+        // No return type specified, default to I32
+        "I32".to_string()
+    };
 
     consume_token(input, pos, "=>")?;
 
@@ -141,7 +147,7 @@ fn parse_argument(
 }
 
 /// Parse function arguments and verify count
-fn parse_and_verify_arguments(
+pub fn parse_and_verify_arguments(
     input: &str,
     pos: &mut usize,
     env: &mut Environment,
@@ -164,7 +170,7 @@ fn parse_and_verify_arguments(
 
     Ok(args)
 }
-fn bind_parameters(
+pub fn bind_parameters(
     params: &[(String, String)],
     args: &[i32],
     base_env: &Environment,
@@ -181,6 +187,7 @@ fn bind_parameters(
                 struct_fields: None,
                 function_name: None,
                 local_function: None,
+                methods: None,
             },
         );
     }
@@ -189,7 +196,7 @@ fn bind_parameters(
 
 /// Parse function body that starts after `=>`
 /// Returns the body string and updates position
-#[allow(dead_code)]
+#[allow(dead_code, clippy::too_many_lines)]
 pub fn parse_function_body(input: &str, pos: &mut usize) -> Result<String, String> {
     skip_whitespace(input, pos);
 
@@ -221,6 +228,8 @@ pub fn parse_function_body(input: &str, pos: &mut usize) -> Result<String, Strin
             return Err("Unclosed brace in function body".to_string());
         }
         
+
+        
         let body_str = input[body_start..end_pos].trim().to_string();
         
         // After the closing brace, check for a semicolon
@@ -229,9 +238,10 @@ pub fn parse_function_body(input: &str, pos: &mut usize) -> Result<String, Strin
         if *pos < input.len() && input[*pos..].starts_with(';') {
             *pos += 1;
         }
+
         body_str
     } else {
-        // For non-block bodies, find the semicolon
+        // For non-block bodies, find the semicolon or the start of the next statement/function
         let mut found_end = false;
         let mut body_end = body_start;
         for (i, c) in rest.chars().enumerate() {
@@ -241,10 +251,29 @@ pub fn parse_function_body(input: &str, pos: &mut usize) -> Result<String, Strin
                 found_end = true;
                 break;
             }
+            // If we hit whitespace followed by 'fn', 'let', 'if', 'while', 'struct', or end of string
+            // then that's the end of the body
+            if c.is_whitespace() {
+                let remaining = &rest[i..];
+                let trimmed_remaining = remaining.trim_start();
+                if trimmed_remaining.starts_with("fn ")
+                    || trimmed_remaining.starts_with("let ")
+                    || trimmed_remaining.starts_with("if ")
+                    || trimmed_remaining.starts_with("while ")
+                    || trimmed_remaining.starts_with("struct ")
+                    || trimmed_remaining.is_empty()
+                {
+                    body_end = body_start + i;
+                    *pos = body_start + i;
+                    skip_whitespace(input, pos);
+                    found_end = true;
+                    break;
+                }
+            }
         }
         
         if !found_end {
-            return Err("Function body must end with ';'".to_string());
+            return Err("Function body must end with ';' or a new statement".to_string());
         }
         
         input[body_start..body_end].trim().to_string()
@@ -291,6 +320,8 @@ pub fn try_parse_function_call(
     env: &mut Environment,
 ) -> Result<Option<(i32, String)>, String> {
     skip_whitespace(input, pos);
+    
+    skip_whitespace(input, pos);
 
     // Expect '('
     if !input[*pos..].trim_start().starts_with('(') {
@@ -323,6 +354,27 @@ pub fn try_parse_function_call(
 
     // Create a new scope with parameters bound to arguments
     let mut func_env = bind_parameters(&func.params, &args, env);
+    
+    // Add the function itself to the environment so it can call itself recursively
+    let func_as_local = LocalFunction {
+        params: func.params.clone(),
+        return_type: func.return_type.clone(),
+        body: func.body.clone(),
+        captured_env: func_env.clone(), // Can reference the current function env
+    };
+    func_env.insert(
+        func_name.to_string(),
+        crate::variables::VariableInfo {
+            value: None,
+            type_name: "fn".to_string(),
+            is_mutable: false,
+            points_to: None,
+            struct_fields: None,
+            function_name: None,
+            local_function: Some(Box::new(func_as_local)),
+            methods: None,
+        },
+    );
 
     // Evaluate the function body
     let mut body_pos = 0;

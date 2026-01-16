@@ -1,5 +1,7 @@
 use crate::parse_utils::{parse_identifier, parse_number_with_type, skip_whitespace};
-use crate::variables::{register_struct, Environment, StructDef, VariableInfo, get_struct_registry};
+use crate::variables::{
+    get_struct_registry, register_struct, Environment, StructDef, VariableInfo,
+};
 use std::collections::HashMap;
 
 fn parse_field_header(input: &str, pos: &mut usize) -> Result<String, String> {
@@ -42,10 +44,7 @@ fn try_consume_comma(input: &str, pos: &mut usize) -> bool {
 }
 
 #[allow(clippy::too_many_lines)]
-pub fn parse_struct_definition(
-    input: &str,
-    pos: &mut usize,
-) -> Result<bool, String> {
+pub fn parse_struct_definition(input: &str, pos: &mut usize) -> Result<bool, String> {
     let rest = &input[*pos..];
     let trimmed = rest.trim_start();
 
@@ -94,7 +93,7 @@ pub fn parse_struct_definition(
         name: struct_name,
         fields,
     };
-    
+
     register_struct(struct_def);
 
     Ok(true)
@@ -108,7 +107,7 @@ pub fn try_parse_struct_instantiation(
     env: &mut Environment,
 ) -> Result<Option<(i32, String)>, String> {
     let registry = get_struct_registry();
-    
+
     if !registry.contains_key(struct_name) {
         return Ok(None);
     }
@@ -174,6 +173,7 @@ pub fn try_parse_struct_instantiation(
         struct_fields: Some(field_values),
         function_name: None,
         local_function: None,
+        methods: None,
     };
     env.insert(var_name.clone(), var_info);
 
@@ -188,12 +188,12 @@ pub fn get_field_value(
     let var_info = env
         .get(struct_var)
         .ok_or_else(|| format!("Undefined variable: {}", struct_var))?;
-    
+
     let fields = var_info
         .struct_fields
         .as_ref()
         .ok_or_else(|| format!("Variable '{}' is not a struct", struct_var))?;
-    
+
     fields
         .get(field_name)
         .copied()
