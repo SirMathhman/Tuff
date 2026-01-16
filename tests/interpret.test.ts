@@ -284,6 +284,9 @@ describe('interpret - if statements and yield', (): void => {
 	it('should interpret "{ if (false) yield 100; else yield 200; }" as 200', (): void => {
 		expectInterpretOk('{ if (false) yield 100; else yield 200; }', 200);
 	});
+});
+
+describe('interpret - chained if-else and match', (): void => {
 	it('should interpret "let x = if (false) 100 else if (true) 200 else 300; x" as 200', (): void => {
 		expectInterpretOk('let x = if (false) 100 else if (true) 200 else 300; x', 200);
 	});
@@ -295,5 +298,8 @@ describe('interpret - if statements and yield', (): void => {
 	});
 	it('should interpret "let x : I32; if (false) x = 100; else x = 200; x" as 200', (): void => {
 		expectInterpretOk('let x : I32; if (false) x = 100; else x = 200; x', 200);
+	});
+	it('should interpret "let x : I32 = match (100) { case 100 => 2; case _ => 3; }; x" as 2', (): void => {
+		expectInterpretOk('let x : I32 = match (100) { case 100 => 2; case _ => 3; }; x', 2);
 	});
 });

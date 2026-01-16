@@ -685,3 +685,9 @@ export function extractIfConditionAndAfter(afterIf: string): IfConditionAndAfter
 	const afterCondition = afterIf.substring(conditionEnd + 1).trim();
 	return { conditionStr, afterCondition };
 }
+
+/**
+ * Re-export match-related types and functions from match.ts.
+ */
+export type { MatchCase, ParsedMatch } from './match';
+export { isMatchKeyword, extractMatchExpression, parseMatchCases } from './match';

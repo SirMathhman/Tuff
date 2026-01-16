@@ -14,6 +14,8 @@ import {
 	type OperatorPrecedenceState,
 	validateValueForType,
 	extractIfConditionAndAfter,
+	isMatchKeyword,
+	extractMatchExpression,
 } from './types';
 
 interface InterpretFunction {
@@ -189,6 +191,11 @@ export function parseLiteral(
 	interpretInternal: InterpretFunction,
 	processVariableBindings?: ProcessVariableBindingsFunction,
 ): Result<number> {
+	const matchResult = parseMatchExpression(literal, context, interpretInternal);
+	if (matchResult !== undefined) {
+		return matchResult;
+	}
+
 	const ifElseResult = parseIfElseExpression(literal, context, interpretInternal);
 	if (ifElseResult !== undefined) {
 		return ifElseResult;
@@ -235,6 +242,45 @@ function parseNumberLiteral(trimmed: string): Result<number> {
 		return validateValueForType(value, typeSuffix);
 	}
 	return ok(value);
+}
+
+/**
+ * Parses a match expression.
+ */
+function parseMatchExpression(
+	input: string,
+	context: ExecutionContext,
+	interpretInternal: (input: string, ctx: ExecutionContext) => Result<number>,
+): Result<number> | undefined {
+	if (!isMatchKeyword(input)) {
+		return undefined;
+	}
+
+	const parsed = extractMatchExpression(input);
+	if (parsed === undefined) {
+		return undefined;
+	}
+
+	const matchResult = interpretInternal(parsed.matchExpr, context);
+	if (matchResult.type === 'err') {
+		return matchResult;
+	}
+
+	const matchValue = matchResult.value;
+	for (const matchCase of parsed.cases) {
+		const pattern = matchCase.pattern.trim();
+
+		if (pattern === '_') {
+			return interpretInternal(matchCase.result, context);
+		}
+
+		const caseValue = Number.parseInt(pattern, 10);
+		if (!Number.isNaN(caseValue) && caseValue === matchValue) {
+			return interpretInternal(matchCase.result, context);
+		}
+	}
+
+	return err('No matching case in match expression');
 }
 
 /**
