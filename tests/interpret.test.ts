@@ -184,4 +184,36 @@ describe('interpret', () => {
 			expect(result.error).toContain('Division by zero');
 		}
 	});
+
+	it('should interpret "{ 7 }" as 7', () => {
+		const result = interpret('{ 7 }');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(7);
+		}
+	});
+
+	it('should interpret "10 / ({ 7 } - 2)" as 2', () => {
+		const result = interpret('10 / ({ 7 } - 2)');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(2);
+		}
+	});
+
+	it('should interpret "{ 2 } * 3 + 1" as 7', () => {
+		const result = interpret('{ 2 } * 3 + 1');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(7);
+		}
+	});
+
+	it('should interpret "1 + { 4 + 2 } * 3" as 19', () => {
+		const result = interpret('1 + { 4 + 2 } * 3');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(19);
+		}
+	});
 });

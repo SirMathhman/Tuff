@@ -58,21 +58,24 @@ function hasNegativeSign(input: string): boolean {
 	return input.length > 0 && input.charAt(0) === '-';
 }
 
-function isBalancedParentheses(input: string): boolean {
-	if (!input.startsWith('(') || !input.endsWith(')')) {
+function isBalancedBrackets(input: string): boolean {
+	const trimmed = input.trim();
+	const isParens = trimmed.startsWith('(') && trimmed.endsWith(')');
+	const isBraces = trimmed.startsWith('{') && trimmed.endsWith('}');
+	if (!isParens && !isBraces) {
 		return false;
 	}
 
 	let depth = 0;
-	for (let i = 0; i < input.length; i++) {
-		const char = input[i];
-		if (char === '(') {
+	for (let i = 0; i < trimmed.length; i++) {
+		const char = trimmed[i];
+		if (char === '(' || char === '{') {
 			depth++;
-		} else if (char === ')') {
+		} else if (char === ')' || char === '}') {
 			depth--;
 		}
 
-		if (depth === 0 && i < input.length - 1) {
+		if (depth === 0 && i < trimmed.length - 1) {
 			return false;
 		}
 
@@ -87,8 +90,8 @@ function isBalancedParentheses(input: string): boolean {
 function parseLiteral(literal: string): Result<number> {
 	const trimmed = literal.trim();
 
-	// Check if this is a parenthesized expression
-	if (isBalancedParentheses(trimmed)) {
+	// Check if this is a parenthesized or braced expression
+	if (isBalancedBrackets(trimmed)) {
 		const inner = trimmed.substring(1, trimmed.length - 1);
 		return interpret(inner);
 	}
@@ -200,7 +203,7 @@ function isPrevCharValidForOperator(input: string, charIndex: number): boolean {
 	}
 
 	const prevChar = input[prevCharIndex];
-	return isAlphanumeric(prevChar) || prevChar === ')';
+	return isAlphanumeric(prevChar) || prevChar === ')' || prevChar === '}';
 }
 
 function findOperator(input: string): OperatorMatch | undefined {
@@ -208,24 +211,24 @@ function findOperator(input: string): OperatorMatch | undefined {
 	let lowestPrecedence = Infinity;
 	let lowestPrecedenceIndex = -1;
 	let lowestPrecedenceOperator = '';
-	let parenDepth = 0;
-	if (input.startsWith('(')) {
-		parenDepth = 1;
+	let bracketDepth = 0;
+	if (input.startsWith('(') || input.startsWith('{')) {
+		bracketDepth = 1;
 	}
 
 	for (let i = 1; i < input.length; i++) {
 		const char = input[i];
 
-		if (char === '(') {
-			parenDepth++;
+		if (char === '(' || char === '{') {
+			bracketDepth++;
 			continue;
 		}
-		if (char === ')') {
-			parenDepth--;
+		if (char === ')' || char === '}') {
+			bracketDepth--;
 			continue;
 		}
 
-		if (parenDepth > 0 || !operators.includes(char)) {
+		if (bracketDepth > 0 || !operators.includes(char)) {
 			continue;
 		}
 
