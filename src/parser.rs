@@ -73,14 +73,35 @@ pub fn interpret_at(input: &str, pos: &mut usize, env: &mut Environment) -> Resu
 }
 
 fn parse_or_expression(input: &str, pos: &mut usize, env: &mut Environment) -> Result<i32, String> {
-    let mut result = parse_addition_expression(input, pos, env)?;
+    let mut result = parse_and_expression(input, pos, env)?;
 
     while *pos < input.len() {
         let trimmed = input[*pos..].trim_start();
         if trimmed.starts_with("||") {
             *pos += input[*pos..].len() - trimmed.len() + 2;
-            let rhs = parse_addition_expression(input, pos, env)?;
+            let rhs = parse_and_expression(input, pos, env)?;
             result = if result != 0 || rhs != 0 { 1 } else { 0 };
+        } else {
+            break;
+        }
+    }
+
+    Ok(result)
+}
+
+fn parse_and_expression(
+    input: &str,
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<i32, String> {
+    let mut result = parse_addition_expression(input, pos, env)?;
+
+    while *pos < input.len() {
+        let trimmed = input[*pos..].trim_start();
+        if trimmed.starts_with("&&") {
+            *pos += input[*pos..].len() - trimmed.len() + 2;
+            let rhs = parse_addition_expression(input, pos, env)?;
+            result = if result != 0 && rhs != 0 { 1 } else { 0 };
         } else {
             break;
         }

@@ -417,4 +417,40 @@ mod tests {
             Ok(1)
         );
     }
+
+    #[test]
+    fn test_logical_and_true_false() {
+        // Logical AND: true && false => 0
+        assert_eq!(
+            interpret("let x : Bool = true; let y : Bool = false; x && y"),
+            Ok(0)
+        );
+    }
+
+    #[test]
+    fn test_logical_and_false_true() {
+        // Logical AND: false && true => 0
+        assert_eq!(
+            interpret("let x : Bool = false; let y : Bool = true; x && y"),
+            Ok(0)
+        );
+    }
+
+    #[test]
+    fn test_logical_and_false_false() {
+        // Logical AND: false && false => 0
+        assert_eq!(
+            interpret("let x : Bool = false; let y : Bool = false; x && y"),
+            Ok(0)
+        );
+    }
+
+    #[test]
+    fn test_logical_and_true_true() {
+        // Logical AND: true && true => 1
+        assert_eq!(
+            interpret("let x : Bool = true; let y : Bool = true; x && y"),
+            Ok(1)
+        );
+    }
 }
