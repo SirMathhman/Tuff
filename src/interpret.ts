@@ -38,6 +38,12 @@ function validateValueForType(value: number, typeSuffix: string): Result<number>
     }
   }
 
+  if (typeSuffix === 'U16') {
+    if (value < 0 || value > 65535) {
+      return err(`Value ${value} is out of range for U16 (0-65535)`);
+    }
+  }
+
   return ok(value);
 }
 
