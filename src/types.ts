@@ -592,13 +592,53 @@ export function findClosingBrace(input: string): number {
  * @param input - The input string
  * @returns True if the string is an assignment statement, false otherwise
  */
+/**
+ * Checks if character pair is a double-char operator (|| or &&).
+ */
+function checkDoubleCharOp(lastChar: string, beforeEqual: string): boolean {
+	if (lastChar !== '|' && lastChar !== '&') {
+		return false;
+	}
+	if (beforeEqual.length < 2) {
+		return false;
+	}
+	const secondLastChar = beforeEqual.charAt(beforeEqual.length - 2);
+	return (
+		(secondLastChar === '|' && lastChar === '|') || (secondLastChar === '&' && lastChar === '&')
+	);
+}
+
+/**
+ * Strips compound operator from assignment variable name if present.
+ * @param beforeEqual - The part before the equals sign
+ * @returns The cleaned variable name (without trailing operator)
+ */ function stripCompoundOperator(beforeEqual: string): string {
+	const lastChar = beforeEqual.charAt(beforeEqual.length - 1);
+	if (lastChar === '+' || lastChar === '-' || lastChar === '*' || lastChar === '/') {
+		return beforeEqual.substring(0, beforeEqual.length - 1).trimEnd();
+	}
+
+	if (checkDoubleCharOp(lastChar, beforeEqual)) {
+		return beforeEqual.substring(0, beforeEqual.length - 2).trimEnd();
+	}
+
+	return beforeEqual;
+}
+
+/**
+ * Checks if a string is an assignment statement (variable = expression).
+ * @param input - The input string
+ * @returns True if the string is an assignment statement, false otherwise
+ */
 export function isAssignmentStatement(input: string): boolean {
 	const eq = input.indexOf('=');
 	const isEqual = eq > 0 && input.charAt(eq + 1) !== '=';
 	if (!isEqual) {
 		return false;
 	}
-	const varName = input.substring(0, eq).trim();
+
+	const beforeEqual = input.substring(0, eq).trimEnd();
+	const varName = stripCompoundOperator(beforeEqual).trim();
 	return isVariableName(varName);
 }
 

@@ -22,6 +22,7 @@ import {
 	extractIfConditionAndAfter,
 } from './types';
 import { interpretInternal } from './evaluator';
+import { parseAssignment } from './assignments';
 
 /**
  * Parses the type annotation and assignment part after a colon.
@@ -136,55 +137,6 @@ function parseVariableBinding(input: string, context: ExecutionContext): Result<
 
 	return ok({ name: varName, value: valueResult.value, isMutable, remaining });
 }
-
-/**
- * Parses a variable assignment statement.
- */
-function parseAssignment(input: string, context: ExecutionContext): Result<ParsedBinding> {
-	const trimmed = input.trim();
-	const semiIndex = findSemicolonOutsideBrackets(trimmed);
-	if (semiIndex < 0) {
-		return err('Assignment missing semicolon');
-	}
-
-	const statementStr = trimmed.substring(0, semiIndex).trim();
-	const remaining = trimmed.substring(semiIndex + 1).trim();
-	const equalIndex = statementStr.indexOf('=');
-	if (equalIndex < 0) {
-		return err('Invalid statement: expected assignment or variable declaration');
-	}
-
-	const varName = statementStr.substring(0, equalIndex).trim();
-	if (!isVariableName(varName)) {
-		return err(`Invalid variable name: ${varName}`);
-	}
-
-	let varBinding: VariableBinding | undefined;
-	for (const binding of context.bindings) {
-		if (binding.name === varName) {
-			varBinding = binding;
-			break;
-		}
-	}
-
-	if (varBinding === undefined) {
-		return err(`Undefined variable: ${varName}`);
-	}
-
-	const isUninitialized = varBinding.value === undefined;
-	if (!isUninitialized && !varBinding.isMutable) {
-		return err(`Variable '${varName}' is not mutable`);
-	}
-
-	const valueStr = statementStr.substring(equalIndex + 1).trim();
-	const valueResult = interpretInternal(valueStr, context);
-	if (valueResult.type === 'err') {
-		return valueResult;
-	}
-
-	return ok({ name: varName, value: valueResult.value, isMutable: varBinding.isMutable, remaining });
-}
-
 /**
  * Processes a let declaration statement.
  */

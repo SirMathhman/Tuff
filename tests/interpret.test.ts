@@ -169,7 +169,7 @@ describe('interpret - type annotations and validation', (): void => {
 	});
 });
 
-describe('interpret - top-level statements and mutability', (): void => {
+describe('interpret - top-level statements', (): void => {
 	it('should interpret "let z = 7; z" as 7', (): void => {
 		expectInterpretOk('let z = 7; z', 7);
 	});
@@ -188,8 +188,23 @@ describe('interpret - top-level statements and mutability', (): void => {
 	it('should interpret "let x : I32; x = 5; x + 3" as 8', (): void => {
 		expectInterpretOk('let x : I32; x = 5; x + 3', 8);
 	});
+});
+
+describe('interpret - mutability', (): void => {
 	it('should interpret "let mut x = 0; x = 100; x" as 100', (): void => {
 		expectInterpretOk('let mut x = 0; x = 100; x', 100);
+	});
+	it('should interpret "let mut x = 5; x += 1; x" as 6', (): void => {
+		expectInterpretOk('let mut x = 5; x += 1; x', 6);
+	});
+	it('should interpret "let mut x = 5; x+=1; x" as 6 (no spaces)', (): void => {
+		expectInterpretOk('let mut x = 5; x+=1; x', 6);
+	});
+	it('should interpret "let mut x = 5; x = x + 1; x" as 6', (): void => {
+		expectInterpretOk('let mut x = 5; x = x + 1; x', 6);
+	});
+	it('should interpret "let mut x = 0; x += 1; x" as 1', (): void => {
+		expectInterpretOk('let mut x = 0; x += 1; x', 1);
 	});
 	it('should return Err for "let x = 0; x = 100; x" (immutable)', (): void => {
 		expectInterpretErrContains('let x = 0; x = 100; x', 'not mutable');
