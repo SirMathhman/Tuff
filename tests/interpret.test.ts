@@ -40,4 +40,12 @@ describe('interpret', () => {
       expect(result.value).toBe(3);
     }
   });
+
+  it('should interpret "1 + 2U8" as 3', () => {
+    const result = interpret('1 + 2U8');
+    expect(result.type).toBe('ok');
+    if (result.type === 'ok') {
+      expect(result.value).toBe(3);
+    }
+  });
 });
