@@ -36,6 +36,7 @@ fn parse_type_annotation_optional(input: &str, pos: &mut usize) -> Result<Option
     Ok(Some(type_name))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn store_variable(
     env: &mut Environment,
     var_name: String,
@@ -44,6 +45,7 @@ fn store_variable(
     actual_type: Option<String>,
     is_mutable: bool,
     points_to: Option<String>,
+    struct_fields: Option<std::collections::HashMap<String, i32>>,
 ) -> Result<(), String> {
     let stored_type = if let Some(declared) = declared_type {
         if let Some(actual) = actual_type {
@@ -67,7 +69,7 @@ fn store_variable(
             type_name: stored_type,
             is_mutable,
             points_to,
-            struct_fields: None,
+            struct_fields,
         },
     );
     Ok(())
@@ -171,7 +173,7 @@ pub fn parse_let_statement(
         if !input[*pos..].trim_start().starts_with(';') {
             return Err("Expected ';' or '=' in let statement".to_string());
         }
-        store_variable(env, var_name, None, declared_type, None, true, None)?;
+        store_variable(env, var_name, None, declared_type, None, true, None, None)?;
         skip_whitespace(input, pos);
         *pos += 1;
         return Ok(());
@@ -179,6 +181,15 @@ pub fn parse_let_statement(
     *pos += 1;
     skip_whitespace(input, pos);
     let (val, actual_type, points_to) = parse_value_or_reference(input, pos, env)?;
+    
+    // If we have a declared struct type, extract struct_fields from temp variable
+    let struct_fields = if let Some(ref decl_type) = declared_type {
+        let temp_var_name = format!("_struct_inst_{}", decl_type);
+        env.get(&temp_var_name).and_then(|info| info.struct_fields.clone())
+    } else {
+        None
+    };
+    
     store_variable(
         env,
         var_name,
@@ -187,6 +198,7 @@ pub fn parse_let_statement(
         Some(actual_type),
         is_mutable,
         points_to,
+        struct_fields,
     )?;
     expect_semicolon(input, pos)?;
     Ok(())

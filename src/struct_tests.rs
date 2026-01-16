@@ -49,4 +49,12 @@ mod tests {
             Ok(20)
         );
     }
+
+    #[test]
+    fn test_struct_variable_assignment() {
+        assert_eq!(
+            interpret("struct Wrapper { value : I32 } let result : Wrapper = Wrapper { value : 100 }; result.value"),
+            Ok(100)
+        );
+    }
 }

@@ -1,3 +1,4 @@
+mod parse_utils;
 mod parser;
 mod pointers;
 mod repl;
@@ -5,7 +6,6 @@ mod statements;
 mod structs;
 mod validators;
 mod variables;
-mod parse_utils;
 use parser::interpret;
 
 #[cfg(test)]

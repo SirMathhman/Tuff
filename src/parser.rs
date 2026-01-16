@@ -1,9 +1,11 @@
+use crate::parse_utils::{
+    check_and_consume_op, parse_identifier, parse_number_with_type, skip_whitespace,
+};
 use crate::statements::{
     parse_block, parse_top_level_assignment, parse_top_level_let, parse_top_level_struct,
     parse_while_statement,
 };
 use crate::variables::Environment;
-use crate::parse_utils::{parse_identifier, parse_number_with_type, skip_whitespace, check_and_consume_op};
 
 mod comparison;
 
@@ -187,7 +189,9 @@ fn parse_factor_with_type(
         {
             // Check for field access on struct instantiation
             let temp_var_name = format!("_struct_inst_{}", identifier);
-            if let Ok(Some((field_value, _))) = try_parse_field_access(&temp_var_name, input, pos, env) {
+            if let Ok(Some((field_value, _))) =
+                try_parse_field_access(&temp_var_name, input, pos, env)
+            {
                 return Ok((field_value, "".to_string()));
             }
             return Ok((val, type_name));
