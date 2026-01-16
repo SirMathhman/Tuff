@@ -464,4 +464,68 @@ describe('interpret', () => {
 			expect(result.value).toBe(0);
 		}
 	});
+
+	it('should interpret "if (true) 100 else 200" as 100', () => {
+		const result = interpret('if (true) 100 else 200');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(100);
+		}
+	});
+
+	it('should interpret "if (false) 100 else 200" as 200', () => {
+		const result = interpret('if (false) 100 else 200');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(200);
+		}
+	});
+
+	it('should interpret "let x = if (true) 100 else 200; x" as 100', () => {
+		const result = interpret('let x = if (true) 100 else 200; x');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(100);
+		}
+	});
+
+	it('should interpret "let x = if (false) 100 else 200; x" as 200', () => {
+		const result = interpret('let x = if (false) 100 else 200; x');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(200);
+		}
+	});
+
+	it('should interpret "if (1) 42 else 0" as 42', () => {
+		const result = interpret('if (1) 42 else 0');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(42);
+		}
+	});
+
+	it('should interpret "if (0) 42 else 0" as 0', () => {
+		const result = interpret('if (0) 42 else 0');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(0);
+		}
+	});
+
+	it('should interpret "if (1 + 2) 100 else 50" as 100', () => {
+		const result = interpret('if (1 + 2) 100 else 50');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(100);
+		}
+	});
+
+	it('should interpret nested if-else: "if (true) if (false) 1 else 2 else 3" as 2', () => {
+		const result = interpret('if (true) if (false) 1 else 2 else 3');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(2);
+		}
+	});
 });

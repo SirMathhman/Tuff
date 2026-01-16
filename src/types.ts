@@ -53,6 +53,13 @@ export interface ProcessedBindings {
 }
 
 /**
+ * Represents the statements module for lazy importing.
+ */
+export interface StatementsModule {
+	processVariableBindings: (input: string, context: ExecutionContext) => Result<ProcessedBindings>;
+}
+
+/**
  * Represents an execution context paired with remaining input.
  */
 export interface ContextAndRemaining {
@@ -68,6 +75,15 @@ export interface VariableDeclarationParts {
 	isMutable: boolean;
 	typeAnnotation: string | undefined;
 	afterTypeOrName: string;
+}
+
+/**
+ * Represents the parsed components of an if-else expression.
+ */
+export interface IfElseComponents {
+	conditionStr: string;
+	trueExprStr: string;
+	falseExprStr: string;
 }
 
 /**
@@ -443,4 +459,154 @@ export function checkSingleCharOperator(
 		return -1;
 	}
 	return getOperatorPrecedence(char);
+}
+/**
+ * Finds the closing parenthesis matching the opening parenthesis at position 0.
+ * @param input - The input string starting with '('
+ * @returns The index of the closing parenthesis, or -1 if not found
+ */
+export function findClosingParen(input: string): number {
+	let parenDepth = 0;
+	for (let i = 0; i < input.length; i++) {
+		if (input[i] === '(') {
+			parenDepth++;
+		} else if (input[i] === ')') {
+			parenDepth--;
+		}
+		if (parenDepth === 0 && input[i] === ')') {
+			return i;
+		}
+	}
+	return -1;
+}
+
+/**
+ * Checks if 'if' keyword starts at the given position.
+ */
+function isIfKeywordAt(input: string, i: number): boolean {
+	if (input.substring(i, i + 2) !== 'if') {
+		return false;
+	}
+	let beforeChar = ' ';
+	if (i > 0) {
+		beforeChar = input[i - 1];
+	}
+	let afterChar = ' ';
+	if (i + 2 < input.length) {
+		afterChar = input[i + 2];
+	}
+	const isWordBoundaryBefore = beforeChar === ' ' || beforeChar === '\t';
+	const isWordBoundaryAfter = afterChar === ' ' || afterChar === '\t' || afterChar === '(';
+	return isWordBoundaryBefore && isWordBoundaryAfter;
+}
+
+/**
+ * Checks if 'else' keyword starts at the given position.
+ */
+function isElseKeywordAt(input: string, i: number): boolean {
+	if (input.substring(i, i + 4) !== 'else') {
+		return false;
+	}
+	let beforeChar = ' ';
+	if (i > 0) {
+		beforeChar = input[i - 1];
+	}
+	let afterChar = ' ';
+	if (i + 4 < input.length) {
+		afterChar = input[i + 4];
+	}
+	const isWordBoundaryBefore = beforeChar === ' ' || beforeChar === '\t';
+	const isWordBoundaryAfter = afterChar === ' ' || afterChar === '\t';
+	return isWordBoundaryBefore && isWordBoundaryAfter;
+}
+
+/**
+ * Finds the closing brace matching the opening brace at position 0.
+ * @param input - The input string starting with '{'
+ * @returns The index of the closing brace, or -1 if not found
+ */
+export function findClosingBrace(input: string): number {
+	let depth = 0;
+	for (let i = 0; i < input.length; i++) {
+		if (input[i] === '{') {
+			depth++;
+		} else if (input[i] === '}') {
+			depth--;
+		}
+		if (depth === 0 && input[i] === '}') {
+			return i;
+		}
+	}
+	return -1;
+}
+
+/**
+ * Checks if a string is an assignment statement (variable = expression).
+ * @param input - The input string
+ * @returns True if the string is an assignment statement, false otherwise
+ */
+export function isAssignmentStatement(input: string): boolean {
+	const eq = input.indexOf('=');
+	const isEqual = eq > 0 && input.charAt(eq + 1) !== '=';
+	if (!isEqual) {
+		return false;
+	}
+	const varName = input.substring(0, eq).trim();
+	return isVariableName(varName);
+}
+
+/**
+ * Checks if a trimmed string should be processed as a statement block.
+ * @param trimmed - The trimmed input string
+ * @returns True if the string should be processed as a statement block
+ */
+export function shouldProcessAsStatementBlock(trimmed: string): boolean {
+	if (!trimmed.startsWith('{')) {
+		return false;
+	}
+	const ci = findClosingBrace(trimmed);
+	if (ci < 0) {
+		return false;
+	}
+	return ci < trimmed.length - 1;
+}
+
+export function findElseKeywordIndex(input: string): number {
+	let bracketDepth = 0;
+	let parenDepth = 0;
+	let ifDepth = 0;
+	for (let i = 0; i < input.length; i++) {
+		const char = input[i];
+		if (char === '(') {
+			parenDepth++;
+			continue;
+		}
+		if (char === ')') {
+			parenDepth--;
+			continue;
+		}
+		if (char === '{') {
+			bracketDepth++;
+			continue;
+		}
+		if (char === '}') {
+			bracketDepth--;
+			continue;
+		}
+
+		const inBrackets = parenDepth > 0 || bracketDepth > 0;
+		if (inBrackets) {
+			continue;
+		}
+
+		if (isIfKeywordAt(input, i)) {
+			ifDepth++;
+		} else if (isElseKeywordAt(input, i) && ifDepth === 0) {
+			return i;
+		} else if (isElseKeywordAt(input, i)) {
+			ifDepth--;
+		}
+	}
+
+	return -1;
 }

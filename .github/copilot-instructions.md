@@ -106,6 +106,7 @@ if (result.type === 'err') { return result; } // Bubble errors immediately
 - **Max nesting depth: 2** (`max-depth: 2`) — keep functions small and focused
 - **Max function lines: 50** (`max-lines-per-function: 50`)
 - **Max file lines: 500** (`max-lines: 500` with `skipBlankLines: true, skipComments: true`)
+  - **IMPORTANT**: ESLint ignores blank lines and comments when counting, so removing whitespace won't help. If a file approaches the limit, **split it into multiple modules** instead. Extract logical units to new files (e.g., `interpret.ts` → split parser/evaluator into separate concerns).
 - **No ternary operators** (`no-ternary: 'error'`)
 - **No console** except warnings/errors (`no-console: ['error', { allow: ['warn', 'error'] }]`)
 - **Prefer const + optional chaining** — variables must not be reassigned
@@ -115,18 +116,6 @@ if (result.type === 'err') { return result; } // Bubble errors immediately
 ### ESLint Configuration
 
 Flat config in [eslint.config.js](../eslint.config.js) with separate rules for test files (slightly relaxed). TypeScript-ESLint integration via `@typescript-eslint/parser` with `tsconfig.json` project reference.
-
-### Recent Refactoring: Module Split
-
-The interpreter was refactored to separate concerns:
-
-- **Before**: Single `interpret.ts` file (717+ lines) - violated max-lines rule
-- **After**: Split into 3 modules:
-  - `types.ts` (447 lines): Type definitions, validation, operator helpers
-  - `interpret.ts` (584 lines, ~496 code lines): Parser and evaluator
-  - `result.ts` (minimal): Result type and constructors
-- **Benefit**: Enables feature addition without line-count pressure; clearer module boundaries
-- **Pattern**: Extract utility functions to `types.ts` when `interpret.ts` approaches 500-line limit
 
 ### Code Deduplication Strategy
 
