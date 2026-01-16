@@ -312,4 +312,20 @@ describe('interpret', () => {
 			expect(result.error).toContain('expression');
 		}
 	});
+
+	it('should return Err for duplicate variable names', () => {
+		const result = interpret('{ let x = 7; let x = 20; x }');
+		expect(result.type).toBe('err');
+		if (result.type === 'err') {
+			expect(result.error).toContain('already defined');
+		}
+	});
+
+	it('should return Err for "10 / ({ let x = 7; let x = 20; x } - 2)"', () => {
+		const result = interpret('10 / ({ let x = 7; let x = 20; x } - 2)');
+		expect(result.type).toBe('err');
+		if (result.type === 'err') {
+			expect(result.error).toContain('already defined');
+		}
+	});
 });

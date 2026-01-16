@@ -239,6 +239,16 @@ function isBalancedBrackets(input: string): boolean {
 	return depth === 0;
 }
 
+function isDuplicateVariable(name: string, context: ExecutionContext): boolean {
+	for (const binding of context.bindings) {
+		if (binding.name === name) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 function processVariableBindings(
 	input: string,
 	context: ExecutionContext,
@@ -253,6 +263,10 @@ function processVariableBindings(
 		}
 
 		const { name, value } = bindResult.value;
+		if (isDuplicateVariable(name, currentContext)) {
+			return err(`Variable '${name}' is already defined`);
+		}
+
 		currentContext = {
 			bindings: [...currentContext.bindings, { name, value }],
 		};
