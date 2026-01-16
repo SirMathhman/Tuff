@@ -1,3 +1,5 @@
+import { type Result, err, ok } from './result';
+
 function findTypeSuffixStart(input: string): number {
   for (let i = input.length - 1; i >= 0; i--) {
     const char = input.charAt(i);
@@ -20,8 +22,18 @@ function findTypeSuffixStart(input: string): number {
   return -1;
 }
 
-export function interpret(input: string): number {
+function hasNegativeSign(input: string): boolean {
+  return input.length > 0 && input.charAt(0) === '-';
+}
+
+export function interpret(input: string): Result<number> {
+  if (hasNegativeSign(input)) {
+    return err('Negative numbers are not supported for unsigned types');
+  }
+
   const suffixStart = findTypeSuffixStart(input);
   const numberPart = suffixStart >= 0 ? input.substring(0, suffixStart) : input;
-  return Number.parseInt(numberPart, 10);
+  const value = Number.parseInt(numberPart, 10);
+
+  return ok(value);
 }
