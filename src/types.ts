@@ -87,6 +87,23 @@ export interface IfElseComponents {
 }
 
 /**
+ * Represents the parsed type annotation and assignment parts.
+ */
+export interface TypeAnnotationParts {
+	typeAnnotation: string | undefined;
+	afterTypeOrName: string;
+}
+
+/**
+ * Represents the parsed if-else statement branches.
+ */
+export interface IfElseBranchesResult {
+	trueStatementStr: string;
+	falseStatementStr: string;
+	error?: string;
+}
+
+/**
  * Finds the starting index of a type suffix in a literal string.
  * @param input - The input string to search
  * @returns The index where the type suffix starts, or -1 if not found

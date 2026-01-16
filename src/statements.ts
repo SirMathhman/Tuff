@@ -2,6 +2,10 @@ import { err, ok, type Result } from './result';
 import {
 	type ContextAndRemaining,
 	type ExecutionContext,
+	type IfElseBranchesResult,
+	type TypeAnnotationParts,
+	findClosingParen,
+	findElseKeywordIndex,
 	findSemicolonOutsideBrackets,
 	findClosingBrace,
 	isAssignmentStatement,
@@ -19,6 +23,32 @@ import { interpretInternal } from './evaluator';
 /**
  * Parses the header of a variable declaration (name, mutability, type annotation).
  */
+/**
+ * Parses the type annotation and assignment part after a colon.
+ */
+function parseTypeAnnotationPart(afterColon: string): TypeAnnotationParts {
+	const semiIndex = afterColon.indexOf(';');
+	let searchForEqual: string;
+	if (semiIndex >= 0) {
+		searchForEqual = afterColon.substring(0, semiIndex);
+	} else {
+		searchForEqual = afterColon;
+	}
+	const equalIndex = searchForEqual.indexOf('=');
+
+	if (equalIndex >= 0) {
+		const typeAnnotation = searchForEqual.substring(0, equalIndex).trim();
+		let afterTypeOrName = searchForEqual.substring(equalIndex);
+		if (semiIndex >= 0) {
+			afterTypeOrName += afterColon.substring(semiIndex);
+		}
+		return { typeAnnotation, afterTypeOrName };
+	}
+
+	const typeAnnotation = searchForEqual.trim();
+	return { typeAnnotation, afterTypeOrName: '' };
+}
+
 function parseVariableDeclarationHeader(withoutLet: string): Result<VariableDeclarationParts> {
 	let isMutable = false;
 	let remaining = withoutLet;
@@ -36,14 +66,9 @@ function parseVariableDeclarationHeader(withoutLet: string): Result<VariableDecl
 	if (colonIndex >= 0) {
 		varName = remaining.substring(0, colonIndex).trim();
 		const afterColon = remaining.substring(colonIndex + 1).trim();
-		const equalIndexAfterColon = afterColon.indexOf('=');
-		if (equalIndexAfterColon >= 0) {
-			typeAnnotation = afterColon.substring(0, equalIndexAfterColon).trim();
-			afterTypeOrName = afterColon.substring(equalIndexAfterColon);
-		} else {
-			typeAnnotation = afterColon;
-			afterTypeOrName = '';
-		}
+		const parts = parseTypeAnnotationPart(afterColon);
+		typeAnnotation = parts.typeAnnotation;
+		afterTypeOrName = parts.afterTypeOrName;
 	} else {
 		const equalIndex = remaining.indexOf('=');
 		if (equalIndex >= 0) {
@@ -146,7 +171,8 @@ function parseAssignment(input: string, context: ExecutionContext): Result<Parse
 		return err(`Undefined variable: ${varName}`);
 	}
 
-	if (!varBinding.isMutable) {
+	const isUninitialized = varBinding.value === undefined;
+	if (!isUninitialized && !varBinding.isMutable) {
 		return err(`Variable '${varName}' is not mutable`);
 	}
 
@@ -156,7 +182,7 @@ function parseAssignment(input: string, context: ExecutionContext): Result<Parse
 		return valueResult;
 	}
 
-	return ok({ name: varName, value: valueResult.value, isMutable: true, remaining });
+	return ok({ name: varName, value: valueResult.value, isMutable: varBinding.isMutable, remaining });
 }
 
 /**
@@ -255,7 +281,136 @@ function processBracedBlock(input: string, context: ExecutionContext): Result<Co
 }
 
 /**
- * Processes statements (declarations, assignments, blocks) in input.
+ * Detects if a statement is an if-else statement (with semicolons).
+ */
+function isIfElseStatement(trimmed: string): boolean {
+	if (!trimmed.startsWith('if ')) {
+		return false;
+	}
+
+	// Check if this looks like an if-else statement by finding the pattern
+	// if (...) <statement>; else <statement>;
+	const afterIf = trimmed.substring(3).trim();
+	if (!afterIf.startsWith('(')) {
+		return false;
+	}
+
+	const conditionEnd = findClosingParen(afterIf);
+	if (conditionEnd < 0) {
+		return false;
+	}
+
+	const afterCondition = afterIf.substring(conditionEnd + 1).trim();
+	const elseIndex = findElseKeywordIndex(afterCondition);
+
+	if (elseIndex < 0) {
+		return false;
+	}
+
+	// Must have semicolons in both branches for this to be a statement
+	const trueStatementStr = afterCondition.substring(0, elseIndex).trim();
+	const falseStatementStr = afterCondition.substring(elseIndex + 4).trim();
+
+	// Check if both branches contain semicolons (indicating statements, not expressions)
+	const trueSemiIndex = findSemicolonOutsideBrackets(trueStatementStr);
+	const falseSemiIndex = findSemicolonOutsideBrackets(falseStatementStr);
+
+	return trueSemiIndex >= 0 && falseSemiIndex >= 0;
+}
+
+/**
+ * Processes an if-else statement with assignment statements.
+ */
+/**
+ * Extracts the if-else statement branches.
+ */
+function extractIfElseBranches(afterCondition: string): IfElseBranchesResult {
+	const elseIndex = findElseKeywordIndex(afterCondition);
+
+	if (elseIndex < 0) {
+		return {
+			trueStatementStr: '',
+			falseStatementStr: '',
+			error: 'Expected else in if-else statement',
+		};
+	}
+
+	const trueStatementStr = afterCondition.substring(0, elseIndex).trim();
+	const falseStatementStr = afterCondition.substring(elseIndex + 4).trim();
+
+	if (trueStatementStr.length === 0 || falseStatementStr.length === 0) {
+		return {
+			trueStatementStr: '',
+			falseStatementStr: '',
+			error: 'Empty if-else statement branches',
+		};
+	}
+
+	return { trueStatementStr, falseStatementStr };
+}
+
+/**
+ * Extracts the remaining string after the false statement.
+ */
+function extractRemaining(falseStatementStr: string): string {
+	const semiIndex = findSemicolonOutsideBrackets(falseStatementStr);
+	if (semiIndex >= 0) {
+		return falseStatementStr.substring(semiIndex + 1).trim();
+	}
+	return '';
+}
+
+function processIfElseStatement(
+	input: string,
+	context: ExecutionContext,
+): Result<ContextAndRemaining> {
+	const trimmed = input.trim();
+	if (!trimmed.startsWith('if ')) {
+		return err('Not an if-else statement');
+	}
+
+	const afterIf = trimmed.substring(3).trim();
+	if (!afterIf.startsWith('(')) {
+		return err('Expected ( after if');
+	}
+
+	const conditionEnd = findClosingParen(afterIf);
+	if (conditionEnd < 0) {
+		return err('Unbalanced parentheses in if condition');
+	}
+
+	const conditionStr = afterIf.substring(1, conditionEnd);
+	const afterCondition = afterIf.substring(conditionEnd + 1).trim();
+
+	const branchesResult = extractIfElseBranches(afterCondition);
+	if (branchesResult.error !== undefined) {
+		return err(branchesResult.error);
+	}
+
+	const conditionResult = interpretInternal(conditionStr, context);
+	if (conditionResult.type === 'err') {
+		return conditionResult;
+	}
+
+	const isTruthy = conditionResult.value !== 0;
+	let statementStr: string;
+	if (isTruthy) {
+		statementStr = branchesResult.trueStatementStr;
+	} else {
+		statementStr = branchesResult.falseStatementStr;
+	}
+
+	const statementsResult = processStatements(statementStr, context, true);
+	if (statementsResult.type === 'err') {
+		return statementsResult;
+	}
+
+	const remaining = extractRemaining(branchesResult.falseStatementStr);
+	return ok({ context: statementsResult.value.context, remaining });
+}
+
+/**
+ * Processes statements (declarations, assignments, if-else, blocks) in input.
  */
 function processStatements(
 	input: string,
@@ -271,6 +426,8 @@ function processStatements(
 			result = processLetDeclaration(remaining, currentContext);
 		} else if (allowBlocks && shouldProcessAsStatementBlock(trimmed)) {
 			result = processBracedBlock(remaining, currentContext);
+		} else if (isIfElseStatement(trimmed)) {
+			result = processIfElseStatement(remaining, currentContext);
 		} else if (isAssignmentStatement(trimmed)) {
 			result = processAssignmentStatement(remaining, currentContext);
 		} else {
