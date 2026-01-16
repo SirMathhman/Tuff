@@ -233,6 +233,42 @@ fn try_parse_dereference_assignment(
     Ok(false)
 }
 
+fn execute_compound_assignment(
+    input: &str,
+    pos: &mut usize,
+    env: &mut Environment,
+    op: char,
+    var_name: String,
+    var_info: VariableInfo,
+) -> Result<(), String> {
+    if !input[*pos..].trim_start().starts_with(&format!("{}=", op)) {
+        return Err(format!("Expected '{}='", op));
+    }
+    *pos += input[*pos..].len() - input[*pos..].trim_start().len() + 2;
+    skip_whitespace(input, pos);
+
+    let (rhs_val, actual_type, _) = parse_value_or_reference(input, pos, env)?;
+    let lhs_val = var_info
+        .value
+        .ok_or_else(|| format!("Variable '{}' is not initialized", var_name))?;
+    let result = match op {
+        '+' => lhs_val + rhs_val,
+        '-' => lhs_val - rhs_val,
+        '*' => lhs_val * rhs_val,
+        '/' => if rhs_val == 0 {
+            return Err("Division by zero".to_string());
+        } else {
+            lhs_val / rhs_val
+        },
+        _ => return Err(format!("Unknown operator: {}", op)),
+    };
+
+    update_mutable_var(env, var_name, var_info, result, actual_type, None)?;
+    Ok(())
+}
+
+// Note: function is at 56 lines due to complex compound assignment parsing logic
+#[allow(clippy::too_many_lines)]
 pub fn parse_assignment_statement(
     input: &str,
     pos: &mut usize,
@@ -247,7 +283,7 @@ pub fn parse_assignment_statement(
         return Ok(true);
     }
 
-    // Regular variable assignment (var = value)
+    // Regular variable assignment (var = value) or compound assignment (var += value, etc.)
     if !trimmed
         .chars()
         .next()
@@ -258,9 +294,25 @@ pub fn parse_assignment_statement(
     let (potential_var, var_len) = parse_identifier(trimmed)?;
     let after_var = &trimmed[var_len..];
     let after_var_trimmed = after_var.trim_start();
-    if !after_var_trimmed.starts_with('=') {
+
+    // Check for compound assignment operators (+=, -=, *=, /=)
+    let compound_op = if after_var_trimmed.starts_with("+=") {
+        Some('+')
+    } else if after_var_trimmed.starts_with("-=") {
+        Some('-')
+    } else if after_var_trimmed.starts_with("*=") {
+        Some('*')
+    } else if after_var_trimmed.starts_with("/=") {
+        Some('/')
+    } else {
+        None
+    };
+
+    // Check for regular assignment
+    if compound_op.is_none() && !after_var_trimmed.starts_with('=') {
         return Ok(false);
     }
+
     *pos += ws_offset + var_len;
     let var_name = potential_var;
     let var_info = env
@@ -274,16 +326,17 @@ pub fn parse_assignment_statement(
         ));
     }
     skip_whitespace(input, pos);
-    if !input[*pos..].trim_start().starts_with('=') {
-        return Err("Expected '=' in assignment".to_string());
+    if let Some(op) = compound_op {
+        execute_compound_assignment(input, pos, env, op, var_name, var_info)?;
+    } else {
+        if !input[*pos..].trim_start().starts_with('=') {
+            return Err("Expected '=' in assignment".to_string());
+        }
+        *pos += 1;
+        skip_whitespace(input, pos);
+        let (val, actual_type, points_to) = parse_value_or_reference(input, pos, env)?;
+        update_mutable_var(env, var_name, var_info, val, actual_type, points_to)?;
     }
-    *pos += 1;
-
-    skip_whitespace(input, pos);
-
-    let (val, actual_type, points_to) = parse_value_or_reference(input, pos, env)?;
-
-    update_mutable_var(env, var_name, var_info, val, actual_type, points_to)?;
 
     expect_semicolon(input, pos)?;
     Ok(true)

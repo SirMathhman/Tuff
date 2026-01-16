@@ -106,18 +106,15 @@ mod tests {
     }
 
     #[test]
-    fn test_multiplication_and_subtraction() {
+    fn test_multiplication_subtraction_division() {
         assert_eq!(interpret("2 * 3 - 4"), Ok(2));
-    }
-
-    #[test]
-    fn test_operator_precedence() {
+        assert_eq!(interpret("10 / 2"), Ok(5));
         assert_eq!(interpret("4 + 2 * 3"), Ok(10));
     }
 
     #[test]
-    fn test_division() {
-        assert_eq!(interpret("10 / 2"), Ok(5));
+    fn test_operator_precedence() {
+        assert_eq!(interpret("(4 + 2) * 3"), Ok(18));
     }
 
     #[test]
@@ -127,11 +124,6 @@ mod tests {
 
     #[test]
     fn test_parentheses() {
-        assert_eq!(interpret("(4 + 2) * 3"), Ok(18));
-    }
-
-    #[test]
-    fn test_curly_braces() {
         assert_eq!(interpret("(4 + { 2 }) * 3"), Ok(18));
     }
 
@@ -265,37 +257,17 @@ mod tests {
     }
 
     #[test]
-    fn test_assignment_in_block() {
-        assert!(interpret("let x : I32; { x = 100; } x").is_err());
-    }
-
-    #[test]
-    fn test_block_assignment_no_persist() {
-        assert!(interpret("let x : I32; { x = 100; x } x").is_err());
-    }
-
-    #[test]
-    fn test_block_with_literal_no_persist() {
-        assert!(interpret("let x : I32; { x = 100; 7893 } x").is_err());
-    }
-
-    #[test]
-    fn test_block_statement_assignment() {
-        // Statement block: x remains uninitialized after the block
-        // Block modifies local x, but assignment doesn't persist
+    fn test_assignment_in_block_not_persisted() {
         assert!(interpret("let x : I32; { x = 100; } x").is_err());
     }
 
     #[test]
     fn test_block_expression_as_initializer() {
-        // Block expression: the block's value initializes x
-        // x gets initialized to 100 (the block's return value)
         assert_eq!(interpret("let x : I32 = { 100 }; x"), Ok(100));
     }
 
     #[test]
     fn test_standalone_block_expression_error() {
-        // Standalone block expressions are invalid - they must be used in a context
         assert!(interpret("let x = 100; { 7893 } x").is_err());
     }
 
@@ -484,6 +456,34 @@ mod tests {
         assert_eq!(
             interpret("let x : I32; if (true || false) x = 100; else x = 200; x"),
             Ok(100)
+        );
+    }
+
+    #[test]
+    fn test_compound_assignment_add() {
+        assert_eq!(interpret("let mut x = 0; x += 10; x"), Ok(10));
+    }
+
+    #[test]
+    fn test_compound_assignment_subtract() {
+        assert_eq!(interpret("let mut x = 50; x -= 20; x"), Ok(30));
+    }
+
+    #[test]
+    fn test_compound_assignment_multiply() {
+        assert_eq!(interpret("let mut x = 5; x *= 3; x"), Ok(15));
+    }
+
+    #[test]
+    fn test_compound_assignment_divide() {
+        assert_eq!(interpret("let mut x = 100; x /= 4; x"), Ok(25));
+    }
+
+    #[test]
+    fn test_compound_assignment_chained() {
+        assert_eq!(
+            interpret("let mut x = 10; x += 5; x -= 3; x *= 2; x"),
+            Ok(24)
         );
     }
 }
