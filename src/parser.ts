@@ -4,7 +4,6 @@ import {
 	checkTwoCharOperator,
 	type ExecutionContext,
 	extractTypeSuffix,
-	findClosingParen,
 	findElseKeywordIndex,
 	findTypeSuffixStart,
 	hasNegativeSign,
@@ -14,6 +13,7 @@ import {
 	type OperatorMatch,
 	type OperatorPrecedenceState,
 	validateValueForType,
+	extractIfConditionAndAfter,
 } from './types';
 
 interface InterpretFunction {
@@ -55,31 +55,24 @@ export function findIfElseComponents(input: string): IfElseComponents | undefine
 	}
 
 	const afterIf = trimmed.substring(3).trim();
-	if (!afterIf.startsWith('(')) {
+	const parsed = extractIfConditionAndAfter(afterIf);
+	if (parsed === undefined) {
 		return undefined;
 	}
 
-	const conditionEnd = findClosingParen(afterIf);
-	if (conditionEnd < 0) {
-		return undefined;
-	}
-
-	const conditionStr = afterIf.substring(1, conditionEnd);
-	const afterCondition = afterIf.substring(conditionEnd + 1).trim();
-	const elseIndex = findElseKeywordIndex(afterCondition);
-
+	const elseIndex = findElseKeywordIndex(parsed.afterCondition);
 	if (elseIndex < 0) {
 		return undefined;
 	}
 
-	const trueExprStr = afterCondition.substring(0, elseIndex).trim();
-	const falseExprStr = afterCondition.substring(elseIndex + 4).trim();
+	const trueExprStr = parsed.afterCondition.substring(0, elseIndex).trim();
+	const falseExprStr = parsed.afterCondition.substring(elseIndex + 4).trim();
 
 	if (trueExprStr.length === 0 || falseExprStr.length === 0) {
 		return undefined;
 	}
 
-	return { conditionStr, trueExprStr, falseExprStr };
+	return { conditionStr: parsed.conditionStr, trueExprStr, falseExprStr };
 }
 
 /**
@@ -295,6 +288,17 @@ function parseBracedExpression(
 
 	const { context: newContext, remaining } = bindingsResult.value;
 	const trimmedRemaining = remaining.trim();
+
+	// Check if yield was encountered
+	if (trimmedRemaining.startsWith('__YIELD__:')) {
+		const afterYield = trimmedRemaining.substring(10); // Remove __YIELD__:
+		const endMarkerIndex = afterYield.indexOf(':__');
+		if (endMarkerIndex >= 0) {
+			const yieldExprStr = afterYield.substring(0, endMarkerIndex);
+			return interpretInternal(yieldExprStr, newContext);
+		}
+	}
+
 	if (trimmedRemaining.length === 0) {
 		return err('Braced expression must contain an expression after variable declarations');
 	}

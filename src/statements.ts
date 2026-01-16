@@ -2,6 +2,7 @@ import { err, ok, type Result } from './result';
 import {
 	type ContextAndRemaining,
 	type ExecutionContext,
+	type IfConditionAndBranches,
 	type IfStatementBranches,
 	type TypeAnnotationParts,
 	findClosingParen,
@@ -11,18 +12,17 @@ import {
 	isAssignmentStatement,
 	isBalancedBrackets,
 	isVariableName,
+	isYieldStatement,
 	shouldProcessAsStatementBlock,
 	validateValueForType,
 	type ParsedBinding,
 	type ProcessedBindings,
 	type VariableBinding,
 	type VariableDeclarationParts,
+	extractIfConditionAndAfter,
 } from './types';
 import { interpretInternal } from './evaluator';
 
-/**
- * Parses the header of a variable declaration (name, mutability, type annotation).
- */
 /**
  * Parses the type annotation and assignment part after a colon.
  */
@@ -233,6 +233,59 @@ function processAssignmentStatement(
 }
 
 /**
+ * Handles yield marker in braced block remaining.
+ */
+function processYieldInBlock(
+	innerRemaining: string,
+	afterBlock: string,
+): ContextAndRemaining | undefined {
+	if (!innerRemaining.startsWith('__YIELD__:')) {
+		return undefined;
+	}
+
+	const afterYield = innerRemaining.substring(10); // Remove __YIELD__:
+	const endMarkerIndex = afterYield.indexOf(':__');
+	if (endMarkerIndex < 0) {
+		return undefined;
+	}
+
+	let afterYieldFull: string;
+	if (afterBlock.length > 0) {
+		afterYieldFull = `${afterYield} ${afterBlock}`.trim();
+	} else {
+		afterYieldFull = afterYield.trim();
+	}
+	return { context: { bindings: [] }, remaining: afterYieldFull };
+}
+
+/**
+ * Creates a scoped context that only propagates mutations to outer-scope variables.
+ */
+function createScopedContext(
+	outerContext: ExecutionContext,
+	innerContext: ExecutionContext,
+): ExecutionContext {
+	return {
+		bindings: outerContext.bindings.map((outerBinding): VariableBinding => {
+			const updated = innerContext.bindings.find(
+				(binding): boolean => binding.name === outerBinding.name,
+			);
+			return updated ?? outerBinding;
+		}),
+	};
+}
+
+/**
+ * Computes remaining string after block processing.
+ */
+function computeBlockRemaining(innerRemaining: string, afterBlock: string): string {
+	if (innerRemaining.trim().length > 0) {
+		return `${innerRemaining.trim()} ${afterBlock}`.trim();
+	}
+	return afterBlock;
+}
+
+/**
  * Processes a braced block statement.
  */
 function processBracedBlock(input: string, context: ExecutionContext): Result<ContextAndRemaining> {
@@ -262,22 +315,78 @@ function processBracedBlock(input: string, context: ExecutionContext): Result<Co
 		return bindingsResult;
 	}
 	const { context: newContext, remaining: innerRemaining } = bindingsResult.value;
-	// Only propagate changes to existing outer-scope variables, not new declarations
-	const scopedContext = {
-		bindings: context.bindings.map((outerBinding): VariableBinding => {
-			const updated = newContext.bindings.find(
-				(binding): boolean => binding.name === outerBinding.name,
-			);
-			return updated ?? outerBinding;
-		}),
-	};
-	let remaining: string;
-	if (innerRemaining.trim().length > 0) {
-		remaining = `${innerRemaining.trim()} ${afterBlock}`.trim();
-	} else {
-		remaining = afterBlock;
+
+	// Check if yield was encountered - just pass it through for the parser to handle
+	const yieldResult = processYieldInBlock(innerRemaining, afterBlock);
+	if (yieldResult !== undefined) {
+		return ok({ context: newContext, remaining: yieldResult.remaining });
 	}
+
+	const scopedContext = createScopedContext(context, newContext);
+	const remaining = computeBlockRemaining(innerRemaining, afterBlock);
 	return ok({ context: scopedContext, remaining });
+}
+
+/**
+ * Processes a yield statement by evaluating the expression and stopping block execution.
+ */
+function processYieldStatement(
+	input: string,
+	context: ExecutionContext,
+): Result<ContextAndRemaining> {
+	const trimmed = input.trim();
+	if (!trimmed.startsWith('yield ')) {
+		return err('Not a yield statement');
+	}
+
+	const afterYield = trimmed.substring(6).trim();
+	const semiIndex = findSemicolonOutsideBrackets(afterYield);
+	if (semiIndex < 0) {
+		return err('Yield statement missing semicolon');
+	}
+
+	const expressionStr = afterYield.substring(0, semiIndex).trim();
+
+	// Return a marker to signal that yield was encountered
+	// The expression string is used as the "remaining" to be evaluated
+	const yieldMarker = `__YIELD__:${expressionStr}:__`;
+	return ok({ context, remaining: yieldMarker });
+}
+
+/**
+ * Processes statements (declarations, assignments, if-else, blocks) in input.
+ */
+function processStatements(
+	input: string,
+	context: ExecutionContext,
+	allowBlocks: boolean,
+): Result<ContextAndRemaining> {
+	let currentContext = context;
+	let remaining = input;
+	while (remaining.trim().length > 0) {
+		const trimmed = remaining.trim();
+		let result: Result<ContextAndRemaining> | undefined;
+		if (trimmed.startsWith('let ')) {
+			result = processLetDeclaration(remaining, currentContext);
+		} else if (allowBlocks && shouldProcessAsStatementBlock(trimmed)) {
+			result = processBracedBlock(remaining, currentContext);
+		} else if (isYieldStatement(trimmed)) {
+			result = processYieldStatement(remaining, currentContext);
+		} else if (isIfStatement(trimmed)) {
+			result = processIfStatement(remaining, currentContext);
+		} else if (isAssignmentStatement(trimmed)) {
+			result = processAssignmentStatement(remaining, currentContext);
+		} else {
+			break;
+		}
+		if (result.type === 'err') {
+			return result;
+		}
+		currentContext = result.value.context;
+		remaining = result.value.remaining;
+	}
+
+	return ok({ context: currentContext, remaining });
 }
 
 /**
@@ -329,9 +438,6 @@ function isIfStatement(trimmed: string): boolean {
 	return isBraced || semiIndex >= 0;
 }
 
-/**
- * Processes an if or if-else statement with assignment statements.
- */
 /**
  * Extracts the if-statement branches (returns undefined for false branch if no else).
  */
@@ -420,6 +526,42 @@ function processBranch(
 }
 
 /**
+ * Determines which branch to execute based on condition truthiness.
+ */
+function selectIfBranch(
+	isTruthy: boolean,
+	hasElse: boolean,
+	branches: IfStatementBranches,
+): string | undefined {
+	if (isTruthy) {
+		return branches.trueStatementStr;
+	}
+	if (hasElse) {
+		return branches.falseStatementStr;
+	}
+	return undefined;
+}
+
+/**
+ * Determines remaining input after if branch execution.
+ */
+function getRemainingAfterIfExecution(
+	branchRemaining: string,
+	isTruthy: boolean,
+	hasElse: boolean,
+	branches: IfStatementBranches,
+): string {
+	// Check if yield was encountered in the branch
+	const trimmedBranchRemaining = branchRemaining.trim();
+	if (trimmedBranchRemaining.startsWith('__YIELD__:')) {
+		return trimmedBranchRemaining;
+	}
+
+	// Otherwise, extract remaining after the if-else structure
+	return getRemainingAfterIf(isTruthy, hasElse, branches);
+}
+
+/**
  * Determines remaining input after if branch.
  */
 function getRemainingAfterIf(
@@ -442,6 +584,23 @@ function getRemainingAfterIf(
 	return extractRemainingFromIfStatement(branches.trueStatementStr);
 }
 
+/**
+ * Parses if statement condition and branches.
+ */
+function parseIfConditionAndBranches(afterIf: string): IfConditionAndBranches | undefined {
+	const parsed = extractIfConditionAndAfter(afterIf);
+	if (parsed === undefined) {
+		return undefined;
+	}
+
+	const branches = extractIfStatementBranches(parsed.afterCondition);
+	if (branches === undefined) {
+		return undefined;
+	}
+
+	return { conditionStr: parsed.conditionStr, branches };
+}
+
 function processIfStatement(input: string, context: ExecutionContext): Result<ContextAndRemaining> {
 	const trimmed = input.trim();
 	if (!trimmed.startsWith('if ')) {
@@ -449,38 +608,22 @@ function processIfStatement(input: string, context: ExecutionContext): Result<Co
 	}
 
 	const afterIf = trimmed.substring(3).trim();
-	if (!afterIf.startsWith('(')) {
-		return err('Expected ( after if');
-	}
-
-	const conditionEnd = findClosingParen(afterIf);
-	if (conditionEnd < 0) {
-		return err('Unbalanced parentheses in if condition');
-	}
-
-	const conditionStr = afterIf.substring(1, conditionEnd);
-	const afterCondition = afterIf.substring(conditionEnd + 1).trim();
-
-	const branchesResult = extractIfStatementBranches(afterCondition);
-	if (branchesResult === undefined) {
+	const parsed = parseIfConditionAndBranches(afterIf);
+	if (parsed === undefined) {
 		return err('Invalid if statement');
 	}
 
-	const conditionResult = interpretInternal(conditionStr, context);
+	const conditionResult = interpretInternal(parsed.conditionStr, context);
 	if (conditionResult.type === 'err') {
 		return conditionResult;
 	}
 
 	const isTruthy = conditionResult.value !== 0;
-	const hasElse = branchesResult.falseStatementStr !== undefined;
-	let statementToExecute: string;
+	const hasElse = parsed.branches.falseStatementStr !== undefined;
+	const statementToExecute = selectIfBranch(isTruthy, hasElse, parsed.branches);
 
-	if (isTruthy) {
-		statementToExecute = branchesResult.trueStatementStr;
-	} else if (hasElse) {
-		statementToExecute = branchesResult.falseStatementStr as string;
-	} else {
-		const remaining = extractRemainingFromIfStatement(branchesResult.trueStatementStr);
+	if (statementToExecute === undefined) {
+		const remaining = extractRemainingFromIfStatement(parsed.branches.trueStatementStr);
 		return ok({ context, remaining });
 	}
 
@@ -489,42 +632,13 @@ function processIfStatement(input: string, context: ExecutionContext): Result<Co
 		return statementsResult;
 	}
 
-	const remaining = getRemainingAfterIf(isTruthy, hasElse, branchesResult);
+	const remaining = getRemainingAfterIfExecution(
+		statementsResult.value.remaining,
+		isTruthy,
+		hasElse,
+		parsed.branches,
+	);
 	return ok({ context: statementsResult.value.context, remaining });
-}
-
-/**
- * Processes statements (declarations, assignments, if-else, blocks) in input.
- */
-function processStatements(
-	input: string,
-	context: ExecutionContext,
-	allowBlocks: boolean,
-): Result<ContextAndRemaining> {
-	let currentContext = context;
-	let remaining = input;
-	while (remaining.trim().length > 0) {
-		const trimmed = remaining.trim();
-		let result: Result<ContextAndRemaining> | undefined;
-		if (trimmed.startsWith('let ')) {
-			result = processLetDeclaration(remaining, currentContext);
-		} else if (allowBlocks && shouldProcessAsStatementBlock(trimmed)) {
-			result = processBracedBlock(remaining, currentContext);
-		} else if (isIfStatement(trimmed)) {
-			result = processIfStatement(remaining, currentContext);
-		} else if (isAssignmentStatement(trimmed)) {
-			result = processAssignmentStatement(remaining, currentContext);
-		} else {
-			break;
-		}
-		if (result.type === 'err') {
-			return result;
-		}
-		currentContext = result.value.context;
-		remaining = result.value.remaining;
-	}
-
-	return ok({ context: currentContext, remaining });
 }
 
 /**

@@ -103,6 +103,37 @@ export interface IfStatementBranches {
 }
 
 /**
+ * Represents a yield statement with its expression.
+ */
+export interface YieldStatement {
+	expression: string;
+	remaining: string;
+}
+
+/**
+ * Represents parsed if statement condition and branches.
+ */
+export interface IfConditionAndBranches {
+	conditionStr: string;
+	branches: IfStatementBranches;
+}
+
+/**
+ * Checks if a string is a yield statement (yield <expr>;).
+ * @param input - The input string
+ * @returns True if the string starts with 'yield', false otherwise
+ */
+export function isYieldStatement(input: string): boolean {
+	const trimmed = input.trim();
+	if (!trimmed.startsWith('yield ')) {
+		return false;
+	}
+
+	const afterYield = trimmed.substring(6).trim();
+	return afterYield.length > 0;
+}
+
+/**
  * Finds the starting index of a type suffix in a literal string.
  * @param input - The input string to search
  * @returns The index where the type suffix starts, or -1 if not found
@@ -625,4 +656,32 @@ export function findElseKeywordIndex(input: string): number {
 	}
 
 	return -1;
+}
+
+/**
+ * Represents parsed if condition and what comes after.
+ */
+export interface IfConditionAndAfter {
+	conditionStr: string;
+	afterCondition: string;
+}
+
+/**
+ * Extracts condition string and remaining text from after-if string.
+ * @param afterIf - The string after 'if'
+ * @returns Object with conditionStr and afterCondition, or undefined if invalid
+ */
+export function extractIfConditionAndAfter(afterIf: string): IfConditionAndAfter | undefined {
+	if (!afterIf.startsWith('(')) {
+		return undefined;
+	}
+
+	const conditionEnd = findClosingParen(afterIf);
+	if (conditionEnd < 0) {
+		return undefined;
+	}
+
+	const conditionStr = afterIf.substring(1, conditionEnd);
+	const afterCondition = afterIf.substring(conditionEnd + 1).trim();
+	return { conditionStr, afterCondition };
 }
