@@ -173,6 +173,7 @@ pub fn try_parse_struct_instantiation(
         points_to: None,
         struct_fields: Some(field_values),
         function_name: None,
+        local_function: None,
     };
     env.insert(var_name.clone(), var_info);
 

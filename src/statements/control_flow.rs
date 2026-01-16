@@ -263,6 +263,54 @@ fn handle_loop_control() -> bool {
 }
 
 #[allow(clippy::too_many_lines)]
+fn parse_local_function_definition(
+    input: &str,
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<(), String> {
+    // Parse a local function definition and store it in the environment as a closure
+    use crate::variables::LocalFunction;
+    use crate::functions::parse_complete_function;
+
+    let rest = &input[*pos..];
+    let trimmed = rest.trim_start();
+
+    if !trimmed.starts_with("fn ") {
+        return Ok(());
+    }
+
+    let start_pos = *pos + rest.len() - trimmed.len();
+    *pos = start_pos;
+
+    // Parse complete function
+    let (func_name, params, return_type, body) = parse_complete_function(input, pos)?;
+
+    // Store the local function in the environment
+    let local_func = LocalFunction {
+        params,
+        return_type,
+        body,
+        captured_env: env.clone(), // Capture the current environment for closures
+    };
+
+    env.insert(
+        func_name,
+        crate::variables::VariableInfo {
+            value: None,
+            type_name: "fn".to_string(),
+            is_mutable: false,
+            points_to: None,
+            struct_fields: None,
+            function_name: None,
+            local_function: Some(Box::new(local_func)),
+        },
+    );
+
+    Ok(())
+}
+
+
+#[allow(clippy::too_many_lines)]
 pub fn parse_block(
     input: &str,
     pos: &mut usize,
@@ -285,6 +333,8 @@ pub fn parse_block(
         if trimmed.starts_with("let ") {
             *pos += 4;
             super::parse_let_statement(input, pos, &mut local_env)?;
+        } else if trimmed.starts_with("fn ") {
+            parse_local_function_definition(input, pos, &mut local_env)?;
         } else if trimmed.starts_with("if ") {
             parse_if_statement(input, pos, &mut local_env)?;
             if get_loop_control() != LoopControl::None {
@@ -405,8 +455,7 @@ fn parse_for_condition_and_statement(
             is_mutable: false,
             points_to: None,
             struct_fields: None,
-            function_name: None,
-        };
+            function_name: None,            local_function: None,        };
         env.insert(loop_var.clone(), var_info);
 
         // Reset position to body start for each iteration

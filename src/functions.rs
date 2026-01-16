@@ -2,7 +2,11 @@ use crate::parse_utils::{parse_identifier, skip_whitespace};
 use crate::variables::{register_function, get_function, FunctionDef, Environment};
 use crate::parser::parse_term_with_type;
 
-fn consume_token(input: &str, pos: &mut usize, token: &str) -> Result<(), String> {
+// Type alias to reduce complexity
+pub type FunctionHeader = (String, Vec<(String, String)>, String);
+pub type CompleteFunction = (String, Vec<(String, String)>, String, String);
+
+pub fn consume_token(input: &str, pos: &mut usize, token: &str) -> Result<(), String> {
     skip_whitespace(input, pos);
     let trimmed = input[*pos..].trim_start();
     if !trimmed.starts_with(token) {
@@ -12,7 +16,7 @@ fn consume_token(input: &str, pos: &mut usize, token: &str) -> Result<(), String
     Ok(())
 }
 
-fn parse_list<T, F>(
+pub fn parse_list<T, F>(
     input: &str,
     pos: &mut usize,
     mut parser: F,
@@ -63,29 +67,46 @@ fn parse_parameter(input: &str, pos: &mut usize) -> Result<(String, String), Str
     Ok((param_name, param_type))
 }
 
-fn parse_parameter_list(input: &str, pos: &mut usize) -> Result<Vec<(String, String)>, String> {
+pub fn parse_parameter_list(input: &str, pos: &mut usize) -> Result<Vec<(String, String)>, String> {
     parse_list(input, pos, parse_parameter)
 }
 
-fn parse_argument(
+/// Parse a complete function definition (header and body)
+/// Returns (name, params, return_type, body)
+pub fn parse_complete_function(
     input: &str,
     pos: &mut usize,
-    env: &mut Environment,
-) -> Result<i32, String> {
-    let (arg_val, _arg_type) = parse_term_with_type(input, pos, env)?;
-    Ok(arg_val)
-}
-
-#[allow(clippy::too_many_lines)]
-pub fn parse_function_definition(
-    input: &str,
-    pos: &mut usize,
-) -> Result<bool, String> {
+) -> Result<CompleteFunction, String> {
     let rest = &input[*pos..];
     let trimmed = rest.trim_start();
 
     if !trimmed.starts_with("fn ") {
-        return Ok(false);
+        return Err("Expected 'fn'".to_string());
+    }
+
+    let start_pos = *pos + rest.len() - trimmed.len();
+    *pos = start_pos;
+
+    // Parse function header
+    let (func_name, params, return_type) = parse_function_header(input, pos)?;
+
+    // Parse function body using shared helper
+    let body = parse_function_body(input, pos)?;
+
+    Ok((func_name, params, return_type, body))
+}
+
+/// Parse function header (fn name(params) : return_type =>)
+/// Returns (name, params, return_type)
+pub fn parse_function_header(
+    input: &str,
+    pos: &mut usize,
+) -> Result<FunctionHeader, String> {
+    let rest = &input[*pos..];
+    let trimmed = rest.trim_start();
+
+    if !trimmed.starts_with("fn ") {
+        return Err("Expected 'fn'".to_string());
     }
 
     *pos += rest.len() - trimmed.len() + 3; // "fn " = 3 chars
@@ -107,9 +128,71 @@ pub fn parse_function_definition(
 
     consume_token(input, pos, "=>")?;
 
+    Ok((func_name, params, return_type))
+}
+
+fn parse_argument(
+    input: &str,
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<i32, String> {
+    let (arg_val, _arg_type) = parse_term_with_type(input, pos, env)?;
+    Ok(arg_val)
+}
+
+/// Parse function arguments and verify count
+fn parse_and_verify_arguments(
+    input: &str,
+    pos: &mut usize,
+    env: &mut Environment,
+    func_name: &str,
+    expected_count: usize,
+) -> Result<Vec<i32>, String> {
+    let trimmed = input[*pos..].trim_start();
+    *pos += input[*pos..].len() - trimmed.len() + 1;
+
+    // Parse arguments
+    let args = parse_list(input, pos, |inp, p| parse_argument(inp, p, env))?;
+
+    // Verify argument count matches parameter count
+    if args.len() != expected_count {
+        return Err(format!(
+            "Function '{}' expects {} arguments but got {}",
+            func_name, expected_count, args.len()
+        ));
+    }
+
+    Ok(args)
+}
+fn bind_parameters(
+    params: &[(String, String)],
+    args: &[i32],
+    base_env: &Environment,
+) -> Environment {
+    let mut func_env = base_env.clone();
+    for ((param_name, _param_type), arg_val) in params.iter().zip(args.iter()) {
+        func_env.insert(
+            param_name.clone(),
+            crate::variables::VariableInfo {
+                value: Some(*arg_val),
+                type_name: "I32".to_string(),
+                is_mutable: false,
+                points_to: None,
+                struct_fields: None,
+                function_name: None,
+                local_function: None,
+            },
+        );
+    }
+    func_env
+}
+
+/// Parse function body that starts after `=>`
+/// Returns the body string and updates position
+#[allow(dead_code)]
+pub fn parse_function_body(input: &str, pos: &mut usize) -> Result<String, String> {
     skip_whitespace(input, pos);
 
-    // Find the function body - it can end with ';' or a statement keyword
     let body_start = *pos;
     let rest = &input[body_start..];
     let trimmed = rest.trim_start();
@@ -146,7 +229,6 @@ pub fn parse_function_definition(
         if *pos < input.len() && input[*pos..].starts_with(';') {
             *pos += 1;
         }
-        // If no semicolon, that's OK - the next statement will parse
         body_str
     } else {
         // For non-block bodies, find the semicolon
@@ -168,6 +250,27 @@ pub fn parse_function_definition(
         input[body_start..body_end].trim().to_string()
     };
 
+    Ok(body)
+}
+
+#[allow(clippy::too_many_lines)]
+pub fn parse_function_definition(
+    input: &str,
+    pos: &mut usize,
+) -> Result<bool, String> {
+    let rest = &input[*pos..];
+    let trimmed = rest.trim_start();
+
+    if !trimmed.starts_with("fn ") {
+        return Ok(false);
+    }
+
+    let start_pos = *pos + rest.len() - trimmed.len();
+    *pos = start_pos;
+
+    // Parse complete function
+    let (func_name, params, return_type, body) = parse_complete_function(input, pos)?;
+
     let func_def = FunctionDef {
         name: func_name,
         params,
@@ -187,11 +290,6 @@ pub fn try_parse_function_call(
     pos: &mut usize,
     env: &mut Environment,
 ) -> Result<Option<(i32, String)>, String> {
-    let func = match get_function(func_name) {
-        Some(f) => f,
-        None => return Ok(None),
-    };
-
     skip_whitespace(input, pos);
 
     // Expect '('
@@ -199,37 +297,32 @@ pub fn try_parse_function_call(
         return Ok(None);
     }
 
-    let trimmed = input[*pos..].trim_start();
-    *pos += input[*pos..].len() - trimmed.len() + 1;
+    // Check if this is a local function first
+    let local_func_opt = env.get(func_name).and_then(|v| v.local_function.clone());
+    
+    if let Some(local_func) = local_func_opt {
+        let args = parse_and_verify_arguments(input, pos, env, func_name, local_func.params.len())?;
 
-    // Parse arguments
-    let args = parse_list(input, pos, |inp, p| parse_argument(inp, p, env))?;
+        // Create a new scope starting from the captured environment and bind parameters
+        let mut func_env = bind_parameters(&local_func.params, &args, &local_func.captured_env);
 
-    // Verify argument count matches parameter count
-    if args.len() != func.params.len() {
-        return Err(format!(
-            "Function '{}' expects {} arguments but got {}",
-            func_name,
-            func.params.len(),
-            args.len()
-        ));
+        // Evaluate the function body
+        let mut body_pos = 0;
+        let result = crate::parser::interpret_at(&local_func.body, &mut body_pos, &mut func_env)?;
+
+        return Ok(Some((result, local_func.return_type.clone())));
     }
+
+    // Check global function registry
+    let func = match get_function(func_name) {
+        Some(f) => f,
+        None => return Ok(None),
+    };
+
+    let args = parse_and_verify_arguments(input, pos, env, func_name, func.params.len())?;
 
     // Create a new scope with parameters bound to arguments
-    let mut func_env = env.clone();
-    for ((param_name, _param_type), arg_val) in func.params.iter().zip(args.iter()) {
-        func_env.insert(
-            param_name.clone(),
-            crate::variables::VariableInfo {
-                value: Some(*arg_val),
-                type_name: "I32".to_string(), // Simplified - could be improved
-                is_mutable: false,
-                points_to: None,
-                struct_fields: None,
-                function_name: None,
-            },
-        );
-    }
+    let mut func_env = bind_parameters(&func.params, &args, env);
 
     // Evaluate the function body
     let mut body_pos = 0;

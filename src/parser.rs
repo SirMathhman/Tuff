@@ -1,6 +1,6 @@
 use crate::parse_utils::{
     check_and_consume_op, parse_dot_and_identifier, parse_identifier, parse_number_with_type,
-    skip_whitespace, try_parse_this_keyword, try_construct_struct_from_this,
+    skip_whitespace, try_construct_struct_from_this, try_parse_this_keyword,
 };
 use crate::statements::{
     parse_block, parse_top_level_assignment, parse_top_level_let, parse_top_level_struct,

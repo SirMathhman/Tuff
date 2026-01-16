@@ -85,6 +85,7 @@ pub fn assign_through_pointer(
                 points_to: pointed_var.points_to,
                 struct_fields: pointed_var.struct_fields,
                 function_name: pointed_var.function_name,
+                local_function: None,
             },
         );
         Ok(())

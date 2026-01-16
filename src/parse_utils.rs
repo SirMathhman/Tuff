@@ -112,6 +112,7 @@ pub fn try_construct_struct_from_this(env: &mut crate::variables::Environment) -
                 points_to: None,
                 struct_fields: Some(struct_fields),
                 function_name: None,
+                local_function: None,
             };
             env.insert(temp_var_name, var_info);
             

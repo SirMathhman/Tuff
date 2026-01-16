@@ -8,6 +8,20 @@ pub struct VariableInfo {
     pub points_to: Option<String>, // If this is a reference, which variable does it point to?
     pub struct_fields: Option<HashMap<String, i32>>, // For struct instances
     pub function_name: Option<String>, // For function pointers, which function does it reference?
+    #[allow(dead_code)]
+    pub local_function: Option<Box<LocalFunction>>, // For local function definitions with closures
+}
+
+#[derive(Clone)]
+pub struct LocalFunction {
+    #[allow(dead_code)]
+    pub params: Vec<(String, String)>, // param_name, param_type
+    #[allow(dead_code)]
+    pub return_type: String,
+    #[allow(dead_code)]
+    pub body: String,
+    #[allow(dead_code)]
+    pub captured_env: Environment, // Captured environment for closures
 }
 
 #[derive(Clone)]

@@ -123,6 +123,7 @@ fn store_variable(
             points_to,
             struct_fields,
             function_name,
+            local_function: None,
         },
     );
     Ok(())
@@ -155,6 +156,7 @@ fn update_mutable_var(
             points_to,
             struct_fields: var_info.struct_fields,
             function_name: None,
+            local_function: None,
         },
     );
     Ok(())

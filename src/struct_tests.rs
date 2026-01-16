@@ -65,4 +65,12 @@ mod tests {
             Ok(7)
         );
     }
+
+    #[test]
+    fn test_struct_instance_method() {
+        assert_eq!(
+            interpret("fn Point(x : I32, y : I32) : I32 => { fn get() : I32 => x + y; get() } Point(3, 4)"),
+            Ok(7)
+        );
+    }
 }
