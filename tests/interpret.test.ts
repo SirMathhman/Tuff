@@ -24,4 +24,12 @@ describe('interpret', () => {
       expect(result.error).toContain('Negative');
     }
   });
+
+  it('should return Err for "256U8"', () => {
+    const result = interpret('256U8');
+    expect(result.type).toBe('err');
+    if (result.type === 'err') {
+      expect(result.error).toContain('out of range');
+    }
+  });
 });
