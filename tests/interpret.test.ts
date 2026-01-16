@@ -456,4 +456,12 @@ describe('interpret', () => {
 			expect(result.value).toBe(1);
 		}
 	});
+
+	it('should interpret "let x : Bool = true; let y : Bool = false; x && y" as 0', () => {
+		const result = interpret('let x : Bool = true; let y : Bool = false; x && y');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(0);
+		}
+	});
 });

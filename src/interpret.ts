@@ -549,7 +549,7 @@ function interpretInternal(input: string, context: ExecutionContext): Result<num
 
 	const { operator, index: operatorIndex } = operatorMatch;
 	const leftStr = input.substring(0, operatorIndex);
-	const rightStr = input.substring(operatorIndex + 1);
+	const rightStr = input.substring(operatorIndex + operator.length);
 
 	const leftInterpret = interpretInternal(leftStr, context);
 	if (leftInterpret.type === 'err') {
