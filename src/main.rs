@@ -453,4 +453,28 @@ mod tests {
             Ok(1)
         );
     }
+
+    #[test]
+    fn test_if_true_condition() {
+        // if-else expression: true condition takes then branch
+        assert_eq!(interpret("let x = if (true) 3 else 5; x"), Ok(3));
+    }
+
+    #[test]
+    fn test_if_false_condition() {
+        // if-else expression: false condition takes else branch
+        assert_eq!(interpret("let x = if (false) 3 else 5; x"), Ok(5));
+    }
+
+    #[test]
+    fn test_if_with_logical_or() {
+        // if-else with logical OR in condition
+        assert_eq!(interpret("let x = if (true || false) 3 else 5; x"), Ok(3));
+    }
+
+    #[test]
+    fn test_if_with_logical_and() {
+        // if-else with logical AND in condition
+        assert_eq!(interpret("let x = if (false && true) 3 else 5; x"), Ok(5));
+    }
 }

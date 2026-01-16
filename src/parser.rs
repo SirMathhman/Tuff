@@ -185,6 +185,11 @@ fn parse_factor_with_type(
         let (identifier, len) = parse_identifier(&input[*pos..])?;
         *pos += len;
 
+        // Check for if expression
+        if identifier == "if" {
+            return parse_if_expression(input, pos, env);
+        }
+
         // Check for Bool literals
         if identifier == "true" {
             return Ok((1, "Bool".to_string()));
@@ -219,6 +224,54 @@ fn check_and_consume_op(input: &str, pos: &mut usize, ops: &str) -> Option<char>
         }
     }
     None
+}
+
+fn parse_if_expression(
+    input: &str,
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<(i32, String), String> {
+    skip_whitespace(input, pos);
+
+    // Expect opening parenthesis for condition
+    if !input[*pos..].trim_start().starts_with('(') {
+        return Err("Expected '(' after 'if'".to_string());
+    }
+    *pos += input[*pos..].len() - input[*pos..].trim_start().len() + 1;
+
+    // Parse the condition
+    let condition = interpret_at(input, pos, env)?;
+
+    // Expect closing parenthesis
+    skip_whitespace(input, pos);
+    if !input[*pos..].trim_start().starts_with(')') {
+        return Err("Expected ')' after condition".to_string());
+    }
+    *pos += input[*pos..].len() - input[*pos..].trim_start().len() + 1;
+
+    // Parse the then branch
+    skip_whitespace(input, pos);
+    let then_value = interpret_at(input, pos, env)?;
+
+    // Expect 'else' keyword
+    skip_whitespace(input, pos);
+    let trimmed = input[*pos..].trim_start();
+    if !trimmed.starts_with("else") {
+        return Err("Expected 'else' after then branch".to_string());
+    }
+    *pos += input[*pos..].len() - trimmed.len() + 4; // 4 = len("else")
+
+    // Parse the else branch
+    skip_whitespace(input, pos);
+    let else_value = interpret_at(input, pos, env)?;
+
+    // Return the appropriate branch
+    let result = if condition != 0 {
+        then_value
+    } else {
+        else_value
+    };
+    Ok((result, "".to_string()))
 }
 
 pub fn parse_term_with_type(
