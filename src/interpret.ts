@@ -58,8 +58,40 @@ function hasNegativeSign(input: string): boolean {
 	return input.length > 0 && input.charAt(0) === '-';
 }
 
+function isBalancedParentheses(input: string): boolean {
+	if (!input.startsWith('(') || !input.endsWith(')')) {
+		return false;
+	}
+
+	let depth = 0;
+	for (let i = 0; i < input.length; i++) {
+		const char = input[i];
+		if (char === '(') {
+			depth++;
+		} else if (char === ')') {
+			depth--;
+		}
+
+		if (depth === 0 && i < input.length - 1) {
+			return false;
+		}
+
+		if (depth < 0) {
+			return false;
+		}
+	}
+
+	return depth === 0;
+}
+
 function parseLiteral(literal: string): Result<number> {
 	const trimmed = literal.trim();
+
+	// Check if this is a parenthesized expression
+	if (isBalancedParentheses(trimmed)) {
+		const inner = trimmed.substring(1, trimmed.length - 1);
+		return interpret(inner);
+	}
 
 	if (hasNegativeSign(trimmed)) {
 		return err('Negative numbers are not supported for unsigned types');
@@ -161,20 +193,43 @@ function getOperatorPrecedence(operator: string): number {
 	return 0;
 }
 
+function isPrevCharValidForOperator(input: string, charIndex: number): boolean {
+	const prevCharIndex = skipBackwardWhitespace(input, charIndex - 1);
+	if (prevCharIndex < 0) {
+		return false;
+	}
+
+	const prevChar = input[prevCharIndex];
+	return isAlphanumeric(prevChar) || prevChar === ')';
+}
+
 function findOperator(input: string): OperatorMatch | undefined {
 	const operators = ['+', '-', '*', '/'];
 	let lowestPrecedence = Infinity;
 	let lowestPrecedenceIndex = -1;
 	let lowestPrecedenceOperator = '';
+	let parenDepth = 0;
+	if (input.startsWith('(')) {
+		parenDepth = 1;
+	}
 
 	for (let i = 1; i < input.length; i++) {
 		const char = input[i];
-		if (!operators.includes(char)) {
+
+		if (char === '(') {
+			parenDepth++;
+			continue;
+		}
+		if (char === ')') {
+			parenDepth--;
 			continue;
 		}
 
-		const prevCharIndex = skipBackwardWhitespace(input, i - 1);
-		if (prevCharIndex < 0 || !isAlphanumeric(input[prevCharIndex])) {
+		if (parenDepth > 0 || !operators.includes(char)) {
+			continue;
+		}
+
+		if (!isPrevCharValidForOperator(input, i)) {
 			continue;
 		}
 

@@ -152,4 +152,20 @@ describe('interpret', () => {
 			expect(result.value).toBe(10);
 		}
 	});
+
+	it('should interpret "(4)" as 4', () => {
+		const result = interpret('(4)');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(4);
+		}
+	});
+
+	it('should interpret "(4 + 2) * 3" as 18', () => {
+		const result = interpret('(4 + 2) * 3');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(18);
+		}
+	});
 });
