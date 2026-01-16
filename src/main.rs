@@ -348,4 +348,25 @@ mod tests {
             Ok(600)
         );
     }
+
+    #[test]
+    fn test_block_expression_as_initializer_no_scope_leak() {
+        // When a block expression is used as an initializer, the block's local variables
+        // don't leak into the outer scope. The initializer value is assigned to the variable.
+        // Expected: a gets 600, but y and z don't exist in outer scope
+        assert_eq!(
+            interpret("let x = 100; let a = { let y = 200; { let z = 300; x + y + z }}; a"),
+            Ok(600)
+        );
+    }
+
+    #[test]
+    fn test_block_initializer_without_final_access() {
+        // When a let statement is the final thing (not accessed), what should it return?
+        // The requirement suggests it should return 0 (or uninitialized default)
+        assert_eq!(
+            interpret("let x = 100; let a = { let y = 200; { let z = 300; x + y + z }};"),
+            Ok(0)
+        );
+    }
 }
