@@ -206,7 +206,7 @@ function processAssignmentStatement(
 	}
 
 	const { name, value } = assignResult.value;
-	const updatedBindings = context.bindings.map((binding) => {
+	const updatedBindings = context.bindings.map((binding): VariableBinding => {
 		if (binding.name === name) {
 			return { name, value };
 		}
@@ -400,6 +400,12 @@ function evaluateBinaryOp(left: number, operator: string, right: number): Result
 	return err(`Unknown operator: ${operator}`);
 }
 
+/**
+ * Interprets a mathematical expression with typed numeric literals and variable bindings.
+ * Supports arithmetic operations, type annotations, variable declarations, and assignments.
+ * @param input - The expression string to interpret
+ * @returns Result containing the evaluated number or an error message
+ */
 export function interpret(input: string): Result<number> {
 	const bindingsResult = processVariableBindings(input, { bindings: [] });
 	if (bindingsResult.type === 'err') {
@@ -443,7 +449,7 @@ function interpretInternal(input: string, context: ExecutionContext): Result<num
 
 	const allTypeSuffixes = collectTypeSuffixes(input);
 	if (allTypeSuffixes.length > 0) {
-		const largestType = allTypeSuffixes.reduce((largest, current) => {
+		const largestType = allTypeSuffixes.reduce((largest, current): string => {
 			const currentMax = getTypeRangeMax(current);
 			const largestMax = getTypeRangeMax(largest);
 			if (currentMax >= largestMax) {

@@ -132,6 +132,16 @@ module.exports = [
 				},
 			],
 
+			// JSDoc requirement for exported members
+			'@typescript-eslint/explicit-function-return-type': [
+				'error',
+				{
+					allowExpressions: false,
+					allowTypedFunctionExpressions: false,
+					allowHigherOrderFunctions: false,
+				},
+			],
+
 			// Prettier integration
 			'prettier/prettier': 'error',
 		},
