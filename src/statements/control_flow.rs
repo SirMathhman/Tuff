@@ -1,4 +1,4 @@
-use crate::parser::skip_whitespace;
+use crate::parse_utils::skip_whitespace;
 use crate::variables::Environment;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -363,7 +363,7 @@ fn parse_for_condition_and_statement(
     }
     *pos += rest.len() - trimmed.len() + 4;
 
-    let (loop_var, var_len) = crate::parser::parse_identifier(&input[*pos..])?;
+    let (loop_var, var_len) = crate::parse_utils::parse_identifier(&input[*pos..])?;
     *pos += var_len;
 
     skip_whitespace(input, pos);
@@ -401,6 +401,7 @@ fn parse_for_condition_and_statement(
             type_name: "I32".to_string(),
             is_mutable: false,
             points_to: None,
+            struct_fields: None,
         };
         env.insert(loop_var.clone(), var_info);
 

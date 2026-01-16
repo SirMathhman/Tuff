@@ -6,9 +6,38 @@ pub struct VariableInfo {
     pub type_name: String,
     pub is_mutable: bool,
     pub points_to: Option<String>, // If this is a reference, which variable does it point to?
+    pub struct_fields: Option<HashMap<String, i32>>, // For struct instances
+}
+
+#[derive(Clone)]
+pub struct StructDef {
+    pub name: String,
+    #[allow(dead_code)]
+    pub fields: Vec<(String, String)>, // field_name, field_type
 }
 
 pub type Environment = HashMap<String, VariableInfo>;
+pub type StructRegistry = HashMap<String, StructDef>;
+
+// Thread-local storage for struct registry
+thread_local! {
+    static STRUCT_REGISTRY: std::cell::RefCell<StructRegistry> = std::cell::RefCell::new(StructRegistry::new());
+}
+
+#[allow(dead_code)]
+pub fn register_struct(def: StructDef) {
+    STRUCT_REGISTRY.with(|sr| sr.borrow_mut().insert(def.name.clone(), def));
+}
+
+#[allow(dead_code)]
+pub fn get_struct_registry() -> StructRegistry {
+    STRUCT_REGISTRY.with(|sr| sr.borrow().clone())
+}
+
+#[allow(dead_code)]
+pub fn clear_struct_registry() {
+    STRUCT_REGISTRY.with(|sr| sr.borrow_mut().clear());
+}
 
 pub fn is_type_compatible(declared: &str, actual: &str) -> bool {
     if actual.is_empty() || declared.is_empty() {

@@ -84,6 +84,7 @@ pub fn assign_through_pointer(
                 type_name: pointed_var.type_name,
                 is_mutable: pointed_var.is_mutable,
                 points_to: pointed_var.points_to,
+                struct_fields: pointed_var.struct_fields,
             },
         );
         Ok(())

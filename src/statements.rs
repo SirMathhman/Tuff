@@ -1,4 +1,4 @@
-use crate::parser::{parse_identifier, skip_whitespace};
+use crate::parse_utils::{parse_identifier, skip_whitespace};
 use crate::variables::{is_type_compatible, Environment, VariableInfo};
 
 mod control_flow;
@@ -67,6 +67,7 @@ fn store_variable(
             type_name: stored_type,
             is_mutable,
             points_to,
+            struct_fields: None,
         },
     );
     Ok(())
@@ -97,6 +98,7 @@ fn update_mutable_var(
             type_name: var_info.type_name,
             is_mutable: new_mutability,
             points_to,
+            struct_fields: var_info.struct_fields,
         },
     );
     Ok(())
@@ -380,4 +382,7 @@ pub fn parse_top_level_assignment(
     env: &mut Environment,
 ) -> Result<bool, String> {
     parse_assignment_statement(input, pos, env)
+}
+pub fn parse_top_level_struct(input: &str, pos: &mut usize) -> Result<bool, String> {
+    crate::structs::parse_struct_definition(input, pos)
 }

@@ -1,57 +1,32 @@
 use crate::statements::{
-    parse_block, parse_top_level_assignment, parse_top_level_let, parse_while_statement,
+    parse_block, parse_top_level_assignment, parse_top_level_let, parse_top_level_struct,
+    parse_while_statement,
 };
-use crate::validators::validate_type_range;
 use crate::variables::Environment;
+use crate::parse_utils::{parse_identifier, parse_number_with_type, skip_whitespace, check_and_consume_op};
 
 mod comparison;
 
-fn parse_number_inner(input: &str) -> Result<(i64, String, usize), String> {
-    let trimmed = input.trim_start();
-    let ws_offset = input.len() - trimmed.len();
-    let digit_end = trimmed
-        .find(|c: char| !c.is_ascii_digit())
-        .unwrap_or(trimmed.len());
-    if digit_end == 0 {
-        return Err("No digits found".to_string());
-    }
-    let digit_str = &trimmed[..digit_end];
-    let value = digit_str.parse::<i64>().map_err(|e| e.to_string())?;
-    let remainder = &trimmed[digit_end..];
-    let suffix_end = remainder
-        .find(|c: char| !c.is_alphanumeric())
-        .unwrap_or(remainder.len());
-    let suffix = &remainder[..suffix_end];
-    let suffix_upper = suffix.to_uppercase();
-    Ok((value, suffix_upper, ws_offset + digit_end + suffix_end))
-}
-
-pub fn parse_number_with_type(input: &str) -> Result<(i32, String, usize), String> {
-    let (value, suffix_upper, len) = parse_number_inner(input)?;
-    let result = validate_type_range(&suffix_upper, value)?;
-    Ok((result, suffix_upper, len))
-}
-
-pub fn parse_identifier(input: &str) -> Result<(String, usize), String> {
-    let trimmed = input.trim_start();
-    let ws_offset = input.len() - trimmed.len();
-
-    let end = trimmed
-        .find(|c: char| !c.is_alphanumeric() && c != '_')
-        .unwrap_or(trimmed.len());
-
-    if end == 0 {
-        return Err("No identifier found".to_string());
+#[allow(dead_code)]
+fn try_parse_field_access(
+    var_name: &str,
+    input: &str,
+    pos: &mut usize,
+    env: &Environment,
+) -> Result<Option<(i32, String)>, String> {
+    skip_whitespace(input, pos);
+    if !input[*pos..].trim_start().starts_with('.') {
+        return Ok(None);
     }
 
-    let ident = trimmed[..end].to_string();
-    Ok((ident, ws_offset + end))
-}
+    let trimmed = input[*pos..].trim_start();
+    *pos += input[*pos..].len() - trimmed.len() + 1;
 
-pub fn skip_whitespace(input: &str, pos: &mut usize) {
-    let rest = &input[*pos..];
-    let trimmed = rest.trim_start();
-    *pos += rest.len() - trimmed.len();
+    let (field_name, field_len) = parse_identifier(&input[*pos..])?;
+    *pos += field_len;
+
+    let field_value = crate::structs::get_field_value(var_name, &field_name, env)?;
+    Ok(Some((field_value, "".to_string())))
 }
 
 fn apply_multiplication_division(lhs: i32, op: char, rhs: i32) -> Result<i32, String> {
@@ -206,11 +181,29 @@ fn parse_factor_with_type(
             return Ok((0, "Bool".to_string()));
         }
 
+        // Try to parse struct instantiation
+        if let Ok(Some((val, type_name))) =
+            crate::structs::try_parse_struct_instantiation(&identifier, input, pos, env)
+        {
+            // Check for field access on struct instantiation
+            let temp_var_name = format!("_struct_inst_{}", identifier);
+            if let Ok(Some((field_value, _))) = try_parse_field_access(&temp_var_name, input, pos, env) {
+                return Ok((field_value, "".to_string()));
+            }
+            return Ok((val, type_name));
+        }
+
         // Otherwise it's a variable
         let var_info = env
             .get(&identifier)
             .ok_or_else(|| format!("Undefined variable: {}", identifier))?
             .clone();
+
+        // Check for field access
+        if let Ok(Some((field_value, _))) = try_parse_field_access(&identifier, input, pos, env) {
+            return Ok((field_value, "".to_string()));
+        }
+
         let val = var_info
             .value
             .ok_or_else(|| format!("Variable '{}' is not initialized", identifier))?;
@@ -220,19 +213,6 @@ fn parse_factor_with_type(
         *pos += len;
         Ok((value, ty))
     }
-}
-
-fn check_and_consume_op(input: &str, pos: &mut usize, ops: &str) -> Option<char> {
-    let trimmed = input[*pos..].trim_start();
-    let ws_len = input[*pos..].len() - trimmed.len();
-
-    if let Some(op) = trimmed.chars().next() {
-        if ops.contains(op) {
-            *pos += ws_len + 1;
-            return Some(op);
-        }
-    }
-    None
 }
 
 fn parse_paren_expression(
@@ -403,19 +383,27 @@ fn expect_closing(
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 pub fn interpret(input: &str) -> Result<i32, String> {
     let input = input.trim();
     let mut pos = 0;
     let mut env = Environment::new();
 
     loop {
+        let parsed_struct = parse_top_level_struct(input, &mut pos)?;
         let parsed_let = parse_top_level_let(input, &mut pos, &mut env)?;
         let parsed_assign = parse_top_level_assignment(input, &mut pos, &mut env)?;
         let parsed_if = crate::statements::parse_if_statement(input, &mut pos, &mut env)?;
         let parsed_while = parse_while_statement(input, &mut pos, &mut env)?;
         let parsed_for = crate::statements::parse_for_statement(input, &mut pos, &mut env)?;
 
-        if !parsed_let && !parsed_assign && !parsed_if && !parsed_while && !parsed_for {
+        if !parsed_struct
+            && !parsed_let
+            && !parsed_assign
+            && !parsed_if
+            && !parsed_while
+            && !parsed_for
+        {
             break;
         }
     }
