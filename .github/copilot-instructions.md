@@ -2,22 +2,23 @@
 
 ## Project Overview
 
-**Tuff** is a TypeScript-based expression interpreter that parses and evaluates mathematical expressions with typed numeric literals.
+**Tuff** is a TypeScript-based expression interpreter that evaluates typed mathematical expressions with variable bindings, logical operators, and block scoping.
 
-### Core Architecture
+### Core Architecture (3-Module Design)
 
-- **Single responsibility**: `interpret()` function serves as the main API in [src/interpret.ts](../src/interpret.ts)
-- **Error handling**: Uses a custom `Result<T>` discriminated union type ([src/result.ts](../src/result.ts)) for explicit error propagation (no exceptions)
-- **Parsing pipeline**: Split into focused functions—type suffix detection → literal parsing → operator detection → binary operation evaluation
+1. **[src/result.ts](../src/result.ts)**: Result type for error handling (mandatory for all fallible operations)
+2. **[src/types.ts](../src/types.ts)**: All type interfaces and utility functions (447 lines of validation, parsing helpers, and state management)
+3. **[src/interpret.ts](../src/interpret.ts)**: Main interpreter with variable binding processing and expression evaluation (584 lines, ≤500 code lines after blank/comment skipping)
 
-### Key Data Structures
+**Entry point**: `interpret(input: string): Result<number>` - processes variable declarations/assignments, then evaluates remaining expression.
+
+### Key Error Handling Pattern
 
 ```typescript
-// Result type - mandatory for all fallible operations
+// All operations return Result<T> - exhaustive checking mandatory
 Result<T> = { type: 'ok'; value: T } | { type: 'err'; error: string }
+if (result.type === 'err') { return result; } // Bubble errors immediately
 ```
-
-**Why this pattern**: Enables exhaustive type checking and forces error handling at call sites. Always use `if (result.type === 'err')` checks.
 
 ## Development Workflows
 
@@ -29,7 +30,7 @@ Result<T> = { type: 'ok'; value: T } | { type: 'err'; error: string }
 - **Pattern**: Test structure with exhaustive type checks:
   ```typescript
   if (result.type === 'ok') {
-    expect(result.value).toBe(expected);
+  	expect(result.value).toBe(expected);
   }
   ```
 
@@ -40,40 +41,48 @@ Result<T> = { type: 'ok'; value: T } | { type: 'err'; error: string }
 - **Duplicate detection**: `pnpm cpd` (PMD Copy-Paste Detector with 50-token minimum)
 - **Pre-commit**: Husky hook runs `test && lint:fix && cpd` automatically
 
-## Critical Patterns & Conventions
+## Language Features & Evaluation Order
 
-### 1. **Operator Detection with Whitespace Handling**
+### Supported Syntax
 
-`findOperator()` scans for `+`, `-`, `*`, `/` but must skip whitespace when checking context. This is essential for expressions like `"1U8 + 2"` where the operator may have leading spaces.
+- **Typed literals**: `100U8`, `42I16` (types: U8, U16, U32, I8, I16, I32)
+- **Boolean literals**: `true` (→ 1), `false` (→ 0), with `Bool` type annotation
+- **Operators** (by precedence, lowest first):
+  - `||` (logical OR, precedence 0) — `left !== 0 || right !== 0`
+  - `&&` (logical AND, precedence 1) — `left !== 0 && right !== 0`
+  - `+`, `-` (precedence 2)
+  - `*`, `/` (precedence 3, floor division)
+- **Variable bindings**: `let x = 5; x + 3` or `let mut x = 0; x = 10; x`
+- **Block scoping**: `{ let y = 100; y }` (new variables isolated, outer mutations allowed)
+- **Type annotations**: `let x : I32 = 7;` with range validation
+- **Uninitialized declarations**: `let x : I32;` (then `x = 2;` to assign)
 
-**Pattern**: Look backward from candidate position, skip spaces, then verify previous character is alphanumeric.
+### Critical Parsing Patterns
 
-### 2. **Type Suffix Parsing (U8, I8, etc.)**
+**1. Boolean Literal Detection (before variable lookup)**
+- In `parseLiteral()`, check `trimmed === 'true'` and `trimmed === 'false'` **before** calling `isVariableName()`
+- This prevents shadowing `true`/`false` with variable names
 
-- Type suffixes appear **immediately after digits** (e.g., `100U8`, `42I8`)
-- Detection: Scan backward from string end, stop at first non-digit, check if preceded by 'U' or 'I'
-- Validation happens in `validateValueForType()` — currently enforces `U8: [0, 255]` range
-- **Future expansion**: Add more types here without changing core parsing logic
+**2. Type Suffix Parsing (U8, I8, etc.)**
+- Suffixes appear immediately after digits: `100U8`, `42I8`
+- `findTypeSuffixStart()` scans backward from string end, stops at first non-digit
+- Validation in `validateValueForType()` enforces ranges (e.g., U8: [0, 255])
 
-### 3. **Error Propagation Pattern**
+**3. Operator Precedence Resolution in `findOperator()`**
+- Scans expression for lowest-precedence operator (stops at bracket depth 0)
+- Two-character operators (`||`, `&&`) checked before single-char via `checkTwoCharOperator()`
+- Returns `OperatorMatch` with operator, index, and precedence level
 
-All parsing functions return `Result<number>`. Follow this pattern when adding features:
+**4. Block Scoping in `processBracedBlock()`**
+- Uses `.map()` to propagate only mutations of existing outer-scope variables
+- New variables declared in blocks don't leak: `{ let x = 7; } x => Error`
+- But mutations of mutable variables propagate: `let mut x = 0; { x = 100; } x => 100`
 
-```typescript
-const leftResult = parseLiteral(leftStr);
-if (leftResult.type === 'err') {
-  return leftResult; // Bubble error up
-}
-```
-
-### 4. **Expression Evaluation Flow**
-
-1. Parse left operand (includes type suffix validation)
-2. Find operator (with whitespace tolerance)
-3. Parse right operand
-4. Execute binary operation only if both operands parse successfully
-
-**Why this order**: Ensures left-to-right validation and clear error attribution.
+**5. Statement vs Expression Blocks**
+- `containsStatements()` detects blocks with `let` or assignment statements
+- `shouldProcessAsStatementBlock()` ensures block has content after closing brace
+- Expression blocks: `{ let x = 7; x }` → value is inner expression result
+- Statement blocks: `{ let x = 7; } expr` → process bindings, then evaluate expr
 
 ## Code Style & Linting Rules
 
@@ -89,13 +98,36 @@ if (leftResult.type === 'err') {
 - **No non-null assertions** (`@typescript-eslint/no-non-null-assertion: 'error'`)
 - **Strict booleans** (`@typescript-eslint/strict-boolean-expressions: 'error'`)
 - **Max nesting depth: 2** (`max-depth: 2`) — keep functions small and focused
+- **Max function lines: 50** (`max-lines-per-function: 50`)
+- **Max file lines: 500** (`max-lines: 500` with `skipBlankLines: true, skipComments: true`)
+- **No ternary operators** (`no-ternary: 'error'`)
 - **No console** except warnings/errors (`no-console: ['error', { allow: ['warn', 'error'] }]`)
 - **Prefer const + optional chaining** — variables must not be reassigned
 - **Template literals** — no string concatenation (`prefer-template: 'error'`)
+- **No anonymous object types** — must define named interfaces (prevents accidental duplicates)
 
 ### ESLint Configuration
 
 Flat config in [eslint.config.js](../eslint.config.js) with separate rules for test files (slightly relaxed). TypeScript-ESLint integration via `@typescript-eslint/parser` with `tsconfig.json` project reference.
+
+### Recent Refactoring: Module Split
+
+The interpreter was refactored to separate concerns:
+- **Before**: Single `interpret.ts` file (717+ lines) - violated max-lines rule
+- **After**: Split into 3 modules:
+  - `types.ts` (447 lines): Type definitions, validation, operator helpers
+  - `interpret.ts` (584 lines, ~496 code lines): Parser and evaluator
+  - `result.ts` (minimal): Result type and constructors
+- **Benefit**: Enables feature addition without line-count pressure; clearer module boundaries
+- **Pattern**: Extract utility functions to `types.ts` when `interpret.ts` approaches 500-line limit
+
+### Code Deduplication Strategy
+
+The `processStatements()` function eliminated duplicate code between:
+- `interpret()` - top-level statement processing with block support
+- `processVariableBindings()` - nested binding processing without blocks
+
+**Pattern**: Created `processStatements(input, context, allowBlocks: boolean)` to unify logic, reducing duplication while maintaining clear responsibility separation.
 
 ## Integration Points & Dependencies
 
@@ -121,17 +153,31 @@ tests/
 
 ## Adding New Features
 
-### Example: Adding a new operator or type
+### Example: Adding a new binary operator
 
-1. Update `findOperator()` if needed for tokenization
-2. Add type validation in `validateValueForType()` for new types
-3. Add operation branch in `evaluateBinaryOp()`
-4. Write test cases covering success + edge cases
-5. Run `pnpm lint:fix && pnpm test` before committing
+1. Add operator string to `operators` list in `findOperator()` (line 443)
+2. Add precedence via `checkSingleCharOperator()` or `checkTwoCharOperator()` in [src/types.ts](../src/types.ts)
+3. Add evaluation case in `evaluateBinaryOp()` in [src/interpret.ts](../src/interpret.ts)
+4. Add test cases covering:
+   - Basic operation: `"2 + 3" => 5`
+   - Precedence interactions: `"1 + 2 * 3" => 7`
+   - Error cases (e.g., division by zero)
+5. Run `pnpm test && pnpm lint:fix && pnpm cpd` before commit
 
-### Example: Modifying error messages
+### Example: Adding a new type
 
-All errors use `err()` helper from `result.ts`. Ensure error messages are user-friendly and include context (e.g., `"Value 256 is out of range for U8 (0-255)"`).
+1. Add type name to `validateValueForType()` switch in [src/types.ts](../src/types.ts)
+2. Add range constraints via `getTypeRangeMax()` and `getTypeRangeMin()`
+3. Update `collectTypeSuffixes()` if precedence rules needed for type coercion
+4. Add test cases with both valid and out-of-range values
+
+### Module Organization
+
+- **types.ts**: All type definitions, validation functions, operator helpers (no side effects)
+- **interpret.ts**: Main interpreter logic, statement processing, expression evaluation
+- **result.ts**: Result type and helpers (never changes)
+
+**Key constraint**: `interpret.ts` ≤ 500 lines (skipBlankLines/skipComments). Keep tight by extracting logic to `types.ts`.
 
 ## Testing Checklist
 
@@ -140,10 +186,15 @@ Before marking features complete:
 - [ ] Test with both typed (`100U8`) and untyped (`100`) literals
 - [ ] Test mixed operands: `1U8 + 2`, `1 + 2U8`
 - [ ] Test error cases: out-of-range values, division by zero, invalid syntax
+- [ ] Test variable declarations: `let x = 5; x`, `let mut x = 0; x = 100; x`
+- [ ] Test block scoping: `{ let x = 7; } x => Error`, `let mut x = 0; { x = 100; } x => 100`
+- [ ] Test logical operators: `true || false => 1`, `false && false => 0`
+- [ ] Test operator precedence: `1 + 2 * 3 => 7`, `true || false && false => 1`
 - [ ] No console warnings/errors in test output
 - [ ] `pnpm lint` passes with no errors
-- [ ] `pnpm cpd` detects no duplicates
+- [ ] `pnpm cpd` detects no duplicates (50-token minimum)
+- [ ] `pnpm test` shows all tests passing
 
 ---
 
-**Last Updated**: January 2026 | **Project Version**: 1.0.0
+**Last Updated**: January 16, 2026 | **Project Version**: 1.0.0 | **Test Coverage**: 57 tests
