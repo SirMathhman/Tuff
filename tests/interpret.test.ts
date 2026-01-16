@@ -296,4 +296,20 @@ describe('interpret', () => {
 			expect(result.value).toBe(1000001);
 		}
 	});
+
+	it('should return Err for "{ let x : I32 = 7; }" (no expression)', () => {
+		const result = interpret('{ let x : I32 = 7; }');
+		expect(result.type).toBe('err');
+		if (result.type === 'err') {
+			expect(result.error).toContain('expression');
+		}
+	});
+
+	it('should return Err for "10 / ({ let x : I32 = 7; } - 2)"', () => {
+		const result = interpret('10 / ({ let x : I32 = 7; } - 2)');
+		expect(result.type).toBe('err');
+		if (result.type === 'err') {
+			expect(result.error).toContain('expression');
+		}
+	});
 });

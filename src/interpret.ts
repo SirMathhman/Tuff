@@ -274,7 +274,12 @@ function parseBracedExpression(trimmed: string, context: ExecutionContext): Resu
 	}
 
 	const { context: newContext, remaining } = bindingsResult.value;
-	return interpretInternal(remaining, newContext);
+	const trimmedRemaining = remaining.trim();
+	if (trimmedRemaining.length === 0) {
+		return err('Braced expression must contain an expression after variable declarations');
+	}
+
+	return interpretInternal(trimmedRemaining, newContext);
 }
 
 function parseLiteral(literal: string, context: ExecutionContext): Result<number> {
