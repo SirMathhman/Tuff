@@ -544,4 +544,20 @@ describe('interpret', () => {
 			expect(result.value).toBe(200);
 		}
 	});
+
+	it('should interpret "let x : I32; if (true) { x = 100; } else { x = 200; } x" as 100', () => {
+		const result = interpret('let x : I32; if (true) { x = 100; } else { x = 200; } x');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(100);
+		}
+	});
+
+	it('should interpret "let x : I32; if (false) { x = 100; } else { x = 200; } x" as 200', () => {
+		const result = interpret('let x : I32; if (false) { x = 100; } else { x = 200; } x');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(200);
+		}
+	});
 });

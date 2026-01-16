@@ -38,6 +38,7 @@ if (result.type === 'err') { return result; } // Bubble errors immediately
 
 - **Linting**: `pnpm lint` (strict ESLint + TypeScript rules)
 - **Fix**: `pnpm lint:fix` (includes Prettier formatting)
+  - **IMPORTANT**: When encountering formatting issues from Prettier (multi-line statements, alignment, etc.), **intentionally run `pnpm lint:fix`** rather than manually fixing formatting. This ensures consistent, tool-enforced formatting across the codebase.
 - **Duplicate detection**: `pnpm cpd` (PMD Copy-Paste Detector with 50-token minimum)
 - **Pre-commit**: Husky hook runs `test && lint:fix && cpd` automatically
 - **Committing**: **REQUIRED** — Always make a commit at the end of any task using `git commit -m "..."`. Never leave changes uncommitted.

@@ -289,7 +289,7 @@ function isIfElseStatement(trimmed: string): boolean {
 	}
 
 	// Check if this looks like an if-else statement by finding the pattern
-	// if (...) <statement>; else <statement>;
+	// if (...) <statement>; else <statement>; or if (...) { ... } else { ... }
 	const afterIf = trimmed.substring(3).trim();
 	if (!afterIf.startsWith('(')) {
 		return false;
@@ -307,15 +307,20 @@ function isIfElseStatement(trimmed: string): boolean {
 		return false;
 	}
 
-	// Must have semicolons in both branches for this to be a statement
 	const trueStatementStr = afterCondition.substring(0, elseIndex).trim();
 	const falseStatementStr = afterCondition.substring(elseIndex + 4).trim();
 
-	// Check if both branches contain semicolons (indicating statements, not expressions)
+	// Check for either semicolon-terminated statements or braced blocks
+	const isTrueBraced = trueStatementStr.startsWith('{');
+	const isFalseBraced = falseStatementStr.startsWith('{');
 	const trueSemiIndex = findSemicolonOutsideBrackets(trueStatementStr);
 	const falseSemiIndex = findSemicolonOutsideBrackets(falseStatementStr);
 
-	return trueSemiIndex >= 0 && falseSemiIndex >= 0;
+	// Valid if: both have semicolons, or both have braces
+	const bothSemicolons = trueSemiIndex >= 0 && falseSemiIndex >= 0;
+	const bothBraced = isTrueBraced && isFalseBraced;
+
+	return bothSemicolons || bothBraced;
 }
 
 /**
@@ -350,14 +355,48 @@ function extractIfElseBranches(afterCondition: string): IfElseBranchesResult {
 }
 
 /**
- * Extracts the remaining string after the false statement.
+ * Extracts remaining string after a braced block.
+ */
+function extractRemainingFromBracedBlock(falseStatementStr: string): string {
+	const closingBraceIndex = findClosingBrace(falseStatementStr);
+	if (closingBraceIndex < 0) {
+		return '';
+	}
+	let remaining = falseStatementStr.substring(closingBraceIndex + 1).trim();
+	if (remaining.startsWith(';')) {
+		remaining = remaining.substring(1).trim();
+	}
+	return remaining;
+}
+
+/**
+ * Extracts the remaining string after the false statement or block.
  */
 function extractRemaining(falseStatementStr: string): string {
+	const isBraced = falseStatementStr.startsWith('{');
+	if (isBraced) {
+		return extractRemainingFromBracedBlock(falseStatementStr);
+	}
+
 	const semiIndex = findSemicolonOutsideBrackets(falseStatementStr);
 	if (semiIndex >= 0) {
 		return falseStatementStr.substring(semiIndex + 1).trim();
 	}
 	return '';
+}
+
+/**
+ * Processes the selected branch of an if-else statement.
+ */
+function processBranch(
+	statementStr: string,
+	context: ExecutionContext,
+): Result<ContextAndRemaining> {
+	const trimmedStatement = statementStr.trim();
+	if (trimmedStatement.startsWith('{') && isBalancedBrackets(trimmedStatement)) {
+		return processBracedBlock(statementStr, context);
+	}
+	return processStatements(statementStr, context, true);
 }
 
 function processIfElseStatement(
@@ -400,7 +439,7 @@ function processIfElseStatement(
 		statementStr = branchesResult.falseStatementStr;
 	}
 
-	const statementsResult = processStatements(statementStr, context, true);
+	const statementsResult = processBranch(statementStr, context);
 	if (statementsResult.type === 'err') {
 		return statementsResult;
 	}
