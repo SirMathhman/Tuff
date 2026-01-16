@@ -381,4 +381,40 @@ mod tests {
         // Bool type with false literal converts to 0
         assert_eq!(interpret("let x : Bool = false; x"), Ok(0));
     }
+
+    #[test]
+    fn test_logical_or_true_false() {
+        // Logical OR: true || false => 1
+        assert_eq!(
+            interpret("let x : Bool = true; let y : Bool = false; x || y"),
+            Ok(1)
+        );
+    }
+
+    #[test]
+    fn test_logical_or_false_true() {
+        // Logical OR: false || true => 1
+        assert_eq!(
+            interpret("let x : Bool = false; let y : Bool = true; x || y"),
+            Ok(1)
+        );
+    }
+
+    #[test]
+    fn test_logical_or_false_false() {
+        // Logical OR: false || false => 0
+        assert_eq!(
+            interpret("let x : Bool = false; let y : Bool = false; x || y"),
+            Ok(0)
+        );
+    }
+
+    #[test]
+    fn test_logical_or_true_true() {
+        // Logical OR: true || true => 1
+        assert_eq!(
+            interpret("let x : Bool = true; let y : Bool = true; x || y"),
+            Ok(1)
+        );
+    }
 }
