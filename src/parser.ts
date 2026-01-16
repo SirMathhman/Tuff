@@ -16,7 +16,9 @@ import {
 	extractIfConditionAndAfter,
 	isMatchKeyword,
 	extractMatchExpression,
+	findClosingBrace,
 } from './types';
+import { getStructDefinition, type StructDefinition } from './structs';
 
 interface InterpretFunction {
 	(input: string, context: ExecutionContext): Result<number>;
@@ -29,6 +31,147 @@ interface ProcessVariableBindingsResult {
 
 interface ProcessVariableBindingsFunction {
 	(input: string, context: ExecutionContext): Result<ProcessVariableBindingsResult>;
+}
+
+/**
+ * Represents a field access expression result.
+ */
+interface FieldAccessExpression {
+	instanceExpr: string;
+	fieldName: string;
+}
+
+/**
+ * Checks if literal looks like struct instantiation with field access.
+ */
+export function hasFieldAccess(literal: string): boolean {
+	const trimmed = literal.trim();
+	const dotIndex = trimmed.lastIndexOf('.');
+	if (dotIndex <= 0) {
+		return false;
+	}
+
+	// Check if there's a closing brace before the dot
+	const beforeDot = trimmed.substring(0, dotIndex);
+	const hasClosingBrace = beforeDot.includes('}');
+
+	return hasClosingBrace;
+}
+
+/**
+ * Extracts struct instantiation and field name from expression.
+ */
+export function extractFieldAccess(literal: string): FieldAccessExpression | undefined {
+	const trimmed = literal.trim();
+	const dotIndex = trimmed.lastIndexOf('.');
+	if (dotIndex <= 0) {
+		return undefined;
+	}
+
+	const instanceExpr = trimmed.substring(0, dotIndex);
+	const fieldName = trimmed.substring(dotIndex + 1).trim();
+
+	if (fieldName.length === 0 || !isVariableName(fieldName)) {
+		return undefined;
+	}
+
+	return { instanceExpr, fieldName };
+}
+
+/**
+ * Parses a single struct field assignment.
+ */
+function parseStructField(
+	decl: string,
+	structDef: StructDefinition,
+): Result<[string, number]> | undefined {
+	const trimmedDecl = decl.trim();
+	if (trimmedDecl.length === 0) {
+		return undefined;
+	}
+
+	const colonIndex = trimmedDecl.indexOf(':');
+	if (colonIndex < 0) {
+		return err(`Invalid struct field assignment: ${trimmedDecl}`);
+	}
+
+	const fieldName = trimmedDecl.substring(0, colonIndex).trim();
+	const fieldValueStr = trimmedDecl.substring(colonIndex + 1).trim();
+
+	const fieldDef = structDef.fields.find((f): boolean => f.name === fieldName);
+	if (!fieldDef) {
+		return err(`Struct has no field '${fieldName}'`);
+	}
+
+	const fieldValue = Number.parseInt(fieldValueStr, 10);
+	if (Number.isNaN(fieldValue)) {
+		return err(`Invalid field value for '${fieldName}': ${fieldValueStr}`);
+	}
+
+	return ok([fieldName, fieldValue]);
+}
+
+/**
+ * Processes a single field declaration in struct instantiation.
+ */
+function processStructInstantiationField(
+	decl: string,
+	structDef: StructDefinition,
+	fieldValues: Record<string, number>,
+): Result<void> {
+	const result = parseStructField(decl, structDef);
+	if (result === undefined) {
+		return ok(undefined as void);
+	}
+
+	if (result.type === 'err') {
+		return result;
+	}
+
+	const [fieldName, fieldValue] = result.value;
+	fieldValues[fieldName] = fieldValue;
+	return ok(undefined as void);
+}
+
+/**
+ * Evaluates struct instantiation by parsing field values.
+ */
+export function evaluateStructInstantiation(
+	instanceExpr: string,
+): Result<Record<string, number>> | undefined {
+	const trimmed = instanceExpr.trim();
+	const braceIndex = trimmed.indexOf('{');
+	if (braceIndex <= 0) {
+		return undefined;
+	}
+
+	const typeName = trimmed.substring(0, braceIndex).trim();
+	if (!isVariableName(typeName)) {
+		return undefined;
+	}
+
+	const structDef = getStructDefinition(typeName);
+	if (structDef === undefined) {
+		return undefined;
+	}
+
+	const closeIndex = findClosingBrace(trimmed.substring(braceIndex));
+	if (closeIndex < 0) {
+		return err('Struct instantiation missing closing brace');
+	}
+
+	const bodyStr = trimmed.substring(braceIndex + 1, braceIndex + closeIndex);
+	const fieldValues: Record<string, number> = {};
+
+	const fieldDecls = bodyStr.split(',');
+	for (const decl of fieldDecls) {
+		const fieldResult = processStructInstantiationField(decl, structDef, fieldValues);
+		if (fieldResult.type === 'err') {
+			return fieldResult;
+		}
+	}
+
+	return ok(fieldValues);
 }
 
 /**
@@ -182,6 +325,37 @@ function parseSimpleLiteral(
 }
 
 /**
+ * Attempts to parse field access expression.
+ */
+function tryParseFieldAccess(literal: string): Result<number> | undefined {
+	if (!hasFieldAccess(literal)) {
+		return undefined;
+	}
+
+	const fieldAccessResult = extractFieldAccess(literal);
+	if (fieldAccessResult === undefined) {
+		return undefined;
+	}
+
+	const instanceResult = evaluateStructInstantiation(fieldAccessResult.instanceExpr);
+	if (instanceResult === undefined) {
+		return undefined;
+	}
+
+	if (instanceResult.type === 'err') {
+		return instanceResult;
+	}
+
+	const fieldValues = instanceResult.value;
+	const value = fieldValues[fieldAccessResult.fieldName];
+	if (typeof value === 'number') {
+		return ok(value);
+	}
+
+	return err(`Field '${fieldAccessResult.fieldName}' not found in struct instance`);
+}
+
+/**
  * Parses a literal value (number, variable, parenthesized expression, braced block, if-else).
  * Requires interpretInternal from evaluator for recursive evaluation.
  */
@@ -191,6 +365,12 @@ export function parseLiteral(
 	interpretInternal: InterpretFunction,
 	processVariableBindings?: ProcessVariableBindingsFunction,
 ): Result<number> {
+	// Handle field access first (e.g., Wrapper { field : 100 }.field)
+	const fieldAccessResult = tryParseFieldAccess(literal);
+	if (fieldAccessResult !== undefined) {
+		return fieldAccessResult;
+	}
+
 	const matchResult = parseMatchExpression(literal, context, interpretInternal);
 	if (matchResult !== undefined) {
 		return matchResult;

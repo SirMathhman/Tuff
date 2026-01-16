@@ -1,5 +1,6 @@
 import { type Result } from '../src/result';
 import { interpret } from '../src/interpret';
+import { clearStructRegistry } from '../src/structs';
 
 function expectOkValue(result: Result<number>, expected: number): void {
 	expect(result.type).toBe('ok');
@@ -367,5 +368,26 @@ describe('interpret - for loops', (): void => {
 	});
 	it('should return Err for "let sum = 0; for (let mut i in 0..5) sum += i; sum" (immutable outer)', (): void => {
 		expectErrContains(interpret('let sum = 0; for (let mut i in 0..5) sum += i; sum'), 'not mutable');
+	});
+});
+describe('interpret - struct definitions and field access', (): void => {
+	beforeEach((): void => {
+		clearStructRegistry();
+	});
+
+	it('should interpret "struct Wrapper { field : I32 } Wrapper { field : 100 }.field" as 100', (): void => {
+		expectInterpretOk('struct Wrapper { field : I32 } Wrapper { field : 100 }.field', 100);
+	});
+	it('should interpret "struct Point { x : I32, y : I32 } Point { x : 10, y : 20 }.x" as 10', (): void => {
+		expectInterpretOk('struct Point { x : I32, y : I32 } Point { x : 10, y : 20 }.x', 10);
+	});
+	it('should interpret "struct Point { x : I32, y : I32 } Point { x : 10, y : 20 }.y" as 20', (): void => {
+		expectInterpretOk('struct Point { x : I32, y : I32 } Point { x : 10, y : 20 }.y', 20);
+	});
+	it('should interpret "struct S { val : I32 } S { val : 42 }.val + 8" as 50', (): void => {
+		expectInterpretOk('struct S { val : I32 } S { val : 42 }.val + 8', 50);
+	});
+	it('should return Err for accessing undefined field', (): void => {
+		expectErrContains(interpret('struct Point { x : I32 } Point { x : 5 }.y'), 'not found');
 	});
 });

@@ -25,6 +25,7 @@ import {
 import { interpretInternal } from './evaluator';
 import { parseAssignment } from './assignments';
 import { processWhileStatement, processForStatement, isForStatement } from './loops';
+import { isStructDefinition, parseStructDefinition, registerStructDefinition } from './structs';
 
 /**
  * Parses the type annotation and assignment part after a colon.
@@ -308,6 +309,40 @@ function processYieldStatement(
 }
 
 /**
+ * Processes a struct definition statement.
+ */
+function processStructStatement(input: string): Result<ContextAndRemaining> {
+	const trimmed = input.trim();
+	const semiIndex = findSemicolonOutsideBrackets(trimmed);
+
+	let definitionStr: string;
+	let remaining: string;
+
+	if (semiIndex >= 0) {
+		definitionStr = trimmed.substring(0, semiIndex);
+		remaining = trimmed.substring(semiIndex + 1).trim();
+	} else {
+		// Struct definition without semicolon at the end
+		const closingBraceIndex = findClosingBrace(trimmed);
+		if (closingBraceIndex < 0) {
+			return err('Struct definition missing closing brace');
+		}
+		definitionStr = trimmed.substring(0, closingBraceIndex + 1);
+		remaining = trimmed.substring(closingBraceIndex + 1).trim();
+	}
+
+	const defResult = parseStructDefinition(definitionStr);
+	if (defResult.type === 'err') {
+		return defResult;
+	}
+
+	registerStructDefinition(defResult.value);
+
+	// Struct definitions don't modify context, just consume input
+	return ok({ context: { bindings: [] }, remaining });
+}
+
+/**
  * Processes statements (declarations, assignments, if-else, blocks) in input.
  */
 export function processStatements(
@@ -320,7 +355,9 @@ export function processStatements(
 	while (remaining.trim().length > 0) {
 		const trimmed = remaining.trim();
 		let result: Result<ContextAndRemaining> | undefined;
-		if (trimmed.startsWith('let ')) {
+		if (isStructDefinition(trimmed)) {
+			result = processStructStatement(remaining);
+		} else if (trimmed.startsWith('let ')) {
 			result = processLetDeclaration(remaining, currentContext);
 		} else if (allowBlocks && shouldProcessAsStatementBlock(trimmed)) {
 			result = processBracedBlock(remaining, currentContext);
@@ -340,7 +377,10 @@ export function processStatements(
 		if (result.type === 'err') {
 			return result;
 		}
-		currentContext = result.value.context;
+		// For struct statements, don't update context (structs are global)
+		if (!isStructDefinition(trimmed)) {
+			currentContext = result.value.context;
+		}
 		remaining = result.value.remaining;
 	}
 
