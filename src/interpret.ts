@@ -166,6 +166,11 @@ export function interpret(input: string): Result<number> {
     return opResult;
   }
 
+  const rightTypeSuffix = getTypeSuffix(rightStr);
+  if (rightTypeSuffix !== undefined) {
+    return validateValueForType(opResult.value, rightTypeSuffix);
+  }
+
   const leftTypeSuffix = getTypeSuffix(leftStr);
   if (leftTypeSuffix !== undefined) {
     return validateValueForType(opResult.value, leftTypeSuffix);

@@ -80,4 +80,12 @@ describe('interpret', () => {
       expect(result.error).toContain('out of range');
     }
   });
+
+  it('should interpret "1U8 + 255U16" as 256', () => {
+    const result = interpret('1U8 + 255U16');
+    expect(result.type).toBe('ok');
+    if (result.type === 'ok') {
+      expect(result.value).toBe(256);
+    }
+  });
 });
