@@ -1,5 +1,10 @@
 import { type Result, err, ok } from './result';
 
+interface OperatorMatch {
+  operator: string;
+  index: number;
+}
+
 function findTypeSuffixStart(input: string): number {
   for (let i = input.length - 1; i >= 0; i--) {
     const char = input.charAt(i);
@@ -84,7 +89,7 @@ function isAlphanumeric(char: string): boolean {
   return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
 }
 
-function findOperator(input: string): { operator: string; index: number } | undefined {
+function findOperator(input: string): OperatorMatch | undefined {
   const operators = ['+', '-', '*', '/'];
   let minIndex = input.length;
   let foundOperator = '';

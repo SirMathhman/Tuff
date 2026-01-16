@@ -77,6 +77,10 @@ module.exports = [
           selector: 'Literal[value=null]',
           message: 'null is banned. Use undefined instead.',
         },
+        {
+          selector: 'TSTypeLiteral:not(:has(TSTypeAnnotation TSIndexSignatureDeclaration))',
+          message: 'Anonymous object types are banned. Define a named interface instead.',
+        },
       ],
 
       // TypeScript-specific rules - extremely strict
