@@ -360,4 +360,28 @@ describe('interpret', () => {
 			expect(result.value).toBe(2);
 		}
 	});
+
+	it('should interpret "let x : I32; x = 2; x" as 2', () => {
+		const result = interpret('let x : I32; x = 2; x');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(2);
+		}
+	});
+
+	it('should return Err for uninitialized variable usage', () => {
+		const result = interpret('let x : I32; x');
+		expect(result.type).toBe('err');
+		if (result.type === 'err') {
+			expect(result.error).toContain('not initialized');
+		}
+	});
+
+	it('should interpret "let x : I32; x = 5; x + 3" as 8', () => {
+		const result = interpret('let x : I32; x = 5; x + 3');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(8);
+		}
+	});
 });

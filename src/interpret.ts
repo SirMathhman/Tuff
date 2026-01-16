@@ -8,7 +8,7 @@ interface OperatorMatch {
 
 interface VariableBinding {
 	name: string;
-	value: number;
+	value: number | undefined;
 }
 
 interface ExecutionContext {
@@ -17,11 +17,16 @@ interface ExecutionContext {
 
 interface ParsedBinding {
 	name: string;
-	value: number;
+	value: number | undefined;
 	remaining: string;
 }
 
 interface ProcessedBindings {
+	context: ExecutionContext;
+	remaining: string;
+}
+
+interface ContextAndRemaining {
 	context: ExecutionContext;
 	remaining: string;
 }
@@ -112,18 +117,24 @@ function parseVariableDeclarationHeader(withoutLet: string): Result<VariableDecl
 		varName = withoutLet.substring(0, colonIndex).trim();
 		const afterColon = withoutLet.substring(colonIndex + 1).trim();
 		const equalIndexAfterColon = afterColon.indexOf('=');
-		if (equalIndexAfterColon < 0) {
-			return err('Variable declaration missing assignment operator');
+		if (equalIndexAfterColon >= 0) {
+			typeAnnotation = afterColon.substring(0, equalIndexAfterColon).trim();
+			afterTypeOrName = afterColon.substring(equalIndexAfterColon);
+		} else {
+			// No assignment operator - just type annotation
+			typeAnnotation = afterColon;
+			afterTypeOrName = '';
 		}
-		typeAnnotation = afterColon.substring(0, equalIndexAfterColon).trim();
-		afterTypeOrName = afterColon.substring(equalIndexAfterColon);
 	} else {
 		const equalIndex = withoutLet.indexOf('=');
-		if (equalIndex < 0) {
-			return err('Variable declaration missing assignment operator');
+		if (equalIndex >= 0) {
+			varName = withoutLet.substring(0, equalIndex).trim();
+			afterTypeOrName = withoutLet.substring(equalIndex);
+		} else {
+			// No assignment operator - just variable name
+			varName = withoutLet;
+			afterTypeOrName = '';
 		}
-		varName = withoutLet.substring(0, equalIndex).trim();
-		afterTypeOrName = withoutLet.substring(equalIndex);
 	}
 
 	if (!isVariableName(varName)) {
@@ -161,6 +172,17 @@ function parseVariableBinding(input: string, context: ExecutionContext): Result<
 	}
 
 	const { varName, typeAnnotation, afterTypeOrName } = headerResult.value;
+
+	// If no assignment operator, this is an uninitialized declaration
+	if (afterTypeOrName.length === 0) {
+		const semiIndex = findSemicolonOutsideBrackets(withoutLet);
+		if (semiIndex < 0) {
+			return err('Variable declaration missing semicolon');
+		}
+		const remaining = withoutLet.substring(semiIndex + 1).trim();
+		return ok({ name: varName, value: undefined, remaining });
+	}
+
 	const withoutEqual = afterTypeOrName.substring(1).trim();
 	const semiIndex = findSemicolonOutsideBrackets(withoutEqual);
 	if (semiIndex < 0) {
@@ -185,14 +207,27 @@ function parseVariableBinding(input: string, context: ExecutionContext): Result<
 	return ok({ name: varName, value: valueResult.value, remaining });
 }
 
-function lookupVariable(name: string, context: ExecutionContext): Result<number> {
+function findBindingByName(name: string, context: ExecutionContext): VariableBinding | undefined {
 	for (const binding of context.bindings) {
 		if (binding.name === name) {
-			return ok(binding.value);
+			return binding;
 		}
 	}
 
-	return err(`Undefined variable: ${name}`);
+	return undefined;
+}
+
+function lookupVariable(name: string, context: ExecutionContext): Result<number> {
+	const binding = findBindingByName(name, context);
+	if (binding === undefined) {
+		return err(`Undefined variable: ${name}`);
+	}
+
+	if (binding.value === undefined) {
+		return err(`Variable '${name}' is not initialized`);
+	}
+
+	return ok(binding.value);
 }
 
 function isVariableName(input: string): boolean {
@@ -264,6 +299,99 @@ function isDuplicateVariable(name: string, context: ExecutionContext): boolean {
 	return false;
 }
 
+function parseAssignment(input: string, context: ExecutionContext): Result<ParsedBinding> {
+	const trimmed = input.trim();
+	const semiIndex = findSemicolonOutsideBrackets(trimmed);
+	if (semiIndex < 0) {
+		return err('Assignment missing semicolon');
+	}
+
+	const statementStr = trimmed.substring(0, semiIndex).trim();
+	const remaining = trimmed.substring(semiIndex + 1).trim();
+	const equalIndex = statementStr.indexOf('=');
+	if (equalIndex < 0) {
+		return err('Invalid statement: expected assignment or variable declaration');
+	}
+
+	const varName = statementStr.substring(0, equalIndex).trim();
+	if (!isVariableName(varName)) {
+		return err(`Invalid variable name: ${varName}`);
+	}
+
+	// Check if variable exists
+	let varExists = false;
+	for (const binding of context.bindings) {
+		if (binding.name === varName) {
+			varExists = true;
+			break;
+		}
+	}
+
+	if (!varExists) {
+		return err(`Undefined variable: ${varName}`);
+	}
+
+	const valueStr = statementStr.substring(equalIndex + 1).trim();
+	const valueResult = interpretInternal(valueStr, context);
+	if (valueResult.type === 'err') {
+		return valueResult;
+	}
+
+	return ok({ name: varName, value: valueResult.value, remaining });
+}
+
+function processLetDeclaration(
+	input: string,
+	context: ExecutionContext,
+): Result<ContextAndRemaining> {
+	const bindResult = parseVariableBinding(input, context);
+	if (bindResult.type === 'err') {
+		return bindResult;
+	}
+
+	const { name, value } = bindResult.value;
+	if (isDuplicateVariable(name, context)) {
+		return err(`Variable '${name}' is already defined`);
+	}
+
+	const newContext = {
+		bindings: [...context.bindings, { name, value }],
+	};
+	return ok({ context: newContext, remaining: bindResult.value.remaining });
+}
+
+function processAssignmentStatement(
+	input: string,
+	context: ExecutionContext,
+): Result<ContextAndRemaining> {
+	const assignResult = parseAssignment(input, context);
+	if (assignResult.type === 'err') {
+		return assignResult;
+	}
+
+	const { name, value } = assignResult.value;
+	const updatedBindings = context.bindings.map((binding) => {
+		if (binding.name === name) {
+			return { name, value };
+		}
+		return binding;
+	});
+
+	const newContext = { bindings: updatedBindings };
+	return ok({ context: newContext, remaining: assignResult.value.remaining });
+}
+
+function isAssignmentStatement(trimmed: string): boolean {
+	const equalsIndex = trimmed.indexOf('=');
+	if (equalsIndex <= 0) {
+		return false;
+	}
+
+	const potentialVarName = trimmed.substring(0, equalsIndex).trim();
+	const charAfter = trimmed.charAt(equalsIndex + 1);
+	return isVariableName(potentialVarName) && charAfter !== '=';
+}
+
 function processVariableBindings(
 	input: string,
 	context: ExecutionContext,
@@ -271,21 +399,24 @@ function processVariableBindings(
 	let currentContext = context;
 	let remaining = input;
 
-	while (remaining.trim().startsWith('let ')) {
-		const bindResult = parseVariableBinding(remaining, currentContext);
-		if (bindResult.type === 'err') {
-			return bindResult;
+	while (remaining.trim().length > 0) {
+		const trimmed = remaining.trim();
+		let result: Result<ContextAndRemaining> | undefined;
+
+		if (trimmed.startsWith('let ')) {
+			result = processLetDeclaration(remaining, currentContext);
+		} else if (isAssignmentStatement(trimmed)) {
+			result = processAssignmentStatement(remaining, currentContext);
+		} else {
+			break;
 		}
 
-		const { name, value } = bindResult.value;
-		if (isDuplicateVariable(name, currentContext)) {
-			return err(`Variable '${name}' is already defined`);
+		if (result.type === 'err') {
+			return result;
 		}
 
-		currentContext = {
-			bindings: [...currentContext.bindings, { name, value }],
-		};
-		remaining = bindResult.value.remaining;
+		currentContext = result.value.context;
+		remaining = result.value.remaining;
 	}
 
 	return ok({ context: currentContext, remaining });
