@@ -104,4 +104,12 @@ describe('interpret', () => {
       expect(result.value).toBe(6);
     }
   });
+
+  it('should return Err for "254 + 1U8 + 1"', () => {
+    const result = interpret('254 + 1U8 + 1');
+    expect(result.type).toBe('err');
+    if (result.type === 'err') {
+      expect(result.error).toContain('out of range');
+    }
+  });
 });

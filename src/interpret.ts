@@ -93,6 +93,32 @@ function getTypeSuffix(literal: string): string | undefined {
   return undefined;
 }
 
+function collectTypeSuffixes(input: string): string[] {
+  const suffixes: string[] = [];
+  let current = '';
+
+  for (const char of input) {
+    if (char !== '+' && char !== '-' && char !== '*' && char !== '/') {
+      current += char;
+      continue;
+    }
+
+    const suffix = getTypeSuffix(current);
+    if (suffix !== undefined) {
+      suffixes.push(suffix);
+    }
+
+    current = '';
+  }
+
+  const suffix = getTypeSuffix(current);
+  if (suffix !== undefined) {
+    suffixes.push(suffix);
+  }
+
+  return suffixes;
+}
+
 function skipBackwardWhitespace(input: string, startIndex: number): number {
   let j = startIndex;
   while (j >= 0 && input[j] === ' ') {
@@ -170,7 +196,6 @@ export function interpret(input: string): Result<number> {
 
   const rightMatch = findOperator(rightStr);
   let rightValue: number;
-  let rightTypeSuffix: string | undefined;
 
   if (rightMatch === undefined) {
     const rightResult = parseLiteral(rightStr);
@@ -179,7 +204,6 @@ export function interpret(input: string): Result<number> {
     }
 
     rightValue = rightResult.value;
-    rightTypeSuffix = getTypeSuffix(rightStr);
   } else {
     const rightInterpret = interpret(rightStr);
     if (rightInterpret.type === 'err') {
@@ -194,22 +218,12 @@ export function interpret(input: string): Result<number> {
     return opResult;
   }
 
-  const leftTypeSuffix = getTypeSuffix(leftStr);
-
-  if (rightTypeSuffix !== undefined && leftTypeSuffix !== undefined) {
-    const typeToValidate =
-      getTypeRangeMax(rightTypeSuffix) >= getTypeRangeMax(leftTypeSuffix)
-        ? rightTypeSuffix
-        : leftTypeSuffix;
-    return validateValueForType(opResult.value, typeToValidate);
-  }
-
-  if (rightTypeSuffix !== undefined) {
-    return validateValueForType(opResult.value, rightTypeSuffix);
-  }
-
-  if (leftTypeSuffix !== undefined) {
-    return validateValueForType(opResult.value, leftTypeSuffix);
+  const allTypeSuffixes = collectTypeSuffixes(input);
+  if (allTypeSuffixes.length > 0) {
+    const largestType = allTypeSuffixes.reduce((largest, current) => {
+      return getTypeRangeMax(current) >= getTypeRangeMax(largest) ? current : largest;
+    });
+    return validateValueForType(opResult.value, largestType);
   }
 
   return opResult;
