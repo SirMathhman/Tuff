@@ -477,7 +477,10 @@ mod tests {
     #[test]
     fn test_while_loop_accumulate() {
         // Test with block - simple version first
-        assert_eq!(interpret("let mut i = 0; while (i < 1) { i += 1; } i"), Ok(1));
+        assert_eq!(
+            interpret("let mut i = 0; while (i < 1) { i += 1; } i"),
+            Ok(1)
+        );
     }
 
     #[test]
@@ -487,11 +490,10 @@ mod tests {
 
     #[test]
     fn test_while_loop_nested() {
-        assert_eq!(
-            interpret(
-                "let mut x = 0; while (x < 2) { let mut y = 0; while (y < 3) y += 1; x += 1; } x"
-            ),
-            Ok(2)
-        );
+        assert_eq!(interpret("let mut x = 0; while (x < 2) { let mut y = 0; while (y < 3) y += 1; x += 1; } x"), Ok(2));
+    }
+    #[test]
+    fn test_for_loop_sum() {
+        assert_eq!(interpret("let mut sum = 0; for (let i in 0..10) sum += i; sum"), Ok(45));
     }
 }

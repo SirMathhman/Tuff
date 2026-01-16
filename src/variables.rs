@@ -11,7 +11,7 @@ pub struct VariableInfo {
 pub type Environment = HashMap<String, VariableInfo>;
 
 pub fn is_type_compatible(declared: &str, actual: &str) -> bool {
-    if actual.is_empty() {
+    if actual.is_empty() || declared.is_empty() {
         return true;
     }
 

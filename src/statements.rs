@@ -2,7 +2,9 @@ use crate::parser::{parse_identifier, skip_whitespace};
 use crate::variables::{is_type_compatible, Environment, VariableInfo};
 
 mod control_flow;
-pub use control_flow::{parse_block, parse_if_statement, parse_while_statement};
+pub use control_flow::{
+    parse_block, parse_for_statement, parse_if_statement, parse_while_statement,
+};
 
 fn read_type_name_after_colon(input: &str, pos: &mut usize) -> Result<String, String> {
     skip_whitespace(input, pos);

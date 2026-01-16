@@ -413,8 +413,9 @@ pub fn interpret(input: &str) -> Result<i32, String> {
         let parsed_assign = parse_top_level_assignment(input, &mut pos, &mut env)?;
         let parsed_if = crate::statements::parse_if_statement(input, &mut pos, &mut env)?;
         let parsed_while = parse_while_statement(input, &mut pos, &mut env)?;
+        let parsed_for = crate::statements::parse_for_statement(input, &mut pos, &mut env)?;
 
-        if !parsed_let && !parsed_assign && !parsed_if && !parsed_while {
+        if !parsed_let && !parsed_assign && !parsed_if && !parsed_while && !parsed_for {
             break;
         }
     }

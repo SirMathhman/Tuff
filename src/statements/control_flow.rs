@@ -210,6 +210,8 @@ pub fn parse_block(
             parse_if_statement(input, pos, &mut local_env)?;
         } else if trimmed.starts_with("while ") {
             parse_while_statement(input, pos, &mut local_env)?;
+        } else if trimmed.starts_with("for ") {
+            parse_for_statement(input, pos, &mut local_env)?;
         } else if super::parse_assignment_statement(input, pos, &mut local_env)? {
             // assignment handled
         } else {
@@ -227,3 +229,82 @@ pub fn parse_block(
 
     Ok((result, has_expression))
 }
+
+pub fn parse_for_statement(
+    input: &str,
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<bool, String> {
+    if !super::check_keyword_match(input, pos, "for ") {
+        return Ok(false);
+    }
+    parse_for_condition_and_statement(input, pos, env)?;
+    Ok(true)
+}
+
+fn parse_for_condition_and_statement(
+    input: &str,
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<(), String> {
+    consume_required_char(input, pos, '(', "Expected '(' after 'for'")?;
+
+    // Parse: let i in START..END
+    let rest = &input[*pos..];
+    let trimmed = rest.trim_start();
+
+    if !trimmed.starts_with("let ") {
+        return Err("Expected 'let' in for loop".to_string());
+    }
+    *pos += rest.len() - trimmed.len() + 4;
+
+    let (loop_var, var_len) = crate::parser::parse_identifier(&input[*pos..])?;
+    *pos += var_len;
+
+    skip_whitespace(input, pos);
+    let rest = &input[*pos..];
+    let trimmed = rest.trim_start();
+    if !trimmed.starts_with("in ") {
+        return Err("Expected 'in' after loop variable".to_string());
+    }
+    *pos += rest.len() - trimmed.len() + 3;
+
+    // Parse start..end range using a minimal environment for expressions
+    let (start, _) = crate::parser::parse_term_with_type(input, pos, env)?;
+
+    skip_whitespace(input, pos);
+    let rest = &input[*pos..];
+    let trimmed = rest.trim_start();
+    if !trimmed.starts_with("..") {
+        return Err("Expected '..' for range".to_string());
+    }
+    *pos += rest.len() - trimmed.len() + 2;
+
+    let (end, _) = crate::parser::parse_term_with_type(input, pos, env)?;
+
+    consume_required_char(input, pos, ')', "Expected ')' after range")?;
+
+    // Remember where the body starts
+    let body_start = *pos;
+
+    // Execute the loop
+    for i in start..end {
+        // Create/update loop variable with I32 type
+        let var_info = crate::variables::VariableInfo {
+            value: Some(i),
+            type_name: "I32".to_string(),
+            is_mutable: false,
+            points_to: None,
+        };
+        env.insert(loop_var.clone(), var_info);
+
+        // Reset position to body start for each iteration
+        *pos = body_start;
+        
+        // Execute body statement
+        parse_statement_or_block(input, pos, env)?;
+    }
+
+    Ok(())
+}
+
