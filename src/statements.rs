@@ -181,15 +181,16 @@ pub fn parse_let_statement(
     *pos += 1;
     skip_whitespace(input, pos);
     let (val, actual_type, points_to) = parse_value_or_reference(input, pos, env)?;
-    
+
     // If we have a declared struct type, extract struct_fields from temp variable
     let struct_fields = if let Some(ref decl_type) = declared_type {
         let temp_var_name = format!("_struct_inst_{}", decl_type);
-        env.get(&temp_var_name).and_then(|info| info.struct_fields.clone())
+        env.get(&temp_var_name)
+            .and_then(|info| info.struct_fields.clone())
     } else {
         None
     };
-    
+
     store_variable(
         env,
         var_name,
@@ -397,4 +398,8 @@ pub fn parse_top_level_assignment(
 }
 pub fn parse_top_level_struct(input: &str, pos: &mut usize) -> Result<bool, String> {
     crate::structs::parse_struct_definition(input, pos)
+}
+
+pub fn parse_top_level_function(input: &str, pos: &mut usize) -> Result<bool, String> {
+    crate::functions::parse_function_definition(input, pos)
 }

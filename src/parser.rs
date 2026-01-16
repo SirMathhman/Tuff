@@ -197,6 +197,13 @@ fn parse_factor_with_type(
             return Ok((val, type_name));
         }
 
+        // Try to parse function call
+        if let Ok(Some((val, type_name))) =
+            crate::functions::try_parse_function_call(&identifier, input, pos, env)
+        {
+            return Ok((val, type_name));
+        }
+
         // Otherwise it's a variable
         let var_info = env
             .get(&identifier)
@@ -395,6 +402,7 @@ pub fn interpret(input: &str) -> Result<i32, String> {
 
     loop {
         let parsed_struct = parse_top_level_struct(input, &mut pos)?;
+        let parsed_function = crate::statements::parse_top_level_function(input, &mut pos)?;
         let parsed_let = parse_top_level_let(input, &mut pos, &mut env)?;
         let parsed_assign = parse_top_level_assignment(input, &mut pos, &mut env)?;
         let parsed_if = crate::statements::parse_if_statement(input, &mut pos, &mut env)?;
@@ -402,6 +410,7 @@ pub fn interpret(input: &str) -> Result<i32, String> {
         let parsed_for = crate::statements::parse_for_statement(input, &mut pos, &mut env)?;
 
         if !parsed_struct
+            && !parsed_function
             && !parsed_let
             && !parsed_assign
             && !parsed_if

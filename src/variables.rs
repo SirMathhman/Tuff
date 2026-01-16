@@ -16,12 +16,22 @@ pub struct StructDef {
     pub fields: Vec<(String, String)>, // field_name, field_type
 }
 
+#[derive(Clone)]
+pub struct FunctionDef {
+    pub name: String,
+    pub params: Vec<(String, String)>, // param_name, param_type
+    pub return_type: String,
+    pub body: String, // Store the expression as a string for lazy evaluation
+}
+
 pub type Environment = HashMap<String, VariableInfo>;
 pub type StructRegistry = HashMap<String, StructDef>;
+pub type FunctionRegistry = HashMap<String, FunctionDef>;
 
 // Thread-local storage for struct registry
 thread_local! {
     static STRUCT_REGISTRY: std::cell::RefCell<StructRegistry> = std::cell::RefCell::new(StructRegistry::new());
+    static FUNCTION_REGISTRY: std::cell::RefCell<FunctionRegistry> = std::cell::RefCell::new(FunctionRegistry::new());
 }
 
 #[allow(dead_code)]
@@ -37,6 +47,26 @@ pub fn get_struct_registry() -> StructRegistry {
 #[allow(dead_code)]
 pub fn clear_struct_registry() {
     STRUCT_REGISTRY.with(|sr| sr.borrow_mut().clear());
+}
+
+#[allow(dead_code)]
+pub fn register_function(def: FunctionDef) {
+    FUNCTION_REGISTRY.with(|fr| fr.borrow_mut().insert(def.name.clone(), def));
+}
+
+#[allow(dead_code)]
+pub fn get_function_registry() -> FunctionRegistry {
+    FUNCTION_REGISTRY.with(|fr| fr.borrow().clone())
+}
+
+#[allow(dead_code)]
+pub fn get_function(name: &str) -> Option<FunctionDef> {
+    FUNCTION_REGISTRY.with(|fr| fr.borrow().get(name).cloned())
+}
+
+#[allow(dead_code)]
+pub fn clear_function_registry() {
+    FUNCTION_REGISTRY.with(|fr| fr.borrow_mut().clear());
 }
 
 pub fn is_type_compatible(declared: &str, actual: &str) -> bool {

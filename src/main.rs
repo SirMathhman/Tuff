@@ -4,6 +4,7 @@ mod pointers;
 mod repl;
 mod statements;
 mod structs;
+mod functions;
 mod validators;
 mod variables;
 use parser::interpret;
@@ -12,6 +13,8 @@ use parser::interpret;
 mod arithmetic_tests;
 #[cfg(test)]
 mod control_flow_tests;
+#[cfg(test)]
+mod function_tests;
 #[cfg(test)]
 mod loop_tests;
 #[cfg(test)]
