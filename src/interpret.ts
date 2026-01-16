@@ -44,6 +44,12 @@ function validateValueForType(value: number, typeSuffix: string): Result<number>
     }
   }
 
+  if (typeSuffix === 'I8') {
+    if (value < -128 || value > 127) {
+      return err(`Value ${value} is out of range for I8 (-128-127)`);
+    }
+  }
+
   return ok(value);
 }
 
@@ -77,6 +83,10 @@ function getTypeRangeMax(typeSuffix: string): number {
 
   if (typeSuffix === 'U16') {
     return 65535;
+  }
+
+  if (typeSuffix === 'I8') {
+    return 127;
   }
 
   return 0;

@@ -120,4 +120,12 @@ describe('interpret', () => {
       expect(result.error).toContain('out of range');
     }
   });
+
+  it('should interpret "1I8 - 2" as -1', () => {
+    const result = interpret('1I8 - 2');
+    expect(result.type).toBe('ok');
+    if (result.type === 'ok') {
+      expect(result.value).toBe(-1);
+    }
+  });
 });
