@@ -5,7 +5,7 @@ import { clearFunctionRegistry } from '../src/functions';
 
 function expectOkValue(result: Result<number>, expected: number): void {
 	if (result.type === 'err') {
-		fail("Expected ok but got err: " + result.error);
+		fail(`Expected ok but got err: ${result.error}`);
 	} else {
 		expect(result.value).toBe(expected);
 	}
