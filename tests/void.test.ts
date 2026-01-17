@@ -1,5 +1,5 @@
 import { clearFunctionRegistry } from '../src/interpreter/functions';
-import { assertValid } from '../src/testing/test-helpers';
+import { expectInterpretOk } from '../src/testing/test-helpers';
 
 describe('interpret - Void', (): void => {
 	beforeEach((): void => {
@@ -7,7 +7,7 @@ describe('interpret - Void', (): void => {
 	});
 
 	it('allows Void function references with side effects', (): void => {
-		assertValid(
+		expectInterpretOk(
 			'let mut x = 0; fn add() : Void => x += 1; let temp : () => Void = add; temp(); x',
 			1,
 		);

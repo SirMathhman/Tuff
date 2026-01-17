@@ -1,5 +1,5 @@
 import { clearFunctionRegistry } from '../src/interpreter/functions';
-import { assertValid } from '../src/testing/test-helpers';
+import { expectInterpretOk } from '../src/testing/test-helpers';
 
 describe('interpret - return expressions', (): void => {
 	beforeEach((): void => {
@@ -7,6 +7,6 @@ describe('interpret - return expressions', (): void => {
 	});
 
 	it('allows return in non-braced function body', (): void => {
-		assertValid('fn get() => return 100; get()', 100);
+		expectInterpretOk('fn get() => return 100; get()', 100);
 	});
 });
