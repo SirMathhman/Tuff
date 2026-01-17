@@ -6,10 +6,10 @@ import { ok, type Result } from '../common/result';
 function compileReadFunction(typeAnnotation: string): string {
 	const type = typeAnnotation.trim();
 	if (type === 'I32' || type === 'i32') {
-		return "parseInt(require('fs').readFileSync(0, 'utf-8').trim(), 10)";
+		return 'parseInt(globalThis.__getNextInput__(), 10)';
 	}
 	if (type === 'U8' || type === 'u8') {
-		return "(v=>v<0||v>255?(() => { throw new Error('U8 value out of range: ' + v); })():v)(parseInt(require('fs').readFileSync(0, 'utf-8').trim(), 10))";
+		return "(v=>v<0||v>255?(() => { throw new Error('U8 value out of range: ' + v); })():v)(parseInt(globalThis.__getNextInput__(), 10))";
 	}
 	return `(() => { throw new Error('Unsupported type: ${type}'); })()`;
 }
@@ -50,9 +50,11 @@ export function compile(input: string): Result<string> {
 
 	jsCode = output;
 
-	// If the code contains read<...>(), set exit code to result, otherwise set to 0
+	// If the code contains read<...>(), wrap in setup to handle sequential reads
 	if (input.includes('read<')) {
-		jsCode = `process.exitCode = ${jsCode};`;
+		const setup =
+			"const __stdin__=require('fs').readFileSync(0,'utf-8').trim().split(/\\s+/);let __idx__=0;globalThis.__getNextInput__=()=>__idx__<__stdin__.length?__stdin__[__idx__++]:null;";
+		jsCode = `${setup}process.exitCode = ${jsCode};`;
 	} else {
 		jsCode = `${jsCode}; process.exitCode = 0;`;
 	}

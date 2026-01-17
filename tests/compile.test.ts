@@ -36,4 +36,12 @@ describe('run', (): void => {
 			expect(result.value).toBe(1);
 		}
 	});
+
+	it('reads multiple values from stdin', (): void => {
+		const result = run('read<U8>() + read<U8>()', '1 2');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(3);
+		}
+	});
 });
