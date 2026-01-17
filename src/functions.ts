@@ -104,6 +104,14 @@ export function isFunctionDefinition(input: string): boolean {
 }
 
 function isKnownValueType(typeAnnotation: string): boolean {
+	const trimmed = typeAnnotation.trim();
+
+	// Check if it's a generic type parameter (single letter like T, U, etc.)
+	if (trimmed.length === 1 && trimmed >= 'A' && trimmed <= 'Z') {
+		return true;
+	}
+
+	// Check for known concrete types
 	const max = getTypeRangeMax(typeAnnotation);
 	return max !== 0;
 }
@@ -307,13 +315,40 @@ function parseBodyExpression(afterArrow: string): Result<BodyExpressionParseResu
 	return ok({ bodyExpression, remaining });
 }
 
+function stripGenericTypeParameters(nameWithGenerics: string): Result<string> {
+	const trimmed = nameWithGenerics.trim();
+	const openAngleIndex = trimmed.indexOf('<');
+	if (openAngleIndex < 0) {
+		return ok(trimmed);
+	}
+
+	const name = trimmed.substring(0, openAngleIndex).trim();
+	const closeAngleIndex = trimmed.indexOf('>');
+	if (closeAngleIndex < 0) {
+		return err('Generic type parameters missing closing >');
+	}
+
+	const genericsStr = trimmed.substring(openAngleIndex + 1, closeAngleIndex).trim();
+	if (genericsStr.length === 0) {
+		return err('Generic type parameters cannot be empty');
+	}
+
+	return ok(name);
+}
+
 function parseFunctionSignature(afterFn: string): Result<FunctionSignatureParseResult> {
 	const openParenIndex = afterFn.indexOf('(');
 	if (openParenIndex < 0) {
 		return err('Function definition missing parameter list');
 	}
 
-	const name = afterFn.substring(0, openParenIndex).trim();
+	const nameWithGenerics = afterFn.substring(0, openParenIndex).trim();
+	const nameResult = stripGenericTypeParameters(nameWithGenerics);
+	if (nameResult.type === 'err') {
+		return nameResult;
+	}
+
+	const name = nameResult.value;
 	if (!isVariableName(name)) {
 		return err(`Invalid function name: ${name}`);
 	}
