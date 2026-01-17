@@ -1,6 +1,6 @@
-import { clearFunctionRegistry } from '../src/interpreter/functions';
-import { clearModuleRegistry } from '../src/interpreter/modules';
-import { assertInterpretValid } from '../src/testing/test-helpers';
+import { clearFunctionRegistry } from '../../src/interpreter/functions';
+import { clearModuleRegistry } from '../../src/interpreter/modules';
+import { assertInterpretValid } from '../../src/testing/test-helpers';
 
 describe('interpret - modules', (): void => {
 	beforeEach((): void => {

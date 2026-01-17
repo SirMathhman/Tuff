@@ -1,4 +1,4 @@
-import { interpret } from '../src/interpret';
+import { interpret } from '../../src/interpret';
 
 describe('Tuples - Basic Operations', (): void => {
 	test('should parse simple tuple type and literal', (): void => {

@@ -1,4 +1,4 @@
-import { assertInterpretValid, assertInterpretInvalid } from '../src/testing/test-helpers';
+import { assertInterpretValid, assertInterpretInvalid } from '../../src/testing/test-helpers';
 
 describe('interpret - pointers and dereference', (): void => {
 	it('should dereference a pointer to an immutable binding', (): void => {

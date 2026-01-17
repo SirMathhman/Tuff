@@ -1,5 +1,5 @@
-import { clearFunctionRegistry } from '../src/interpreter/functions';
-import { assertInterpretInvalid } from '../src/testing/test-helpers';
+import { clearFunctionRegistry } from '../../src/interpreter/functions';
+import { assertInterpretInvalid } from '../../src/testing/test-helpers';
 
 describe('interpret - assignment expressions', (): void => {
 	beforeEach((): void => {

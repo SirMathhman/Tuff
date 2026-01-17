@@ -1,5 +1,5 @@
-import { interpret } from '../src/interpret';
-import { clearEnumRegistry } from '../src/types/enums';
+import { interpret } from '../../src/interpret';
+import { clearEnumRegistry } from '../../src/types/enums';
 
 describe('Enums - Definition and Access', (): void => {
 	beforeEach((): void => {

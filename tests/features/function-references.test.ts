@@ -1,5 +1,5 @@
-import { clearFunctionRegistry } from '../src/interpreter/functions';
-import { assertInterpretValid, assertInterpretInvalid } from '../src/testing/test-helpers';
+import { clearFunctionRegistry } from '../../src/interpreter/functions';
+import { assertInterpretValid, assertInterpretInvalid } from '../../src/testing/test-helpers';
 
 describe('interpret - function references', (): void => {
 	beforeEach((): void => {

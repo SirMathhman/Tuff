@@ -1,4 +1,4 @@
-import { assertInterpretValid, assertInterpretInvalid } from '../src/testing/test-helpers';
+import { assertInterpretValid, assertInterpretInvalid } from '../../src/testing/test-helpers';
 
 describe('interpret - arrays - basic', (): void => {
 	it('should interpret array literal and access elements', (): void => {

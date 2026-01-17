@@ -1,5 +1,5 @@
-import { clearFunctionRegistry } from '../src/interpreter/functions';
-import { assertInterpretValid } from '../src/testing/test-helpers';
+import { clearFunctionRegistry } from '../../src/interpreter/functions';
+import { assertInterpretValid } from '../../src/testing/test-helpers';
 
 describe('interpret - generics', (): void => {
 	beforeEach((): void => {

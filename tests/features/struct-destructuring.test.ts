@@ -1,6 +1,6 @@
-import { interpret } from '../src/interpret';
-import { clearStructRegistry } from '../src/types/structs';
-import { clearFunctionRegistry } from '../src/interpreter/functions';
+import { interpret } from '../../src/interpret';
+import { clearStructRegistry } from '../../src/types/structs';
+import { clearFunctionRegistry } from '../../src/interpreter/functions';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const expectInterpretOk = (input: string, expected: any): void => {
