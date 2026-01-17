@@ -63,6 +63,7 @@ import {
 	isEnumDefinition,
 } from './enums';
 import { isPointerType, parsePointerTypeBinding, parsePointerAssignment } from './pointers';
+import { isModuleDefinition, parseModuleDefinition } from './modules';
 
 function parseStructTypeBinding(
 	varName: string,
@@ -1035,7 +1036,9 @@ export function processStatements(
 	while (remaining.trim().length > 0) {
 		const trimmed = remaining.trim();
 		let result: Result<ContextAndRemaining> | undefined;
-		if (isEnumDefinition(trimmed)) {
+		if (isModuleDefinition(trimmed)) {
+			result = parseModuleDefinition(remaining, currentContext, processStatements);
+		} else if (isEnumDefinition(trimmed)) {
 			result = processEnumStatement(remaining, registerGlobally);
 		} else if (isStructDefinition(trimmed)) {
 			result = processStructStatement(remaining, registerGlobally);
@@ -1064,7 +1067,7 @@ export function processStatements(
 			return result;
 		}
 		// For global definitions, don't update context (they are global)
-		if (!(isStructDefinition(trimmed) || isEnumDefinition(trimmed))) {
+		if (!(isStructDefinition(trimmed) || isEnumDefinition(trimmed) || isModuleDefinition(trimmed))) {
 			currentContext = result.value.context;
 		}
 		remaining = result.value.remaining;

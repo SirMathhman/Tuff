@@ -24,6 +24,7 @@ import {
 	setLastFunctionReference,
 } from './common/function-references';
 import { getLastStructInstance, setLastStructInstance } from './common/struct-values';
+import { getModule } from './modules';
 
 interface InterpretFunction {
 	(input: string, context: ExecutionContext): Result<number>;
@@ -199,6 +200,36 @@ type ResolveFunctionDefinitionResult = Result<ResolvedFunctionDefinition> | unde
 type ResolveFunctionDefinition = (functionName: string) => ResolveFunctionDefinitionResult;
 
 function resolveDirectFunctionDefinition(functionName: string): Result<ResolvedFunctionDefinition> {
+	// Check if it's a module::function call
+	if (functionName.includes('::')) {
+		const parts = functionName.split('::');
+		if (parts.length !== 2) {
+			return err(`Invalid module access: ${functionName}`);
+		}
+
+		const moduleName = parts[0].trim();
+		const methodName = parts[1].trim();
+
+		const moduleContext = getModule(moduleName);
+		if (moduleContext === undefined) {
+			return err(`Undefined module: ${moduleName}`);
+		}
+
+		const binding = moduleContext.bindings.find((b): boolean => b.name === methodName);
+		if (binding?.functionReferenceValue === undefined) {
+			return err(`Function '${methodName}' not found in module '${moduleName}'`);
+		}
+
+		const ref = binding.functionReferenceValue;
+		const def = getFunctionDefinition(ref.functionName);
+		if (def === undefined) {
+			return err(`Function '${methodName}' in module '${moduleName}' is undefined`);
+		}
+
+		return ok({ def, capturedBindings: ref.capturedBindings });
+	}
+
+	// Regular function lookup
 	const def = getFunctionDefinition(functionName);
 	if (def === undefined) {
 		return err(`Undefined function: ${functionName}`);

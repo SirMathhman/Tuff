@@ -85,7 +85,9 @@ export function extractFunctionCallExpression(literal: string): FunctionCallExpr
 	}
 
 	const functionName = trimmed.substring(0, openIndex).trim();
-	if (!isVariableName(functionName)) {
+
+	// Check if it's a simple variable name or module::function syntax
+	if (!isVariableName(functionName) && !functionName.includes('::')) {
 		return undefined;
 	}
 
