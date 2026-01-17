@@ -27,6 +27,25 @@ export interface StructInstance {
 }
 
 /**
+ * Represents an array type definition with element type, initialized count, and total capacity.
+ */
+export interface ArrayType {
+	elementType: string;
+	initializedCount: number;
+	totalCapacity: number;
+}
+
+/**
+ * Represents an array value with its elements and metadata.
+ */
+export interface ArrayValue {
+	elementType: string;
+	elements: number[];
+	initializedCount: number;
+	totalCapacity: number;
+}
+
+/**
  * Represents a variable binding with an optional value.
  */
 export interface VariableBinding {
@@ -34,6 +53,7 @@ export interface VariableBinding {
 	value: number | undefined;
 	isMutable: boolean;
 	structValue?: StructInstance;
+	arrayValue?: ArrayValue;
 }
 
 /**
@@ -52,6 +72,7 @@ export interface ParsedBinding {
 	isMutable: boolean;
 	remaining: string;
 	structValue?: StructInstance;
+	arrayValue?: ArrayValue;
 }
 
 /**
@@ -334,6 +355,7 @@ export function isBalancedBrackets(input: string): boolean {
 export function findCharOutsideBrackets(input: string, targetChar: string): number {
 	let bracketDepth = 0;
 	let parenDepth = 0;
+	let squareBracketDepth = 0;
 	for (let i = 0; i < input.length; i++) {
 		const char = input[i];
 		if (char === '(') {
@@ -344,7 +366,16 @@ export function findCharOutsideBrackets(input: string, targetChar: string): numb
 			bracketDepth++;
 		} else if (char === '}') {
 			bracketDepth--;
-		} else if (char === targetChar && bracketDepth === 0 && parenDepth === 0) {
+		} else if (char === '[') {
+			squareBracketDepth++;
+		} else if (char === ']') {
+			squareBracketDepth--;
+		} else if (
+			char === targetChar &&
+			bracketDepth === 0 &&
+			parenDepth === 0 &&
+			squareBracketDepth === 0
+		) {
 			return i;
 		}
 	}
@@ -516,7 +547,7 @@ export function isPrevCharValidForOperator(input: string, charIndex: number): bo
 	}
 
 	const prevChar = input[prevCharIndex];
-	return isAlphanumeric(prevChar) || prevChar === ')' || prevChar === '}';
+	return isAlphanumeric(prevChar) || prevChar === ')' || prevChar === '}' || prevChar === ']';
 }
 
 /**

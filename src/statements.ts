@@ -37,6 +37,7 @@ import {
 	parseFunctionDefinition,
 	registerFunctionDefinition,
 } from './functions';
+import { parseArrayTypeBinding } from './arrays';
 
 /**
  * Handles struct type variable binding.
@@ -107,6 +108,10 @@ function handleValueBinding(
 	const valueStr = withoutEqual.substring(0, semiIndex).trim();
 	const remaining = withoutEqual.substring(semiIndex + 1).trim();
 
+	if (typeAnnotation !== undefined && typeAnnotation.startsWith('[')) {
+		return parseArrayTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
+	}
+
 	if (typeAnnotation !== undefined && isStructType(typeAnnotation)) {
 		return parseStructTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
 	}
@@ -167,7 +172,7 @@ function processLetDeclaration(
 		return bindResult;
 	}
 
-	const { name, value, isMutable, structValue } = bindResult.value;
+	const { name, value, isMutable, structValue, arrayValue } = bindResult.value;
 	if (context.bindings.some((binding): boolean => binding.name === name)) {
 		return err(`Variable '${name}' is already defined`);
 	}
@@ -175,6 +180,9 @@ function processLetDeclaration(
 	const newBinding: VariableBinding = { name, value, isMutable };
 	if (structValue !== undefined) {
 		newBinding.structValue = structValue;
+	}
+	if (arrayValue !== undefined) {
+		newBinding.arrayValue = arrayValue;
 	}
 
 	const newContext = {

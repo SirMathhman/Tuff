@@ -58,8 +58,11 @@ export function findOperator(input: string): OperatorMatch | undefined {
 		lowestPrecedenceOperator: '',
 	};
 	let bracketDepth = 0;
+	let squareBracketDepth = 0;
 	if (input.startsWith('(') || input.startsWith('{')) {
 		bracketDepth = 1;
+	} else if (input.startsWith('[')) {
+		squareBracketDepth = 1;
 	}
 	for (let i = 1; i < input.length; i++) {
 		const char = input[i];
@@ -71,7 +74,15 @@ export function findOperator(input: string): OperatorMatch | undefined {
 			bracketDepth--;
 			continue;
 		}
-		if (bracketDepth > 0) {
+		if (char === '[') {
+			squareBracketDepth++;
+			continue;
+		}
+		if (char === ']') {
+			squareBracketDepth--;
+			continue;
+		}
+		if (bracketDepth > 0 || squareBracketDepth > 0) {
 			continue;
 		}
 		const skip = checkOperatorAtPosition(input, i, char, operators, state);

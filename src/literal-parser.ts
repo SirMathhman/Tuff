@@ -19,6 +19,7 @@ import {
 import { ReturnSignal } from './function-call-utils';
 import { tryParseCallExpression } from './call-expressions';
 import { tryParseFieldAccess } from './field-access';
+import { tryParseArrayIndexing } from './arrays';
 
 interface InterpretFunction {
 	(input: string, context: ExecutionContext): Result<number>;
@@ -270,6 +271,11 @@ export function parseLiteral(
 	const fieldAccessResult = tryParseFieldAccess(literal, context, interpretInternal);
 	if (fieldAccessResult !== undefined) {
 		return fieldAccessResult;
+	}
+
+	const arrayIndexResult = tryParseArrayIndexing(literal, context, interpretInternal);
+	if (arrayIndexResult !== undefined) {
+		return arrayIndexResult;
 	}
 
 	const matchResult = parseMatchExpression(literal, context, interpretInternal);
