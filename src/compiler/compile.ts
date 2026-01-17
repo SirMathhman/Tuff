@@ -10,7 +10,7 @@ function compileReadFunction(typeAnnotation: string): string {
 		return 'parseInt(globalThis.__getNextInput__(), 10)';
 	}
 	if (type === 'U8' || type === 'u8') {
-		return "(v=>v<0||v>255?(() => { throw new Error('U8 value out of range: ' + v); })():v)(parseInt(globalThis.__getNextInput__(), 10))";
+		return '(v=>{if(v<0||v>255){process.exitCode=1;return 0;}return v;})(parseInt(globalThis.__getNextInput__(),10))';
 	}
 	return `(() => { throw new Error('Unsupported type: ${type}'); })()`;
 }
@@ -55,7 +55,7 @@ export function compile(input: string): Result<string> {
 	if (input.includes('read<')) {
 		const setup =
 			"const __stdin__=require('fs').readFileSync(0,'utf-8').trim().split(/\\s+/);let __idx__=0;globalThis.__getNextInput__=()=>__idx__<__stdin__.length?__stdin__[__idx__++]:null;";
-		jsCode = `${setup}process.exitCode = ${jsCode};`;
+		jsCode = `${setup}const __result__ = ${jsCode}; if(process.exitCode===undefined) process.exitCode = __result__;`;
 	} else {
 		jsCode = `${jsCode}; process.exitCode = 0;`;
 	}
