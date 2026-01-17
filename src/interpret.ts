@@ -2,6 +2,7 @@ import { err, ok, type Result } from './result';
 import { processTopLevelStatements } from './statements';
 import { interpretInternal } from './evaluator';
 import { findClosingBrace } from './types';
+import { parseFunctionDefinition } from './functions';
 
 function stripAfterIndex(s: string, idx: number): string {
 	let rem = s.substring(idx + 1).trim();
@@ -31,6 +32,14 @@ function handleStructSegment(remaining: string): string | undefined {
 	return stripAfterIndex(remaining, braceIdx + closeRel);
 }
 
+function handleFunctionSegment(remaining: string): string | undefined {
+	const parsed = parseFunctionDefinition(remaining);
+	if (parsed.type === 'err') {
+		return undefined;
+	}
+	return parsed.value.remaining;
+}
+
 function isOnlyStructsOrBlocks(inputStr: string): boolean {
 	let remaining = inputStr.trim();
 	while (remaining.length > 0) {
@@ -39,6 +48,8 @@ function isOnlyStructsOrBlocks(inputStr: string): boolean {
 			next = handleBraceSegment(remaining);
 		} else if (remaining.startsWith('struct ')) {
 			next = handleStructSegment(remaining);
+		} else if (remaining.startsWith('fn ')) {
+			next = handleFunctionSegment(remaining);
 		} else {
 			return false;
 		}

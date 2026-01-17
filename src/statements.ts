@@ -20,6 +20,7 @@ import {
 	extractRemainingFromStatement,
 	parseVariableDeclarationHeader,
 	isIfStatement,
+	stripLeadingSemicolon,
 } from './helpers';
 import { interpretInternal } from './evaluator';
 import { parseAssignment } from './assignments';
@@ -31,6 +32,11 @@ import {
 	isStructType,
 	handleStructInstantiation,
 } from './structs';
+import {
+	isFunctionDefinition,
+	parseFunctionDefinition,
+	registerFunctionDefinition,
+} from './functions';
 
 /**
  * Handles struct type variable binding.
@@ -336,10 +342,7 @@ function processStructStatement(input: string, shouldRegister = true): Result<Co
 		return err('Struct definition missing closing brace');
 	}
 	const definitionStr = trimmed.substring(0, closingBraceIndex + 1);
-	let remaining = trimmed.substring(closingBraceIndex + 1).trim();
-	if (remaining.startsWith(';')) {
-		remaining = remaining.substring(1).trim();
-	}
+	const remaining = stripLeadingSemicolon(trimmed.substring(closingBraceIndex + 1));
 
 	const defResult = parseStructDefinition(definitionStr);
 	if (defResult.type === 'err') {
@@ -360,6 +363,28 @@ function processStructStatement(input: string, shouldRegister = true): Result<Co
 }
 
 /**
+ * Processes a function definition statement.
+ */
+function processFunctionStatement(input: string): Result<ContextAndRemaining> {
+	const parsed = parseFunctionDefinition(input);
+	if (parsed.type === 'err') {
+		return parsed;
+	}
+
+	const registerResult = registerFunctionDefinition(parsed.value.definition);
+	if (registerResult.type === 'err') {
+		return registerResult;
+	}
+
+	// Function definitions don't modify context, just consume input
+	return ok({ context: { bindings: [] }, remaining: parsed.value.remaining });
+}
+
+function isGlobalDefinition(trimmed: string): boolean {
+	return isStructDefinition(trimmed) || isFunctionDefinition(trimmed);
+}
+
+/**
  * Processes statements (declarations, assignments, if-else, blocks) in input.
  */
 export function processStatements(
@@ -375,6 +400,8 @@ export function processStatements(
 		let result: Result<ContextAndRemaining> | undefined;
 		if (isStructDefinition(trimmed)) {
 			result = processStructStatement(remaining, registerStructs);
+		} else if (isFunctionDefinition(trimmed)) {
+			result = processFunctionStatement(remaining);
 		} else if (trimmed.startsWith('let ')) {
 			result = processLetDeclaration(remaining, currentContext);
 		} else if (allowBlocks && shouldProcessAsStatementBlock(trimmed)) {
@@ -395,8 +422,8 @@ export function processStatements(
 		if (result.type === 'err') {
 			return result;
 		}
-		// For struct statements, don't update context (structs are global)
-		if (!isStructDefinition(trimmed)) {
+		// For global definitions, don't update context (they are global)
+		if (!isGlobalDefinition(trimmed)) {
 			currentContext = result.value.context;
 		}
 		remaining = result.value.remaining;

@@ -1,6 +1,7 @@
 import { type Result } from '../src/result';
 import { interpret } from '../src/interpret';
 import { clearStructRegistry } from '../src/structs';
+import { clearFunctionRegistry } from '../src/functions';
 
 function expectOkValue(result: Result<number>, expected: number): void {
 	if (result.type === 'err') {
@@ -483,6 +484,34 @@ describe('interpret - struct validation', (): void => {
 		expectInterpretErrContains(
 			'struct Point { x : I32, y : I32 } let p = Point { x : 1 }; p.y',
 			"Field 'y' not initialized in Point",
+		);
+	});
+});
+
+describe('interpret - functions', (): void => {
+	beforeEach((): void => {
+		clearFunctionRegistry();
+	});
+
+	it('should interpret function call add(3, 4) as 7', (): void => {
+		expectInterpretOk('fn add(first : I32, second : I32) : I32 => { first + second } add(3, 4)', 7);
+	});
+
+	it('should return Err for calling undefined function', (): void => {
+		expectInterpretErrContains('add(1, 2)', 'Undefined function');
+	});
+
+	it('should return Err for wrong argument count', (): void => {
+		expectInterpretErrContains(
+			'fn add(first : I32, second : I32) : I32 => { first + second } add(1)',
+			'expects 2 argument(s)',
+		);
+	});
+
+	it('should return Err for out-of-range return value', (): void => {
+		expectInterpretErrContains(
+			'fn add(first : U8, second : U8) : U8 => { first + second } add(255, 1)',
+			'out of range',
 		);
 	});
 });

@@ -3,6 +3,7 @@ import {
 	checkSingleCharOperator,
 	checkTwoCharOperator,
 	type ExecutionContext,
+	type VariableBinding,
 	extractTypeSuffix,
 	findTypeSuffixStart,
 	hasNegativeSign,
@@ -21,6 +22,7 @@ import {
 	type IfConditionAndAfter,
 } from './helpers';
 import { evaluateStructInstantiation } from './structs';
+import { getFunctionDefinition, type FunctionDefinition } from './functions';
 
 interface InterpretFunction {
 	(input: string, context: ExecutionContext): Result<number>;
@@ -41,6 +43,14 @@ interface ProcessVariableBindingsFunction {
 interface FieldAccessExpression {
 	instanceExpr: string;
 	fieldName: string;
+}
+
+/**
+ * Represents a parsed function call.
+ */
+interface FunctionCallExpression {
+	functionName: string;
+	args: string[];
 }
 
 /**
@@ -236,6 +246,142 @@ function parseSimpleLiteral(
 	return undefined;
 }
 
+function splitArguments(argsStr: string): string[] {
+	const args: string[] = [];
+	let current = '';
+	let parenDepth = 0;
+	let braceDepth = 0;
+
+	for (let i = 0; i < argsStr.length; i++) {
+		const char = argsStr[i];
+		if (char === '(') {
+			parenDepth++;
+		} else if (char === ')') {
+			parenDepth--;
+		} else if (char === '{') {
+			braceDepth++;
+		} else if (char === '}') {
+			braceDepth--;
+		}
+
+		if (char === ',' && parenDepth === 0 && braceDepth === 0) {
+			args.push(current.trim());
+			current = '';
+			continue;
+		}
+
+		current += char;
+	}
+
+	const last = current.trim();
+	if (last.length > 0) {
+		args.push(last);
+	}
+
+	return args;
+}
+
+function extractFunctionCallExpression(literal: string): FunctionCallExpression | undefined {
+	const trimmed = literal.trim();
+	if (!trimmed.endsWith(')')) {
+		return undefined;
+	}
+
+	let depth = 0;
+	let openIndex = -1;
+	for (let i = trimmed.length - 1; i >= 0; i--) {
+		const char = trimmed[i];
+		if (char === ')') {
+			depth++;
+			continue;
+		}
+		if (char !== '(') {
+			continue;
+		}
+
+		depth--;
+		if (depth !== 0) {
+			continue;
+		}
+		openIndex = i;
+		break;
+	}
+
+	if (openIndex <= 0) {
+		return undefined;
+	}
+
+	const functionName = trimmed.substring(0, openIndex).trim();
+	if (!isVariableName(functionName)) {
+		return undefined;
+	}
+
+	const argsStr = trimmed.substring(openIndex + 1, trimmed.length - 1);
+	const args = splitArguments(argsStr);
+	return { functionName, args };
+}
+
+function createCallContext(
+	def: FunctionDefinition,
+	argValues: number[],
+	outerContext: ExecutionContext,
+): ExecutionContext {
+	const paramNames = new Set<string>();
+	const paramBindings: VariableBinding[] = def.parameters.map((p, idx): VariableBinding => {
+		paramNames.add(p.name);
+		return { name: p.name, value: argValues[idx], isMutable: false };
+	});
+
+	const outerBindings = outerContext.bindings.filter((b): boolean => !paramNames.has(b.name));
+	return { bindings: [...paramBindings, ...outerBindings] };
+}
+
+function tryParseFunctionCall(
+	literal: string,
+	context: ExecutionContext,
+	interpretInternal: InterpretFunction,
+): Result<number> | undefined {
+	const parsed = extractFunctionCallExpression(literal);
+	if (parsed === undefined) {
+		return undefined;
+	}
+
+	const def = getFunctionDefinition(parsed.functionName);
+	if (def === undefined) {
+		return err(`Undefined function: ${parsed.functionName}`);
+	}
+
+	if (parsed.args.length !== def.parameters.length) {
+		return err(
+			`Function '${def.name}' expects ${def.parameters.length} argument(s), got ${parsed.args.length}`,
+		);
+	}
+
+	const argValues: number[] = [];
+	for (let i = 0; i < def.parameters.length; i++) {
+		const argResult = interpretInternal(parsed.args[i], context);
+		if (argResult.type === 'err') {
+			return argResult;
+		}
+
+		const param = def.parameters[i];
+		const typeCheck = validateValueForType(argResult.value, param.typeAnnotation);
+		if (typeCheck.type === 'err') {
+			return typeCheck;
+		}
+
+		argValues.push(argResult.value);
+	}
+
+	const callContext = createCallContext(def, argValues, context);
+	const result = interpretInternal(def.bodyExpression, callContext);
+	if (result.type === 'err') {
+		return result;
+	}
+
+	return validateValueForType(result.value, def.returnType);
+}
+
 /**
  * Attempts to parse field access expression.
  */
@@ -333,6 +479,11 @@ export function parseLiteral(
 	const ifElseResult = parseIfElseExpression(literal, context, interpretInternal);
 	if (ifElseResult !== undefined) {
 		return ifElseResult;
+	}
+
+	const callResult = tryParseFunctionCall(literal, context, interpretInternal);
+	if (callResult !== undefined) {
+		return callResult;
 	}
 
 	const trimmed = literal.trim();

@@ -213,6 +213,17 @@ export function extractRemainingFromStatement(statementStr: string): string {
 }
 
 /**
+ * Strips a single leading semicolon (if present) and surrounding whitespace.
+ */
+export function stripLeadingSemicolon(input: string): string {
+	let remaining = input.trim();
+	if (remaining.startsWith(';')) {
+		remaining = remaining.substring(1).trim();
+	}
+	return remaining;
+}
+
+/**
  * Parses the type annotation and assignment part after a colon.
  */
 export function parseTypeAnnotationPart(afterColon: string): TypeAnnotationParts {
