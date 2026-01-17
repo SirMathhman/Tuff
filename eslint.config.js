@@ -85,6 +85,10 @@ module.exports = [
 					selector: 'TSTypeLiteral:not(:has(TSTypeAnnotation TSIndexSignatureDeclaration))',
 					message: 'Anonymous object types are banned. Define a named interface instead.',
 				},
+				{
+					selector: 'TSTypeReference[typeName.name="Record"]',
+					message: 'Record type is banned. Use Map instead.',
+				},
 			],
 
 			// TypeScript-specific rules - extremely strict

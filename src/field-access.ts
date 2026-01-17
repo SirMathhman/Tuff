@@ -52,7 +52,7 @@ function lookupStructVariableField(
 		if (binding.name !== varName || binding.structValue === undefined) {
 			continue;
 		}
-		const fieldValue = binding.structValue.values[fieldName];
+		const fieldValue = binding.structValue.values.get(fieldName);
 		if (typeof fieldValue === 'number') {
 			return ok(fieldValue);
 		}
@@ -99,7 +99,7 @@ export function tryParseFieldAccess(
 		return instanceResult;
 	}
 
-	const fieldValue = instanceResult.value.fieldValues[fieldName];
+	const fieldValue = instanceResult.value.fieldValues.get(fieldName);
 	// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
 	if (fieldValue === undefined) {
 		return err(`Field '${fieldName}' not found in struct '${instanceResult.value.structType}'`);

@@ -23,7 +23,7 @@ export interface OperatorPrecedenceState {
  */
 export interface StructInstance {
 	structType: string;
-	values: Record<string, number>;
+	values: Map<string, number>;
 }
 
 /**

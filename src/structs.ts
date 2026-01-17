@@ -28,7 +28,7 @@ export interface StructDefinition {
  */
 export interface StructInstantiationResult {
 	structType: string;
-	fieldValues: Record<string, number>;
+	fieldValues: Map<string, number>;
 }
 
 /**
@@ -237,11 +237,11 @@ export function looksLikeStructInstantiation(expr: string): boolean {
  * Validates that all fields defined in the struct are present.
  */
 function validateAllFieldsInitialized(
-	fieldValues: Record<string, number>,
+	fieldValues: Map<string, number>,
 	structDef: StructDefinition,
 ): Result<void> {
 	for (const field of structDef.fields) {
-		if (!Object.prototype.hasOwnProperty.call(fieldValues, field.name)) {
+		if (!fieldValues.has(field.name)) {
 			return err(`Field '${field.name}' not initialized in ${structDef.name}`);
 		}
 	}
@@ -255,7 +255,7 @@ function processFieldAssignment(
 	decl: string,
 	structDef: StructDefinition,
 	seenFields: Set<string>,
-	fieldValues: Record<string, number>,
+	fieldValues: Map<string, number>,
 	parseValue: (expr: string) => Result<number>,
 ): Result<void> {
 	const trimmedDecl = decl.trim();
@@ -284,7 +284,7 @@ function processFieldAssignment(
 		return valueResult;
 	}
 
-	fieldValues[fieldName] = valueResult.value;
+	fieldValues.set(fieldName, valueResult.value);
 	return ok(undefined as void);
 }
 
@@ -312,7 +312,7 @@ export function evaluateStructInstantiation(
 		return err('Struct instantiation missing closing brace');
 	}
 
-	const fieldValues: Record<string, number> = {};
+	const fieldValues: Map<string, number> = new Map();
 	const seenFields = new Set<string>();
 	const fieldDecls = trimmed.substring(braceIndex + 1, braceIndex + closeIndex).split(',');
 
