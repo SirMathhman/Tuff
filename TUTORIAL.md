@@ -257,6 +257,14 @@ let f : () => I32 = get;
 f()                      // 42
 ```
 
+Function types in annotations use the same `=>` arrow syntax:
+
+```tuff
+fn add(a : I32, b : I32) : I32 => a + b;
+let g : (I32, I32) => I32 = add;
+g(2, 3)                   // 5
+```
+
 ---
 
 ## Closures
