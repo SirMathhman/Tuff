@@ -13,6 +13,35 @@ export interface FunctionCallExpression {
 	args: string[];
 }
 
+/**
+ * Finds the matching opening parenthesis for the final closing parenthesis of a call.
+ * Returns -1 if the input is not a well-formed call suffix.
+ */
+export function findCallOpenParenIndex(trimmed: string): number {
+	if (!trimmed.endsWith(')')) {
+		return -1;
+	}
+
+	let depth = 0;
+	for (let i = trimmed.length - 1; i >= 0; i--) {
+		const char = trimmed[i];
+		if (char === ')') {
+			depth++;
+			continue;
+		}
+		if (char !== '(') {
+			continue;
+		}
+
+		depth--;
+		if (depth === 0) {
+			return i;
+		}
+	}
+
+	return -1;
+}
+
 export function splitArguments(argsStr: string): string[] {
 	const args: string[] = [];
 	let current = '';
@@ -50,30 +79,7 @@ export function splitArguments(argsStr: string): string[] {
 
 export function extractFunctionCallExpression(literal: string): FunctionCallExpression | undefined {
 	const trimmed = literal.trim();
-	if (!trimmed.endsWith(')')) {
-		return undefined;
-	}
-
-	let depth = 0;
-	let openIndex = -1;
-	for (let i = trimmed.length - 1; i >= 0; i--) {
-		const char = trimmed[i];
-		if (char === ')') {
-			depth++;
-			continue;
-		}
-		if (char !== '(') {
-			continue;
-		}
-
-		depth--;
-		if (depth !== 0) {
-			continue;
-		}
-		openIndex = i;
-		break;
-	}
-
+	const openIndex = findCallOpenParenIndex(trimmed);
 	if (openIndex <= 0) {
 		return undefined;
 	}

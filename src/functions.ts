@@ -34,6 +34,11 @@ interface ReturnTypeParseResult {
 	afterReturn: string;
 }
 
+interface AfterArrowParseResult {
+	returnType: string;
+	afterArrow: string;
+}
+
 /**
  * Represents parsed function body and remaining input.
  */
@@ -182,28 +187,59 @@ function parseReturnType(afterParams: string): Result<ReturnTypeParseResult> {
 	return ok({ returnType, afterReturn });
 }
 
+function parseAfterSignature(afterParams: string): Result<AfterArrowParseResult> {
+	const trimmed = afterParams.trim();
+	if (trimmed.startsWith(':')) {
+		const withReturn = parseReturnType(trimmed);
+		if (withReturn.type === 'err') {
+			return withReturn;
+		}
+		return ok({ returnType: withReturn.value.returnType, afterArrow: withReturn.value.afterReturn });
+	}
+
+	const arrowIndex = trimmed.indexOf('=>');
+	if (arrowIndex < 0) {
+		return err('Function definition missing =>');
+	}
+
+	const afterArrow = trimmed.substring(arrowIndex + 2).trim();
+	// Default return type when omitted.
+	return ok({ returnType: 'I32', afterArrow });
+}
+
 function parseBodyExpression(afterArrow: string): Result<BodyExpressionParseResult> {
 	const trimmed = afterArrow.trim();
-	if (!trimmed.startsWith('{')) {
-		return err('Function body must be a braced expression');
+	if (trimmed.startsWith('{')) {
+		const closingBraceIndex = findClosingBrace(trimmed);
+		if (closingBraceIndex < 0) {
+			return err('Function body missing closing brace');
+		}
+
+		const afterBrace = trimmed.substring(closingBraceIndex + 1);
+		const semicolonIndex = findSemicolonOutsideBrackets(afterBrace);
+		let expressionEndIndex = closingBraceIndex + 1;
+		let remainingStartIndex = closingBraceIndex + 1;
+		if (semicolonIndex >= 0) {
+			expressionEndIndex += semicolonIndex;
+			remainingStartIndex += semicolonIndex;
+		}
+		const bodyExpression = trimmed.substring(0, expressionEndIndex);
+		const remaining = stripLeadingSemicolon(trimmed.substring(remainingStartIndex));
+
+		return ok({ bodyExpression, remaining });
 	}
 
-	const closingBraceIndex = findClosingBrace(trimmed);
-	if (closingBraceIndex < 0) {
-		return err('Function body missing closing brace');
+	const semiIndex = findSemicolonOutsideBrackets(trimmed);
+	if (semiIndex < 0) {
+		return err('Function body missing semicolon');
 	}
 
-	const afterBrace = trimmed.substring(closingBraceIndex + 1);
-	const semicolonIndex = findSemicolonOutsideBrackets(afterBrace);
-	let expressionEndIndex = closingBraceIndex + 1;
-	let remainingStartIndex = closingBraceIndex + 1;
-	if (semicolonIndex >= 0) {
-		expressionEndIndex += semicolonIndex;
-		remainingStartIndex += semicolonIndex;
+	const bodyExpression = trimmed.substring(0, semiIndex).trim();
+	if (bodyExpression.length === 0) {
+		return err('Function body missing expression');
 	}
-	const bodyExpression = trimmed.substring(0, expressionEndIndex);
-	const remaining = stripLeadingSemicolon(trimmed.substring(remainingStartIndex));
 
+	const remaining = stripLeadingSemicolon(trimmed.substring(semiIndex));
 	return ok({ bodyExpression, remaining });
 }
 
@@ -249,12 +285,12 @@ export function parseFunctionDefinition(input: string): Result<ParsedFunctionDef
 		return signatureResult;
 	}
 
-	const returnResult = parseReturnType(signatureResult.value.afterSignature);
-	if (returnResult.type === 'err') {
-		return returnResult;
+	const afterSigResult = parseAfterSignature(signatureResult.value.afterSignature);
+	if (afterSigResult.type === 'err') {
+		return afterSigResult;
 	}
 
-	const bodyResult = parseBodyExpression(returnResult.value.afterReturn);
+	const bodyResult = parseBodyExpression(afterSigResult.value.afterArrow);
 	if (bodyResult.type === 'err') {
 		return bodyResult;
 	}
@@ -262,7 +298,7 @@ export function parseFunctionDefinition(input: string): Result<ParsedFunctionDef
 	const def: FunctionDefinition = {
 		name: signatureResult.value.name,
 		parameters: signatureResult.value.parameters,
-		returnType: returnResult.value.returnType,
+		returnType: afterSigResult.value.returnType,
 		bodyExpression: bodyResult.value.bodyExpression,
 	};
 

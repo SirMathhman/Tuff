@@ -525,4 +525,11 @@ describe('interpret - functions', (): void => {
 			'out of range',
 		);
 	});
+
+	it('should support method-call syntax with implicit this', (): void => {
+		expectInterpretOk(
+			'fn addOnce(this : I32) => this + 1; let value : I32 = 100; value.addOnce()',
+			101,
+		);
+	});
 });
