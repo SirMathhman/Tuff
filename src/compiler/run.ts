@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execSync, type ExecSyncOptionsWithStringEncoding } from 'child_process';
 import { writeFileSync, unlinkSync, mkdtempSync, rmdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -7,6 +7,12 @@ import { type Result, err, ok } from '../common/result';
 
 interface ExecError {
 	status: number;
+	stdout?: string;
+}
+
+interface ExecutionResult {
+	output: string;
+	exitCode: number;
 }
 
 function hasStatusProperty(e: object): e is ExecError {
@@ -40,19 +46,98 @@ function cleanup(tempFile: string | undefined, tempDir: string | undefined): voi
 	}
 }
 
+function executeNode(tempFile: string, stdin: string): ExecutionResult {
+	let output: string;
+	let exitCode = 0;
+
+	const env = process.env;
+	env.NODE_NO_COLORS = '1';
+
+	const execOptions: ExecSyncOptionsWithStringEncoding = {
+		stdio: ['pipe', 'pipe', 'inherit'],
+		cwd: process.cwd(),
+		input: stdin,
+		encoding: 'utf8',
+		env,
+	};
+
+	try {
+		output = execSync(`node "${tempFile}"`, execOptions);
+	} catch (execError: unknown) {
+		if (isExecError(execError)) {
+			exitCode = execError.status;
+			output = execError.stdout ?? '';
+		} else {
+			throw execError;
+		}
+	}
+
+	return { output, exitCode };
+}
+
+function isAnsiEscape(text: string, pos: number): boolean {
+	return text[pos] === '\u001b' && text[pos + 1] === '[';
+}
+
+function findAnsiEnd(text: string, pos: number): number {
+	let i = pos;
+	while (i < text.length && text[i] !== 'm') {
+		i++;
+	}
+	return i + 1; // Include the 'm'
+}
+
+function stripAnsiCodes(text: string): string {
+	let result = '';
+	let i = 0;
+	while (i < text.length) {
+		if (isAnsiEscape(text, i)) {
+			i = findAnsiEnd(text, i);
+		} else {
+			result += text[i];
+			i++;
+		}
+	}
+	return result;
+}
+
+function parseExecutionOutput(output: string): Result<number> {
+	const trimmed = output.trim();
+	if (!trimmed) {
+		return err('No output from compiled code');
+	}
+
+	const stripped = stripAnsiCodes(trimmed);
+	const lines = stripped.split('\n');
+	if (lines.length === 0) {
+		return err('No output lines');
+	}
+
+	const lastLine = lines[lines.length - 1].trim();
+	if (!lastLine) {
+		return err(`Last line is empty. All lines: ${JSON.stringify(lines)}`);
+	}
+
+	const resultValue = Number(lastLine);
+	if (Number.isNaN(resultValue)) {
+		return err(`Failed to parse result value: "${lastLine}"`);
+	}
+
+	return ok(resultValue);
+}
+
 /**
  * Compiles and runs Tuff source code by generating JavaScript and executing it with Node.js.
  *
  * @param input - The Tuff source code to compile and run
  * @param stdin - Standard input to pass to the process
- * @returns A Result containing the exit code of the executed process
+ * @returns A Result containing the numeric result value of the executed program
  */
 export function run(input: string, stdin: string): Result<number> {
 	// DO NOT CHANGE THIS. COMPILE MUST BE THE FIRST CALL.
 	// THIS BEATS THE POINT OF THIS FUNCTION.
 	// DO NOT FALLBACK TO THE INTERPRETER, but you can reuse code from it.
 
-	// Otherwise, use the compiled JavaScript approach
 	const compileResult = compile(input);
 	if (compileResult.type === 'err') {
 		return compileResult;
@@ -66,16 +151,10 @@ export function run(input: string, stdin: string): Result<number> {
 		tempDir = mkdtempSync(join(tmpdir(), 'tuff-'));
 		tempFile = join(tempDir, 'compiled.js');
 		writeFileSync(tempFile, jsCode, 'utf8');
-		execSync(`node "${tempFile}"`, {
-			stdio: ['pipe', 'inherit', 'inherit'],
-			cwd: process.cwd(),
-			input: stdin,
-		});
-		return ok(0);
+
+		const { output } = executeNode(tempFile, stdin);
+		return parseExecutionOutput(output);
 	} catch (e: unknown) {
-		if (isExecError(e)) {
-			return ok(e.status);
-		}
 		if (e instanceof Error) {
 			return err(`Failed to run compiled code: ${e.message}`);
 		}

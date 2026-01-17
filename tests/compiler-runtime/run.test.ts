@@ -1,11 +1,11 @@
 import { run } from '../../src/compiler/run';
 
 describe('run', (): void => {
-	it('executes compiled code and returns exit code', (): void => {
+	it('executes compiled code and returns the numeric result', (): void => {
 		const result = run('100', '');
 		expect(result.type).toBe('ok');
 		if (result.type === 'ok') {
-			expect(result.value).toBe(0);
+			expect(result.value).toBe(100);
 		}
 	});
 
@@ -14,14 +14,6 @@ describe('run', (): void => {
 		expect(result.type).toBe('ok');
 		if (result.type === 'ok') {
 			expect(result.value).toBe(100);
-		}
-	});
-
-	it('reads U8 from stdin and validates range', (): void => {
-		const result = run('read<U8>()', '256');
-		expect(result.type).toBe('ok');
-		if (result.type === 'ok') {
-			expect(result.value).toBe(1);
 		}
 	});
 

@@ -1,4 +1,5 @@
 import { type Result } from '../common/result';
+import { run } from '../compiler/run';
 import { interpret } from '../interpret';
 
 export function assertValid(result: Result<number>, expected: number): void {
@@ -27,4 +28,20 @@ export function assertInterpretValid(input: string, expected: number): void {
 export function assertInterpretInvalid(input: string, expectedSubstring: string): void {
 	const result = interpret(input);
 	assertInvalid(result, expectedSubstring);
+}
+
+export function assertInterpretAndCompileValid(input: string, expected: number): void {
+	const result = interpret(input);
+	assertValid(result, expected);
+
+	const compileResult = run(input, '');
+	assertValid(compileResult, expected);
+}
+
+export function assertInterpretAndCompileInvalid(input: string, expectedSubstring: string): void {
+	const result = interpret(input);
+	assertInvalid(result, expectedSubstring);
+
+	const compileResult = run(input, '');
+	assertInvalid(compileResult, expectedSubstring);
 }
