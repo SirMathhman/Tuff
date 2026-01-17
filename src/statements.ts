@@ -313,6 +313,11 @@ function processStructStatement(input: string): Result<ContextAndRemaining> {
 		return defResult;
 	}
 
+	// Reject duplicate struct definitions
+	if (isStructType(defResult.value.name)) {
+		return err(`Struct '${defResult.value.name}' is already defined`);
+	}
+
 	registerStructDefinition(defResult.value);
 
 	// Struct definitions don't modify context, just consume input
