@@ -6,17 +6,16 @@ import { clearFunctionRegistry } from '../src/functions';
 function expectOkValue(result: Result<number>, expected: number): void {
 	if (result.type === 'err') {
 		console.error('Expected ok but got err:', result.error);
-	}
-	expect(result.type).toBe('ok');
-	if (result.type === 'ok') {
+	} else {
 		expect(result.value).toBe(expected);
 	}
 }
 
 function expectErrContains(result: Result<number>, expectedSubstring: string): void {
-	expect(result.type).toBe('err');
 	if (result.type === 'err') {
 		expect(result.error).toContain(expectedSubstring);
+	} else {
+		fail(`Expected err but got ok: ${result.value}`);
 	}
 }
 
@@ -498,10 +497,7 @@ describe('interpret - functions', (): void => {
 	});
 
 	it('should handle yield plus additional expression in function body', (): void => {
-		expectInterpretOk(
-			'fn get() : I32 => { if (true) yield 100; 200 } + 1; get()',
-			101,
-		);
+		expectInterpretOk('fn get() : I32 => { if (true) yield 100; 200 } + 1; get()', 101);
 	});
 
 	it('should return Err for calling undefined function', (): void => {
