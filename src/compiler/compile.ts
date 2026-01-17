@@ -190,6 +190,7 @@ function findMatchingParen(code: string, openIdx: number): number {
 
 function findElseKeyword(code: string, startIdx: number): number {
 	let depth = 0;
+	let ifDepth = 0;
 	let i = startIdx;
 
 	while (i < code.length) {
@@ -203,14 +204,40 @@ function findElseKeyword(code: string, startIdx: number): number {
 			depth--;
 		}
 
-		if (depth === 0 && isKeywordAt(code, i, 'else')) {
-			return i;
+		if (depth === 0) {
+			if (isKeywordAt(code, i, 'if')) {
+				ifDepth++;
+				i += 2;
+				continue;
+			}
+			if (isKeywordAt(code, i, 'else')) {
+				if (ifDepth === 0) {
+					return i;
+				}
+				ifDepth--;
+				i += 4;
+				continue;
+			}
 		}
 
 		i++;
 	}
 
 	return -1;
+}
+
+function findMatchingBrace(code: string, startIdx: number): number {
+	let depth = 1;
+	let i = startIdx + 1;
+	while (i < code.length && depth > 0) {
+		if (code[i] === '{') {
+			depth++;
+		} else if (code[i] === '}') {
+			depth--;
+		}
+		i++;
+	}
+	return i;
 }
 
 interface IfParts {
@@ -254,17 +281,8 @@ function parseIfExpression(code: string, ifIdx: number): IfParts | undefined {
 
 	if (code[i] === '{') {
 		// Block - find matching }
-		let depth = 1;
-		i++;
-		while (i < code.length && depth > 0) {
-			if (code[i] === '{') {
-				depth++;
-			} else if (code[i] === '}') {
-				depth--;
-			}
-			i++;
-		}
-		thenEnd = i;
+		thenEnd = findMatchingBrace(code, i);
+		i = thenEnd;
 	} else {
 		// Expression - find 'else' keyword
 		const elseIdx = findElseKeyword(code, i);
@@ -294,17 +312,8 @@ function parseIfExpression(code: string, ifIdx: number): IfParts | undefined {
 
 	if (code[i] === '{') {
 		// Block - find matching }
-		let depth = 1;
-		i++;
-		while (i < code.length && depth > 0) {
-			if (code[i] === '{') {
-				depth++;
-			} else if (code[i] === '}') {
-				depth--;
-			}
-			i++;
-		}
-		elseEnd = i;
+		elseEnd = findMatchingBrace(code, i);
+		i = elseEnd;
 	} else if (isKeywordAt(code, i, 'if')) {
 		// Nested if-else - recursively parse it
 		const nested = parseIfExpression(code, i);
@@ -505,16 +514,39 @@ function replaceIfExpressions(code: string): string {
 		if (isKeywordAt(code, i, 'if')) {
 			const parsed = parseIfExpression(code, i);
 			if (parsed !== undefined) {
-				// Check if there's a return inside - if so, don't convert to ternary
+				// Recursively process branches first
+				const processedThen = replaceIfExpressions(parsed.thenBranch);
+				const processedElse = replaceIfExpressions(parsed.elseBranch);
+
+				// Check if branches are blocks (start with '{')
+				const thenIsBlock = processedThen.trim().startsWith('{');
+				const elseIsBlock = processedElse.trim().startsWith('{');
+
+				// If either branch is a block, keep as statement
+				if (thenIsBlock || elseIsBlock) {
+					result += code[i];
+					i++;
+					continue;
+				}
+
+				// Check if there's a return/yield inside - if so, don't convert to ternary
 				// (it's a statement, not an expression)
-				if (parsed.thenBranch.includes('return') || parsed.elseBranch.includes('return')) {
+				const hasStatement = (branch: string): boolean => {
+					return (
+						branch.includes('return') ||
+						branch.includes('yield') ||
+						branch.includes(';')
+					);
+				};
+
+				if (hasStatement(processedThen) || hasStatement(processedElse)) {
 					result += code[i];
 					i++;
 					continue;
 				}
 
 				// Convert to ternary
-				const ternary = `((${parsed.condition}) ? (${parsed.thenBranch}) : (${parsed.elseBranch}))`;
+				const ternary = `((${parsed.condition}) ? (${processedThen}) : (${processedElse}))`;
 				result += ternary;
 				i = parsed.endIdx;
 				continue;

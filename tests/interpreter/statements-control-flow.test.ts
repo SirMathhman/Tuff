@@ -1,7 +1,8 @@
 import {
 	assertInterpretAndCompileValid,
 	assertInterpretAndCompileInvalid,
-	assertInvalid
+	assertCompileValid,
+	assertInvalid,
 } from '../../src/testing/test-helpers';
 import { interpret } from '../../src/interpret';
 
@@ -195,7 +196,10 @@ describe('for loops', (): void => {
 		assertInterpretAndCompileValid('let mut sum = 0; for (let mut i in 0..5) sum += i; sum', 10);
 	});
 	it('should interpret "let mut product = 1; for (let mut i in 1..5) product *= i; product" as 24', (): void => {
-		assertInterpretAndCompileValid('let mut product = 1; for (let mut i in 1..5) product *= i; product', 24);
+		assertInterpretAndCompileValid(
+			'let mut product = 1; for (let mut i in 1..5) product *= i; product',
+			24,
+		);
 	});
 	it('should interpret "let mut x = 0; for (let mut i in 0..3) x = i; x" (last iteration)', (): void => {
 		// for loop updates x to the last iteration value (2)
@@ -207,5 +211,11 @@ describe('for loops', (): void => {
 	});
 	it('should return Err for "let sum = 0; for (let mut i in 0..5) sum += i; sum" (immutable outer)', (): void => {
 		assertInvalid(interpret('let sum = 0; for (let mut i in 0..5) sum += i; sum'), 'not mutable');
+	});
+});
+
+describe('compiler-only tests with read<T>()', (): void => {
+	it('should compile "let x = read<I32>(); x + x" with stdin', (): void => {
+		assertCompileValid('let x = read<I32>(); x + x', '10', 20);
 	});
 });

@@ -83,6 +83,222 @@ function splitTopLevelStatements(block: string): string[] {
 	let i = 0;
 	while (i < block.length) {
 		const ch = block[i];
+
+		// Check for control flow keywords at depth 0
+		if (parenDepth === 0 && braceDepth === 0 && bracketDepth === 0) {
+			// Check for if/while/for/match keywords
+			if (
+				isKeywordAt(block, i, 'if') ||
+				isKeywordAt(block, i, 'while') ||
+				isKeywordAt(block, i, 'for') ||
+				isKeywordAt(block, i, 'match')
+			) {
+				// Find the keyword length
+				let keywordLen = 2;
+				if (isKeywordAt(block, i, 'while') || isKeywordAt(block, i, 'match')) {
+					keywordLen = 5;
+				} else if (isKeywordAt(block, i, 'for')) {
+					keywordLen = 3;
+				}
+
+				// Skip to condition
+				let j = i + keywordLen;
+				while (j < block.length && isWhitespace(block[j])) {
+					j++;
+				}
+
+				// Parse condition (skip parens or match expression)
+				if (block[j] === '(') {
+					let depth = 1;
+					j++;
+					while (j < block.length && depth > 0) {
+						if (block[j] === '(') {
+							depth++;
+						} else if (block[j] === ')') {
+							depth--;
+						}
+						j++;
+					}
+				}
+
+				// Skip whitespace after condition
+				while (j < block.length && isWhitespace(block[j])) {
+					j++;
+				}
+
+				// Parse body (could be block or single statement)
+				if (block[j] === '{') {
+					// Block body - find matching brace
+					let depth = 1;
+					j++;
+					while (j < block.length && depth > 0) {
+						if (block[j] === '{') {
+							depth++;
+						} else if (block[j] === '}') {
+							depth--;
+						}
+						j++;
+					}
+				} else {
+					// Single statement - find semicolon or else keyword
+					while (j < block.length) {
+						if (block[j] === ';') {
+							j++;
+							break;
+						}
+						if (isKeywordAt(block, j, 'else')) {
+							break;
+						}
+						j++;
+					}
+				}
+
+				// If this was an if statement, check for else
+				if (isKeywordAt(block, i, 'if')) {
+					// Skip whitespace
+					while (j < block.length && isWhitespace(block[j])) {
+						j++;
+					}
+
+					if (isKeywordAt(block, j, 'else')) {
+						j += 4;
+
+						// Skip whitespace
+						while (j < block.length && isWhitespace(block[j])) {
+							j++;
+						}
+
+						// Parse else body (could be if, block, or statement)
+						if (isKeywordAt(block, j, 'if')) {
+						// else if - recursively parse the nested if-else
+						// We need to find where the nested if ends
+						// Save current position
+						const nestedIfStart = j;
+
+						// Call ourselves recursively by simulating the if parsing
+						// Actually, let's just parse it manually inline
+
+						// Skip 'if'
+						j += 2;
+
+						// Skip whitespace
+						while (j < block.length && isWhitespace(block[j])) {
+							j++;
+						}
+
+						// Parse condition
+						if (block[j] === '(') {
+							let depth = 1;
+							j++;
+							while (j < block.length && depth > 0) {
+								if (block[j] === '(') {
+									depth++;
+								} else if (block[j] === ')') {
+									depth--;
+								}
+								j++;
+							}
+						}
+
+						// Skip whitespace
+						while (j < block.length && isWhitespace(block[j])) {
+							j++;
+						}
+
+						// Parse then branch
+						if (block[j] === '{') {
+							let depth = 1;
+							j++;
+							while (j < block.length && depth > 0) {
+								if (block[j] === '{') {
+									depth++;
+								} else if (block[j] === '}') {
+									depth--;
+								}
+								j++;
+							}
+						} else {
+							while (j < block.length) {
+								if (block[j] === ';') {
+									j++;
+									break;
+								}
+								if (isKeywordAt(block, j, 'else')) {
+									break;
+								}
+								j++;
+							}
+						}
+
+						// Check for else after nested if
+						while (j < block.length && isWhitespace(block[j])) {
+							j++;
+						}
+
+						if (isKeywordAt(block, j, 'else')) {
+							// There's another else - continue parsing
+							// Set i to continue from this else for next iteration
+							// But actually we want to keep parsing this entire chain
+							// Let's use a loop
+							j += 4;
+							while (j < block.length && isWhitespace(block[j])) {
+								j++;
+							}
+
+							// Parse this else branch
+							if (block[j] === '{') {
+								let depth = 1;
+								j++;
+								while (j < block.length && depth > 0) {
+									if (block[j] === '{') {
+										depth++;
+									} else if (block[j] === '}') {
+										depth--;
+									}
+									j++;
+								}
+							} else if (!isKeywordAt(block, j, 'if')) {
+								// Single statement
+								while (j < block.length && block[j] !== ';') {
+									j++;
+								}
+								if (j < block.length && block[j] === ';') {
+									j++;
+								}
+							}
+						}
+						} else if (block[j] === '{') {
+							// Block body
+							let depth = 1;
+							j++;
+							while (j < block.length && depth > 0) {
+								if (block[j] === '{') {
+									depth++;
+								} else if (block[j] === '}') {
+									depth--;
+								}
+								j++;
+							}
+						} else {
+							// Single statement
+							while (j < block.length && block[j] !== ';') {
+								j++;
+							}
+							if (j < block.length && block[j] === ';') {
+								j++;
+							}
+						}
+					}
+				}
+
+				// Add the complete control flow statement
+				parts.push(block.substring(start, j).trim());
+				start = j;
+				i = j;
+				continue;
+			}
+		}
+
 		if (ch === '(') {
 			parenDepth = parenDepth + 1;
 		}
@@ -200,6 +416,13 @@ function compileBlockExpression(blockContent: string): string {
 		return `(() => { ${body}${last}; return 0; })()`;
 	}
 
+	// Check if last statement is already a complete statement (if/while/for with returns/yields)
+	const lastTrimmed = last.trim();
+	if (lastTrimmed.startsWith('if ') && (lastTrimmed.includes('return') || lastTrimmed.includes('yield'))) {
+		// If-statement with returns/yields - don't add another return
+		return `(() => { ${body}${last}; })()`;
+	}
+
 	// Wrap the last expression with uninitialized checks
 	const wrappedLast = wrapUninitializedCheck(last, uninitVars);
 	return `(() => { ${body}return ${wrappedLast}; })()`;
@@ -314,6 +537,67 @@ export function compileBracedExpressionsToIife(code: string): string {
 		if (ch !== '{') {
 			parts.push(ch);
 			i = i + 1;
+			continue;
+		}
+
+		// Check if this block is preceded by a control flow keyword
+		// Look backwards to find if this is part of if/while/for/match/else
+		let j = i - 1;
+		while (j >= 0 && isWhitespace(code[j])) {
+			j--;
+		}
+
+		// Check for closing paren (condition) before the block
+		let isControlFlowBlock = false;
+		if (j >= 0 && code[j] === ')') {
+			// Find matching opening paren
+			let depth = 1;
+			j--;
+			while (j >= 0 && depth > 0) {
+				if (code[j] === ')') {
+					depth++;
+				} else if (code[j] === '(') {
+					depth--;
+				}
+				j--;
+			}
+
+			// Skip whitespace before paren
+			while (j >= 0 && isWhitespace(code[j])) {
+				j--;
+			}
+
+			// Check for control flow keyword ending at position j
+			// Try all keywords
+			if (j >= 1 && isKeywordAt(code, j - 1, 'if')) {
+				isControlFlowBlock = true;
+			} else if (j >= 2 && isKeywordAt(code, j - 2, 'for')) {
+				isControlFlowBlock = true;
+			} else if (j >= 4 && isKeywordAt(code, j - 4, 'while')) {
+				isControlFlowBlock = true;
+			} else if (j >= 4 && isKeywordAt(code, j - 4, 'match')) {
+				isControlFlowBlock = true;
+			}
+		} else if (j >= 3 && isKeywordAt(code, j - 3, 'else')) {
+			// Block directly after 'else'
+			isControlFlowBlock = true;
+		}
+
+		if (isControlFlowBlock) {
+			// Keep the block as-is, but recursively process its contents
+			const closeIndex = findMatchingBrace(code, i);
+			if (closeIndex === undefined) {
+				parts.push(ch);
+				i = i + 1;
+				continue;
+			}
+
+			const inner = code.substring(i + 1, closeIndex);
+			const compiledInner = compileBracedExpressionsToIife(inner);
+			parts.push('{');
+			parts.push(compiledInner);
+			parts.push('}');
+			i = closeIndex + 1;
 			continue;
 		}
 

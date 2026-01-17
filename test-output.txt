@@ -5,69 +5,71 @@
 FAIL tests/interpreter/statements-control-flow.test.ts
   top-level statements
     ΓêÜ should interpret "let z = 7; z" as 7 (44 ms)
-    ΓêÜ should interpret "let z = 1 + 1; z" as 2 (39 ms)
-    ΓêÜ should interpret "let z = 10 / ({ let x = 7; let y = x; y } - 2); z" as 2 (38 ms)
-    ΓêÜ should interpret "let x : I32; x = 2; x" as 2 (36 ms)
+    ΓêÜ should interpret "let z = 1 + 1; z" as 2 (38 ms)
+    ΓêÜ should interpret "let z = 10 / ({ let x = 7; let y = x; y } - 2); z" as 2 (40 ms)
+    ΓêÜ should interpret "let x : I32; x = 2; x" as 2 (40 ms)
     ΓêÜ should return Err for uninitialized variable usage (39 ms)
-    ΓêÜ should interpret "let x : I32; x = 5; x + 3" as 8 (45 ms)
+    ΓêÜ should interpret "let x : I32; x = 5; x + 3" as 8 (36 ms)
   mutability
-    ΓêÜ should interpret "let mut x = 0; x = 100; x" as 100 (41 ms)
-    ΓêÜ should interpret "let mut x = 5; x += 1; x" as 6 (40 ms)
-    ΓêÜ should interpret "let mut x = 5; x+=1; x" as 6 (no spaces) (38 ms)
+    ΓêÜ should interpret "let mut x = 0; x = 100; x" as 100 (36 ms)
+    ΓêÜ should interpret "let mut x = 5; x += 1; x" as 6 (36 ms)
+    ΓêÜ should interpret "let mut x = 5; x+=1; x" as 6 (no spaces) (36 ms)
     ΓêÜ should interpret "let mut x = 5; x = x + 1; x" as 6 (36 ms)
     ΓêÜ should interpret "let mut x = 0; x += 1; x" as 1 (37 ms)
-    ├ù should return Err for "let x = 0; x = 100; x" (immutable) (37 ms)
-    ├ù should return Err for "let x : I32 = 0; x = 100; x = 2; x" (immutable with type) (36 ms)
-    ΓêÜ should interpret "let mut x : I32 = 0; x = 100; x = 2; x" as 2 (37 ms)
-    ├ù should interpret "let mut x = 0; { x = 100; } x" as 100 (35 ms)
-    ├ù should return Err for "{ let mut x = 0; } x = 100; x" (x only mutable in block scope) (35 ms)
-    ΓêÜ should interpret "let x = { let y = 100; y }; x" as 100 (35 ms)
+    ├ù should return Err for "let x = 0; x = 100; x" (immutable) (38 ms)
+    ├ù should return Err for "let x : I32 = 0; x = 100; x = 2; x" (immutable with type) (40 ms)
+    ΓêÜ should interpret "let mut x : I32 = 0; x = 100; x = 2; x" as 2 (36 ms)
+    ├ù should interpret "let mut x = 0; { x = 100; } x" as 100 (36 ms)
+    ├ù should return Err for "{ let mut x = 0; } x = 100; x" (x only mutable in block scope) (36 ms)
+    ΓêÜ should interpret "let x = { let y = 100; y }; x" as 100 (36 ms)
   booleans and if expressions
     ΓêÜ should interpret "let x : Bool = true; x" as 1 (35 ms)
     ΓêÜ should interpret "let x : Bool = true; let y : Bool = false; x || y" as 1 (35 ms)
     ΓêÜ should interpret "let x : Bool = true; let y : Bool = false; x && y" as 0 (35 ms)
     ΓêÜ should interpret "if (true) 100 else 200" as 100 (36 ms)
-    ΓêÜ should interpret "if (false) 100 else 200" as 200 (36 ms)
+    ΓêÜ should interpret "if (false) 100 else 200" as 200 (37 ms)
     ΓêÜ should interpret "let x = if (true) 100 else 200; x" as 100 (36 ms)
-    ΓêÜ should interpret "let x = if (false) 100 else 200; x" as 200 (36 ms)
+    ΓêÜ should interpret "let x = if (false) 100 else 200; x" as 200 (35 ms)
     ΓêÜ should interpret "if (1) 42 else 0" as 42 (36 ms)
-    ΓêÜ should interpret "if (0) 42 else 0" as 0 (34 ms)
-    ΓêÜ should interpret "if (1 + 2) 100 else 50" as 100 (36 ms)
-    ├ù should interpret nested if-else: "if (true) if (false) 1 else 2 else 3" as 2 (37 ms)
+    ΓêÜ should interpret "if (0) 42 else 0" as 0 (36 ms)
+    ΓêÜ should interpret "if (1 + 2) 100 else 50" as 100 (35 ms)
+    ΓêÜ should interpret nested if-else: "if (true) if (false) 1 else 2 else 3" as 2 (35 ms)
   if statements and yield
-    ├ù should interpret "let x : I32; if (true) x = 100; else x = 200; x" as 100 (36 ms)
-    ├ù should interpret "let x : I32; if (false) x = 100; else x = 200; x" as 200 (39 ms)
-    ├ù should interpret "let x : I32; if (true) { x = 100; } else { x = 200; } x" as 100 (41 ms)
-    ├ù should interpret "let x : I32; if (false) { x = 100; } else { x = 200; } x" as 200 (42 ms)
-    ΓêÜ should interpret "let mut x = 0; if (true) x = 100; x" as 100 (40 ms)
-    ΓêÜ should interpret "let mut x = 0; if (false) x = 100; x" as 0 (37 ms)
+    ΓêÜ should interpret "let x : I32; if (true) x = 100; else x = 200; x" as 100 (36 ms)
+    ΓêÜ should interpret "let x : I32; if (false) x = 100; else x = 200; x" as 200 (39 ms)
+    ΓêÜ should interpret "let x : I32; if (true) { x = 100; } else { x = 200; } x" as 100 (37 ms)
+    ΓêÜ should interpret "let x : I32; if (false) { x = 100; } else { x = 200; } x" as 200 (36 ms)
+    ΓêÜ should interpret "let mut x = 0; if (true) x = 100; x" as 100 (35 ms)
+    ΓêÜ should interpret "let mut x = 0; if (false) x = 100; x" as 0 (36 ms)
     ΓêÜ should interpret "{ yield 100; 200 }" as 100 (36 ms)
-    ΓêÜ should interpret "let x = { yield 100; 200 }; x" as 100 (38 ms)
-    ΓêÜ should interpret "let x = { if (true) yield 100; 200 }; x" as 100 (39 ms)
-    ΓêÜ should interpret "let x = { if (false) yield 100; 200 }; x" as 200 (41 ms)
-    ├ù should interpret "{ if (true) yield 100; else yield 200; }" as 100 (37 ms)
-    ├ù should interpret "{ if (false) yield 100; else yield 200; }" as 200 (37 ms)
+    ΓêÜ should interpret "let x = { yield 100; 200 }; x" as 100 (36 ms)
+    ΓêÜ should interpret "let x = { if (true) yield 100; 200 }; x" as 100 (37 ms)
+    ΓêÜ should interpret "let x = { if (false) yield 100; 200 }; x" as 200 (35 ms)
+    ΓêÜ should interpret "{ if (true) yield 100; else yield 200; }" as 100 (36 ms)
+    ΓêÜ should interpret "{ if (false) yield 100; else yield 200; }" as 200 (36 ms)
   chained if-else and match
-    ├ù should interpret "let x = if (false) 100 else if (true) 200 else 300; x" as 200 (38 ms)
-    ├ù should interpret "if (false) 100 else if (false) 200 else 300" as 300 (37 ms)
-    ├ù should interpret "if (true) 100 else if (true) 200 else 300" as 100 (36 ms)
-    ├ù should interpret "let x : I32; if (false) x = 100; else x = 200; x" as 200 (36 ms)
-    ├ù should interpret "let x : I32 = match (100) { case 100 => 2; case _ => 3; }; x" as 2 (34 ms)
+    ΓêÜ should interpret "let x = if (false) 100 else if (true) 200 else 300; x" as 200 (40 ms)
+    ΓêÜ should interpret "if (false) 100 else if (false) 200 else 300" as 300 (36 ms)
+    ΓêÜ should interpret "if (true) 100 else if (true) 200 else 300" as 100 (36 ms)
+    ΓêÜ should interpret "let x : I32; if (false) x = 100; else x = 200; x" as 200 (35 ms)
+    ├ù should interpret "let x : I32 = match (100) { case 100 => 2; case _ => 3; }; x" as 2 (35 ms)
   while loops
-    ΓêÜ should interpret "let mut x = 0; while (x < 4) x += 1; x" as 4
-    ΓêÜ should interpret "let mut x = 10; while (x > 5) x -= 1; x" as 5 (35 ms)
+    ΓêÜ should interpret "let mut x = 0; while (x < 4) x += 1; x" as 4 (1 ms)
+    ΓêÜ should interpret "let mut x = 10; while (x > 5) x -= 1; x" as 5 (36 ms)
     ΓêÜ should interpret "let mut x = 1; while (x < 100) x = x * 2; x" as 128 (36 ms)
-    ΓêÜ should interpret "let mut x = 0; while (false) x = 100; x" as 0 (35 ms)
-    ├ù should interpret "let mut sum = 0; let mut i = 1; while (i <= 5) { sum += i; i += 1; } sum" as 15 (34 ms)
-    ├ù should interpret "let mut x = 0; while (x < 4) { x += 1; } x" as 4 (35 ms)
+    ΓêÜ should interpret "let mut x = 0; while (false) x = 100; x" as 0 (36 ms)
+    ΓêÜ should interpret "let mut sum = 0; let mut i = 1; while (i <= 5) { sum += i; i += 1; } sum" as 15 (35 ms)
+    ΓêÜ should interpret "let mut x = 0; while (x < 4) { x += 1; } x" as 4 (36 ms)
     ΓêÜ should return Err for "let x = 0; while (true) x += 1; x" (immutable)
   for loops
     ΓêÜ should interpret "let mut sum = 0; for (let mut i in 0..10) sum += i; sum" as 45 (36 ms)
     ΓêÜ should interpret "let mut sum = 0; for (let mut i in 0..5) sum += i; sum" as 10 (35 ms)
     ΓêÜ should interpret "let mut product = 1; for (let mut i in 1..5) product *= i; product" as 24 (36 ms)
     ΓêÜ should interpret "let mut x = 0; for (let mut i in 0..3) x = i; x" (last iteration) (35 ms)
-    ├ù should interpret "let mut sum = 0; for (let mut i in 2..7) { sum += i; } sum" as 20 (35 ms)
-    ΓêÜ should return Err for "let sum = 0; for (let mut i in 0..5) sum += i; sum" (immutable outer) (1 ms)
+    ΓêÜ should interpret "let mut sum = 0; for (let mut i in 2..7) { sum += i; } sum" as 20 (36 ms)
+    ΓêÜ should return Err for "let sum = 0; for (let mut i in 0..5) sum += i; sum" (immutable outer)
+  compiler-only tests with read<T>()
+    ΓêÜ should compile "let x = read<I32>(); x + x" with stdin (36 ms)
 
   ΓùÅ mutability ΓÇ║ should return Err for "let x = 0; x = 100; x" (immutable)
 
@@ -76,17 +78,17 @@ FAIL tests/interpreter/statements-control-flow.test.ts
     Expected: "err"
     Received: "ok"
 
-      30 | 		assertFn(compileResult);
-      31 | 	} catch (e) {
-    > 32 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
+      31 | 		assertFn(compileResult);
+      32 | 	} catch (e) {
+    > 33 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
          | 		      ^
-      33 | 	}
-      34 | }
-      35 |
+      34 | 	}
+      35 | }
+      36 |
 
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:32:9)
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:76:2)
-      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:46:35)
+      at runCompileWithErrorHandling (src/testing/test-helpers.ts:33:9)
+      at runCompileWithErrorHandling (src/testing/test-helpers.ts:81:2)
+      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:47:35)
 
   ΓùÅ mutability ΓÇ║ should return Err for "let x : I32 = 0; x = 100; x = 2; x" (immutable with type)
 
@@ -95,33 +97,33 @@ FAIL tests/interpreter/statements-control-flow.test.ts
     Expected: "err"
     Received: "ok"
 
-      30 | 		assertFn(compileResult);
-      31 | 	} catch (e) {
-    > 32 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
+      31 | 		assertFn(compileResult);
+      32 | 	} catch (e) {
+    > 33 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
          | 		      ^
-      33 | 	}
-      34 | }
-      35 |
+      34 | 	}
+      35 | }
+      36 |
 
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:32:9)
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:76:2)
-      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:49:35)
+      at runCompileWithErrorHandling (src/testing/test-helpers.ts:33:9)
+      at runCompileWithErrorHandling (src/testing/test-helpers.ts:81:2)
+      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:50:35)
 
   ΓùÅ mutability ΓÇ║ should interpret "let mut x = 0; { x = 100; } x" as 100
 
     Compilation error: Expected ok but got err: Unexpected identifier 'x'
 
-      30 | 		assertFn(compileResult);
-      31 | 	} catch (e) {
-    > 32 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
+      31 | 		assertFn(compileResult);
+      32 | 	} catch (e) {
+    > 33 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
          | 		      ^
-      33 | 	}
-      34 | }
-      35 |
+      34 | 	}
+      35 | }
+      36 |
 
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:32:9)
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:71:2)
-      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:55:33)
+      at runCompileWithErrorHandling (src/testing/test-helpers.ts:33:9)
+      at runCompileWithErrorHandling (src/testing/test-helpers.ts:72:2)
+      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:56:33)
 
   ΓùÅ mutability ΓÇ║ should return Err for "{ let mut x = 0; } x = 100; x" (x only mutable in block scope)
 
@@ -130,261 +132,37 @@ FAIL tests/interpreter/statements-control-flow.test.ts
     Expected substring: "Undefined"
     Received string:    "Unexpected identifier 'x'"
 
-      30 | 		assertFn(compileResult);
-      31 | 	} catch (e) {
-    > 32 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
+      31 | 		assertFn(compileResult);
+      32 | 	} catch (e) {
+    > 33 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
          | 		      ^
-      33 | 	}
-      34 | }
-      35 |
+      34 | 	}
+      35 | }
+      36 |
 
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:32:9)
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:76:2)
-      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:58:35)
-
-  ΓùÅ booleans and if expressions ΓÇ║ should interpret nested if-else: "if (true) if (false) 1 else 2 else 3" as 2
-
-    Compilation error: Expected ok but got err: Unexpected token 'if'
-
-      30 | 		assertFn(compileResult);
-      31 | 	} catch (e) {
-    > 32 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
-         | 		      ^
-      33 | 	}
-      34 | }
-      35 |
-
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:32:9)
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:71:2)
-      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:97:33)
-
-  ΓùÅ if statements and yield ΓÇ║ should interpret "let x : I32; if (true) x = 100; else x = 200; x" as 100
-
-    Compilation error: Expected ok but got err: Unexpected token ';'
-
-      30 | 		assertFn(compileResult);
-      31 | 	} catch (e) {
-    > 32 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
-         | 		      ^
-      33 | 	}
-      34 | }
-      35 |
-
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:32:9)
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:71:2)
-      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:103:33)
-
-  ΓùÅ if statements and yield ΓÇ║ should interpret "let x : I32; if (false) x = 100; else x = 200; x" as 200
-
-    Compilation error: Expected ok but got err: Unexpected token ';'
-
-      30 | 		assertFn(compileResult);
-      31 | 	} catch (e) {
-    > 32 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
-         | 		      ^
-      33 | 	}
-      34 | }
-      35 |
-
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:32:9)
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:71:2)
-      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:106:33)
-
-  ΓùÅ if statements and yield ΓÇ║ should interpret "let x : I32; if (true) { x = 100; } else { x = 200; } x" as 100
-
-    Compilation error: Expected ok but got err: Unexpected token 'if'
-
-      30 | 		assertFn(compileResult);
-      31 | 	} catch (e) {
-    > 32 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
-         | 		      ^
-      33 | 	}
-      34 | }
-      35 |
-
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:32:9)
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:71:2)
-      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:109:33)
-
-  ΓùÅ if statements and yield ΓÇ║ should interpret "let x : I32; if (false) { x = 100; } else { x = 200; } x" as 200
-
-    Compilation error: Expected ok but got err: Unexpected token 'if'
-
-      30 | 		assertFn(compileResult);
-      31 | 	} catch (e) {
-    > 32 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
-         | 		      ^
-      33 | 	}
-      34 | }
-      35 |
-
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:32:9)
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:71:2)
-      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:112:33)
-
-  ΓùÅ if statements and yield ΓÇ║ should interpret "{ if (true) yield 100; else yield 200; }" as 100
-
-    Compilation error: Expected ok but got err: Unexpected token 'else'
-
-      30 | 		assertFn(compileResult);
-      31 | 	} catch (e) {
-    > 32 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
-         | 		      ^
-      33 | 	}
-      34 | }
-      35 |
-
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:32:9)
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:71:2)
-      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:133:33)
-
-  ΓùÅ if statements and yield ΓÇ║ should interpret "{ if (false) yield 100; else yield 200; }" as 200
-
-    Compilation error: Expected ok but got err: Unexpected token 'else'
-
-      30 | 		assertFn(compileResult);
-      31 | 	} catch (e) {
-    > 32 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
-         | 		      ^
-      33 | 	}
-      34 | }
-      35 |
-
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:32:9)
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:71:2)
-      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:136:33)
-
-  ΓùÅ chained if-else and match ΓÇ║ should interpret "let x = if (false) 100 else if (true) 200 else 300; x" as 200
-
-    Compilation error: Expected ok but got err: Unexpected token 'if'
-
-      30 | 		assertFn(compileResult);
-      31 | 	} catch (e) {
-    > 32 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
-         | 		      ^
-      33 | 	}
-      34 | }
-      35 |
-
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:32:9)
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:71:2)
-      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:142:33)
-
-  ΓùÅ chained if-else and match ΓÇ║ should interpret "if (false) 100 else if (false) 200 else 300" as 300
-
-    Compilation error: Expected ok but got err: Unexpected token 'if'
-
-      30 | 		assertFn(compileResult);
-      31 | 	} catch (e) {
-    > 32 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
-         | 		      ^
-      33 | 	}
-      34 | }
-      35 |
-
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:32:9)
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:71:2)
-      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:145:33)
-
-  ΓùÅ chained if-else and match ΓÇ║ should interpret "if (true) 100 else if (true) 200 else 300" as 100
-
-    Compilation error: Expected ok but got err: Unexpected token 'if'
-
-      30 | 		assertFn(compileResult);
-      31 | 	} catch (e) {
-    > 32 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
-         | 		      ^
-      33 | 	}
-      34 | }
-      35 |
-
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:32:9)
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:71:2)
-      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:148:33)
-
-  ΓùÅ chained if-else and match ΓÇ║ should interpret "let x : I32; if (false) x = 100; else x = 200; x" as 200
-
-    Compilation error: Expected ok but got err: Unexpected token ';'
-
-      30 | 		assertFn(compileResult);
-      31 | 	} catch (e) {
-    > 32 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
-         | 		      ^
-      33 | 	}
-      34 | }
-      35 |
-
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:32:9)
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:71:2)
-      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:151:33)
+      at runCompileWithErrorHandling (src/testing/test-helpers.ts:33:9)
+      at runCompileWithErrorHandling (src/testing/test-helpers.ts:81:2)
+      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:59:35)
 
   ΓùÅ chained if-else and match ΓÇ║ should interpret "let x : I32 = match (100) { case 100 => 2; case _ => 3; }; x" as 2
 
-    Compilation error: Expected ok but got err: Unexpected token 'case'
+    Compilation error: Expected ok but got err: Unexpected token '{'
 
-      30 | 		assertFn(compileResult);
-      31 | 	} catch (e) {
-    > 32 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
+      31 | 		assertFn(compileResult);
+      32 | 	} catch (e) {
+    > 33 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
          | 		      ^
-      33 | 	}
-      34 | }
-      35 |
+      34 | 	}
+      35 | }
+      36 |
 
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:32:9)
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:71:2)
-      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:154:33)
-
-  ΓùÅ while loops ΓÇ║ should interpret "let mut sum = 0; let mut i = 1; while (i <= 5) { sum += i; i += 1; } sum" as 15
-
-    Compilation error: Expected ok but got err: Unexpected token 'while'
-
-      30 | 		assertFn(compileResult);
-      31 | 	} catch (e) {
-    > 32 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
-         | 		      ^
-      33 | 	}
-      34 | }
-      35 |
-
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:32:9)
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:71:2)
-      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:177:33)
-
-  ΓùÅ while loops ΓÇ║ should interpret "let mut x = 0; while (x < 4) { x += 1; } x" as 4
-
-    Compilation error: Expected ok but got err: Unexpected token 'while'
-
-      30 | 		assertFn(compileResult);
-      31 | 	} catch (e) {
-    > 32 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
-         | 		      ^
-      33 | 	}
-      34 | }
-      35 |
-
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:32:9)
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:71:2)
-      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:183:33)
-
-  ΓùÅ for loops ΓÇ║ should interpret "let mut sum = 0; for (let mut i in 2..7) { sum += i; } sum" as 20
-
-    Compilation error: Expected ok but got err: Unexpected token 'for'
-
-      30 | 		assertFn(compileResult);
-      31 | 	} catch (e) {
-    > 32 | 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
-         | 		      ^
-      33 | 	}
-      34 | }
-      35 |
-
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:32:9)
-      at runCompileWithErrorHandling (src/testing/test-helpers.ts:71:2)
-      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:206:33)
+      at runCompileWithErrorHandling (src/testing/test-helpers.ts:33:9)
+      at runCompileWithErrorHandling (src/testing/test-helpers.ts:72:2)
+      at Object.<anonymous> (tests/interpreter/statements-control-flow.test.ts:155:33)
 
 Test Suites: 1 failed, 1 total
-Tests:       19 failed, 39 passed, 58 total
+Tests:       5 failed, 54 passed, 59 total
 Snapshots:   0 total
-Time:        2.304 s, estimated 3 s
+Time:        2.308 s, estimated 3 s
 Ran all test suites matching /tests\\interpreter\\statements-control-flow.test.ts/i.
 ΓÇëELIFECYCLEΓÇë Test failed. See above for more details.

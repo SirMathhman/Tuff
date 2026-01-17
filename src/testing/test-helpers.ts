@@ -23,10 +23,11 @@ function runInterpretWithErrorHandling(
 
 function runCompileWithErrorHandling(
 	input: string,
+	stdin: string,
 	assertFn: (result: Result<number>) => void,
 ): void {
 	try {
-		const compileResult = run(input, '');
+		const compileResult = run(input, stdin);
 		assertFn(compileResult);
 	} catch (e) {
 		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
@@ -66,12 +67,18 @@ export function assertCompileValid(input: string, stdIn: string, expected: numbe
 	assertValid(result, expected);
 }
 
-export function assertInterpretAndCompileValid(input: string, expected: number): void {
+export function assertInterpretAndCompileValid(input: string, expected: number, stdin = ''): void {
 	runInterpretWithErrorHandling(input, (result): void => assertValid(result, expected));
-	runCompileWithErrorHandling(input, (result): void => assertValid(result, expected));
+	runCompileWithErrorHandling(input, stdin, (result): void => assertValid(result, expected));
 }
 
-export function assertInterpretAndCompileInvalid(input: string, expectedSubstring: string): void {
+export function assertInterpretAndCompileInvalid(
+	input: string,
+	expectedSubstring: string,
+	stdin = '',
+): void {
 	runInterpretWithErrorHandling(input, (result): void => assertInvalid(result, expectedSubstring));
-	runCompileWithErrorHandling(input, (result): void => assertInvalid(result, expectedSubstring));
+	runCompileWithErrorHandling(input, stdin, (result): void =>
+		assertInvalid(result, expectedSubstring),
+	);
 }
