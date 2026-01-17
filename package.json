@@ -5,7 +5,7 @@
 	"main": "index.js",
 	"scripts": {
 		"cpd": "node scripts/cpd-cached.js",
-		"cpd:force": "pmd cpd --dir src tests --language typescript --minimum-tokens 50 --ignore-literals --ignore-identifiers --format markdown",
+		"cpd:all": "pmd cpd --dir src tests --language typescript --minimum-tokens 50 --ignore-literals --ignore-identifiers --format markdown",
 		"test": "jest",
 		"test:watch": "jest --watch",
 		"test:coverage": "jest --coverage",

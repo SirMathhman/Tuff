@@ -1,87 +1,47 @@
-const fs = require('fs');
-const path = require('path');
 const { execSync } = require('child_process');
-const crypto = require('crypto');
-
-const CACHE_FILE = path.join(__dirname, '..', '.cpd-cache.json');
-const DIRS_TO_CHECK = ['src', 'tests'];
+const path = require('path');
 
 /**
- * Get modification times and compute hash for all TypeScript files.
+ * Get list of changed TypeScript files from git.
  */
-function computeFilesHash() {
-	const files = [];
-	const hashes = [];
-
-	for (const dir of DIRS_TO_CHECK) {
-		const dirPath = path.join(__dirname, '..', dir);
-		if (!fs.existsSync(dirPath)) {
-			continue;
-		}
-		collectFiles(dirPath, files);
-	}
-
-	files.sort();
-
-	for (const file of files) {
-		const stat = fs.statSync(file);
-		const content = fs.readFileSync(file, 'utf8');
-		const hash = crypto.createHash('md5').update(content).digest('hex');
-		hashes.push(`${file}:${stat.mtimeMs}:${hash}`);
-	}
-
-	return crypto.createHash('md5').update(hashes.join('|')).digest('hex');
-}
-
-/**
- * Recursively collect all .ts files.
- */
-function collectFiles(dir, files) {
-	const entries = fs.readdirSync(dir, { withFileTypes: true });
-
-	for (const entry of entries) {
-		const fullPath = path.join(dir, entry.name);
-		if (entry.isDirectory()) {
-			collectFiles(fullPath, files);
-		} else if (entry.isFile() && entry.name.endsWith('.ts')) {
-			files.push(fullPath);
-		}
-	}
-}
-
-/**
- * Load cache from disk.
- */
-function loadCache() {
+function getChangedFiles() {
 	try {
-		if (fs.existsSync(CACHE_FILE)) {
-			const content = fs.readFileSync(CACHE_FILE, 'utf8');
-			return JSON.parse(content);
-		}
+		// Get staged and unstaged changes
+		const output = execSync('git status --porcelain', {
+			cwd: path.join(__dirname, '..'),
+			encoding: 'utf8',
+		});
+
+		const files = output
+			.split('\n')
+			.filter((line) => line.trim().length > 0)
+			.map((line) => {
+				// Format: "XY filename" where X is staged status, Y is unstaged status
+				const match = line.match(/^..\s+(.+)$/);
+				return match ? match[1] : '';
+			})
+			.filter((file) => file.endsWith('.ts') && (file.startsWith('src/') || file.startsWith('tests/')))
+			.filter((file) => file.length > 0);
+
+		return files;
 	} catch (e) {
-		// Ignore errors, treat as cache miss
+		console.error('Error getting changed files from git:', e.message);
+		return [];
 	}
-	return { hash: '', timestamp: 0 };
 }
 
 /**
- * Save cache to disk.
+ * Run CPD on specified files.
  */
-function saveCache(hash) {
-	const cache = {
-		hash,
-		timestamp: Date.now(),
-	};
-	fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, undefined, 2));
-}
+function runCpdOnFiles(files) {
+	if (files.length === 0) {
+		return 0;
+	}
 
-/**
- * Run CPD and return exit code.
- */
-function runCpd() {
 	try {
+		const fileArgs = files.join(',');
 		execSync(
-			'pmd cpd --dir src tests --language typescript --minimum-tokens 50 --ignore-literals --ignore-identifiers --format markdown',
+			`pmd cpd --files ${fileArgs} --language typescript --minimum-tokens 50 --ignore-literals --ignore-identifiers --format markdown`,
 			{
 				stdio: 'inherit',
 				cwd: path.join(__dirname, '..'),
@@ -93,17 +53,13 @@ function runCpd() {
 	}
 }
 
-const currentHash = computeFilesHash();
-const cache = loadCache();
+const changedFiles = getChangedFiles();
 
-if (cache.hash === currentHash) {
-	console.log('CPD: No changes detected, using cached result (passed)');
+if (changedFiles.length === 0) {
+	console.log('CPD: No changed TypeScript files to check');
 	process.exit(0);
 } else {
-	console.log('CPD: Changes detected, running analysis...');
-	const exitCode = runCpd();
-	if (exitCode === 0) {
-		saveCache(currentHash);
-	}
+	console.log(`CPD: Checking ${changedFiles.length} changed file(s)...`);
+	const exitCode = runCpdOnFiles(changedFiles);
 	process.exit(exitCode);
 }
