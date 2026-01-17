@@ -219,6 +219,15 @@ fn add(x : I32, y : I32) => x + y;
 add(10, 20)              // 30
 ```
 
+### Generic Functions
+
+Generic type parameters are erased at runtime (they exist for typing):
+
+```tuff
+fn pass<T>(value : T) : T => value;
+pass(100)                // 100
+```
+
 **Block bodies:**
 
 ```tuff
