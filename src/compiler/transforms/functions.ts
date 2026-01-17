@@ -92,6 +92,35 @@ function skipQuotedString(code: string, startIdx: number): number {
 	return i;
 }
 
+function skipGenericParams(code: string, idx: number): number {
+	let i = idx;
+	if (i >= code.length || code[i] !== '<') {
+		return i;
+	}
+
+	i += 1;
+	let depth = 1;
+	while (i < code.length) {
+		const ch = code[i];
+		if (ch === '"' || ch === "'" || ch === '`') {
+			i = skipQuotedString(code, i);
+			continue;
+		}
+		if (ch === '<') {
+			depth += 1;
+		}
+		if (ch === '>') {
+			depth -= 1;
+		}
+		if (ch === '>' && depth === 0) {
+			return i + 1;
+		}
+		i += 1;
+	}
+
+	return i;
+}
+
 function findFunctionBodyEnd(code: string, startIdx: number): number {
 	let i = startIdx;
 	let parenDepth = 0;
@@ -161,6 +190,8 @@ function parseFunctionHeader(code: string, idx: number): ParsedFunctionHeader | 
 		return undefined;
 	}
 	i += name.length;
+	i = skipWhitespaceInCode(code, i);
+	i = skipGenericParams(code, i);
 	i = skipWhitespaceInCode(code, i);
 	if (i >= code.length || code[i] !== '(') {
 		return undefined;

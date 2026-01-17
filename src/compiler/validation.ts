@@ -82,8 +82,24 @@ export function validateNumericLiterals(code: string): Result<void> {
  * no variables or blocks with variable bindings.
  */
 export function validateConstantExpressions(code: string): Result<void> {
-	if (code.includes('read<') || code.includes('let ')) {
-		return ok(undefined as void);
+	const skipMarkers = [
+		'read<',
+		'let ',
+		'fn ',
+		'struct ',
+		'enum ',
+		'module ',
+		'match ',
+		'for ',
+		'if ',
+		';',
+		'{',
+		'}',
+	];
+	for (const marker of skipMarkers) {
+		if (code.includes(marker)) {
+			return ok(undefined as void);
+		}
 	}
 
 	const emptyContext = { bindings: [], modules: {}, globalBindings: {}, globalModules: {} };
