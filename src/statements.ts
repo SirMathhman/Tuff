@@ -296,7 +296,7 @@ function processYieldStatement(
 /**
  * Processes a struct definition statement.
  */
-function processStructStatement(input: string): Result<ContextAndRemaining> {
+function processStructStatement(input: string, shouldRegister = true): Result<ContextAndRemaining> {
 	const trimmed = input.trim();
 	const closingBraceIndex = findClosingBrace(trimmed);
 	if (closingBraceIndex < 0) {
@@ -313,12 +313,14 @@ function processStructStatement(input: string): Result<ContextAndRemaining> {
 		return defResult;
 	}
 
-	// Reject duplicate struct definitions
-	if (isStructType(defResult.value.name)) {
-		return err(`Struct '${defResult.value.name}' is already defined`);
-	}
+	if (shouldRegister) {
+		// Reject duplicate struct definitions
+		if (isStructType(defResult.value.name)) {
+			return err(`Struct '${defResult.value.name}' is already defined`);
+		}
 
-	registerStructDefinition(defResult.value);
+		registerStructDefinition(defResult.value);
+	}
 
 	// Struct definitions don't modify context, just consume input
 	return ok({ context: { bindings: [] }, remaining });
@@ -331,6 +333,7 @@ export function processStatements(
 	input: string,
 	context: ExecutionContext,
 	allowBlocks: boolean,
+	registerStructs = false,
 ): Result<ContextAndRemaining> {
 	let currentContext = context;
 	let remaining = input;
@@ -338,7 +341,7 @@ export function processStatements(
 		const trimmed = remaining.trim();
 		let result: Result<ContextAndRemaining> | undefined;
 		if (isStructDefinition(trimmed)) {
-			result = processStructStatement(remaining);
+			result = processStructStatement(remaining, registerStructs);
 		} else if (trimmed.startsWith('let ')) {
 			result = processLetDeclaration(remaining, currentContext);
 		} else if (allowBlocks && shouldProcessAsStatementBlock(trimmed)) {
@@ -494,5 +497,5 @@ export function processTopLevelStatements(
 	input: string,
 	context: ExecutionContext,
 ): Result<ContextAndRemaining> {
-	return processStatements(input, context, true);
+	return processStatements(input, context, true, true);
 }

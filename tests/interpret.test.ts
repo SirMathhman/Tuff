@@ -386,6 +386,10 @@ describe('interpret - struct definitions and field access', (): void => {
 		expectInterpretOk('struct Empty {} struct Empty0 {}', 0);
 	});
 
+	it('should interpret "{ struct Empty {} } struct Empty {}" as 0', (): void => {
+		expectInterpretOk('{ struct Empty {} } struct Empty {}', 0);
+	});
+
 	it('should return Err for duplicate struct definitions', (): void => {
 		expectInterpretErrContains('struct Empty {} struct Empty {}', 'already defined');
 	});
