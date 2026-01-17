@@ -2,6 +2,37 @@ import { type Result } from '../common/result';
 import { run } from '../compiler/run';
 import { interpret } from '../interpret';
 
+function extractErrorMessage(e: unknown): string {
+	if (e instanceof Error) {
+		return e.message;
+	}
+	return String(e);
+}
+
+function runInterpretWithErrorHandling(
+	input: string,
+	assertFn: (result: Result<number>) => void,
+): void {
+	try {
+		const result = interpret(input);
+		assertFn(result);
+	} catch (e) {
+		throw new Error(`Interpretation error: ${extractErrorMessage(e)}`);
+	}
+}
+
+function runCompileWithErrorHandling(
+	input: string,
+	assertFn: (result: Result<number>) => void,
+): void {
+	try {
+		const compileResult = run(input, '');
+		assertFn(compileResult);
+	} catch (e) {
+		throw new Error(`Compilation error: ${extractErrorMessage(e)}`);
+	}
+}
+
 export function assertValid(result: Result<number>, expected: number): void {
 	if (result.type === 'err') {
 		throw new Error(`Expected ok but got err: ${result.error}`);
@@ -30,18 +61,17 @@ export function assertInterpretInvalid(input: string, expectedSubstring: string)
 	assertInvalid(result, expectedSubstring);
 }
 
-export function assertInterpretAndCompileValid(input: string, expected: number): void {
-	const result = interpret(input);
+export function assertCompileValid(input: string, stdIn: string, expected: number): void {
+	const result = run(input, stdIn);
 	assertValid(result, expected);
+}
 
-	const compileResult = run(input, '');
-	assertValid(compileResult, expected);
+export function assertInterpretAndCompileValid(input: string, expected: number): void {
+	runInterpretWithErrorHandling(input, (result): void => assertValid(result, expected));
+	runCompileWithErrorHandling(input, (result): void => assertValid(result, expected));
 }
 
 export function assertInterpretAndCompileInvalid(input: string, expectedSubstring: string): void {
-	const result = interpret(input);
-	assertInvalid(result, expectedSubstring);
-
-	const compileResult = run(input, '');
-	assertInvalid(compileResult, expectedSubstring);
+	runInterpretWithErrorHandling(input, (result): void => assertInvalid(result, expectedSubstring));
+	runCompileWithErrorHandling(input, (result): void => assertInvalid(result, expectedSubstring));
 }

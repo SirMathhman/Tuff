@@ -1,6 +1,7 @@
 import {
 	assertInterpretAndCompileValid,
 	assertInterpretAndCompileInvalid,
+	assertCompileValid,
 } from '../../src/testing/test-helpers';
 
 function testBasicLiterals(): void {
@@ -91,8 +92,13 @@ function testBlocks(): void {
 	it('should interpret "{ 2 } * 3 + 1" as 7', (): void => {
 		assertInterpretAndCompileValid('{ 2 } * 3 + 1', 7);
 	});
+
 	it('should interpret "1 + { 4 + 2 } * 3" as 19', (): void => {
 		assertInterpretAndCompileValid('1 + { 4 + 2 } * 3', 19);
+	});
+
+	it('should compile "1 + { 4 + 2 } * 3" as 19', (): void => {
+		assertCompileValid('read<U8>() + { read<U8>() + read<U8>() } * read<U8>()', '1 4 2 3', 19);
 	});
 }
 
